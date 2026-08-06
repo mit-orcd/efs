@@ -10,11 +10,13 @@
 #SBATCH --error=/orcd/scratch/orcd/001/erbmi1/efs/logs/debug-med-%j.err
 set -uo pipefail
 REPO=/home/erbmi1/git/efs
-if [ -d /scratch ] && mkdir -p /scratch/efs/.probe 2>/dev/null; then
-  LOCAL=/scratch/efs/dbg-${SLURM_JOB_ID}
-else
-  LOCAL=${TMPDIR:-/tmp}/efs/dbg-${SLURM_JOB_ID}
+if [ ! -d /scratch ]; then
+  echo "ERROR: /scratch required on compute node"
+  exit 1
 fi
+LOCAL=/scratch/efs-testing/${SLURM_JOB_ID}
+rm -rf "$LOCAL"
+mkdir -p "$LOCAL"
 echo "host=$(hostname) LOCAL=$LOCAL"
 rm -rf "$LOCAL"
 mkdir -p "$LOCAL"/{s1,s2,s3,mnt}

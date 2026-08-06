@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=efs-s3
+#SBATCH --job-name=efs-s4
 #SBATCH --partition=mit_normal
 #SBATCH --time=01:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=4G
-#SBATCH --output=/orcd/scratch/orcd/001/erbmi1/efs/logs/s3-%j.out
-#SBATCH --error=/orcd/scratch/orcd/001/erbmi1/efs/logs/s3-%j.err
+#SBATCH --output=/orcd/scratch/orcd/001/erbmi1/efs/logs/s4-%j.out
+#SBATCH --error=/orcd/scratch/orcd/001/erbmi1/efs/logs/s4-%j.err
 
 set -euo pipefail
 
@@ -23,15 +23,15 @@ STORAGE="$SCRATCH/storage"
 rm -rf "$SCRATCH"
 mkdir -p "$STORAGE" "$SHARED/state" "$SHARED/logs"
 
-PORT=1983
-NODE_ID=3
+PORT=1984
+NODE_ID=4
 
 read -r IB_HOST IB_IP < <(efs_ib_host)
 SHORT=$(hostname -s)
-echo "efs-s3 on $SHORT IB=$IB_HOST ($IB_IP):$PORT"
-echo "${IB_HOST}:${PORT}" > "$SHARED/state/s3.addr"
-echo "$IB_HOST" > "$SHARED/state/s3.host"
-echo "$SHORT" > "$SHARED/state/s3.node"
+echo "efs-s4 on $SHORT IB=$IB_HOST ($IB_IP):$PORT"
+echo "${IB_HOST}:${PORT}" > "$SHARED/state/s4.addr"
+echo "$IB_HOST" > "$SHARED/state/s4.host"
+echo "$SHORT" > "$SHARED/state/s4.node"
 
 WAITED=0
 while [ ! -f "$SHARED/state/s1.addr" ]; do

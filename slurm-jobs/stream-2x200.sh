@@ -32,11 +32,11 @@ DD_COUNT=$((FILE_GIB * 1024))
 FILE_BYTES=$((FILE_GIB * 1024 * 1024 * 1024))
 
 # Require real /scratch — root /tmp is too small for multi-hundred-GiB loads.
-if [ ! -d /scratch ] || ! mkdir -p /scratch/efs/.probe 2>/dev/null; then
+if [ ! -d /scratch ] || ! mkdir -p "/scratch/efs-testing/${SLURM_JOB_ID}" 2>/dev/null; then
     echo "ERROR: this job requires node-local /scratch (mit_normal). Got hostname=$(hostname)"
     exit 1
 fi
-LOCAL="/scratch/efs/stream-${SLURM_JOB_ID}"
+LOCAL="/scratch/efs-testing/${SLURM_JOB_ID}"
 mkdir -p "$LOCAL"
 echo "LOCAL=$LOCAL FILE_GIB=$FILE_GIB FILE_BYTES=$FILE_BYTES"
 

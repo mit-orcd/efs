@@ -323,11 +323,24 @@ uint64_t server_compute_usage(const char *path)
     return compute_dir_usage(data_path);
 }
 
+struct efs_node *server_local_node(struct efsd_server *s)
+{
+    if (!s)
+        return NULL;
+    for (uint32_t i = 0; i < s->node_count; i++) {
+        if (s->nodes[i].id == s->id)
+            return &s->nodes[i];
+    }
+    return NULL;
+}
+
 void server_update_local_usage(struct efsd_server *s)
 {
     uint64_t used = server_compute_usage(s->storage_path);
     pthread_mutex_lock(&s->lock);
-    s->nodes[0].used = used;
+    struct efs_node *local = server_local_node(s);
+    if (local)
+        local->used = used;
     pthread_mutex_unlock(&s->lock);
 }
 
@@ -335,7 +348,10 @@ bool server_would_exceed_quota(struct efsd_server *s, uint64_t fragment_size)
 {
     if (s->quota == 0)
         return false;
-    return s->nodes[0].used + fragment_size > s->quota;
+    struct efs_node *local = server_local_node(s);
+    if (!local)
+        return true;
+    return local->used + fragment_size > s->quota;
 }
 
 int server_write_fragment(struct efsd_server *s, struct efs_export *ex,
@@ -347,11 +363,16 @@ int server_write_fragment(struct efsd_server *s, struct efs_export *ex,
     make_dir_for_file(path);
 
     pthread_mutex_lock(&s->lock);
-    if (s->quota > 0 && s->nodes[0].used + data_len > s->quota) {
+    struct efs_node *local = server_local_node(s);
+    if (!local) {
+        pthread_mutex_unlock(&s->lock);
+        return EFS_ERR_INVAL;
+    }
+    if (s->quota > 0 && local->used + data_len > s->quota) {
         pthread_mutex_unlock(&s->lock);
         return EFS_ERR_QUOTA;
     }
-    s->nodes[0].used += data_len;
+    local->used += data_len;
     pthread_mutex_unlock(&s->lock);
 
     int flags = O_WRONLY | O_CREAT | O_TRUNC;
@@ -361,7 +382,9 @@ int server_write_fragment(struct efsd_server *s, struct efs_export *ex,
     int fd = open(path, flags, 0644);
     if (fd < 0) {
         pthread_mutex_lock(&s->lock);
-        s->nodes[0].used -= data_len;
+        local = server_local_node(s);
+        if (local && local->used >= data_len)
+            local->used -= data_len;
         pthread_mutex_unlock(&s->lock);
         return EFS_ERR_IO;
     }
@@ -372,7 +395,9 @@ int server_write_fragment(struct efsd_server *s, struct efs_export *ex,
         if (posix_memalign((void **)&aligned_buf, 4096, EFS_FRAGMENT_SIZE) != 0) {
             close(fd);
             pthread_mutex_lock(&s->lock);
-            s->nodes[0].used -= data_len;
+            local = server_local_node(s);
+            if (local && local->used >= data_len)
+                local->used -= data_len;
             pthread_mutex_unlock(&s->lock);
             return EFS_ERR_NOMEM;
         }
@@ -386,7 +411,9 @@ int server_write_fragment(struct efsd_server *s, struct efs_export *ex,
                 free(aligned_buf);
                 close(fd);
                 pthread_mutex_lock(&s->lock);
-                s->nodes[0].used -= data_len;
+                local = server_local_node(s);
+                if (local && local->used >= data_len)
+                    local->used -= data_len;
                 pthread_mutex_unlock(&s->lock);
                 return EFS_ERR_IO;
             }
@@ -399,7 +426,9 @@ int server_write_fragment(struct efsd_server *s, struct efs_export *ex,
             if (n <= 0) {
                 close(fd);
                 pthread_mutex_lock(&s->lock);
-                s->nodes[0].used -= data_len;
+                local = server_local_node(s);
+                if (local && local->used >= data_len)
+                    local->used -= data_len;
                 pthread_mutex_unlock(&s->lock);
                 return EFS_ERR_IO;
             }

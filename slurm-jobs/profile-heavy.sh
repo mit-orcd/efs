@@ -28,13 +28,12 @@ mkdir -p "$PROF" "$SHARED/logs"
 
 # Node-local storage: /scratch when present (mit_normal), else $TMPDIR, else
 # the shared parallel FS (slower, but always writable).
-if [ -d /scratch ] && mkdir -p /scratch/efs/.probe 2>/dev/null; then
-    LOCAL="/scratch/efs/prof-heavy-${SLURM_JOB_ID}"
-elif mkdir -p "${TMPDIR:-/tmp}/efs/.probe" 2>/dev/null; then
-    LOCAL="${TMPDIR:-/tmp}/efs/prof-heavy-${SLURM_JOB_ID}"
-else
-    LOCAL="$SHARED/nodelocal/prof-heavy-${SLURM_JOB_ID}"
+if [ ! -d /scratch ]; then
+    echo "ERROR: /scratch required on compute node"
+    exit 1
 fi
+LOCAL="/scratch/efs-testing/${SLURM_JOB_ID}"
+rm -rf "$LOCAL"
 mkdir -p "$LOCAL"
 echo "LOCAL=$LOCAL"
 

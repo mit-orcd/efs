@@ -19,7 +19,10 @@ static void usage(const char *prog)
 {
     fprintf(stderr,
             "Usage: %s --node-id <id> --addr <addr> --port <port> "
-            "--storage <path> [--quota <bytes>[T|G|M|K]] [--direct-io] [--join <host:port>] [--no-persist] [--perf]\n",
+            "--storage <path> [--quota <bytes>[T|G|M|K]] [--direct-io|--no-direct-io] "
+            "[--join <host:port>] [--no-persist] [--perf]\n"
+            "  --direct-io      O_DIRECT for fragment I/O (default on)\n"
+            "  --no-direct-io   use the page cache for fragment I/O\n",
             prog);
 }
 
@@ -132,6 +135,7 @@ int main(int argc, char **argv)
     struct efsd_server server;
     memset(&server, 0, sizeof(server));
     server.persist_nodes = 1;
+    server.direct_io = 1; /* default: O_DIRECT on flash-backed node storage */
     server.listen_fd = -1;
     g_server = &server;
     pthread_mutex_init(&server.lock, NULL);
@@ -156,6 +160,8 @@ int main(int argc, char **argv)
             }
         } else if (strcmp(argv[i], "--direct-io") == 0) {
             server.direct_io = 1;
+        } else if (strcmp(argv[i], "--no-direct-io") == 0) {
+            server.direct_io = 0;
         } else if (strcmp(argv[i], "--join") == 0 && i + 1 < argc) {
             join_peer = argv[++i];
         } else if (strcmp(argv[i], "--no-persist") == 0) {
@@ -271,6 +277,9 @@ int main(int argc, char **argv)
         pthread_mutex_unlock(&server.lock);
     }
 
+    /* Membership is known; reconstruct bulk metadata from 2+1 pages. */
+    server_rebuild_fragmented_exports(&server);
+
     setlinebuf(stdout);
     {
         struct sigaction sa;
@@ -286,10 +295,11 @@ int main(int argc, char **argv)
     server_start_heartbeat(&server);
     server_start_migration(&server);
 
-    printf("efsd node %u listening on %s:%u, storage=%s, used=%llu, quota=%llu\n",
+    printf("efsd node %u listening on %s:%u, storage=%s, used=%llu, quota=%llu, direct_io=%s\n",
            server.id, server.addr, server.port, server.storage_path,
            (unsigned long long)server.nodes[0].used,
-           (unsigned long long)server.quota);
+           (unsigned long long)server.quota,
+           server.direct_io ? "on" : "off");
     fflush(stdout);
 
     if (server.perf) {

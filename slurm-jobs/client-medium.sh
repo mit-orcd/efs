@@ -24,11 +24,11 @@ ROUND="${ROUND:-1}"
 PROF="${PROF_DIR:-$SHARED/profile/medium-ib-r${ROUND}-${SLURM_JOB_ID}}"
 mkdir -p "$PROF" "$SHARED/logs"
 
-if [ ! -d /scratch ] || ! mkdir -p /scratch/efs/.probe 2>/dev/null; then
+if [ ! -d /scratch ] || ! mkdir -p "/scratch/efs-testing/${SLURM_JOB_ID}" 2>/dev/null; then
     echo "ERROR: client needs /scratch"
     exit 1
 fi
-LOCAL="/scratch/efs/med-cli-${SLURM_JOB_ID}"
+LOCAL="/scratch/efs-testing/${SLURM_JOB_ID}"
 MNT="$LOCAL/mnt"
 rm -rf "$LOCAL"
 mkdir -p "$MNT"

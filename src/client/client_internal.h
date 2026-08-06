@@ -36,15 +36,14 @@ struct efs_client {
 
     /* When non-zero, metadata replication is coalesced: changes only mark
      * dirty and flush every meta_batch_ops operations (or when forced on
-     * unmount). Flushes send a delta of dirty inodes/chunks only (not the
-     * full export) so bulk creates stay O(n). C tests leave this at 0 for
-     * immediate full-metadata sync. */
+     * unmount). Flushes pack the full export into 2+1 pages and push a tiny
+     * EFSR root (≥2 acks). C tests leave this at 0 for immediate sync. */
     int meta_batch;
     uint32_t meta_batch_ops; /* flush threshold; 0 → default */
     uint32_t meta_dirty_ops;
     int meta_dirty;
 
-    /* Dirty tracking for batched delta flushes (meta_batch only).
+    /* Dirty tracking for batched meta flushes (meta_batch only).
      * Inodes: open-addressing set (key 0 = empty).
      * Chunks: set for dedup + parallel arrays of (ino, chunk_index). */
     uint64_t *dirty_ino_keys;
@@ -151,6 +150,10 @@ void efs_client_conn_drop(efs_node_id_t node_id, int fd);
 
 /* Initialize the connection pool (call once after node_count is known). */
 void efs_client_conn_init(void);
+
+/* Close pooled sockets, free dirty-tracking / export memory, destroy locks.
+ * Safe to call once from FUSE destroy / process exit. */
+void efs_client_shutdown(void);
 
 /* PUT all three fragments concurrently (send-all / recv-all on three
  * pooled sockets). Returns EFS_OK if quorum (>=2) acks, else an error. */

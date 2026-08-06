@@ -133,6 +133,7 @@ static int join_cluster(void)
             efs_recv_msg(fd, &type, &reply, &reply_len) != 0 ||
             type != EFS_MSG_JOIN_REPLY || reply_len < 1 ||
             ((uint8_t *)reply)[0] != EFS_JOIN_OK) {
+            free(reply);
             close(fd);
             return -1;
         }
@@ -162,6 +163,7 @@ static int create_export(void)
         efs_recv_msg(fd, &type, &reply, &reply_len) != 0 ||
         type != EFS_MSG_CREATE_EXPORT_REPLY || reply_len < 1 ||
         ((uint8_t *)reply)[0] != EFS_CREATE_EXPORT_OK) {
+        free(reply);
         close(fd);
         return -1;
     }

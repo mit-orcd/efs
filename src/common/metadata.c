@@ -7,8 +7,10 @@
 #include <unistd.h>
 
 #define EFS_META_MAGIC "EFSM"
+#define EFS_META_ROOT_MAGIC "EFSR"
 /* v2: uid/gid. v3: mtime_nsec after mtime. */
 #define EFS_META_VERSION 3
+#define EFS_META_ROOT_VERSION 1
 
 static void time_now(uint64_t *t)
 {
@@ -488,6 +490,7 @@ void efs_export_free(struct efs_export *ex)
     idx_free(&ex->ino_keys, &ex->ino_vals, &ex->ino_mask);
     idx_free(&ex->name_keys, &ex->name_vals, &ex->name_mask);
     idx_free(&ex->chunk_keys, &ex->chunk_vals, &ex->chunk_mask);
+    efs_export_root_free(&ex->root);
     memset(ex, 0, sizeof(*ex));
 }
 
@@ -1113,6 +1116,7 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
 
     efs_export_free(ex);
     efs_export_init(ex, 0, "");
+    ex->meta_fragmented = 0;
 
     read_u32(f, &ex->id);
     read_str(f, ex->name, EFS_MAX_NAME);
@@ -1195,6 +1199,211 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
     return EFS_OK;
 }
 
+int efs_meta_blob_is_root(const char *buf, size_t len)
+{
+    return buf && len >= 4 && memcmp(buf, EFS_META_ROOT_MAGIC, 4) == 0;
+}
+
+int efs_meta_blob_is_export(const char *buf, size_t len)
+{
+    return buf && len >= 4 && memcmp(buf, EFS_META_MAGIC, 4) == 0;
+}
+
+uint32_t efs_meta_page_count_for_blob(uint32_t blob_len)
+{
+    if (blob_len == 0)
+        return 0;
+    return (blob_len + EFS_CHUNK_SIZE - 1) / EFS_CHUNK_SIZE;
+}
+
+int efs_meta_extract_page(const char *blob, uint32_t blob_len, uint32_t page_index,
+                          uint8_t page_out[EFS_CHUNK_SIZE])
+{
+    if (!blob || !page_out)
+        return EFS_ERR_INVAL;
+    uint32_t pages = efs_meta_page_count_for_blob(blob_len);
+    if (page_index >= pages)
+        return EFS_ERR_INVAL;
+    memset(page_out, 0, EFS_CHUNK_SIZE);
+    uint32_t off = page_index * EFS_CHUNK_SIZE;
+    uint32_t n = blob_len - off;
+    if (n > EFS_CHUNK_SIZE)
+        n = EFS_CHUNK_SIZE;
+    memcpy(page_out, blob + off, n);
+    return EFS_OK;
+}
+
+int efs_meta_assemble_blob(const struct efs_export_root *root,
+                           const uint8_t pages[][EFS_CHUNK_SIZE],
+                           char **blob_out, size_t *blob_len_out)
+{
+    if (!root || !pages || !blob_out || !blob_len_out)
+        return EFS_ERR_INVAL;
+    if (root->page_count == 0 || root->blob_len == 0) {
+        *blob_out = NULL;
+        *blob_len_out = 0;
+        return EFS_ERR_INVAL;
+    }
+    char *blob = malloc(root->blob_len);
+    if (!blob)
+        return EFS_ERR_NOMEM;
+    for (uint32_t i = 0; i < root->page_count; i++) {
+        uint32_t off = i * EFS_CHUNK_SIZE;
+        uint32_t n = root->blob_len - off;
+        if (n > EFS_CHUNK_SIZE)
+            n = EFS_CHUNK_SIZE;
+        memcpy(blob + off, pages[i], n);
+    }
+    *blob_out = blob;
+    *blob_len_out = root->blob_len;
+    return EFS_OK;
+}
+
+void efs_export_root_free(struct efs_export_root *root)
+{
+    if (!root)
+        return;
+    free(root->page_checksums);
+    root->page_checksums = NULL;
+    root->page_count = 0;
+}
+
+void efs_export_root_move(struct efs_export_root *dst, struct efs_export_root *src)
+{
+    if (!dst || !src)
+        return;
+    efs_export_root_free(dst);
+    *dst = *src;
+    memset(src, 0, sizeof(*src));
+}
+
+int efs_export_root_copy(struct efs_export_root *dst, const struct efs_export_root *src)
+{
+    if (!dst || !src)
+        return EFS_ERR_INVAL;
+    efs_export_root_free(dst);
+    *dst = *src;
+    dst->page_checksums = NULL;
+    if (src->page_count == 0 || !src->page_checksums)
+        return EFS_OK;
+    size_t n = (size_t)src->page_count * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE;
+    dst->page_checksums = malloc(n);
+    if (!dst->page_checksums)
+        return EFS_ERR_NOMEM;
+    memcpy(dst->page_checksums, src->page_checksums, n);
+    return EFS_OK;
+}
+
+int efs_export_root_prepare(struct efs_export_root *root,
+                            const struct efs_export *ex,
+                            uint64_t generation,
+                            uint32_t blob_len)
+{
+    if (!root || !ex)
+        return EFS_ERR_INVAL;
+    efs_export_root_free(root);
+    memset(root, 0, sizeof(*root));
+    root->version = EFS_META_ROOT_VERSION;
+    root->id = ex->id;
+    strncpy(root->name, ex->name, EFS_MAX_NAME - 1);
+    root->next_ino = ex->next_ino;
+    root->generation = generation;
+    root->blob_len = blob_len;
+    root->page_count = efs_meta_page_count_for_blob(blob_len);
+    if (root->page_count > EFS_META_MAX_PAGES)
+        return EFS_ERR_INVAL;
+    if (root->page_count > 0) {
+        size_t n = (size_t)root->page_count * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE;
+        root->page_checksums = calloc(1, n);
+        if (!root->page_checksums)
+            return EFS_ERR_NOMEM;
+    }
+    return EFS_OK;
+}
+
+int efs_export_root_serialize(const struct efs_export_root *root,
+                              char **buf, size_t *len)
+{
+    if (!root || !buf || !len)
+        return EFS_ERR_INVAL;
+    if (root->page_count > EFS_META_MAX_PAGES)
+        return EFS_ERR_INVAL;
+    if (root->page_count > 0 && !root->page_checksums)
+        return EFS_ERR_INVAL;
+
+    FILE *f = open_memstream(buf, len);
+    if (!f)
+        return EFS_ERR_NOMEM;
+
+    fwrite(EFS_META_ROOT_MAGIC, 4, 1, f);
+    write_u32(f, root->version);
+    write_u32(f, root->id);
+    write_str(f, root->name);
+    write_u64(f, root->next_ino);
+    write_u64(f, root->generation);
+    write_u32(f, root->blob_len);
+    write_u32(f, root->page_count);
+    if (root->page_count > 0) {
+        size_t n = (size_t)root->page_count * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE;
+        fwrite(root->page_checksums, 1, n, f);
+    }
+    fclose(f);
+    return EFS_OK;
+}
+
+int efs_export_root_deserialize(struct efs_export_root *root,
+                                const char *buf, size_t len)
+{
+    if (!root || !buf)
+        return EFS_ERR_INVAL;
+
+    FILE *f = fmemopen((void *)buf, len, "r");
+    if (!f)
+        return EFS_ERR_IO;
+
+    char magic[4];
+    if (fread(magic, 4, 1, f) != 1 || memcmp(magic, EFS_META_ROOT_MAGIC, 4) != 0) {
+        fclose(f);
+        return EFS_ERR_PROTO;
+    }
+
+    efs_export_root_free(root);
+    memset(root, 0, sizeof(*root));
+    uint32_t version = 0;
+    if (read_u32(f, &version) != 0 || version != EFS_META_ROOT_VERSION) {
+        fclose(f);
+        return EFS_ERR_PROTO;
+    }
+    root->version = version;
+    read_u32(f, &root->id);
+    read_str(f, root->name, EFS_MAX_NAME);
+    read_u64(f, &root->next_ino);
+    read_u64(f, &root->generation);
+    read_u32(f, &root->blob_len);
+    read_u32(f, &root->page_count);
+    if (root->page_count > EFS_META_MAX_PAGES ||
+        root->page_count != efs_meta_page_count_for_blob(root->blob_len)) {
+        fclose(f);
+        return EFS_ERR_PROTO;
+    }
+    if (root->page_count > 0) {
+        size_t n = (size_t)root->page_count * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE;
+        root->page_checksums = malloc(n);
+        if (!root->page_checksums) {
+            fclose(f);
+            return EFS_ERR_NOMEM;
+        }
+        if (fread(root->page_checksums, 1, n, f) != n) {
+            free(root->page_checksums);
+            root->page_checksums = NULL;
+            fclose(f);
+            return EFS_ERR_PROTO;
+        }
+    }
+    fclose(f);
+    return EFS_OK;
+}
+
 int efs_export_load(struct efs_export *ex, const char *path)
 {
     FILE *f = fopen(path, "rb");
@@ -1222,7 +1431,24 @@ int efs_export_load(struct efs_export *ex, const char *path)
     }
     fclose(f);
 
-    int rc = efs_export_deserialize(ex, buf, (size_t)len);
+    int rc;
+    if (efs_meta_blob_is_root(buf, (size_t)len)) {
+        struct efs_export_root root;
+        memset(&root, 0, sizeof(root));
+        rc = efs_export_root_deserialize(&root, buf, (size_t)len);
+        if (rc == EFS_OK) {
+            /* Keep a minimal export; caller rebuilds bulk from pages. */
+            efs_export_free(ex);
+            efs_export_init(ex, root.id, root.name);
+            ex->next_ino = root.next_ino;
+            ex->meta_fragmented = 1;
+            efs_export_root_move(&ex->root, &root);
+        }
+    } else {
+        rc = efs_export_deserialize(ex, buf, (size_t)len);
+        if (rc == EFS_OK)
+            ex->meta_fragmented = 0;
+    }
     free(buf);
     return rc;
 }
@@ -1231,7 +1457,11 @@ int efs_export_save(struct efs_export *ex, const char *path)
 {
     char *buf = NULL;
     size_t len = 0;
-    int rc = efs_export_serialize(ex, &buf, &len);
+    int rc;
+    if (ex->meta_fragmented)
+        rc = efs_export_root_serialize(&ex->root, &buf, &len);
+    else
+        rc = efs_export_serialize(ex, &buf, &len);
     if (rc != EFS_OK)
         return rc;
 

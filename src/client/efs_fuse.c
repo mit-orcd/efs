@@ -21,6 +21,9 @@
 /* Generate a per-mount inode namespace so concurrent clients never assign the
  * same inode number to different files. The namespace occupies the high bits
  * of the 64-bit ino; the low 40 bits are a per-client counter. */
+static int split_parent_name(const char *path, char *name, size_t name_len,
+                             struct efs_inode *parent);
+
 static void efs_client_setup_ino_namespace(void)
 {
     struct timespec ts;
@@ -137,25 +140,11 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
 static int efs_fuse_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
     (void)fi;
-    char *p = strdup(path);
-    char *base = strrchr(p, '/');
-    if (!base) {
-        free(p);
-        return -EINVAL;
-    }
-    *base = '\0';
-    base++;
     char name[EFS_MAX_NAME];
-    strncpy(name, base, EFS_MAX_NAME - 1);
-    name[EFS_MAX_NAME - 1] = '\0';
-
     struct efs_inode parent;
-    int rc = efs_client_lookup(p[0] ? p : "/", &parent);
-    free(p);
+    int rc = split_parent_name(path, name, sizeof(name), &parent);
     if (rc != 0)
-        return -ENOENT;
-    if (!efs_mode_is_dir(parent.mode))
-        return -ENOTDIR;
+        return rc;
 
     struct fuse_context *ctx = fuse_get_context();
     efs_ino_t ino = efs_client_create(parent.ino, name, S_IFREG | mode,
@@ -167,25 +156,11 @@ static int efs_fuse_create(const char *path, mode_t mode, struct fuse_file_info 
 
 static int efs_fuse_mkdir(const char *path, mode_t mode)
 {
-    char *p = strdup(path);
-    char *base = strrchr(p, '/');
-    if (!base) {
-        free(p);
-        return -EINVAL;
-    }
-    *base = '\0';
-    base++;
     char name[EFS_MAX_NAME];
-    strncpy(name, base, EFS_MAX_NAME - 1);
-    name[EFS_MAX_NAME - 1] = '\0';
-
     struct efs_inode parent;
-    int rc = efs_client_lookup(p[0] ? p : "/", &parent);
-    free(p);
+    int rc = split_parent_name(path, name, sizeof(name), &parent);
     if (rc != 0)
-        return -ENOENT;
-    if (!efs_mode_is_dir(parent.mode))
-        return -ENOTDIR;
+        return rc;
 
     struct fuse_context *ctx = fuse_get_context();
     efs_ino_t ino = efs_client_create(parent.ino, name, S_IFDIR | mode,
@@ -197,46 +172,22 @@ static int efs_fuse_mkdir(const char *path, mode_t mode)
 
 static int efs_fuse_unlink(const char *path)
 {
-    char *p = strdup(path);
-    char *base = strrchr(p, '/');
-    if (!base) {
-        free(p);
-        return -EINVAL;
-    }
-    *base = '\0';
-    base++;
     char name[EFS_MAX_NAME];
-    strncpy(name, base, EFS_MAX_NAME - 1);
-    name[EFS_MAX_NAME - 1] = '\0';
-
     struct efs_inode parent;
-    int rc = efs_client_lookup(p[0] ? p : "/", &parent);
-    free(p);
+    int rc = split_parent_name(path, name, sizeof(name), &parent);
     if (rc != 0)
-        return -ENOENT;
+        return rc;
 
     return efs_client_unlink(parent.ino, name, false) == 0 ? 0 : -EIO;
 }
 
 static int efs_fuse_rmdir(const char *path)
 {
-    char *p = strdup(path);
-    char *base = strrchr(p, '/');
-    if (!base) {
-        free(p);
-        return -EINVAL;
-    }
-    *base = '\0';
-    base++;
     char name[EFS_MAX_NAME];
-    strncpy(name, base, EFS_MAX_NAME - 1);
-    name[EFS_MAX_NAME - 1] = '\0';
-
     struct efs_inode parent;
-    int rc = efs_client_lookup(p[0] ? p : "/", &parent);
-    free(p);
+    int rc = split_parent_name(path, name, sizeof(name), &parent);
     if (rc != 0)
-        return -ENOENT;
+        return rc;
 
     return efs_client_unlink(parent.ino, name, true) == 0 ? 0 : -EIO;
 }
@@ -478,32 +429,20 @@ static void efs_fuse_destroy(void *userdata)
     (void)userdata;
     /* Final flush so the last dirty batch is not lost on unmount. */
     efs_client_note_meta_change(1);
+    efs_client_shutdown();
 }
 
 static int efs_fuse_rename(const char *from, const char *to)
 {
-    struct efs_inode src, dst_parent;
+    struct efs_inode src;
     if (efs_client_lookup(from, &src) != 0)
         return -ENOENT;
 
-    char *p = strdup(to);
-    char *base = strrchr(p, '/');
-    if (!base) {
-        free(p);
-        return -EINVAL;
-    }
-    *base = '\0';
-    base++;
     char name[EFS_MAX_NAME];
-    strncpy(name, base, EFS_MAX_NAME - 1);
-    name[EFS_MAX_NAME - 1] = '\0';
-
-    int rc = efs_client_lookup(p[0] ? p : "/", &dst_parent);
-    free(p);
+    struct efs_inode dst_parent;
+    int rc = split_parent_name(to, name, sizeof(name), &dst_parent);
     if (rc != 0)
-        return -ENOENT;
-    if (!efs_mode_is_dir(dst_parent.mode))
-        return -ENOTDIR;
+        return rc;
 
     if (efs_client_rename(src.ino, dst_parent.ino, name) != 0)
         return -EIO;
@@ -741,5 +680,7 @@ int main(int argc, char **argv)
 
     int ret = fuse_main(fuse_argc, fuse_argv, &efs_ops, NULL);
     stop_perf_recorder();
+    /* destroy() already shut down on clean unmount; call again is a no-op. */
+    efs_client_shutdown();
     return ret;
 }

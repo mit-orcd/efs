@@ -4,6 +4,7 @@
 #include "efs/erasure.h"
 #include "efs/checksum.h"
 #include "efs/placement.h"
+#include <stddef.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -141,59 +142,8 @@ void efs_client_mark_chunk_dirty(efs_ino_t ino, uint32_t chunk_index)
     g_client.dirty_chunk_idxs[slot] = chunk_index;
 }
 
-/* Build a delta export containing only dirty inodes/chunks. Caller frees via
- * efs_export_free. Returns 0 on success; empty delta yields inode_count 0. */
-static int build_meta_delta(struct efs_export *delta)
-{
-    efs_export_init(delta, g_client.export.id, g_client.export.name);
-    /* Drop the auto-created root; only dirty rows are merged on the server. */
-    delta->inode_count = 0;
-    delta->chunk_count = 0;
-    delta->next_ino = g_client.export.next_ino;
-
-    if (g_client.dirty_ino_keys) {
-        for (uint64_t i = 0; i <= g_client.dirty_ino_mask; i++) {
-            efs_ino_t ino = g_client.dirty_ino_keys[i];
-            if (!ino)
-                continue;
-            /* Include every hard-link directory row that shares this ino. */
-            for (uint64_t r = 0; r < g_client.export.inode_count; r++) {
-                if (g_client.export.inodes[r].ino != ino)
-                    continue;
-                if (delta->inode_count >= delta->inode_capacity) {
-                    uint64_t ncap = delta->inode_capacity * 2;
-                    struct efs_inode *n = realloc(delta->inodes,
-                                                 ncap * sizeof(struct efs_inode));
-                    if (!n)
-                        continue;
-                    delta->inodes = n;
-                    delta->inode_capacity = ncap;
-                }
-                delta->inodes[delta->inode_count++] = g_client.export.inodes[r];
-            }
-        }
-    }
-
-    for (uint64_t i = 0; i < g_client.dirty_chunk_count; i++) {
-        struct efs_chunk_entry ce;
-        if (efs_export_get_chunk(&g_client.export, g_client.dirty_chunk_inos[i],
-                                g_client.dirty_chunk_idxs[i], &ce) != 0)
-            continue;
-        if (delta->chunk_count >= delta->chunk_capacity) {
-            uint64_t ncap = delta->chunk_capacity * 2;
-            struct efs_chunk_entry *n = realloc(delta->chunks,
-                                               ncap * sizeof(struct efs_chunk_entry));
-            if (!n)
-                continue;
-            delta->chunks = n;
-            delta->chunk_capacity = ncap;
-        }
-        delta->chunks[delta->chunk_count++] = ce;
-    }
-    return 0;
-}
-
-static int send_meta_payload(const char *buf, size_t len)
+/* Replicate the tiny export root (EFSR) to all nodes; need ≥2 acks. */
+static int send_meta_root(const char *buf, size_t len)
 {
     int acks = 0;
     for (uint32_t i = 0; i < g_client.node_count; i++) {
@@ -208,7 +158,9 @@ static int send_meta_payload(const char *buf, size_t len)
         if (efs_send_msg(fd, EFS_MSG_PUT_META, buf, (uint32_t)len) == 0 &&
             efs_recv_msg(fd, &type, &reply, &reply_len) == 0 &&
             type == EFS_MSG_PUT_META_REPLY && reply_len >= 1) {
-            acks++;
+            uint8_t status = ((uint8_t *)reply)[0];
+            if (status == EFS_PUT_META_OK)
+                acks++;
             free(reply);
             efs_client_conn_release(nid, fd);
         } else {
@@ -219,47 +171,98 @@ static int send_meta_payload(const char *buf, size_t len)
     return (acks >= 2) ? EFS_OK : EFS_ERR_NO_QUORUM;
 }
 
+/* Pack the full export into 2+1 pages, then push the EFSR root (≥2 acks). */
 int efs_client_replicate_metadata(void)
 {
-    char *buf = NULL;
-    size_t len = 0;
-    struct efs_export delta;
-    int use_delta = 0;
+    char *blob = NULL;
+    size_t blob_len = 0;
+    uint64_t new_gen = 1;
 
     pthread_mutex_lock(&g_client.lock);
     if (g_client.meta_batch &&
-        (g_client.dirty_ino_count > 0 || g_client.dirty_chunk_count > 0)) {
-        build_meta_delta(&delta);
-        use_delta = 1;
-        efs_export_serialize(&delta, &buf, &len);
-    } else if (!g_client.meta_batch) {
-        efs_export_serialize(&g_client.export, &buf, &len);
-    } else {
-        /* Batched mode, nothing dirty. */
-        g_client.meta_dirty = 0;
+        g_client.dirty_ino_count == 0 && g_client.dirty_chunk_count == 0 &&
+        !g_client.meta_dirty) {
         g_client.meta_dirty_ops = 0;
         pthread_mutex_unlock(&g_client.lock);
         return EFS_OK;
     }
+    if (efs_export_serialize(&g_client.export, &blob, &blob_len) != EFS_OK) {
+        pthread_mutex_unlock(&g_client.lock);
+        return EFS_ERR_NOMEM;
+    }
+    new_gen = g_client.export.root.generation + 1;
+    if (new_gen == 0)
+        new_gen = 1;
     pthread_mutex_unlock(&g_client.lock);
 
-    if (use_delta)
-        efs_export_free(&delta);
-
-    if (!buf)
+    if (!blob)
         return EFS_ERR_NOMEM;
+    if (blob_len > (size_t)EFS_META_MAX_PAGES * EFS_CHUNK_SIZE) {
+        free(blob);
+        return EFS_ERR_INVAL;
+    }
 
-    int rc = send_meta_payload(buf, len);
-    free(buf);
+    struct efs_export_root root;
+    memset(&root, 0, sizeof(root));
+    pthread_mutex_lock(&g_client.lock);
+    int prc = efs_export_root_prepare(&root, &g_client.export, new_gen,
+                                      (uint32_t)blob_len);
+    pthread_mutex_unlock(&g_client.lock);
+    if (prc != EFS_OK) {
+        free(blob);
+        return prc;
+    }
 
-    /* Only clear dirty sets after a successful quorum so a failed flush
-     * retries the same delta on the next note/force. */
+    for (uint32_t pi = 0; pi < root.page_count; pi++) {
+        uint8_t page[EFS_CHUNK_SIZE];
+        if (efs_meta_extract_page(blob, (uint32_t)blob_len, pi, page) != EFS_OK) {
+            free(blob);
+            efs_export_root_free(&root);
+            return EFS_ERR_INVAL;
+        }
+        uint8_t fragments[EFS_NUM_FRAGMENTS][EFS_FRAGMENT_SIZE];
+        efs_encode_chunk(page, EFS_CHUNK_SIZE, fragments);
+
+        uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+        for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
+            efs_hash(fragments[fi], EFS_FRAGMENT_SIZE, checksums[fi]);
+
+        efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+        efs_get_placement(g_client.node_count, EFS_META_TABLE_INO, pi, nodes);
+
+        int rc = efs_client_put_fragments_parallel(EFS_META_TABLE_INO, pi, nodes,
+                                                   fragments, checksums);
+        if (rc != EFS_OK) {
+            free(blob);
+            efs_export_root_free(&root);
+            return rc;
+        }
+        for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
+            memcpy(efs_export_root_checksum(&root, pi, fi), checksums[fi],
+                   EFS_HASH_SIZE);
+    }
+    free(blob);
+
+    char *root_buf = NULL;
+    size_t root_len = 0;
+    if (efs_export_root_serialize(&root, &root_buf, &root_len) != EFS_OK) {
+        efs_export_root_free(&root);
+        return EFS_ERR_NOMEM;
+    }
+
+    int rc = send_meta_root(root_buf, root_len);
+    free(root_buf);
+
     if (rc == EFS_OK) {
         pthread_mutex_lock(&g_client.lock);
+        g_client.export.meta_fragmented = 1;
+        efs_export_root_move(&g_client.export.root, &root);
         dirty_sets_clear();
         g_client.meta_dirty = 0;
         g_client.meta_dirty_ops = 0;
         pthread_mutex_unlock(&g_client.lock);
+    } else {
+        efs_export_root_free(&root);
     }
     return rc;
 }
@@ -302,33 +305,29 @@ int efs_client_put_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
     if (fd < 0)
         return EFS_ERR_NET;
 
-    struct efs_msg_put_chunk *req = malloc(sizeof(*req));
-    if (!req) {
-        efs_client_conn_release(node_id, fd);
-        return EFS_ERR_NOMEM;
-    }
-    memset(req, 0, sizeof(*req));
-    req->export_id = g_client.export_id;
-    req->ino = ino;
-    req->chunk_index = chunk_index;
-    req->fragment_index = fragment_index;
-    memcpy(req->checksum, checksum, EFS_HASH_SIZE);
-    memcpy(req->data, data, EFS_FRAGMENT_SIZE);
+    /* Zero header (incl. padding) only — avoid sending uninit bytes without
+     * memset'ing the 64 KiB fragment body that we overwrite next. */
+    struct efs_msg_put_chunk req;
+    memset(&req, 0, offsetof(struct efs_msg_put_chunk, data));
+    req.export_id = g_client.export_id;
+    req.ino = ino;
+    req.chunk_index = chunk_index;
+    req.fragment_index = fragment_index;
+    memcpy(req.checksum, checksum, EFS_HASH_SIZE);
+    memcpy(req.data, data, EFS_FRAGMENT_SIZE);
 
     uint8_t reply_type;
     void *reply = NULL;
     uint32_t reply_len = 0;
-    if (efs_send_msg(fd, EFS_MSG_PUT_CHUNK, req, sizeof(*req)) != 0 ||
+    if (efs_send_msg(fd, EFS_MSG_PUT_CHUNK, &req, sizeof(req)) != 0 ||
         efs_recv_msg(fd, &reply_type, &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_PUT_CHUNK_REPLY || reply_len != 1) {
-        free(req);
         free(reply);
         efs_client_conn_drop(node_id, fd);
         return EFS_ERR_NET;
     }
 
     uint8_t status = ((uint8_t *)reply)[0];
-    free(req);
     free(reply);
     efs_client_conn_release(node_id, fd);
     if (status == EFS_PUT_CHUNK_OK)
@@ -344,15 +343,17 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
                                       const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE])
 {
     int fds[EFS_NUM_FRAGMENTS];
-    struct efs_msg_put_chunk *reqs[EFS_NUM_FRAGMENTS];
-    int got = 0;
     int acks = 0;
     int quota_errors = 0;
 
-    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+    /* One allocation for three PUT payloads (~192 KiB) instead of three
+     * mallocs, and avoid zeroing the fragment bodies. */
+    struct efs_msg_put_chunk *reqs = malloc(EFS_NUM_FRAGMENTS * sizeof(*reqs));
+    if (!reqs)
+        return EFS_ERR_NOMEM;
+
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
         fds[i] = -1;
-        reqs[i] = NULL;
-    }
 
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         if (nodes[i] == 0 || nodes[i] > g_client.node_count)
@@ -360,24 +361,20 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
         fds[i] = efs_client_conn_get(nodes[i]);
         if (fds[i] < 0)
             goto fail_net;
-        got++;
-        reqs[i] = malloc(sizeof(*reqs[i]));
-        if (!reqs[i])
-            goto fail_nomem;
-        memset(reqs[i], 0, sizeof(*reqs[i]));
-        reqs[i]->export_id = g_client.export_id;
-        reqs[i]->ino = ino;
-        reqs[i]->chunk_index = chunk_index;
-        reqs[i]->fragment_index = (uint32_t)i;
-        memcpy(reqs[i]->checksum, checksums[i], EFS_HASH_SIZE);
-        memcpy(reqs[i]->data, fragments[i], EFS_FRAGMENT_SIZE);
+        memset(&reqs[i], 0, offsetof(struct efs_msg_put_chunk, data));
+        reqs[i].export_id = g_client.export_id;
+        reqs[i].ino = ino;
+        reqs[i].chunk_index = chunk_index;
+        reqs[i].fragment_index = (uint32_t)i;
+        memcpy(reqs[i].checksum, checksums[i], EFS_HASH_SIZE);
+        memcpy(reqs[i].data, fragments[i], EFS_FRAGMENT_SIZE);
     }
 
     /* Send all three PUTs before waiting for any ACK (overlap RTTs). */
     int send_ok[EFS_NUM_FRAGMENTS];
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        send_ok[i] = (efs_send_msg(fds[i], EFS_MSG_PUT_CHUNK, reqs[i],
-                                   sizeof(*reqs[i])) == 0);
+        send_ok[i] = (efs_send_msg(fds[i], EFS_MSG_PUT_CHUNK, &reqs[i],
+                                   sizeof(reqs[i])) == 0);
     }
 
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
@@ -406,8 +403,7 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
         fds[i] = -1;
     }
 
-    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        free(reqs[i]);
+    free(reqs);
 
     if (quota_errors >= 2)
         return EFS_ERR_QUOTA;
@@ -415,24 +411,12 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
         return EFS_ERR_NO_QUORUM;
     return EFS_OK;
 
-fail_nomem:
-    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        free(reqs[i]);
-        reqs[i] = NULL;
-        if (fds[i] >= 0) {
-            efs_client_conn_release(nodes[i], fds[i]);
-            fds[i] = -1;
-        }
-    }
-    return EFS_ERR_NOMEM;
-
 fail_net:
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        free(reqs[i]);
         if (fds[i] >= 0)
             efs_client_conn_release(nodes[i], fds[i]);
     }
-    (void)got;
+    free(reqs);
     return EFS_ERR_NET;
 }
 

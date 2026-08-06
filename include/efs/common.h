@@ -13,7 +13,7 @@
 #define EFS_CHUNK_SIZE       (128 * 1024)
 #define EFS_FRAGMENT_SIZE    (EFS_CHUNK_SIZE / 2)
 #define EFS_NUM_FRAGMENTS    3
-#define EFS_MAX_NODES        3
+#define EFS_MAX_NODES        4
 /* Max TCP connections the client keeps open to each server (pool size). */
 #define EFS_CLIENT_CONNS_PER_NODE 8
 #define EFS_MAX_EXPORTS      16
@@ -26,6 +26,11 @@
 #define EFS_IO_TIMEOUT_MS    30000
 
 #define EFS_ROOT_INO         1
+/* Reserved inode for 2+1 metadata table pages (not a user-visible file).
+ * High bit set so it cannot collide with client inode namespaces. */
+#define EFS_META_TABLE_INO   ((efs_ino_t)0x8000000000000002ULL)
+/* Max 128 KiB pages in a fragmented metadata blob (~64 MiB logical). */
+#define EFS_META_MAX_PAGES   512
 
 #define EFS_OK               0
 #define EFS_ERR_IO          -1

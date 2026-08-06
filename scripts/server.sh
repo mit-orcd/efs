@@ -147,17 +147,34 @@ if [ ${#EXTRA_ARGS[@]} -gt 0 ]; then
     ARGS+=("${EXTRA_ARGS[@]}")
 fi
 
-"${ARGS[@]}" >> "$STORAGE/log/efsd.log" 2>&1 &
+LOG_FILE="$STORAGE/log/efsd.log"
+# Mark where this start's log begins so we can surface join/bind errors.
+LOG_MARK=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
+
+"${ARGS[@]}" >> "$LOG_FILE" 2>&1 &
 NEW_PID=$!
 echo "$NEW_PID" > "$PID_FILE"
 
-echo "efsd started (PID $NEW_PID); logs: $STORAGE/log/efsd.log"
+echo "efsd started (PID $NEW_PID); logs: $LOG_FILE"
 echo "Stop with: $0 stop $STORAGE   # or: $0 stop $ADDR_PORT"
 
 # Give efsd a moment to bind and report any immediate failure.
 sleep 1
 if ! kill -0 "$NEW_PID" 2>/dev/null; then
     echo "ERROR: efsd exited immediately. Last log lines:"
-    tail -n 20 "$STORAGE/log/efsd.log" 2>/dev/null || true
+    tail -n 20 "$LOG_FILE" 2>/dev/null || true
     exit 1
+fi
+
+# Join failures are non-fatal (efsd runs standalone and retries), but they
+# must be visible on the terminal — not only buried in the log.
+if [ -n "$JOIN" ]; then
+    NEW_LOG=$(tail -n +"$((LOG_MARK + 1))" "$LOG_FILE" 2>/dev/null || true)
+    if echo "$NEW_LOG" | grep -qE 'Cannot connect to peer|Could not join cluster|Invalid join address|Join rejected|Join failed|No HELLO_ACK'; then
+        echo "WARNING: join to $JOIN failed; efsd is running standalone and will retry in the background." >&2
+        echo "$NEW_LOG" | grep -E 'Cannot connect to peer|Could not join cluster|Invalid join address|Join rejected|Join failed|No HELLO_ACK' >&2 || true
+        echo "See full log: $LOG_FILE" >&2
+    elif ! echo "$NEW_LOG" | grep -q 'Joined cluster'; then
+        echo "WARNING: join to $JOIN was requested but no join success was logged yet; check $LOG_FILE" >&2
+    fi
 fi

@@ -10,7 +10,7 @@
 #SBATCH --error=/orcd/scratch/orcd/001/erbmi1/efs/logs/debug-gdb-%j.err
 set -uo pipefail
 REPO=/home/erbmi1/git/efs
-LOCAL=/scratch/efs/gdb-${SLURM_JOB_ID}
+LOCAL=/scratch/efs-testing/${SLURM_JOB_ID}
 rm -rf "$LOCAL"; mkdir -p "$LOCAL"/{s1,s2,s3,mnt,gdb}
 IP=127.0.0.1
 "$REPO/efsd" --node-id 1 --addr "$IP" --port 1991 --storage "$LOCAL/s1" >"$LOCAL/s1.log" 2>&1 &

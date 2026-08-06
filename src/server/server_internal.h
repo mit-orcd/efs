@@ -83,6 +83,9 @@ uint64_t server_compute_usage(const char *path);
 /* Update the local node's used counter in the cluster list. */
 void server_update_local_usage(struct efsd_server *s);
 
+/* Pointer to this process's row in s->nodes (matched by s->id), or NULL. */
+struct efs_node *server_local_node(struct efsd_server *s);
+
 /* Return true if adding fragment_size bytes would exceed the server's quota. */
 bool server_would_exceed_quota(struct efsd_server *s, uint64_t fragment_size);
 
@@ -92,10 +95,19 @@ void server_handle_conn(int fd);
 /* Join an existing cluster by contacting a peer. */
 int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t peer_port);
 
+/* Persist export as 2+1 meta pages + EFSR root; push root to peers. */
+int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex);
+
+/* Rebuild in-memory export tables from meta pages referenced by ex->root. */
+int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *ex);
+
+/* After membership is known, rebuild any EFSR exports from meta pages. */
+void server_rebuild_fragmented_exports(struct efsd_server *s);
+
 /* Send metadata to all peers. Returns number of acks. */
 int server_replicate_metadata(struct efsd_server *s, struct efs_export *ex);
 
-/* Send a full metadata snapshot to a peer. */
+/* Send a metadata snapshot (EFSR root or legacy EFSM) to a peer. */
 int server_send_metadata_to(struct efsd_server *s, struct efs_export *ex,
                               const char *host, uint16_t port);
 

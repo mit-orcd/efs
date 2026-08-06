@@ -13,10 +13,11 @@ set -e
 REPO="/home/erbmi1/git/efs"
 SHARED="/orcd/scratch/orcd/001/erbmi1/efs"
 mkdir -p "$SHARED/state" "$SHARED/logs"
-MNT="/scratch/efs/mnt1-${SLURM_JOB_ID}"
+SCRATCH="/scratch/efs-testing/${SLURM_JOB_ID}"
+MNT="$SCRATCH/mnt"
 # Clean up any stale mount from a previous run on this node, then start fresh.
 fusermount -u "$MNT" 2>/dev/null || umount "$MNT" 2>/dev/null || true
-rm -rf "$MNT"
+rm -rf "$SCRATCH"
 mkdir -p "$MNT"
 # when the harness finishes, always cleanup after yourself in /scratch.
 cleanup() {
@@ -24,7 +25,8 @@ cleanup() {
     fusermount -u "$MNT" 2>/dev/null || umount "$MNT" 2>/dev/null || true
     [ -n "${FUSE_PID:-}" ] && kill "$FUSE_PID" 2>/dev/null || true
     [ -n "${FUSE_PID:-}" ] && wait "$FUSE_PID" 2>/dev/null || true
-    rm -rf "$MNT" 2>/dev/null || true
+    echo "cleaning /scratch: $SCRATCH"
+    rm -rf "$SCRATCH" 2>/dev/null || true
 }
 trap cleanup EXIT
 

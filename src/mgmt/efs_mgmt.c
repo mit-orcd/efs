@@ -180,17 +180,17 @@ static int cmd_mkfs(int argc, char **argv)
         return 1;
     }
 
-    uint8_t *status = reply;
-    if (*status == EFS_CREATE_EXPORT_OK)
+    uint8_t status = ((uint8_t *)reply)[0];
+    if (status == EFS_CREATE_EXPORT_OK)
         printf("Export '%s' created on %s:%u\n", argv[1], host, port);
-    else if (*status == EFS_CREATE_EXPORT_EXISTS)
+    else if (status == EFS_CREATE_EXPORT_EXISTS)
         fprintf(stderr, "Export '%s' already exists on %s:%u\n", argv[1], host, port);
     else
         fprintf(stderr, "Failed to create export '%s'\n", argv[1]);
 
     free(reply);
     close(fd);
-    return (*status == EFS_CREATE_EXPORT_OK) ? 0 : 1;
+    return (status == EFS_CREATE_EXPORT_OK) ? 0 : 1;
 }
 
 static int cmd_add_node(int argc, char **argv)
@@ -230,15 +230,15 @@ static int cmd_add_node(int argc, char **argv)
         return 1;
     }
 
-    uint8_t *status = reply;
-    if (*status == EFS_JOIN_OK)
+    uint8_t status = ((uint8_t *)reply)[0];
+    if (status == EFS_JOIN_OK)
         printf("Node %s:%u joined cluster via %s:%u\n", new_host, new_port, existing_host, existing_port);
     else
         fprintf(stderr, "Join failed\n");
 
     free(reply);
     close(fd);
-    return (*status == EFS_JOIN_OK) ? 0 : 1;
+    return (status == EFS_JOIN_OK) ? 0 : 1;
 }
 
 static int cmd_remove_node(int argc, char **argv)
@@ -272,15 +272,15 @@ static int cmd_remove_node(int argc, char **argv)
         return 1;
     }
 
-    uint8_t *status = reply;
-    if (*status == EFS_REMOVE_NODE_IN_PROGRESS)
+    uint8_t status = ((uint8_t *)reply)[0];
+    if (status == EFS_REMOVE_NODE_IN_PROGRESS)
         printf("Node %s:%u is removing its data and will leave the cluster\n", host, port);
     else
         fprintf(stderr, "Remove-node failed\n");
 
     free(reply);
     close(fd);
-    return (*status == EFS_REMOVE_NODE_IN_PROGRESS) ? 0 : 1;
+    return (status == EFS_REMOVE_NODE_IN_PROGRESS) ? 0 : 1;
 }
 
 static int cmd_shrink_quota(int argc, char **argv)
@@ -324,8 +324,8 @@ static int cmd_shrink_quota(int argc, char **argv)
         return 1;
     }
 
-    uint8_t *status = reply;
-    if (*status == EFS_SHRINK_QUOTA_IN_PROGRESS)
+    uint8_t status = ((uint8_t *)reply)[0];
+    if (status == EFS_SHRINK_QUOTA_IN_PROGRESS)
         printf("Shrinking quota on %s:%u by %s; background migration started\n",
                host, port, argv[1]);
     else
@@ -333,7 +333,7 @@ static int cmd_shrink_quota(int argc, char **argv)
 
     free(reply);
     close(fd);
-    return (*status == EFS_SHRINK_QUOTA_IN_PROGRESS) ? 0 : 1;
+    return (status == EFS_SHRINK_QUOTA_IN_PROGRESS) ? 0 : 1;
 }
 
 int main(int argc, char **argv)

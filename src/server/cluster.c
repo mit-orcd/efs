@@ -26,7 +26,10 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
     h.port = s->port;
     strncpy(h.storage_path, s->storage_path, sizeof(h.storage_path) - 1);
     h.quota = s->quota;
-    h.used = s->nodes[0].used;
+    {
+        struct efs_node *local = server_local_node(s);
+        h.used = local ? local->used : server_compute_usage(s->storage_path);
+    }
 
     if (efs_send_msg(fd, EFS_MSG_HELLO, &h, sizeof(h)) != 0) {
         fprintf(stderr, "Failed to send HELLO to peer %s:%u\n", peer_host, peer_port);
@@ -59,16 +62,56 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
     }
 
     struct efs_msg_hello_ack *ack = payload;
+    if (ack->assigned_id == 0 || ack->assigned_id != s->id) {
+        fprintf(stderr,
+                "Join rejected by peer %s:%u (cluster full or id mismatch; "
+                "assigned_id=%llu local_id=%llu count=%u)\n",
+                peer_host, peer_port,
+                (unsigned long long)ack->assigned_id,
+                (unsigned long long)s->id, ack->node_count);
+        free(payload);
+        close(fd);
+        return -1;
+    }
+
+    int self_in_list = 0;
+    for (uint32_t i = 0; i < ack->node_count && i < EFS_MAX_NODES; i++) {
+        if (ack->nodes[i].id == s->id) {
+            self_in_list = 1;
+            break;
+        }
+    }
+    if (!self_in_list) {
+        fprintf(stderr,
+                "Join failed: peer %s:%u ACK omitted this node (id %llu)\n",
+                peer_host, peer_port, (unsigned long long)s->id);
+        free(payload);
+        close(fd);
+        return -1;
+    }
+
+    uint32_t joined = ack->node_count;
     pthread_mutex_lock(&s->lock);
     s->epoch = ack->epoch;
     s->node_count = ack->node_count;
     memcpy(s->nodes, ack->nodes, sizeof(s->nodes));
+    /* Keep this process's listen/storage facts authoritative after adopt. */
+    struct efs_node *local = server_local_node(s);
+    if (local) {
+        strncpy(local->addr, s->addr, sizeof(local->addr) - 1);
+        local->addr[sizeof(local->addr) - 1] = '\0';
+        local->port = s->port;
+        strncpy(local->storage_path, s->storage_path, sizeof(local->storage_path) - 1);
+        local->storage_path[sizeof(local->storage_path) - 1] = '\0';
+        local->quota = s->quota;
+        local->used = server_compute_usage(s->storage_path);
+    }
     server_save_nodes(s);
     pthread_mutex_unlock(&s->lock);
     free(payload);
     close(fd);
 
-    printf("Joined cluster with %u nodes\n", ack->node_count);
+    printf("Joined cluster with %u nodes\n", joined);
     return 0;
 }
 

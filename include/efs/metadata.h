@@ -27,6 +27,20 @@ struct efs_inode {
     char name[EFS_MAX_NAME];
 };
 
+/* Tiny fully-replicated export root. Bulk inode/chunk tables live in
+ * 2+1 metadata pages under EFS_META_TABLE_INO (see efs_meta_page_*).
+ * page_checksums is heap-allocated: page_count * EFS_NUM_FRAGMENTS * HASH. */
+struct efs_export_root {
+    uint32_t version;
+    efs_export_id_t id;
+    char name[EFS_MAX_NAME];
+    uint64_t next_ino;
+    uint64_t generation;
+    uint32_t blob_len;   /* length of the EFSM blob packed into pages */
+    uint32_t page_count; /* ceil(blob_len / EFS_CHUNK_SIZE) */
+    uint8_t *page_checksums;
+};
+
 struct efs_export {
     efs_export_id_t id;
     char name[EFS_MAX_NAME];
@@ -49,6 +63,12 @@ struct efs_export {
     uint64_t *chunk_keys;
     uint64_t *chunk_vals;
     uint64_t chunk_mask;
+
+    /* When set, metadata.bin stores efs_export_root (EFSR); bulk tables are
+     * reconstructed from 2+1 pages. The in-memory inode/chunk arrays remain
+     * the working cache after rebuild. */
+    int meta_fragmented;
+    struct efs_export_root root;
 };
 
 /* Initialize an empty export. */
@@ -130,8 +150,59 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len);
  * This lets concurrent clients commit without dropping each other's data. */
 int efs_export_merge(struct efs_export *ex, const struct efs_export *inc);
 
-/* Load from / save to a file. */
+/* Load from / save to a file. Fragmented exports save/load EFSR roots. */
 int efs_export_load(struct efs_export *ex, const char *path);
 int efs_export_save(struct efs_export *ex, const char *path);
+
+/* --- Fragmented metadata (hybrid root + 2+1 pages) --- */
+
+int efs_meta_blob_is_root(const char *buf, size_t len);
+int efs_meta_blob_is_export(const char *buf, size_t len);
+
+uint32_t efs_meta_page_count_for_blob(uint32_t blob_len);
+
+/* Copy one zero-padded EFS_CHUNK_SIZE page out of a serialized EFSM blob. */
+int efs_meta_extract_page(const char *blob, uint32_t blob_len, uint32_t page_index,
+                          uint8_t page_out[EFS_CHUNK_SIZE]);
+
+/* Assemble pages back into a blob of root->blob_len bytes. */
+int efs_meta_assemble_blob(const struct efs_export_root *root,
+                           const uint8_t pages[][EFS_CHUNK_SIZE],
+                           char **blob_out, size_t *blob_len_out);
+
+int efs_export_root_serialize(const struct efs_export_root *root,
+                              char **buf, size_t *len);
+int efs_export_root_deserialize(struct efs_export_root *root,
+                                const char *buf, size_t len);
+
+/* Fill root header from export (allocates page_checksums for page_count). */
+int efs_export_root_prepare(struct efs_export_root *root,
+                            const struct efs_export *ex,
+                            uint64_t generation,
+                            uint32_t blob_len);
+
+/* Free page_checksums; safe on zeroed roots. */
+void efs_export_root_free(struct efs_export_root *root);
+
+/* Move root contents into dst (steals page_checksums; clears src). */
+void efs_export_root_move(struct efs_export_root *dst, struct efs_export_root *src);
+
+/* Deep-copy root (including checksums). */
+int efs_export_root_copy(struct efs_export_root *dst, const struct efs_export_root *src);
+
+/* Pointer to checksums[page][frag] inside root->page_checksums. */
+static inline uint8_t *efs_export_root_checksum(struct efs_export_root *root,
+                                                uint32_t page, int frag)
+{
+    return root->page_checksums +
+           ((size_t)page * EFS_NUM_FRAGMENTS + (size_t)frag) * EFS_HASH_SIZE;
+}
+
+static inline const uint8_t *efs_export_root_checksum_const(
+    const struct efs_export_root *root, uint32_t page, int frag)
+{
+    return root->page_checksums +
+           ((size_t)page * EFS_NUM_FRAGMENTS + (size_t)frag) * EFS_HASH_SIZE;
+}
 
 #endif

@@ -16,7 +16,7 @@ set -euo pipefail
 REPO="/home/erbmi1/git/efs"
 SHARED="/orcd/scratch/orcd/001/erbmi1/efs"
 PROF="$SHARED/profile/${SLURM_JOB_ID}"
-LOCAL="/scratch/efs/prof-${SLURM_JOB_ID}"
+LOCAL="/scratch/efs-testing/${SLURM_JOB_ID}"
 mkdir -p "$PROF" "$SHARED/logs" "$LOCAL"
 
 IP="127.0.0.1"

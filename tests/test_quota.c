@@ -140,6 +140,7 @@ static int join_cluster(void)
         if (efs_send_msg(fd, EFS_MSG_JOIN, &req, sizeof(req)) != 0 ||
             efs_recv_msg(fd, &type, &reply, &reply_len) != 0 ||
             type != EFS_MSG_JOIN_REPLY || reply_len != 1) {
+            free(reply);
             close(fd);
             return -1;
         }
@@ -169,6 +170,7 @@ static int create_export(const char *name)
     if (efs_send_msg(fd, EFS_MSG_CREATE_EXPORT, &req, sizeof(req)) != 0 ||
         efs_recv_msg(fd, &type, &reply, &reply_len) != 0 ||
         type != EFS_MSG_CREATE_EXPORT_REPLY || reply_len != 1) {
+        free(reply);
         close(fd);
         return -1;
     }
@@ -193,6 +195,7 @@ static int check_cluster_full(bool expect_full)
         efs_recv_msg(fd, &type, &reply, &reply_len) != 0 ||
         type != EFS_MSG_LIST_NODES_REPLY ||
         reply_len != sizeof(struct efs_msg_list_nodes_reply)) {
+        free(reply);
         close(fd);
         return -1;
     }

@@ -1,6 +1,6 @@
 ---
 name: slurm-execution
-description: How to build and run anything in the efs project. Never compile or run project binaries on the login node. Submit everything as Slurm jobs on mit_normal or mit_quicktest, store all compute-node data under /scratch, clean /scratch when harnesses finish, place multi-node servers on distinct nodes, and keep tests as small smoke tests (not load tests).
+description: How to build and run anything in the efs project. Never compile or run project binaries on the login node. Submit everything as Slurm jobs on mit_normal or mit_quicktest, store all compute-node data under /scratch/efs-testing/$SLURM_JOB_ID, clean that tree when harnesses finish, place multi-node servers on distinct nodes, and keep tests as small smoke tests (not load tests).
 ---
 
 # Slurm execution rules for efs
@@ -28,23 +28,31 @@ These rules govern every build, server, client, management command, and test in 
 - Do **not** let Slurm pack `efs-s1`/`efs-s2`/`efs-s3` onto one machine (distinct ports are not enough).
 - Submit servers **sequentially**: wait for `state/sN.host`, then `sbatch --exclude=<already-used-nodes>` for the next server. Assert three distinct short hostnames before starting clients.
 - Prefer excluding those server nodes when submitting clients so the client is also cross-node.
-- Helpers live in `slurm-jobs/lib-harness.sh` (`efs_wait_addr`, `efs_assert_distinct_servers`, `efs_run_efsd`).
-- Single-job local profiles (all processes on one node under `/scratch/efs/prof-*`) are the exception; they are not multi-node clusters.
+- Helpers live in `slurm-jobs/lib-harness.sh` (`efs_job_scratch`, `efs_wait_addr`, `efs_assert_distinct_servers`, `efs_run_efsd`).
+- Single-job local profiles (all processes on one node under `/scratch/efs-testing/$SLURM_JOB_ID`) are the exception; they are not multi-node clusters.
 
-## 4. Compute-node storage goes under /scratch
+## 4. Compute-node storage: `/scratch/efs-testing/$SLURM_JOB_ID`
 
-- All server storage directories, FUSE mountpoints, PID files, and any temporary data created on a compute node **must live under `/scratch`** (e.g. `/scratch/efs/<name>`). `/scratch` is node-local and fast.
-- Never use `/tmp` for efs data on compute nodes; `/tmp` is small and shared.
-- Clean up stale mountpoints and directories before reusing them (`fusermount -u`, then `rm -rf`).
-- **when the harness finishes, always cleanup after yourself in /scratch.**
-- Every server/client/profile job must `trap` EXIT/TERM and `rm -rf` its `/scratch/efs/...` directory after unmounting/killing processes. Do not leave job-local trees behind after `scancel` or normal exit. Use `efs_run_efsd` (not bare `exec efsd`) so the shell trap still runs.
+- All server storage, FUSE mountpoints, PID files, perf data, and any other node-local temp **must** live under:
+
+  **`/scratch/efs-testing/${SLURM_JOB_ID}/...`**
+
+  Examples: `/scratch/efs-testing/$SLURM_JOB_ID/storage`, `/scratch/efs-testing/$SLURM_JOB_ID/mnt`.
+- Testing root on the compute node: **`/scratch/efs-testing/`**.
+- Helper: `efs_job_scratch` in `lib-harness.sh` prints `/scratch/efs-testing/$SLURM_JOB_ID` (errors if unset or `/scratch` missing).
+- Cleanup removes the **job subdirectory** only (`rm -rf /scratch/efs-testing/$SLURM_JOB_ID`), not the whole `efs-testing` tree.
+- **Never** use `/tmp`, `/scratch/efs/...`, or shared `/orcd/...` for node-local server/mount data.
+- Clean up stale mountpoints before reuse (`fusermount -u`, then `rm -rf`).
+- **When the harness finishes, always `rm -rf /scratch/efs-testing/$SLURM_JOB_ID`.**
+- Every server/client/profile job must `trap` EXIT/TERM and remove that whole tree after unmounting/killing processes. Use `efs_run_efsd "$SCRATCH" ...` (cleanup arg = job scratch root, not only the storage subdir).
 
 ### Shared cross-node storage
 
-- Anything that must be visible across **all** compute nodes and the login node (server address/state files, harness logs, build logs) goes under **`/orcd/scratch/orcd/001/erbmi1/efs`** (a.k.a. `~/orcd/scratch/efs`). This is the shared parallel filesystem mounted everywhere.
+- Anything that must be visible across **all** compute nodes and the login node (server address/state files, harness logs, build logs, profile reports) goes under **`/orcd/scratch/orcd/001/erbmi1/efs`** (a.k.a. `~/orcd/scratch/efs`).
   - State files: `/orcd/scratch/orcd/001/erbmi1/efs/state/`
   - Logs: `/orcd/scratch/orcd/001/erbmi1/efs/logs/`
-- Use `/scratch` (node-local) for server data and FUSE mounts; use the shared `efs` dir only for things that must cross node boundaries.
+  - Profiles: `/orcd/scratch/orcd/001/erbmi1/efs/profile/`
+- Use `/scratch/efs-testing/$SLURM_JOB_ID` for node-local data; use the shared `efs` dir only for things that must cross node boundaries.
 - `#SBATCH --output=`/`--error=` directives do not expand shell variables or `~`, so always write the literal absolute shared path there.
 
 ## 5. Smoke tests, not load tests
@@ -64,20 +72,6 @@ These rules govern every build, server, client, management command, and test in 
 ## Building via Slurm
 
 ```bash
-cat > slurm-jobs/build.sh <<'EOF'
-#!/bin/bash
-#SBATCH --job-name=efs-build
-#SBATCH --partition=mit_quicktest
-#SBATCH --time=00:15:00
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=4
-#SBATCH --output=slurm-jobs/logs/build-%j.out
-#SBATCH --error=slurm-jobs/logs/build-%j.err
-set -e
-cd /home/erbmi1/git/efs
-make -j4
-EOF
 sbatch --wait slurm-jobs/build.sh
 ```
 
@@ -93,11 +87,13 @@ The build writes into the shared repo directory, so the resulting binaries are i
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
-#SBATCH --output=slurm-jobs/logs/s1-%j.out
-#SBATCH --error=slurm-jobs/logs/s1-%j.err
-set -e
-STORAGE="/scratch/efs/s1"
-rm -rf "$STORAGE"
+#SBATCH --output=/orcd/scratch/orcd/001/erbmi1/efs/logs/s1-%j.out
+#SBATCH --error=/orcd/scratch/orcd/001/erbmi1/efs/logs/s1-%j.err
+set -euo pipefail
+SCRATCH="/scratch/efs-testing/${SLURM_JOB_ID}"
+STORAGE="$SCRATCH/storage"
+rm -rf "$SCRATCH"
 mkdir -p "$STORAGE"
+# trap should rm -rf "$SCRATCH"
 /home/erbmi1/git/efs/efsd --node-id 1 --addr "$(hostname -s)" --port 1981 --storage "$STORAGE"
 ```

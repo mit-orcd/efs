@@ -81,9 +81,14 @@ Other nodes use it to connect back.
 
 Each server creates under its storage path:
 
-- `data/` — fragment data
-- `meta/` — metadata and cluster membership
+- `data/` — fragment data (file chunks and 2+1 metadata table pages)
+- `meta/` — export root (`EFSR` in `metadata.bin`) and cluster membership
 - `log/` — logs, PID file, optional `perf` output
+
+Export metadata is hybrid: a tiny fully-replicated root (generation, `next_ino`,
+page checksums) plus bulk inode/chunk tables packed into 128 KiB pages, encoded
+with the same 2+1 XOR scheme as file data under reserved inode
+`EFS_META_TABLE_INO`. Durability matches data (survive one node loss).
 
 `server.sh` restarts cleanly if you run it again for the same path (kills the
 old process first). If `efsd` exits immediately, it prints the last log lines.
@@ -168,11 +173,12 @@ background. Watch progress with `efs-mgmt status`.
 
 ## Direct I/O
 
-For flash-backed storage, bypass the page cache:
+Fragment reads/writes use `O_DIRECT` by default (good for flash-backed
+node-local storage). Pass `--no-direct-io` to use the page cache instead:
 
 ```bash
 ./efsd --node-id 1 --addr 127.0.0.1 --port 17432 \
-       --storage /tmp/efs/s1 --direct-io &
+       --storage /tmp/efs/s1 --no-direct-io &
 ```
 
 ## Querying metadata

@@ -139,6 +139,7 @@ static int join_cluster(void)
         if (efs_send_msg(fd, EFS_MSG_JOIN, &req, sizeof(req)) != 0 ||
             efs_recv_msg(fd, &type, &reply, &reply_len) != 0 ||
             type != EFS_MSG_JOIN_REPLY || reply_len != 1) {
+            free(reply);
             close(fd);
             return -1;
         }
@@ -168,6 +169,7 @@ static int create_export(const char *name)
     if (efs_send_msg(fd, EFS_MSG_CREATE_EXPORT, &req, sizeof(req)) != 0 ||
         efs_recv_msg(fd, &type, &reply, &reply_len) != 0 ||
         type != EFS_MSG_CREATE_EXPORT_REPLY || reply_len != 1) {
+        free(reply);
         close(fd);
         return -1;
     }
@@ -211,6 +213,7 @@ static uint64_t get_node_usage(int server_idx)
         efs_recv_msg(fd, &type, &reply, &reply_len) != 0 ||
         type != EFS_MSG_STATUS_REPLY ||
         reply_len != sizeof(struct efs_msg_status_reply)) {
+        free(reply);
         close(fd);
         return UINT64_MAX;
     }
@@ -246,6 +249,7 @@ static int send_remove_node(int server_idx)
     if (efs_send_msg(fd, EFS_MSG_REMOVE_NODE, NULL, 0) != 0 ||
         efs_recv_msg(fd, &type, &reply, &reply_len) != 0 ||
         type != EFS_MSG_REMOVE_NODE_REPLY || reply_len != 1) {
+        free(reply);
         close(fd);
         return -1;
     }
@@ -274,6 +278,7 @@ static int send_shrink_quota(int server_idx, uint64_t amount)
     if (efs_send_msg(fd, EFS_MSG_SHRINK_QUOTA, &req, sizeof(req)) != 0 ||
         efs_recv_msg(fd, &type, &reply, &reply_len) != 0 ||
         type != EFS_MSG_SHRINK_QUOTA_REPLY || reply_len != 1) {
+        free(reply);
         close(fd);
         return -1;
     }
@@ -299,6 +304,7 @@ static int cluster_node_count(void)
         efs_recv_msg(fd, &type, &reply, &reply_len) != 0 ||
         type != EFS_MSG_LIST_NODES_REPLY ||
         reply_len != sizeof(struct efs_msg_list_nodes_reply)) {
+        free(reply);
         close(fd);
         return -1;
     }

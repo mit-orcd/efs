@@ -1,25 +1,27 @@
 #!/bin/bash
-#SBATCH --job-name=efs-client2
-#SBATCH --partition=mit_quicktest
-#SBATCH --time=00:15:00
+#SBATCH --job-name=efs-ckill2
+#SBATCH --partition=mit_normal
+#SBATCH --time=00:30:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=1
-#SBATCH --output=/orcd/scratch/orcd/001/erbmi1/efs/logs/client2-%j.out
-#SBATCH --error=/orcd/scratch/orcd/001/erbmi1/efs/logs/client2-%j.err
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=4G
+#SBATCH --output=/orcd/scratch/orcd/001/erbmi1/efs/logs/ckill2-%j.out
+#SBATCH --error=/orcd/scratch/orcd/001/erbmi1/efs/logs/ckill2-%j.err
 
-set -e
+set -euo pipefail
 
 REPO="/home/erbmi1/git/efs"
 SHARED="/orcd/scratch/orcd/001/erbmi1/efs"
-mkdir -p "$SHARED/state" "$SHARED/logs"
+CLIENT=2
 SCRATCH="/scratch/efs-testing/${SLURM_JOB_ID}"
 MNT="$SCRATCH/mnt"
-# Clean up any stale mount from a previous run on this node, then start fresh.
+
+mkdir -p "$SHARED/state" "$SHARED/logs"
 fusermount -u "$MNT" 2>/dev/null || umount "$MNT" 2>/dev/null || true
 rm -rf "$SCRATCH"
 mkdir -p "$MNT"
-# when the harness finishes, always cleanup after yourself in /scratch.
+
 cleanup() {
     set +e
     fusermount -u "$MNT" 2>/dev/null || umount "$MNT" 2>/dev/null || true
@@ -30,17 +32,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for i in 1 2 3; do
-    while [ ! -f "$SHARED/state/s${i}.addr" ]; do
+for i in 1 2 3 4; do
+    while [ ! -s "$SHARED/state/s${i}.addr" ]; do
         sleep 2
     done
 done
 
 S1=$(cat "$SHARED/state/s1.addr")
-S2=$(cat "$SHARED/state/s2.addr")
-S3=$(cat "$SHARED/state/s3.addr")
-
-for addr in "$S1" "$S2" "$S3"; do
+for addr in "$S1" "$(cat "$SHARED/state/s2.addr")" \
+            "$(cat "$SHARED/state/s3.addr")" "$(cat "$SHARED/state/s4.addr")"; do
     host=${addr%:*}
     port=${addr#*:}
     WAITED=0
@@ -48,45 +48,41 @@ for addr in "$S1" "$S2" "$S3"; do
         sleep 2
         WAITED=$((WAITED + 2))
         if [ "$WAITED" -ge 300 ]; then
-            echo "Timed out waiting for $addr to be reachable"
+            echo "Timed out waiting for $addr"
             exit 1
         fi
     done
 done
 
-"$REPO/efs-mgmt" mkfs "$S1" myexport || true
+# Export may already exist from client 1.
+"$REPO/efs-mgmt" mkfs "$S1" kill4export || true
 
-"$REPO/efs-fuse" "$S1" "$S2" "$S3" myexport "$MNT" -f > "$SHARED/logs/client2-fuse.log" 2>&1 &
+"$REPO/efs-fuse" "$S1" kill4export "$MNT" -f \
+    > "$SHARED/logs/ckill2-fuse.log" 2>&1 &
 FUSE_PID=$!
 
-for i in $(seq 1 30); do
+for i in $(seq 1 60); do
     if mountpoint -q "$MNT" 2>/dev/null; then
         break
     fi
     if ! kill -0 "$FUSE_PID" 2>/dev/null; then
         echo "FUSE client exited before mounting"
+        cat "$SHARED/logs/ckill2-fuse.log" 2>/dev/null || true
         exit 1
     fi
     sleep 1
 done
-
 if ! mountpoint -q "$MNT" 2>/dev/null; then
     echo "FUSE mount failed"
-    echo "--- FUSE log ---"
-    cat "$SHARED/logs/client2-fuse.log" 2>/dev/null || true
-    kill "$FUSE_PID" 2>/dev/null || true
-    wait "$FUSE_PID" 2>/dev/null || true
+    cat "$SHARED/logs/ckill2-fuse.log" 2>/dev/null || true
     exit 1
 fi
 
-echo "FUSE mount OK, running tests"
-
+echo "FUSE mount OK on client $CLIENT"
 RC=0
-"$REPO/slurm-jobs/client-tests.sh" "$MNT" 2 || RC=$?
-
-if [ "$RC" != "0" ]; then
-    echo "--- FUSE log (after failure) ---"
-    cat "$SHARED/logs/client2-fuse.log" 2>/dev/null || true
+"$REPO/slurm-jobs/client-kill4-tests.sh" "$MNT" "$CLIENT" || RC=$?
+if [ "$RC" != 0 ]; then
+    echo "--- FUSE log ---"
+    cat "$SHARED/logs/ckill2-fuse.log" 2>/dev/null || true
 fi
-
-exit $RC
+exit "$RC"

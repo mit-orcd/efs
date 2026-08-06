@@ -61,19 +61,30 @@ void server_handle_conn(int fd)
                 /* Update existing entry or append a new one; never duplicate. */
                 uint32_t idx = g_server->node_count;
                 int changed = 0;
+                int accepted = 0;
                 for (uint32_t i = 0; i < g_server->node_count; i++) {
                     if (g_server->nodes[i].id == h->node_id) {
                         idx = i;
                         break;
                     }
                 }
-                if (idx < EFS_MAX_NODES) {
+                if (idx < g_server->node_count) {
+                    /* Refresh an already-known peer. */
                     struct efs_node *n = &g_server->nodes[idx];
-                    if (n->id != h->node_id || n->port != h->port ||
+                    if (n->port != h->port ||
                         strcmp(n->addr, h->addr) != 0 ||
                         n->quota != h->quota || n->used != h->used) {
                         changed = 1;
                     }
+                    strncpy(n->addr, h->addr, sizeof(n->addr) - 1);
+                    n->port = h->port;
+                    strncpy(n->storage_path, h->storage_path,
+                            sizeof(n->storage_path) - 1);
+                    n->quota = h->quota;
+                    n->used = h->used;
+                    accepted = 1;
+                } else if (g_server->node_count < EFS_MAX_NODES) {
+                    struct efs_node *n = &g_server->nodes[g_server->node_count];
                     n->id = h->node_id;
                     strncpy(n->addr, h->addr, sizeof(n->addr) - 1);
                     n->port = h->port;
@@ -81,16 +92,16 @@ void server_handle_conn(int fd)
                             sizeof(n->storage_path) - 1);
                     n->quota = h->quota;
                     n->used = h->used;
-                    if (idx == g_server->node_count && g_server->node_count < EFS_MAX_NODES) {
-                        g_server->node_count++;
-                        changed = 1;
-                    }
+                    g_server->node_count++;
+                    changed = 1;
+                    accepted = 1;
                 }
 
                 struct efs_msg_hello_ack ack;
                 memset(&ack, 0, sizeof(ack));
                 ack.epoch = g_server->epoch;
-                ack.assigned_id = h->node_id;
+                /* assigned_id == 0 means reject (e.g. cluster at capacity). */
+                ack.assigned_id = accepted ? h->node_id : 0;
                 ack.node_count = g_server->node_count;
                 memcpy(ack.nodes, g_server->nodes, sizeof(g_server->nodes));
                 /* Persist only when membership / addressing actually changed. */
@@ -145,6 +156,13 @@ void server_handle_conn(int fd)
                 struct efs_msg_put_chunk *req = payload;
                 pthread_mutex_lock(&g_server->lock);
                 struct efs_export *ex = server_get_export(g_server, req->export_id);
+                /* Auto-create export shell so meta-page PUTs can land before
+                 * the EFSR root arrives (mkfs / first flush race). */
+                if (!ex && g_server->export_count < EFS_MAX_EXPORTS) {
+                    ex = &g_server->exports[g_server->export_count++];
+                    efs_export_init(ex, req->export_id, "pending");
+                    ex->id = req->export_id;
+                }
                 pthread_mutex_unlock(&g_server->lock);
 
                 uint8_t reply = EFS_PUT_CHUNK_ERROR;
@@ -180,7 +198,10 @@ void server_handle_conn(int fd)
             char *buf = NULL;
             size_t len = 0;
             if (ex) {
-                efs_export_serialize(ex, &buf, &len);
+                if (ex->meta_fragmented)
+                    efs_export_root_serialize(&ex->root, &buf, &len);
+                else
+                    efs_export_serialize(ex, &buf, &len);
             }
             pthread_mutex_unlock(&g_server->lock);
             if (buf) {
@@ -193,31 +214,63 @@ void server_handle_conn(int fd)
         }
         case EFS_MSG_PUT_META: {
             if (payload_len > 0) {
-                /* Deserialize the client's update into a temporary export,
-                 * then merge it into the committed export so concurrent
-                 * clients do not overwrite each other's inodes/chunks. */
-                struct efs_export inc;
-                efs_export_init(&inc, 1, "");
                 uint8_t reply = EFS_PUT_META_ERROR;
-                if (efs_export_deserialize(&inc, payload, payload_len) == 0) {
-                    pthread_mutex_lock(&g_server->lock);
-                    if (g_server->export_count == 0) {
-                        efs_export_init(&g_server->exports[0], 1, "");
-                        g_server->export_count = 1;
+                if (efs_meta_blob_is_root(payload, payload_len)) {
+                    struct efs_export_root root;
+                    memset(&root, 0, sizeof(root));
+                    if (efs_export_root_deserialize(&root, payload, payload_len) == 0) {
+                        pthread_mutex_lock(&g_server->lock);
+                        if (g_server->export_count == 0) {
+                            efs_export_init(&g_server->exports[0], root.id, root.name);
+                            g_server->export_count = 1;
+                        }
+                        struct efs_export *ex = &g_server->exports[0];
+                        if (ex->meta_fragmented &&
+                            root.generation < ex->root.generation) {
+                            reply = EFS_PUT_META_STALE;
+                            pthread_mutex_unlock(&g_server->lock);
+                            efs_export_root_free(&root);
+                        } else {
+                            ex->meta_fragmented = 1;
+                            efs_export_root_move(&ex->root, &root);
+                            ex->id = ex->root.id;
+                            strncpy(ex->name, ex->root.name, EFS_MAX_NAME - 1);
+                            ex->next_ino = ex->root.next_ino;
+                            g_server->epoch++;
+                            g_server->export_meta_dirty = 1;
+                            pthread_mutex_unlock(&g_server->lock);
+                            /* Rebuild bulk tables when pages exist. */
+                            if (ex->root.page_count > 0)
+                                server_rebuild_export_from_pages(g_server, ex);
+                            server_save_export(g_server, ex);
+                            reply = EFS_PUT_META_OK;
+                        }
                     }
-                    struct efs_export *ex = &g_server->exports[0];
-                    if (efs_export_merge(ex, &inc) == 0) {
-                        g_server->epoch++;
-                        /* Defer disk persist: full metadata.bin rewrite+fsync
-                         * on every batch dominates bulk-create cost. Flush on
-                         * shutdown (and other explicit save paths). */
-                        g_server->export_meta_dirty = 1;
-                        reply = EFS_PUT_META_OK;
+                } else if (efs_meta_blob_is_export(payload, payload_len)) {
+                    /* Legacy full-blob merge (pre-fragmented peers / tests). */
+                    struct efs_export inc;
+                    efs_export_init(&inc, 1, "");
+                    if (efs_export_deserialize(&inc, payload, payload_len) == 0) {
+                        pthread_mutex_lock(&g_server->lock);
+                        if (g_server->export_count == 0) {
+                            efs_export_init(&g_server->exports[0], 1, "");
+                            g_server->export_count = 1;
+                        }
+                        struct efs_export *ex = &g_server->exports[0];
+                        if (efs_export_merge(ex, &inc) == 0) {
+                            ex->meta_fragmented = 0;
+                            g_server->epoch++;
+                            g_server->export_meta_dirty = 1;
+                            reply = EFS_PUT_META_OK;
+                        }
+                        pthread_mutex_unlock(&g_server->lock);
                     }
-                    pthread_mutex_unlock(&g_server->lock);
+                    efs_export_free(&inc);
                 }
-                efs_export_free(&inc);
-                struct efs_msg_put_meta_reply m = {reply, g_server->epoch};
+                struct efs_msg_put_meta_reply m;
+                memset(&m, 0, sizeof(m));
+                m.status = reply;
+                m.new_epoch = g_server->epoch;
                 efs_send_msg(fd, EFS_MSG_PUT_META_REPLY, &m, sizeof(m));
             }
             break;
@@ -250,6 +303,7 @@ void server_handle_conn(int fd)
 
             pthread_mutex_lock(&g_server->lock);
             struct efs_msg_list_nodes_reply reply;
+            memset(&reply, 0, sizeof(reply));
             reply.node_count = g_server->node_count;
             memcpy(reply.nodes, g_server->nodes, sizeof(g_server->nodes));
             pthread_mutex_unlock(&g_server->lock);
@@ -260,8 +314,10 @@ void server_handle_conn(int fd)
             server_update_local_usage(g_server);
             pthread_mutex_lock(&g_server->lock);
             struct efs_msg_status_reply reply;
+            memset(&reply, 0, sizeof(reply));
             reply.quota = g_server->quota;
-            reply.used = g_server->nodes[0].used;
+            struct efs_node *local = server_local_node(g_server);
+            reply.used = local ? local->used : 0;
             pthread_mutex_unlock(&g_server->lock);
             efs_send_msg(fd, EFS_MSG_STATUS_REPLY, &reply, sizeof(reply));
             break;
@@ -288,8 +344,11 @@ void server_handle_conn(int fd)
                 if (g_server->quota > 0 && g_server->quota > req->amount) {
                     uint64_t new_quota = g_server->quota - req->amount;
                     g_server->quota = new_quota;
-                    g_server->nodes[0].quota = new_quota;
-                    if (g_server->nodes[0].used > new_quota) {
+                    struct efs_node *local = server_local_node(g_server);
+                    if (local)
+                        local->quota = new_quota;
+                    uint64_t used = local ? local->used : 0;
+                    if (used > new_quota) {
                         g_server->shrink_target = new_quota;
                         g_server->state = SERVER_STATE_SHRINKING;
                         printf("Shrink-quota requested: new quota %llu, starting migration\n",

@@ -36,15 +36,22 @@ int efs_recv_msg(int fd, uint8_t *type, void **payload, uint32_t *payload_len)
     }
 
     *type = buf[0];
-    if (payload_len) {
+    if (payload_len)
         *payload_len = len - 1;
+
+    if (!payload) {
+        free(buf);
+        return EFS_OK;
     }
-    if (payload) {
-        *payload = len > 1 ? malloc(len - 1) : NULL;
-        if (len > 1) {
-            memcpy(*payload, buf + 1, len - 1);
-        }
+
+    /* Reuse the receive buffer: shift payload over the type byte so callers
+     * free one allocation instead of alloc+copy+free. */
+    if (len == 1) {
+        *payload = NULL;
+        free(buf);
+        return EFS_OK;
     }
-    free(buf);
+    memmove(buf, buf + 1, len - 1);
+    *payload = buf;
     return EFS_OK;
 }

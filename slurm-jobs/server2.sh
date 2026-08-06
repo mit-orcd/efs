@@ -18,8 +18,9 @@ source "$REPO/slurm-jobs/lib-ib.sh"
 # shellcheck source=lib-harness.sh
 source "$REPO/slurm-jobs/lib-harness.sh"
 
-STORAGE="/scratch/efs/s2-${SLURM_JOB_ID}"
-rm -rf "$STORAGE"
+SCRATCH="/scratch/efs-testing/${SLURM_JOB_ID}"
+STORAGE="$SCRATCH/storage"
+rm -rf "$SCRATCH"
 mkdir -p "$STORAGE" "$SHARED/state" "$SHARED/logs"
 
 PORT=1982
@@ -44,6 +45,6 @@ done
 S1=$(cat "$SHARED/state/s1.addr")
 echo "joining via IB: $S1"
 
-efs_run_efsd "$STORAGE" \
+efs_run_efsd "$SCRATCH" \
     "$REPO/efsd" --node-id "$NODE_ID" --addr "$IB_HOST" --port "$PORT" \
     --storage "$STORAGE" --join "$S1"

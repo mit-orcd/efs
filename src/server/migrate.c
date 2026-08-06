@@ -257,10 +257,13 @@ static int migrate_one_fragment(struct efsd_server *s, struct efs_export *ex,
     unlink(path);
 
     pthread_mutex_lock(&s->lock);
-    if (s->nodes[0].used >= EFS_FRAGMENT_SIZE)
-        s->nodes[0].used -= EFS_FRAGMENT_SIZE;
-    else
-        s->nodes[0].used = 0;
+    struct efs_node *local = server_local_node(s);
+    if (local) {
+        if (local->used >= EFS_FRAGMENT_SIZE)
+            local->used -= EFS_FRAGMENT_SIZE;
+        else
+            local->used = 0;
+    }
     pthread_mutex_unlock(&s->lock);
 
     return EFS_OK;
@@ -270,7 +273,8 @@ static bool shrink_target_reached(struct efsd_server *s)
 {
     bool reached;
     pthread_mutex_lock(&s->lock);
-    reached = (s->nodes[0].used <= s->shrink_target);
+    struct efs_node *local = server_local_node(s);
+    reached = local ? (local->used <= s->shrink_target) : true;
     pthread_mutex_unlock(&s->lock);
     return reached;
 }
@@ -358,6 +362,7 @@ void server_remove_node_from_cluster(struct efsd_server *s, efs_node_id_t node_i
     pthread_mutex_lock(&s->lock);
     uint32_t new_count = 0;
     struct efs_node new_nodes[EFS_MAX_NODES];
+    memset(new_nodes, 0, sizeof(new_nodes));
     for (uint32_t i = 0; i < s->node_count; i++) {
         if (s->nodes[i].id != node_id)
             new_nodes[new_count++] = s->nodes[i];

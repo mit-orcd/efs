@@ -169,6 +169,48 @@ void efs_client_conn_drop(efs_node_id_t node_id, int fd)
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
 }
 
+void efs_client_shutdown(void)
+{
+    static int done;
+    if (done)
+        return;
+    done = 1;
+
+    if (conn_pool_inited) {
+        for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
+            pthread_mutex_lock(&g_client.conn_lock[i]);
+            for (int s = 0; s < EFS_CLIENT_CONNS_PER_NODE; s++) {
+                if (g_client.conn_fd[i][s] >= 0) {
+                    close(g_client.conn_fd[i][s]);
+                    g_client.conn_fd[i][s] = -1;
+                }
+                g_client.conn_busy[i][s] = 0;
+            }
+            pthread_mutex_unlock(&g_client.conn_lock[i]);
+            pthread_cond_destroy(&g_client.conn_cv[i]);
+            pthread_mutex_destroy(&g_client.conn_lock[i]);
+        }
+        conn_pool_inited = 0;
+    }
+
+    free(g_client.dirty_ino_keys);
+    free(g_client.dirty_chunk_keys);
+    free(g_client.dirty_chunk_inos);
+    free(g_client.dirty_chunk_idxs);
+    g_client.dirty_ino_keys = NULL;
+    g_client.dirty_chunk_keys = NULL;
+    g_client.dirty_chunk_inos = NULL;
+    g_client.dirty_chunk_idxs = NULL;
+    g_client.dirty_ino_mask = 0;
+    g_client.dirty_chunk_mask = 0;
+    g_client.dirty_ino_count = 0;
+    g_client.dirty_chunk_count = 0;
+    g_client.dirty_chunk_cap = 0;
+
+    efs_export_free(&g_client.export);
+    pthread_mutex_destroy(&g_client.lock);
+}
+
 void efs_client_init_nodes(struct efs_client *c, const char *node_list[EFS_MAX_NODES],
                            uint32_t node_count)
 {
@@ -211,6 +253,7 @@ int efs_client_discover_nodes(struct efs_client *c, const char *host, uint16_t p
         efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
         type != EFS_MSG_LIST_NODES_REPLY ||
         payload_len != sizeof(struct efs_msg_list_nodes_reply)) {
+        free(payload);
         close(fd);
         return -1;
     }

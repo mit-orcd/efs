@@ -35,11 +35,11 @@ DD_BS=$((1024 * 1024))
 DD_COUNT=$((FILE_GIB * 1024))
 FILE_BYTES=$((FILE_GIB * 1024 * 1024 * 1024))
 
-if [ ! -d /scratch ] || ! mkdir -p /scratch/efs/.probe 2>/dev/null; then
+if [ ! -d /scratch ] || ! mkdir -p "/scratch/efs-testing/${SLURM_JOB_ID}" 2>/dev/null; then
     echo "ERROR: client needs /scratch"
     exit 1
 fi
-LOCAL="/scratch/efs/str-cli-${SLURM_JOB_ID}"
+LOCAL="/scratch/efs-testing/${SLURM_JOB_ID}"
 MNT="$LOCAL/mnt"
 rm -rf "$LOCAL"
 mkdir -p "$MNT"

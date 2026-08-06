@@ -16,7 +16,7 @@ set -euo pipefail
 REPO="/home/erbmi1/git/efs"
 SHARED="/orcd/scratch/orcd/001/erbmi1/efs"
 OUT="$SHARED/logs/smoke-attrs-${SLURM_JOB_ID}"
-LOCAL="/scratch/efs/smoke-attrs-${SLURM_JOB_ID}"
+LOCAL="/scratch/efs-testing/${SLURM_JOB_ID}"
 mkdir -p "$OUT" "$SHARED/logs"
 
 IP="127.0.0.1"
