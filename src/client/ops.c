@@ -147,11 +147,30 @@ int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
         return EFS_ERR_INVAL;
     }
 
-    efs_export_unlink(&g_client.export, ino.ino);
+    efs_ino_t removed = ino.ino;
+    int rc = efs_export_unlink_name(&g_client.export, parent, name);
     /* Merge cannot delete; full replicate when not batched. When batched,
-     * mark parent dirty so its mtime/nlink updates land; tombstones TBD. */
-    efs_client_mark_ino_dirty(parent);
+     * mark parent (and remaining hard-link names) dirty. Tombstones TBD. */
+    if (rc == 0) {
+        efs_client_mark_ino_dirty(parent);
+        efs_client_mark_ino_dirty(removed);
+    }
     pthread_mutex_unlock(&g_client.lock);
-    efs_client_note_meta_change(0);
-    return EFS_OK;
+    if (rc == 0)
+        efs_client_note_meta_change(0);
+    return rc;
+}
+
+int efs_client_link(efs_ino_t src_ino, efs_ino_t new_parent, const char *new_name)
+{
+    pthread_mutex_lock(&g_client.lock);
+    int rc = efs_export_link(&g_client.export, src_ino, new_parent, new_name);
+    if (rc == 0) {
+        efs_client_mark_ino_dirty(src_ino);
+        efs_client_mark_ino_dirty(new_parent);
+    }
+    pthread_mutex_unlock(&g_client.lock);
+    if (rc == 0)
+        rc = efs_client_note_meta_change(0);
+    return rc;
 }

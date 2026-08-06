@@ -56,6 +56,7 @@ struct efs_node {
 
 static inline bool efs_mode_is_dir(uint32_t mode) { return S_ISDIR(mode); }
 static inline bool efs_mode_is_reg(uint32_t mode) { return S_ISREG(mode); }
+static inline bool efs_mode_is_lnk(uint32_t mode) { return S_ISLNK(mode); }
 
 const char *efs_strerror(int rc);
 

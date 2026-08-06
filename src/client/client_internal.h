@@ -111,6 +111,9 @@ efs_ino_t efs_client_create(efs_ino_t parent, const char *name, uint32_t mode,
 /* Remove a file or directory. */
 int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir);
 
+/* Add a hard link to an existing inode under new_parent/new_name. */
+int efs_client_link(efs_ino_t src_ino, efs_ino_t new_parent, const char *new_name);
+
 /* Set mode bits. */
 int efs_client_chmod(efs_ino_t ino, uint32_t mode);
 

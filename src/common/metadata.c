@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <stdint.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -376,6 +377,82 @@ static struct efs_inode *inode_ptr(struct efs_export *ex, efs_ino_t ino)
     return NULL;
 }
 
+/* Copy shared inode fields onto every hard-link row with the same ino.
+ * Parent/name of each directory entry are preserved. */
+static void sync_hardlink_attrs(struct efs_export *ex, efs_ino_t ino,
+                                const struct efs_inode *src)
+{
+    for (uint64_t i = 0; i < ex->inode_count; i++) {
+        if (ex->inodes[i].ino != ino)
+            continue;
+        efs_ino_t parent = ex->inodes[i].parent;
+        char name[EFS_MAX_NAME];
+        memcpy(name, ex->inodes[i].name, EFS_MAX_NAME);
+        ex->inodes[i] = *src;
+        ex->inodes[i].parent = parent;
+        memcpy(ex->inodes[i].name, name, EFS_MAX_NAME);
+    }
+}
+
+static void remove_chunks_for_ino(struct efs_export *ex, efs_ino_t ino)
+{
+    uint64_t j = 0;
+    while (j < ex->chunk_count) {
+        if (ex->chunks[j].ino == ino) {
+            uint32_t cidx = ex->chunks[j].chunk_index;
+            chunk_idx_del(ex, ino, cidx);
+            uint64_t clast = ex->chunk_count - 1;
+            if (j != clast) {
+                chunk_idx_del(ex, ex->chunks[clast].ino, ex->chunks[clast].chunk_index);
+                ex->chunks[j] = ex->chunks[clast];
+                ex->chunk_count--;
+                chunk_idx_put(ex, ex->chunks[j].ino, ex->chunks[j].chunk_index, j);
+            } else {
+                ex->chunk_count--;
+            }
+        } else {
+            j++;
+        }
+    }
+}
+
+/* Swap-remove inode array slot i; refresh indexes for the moved row. */
+static void remove_inode_slot(struct efs_export *ex, uint64_t i)
+{
+    efs_ino_t old_parent = ex->inodes[i].parent;
+    char old_name[EFS_MAX_NAME];
+    memcpy(old_name, ex->inodes[i].name, EFS_MAX_NAME);
+    efs_ino_t old_ino = ex->inodes[i].ino;
+
+    name_idx_del(ex, old_parent, old_name);
+
+    uint64_t last = ex->inode_count - 1;
+    if (i != last) {
+        idx_del(ex->ino_keys, ex->ino_vals, ex->ino_mask, ex->inodes[last].ino);
+        name_idx_del(ex, ex->inodes[last].parent, ex->inodes[last].name);
+        ex->inodes[i] = ex->inodes[last];
+        ex->inode_count--;
+        idx_put(ex->ino_keys, ex->ino_vals, ex->ino_mask, ex->inodes[i].ino, i);
+        name_idx_put(ex, ex->inodes[i].parent, ex->inodes[i].name, i);
+    } else {
+        ex->inode_count--;
+    }
+
+    /* If we removed the row that ino_idx pointed at (or any row), re-point
+     * ino_idx to another remaining hard-link row when present. */
+    uint64_t survivor = UINT64_MAX;
+    for (uint64_t k = 0; k < ex->inode_count; k++) {
+        if (ex->inodes[k].ino == old_ino) {
+            survivor = k;
+            break;
+        }
+    }
+    if (survivor != UINT64_MAX)
+        idx_put(ex->ino_keys, ex->ino_vals, ex->ino_mask, old_ino, survivor);
+    else
+        idx_del(ex->ino_keys, ex->ino_vals, ex->ino_mask, old_ino);
+}
+
 void efs_export_init(struct efs_export *ex, efs_export_id_t id, const char *name)
 {
     memset(ex, 0, sizeof(*ex));
@@ -502,56 +579,111 @@ efs_ino_t efs_export_create(struct efs_export *ex, efs_ino_t parent,
     return ino;
 }
 
+int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *name)
+{
+    if (!ex || !name)
+        return EFS_ERR_INVAL;
+
+    uint64_t pos = 0;
+    if (name_idx_get(ex, parent, name, &pos) != 0)
+        return EFS_ERR_NOT_FOUND;
+
+    efs_ino_t ino = ex->inodes[pos].ino;
+    uint32_t nlink = ex->inodes[pos].nlink;
+    if (nlink == 0)
+        nlink = 1;
+    nlink--;
+
+    remove_inode_slot(ex, pos);
+
+    if (nlink == 0) {
+        remove_chunks_for_ino(ex, ino);
+        return EFS_OK;
+    }
+
+    /* Remaining hard links keep the decremented nlink. */
+    for (uint64_t i = 0; i < ex->inode_count; i++) {
+        if (ex->inodes[i].ino == ino)
+            ex->inodes[i].nlink = nlink;
+    }
+    return EFS_OK;
+}
+
 int efs_export_unlink(struct efs_export *ex, efs_ino_t ino)
 {
     if (!ex)
         return EFS_ERR_INVAL;
 
+    /* Remove every directory name for this inode, then chunks. */
+    int found = 0;
     uint64_t i = 0;
-    struct efs_inode *p = inode_ptr(ex, ino);
-    if (!p)
-        return EFS_ERR_NOT_FOUND;
-    i = (uint64_t)(p - ex->inodes);
-
-    efs_ino_t old_parent = ex->inodes[i].parent;
-    char old_name[EFS_MAX_NAME];
-    memcpy(old_name, ex->inodes[i].name, EFS_MAX_NAME);
-
-    idx_del(ex->ino_keys, ex->ino_vals, ex->ino_mask, ex->inodes[i].ino);
-    name_idx_del(ex, old_parent, old_name);
-
-    uint64_t last = ex->inode_count - 1;
-    if (i != last) {
-        /* Drop last's index entries while its array slot is still valid. */
-        idx_del(ex->ino_keys, ex->ino_vals, ex->ino_mask, ex->inodes[last].ino);
-        name_idx_del(ex, ex->inodes[last].parent, ex->inodes[last].name);
-        ex->inodes[i] = ex->inodes[last];
-        ex->inode_count--;
-        idx_put(ex->ino_keys, ex->ino_vals, ex->ino_mask, ex->inodes[i].ino, i);
-        name_idx_put(ex, ex->inodes[i].parent, ex->inodes[i].name, i);
-    } else {
-        ex->inode_count--;
-    }
-
-    /* Remove chunk entries for this inode (and keep chunk index coherent). */
-    uint64_t j = 0;
-    while (j < ex->chunk_count) {
-        if (ex->chunks[j].ino == ino) {
-            uint32_t cidx = ex->chunks[j].chunk_index;
-            chunk_idx_del(ex, ino, cidx);
-            uint64_t clast = ex->chunk_count - 1;
-            if (j != clast) {
-                chunk_idx_del(ex, ex->chunks[clast].ino, ex->chunks[clast].chunk_index);
-                ex->chunks[j] = ex->chunks[clast];
-                ex->chunk_count--;
-                chunk_idx_put(ex, ex->chunks[j].ino, ex->chunks[j].chunk_index, j);
-            } else {
-                ex->chunk_count--;
-            }
+    while (i < ex->inode_count) {
+        if (ex->inodes[i].ino == ino) {
+            found = 1;
+            remove_inode_slot(ex, i);
+            /* slot i now holds a different row (or count shrank) */
         } else {
-            j++;
+            i++;
         }
     }
+    if (!found)
+        return EFS_ERR_NOT_FOUND;
+    remove_chunks_for_ino(ex, ino);
+    return EFS_OK;
+}
+
+int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
+                    efs_ino_t new_parent, const char *new_name)
+{
+    if (!ex || !new_name || !*new_name)
+        return EFS_ERR_INVAL;
+
+    struct efs_inode *src = inode_ptr(ex, src_ino);
+    if (!src)
+        return EFS_ERR_NOT_FOUND;
+    if (efs_mode_is_dir(src->mode))
+        return EFS_ERR_INVAL;
+    if (efs_export_lookup(ex, new_parent, new_name, NULL) == EFS_OK)
+        return EFS_ERR_EXIST;
+    struct efs_inode *pdir = inode_ptr(ex, new_parent);
+    if (!pdir || !efs_mode_is_dir(pdir->mode))
+        return EFS_ERR_INVAL;
+
+    if (ex->inode_count >= ex->inode_capacity) {
+        uint64_t new_cap = ex->inode_capacity * 2;
+        struct efs_inode *new = realloc(ex->inodes, new_cap * sizeof(struct efs_inode));
+        if (!new)
+            return EFS_ERR_NOMEM;
+        ex->inodes = new;
+        ex->inode_capacity = new_cap;
+    }
+    if (export_ensure_inode_idx(ex) != 0)
+        return EFS_ERR_NOMEM;
+
+    /* Re-fetch after possible realloc. */
+    src = inode_ptr(ex, src_ino);
+    if (!src)
+        return EFS_ERR_NOT_FOUND;
+
+    uint32_t nlink = src->nlink + 1;
+    sync_hardlink_attrs(ex, src_ino, src);
+    for (uint64_t i = 0; i < ex->inode_count; i++) {
+        if (ex->inodes[i].ino == src_ino)
+            ex->inodes[i].nlink = nlink;
+    }
+    src = inode_ptr(ex, src_ino);
+
+    uint64_t pos = ex->inode_count++;
+    struct efs_inode *dst = &ex->inodes[pos];
+    *dst = *src;
+    dst->parent = new_parent;
+    dst->nlink = nlink;
+    strncpy(dst->name, new_name, EFS_MAX_NAME - 1);
+    dst->name[EFS_MAX_NAME - 1] = '\0';
+    time_now(&dst->ctime);
+
+    /* Keep ino_idx pointing at an existing row; name index gets the new name. */
+    name_idx_put(ex, new_parent, new_name, pos);
     return EFS_OK;
 }
 
@@ -564,6 +696,7 @@ int efs_export_set_size(struct efs_export *ex, efs_ino_t ino, uint64_t size)
         return EFS_ERR_NOT_FOUND;
     p->size = size;
     time_now(&p->mtime);
+    sync_hardlink_attrs(ex, ino, p);
     return EFS_OK;
 }
 
@@ -576,6 +709,7 @@ int efs_export_set_mode(struct efs_export *ex, efs_ino_t ino, uint32_t mode)
         return EFS_ERR_NOT_FOUND;
     p->mode = (p->mode & S_IFMT) | (mode & ~S_IFMT);
     time_now(&p->mtime);
+    sync_hardlink_attrs(ex, ino, p);
     return EFS_OK;
 }
 
@@ -591,6 +725,7 @@ int efs_export_set_owner(struct efs_export *ex, efs_ino_t ino, uid_t uid, gid_t 
     if (gid != (gid_t)-1)
         p->gid = gid;
     time_now(&p->mtime);
+    sync_hardlink_attrs(ex, ino, p);
     return EFS_OK;
 }
 
@@ -602,6 +737,7 @@ int efs_export_set_mtime(struct efs_export *ex, efs_ino_t ino, uint64_t mtime)
     if (!p)
         return EFS_ERR_NOT_FOUND;
     p->mtime = mtime;
+    sync_hardlink_attrs(ex, ino, p);
     return EFS_OK;
 }
 
@@ -765,10 +901,25 @@ int efs_export_merge(struct efs_export *ex, const struct efs_export *inc)
 
     /* Merge inodes: add new ones, update existing ones when the incoming
      * entry is newer (higher mtime, or equal mtime but larger size so a
-     * growing write is not lost). Inodes present on the server but absent
-     * from the client are left untouched (they belong to other clients). */
+     * growing write is not lost). Hard-link rows share an ino but have
+     * distinct (parent,name); they are merged by directory name. Inodes
+     * present on the server but absent from the client are left untouched. */
     for (uint64_t i = 0; i < inc->inode_count; i++) {
         const struct efs_inode *ci = &inc->inodes[i];
+        uint64_t name_pos = 0;
+        int have_name = (name_idx_get(ex, ci->parent, ci->name, &name_pos) == 0);
+
+        if (have_name) {
+            struct efs_inode *cur = &ex->inodes[name_pos];
+            if (ci->mtime > cur->mtime ||
+                (ci->mtime == cur->mtime && ci->size > cur->size) ||
+                ci->nlink > cur->nlink) {
+                *cur = *ci;
+                sync_hardlink_attrs(ex, ci->ino, cur);
+            }
+            continue;
+        }
+
         struct efs_inode *cur = inode_ptr(ex, ci->ino);
         if (!cur) {
             if (grow_inodes(ex) != 0)
@@ -779,16 +930,33 @@ int efs_export_merge(struct efs_export *ex, const struct efs_export *inc)
             ex->inodes[pos] = *ci;
             idx_put(ex->ino_keys, ex->ino_vals, ex->ino_mask, ci->ino, pos);
             name_idx_put(ex, ci->parent, ci->name, pos);
+        } else if (cur->parent != ci->parent || strcmp(cur->name, ci->name) != 0) {
+            /* Additional hard-link name for an inode already on the server. */
+            if (grow_inodes(ex) != 0)
+                return EFS_ERR_NOMEM;
+            if (export_ensure_inode_idx(ex) != 0)
+                return EFS_ERR_NOMEM;
+            uint64_t pos = ex->inode_count++;
+            ex->inodes[pos] = *ci;
+            name_idx_put(ex, ci->parent, ci->name, pos);
+            if (ci->mtime > cur->mtime ||
+                (ci->mtime == cur->mtime && ci->size > cur->size) ||
+                ci->nlink > cur->nlink) {
+                sync_hardlink_attrs(ex, ci->ino, ci);
+            } else {
+                /* Keep server attrs; just adopt the higher nlink if needed. */
+                struct efs_inode *canon = inode_ptr(ex, ci->ino);
+                if (canon && ci->nlink > canon->nlink) {
+                    for (uint64_t k = 0; k < ex->inode_count; k++) {
+                        if (ex->inodes[k].ino == ci->ino)
+                            ex->inodes[k].nlink = ci->nlink;
+                    }
+                }
+            }
         } else if (ci->mtime > cur->mtime ||
                    (ci->mtime == cur->mtime && ci->size > cur->size)) {
-            uint64_t pos = (uint64_t)(cur - ex->inodes);
-            if (cur->parent != ci->parent || strcmp(cur->name, ci->name) != 0) {
-                name_idx_del(ex, cur->parent, cur->name);
-                *cur = *ci;
-                name_idx_put(ex, cur->parent, cur->name, pos);
-            } else {
-                *cur = *ci;
-            }
+            *cur = *ci;
+            sync_hardlink_attrs(ex, ci->ino, cur);
         }
     }
 

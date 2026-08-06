@@ -148,20 +148,21 @@ static int build_meta_delta(struct efs_export *delta)
             efs_ino_t ino = g_client.dirty_ino_keys[i];
             if (!ino)
                 continue;
-            struct efs_inode src;
-            if (efs_export_get_inode(&g_client.export, ino, &src) != 0)
-                continue;
-            /* Append a verbatim copy (serialize does not need indexes). */
-            if (delta->inode_count >= delta->inode_capacity) {
-                uint64_t ncap = delta->inode_capacity * 2;
-                struct efs_inode *n = realloc(delta->inodes,
-                                             ncap * sizeof(struct efs_inode));
-                if (!n)
+            /* Include every hard-link directory row that shares this ino. */
+            for (uint64_t r = 0; r < g_client.export.inode_count; r++) {
+                if (g_client.export.inodes[r].ino != ino)
                     continue;
-                delta->inodes = n;
-                delta->inode_capacity = ncap;
+                if (delta->inode_count >= delta->inode_capacity) {
+                    uint64_t ncap = delta->inode_capacity * 2;
+                    struct efs_inode *n = realloc(delta->inodes,
+                                                 ncap * sizeof(struct efs_inode));
+                    if (!n)
+                        continue;
+                    delta->inodes = n;
+                    delta->inode_capacity = ncap;
+                }
+                delta->inodes[delta->inode_count++] = g_client.export.inodes[r];
             }
-            delta->inodes[delta->inode_count++] = src;
         }
     }
 

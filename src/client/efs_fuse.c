@@ -301,6 +301,103 @@ static int efs_fuse_chown(const char *path, uid_t uid, gid_t gid)
     return 0;
 }
 
+static int split_parent_name(const char *path, char *name, size_t name_len,
+                             struct efs_inode *parent)
+{
+    char *p = strdup(path);
+    if (!p)
+        return -ENOMEM;
+    char *base = strrchr(p, '/');
+    if (!base) {
+        free(p);
+        return -EINVAL;
+    }
+    *base = '\0';
+    base++;
+    strncpy(name, base, name_len - 1);
+    name[name_len - 1] = '\0';
+    int rc = efs_client_lookup(p[0] ? p : "/", parent);
+    free(p);
+    if (rc != 0)
+        return -ENOENT;
+    if (!efs_mode_is_dir(parent->mode))
+        return -ENOTDIR;
+    return 0;
+}
+
+static int efs_fuse_symlink(const char *link, const char *path)
+{
+    char name[EFS_MAX_NAME];
+    struct efs_inode parent;
+    int rc = split_parent_name(path, name, sizeof(name), &parent);
+    if (rc != 0)
+        return rc;
+
+    struct fuse_context *ctx = fuse_get_context();
+    efs_ino_t ino = efs_client_create(parent.ino, name, S_IFLNK | 0777,
+                                      ctx->uid, ctx->gid);
+    if (ino == 0)
+        return -EEXIST;
+
+    size_t len = strlen(link);
+    if (len > 0) {
+        rc = efs_client_write(ino, 0, len, link);
+        if (rc != 0)
+            return -EIO;
+    } else {
+        /* Empty target: still set size 0 explicitly. */
+        if (efs_client_truncate(ino, 0) != 0)
+            return -EIO;
+    }
+    return 0;
+}
+
+static int efs_fuse_readlink(const char *path, char *buf, size_t size)
+{
+    struct efs_inode ino;
+    int rc = efs_client_lookup(path, &ino);
+    if (rc != 0)
+        return -ENOENT;
+    if (!efs_mode_is_lnk(ino.mode))
+        return -EINVAL;
+    if (size == 0)
+        return -EINVAL;
+
+    size_t got = 0;
+    size_t want = size - 1;
+    if (want > ino.size)
+        want = (size_t)ino.size;
+    if (want > 0) {
+        rc = efs_client_read(ino.ino, 0, want, buf, &got);
+        if (rc != 0)
+            return -EIO;
+    }
+    buf[got] = '\0';
+    return 0;
+}
+
+static int efs_fuse_link(const char *from, const char *to)
+{
+    struct efs_inode src;
+    if (efs_client_lookup(from, &src) != 0)
+        return -ENOENT;
+    if (efs_mode_is_dir(src.mode))
+        return -EPERM;
+
+    char name[EFS_MAX_NAME];
+    struct efs_inode parent;
+    int rc = split_parent_name(to, name, sizeof(name), &parent);
+    if (rc != 0)
+        return rc;
+
+    rc = efs_client_link(src.ino, parent.ino, name);
+    if (rc == EFS_ERR_EXIST)
+        return -EEXIST;
+    if (rc != 0)
+        return -EIO;
+    return 0;
+}
+
 static int efs_fuse_utime(const char *path, struct utimbuf *ubuf)
 {
     struct efs_inode ino;
@@ -418,6 +515,9 @@ static struct fuse_operations efs_ops = {
     .utime    = efs_fuse_utime,
     .truncate = efs_fuse_truncate,
     .rename   = efs_fuse_rename,
+    .symlink  = efs_fuse_symlink,
+    .readlink = efs_fuse_readlink,
+    .link     = efs_fuse_link,
     .release  = efs_fuse_release,
     .init     = efs_fuse_init,
     .destroy  = efs_fuse_destroy,
@@ -576,9 +676,11 @@ int main(int argc, char **argv)
     fuse_argv[fuse_argc++] = (char *)mountpoint;
     /* Prefer large writes so FUSE does not chop every write into 4 KiB and
      * force a 128 KiB RMW per call. big_writes raises the kernel limit;
-     * max_write matches our chunk size. */
+     * max_write matches our chunk size. use_ino exposes our st_ino (needed
+     * for hard links); attr/entry timeouts at 0 avoid stale nlink/mode. */
     fuse_argv[fuse_argc++] = "-o";
-    fuse_argv[fuse_argc++] = "big_writes,max_write=131072";
+    fuse_argv[fuse_argc++] =
+        "big_writes,max_write=131072,use_ino,attr_timeout=0,entry_timeout=0,ac_attr_timeout=0";
     while (arg_idx < argc && fuse_argc < 63) {
         if (strcmp(argv[arg_idx], "--perf") == 0) {
             arg_idx++;

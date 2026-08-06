@@ -79,6 +79,13 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
 /* Remove an inode and all of its chunk entries. */
 int efs_export_unlink(struct efs_export *ex, efs_ino_t ino);
 
+/* Remove one directory name. If it was the last hard link, also remove chunks. */
+int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *name);
+
+/* Add a hard link (extra name) for an existing non-directory inode. */
+int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
+                    efs_ino_t new_parent, const char *new_name);
+
 /* Set inode size. */
 int efs_export_set_size(struct efs_export *ex, efs_ino_t ino, uint64_t size);
 
