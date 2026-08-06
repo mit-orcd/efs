@@ -1,0 +1,48 @@
+# build artifacts
+/efsd
+/efs-fuse
+/efs-mgmt
+/efs-query
+*.o
+*.d
+*.lo
+*.la
+build.log
+libefs.a
+
+# tests (built binaries; keep sources and scripts)
+tests/test_directio
+tests/test_erasure
+tests/test_integration
+tests/test_list_exports
+tests/test_meta_batch
+tests/test_migrate
+tests/test_placement
+tests/test_query
+tests/test_quota
+tests/test_rejoin
+
+# dependency build artifacts
+deps/libfuse/Makefile
+deps/libfuse/config.h
+deps/libfuse/config.log
+deps/libfuse/config.status
+deps/libfuse/libtool
+deps/libfuse/*.pc
+deps/libfuse/**/*.o
+deps/libfuse/**/*.lo
+deps/libfuse/**/*.a
+deps/libfuse/**/*.so*
+deps/libfuse/**/.deps/
+deps/libfuse/**/.libs/
+deps/libfuse/**/Makefile
+deps/libfuse/**/stamp-*
+
+# profiling / job runtime output
+/logs/
+slurm-jobs/logs/
+slurm-jobs/state/
+
+# editor / tooling
+/.codex
+/notes.txt
