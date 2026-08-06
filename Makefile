@@ -1,7 +1,9 @@
 CC = gcc
 # -g keeps symbols for `perf report`; -fno-omit-frame-pointer improves stack
 # unwinding under --perf. Both are cheap at -O3.
-CFLAGS = -O3 -g -fno-omit-frame-pointer -std=c99 -Wall -Wextra -D_GNU_SOURCE \
+# Always tune for the build host (compile on the same arch you run on).
+CFLAGS = -O3 -g -fno-omit-frame-pointer -march=native -mtune=native \
+         -std=c99 -Wall -Wextra -D_GNU_SOURCE \
          -Wno-stringop-truncation -Wno-format-truncation
 INCLUDES = -Iinclude -Isrc/common -Ideps/blake3
 
@@ -53,7 +55,19 @@ FUSE_DIR = deps/libfuse
 FUSE_CFLAGS = -I$(FUSE_DIR)/include -D_FILE_OFFSET_BITS=64
 FUSE_LIBS = $(FUSE_DIR)/lib/.libs/libfuse.a
 
-.PHONY: all clean tests test
+BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
+              $(BLAKE3_DIR)/blake3_portable.o \
+              $(BLAKE3_DIR)/blake3_dispatch.o \
+              $(BLAKE3_DIR)/blake3_sse2.o \
+              $(BLAKE3_DIR)/blake3_sse41.o \
+              $(BLAKE3_DIR)/blake3_avx2.o \
+              $(BLAKE3_DIR)/blake3_avx512.o
+
+.PHONY: all clean tests test blake3-bench FORCE
+
+# blake3-bench always relinks so a stale binary cannot linger after CPU changes.
+FORCE:
+
 
 all: $(LIB) efsd efs-fuse efs-mgmt efs-query tests
 
@@ -91,9 +105,13 @@ tests: $(TEST_BINS)
 %: %.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
 
+blake3-bench: $(BLAKE3_OBJS) FORCE
+	$(CC) $(CFLAGS) $(INCLUDES) \
+		-o blake3-bench tools/blake3-bench.c $(BLAKE3_OBJS) $(LDFLAGS)
+
 clean:
 	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(MGMT_OBJ) $(QUERY_OBJ)
-	rm -f $(LIB) efsd efs-fuse efs-mgmt efs-query
+	rm -f $(LIB) efsd efs-fuse efs-mgmt efs-query blake3-bench
 	rm -f $(TEST_BINS)
 	if [ -f $(FUSE_DIR)/Makefile ]; then cd $(FUSE_DIR) && $(MAKE) clean; fi
 

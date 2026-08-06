@@ -46,3 +46,4 @@ slurm-jobs/state/
 # editor / tooling
 /.codex
 /notes.txt
+/blake3-bench
