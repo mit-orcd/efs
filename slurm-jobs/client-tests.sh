@@ -62,6 +62,12 @@ run rsync -a rsync-src/ rsync-dst/
 for i in 1 2; do
     run cmp "rsync-src/file-$i.bin" "rsync-dst/file-$i.bin"
 done
+# Second pass must be a no-op (mtime/size preserved).
+STATS=$(run rsync -a --info=stats2 rsync-src/ rsync-dst/)
+echo "$STATS"
+echo "$STATS" | grep -q 'Number of regular files transferred: 0' \
+    || { log "ERROR: rsync second pass re-transferred files"; exit 1; }
+log "rsync idempotent OK"
 
 log "=== rclone ==="
 if command -v ml >/dev/null 2>&1; then

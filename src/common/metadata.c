@@ -7,7 +7,8 @@
 #include <unistd.h>
 
 #define EFS_META_MAGIC "EFSM"
-#define EFS_META_VERSION 2
+/* v2: uid/gid. v3: mtime_nsec after mtime. */
+#define EFS_META_VERSION 3
 
 static void time_now(uint64_t *t)
 {
@@ -695,7 +696,13 @@ int efs_export_set_size(struct efs_export *ex, efs_ino_t ino, uint64_t size)
     if (!p)
         return EFS_ERR_NOT_FOUND;
     p->size = size;
-    time_now(&p->mtime);
+    /* Size changes update mtime with full nsec precision (not sec-only). */
+    {
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        p->mtime = (uint64_t)ts.tv_sec;
+        p->mtime_nsec = (uint32_t)ts.tv_nsec;
+    }
     sync_hardlink_attrs(ex, ino, p);
     return EFS_OK;
 }
@@ -708,7 +715,8 @@ int efs_export_set_mode(struct efs_export *ex, efs_ino_t ino, uint32_t mode)
     if (!p)
         return EFS_ERR_NOT_FOUND;
     p->mode = (p->mode & S_IFMT) | (mode & ~S_IFMT);
-    time_now(&p->mtime);
+    /* POSIX: chmod updates ctime, not mtime (rsync -a relies on this). */
+    time_now(&p->ctime);
     sync_hardlink_attrs(ex, ino, p);
     return EFS_OK;
 }
@@ -724,21 +732,31 @@ int efs_export_set_owner(struct efs_export *ex, efs_ino_t ino, uid_t uid, gid_t 
         p->uid = uid;
     if (gid != (gid_t)-1)
         p->gid = gid;
-    time_now(&p->mtime);
+    /* POSIX: chown updates ctime, not mtime. */
+    time_now(&p->ctime);
     sync_hardlink_attrs(ex, ino, p);
     return EFS_OK;
 }
 
-int efs_export_set_mtime(struct efs_export *ex, efs_ino_t ino, uint64_t mtime)
+int efs_export_set_mtime_ns(struct efs_export *ex, efs_ino_t ino,
+                            uint64_t mtime, uint32_t mtime_nsec)
 {
     if (!ex)
         return EFS_ERR_INVAL;
     struct efs_inode *p = inode_ptr(ex, ino);
     if (!p)
         return EFS_ERR_NOT_FOUND;
+    if (mtime_nsec >= 1000000000u)
+        mtime_nsec = 0;
     p->mtime = mtime;
+    p->mtime_nsec = mtime_nsec;
     sync_hardlink_attrs(ex, ino, p);
     return EFS_OK;
+}
+
+int efs_export_set_mtime(struct efs_export *ex, efs_ino_t ino, uint64_t mtime)
+{
+    return efs_export_set_mtime_ns(ex, ino, mtime, 0);
 }
 
 int efs_export_rename(struct efs_export *ex, efs_ino_t ino,
@@ -806,7 +824,7 @@ int efs_export_rename(struct efs_export *ex, efs_ino_t ino,
     strncpy(src->name, new_name, EFS_MAX_NAME - 1);
     src->name[EFS_MAX_NAME - 1] = '\0';
     src->parent = new_parent;
-    time_now(&src->mtime);
+    /* Preserve mtime across rename (rsync partial → final); bump ctime only. */
     time_now(&src->ctime);
     name_idx_put(ex, src->parent, src->name, (uint64_t)(src - ex->inodes));
     return EFS_OK;
@@ -1053,6 +1071,7 @@ int efs_export_serialize(struct efs_export *ex, char **buf, size_t *len)
         write_u32(f, (uint32_t)ino->gid);
         write_u64(f, ino->size);
         write_u64(f, ino->mtime);
+        write_u32(f, ino->mtime_nsec);
         write_u64(f, ino->ctime);
         write_u32(f, ino->nlink);
         write_str(f, ino->name);
@@ -1087,7 +1106,7 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
     }
 
     uint32_t version;
-    if (read_u32(f, &version) != 0 || version != EFS_META_VERSION) {
+    if (read_u32(f, &version) != 0 || (version != 2 && version != 3)) {
         fclose(f);
         return EFS_ERR_PROTO;
     }
@@ -1133,6 +1152,13 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
         }
         read_u64(f, &ino->size);
         read_u64(f, &ino->mtime);
+        if (version >= 3) {
+            read_u32(f, &ino->mtime_nsec);
+            if (ino->mtime_nsec >= 1000000000u)
+                ino->mtime_nsec = 0;
+        } else {
+            ino->mtime_nsec = 0;
+        }
         read_u64(f, &ino->ctime);
         read_u32(f, &ino->nlink);
         read_str(f, ino->name, EFS_MAX_NAME);

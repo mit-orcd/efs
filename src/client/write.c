@@ -16,6 +16,14 @@ static uint64_t now(void)
     return (uint64_t)ts.tv_sec;
 }
 
+static void now_ns(uint64_t *sec, uint32_t *nsec)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    *sec = (uint64_t)ts.tv_sec;
+    *nsec = (uint32_t)ts.tv_nsec;
+}
+
 static uint64_t pack_dirty_chunk(efs_ino_t ino, uint32_t chunk_index)
 {
     uint64_t k = ino ^ ((uint64_t)chunk_index * 0x9E3779B97F4A7C15ULL);
@@ -559,7 +567,12 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
     struct efs_inode cur;
     if (efs_export_get_inode(&g_client.export, ino, &cur) == 0 && cur.size < end)
         efs_export_set_size(&g_client.export, ino, end);
-    efs_export_set_mtime(&g_client.export, ino, now());
+    {
+        uint64_t sec;
+        uint32_t nsec;
+        now_ns(&sec, &nsec);
+        efs_export_set_mtime_ns(&g_client.export, ino, sec, nsec);
+    }
     efs_client_mark_ino_dirty(ino);
     pthread_mutex_unlock(&g_client.lock);
     efs_client_replicate_metadata();
@@ -622,7 +635,12 @@ int efs_client_write_no_replicate(efs_ino_t ino, uint64_t offset, size_t size, c
     struct efs_inode cur;
     if (efs_export_get_inode(&g_client.export, ino, &cur) == 0 && cur.size < end)
         efs_export_set_size(&g_client.export, ino, end);
-    efs_export_set_mtime(&g_client.export, ino, now());
+    {
+        uint64_t sec;
+        uint32_t nsec;
+        now_ns(&sec, &nsec);
+        efs_export_set_mtime_ns(&g_client.export, ino, sec, nsec);
+    }
     efs_client_mark_ino_dirty(ino);
     pthread_mutex_unlock(&g_client.lock);
 

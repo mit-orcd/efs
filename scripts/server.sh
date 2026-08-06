@@ -1,17 +1,104 @@
 #!/bin/bash
 set -e
 
-if [ $# -lt 2 ]; then
-    echo "Usage: $0 <addr:port> <path:quota> [join-addr:port] [extra-efsd-args...]"
-    echo "  addr:port      address and port this server will bind to (must be a real local IP, not a network address)"
-    echo "  path:quota     storage path, optionally followed by a quota (e.g. /data/efs/s1:5T)"
-    echo "  join-addr:port optional bootstrap server to join an existing cluster"
-    echo "  --no-persist   start fresh and ignore any previously persisted cluster_nodes.bin"
+usage() {
+    cat <<EOF
+Usage:
+  $0 <addr:port> <path[:quota]> [join-addr:port] [extra-efsd-args...]
+  $0 stop <path[:quota]>
+  $0 stop <addr:port>
+
+  start:  bind addr:port, store under path (optional :quota), optional join
+  stop:   stop by storage path (PID file) or by addr:port (efsd on that port)
+EOF
     exit 1
-fi
+}
 
 # Run from the project root so efsd is found.
 cd "$(dirname "$0")/.."
+
+kill_pid_graceful() {
+    local pid=$1
+    local label=${2:-process}
+    if ! kill -0 "$pid" 2>/dev/null; then
+        return 0
+    fi
+    echo "Stopping $label (PID $pid)"
+    kill "$pid" 2>/dev/null || true
+    for _ in $(seq 1 30); do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+        sleep 0.1
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+        kill -9 "$pid" 2>/dev/null || true
+        sleep 0.2
+    fi
+}
+
+kill_from_pidfile() {
+    local file=$1
+    if [ -f "$file" ]; then
+        local old_pid
+        old_pid=$(cat "$file")
+        kill_pid_graceful "$old_pid" "efsd from $file"
+        rm -f "$file"
+    fi
+}
+
+kill_port_holder() {
+    local port=$1
+    local pids=""
+    if command -v lsof >/dev/null 2>&1; then
+        pids=$(lsof -ti TCP:"$port" 2>/dev/null || true)
+    elif command -v fuser >/dev/null 2>&1; then
+        pids=$(fuser "$port"/tcp 2>/dev/null || true)
+    fi
+    if [ -z "$pids" ]; then
+        return 0
+    fi
+    for pid in $pids; do
+        if [ -r "/proc/$pid/cmdline" ] && tr '\0' ' ' < "/proc/$pid/cmdline" | grep -q "efsd"; then
+            kill_pid_graceful "$pid" "efsd holding port $port"
+        fi
+    done
+}
+
+cmd_stop() {
+    if [ $# -lt 1 ]; then
+        echo "Usage: $0 stop <path[:quota]|addr:port>" >&2
+        exit 1
+    fi
+    local target=$1
+    # addr:port → kill by port
+    if [[ "$target" == *:* ]] && [[ "$target" != /* ]] && [[ "$target" != ./* ]]; then
+        local port=${target##*:}
+        if [[ "$port" =~ ^[0-9]+$ ]]; then
+            kill_port_holder "$port"
+            echo "Stopped efsd on port $port (if any)"
+            return 0
+        fi
+    fi
+    local storage=${target%:*}
+    kill_from_pidfile "$storage/log/efsd.pid"
+    kill_from_pidfile "$storage/efsd.pid"
+    echo "Stopped efsd for storage $storage (if any)"
+}
+
+if [ $# -lt 1 ]; then
+    usage
+fi
+
+if [ "$1" = "stop" ]; then
+    shift
+    cmd_stop "$@"
+    exit 0
+fi
+
+if [ $# -lt 2 ]; then
+    usage
+fi
 
 ADDR_PORT=$1
 PATH_QUOTA=$2
@@ -35,67 +122,10 @@ QUOTA=${PATH_QUOTA#*:}
 mkdir -p "$STORAGE"
 mkdir -p "$STORAGE/log"
 
-kill_from_pidfile() {
-    local file=$1
-    if [ -f "$file" ]; then
-        local old_pid
-        old_pid=$(cat "$file")
-        if kill -0 "$old_pid" 2>/dev/null; then
-            echo "Killing existing efsd process $old_pid from $file"
-            # SIGTERM first, then SIGKILL if it does not exit promptly.
-            kill "$old_pid" 2>/dev/null || true
-            for _ in $(seq 1 30); do
-                if ! kill -0 "$old_pid" 2>/dev/null; then
-                    break
-                fi
-                sleep 0.1
-            done
-            if kill -0 "$old_pid" 2>/dev/null; then
-                kill -9 "$old_pid" 2>/dev/null || true
-                sleep 0.2
-            fi
-        fi
-        rm -f "$file"
-    fi
-}
-
 # New PID file location and legacy location at the storage root.
 PID_FILE="$STORAGE/log/efsd.pid"
 kill_from_pidfile "$PID_FILE"
 kill_from_pidfile "$STORAGE/efsd.pid"
-
-# Fallback: if the port is still held by an efsd process not tracked by a PID
-# file (e.g. an old instance started before this script existed), kill it by
-# port. We prefer lsof, then fuser; if neither is available, we leave it to the
-# user.
-kill_port_holder() {
-    local port=$1
-    local pids=""
-    if command -v lsof >/dev/null 2>&1; then
-        pids=$(lsof -ti TCP:"$port" 2>/dev/null || true)
-    elif command -v fuser >/dev/null 2>&1; then
-        pids=$(fuser "$port"/tcp 2>/dev/null || true)
-    fi
-    if [ -n "$pids" ]; then
-        for pid in $pids; do
-            # Only kill efsd processes to avoid stomping on unrelated services.
-            if [ -r "/proc/$pid/cmdline" ] && tr '\0' ' ' < "/proc/$pid/cmdline" | grep -q "efsd"; then
-                echo "Killing efsd process $pid holding port $port"
-                kill "$pid" 2>/dev/null || true
-                for _ in $(seq 1 30); do
-                    if ! kill -0 "$pid" 2>/dev/null; then
-                        break
-                    fi
-                    sleep 0.1
-                done
-                if kill -0 "$pid" 2>/dev/null; then
-                    kill -9 "$pid" 2>/dev/null || true
-                    sleep 0.2
-                fi
-            fi
-        done
-    fi
-}
 kill_port_holder "$PORT"
 
 # Derive a stable node id from the address and port.
@@ -122,6 +152,7 @@ NEW_PID=$!
 echo "$NEW_PID" > "$PID_FILE"
 
 echo "efsd started (PID $NEW_PID); logs: $STORAGE/log/efsd.log"
+echo "Stop with: $0 stop $STORAGE   # or: $0 stop $ADDR_PORT"
 
 # Give efsd a moment to bind and report any immediate failure.
 sleep 1

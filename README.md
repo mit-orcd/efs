@@ -58,10 +58,22 @@ Requires `gcc`, `make`, and Linux with the FUSE kernel module.
 
 ## Server and storage layout
 
-`server.sh` usage:
+`server.sh` / `client.sh` usage:
 
 ```text
 ./scripts/server.sh <addr:port> <path[:quota]> [join-addr:port] [extra args...]
+./scripts/server.sh stop <path[:quota]|addr:port>
+
+./scripts/client.sh <server-addr:port> <mount-path> [export-name] [extra args...]
+./scripts/client.sh stop <mount-path>
+```
+
+Examples:
+
+```bash
+./scripts/server.sh stop /tmp/efs/s1
+./scripts/server.sh stop 127.0.0.1:17432
+./scripts/client.sh stop /mnt/efs
 ```
 
 The bind address must be a real local IP (not `0.0.0.0` or a network address).
@@ -191,9 +203,8 @@ cluster, runs load, and writes reports under a scratch directory.
 
 ## FUSE notes
 
-Supported: `chmod`, `chown`, `truncate`, `rename`, and the older `utime(2)`
-interface. The FUSE2 high-level API does not implement `utimensat`/`futimens`
-(`ENOSYS`).
+Supported: `chmod`, `chown`, `truncate`, `rename`, `utime(2)`, and `utimens`
+(nanosecond mtimes so `rsync -a` is idempotent on a second pass).
 
 ## Testing
 

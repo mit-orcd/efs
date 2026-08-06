@@ -21,6 +21,7 @@ struct efs_inode {
     gid_t gid;
     uint64_t size;
     uint64_t mtime;
+    uint32_t mtime_nsec; /* nanoseconds portion of mtime (for rsync etc.) */
     uint64_t ctime;
     uint32_t nlink;
     char name[EFS_MAX_NAME];
@@ -95,8 +96,12 @@ int efs_export_set_mode(struct efs_export *ex, efs_ino_t ino, uint32_t mode);
 /* Set inode owner/group. Use (uid_t)-1 or (gid_t)-1 to leave unchanged. */
 int efs_export_set_owner(struct efs_export *ex, efs_ino_t ino, uid_t uid, gid_t gid);
 
-/* Set inode modification time. */
+/* Set inode modification time (seconds; clears nanoseconds). */
 int efs_export_set_mtime(struct efs_export *ex, efs_ino_t ino, uint64_t mtime);
+
+/* Set inode modification time with nanosecond precision. */
+int efs_export_set_mtime_ns(struct efs_export *ex, efs_ino_t ino,
+                            uint64_t mtime, uint32_t mtime_nsec);
 
 /* Rename/move an inode. If a destination inode already exists, it is replaced
    only when the source and destination are both regular files or both empty

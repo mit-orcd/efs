@@ -120,8 +120,11 @@ int efs_client_chmod(efs_ino_t ino, uint32_t mode);
 /* Set owner/group. */
 int efs_client_chown(efs_ino_t ino, uid_t uid, gid_t gid);
 
-/* Set modification time. */
+/* Set modification time (seconds; nsec cleared). */
 int efs_client_utime(efs_ino_t ino, uint64_t mtime);
+
+/* Set modification time with nanoseconds (for utimensat / rsync). */
+int efs_client_utimens(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec);
 
 /* Truncate or extend a file to the given size. */
 int efs_client_truncate(efs_ino_t ino, uint64_t size);

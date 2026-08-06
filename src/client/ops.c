@@ -98,8 +98,13 @@ int efs_client_chown(efs_ino_t ino, uid_t uid, gid_t gid)
 
 int efs_client_utime(efs_ino_t ino, uint64_t mtime)
 {
+    return efs_client_utimens(ino, mtime, 0);
+}
+
+int efs_client_utimens(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec)
+{
     pthread_mutex_lock(&g_client.lock);
-    int rc = efs_export_set_mtime(&g_client.export, ino, mtime);
+    int rc = efs_export_set_mtime_ns(&g_client.export, ino, mtime, mtime_nsec);
     if (rc == 0)
         efs_client_mark_ino_dirty(ino);
     pthread_mutex_unlock(&g_client.lock);

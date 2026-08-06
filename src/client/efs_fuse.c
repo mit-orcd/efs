@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #define FUSE_USE_VERSION 26
 
 #include "client_internal.h"
@@ -15,6 +16,7 @@
 #include <sys/statvfs.h>
 #include <utime.h>
 #include <time.h>
+#include <fcntl.h>
 
 /* Generate a per-mount inode namespace so concurrent clients never assign the
  * same inode number to different files. The namespace occupies the high bits
@@ -47,10 +49,13 @@ static int efs_fuse_getattr(const char *path, struct stat *stbuf)
     stbuf->st_mode = ino.mode;
     stbuf->st_nlink = ino.nlink;
     stbuf->st_size = ino.size;
-    stbuf->st_mtime = ino.mtime;
-    stbuf->st_ctime = ino.ctime;
     stbuf->st_uid = ino.uid;
     stbuf->st_gid = ino.gid;
+    stbuf->st_mtim.tv_sec = (time_t)ino.mtime;
+    stbuf->st_mtim.tv_nsec = (long)ino.mtime_nsec;
+    stbuf->st_atim = stbuf->st_mtim;
+    stbuf->st_ctim.tv_sec = (time_t)ino.ctime;
+    stbuf->st_ctim.tv_nsec = 0;
     return 0;
 }
 
@@ -416,6 +421,35 @@ static int efs_fuse_utime(const char *path, struct utimbuf *ubuf)
     return 0;
 }
 
+static int efs_fuse_utimens(const char *path, const struct timespec tv[2])
+{
+    struct efs_inode ino;
+    int rc = efs_client_lookup(path, &ino);
+    if (rc != 0)
+        return -ENOENT;
+
+    /* tv[1] is mtime; honor UTIME_OMIT / UTIME_NOW. */
+    uint64_t sec;
+    uint32_t nsec;
+    if (!tv || tv[1].tv_nsec == UTIME_OMIT) {
+        return 0;
+    } else if (tv[1].tv_nsec == UTIME_NOW) {
+        struct timespec now;
+        clock_gettime(CLOCK_REALTIME, &now);
+        sec = (uint64_t)now.tv_sec;
+        nsec = (uint32_t)now.tv_nsec;
+    } else {
+        sec = (uint64_t)tv[1].tv_sec;
+        nsec = (uint32_t)tv[1].tv_nsec;
+        if (nsec >= 1000000000u)
+            nsec = 0;
+    }
+
+    if (efs_client_utimens(ino.ino, sec, nsec) != 0)
+        return -EIO;
+    return 0;
+}
+
 static int efs_fuse_truncate(const char *path, off_t size)
 {
     struct efs_inode ino;
@@ -513,6 +547,7 @@ static struct fuse_operations efs_ops = {
     .chmod    = efs_fuse_chmod,
     .chown    = efs_fuse_chown,
     .utime    = efs_fuse_utime,
+    .utimens  = efs_fuse_utimens,
     .truncate = efs_fuse_truncate,
     .rename   = efs_fuse_rename,
     .symlink  = efs_fuse_symlink,
@@ -521,6 +556,7 @@ static struct fuse_operations efs_ops = {
     .release  = efs_fuse_release,
     .init     = efs_fuse_init,
     .destroy  = efs_fuse_destroy,
+    .flag_utime_omit_ok = 1,
 };
 
 static int parse_addr(const char *str, char *host, size_t host_len, uint16_t *port)
