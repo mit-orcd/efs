@@ -14,13 +14,18 @@
 #define EFS_FRAGMENT_SIZE    (EFS_CHUNK_SIZE / 2)
 #define EFS_NUM_FRAGMENTS    3
 #define EFS_MAX_NODES        4
-/* Max TCP connections the client keeps open to each server (pool size). */
-#define EFS_CLIENT_CONNS_PER_NODE 8
+/* Max TCP connections the client keeps open to each server (pool size).
+ * Sized for many FUSE writers × fragment fanout × chunk pipeline. */
+#define EFS_CLIENT_CONNS_PER_NODE 32
+/* How many 128 KiB chunks one FUSE write may PUT concurrently. */
+#define EFS_WRITE_PIPELINE 8
 #define EFS_MAX_EXPORTS      16
 #define EFS_MAX_PATH         4096
 #define EFS_MAX_NAME         256
+/* Local data roots per efsd: 1 (plain) or 3..8 (local EC). 2 is rejected. */
+#define EFS_MAX_STORAGE_PATHS 8
 #define EFS_HASH_SIZE        32
-#define EFS_LISTEN_BACKLOG   64
+#define EFS_LISTEN_BACKLOG   512
 #define EFS_DEFAULT_PORT     7432
 #define EFS_HEARTBEAT_MS     2000
 #define EFS_IO_TIMEOUT_MS    30000

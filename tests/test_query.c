@@ -114,8 +114,9 @@ static void stop_servers(void)
 
 static int join_cluster(void)
 {
+    /* Each new node joins the seed (same direction as test_integration). */
     for (int i = 1; i < NODE_COUNT; i++) {
-        int fd = efs_connect_tcp(children[0].host, children[0].port);
+        int fd = efs_connect_tcp(children[i].host, children[i].port);
         if (fd < 0)
             return -1;
         efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
@@ -123,8 +124,8 @@ static int join_cluster(void)
 
         struct efs_msg_join req;
         memset(&req, 0, sizeof(req));
-        strncpy(req.peer_host, children[i].host, sizeof(req.peer_host) - 1);
-        req.peer_port = children[i].port;
+        strncpy(req.peer_host, children[0].host, sizeof(req.peer_host) - 1);
+        req.peer_port = children[0].port;
 
         uint8_t type;
         void *reply = NULL;
@@ -174,14 +175,14 @@ static int create_export(void)
 
 static int setup_client(void)
 {
+    const char *addrs[EFS_MAX_NODES] = {
+        "127.0.0.1:18492", "127.0.0.1:18493", "127.0.0.1:18494"
+    };
+    memset(&g_client, 0, sizeof(g_client));
     g_client.export_id = 1;
     strcpy(g_client.export_name, "fs");
-    g_client.node_count = NODE_COUNT;
-    for (int i = 0; i < NODE_COUNT; i++) {
-        g_client.nodes[i].id = i + 1;
-        strncpy(g_client.nodes[i].addr, children[i].host, sizeof(g_client.nodes[i].addr) - 1);
-        g_client.nodes[i].port = children[i].port;
-    }
+    pthread_mutex_init(&g_client.lock, NULL);
+    efs_client_init_nodes(&g_client, addrs, NODE_COUNT);
     efs_export_init(&g_client.export, 1, "fs");
     return efs_client_fetch_metadata(children[0].host, children[0].port);
 }
@@ -252,6 +253,8 @@ static int query_and_check(void)
 int main(void)
 {
     int failures = 0;
+    setlinebuf(stdout);
+    setlinebuf(stderr);
 
     if (start_servers() != 0) {
         fprintf(stderr, "Failed to start servers\n");

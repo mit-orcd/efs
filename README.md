@@ -162,12 +162,18 @@ fragments reconstruct a chunk.
 
 ```bash
 ./efs-mgmt list-exports 127.0.0.1:17432
-./efs-mgmt remove-node 127.0.0.1:17434      # migrate off, then leave
+./efs-mgmt drain-node 127.0.0.1:17434       # migrate local data to peers; stay in cluster
+./efs-mgmt undrain-node 127.0.0.1:17434     # accept new writes again after drain
+./efs-mgmt remove-node 127.0.0.1:17434      # leave cluster (requires prior drain)
 ./efs-mgmt shrink-quota 127.0.0.1:17432 2G  # migrate until under new limit
 ```
 
-`remove-node` and `shrink-quota` return immediately; migration runs in the
-background. Watch progress with `efs-mgmt status`.
+`drain-node` empties a node but keeps it in the membership (useful for
+maintenance or before remove). While draining or drained, the node rejects new
+fragment PUTs. `remove-node` fails unless the node is already empty — run
+`drain-node` first. `drain-node` and `shrink-quota` return immediately;
+migration runs in the background. Watch progress with `efs-mgmt status`
+(shows `draining` / `drained` / `active`).
 
 `mkfs` fails if the export name already exists.
 
@@ -180,6 +186,10 @@ node-local storage). Pass `--no-direct-io` to use the page cache instead:
 ./efsd --node-id 1 --addr 127.0.0.1 --port 17432 \
        --storage /tmp/efs/s1 --no-direct-io &
 ```
+
+Fragment PUTs are executed on a dedicated writer thread pool (default 8
+threads). Override with `--writers <n>` (`0` runs writes inline on the
+connection thread).
 
 ## Querying metadata
 

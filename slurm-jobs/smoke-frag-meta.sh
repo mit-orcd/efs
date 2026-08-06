@@ -111,32 +111,25 @@ sync
 sleep 0.5
 
 # Confirm root is fragmented (EFSR) on at least one server.
-if ! grep -aq "EFSR" "$LOCAL/s1/meta/exports/fragmeta/metadata.bin" \
-    && ! grep -aq "EFSR" "$LOCAL/s2/meta/exports/fragmeta/metadata.bin"; then
-    # binary magic may not be greppable as text — check with od/hexdump
-    MAGIC=$(head -c 4 "$LOCAL/s1/meta/exports/fragmeta/metadata.bin" 2>/dev/null || true)
-    if [ "$MAGIC" != "EFSR" ]; then
-        fail "metadata.bin is not EFSR root (got '$(echo -n "$MAGIC" | xxd -p 2>/dev/null || echo "?")')"
-        ls -la "$LOCAL"/s*/meta/exports/fragmeta/ 2>/dev/null || true
-        xxd "$LOCAL/s1/meta/exports/fragmeta/metadata.bin" | head -3 || true
-    else
-        pass "metadata.bin is EFSR root"
-    fi
-else
+MAGIC=$(head -c 4 "$LOCAL/s1/meta/exports/fragmeta/metadata.bin" 2>/dev/null || true)
+if [ "$MAGIC" = "EFSR" ]; then
     pass "metadata.bin is EFSR root"
+else
+    fail "metadata.bin is not EFSR root"
+    xxd "$LOCAL/s1/meta/exports/fragmeta/metadata.bin" 2>/dev/null | head -3 || true
 fi
 
-# Meta table fragments should exist under reserved inode path.
-META_FRAGS=$(find "$LOCAL"/s*/data/exports/fragmeta -path '*8000000000000002*' 2>/dev/null | wc -l)
-if [ "$META_FRAGS" -ge 2 ]; then
+# Meta table fragments live under data/exports/<export-id>/<meta-ino>/...
+META_INO=9223372036854775810
+META_FRAGS=$(find "$LOCAL"/s*/data/exports -type f ! -name '*.sum' 2>/dev/null | grep -c "$META_INO" || true)
+if [ "${META_FRAGS:-0}" -ge 2 ]; then
     pass "found $META_FRAGS meta-table fragment files"
 else
-    # inode may be printed decimal in path
-    META_FRAGS=$(find "$LOCAL"/s*/data/exports/fragmeta -type f ! -name '*.sum' 2>/dev/null | wc -l)
-    if [ "$META_FRAGS" -ge 3 ]; then
-        pass "found $META_FRAGS data/meta fragment files under export"
+    ALL_FRAGS=$(find "$LOCAL"/s*/data/exports -type f ! -name '*.sum' 2>/dev/null | wc -l || true)
+    if [ "${ALL_FRAGS:-0}" -ge 3 ]; then
+        pass "found $ALL_FRAGS fragment files under data/exports"
     else
-        fail "expected meta page fragments under data/exports (found $META_FRAGS)"
+        fail "expected meta page fragments (meta=$META_FRAGS all=$ALL_FRAGS)"
         find "$LOCAL"/s*/data/exports -type f 2>/dev/null | head -20 || true
     fi
 fi
@@ -155,8 +148,10 @@ wait "$S2" 2>/dev/null || true
 S2=""
 sleep 0.5
 
+# Keep all three addresses so placement matches the live cluster even though
+# s2 is down (2+1 can still reconstruct from s1+s3).
 EFS_META_BATCH_OPS=1 \
-    "$REPO/efs-fuse" "$IP:$P1" "$IP:$P3" fragmeta "$MNT" -f \
+    "$REPO/efs-fuse" "$IP:$P1" "$IP:$P2" "$IP:$P3" fragmeta "$MNT" -f \
     > "$OUT/client2.stdout" 2>&1 &
 CPID=$!
 

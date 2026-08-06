@@ -34,5 +34,13 @@ echo "${IB_HOST}:${PORT}" > "$SHARED/state/s1.addr"
 echo "$IB_HOST" > "$SHARED/state/s1.host"
 echo "$SHORT" > "$SHARED/state/s1.node"
 
+# Optional: EFS_DIO=off|on from orchestrator; EFS_EXTRA_ARGS for other flags.
+DIO_ARGS=()
+case "${EFS_DIO:-}" in
+    off|buffered|0) DIO_ARGS+=(--no-direct-io) ;;
+    on|direct|1)    DIO_ARGS+=(--direct-io) ;;
+esac
+# shellcheck disable=SC2086
 efs_run_efsd "$SCRATCH" \
-    "$REPO/efsd" --node-id "$NODE_ID" --addr "$IB_HOST" --port "$PORT" --storage "$STORAGE"
+    "$REPO/efsd" --node-id "$NODE_ID" --addr "$IB_HOST" --port "$PORT" \
+    --storage "$STORAGE" "${DIO_ARGS[@]}" ${EFS_EXTRA_ARGS:-}

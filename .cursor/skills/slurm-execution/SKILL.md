@@ -55,6 +55,17 @@ These rules govern every build, server, client, management command, and test in 
 - Use `/scratch/efs-testing/$SLURM_JOB_ID` for node-local data; use the shared `efs` dir only for things that must cross node boundaries.
 - `#SBATCH --output=`/`--error=` directives do not expand shell variables or `~`, so always write the literal absolute shared path there.
 
+### Agent cleanup after every test (mandatory)
+
+When a test/harness/Valgrind/profile run finishes (or fails), **before ending the turn**:
+
+1. Confirm job scratch was removed (`/scratch/efs-testing/$SLURM_JOB_ID` on the compute node via the job's trap, or clean manually if the trap missed).
+2. Check `squeue` first — **never** wipe shared `state/` / `profile/` while other efs harness jobs are still running.
+3. Clear finished harness coordination files: `rm -f /orcd/scratch/orcd/001/erbmi1/efs/state/*` only when no efs harness remains.
+4. Remove that run’s ephemeral result dirs once results are reported (`valgrind/<id>/`, `valgrind-fuse/<id>/`, `profile/<id>/`). Prefer per-job deletes over wiping whole trees.
+5. Keep `logs/` unless the user asks to purge them.
+6. Unmount any leftover FUSE mounts before deleting their directories.
+
 ## 5. Smoke tests, not load tests
 
 - Tests verify **features and correctness**, not performance or scale.

@@ -1,0 +1,43 @@
+---
+description: Always clean up efs test artifacts after every test/harness run
+alwaysApply: true
+---
+
+# Cleanup after testing
+
+After every test, harness, Valgrind, profile, or smoke run — before ending the turn — clean up.
+
+## Before cleaning shared dirs
+
+Check `squeue -u $USER` for active efs harness jobs (`efs-s*`, `efs-c*`, clients, verify jobs).
+**Never** wipe `state/`, `profile/`, or result trees while another harness still needs them.
+
+## Must remove (after the run you started is done)
+
+1. **Node-local job scratch** (on the compute node that ran the job):
+   `rm -rf /scratch/efs-testing/$SLURM_JOB_ID`
+   Harness scripts must also `trap` this on EXIT/TERM.
+
+2. **Shared harness state** for finished runs only:
+   Clear stale files under `/orcd/scratch/orcd/001/erbmi1/efs/state/` when no efs harness is still running.
+
+3. **Ephemeral result trees** for the finished run (after results are reported):
+   - that job’s dirs under `valgrind/`, `valgrind-fuse/`, `profile/`
+
+4. **FUSE mounts** before deleting mount dirs: `fusermount -u` (or `umount`), then `rm -rf`.
+
+## Do not leave behind
+
+- Live `efsd` / `efs-fuse` / test processes from **your** finished run
+- Stale `state/` go/ready/ok/host files after the harness exits
+- Orphan `/scratch/efs-testing/*` trees from finished jobs
+
+## Keep (unless the user asks to purge)
+
+- Shared job logs under `/orcd/scratch/orcd/001/erbmi1/efs/logs/` (Slurm stdout/stderr)
+
+## Habit
+
+- Cleanup is part of finishing the test, not an optional follow-up.
+- If a job dies mid-run, cancel leftovers, then clear only that run’s scratch/state.
+- Prefer deleting specific job IDs over `rm -rf` of whole shared trees.

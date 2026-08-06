@@ -38,6 +38,10 @@ enum efs_msg_type {
     EFS_MSG_QUERY_STATS_REPLY = 26,
     EFS_MSG_LIST_EXPORTS = 27,
     EFS_MSG_LIST_EXPORTS_REPLY = 28,
+    EFS_MSG_DRAIN_NODE = 29,
+    EFS_MSG_DRAIN_NODE_REPLY = 30,
+    EFS_MSG_UNDRAIN_NODE = 31,
+    EFS_MSG_UNDRAIN_NODE_REPLY = 32,
 };
 
 struct efs_msg_hello {
@@ -105,6 +109,7 @@ struct efs_msg_list_nodes_reply {
 struct efs_msg_status_reply {
     uint64_t quota;
     uint64_t used;
+    uint32_t state; /* efsd_server_state: 0=active, 3=draining, 4=drained, ... */
 };
 
 struct efs_msg_shrink_quota {
@@ -118,10 +123,25 @@ struct efs_msg_node_left {
 #define EFS_REMOVE_NODE_OK     0
 #define EFS_REMOVE_NODE_ERROR  1
 #define EFS_REMOVE_NODE_IN_PROGRESS 2
+#define EFS_REMOVE_NODE_NOT_DRAINED 3
+
+#define EFS_DRAIN_NODE_OK           0
+#define EFS_DRAIN_NODE_ERROR        1
+#define EFS_DRAIN_NODE_IN_PROGRESS  2
+
+#define EFS_UNDRAIN_NODE_OK     0
+#define EFS_UNDRAIN_NODE_ERROR  1
 
 #define EFS_SHRINK_QUOTA_OK     0
 #define EFS_SHRINK_QUOTA_ERROR  1
 #define EFS_SHRINK_QUOTA_IN_PROGRESS 2
+
+/* Wire values match enum efsd_server_state in server_internal.h */
+#define EFS_NODE_STATE_ACTIVE    0
+#define EFS_NODE_STATE_LEAVING   1
+#define EFS_NODE_STATE_SHRINKING 2
+#define EFS_NODE_STATE_DRAINING  3
+#define EFS_NODE_STATE_DRAINED   4
 
 struct efs_msg_create_export {
     char name[EFS_MAX_NAME];

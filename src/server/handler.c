@@ -155,6 +155,7 @@ void server_handle_conn(int fd)
             if (payload_len >= sizeof(struct efs_msg_put_chunk)) {
                 struct efs_msg_put_chunk *req = payload;
                 pthread_mutex_lock(&g_server->lock);
+                int put_state = g_server->state;
                 struct efs_export *ex = server_get_export(g_server, req->export_id);
                 /* Auto-create export shell so meta-page PUTs can land before
                  * the EFSR root arrives (mkfs / first flush race). */
@@ -166,7 +167,12 @@ void server_handle_conn(int fd)
                 pthread_mutex_unlock(&g_server->lock);
 
                 uint8_t reply = EFS_PUT_CHUNK_ERROR;
-                if (ex) {
+                if (put_state == SERVER_STATE_DRAINING ||
+                    put_state == SERVER_STATE_DRAINED ||
+                    put_state == SERVER_STATE_LEAVING) {
+                    /* Drain/leave: do not accept new fragment data. */
+                    reply = EFS_PUT_CHUNK_ERROR;
+                } else if (ex) {
                     /* Verify the client-supplied checksum once at write time
                      * and persist it so reads do not need to re-hash. */
                     uint8_t verify[EFS_HASH_SIZE];
@@ -174,18 +180,14 @@ void server_handle_conn(int fd)
                     if (memcmp(verify, req->checksum, EFS_HASH_SIZE) != 0) {
                         reply = EFS_PUT_CHUNK_ERROR;
                     } else {
-                        rc = server_write_fragment(g_server, ex, req->ino,
-                                                   req->chunk_index, req->fragment_index,
-                                                   req->data, EFS_FRAGMENT_SIZE);
-                        if (rc == 0) {
-                            server_write_fragment_sum(g_server, ex, req->ino,
-                                                      req->chunk_index,
-                                                      req->fragment_index,
-                                                      req->checksum);
+                        rc = server_write_fragment_with_sum(
+                            g_server, ex, req->ino, req->chunk_index,
+                            req->fragment_index, req->data, EFS_FRAGMENT_SIZE,
+                            req->checksum);
+                        if (rc == 0)
                             reply = EFS_PUT_CHUNK_OK;
-                        } else if (rc == EFS_ERR_QUOTA) {
+                        else if (rc == EFS_ERR_QUOTA)
                             reply = EFS_PUT_CHUNK_QUOTA_EXCEEDED;
-                        }
                     }
                 }
                 efs_send_msg(fd, EFS_MSG_PUT_CHUNK_REPLY, &reply, 1);
@@ -236,12 +238,14 @@ void server_handle_conn(int fd)
                             ex->id = ex->root.id;
                             strncpy(ex->name, ex->root.name, EFS_MAX_NAME - 1);
                             ex->next_ino = ex->root.next_ino;
+                            /* Never rebuild on this handler thread: peer page
+                             * fetches would block the pooled client connection
+                             * and can cascade into multi-node stalls. */
+                            if (ex->root.page_count > 0)
+                                ex->meta_needs_rebuild = 1;
                             g_server->epoch++;
                             g_server->export_meta_dirty = 1;
                             pthread_mutex_unlock(&g_server->lock);
-                            /* Rebuild bulk tables when pages exist. */
-                            if (ex->root.page_count > 0)
-                                server_rebuild_export_from_pages(g_server, ex);
                             server_save_export(g_server, ex);
                             reply = EFS_PUT_META_OK;
                         }
@@ -318,21 +322,89 @@ void server_handle_conn(int fd)
             reply.quota = g_server->quota;
             struct efs_node *local = server_local_node(g_server);
             reply.used = local ? local->used : 0;
+            reply.state = (uint32_t)g_server->state;
             pthread_mutex_unlock(&g_server->lock);
             efs_send_msg(fd, EFS_MSG_STATUS_REPLY, &reply, sizeof(reply));
             break;
         }
-        case EFS_MSG_REMOVE_NODE: {
-            uint8_t reply = EFS_REMOVE_NODE_ERROR;
+        case EFS_MSG_DRAIN_NODE: {
+            uint8_t reply = EFS_DRAIN_NODE_ERROR;
             pthread_mutex_lock(&g_server->lock);
-            if (g_server->state == SERVER_STATE_ACTIVE) {
-                g_server->state = SERVER_STATE_LEAVING;
-                printf("Node removal requested, starting background migration\n");
-                reply = EFS_REMOVE_NODE_IN_PROGRESS;
-            } else if (g_server->state == SERVER_STATE_LEAVING) {
-                reply = EFS_REMOVE_NODE_IN_PROGRESS;
+            int st = g_server->state;
+            pthread_mutex_unlock(&g_server->lock);
+
+            if (st == SERVER_STATE_DRAINED) {
+                reply = EFS_DRAIN_NODE_OK;
+            } else if (st == SERVER_STATE_DRAINING) {
+                reply = EFS_DRAIN_NODE_IN_PROGRESS;
+            } else if (st == SERVER_STATE_SHRINKING || st == SERVER_STATE_LEAVING) {
+                reply = EFS_DRAIN_NODE_ERROR;
+            } else if (st == SERVER_STATE_ACTIVE) {
+                int empty = server_node_is_empty(g_server);
+                pthread_mutex_lock(&g_server->lock);
+                if (g_server->state != SERVER_STATE_ACTIVE) {
+                    /* Lost race with another mgmt op. */
+                    reply = (g_server->state == SERVER_STATE_DRAINED) ? EFS_DRAIN_NODE_OK
+                          : (g_server->state == SERVER_STATE_DRAINING) ? EFS_DRAIN_NODE_IN_PROGRESS
+                          : EFS_DRAIN_NODE_ERROR;
+                } else if (empty) {
+                    g_server->state = SERVER_STATE_DRAINED;
+                    printf("Drain requested: already empty, node drained\n");
+                    reply = EFS_DRAIN_NODE_OK;
+                } else {
+                    g_server->state = SERVER_STATE_DRAINING;
+                    printf("Drain requested, starting background migration\n");
+                    reply = EFS_DRAIN_NODE_IN_PROGRESS;
+                }
+                pthread_mutex_unlock(&g_server->lock);
+            }
+            efs_send_msg(fd, EFS_MSG_DRAIN_NODE_REPLY, &reply, 1);
+            break;
+        }
+        case EFS_MSG_UNDRAIN_NODE: {
+            uint8_t reply = EFS_UNDRAIN_NODE_ERROR;
+            pthread_mutex_lock(&g_server->lock);
+            if (g_server->state == SERVER_STATE_DRAINED) {
+                g_server->state = SERVER_STATE_ACTIVE;
+                printf("Undrain requested, node active\n");
+                reply = EFS_UNDRAIN_NODE_OK;
+            } else if (g_server->state == SERVER_STATE_ACTIVE) {
+                reply = EFS_UNDRAIN_NODE_OK;
             }
             pthread_mutex_unlock(&g_server->lock);
+            efs_send_msg(fd, EFS_MSG_UNDRAIN_NODE_REPLY, &reply, 1);
+            break;
+        }
+        case EFS_MSG_REMOVE_NODE: {
+            uint8_t reply = EFS_REMOVE_NODE_ERROR;
+            int do_notify = 0;
+            pthread_mutex_lock(&g_server->lock);
+            int st = g_server->state;
+            pthread_mutex_unlock(&g_server->lock);
+
+            if (st == SERVER_STATE_LEAVING) {
+                reply = EFS_REMOVE_NODE_OK;
+            } else if (st == SERVER_STATE_DRAINING || st == SERVER_STATE_SHRINKING) {
+                reply = EFS_REMOVE_NODE_NOT_DRAINED;
+            } else if (st == SERVER_STATE_DRAINED || st == SERVER_STATE_ACTIVE) {
+                int empty = (st == SERVER_STATE_DRAINED) || server_node_is_empty(g_server);
+                pthread_mutex_lock(&g_server->lock);
+                if (g_server->state == SERVER_STATE_LEAVING) {
+                    reply = EFS_REMOVE_NODE_OK;
+                } else if (g_server->state == SERVER_STATE_DRAINING ||
+                           g_server->state == SERVER_STATE_SHRINKING) {
+                    reply = EFS_REMOVE_NODE_NOT_DRAINED;
+                } else if (empty || g_server->state == SERVER_STATE_DRAINED) {
+                    server_begin_leave_locked(g_server);
+                    do_notify = 1;
+                    reply = EFS_REMOVE_NODE_OK;
+                } else {
+                    reply = EFS_REMOVE_NODE_NOT_DRAINED;
+                }
+                pthread_mutex_unlock(&g_server->lock);
+            }
+            if (do_notify)
+                server_notify_node_left(g_server, g_server->id);
             efs_send_msg(fd, EFS_MSG_REMOVE_NODE_REPLY, &reply, 1);
             break;
         }
@@ -394,7 +466,8 @@ void server_handle_conn(int fd)
                 }
                 pthread_mutex_unlock(&g_server->lock);
                 if (reply == EFS_CREATE_EXPORT_OK) {
-                    server_replicate_metadata(g_server, ex);
+                    if (server_replicate_metadata(g_server, ex) < 0)
+                        reply = EFS_CREATE_EXPORT_ERROR;
                 }
                 efs_send_msg(fd, EFS_MSG_CREATE_EXPORT_REPLY, &reply, 1);
             }
@@ -427,6 +500,24 @@ void server_handle_conn(int fd)
             break;
         }
         case EFS_MSG_QUERY_STATS: {
+            /* Rebuild bulk tables before counting (EFSR root alone is not enough). */
+            pthread_mutex_lock(&g_server->lock);
+            uint32_t ec = g_server->export_count;
+            int need[EFS_MAX_EXPORTS];
+            memset(need, 0, sizeof(need));
+            for (uint32_t e = 0; e < ec && e < EFS_MAX_EXPORTS; e++) {
+                struct efs_export *ex = &g_server->exports[e];
+                /* Rebuild when dirty, or when tables look empty despite pages. */
+                need[e] = (ex->meta_fragmented && ex->root.page_count > 0 &&
+                           (ex->meta_needs_rebuild || ex->inode_count <= 1));
+            }
+            pthread_mutex_unlock(&g_server->lock);
+            for (uint32_t e = 0; e < ec && e < EFS_MAX_EXPORTS; e++) {
+                if (!need[e])
+                    continue;
+                server_rebuild_export_from_pages(g_server, &g_server->exports[e]);
+            }
+
             struct efs_msg_query_stats_reply reply;
             memset(&reply, 0, sizeof(reply));
             pthread_mutex_lock(&g_server->lock);

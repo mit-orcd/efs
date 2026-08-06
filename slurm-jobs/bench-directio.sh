@@ -4,7 +4,7 @@
 #SBATCH --time=00:15:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=8
 #SBATCH --mem=8G
 #SBATCH --output=/orcd/scratch/orcd/001/erbmi1/efs/logs/dio-bench-%j.out
 #SBATCH --error=/orcd/scratch/orcd/001/erbmi1/efs/logs/dio-bench-%j.err
@@ -37,7 +37,7 @@ cleanup() {
         fusermount -u "$MNT" 2>/dev/null || umount "$MNT" 2>/dev/null || true
     fi
     for pid in ${CPID:-} ${S1:-} ${S2:-} ${S3:-}; do
-        kill -INT "$pid" 2>/dev/null || true
+        kill -TERM "$pid" 2>/dev/null || true
     done
     sleep 1
     for pid in ${CPID:-} ${S1:-} ${S2:-} ${S3:-}; do
@@ -117,8 +117,15 @@ run_mode() {
         done
         [ "$READY" = "1" ] || { echo "server :$port failed"; cat "$OUT/${mode}-s"*.log; return 1; }
     done
-    # Allow join/HELLO to settle before mkfs.
-    sleep 2
+    # Wait until s2/s3 have actually joined (not just listening).
+    for log in "$OUT/${mode}-s2.log" "$OUT/${mode}-s3.log"; do
+        for i in $(seq 1 40); do
+            if grep -q "Joined cluster" "$log" 2>/dev/null; then break; fi
+            sleep 0.25
+        done
+        grep -q "Joined cluster" "$log" || { echo "join failed: $log"; cat "$log"; return 1; }
+    done
+    sleep 1
 
     echo "mkfs..."
     MKFS_OK=0
@@ -164,8 +171,10 @@ run_mode() {
     echo "SEQ_WRITE mode=$mode bytes_miB=$total_mb seconds=$dt mib_s=$(mibs "$total_mb" "$dt")"
     echo "SEQ_WRITE mode=$mode bytes_miB=$total_mb seconds=$dt mib_s=$(mibs "$total_mb" "$dt")" >> "$OUT/results.txt"
 
-    # Sequential large reads (drop page cache if permitted; ignore failure)
-    echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+    # Sequential large reads (drop page cache only when permitted)
+    if [ -w /proc/sys/vm/drop_caches ]; then
+        echo 3 > /proc/sys/vm/drop_caches || true
+    fi
     t0=$(secs)
     for i in $(seq 1 "$NSEQ"); do
         dd if="$MNT/seq-${i}.bin" of=/dev/null bs=1M status=none
@@ -188,20 +197,17 @@ run_mode() {
     echo "SMALL_WR  mode=$mode files=$SMALL_N each_kiB=$SMALL_KB bytes_miB=$total_mb seconds=$dt mib_s=$(mibs "$total_mb" "$dt")"
     echo "SMALL_WR  mode=$mode files=$SMALL_N each_kiB=$SMALL_KB bytes_miB=$total_mb seconds=$dt mib_s=$(mibs "$total_mb" "$dt")" >> "$OUT/results.txt"
 
-    # Tear down this mode before the next.
+    # Tear down this mode before the next (KILL avoids efsd SIGINT shutdown crashes).
     fusermount -u "$MNT" 2>/dev/null || umount "$MNT" 2>/dev/null || true
-    kill -INT "$CPID" 2>/dev/null || true
-    wait "$CPID" 2>/dev/null || true
-    CPID=""
-    for pid in "$S1" "$S2" "$S3"; do
-        kill -INT "$pid" 2>/dev/null || true
+    for pid in "$CPID" "$S1" "$S2" "$S3"; do
+        kill -TERM "$pid" 2>/dev/null || true
     done
     sleep 1
-    for pid in "$S1" "$S2" "$S3"; do
+    for pid in "$CPID" "$S1" "$S2" "$S3"; do
         kill -KILL "$pid" 2>/dev/null || true
         wait "$pid" 2>/dev/null || true
     done
-    S1=""; S2=""; S3=""
+    CPID=""; S1=""; S2=""; S3=""
     for port in "$P1" "$P2" "$P3"; do
         fuser -k "${port}/tcp" 2>/dev/null || true
     done

@@ -1443,6 +1443,7 @@ int efs_export_load(struct efs_export *ex, const char *path)
             ex->next_ino = root.next_ino;
             ex->meta_fragmented = 1;
             efs_export_root_move(&ex->root, &root);
+            ex->meta_needs_rebuild = (ex->root.page_count > 0);
         }
     } else {
         rc = efs_export_deserialize(ex, buf, (size_t)len);

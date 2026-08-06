@@ -1,6 +1,7 @@
 #include "efs/common.h"
 #include "efs/network.h"
 #include "server_internal.h"
+#include "storage_numa.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,11 +20,48 @@ static void usage(const char *prog)
 {
     fprintf(stderr,
             "Usage: %s --node-id <id> --addr <addr> --port <port> "
-            "--storage <path> [--quota <bytes>[T|G|M|K]] [--direct-io|--no-direct-io] "
-            "[--join <host:port>] [--no-persist] [--perf]\n"
+            "--storage <path>[,path...] [--storage <path> ...] "
+            "[--quota <bytes>[T|G|M|K]] [--direct-io|--no-direct-io] "
+            "[--writers <n>] [--join <host:port>] [--no-persist] [--perf]\n"
+            "  --storage        one path, or 3..%d paths (comma and/or repeated).\n"
+            "                   With >=3 paths the server applies local EC so disks\n"
+            "                   can fail without peer RPCs (3→1 loss, 4+→2 losses).\n"
             "  --direct-io      O_DIRECT for fragment I/O (default on)\n"
-            "  --no-direct-io   use the page cache for fragment I/O\n",
-            prog);
+            "  --no-direct-io   use the page cache for fragment I/O\n"
+            "  --writers <n>    fragment writer threads (default %d, 0 = inline)\n",
+            prog, EFS_MAX_STORAGE_PATHS, EFS_DEFAULT_WRITERS);
+}
+
+static int add_storage_path(struct efsd_server *s, const char *path)
+{
+    if (!path || !*path)
+        return -1;
+    if (s->storage_path_count >= EFS_MAX_STORAGE_PATHS) {
+        fprintf(stderr, "Too many --storage paths (max %d)\n", EFS_MAX_STORAGE_PATHS);
+        return -1;
+    }
+    strncpy(s->storage_paths[s->storage_path_count], path,
+            sizeof(s->storage_paths[0]) - 1);
+    s->storage_paths[s->storage_path_count][sizeof(s->storage_paths[0]) - 1] = '\0';
+    s->storage_path_count++;
+    return 0;
+}
+
+static int parse_storage_arg(struct efsd_server *s, const char *arg)
+{
+    char buf[EFS_MAX_PATH * EFS_MAX_STORAGE_PATHS];
+    strncpy(buf, arg, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    char *save = NULL;
+    for (char *tok = strtok_r(buf, ",", &save); tok; tok = strtok_r(NULL, ",", &save)) {
+        while (*tok == ' ' || *tok == '\t')
+            tok++;
+        if (!*tok)
+            continue;
+        if (add_storage_path(s, tok) != 0)
+            return -1;
+    }
+    return 0;
 }
 
 static int mkdir_p(const char *path)
@@ -136,6 +174,7 @@ int main(int argc, char **argv)
     memset(&server, 0, sizeof(server));
     server.persist_nodes = 1;
     server.direct_io = 1; /* default: O_DIRECT on flash-backed node storage */
+    server.nwriters = EFS_DEFAULT_WRITERS;
     server.listen_fd = -1;
     g_server = &server;
     pthread_mutex_init(&server.lock, NULL);
@@ -150,7 +189,10 @@ int main(int argc, char **argv)
         } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
             server.port = (uint16_t)atoi(argv[++i]);
         } else if (strcmp(argv[i], "--storage") == 0 && i + 1 < argc) {
-            strncpy(server.storage_path, argv[++i], sizeof(server.storage_path) - 1);
+            if (parse_storage_arg(&server, argv[++i]) != 0) {
+                usage(argv[0]);
+                return 1;
+            }
         } else if (strcmp(argv[i], "--quota") == 0 && i + 1 < argc) {
             server.quota = efs_parse_quota(argv[++i]);
             if (server.quota == 0) {
@@ -162,6 +204,14 @@ int main(int argc, char **argv)
             server.direct_io = 1;
         } else if (strcmp(argv[i], "--no-direct-io") == 0) {
             server.direct_io = 0;
+        } else if (strcmp(argv[i], "--writers") == 0 && i + 1 < argc) {
+            int n = atoi(argv[++i]);
+            if (n < 0 || n > EFS_MAX_WRITERS) {
+                fprintf(stderr, "Invalid --writers value (0..%d)\n", EFS_MAX_WRITERS);
+                usage(argv[0]);
+                return 1;
+            }
+            server.nwriters = n;
         } else if (strcmp(argv[i], "--join") == 0 && i + 1 < argc) {
             join_peer = argv[++i];
         } else if (strcmp(argv[i], "--no-persist") == 0) {
@@ -178,11 +228,22 @@ int main(int argc, char **argv)
         }
     }
 
-    if (server.id == 0 || server.port == 0 || server.storage_path[0] == '\0') {
+    if (server.id == 0 || server.port == 0 || server.storage_path_count == 0) {
         fprintf(stderr, "Missing required arguments\n");
         usage(argv[0]);
         return 1;
     }
+    if (server.storage_path_count == 2) {
+        fprintf(stderr, "Invalid --storage: use 1 path or 3..%d paths (not 2)\n",
+                EFS_MAX_STORAGE_PATHS);
+        return 1;
+    }
+    strncpy(server.storage_path, server.storage_paths[0], sizeof(server.storage_path) - 1);
+    server.storage_path[sizeof(server.storage_path) - 1] = '\0';
+
+    /* Line-buffer early so join/listen banners show up in harness logs promptly. */
+    setlinebuf(stdout);
+    setlinebuf(stderr);
 
     char perf_path[8192];
     perf_path[0] = '\0';
@@ -194,18 +255,22 @@ int main(int argc, char **argv)
             snprintf(perf_path, sizeof(perf_path), "%s/log/perf.data", server.storage_path);
     }
 
-    if (mkdir(server.storage_path, 0755) != 0 && errno != EEXIST) {
-        perror("mkdir storage");
-        return 1;
+    for (uint32_t pi = 0; pi < server.storage_path_count; pi++) {
+        if (mkdir(server.storage_paths[pi], 0755) != 0 && errno != EEXIST) {
+            fprintf(stderr, "mkdir storage %s: %s\n", server.storage_paths[pi],
+                    strerror(errno));
+            return 1;
+        }
+        char subdir[8192];
+        snprintf(subdir, sizeof(subdir), "%s/data", server.storage_paths[pi]);
+        mkdir_p(subdir);
+        snprintf(subdir, sizeof(subdir), "%s/meta", server.storage_paths[pi]);
+        mkdir_p(subdir);
+        snprintf(subdir, sizeof(subdir), "%s/log", server.storage_paths[pi]);
+        mkdir_p(subdir);
     }
 
-    char subdir[8192];
-    snprintf(subdir, sizeof(subdir), "%s/data", server.storage_path);
-    mkdir_p(subdir);
-    snprintf(subdir, sizeof(subdir), "%s/meta", server.storage_path);
-    mkdir_p(subdir);
-    snprintf(subdir, sizeof(subdir), "%s/log", server.storage_path);
-    mkdir_p(subdir);
+    server_discover_storage_numa(&server);
 
     server_migrate_old_layout(&server);
 
@@ -215,7 +280,7 @@ int main(int argc, char **argv)
     strncpy(server.nodes[0].storage_path, server.storage_path,
             sizeof(server.nodes[0].storage_path) - 1);
     server.nodes[0].quota = server.quota;
-    server.nodes[0].used = server_compute_usage(server.storage_path);
+    server.nodes[0].used = server_compute_local_usage(&server);
     server.node_count = 1;
 
     server_load_exports(&server);
@@ -228,7 +293,7 @@ int main(int argc, char **argv)
     strncpy(server.nodes[0].storage_path, server.storage_path,
             sizeof(server.nodes[0].storage_path) - 1);
     server.nodes[0].quota = server.quota;
-    server.nodes[0].used = server_compute_usage(server.storage_path);
+    server.nodes[0].used = server_compute_local_usage(&server);
 
     /* Start listening first. If the configured address/port cannot be bound,
        fail immediately before contacting peers. */
@@ -267,6 +332,14 @@ int main(int argc, char **argv)
                     "Could not rejoin cluster from persisted peers; starting as standalone and retrying in background\n");
             server_start_rejoin(&server);
         } else {
+            /* Refresh export root + bulk pages from a live peer when possible. */
+            for (uint32_t i = 0; i < server.node_count; i++) {
+                if (server.nodes[i].id == server.id)
+                    continue;
+                if (server_fetch_metadata_from(&server, server.nodes[i].addr,
+                                               server.nodes[i].port) == 0)
+                    break;
+            }
             pthread_mutex_lock(&server.lock);
             server_save_nodes(&server);
             pthread_mutex_unlock(&server.lock);
@@ -280,7 +353,6 @@ int main(int argc, char **argv)
     /* Membership is known; reconstruct bulk metadata from 2+1 pages. */
     server_rebuild_fragmented_exports(&server);
 
-    setlinebuf(stdout);
     {
         struct sigaction sa;
         memset(&sa, 0, sizeof(sa));
@@ -292,14 +364,28 @@ int main(int argc, char **argv)
         sigaction(SIGTERM, &sa, NULL);
     }
     server.running = 1;
+    if (server_writer_pool_start(&server) != 0) {
+        fprintf(stderr, "Failed to start writer pool (%d threads)\n", server.nwriters);
+        return 1;
+    }
     server_start_heartbeat(&server);
     server_start_migration(&server);
 
-    printf("efsd node %u listening on %s:%u, storage=%s, used=%llu, quota=%llu, direct_io=%s\n",
-           server.id, server.addr, server.port, server.storage_path,
-           (unsigned long long)server.nodes[0].used,
-           (unsigned long long)server.quota,
-           server.direct_io ? "on" : "off");
+    {
+        const char *ec = "none";
+        if (server.storage_path_count == 3)
+            ec = "xor2+1";
+        else if (server.storage_path_count >= 4)
+            ec = "rs(k,2)";
+        printf("efsd node %u listening on %s:%u, storage=%s (%u paths, local_ec=%s), "
+               "used=%llu, quota=%llu, direct_io=%s, writers=%d\n",
+               server.id, server.addr, server.port, server.storage_path,
+               server.storage_path_count, ec,
+               (unsigned long long)server.nodes[0].used,
+               (unsigned long long)server.quota,
+               server.direct_io ? "on" : "off",
+               server.nwriters);
+    }
     fflush(stdout);
 
     if (server.perf) {
@@ -334,6 +420,7 @@ int main(int argc, char **argv)
         server.listen_fd = -1;
     }
     stop_perf_recorder();
+    server_writer_pool_stop(&server);
 
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);

@@ -17,6 +17,8 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
               $(COMMON_DIR)/metadata.c \
               $(COMMON_DIR)/placement.c \
               $(COMMON_DIR)/erasure.c \
+              $(COMMON_DIR)/local_ec.c \
+              $(COMMON_DIR)/numa_locality.c \
               $(COMMON_DIR)/checksum.c \
               $(COMMON_DIR)/network.c \
               $(BLAKE3_DIR)/blake3.c \
@@ -35,11 +37,12 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
-TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c
-TEST_BINS = tests/test_erasure tests/test_placement tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports
+TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_local_ec.c tests/test_numa_locality.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c
+TEST_BINS = tests/test_erasure tests/test_placement tests/test_local_ec tests/test_numa_locality tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports
 
 SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/handler.c \
-              src/server/cluster.c src/server/meta_server.c src/server/migrate.c
+              src/server/cluster.c src/server/meta_server.c src/server/migrate.c \
+              src/server/writer.c src/server/storage_numa.c
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 
 CLIENT_SRCS = src/client/efs_fuse.c
@@ -54,6 +57,11 @@ QUERY_OBJ = $(QUERY_SRC:.c=.o)
 FUSE_DIR = deps/libfuse
 FUSE_CFLAGS = -I$(FUSE_DIR)/include -D_FILE_OFFSET_BITS=64
 FUSE_LIBS = $(FUSE_DIR)/lib/.libs/libfuse.a
+# Vendored libfuse trips gcc truncation/fallthrough warnings; quiet those and
+# skip example apps we never install. Reconfigure when this Makefile changes.
+FUSE_CONFIGURE_FLAGS = --disable-util --disable-example
+FUSE_BUILD_CFLAGS = -O3 -g -fno-omit-frame-pointer -march=native -mtune=native \
+	-Wno-stringop-truncation -Wno-implicit-fallthrough -Wno-unused-result
 
 BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
               $(BLAKE3_DIR)/blake3_portable.o \
@@ -65,15 +73,16 @@ BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
 
 .PHONY: all clean tests test blake3-bench FORCE
 
+all: $(LIB) efsd efs-fuse efs-mgmt efs-query tests
+
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
-
-
-all: $(LIB) efsd efs-fuse efs-mgmt efs-query tests
 
 test: all
 	./tests/test_erasure
 	./tests/test_placement
+	./tests/test_local_ec
+	./tests/test_numa_locality
 	./tests/test_integration
 	./tests/test_quota
 	./tests/test_migrate
@@ -109,14 +118,20 @@ blake3-bench: $(BLAKE3_OBJS) FORCE
 	$(CC) $(CFLAGS) $(INCLUDES) \
 		-o blake3-bench tools/blake3-bench.c $(BLAKE3_OBJS) $(LDFLAGS)
 
+$(FUSE_DIR)/.efs-configured: Makefile
+	cd $(FUSE_DIR) && ./configure $(FUSE_CONFIGURE_FLAGS) \
+		CFLAGS="$(FUSE_BUILD_CFLAGS)"
+	touch $@
+
+$(FUSE_LIBS): $(FUSE_DIR)/.efs-configured
+	cd $(FUSE_DIR) && $(MAKE)
+
 clean:
 	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(MGMT_OBJ) $(QUERY_OBJ)
 	rm -f $(LIB) efsd efs-fuse efs-mgmt efs-query blake3-bench
 	rm -f $(TEST_BINS)
+	rm -f $(FUSE_DIR)/.efs-configured
 	if [ -f $(FUSE_DIR)/Makefile ]; then cd $(FUSE_DIR) && $(MAKE) clean; fi
-
-$(FUSE_LIBS):
-	cd $(FUSE_DIR) && ./configure --disable-util && $(MAKE)
 
 $(BLAKE3_DIR)/blake3_sse2.o: $(BLAKE3_DIR)/blake3_sse2.c
 	$(CC) $(CFLAGS) $(INCLUDES) -msse2 -c -o $@ $<

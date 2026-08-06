@@ -45,6 +45,12 @@ done
 S1=$(cat "$SHARED/state/s1.addr")
 echo "joining via IB: $S1"
 
+DIO_ARGS=()
+case "${EFS_DIO:-}" in
+    off|buffered|0) DIO_ARGS+=(--no-direct-io) ;;
+    on|direct|1)    DIO_ARGS+=(--direct-io) ;;
+esac
+# shellcheck disable=SC2086
 efs_run_efsd "$SCRATCH" \
     "$REPO/efsd" --node-id "$NODE_ID" --addr "$IB_HOST" --port "$PORT" \
-    --storage "$STORAGE" --join "$S1"
+    --storage "$STORAGE" --join "$S1" "${DIO_ARGS[@]}" ${EFS_EXTRA_ARGS:-}

@@ -98,6 +98,24 @@ static int cmd_status(int argc, char **argv)
     printf("Cluster state: %s\n", (full_nodes >= 2) ? "FULL" : "OK");
 
     free(reply);
+    reply = NULL;
+
+    /* Operational state of the contacted node (active/draining/drained/...). */
+    if (send_recv(fd, EFS_MSG_STATUS, NULL, 0, &reply_type, &reply, &reply_len) == 0 &&
+        reply_type == EFS_MSG_STATUS_REPLY &&
+        reply_len == sizeof(struct efs_msg_status_reply)) {
+        struct efs_msg_status_reply *st = reply;
+        const char *state_name = "unknown";
+        switch (st->state) {
+        case EFS_NODE_STATE_ACTIVE:    state_name = "active"; break;
+        case EFS_NODE_STATE_LEAVING:   state_name = "leaving"; break;
+        case EFS_NODE_STATE_SHRINKING: state_name = "shrinking"; break;
+        case EFS_NODE_STATE_DRAINING:  state_name = "draining"; break;
+        case EFS_NODE_STATE_DRAINED:   state_name = "drained"; break;
+        }
+        printf("Node %s:%u state: %s\n", host, port, state_name);
+    }
+    free(reply);
     close(fd);
     return 0;
 }
@@ -241,6 +259,95 @@ static int cmd_add_node(int argc, char **argv)
     return (status == EFS_JOIN_OK) ? 0 : 1;
 }
 
+static int cmd_drain_node(int argc, char **argv)
+{
+    if (argc < 1) {
+        fprintf(stderr, "usage: drain-node <node:port>\n");
+        return 1;
+    }
+    char host[64];
+    uint16_t port;
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+
+    int fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    if (send_recv(fd, EFS_MSG_DRAIN_NODE, NULL, 0, &reply_type, &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_DRAIN_NODE_REPLY || reply_len != 1) {
+        fprintf(stderr, "Failed to send drain-node request\n");
+        close(fd);
+        return 1;
+    }
+
+    uint8_t status = ((uint8_t *)reply)[0];
+    free(reply);
+    close(fd);
+    if (status == EFS_DRAIN_NODE_IN_PROGRESS) {
+        printf("Node %s:%u is draining; watch with: efs-mgmt status %s:%u\n",
+               host, port, host, port);
+        return 0;
+    }
+    if (status == EFS_DRAIN_NODE_OK) {
+        printf("Node %s:%u is drained (empty)\n", host, port);
+        return 0;
+    }
+    fprintf(stderr, "Drain-node failed\n");
+    return 1;
+}
+
+static int cmd_undrain_node(int argc, char **argv)
+{
+    if (argc < 1) {
+        fprintf(stderr, "usage: undrain-node <node:port>\n");
+        return 1;
+    }
+    char host[64];
+    uint16_t port;
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+
+    int fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    if (send_recv(fd, EFS_MSG_UNDRAIN_NODE, NULL, 0, &reply_type, &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_UNDRAIN_NODE_REPLY || reply_len != 1) {
+        fprintf(stderr, "Failed to send undrain-node request\n");
+        close(fd);
+        return 1;
+    }
+
+    uint8_t status = ((uint8_t *)reply)[0];
+    free(reply);
+    close(fd);
+    if (status == EFS_UNDRAIN_NODE_OK) {
+        printf("Node %s:%u is active again\n", host, port);
+        return 0;
+    }
+    fprintf(stderr, "Undrain-node failed (must be drained, not still draining)\n");
+    return 1;
+}
+
 static int cmd_remove_node(int argc, char **argv)
 {
     if (argc < 1) {
@@ -273,14 +380,20 @@ static int cmd_remove_node(int argc, char **argv)
     }
 
     uint8_t status = ((uint8_t *)reply)[0];
-    if (status == EFS_REMOVE_NODE_IN_PROGRESS)
-        printf("Node %s:%u is removing its data and will leave the cluster\n", host, port);
-    else
-        fprintf(stderr, "Remove-node failed\n");
-
     free(reply);
     close(fd);
-    return (status == EFS_REMOVE_NODE_IN_PROGRESS) ? 0 : 1;
+    if (status == EFS_REMOVE_NODE_OK) {
+        printf("Node %s:%u is leaving the cluster\n", host, port);
+        return 0;
+    }
+    if (status == EFS_REMOVE_NODE_NOT_DRAINED) {
+        fprintf(stderr,
+                "Remove-node refused: node still holds data. Run: efs-mgmt drain-node %s:%u\n",
+                host, port);
+        return 1;
+    }
+    fprintf(stderr, "Remove-node failed\n");
+    return 1;
 }
 
 static int cmd_shrink_quota(int argc, char **argv)
@@ -345,6 +458,8 @@ int main(int argc, char **argv)
                     "  list-exports <node:port>\n"
                     "  mkfs <node:port> <export-name>\n"
                     "  add-node <new-node:port> <existing-node:port>\n"
+                    "  drain-node <node:port>\n"
+                    "  undrain-node <node:port>\n"
                     "  remove-node <node:port>\n"
                     "  shrink-quota <node:port> <amount>[T|G|M|K]\n",
             argv[0]);
@@ -360,6 +475,10 @@ int main(int argc, char **argv)
         return cmd_mkfs(argc - 2, argv + 2);
     if (strcmp(cmd, "add-node") == 0)
         return cmd_add_node(argc - 2, argv + 2);
+    if (strcmp(cmd, "drain-node") == 0)
+        return cmd_drain_node(argc - 2, argv + 2);
+    if (strcmp(cmd, "undrain-node") == 0)
+        return cmd_undrain_node(argc - 2, argv + 2);
     if (strcmp(cmd, "remove-node") == 0)
         return cmd_remove_node(argc - 2, argv + 2);
     if (strcmp(cmd, "shrink-quota") == 0)

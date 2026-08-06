@@ -37,6 +37,10 @@ static int connect_sockaddr(const struct sockaddr *addr, socklen_t addrlen)
 
     int yes = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+    /* Large buffers help IB/IPoIB bulk fragment PUT streams. */
+    int buf = 4 * 1024 * 1024;
+    setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &buf, sizeof(buf));
+    setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &buf, sizeof(buf));
 
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
@@ -142,6 +146,9 @@ int efs_listen_tcp(const char *host, uint16_t port, int backlog)
             setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &no, sizeof(no));
         }
         setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+        int buf = 4 * 1024 * 1024;
+        setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &buf, sizeof(buf));
+        setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &buf, sizeof(buf));
 
         if (bind(fd, rp->ai_addr, rp->ai_addrlen) != 0) {
             fprintf(stderr, "bind failed for %s:%u: %s\n", host, port, strerror(errno));

@@ -4,6 +4,7 @@
 #include "client_internal.h"
 #include "efs/common.h"
 #include "efs/network.h"
+#include "efs/numa_locality.h"
 #include "efs/protocol.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -456,8 +457,9 @@ static void *efs_fuse_init(struct fuse_conn_info *conn)
     if (conn) {
         if (conn->capable & FUSE_CAP_BIG_WRITES)
             conn->want |= FUSE_CAP_BIG_WRITES;
-        if (conn->max_write == 0 || conn->max_write > EFS_CHUNK_SIZE)
-            conn->max_write = EFS_CHUNK_SIZE;
+        /* Allow up to 1 MiB so sequential dd(bs=1M) is one FUSE write. */
+        if (conn->max_write == 0 || conn->max_write > (1u << 20))
+            conn->max_write = (1u << 20);
     }
     /* Coalesce metadata PUTs so bulk creates are not O(n^2) full-metadata
      * syncs. Override with EFS_META_BATCH_OPS for heavy profiling loads. */
@@ -633,6 +635,40 @@ int main(int argc, char **argv)
         printf("Discovered %u cluster nodes from %s\n", g_client.node_count, nodes[0]);
     }
 
+    /* Soft NUMA: prefer CPUs near the NIC used to reach the first seed. */
+    g_client.net_numa_node = -1;
+    g_client.net_affinity_valid = 0;
+    g_client.net_ifname[0] = '\0';
+    CPU_ZERO(&g_client.net_cpu_set);
+    {
+        int pinned = 0;
+        for (uint32_t i = 0; i < node_count && !pinned; i++) {
+            char host[64];
+            uint16_t port = 0;
+            if (parse_addr(nodes[i], host, sizeof(host), &port) != 0)
+                continue;
+            int numa = -1;
+            cpu_set_t set;
+            char ifname[IFNAMSIZ];
+            if (efs_numa_for_peer(host, port, &numa, &set, ifname,
+                                  sizeof(ifname)) == 0) {
+                g_client.net_numa_node = numa;
+                g_client.net_cpu_set = set;
+                g_client.net_affinity_valid = 1;
+                snprintf(g_client.net_ifname, sizeof(g_client.net_ifname), "%s",
+                         ifname);
+                printf("nic_numa=%d if=%s\n", numa, ifname);
+                fflush(stdout);
+                efs_numa_apply_affinity(&g_client.net_cpu_set);
+                pinned = 1;
+            }
+        }
+        if (!pinned) {
+            printf("nic_numa=unknown\n");
+            fflush(stdout);
+        }
+    }
+
     /* Fetch initial metadata from one of the nodes. */
     int rc = -1;
     for (uint32_t i = 0; i < g_client.node_count; i++) {
@@ -651,11 +687,12 @@ int main(int argc, char **argv)
     fuse_argv[fuse_argc++] = (char *)mountpoint;
     /* Prefer large writes so FUSE does not chop every write into 4 KiB and
      * force a 128 KiB RMW per call. big_writes raises the kernel limit;
-     * max_write matches our chunk size. use_ino exposes our st_ino (needed
-     * for hard links); attr/entry timeouts at 0 avoid stale nlink/mode. */
+     * max_write=1MiB lets one FUSE op cover 8 chunks (pipeline-friendly).
+     * use_ino exposes our st_ino (needed for hard links); attr/entry
+     * timeouts at 0 avoid stale nlink/mode. */
     fuse_argv[fuse_argc++] = "-o";
     fuse_argv[fuse_argc++] =
-        "big_writes,max_write=131072,use_ino,attr_timeout=0,entry_timeout=0,ac_attr_timeout=0";
+        "big_writes,max_write=1048576,use_ino,attr_timeout=0,entry_timeout=0,ac_attr_timeout=0";
     while (arg_idx < argc && fuse_argc < 63) {
         if (strcmp(argv[arg_idx], "--perf") == 0) {
             arg_idx++;

@@ -68,6 +68,9 @@ struct efs_export {
      * reconstructed from 2+1 pages. The in-memory inode/chunk arrays remain
      * the working cache after rebuild. */
     int meta_fragmented;
+    /* Set when root advanced but inode/chunk tables not yet rebuilt from pages.
+     * Cleared by server_rebuild_export_from_pages. */
+    int meta_needs_rebuild;
     struct efs_export_root root;
 };
 

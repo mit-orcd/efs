@@ -28,7 +28,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
     h.quota = s->quota;
     {
         struct efs_node *local = server_local_node(s);
-        h.used = local ? local->used : server_compute_usage(s->storage_path);
+        h.used = local ? local->used : server_compute_local_usage(s);
     }
 
     if (efs_send_msg(fd, EFS_MSG_HELLO, &h, sizeof(h)) != 0) {
@@ -104,7 +104,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
         strncpy(local->storage_path, s->storage_path, sizeof(local->storage_path) - 1);
         local->storage_path[sizeof(local->storage_path) - 1] = '\0';
         local->quota = s->quota;
-        local->used = server_compute_usage(s->storage_path);
+        local->used = server_compute_local_usage(s);
     }
     server_save_nodes(s);
     pthread_mutex_unlock(&s->lock);

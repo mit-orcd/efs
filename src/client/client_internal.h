@@ -3,7 +3,9 @@
 
 #include "efs/common.h"
 #include "efs/metadata.h"
+#include <net/if.h>
 #include <pthread.h>
+#include <sched.h>
 #include <sys/types.h>
 
 struct efs_client {
@@ -55,6 +57,13 @@ struct efs_client {
     uint32_t *dirty_chunk_idxs;
     uint64_t dirty_chunk_count;
     uint64_t dirty_chunk_cap;
+
+    /* Soft NUMA preference for egress NIC toward cluster peers
+     * (-1 / invalid = unknown / unbound). */
+    int net_numa_node;
+    cpu_set_t net_cpu_set;
+    int net_affinity_valid;
+    char net_ifname[IFNAMSIZ];
 };
 
 /* Mark inode/chunk dirty for the next batched metadata delta flush.

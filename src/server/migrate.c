@@ -245,16 +245,19 @@ static int migrate_one_fragment(struct efsd_server *s, struct efs_export *ex,
 
     pthread_mutex_lock(&s->lock);
     efs_export_set_chunk(ex, chunk->ino, chunk->chunk_index, new_nodes, new_checksums);
-    server_save_export(s, ex);
+    s->export_meta_dirty = 1;
     pthread_mutex_unlock(&s->lock);
 
-    server_replicate_metadata(s, ex);
-
-    /* Delete the local copy of the fragment. */
+    /* Delete the local copy of the fragment and its checksum sidecar. */
     char path[8192];
     server_fragment_path(s, ex, chunk->ino, chunk->chunk_index, fragment_index,
                          path, sizeof(path));
     unlink(path);
+    {
+        char sum_path[8200];
+        snprintf(sum_path, sizeof(sum_path), "%s.sum", path);
+        unlink(sum_path);
+    }
 
     pthread_mutex_lock(&s->lock);
     struct efs_node *local = server_local_node(s);
@@ -289,10 +292,20 @@ static void *migration_thread(void *arg)
         struct efs_export *ex = (s->export_count > 0) ? &s->exports[0] : NULL;
         pthread_mutex_unlock(&s->lock);
 
-        if (state == SERVER_STATE_ACTIVE || ex == NULL) {
+        if (state == SERVER_STATE_ACTIVE || state == SERVER_STATE_DRAINED ||
+            state == SERVER_STATE_LEAVING || ex == NULL) {
             usleep(1000 * 1000);
             continue;
         }
+
+        /* Chunk placement lives in bulk meta pages; rebuild before planning. */
+        pthread_mutex_lock(&s->lock);
+        int need_rebuild = (ex->meta_fragmented && ex->meta_needs_rebuild);
+        pthread_mutex_unlock(&s->lock);
+        if (need_rebuild)
+            server_rebuild_export_from_pages(s, ex);
+
+        server_update_local_usage(s);
 
         bool migrated_any = false;
         bool done = true;
@@ -329,16 +342,31 @@ static void *migration_thread(void *arg)
             }
         }
 
+        /* Flush chunk-map pages once per migration round (not per fragment). */
+        if (migrated_any) {
+            server_flush_fragmented_meta(s, ex);
+            pthread_mutex_lock(&s->lock);
+            s->export_meta_dirty = 0;
+            pthread_mutex_unlock(&s->lock);
+        }
+
         if (done && state == SERVER_STATE_SHRINKING) {
+            if (s->export_meta_dirty)
+                server_flush_fragmented_meta(s, ex);
             pthread_mutex_lock(&s->lock);
             s->state = SERVER_STATE_ACTIVE;
+            s->export_meta_dirty = 0;
             pthread_mutex_unlock(&s->lock);
-        } else if (done && state == SERVER_STATE_LEAVING) {
-            server_notify_node_left(s, s->id);
-            s->running = 0;
-            if (s->listen_fd >= 0)
-                shutdown(s->listen_fd, SHUT_RDWR);
-            break;
+            printf("Shrink-quota migration complete, node active\n");
+        } else if (done && state == SERVER_STATE_DRAINING) {
+            if (s->export_meta_dirty)
+                server_flush_fragmented_meta(s, ex);
+            server_update_local_usage(s);
+            pthread_mutex_lock(&s->lock);
+            s->export_meta_dirty = 0;
+            s->state = SERVER_STATE_DRAINED;
+            pthread_mutex_unlock(&s->lock);
+            printf("Drain complete, node drained (empty; rejects new PUTs)\n");
         }
 
         if (!migrated_any)
@@ -346,6 +374,54 @@ static void *migration_thread(void *arg)
     }
 
     return NULL;
+}
+
+int server_has_local_fragments_locked(struct efsd_server *s)
+{
+    for (uint32_t e = 0; e < s->export_count; e++) {
+        struct efs_export *ex = &s->exports[e];
+        for (uint64_t ci = 0; ci < ex->chunk_count; ci++) {
+            for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+                if (ex->chunks[ci].fragment_nodes[i] == s->id)
+                    return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+int server_node_is_empty(struct efsd_server *s)
+{
+    /* Fragmented meta may leave chunk maps empty until rebuild. */
+    pthread_mutex_lock(&s->lock);
+    for (uint32_t e = 0; e < s->export_count; e++) {
+        struct efs_export *ex = &s->exports[e];
+        int need = (ex->meta_fragmented && ex->meta_needs_rebuild);
+        pthread_mutex_unlock(&s->lock);
+        if (need)
+            server_rebuild_export_from_pages(s, ex);
+        pthread_mutex_lock(&s->lock);
+    }
+    pthread_mutex_unlock(&s->lock);
+
+    server_update_local_usage(s);
+
+    pthread_mutex_lock(&s->lock);
+    /* Emptiness is defined by placement metadata, not raw disk used: meta-page
+     * sidecars / empty dirs can leave used > 0 after all owned fragments move. */
+    int empty = !server_has_local_fragments_locked(s);
+    pthread_mutex_unlock(&s->lock);
+    return empty;
+}
+
+void server_begin_leave_locked(struct efsd_server *s)
+{
+    /* Caller holds s->lock. Stop accepting work; notify peers after unlock. */
+    s->state = SERVER_STATE_LEAVING;
+    s->running = 0;
+    if (s->listen_fd >= 0)
+        shutdown(s->listen_fd, SHUT_RDWR);
+    printf("Node leaving cluster (already drained)\n");
 }
 
 void server_start_migration(struct efsd_server *s)

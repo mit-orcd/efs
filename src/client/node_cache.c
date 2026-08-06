@@ -97,11 +97,23 @@ static int slot_for_fd(uint32_t idx, int fd)
     return -1;
 }
 
+/* Map placement / protocol node id → index in g_client.nodes[]. */
+static int node_index_for_id(efs_node_id_t node_id)
+{
+    if (node_id == 0)
+        return -1;
+    for (uint32_t i = 0; i < g_client.node_count; i++) {
+        if (g_client.nodes[i].id == node_id)
+            return (int)i;
+    }
+    return -1;
+}
+
 int efs_client_conn_get(efs_node_id_t node_id)
 {
-    if (node_id == 0 || node_id > g_client.node_count)
+    int idx = node_index_for_id(node_id);
+    if (idx < 0)
         return -1;
-    uint32_t idx = node_id - 1;
     int n = pool_size();
 
     pthread_mutex_lock(&g_client.conn_lock[idx]);
@@ -139,11 +151,11 @@ int efs_client_conn_get(efs_node_id_t node_id)
 
 void efs_client_conn_release(efs_node_id_t node_id, int fd)
 {
-    if (node_id == 0 || node_id > g_client.node_count || fd < 0)
+    int idx = node_index_for_id(node_id);
+    if (idx < 0 || fd < 0)
         return;
-    uint32_t idx = node_id - 1;
     pthread_mutex_lock(&g_client.conn_lock[idx]);
-    int s = slot_for_fd(idx, fd);
+    int s = slot_for_fd((uint32_t)idx, fd);
     if (s >= 0)
         g_client.conn_busy[idx][s] = 0;
     pthread_cond_signal(&g_client.conn_cv[idx]);
@@ -152,11 +164,11 @@ void efs_client_conn_release(efs_node_id_t node_id, int fd)
 
 void efs_client_conn_drop(efs_node_id_t node_id, int fd)
 {
-    if (node_id == 0 || node_id > g_client.node_count || fd < 0)
+    int idx = node_index_for_id(node_id);
+    if (idx < 0 || fd < 0)
         return;
-    uint32_t idx = node_id - 1;
     pthread_mutex_lock(&g_client.conn_lock[idx]);
-    int s = slot_for_fd(idx, fd);
+    int s = slot_for_fd((uint32_t)idx, fd);
     if (s >= 0) {
         if (g_client.conn_fd[idx][s] >= 0)
             close(g_client.conn_fd[idx][s]);

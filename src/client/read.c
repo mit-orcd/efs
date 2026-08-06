@@ -9,8 +9,9 @@
 #include <unistd.h>
 
 /* Reconstruct one logical chunk from any 2 of 3 fragments. */
-static int efs_client_decode_placed_chunk(efs_ino_t ino, uint32_t chunk_index,
-                                          uint8_t chunk_out[EFS_CHUNK_SIZE])
+static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk_index,
+                                                   uint8_t chunk_out[EFS_CHUNK_SIZE],
+                                                   int max_attempts)
 {
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     efs_get_placement(g_client.node_count, ino, chunk_index, nodes);
@@ -27,7 +28,9 @@ static int efs_client_decode_placed_chunk(efs_ino_t ino, uint32_t chunk_index,
         }
     }
 
-    for (int attempt = 0; attempt < 5; attempt++) {
+    if (max_attempts < 1)
+        max_attempts = 1;
+    for (int attempt = 0; attempt < max_attempts; attempt++) {
         uint8_t fragments[EFS_NUM_FRAGMENTS][EFS_FRAGMENT_SIZE];
         int have[EFS_NUM_FRAGMENTS] = {0, 0, 0};
         uint8_t fsum[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
@@ -67,6 +70,12 @@ static int efs_client_decode_placed_chunk(efs_ino_t ino, uint32_t chunk_index,
     return EFS_ERR_DECODE;
 }
 
+static int efs_client_decode_placed_chunk(efs_ino_t ino, uint32_t chunk_index,
+                                          uint8_t chunk_out[EFS_CHUNK_SIZE])
+{
+    return efs_client_decode_placed_chunk_attempts(ino, chunk_index, chunk_out, 5);
+}
+
 static int load_export_from_root(const struct efs_export_root *root)
 {
     if (root->page_count == 0 || root->blob_len == 0)
@@ -77,7 +86,9 @@ static int load_export_from_root(const struct efs_export_root *root)
         return EFS_ERR_NOMEM;
 
     for (uint32_t pi = 0; pi < root->page_count; pi++) {
-        if (efs_client_decode_placed_chunk(EFS_META_TABLE_INO, pi, pages[pi]) != EFS_OK) {
+        /* Meta mount path: fail fast so we can fall back to legacy EFSM. */
+        if (efs_client_decode_placed_chunk_attempts(EFS_META_TABLE_INO, pi,
+                                                    pages[pi], 2) != EFS_OK) {
             free(pages);
             return EFS_ERR_DECODE;
         }
@@ -115,7 +126,8 @@ static int load_export_from_root(const struct efs_export_root *root)
     return rc;
 }
 
-int efs_client_fetch_metadata(const char *host, uint16_t port)
+static int fetch_meta_blob_from(const char *host, uint16_t port,
+                                void **payload_out, uint32_t *len_out)
 {
     int fd = efs_connect_tcp(host, port);
     if (fd < 0)
@@ -135,32 +147,83 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
         return EFS_ERR_NET;
     }
     close(fd);
+    *payload_out = payload;
+    *len_out = payload_len;
+    return EFS_OK;
+}
 
-    int rc;
-    if (efs_meta_blob_is_root(payload, payload_len)) {
-        struct efs_export_root root;
-        memset(&root, 0, sizeof(root));
-        rc = efs_export_root_deserialize(&root, payload, payload_len);
-        free(payload);
-        if (rc != EFS_OK)
+int efs_client_fetch_metadata(const char *host, uint16_t port)
+{
+    /* Prefer the newest EFSR generation across the cluster so a root that
+     * missed the last 2-ack quorum cannot shadow fresher peers. */
+    struct efs_export_root best_root;
+    memset(&best_root, 0, sizeof(best_root));
+    int have_root = 0;
+    char *best_legacy = NULL;
+    size_t best_legacy_len = 0;
+
+    for (int pass = 0; pass < 2; pass++) {
+        uint32_t n = (pass == 0) ? 1 : g_client.node_count;
+        for (uint32_t i = 0; i < n; i++) {
+            const char *h;
+            uint16_t p;
+            if (pass == 0) {
+                h = host;
+                p = port;
+            } else {
+                h = g_client.nodes[i].addr;
+                p = g_client.nodes[i].port;
+                if (strcmp(h, host) == 0 && p == port)
+                    continue;
+            }
+
+            void *payload = NULL;
+            uint32_t plen = 0;
+            if (fetch_meta_blob_from(h, p, &payload, &plen) != EFS_OK)
+                continue;
+            if (efs_meta_blob_is_root(payload, plen)) {
+                struct efs_export_root root;
+                memset(&root, 0, sizeof(root));
+                if (efs_export_root_deserialize(&root, payload, plen) == 0) {
+                    /* Ignore bootstrap shells (no pages yet). */
+                    if (root.page_count == 0 || root.blob_len == 0) {
+                        efs_export_root_free(&root);
+                    } else if (!have_root || root.generation > best_root.generation) {
+                        efs_export_root_free(&best_root);
+                        efs_export_root_move(&best_root, &root);
+                        have_root = 1;
+                    } else {
+                        efs_export_root_free(&root);
+                    }
+                }
+            } else if (efs_meta_blob_is_export(payload, plen) && !have_root) {
+                free(best_legacy);
+                best_legacy = payload;
+                best_legacy_len = plen;
+                payload = NULL;
+            }
+            free(payload);
+        }
+    }
+
+    if (have_root) {
+        int rc = load_export_from_root(&best_root);
+        efs_export_root_free(&best_root);
+        if (rc == EFS_OK) {
+            free(best_legacy);
             return rc;
-        /* Need cluster membership + conn pool before page fetches. */
-        rc = load_export_from_root(&root);
-        efs_export_root_free(&root);
+        }
+        /* Fall back to legacy EFSM if page reconstruct fails. */
+    }
+    if (best_legacy) {
+        pthread_mutex_lock(&g_client.lock);
+        int rc = efs_export_deserialize(&g_client.export, best_legacy, best_legacy_len);
+        g_client.export.meta_fragmented = 0;
+        pthread_mutex_unlock(&g_client.lock);
+        free(best_legacy);
         return rc;
     }
-
-    if (!efs_meta_blob_is_export(payload, payload_len)) {
-        free(payload);
-        return EFS_ERR_PROTO;
-    }
-
-    pthread_mutex_lock(&g_client.lock);
-    rc = efs_export_deserialize(&g_client.export, payload, payload_len);
-    g_client.export.meta_fragmented = 0;
-    pthread_mutex_unlock(&g_client.lock);
-    free(payload);
-    return rc;
+    return EFS_ERR_NET;
 }
 
 int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk_index,

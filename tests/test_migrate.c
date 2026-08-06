@@ -15,6 +15,8 @@
 #include <signal.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdint.h>
+#include <limits.h>
 
 #define TEST_DIR "/tmp/efs_migrate_test"
 #define NODE_COUNT 3
@@ -198,11 +200,11 @@ static int read_file(efs_ino_t ino, size_t expected_len, char *buf)
     return 0;
 }
 
-static uint64_t get_node_usage(int server_idx)
+static int get_node_status(int server_idx, uint64_t *used_out, uint32_t *state_out)
 {
     int fd = efs_connect_tcp(children[server_idx].host, children[server_idx].port);
     if (fd < 0)
-        return UINT64_MAX;
+        return -1;
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
 
@@ -215,12 +217,23 @@ static uint64_t get_node_usage(int server_idx)
         reply_len != sizeof(struct efs_msg_status_reply)) {
         free(reply);
         close(fd);
-        return UINT64_MAX;
+        return -1;
     }
     struct efs_msg_status_reply *r = reply;
-    uint64_t used = r->used;
+    if (used_out)
+        *used_out = r->used;
+    if (state_out)
+        *state_out = r->state;
     free(reply);
     close(fd);
+    return 0;
+}
+
+static uint64_t get_node_usage(int server_idx)
+{
+    uint64_t used = UINT64_MAX;
+    if (get_node_status(server_idx, &used, NULL) != 0)
+        return UINT64_MAX;
     return used;
 }
 
@@ -235,7 +248,66 @@ static int wait_for_usage(int server_idx, uint64_t max_usage, int timeout_ms)
     return -1;
 }
 
-static int send_remove_node(int server_idx)
+static int wait_for_state(int server_idx, uint32_t want, int timeout_ms)
+{
+    for (int t = 0; t < timeout_ms; t += 200) {
+        uint32_t state = UINT32_MAX;
+        if (get_node_status(server_idx, NULL, &state) == 0 && state == want)
+            return 0;
+        usleep(200 * 1000);
+    }
+    return -1;
+}
+
+static int send_drain_node(int server_idx)
+{
+    int fd = efs_connect_tcp(children[server_idx].host, children[server_idx].port);
+    if (fd < 0)
+        return -1;
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+
+    uint8_t type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    if (efs_send_msg(fd, EFS_MSG_DRAIN_NODE, NULL, 0) != 0 ||
+        efs_recv_msg(fd, &type, &reply, &reply_len) != 0 ||
+        type != EFS_MSG_DRAIN_NODE_REPLY || reply_len != 1) {
+        free(reply);
+        close(fd);
+        return -1;
+    }
+    uint8_t status = *(uint8_t *)reply;
+    free(reply);
+    close(fd);
+    return (status == EFS_DRAIN_NODE_IN_PROGRESS || status == EFS_DRAIN_NODE_OK) ? 0 : -1;
+}
+
+static int send_undrain_node(int server_idx)
+{
+    int fd = efs_connect_tcp(children[server_idx].host, children[server_idx].port);
+    if (fd < 0)
+        return -1;
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+
+    uint8_t type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    if (efs_send_msg(fd, EFS_MSG_UNDRAIN_NODE, NULL, 0) != 0 ||
+        efs_recv_msg(fd, &type, &reply, &reply_len) != 0 ||
+        type != EFS_MSG_UNDRAIN_NODE_REPLY || reply_len != 1) {
+        free(reply);
+        close(fd);
+        return -1;
+    }
+    uint8_t status = *(uint8_t *)reply;
+    free(reply);
+    close(fd);
+    return (status == EFS_UNDRAIN_NODE_OK) ? 0 : -1;
+}
+
+static int send_remove_node(int server_idx, uint8_t *status_out)
 {
     int fd = efs_connect_tcp(children[server_idx].host, children[server_idx].port);
     if (fd < 0)
@@ -253,11 +325,12 @@ static int send_remove_node(int server_idx)
         close(fd);
         return -1;
     }
-    uint8_t *status = reply;
-    int ok = (*status == EFS_REMOVE_NODE_IN_PROGRESS);
+    uint8_t status = *(uint8_t *)reply;
+    if (status_out)
+        *status_out = status;
     free(reply);
     close(fd);
-    return ok ? 0 : -1;
+    return 0;
 }
 
 static int send_shrink_quota(int server_idx, uint64_t amount)
@@ -394,8 +467,41 @@ static int test_remove_node(void)
     free(read_buf);
     printf("[remove-node] Read back OK before removal\n");
 
-    if (send_remove_node(2) != 0) { /* remove server 3 (index 2) */
-        fprintf(stderr, "[remove-node] Failed to request removal\n");
+    /* Remove without drain must fail. */
+    uint8_t rm_status = 0xff;
+    if (send_remove_node(2, &rm_status) != 0 ||
+        rm_status != EFS_REMOVE_NODE_NOT_DRAINED) {
+        fprintf(stderr, "[remove-node] Expected NOT_DRAINED, got %u\n", rm_status);
+        failures++;
+        goto cleanup;
+    }
+    printf("[remove-node] Remove without drain correctly refused\n");
+
+    if (send_drain_node(2) != 0) {
+        fprintf(stderr, "[remove-node] Failed to request drain\n");
+        failures++;
+        goto cleanup;
+    }
+    printf("[remove-node] Drain requested\n");
+
+    if (wait_for_state(2, EFS_NODE_STATE_DRAINED, 15000) != 0) {
+        fprintf(stderr, "[remove-node] Server 3 did not reach drained\n");
+        failures++;
+        goto cleanup;
+    }
+    printf("[remove-node] Server 3 drained\n");
+
+    int count = cluster_node_count();
+    if (count != 3) {
+        fprintf(stderr, "[remove-node] Expected cluster size 3 after drain, got %d\n", count);
+        failures++;
+    } else {
+        printf("[remove-node] Still in cluster after drain\n");
+    }
+
+    rm_status = 0xff;
+    if (send_remove_node(2, &rm_status) != 0 || rm_status != EFS_REMOVE_NODE_OK) {
+        fprintf(stderr, "[remove-node] Failed to remove drained node (status=%u)\n", rm_status);
         failures++;
         goto cleanup;
     }
@@ -421,7 +527,7 @@ static int test_remove_node(void)
     /* Wait for remaining nodes to update their cluster list. */
     sleep(1);
 
-    int count = cluster_node_count();
+    count = cluster_node_count();
     if (count != 2) {
         fprintf(stderr, "[remove-node] Expected cluster size 2, got %d\n", count);
         failures++;
@@ -437,6 +543,140 @@ static int test_remove_node(void)
         printf("[remove-node] Read back OK after removal\n");
     }
     free(read_buf);
+
+cleanup:
+    efs_export_free(&g_client.export);
+    stop_servers();
+    print_logs();
+    system("rm -rf " TEST_DIR);
+    return failures;
+}
+
+static int test_drain_undrain(void)
+{
+    int failures = 0;
+
+    if (start_servers(256 * 1024, 18472) != 0) {
+        fprintf(stderr, "[drain-undrain] Failed to start servers\n");
+        stop_servers();
+        return 1;
+    }
+    printf("[drain-undrain] Servers started\n");
+
+    if (join_cluster() != 0) {
+        fprintf(stderr, "[drain-undrain] Failed to form cluster\n");
+        failures++;
+        goto cleanup;
+    }
+    if (create_export("drain") != 0) {
+        fprintf(stderr, "[drain-undrain] Failed to create export\n");
+        failures++;
+        goto cleanup;
+    }
+
+    const char *node_addrs[EFS_MAX_NODES] = {
+        "127.0.0.1:18472",
+        "127.0.0.1:18473",
+        "127.0.0.1:18474"
+    };
+    if (init_client("drain", node_addrs) != 0) {
+        fprintf(stderr, "[drain-undrain] Failed to fetch metadata\n");
+        failures++;
+        goto cleanup;
+    }
+
+    efs_ino_t fno = efs_client_create(EFS_ROOT_INO, "d.bin", S_IFREG | 0644, 0, 0);
+    if (fno == 0) {
+        fprintf(stderr, "[drain-undrain] Failed to create file\n");
+        failures++;
+        goto cleanup;
+    }
+    size_t len = 128 * 1024;
+    char *data = malloc(len);
+    for (size_t i = 0; i < len; i++)
+        data[i] = (char)(i % 251);
+    if (efs_client_write(fno, 0, len, data) != 0) {
+        fprintf(stderr, "[drain-undrain] Failed to write file\n");
+        failures++;
+        free(data);
+        goto cleanup;
+    }
+    free(data);
+
+    if (send_drain_node(1) != 0) {
+        fprintf(stderr, "[drain-undrain] drain-node failed\n");
+        failures++;
+        goto cleanup;
+    }
+    if (wait_for_state(1, EFS_NODE_STATE_DRAINED, 15000) != 0) {
+        fprintf(stderr, "[drain-undrain] did not reach drained\n");
+        failures++;
+        goto cleanup;
+    }
+    printf("[drain-undrain] Node 2 drained\n");
+
+    if (cluster_node_count() != 3) {
+        fprintf(stderr, "[drain-undrain] node left cluster during drain\n");
+        failures++;
+        goto cleanup;
+    }
+
+    /* Direct PUT to drained node must fail. */
+    {
+        int fd = efs_connect_tcp(children[1].host, children[1].port);
+        if (fd < 0) {
+            failures++;
+            goto cleanup;
+        }
+        efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+        efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+        struct efs_msg_put_chunk req;
+        memset(&req, 0, sizeof(req));
+        req.export_id = 1;
+        req.ino = fno;
+        req.chunk_index = 0;
+        req.fragment_index = 0;
+        efs_hash(req.data, EFS_FRAGMENT_SIZE, req.checksum);
+        uint8_t type;
+        void *reply = NULL;
+        uint32_t reply_len = 0;
+        if (efs_send_msg(fd, EFS_MSG_PUT_CHUNK, &req, sizeof(req)) != 0 ||
+            efs_recv_msg(fd, &type, &reply, &reply_len) != 0 ||
+            type != EFS_MSG_PUT_CHUNK_REPLY || reply_len != 1 ||
+            ((uint8_t *)reply)[0] == EFS_PUT_CHUNK_OK) {
+            fprintf(stderr, "[drain-undrain] drained node accepted PUT\n");
+            failures++;
+        } else {
+            printf("[drain-undrain] drained node rejected PUT\n");
+        }
+        free(reply);
+        close(fd);
+    }
+
+    if (send_undrain_node(1) != 0) {
+        fprintf(stderr, "[drain-undrain] undrain failed\n");
+        failures++;
+        goto cleanup;
+    }
+    if (wait_for_state(1, EFS_NODE_STATE_ACTIVE, 5000) != 0) {
+        fprintf(stderr, "[drain-undrain] did not return to active\n");
+        failures++;
+        goto cleanup;
+    }
+    printf("[drain-undrain] Node 2 active again\n");
+
+    /* New write should succeed after undrain (may or may not hit node 2). */
+    efs_ino_t f2 = efs_client_create(EFS_ROOT_INO, "e.bin", S_IFREG | 0644, 0, 0);
+    data = malloc(len);
+    memset(data, 0x5a, len);
+    if (f2 == 0 || efs_client_write(f2, 0, len, data) != 0) {
+        fprintf(stderr, "[drain-undrain] write after undrain failed\n");
+        failures++;
+        free(data);
+        goto cleanup;
+    }
+    free(data);
+    printf("[drain-undrain] Write after undrain OK\n");
 
 cleanup:
     efs_export_free(&g_client.export);
@@ -548,6 +788,7 @@ int main(void)
     int failures = 0;
 
     failures += test_shrink_quota();
+    failures += test_drain_undrain();
     failures += test_remove_node();
 
     if (failures == 0) {

@@ -47,3 +47,6 @@ slurm-jobs/state/
 /.codex
 /notes.txt
 /blake3-bench
+tests/test_local_ec
+tests/test_numa_locality
+tests/test_storage_numa

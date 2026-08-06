@@ -12,7 +12,7 @@
 # One IB client: mount export, write FILES_PER_CLIENT × FILE_GIB GiB files in
 # parallel. CLIENT_ID distinguishes paths/logs across jobs.
 # Env: ROUND, CLIENT_ID, FILE_GIB (default 100), FILES_PER_CLIENT (default 2),
-#      EXPORT_NAME, PROF_ROOT
+#      EXPORT_NAME, PROF_ROOT, NUM_SERVERS (default 3; wait for s1..sN, seed fuse from s1)
 
 set -euo pipefail
 if [ -z "${EFS_STREAM_STDBUF:-}" ] && command -v stdbuf >/dev/null 2>&1; then
@@ -27,9 +27,14 @@ CLIENT_ID="${CLIENT_ID:?CLIENT_ID required}"
 FILE_GIB="${FILE_GIB:-100}"
 FILES_PER_CLIENT="${FILES_PER_CLIENT:-2}"
 EXPORT_NAME="${EXPORT_NAME:-streamexport}"
+NUM_SERVERS="${NUM_SERVERS:-3}"
 PROF_ROOT="${PROF_ROOT:-$SHARED/profile/stream-4x100-ib-r${ROUND}}"
 PROF="$PROF_ROOT/client${CLIENT_ID}-${SLURM_JOB_ID}"
 mkdir -p "$PROF" "$SHARED/logs" "$PROF_ROOT"
+if [ "$NUM_SERVERS" -lt 1 ] || [ "$NUM_SERVERS" -gt 4 ]; then
+    echo "ERROR: NUM_SERVERS must be 1..4 (got $NUM_SERVERS)"
+    exit 1
+fi
 
 DD_BS=$((1024 * 1024))
 DD_COUNT=$((FILE_GIB * 1024))
@@ -71,7 +76,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for i in 1 2 3; do
+SERVER_ADDRS=()
+for i in $(seq 1 "$NUM_SERVERS"); do
     WAITED=0
     while [ ! -f "$SHARED/state/s${i}.addr" ]; do
         sleep 2
@@ -81,13 +87,12 @@ for i in 1 2 3; do
             exit 1
         fi
     done
+    SERVER_ADDRS+=("$(cat "$SHARED/state/s${i}.addr")")
 done
-S1=$(cat "$SHARED/state/s1.addr")
-S2=$(cat "$SHARED/state/s2.addr")
-S3=$(cat "$SHARED/state/s3.addr")
-echo "servers (IB): $S1 $S2 $S3"
+S1="${SERVER_ADDRS[0]}"
+echo "servers (IB, n=$NUM_SERVERS): ${SERVER_ADDRS[*]}"
 
-for addr in "$S1" "$S2" "$S3"; do
+for addr in "${SERVER_ADDRS[@]}"; do
     host=${addr%:*}
     port=${addr#*:}
     WAITED=0
@@ -115,9 +120,16 @@ while [ ! -f "$GO" ]; do
 done
 echo "GO received"
 
+# EFS_FUSE_PERF=1 enables perf record (adds overhead; off for load runs).
+FUSE_EXTRA=()
+if [ "${EFS_FUSE_PERF:-0}" = "1" ]; then
+    FUSE_EXTRA+=(--perf)
+    export EFS_PERF_PATH="$LOCAL/client.perf.data"
+fi
+# Seed with s1 only so LIST_NODES discovers full membership (3 or 4).
 EFS_META_BATCH_OPS="${EFS_META_BATCH_OPS:-16384}" \
-EFS_PERF_PATH="$LOCAL/client.perf.data" \
-    "$REPO/efs-fuse" "$S1" "$S2" "$S3" "$EXPORT_NAME" "$MNT" -f --perf \
+    "$REPO/efs-fuse" "$S1" "$EXPORT_NAME" "$MNT" -f \
+    "${FUSE_EXTRA[@]}" \
     > "$PROF/client.stdout" 2>&1 &
 CPID=$!
 for i in $(seq 1 120); do
@@ -158,7 +170,8 @@ stream_one() {
 
 echo "=== client $CLIENT_ID: ${FILES_PER_CLIENT} x ${FILE_GIB} GiB parallel ==="
 echo "client_ib=$CLIENT_IB" > "$PROF/IB.txt"
-echo "servers=$S1 $S2 $S3" >> "$PROF/IB.txt"
+echo "num_servers=$NUM_SERVERS" >> "$PROF/IB.txt"
+echo "servers=${SERVER_ADDRS[*]}" >> "$PROF/IB.txt"
 echo "node=$(hostname -s)" >> "$PROF/IB.txt"
 
 WALL_START=$(date +%s.%N)
