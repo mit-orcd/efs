@@ -201,10 +201,10 @@ static int send_meta_payload(const char *buf, size_t len)
             type == EFS_MSG_PUT_META_REPLY && reply_len >= 1) {
             acks++;
             free(reply);
-            efs_client_conn_release(nid);
+            efs_client_conn_release(nid, fd);
         } else {
             free(reply);
-            efs_client_conn_drop(nid);
+            efs_client_conn_drop(nid, fd);
         }
     }
     return (acks >= 2) ? EFS_OK : EFS_ERR_NO_QUORUM;
@@ -293,34 +293,138 @@ int efs_client_put_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
     if (fd < 0)
         return EFS_ERR_NET;
 
-    struct efs_msg_put_chunk req;
-    memset(&req, 0, sizeof(req));
-    req.export_id = g_client.export_id;
-    req.ino = ino;
-    req.chunk_index = chunk_index;
-    req.fragment_index = fragment_index;
-    memcpy(req.checksum, checksum, EFS_HASH_SIZE);
-    memcpy(req.data, data, EFS_FRAGMENT_SIZE);
+    struct efs_msg_put_chunk *req = malloc(sizeof(*req));
+    if (!req) {
+        efs_client_conn_release(node_id, fd);
+        return EFS_ERR_NOMEM;
+    }
+    memset(req, 0, sizeof(*req));
+    req->export_id = g_client.export_id;
+    req->ino = ino;
+    req->chunk_index = chunk_index;
+    req->fragment_index = fragment_index;
+    memcpy(req->checksum, checksum, EFS_HASH_SIZE);
+    memcpy(req->data, data, EFS_FRAGMENT_SIZE);
 
     uint8_t reply_type;
     void *reply = NULL;
     uint32_t reply_len = 0;
-    if (efs_send_msg(fd, EFS_MSG_PUT_CHUNK, &req, sizeof(req)) != 0 ||
+    if (efs_send_msg(fd, EFS_MSG_PUT_CHUNK, req, sizeof(*req)) != 0 ||
         efs_recv_msg(fd, &reply_type, &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_PUT_CHUNK_REPLY || reply_len != 1) {
+        free(req);
         free(reply);
-        efs_client_conn_drop(node_id);
+        efs_client_conn_drop(node_id, fd);
         return EFS_ERR_NET;
     }
 
     uint8_t status = ((uint8_t *)reply)[0];
+    free(req);
     free(reply);
-    efs_client_conn_release(node_id);
+    efs_client_conn_release(node_id, fd);
     if (status == EFS_PUT_CHUNK_OK)
         return EFS_OK;
     if (status == EFS_PUT_CHUNK_QUOTA_EXCEEDED)
         return EFS_ERR_QUOTA;
     return EFS_ERR_IO;
+}
+
+int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
+                                      const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
+                                      const uint8_t fragments[EFS_NUM_FRAGMENTS][EFS_FRAGMENT_SIZE],
+                                      const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE])
+{
+    int fds[EFS_NUM_FRAGMENTS];
+    struct efs_msg_put_chunk *reqs[EFS_NUM_FRAGMENTS];
+    int got = 0;
+    int acks = 0;
+    int quota_errors = 0;
+
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        fds[i] = -1;
+        reqs[i] = NULL;
+    }
+
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (nodes[i] == 0 || nodes[i] > g_client.node_count)
+            goto fail_net;
+        fds[i] = efs_client_conn_get(nodes[i]);
+        if (fds[i] < 0)
+            goto fail_net;
+        got++;
+        reqs[i] = malloc(sizeof(*reqs[i]));
+        if (!reqs[i])
+            goto fail_nomem;
+        memset(reqs[i], 0, sizeof(*reqs[i]));
+        reqs[i]->export_id = g_client.export_id;
+        reqs[i]->ino = ino;
+        reqs[i]->chunk_index = chunk_index;
+        reqs[i]->fragment_index = (uint32_t)i;
+        memcpy(reqs[i]->checksum, checksums[i], EFS_HASH_SIZE);
+        memcpy(reqs[i]->data, fragments[i], EFS_FRAGMENT_SIZE);
+    }
+
+    /* Send all three PUTs before waiting for any ACK (overlap RTTs). */
+    int send_ok[EFS_NUM_FRAGMENTS];
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        send_ok[i] = (efs_send_msg(fds[i], EFS_MSG_PUT_CHUNK, reqs[i],
+                                   sizeof(*reqs[i])) == 0);
+    }
+
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (!send_ok[i]) {
+            efs_client_conn_drop(nodes[i], fds[i]);
+            fds[i] = -1;
+            continue;
+        }
+        uint8_t reply_type;
+        void *reply = NULL;
+        uint32_t reply_len = 0;
+        if (efs_recv_msg(fds[i], &reply_type, &reply, &reply_len) != 0 ||
+            reply_type != EFS_MSG_PUT_CHUNK_REPLY || reply_len != 1) {
+            free(reply);
+            efs_client_conn_drop(nodes[i], fds[i]);
+            fds[i] = -1;
+            continue;
+        }
+        uint8_t status = ((uint8_t *)reply)[0];
+        free(reply);
+        if (status == EFS_PUT_CHUNK_OK)
+            acks++;
+        else if (status == EFS_PUT_CHUNK_QUOTA_EXCEEDED)
+            quota_errors++;
+        efs_client_conn_release(nodes[i], fds[i]);
+        fds[i] = -1;
+    }
+
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        free(reqs[i]);
+
+    if (quota_errors >= 2)
+        return EFS_ERR_QUOTA;
+    if (acks < 2)
+        return EFS_ERR_NO_QUORUM;
+    return EFS_OK;
+
+fail_nomem:
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        free(reqs[i]);
+        reqs[i] = NULL;
+        if (fds[i] >= 0) {
+            efs_client_conn_release(nodes[i], fds[i]);
+            fds[i] = -1;
+        }
+    }
+    return EFS_ERR_NOMEM;
+
+fail_net:
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        free(reqs[i]);
+        if (fds[i] >= 0)
+            efs_client_conn_release(nodes[i], fds[i]);
+    }
+    (void)got;
+    return EFS_ERR_NET;
 }
 
 /* Assemble one chunk buffer for a write spanning [wr_start, wr_end).
@@ -440,20 +544,9 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
         hash_write_fragments(fragments, from_zero, chunk_start, wr_start, wr_end,
                              checksums);
 
-        int acks = 0;
-        int quota_errors = 0;
-        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-            int rc = efs_client_put_fragment(nodes[i], ino, ci, i, fragments[i], checksums[i]);
-            if (rc == 0)
-                acks++;
-            else if (rc == EFS_ERR_QUOTA)
-                quota_errors++;
-        }
-
-        if (quota_errors >= 2)
-            return EFS_ERR_QUOTA;
-        if (acks < 2)
-            return EFS_ERR_NO_QUORUM;
+        int rc = efs_client_put_fragments_parallel(ino, ci, nodes, fragments, checksums);
+        if (rc != EFS_OK)
+            return rc;
 
         pthread_mutex_lock(&g_client.lock);
         efs_export_set_chunk(&g_client.export, ino, ci, nodes, checksums);
@@ -511,21 +604,9 @@ int efs_client_write_no_replicate(efs_ino_t ino, uint64_t offset, size_t size, c
         hash_write_fragments(fragments, from_zero, chunk_start, wr_start, wr_end,
                              checksums);
 
-        int acks = 0;
-        int quota_errors = 0;
-        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-            int rc = efs_client_put_fragment(nodes[i], ino, ci, i, fragments[i], checksums[i]);
-            if (rc == 0)
-                acks++;
-            else if (rc == EFS_ERR_QUOTA)
-                quota_errors++;
-        }
-
-        if (acks < 2) {
-            if (quota_errors > 0)
-                return EFS_ERR_QUOTA;
-            return EFS_ERR_NO_QUORUM;
-        }
+        int rc = efs_client_put_fragments_parallel(ino, ci, nodes, fragments, checksums);
+        if (rc != EFS_OK)
+            return rc;
 
         pthread_mutex_lock(&g_client.lock);
         efs_export_set_chunk(&g_client.export, ino, ci, nodes, checksums);

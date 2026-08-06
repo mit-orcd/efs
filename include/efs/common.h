@@ -14,6 +14,8 @@
 #define EFS_FRAGMENT_SIZE    (EFS_CHUNK_SIZE / 2)
 #define EFS_NUM_FRAGMENTS    3
 #define EFS_MAX_NODES        3
+/* Max TCP connections the client keeps open to each server (pool size). */
+#define EFS_CLIENT_CONNS_PER_NODE 8
 #define EFS_MAX_EXPORTS      16
 #define EFS_MAX_PATH         4096
 #define EFS_MAX_NAME         256

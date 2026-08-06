@@ -24,12 +24,15 @@ struct efs_client {
     uint64_t ino_namespace;
     uint64_t ino_counter;
 
-    /* Persistent TCP connections to each server. The server's accept loop
-     * handles multiple requests per connection, so reusing sockets avoids a
-     * connect()/handshake per fragment. Each slot is guarded by its own lock
-     * so FUSE worker threads can talk to different nodes in parallel. */
-    int conn_fd[EFS_MAX_NODES];
+    /* Persistent TCP connection pool to each server. The server's accept
+     * loop handles multiple requests per connection; a pool of sockets lets
+     * FUSE workers and parallel fragment PUTs proceed without serializing
+     * on a single fd. Checkout waits if all slots are busy. */
+    int conn_fd[EFS_MAX_NODES][EFS_CLIENT_CONNS_PER_NODE];
+    int conn_busy[EFS_MAX_NODES][EFS_CLIENT_CONNS_PER_NODE];
     pthread_mutex_t conn_lock[EFS_MAX_NODES];
+    pthread_cond_t conn_cv[EFS_MAX_NODES];
+    int conn_pool_size; /* 1..EFS_CLIENT_CONNS_PER_NODE, from env or default */
 
     /* When non-zero, metadata replication is coalesced: changes only mark
      * dirty and flush every meta_batch_ops operations (or when forced on
@@ -130,17 +133,24 @@ void efs_client_init_nodes(struct efs_client *c, const char *node_list[EFS_MAX_N
 /* Discover the full cluster membership by asking one server. Returns 0 on success. */
 int efs_client_discover_nodes(struct efs_client *c, const char *host, uint16_t port);
 
-/* Borrow a live TCP fd for node_id (1-based). On success the per-node conn
- * lock is held; caller must efs_client_conn_release() or _drop(). */
+/* Borrow a live TCP fd for node_id (1-based). Blocks until a pool slot is
+ * free. Caller must efs_client_conn_release(node_id, fd) or _drop(...). */
 int efs_client_conn_get(efs_node_id_t node_id);
 
-/* Return a healthy connection to the pool (unlocks). */
-void efs_client_conn_release(efs_node_id_t node_id);
+/* Return a healthy connection to the pool. */
+void efs_client_conn_release(efs_node_id_t node_id, int fd);
 
-/* Close a broken connection and unlock. */
-void efs_client_conn_drop(efs_node_id_t node_id);
+/* Close a broken connection and free its pool slot. */
+void efs_client_conn_drop(efs_node_id_t node_id, int fd);
 
 /* Initialize the connection pool (call once after node_count is known). */
 void efs_client_conn_init(void);
+
+/* PUT all three fragments concurrently (send-all / recv-all on three
+ * pooled sockets). Returns EFS_OK if quorum (>=2) acks, else an error. */
+int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
+                                      const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
+                                      const uint8_t fragments[EFS_NUM_FRAGMENTS][EFS_FRAGMENT_SIZE],
+                                      const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE]);
 
 #endif

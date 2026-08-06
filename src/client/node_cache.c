@@ -48,12 +48,53 @@ static bool resolve_local(const char *host)
     return false;
 }
 
+static int conn_pool_inited;
+
+static int pool_size(void)
+{
+    int n = g_client.conn_pool_size;
+    if (n < 1)
+        n = EFS_CLIENT_CONNS_PER_NODE;
+    if (n > EFS_CLIENT_CONNS_PER_NODE)
+        n = EFS_CLIENT_CONNS_PER_NODE;
+    return n;
+}
+
 void efs_client_conn_init(void)
 {
-    for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
-        g_client.conn_fd[i] = -1;
-        pthread_mutex_init(&g_client.conn_lock[i], NULL);
+    const char *env = getenv("EFS_CLIENT_CONNS_PER_NODE");
+    int n = EFS_CLIENT_CONNS_PER_NODE;
+    if (env && *env) {
+        int v = atoi(env);
+        if (v >= 1 && v <= EFS_CLIENT_CONNS_PER_NODE)
+            n = v;
     }
+    g_client.conn_pool_size = n;
+
+    for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
+        for (int s = 0; s < EFS_CLIENT_CONNS_PER_NODE; s++) {
+            /* First init: BSS zeros look like fd 0 — do not close. */
+            if (conn_pool_inited && g_client.conn_fd[i][s] >= 0)
+                close(g_client.conn_fd[i][s]);
+            g_client.conn_fd[i][s] = -1;
+            g_client.conn_busy[i][s] = 0;
+        }
+        if (!conn_pool_inited) {
+            pthread_mutex_init(&g_client.conn_lock[i], NULL);
+            pthread_cond_init(&g_client.conn_cv[i], NULL);
+        }
+    }
+    conn_pool_inited = 1;
+}
+
+static int slot_for_fd(uint32_t idx, int fd)
+{
+    int n = pool_size();
+    for (int s = 0; s < n; s++) {
+        if (g_client.conn_fd[idx][s] == fd)
+            return s;
+    }
+    return -1;
 }
 
 int efs_client_conn_get(efs_node_id_t node_id)
@@ -61,38 +102,70 @@ int efs_client_conn_get(efs_node_id_t node_id)
     if (node_id == 0 || node_id > g_client.node_count)
         return -1;
     uint32_t idx = node_id - 1;
+    int n = pool_size();
+
     pthread_mutex_lock(&g_client.conn_lock[idx]);
-    if (g_client.conn_fd[idx] >= 0)
-        return g_client.conn_fd[idx];
+    for (;;) {
+        int free_slot = -1;
+        for (int s = 0; s < n; s++) {
+            if (!g_client.conn_busy[idx][s]) {
+                free_slot = s;
+                break;
+            }
+        }
+        if (free_slot < 0) {
+            pthread_cond_wait(&g_client.conn_cv[idx], &g_client.conn_lock[idx]);
+            continue;
+        }
 
-    struct efs_node *n = &g_client.nodes[idx];
-    int fd = efs_connect_tcp(n->addr, n->port);
-    if (fd < 0) {
+        if (g_client.conn_fd[idx][free_slot] < 0) {
+            struct efs_node *node = &g_client.nodes[idx];
+            int fd = efs_connect_tcp(node->addr, node->port);
+            if (fd < 0) {
+                pthread_mutex_unlock(&g_client.conn_lock[idx]);
+                return -1;
+            }
+            efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+            efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+            g_client.conn_fd[idx][free_slot] = fd;
+        }
+
+        g_client.conn_busy[idx][free_slot] = 1;
+        int fd = g_client.conn_fd[idx][free_slot];
         pthread_mutex_unlock(&g_client.conn_lock[idx]);
-        return -1;
+        return fd;
     }
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    g_client.conn_fd[idx] = fd;
-    return fd;
 }
 
-void efs_client_conn_release(efs_node_id_t node_id)
+void efs_client_conn_release(efs_node_id_t node_id, int fd)
 {
-    if (node_id == 0 || node_id > g_client.node_count)
-        return;
-    pthread_mutex_unlock(&g_client.conn_lock[node_id - 1]);
-}
-
-void efs_client_conn_drop(efs_node_id_t node_id)
-{
-    if (node_id == 0 || node_id > g_client.node_count)
+    if (node_id == 0 || node_id > g_client.node_count || fd < 0)
         return;
     uint32_t idx = node_id - 1;
-    if (g_client.conn_fd[idx] >= 0) {
-        close(g_client.conn_fd[idx]);
-        g_client.conn_fd[idx] = -1;
+    pthread_mutex_lock(&g_client.conn_lock[idx]);
+    int s = slot_for_fd(idx, fd);
+    if (s >= 0)
+        g_client.conn_busy[idx][s] = 0;
+    pthread_cond_signal(&g_client.conn_cv[idx]);
+    pthread_mutex_unlock(&g_client.conn_lock[idx]);
+}
+
+void efs_client_conn_drop(efs_node_id_t node_id, int fd)
+{
+    if (node_id == 0 || node_id > g_client.node_count || fd < 0)
+        return;
+    uint32_t idx = node_id - 1;
+    pthread_mutex_lock(&g_client.conn_lock[idx]);
+    int s = slot_for_fd(idx, fd);
+    if (s >= 0) {
+        if (g_client.conn_fd[idx][s] >= 0)
+            close(g_client.conn_fd[idx][s]);
+        g_client.conn_fd[idx][s] = -1;
+        g_client.conn_busy[idx][s] = 0;
+    } else {
+        close(fd);
     }
+    pthread_cond_signal(&g_client.conn_cv[idx]);
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
 }
 
