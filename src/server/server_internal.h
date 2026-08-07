@@ -81,10 +81,15 @@ void server_load_exports(struct efsd_server *s);
 /* Save an export to disk. */
 void server_save_export(struct efsd_server *s, struct efs_export *ex);
 
-/* Get the path for a fragment on disk. */
+/* Get the (sharded) path for a fragment on disk. Writes always use this. */
 int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
                          efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                          char *path, size_t path_len);
+
+/* Unlink fragment + .sum at sharded and legacy flat-{ino} locations. */
+void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
+                                  efs_ino_t ino, uint32_t chunk_index,
+                                  uint32_t fragment_index);
 
 /* Read a fragment from disk. */
 int server_read_fragment(struct efsd_server *s, struct efs_export *ex,
@@ -120,8 +125,14 @@ uint64_t server_compute_usage(const char *path);
 /* Logical used across all local roots (accounts for local EC overhead). */
 uint64_t server_compute_local_usage(struct efsd_server *s);
 
-/* Update the local node's used counter in the cluster list. */
+/* Update the local node's used counter via a full data/ tree scan, then persist. */
 void server_update_local_usage(struct efsd_server *s);
+
+/* Load meta/usage.bin, or scan+save if missing/corrupt. Call once at startup. */
+void server_init_local_usage(struct efsd_server *s);
+
+/* Persist local->used to meta/usage.bin (primary storage root). */
+void server_usage_save(struct efsd_server *s);
 
 /* Comma-join all local storage roots into buf for status/HELLO advertise. */
 void server_format_storage_paths(const struct efsd_server *s, char *buf, size_t buflen);

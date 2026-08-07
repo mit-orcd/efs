@@ -5,7 +5,7 @@
 
 set -e
 
-BASE="/tmp/efs_fuse_test"
+BASE="${EFS_TEST_BASE:-/tmp/efs_fuse_test}"
 MNT="$BASE/mnt"
 
 cleanup() {
@@ -105,6 +105,27 @@ if [ "$READ_BACK" != "$EXPECTED_AFTER_TRUNC" ]; then
     echo "FAIL: read after rename mismatch: got '$READ_BACK', expected '$EXPECTED_AFTER_TRUNC'"
     exit 1
 fi
+
+echo "Virtual .stats (lookup-only)..."
+# Must not appear in directory listings (including ls -a).
+if ls -a "$MNT" | grep -qx '\.stats'; then
+    echo "FAIL: .stats listed by readdir/ls -a"
+    exit 1
+fi
+# Explicit path must work.
+if [ ! -f "$MNT/.stats" ]; then
+    echo "FAIL: .stats missing via direct getattr"
+    exit 1
+fi
+STATS=$(cat "$MNT/.stats")
+echo "$STATS" | grep -q 'imm_files=' || { echo "FAIL: .stats missing imm_files"; exit 1; }
+echo "$STATS" | grep -q 'tree_files=' || { echo "FAIL: .stats missing tree_files"; exit 1; }
+# After rename we have one regular file at root; .stats itself is not counted.
+echo "$STATS" | grep -q 'imm_files=1' || {
+    echo "FAIL: expected imm_files=1 in .stats (virtual file must not be counted):"
+    echo "$STATS"
+    exit 1
+}
 
 echo "Killing server 2..."
 pkill -f 'efsd --node-id 2 --addr 127.0.0.1 --port 17433'

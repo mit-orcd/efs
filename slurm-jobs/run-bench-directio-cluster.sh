@@ -1,7 +1,7 @@
 #!/bin/bash
 # Multi-node buffered vs direct-io bench over InfiniBand.
 # 3 servers on distinct nodes + 1 client excluded from those nodes.
-# Default writers=8 (efsd default); buffered uses --no-direct-io.
+# Default writers=8 (efsd default). buffered → EFS_DIO=off; direct → EFS_DIO=on.
 #
 # Usage: PARTITION=mit_quicktest ./slurm-jobs/run-bench-directio-cluster.sh
 

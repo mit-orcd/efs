@@ -306,8 +306,7 @@ void server_handle_conn(int fd)
             break;
         }
         case EFS_MSG_LIST_NODES: {
-            server_update_local_usage(g_server);
-
+            /* used comes from the cached counter (meta/usage.bin); no tree walk. */
             pthread_mutex_lock(&g_server->lock);
             uint32_t node_count = g_server->node_count;
             struct efs_node nodes[EFS_MAX_NODES];
@@ -341,7 +340,6 @@ void server_handle_conn(int fd)
             break;
         }
         case EFS_MSG_STATUS: {
-            server_update_local_usage(g_server);
             pthread_mutex_lock(&g_server->lock);
             struct efs_msg_status_reply reply;
             memset(&reply, 0, sizeof(reply));

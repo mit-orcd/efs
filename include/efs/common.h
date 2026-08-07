@@ -36,6 +36,9 @@
 #define EFS_META_TABLE_INO   ((efs_ino_t)0x8000000000000002ULL)
 /* Max 128 KiB pages in a fragmented metadata blob (~64 MiB logical). */
 #define EFS_META_MAX_PAGES   512
+/* On-disk inode directory sharding: five base-10000 groups (0000-9999)
+ * encode any uint64 ino uniquely (10^20 > 2^64). seg[0] is least-significant. */
+#define EFS_INO_PATH_SEGS    5
 
 #define EFS_OK               0
 #define EFS_ERR_IO          -1
@@ -54,6 +57,8 @@
 typedef uint64_t efs_ino_t;
 typedef uint32_t efs_export_id_t;
 typedef uint32_t efs_node_id_t;
+
+void efs_ino_path_segments(efs_ino_t ino, char seg[EFS_INO_PATH_SEGS][5]);
 
 struct efs_node {
     efs_node_id_t id;

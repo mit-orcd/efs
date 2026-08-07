@@ -248,16 +248,10 @@ static int migrate_one_fragment(struct efsd_server *s, struct efs_export *ex,
     s->export_meta_dirty = 1;
     pthread_mutex_unlock(&s->lock);
 
-    /* Delete the local copy of the fragment and its checksum sidecar. */
-    char path[8192];
-    server_fragment_path(s, ex, chunk->ino, chunk->chunk_index, fragment_index,
-                         path, sizeof(path));
-    unlink(path);
-    {
-        char sum_path[8200];
-        snprintf(sum_path, sizeof(sum_path), "%s.sum", path);
-        unlink(sum_path);
-    }
+    /* Delete the local copy of the fragment and its checksum sidecar
+     * (sharded path and legacy flat-{ino} path). */
+    server_unlink_fragment_files(s, ex, chunk->ino, chunk->chunk_index,
+                                 fragment_index);
 
     pthread_mutex_lock(&s->lock);
     struct efs_node *local = server_local_node(s);
@@ -268,6 +262,7 @@ static int migrate_one_fragment(struct efsd_server *s, struct efs_export *ex,
             local->used = 0;
     }
     pthread_mutex_unlock(&s->lock);
+    server_usage_save(s);
 
     return EFS_OK;
 }

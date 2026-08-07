@@ -85,6 +85,20 @@ Each server creates under its storage path:
 - `meta/` — export root (`EFSR` in `metadata.bin`) and cluster membership
 - `log/` — logs, PID file, optional `perf` output
 
+Fragment files are sharded by inode so an export root never holds one directory
+per file. Each inode becomes five base-10000 path segments (`0000`–`9999`),
+least-significant group last, then the existing chunk bucket:
+
+```text
+data/exports/{export_id}/{d4}/{d3}/{d2}/{d1}/{d0}/{chunk>>10}/{chunk}.{frag}
+```
+
+Example: inode `2`, chunk `0`, fragment `0` →
+`data/exports/1/0000/0000/0000/0000/0002/0/0.0`. Five segments uniquely encode
+any 64-bit inode (client namespaces use high bits). Writes always use this
+layout; reads/unlinks also fall back to the legacy flat
+`data/exports/{id}/{ino}/{chunk>>10}/…` path for older data.
+
 Export metadata is hybrid: a tiny fully-replicated root (generation, `next_ino`,
 page checksums) plus bulk inode/chunk tables packed into 128 KiB pages, encoded
 with the same 2+1 XOR scheme as file data under reserved inode
@@ -150,6 +164,10 @@ Check status:
 ./efs-mgmt status 127.0.0.1:17432
 ```
 
+Each server keeps a cached `used` counter (updated on PUT/migrate, persisted as
+`meta/usage.bin`) so status stays fast; a full disk scan runs only at startup
+when that file is missing, or after destroying an export.
+
 `df` on the mount reports logical capacity. With three equal quotas, usable space
 is about `2 * min_quota` (2+1 encoding). If any server has no quota, `df` shows `0`.
 
@@ -179,12 +197,12 @@ migration runs in the background. Watch progress with `efs-mgmt status`
 
 ## Direct I/O
 
-Fragment reads/writes use `O_DIRECT` by default (good for flash-backed
-node-local storage). Pass `--no-direct-io` to use the page cache instead:
+Fragment reads/writes use the page cache by default. Pass `--direct-io` for
+`O_DIRECT` (often better on flash-backed node-local storage):
 
 ```bash
 ./efsd --node-id 1 --addr 127.0.0.1 --port 17432 \
-       --storage /tmp/efs/s1 --no-direct-io &
+       --storage /tmp/efs/s1 --direct-io &
 ```
 
 Fragment PUTs are executed on a dedicated writer thread pool (default 8
@@ -193,11 +211,14 @@ connection thread).
 
 ## Directory rollup stats
 
-Each directory exposes a virtual read-only file `.stats` (visible with `ls -a`).
-`cat dir/.stats` prints immediate and subtree file/dir counts, byte totals, and
-min/max timestamps (`min`/`max` of atime, ctime, mtime per entry). Rollups are
-maintained incrementally in metadata so reads stay cheap. Creating a real inode
-named `.stats` is rejected.
+Each directory exposes a virtual read-only file `.stats`. It is **lookup-only**:
+`ls` / `readdir` of the directory does not list it; access by explicit path
+(`cat dir/.stats`, `stat dir/.stats`) still works. The file is not a real inode
+and is not counted in the rollup numbers it reports. `cat dir/.stats` prints
+immediate and subtree file/dir counts, byte totals, and min/max timestamps
+(`min`/`max` of atime, ctime, mtime per entry). Rollups are maintained
+incrementally in metadata so reads stay cheap. Creating a real inode named
+`.stats` is rejected.
 
 ## Querying metadata
 
@@ -229,7 +250,7 @@ cluster, runs load, and writes reports under a scratch directory.
 
 Supported: `chmod`, `chown`, `truncate`, `rename`, `utime(2)`, and `utimens`
 (nanosecond mtimes so `rsync -a` is idempotent on a second pass). Each directory
-also has a virtual read-only `.stats` file (see above).
+also has a lookup-only virtual `.stats` file (see above).
 
 ## Testing
 

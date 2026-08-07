@@ -31,8 +31,16 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
 
     if (max_attempts < 1)
         max_attempts = 1;
+
+    /* Heap-allocate: 3 × 64 KiB on a FUSE/main stack overflows easily and
+     * SIGSEGV handlers without an alt stack cannot even log. */
+    uint8_t (*fragments)[EFS_FRAGMENT_SIZE] =
+        malloc(EFS_NUM_FRAGMENTS * EFS_FRAGMENT_SIZE);
+    if (!fragments)
+        return EFS_ERR_NOMEM;
+
+    int rc = EFS_ERR_DECODE;
     for (int attempt = 0; attempt < max_attempts; attempt++) {
-        uint8_t fragments[EFS_NUM_FRAGMENTS][EFS_FRAGMENT_SIZE];
         int have[EFS_NUM_FRAGMENTS] = {0, 0, 0};
         uint8_t fsum[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
 
@@ -65,10 +73,13 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
         }
         if (a < 0 || b < 0 || missing < 0)
             continue;
-        if (efs_decode_chunk(fragments, a, b, missing, chunk_out, EFS_CHUNK_SIZE) == 0)
-            return EFS_OK;
+        if (efs_decode_chunk(fragments, a, b, missing, chunk_out, EFS_CHUNK_SIZE) == 0) {
+            rc = EFS_OK;
+            break;
+        }
     }
-    return EFS_ERR_DECODE;
+    free(fragments);
+    return rc;
 }
 
 static int efs_client_decode_placed_chunk(efs_ino_t ino, uint32_t chunk_index,
@@ -94,17 +105,24 @@ static int load_export_from_root(const struct efs_export_root *root)
             return EFS_ERR_DECODE;
         }
         /* Verify fragment checksums against the root page map (D1). */
-        uint8_t fragments[EFS_NUM_FRAGMENTS][EFS_FRAGMENT_SIZE];
+        uint8_t (*fragments)[EFS_FRAGMENT_SIZE] =
+            malloc(EFS_NUM_FRAGMENTS * EFS_FRAGMENT_SIZE);
+        if (!fragments) {
+            free(pages);
+            return EFS_ERR_NOMEM;
+        }
         efs_encode_chunk(pages[pi], EFS_CHUNK_SIZE, fragments);
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
             uint8_t sum[EFS_HASH_SIZE];
             efs_hash(fragments[fi], EFS_FRAGMENT_SIZE, sum);
             if (memcmp(sum, efs_export_root_checksum_const(root, pi, fi),
                        EFS_HASH_SIZE) != 0) {
+                free(fragments);
                 free(pages);
                 return EFS_ERR_CHECKSUM;
             }
         }
+        free(fragments);
     }
 
     char *blob = NULL;
@@ -141,11 +159,21 @@ static int fetch_meta_blob_from(const char *host, uint16_t port,
     void *payload = NULL;
     uint32_t payload_len = 0;
     if (efs_send_msg(fd, EFS_MSG_GET_META, NULL, 0) != 0 ||
-        efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
-        type != EFS_MSG_GET_META_REPLY || payload_len == 0) {
+        efs_recv_msg(fd, &type, &payload, &payload_len) != 0) {
         free(payload);
         close(fd);
         return EFS_ERR_NET;
+    }
+    if (type != EFS_MSG_GET_META_REPLY) {
+        free(payload);
+        close(fd);
+        return EFS_ERR_PROTO;
+    }
+    if (payload_len == 0) {
+        free(payload);
+        close(fd);
+        /* Server has no serializable export root/blob. */
+        return EFS_ERR_NOT_FOUND;
     }
     close(fd);
     *payload_out = payload;
@@ -160,6 +188,9 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
     struct efs_export_root best_root;
     memset(&best_root, 0, sizeof(best_root));
     int have_root = 0;
+    int saw_bootstrap = 0;
+    int last_fetch_rc = EFS_ERR_NET;
+    int fetch_ok = 0;
     char *best_legacy = NULL;
     size_t best_legacy_len = 0;
 
@@ -180,14 +211,19 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
 
             void *payload = NULL;
             uint32_t plen = 0;
-            if (fetch_meta_blob_from(h, p, &payload, &plen) != EFS_OK)
+            int frc = fetch_meta_blob_from(h, p, &payload, &plen);
+            if (frc != EFS_OK) {
+                last_fetch_rc = frc;
                 continue;
+            }
+            fetch_ok = 1;
             if (efs_meta_blob_is_root(payload, plen)) {
                 struct efs_export_root root;
                 memset(&root, 0, sizeof(root));
                 if (efs_export_root_deserialize(&root, payload, plen) == 0) {
                     /* Ignore bootstrap shells (no pages yet). */
                     if (root.page_count == 0 || root.blob_len == 0) {
+                        saw_bootstrap = 1;
                         efs_export_root_free(&root);
                     } else if (!have_root || root.generation > best_root.generation) {
                         efs_export_root_free(&best_root);
@@ -208,13 +244,26 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
     }
 
     if (have_root) {
+        fprintf(stderr,
+                "meta: got EFSR generation=%llu pages=%u blob_len=%u; "
+                "reconstructing table pages...\n",
+                (unsigned long long)best_root.generation, best_root.page_count,
+                best_root.blob_len);
         int rc = load_export_from_root(&best_root);
         efs_export_root_free(&best_root);
         if (rc == EFS_OK) {
             free(best_legacy);
             return rc;
         }
+        fprintf(stderr,
+                "meta: page reconstruct failed (%s); trying legacy EFSM fallback\n",
+                efs_strerror(rc));
         /* Fall back to legacy EFSM if page reconstruct fails. */
+        if (!best_legacy) {
+            /* Typical cause: meta table fragments missing on 2+ nodes
+             * (2-of-3 decode needs any two fragments). */
+            return rc;
+        }
     }
     if (best_legacy) {
         pthread_mutex_lock(&g_client.lock);
@@ -224,7 +273,11 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
         free(best_legacy);
         return rc;
     }
-    return EFS_ERR_NET;
+    if (!fetch_ok)
+        return last_fetch_rc;
+    if (saw_bootstrap)
+        return EFS_ERR_PROTO; /* export name exists but root has no pages */
+    return EFS_ERR_NOT_FOUND;
 }
 
 int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk_index,
@@ -316,7 +369,9 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
 
         /* Sparse / truncate-up holes: no chunk map entry → zeros.
          * Mapped chunks must decode; corruption must not be masked. */
-        uint8_t chunk[EFS_CHUNK_SIZE];
+        uint8_t *chunk = malloc(EFS_CHUNK_SIZE);
+        if (!chunk)
+            return EFS_ERR_NOMEM;
         struct efs_chunk_entry ce;
         pthread_mutex_lock(&g_client.lock);
         int have_ce = efs_export_get_chunk(&g_client.export, ino, chunk_index, &ce);
@@ -324,10 +379,12 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
         if (have_ce != EFS_OK) {
             memset(chunk, 0, EFS_CHUNK_SIZE);
         } else if (efs_client_decode_placed_chunk(ino, chunk_index, chunk) != EFS_OK) {
+            free(chunk);
             return EFS_ERR_DECODE;
         }
 
         memcpy(buf + total, chunk + chunk_off, to_copy);
+        free(chunk);
         total += to_copy;
         pos += to_copy;
     }

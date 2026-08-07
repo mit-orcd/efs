@@ -31,8 +31,8 @@ static void usage(const char *prog)
             "                   can fail without peer RPCs (3→1 loss, 4+→2 losses).\n"
             "  --bench <path>   local disk saturate (fragment-sized writes); no cluster\n"
             "  --time <sec>     duration for --bench (default 10)\n"
-            "  --direct-io      O_DIRECT for fragment I/O (default on)\n"
-            "  --no-direct-io   use the page cache for fragment I/O\n"
+            "  --direct-io      O_DIRECT for fragment I/O\n"
+            "  --no-direct-io   use the page cache for fragment I/O (default)\n"
             "  --writers <n>    fragment writer threads (default %d, 0 = inline)\n",
             prog, prog, EFS_MAX_STORAGE_PATHS, EFS_DEFAULT_WRITERS);
 }
@@ -173,7 +173,7 @@ int main(int argc, char **argv)
     struct efsd_server server;
     memset(&server, 0, sizeof(server));
     server.persist_nodes = 1;
-    server.direct_io = 1; /* default: O_DIRECT on flash-backed node storage */
+    server.direct_io = 0; /* default: page cache; opt in with --direct-io */
     server.nwriters = EFS_DEFAULT_WRITERS;
     server.listen_fd = -1;
     g_server = &server;
@@ -297,7 +297,7 @@ int main(int argc, char **argv)
     server_format_storage_paths(&server, server.nodes[0].storage_path,
                                 sizeof(server.nodes[0].storage_path));
     server.nodes[0].quota = server.quota;
-    server.nodes[0].used = server_compute_local_usage(&server);
+    server.nodes[0].used = 0;
     server.node_count = 1;
 
     server_load_exports(&server);
@@ -310,7 +310,8 @@ int main(int argc, char **argv)
     server_format_storage_paths(&server, server.nodes[0].storage_path,
                                 sizeof(server.nodes[0].storage_path));
     server.nodes[0].quota = server.quota;
-    server.nodes[0].used = server_compute_local_usage(&server);
+    /* Prefer meta/usage.bin; fall back to one full data/ scan. */
+    server_init_local_usage(&server);
 
     /* Start listening first. If the configured address/port cannot be bound,
        fail immediately before contacting peers. */

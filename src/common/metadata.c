@@ -420,11 +420,16 @@ static struct efs_child_vec *child_vec_get(struct efs_export *ex, efs_ino_t pare
         ex->child_vecs = n;
         ex->child_vec_cap = ncap;
     }
-    /* Grow open-addressing table if load is high. */
+    /* Grow open-addressing table if load is high.
+     * idx_init() frees *keys/*vals — detach old pointers first so we can
+     * rehash from them, then free once (avoid double-free). */
     if (ex->child_vec_count * 2 > ex->child_mask) {
         uint64_t old_mask = ex->child_mask;
         uint64_t *ok = ex->child_keys;
         uint64_t *ov = ex->child_vals;
+        ex->child_keys = NULL;
+        ex->child_vals = NULL;
+        ex->child_mask = 0;
         if (idx_init(&ex->child_keys, &ex->child_vals, &ex->child_mask,
                      ex->child_vec_count + 1) != 0) {
             ex->child_keys = ok;

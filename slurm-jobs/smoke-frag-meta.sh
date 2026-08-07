@@ -119,19 +119,26 @@ else
     xxd "$LOCAL/s1/meta/exports/fragmeta/metadata.bin" 2>/dev/null | head -3 || true
 fi
 
-# Meta table fragments live under data/exports/<export-id>/<meta-ino>/...
-META_INO=9223372036854775810
-META_FRAGS=$(find "$LOCAL"/s*/data/exports -type f ! -name '*.sum' 2>/dev/null | grep -c "$META_INO" || true)
+# Meta table fragments use sharded inode dirs (5×0000-9999), e.g.
+# .../exports/<id>/0922/3372/0368/5477/5810/<bucket>/...
+META_SHARD="0922/3372/0368/5477/5810"
+META_FRAGS=$(find "$LOCAL"/s*/data/exports -type f ! -name '*.sum' 2>/dev/null \
+    | grep -c "$META_SHARD" || true)
+# User file fragments must also land under 0000/... sharding (not flat {ino}/).
+SHARDED=$(find "$LOCAL"/s*/data/exports -type f ! -name '*.sum' 2>/dev/null \
+    | grep -E '/[0-9]{4}/[0-9]{4}/[0-9]{4}/[0-9]{4}/[0-9]{4}/' | wc -l || true)
 if [ "${META_FRAGS:-0}" -ge 2 ]; then
-    pass "found $META_FRAGS meta-table fragment files"
+    pass "found $META_FRAGS meta-table fragment files under sharded path"
+elif [ "${SHARDED:-0}" -ge 3 ]; then
+    pass "found $SHARDED sharded fragment files under data/exports"
 else
-    ALL_FRAGS=$(find "$LOCAL"/s*/data/exports -type f ! -name '*.sum' 2>/dev/null | wc -l || true)
-    if [ "${ALL_FRAGS:-0}" -ge 3 ]; then
-        pass "found $ALL_FRAGS fragment files under data/exports"
-    else
-        fail "expected meta page fragments (meta=$META_FRAGS all=$ALL_FRAGS)"
-        find "$LOCAL"/s*/data/exports -type f 2>/dev/null | head -20 || true
-    fi
+    fail "expected sharded fragments (meta=$META_FRAGS sharded=$SHARDED)"
+    find "$LOCAL"/s*/data/exports -type f 2>/dev/null | head -20 || true
+fi
+if [ "${SHARDED:-0}" -ge 1 ]; then
+    pass "inode path sharding present ($SHARDED files)"
+else
+    fail "no 0000/0000/0000/0000/0000-style shard paths found"
 fi
 
 CONTENT=$(timeout 10 cat "$MNT/dir/file.txt" || true)

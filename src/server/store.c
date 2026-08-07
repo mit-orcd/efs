@@ -231,6 +231,75 @@ static void rm_tree(const char *path)
     rmdir(path);
 }
 
+#define EFS_USAGE_MAGIC   "EFSU"
+#define EFS_USAGE_VERSION 1
+
+static void usage_path(struct efsd_server *s, char *path, size_t path_len)
+{
+    const char *root = (s->storage_path_count > 0) ? s->storage_paths[0]
+                                                   : s->storage_path;
+    snprintf(path, path_len, "%s/meta/usage.bin", root);
+}
+
+static int server_usage_load(struct efsd_server *s, uint64_t *used_out)
+{
+    char path[8192];
+    usage_path(s, path, sizeof(path));
+    FILE *f = fopen(path, "rb");
+    if (!f)
+        return -1;
+    char magic[4];
+    uint32_t version = 0;
+    uint64_t used = 0;
+    if (fread(magic, 1, 4, f) != 4 ||
+        memcmp(magic, EFS_USAGE_MAGIC, 4) != 0 ||
+        fread(&version, sizeof(version), 1, f) != 1 ||
+        version != EFS_USAGE_VERSION ||
+        fread(&used, sizeof(used), 1, f) != 1) {
+        fclose(f);
+        return -1;
+    }
+    fclose(f);
+    *used_out = used;
+    return 0;
+}
+
+void server_usage_save(struct efsd_server *s)
+{
+    if (!s)
+        return;
+    uint64_t used = 0;
+    pthread_mutex_lock(&s->lock);
+    struct efs_node *local = server_local_node(s);
+    if (local)
+        used = local->used;
+    pthread_mutex_unlock(&s->lock);
+
+    char path[8192];
+    usage_path(s, path, sizeof(path));
+    make_dir_for_file(path);
+
+    char tmp[8192];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    FILE *f = fopen(tmp, "wb");
+    if (!f) {
+        fprintf(stderr, "Could not save usage to %s: %s\n", tmp, strerror(errno));
+        return;
+    }
+    uint32_t version = EFS_USAGE_VERSION;
+    fwrite(EFS_USAGE_MAGIC, 4, 1, f);
+    fwrite(&version, sizeof(version), 1, f);
+    fwrite(&used, sizeof(used), 1, f);
+    fflush(f);
+    fsync(fileno(f));
+    fclose(f);
+    if (rename(tmp, path) != 0) {
+        fprintf(stderr, "Could not rename usage file to %s: %s\n",
+                path, strerror(errno));
+        unlink(tmp);
+    }
+}
+
 int server_destroy_export(struct efsd_server *s, const char *name)
 {
     if (!s || !name)
@@ -287,6 +356,8 @@ int server_destroy_export(struct efsd_server *s, const char *name)
     }
 
     efs_export_free(&doomed);
+    /* Trees gone — one scan to refresh the cached counter, then persist. */
+    server_update_local_usage(s);
     printf("Destroyed export id=%u name=%s\n", id,
            doomed_name[0] ? doomed_name : "(unnamed)");
     return EFS_OK;
@@ -335,14 +406,50 @@ void server_load_exports(struct efsd_server *s)
     closedir(d);
 }
 
+/* Sharded: .../exports/{id}/{d4}/{d3}/{d2}/{d1}/{d0}/{chunk>>10}
+ * seg[0] is the least-significant group (rightmost path component). */
+static int format_ino_chunk_dir(char *path, size_t path_len, const char *root,
+                                efs_export_id_t export_id, efs_ino_t ino,
+                                uint32_t chunk_index)
+{
+    char seg[EFS_INO_PATH_SEGS][5];
+    efs_ino_path_segments(ino, seg);
+    return snprintf(path, path_len,
+                    "%s/data/exports/%u/%s/%s/%s/%s/%s/%u",
+                    root, export_id,
+                    seg[4], seg[3], seg[2], seg[1], seg[0],
+                    chunk_index >> 10);
+}
+
+/* Pre-sharding layout: .../exports/{id}/{ino}/{chunk>>10} */
+static int format_ino_chunk_dir_legacy(char *path, size_t path_len,
+                                       const char *root, efs_export_id_t export_id,
+                                       efs_ino_t ino, uint32_t chunk_index)
+{
+    return snprintf(path, path_len, "%s/data/exports/%u/%llu/%u",
+                    root, export_id, (unsigned long long)ino, chunk_index >> 10);
+}
+
 int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
                          efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                          char *path, size_t path_len)
 {
-    /* Legacy single-disk name (n==1). */
-    snprintf(path, path_len, "%s/data/exports/%u/%llu/%u/%u.%u",
-             s->storage_paths[0], ex->id,
-             (unsigned long long)ino, chunk_index >> 10, chunk_index, fragment_index);
+    char dir[8192];
+    format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[0], ex->id, ino,
+                         chunk_index);
+    snprintf(path, path_len, "%s/%u.%u", dir, chunk_index, fragment_index);
+    return 0;
+}
+
+static int server_fragment_path_legacy(struct efsd_server *s, struct efs_export *ex,
+                                       efs_ino_t ino, uint32_t chunk_index,
+                                       uint32_t fragment_index,
+                                       char *path, size_t path_len)
+{
+    char dir[8192];
+    format_ino_chunk_dir_legacy(dir, sizeof(dir), s->storage_paths[0], ex->id, ino,
+                                chunk_index);
+    snprintf(path, path_len, "%s/%u.%u", dir, chunk_index, fragment_index);
     return 0;
 }
 
@@ -355,11 +462,102 @@ static int server_shard_path(struct efsd_server *s, struct efs_export *ex,
         return server_fragment_path(s, ex, ino, chunk_index, fragment_index,
                                     path, path_len);
     }
-    snprintf(path, path_len, "%s/data/exports/%u/%llu/%u/%u.%u.s%u",
-             s->storage_paths[shard_index], ex->id,
-             (unsigned long long)ino, chunk_index >> 10, chunk_index,
-             fragment_index, shard_index);
+    char dir[8192];
+    format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[shard_index], ex->id,
+                         ino, chunk_index);
+    snprintf(path, path_len, "%s/%u.%u.s%u", dir, chunk_index, fragment_index,
+             shard_index);
     return 0;
+}
+
+static int server_shard_path_legacy(struct efsd_server *s, struct efs_export *ex,
+                                    efs_ino_t ino, uint32_t chunk_index,
+                                    uint32_t fragment_index, uint32_t shard_index,
+                                    char *path, size_t path_len)
+{
+    if (s->storage_path_count <= 1) {
+        return server_fragment_path_legacy(s, ex, ino, chunk_index, fragment_index,
+                                           path, path_len);
+    }
+    char dir[8192];
+    format_ino_chunk_dir_legacy(dir, sizeof(dir), s->storage_paths[shard_index],
+                                ex->id, ino, chunk_index);
+    snprintf(path, path_len, "%s/%u.%u.s%u", dir, chunk_index, fragment_index,
+             shard_index);
+    return 0;
+}
+
+/* Resolve an on-disk fragment path: sharded first, then legacy flat-{ino}. */
+static int resolve_shard_path(struct efsd_server *s, struct efs_export *ex,
+                              efs_ino_t ino, uint32_t chunk_index,
+                              uint32_t fragment_index, uint32_t shard_index,
+                              char *path, size_t path_len)
+{
+    server_shard_path(s, ex, ino, chunk_index, fragment_index, shard_index,
+                      path, path_len);
+    if (access(path, F_OK) == 0)
+        return 0;
+    server_shard_path_legacy(s, ex, ino, chunk_index, fragment_index, shard_index,
+                             path, path_len);
+    if (access(path, F_OK) == 0)
+        return 0;
+    /* Multi-disk upgrade: plain single-disk name may still exist. */
+    if (s->storage_path_count > 1 && shard_index == 0) {
+        server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
+                             path_len);
+        if (access(path, F_OK) == 0)
+            return 0;
+        server_fragment_path_legacy(s, ex, ino, chunk_index, fragment_index, path,
+                                    path_len);
+        if (access(path, F_OK) == 0)
+            return 0;
+    }
+    /* Prefer sharded path for callers that will create on ENOENT. */
+    server_shard_path(s, ex, ino, chunk_index, fragment_index, shard_index,
+                      path, path_len);
+    return -1;
+}
+
+/* True if this fragment is already on disk (overwrite must not re-charge quota). */
+static int fragment_exists_on_disk(struct efsd_server *s, struct efs_export *ex,
+                                   efs_ino_t ino, uint32_t chunk_index,
+                                   uint32_t fragment_index)
+{
+    char path[8192];
+    return resolve_shard_path(s, ex, ino, chunk_index, fragment_index, 0,
+                              path, sizeof(path)) == 0;
+}
+
+/* Unlink fragment data + checksum sidecars at sharded and legacy locations. */
+void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
+                                  efs_ino_t ino, uint32_t chunk_index,
+                                  uint32_t fragment_index)
+{
+    char path[8192];
+    char sum_path[8200];
+
+    server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
+                         sizeof(path));
+    unlink(path);
+    snprintf(sum_path, sizeof(sum_path), "%s.sum", path);
+    unlink(sum_path);
+
+    server_fragment_path_legacy(s, ex, ino, chunk_index, fragment_index, path,
+                                sizeof(path));
+    unlink(path);
+    snprintf(sum_path, sizeof(sum_path), "%s.sum", path);
+    unlink(sum_path);
+
+    if (s->storage_path_count > 1) {
+        for (uint32_t i = 0; i < s->storage_path_count; i++) {
+            server_shard_path(s, ex, ino, chunk_index, fragment_index, i,
+                              path, sizeof(path));
+            unlink(path);
+            server_shard_path_legacy(s, ex, ino, chunk_index, fragment_index, i,
+                                     path, sizeof(path));
+            unlink(path);
+        }
+    }
 }
 
 static int read_file_bytes(struct efsd_server *s, const char *path,
@@ -516,7 +714,8 @@ int server_read_fragment(struct efsd_server *s, struct efs_export *ex,
 
     if (n <= 1) {
         char path[8192];
-        server_fragment_path(s, ex, ino, chunk_index, fragment_index, path, sizeof(path));
+        resolve_shard_path(s, ex, ino, chunk_index, fragment_index, 0,
+                           path, sizeof(path));
         uint32_t got = 0;
         int rc = read_file_bytes(s, path, data, EFS_FRAGMENT_SIZE, &got);
         if (rc != EFS_OK)
@@ -546,8 +745,8 @@ int server_read_fragment(struct efsd_server *s, struct efs_export *ex,
         args[i].path_index = i;
         args[i].is_write = 0;
         args[i].result = EFS_ERR_IO;
-        server_shard_path(s, ex, ino, chunk_index, fragment_index, i,
-                          args[i].path, sizeof(args[i].path));
+        resolve_shard_path(s, ex, ino, chunk_index, fragment_index, i,
+                           args[i].path, sizeof(args[i].path));
         if (pthread_create(&tids[i], NULL, shard_io_thread, &args[i]) == 0)
             started[i] = 1;
         else
@@ -573,9 +772,22 @@ static void server_fragment_sum_path_at(struct efsd_server *s, uint32_t root_idx
                                        uint32_t chunk_index, uint32_t fragment_index,
                                        char *path, size_t path_len)
 {
-    snprintf(path, path_len, "%s/data/exports/%u/%llu/%u/%u.%u.sum",
-             s->storage_paths[root_idx], ex->id,
-             (unsigned long long)ino, chunk_index >> 10, chunk_index, fragment_index);
+    char dir[8192];
+    format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[root_idx], ex->id, ino,
+                         chunk_index);
+    snprintf(path, path_len, "%s/%u.%u.sum", dir, chunk_index, fragment_index);
+}
+
+static void server_fragment_sum_path_at_legacy(struct efsd_server *s, uint32_t root_idx,
+                                              struct efs_export *ex, efs_ino_t ino,
+                                              uint32_t chunk_index,
+                                              uint32_t fragment_index,
+                                              char *path, size_t path_len)
+{
+    char dir[8192];
+    format_ino_chunk_dir_legacy(dir, sizeof(dir), s->storage_paths[root_idx],
+                                ex->id, ino, chunk_index);
+    snprintf(path, path_len, "%s/%u.%u.sum", dir, chunk_index, fragment_index);
 }
 
 int server_write_fragment_sum_sync(struct efsd_server *s, struct efs_export *ex,
@@ -587,6 +799,7 @@ int server_write_fragment_sum_sync(struct efsd_server *s, struct efs_export *ex,
     int ok = 0;
     for (uint32_t ri = 0; ri < nroots; ri++) {
         char path[8192];
+        /* Writes always use the sharded layout. */
         server_fragment_sum_path_at(s, ri, ex, ino, chunk_index, fragment_index,
                                     path, sizeof(path));
         int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -614,6 +827,11 @@ int server_read_fragment_sum(struct efsd_server *s, struct efs_export *ex,
         server_fragment_sum_path_at(s, ri, ex, ino, chunk_index, fragment_index,
                                     path, sizeof(path));
         int fd = open(path, O_RDONLY);
+        if (fd < 0) {
+            server_fragment_sum_path_at_legacy(s, ri, ex, ino, chunk_index,
+                                               fragment_index, path, sizeof(path));
+            fd = open(path, O_RDONLY);
+        }
         if (fd < 0)
             continue;
         ssize_t n = read(fd, checksum, EFS_HASH_SIZE);
@@ -622,6 +840,17 @@ int server_read_fragment_sum(struct efsd_server *s, struct efs_export *ex,
             return EFS_OK;
     }
     return EFS_ERR_NOT_FOUND;
+}
+
+/* True if path contains the sharded leaf for EFS_META_TABLE_INO. */
+static int path_under_meta_table_ino(const char *path)
+{
+    char seg[EFS_INO_PATH_SEGS][5];
+    char needle[64];
+    efs_ino_path_segments(EFS_META_TABLE_INO, seg);
+    snprintf(needle, sizeof(needle), "/%s/%s/%s/%s/%s",
+             seg[4], seg[3], seg[2], seg[1], seg[0]);
+    return strstr(path, needle) != NULL;
 }
 
 static uint64_t compute_dir_usage(const char *path)
@@ -639,12 +868,17 @@ static uint64_t compute_dir_usage(const char *path)
     while ((entry = readdir(d)) != NULL) {
         if (entry->d_name[0] == '.')
             continue;
-        /* Exclude 2+1 metadata table pages from data usage / quota. */
+        /* Exclude 2+1 metadata table pages from data usage / quota.
+         * Legacy: flat directory named after the meta ino. */
         if (strcmp(entry->d_name, meta_ino_name) == 0)
             continue;
 
         char full_path[8192];
         snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+
+        /* Sharded: skip the meta-table inode leaf and everything under it. */
+        if (path_under_meta_table_ino(full_path))
+            continue;
 
         struct stat st;
         if (stat(full_path, &st) != 0)
@@ -741,6 +975,21 @@ void server_update_local_usage(struct efsd_server *s)
                                     sizeof(local->storage_path));
     }
     pthread_mutex_unlock(&s->lock);
+    server_usage_save(s);
+}
+
+void server_init_local_usage(struct efsd_server *s)
+{
+    uint64_t used = 0;
+    if (server_usage_load(s, &used) == 0) {
+        pthread_mutex_lock(&s->lock);
+        struct efs_node *local = server_local_node(s);
+        if (local)
+            local->used = used;
+        pthread_mutex_unlock(&s->lock);
+        return;
+    }
+    server_update_local_usage(s);
 }
 
 bool server_would_exceed_quota(struct efsd_server *s, uint64_t fragment_size)
@@ -757,8 +1006,10 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
                                efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                                const uint8_t *data, uint32_t data_len)
 {
-    /* Quota charges logical fragment size (not raw EC bytes). */
-    int charge_quota = (ino != EFS_META_TABLE_INO);
+    /* Quota charges logical fragment size (not raw EC bytes), and only once
+     * per fragment — overwrites must not inflate the cached used counter. */
+    int is_new = !fragment_exists_on_disk(s, ex, ino, chunk_index, fragment_index);
+    int charge_quota = (ino != EFS_META_TABLE_INO) && is_new;
 
     pthread_mutex_lock(&s->lock);
     struct efs_node *local = server_local_node(s);
@@ -799,9 +1050,12 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
                 if (local && local->used >= data_len)
                     local->used -= data_len;
                 pthread_mutex_unlock(&s->lock);
+                server_usage_save(s);
             }
             return EFS_ERR_IO;
         }
+        if (charge_quota)
+            server_usage_save(s);
         return EFS_OK;
     }
 
@@ -814,6 +1068,7 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
             if (local && local->used >= data_len)
                 local->used -= data_len;
             pthread_mutex_unlock(&s->lock);
+            server_usage_save(s);
         }
         return EFS_ERR_NOMEM;
     }
@@ -825,6 +1080,7 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
             if (local && local->used >= data_len)
                 local->used -= data_len;
             pthread_mutex_unlock(&s->lock);
+            server_usage_save(s);
         }
         return EFS_ERR_INVAL;
     }
@@ -867,9 +1123,12 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
             if (local && local->used >= data_len)
                 local->used -= data_len;
             pthread_mutex_unlock(&s->lock);
+            server_usage_save(s);
         }
         return EFS_ERR_IO;
     }
+    if (charge_quota)
+        server_usage_save(s);
     return EFS_OK;
 }
 

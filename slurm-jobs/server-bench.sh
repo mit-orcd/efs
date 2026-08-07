@@ -41,8 +41,9 @@ trap cleanup EXIT
 
 echo "=== server-bench host=$(hostname -s) path=$BENCH_PATH time=$TIME_SEC writers=$WRITERS ==="
 
-DIO_ARGS=(--direct-io)
+DIO_ARGS=()
 case "${EFS_DIO:-}" in
+    on|direct|1)    DIO_ARGS=(--direct-io) ;;
     off|buffered|0) DIO_ARGS=(--no-direct-io) ;;
 esac
 

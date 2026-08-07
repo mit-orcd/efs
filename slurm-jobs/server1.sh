@@ -34,7 +34,8 @@ echo "${IB_HOST}:${PORT}" > "$SHARED/state/s1.addr"
 echo "$IB_HOST" > "$SHARED/state/s1.host"
 echo "$SHORT" > "$SHARED/state/s1.node"
 
-# Optional: EFS_DIO=off|on from orchestrator; EFS_EXTRA_ARGS for other flags.
+# Optional: EFS_DIO=off|on from orchestrator (unset → efsd default: off).
+# EFS_EXTRA_ARGS for other flags.
 DIO_ARGS=()
 case "${EFS_DIO:-}" in
     off|buffered|0) DIO_ARGS+=(--no-direct-io) ;;

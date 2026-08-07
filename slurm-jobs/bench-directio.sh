@@ -9,7 +9,7 @@
 #SBATCH --output=/orcd/scratch/orcd/001/erbmi1/efs/logs/dio-bench-%j.out
 #SBATCH --error=/orcd/scratch/orcd/001/erbmi1/efs/logs/dio-bench-%j.err
 #
-# Single-node A/B: buffered (--no-direct-io) vs default O_DIRECT.
+# Single-node A/B: buffered (--no-direct-io) vs O_DIRECT (--direct-io).
 # Writes/reads a few sequential files under /scratch; prints MiB/s.
 
 set -euo pipefail
@@ -223,7 +223,7 @@ if [ ! -x "$REPO/efsd" ] || [ ! -x "$REPO/efs-fuse" ]; then
     exit 1
 fi
 
-# buffered first, then default direct-io
+# buffered first, then explicit --direct-io
 run_mode buffered
 run_mode direct
 

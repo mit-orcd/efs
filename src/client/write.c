@@ -6,6 +6,7 @@
 #include "efs/checksum.h"
 #include "efs/placement.h"
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -174,7 +175,7 @@ static int send_meta_root(const char *buf, size_t len)
 }
 
 /* Pack the full export into 2+1 pages, then push the EFSR root (≥2 acks). */
-int efs_client_replicate_metadata(void)
+static int efs_client_replicate_metadata_once(void)
 {
     char *blob = NULL;
     size_t blob_len = 0;
@@ -282,6 +283,29 @@ int efs_client_replicate_metadata(void)
     } else {
         efs_export_root_free(&root);
     }
+    return rc;
+}
+
+int efs_client_replicate_metadata(void)
+{
+    /* Bulk copies (ecopy/rsync) hit a full meta flush every meta_batch_ops
+     * creates/chmods. Transient net/quorum blips show up as fchmod EIO —
+     * retry a few times before surfacing failure. */
+    int rc = EFS_ERR_NET;
+    for (int attempt = 1; attempt <= 4; attempt++) {
+        rc = efs_client_replicate_metadata_once();
+        if (rc == EFS_OK)
+            return EFS_OK;
+        if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM)
+            break;
+        fprintf(stderr, "meta replicate attempt %d/4 failed: %s\n",
+                attempt, efs_strerror(rc));
+        fflush(stderr);
+        if (attempt < 4)
+            usleep(50000u * (unsigned)attempt);
+    }
+    fprintf(stderr, "meta replicate giving up: %s\n", efs_strerror(rc));
+    fflush(stderr);
     return rc;
 }
 
@@ -550,16 +574,26 @@ static void *chunk_put_worker(void *arg)
                           ? job->end
                           : chunk_start + EFS_CHUNK_SIZE;
 
-    uint8_t chunk[EFS_CHUNK_SIZE];
+    /* Heap-allocate — ~320 KiB exceeds some FUSE/pthread stacks when the
+     * worker runs inline on a FUSE thread (pthread_create failed / batch=1). */
+    uint8_t *chunk = malloc(EFS_CHUNK_SIZE);
+    uint8_t (*fragments)[EFS_FRAGMENT_SIZE] =
+        malloc(EFS_NUM_FRAGMENTS * EFS_FRAGMENT_SIZE);
+    if (!chunk || !fragments) {
+        free(chunk);
+        free(fragments);
+        job->rc = EFS_ERR_NOMEM;
+        return NULL;
+    }
+
     int from_zero = assemble_write_chunk(job->ino, job->old_size, job->offset,
                                          job->buf, chunk_start, wr_start, wr_end,
                                          chunk);
 
-    uint8_t fragments[EFS_NUM_FRAGMENTS][EFS_FRAGMENT_SIZE];
     int full_zero = from_zero && wr_start <= chunk_start &&
                     wr_end >= chunk_start + EFS_CHUNK_SIZE;
     if (full_zero) {
-        memset(fragments, 0, sizeof(fragments));
+        memset(fragments, 0, EFS_NUM_FRAGMENTS * EFS_FRAGMENT_SIZE);
         efs_hash_zero_fragment(job->checksums[0]);
         efs_hash_zero_fragment(job->checksums[1]);
         efs_hash_zero_fragment(job->checksums[2]);
@@ -572,6 +606,8 @@ static void *chunk_put_worker(void *arg)
                         job->nodes);
     job->rc = efs_client_put_fragments_parallel(job->ino, job->ci, job->nodes,
                                                 fragments, job->checksums);
+    free(chunk);
+    free(fragments);
     return NULL;
 }
 
@@ -601,11 +637,17 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
         uint64_t wr_end = (end < chunk_start + EFS_CHUNK_SIZE) ? end
                                                               : chunk_start + EFS_CHUNK_SIZE;
 
-        uint8_t chunk[EFS_CHUNK_SIZE];
+        uint8_t *chunk = malloc(EFS_CHUNK_SIZE);
+        uint8_t (*fragments)[EFS_FRAGMENT_SIZE] =
+            malloc(EFS_NUM_FRAGMENTS * EFS_FRAGMENT_SIZE);
+        if (!chunk || !fragments) {
+            free(chunk);
+            free(fragments);
+            return EFS_ERR_NOMEM;
+        }
         int from_zero = assemble_write_chunk(ino, old_size, offset, buf,
                                              chunk_start, wr_start, wr_end, chunk);
 
-        uint8_t fragments[EFS_NUM_FRAGMENTS][EFS_FRAGMENT_SIZE];
         efs_encode_chunk(chunk, EFS_CHUNK_SIZE, fragments);
 
         efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
@@ -616,6 +658,8 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
                              checksums);
 
         int rc = efs_client_put_fragments_parallel(ino, ci, nodes, fragments, checksums);
+        free(chunk);
+        free(fragments);
         if (rc != EFS_OK)
             return rc;
 

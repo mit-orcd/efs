@@ -92,6 +92,13 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
 
     uint32_t joined = ack->node_count;
     pthread_mutex_lock(&s->lock);
+    /* Keep our cached used across membership adopt (peer view can be stale). */
+    uint64_t keep_used = 0;
+    {
+        struct efs_node *prev = server_local_node(s);
+        if (prev)
+            keep_used = prev->used;
+    }
     s->epoch = ack->epoch;
     s->node_count = ack->node_count;
     memcpy(s->nodes, ack->nodes, sizeof(s->nodes));
@@ -103,7 +110,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
         local->port = s->port;
         server_format_storage_paths(s, local->storage_path, sizeof(local->storage_path));
         local->quota = s->quota;
-        local->used = server_compute_local_usage(s);
+        local->used = keep_used;
     }
     server_save_nodes(s);
     pthread_mutex_unlock(&s->lock);

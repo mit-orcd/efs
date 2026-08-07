@@ -78,7 +78,7 @@ run_cluster_kill() {
     done
     sleep 0.5
 
-    # --no-direct-io: /scratch on Engaging is often unreliable with O_DIRECT.
+    # Explicit --no-direct-io (also the efsd default); /scratch + O_DIRECT is flaky.
     "$REPO/efsd" --node-id 1 --addr "$IP" --port "$p1" \
         "${storage_args[@]}" --writers 2 --no-direct-io \
         > "$OUT/${tag}-s1.stdout" 2>&1 &

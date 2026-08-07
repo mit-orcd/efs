@@ -1,7 +1,17 @@
 #include "efs/common.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
+
+void efs_ino_path_segments(efs_ino_t ino, char seg[EFS_INO_PATH_SEGS][5])
+{
+    uint64_t v = (uint64_t)ino;
+    for (int i = 0; i < EFS_INO_PATH_SEGS; i++) {
+        snprintf(seg[i], 5, "%04llu", (unsigned long long)(v % 10000ULL));
+        v /= 10000ULL;
+    }
+}
 
 const char *efs_strerror(int rc)
 {

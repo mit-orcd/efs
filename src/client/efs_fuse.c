@@ -18,6 +18,57 @@
 #include <utime.h>
 #include <time.h>
 #include <fcntl.h>
+#include <signal.h>
+
+/* Async-signal-safe crash breadcrumb. Uses an alternate signal stack so a
+ * stack-overflow SIGSEGV can still report instead of dying silently. */
+static char g_efs_fuse_altstack[256 * 1024];
+
+static void efs_fuse_fatal_signal(int sig)
+{
+    const char *name = "signal";
+    if (sig == SIGSEGV)
+        name = "SIGSEGV";
+    else if (sig == SIGBUS)
+        name = "SIGBUS";
+    else if (sig == SIGABRT)
+        name = "SIGABRT";
+    else if (sig == SIGILL)
+        name = "SIGILL";
+    else if (sig == SIGFPE)
+        name = "SIGFPE";
+    char buf[128];
+    int n = snprintf(buf, sizeof(buf),
+                     "efs-fuse: fatal %s (%d) — mount will go ENOTCONN\n", name,
+                     sig);
+    if (n > 0)
+        (void)write(STDERR_FILENO, buf, (size_t)n);
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
+static void efs_fuse_install_crash_handlers(void)
+{
+    stack_t ss;
+    memset(&ss, 0, sizeof(ss));
+    ss.ss_sp = g_efs_fuse_altstack;
+    ss.ss_size = sizeof(g_efs_fuse_altstack);
+    ss.ss_flags = 0;
+    if (sigaltstack(&ss, NULL) != 0) {
+        fprintf(stderr, "Warning: sigaltstack failed: %s\n", strerror(errno));
+    }
+
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = efs_fuse_fatal_signal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESETHAND | SA_ONSTACK;
+    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGBUS, &sa, NULL);
+    sigaction(SIGABRT, &sa, NULL);
+    sigaction(SIGILL, &sa, NULL);
+    sigaction(SIGFPE, &sa, NULL);
+}
 
 /* Generate a per-mount inode namespace so concurrent clients never assign the
  * same inode number to different files. The namespace occupies the high bits
@@ -49,6 +100,14 @@ static ino_t stats_synthetic_ino(efs_ino_t parent_ino)
     return (ino_t)((1ULL << 62) | (parent_ino & ((1ULL << 62) - 1)));
 }
 
+/* du(1) sums st_blocks (512-byte units), not st_size. */
+static void stat_set_size_blocks(struct stat *stbuf, uint64_t size)
+{
+    stbuf->st_size = (off_t)size;
+    stbuf->st_blksize = EFS_CHUNK_SIZE;
+    stbuf->st_blocks = (blkcnt_t)((size + 511) / 512);
+}
+
 static int stats_fill_stat(const struct efs_inode *parent, struct stat *stbuf)
 {
     char text[512];
@@ -59,7 +118,7 @@ static int stats_fill_stat(const struct efs_inode *parent, struct stat *stbuf)
     stbuf->st_ino = stats_synthetic_ino(parent->ino);
     stbuf->st_mode = S_IFREG | 0444;
     stbuf->st_nlink = 1;
-    stbuf->st_size = (off_t)n;
+    stat_set_size_blocks(stbuf, (uint64_t)n);
     stbuf->st_uid = parent->uid;
     stbuf->st_gid = parent->gid;
     stbuf->st_mtim.tv_sec = (time_t)parent->mtime;
@@ -106,7 +165,7 @@ static int efs_fuse_getattr(const char *path, struct stat *stbuf)
     stbuf->st_ino = ino.ino;
     stbuf->st_mode = ino.mode;
     stbuf->st_nlink = ino.nlink;
-    stbuf->st_size = ino.size;
+    stat_set_size_blocks(stbuf, ino.size);
     stbuf->st_uid = ino.uid;
     stbuf->st_gid = ino.gid;
     stbuf->st_mtim.tv_sec = (time_t)ino.mtime;
@@ -163,18 +222,13 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         return -ENOTDIR;
 
     /* Snapshot under the lock; call filler unlocked so a same-thread
-     * getattr re-entry cannot double-lock g_client.lock. */
+     * getattr re-entry cannot double-lock g_client.lock.
+     * .stats is lookup-only (getattr/open/read by explicit path) and is
+     * intentionally omitted from readdir so ls of the directory hides it. */
     struct readdir_collect_arg col = {0};
-    struct stat stats_st;
-    int have_stats = 0;
     pthread_mutex_lock(&g_client.lock);
     rc = efs_export_foreach_child(&g_client.export, parent.ino,
                                   readdir_collect_cb, &col);
-    struct efs_inode fresh;
-    if (rc == 0 &&
-        efs_export_get_inode(&g_client.export, parent.ino, &fresh) == 0 &&
-        stats_fill_stat(&fresh, &stats_st) == 0)
-        have_stats = 1;
     pthread_mutex_unlock(&g_client.lock);
     if (rc != 0) {
         free(col.ents);
@@ -185,8 +239,6 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     filler(buf, "..", NULL, 0);
     for (size_t i = 0; i < col.count; i++)
         filler(buf, col.ents[i].name, &col.ents[i].st, 0);
-    if (have_stats)
-        filler(buf, EFS_STATS_NAME, &stats_st, 0);
     free(col.ents);
     return 0;
 }
@@ -367,6 +419,22 @@ static int efs_fuse_statfs(const char *path, struct statvfs *stbuf)
     return 0;
 }
 
+static int efs_rc_to_errno(int rc)
+{
+    switch (rc) {
+    case EFS_OK:            return 0;
+    case EFS_ERR_NOT_FOUND: return -ENOENT;
+    case EFS_ERR_EXIST:     return -EEXIST;
+    case EFS_ERR_NOMEM:     return -ENOMEM;
+    case EFS_ERR_INVAL:     return -EINVAL;
+    case EFS_ERR_QUOTA:     return -ENOSPC;
+    case EFS_ERR_NOT_EMPTY: return -ENOTEMPTY;
+    case EFS_ERR_NO_QUORUM:
+    case EFS_ERR_NET:
+    default:                return -EIO;
+    }
+}
+
 static int efs_fuse_chmod(const char *path, mode_t mode)
 {
     if (path_is_stats(path, NULL) == 0)
@@ -375,8 +443,14 @@ static int efs_fuse_chmod(const char *path, mode_t mode)
     int rc = efs_client_lookup(path, &ino);
     if (rc != 0)
         return -ENOENT;
-    if (efs_client_chmod(ino.ino, mode) != 0)
-        return -EIO;
+    /* Mode is applied in-memory first; failure here is almost always a
+     * batched metadata flush (see efs_client_note_meta_change), not chmod. */
+    rc = efs_client_chmod(ino.ino, mode);
+    if (rc != 0) {
+        fprintf(stderr, "chmod %s failed: %s\n", path, efs_strerror(rc));
+        fflush(stderr);
+        return efs_rc_to_errno(rc);
+    }
     return 0;
 }
 
@@ -741,6 +815,11 @@ static void stop_perf_recorder(void)
 
 int main(int argc, char **argv)
 {
+    /* Line-buffer logs even when stdout is a pipe (client.sh | tee). */
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    setvbuf(stderr, NULL, _IOLBF, 0);
+    efs_fuse_install_crash_handlers();
+
     int perf = 0;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--perf") == 0) {
@@ -838,16 +917,38 @@ int main(int argc, char **argv)
     }
 
     /* Fetch initial metadata from one of the nodes. */
+    printf("fetching metadata...\n");
+    fflush(stdout);
     int rc = -1;
     for (uint32_t i = 0; i < g_client.node_count; i++) {
+        printf("  try %s:%u\n", g_client.nodes[i].addr, g_client.nodes[i].port);
+        fflush(stdout);
         rc = efs_client_fetch_metadata(g_client.nodes[i].addr, g_client.nodes[i].port);
         if (rc == 0)
             break;
+        printf("  fetch failed rc=%d (%s)\n", rc, efs_strerror(rc));
+        fflush(stdout);
     }
     if (rc != 0) {
-        fprintf(stderr, "Could not fetch metadata from any node\n");
+        fprintf(stderr,
+                "Could not fetch metadata from any node (%s).\n"
+                "status/list-exports can still work while mount fails if the\n"
+                "export root exists but its 2+1 meta table pages cannot be\n"
+                "reconstructed (missing/corrupt fragments on peers).\n",
+                efs_strerror(rc));
         return 1;
     }
+    /* PUTs carry export_id; do not leave the hardcoded 1 if meta says otherwise. */
+    g_client.export_id = g_client.export.id ? g_client.export.id : 1;
+    if (g_client.export.name[0] &&
+        strcmp(g_client.export.name, g_client.export_name) != 0) {
+        fprintf(stderr,
+                "Warning: mounted as '%s' but server export[0] is '%s' (id=%u)\n",
+                g_client.export_name, g_client.export.name, g_client.export_id);
+    }
+    printf("export id=%u name=%s\n", g_client.export_id,
+           g_client.export.name[0] ? g_client.export.name : g_client.export_name);
+    fflush(stdout);
 
     char *fuse_argv[64];
     int fuse_argc = 0;
