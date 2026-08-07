@@ -21,8 +21,11 @@ NUM_CLIENTS="${NUM_CLIENTS:-2}"
 NUM_SERVERS="${NUM_SERVERS:-3}"
 PARTITION="${PARTITION:-mit_normal}"
 JOB_TIME="${JOB_TIME:-00:30:00}"
+CLIENT_CPUS="${CLIENT_CPUS:-8}"
+CLIENT_MEM="${CLIENT_MEM:-8G}"
 EXPORT_NAME="load2cli-i${ITER}"
 NOTE="${NOTE:-}"
+DO_READ="${DO_READ:-1}"
 cd "$REPO"
 
 # shellcheck source=lib-harness.sh
@@ -130,8 +133,8 @@ for cid in $(seq 1 "$NUM_CLIENTS"); do
         [ -n "$prev" ] && excl="${excl},${prev}"
     done
     job=$(sbatch --parsable -p "$PARTITION" --time="$JOB_TIME" \
-        --cpus-per-task=8 --mem=8G --exclude="$excl" \
-        --export=ALL,ROUND="$ITER",CLIENT_ID="$cid",FILE_GIB="$FILE_GIB",FILES_PER_CLIENT="$FILES_PER_CLIENT",EXPORT_NAME="$EXPORT_NAME",PROF_ROOT="$PROF_ROOT",NUM_SERVERS="$NUM_SERVERS",EFS_META_BATCH_OPS=65536 \
+        --cpus-per-task="$CLIENT_CPUS" --mem="$CLIENT_MEM" --exclude="$excl" \
+        --export=ALL,ROUND="$ITER",CLIENT_ID="$cid",FILE_GIB="$FILE_GIB",FILES_PER_CLIENT="$FILES_PER_CLIENT",EXPORT_NAME="$EXPORT_NAME",PROF_ROOT="$PROF_ROOT",NUM_SERVERS="$NUM_SERVERS",EFS_META_BATCH_OPS=65536,DO_READ="$DO_READ",EFS_NUMA_AFFINITY="${EFS_NUMA_AFFINITY:-}" \
         slurm-jobs/client-stream-ib.sh)
     CLIENT_JOBS+=("$job")
     echo "  client $cid job $job"

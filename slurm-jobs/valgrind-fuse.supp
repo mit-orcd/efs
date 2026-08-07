@@ -1,0 +1,34 @@
+# libfuse / glibc noise under Valgrind on Engaging (not efs bugs).
+
+{
+   fuse_lib_ioctl_writev_uninit
+   Memcheck:Param
+   writev(vector[2])
+   fun:writev
+   fun:fuse_kern_chan_send
+   fun:fuse_chan_send
+   fun:fuse_send_msg
+   fun:fuse_send_reply_iov_nofree
+   fun:send_reply_iov
+   fun:fuse_reply_ioctl
+   fun:fuse_lib_ioctl
+}
+
+{
+   fusermount_execve_env_tunables
+   Memcheck:Param
+   execve(envp[i])
+   fun:execve
+   fun:exec_fusermount
+   fun:fuse_mount_fusermount
+}
+
+{
+   fusermount_execvpe_env_tunables
+   Memcheck:Param
+   execve(envp[i])
+   fun:execve
+   fun:__execvpe_common
+   fun:exec_fusermount
+   fun:fuse_mount_fusermount
+}

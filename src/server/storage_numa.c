@@ -8,6 +8,7 @@ void server_discover_storage_numa(struct efsd_server *s)
 {
     if (!s)
         return;
+    int numa_on = efs_numa_affinity_enabled();
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
     for (uint32_t i = 0; i < EFS_MAX_STORAGE_PATHS; i++) {
         s->storage_numa_node[i] = -1;
@@ -20,12 +21,14 @@ void server_discover_storage_numa(struct efsd_server *s)
         CPU_ZERO(&set);
         if (efs_numa_for_path(s->storage_paths[i], &node, &set) == 0) {
             s->storage_numa_node[i] = node;
-            s->storage_cpu_set[i] = set;
-            s->storage_affinity_valid[i] = 1;
             char cpus[256];
             efs_numa_format_cpuset(&set, cpus, sizeof(cpus));
-            printf("storage[%u]=%s numa=%d cpus=%s\n", i, s->storage_paths[i],
-                   node, cpus);
+            printf("storage[%u]=%s numa=%d cpus=%s affinity=%s\n", i,
+                   s->storage_paths[i], node, cpus, numa_on ? "on" : "off");
+            if (numa_on) {
+                s->storage_cpu_set[i] = set;
+                s->storage_affinity_valid[i] = 1;
+            }
         } else {
             printf("storage[%u]=%s numa=unknown (unbound)\n", i,
                    s->storage_paths[i]);

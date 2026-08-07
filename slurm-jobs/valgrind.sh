@@ -33,12 +33,16 @@ cd "$REPO"
 echo "=== host=$(hostname) job=$SLURM_JOB_ID $(date) ==="
 command -v valgrind
 valgrind --version
+# Hide AVX-512 from glibc IFUNCs under Valgrind.
+export GLIBC_TUNABLES="glibc.cpu.hwcaps=-AVX512F,-AVX512DQ,-AVX512VL,-AVX512BW,-AVX512CD"
+
 
 echo "=== building with -O1 -g ==="
 # Clean project objects only — do not wipe deps/libfuse (configure + headers).
 rm -f src/common/*.o src/client/*.o src/server/*.o src/mgmt/*.o src/query/*.o
 rm -f deps/blake3/*.o libefs.a efsd efs-fuse efs-mgmt efs-query
-rm -f tests/test_erasure tests/test_placement tests/test_integration \
+rm -f tests/test_erasure tests/test_placement tests/test_local_ec \
+      tests/test_numa_locality tests/test_integration \
       tests/test_quota tests/test_migrate tests/test_directio \
       tests/test_rejoin tests/test_query tests/test_list_exports
 
@@ -47,7 +51,7 @@ make -j"${SLURM_CPUS_PER_TASK}" deps/libfuse/lib/.libs/libfuse.a
 
 # Command-line CFLAGS overrides Makefile CFLAGS, so include FUSE flags here.
 make -j"${SLURM_CPUS_PER_TASK}" \
-  CFLAGS='-O1 -g -fno-omit-frame-pointer -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -Ideps/libfuse/include -D_FILE_OFFSET_BITS=64'
+  CFLAGS='-O1 -g -fno-omit-frame-pointer -std=c99 -Wall -Wextra -D_GNU_SOURCE -DBLAKE3_NO_AVX512 -Wno-stringop-truncation -Wno-format-truncation -Ideps/libfuse/include -D_FILE_OFFSET_BITS=64'
 
 # definite+indirect only as failures; "still reachable" at exit is often
 # process-lifetime pools (TCP conn fds, pthread mutexes) and is summarized.
@@ -83,6 +87,8 @@ fi
 TESTS=(
   tests/test_erasure
   tests/test_placement
+  tests/test_local_ec
+  tests/test_numa_locality
   tests/test_integration
   tests/test_quota
   tests/test_migrate

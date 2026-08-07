@@ -116,6 +116,61 @@ int efs_client_utimens(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec)
 int efs_client_truncate(efs_ino_t ino, uint64_t size)
 {
     pthread_mutex_lock(&g_client.lock);
+    struct efs_inode inode;
+    if (efs_export_get_inode(&g_client.export, ino, &inode) != 0) {
+        pthread_mutex_unlock(&g_client.lock);
+        return EFS_ERR_NOT_FOUND;
+    }
+    uint64_t old_size = inode.size;
+    pthread_mutex_unlock(&g_client.lock);
+
+    if (size == old_size)
+        return EFS_OK;
+
+    if (size < old_size) {
+        uint32_t first_drop;
+        if (size == 0) {
+            first_drop = 0;
+        } else {
+            uint32_t ci = (uint32_t)(size / EFS_CHUNK_SIZE);
+            uint32_t keep = (uint32_t)(size % EFS_CHUNK_SIZE);
+            if (keep != 0) {
+                /* Rewrite last kept chunk with a zeroed tail so a later
+                 * truncate-up does not resurrect discarded bytes. */
+                uint8_t *chunk = malloc(EFS_CHUNK_SIZE);
+                if (!chunk)
+                    return EFS_ERR_NOMEM;
+                memset(chunk, 0, EFS_CHUNK_SIZE);
+                uint64_t chunk_start = (uint64_t)ci * EFS_CHUNK_SIZE;
+                size_t want = (size_t)(old_size - chunk_start);
+                if (want > EFS_CHUNK_SIZE)
+                    want = EFS_CHUNK_SIZE;
+                size_t got = 0;
+                (void)efs_client_read(ino, chunk_start, want, (char *)chunk, &got);
+                memset(chunk + keep, 0, EFS_CHUNK_SIZE - keep);
+                int wrc = efs_client_write(ino, chunk_start, EFS_CHUNK_SIZE,
+                                           (const char *)chunk);
+                free(chunk);
+                if (wrc != 0)
+                    return wrc;
+                first_drop = ci + 1;
+            } else {
+                first_drop = ci;
+            }
+        }
+        pthread_mutex_lock(&g_client.lock);
+        efs_export_drop_chunks_from(&g_client.export, ino, first_drop);
+        int rc = efs_export_set_size(&g_client.export, ino, size);
+        if (rc == 0)
+            efs_client_mark_ino_dirty(ino);
+        pthread_mutex_unlock(&g_client.lock);
+        if (rc == 0)
+            rc = efs_client_note_meta_change(0);
+        return rc;
+    }
+
+    /* Grow: logical sparse hole; reads of unmapped chunks return zeros. */
+    pthread_mutex_lock(&g_client.lock);
     int rc = efs_export_set_size(&g_client.export, ino, size);
     if (rc == 0)
         efs_client_mark_ino_dirty(ino);

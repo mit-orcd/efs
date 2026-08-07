@@ -313,11 +313,18 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
         if (to_copy > EFS_CHUNK_SIZE - chunk_off)
             to_copy = EFS_CHUNK_SIZE - chunk_off;
 
-        /* Fetch fragments and decode from any two that are individually
-         * self-consistent (each fragment carries its own BLAKE3 checksum). */
+        /* Sparse / truncate-up holes: no chunk map entry → zeros.
+         * Mapped chunks must decode; corruption must not be masked. */
         uint8_t chunk[EFS_CHUNK_SIZE];
-        if (efs_client_decode_placed_chunk(ino, chunk_index, chunk) != EFS_OK)
+        struct efs_chunk_entry ce;
+        pthread_mutex_lock(&g_client.lock);
+        int have_ce = efs_export_get_chunk(&g_client.export, ino, chunk_index, &ce);
+        pthread_mutex_unlock(&g_client.lock);
+        if (have_ce != EFS_OK) {
+            memset(chunk, 0, EFS_CHUNK_SIZE);
+        } else if (efs_client_decode_placed_chunk(ino, chunk_index, chunk) != EFS_OK) {
             return EFS_ERR_DECODE;
+        }
 
         memcpy(buf + total, chunk + chunk_off, to_copy);
         total += to_copy;

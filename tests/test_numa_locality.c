@@ -1,5 +1,6 @@
 #include "efs/numa_locality.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sched.h>
 
@@ -131,6 +132,30 @@ int main(void)
             fprintf(stderr, "FAIL format got '%s'\n", buf);
             fail++;
         }
+    }
+
+    {
+        unsetenv("EFS_NUMA_AFFINITY");
+        if (efs_numa_affinity_enabled() != 0) {
+            fprintf(stderr, "FAIL affinity default should be off\n");
+            fail++;
+        }
+        setenv("EFS_NUMA_AFFINITY", "1", 1);
+        if (efs_numa_affinity_enabled() != 1) {
+            fprintf(stderr, "FAIL affinity=1 should be on\n");
+            fail++;
+        }
+        setenv("EFS_NUMA_AFFINITY", "on", 1);
+        if (efs_numa_affinity_enabled() != 1) {
+            fprintf(stderr, "FAIL affinity=on should be on\n");
+            fail++;
+        }
+        setenv("EFS_NUMA_AFFINITY", "0", 1);
+        if (efs_numa_affinity_enabled() != 0) {
+            fprintf(stderr, "FAIL affinity=0 should be off\n");
+            fail++;
+        }
+        unsetenv("EFS_NUMA_AFFINITY");
     }
 
     if (fail == 0)

@@ -348,3 +348,12 @@ void efs_numa_apply_affinity(const cpu_set_t *set)
         return;
     (void)pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), set);
 }
+
+int efs_numa_affinity_enabled(void)
+{
+    const char *e = getenv("EFS_NUMA_AFFINITY");
+    if (!e || !*e)
+        return 0;
+    return strcmp(e, "1") == 0 || strcmp(e, "on") == 0 ||
+           strcmp(e, "true") == 0;
+}

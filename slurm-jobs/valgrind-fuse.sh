@@ -45,13 +45,21 @@ cd "$REPO"
 
 echo "=== host=$(hostname) job=$SLURM_JOB_ID $(date) ==="
 valgrind --version
+# Hide AVX-512 from glibc IFUNCs under Valgrind.
+export GLIBC_TUNABLES="glibc.cpu.hwcaps=-AVX512F,-AVX512DQ,-AVX512VL,-AVX512BW,-AVX512CD"
 
-echo "=== building -O1 -g ==="
+
+echo "=== building -O1 -g (no AVX-512; Valgrind-safe libfuse) ==="
 rm -f src/common/*.o src/client/*.o src/server/*.o src/mgmt/*.o src/query/*.o
 rm -f deps/blake3/*.o libefs.a efsd efs-fuse efs-mgmt efs-query
-make -j"${SLURM_CPUS_PER_TASK}" deps/libfuse/lib/.libs/libfuse.a
-make -j"${SLURM_CPUS_PER_TASK}" \
-  CFLAGS='-O1 -g -fno-omit-frame-pointer -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -Ideps/libfuse/include -D_FILE_OFFSET_BITS=64'
+VG_CFLAGS='-O1 -g -fno-omit-frame-pointer -std=c99 -Wall -Wextra -D_GNU_SOURCE -DBLAKE3_NO_AVX512 -mno-avx512f -mno-avx512vl -mno-avx512bw -mno-avx512dq -Wno-stringop-truncation -Wno-format-truncation -Ideps/libfuse/include -D_FILE_OFFSET_BITS=64'
+FUSE_VG_CFLAGS='-O1 -g -fno-omit-frame-pointer -mno-avx512f -mno-avx512vl -mno-avx512bw -mno-avx512dq -Wno-stringop-truncation -Wno-implicit-fallthrough -Wno-unused-result'
+rm -f deps/libfuse/.efs-configured
+if [ -f deps/libfuse/Makefile ]; then (cd deps/libfuse && make clean) || true; fi
+(cd deps/libfuse && ./configure --disable-util --disable-example CFLAGS="$FUSE_VG_CFLAGS")
+touch deps/libfuse/.efs-configured
+make -j"${SLURM_CPUS_PER_TASK}" -C deps/libfuse
+make -j"${SLURM_CPUS_PER_TASK}" CFLAGS="$VG_CFLAGS"
 
 echo "=== starting 3 servers (not under valgrind) ==="
 # Unique ports per job to avoid collisions with leftover efsd.

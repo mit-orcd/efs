@@ -205,8 +205,65 @@ for f in $(seq 1 "$FILES_PER_CLIENT"); do
 done
 cli_mibs=$(awk -v b="$total_bytes" -v t="$WALL" 'BEGIN{printf "%.2f", (b/1024/1024)/(t<0.001?0.001:t)}')
 cli_gibs=$(awk -v b="$total_bytes" -v t="$WALL" 'BEGIN{printf "%.3f", (b/1024/1024/1024)/(t<0.001?0.001:t)}')
-echo "client_${CLIENT_ID}_wall_sec=$WALL client_${CLIENT_ID}_bytes=$total_bytes client_${CLIENT_ID}_MiB_s=$cli_mibs client_${CLIENT_ID}_GiB_s=$cli_gibs ok=$ok"
+echo "client_${CLIENT_ID}_write_wall_sec=$WALL client_${CLIENT_ID}_write_bytes=$total_bytes client_${CLIENT_ID}_write_MiB_s=$cli_mibs client_${CLIENT_ID}_write_GiB_s=$cli_gibs ok=$ok"
+echo "$WALL $total_bytes $cli_mibs $cli_gibs $ok" > "$PROF/SUMMARY.write.txt"
 echo "$WALL $total_bytes $cli_mibs $cli_gibs $ok" > "$PROF/SUMMARY.txt"
+
+# Optional read-back phase (parallel dd of the files just written).
+READ_OK=1
+READ_WALL=0
+READ_BYTES=0
+if [ "${DO_READ:-1}" = "1" ]; then
+    echo "=== client $CLIENT_ID: parallel read-back ==="
+    read_one() {
+        local fid="$1"
+        local path="$DIR/stream-${fid}.bin"
+        local log="$PROF/reader-${fid}.log"
+        {
+            local start end elapsed got
+            start=$(date +%s.%N)
+            if dd if="$path" of=/dev/null bs="$DD_BS" status=progress; then
+                end=$(date +%s.%N)
+                elapsed=$(awk -v s="$start" -v e="$end" 'BEGIN{printf "%.3f", e-s}')
+                got=$(stat -c%s "$path" 2>/dev/null || echo 0)
+                local thr_mibs thr_gibs
+                thr_mibs=$(awk -v b="$got" -v t="$elapsed" 'BEGIN{printf "%.2f", (b/1024/1024)/t}')
+                thr_gibs=$(awk -v b="$got" -v t="$elapsed" 'BEGIN{printf "%.3f", (b/1024/1024/1024)/t}')
+                echo "[c${CLIENT_ID}-f${fid}] read done wall_sec=$elapsed bytes=$got MiB_s=$thr_mibs GiB_s=$thr_gibs"
+                echo "$elapsed $got $thr_mibs $thr_gibs" > "$PROF/reader-${fid}.result"
+            else
+                echo "[c${CLIENT_ID}-f${fid}] READ FAILED"
+                echo "FAIL" > "$PROF/reader-${fid}.result"
+                return 1
+            fi
+        } >"$log" 2>&1
+    }
+    RSTART=$(date +%s.%N)
+    RPIDS=()
+    for f in $(seq 1 "$FILES_PER_CLIENT"); do
+        read_one "$f" &
+        RPIDS+=($!)
+    done
+    for pid in "${RPIDS[@]}"; do
+        wait "$pid" || READ_OK=0
+    done
+    REND=$(date +%s.%N)
+    READ_WALL=$(awk -v s="$RSTART" -v e="$REND" 'BEGIN{printf "%.3f", e-s}')
+    for f in $(seq 1 "$FILES_PER_CLIENT"); do
+        if [ -f "$PROF/reader-${f}.result" ] && ! grep -q FAIL "$PROF/reader-${f}.result"; then
+            read -r el got mibs gibs < "$PROF/reader-${f}.result"
+            READ_BYTES=$((READ_BYTES + got))
+            echo "read_file_${f}_wall_sec=$el read_file_${f}_MiB_s=$mibs"
+        else
+            READ_OK=0
+        fi
+    done
+    read_mibs=$(awk -v b="$READ_BYTES" -v t="$READ_WALL" 'BEGIN{printf "%.2f", (b/1024/1024)/(t<0.001?0.001:t)}')
+    read_gibs=$(awk -v b="$READ_BYTES" -v t="$READ_WALL" 'BEGIN{printf "%.3f", (b/1024/1024/1024)/(t<0.001?0.001:t)}')
+    echo "client_${CLIENT_ID}_read_wall_sec=$READ_WALL client_${CLIENT_ID}_read_bytes=$READ_BYTES client_${CLIENT_ID}_read_MiB_s=$read_mibs client_${CLIENT_ID}_read_GiB_s=$read_gibs ok=$READ_OK"
+    echo "$READ_WALL $READ_BYTES $read_mibs $read_gibs $READ_OK" > "$PROF/SUMMARY.read.txt"
+    [ "$READ_OK" = "1" ] || ok=0
+fi
 
 # Unmount before perf copy in cleanup
 fusermount -u "$MNT" 2>/dev/null || umount "$MNT" 2>/dev/null || true

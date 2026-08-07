@@ -419,6 +419,34 @@ static void remove_chunks_for_ino(struct efs_export *ex, efs_ino_t ino)
     }
 }
 
+void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
+                                 uint32_t first_chunk)
+{
+    if (!ex)
+        return;
+    uint64_t j = 0;
+    while (j < ex->chunk_count) {
+        if (ex->chunks[j].ino == ino &&
+            ex->chunks[j].chunk_index >= first_chunk) {
+            uint32_t cidx = ex->chunks[j].chunk_index;
+            chunk_idx_del(ex, ino, cidx);
+            uint64_t clast = ex->chunk_count - 1;
+            if (j != clast) {
+                chunk_idx_del(ex, ex->chunks[clast].ino,
+                              ex->chunks[clast].chunk_index);
+                ex->chunks[j] = ex->chunks[clast];
+                ex->chunk_count--;
+                chunk_idx_put(ex, ex->chunks[j].ino, ex->chunks[j].chunk_index,
+                              j);
+            } else {
+                ex->chunk_count--;
+            }
+        } else {
+            j++;
+        }
+    }
+}
+
 /* Swap-remove inode array slot i; refresh indexes for the moved row. */
 static void remove_inode_slot(struct efs_export *ex, uint64_t i)
 {

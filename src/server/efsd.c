@@ -156,16 +156,11 @@ static void *conn_thread(void *arg)
 static void sigint_handler(int sig)
 {
     (void)sig;
-    /* Async-signal-safe only. Closing listen_fd unblocks accept() even when
-     * the libc wrapper restarts interrupted syscalls (SA_RESTART). Stopping
-     * perf (waitpid/sleep) happens in main after the accept loop exits. */
-    if (g_server) {
+    /* Async-signal-safe only: flip the flag. Do not close(listen_fd) here —
+     * racing accept()/other threads on a closed fd has segfaulted on Engaging.
+     * Without SA_RESTART, accept() returns EINTR and the loop exits. */
+    if (g_server)
         g_server->running = 0;
-        if (g_server->listen_fd >= 0) {
-            close(g_server->listen_fd);
-            g_server->listen_fd = -1;
-        }
-    }
 }
 
 int main(int argc, char **argv)

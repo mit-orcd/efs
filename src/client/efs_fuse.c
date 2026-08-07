@@ -635,12 +635,15 @@ int main(int argc, char **argv)
         printf("Discovered %u cluster nodes from %s\n", g_client.node_count, nodes[0]);
     }
 
-    /* Soft NUMA: prefer CPUs near the NIC used to reach the first seed. */
+    /* Soft NUMA: discover NIC locality; pin only if EFS_NUMA_AFFINITY=1/on/true
+     * (default off). Pinning the main thread before fuse_main makes every FUSE
+     * worker inherit that mask and can collapse throughput under Slurm. */
     g_client.net_numa_node = -1;
     g_client.net_affinity_valid = 0;
     g_client.net_ifname[0] = '\0';
     CPU_ZERO(&g_client.net_cpu_set);
     {
+        int numa_on = efs_numa_affinity_enabled();
         int pinned = 0;
         for (uint32_t i = 0; i < node_count && !pinned; i++) {
             char host[64];
@@ -653,13 +656,16 @@ int main(int argc, char **argv)
             if (efs_numa_for_peer(host, port, &numa, &set, ifname,
                                   sizeof(ifname)) == 0) {
                 g_client.net_numa_node = numa;
-                g_client.net_cpu_set = set;
-                g_client.net_affinity_valid = 1;
                 snprintf(g_client.net_ifname, sizeof(g_client.net_ifname), "%s",
                          ifname);
-                printf("nic_numa=%d if=%s\n", numa, ifname);
+                printf("nic_numa=%d if=%s affinity=%s\n", numa, ifname,
+                       numa_on ? "on" : "off");
                 fflush(stdout);
-                efs_numa_apply_affinity(&g_client.net_cpu_set);
+                if (numa_on) {
+                    g_client.net_cpu_set = set;
+                    g_client.net_affinity_valid = 1;
+                    efs_numa_apply_affinity(&g_client.net_cpu_set);
+                }
                 pinned = 1;
             }
         }
