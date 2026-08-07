@@ -23,6 +23,22 @@ void efs_hash_zero_fragment(uint8_t out[EFS_HASH_SIZE])
     memcpy(out, cached, EFS_HASH_SIZE);
 }
 
+int efs_bytes_are_zero(const void *data, size_t len)
+{
+    if (!data)
+        return 0;
+    if (len == EFS_FRAGMENT_SIZE) {
+        static const uint8_t zeros[EFS_FRAGMENT_SIZE];
+        return memcmp(data, zeros, EFS_FRAGMENT_SIZE) == 0;
+    }
+    const uint8_t *p = data;
+    for (size_t i = 0; i < len; i++) {
+        if (p[i] != 0)
+            return 0;
+    }
+    return 1;
+}
+
 void efs_hash_to_hex(const uint8_t hash[EFS_HASH_SIZE], char hex[EFS_HASH_SIZE * 2 + 1])
 {
     static const char hex_chars[] = "0123456789abcdef";

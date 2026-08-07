@@ -86,6 +86,9 @@ int server_read_fragment(struct efsd_server *s, struct efs_export *ex,
                          efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                          uint8_t *data, uint32_t *data_len);
 
+/* Writer-thread hint from writer.c: payload already verified as all zeros. */
+extern __thread int efs_tls_write_known_zero;
+
 /* Synchronous fragment write (disk I/O); used by the writer pool. */
 int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
                                efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,

@@ -1,6 +1,7 @@
 # build artifacts
 /efsd
 /efs-fuse
+/efs-bench
 /efs-mgmt
 /efs-query
 *.o
@@ -12,6 +13,7 @@ libefs.a
 
 # tests (built binaries; keep sources and scripts)
 tests/test_directio
+tests/test_dir_stats
 tests/test_erasure
 tests/test_integration
 tests/test_list_exports
@@ -23,6 +25,7 @@ tests/test_quota
 tests/test_rejoin
 
 # dependency build artifacts
+deps/libfuse/.efs-configured
 deps/libfuse/Makefile
 deps/libfuse/config.h
 deps/libfuse/config.log

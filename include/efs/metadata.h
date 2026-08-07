@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <sys/types.h>
 
+/* Virtual per-directory stats file (FUSE-only; not a real inode). */
+#define EFS_STATS_NAME ".stats"
+
 struct efs_chunk_entry {
     efs_ino_t ino;
     uint32_t chunk_index;
@@ -23,8 +26,22 @@ struct efs_inode {
     uint64_t mtime;
     uint32_t mtime_nsec; /* nanoseconds portion of mtime (for rsync etc.) */
     uint64_t ctime;
+    uint64_t atime; /* set on create / utimens; never bumped on read */
     uint32_t nlink;
     char name[EFS_MAX_NAME];
+    /* Directory rollups (contents only; zero on files). Immediate = direct
+     * children; tree = all descendants. Size sums regular-file sizes
+     * (dent-based; hard links may double-count). */
+    uint64_t imm_files, imm_dirs, tree_files, tree_dirs;
+    uint64_t imm_bytes, tree_bytes;
+    uint64_t imm_tmin, imm_tmax, tree_tmin, tree_tmax;
+};
+
+/* In-memory parent → child slot list (not serialized). */
+struct efs_child_vec {
+    uint64_t *slots;
+    uint64_t count;
+    uint64_t cap;
 };
 
 /* Tiny fully-replicated export root. Bulk inode/chunk tables live in
@@ -63,6 +80,14 @@ struct efs_export {
     uint64_t *chunk_keys;
     uint64_t *chunk_vals;
     uint64_t chunk_mask;
+
+    /* parent_ino → efs_child_vec (in-memory only; rebuilt on load/merge). */
+    uint64_t *child_keys;
+    uint64_t *child_vals; /* index into child_vecs */
+    uint64_t child_mask;
+    struct efs_child_vec *child_vecs;
+    uint64_t child_vec_count;
+    uint64_t child_vec_cap;
 
     /* When set, metadata.bin stores efs_export_root (EFSR); bulk tables are
      * reconstructed from 2+1 pages. The in-memory inode/chunk arrays remain
@@ -130,6 +155,9 @@ int efs_export_set_mtime(struct efs_export *ex, efs_ino_t ino, uint64_t mtime);
 int efs_export_set_mtime_ns(struct efs_export *ex, efs_ino_t ino,
                             uint64_t mtime, uint32_t mtime_nsec);
 
+/* Set inode access time (seconds). Not bumped on read. */
+int efs_export_set_atime(struct efs_export *ex, efs_ino_t ino, uint64_t atime);
+
 /* Rename/move an inode. If a destination inode already exists, it is replaced
    only when the source and destination are both regular files or both empty
    directories. Returns EFS_ERR_NOT_FOUND if the source does not exist. */
@@ -144,6 +172,18 @@ int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
 /* Get a chunk entry. Returns 0 if found. */
 int efs_export_get_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index,
                          struct efs_chunk_entry *out);
+
+/* Rebuild derived directory rollups from the inode table (after load/merge). */
+void efs_export_recompute_rollups(struct efs_export *ex);
+
+/* Format directory rollup fields into .stats text. Returns bytes written
+ * (excluding NUL), or -1 if buf is too small / not a directory. */
+int efs_export_format_stats(const struct efs_inode *dir, char *buf, size_t buflen);
+
+/* Visit each child directory-entry slot under parent (skips the dir itself). */
+typedef int (*efs_child_cb)(struct efs_export *ex, uint64_t slot, void *arg);
+int efs_export_foreach_child(struct efs_export *ex, efs_ino_t parent,
+                             efs_child_cb cb, void *arg);
 
 /* Serialize export metadata to a memory buffer. Caller must free *buf. */
 int efs_export_serialize(struct efs_export *ex, char **buf, size_t *len);

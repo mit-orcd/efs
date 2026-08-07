@@ -37,16 +37,19 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
-TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_local_ec.c tests/test_numa_locality.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c
-TEST_BINS = tests/test_erasure tests/test_placement tests/test_local_ec tests/test_numa_locality tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports
+TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_local_ec.c tests/test_numa_locality.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c tests/test_dir_stats.c
+TEST_BINS = tests/test_erasure tests/test_placement tests/test_local_ec tests/test_numa_locality tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports tests/test_dir_stats
 
 SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/handler.c \
               src/server/cluster.c src/server/meta_server.c src/server/migrate.c \
-              src/server/writer.c src/server/storage_numa.c
+              src/server/writer.c src/server/storage_numa.c src/server/bench_local.c
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 
 CLIENT_SRCS = src/client/efs_fuse.c
 CLIENT_OBJS = $(CLIENT_SRCS:.c=.o)
+
+BENCH_CLIENT_SRC = src/client/efs_bench.c
+BENCH_CLIENT_OBJ = $(BENCH_CLIENT_SRC:.c=.o)
 
 MGMT_SRC = src/mgmt/efs_mgmt.c
 MGMT_OBJ = $(MGMT_SRC:.c=.o)
@@ -73,7 +76,7 @@ BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
 
 .PHONY: all clean tests test blake3-bench FORCE
 
-all: $(LIB) efsd efs-fuse efs-mgmt efs-query tests
+all: $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query tests
 
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
@@ -90,7 +93,12 @@ test: all
 	./tests/test_rejoin
 	./tests/test_query
 	./tests/test_list_exports
+	./tests/test_dir_stats
 	./tests/test_rw.sh
+
+# Rebuild when public headers change (struct layouts in metadata.h, etc.).
+$(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(MGMT_OBJ) $(QUERY_OBJ): \
+	include/efs/common.h include/efs/metadata.h include/efs/protocol.h
 
 $(LIB): $(COMMON_OBJS)
 	ar rcs $@ $^
@@ -100,6 +108,9 @@ efsd: $(SERVER_OBJS) $(LIB)
 
 efs-fuse: $(CLIENT_OBJS) $(LIB) $(FUSE_LIBS)
 	$(CC) $(CFLAGS) $(INCLUDES) $(FUSE_CFLAGS) -o $@ $(CLIENT_OBJS) $(LIB) $(LDFLAGS) $(FUSE_LIBS)
+
+efs-bench: $(BENCH_CLIENT_OBJ) $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(BENCH_CLIENT_OBJ) $(LIB) $(LDFLAGS)
 
 $(CLIENT_OBJS): CFLAGS += $(FUSE_CFLAGS)
 
@@ -127,8 +138,8 @@ $(FUSE_LIBS): $(FUSE_DIR)/.efs-configured
 	cd $(FUSE_DIR) && $(MAKE)
 
 clean:
-	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(MGMT_OBJ) $(QUERY_OBJ)
-	rm -f $(LIB) efsd efs-fuse efs-mgmt efs-query blake3-bench
+	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(MGMT_OBJ) $(QUERY_OBJ)
+	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query blake3-bench
 	rm -f $(TEST_BINS)
 	rm -f $(FUSE_DIR)/.efs-configured
 	if [ -f $(FUSE_DIR)/Makefile ]; then cd $(FUSE_DIR) && $(MAKE) clean; fi

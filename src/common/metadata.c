@@ -8,8 +8,8 @@
 
 #define EFS_META_MAGIC "EFSM"
 #define EFS_META_ROOT_MAGIC "EFSR"
-/* v2: uid/gid. v3: mtime_nsec after mtime. */
-#define EFS_META_VERSION 3
+/* v2: uid/gid. v3: mtime_nsec after mtime. v4: atime + dir rollups. */
+#define EFS_META_VERSION 4
 #define EFS_META_ROOT_VERSION 1
 
 static void time_now(uint64_t *t)
@@ -380,6 +380,502 @@ static struct efs_inode *inode_ptr(struct efs_export *ex, efs_ino_t ino)
     return NULL;
 }
 
+/* ---- parent → children index (in-memory) ---- */
+
+static void child_vecs_free(struct efs_export *ex)
+{
+    if (!ex)
+        return;
+    for (uint64_t i = 0; i < ex->child_vec_count; i++)
+        free(ex->child_vecs[i].slots);
+    free(ex->child_vecs);
+    ex->child_vecs = NULL;
+    ex->child_vec_count = 0;
+    ex->child_vec_cap = 0;
+    idx_free(&ex->child_keys, &ex->child_vals, &ex->child_mask);
+}
+
+static struct efs_child_vec *child_vec_get(struct efs_export *ex, efs_ino_t parent,
+                                          int create)
+{
+    if (!ex->child_keys || ex->child_mask == 0) {
+        if (!create)
+            return NULL;
+        uint64_t hint = ex->inode_count ? ex->inode_count : 16;
+        if (idx_init(&ex->child_keys, &ex->child_vals, &ex->child_mask, hint) != 0)
+            return NULL;
+    }
+    uint64_t vi = 0;
+    if (idx_get(ex->child_keys, ex->child_vals, ex->child_mask, parent, &vi) == 0 &&
+        vi < ex->child_vec_count)
+        return &ex->child_vecs[vi];
+    if (!create)
+        return NULL;
+    if (ex->child_vec_count >= ex->child_vec_cap) {
+        uint64_t ncap = ex->child_vec_cap ? ex->child_vec_cap * 2 : 16;
+        struct efs_child_vec *n = realloc(ex->child_vecs,
+                                          ncap * sizeof(struct efs_child_vec));
+        if (!n)
+            return NULL;
+        ex->child_vecs = n;
+        ex->child_vec_cap = ncap;
+    }
+    /* Grow open-addressing table if load is high. */
+    if (ex->child_vec_count * 2 > ex->child_mask) {
+        uint64_t old_mask = ex->child_mask;
+        uint64_t *ok = ex->child_keys;
+        uint64_t *ov = ex->child_vals;
+        if (idx_init(&ex->child_keys, &ex->child_vals, &ex->child_mask,
+                     ex->child_vec_count + 1) != 0) {
+            ex->child_keys = ok;
+            ex->child_vals = ov;
+            ex->child_mask = old_mask;
+            return NULL;
+        }
+        for (uint64_t i = 0; i <= old_mask; i++) {
+            if (ok[i])
+                idx_put(ex->child_keys, ex->child_vals, ex->child_mask, ok[i], ov[i]);
+        }
+        free(ok);
+        free(ov);
+    }
+    vi = ex->child_vec_count++;
+    memset(&ex->child_vecs[vi], 0, sizeof(ex->child_vecs[vi]));
+    idx_put(ex->child_keys, ex->child_vals, ex->child_mask, parent, vi);
+    return &ex->child_vecs[vi];
+}
+
+static int child_idx_add(struct efs_export *ex, efs_ino_t parent, uint64_t slot)
+{
+    if (parent == ex->inodes[slot].ino && parent == EFS_ROOT_INO)
+        return 0; /* root is not a child of itself for listing */
+    struct efs_child_vec *v = child_vec_get(ex, parent, 1);
+    if (!v)
+        return -1;
+    if (v->count >= v->cap) {
+        uint64_t ncap = v->cap ? v->cap * 2 : 4;
+        uint64_t *ns = realloc(v->slots, ncap * sizeof(uint64_t));
+        if (!ns)
+            return -1;
+        v->slots = ns;
+        v->cap = ncap;
+    }
+    v->slots[v->count++] = slot;
+    return 0;
+}
+
+static void child_idx_del(struct efs_export *ex, efs_ino_t parent, uint64_t slot)
+{
+    struct efs_child_vec *v = child_vec_get(ex, parent, 0);
+    if (!v)
+        return;
+    for (uint64_t i = 0; i < v->count; i++) {
+        if (v->slots[i] == slot) {
+            v->slots[i] = v->slots[v->count - 1];
+            v->count--;
+            return;
+        }
+    }
+}
+
+static void child_idx_replace_slot(struct efs_export *ex, efs_ino_t parent,
+                                   uint64_t old_slot, uint64_t new_slot)
+{
+    struct efs_child_vec *v = child_vec_get(ex, parent, 0);
+    if (!v)
+        return;
+    for (uint64_t i = 0; i < v->count; i++) {
+        if (v->slots[i] == old_slot) {
+            v->slots[i] = new_slot;
+            return;
+        }
+    }
+}
+
+static void child_idx_rebuild(struct efs_export *ex)
+{
+    child_vecs_free(ex);
+    for (uint64_t i = 0; i < ex->inode_count; i++) {
+        if (ex->inodes[i].ino == EFS_ROOT_INO &&
+            ex->inodes[i].parent == EFS_ROOT_INO)
+            continue;
+        child_idx_add(ex, ex->inodes[i].parent, i);
+    }
+}
+
+int efs_export_foreach_child(struct efs_export *ex, efs_ino_t parent,
+                             efs_child_cb cb, void *arg)
+{
+    if (!ex || !cb)
+        return EFS_ERR_INVAL;
+    struct efs_child_vec *v = child_vec_get(ex, parent, 0);
+    if (!v)
+        return EFS_OK;
+    for (uint64_t i = 0; i < v->count; i++) {
+        uint64_t slot = v->slots[i];
+        if (slot >= ex->inode_count)
+            continue;
+        if (ex->inodes[slot].ino == parent)
+            continue;
+        int rc = cb(ex, slot, arg);
+        if (rc != 0)
+            return rc;
+    }
+    return EFS_OK;
+}
+
+/* ---- directory rollups ---- */
+
+static uint64_t entry_tmin(const struct efs_inode *e)
+{
+    uint64_t t = e->mtime;
+    if (e->ctime < t)
+        t = e->ctime;
+    if (e->atime < t)
+        t = e->atime;
+    return t;
+}
+
+static uint64_t entry_tmax(const struct efs_inode *e)
+{
+    uint64_t t = e->mtime;
+    if (e->ctime > t)
+        t = e->ctime;
+    if (e->atime > t)
+        t = e->atime;
+    return t;
+}
+
+static void inode_clear_rollups(struct efs_inode *d)
+{
+    d->imm_files = d->imm_dirs = d->tree_files = d->tree_dirs = 0;
+    d->imm_bytes = d->tree_bytes = 0;
+    d->imm_tmin = d->imm_tmax = d->tree_tmin = d->tree_tmax = 0;
+}
+
+static void times_expand(uint64_t *tmin, uint64_t *tmax, uint64_t lo, uint64_t hi,
+                         int *has)
+{
+    if (!*has) {
+        *tmin = lo;
+        *tmax = hi;
+        *has = 1;
+        return;
+    }
+    if (lo < *tmin)
+        *tmin = lo;
+    if (hi > *tmax)
+        *tmax = hi;
+}
+
+/* Child C's contribution to a parent's tree_* aggregates. */
+static void child_tree_contrib(const struct efs_inode *c, uint64_t *files,
+                               uint64_t *dirs, uint64_t *bytes, uint64_t *tlo,
+                               uint64_t *thi)
+{
+    *tlo = entry_tmin(c);
+    *thi = entry_tmax(c);
+    if (efs_mode_is_dir(c->mode)) {
+        *files = c->tree_files;
+        *dirs = 1 + c->tree_dirs;
+        *bytes = c->tree_bytes;
+        if (c->tree_files + c->tree_dirs > 0) {
+            if (c->tree_tmin < *tlo)
+                *tlo = c->tree_tmin;
+            if (c->tree_tmax > *thi)
+                *thi = c->tree_tmax;
+        }
+    } else {
+        *files = 1;
+        *dirs = 0;
+        *bytes = c->size;
+    }
+}
+
+static void parent_add_child(struct efs_inode *p, const struct efs_inode *c)
+{
+    uint64_t lo = entry_tmin(c), hi = entry_tmax(c);
+    int has_imm = (p->imm_files + p->imm_dirs) > 0;
+    int has_tree = (p->tree_files + p->tree_dirs) > 0;
+
+    if (efs_mode_is_dir(c->mode)) {
+        p->imm_dirs++;
+        times_expand(&p->imm_tmin, &p->imm_tmax, lo, hi, &has_imm);
+
+        uint64_t tf, td, tb, tlo, thi;
+        child_tree_contrib(c, &tf, &td, &tb, &tlo, &thi);
+        p->tree_files += tf;
+        p->tree_dirs += td;
+        p->tree_bytes += tb;
+        times_expand(&p->tree_tmin, &p->tree_tmax, tlo, thi, &has_tree);
+    } else {
+        p->imm_files++;
+        p->tree_files++;
+        p->imm_bytes += c->size;
+        p->tree_bytes += c->size;
+        times_expand(&p->imm_tmin, &p->imm_tmax, lo, hi, &has_imm);
+        times_expand(&p->tree_tmin, &p->tree_tmax, lo, hi, &has_tree);
+    }
+}
+
+static void ancestor_add_tree(struct efs_inode *a, uint64_t files, uint64_t dirs,
+                              uint64_t bytes, uint64_t tlo, uint64_t thi)
+{
+    int has = (a->tree_files + a->tree_dirs) > 0;
+    a->tree_files += files;
+    a->tree_dirs += dirs;
+    a->tree_bytes += bytes;
+    times_expand(&a->tree_tmin, &a->tree_tmax, tlo, thi, &has);
+}
+
+static void ancestor_sub_tree(struct efs_inode *a, uint64_t files, uint64_t dirs,
+                              uint64_t bytes)
+{
+    if (a->tree_files >= files)
+        a->tree_files -= files;
+    else
+        a->tree_files = 0;
+    if (a->tree_dirs >= dirs)
+        a->tree_dirs -= dirs;
+    else
+        a->tree_dirs = 0;
+    if (a->tree_bytes >= bytes)
+        a->tree_bytes -= bytes;
+    else
+        a->tree_bytes = 0;
+}
+
+static void parent_sub_child_counts(struct efs_inode *p, const struct efs_inode *c)
+{
+    if (efs_mode_is_dir(c->mode)) {
+        if (p->imm_dirs > 0)
+            p->imm_dirs--;
+        uint64_t tf, td, tb, tlo, thi;
+        child_tree_contrib(c, &tf, &td, &tb, &tlo, &thi);
+        ancestor_sub_tree(p, tf, td, tb);
+    } else {
+        if (p->imm_files > 0)
+            p->imm_files--;
+        if (p->tree_files > 0)
+            p->tree_files--;
+        if (p->imm_bytes >= c->size)
+            p->imm_bytes -= c->size;
+        else
+            p->imm_bytes = 0;
+        if (p->tree_bytes >= c->size)
+            p->tree_bytes -= c->size;
+        else
+            p->tree_bytes = 0;
+    }
+    if (p->imm_files + p->imm_dirs == 0) {
+        p->imm_tmin = p->imm_tmax = 0;
+        p->imm_bytes = 0;
+    }
+    if (p->tree_files + p->tree_dirs == 0) {
+        p->tree_tmin = p->tree_tmax = 0;
+        p->tree_bytes = 0;
+    }
+}
+
+static void recompute_times_one(struct efs_export *ex, efs_ino_t dir_ino)
+{
+    struct efs_inode *d = inode_ptr(ex, dir_ino);
+    if (!d || !efs_mode_is_dir(d->mode))
+        return;
+    d->imm_tmin = d->imm_tmax = d->tree_tmin = d->tree_tmax = 0;
+    int has_imm = 0, has_tree = 0;
+    struct efs_child_vec *v = child_vec_get(ex, dir_ino, 0);
+    if (!v)
+        return;
+    for (uint64_t i = 0; i < v->count; i++) {
+        uint64_t slot = v->slots[i];
+        if (slot >= ex->inode_count)
+            continue;
+        struct efs_inode *c = &ex->inodes[slot];
+        if (c->ino == dir_ino)
+            continue;
+        uint64_t lo = entry_tmin(c), hi = entry_tmax(c);
+        times_expand(&d->imm_tmin, &d->imm_tmax, lo, hi, &has_imm);
+        uint64_t tf, td, tb, tlo, thi;
+        child_tree_contrib(c, &tf, &td, &tb, &tlo, &thi);
+        (void)tf;
+        (void)td;
+        (void)tb;
+        times_expand(&d->tree_tmin, &d->tree_tmax, tlo, thi, &has_tree);
+    }
+}
+
+static void recompute_times_up(struct efs_export *ex, efs_ino_t dir_ino)
+{
+    efs_ino_t cur = dir_ino;
+    for (;;) {
+        recompute_times_one(ex, cur);
+        struct efs_inode *d = inode_ptr(ex, cur);
+        if (!d || d->parent == d->ino)
+            break;
+        cur = d->parent;
+    }
+}
+
+static void rollup_add_under(struct efs_export *ex, efs_ino_t parent,
+                             const struct efs_inode *child)
+{
+    struct efs_inode *p = inode_ptr(ex, parent);
+    if (!p || !efs_mode_is_dir(p->mode))
+        return;
+    parent_add_child(p, child);
+
+    uint64_t tf, td, tb, tlo, thi;
+    child_tree_contrib(child, &tf, &td, &tb, &tlo, &thi);
+    efs_ino_t a = p->parent;
+    efs_ino_t prev = parent;
+    while (a != prev) {
+        struct efs_inode *ap = inode_ptr(ex, a);
+        if (!ap || !efs_mode_is_dir(ap->mode))
+            break;
+        ancestor_add_tree(ap, tf, td, tb, tlo, thi);
+        if (ap->parent == a)
+            break;
+        prev = a;
+        a = ap->parent;
+    }
+}
+
+static void rollup_sub_under(struct efs_export *ex, efs_ino_t parent,
+                             const struct efs_inode *child)
+{
+    struct efs_inode *p = inode_ptr(ex, parent);
+    if (!p || !efs_mode_is_dir(p->mode))
+        return;
+
+    uint64_t tf, td, tb, tlo, thi;
+    child_tree_contrib(child, &tf, &td, &tb, &tlo, &thi);
+    parent_sub_child_counts(p, child);
+
+    efs_ino_t a = p->parent;
+    efs_ino_t prev = parent;
+    while (a != prev) {
+        struct efs_inode *ap = inode_ptr(ex, a);
+        if (!ap || !efs_mode_is_dir(ap->mode))
+            break;
+        ancestor_sub_tree(ap, tf, td, tb);
+        if (ap->parent == a)
+            break;
+        prev = a;
+        a = ap->parent;
+    }
+    recompute_times_up(ex, parent);
+}
+
+static void rollup_size_delta(struct efs_export *ex, efs_ino_t parent,
+                              int64_t delta)
+{
+    if (delta == 0)
+        return;
+    efs_ino_t cur = parent;
+    efs_ino_t prev = 0;
+    int first = 1;
+    while (cur != prev) {
+        struct efs_inode *d = inode_ptr(ex, cur);
+        if (!d || !efs_mode_is_dir(d->mode))
+            break;
+        if (first) {
+            if (delta > 0)
+                d->imm_bytes += (uint64_t)delta;
+            else if (d->imm_bytes >= (uint64_t)(-delta))
+                d->imm_bytes -= (uint64_t)(-delta);
+            else
+                d->imm_bytes = 0;
+            first = 0;
+        }
+        if (delta > 0)
+            d->tree_bytes += (uint64_t)delta;
+        else if (d->tree_bytes >= (uint64_t)(-delta))
+            d->tree_bytes -= (uint64_t)(-delta);
+        else
+            d->tree_bytes = 0;
+        if (d->parent == cur)
+            break;
+        prev = cur;
+        cur = d->parent;
+    }
+}
+
+static void rollup_touch_parents_of(struct efs_export *ex, efs_ino_t ino)
+{
+    for (uint64_t i = 0; i < ex->inode_count; i++) {
+        if (ex->inodes[i].ino != ino)
+            continue;
+        recompute_times_up(ex, ex->inodes[i].parent);
+    }
+}
+
+static void recompute_dir_postorder(struct efs_export *ex, efs_ino_t dir_ino)
+{
+    struct efs_inode *d = inode_ptr(ex, dir_ino);
+    if (!d || !efs_mode_is_dir(d->mode))
+        return;
+    inode_clear_rollups(d);
+    struct efs_child_vec *v = child_vec_get(ex, dir_ino, 0);
+    if (!v)
+        return;
+    for (uint64_t i = 0; i < v->count; i++) {
+        uint64_t slot = v->slots[i];
+        if (slot >= ex->inode_count)
+            continue;
+        struct efs_inode *c = &ex->inodes[slot];
+        if (c->ino == dir_ino)
+            continue;
+        if (efs_mode_is_dir(c->mode))
+            recompute_dir_postorder(ex, c->ino);
+        parent_add_child(d, c);
+    }
+}
+
+void efs_export_recompute_rollups(struct efs_export *ex)
+{
+    if (!ex)
+        return;
+    for (uint64_t i = 0; i < ex->inode_count; i++) {
+        if (efs_mode_is_dir(ex->inodes[i].mode))
+            inode_clear_rollups(&ex->inodes[i]);
+        else
+            inode_clear_rollups(&ex->inodes[i]);
+    }
+    child_idx_rebuild(ex);
+    recompute_dir_postorder(ex, EFS_ROOT_INO);
+}
+
+int efs_export_format_stats(const struct efs_inode *dir, char *buf, size_t buflen)
+{
+    if (!dir || !buf || buflen == 0 || !efs_mode_is_dir(dir->mode))
+        return -1;
+    int n = snprintf(buf, buflen,
+                     "imm_files=%llu\n"
+                     "imm_dirs=%llu\n"
+                     "imm_bytes=%llu\n"
+                     "imm_tmin=%llu\n"
+                     "imm_tmax=%llu\n"
+                     "tree_files=%llu\n"
+                     "tree_dirs=%llu\n"
+                     "tree_bytes=%llu\n"
+                     "tree_tmin=%llu\n"
+                     "tree_tmax=%llu\n",
+                     (unsigned long long)dir->imm_files,
+                     (unsigned long long)dir->imm_dirs,
+                     (unsigned long long)dir->imm_bytes,
+                     (unsigned long long)dir->imm_tmin,
+                     (unsigned long long)dir->imm_tmax,
+                     (unsigned long long)dir->tree_files,
+                     (unsigned long long)dir->tree_dirs,
+                     (unsigned long long)dir->tree_bytes,
+                     (unsigned long long)dir->tree_tmin,
+                     (unsigned long long)dir->tree_tmax);
+    if (n < 0 || (size_t)n >= buflen)
+        return -1;
+    return n;
+}
+
 /* Copy shared inode fields onto every hard-link row with the same ino.
  * Parent/name of each directory entry are preserved. */
 static void sync_hardlink_attrs(struct efs_export *ex, efs_ino_t ino,
@@ -391,9 +887,31 @@ static void sync_hardlink_attrs(struct efs_export *ex, efs_ino_t ino,
         efs_ino_t parent = ex->inodes[i].parent;
         char name[EFS_MAX_NAME];
         memcpy(name, ex->inodes[i].name, EFS_MAX_NAME);
+        /* Preserve per-dent identity; shared attrs include atime/size/times.
+         * Rollups stay zero on file dents. */
+        uint64_t imm_files = ex->inodes[i].imm_files;
+        uint64_t imm_dirs = ex->inodes[i].imm_dirs;
+        uint64_t tree_files = ex->inodes[i].tree_files;
+        uint64_t tree_dirs = ex->inodes[i].tree_dirs;
+        uint64_t imm_bytes = ex->inodes[i].imm_bytes;
+        uint64_t tree_bytes = ex->inodes[i].tree_bytes;
+        uint64_t imm_tmin = ex->inodes[i].imm_tmin;
+        uint64_t imm_tmax = ex->inodes[i].imm_tmax;
+        uint64_t tree_tmin = ex->inodes[i].tree_tmin;
+        uint64_t tree_tmax = ex->inodes[i].tree_tmax;
         ex->inodes[i] = *src;
         ex->inodes[i].parent = parent;
         memcpy(ex->inodes[i].name, name, EFS_MAX_NAME);
+        ex->inodes[i].imm_files = imm_files;
+        ex->inodes[i].imm_dirs = imm_dirs;
+        ex->inodes[i].tree_files = tree_files;
+        ex->inodes[i].tree_dirs = tree_dirs;
+        ex->inodes[i].imm_bytes = imm_bytes;
+        ex->inodes[i].tree_bytes = tree_bytes;
+        ex->inodes[i].imm_tmin = imm_tmin;
+        ex->inodes[i].imm_tmax = imm_tmax;
+        ex->inodes[i].tree_tmin = tree_tmin;
+        ex->inodes[i].tree_tmax = tree_tmax;
     }
 }
 
@@ -447,7 +965,8 @@ void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
     }
 }
 
-/* Swap-remove inode array slot i; refresh indexes for the moved row. */
+/* Swap-remove inode array slot i; refresh indexes for the moved row.
+ * Caller must already have applied rollup_sub and child_idx_del for slot i. */
 static void remove_inode_slot(struct efs_export *ex, uint64_t i)
 {
     efs_ino_t old_parent = ex->inodes[i].parent;
@@ -459,12 +978,14 @@ static void remove_inode_slot(struct efs_export *ex, uint64_t i)
 
     uint64_t last = ex->inode_count - 1;
     if (i != last) {
+        efs_ino_t moved_parent = ex->inodes[last].parent;
         idx_del(ex->ino_keys, ex->ino_vals, ex->ino_mask, ex->inodes[last].ino);
         name_idx_del(ex, ex->inodes[last].parent, ex->inodes[last].name);
         ex->inodes[i] = ex->inodes[last];
         ex->inode_count--;
         idx_put(ex->ino_keys, ex->ino_vals, ex->ino_mask, ex->inodes[i].ino, i);
         name_idx_put(ex, ex->inodes[i].parent, ex->inodes[i].name, i);
+        child_idx_replace_slot(ex, moved_parent, last, i);
     } else {
         ex->inode_count--;
     }
@@ -505,8 +1026,10 @@ void efs_export_init(struct efs_export *ex, efs_export_id_t id, const char *name
     strcpy(root.name, "/");
     time_now(&root.mtime);
     root.ctime = root.mtime;
+    root.atime = root.mtime;
     ex->inodes[ex->inode_count++] = root;
     export_reindex(ex);
+    child_idx_rebuild(ex);
 }
 
 void efs_export_free(struct efs_export *ex)
@@ -518,6 +1041,7 @@ void efs_export_free(struct efs_export *ex)
     idx_free(&ex->ino_keys, &ex->ino_vals, &ex->ino_mask);
     idx_free(&ex->name_keys, &ex->name_vals, &ex->name_mask);
     idx_free(&ex->chunk_keys, &ex->chunk_vals, &ex->chunk_mask);
+    child_vecs_free(ex);
     efs_export_root_free(&ex->root);
     memset(ex, 0, sizeof(*ex));
 }
@@ -556,6 +1080,8 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
 {
     if (!ex || !name || !*name || ino_num == 0)
         return 0;
+    if (strcmp(name, EFS_STATS_NAME) == 0)
+        return 0;
 
     if (efs_export_lookup(ex, parent, name, NULL) == EFS_OK)
         return 0;
@@ -585,10 +1111,12 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
     ino->nlink = 1;
     time_now(&ino->mtime);
     ino->ctime = ino->mtime;
+    ino->atime = ino->mtime;
     strncpy(ino->name, name, EFS_MAX_NAME - 1);
 
     idx_put(ex->ino_keys, ex->ino_vals, ex->ino_mask, ino_num, pos);
     name_idx_put(ex, parent, name, pos);
+    child_idx_add(ex, parent, pos);
 
     if (efs_mode_is_dir(mode)) {
         ino->nlink = 2;
@@ -597,6 +1125,7 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
             p->nlink++;
     }
 
+    rollup_add_under(ex, parent, ino);
     return ino->ino;
 }
 
@@ -615,17 +1144,22 @@ int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *
 {
     if (!ex || !name)
         return EFS_ERR_INVAL;
+    if (strcmp(name, EFS_STATS_NAME) == 0)
+        return EFS_ERR_INVAL;
 
     uint64_t pos = 0;
     if (name_idx_get(ex, parent, name, &pos) != 0)
         return EFS_ERR_NOT_FOUND;
 
-    efs_ino_t ino = ex->inodes[pos].ino;
-    uint32_t nlink = ex->inodes[pos].nlink;
+    struct efs_inode removed = ex->inodes[pos];
+    efs_ino_t ino = removed.ino;
+    uint32_t nlink = removed.nlink;
     if (nlink == 0)
         nlink = 1;
     nlink--;
 
+    rollup_sub_under(ex, parent, &removed);
+    child_idx_del(ex, parent, pos);
     remove_inode_slot(ex, pos);
 
     if (nlink == 0) {
@@ -652,6 +1186,9 @@ int efs_export_unlink(struct efs_export *ex, efs_ino_t ino)
     while (i < ex->inode_count) {
         if (ex->inodes[i].ino == ino) {
             found = 1;
+            struct efs_inode removed = ex->inodes[i];
+            rollup_sub_under(ex, removed.parent, &removed);
+            child_idx_del(ex, removed.parent, i);
             remove_inode_slot(ex, i);
             /* slot i now holds a different row (or count shrank) */
         } else {
@@ -668,6 +1205,8 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
                     efs_ino_t new_parent, const char *new_name)
 {
     if (!ex || !new_name || !*new_name)
+        return EFS_ERR_INVAL;
+    if (strcmp(new_name, EFS_STATS_NAME) == 0)
         return EFS_ERR_INVAL;
 
     struct efs_inode *src = inode_ptr(ex, src_ino);
@@ -710,12 +1249,15 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
     *dst = *src;
     dst->parent = new_parent;
     dst->nlink = nlink;
+    inode_clear_rollups(dst);
     strncpy(dst->name, new_name, EFS_MAX_NAME - 1);
     dst->name[EFS_MAX_NAME - 1] = '\0';
     time_now(&dst->ctime);
 
     /* Keep ino_idx pointing at an existing row; name index gets the new name. */
     name_idx_put(ex, new_parent, new_name, pos);
+    child_idx_add(ex, new_parent, pos);
+    rollup_add_under(ex, new_parent, dst);
     return EFS_OK;
 }
 
@@ -726,6 +1268,7 @@ int efs_export_set_size(struct efs_export *ex, efs_ino_t ino, uint64_t size)
     struct efs_inode *p = inode_ptr(ex, ino);
     if (!p)
         return EFS_ERR_NOT_FOUND;
+    uint64_t old_size = p->size;
     p->size = size;
     /* Size changes update mtime with full nsec precision (not sec-only). */
     {
@@ -735,6 +1278,14 @@ int efs_export_set_size(struct efs_export *ex, efs_ino_t ino, uint64_t size)
         p->mtime_nsec = (uint32_t)ts.tv_nsec;
     }
     sync_hardlink_attrs(ex, ino, p);
+    if (!efs_mode_is_dir(p->mode) && size != old_size) {
+        int64_t delta = (int64_t)size - (int64_t)old_size;
+        for (uint64_t i = 0; i < ex->inode_count; i++) {
+            if (ex->inodes[i].ino == ino)
+                rollup_size_delta(ex, ex->inodes[i].parent, delta);
+        }
+    }
+    rollup_touch_parents_of(ex, ino);
     return EFS_OK;
 }
 
@@ -749,6 +1300,7 @@ int efs_export_set_mode(struct efs_export *ex, efs_ino_t ino, uint32_t mode)
     /* POSIX: chmod updates ctime, not mtime (rsync -a relies on this). */
     time_now(&p->ctime);
     sync_hardlink_attrs(ex, ino, p);
+    rollup_touch_parents_of(ex, ino);
     return EFS_OK;
 }
 
@@ -766,6 +1318,7 @@ int efs_export_set_owner(struct efs_export *ex, efs_ino_t ino, uid_t uid, gid_t 
     /* POSIX: chown updates ctime, not mtime. */
     time_now(&p->ctime);
     sync_hardlink_attrs(ex, ino, p);
+    rollup_touch_parents_of(ex, ino);
     return EFS_OK;
 }
 
@@ -782,6 +1335,7 @@ int efs_export_set_mtime_ns(struct efs_export *ex, efs_ino_t ino,
     p->mtime = mtime;
     p->mtime_nsec = mtime_nsec;
     sync_hardlink_attrs(ex, ino, p);
+    rollup_touch_parents_of(ex, ino);
     return EFS_OK;
 }
 
@@ -790,10 +1344,25 @@ int efs_export_set_mtime(struct efs_export *ex, efs_ino_t ino, uint64_t mtime)
     return efs_export_set_mtime_ns(ex, ino, mtime, 0);
 }
 
+int efs_export_set_atime(struct efs_export *ex, efs_ino_t ino, uint64_t atime)
+{
+    if (!ex)
+        return EFS_ERR_INVAL;
+    struct efs_inode *p = inode_ptr(ex, ino);
+    if (!p)
+        return EFS_ERR_NOT_FOUND;
+    p->atime = atime;
+    sync_hardlink_attrs(ex, ino, p);
+    rollup_touch_parents_of(ex, ino);
+    return EFS_OK;
+}
+
 int efs_export_rename(struct efs_export *ex, efs_ino_t ino,
                       efs_ino_t new_parent, const char *new_name)
 {
     if (!ex || !new_name)
+        return EFS_ERR_INVAL;
+    if (strcmp(new_name, EFS_STATS_NAME) == 0)
         return EFS_ERR_INVAL;
 
     struct efs_inode *src = inode_ptr(ex, ino);
@@ -836,11 +1405,9 @@ int efs_export_rename(struct efs_export *ex, efs_ino_t ino,
             return EFS_ERR_INVAL;
 
         if (src_dir) {
-            for (uint64_t i = 0; i < ex->inode_count; i++) {
-                if (ex->inodes[i].parent == dst_copy.ino &&
-                    ex->inodes[i].ino != dst_copy.ino)
-                    return EFS_ERR_NOT_EMPTY;
-            }
+            struct efs_child_vec *cv = child_vec_get(ex, dst_copy.ino, 0);
+            if (cv && cv->count > 0)
+                return EFS_ERR_NOT_EMPTY;
         }
         /* efs_export_unlink swap-removes the destination entry, which can
          * move or overwrite the entry `src` points to. Re-find it after. */
@@ -850,14 +1417,26 @@ int efs_export_rename(struct efs_export *ex, efs_ino_t ino,
             return EFS_ERR_NOT_FOUND;
     }
 
-    /* Drop old name key before mutating parent/name fields. */
-    name_idx_del(ex, src->parent, src->name);
-    strncpy(src->name, new_name, EFS_MAX_NAME - 1);
-    src->name[EFS_MAX_NAME - 1] = '\0';
-    src->parent = new_parent;
-    /* Preserve mtime across rename (rsync partial → final); bump ctime only. */
-    time_now(&src->ctime);
-    name_idx_put(ex, src->parent, src->name, (uint64_t)(src - ex->inodes));
+    uint64_t slot = (uint64_t)(src - ex->inodes);
+    efs_ino_t old_parent = src->parent;
+    if (old_parent != new_parent || strcmp(src->name, new_name) != 0) {
+        struct efs_inode snap = *src;
+        if (old_parent != new_parent)
+            rollup_sub_under(ex, old_parent, &snap);
+        child_idx_del(ex, old_parent, slot);
+        name_idx_del(ex, src->parent, src->name);
+        strncpy(src->name, new_name, EFS_MAX_NAME - 1);
+        src->name[EFS_MAX_NAME - 1] = '\0';
+        src->parent = new_parent;
+        /* Preserve mtime across rename (rsync partial → final); bump ctime only. */
+        time_now(&src->ctime);
+        name_idx_put(ex, src->parent, src->name, slot);
+        child_idx_add(ex, new_parent, slot);
+        if (old_parent != new_parent)
+            rollup_add_under(ex, new_parent, src);
+        else
+            recompute_times_up(ex, new_parent);
+    }
     return EFS_OK;
 }
 
@@ -1031,6 +1610,9 @@ int efs_export_merge(struct efs_export *ex, const struct efs_export *inc)
     if (inc->next_ino > ex->next_ino)
         ex->next_ino = inc->next_ino;
 
+    /* Rollups are derived; rebuild after merge so newer-wins cannot leave
+     * stale aggregates relative to the combined child set. */
+    efs_export_recompute_rollups(ex);
     return EFS_OK;
 }
 
@@ -1104,8 +1686,21 @@ int efs_export_serialize(struct efs_export *ex, char **buf, size_t *len)
         write_u64(f, ino->mtime);
         write_u32(f, ino->mtime_nsec);
         write_u64(f, ino->ctime);
+        write_u64(f, ino->atime);
         write_u32(f, ino->nlink);
         write_str(f, ino->name);
+        if (efs_mode_is_dir(ino->mode)) {
+            write_u64(f, ino->imm_files);
+            write_u64(f, ino->imm_dirs);
+            write_u64(f, ino->tree_files);
+            write_u64(f, ino->tree_dirs);
+            write_u64(f, ino->imm_bytes);
+            write_u64(f, ino->tree_bytes);
+            write_u64(f, ino->imm_tmin);
+            write_u64(f, ino->imm_tmax);
+            write_u64(f, ino->tree_tmin);
+            write_u64(f, ino->tree_tmax);
+        }
     }
 
     write_u32(f, (uint32_t)ex->chunk_count);
@@ -1137,7 +1732,8 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
     }
 
     uint32_t version;
-    if (read_u32(f, &version) != 0 || (version != 2 && version != 3)) {
+    if (read_u32(f, &version) != 0 ||
+        (version != 2 && version != 3 && version != 4)) {
         fclose(f);
         return EFS_ERR_PROTO;
     }
@@ -1156,7 +1752,9 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
         return EFS_ERR_PROTO;
     }
 
+    /* Replace the empty root from init with the deserialized table. */
     ex->inode_count = 0;
+    child_vecs_free(ex);
     for (uint32_t i = 0; i < inode_count; i++) {
         if (ex->inode_count >= ex->inode_capacity) {
             uint64_t new_cap = ex->inode_capacity * 2;
@@ -1169,6 +1767,7 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
             ex->inode_capacity = new_cap;
         }
         struct efs_inode *ino = &ex->inodes[ex->inode_count++];
+        memset(ino, 0, sizeof(*ino));
         read_u64(f, &ino->ino);
         read_u64(f, &ino->parent);
         read_u32(f, &ino->mode);
@@ -1192,8 +1791,25 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
             ino->mtime_nsec = 0;
         }
         read_u64(f, &ino->ctime);
+        if (version >= 4) {
+            read_u64(f, &ino->atime);
+        } else {
+            ino->atime = ino->mtime;
+        }
         read_u32(f, &ino->nlink);
         read_str(f, ino->name, EFS_MAX_NAME);
+        if (version >= 4 && efs_mode_is_dir(ino->mode)) {
+            read_u64(f, &ino->imm_files);
+            read_u64(f, &ino->imm_dirs);
+            read_u64(f, &ino->tree_files);
+            read_u64(f, &ino->tree_dirs);
+            read_u64(f, &ino->imm_bytes);
+            read_u64(f, &ino->tree_bytes);
+            read_u64(f, &ino->imm_tmin);
+            read_u64(f, &ino->imm_tmax);
+            read_u64(f, &ino->tree_tmin);
+            read_u64(f, &ino->tree_tmax);
+        }
     }
 
     uint32_t chunk_count;
@@ -1224,6 +1840,7 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
     fclose(f);
     if (export_reindex(ex) != 0)
         return EFS_ERR_NOMEM;
+    efs_export_recompute_rollups(ex);
     return EFS_OK;
 }
 

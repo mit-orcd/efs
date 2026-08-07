@@ -400,18 +400,13 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
             fds[i] = -1;
             continue;
         }
-        uint8_t reply_type;
-        void *reply = NULL;
-        uint32_t reply_len = 0;
-        if (efs_recv_msg(fds[i], &reply_type, &reply, &reply_len) != 0 ||
-            reply_type != EFS_MSG_PUT_CHUNK_REPLY || reply_len != 1) {
-            free(reply);
+        uint8_t reply_type = 0, status = 0;
+        if (efs_recv_u8_reply(fds[i], &reply_type, &status) != 0 ||
+            reply_type != EFS_MSG_PUT_CHUNK_REPLY) {
             efs_client_conn_drop(nodes[i], fds[i]);
             fds[i] = -1;
             continue;
         }
-        uint8_t status = ((uint8_t *)reply)[0];
-        free(reply);
         if (status == EFS_PUT_CHUNK_OK)
             acks++;
         else if (status == EFS_PUT_CHUNK_QUOTA_EXCEEDED)

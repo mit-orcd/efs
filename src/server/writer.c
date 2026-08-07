@@ -1,4 +1,5 @@
 #include "server_internal.h"
+#include "efs/checksum.h"
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +28,9 @@ struct writer_job {
     pthread_cond_t done_cv;
 };
 
+/* Writer-thread hint: fragment body is known-zero (checksum already verified). */
+__thread int efs_tls_write_known_zero;
+
 struct writer_pool {
     int nwriters;
     int running;
@@ -46,6 +50,16 @@ static __thread int tls_in_writer;
 static int run_job(struct writer_job *job)
 {
     int rc = EFS_OK;
+    int saved_zero = efs_tls_write_known_zero;
+    if (job->op == WRITER_OP_FRAGMENT_WITH_SUM && job->checksum &&
+        job->data_len == EFS_FRAGMENT_SIZE) {
+        uint8_t zero_ck[EFS_HASH_SIZE];
+        efs_hash_zero_fragment(zero_ck);
+        efs_tls_write_known_zero =
+            (memcmp(job->checksum, zero_ck, EFS_HASH_SIZE) == 0);
+    } else {
+        efs_tls_write_known_zero = 0;
+    }
     switch (job->op) {
     case WRITER_OP_FRAGMENT:
         rc = server_write_fragment_sync(job->s, job->ex, job->ino,
@@ -71,6 +85,7 @@ static int run_job(struct writer_job *job)
         rc = EFS_ERR_INVAL;
         break;
     }
+    efs_tls_write_known_zero = saved_zero;
     return rc;
 }
 

@@ -48,6 +48,24 @@ int efs_send_msg(int fd, uint8_t type, const void *payload, uint32_t payload_len
     return EFS_OK;
 }
 
+int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status)
+{
+    uint32_t len;
+    if (efs_recv_all(fd, &len, sizeof(len)) != 0)
+        return EFS_ERR_NET;
+    len = ntohl(len);
+    if (len != 2)
+        return EFS_ERR_PROTO;
+    uint8_t buf[2];
+    if (efs_recv_all(fd, buf, 2) != 0)
+        return EFS_ERR_NET;
+    if (type)
+        *type = buf[0];
+    if (status)
+        *status = buf[1];
+    return EFS_OK;
+}
+
 int efs_recv_msg(int fd, uint8_t *type, void **payload, uint32_t *payload_len)
 {
     uint32_t len;
@@ -57,32 +75,42 @@ int efs_recv_msg(int fd, uint8_t *type, void **payload, uint32_t *payload_len)
     if (len == 0 || len > 16 * 1024 * 1024)
         return EFS_ERR_PROTO;
 
-    uint8_t *buf = malloc(len);
+    uint8_t t;
+    if (efs_recv_all(fd, &t, 1) != 0)
+        return EFS_ERR_NET;
+    *type = t;
+
+    uint32_t plen = len - 1;
+    if (payload_len)
+        *payload_len = plen;
+
+    if (plen == 0) {
+        if (payload)
+            *payload = NULL;
+        return EFS_OK;
+    }
+
+    if (!payload) {
+        /* Drain unread payload. */
+        uint8_t sink[4096];
+        uint32_t left = plen;
+        while (left) {
+            uint32_t n = left > sizeof(sink) ? (uint32_t)sizeof(sink) : left;
+            if (efs_recv_all(fd, sink, n) != 0)
+                return EFS_ERR_NET;
+            left -= n;
+        }
+        return EFS_OK;
+    }
+
+    /* Payload lands at malloc base — no 64 KiB memmove to strip the type. */
+    uint8_t *buf = malloc(plen);
     if (!buf)
         return EFS_ERR_NOMEM;
-
-    if (efs_recv_all(fd, buf, len) != 0) {
+    if (efs_recv_all(fd, buf, plen) != 0) {
         free(buf);
         return EFS_ERR_NET;
     }
-
-    *type = buf[0];
-    if (payload_len)
-        *payload_len = len - 1;
-
-    if (!payload) {
-        free(buf);
-        return EFS_OK;
-    }
-
-    /* Reuse the receive buffer: shift payload over the type byte so callers
-     * free one allocation instead of alloc+copy+free. */
-    if (len == 1) {
-        *payload = NULL;
-        free(buf);
-        return EFS_OK;
-    }
-    memmove(buf, buf + 1, len - 1);
     *payload = buf;
     return EFS_OK;
 }

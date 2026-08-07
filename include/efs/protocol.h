@@ -42,6 +42,9 @@ enum efs_msg_type {
     EFS_MSG_DRAIN_NODE_REPLY = 30,
     EFS_MSG_UNDRAIN_NODE = 31,
     EFS_MSG_UNDRAIN_NODE_REPLY = 32,
+    /* Network bench: same payload as PUT_CHUNK; server ACKs and discards. */
+    EFS_MSG_BENCH_PUT = 33,
+    EFS_MSG_BENCH_PUT_REPLY = 34,
 };
 
 struct efs_msg_hello {
@@ -85,6 +88,9 @@ struct efs_msg_put_chunk {
 #define EFS_PUT_CHUNK_OK     0
 #define EFS_PUT_CHUNK_ERROR  1
 #define EFS_PUT_CHUNK_QUOTA_EXCEEDED 2
+
+#define EFS_BENCH_PUT_OK     0
+#define EFS_BENCH_PUT_ERROR  1
 
 struct efs_msg_put_meta {
     uint32_t epoch;
@@ -189,5 +195,9 @@ int efs_send_msg(int fd, uint8_t type, const void *payload, uint32_t payload_len
 
 /* Receive a single message. Caller must free *payload with free(). */
 int efs_recv_msg(int fd, uint8_t *type, void **payload, uint32_t *payload_len);
+
+/* Hot-path helper: receive a 1-byte status reply without malloc.
+ * On success sets *type and *status. Returns EFS_OK or an error. */
+int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status);
 
 #endif

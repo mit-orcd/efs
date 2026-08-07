@@ -134,6 +134,9 @@ int efs_client_utime(efs_ino_t ino, uint64_t mtime);
 /* Set modification time with nanoseconds (for utimensat / rsync). */
 int efs_client_utimens(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec);
 
+/* Set access time (seconds; never bumped on read). */
+int efs_client_set_atime(efs_ino_t ino, uint64_t atime);
+
 /* Truncate or extend a file to the given size. */
 int efs_client_truncate(efs_ino_t ino, uint64_t size);
 

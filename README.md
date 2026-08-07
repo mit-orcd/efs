@@ -191,6 +191,14 @@ Fragment PUTs are executed on a dedicated writer thread pool (default 8
 threads). Override with `--writers <n>` (`0` runs writes inline on the
 connection thread).
 
+## Directory rollup stats
+
+Each directory exposes a virtual read-only file `.stats` (visible with `ls -a`).
+`cat dir/.stats` prints immediate and subtree file/dir counts, byte totals, and
+min/max timestamps (`min`/`max` of atime, ctime, mtime per entry). Rollups are
+maintained incrementally in metadata so reads stay cheap. Creating a real inode
+named `.stats` is rejected.
+
 ## Querying metadata
 
 ```bash
@@ -220,7 +228,8 @@ cluster, runs load, and writes reports under a scratch directory.
 ## FUSE notes
 
 Supported: `chmod`, `chown`, `truncate`, `rename`, `utime(2)`, and `utimens`
-(nanosecond mtimes so `rsync -a` is idempotent on a second pass).
+(nanosecond mtimes so `rsync -a` is idempotent on a second pass). Each directory
+also has a virtual read-only `.stats` file (see above).
 
 ## Testing
 

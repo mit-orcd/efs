@@ -1,5 +1,6 @@
 #include "efs/common.h"
 #include "efs/network.h"
+#include "bench_local.h"
 #include "server_internal.h"
 #include "storage_numa.h"
 #include <stdio.h>
@@ -23,13 +24,17 @@ static void usage(const char *prog)
             "--storage <path>[,path...] [--storage <path> ...] "
             "[--quota <bytes>[T|G|M|K]] [--direct-io|--no-direct-io] "
             "[--writers <n>] [--join <host:port>] [--no-persist] [--perf]\n"
+            "   or: %s --bench <path> --time <seconds> "
+            "[--writers <n>] [--direct-io|--no-direct-io]\n"
             "  --storage        one path, or 3..%d paths (comma and/or repeated).\n"
             "                   With >=3 paths the server applies local EC so disks\n"
             "                   can fail without peer RPCs (3→1 loss, 4+→2 losses).\n"
+            "  --bench <path>   local disk saturate (fragment-sized writes); no cluster\n"
+            "  --time <sec>     duration for --bench (default 10)\n"
             "  --direct-io      O_DIRECT for fragment I/O (default on)\n"
             "  --no-direct-io   use the page cache for fragment I/O\n"
             "  --writers <n>    fragment writer threads (default %d, 0 = inline)\n",
-            prog, EFS_MAX_STORAGE_PATHS, EFS_DEFAULT_WRITERS);
+            prog, prog, EFS_MAX_STORAGE_PATHS, EFS_DEFAULT_WRITERS);
 }
 
 static int add_storage_path(struct efsd_server *s, const char *path)
@@ -175,6 +180,8 @@ int main(int argc, char **argv)
     pthread_mutex_init(&server.lock, NULL);
 
     char *join_peer = NULL;
+    char *bench_path = NULL;
+    double bench_time = 10.0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--node-id") == 0 && i + 1 < argc) {
@@ -185,6 +192,15 @@ int main(int argc, char **argv)
             server.port = (uint16_t)atoi(argv[++i]);
         } else if (strcmp(argv[i], "--storage") == 0 && i + 1 < argc) {
             if (parse_storage_arg(&server, argv[++i]) != 0) {
+                usage(argv[0]);
+                return 1;
+            }
+        } else if (strcmp(argv[i], "--bench") == 0 && i + 1 < argc) {
+            bench_path = argv[++i];
+        } else if (strcmp(argv[i], "--time") == 0 && i + 1 < argc) {
+            bench_time = atof(argv[++i]);
+            if (bench_time <= 0.0) {
+                fprintf(stderr, "Invalid --time value\n");
                 usage(argv[0]);
                 return 1;
             }
@@ -221,6 +237,12 @@ int main(int argc, char **argv)
             usage(argv[0]);
             return 1;
         }
+    }
+
+    if (bench_path) {
+        int writers = server.nwriters > 0 ? server.nwriters : EFS_DEFAULT_WRITERS;
+        return server_run_local_bench(bench_path, bench_time, writers,
+                                      server.direct_io);
     }
 
     if (server.id == 0 || server.port == 0 || server.storage_path_count == 0) {

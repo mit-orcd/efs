@@ -1,5 +1,6 @@
 #include "server_internal.h"
 #include "efs/local_ec.h"
+#include "efs/checksum.h"
 #include "storage_numa.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -329,16 +330,46 @@ static void *shard_io_thread(void *arg)
             uint32_t alloc = (a->len + 4095u) & ~4095u;
             if (alloc < 4096)
                 alloc = 4096;
-            if (posix_memalign((void **)&aligned, 4096, alloc) != 0) {
-                close(fd);
-                a->result = EFS_ERR_NOMEM;
-                return NULL;
+            /* Zero payloads (store-bench / dd if=/dev/zero): write from a
+             * process-wide pre-zeroed O_DIRECT buffer — no per-PUT memset
+             * or memcpy of the 64 KiB fragment. */
+            int is_zero = (a->len == EFS_FRAGMENT_SIZE) &&
+                          (efs_tls_write_known_zero ||
+                           efs_bytes_are_zero(a->buf, a->len));
+            const uint8_t *wbuf;
+            if (is_zero) {
+                static uint8_t *zero_dio;
+                static uint32_t zero_dio_alloc;
+                static pthread_mutex_t zero_dio_mu = PTHREAD_MUTEX_INITIALIZER;
+                pthread_mutex_lock(&zero_dio_mu);
+                if (!zero_dio || zero_dio_alloc < alloc) {
+                    uint8_t *fresh = NULL;
+                    if (posix_memalign((void **)&fresh, 4096, alloc) != 0) {
+                        pthread_mutex_unlock(&zero_dio_mu);
+                        close(fd);
+                        a->result = EFS_ERR_NOMEM;
+                        return NULL;
+                    }
+                    memset(fresh, 0, alloc);
+                    free(zero_dio);
+                    zero_dio = fresh;
+                    zero_dio_alloc = alloc;
+                }
+                wbuf = zero_dio;
+                pthread_mutex_unlock(&zero_dio_mu);
+            } else {
+                if (posix_memalign((void **)&aligned, 4096, alloc) != 0) {
+                    close(fd);
+                    a->result = EFS_ERR_NOMEM;
+                    return NULL;
+                }
+                memcpy(aligned, a->buf, a->len);
+                if (a->len < alloc)
+                    memset(aligned + a->len, 0, alloc - a->len);
+                wbuf = aligned;
             }
-            memcpy(aligned, a->buf, a->len);
-            if (a->len < alloc)
-                memset(aligned + a->len, 0, alloc - a->len);
             while (written < alloc) {
-                ssize_t n = write(fd, aligned + written, alloc - written);
+                ssize_t n = write(fd, wbuf + written, alloc - written);
                 if (n <= 0) {
                     free(aligned);
                     close(fd);
@@ -609,6 +640,36 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
     pthread_mutex_unlock(&s->lock);
 
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
+
+    /* n==1: write the fragment buffer directly — encode_plain was a full
+     * memset+memcpy of every PUT for no benefit. */
+    if (n <= 1) {
+        struct shard_io_arg arg;
+        memset(&arg, 0, sizeof(arg));
+        arg.s = s;
+        arg.buf = (uint8_t *)data;
+        arg.len = data_len;
+        if (s->direct_io)
+            arg.len = EFS_FRAGMENT_SIZE;
+        arg.path_index = 0;
+        arg.is_write = 1;
+        arg.result = EFS_ERR_IO;
+        server_shard_path(s, ex, ino, chunk_index, fragment_index, 0,
+                          arg.path, sizeof(arg.path));
+        shard_io_thread(&arg);
+        if (arg.result != EFS_OK) {
+            if (charge_quota) {
+                pthread_mutex_lock(&s->lock);
+                local = server_local_node(s);
+                if (local && local->used >= data_len)
+                    local->used -= data_len;
+                pthread_mutex_unlock(&s->lock);
+            }
+            return EFS_ERR_IO;
+        }
+        return EFS_OK;
+    }
+
     uint8_t (*shards)[EFS_LOCAL_EC_MAX_SHARD] =
         malloc(EFS_MAX_STORAGE_PATHS * EFS_LOCAL_EC_MAX_SHARD);
     if (!shards) {
@@ -631,35 +692,6 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
             pthread_mutex_unlock(&s->lock);
         }
         return EFS_ERR_INVAL;
-    }
-
-    /* n==1: write inline (no fanout thread) so writer-pool jobs stay simple. */
-    if (n <= 1) {
-        struct shard_io_arg arg;
-        memset(&arg, 0, sizeof(arg));
-        arg.s = s;
-        arg.buf = shards[0];
-        arg.len = data_len;
-        if (s->direct_io)
-            arg.len = EFS_FRAGMENT_SIZE;
-        arg.path_index = 0;
-        arg.is_write = 1;
-        arg.result = EFS_ERR_IO;
-        server_shard_path(s, ex, ino, chunk_index, fragment_index, 0,
-                          arg.path, sizeof(arg.path));
-        shard_io_thread(&arg);
-        free(shards);
-        if (arg.result != EFS_OK) {
-            if (charge_quota) {
-                pthread_mutex_lock(&s->lock);
-                local = server_local_node(s);
-                if (local && local->used >= data_len)
-                    local->used -= data_len;
-                pthread_mutex_unlock(&s->lock);
-            }
-            return EFS_ERR_IO;
-        }
-        return EFS_OK;
     }
 
     uint32_t slen = efs_local_ec_shard_len(n);

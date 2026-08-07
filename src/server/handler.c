@@ -174,10 +174,21 @@ void server_handle_conn(int fd)
                     reply = EFS_PUT_CHUNK_ERROR;
                 } else if (ex) {
                     /* Verify the client-supplied checksum once at write time
-                     * and persist it so reads do not need to re-hash. */
-                    uint8_t verify[EFS_HASH_SIZE];
-                    efs_hash(req->data, EFS_FRAGMENT_SIZE, verify);
-                    if (memcmp(verify, req->checksum, EFS_HASH_SIZE) != 0) {
+                     * and persist it so reads do not need to re-hash.
+                     * If the client claims the zero-fragment digest, confirm
+                     * the payload is zeros (no Blake3). Otherwise hash once —
+                     * do not memcmp-scan every non-zero PUT for zeros first. */
+                    uint8_t zero_ck[EFS_HASH_SIZE];
+                    efs_hash_zero_fragment(zero_ck);
+                    int sum_ok = 0;
+                    if (memcmp(req->checksum, zero_ck, EFS_HASH_SIZE) == 0) {
+                        sum_ok = efs_bytes_are_zero(req->data, EFS_FRAGMENT_SIZE);
+                    } else {
+                        uint8_t verify[EFS_HASH_SIZE];
+                        efs_hash(req->data, EFS_FRAGMENT_SIZE, verify);
+                        sum_ok = (memcmp(verify, req->checksum, EFS_HASH_SIZE) == 0);
+                    }
+                    if (!sum_ok) {
                         reply = EFS_PUT_CHUNK_ERROR;
                     } else {
                         rc = server_write_fragment_with_sum(
@@ -192,6 +203,14 @@ void server_handle_conn(int fd)
                 }
                 efs_send_msg(fd, EFS_MSG_PUT_CHUNK_REPLY, &reply, 1);
             }
+            break;
+        }
+        case EFS_MSG_BENCH_PUT: {
+            /* Network bench: accept mount-shaped PUT payload, ACK, discard. */
+            uint8_t reply = EFS_BENCH_PUT_ERROR;
+            if (payload_len >= sizeof(struct efs_msg_put_chunk))
+                reply = EFS_BENCH_PUT_OK;
+            efs_send_msg(fd, EFS_MSG_BENCH_PUT_REPLY, &reply, 1);
             break;
         }
         case EFS_MSG_GET_META: {

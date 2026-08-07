@@ -25,6 +25,49 @@
 static int split_parent_name(const char *path, char *name, size_t name_len,
                              struct efs_inode *parent);
 
+/* Virtual per-directory .stats (not a real inode). */
+static int path_is_stats(const char *path, struct efs_inode *parent_out)
+{
+    if (!path)
+        return -ENOENT;
+    const char *base = strrchr(path, '/');
+    base = base ? base + 1 : path;
+    if (strcmp(base, EFS_STATS_NAME) != 0)
+        return -ENOENT;
+    char name[EFS_MAX_NAME];
+    struct efs_inode parent;
+    int rc = split_parent_name(path, name, sizeof(name), &parent);
+    if (rc != 0)
+        return rc;
+    if (parent_out)
+        *parent_out = parent;
+    return 0;
+}
+
+static ino_t stats_synthetic_ino(efs_ino_t parent_ino)
+{
+    return (ino_t)((1ULL << 62) | (parent_ino & ((1ULL << 62) - 1)));
+}
+
+static int stats_fill_stat(const struct efs_inode *parent, struct stat *stbuf)
+{
+    char text[512];
+    int n = efs_export_format_stats(parent, text, sizeof(text));
+    if (n < 0)
+        return -EIO;
+    memset(stbuf, 0, sizeof(*stbuf));
+    stbuf->st_ino = stats_synthetic_ino(parent->ino);
+    stbuf->st_mode = S_IFREG | 0444;
+    stbuf->st_nlink = 1;
+    stbuf->st_size = (off_t)n;
+    stbuf->st_uid = parent->uid;
+    stbuf->st_gid = parent->gid;
+    stbuf->st_mtim.tv_sec = (time_t)parent->mtime;
+    stbuf->st_atim.tv_sec = (time_t)parent->atime;
+    stbuf->st_ctim.tv_sec = (time_t)parent->ctime;
+    return 0;
+}
+
 static void efs_client_setup_ino_namespace(void)
 {
     struct timespec ts;
@@ -43,6 +86,17 @@ static void efs_client_setup_ino_namespace(void)
 
 static int efs_fuse_getattr(const char *path, struct stat *stbuf)
 {
+    struct efs_inode parent;
+    if (path_is_stats(path, &parent) == 0) {
+        pthread_mutex_lock(&g_client.lock);
+        struct efs_inode fresh;
+        int grc = efs_export_get_inode(&g_client.export, parent.ino, &fresh);
+        pthread_mutex_unlock(&g_client.lock);
+        if (grc != 0)
+            return -ENOENT;
+        return stats_fill_stat(&fresh, stbuf);
+    }
+
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
     if (rc != 0)
@@ -57,9 +111,41 @@ static int efs_fuse_getattr(const char *path, struct stat *stbuf)
     stbuf->st_gid = ino.gid;
     stbuf->st_mtim.tv_sec = (time_t)ino.mtime;
     stbuf->st_mtim.tv_nsec = (long)ino.mtime_nsec;
-    stbuf->st_atim = stbuf->st_mtim;
+    stbuf->st_atim.tv_sec = (time_t)ino.atime;
+    stbuf->st_atim.tv_nsec = 0;
     stbuf->st_ctim.tv_sec = (time_t)ino.ctime;
     stbuf->st_ctim.tv_nsec = 0;
+    return 0;
+}
+
+struct readdir_ent {
+    char name[EFS_MAX_NAME];
+    struct stat st;
+};
+
+struct readdir_collect_arg {
+    struct readdir_ent *ents;
+    size_t count;
+    size_t cap;
+};
+
+static int readdir_collect_cb(struct efs_export *ex, uint64_t slot, void *arg)
+{
+    struct readdir_collect_arg *a = arg;
+    struct efs_inode *child = &ex->inodes[slot];
+    if (a->count >= a->cap) {
+        size_t ncap = a->cap ? a->cap * 2 : 16;
+        struct readdir_ent *n = realloc(a->ents, ncap * sizeof(*n));
+        if (!n)
+            return -ENOMEM;
+        a->ents = n;
+        a->cap = ncap;
+    }
+    struct readdir_ent *e = &a->ents[a->count++];
+    memset(e, 0, sizeof(*e));
+    strncpy(e->name, child->name, EFS_MAX_NAME - 1);
+    e->st.st_ino = child->ino;
+    e->st.st_mode = child->mode;
     return 0;
 }
 
@@ -76,27 +162,43 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     if (!efs_mode_is_dir(parent.mode))
         return -ENOTDIR;
 
+    /* Snapshot under the lock; call filler unlocked so a same-thread
+     * getattr re-entry cannot double-lock g_client.lock. */
+    struct readdir_collect_arg col = {0};
+    struct stat stats_st;
+    int have_stats = 0;
+    pthread_mutex_lock(&g_client.lock);
+    rc = efs_export_foreach_child(&g_client.export, parent.ino,
+                                  readdir_collect_cb, &col);
+    struct efs_inode fresh;
+    if (rc == 0 &&
+        efs_export_get_inode(&g_client.export, parent.ino, &fresh) == 0 &&
+        stats_fill_stat(&fresh, &stats_st) == 0)
+        have_stats = 1;
+    pthread_mutex_unlock(&g_client.lock);
+    if (rc != 0) {
+        free(col.ents);
+        return rc;
+    }
+
     filler(buf, ".", NULL, 0);
     filler(buf, "..", NULL, 0);
-
-    pthread_mutex_lock(&g_client.lock);
-    for (uint64_t i = 0; i < g_client.export.inode_count; i++) {
-        if (g_client.export.inodes[i].parent == parent.ino &&
-            g_client.export.inodes[i].ino != parent.ino) {
-            struct stat st;
-            memset(&st, 0, sizeof(st));
-            st.st_ino = g_client.export.inodes[i].ino;
-            st.st_mode = g_client.export.inodes[i].mode;
-            filler(buf, g_client.export.inodes[i].name, &st, 0);
-        }
-    }
-    pthread_mutex_unlock(&g_client.lock);
+    for (size_t i = 0; i < col.count; i++)
+        filler(buf, col.ents[i].name, &col.ents[i].st, 0);
+    if (have_stats)
+        filler(buf, EFS_STATS_NAME, &stats_st, 0);
+    free(col.ents);
     return 0;
 }
 
 static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
 {
-    (void)fi;
+    struct efs_inode parent;
+    if (path_is_stats(path, &parent) == 0) {
+        if ((fi->flags & O_ACCMODE) != O_RDONLY)
+            return -EACCES;
+        return 0;
+    }
     struct efs_inode ino;
     return efs_client_lookup(path, &ino) == 0 ? 0 : -ENOENT;
 }
@@ -105,6 +207,27 @@ static int efs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
                          struct fuse_file_info *fi)
 {
     (void)fi;
+    struct efs_inode parent;
+    if (path_is_stats(path, &parent) == 0) {
+        char text[512];
+        pthread_mutex_lock(&g_client.lock);
+        struct efs_inode fresh;
+        int grc = efs_export_get_inode(&g_client.export, parent.ino, &fresh);
+        pthread_mutex_unlock(&g_client.lock);
+        if (grc != 0)
+            return -ENOENT;
+        int n = efs_export_format_stats(&fresh, text, sizeof(text));
+        if (n < 0)
+            return -EIO;
+        if (offset >= n)
+            return 0;
+        size_t avail = (size_t)n - (size_t)offset;
+        if (avail > size)
+            avail = size;
+        memcpy(buf, text + offset, avail);
+        return (int)avail;
+    }
+
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
     if (rc != 0)
@@ -123,6 +246,8 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
                           off_t offset, struct fuse_file_info *fi)
 {
     (void)fi;
+    if (path_is_stats(path, NULL) == 0)
+        return -EACCES;
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
     if (rc != 0)
@@ -146,6 +271,8 @@ static int efs_fuse_create(const char *path, mode_t mode, struct fuse_file_info 
     int rc = split_parent_name(path, name, sizeof(name), &parent);
     if (rc != 0)
         return rc;
+    if (strcmp(name, EFS_STATS_NAME) == 0)
+        return -EEXIST;
 
     struct fuse_context *ctx = fuse_get_context();
     efs_ino_t ino = efs_client_create(parent.ino, name, S_IFREG | mode,
@@ -162,6 +289,8 @@ static int efs_fuse_mkdir(const char *path, mode_t mode)
     int rc = split_parent_name(path, name, sizeof(name), &parent);
     if (rc != 0)
         return rc;
+    if (strcmp(name, EFS_STATS_NAME) == 0)
+        return -EEXIST;
 
     struct fuse_context *ctx = fuse_get_context();
     efs_ino_t ino = efs_client_create(parent.ino, name, S_IFDIR | mode,
@@ -178,6 +307,8 @@ static int efs_fuse_unlink(const char *path)
     int rc = split_parent_name(path, name, sizeof(name), &parent);
     if (rc != 0)
         return rc;
+    if (strcmp(name, EFS_STATS_NAME) == 0)
+        return -EACCES;
 
     return efs_client_unlink(parent.ino, name, false) == 0 ? 0 : -EIO;
 }
@@ -238,6 +369,8 @@ static int efs_fuse_statfs(const char *path, struct statvfs *stbuf)
 
 static int efs_fuse_chmod(const char *path, mode_t mode)
 {
+    if (path_is_stats(path, NULL) == 0)
+        return -EACCES;
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
     if (rc != 0)
@@ -249,6 +382,8 @@ static int efs_fuse_chmod(const char *path, mode_t mode)
 
 static int efs_fuse_chown(const char *path, uid_t uid, gid_t gid)
 {
+    if (path_is_stats(path, NULL) == 0)
+        return -EACCES;
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
     if (rc != 0)
@@ -335,6 +470,8 @@ static int efs_fuse_readlink(const char *path, char *buf, size_t size)
 
 static int efs_fuse_link(const char *from, const char *to)
 {
+    if (path_is_stats(from, NULL) == 0 || path_is_stats(to, NULL) == 0)
+        return -EACCES;
     struct efs_inode src;
     if (efs_client_lookup(from, &src) != 0)
         return -ENOENT;
@@ -346,6 +483,8 @@ static int efs_fuse_link(const char *from, const char *to)
     int rc = split_parent_name(to, name, sizeof(name), &parent);
     if (rc != 0)
         return rc;
+    if (strcmp(name, EFS_STATS_NAME) == 0)
+        return -EACCES;
 
     rc = efs_client_link(src.ino, parent.ino, name);
     if (rc == EFS_ERR_EXIST)
@@ -357,6 +496,8 @@ static int efs_fuse_link(const char *from, const char *to)
 
 static int efs_fuse_utime(const char *path, struct utimbuf *ubuf)
 {
+    if (path_is_stats(path, NULL) == 0)
+        return -EACCES;
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
     if (rc != 0)
@@ -375,12 +516,27 @@ static int efs_fuse_utime(const char *path, struct utimbuf *ubuf)
 
 static int efs_fuse_utimens(const char *path, const struct timespec tv[2])
 {
+    if (path_is_stats(path, NULL) == 0)
+        return -EACCES;
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
     if (rc != 0)
         return -ENOENT;
 
-    /* tv[1] is mtime; honor UTIME_OMIT / UTIME_NOW. */
+    /* tv[0]=atime, tv[1]=mtime; honor UTIME_OMIT / UTIME_NOW. */
+    if (tv && tv[0].tv_nsec != UTIME_OMIT) {
+        uint64_t asec;
+        if (tv[0].tv_nsec == UTIME_NOW) {
+            struct timespec now;
+            clock_gettime(CLOCK_REALTIME, &now);
+            asec = (uint64_t)now.tv_sec;
+        } else {
+            asec = (uint64_t)tv[0].tv_sec;
+        }
+        if (efs_client_set_atime(ino.ino, asec) != 0)
+            return -EIO;
+    }
+
     uint64_t sec;
     uint32_t nsec;
     if (!tv || tv[1].tv_nsec == UTIME_OMIT) {
@@ -404,6 +560,8 @@ static int efs_fuse_utimens(const char *path, const struct timespec tv[2])
 
 static int efs_fuse_truncate(const char *path, off_t size)
 {
+    if (path_is_stats(path, NULL) == 0)
+        return -EACCES;
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
     if (rc != 0)
@@ -435,6 +593,8 @@ static void efs_fuse_destroy(void *userdata)
 
 static int efs_fuse_rename(const char *from, const char *to)
 {
+    if (path_is_stats(from, NULL) == 0 || path_is_stats(to, NULL) == 0)
+        return -EACCES;
     struct efs_inode src;
     if (efs_client_lookup(from, &src) != 0)
         return -ENOENT;
@@ -444,6 +604,8 @@ static int efs_fuse_rename(const char *from, const char *to)
     int rc = split_parent_name(to, name, sizeof(name), &dst_parent);
     if (rc != 0)
         return rc;
+    if (strcmp(name, EFS_STATS_NAME) == 0)
+        return -EACCES;
 
     if (efs_client_rename(src.ino, dst_parent.ino, name) != 0)
         return -EIO;
