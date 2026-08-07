@@ -41,6 +41,7 @@ trap cleanup EXIT
 
 echo "=== server-bench host=$(hostname -s) path=$BENCH_PATH time=$TIME_SEC writers=$WRITERS ==="
 
+# Unset → efsd default (direct_io off). Opt in with EFS_DIO=on.
 DIO_ARGS=()
 case "${EFS_DIO:-}" in
     on|direct|1)    DIO_ARGS=(--direct-io) ;;

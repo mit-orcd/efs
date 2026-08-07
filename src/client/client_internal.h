@@ -36,6 +36,11 @@ struct efs_client {
     pthread_cond_t conn_cv[EFS_MAX_NODES];
     int conn_pool_size; /* 1..EFS_CLIENT_CONNS_PER_NODE, from env or default */
 
+    /* Soft down-mark: after consecutive failures, skip connect attempts for a
+     * cooldown so one dead peer cannot stall every chunk PUT (2+1 quorum). */
+    int node_fail_streak[EFS_MAX_NODES];
+    int64_t node_down_until_ms[EFS_MAX_NODES]; /* CLOCK_MONOTONIC ms; 0 = up */
+
     /* When non-zero, metadata replication is coalesced: changes only mark
      * dirty and flush every meta_batch_ops operations (or when forced on
      * unmount). Flushes pack the full export into 2+1 pages and push a tiny
@@ -157,8 +162,20 @@ int efs_client_conn_get(efs_node_id_t node_id);
 /* Return a healthy connection to the pool. */
 void efs_client_conn_release(efs_node_id_t node_id, int fd);
 
-/* Close a broken connection and free its pool slot. */
+/* Close a broken connection and free its pool slot. Also closes other
+ * idle pooled sockets to the same node (they are often stale after an
+ * efsd restart). */
 void efs_client_conn_drop(efs_node_id_t node_id, int fd);
+
+/* Close all idle pooled sockets to node_id so the next checkout reconnects.
+ * In-flight (busy) sockets are left alone until their owners drop/release. */
+void efs_client_conn_invalidate_node(efs_node_id_t node_id);
+
+/* Track peer liveness for the down-mark (connect / I/O success or failure). */
+void efs_client_node_note_ok(efs_node_id_t node_id);
+void efs_client_node_note_fail(efs_node_id_t node_id);
+/* True while the peer is in the short connect-skip cooldown. */
+int efs_client_node_is_down(efs_node_id_t node_id);
 
 /* Initialize the connection pool (call once after node_count is known). */
 void efs_client_conn_init(void);

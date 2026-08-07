@@ -6,9 +6,24 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <pthread.h>
+
+/* Mark a peer down after this many consecutive failures. */
+#define EFS_NODE_DOWN_FAILS 1
+/* Skip connect attempts for this long (ms) while marked down.
+ * When the timer expires, conn_get clears the streak and re-probes so a
+ * restarted peer is picked up again without a client restart. */
+#define EFS_NODE_DOWN_MS    10000
+
+static int64_t monotonic_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000 + (int64_t)ts.tv_nsec / 1000000;
+}
 
 static int parse_host_port(const char *str, char *host, size_t host_len, uint16_t *port)
 {
@@ -79,6 +94,8 @@ void efs_client_conn_init(void)
             g_client.conn_fd[i][s] = -1;
             g_client.conn_busy[i][s] = 0;
         }
+        g_client.node_fail_streak[i] = 0;
+        g_client.node_down_until_ms[i] = 0;
         if (!conn_pool_inited) {
             pthread_mutex_init(&g_client.conn_lock[i], NULL);
             pthread_cond_init(&g_client.conn_cv[i], NULL);
@@ -109,6 +126,48 @@ static int node_index_for_id(efs_node_id_t node_id)
     return -1;
 }
 
+void efs_client_node_note_ok(efs_node_id_t node_id)
+{
+    int idx = node_index_for_id(node_id);
+    if (idx < 0)
+        return;
+    pthread_mutex_lock(&g_client.conn_lock[idx]);
+    g_client.node_fail_streak[idx] = 0;
+    g_client.node_down_until_ms[idx] = 0;
+    pthread_mutex_unlock(&g_client.conn_lock[idx]);
+}
+
+int efs_client_node_is_down(efs_node_id_t node_id)
+{
+    int idx = node_index_for_id(node_id);
+    if (idx < 0)
+        return 1;
+    pthread_mutex_lock(&g_client.conn_lock[idx]);
+    int down = g_client.node_down_until_ms[idx] > monotonic_ms();
+    pthread_mutex_unlock(&g_client.conn_lock[idx]);
+    return down;
+}
+
+void efs_client_node_note_fail(efs_node_id_t node_id)
+{
+    int idx = node_index_for_id(node_id);
+    if (idx < 0)
+        return;
+    int64_t now = monotonic_ms();
+    pthread_mutex_lock(&g_client.conn_lock[idx]);
+    /* Already in cooldown: do not refresh. Active PUTs would otherwise
+     * keep pushing down_until forward forever and never re-probe. */
+    if (g_client.node_down_until_ms[idx] > now) {
+        pthread_mutex_unlock(&g_client.conn_lock[idx]);
+        return;
+    }
+    if (g_client.node_fail_streak[idx] < 1000)
+        g_client.node_fail_streak[idx]++;
+    if (g_client.node_fail_streak[idx] >= EFS_NODE_DOWN_FAILS)
+        g_client.node_down_until_ms[idx] = now + EFS_NODE_DOWN_MS;
+    pthread_mutex_unlock(&g_client.conn_lock[idx]);
+}
+
 int efs_client_conn_get(efs_node_id_t node_id)
 {
     int idx = node_index_for_id(node_id);
@@ -117,6 +176,17 @@ int efs_client_conn_get(efs_node_id_t node_id)
     int n = pool_size();
 
     pthread_mutex_lock(&g_client.conn_lock[idx]);
+    int64_t now = monotonic_ms();
+    if (g_client.node_down_until_ms[idx] > now) {
+        pthread_mutex_unlock(&g_client.conn_lock[idx]);
+        return -1;
+    }
+    /* Cooldown expired — clear streak so a recovered peer gets a clean probe. */
+    if (g_client.node_down_until_ms[idx] > 0) {
+        g_client.node_down_until_ms[idx] = 0;
+        g_client.node_fail_streak[idx] = 0;
+    }
+
     for (;;) {
         int free_slot = -1;
         for (int s = 0; s < n; s++) {
@@ -134,12 +204,21 @@ int efs_client_conn_get(efs_node_id_t node_id)
             struct efs_node *node = &g_client.nodes[idx];
             int fd = efs_connect_tcp(node->addr, node->port);
             if (fd < 0) {
+                now = monotonic_ms();
+                if (g_client.node_fail_streak[idx] < 1000)
+                    g_client.node_fail_streak[idx]++;
+                /* Only arm cooldown once; do not refresh if already set. */
+                if (g_client.node_fail_streak[idx] >= EFS_NODE_DOWN_FAILS &&
+                    g_client.node_down_until_ms[idx] <= now)
+                    g_client.node_down_until_ms[idx] = now + EFS_NODE_DOWN_MS;
                 pthread_mutex_unlock(&g_client.conn_lock[idx]);
                 return -1;
             }
             efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
             efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
             g_client.conn_fd[idx][free_slot] = fd;
+            g_client.node_fail_streak[idx] = 0;
+            g_client.node_down_until_ms[idx] = 0;
         }
 
         g_client.conn_busy[idx][free_slot] = 1;
@@ -162,11 +241,31 @@ void efs_client_conn_release(efs_node_id_t node_id, int fd)
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
 }
 
+void efs_client_conn_invalidate_node(efs_node_id_t node_id)
+{
+    int idx = node_index_for_id(node_id);
+    if (idx < 0)
+        return;
+    int n = pool_size();
+    pthread_mutex_lock(&g_client.conn_lock[idx]);
+    for (int s = 0; s < n; s++) {
+        if (g_client.conn_busy[idx][s])
+            continue;
+        if (g_client.conn_fd[idx][s] >= 0) {
+            close(g_client.conn_fd[idx][s]);
+            g_client.conn_fd[idx][s] = -1;
+        }
+    }
+    pthread_cond_broadcast(&g_client.conn_cv[idx]);
+    pthread_mutex_unlock(&g_client.conn_lock[idx]);
+}
+
 void efs_client_conn_drop(efs_node_id_t node_id, int fd)
 {
     int idx = node_index_for_id(node_id);
     if (idx < 0 || fd < 0)
         return;
+    int n = pool_size();
     pthread_mutex_lock(&g_client.conn_lock[idx]);
     int s = slot_for_fd((uint32_t)idx, fd);
     if (s >= 0) {
@@ -177,7 +276,17 @@ void efs_client_conn_drop(efs_node_id_t node_id, int fd)
     } else {
         close(fd);
     }
-    pthread_cond_signal(&g_client.conn_cv[idx]);
+    /* After efsd restart the whole idle pool for this peer is usually dead;
+     * flush it so the next checkout opens fresh TCP connections. */
+    for (int i = 0; i < n; i++) {
+        if (g_client.conn_busy[idx][i])
+            continue;
+        if (g_client.conn_fd[idx][i] >= 0) {
+            close(g_client.conn_fd[idx][i]);
+            g_client.conn_fd[idx][i] = -1;
+        }
+    }
+    pthread_cond_broadcast(&g_client.conn_cv[idx]);
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
 }
 

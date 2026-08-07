@@ -71,9 +71,9 @@ for sid in 1 2 3; do
     [ -n "$EXCLUDE" ] && excl_args=(--exclude="$EXCLUDE")
     # Profile server1 only
     extra=""
-    export_extra="ALL,EFS_DIO=on"
+    export_extra="ALL,EFS_DIO=off"
     if [ "$sid" = 1 ]; then
-        export_extra="ALL,EFS_DIO=on,EFS_EXTRA_ARGS=--perf,EFS_PERF_PATH=${PROF}/server1.perf.data"
+        export_extra="ALL,EFS_DIO=off,EFS_EXTRA_ARGS=--perf,EFS_PERF_PATH=${PROF}/server1.perf.data"
     fi
     # --no-requeue: a mid-run requeue kills efsd but leaves stale state/*.addr
     job=$(sbatch --parsable -p "$PARTITION" --time=00:45:00 --no-requeue \

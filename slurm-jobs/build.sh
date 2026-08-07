@@ -16,16 +16,13 @@ mkdir -p "$SHARED/logs"
 cd "$REPO"
 
 echo "Building on $(hostname) at $(date)"
-# Makefile lacks header deps; force client/common rebuild when headers move.
-need_client=0
-if [ ! -f src/client/client.o ] || [ include/efs/common.h -nt src/client/client.o ] \
-   || [ src/client/client_internal.h -nt src/client/client.o ]; then
-    need_client=1
-fi
-if [ "$need_client" = 1 ]; then
-    echo "Forcing client object rebuild (header newer than client.o)"
-    rm -f src/client/*.o efs-fuse libefs.a
-fi
+# Always clean: ASAN builds leave instrumented .o that break normal link, and
+# Makefile header deps are incomplete.
+make clean
 make -j4
 echo "Build finished OK"
 ls -la efs-fuse efsd efs-mgmt | awk '{print $5,$9}'
+if nm efsd 2>/dev/null | grep -q '__asan_init'; then
+    echo "ERROR: efsd still has ASAN symbols" >&2
+    exit 1
+fi

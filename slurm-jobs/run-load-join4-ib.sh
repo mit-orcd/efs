@@ -56,7 +56,7 @@ for sid in 1 2 3; do
     [ -n "$EXCLUDE" ] && excl_args=(--exclude="$EXCLUDE")
     job=$(sbatch --parsable -p "$PARTITION" --time="$JOB_TIME" \
         --cpus-per-task=4 --mem=8G "${excl_args[@]}" \
-        --export=ALL,EFS_DIO=on "slurm-jobs/server${sid}.sh")
+        --export=ALL,EFS_DIO=off "slurm-jobs/server${sid}.sh")
     SERVER_JOBS+=("$job")
     efs_wait_addr "$sid" 600
     node=$(efs_slurm_node "$(cat "$SHARED/state/s${sid}.host")")
@@ -136,7 +136,7 @@ echo "JOIN_START $(date -Is) delay=${JOIN_DELAY_S}s" | tee -a "$PROF_ROOT/timeli
 
 JOB4=$(sbatch --parsable -p "$PARTITION" --time="$JOB_TIME" \
     --cpus-per-task=4 --mem=8G --exclude="$EXCLUDE" \
-    --export=ALL,EFS_DIO=on slurm-jobs/server4.sh)
+    --export=ALL,EFS_DIO=off slurm-jobs/server4.sh)
 echo "  s4 job $JOB4 (exclude=$EXCLUDE)"
 efs_wait_addr 4 600
 N4=$(efs_slurm_node "$(cat "$SHARED/state/s4.host")")

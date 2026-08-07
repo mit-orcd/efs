@@ -14,9 +14,11 @@
 
 static void make_dir(const char *path)
 {
-    char tmp[8192];
-    strncpy(tmp, path, sizeof(tmp) - 1);
-    tmp[sizeof(tmp) - 1] = '\0';
+    size_t n = strlen(path) + 1;
+    char *tmp = malloc(n);
+    if (!tmp)
+        return;
+    memcpy(tmp, path, n);
 
     for (char *p = tmp + 1; *p; p++) {
         if (*p == '/') {
@@ -26,19 +28,23 @@ static void make_dir(const char *path)
         }
     }
     mkdir(tmp, 0755);
+    free(tmp);
 }
 
 static void make_dir_for_file(const char *path)
 {
-    char tmp[8192];
-    strncpy(tmp, path, sizeof(tmp) - 1);
-    tmp[sizeof(tmp) - 1] = '\0';
+    size_t n = strlen(path) + 1;
+    char *tmp = malloc(n);
+    if (!tmp)
+        return;
+    memcpy(tmp, path, n);
 
     char *last_slash = strrchr(tmp, '/');
     if (last_slash) {
         *last_slash = '\0';
         make_dir(tmp);
     }
+    free(tmp);
 }
 
 static int path_exists(const char *path)
@@ -264,8 +270,25 @@ static int server_usage_load(struct efsd_server *s, uint64_t *used_out)
     return 0;
 }
 
+void server_usage_mark_dirty(struct efsd_server *s)
+{
+    if (s)
+        __atomic_store_n(&s->usage_dirty, 1, __ATOMIC_RELEASE);
+}
+
+void server_usage_flush_dirty(struct efsd_server *s)
+{
+    if (!s || !__atomic_exchange_n(&s->usage_dirty, 0, __ATOMIC_ACQ_REL))
+        return;
+    server_usage_save(s);
+}
+
 void server_usage_save(struct efsd_server *s)
 {
+    /* Serialize disk I/O: many writers used to race on usage.bin.tmp, causing
+     * rename ENOENT storms (one thread renames the shared .tmp out from under
+     * another). Unique tmp names + mutex make persistence safe. */
+    static pthread_mutex_t usage_io_mu = PTHREAD_MUTEX_INITIALIZER;
     if (!s)
         return;
     uint64_t used = 0;
@@ -273,31 +296,62 @@ void server_usage_save(struct efsd_server *s)
     struct efs_node *local = server_local_node(s);
     if (local)
         used = local->used;
+    __atomic_store_n(&s->usage_dirty, 0, __ATOMIC_RELEASE);
     pthread_mutex_unlock(&s->lock);
 
-    char path[8192];
-    usage_path(s, path, sizeof(path));
+    /* Heap paths: heartbeat flushes usage and must stay stack-light (ASAN). */
+    char *path = malloc(8192);
+    char *tmp = malloc(8192);
+    if (!path || !tmp) {
+        free(path);
+        free(tmp);
+        server_usage_mark_dirty(s);
+        return;
+    }
+    usage_path(s, path, 8192);
+
+    pthread_mutex_lock(&usage_io_mu);
     make_dir_for_file(path);
 
-    char tmp[8192];
-    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    snprintf(tmp, 8192, "%s.tmp.%d.%lu", path, (int)getpid(),
+             (unsigned long)pthread_self());
     FILE *f = fopen(tmp, "wb");
     if (!f) {
         fprintf(stderr, "Could not save usage to %s: %s\n", tmp, strerror(errno));
+        pthread_mutex_unlock(&usage_io_mu);
+        free(path);
+        free(tmp);
+        server_usage_mark_dirty(s);
         return;
     }
     uint32_t version = EFS_USAGE_VERSION;
-    fwrite(EFS_USAGE_MAGIC, 4, 1, f);
-    fwrite(&version, sizeof(version), 1, f);
-    fwrite(&used, sizeof(used), 1, f);
+    if (fwrite(EFS_USAGE_MAGIC, 4, 1, f) != 1 ||
+        fwrite(&version, sizeof(version), 1, f) != 1 ||
+        fwrite(&used, sizeof(used), 1, f) != 1) {
+        fprintf(stderr, "Could not write usage to %s: %s\n", tmp, strerror(errno));
+        fclose(f);
+        unlink(tmp);
+        pthread_mutex_unlock(&usage_io_mu);
+        free(path);
+        free(tmp);
+        server_usage_mark_dirty(s);
+        return;
+    }
     fflush(f);
-    fsync(fileno(f));
     fclose(f);
     if (rename(tmp, path) != 0) {
-        fprintf(stderr, "Could not rename usage file to %s: %s\n",
-                path, strerror(errno));
-        unlink(tmp);
+        /* Parent may have been wiped mid-flight; recreate and retry once. */
+        make_dir_for_file(path);
+        if (rename(tmp, path) != 0) {
+            fprintf(stderr, "Could not rename usage file to %s: %s\n",
+                    path, strerror(errno));
+            unlink(tmp);
+            server_usage_mark_dirty(s);
+        }
     }
+    pthread_mutex_unlock(&usage_io_mu);
+    free(path);
+    free(tmp);
 }
 
 int server_destroy_export(struct efsd_server *s, const char *name)
@@ -642,6 +696,8 @@ static void *shard_io_thread(void *arg)
                            efs_bytes_are_zero(a->buf, a->len));
             const uint8_t *wbuf;
             if (is_zero) {
+                /* Never free after publish: writers may still reference the
+                 * prior buffer. Grow by replacing the pointer without free. */
                 static uint8_t *zero_dio;
                 static uint32_t zero_dio_alloc;
                 static pthread_mutex_t zero_dio_mu = PTHREAD_MUTEX_INITIALIZER;
@@ -655,7 +711,6 @@ static void *shard_io_thread(void *arg)
                         return NULL;
                     }
                     memset(fresh, 0, alloc);
-                    free(zero_dio);
                     zero_dio = fresh;
                     zero_dio_alloc = alloc;
                 }
@@ -732,30 +787,21 @@ int server_read_fragment(struct efsd_server *s, struct efs_export *ex,
     int have[EFS_MAX_STORAGE_PATHS];
     memset(have, 0, sizeof(have));
 
-    struct shard_io_arg args[EFS_MAX_STORAGE_PATHS];
-    pthread_t tids[EFS_MAX_STORAGE_PATHS];
-    int started[EFS_MAX_STORAGE_PATHS];
-    memset(started, 0, sizeof(started));
-
+    /* Inline shard reads — see server_write_fragment_sync (avoid per-PUT
+     * pthread storms under multi-disk local EC). */
     for (uint32_t i = 0; i < n; i++) {
-        memset(&args[i], 0, sizeof(args[i]));
-        args[i].s = s;
-        args[i].buf = shards[i];
-        args[i].len = slen;
-        args[i].path_index = i;
-        args[i].is_write = 0;
-        args[i].result = EFS_ERR_IO;
+        struct shard_io_arg arg;
+        memset(&arg, 0, sizeof(arg));
+        arg.s = s;
+        arg.buf = shards[i];
+        arg.len = slen;
+        arg.path_index = i;
+        arg.is_write = 0;
+        arg.result = EFS_ERR_IO;
         resolve_shard_path(s, ex, ino, chunk_index, fragment_index, i,
-                           args[i].path, sizeof(args[i].path));
-        if (pthread_create(&tids[i], NULL, shard_io_thread, &args[i]) == 0)
-            started[i] = 1;
-        else
-            shard_io_thread(&args[i]);
-    }
-    for (uint32_t i = 0; i < n; i++) {
-        if (started[i])
-            pthread_join(tids[i], NULL);
-        if (args[i].result == EFS_OK)
+                           arg.path, sizeof(arg.path));
+        shard_io_thread(&arg);
+        if (arg.result == EFS_OK)
             have[i] = 1;
     }
 
@@ -963,6 +1009,67 @@ struct efs_node *server_local_node(struct efsd_server *s)
     return NULL;
 }
 
+void server_dedupe_nodes_locked(struct efsd_server *s)
+{
+    if (!s || s->node_count <= 1)
+        return;
+    struct efs_node *unique = malloc(sizeof(struct efs_node) * EFS_MAX_NODES);
+    if (!unique)
+        return;
+    memset(unique, 0, sizeof(struct efs_node) * EFS_MAX_NODES);
+    uint32_t unique_count = 0;
+    for (uint32_t i = 0; i < s->node_count && i < EFS_MAX_NODES; i++) {
+        if (s->nodes[i].id == 0)
+            continue;
+        int seen = 0;
+        for (uint32_t j = 0; j < unique_count; j++) {
+            if (unique[j].id == s->nodes[i].id) {
+                seen = 1;
+                break;
+            }
+        }
+        if (!seen)
+            unique[unique_count++] = s->nodes[i];
+    }
+    memcpy(s->nodes, unique, sizeof(s->nodes));
+    s->node_count = unique_count;
+    free(unique);
+}
+
+void server_sync_local_membership(struct efsd_server *s)
+{
+    if (!s || s->id == 0)
+        return;
+    pthread_mutex_lock(&s->lock);
+    server_dedupe_nodes_locked(s);
+    struct efs_node *local = NULL;
+    for (uint32_t i = 0; i < s->node_count; i++) {
+        if (s->nodes[i].id == s->id) {
+            local = &s->nodes[i];
+            break;
+        }
+    }
+    if (!local) {
+        if (s->node_count >= EFS_MAX_NODES) {
+            pthread_mutex_unlock(&s->lock);
+            fprintf(stderr, "Cannot insert local node %u: membership full\n",
+                    s->id);
+            return;
+        }
+        local = &s->nodes[s->node_count++];
+        memset(local, 0, sizeof(*local));
+        local->id = s->id;
+    }
+    strncpy(local->addr, s->addr, sizeof(local->addr) - 1);
+    local->addr[sizeof(local->addr) - 1] = '\0';
+    local->port = s->port;
+    server_format_storage_paths(s, local->storage_path, sizeof(local->storage_path));
+    local->quota = s->quota;
+    /* used left as-is (usage.bin / prior counter). */
+    server_dedupe_nodes_locked(s);
+    pthread_mutex_unlock(&s->lock);
+}
+
 void server_update_local_usage(struct efsd_server *s)
 {
     uint64_t used = server_compute_local_usage(s);
@@ -1021,9 +1128,21 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
         pthread_mutex_unlock(&s->lock);
         return EFS_ERR_QUOTA;
     }
-    if (charge_quota)
+    int flush_usage = 0;
+    if (charge_quota) {
         local->used += data_len;
+        /* Persist at most every ~64 MiB charged (writer thread, not heartbeat). */
+        static uint64_t charged_since_save;
+        uint64_t sum = __atomic_add_fetch(&charged_since_save, (uint64_t)data_len,
+                                          __ATOMIC_RELAXED);
+        if (sum >= (64ull << 20)) {
+            __atomic_store_n(&charged_since_save, 0, __ATOMIC_RELAXED);
+            flush_usage = 1;
+        }
+    }
     pthread_mutex_unlock(&s->lock);
+    if (flush_usage)
+        server_usage_save(s);
 
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
 
@@ -1050,12 +1169,10 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
                 if (local && local->used >= data_len)
                     local->used -= data_len;
                 pthread_mutex_unlock(&s->lock);
-                server_usage_save(s);
+                server_usage_mark_dirty(s);
             }
             return EFS_ERR_IO;
         }
-        if (charge_quota)
-            server_usage_save(s);
         return EFS_OK;
     }
 
@@ -1068,7 +1185,7 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
             if (local && local->used >= data_len)
                 local->used -= data_len;
             pthread_mutex_unlock(&s->lock);
-            server_usage_save(s);
+            server_usage_mark_dirty(s);
         }
         return EFS_ERR_NOMEM;
     }
@@ -1080,38 +1197,30 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
             if (local && local->used >= data_len)
                 local->used -= data_len;
             pthread_mutex_unlock(&s->lock);
-            server_usage_save(s);
+            server_usage_mark_dirty(s);
         }
         return EFS_ERR_INVAL;
     }
 
+    /* Write shards inline on the writer thread. Spawning n pthreads per PUT
+     * (default 8MB stacks × 4 disks × 16 writers) exhausted address space and
+     * correlated with efsd SIGSEGV under imagenet ecopy. Writer-pool
+     * parallelism already covers concurrent fragments. */
     uint32_t slen = efs_local_ec_shard_len(n);
-    struct shard_io_arg args[EFS_MAX_STORAGE_PATHS];
-    pthread_t tids[EFS_MAX_STORAGE_PATHS];
-    int started[EFS_MAX_STORAGE_PATHS];
-    memset(started, 0, sizeof(started));
-
-    for (uint32_t i = 0; i < n; i++) {
-        memset(&args[i], 0, sizeof(args[i]));
-        args[i].s = s;
-        args[i].buf = shards[i];
-        args[i].len = slen;
-        args[i].path_index = i;
-        args[i].is_write = 1;
-        args[i].result = EFS_ERR_IO;
-        server_shard_path(s, ex, ino, chunk_index, fragment_index, i,
-                          args[i].path, sizeof(args[i].path));
-        if (pthread_create(&tids[i], NULL, shard_io_thread, &args[i]) == 0)
-            started[i] = 1;
-        else
-            shard_io_thread(&args[i]);
-    }
-
     int ok = 0;
     for (uint32_t i = 0; i < n; i++) {
-        if (started[i])
-            pthread_join(tids[i], NULL);
-        if (args[i].result == EFS_OK)
+        struct shard_io_arg arg;
+        memset(&arg, 0, sizeof(arg));
+        arg.s = s;
+        arg.buf = shards[i];
+        arg.len = slen;
+        arg.path_index = i;
+        arg.is_write = 1;
+        arg.result = EFS_ERR_IO;
+        server_shard_path(s, ex, ino, chunk_index, fragment_index, i,
+                          arg.path, sizeof(arg.path));
+        shard_io_thread(&arg);
+        if (arg.result == EFS_OK)
             ok++;
     }
     free(shards);
@@ -1123,12 +1232,10 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
             if (local && local->used >= data_len)
                 local->used -= data_len;
             pthread_mutex_unlock(&s->lock);
-            server_usage_save(s);
+            server_usage_mark_dirty(s);
         }
         return EFS_ERR_IO;
     }
-    if (charge_quota)
-        server_usage_save(s);
     return EFS_OK;
 }
 

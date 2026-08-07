@@ -205,6 +205,11 @@ Fragment reads/writes use the page cache by default. Pass `--direct-io` for
        --storage /tmp/efs/s1 --direct-io &
 ```
 
+## NUMA affinity
+
+Soft NUMA pinning (storage writers and FUSE NIC locality) is **off by default**.
+Set `EFS_NUMA_AFFINITY=1` (or `on`/`true`) to enable discovery and pinning.
+
 Fragment PUTs are executed on a dedicated writer thread pool (default 8
 threads). Override with `--writers <n>` (`0` runs writes inline on the
 connection thread).

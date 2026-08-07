@@ -77,6 +77,20 @@ static int cmd_status(int argc, char **argv)
     struct efs_msg_list_nodes_reply *list = reply;
     printf("Cluster nodes (%u):\n", list->node_count);
 
+    /* Surface corrupt membership (duplicate ids) — placement will skip nodes. */
+    for (uint32_t i = 0; i < list->node_count; i++) {
+        for (uint32_t j = i + 1; j < list->node_count; j++) {
+            if (list->nodes[i].id == list->nodes[j].id) {
+                fprintf(stderr,
+                        "WARNING: duplicate node id %u in membership "
+                        "(%s:%u and %s:%u) — restart cluster with fixed efsd\n",
+                        list->nodes[i].id,
+                        list->nodes[i].addr, list->nodes[i].port,
+                        list->nodes[j].addr, list->nodes[j].port);
+            }
+        }
+    }
+
     int full_nodes = 0;
     int all_have_quota = (list->node_count > 0);
     uint64_t min_quota = 0;

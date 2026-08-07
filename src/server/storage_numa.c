@@ -8,13 +8,15 @@ void server_discover_storage_numa(struct efsd_server *s)
 {
     if (!s)
         return;
-    int numa_on = efs_numa_affinity_enabled();
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
     for (uint32_t i = 0; i < EFS_MAX_STORAGE_PATHS; i++) {
         s->storage_numa_node[i] = -1;
         s->storage_affinity_valid[i] = 0;
         CPU_ZERO(&s->storage_cpu_set[i]);
     }
+    /* Opt-in only (EFS_NUMA_AFFINITY=1/on/true). Default: no discovery, no pin. */
+    if (!efs_numa_affinity_enabled())
+        return;
     for (uint32_t i = 0; i < n; i++) {
         int node = -1;
         cpu_set_t set;
@@ -23,12 +25,10 @@ void server_discover_storage_numa(struct efsd_server *s)
             s->storage_numa_node[i] = node;
             char cpus[256];
             efs_numa_format_cpuset(&set, cpus, sizeof(cpus));
-            printf("storage[%u]=%s numa=%d cpus=%s affinity=%s\n", i,
-                   s->storage_paths[i], node, cpus, numa_on ? "on" : "off");
-            if (numa_on) {
-                s->storage_cpu_set[i] = set;
-                s->storage_affinity_valid[i] = 1;
-            }
+            printf("storage[%u]=%s numa=%d cpus=%s affinity=on\n", i,
+                   s->storage_paths[i], node, cpus);
+            s->storage_cpu_set[i] = set;
+            s->storage_affinity_valid[i] = 1;
         } else {
             printf("storage[%u]=%s numa=unknown (unbound)\n", i,
                    s->storage_paths[i]);

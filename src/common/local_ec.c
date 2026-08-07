@@ -1,6 +1,7 @@
 #include "efs/local_ec.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /* GF(256) with irreducible polynomial 0x11d (AES/RAID-6 friendly). */
 static uint8_t gf_exp[512];
@@ -223,10 +224,17 @@ static int decode_rs(uint32_t n,
     if (k + 2 != n)
         return EFS_ERR_INVAL;
 
-    uint8_t shards[EFS_MAX_STORAGE_PATHS][EFS_LOCAL_EC_MAX_SHARD];
-    int have[EFS_MAX_STORAGE_PATHS];
-    memcpy(shards, shards_in, sizeof(shards));
-    memcpy(have, have_in, sizeof(have));
+    /* Heap: EFS_MAX_STORAGE_PATHS × max shard ≈ hundreds of KiB. */
+    uint8_t (*shards)[EFS_LOCAL_EC_MAX_SHARD] =
+        malloc(EFS_MAX_STORAGE_PATHS * EFS_LOCAL_EC_MAX_SHARD);
+    int *have = malloc(EFS_MAX_STORAGE_PATHS * sizeof(int));
+    if (!shards || !have) {
+        free(shards);
+        free(have);
+        return EFS_ERR_NOMEM;
+    }
+    memcpy(shards, shards_in, EFS_MAX_STORAGE_PATHS * EFS_LOCAL_EC_MAX_SHARD);
+    memcpy(have, have_in, EFS_MAX_STORAGE_PATHS * sizeof(int));
 
     int data_ok = 1;
     for (uint32_t di = 0; di < k; di++) {
@@ -248,7 +256,7 @@ static int decode_rs(uint32_t n,
             missing[nmiss++] = (int)i;
     }
     if (nhave < (int)k || nmiss > 2)
-        return EFS_ERR_DECODE;
+        goto fail;
 
     uint32_t p_idx = k;
     uint32_t q_idx = k + 1;
@@ -283,7 +291,7 @@ static int decode_rs(uint32_t n,
                     }
                     shards[m][i] = gf_div(q, gf_pow2(m));
                 } else {
-                    return EFS_ERR_DECODE;
+                    goto fail;
                 }
             }
             have[m] = 1;
@@ -365,10 +373,10 @@ static int decode_rs(uint32_t n,
                 shards[p_idx][i] = p;
                 shards[q_idx][i] = q;
             } else {
-                return EFS_ERR_DECODE;
+                goto fail;
             }
         } else {
-            return EFS_ERR_DECODE;
+            goto fail;
         }
     }
 
@@ -387,7 +395,14 @@ assemble:
         }
         memcpy(frag_out, full, frag_len);
     }
+    free(shards);
+    free(have);
     return EFS_OK;
+
+fail:
+    free(shards);
+    free(have);
+    return EFS_ERR_DECODE;
 }
 
 int efs_local_ec_decode(uint32_t n,

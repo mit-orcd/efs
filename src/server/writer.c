@@ -169,7 +169,7 @@ int server_writer_pool_start(struct efsd_server *s)
         return -1;
     g_pool.running = 1;
     for (int i = 0; i < g_pool.nwriters; i++) {
-        if (pthread_create(&g_pool.threads[i], NULL, writer_thread, NULL) != 0) {
+        if (efsd_pthread_create(&g_pool.threads[i], writer_thread, NULL) != 0) {
             g_pool.running = 0;
             pthread_cond_broadcast(&g_pool.not_empty);
             for (int j = 0; j < i; j++)

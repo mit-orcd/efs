@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <errno.h>
 #include <pthread.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -148,7 +149,8 @@ static int bench_node_index(efs_node_id_t nid)
 }
 
 /* sticky_fds[membership_index] holds a checked-out pool fd for the worker
- * lifetime. Pass NULL to use short-lived borrows. */
+ * lifetime. Pass NULL to use short-lived borrows.
+ * Success = ≥2 acks (same 2+1 quorum as the FUSE client PUT path). */
 static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
                             const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                             const uint8_t *zero_frag,
@@ -168,32 +170,51 @@ static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
 
     int fds[EFS_NUM_FRAGMENTS];
     int idxs[EFS_NUM_FRAGMENTS];
-    int borrowed[EFS_NUM_FRAGMENTS];
+    int pending[EFS_NUM_FRAGMENTS];
+    int sticky_owned[EFS_NUM_FRAGMENTS];
     struct efs_msg_put_chunk *reqs = tls_reqs;
 
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         fds[i] = -1;
         idxs[i] = -1;
-        borrowed[i] = 0;
+        pending[i] = 0;
+        sticky_owned[i] = 0;
     }
 
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         efs_node_id_t nid = nodes[i];
         int idx = bench_node_index(nid);
-        if (idx < 0)
-            goto fail;
+        if (idx < 0 || nid == 0)
+            continue;
         idxs[i] = idx;
+        /* Skip peers in down-cooldown; drop any sticky fd so we do not
+         * block on a full SO_SNDTIMEO against a dead socket. */
+        if (efs_client_node_is_down(nid)) {
+            if (sticky_fds && sticky_fds[idx] >= 0) {
+                efs_client_conn_drop(nid, sticky_fds[idx]);
+                sticky_fds[idx] = -1;
+            }
+            continue;
+        }
         if (sticky_fds && sticky_fds[idx] >= 0) {
+            struct pollfd p = { .fd = sticky_fds[idx], .events = POLLOUT };
+            int pr = poll(&p, 1, 0);
+            if (pr < 0 || (p.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+                efs_client_conn_drop(nid, sticky_fds[idx]);
+                sticky_fds[idx] = -1;
+                efs_client_node_note_fail(nid);
+                continue;
+            }
             fds[i] = sticky_fds[idx];
+            sticky_owned[i] = 1;
         } else {
             fds[i] = efs_client_conn_get(nid);
             if (fds[i] < 0)
-                goto fail;
-            borrowed[i] = 1;
+                continue;
             if (sticky_fds)
                 sticky_fds[idx] = fds[i];
+            sticky_owned[i] = sticky_fds ? 1 : 0;
         }
-        /* Header only — data[] already zeros from calloc. */
         reqs[i].export_id = store ? EFS_BENCH_EXPORT_ID : 0;
         reqs[i].ino = ino;
         reqs[i].chunk_index = chunk_index;
@@ -201,62 +222,97 @@ static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
         memcpy(reqs[i].checksum, checksum, EFS_HASH_SIZE);
     }
 
-    int send_ok[EFS_NUM_FRAGMENTS];
-    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        send_ok[i] =
-            (efs_send_msg(fds[i], msg_type, &reqs[i], sizeof(reqs[i])) == 0);
-    }
-
-    int acks = 0;
-    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        efs_node_id_t nid = nodes[i];
-        int idx = idxs[i];
-        if (!send_ok[i]) {
-            efs_client_conn_drop(nid, fds[i]);
-            if (sticky_fds)
-                sticky_fds[idx] = -1;
-            fds[i] = -1;
-            borrowed[i] = 0;
-            continue;
-        }
-        uint8_t reply_type = 0, status = 0;
-        if (efs_recv_u8_reply(fds[i], &reply_type, &status) != 0 ||
-            reply_type != reply_type_want || status != ok_status) {
-            efs_client_conn_drop(nid, fds[i]);
-            if (sticky_fds)
-                sticky_fds[idx] = -1;
-            fds[i] = -1;
-            borrowed[i] = 0;
-            continue;
-        }
-        acks++;
-        if (idx >= 0 && (uint32_t)idx < EFS_MAX_NODES)
-            per_node_bytes[idx] += EFS_FRAGMENT_SIZE;
-        if (!sticky_fds) {
-            efs_client_conn_release(nid, fds[i]);
-            fds[i] = -1;
-        }
-        /* sticky: keep fd checked out */
-        borrowed[i] = 0;
-        fds[i] = -1;
-    }
-
-    return (acks == EFS_NUM_FRAGMENTS) ? EFS_OK : EFS_ERR_NO_QUORUM;
-
-fail:
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         if (fds[i] < 0)
             continue;
-        efs_node_id_t nid = nodes[i];
-        int idx = idxs[i];
-        if (sticky_fds && idx >= 0 && sticky_fds[idx] == fds[i]) {
-            /* keep sticky checkout; nothing to undo beyond failed siblings */
+        if (efs_send_msg(fds[i], msg_type, &reqs[i], sizeof(reqs[i])) != 0) {
+            efs_client_conn_drop(nodes[i], fds[i]);
+            efs_client_node_note_fail(nodes[i]);
+            if (sticky_fds && idxs[i] >= 0)
+                sticky_fds[idxs[i]] = -1;
+            fds[i] = -1;
             continue;
         }
-        if (borrowed[i])
-            efs_client_conn_release(nid, fds[i]);
+        pending[i] = 1;
     }
-    return EFS_ERR_NET;
+
+    int acks = 0;
+    struct timespec ts0;
+    clock_gettime(CLOCK_MONOTONIC, &ts0);
+    int64_t deadline_ms = (int64_t)ts0.tv_sec * 1000 +
+                          (int64_t)ts0.tv_nsec / 1000000 + EFS_IO_TIMEOUT_MS;
+
+    while (acks < 2) {
+        struct pollfd pfds[EFS_NUM_FRAGMENTS];
+        int map[EFS_NUM_FRAGMENTS];
+        int npoll = 0;
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            if (!pending[i] || fds[i] < 0)
+                continue;
+            pfds[npoll].fd = fds[i];
+            pfds[npoll].events = POLLIN;
+            pfds[npoll].revents = 0;
+            map[npoll] = i;
+            npoll++;
+        }
+        if (npoll == 0)
+            break;
+
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        int64_t now_ms = (int64_t)ts.tv_sec * 1000 + (int64_t)ts.tv_nsec / 1000000;
+        int64_t left = deadline_ms - now_ms;
+        if (left <= 0)
+            break;
+        int wait_ms = left > 2000 ? 2000 : (int)left;
+        int pr = poll(pfds, (nfds_t)npoll, wait_ms);
+        if (pr <= 0)
+            continue;
+
+        for (int p = 0; p < npoll; p++) {
+            if (!(pfds[p].revents & (POLLIN | POLLERR | POLLHUP)))
+                continue;
+            int i = map[p];
+            efs_node_id_t nid = nodes[i];
+            int idx = idxs[i];
+            uint8_t reply_type = 0, status = 0;
+            if ((pfds[p].revents & (POLLERR | POLLHUP)) ||
+                efs_recv_u8_reply(fds[i], &reply_type, &status) != 0 ||
+                reply_type != reply_type_want || status != ok_status) {
+                efs_client_conn_drop(nid, fds[i]);
+                efs_client_node_note_fail(nid);
+                if (sticky_fds && idx >= 0)
+                    sticky_fds[idx] = -1;
+                fds[i] = -1;
+                pending[i] = 0;
+                continue;
+            }
+            acks++;
+            efs_client_node_note_ok(nid);
+            if (idx >= 0 && (uint32_t)idx < EFS_MAX_NODES)
+                per_node_bytes[idx] += EFS_FRAGMENT_SIZE;
+            if (!sticky_owned[i])
+                efs_client_conn_release(nid, fds[i]);
+            /* sticky: keep fd checked out for the next chunk */
+            fds[i] = -1;
+            pending[i] = 0;
+        }
+    }
+
+    /* Quorum met: abandon remaining waiters (likely the dead peer). */
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (fds[i] < 0)
+            continue;
+        efs_client_conn_drop(nodes[i], fds[i]);
+        if (acks < 2)
+            efs_client_node_note_fail(nodes[i]);
+        if (sticky_fds && idxs[i] >= 0)
+            sticky_fds[idxs[i]] = -1;
+        fds[i] = -1;
+        pending[i] = 0;
+    }
+
+    return (acks >= 2) ? EFS_OK : EFS_ERR_NO_QUORUM;
 }
 
 struct worker_arg {
@@ -287,18 +343,10 @@ static void *worker_main(void *arg)
      * net mode still spreads via seq for placement churn. */
     efs_ino_t ino = ((efs_ino_t)0xBEEF << 32) | 1ULL;
 
-    /* Check out one connection per membership slot for the worker lifetime. */
+    /* Sticky fds filled lazily; a down peer must not abort the whole worker. */
     int sticky[EFS_MAX_NODES];
     for (int i = 0; i < EFS_MAX_NODES; i++)
         sticky[i] = -1;
-    for (uint32_t i = 0; i < g_client.node_count; i++) {
-        efs_node_id_t nid = g_client.nodes[i].id;
-        sticky[i] = efs_client_conn_get(nid);
-        if (sticky[i] < 0) {
-            a->chunks_fail++;
-            goto done;
-        }
-    }
 
     for (;;) {
         if (a->store) {
@@ -339,7 +387,6 @@ static void *worker_main(void *arg)
         }
     }
 
-done:
     for (uint32_t i = 0; i < g_client.node_count; i++) {
         if (sticky[i] >= 0) {
             efs_client_conn_release(g_client.nodes[i].id, sticky[i]);

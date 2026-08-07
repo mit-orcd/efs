@@ -287,51 +287,64 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
     if (node_id == 0)
         return EFS_ERR_INVAL;
 
-    int fd = efs_client_conn_get(node_id);
-    if (fd < 0)
-        return EFS_ERR_NET;
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        int fd = efs_client_conn_get(node_id);
+        if (fd < 0) {
+            if (attempt < 3) {
+                usleep(50000u * (unsigned)attempt);
+                continue;
+            }
+            return EFS_ERR_NET;
+        }
 
-    struct efs_msg_get_chunk req;
-    memset(&req, 0, sizeof(req));
-    req.export_id = g_client.export_id;
-    req.ino = ino;
-    req.chunk_index = chunk_index;
-    req.fragment_index = fragment_index;
+        struct efs_msg_get_chunk req;
+        memset(&req, 0, sizeof(req));
+        req.export_id = g_client.export_id;
+        req.ino = ino;
+        req.chunk_index = chunk_index;
+        req.fragment_index = fragment_index;
 
-    uint8_t reply_type;
-    void *reply = NULL;
-    uint32_t reply_len = 0;
-    if (efs_send_msg(fd, EFS_MSG_GET_CHUNK, &req, sizeof(req)) != 0 ||
-        efs_recv_msg(fd, &reply_type, &reply, &reply_len) != 0 ||
-        reply_type != EFS_MSG_GET_CHUNK_REPLY || reply_len < 1) {
-        free(reply);
-        efs_client_conn_drop(node_id, fd);
-        return EFS_ERR_NET;
-    }
+        uint8_t reply_type;
+        void *reply = NULL;
+        uint32_t reply_len = 0;
+        if (efs_send_msg(fd, EFS_MSG_GET_CHUNK, &req, sizeof(req)) != 0 ||
+            efs_recv_msg(fd, &reply_type, &reply, &reply_len) != 0 ||
+            reply_type != EFS_MSG_GET_CHUNK_REPLY || reply_len < 1) {
+            free(reply);
+            efs_client_conn_drop(node_id, fd);
+            if (attempt < 3) {
+                usleep(50000u * (unsigned)attempt);
+                continue;
+            }
+            return EFS_ERR_NET;
+        }
 
-    uint8_t *r = reply;
-    int status = r[0];
-    if (status != EFS_GET_CHUNK_OK || reply_len != 1 + EFS_HASH_SIZE + EFS_FRAGMENT_SIZE) {
+        uint8_t *r = reply;
+        int status = r[0];
+        if (status != EFS_GET_CHUNK_OK ||
+            reply_len != 1 + EFS_HASH_SIZE + EFS_FRAGMENT_SIZE) {
+            free(reply);
+            efs_client_conn_release(node_id, fd);
+            return EFS_ERR_NOT_FOUND;
+        }
+
+        memcpy(checksum, r + 1, EFS_HASH_SIZE);
+        memcpy(data, r + 1 + EFS_HASH_SIZE, EFS_FRAGMENT_SIZE);
+        *data_len = EFS_FRAGMENT_SIZE;
+
+        uint8_t verify[EFS_HASH_SIZE];
+        efs_hash(data, EFS_FRAGMENT_SIZE, verify);
+        if (memcmp(verify, checksum, EFS_HASH_SIZE) != 0) {
+            free(reply);
+            efs_client_conn_release(node_id, fd);
+            return EFS_ERR_CHECKSUM;
+        }
+
         free(reply);
         efs_client_conn_release(node_id, fd);
-        return EFS_ERR_NOT_FOUND;
+        return EFS_OK;
     }
-
-    memcpy(checksum, r + 1, EFS_HASH_SIZE);
-    memcpy(data, r + 1 + EFS_HASH_SIZE, EFS_FRAGMENT_SIZE);
-    *data_len = EFS_FRAGMENT_SIZE;
-
-    uint8_t verify[EFS_HASH_SIZE];
-    efs_hash(data, EFS_FRAGMENT_SIZE, verify);
-    if (memcmp(verify, checksum, EFS_HASH_SIZE) != 0) {
-        free(reply);
-        efs_client_conn_release(node_id, fd);
-        return EFS_ERR_CHECKSUM;
-    }
-
-    free(reply);
-    efs_client_conn_release(node_id, fd);
-    return EFS_OK;
+    return EFS_ERR_NET;
 }
 
 int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size_t *out_len)

@@ -76,9 +76,13 @@ static int connect_sockaddr(const struct sockaddr *addr, socklen_t addrlen)
 int efs_connect_tcp(const char *host, uint16_t port)
 {
     efs_net_init();
+    if (!host || !*host)
+        return -1;
 
-    /* Fast path for numeric IPv4 (common for cluster peers / heartbeats):
-     * skip getaddrinfo entirely. */
+    /* Numeric IPv4 only on the hot path. Engaging's NSS corrupts under
+     * concurrent getaddrinfo (heartbeat SEGV in freeaddrinfo / ai_next).
+     * Cluster membership should advertise IB IPs; hostnames are resolved
+     * once under a lock below for rare non-numeric cases. */
     struct in_addr addr4;
     if (inet_pton(AF_INET, host, &addr4) == 1) {
         struct sockaddr_in sa;
@@ -92,80 +96,73 @@ int efs_connect_tcp(const char *host, uint16_t port)
     char port_str[8];
     snprintf(port_str, sizeof(port_str), "%u", port);
 
-    struct addrinfo hints, *res, *rp;
+    struct addrinfo hints, *res = NULL;
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
+    hints.ai_family = AF_INET; /* IPv4-only; matches Engaging IB usage */
     hints.ai_socktype = SOCK_STREAM;
 
+    static pthread_mutex_t gai_mu = PTHREAD_MUTEX_INITIALIZER;
+    struct sockaddr_in sa;
+    int have = 0;
+
+    pthread_mutex_lock(&gai_mu);
     int rc = getaddrinfo(host, port_str, &hints, &res);
-    if (rc != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rc));
+    if (rc == 0 && res && res->ai_addr &&
+        res->ai_addrlen >= sizeof(struct sockaddr_in) &&
+        res->ai_addr->sa_family == AF_INET) {
+        memcpy(&sa, res->ai_addr, sizeof(sa));
+        have = 1;
+    }
+    if (res)
+        freeaddrinfo(res);
+    pthread_mutex_unlock(&gai_mu);
+
+    if (!have) {
+        fprintf(stderr, "efs_connect_tcp: cannot resolve '%s'\n", host);
         return -1;
     }
-
-    int fd = -1;
-    for (rp = res; rp != NULL; rp = rp->ai_next) {
-        fd = connect_sockaddr(rp->ai_addr, rp->ai_addrlen);
-        if (fd >= 0)
-            break;
-    }
-
-    freeaddrinfo(res);
-    return fd;
+    return connect_sockaddr((struct sockaddr *)&sa, sizeof(sa));
 }
 
 int efs_listen_tcp(const char *host, uint16_t port, int backlog)
 {
     efs_net_init();
 
-    char port_str[8];
-    snprintf(port_str, sizeof(port_str), "%u", port);
-
-    struct addrinfo hints, *res, *rp;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;
-
-    int rc = getaddrinfo(host, port_str, &hints, &res);
-    if (rc != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rc));
+    struct sockaddr_in sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons(port);
+    if (!host || !*host || strcmp(host, "0.0.0.0") == 0) {
+        sa.sin_addr.s_addr = htonl(INADDR_ANY);
+    } else if (inet_pton(AF_INET, host, &sa.sin_addr) != 1) {
+        fprintf(stderr, "efs_listen_tcp: need numeric IPv4 addr, got '%s'\n",
+                host ? host : "(null)");
         return -1;
     }
 
-    int fd = -1;
-    for (rp = res; rp != NULL; rp = rp->ai_next) {
-        fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (fd < 0)
-            continue;
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0)
+        return -1;
 
-        int yes = 1;
-        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
-        if (rp->ai_family == AF_INET6) {
-            int no = 0;
-            setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &no, sizeof(no));
-        }
-        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
-        int buf = 4 * 1024 * 1024;
-        setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &buf, sizeof(buf));
-        setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &buf, sizeof(buf));
+    int yes = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+    int buf = 4 * 1024 * 1024;
+    setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &buf, sizeof(buf));
+    setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &buf, sizeof(buf));
 
-        if (bind(fd, rp->ai_addr, rp->ai_addrlen) != 0) {
-            fprintf(stderr, "bind failed for %s:%u: %s\n", host, port, strerror(errno));
-            close(fd);
-            fd = -1;
-            continue;
-        }
-        if (listen(fd, backlog) != 0) {
-            fprintf(stderr, "listen failed for %s:%u: %s\n", host, port, strerror(errno));
-            close(fd);
-            fd = -1;
-            continue;
-        }
-        break;
+    if (bind(fd, (struct sockaddr *)&sa, sizeof(sa)) != 0) {
+        fprintf(stderr, "bind failed for %s:%u: %s\n", host ? host : "*", port,
+                strerror(errno));
+        close(fd);
+        return -1;
     }
-
-    freeaddrinfo(res);
+    if (listen(fd, backlog) != 0) {
+        fprintf(stderr, "listen failed for %s:%u: %s\n", host ? host : "*", port,
+                strerror(errno));
+        close(fd);
+        return -1;
+    }
     return fd;
 }
 

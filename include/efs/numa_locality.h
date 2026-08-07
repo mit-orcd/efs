@@ -30,8 +30,8 @@ void efs_numa_format_cpuset(const cpu_set_t *set, char *buf, size_t buflen);
 /* Best-effort pthread_setaffinity_np for the given set (ignores errors). */
 void efs_numa_apply_affinity(const cpu_set_t *set);
 
-/* Soft NUMA pinning is opt-in: returns 1 only when EFS_NUMA_AFFINITY is
- * 1/on/true. Default (unset/empty/other) is off — discovery/logging still runs. */
+/* Soft NUMA is opt-in: returns 1 only when EFS_NUMA_AFFINITY is 1/on/true.
+ * Default (unset/empty/other) is off — no discovery and no pinning. */
 int efs_numa_affinity_enabled(void);
 
 #endif

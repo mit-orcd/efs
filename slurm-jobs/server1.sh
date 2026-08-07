@@ -29,9 +29,9 @@ NODE_ID=1
 read -r IB_HOST IB_IP < <(efs_ib_host)
 SHORT=$(hostname -s)
 echo "efs-s1 on $SHORT IB=$IB_HOST ($IB_IP):$PORT"
-# Advertise hostname.ib so peers/clients connect over InfiniBand.
-echo "${IB_HOST}:${PORT}" > "$SHARED/state/s1.addr"
-echo "$IB_HOST" > "$SHARED/state/s1.host"
+# Numeric IB IP: efs_listen_tcp/efs_connect_tcp avoid hostname NSS.
+echo "${IB_IP}:${PORT}" > "$SHARED/state/s1.addr"
+echo "$IB_IP" > "$SHARED/state/s1.host"
 echo "$SHORT" > "$SHARED/state/s1.node"
 
 # Optional: EFS_DIO=off|on from orchestrator (unset → efsd default: off).
@@ -43,5 +43,5 @@ case "${EFS_DIO:-}" in
 esac
 # shellcheck disable=SC2086
 efs_run_efsd "$SCRATCH" \
-    "$REPO/efsd" --node-id "$NODE_ID" --addr "$IB_HOST" --port "$PORT" \
+    "$REPO/efsd" --node-id "$NODE_ID" --addr "$IB_IP" --port "$PORT" \
     --storage "$STORAGE" "${DIO_ARGS[@]}" ${EFS_EXTRA_ARGS:-}

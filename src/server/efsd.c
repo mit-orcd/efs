@@ -10,12 +10,87 @@
 #include <errno.h>
 #include <pthread.h>
 #include <signal.h>
+#include <execinfo.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <time.h>
 
 struct efsd_server *g_server = NULL;
+
+/* Conn/writer stacks need room for hello_ack (~16KiB) + ASAN redzones. */
+#define EFSD_THREAD_STACK (16 * 1024 * 1024)
+
+int efsd_pthread_create(pthread_t *tid, void *(*fn)(void *), void *arg)
+{
+    pthread_attr_t attr;
+    int rc;
+    if (pthread_attr_init(&attr) != 0)
+        return pthread_create(tid, NULL, fn, arg);
+    if (pthread_attr_setstacksize(&attr, EFSD_THREAD_STACK) != 0) {
+        pthread_attr_destroy(&attr);
+        return pthread_create(tid, NULL, fn, arg);
+    }
+    rc = pthread_create(tid, &attr, fn, arg);
+    pthread_attr_destroy(&attr);
+    return rc;
+}
+
+/* Alternate stack so SIGSEGV from stack overflow can still report. */
+static char g_efsd_altstack[256 * 1024];
+
+static void efsd_fatal_signal(int sig)
+{
+    const char *name = "signal";
+    if (sig == SIGSEGV)
+        name = "SIGSEGV";
+    else if (sig == SIGBUS)
+        name = "SIGBUS";
+    else if (sig == SIGABRT)
+        name = "SIGABRT";
+    else if (sig == SIGILL)
+        name = "SIGILL";
+    else if (sig == SIGFPE)
+        name = "SIGFPE";
+    char buf[160];
+    int n = snprintf(buf, sizeof(buf), "efsd: fatal %s (%d)\n", name, sig);
+    if (n > 0)
+        (void)write(STDERR_FILENO, buf, (size_t)n);
+    {
+        void *frames[64];
+        int nf = backtrace(frames, 64);
+        backtrace_symbols_fd(frames, nf, STDERR_FILENO);
+    }
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
+static void efsd_install_crash_handlers(void)
+{
+#ifdef __SANITIZE_ADDRESS__
+    /* Let ASAN own fatal signals so we get a full report. */
+    (void)g_efsd_altstack;
+    (void)efsd_fatal_signal;
+    return;
+#endif
+    stack_t ss;
+    memset(&ss, 0, sizeof(ss));
+    ss.ss_sp = g_efsd_altstack;
+    ss.ss_size = sizeof(g_efsd_altstack);
+    if (sigaltstack(&ss, NULL) != 0)
+        fprintf(stderr, "Warning: sigaltstack failed: %s\n", strerror(errno));
+
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = efsd_fatal_signal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESETHAND | SA_ONSTACK;
+    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGBUS, &sa, NULL);
+    sigaction(SIGABRT, &sa, NULL);
+    sigaction(SIGILL, &sa, NULL);
+    sigaction(SIGFPE, &sa, NULL);
+}
 
 static void usage(const char *prog)
 {
@@ -170,6 +245,9 @@ static void sigint_handler(int sig)
 
 int main(int argc, char **argv)
 {
+    /* Install before any work — imagenet load has produced silent SIGSEGVs. */
+    efsd_install_crash_handlers();
+
     struct efsd_server server;
     memset(&server, 0, sizeof(server));
     server.persist_nodes = 1;
@@ -303,13 +381,9 @@ int main(int argc, char **argv)
     server_load_exports(&server);
     server_load_nodes(&server);
 
-    /* Ensure the local node entry matches the current command-line arguments. */
-    server.nodes[0].id = server.id;
-    strncpy(server.nodes[0].addr, server.addr, sizeof(server.nodes[0].addr) - 1);
-    server.nodes[0].port = server.port;
-    server_format_storage_paths(&server, server.nodes[0].storage_path,
-                                sizeof(server.nodes[0].storage_path));
-    server.nodes[0].quota = server.quota;
+    /* Refresh this process's row by id — never smash nodes[0], which may be a peer
+     * after load (that bug duplicated one id and dropped another). */
+    server_sync_local_membership(&server);
     /* Prefer meta/usage.bin; fall back to one full data/ scan. */
     server_init_local_usage(&server);
 
@@ -395,11 +469,17 @@ int main(int argc, char **argv)
             ec = "xor2+1";
         else if (server.storage_path_count >= 4)
             ec = "rs(k,2)";
+        char storage_disp[EFS_MAX_PATH];
+        uint64_t used_disp = 0;
+        server_format_storage_paths(&server, storage_disp, sizeof(storage_disp));
+        struct efs_node *local = server_local_node(&server);
+        if (local)
+            used_disp = local->used;
         printf("efsd node %u listening on %s:%u, storage=%s (%u paths, local_ec=%s), "
                "used=%llu, quota=%llu, direct_io=%s, writers=%d\n",
-               server.id, server.addr, server.port, server.nodes[0].storage_path,
+               server.id, server.addr, server.port, storage_disp,
                server.storage_path_count, ec,
-               (unsigned long long)server.nodes[0].used,
+               (unsigned long long)used_disp,
                (unsigned long long)server.quota,
                server.direct_io ? "on" : "off",
                server.nwriters);
@@ -426,7 +506,7 @@ int main(int argc, char **argv)
         }
 
         pthread_t tid;
-        if (pthread_create(&tid, NULL, conn_thread, (void *)(intptr_t)fd) != 0) {
+        if (efsd_pthread_create(&tid, conn_thread, (void *)(intptr_t)fd) != 0) {
             close(fd);
         } else {
             pthread_detach(tid);
@@ -439,6 +519,7 @@ int main(int argc, char **argv)
     }
     stop_perf_recorder();
     server_writer_pool_stop(&server);
+    server_usage_flush_dirty(&server);
 
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);

@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
+#include <poll.h>
 #include <pthread.h>
 
 static uint64_t now(void)
@@ -201,6 +202,13 @@ static int efs_client_replicate_metadata_once(void)
     if (!blob)
         return EFS_ERR_NOMEM;
     if (blob_len > (size_t)EFS_META_MAX_PAGES * EFS_CHUNK_SIZE) {
+        fprintf(stderr,
+                "meta replicate: export blob %zu bytes exceeds cap %zu "
+                "(%u pages × %u); raise EFS_META_MAX_PAGES\n",
+                blob_len,
+                (size_t)EFS_META_MAX_PAGES * EFS_CHUNK_SIZE,
+                (unsigned)EFS_META_MAX_PAGES, (unsigned)EFS_CHUNK_SIZE);
+        fflush(stderr);
         free(blob);
         return EFS_ERR_INVAL;
     }
@@ -343,50 +351,73 @@ int efs_client_put_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
     if (node_id == 0)
         return EFS_ERR_INVAL;
 
-    int fd = efs_client_conn_get(node_id);
-    if (fd < 0)
-        return EFS_ERR_NET;
+    /* Retry after efsd bounce: pooled fds die; drop invalidates the idle
+     * pool and the next attempt reconnects. */
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        int fd = efs_client_conn_get(node_id);
+        if (fd < 0) {
+            if (attempt < 3) {
+                usleep(100000u * (unsigned)attempt);
+                continue;
+            }
+            return EFS_ERR_NET;
+        }
 
-    /* Zero header (incl. padding) only — avoid sending uninit bytes without
-     * memset'ing the 64 KiB fragment body that we overwrite next. */
-    struct efs_msg_put_chunk req;
-    memset(&req, 0, offsetof(struct efs_msg_put_chunk, data));
-    req.export_id = g_client.export_id;
-    req.ino = ino;
-    req.chunk_index = chunk_index;
-    req.fragment_index = fragment_index;
-    memcpy(req.checksum, checksum, EFS_HASH_SIZE);
-    memcpy(req.data, data, EFS_FRAGMENT_SIZE);
+        /* Zero header (incl. padding) only — avoid sending uninit bytes without
+         * memset'ing the 64 KiB fragment body that we overwrite next. */
+        struct efs_msg_put_chunk req;
+        memset(&req, 0, offsetof(struct efs_msg_put_chunk, data));
+        req.export_id = g_client.export_id;
+        req.ino = ino;
+        req.chunk_index = chunk_index;
+        req.fragment_index = fragment_index;
+        memcpy(req.checksum, checksum, EFS_HASH_SIZE);
+        memcpy(req.data, data, EFS_FRAGMENT_SIZE);
 
-    uint8_t reply_type;
-    void *reply = NULL;
-    uint32_t reply_len = 0;
-    if (efs_send_msg(fd, EFS_MSG_PUT_CHUNK, &req, sizeof(req)) != 0 ||
-        efs_recv_msg(fd, &reply_type, &reply, &reply_len) != 0 ||
-        reply_type != EFS_MSG_PUT_CHUNK_REPLY || reply_len != 1) {
+        uint8_t reply_type;
+        void *reply = NULL;
+        uint32_t reply_len = 0;
+        if (efs_send_msg(fd, EFS_MSG_PUT_CHUNK, &req, sizeof(req)) != 0 ||
+            efs_recv_msg(fd, &reply_type, &reply, &reply_len) != 0 ||
+            reply_type != EFS_MSG_PUT_CHUNK_REPLY || reply_len != 1) {
+            free(reply);
+            efs_client_conn_drop(node_id, fd);
+            if (attempt < 3) {
+                usleep(100000u * (unsigned)attempt);
+                continue;
+            }
+            return EFS_ERR_NET;
+        }
+
+        uint8_t status = ((uint8_t *)reply)[0];
         free(reply);
-        efs_client_conn_drop(node_id, fd);
-        return EFS_ERR_NET;
+        efs_client_conn_release(node_id, fd);
+        if (status == EFS_PUT_CHUNK_OK)
+            return EFS_OK;
+        if (status == EFS_PUT_CHUNK_QUOTA_EXCEEDED)
+            return EFS_ERR_QUOTA;
+        return EFS_ERR_IO;
     }
-
-    uint8_t status = ((uint8_t *)reply)[0];
-    free(reply);
-    efs_client_conn_release(node_id, fd);
-    if (status == EFS_PUT_CHUNK_OK)
-        return EFS_OK;
-    if (status == EFS_PUT_CHUNK_QUOTA_EXCEEDED)
-        return EFS_ERR_QUOTA;
-    return EFS_ERR_IO;
+    return EFS_ERR_NET;
 }
 
-int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
+/* failed_out[i]=1 marks placement slots that need invalidate/retry. */
+static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                                       const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                                       const uint8_t fragments[EFS_NUM_FRAGMENTS][EFS_FRAGMENT_SIZE],
-                                      const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE])
+                                      const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
+                                      int failed_out[EFS_NUM_FRAGMENTS])
 {
     int fds[EFS_NUM_FRAGMENTS];
+    int pending[EFS_NUM_FRAGMENTS];
     int acks = 0;
     int quota_errors = 0;
+    int reachable = 0;
+
+    if (failed_out) {
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+            failed_out[i] = 0;
+    }
 
     /* One allocation for three PUT payloads (~192 KiB) instead of three
      * mallocs, and avoid zeroing the fragment bodies. */
@@ -394,15 +425,31 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
     if (!reqs)
         return EFS_ERR_NOMEM;
 
-    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        fds[i] = -1;
-
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        if (nodes[i] == 0)
-            goto fail_net;
+        fds[i] = -1;
+        pending[i] = 0;
+    }
+
+    /* Unreachable peers count as missing acks — do not abort the whole PUT. */
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (nodes[i] == 0) {
+            if (failed_out)
+                failed_out[i] = 1;
+            continue;
+        }
+        if (efs_client_node_is_down(nodes[i])) {
+            if (failed_out)
+                failed_out[i] = 1;
+            continue;
+        }
         fds[i] = efs_client_conn_get(nodes[i]);
-        if (fds[i] < 0)
-            goto fail_net;
+        if (fds[i] < 0) {
+            efs_client_node_note_fail(nodes[i]);
+            if (failed_out)
+                failed_out[i] = 1;
+            continue;
+        }
+        reachable++;
         memset(&reqs[i], 0, offsetof(struct efs_msg_put_chunk, data));
         reqs[i].export_id = g_client.export_id;
         reqs[i].ino = ino;
@@ -412,49 +459,175 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
         memcpy(reqs[i].data, fragments[i], EFS_FRAGMENT_SIZE);
     }
 
-    /* Send all three PUTs before waiting for any ACK (overlap RTTs). */
-    int send_ok[EFS_NUM_FRAGMENTS];
+    /* Send on every live fd before waiting (overlap RTTs). */
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        send_ok[i] = (efs_send_msg(fds[i], EFS_MSG_PUT_CHUNK, &reqs[i],
-                                   sizeof(reqs[i])) == 0);
-    }
-
-    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        if (!send_ok[i]) {
+        if (fds[i] < 0)
+            continue;
+        /* Drop half-dead sockets before a long SO_SNDTIMEO stall. */
+        {
+            struct pollfd p = { .fd = fds[i], .events = POLLOUT };
+            int pr = poll(&p, 1, 0);
+            if (pr < 0 || (p.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+                efs_client_conn_drop(nodes[i], fds[i]);
+                efs_client_node_note_fail(nodes[i]);
+                if (failed_out)
+                    failed_out[i] = 1;
+                fds[i] = -1;
+                continue;
+            }
+        }
+        if (efs_send_msg(fds[i], EFS_MSG_PUT_CHUNK, &reqs[i],
+                         sizeof(reqs[i])) != 0) {
             efs_client_conn_drop(nodes[i], fds[i]);
+            efs_client_node_note_fail(nodes[i]);
+            if (failed_out)
+                failed_out[i] = 1;
             fds[i] = -1;
             continue;
         }
-        uint8_t reply_type = 0, status = 0;
-        if (efs_recv_u8_reply(fds[i], &reply_type, &status) != 0 ||
-            reply_type != EFS_MSG_PUT_CHUNK_REPLY) {
-            efs_client_conn_drop(nodes[i], fds[i]);
-            fds[i] = -1;
-            continue;
-        }
-        if (status == EFS_PUT_CHUNK_OK)
-            acks++;
-        else if (status == EFS_PUT_CHUNK_QUOTA_EXCEEDED)
-            quota_errors++;
-        efs_client_conn_release(nodes[i], fds[i]);
-        fds[i] = -1;
+        pending[i] = 1;
     }
-
     free(reqs);
+    reqs = NULL;
+
+    /* Poll for replies; return as soon as we have ≥2 acks so one dead peer
+     * cannot serialize a full SO_RCVTIMEO wait. */
+    struct timespec ts0;
+    clock_gettime(CLOCK_MONOTONIC, &ts0);
+    int64_t deadline_ms = (int64_t)ts0.tv_sec * 1000 +
+                          (int64_t)ts0.tv_nsec / 1000000 + EFS_IO_TIMEOUT_MS;
+
+    while (acks < 2) {
+        struct pollfd pfds[EFS_NUM_FRAGMENTS];
+        int map[EFS_NUM_FRAGMENTS];
+        int npoll = 0;
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            if (!pending[i] || fds[i] < 0)
+                continue;
+            pfds[npoll].fd = fds[i];
+            pfds[npoll].events = POLLIN;
+            pfds[npoll].revents = 0;
+            map[npoll] = i;
+            npoll++;
+        }
+        if (npoll == 0)
+            break;
+
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        int64_t now_ms = (int64_t)ts.tv_sec * 1000 + (int64_t)ts.tv_nsec / 1000000;
+        int64_t left = deadline_ms - now_ms;
+        if (left <= 0) {
+            for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+                if (!pending[i] || fds[i] < 0)
+                    continue;
+                efs_client_conn_drop(nodes[i], fds[i]);
+                efs_client_node_note_fail(nodes[i]);
+                if (failed_out)
+                    failed_out[i] = 1;
+                fds[i] = -1;
+                pending[i] = 0;
+            }
+            break;
+        }
+        /* Cap each poll slice so we re-check the deadline promptly. */
+        int wait_ms = left > 2000 ? 2000 : (int)left;
+        int pr = poll(pfds, (nfds_t)npoll, wait_ms);
+        if (pr < 0)
+            continue;
+        if (pr == 0)
+            continue;
+
+        for (int p = 0; p < npoll; p++) {
+            if (!(pfds[p].revents & (POLLIN | POLLERR | POLLHUP)))
+                continue;
+            int i = map[p];
+            if (!pending[i] || fds[i] < 0)
+                continue;
+            uint8_t reply_type = 0, status = 0;
+            if ((pfds[p].revents & (POLLERR | POLLHUP)) ||
+                efs_recv_u8_reply(fds[i], &reply_type, &status) != 0 ||
+                reply_type != EFS_MSG_PUT_CHUNK_REPLY) {
+                efs_client_conn_drop(nodes[i], fds[i]);
+                efs_client_node_note_fail(nodes[i]);
+                if (failed_out)
+                    failed_out[i] = 1;
+                fds[i] = -1;
+                pending[i] = 0;
+                continue;
+            }
+            if (status == EFS_PUT_CHUNK_OK) {
+                acks++;
+                efs_client_node_note_ok(nodes[i]);
+                efs_client_conn_release(nodes[i], fds[i]);
+            } else if (status == EFS_PUT_CHUNK_QUOTA_EXCEEDED) {
+                quota_errors++;
+                efs_client_conn_release(nodes[i], fds[i]);
+            } else {
+                efs_client_conn_drop(nodes[i], fds[i]);
+                efs_client_node_note_fail(nodes[i]);
+                if (failed_out)
+                    failed_out[i] = 1;
+            }
+            fds[i] = -1;
+            pending[i] = 0;
+        }
+    }
+
+    /* Quorum met: abandon remaining waiters (likely the dead peer). */
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (fds[i] < 0)
+            continue;
+        if (acks >= 2) {
+            efs_client_conn_drop(nodes[i], fds[i]);
+            if (failed_out)
+                failed_out[i] = 1;
+        } else {
+            efs_client_conn_drop(nodes[i], fds[i]);
+            efs_client_node_note_fail(nodes[i]);
+            if (failed_out)
+                failed_out[i] = 1;
+        }
+        fds[i] = -1;
+        pending[i] = 0;
+    }
 
     if (quota_errors >= 2)
         return EFS_ERR_QUOTA;
-    if (acks < 2)
-        return EFS_ERR_NO_QUORUM;
-    return EFS_OK;
+    if (acks >= 2)
+        return EFS_OK;
+    if (reachable == 0)
+        return EFS_ERR_NET;
+    return EFS_ERR_NO_QUORUM;
+}
 
-fail_net:
-    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        if (fds[i] >= 0)
-            efs_client_conn_release(nodes[i], fds[i]);
+int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
+                                      const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
+                                      const uint8_t fragments[EFS_NUM_FRAGMENTS][EFS_FRAGMENT_SIZE],
+                                      const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE])
+{
+    /* Retry transient blips; only invalidate peers that actually failed. */
+    int rc = EFS_ERR_NET;
+    for (int attempt = 1; attempt <= 4; attempt++) {
+        int failed[EFS_NUM_FRAGMENTS];
+        rc = put_fragments_parallel_once(ino, chunk_index, nodes, fragments,
+                                         checksums, failed);
+        if (rc == EFS_OK || rc == EFS_ERR_QUOTA)
+            return rc;
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            if (failed[i] && nodes[i] != 0)
+                efs_client_conn_invalidate_node(nodes[i]);
+        }
+        if (attempt < 4) {
+            fprintf(stderr,
+                    "put_fragments ino=%llu chunk=%u attempt %d/4 failed: %s\n",
+                    (unsigned long long)ino, chunk_index, attempt,
+                    efs_strerror(rc));
+            fflush(stderr);
+            usleep(150000u * (unsigned)attempt);
+        }
     }
-    free(reqs);
-    return EFS_ERR_NET;
+    return rc;
 }
 
 /* Assemble one chunk buffer for a write spanning [wr_start, wr_end).

@@ -98,18 +98,24 @@ void server_handle_conn(int fd)
                     accepted = 1;
                 }
 
-                struct efs_msg_hello_ack ack;
-                memset(&ack, 0, sizeof(ack));
-                ack.epoch = g_server->epoch;
+                server_dedupe_nodes_locked(g_server);
+                /* Heap: hello_ack embeds nodes[EFS_MAX_NODES] (~16KiB). */
+                struct efs_msg_hello_ack *ack = calloc(1, sizeof(*ack));
+                if (!ack) {
+                    pthread_mutex_unlock(&g_server->lock);
+                    break;
+                }
+                ack->epoch = g_server->epoch;
                 /* assigned_id == 0 means reject (e.g. cluster at capacity). */
-                ack.assigned_id = accepted ? h->node_id : 0;
-                ack.node_count = g_server->node_count;
-                memcpy(ack.nodes, g_server->nodes, sizeof(g_server->nodes));
+                ack->assigned_id = accepted ? h->node_id : 0;
+                ack->node_count = g_server->node_count;
+                memcpy(ack->nodes, g_server->nodes, sizeof(g_server->nodes));
                 /* Persist only when membership / addressing actually changed. */
                 if (changed)
                     server_save_nodes(g_server);
                 pthread_mutex_unlock(&g_server->lock);
-                efs_send_msg(fd, EFS_MSG_HELLO_ACK, &ack, sizeof(ack));
+                efs_send_msg(fd, EFS_MSG_HELLO_ACK, ack, sizeof(*ack));
+                free(ack);
             }
             break;
         }
@@ -120,12 +126,20 @@ void server_handle_conn(int fd)
                 struct efs_export *ex = server_get_export(g_server, req->export_id);
                 pthread_mutex_unlock(&g_server->lock);
 
-                uint8_t reply[1 + EFS_HASH_SIZE + EFS_FRAGMENT_SIZE];
+                /* Heap: ~128 KiB — keep conn-thread stacks small under load. */
+                uint8_t *reply = malloc(1 + EFS_HASH_SIZE + EFS_FRAGMENT_SIZE);
+                uint8_t *data = malloc(EFS_FRAGMENT_SIZE);
+                if (!reply || !data) {
+                    free(reply);
+                    free(data);
+                    uint8_t err = EFS_GET_CHUNK_ERROR;
+                    efs_send_msg(fd, EFS_MSG_GET_CHUNK_REPLY, &err, 1);
+                    break;
+                }
                 if (!ex) {
                     reply[0] = EFS_GET_CHUNK_ERROR;
                     efs_send_msg(fd, EFS_MSG_GET_CHUNK_REPLY, reply, 1);
                 } else {
-                    uint8_t data[EFS_FRAGMENT_SIZE];
                     uint32_t data_len = 0;
                     uint8_t hash[EFS_HASH_SIZE];
                     rc = server_read_fragment(g_server, ex, req->ino,
@@ -146,9 +160,12 @@ void server_handle_conn(int fd)
                         reply[0] = EFS_GET_CHUNK_OK;
                         memcpy(reply + 1, hash, EFS_HASH_SIZE);
                         memcpy(reply + 1 + EFS_HASH_SIZE, data, data_len);
-                        efs_send_msg(fd, EFS_MSG_GET_CHUNK_REPLY, reply, 1 + EFS_HASH_SIZE + data_len);
+                        efs_send_msg(fd, EFS_MSG_GET_CHUNK_REPLY, reply,
+                                     1 + EFS_HASH_SIZE + data_len);
                     }
                 }
+                free(reply);
+                free(data);
             }
             break;
         }
@@ -265,8 +282,12 @@ void server_handle_conn(int fd)
                                 ex->meta_needs_rebuild = 1;
                             g_server->epoch++;
                             g_server->export_meta_dirty = 1;
-                            pthread_mutex_unlock(&g_server->lock);
+                            /* Save while holding the lock: concurrent PUT_META
+                             * can efs_export_root_move and free page_checksums
+                             * under a raced unlocked save (SIGSEGV). */
                             server_save_export(g_server, ex);
+                            g_server->export_meta_dirty = 0;
+                            pthread_mutex_unlock(&g_server->lock);
                             reply = EFS_PUT_META_OK;
                         }
                     }
@@ -287,10 +308,12 @@ void server_handle_conn(int fd)
                             ex->meta_fragmented = 0;
                             g_server->epoch++;
                             g_server->export_meta_dirty = 1;
+                            if (ex->name[0] && strcmp(ex->name, "pending") != 0) {
+                                server_save_export(g_server, ex);
+                                g_server->export_meta_dirty = 0;
+                            }
                             reply = EFS_PUT_META_OK;
                             pthread_mutex_unlock(&g_server->lock);
-                            if (ex->name[0] && strcmp(ex->name, "pending") != 0)
-                                server_save_export(g_server, ex);
                         } else {
                             pthread_mutex_unlock(&g_server->lock);
                         }
@@ -307,20 +330,32 @@ void server_handle_conn(int fd)
         }
         case EFS_MSG_LIST_NODES: {
             /* used comes from the cached counter (meta/usage.bin); no tree walk. */
+            struct efs_node *nodes = malloc(sizeof(struct efs_node) * EFS_MAX_NODES);
+            struct efs_msg_list_nodes_reply *reply = calloc(1, sizeof(*reply));
+            if (!nodes || !reply) {
+                free(nodes);
+                free(reply);
+                break;
+            }
             pthread_mutex_lock(&g_server->lock);
             uint32_t node_count = g_server->node_count;
-            struct efs_node nodes[EFS_MAX_NODES];
-            memcpy(nodes, g_server->nodes, sizeof(nodes));
+            if (node_count > EFS_MAX_NODES)
+                node_count = EFS_MAX_NODES;
+            memcpy(nodes, g_server->nodes, sizeof(struct efs_node) * node_count);
+            efs_node_id_t self = g_server->id;
             pthread_mutex_unlock(&g_server->lock);
 
             for (uint32_t i = 0; i < node_count; i++) {
-                if (nodes[i].id == g_server->id)
+                if (nodes[i].id == self)
                     continue;
                 uint64_t q = 0, u = 0;
                 if (refresh_peer_usage(nodes[i].addr, nodes[i].port, &q, &u) == 0) {
                     pthread_mutex_lock(&g_server->lock);
+                    /* Match the peer we contacted by addr:port (not only id),
+                     * so a corrupt duplicate-id row cannot steal the update. */
                     for (uint32_t j = 0; j < g_server->node_count; j++) {
-                        if (g_server->nodes[j].id == nodes[i].id) {
+                        if (g_server->nodes[j].port == nodes[i].port &&
+                            strcmp(g_server->nodes[j].addr, nodes[i].addr) == 0) {
                             g_server->nodes[j].quota = q;
                             g_server->nodes[j].used = u;
                             break;
@@ -331,12 +366,13 @@ void server_handle_conn(int fd)
             }
 
             pthread_mutex_lock(&g_server->lock);
-            struct efs_msg_list_nodes_reply reply;
-            memset(&reply, 0, sizeof(reply));
-            reply.node_count = g_server->node_count;
-            memcpy(reply.nodes, g_server->nodes, sizeof(g_server->nodes));
+            server_dedupe_nodes_locked(g_server);
+            reply->node_count = g_server->node_count;
+            memcpy(reply->nodes, g_server->nodes, sizeof(g_server->nodes));
             pthread_mutex_unlock(&g_server->lock);
-            efs_send_msg(fd, EFS_MSG_LIST_NODES_REPLY, &reply, sizeof(reply));
+            efs_send_msg(fd, EFS_MSG_LIST_NODES_REPLY, reply, sizeof(*reply));
+            free(nodes);
+            free(reply);
             break;
         }
         case EFS_MSG_STATUS: {

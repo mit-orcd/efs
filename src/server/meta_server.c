@@ -10,13 +10,22 @@
 #include <string.h>
 #include <unistd.h>
 
-static struct efs_node *find_node_by_id(struct efsd_server *s, efs_node_id_t id)
+/* Snapshot peer by id under lock (do not return a live s->nodes pointer). */
+static int copy_node_by_id(struct efsd_server *s, efs_node_id_t id,
+                           struct efs_node *out)
 {
+    if (!s || !out)
+        return -1;
+    pthread_mutex_lock(&s->lock);
     for (uint32_t i = 0; i < s->node_count; i++) {
-        if (s->nodes[i].id == id)
-            return &s->nodes[i];
+        if (s->nodes[i].id == id) {
+            *out = s->nodes[i];
+            pthread_mutex_unlock(&s->lock);
+            return 0;
+        }
     }
-    return NULL;
+    pthread_mutex_unlock(&s->lock);
+    return -1;
 }
 
 static int server_get_fragment_from_peer(const char *host, uint16_t port,
@@ -119,10 +128,10 @@ static int fetch_meta_fragment(struct efsd_server *s, struct efs_export *ex,
             return EFS_ERR_NOT_FOUND;
         return EFS_OK;
     }
-    struct efs_node *n = find_node_by_id(s, node_id);
-    if (!n)
+    struct efs_node n;
+    if (copy_node_by_id(s, node_id, &n) != 0)
         return EFS_ERR_NOT_FOUND;
-    return server_get_fragment_from_peer(n->addr, n->port, ex->id, EFS_META_TABLE_INO,
+    return server_get_fragment_from_peer(n.addr, n.port, ex->id, EFS_META_TABLE_INO,
                                          page_index, fragment_index, data, checksum);
 }
 
@@ -279,10 +288,10 @@ static int put_meta_fragment(struct efsd_server *s, struct efs_export *ex,
         return server_write_fragment_sum_sync(s, ex, EFS_META_TABLE_INO, page_index,
                                               fragment_index, checksum);
     }
-    struct efs_node *n = find_node_by_id(s, node_id);
-    if (!n)
+    struct efs_node n;
+    if (copy_node_by_id(s, node_id, &n) != 0)
         return EFS_ERR_NOT_FOUND;
-    return server_put_fragment_to_peer(n->addr, n->port, ex->id, EFS_META_TABLE_INO,
+    return server_put_fragment_to_peer(n.addr, n.port, ex->id, EFS_META_TABLE_INO,
                                        page_index, fragment_index, data, checksum);
 }
 
@@ -296,10 +305,16 @@ static void bootstrap_export_on_peers(struct efsd_server *s, struct efs_export *
     if (efs_export_serialize(ex, &buf, &len) != EFS_OK)
         return;
 
+    struct efs_node *nodes = malloc(sizeof(struct efs_node) * EFS_MAX_NODES);
+    if (!nodes) {
+        free(buf);
+        return;
+    }
     pthread_mutex_lock(&s->lock);
-    struct efs_node nodes[EFS_MAX_NODES];
     uint32_t node_count = s->node_count;
-    memcpy(nodes, s->nodes, sizeof(nodes));
+    if (node_count > EFS_MAX_NODES)
+        node_count = EFS_MAX_NODES;
+    memcpy(nodes, s->nodes, sizeof(struct efs_node) * node_count);
     efs_node_id_t self = s->id;
     pthread_mutex_unlock(&s->lock);
 
@@ -319,6 +334,7 @@ static void bootstrap_export_on_peers(struct efsd_server *s, struct efs_export *
         free(reply);
         close(fd);
     }
+    free(nodes);
     free(buf);
 }
 
@@ -415,21 +431,39 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     ex->meta_fragmented = 1;
     efs_export_root_move(&ex->root, &root);
     s->export_meta_dirty = 1;
-    pthread_mutex_unlock(&s->lock);
-
+    /* Persist under lock so a concurrent peer PUT_META cannot free
+     * page_checksums mid-fwrite. */
     server_save_export(s, ex);
+    s->export_meta_dirty = 0;
+
+    /* Snapshot root for unlocked peer fan-out. */
+    struct efs_export_root snap;
+    memset(&snap, 0, sizeof(snap));
+    int src = efs_export_root_copy(&snap, &ex->root);
+    pthread_mutex_unlock(&s->lock);
+    if (src != EFS_OK)
+        return -1;
 
     /* Push root to peers. */
     char *root_buf = NULL;
     size_t root_len = 0;
-    if (efs_export_root_serialize(&ex->root, &root_buf, &root_len) != EFS_OK)
+    if (efs_export_root_serialize(&snap, &root_buf, &root_len) != EFS_OK) {
+        efs_export_root_free(&snap);
         return -1;
+    }
 
     int acks = 0;
+    struct efs_node *nodes = malloc(sizeof(struct efs_node) * EFS_MAX_NODES);
+    if (!nodes) {
+        free(root_buf);
+        efs_export_root_free(&snap);
+        return -1;
+    }
     pthread_mutex_lock(&s->lock);
-    struct efs_node nodes[EFS_MAX_NODES];
     uint32_t node_count = s->node_count;
-    memcpy(nodes, s->nodes, sizeof(nodes));
+    if (node_count > EFS_MAX_NODES)
+        node_count = EFS_MAX_NODES;
+    memcpy(nodes, s->nodes, sizeof(struct efs_node) * node_count);
     efs_node_id_t self = s->id;
     pthread_mutex_unlock(&s->lock);
 
@@ -453,7 +487,10 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
         free(reply);
         close(fd);
     }
+    free(nodes);
     free(root_buf);
+    efs_export_id_t eid = snap.id;
+    efs_export_root_free(&snap);
     /* Single-node clusters have no peers; otherwise require at least one
      * peer root ack (pages already needed quorum above). */
     if (node_count <= 1)
@@ -461,7 +498,7 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     if (acks < 1) {
         fprintf(stderr,
                 "meta-flush: export %u root replicate got 0/%u peer acks\n",
-                ex->id, node_count - 1);
+                eid, node_count - 1);
         return -1;
     }
     return 0;

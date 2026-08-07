@@ -79,8 +79,11 @@ int efs_client_chmod(efs_ino_t ino, uint32_t mode)
     if (rc == 0)
         efs_client_mark_ino_dirty(ino);
     pthread_mutex_unlock(&g_client.lock);
+    /* Mode is already applied locally; a later meta flush failure must not
+     * surface as chmod EINVAL (ImageNet-scale batches can temporarily exceed
+     * caps or hit transient quorum). */
     if (rc == 0)
-        rc = efs_client_note_meta_change(0);
+        (void)efs_client_note_meta_change(0);
     return rc;
 }
 

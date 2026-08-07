@@ -35,7 +35,9 @@
  * High bit set so it cannot collide with client inode namespaces. */
 #define EFS_META_TABLE_INO   ((efs_ino_t)0x8000000000000002ULL)
 /* Max 128 KiB pages in a fragmented metadata blob (~64 MiB logical). */
-#define EFS_META_MAX_PAGES   512
+/* Max pages for a fragmented metadata blob (each page = EFS_CHUNK_SIZE).
+ * 8192 × 128 KiB = 1 GiB — enough for ~millions of inodes (ImageNet-scale). */
+#define EFS_META_MAX_PAGES   8192
 /* On-disk inode directory sharding: five base-10000 groups (0000-9999)
  * encode any uint64 ino uniquely (10^20 > 2^64). seg[0] is least-significant. */
 #define EFS_INO_PATH_SEGS    5

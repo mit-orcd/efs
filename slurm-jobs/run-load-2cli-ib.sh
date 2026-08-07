@@ -66,7 +66,7 @@ for sid in $(seq 1 "$NUM_SERVERS"); do
     [ -n "$EXCLUDE" ] && excl_args=(--exclude="$EXCLUDE")
     job=$(sbatch --parsable -p "$PARTITION" --time="$JOB_TIME" \
         --cpus-per-task=4 --mem=8G "${excl_args[@]}" \
-        --export=ALL,EFS_DIO=on "slurm-jobs/server${sid}.sh")
+        --export=ALL,EFS_DIO=off "slurm-jobs/server${sid}.sh")
     SERVER_JOBS+=("$job")
     efs_wait_addr "$sid" 600
     node=$(efs_slurm_node "$(cat "$SHARED/state/s${sid}.host")")

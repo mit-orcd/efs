@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=16G
+#SBATCH --mem=32G
 #SBATCH --output=/orcd/scratch/orcd/001/erbmi1/efs/logs/s4d-%j.out
 #SBATCH --error=/orcd/scratch/orcd/001/erbmi1/efs/logs/s4d-%j.err
 #
@@ -32,16 +32,17 @@ STORAGE="$SCRATCH/d1,$SCRATCH/d2,$SCRATCH/d3,$SCRATCH/d4"
 
 read -r IB_HOST IB_IP < <(efs_ib_host)
 SHORT=$(hostname -s)
+# Advertise numeric IB IP so peers use inet_pton (no getaddrinfo/NSS under load).
 echo "efs-s${SERVER_ID} on $SHORT IB=$IB_HOST ($IB_IP):$PORT storage=$STORAGE"
-echo "${IB_HOST}:${PORT}" > "$SHARED/state/s${SERVER_ID}.addr"
-echo "$IB_HOST" > "$SHARED/state/s${SERVER_ID}.host"
+echo "${IB_IP}:${PORT}" > "$SHARED/state/s${SERVER_ID}.addr"
+echo "$IB_IP" > "$SHARED/state/s${SERVER_ID}.host"
 echo "$SHORT" > "$SHARED/state/s${SERVER_ID}.node"
 
 JOIN_ARGS=()
 if [ "$SERVER_ID" -gt 1 ]; then
     efs_wait_addr 1 600
     S1=$(cat "$SHARED/state/s1.addr")
-    echo "joining via IB: $S1"
+    echo "joining via IB IP: $S1"
     JOIN_ARGS=(--join "$S1")
 fi
 
@@ -53,6 +54,6 @@ esac
 
 # shellcheck disable=SC2086
 efs_run_efsd "$SCRATCH" \
-    "$REPO/efsd" --node-id "$NODE_ID" --addr "$IB_HOST" --port "$PORT" \
+    "$REPO/efsd" --node-id "$NODE_ID" --addr "$IB_IP" --port "$PORT" \
     --storage "$STORAGE" --quota "${EFS_QUOTA:-200G}" \
     "${DIO_ARGS[@]}" "${JOIN_ARGS[@]}" ${EFS_EXTRA_ARGS:-}

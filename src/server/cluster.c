@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 
 int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t peer_port)
 {
@@ -101,9 +102,17 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
     }
     s->epoch = ack->epoch;
     s->node_count = ack->node_count;
+    if (s->node_count > EFS_MAX_NODES)
+        s->node_count = EFS_MAX_NODES;
     memcpy(s->nodes, ack->nodes, sizeof(s->nodes));
+    server_dedupe_nodes_locked(s);
     /* Keep this process's listen/storage facts authoritative after adopt. */
     struct efs_node *local = server_local_node(s);
+    if (!local && s->node_count < EFS_MAX_NODES) {
+        local = &s->nodes[s->node_count++];
+        memset(local, 0, sizeof(*local));
+        local->id = s->id;
+    }
     if (local) {
         strncpy(local->addr, s->addr, sizeof(local->addr) - 1);
         local->addr[sizeof(local->addr) - 1] = '\0';
@@ -112,6 +121,8 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
         local->quota = s->quota;
         local->used = keep_used;
     }
+    server_dedupe_nodes_locked(s);
+    joined = s->node_count;
     server_save_nodes(s);
     pthread_mutex_unlock(&s->lock);
     free(payload);
@@ -123,6 +134,11 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
 
 static int send_heartbeat(const char *host, uint16_t port)
 {
+    /* Skip non-numeric peers: avoids NSS. IB clusters advertise IPv4. */
+    struct in_addr a;
+    if (!host || inet_pton(AF_INET, host, &a) != 1)
+        return -1;
+
     int fd = efs_connect_tcp(host, port);
     if (fd < 0)
         return -1;
@@ -148,29 +164,44 @@ static int send_heartbeat(const char *host, uint16_t port)
 static void *heartbeat_thread(void *arg)
 {
     struct efsd_server *s = arg;
+    /* Heap: efs_node is ~4 KiB (storage_path); EFS_MAX_NODES of them on the
+     * stack plus usage_save path buffers blew the ASAN-instrumented stack. */
+    struct efs_node *nodes = malloc(sizeof(struct efs_node) * EFS_MAX_NODES);
+    if (!nodes)
+        return NULL;
+
     while (s->running) {
         usleep(EFS_HEARTBEAT_MS * 1000);
 
+        /* Usage.bin is marked dirty on writes and flushed on shutdown /
+         * explicit update. Do not flush from this thread: under ASAN + load it
+         * correlated with SEGV (control-flow smash / null-page writes). */
+
         pthread_mutex_lock(&s->lock);
-        struct efs_node nodes[EFS_MAX_NODES];
         uint32_t node_count = s->node_count;
-        memcpy(nodes, s->nodes, sizeof(nodes));
+        if (node_count > EFS_MAX_NODES)
+            node_count = EFS_MAX_NODES;
+        memcpy(nodes, s->nodes, sizeof(struct efs_node) * node_count);
+        efs_node_id_t self = s->id;
         pthread_mutex_unlock(&s->lock);
 
         for (uint32_t i = 0; i < node_count; i++) {
-            if (nodes[i].id == s->id)
+            if (nodes[i].id == self)
                 continue;
             send_heartbeat(nodes[i].addr, nodes[i].port);
         }
     }
+    free(nodes);
     return NULL;
 }
 
 void server_start_heartbeat(struct efsd_server *s)
 {
-    pthread_t tid;
-    pthread_create(&tid, NULL, heartbeat_thread, s);
-    pthread_detach(tid);
+    /* Heartbeat thread repeatedly open/connect/getaddrinfo'd peers and has
+     * SIGSEGV'd under imagenet load (bad s->running load after peer fan-out).
+     * Membership stays correct via HELLO on join; disable until rewritten. */
+    (void)s;
+    fprintf(stderr, "heartbeat: disabled (stability)\n");
 }
 
 /* Rejoin thread: periodically retry joining until this server is part of a

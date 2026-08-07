@@ -89,13 +89,12 @@ run_cluster_kill() {
         sleep 0.25
     done
     grep -q "local_ec=" "$OUT/${tag}-s1.stdout" || { fail "$tag s1 banner"; return 1; }
-    # Soft NUMA discovery logs numa=<n>|unknown (presence only; scratch may be unknown).
+    # NUMA affinity is opt-in; default must not discover/pin.
     if grep -q "numa=" "$OUT/${tag}-s1.stdout"; then
-        pass "$tag storage numa= logged"
-    else
-        fail "$tag missing numa= in s1 log"
+        fail "$tag unexpected numa= (EFS_NUMA_AFFINITY should be off)"
         return 1
     fi
+    pass "$tag numa off by default"
 
     # Single-node is enough to exercise local EC (network 2+1 still wants 3 for
     # cluster writes). Use a 3-node cluster with only node1 multi-disk.
@@ -133,9 +132,9 @@ run_cluster_kill() {
     mount_fuse || { fail "$tag mount"; cat "$OUT/${tag}-fuse.stdout"; return 1; }
     # Soft NIC NUMA log (presence only; unknown OK on loopback/scratch).
     if grep -q "nic_numa=" "$OUT/${tag}-fuse.stdout"; then
-        pass "$tag fuse nic_numa= logged"
+        fail "$tag unexpected nic_numa= (EFS_NUMA_AFFINITY should be off)"
     else
-        fail "$tag missing nic_numa= in fuse log"
+        pass "$tag fuse numa off by default"
     fi
 
     local payload="hello-local-ec-$tag"
@@ -203,8 +202,11 @@ run_n1_regression() {
     done
     grep -q "local_ec=none" "$OUT/${tag}-s1.stdout" && pass "n=1 local_ec=none" \
         || fail "n=1 banner"
-    grep -q "numa=" "$OUT/${tag}-s1.stdout" && pass "n=1 numa= logged" \
-        || fail "n=1 missing numa="
+    if grep -q "numa=" "$OUT/${tag}-s1.stdout"; then
+        fail "n=1 unexpected numa= (EFS_NUMA_AFFINITY should be off)"
+    else
+        pass "n=1 numa off by default"
+    fi
     "$REPO/efsd" --node-id 2 --addr "$IP" --port "$p2" --storage "$base/s2" \
         --join "$IP:$p1" --writers 2 --no-direct-io > "$OUT/${tag}-s2.stdout" 2>&1 &
     S2=$!
@@ -221,8 +223,11 @@ run_n1_regression() {
         sleep 0.25
     done
     if mountpoint -q "$mnt" 2>/dev/null; then
-        grep -q "nic_numa=" "$OUT/${tag}-fuse.stdout" && pass "n=1 nic_numa= logged" \
-            || fail "n=1 missing nic_numa="
+        if grep -q "nic_numa=" "$OUT/${tag}-fuse.stdout"; then
+            fail "n=1 unexpected nic_numa= (EFS_NUMA_AFFINITY should be off)"
+        else
+            pass "n=1 fuse numa off by default"
+        fi
         echo "n1-ok" > "$mnt/f.txt"
         sync
         sleep 0.5

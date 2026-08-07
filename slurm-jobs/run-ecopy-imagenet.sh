@@ -17,7 +17,7 @@ JOB_TIME="${JOB_TIME:-04:00:00}"
 EXPORT_NAME="${EXPORT_NAME:-efs-imagenet}"
 SRC="${SRC:-/home/erbmi1/orcd/scratch/imagenet}"
 NUM_SERVERS=3
-EFS_DIO="${EFS_DIO:-on}"
+EFS_DIO="${EFS_DIO:-off}"
 EFS_QUOTA="${EFS_QUOTA:-200G}"
 cd "$REPO"
 
@@ -51,14 +51,37 @@ for sid in $(seq 1 "$NUM_SERVERS"); do
         --export=ALL,SERVER_ID="$sid",EFS_DIO="$EFS_DIO",EFS_QUOTA="$EFS_QUOTA" \
         slurm-jobs/server-4disk.sh)
     SERVER_JOBS+=("$job")
-    efs_wait_addr "$sid" 600
-    node=$(efs_slurm_node "$(cat "$SHARED/state/s${sid}.host")")
+    efs_wait_addr "$sid" 1800
+    # Prefer sN.node (short hostname) — sN.host may be a numeric IB IP.
+    if [ -s "$SHARED/state/s${sid}.node" ]; then
+        node=$(cat "$SHARED/state/s${sid}.node")
+    else
+        node=$(efs_slurm_node "$(cat "$SHARED/state/s${sid}.host")")
+    fi
     SERVER_NODES+=("$node")
     if [ -z "$EXCLUDE" ]; then EXCLUDE="$node"; else EXCLUDE="${EXCLUDE},${node}"; fi
     echo "  s${sid} job $job on $node"
 done
 
-efs_assert_distinct_servers "$NUM_SERVERS"
+# Distinctness via short hostnames in sN.node when present
+if [ -s "$SHARED/state/s1.node" ]; then
+    nodes_check=()
+    for sid in $(seq 1 "$NUM_SERVERS"); do
+        nodes_check+=("$(cat "$SHARED/state/s${sid}.node")")
+        echo "  s${sid}=$(cat "$SHARED/state/s${sid}.node")"
+    done
+    echo "server nodes: ${nodes_check[*]}"
+    for i in $(seq 0 $((NUM_SERVERS - 1))); do
+        for j in $(seq $((i + 1)) $((NUM_SERVERS - 1))); do
+            if [ "${nodes_check[$i]}" = "${nodes_check[$j]}" ]; then
+                echo "ERROR: servers must run on distinct nodes" >&2
+                exit 1
+            fi
+        done
+    done
+else
+    efs_assert_distinct_servers "$NUM_SERVERS"
+fi
 echo "${SERVER_NODES[*]}" | tee "$PROF_ROOT/server_nodes.txt"
 
 for job in "${SERVER_JOBS[@]}"; do

@@ -29,8 +29,8 @@ NODE_ID=4
 read -r IB_HOST IB_IP < <(efs_ib_host)
 SHORT=$(hostname -s)
 echo "efs-s4 on $SHORT IB=$IB_HOST ($IB_IP):$PORT"
-echo "${IB_HOST}:${PORT}" > "$SHARED/state/s4.addr"
-echo "$IB_HOST" > "$SHARED/state/s4.host"
+echo "${IB_IP}:${PORT}" > "$SHARED/state/s4.addr"
+echo "$IB_IP" > "$SHARED/state/s4.host"
 echo "$SHORT" > "$SHARED/state/s4.node"
 
 WAITED=0
@@ -52,5 +52,5 @@ case "${EFS_DIO:-}" in
 esac
 # shellcheck disable=SC2086
 efs_run_efsd "$SCRATCH" \
-    "$REPO/efsd" --node-id "$NODE_ID" --addr "$IB_HOST" --port "$PORT" \
+    "$REPO/efsd" --node-id "$NODE_ID" --addr "$IB_IP" --port "$PORT" \
     --storage "$STORAGE" --join "$S1" "${DIO_ARGS[@]}" ${EFS_EXTRA_ARGS:-}

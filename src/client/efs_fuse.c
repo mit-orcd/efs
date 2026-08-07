@@ -19,6 +19,7 @@
 #include <time.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <execinfo.h>
 
 /* Async-signal-safe crash breadcrumb. Uses an alternate signal stack so a
  * stack-overflow SIGSEGV can still report instead of dying silently. */
@@ -43,6 +44,12 @@ static void efs_fuse_fatal_signal(int sig)
                      sig);
     if (n > 0)
         (void)write(STDERR_FILENO, buf, (size_t)n);
+    /* Best-effort stack for kill/fault debugging (may allocate; last resort). */
+    {
+        void *frames[48];
+        int nf = backtrace(frames, 48);
+        backtrace_symbols_fd(frames, nf, STDERR_FILENO);
+    }
     signal(sig, SIG_DFL);
     raise(sig);
 }
@@ -876,15 +883,14 @@ int main(int argc, char **argv)
         printf("Discovered %u cluster nodes from %s\n", g_client.node_count, nodes[0]);
     }
 
-    /* Soft NUMA: discover NIC locality; pin only if EFS_NUMA_AFFINITY=1/on/true
-     * (default off). Pinning the main thread before fuse_main makes every FUSE
-     * worker inherit that mask and can collapse throughput under Slurm. */
+    /* Soft NUMA is opt-in (EFS_NUMA_AFFINITY=1/on/true). Default: skip entirely
+     * so FUSE workers are not pinned (pinning the main thread before fuse_main
+     * makes every worker inherit that mask and can collapse Slurm throughput). */
     g_client.net_numa_node = -1;
     g_client.net_affinity_valid = 0;
     g_client.net_ifname[0] = '\0';
     CPU_ZERO(&g_client.net_cpu_set);
-    {
-        int numa_on = efs_numa_affinity_enabled();
+    if (efs_numa_affinity_enabled()) {
         int pinned = 0;
         for (uint32_t i = 0; i < node_count && !pinned; i++) {
             char host[64];
@@ -899,14 +905,11 @@ int main(int argc, char **argv)
                 g_client.net_numa_node = numa;
                 snprintf(g_client.net_ifname, sizeof(g_client.net_ifname), "%s",
                          ifname);
-                printf("nic_numa=%d if=%s affinity=%s\n", numa, ifname,
-                       numa_on ? "on" : "off");
+                printf("nic_numa=%d if=%s affinity=on\n", numa, ifname);
                 fflush(stdout);
-                if (numa_on) {
-                    g_client.net_cpu_set = set;
-                    g_client.net_affinity_valid = 1;
-                    efs_numa_apply_affinity(&g_client.net_cpu_set);
-                }
+                g_client.net_cpu_set = set;
+                g_client.net_affinity_valid = 1;
+                efs_numa_apply_affinity(&g_client.net_cpu_set);
                 pinned = 1;
             }
         }

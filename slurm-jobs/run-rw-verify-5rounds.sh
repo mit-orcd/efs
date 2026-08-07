@@ -67,7 +67,7 @@ for ROUND in $(seq 1 "$ROUNDS"); do
         fi
         job=$(sbatch --parsable -p "$PARTITION" --time="$JOB_TIME" \
             --cpus-per-task=4 --mem=8G "${excl_args[@]}" \
-            --export=ALL,EFS_DIO=on,EFS_EXTRA_ARGS="$extra" \
+            --export=ALL,EFS_DIO=off,EFS_EXTRA_ARGS="$extra" \
             "slurm-jobs/server${sid}.sh")
         SERVER_JOBS+=("$job")
         efs_wait_addr "$sid" 600

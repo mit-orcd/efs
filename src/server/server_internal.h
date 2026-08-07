@@ -57,6 +57,7 @@ struct efsd_server {
     int persist_nodes; /* persist cluster membership to disk */
     int perf; /* run under perf record when starting */
     int export_meta_dirty; /* defer metadata.bin writes across PUT_META */
+    int usage_dirty; /* local->used changed; flush meta/usage.bin soon */
 };
 
 /* Global server instance used by worker threads. */
@@ -119,6 +120,9 @@ int server_write_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
 int server_writer_pool_start(struct efsd_server *s);
 void server_writer_pool_stop(struct efsd_server *s);
 
+/* pthread_create with a larger stack (hello_ack / node snapshots are ~16KiB). */
+int efsd_pthread_create(pthread_t *tid, void *(*fn)(void *), void *arg);
+
 /* Compute total bytes used under one storage root's data/. */
 uint64_t server_compute_usage(const char *path);
 
@@ -134,11 +138,24 @@ void server_init_local_usage(struct efsd_server *s);
 /* Persist local->used to meta/usage.bin (primary storage root). */
 void server_usage_save(struct efsd_server *s);
 
+/* Mark usage dirty (hot path). Heartbeat / explicit save flushes. */
+void server_usage_mark_dirty(struct efsd_server *s);
+
+/* If usage_dirty, persist and clear the flag. */
+void server_usage_flush_dirty(struct efsd_server *s);
+
 /* Comma-join all local storage roots into buf for status/HELLO advertise. */
 void server_format_storage_paths(const struct efsd_server *s, char *buf, size_t buflen);
 
 /* Pointer to this process's row in s->nodes (matched by s->id), or NULL. */
 struct efs_node *server_local_node(struct efsd_server *s);
+
+/* Update (or append) this process's row from s->addr/port/quota/storage.
+ * Deduplicates by node id. Caller may hold s->lock or not (takes lock). */
+void server_sync_local_membership(struct efsd_server *s);
+
+/* Compact s->nodes to unique ids (first wins). Caller must hold s->lock. */
+void server_dedupe_nodes_locked(struct efsd_server *s);
 
 /* Return true if adding fragment_size bytes would exceed the server's quota. */
 bool server_would_exceed_quota(struct efsd_server *s, uint64_t fragment_size);
