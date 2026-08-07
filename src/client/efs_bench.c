@@ -135,15 +135,26 @@ static int ensure_tls_reqs(void)
     return 0;
 }
 
-/* sticky_fds[node_id] holds a checked-out pool fd for the worker lifetime
- * (avoids ~20% mutex time on get/release every chunk). Pass NULL to use
- * short-lived borrows. On hard errors sticky slots are cleared to -1. */
+/* Map a live node id → index in g_client.nodes[]. */
+static int bench_node_index(efs_node_id_t nid)
+{
+    if (nid == 0)
+        return -1;
+    for (uint32_t i = 0; i < g_client.node_count; i++) {
+        if (g_client.nodes[i].id == nid)
+            return (int)i;
+    }
+    return -1;
+}
+
+/* sticky_fds[membership_index] holds a checked-out pool fd for the worker
+ * lifetime. Pass NULL to use short-lived borrows. */
 static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
                             const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                             const uint8_t *zero_frag,
                             const uint8_t checksum[EFS_HASH_SIZE],
                             int store,
-                            uint64_t per_node_bytes[EFS_MAX_NODES + 1],
+                            uint64_t per_node_bytes[EFS_MAX_NODES],
                             int *sticky_fds)
 {
     (void)zero_frag; /* templates stay zero-filled */
@@ -156,27 +167,31 @@ static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
         return EFS_ERR_NOMEM;
 
     int fds[EFS_NUM_FRAGMENTS];
+    int idxs[EFS_NUM_FRAGMENTS];
     int borrowed[EFS_NUM_FRAGMENTS];
     struct efs_msg_put_chunk *reqs = tls_reqs;
 
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         fds[i] = -1;
+        idxs[i] = -1;
         borrowed[i] = 0;
     }
 
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         efs_node_id_t nid = nodes[i];
-        if (nid == 0 || nid > g_client.node_count)
+        int idx = bench_node_index(nid);
+        if (idx < 0)
             goto fail;
-        if (sticky_fds && sticky_fds[nid] >= 0) {
-            fds[i] = sticky_fds[nid];
+        idxs[i] = idx;
+        if (sticky_fds && sticky_fds[idx] >= 0) {
+            fds[i] = sticky_fds[idx];
         } else {
             fds[i] = efs_client_conn_get(nid);
             if (fds[i] < 0)
                 goto fail;
             borrowed[i] = 1;
             if (sticky_fds)
-                sticky_fds[nid] = fds[i];
+                sticky_fds[idx] = fds[i];
         }
         /* Header only — data[] already zeros from calloc. */
         reqs[i].export_id = store ? EFS_BENCH_EXPORT_ID : 0;
@@ -195,10 +210,11 @@ static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
     int acks = 0;
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         efs_node_id_t nid = nodes[i];
+        int idx = idxs[i];
         if (!send_ok[i]) {
             efs_client_conn_drop(nid, fds[i]);
             if (sticky_fds)
-                sticky_fds[nid] = -1;
+                sticky_fds[idx] = -1;
             fds[i] = -1;
             borrowed[i] = 0;
             continue;
@@ -208,14 +224,14 @@ static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
             reply_type != reply_type_want || status != ok_status) {
             efs_client_conn_drop(nid, fds[i]);
             if (sticky_fds)
-                sticky_fds[nid] = -1;
+                sticky_fds[idx] = -1;
             fds[i] = -1;
             borrowed[i] = 0;
             continue;
         }
         acks++;
-        if (nid <= EFS_MAX_NODES)
-            per_node_bytes[nid] += EFS_FRAGMENT_SIZE;
+        if (idx >= 0 && (uint32_t)idx < EFS_MAX_NODES)
+            per_node_bytes[idx] += EFS_FRAGMENT_SIZE;
         if (!sticky_fds) {
             efs_client_conn_release(nid, fds[i]);
             fds[i] = -1;
@@ -232,7 +248,8 @@ fail:
         if (fds[i] < 0)
             continue;
         efs_node_id_t nid = nodes[i];
-        if (sticky_fds && sticky_fds[nid] == fds[i]) {
+        int idx = idxs[i];
+        if (sticky_fds && idx >= 0 && sticky_fds[idx] == fds[i]) {
             /* keep sticky checkout; nothing to undo beyond failed siblings */
             continue;
         }
@@ -251,7 +268,7 @@ struct worker_arg {
     uint64_t logical_bytes;
     uint64_t chunks_ok;
     uint64_t chunks_fail;
-    uint64_t per_node_bytes[EFS_MAX_NODES + 1];
+    uint64_t per_node_bytes[EFS_MAX_NODES]; /* indexed by membership slot */
     uint8_t *zero_frag;
     uint8_t checksum[EFS_HASH_SIZE];
 };
@@ -270,17 +287,14 @@ static void *worker_main(void *arg)
      * net mode still spreads via seq for placement churn. */
     efs_ino_t ino = ((efs_ino_t)0xBEEF << 32) | 1ULL;
 
-    /* Check out one connection per node for the whole worker lifetime so
-     * put_chunk_fanout does not thrash the pool mutex every chunk. */
-    int sticky[EFS_MAX_NODES + 1];
-    for (int i = 0; i <= EFS_MAX_NODES; i++)
+    /* Check out one connection per membership slot for the worker lifetime. */
+    int sticky[EFS_MAX_NODES];
+    for (int i = 0; i < EFS_MAX_NODES; i++)
         sticky[i] = -1;
     for (uint32_t i = 0; i < g_client.node_count; i++) {
         efs_node_id_t nid = g_client.nodes[i].id;
-        if (nid == 0 || nid > EFS_MAX_NODES)
-            continue;
-        sticky[nid] = efs_client_conn_get(nid);
-        if (sticky[nid] < 0) {
+        sticky[i] = efs_client_conn_get(nid);
+        if (sticky[i] < 0) {
             a->chunks_fail++;
             goto done;
         }
@@ -293,7 +307,8 @@ static void *worker_main(void *arg)
                 break;
             uint32_t chunk_index = (uint32_t)seq;
             efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
-            efs_get_placement(g_client.node_count, ino, chunk_index, nodes);
+            efs_place_fragments(g_client.nodes, g_client.node_count, ino,
+                                chunk_index, nodes);
             int rc = put_chunk_fanout(ino, chunk_index, nodes, a->zero_frag,
                                       a->checksum, 1, a->per_node_bytes, sticky);
             if (rc == EFS_OK) {
@@ -310,7 +325,8 @@ static void *worker_main(void *arg)
             uint32_t chunk_index = (uint32_t)(seq & 0xffffffffu);
             efs_ino_t net_ino = ino + (seq >> 20);
             efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
-            efs_get_placement(g_client.node_count, net_ino, chunk_index, nodes);
+            efs_place_fragments(g_client.nodes, g_client.node_count, net_ino,
+                                chunk_index, nodes);
             int rc = put_chunk_fanout(net_ino, chunk_index, nodes, a->zero_frag,
                                       a->checksum, 0, a->per_node_bytes, sticky);
             if (rc == EFS_OK) {
@@ -325,10 +341,9 @@ static void *worker_main(void *arg)
 
 done:
     for (uint32_t i = 0; i < g_client.node_count; i++) {
-        efs_node_id_t nid = g_client.nodes[i].id;
-        if (nid > 0 && nid <= EFS_MAX_NODES && sticky[nid] >= 0) {
-            efs_client_conn_release(nid, sticky[nid]);
-            sticky[nid] = -1;
+        if (sticky[i] >= 0) {
+            efs_client_conn_release(g_client.nodes[i].id, sticky[i]);
+            sticky[i] = -1;
         }
     }
     return NULL;
@@ -495,14 +510,14 @@ int main(int argc, char **argv)
         wall = 1e-6;
 
     uint64_t total = 0, logical = 0, ok = 0, fail = 0;
-    uint64_t per_node[EFS_MAX_NODES + 1];
+    uint64_t per_node[EFS_MAX_NODES];
     memset(per_node, 0, sizeof(per_node));
     for (int i = 0; i < nworkers; i++) {
         total += args[i].bytes;
         logical += args[i].logical_bytes;
         ok += args[i].chunks_ok;
         fail += args[i].chunks_fail;
-        for (uint32_t n = 1; n <= EFS_MAX_NODES; n++)
+        for (uint32_t n = 0; n < g_client.node_count && n < EFS_MAX_NODES; n++)
             per_node[n] += args[i].per_node_bytes[n];
     }
 
@@ -514,7 +529,7 @@ int main(int argc, char **argv)
     printf("per_server_bytes:");
     for (uint32_t i = 0; i < g_client.node_count; i++) {
         efs_node_id_t id = g_client.nodes[i].id;
-        printf(" id%u=%llu", id, (unsigned long long)per_node[id]);
+        printf(" id%u=%llu", id, (unsigned long long)per_node[i]);
     }
     printf("\n");
 

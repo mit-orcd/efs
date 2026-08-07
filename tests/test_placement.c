@@ -35,6 +35,37 @@ int main(void)
         }
     }
 
+    /* Real clusters use non-sequential ids (e.g. derived from IP:port). */
+    struct efs_node cluster_big[3] = {
+        {3737533, "10.1.223.57", 1981, "", 0, 0},
+        {3803069, "10.1.223.58", 1981, "", 0, 0},
+        {3868605, "10.1.223.59", 1981, "", 0, 0},
+    };
+    for (efs_ino_t ino = 1; ino <= 20; ino++) {
+        efs_place_fragments(cluster_big, 3, ino, 0, nodes);
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            int ok = 0;
+            for (int j = 0; j < 3; j++) {
+                if (nodes[i] == cluster_big[j].id)
+                    ok = 1;
+            }
+            if (!ok) {
+                fprintf(stderr,
+                        "FAIL place_fragments returned unknown id %u "
+                        "(ino=%u frag=%d)\n",
+                        nodes[i], ino, i);
+                failures++;
+            }
+        }
+        /* Distinct hosts for 2+1. */
+        if (nodes[0] == nodes[1] || nodes[0] == nodes[2] ||
+            nodes[1] == nodes[2]) {
+            fprintf(stderr, "FAIL place_fragments duplicated nodes for ino=%u\n",
+                    ino);
+            failures++;
+        }
+    }
+
     efs_node_id_t local_id;
     struct efs_node cluster[3] = {
         {1, "node1", 7432, "", 0, 0},

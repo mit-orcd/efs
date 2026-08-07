@@ -1,6 +1,7 @@
 #include "efs/common.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -77,22 +78,64 @@ static int cmd_status(int argc, char **argv)
     printf("Cluster nodes (%u):\n", list->node_count);
 
     int full_nodes = 0;
+    int all_have_quota = (list->node_count > 0);
+    uint64_t min_quota = 0;
+    uint64_t min_free = UINT64_MAX;
     for (uint32_t i = 0; i < list->node_count; i++) {
         char used_str[32], quota_str[32];
         format_bytes(list->nodes[i].used, used_str, sizeof(used_str));
+        /* storage_path may be a comma-joined list of local roots. */
+        unsigned npaths = 1;
+        for (const char *p = list->nodes[i].storage_path; *p; p++) {
+            if (*p == ',')
+                npaths++;
+        }
         if (list->nodes[i].quota > 0) {
             format_bytes(list->nodes[i].quota, quota_str, sizeof(quota_str));
             double pct = 100.0 * (double)list->nodes[i].used / (double)list->nodes[i].quota;
-            printf("  node %u: %s:%u  storage=%s  used=%s  quota=%s (%.1f%%)\n",
+            printf("  node %u: %s:%u  used=%s  quota=%s (%.1f%%)  storage(%u):\n",
                    list->nodes[i].id, list->nodes[i].addr, list->nodes[i].port,
-                   list->nodes[i].storage_path, used_str, quota_str, pct);
+                   used_str, quota_str, pct, npaths);
             if (list->nodes[i].used >= list->nodes[i].quota)
                 full_nodes++;
+            if (min_quota == 0 || list->nodes[i].quota < min_quota)
+                min_quota = list->nodes[i].quota;
+            uint64_t free_i = (list->nodes[i].used < list->nodes[i].quota)
+                                  ? (list->nodes[i].quota - list->nodes[i].used)
+                                  : 0;
+            if (free_i < min_free)
+                min_free = free_i;
         } else {
-            printf("  node %u: %s:%u  storage=%s  used=%s  quota=unlimited\n",
+            all_have_quota = 0;
+            printf("  node %u: %s:%u  used=%s  quota=unlimited  storage(%u):\n",
                    list->nodes[i].id, list->nodes[i].addr, list->nodes[i].port,
-                   list->nodes[i].storage_path, used_str);
+                   used_str, npaths);
         }
+        char paths[EFS_MAX_PATH];
+        strncpy(paths, list->nodes[i].storage_path, sizeof(paths) - 1);
+        paths[sizeof(paths) - 1] = '\0';
+        char *save = NULL;
+        for (char *tok = strtok_r(paths, ",", &save); tok;
+             tok = strtok_r(NULL, ",", &save))
+            printf("      %s\n", tok);
+    }
+
+    /* 2+1 cluster EC: each logical byte needs a fragment on every node, so
+     * usable capacity is 2 * min_quota (same model as FUSE df). */
+    if (all_have_quota && min_quota > 0 && min_free != UINT64_MAX) {
+        uint64_t usable_cap = min_quota * 2;
+        uint64_t usable_free = min_free * 2;
+        uint64_t usable_used =
+            (usable_cap > usable_free) ? (usable_cap - usable_free) : 0;
+        char used_s[32], free_s[32], cap_s[32];
+        format_bytes(usable_used, used_s, sizeof(used_s));
+        format_bytes(usable_free, free_s, sizeof(free_s));
+        format_bytes(usable_cap, cap_s, sizeof(cap_s));
+        double pct = 100.0 * (double)usable_used / (double)usable_cap;
+        printf("Usable (2+1 logical): used=%s  free=%s  capacity=%s (%.1f%%)\n",
+               used_s, free_s, cap_s, pct);
+    } else {
+        printf("Usable (2+1 logical): n/a (set a quota on every node)\n");
     }
 
     printf("Cluster state: %s\n", (full_nodes >= 2) ? "FULL" : "OK");
@@ -155,7 +198,12 @@ static int cmd_list_exports(int argc, char **argv)
     struct efs_msg_list_exports_reply *list = reply;
     printf("Exports (%u):\n", list->export_count);
     for (uint32_t i = 0; i < list->export_count; i++) {
-        printf("  id=%u  name=%s\n", list->exports[i].id, list->exports[i].name);
+        const char *n = list->exports[i].name;
+        if (!n[0])
+            n = "(unnamed)";
+        else if (strcmp(n, "pending") == 0)
+            n = "(pending)";
+        printf("  id=%u  name=%s\n", list->exports[i].id, n);
     }
 
     free(reply);
@@ -199,16 +247,147 @@ static int cmd_mkfs(int argc, char **argv)
     }
 
     uint8_t status = ((uint8_t *)reply)[0];
-    if (status == EFS_CREATE_EXPORT_OK)
+    int rc = 1;
+    if (status == EFS_CREATE_EXPORT_OK) {
         printf("Export '%s' created on %s:%u\n", argv[1], host, port);
-    else if (status == EFS_CREATE_EXPORT_EXISTS)
+        rc = 0;
+    } else if (status == EFS_CREATE_EXPORT_EXISTS) {
         fprintf(stderr, "Export '%s' already exists on %s:%u\n", argv[1], host, port);
-    else
+    } else if (status == EFS_CREATE_EXPORT_REPLICATE_FAILED) {
+        /* Local create succeeded; fragmented meta page/root flush to peers
+         * did not reach quorum. Membership can still look fine in status. */
+        fprintf(stderr,
+                "Export '%s' created on %s:%u, but metadata page replicate "
+                "failed (see efsd log: meta-flush). Cluster membership may "
+                "still look OK — this is a meta placement/write failure, "
+                "not a join failure.\n",
+                argv[1], host, port);
+    } else {
         fprintf(stderr, "Failed to create export '%s'\n", argv[1]);
+    }
 
     free(reply);
     close(fd);
-    return (status == EFS_CREATE_EXPORT_OK) ? 0 : 1;
+    return rc;
+}
+
+static int destroy_on_node(const char *host, uint16_t port, const char *name,
+                           uint8_t *status_out)
+{
+    int fd = efs_connect_tcp(host, port);
+    if (fd < 0)
+        return -1;
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+
+    struct efs_msg_destroy_export req;
+    memset(&req, 0, sizeof(req));
+    strncpy(req.name, name, EFS_MAX_NAME - 1);
+
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    int rc = send_recv(fd, EFS_MSG_DESTROY_EXPORT, &req, sizeof(req),
+                       &reply_type, &reply, &reply_len);
+    if (rc != 0 || reply_type != EFS_MSG_DESTROY_EXPORT_REPLY || reply_len != 1) {
+        free(reply);
+        close(fd);
+        return -1;
+    }
+    *status_out = ((uint8_t *)reply)[0];
+    free(reply);
+    close(fd);
+    return 0;
+}
+
+static int cmd_destroy(int argc, char **argv)
+{
+    if (argc < 2) {
+        fprintf(stderr,
+                "usage: destroy|rmfs <node:port> <export-name|--unnamed>\n");
+        return 1;
+    }
+    char host[64];
+    uint16_t port;
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    /* "-" / "--unnamed" removes bootstrap leftovers with an empty/pending name. */
+    const char *export_name = argv[1];
+    int wipe_unnamed = (strcmp(argv[1], "-") == 0 ||
+                        strcmp(argv[1], "--unnamed") == 0);
+    if (!wipe_unnamed && !argv[1][0]) {
+        fprintf(stderr, "Export name must be non-empty (or --unnamed)\n");
+        return 1;
+    }
+    if (wipe_unnamed)
+        export_name = "";
+
+    /* Ask the contacted node for membership, then wipe the export everywhere. */
+    int fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_node nodes[EFS_MAX_NODES];
+    uint32_t node_count = 0;
+    if (send_recv(fd, EFS_MSG_LIST_NODES, NULL, 0, &reply_type, &reply, &reply_len) == 0 &&
+        reply_type == EFS_MSG_LIST_NODES_REPLY &&
+        reply_len == sizeof(struct efs_msg_list_nodes_reply)) {
+        struct efs_msg_list_nodes_reply *list = reply;
+        node_count = list->node_count;
+        if (node_count > EFS_MAX_NODES)
+            node_count = EFS_MAX_NODES;
+        memcpy(nodes, list->nodes, node_count * sizeof(nodes[0]));
+    }
+    free(reply);
+    close(fd);
+
+    if (node_count == 0) {
+        nodes[0].port = port;
+        strncpy(nodes[0].addr, host, sizeof(nodes[0].addr) - 1);
+        node_count = 1;
+    }
+
+    const char *label = wipe_unnamed ? "(unnamed/pending)" : argv[1];
+    int ok = 0, missing = 0, failed = 0;
+    for (uint32_t i = 0; i < node_count; i++) {
+        uint8_t st = EFS_DESTROY_EXPORT_ERROR;
+        if (destroy_on_node(nodes[i].addr, nodes[i].port, export_name, &st) != 0) {
+            fprintf(stderr, "  %s:%u: no reply\n", nodes[i].addr, nodes[i].port);
+            failed++;
+            continue;
+        }
+        if (st == EFS_DESTROY_EXPORT_OK) {
+            printf("  %s:%u: destroyed\n", nodes[i].addr, nodes[i].port);
+            ok++;
+        } else if (st == EFS_DESTROY_EXPORT_NOT_FOUND) {
+            printf("  %s:%u: not found\n", nodes[i].addr, nodes[i].port);
+            missing++;
+        } else {
+            fprintf(stderr, "  %s:%u: error\n", nodes[i].addr, nodes[i].port);
+            failed++;
+        }
+    }
+
+    if (ok > 0 && failed == 0) {
+        printf("Export '%s' destroyed on %d node(s)\n", label, ok);
+        return 0;
+    }
+    if (ok == 0 && missing == (int)node_count) {
+        fprintf(stderr, "Export '%s' not found on any node\n", label);
+        return 1;
+    }
+    fprintf(stderr, "Export '%s': destroyed=%d missing=%d failed=%d\n",
+            label, ok, missing, failed);
+    return failed ? 1 : 0;
 }
 
 static int cmd_add_node(int argc, char **argv)
@@ -457,6 +636,7 @@ int main(int argc, char **argv)
                     "  status <node:port>\n"
                     "  list-exports <node:port>\n"
                     "  mkfs <node:port> <export-name>\n"
+                    "  destroy|rmfs <node:port> <export-name|--unnamed>\n"
                     "  add-node <new-node:port> <existing-node:port>\n"
                     "  drain-node <node:port>\n"
                     "  undrain-node <node:port>\n"
@@ -473,6 +653,8 @@ int main(int argc, char **argv)
         return cmd_list_exports(argc - 2, argv + 2);
     if (strcmp(cmd, "mkfs") == 0)
         return cmd_mkfs(argc - 2, argv + 2);
+    if (strcmp(cmd, "destroy") == 0 || strcmp(cmd, "rmfs") == 0)
+        return cmd_destroy(argc - 2, argv + 2);
     if (strcmp(cmd, "add-node") == 0)
         return cmd_add_node(argc - 2, argv + 2);
     if (strcmp(cmd, "drain-node") == 0)

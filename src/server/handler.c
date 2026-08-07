@@ -73,6 +73,7 @@ void server_handle_conn(int fd)
                     struct efs_node *n = &g_server->nodes[idx];
                     if (n->port != h->port ||
                         strcmp(n->addr, h->addr) != 0 ||
+                        strcmp(n->storage_path, h->storage_path) != 0 ||
                         n->quota != h->quota || n->used != h->used) {
                         changed = 1;
                     }
@@ -272,11 +273,13 @@ void server_handle_conn(int fd)
                 } else if (efs_meta_blob_is_export(payload, payload_len)) {
                     /* Legacy full-blob merge (pre-fragmented peers / tests). */
                     struct efs_export inc;
-                    efs_export_init(&inc, 1, "");
+                    efs_export_init(&inc, 1, "pending");
                     if (efs_export_deserialize(&inc, payload, payload_len) == 0) {
                         pthread_mutex_lock(&g_server->lock);
                         if (g_server->export_count == 0) {
-                            efs_export_init(&g_server->exports[0], 1, "");
+                            efs_export_init(&g_server->exports[0],
+                                            inc.id ? inc.id : 1,
+                                            inc.name[0] ? inc.name : "pending");
                             g_server->export_count = 1;
                         }
                         struct efs_export *ex = &g_server->exports[0];
@@ -285,8 +288,12 @@ void server_handle_conn(int fd)
                             g_server->epoch++;
                             g_server->export_meta_dirty = 1;
                             reply = EFS_PUT_META_OK;
+                            pthread_mutex_unlock(&g_server->lock);
+                            if (ex->name[0] && strcmp(ex->name, "pending") != 0)
+                                server_save_export(g_server, ex);
+                        } else {
+                            pthread_mutex_unlock(&g_server->lock);
                         }
-                        pthread_mutex_unlock(&g_server->lock);
                     }
                     efs_export_free(&inc);
                 }
@@ -466,30 +473,51 @@ void server_handle_conn(int fd)
         case EFS_MSG_CREATE_EXPORT: {
             if (payload_len >= sizeof(struct efs_msg_create_export)) {
                 struct efs_msg_create_export *req = payload;
-                pthread_mutex_lock(&g_server->lock);
-                int exists = 0;
-                for (uint32_t i = 0; i < g_server->export_count; i++) {
-                    if (strcmp(g_server->exports[i].name, req->name) == 0) {
-                        exists = 1;
-                        break;
-                    }
-                }
-                struct efs_export *ex = NULL;
                 uint8_t reply = EFS_CREATE_EXPORT_ERROR;
-                if (!exists) {
-                    ex = server_find_export(g_server, req->name);
-                    if (ex != NULL)
-                        reply = EFS_CREATE_EXPORT_OK;
+                struct efs_export *ex = NULL;
+                if (!req->name[0]) {
+                    reply = EFS_CREATE_EXPORT_ERROR;
                 } else {
-                    reply = EFS_CREATE_EXPORT_EXISTS;
+                    pthread_mutex_lock(&g_server->lock);
+                    int exists = 0;
+                    for (uint32_t i = 0; i < g_server->export_count; i++) {
+                        if (strcmp(g_server->exports[i].name, req->name) == 0) {
+                            exists = 1;
+                            break;
+                        }
+                    }
+                    if (!exists) {
+                        ex = server_find_export(g_server, req->name);
+                        if (ex != NULL)
+                            reply = EFS_CREATE_EXPORT_OK;
+                    } else {
+                        reply = EFS_CREATE_EXPORT_EXISTS;
+                    }
+                    pthread_mutex_unlock(&g_server->lock);
                 }
-                pthread_mutex_unlock(&g_server->lock);
+                /* Local create already persisted via server_find_export. Do not
+                 * report a hard ERROR if only peer replicate fails — that left
+                 * mkfs claiming failure while the export already existed. */
                 if (reply == EFS_CREATE_EXPORT_OK) {
                     if (server_replicate_metadata(g_server, ex) < 0)
-                        reply = EFS_CREATE_EXPORT_ERROR;
+                        reply = EFS_CREATE_EXPORT_REPLICATE_FAILED;
                 }
                 efs_send_msg(fd, EFS_MSG_CREATE_EXPORT_REPLY, &reply, 1);
             }
+            break;
+        }
+        case EFS_MSG_DESTROY_EXPORT: {
+            /* Local wipe only; efs-mgmt fans out to each cluster node. */
+            uint8_t reply = EFS_DESTROY_EXPORT_ERROR;
+            if (payload_len >= sizeof(struct efs_msg_destroy_export)) {
+                struct efs_msg_destroy_export *req = payload;
+                int rc = server_destroy_export(g_server, req->name);
+                if (rc == EFS_OK)
+                    reply = EFS_DESTROY_EXPORT_OK;
+                else if (rc == EFS_ERR_NOT_FOUND)
+                    reply = EFS_DESTROY_EXPORT_NOT_FOUND;
+            }
+            efs_send_msg(fd, EFS_MSG_DESTROY_EXPORT_REPLY, &reply, 1);
             break;
         }
         case EFS_MSG_LIST_EXPORTS: {

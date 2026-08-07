@@ -4,12 +4,12 @@ set -e
 usage() {
     cat <<EOF
 Usage:
-  $0 <addr:port> <path[:quota]> [join-addr:port] [extra-efsd-args...]
-  $0 stop <path[:quota]>
-  $0 stop <addr:port>
+  $0 <addr:port> <path[,path...][:quota]> [join-addr:port] [extra-efsd-args...]
+  $0 stop <path[:quota]|path[,path...]|addr:port>
 
-  start:  bind addr:port, store under path (optional :quota), optional join
-  stop:   stop by storage path (PID file) or by addr:port (efsd on that port)
+  start:  bind addr:port; one storage path or comma-separated 3..8 paths
+          (optional :quota after the path list); optional join
+  stop:   stop by first storage path (PID file) or by addr:port
 EOF
     exit 1
 }
@@ -81,6 +81,8 @@ cmd_stop() {
         fi
     fi
     local storage=${target%:*}
+    # Multi-path: PID lives under the first root.
+    storage=${storage%%,*}
     kill_from_pidfile "$storage/log/efsd.pid"
     kill_from_pidfile "$storage/efsd.pid"
     echo "Stopped efsd for storage $storage (if any)"
@@ -116,16 +118,26 @@ EXTRA_ARGS+=("$@")
 ADDR=${ADDR_PORT%:*}
 PORT=${ADDR_PORT##*:}
 
-STORAGE=${PATH_QUOTA%:*}
-QUOTA=${PATH_QUOTA#*:}
+# path[,path...]:quota  — quota is after the last colon only when it looks like
+# a size (digits + optional T/G/M/K). Otherwise the whole string is storage.
+STORAGE=$PATH_QUOTA
+QUOTA=""
+if [[ "$PATH_QUOTA" =~ ^(.*):([0-9]+([TtGgMmKk][Ii]?[Bb]?)?)$ ]]; then
+    STORAGE=${BASH_REMATCH[1]}
+    QUOTA=${BASH_REMATCH[2]}
+fi
 
-mkdir -p "$STORAGE"
-mkdir -p "$STORAGE/log"
+# Create every local root; PID/log live under the first path.
+FIRST_STORAGE=${STORAGE%%,*}
+IFS=',' read -r -a STORAGE_PATHS <<< "$STORAGE"
+for p in "${STORAGE_PATHS[@]}"; do
+    mkdir -p "$p" "$p/log"
+done
 
 # New PID file location and legacy location at the storage root.
-PID_FILE="$STORAGE/log/efsd.pid"
+PID_FILE="$FIRST_STORAGE/log/efsd.pid"
 kill_from_pidfile "$PID_FILE"
-kill_from_pidfile "$STORAGE/efsd.pid"
+kill_from_pidfile "$FIRST_STORAGE/efsd.pid"
 kill_port_holder "$PORT"
 
 # Derive a stable node id from the address and port.
@@ -137,7 +149,7 @@ else
 fi
 
 ARGS=(./efsd --node-id "$NODE_ID" --addr "$ADDR" --port "$PORT" --storage "$STORAGE")
-if [ "$QUOTA" != "$STORAGE" ]; then
+if [ -n "$QUOTA" ]; then
     ARGS+=(--quota "$QUOTA")
 fi
 if [ -n "$JOIN" ]; then
@@ -147,7 +159,7 @@ if [ ${#EXTRA_ARGS[@]} -gt 0 ]; then
     ARGS+=("${EXTRA_ARGS[@]}")
 fi
 
-LOG_FILE="$STORAGE/log/efsd.log"
+LOG_FILE="$FIRST_STORAGE/log/efsd.log"
 # Mark where this start's log begins so we can surface join/bind errors.
 LOG_MARK=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
 
@@ -156,7 +168,7 @@ NEW_PID=$!
 echo "$NEW_PID" > "$PID_FILE"
 
 echo "efsd started (PID $NEW_PID); logs: $LOG_FILE"
-echo "Stop with: $0 stop $STORAGE   # or: $0 stop $ADDR_PORT"
+echo "Stop with: $0 stop $FIRST_STORAGE   # or: $0 stop $ADDR_PORT"
 
 # Give efsd a moment to bind and report any immediate failure.
 sleep 1

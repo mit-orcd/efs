@@ -14,7 +14,8 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
                                                    int max_attempts)
 {
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
-    efs_get_placement(g_client.node_count, ino, chunk_index, nodes);
+    efs_place_fragments(g_client.nodes, g_client.node_count, ino, chunk_index,
+                        nodes);
 
     int order[EFS_NUM_FRAGMENTS] = {0, 1, 2};
     if (g_client.local_node_id != 0) {
@@ -230,7 +231,7 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
                             uint32_t fragment_index, uint8_t *data, uint32_t *data_len,
                             uint8_t checksum[EFS_HASH_SIZE])
 {
-    if (node_id == 0 || node_id > g_client.node_count)
+    if (node_id == 0)
         return EFS_ERR_INVAL;
 
     int fd = efs_client_conn_get(node_id);

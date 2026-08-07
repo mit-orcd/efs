@@ -45,6 +45,8 @@ enum efs_msg_type {
     /* Network bench: same payload as PUT_CHUNK; server ACKs and discards. */
     EFS_MSG_BENCH_PUT = 33,
     EFS_MSG_BENCH_PUT_REPLY = 34,
+    EFS_MSG_DESTROY_EXPORT = 35,
+    EFS_MSG_DESTROY_EXPORT_REPLY = 36,
 };
 
 struct efs_msg_hello {
@@ -153,9 +155,19 @@ struct efs_msg_create_export {
     char name[EFS_MAX_NAME];
 };
 
-#define EFS_CREATE_EXPORT_OK     0
-#define EFS_CREATE_EXPORT_ERROR  1
-#define EFS_CREATE_EXPORT_EXISTS 2
+#define EFS_CREATE_EXPORT_OK                0
+#define EFS_CREATE_EXPORT_ERROR             1
+#define EFS_CREATE_EXPORT_EXISTS            2
+/* Export was created/saved locally; peer meta replicate did not get quorum. */
+#define EFS_CREATE_EXPORT_REPLICATE_FAILED  3
+
+struct efs_msg_destroy_export {
+    char name[EFS_MAX_NAME];
+};
+
+#define EFS_DESTROY_EXPORT_OK         0
+#define EFS_DESTROY_EXPORT_ERROR      1
+#define EFS_DESTROY_EXPORT_NOT_FOUND  2
 
 struct efs_msg_join {
     char peer_host[64];

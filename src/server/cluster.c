@@ -24,7 +24,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
     h.node_id = s->id;
     strncpy(h.addr, s->addr, sizeof(h.addr) - 1);
     h.port = s->port;
-    strncpy(h.storage_path, s->storage_path, sizeof(h.storage_path) - 1);
+    server_format_storage_paths(s, h.storage_path, sizeof(h.storage_path));
     h.quota = s->quota;
     {
         struct efs_node *local = server_local_node(s);
@@ -101,8 +101,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
         strncpy(local->addr, s->addr, sizeof(local->addr) - 1);
         local->addr[sizeof(local->addr) - 1] = '\0';
         local->port = s->port;
-        strncpy(local->storage_path, s->storage_path, sizeof(local->storage_path) - 1);
-        local->storage_path[sizeof(local->storage_path) - 1] = '\0';
+        server_format_storage_paths(s, local->storage_path, sizeof(local->storage_path));
         local->quota = s->quota;
         local->used = server_compute_local_usage(s);
     }

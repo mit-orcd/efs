@@ -175,13 +175,16 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
     }
 
     for (uint32_t pi = 0; pi < root->page_count; pi++) {
-        efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
-        efs_get_placement(s->node_count, EFS_META_TABLE_INO, pi, nodes);
+        efs_node_id_t placed[EFS_NUM_FRAGMENTS];
+        pthread_mutex_lock(&s->lock);
+        efs_place_fragments(s->nodes, s->node_count, EFS_META_TABLE_INO, pi,
+                            placed);
+        pthread_mutex_unlock(&s->lock);
 
         int have[EFS_NUM_FRAGMENTS] = {0};
 
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
-            int frc = fetch_meta_fragment(s, ex, nodes[fi], pi, (uint32_t)fi,
+            int frc = fetch_meta_fragment(s, ex, placed[fi], pi, (uint32_t)fi,
                                           fragments[fi]);
             if (frc == EFS_OK) {
                 uint8_t sum[EFS_HASH_SIZE];
@@ -193,12 +196,12 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
                     fprintf(stderr,
                             "meta-rebuild: page %u frag %u checksum mismatch "
                             "(node %u)\n",
-                            pi, fi, nodes[fi]);
+                            pi, fi, placed[fi]);
             } else {
                 fprintf(stderr,
                         "meta-rebuild: page %u frag %u fetch failed rc=%d "
                         "(node %u export=%u)\n",
-                        pi, fi, frc, nodes[fi], ex->id);
+                        pi, fi, frc, placed[fi], ex->id);
             }
         }
 
@@ -226,8 +229,8 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
             fprintf(stderr,
                     "meta-rebuild: decode failed page %u have=%d%d%d "
                     "nodes=%u,%u,%u node_count=%u\n",
-                    pi, have[0], have[1], have[2], nodes[0], nodes[1], nodes[2],
-                    s->node_count);
+                    pi, have[0], have[1], have[2], placed[0], placed[1],
+                    placed[2], s->node_count);
             free(fragments);
             free(pages);
             return EFS_ERR_DECODE;
@@ -368,24 +371,30 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
             efs_hash(fragments[fi], EFS_FRAGMENT_SIZE, checksums[fi]);
 
-        efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+        efs_node_id_t placed[EFS_NUM_FRAGMENTS];
         pthread_mutex_lock(&s->lock);
-        uint32_t ncount = s->node_count;
+        efs_place_fragments(s->nodes, s->node_count, EFS_META_TABLE_INO, pi,
+                            placed);
         pthread_mutex_unlock(&s->lock);
-        efs_get_placement(ncount, EFS_META_TABLE_INO, pi, nodes);
 
         int acks = 0;
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
-            int prc = put_meta_fragment(s, ex, nodes[fi], pi, (uint32_t)fi,
+            int prc = put_meta_fragment(s, ex, placed[fi], pi, (uint32_t)fi,
                                         fragments[fi], checksums[fi]);
             if (prc != EFS_OK) {
                 /* Peer may not have finished bootstrap yet — retry once. */
                 usleep(50000);
-                prc = put_meta_fragment(s, ex, nodes[fi], pi, (uint32_t)fi,
+                prc = put_meta_fragment(s, ex, placed[fi], pi, (uint32_t)fi,
                                         fragments[fi], checksums[fi]);
             }
-            if (prc == EFS_OK)
+            if (prc == EFS_OK) {
                 acks++;
+            } else {
+                fprintf(stderr,
+                        "meta-flush: page %u frag %u put failed rc=%d "
+                        "(node %u export=%u)\n",
+                        pi, fi, prc, placed[fi], ex->id);
+            }
         }
         if (acks < 2) {
             free(page);
@@ -445,7 +454,17 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
         close(fd);
     }
     free(root_buf);
-    return acks;
+    /* Single-node clusters have no peers; otherwise require at least one
+     * peer root ack (pages already needed quorum above). */
+    if (node_count <= 1)
+        return 0;
+    if (acks < 1) {
+        fprintf(stderr,
+                "meta-flush: export %u root replicate got 0/%u peer acks\n",
+                ex->id, node_count - 1);
+        return -1;
+    }
+    return 0;
 }
 
 int server_send_metadata_to(struct efsd_server *s, struct efs_export *ex,

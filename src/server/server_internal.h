@@ -23,7 +23,8 @@ struct efsd_server {
     char addr[64];
     uint16_t port;
     /* Local data roots: 1 (plain) or 3..EFS_MAX_STORAGE_PATHS (local EC).
-     * storage_path always mirrors storage_paths[0] for advertise/compat. */
+     * storage_path is always storage_paths[0] for on-disk paths (log/PID/meta).
+     * Cluster advertise (efs_node / HELLO) uses server_format_storage_paths(). */
     char storage_paths[EFS_MAX_STORAGE_PATHS][EFS_MAX_PATH];
     uint32_t storage_path_count;
     char storage_path[EFS_MAX_PATH];
@@ -66,6 +67,10 @@ struct efs_export *server_find_export(struct efsd_server *s, const char *name);
 
 /* Get export by id. */
 struct efs_export *server_get_export(struct efsd_server *s, efs_export_id_t id);
+
+/* Destroy an export by name: wipe local data/meta and drop the in-memory row.
+ * Returns EFS_OK, EFS_ERR_NOT_FOUND, or EFS_ERR_INVAL. */
+int server_destroy_export(struct efsd_server *s, const char *name);
 
 /* Migrate pre-subdirectory storage layout to data/meta/log. */
 void server_migrate_old_layout(struct efsd_server *s);
@@ -117,6 +122,9 @@ uint64_t server_compute_local_usage(struct efsd_server *s);
 
 /* Update the local node's used counter in the cluster list. */
 void server_update_local_usage(struct efsd_server *s);
+
+/* Comma-join all local storage roots into buf for status/HELLO advertise. */
+void server_format_storage_paths(const struct efsd_server *s, char *buf, size_t buflen);
 
 /* Pointer to this process's row in s->nodes (matched by s->id), or NULL. */
 struct efs_node *server_local_node(struct efsd_server *s);

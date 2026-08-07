@@ -1527,6 +1527,18 @@ int efs_export_merge(struct efs_export *ex, const struct efs_export *inc)
     if (!ex->ino_keys && export_reindex(ex) != 0)
         return EFS_ERR_NOMEM;
 
+    /* Bootstrap PUT_META used to leave ex->name empty ("") while the blob
+     * carried the real export name — adopt it so list-exports is not blank. */
+    if (inc->name[0] &&
+        (ex->name[0] == '\0' || strcmp(ex->name, "pending") == 0)) {
+        strncpy(ex->name, inc->name, EFS_MAX_NAME - 1);
+        ex->name[EFS_MAX_NAME - 1] = '\0';
+    }
+    if (inc->id != 0 &&
+        (ex->id == 0 || ex->name[0] == '\0' || strcmp(ex->name, "pending") == 0 ||
+         ex->id == inc->id))
+        ex->id = inc->id;
+
     /* Merge inodes: add new ones, update existing ones when the incoming
      * entry is newer (higher mtime, or equal mtime but larger size so a
      * growing write is not lost). Hard-link rows share an ino but have

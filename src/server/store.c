@@ -127,12 +127,34 @@ void server_migrate_old_layout(struct efsd_server *s)
     }
 }
 
+static int export_is_placeholder(const struct efs_export *ex)
+{
+    return ex && (ex->name[0] == '\0' || strcmp(ex->name, "pending") == 0);
+}
+
 struct efs_export *server_find_export(struct efsd_server *s, const char *name)
 {
+    if (!s || !name || !*name)
+        return NULL;
+
     for (uint32_t i = 0; i < s->export_count; i++) {
         if (strcmp(s->exports[i].name, name) == 0)
             return &s->exports[i];
     }
+
+    /* Reclaim a bootstrap placeholder left by PUT_META with an empty name. */
+    for (uint32_t i = 0; i < s->export_count; i++) {
+        if (export_is_placeholder(&s->exports[i])) {
+            struct efs_export *ex = &s->exports[i];
+            strncpy(ex->name, name, EFS_MAX_NAME - 1);
+            ex->name[EFS_MAX_NAME - 1] = '\0';
+            if (ex->id == 0)
+                ex->id = i + 1;
+            server_save_export(s, ex);
+            return ex;
+        }
+    }
+
     if (s->export_count >= EFS_MAX_EXPORTS)
         return NULL;
 
@@ -184,6 +206,90 @@ void server_save_export(struct efsd_server *s, struct efs_export *ex)
             fprintf(stderr, "Failed to save metadata for export %s on %s\n",
                     ex->name, s->storage_paths[ri]);
     }
+}
+
+static void rm_tree(const char *path)
+{
+    DIR *d = opendir(path);
+    if (!d) {
+        unlink(path);
+        return;
+    }
+    struct dirent *de;
+    while ((de = readdir(d)) != NULL) {
+        if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0)
+            continue;
+        char child[8192];
+        snprintf(child, sizeof(child), "%s/%s", path, de->d_name);
+        struct stat st;
+        if (lstat(child, &st) == 0 && S_ISDIR(st.st_mode))
+            rm_tree(child);
+        else
+            unlink(child);
+    }
+    closedir(d);
+    rmdir(path);
+}
+
+int server_destroy_export(struct efsd_server *s, const char *name)
+{
+    if (!s || !name)
+        return EFS_ERR_INVAL;
+
+    pthread_mutex_lock(&s->lock);
+    int idx = -1;
+    if (name[0]) {
+        for (uint32_t i = 0; i < s->export_count; i++) {
+            if (strcmp(s->exports[i].name, name) == 0) {
+                idx = (int)i;
+                break;
+            }
+        }
+    } else {
+        for (uint32_t i = 0; i < s->export_count; i++) {
+            if (export_is_placeholder(&s->exports[i])) {
+                idx = (int)i;
+                break;
+            }
+        }
+    }
+    if (idx < 0) {
+        pthread_mutex_unlock(&s->lock);
+        return EFS_ERR_NOT_FOUND;
+    }
+
+    struct efs_export doomed = s->exports[idx];
+    efs_export_id_t id = doomed.id;
+    char doomed_name[EFS_MAX_NAME];
+    strncpy(doomed_name, doomed.name, EFS_MAX_NAME - 1);
+    doomed_name[EFS_MAX_NAME - 1] = '\0';
+
+    /* Drop from the table before unlocking so new I/O cannot find it. */
+    uint32_t last = s->export_count - 1;
+    if ((uint32_t)idx != last)
+        s->exports[idx] = s->exports[last];
+    memset(&s->exports[last], 0, sizeof(s->exports[last]));
+    s->export_count--;
+    s->export_meta_dirty = 1;
+    pthread_mutex_unlock(&s->lock);
+
+    uint32_t nroots = s->storage_path_count ? s->storage_path_count : 1;
+    for (uint32_t ri = 0; ri < nroots; ri++) {
+        char path[8192];
+        if (doomed_name[0]) {
+            snprintf(path, sizeof(path), "%s/meta/exports/%s",
+                     s->storage_paths[ri], doomed_name);
+            rm_tree(path);
+        }
+        snprintf(path, sizeof(path), "%s/data/exports/%u",
+                 s->storage_paths[ri], id);
+        rm_tree(path);
+    }
+
+    efs_export_free(&doomed);
+    printf("Destroyed export id=%u name=%s\n", id,
+           doomed_name[0] ? doomed_name : "(unnamed)");
+    return EFS_OK;
 }
 
 void server_load_exports(struct efsd_server *s)
@@ -575,6 +681,31 @@ uint64_t server_compute_local_usage(struct efsd_server *s)
     return (raw * (uint64_t)k) / (uint64_t)n;
 }
 
+void server_format_storage_paths(const struct efsd_server *s, char *buf, size_t buflen)
+{
+    if (!buf || buflen == 0)
+        return;
+    buf[0] = '\0';
+    if (!s)
+        return;
+    uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
+    size_t off = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        const char *p = (s->storage_path_count > 0) ? s->storage_paths[i]
+                                                    : s->storage_path;
+        if (!p || !*p)
+            continue;
+        int wrote;
+        if (off == 0)
+            wrote = snprintf(buf + off, buflen - off, "%s", p);
+        else
+            wrote = snprintf(buf + off, buflen - off, ",%s", p);
+        if (wrote < 0 || (size_t)wrote >= buflen - off)
+            break;
+        off += (size_t)wrote;
+    }
+}
+
 struct efs_node *server_local_node(struct efsd_server *s)
 {
     if (!s)
@@ -591,7 +722,7 @@ struct efs_node *server_local_node(struct efsd_server *s)
         n->id = s->id;
         strncpy(n->addr, s->addr, sizeof(n->addr) - 1);
         n->port = s->port;
-        strncpy(n->storage_path, s->storage_path, sizeof(n->storage_path) - 1);
+        server_format_storage_paths(s, n->storage_path, sizeof(n->storage_path));
         n->quota = s->quota;
         return n;
     }
@@ -603,8 +734,12 @@ void server_update_local_usage(struct efsd_server *s)
     uint64_t used = server_compute_local_usage(s);
     pthread_mutex_lock(&s->lock);
     struct efs_node *local = server_local_node(s);
-    if (local)
+    if (local) {
         local->used = used;
+        /* Keep advertised path list current (e.g. after upgrade / rejoin). */
+        server_format_storage_paths(s, local->storage_path,
+                                    sizeof(local->storage_path));
+    }
     pthread_mutex_unlock(&s->lock);
 }
 

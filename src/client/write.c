@@ -241,7 +241,8 @@ int efs_client_replicate_metadata(void)
             efs_hash(fragments[fi], EFS_FRAGMENT_SIZE, checksums[fi]);
 
         efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
-        efs_get_placement(g_client.node_count, EFS_META_TABLE_INO, pi, nodes);
+        efs_place_fragments(g_client.nodes, g_client.node_count,
+                            EFS_META_TABLE_INO, pi, nodes);
 
         int rc = efs_client_put_fragments_parallel(EFS_META_TABLE_INO, pi, nodes,
                                                    fragments, checksums);
@@ -315,7 +316,7 @@ int efs_client_put_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
                             uint32_t fragment_index, const uint8_t *data,
                             const uint8_t checksum[EFS_HASH_SIZE])
 {
-    if (node_id == 0 || node_id > g_client.node_count)
+    if (node_id == 0)
         return EFS_ERR_INVAL;
 
     int fd = efs_client_conn_get(node_id);
@@ -373,7 +374,7 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
         fds[i] = -1;
 
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        if (nodes[i] == 0 || nodes[i] > g_client.node_count)
+        if (nodes[i] == 0)
             goto fail_net;
         fds[i] = efs_client_conn_get(nodes[i]);
         if (fds[i] < 0)
@@ -567,7 +568,8 @@ static void *chunk_put_worker(void *arg)
         hash_write_fragments(fragments, from_zero, chunk_start, wr_start, wr_end,
                              job->checksums);
     }
-    efs_get_placement(g_client.node_count, job->ino, job->ci, job->nodes);
+    efs_place_fragments(g_client.nodes, g_client.node_count, job->ino, job->ci,
+                        job->nodes);
     job->rc = efs_client_put_fragments_parallel(job->ino, job->ci, job->nodes,
                                                 fragments, job->checksums);
     return NULL;
@@ -607,7 +609,7 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
         efs_encode_chunk(chunk, EFS_CHUNK_SIZE, fragments);
 
         efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
-        efs_get_placement(g_client.node_count, ino, ci, nodes);
+        efs_place_fragments(g_client.nodes, g_client.node_count, ino, ci, nodes);
 
         uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
         hash_write_fragments(fragments, from_zero, chunk_start, wr_start, wr_end,

@@ -294,8 +294,8 @@ int main(int argc, char **argv)
     server.nodes[0].id = server.id;
     strncpy(server.nodes[0].addr, server.addr, sizeof(server.nodes[0].addr) - 1);
     server.nodes[0].port = server.port;
-    strncpy(server.nodes[0].storage_path, server.storage_path,
-            sizeof(server.nodes[0].storage_path) - 1);
+    server_format_storage_paths(&server, server.nodes[0].storage_path,
+                                sizeof(server.nodes[0].storage_path));
     server.nodes[0].quota = server.quota;
     server.nodes[0].used = server_compute_local_usage(&server);
     server.node_count = 1;
@@ -307,8 +307,8 @@ int main(int argc, char **argv)
     server.nodes[0].id = server.id;
     strncpy(server.nodes[0].addr, server.addr, sizeof(server.nodes[0].addr) - 1);
     server.nodes[0].port = server.port;
-    strncpy(server.nodes[0].storage_path, server.storage_path,
-            sizeof(server.nodes[0].storage_path) - 1);
+    server_format_storage_paths(&server, server.nodes[0].storage_path,
+                                sizeof(server.nodes[0].storage_path));
     server.nodes[0].quota = server.quota;
     server.nodes[0].used = server_compute_local_usage(&server);
 
@@ -396,7 +396,7 @@ int main(int argc, char **argv)
             ec = "rs(k,2)";
         printf("efsd node %u listening on %s:%u, storage=%s (%u paths, local_ec=%s), "
                "used=%llu, quota=%llu, direct_io=%s, writers=%d\n",
-               server.id, server.addr, server.port, server.storage_path,
+               server.id, server.addr, server.port, server.nodes[0].storage_path,
                server.storage_path_count, ec,
                (unsigned long long)server.nodes[0].used,
                (unsigned long long)server.quota,
