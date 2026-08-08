@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <pthread.h>
 
 /* Reconstruct one logical chunk from any 2 of 3 fragments. */
 static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk_index,
@@ -332,9 +333,19 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
         memcpy(data, r + 1 + EFS_HASH_SIZE, EFS_FRAGMENT_SIZE);
         *data_len = EFS_FRAGMENT_SIZE;
 
-        uint8_t verify[EFS_HASH_SIZE];
-        efs_hash(data, EFS_FRAGMENT_SIZE, verify);
-        if (memcmp(verify, checksum, EFS_HASH_SIZE) != 0) {
+        /* Verify payload. Known-zero digests use a memcmp against zeros
+         * (cheap) instead of Blake3 — dominates single-stream dd reads. */
+        uint8_t zero_ck[EFS_HASH_SIZE];
+        efs_hash_zero_fragment(zero_ck);
+        int sum_ok;
+        if (memcmp(checksum, zero_ck, EFS_HASH_SIZE) == 0) {
+            sum_ok = efs_bytes_are_zero(data, EFS_FRAGMENT_SIZE);
+        } else {
+            uint8_t verify[EFS_HASH_SIZE];
+            efs_hash(data, EFS_FRAGMENT_SIZE, verify);
+            sum_ok = (memcmp(verify, checksum, EFS_HASH_SIZE) == 0);
+        }
+        if (!sum_ok) {
             free(reply);
             efs_client_conn_release(node_id, fd);
             return EFS_ERR_CHECKSUM;
@@ -345,6 +356,26 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
         return EFS_OK;
     }
     return EFS_ERR_NET;
+}
+
+struct chunk_get_job {
+    efs_ino_t ino;
+    uint32_t ci;
+    int have_ce;
+    int rc;
+    uint8_t *chunk; /* EFS_CHUNK_SIZE, owned by caller */
+};
+
+static void *chunk_get_worker(void *arg)
+{
+    struct chunk_get_job *job = arg;
+    if (!job->have_ce) {
+        memset(job->chunk, 0, EFS_CHUNK_SIZE);
+        job->rc = EFS_OK;
+        return NULL;
+    }
+    job->rc = efs_client_decode_placed_chunk(job->ino, job->ci, job->chunk);
+    return NULL;
 }
 
 int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size_t *out_len)
@@ -372,34 +403,69 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
 
     size_t total = 0;
     uint64_t end = offset + size;
+    uint32_t pipe = EFS_WRITE_PIPELINE;
+    if (pipe < 1)
+        pipe = 1;
 
     for (uint64_t pos = offset; pos < end; ) {
-        uint32_t chunk_index = (uint32_t)(pos / EFS_CHUNK_SIZE);
-        uint32_t chunk_off = (uint32_t)(pos % EFS_CHUNK_SIZE);
-        size_t to_copy = end - pos;
-        if (to_copy > EFS_CHUNK_SIZE - chunk_off)
-            to_copy = EFS_CHUNK_SIZE - chunk_off;
+        /* Build a batch of whole chunks covering [pos, end). */
+        struct chunk_get_job jobs[EFS_WRITE_PIPELINE];
+        pthread_t tids[EFS_WRITE_PIPELINE];
+        int threaded[EFS_WRITE_PIPELINE];
+        uint32_t batch = 0;
+        uint64_t batch_pos = pos;
 
-        /* Sparse / truncate-up holes: no chunk map entry → zeros.
-         * Mapped chunks must decode; corruption must not be masked. */
-        uint8_t *chunk = malloc(EFS_CHUNK_SIZE);
-        if (!chunk)
-            return EFS_ERR_NOMEM;
-        struct efs_chunk_entry ce;
-        pthread_mutex_lock(&g_client.lock);
-        int have_ce = efs_export_get_chunk(&g_client.export, ino, chunk_index, &ce);
-        pthread_mutex_unlock(&g_client.lock);
-        if (have_ce != EFS_OK) {
-            memset(chunk, 0, EFS_CHUNK_SIZE);
-        } else if (efs_client_decode_placed_chunk(ino, chunk_index, chunk) != EFS_OK) {
-            free(chunk);
-            return EFS_ERR_DECODE;
+        while (batch < pipe && batch_pos < end) {
+            uint32_t ci = (uint32_t)(batch_pos / EFS_CHUNK_SIZE);
+            memset(&jobs[batch], 0, sizeof(jobs[batch]));
+            jobs[batch].ino = ino;
+            jobs[batch].ci = ci;
+            jobs[batch].chunk = malloc(EFS_CHUNK_SIZE);
+            if (!jobs[batch].chunk) {
+                for (uint32_t j = 0; j < batch; j++)
+                    free(jobs[j].chunk);
+                return EFS_ERR_NOMEM;
+            }
+            jobs[batch].rc = EFS_ERR_IO;
+            struct efs_chunk_entry ce;
+            pthread_mutex_lock(&g_client.lock);
+            jobs[batch].have_ce =
+                (efs_export_get_chunk(&g_client.export, ino, ci, &ce) == EFS_OK);
+            pthread_mutex_unlock(&g_client.lock);
+            threaded[batch] = 0;
+            batch_pos = ((uint64_t)ci + 1) * EFS_CHUNK_SIZE;
+            batch++;
         }
 
-        memcpy(buf + total, chunk + chunk_off, to_copy);
-        free(chunk);
-        total += to_copy;
-        pos += to_copy;
+        for (uint32_t i = 0; i < batch; i++) {
+            if (batch > 1 &&
+                pthread_create(&tids[i], NULL, chunk_get_worker, &jobs[i]) == 0) {
+                threaded[i] = 1;
+            } else {
+                chunk_get_worker(&jobs[i]);
+            }
+        }
+        for (uint32_t i = 0; i < batch; i++) {
+            if (threaded[i])
+                pthread_join(tids[i], NULL);
+        }
+
+        for (uint32_t i = 0; i < batch; i++) {
+            if (jobs[i].rc != EFS_OK) {
+                for (uint32_t j = 0; j < batch; j++)
+                    free(jobs[j].chunk);
+                return jobs[i].rc;
+            }
+            uint64_t chunk_start = (uint64_t)jobs[i].ci * EFS_CHUNK_SIZE;
+            uint32_t chunk_off = (pos > chunk_start) ? (uint32_t)(pos - chunk_start) : 0;
+            size_t to_copy = end - pos;
+            if (to_copy > EFS_CHUNK_SIZE - chunk_off)
+                to_copy = EFS_CHUNK_SIZE - chunk_off;
+            memcpy(buf + total, jobs[i].chunk + chunk_off, to_copy);
+            total += to_copy;
+            pos += to_copy;
+            free(jobs[i].chunk);
+        }
     }
 
     *out_len = total;

@@ -700,9 +700,10 @@ static void *efs_fuse_init(struct fuse_conn_info *conn)
     if (conn) {
         if (conn->capable & FUSE_CAP_BIG_WRITES)
             conn->want |= FUSE_CAP_BIG_WRITES;
-        /* Allow up to 1 MiB so sequential dd(bs=1M) is one FUSE write. */
-        if (conn->max_write == 0 || conn->max_write > (1u << 20))
-            conn->max_write = (1u << 20);
+        /* Prefer up to 4 MiB so one FUSE write covers a full write pipeline
+         * (16 × 128 KiB). Kernel may clamp lower (often 1 MiB). */
+        if (conn->max_write == 0 || conn->max_write > (4u << 20))
+            conn->max_write = (4u << 20);
     }
     /* Coalesce metadata PUTs so bulk creates are not O(n^2) full-metadata
      * syncs. Override with EFS_META_BATCH_OPS for heavy profiling loads. */
@@ -959,12 +960,12 @@ int main(int argc, char **argv)
     fuse_argv[fuse_argc++] = (char *)mountpoint;
     /* Prefer large writes so FUSE does not chop every write into 4 KiB and
      * force a 128 KiB RMW per call. big_writes raises the kernel limit;
-     * max_write=1MiB lets one FUSE op cover 8 chunks (pipeline-friendly).
-     * use_ino exposes our st_ino (needed for hard links); attr/entry
-     * timeouts at 0 avoid stale nlink/mode. */
+     * max_write=4MiB matches EFS_WRITE_PIPELINE=16 (kernel may clamp).
+     * max_readahead helps single-stream dd reads. use_ino exposes our
+     * st_ino; attr/entry timeouts at 0 avoid stale nlink/mode. */
     fuse_argv[fuse_argc++] = "-o";
     fuse_argv[fuse_argc++] =
-        "big_writes,max_write=1048576,use_ino,attr_timeout=0,entry_timeout=0,ac_attr_timeout=0";
+        "big_writes,max_write=4194304,max_readahead=4194304,use_ino,attr_timeout=0,entry_timeout=0,ac_attr_timeout=0";
     while (arg_idx < argc && fuse_argc < 63) {
         if (strcmp(argv[arg_idx], "--perf") == 0) {
             arg_idx++;

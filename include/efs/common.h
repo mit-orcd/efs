@@ -17,8 +17,9 @@
 /* Max TCP connections the client keeps open to each server (pool size).
  * Sized for many FUSE writers × fragment fanout × chunk pipeline. */
 #define EFS_CLIENT_CONNS_PER_NODE 32
-/* How many 128 KiB chunks one FUSE write may PUT concurrently. */
-#define EFS_WRITE_PIPELINE 8
+/* How many 128 KiB chunks one FUSE write may PUT concurrently.
+ * Sized for max_write≈1–4 MiB (8–32 chunks) so a single dd op stays pipelined. */
+#define EFS_WRITE_PIPELINE 16
 #define EFS_MAX_EXPORTS      16
 #define EFS_MAX_PATH         4096
 #define EFS_MAX_NAME         256

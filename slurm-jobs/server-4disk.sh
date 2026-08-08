@@ -52,8 +52,14 @@ case "${EFS_DIO:-}" in
     on|direct|1)    DIO_ARGS+=(--direct-io) ;;
 esac
 
+QUOTA_ARGS=()
+case "${EFS_QUOTA:-200G}" in
+    ''|0|off|none|unlimited) ;; # no --quota → unlimited
+    *) QUOTA_ARGS=(--quota "$EFS_QUOTA") ;;
+esac
+
 # shellcheck disable=SC2086
 efs_run_efsd "$SCRATCH" \
     "$REPO/efsd" --node-id "$NODE_ID" --addr "$IB_IP" --port "$PORT" \
-    --storage "$STORAGE" --quota "${EFS_QUOTA:-200G}" \
+    --storage "$STORAGE" "${QUOTA_ARGS[@]}" \
     "${DIO_ARGS[@]}" "${JOIN_ARGS[@]}" ${EFS_EXTRA_ARGS:-}

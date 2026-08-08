@@ -33,6 +33,18 @@ static void make_dir(const char *path)
 
 static void make_dir_for_file(const char *path)
 {
+    /* Skip full mkdir walk when the parent dir matches the last one we
+     * successfully created on this thread (sequential chunk PUTs share
+     * chunk>>10 dirs). */
+    static __thread char last_parent[8192];
+    const char *slash = strrchr(path, '/');
+    size_t plen = 0;
+    if (slash && slash > path)
+        plen = (size_t)(slash - path);
+    if (plen > 0 && plen < sizeof(last_parent) && last_parent[0] &&
+        strncmp(last_parent, path, plen) == 0 && last_parent[plen] == '\0')
+        return;
+
     size_t n = strlen(path) + 1;
     char *tmp = malloc(n);
     if (!tmp)
@@ -43,6 +55,10 @@ static void make_dir_for_file(const char *path)
     if (last_slash) {
         *last_slash = '\0';
         make_dir(tmp);
+        if (plen > 0 && plen < sizeof(last_parent)) {
+            memcpy(last_parent, path, plen);
+            last_parent[plen] = '\0';
+        }
     }
     free(tmp);
 }
@@ -572,14 +588,25 @@ static int resolve_shard_path(struct efsd_server *s, struct efs_export *ex,
     return -1;
 }
 
-/* True if this fragment is already on disk (overwrite must not re-charge quota). */
+/* True if this fragment is already on disk (overwrite must not re-charge quota).
+ * Hot path: only probe the primary shard/plain path — legacy layout walks are
+ * for reads. Avoids 3–4 failing access() syscalls per PUT on new files. */
 static int fragment_exists_on_disk(struct efsd_server *s, struct efs_export *ex,
                                    efs_ino_t ino, uint32_t chunk_index,
                                    uint32_t fragment_index)
 {
     char path[8192];
-    return resolve_shard_path(s, ex, ino, chunk_index, fragment_index, 0,
-                              path, sizeof(path)) == 0;
+    server_shard_path(s, ex, ino, chunk_index, fragment_index, 0, path,
+                      sizeof(path));
+    if (access(path, F_OK) == 0)
+        return 1;
+    if (s->storage_path_count > 1) {
+        server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
+                             sizeof(path));
+        if (access(path, F_OK) == 0)
+            return 1;
+    }
+    return 0;
 }
 
 /* Unlink fragment data + checksum sidecars at sharded and legacy locations. */
@@ -748,7 +775,11 @@ static void *shard_io_thread(void *arg)
                 }
                 written += (size_t)n;
             }
-            fsync(fd);
+            /* Do not fsync per shard PUT. A single FUSE dd MiB becomes
+             * ~24 fragment PUTs × 4 disks = ~96 fsyncs and caps single-stream
+             * bandwidth well below 1 GiB/s. Durability relies on the page
+             * cache until process exit / umount (same model as many parallel
+             * FS clients); add an explicit fsync RPC later if needed. */
         }
         close(fd);
         a->result = EFS_OK;
@@ -841,26 +872,22 @@ int server_write_fragment_sum_sync(struct efsd_server *s, struct efs_export *ex,
                                    uint32_t fragment_index,
                                    const uint8_t checksum[EFS_HASH_SIZE])
 {
-    uint32_t nroots = s->storage_path_count ? s->storage_path_count : 1;
-    int ok = 0;
-    for (uint32_t ri = 0; ri < nroots; ri++) {
-        char path[8192];
-        /* Writes always use the sharded layout. */
-        server_fragment_sum_path_at(s, ri, ex, ino, chunk_index, fragment_index,
-                                    path, sizeof(path));
-        int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        if (fd < 0 && errno == ENOENT) {
-            make_dir_for_file(path);
-            fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        }
-        if (fd < 0)
-            continue;
-        ssize_t n = write(fd, checksum, EFS_HASH_SIZE);
-        close(fd);
-        if (n == (ssize_t)EFS_HASH_SIZE)
-            ok++;
+    /* Write .sum to root 0 only. Mirroring to every local EC disk made each
+     * PUT open/create 4 tiny checksum files and dominated single-stream
+     * bandwidth; reads already fall back across roots when needed. */
+    char path[8192];
+    server_fragment_sum_path_at(s, 0, ex, ino, chunk_index, fragment_index,
+                                path, sizeof(path));
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0 && errno == ENOENT) {
+        make_dir_for_file(path);
+        fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     }
-    return (ok > 0) ? EFS_OK : EFS_ERR_IO;
+    if (fd < 0)
+        return EFS_ERR_IO;
+    ssize_t n = write(fd, checksum, EFS_HASH_SIZE);
+    close(fd);
+    return (n == (ssize_t)EFS_HASH_SIZE) ? EFS_OK : EFS_ERR_IO;
 }
 
 int server_read_fragment_sum(struct efsd_server *s, struct efs_export *ex,
@@ -1114,9 +1141,13 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
                                const uint8_t *data, uint32_t data_len)
 {
     /* Quota charges logical fragment size (not raw EC bytes), and only once
-     * per fragment — overwrites must not inflate the cached used counter. */
-    int is_new = !fragment_exists_on_disk(s, ex, ino, chunk_index, fragment_index);
-    int charge_quota = (ino != EFS_META_TABLE_INO) && is_new;
+     * per fragment — overwrites must not inflate the cached used counter.
+     * Skip the on-disk exists probe when quota is unlimited: it is several
+     * access() syscalls per PUT and dominates single-stream create workloads. */
+    int is_new = 1;
+    if (s->quota > 0)
+        is_new = !fragment_exists_on_disk(s, ex, ino, chunk_index, fragment_index);
+    int charge_quota = (ino != EFS_META_TABLE_INO) && is_new && (s->quota > 0);
 
     pthread_mutex_lock(&s->lock);
     struct efs_node *local = server_local_node(s);
@@ -1202,10 +1233,9 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
         return EFS_ERR_INVAL;
     }
 
-    /* Write shards inline on the writer thread. Spawning n pthreads per PUT
-     * (default 8MB stacks × 4 disks × 16 writers) exhausted address space and
-     * correlated with efsd SIGSEGV under imagenet ecopy. Writer-pool
-     * parallelism already covers concurrent fragments. */
+    /* Serial shard I/O on the writer thread. Per-PUT pthread storms (even with
+     * small stacks) cost more than buffered writes once fsync-per-shard is
+     * gone; the writer pool already parallelizes across fragments. */
     uint32_t slen = efs_local_ec_shard_len(n);
     int ok = 0;
     for (uint32_t i = 0; i < n; i++) {

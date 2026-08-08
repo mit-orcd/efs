@@ -43,6 +43,30 @@ static void format_bytes(uint64_t bytes, char *buf, size_t len)
         snprintf(buf, len, "%llu B", (unsigned long long)bytes);
 }
 
+/* Short STATUS probe so a dead peer does not stall status for EFS_IO_TIMEOUT_MS. */
+#define EFS_STATUS_PROBE_MS 2000
+
+static int probe_node_up(const char *nhost, uint16_t nport)
+{
+    int pfd = efs_connect_tcp(nhost, nport);
+    if (pfd < 0)
+        return 0;
+    efs_set_recv_timeout(pfd, EFS_STATUS_PROBE_MS);
+    efs_set_send_timeout(pfd, EFS_STATUS_PROBE_MS);
+    uint8_t type = 0;
+    void *preply = NULL;
+    uint32_t preply_len = 0;
+    int ok = 0;
+    if (efs_send_msg(pfd, EFS_MSG_STATUS, NULL, 0) == 0 &&
+        efs_recv_msg(pfd, &type, &preply, &preply_len) == 0 &&
+        type == EFS_MSG_STATUS_REPLY &&
+        preply_len == sizeof(struct efs_msg_status_reply))
+        ok = 1;
+    free(preply);
+    close(pfd);
+    return ok;
+}
+
 static int cmd_status(int argc, char **argv)
 {
     if (argc < 1) {
@@ -92,10 +116,19 @@ static int cmd_status(int argc, char **argv)
     }
 
     int full_nodes = 0;
+    int up_nodes = 0;
+    int down_nodes = 0;
     int all_have_quota = (list->node_count > 0);
     uint64_t min_quota = 0;
     uint64_t min_free = UINT64_MAX;
     for (uint32_t i = 0; i < list->node_count; i++) {
+        /* Probe every advertised addr (may differ from the seed string we used). */
+        int up = probe_node_up(list->nodes[i].addr, list->nodes[i].port);
+        if (up)
+            up_nodes++;
+        else
+            down_nodes++;
+
         char used_str[32], quota_str[32];
         format_bytes(list->nodes[i].used, used_str, sizeof(used_str));
         /* storage_path may be a comma-joined list of local roots. */
@@ -104,26 +137,29 @@ static int cmd_status(int argc, char **argv)
             if (*p == ',')
                 npaths++;
         }
+        const char *reach = up ? "up" : "DOWN";
         if (list->nodes[i].quota > 0) {
             format_bytes(list->nodes[i].quota, quota_str, sizeof(quota_str));
             double pct = 100.0 * (double)list->nodes[i].used / (double)list->nodes[i].quota;
-            printf("  node %u: %s:%u  used=%s  quota=%s (%.1f%%)  storage(%u):\n",
+            printf("  node %u: %s:%u  %s  used=%s  quota=%s (%.1f%%)  storage(%u):\n",
                    list->nodes[i].id, list->nodes[i].addr, list->nodes[i].port,
-                   used_str, quota_str, pct, npaths);
-            if (list->nodes[i].used >= list->nodes[i].quota)
+                   reach, used_str, quota_str, pct, npaths);
+            if (up && list->nodes[i].used >= list->nodes[i].quota)
                 full_nodes++;
-            if (min_quota == 0 || list->nodes[i].quota < min_quota)
-                min_quota = list->nodes[i].quota;
-            uint64_t free_i = (list->nodes[i].used < list->nodes[i].quota)
-                                  ? (list->nodes[i].quota - list->nodes[i].used)
-                                  : 0;
-            if (free_i < min_free)
-                min_free = free_i;
+            if (up) {
+                if (min_quota == 0 || list->nodes[i].quota < min_quota)
+                    min_quota = list->nodes[i].quota;
+                uint64_t free_i = (list->nodes[i].used < list->nodes[i].quota)
+                                      ? (list->nodes[i].quota - list->nodes[i].used)
+                                      : 0;
+                if (free_i < min_free)
+                    min_free = free_i;
+            }
         } else {
             all_have_quota = 0;
-            printf("  node %u: %s:%u  used=%s  quota=unlimited  storage(%u):\n",
+            printf("  node %u: %s:%u  %s  used=%s  quota=unlimited  storage(%u):\n",
                    list->nodes[i].id, list->nodes[i].addr, list->nodes[i].port,
-                   used_str, npaths);
+                   reach, used_str, npaths);
         }
         char paths[EFS_MAX_PATH];
         strncpy(paths, list->nodes[i].storage_path, sizeof(paths) - 1);
@@ -136,7 +172,7 @@ static int cmd_status(int argc, char **argv)
 
     /* 2+1 cluster EC: each logical byte needs a fragment on every node, so
      * usable capacity is 2 * min_quota (same model as FUSE df). */
-    if (all_have_quota && min_quota > 0 && min_free != UINT64_MAX) {
+    if (all_have_quota && min_quota > 0 && min_free != UINT64_MAX && up_nodes >= 2) {
         uint64_t usable_cap = min_quota * 2;
         uint64_t usable_free = min_free * 2;
         uint64_t usable_used =
@@ -148,11 +184,22 @@ static int cmd_status(int argc, char **argv)
         double pct = 100.0 * (double)usable_used / (double)usable_cap;
         printf("Usable (2+1 logical): used=%s  free=%s  capacity=%s (%.1f%%)\n",
                used_s, free_s, cap_s, pct);
+    } else if (down_nodes > 0) {
+        printf("Usable (2+1 logical): degraded (%d/%u nodes up)\n",
+               up_nodes, list->node_count);
     } else {
         printf("Usable (2+1 logical): n/a (set a quota on every node)\n");
     }
 
-    printf("Cluster state: %s\n", (full_nodes >= 2) ? "FULL" : "OK");
+    const char *cluster_state = "OK";
+    if (up_nodes < 2)
+        cluster_state = "UNAVAILABLE";
+    else if (down_nodes > 0)
+        cluster_state = "DEGRADED";
+    else if (full_nodes >= 2)
+        cluster_state = "FULL";
+    printf("Cluster state: %s (%d up, %d down)\n", cluster_state, up_nodes,
+           down_nodes);
 
     free(reply);
     reply = NULL;
@@ -174,7 +221,7 @@ static int cmd_status(int argc, char **argv)
     }
     free(reply);
     close(fd);
-    return 0;
+    return (down_nodes > 0) ? 1 : 0;
 }
 
 static int cmd_list_exports(int argc, char **argv)

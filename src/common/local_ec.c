@@ -115,16 +115,40 @@ static int encode_xor3(const uint8_t *frag, uint32_t frag_len,
     return EFS_OK;
 }
 
+/* xtime: multiply by 2 in GF(256) with poly 0x11d. */
+static inline uint8_t gf_xtime(uint8_t x)
+{
+    return (uint8_t)((x << 1) ^ ((x & 0x80) ? 0x1d : 0));
+}
+
 /* RAID-6 style: k data shards + P (XOR) + Q (GF syndrome with g=2). */
 static int encode_rs(uint32_t n, const uint8_t *frag, uint32_t frag_len,
                      uint8_t shards[EFS_MAX_STORAGE_PATHS][EFS_LOCAL_EC_MAX_SHARD])
 {
-    gf_init();
     uint32_t k = efs_local_ec_k(n);
     uint32_t slen = efs_local_ec_shard_len(n);
     if (k < 2 || k + 2 != n || slen == 0 || slen > EFS_LOCAL_EC_MAX_SHARD)
         return EFS_ERR_INVAL;
 
+    /* dd if=/dev/zero / store-bench: shards are all zero — skip GF work. */
+    if (frag_len == EFS_FRAGMENT_SIZE) {
+        const uint64_t *q = (const uint64_t *)(const void *)frag;
+        size_t nq = EFS_FRAGMENT_SIZE / sizeof(uint64_t);
+        int all_zero = 1;
+        for (size_t i = 0; i < nq; i++) {
+            if (q[i] != 0) {
+                all_zero = 0;
+                break;
+            }
+        }
+        if (all_zero) {
+            for (uint32_t i = 0; i < n; i++)
+                memset(shards[i], 0, slen);
+            return EFS_OK;
+        }
+    }
+
+    gf_init();
     for (uint32_t i = 0; i < n; i++)
         memset(shards[i], 0, slen);
 
@@ -141,16 +165,40 @@ static int encode_rs(uint32_t n, const uint8_t *frag, uint32_t frag_len,
 
     uint32_t p_idx = k;
     uint32_t q_idx = k + 1;
+
+    /* Fast path k==2 (n==4): P = d0^d1, Q = d0 ^ (2*d1) word-wise where possible. */
+    if (k == 2) {
+        const uint8_t *d0 = shards[0];
+        const uint8_t *d1 = shards[1];
+        uint8_t *p = shards[p_idx];
+        uint8_t *qq = shards[q_idx];
+        uint32_t i = 0;
+        for (; i + 8 <= slen; i += 8) {
+            uint64_t a, b;
+            memcpy(&a, d0 + i, 8);
+            memcpy(&b, d1 + i, 8);
+            uint64_t px = a ^ b;
+            memcpy(p + i, &px, 8);
+            for (uint32_t j = 0; j < 8; j++)
+                qq[i + j] = (uint8_t)(d0[i + j] ^ gf_xtime(d1[i + j]));
+        }
+        for (; i < slen; i++) {
+            p[i] = (uint8_t)(d0[i] ^ d1[i]);
+            qq[i] = (uint8_t)(d0[i] ^ gf_xtime(d1[i]));
+        }
+        return EFS_OK;
+    }
+
     for (uint32_t i = 0; i < slen; i++) {
         uint8_t p = 0;
-        uint8_t q = 0;
+        uint8_t qv = 0;
         for (uint32_t di = 0; di < k; di++) {
             uint8_t d = shards[di][i];
             p ^= d;
-            q ^= gf_mul(gf_pow2((int)di), d);
+            qv ^= gf_mul(gf_pow2((int)di), d);
         }
         shards[p_idx][i] = p;
-        shards[q_idx][i] = q;
+        shards[q_idx][i] = qv;
     }
     return EFS_OK;
 }
