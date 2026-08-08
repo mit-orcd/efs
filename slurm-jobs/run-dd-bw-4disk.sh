@@ -52,8 +52,9 @@ for sid in $(seq 1 "$NUM_SERVERS"); do
     excl_args=()
     [ -n "$EXCLUDE" ] && excl_args=(--exclude="$EXCLUDE")
     export_extra="ALL,SERVER_ID=$sid,EFS_DIO=$EFS_DIO,EFS_QUOTA=100G"
-    if [ "$sid" = 1 ]; then
-        export_extra="${export_extra},EFS_EXTRA_ARGS=--perf,EFS_PERF_PATH=${PROF}/server1.perf.data"
+    if [ "$sid" = 1 ] && [ "${EFS_SERVER_PERF:-1}" = "1" ]; then
+        # server-4disk.sh records perf on node-local scratch then copies here.
+        export_extra="${export_extra},EFS_EXTRA_ARGS=--perf,EFS_PERF_COPY=${PROF}/server1.perf.data"
     fi
     job=$(sbatch --parsable -p "$PARTITION" --time="$JOB_TIME" --no-requeue \
         --cpus-per-task=8 --mem=32G "${excl_args[@]}" \
@@ -74,12 +75,16 @@ for job in "${SERVER_JOBS[@]}"; do
         squeue -h -j "$job" >/dev/null || { echo "server $job died"; tail -30 "$log"; exit 1; }
         sleep 2
     done
-    grep -E 'listening on|local_ec|Joined' "$log" | tail -5 || true
+    grep -E 'listening on|stripe=|Joined' "$log" | tail -5 || true
 done
 sleep 3
 
+MKFS_EXPORT="ALL,EXPORT_NAME=$EXPORT_NAME"
+if [ -n "${EFS_CHUNK_SIZE:-}" ]; then
+    MKFS_EXPORT="${MKFS_EXPORT},EFS_CHUNK_SIZE=$EFS_CHUNK_SIZE"
+fi
 MKFS=$(sbatch --parsable -p "$PARTITION" --time=00:10:00 --exclude="$EXCLUDE" \
-    --export=ALL,EXPORT_NAME="$EXPORT_NAME" slurm-jobs/mkfs-ib.sh)
+    --export="$MKFS_EXPORT" slurm-jobs/mkfs-ib.sh)
 echo "mkfs job=$MKFS"
 while squeue -h -j "$MKFS" 2>/dev/null | grep -q .; do sleep 60; done
 sacct -j "$MKFS" -n -o State | head -1 | grep -q COMPLETED || {
@@ -88,9 +93,15 @@ sacct -j "$MKFS" -n -o State | head -1 | grep -q COMPLETED || {
     exit 1
 }
 
+CLIENT_EXPORT="ALL,EXPORT_NAME=$EXPORT_NAME,PROF_ROOT=$PROF,NUM_SERVERS=$NUM_SERVERS,FILE_GIB=$FILE_GIB,DO_STORE_BENCH=1,EFS_FUSE_PERF=${EFS_FUSE_PERF:-1},EFS_BENCH_PERF=${EFS_BENCH_PERF:-0},LABEL=$LABEL"
+if [ -n "${EFS_CHUNK_SIZE:-}" ]; then
+    CLIENT_EXPORT="${CLIENT_EXPORT},EFS_CHUNK_SIZE=$EFS_CHUNK_SIZE"
+fi
+# Prefer a node with local /scratch. Excluding all three servers can land the
+# client on a node without /scratch (mkdir fails). Allow overlap with servers.
 CLIENT=$(sbatch --parsable -p "$PARTITION" --time="$JOB_TIME" \
-    --cpus-per-task=8 --mem=16G --exclude="$EXCLUDE" \
-    --export=ALL,EXPORT_NAME="$EXPORT_NAME",PROF_ROOT="$PROF",NUM_SERVERS="$NUM_SERVERS",FILE_GIB="$FILE_GIB",DO_STORE_BENCH=1,EFS_FUSE_PERF="${EFS_FUSE_PERF:-1}",EFS_BENCH_PERF="${EFS_BENCH_PERF:-0}",LABEL="$LABEL" \
+    --cpus-per-task=8 --mem=16G \
+    --export="$CLIENT_EXPORT" \
     slurm-jobs/client-dd-bw.sh)
 echo "client job=$CLIENT"
 touch "$PROF/GO"
@@ -106,7 +117,7 @@ if [ -f "$PROF/server1.perf.data" ]; then
         >"$PROF/server1.report.txt" 2>/dev/null || true
     {
         echo "=== server1 hotspots ==="
-        grep -E 'blake3|efs_|memcpy|write|fsync|encode|local_ec|shard' \
+        grep -E 'blake3|efs_|memcpy|write|fsync|encode|stripe|shard' \
             "$PROF/server1.report.txt" || true
         echo "--- top ---"
         grep -E '^\s+[0-9]+\.[0-9]+%' "$PROF/server1.report.txt" | head -25 || true

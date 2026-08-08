@@ -15,6 +15,7 @@
 static int server_get_fragment_from_peer(const char *host, uint16_t port,
                                          efs_export_id_t export_id, efs_ino_t ino,
                                          uint32_t chunk_index, uint32_t fragment_index,
+                                         uint32_t frag_len,
                                          uint8_t *data, uint8_t *checksum)
 {
     int fd = efs_connect_tcp(host, port);
@@ -40,9 +41,10 @@ static int server_get_fragment_from_peer(const char *host, uint16_t port,
         efs_recv_msg(fd, &type, &reply, &reply_len) == 0 &&
         type == EFS_MSG_GET_CHUNK_REPLY && reply_len >= 1) {
         uint8_t *r = reply;
-        if (r[0] == EFS_GET_CHUNK_OK && reply_len == 1 + EFS_HASH_SIZE + EFS_FRAGMENT_SIZE) {
+        if (r[0] == EFS_GET_CHUNK_OK &&
+            reply_len == 1 + EFS_HASH_SIZE + frag_len) {
             memcpy(checksum, r + 1, EFS_HASH_SIZE);
-            memcpy(data, r + 1 + EFS_HASH_SIZE, EFS_FRAGMENT_SIZE);
+            memcpy(data, r + 1 + EFS_HASH_SIZE, frag_len);
             rc = EFS_OK;
         } else if (r[0] == EFS_GET_CHUNK_NOT_FOUND) {
             rc = EFS_ERR_NOT_FOUND;
@@ -59,6 +61,7 @@ static int server_get_fragment_from_peer(const char *host, uint16_t port,
 static int server_put_fragment_to_peer(const char *host, uint16_t port,
                                        efs_export_id_t export_id, efs_ino_t ino,
                                        uint32_t chunk_index, uint32_t fragment_index,
+                                       uint32_t frag_len,
                                        const uint8_t *data, const uint8_t *checksum)
 {
     int fd = efs_connect_tcp(host, port);
@@ -68,21 +71,28 @@ static int server_put_fragment_to_peer(const char *host, uint16_t port,
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
 
-    struct efs_msg_put_chunk req;
-    memset(&req, 0, sizeof(req));
-    req.export_id = export_id;
-    req.ino = ino;
-    req.chunk_index = chunk_index;
-    req.fragment_index = fragment_index;
-    memcpy(req.checksum, checksum, EFS_HASH_SIZE);
-    memcpy(req.data, data, EFS_FRAGMENT_SIZE);
+    size_t msg_len = sizeof(struct efs_msg_put_chunk) + frag_len;
+    uint8_t *msg = malloc(msg_len);
+    if (!msg) {
+        close(fd);
+        return EFS_ERR_NOMEM;
+    }
+    struct efs_msg_put_chunk *req = (struct efs_msg_put_chunk *)msg;
+    memset(req, 0, sizeof(*req));
+    req->export_id = export_id;
+    req->ino = ino;
+    req->chunk_index = chunk_index;
+    req->fragment_index = fragment_index;
+    req->data_len = frag_len;
+    memcpy(req->checksum, checksum, EFS_HASH_SIZE);
+    memcpy(msg + sizeof(*req), data, frag_len);
 
     uint8_t type;
     void *reply = NULL;
     uint32_t reply_len = 0;
     int rc = EFS_ERR_NET;
 
-    if (efs_send_msg(fd, EFS_MSG_PUT_CHUNK, &req, sizeof(req)) == 0 &&
+    if (efs_send_msg(fd, EFS_MSG_PUT_CHUNK, msg, (uint32_t)msg_len) == 0 &&
         efs_recv_msg(fd, &type, &reply, &reply_len) == 0 &&
         type == EFS_MSG_PUT_CHUNK_REPLY && reply_len == 1) {
         uint8_t *r = reply;
@@ -94,6 +104,7 @@ static int server_put_fragment_to_peer(const char *host, uint16_t port,
             rc = EFS_ERR_IO;
     }
 
+    free(msg);
     free(reply);
     close(fd);
     return rc;
@@ -108,14 +119,17 @@ static int pick_target_node(struct efsd_server *s, struct efs_export *ex,
     struct efs_node nodes[EFS_MAX_NODES];
     memcpy(nodes, s->nodes, sizeof(nodes));
 
+    uint32_t migrate_frag_len = server_frag_len(ex, chunk->ino);
+
     /* Compute fragment storage used by each node from the current metadata. */
     uint64_t node_used[EFS_MAX_NODES] = {0};
     for (uint64_t ci = 0; ci < ex->chunk_count; ci++) {
+        uint32_t frag_len = server_frag_len(ex, ex->chunks[ci].ino);
         for (int j = 0; j < EFS_NUM_FRAGMENTS; j++) {
             efs_node_id_t id = ex->chunks[ci].fragment_nodes[j];
             for (uint32_t k = 0; k < node_count; k++) {
                 if (nodes[k].id == id) {
-                    node_used[k] += EFS_FRAGMENT_SIZE;
+                    node_used[k] += frag_len;
                     break;
                 }
             }
@@ -139,7 +153,7 @@ static int pick_target_node(struct efsd_server *s, struct efs_export *ex,
         }
 
         uint64_t free = (nodes[i].quota > 0) ? (nodes[i].quota - node_used[i]) : UINT64_MAX;
-        if (free < EFS_FRAGMENT_SIZE)
+        if (free < migrate_frag_len)
             continue;
 
         if (!has_other_fragment && preferred == 0) {
@@ -156,6 +170,9 @@ static int pick_target_node(struct efsd_server *s, struct efs_export *ex,
 static int migrate_one_fragment(struct efsd_server *s, struct efs_export *ex,
                                 struct efs_chunk_entry *chunk, int fragment_index)
 {
+    uint32_t frag_len = server_frag_len(ex, chunk->ino);
+    uint32_t chunk_size = server_data_chunk_size(ex);
+
     efs_node_id_t target_id;
     int rc = pick_target_node(s, ex, chunk, fragment_index, &target_id);
     if (rc != 0)
@@ -175,10 +192,26 @@ static int migrate_one_fragment(struct efsd_server *s, struct efs_export *ex,
             other[idx++] = i;
     }
 
-    /* Read the other two fragments from their current nodes. */
-    uint8_t fragments[EFS_NUM_FRAGMENTS][EFS_FRAGMENT_SIZE];
+    uint8_t *frag_bufs[EFS_NUM_FRAGMENTS] = {NULL};
+    uint8_t *frags[EFS_NUM_FRAGMENTS];
+    uint8_t *reconstructed_chunk = NULL;
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
 
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        frag_bufs[i] = malloc(frag_len);
+        if (!frag_bufs[i]) {
+            rc = EFS_ERR_NOMEM;
+            goto out;
+        }
+        frags[i] = frag_bufs[i];
+    }
+    reconstructed_chunk = malloc(chunk_size);
+    if (!reconstructed_chunk) {
+        rc = EFS_ERR_NOMEM;
+        goto out;
+    }
+
+    /* Read the other two fragments from their current nodes. */
     for (int i = 0; i < 2; i++) {
         int oi = other[i];
         efs_node_id_t node_id = chunk->fragment_nodes[oi];
@@ -189,32 +222,40 @@ static int migrate_one_fragment(struct efsd_server *s, struct efs_export *ex,
                 break;
             }
         }
-        if (!n)
-            return EFS_ERR_NET;
+        if (!n) {
+            rc = EFS_ERR_NET;
+            goto out;
+        }
         rc = server_get_fragment_from_peer(n->addr, n->port, ex->id,
                                            chunk->ino, chunk->chunk_index, oi,
-                                           fragments[oi], checksums[oi]);
+                                           frag_len, frags[oi], checksums[oi]);
         if (rc != 0)
-            return rc;
+            goto out;
     }
 
     /* Reconstruct the full chunk and extract the missing fragment. */
-    uint8_t reconstructed_chunk[EFS_CHUNK_SIZE];
-    efs_decode_chunk(fragments, other[0], other[1], fragment_index, reconstructed_chunk, EFS_CHUNK_SIZE);
+    rc = efs_decode_chunk(frags, chunk_size, other[0], other[1], fragment_index,
+                          reconstructed_chunk, chunk_size);
+    if (rc != 0) {
+        rc = EFS_ERR_DECODE;
+        goto out;
+    }
     if (fragment_index == 0) {
-        memcpy(fragments[fragment_index], reconstructed_chunk, EFS_FRAGMENT_SIZE);
+        memcpy(frags[0], reconstructed_chunk, frag_len);
     } else if (fragment_index == 1) {
-        memcpy(fragments[fragment_index], reconstructed_chunk + EFS_FRAGMENT_SIZE, EFS_FRAGMENT_SIZE);
+        memcpy(frags[1], reconstructed_chunk + frag_len, frag_len);
     } else {
-        for (size_t i = 0; i < EFS_FRAGMENT_SIZE; i++)
-            fragments[fragment_index][i] = reconstructed_chunk[i] ^ reconstructed_chunk[EFS_FRAGMENT_SIZE + i];
+        for (size_t i = 0; i < frag_len; i++)
+            frags[2][i] = reconstructed_chunk[i] ^ reconstructed_chunk[frag_len + i];
     }
 
     /* Verify against the stored checksum. */
     uint8_t verify_hash[EFS_HASH_SIZE];
-    efs_hash(fragments[fragment_index], EFS_FRAGMENT_SIZE, verify_hash);
-    if (memcmp(verify_hash, chunk->checksums[fragment_index], EFS_HASH_SIZE) != 0)
-        return EFS_ERR_CHECKSUM;
+    efs_hash(frags[fragment_index], frag_len, verify_hash);
+    if (memcmp(verify_hash, chunk->checksums[fragment_index], EFS_HASH_SIZE) != 0) {
+        rc = EFS_ERR_CHECKSUM;
+        goto out;
+    }
 
     /* Write the reconstructed fragment to the target node. */
     struct efs_node *target = NULL;
@@ -224,15 +265,17 @@ static int migrate_one_fragment(struct efsd_server *s, struct efs_export *ex,
             break;
         }
     }
-    if (!target)
-        return EFS_ERR_NET;
+    if (!target) {
+        rc = EFS_ERR_NET;
+        goto out;
+    }
 
     rc = server_put_fragment_to_peer(target->addr, target->port, ex->id,
                                      chunk->ino, chunk->chunk_index, fragment_index,
-                                     fragments[fragment_index],
+                                     frag_len, frags[fragment_index],
                                      chunk->checksums[fragment_index]);
     if (rc != 0)
-        return rc;
+        goto out;
 
     /* Update metadata: this fragment now lives on the target node. */
     efs_node_id_t new_nodes[EFS_NUM_FRAGMENTS];
@@ -256,15 +299,21 @@ static int migrate_one_fragment(struct efsd_server *s, struct efs_export *ex,
     pthread_mutex_lock(&s->lock);
     struct efs_node *local = server_local_node(s);
     if (local) {
-        if (local->used >= EFS_FRAGMENT_SIZE)
-            local->used -= EFS_FRAGMENT_SIZE;
+        if (local->used >= frag_len)
+            local->used -= frag_len;
         else
             local->used = 0;
     }
     pthread_mutex_unlock(&s->lock);
     server_usage_save(s);
 
-    return EFS_OK;
+    rc = EFS_OK;
+
+out:
+    free(reconstructed_chunk);
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        free(frag_bufs[i]);
+    return rc;
 }
 
 static bool shrink_target_reached(struct efsd_server *s)

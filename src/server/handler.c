@@ -126,9 +126,9 @@ void server_handle_conn(int fd)
                 struct efs_export *ex = server_get_export(g_server, req->export_id);
                 pthread_mutex_unlock(&g_server->lock);
 
-                /* Heap: ~128 KiB — keep conn-thread stacks small under load. */
-                uint8_t *reply = malloc(1 + EFS_HASH_SIZE + EFS_FRAGMENT_SIZE);
-                uint8_t *data = malloc(EFS_FRAGMENT_SIZE);
+                uint32_t frag_len = server_frag_len(ex, req->ino);
+                uint8_t *reply = malloc(1 + EFS_HASH_SIZE + frag_len);
+                uint8_t *data = malloc(frag_len);
                 if (!reply || !data) {
                     free(reply);
                     free(data);
@@ -149,9 +149,6 @@ void server_handle_conn(int fd)
                         reply[0] = EFS_GET_CHUNK_NOT_FOUND;
                         efs_send_msg(fd, EFS_MSG_GET_CHUNK_REPLY, reply, 1);
                     } else {
-                        /* Prefer the checksum stored at write time; only
-                         * re-hash as a fallback for fragments written by an
-                         * older server that did not persist .sum sidecars. */
                         if (server_read_fragment_sum(g_server, ex, req->ino,
                                                      req->chunk_index,
                                                      req->fragment_index,
@@ -172,6 +169,8 @@ void server_handle_conn(int fd)
         case EFS_MSG_PUT_CHUNK: {
             if (payload_len >= sizeof(struct efs_msg_put_chunk)) {
                 struct efs_msg_put_chunk *req = payload;
+                const uint8_t *data =
+                    (const uint8_t *)payload + sizeof(struct efs_msg_put_chunk);
                 pthread_mutex_lock(&g_server->lock);
                 int put_state = g_server->state;
                 struct efs_export *ex = server_get_export(g_server, req->export_id);
@@ -182,41 +181,55 @@ void server_handle_conn(int fd)
                     efs_export_init(ex, req->export_id, "pending");
                     ex->id = req->export_id;
                 }
+                /* Learn data chunk_size from first non-meta PUT when still
+                 * default (peer may not have applied EFSR yet). */
+                if (ex && req->ino != EFS_META_TABLE_INO &&
+                    req->data_len > 0 &&
+                    (ex->chunk_size == 0 ||
+                     ex->chunk_size == EFS_DEFAULT_CHUNK_SIZE) &&
+                    efs_chunk_size_valid(req->data_len * 2u) &&
+                    req->data_len != EFS_META_FRAGMENT_SIZE) {
+                    ex->chunk_size = req->data_len * 2u;
+                }
                 pthread_mutex_unlock(&g_server->lock);
 
                 uint8_t reply = EFS_PUT_CHUNK_ERROR;
                 if (put_state == SERVER_STATE_DRAINING ||
                     put_state == SERVER_STATE_DRAINED ||
                     put_state == SERVER_STATE_LEAVING) {
-                    /* Drain/leave: do not accept new fragment data. */
                     reply = EFS_PUT_CHUNK_ERROR;
                 } else if (ex) {
-                    /* Verify the client-supplied checksum once at write time
-                     * and persist it so reads do not need to re-hash.
-                     * If the client claims the zero-fragment digest, confirm
-                     * the payload is zeros (no Blake3). Otherwise hash once —
-                     * do not memcmp-scan every non-zero PUT for zeros first. */
-                    uint8_t zero_ck[EFS_HASH_SIZE];
-                    efs_hash_zero_fragment(zero_ck);
-                    int sum_ok = 0;
-                    if (memcmp(req->checksum, zero_ck, EFS_HASH_SIZE) == 0) {
-                        sum_ok = efs_bytes_are_zero(req->data, EFS_FRAGMENT_SIZE);
-                    } else {
-                        uint8_t verify[EFS_HASH_SIZE];
-                        efs_hash(req->data, EFS_FRAGMENT_SIZE, verify);
-                        sum_ok = (memcmp(verify, req->checksum, EFS_HASH_SIZE) == 0);
-                    }
-                    if (!sum_ok) {
+                    uint32_t expect = server_frag_len(ex, req->ino);
+                    if (req->data_len != expect ||
+                        payload_len < sizeof(*req) + req->data_len) {
                         reply = EFS_PUT_CHUNK_ERROR;
                     } else {
-                        rc = server_write_fragment_with_sum(
-                            g_server, ex, req->ino, req->chunk_index,
-                            req->fragment_index, req->data, EFS_FRAGMENT_SIZE,
-                            req->checksum);
-                        if (rc == 0)
-                            reply = EFS_PUT_CHUNK_OK;
-                        else if (rc == EFS_ERR_QUOTA)
-                            reply = EFS_PUT_CHUNK_QUOTA_EXCEEDED;
+                        uint8_t zero_ck[EFS_HASH_SIZE];
+                        efs_hash_zero_fragment_len(expect, zero_ck);
+                        int sum_ok = 0;
+                        if (memcmp(req->checksum, zero_ck, EFS_HASH_SIZE) == 0) {
+                            /* Trust the cached zero digest on the PUT hot path.
+                             * Writer/store already short-circuit to a shared
+                             * zero page; re-scanning 64KiB+ here dominated
+                             * single-stream dd if=/dev/zero. */
+                            sum_ok = 1;
+                        } else {
+                            uint8_t verify[EFS_HASH_SIZE];
+                            efs_hash(data, expect, verify);
+                            sum_ok = (memcmp(verify, req->checksum,
+                                             EFS_HASH_SIZE) == 0);
+                        }
+                        if (!sum_ok) {
+                            reply = EFS_PUT_CHUNK_ERROR;
+                        } else {
+                            rc = server_write_fragment_with_sum(
+                                g_server, ex, req->ino, req->chunk_index,
+                                req->fragment_index, data, expect, req->checksum);
+                            if (rc == 0)
+                                reply = EFS_PUT_CHUNK_OK;
+                            else if (rc == EFS_ERR_QUOTA)
+                                reply = EFS_PUT_CHUNK_QUOTA_EXCEEDED;
+                        }
                     }
                 }
                 efs_send_msg(fd, EFS_MSG_PUT_CHUNK_REPLY, &reply, 1);
@@ -226,8 +239,11 @@ void server_handle_conn(int fd)
         case EFS_MSG_BENCH_PUT: {
             /* Network bench: accept mount-shaped PUT payload, ACK, discard. */
             uint8_t reply = EFS_BENCH_PUT_ERROR;
-            if (payload_len >= sizeof(struct efs_msg_put_chunk))
-                reply = EFS_BENCH_PUT_OK;
+            if (payload_len >= sizeof(struct efs_msg_put_chunk)) {
+                struct efs_msg_put_chunk *req = payload;
+                if (payload_len >= sizeof(*req) + req->data_len)
+                    reply = EFS_BENCH_PUT_OK;
+            }
             efs_send_msg(fd, EFS_MSG_BENCH_PUT_REPLY, &reply, 1);
             break;
         }
@@ -275,6 +291,8 @@ void server_handle_conn(int fd)
                             ex->id = ex->root.id;
                             strncpy(ex->name, ex->root.name, EFS_MAX_NAME - 1);
                             ex->next_ino = ex->root.next_ino;
+                            if (efs_chunk_size_valid(ex->root.chunk_size))
+                                ex->chunk_size = ex->root.chunk_size;
                             /* Never rebuild on this handler thread: peer page
                              * fetches would block the pooled client connection
                              * and can cascade into multi-node stalls. */
@@ -505,11 +523,16 @@ void server_handle_conn(int fd)
             break;
         }
         case EFS_MSG_CREATE_EXPORT: {
-            if (payload_len >= sizeof(struct efs_msg_create_export)) {
+            /* Accept name-only (legacy) or name+chunk_size. */
+            if (payload_len >= EFS_MAX_NAME) {
                 struct efs_msg_create_export *req = payload;
+                uint32_t chunk_size = EFS_DEFAULT_CHUNK_SIZE;
+                if (payload_len >= sizeof(struct efs_msg_create_export) &&
+                    req->chunk_size != 0)
+                    chunk_size = req->chunk_size;
                 uint8_t reply = EFS_CREATE_EXPORT_ERROR;
                 struct efs_export *ex = NULL;
-                if (!req->name[0]) {
+                if (!req->name[0] || !efs_chunk_size_valid(chunk_size)) {
                     reply = EFS_CREATE_EXPORT_ERROR;
                 } else {
                     pthread_mutex_lock(&g_server->lock);
@@ -522,8 +545,11 @@ void server_handle_conn(int fd)
                     }
                     if (!exists) {
                         ex = server_find_export(g_server, req->name);
-                        if (ex != NULL)
+                        if (ex != NULL) {
+                            ex->chunk_size = chunk_size;
+                            server_save_export(g_server, ex);
                             reply = EFS_CREATE_EXPORT_OK;
+                        }
                     } else {
                         reply = EFS_CREATE_EXPORT_EXISTS;
                     }

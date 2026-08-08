@@ -15,7 +15,11 @@ SHARED="/orcd/scratch/orcd/001/erbmi1/efs"
 EXPORT_NAME="${EXPORT_NAME:-streamexport}"
 
 S1=$(cat "$SHARED/state/s1.addr")
-echo "mkfs $EXPORT_NAME on $S1"
-OUT=$("$REPO/efs-mgmt" mkfs "$S1" "$EXPORT_NAME" 2>&1) || true
+CHUNK_ARGS=()
+if [ -n "${EFS_CHUNK_SIZE:-}" ]; then
+    CHUNK_ARGS=(--chunk-size "$EFS_CHUNK_SIZE")
+fi
+echo "mkfs $EXPORT_NAME on $S1 ${CHUNK_ARGS[*]:-}"
+OUT=$("$REPO/efs-mgmt" mkfs "$S1" "$EXPORT_NAME" "${CHUNK_ARGS[@]}" 2>&1) || true
 echo "$OUT"
 echo "$OUT" | grep -q "created\|already exists"

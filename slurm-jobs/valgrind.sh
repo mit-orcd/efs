@@ -41,8 +41,8 @@ echo "=== building with -O1 -g ==="
 # Clean project objects only — do not wipe deps/libfuse (configure + headers).
 rm -f src/common/*.o src/client/*.o src/server/*.o src/mgmt/*.o src/query/*.o
 rm -f deps/blake3/*.o libefs.a efsd efs-fuse efs-mgmt efs-query
-rm -f tests/test_erasure tests/test_placement tests/test_local_ec \
-      tests/test_numa_locality tests/test_integration \
+rm -f tests/test_erasure tests/test_placement \
+      tests/test_integration \
       tests/test_quota tests/test_migrate tests/test_directio \
       tests/test_rejoin tests/test_query tests/test_list_exports
 
@@ -87,8 +87,6 @@ fi
 TESTS=(
   tests/test_erasure
   tests/test_placement
-  tests/test_local_ec
-  tests/test_numa_locality
   tests/test_integration
   tests/test_quota
   tests/test_migrate

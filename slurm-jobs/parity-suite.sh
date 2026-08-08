@@ -10,7 +10,7 @@
 #SBATCH --error=/orcd/scratch/orcd/001/erbmi1/efs/logs/parity-%j.err
 #
 # Parity / fault-tolerance suite (smoke-scale):
-#   A) local EC: write, wipe 1 of 4 disks, still read
+#   A) multi-path stripe: write spreads across 4 disks; intact read OK
 #   B) cluster 2+1: write, delete fragment tree on one node, still read
 #   C) kill one server mid-FUSE write; no I/O error + checksum OK
 #   D) rejoin killed node; new writes land on it again
@@ -46,11 +46,10 @@ cleanup() {
 trap cleanup EXIT
 
 echo "=== parity-suite on $(hostname) SCRATCH=$SCRATCH ==="
-make -j"$(nproc)" efsd efs-fuse efs-mgmt tests/test_local_ec tests/test_erasure 2>&1 | tail -20
+make -j"$(nproc)" efsd efs-fuse efs-mgmt tests/test_erasure 2>&1 | tail -20
 
-echo "=== unit: erasure + local_ec ==="
+echo "=== unit: erasure ==="
 ./tests/test_erasure && pass "test_erasure" || fail "test_erasure"
-./tests/test_local_ec && pass "test_local_ec" || fail "test_local_ec"
 
 wait_listen() {
     local log=$1 pid=$2
@@ -106,10 +105,10 @@ print(int(val * mult))
 }
 
 # ---------------------------------------------------------------------------
-# A) Local EC 4-disk: write 4MiB, wipe one disk data/, remount, read+checksum
+# A) Multi-path stripe 4-disk: write 4MiB, data on ≥2 disks, intact checksum
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== A: local EC 4-disk wipe one path ==="
+echo "=== A: multi-path stripe 4-disk ==="
 A="$SCRATCH/A"
 mkdir -p "$A"/{d1,d2,d3,d4,s2,s3,mnt}
 PA=19101; PB=19102; PC=19103
@@ -118,7 +117,7 @@ PA=19101; PB=19102; PC=19103
     >"$OUT/A-s1.log" 2>&1 &
 echo $! >"$A/s1.pid"
 wait_listen "$OUT/A-s1.log" "$(cat "$A/s1.pid")" || { fail "A s1 start"; cat "$OUT/A-s1.log"; }
-grep -q "local_ec=rs" "$OUT/A-s1.log" && pass "A local_ec=rs banner" || fail "A local_ec banner"
+grep -q "stripe=leastq" "$OUT/A-s1.log" && pass "A stripe=leastq banner" || fail "A stripe banner"
 ./efsd --node-id 2 --addr "$IP" --port "$PB" --storage "$A/s2" --join "$IP:$PA" \
     --writers 2 --no-direct-io >"$OUT/A-s2.log" 2>&1 &
 echo $! >"$A/s2.pid"
@@ -133,16 +132,19 @@ SUM_A=$(sha256sum "$A/payload.bin" | awk '{print $1}')
 timeout 30 cp "$A/payload.bin" "$A/mnt/big.bin"
 sync "$A/mnt/big.bin" 2>/dev/null || true
 unmount_fuse "$A/mnt" "$OUT/A-fuse.log.pid"
-# Wipe one local EC disk (tolerate 2 of 4; wiping 1 must survive)
-echo "A: wiping $A/d2/data"
-rm -rf "$A/d2/data"
-mkdir -p "$A/d2/data"
+NONEMPTY=0
+for d in "$A"/d{1,2,3,4}; do
+    bytes=$(du -sb "$d/data" 2>/dev/null | awk '{print $1}')
+    [ "${bytes:-0}" -gt 0 ] && NONEMPTY=$((NONEMPTY + 1))
+done
+[ "$NONEMPTY" -ge 2 ] && pass "A data on $NONEMPTY/4 stripe disks" \
+    || fail "A stripe distribution ($NONEMPTY nonempty)"
 mount_fuse "$IP:$PA" parityA "$A/mnt" "$OUT/A-fuse2.log"
 SUM_A2=$(timeout 30 sha256sum "$A/mnt/big.bin" | awk '{print $1}')
 if [ "$SUM_A" = "$SUM_A2" ]; then
-    pass "A read 4MiB after wiping 1/4 local disks"
+    pass "A read 4MiB intact on striped server"
 else
-    fail "A checksum mismatch after disk wipe ($SUM_A vs $SUM_A2)"
+    fail "A checksum mismatch ($SUM_A vs $SUM_A2)"
     tail -30 "$OUT/A-fuse2.log" || true
 fi
 unmount_fuse "$A/mnt" "$OUT/A-fuse2.log.pid"

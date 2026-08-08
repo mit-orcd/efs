@@ -134,7 +134,7 @@ for cid in $(seq 1 "$NUM_CLIENTS"); do
     done
     job=$(sbatch --parsable -p "$PARTITION" --time="$JOB_TIME" \
         --cpus-per-task="$CLIENT_CPUS" --mem="$CLIENT_MEM" --exclude="$excl" \
-        --export=ALL,ROUND="$ITER",CLIENT_ID="$cid",FILE_GIB="$FILE_GIB",FILES_PER_CLIENT="$FILES_PER_CLIENT",EXPORT_NAME="$EXPORT_NAME",PROF_ROOT="$PROF_ROOT",NUM_SERVERS="$NUM_SERVERS",EFS_META_BATCH_OPS=65536,DO_READ="$DO_READ",EFS_NUMA_AFFINITY="${EFS_NUMA_AFFINITY:-}" \
+        --export=ALL,ROUND="$ITER",CLIENT_ID="$cid",FILE_GIB="$FILE_GIB",FILES_PER_CLIENT="$FILES_PER_CLIENT",EXPORT_NAME="$EXPORT_NAME",PROF_ROOT="$PROF_ROOT",NUM_SERVERS="$NUM_SERVERS",EFS_META_BATCH_OPS=65536,DO_READ="$DO_READ" \
         slurm-jobs/client-stream-ib.sh)
     CLIENT_JOBS+=("$job")
     echo "  client $cid job $job"

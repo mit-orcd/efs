@@ -54,13 +54,15 @@ struct efs_export_root {
     uint64_t next_ino;
     uint64_t generation;
     uint32_t blob_len;   /* length of the EFSM blob packed into pages */
-    uint32_t page_count; /* ceil(blob_len / EFS_CHUNK_SIZE) */
+    uint32_t page_count; /* ceil(blob_len / EFS_META_PAGE_SIZE) */
+    uint32_t chunk_size; /* data chunk size for this export */
     uint8_t *page_checksums;
 };
 
 struct efs_export {
     efs_export_id_t id;
     char name[EFS_MAX_NAME];
+    uint32_t chunk_size; /* data EC unit; default EFS_DEFAULT_CHUNK_SIZE */
     uint64_t next_ino;
     struct efs_inode *inodes;
     uint64_t inode_count;
@@ -208,13 +210,13 @@ int efs_meta_blob_is_export(const char *buf, size_t len);
 
 uint32_t efs_meta_page_count_for_blob(uint32_t blob_len);
 
-/* Copy one zero-padded EFS_CHUNK_SIZE page out of a serialized EFSM blob. */
+/* Copy one zero-padded EFS_META_PAGE_SIZE page out of a serialized EFSM blob. */
 int efs_meta_extract_page(const char *blob, uint32_t blob_len, uint32_t page_index,
-                          uint8_t page_out[EFS_CHUNK_SIZE]);
+                          uint8_t page_out[EFS_META_PAGE_SIZE]);
 
 /* Assemble pages back into a blob of root->blob_len bytes. */
 int efs_meta_assemble_blob(const struct efs_export_root *root,
-                           const uint8_t pages[][EFS_CHUNK_SIZE],
+                           const uint8_t pages[][EFS_META_PAGE_SIZE],
                            char **blob_out, size_t *blob_len_out);
 
 int efs_export_root_serialize(const struct efs_export_root *root,

@@ -4,11 +4,11 @@
 #include "client_internal.h"
 #include "efs/common.h"
 #include "efs/network.h"
-#include "efs/numa_locality.h"
 #include "efs/protocol.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 #include <fuse.h>
 #include <errno.h>
 #include <unistd.h>
@@ -108,10 +108,16 @@ static ino_t stats_synthetic_ino(efs_ino_t parent_ino)
 }
 
 /* du(1) sums st_blocks (512-byte units), not st_size. */
+static uint32_t fuse_chunk_size(void)
+{
+    uint32_t cs = g_client.export.chunk_size;
+    return efs_chunk_size_valid(cs) ? cs : EFS_DEFAULT_CHUNK_SIZE;
+}
+
 static void stat_set_size_blocks(struct stat *stbuf, uint64_t size)
 {
     stbuf->st_size = (off_t)size;
-    stbuf->st_blksize = EFS_CHUNK_SIZE;
+    stbuf->st_blksize = fuse_chunk_size();
     stbuf->st_blocks = (blkcnt_t)((size + 511) / 512);
 }
 
@@ -301,6 +307,138 @@ static int efs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
     return (int)got;
 }
 
+/* Userspace writeback: ACK the FUSE write after a bounce copy and let a
+ * small worker pool issue overlapping write_no_replicate calls. Single-stream
+ * dd+conv=fsync still waits for durability on fsync/release, but PUTs from
+ * consecutive syscalls overlap — needed to approach store-bench throughput. */
+#define EFS_WB_DEPTH   32
+#define EFS_WB_WORKERS 4
+
+struct efs_wb_job {
+    efs_ino_t ino;
+    uint64_t offset;
+    size_t size;
+    char *buf;
+};
+
+static struct {
+    pthread_mutex_t mu;
+    pthread_cond_t not_empty;
+    pthread_cond_t not_full;
+    pthread_cond_t idle;
+    struct efs_wb_job q[EFS_WB_DEPTH];
+    int head, tail, count, inflight;
+    int err;
+    int ready;
+    int shutdown;
+    pthread_t workers[EFS_WB_WORKERS];
+} g_wb = {
+    .mu = PTHREAD_MUTEX_INITIALIZER,
+    .not_empty = PTHREAD_COND_INITIALIZER,
+    .not_full = PTHREAD_COND_INITIALIZER,
+    .idle = PTHREAD_COND_INITIALIZER,
+};
+
+static void *efs_wb_thread(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        pthread_mutex_lock(&g_wb.mu);
+        while (g_wb.count == 0 && !g_wb.shutdown)
+            pthread_cond_wait(&g_wb.not_empty, &g_wb.mu);
+        if (g_wb.shutdown && g_wb.count == 0) {
+            pthread_mutex_unlock(&g_wb.mu);
+            return NULL;
+        }
+        struct efs_wb_job job = g_wb.q[g_wb.head];
+        g_wb.head = (g_wb.head + 1) % EFS_WB_DEPTH;
+        g_wb.count--;
+        g_wb.inflight++;
+        pthread_cond_signal(&g_wb.not_full);
+        pthread_mutex_unlock(&g_wb.mu);
+
+        int rc = efs_client_write_no_replicate(job.ino, job.offset, job.size,
+                                               job.buf);
+        free(job.buf);
+
+        pthread_mutex_lock(&g_wb.mu);
+        if (rc != EFS_OK && g_wb.err == EFS_OK)
+            g_wb.err = rc;
+        g_wb.inflight--;
+        if (g_wb.count == 0 && g_wb.inflight == 0)
+            pthread_cond_broadcast(&g_wb.idle);
+        pthread_mutex_unlock(&g_wb.mu);
+    }
+}
+
+static int efs_wb_ensure(void)
+{
+    if (g_wb.ready)
+        return 0;
+    pthread_mutex_lock(&g_wb.mu);
+    if (!g_wb.ready) {
+        for (int i = 0; i < EFS_WB_WORKERS; i++) {
+            if (pthread_create(&g_wb.workers[i], NULL, efs_wb_thread, NULL) != 0) {
+                g_wb.shutdown = 1;
+                pthread_cond_broadcast(&g_wb.not_empty);
+                pthread_mutex_unlock(&g_wb.mu);
+                for (int j = 0; j < i; j++)
+                    pthread_join(g_wb.workers[j], NULL);
+                g_wb.shutdown = 0;
+                return -1;
+            }
+        }
+        g_wb.ready = 1;
+    }
+    pthread_mutex_unlock(&g_wb.mu);
+    return 0;
+}
+
+static int efs_wb_enqueue(efs_ino_t ino, uint64_t offset, size_t size,
+                          const char *buf)
+{
+    if (size == 0)
+        return 0;
+    if (efs_wb_ensure() != 0)
+        return EFS_ERR_NOMEM;
+    char *copy = malloc(size);
+    if (!copy)
+        return EFS_ERR_NOMEM;
+    memcpy(copy, buf, size);
+
+    pthread_mutex_lock(&g_wb.mu);
+    while (g_wb.count == EFS_WB_DEPTH && g_wb.err == EFS_OK)
+        pthread_cond_wait(&g_wb.not_full, &g_wb.mu);
+    if (g_wb.err != EFS_OK) {
+        int err = g_wb.err;
+        pthread_mutex_unlock(&g_wb.mu);
+        free(copy);
+        return err;
+    }
+    g_wb.q[g_wb.tail].ino = ino;
+    g_wb.q[g_wb.tail].offset = offset;
+    g_wb.q[g_wb.tail].size = size;
+    g_wb.q[g_wb.tail].buf = copy;
+    g_wb.tail = (g_wb.tail + 1) % EFS_WB_DEPTH;
+    g_wb.count++;
+    pthread_cond_signal(&g_wb.not_empty);
+    pthread_mutex_unlock(&g_wb.mu);
+    return EFS_OK;
+}
+
+static int efs_wb_sync(void)
+{
+    if (!g_wb.ready)
+        return EFS_OK;
+    pthread_mutex_lock(&g_wb.mu);
+    while (g_wb.count > 0 || g_wb.inflight > 0)
+        pthread_cond_wait(&g_wb.idle, &g_wb.mu);
+    int err = g_wb.err;
+    g_wb.err = EFS_OK;
+    pthread_mutex_unlock(&g_wb.mu);
+    return err;
+}
+
 static int efs_fuse_write(const char *path, const char *buf, size_t size,
                           off_t offset, struct fuse_file_info *fi)
 {
@@ -314,12 +452,39 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
     if (efs_mode_is_dir(ino.mode))
         return -EISDIR;
 
-    rc = efs_client_write_no_replicate(ino.ino, (uint64_t)offset, size, buf);
+    rc = efs_wb_enqueue(ino.ino, (uint64_t)offset, size, buf);
     if (rc == EFS_ERR_QUOTA)
         return -ENOSPC;
     if (rc != 0)
         return -EIO;
     return (int)size;
+}
+
+static int efs_fuse_fsync(const char *path, int isdatasync,
+                          struct fuse_file_info *fi)
+{
+    (void)path;
+    (void)isdatasync;
+    (void)fi;
+    int rc = efs_wb_sync();
+    if (rc == EFS_ERR_QUOTA)
+        return -ENOSPC;
+    if (rc != 0)
+        return -EIO;
+    efs_client_note_meta_change(1);
+    return 0;
+}
+
+static int efs_fuse_flush(const char *path, struct fuse_file_info *fi)
+{
+    (void)path;
+    (void)fi;
+    int rc = efs_wb_sync();
+    if (rc == EFS_ERR_QUOTA)
+        return -ENOSPC;
+    if (rc != 0)
+        return -EIO;
+    return 0;
 }
 
 static int efs_fuse_create(const char *path, mode_t mode, struct fuse_file_info *fi)
@@ -659,6 +824,11 @@ static int efs_fuse_release(const char *path, struct fuse_file_info *fi)
 {
     (void)path;
     (void)fi;
+    int rc = efs_wb_sync();
+    if (rc == EFS_ERR_QUOTA)
+        return -ENOSPC;
+    if (rc != 0)
+        return -EIO;
     /* Coalesced: only flushes every meta_batch_ops releases/creates. */
     efs_client_note_meta_change(0);
     return 0;
@@ -667,6 +837,17 @@ static int efs_fuse_release(const char *path, struct fuse_file_info *fi)
 static void efs_fuse_destroy(void *userdata)
 {
     (void)userdata;
+    (void)efs_wb_sync();
+    if (g_wb.ready) {
+        pthread_mutex_lock(&g_wb.mu);
+        g_wb.shutdown = 1;
+        pthread_cond_broadcast(&g_wb.not_empty);
+        pthread_mutex_unlock(&g_wb.mu);
+        for (int i = 0; i < EFS_WB_WORKERS; i++)
+            pthread_join(g_wb.workers[i], NULL);
+        g_wb.ready = 0;
+        g_wb.shutdown = 0;
+    }
     /* Final flush so the last dirty batch is not lost on unmount. */
     efs_client_note_meta_change(1);
     efs_client_shutdown();
@@ -700,10 +881,22 @@ static void *efs_fuse_init(struct fuse_conn_info *conn)
     if (conn) {
         if (conn->capable & FUSE_CAP_BIG_WRITES)
             conn->want |= FUSE_CAP_BIG_WRITES;
-        /* Prefer up to 4 MiB so one FUSE write covers a full write pipeline
-         * (16 × 128 KiB). Kernel may clamp lower (often 1 MiB). */
-        if (conn->max_write == 0 || conn->max_write > (4u << 20))
-            conn->max_write = (4u << 20);
+        /* Prefer up to pipeline × export chunk so one FUSE write saturates
+         * the PUT worker pool. Kernel may clamp lower. */
+        {
+            uint32_t cs = fuse_chunk_size();
+            uint32_t want = (uint32_t)EFS_WRITE_PIPELINE * cs;
+            if (want < (1u << 20))
+                want = (1u << 20);
+            if (want > (16u << 20))
+                want = (16u << 20);
+            if (conn->max_write == 0 || conn->max_write > want)
+                conn->max_write = want;
+        }
+#ifdef FUSE_CAP_WRITEBACK_CACHE
+        if (conn->capable & FUSE_CAP_WRITEBACK_CACHE)
+            conn->want |= FUSE_CAP_WRITEBACK_CACHE;
+#endif
     }
     /* Coalesce metadata PUTs so bulk creates are not O(n^2) full-metadata
      * syncs. Override with EFS_META_BATCH_OPS for heavy profiling loads. */
@@ -725,6 +918,8 @@ static struct fuse_operations efs_ops = {
     .open    = efs_fuse_open,
     .read    = efs_fuse_read,
     .write   = efs_fuse_write,
+    .flush   = efs_fuse_flush,
+    .fsync   = efs_fuse_fsync,
     .create  = efs_fuse_create,
     .mkdir   = efs_fuse_mkdir,
     .unlink   = efs_fuse_unlink,
@@ -884,42 +1079,6 @@ int main(int argc, char **argv)
         printf("Discovered %u cluster nodes from %s\n", g_client.node_count, nodes[0]);
     }
 
-    /* Soft NUMA is opt-in (EFS_NUMA_AFFINITY=1/on/true). Default: skip entirely
-     * so FUSE workers are not pinned (pinning the main thread before fuse_main
-     * makes every worker inherit that mask and can collapse Slurm throughput). */
-    g_client.net_numa_node = -1;
-    g_client.net_affinity_valid = 0;
-    g_client.net_ifname[0] = '\0';
-    CPU_ZERO(&g_client.net_cpu_set);
-    if (efs_numa_affinity_enabled()) {
-        int pinned = 0;
-        for (uint32_t i = 0; i < node_count && !pinned; i++) {
-            char host[64];
-            uint16_t port = 0;
-            if (parse_addr(nodes[i], host, sizeof(host), &port) != 0)
-                continue;
-            int numa = -1;
-            cpu_set_t set;
-            char ifname[IFNAMSIZ];
-            if (efs_numa_for_peer(host, port, &numa, &set, ifname,
-                                  sizeof(ifname)) == 0) {
-                g_client.net_numa_node = numa;
-                snprintf(g_client.net_ifname, sizeof(g_client.net_ifname), "%s",
-                         ifname);
-                printf("nic_numa=%d if=%s affinity=on\n", numa, ifname);
-                fflush(stdout);
-                g_client.net_cpu_set = set;
-                g_client.net_affinity_valid = 1;
-                efs_numa_apply_affinity(&g_client.net_cpu_set);
-                pinned = 1;
-            }
-        }
-        if (!pinned) {
-            printf("nic_numa=unknown\n");
-            fflush(stdout);
-        }
-    }
-
     /* Fetch initial metadata from one of the nodes. */
     printf("fetching metadata...\n");
     fflush(stdout);
@@ -959,13 +1118,12 @@ int main(int argc, char **argv)
     fuse_argv[fuse_argc++] = argv[0];
     fuse_argv[fuse_argc++] = (char *)mountpoint;
     /* Prefer large writes so FUSE does not chop every write into 4 KiB and
-     * force a 128 KiB RMW per call. big_writes raises the kernel limit;
-     * max_write=4MiB matches EFS_WRITE_PIPELINE=16 (kernel may clamp).
-     * max_readahead helps single-stream dd reads. use_ino exposes our
-     * st_ino; attr/entry timeouts at 0 avoid stale nlink/mode. */
+     * force a chunk RMW per call. writeback_cache is requested via
+     * FUSE_CAP_WRITEBACK_CACHE in efs_fuse_init when the kernel supports it
+     * (this cluster's libfuse rejects -o writeback_cache). */
     fuse_argv[fuse_argc++] = "-o";
     fuse_argv[fuse_argc++] =
-        "big_writes,max_write=4194304,max_readahead=4194304,use_ino,attr_timeout=0,entry_timeout=0,ac_attr_timeout=0";
+        "big_writes,max_write=16777216,max_readahead=16777216,use_ino,attr_timeout=0,entry_timeout=0,ac_attr_timeout=0";
     while (arg_idx < argc && fuse_argc < 63) {
         if (strcmp(argv[arg_idx], "--perf") == 0) {
             arg_idx++;

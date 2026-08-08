@@ -8,9 +8,12 @@
 
 #define EFS_META_MAGIC "EFSM"
 #define EFS_META_ROOT_MAGIC "EFSR"
-/* v2: uid/gid. v3: mtime_nsec after mtime. v4: atime + dir rollups. */
+/* EFSR: v1 = no chunk_size; v2 = chunk_size after page_count. */
+#define EFS_META_ROOT_VERSION_V1 1
+#define EFS_META_ROOT_VERSION_V2 2
+#define EFS_META_ROOT_VERSION EFS_META_ROOT_VERSION_V2
+/* EFSM: v2: uid/gid. v3: mtime_nsec after mtime. v4: atime + dir rollups. */
 #define EFS_META_VERSION 4
-#define EFS_META_ROOT_VERSION 1
 
 static void time_now(uint64_t *t)
 {
@@ -1015,6 +1018,7 @@ void efs_export_init(struct efs_export *ex, efs_export_id_t id, const char *name
     memset(ex, 0, sizeof(*ex));
     ex->id = id;
     strncpy(ex->name, name, EFS_MAX_NAME - 1);
+    ex->chunk_size = EFS_DEFAULT_CHUNK_SIZE;
     ex->next_ino = EFS_ROOT_INO + 1;
 
     ex->inode_capacity = 16;
@@ -1875,28 +1879,28 @@ uint32_t efs_meta_page_count_for_blob(uint32_t blob_len)
 {
     if (blob_len == 0)
         return 0;
-    return (blob_len + EFS_CHUNK_SIZE - 1) / EFS_CHUNK_SIZE;
+    return (blob_len + EFS_META_PAGE_SIZE - 1) / EFS_META_PAGE_SIZE;
 }
 
 int efs_meta_extract_page(const char *blob, uint32_t blob_len, uint32_t page_index,
-                          uint8_t page_out[EFS_CHUNK_SIZE])
+                          uint8_t page_out[EFS_META_PAGE_SIZE])
 {
     if (!blob || !page_out)
         return EFS_ERR_INVAL;
     uint32_t pages = efs_meta_page_count_for_blob(blob_len);
     if (page_index >= pages)
         return EFS_ERR_INVAL;
-    memset(page_out, 0, EFS_CHUNK_SIZE);
-    uint32_t off = page_index * EFS_CHUNK_SIZE;
+    memset(page_out, 0, EFS_META_PAGE_SIZE);
+    uint32_t off = page_index * EFS_META_PAGE_SIZE;
     uint32_t n = blob_len - off;
-    if (n > EFS_CHUNK_SIZE)
-        n = EFS_CHUNK_SIZE;
+    if (n > EFS_META_PAGE_SIZE)
+        n = EFS_META_PAGE_SIZE;
     memcpy(page_out, blob + off, n);
     return EFS_OK;
 }
 
 int efs_meta_assemble_blob(const struct efs_export_root *root,
-                           const uint8_t pages[][EFS_CHUNK_SIZE],
+                           const uint8_t pages[][EFS_META_PAGE_SIZE],
                            char **blob_out, size_t *blob_len_out)
 {
     if (!root || !pages || !blob_out || !blob_len_out)
@@ -1910,10 +1914,10 @@ int efs_meta_assemble_blob(const struct efs_export_root *root,
     if (!blob)
         return EFS_ERR_NOMEM;
     for (uint32_t i = 0; i < root->page_count; i++) {
-        uint32_t off = i * EFS_CHUNK_SIZE;
+        uint32_t off = i * EFS_META_PAGE_SIZE;
         uint32_t n = root->blob_len - off;
-        if (n > EFS_CHUNK_SIZE)
-            n = EFS_CHUNK_SIZE;
+        if (n > EFS_META_PAGE_SIZE)
+            n = EFS_META_PAGE_SIZE;
         memcpy(blob + off, pages[i], n);
     }
     *blob_out = blob;
@@ -1972,6 +1976,9 @@ int efs_export_root_prepare(struct efs_export_root *root,
     root->generation = generation;
     root->blob_len = blob_len;
     root->page_count = efs_meta_page_count_for_blob(blob_len);
+    root->chunk_size = ex->chunk_size ? ex->chunk_size : EFS_DEFAULT_CHUNK_SIZE;
+    if (!efs_chunk_size_valid(root->chunk_size))
+        root->chunk_size = EFS_DEFAULT_CHUNK_SIZE;
     if (root->page_count > EFS_META_MAX_PAGES)
         return EFS_ERR_INVAL;
     if (root->page_count > 0) {
@@ -1998,13 +2005,17 @@ int efs_export_root_serialize(const struct efs_export_root *root,
         return EFS_ERR_NOMEM;
 
     fwrite(EFS_META_ROOT_MAGIC, 4, 1, f);
-    write_u32(f, root->version);
+    write_u32(f, EFS_META_ROOT_VERSION_V2);
     write_u32(f, root->id);
     write_str(f, root->name);
     write_u64(f, root->next_ino);
     write_u64(f, root->generation);
     write_u32(f, root->blob_len);
     write_u32(f, root->page_count);
+    {
+        uint32_t cs = root->chunk_size ? root->chunk_size : EFS_DEFAULT_CHUNK_SIZE;
+        write_u32(f, cs);
+    }
     if (root->page_count > 0) {
         size_t n = (size_t)root->page_count * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE;
         fwrite(root->page_checksums, 1, n, f);
@@ -2032,7 +2043,9 @@ int efs_export_root_deserialize(struct efs_export_root *root,
     efs_export_root_free(root);
     memset(root, 0, sizeof(*root));
     uint32_t version = 0;
-    if (read_u32(f, &version) != 0 || version != EFS_META_ROOT_VERSION) {
+    if (read_u32(f, &version) != 0 ||
+        (version != EFS_META_ROOT_VERSION_V1 &&
+         version != EFS_META_ROOT_VERSION_V2)) {
         fclose(f);
         return EFS_ERR_PROTO;
     }
@@ -2043,6 +2056,16 @@ int efs_export_root_deserialize(struct efs_export_root *root,
     read_u64(f, &root->generation);
     read_u32(f, &root->blob_len);
     read_u32(f, &root->page_count);
+    if (version >= EFS_META_ROOT_VERSION_V2) {
+        if (read_u32(f, &root->chunk_size) != 0) {
+            fclose(f);
+            return EFS_ERR_PROTO;
+        }
+    } else {
+        root->chunk_size = EFS_DEFAULT_CHUNK_SIZE;
+    }
+    if (!efs_chunk_size_valid(root->chunk_size))
+        root->chunk_size = EFS_DEFAULT_CHUNK_SIZE;
     if (root->page_count > EFS_META_MAX_PAGES ||
         root->page_count != efs_meta_page_count_for_blob(root->blob_len)) {
         fclose(f);
@@ -2103,6 +2126,9 @@ int efs_export_load(struct efs_export *ex, const char *path)
             efs_export_free(ex);
             efs_export_init(ex, root.id, root.name);
             ex->next_ino = root.next_ino;
+            ex->chunk_size = efs_chunk_size_valid(root.chunk_size)
+                                 ? root.chunk_size
+                                 : EFS_DEFAULT_CHUNK_SIZE;
             ex->meta_fragmented = 1;
             efs_export_root_move(&ex->root, &root);
             ex->meta_needs_rebuild = (ex->root.page_count > 0);

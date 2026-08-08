@@ -58,6 +58,12 @@ case "${EFS_QUOTA:-200G}" in
     *) QUOTA_ARGS=(--quota "$EFS_QUOTA") ;;
 esac
 
+if [[ "${EFS_EXTRA_ARGS:-}" == *--perf* ]]; then
+    # Record onto node-local scratch (shared /orcd stalls efsd). Copied to
+    # EFS_PERF_COPY from lib-harness cleanup before scratch is removed.
+    export EFS_PERF_PATH="$SCRATCH/server1.perf.data"
+fi
+
 # shellcheck disable=SC2086
 efs_run_efsd "$SCRATCH" \
     "$REPO/efsd" --node-id "$NODE_ID" --addr "$IB_IP" --port "$PORT" \

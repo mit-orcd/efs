@@ -95,6 +95,11 @@ efs_run_efsd() {
             wait "$EFS_EFSD_PID" 2>/dev/null || true
             EFS_EFSD_PID=""
         fi
+        if [ -n "${EFS_PERF_COPY:-}" ] && [ -n "${EFS_SCRATCH_CLEANUP:-}" ] && \
+           [ -f "${EFS_SCRATCH_CLEANUP}/server1.perf.data" ]; then
+            cp -f "${EFS_SCRATCH_CLEANUP}/server1.perf.data" "$EFS_PERF_COPY" \
+                2>/dev/null || true
+        fi
         if [ -n "${EFS_SCRATCH_CLEANUP:-}" ]; then
             echo "cleaning /scratch: $EFS_SCRATCH_CLEANUP"
             rm -rf "$EFS_SCRATCH_CLEANUP"

@@ -57,9 +57,9 @@ static int server_get_fragment_from_peer(const char *host, uint16_t port,
         type == EFS_MSG_GET_CHUNK_REPLY && reply_len >= 1) {
         uint8_t *r = reply;
         if (r[0] == EFS_GET_CHUNK_OK &&
-            reply_len == 1 + EFS_HASH_SIZE + EFS_FRAGMENT_SIZE) {
+            reply_len == 1 + EFS_HASH_SIZE + EFS_META_FRAGMENT_SIZE) {
             memcpy(checksum, r + 1, EFS_HASH_SIZE);
-            memcpy(data, r + 1 + EFS_HASH_SIZE, EFS_FRAGMENT_SIZE);
+            memcpy(data, r + 1 + EFS_HASH_SIZE, EFS_META_FRAGMENT_SIZE);
             rc = EFS_OK;
         } else if (r[0] == EFS_GET_CHUNK_NOT_FOUND) {
             rc = EFS_ERR_NOT_FOUND;
@@ -85,21 +85,28 @@ static int server_put_fragment_to_peer(const char *host, uint16_t port,
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
 
-    struct efs_msg_put_chunk req;
-    memset(&req, 0, sizeof(req));
-    req.export_id = export_id;
-    req.ino = ino;
-    req.chunk_index = chunk_index;
-    req.fragment_index = fragment_index;
-    memcpy(req.checksum, checksum, EFS_HASH_SIZE);
-    memcpy(req.data, data, EFS_FRAGMENT_SIZE);
+    size_t msg_len = sizeof(struct efs_msg_put_chunk) + EFS_META_FRAGMENT_SIZE;
+    uint8_t *msg = malloc(msg_len);
+    if (!msg) {
+        close(fd);
+        return EFS_ERR_NOMEM;
+    }
+    struct efs_msg_put_chunk *req = (struct efs_msg_put_chunk *)msg;
+    memset(req, 0, sizeof(*req));
+    req->export_id = export_id;
+    req->ino = ino;
+    req->chunk_index = chunk_index;
+    req->fragment_index = fragment_index;
+    memcpy(req->checksum, checksum, EFS_HASH_SIZE);
+    req->data_len = EFS_META_FRAGMENT_SIZE;
+    memcpy(msg + sizeof(*req), data, EFS_META_FRAGMENT_SIZE);
 
     uint8_t type;
     void *reply = NULL;
     uint32_t reply_len = 0;
     int rc = EFS_ERR_NET;
 
-    if (efs_send_msg(fd, EFS_MSG_PUT_CHUNK, &req, sizeof(req)) == 0 &&
+    if (efs_send_msg(fd, EFS_MSG_PUT_CHUNK, msg, (uint32_t)msg_len) == 0 &&
         efs_recv_msg(fd, &type, &reply, &reply_len) == 0 &&
         type == EFS_MSG_PUT_CHUNK_REPLY && reply_len == 1) {
         uint8_t *r = reply;
@@ -111,6 +118,7 @@ static int server_put_fragment_to_peer(const char *host, uint16_t port,
             rc = EFS_ERR_IO;
     }
 
+    free(msg);
     free(reply);
     close(fd);
     return rc;
@@ -174,14 +182,18 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
     if (!root->page_checksums)
         return EFS_ERR_INVAL;
 
-    uint8_t (*pages)[EFS_CHUNK_SIZE] = calloc(root->page_count, EFS_CHUNK_SIZE);
-    uint8_t (*fragments)[EFS_FRAGMENT_SIZE] =
-        malloc(EFS_NUM_FRAGMENTS * EFS_FRAGMENT_SIZE);
-    if (!pages || !fragments) {
+    uint8_t (*pages)[EFS_META_PAGE_SIZE] =
+        calloc(root->page_count, EFS_META_PAGE_SIZE);
+    uint8_t *frag_buf = malloc(EFS_NUM_FRAGMENTS * EFS_META_FRAGMENT_SIZE);
+    if (!pages || !frag_buf) {
         free(pages);
-        free(fragments);
+        free(frag_buf);
         return EFS_ERR_NOMEM;
     }
+    uint8_t *fragments[EFS_NUM_FRAGMENTS] = {
+        frag_buf, frag_buf + EFS_META_FRAGMENT_SIZE,
+        frag_buf + 2 * EFS_META_FRAGMENT_SIZE
+    };
 
     for (uint32_t pi = 0; pi < root->page_count; pi++) {
         efs_node_id_t placed[EFS_NUM_FRAGMENTS];
@@ -197,7 +209,7 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
                                           fragments[fi]);
             if (frc == EFS_OK) {
                 uint8_t sum[EFS_HASH_SIZE];
-                efs_hash(fragments[fi], EFS_FRAGMENT_SIZE, sum);
+                efs_hash(fragments[fi], EFS_META_FRAGMENT_SIZE, sum);
                 if (memcmp(sum, efs_export_root_checksum_const(root, pi, fi),
                            EFS_HASH_SIZE) == 0)
                     have[fi] = 1;
@@ -234,18 +246,19 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
             }
         }
         if (a < 0 || b < 0 || missing < 0 ||
-            efs_decode_chunk(fragments, a, b, missing, pages[pi], EFS_CHUNK_SIZE) != 0) {
+            efs_decode_chunk(fragments, EFS_META_PAGE_SIZE, a, b, missing,
+                             pages[pi], EFS_META_PAGE_SIZE) != 0) {
             fprintf(stderr,
                     "meta-rebuild: decode failed page %u have=%d%d%d "
                     "nodes=%u,%u,%u node_count=%u\n",
                     pi, have[0], have[1], have[2], placed[0], placed[1],
                     placed[2], s->node_count);
-            free(fragments);
+            free(frag_buf);
             free(pages);
             return EFS_ERR_DECODE;
         }
     }
-    free(fragments);
+    free(frag_buf);
 
     char *blob = NULL;
     size_t blob_len = 0;
@@ -271,6 +284,8 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
     ex->meta_needs_rebuild = 0;
     efs_export_root_move(&ex->root, &saved_root);
     ex->next_ino = ex->root.next_ino;
+    if (efs_chunk_size_valid(ex->root.chunk_size))
+        ex->chunk_size = ex->root.chunk_size;
     return EFS_OK;
 }
 
@@ -282,7 +297,8 @@ static int put_meta_fragment(struct efsd_server *s, struct efs_export *ex,
     if (node_id == s->id) {
         /* Use sync writers to avoid pool re-entrancy during meta flush. */
         int rc = server_write_fragment_sync(s, ex, EFS_META_TABLE_INO, page_index,
-                                            fragment_index, data, EFS_FRAGMENT_SIZE);
+                                            fragment_index, data,
+                                            EFS_META_FRAGMENT_SIZE);
         if (rc != EFS_OK)
             return rc;
         return server_write_fragment_sum_sync(s, ex, EFS_META_TABLE_INO, page_index,
@@ -348,7 +364,7 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     size_t blob_len = 0;
     if (efs_export_serialize(ex, &blob, &blob_len) != EFS_OK)
         return -1;
-    if (blob_len > (size_t)EFS_META_MAX_PAGES * EFS_CHUNK_SIZE) {
+    if (blob_len > (size_t)EFS_META_MAX_PAGES * EFS_META_PAGE_SIZE) {
         free(blob);
         return -1;
     }
@@ -364,28 +380,31 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
         return -1;
     }
 
-    uint8_t *page = malloc(EFS_CHUNK_SIZE);
-    uint8_t (*fragments)[EFS_FRAGMENT_SIZE] =
-        malloc(EFS_NUM_FRAGMENTS * EFS_FRAGMENT_SIZE);
-    if (!page || !fragments) {
+    uint8_t *page = malloc(EFS_META_PAGE_SIZE);
+    uint8_t *frag_buf = malloc(EFS_NUM_FRAGMENTS * EFS_META_FRAGMENT_SIZE);
+    if (!page || !frag_buf) {
         free(page);
-        free(fragments);
+        free(frag_buf);
         free(blob);
         efs_export_root_free(&root);
         return -1;
     }
+    uint8_t *fragments[EFS_NUM_FRAGMENTS] = {
+        frag_buf, frag_buf + EFS_META_FRAGMENT_SIZE,
+        frag_buf + 2 * EFS_META_FRAGMENT_SIZE
+    };
     for (uint32_t pi = 0; pi < root.page_count; pi++) {
         if (efs_meta_extract_page(blob, (uint32_t)blob_len, pi, page) != EFS_OK) {
             free(page);
-            free(fragments);
+            free(frag_buf);
             free(blob);
             efs_export_root_free(&root);
             return -1;
         }
-        efs_encode_chunk(page, EFS_CHUNK_SIZE, fragments);
+        efs_encode_chunk(page, EFS_META_PAGE_SIZE, EFS_META_PAGE_SIZE, fragments);
         uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
-            efs_hash(fragments[fi], EFS_FRAGMENT_SIZE, checksums[fi]);
+            efs_hash(fragments[fi], EFS_META_FRAGMENT_SIZE, checksums[fi]);
 
         efs_node_id_t placed[EFS_NUM_FRAGMENTS];
         pthread_mutex_lock(&s->lock);
@@ -414,7 +433,7 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
         }
         if (acks < 2) {
             free(page);
-            free(fragments);
+            free(frag_buf);
             free(blob);
             efs_export_root_free(&root);
             return -1;
@@ -424,7 +443,7 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
                    EFS_HASH_SIZE);
     }
     free(page);
-    free(fragments);
+    free(frag_buf);
     free(blob);
 
     pthread_mutex_lock(&s->lock);
@@ -594,6 +613,8 @@ int server_fetch_metadata_from(struct efsd_server *s, const char *host, uint16_t
             ex->id = ex->root.id;
             strncpy(ex->name, ex->root.name, EFS_MAX_NAME - 1);
             ex->next_ino = ex->root.next_ino;
+            if (efs_chunk_size_valid(ex->root.chunk_size))
+                ex->chunk_size = ex->root.chunk_size;
             ex->meta_needs_rebuild = (ex->root.page_count > 0);
             pthread_mutex_unlock(&s->lock);
             rc = server_rebuild_export_from_pages(s, ex);

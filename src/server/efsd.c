@@ -2,7 +2,6 @@
 #include "efs/network.h"
 #include "bench_local.h"
 #include "server_internal.h"
-#include "storage_numa.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -101,15 +100,16 @@ static void usage(const char *prog)
             "[--writers <n>] [--join <host:port>] [--no-persist] [--perf]\n"
             "   or: %s --bench <path> --time <seconds> "
             "[--writers <n>] [--direct-io|--no-direct-io]\n"
-            "  --storage        one path, or 3..%d paths (comma and/or repeated).\n"
-            "                   With >=3 paths the server applies local EC so disks\n"
-            "                   can fail without peer RPCs (3→1 loss, 4+→2 losses).\n"
+            "  --storage        1..%d paths (comma and/or repeated).\n"
+            "                   Multiple paths: least-queue write placement\n"
+            "                   (chunk_index %% N) across disks for parallelism.\n"
             "  --bench <path>   local disk saturate (fragment-sized writes); no cluster\n"
             "  --time <sec>     duration for --bench (default 10)\n"
             "  --direct-io      O_DIRECT for fragment I/O\n"
             "  --no-direct-io   use the page cache for fragment I/O (default)\n"
-            "  --writers <n>    fragment writer threads (default %d, 0 = inline)\n",
-            prog, prog, EFS_MAX_STORAGE_PATHS, EFS_DEFAULT_WRITERS);
+            "  --writers <n>    writer threads per storage path "
+            "(default %d, 0 = inline)\n",
+            prog, prog, EFS_MAX_STORAGE_PATHS, EFS_WRITERS_PER_PATH_DEFAULT);
 }
 
 static int add_storage_path(struct efsd_server *s, const char *path)
@@ -252,7 +252,7 @@ int main(int argc, char **argv)
     memset(&server, 0, sizeof(server));
     server.persist_nodes = 1;
     server.direct_io = 0; /* default: page cache; opt in with --direct-io */
-    server.nwriters = EFS_DEFAULT_WRITERS;
+    server.nwriters = EFS_WRITERS_PER_PATH_DEFAULT;
     server.listen_fd = -1;
     g_server = &server;
     pthread_mutex_init(&server.lock, NULL);
@@ -295,8 +295,9 @@ int main(int argc, char **argv)
             server.direct_io = 0;
         } else if (strcmp(argv[i], "--writers") == 0 && i + 1 < argc) {
             int n = atoi(argv[++i]);
-            if (n < 0 || n > EFS_MAX_WRITERS) {
-                fprintf(stderr, "Invalid --writers value (0..%d)\n", EFS_MAX_WRITERS);
+            if (n < 0 || n > EFS_MAX_WRITERS_PER_PATH) {
+                fprintf(stderr, "Invalid --writers value (0..%d per path)\n",
+                        EFS_MAX_WRITERS_PER_PATH);
                 usage(argv[0]);
                 return 1;
             }
@@ -318,7 +319,8 @@ int main(int argc, char **argv)
     }
 
     if (bench_path) {
-        int writers = server.nwriters > 0 ? server.nwriters : EFS_DEFAULT_WRITERS;
+        int writers = server.nwriters > 0 ? server.nwriters
+                                         : EFS_WRITERS_PER_PATH_DEFAULT;
         return server_run_local_bench(bench_path, bench_time, writers,
                                       server.direct_io);
     }
@@ -326,11 +328,6 @@ int main(int argc, char **argv)
     if (server.id == 0 || server.port == 0 || server.storage_path_count == 0) {
         fprintf(stderr, "Missing required arguments\n");
         usage(argv[0]);
-        return 1;
-    }
-    if (server.storage_path_count == 2) {
-        fprintf(stderr, "Invalid --storage: use 1 path or 3..%d paths (not 2)\n",
-                EFS_MAX_STORAGE_PATHS);
         return 1;
     }
     strncpy(server.storage_path, server.storage_paths[0], sizeof(server.storage_path) - 1);
@@ -364,8 +361,6 @@ int main(int argc, char **argv)
         snprintf(subdir, sizeof(subdir), "%s/log", server.storage_paths[pi]);
         mkdir_p(subdir);
     }
-
-    server_discover_storage_numa(&server);
 
     server_migrate_old_layout(&server);
 
@@ -457,32 +452,30 @@ int main(int argc, char **argv)
     }
     server.running = 1;
     if (server_writer_pool_start(&server) != 0) {
-        fprintf(stderr, "Failed to start writer pool (%d threads)\n", server.nwriters);
+        fprintf(stderr, "Failed to start writer pools (%d per path × %u paths)\n",
+                server.nwriters, server.storage_path_count);
         return 1;
     }
     server_start_heartbeat(&server);
     server_start_migration(&server);
 
     {
-        const char *ec = "none";
-        if (server.storage_path_count == 3)
-            ec = "xor2+1";
-        else if (server.storage_path_count >= 4)
-            ec = "rs(k,2)";
+        const char *stripe = (server.storage_path_count > 1) ? "leastq" : "none";
         char storage_disp[EFS_MAX_PATH];
         uint64_t used_disp = 0;
+        int total_writers = server.nwriters * (int)server.storage_path_count;
         server_format_storage_paths(&server, storage_disp, sizeof(storage_disp));
         struct efs_node *local = server_local_node(&server);
         if (local)
             used_disp = local->used;
-        printf("efsd node %u listening on %s:%u, storage=%s (%u paths, local_ec=%s), "
-               "used=%llu, quota=%llu, direct_io=%s, writers=%d\n",
+        printf("efsd node %u listening on %s:%u, storage=%s (%u paths, stripe=%s), "
+               "used=%llu, quota=%llu, direct_io=%s, writers=%d/path (%d total)\n",
                server.id, server.addr, server.port, storage_disp,
-               server.storage_path_count, ec,
+               server.storage_path_count, stripe,
                (unsigned long long)used_disp,
                (unsigned long long)server.quota,
                server.direct_io ? "on" : "off",
-               server.nwriters);
+               server.nwriters, total_writers);
     }
     fflush(stdout);
 

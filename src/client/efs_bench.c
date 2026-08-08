@@ -119,18 +119,23 @@ static int parse_host_port(const char *s, char *host, size_t host_len, uint16_t 
     return 0;
 }
 
-/* Per-thread PUT templates: data[] stays zeroed; only headers change.
- * Avoids the ~75% memmove seen copying 64 KiB fragments every chunk. */
-static __thread struct efs_msg_put_chunk *tls_reqs;
+/* Per-thread PUT templates: header + zero payload; only headers change.
+ * Avoids copying fragment bytes every chunk. */
+static __thread uint8_t *tls_msgs;
+static __thread uint32_t tls_frag_len;
+static __thread size_t tls_msg_size;
 static __thread int tls_reqs_ready;
 
-static int ensure_tls_reqs(void)
+static int ensure_tls_reqs(uint32_t frag_len)
 {
-    if (tls_reqs_ready && tls_reqs)
+    if (tls_reqs_ready && tls_msgs && tls_frag_len == frag_len)
         return 0;
-    free(tls_reqs);
-    tls_reqs = calloc(EFS_NUM_FRAGMENTS, sizeof(*tls_reqs));
-    if (!tls_reqs)
+    free(tls_msgs);
+    tls_msgs = NULL;
+    tls_frag_len = frag_len;
+    tls_msg_size = sizeof(struct efs_msg_put_chunk) + frag_len;
+    tls_msgs = calloc(EFS_NUM_FRAGMENTS, tls_msg_size);
+    if (!tls_msgs)
         return -1;
     tls_reqs_ready = 1;
     return 0;
@@ -164,15 +169,15 @@ static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
     uint8_t reply_type_want =
         store ? EFS_MSG_PUT_CHUNK_REPLY : EFS_MSG_BENCH_PUT_REPLY;
     uint8_t ok_status = store ? EFS_PUT_CHUNK_OK : EFS_BENCH_PUT_OK;
+    uint32_t bench_frag_len = EFS_FRAGMENT_SIZE;
 
-    if (ensure_tls_reqs() != 0)
+    if (ensure_tls_reqs(bench_frag_len) != 0)
         return EFS_ERR_NOMEM;
 
     int fds[EFS_NUM_FRAGMENTS];
     int idxs[EFS_NUM_FRAGMENTS];
     int pending[EFS_NUM_FRAGMENTS];
     int sticky_owned[EFS_NUM_FRAGMENTS];
-    struct efs_msg_put_chunk *reqs = tls_reqs;
 
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         fds[i] = -1;
@@ -205,27 +210,49 @@ static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
                 efs_client_node_note_fail(nid);
                 continue;
             }
+            /* Not writable yet: skip this peer for this chunk only. Keep
+             * sticky fd — backpressure is not a hard failure. */
+            if (pr == 0 || !(p.revents & POLLOUT))
+                continue;
             fds[i] = sticky_fds[idx];
             sticky_owned[i] = 1;
         } else {
             fds[i] = efs_client_conn_get(nid);
             if (fds[i] < 0)
                 continue;
+            struct pollfd p = { .fd = fds[i], .events = POLLOUT };
+            int pr = poll(&p, 1, 0);
+            if (pr < 0 || (p.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+                efs_client_conn_drop(nid, fds[i]);
+                efs_client_node_note_fail(nid);
+                continue;
+            }
+            if (pr == 0 || !(p.revents & POLLOUT)) {
+                efs_client_conn_release(nid, fds[i]);
+                continue;
+            }
             if (sticky_fds)
                 sticky_fds[idx] = fds[i];
             sticky_owned[i] = sticky_fds ? 1 : 0;
         }
-        reqs[i].export_id = store ? EFS_BENCH_EXPORT_ID : 0;
-        reqs[i].ino = ino;
-        reqs[i].chunk_index = chunk_index;
-        reqs[i].fragment_index = (uint32_t)i;
-        memcpy(reqs[i].checksum, checksum, EFS_HASH_SIZE);
+        struct efs_msg_put_chunk *req =
+            (struct efs_msg_put_chunk *)(tls_msgs + (size_t)i * tls_msg_size);
+        req->export_id = store ? EFS_BENCH_EXPORT_ID : 0;
+        req->ino = ino;
+        req->chunk_index = chunk_index;
+        req->fragment_index = (uint32_t)i;
+        req->data_len = bench_frag_len;
+        memcpy(req->checksum, checksum, EFS_HASH_SIZE);
+        if (zero_frag)
+            memcpy((uint8_t *)req + sizeof(*req), zero_frag, bench_frag_len);
     }
 
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         if (fds[i] < 0)
             continue;
-        if (efs_send_msg(fds[i], msg_type, &reqs[i], sizeof(reqs[i])) != 0) {
+        struct efs_msg_put_chunk *req =
+            (struct efs_msg_put_chunk *)(tls_msgs + (size_t)i * tls_msg_size);
+        if (efs_send_msg(fds[i], msg_type, req, (uint32_t)tls_msg_size) != 0) {
             efs_client_conn_drop(nodes[i], fds[i]);
             efs_client_node_note_fail(nodes[i]);
             if (sticky_fds && idxs[i] >= 0)
@@ -290,7 +317,7 @@ static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
             acks++;
             efs_client_node_note_ok(nid);
             if (idx >= 0 && (uint32_t)idx < EFS_MAX_NODES)
-                per_node_bytes[idx] += EFS_FRAGMENT_SIZE;
+                per_node_bytes[idx] += bench_frag_len;
             if (!sticky_owned[i])
                 efs_client_conn_release(nid, fds[i]);
             /* sticky: keep fd checked out for the next chunk */
@@ -299,15 +326,40 @@ static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
         }
     }
 
-    /* Quorum met: abandon remaining waiters (likely the dead peer). */
+    /* Quorum met: drain ready replies so sticky fds stay usable; only drop
+     * when the peer is behind (avoid reconnect storms). */
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         if (fds[i] < 0)
             continue;
-        efs_client_conn_drop(nodes[i], fds[i]);
-        if (acks < 2)
-            efs_client_node_note_fail(nodes[i]);
-        if (sticky_fds && idxs[i] >= 0)
-            sticky_fds[idxs[i]] = -1;
+        efs_node_id_t nid = nodes[i];
+        int idx = idxs[i];
+        if (acks >= 2) {
+            struct pollfd p = { .fd = fds[i], .events = POLLIN };
+            int pr = poll(&p, 1, 0);
+            if (pr > 0 && (p.revents & POLLIN) &&
+                !(p.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+                uint8_t reply_type = 0, status = 0;
+                if (efs_recv_u8_reply(fds[i], &reply_type, &status) == 0 &&
+                    reply_type == reply_type_want) {
+                    if (status == ok_status && idx >= 0 &&
+                        (uint32_t)idx < EFS_MAX_NODES)
+                        per_node_bytes[idx] += bench_frag_len;
+                    if (!sticky_owned[i])
+                        efs_client_conn_release(nid, fds[i]);
+                    fds[i] = -1;
+                    pending[i] = 0;
+                    continue;
+                }
+            }
+            efs_client_conn_drop(nid, fds[i]);
+            if (sticky_fds && idx >= 0)
+                sticky_fds[idx] = -1;
+        } else {
+            efs_client_conn_drop(nid, fds[i]);
+            efs_client_node_note_fail(nid);
+            if (sticky_fds && idx >= 0)
+                sticky_fds[idx] = -1;
+        }
         fds[i] = -1;
         pending[i] = 0;
     }

@@ -17,8 +17,6 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
               $(COMMON_DIR)/metadata.c \
               $(COMMON_DIR)/placement.c \
               $(COMMON_DIR)/erasure.c \
-              $(COMMON_DIR)/local_ec.c \
-              $(COMMON_DIR)/numa_locality.c \
               $(COMMON_DIR)/checksum.c \
               $(COMMON_DIR)/network.c \
               $(BLAKE3_DIR)/blake3.c \
@@ -37,12 +35,12 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
-TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_local_ec.c tests/test_numa_locality.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c tests/test_dir_stats.c tests/test_ino_path.c
-TEST_BINS = tests/test_erasure tests/test_placement tests/test_local_ec tests/test_numa_locality tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports tests/test_dir_stats tests/test_ino_path
+TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c tests/test_dir_stats.c tests/test_ino_path.c
+TEST_BINS = tests/test_erasure tests/test_placement tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports tests/test_dir_stats tests/test_ino_path
 
 SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/handler.c \
               src/server/cluster.c src/server/meta_server.c src/server/migrate.c \
-              src/server/writer.c src/server/storage_numa.c src/server/bench_local.c
+              src/server/writer.c src/server/bench_local.c
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 
 CLIENT_SRCS = src/client/efs_fuse.c
@@ -84,8 +82,6 @@ FORCE:
 test: all
 	./tests/test_erasure
 	./tests/test_placement
-	./tests/test_local_ec
-	./tests/test_numa_locality
 	./tests/test_integration
 	./tests/test_quota
 	./tests/test_migrate

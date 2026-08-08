@@ -275,7 +275,9 @@ static int cmd_list_exports(int argc, char **argv)
 static int cmd_mkfs(int argc, char **argv)
 {
     if (argc < 2) {
-        fprintf(stderr, "usage: mkfs <node:port> <export-name>\n");
+        fprintf(stderr,
+                "usage: mkfs <node:port> <export-name> "
+                "[--chunk-size <bytes|128K|1M|…>]\n");
         return 1;
     }
     char host[64];
@@ -283,6 +285,26 @@ static int cmd_mkfs(int argc, char **argv)
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
         fprintf(stderr, "Invalid address: %s\n", argv[0]);
         return 1;
+    }
+
+    uint32_t chunk_size = 0;
+    for (int i = 2; i < argc; i++) {
+        if (strcmp(argv[i], "--chunk-size") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "mkfs: --chunk-size requires a value\n");
+                return 1;
+            }
+            chunk_size = (uint32_t)efs_parse_quota(argv[++i]);
+            if (chunk_size == 0 || !efs_chunk_size_valid(chunk_size)) {
+                fprintf(stderr,
+                        "Invalid chunk size (power of two, %u..%u bytes)\n",
+                        EFS_MIN_CHUNK_SIZE, EFS_MAX_CHUNK_SIZE);
+                return 1;
+            }
+        } else {
+            fprintf(stderr, "Unknown mkfs argument: %s\n", argv[i]);
+            return 1;
+        }
     }
 
     int fd = efs_connect_tcp(host, port);
@@ -296,6 +318,7 @@ static int cmd_mkfs(int argc, char **argv)
     struct efs_msg_create_export req;
     memset(&req, 0, sizeof(req));
     strncpy(req.name, argv[1], EFS_MAX_NAME - 1);
+    req.chunk_size = chunk_size;
 
     uint8_t reply_type;
     void *reply = NULL;
@@ -310,7 +333,11 @@ static int cmd_mkfs(int argc, char **argv)
     uint8_t status = ((uint8_t *)reply)[0];
     int rc = 1;
     if (status == EFS_CREATE_EXPORT_OK) {
-        printf("Export '%s' created on %s:%u\n", argv[1], host, port);
+        uint32_t effective = chunk_size ? chunk_size : EFS_DEFAULT_CHUNK_SIZE;
+        char cs_str[32];
+        format_bytes(effective, cs_str, sizeof(cs_str));
+        printf("Export '%s' created on %s:%u (chunk_size=%s)\n",
+               argv[1], host, port, cs_str);
         rc = 0;
     } else if (status == EFS_CREATE_EXPORT_EXISTS) {
         fprintf(stderr, "Export '%s' already exists on %s:%u\n", argv[1], host, port);
@@ -696,7 +723,7 @@ int main(int argc, char **argv)
                     "Commands:\n"
                     "  status <node:port>\n"
                     "  list-exports <node:port>\n"
-                    "  mkfs <node:port> <export-name>\n"
+                    "  mkfs <node:port> <export-name> [--chunk-size <bytes|128K|1M|…>]\n"
                     "  destroy|rmfs <node:port> <export-name|--unnamed>\n"
                     "  add-node <new-node:port> <existing-node:port>\n"
                     "  drain-node <node:port>\n"

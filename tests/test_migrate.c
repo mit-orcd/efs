@@ -630,17 +630,24 @@ static int test_drain_undrain(void)
         }
         efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
         efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-        struct efs_msg_put_chunk req;
-        memset(&req, 0, sizeof(req));
-        req.export_id = 1;
-        req.ino = fno;
-        req.chunk_index = 0;
-        req.fragment_index = 0;
-        efs_hash(req.data, EFS_FRAGMENT_SIZE, req.checksum);
+        size_t msg_len = sizeof(struct efs_msg_put_chunk) + EFS_FRAGMENT_SIZE;
+        uint8_t *msg = calloc(1, msg_len);
+        if (!msg) {
+            failures++;
+            close(fd);
+            goto cleanup;
+        }
+        struct efs_msg_put_chunk *req = (struct efs_msg_put_chunk *)msg;
+        req->export_id = 1;
+        req->ino = fno;
+        req->chunk_index = 0;
+        req->fragment_index = 0;
+        req->data_len = EFS_FRAGMENT_SIZE;
+        efs_hash(msg + sizeof(*req), EFS_FRAGMENT_SIZE, req->checksum);
         uint8_t type;
         void *reply = NULL;
         uint32_t reply_len = 0;
-        if (efs_send_msg(fd, EFS_MSG_PUT_CHUNK, &req, sizeof(req)) != 0 ||
+        if (efs_send_msg(fd, EFS_MSG_PUT_CHUNK, msg, (uint32_t)msg_len) != 0 ||
             efs_recv_msg(fd, &type, &reply, &reply_len) != 0 ||
             type != EFS_MSG_PUT_CHUNK_REPLY || reply_len != 1 ||
             ((uint8_t *)reply)[0] == EFS_PUT_CHUNK_OK) {
@@ -649,6 +656,7 @@ static int test_drain_undrain(void)
         } else {
             printf("[drain-undrain] drained node rejected PUT\n");
         }
+        free(msg);
         free(reply);
         close(fd);
     }

@@ -4,6 +4,12 @@
 #include <time.h>
 #include <sys/types.h>
 
+static uint32_t data_chunk_size(void)
+{
+    uint32_t cs = g_client.export.chunk_size;
+    return efs_chunk_size_valid(cs) ? cs : EFS_DEFAULT_CHUNK_SIZE;
+}
+
 static uint64_t now(void)
 {
     struct timespec ts;
@@ -143,27 +149,28 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
         return EFS_OK;
 
     if (size < old_size) {
+        uint32_t chunk_size = data_chunk_size();
         uint32_t first_drop;
         if (size == 0) {
             first_drop = 0;
         } else {
-            uint32_t ci = (uint32_t)(size / EFS_CHUNK_SIZE);
-            uint32_t keep = (uint32_t)(size % EFS_CHUNK_SIZE);
+            uint32_t ci = (uint32_t)(size / chunk_size);
+            uint32_t keep = (uint32_t)(size % chunk_size);
             if (keep != 0) {
                 /* Rewrite last kept chunk with a zeroed tail so a later
                  * truncate-up does not resurrect discarded bytes. */
-                uint8_t *chunk = malloc(EFS_CHUNK_SIZE);
+                uint8_t *chunk = malloc(chunk_size);
                 if (!chunk)
                     return EFS_ERR_NOMEM;
-                memset(chunk, 0, EFS_CHUNK_SIZE);
-                uint64_t chunk_start = (uint64_t)ci * EFS_CHUNK_SIZE;
+                memset(chunk, 0, chunk_size);
+                uint64_t chunk_start = (uint64_t)ci * chunk_size;
                 size_t want = (size_t)(old_size - chunk_start);
-                if (want > EFS_CHUNK_SIZE)
-                    want = EFS_CHUNK_SIZE;
+                if (want > chunk_size)
+                    want = chunk_size;
                 size_t got = 0;
                 (void)efs_client_read(ino, chunk_start, want, (char *)chunk, &got);
-                memset(chunk + keep, 0, EFS_CHUNK_SIZE - keep);
-                int wrc = efs_client_write(ino, chunk_start, EFS_CHUNK_SIZE,
+                memset(chunk + keep, 0, chunk_size - keep);
+                int wrc = efs_client_write(ino, chunk_start, chunk_size,
                                            (const char *)chunk);
                 free(chunk);
                 if (wrc != 0)

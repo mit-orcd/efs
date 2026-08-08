@@ -73,18 +73,21 @@ struct efs_msg_get_chunk {
     uint32_t fragment_index; /* 0 = D1, 1 = D2, 2 = P */
 };
 
-/* Reply payload: [status:1][checksum:32][fragment_data:65536] */
+/* Reply payload: [status:1][checksum:32][fragment_data:data_len]
+ * data_len = frame_payload_len - 1 - EFS_HASH_SIZE when status == OK. */
 #define EFS_GET_CHUNK_OK     0
 #define EFS_GET_CHUNK_NOT_FOUND 1
 #define EFS_GET_CHUNK_ERROR  2
 
+/* PUT/BENCH frame: this header followed by data_len payload bytes. */
 struct efs_msg_put_chunk {
     efs_export_id_t export_id;
     efs_ino_t ino;
     uint32_t chunk_index;
     uint32_t fragment_index;
     uint8_t checksum[EFS_HASH_SIZE];
-    uint8_t data[EFS_FRAGMENT_SIZE];
+    uint32_t data_len;
+    /* uint8_t data[data_len]; */
 };
 
 #define EFS_PUT_CHUNK_OK     0
@@ -153,6 +156,7 @@ struct efs_msg_node_left {
 
 struct efs_msg_create_export {
     char name[EFS_MAX_NAME];
+    uint32_t chunk_size; /* 0 = EFS_DEFAULT_CHUNK_SIZE */
 };
 
 #define EFS_CREATE_EXPORT_OK                0
@@ -204,6 +208,12 @@ struct efs_msg_list_exports_reply {
 
 /* Send a single message. */
 int efs_send_msg(int fd, uint8_t type, const void *payload, uint32_t payload_len);
+
+/* Send a message whose payload is two contiguous logical parts (writev),
+ * avoiding a bounce buffer when the on-wire payload is header+body. */
+int efs_send_msg_parts(int fd, uint8_t type,
+                       const void *part1, uint32_t part1_len,
+                       const void *part2, uint32_t part2_len);
 
 /* Receive a single message. Caller must free *payload with free(). */
 int efs_recv_msg(int fd, uint8_t *type, void **payload, uint32_t *payload_len);

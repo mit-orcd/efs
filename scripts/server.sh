@@ -7,7 +7,7 @@ Usage:
   $0 <addr:port> <path[,path...][:quota]> [join-addr:port] [extra-efsd-args...]
   $0 stop <path[:quota]|path[,path...]|addr:port>
 
-  start:  bind addr:port; one storage path or comma-separated 3..8 paths
+  start:  bind addr:port; one storage path or comma-separated 1..24 paths
           (optional :quota after the path list); optional join
   stop:   stop by first storage path (PID file) or by addr:port
 EOF

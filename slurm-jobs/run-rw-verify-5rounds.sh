@@ -204,7 +204,7 @@ for ROUND in $(seq 1 "$ROUNDS"); do
         echo "--- server1 listen banner ---"
         sj=${SERVER_JOBS[0]}
         slog=$(ls -t "$SHARED/logs"/s1-"${sj}".out 2>/dev/null | head -1 || true)
-        grep -E 'listening on|writers=|numa=' "$slog" 2>/dev/null | tail -5 || true
+        grep -E 'listening on|writers=' "$slog" 2>/dev/null | tail -5 || true
         if [ -f "$SHARED/profile" ]; then :; fi
         # server perf if copied — efsd writes under job scratch; may be gone.
         # Look for server.perf in shared logs? server cleanup removes scratch.

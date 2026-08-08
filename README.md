@@ -79,7 +79,9 @@ Examples:
 The bind address must be a real local IP (not `0.0.0.0` or a network address).
 Other nodes use it to connect back.
 
-Each server creates under its storage path:
+Each server creates under its storage path (or under each path when multiple
+`--storage` roots are given; new writes pick the path with least writer-queue
+wait, fairness-weighted by bytes already assigned):
 
 - `data/` — fragment data (file chunks and 2+1 metadata table pages)
 - `meta/` — export root (`EFSR` in `metadata.bin`) and cluster membership
@@ -205,14 +207,12 @@ Fragment reads/writes use the page cache by default. Pass `--direct-io` for
        --storage /tmp/efs/s1 --direct-io &
 ```
 
-## NUMA affinity
+## Writer threads
 
-Soft NUMA pinning (storage writers and FUSE NIC locality) is **off by default**.
-Set `EFS_NUMA_AFFINITY=1` (or `on`/`true`) to enable discovery and pinning.
-
-Fragment PUTs are executed on a dedicated writer thread pool (default 8
-threads). Override with `--writers <n>` (`0` runs writes inline on the
-connection thread).
+Fragment PUTs use a dedicated writer pool **per `--storage` path** (default 8
+writers/path). New fragments go to the path with the shortest queue (with
+byte-assignment fairness); overwrites stay on the existing path. Override with
+`--writers <n>` (`0` runs writes inline on the connection thread).
 
 ## Directory rollup stats
 

@@ -4,6 +4,13 @@
 #include <ctype.h>
 #include <string.h>
 
+int efs_chunk_size_valid(uint32_t chunk_size)
+{
+    if (chunk_size < EFS_MIN_CHUNK_SIZE || chunk_size > EFS_MAX_CHUNK_SIZE)
+        return 0;
+    return (chunk_size & (chunk_size - 1)) == 0;
+}
+
 void efs_ino_path_segments(efs_ino_t ino, char seg[EFS_INO_PATH_SEGS][5])
 {
     uint64_t v = (uint64_t)ino;

@@ -1,6 +1,8 @@
 #include "efs/checksum.h"
 #include "blake3.h"
+#include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 void efs_hash(const void *data, size_t len, uint8_t out[EFS_HASH_SIZE])
@@ -11,32 +13,92 @@ void efs_hash(const void *data, size_t len, uint8_t out[EFS_HASH_SIZE])
     blake3_hasher_finalize(&hasher, out, EFS_HASH_SIZE);
 }
 
+void efs_hash_zero_fragment_len(size_t frag_len, uint8_t out[EFS_HASH_SIZE])
+{
+    /* Cache default meta/data fragment size (64 KiB). */
+    static uint8_t cached_default[EFS_HASH_SIZE];
+    static int ready_default;
+    if (frag_len == EFS_FRAGMENT_SIZE) {
+        if (!ready_default) {
+            static const uint8_t zeros[EFS_FRAGMENT_SIZE];
+            efs_hash(zeros, EFS_FRAGMENT_SIZE, cached_default);
+            ready_default = 1;
+        }
+        memcpy(out, cached_default, EFS_HASH_SIZE);
+        return;
+    }
+    if (frag_len == 0 || frag_len > EFS_MAX_FRAGMENT_SIZE) {
+        memset(out, 0, EFS_HASH_SIZE);
+        return;
+    }
+    uint8_t *zeros = calloc(1, frag_len);
+    if (!zeros) {
+        memset(out, 0, EFS_HASH_SIZE);
+        return;
+    }
+    efs_hash(zeros, frag_len, out);
+    free(zeros);
+}
+
 void efs_hash_zero_fragment(uint8_t out[EFS_HASH_SIZE])
 {
-    static uint8_t cached[EFS_HASH_SIZE];
-    static int ready;
-    if (!ready) {
-        static const uint8_t zeros[EFS_FRAGMENT_SIZE];
-        efs_hash(zeros, EFS_FRAGMENT_SIZE, cached);
-        ready = 1;
-    }
-    memcpy(out, cached, EFS_HASH_SIZE);
+    efs_hash_zero_fragment_len(EFS_FRAGMENT_SIZE, out);
 }
 
 int efs_bytes_are_zero(const void *data, size_t len)
 {
     if (!data)
         return 0;
-    if (len == EFS_FRAGMENT_SIZE) {
-        static const uint8_t zeros[EFS_FRAGMENT_SIZE];
-        return memcmp(data, zeros, EFS_FRAGMENT_SIZE) == 0;
-    }
+    if (len == 0)
+        return 1;
+    /* memcmp vs a BSS zero page is far faster than a hand-rolled word loop
+     * (glibc uses AVX). Chunk/fragment sizes are the PUT/GET hot path. */
+    static const uint8_t zero_frag[EFS_FRAGMENT_SIZE];
+    static const uint8_t zero_chunk[EFS_DEFAULT_CHUNK_SIZE];
+    if (len == EFS_FRAGMENT_SIZE)
+        return memcmp(data, zero_frag, EFS_FRAGMENT_SIZE) == 0;
+    if (len == EFS_DEFAULT_CHUNK_SIZE)
+        return memcmp(data, zero_chunk, EFS_DEFAULT_CHUNK_SIZE) == 0;
+
     const uint8_t *p = data;
-    for (size_t i = 0; i < len; i++) {
-        if (p[i] != 0)
+    while (len >= EFS_FRAGMENT_SIZE) {
+        if (memcmp(p, zero_frag, EFS_FRAGMENT_SIZE) != 0)
             return 0;
+        p += EFS_FRAGMENT_SIZE;
+        len -= EFS_FRAGMENT_SIZE;
     }
+    if (len > 0 && memcmp(p, zero_frag, len) != 0)
+        return 0;
     return 1;
+}
+
+const uint8_t *efs_zero_bytes(size_t len)
+{
+    static const uint8_t zero_default[EFS_FRAGMENT_SIZE];
+    static uint8_t *zero_big;
+    static size_t zero_big_len;
+    static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
+
+    if (len == 0)
+        return zero_default;
+    if (len <= EFS_FRAGMENT_SIZE)
+        return zero_default;
+    if (len > EFS_MAX_FRAGMENT_SIZE)
+        return NULL;
+
+    pthread_mutex_lock(&mu);
+    if (!zero_big || zero_big_len < len) {
+        uint8_t *fresh = calloc(1, len);
+        if (!fresh) {
+            pthread_mutex_unlock(&mu);
+            return NULL;
+        }
+        free(zero_big);
+        zero_big = fresh;
+        zero_big_len = len;
+    }
+    pthread_mutex_unlock(&mu);
+    return zero_big;
 }
 
 void efs_hash_to_hex(const uint8_t hash[EFS_HASH_SIZE], char hex[EFS_HASH_SIZE * 2 + 1])

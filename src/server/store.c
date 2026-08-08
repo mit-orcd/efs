@@ -1,7 +1,5 @@
 #include "server_internal.h"
-#include "efs/local_ec.h"
 #include "efs/checksum.h"
-#include "storage_numa.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -500,14 +498,107 @@ static int format_ino_chunk_dir_legacy(char *path, size_t path_len,
                     root, export_id, (unsigned long long)ino, chunk_index >> 10);
 }
 
+/* Legacy RR (chunk_index % N). Kept only as a create-path fallback when the
+ * writer has not set efs_tls_write_root (e.g. inline sync without pool). */
+static uint32_t stripe_root_index(const struct efsd_server *s, uint32_t chunk_index)
+{
+    uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
+    if (n <= 1)
+        return 0;
+    return chunk_index % n;
+}
+
+static uint32_t write_root_index(const struct efsd_server *s, uint32_t chunk_index)
+{
+    if (efs_tls_write_root >= 0) {
+        uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
+        if ((uint32_t)efs_tls_write_root < n)
+            return (uint32_t)efs_tls_write_root;
+    }
+    return stripe_root_index(s, chunk_index);
+}
+
+static void fragment_path_at(struct efsd_server *s, uint32_t root_idx,
+                             struct efs_export *ex, efs_ino_t ino,
+                             uint32_t chunk_index, uint32_t fragment_index,
+                             char *path, size_t path_len);
+static void fragment_path_at_legacy(struct efsd_server *s, uint32_t root_idx,
+                                    struct efs_export *ex, efs_ino_t ino,
+                                    uint32_t chunk_index, uint32_t fragment_index,
+                                    char *path, size_t path_len);
+
+static void fragment_path_at(struct efsd_server *s, uint32_t root_idx,
+                             struct efs_export *ex, efs_ino_t ino,
+                             uint32_t chunk_index, uint32_t fragment_index,
+                             char *path, size_t path_len)
+{
+    char dir[8192];
+    format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[root_idx], ex->id,
+                         ino, chunk_index);
+    snprintf(path, path_len, "%s/%u.%u", dir, chunk_index, fragment_index);
+}
+
+static void fragment_path_at_legacy(struct efsd_server *s, uint32_t root_idx,
+                                    struct efs_export *ex, efs_ino_t ino,
+                                    uint32_t chunk_index, uint32_t fragment_index,
+                                    char *path, size_t path_len)
+{
+    char dir[8192];
+    format_ino_chunk_dir_legacy(dir, sizeof(dir), s->storage_paths[root_idx],
+                                ex->id, ino, chunk_index);
+    snprintf(path, path_len, "%s/%u.%u", dir, chunk_index, fragment_index);
+}
+
+int server_find_fragment_root(struct efsd_server *s, struct efs_export *ex,
+                              efs_ino_t ino, uint32_t chunk_index,
+                              uint32_t fragment_index)
+{
+    uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
+    char path[8192];
+    for (uint32_t ri = 0; ri < n; ri++) {
+        fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index, path,
+                         sizeof(path));
+        if (access(path, F_OK) == 0)
+            return (int)ri;
+        fragment_path_at_legacy(s, ri, ex, ino, chunk_index, fragment_index,
+                                path, sizeof(path));
+        if (access(path, F_OK) == 0)
+            return (int)ri;
+    }
+    return -1;
+}
+
+/* Legacy local-EC shard names (removed); only unlinked for cleanup. */
+static void legacy_ec_shard_path(struct efsd_server *s, uint32_t root_idx,
+                                 struct efs_export *ex, efs_ino_t ino,
+                                 uint32_t chunk_index, uint32_t fragment_index,
+                                 char *path, size_t path_len)
+{
+    char dir[8192];
+    format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[root_idx], ex->id,
+                         ino, chunk_index);
+    snprintf(path, path_len, "%s/%u.%u.s%u", dir, chunk_index, fragment_index,
+             root_idx);
+}
+
+static void legacy_ec_shard_path_flat(struct efsd_server *s, uint32_t root_idx,
+                                      struct efs_export *ex, efs_ino_t ino,
+                                      uint32_t chunk_index, uint32_t fragment_index,
+                                      char *path, size_t path_len)
+{
+    char dir[8192];
+    format_ino_chunk_dir_legacy(dir, sizeof(dir), s->storage_paths[root_idx],
+                                ex->id, ino, chunk_index);
+    snprintf(path, path_len, "%s/%u.%u.s%u", dir, chunk_index, fragment_index,
+             root_idx);
+}
+
 int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
                          efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                          char *path, size_t path_len)
 {
-    char dir[8192];
-    format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[0], ex->id, ino,
-                         chunk_index);
-    snprintf(path, path_len, "%s/%u.%u", dir, chunk_index, fragment_index);
+    fragment_path_at(s, write_root_index(s, chunk_index), ex, ino, chunk_index,
+                     fragment_index, path, path_len);
     return 0;
 }
 
@@ -516,128 +607,71 @@ static int server_fragment_path_legacy(struct efsd_server *s, struct efs_export 
                                        uint32_t fragment_index,
                                        char *path, size_t path_len)
 {
-    char dir[8192];
-    format_ino_chunk_dir_legacy(dir, sizeof(dir), s->storage_paths[0], ex->id, ino,
-                                chunk_index);
-    snprintf(path, path_len, "%s/%u.%u", dir, chunk_index, fragment_index);
+    fragment_path_at_legacy(s, write_root_index(s, chunk_index), ex, ino,
+                            chunk_index, fragment_index, path, path_len);
     return 0;
 }
 
-static int server_shard_path(struct efsd_server *s, struct efs_export *ex,
-                             efs_ino_t ino, uint32_t chunk_index,
-                             uint32_t fragment_index, uint32_t shard_index,
-                             char *path, size_t path_len)
+/* Resolve on-disk fragment across all local roots (adaptive write placement
+ * means chunk_index % N is no longer authoritative). */
+static int resolve_fragment_path(struct efsd_server *s, struct efs_export *ex,
+                                 efs_ino_t ino, uint32_t chunk_index,
+                                 uint32_t fragment_index,
+                                 char *path, size_t path_len)
 {
-    if (s->storage_path_count <= 1) {
-        return server_fragment_path(s, ex, ino, chunk_index, fragment_index,
-                                    path, path_len);
-    }
-    char dir[8192];
-    format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[shard_index], ex->id,
-                         ino, chunk_index);
-    snprintf(path, path_len, "%s/%u.%u.s%u", dir, chunk_index, fragment_index,
-             shard_index);
-    return 0;
-}
-
-static int server_shard_path_legacy(struct efsd_server *s, struct efs_export *ex,
-                                    efs_ino_t ino, uint32_t chunk_index,
-                                    uint32_t fragment_index, uint32_t shard_index,
-                                    char *path, size_t path_len)
-{
-    if (s->storage_path_count <= 1) {
-        return server_fragment_path_legacy(s, ex, ino, chunk_index, fragment_index,
-                                           path, path_len);
-    }
-    char dir[8192];
-    format_ino_chunk_dir_legacy(dir, sizeof(dir), s->storage_paths[shard_index],
-                                ex->id, ino, chunk_index);
-    snprintf(path, path_len, "%s/%u.%u.s%u", dir, chunk_index, fragment_index,
-             shard_index);
-    return 0;
-}
-
-/* Resolve an on-disk fragment path: sharded first, then legacy flat-{ino}. */
-static int resolve_shard_path(struct efsd_server *s, struct efs_export *ex,
-                              efs_ino_t ino, uint32_t chunk_index,
-                              uint32_t fragment_index, uint32_t shard_index,
-                              char *path, size_t path_len)
-{
-    server_shard_path(s, ex, ino, chunk_index, fragment_index, shard_index,
-                      path, path_len);
-    if (access(path, F_OK) == 0)
-        return 0;
-    server_shard_path_legacy(s, ex, ino, chunk_index, fragment_index, shard_index,
-                             path, path_len);
-    if (access(path, F_OK) == 0)
-        return 0;
-    /* Multi-disk upgrade: plain single-disk name may still exist. */
-    if (s->storage_path_count > 1 && shard_index == 0) {
-        server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
-                             path_len);
+    int found = server_find_fragment_root(s, ex, ino, chunk_index, fragment_index);
+    if (found >= 0) {
+        fragment_path_at(s, (uint32_t)found, ex, ino, chunk_index, fragment_index,
+                         path, path_len);
         if (access(path, F_OK) == 0)
             return 0;
-        server_fragment_path_legacy(s, ex, ino, chunk_index, fragment_index, path,
-                                    path_len);
+        fragment_path_at_legacy(s, (uint32_t)found, ex, ino, chunk_index,
+                                fragment_index, path, path_len);
         if (access(path, F_OK) == 0)
             return 0;
     }
-    /* Prefer sharded path for callers that will create on ENOENT. */
-    server_shard_path(s, ex, ino, chunk_index, fragment_index, shard_index,
-                      path, path_len);
+    /* Create path: writer TLS root, else legacy RR. */
+    uint32_t ri = write_root_index(s, chunk_index);
+    fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index, path, path_len);
     return -1;
 }
 
-/* True if this fragment is already on disk (overwrite must not re-charge quota).
- * Hot path: only probe the primary shard/plain path — legacy layout walks are
- * for reads. Avoids 3–4 failing access() syscalls per PUT on new files. */
+/* True if this fragment is already on disk (overwrite must not re-charge quota). */
 static int fragment_exists_on_disk(struct efsd_server *s, struct efs_export *ex,
                                    efs_ino_t ino, uint32_t chunk_index,
                                    uint32_t fragment_index)
 {
-    char path[8192];
-    server_shard_path(s, ex, ino, chunk_index, fragment_index, 0, path,
-                      sizeof(path));
-    if (access(path, F_OK) == 0)
-        return 1;
-    if (s->storage_path_count > 1) {
-        server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
-                             sizeof(path));
-        if (access(path, F_OK) == 0)
-            return 1;
-    }
-    return 0;
+    return server_find_fragment_root(s, ex, ino, chunk_index, fragment_index) >= 0;
 }
 
-/* Unlink fragment data + checksum sidecars at sharded and legacy locations. */
+/* Unlink fragment data + checksum sidecars (stripe + legacy + old EC shards). */
 void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index)
 {
     char path[8192];
     char sum_path[8200];
+    uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
 
-    server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
+    for (uint32_t ri = 0; ri < n; ri++) {
+        fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index, path,
                          sizeof(path));
-    unlink(path);
-    snprintf(sum_path, sizeof(sum_path), "%s.sum", path);
-    unlink(sum_path);
+        unlink(path);
+        snprintf(sum_path, sizeof(sum_path), "%s.sum", path);
+        unlink(sum_path);
 
-    server_fragment_path_legacy(s, ex, ino, chunk_index, fragment_index, path,
+        fragment_path_at_legacy(s, ri, ex, ino, chunk_index, fragment_index, path,
                                 sizeof(path));
-    unlink(path);
-    snprintf(sum_path, sizeof(sum_path), "%s.sum", path);
-    unlink(sum_path);
+        unlink(path);
+        snprintf(sum_path, sizeof(sum_path), "%s.sum", path);
+        unlink(sum_path);
 
-    if (s->storage_path_count > 1) {
-        for (uint32_t i = 0; i < s->storage_path_count; i++) {
-            server_shard_path(s, ex, ino, chunk_index, fragment_index, i,
-                              path, sizeof(path));
-            unlink(path);
-            server_shard_path_legacy(s, ex, ino, chunk_index, fragment_index, i,
-                                     path, sizeof(path));
-            unlink(path);
-        }
+        legacy_ec_shard_path(s, ri, ex, ino, chunk_index, fragment_index, path,
+                             sizeof(path));
+        unlink(path);
+        legacy_ec_shard_path_flat(s, ri, ex, ino, chunk_index, fragment_index, path,
+                                  sizeof(path));
+        unlink(path);
     }
 }
 
@@ -687,7 +721,6 @@ struct shard_io_arg {
     char path[8192];
     uint8_t *buf;
     uint32_t len;
-    uint32_t path_index;
     int is_write;
     int result;
 };
@@ -695,7 +728,6 @@ struct shard_io_arg {
 static void *shard_io_thread(void *arg)
 {
     struct shard_io_arg *a = arg;
-    server_apply_storage_affinity(a->s, a->path_index);
     if (a->is_write) {
         int flags = O_WRONLY | O_CREAT | O_TRUNC;
         if (a->s->direct_io)
@@ -718,7 +750,7 @@ static void *shard_io_thread(void *arg)
             /* Zero payloads (store-bench / dd if=/dev/zero): write from a
              * process-wide pre-zeroed O_DIRECT buffer — no per-PUT memset
              * or memcpy of the 64 KiB fragment. */
-            int is_zero = (a->len == EFS_FRAGMENT_SIZE) &&
+            int is_zero = (a->len > 0) &&
                           (efs_tls_write_known_zero ||
                            efs_bytes_are_zero(a->buf, a->len));
             const uint8_t *wbuf;
@@ -796,51 +828,15 @@ int server_read_fragment(struct efsd_server *s, struct efs_export *ex,
                          efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                          uint8_t *data, uint32_t *data_len)
 {
-    uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
-
-    if (n <= 1) {
-        char path[8192];
-        resolve_shard_path(s, ex, ino, chunk_index, fragment_index, 0,
-                           path, sizeof(path));
-        uint32_t got = 0;
-        int rc = read_file_bytes(s, path, data, EFS_FRAGMENT_SIZE, &got);
-        if (rc != EFS_OK)
-            return rc;
-        *data_len = got;
-        return EFS_OK;
-    }
-
-    uint32_t slen = efs_local_ec_shard_len(n);
-    uint8_t (*shards)[EFS_LOCAL_EC_MAX_SHARD] =
-        malloc(EFS_MAX_STORAGE_PATHS * EFS_LOCAL_EC_MAX_SHARD);
-    if (!shards)
-        return EFS_ERR_NOMEM;
-    int have[EFS_MAX_STORAGE_PATHS];
-    memset(have, 0, sizeof(have));
-
-    /* Inline shard reads — see server_write_fragment_sync (avoid per-PUT
-     * pthread storms under multi-disk local EC). */
-    for (uint32_t i = 0; i < n; i++) {
-        struct shard_io_arg arg;
-        memset(&arg, 0, sizeof(arg));
-        arg.s = s;
-        arg.buf = shards[i];
-        arg.len = slen;
-        arg.path_index = i;
-        arg.is_write = 0;
-        arg.result = EFS_ERR_IO;
-        resolve_shard_path(s, ex, ino, chunk_index, fragment_index, i,
-                           arg.path, sizeof(arg.path));
-        shard_io_thread(&arg);
-        if (arg.result == EFS_OK)
-            have[i] = 1;
-    }
-
-    int rc = efs_local_ec_decode(n, shards, have, data, EFS_FRAGMENT_SIZE);
-    free(shards);
+    char path[8192];
+    resolve_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
+                          sizeof(path));
+    uint32_t want = server_frag_len(ex, ino);
+    uint32_t got = 0;
+    int rc = read_file_bytes(s, path, data, want, &got);
     if (rc != EFS_OK)
-        return EFS_ERR_NOT_FOUND;
-    *data_len = EFS_FRAGMENT_SIZE;
+        return rc;
+    *data_len = got;
     return EFS_OK;
 }
 
@@ -872,11 +868,10 @@ int server_write_fragment_sum_sync(struct efsd_server *s, struct efs_export *ex,
                                    uint32_t fragment_index,
                                    const uint8_t checksum[EFS_HASH_SIZE])
 {
-    /* Write .sum to root 0 only. Mirroring to every local EC disk made each
-     * PUT open/create 4 tiny checksum files and dominated single-stream
-     * bandwidth; reads already fall back across roots when needed. */
+    /* Keep .sum next to the fragment data (same root as the write). */
     char path[8192];
-    server_fragment_sum_path_at(s, 0, ex, ino, chunk_index, fragment_index,
+    uint32_t ri = write_root_index(s, chunk_index);
+    server_fragment_sum_path_at(s, ri, ex, ino, chunk_index, fragment_index,
                                 path, sizeof(path));
     int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0 && errno == ENOENT) {
@@ -980,12 +975,7 @@ uint64_t server_compute_local_usage(struct efsd_server *s)
     uint64_t raw = 0;
     for (uint32_t i = 0; i < n; i++)
         raw += server_compute_usage(s->storage_paths[i]);
-    if (n <= 1)
-        return raw;
-    uint32_t k = efs_local_ec_k(n);
-    if (k == 0)
-        return raw;
-    return (raw * (uint64_t)k) / (uint64_t)n;
+    return raw;
 }
 
 void server_format_storage_paths(const struct efsd_server *s, char *buf, size_t buflen)
@@ -1175,87 +1165,20 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
     if (flush_usage)
         server_usage_save(s);
 
-    uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
-
-    /* n==1: write the fragment buffer directly — encode_plain was a full
-     * memset+memcpy of every PUT for no benefit. */
-    if (n <= 1) {
-        struct shard_io_arg arg;
-        memset(&arg, 0, sizeof(arg));
-        arg.s = s;
-        arg.buf = (uint8_t *)data;
-        arg.len = data_len;
-        if (s->direct_io)
-            arg.len = EFS_FRAGMENT_SIZE;
-        arg.path_index = 0;
-        arg.is_write = 1;
-        arg.result = EFS_ERR_IO;
-        server_shard_path(s, ex, ino, chunk_index, fragment_index, 0,
-                          arg.path, sizeof(arg.path));
-        shard_io_thread(&arg);
-        if (arg.result != EFS_OK) {
-            if (charge_quota) {
-                pthread_mutex_lock(&s->lock);
-                local = server_local_node(s);
-                if (local && local->used >= data_len)
-                    local->used -= data_len;
-                pthread_mutex_unlock(&s->lock);
-                server_usage_mark_dirty(s);
-            }
-            return EFS_ERR_IO;
-        }
-        return EFS_OK;
-    }
-
-    uint8_t (*shards)[EFS_LOCAL_EC_MAX_SHARD] =
-        malloc(EFS_MAX_STORAGE_PATHS * EFS_LOCAL_EC_MAX_SHARD);
-    if (!shards) {
-        if (charge_quota) {
-            pthread_mutex_lock(&s->lock);
-            local = server_local_node(s);
-            if (local && local->used >= data_len)
-                local->used -= data_len;
-            pthread_mutex_unlock(&s->lock);
-            server_usage_mark_dirty(s);
-        }
-        return EFS_ERR_NOMEM;
-    }
-    if (efs_local_ec_encode(n, data, data_len, shards) != EFS_OK) {
-        free(shards);
-        if (charge_quota) {
-            pthread_mutex_lock(&s->lock);
-            local = server_local_node(s);
-            if (local && local->used >= data_len)
-                local->used -= data_len;
-            pthread_mutex_unlock(&s->lock);
-            server_usage_mark_dirty(s);
-        }
-        return EFS_ERR_INVAL;
-    }
-
-    /* Serial shard I/O on the writer thread. Per-PUT pthread storms (even with
-     * small stacks) cost more than buffered writes once fsync-per-shard is
-     * gone; the writer pool already parallelizes across fragments. */
-    uint32_t slen = efs_local_ec_shard_len(n);
-    int ok = 0;
-    for (uint32_t i = 0; i < n; i++) {
-        struct shard_io_arg arg;
-        memset(&arg, 0, sizeof(arg));
-        arg.s = s;
-        arg.buf = shards[i];
-        arg.len = slen;
-        arg.path_index = i;
-        arg.is_write = 1;
-        arg.result = EFS_ERR_IO;
-        server_shard_path(s, ex, ino, chunk_index, fragment_index, i,
-                          arg.path, sizeof(arg.path));
-        shard_io_thread(&arg);
-        if (arg.result == EFS_OK)
-            ok++;
-    }
-    free(shards);
-
-    if (ok < (int)n) {
+    /* One full fragment on the writer-selected storage root. */
+    struct shard_io_arg arg;
+    memset(&arg, 0, sizeof(arg));
+    arg.s = s;
+    arg.buf = (uint8_t *)data;
+    arg.len = data_len;
+    if (s->direct_io)
+        arg.len = server_frag_len(ex, ino);
+    arg.is_write = 1;
+    arg.result = EFS_ERR_IO;
+    server_fragment_path(s, ex, ino, chunk_index, fragment_index, arg.path,
+                         sizeof(arg.path));
+    shard_io_thread(&arg);
+    if (arg.result != EFS_OK) {
         if (charge_quota) {
             pthread_mutex_lock(&s->lock);
             local = server_local_node(s);

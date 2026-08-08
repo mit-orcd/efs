@@ -3,9 +3,7 @@
 
 #include "efs/common.h"
 #include "efs/metadata.h"
-#include <net/if.h>
 #include <pthread.h>
-#include <sched.h>
 #include <sys/types.h>
 
 struct efs_client {
@@ -62,13 +60,6 @@ struct efs_client {
     uint32_t *dirty_chunk_idxs;
     uint64_t dirty_chunk_count;
     uint64_t dirty_chunk_cap;
-
-    /* Soft NUMA preference for egress NIC toward cluster peers
-     * (-1 / invalid = unknown / unbound). */
-    int net_numa_node;
-    cpu_set_t net_cpu_set;
-    int net_affinity_valid;
-    char net_ifname[IFNAMSIZ];
 };
 
 /* Mark inode/chunk dirty for the next batched metadata delta flush.
@@ -97,14 +88,16 @@ int efs_client_note_meta_change(int force);
 /* Enable coalesced metadata replication for the FUSE client. */
 void efs_client_enable_meta_batch(uint32_t every_n_ops);
 
-/* Fetch a fragment from a node. Returns 0 on success. */
+/* Fetch a fragment from a node. data must hold at least expected_frag_len bytes.
+ * Returns 0 on success. */
 int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk_index,
-                            uint32_t fragment_index, uint8_t *data, uint32_t *data_len,
+                            uint32_t fragment_index, uint32_t expected_frag_len,
+                            uint8_t *data, uint32_t *data_len,
                             uint8_t checksum[EFS_HASH_SIZE]);
 
 /* Store a fragment on a node. Returns 0 on success. */
 int efs_client_put_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk_index,
-                            uint32_t fragment_index, const uint8_t *data,
+                            uint32_t fragment_index, const uint8_t *data, uint32_t frag_len,
                             const uint8_t checksum[EFS_HASH_SIZE]);
 
 /* Read bytes from a file. Returns 0 on success. */
@@ -188,7 +181,8 @@ void efs_client_shutdown(void);
  * pooled sockets). Returns EFS_OK if quorum (>=2) acks, else an error. */
 int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
                                       const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
-                                      const uint8_t fragments[EFS_NUM_FRAGMENTS][EFS_FRAGMENT_SIZE],
+                                      const uint8_t *fragments[EFS_NUM_FRAGMENTS],
+                                      uint32_t frag_len,
                                       const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE]);
 
 #endif

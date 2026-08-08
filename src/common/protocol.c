@@ -8,23 +8,8 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
-int efs_send_msg(int fd, uint8_t type, const void *payload, uint32_t payload_len)
+static int send_iov(int fd, struct iovec *iov, int niov)
 {
-    uint32_t len = htonl(1 + payload_len);
-    struct iovec iov[3];
-    int niov = 2;
-    iov[0].iov_base = &len;
-    iov[0].iov_len = sizeof(len);
-    iov[1].iov_base = &type;
-    iov[1].iov_len = 1;
-    if (payload_len > 0 && payload) {
-        iov[2].iov_base = (void *)payload;
-        iov[2].iov_len = payload_len;
-        niov = 3;
-    }
-
-    /* Single writev for header+payload when the kernel accepts it all;
-     * fall back to advancing through partial sends. */
     int i = 0;
     while (i < niov) {
         ssize_t n = writev(fd, &iov[i], niov - i);
@@ -46,6 +31,36 @@ int efs_send_msg(int fd, uint8_t type, const void *payload, uint32_t payload_len
         }
     }
     return EFS_OK;
+}
+
+int efs_send_msg_parts(int fd, uint8_t type,
+                       const void *part1, uint32_t part1_len,
+                       const void *part2, uint32_t part2_len)
+{
+    uint32_t payload_len = part1_len + part2_len;
+    uint32_t len = htonl(1 + payload_len);
+    struct iovec iov[4];
+    int niov = 2;
+    iov[0].iov_base = &len;
+    iov[0].iov_len = sizeof(len);
+    iov[1].iov_base = &type;
+    iov[1].iov_len = 1;
+    if (part1_len > 0 && part1) {
+        iov[niov].iov_base = (void *)part1;
+        iov[niov].iov_len = part1_len;
+        niov++;
+    }
+    if (part2_len > 0 && part2) {
+        iov[niov].iov_base = (void *)part2;
+        iov[niov].iov_len = part2_len;
+        niov++;
+    }
+    return send_iov(fd, iov, niov);
+}
+
+int efs_send_msg(int fd, uint8_t type, const void *payload, uint32_t payload_len)
+{
+    return efs_send_msg_parts(fd, type, payload, payload_len, NULL, 0);
 }
 
 int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status)

@@ -4,11 +4,14 @@
 #include "efs/common.h"
 #include "efs/metadata.h"
 #include <pthread.h>
-#include <sched.h>
 
 #define EFS_SERVER_MAX_CONNS 64
-#define EFS_DEFAULT_WRITERS  16
-#define EFS_MAX_WRITERS      64
+/* Dedicated PUT writers per --storage path (stripe lane). */
+#define EFS_WRITERS_PER_PATH_DEFAULT 8
+#define EFS_MAX_WRITERS_PER_PATH     64
+/* Back-compat aliases used by local --bench. */
+#define EFS_DEFAULT_WRITERS  EFS_WRITERS_PER_PATH_DEFAULT
+#define EFS_MAX_WRITERS      EFS_MAX_WRITERS_PER_PATH
 
 enum efsd_server_state {
     SERVER_STATE_ACTIVE = 0,
@@ -22,16 +25,12 @@ struct efsd_server {
     efs_node_id_t id;
     char addr[64];
     uint16_t port;
-    /* Local data roots: 1 (plain) or 3..EFS_MAX_STORAGE_PATHS (local EC).
+    /* Local data roots: 1..EFS_MAX_STORAGE_PATHS (full-fragment stripe).
      * storage_path is always storage_paths[0] for on-disk paths (log/PID/meta).
      * Cluster advertise (efs_node / HELLO) uses server_format_storage_paths(). */
     char storage_paths[EFS_MAX_STORAGE_PATHS][EFS_MAX_PATH];
     uint32_t storage_path_count;
     char storage_path[EFS_MAX_PATH];
-    /* Soft NUMA preference per storage path (-1 = unknown / unbound). */
-    int storage_numa_node[EFS_MAX_STORAGE_PATHS];
-    cpu_set_t storage_cpu_set[EFS_MAX_STORAGE_PATHS];
-    int storage_affinity_valid[EFS_MAX_STORAGE_PATHS];
     uint64_t quota; /* local storage quota in bytes; 0 = unlimited */
 
     struct efs_node nodes[EFS_MAX_NODES];
@@ -53,7 +52,8 @@ struct efsd_server {
     uint16_t rejoin_port;
 
     int direct_io; /* use O_DIRECT for fragment reads/writes */
-    int nwriters; /* dedicated fragment-writer threads (0 = inline) */
+    /* Writers per storage path (0 = inline). Total = nwriters * path_count. */
+    int nwriters;
     int persist_nodes; /* persist cluster membership to disk */
     int perf; /* run under perf record when starting */
     int export_meta_dirty; /* defer metadata.bin writes across PUT_META */
@@ -82,6 +82,24 @@ void server_load_exports(struct efsd_server *s);
 /* Save an export to disk. */
 void server_save_export(struct efsd_server *s, struct efs_export *ex);
 
+/* Fragment byte length for this inode: meta pages are fixed; data uses export. */
+static inline uint32_t server_frag_len(const struct efs_export *ex, efs_ino_t ino)
+{
+    if (ino == EFS_META_TABLE_INO)
+        return EFS_META_FRAGMENT_SIZE;
+    uint32_t cs = (ex && efs_chunk_size_valid(ex->chunk_size))
+                      ? ex->chunk_size
+                      : EFS_DEFAULT_CHUNK_SIZE;
+    return efs_frag_size(cs);
+}
+
+static inline uint32_t server_data_chunk_size(const struct efs_export *ex)
+{
+    return (ex && efs_chunk_size_valid(ex->chunk_size))
+               ? ex->chunk_size
+               : EFS_DEFAULT_CHUNK_SIZE;
+}
+
 /* Get the (sharded) path for a fragment on disk. Writes always use this. */
 int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
                          efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
@@ -99,6 +117,15 @@ int server_read_fragment(struct efsd_server *s, struct efs_export *ex,
 
 /* Writer-thread hint from writer.c: payload already verified as all zeros. */
 extern __thread int efs_tls_write_known_zero;
+
+/* Writer-thread: storage root index for the in-flight fragment write
+ * (-1 = unset; store path helpers fall back to probing / legacy RR). */
+extern __thread int efs_tls_write_root;
+
+/* Which local --storage root already holds this fragment, or -1. */
+int server_find_fragment_root(struct efsd_server *s, struct efs_export *ex,
+                              efs_ino_t ino, uint32_t chunk_index,
+                              uint32_t fragment_index);
 
 /* Synchronous fragment write (disk I/O); used by the writer pool. */
 int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
@@ -126,7 +153,7 @@ int efsd_pthread_create(pthread_t *tid, void *(*fn)(void *), void *arg);
 /* Compute total bytes used under one storage root's data/. */
 uint64_t server_compute_usage(const char *path);
 
-/* Logical used across all local roots (accounts for local EC overhead). */
+/* Bytes used across all local data roots (sum of on-disk sizes). */
 uint64_t server_compute_local_usage(struct efsd_server *s);
 
 /* Update the local node's used counter via a full data/ tree scan, then persist. */

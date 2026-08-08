@@ -29,15 +29,15 @@ PROF="$PROF_ROOT/client-${SLURM_JOB_ID}"
 DO_STORE_BENCH="${DO_STORE_BENCH:-1}"
 mkdir -p "$PROF" "$SHARED/logs"
 
-LOCAL=/scratch/efs-testing/${SLURM_JOB_ID}
+# shellcheck source=lib-harness.sh
+source "$REPO/slurm-jobs/lib-harness.sh"
+LOCAL=$(efs_job_scratch) || exit 1
 MNT=$LOCAL/mnt
 rm -rf "$LOCAL"
 mkdir -p "$MNT"
 
 # shellcheck source=lib-ib.sh
 source "$REPO/slurm-jobs/lib-ib.sh"
-# shellcheck source=lib-harness.sh
-source "$REPO/slurm-jobs/lib-harness.sh"
 read -r CLIENT_IB CLIENT_IP < <(efs_ib_host)
 echo "=== dd-bw on $(hostname -s) IB=$CLIENT_IB FILE_GIB=$FILE_GIB ==="
 
@@ -130,11 +130,29 @@ done
 mountpoint -q "$MNT" || { echo "mount failed"; cat "$PROF/fuse.stdout"; exit 1; }
 
 BYTES=$((FILE_GIB * 1024 * 1024 * 1024))
-COUNT=$((FILE_GIB * 1024))
+# Match FUSE max_write so each syscall fans out many chunks. With 1MiB
+# export chunks use 16MiB; default 128KiB chunks use 4MiB.
+if [ -z "${DD_BS:-}" ]; then
+    case "${EFS_CHUNK_SIZE:-128K}" in
+        *M|*m) DD_BS=16M; DD_BS_BYTES=$((16 * 1024 * 1024)) ;;
+        *)     DD_BS=4M;  DD_BS_BYTES=$((4 * 1024 * 1024)) ;;
+    esac
+else
+    # crude parse for COUNT only; dd accepts the DD_BS string
+    case "$DD_BS" in
+        16M|16m) DD_BS_BYTES=$((16 * 1024 * 1024)) ;;
+        8M|8m)   DD_BS_BYTES=$((8 * 1024 * 1024)) ;;
+        4M|4m)   DD_BS_BYTES=$((4 * 1024 * 1024)) ;;
+        1M|1m)   DD_BS_BYTES=$((1 * 1024 * 1024)) ;;
+        *)       DD_BS_BYTES=$((4 * 1024 * 1024)) ;;
+    esac
+fi
+COUNT=$((BYTES / DD_BS_BYTES))
+[ "$COUNT" -ge 1 ] || COUNT=1
 
-echo "=== dd WRITE ${FILE_GIB}GiB bs=1M if=/dev/zero ==="
+echo "=== dd WRITE ${FILE_GIB}GiB bs=$DD_BS if=/dev/zero ==="
 W0=$(date +%s.%N)
-dd if=/dev/zero of="$MNT/dd.bin" bs=1M count="$COUNT" status=progress conv=fsync 2>"$PROF/dd-write.err"
+dd if=/dev/zero of="$MNT/dd.bin" bs="$DD_BS" count="$COUNT" status=progress conv=fsync 2>"$PROF/dd-write.err"
 sync "$MNT/dd.bin" 2>/dev/null || true
 W1=$(date +%s.%N)
 W_SEC=$(awk -v s="$W0" -v e="$W1" 'BEGIN{printf "%.3f", e-s}')
@@ -142,10 +160,10 @@ W_GIB=$(awk -v b="$BYTES" -v t="$W_SEC" 'BEGIN{printf "%.3f", (b/1024/1024/1024)
 echo "WRITE wall_s=$W_SEC GiB_s=$W_GIB" | tee "$PROF/write.txt"
 cat "$PROF/dd-write.err" | tee -a "$PROF/write.txt"
 
-echo "=== dd READ ${FILE_GIB}GiB bs=1M of=/dev/null ==="
+echo "=== dd READ ${FILE_GIB}GiB bs=$DD_BS of=/dev/null ==="
 # Drop page cache on this node for the mount file if possible (best-effort)
 R0=$(date +%s.%N)
-dd if="$MNT/dd.bin" of=/dev/null bs=1M status=progress 2>"$PROF/dd-read.err"
+dd if="$MNT/dd.bin" of=/dev/null bs="$DD_BS" status=progress 2>"$PROF/dd-read.err"
 R1=$(date +%s.%N)
 R_SEC=$(awk -v s="$R0" -v e="$R1" 'BEGIN{printf "%.3f", e-s}')
 R_GIB=$(awk -v b="$BYTES" -v t="$R_SEC" 'BEGIN{printf "%.3f", (b/1024/1024/1024)/(t<0.001?0.001:t)}')
