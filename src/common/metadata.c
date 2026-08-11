@@ -811,6 +811,13 @@ static void rollup_size_delta(struct efs_export *ex, efs_ino_t parent,
 
 static void rollup_touch_parents_of(struct efs_export *ex, efs_ino_t ino)
 {
+    struct efs_inode *p = inode_ptr(ex, ino);
+    if (!p)
+        return;
+    if (p->nlink <= 1) {
+        recompute_times_up(ex, p->parent);
+        return;
+    }
     for (uint64_t i = 0; i < ex->inode_count; i++) {
         if (ex->inodes[i].ino != ino)
             continue;
@@ -840,6 +847,64 @@ static void recompute_dir_postorder(struct efs_export *ex, efs_ino_t dir_ino)
     }
 }
 
+static void pending_rollup_clear(struct efs_export *ex)
+{
+    ex->pending_rollup_count = 0;
+    ex->rollups_stale = 0;
+}
+
+static int pending_rollup_note(struct efs_export *ex, efs_ino_t ino,
+                               int64_t size_delta, int touch)
+{
+    for (uint64_t i = 0; i < ex->pending_rollup_count; i++) {
+        if (ex->pending_rollup_inos[i] == ino) {
+            ex->pending_rollup_deltas[i] += size_delta;
+            if (touch)
+                ex->pending_rollup_touch[i] = 1;
+            return 0;
+        }
+    }
+    if (ex->pending_rollup_count >= ex->pending_rollup_cap) {
+        uint64_t ncap = ex->pending_rollup_cap ? ex->pending_rollup_cap * 2 : 64;
+        efs_ino_t *ninos = realloc(ex->pending_rollup_inos, ncap * sizeof(*ninos));
+        int64_t *ndeltas = realloc(ex->pending_rollup_deltas, ncap * sizeof(*ndeltas));
+        uint8_t *ntouch = realloc(ex->pending_rollup_touch, ncap * sizeof(*ntouch));
+        if (!ninos || !ndeltas || !ntouch) {
+            free(ninos);
+            free(ndeltas);
+            free(ntouch);
+            return -1;
+        }
+        ex->pending_rollup_inos = ninos;
+        ex->pending_rollup_deltas = ndeltas;
+        ex->pending_rollup_touch = ntouch;
+        ex->pending_rollup_cap = ncap;
+    }
+    uint64_t i = ex->pending_rollup_count++;
+    ex->pending_rollup_inos[i] = ino;
+    ex->pending_rollup_deltas[i] = size_delta;
+    ex->pending_rollup_touch[i] = touch ? 1 : 0;
+    return 0;
+}
+
+static void apply_size_delta_for_ino(struct efs_export *ex, efs_ino_t ino,
+                                     int64_t delta)
+{
+    if (delta == 0)
+        return;
+    struct efs_inode *p = inode_ptr(ex, ino);
+    if (!p || efs_mode_is_dir(p->mode))
+        return;
+    if (p->nlink <= 1) {
+        rollup_size_delta(ex, p->parent, delta);
+        return;
+    }
+    for (uint64_t i = 0; i < ex->inode_count; i++) {
+        if (ex->inodes[i].ino == ino)
+            rollup_size_delta(ex, ex->inodes[i].parent, delta);
+    }
+}
+
 void efs_export_recompute_rollups(struct efs_export *ex)
 {
     if (!ex)
@@ -852,6 +917,21 @@ void efs_export_recompute_rollups(struct efs_export *ex)
     }
     child_idx_rebuild(ex);
     recompute_dir_postorder(ex, EFS_ROOT_INO);
+    pending_rollup_clear(ex);
+}
+
+void efs_export_ensure_rollups(struct efs_export *ex)
+{
+    if (!ex || !ex->rollups_stale)
+        return;
+    for (uint64_t i = 0; i < ex->pending_rollup_count; i++) {
+        efs_ino_t ino = ex->pending_rollup_inos[i];
+        int64_t delta = ex->pending_rollup_deltas[i];
+        apply_size_delta_for_ino(ex, ino, delta);
+        if (delta != 0 || ex->pending_rollup_touch[i])
+            rollup_touch_parents_of(ex, ino);
+    }
+    pending_rollup_clear(ex);
 }
 
 int efs_export_format_stats(const struct efs_inode *dir, char *buf, size_t buflen)
@@ -889,6 +969,9 @@ int efs_export_format_stats(const struct efs_inode *dir, char *buf, size_t bufle
 static void sync_hardlink_attrs(struct efs_export *ex, efs_ino_t ino,
                                 const struct efs_inode *src)
 {
+    /* Single link: attrs already live on the indexed row (inode_ptr). */
+    if (!src || src->nlink <= 1)
+        return;
     for (uint64_t i = 0; i < ex->inode_count; i++) {
         if (ex->inodes[i].ino != ino)
             continue;
@@ -1047,6 +1130,9 @@ void efs_export_free(struct efs_export *ex)
         return;
     free(ex->inodes);
     free(ex->chunks);
+    free(ex->pending_rollup_inos);
+    free(ex->pending_rollup_deltas);
+    free(ex->pending_rollup_touch);
     idx_free(&ex->ino_keys, &ex->ino_vals, &ex->ino_mask);
     idx_free(&ex->name_keys, &ex->name_vals, &ex->name_mask);
     idx_free(&ex->chunk_keys, &ex->chunk_vals, &ex->chunk_mask);
@@ -1091,6 +1177,8 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
         return 0;
     if (strcmp(name, EFS_STATS_NAME) == 0)
         return 0;
+
+    efs_export_ensure_rollups(ex);
 
     if (efs_export_lookup(ex, parent, name, NULL) == EFS_OK)
         return 0;
@@ -1155,6 +1243,7 @@ int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *
         return EFS_ERR_INVAL;
     if (strcmp(name, EFS_STATS_NAME) == 0)
         return EFS_ERR_INVAL;
+    efs_export_ensure_rollups(ex);
 
     uint64_t pos = 0;
     if (name_idx_get(ex, parent, name, &pos) != 0)
@@ -1217,6 +1306,7 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
         return EFS_ERR_INVAL;
     if (strcmp(new_name, EFS_STATS_NAME) == 0)
         return EFS_ERR_INVAL;
+    efs_export_ensure_rollups(ex);
 
     struct efs_inode *src = inode_ptr(ex, src_ino);
     if (!src)
@@ -1270,10 +1360,13 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
     return EFS_OK;
 }
 
-int efs_export_set_size(struct efs_export *ex, efs_ino_t ino, uint64_t size)
+static int set_size_common(struct efs_export *ex, efs_ino_t ino, uint64_t size,
+                           int do_rollups)
 {
     if (!ex)
         return EFS_ERR_INVAL;
+    if (do_rollups)
+        efs_export_ensure_rollups(ex);
     struct efs_inode *p = inode_ptr(ex, ino);
     if (!p)
         return EFS_ERR_NOT_FOUND;
@@ -1287,21 +1380,39 @@ int efs_export_set_size(struct efs_export *ex, efs_ino_t ino, uint64_t size)
         p->mtime_nsec = (uint32_t)ts.tv_nsec;
     }
     sync_hardlink_attrs(ex, ino, p);
+    if (!do_rollups) {
+        int64_t delta = 0;
+        if (!efs_mode_is_dir(p->mode) && size != old_size)
+            delta = (int64_t)size - (int64_t)old_size;
+        if (pending_rollup_note(ex, ino, delta, 1) != 0)
+            return EFS_ERR_NOMEM;
+        ex->rollups_stale = 1;
+        return EFS_OK;
+    }
     if (!efs_mode_is_dir(p->mode) && size != old_size) {
         int64_t delta = (int64_t)size - (int64_t)old_size;
-        for (uint64_t i = 0; i < ex->inode_count; i++) {
-            if (ex->inodes[i].ino == ino)
-                rollup_size_delta(ex, ex->inodes[i].parent, delta);
-        }
+        apply_size_delta_for_ino(ex, ino, delta);
     }
     rollup_touch_parents_of(ex, ino);
     return EFS_OK;
+}
+
+int efs_export_set_size(struct efs_export *ex, efs_ino_t ino, uint64_t size)
+{
+    return set_size_common(ex, ino, size, 1);
+}
+
+int efs_export_set_size_norollup(struct efs_export *ex, efs_ino_t ino,
+                                 uint64_t size)
+{
+    return set_size_common(ex, ino, size, 0);
 }
 
 int efs_export_set_mode(struct efs_export *ex, efs_ino_t ino, uint32_t mode)
 {
     if (!ex)
         return EFS_ERR_INVAL;
+    efs_export_ensure_rollups(ex);
     struct efs_inode *p = inode_ptr(ex, ino);
     if (!p)
         return EFS_ERR_NOT_FOUND;
@@ -1317,6 +1428,7 @@ int efs_export_set_owner(struct efs_export *ex, efs_ino_t ino, uid_t uid, gid_t 
 {
     if (!ex)
         return EFS_ERR_INVAL;
+    efs_export_ensure_rollups(ex);
     struct efs_inode *p = inode_ptr(ex, ino);
     if (!p)
         return EFS_ERR_NOT_FOUND;
@@ -1331,11 +1443,14 @@ int efs_export_set_owner(struct efs_export *ex, efs_ino_t ino, uid_t uid, gid_t 
     return EFS_OK;
 }
 
-int efs_export_set_mtime_ns(struct efs_export *ex, efs_ino_t ino,
-                            uint64_t mtime, uint32_t mtime_nsec)
+static int set_mtime_ns_common(struct efs_export *ex, efs_ino_t ino,
+                               uint64_t mtime, uint32_t mtime_nsec,
+                               int do_rollups)
 {
     if (!ex)
         return EFS_ERR_INVAL;
+    if (do_rollups)
+        efs_export_ensure_rollups(ex);
     struct efs_inode *p = inode_ptr(ex, ino);
     if (!p)
         return EFS_ERR_NOT_FOUND;
@@ -1344,8 +1459,26 @@ int efs_export_set_mtime_ns(struct efs_export *ex, efs_ino_t ino,
     p->mtime = mtime;
     p->mtime_nsec = mtime_nsec;
     sync_hardlink_attrs(ex, ino, p);
+    if (!do_rollups) {
+        if (pending_rollup_note(ex, ino, 0, 1) != 0)
+            return EFS_ERR_NOMEM;
+        ex->rollups_stale = 1;
+        return EFS_OK;
+    }
     rollup_touch_parents_of(ex, ino);
     return EFS_OK;
+}
+
+int efs_export_set_mtime_ns(struct efs_export *ex, efs_ino_t ino,
+                            uint64_t mtime, uint32_t mtime_nsec)
+{
+    return set_mtime_ns_common(ex, ino, mtime, mtime_nsec, 1);
+}
+
+int efs_export_set_mtime_ns_norollup(struct efs_export *ex, efs_ino_t ino,
+                                     uint64_t mtime, uint32_t mtime_nsec)
+{
+    return set_mtime_ns_common(ex, ino, mtime, mtime_nsec, 0);
 }
 
 int efs_export_set_mtime(struct efs_export *ex, efs_ino_t ino, uint64_t mtime)
@@ -1357,6 +1490,7 @@ int efs_export_set_atime(struct efs_export *ex, efs_ino_t ino, uint64_t atime)
 {
     if (!ex)
         return EFS_ERR_INVAL;
+    efs_export_ensure_rollups(ex);
     struct efs_inode *p = inode_ptr(ex, ino);
     if (!p)
         return EFS_ERR_NOT_FOUND;
@@ -1373,6 +1507,7 @@ int efs_export_rename(struct efs_export *ex, efs_ino_t ino,
         return EFS_ERR_INVAL;
     if (strcmp(new_name, EFS_STATS_NAME) == 0)
         return EFS_ERR_INVAL;
+    efs_export_ensure_rollups(ex);
 
     struct efs_inode *src = inode_ptr(ex, ino);
     if (!src)
@@ -1684,6 +1819,7 @@ int efs_export_serialize(struct efs_export *ex, char **buf, size_t *len)
 {
     if (!ex || !buf || !len)
         return EFS_ERR_INVAL;
+    efs_export_ensure_rollups(ex);
 
     FILE *f = open_memstream(buf, len);
     if (!f)

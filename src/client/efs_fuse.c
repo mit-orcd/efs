@@ -124,19 +124,27 @@ static void stat_set_size_blocks(struct stat *stbuf, uint64_t size)
 static int stats_fill_stat(const struct efs_inode *parent, struct stat *stbuf)
 {
     char text[512];
-    int n = efs_export_format_stats(parent, text, sizeof(text));
+    struct efs_inode fresh;
+    pthread_mutex_lock(&g_client.lock);
+    efs_export_ensure_rollups(&g_client.export);
+    if (efs_export_get_inode(&g_client.export, parent->ino, &fresh) != 0) {
+        pthread_mutex_unlock(&g_client.lock);
+        return -EIO;
+    }
+    pthread_mutex_unlock(&g_client.lock);
+    int n = efs_export_format_stats(&fresh, text, sizeof(text));
     if (n < 0)
         return -EIO;
     memset(stbuf, 0, sizeof(*stbuf));
-    stbuf->st_ino = stats_synthetic_ino(parent->ino);
+    stbuf->st_ino = stats_synthetic_ino(fresh.ino);
     stbuf->st_mode = S_IFREG | 0444;
     stbuf->st_nlink = 1;
     stat_set_size_blocks(stbuf, (uint64_t)n);
-    stbuf->st_uid = parent->uid;
-    stbuf->st_gid = parent->gid;
-    stbuf->st_mtim.tv_sec = (time_t)parent->mtime;
-    stbuf->st_atim.tv_sec = (time_t)parent->atime;
-    stbuf->st_ctim.tv_sec = (time_t)parent->ctime;
+    stbuf->st_uid = fresh.uid;
+    stbuf->st_gid = fresh.gid;
+    stbuf->st_mtim.tv_sec = (time_t)fresh.mtime;
+    stbuf->st_atim.tv_sec = (time_t)fresh.atime;
+    stbuf->st_ctim.tv_sec = (time_t)fresh.ctime;
     return 0;
 }
 
@@ -276,6 +284,7 @@ static int efs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
     if (path_is_stats(path, &parent) == 0) {
         char text[512];
         pthread_mutex_lock(&g_client.lock);
+        efs_export_ensure_rollups(&g_client.export);
         struct efs_inode fresh;
         int grc = efs_export_get_inode(&g_client.export, parent.ino, &fresh);
         pthread_mutex_unlock(&g_client.lock);
@@ -339,6 +348,23 @@ static struct {
     .idle = PTHREAD_COND_INITIALIZER,
 };
 
+static void efs_fuse_log_err(const char *where, int efs_rc, efs_ino_t ino,
+                             uint64_t offset, size_t size, const char *path)
+{
+    if (path && path[0]) {
+        fprintf(stderr,
+                "efs-fuse %s: %s (efs_rc=%d) path=%s ino=%llu off=%llu len=%zu\n",
+                where, efs_strerror(efs_rc), efs_rc, path,
+                (unsigned long long)ino, (unsigned long long)offset, size);
+    } else {
+        fprintf(stderr,
+                "efs-fuse %s: %s (efs_rc=%d) ino=%llu off=%llu len=%zu\n",
+                where, efs_strerror(efs_rc), efs_rc,
+                (unsigned long long)ino, (unsigned long long)offset, size);
+    }
+    fflush(stderr);
+}
+
 static void *efs_wb_thread(void *arg)
 {
     (void)arg;
@@ -362,8 +388,24 @@ static void *efs_wb_thread(void *arg)
         free(job.buf);
 
         pthread_mutex_lock(&g_wb.mu);
-        if (rc != EFS_OK && g_wb.err == EFS_OK)
-            g_wb.err = rc;
+        if (rc != EFS_OK) {
+            if (g_wb.err == EFS_OK) {
+                g_wb.err = rc;
+                /* Log outside? hold lock briefly — fprintf is fine for errors. */
+                efs_fuse_log_err("writeback", rc, job.ino, job.offset, job.size,
+                                 NULL);
+            } else {
+                /* Follow-on failures after the first sticky error. */
+                fprintf(stderr,
+                        "efs-fuse writeback: also failed %s (efs_rc=%d) "
+                        "ino=%llu off=%llu len=%zu (sticky_err=%s)\n",
+                        efs_strerror(rc), rc,
+                        (unsigned long long)job.ino,
+                        (unsigned long long)job.offset, job.size,
+                        efs_strerror(g_wb.err));
+                fflush(stderr);
+            }
+        }
         g_wb.inflight--;
         if (g_wb.count == 0 && g_wb.inflight == 0)
             pthread_cond_broadcast(&g_wb.idle);
@@ -453,11 +495,22 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
         return -EISDIR;
 
     rc = efs_wb_enqueue(ino.ino, (uint64_t)offset, size, buf);
-    if (rc == EFS_ERR_QUOTA)
+    if (rc == EFS_ERR_QUOTA) {
+        efs_fuse_log_err("write", rc, ino.ino, (uint64_t)offset, size, path);
         return -ENOSPC;
-    if (rc != 0)
+    }
+    if (rc != 0) {
+        efs_fuse_log_err("write", rc, ino.ino, (uint64_t)offset, size, path);
         return -EIO;
+    }
     return (int)size;
+}
+
+static void efs_fuse_sync_rollups(void)
+{
+    pthread_mutex_lock(&g_client.lock);
+    efs_export_ensure_rollups(&g_client.export);
+    pthread_mutex_unlock(&g_client.lock);
 }
 
 static int efs_fuse_fsync(const char *path, int isdatasync,
@@ -467,23 +520,32 @@ static int efs_fuse_fsync(const char *path, int isdatasync,
     (void)isdatasync;
     (void)fi;
     int rc = efs_wb_sync();
-    if (rc == EFS_ERR_QUOTA)
+    efs_fuse_sync_rollups();
+    if (rc == EFS_ERR_QUOTA) {
+        efs_fuse_log_err("fsync", rc, 0, 0, 0, path);
         return -ENOSPC;
-    if (rc != 0)
+    }
+    if (rc != 0) {
+        efs_fuse_log_err("fsync", rc, 0, 0, 0, path);
         return -EIO;
+    }
     efs_client_note_meta_change(1);
     return 0;
 }
 
 static int efs_fuse_flush(const char *path, struct fuse_file_info *fi)
 {
-    (void)path;
     (void)fi;
     int rc = efs_wb_sync();
-    if (rc == EFS_ERR_QUOTA)
+    efs_fuse_sync_rollups();
+    if (rc == EFS_ERR_QUOTA) {
+        efs_fuse_log_err("flush", rc, 0, 0, 0, path);
         return -ENOSPC;
-    if (rc != 0)
+    }
+    if (rc != 0) {
+        efs_fuse_log_err("flush", rc, 0, 0, 0, path);
         return -EIO;
+    }
     return 0;
 }
 
@@ -822,13 +884,17 @@ static int efs_fuse_truncate(const char *path, off_t size)
 
 static int efs_fuse_release(const char *path, struct fuse_file_info *fi)
 {
-    (void)path;
     (void)fi;
     int rc = efs_wb_sync();
-    if (rc == EFS_ERR_QUOTA)
+    efs_fuse_sync_rollups();
+    if (rc == EFS_ERR_QUOTA) {
+        efs_fuse_log_err("release", rc, 0, 0, 0, path);
         return -ENOSPC;
-    if (rc != 0)
+    }
+    if (rc != 0) {
+        efs_fuse_log_err("release", rc, 0, 0, 0, path);
         return -EIO;
+    }
     /* Coalesced: only flushes every meta_batch_ops releases/creates. */
     efs_client_note_meta_change(0);
     return 0;

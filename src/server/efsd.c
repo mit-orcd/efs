@@ -458,6 +458,7 @@ int main(int argc, char **argv)
     }
     server_start_heartbeat(&server);
     server_start_migration(&server);
+    server_start_meta_catchup(&server);
 
     {
         const char *stripe = (server.storage_path_count > 1) ? "leastq" : "none";
@@ -518,6 +519,9 @@ int main(int argc, char **argv)
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += 10;
     pthread_timedjoin_np(server.migrate_tid, NULL, &ts);
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += 10;
+    pthread_timedjoin_np(server.meta_catchup_tid, NULL, &ts);
 
     pthread_mutex_lock(&server.lock);
     if (server.export_meta_dirty) {

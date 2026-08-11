@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <limits.h>
 #include <sys/stat.h>
 
 #define EFS_VERSION_MAJOR 0
@@ -49,6 +50,10 @@
 /* Max pages for a fragmented metadata blob (each page = EFS_META_PAGE_SIZE).
  * 8192 × 128 KiB = 1 GiB — enough for ~millions of inodes (ImageNet-scale). */
 #define EFS_META_MAX_PAGES   8192
+/* Dual-slot meta pages: generation parity selects which on-disk chunk_index
+ * range is written. Flush writes the new gen's slot only, then flips EFSR so
+ * a torn flush cannot clobber the live generation. */
+#define EFS_META_SLOT_STRIDE EFS_META_MAX_PAGES
 /* On-disk inode directory sharding: five base-10000 groups (0000-9999)
  * encode any uint64 ino uniquely (10^20 > 2^64). seg[0] is least-significant. */
 #define EFS_INO_PATH_SEGS    5
@@ -89,6 +94,17 @@ static inline bool efs_mode_is_lnk(uint32_t mode) { return S_ISLNK(mode); }
 static inline uint32_t efs_frag_size(uint32_t chunk_size)
 {
     return chunk_size / 2;
+}
+
+/* Map (generation, page) → fragment chunk_index. page must be < EFS_META_MAX_PAGES.
+ * Returns UINT32_MAX if page_index is out of range. */
+static inline uint32_t efs_meta_page_chunk_index(uint64_t generation,
+                                                uint32_t page_index)
+{
+    if (page_index >= EFS_META_MAX_PAGES)
+        return UINT32_MAX;
+    return page_index +
+           (uint32_t)((generation & 1ULL) * (uint64_t)EFS_META_SLOT_STRIDE);
 }
 
 /* True if size is a power of two in [EFS_MIN_CHUNK_SIZE, EFS_MAX_CHUNK_SIZE]. */

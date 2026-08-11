@@ -47,6 +47,7 @@ struct efsd_server {
     int state; /* enum efsd_server_state */
     uint64_t shrink_target; /* target used bytes after shrink-quota migration */
     pthread_t migrate_tid;
+    pthread_t meta_catchup_tid; /* background meta rebuild + local heal */
     pthread_t rejoin_tid; /* background rejoin retry thread */
     char rejoin_addr[64]; /* explicit --join target to keep retrying; empty = use persisted peers */
     uint16_t rejoin_port;
@@ -196,6 +197,11 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
 /* Persist export as 2+1 meta pages + EFSR root; push root to peers. */
 int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex);
 
+/* Best-effort unlink local meta page fragments for a retired generation slot.
+ * Non-fatal; space leak only if unlink fails. */
+void server_gc_meta_slot_pages(struct efsd_server *s, struct efs_export *ex,
+                               uint64_t dead_generation, uint32_t page_count);
+
 /* Rebuild in-memory export tables from meta pages referenced by ex->root. */
 int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *ex);
 
@@ -217,6 +223,9 @@ void server_start_heartbeat(struct efsd_server *s);
 
 /* Start the background data migration thread. */
 void server_start_migration(struct efsd_server *s);
+
+/* Start background meta catch-up (rebuild dirty roots + heal local pages). */
+void server_start_meta_catchup(struct efsd_server *s);
 
 /* Start the background cluster rejoin retry thread. */
 void server_start_rejoin(struct efsd_server *s);

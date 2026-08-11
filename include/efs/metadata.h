@@ -98,6 +98,16 @@ struct efs_export {
     /* Set when root advanced but inode/chunk tables not yet rebuilt from pages.
      * Cleared by server_rebuild_export_from_pages. */
     int meta_needs_rebuild;
+    /* Size/mtime updated via *_norollup; parent dir tree stats/times need
+     * efs_export_ensure_rollups before serialize or incremental rollups. */
+    int rollups_stale;
+    /* Net size deltas / time touches deferred from *_norollup (applied by
+     * efs_export_ensure_rollups — O(pending), not a full tree recompute). */
+    efs_ino_t *pending_rollup_inos;
+    int64_t *pending_rollup_deltas;
+    uint8_t *pending_rollup_touch;
+    uint64_t pending_rollup_count;
+    uint64_t pending_rollup_cap;
     struct efs_export_root root;
 };
 
@@ -140,6 +150,11 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
 /* Set inode size. */
 int efs_export_set_size(struct efs_export *ex, efs_ino_t ino, uint64_t size);
 
+/* Update size (and mtime) without parent directory rollups. Marks
+ * ex->rollups_stale; call efs_export_ensure_rollups before .stats/serialize. */
+int efs_export_set_size_norollup(struct efs_export *ex, efs_ino_t ino,
+                                 uint64_t size);
+
 /* Drop chunk map entries with chunk_index >= first_chunk (truncate shrink). */
 void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
                                  uint32_t first_chunk);
@@ -156,6 +171,13 @@ int efs_export_set_mtime(struct efs_export *ex, efs_ino_t ino, uint64_t mtime);
 /* Set inode modification time with nanosecond precision. */
 int efs_export_set_mtime_ns(struct efs_export *ex, efs_ino_t ino,
                             uint64_t mtime, uint32_t mtime_nsec);
+
+/* Like efs_export_set_mtime_ns but skips parent directory time rollups. */
+int efs_export_set_mtime_ns_norollup(struct efs_export *ex, efs_ino_t ino,
+                                     uint64_t mtime, uint32_t mtime_nsec);
+
+/* If rollups_stale, rebuild directory rollups and clear the flag. */
+void efs_export_ensure_rollups(struct efs_export *ex);
 
 /* Set inode access time (seconds). Not bumped on read. */
 int efs_export_set_atime(struct efs_export *ex, efs_ino_t ino, uint64_t atime);

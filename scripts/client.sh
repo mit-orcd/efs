@@ -109,10 +109,26 @@ fi
 LOG_DIR=$(dirname "$MOUNT_PATH")
 LOG_FILE="${EFS_FUSE_LOG:-$LOG_DIR/efs-fuse-$(basename "$MOUNT_PATH").log}"
 
+# libfuse daemonizes unless -f is set. After daemonize the parent exits 0 and
+# the child's stderr is detached from this tee — writeback EIO lines vanish.
+# Always force foreground so the log captures put_fragments / writeback errors.
+HAS_FOREGROUND=0
+for a in "$@"; do
+    if [ "$a" = "-f" ] || [ "$a" = "--foreground" ]; then
+        HAS_FOREGROUND=1
+        break
+    fi
+done
+
 echo "Stop with: $0 stop $MOUNT_PATH"
-echo "Logging efs-fuse to $LOG_FILE"
+echo "Logging efs-fuse to $LOG_FILE (foreground; Ctrl-C or stop to unmount)"
+echo "Write/fsync EIO details (efs_rc, ino, offset) go to this log."
 # Keep a copy of stdout/stderr so the next silent death is not silent.
-./efs-fuse "$ADDR_PORT" "$EXPORT_NAME" "$MOUNT_PATH" "$@" 2>&1 | tee -a "$LOG_FILE"
+if [ "$HAS_FOREGROUND" = 1 ]; then
+    ./efs-fuse "$ADDR_PORT" "$EXPORT_NAME" "$MOUNT_PATH" "$@" 2>&1 | tee -a "$LOG_FILE"
+else
+    ./efs-fuse "$ADDR_PORT" "$EXPORT_NAME" "$MOUNT_PATH" -f "$@" 2>&1 | tee -a "$LOG_FILE"
+fi
 rc=${PIPESTATUS[0]}
 echo "efs-fuse exited rc=$rc" | tee -a "$LOG_FILE"
 exit "$rc"

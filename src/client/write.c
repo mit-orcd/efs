@@ -252,6 +252,18 @@ static int efs_client_replicate_metadata_once(void)
         return EFS_ERR_NOMEM;
     }
     frag_ptrs(frag_buf, EFS_META_FRAGMENT_SIZE, frags);
+    /* Test hook: abort after N page PUTs without flipping the root so dual-slot
+     * durability can be smoke-tested (live gen remains mountable). */
+    uint32_t abort_after = UINT32_MAX;
+    {
+        const char *env = getenv("EFS_META_FLUSH_ABORT_AFTER_PAGES");
+        if (env && *env) {
+            char *end = NULL;
+            unsigned long v = strtoul(env, &end, 10);
+            if (end != env && v < UINT32_MAX)
+                abort_after = (uint32_t)v;
+        }
+    }
     for (uint32_t pi = 0; pi < root.page_count; pi++) {
         if (efs_meta_extract_page(blob, (uint32_t)blob_len, pi, page) != EFS_OK) {
             free(page);
@@ -266,14 +278,23 @@ static int efs_client_replicate_metadata_once(void)
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
             efs_hash(frags[fi], EFS_META_FRAGMENT_SIZE, checksums[fi]);
 
+        uint32_t ci = efs_meta_page_chunk_index(new_gen, pi);
+        if (ci == UINT32_MAX) {
+            free(page);
+            free(frag_buf);
+            free(blob);
+            efs_export_root_free(&root);
+            return EFS_ERR_INVAL;
+        }
+
         efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
         efs_place_fragments(g_client.nodes, g_client.node_count,
-                            EFS_META_TABLE_INO, pi, nodes);
+                            EFS_META_TABLE_INO, ci, nodes);
 
         const uint8_t *cfrags[EFS_NUM_FRAGMENTS];
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
             cfrags[fi] = frags[fi];
-        int rc = efs_client_put_fragments_parallel(EFS_META_TABLE_INO, pi, nodes,
+        int rc = efs_client_put_fragments_parallel(EFS_META_TABLE_INO, ci, nodes,
                                                    cfrags, EFS_META_FRAGMENT_SIZE,
                                                    checksums);
         if (rc != EFS_OK) {
@@ -286,6 +307,19 @@ static int efs_client_replicate_metadata_once(void)
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
             memcpy(efs_export_root_checksum(&root, pi, fi), checksums[fi],
                    EFS_HASH_SIZE);
+        /* After N successful page PUTs, skip root flip (dual-slot smoke). */
+        if (abort_after != UINT32_MAX && (pi + 1) >= abort_after) {
+            fprintf(stderr,
+                    "meta replicate: abort after %u page PUT(s) "
+                    "(EFS_META_FLUSH_ABORT_AFTER_PAGES); root not flipped\n",
+                    abort_after);
+            fflush(stderr);
+            free(page);
+            free(frag_buf);
+            free(blob);
+            efs_export_root_free(&root);
+            return EFS_ERR_IO;
+        }
     }
     free(page);
     free(frag_buf);
@@ -673,14 +707,16 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
             if (failed[i] && nodes[i] != 0)
                 efs_client_conn_invalidate_node(nodes[i]);
         }
-        if (attempt < 4) {
-            fprintf(stderr,
-                    "put_fragments ino=%llu chunk=%u attempt %d/4 failed: %s\n",
-                    (unsigned long long)ino, chunk_index, attempt,
-                    efs_strerror(rc));
-            fflush(stderr);
+        fprintf(stderr,
+                "put_fragments ino=%llu chunk=%u nodes=%u,%u,%u "
+                "attempt %d/4 failed: %s (efs_rc=%d)%s\n",
+                (unsigned long long)ino, chunk_index,
+                (unsigned)nodes[0], (unsigned)nodes[1], (unsigned)nodes[2],
+                attempt, efs_strerror(rc), rc,
+                attempt < 4 ? " — retrying" : " — giving up");
+        fflush(stderr);
+        if (attempt < 4)
             usleep(150000u * (unsigned)attempt);
-        }
     }
     return rc;
 }
@@ -1016,14 +1052,16 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
     }
 
     pthread_mutex_lock(&g_client.lock);
+    /* Grow size (sets mtime) OR bump mtime alone — never both (each used to
+     * run sync_hardlink_attrs + parent rollups). Skip rollups until flush. */
     struct efs_inode cur;
-    if (efs_export_get_inode(&g_client.export, ino, &cur) == 0 && cur.size < end)
-        efs_export_set_size(&g_client.export, ino, end);
-    {
+    if (efs_export_get_inode(&g_client.export, ino, &cur) == 0 && cur.size < end) {
+        efs_export_set_size_norollup(&g_client.export, ino, end);
+    } else {
         uint64_t sec;
         uint32_t nsec;
         now_ns(&sec, &nsec);
-        efs_export_set_mtime_ns(&g_client.export, ino, sec, nsec);
+        efs_export_set_mtime_ns_norollup(&g_client.export, ino, sec, nsec);
     }
     efs_client_mark_ino_dirty(ino);
     pthread_mutex_unlock(&g_client.lock);
@@ -1093,15 +1131,17 @@ int efs_client_write_no_replicate(efs_ino_t ino, uint64_t offset, size_t size, c
     pthread_mutex_lock(&g_client.lock);
     /* Grow the size based on the current value under the lock, not the stale
      * copy read before the (unlocked) write loop, so concurrent writes on
-     * different FUSE worker threads cannot shrink or mis-set the size. */
+     * different FUSE worker threads cannot shrink or mis-set the size.
+     * Size grow already bumps mtime — do not also call set_mtime (that was
+     * a double sync_hardlink_attrs + rollup walk per write job). */
     struct efs_inode cur;
-    if (efs_export_get_inode(&g_client.export, ino, &cur) == 0 && cur.size < end)
-        efs_export_set_size(&g_client.export, ino, end);
-    {
+    if (efs_export_get_inode(&g_client.export, ino, &cur) == 0 && cur.size < end) {
+        efs_export_set_size_norollup(&g_client.export, ino, end);
+    } else {
         uint64_t sec;
         uint32_t nsec;
         now_ns(&sec, &nsec);
-        efs_export_set_mtime_ns(&g_client.export, ino, sec, nsec);
+        efs_export_set_mtime_ns_norollup(&g_client.export, ino, sec, nsec);
     }
     efs_client_mark_ino_dirty(ino);
     pthread_mutex_unlock(&g_client.lock);

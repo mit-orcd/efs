@@ -4,9 +4,11 @@
 #include "efs/erasure.h"
 #include "efs/checksum.h"
 #include "efs/placement.h"
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <limits.h>
 #include <pthread.h>
 
 static uint32_t data_chunk_size(void)
@@ -110,6 +112,33 @@ static int efs_client_decode_placed_chunk(efs_ino_t ino, uint32_t chunk_index,
                                                    data_chunk_size(), data_frag_size(), 5);
 }
 
+static int load_page_from_chunk(const struct efs_export_root *root, uint32_t pi,
+                                uint32_t chunk_index, uint8_t *page_out)
+{
+    if (efs_client_decode_placed_chunk_attempts(EFS_META_TABLE_INO, chunk_index,
+                                                page_out, EFS_META_PAGE_SIZE,
+                                                EFS_META_FRAGMENT_SIZE, 2) != EFS_OK)
+        return EFS_ERR_DECODE;
+
+    uint8_t *frag_buf = malloc(EFS_NUM_FRAGMENTS * EFS_META_FRAGMENT_SIZE);
+    if (!frag_buf)
+        return EFS_ERR_NOMEM;
+    uint8_t *frags[EFS_NUM_FRAGMENTS];
+    frag_ptrs(frag_buf, EFS_META_FRAGMENT_SIZE, frags);
+    efs_encode_chunk(page_out, EFS_META_PAGE_SIZE, EFS_META_PAGE_SIZE, frags);
+    for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+        uint8_t sum[EFS_HASH_SIZE];
+        efs_hash(frags[fi], EFS_META_FRAGMENT_SIZE, sum);
+        if (memcmp(sum, efs_export_root_checksum_const(root, pi, fi),
+                   EFS_HASH_SIZE) != 0) {
+            free(frag_buf);
+            return EFS_ERR_CHECKSUM;
+        }
+    }
+    free(frag_buf);
+    return EFS_OK;
+}
+
 static int load_export_from_root(const struct efs_export_root *root)
 {
     if (root->page_count == 0 || root->blob_len == 0)
@@ -120,33 +149,37 @@ static int load_export_from_root(const struct efs_export_root *root)
         return EFS_ERR_NOMEM;
 
     for (uint32_t pi = 0; pi < root->page_count; pi++) {
-        /* Meta mount path: fail fast so we can fall back to legacy EFSM. */
-        if (efs_client_decode_placed_chunk_attempts(EFS_META_TABLE_INO, pi, pages[pi],
-                                                    EFS_META_PAGE_SIZE,
-                                                    EFS_META_FRAGMENT_SIZE, 2) != EFS_OK) {
-            free(pages);
-            return EFS_ERR_DECODE;
+        uint32_t slotted = efs_meta_page_chunk_index(root->generation, pi);
+        int rc = EFS_ERR_INVAL;
+        const char *scheme = "slot";
+
+        if (slotted != UINT32_MAX) {
+            rc = load_page_from_chunk(root, pi, slotted, pages[pi]);
+            if (rc == EFS_OK)
+                continue;
         }
-        /* Verify fragment checksums against the root page map (D1). */
-        uint8_t *frag_buf = malloc(EFS_NUM_FRAGMENTS * EFS_META_FRAGMENT_SIZE);
-        if (!frag_buf) {
-            free(pages);
-            return EFS_ERR_NOMEM;
-        }
-        uint8_t *frags[EFS_NUM_FRAGMENTS];
-        frag_ptrs(frag_buf, EFS_META_FRAGMENT_SIZE, frags);
-        efs_encode_chunk(pages[pi], EFS_META_PAGE_SIZE, EFS_META_PAGE_SIZE, frags);
-        for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
-            uint8_t sum[EFS_HASH_SIZE];
-            efs_hash(frags[fi], EFS_META_FRAGMENT_SIZE, sum);
-            if (memcmp(sum, efs_export_root_checksum_const(root, pi, fi),
-                       EFS_HASH_SIZE) != 0) {
-                free(frag_buf);
-                free(pages);
-                return EFS_ERR_CHECKSUM;
+        /* Pre-dual-slot exports: chunk_index == page_index. */
+        if (slotted != pi) {
+            scheme = "legacy";
+            rc = load_page_from_chunk(root, pi, pi, pages[pi]);
+            if (rc == EFS_OK) {
+                fprintf(stderr,
+                        "meta: page %u/%u loaded via legacy chunk_index "
+                        "(gen=%llu)\n",
+                        pi, root->page_count,
+                        (unsigned long long)root->generation);
+                fflush(stderr);
+                continue;
             }
         }
-        free(frag_buf);
+        fprintf(stderr,
+                "meta: page reconstruct failed page=%u/%u gen=%llu "
+                "blob_len=%u scheme=%s rc=%d (%s)\n",
+                pi, root->page_count, (unsigned long long)root->generation,
+                root->blob_len, scheme, rc, efs_strerror(rc));
+        fflush(stderr);
+        free(pages);
+        return rc;
     }
 
     char *blob = NULL;

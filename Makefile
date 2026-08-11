@@ -35,8 +35,8 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
-TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c tests/test_dir_stats.c tests/test_ino_path.c
-TEST_BINS = tests/test_erasure tests/test_placement tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports tests/test_dir_stats tests/test_ino_path
+TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c tests/test_dir_stats.c tests/test_ino_path.c tests/test_meta_slot.c
+TEST_BINS = tests/test_erasure tests/test_placement tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports tests/test_dir_stats tests/test_ino_path tests/test_meta_slot
 
 SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/handler.c \
               src/server/cluster.c src/server/meta_server.c src/server/migrate.c \
@@ -91,6 +91,7 @@ test: all
 	./tests/test_list_exports
 	./tests/test_dir_stats
 	./tests/test_ino_path
+	./tests/test_meta_slot
 	./tests/test_rw.sh
 
 # Rebuild when public headers change (struct layouts in metadata.h, etc.).

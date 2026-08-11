@@ -286,6 +286,9 @@ void server_handle_conn(int fd)
                             pthread_mutex_unlock(&g_server->lock);
                             efs_export_root_free(&root);
                         } else {
+                            uint64_t old_gen = ex->root.generation;
+                            uint32_t old_pages = ex->root.page_count;
+                            int had_frag = ex->meta_fragmented;
                             ex->meta_fragmented = 1;
                             efs_export_root_move(&ex->root, &root);
                             ex->id = ex->root.id;
@@ -305,8 +308,15 @@ void server_handle_conn(int fd)
                              * under a raced unlocked save (SIGSEGV). */
                             server_save_export(g_server, ex);
                             g_server->export_meta_dirty = 0;
+                            uint64_t new_gen = ex->root.generation;
                             pthread_mutex_unlock(&g_server->lock);
                             reply = EFS_PUT_META_OK;
+                            /* Client-driven root flip: drop local fragments for
+                             * the retired dual-slot generation. */
+                            if (had_frag && old_pages > 0 && old_gen != new_gen)
+                                server_gc_meta_slot_pages(g_server,
+                                                          &g_server->exports[0],
+                                                          old_gen, old_pages);
                         }
                     }
                 } else if (efs_meta_blob_is_export(payload, payload_len)) {

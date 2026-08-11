@@ -128,6 +128,28 @@ int main(void)
     id1 = get_dir(&ex, d1);
     expect_u64("recompute d1.tree_bytes", id1.tree_bytes, 50);
 
+    /* Deferred rollups: norollup then ensure restores dir bytes. */
+    efs_ino_t f3 = efs_export_create(&ex, d1, S_IFREG | 0644, 0, 0, "f3");
+    if (!f3) {
+        fprintf(stderr, "FAIL create f3\n");
+        failures++;
+    } else {
+        efs_export_set_size_norollup(&ex, f3, 25);
+        if (!ex.rollups_stale) {
+            fprintf(stderr, "FAIL expected rollups_stale after norollup\n");
+            failures++;
+        }
+        efs_export_ensure_rollups(&ex);
+        if (ex.rollups_stale) {
+            fprintf(stderr, "FAIL rollups_stale still set after ensure\n");
+            failures++;
+        }
+        id1 = get_dir(&ex, d1);
+        root = get_dir(&ex, EFS_ROOT_INO);
+        expect_u64("norollup d1.tree_bytes", id1.tree_bytes, 75);
+        expect_u64("norollup root.tree_bytes", root.tree_bytes, 75);
+    }
+
     efs_export_free(&ex);
 
     if (failures == 0) {
