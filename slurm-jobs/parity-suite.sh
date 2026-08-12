@@ -244,8 +244,8 @@ sleep 2
 grep -q 'Cluster state: OK' "$OUT/D-status0.txt" && pass "D cluster OK after rejoin" \
     || fail "D cluster not OK after rejoin"
 mount_fuse "$IP:$P1" parityB "$B/mnt" "$OUT/D-fuse.log"
-# cooldown > EFS_NODE_DOWN_MS (10s)
-sleep 12
+# cooldown > EFS_NODE_DOWN_MS (30s)
+sleep 35
 S3_BEFORE=$(node_used "$IP:$P1" 3)
 echo "D: s3_used_before=$S3_BEFORE"
 dd if=/dev/urandom of="$B/mnt/d.bin" bs=1M count=4 status=none

@@ -205,14 +205,24 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
 {
     if (!s || !ex || !ex->meta_fragmented)
         return EFS_ERR_INVAL;
-    const struct efs_export_root *root = &ex->root;
-    if (root->page_count == 0 || root->blob_len == 0)
-        return EFS_ERR_PROTO;
-    if (root->page_count > EFS_META_MAX_PAGES)
-        return EFS_ERR_INVAL;
-    if (!root->page_checksums)
-        return EFS_ERR_INVAL;
 
+    /* Deep-copy the EFSR under lock so concurrent PUT_META cannot free
+     * page_checksums under this thread (UAF → bogus decode / SIGSEGV). */
+    struct efs_export_root snap;
+    memset(&snap, 0, sizeof(snap));
+    pthread_mutex_lock(&s->lock);
+    if (!ex->meta_fragmented || ex->root.page_count == 0 ||
+        ex->root.blob_len == 0 || !ex->root.page_checksums ||
+        ex->root.page_count > EFS_META_MAX_PAGES) {
+        pthread_mutex_unlock(&s->lock);
+        return EFS_ERR_INVAL;
+    }
+    int crc = efs_export_root_copy(&snap, &ex->root);
+    pthread_mutex_unlock(&s->lock);
+    if (crc != EFS_OK)
+        return crc;
+
+    const struct efs_export_root *root = &snap;
     const uint64_t start_gen = root->generation;
     const uint32_t page_count = root->page_count;
 
@@ -222,6 +232,7 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
     if (!pages || !frag_buf) {
         free(pages);
         free(frag_buf);
+        efs_export_root_free(&snap);
         return EFS_ERR_NOMEM;
     }
     uint8_t *fragments[EFS_NUM_FRAGMENTS] = {
@@ -344,6 +355,7 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
         if (!decoded) {
             free(frag_buf);
             free(pages);
+            efs_export_root_free(&snap);
             return EFS_ERR_DECODE;
         }
     }
@@ -353,35 +365,40 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
     size_t blob_len = 0;
     int rc = efs_meta_assemble_blob(root, pages, &blob, &blob_len);
     free(pages);
-    if (rc != EFS_OK)
+    if (rc != EFS_OK) {
+        efs_export_root_free(&snap);
         return rc;
+    }
 
-    /* Deserialize frees ex->root; check for a newer PUT_META before that. */
+    /* Deserialize mutates ex (frees tables/root). Hold the server lock so a
+     * concurrent PUT_META/handler cannot observe a half-freed export. */
+    pthread_mutex_lock(&s->lock);
     if (ex->root.generation != start_gen) {
+        pthread_mutex_unlock(&s->lock);
         free(blob);
-        ex->meta_needs_rebuild = 1;
+        efs_export_root_free(&snap);
         return EFS_ERR_PROTO;
     }
 
-    struct efs_export_root saved_root;
-    memset(&saved_root, 0, sizeof(saved_root));
-    if (efs_export_root_copy(&saved_root, root) != EFS_OK) {
-        free(blob);
-        return EFS_ERR_NOMEM;
-    }
     rc = efs_export_deserialize(ex, blob, blob_len);
     free(blob);
     if (rc != EFS_OK) {
-        efs_export_root_free(&saved_root);
+        /* Root was cleared by a failed/partial deserialize path; restore snap
+         * so the node keeps a usable EFSR and can retry. */
+        efs_export_root_move(&ex->root, &snap);
+        ex->meta_fragmented = 1;
+        ex->meta_needs_rebuild = 1;
+        pthread_mutex_unlock(&s->lock);
         return rc;
     }
 
     ex->meta_fragmented = 1;
     ex->meta_needs_rebuild = 0;
-    efs_export_root_move(&ex->root, &saved_root);
+    efs_export_root_move(&ex->root, &snap);
     ex->next_ino = ex->root.next_ino;
     if (efs_chunk_size_valid(ex->root.chunk_size))
         ex->chunk_size = ex->root.chunk_size;
+    pthread_mutex_unlock(&s->lock);
     return EFS_OK;
 }
 
@@ -867,8 +884,11 @@ static void *meta_catchup_thread(void *arg)
             ec = EFS_MAX_EXPORTS;
         for (uint32_t e = 0; e < ec; e++) {
             struct efs_export *ex = &s->exports[e];
+            /* Only rebuild when explicitly dirty. Do NOT key off inode_count<=1:
+             * an empty export stays at 1 inode forever and used to spin-rebuild
+             * (hundreds of times) until a raced deserialize SIGSEGV'd. */
             need[e] = (ex->meta_fragmented && ex->root.page_count > 0 &&
-                       (ex->meta_needs_rebuild || ex->inode_count <= 1));
+                       ex->meta_needs_rebuild);
         }
         pthread_mutex_unlock(&s->lock);
 
@@ -883,12 +903,13 @@ static void *meta_catchup_thread(void *arg)
                 pthread_mutex_unlock(&s->lock);
                 fprintf(stderr, "meta-catchup: rebuilt export=%s\n", ex->name);
                 did_work = 1;
-            } else if (rc != EFS_ERR_PROTO) {
-                /* PROTO = gen raced; leave dirty for next loop. */
+            } else if (rc == EFS_ERR_PROTO) {
+                /* Gen raced with PUT_META; retry promptly. */
+                did_work = 1;
+            } else {
                 fprintf(stderr, "meta-catchup: rebuild export=%s rc=%d\n",
                         ex->name, rc);
-            } else {
-                did_work = 1;
+                /* Decode/IO failure: back off; leave meta_needs_rebuild set. */
             }
         }
 
@@ -898,7 +919,7 @@ static void *meta_catchup_thread(void *arg)
         for (uint32_t e = 0; e < s->export_count && e < EFS_MAX_EXPORTS; e++) {
             struct efs_export *ex = &s->exports[e];
             if (ex->meta_fragmented && ex->root.page_count > 0 &&
-                (ex->meta_needs_rebuild || ex->inode_count <= 1)) {
+                ex->meta_needs_rebuild) {
                 any_dirty = 1;
                 break;
             }

@@ -23,8 +23,8 @@ P2=19512
 P3=19513
 MNT="$SCRATCH/mnt"
 EXPORT=recover1
-# Must exceed EFS_NODE_DOWN_MS (10s) in node_cache.c
-COOLDOWN_WAIT=12
+# Must exceed EFS_NODE_DOWN_MS (30s) in node_cache.c
+COOLDOWN_WAIT=35
 
 mkdir -p "$SHARED/logs" "$SCRATCH"/{s1,s2,s3}/log "$MNT"
 cd "$REPO"

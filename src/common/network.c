@@ -14,7 +14,9 @@
 #include <signal.h>
 #include <pthread.h>
 
-#define EFS_CONNECT_TIMEOUT_SEC 5
+/* Keep short: a missing peer must not stall small-file meta flushes for long.
+ * Down-marked peers are skipped entirely for EFS_NODE_DOWN_MS after one fail. */
+#define EFS_CONNECT_TIMEOUT_SEC 2
 
 static void efs_ignore_sigpipe_once(void)
 {

@@ -15,8 +15,10 @@
 #define EFS_NODE_DOWN_FAILS 1
 /* Skip connect attempts for this long (ms) while marked down.
  * When the timer expires, conn_get clears the streak and re-probes so a
- * restarted peer is picked up again without a client restart. */
-#define EFS_NODE_DOWN_MS    10000
+ * restarted peer is picked up again without a client restart.
+ * Keep this longer than a typical blackhole connect timeout so small-file
+ * meta flushes are not stalled every few seconds by re-probes. */
+#define EFS_NODE_DOWN_MS    30000
 
 static int64_t monotonic_ms(void)
 {
@@ -201,24 +203,46 @@ int efs_client_conn_get(efs_node_id_t node_id)
         }
 
         if (g_client.conn_fd[idx][free_slot] < 0) {
-            struct efs_node *node = &g_client.nodes[idx];
-            int fd = efs_connect_tcp(node->addr, node->port);
+            /* Connect outside the lock: a blackholed peer's connect timeout
+             * must not stall every other checkout for this node. Reserve the
+             * slot (busy, fd=-1) so waiters block on the cond instead. */
+            char host[64];
+            uint16_t port = g_client.nodes[idx].port;
+            strncpy(host, g_client.nodes[idx].addr, sizeof(host) - 1);
+            host[sizeof(host) - 1] = '\0';
+            g_client.conn_busy[idx][free_slot] = 1;
+            pthread_mutex_unlock(&g_client.conn_lock[idx]);
+
+            int fd = efs_connect_tcp(host, port);
             if (fd < 0) {
+                pthread_mutex_lock(&g_client.conn_lock[idx]);
+                g_client.conn_busy[idx][free_slot] = 0;
                 now = monotonic_ms();
                 if (g_client.node_fail_streak[idx] < 1000)
                     g_client.node_fail_streak[idx]++;
-                /* Only arm cooldown once; do not refresh if already set. */
                 if (g_client.node_fail_streak[idx] >= EFS_NODE_DOWN_FAILS &&
                     g_client.node_down_until_ms[idx] <= now)
                     g_client.node_down_until_ms[idx] = now + EFS_NODE_DOWN_MS;
+                pthread_cond_signal(&g_client.conn_cv[idx]);
                 pthread_mutex_unlock(&g_client.conn_lock[idx]);
                 return -1;
             }
             efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
             efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-            g_client.conn_fd[idx][free_slot] = fd;
+
+            pthread_mutex_lock(&g_client.conn_lock[idx]);
+            if (g_client.conn_fd[idx][free_slot] >= 0) {
+                /* Slot reused while we connected — keep the existing fd. */
+                close(fd);
+                fd = g_client.conn_fd[idx][free_slot];
+            } else {
+                g_client.conn_fd[idx][free_slot] = fd;
+            }
             g_client.node_fail_streak[idx] = 0;
             g_client.node_down_until_ms[idx] = 0;
+            /* busy already set */
+            pthread_mutex_unlock(&g_client.conn_lock[idx]);
+            return fd;
         }
 
         g_client.conn_busy[idx][free_slot] = 1;

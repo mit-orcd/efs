@@ -162,32 +162,150 @@ void efs_client_mark_chunk_dirty(efs_ino_t ino, uint32_t chunk_index)
     g_client.dirty_chunk_idxs[slot] = chunk_index;
 }
 
-/* Replicate the tiny export root (EFSR) to all nodes; need ≥2 acks. */
+/* Replicate the tiny export root (EFSR) to all nodes; need ≥2 acks.
+ * Fan-out + poll (like fragment PUT): skip down peers, return as soon as
+ * quorum is met so one dead/blackholed node cannot serialize SO_RCVTIMEO. */
 static int send_meta_root(const char *buf, size_t len)
 {
-    int acks = 0;
-    for (uint32_t i = 0; i < g_client.node_count; i++) {
-        efs_node_id_t nid = g_client.nodes[i].id;
-        int fd = efs_client_conn_get(nid);
-        if (fd < 0)
-            continue;
+    uint32_t n = g_client.node_count;
+    if (n > EFS_MAX_NODES)
+        n = EFS_MAX_NODES;
 
-        uint8_t type;
-        void *reply = NULL;
-        uint32_t reply_len = 0;
-        if (efs_send_msg(fd, EFS_MSG_PUT_META, buf, (uint32_t)len) == 0 &&
-            efs_recv_msg(fd, &type, &reply, &reply_len) == 0 &&
-            type == EFS_MSG_PUT_META_REPLY && reply_len >= 1) {
-            uint8_t status = ((uint8_t *)reply)[0];
-            if (status == EFS_PUT_META_OK)
-                acks++;
-            free(reply);
-            efs_client_conn_release(nid, fd);
-        } else {
-            free(reply);
-            efs_client_conn_drop(nid, fd);
+    int fds[EFS_MAX_NODES];
+    efs_node_id_t nids[EFS_MAX_NODES];
+    int pending[EFS_MAX_NODES];
+    int acks = 0;
+
+    for (uint32_t i = 0; i < n; i++) {
+        fds[i] = -1;
+        pending[i] = 0;
+        nids[i] = g_client.nodes[i].id;
+        if (nids[i] == 0 || efs_client_node_is_down(nids[i]))
+            continue;
+        fds[i] = efs_client_conn_get(nids[i]);
+        if (fds[i] < 0) {
+            efs_client_node_note_fail(nids[i]);
+            continue;
         }
     }
+
+    for (uint32_t i = 0; i < n; i++) {
+        if (fds[i] < 0)
+            continue;
+        if (efs_send_msg(fds[i], EFS_MSG_PUT_META, buf, (uint32_t)len) != 0) {
+            efs_client_conn_drop(nids[i], fds[i]);
+            efs_client_node_note_fail(nids[i]);
+            fds[i] = -1;
+            continue;
+        }
+        pending[i] = 1;
+    }
+
+    struct timespec ts0;
+    clock_gettime(CLOCK_MONOTONIC, &ts0);
+    int64_t deadline_ms = (int64_t)ts0.tv_sec * 1000 +
+                          (int64_t)ts0.tv_nsec / 1000000 + EFS_IO_TIMEOUT_MS;
+
+    while (acks < 2) {
+        struct pollfd pfds[EFS_MAX_NODES];
+        int map[EFS_MAX_NODES];
+        int npoll = 0;
+        for (uint32_t i = 0; i < n; i++) {
+            if (!pending[i] || fds[i] < 0)
+                continue;
+            pfds[npoll].fd = fds[i];
+            pfds[npoll].events = POLLIN;
+            pfds[npoll].revents = 0;
+            map[npoll] = (int)i;
+            npoll++;
+        }
+        if (npoll == 0)
+            break;
+
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        int64_t now_ms = (int64_t)ts.tv_sec * 1000 + (int64_t)ts.tv_nsec / 1000000;
+        int64_t left = deadline_ms - now_ms;
+        if (left <= 0) {
+            for (uint32_t i = 0; i < n; i++) {
+                if (!pending[i] || fds[i] < 0)
+                    continue;
+                efs_client_conn_drop(nids[i], fds[i]);
+                efs_client_node_note_fail(nids[i]);
+                fds[i] = -1;
+                pending[i] = 0;
+            }
+            break;
+        }
+        int wait_ms = left > 2000 ? 2000 : (int)left;
+        int pr = poll(pfds, (nfds_t)npoll, wait_ms);
+        if (pr <= 0)
+            continue;
+
+        for (int p = 0; p < npoll; p++) {
+            if (!(pfds[p].revents & (POLLIN | POLLERR | POLLHUP)))
+                continue;
+            int i = map[p];
+            if (!pending[i] || fds[i] < 0)
+                continue;
+            uint8_t type = 0;
+            void *reply = NULL;
+            uint32_t reply_len = 0;
+            if ((pfds[p].revents & (POLLERR | POLLHUP)) ||
+                efs_recv_msg(fds[i], &type, &reply, &reply_len) != 0 ||
+                type != EFS_MSG_PUT_META_REPLY || reply_len < 1) {
+                free(reply);
+                efs_client_conn_drop(nids[i], fds[i]);
+                efs_client_node_note_fail(nids[i]);
+                fds[i] = -1;
+                pending[i] = 0;
+                continue;
+            }
+            uint8_t status = ((uint8_t *)reply)[0];
+            free(reply);
+            if (status == EFS_PUT_META_OK) {
+                acks++;
+                efs_client_node_note_ok(nids[i]);
+                efs_client_conn_release(nids[i], fds[i]);
+            } else {
+                efs_client_conn_drop(nids[i], fds[i]);
+                efs_client_node_note_fail(nids[i]);
+            }
+            fds[i] = -1;
+            pending[i] = 0;
+        }
+    }
+
+    /* Quorum met: drop stragglers without blocking on their RCVTIMEO. */
+    for (uint32_t i = 0; i < n; i++) {
+        if (fds[i] < 0)
+            continue;
+        if (acks >= 2) {
+            struct pollfd p = { .fd = fds[i], .events = POLLIN };
+            int pr = poll(&p, 1, 0);
+            if (pr > 0 && (p.revents & POLLIN) &&
+                !(p.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+                uint8_t type = 0;
+                void *reply = NULL;
+                uint32_t reply_len = 0;
+                if (efs_recv_msg(fds[i], &type, &reply, &reply_len) == 0) {
+                    free(reply);
+                    efs_client_conn_release(nids[i], fds[i]);
+                    fds[i] = -1;
+                    pending[i] = 0;
+                    continue;
+                }
+                free(reply);
+            }
+            efs_client_conn_drop(nids[i], fds[i]);
+        } else {
+            efs_client_conn_drop(nids[i], fds[i]);
+            efs_client_node_note_fail(nids[i]);
+        }
+        fds[i] = -1;
+        pending[i] = 0;
+    }
+
     return (acks >= 2) ? EFS_OK : EFS_ERR_NO_QUORUM;
 }
 
