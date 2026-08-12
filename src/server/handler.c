@@ -11,20 +11,17 @@
 
 static int refresh_peer_usage(const char *host, uint16_t port, uint64_t *quota, uint64_t *used)
 {
-    int fd = efs_connect_tcp(host, port);
+    int fd = server_peer_conn_get(host, port);
     if (fd < 0)
         return -1;
-
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
 
     uint8_t type;
     void *reply = NULL;
     uint32_t reply_len = 0;
     int rc = -1;
-    if (efs_send_msg(fd, EFS_MSG_STATUS, NULL, 0) == 0 &&
-        efs_recv_msg(fd, &type, &reply, &reply_len) == 0 &&
-        type == EFS_MSG_STATUS_REPLY &&
+    int net_ok = (efs_send_msg(fd, EFS_MSG_STATUS, NULL, 0) == 0 &&
+                  efs_recv_msg(fd, &type, &reply, &reply_len) == 0);
+    if (net_ok && type == EFS_MSG_STATUS_REPLY &&
         reply_len == sizeof(struct efs_msg_status_reply)) {
         struct efs_msg_status_reply *r = reply;
         *quota = r->quota;
@@ -33,7 +30,10 @@ static int refresh_peer_usage(const char *host, uint16_t port, uint64_t *quota, 
     }
 
     free(reply);
-    close(fd);
+    if (net_ok)
+        server_peer_conn_release(host, port, fd);
+    else
+        server_peer_conn_drop(host, port, fd);
     return rc;
 }
 

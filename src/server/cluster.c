@@ -10,14 +10,11 @@
 
 int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t peer_port)
 {
-    int fd = efs_connect_tcp(peer_host, peer_port);
+    int fd = server_peer_conn_get(peer_host, peer_port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to peer %s:%u\n", peer_host, peer_port);
         return -1;
     }
-
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
 
     struct efs_msg_hello h;
     memset(&h, 0, sizeof(h));
@@ -34,7 +31,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
 
     if (efs_send_msg(fd, EFS_MSG_HELLO, &h, sizeof(h)) != 0) {
         fprintf(stderr, "Failed to send HELLO to peer %s:%u\n", peer_host, peer_port);
-        close(fd);
+        server_peer_conn_drop(peer_host, peer_port, fd);
         return -1;
     }
 
@@ -44,21 +41,21 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
     if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0) {
         fprintf(stderr, "No HELLO_ACK from peer %s:%u (timeout or disconnect)\n",
                 peer_host, peer_port);
-        close(fd);
+        server_peer_conn_drop(peer_host, peer_port, fd);
         return -1;
     }
     if (type != EFS_MSG_HELLO_ACK) {
         fprintf(stderr, "Peer %s:%u replied with unexpected message type %u\n",
                 peer_host, peer_port, type);
         free(payload);
-        close(fd);
+        server_peer_conn_drop(peer_host, peer_port, fd);
         return -1;
     }
     if (payload_len != sizeof(struct efs_msg_hello_ack)) {
         fprintf(stderr, "Peer %s:%u sent malformed HELLO_ACK (len %u)\n",
                 peer_host, peer_port, payload_len);
         free(payload);
-        close(fd);
+        server_peer_conn_drop(peer_host, peer_port, fd);
         return -1;
     }
 
@@ -71,7 +68,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
                 (unsigned long long)ack->assigned_id,
                 (unsigned long long)s->id, ack->node_count);
         free(payload);
-        close(fd);
+        server_peer_conn_drop(peer_host, peer_port, fd);
         return -1;
     }
 
@@ -87,7 +84,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
                 "Join failed: peer %s:%u ACK omitted this node (id %llu)\n",
                 peer_host, peer_port, (unsigned long long)s->id);
         free(payload);
-        close(fd);
+        server_peer_conn_drop(peer_host, peer_port, fd);
         return -1;
     }
 
@@ -126,7 +123,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
     server_save_nodes(s);
     pthread_mutex_unlock(&s->lock);
     free(payload);
-    close(fd);
+    server_peer_conn_release(peer_host, peer_port, fd);
 
     printf("Joined cluster with %u nodes\n", joined);
     return 0;
@@ -139,15 +136,12 @@ static int send_heartbeat(const char *host, uint16_t port)
     if (!host || inet_pton(AF_INET, host, &a) != 1)
         return -1;
 
-    int fd = efs_connect_tcp(host, port);
+    int fd = server_peer_conn_get(host, port);
     if (fd < 0)
         return -1;
 
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-
     if (efs_send_msg(fd, EFS_MSG_HEARTBEAT, NULL, 0) != 0) {
-        close(fd);
+        server_peer_conn_drop(host, port, fd);
         return -1;
     }
 
@@ -156,8 +150,12 @@ static int send_heartbeat(const char *host, uint16_t port)
     uint32_t payload_len = 0;
     int rc = efs_recv_msg(fd, &type, &payload, &payload_len);
     free(payload);
-    close(fd);
-    return (rc == 0 && type == EFS_MSG_HEARTBEAT_ACK) ? 0 : -1;
+    if (rc != 0) {
+        server_peer_conn_drop(host, port, fd);
+        return -1;
+    }
+    server_peer_conn_release(host, port, fd);
+    return (type == EFS_MSG_HEARTBEAT_ACK) ? 0 : -1;
 }
 
 /* Heartbeat thread: periodically ping all peers to keep the cluster alive. */

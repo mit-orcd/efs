@@ -5,7 +5,19 @@
 #include "efs/metadata.h"
 #include <pthread.h>
 
-#define EFS_SERVER_MAX_CONNS 64
+/* Soft cap on concurrent accept/handler threads. Excess sockets are closed
+ * immediately so one connection storm cannot exhaust RLIMIT_NOFILE. */
+#define EFS_SERVER_MAX_CONNS 512
+
+/* Persistent server→server TCP pool (meta/migrate/heartbeat/status). */
+void server_peer_pool_init(void);
+void server_peer_pool_shutdown(void);
+/* Checkout a live fd to host:port (connects on miss). Returns -1 on failure. */
+int server_peer_conn_get(const char *host, uint16_t port);
+/* Return fd to the pool after a successful request/response. */
+void server_peer_conn_release(const char *host, uint16_t port, int fd);
+/* Close and discard a broken fd (net/protocol error). */
+void server_peer_conn_drop(const char *host, uint16_t port, int fd);
 /* Dedicated PUT writers per --storage path (stripe lane). */
 #define EFS_WRITERS_PER_PATH_DEFAULT 8
 #define EFS_MAX_WRITERS_PER_PATH     64

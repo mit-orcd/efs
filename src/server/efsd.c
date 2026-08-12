@@ -221,6 +221,9 @@ static int parse_host_port(const char *str, char *host, size_t host_len, uint16_
     return 0;
 }
 
+/* Live handler threads (accept path). Used to cap concurrent conns. */
+static volatile int g_live_conns;
+
 static void *conn_thread(void *arg)
 {
     int fd = (intptr_t)arg;
@@ -230,6 +233,7 @@ static void *conn_thread(void *arg)
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
     server_handle_conn(fd);
     close(fd);
+    __sync_fetch_and_sub(&g_live_conns, 1);
     return NULL;
 }
 
@@ -256,6 +260,7 @@ int main(int argc, char **argv)
     server.listen_fd = -1;
     g_server = &server;
     pthread_mutex_init(&server.lock, NULL);
+    server_peer_pool_init();
 
     char *join_peer = NULL;
     char *bench_path = NULL;
@@ -494,13 +499,31 @@ int main(int argc, char **argv)
         if (fd < 0) {
             if (errno == EINTR)
                 continue;
+            /* EMFILE/ENFILE: do not tear down the accept loop — back off so
+             * existing handlers can finish and free fds, then resume. */
+            if (errno == EMFILE || errno == ENFILE || errno == ENOBUFS ||
+                errno == ENOMEM) {
+                fprintf(stderr,
+                        "accept: %s (live_conns=%d); backing off\n",
+                        strerror(errno), g_live_conns);
+                usleep(10 * 1000);
+                continue;
+            }
             if (errno != EINVAL)
                 perror("accept");
             break;
         }
 
+        int live = __sync_add_and_fetch(&g_live_conns, 1);
+        if (live > EFS_SERVER_MAX_CONNS) {
+            __sync_fetch_and_sub(&g_live_conns, 1);
+            close(fd);
+            continue;
+        }
+
         pthread_t tid;
         if (efsd_pthread_create(&tid, conn_thread, (void *)(intptr_t)fd) != 0) {
+            __sync_fetch_and_sub(&g_live_conns, 1);
             close(fd);
         } else {
             pthread_detach(tid);
@@ -531,6 +554,7 @@ int main(int argc, char **argv)
     }
     pthread_mutex_unlock(&server.lock);
 
+    server_peer_pool_shutdown();
     pthread_mutex_destroy(&server.lock);
     for (uint32_t i = 0; i < server.export_count; i++)
         efs_export_free(&server.exports[i]);

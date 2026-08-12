@@ -28,18 +28,10 @@ static int copy_node_by_id(struct efsd_server *s, efs_node_id_t id,
     return -1;
 }
 
-static int server_get_fragment_from_peer(const char *host, uint16_t port,
-                                         efs_export_id_t export_id, efs_ino_t ino,
-                                         uint32_t chunk_index, uint32_t fragment_index,
-                                         uint8_t *data, uint8_t *checksum)
+static int server_get_fragment_on_fd(int fd, efs_export_id_t export_id, efs_ino_t ino,
+                                    uint32_t chunk_index, uint32_t fragment_index,
+                                    uint8_t *data, uint8_t *checksum)
 {
-    int fd = efs_connect_tcp(host, port);
-    if (fd < 0)
-        return EFS_ERR_NET;
-
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-
     struct efs_msg_get_chunk req;
     memset(&req, 0, sizeof(req));
     req.export_id = export_id;
@@ -69,7 +61,24 @@ static int server_get_fragment_from_peer(const char *host, uint16_t port,
     }
 
     free(reply);
-    close(fd);
+    return rc;
+}
+
+static int server_get_fragment_from_peer(const char *host, uint16_t port,
+                                         efs_export_id_t export_id, efs_ino_t ino,
+                                         uint32_t chunk_index, uint32_t fragment_index,
+                                         uint8_t *data, uint8_t *checksum)
+{
+    int fd = server_peer_conn_get(host, port);
+    if (fd < 0)
+        return EFS_ERR_NET;
+
+    int rc = server_get_fragment_on_fd(fd, export_id, ino, chunk_index,
+                                       fragment_index, data, checksum);
+    if (rc == EFS_ERR_NET)
+        server_peer_conn_drop(host, port, fd);
+    else
+        server_peer_conn_release(host, port, fd);
     return rc;
 }
 
@@ -78,17 +87,14 @@ static int server_put_fragment_to_peer(const char *host, uint16_t port,
                                        uint32_t chunk_index, uint32_t fragment_index,
                                        const uint8_t *data, const uint8_t *checksum)
 {
-    int fd = efs_connect_tcp(host, port);
+    int fd = server_peer_conn_get(host, port);
     if (fd < 0)
         return EFS_ERR_NET;
-
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
 
     size_t msg_len = sizeof(struct efs_msg_put_chunk) + EFS_META_FRAGMENT_SIZE;
     uint8_t *msg = malloc(msg_len);
     if (!msg) {
-        close(fd);
+        server_peer_conn_release(host, port, fd);
         return EFS_ERR_NOMEM;
     }
     struct efs_msg_put_chunk *req = (struct efs_msg_put_chunk *)msg;
@@ -120,7 +126,10 @@ static int server_put_fragment_to_peer(const char *host, uint16_t port,
 
     free(msg);
     free(reply);
-    close(fd);
+    if (rc == EFS_ERR_NET)
+        server_peer_conn_drop(host, port, fd);
+    else
+        server_peer_conn_release(host, port, fd);
     return rc;
 }
 
@@ -450,18 +459,21 @@ static void bootstrap_export_on_peers(struct efsd_server *s, struct efs_export *
     for (uint32_t i = 0; i < node_count; i++) {
         if (nodes[i].id == self)
             continue;
-        int fd = efs_connect_tcp(nodes[i].addr, nodes[i].port);
+        const char *host = nodes[i].addr;
+        uint16_t port = nodes[i].port;
+        int fd = server_peer_conn_get(host, port);
         if (fd < 0)
             continue;
-        efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-        efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
         uint8_t type;
         void *reply = NULL;
         uint32_t reply_len = 0;
-        efs_send_msg(fd, EFS_MSG_PUT_META, buf, (uint32_t)len);
-        efs_recv_msg(fd, &type, &reply, &reply_len);
+        int ok = (efs_send_msg(fd, EFS_MSG_PUT_META, buf, (uint32_t)len) == 0 &&
+                  efs_recv_msg(fd, &type, &reply, &reply_len) == 0);
         free(reply);
-        close(fd);
+        if (ok)
+            server_peer_conn_release(host, port, fd);
+        else
+            server_peer_conn_drop(host, port, fd);
     }
     free(nodes);
     free(buf);
@@ -620,22 +632,26 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     for (uint32_t i = 0; i < node_count; i++) {
         if (nodes[i].id == self)
             continue;
-        int fd = efs_connect_tcp(nodes[i].addr, nodes[i].port);
+        const char *host = nodes[i].addr;
+        uint16_t port = nodes[i].port;
+        int fd = server_peer_conn_get(host, port);
         if (fd < 0)
             continue;
-        efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-        efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
         uint8_t type;
         void *reply = NULL;
         uint32_t reply_len = 0;
-        if (efs_send_msg(fd, EFS_MSG_PUT_META, root_buf, (uint32_t)root_len) == 0 &&
-            efs_recv_msg(fd, &type, &reply, &reply_len) == 0 &&
-            type == EFS_MSG_PUT_META_REPLY && reply_len >= 1 &&
+        int net_ok = (efs_send_msg(fd, EFS_MSG_PUT_META, root_buf,
+                                   (uint32_t)root_len) == 0 &&
+                      efs_recv_msg(fd, &type, &reply, &reply_len) == 0);
+        if (net_ok && type == EFS_MSG_PUT_META_REPLY && reply_len >= 1 &&
             ((uint8_t *)reply)[0] == EFS_PUT_META_OK) {
             acks++;
         }
         free(reply);
-        close(fd);
+        if (net_ok)
+            server_peer_conn_release(host, port, fd);
+        else
+            server_peer_conn_drop(host, port, fd);
     }
     free(nodes);
     free(root_buf);
@@ -672,19 +688,16 @@ int server_send_metadata_to(struct efsd_server *s, struct efs_export *ex,
     if (rc != EFS_OK || !buf)
         return -1;
 
-    int fd = efs_connect_tcp(host, port);
+    int fd = server_peer_conn_get(host, port);
     if (fd < 0) {
         free(buf);
         return -1;
     }
 
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-
     rc = efs_send_msg(fd, EFS_MSG_PUT_META, buf, (uint32_t)len);
     free(buf);
     if (rc != 0) {
-        close(fd);
+        server_peer_conn_drop(host, port, fd);
         return -1;
     }
 
@@ -693,8 +706,12 @@ int server_send_metadata_to(struct efsd_server *s, struct efs_export *ex,
     uint32_t payload_len = 0;
     rc = efs_recv_msg(fd, &type, &payload, &payload_len);
     free(payload);
-    close(fd);
-    return (rc == 0 && type == EFS_MSG_PUT_META_REPLY) ? 0 : -1;
+    if (rc != 0) {
+        server_peer_conn_drop(host, port, fd);
+        return -1;
+    }
+    server_peer_conn_release(host, port, fd);
+    return (type == EFS_MSG_PUT_META_REPLY) ? 0 : -1;
 }
 
 int server_replicate_metadata(struct efsd_server *s, struct efs_export *ex)
@@ -705,15 +722,12 @@ int server_replicate_metadata(struct efsd_server *s, struct efs_export *ex)
 
 int server_fetch_metadata_from(struct efsd_server *s, const char *host, uint16_t port)
 {
-    int fd = efs_connect_tcp(host, port);
+    int fd = server_peer_conn_get(host, port);
     if (fd < 0)
         return -1;
 
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-
     if (efs_send_msg(fd, EFS_MSG_GET_META, NULL, 0) != 0) {
-        close(fd);
+        server_peer_conn_drop(host, port, fd);
         return -1;
     }
 
@@ -723,10 +737,10 @@ int server_fetch_metadata_from(struct efsd_server *s, const char *host, uint16_t
     if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
         type != EFS_MSG_GET_META_REPLY || payload_len == 0) {
         free(payload);
-        close(fd);
+        server_peer_conn_drop(host, port, fd);
         return -1;
     }
-    close(fd);
+    server_peer_conn_release(host, port, fd);
 
     pthread_mutex_lock(&s->lock);
     if (s->export_count == 0) {
@@ -840,15 +854,12 @@ static int catchup_poll_peer_root(struct efsd_server *s)
     if (!host[0] || port == 0)
         return 0;
 
-    int fd = efs_connect_tcp(host, port);
+    int fd = server_peer_conn_get(host, port);
     if (fd < 0)
         return -1;
 
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-
     if (efs_send_msg(fd, EFS_MSG_GET_META, NULL, 0) != 0) {
-        close(fd);
+        server_peer_conn_drop(host, port, fd);
         return -1;
     }
 
@@ -858,10 +869,10 @@ static int catchup_poll_peer_root(struct efsd_server *s)
     if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
         type != EFS_MSG_GET_META_REPLY || payload_len == 0) {
         free(payload);
-        close(fd);
+        server_peer_conn_drop(host, port, fd);
         return -1;
     }
-    close(fd);
+    server_peer_conn_release(host, port, fd);
 
     int rc = catchup_install_newer_root(s, payload, payload_len);
     free(payload);
@@ -934,8 +945,11 @@ static void *meta_catchup_thread(void *arg)
 
         if (!s->running)
             break;
+        /* Debounce rebuild storms: continuous PUT_META under load used to
+         * rebuild hundreds of times/min. Peer TCP is pooled, but pacing still
+         * keeps catch-up from thrashing. Hot-path clients are unaffected. */
         if (did_work)
-            usleep(200 * 1000);
+            sleep(1);
         else
             sleep(2);
     }
