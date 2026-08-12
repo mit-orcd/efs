@@ -57,6 +57,7 @@ struct efs_msg_hello {
     char storage_path[EFS_MAX_PATH];
     uint64_t quota; /* local storage quota in bytes; 0 = unlimited */
     uint64_t used;  /* bytes currently stored on this node */
+    char build_id[EFS_BUILD_ID_LEN]; /* git build id; must match the cluster's */
 };
 
 struct efs_msg_hello_ack {
@@ -64,7 +65,13 @@ struct efs_msg_hello_ack {
     efs_node_id_t assigned_id;
     uint32_t node_count;
     struct efs_node nodes[EFS_MAX_NODES];
+    uint32_t reject_reason; /* EFS_HELLO_REJECT_*; valid when assigned_id == 0 */
+    char build_id[EFS_BUILD_ID_LEN]; /* receiver's build id (for diagnostics) */
 };
+
+#define EFS_HELLO_REJECT_NONE    0
+#define EFS_HELLO_REJECT_FULL    1
+#define EFS_HELLO_REJECT_VERSION 2
 
 struct efs_msg_get_chunk {
     efs_export_id_t export_id;

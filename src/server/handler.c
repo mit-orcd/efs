@@ -54,8 +54,44 @@ void server_handle_conn(int fd)
             break;
         }
         case EFS_MSG_HELLO: {
-            if (payload_len >= sizeof(struct efs_msg_hello)) {
+            /* Legacy (pre-build-id) HELLO is shorter than the current struct;
+             * refuse it too — a node we cannot identify by build must not
+             * join the placement ring. */
+            if (payload_len >= sizeof(uint32_t)) {
                 struct efs_msg_hello *h = payload;
+                int version_ok =
+                    payload_len >= sizeof(struct efs_msg_hello) &&
+                    h->version == EFS_VERSION_PACK &&
+                    strncmp(h->build_id, EFS_BUILD_ID, EFS_BUILD_ID_LEN) == 0;
+                if (!version_ok) {
+                    /* Heap: hello_ack embeds nodes[EFS_MAX_NODES] (~16KiB). */
+                    struct efs_msg_hello_ack *rej = calloc(1, sizeof(*rej));
+                    if (!rej)
+                        break;
+                    pthread_mutex_lock(&g_server->lock);
+                    rej->epoch = g_server->epoch;
+                    pthread_mutex_unlock(&g_server->lock);
+                    rej->assigned_id = 0;
+                    rej->reject_reason = EFS_HELLO_REJECT_VERSION;
+                    strncpy(rej->build_id, EFS_BUILD_ID, sizeof(rej->build_id) - 1);
+                    fprintf(stderr,
+                            "HELLO rejected: node (%s:%u) runs build '%s' "
+                            "(version 0x%x); this node is build '%s' "
+                            "(version 0x%x) — refusing join\n",
+                            payload_len >= offsetof(struct efs_msg_hello, port) +
+                                          sizeof(h->port)
+                                ? h->addr : "?",
+                            payload_len >= offsetof(struct efs_msg_hello, port) +
+                                          sizeof(h->port)
+                                ? h->port : 0,
+                            payload_len >= sizeof(struct efs_msg_hello)
+                                ? h->build_id : "<pre-build-id>",
+                            payload_len >= sizeof(h->version) ? h->version : 0,
+                            EFS_BUILD_ID, EFS_VERSION_PACK);
+                    efs_send_msg(fd, EFS_MSG_HELLO_ACK, rej, sizeof(*rej));
+                    free(rej);
+                    break;
+                }
                 pthread_mutex_lock(&g_server->lock);
 
                 /* Update existing entry or append a new one; never duplicate. */
@@ -108,6 +144,9 @@ void server_handle_conn(int fd)
                 ack->epoch = g_server->epoch;
                 /* assigned_id == 0 means reject (e.g. cluster at capacity). */
                 ack->assigned_id = accepted ? h->node_id : 0;
+                ack->reject_reason =
+                    accepted ? EFS_HELLO_REJECT_NONE : EFS_HELLO_REJECT_FULL;
+                strncpy(ack->build_id, EFS_BUILD_ID, sizeof(ack->build_id) - 1);
                 ack->node_count = g_server->node_count;
                 memcpy(ack->nodes, g_server->nodes, sizeof(g_server->nodes));
                 /* Persist only when membership / addressing actually changed,

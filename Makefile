@@ -2,9 +2,15 @@ CC = gcc
 # -g keeps symbols for `perf report`; -fno-omit-frame-pointer improves stack
 # unwinding under --perf. Both are cheap at -O3.
 # Always tune for the build host (compile on the same arch you run on).
+# Build id: nodes refuse to cluster across different builds (see HELLO gate).
+EFS_GIT_ID := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
+ifneq ($(shell git status --porcelain 2>/dev/null | head -1),)
+EFS_GIT_ID := $(EFS_GIT_ID)-dirty
+endif
 CFLAGS = -O3 -g -fno-omit-frame-pointer -march=native -mtune=native \
          -std=c99 -Wall -Wextra -D_GNU_SOURCE \
-         -Wno-stringop-truncation -Wno-format-truncation
+         -Wno-stringop-truncation -Wno-format-truncation \
+         -DEFS_BUILD_ID='"$(EFS_GIT_ID)"'
 INCLUDES = -Iinclude -Isrc/common -Ideps/blake3
 
 LDFLAGS = -lpthread -lm -ldl

@@ -18,7 +18,8 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
 
     struct efs_msg_hello h;
     memset(&h, 0, sizeof(h));
-    h.version = (EFS_VERSION_MAJOR << 16) | (EFS_VERSION_MINOR << 8) | EFS_VERSION_PATCH;
+    h.version = EFS_VERSION_PACK;
+    strncpy(h.build_id, EFS_BUILD_ID, sizeof(h.build_id) - 1);
     h.node_id = s->id;
     strncpy(h.addr, s->addr, sizeof(h.addr) - 1);
     h.port = s->port;
@@ -61,12 +62,20 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
 
     struct efs_msg_hello_ack *ack = payload;
     if (ack->assigned_id == 0 || ack->assigned_id != s->id) {
-        fprintf(stderr,
-                "Join rejected by peer %s:%u (cluster full or id mismatch; "
-                "assigned_id=%llu local_id=%llu count=%u)\n",
-                peer_host, peer_port,
-                (unsigned long long)ack->assigned_id,
-                (unsigned long long)s->id, ack->node_count);
+        if (ack->reject_reason == EFS_HELLO_REJECT_VERSION) {
+            fprintf(stderr,
+                    "Join refused by %s:%u — VERSION MISMATCH: this node runs "
+                    "build '%s', the cluster runs build '%s'. Run the same "
+                    "efsd build on every node.\n",
+                    peer_host, peer_port, EFS_BUILD_ID, ack->build_id);
+        } else {
+            fprintf(stderr,
+                    "Join rejected by peer %s:%u (cluster full or id mismatch; "
+                    "assigned_id=%llu local_id=%llu count=%u)\n",
+                    peer_host, peer_port,
+                    (unsigned long long)ack->assigned_id,
+                    (unsigned long long)s->id, ack->node_count);
+        }
         free(payload);
         server_peer_conn_drop(peer_host, peer_port, fd);
         return -1;

@@ -566,7 +566,8 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
 
         for (uint32_t i = 0; i < batch; i++) {
             if (jobs[i].rc != EFS_OK) {
-                for (uint32_t j = 0; j < batch; j++)
+                /* Chunks [0, i) were already freed below; release [i, batch). */
+                for (uint32_t j = i; j < batch; j++)
                     free(jobs[j].chunk);
                 return jobs[i].rc;
             }
@@ -579,6 +580,7 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
             total += to_copy;
             pos += to_copy;
             free(jobs[i].chunk);
+            jobs[i].chunk = NULL;
         }
     }
 

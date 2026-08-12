@@ -471,13 +471,14 @@ int main(int argc, char **argv)
         if (local)
             used_disp = local->used;
         printf("efsd node %u listening on %s:%u, storage=%s (%u paths, stripe=%s), "
-               "used=%llu, quota=%llu, direct_io=%s, writers=%d/path (%d total)\n",
+               "used=%llu, quota=%llu, direct_io=%s, writers=%d/path (%d total), "
+               "build=%s\n",
                server.id, server.addr, server.port, storage_disp,
                server.storage_path_count, stripe,
                (unsigned long long)used_disp,
                (unsigned long long)server.quota,
                server.direct_io ? "on" : "off",
-               server.nwriters, total_writers);
+               server.nwriters, total_writers, EFS_BUILD_ID);
     }
     fflush(stdout);
 

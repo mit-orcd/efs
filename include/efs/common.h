@@ -10,6 +10,17 @@
 #define EFS_VERSION_MAJOR 0
 #define EFS_VERSION_MINOR 1
 #define EFS_VERSION_PATCH 0
+#define EFS_VERSION_PACK \
+    ((EFS_VERSION_MAJOR << 16) | (EFS_VERSION_MINOR << 8) | EFS_VERSION_PATCH)
+
+/* Build identifier baked in by the Makefile (git commit + dirty flag). Nodes
+ * refuse to cluster with a different build so mixed-version deployments fail
+ * loudly at join instead of corrupting each other. "unknown" (no git at build
+ * time) only matches "unknown". */
+#ifndef EFS_BUILD_ID
+#define EFS_BUILD_ID "unknown"
+#endif
+#define EFS_BUILD_ID_LEN 48
 
 /* Data chunk size bounds (per-export; power of two). */
 #define EFS_MIN_CHUNK_SIZE     (128 * 1024)

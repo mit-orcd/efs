@@ -314,13 +314,16 @@ static int send_meta_root(const char *buf, size_t len)
 static pthread_mutex_t g_repl_mu = PTHREAD_MUTEX_INITIALIZER;
 
 /* Pack the full export into 2+1 pages, then push the EFSR root (≥2 acks). */
-static int efs_client_replicate_metadata_once(void)
+/* One flush attempt: serialize the full export and PUT all meta pages.
+ * Caller must hold g_repl_mu. This never locks/unlocks g_repl_mu itself, so
+ * every return path leaves the lock for the wrapper to release — previously
+ * the page-PUT / no-quorum error paths returned holding g_repl_mu, leaking the
+ * non-recursive mutex and deadlocking the next flush. */
+static int efs_client_replicate_metadata_locked(void)
 {
     char *blob = NULL;
     size_t blob_len = 0;
     uint64_t new_gen = 1;
-
-    pthread_mutex_lock(&g_repl_mu);
 
     pthread_mutex_lock(&g_client.lock);
     if (g_client.meta_batch &&
@@ -328,12 +331,10 @@ static int efs_client_replicate_metadata_once(void)
         !g_client.meta_dirty) {
         g_client.meta_dirty_ops = 0;
         pthread_mutex_unlock(&g_client.lock);
-        pthread_mutex_unlock(&g_repl_mu);
         return EFS_OK;
     }
     if (efs_export_serialize(&g_client.export, &blob, &blob_len) != EFS_OK) {
         pthread_mutex_unlock(&g_client.lock);
-        pthread_mutex_unlock(&g_repl_mu);
         return EFS_ERR_NOMEM;
     }
     new_gen = g_client.export.root.generation + 1;
@@ -494,7 +495,40 @@ static int efs_client_replicate_metadata_once(void)
     } else {
         efs_export_root_free(&root);
     }
+    return rc;
+}
+
+/* Blocking single flush; g_repl_mu serializes concurrent flushes. */
+static int efs_client_replicate_metadata_once(void)
+{
+    pthread_mutex_lock(&g_repl_mu);
+    int rc = efs_client_replicate_metadata_locked();
     pthread_mutex_unlock(&g_repl_mu);
+    return rc;
+}
+
+/* Non-blocking flush for the batched hot path. If another flush is already in
+ * flight it serializes the full table, which coalesces our dirty ops — so
+ * return instead of stalling every worker behind g_repl_mu for the whole
+ * O(table) flush. Retries transient failures (releasing the lock between
+ * attempts so a concurrent flush can coalesce). */
+static int efs_client_replicate_metadata_nb(void)
+{
+    int rc = EFS_ERR_NET;
+    for (int attempt = 1; attempt <= 4; attempt++) {
+        if (pthread_mutex_trylock(&g_repl_mu) != 0)
+            return EFS_OK; /* in-flight flush coalesces our ops */
+        rc = efs_client_replicate_metadata_locked();
+        pthread_mutex_unlock(&g_repl_mu);
+        if (rc == EFS_OK)
+            return EFS_OK;
+        if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM)
+            break;
+        if (attempt < 4) {
+            useconds_t base = 100000u << (attempt - 1);
+            usleep(base + (useconds_t)(rand() % 50000));
+        }
+    }
     return rc;
 }
 
@@ -545,8 +579,12 @@ int efs_client_note_meta_change(int force)
     int flush = (ops >= thresh);
     pthread_mutex_unlock(&g_client.lock);
 
+    /* Batched threshold flush: non-blocking so a big O(table) flush doesn't
+     * stall every worker behind g_repl_mu. An in-flight flush coalesces our
+     * dirty ops; if none is running, we run one ourselves. Forced flushes
+     * (fsync/unmount) above stay blocking for durability. */
     if (flush)
-        return efs_client_replicate_metadata();
+        return efs_client_replicate_metadata_nb();
     return EFS_OK;
 }
 
@@ -905,29 +943,31 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
 }
 
 /* Assemble one chunk buffer for a write spanning [wr_start, wr_end).
- * Returns whether the chunk was built from a zero base (new or full overwrite),
- * which lets callers skip Blake3 of known-zero halves. */
+ * Sets *from_zero_out when the chunk was built from a zero base (new or full
+ * overwrite), which lets callers skip Blake3 of known-zero halves.
+ * Returns EFS_OK on success; a read-modify-write fetch failure is propagated
+ * (never silently zero over live data). */
 static int assemble_write_chunk(efs_ino_t ino, uint64_t old_size,
                                 uint64_t offset, const char *buf,
                                 uint64_t chunk_start, uint64_t wr_start,
                                 uint64_t wr_end, uint32_t chunk_size,
-                                uint8_t *chunk)
+                                uint8_t *chunk, int *from_zero_out)
 {
     int covers_full = (wr_start == chunk_start &&
                        wr_end == chunk_start + chunk_size);
     size_t off_in_chunk = (size_t)(wr_start - chunk_start);
     size_t wr_len = (size_t)(wr_end - wr_start);
     size_t src_off = (size_t)(wr_start - offset);
-    int from_zero;
 
     if (covers_full) {
         /* Full overwrite: copy user bytes only — no memset+memcpy. */
         memcpy(chunk, buf + src_off, chunk_size);
-        return efs_bytes_are_zero(chunk, chunk_size);
+        *from_zero_out = efs_bytes_are_zero(chunk, chunk_size);
+        return EFS_OK;
     }
 
     if (chunk_start >= old_size) {
-        from_zero = 1;
+        *from_zero_out = 1;
         /* Zero only the unwritten regions. */
         if (off_in_chunk > 0)
             memset(chunk, 0, off_in_chunk);
@@ -935,18 +975,22 @@ static int assemble_write_chunk(efs_ino_t ino, uint64_t old_size,
             memset(chunk + off_in_chunk + wr_len, 0,
                    chunk_size - off_in_chunk - wr_len);
     } else {
-        from_zero = 0;
+        *from_zero_out = 0;
         size_t existing = (size_t)(old_size - chunk_start);
         if (existing > chunk_size)
             existing = chunk_size;
         size_t got = 0;
-        efs_client_read(ino, chunk_start, existing, (char *)chunk, &got);
-        if (got < chunk_size)
-            memset(chunk + got, 0, chunk_size - got);
+        int rrc = efs_client_read(ino, chunk_start, existing, (char *)chunk, &got);
+        if (rrc != EFS_OK || got != existing) {
+            /* RMW base unreadable: refuse rather than zero over live data. */
+            return (rrc != EFS_OK) ? rrc : EFS_ERR_IO;
+        }
+        if (existing < chunk_size)
+            memset(chunk + existing, 0, chunk_size - existing);
     }
 
     memcpy(chunk + off_in_chunk, buf + src_off, wr_len);
-    return from_zero;
+    return EFS_OK;
 }
 
 /* Hash fragments; when from_zero and a half was not written, reuse the cached
@@ -1149,9 +1193,16 @@ static void *chunk_put_worker(void *arg)
     }
     frag_ptrs(frag_buf, frag_len, frags);
 
-    int from_zero = assemble_write_chunk(job->ino, job->old_size, job->offset,
-                                         job->buf, chunk_start, wr_start, wr_end,
-                                         chunk_size, chunk);
+    int from_zero = 0;
+    int arc = assemble_write_chunk(job->ino, job->old_size, job->offset,
+                                   job->buf, chunk_start, wr_start, wr_end,
+                                   chunk_size, chunk, &from_zero);
+    if (arc != EFS_OK) {
+        free(chunk);
+        free(frag_buf);
+        job->rc = arc;
+        return NULL;
+    }
 
     const uint8_t *cfrags[EFS_NUM_FRAGMENTS];
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
@@ -1205,9 +1256,15 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
             return EFS_ERR_NOMEM;
         }
         frag_ptrs(frag_buf, frag_len, frags);
-        int from_zero = assemble_write_chunk(ino, old_size, offset, buf,
-                                             chunk_start, wr_start, wr_end,
-                                             chunk_size, chunk);
+        int from_zero = 0;
+        int arc = assemble_write_chunk(ino, old_size, offset, buf,
+                                       chunk_start, wr_start, wr_end,
+                                       chunk_size, chunk, &from_zero);
+        if (arc != EFS_OK) {
+            free(chunk);
+            free(frag_buf);
+            return arc;
+        }
 
         efs_encode_chunk(chunk, chunk_size, chunk_size, frags);
 

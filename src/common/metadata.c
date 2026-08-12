@@ -809,19 +809,51 @@ static void rollup_size_delta(struct efs_export *ex, efs_ino_t parent,
     }
 }
 
-static void rollup_touch_parents_of(struct efs_export *ex, efs_ino_t ino)
+/* Incremental time rollup for "time moved forward" mutations (create/write/
+ * chmod/chown/utimens all stamp ctime = now, and entry_tmax is dominated by
+ * ctime). The child's entry range can only widen an ancestor's [tmin,tmax],
+ * never narrow it, so expand in O(depth) instead of the O(children) rescan in
+ * recompute_times_up. Without this, every write in a growing directory cost
+ * O(dir_children) → O(n^2) bulk copies. The narrowing case (unlink) still does
+ * a full rescan via rollup_sub_under → recompute_times_up. */
+static void expand_parent_chain(struct efs_export *ex, efs_ino_t from_ino,
+                                efs_ino_t parent, uint64_t lo, uint64_t hi)
+{
+    efs_ino_t cur = parent;
+    efs_ino_t prev = from_ino;
+    int first = 1;
+    while (cur != prev) {
+        struct efs_inode *d = inode_ptr(ex, cur);
+        if (!d || !efs_mode_is_dir(d->mode))
+            break;
+        if (first) { /* immediate parent also tracks imm_* */
+            int has = (d->imm_files + d->imm_dirs) > 0;
+            times_expand(&d->imm_tmin, &d->imm_tmax, lo, hi, &has);
+            first = 0;
+        }
+        int hast = (d->tree_files + d->tree_dirs) > 0;
+        times_expand(&d->tree_tmin, &d->tree_tmax, lo, hi, &hast);
+        if (d->parent == cur)
+            break;
+        prev = cur;
+        cur = d->parent;
+    }
+}
+
+static void rollup_expand_parents_of(struct efs_export *ex, efs_ino_t ino)
 {
     struct efs_inode *p = inode_ptr(ex, ino);
     if (!p)
         return;
+    uint64_t lo = entry_tmin(p), hi = entry_tmax(p);
     if (p->nlink <= 1) {
-        recompute_times_up(ex, p->parent);
+        expand_parent_chain(ex, ino, p->parent, lo, hi);
         return;
     }
+    /* Hardlinked: one inode row per link, each with its own parent (rare). */
     for (uint64_t i = 0; i < ex->inode_count; i++) {
-        if (ex->inodes[i].ino != ino)
-            continue;
-        recompute_times_up(ex, ex->inodes[i].parent);
+        if (ex->inodes[i].ino == ino)
+            expand_parent_chain(ex, ino, ex->inodes[i].parent, lo, hi);
     }
 }
 
@@ -928,8 +960,10 @@ void efs_export_ensure_rollups(struct efs_export *ex)
         efs_ino_t ino = ex->pending_rollup_inos[i];
         int64_t delta = ex->pending_rollup_deltas[i];
         apply_size_delta_for_ino(ex, ino, delta);
+        /* Deferred touches come from the norollup write path, which stamps
+         * mtime = now — a pure range expansion, so expand incrementally. */
         if (delta != 0 || ex->pending_rollup_touch[i])
-            rollup_touch_parents_of(ex, ino);
+            rollup_expand_parents_of(ex, ino);
     }
     pending_rollup_clear(ex);
 }
@@ -1393,7 +1427,7 @@ static int set_size_common(struct efs_export *ex, efs_ino_t ino, uint64_t size,
         int64_t delta = (int64_t)size - (int64_t)old_size;
         apply_size_delta_for_ino(ex, ino, delta);
     }
-    rollup_touch_parents_of(ex, ino);
+    rollup_expand_parents_of(ex, ino); /* set_size stamps mtime=now: expand */
     return EFS_OK;
 }
 
@@ -1420,7 +1454,7 @@ int efs_export_set_mode(struct efs_export *ex, efs_ino_t ino, uint32_t mode)
     /* POSIX: chmod updates ctime, not mtime (rsync -a relies on this). */
     time_now(&p->ctime);
     sync_hardlink_attrs(ex, ino, p);
-    rollup_touch_parents_of(ex, ino);
+    rollup_expand_parents_of(ex, ino); /* ctime=now: expand */
     return EFS_OK;
 }
 
@@ -1439,7 +1473,7 @@ int efs_export_set_owner(struct efs_export *ex, efs_ino_t ino, uid_t uid, gid_t 
     /* POSIX: chown updates ctime, not mtime. */
     time_now(&p->ctime);
     sync_hardlink_attrs(ex, ino, p);
-    rollup_touch_parents_of(ex, ino);
+    rollup_expand_parents_of(ex, ino); /* ctime=now: expand */
     return EFS_OK;
 }
 
@@ -1465,7 +1499,9 @@ static int set_mtime_ns_common(struct efs_export *ex, efs_ino_t ino,
         ex->rollups_stale = 1;
         return EFS_OK;
     }
-    rollup_touch_parents_of(ex, ino);
+    /* entry_tmax is dominated by ctime (=now, never back-dated), so even an
+     * explicit utimens only widens the parent range — expand incrementally. */
+    rollup_expand_parents_of(ex, ino);
     return EFS_OK;
 }
 
@@ -1496,7 +1532,7 @@ int efs_export_set_atime(struct efs_export *ex, efs_ino_t ino, uint64_t atime)
         return EFS_ERR_NOT_FOUND;
     p->atime = atime;
     sync_hardlink_attrs(ex, ino, p);
-    rollup_touch_parents_of(ex, ino);
+    rollup_expand_parents_of(ex, ino);
     return EFS_OK;
 }
 

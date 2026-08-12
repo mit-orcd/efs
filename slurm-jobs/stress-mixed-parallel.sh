@@ -39,6 +39,24 @@ LARGE_WORKERS="${LARGE_WORKERS:-3}"
 LARGE_MB="${LARGE_MB:-128}"
 PERF="${PERF:-1}"
 
+# MODE=mixed (default): concurrent small+large stress with verify.
+# MODE=ecopy: long-running bulk copy of a many-small-files tree (ImageNet) via
+#             ecopy, sampling destination file/byte counts to chart the
+#             windowed throughput trend (exposes the progressive slowdown).
+MODE="${MODE:-mixed}"
+ECOPY="${ECOPY:-$HOME/git/direct_copy/ecopy}"
+ECOPY_SRC="${ECOPY_SRC:-$HOME/orcd/scratch/imagenet/images_complete/ilsvrc}"
+ECOPY_DST="${ECOPY_DST:-imagenet}"
+ECOPY_MAX_SEC="${ECOPY_MAX_SEC:-600}"
+ECOPY_SAMPLE_SEC="${ECOPY_SAMPLE_SEC:-15}"
+# Metadata flush batch: mixed uses a huge batch to isolate the data path; ecopy
+# uses the realistic default (4096) so the metadata flush/rebuild cost shows.
+if [ "$MODE" = "ecopy" ]; then
+    BATCH="${EFS_META_BATCH_OPS:-4096}"
+else
+    BATCH="${EFS_META_BATCH_OPS:-65536}"
+fi
+
 mkdir -p "$SCRATCH"/{s1,s2,s3} "$MNT" "$KEEP" "$SHARED/logs"
 cd "$REPO"
 
@@ -84,8 +102,8 @@ cat "$KEEP/status0.txt"
 [ "$ok" = 1 ] || { echo "cluster not OK after 30s"; exit 1; }
 ./efs-mgmt mkfs "$IP:$P1" "$EXPORT" || { echo "mkfs failed"; exit 1; }
 
-note "=== mount FUSE ==="
-EFS_META_BATCH_OPS=65536 ./efs-fuse "$IP:$P1" "$IP:$P2" "$IP:$P3" "$EXPORT" "$MNT" -f >"$KEEP/fuse.log" 2>&1 &
+note "=== mount FUSE (MODE=$MODE BATCH=$BATCH) ==="
+EFS_META_BATCH_OPS=$BATCH ./efs-fuse "$IP:$P1" "$IP:$P2" "$IP:$P3" "$EXPORT" "$MNT" -f >"$KEEP/fuse.log" 2>&1 &
 CPID=$!
 for _ in $(seq 1 120); do mountpoint -q "$MNT" 2>/dev/null && break; kill -0 "$CPID" 2>/dev/null || { cat "$KEEP/fuse.log"; exit 1; }; sleep 0.25; done
 mountpoint -q "$MNT" || { echo "mount failed"; cat "$KEEP/fuse.log"; exit 1; }
@@ -105,7 +123,17 @@ stop_perf() {
     for pp in "$PERF_C" "$PERF_S"; do
         [ -n "$pp" ] && kill -INT "$pp" 2>/dev/null
     done
-    sleep 2
+    # perf record must finalize (write out) the -g data on SIGINT; with hundreds
+    # of MB this takes seconds. Wait for exit before escalating to SIGKILL,
+    # otherwise the .data is truncated and `perf report` comes out empty.
+    for _ in $(seq 1 30); do
+        local alive=0
+        for pp in "$PERF_C" "$PERF_S"; do
+            [ -n "$pp" ] && kill -0 "$pp" 2>/dev/null && alive=1
+        done
+        [ "$alive" = 0 ] && break
+        sleep 1
+    done
     for pp in "$PERF_C" "$PERF_S"; do
         [ -n "$pp" ] && { kill -KILL "$pp" 2>/dev/null; wait "$pp" 2>/dev/null; }
     done
@@ -189,17 +217,84 @@ large_worker() {
     return 0
 }
 
+# --- ecopy long-running workload -------------------------------------------
+# Copy a many-small-files tree into the mount with ecopy, sampling the root
+# .stats (O(1) rollups) every ECOPY_SAMPLE_SEC to chart windowed throughput.
+# Writes "epoch tree_files tree_bytes" lines to $KEEP/ecopy.progress.
+sample_stats() {  # -> "tree_files tree_bytes" (0 0 on error)
+    awk -F= '/^tree_files=/{f=$2} /^tree_bytes=/{b=$2} END{print (f+0)" "(b+0)}' \
+        "$MNT/.stats" 2>/dev/null || echo "0 0"
+}
+
+ecopy_workload() {
+    local dst="$MNT/$ECOPY_DST"
+    mkdir -p "$dst" || return 1
+    [ -x "$ECOPY" ] || { echo "ecopy not found: $ECOPY"; return 1; }
+    [ -d "$ECOPY_SRC" ] || { echo "ecopy src not found: $ECOPY_SRC"; return 1; }
+    local prog="$KEEP/ecopy.progress"
+    : > "$prog"
+    note "ecopy: $ECOPY $ECOPY_SRC -> $dst (max ${ECOPY_MAX_SEC}s, sample ${ECOPY_SAMPLE_SEC}s, BATCH=$BATCH)"
+    "$ECOPY" "$ECOPY_SRC" "$dst" >"$KEEP/ecopy.log" 2>&1 &
+    local ep=$!
+    local t0; t0=$(date +%s)
+    local capped=0
+    while kill -0 "$ep" 2>/dev/null; do
+        local now; now=$(date +%s)
+        if [ $((now - t0)) -ge "$ECOPY_MAX_SEC" ]; then
+            note "ecopy: time cap ${ECOPY_MAX_SEC}s reached, stopping"
+            kill -TERM "$ep" 2>/dev/null; sleep 3; kill -KILL "$ep" 2>/dev/null
+            capped=1
+            break
+        fi
+        echo "$now $(sample_stats)" >> "$prog"
+        sleep "$ECOPY_SAMPLE_SEC"
+    done
+    wait "$ep"; local erc=$?
+    echo "$(date +%s) $(sample_stats)" >> "$prog"
+    note "ecopy done rc=$erc capped=$capped wall=$(( $(date +%s) - t0 ))s"
+    # An intentional time-cap stop is not a failure; a real ecopy error is.
+    [ "$capped" = 1 ] && return 0
+    return $erc
+}
+
+# Print cumulative files/bytes and per-window files/s + MiB/s trend.
+ecopy_report() {
+    local prog="$KEEP/ecopy.progress"
+    [ -s "$prog" ] || { echo "(no ecopy progress samples)"; return; }
+    echo "--- ecopy throughput trend (window = ${ECOPY_SAMPLE_SEC}s) ---"
+    awk '{ t[NR]=$1; f[NR]=$2; b[NR]=$3 }
+         END { t0=t[1];
+               for (i=2; i<=NR; i++) {
+                   dt=t[i]-t[i-1]; if (dt<=0) continue;
+                   printf "  t+%4ds  %9d files  %10.1f MiB  |  win %7.1f files/s  %8.1f MiB/s\n",
+                          t[i]-t0, f[i], b[i]/1048576, (f[i]-f[i-1])/dt, (b[i]-b[i-1])/1048576/dt;
+               }
+               if (NR>=2) {
+                   tot=t[NR]-t[1]; if (tot<=0) tot=1;
+                   printf "  TOTAL  %9d files  %10.1f MiB  in %ds  ->  avg %.1f files/s  %.1f MiB/s\n",
+                          f[NR], b[NR]/1048576, tot, f[NR]/tot, b[NR]/1048576/tot;
+               } }' "$prog"
+}
+
 note "=== start perf ==="
 start_perf
 
-note "=== launch parallel mixed workload: $SMALL_WORKERS small x $SMALL_FILES files, $LARGE_WORKERS large x ${LARGE_MB}MB ==="
-T0=$(date +%s.%N)
-pids=()
-for w in $(seq 0 $((SMALL_WORKERS-1))); do small_worker "$w" & pids+=($!); done
-for w in $(seq 0 $((LARGE_WORKERS-1))); do large_worker "$w" & pids+=($!); done
-for pid in "${pids[@]}"; do wait "$pid" || FAIL=1; done
-T1=$(date +%s.%N)
-WALL=$(awk -v s="$T0" -v e="$T1" 'BEGIN{printf "%.3f", e-s}')
+if [ "$MODE" = "ecopy" ]; then
+    note "=== launch long-running ecopy workload ==="
+    T0=$(date +%s.%N)
+    ecopy_workload || FAIL=1
+    T1=$(date +%s.%N)
+    WALL=$(awk -v s="$T0" -v e="$T1" 'BEGIN{printf "%.3f", e-s}')
+else
+    note "=== launch parallel mixed workload: $SMALL_WORKERS small x $SMALL_FILES files, $LARGE_WORKERS large x ${LARGE_MB}MB ==="
+    T0=$(date +%s.%N)
+    pids=()
+    for w in $(seq 0 $((SMALL_WORKERS-1))); do small_worker "$w" & pids+=($!); done
+    for w in $(seq 0 $((LARGE_WORKERS-1))); do large_worker "$w" & pids+=($!); done
+    for pid in "${pids[@]}"; do wait "$pid" || FAIL=1; done
+    T1=$(date +%s.%N)
+    WALL=$(awk -v s="$T0" -v e="$T1" 'BEGIN{printf "%.3f", e-s}')
+fi
 
 note "=== workload done wall_s=$WALL FAIL=$FAIL ==="
 stop_perf
@@ -228,8 +323,10 @@ if [ "$NREBUILT" -eq 0 ]; then
     fail "meta never rebuilt successfully (stuck)"
 fi
 # Data-path correctness is verified separately by the workers (sizes + hashes).
-for w in $(seq 0 $((SMALL_WORKERS-1))); do [ -s "$KEEP/small_w$w.err" ] && { fail "small worker $w errors"; cat "$KEEP/small_w$w.err"; }; done
-for w in $(seq 0 $((LARGE_WORKERS-1))); do [ -s "$KEEP/large_w$w.err" ] && { fail "large worker $w errors"; cat "$KEEP/large_w$w.err"; }; done
+if [ "$MODE" = "mixed" ]; then
+    for w in $(seq 0 $((SMALL_WORKERS-1))); do [ -s "$KEEP/small_w$w.err" ] && { fail "small worker $w errors"; cat "$KEEP/small_w$w.err"; }; done
+    for w in $(seq 0 $((LARGE_WORKERS-1))); do [ -s "$KEEP/large_w$w.err" ] && { fail "large worker $w errors"; cat "$KEEP/large_w$w.err"; }; done
+fi
 
 # --- performance rollup ----------------------------------------------------
 # Aggregate per-worker stats: sum files/bytes, window = last end - first start.
@@ -249,6 +346,16 @@ fmt_class() {  # label "fw bw wwin fr br rwin"
                L, fr, br/1048576, rw, fr/rw, br/1048576/rw; }'
 }
 
+if [ "$MODE" = "ecopy" ]; then
+{
+  echo "================ PERFORMANCE (ecopy) ================"
+  echo "workload: ecopy $ECOPY_SRC -> /$ECOPY_DST (BATCH=$BATCH, max ${ECOPY_MAX_SEC}s)"
+  echo "total wall: ${WALL}s"
+  ecopy_report
+  echo "====================================================="
+  echo "FAIL=$FAIL"
+} | tee "$KEEP/SUMMARY.txt"
+else
 S_STATS=$(calc_stats "$KEEP"/stats.small.*)
 L_STATS=$(calc_stats "$KEEP"/stats.large.*)
 A_STATS=$(calc_stats "$KEEP"/stats.small.* "$KEEP"/stats.large.*)
@@ -266,6 +373,7 @@ A_STATS=$(calc_stats "$KEEP"/stats.small.* "$KEEP"/stats.large.*)
   echo "============================================="
   echo "FAIL=$FAIL"
 } | tee "$KEEP/SUMMARY.txt"
+fi
 
 echo "--- client hotspots ---"
 grep -E 'blake3|efs_|fuse_|memcpy|encode|decode|put_|get_|hash|memset|poll|sendmsg|recvmsg|pthread' "$KEEP/client.report.txt" 2>/dev/null | head -20 || echo "(no client report)"

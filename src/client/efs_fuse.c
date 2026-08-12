@@ -121,30 +121,147 @@ static void stat_set_size_blocks(struct stat *stbuf, uint64_t size)
     stbuf->st_blocks = (blkcnt_t)((size + 511) / 512);
 }
 
-static int stats_fill_stat(const struct efs_inode *parent, struct stat *stbuf)
+/* Lazy .stats cache. Serving .stats used to run efs_export_ensure_rollups()
+ * under g_client.lock on every read/getattr — O(pending writes) under the
+ * global lock, so a monitoring loop (watch cat .stats) stalled the write hot
+ * path. Stats need not be just-in-time, so we cache the rendered text per
+ * directory for a short TTL; cache hits take no g_client.lock at all. The text
+ * carries an as_of=<time> line recording when the numbers were computed, so
+ * readers can see exactly how fresh they are. Rollups are still applied by the
+ * flush/serialize path, so skipped computes here lose nothing. */
+#define EFS_STATS_CACHE_N 16
+#define EFS_STATS_TEXT   640
+
+struct stats_ent {
+    int valid;
+    efs_ino_t dir_ino;
+    uint64_t computed_ms; /* CLOCK_MONOTONIC ms when computed */
+    uint64_t uid, gid;
+    uint64_t mtime, atime, ctime;
+    int len;
+    char text[EFS_STATS_TEXT];
+};
+
+static struct stats_ent g_stats_cache[EFS_STATS_CACHE_N];
+static pthread_mutex_t g_stats_cache_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static uint64_t stats_now_ms(void)
 {
-    char text[512];
-    struct efs_inode fresh;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+}
+
+static uint32_t stats_ttl_ms(void)
+{
+    static int ttl = -1; /* benign idempotent race on first init */
+    if (ttl < 0) {
+        ttl = 1000;
+        const char *e = getenv("EFS_STATS_TTL_MS");
+        if (e && *e) {
+            unsigned long v = strtoul(e, NULL, 10);
+            if (v <= 60000)
+                ttl = (int)v;
+        }
+    }
+    return (uint32_t)ttl;
+}
+
+/* Recompute a stats entry from the export (takes g_client.lock briefly). */
+static int stats_compute_locked(struct stats_ent *e, efs_ino_t dir_ino)
+{
     pthread_mutex_lock(&g_client.lock);
     efs_export_ensure_rollups(&g_client.export);
-    if (efs_export_get_inode(&g_client.export, parent->ino, &fresh) != 0) {
-        pthread_mutex_unlock(&g_client.lock);
-        return -EIO;
-    }
+    struct efs_inode fresh;
+    int grc = efs_export_get_inode(&g_client.export, dir_ino, &fresh);
     pthread_mutex_unlock(&g_client.lock);
-    int n = efs_export_format_stats(&fresh, text, sizeof(text));
+    if (grc != 0)
+        return -ENOENT;
+
+    int n = efs_export_format_stats(&fresh, e->text, EFS_STATS_TEXT - 48);
     if (n < 0)
         return -EIO;
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    int m = snprintf(e->text + n, EFS_STATS_TEXT - n, "as_of=%llu.%09lu\n",
+                     (unsigned long long)ts.tv_sec, (unsigned long)ts.tv_nsec);
+    if (m > 0)
+        n += m;
+    e->len = n;
+    e->uid = fresh.uid;
+    e->gid = fresh.gid;
+    e->mtime = fresh.mtime;
+    e->atime = fresh.atime;
+    e->ctime = fresh.ctime;
+    e->dir_ino = dir_ino;
+    e->computed_ms = stats_now_ms();
+    e->valid = 1;
+    return 0;
+}
+
+/* Return a fresh-or-cached stats snapshot for dir_ino. Cache hits take no
+ * g_client.lock; only a miss/stale recomputes (and only once per TTL). */
+static int stats_snapshot(efs_ino_t dir_ino, struct stats_ent *out)
+{
+    uint64_t now = stats_now_ms();
+    uint32_t ttl = stats_ttl_ms();
+
+    pthread_mutex_lock(&g_stats_cache_mu);
+    for (int i = 0; i < EFS_STATS_CACHE_N; i++) {
+        struct stats_ent *e = &g_stats_cache[i];
+        if (e->valid && e->dir_ino == dir_ino && now - e->computed_ms < ttl) {
+            *out = *e;
+            pthread_mutex_unlock(&g_stats_cache_mu);
+            return 0;
+        }
+    }
+    pthread_mutex_unlock(&g_stats_cache_mu);
+
+    struct stats_ent tmp;
+    memset(&tmp, 0, sizeof(tmp));
+    int rc = stats_compute_locked(&tmp, dir_ino);
+    if (rc != 0)
+        return rc;
+
+    pthread_mutex_lock(&g_stats_cache_mu);
+    int slot = -1, oldest = 0;
+    uint64_t oldest_ms = ~0ULL;
+    for (int i = 0; i < EFS_STATS_CACHE_N; i++) {
+        struct stats_ent *e = &g_stats_cache[i];
+        if (!e->valid || e->dir_ino == dir_ino) {
+            slot = i;
+            break;
+        }
+        if (e->computed_ms < oldest_ms) {
+            oldest_ms = e->computed_ms;
+            oldest = i;
+        }
+    }
+    if (slot < 0)
+        slot = oldest;
+    g_stats_cache[slot] = tmp;
+    pthread_mutex_unlock(&g_stats_cache_mu);
+
+    *out = tmp;
+    return 0;
+}
+
+static int stats_fill_stat(const struct efs_inode *parent, struct stat *stbuf)
+{
+    struct stats_ent e;
+    int rc = stats_snapshot(parent->ino, &e);
+    if (rc != 0)
+        return rc;
     memset(stbuf, 0, sizeof(*stbuf));
-    stbuf->st_ino = stats_synthetic_ino(fresh.ino);
+    stbuf->st_ino = stats_synthetic_ino(parent->ino);
     stbuf->st_mode = S_IFREG | 0444;
     stbuf->st_nlink = 1;
-    stat_set_size_blocks(stbuf, (uint64_t)n);
-    stbuf->st_uid = fresh.uid;
-    stbuf->st_gid = fresh.gid;
-    stbuf->st_mtim.tv_sec = (time_t)fresh.mtime;
-    stbuf->st_atim.tv_sec = (time_t)fresh.atime;
-    stbuf->st_ctim.tv_sec = (time_t)fresh.ctime;
+    stat_set_size_blocks(stbuf, (uint64_t)e.len);
+    stbuf->st_uid = (uid_t)e.uid;
+    stbuf->st_gid = (gid_t)e.gid;
+    stbuf->st_mtim.tv_sec = (time_t)e.mtime;
+    stbuf->st_atim.tv_sec = (time_t)e.atime;
+    stbuf->st_ctim.tv_sec = (time_t)e.ctime;
     return 0;
 }
 
@@ -167,15 +284,8 @@ static void efs_client_setup_ino_namespace(void)
 static int efs_fuse_getattr(const char *path, struct stat *stbuf)
 {
     struct efs_inode parent;
-    if (path_is_stats(path, &parent) == 0) {
-        pthread_mutex_lock(&g_client.lock);
-        struct efs_inode fresh;
-        int grc = efs_export_get_inode(&g_client.export, parent.ino, &fresh);
-        pthread_mutex_unlock(&g_client.lock);
-        if (grc != 0)
-            return -ENOENT;
-        return stats_fill_stat(&fresh, stbuf);
-    }
+    if (path_is_stats(path, &parent) == 0)
+        return stats_fill_stat(&parent, stbuf);
 
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
@@ -276,29 +386,24 @@ static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
     return efs_client_lookup(path, &ino) == 0 ? 0 : -ENOENT;
 }
 
+static void efs_fuse_log_err(const char *where, int efs_rc, efs_ino_t ino,
+                             uint64_t offset, size_t size, const char *path);
+
 static int efs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
                          struct fuse_file_info *fi)
 {
     (void)fi;
     struct efs_inode parent;
     if (path_is_stats(path, &parent) == 0) {
-        char text[512];
-        pthread_mutex_lock(&g_client.lock);
-        efs_export_ensure_rollups(&g_client.export);
-        struct efs_inode fresh;
-        int grc = efs_export_get_inode(&g_client.export, parent.ino, &fresh);
-        pthread_mutex_unlock(&g_client.lock);
-        if (grc != 0)
+        struct stats_ent e;
+        if (stats_snapshot(parent.ino, &e) != 0)
             return -ENOENT;
-        int n = efs_export_format_stats(&fresh, text, sizeof(text));
-        if (n < 0)
-            return -EIO;
-        if (offset >= n)
+        if (offset >= e.len)
             return 0;
-        size_t avail = (size_t)n - (size_t)offset;
+        size_t avail = (size_t)e.len - (size_t)offset;
         if (avail > size)
             avail = size;
-        memcpy(buf, text + offset, avail);
+        memcpy(buf, e.text + offset, avail);
         return (int)avail;
     }
 
@@ -311,8 +416,10 @@ static int efs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
 
     size_t got = 0;
     rc = efs_client_read(ino.ino, (uint64_t)offset, size, buf, &got);
-    if (rc != 0)
+    if (rc != 0) {
+        efs_fuse_log_err("read", rc, ino.ino, (uint64_t)offset, size, path);
         return -EIO;
+    }
     return (int)got;
 }
 
@@ -464,18 +571,14 @@ static int efs_wb_ensure(void)
     return 0;
 }
 
-static int efs_wb_enqueue(efs_ino_t ino, uint64_t offset, size_t size,
-                          const char *buf)
+/* Enqueue a WB job taking ownership of an already-allocated buffer. */
+static int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
+                                char *copy)
 {
-    if (size == 0)
-        return 0;
-    if (efs_wb_ensure() != 0)
+    if (efs_wb_ensure() != 0) {
+        free(copy);
         return EFS_ERR_NOMEM;
-    char *copy = malloc(size);
-    if (!copy)
-        return EFS_ERR_NOMEM;
-    memcpy(copy, buf, size);
-
+    }
     pthread_mutex_lock(&g_wb.mu);
     while (g_wb.count == EFS_WB_DEPTH && g_wb.err == EFS_OK)
         pthread_cond_wait(&g_wb.not_full, &g_wb.mu);
@@ -494,6 +597,20 @@ static int efs_wb_enqueue(efs_ino_t ino, uint64_t offset, size_t size,
     pthread_cond_signal(&g_wb.not_empty);
     pthread_mutex_unlock(&g_wb.mu);
     return EFS_OK;
+}
+
+static int efs_wb_enqueue(efs_ino_t ino, uint64_t offset, size_t size,
+                          const char *buf)
+{
+    if (size == 0)
+        return 0;
+    if (efs_wb_ensure() != 0)
+        return EFS_ERR_NOMEM;
+    char *copy = malloc(size);
+    if (!copy)
+        return EFS_ERR_NOMEM;
+    memcpy(copy, buf, size);
+    return efs_wb_enqueue_owned(ino, offset, size, copy);
 }
 
 static int efs_wb_sync(void)
@@ -529,6 +646,48 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
     }
     if (rc != 0) {
         efs_fuse_log_err("write", rc, ino.ino, (uint64_t)offset, size, path);
+        return -EIO;
+    }
+    return (int)size;
+}
+
+/* write_buf: libfuse hands us the kernel's bufvec directly instead of first
+ * flattening it with a full-data memmove to call .write. We copy the vec
+ * straight into the writeback job buffer — one copy instead of two. That
+ * libfuse flatten was the top single-stream CPU cost (~68% memmove). */
+static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
+                              off_t offset, struct fuse_file_info *fi)
+{
+    (void)fi;
+    if (path_is_stats(path, NULL) == 0)
+        return -EACCES;
+    struct efs_inode ino;
+    int rc = efs_client_lookup(path, &ino);
+    if (rc != 0)
+        return -ENOENT;
+    if (efs_mode_is_dir(ino.mode))
+        return -EISDIR;
+
+    size_t size = fuse_buf_size(buf);
+    if (size == 0)
+        return 0;
+    char *copy = malloc(size);
+    if (!copy)
+        return -ENOMEM;
+    struct fuse_bufvec dst = FUSE_BUFVEC_INIT(size);
+    dst.buf[0].mem = copy;
+    if (fuse_buf_copy(&dst, buf, FUSE_BUF_NO_SPLICE) < 0) {
+        free(copy);
+        return -EIO;
+    }
+
+    rc = efs_wb_enqueue_owned(ino.ino, (uint64_t)offset, size, copy);
+    if (rc == EFS_ERR_QUOTA) {
+        efs_fuse_log_err("write_buf", rc, ino.ino, (uint64_t)offset, size, path);
+        return -ENOSPC;
+    }
+    if (rc != 0) {
+        efs_fuse_log_err("write_buf", rc, ino.ino, (uint64_t)offset, size, path);
         return -EIO;
     }
     return (int)size;
@@ -1012,6 +1171,7 @@ static struct fuse_operations efs_ops = {
     .open    = efs_fuse_open,
     .read    = efs_fuse_read,
     .write   = efs_fuse_write,
+    .write_buf = efs_fuse_write_buf,
     .flush   = efs_fuse_flush,
     .fsync   = efs_fuse_fsync,
     .create  = efs_fuse_create,
