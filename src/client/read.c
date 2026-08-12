@@ -28,7 +28,29 @@ static void frag_ptrs(uint8_t *buf, uint32_t frag_len, uint8_t *frags[EFS_NUM_FR
         frags[i] = buf + (size_t)i * frag_len;
 }
 
-/* Reconstruct one logical chunk from any 2 of 3 fragments. */
+struct frag_get_job {
+    efs_node_id_t node;
+    efs_ino_t ino;
+    uint32_t chunk_index;
+    int fi;
+    uint32_t frag_len;
+    uint8_t *out;
+    uint32_t len;
+    int rc;
+};
+
+static void *frag_get_thread(void *arg)
+{
+    struct frag_get_job *j = arg;
+    uint8_t sum[EFS_HASH_SIZE];
+    j->rc = efs_client_get_fragment(j->node, j->ino, j->chunk_index, j->fi,
+                                    j->frag_len, j->out, &j->len, sum);
+    return NULL;
+}
+
+/* Reconstruct one logical chunk from any 2 of 3 fragments. The three GETs run
+ * concurrently so one slow/dead peer overlaps the others instead of adding a
+ * full RTT; decode only needs any two, so we don't serialize on a straggler. */
 static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk_index,
                                                    uint8_t *chunk_out, uint32_t chunk_size,
                                                    uint32_t frag_len, int max_attempts)
@@ -63,14 +85,34 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     int rc = EFS_ERR_DECODE;
     for (int attempt = 0; attempt < max_attempts; attempt++) {
         int have[EFS_NUM_FRAGMENTS] = {0, 0, 0};
-        uint8_t fsum[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
 
+        /* Fan out the GETs in parallel; a down node is skipped inside
+         * efs_client_get_fragment (down-mark) and returns fast. */
+        struct frag_get_job jobs[EFS_NUM_FRAGMENTS];
+        pthread_t tids[EFS_NUM_FRAGMENTS];
+        int spawned[EFS_NUM_FRAGMENTS] = {0, 0, 0};
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
             int fi = order[i];
-            uint32_t len = 0;
-            if (efs_client_get_fragment(nodes[fi], ino, chunk_index, fi, frag_len,
-                                        frags[fi], &len, fsum[fi]) == 0 &&
-                len == frag_len)
+            jobs[i].node = nodes[fi];
+            jobs[i].ino = ino;
+            jobs[i].chunk_index = chunk_index;
+            jobs[i].fi = fi;
+            jobs[i].frag_len = frag_len;
+            jobs[i].out = frags[fi];
+            jobs[i].len = 0;
+            jobs[i].rc = EFS_ERR_NET;
+            if (pthread_create(&tids[i], NULL, frag_get_thread, &jobs[i]) == 0) {
+                spawned[i] = 1;
+            } else {
+                /* No thread budget: run inline. */
+                frag_get_thread(&jobs[i]);
+            }
+        }
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            if (spawned[i])
+                pthread_join(tids[i], NULL);
+            int fi = order[i];
+            if (jobs[i].rc == 0 && jobs[i].len == frag_len)
                 have[fi] = 1;
         }
 
@@ -93,8 +135,12 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
                 }
             }
         }
-        if (a < 0 || b < 0 || missing < 0)
+        if (a < 0 || b < 0 || missing < 0) {
+            /* Fewer than 2 good fragments — brief backoff before refetch. */
+            if (attempt + 1 < max_attempts)
+                usleep(100000u * (unsigned)(attempt + 1));
             continue;
+        }
         if (efs_decode_chunk(frags, chunk_size, a, b, missing, chunk_out,
                              chunk_size) == 0) {
             rc = EFS_OK;
@@ -109,7 +155,7 @@ static int efs_client_decode_placed_chunk(efs_ino_t ino, uint32_t chunk_index,
                                           uint8_t *chunk_out)
 {
     return efs_client_decode_placed_chunk_attempts(ino, chunk_index, chunk_out,
-                                                   data_chunk_size(), data_frag_size(), 5);
+                                                   data_chunk_size(), data_frag_size(), 2);
 }
 
 static int load_page_from_chunk(const struct efs_export_root *root, uint32_t pi,
@@ -350,9 +396,15 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
     if (node_id == 0 || expected_frag_len == 0)
         return EFS_ERR_INVAL;
 
+    /* Skip nodes already marked down: a dead pooled fd would otherwise cost a
+     * full SO_RCVTIMEO (30s) per attempt before we even try the next peer. */
+    if (efs_client_node_is_down(node_id))
+        return EFS_ERR_NET;
+
     for (int attempt = 1; attempt <= 3; attempt++) {
         int fd = efs_client_conn_get(node_id);
         if (fd < 0) {
+            efs_client_node_note_fail(node_id);
             if (attempt < 3) {
                 usleep(50000u * (unsigned)attempt);
                 continue;
@@ -367,14 +419,17 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
         req.chunk_index = chunk_index;
         req.fragment_index = fragment_index;
 
-        uint8_t reply_type;
-        void *reply = NULL;
-        uint32_t reply_len = 0;
+        /* Zero-copy receive: status + checksum + fragment land directly in the
+         * caller's buffers — no malloc + 64 KiB memcpy per GET. */
+        uint8_t reply_type = 0;
+        uint8_t status = 0;
         if (efs_send_msg(fd, EFS_MSG_GET_CHUNK, &req, sizeof(req)) != 0 ||
-            efs_recv_msg(fd, &reply_type, &reply, &reply_len) != 0 ||
-            reply_type != EFS_MSG_GET_CHUNK_REPLY || reply_len < 1) {
-            free(reply);
+            efs_recv_msg_into(fd, &reply_type, &status,
+                              checksum, EFS_HASH_SIZE,
+                              data, expected_frag_len) != 0 ||
+            reply_type != EFS_MSG_GET_CHUNK_REPLY) {
             efs_client_conn_drop(node_id, fd);
+            efs_client_node_note_fail(node_id);
             if (attempt < 3) {
                 usleep(50000u * (unsigned)attempt);
                 continue;
@@ -382,17 +437,10 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
             return EFS_ERR_NET;
         }
 
-        uint8_t *r = reply;
-        int status = r[0];
-        uint32_t payload_len = reply_len - 1 - EFS_HASH_SIZE;
-        if (status != EFS_GET_CHUNK_OK || payload_len != expected_frag_len) {
-            free(reply);
+        if (status != EFS_GET_CHUNK_OK) {
             efs_client_conn_release(node_id, fd);
             return EFS_ERR_NOT_FOUND;
         }
-
-        memcpy(checksum, r + 1, EFS_HASH_SIZE);
-        memcpy(data, r + 1 + EFS_HASH_SIZE, expected_frag_len);
         *data_len = expected_frag_len;
 
         /* Verify payload. Known-zero digests are trusted (writer/store already
@@ -411,13 +459,12 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
             sum_ok = (memcmp(verify, checksum, EFS_HASH_SIZE) == 0);
         }
         if (!sum_ok) {
-            free(reply);
             efs_client_conn_release(node_id, fd);
             return EFS_ERR_CHECKSUM;
         }
 
-        free(reply);
         efs_client_conn_release(node_id, fd);
+        efs_client_node_note_ok(node_id);
         return EFS_OK;
     }
     return EFS_ERR_NET;

@@ -71,6 +71,7 @@
 #define EFS_ERR_CHECKSUM   -10
 #define EFS_ERR_QUOTA      -11
 #define EFS_ERR_NOT_EMPTY  -12
+#define EFS_ERR_BUSY       -13
 
 typedef uint64_t efs_ino_t;
 typedef uint32_t efs_export_id_t;
@@ -85,6 +86,9 @@ struct efs_node {
     char storage_path[EFS_MAX_PATH];
     uint64_t quota; /* max bytes this node may store; 0 means unlimited */
     uint64_t used;  /* bytes currently stored on this node */
+    /* Failure detection (in-memory; reset on heartbeat reply / HELLO). */
+    uint64_t down_until_ms; /* heartbeat-marked-down cooldown deadline */
+    uint32_t hb_fail_streak;
 };
 
 static inline bool efs_mode_is_dir(uint32_t mode) { return S_ISDIR(mode); }

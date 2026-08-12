@@ -250,6 +250,21 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
     };
 
     for (uint32_t pi = 0; pi < page_count; pi++) {
+        /* Early-abort on a stale root: if a concurrent flush advanced the
+         * generation, our snapshot's checksums no longer match the same-slot
+         * fragments being written, producing a mismatch storm. Bail out as
+         * PROTO so the catch-up loop re-polls the newest root and retries,
+         * instead of fetching every remaining page against a dead gen. */
+        pthread_mutex_lock(&s->lock);
+        uint64_t cur_gen = ex->root.generation;
+        pthread_mutex_unlock(&s->lock);
+        if (cur_gen != start_gen) {
+            free(frag_buf);
+            free(pages);
+            efs_export_root_free(&snap);
+            return EFS_ERR_PROTO;
+        }
+
         /* Prefer dual-slot keys for this generation; fall back to legacy
          * page_index-only keys for exports flushed before dual-slot. */
         uint32_t try_ci[2];
@@ -433,6 +448,26 @@ static int put_meta_fragment(struct efsd_server *s, struct efs_export *ex,
                                        chunk_index, fragment_index, data, checksum);
 }
 
+/* One fragment PUT for the parallel meta flush. */
+struct meta_put_job {
+    struct efsd_server *s;
+    struct efs_export *ex;
+    efs_node_id_t node;
+    uint32_t ci;
+    int fi;
+    const uint8_t *frag;
+    const uint8_t *checksum;
+    int rc;
+};
+
+static void *meta_put_thread(void *arg)
+{
+    struct meta_put_job *j = arg;
+    j->rc = put_meta_fragment(j->s, j->ex, j->node, j->ci, (uint32_t)j->fi,
+                              j->frag, j->checksum);
+    return NULL;
+}
+
 /* Ensure peers have an export row before we PUT meta-page fragments.
  * Send a legacy empty EFSM shell (not EFSR) so clients never treat a
  * page-less bootstrap root as authoritative. */
@@ -485,22 +520,43 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     /* Peers must know the export before accepting meta-page PUT_CHUNKs. */
     bootstrap_export_on_peers(s, ex);
 
+    /* Serialize under the lock: handlers mutate ex (inode/chunk tables) and a
+     * concurrent peer PUT_META can move ex->root, so an unlocked serialize is
+     * a torn-blob / UAF window. */
     char *blob = NULL;
     size_t blob_len = 0;
-    if (efs_export_serialize(ex, &blob, &blob_len) != EFS_OK)
+    uint64_t new_gen = 1;
+    uint64_t old_gen = 0;
+    uint32_t old_pages = 0;
+    pthread_mutex_lock(&s->lock);
+    if (efs_export_serialize(ex, &blob, &blob_len) != EFS_OK) {
+        pthread_mutex_unlock(&s->lock);
         return -1;
+    }
+    new_gen = ex->root.generation + 1;
+    if (new_gen == 0)
+        new_gen = 1;
+    if (ex->meta_fragmented) {
+        old_gen = ex->root.generation;
+        old_pages = ex->root.page_count;
+    }
+    pthread_mutex_unlock(&s->lock);
+
     if (blob_len > (size_t)EFS_META_MAX_PAGES * EFS_META_PAGE_SIZE) {
         free(blob);
         return -1;
     }
 
-    uint64_t new_gen = ex->root.generation + 1;
-    if (new_gen == 0)
-        new_gen = 1;
-
+    /* Durability is gated by the two-phase peer-ack quorum below, not by a
+     * hard node-count check here: during cluster formation a node's membership
+     * view can lag the real cluster (gossip convergence), so refusing on a
+     * stale count would fail mkfs/create on a healthy-but-converging ring. */
     struct efs_export_root root;
     memset(&root, 0, sizeof(root));
-    if (efs_export_root_prepare(&root, ex, new_gen, (uint32_t)blob_len) != EFS_OK) {
+    pthread_mutex_lock(&s->lock);
+    int prc = efs_export_root_prepare(&root, ex, new_gen, (uint32_t)blob_len);
+    pthread_mutex_unlock(&s->lock);
+    if (prc != EFS_OK) {
         free(blob);
         return -1;
     }
@@ -518,14 +574,6 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
         frag_buf, frag_buf + EFS_META_FRAGMENT_SIZE,
         frag_buf + 2 * EFS_META_FRAGMENT_SIZE
     };
-    uint64_t old_gen = 0;
-    uint32_t old_pages = 0;
-    pthread_mutex_lock(&s->lock);
-    if (ex->meta_fragmented) {
-        old_gen = ex->root.generation;
-        old_pages = ex->root.page_count;
-    }
-    pthread_mutex_unlock(&s->lock);
 
     for (uint32_t pi = 0; pi < root.page_count; pi++) {
         if (efs_meta_extract_page(blob, (uint32_t)blob_len, pi, page) != EFS_OK) {
@@ -553,15 +601,50 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
         pthread_mutex_lock(&s->lock);
         efs_place_fragments(s->nodes, s->node_count, EFS_META_TABLE_INO, ci,
                             placed);
+        /* Re-route fragments off heartbeat-marked-down nodes so a dead peer
+         * doesn't consume a full PUT timeout per page. */
+        for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+            if (!server_node_is_down_locked(s, placed[fi]))
+                continue;
+            for (uint32_t ni = 0; ni < s->node_count; ni++) {
+                efs_node_id_t cand = s->nodes[ni].id;
+                if (cand == placed[0] || cand == placed[1] || cand == placed[2])
+                    continue;
+                if (server_node_is_down_locked(s, cand))
+                    continue;
+                placed[fi] = cand;
+                break;
+            }
+        }
         pthread_mutex_unlock(&s->lock);
 
+        /* Fan the 3 fragment PUTs out in parallel: a sequential page flush
+         * pays 3 RTTs (plus a fixed 50ms retry sleep) per page, which is a
+         * meta RTT storm under mkfs/migrate. Decode only needs 2 acks. */
+        struct meta_put_job jobs[EFS_NUM_FRAGMENTS];
+        pthread_t tids[EFS_NUM_FRAGMENTS];
+        int spawned[EFS_NUM_FRAGMENTS] = {0, 0, 0};
+        for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+            jobs[fi].s = s;
+            jobs[fi].ex = ex;
+            jobs[fi].node = placed[fi];
+            jobs[fi].ci = ci;
+            jobs[fi].fi = fi;
+            jobs[fi].frag = fragments[fi];
+            jobs[fi].checksum = checksums[fi];
+            jobs[fi].rc = EFS_ERR_NET;
+            if (pthread_create(&tids[fi], NULL, meta_put_thread, &jobs[fi]) == 0)
+                spawned[fi] = 1;
+            else
+                meta_put_thread(&jobs[fi]);
+        }
         int acks = 0;
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
-            int prc = put_meta_fragment(s, ex, placed[fi], ci, (uint32_t)fi,
-                                        fragments[fi], checksums[fi]);
+            if (spawned[fi])
+                pthread_join(tids[fi], NULL);
+            int prc = jobs[fi].rc;
             if (prc != EFS_OK) {
                 /* Peer may not have finished bootstrap yet — retry once. */
-                usleep(50000);
                 prc = put_meta_fragment(s, ex, placed[fi], ci, (uint32_t)fi,
                                         fragments[fi], checksums[fi]);
             }
@@ -589,28 +672,14 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     free(frag_buf);
     free(blob);
 
-    pthread_mutex_lock(&s->lock);
-    ex->meta_fragmented = 1;
-    efs_export_root_move(&ex->root, &root);
-    s->export_meta_dirty = 1;
-    /* Persist under lock so a concurrent peer PUT_META cannot free
-     * page_checksums mid-fwrite. */
-    server_save_export(s, ex);
-    s->export_meta_dirty = 0;
-
-    /* Snapshot root for unlocked peer fan-out. */
-    struct efs_export_root snap;
-    memset(&snap, 0, sizeof(snap));
-    int src = efs_export_root_copy(&snap, &ex->root);
-    pthread_mutex_unlock(&s->lock);
-    if (src != EFS_OK)
-        return -1;
-
-    /* Push root to peers. */
+    /* Two-phase commit: the new root is NOT installed locally until a quorum
+     * of peers has acknowledged it. Serialize the candidate root for fan-out
+     * first, push to peers, and only on quorum move it into ex->root and
+     * persist. On failure the local node keeps the prior authoritative gen. */
     char *root_buf = NULL;
     size_t root_len = 0;
-    if (efs_export_root_serialize(&snap, &root_buf, &root_len) != EFS_OK) {
-        efs_export_root_free(&snap);
+    if (efs_export_root_serialize(&root, &root_buf, &root_len) != EFS_OK) {
+        efs_export_root_free(&root);
         return -1;
     }
 
@@ -618,7 +687,7 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     struct efs_node *nodes = malloc(sizeof(struct efs_node) * EFS_MAX_NODES);
     if (!nodes) {
         free(root_buf);
-        efs_export_root_free(&snap);
+        efs_export_root_free(&root);
         return -1;
     }
     pthread_mutex_lock(&s->lock);
@@ -655,16 +724,33 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     }
     free(nodes);
     free(root_buf);
-    efs_export_id_t eid = snap.id;
-    efs_export_root_free(&snap);
-    /* Single-node clusters have no peers; otherwise require at least one
-     * peer root ack (pages already needed quorum above). */
-    if (node_count > 1 && acks < 1) {
+
+    /* Durability: match the client's ≥2-ack rule so a single surviving copy
+     * cannot be lost with one node failure. node_count already includes self,
+     * so require min(2, node_count) total roots persisted (self counts once
+     * committed below). For a 3-node cluster that is self + 1 peer; to be
+     * safe under one concurrent failure require 2 peer acks when 3+ nodes. */
+    uint32_t need_peer_acks = (node_count >= EFS_NUM_FRAGMENTS) ? 2
+                              : (node_count > 1) ? 1 : 0;
+    if (acks < (int)need_peer_acks) {
         fprintf(stderr,
-                "meta-flush: export %u root replicate got 0/%u peer acks\n",
-                eid, node_count - 1);
+                "meta-flush: export %u root replicate got %d/%u peer acks — "
+                "gen %llu NOT committed locally\n",
+                root.id, acks, need_peer_acks, (unsigned long long)new_gen);
+        efs_export_root_free(&root);
         return -1;
     }
+
+    /* Quorum reached: install + persist locally. Persist under lock so a
+     * concurrent peer PUT_META cannot free page_checksums mid-fwrite. */
+    pthread_mutex_lock(&s->lock);
+    ex->meta_fragmented = 1;
+    efs_export_root_move(&ex->root, &root);
+    s->export_meta_dirty = 1;
+    server_save_export(s, ex);
+    s->export_meta_dirty = 0;
+    pthread_mutex_unlock(&s->lock);
+
     /* Retire the previous generation's dual-slot pages (best-effort). */
     if (old_pages > 0 && old_gen != new_gen)
         server_gc_meta_slot_pages(s, ex, old_gen, old_pages);
@@ -834,49 +920,53 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
     return 1;
 }
 
-/* Best-effort GET_META from one peer; installs root only if newer. */
+/* Best-effort GET_META from ALL peers; install the highest-generation root
+ * found (install function still rejects anything not strictly newer). Polling
+ * only the first peer could strand a lagging node when that peer is behind. */
 static int catchup_poll_peer_root(struct efsd_server *s)
 {
-    char host[64];
-    uint16_t port = 0;
-    host[0] = '\0';
-
+    struct efs_node nodes[EFS_MAX_NODES];
     pthread_mutex_lock(&s->lock);
-    for (uint32_t i = 0; i < s->node_count; i++) {
-        if (s->nodes[i].id == s->id)
-            continue;
-        strncpy(host, s->nodes[i].addr, sizeof(host) - 1);
-        host[sizeof(host) - 1] = '\0';
-        port = s->nodes[i].port;
-        break;
-    }
+    uint32_t node_count = s->node_count;
+    if (node_count > EFS_MAX_NODES)
+        node_count = EFS_MAX_NODES;
+    memcpy(nodes, s->nodes, sizeof(struct efs_node) * node_count);
+    efs_node_id_t self = s->id;
     pthread_mutex_unlock(&s->lock);
-    if (!host[0] || port == 0)
-        return 0;
 
-    int fd = server_peer_conn_get(host, port);
-    if (fd < 0)
-        return -1;
+    int best = 0;
+    for (uint32_t i = 0; i < node_count; i++) {
+        if (nodes[i].id == self)
+            continue;
+        const char *host = nodes[i].addr;
+        uint16_t port = nodes[i].port;
+        if (!host[0] || port == 0)
+            continue;
 
-    if (efs_send_msg(fd, EFS_MSG_GET_META, NULL, 0) != 0) {
-        server_peer_conn_drop(host, port, fd);
-        return -1;
-    }
+        int fd = server_peer_conn_get(host, port);
+        if (fd < 0)
+            continue;
+        if (efs_send_msg(fd, EFS_MSG_GET_META, NULL, 0) != 0) {
+            server_peer_conn_drop(host, port, fd);
+            continue;
+        }
+        uint8_t type;
+        void *payload = NULL;
+        uint32_t payload_len = 0;
+        if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
+            type != EFS_MSG_GET_META_REPLY || payload_len == 0) {
+            free(payload);
+            server_peer_conn_drop(host, port, fd);
+            continue;
+        }
+        server_peer_conn_release(host, port, fd);
 
-    uint8_t type;
-    void *payload = NULL;
-    uint32_t payload_len = 0;
-    if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
-        type != EFS_MSG_GET_META_REPLY || payload_len == 0) {
+        int rc = catchup_install_newer_root(s, payload, payload_len);
         free(payload);
-        server_peer_conn_drop(host, port, fd);
-        return -1;
+        if (rc > best)
+            best = rc;
     }
-    server_peer_conn_release(host, port, fd);
-
-    int rc = catchup_install_newer_root(s, payload, payload_len);
-    free(payload);
-    return rc;
+    return best;
 }
 
 static void *meta_catchup_thread(void *arg)

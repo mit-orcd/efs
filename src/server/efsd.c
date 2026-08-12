@@ -17,8 +17,9 @@
 
 struct efsd_server *g_server = NULL;
 
-/* Conn/writer stacks need room for hello_ack (~16KiB) + ASAN redzones. */
-#define EFSD_THREAD_STACK (16 * 1024 * 1024)
+/* Conn/writer stacks: hello_ack is heap-allocated now, so 1 MiB is ample and
+ * avoids ~8 GiB of VA when 512 conn threads are live. */
+#define EFSD_THREAD_STACK (1 * 1024 * 1024)
 
 int efsd_pthread_create(pthread_t *tid, void *(*fn)(void *), void *arg)
 {
@@ -260,6 +261,7 @@ int main(int argc, char **argv)
     server.listen_fd = -1;
     g_server = &server;
     pthread_mutex_init(&server.lock, NULL);
+    pthread_cond_init(&server.export_idle_cv, NULL);
     server_peer_pool_init();
 
     char *join_peer = NULL;
@@ -414,9 +416,7 @@ int main(int argc, char **argv)
             server_start_rejoin(&server);
         } else {
             server_fetch_metadata_from(&server, host, port);
-            pthread_mutex_lock(&server.lock);
             server_save_nodes(&server);
-            pthread_mutex_unlock(&server.lock);
         }
     } else if (server.node_count > 1) {
         if (server_rejoin_cluster(&server) != 0) {
@@ -432,14 +432,10 @@ int main(int argc, char **argv)
                                                server.nodes[i].port) == 0)
                     break;
             }
-            pthread_mutex_lock(&server.lock);
             server_save_nodes(&server);
-            pthread_mutex_unlock(&server.lock);
         }
     } else {
-        pthread_mutex_lock(&server.lock);
         server_save_nodes(&server);
-        pthread_mutex_unlock(&server.lock);
     }
 
     /* Membership is known; reconstruct bulk metadata from 2+1 pages. */
@@ -518,6 +514,8 @@ int main(int argc, char **argv)
         if (live > EFS_SERVER_MAX_CONNS) {
             __sync_fetch_and_sub(&g_live_conns, 1);
             close(fd);
+            /* Over-cap: back off like EMFILE so a conn storm doesn't spin. */
+            usleep(10 * 1000);
             continue;
         }
 
@@ -535,6 +533,18 @@ int main(int argc, char **argv)
         server.listen_fd = -1;
     }
     stop_perf_recorder();
+
+    /* Drain live conn threads before tearing down server state. Detached
+     * handlers use g_server (lock, exports, peer pool); destroying it while
+     * they run is a UAF. Wait with a bounded timeout. */
+    for (int waited_ms = 0; g_live_conns > 0 && waited_ms < 15000; ) {
+        usleep(50 * 1000);
+        waited_ms += 50;
+    }
+    if (g_live_conns > 0)
+        fprintf(stderr, "shutdown: %d conn threads still live after drain "
+                "timeout; forcing teardown\n", g_live_conns);
+
     server_writer_pool_stop(&server);
     server_usage_flush_dirty(&server);
 

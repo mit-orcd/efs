@@ -28,7 +28,7 @@ These rules govern every build, server, client, management command, and test in 
 - Do **not** let Slurm pack `efs-s1`/`efs-s2`/`efs-s3` onto one machine (distinct ports are not enough).
 - Submit servers **sequentially**: wait for `state/sN.host`, then `sbatch --exclude=<already-used-nodes>` for the next server. Assert three distinct short hostnames before starting clients.
 - Prefer excluding those server nodes when submitting clients so the client is also cross-node.
-- Helpers live in `slurm-jobs/lib-harness.sh` (`efs_job_scratch`, `efs_wait_addr`, `efs_assert_distinct_servers`, `efs_run_efsd`).
+- The canonical single-job harness is `slurm-jobs/stress-mixed-parallel.sh` (3 servers + FUSE client on one node, all node-local data under `/scratch/efs-testing/$SLURM_JOB_ID`, cleaned on exit).
 - Single-job local profiles (all processes on one node under `/scratch/efs-testing/$SLURM_JOB_ID`) are the exception; they are not multi-node clusters.
 
 ## 4. Compute-node storage: `/scratch/efs-testing/$SLURM_JOB_ID`

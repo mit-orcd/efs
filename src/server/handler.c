@@ -110,12 +110,18 @@ void server_handle_conn(int fd)
                 ack->assigned_id = accepted ? h->node_id : 0;
                 ack->node_count = g_server->node_count;
                 memcpy(ack->nodes, g_server->nodes, sizeof(g_server->nodes));
-                /* Persist only when membership / addressing actually changed. */
+                /* Persist only when membership / addressing actually changed,
+                 * and never under the lock (fsync would stall every handler). */
                 if (changed)
-                    server_save_nodes(g_server);
+                    server_nodes_mark_dirty(g_server);
                 pthread_mutex_unlock(&g_server->lock);
+                server_nodes_flush_dirty(g_server);
                 efs_send_msg(fd, EFS_MSG_HELLO_ACK, ack, sizeof(*ack));
                 free(ack);
+                /* Converge the placement ring: relay this membership change to
+                 * every other peer (HELLO only updates the contacted node). */
+                if (changed)
+                    server_gossip_membership(g_server, h);
             }
             break;
         }
@@ -123,7 +129,8 @@ void server_handle_conn(int fd)
             if (payload_len >= sizeof(struct efs_msg_get_chunk)) {
                 struct efs_msg_get_chunk *req = payload;
                 pthread_mutex_lock(&g_server->lock);
-                struct efs_export *ex = server_get_export(g_server, req->export_id);
+                struct efs_export *ex =
+                    server_export_acquire_locked(g_server, req->export_id);
                 pthread_mutex_unlock(&g_server->lock);
 
                 uint32_t frag_len = server_frag_len(ex, req->ino);
@@ -163,6 +170,7 @@ void server_handle_conn(int fd)
                 }
                 free(reply);
                 free(data);
+                server_export_put(g_server, ex);
             }
             break;
         }
@@ -173,13 +181,17 @@ void server_handle_conn(int fd)
                     (const uint8_t *)payload + sizeof(struct efs_msg_put_chunk);
                 pthread_mutex_lock(&g_server->lock);
                 int put_state = g_server->state;
-                struct efs_export *ex = server_get_export(g_server, req->export_id);
+                struct efs_export *ex =
+                    server_export_acquire_locked(g_server, req->export_id);
                 /* Auto-create export shell so meta-page PUTs can land before
                  * the EFSR root arrives (mkfs / first flush race). */
                 if (!ex && g_server->export_count < EFS_MAX_EXPORTS) {
                     ex = &g_server->exports[g_server->export_count++];
                     efs_export_init(ex, req->export_id, "pending");
                     ex->id = req->export_id;
+                    int nidx = server_export_index_locked(g_server, ex);
+                    if (nidx >= 0)
+                        g_server->export_inflight[nidx]++;
                 }
                 /* Learn data chunk_size from first non-meta PUT when still
                  * default (peer may not have applied EFSR yet). */
@@ -232,6 +244,7 @@ void server_handle_conn(int fd)
                         }
                     }
                 }
+                server_export_put(g_server, ex);
                 efs_send_msg(fd, EFS_MSG_PUT_CHUNK_REPLY, &reply, 1);
             }
             break;
@@ -280,8 +293,19 @@ void server_handle_conn(int fd)
                             g_server->export_count = 1;
                         }
                         struct efs_export *ex = &g_server->exports[0];
+                        /* Strict monotonic CAS: once we hold an EFSR, reject
+                         * any generation we have already seen (<=). Equal gen
+                         * from a second writer would collide in the same
+                         * dual-slot pages with different content (split-brain);
+                         * a lagging writer gets STALE and must re-fetch the max
+                         * gen. A forward jump (gap>1) is NOT split-brain: the
+                         * single metadata writer advances gen every flush, and
+                         * a peer that missed intermediate gens (catch-up lag or
+                         * dropped PUT_META) legitimately observes a gap. Accept
+                         * any strictly-newer gen; the fence+rebuild below brings
+                         * the tables convergent with the newest root. */
                         if (ex->meta_fragmented &&
-                            root.generation < ex->root.generation) {
+                            root.generation <= ex->root.generation) {
                             reply = EFS_PUT_META_STALE;
                             pthread_mutex_unlock(&g_server->lock);
                             efs_export_root_free(&root);
@@ -298,9 +322,14 @@ void server_handle_conn(int fd)
                                 ex->chunk_size = ex->root.chunk_size;
                             /* Never rebuild on this handler thread: peer page
                              * fetches would block the pooled client connection
-                             * and can cascade into multi-node stalls. */
-                            if (ex->root.page_count > 0)
+                             * and can cascade into multi-node stalls. Fence the
+                             * now-stale inode/chunk tables so migrate/stats
+                             * cannot act on maps from the old generation. */
+                            if (ex->root.page_count > 0) {
                                 ex->meta_needs_rebuild = 1;
+                                ex->chunk_count = 0;
+                                ex->inode_count = 0;
+                            }
                             g_server->epoch++;
                             g_server->export_meta_dirty = 1;
                             /* Save while holding the lock: concurrent PUT_META
@@ -527,6 +556,10 @@ void server_handle_conn(int fd)
         case EFS_MSG_NODE_LEFT: {
             if (payload_len >= sizeof(struct efs_msg_node_left)) {
                 struct efs_msg_node_left *msg = payload;
+                /* Heal orphans first: re-place every fragment that referenced
+                 * the departing node and flush the EFSR, so no chunk map points
+                 * at a node that is gone before we shrink membership. */
+                server_heal_orphan_fragments(g_server, msg->node_id);
                 server_remove_node_from_cluster(g_server, msg->node_id);
                 printf("Node %u left the cluster\n", msg->node_id);
             }
@@ -629,10 +662,16 @@ void server_handle_conn(int fd)
                            (ex->meta_needs_rebuild || ex->inode_count <= 1));
             }
             pthread_mutex_unlock(&g_server->lock);
+            /* Rebuild dirty/empty tables before counting. The catch-up thread
+             * also rebuilds, but a stats query must not report zeros for an
+             * export whose pages exist but whose tables are fenced pending
+             * rebuild (e.g. right after a PUT_META root flip). Rebuild here
+             * synchronously; page fetches are served from local disk when this
+             * node holds the fragments, so the common case is fast. */
             for (uint32_t e = 0; e < ec && e < EFS_MAX_EXPORTS; e++) {
-                if (!need[e])
-                    continue;
-                server_rebuild_export_from_pages(g_server, &g_server->exports[e]);
+                if (need[e])
+                    server_rebuild_export_from_pages(g_server,
+                                                     &g_server->exports[e]);
             }
 
             struct efs_msg_query_stats_reply reply;

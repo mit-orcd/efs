@@ -218,6 +218,14 @@ int efs_send_msg_parts(int fd, uint8_t type,
 /* Receive a single message. Caller must free *payload with free(). */
 int efs_recv_msg(int fd, uint8_t *type, void **payload, uint32_t *payload_len);
 
+/* Zero-copy variant: receive a message whose payload is exactly
+ * [1-byte status][hdr_len bytes header][body_len bytes body]. Status, header,
+ * and body are read directly into caller-provided buffers (no malloc, no extra
+ * copy). The wire payload length must equal 1 + hdr_len + body_len exactly,
+ * else EFS_ERR_PROTO. On success *type and *status are set. */
+int efs_recv_msg_into(int fd, uint8_t *type, uint8_t *status,
+                      void *hdr, uint32_t hdr_len, void *body, uint32_t body_len);
+
 /* Hot-path helper: receive a 1-byte status reply without malloc.
  * On success sets *type and *status. Returns EFS_OK or an error. */
 int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status);

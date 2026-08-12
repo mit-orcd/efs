@@ -23,6 +23,8 @@ tests/test_placement
 tests/test_query
 tests/test_quota
 tests/test_rejoin
+tests/test_meta_slot
+tests/test_storage_numa
 
 # dependency build artifacts
 deps/libfuse/.efs-configured

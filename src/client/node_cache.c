@@ -7,6 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <errno.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <pthread.h>
@@ -198,7 +199,16 @@ int efs_client_conn_get(efs_node_id_t node_id)
             }
         }
         if (free_slot < 0) {
-            pthread_cond_wait(&g_client.conn_cv[idx], &g_client.conn_lock[idx]);
+            /* Bounded wait: never hang a FUSE thread forever when the pool is
+             * exhausted. After the deadline return a transient net error so the
+             * caller backs off/retries instead of deadlocking the mount. */
+            struct timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            ts.tv_sec += 5;
+            int wrc = pthread_cond_timedwait(&g_client.conn_cv[idx],
+                                             &g_client.conn_lock[idx], &ts);
+            if (wrc == ETIMEDOUT)
+                return -1;
             continue;
         }
 

@@ -13,18 +13,23 @@ void efs_hash(const void *data, size_t len, uint8_t out[EFS_HASH_SIZE])
     blake3_hasher_finalize(&hasher, out, EFS_HASH_SIZE);
 }
 
+/* pthread_once target for the cached 64 KiB zero-fragment digest. */
+static uint8_t g_zero_frag_digest[EFS_HASH_SIZE];
+static void efs_zero_frag_digest_init(void)
+{
+    static const uint8_t zeros[EFS_FRAGMENT_SIZE];
+    efs_hash(zeros, EFS_FRAGMENT_SIZE, g_zero_frag_digest);
+}
+
 void efs_hash_zero_fragment_len(size_t frag_len, uint8_t out[EFS_HASH_SIZE])
 {
-    /* Cache default meta/data fragment size (64 KiB). */
-    static uint8_t cached_default[EFS_HASH_SIZE];
-    static int ready_default;
+    /* Cache default meta/data fragment size (64 KiB). pthread_once makes the
+     * lazy init thread-safe (the previous racy `ready` flag could let two
+     * threads hash simultaneously and one read a half-written digest). */
+    static pthread_once_t once_default = PTHREAD_ONCE_INIT;
     if (frag_len == EFS_FRAGMENT_SIZE) {
-        if (!ready_default) {
-            static const uint8_t zeros[EFS_FRAGMENT_SIZE];
-            efs_hash(zeros, EFS_FRAGMENT_SIZE, cached_default);
-            ready_default = 1;
-        }
-        memcpy(out, cached_default, EFS_HASH_SIZE);
+        pthread_once(&once_default, efs_zero_frag_digest_init);
+        memcpy(out, g_zero_frag_digest, EFS_HASH_SIZE);
         return;
     }
     if (frag_len == 0 || frag_len > EFS_MAX_FRAGMENT_SIZE) {

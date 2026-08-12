@@ -1,4 +1,22 @@
 #include "efs/erasure.h"
+#include <stdint.h>
+#include <string.h>
+
+/* Byte-wise XOR is the hot loop of 2+1 parity; do it word-at-a-time (and let
+ * the compiler vectorize) to cut per-chunk CPU on both encode and decode. */
+static void xor_into(uint8_t *dst, const uint8_t *a, const uint8_t *b, size_t n)
+{
+    size_t i = 0;
+    for (; i + sizeof(uint64_t) <= n; i += sizeof(uint64_t)) {
+        uint64_t va, vb;
+        memcpy(&va, a + i, sizeof(va));
+        memcpy(&vb, b + i, sizeof(vb));
+        uint64_t r = va ^ vb;
+        memcpy(dst + i, &r, sizeof(r));
+    }
+    for (; i < n; i++)
+        dst[i] = a[i] ^ b[i];
+}
 #include <string.h>
 #include <stdio.h>
 
@@ -32,8 +50,7 @@ int efs_encode_chunk(const uint8_t *chunk, size_t chunk_len, size_t chunk_size,
         memset(fragments[1], 0, frag_len);
     }
 
-    for (size_t i = 0; i < frag_len; i++)
-        fragments[2][i] = fragments[0][i] ^ fragments[1][i];
+    xor_into(fragments[2], fragments[0], fragments[1], frag_len);
 
     return EFS_OK;
 }
@@ -66,11 +83,9 @@ int efs_decode_chunk(uint8_t *const fragments[EFS_NUM_FRAGMENTS], size_t chunk_s
         memcpy(chunk + frag_len, fragments[1], frag_len);
     } else if (missing == 1) {
         memcpy(chunk, fragments[0], frag_len);
-        for (size_t i = 0; i < frag_len; i++)
-            chunk[frag_len + i] = fragments[0][i] ^ fragments[2][i];
+        xor_into(chunk + frag_len, fragments[0], fragments[2], frag_len);
     } else { /* missing == 0 */
-        for (size_t i = 0; i < frag_len; i++)
-            chunk[i] = fragments[1][i] ^ fragments[2][i];
+        xor_into(chunk, fragments[1], fragments[2], frag_len);
         memcpy(chunk + frag_len, fragments[1], frag_len);
     }
 

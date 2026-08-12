@@ -114,28 +114,45 @@ static int pick_target_node(struct efsd_server *s, struct efs_export *ex,
                             struct efs_chunk_entry *chunk, int fragment_index,
                             efs_node_id_t *target_id)
 {
-    pthread_mutex_lock(&s->lock);
-    uint32_t node_count = s->node_count;
+    uint32_t node_count;
     struct efs_node nodes[EFS_MAX_NODES];
-    memcpy(nodes, s->nodes, sizeof(nodes));
-
-    uint32_t migrate_frag_len = server_frag_len(ex, chunk->ino);
-
-    /* Compute fragment storage used by each node from the current metadata. */
     uint64_t node_used[EFS_MAX_NODES] = {0};
-    for (uint64_t ci = 0; ci < ex->chunk_count; ci++) {
-        uint32_t frag_len = server_frag_len(ex, ex->chunks[ci].ino);
-        for (int j = 0; j < EFS_NUM_FRAGMENTS; j++) {
-            efs_node_id_t id = ex->chunks[ci].fragment_nodes[j];
-            for (uint32_t k = 0; k < node_count; k++) {
-                if (nodes[k].id == id) {
-                    node_used[k] += frag_len;
-                    break;
+
+    /* Snapshot nodes + chunk map under the lock, then scan unlocked: holding
+     * s->lock across an O(chunks×3×nodes) sweep stalls every handler. */
+    pthread_mutex_lock(&s->lock);
+    node_count = s->node_count;
+    if (node_count > EFS_MAX_NODES)
+        node_count = EFS_MAX_NODES;
+    memcpy(nodes, s->nodes, sizeof(struct efs_node) * node_count);
+    uint64_t chunk_count = ex->chunk_count;
+    uint32_t frag_len_snap = server_frag_len(ex, chunk->ino);
+    struct efs_chunk_entry *csnap = NULL;
+    if (chunk_count > 0) {
+        csnap = malloc(sizeof(*csnap) * chunk_count);
+        if (csnap)
+            memcpy(csnap, ex->chunks, sizeof(*csnap) * chunk_count);
+    }
+    pthread_mutex_unlock(&s->lock);
+
+    uint32_t migrate_frag_len = frag_len_snap;
+
+    /* Compute fragment storage used by each node from the chunk snapshot. */
+    if (csnap) {
+        for (uint64_t ci = 0; ci < chunk_count; ci++) {
+            uint32_t frag_len = frag_len_snap; /* same chunk_size for all */
+            for (int j = 0; j < EFS_NUM_FRAGMENTS; j++) {
+                efs_node_id_t id = csnap[ci].fragment_nodes[j];
+                for (uint32_t k = 0; k < node_count; k++) {
+                    if (nodes[k].id == id) {
+                        node_used[k] += frag_len;
+                        break;
+                    }
                 }
             }
         }
+        free(csnap);
     }
-    pthread_mutex_unlock(&s->lock);
 
     efs_node_id_t preferred = 0;
     efs_node_id_t fallback = 0;
@@ -211,6 +228,22 @@ static int migrate_one_fragment(struct efsd_server *s, struct efs_export *ex,
         goto out;
     }
 
+    /* Fast path: the fragment being migrated is local — read + verify it from
+     * our own disk instead of fetching the other two fragments over the
+     * network and EC-reconstructing. Fall back to reconstruction on miss. */
+    {
+        uint32_t local_len = 0;
+        uint8_t vh[EFS_HASH_SIZE];
+        if (server_read_fragment(s, ex, chunk->ino, chunk->chunk_index,
+                                 fragment_index, frags[fragment_index],
+                                 &local_len) == EFS_OK &&
+            local_len == frag_len) {
+            efs_hash(frags[fragment_index], frag_len, vh);
+            if (memcmp(vh, chunk->checksums[fragment_index], EFS_HASH_SIZE) == 0)
+                goto have_fragment; /* local read verified; skip EC rebuild */
+        }
+    }
+
     /* Read the other two fragments from their current nodes. */
     for (int i = 0; i < 2; i++) {
         int oi = other[i];
@@ -257,6 +290,8 @@ static int migrate_one_fragment(struct efsd_server *s, struct efs_export *ex,
         goto out;
     }
 
+have_fragment:;
+
     /* Write the reconstructed fragment to the target node. */
     struct efs_node *target = NULL;
     for (uint32_t i = 0; i < node_count; i++) {
@@ -291,6 +326,20 @@ static int migrate_one_fragment(struct efsd_server *s, struct efs_export *ex,
     s->export_meta_dirty = 1;
     pthread_mutex_unlock(&s->lock);
 
+    /* Make the new placement durable BEFORE deleting the local copy. If we
+     * unlink first and then crash/fail to flush, the published map still
+     * points at this (now empty) node → permanent NOT_FOUND. Flush failure
+     * aborts the migrate and leaves the local fragment intact. */
+    if (server_flush_fragmented_meta(s, ex) != 0) {
+        fprintf(stderr,
+                "migrate: flush after re-place failed (ino=%llu ci=%u fi=%d) — "
+                "keeping local fragment\n",
+                (unsigned long long)chunk->ino, chunk->chunk_index,
+                fragment_index);
+        rc = EFS_ERR_IO;
+        goto out;
+    }
+
     /* Delete the local copy of the fragment and its checksum sidecar
      * (sharded path and legacy flat-{ino} path). */
     server_unlink_fragment_files(s, ex, chunk->ino, chunk->chunk_index,
@@ -304,6 +353,7 @@ static int migrate_one_fragment(struct efsd_server *s, struct efs_export *ex,
         else
             local->used = 0;
     }
+    s->export_meta_dirty = 0;
     pthread_mutex_unlock(&s->lock);
     server_usage_save(s);
 
@@ -311,6 +361,156 @@ static int migrate_one_fragment(struct efsd_server *s, struct efs_export *ex,
 
 out:
     free(reconstructed_chunk);
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        free(frag_bufs[i]);
+    return rc;
+}
+
+/* Rebuild one fragment that lived on a departed node from the two surviving
+ * fragments (EC decode), push it to a live node, and update the in-memory
+ * chunk map. Does NOT touch disk on the departed node (it is gone). Caller
+ * flushes the EFSR once for the whole heal pass. */
+int server_rebuild_orphan_fragment(struct efsd_server *s, struct efs_export *ex,
+                                   struct efs_chunk_entry *chunk,
+                                   int fragment_index, efs_node_id_t dead_id)
+{
+    uint32_t frag_len = server_frag_len(ex, chunk->ino);
+    uint32_t chunk_size = server_data_chunk_size(ex);
+
+    pthread_mutex_lock(&s->lock);
+    uint32_t node_count = s->node_count;
+    struct efs_node nodes[EFS_MAX_NODES];
+    memcpy(nodes, s->nodes, sizeof(struct efs_node) * node_count);
+    pthread_mutex_unlock(&s->lock);
+
+    /* The two fragments not on the dead node. */
+    int surv[2];
+    int idx = 0;
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (i != fragment_index)
+            surv[idx++] = i;
+    }
+
+    uint8_t *frag_bufs[EFS_NUM_FRAGMENTS] = {NULL};
+    uint8_t *frags[EFS_NUM_FRAGMENTS];
+    uint8_t *recon = NULL;
+    int rc = EFS_ERR_NOMEM;
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        frag_bufs[i] = malloc(frag_len);
+        if (!frag_bufs[i])
+            goto out;
+        frags[i] = frag_bufs[i];
+    }
+    recon = malloc(chunk_size);
+    if (!recon)
+        goto out;
+
+    /* Fetch the two survivors; one may be local. */
+    for (int i = 0; i < 2; i++) {
+        int oi = surv[i];
+        efs_node_id_t nid = chunk->fragment_nodes[oi];
+        if (nid == dead_id) {
+            rc = EFS_ERR_NET;
+            goto out;
+        }
+        uint8_t csum[EFS_HASH_SIZE];
+        uint32_t len = 0;
+        if (nid == s->id) {
+            rc = server_read_fragment(s, ex, chunk->ino, chunk->chunk_index, oi,
+                                      frags[oi], &len);
+            if (rc != EFS_OK || len != frag_len) {
+                rc = EFS_ERR_IO;
+                goto out;
+            }
+        } else {
+            struct efs_node *n = NULL;
+            for (uint32_t j = 0; j < node_count; j++)
+                if (nodes[j].id == nid) { n = &nodes[j]; break; }
+            if (!n) { rc = EFS_ERR_NET; goto out; }
+            rc = server_get_fragment_from_peer(n->addr, n->port, ex->id,
+                                               chunk->ino, chunk->chunk_index,
+                                               oi, frag_len, frags[oi], csum);
+            if (rc != 0)
+                goto out;
+        }
+    }
+
+    rc = efs_decode_chunk(frags, chunk_size, surv[0], surv[1], fragment_index,
+                          recon, chunk_size);
+    if (rc != 0) {
+        rc = EFS_ERR_DECODE;
+        goto out;
+    }
+    if (fragment_index == 0)
+        memcpy(frags[0], recon, frag_len);
+    else if (fragment_index == 1)
+        memcpy(frags[1], recon + frag_len, frag_len);
+    else
+        for (size_t i = 0; i < frag_len; i++)
+            frags[2][i] = recon[i] ^ recon[frag_len + i];
+
+    /* Verify against the recorded checksum. */
+    uint8_t vh[EFS_HASH_SIZE];
+    efs_hash(frags[fragment_index], frag_len, vh);
+    if (memcmp(vh, chunk->checksums[fragment_index], EFS_HASH_SIZE) != 0) {
+        rc = EFS_ERR_CHECKSUM;
+        goto out;
+    }
+
+    /* Pick a live target that does not already hold a fragment of this chunk. */
+    efs_node_id_t target_id = 0;
+    for (uint32_t i = 0; i < node_count && !target_id; i++) {
+        efs_node_id_t nid = nodes[i].id;
+        if (nid == dead_id)
+            continue;
+        int clash = 0;
+        for (int j = 0; j < EFS_NUM_FRAGMENTS; j++)
+            if (j != fragment_index && chunk->fragment_nodes[j] == nid) { clash = 1; break; }
+        if (!clash)
+            target_id = nid;
+    }
+    if (!target_id) {
+        rc = EFS_ERR_NOT_FOUND;
+        goto out;
+    }
+
+    /* Push to the target (local write or peer PUT). */
+    if (target_id == s->id) {
+        rc = server_write_fragment_sync(s, ex, chunk->ino, chunk->chunk_index,
+                                        fragment_index, frags[fragment_index],
+                                        frag_len);
+        if (rc == EFS_OK)
+            rc = server_write_fragment_sum_sync(s, ex, chunk->ino,
+                                                chunk->chunk_index, fragment_index,
+                                                chunk->checksums[fragment_index]);
+    } else {
+        struct efs_node *t = NULL;
+        for (uint32_t i = 0; i < node_count; i++)
+            if (nodes[i].id == target_id) { t = &nodes[i]; break; }
+        if (!t) { rc = EFS_ERR_NET; goto out; }
+        rc = server_put_fragment_to_peer(t->addr, t->port, ex->id, chunk->ino,
+                                         chunk->chunk_index, fragment_index,
+                                         frag_len, frags[fragment_index],
+                                         chunk->checksums[fragment_index]);
+    }
+    if (rc != 0)
+        goto out;
+
+    pthread_mutex_lock(&s->lock);
+    efs_node_id_t new_nodes[EFS_NUM_FRAGMENTS];
+    uint8_t new_sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        new_nodes[i] = chunk->fragment_nodes[i];
+        memcpy(new_sums[i], chunk->checksums[i], EFS_HASH_SIZE);
+    }
+    new_nodes[fragment_index] = target_id;
+    efs_export_set_chunk(ex, chunk->ino, chunk->chunk_index, new_nodes, new_sums);
+    s->export_meta_dirty = 1;
+    pthread_mutex_unlock(&s->lock);
+    rc = EFS_OK;
+
+out:
+    free(recon);
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
         free(frag_bufs[i]);
     return rc;
@@ -349,7 +549,10 @@ static void *migration_thread(void *arg)
         if (need_rebuild)
             server_rebuild_export_from_pages(s, ex);
 
-        server_update_local_usage(s);
+        /* Used-bytes are maintained incrementally by migrate_one_fragment
+         * (subtract frag_len per move); skip the O(tree) data/ walk each round.
+         * server_node_is_empty() still walks when drain/leave actually needs a
+         * ground-truth emptiness check. */
 
         bool migrated_any = false;
         bool done = true;
@@ -374,7 +577,6 @@ static void *migration_thread(void *arg)
             if (rc == 0) {
                 migrated_any = true;
                 done = false;
-                usleep(10000); /* brief pause between migrations */
             } else if (rc == EFS_ERR_NOT_FOUND) {
                 /* No other node has room for this fragment. */
                 continue;
@@ -386,9 +588,9 @@ static void *migration_thread(void *arg)
             }
         }
 
-        /* Flush chunk-map pages once per migration round (not per fragment). */
+        /* Per-fragment migrate already flushes before unlinking the source;
+         * nothing extra to flush here. Clear any residual dirty flag. */
         if (migrated_any) {
-            server_flush_fragmented_meta(s, ex);
             pthread_mutex_lock(&s->lock);
             s->export_meta_dirty = 0;
             pthread_mutex_unlock(&s->lock);
@@ -489,8 +691,9 @@ void server_remove_node_from_cluster(struct efsd_server *s, efs_node_id_t node_i
     }
     memcpy(s->nodes, new_nodes, sizeof(s->nodes));
     s->node_count = new_count;
-    server_save_nodes(s);
+    server_nodes_mark_dirty(s);
     pthread_mutex_unlock(&s->lock);
+    server_nodes_flush_dirty(s);
 }
 
 void server_notify_node_left(struct efsd_server *s, efs_node_id_t node_id)
@@ -518,4 +721,72 @@ void server_notify_node_left(struct efsd_server *s, efs_node_id_t node_id)
         else
             server_peer_conn_drop(host, port, fd);
     }
+}
+
+/* Re-place every fragment that referenced a departed node and flush the EFSR,
+ * so the published chunk map never points at a node that has left. For each
+ * orphaned fragment we reconstruct from the two surviving fragments (the local
+ * node may hold one) and PUT it to a live target. */
+void server_heal_orphan_fragments(struct efsd_server *s, efs_node_id_t node_id)
+{
+    pthread_mutex_lock(&s->lock);
+    int ex_idx = -1;
+    for (uint32_t e = 0; e < s->export_count; e++) {
+        if (!s->export_destroying[e]) {
+            ex_idx = (int)e;
+            s->export_inflight[e]++;
+            break;
+        }
+    }
+    struct efs_export *ex = (ex_idx >= 0) ? &s->exports[ex_idx] : NULL;
+    int need_rebuild = ex && ex->meta_fragmented && ex->meta_needs_rebuild;
+    pthread_mutex_unlock(&s->lock);
+    if (!ex)
+        return;
+    if (need_rebuild)
+        server_rebuild_export_from_pages(s, ex);
+
+    int healed = 0;
+    for (uint64_t ci = 0; ci < ex->chunk_count; ci++) {
+        /* Re-read the chunk entry under lock each iteration: heals below
+         * mutate the map and can grow/realloc it. */
+        pthread_mutex_lock(&s->lock);
+        if (ci >= ex->chunk_count) {
+            pthread_mutex_unlock(&s->lock);
+            break;
+        }
+        struct efs_chunk_entry chunk = ex->chunks[ci];
+        pthread_mutex_unlock(&s->lock);
+
+        int orphan_fi = -1;
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            if (chunk.fragment_nodes[i] == node_id) {
+                orphan_fi = i;
+                break;
+            }
+        }
+        if (orphan_fi < 0)
+            continue;
+
+        /* Reconstruct the orphaned fragment from the two survivors and push it
+         * to a live node. Temporarily treat this as a "migrate off node_id". */
+        if (server_rebuild_orphan_fragment(s, ex, &chunk, orphan_fi,
+                                           node_id) == 0)
+            healed++;
+    }
+
+    if (healed > 0) {
+        if (server_flush_fragmented_meta(s, ex) != 0)
+            fprintf(stderr, "NODE_LEFT heal: flush failed after %d re-places\n",
+                    healed);
+        else
+            printf("NODE_LEFT: healed %d orphaned fragments from node %u\n",
+                   healed, node_id);
+    }
+    pthread_mutex_lock(&s->lock);
+    if (ex_idx >= 0 && ex_idx < (int)s->export_count &&
+        s->export_inflight[ex_idx] > 0)
+        if (--s->export_inflight[ex_idx] == 0)
+            pthread_cond_broadcast(&s->export_idle_cv);
+    pthread_mutex_unlock(&s->lock);
 }

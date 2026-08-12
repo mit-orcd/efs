@@ -193,6 +193,49 @@ struct efs_export *server_get_export(struct efsd_server *s, efs_export_id_t id)
     return NULL;
 }
 
+int server_export_index_locked(struct efsd_server *s, struct efs_export *ex)
+{
+    if (!ex)
+        return -1;
+    ptrdiff_t idx = ex - s->exports;
+    if (idx < 0 || (uint32_t)idx >= s->export_count)
+        return -1;
+    return (int)idx;
+}
+
+struct efs_export *server_export_acquire_locked(struct efsd_server *s,
+                                                efs_export_id_t id)
+{
+    struct efs_export *ex = server_get_export(s, id);
+    int idx = server_export_index_locked(s, ex);
+    if (idx < 0 || s->export_destroying[idx])
+        return NULL;
+    s->export_inflight[idx]++;
+    return ex;
+}
+
+struct efs_export *server_export_acquire(struct efsd_server *s,
+                                         efs_export_id_t id)
+{
+    pthread_mutex_lock(&s->lock);
+    struct efs_export *ex = server_export_acquire_locked(s, id);
+    pthread_mutex_unlock(&s->lock);
+    return ex;
+}
+
+void server_export_put(struct efsd_server *s, struct efs_export *ex)
+{
+    if (!ex)
+        return;
+    pthread_mutex_lock(&s->lock);
+    int idx = server_export_index_locked(s, ex);
+    if (idx >= 0 && s->export_inflight[idx] > 0) {
+        if (--s->export_inflight[idx] == 0)
+            pthread_cond_broadcast(&s->export_idle_cv);
+    }
+    pthread_mutex_unlock(&s->lock);
+}
+
 static void export_meta_dir_path_at(struct efsd_server *s, uint32_t root_idx,
                                     struct efs_export *ex, char *path, size_t path_len)
 {
@@ -395,6 +438,12 @@ int server_destroy_export(struct efsd_server *s, const char *name)
         return EFS_ERR_NOT_FOUND;
     }
 
+    /* Fence new acquires, then wait for in-flight I/O to drain before we
+     * compact/free the slot. */
+    s->export_destroying[idx] = 1;
+    while (s->export_inflight[idx] > 0)
+        pthread_cond_wait(&s->export_idle_cv, &s->lock);
+
     struct efs_export doomed = s->exports[idx];
     efs_export_id_t id = doomed.id;
     char doomed_name[EFS_MAX_NAME];
@@ -405,7 +454,15 @@ int server_destroy_export(struct efsd_server *s, const char *name)
     uint32_t last = s->export_count - 1;
     if ((uint32_t)idx != last)
         s->exports[idx] = s->exports[last];
+    /* Slot `last` is being cleared; move its lifetime counters down to idx if
+     * we compacted, then clear the tail slot's counters. */
+    if ((uint32_t)idx != last) {
+        s->export_inflight[idx] = 0;
+        s->export_destroying[idx] = 0;
+    }
     memset(&s->exports[last], 0, sizeof(s->exports[last]));
+    s->export_inflight[last] = 0;
+    s->export_destroying[last] = 0;
     s->export_count--;
     s->export_meta_dirty = 1;
     pthread_mutex_unlock(&s->lock);
@@ -863,12 +920,27 @@ static void server_fragment_sum_path_at_legacy(struct efsd_server *s, uint32_t r
     snprintf(path, path_len, "%s/%u.%u.sum", dir, chunk_index, fragment_index);
 }
 
+/* Write the checksum sidecar for an already-resolved fragment path. The
+ * fragment write just created the parent dir, so a plain open suffices — no
+ * make_dir walk (saves the per-PUT dir-resolution the .sum used to redo). */
+static int write_sum_for_path(const char *frag_path,
+                              const uint8_t checksum[EFS_HASH_SIZE])
+{
+    char spath[8200];
+    snprintf(spath, sizeof(spath), "%s.sum", frag_path);
+    int fd = open(spath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0)
+        return EFS_ERR_IO;
+    ssize_t n = write(fd, checksum, EFS_HASH_SIZE);
+    close(fd);
+    return (n == (ssize_t)EFS_HASH_SIZE) ? EFS_OK : EFS_ERR_IO;
+}
+
 int server_write_fragment_sum_sync(struct efsd_server *s, struct efs_export *ex,
                                    efs_ino_t ino, uint32_t chunk_index,
                                    uint32_t fragment_index,
                                    const uint8_t checksum[EFS_HASH_SIZE])
 {
-    /* Keep .sum next to the fragment data (same root as the write). */
     char path[8192];
     uint32_t ri = write_root_index(s, chunk_index);
     server_fragment_sum_path_at(s, ri, ex, ino, chunk_index, fragment_index,
@@ -1126,6 +1198,12 @@ bool server_would_exceed_quota(struct efsd_server *s, uint64_t fragment_size)
     return local->used + fragment_size > s->quota;
 }
 
+int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export *ex,
+                                        efs_ino_t ino, uint32_t chunk_index,
+                                        uint32_t fragment_index,
+                                        const uint8_t *data, uint32_t data_len,
+                                        const uint8_t checksum[EFS_HASH_SIZE]);
+
 int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
                                efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                                const uint8_t *data, uint32_t data_len)
@@ -1192,6 +1270,24 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
     return EFS_OK;
 }
 
+/* Combined fragment+checksum write: one dir resolution, the .sum emitted in
+ * the same just-created directory (no second make_dir / access walk). */
+int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export *ex,
+                                        efs_ino_t ino, uint32_t chunk_index,
+                                        uint32_t fragment_index,
+                                        const uint8_t *data, uint32_t data_len,
+                                        const uint8_t checksum[EFS_HASH_SIZE])
+{
+    int rc = server_write_fragment_sync(s, ex, ino, chunk_index, fragment_index,
+                                        data, data_len);
+    if (rc != EFS_OK)
+        return rc;
+    char path[8192];
+    server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
+                         sizeof(path));
+    return write_sum_for_path(path, checksum);
+}
+
 #define EFS_NODES_MAGIC "EFSN"
 #define EFS_NODES_VERSION 1
 
@@ -1201,10 +1297,36 @@ static void nodes_path_at(struct efsd_server *s, uint32_t root_idx,
     snprintf(path, path_len, "%s/meta/cluster_nodes.bin", s->storage_paths[root_idx]);
 }
 
+void server_nodes_mark_dirty(struct efsd_server *s)
+{
+    s->nodes_dirty = 1;
+}
+
+void server_nodes_flush_dirty(struct efsd_server *s)
+{
+    pthread_mutex_lock(&s->lock);
+    int dirty = s->nodes_dirty;
+    s->nodes_dirty = 0;
+    pthread_mutex_unlock(&s->lock);
+    if (dirty)
+        server_save_nodes(s);
+}
+
 void server_save_nodes(struct efsd_server *s)
 {
     if (!s->persist_nodes)
         return;
+
+    /* Snapshot membership under the lock, then do all disk I/O unlocked so a
+     * slow fsync never serializes every connection handler behind s->lock. */
+    struct efs_node nodes_snap[EFS_MAX_NODES];
+    uint32_t node_count;
+    pthread_mutex_lock(&s->lock);
+    node_count = s->node_count;
+    if (node_count > EFS_MAX_NODES)
+        node_count = EFS_MAX_NODES;
+    memcpy(nodes_snap, s->nodes, sizeof(struct efs_node) * node_count);
+    pthread_mutex_unlock(&s->lock);
 
     uint32_t nroots = s->storage_path_count ? s->storage_path_count : 1;
     for (uint32_t ri = 0; ri < nroots; ri++) {
@@ -1221,11 +1343,10 @@ void server_save_nodes(struct efsd_server *s)
 
         fwrite(EFS_NODES_MAGIC, 4, 1, f);
         uint32_t version = EFS_NODES_VERSION;
-        uint32_t node_count = s->node_count;
         fwrite(&version, sizeof(version), 1, f);
         fwrite(&node_count, sizeof(node_count), 1, f);
         if (node_count > 0)
-            fwrite(s->nodes, sizeof(struct efs_node), node_count, f);
+            fwrite(nodes_snap, sizeof(struct efs_node), node_count, f);
 
         fflush(f);
         fsync(fileno(f));

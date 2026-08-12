@@ -4,12 +4,18 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
+#include <time.h>
 
 /* Persistent server→server TCP pool. Same idea as the client conn pool:
  * connect once per peer, reuse across meta rebuild/flush/migrate. Drop on
  * protocol/net errors so the next checkout reconnects. */
 
 #define EFS_PEER_CONNS_PER_NODE 4
+/* After this many consecutive connect failures, stop reconnecting for the
+ * cooldown window so a dead peer does not stall every caller on connect(). */
+#define EFS_PEER_DOWN_FAILS 3
+#define EFS_PEER_DOWN_MS    10000
 
 struct peer_slot {
     char host[64];
@@ -17,9 +23,18 @@ struct peer_slot {
     int in_use; /* host/port assigned */
     int fd[EFS_PEER_CONNS_PER_NODE];
     int busy[EFS_PEER_CONNS_PER_NODE];
+    uint64_t down_until_ms; /* skip reconnect until this monotonic deadline */
+    uint32_t fail_streak;
     pthread_mutex_t lock;
     pthread_cond_t cv;
 };
+
+static uint64_t peer_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000ull + (uint64_t)ts.tv_nsec / 1000000ull;
+}
 
 static struct peer_slot g_peers[EFS_MAX_NODES];
 static pthread_mutex_t g_peers_mu = PTHREAD_MUTEX_INITIALIZER;
@@ -105,7 +120,14 @@ int server_peer_conn_get(const char *host, uint16_t port)
     if (!p)
         return -1;
 
+    uint64_t now = peer_now_ms();
     pthread_mutex_lock(&p->lock);
+    /* Down-cooldown: don't even try to connect to a peer that has failed
+     * repeatedly; the caller treats -1 as "peer down" and skips it fast. */
+    if (p->down_until_ms > now) {
+        pthread_mutex_unlock(&p->lock);
+        return -1;
+    }
     for (;;) {
         int free_s = -1;
         for (int s = 0; s < EFS_PEER_CONNS_PER_NODE; s++) {
@@ -115,7 +137,16 @@ int server_peer_conn_get(const char *host, uint16_t port)
             }
         }
         if (free_s < 0) {
-            pthread_cond_wait(&p->cv, &p->lock);
+            /* Bounded wait: never park a caller forever on a busy pool; after
+             * the deadline let the caller fail/back off. */
+            struct timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            ts.tv_sec += 5;
+            int wrc = pthread_cond_timedwait(&p->cv, &p->lock, &ts);
+            if (wrc == ETIMEDOUT) {
+                pthread_mutex_unlock(&p->lock);
+                return -1;
+            }
             continue;
         }
 
@@ -131,6 +162,10 @@ int server_peer_conn_get(const char *host, uint16_t port)
             if (fd < 0) {
                 pthread_mutex_lock(&p->lock);
                 p->busy[free_s] = 0;
+                if (p->fail_streak < 1000)
+                    p->fail_streak++;
+                if (p->fail_streak >= EFS_PEER_DOWN_FAILS)
+                    p->down_until_ms = peer_now_ms() + EFS_PEER_DOWN_MS;
                 pthread_cond_signal(&p->cv);
                 pthread_mutex_unlock(&p->lock);
                 return -1;
@@ -145,6 +180,8 @@ int server_peer_conn_get(const char *host, uint16_t port)
             } else {
                 p->fd[free_s] = fd;
             }
+            p->fail_streak = 0;
+            p->down_until_ms = 0;
             pthread_mutex_unlock(&p->lock);
             return fd;
         }

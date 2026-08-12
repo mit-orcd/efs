@@ -309,6 +309,10 @@ static int send_meta_root(const char *buf, size_t len)
     return (acks >= 2) ? EFS_OK : EFS_ERR_NO_QUORUM;
 }
 
+/* Serialize concurrent replicators so two flushes don't interleave page PUTs /
+ * gen bumps. This replaces holding g_client.lock across serialize+network. */
+static pthread_mutex_t g_repl_mu = PTHREAD_MUTEX_INITIALIZER;
+
 /* Pack the full export into 2+1 pages, then push the EFSR root (≥2 acks). */
 static int efs_client_replicate_metadata_once(void)
 {
@@ -316,16 +320,20 @@ static int efs_client_replicate_metadata_once(void)
     size_t blob_len = 0;
     uint64_t new_gen = 1;
 
+    pthread_mutex_lock(&g_repl_mu);
+
     pthread_mutex_lock(&g_client.lock);
     if (g_client.meta_batch &&
         g_client.dirty_ino_count == 0 && g_client.dirty_chunk_count == 0 &&
         !g_client.meta_dirty) {
         g_client.meta_dirty_ops = 0;
         pthread_mutex_unlock(&g_client.lock);
+        pthread_mutex_unlock(&g_repl_mu);
         return EFS_OK;
     }
     if (efs_export_serialize(&g_client.export, &blob, &blob_len) != EFS_OK) {
         pthread_mutex_unlock(&g_client.lock);
+        pthread_mutex_unlock(&g_repl_mu);
         return EFS_ERR_NOMEM;
     }
     new_gen = g_client.export.root.generation + 1;
@@ -345,6 +353,23 @@ static int efs_client_replicate_metadata_once(void)
         fflush(stderr);
         free(blob);
         return EFS_ERR_INVAL;
+    }
+
+    /* 2+1 EC needs 3 distinct nodes; on a 1-2 node ring placement wraps and
+     * two fragments land on one machine, so a "quorum" of 2 acks can be a
+     * single disk. Refuse to publish data metadata we cannot durably store. */
+    pthread_mutex_lock(&g_client.lock);
+    uint32_t live_nodes = g_client.node_count;
+    pthread_mutex_unlock(&g_client.lock);
+    if (live_nodes < EFS_NUM_FRAGMENTS) {
+        fprintf(stderr,
+                "meta replicate: only %u live node(s); 2+1 EC needs %u distinct "
+                "nodes — refusing to commit gen %llu\n",
+                live_nodes, (unsigned)EFS_NUM_FRAGMENTS,
+                (unsigned long long)new_gen);
+        fflush(stderr);
+        free(blob);
+        return EFS_ERR_NO_QUORUM;
     }
 
     struct efs_export_root root;
@@ -469,6 +494,7 @@ static int efs_client_replicate_metadata_once(void)
     } else {
         efs_export_root_free(&root);
     }
+    pthread_mutex_unlock(&g_repl_mu);
     return rc;
 }
 
@@ -476,7 +502,7 @@ int efs_client_replicate_metadata(void)
 {
     /* Bulk copies (ecopy/rsync) hit a full meta flush every meta_batch_ops
      * creates/chmods. Transient net/quorum blips show up as fchmod EIO —
-     * retry a few times before surfacing failure. */
+     * retry with exponential backoff + jitter before surfacing failure. */
     int rc = EFS_ERR_NET;
     for (int attempt = 1; attempt <= 4; attempt++) {
         rc = efs_client_replicate_metadata_once();
@@ -487,8 +513,10 @@ int efs_client_replicate_metadata(void)
         fprintf(stderr, "meta replicate attempt %d/4 failed: %s\n",
                 attempt, efs_strerror(rc));
         fflush(stderr);
-        if (attempt < 4)
-            usleep(50000u * (unsigned)attempt);
+        if (attempt < 4) {
+            useconds_t base = 100000u << (attempt - 1); /* 100,200,400ms */
+            usleep(base + (useconds_t)(rand() % 50000));
+        }
     }
     fprintf(stderr, "meta replicate giving up: %s\n", efs_strerror(rc));
     fflush(stderr);
@@ -813,6 +841,20 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
                                       uint32_t frag_len,
                                       const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE])
 {
+    /* 2+1 EC requires 3 distinct nodes. On a 1-2 node ring placement wraps and
+     * two fragments land on one machine, so a "2-ack quorum" can be a single
+     * disk — losing that node loses the chunk. Refuse rather than store
+     * undurably. */
+    if (nodes[0] == nodes[1] || nodes[1] == nodes[2] || nodes[0] == nodes[2]) {
+        fprintf(stderr,
+                "put_fragments ino=%llu chunk=%u: EC needs 3 distinct nodes "
+                "(got %u,%u,%u) — refusing undurable write\n",
+                (unsigned long long)ino, chunk_index,
+                (unsigned)nodes[0], (unsigned)nodes[1], (unsigned)nodes[2]);
+        fflush(stderr);
+        return EFS_ERR_NO_QUORUM;
+    }
+
     /* Retry transient blips; only invalidate peers that actually failed. */
     int rc = EFS_ERR_NET;
     for (int attempt = 1; attempt <= 4; attempt++) {
@@ -821,9 +863,28 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
                                          frag_len, checksums, failed);
         if (rc == EFS_OK || rc == EFS_ERR_QUOTA)
             return rc;
+        /* Only hard I/O failures invalidate a node's idle pool. failed[] is
+         * also set for POLLOUT soft-misses (window backpressure) and down-skip,
+         * which must NOT trigger a reconnect storm — the node is not dead. */
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-            if (failed[i] && nodes[i] != 0)
+            if (failed[i] && nodes[i] != 0 &&
+                !efs_client_node_is_down(nodes[i]))
                 efs_client_conn_invalidate_node(nodes[i]);
+        }
+        /* Fail fast when fewer than 2 peers are even reachable — retrying a
+         * quorum we cannot reach only stacks latency. */
+        int live = 0;
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+            if (nodes[i] != 0 && !efs_client_node_is_down(nodes[i]))
+                live++;
+        if (live < 2) {
+            fprintf(stderr,
+                    "put_fragments ino=%llu chunk=%u: only %d/%u peers live, "
+                    "cannot reach EC quorum — failing fast\n",
+                    (unsigned long long)ino, chunk_index, live,
+                    (unsigned)EFS_NUM_FRAGMENTS);
+            fflush(stderr);
+            return EFS_ERR_NO_QUORUM;
         }
         fprintf(stderr,
                 "put_fragments ino=%llu chunk=%u nodes=%u,%u,%u "
@@ -833,8 +894,12 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
                 attempt, efs_strerror(rc), rc,
                 attempt < 4 ? " — retrying" : " — giving up");
         fflush(stderr);
-        if (attempt < 4)
-            usleep(150000u * (unsigned)attempt);
+        /* Exponential backoff + jitter instead of a fixed linear sleep. */
+        if (attempt < 4) {
+            useconds_t base = 100000u << (attempt - 1); /* 100,200,400ms */
+            useconds_t jitter = (useconds_t)(rand() % 50000);
+            usleep(base + jitter);
+        }
     }
     return rc;
 }

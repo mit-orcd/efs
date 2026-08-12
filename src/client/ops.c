@@ -30,9 +30,15 @@ int efs_client_lookup(const char *path, struct efs_inode *out)
         return rc;
     }
 
-    char *p = strdup(path + 1);
+    /* Copy onto the stack (bounded by PATH_MAX) instead of a per-lookup
+     * strdup/free on the getattr/lookup hot path. */
+    char pbuf[4096];
+    size_t plen = strlen(path + 1);
+    if (plen >= sizeof(pbuf))
+        return EFS_ERR_INVAL;
+    memcpy(pbuf, path + 1, plen + 1);
     char *save = NULL;
-    char *part = strtok_r(p, "/", &save);
+    char *part = strtok_r(pbuf, "/", &save);
 
     pthread_mutex_lock(&g_client.lock);
     int rc = EFS_ERR_NOT_FOUND;
@@ -49,7 +55,6 @@ int efs_client_lookup(const char *path, struct efs_inode *out)
     }
     pthread_mutex_unlock(&g_client.lock);
 
-    free(p);
     return rc;
 }
 

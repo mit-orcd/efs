@@ -330,6 +330,29 @@ struct efs_wb_job {
     char *buf;
 };
 
+/* Per-ino write serialization. WB workers run jobs concurrently, but two jobs
+ * touching the same inode (overlapping partial chunks) must not RMW the same
+ * chunk concurrently or they lose updates. Striped locks keep parallelism
+ * across inodes while serializing within one. */
+#define EFS_WB_INO_STRIPES 64
+static pthread_mutex_t g_wb_ino_mu[EFS_WB_INO_STRIPES];
+static int g_wb_ino_mu_ready;
+static pthread_mutex_t g_wb_ino_init_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static pthread_mutex_t *efs_wb_ino_lock(efs_ino_t ino)
+{
+    if (!g_wb_ino_mu_ready) {
+        pthread_mutex_lock(&g_wb_ino_init_mu);
+        if (!g_wb_ino_mu_ready) {
+            for (int i = 0; i < EFS_WB_INO_STRIPES; i++)
+                pthread_mutex_init(&g_wb_ino_mu[i], NULL);
+            __atomic_store_n(&g_wb_ino_mu_ready, 1, __ATOMIC_RELEASE);
+        }
+        pthread_mutex_unlock(&g_wb_ino_init_mu);
+    }
+    return &g_wb_ino_mu[(uint64_t)ino % EFS_WB_INO_STRIPES];
+}
+
 static struct {
     pthread_mutex_t mu;
     pthread_cond_t not_empty;
@@ -383,8 +406,13 @@ static void *efs_wb_thread(void *arg)
         pthread_cond_signal(&g_wb.not_full);
         pthread_mutex_unlock(&g_wb.mu);
 
+        /* Serialize same-ino writebacks: partial-chunk RMW is not atomic, so
+         * two overlapping WB jobs on one file would otherwise lose updates. */
+        pthread_mutex_t *ilock = efs_wb_ino_lock(job.ino);
+        pthread_mutex_lock(ilock);
         int rc = efs_client_write_no_replicate(job.ino, job.offset, job.size,
                                                job.buf);
+        pthread_mutex_unlock(ilock);
         free(job.buf);
 
         pthread_mutex_lock(&g_wb.mu);
@@ -1188,8 +1216,13 @@ int main(int argc, char **argv)
      * FUSE_CAP_WRITEBACK_CACHE in efs_fuse_init when the kernel supports it
      * (this cluster's libfuse rejects -o writeback_cache). */
     fuse_argv[fuse_argc++] = "-o";
+    /* Cache attr/entry for 1s in the kernel: with timeout=0 every access
+     * round-trips FUSE getattr/lookup into userspace (and our lookup path
+     * takes g_client.lock + strdup). efs serves attrs from the in-memory meta
+     * cache anyway, so a short TTL is safe for single-mount workloads and a
+     * large win for metadata-heavy trees. */
     fuse_argv[fuse_argc++] =
-        "big_writes,max_write=16777216,max_readahead=16777216,use_ino,attr_timeout=0,entry_timeout=0,ac_attr_timeout=0";
+        "big_writes,max_write=16777216,max_readahead=16777216,use_ino,attr_timeout=1,entry_timeout=1,ac_attr_timeout=1";
     while (arg_idx < argc && fuse_argc < 63) {
         if (strcmp(argv[arg_idx], "--perf") == 0) {
             arg_idx++;

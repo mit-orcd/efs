@@ -37,6 +37,14 @@ struct efsd_server {
     efs_node_id_t id;
     char addr[64];
     uint16_t port;
+
+    /* Export lifetime: handlers/writers hold a use-count while doing I/O so
+     * server_destroy_export cannot free/compact the slot out from under them.
+     * Guarded by s->lock; destroy sets destroying then waits on export_idle_cv
+     * until export_inflight drains to 0. */
+    uint32_t export_inflight[EFS_MAX_EXPORTS];
+    uint8_t export_destroying[EFS_MAX_EXPORTS];
+    pthread_cond_t export_idle_cv;
     /* Local data roots: 1..EFS_MAX_STORAGE_PATHS (full-fragment stripe).
      * storage_path is always storage_paths[0] for on-disk paths (log/PID/meta).
      * Cluster advertise (efs_node / HELLO) uses server_format_storage_paths(). */
@@ -71,6 +79,7 @@ struct efsd_server {
     int perf; /* run under perf record when starting */
     int export_meta_dirty; /* defer metadata.bin writes across PUT_META */
     int usage_dirty; /* local->used changed; flush meta/usage.bin soon */
+    int nodes_dirty; /* membership changed; persist nodes.bin off the lock */
 };
 
 /* Global server instance used by worker threads. */
@@ -81,6 +90,19 @@ struct efs_export *server_find_export(struct efsd_server *s, const char *name);
 
 /* Get export by id. */
 struct efs_export *server_get_export(struct efsd_server *s, efs_export_id_t id);
+
+/* Export lifetime for unlocked I/O. Acquire returns the export (or NULL if
+ * missing/being destroyed) with a use-count held; the caller MUST pair it with
+ * server_export_put. Caller holds s->lock on entry to acquire (it does not
+ * take it). While the count is held, destroy waits, so the pointer stays
+ * valid across unlocked disk I/O. */
+struct efs_export *server_export_acquire_locked(struct efsd_server *s,
+                                                efs_export_id_t id);
+struct efs_export *server_export_acquire(struct efsd_server *s,
+                                         efs_export_id_t id);
+void server_export_put(struct efsd_server *s, struct efs_export *ex);
+/* Index of ex within s->exports, or -1. Caller holds s->lock. */
+int server_export_index_locked(struct efsd_server *s, struct efs_export *ex);
 
 /* Destroy an export by name: wipe local data/meta and drop the in-memory row.
  * Returns EFS_OK, EFS_ERR_NOT_FOUND, or EFS_ERR_INVAL. */
@@ -144,6 +166,11 @@ int server_find_fragment_root(struct efsd_server *s, struct efs_export *ex,
 int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
                                efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                                const uint8_t *data, uint32_t data_len);
+int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export *ex,
+                                        efs_ino_t ino, uint32_t chunk_index,
+                                        uint32_t fragment_index,
+                                        const uint8_t *data, uint32_t data_len,
+                                        const uint8_t checksum[EFS_HASH_SIZE]);
 
 /* Queue fragment write onto the writer pool (or run inline if pool is off). */
 int server_write_fragment(struct efsd_server *s, struct efs_export *ex,
@@ -206,6 +233,10 @@ void server_handle_conn(int fd);
 /* Join an existing cluster by contacting a peer. */
 int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t peer_port);
 
+/* Relay a membership change to all other peers (ring convergence). */
+struct efs_msg_hello;
+void server_gossip_membership(struct efsd_server *s, const struct efs_msg_hello *h);
+
 /* Persist export as 2+1 meta pages + EFSR root; push root to peers. */
 int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex);
 
@@ -233,6 +264,10 @@ int server_fetch_metadata_from(struct efsd_server *s, const char *host, uint16_t
 /* Start the background heartbeat thread. */
 void server_start_heartbeat(struct efsd_server *s);
 
+/* Non-zero when a node is heartbeat-marked-down (exclude from placement).
+ * Caller holds s->lock. */
+int server_node_is_down_locked(struct efsd_server *s, efs_node_id_t id);
+
 /* Start the background data migration thread. */
 void server_start_migration(struct efsd_server *s);
 
@@ -247,6 +282,12 @@ void server_remove_node_from_cluster(struct efsd_server *s, efs_node_id_t node_i
 
 /* Broadcast a node-left notification to all peers. */
 void server_notify_node_left(struct efsd_server *s, efs_node_id_t node_id);
+
+/* Re-place fragments orphaned by a departed node and flush the EFSR. */
+void server_heal_orphan_fragments(struct efsd_server *s, efs_node_id_t node_id);
+int server_rebuild_orphan_fragment(struct efsd_server *s, struct efs_export *ex,
+                                   struct efs_chunk_entry *chunk,
+                                   int fragment_index, efs_node_id_t dead_id);
 
 /* True if any chunk still places a fragment on this node's id. Caller holds lock. */
 int server_has_local_fragments_locked(struct efsd_server *s);
@@ -269,8 +310,14 @@ int server_read_fragment_sum(struct efsd_server *s, struct efs_export *ex,
                              efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                              uint8_t checksum[EFS_HASH_SIZE]);
 
-/* Persist the cluster nodes list to disk. */
+/* Persist the cluster nodes list to disk. Caller must NOT hold s->lock (does
+ * disk I/O). Use server_nodes_mark_dirty under the lock instead. */
 void server_save_nodes(struct efsd_server *s);
+
+/* Mark membership dirty (under s->lock); flush with server_nodes_flush_dirty
+ * after dropping the lock so the fsync never stalls the global lock. */
+void server_nodes_mark_dirty(struct efsd_server *s);
+void server_nodes_flush_dirty(struct efsd_server *s);
 
 /* Load the persisted cluster nodes list from disk. */
 void server_load_nodes(struct efsd_server *s);

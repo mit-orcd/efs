@@ -248,8 +248,11 @@ perf report -i /tmp/efs/s1/log/perf.data
 
 If `perf` is missing, the process continues without profiling.
 
-There is also a Slurm helper at `slurm-jobs/profile.sh` that starts a short
-cluster, runs load, and writes reports under a scratch directory.
+There is also a Slurm helper at `slurm-jobs/stress-mixed-parallel.sh` that
+starts a 3-server cluster plus a FUSE client on one compute node, runs
+parallel mixed-size workloads (small-file create/write/verify alongside
+large-file streaming), verifies every byte read back, and captures `perf
+record` profiles of both the client and a server.
 
 ## FUSE notes
 

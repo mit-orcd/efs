@@ -120,13 +120,60 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
     }
     server_dedupe_nodes_locked(s);
     joined = s->node_count;
-    server_save_nodes(s);
+    server_nodes_mark_dirty(s);
     pthread_mutex_unlock(&s->lock);
+    server_nodes_flush_dirty(s);
     free(payload);
     server_peer_conn_release(peer_host, peer_port, fd);
 
     printf("Joined cluster with %u nodes\n", joined);
     return 0;
+}
+
+/* Forward one membership update to a single peer (best-effort, pooled conn). */
+static void gossip_hello_to(struct efsd_server *s, const struct efs_msg_hello *h,
+                            const char *host, uint16_t port)
+{
+    (void)s;
+    struct in_addr a;
+    if (!host || inet_pton(AF_INET, host, &a) != 1)
+        return;
+    int fd = server_peer_conn_get(host, port);
+    if (fd < 0)
+        return;
+    if (efs_send_msg(fd, EFS_MSG_HELLO, h, sizeof(*h)) == 0) {
+        uint8_t type;
+        void *payload = NULL;
+        uint32_t payload_len = 0;
+        int rc = efs_recv_msg(fd, &type, &payload, &payload_len);
+        free(payload);
+        if (rc == 0) {
+            server_peer_conn_release(host, port, fd);
+            return;
+        }
+    }
+    server_peer_conn_drop(host, port, fd);
+}
+
+/* Broadcast a membership change (join/refresh) to every other known peer so
+ * all nodes converge on the same placement ring, not just the contacted one.
+ * Call WITHOUT holding s->lock. */
+void server_gossip_membership(struct efsd_server *s, const struct efs_msg_hello *h)
+{
+    struct efs_node nodes[EFS_MAX_NODES];
+    pthread_mutex_lock(&s->lock);
+    uint32_t node_count = s->node_count;
+    if (node_count > EFS_MAX_NODES)
+        node_count = EFS_MAX_NODES;
+    memcpy(nodes, s->nodes, sizeof(struct efs_node) * node_count);
+    efs_node_id_t self = s->id;
+    pthread_mutex_unlock(&s->lock);
+
+    for (uint32_t i = 0; i < node_count; i++) {
+        if (nodes[i].id == self || nodes[i].id == h->node_id)
+            continue;
+        gossip_hello_to(s, h, nodes[i].addr, nodes[i].port);
+    }
 }
 
 static int send_heartbeat(const char *host, uint16_t port)
@@ -158,7 +205,18 @@ static int send_heartbeat(const char *host, uint16_t port)
     return (type == EFS_MSG_HEARTBEAT_ACK) ? 0 : -1;
 }
 
-/* Heartbeat thread: periodically ping all peers to keep the cluster alive. */
+static uint64_t hb_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000ull + (uint64_t)ts.tv_nsec / 1000000ull;
+}
+
+/* Heartbeat thread: ping peers on the pooled conn, track fail streaks, and
+ * mark unresponsive nodes down (excluded from placement) with a cooldown so a
+ * dead node does not keep absorbing PUT/placement forever. No usage flush here. */
+#define EFS_HB_DOWN_FAILS 3
+#define EFS_HB_DOWN_MS    30000
 static void *heartbeat_thread(void *arg)
 {
     struct efsd_server *s = arg;
@@ -168,12 +226,8 @@ static void *heartbeat_thread(void *arg)
     if (!nodes)
         return NULL;
 
-    while (s->running) {
+    while (__atomic_load_n(&s->running, __ATOMIC_ACQUIRE)) {
         usleep(EFS_HEARTBEAT_MS * 1000);
-
-        /* Usage.bin is marked dirty on writes and flushed on shutdown /
-         * explicit update. Do not flush from this thread: under ASAN + load it
-         * correlated with SEGV (control-flow smash / null-page writes). */
 
         pthread_mutex_lock(&s->lock);
         uint32_t node_count = s->node_count;
@@ -183,10 +237,36 @@ static void *heartbeat_thread(void *arg)
         efs_node_id_t self = s->id;
         pthread_mutex_unlock(&s->lock);
 
+        uint64_t now = hb_now_ms();
         for (uint32_t i = 0; i < node_count; i++) {
             if (nodes[i].id == self)
                 continue;
-            send_heartbeat(nodes[i].addr, nodes[i].port);
+            int ok = (send_heartbeat(nodes[i].addr, nodes[i].port) == 0);
+
+            /* Record outcome under the lock by node id (indices may shift). */
+            pthread_mutex_lock(&s->lock);
+            for (uint32_t j = 0; j < s->node_count; j++) {
+                if (s->nodes[j].id != nodes[i].id)
+                    continue;
+                if (ok) {
+                    s->nodes[j].hb_fail_streak = 0;
+                    s->nodes[j].down_until_ms = 0;
+                } else {
+                    if (s->nodes[j].hb_fail_streak < 1000)
+                        s->nodes[j].hb_fail_streak++;
+                    if (s->nodes[j].hb_fail_streak >= EFS_HB_DOWN_FAILS &&
+                        s->nodes[j].down_until_ms <= now) {
+                        s->nodes[j].down_until_ms = now + EFS_HB_DOWN_MS;
+                        fprintf(stderr,
+                                "heartbeat: node %u (%s:%u) unresponsive — "
+                                "marked down for %ds\n",
+                                s->nodes[j].id, s->nodes[j].addr,
+                                s->nodes[j].port, EFS_HB_DOWN_MS / 1000);
+                    }
+                }
+                break;
+            }
+            pthread_mutex_unlock(&s->lock);
         }
     }
     free(nodes);
@@ -195,11 +275,26 @@ static void *heartbeat_thread(void *arg)
 
 void server_start_heartbeat(struct efsd_server *s)
 {
-    /* Heartbeat thread repeatedly open/connect/getaddrinfo'd peers and has
-     * SIGSEGV'd under imagenet load (bad s->running load after peer fan-out).
-     * Membership stays correct via HELLO on join; disable until rewritten. */
-    (void)s;
-    fprintf(stderr, "heartbeat: disabled (stability)\n");
+    pthread_t tid;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (efsd_pthread_create(&tid, heartbeat_thread, s) == 0) {
+        fprintf(stderr, "heartbeat: enabled (%d ms interval)\n", EFS_HEARTBEAT_MS);
+    }
+    pthread_attr_destroy(&attr);
+}
+
+/* Non-zero when a node is currently heartbeat-marked-down (exclude from
+ * placement). Caller holds s->lock. */
+int server_node_is_down_locked(struct efsd_server *s, efs_node_id_t id)
+{
+    uint64_t now = hb_now_ms();
+    for (uint32_t i = 0; i < s->node_count; i++) {
+        if (s->nodes[i].id == id)
+            return (s->nodes[i].down_until_ms > now);
+    }
+    return 0;
 }
 
 /* Rejoin thread: periodically retry joining until this server is part of a
@@ -226,15 +321,17 @@ static void *rejoin_thread(void *arg)
                 printf("Rejoined cluster via %s:%u\n", s->rejoin_addr, s->rejoin_port);
                 server_fetch_metadata_from(s, s->rejoin_addr, s->rejoin_port);
                 pthread_mutex_lock(&s->lock);
-                server_save_nodes(s);
+                server_nodes_mark_dirty(s);
                 pthread_mutex_unlock(&s->lock);
+                server_nodes_flush_dirty(s);
             }
         } else {
             rc = server_rejoin_cluster(s);
             if (rc == 0) {
                 pthread_mutex_lock(&s->lock);
-                server_save_nodes(s);
+                server_nodes_mark_dirty(s);
                 pthread_mutex_unlock(&s->lock);
+                server_nodes_flush_dirty(s);
             }
         }
     }

@@ -129,3 +129,44 @@ int efs_recv_msg(int fd, uint8_t *type, void **payload, uint32_t *payload_len)
     *payload = buf;
     return EFS_OK;
 }
+
+int efs_recv_msg_into(int fd, uint8_t *type, uint8_t *status,
+                      void *hdr, uint32_t hdr_len, void *body, uint32_t body_len)
+{
+    uint32_t len;
+    if (efs_recv_all(fd, &len, sizeof(len)) != 0)
+        return EFS_ERR_NET;
+    len = ntohl(len);
+    if (len == 0 || len > 16 * 1024 * 1024)
+        return EFS_ERR_PROTO;
+
+    uint8_t t;
+    if (efs_recv_all(fd, &t, 1) != 0)
+        return EFS_ERR_NET;
+    *type = t;
+
+    uint32_t plen = len - 1;
+    /* Read the status byte first. A status-only (error) reply is plen==1;
+     * a full reply is plen == 1 + hdr_len + body_len. Anything else is a
+     * protocol error. */
+    if (plen != 1 && plen != 1 + hdr_len + body_len) {
+        uint8_t sink[4096];
+        uint32_t left = plen;
+        while (left) {
+            uint32_t n = left > sizeof(sink) ? (uint32_t)sizeof(sink) : left;
+            if (efs_recv_all(fd, sink, n) != 0)
+                return EFS_ERR_NET;
+            left -= n;
+        }
+        return EFS_ERR_PROTO;
+    }
+    if (efs_recv_all(fd, status, 1) != 0)
+        return EFS_ERR_NET;
+    if (plen == 1)
+        return EFS_OK;  /* status-only reply: hdr/body left untouched */
+    if (hdr_len > 0 && efs_recv_all(fd, hdr, hdr_len) != 0)
+        return EFS_ERR_NET;
+    if (body_len > 0 && efs_recv_all(fd, body, body_len) != 0)
+        return EFS_ERR_NET;
+    return EFS_OK;
+}

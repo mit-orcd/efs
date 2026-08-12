@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define EFS_WRITER_QUEUE_CAP 256
 
@@ -123,14 +124,16 @@ static int run_job(struct writer_job *job)
                                             job->checksum);
         break;
     case WRITER_OP_FRAGMENT_WITH_SUM:
-        rc = server_write_fragment_sync(job->s, job->ex, job->ino,
-                                        job->chunk_index, job->fragment_index,
-                                        job->data, job->data_len);
-        if (rc == EFS_OK && job->checksum)
-            rc = server_write_fragment_sum_sync(job->s, job->ex, job->ino,
-                                                job->chunk_index,
-                                                job->fragment_index,
-                                                job->checksum);
+        if (job->checksum)
+            rc = server_write_fragment_with_sum_sync(job->s, job->ex, job->ino,
+                                                     job->chunk_index,
+                                                     job->fragment_index,
+                                                     job->data, job->data_len,
+                                                     job->checksum);
+        else
+            rc = server_write_fragment_sync(job->s, job->ex, job->ino,
+                                            job->chunk_index, job->fragment_index,
+                                            job->data, job->data_len);
         break;
     default:
         rc = EFS_ERR_INVAL;
@@ -195,8 +198,22 @@ static int submit_and_wait(struct writer_job *job)
     job->result = EFS_ERR_IO;
 
     pthread_mutex_lock(&pool->lock);
-    while (pool->running && pool->count == EFS_WRITER_QUEUE_CAP)
-        pthread_cond_wait(&pool->not_full, &pool->lock);
+    /* Bounded wait for queue space: blocking forever parks a conn thread per
+     * queued PUT (up to 512) with no client-visible backpressure. After the
+     * deadline return EBUSY so the client retries instead of stalling. */
+    if (pool->running && pool->count == EFS_WRITER_QUEUE_CAP) {
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 5;
+        while (pool->running && pool->count == EFS_WRITER_QUEUE_CAP) {
+            if (pthread_cond_timedwait(&pool->not_full, &pool->lock, &ts) == ETIMEDOUT) {
+                pthread_mutex_unlock(&pool->lock);
+                pthread_mutex_destroy(&job->done_mu);
+                pthread_cond_destroy(&job->done_cv);
+                return EFS_ERR_BUSY;
+            }
+        }
+    }
     if (!pool->running) {
         pthread_mutex_unlock(&pool->lock);
         pthread_mutex_destroy(&job->done_mu);
