@@ -8,6 +8,13 @@
 
 /* Virtual per-directory stats file (FUSE-only; not a real inode). */
 #define EFS_STATS_NAME ".stats"
+/* Virtual per-directory search file (FUSE-only; not a real inode). */
+#define EFS_FIND_NAME ".find"
+/* Minimum literal (non-'*') characters in a .find query term. */
+#define EFS_FIND_MIN_TERM 4
+
+/* EFS_FEATURE_* / EFS_FEATURES_DEFAULT live in common.h (shared with the wire
+ * protocol and efs-mgmt). */
 
 struct efs_chunk_entry {
     efs_ino_t ino;
@@ -56,6 +63,7 @@ struct efs_export_root {
     uint32_t blob_len;   /* length of the EFSM blob packed into pages */
     uint32_t page_count; /* ceil(blob_len / EFS_META_PAGE_SIZE) */
     uint32_t chunk_size; /* data chunk size for this export */
+    uint32_t features;   /* EFS_FEATURE_* bitmask (EFSR v3+) */
     uint8_t *page_checksums;
 };
 
@@ -63,6 +71,7 @@ struct efs_export {
     efs_export_id_t id;
     char name[EFS_MAX_NAME];
     uint32_t chunk_size; /* data EC unit; default EFS_DEFAULT_CHUNK_SIZE */
+    uint32_t features;   /* EFS_FEATURE_* bitmask; mirrors root.features */
     uint64_t next_ino;
     struct efs_inode *inodes;
     uint64_t inode_count;

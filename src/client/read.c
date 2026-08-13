@@ -85,13 +85,21 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     int rc = EFS_ERR_DECODE;
     for (int attempt = 0; attempt < max_attempts; attempt++) {
         int have[EFS_NUM_FRAGMENTS] = {0, 0, 0};
+        int good = 0;
 
-        /* Fan out the GETs in parallel; a down node is skipped inside
-         * efs_client_get_fragment (down-mark) and returns fast. */
+        /* Fetch the two preferred fragments in parallel; pull the third
+         * (parity) only if one of the first two fails. 2+1 reconstruction
+         * needs any two fragments, and the all-up common case is served by the
+         * two data fragments — saving a third GET, a third verify-hash, and a
+         * third thread per chunk. A down node is skipped inside
+         * efs_client_get_fragment (down-mark) and fails fast into the parity
+         * fallback. */
         struct frag_get_job jobs[EFS_NUM_FRAGMENTS];
         pthread_t tids[EFS_NUM_FRAGMENTS];
         int spawned[EFS_NUM_FRAGMENTS] = {0, 0, 0};
-        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+
+        /* Stage 1: the two preferred fragments in parallel. */
+        for (int i = 0; i < 2; i++) {
             int fi = order[i];
             jobs[i].node = nodes[fi];
             jobs[i].ino = ino;
@@ -101,19 +109,36 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
             jobs[i].out = frags[fi];
             jobs[i].len = 0;
             jobs[i].rc = EFS_ERR_NET;
-            if (pthread_create(&tids[i], NULL, frag_get_thread, &jobs[i]) == 0) {
+            if (pthread_create(&tids[i], NULL, frag_get_thread, &jobs[i]) == 0)
                 spawned[i] = 1;
-            } else {
-                /* No thread budget: run inline. */
-                frag_get_thread(&jobs[i]);
-            }
+            else
+                frag_get_thread(&jobs[i]); /* no thread budget: run inline */
         }
-        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        for (int i = 0; i < 2; i++) {
             if (spawned[i])
                 pthread_join(tids[i], NULL);
-            int fi = order[i];
-            if (jobs[i].rc == 0 && jobs[i].len == frag_len)
+            if (jobs[i].rc == 0 && jobs[i].len == frag_len && !have[jobs[i].fi]) {
+                have[jobs[i].fi] = 1;
+                good++;
+            }
+        }
+
+        /* Stage 2: parity fallback only when a preferred fragment failed. */
+        if (good < 2) {
+            int fi = order[2];
+            jobs[2].node = nodes[fi];
+            jobs[2].ino = ino;
+            jobs[2].chunk_index = chunk_index;
+            jobs[2].fi = fi;
+            jobs[2].frag_len = frag_len;
+            jobs[2].out = frags[fi];
+            jobs[2].len = 0;
+            jobs[2].rc = EFS_ERR_NET;
+            frag_get_thread(&jobs[2]); /* single fetch: run inline */
+            if (jobs[2].rc == 0 && jobs[2].len == frag_len && !have[fi]) {
                 have[fi] = 1;
+                good++;
+            }
         }
 
         int missing = -1, a = -1, b = -1;
@@ -246,6 +271,7 @@ static int load_export_from_root(const struct efs_export_root *root)
             uint32_t cs = root->chunk_size;
             g_client.export.chunk_size = efs_chunk_size_valid(cs) ? cs
                                                                   : EFS_DEFAULT_CHUNK_SIZE;
+            g_client.export.features = root->features;
         }
     }
     pthread_mutex_unlock(&g_client.lock);

@@ -422,6 +422,9 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
     ex->next_ino = ex->root.next_ino;
     if (efs_chunk_size_valid(ex->root.chunk_size))
         ex->chunk_size = ex->root.chunk_size;
+    /* Features are root-owned; the EFSM blob does not carry them, so restore
+     * the export's working copy from the (server-preserved) root. */
+    ex->features = ex->root.features;
     pthread_mutex_unlock(&s->lock);
     return EFS_OK;
 }

@@ -352,6 +352,7 @@ void server_handle_conn(int fd)
                             uint64_t old_gen = ex->root.generation;
                             uint32_t old_pages = ex->root.page_count;
                             int had_frag = ex->meta_fragmented;
+                            uint32_t prev_features = ex->root.features;
                             ex->meta_fragmented = 1;
                             efs_export_root_move(&ex->root, &root);
                             ex->id = ex->root.id;
@@ -359,6 +360,16 @@ void server_handle_conn(int fd)
                             ex->next_ino = ex->root.next_ino;
                             if (efs_chunk_size_valid(ex->root.chunk_size))
                                 ex->chunk_size = ex->root.chunk_size;
+                            /* Features are server-owned: ignore the client's
+                             * root.features so a flush can't revert an admin
+                             * toggle. A fresh export (no prior committed root)
+                             * adopts the incoming value; thereafter only
+                             * SET_FEATURES changes it. */
+                            if (had_frag)
+                                ex->root.features = prev_features;
+                            else if (ex->root.features == 0)
+                                ex->root.features = EFS_FEATURES_DEFAULT;
+                            ex->features = ex->root.features;
                             /* Never rebuild on this handler thread: peer page
                              * fetches would block the pooled client connection
                              * and can cascade into multi-node stalls. Fence the
@@ -674,6 +685,47 @@ void server_handle_conn(int fd)
             }
             pthread_mutex_unlock(&g_server->lock);
             efs_send_msg(fd, EFS_MSG_LIST_EXPORTS_REPLY, &reply, sizeof(reply));
+            break;
+        }
+        case EFS_MSG_GET_FEATURES: {
+            if (payload_len >= sizeof(struct efs_msg_get_features)) {
+                struct efs_msg_get_features *req = payload;
+                struct efs_msg_features_reply r;
+                memset(&r, 0, sizeof(r));
+                r.status = EFS_FEATURES_NOT_FOUND;
+                pthread_mutex_lock(&g_server->lock);
+                struct efs_export *ex = server_find_export(g_server, req->export_name);
+                if (ex) {
+                    r.features = ex->features;
+                    r.status = EFS_FEATURES_OK;
+                }
+                pthread_mutex_unlock(&g_server->lock);
+                efs_send_msg(fd, EFS_MSG_GET_FEATURES_REPLY, &r, sizeof(r));
+            }
+            break;
+        }
+        case EFS_MSG_SET_FEATURES: {
+            /* Local-only: efs-mgmt fans out to every cluster node. Features are
+             * server-owned; only bits in set_mask change. Persisted via the EFSR
+             * root so the setting survives restart. */
+            if (payload_len >= sizeof(struct efs_msg_set_features)) {
+                struct efs_msg_set_features *req = payload;
+                struct efs_msg_features_reply r;
+                memset(&r, 0, sizeof(r));
+                r.status = EFS_FEATURES_NOT_FOUND;
+                pthread_mutex_lock(&g_server->lock);
+                struct efs_export *ex = server_find_export(g_server, req->export_name);
+                if (ex) {
+                    ex->features = (ex->features & ~req->set_mask) |
+                                   (req->features & req->set_mask);
+                    ex->root.features = ex->features;
+                    server_save_export(g_server, ex);
+                    r.features = ex->features;
+                    r.status = EFS_FEATURES_OK;
+                }
+                pthread_mutex_unlock(&g_server->lock);
+                efs_send_msg(fd, EFS_MSG_SET_FEATURES_REPLY, &r, sizeof(r));
+            }
             break;
         }
         case EFS_MSG_JOIN: {

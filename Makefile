@@ -99,6 +99,7 @@ test: all
 	./tests/test_ino_path
 	./tests/test_meta_slot
 	./tests/test_rw.sh
+	./tests/test_find.sh
 
 # Rebuild when public headers change (struct layouts in metadata.h, etc.).
 $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(MGMT_OBJ) $(QUERY_OBJ): \

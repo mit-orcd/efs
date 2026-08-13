@@ -716,6 +716,170 @@ static int cmd_shrink_quota(int argc, char **argv)
     return (status == EFS_SHRINK_QUOTA_IN_PROGRESS) ? 0 : 1;
 }
 
+static int feature_rpc(const char *host, uint16_t port, const char *export,
+                       int do_set, uint32_t set_mask, uint32_t features,
+                       uint32_t *out_feat, uint8_t *out_status)
+{
+    int fd = efs_connect_tcp(host, port);
+    if (fd < 0)
+        return -1;
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    uint8_t rtype;
+    void *reply = NULL;
+    uint32_t rlen = 0;
+    int rc;
+    if (do_set) {
+        struct efs_msg_set_features req;
+        memset(&req, 0, sizeof(req));
+        strncpy(req.export_name, export, EFS_MAX_NAME - 1);
+        req.features = features;
+        req.set_mask = set_mask;
+        rc = send_recv(fd, EFS_MSG_SET_FEATURES, &req, sizeof(req),
+                       &rtype, &reply, &rlen);
+        if (rc == 0 && rtype != EFS_MSG_SET_FEATURES_REPLY)
+            rc = -1;
+    } else {
+        struct efs_msg_get_features req;
+        memset(&req, 0, sizeof(req));
+        strncpy(req.export_name, export, EFS_MAX_NAME - 1);
+        rc = send_recv(fd, EFS_MSG_GET_FEATURES, &req, sizeof(req),
+                       &rtype, &reply, &rlen);
+        if (rc == 0 && rtype != EFS_MSG_GET_FEATURES_REPLY)
+            rc = -1;
+    }
+    if (rc == 0 && rlen >= sizeof(struct efs_msg_features_reply)) {
+        struct efs_msg_features_reply *r = reply;
+        *out_feat = r->features;
+        *out_status = r->status;
+    } else {
+        rc = -1;
+    }
+    free(reply);
+    close(fd);
+    return rc;
+}
+
+static void print_features(const char *label, uint32_t feat)
+{
+    printf("  %-22s .stats=%s .find=%s\n", label,
+           (feat & EFS_FEATURE_STATS) ? "on" : "off",
+           (feat & EFS_FEATURE_FIND) ? "on" : "off");
+}
+
+static int cmd_feature(int argc, char **argv)
+{
+    if (argc < 2) {
+        fprintf(stderr,
+                "usage: feature <node:port> <export> show\n"
+                "       feature <node:port> <export> <stats|find> <on|off>\n");
+        return 1;
+    }
+    char host[64];
+    uint16_t port;
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    const char *export = argv[1];
+
+    if (argc >= 3 && strcmp(argv[2], "show") == 0) {
+        uint32_t feat = 0;
+        uint8_t st = EFS_FEATURES_NOT_FOUND;
+        if (feature_rpc(host, port, export, 0, 0, 0, &feat, &st) != 0 ||
+            st != EFS_FEATURES_OK) {
+            fprintf(stderr, "Export '%s' not found on %s:%u\n", export, host, port);
+            return 1;
+        }
+        printf("Export '%s' features (%s:%u):\n", export, host, port);
+        print_features("current", feat);
+        return 0;
+    }
+
+    if (argc < 4) {
+        fprintf(stderr,
+                "usage: feature <node:port> <export> <stats|find> <on|off>\n");
+        return 1;
+    }
+    const char *fname = argv[2];
+    const char *fval = argv[3];
+    uint32_t bit;
+    if (strcmp(fname, "stats") == 0 || strcmp(fname, ".stats") == 0)
+        bit = EFS_FEATURE_STATS;
+    else if (strcmp(fname, "find") == 0 || strcmp(fname, ".find") == 0)
+        bit = EFS_FEATURE_FIND;
+    else {
+        fprintf(stderr, "Unknown feature '%s' (want stats|find)\n", fname);
+        return 1;
+    }
+    int on;
+    if (strcmp(fval, "on") == 0)
+        on = 1;
+    else if (strcmp(fval, "off") == 0)
+        on = 0;
+    else {
+        fprintf(stderr, "Unknown value '%s' (want on|off)\n", fval);
+        return 1;
+    }
+    uint32_t features = on ? bit : 0;
+
+    /* Discover membership via the contacted node, then apply on every node. */
+    struct efs_node nodes[EFS_MAX_NODES];
+    uint32_t node_count = 0;
+    int fd = efs_connect_tcp(host, port);
+    if (fd >= 0) {
+        efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+        efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+        uint8_t rtype;
+        void *reply = NULL;
+        uint32_t rlen = 0;
+        if (send_recv(fd, EFS_MSG_LIST_NODES, NULL, 0, &rtype, &reply, &rlen) == 0 &&
+            rtype == EFS_MSG_LIST_NODES_REPLY &&
+            rlen == sizeof(struct efs_msg_list_nodes_reply)) {
+            struct efs_msg_list_nodes_reply *list = reply;
+            node_count = list->node_count;
+            if (node_count > EFS_MAX_NODES)
+                node_count = EFS_MAX_NODES;
+            memcpy(nodes, list->nodes, node_count * sizeof(nodes[0]));
+        }
+        free(reply);
+        close(fd);
+    }
+    if (node_count == 0) {
+        strncpy(nodes[0].addr, host, sizeof(nodes[0].addr) - 1);
+        nodes[0].port = port;
+        node_count = 1;
+    }
+
+    int ok = 0, failed = 0;
+    for (uint32_t i = 0; i < node_count; i++) {
+        uint32_t feat = 0;
+        uint8_t st = EFS_FEATURES_NOT_FOUND;
+        char label[96];
+        snprintf(label, sizeof(label), "%s:%u", nodes[i].addr, nodes[i].port);
+        if (feature_rpc(nodes[i].addr, nodes[i].port, export, 1, bit, features,
+                        &feat, &st) != 0) {
+            fprintf(stderr, "  %s: no reply\n", label);
+            failed++;
+            continue;
+        }
+        if (st != EFS_FEATURES_OK) {
+            fprintf(stderr, "  %s: export not found\n", label);
+            failed++;
+            continue;
+        }
+        print_features(label, feat);
+        ok++;
+    }
+    if (ok == 0) {
+        fprintf(stderr, "Failed to set feature on any node\n");
+        return 1;
+    }
+    printf("Feature '%s' turned %s on %d/%u node(s) for export '%s'\n",
+           fname, on ? "on" : "off", ok, node_count, export);
+    return failed ? 1 : 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -729,7 +893,8 @@ int main(int argc, char **argv)
                     "  drain-node <node:port>\n"
                     "  undrain-node <node:port>\n"
                     "  remove-node <node:port>\n"
-                    "  shrink-quota <node:port> <amount>[T|G|M|K]\n",
+                    "  shrink-quota <node:port> <amount>[T|G|M|K]\n"
+                    "  feature <node:port> <export> show|<stats|find> <on|off>\n",
             argv[0]);
     return 1;
 }
@@ -753,6 +918,8 @@ int main(int argc, char **argv)
         return cmd_remove_node(argc - 2, argv + 2);
     if (strcmp(cmd, "shrink-quota") == 0)
         return cmd_shrink_quota(argc - 2, argv + 2);
+    if (strcmp(cmd, "feature") == 0)
+        return cmd_feature(argc - 2, argv + 2);
 
     fprintf(stderr, "Unknown command: %s\n", cmd);
     return 1;

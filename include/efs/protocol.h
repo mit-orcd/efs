@@ -47,6 +47,32 @@ enum efs_msg_type {
     EFS_MSG_BENCH_PUT_REPLY = 34,
     EFS_MSG_DESTROY_EXPORT = 35,
     EFS_MSG_DESTROY_EXPORT_REPLY = 36,
+    /* Per-export feature switches (.stats/.find). Server-owned. */
+    EFS_MSG_SET_FEATURES = 37,
+    EFS_MSG_SET_FEATURES_REPLY = 38,
+    EFS_MSG_GET_FEATURES = 39,
+    EFS_MSG_GET_FEATURES_REPLY = 40,
+};
+
+/* Set per-export features. Only bits in set_mask are changed (to the
+ * corresponding bits in features); other bits are preserved. */
+struct efs_msg_set_features {
+    char export_name[EFS_MAX_NAME];
+    uint32_t features;
+    uint32_t set_mask;
+};
+
+/* Reply for both SET_FEATURES and GET_FEATURES: the export's current mask. */
+#define EFS_FEATURES_OK        0
+#define EFS_FEATURES_NOT_FOUND 1
+struct efs_msg_features_reply {
+    uint32_t features;
+    uint8_t status; /* EFS_FEATURES_* */
+};
+
+/* GET_FEATURES request: just the export name. */
+struct efs_msg_get_features {
+    char export_name[EFS_MAX_NAME];
 };
 
 struct efs_msg_hello {

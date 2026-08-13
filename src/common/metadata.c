@@ -8,10 +8,11 @@
 
 #define EFS_META_MAGIC "EFSM"
 #define EFS_META_ROOT_MAGIC "EFSR"
-/* EFSR: v1 = no chunk_size; v2 = chunk_size after page_count. */
+/* EFSR: v1 = no chunk_size; v2 = chunk_size after page_count; v3 = features. */
 #define EFS_META_ROOT_VERSION_V1 1
 #define EFS_META_ROOT_VERSION_V2 2
-#define EFS_META_ROOT_VERSION EFS_META_ROOT_VERSION_V2
+#define EFS_META_ROOT_VERSION_V3 3
+#define EFS_META_ROOT_VERSION EFS_META_ROOT_VERSION_V3
 /* EFSM: v2: uid/gid. v3: mtime_nsec after mtime. v4: atime + dir rollups. */
 #define EFS_META_VERSION 4
 
@@ -1136,6 +1137,7 @@ void efs_export_init(struct efs_export *ex, efs_export_id_t id, const char *name
     ex->id = id;
     strncpy(ex->name, name, EFS_MAX_NAME - 1);
     ex->chunk_size = EFS_DEFAULT_CHUNK_SIZE;
+    ex->features = EFS_FEATURES_DEFAULT;
     ex->next_ino = EFS_ROOT_INO + 1;
 
     ex->inode_capacity = 16;
@@ -2151,6 +2153,7 @@ int efs_export_root_prepare(struct efs_export_root *root,
     root->chunk_size = ex->chunk_size ? ex->chunk_size : EFS_DEFAULT_CHUNK_SIZE;
     if (!efs_chunk_size_valid(root->chunk_size))
         root->chunk_size = EFS_DEFAULT_CHUNK_SIZE;
+    root->features = ex->features;
     if (root->page_count > EFS_META_MAX_PAGES)
         return EFS_ERR_INVAL;
     if (root->page_count > 0) {
@@ -2177,7 +2180,7 @@ int efs_export_root_serialize(const struct efs_export_root *root,
         return EFS_ERR_NOMEM;
 
     fwrite(EFS_META_ROOT_MAGIC, 4, 1, f);
-    write_u32(f, EFS_META_ROOT_VERSION_V2);
+    write_u32(f, EFS_META_ROOT_VERSION_V3);
     write_u32(f, root->id);
     write_str(f, root->name);
     write_u64(f, root->next_ino);
@@ -2188,6 +2191,7 @@ int efs_export_root_serialize(const struct efs_export_root *root,
         uint32_t cs = root->chunk_size ? root->chunk_size : EFS_DEFAULT_CHUNK_SIZE;
         write_u32(f, cs);
     }
+    write_u32(f, root->features);
     if (root->page_count > 0) {
         size_t n = (size_t)root->page_count * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE;
         fwrite(root->page_checksums, 1, n, f);
@@ -2217,7 +2221,8 @@ int efs_export_root_deserialize(struct efs_export_root *root,
     uint32_t version = 0;
     if (read_u32(f, &version) != 0 ||
         (version != EFS_META_ROOT_VERSION_V1 &&
-         version != EFS_META_ROOT_VERSION_V2)) {
+         version != EFS_META_ROOT_VERSION_V2 &&
+         version != EFS_META_ROOT_VERSION_V3)) {
         fclose(f);
         return EFS_ERR_PROTO;
     }
@@ -2238,6 +2243,14 @@ int efs_export_root_deserialize(struct efs_export_root *root,
     }
     if (!efs_chunk_size_valid(root->chunk_size))
         root->chunk_size = EFS_DEFAULT_CHUNK_SIZE;
+    if (version >= EFS_META_ROOT_VERSION_V3) {
+        if (read_u32(f, &root->features) != 0) {
+            fclose(f);
+            return EFS_ERR_PROTO;
+        }
+    } else {
+        root->features = EFS_FEATURES_DEFAULT;
+    }
     if (root->page_count > EFS_META_MAX_PAGES ||
         root->page_count != efs_meta_page_count_for_blob(root->blob_len)) {
         fclose(f);

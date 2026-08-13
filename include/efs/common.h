@@ -54,6 +54,12 @@
 #define EFS_HEARTBEAT_MS     2000
 #define EFS_IO_TIMEOUT_MS    30000
 
+/* Per-export feature switches (EFS_FEATURE_* bitmask). Persisted in the EFSR
+ * root (server-owned), replicated, and toggled via efs-mgmt. Default: all on. */
+#define EFS_FEATURE_STATS    (1u << 0) /* serve per-directory .stats */
+#define EFS_FEATURE_FIND     (1u << 1) /* serve per-directory .find  */
+#define EFS_FEATURES_DEFAULT (EFS_FEATURE_STATS | EFS_FEATURE_FIND)
+
 #define EFS_ROOT_INO         1
 /* Reserved inode for 2+1 metadata table pages (not a user-visible file).
  * High bit set so it cannot collide with client inode namespaces. */
