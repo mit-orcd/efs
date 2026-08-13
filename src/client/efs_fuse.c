@@ -379,9 +379,9 @@ static int feature_enabled(uint32_t bit)
  * .find is a virtual directory; reading "<dir>/.find/<term>" runs a glob-ish
  * query ("term", "*term", "term*", "*term*"; literal part >= EFS_FIND_MIN_TERM
  * chars) over <dir>'s subtree and returns the matching paths (one per line,
- * relative to <dir>). Single-command and pipeable, e.g. cat ".find/PATTERN".
- * Backed by a lazily built name index so the read/write data path is
- * untouched. */
+ * host-absolute: mountpoint + fs-root path, so they pipe/loop from any cwd).
+ * Single-command, e.g. cat ".find/PATTERN". Backed by a lazily built name
+ * index so the read/write data path is untouched. */
 static int path_is_find(const char *path, struct efs_inode *parent_out)
 {
     if (!path)
@@ -488,6 +488,11 @@ static struct {
 } g_find_idx;
 static pthread_mutex_t g_find_idx_mu = PTHREAD_MUTEX_INITIALIZER;
 
+/* Canonical absolute mountpoint, set once in main. .find results are rendered
+ * as host-absolute paths (mountpoint + fs-root path) so they can be piped or
+ * looped over from any working directory. */
+static char g_mountpoint[EFS_MAX_PATH] = "/";
+
 static void find_index_free_locked(void)
 {
     free(g_find_idx.ents);
@@ -591,40 +596,40 @@ static int64_t find_idx_lookup(efs_ino_t ino)
     return -1;
 }
 
-/* Build the path of `ino` relative to ancestor `dir_ino` ("a/b/name"). Returns
- * 0 if ino is under dir_ino, -1 otherwise. Caller holds g_find_idx_mu. */
-static int find_relpath(efs_ino_t dir_ino, efs_ino_t ino, char *out, size_t out_len)
+/* Build the filesystem-root-absolute path of `ino` ("/a/b/name"). Returns 0 if
+ * ino lies under `dir_ino` (dir_ino is an ancestor, so the match is inside the
+ * queried subtree), -1 otherwise. Caller holds g_find_idx_mu. */
+static int find_fullpath(efs_ino_t dir_ino, efs_ino_t ino, char *out, size_t out_len)
 {
     uint32_t comps[128]; /* name offsets, leaf-first; caps depth at 128 */
     int nc = 0;
     efs_ino_t cur = ino;
-    int found = 0;
+    int under = 0;
     while (nc < 128) {
-        if (cur == dir_ino) {
-            found = 1;
-            break;
-        }
+        if (cur == dir_ino)
+            under = 1;
         int64_t idx = find_idx_lookup(cur);
         if (idx < 0)
             break;
-        comps[nc++] = g_find_idx.ents[idx].name_off;
         efs_ino_t p = g_find_idx.ents[idx].parent;
         if (p == cur) /* root's parent is itself */
             break;
+        comps[nc++] = g_find_idx.ents[idx].name_off;
         cur = p;
     }
-    if (!found || nc == 0)
+    if (!under || nc == 0)
         return -1;
     size_t off = 0;
+    out[off++] = '/';
     for (int i = nc - 1; i >= 0; i--) {
         const char *nm = g_find_idx.names + comps[i];
         size_t L = strlen(nm);
         if (off + L + 2 > out_len)
             return -1;
-        if (off)
-            out[off++] = '/';
         memcpy(out + off, nm, L);
         off += L;
+        if (i)
+            out[off++] = '/';
     }
     out[off] = '\0';
     return 0;
@@ -685,7 +690,8 @@ static int find_parse_query(const char *q, size_t qlen, enum find_match *type,
 }
 
 /* Run a parsed query against a freshly rebuilt index; return the matching
- * relative paths (newline-separated) in a malloc'd buffer. */
+ * host-absolute paths (mountpoint + fs-root path, newline-separated) in a
+ * malloc'd buffer. */
 static int find_run_query(efs_ino_t dir_ino, enum find_match type,
                           const char *term, size_t term_len,
                           char **out_text, int *out_len)
@@ -701,6 +707,9 @@ static int find_run_query(efs_ino_t dir_ino, enum find_match type,
         pthread_mutex_unlock(&g_find_idx_mu);
         return EFS_ERR_NOMEM;
     }
+    /* Mountpoint prefix; a "/" mountpoint adds nothing (avoids "//"). */
+    size_t mpl = strlen(g_mountpoint);
+    size_t plen = (mpl > 1) ? mpl : 0;
     for (uint64_t i = 0; i < g_find_idx.count; i++) {
         const char *nm = g_find_idx.names + g_find_idx.ents[i].name_off;
         if (!find_name_match(nm, type, term, term_len))
@@ -708,13 +717,13 @@ static int find_run_query(efs_ino_t dir_ino, enum find_match type,
         efs_ino_t ino = g_find_idx.ents[i].ino;
         if (ino == dir_ino)
             continue;
-        char rel[EFS_MAX_PATH];
-        if (find_relpath(dir_ino, ino, rel, sizeof(rel)) != 0)
+        char full[EFS_MAX_PATH];
+        if (find_fullpath(dir_ino, ino, full, sizeof(full)) != 0)
             continue;
-        size_t L = strlen(rel);
-        if (len + L + 2 > cap) {
+        size_t L = strlen(full);
+        if (len + plen + L + 2 > cap) {
             size_t ncap = cap * 2;
-            while (ncap < len + L + 2)
+            while (ncap < len + plen + L + 2)
                 ncap *= 2;
             char *nb = realloc(buf, ncap);
             if (!nb) {
@@ -725,7 +734,11 @@ static int find_run_query(efs_ino_t dir_ino, enum find_match type,
             buf = nb;
             cap = ncap;
         }
-        memcpy(buf + len, rel, L);
+        if (plen) {
+            memcpy(buf + len, g_mountpoint, plen);
+            len += plen;
+        }
+        memcpy(buf + len, full, L);
         len += L;
         buf[len++] = '\n';
     }
@@ -2276,6 +2289,18 @@ int main(int argc, char **argv)
         return 1;
     }
     const char *mountpoint = argv[arg_idx++];
+
+    /* Canonical absolute mountpoint, used to render host-absolute .find
+     * results. realpath(..., NULL) mallocs; fall back to the raw argument. */
+    {
+        char *rp = realpath(mountpoint, NULL);
+        strncpy(g_mountpoint, rp ? rp : mountpoint, sizeof(g_mountpoint) - 1);
+        g_mountpoint[sizeof(g_mountpoint) - 1] = '\0';
+        free(rp);
+        size_t mpl = strlen(g_mountpoint);
+        while (mpl > 1 && g_mountpoint[mpl - 1] == '/')
+            g_mountpoint[--mpl] = '\0';
+    }
 
     efs_client_init_nodes(&g_client, nodes, node_count);
     strncpy(g_client.export_name, export_name, EFS_MAX_NAME - 1);

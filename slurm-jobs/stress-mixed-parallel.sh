@@ -315,21 +315,22 @@ special_worker() {
 special_verify() {
     sleep 2
     local sp="$SPECIAL_DIR/w0" got want
+    local spr; spr=$(realpath "$sp")   # results are host-absolute
     got=$(cat "$sp/.find/*alpha*" 2>/dev/null | sort)
     want=$(printf '%s\n' \
-        "alpha_report_001.dat" "alpha_report_002.dat" "alpha_report_003.dat" \
-        "gamma_alpha_0001.dat" "sub1/alpha_deep_0001.dat" | sort)
+        "$spr/alpha_report_001.dat" "$spr/alpha_report_002.dat" "$spr/alpha_report_003.dat" \
+        "$spr/gamma_alpha_0001.dat" "$spr/sub1/alpha_deep_0001.dat" | sort)
     if [ "$got" != "$want" ]; then
         { echo "special_verify: .find '*alpha*' mismatch:"; echo "--got--"; echo "$got"; echo "--want--"; echo "$want"; } >>"$KEEP/special.err"
         return 1
     fi
     # exact-match query returns exactly one path
     got=$(cat "$sp/.find/gamma_alpha_0001.dat" 2>/dev/null)
-    [ "$got" = "gamma_alpha_0001.dat" ] || { echo "special_verify: exact query -> '$got'" >>"$KEEP/special.err"; return 1; }
-    # piped paths are real files relative to the special dir
+    [ "$got" = "$spr/gamma_alpha_0001.dat" ] || { echo "special_verify: exact query -> '$got'" >>"$KEEP/special.err"; return 1; }
+    # piped paths are real files (host-absolute, usable from any cwd)
     local bad=0 p
     while IFS= read -r p; do
-        [ -f "$sp/$p" ] || { echo "special_verify: piped path not a file: $p" >>"$KEEP/special.err"; bad=1; }
+        [ -f "$p" ] || { echo "special_verify: piped path not a file: $p" >>"$KEEP/special.err"; bad=1; }
     done < <(cat "$sp/.find/*.dat" 2>/dev/null)
     [ "$bad" = 0 ] || return 1
     # top-level .stats aggregate: 9 files per worker subtree

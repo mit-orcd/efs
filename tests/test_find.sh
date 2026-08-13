@@ -3,7 +3,8 @@
 # efs-mgmt feature switches (.stats / .find). Starts a 3-node loopback cluster,
 # mounts FUSE, builds a known tree, and exercises the single-command query
 # interface:  cat "<dir>/.find/<term>"  -> newline-separated matching paths.
-# Covers the 4 glob forms, the min-term rule, recursion + relative paths,
+# Results are host-absolute (mountpoint + fs-root path) so they pipe/loop from
+# any working directory. Covers the 4 glob forms, the min-term rule, recursion,
 # piping, and the on/off toggles.
 
 set -u
@@ -25,7 +26,7 @@ trap cleanup EXIT
 
 note() { echo "[find] $*"; }
 check() { # check <desc> <expected> <actual>
-    if [ "$2" = "$3" ]; then note "OK: $1"; else note "FAIL: $1 (want='$2' got='$3')"; FAIL=1; fi
+    if [ "$2" = "$3" ]; then note "OK: $1"; else note "FAIL: $1"; echo "  want: $2"; echo "  got:  $3"; FAIL=1; fi
 }
 
 cleanup
@@ -52,22 +53,25 @@ echo x > "$MNT/sub/deep/final_report.pdf"
 echo x > "$MNT/other.log"
 sync
 
+# Results are host-absolute: canonical mountpoint + fs-root path.
+MP=$(realpath "$MNT")
+
 # --- 1. exact match ---
 OUT=$(cat "$MNT/.find/report2024.txt")
-check "exact match" "report2024.txt" "$OUT"
+check "exact match" "$MP/report2024.txt" "$OUT"
 
 # --- 2. prefix match (recursive) ---
 OUT=$(cat "$MNT/.find/report*" | sort)
-want=$'report2024.txt\nreport2025.txt\nsub/report_old.txt'
+want=$(printf '%s\n' "$MP/report2024.txt" "$MP/report2025.txt" "$MP/sub/report_old.txt" | sort)
 check "prefix * recursive" "$want" "$OUT"
 
 # --- 3. suffix match ---
 OUT=$(cat "$MNT/.find/*2025.txt")
-check "suffix match" "report2025.txt" "$OUT"
+check "suffix match" "$MP/report2025.txt" "$OUT"
 
 # --- 4. substring match (recursive, includes subdir file) ---
 OUT=$(cat "$MNT/.find/*report*" | sort)
-want=$'report2024.txt\nreport2025.txt\nsub/deep/final_report.pdf\nsub/report_old.txt'
+want=$(printf '%s\n' "$MP/report2024.txt" "$MP/report2025.txt" "$MP/sub/deep/final_report.pdf" "$MP/sub/report_old.txt" | sort)
 check "substring recursive" "$want" "$OUT"
 
 # --- 5. min term: 3 chars rejected, 4 accepted ---
@@ -77,24 +81,24 @@ else
     note "OK: 3-char term rejected"
 fi
 OUT=$(cat "$MNT/.find/repo*" | sort)   # 'repo' = 4 chars, prefix
-want=$'report2024.txt\nreport2025.txt\nsub/report_old.txt'
+want=$(printf '%s\n' "$MP/report2024.txt" "$MP/report2025.txt" "$MP/sub/report_old.txt" | sort)
 check "4-char prefix ok" "$want" "$OUT"
 
-# --- 6. subdirectory scoping: search under sub/ only ---
+# --- 6. subdirectory scoping: search under sub/ only (still host-absolute) ---
 OUT=$(cat "$MNT/sub/.find/*report*" | sort)
-want=$'deep/final_report.pdf\nreport_old.txt'
-check "subdir scope (relative paths)" "$want" "$OUT"
+want=$(printf '%s\n' "$MP/sub/deep/final_report.pdf" "$MP/sub/report_old.txt" | sort)
+check "subdir scope (host-absolute)" "$want" "$OUT"
 
-# --- 7. piping results to another command ---
+# --- 7. piping results to another command (works from any CWD: absolute) ---
 N=$(cat "$MNT/.find/*2024.txt" | wc -l)
 check "pipe to wc -l" "1" "$N"
-# pipe paths into ls -l from the querying dir
-( cd "$MNT" && cat ".find/report*" | xargs ls -l >/dev/null 2>&1 ) \
-    && note "OK: pipe to xargs ls" || { note "FAIL: pipe to xargs ls"; FAIL=1; }
+# pipe absolute paths into ls -l from an unrelated directory
+( cd / && cat "$MNT/.find/report*" | xargs ls -l >/dev/null 2>&1 ) \
+    && note "OK: pipe to xargs ls (from /)" || { note "FAIL: pipe to xargs ls"; FAIL=1; }
 # build a for loop over the result list
 LOOPN=0
-for f in $(cat "$MNT/.find/*report*"); do LOOPN=$((LOOPN+1)); done
-check "for-loop over results" "4" "$LOOPN"
+for f in $(cat "$MNT/.find/*report*"); do [ -f "$f" ] && LOOPN=$((LOOPN+1)); done
+check "for-loop over results (absolute -f)" "4" "$LOOPN"
 
 # --- 8. feature show / toggles ---
 FEAT=$(./efs-mgmt feature $IP:$P1 test show 2>&1)
@@ -113,7 +117,7 @@ cat "$MNT/.stats" >/dev/null 2>&1 && note "OK: .stats unaffected by find off" ||
 ./efs-mgmt feature $IP:$P1 test find on >/dev/null 2>&1
 sleep 1
 OUT=$(cat "$MNT/.find/report*" 2>/dev/null | sort | head -1)
-check ".find back after feature on" "report2024.txt" "$OUT"
+check ".find back after feature on" "$MP/report2024.txt" "$OUT"
 
 # stats off independently
 ./efs-mgmt feature $IP:$P1 test stats off >/dev/null 2>&1
