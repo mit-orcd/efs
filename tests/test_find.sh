@@ -1,8 +1,10 @@
 #!/bin/bash
-# Functional test for the per-directory .find virtual file and the efs-mgmt
-# feature switches (.stats / .find). Starts a 3-node loopback cluster, mounts
-# FUSE, builds a known tree, and exercises the 4 glob forms, the min-term rule,
-# recursion + relative paths, piping, and the on/off toggles.
+# Functional test for the per-directory .find virtual directory and the
+# efs-mgmt feature switches (.stats / .find). Starts a 3-node loopback cluster,
+# mounts FUSE, builds a known tree, and exercises the single-command query
+# interface:  cat "<dir>/.find/<term>"  -> newline-separated matching paths.
+# Covers the 4 glob forms, the min-term rule, recursion + relative paths,
+# piping, and the on/off toggles.
 
 set -u
 BASE="${EFS_TEST_BASE:-/tmp/efs_find_test}"
@@ -51,51 +53,48 @@ echo x > "$MNT/other.log"
 sync
 
 # --- 1. exact match ---
-echo "report2024.txt" > "$MNT/.find"
-OUT=$(cat "$MNT/.find")
+OUT=$(cat "$MNT/.find/report2024.txt")
 check "exact match" "report2024.txt" "$OUT"
 
 # --- 2. prefix match (recursive) ---
-echo "report*" > "$MNT/.find"
-OUT=$(cat "$MNT/.find" | sort)
+OUT=$(cat "$MNT/.find/report*" | sort)
 want=$'report2024.txt\nreport2025.txt\nsub/report_old.txt'
 check "prefix * recursive" "$want" "$OUT"
 
 # --- 3. suffix match ---
-echo "*2025.txt" > "$MNT/.find"
-OUT=$(cat "$MNT/.find")
+OUT=$(cat "$MNT/.find/*2025.txt")
 check "suffix match" "report2025.txt" "$OUT"
 
 # --- 4. substring match (recursive, includes subdir file) ---
-echo "*report*" > "$MNT/.find"
-OUT=$(cat "$MNT/.find" | sort)
+OUT=$(cat "$MNT/.find/*report*" | sort)
 want=$'report2024.txt\nreport2025.txt\nsub/deep/final_report.pdf\nsub/report_old.txt'
 check "substring recursive" "$want" "$OUT"
 
 # --- 5. min term: 3 chars rejected, 4 accepted ---
-if echo "abc" > "$MNT/.find" 2>/dev/null; then
-    note "FAIL: 3-char term accepted (want EINVAL)"; FAIL=1
+if cat "$MNT/.find/abc" >/dev/null 2>&1; then
+    note "FAIL: 3-char term accepted (want ENOENT)"; FAIL=1
 else
     note "OK: 3-char term rejected"
 fi
-echo "repo*" > "$MNT/.find"   # 'repo' = 4 chars, prefix
-OUT=$(cat "$MNT/.find" | sort)
+OUT=$(cat "$MNT/.find/repo*" | sort)   # 'repo' = 4 chars, prefix
 want=$'report2024.txt\nreport2025.txt\nsub/report_old.txt'
 check "4-char prefix ok" "$want" "$OUT"
 
 # --- 6. subdirectory scoping: search under sub/ only ---
-echo "*report*" > "$MNT/sub/.find"
-OUT=$(cat "$MNT/sub/.find" | sort)
+OUT=$(cat "$MNT/sub/.find/*report*" | sort)
 want=$'deep/final_report.pdf\nreport_old.txt'
 check "subdir scope (relative paths)" "$want" "$OUT"
 
 # --- 7. piping results to another command ---
-echo "*2024.txt" > "$MNT/.find"
-N=$(cat "$MNT/.find" | wc -l)
+N=$(cat "$MNT/.find/*2024.txt" | wc -l)
 check "pipe to wc -l" "1" "$N"
 # pipe paths into ls -l from the querying dir
-( cd "$MNT" && echo "report*" > .find && cat .find | xargs ls -l >/dev/null 2>&1 ) \
+( cd "$MNT" && cat ".find/report*" | xargs ls -l >/dev/null 2>&1 ) \
     && note "OK: pipe to xargs ls" || { note "FAIL: pipe to xargs ls"; FAIL=1; }
+# build a for loop over the result list
+LOOPN=0
+for f in $(cat "$MNT/.find/*report*"); do LOOPN=$((LOOPN+1)); done
+check "for-loop over results" "4" "$LOOPN"
 
 # --- 8. feature show / toggles ---
 FEAT=$(./efs-mgmt feature $IP:$P1 test show 2>&1)
@@ -103,7 +102,7 @@ echo "$FEAT" | grep -q ".find=on" && note "OK: feature show find=on" || { note "
 
 ./efs-mgmt feature $IP:$P1 test find off >/dev/null 2>&1
 sleep 1
-if cat "$MNT/.find" >/dev/null 2>&1; then
+if cat "$MNT/.find/report*" >/dev/null 2>&1; then
     note "FAIL: .find still readable after feature off"; FAIL=1
 else
     note "OK: .find hidden when feature off"
@@ -113,7 +112,7 @@ cat "$MNT/.stats" >/dev/null 2>&1 && note "OK: .stats unaffected by find off" ||
 
 ./efs-mgmt feature $IP:$P1 test find on >/dev/null 2>&1
 sleep 1
-echo "report*" > "$MNT/.find" 2>/dev/null && OUT=$(cat "$MNT/.find" | sort | head -1)
+OUT=$(cat "$MNT/.find/report*" 2>/dev/null | sort | head -1)
 check ".find back after feature on" "report2024.txt" "$OUT"
 
 # stats off independently
@@ -124,8 +123,8 @@ if cat "$MNT/.stats" >/dev/null 2>&1; then
 else
     note "OK: .stats hidden when stats off"
 fi
-echo "report*" > "$MNT/.find" 2>/dev/null && cat "$MNT/.find" >/dev/null 2>&1 \
-    && note "OK: .find works while stats off" || { note "FAIL: .find broke while stats off"; FAIL=1; }
+OUT=$(cat "$MNT/.find/report*" 2>/dev/null)
+[ -n "$OUT" ] && note "OK: .find works while stats off" || { note "FAIL: .find broke while stats off"; FAIL=1; }
 ./efs-mgmt feature $IP:$P1 test stats on >/dev/null 2>&1
 
 echo

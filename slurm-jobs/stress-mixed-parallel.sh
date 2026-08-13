@@ -245,8 +245,8 @@ large_worker() {
 
 # --- special-files (.stats / .find) workload --------------------------------
 # Stable, deterministic per-worker subtrees created BEFORE the concurrent
-# phase. Each special worker owns $MNT/special/w$k so concurrent .find writers
-# never race on one directory's result cache. Only special workers touch
+# phase. Each special worker owns $MNT/special/w$k and queries it via
+# cat "<dir>/.find/<term>" (single-command). Only special workers touch
 # $MNT/special, so .find results there stay exact while the data workers churn
 # the rest of the metadata (forcing index rebuilds + stats refreshes).
 # Names are >=4 chars (EFS_FIND_MIN_TERM) for the search terms.
@@ -273,10 +273,10 @@ setup_special() {
 }
 
 # find_assert <dir> <pattern> <want_count> <tag>
+# Single-command query: cat "<dir>/.find/<pattern>" returns the path list.
 find_assert() {
     local dir=$1 pat=$2 want=$3 tag=$4
-    echo "$pat" > "$dir/.find" 2>>"$KEEP/special.err" || { echo "$tag: write query '$pat' failed" >>"$KEEP/special.err"; return 1; }
-    local n; n=$(grep -c . "$dir/.find" 2>/dev/null)
+    local n; n=$(cat "$dir/.find/$pat" 2>/dev/null | grep -c .)
     if [ "$n" != "$want" ]; then
         echo "$tag: .find '$pat' -> $n results (want $want)" >>"$KEEP/special.err"
         return 1
@@ -297,8 +297,7 @@ special_worker() {
         find_assert "$sp" '*report*' 4 "w$w it$it" || { rc=1; break; }; ops=$((ops+1))
         find_assert "$sp" 'beta_*'   3 "w$w it$it" || { rc=1; break; }; ops=$((ops+1))
         # pipe usage: results must be a clean newline-separated list of paths
-        echo '*alpha*' > "$sp/.find" 2>/dev/null
-        local np; np=$(cat "$sp/.find" 2>/dev/null | wc -l)
+        local np; np=$(cat "$sp/.find/*alpha*" 2>/dev/null | wc -l)
         [ "$np" = "5" ] || { echo "w$w it$it: pipe '*alpha*' -> $np (want 5)" >>"$KEEP/special.err"; rc=1; break; }
         ops=$((ops+1))
         # .stats must stay parseable on root + the worker's special subtree
@@ -316,8 +315,7 @@ special_worker() {
 special_verify() {
     sleep 2
     local sp="$SPECIAL_DIR/w0" got want
-    echo '*alpha*' > "$sp/.find" 2>/dev/null
-    got=$(grep . "$sp/.find" 2>/dev/null | sort)
+    got=$(cat "$sp/.find/*alpha*" 2>/dev/null | sort)
     want=$(printf '%s\n' \
         "alpha_report_001.dat" "alpha_report_002.dat" "alpha_report_003.dat" \
         "gamma_alpha_0001.dat" "sub1/alpha_deep_0001.dat" | sort)
@@ -326,15 +324,13 @@ special_verify() {
         return 1
     fi
     # exact-match query returns exactly one path
-    echo 'gamma_alpha_0001.dat' > "$sp/.find" 2>/dev/null
-    got=$(grep . "$sp/.find" 2>/dev/null)
+    got=$(cat "$sp/.find/gamma_alpha_0001.dat" 2>/dev/null)
     [ "$got" = "gamma_alpha_0001.dat" ] || { echo "special_verify: exact query -> '$got'" >>"$KEEP/special.err"; return 1; }
     # piped paths are real files relative to the special dir
-    echo '*.dat' > "$sp/.find" 2>/dev/null
     local bad=0 p
     while IFS= read -r p; do
         [ -f "$sp/$p" ] || { echo "special_verify: piped path not a file: $p" >>"$KEEP/special.err"; bad=1; }
-    done < <(grep . "$sp/.find" 2>/dev/null)
+    done < <(cat "$sp/.find/*.dat" 2>/dev/null)
     [ "$bad" = 0 ] || return 1
     # top-level .stats aggregate: 9 files per worker subtree
     local tf wantf=$((9 * SPECIAL_WORKERS))
@@ -353,13 +349,12 @@ special_toggle_test() {
     local sp="$SPECIAL_DIR/w0" i ok n
     # .find off -> unreadable
     ./efs-mgmt feature "$IP:$P1" "$EXPORT" find off >/dev/null 2>&1
-    ok=0; for i in $(seq 1 24); do cat "$sp/.find" >/dev/null 2>&1 || { ok=1; break; }; sleep 0.5; done
+    ok=0; for i in $(seq 1 24); do cat "$sp/.find/*alpha*" >/dev/null 2>&1 || { ok=1; break; }; sleep 0.5; done
     [ "$ok" = 1 ] || { echo "toggle: .find still readable after feature off" >>"$KEEP/special.err"; return 1; }
     # .find on -> index recomputed (exact results again)
     ./efs-mgmt feature "$IP:$P1" "$EXPORT" find on >/dev/null 2>&1
     ok=0; for i in $(seq 1 24); do
-        echo '*alpha*' > "$sp/.find" 2>/dev/null
-        n=$(grep -c . "$sp/.find" 2>/dev/null)
+        n=$(cat "$sp/.find/*alpha*" 2>/dev/null | grep -c .)
         [ "$n" = "5" ] && { ok=1; break; }
         sleep 0.5
     done

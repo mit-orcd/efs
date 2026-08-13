@@ -376,10 +376,12 @@ static int feature_enabled(uint32_t bit)
 }
 
 /* --- Virtual per-directory .find (not a real inode) ---
- * Write a glob-ish query ("term", "*term", "term*", "*term*"; literal part
- * >= EFS_FIND_MIN_TERM chars) to search the directory's subtree; read back the
- * matching paths (one per line, relative to the directory). Backed by a lazily
- * built name index so the read/write data path is untouched. */
+ * .find is a virtual directory; reading "<dir>/.find/<term>" runs a glob-ish
+ * query ("term", "*term", "term*", "*term*"; literal part >= EFS_FIND_MIN_TERM
+ * chars) over <dir>'s subtree and returns the matching paths (one per line,
+ * relative to <dir>). Single-command and pipeable, e.g. cat ".find/PATTERN".
+ * Backed by a lazily built name index so the read/write data path is
+ * untouched. */
 static int path_is_find(const char *path, struct efs_inode *parent_out)
 {
     if (!path)
@@ -393,6 +395,60 @@ static int path_is_find(const char *path, struct efs_inode *parent_out)
     int rc = split_parent_name(path, name, sizeof(name), &parent);
     if (rc != 0)
         return rc;
+    if (parent_out)
+        *parent_out = parent;
+    return 0;
+}
+
+/* Lightweight shape check: does path name a .find query file
+ * ("<dir>/.find/<term>")? The term must be a single non-empty component (no
+ * '/'). Does not resolve anything — safe for hot-path guards. */
+static int path_is_find_query_path(const char *path)
+{
+    if (!path)
+        return 0;
+    const char *m = strstr(path, "/" EFS_FIND_NAME "/");
+    if (!m)
+        return 0;
+    const char *term = m + strlen("/" EFS_FIND_NAME "/");
+    return *term != '\0' && strchr(term, '/') == NULL;
+}
+
+/* Resolve a .find query path "<dir>/.find/<term>": the directory whose subtree
+ * to search into parent_out, and the raw glob pattern into term_out. Returns 0
+ * on match, -ENOENT otherwise. */
+static int path_find_query(const char *path, struct efs_inode *parent_out,
+                           char *term_out, size_t term_cap)
+{
+    if (!path)
+        return -ENOENT;
+    const char *m = strstr(path, "/" EFS_FIND_NAME "/");
+    if (!m)
+        return -ENOENT;
+    const char *term = m + strlen("/" EFS_FIND_NAME "/");
+    if (!*term || strchr(term, '/'))
+        return -ENOENT;
+    char dir[EFS_MAX_PATH];
+    size_t dlen = (size_t)(m - path);
+    if (dlen == 0) {
+        dir[0] = '/';
+        dir[1] = '\0';
+    } else {
+        if (dlen >= sizeof(dir))
+            return -ENOENT;
+        memcpy(dir, path, dlen);
+        dir[dlen] = '\0';
+    }
+    struct efs_inode parent;
+    if (efs_client_lookup(dir, &parent) != 0)
+        return -ENOENT;
+    if (!efs_mode_is_dir(parent.mode))
+        return -ENOENT;
+    if (term_out) {
+        if (strlen(term) >= term_cap)
+            return -ENOENT;
+        strcpy(term_out, term);
+    }
     if (parent_out)
         *parent_out = parent;
     return 0;
@@ -679,45 +735,116 @@ static int find_run_query(efs_ino_t dir_ino, enum find_match type,
     return 0;
 }
 
-/* Cached .find results per directory (written by the query write, served by
- * reads). */
-#define EFS_FIND_RES_N 8
+/* Cached .find query results, keyed by (directory, raw pattern). A read of
+ * ".find/<term>" runs the glob over the directory's subtree and caches the
+ * rendered path list briefly so the getattr (size) and the read (content) that
+ * make up a single `cat` share one index build. Queries are user-driven and
+ * rare, so the small cache + short TTL keep results fresh without a hot-path
+ * cost. */
+#define EFS_FIND_RES_N 16
+#define EFS_FIND_RES_TTL_MS 5000
 static struct {
     int valid;
     efs_ino_t dir_ino;
+    char term[EFS_MAX_NAME]; /* raw pattern, e.g. "*report*" */
+    uint64_t ms;
     int len;
     char *text;
 } g_find_res[EFS_FIND_RES_N];
 static pthread_mutex_t g_find_res_mu = PTHREAD_MUTEX_INITIALIZER;
 
-static void find_res_store(efs_ino_t dir_ino, char *text, int len)
+/* Ensure a fresh cached result for (dir_ino, pattern). Returns 0 on success
+ * (result cached, possibly empty), -EINVAL for a bad/short term, -EIO on
+ * internal error. */
+static int find_query_ensure(efs_ino_t dir_ino, const char *pattern)
 {
+    enum find_match type;
+    char term[EFS_MAX_NAME];
+    size_t term_len;
+    if (find_parse_query(pattern, strlen(pattern), &type, term, &term_len) != 0)
+        return -EINVAL;
+
+    uint64_t now = stats_now_ms();
+    pthread_mutex_lock(&g_find_res_mu);
+    for (int i = 0; i < EFS_FIND_RES_N; i++) {
+        if (g_find_res[i].valid && g_find_res[i].dir_ino == dir_ino &&
+            strcmp(g_find_res[i].term, pattern) == 0 &&
+            now - g_find_res[i].ms < EFS_FIND_RES_TTL_MS) {
+            pthread_mutex_unlock(&g_find_res_mu);
+            return 0;
+        }
+    }
+    pthread_mutex_unlock(&g_find_res_mu);
+
+    /* Miss: run the query (takes g_find_idx_mu internally) outside our lock. */
+    char *text = NULL;
+    int len = 0;
+    if (find_run_query(dir_ino, type, term, term_len, &text, &len) != 0) {
+        free(text);
+        return -EIO;
+    }
+
     pthread_mutex_lock(&g_find_res_mu);
     int slot = -1;
     for (int i = 0; i < EFS_FIND_RES_N; i++) {
-        if (!g_find_res[i].valid || g_find_res[i].dir_ino == dir_ino) {
+        if (!g_find_res[i].valid ||
+            (g_find_res[i].dir_ino == dir_ino &&
+             strcmp(g_find_res[i].term, pattern) == 0)) {
             slot = i;
             break;
         }
     }
-    if (slot < 0)
-        slot = 0; /* simple eviction; queries are rare */
+    if (slot < 0) { /* evict the oldest */
+        uint64_t oldest = ~0ULL;
+        for (int i = 0; i < EFS_FIND_RES_N; i++) {
+            if (g_find_res[i].ms < oldest) {
+                oldest = g_find_res[i].ms;
+                slot = i;
+            }
+        }
+    }
     free(g_find_res[slot].text);
     g_find_res[slot].valid = 1;
     g_find_res[slot].dir_ino = dir_ino;
+    strncpy(g_find_res[slot].term, pattern, EFS_MAX_NAME - 1);
+    g_find_res[slot].term[EFS_MAX_NAME - 1] = '\0';
+    g_find_res[slot].ms = now;
     g_find_res[slot].text = text; /* takes ownership */
     g_find_res[slot].len = len;
     pthread_mutex_unlock(&g_find_res_mu);
+    return 0;
 }
 
-/* Copy a slice of the cached results for dir_ino into buf. Returns bytes
- * copied, or 0 when there are no (more) results / no cached query. */
-static int find_res_read(efs_ino_t dir_ino, char *buf, size_t size, off_t offset)
+/* Result length for (dir, pattern), or -1 on invalid term / error. */
+static int find_query_len(efs_ino_t dir_ino, const char *pattern)
 {
+    if (find_query_ensure(dir_ino, pattern) != 0)
+        return -1;
+    pthread_mutex_lock(&g_find_res_mu);
+    int len = -1;
+    for (int i = 0; i < EFS_FIND_RES_N; i++) {
+        if (g_find_res[i].valid && g_find_res[i].dir_ino == dir_ino &&
+            strcmp(g_find_res[i].term, pattern) == 0) {
+            len = g_find_res[i].len;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_find_res_mu);
+    return len;
+}
+
+/* Copy a slice of the (dir, pattern) result into buf. Returns bytes copied,
+ * 0 at EOF, or a negative errno for an invalid term. */
+static int find_query_read(efs_ino_t dir_ino, const char *pattern,
+                           char *buf, size_t size, off_t offset)
+{
+    if (find_query_ensure(dir_ino, pattern) != 0)
+        return -EINVAL;
     pthread_mutex_lock(&g_find_res_mu);
     int n = 0;
     for (int i = 0; i < EFS_FIND_RES_N; i++) {
-        if (!g_find_res[i].valid || g_find_res[i].dir_ino != dir_ino)
+        if (!g_find_res[i].valid || g_find_res[i].dir_ino != dir_ino ||
+            strcmp(g_find_res[i].term, pattern) != 0)
             continue;
         if (offset < g_find_res[i].len) {
             size_t avail = (size_t)g_find_res[i].len - (size_t)offset;
@@ -732,27 +859,25 @@ static int find_res_read(efs_ino_t dir_ino, char *buf, size_t size, off_t offset
     return n;
 }
 
-static int find_res_len(efs_ino_t dir_ino)
+/* Synthetic ino for a .find/<term> query file: distinct high bit from the
+ * .find dir, folded with a hash of the pattern so different terms differ. */
+static ino_t find_query_ino(efs_ino_t dir_ino, const char *pattern)
 {
-    pthread_mutex_lock(&g_find_res_mu);
-    int len = 0;
-    for (int i = 0; i < EFS_FIND_RES_N; i++) {
-        if (g_find_res[i].valid && g_find_res[i].dir_ino == dir_ino) {
-            len = g_find_res[i].len;
-            break;
-        }
+    uint64_t h = 1469598103934665603ULL;
+    for (const unsigned char *p = (const unsigned char *)pattern; *p; p++) {
+        h ^= *p;
+        h *= 1099511628211ULL;
     }
-    pthread_mutex_unlock(&g_find_res_mu);
-    return len;
+    return (ino_t)((1ULL << 60) | ((dir_ino + (h & 0xfffff)) & ((1ULL << 60) - 1)));
 }
 
-static int find_fill_stat(const struct efs_inode *parent, struct stat *stbuf)
+/* stat for the virtual .find directory itself. */
+static int find_dir_fill_stat(const struct efs_inode *parent, struct stat *stbuf)
 {
     memset(stbuf, 0, sizeof(*stbuf));
     stbuf->st_ino = find_synthetic_ino(parent->ino);
-    stbuf->st_mode = S_IFREG | 0666;
-    stbuf->st_nlink = 1;
-    stat_set_size_blocks(stbuf, (uint64_t)find_res_len(parent->ino));
+    stbuf->st_mode = S_IFDIR | 0555;
+    stbuf->st_nlink = 2;
     stbuf->st_uid = parent->uid;
     stbuf->st_gid = parent->gid;
     stbuf->st_mtim.tv_sec = (time_t)parent->mtime;
@@ -761,22 +886,24 @@ static int find_fill_stat(const struct efs_inode *parent, struct stat *stbuf)
     return 0;
 }
 
-/* Handle a query written to .find: parse, search, cache results. Returns 0 on
- * success, -EINVAL for a bad/short term, -EIO on internal error. */
-static int find_handle_query(efs_ino_t dir_ino, const char *q, size_t qlen)
+/* stat for a .find/<term> query file: runs the query to report the real size
+ * (so `cat` reads the full list rather than stopping at a 0 size). */
+static int find_query_fill_stat(const struct efs_inode *parent, const char *pattern,
+                                struct stat *stbuf)
 {
-    enum find_match type;
-    char term[EFS_MAX_NAME];
-    size_t term_len;
-    if (find_parse_query(q, qlen, &type, term, &term_len) != 0)
-        return -EINVAL;
-    char *text = NULL;
-    int len = 0;
-    if (find_run_query(dir_ino, type, term, term_len, &text, &len) != 0) {
-        free(text);
-        return -EIO;
-    }
-    find_res_store(dir_ino, text, len);
+    int len = find_query_len(parent->ino, pattern);
+    if (len < 0)
+        return -ENOENT;
+    memset(stbuf, 0, sizeof(*stbuf));
+    stbuf->st_ino = find_query_ino(parent->ino, pattern);
+    stbuf->st_mode = S_IFREG | 0444;
+    stbuf->st_nlink = 1;
+    stat_set_size_blocks(stbuf, (uint64_t)len);
+    stbuf->st_uid = parent->uid;
+    stbuf->st_gid = parent->gid;
+    stbuf->st_mtim.tv_sec = (time_t)parent->mtime;
+    stbuf->st_atim.tv_sec = (time_t)parent->atime;
+    stbuf->st_ctim.tv_sec = (time_t)parent->ctime;
     return 0;
 }
 
@@ -804,10 +931,17 @@ static int efs_fuse_getattr(const char *path, struct stat *stbuf)
             return -ENOENT;
         return stats_fill_stat(&parent, stbuf);
     }
+    char fqterm[EFS_MAX_NAME];
+    struct efs_inode fqpar;
+    if (path_find_query(path, &fqpar, fqterm, sizeof(fqterm)) == 0) {
+        if (!feature_enabled(EFS_FEATURE_FIND))
+            return -ENOENT;
+        return find_query_fill_stat(&fqpar, fqterm, stbuf);
+    }
     if (path_is_find(path, &parent) == 0) {
         if (!feature_enabled(EFS_FEATURE_FIND))
             return -ENOENT;
-        return find_fill_stat(&parent, stbuf);
+        return find_dir_fill_stat(&parent, stbuf);
     }
 
     struct efs_inode ino;
@@ -868,6 +1002,16 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     (void)offset;
     (void)fi;
 
+    /* The virtual .find directory enumerates nothing — queries are read by
+     * explicit ".find/<term>" path, not listed. */
+    if (path_is_find(path, NULL) == 0) {
+        if (!feature_enabled(EFS_FEATURE_FIND))
+            return -ENOENT;
+        filler(buf, ".", NULL, 0);
+        filler(buf, "..", NULL, 0);
+        return 0;
+    }
+
     struct efs_inode parent;
     int rc = efs_client_lookup(path, &parent);
     if (rc != 0)
@@ -907,10 +1051,21 @@ static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
             return -EACCES;
         return 0;
     }
+    char fqterm[EFS_MAX_NAME];
+    struct efs_inode fqpar;
+    if (path_find_query(path, &fqpar, fqterm, sizeof(fqterm)) == 0) {
+        if (!feature_enabled(EFS_FEATURE_FIND))
+            return -ENOENT;
+        if ((fi->flags & O_ACCMODE) != O_RDONLY)
+            return -EACCES; /* query files are read-only */
+        if (find_query_len(fqpar.ino, fqterm) < 0)
+            return -ENOENT; /* invalid/short term */
+        return 0;
+    }
     if (path_is_find(path, &parent) == 0) {
         if (!feature_enabled(EFS_FEATURE_FIND))
             return -ENOENT;
-        return 0; /* readable (results) + writable (query) */
+        return -EISDIR; /* .find is a directory; query via .find/<term> */
     }
     struct efs_inode ino;
     return efs_client_lookup(path, &ino) == 0 ? 0 : -ENOENT;
@@ -940,10 +1095,17 @@ static int efs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
         memcpy(buf, e.text + offset, avail);
         return (int)avail;
     }
+    char fqterm[EFS_MAX_NAME];
+    struct efs_inode fqpar;
+    if (path_find_query(path, &fqpar, fqterm, sizeof(fqterm)) == 0) {
+        if (!feature_enabled(EFS_FEATURE_FIND))
+            return -ENOENT;
+        return find_query_read(fqpar.ino, fqterm, buf, size, offset);
+    }
     if (path_is_find(path, &parent) == 0) {
         if (!feature_enabled(EFS_FEATURE_FIND))
             return -ENOENT;
-        return find_res_read(parent.ino, buf, size, offset);
+        return -EISDIR; /* .find is a directory; query via .find/<term> */
     }
 
     struct efs_inode ino;
@@ -1369,15 +1531,10 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
     (void)fi;
     if (path_is_stats(path, NULL) == 0)
         return -EACCES;
-    struct efs_inode fparent;
-    if (path_is_find(path, &fparent) == 0) {
-        if (!feature_enabled(EFS_FEATURE_FIND))
-            return -ENOENT;
-        int frc = find_handle_query(fparent.ino, buf, size);
-        if (frc != 0)
-            return frc; /* -EINVAL for a bad/short term */
-        return (int)size;
-    }
+    if (path_is_find(path, NULL) == 0)
+        return -EISDIR; /* .find is a virtual directory */
+    if (path_is_find_query_path(path))
+        return -EACCES; /* .find/<term> query files are read-only */
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
     if (rc != 0)
@@ -1416,26 +1573,10 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
     (void)fi;
     if (path_is_stats(path, NULL) == 0)
         return -EACCES;
-    struct efs_inode fparent;
-    if (path_is_find(path, &fparent) == 0) {
-        if (!feature_enabled(EFS_FEATURE_FIND))
-            return -ENOENT;
-        size_t qsize = fuse_buf_size(buf);
-        char *q = malloc(qsize + 1);
-        if (!q)
-            return -ENOMEM;
-        struct fuse_bufvec qdst = FUSE_BUFVEC_INIT(qsize);
-        qdst.buf[0].mem = q;
-        if (fuse_buf_copy(&qdst, buf, FUSE_BUF_NO_SPLICE) < 0) {
-            free(q);
-            return -EIO;
-        }
-        int frc = find_handle_query(fparent.ino, q, qsize);
-        free(q);
-        if (frc != 0)
-            return frc;
-        return (int)qsize;
-    }
+    if (path_is_find(path, NULL) == 0)
+        return -EISDIR; /* .find is a virtual directory */
+    if (path_is_find_query_path(path))
+        return -EACCES; /* .find/<term> query files are read-only */
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
     if (rc != 0)
@@ -1645,7 +1786,8 @@ static int efs_rc_to_errno(int rc)
 
 static int efs_fuse_chmod(const char *path, mode_t mode)
 {
-    if (path_is_stats(path, NULL) == 0 || path_is_find(path, NULL) == 0)
+    if (path_is_stats(path, NULL) == 0 || path_is_find(path, NULL) == 0 ||
+        path_is_find_query_path(path))
         return -EACCES;
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
@@ -1664,7 +1806,8 @@ static int efs_fuse_chmod(const char *path, mode_t mode)
 
 static int efs_fuse_chown(const char *path, uid_t uid, gid_t gid)
 {
-    if (path_is_stats(path, NULL) == 0 || path_is_find(path, NULL) == 0)
+    if (path_is_stats(path, NULL) == 0 || path_is_find(path, NULL) == 0 ||
+        path_is_find_query_path(path))
         return -EACCES;
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
@@ -1753,7 +1896,8 @@ static int efs_fuse_readlink(const char *path, char *buf, size_t size)
 static int efs_fuse_link(const char *from, const char *to)
 {
     if (path_is_stats(from, NULL) == 0 || path_is_stats(to, NULL) == 0 ||
-        path_is_find(from, NULL) == 0 || path_is_find(to, NULL) == 0)
+        path_is_find(from, NULL) == 0 || path_is_find(to, NULL) == 0 ||
+        path_is_find_query_path(from) || path_is_find_query_path(to))
         return -EACCES;
     struct efs_inode src;
     if (efs_client_lookup(from, &src) != 0)
@@ -1779,7 +1923,8 @@ static int efs_fuse_link(const char *from, const char *to)
 
 static int efs_fuse_utime(const char *path, struct utimbuf *ubuf)
 {
-    if (path_is_stats(path, NULL) == 0 || path_is_find(path, NULL) == 0)
+    if (path_is_stats(path, NULL) == 0 || path_is_find(path, NULL) == 0 ||
+        path_is_find_query_path(path))
         return -EACCES;
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
@@ -1799,7 +1944,8 @@ static int efs_fuse_utime(const char *path, struct utimbuf *ubuf)
 
 static int efs_fuse_utimens(const char *path, const struct timespec tv[2])
 {
-    if (path_is_stats(path, NULL) == 0 || path_is_find(path, NULL) == 0)
+    if (path_is_stats(path, NULL) == 0 || path_is_find(path, NULL) == 0 ||
+        path_is_find_query_path(path))
         return -EACCES;
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
@@ -1845,12 +1991,10 @@ static int efs_fuse_truncate(const char *path, off_t size)
 {
     if (path_is_stats(path, NULL) == 0)
         return -EACCES;
-    struct efs_inode fparent;
-    if (path_is_find(path, &fparent) == 0) {
-        if (!feature_enabled(EFS_FEATURE_FIND))
-            return -ENOENT;
-        return 0; /* O_TRUNC on the virtual query file is a no-op */
-    }
+    if (path_is_find(path, NULL) == 0)
+        return -EISDIR; /* .find is a virtual directory */
+    if (path_is_find_query_path(path))
+        return -EACCES; /* query files are read-only */
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
     if (rc != 0)
@@ -1921,7 +2065,8 @@ static void efs_fuse_destroy(void *userdata)
 static int efs_fuse_rename(const char *from, const char *to)
 {
     if (path_is_stats(from, NULL) == 0 || path_is_stats(to, NULL) == 0 ||
-        path_is_find(from, NULL) == 0 || path_is_find(to, NULL) == 0)
+        path_is_find(from, NULL) == 0 || path_is_find(to, NULL) == 0 ||
+        path_is_find_query_path(from) || path_is_find_query_path(to))
         return -EACCES;
     struct efs_inode src;
     if (efs_client_lookup(from, &src) != 0)
