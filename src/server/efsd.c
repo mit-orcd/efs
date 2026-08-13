@@ -355,7 +355,7 @@ int main(int argc, char **argv)
     }
 
     for (uint32_t pi = 0; pi < server.storage_path_count; pi++) {
-        if (mkdir(server.storage_paths[pi], 0755) != 0 && errno != EEXIST) {
+        if (mkdir_p(server.storage_paths[pi]) != 0 && errno != EEXIST) {
             fprintf(stderr, "mkdir storage %s: %s\n", server.storage_paths[pi],
                     strerror(errno));
             return 1;

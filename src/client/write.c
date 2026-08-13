@@ -1037,6 +1037,17 @@ static void hash_write_fragments(const uint8_t *fragments[EFS_NUM_FRAGMENTS],
         efs_hash(fragments[2], frag_len, checksums[2]);
 }
 
+/* Per-batch completion tracker. Lives on the put_pool_run caller's stack; the
+ * caller waits until every job it enqueued has been drained, so the tracker
+ * outlives all pool-thread access. This is what makes the pool reentrant —
+ * concurrent writers each wait on their own batch instead of racing on one
+ * shared batch slot. */
+struct put_batch {
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    int remaining;
+};
+
 struct chunk_put_job {
     efs_ino_t ino;
     uint32_t ci;
@@ -1045,29 +1056,33 @@ struct chunk_put_job {
     const char *buf;
     uint64_t end;
     int rc;
+    struct put_batch *bp;
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
 };
 
 static void *chunk_put_worker(void *arg);
 
-/* Persistent PUT workers — avoids pthread_create/join per FUSE write batch. */
+/* Persistent PUT workers draining a shared FIFO of chunk jobs. Reentrant:
+ * each put_pool_run enqueues its jobs tagged with a per-batch tracker and
+ * waits on that tracker, so concurrent writers (WB workers) all stay in flight
+ * instead of racing on a single batch slot. Queue depth spans several batches
+ * so enqueuers rarely block. */
+#define PUT_POOL_QDEPTH (8 * EFS_WRITE_PIPELINE)
 static struct {
     pthread_mutex_t mu;
-    pthread_cond_t job_cv;
-    pthread_cond_t done_cv;
+    pthread_cond_t not_empty;
+    pthread_cond_t not_full;
+    struct chunk_put_job *q[PUT_POOL_QDEPTH];
+    int head, tail, count;
     pthread_t tids[EFS_WRITE_PIPELINE];
     int nworkers;
     int ready;
     int shutdown;
-    struct chunk_put_job *batch;
-    uint32_t batch_n;
-    uint32_t next_i;
-    uint32_t completed;
 } g_put_pool = {
     .mu = PTHREAD_MUTEX_INITIALIZER,
-    .job_cv = PTHREAD_COND_INITIALIZER,
-    .done_cv = PTHREAD_COND_INITIALIZER,
+    .not_empty = PTHREAD_COND_INITIALIZER,
+    .not_full = PTHREAD_COND_INITIALIZER,
 };
 
 static void *put_pool_thread(void *arg)
@@ -1075,24 +1090,25 @@ static void *put_pool_thread(void *arg)
     (void)arg;
     for (;;) {
         pthread_mutex_lock(&g_put_pool.mu);
-        while (!g_put_pool.shutdown &&
-               (g_put_pool.batch == NULL || g_put_pool.next_i >= g_put_pool.batch_n))
-            pthread_cond_wait(&g_put_pool.job_cv, &g_put_pool.mu);
-        if (g_put_pool.shutdown) {
+        while (g_put_pool.count == 0 && !g_put_pool.shutdown)
+            pthread_cond_wait(&g_put_pool.not_empty, &g_put_pool.mu);
+        if (g_put_pool.shutdown && g_put_pool.count == 0) {
             pthread_mutex_unlock(&g_put_pool.mu);
             return NULL;
         }
-        uint32_t i = g_put_pool.next_i++;
-        struct chunk_put_job *job = &g_put_pool.batch[i];
+        struct chunk_put_job *job = g_put_pool.q[g_put_pool.head];
+        g_put_pool.head = (g_put_pool.head + 1) % PUT_POOL_QDEPTH;
+        g_put_pool.count--;
+        pthread_cond_signal(&g_put_pool.not_full);
         pthread_mutex_unlock(&g_put_pool.mu);
 
         chunk_put_worker(job);
 
-        pthread_mutex_lock(&g_put_pool.mu);
-        g_put_pool.completed++;
-        if (g_put_pool.completed == g_put_pool.batch_n)
-            pthread_cond_signal(&g_put_pool.done_cv);
-        pthread_mutex_unlock(&g_put_pool.mu);
+        struct put_batch *bp = job->bp;
+        pthread_mutex_lock(&bp->mu);
+        if (--bp->remaining == 0)
+            pthread_cond_signal(&bp->cv);
+        pthread_mutex_unlock(&bp->mu);
     }
 }
 
@@ -1107,7 +1123,7 @@ static int put_pool_ensure(void)
             if (pthread_create(&g_put_pool.tids[i], NULL, put_pool_thread,
                                NULL) != 0) {
                 g_put_pool.shutdown = 1;
-                pthread_cond_broadcast(&g_put_pool.job_cv);
+                pthread_cond_broadcast(&g_put_pool.not_empty);
                 pthread_mutex_unlock(&g_put_pool.mu);
                 for (uint32_t j = 0; j < i; j++)
                     pthread_join(g_put_pool.tids[j], NULL);
@@ -1131,17 +1147,29 @@ static int put_pool_run(struct chunk_put_job *jobs, uint32_t batch)
             chunk_put_worker(&jobs[i]);
         return 0;
     }
+    struct put_batch bp;
+    pthread_mutex_init(&bp.mu, NULL);
+    pthread_cond_init(&bp.cv, NULL);
+    bp.remaining = (int)batch;
+
     pthread_mutex_lock(&g_put_pool.mu);
-    g_put_pool.batch = jobs;
-    g_put_pool.batch_n = batch;
-    g_put_pool.next_i = 0;
-    g_put_pool.completed = 0;
-    pthread_cond_broadcast(&g_put_pool.job_cv);
-    while (g_put_pool.completed < batch)
-        pthread_cond_wait(&g_put_pool.done_cv, &g_put_pool.mu);
-    g_put_pool.batch = NULL;
-    g_put_pool.batch_n = 0;
+    for (uint32_t i = 0; i < batch; i++) {
+        jobs[i].bp = &bp;
+        while (g_put_pool.count == PUT_POOL_QDEPTH && !g_put_pool.shutdown)
+            pthread_cond_wait(&g_put_pool.not_full, &g_put_pool.mu);
+        g_put_pool.q[g_put_pool.tail] = &jobs[i];
+        g_put_pool.tail = (g_put_pool.tail + 1) % PUT_POOL_QDEPTH;
+        g_put_pool.count++;
+        pthread_cond_signal(&g_put_pool.not_empty);
+    }
     pthread_mutex_unlock(&g_put_pool.mu);
+
+    pthread_mutex_lock(&bp.mu);
+    while (bp.remaining > 0)
+        pthread_cond_wait(&bp.cv, &bp.mu);
+    pthread_mutex_unlock(&bp.mu);
+    pthread_mutex_destroy(&bp.mu);
+    pthread_cond_destroy(&bp.cv);
     return 0;
 }
 
