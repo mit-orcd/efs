@@ -153,13 +153,20 @@ static int fetch_meta_fragment(struct efsd_server *s, struct efs_export *ex,
 }
 
 void server_gc_meta_slot_pages(struct efsd_server *s, struct efs_export *ex,
-                               uint64_t dead_generation, uint32_t page_count)
+                               uint64_t dead_generation, uint32_t page_count,
+                               uint32_t live_page_count)
 {
     if (!s || !ex || page_count == 0)
         return;
     if (page_count > EFS_META_MAX_PAGES)
         page_count = EFS_META_MAX_PAGES;
-    for (uint32_t pi = 0; pi < page_count; pi++) {
+    if (live_page_count > EFS_META_MAX_PAGES)
+        live_page_count = EFS_META_MAX_PAGES;
+    /* Pages still in range of the live generation must survive: a dirty-page
+     * flush skips re-PUTting unchanged pages, so the live (and next
+     * same-parity) generation reads those fragments from this slot. Only
+     * pages the live generation no longer covers are reclaimed here. */
+    for (uint32_t pi = live_page_count; pi < page_count; pi++) {
         uint32_t ci = efs_meta_page_chunk_index(dead_generation, pi);
         if (ci == UINT32_MAX)
             continue;
@@ -226,6 +233,7 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
         pthread_mutex_unlock(&s->lock);
         return EFS_ERR_INVAL;
     }
+    int ei = server_export_index_locked(s, ex);
     int crc = efs_export_root_copy(&snap, &ex->root);
     pthread_mutex_unlock(&s->lock);
     if (crc != EFS_OK)
@@ -257,6 +265,28 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
          * instead of fetching every remaining page against a dead gen. */
         pthread_mutex_lock(&s->lock);
         uint64_t cur_gen = ex->root.generation;
+        /* Cache hit: the page's fragment checksums are unchanged from the
+         * last rebuild's generation, so the assembled-blob cache already
+         * holds exactly this page's content — memcpy instead of peer fetch. */
+        int cached = 0;
+        if (cur_gen == start_gen && ei >= 0 && pi < s->meta_blob_pages[ei] &&
+            s->meta_blob_cache[ei] && s->meta_blob_sums[ei] &&
+            memcmp(s->meta_blob_sums[ei] +
+                       (size_t)pi * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE,
+                   efs_export_root_checksum_const(root, pi, 0),
+                   EFS_NUM_FRAGMENTS * EFS_HASH_SIZE) == 0) {
+            size_t off = (size_t)pi * EFS_META_PAGE_SIZE;
+            size_t avail = (off < s->meta_blob_cache_len[ei])
+                               ? s->meta_blob_cache_len[ei] - off : 0;
+            if (avail > 0) {
+                size_t n = avail > EFS_META_PAGE_SIZE ? EFS_META_PAGE_SIZE
+                                                      : avail;
+                memcpy(pages[pi], s->meta_blob_cache[ei] + off, n);
+                if (n < EFS_META_PAGE_SIZE)
+                    memset(pages[pi] + n, 0, EFS_META_PAGE_SIZE - n);
+                cached = 1;
+            }
+        }
         pthread_mutex_unlock(&s->lock);
         if (cur_gen != start_gen) {
             free(frag_buf);
@@ -264,6 +294,8 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
             efs_export_root_free(&snap);
             return EFS_ERR_PROTO;
         }
+        if (cached)
+            continue;
 
         /* Prefer dual-slot keys for this generation; fall back to legacy
          * page_index-only keys for exports flushed before dual-slot. */
@@ -405,8 +437,8 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
     }
 
     rc = efs_export_deserialize(ex, blob, blob_len);
-    free(blob);
     if (rc != EFS_OK) {
+        free(blob);
         /* Root was cleared by a failed/partial deserialize path; restore snap
          * so the node keeps a usable EFSR and can retry. */
         efs_export_root_move(&ex->root, &snap);
@@ -415,6 +447,26 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
         pthread_mutex_unlock(&s->lock);
         return rc;
     }
+
+    /* Success: keep the assembled blob (plus this generation's page
+     * checksums) as the incremental-rebuild cache so the next rebuild only
+     * fetches pages whose checksums changed. */
+    if (ei >= 0) {
+        free(s->meta_blob_cache[ei]);
+        free(s->meta_blob_sums[ei]);
+        s->meta_blob_cache[ei] = (uint8_t *)blob;
+        s->meta_blob_cache_len[ei] = (uint32_t)blob_len;
+        s->meta_blob_cache_gen[ei] = start_gen;
+        s->meta_blob_pages[ei] = page_count;
+        size_t sum_n = (size_t)page_count * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE;
+        s->meta_blob_sums[ei] = malloc(sum_n);
+        if (s->meta_blob_sums[ei])
+            memcpy(s->meta_blob_sums[ei], root->page_checksums, sum_n);
+        else
+            s->meta_blob_pages[ei] = 0; /* no sums: cache unusable, freed next */
+        blob = NULL; /* owned by the cache */
+    }
+    free(blob);
 
     ex->meta_fragmented = 1;
     ex->meta_needs_rebuild = 0;
@@ -746,6 +798,7 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
 
     /* Quorum reached: install + persist locally. Persist under lock so a
      * concurrent peer PUT_META cannot free page_checksums mid-fwrite. */
+    uint32_t new_pages = root.page_count;
     pthread_mutex_lock(&s->lock);
     ex->meta_fragmented = 1;
     efs_export_root_move(&ex->root, &root);
@@ -754,9 +807,11 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     s->export_meta_dirty = 0;
     pthread_mutex_unlock(&s->lock);
 
-    /* Retire the previous generation's dual-slot pages (best-effort). */
+    /* Retire the previous generation's dual-slot pages (best-effort). Only
+     * pages beyond the new generation's page count are dead; in-range
+     * fragments stay for dirty-page skip reuse by future same-parity gens. */
     if (old_pages > 0 && old_gen != new_gen)
-        server_gc_meta_slot_pages(s, ex, old_gen, old_pages);
+        server_gc_meta_slot_pages(s, ex, old_gen, old_pages, new_pages);
     return 0;
 }
 

@@ -361,6 +361,16 @@ void efs_client_shutdown(void)
     g_client.dirty_ino_count = 0;
     g_client.dirty_chunk_count = 0;
     g_client.dirty_chunk_cap = 0;
+    free(g_client.meta_slot_hashes[0]);
+    free(g_client.meta_slot_hashes[1]);
+    free(g_client.meta_slot_sums[0]);
+    free(g_client.meta_slot_sums[1]);
+    g_client.meta_slot_hashes[0] = NULL;
+    g_client.meta_slot_hashes[1] = NULL;
+    g_client.meta_slot_sums[0] = NULL;
+    g_client.meta_slot_sums[1] = NULL;
+    g_client.meta_slot_pages[0] = 0;
+    g_client.meta_slot_pages[1] = 0;
 
     efs_export_free(&g_client.export);
     pthread_mutex_destroy(&g_client.lock);

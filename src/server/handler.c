@@ -351,6 +351,7 @@ void server_handle_conn(int fd)
                         } else {
                             uint64_t old_gen = ex->root.generation;
                             uint32_t old_pages = ex->root.page_count;
+                            uint32_t new_pages = root.page_count;
                             int had_frag = ex->meta_fragmented;
                             uint32_t prev_features = ex->root.features;
                             ex->meta_fragmented = 1;
@@ -391,11 +392,14 @@ void server_handle_conn(int fd)
                             pthread_mutex_unlock(&g_server->lock);
                             reply = EFS_PUT_META_OK;
                             /* Client-driven root flip: drop local fragments for
-                             * the retired dual-slot generation. */
+                             * the retired dual-slot generation's out-of-range
+                             * pages only (in-range fragments stay for reuse by
+                             * dirty-page skip references). */
                             if (had_frag && old_pages > 0 && old_gen != new_gen)
                                 server_gc_meta_slot_pages(g_server,
                                                           &g_server->exports[0],
-                                                          old_gen, old_pages);
+                                                          old_gen, old_pages,
+                                                          new_pages);
                         }
                     }
                 } else if (efs_meta_blob_is_export(payload, payload_len)) {

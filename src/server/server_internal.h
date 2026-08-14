@@ -80,6 +80,18 @@ struct efsd_server {
     int export_meta_dirty; /* defer metadata.bin writes across PUT_META */
     int usage_dirty; /* local->used changed; flush meta/usage.bin soon */
     int nodes_dirty; /* membership changed; persist nodes.bin off the lock */
+
+    /* Incremental meta-rebuild cache (per export slot): the assembled EFSM
+     * blob from the last successful rebuild plus that generation's page
+     * checksums. Pages whose checksums are unchanged in a new root are
+     * memcpy'd from the cache instead of being fetched from peers, so a
+     * catch-up rebuild costs O(changed pages) of network I/O. In-memory
+     * only, guarded by s->lock; cleared on export destroy. */
+    uint8_t *meta_blob_cache[EFS_MAX_EXPORTS];
+    uint32_t meta_blob_cache_len[EFS_MAX_EXPORTS];
+    uint64_t meta_blob_cache_gen[EFS_MAX_EXPORTS];
+    uint8_t *meta_blob_sums[EFS_MAX_EXPORTS]; /* pages * 3 * EFS_HASH_SIZE */
+    uint32_t meta_blob_pages[EFS_MAX_EXPORTS];
 };
 
 /* Global server instance used by worker threads. */
@@ -241,9 +253,15 @@ void server_gossip_membership(struct efsd_server *s, const struct efs_msg_hello 
 int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex);
 
 /* Best-effort unlink local meta page fragments for a retired generation slot.
- * Non-fatal; space leak only if unlink fails. */
+ * Non-fatal; space leak only if unlink fails. With dirty-page flushing the
+ * live generation may still reference (skip re-PUTting) unchanged pages whose
+ * fragments were written by an earlier same-parity generation, so only pages
+ * BEYOND the new live generation's page count are truly dead and unlinked;
+ * in-range fragments are left in place for reuse (they are overwritten by
+ * the next same-parity flush that actually changes them). */
 void server_gc_meta_slot_pages(struct efsd_server *s, struct efs_export *ex,
-                               uint64_t dead_generation, uint32_t page_count);
+                               uint64_t dead_generation, uint32_t page_count,
+                               uint32_t live_page_count);
 
 /* Rebuild in-memory export tables from meta pages referenced by ex->root. */
 int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *ex);

@@ -48,6 +48,18 @@ struct efs_client {
     uint32_t meta_dirty_ops;
     int meta_dirty;
 
+    /* Dirty-page flush: per dual-slot parity (generation & 1), the page
+     * content hashes AND fragment checksums committed by the last successful
+     * flush of that parity. A page whose content hash still matches its
+     * parity slot is already durably stored at the same chunk index (slots
+     * alternate per gen; the server GC keeps in-range fragments), so its
+     * fragment PUT is skipped and the committed fragment checksums are
+     * reused verbatim — the flush's network cost becomes O(dirty pages),
+     * not O(table). Only touched by the flush path (g_repl_mu serializes). */
+    uint8_t *meta_slot_hashes[2]; /* meta_slot_pages[p] * EFS_HASH_SIZE */
+    uint8_t *meta_slot_sums[2];   /* meta_slot_pages[p] * 3 * EFS_HASH_SIZE */
+    uint32_t meta_slot_pages[2];
+
     /* Dirty tracking for batched meta flushes (meta_batch only).
      * Inodes: open-addressing set (key 0 = empty).
      * Chunks: set for dedup + parallel arrays of (ino, chunk_index). */

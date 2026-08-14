@@ -847,7 +847,10 @@ static void rollup_expand_parents_of(struct efs_export *ex, efs_ino_t ino)
     if (!p)
         return;
     uint64_t lo = entry_tmin(p), hi = entry_tmax(p);
-    if (p->nlink <= 1) {
+    /* Directories always have nlink>=2 (".", subdirs) but a single inode row —
+     * not hardlinks. Take the O(depth) single-parent walk for them; only scan
+     * all rows for genuinely hardlinked multi-link files (rare). */
+    if (p->nlink <= 1 || efs_mode_is_dir(p->mode)) {
         expand_parent_chain(ex, ino, p->parent, lo, hi);
         return;
     }
@@ -1004,8 +1007,9 @@ int efs_export_format_stats(const struct efs_inode *dir, char *buf, size_t bufle
 static void sync_hardlink_attrs(struct efs_export *ex, efs_ino_t ino,
                                 const struct efs_inode *src)
 {
-    /* Single link: attrs already live on the indexed row (inode_ptr). */
-    if (!src || src->nlink <= 1)
+    /* Single link: attrs already live on the indexed row (inode_ptr).
+     * Directories have nlink>=2 without hardlink rows — nothing to sync. */
+    if (!src || src->nlink <= 1 || efs_mode_is_dir(src->mode))
         return;
     for (uint64_t i = 0; i < ex->inode_count; i++) {
         if (ex->inodes[i].ino != ino)

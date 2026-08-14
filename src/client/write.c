@@ -319,29 +319,95 @@ static pthread_mutex_t g_repl_mu = PTHREAD_MUTEX_INITIALIZER;
  * every return path leaves the lock for the wrapper to release — previously
  * the page-PUT / no-quorum error paths returned holding g_repl_mu, leaking the
  * non-recursive mutex and deadlocking the next flush. */
-static int efs_client_replicate_metadata_locked(void)
+/* Dirty state swapped out of g_client at snapshot time. Ops that race the
+ * unlocked serialize populate fresh sets and stay dirty for the next flush;
+ * on flush failure the saved marks are merged back so nothing is lost. */
+struct dirty_snap {
+    uint64_t *ino_keys, ino_mask, ino_count;
+    uint64_t *chunk_keys, chunk_mask, chunk_count;
+    efs_ino_t *chunk_inos;
+    uint32_t *chunk_idxs;
+    uint64_t chunk_cap;
+    int meta_dirty;
+    uint32_t dirty_ops;
+};
+
+static void dirty_snap_save_locked(struct dirty_snap *ds)
+{
+    ds->ino_keys = g_client.dirty_ino_keys;
+    ds->ino_mask = g_client.dirty_ino_mask;
+    ds->ino_count = g_client.dirty_ino_count;
+    ds->chunk_keys = g_client.dirty_chunk_keys;
+    ds->chunk_mask = g_client.dirty_chunk_mask;
+    ds->chunk_count = g_client.dirty_chunk_count;
+    ds->chunk_inos = g_client.dirty_chunk_inos;
+    ds->chunk_idxs = g_client.dirty_chunk_idxs;
+    ds->chunk_cap = g_client.dirty_chunk_cap;
+    ds->meta_dirty = g_client.meta_dirty;
+    ds->dirty_ops = g_client.meta_dirty_ops;
+    g_client.dirty_ino_keys = NULL;
+    g_client.dirty_ino_mask = 0;
+    g_client.dirty_ino_count = 0;
+    g_client.dirty_chunk_keys = NULL;
+    g_client.dirty_chunk_mask = 0;
+    g_client.dirty_chunk_count = 0;
+    g_client.dirty_chunk_inos = NULL;
+    g_client.dirty_chunk_idxs = NULL;
+    g_client.dirty_chunk_cap = 0;
+    g_client.meta_dirty = 0;
+    g_client.meta_dirty_ops = 0;
+}
+
+static void dirty_snap_free(struct dirty_snap *ds)
+{
+    free(ds->ino_keys);
+    free(ds->chunk_keys);
+    free(ds->chunk_inos);
+    free(ds->chunk_idxs);
+    memset(ds, 0, sizeof(*ds));
+}
+
+/* Flush failed: re-mark everything the snapshot covered so the next flush
+ * retries it. g_client.lock must be held. */
+static void dirty_snap_merge_back_locked(struct dirty_snap *ds)
+{
+    for (uint64_t i = 0; i <= ds->ino_mask; i++) {
+        if (ds->ino_keys && ds->ino_keys[i])
+            efs_client_mark_ino_dirty(ds->ino_keys[i]);
+    }
+    for (uint64_t i = 0; i < ds->chunk_count; i++)
+        efs_client_mark_chunk_dirty(ds->chunk_inos[i], ds->chunk_idxs[i]);
+    g_client.meta_dirty |= ds->meta_dirty;
+    g_client.meta_dirty_ops += ds->dirty_ops;
+    dirty_snap_free(ds);
+}
+
+/* Serialize the snapshot and publish a new metadata generation: EC-encode
+ * each 128 KiB page, skip PUTs for pages identical to the last committed
+ * same-parity flush, PUT the rest, then flip the root. Does NOT hold
+ * g_client.lock and does NOT touch dirty state. On success, *out_hashes /
+ * *out_sums / *out_pages hand the caller (still holding nothing) the parity
+ * slot state to commit under the lock; on failure all three are NULL/0. */
+static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
+                          uint32_t committed_pc, uint8_t **out_hashes,
+                          uint8_t **out_sums, uint32_t *out_pages,
+                          struct efs_export_root *out_root)
 {
     char *blob = NULL;
     size_t blob_len = 0;
-    uint64_t new_gen = 1;
+    uint8_t *new_hashes = NULL; /* this flush's per-page content hashes */
+    uint8_t *new_sums = NULL;   /* this flush's per-page fragment checksums */
+    uint32_t page_put = 0, page_skip = 0;
+    struct efs_export_root root;
 
-    pthread_mutex_lock(&g_client.lock);
-    if (g_client.meta_batch &&
-        g_client.dirty_ino_count == 0 && g_client.dirty_chunk_count == 0 &&
-        !g_client.meta_dirty) {
-        g_client.meta_dirty_ops = 0;
-        pthread_mutex_unlock(&g_client.lock);
-        return EFS_OK;
-    }
-    if (efs_export_serialize(&g_client.export, &blob, &blob_len) != EFS_OK) {
-        pthread_mutex_unlock(&g_client.lock);
+    *out_hashes = NULL;
+    *out_sums = NULL;
+    *out_pages = 0;
+    memset(out_root, 0, sizeof(*out_root));
+    memset(&root, 0, sizeof(root));
+
+    if (efs_export_serialize(snap, &blob, &blob_len) != EFS_OK)
         return EFS_ERR_NOMEM;
-    }
-    new_gen = g_client.export.root.generation + 1;
-    if (new_gen == 0)
-        new_gen = 1;
-    pthread_mutex_unlock(&g_client.lock);
-
     if (!blob)
         return EFS_ERR_NOMEM;
     if (blob_len > (size_t)EFS_META_MAX_PAGES * EFS_META_PAGE_SIZE) {
@@ -373,12 +439,8 @@ static int efs_client_replicate_metadata_locked(void)
         return EFS_ERR_NO_QUORUM;
     }
 
-    struct efs_export_root root;
-    memset(&root, 0, sizeof(root));
-    pthread_mutex_lock(&g_client.lock);
-    int prc = efs_export_root_prepare(&root, &g_client.export, new_gen,
+    int prc = efs_export_root_prepare(&root, snap, new_gen,
                                       (uint32_t)blob_len);
-    pthread_mutex_unlock(&g_client.lock);
     if (prc != EFS_OK) {
         free(blob);
         return prc;
@@ -387,10 +449,15 @@ static int efs_client_replicate_metadata_locked(void)
     /* Heap-allocate page/fragments — ~320 KiB is too large for some stacks. */
     uint8_t *page = malloc(EFS_META_PAGE_SIZE);
     uint8_t *frag_buf = malloc(EFS_NUM_FRAGMENTS * EFS_META_FRAGMENT_SIZE);
+    new_hashes = malloc((size_t)root.page_count * EFS_HASH_SIZE);
+    new_sums = malloc((size_t)root.page_count * EFS_NUM_FRAGMENTS *
+                      EFS_HASH_SIZE);
     uint8_t *frags[EFS_NUM_FRAGMENTS];
-    if (!page || !frag_buf) {
+    if (!page || !frag_buf || !new_hashes || !new_sums) {
         free(page);
         free(frag_buf);
+        free(new_hashes);
+        free(new_sums);
         free(blob);
         efs_export_root_free(&root);
         return EFS_ERR_NOMEM;
@@ -408,14 +475,39 @@ static int efs_client_replicate_metadata_locked(void)
                 abort_after = (uint32_t)v;
         }
     }
+    uint32_t parity = (uint32_t)(new_gen & 1ULL);
     for (uint32_t pi = 0; pi < root.page_count; pi++) {
         if (efs_meta_extract_page(blob, (uint32_t)blob_len, pi, page) != EFS_OK) {
             free(page);
             free(frag_buf);
+            free(new_hashes);
+            free(new_sums);
             free(blob);
             efs_export_root_free(&root);
             return EFS_ERR_INVAL;
         }
+        /* Dirty-page skip: if this page's content still matches what the last
+         * committed flush of THIS parity slot stored, and the page is in
+         * range of the currently committed root (so the server GC has not
+         * reclaimed the fragment), the fragment — with exactly this content —
+         * is already durably on disk. Reuse that parity flush's committed
+         * fragment checksums and skip the network PUT. */
+        efs_hash(page, EFS_META_PAGE_SIZE, new_hashes + (size_t)pi * EFS_HASH_SIZE);
+        if (pi < g_client.meta_slot_pages[parity] && pi < committed_pc &&
+            memcmp(new_hashes + (size_t)pi * EFS_HASH_SIZE,
+                   g_client.meta_slot_hashes[parity] + (size_t)pi * EFS_HASH_SIZE,
+                   EFS_HASH_SIZE) == 0) {
+            memcpy(new_sums + (size_t)pi * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE,
+                   g_client.meta_slot_sums[parity] +
+                       (size_t)pi * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE,
+                   EFS_NUM_FRAGMENTS * EFS_HASH_SIZE);
+            memcpy(efs_export_root_checksum(&root, pi, 0),
+                   new_sums + (size_t)pi * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE,
+                   EFS_NUM_FRAGMENTS * EFS_HASH_SIZE);
+            page_skip++;
+            continue;
+        }
+
         efs_encode_chunk(page, EFS_META_PAGE_SIZE, EFS_META_PAGE_SIZE, frags);
 
         uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
@@ -426,6 +518,8 @@ static int efs_client_replicate_metadata_locked(void)
         if (ci == UINT32_MAX) {
             free(page);
             free(frag_buf);
+            free(new_hashes);
+            free(new_sums);
             free(blob);
             efs_export_root_free(&root);
             return EFS_ERR_INVAL;
@@ -444,13 +538,18 @@ static int efs_client_replicate_metadata_locked(void)
         if (rc != EFS_OK) {
             free(page);
             free(frag_buf);
+            free(new_hashes);
+            free(new_sums);
             free(blob);
             efs_export_root_free(&root);
             return rc;
         }
+        page_put++;
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
             memcpy(efs_export_root_checksum(&root, pi, fi), checksums[fi],
                    EFS_HASH_SIZE);
+        memcpy(new_sums + (size_t)pi * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE,
+               checksums, EFS_NUM_FRAGMENTS * EFS_HASH_SIZE);
         /* After N successful page PUTs, skip root flip (dual-slot smoke). */
         if (abort_after != UINT32_MAX && (pi + 1) >= abort_after) {
             fprintf(stderr,
@@ -460,6 +559,8 @@ static int efs_client_replicate_metadata_locked(void)
             fflush(stderr);
             free(page);
             free(frag_buf);
+            free(new_hashes);
+            free(new_sums);
             free(blob);
             efs_export_root_free(&root);
             return EFS_ERR_IO;
@@ -472,29 +573,134 @@ static int efs_client_replicate_metadata_locked(void)
     char *root_buf = NULL;
     size_t root_len = 0;
     if (efs_export_root_serialize(&root, &root_buf, &root_len) != EFS_OK) {
+        free(new_hashes);
+        free(new_sums);
         efs_export_root_free(&root);
         return EFS_ERR_NOMEM;
     }
 
     int rc = send_meta_root(root_buf, root_len);
     free(root_buf);
+    if (rc != EFS_OK) {
+        free(new_hashes);
+        free(new_sums);
+        efs_export_root_free(&root);
+        return rc;
+    }
+    if (page_skip) {
+        fprintf(stderr,
+                "meta flush gen %llu: %u pages PUT, %u unchanged (skipped)\n",
+                (unsigned long long)new_gen, page_put, page_skip);
+        fflush(stderr);
+    }
+    *out_hashes = new_hashes;
+    *out_sums = new_sums;
+    *out_pages = root.page_count;
+    *out_root = root; /* ownership moves to caller */
+    return EFS_OK;
+}
 
+static int efs_client_replicate_metadata_locked(void)
+{
+    /* Point-in-time snapshot of the mutable table, so the O(table) serialize
+     * runs WITHOUT holding g_client.lock (previously every FUSE op stalled
+     * for the whole serialize of a large table). Arrays are flat (inline
+     * names), so a memcpy copy is a consistent snapshot. */
+    struct efs_export snap;
+    struct dirty_snap ds;
+    struct efs_export_root new_root;
+    uint64_t new_gen = 1;
+    /* Page count of the currently committed root (gen N): a page beyond it
+     * may have been reclaimed by the server GC, so it must be re-PUT. */
+    uint32_t committed_pc = 0;
+    uint8_t *hashes = NULL, *sums = NULL;
+    uint32_t pages = 0;
+
+    memset(&snap, 0, sizeof(snap));
+    memset(&ds, 0, sizeof(ds));
+    memset(&new_root, 0, sizeof(new_root));
+
+    pthread_mutex_lock(&g_client.lock);
+    if (g_client.meta_batch &&
+        g_client.dirty_ino_count == 0 && g_client.dirty_chunk_count == 0 &&
+        !g_client.meta_dirty) {
+        g_client.meta_dirty_ops = 0;
+        pthread_mutex_unlock(&g_client.lock);
+        return EFS_OK;
+    }
+    struct efs_export *ex = &g_client.export;
+    efs_export_ensure_rollups(ex);
+    snap.id = ex->id;
+    strncpy(snap.name, ex->name, EFS_MAX_NAME - 1);
+    snap.chunk_size = ex->chunk_size;
+    snap.features = ex->features;
+    snap.next_ino = ex->next_ino;
+    snap.inode_count = ex->inode_count;
+    snap.chunk_count = ex->chunk_count;
+    if (snap.inode_count) {
+        snap.inodes = malloc(snap.inode_count * sizeof(*snap.inodes));
+        if (snap.inodes)
+            memcpy(snap.inodes, ex->inodes,
+                   snap.inode_count * sizeof(*snap.inodes));
+    }
+    if (snap.chunk_count) {
+        snap.chunks = malloc(snap.chunk_count * sizeof(*snap.chunks));
+        if (snap.chunks)
+            memcpy(snap.chunks, ex->chunks,
+                   snap.chunk_count * sizeof(*snap.chunks));
+    }
+    if ((snap.inode_count && !snap.inodes) ||
+        (snap.chunk_count && !snap.chunks)) {
+        free(snap.inodes);
+        free(snap.chunks);
+        pthread_mutex_unlock(&g_client.lock);
+        return EFS_ERR_NOMEM;
+    }
+    new_gen = ex->root.generation + 1;
+    if (new_gen == 0)
+        new_gen = 1;
+    committed_pc = ex->root.page_count;
+    if (committed_pc > EFS_META_MAX_PAGES)
+        committed_pc = EFS_META_MAX_PAGES;
+    /* Swap the dirty state out: ops that race the unlocked serialize in
+     * flush_snapshot() populate fresh sets and stay dirty for the next
+     * flush instead of having their marks wiped by a stale clear. */
+    dirty_snap_save_locked(&ds);
+    pthread_mutex_unlock(&g_client.lock);
+
+    int rc = flush_snapshot(&snap, new_gen, committed_pc, &hashes, &sums,
+                            &pages, &new_root);
+    free(snap.inodes);
+    free(snap.chunks);
+
+    pthread_mutex_lock(&g_client.lock);
     if (rc == EFS_OK) {
-        pthread_mutex_lock(&g_client.lock);
         g_client.export.meta_fragmented = 1;
-        efs_export_root_move(&g_client.export.root, &root);
+        efs_export_root_move(&g_client.export.root, &new_root);
         {
             uint32_t cs = g_client.export.root.chunk_size;
             g_client.export.chunk_size = efs_chunk_size_valid(cs) ? cs
                                                                   : EFS_DEFAULT_CHUNK_SIZE;
         }
-        dirty_sets_clear();
-        g_client.meta_dirty = 0;
-        g_client.meta_dirty_ops = 0;
-        pthread_mutex_unlock(&g_client.lock);
+        /* Commit this parity's page hashes + fragment checksums so the next
+         * flush of the same parity can skip unchanged pages. Only on success:
+         * a failed flush leaves the slot state describing the last committed
+         * generation. */
+        uint32_t parity = (uint32_t)(new_gen & 1ULL);
+        free(g_client.meta_slot_hashes[parity]);
+        free(g_client.meta_slot_sums[parity]);
+        g_client.meta_slot_hashes[parity] = hashes;
+        g_client.meta_slot_sums[parity] = sums;
+        g_client.meta_slot_pages[parity] = pages;
+        /* Marks that raced the unlocked serialize stay dirty; the swapped-out
+         * snapshot state is published now and can be dropped. */
+        dirty_snap_free(&ds);
     } else {
-        efs_export_root_free(&root);
+        /* Flush failed: re-mark everything the snapshot covered so a later
+         * flush retries it instead of silently losing the updates. */
+        dirty_snap_merge_back_locked(&ds);
     }
+    pthread_mutex_unlock(&g_client.lock);
     return rc;
 }
 
