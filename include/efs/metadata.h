@@ -234,7 +234,8 @@ void efs_export_recompute_rollups(struct efs_export *ex);
  * (excluding NUL), or -1 if buf is too small / not a directory. */
 int efs_export_format_stats(const struct efs_inode *dir, char *buf, size_t buflen);
 
-/* Visit each child directory-entry slot under parent (skips the dir itself). */
+/* Visit each lookupable child slot under parent (skips the dir itself,
+ * ino==0 holes, and rows the name index cannot resolve). */
 typedef int (*efs_child_cb)(struct efs_export *ex, uint64_t slot, void *arg);
 int efs_export_foreach_child(struct efs_export *ex, efs_ino_t parent,
                              efs_child_cb cb, void *arg);

@@ -338,6 +338,24 @@ static void chunk_idx_del(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_i
     }
 }
 
+/* Drop ino==0 table holes (torn/unflushed meta pages). Safe only when
+ * child vecs will be rebuilt afterwards — do not call on a live index grow. */
+static void export_drop_zero_inodes(struct efs_export *ex)
+{
+    uint64_t w = 0;
+    for (uint64_t i = 0; i < ex->inode_count; i++) {
+        if (ex->inodes[i].ino == 0)
+            continue;
+        if (w != i)
+            ex->inodes[w] = ex->inodes[i];
+        w++;
+    }
+    if (w != ex->inode_count) {
+        ex->inode_count = w;
+        ex->layout_epoch++;
+    }
+}
+
 static int export_reindex(struct efs_export *ex)
 {
     if (idx_init(&ex->ino_keys, &ex->ino_vals, &ex->ino_mask,
@@ -550,6 +568,8 @@ static void child_idx_rebuild(struct efs_export *ex)
 {
     child_vecs_free(ex);
     for (uint64_t i = 0; i < ex->inode_count; i++) {
+        if (ex->inodes[i].ino == 0)
+            continue;
         if (ex->inodes[i].ino == EFS_ROOT_INO &&
             ex->inodes[i].parent == EFS_ROOT_INO)
             continue;
@@ -569,7 +589,17 @@ int efs_export_foreach_child(struct efs_export *ex, efs_ino_t parent,
         uint64_t slot = v->slots[i];
         if (slot >= ex->inode_count)
             continue;
+        /* ino==0 rows are not in the name index (lookup → ENOENT) but used
+         * to appear in readdir — walkers then fstatat a listed name and fail. */
+        if (ex->inodes[slot].ino == 0)
+            continue;
         if (ex->inodes[slot].ino == parent)
+            continue;
+        if (ex->inodes[slot].parent != parent)
+            continue;
+        uint64_t npos = 0;
+        if (name_idx_get(ex, parent, ex->inodes[slot].name, &npos) != 0 ||
+            npos != slot)
             continue;
         int rc = cb(ex, slot, arg);
         if (rc != 0)
@@ -1097,26 +1127,32 @@ static void sync_hardlink_attrs(struct efs_export *ex, efs_ino_t ino,
     }
 }
 
+/* Swap-remove chunks[j]; caller already bumped layout_epoch. */
+static void remove_chunk_at(struct efs_export *ex, uint64_t j)
+{
+    uint32_t cidx = ex->chunks[j].chunk_index;
+    efs_ino_t ino = ex->chunks[j].ino;
+    chunk_idx_del(ex, ino, cidx);
+    uint64_t clast = ex->chunk_count - 1;
+    if (j != clast) {
+        chunk_idx_del(ex, ex->chunks[clast].ino, ex->chunks[clast].chunk_index);
+        ex->chunks[j] = ex->chunks[clast];
+        ex->chunk_count--;
+        chunk_idx_put(ex, ex->chunks[j].ino, ex->chunks[j].chunk_index, j);
+    } else {
+        ex->chunk_count--;
+    }
+}
+
+/* Chunk indexes for one ino are dense from 0 (writes and pack tails). */
 static void remove_chunks_for_ino(struct efs_export *ex, efs_ino_t ino)
 {
     ex->layout_epoch++;
-    uint64_t j = 0;
-    while (j < ex->chunk_count) {
-        if (ex->chunks[j].ino == ino) {
-            uint32_t cidx = ex->chunks[j].chunk_index;
-            chunk_idx_del(ex, ino, cidx);
-            uint64_t clast = ex->chunk_count - 1;
-            if (j != clast) {
-                chunk_idx_del(ex, ex->chunks[clast].ino, ex->chunks[clast].chunk_index);
-                ex->chunks[j] = ex->chunks[clast];
-                ex->chunk_count--;
-                chunk_idx_put(ex, ex->chunks[j].ino, ex->chunks[j].chunk_index, j);
-            } else {
-                ex->chunk_count--;
-            }
-        } else {
-            j++;
-        }
+    uint32_t ci = 0;
+    uint64_t pos;
+    while (chunk_idx_get(ex, ino, ci, &pos) == 0) {
+        remove_chunk_at(ex, pos);
+        ci++;
     }
 }
 
@@ -1126,32 +1162,18 @@ void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
     if (!ex)
         return;
     ex->layout_epoch++;
-    uint64_t j = 0;
-    while (j < ex->chunk_count) {
-        if (ex->chunks[j].ino == ino &&
-            ex->chunks[j].chunk_index >= first_chunk) {
-            uint32_t cidx = ex->chunks[j].chunk_index;
-            chunk_idx_del(ex, ino, cidx);
-            uint64_t clast = ex->chunk_count - 1;
-            if (j != clast) {
-                chunk_idx_del(ex, ex->chunks[clast].ino,
-                              ex->chunks[clast].chunk_index);
-                ex->chunks[j] = ex->chunks[clast];
-                ex->chunk_count--;
-                chunk_idx_put(ex, ex->chunks[j].ino, ex->chunks[j].chunk_index,
-                              j);
-            } else {
-                ex->chunk_count--;
-            }
-        } else {
-            j++;
-        }
+    uint32_t ci = first_chunk;
+    uint64_t pos;
+    while (chunk_idx_get(ex, ino, ci, &pos) == 0) {
+        remove_chunk_at(ex, pos);
+        ci++;
     }
 }
 
 /* Swap-remove inode array slot i; refresh indexes for the moved row.
- * Caller must already have applied rollup_sub and child_idx_del for slot i. */
-static void remove_inode_slot(struct efs_export *ex, uint64_t i)
+ * Caller must already have applied rollup_sub and child_idx_del for slot i.
+ * expect_survivor: another hard-link row for this ino remains (nlink > 0). */
+static void remove_inode_slot(struct efs_export *ex, uint64_t i, int expect_survivor)
 {
     efs_ino_t old_parent = ex->inodes[i].parent;
     char old_name[EFS_MAX_NAME];
@@ -1175,8 +1197,21 @@ static void remove_inode_slot(struct efs_export *ex, uint64_t i)
         ex->inode_count--;
     }
 
-    /* If we removed the row that ino_idx pointed at (or any row), re-point
-     * ino_idx to another remaining hard-link row when present. */
+    /* ino_idx holds one slot per ino. If it still points at a live row with
+     * old_ino (hard-link survivor, or the moved last row was the same ino),
+     * leave it. Otherwise drop it — do not scan the inode table. */
+    uint64_t pos = 0;
+    if (ex->ino_keys &&
+        idx_get(ex->ino_keys, ex->ino_vals, ex->ino_mask, old_ino, &pos) == 0 &&
+        pos < ex->inode_count && ex->inodes[pos].ino == old_ino)
+        return;
+
+    if (!expect_survivor) {
+        idx_del(ex->ino_keys, ex->ino_vals, ex->ino_mask, old_ino);
+        return;
+    }
+
+    /* Rare: unlinked the indexed hard-link row; find another dent. */
     uint64_t survivor = UINT64_MAX;
     for (uint64_t k = 0; k < ex->inode_count; k++) {
         if (ex->inodes[k].ino == old_ino) {
@@ -1353,7 +1388,7 @@ int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *
 
     rollup_sub_under(ex, parent, &removed);
     child_idx_del(ex, parent, pos);
-    remove_inode_slot(ex, pos);
+    remove_inode_slot(ex, pos, nlink > 0);
 
     if (nlink == 0) {
         remove_chunks_for_ino(ex, ino);
@@ -1382,7 +1417,7 @@ int efs_export_unlink(struct efs_export *ex, efs_ino_t ino)
             struct efs_inode removed = ex->inodes[i];
             rollup_sub_under(ex, removed.parent, &removed);
             child_idx_del(ex, removed.parent, i);
-            remove_inode_slot(ex, i);
+            remove_inode_slot(ex, i, 0);
             /* slot i now holds a different row (or count shrank) */
         } else {
             i++;
@@ -2338,6 +2373,7 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
     }
 
     fclose(f);
+    export_drop_zero_inodes(ex);
     if (export_reindex(ex) != 0)
         return EFS_ERR_NOMEM;
     efs_export_recompute_rollups(ex);
