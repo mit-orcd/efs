@@ -331,6 +331,10 @@ void efs_client_shutdown(void)
         return;
     done = 1;
 
+    /* Stop the flush thread before freeing state it might be using; join
+     * blocks until any in-flight flush completes. */
+    efs_client_stop_meta_flush();
+
     if (conn_pool_inited) {
         for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
             pthread_mutex_lock(&g_client.conn_lock[i]);

@@ -477,14 +477,17 @@ static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
     }
     uint32_t parity = (uint32_t)(new_gen & 1ULL);
     for (uint32_t pi = 0; pi < root.page_count; pi++) {
-        if (efs_meta_extract_page(blob, (uint32_t)blob_len, pi, page) != EFS_OK) {
-            free(page);
-            free(frag_buf);
-            free(new_hashes);
-            free(new_sums);
-            free(blob);
-            efs_export_root_free(&root);
-            return EFS_ERR_INVAL;
+        /* Full pages are hashed/EC-encoded straight out of the blob (no
+         * 128 KiB copy); only the tail page needs zero-padding. */
+        size_t poff = (size_t)pi * EFS_META_PAGE_SIZE;
+        const uint8_t *pg;
+        if (poff + EFS_META_PAGE_SIZE <= blob_len) {
+            pg = (const uint8_t *)blob + poff;
+        } else {
+            size_t tail = blob_len - poff;
+            memcpy(page, blob + poff, tail);
+            memset(page + tail, 0, EFS_META_PAGE_SIZE - tail);
+            pg = page;
         }
         /* Dirty-page skip: if this page's content still matches what the last
          * committed flush of THIS parity slot stored, and the page is in
@@ -492,7 +495,7 @@ static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
          * reclaimed the fragment), the fragment — with exactly this content —
          * is already durably on disk. Reuse that parity flush's committed
          * fragment checksums and skip the network PUT. */
-        efs_hash(page, EFS_META_PAGE_SIZE, new_hashes + (size_t)pi * EFS_HASH_SIZE);
+        efs_hash(pg, EFS_META_PAGE_SIZE, new_hashes + (size_t)pi * EFS_HASH_SIZE);
         if (pi < g_client.meta_slot_pages[parity] && pi < committed_pc &&
             memcmp(new_hashes + (size_t)pi * EFS_HASH_SIZE,
                    g_client.meta_slot_hashes[parity] + (size_t)pi * EFS_HASH_SIZE,
@@ -508,7 +511,7 @@ static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
             continue;
         }
 
-        efs_encode_chunk(page, EFS_META_PAGE_SIZE, EFS_META_PAGE_SIZE, frags);
+        efs_encode_chunk(pg, EFS_META_PAGE_SIZE, EFS_META_PAGE_SIZE, frags);
 
         uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
@@ -763,6 +766,28 @@ int efs_client_replicate_metadata(void)
     return rc;
 }
 
+/* Flush-thread main: waits for threshold hits and runs blocking flushes off
+ * the FUSE worker threads. g_repl_mu still serializes against forced flushes
+ * (fsync/unmount) from the op path. */
+static void *meta_flush_main(void *arg)
+{
+    (void)arg;
+    pthread_mutex_lock(&g_client.meta_flush_mu);
+    for (;;) {
+        while (!g_client.meta_flush_req && !g_client.meta_flush_stop)
+            pthread_cond_wait(&g_client.meta_flush_cv,
+                              &g_client.meta_flush_mu);
+        if (g_client.meta_flush_stop)
+            break;
+        g_client.meta_flush_req = 0;
+        pthread_mutex_unlock(&g_client.meta_flush_mu);
+        (void)efs_client_replicate_metadata();
+        pthread_mutex_lock(&g_client.meta_flush_mu);
+    }
+    pthread_mutex_unlock(&g_client.meta_flush_mu);
+    return NULL;
+}
+
 void efs_client_enable_meta_batch(uint32_t every_n_ops)
 {
     g_client.meta_batch = 1;
@@ -770,6 +795,28 @@ void efs_client_enable_meta_batch(uint32_t every_n_ops)
     g_client.meta_dirty = 0;
     g_client.meta_dirty_ops = 0;
     dirty_sets_clear();
+
+    if (!g_client.meta_flush_started) {
+        pthread_mutex_init(&g_client.meta_flush_mu, NULL);
+        pthread_cond_init(&g_client.meta_flush_cv, NULL);
+        g_client.meta_flush_req = 0;
+        g_client.meta_flush_stop = 0;
+        if (pthread_create(&g_client.meta_flush_tid, NULL, meta_flush_main,
+                           NULL) == 0)
+            g_client.meta_flush_started = 1;
+    }
+}
+
+void efs_client_stop_meta_flush(void)
+{
+    if (!g_client.meta_flush_started)
+        return;
+    pthread_mutex_lock(&g_client.meta_flush_mu);
+    g_client.meta_flush_stop = 1;
+    pthread_cond_signal(&g_client.meta_flush_cv);
+    pthread_mutex_unlock(&g_client.meta_flush_mu);
+    pthread_join(g_client.meta_flush_tid, NULL);
+    g_client.meta_flush_started = 0;
 }
 
 int efs_client_note_meta_change(int force)
@@ -785,12 +832,20 @@ int efs_client_note_meta_change(int force)
     int flush = (ops >= thresh);
     pthread_mutex_unlock(&g_client.lock);
 
-    /* Batched threshold flush: non-blocking so a big O(table) flush doesn't
-     * stall every worker behind g_repl_mu. An in-flight flush coalesces our
-     * dirty ops; if none is running, we run one ourselves. Forced flushes
-     * (fsync/unmount) above stay blocking for durability. */
-    if (flush)
+    /* Batched threshold flush: hand off to the dedicated flush thread so the
+     * O(table) serialize/encode/PUT never runs on a FUSE worker. The thread
+     * coalesces all dirty ops into one flush; forced flushes (fsync/unmount)
+     * above stay blocking for durability. */
+    if (flush) {
+        if (g_client.meta_flush_started) {
+            pthread_mutex_lock(&g_client.meta_flush_mu);
+            g_client.meta_flush_req = 1;
+            pthread_cond_signal(&g_client.meta_flush_cv);
+            pthread_mutex_unlock(&g_client.meta_flush_mu);
+            return EFS_OK;
+        }
         return efs_client_replicate_metadata_nb();
+    }
     return EFS_OK;
 }
 

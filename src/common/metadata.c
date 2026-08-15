@@ -1863,55 +1863,85 @@ int efs_export_serialize(struct efs_export *ex, char **buf, size_t *len)
         return EFS_ERR_INVAL;
     efs_export_ensure_rollups(ex);
 
-    FILE *f = open_memstream(buf, len);
-    if (!f)
-        return EFS_ERR_NOMEM;
-
-    fwrite(EFS_META_MAGIC, 4, 1, f);
-    write_u32(f, EFS_META_VERSION);
-    write_u32(f, ex->id);
-    write_str(f, ex->name);
-    write_u64(f, ex->next_ino);
-
-    write_u32(f, (uint32_t)ex->inode_count);
+    /* Direct two-pass writer: at ImageNet scale the stdio memstream path
+     * (per-field fwrite with locking) burned ~28% of all client CPU in the
+     * flush path. Byte layout is identical to the old fwrite stream. */
+    size_t total = 4 + 4 + 4 + 4 + strlen(ex->name) + 8 + 4;
     for (uint64_t i = 0; i < ex->inode_count; i++) {
         struct efs_inode *ino = &ex->inodes[i];
-        write_u64(f, ino->ino);
-        write_u64(f, ino->parent);
-        write_u32(f, ino->mode);
-        write_u32(f, (uint32_t)ino->uid);
-        write_u32(f, (uint32_t)ino->gid);
-        write_u64(f, ino->size);
-        write_u64(f, ino->mtime);
-        write_u32(f, ino->mtime_nsec);
-        write_u64(f, ino->ctime);
-        write_u64(f, ino->atime);
-        write_u32(f, ino->nlink);
-        write_str(f, ino->name);
+        total += 68 + 4 + strlen(ino->name);
+        if (efs_mode_is_dir(ino->mode))
+            total += 80;
+    }
+    total += 4 + ex->chunk_count *
+                 (uint64_t)(8 + 4 + sizeof(efs_node_id_t) * EFS_NUM_FRAGMENTS +
+                            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+
+    uint8_t *b = malloc(total ? total : 1);
+    if (!b)
+        return EFS_ERR_NOMEM;
+    uint8_t *p = b;
+
+#define W_RAW(v, n) do { memcpy(p, (v), (n)); p += (n); } while (0)
+#define W_32(v) do { uint32_t v_ = (uint32_t)(v); memcpy(p, &v_, 4); p += 4; } while (0)
+#define W_64(v) do { uint64_t v_ = (uint64_t)(v); memcpy(p, &v_, 8); p += 8; } while (0)
+#define W_STR(s) do { \
+        const char *s_ = (s); \
+        uint32_t l_ = (uint32_t)strlen(s_); \
+        W_32(l_); \
+        if (l_) { memcpy(p, s_, l_); p += l_; } \
+    } while (0)
+
+    W_RAW(EFS_META_MAGIC, 4);
+    W_32(EFS_META_VERSION);
+    W_32(ex->id);
+    W_STR(ex->name);
+    W_64(ex->next_ino);
+
+    W_32((uint32_t)ex->inode_count);
+    for (uint64_t i = 0; i < ex->inode_count; i++) {
+        struct efs_inode *ino = &ex->inodes[i];
+        W_64(ino->ino);
+        W_64(ino->parent);
+        W_32(ino->mode);
+        W_32((uint32_t)ino->uid);
+        W_32((uint32_t)ino->gid);
+        W_64(ino->size);
+        W_64(ino->mtime);
+        W_32(ino->mtime_nsec);
+        W_64(ino->ctime);
+        W_64(ino->atime);
+        W_32(ino->nlink);
+        W_STR(ino->name);
         if (efs_mode_is_dir(ino->mode)) {
-            write_u64(f, ino->imm_files);
-            write_u64(f, ino->imm_dirs);
-            write_u64(f, ino->tree_files);
-            write_u64(f, ino->tree_dirs);
-            write_u64(f, ino->imm_bytes);
-            write_u64(f, ino->tree_bytes);
-            write_u64(f, ino->imm_tmin);
-            write_u64(f, ino->imm_tmax);
-            write_u64(f, ino->tree_tmin);
-            write_u64(f, ino->tree_tmax);
+            W_64(ino->imm_files);
+            W_64(ino->imm_dirs);
+            W_64(ino->tree_files);
+            W_64(ino->tree_dirs);
+            W_64(ino->imm_bytes);
+            W_64(ino->tree_bytes);
+            W_64(ino->imm_tmin);
+            W_64(ino->imm_tmax);
+            W_64(ino->tree_tmin);
+            W_64(ino->tree_tmax);
         }
     }
 
-    write_u32(f, (uint32_t)ex->chunk_count);
+    W_32((uint32_t)ex->chunk_count);
     for (uint64_t i = 0; i < ex->chunk_count; i++) {
         struct efs_chunk_entry *ce = &ex->chunks[i];
-        write_u64(f, ce->ino);
-        write_u32(f, ce->chunk_index);
-        fwrite(ce->fragment_nodes, sizeof(efs_node_id_t), EFS_NUM_FRAGMENTS, f);
-        fwrite(ce->checksums, EFS_HASH_SIZE, EFS_NUM_FRAGMENTS, f);
+        W_64(ce->ino);
+        W_32(ce->chunk_index);
+        W_RAW(ce->fragment_nodes, sizeof(efs_node_id_t) * EFS_NUM_FRAGMENTS);
+        W_RAW(ce->checksums, EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
     }
+#undef W_RAW
+#undef W_32
+#undef W_64
+#undef W_STR
 
-    fclose(f);
+    *buf = (char *)b;
+    *len = (size_t)(p - b);
     return EFS_OK;
 }
 

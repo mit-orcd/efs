@@ -72,6 +72,16 @@ struct efs_client {
     uint32_t *dirty_chunk_idxs;
     uint64_t dirty_chunk_count;
     uint64_t dirty_chunk_cap;
+
+    /* Dedicated metadata-flush thread: batched threshold flushes run here so
+     * the O(table) serialize/encode/PUT work never executes on a FUSE worker
+     * thread. note_meta_change() only sets flush_req and signals. */
+    pthread_t meta_flush_tid;
+    pthread_mutex_t meta_flush_mu;
+    pthread_cond_t meta_flush_cv;
+    int meta_flush_req;
+    int meta_flush_stop;
+    int meta_flush_started;
 };
 
 /* Mark inode/chunk dirty for the next batched metadata delta flush.
@@ -96,6 +106,7 @@ int efs_client_replicate_metadata(void);
  * immediately (test / C-API behaviour). With meta_batch!=0 it coalesces
  * until meta_batch_ops changes accumulate (or force!=0). */
 int efs_client_note_meta_change(int force);
+void efs_client_stop_meta_flush(void);
 
 /* Enable coalesced metadata replication for the FUSE client. */
 void efs_client_enable_meta_batch(uint32_t every_n_ops);
