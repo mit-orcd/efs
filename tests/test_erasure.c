@@ -73,6 +73,43 @@ int main(void)
     test_roundtrip("1M-partial", meg, meg / 2 - 1);
     test_roundtrip("1M-full", meg, meg);
 
+    /* In-place encode: fragments[0]/[1] alias the source (write hot path). */
+    {
+        size_t cs = EFS_CHUNK_SIZE;
+        size_t fl = cs / 2;
+        uint8_t *chunk = malloc(cs);
+        uint8_t *parity = malloc(fl);
+        uint8_t *decoded = malloc(cs);
+        uint8_t *sep = malloc(cs);
+        if (!chunk || !parity || !decoded || !sep) {
+            fprintf(stderr, "FAIL alias oom\n");
+            failures++;
+        } else {
+            for (size_t i = 0; i < cs; i++)
+                chunk[i] = (uint8_t)(i * 17 + 3);
+            memcpy(sep, chunk, cs);
+            uint8_t *frags[EFS_NUM_FRAGMENTS] = {chunk, chunk + fl, parity};
+            if (efs_encode_chunk(chunk, cs, cs, frags) != 0) {
+                fprintf(stderr, "FAIL alias encode\n");
+                failures++;
+            } else if (memcmp(chunk, sep, cs) != 0) {
+                fprintf(stderr, "FAIL alias mutated source data halves\n");
+                failures++;
+            } else {
+                uint8_t *dfrags[EFS_NUM_FRAGMENTS] = {frags[0], frags[1], frags[2]};
+                if (efs_decode_chunk(dfrags, cs, 0, 1, 2, decoded, cs) != 0 ||
+                    memcmp(decoded, sep, cs) != 0) {
+                    fprintf(stderr, "FAIL alias decode\n");
+                    failures++;
+                }
+            }
+        }
+        free(chunk);
+        free(parity);
+        free(decoded);
+        free(sep);
+    }
+
     if (!efs_chunk_size_valid(EFS_DEFAULT_CHUNK_SIZE) ||
         !efs_chunk_size_valid(EFS_MAX_CHUNK_SIZE) ||
         efs_chunk_size_valid(EFS_MIN_CHUNK_SIZE - 1) ||

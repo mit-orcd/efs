@@ -865,7 +865,7 @@ struct get_batch {
     int remaining;
 };
 
-#define RDCACHE_SLOTS 1024
+#define RDCACHE_SLOTS 8192
 struct rdcache_ent {
     efs_ino_t ino;
     uint32_t ci;
@@ -886,6 +886,9 @@ static uint32_t rdcache_slot(efs_ino_t ino, uint32_t ci)
 
 int efs_rdcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
 {
+    /* Dirty write-combined chunks are newer than anything on the servers. */
+    if (efs_dcache_get(ino, ci, dst, len) == 0)
+        return 0;
     uint32_t s = rdcache_slot(ino, ci);
     pthread_mutex_lock(&g_rdcache.mu);
     struct rdcache_ent *e = &g_rdcache.e[s];
@@ -1085,6 +1088,14 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
     uint32_t pack_len = inode.pack_len;
     efs_client_unlock_dir(ino);
 
+    if (!pack_ino) {
+        size_t staged = 0;
+        if (efs_client_pack_stage_read(ino, offset, size, buf, &staged) == 0) {
+            *out_len = staged;
+            return EFS_OK;
+        }
+    }
+
     if (pack_ino && pack_len) {
         if (offset >= pack_len) {
             *out_len = 0;
@@ -1095,6 +1106,13 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
         ino = pack_ino;
         offset = (uint64_t)pack_off + offset;
         file_size = offset + size;
+        /* Seal copies into the dir pack but PUTs only when the chunk is
+         * full. Serve the in-memory tail so close+read sees the bytes. */
+        size_t packed = 0;
+        if (efs_client_dir_pack_read(ino, offset, size, buf, &packed) == 0) {
+            *out_len = packed;
+            return EFS_OK;
+        }
     } else if (offset >= file_size) {
         *out_len = 0;
         return EFS_OK;

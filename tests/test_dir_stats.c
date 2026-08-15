@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <sys/stat.h>
 
 static int failures = 0;
@@ -198,6 +199,45 @@ int main(void)
             failures++;
         }
         efs_export_free(&ns);
+    }
+
+    /* ino==0 + leftover name must not be listed (readdir vs lookup split). */
+    {
+        efs_ino_t g = efs_export_create(&ex, d1, S_IFREG | 0644, 0, 0, "ghost.jpg");
+        char *blob = NULL;
+        size_t blen = 0;
+        if (!g || efs_export_serialize(&ex, &blob, &blen) != 0) {
+            fprintf(stderr, "FAIL ghost create/serialize\n");
+            failures++;
+        } else {
+            int found = 0;
+            for (size_t off = EFS_META_HDR_SIZE;
+                 off + EFS_INODE_WIRE_SIZE <= blen;
+                 off += EFS_INODE_WIRE_SIZE) {
+                if (strcmp(blob + off + 68, "ghost.jpg") == 0) {
+                    memset(blob + off, 0, 8);
+                    found = 1;
+                    break;
+                }
+            }
+            struct efs_export loaded;
+            struct efs_inode chk;
+            if (!found || efs_export_deserialize(&loaded, blob, blen) != 0) {
+                fprintf(stderr, "FAIL ghost load found=%d\n", found);
+                failures++;
+            } else if (efs_export_lookup(&loaded, d1, "ghost.jpg", &chk) == 0) {
+                fprintf(stderr, "FAIL ghost lookup should miss\n");
+                failures++;
+                efs_export_free(&loaded);
+            } else if (efs_export_lookup(&loaded, d1, "f3", &chk) != 0) {
+                fprintf(stderr, "FAIL f3 missing after dropping ino==0\n");
+                failures++;
+                efs_export_free(&loaded);
+            } else {
+                efs_export_free(&loaded);
+            }
+        }
+        free(blob);
     }
 
     efs_export_free(&ex);

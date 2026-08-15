@@ -7,6 +7,25 @@
 static void xor_into(uint8_t *dst, const uint8_t *a, const uint8_t *b, size_t n)
 {
     size_t i = 0;
+    for (; i + 32 <= n; i += 32) {
+        uint64_t a0, a1, a2, a3, b0, b1, b2, b3;
+        memcpy(&a0, a + i, 8);
+        memcpy(&a1, a + i + 8, 8);
+        memcpy(&a2, a + i + 16, 8);
+        memcpy(&a3, a + i + 24, 8);
+        memcpy(&b0, b + i, 8);
+        memcpy(&b1, b + i + 8, 8);
+        memcpy(&b2, b + i + 16, 8);
+        memcpy(&b3, b + i + 24, 8);
+        a0 ^= b0;
+        a1 ^= b1;
+        a2 ^= b2;
+        a3 ^= b3;
+        memcpy(dst + i, &a0, 8);
+        memcpy(dst + i + 8, &a1, 8);
+        memcpy(dst + i + 16, &a2, 8);
+        memcpy(dst + i + 24, &a3, 8);
+    }
     for (; i + sizeof(uint64_t) <= n; i += sizeof(uint64_t)) {
         uint64_t va, vb;
         memcpy(&va, a + i, sizeof(va));
@@ -33,20 +52,34 @@ int efs_encode_chunk(const uint8_t *chunk, size_t chunk_len, size_t chunk_size,
         return EFS_ERR_INVAL;
 
     size_t frag_len = chunk_size / 2;
+    /* Full-chunk PUT aliases fragments[0]/[1] onto the source so encode
+     * can skip the two data memcpys. memcpy(dst, src) with dst==src is
+     * also undefined, so the skip is required, not just a win. */
+    int alias0 = (fragments[0] == chunk);
+    int alias1 = (fragments[1] == (chunk + frag_len));
 
     if (chunk_len >= frag_len) {
-        memcpy(fragments[0], chunk, frag_len);
+        if (!alias0)
+            memcpy(fragments[0], chunk, frag_len);
         size_t second = chunk_len - frag_len;
         if (second > frag_len)
             second = frag_len;
-        if (second > 0)
-            memcpy(fragments[1], chunk + frag_len, second);
-        if (second < frag_len)
+        if (!alias1) {
+            if (second > 0)
+                memcpy(fragments[1], chunk + frag_len, second);
+            if (second < frag_len)
+                memset(fragments[1] + second, 0, frag_len - second);
+        } else if (second < frag_len) {
             memset(fragments[1] + second, 0, frag_len - second);
+        }
     } else {
-        if (chunk_len > 0)
-            memcpy(fragments[0], chunk, chunk_len);
-        memset(fragments[0] + chunk_len, 0, frag_len - chunk_len);
+        if (!alias0) {
+            if (chunk_len > 0)
+                memcpy(fragments[0], chunk, chunk_len);
+            memset(fragments[0] + chunk_len, 0, frag_len - chunk_len);
+        } else if (chunk_len < frag_len) {
+            memset(fragments[0] + chunk_len, 0, frag_len - chunk_len);
+        }
         memset(fragments[1], 0, frag_len);
     }
 
