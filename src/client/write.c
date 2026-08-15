@@ -1438,11 +1438,13 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         if (fds[i] < 0)
             continue;
         /* Never enter a blocking writev: a slow peer fills the TCP window
-         * and SO_SNDTIMEO stalls the whole chunk. Wait a short slice for
-         * POLLOUT; a miss is backpressure (failed=2), not a dead peer. */
+         * and SO_SNDTIMEO stalls the whole chunk. Wait for POLLOUT; a miss
+         * is backpressure (failed=2), not a dead peer. 8ms was too short
+         * under 8-job 1M (many 64 KiB fragments in flight) and inverted
+         * that case vs 1-job / 128k. */
         {
             struct pollfd p = { .fd = fds[i], .events = POLLOUT };
-            int pr = poll(&p, 1, 8);
+            int pr = poll(&p, 1, 100);
             if (pr < 0 || (p.revents & (POLLERR | POLLHUP | POLLNVAL))) {
                 efs_client_conn_drop(nodes[i], fds[i]);
                 efs_client_node_note_fail(nodes[i]);
@@ -1556,36 +1558,74 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         }
     }
 
-    /* Quorum met: drain or drop remaining waiters. Prefer draining a ready
-     * reply so pooled fds stay healthy — dropping every third peer was
-     * forcing reconnect storms (efs_connect_tcp in the write hot path). */
+    /* Quorum met: wait for remaining replies so pooled fds stay reusable.
+     * poll(0)+drop used to close the third peer on almost every chunk;
+     * 8-job 1M then spent its time in efs_connect_tcp. Cap the drain so a
+     * truly stuck peer cannot sit on SO_RCVTIMEO. */
+    if (acks >= 2) {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        int64_t now_ms = (int64_t)ts.tv_sec * 1000 +
+                         (int64_t)ts.tv_nsec / 1000000;
+        int64_t left = deadline_ms - now_ms;
+        if (left > 2000)
+            left = 2000;
+        int64_t drain_end = now_ms + (left > 0 ? left : 0);
+        while (now_ms < drain_end) {
+            struct pollfd pfds[EFS_NUM_FRAGMENTS];
+            int map[EFS_NUM_FRAGMENTS];
+            int npoll = 0;
+            for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+                if (fds[i] < 0)
+                    continue;
+                pfds[npoll].fd = fds[i];
+                pfds[npoll].events = POLLIN;
+                pfds[npoll].revents = 0;
+                map[npoll] = i;
+                npoll++;
+            }
+            if (npoll == 0)
+                break;
+            int wait_ms = (int)(drain_end - now_ms);
+            if (wait_ms < 1)
+                wait_ms = 1;
+            int pr = poll(pfds, (nfds_t)npoll, wait_ms);
+            if (pr <= 0)
+                break;
+            for (int p = 0; p < npoll; p++) {
+                if (!(pfds[p].revents & (POLLIN | POLLERR | POLLHUP)))
+                    continue;
+                int i = map[p];
+                if (fds[i] < 0)
+                    continue;
+                if ((pfds[p].revents & (POLLERR | POLLHUP)) == 0) {
+                    uint8_t reply_type = 0, status = 0;
+                    if (efs_recv_u8_reply(fds[i], &reply_type, &status) == 0 &&
+                        reply_type == EFS_MSG_PUT_CHUNK_REPLY) {
+                        efs_client_conn_release(nodes[i], fds[i]);
+                        fds[i] = -1;
+                        pending[i] = 0;
+                        continue;
+                    }
+                }
+                efs_client_conn_drop(nodes[i], fds[i]);
+                fds[i] = -1;
+                pending[i] = 0;
+            }
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+            now_ms = (int64_t)ts.tv_sec * 1000 +
+                     (int64_t)ts.tv_nsec / 1000000;
+        }
+    }
+
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         if (fds[i] < 0)
             continue;
-        if (acks >= 2) {
-            struct pollfd p = { .fd = fds[i], .events = POLLIN };
-            int pr = poll(&p, 1, 0);
-            if (pr > 0 && (p.revents & POLLIN) &&
-                !(p.revents & (POLLERR | POLLHUP | POLLNVAL))) {
-                uint8_t reply_type = 0, status = 0;
-                if (efs_recv_u8_reply(fds[i], &reply_type, &status) == 0 &&
-                    reply_type == EFS_MSG_PUT_CHUNK_REPLY) {
-                    efs_client_conn_release(nodes[i], fds[i]);
-                    fds[i] = -1;
-                    pending[i] = 0;
-                    continue;
-                }
-            }
-            /* Still in flight / desynced: drop without note_fail. */
-            efs_client_conn_drop(nodes[i], fds[i]);
-            if (failed_out)
-                failed_out[i] = 1;
-        } else {
-            efs_client_conn_drop(nodes[i], fds[i]);
+        efs_client_conn_drop(nodes[i], fds[i]);
+        if (acks < 2)
             efs_client_node_note_fail(nodes[i]);
-            if (failed_out)
-                failed_out[i] = 1;
-        }
+        if (failed_out)
+            failed_out[i] = 1;
         fds[i] = -1;
         pending[i] = 0;
     }
