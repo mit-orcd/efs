@@ -5,6 +5,7 @@
 #include "efs/checksum.h"
 #include "efs/placement.h"
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -521,6 +522,7 @@ static int incremental_serialize(struct efs_export *snap, struct dirty_snap *ds,
     size_t old_ino_len = g_client.meta_cache_ino_len
                              ? g_client.meta_cache_ino_len
                              : g_client.meta_cache_len;
+    size_t old_ch_len = g_client.meta_cache_ch_len;
     if (cache_grow(&g_client.meta_cache_blob, &g_client.meta_cache_cap,
                    ino_len) != 0)
         return -1;
@@ -550,15 +552,38 @@ static int incremental_serialize(struct efs_export *snap, struct dirty_snap *ds,
     if (ino_pc)
         idirty[0] = 1; /* header */
 
+    /* A record that straddles a 128 KiB page must dirty both pages.
+     * Marking only the start page left the tail on the previous generation
+     * (ino==0 + leftover name → readdir lists a path lookup cannot find). */
+    #define MARK_SPAN(bm, npc, off0, rec) do {                          \
+        uint32_t _a = (uint32_t)(off0) / EFS_META_PAGE_SIZE;            \
+        uint32_t _b = (uint32_t)((off0) + (rec) - 1) / EFS_META_PAGE_SIZE; \
+        if (_a < (npc)) (bm)[_a] = 1;                                   \
+        if (_b < (npc)) (bm)[_b] = 1;                                   \
+    } while (0)
+
+    /* New bytes at the end of a region (including a newly created last page
+     * that only holds the tail of a spanning record) must be flushed. */
+    if (ino_len > old_ino_len && ino_pc) {
+        uint32_t p0 = (uint32_t)old_ino_len / EFS_META_PAGE_SIZE;
+        uint32_t p1 = (ino_len - 1) / EFS_META_PAGE_SIZE;
+        for (uint32_t p = p0; p <= p1 && p < ino_pc; p++)
+            idirty[p] = 1;
+    }
+    if (ch_bytes > old_ch_len && ch_pc) {
+        uint32_t p0 = (uint32_t)old_ch_len / EFS_META_PAGE_SIZE;
+        uint32_t p1 = (uint32_t)(ch_bytes - 1) / EFS_META_PAGE_SIZE;
+        for (uint32_t p = p0; p <= p1 && p < ch_pc; p++)
+            cdirty[p] = 1;
+    }
+
     uint64_t old_ic = g_client.meta_cache_icount;
     for (uint64_t i = old_ic; i < snap->inode_count; i++) {
         efs_export_pack_inode(&snap->inodes[i],
                               (uint8_t *)b + EFS_META_HDR_SIZE +
                                   i * EFS_INODE_WIRE_SIZE);
         uint32_t off = (uint32_t)(EFS_META_HDR_SIZE + i * EFS_INODE_WIRE_SIZE);
-        uint32_t pi = off / EFS_META_PAGE_SIZE;
-        if (pi < ino_pc)
-            idirty[pi] = 1;
+        MARK_SPAN(idirty, ino_pc, off, EFS_INODE_WIRE_SIZE);
     }
     if (ds->ino_slots) {
         for (uint64_t i = 0; i < ds->ino_count; i++) {
@@ -570,18 +595,15 @@ static int incremental_serialize(struct efs_export *snap, struct dirty_snap *ds,
                                       slot * EFS_INODE_WIRE_SIZE);
             uint32_t off = (uint32_t)(EFS_META_HDR_SIZE +
                                       slot * EFS_INODE_WIRE_SIZE);
-            uint32_t pi = off / EFS_META_PAGE_SIZE;
-            if (pi < ino_pc)
-                idirty[pi] = 1;
+            MARK_SPAN(idirty, ino_pc, off, EFS_INODE_WIRE_SIZE);
         }
     }
     uint64_t old_cc = g_client.meta_cache_ccount;
     for (uint64_t i = old_cc; i < snap->chunk_count; i++) {
         efs_export_pack_chunk(&snap->chunks[i],
                               (uint8_t *)cb + i * EFS_CHUNK_WIRE_SIZE);
-        uint32_t pi = (uint32_t)((i * EFS_CHUNK_WIRE_SIZE) / EFS_META_PAGE_SIZE);
-        if (pi < ch_pc)
-            cdirty[pi] = 1;
+        uint32_t off = (uint32_t)(i * EFS_CHUNK_WIRE_SIZE);
+        MARK_SPAN(cdirty, ch_pc, off, EFS_CHUNK_WIRE_SIZE);
     }
     if (ds->chunk_slots) {
         for (uint64_t i = 0; i < ds->chunk_count; i++) {
@@ -590,12 +612,11 @@ static int incremental_serialize(struct efs_export *snap, struct dirty_snap *ds,
                 continue;
             efs_export_pack_chunk(&snap->chunks[slot],
                                   (uint8_t *)cb + slot * EFS_CHUNK_WIRE_SIZE);
-            uint32_t pi = (uint32_t)((slot * EFS_CHUNK_WIRE_SIZE) /
-                                     EFS_META_PAGE_SIZE);
-            if (pi < ch_pc)
-                cdirty[pi] = 1;
+            uint32_t off = (uint32_t)(slot * EFS_CHUNK_WIRE_SIZE);
+            MARK_SPAN(cdirty, ch_pc, off, EFS_CHUNK_WIRE_SIZE);
         }
     }
+    #undef MARK_SPAN
 
     *blob = b;
     *blob_len = total;
@@ -1302,8 +1323,6 @@ int efs_client_put_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
     if (node_id == 0 || frag_len == 0)
         return EFS_ERR_INVAL;
 
-    size_t msg_size = sizeof(struct efs_msg_put_chunk) + frag_len;
-
     /* Retry after efsd bounce: pooled fds die; drop invalidates the idle
      * pool and the next attempt reconnects. */
     for (int attempt = 1; attempt <= 3; attempt++) {
@@ -1316,27 +1335,22 @@ int efs_client_put_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
             return EFS_ERR_NET;
         }
 
-        struct efs_msg_put_chunk *req = malloc(msg_size);
-        if (!req) {
-            efs_client_conn_release(node_id, fd);
-            return EFS_ERR_NOMEM;
-        }
-        memset(req, 0, sizeof(*req));
-        req->export_id = g_client.export_id;
-        req->ino = ino;
-        req->chunk_index = chunk_index;
-        req->fragment_index = fragment_index;
-        req->data_len = frag_len;
-        memcpy(req->checksum, checksum, EFS_HASH_SIZE);
-        memcpy((uint8_t *)req + sizeof(*req), data, frag_len);
+        struct efs_msg_put_chunk hdr;
+        memset(&hdr, 0, sizeof(hdr));
+        hdr.export_id = g_client.export_id;
+        hdr.ino = ino;
+        hdr.chunk_index = chunk_index;
+        hdr.fragment_index = fragment_index;
+        hdr.data_len = frag_len;
+        memcpy(hdr.checksum, checksum, EFS_HASH_SIZE);
 
         uint8_t reply_type;
         void *reply = NULL;
         uint32_t reply_len = 0;
-        if (efs_send_msg(fd, EFS_MSG_PUT_CHUNK, req, (uint32_t)msg_size) != 0 ||
+        if (efs_send_msg_parts(fd, EFS_MSG_PUT_CHUNK, &hdr, sizeof(hdr),
+                               data, frag_len) != 0 ||
             efs_recv_msg(fd, &reply_type, &reply, &reply_len) != 0 ||
             reply_type != EFS_MSG_PUT_CHUNK_REPLY || reply_len != 1) {
-            free(req);
             free(reply);
             efs_client_conn_drop(node_id, fd);
             if (attempt < 3) {
@@ -1345,8 +1359,6 @@ int efs_client_put_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
             }
             return EFS_ERR_NET;
         }
-
-        free(req);
         uint8_t status = ((uint8_t *)reply)[0];
         free(reply);
         efs_client_conn_release(node_id, fd);
@@ -1701,7 +1713,8 @@ static int assemble_write_chunk(efs_ino_t ino, uint64_t old_size,
     }
 
     memcpy(chunk + off_in_chunk, buf + src_off, wr_len);
-    efs_rdcache_put(ino, (uint32_t)(chunk_start / chunk_size), chunk, chunk_size);
+    /* Dirty dcache is the source of truth for partials; skip a second 128 KiB
+     * rdcache copy on every RMW. */
     return EFS_OK;
 }
 
@@ -1768,12 +1781,398 @@ struct chunk_put_job {
     const char *buf;
     uint64_t end;
     int rc;
+    int deferred;
     struct put_batch *bp;
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
 };
 
 static void *chunk_put_worker(void *arg);
+
+/* Dirty assembled-chunk cache. Partial writes (4k randwrite) used to GET+encode
+ * +PUT a full 128 KiB chunk on every FUSE write. Hold the assembled chunk and
+ * PUT once on flush / unmount. 65536 × 128 KiB ≈ 8 GiB if every slot is live;
+ * buffers are allocated on first store. Collision does not evict (that
+ * serialized PUTs on one mutex and tanked 4k IOPS) — the caller PUTs now. */
+#define DCACHE_SLOTS  65536
+#define DCACHE_SHARDS 64
+struct dcache_ent {
+    efs_ino_t ino;
+    uint32_t ci;
+    uint8_t *data;
+    uint32_t len;
+    int dirty;
+    struct dcache_ent *next;
+};
+static struct {
+    pthread_mutex_t shard[DCACHE_SHARDS];
+    struct dcache_ent e[DCACHE_SLOTS];
+    int inited;
+} g_dcache;
+static pthread_once_t g_dcache_once = PTHREAD_ONCE_INIT;
+
+static void dcache_init(void)
+{
+    for (int i = 0; i < DCACHE_SHARDS; i++)
+        pthread_mutex_init(&g_dcache.shard[i], NULL);
+    g_dcache.inited = 1;
+}
+
+static uint32_t dcache_slot(efs_ino_t ino, uint32_t ci)
+{
+    uint64_t h = (uint64_t)ino * 0x9E3779B97F4A7C15ULL;
+    h ^= (uint64_t)ci * 0xBF58476D1CE4E5B9ULL;
+    return (uint32_t)(h & (DCACHE_SLOTS - 1));
+}
+
+static pthread_mutex_t *dcache_mu(uint32_t slot)
+{
+    pthread_once(&g_dcache_once, dcache_init);
+    return &g_dcache.shard[slot & (DCACHE_SHARDS - 1)];
+}
+
+static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
+                          uint32_t chunk_size)
+{
+    uint32_t frag_len = chunk_size / 2;
+    uint8_t *parity = malloc(frag_len);
+    if (!parity)
+        return EFS_ERR_NOMEM;
+
+    uint8_t *frags[EFS_NUM_FRAGMENTS];
+    frags[0] = (uint8_t *)(uintptr_t)chunk;
+    frags[1] = (uint8_t *)(uintptr_t)(chunk + frag_len);
+    frags[2] = parity;
+    efs_encode_chunk(chunk, chunk_size, chunk_size, frags);
+
+    const uint8_t *cfrags[EFS_NUM_FRAGMENTS] = {frags[0], frags[1], frags[2]};
+    uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+    int from_zero = efs_bytes_are_zero(chunk, chunk_size);
+    hash_write_fragments(cfrags, frag_len, chunk_size, from_zero, 0, 0,
+                         chunk_size, checksums);
+
+    efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+    efs_place_fragments(g_client.nodes, g_client.node_count, ino, ci, nodes);
+    int rc = efs_client_put_fragments_parallel(ino, ci, nodes, cfrags, frag_len,
+                                               checksums);
+    free(parity);
+    if (rc != EFS_OK)
+        return rc;
+
+    if (efs_export_needs_chunk_grow(&g_client.export)) {
+        efs_client_table_lock();
+        (void)efs_export_reserve_chunks(&g_client.export, 64);
+        efs_client_table_unlock();
+    }
+    efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
+    efs_export_set_chunk(&g_client.export, ino, ci, nodes, checksums);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(ino);
+    efs_client_mark_chunk_dirty(ino, ci);
+    return EFS_OK;
+}
+
+static struct dcache_ent *dcache_find(uint32_t s, efs_ino_t ino, uint32_t ci)
+{
+    for (struct dcache_ent *e = &g_dcache.e[s]; e; e = e->next) {
+        if (e->data && e->ino == ino && e->ci == ci)
+            return e;
+    }
+    return NULL;
+}
+
+int efs_dcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
+{
+    if (!dst || !len)
+        return -1;
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(s, ino, ci);
+    if (e && e->len >= len) {
+        memcpy(dst, e->data, len);
+        pthread_mutex_unlock(mu);
+        return 0;
+    }
+    pthread_mutex_unlock(mu);
+    return -1;
+}
+
+void efs_dcache_drop(efs_ino_t ino, uint32_t ci)
+{
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *head = &g_dcache.e[s];
+    if (head->ino == ino && head->ci == ci) {
+        free(head->data);
+        if (head->next) {
+            struct dcache_ent *n = head->next;
+            *head = *n;
+            free(n);
+        } else {
+            memset(head, 0, sizeof(*head));
+        }
+        pthread_mutex_unlock(mu);
+        return;
+    }
+    struct dcache_ent *prev = head;
+    for (struct dcache_ent *e = head->next; e; prev = e, e = e->next) {
+        if (e->ino == ino && e->ci == ci) {
+            prev->next = e->next;
+            free(e->data);
+            free(e);
+            break;
+        }
+    }
+    pthread_mutex_unlock(mu);
+}
+
+static int dcache_patch(efs_ino_t ino, uint32_t ci, uint32_t off, const uint8_t *src,
+                        uint32_t len)
+{
+    if (!src || !len)
+        return -1;
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(s, ino, ci);
+    if (e && e->dirty && off + len <= e->len) {
+        memcpy(e->data + off, src, len);
+        pthread_mutex_unlock(mu);
+        return 0;
+    }
+    pthread_mutex_unlock(mu);
+    return -1;
+}
+
+int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
+                         const uint8_t *src)
+{
+    if (!src || !len)
+        return -1;
+    uint32_t cs = data_chunk_size();
+    if (cs == 0)
+        return -1;
+    uint32_t ci = (uint32_t)(offset / cs);
+    uint32_t off = (uint32_t)(offset % cs);
+    if ((uint64_t)off + len > cs)
+        return -1;
+    if (dcache_patch(ino, ci, off, src, len) != 0)
+        return -1;
+
+    uint64_t end = offset + len;
+    efs_client_lock_dir(ino);
+    struct efs_inode cur;
+    if (efs_export_get_inode(&g_client.export, ino, &cur) == 0 &&
+        cur.size < end) {
+        efs_export_set_size_norollup(&g_client.export, ino, end);
+    } else {
+        uint64_t sec;
+        uint32_t nsec;
+        now_ns(&sec, &nsec);
+        efs_export_set_mtime_ns_norollup(&g_client.export, ino, sec, nsec);
+    }
+    efs_client_mark_ino_dirty(ino);
+    efs_client_unlock_dir(ino);
+    return 0;
+}
+
+static int dcache_fill(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
+                       const uint8_t *chunk, uint32_t chunk_size)
+{
+    if (e->len != chunk_size || !e->data) {
+        uint8_t *nbuf = realloc(e->data, chunk_size);
+        if (!nbuf)
+            return EFS_ERR_NOMEM;
+        e->data = nbuf;
+        e->len = chunk_size;
+    }
+    memcpy(e->data, chunk, chunk_size);
+    e->ino = ino;
+    e->ci = ci;
+    e->dirty = 1;
+    return 0;
+}
+
+/* Take ownership of a malloc'd assemble buffer. Caller must not free
+ * `chunk` after success. */
+static int dcache_take(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
+                       uint8_t *chunk, uint32_t chunk_size)
+{
+    if (e->data && e->data != chunk)
+        free(e->data);
+    e->data = chunk;
+    e->len = chunk_size;
+    e->ino = ino;
+    e->ci = ci;
+    e->dirty = 1;
+    return 0;
+}
+
+/* 0 = cached, 1 = should not happen (chain grows), <0 = error. */
+static int dcache_store(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
+                        uint32_t chunk_size)
+{
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(s, ino, ci);
+    if (e) {
+        int rc = dcache_fill(e, ino, ci, chunk, chunk_size);
+        pthread_mutex_unlock(mu);
+        return rc;
+    }
+    struct dcache_ent *head = &g_dcache.e[s];
+    if (!head->dirty && !head->data) {
+        int rc = dcache_fill(head, ino, ci, chunk, chunk_size);
+        pthread_mutex_unlock(mu);
+        return rc;
+    }
+    struct dcache_ent *n = calloc(1, sizeof(*n));
+    if (!n) {
+        pthread_mutex_unlock(mu);
+        return EFS_ERR_NOMEM;
+    }
+    int rc = dcache_fill(n, ino, ci, chunk, chunk_size);
+    if (rc != 0) {
+        free(n);
+        pthread_mutex_unlock(mu);
+        return rc;
+    }
+    n->next = head->next;
+    head->next = n;
+    pthread_mutex_unlock(mu);
+    return 0;
+}
+
+/* Like dcache_store, but `chunk` is stolen on success (not copied). */
+static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
+                              uint32_t chunk_size)
+{
+    if (!chunk || !chunk_size)
+        return EFS_ERR_INVAL;
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(s, ino, ci);
+    if (e) {
+        int rc = dcache_take(e, ino, ci, chunk, chunk_size);
+        pthread_mutex_unlock(mu);
+        return rc;
+    }
+    struct dcache_ent *head = &g_dcache.e[s];
+    if (!head->dirty && !head->data) {
+        int rc = dcache_take(head, ino, ci, chunk, chunk_size);
+        pthread_mutex_unlock(mu);
+        return rc;
+    }
+    struct dcache_ent *n = calloc(1, sizeof(*n));
+    if (!n) {
+        pthread_mutex_unlock(mu);
+        return EFS_ERR_NOMEM;
+    }
+    int rc = dcache_take(n, ino, ci, chunk, chunk_size);
+    if (rc != 0) {
+        free(n);
+        pthread_mutex_unlock(mu);
+        return rc;
+    }
+    n->next = head->next;
+    head->next = n;
+    pthread_mutex_unlock(mu);
+    return 0;
+}
+
+static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
+{
+    pthread_mutex_t *mu = dcache_mu(s);
+    int rc = EFS_OK;
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = &g_dcache.e[s];
+    while (e) {
+        if (!e->dirty || !e->data || (have_only && e->ino != only_ino)) {
+            e = e->next;
+            continue;
+        }
+        efs_ino_t ino = e->ino;
+        uint32_t ci = e->ci;
+        uint32_t len = e->len;
+        uint8_t *copy = malloc(len);
+        if (!copy) {
+            pthread_mutex_unlock(mu);
+            return EFS_ERR_NOMEM;
+        }
+        memcpy(copy, e->data, len);
+        e->dirty = 0;
+        pthread_mutex_unlock(mu);
+        int prc = dcache_put_now(ino, ci, copy, len);
+        free(copy);
+        if (prc != EFS_OK && rc == EFS_OK)
+            rc = prc;
+        pthread_mutex_lock(mu);
+        if (!e->dirty && e->ino == ino && e->ci == ci) {
+            free(e->data);
+            e->data = NULL;
+            e->len = 0;
+            e->ino = 0;
+            e->ci = 0;
+        }
+        e = e->next;
+    }
+    pthread_mutex_unlock(mu);
+    return rc;
+}
+
+/* Close/truncate used to walk all 65536 slots (and 64 shard locks) per
+ * file. ecopy hit that on flush+release+ftruncate (~200k locks/file).
+ * Chunks are dense from 0, so only those hashed slots can hold this ino. */
+#define DCACHE_FLUSH_SCAN_SLOTS  4096
+
+static int dcache_flush_all_slots(efs_ino_t only_ino, int have_only)
+{
+    int rc = EFS_OK;
+    pthread_once(&g_dcache_once, dcache_init);
+    for (uint32_t i = 0; i < DCACHE_SLOTS; i++) {
+        int prc = dcache_flush_slot(i, only_ino, have_only);
+        if (prc != EFS_OK && rc == EFS_OK)
+            rc = prc;
+    }
+    return rc;
+}
+
+int efs_dcache_flush_ino(efs_ino_t ino)
+{
+    uint32_t cs = data_chunk_size();
+    uint32_t nci = 1;
+    struct efs_inode inode;
+    if (cs && efs_export_get_inode(&g_client.export, ino, &inode) == 0 &&
+        inode.size > 0) {
+        uint64_t n = (inode.size + (uint64_t)cs - 1) / (uint64_t)cs;
+        if (n > UINT32_MAX)
+            return dcache_flush_all_slots(ino, 1);
+        nci = (uint32_t)n;
+        if (nci == 0)
+            nci = 1;
+    }
+    if (nci > DCACHE_FLUSH_SCAN_SLOTS)
+        return dcache_flush_all_slots(ino, 1);
+
+    int rc = EFS_OK;
+    pthread_once(&g_dcache_once, dcache_init);
+    for (uint32_t ci = 0; ci < nci; ci++) {
+        int prc = dcache_flush_slot(dcache_slot(ino, ci), ino, 1);
+        if (prc != EFS_OK && rc == EFS_OK)
+            rc = prc;
+    }
+    return rc;
+}
+
+int efs_dcache_flush_all(void)
+{
+    return dcache_flush_all_slots(0, 0);
+}
 
 /* Persistent PUT workers draining a shared FIFO of chunk jobs. Reentrant:
  * each put_pool_run enqueues its jobs tagged with a per-batch tracker and
@@ -1898,6 +2297,21 @@ static void *chunk_put_worker(void *arg)
     int covers_full = (wr_start == chunk_start &&
                        wr_end == chunk_start + chunk_size);
 
+    if (covers_full)
+        efs_dcache_drop(job->ino, job->ci);
+    else {
+        size_t off_in = (size_t)(wr_start - chunk_start);
+        size_t wr_len = (size_t)(wr_end - wr_start);
+        size_t src_off = (size_t)(wr_start - job->offset);
+        if (dcache_patch(job->ino, job->ci, (uint32_t)off_in,
+                         (const uint8_t *)job->buf + src_off,
+                         (uint32_t)wr_len) == 0) {
+            job->rc = EFS_OK;
+            job->deferred = 1;
+            return NULL;
+        }
+    }
+
     /* dd if=/dev/zero / full-chunk zeros: skip assemble/encode/malloc and PUT
      * shared zero pages with the cached zero digest. */
     if (covers_full) {
@@ -1918,6 +2332,30 @@ static void *chunk_put_worker(void *arg)
                 job->ino, job->ci, job->nodes, cfrags, frag_len, job->checksums);
             return NULL;
         }
+
+        /* Full overwrite: encode in place from the caller's buffer — skip the
+         * extra 128 KiB assemble memcpy that showed up as 8–10% of seq write. */
+        uint8_t *parity = malloc(frag_len);
+        if (!parity) {
+            job->rc = EFS_ERR_NOMEM;
+            return NULL;
+        }
+        uint8_t *frags[EFS_NUM_FRAGMENTS];
+        const uint8_t *src = (const uint8_t *)job->buf + src_off;
+        frags[0] = (uint8_t *)(uintptr_t)src;
+        frags[1] = (uint8_t *)(uintptr_t)(src + frag_len);
+        frags[2] = parity;
+        efs_encode_chunk(src, chunk_size, chunk_size, frags);
+        const uint8_t *cfrags2[EFS_NUM_FRAGMENTS] = {frags[0], frags[1], frags[2]};
+        hash_write_fragments(cfrags2, frag_len, chunk_size, 0, chunk_start,
+                             wr_start, wr_end, job->checksums);
+        efs_place_fragments(g_client.nodes, g_client.node_count, job->ino,
+                            job->ci, job->nodes);
+        job->rc = efs_client_put_fragments_parallel(
+            job->ino, job->ci, job->nodes, cfrags2, frag_len, job->checksums);
+        free(parity);
+        efs_rdcache_invalidate(job->ino, job->ci);
+        return NULL;
     }
 
     /* Heap-allocate — large chunks exceed some FUSE/pthread stacks when the
@@ -1942,6 +2380,24 @@ static void *chunk_put_worker(void *arg)
         free(frag_buf);
         job->rc = arc;
         return NULL;
+    }
+
+    /* Partial chunk: hold the assembled bytes and skip encode/hash/PUT.
+     * Close / fsync persist. Collision: PUT this write now (do not evict). */
+    if (!covers_full) {
+        int st = dcache_store_owned(job->ino, job->ci, chunk, chunk_size);
+        if (st == 0) {
+            job->rc = EFS_OK;
+            job->deferred = 1;
+            free(frag_buf);
+            return NULL;
+        }
+        if (st < 0) {
+            job->rc = st;
+            free(chunk);
+            free(frag_buf);
+            return NULL;
+        }
     }
 
     const uint8_t *cfrags[EFS_NUM_FRAGMENTS];
@@ -2132,6 +2588,66 @@ static struct pack_stage *stage_take(efs_ino_t ino)
     return s;
 }
 
+int efs_client_dir_pack_read(efs_ino_t pack_ino, uint64_t offset, size_t size,
+                             char *buf, size_t *out_len)
+{
+    if (!buf || !out_len)
+        return -1;
+    uint32_t cs = data_chunk_size();
+    if (cs == 0)
+        return -1;
+    pthread_mutex_lock(&g_pack_mu);
+    struct dir_pack *p = NULL;
+    for (int i = 0; i < PACK_DIR_MAX; i++) {
+        if (g_dir_pack[i].live && g_dir_pack[i].dir_ino == pack_ino) {
+            p = &g_dir_pack[i];
+            break;
+        }
+    }
+    if (!p || !p->buf || p->used == 0) {
+        pthread_mutex_unlock(&g_pack_mu);
+        return -1;
+    }
+    uint64_t chunk_start = (uint64_t)p->ci * cs;
+    if (offset < chunk_start || offset >= chunk_start + p->used) {
+        pthread_mutex_unlock(&g_pack_mu);
+        return -1;
+    }
+    uint32_t local = (uint32_t)(offset - chunk_start);
+    size_t n = (size_t)p->used - local;
+    if (n > size)
+        n = size;
+    memcpy(buf, p->buf + local, n);
+    *out_len = n;
+    pthread_mutex_unlock(&g_pack_mu);
+    return 0;
+}
+
+int efs_client_pack_stage_read(efs_ino_t ino, uint64_t offset, size_t size,
+                               char *buf, size_t *out_len)
+{
+    if (!buf || !out_len)
+        return -1;
+    pthread_mutex_lock(&g_stage_mu);
+    struct pack_stage *s = stage_find_locked(ino);
+    if (!s) {
+        pthread_mutex_unlock(&g_stage_mu);
+        return -1;
+    }
+    if (offset >= s->len) {
+        *out_len = 0;
+        pthread_mutex_unlock(&g_stage_mu);
+        return 0;
+    }
+    size_t n = (size_t)s->len - (size_t)offset;
+    if (n > size)
+        n = size;
+    memcpy(buf, s->buf + offset, n);
+    *out_len = n;
+    pthread_mutex_unlock(&g_stage_mu);
+    return 0;
+}
+
 int efs_client_pack_seal(efs_ino_t ino)
 {
     if (!g_client.meta_batch)
@@ -2173,16 +2689,18 @@ int efs_client_pack_seal(efs_ino_t ino)
     p->used += s->len;
     efs_ino_t pack_ino = s->parent;
     uint32_t pack_len = s->len;
-    /* PUT now (including a partial tail) so remount can read this file.
-     * Further seals overwrite the same ci until it fills. */
-    int prc = pack_put_chunk(p->dir_ino, p->ci, p->buf, chunk_size);
-    if (prc != EFS_OK) {
-        pthread_mutex_unlock(&g_pack_mu);
-        free(s->buf);
-        free(s);
-        return prc;
-    }
+    /* PUT only when the pack chunk is full. Partial tails wait for
+     * pack_flush_all / fsync — sealing every ImageNet file used to
+     * encode+PUT a 128 KiB chunk on close. */
+    int prc = EFS_OK;
     if (p->used == chunk_size) {
+        prc = pack_put_chunk(p->dir_ino, p->ci, p->buf, chunk_size);
+        if (prc != EFS_OK) {
+            pthread_mutex_unlock(&g_pack_mu);
+            free(s->buf);
+            free(s);
+            return prc;
+        }
         memset(p->buf, 0, chunk_size);
         p->ci++;
         p->used = 0;
@@ -2399,12 +2917,15 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
             jobs[i].buf = buf;
             jobs[i].end = end;
             jobs[i].rc = EFS_ERR_IO;
+            jobs[i].deferred = 0;
         }
         put_pool_run(jobs, batch);
 
         for (uint32_t i = 0; i < batch; i++) {
             if (jobs[i].rc != EFS_OK)
                 return jobs[i].rc;
+            if (jobs[i].deferred)
+                continue;
             if (efs_export_needs_chunk_grow(&g_client.export)) {
                 efs_client_table_lock();
                 (void)efs_export_reserve_chunks(&g_client.export, 64);

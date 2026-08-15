@@ -129,6 +129,12 @@ void efs_client_table_unlock(void);
 /* Seal a staged small file into its parent directory pack (FUSE release). */
 int efs_client_pack_seal(efs_ino_t ino);
 void efs_client_pack_flush_all(void);
+/* 0 = this ino is staged (out_len set); -1 = not in the pack stage. */
+int efs_client_pack_stage_read(efs_ino_t ino, uint64_t offset, size_t size,
+                               char *buf, size_t *out_len);
+/* 0 = hit the in-memory dir pack tail (not yet PUT); -1 = miss. */
+int efs_client_dir_pack_read(efs_ino_t pack_ino, uint64_t offset, size_t size,
+                             char *buf, size_t *out_len);
 
 extern struct efs_client g_client;
 
@@ -153,6 +159,15 @@ void efs_client_stop_meta_flush(void);
 int efs_rdcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len);
 void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t len);
 void efs_rdcache_invalidate(efs_ino_t ino, uint32_t ci);
+
+/* Dirty assembled chunks: combine partial writes and PUT on flush/evict. */
+int efs_dcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len);
+int efs_dcache_flush_all(void);
+int efs_dcache_flush_ino(efs_ino_t ino);
+void efs_dcache_drop(efs_ino_t ino, uint32_t ci);
+/* Patch a dirty cached chunk in place. 0 = hit (size/mtime updated), -1 = miss. */
+int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
+                         const uint8_t *src);
 
 /* Enable coalesced metadata replication for the FUSE client. */
 void efs_client_enable_meta_batch(uint32_t every_n_ops);
