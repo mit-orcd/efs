@@ -5,8 +5,9 @@ chunk as **2 data fragments + 1 XOR parity**. Any two fragments rebuild the
 chunk, so the cluster stays up if **one node dies**. Metadata uses the same
 scheme. You mount it with FUSE.
 
-Dependencies are vendored (`deps/blake3/`, `deps/libfuse/`). Needs `gcc`,
-`make`, and the FUSE kernel module.
+Blake3 is vendored (`deps/blake3/`). The FUSE client links the OS **fuse3**
+library (`fuse3-devel` ≥ 3.3.0, plus `fusermount3` and the kernel `fuse`
+module). Needs `gcc` and `make`.
 
 | Binary | Role |
 |---|---|

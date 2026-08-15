@@ -16,15 +16,8 @@ IP=127.0.0.1
 rm -rf "$BASE"; mkdir -p "$BASE"
 for i in 1 2 3; do mkdir -p "$BASE/s$i"; done
 
-# libfuse2 execs "fusermount" but this host only ships fusermount3: shim it.
-if ! command -v fusermount >/dev/null 2>&1 && command -v fusermount3 >/dev/null 2>&1; then
-    mkdir -p "$BASE/bin"
-    ln -sf "$(command -v fusermount3)" "$BASE/bin/fusermount"
-    export PATH="$BASE/bin:$PATH"
-fi
-
 cleanup() {
-    fusermount -u "$BASE/mnt" 2>/dev/null || umount "$BASE/mnt" 2>/dev/null || true
+    fusermount3 -u "$BASE/mnt" 2>/dev/null || umount "$BASE/mnt" 2>/dev/null || true
     [ -n "${P1:-}" ] && kill "$P1" "$P2" "$P3" 2>/dev/null || true
     wait 2>/dev/null || true
 }
@@ -79,7 +72,7 @@ sleep 1
 # md5 of everything (sorted), then unmount + remount and compare
 ( cd "$BASE/mnt" && find . -type f -name '*.bin' -o -name marker.txt | sort | xargs md5sum ) > "$BASE/md5.before"
 
-fusermount -u "$BASE/mnt" 2>/dev/null || umount "$BASE/mnt"
+fusermount3 -u "$BASE/mnt" 2>/dev/null || umount "$BASE/mnt"
 sleep 0.5
 
 EFS_META_BATCH_OPS=8 $BIN/efs-fuse $IP:17451 $IP:17452 $IP:17453 test \

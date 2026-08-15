@@ -25,23 +25,6 @@ tests/test_quota
 tests/test_rejoin
 tests/test_meta_slot
 
-# dependency build artifacts
-deps/libfuse/.efs-configured
-deps/libfuse/Makefile
-deps/libfuse/config.h
-deps/libfuse/config.log
-deps/libfuse/config.status
-deps/libfuse/libtool
-deps/libfuse/*.pc
-deps/libfuse/**/*.o
-deps/libfuse/**/*.lo
-deps/libfuse/**/*.a
-deps/libfuse/**/*.so*
-deps/libfuse/**/.deps/
-deps/libfuse/**/.libs/
-deps/libfuse/**/Makefile
-deps/libfuse/**/stamp-*
-
 # profiling / job runtime output
 /logs/
 slurm-jobs/logs/

@@ -82,7 +82,7 @@ cleanup() {
     [ -n "$SAMP_PID" ] && kill -KILL "$SAMP_PID" 2>/dev/null
     [ -n "$PERF_C" ] && kill -INT "$PERF_C" 2>/dev/null
     [ -n "$PERF_S" ] && kill -INT "$PERF_S" 2>/dev/null
-    fusermount -u "$MNT" 2>/dev/null || umount -l "$MNT" 2>/dev/null
+    fusermount3 -u "$MNT" 2>/dev/null || umount -l "$MNT" 2>/dev/null
     for p in $CPID $S1 $S2 $S3; do [ -n "$p" ] && kill -KILL "$p" 2>/dev/null; done
     sleep 1
     rm -rf "$SCRATCH"

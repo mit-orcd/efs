@@ -62,14 +62,9 @@ MGMT_OBJ = $(MGMT_SRC:.c=.o)
 QUERY_SRC = src/query/efs_query.c
 QUERY_OBJ = $(QUERY_SRC:.c=.o)
 
-FUSE_DIR = deps/libfuse
-FUSE_CFLAGS = -I$(FUSE_DIR)/include -D_FILE_OFFSET_BITS=64
-FUSE_LIBS = $(FUSE_DIR)/lib/.libs/libfuse.a
-# Vendored libfuse trips gcc truncation/fallthrough warnings; quiet those and
-# skip example apps we never install. Reconfigure when this Makefile changes.
-FUSE_CONFIGURE_FLAGS = --disable-util --disable-example
-FUSE_BUILD_CFLAGS = -O3 -g -fno-omit-frame-pointer -march=native -mtune=native \
-	-Wno-stringop-truncation -Wno-implicit-fallthrough -Wno-unused-result
+# System fuse3 (>= 3.3.0-19.el8). pkg-config supplies -I and -lfuse3.
+FUSE_CFLAGS := $(shell pkg-config --cflags fuse3 2>/dev/null)
+FUSE_LIBS := $(shell pkg-config --libs fuse3 2>/dev/null)
 
 BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
               $(BLAKE3_DIR)/blake3_portable.o \
@@ -112,7 +107,10 @@ $(LIB): $(COMMON_OBJS)
 efsd: $(SERVER_OBJS) $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(SERVER_OBJS) $(LIB) $(LDFLAGS)
 
-efs-fuse: $(CLIENT_OBJS) $(LIB) $(FUSE_LIBS)
+efs-fuse: $(CLIENT_OBJS) $(LIB)
+	@pkg-config --exists fuse3 || { \
+	  echo "efs-fuse needs fuse3-devel >= 3.3.0 (pkg-config fuse3)" >&2; \
+	  exit 1; }
 	$(CC) $(CFLAGS) $(INCLUDES) $(FUSE_CFLAGS) -o $@ $(CLIENT_OBJS) $(LIB) $(LDFLAGS) $(FUSE_LIBS)
 
 efs-bench: $(BENCH_CLIENT_OBJ) $(LIB)
@@ -135,20 +133,10 @@ blake3-bench: $(BLAKE3_OBJS) FORCE
 	$(CC) $(CFLAGS) $(INCLUDES) \
 		-o blake3-bench tools/blake3-bench.c $(BLAKE3_OBJS) $(LDFLAGS)
 
-$(FUSE_DIR)/.efs-configured: Makefile
-	cd $(FUSE_DIR) && ./configure $(FUSE_CONFIGURE_FLAGS) \
-		CFLAGS="$(FUSE_BUILD_CFLAGS)"
-	touch $@
-
-$(FUSE_LIBS): $(FUSE_DIR)/.efs-configured
-	cd $(FUSE_DIR) && $(MAKE)
-
 clean:
 	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(MGMT_OBJ) $(QUERY_OBJ)
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query blake3-bench
 	rm -f $(TEST_BINS)
-	rm -f $(FUSE_DIR)/.efs-configured
-	if [ -f $(FUSE_DIR)/Makefile ]; then cd $(FUSE_DIR) && $(MAKE) clean; fi
 
 $(BLAKE3_DIR)/blake3_sse2.o: $(BLAKE3_DIR)/blake3_sse2.c
 	$(CC) $(CFLAGS) $(INCLUDES) -msse2 -c -o $@ $<

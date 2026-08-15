@@ -24,7 +24,7 @@ Check `squeue -u $USER` for active efs harness jobs (`efs-s*`, `efs-c*`, clients
 3. **Ephemeral result trees** for the finished run (after results are reported):
    - that job’s dirs under `valgrind/`, `valgrind-fuse/`, `profile/`
 
-4. **FUSE mounts** before deleting mount dirs: `fusermount -u` (or `umount`), then `rm -rf`.
+4. **FUSE mounts** before deleting mount dirs: `fusermount3 -u` (or `umount`), then `rm -rf`.
 
 ## Do not leave behind
 

@@ -16,7 +16,7 @@ FAIL=0
 
 cleanup() {
     set +e
-    fusermount -u "$MNT" 2>/dev/null || umount "$MNT" 2>/dev/null
+    fusermount3 -u "$MNT" 2>/dev/null || umount "$MNT" 2>/dev/null
     pkill -9 -x efs-fuse 2>/dev/null
     pkill -9 -x efsd 2>/dev/null
     sleep 0.5

@@ -10,7 +10,7 @@ MNT="$BASE/mnt"
 
 cleanup() {
     set +e
-    fusermount -u "$MNT" 2>/dev/null || umount "$MNT" 2>/dev/null
+    fusermount3 -u "$MNT" 2>/dev/null || umount "$MNT" 2>/dev/null
     pkill -9 -x efs-fuse
     pkill -9 -x efsd
     sleep 0.5
@@ -60,8 +60,7 @@ fi
 # chown to the current user is a no-op but still exercises the FUSE chown path.
 chown "$(id -u):$(id -g)" "$MNT/file.txt"
 
-# The FUSE2 high-level API supports the old utime(2) interface, not utimensat.
-# Use a tiny C helper to call utime(2) directly.
+# Exercise utimens via the classic utime(2) syscall (kernel maps it).
 UTIME_SRC="$BASE/utime_helper.c"
 cat > "$UTIME_SRC" <<'EOF'
 #include <utime.h>

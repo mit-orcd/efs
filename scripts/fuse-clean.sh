@@ -82,9 +82,7 @@ unmount_one() {
     if [ "$DRY" -eq 1 ]; then
         return 0
     fi
-    if command -v fusermount >/dev/null 2>&1; then
-        fusermount -u "$mnt" 2>/dev/null || fusermount -uz "$mnt" 2>/dev/null || true
-    fi
+    fusermount3 -u "$mnt" 2>/dev/null || fusermount3 -uz "$mnt" 2>/dev/null || true
     if still_mounted "$mnt"; then
         umount "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
     fi

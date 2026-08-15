@@ -8,7 +8,7 @@ Usage:
   $0 stop <mount-path>
 
   start:  mount export at mount-path (default export name: fs)
-  stop:   unmount mount-path (fusermount -u, then umount)
+  stop:   unmount mount-path (fusermount3 -u, then umount)
 EOF
     exit 1
 }
@@ -49,14 +49,12 @@ cmd_stop() {
     fi
 
     echo "Unmounting $mnt"
-    if command -v fusermount >/dev/null 2>&1; then
-        fusermount -u "$mnt" 2>/dev/null || fusermount -uz "$mnt" 2>/dev/null || true
-    fi
+    fusermount3 -u "$mnt" 2>/dev/null || fusermount3 -uz "$mnt" 2>/dev/null || true
     umount "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
 
     if is_listed_mount "$mnt" || mountpoint -q "$mnt" 2>/dev/null; then
         echo "ERROR: still mounted: $mnt" >&2
-        echo "Try: fusermount -uz $mnt   or   umount -l $mnt" >&2
+        echo "Try: fusermount3 -uz $mnt   or   umount -l $mnt" >&2
         exit 1
     fi
 
@@ -92,11 +90,9 @@ if is_listed_mount "$MOUNT_PATH" || mountpoint -q "$MOUNT_PATH" 2>/dev/null; the
     echo "Mount point busy or stale; unmounting first..."
     cmd_stop "$MOUNT_PATH"
 fi
-# Always poke fusermount once more — covers ENOTCONN when /proc path differs.
-if command -v fusermount >/dev/null 2>&1; then
-    fusermount -u "$MOUNT_PATH" 2>/dev/null || \
-        fusermount -uz "$MOUNT_PATH" 2>/dev/null || true
-fi
+# Always poke fusermount3 once more — covers ENOTCONN when /proc path differs.
+fusermount3 -u "$MOUNT_PATH" 2>/dev/null || \
+    fusermount3 -uz "$MOUNT_PATH" 2>/dev/null || true
 umount "$MOUNT_PATH" 2>/dev/null || umount -l "$MOUNT_PATH" 2>/dev/null || true
 
 mkdir -p "$MOUNT_PATH"

@@ -42,7 +42,7 @@ These rules govern every build, server, client, management command, and test in 
 - Helper: `efs_job_scratch` in `lib-harness.sh` prints `/scratch/efs-testing/$SLURM_JOB_ID` (errors if unset or `/scratch` missing).
 - Cleanup removes the **job subdirectory** only (`rm -rf /scratch/efs-testing/$SLURM_JOB_ID`), not the whole `efs-testing` tree.
 - **Never** use `/tmp`, `/scratch/efs/...`, or shared `/orcd/...` for node-local server/mount data.
-- Clean up stale mountpoints before reuse (`fusermount -u`, then `rm -rf`).
+- Clean up stale mountpoints before reuse (`fusermount3 -u`, then `rm -rf`).
 - **When the harness finishes, always `rm -rf /scratch/efs-testing/$SLURM_JOB_ID`.**
 - Every server/client/profile job must `trap` EXIT/TERM and remove that whole tree after unmounting/killing processes. Use `efs_run_efsd "$SCRATCH" ...` (cleanup arg = job scratch root, not only the storage subdir).
 
