@@ -18,12 +18,13 @@ int server_peer_conn_get(const char *host, uint16_t port);
 void server_peer_conn_release(const char *host, uint16_t port, int fd);
 /* Close and discard a broken fd (net/protocol error). */
 void server_peer_conn_drop(const char *host, uint16_t port, int fd);
-/* Dedicated PUT writers per --storage path (stripe lane). */
-#define EFS_WRITERS_PER_PATH_DEFAULT 8
-#define EFS_MAX_WRITERS_PER_PATH     64
-/* Back-compat aliases used by local --bench. */
-#define EFS_DEFAULT_WRITERS  EFS_WRITERS_PER_PATH_DEFAULT
-#define EFS_MAX_WRITERS      EFS_MAX_WRITERS_PER_PATH
+/* Shared PUT writer pool (one queue, all --storage paths). --writers n is
+ * the total; n=0 is inline; n<0 (startup default) means auto from nproc. */
+#define EFS_WRITERS_RESERVED         4  /* main + heartbeat + migrate + catchup */
+#define EFS_MAX_WRITERS              64
+#define EFS_MAX_WRITERS_PER_PATH     EFS_MAX_WRITERS /* CLI / bench alias */
+#define EFS_DEFAULT_WRITERS          8               /* bench fallback */
+#define EFS_WRITERS_PER_PATH_DEFAULT EFS_DEFAULT_WRITERS
 
 enum efsd_server_state {
     SERVER_STATE_ACTIVE = 0,
@@ -73,7 +74,7 @@ struct efsd_server {
     uint16_t rejoin_port;
 
     int direct_io; /* use O_DIRECT for fragment reads/writes */
-    /* Writers per storage path (0 = inline). Total = nwriters * path_count. */
+    /* Shared writer-pool size (0 = inline, <0 = auto from nproc at start). */
     int nwriters;
     int persist_nodes; /* persist cluster membership to disk */
     int perf; /* run under perf record when starting */
@@ -196,6 +197,7 @@ int server_write_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                                    const uint8_t *data, uint32_t data_len,
                                    const uint8_t checksum[EFS_HASH_SIZE]);
 
+int server_default_writer_threads(void);
 int server_writer_pool_start(struct efsd_server *s);
 void server_writer_pool_stop(struct efsd_server *s);
 

@@ -108,9 +108,9 @@ static void usage(const char *prog)
             "  --time <sec>     duration for --bench (default 10)\n"
             "  --direct-io      O_DIRECT for fragment I/O\n"
             "  --no-direct-io   use the page cache for fragment I/O (default)\n"
-            "  --writers <n>    writer threads per storage path "
-            "(default %d, 0 = inline)\n",
-            prog, prog, EFS_MAX_STORAGE_PATHS, EFS_WRITERS_PER_PATH_DEFAULT);
+            "  --writers <n>    shared writer threads across all storage paths "
+            "(default: nproc-%d, 0 = inline)\n",
+            prog, prog, EFS_MAX_STORAGE_PATHS, EFS_WRITERS_RESERVED);
 }
 
 static int add_storage_path(struct efsd_server *s, const char *path)
@@ -257,7 +257,7 @@ int main(int argc, char **argv)
     memset(&server, 0, sizeof(server));
     server.persist_nodes = 1;
     server.direct_io = 0; /* default: page cache; opt in with --direct-io */
-    server.nwriters = EFS_WRITERS_PER_PATH_DEFAULT;
+    server.nwriters = -1; /* auto: nproc minus standing helper threads */
     server.listen_fd = -1;
     g_server = &server;
     pthread_mutex_init(&server.lock, NULL);
@@ -302,9 +302,9 @@ int main(int argc, char **argv)
             server.direct_io = 0;
         } else if (strcmp(argv[i], "--writers") == 0 && i + 1 < argc) {
             int n = atoi(argv[++i]);
-            if (n < 0 || n > EFS_MAX_WRITERS_PER_PATH) {
-                fprintf(stderr, "Invalid --writers value (0..%d per path)\n",
-                        EFS_MAX_WRITERS_PER_PATH);
+            if (n < 0 || n > EFS_MAX_WRITERS) {
+                fprintf(stderr, "Invalid --writers value (0..%d total)\n",
+                        EFS_MAX_WRITERS);
                 usage(argv[0]);
                 return 1;
             }
@@ -453,7 +453,7 @@ int main(int argc, char **argv)
     }
     server.running = 1;
     if (server_writer_pool_start(&server) != 0) {
-        fprintf(stderr, "Failed to start writer pools (%d per path × %u paths)\n",
+        fprintf(stderr, "Failed to start writer pool (%d threads, %u paths)\n",
                 server.nwriters, server.storage_path_count);
         return 1;
     }
@@ -465,20 +465,19 @@ int main(int argc, char **argv)
         const char *stripe = (server.storage_path_count > 1) ? "leastq" : "none";
         char storage_disp[EFS_MAX_PATH];
         uint64_t used_disp = 0;
-        int total_writers = server.nwriters * (int)server.storage_path_count;
         server_format_storage_paths(&server, storage_disp, sizeof(storage_disp));
         struct efs_node *local = server_local_node(&server);
         if (local)
             used_disp = local->used;
         printf("efsd node %u listening on %s:%u, storage=%s (%u paths, stripe=%s), "
-               "used=%llu, quota=%llu, direct_io=%s, writers=%d/path (%d total), "
+               "used=%llu, quota=%llu, direct_io=%s, writers=%d shared, "
                "build=%s\n",
                server.id, server.addr, server.port, storage_disp,
                server.storage_path_count, stripe,
                (unsigned long long)used_disp,
                (unsigned long long)server.quota,
                server.direct_io ? "on" : "off",
-               server.nwriters, total_writers, EFS_BUILD_ID);
+               server.nwriters, EFS_BUILD_ID);
     }
     fflush(stdout);
 
