@@ -2358,15 +2358,30 @@ int main(int argc, char **argv)
     efs_export_init(&g_client.export, g_client.export_id, g_client.export_name);
     efs_client_setup_ino_namespace();
 
-    if (node_count == 1) {
+    /* argv addresses are bootstrap only. init_nodes assigns 1..N, which
+     * will not match a cluster started with --node-id 3,4,5. Always take
+     * membership and real ids from LIST_NODES. */
+    {
         char host[64];
         uint16_t port = 0;
-        if (parse_addr(nodes[0], host, sizeof(host), &port) != 0 ||
-            efs_client_discover_nodes(&g_client, host, port) != 0) {
-            fprintf(stderr, "Could not discover cluster from %s\n", nodes[0]);
+        int discovered = 0;
+        for (uint32_t i = 0; i < node_count; i++) {
+            if (parse_addr(nodes[i], host, sizeof(host), &port) != 0)
+                continue;
+            if (efs_client_discover_nodes(&g_client, host, port) == 0) {
+                printf("Discovered %u cluster nodes from %s\n",
+                       g_client.node_count, nodes[i]);
+                for (uint32_t n = 0; n < g_client.node_count; n++)
+                    printf("  node id=%u %s:%u\n", g_client.nodes[n].id,
+                           g_client.nodes[n].addr, g_client.nodes[n].port);
+                discovered = 1;
+                break;
+            }
+        }
+        if (!discovered) {
+            fprintf(stderr, "Could not discover cluster from any bootstrap node\n");
             return 1;
         }
-        printf("Discovered %u cluster nodes from %s\n", g_client.node_count, nodes[0]);
     }
 
     /* Fetch initial metadata from one of the nodes. */

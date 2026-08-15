@@ -186,17 +186,24 @@ static int send_meta_root(const char *buf, size_t len)
     int pending[EFS_MAX_NODES];
     int acks = 0;
 
-    for (uint32_t i = 0; i < n; i++) {
-        fds[i] = -1;
-        pending[i] = 0;
-        nids[i] = g_client.nodes[i].id;
-        if (nids[i] == 0 || efs_client_node_is_down(nids[i]))
-            continue;
-        fds[i] = efs_client_conn_get(nids[i]);
-        if (fds[i] < 0) {
-            efs_client_node_note_fail(nids[i]);
-            continue;
+    for (int pass = 0; pass < 2; pass++) {
+        int got = 0;
+        for (uint32_t i = 0; i < n; i++) {
+            fds[i] = -1;
+            pending[i] = 0;
+            nids[i] = g_client.nodes[i].id;
+            if (nids[i] == 0 || efs_client_node_is_down(nids[i]))
+                continue;
+            fds[i] = efs_client_conn_get(nids[i]);
+            if (fds[i] < 0) {
+                efs_client_node_note_fail(nids[i]);
+                continue;
+            }
+            got++;
         }
+        if (got >= 2 || pass == 1)
+            break;
+        efs_client_nodes_force_reprobe();
     }
 
     for (uint32_t i = 0; i < n; i++) {
@@ -1635,6 +1642,16 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
             if (nodes[i] != 0 && !efs_client_node_is_down(nodes[i]))
                 live++;
         if (live < 2) {
+            if (attempt == 1) {
+                fprintf(stderr,
+                        "put_fragments ino=%llu chunk=%u: only %d/%u peers live, "
+                        "clearing down-marks and re-probing\n",
+                        (unsigned long long)ino, chunk_index, live,
+                        (unsigned)EFS_NUM_FRAGMENTS);
+                fflush(stderr);
+                efs_client_nodes_force_reprobe();
+                continue;
+            }
             fprintf(stderr,
                     "put_fragments ino=%llu chunk=%u: only %d/%u peers live, "
                     "cannot reach EC quorum — failing fast\n",

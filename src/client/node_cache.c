@@ -13,7 +13,7 @@
 #include <pthread.h>
 
 /* Mark a peer down after this many consecutive failures. */
-#define EFS_NODE_DOWN_FAILS 1
+#define EFS_NODE_DOWN_FAILS 4
 /* Skip connect attempts for this long (ms) while marked down.
  * When the timer expires, conn_get clears the streak and re-probes so a
  * restarted peer is picked up again without a client restart.
@@ -151,6 +151,16 @@ int efs_client_node_is_down(efs_node_id_t node_id)
     return down;
 }
 
+void efs_client_nodes_force_reprobe(void)
+{
+    for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
+        pthread_mutex_lock(&g_client.conn_lock[i]);
+        g_client.node_fail_streak[i] = 0;
+        g_client.node_down_until_ms[i] = 0;
+        pthread_mutex_unlock(&g_client.conn_lock[i]);
+    }
+}
+
 void efs_client_node_note_fail(efs_node_id_t node_id)
 {
     int idx = node_index_for_id(node_id);
@@ -207,8 +217,10 @@ int efs_client_conn_get(efs_node_id_t node_id)
             ts.tv_sec += 5;
             int wrc = pthread_cond_timedwait(&g_client.conn_cv[idx],
                                              &g_client.conn_lock[idx], &ts);
-            if (wrc == ETIMEDOUT)
+            if (wrc == ETIMEDOUT) {
+                pthread_mutex_unlock(&g_client.conn_lock[idx]);
                 return -1;
+            }
             continue;
         }
 
@@ -330,6 +342,9 @@ void efs_client_shutdown(void)
     if (done)
         return;
     done = 1;
+
+    /* Persist any write-combined chunks before tearing down connections. */
+    (void)efs_dcache_flush_all();
 
     /* Stop the flush thread before freeing state it might be using; join
      * blocks until any in-flight flush completes. */

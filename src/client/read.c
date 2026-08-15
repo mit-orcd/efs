@@ -388,6 +388,167 @@ static int load_page_from_chunk(const struct efs_export_root *root, uint32_t pi,
     return rc;
 }
 
+/* Recover a torn dual-slot flush: the published EFSR checksums do not match
+ * the even/odd pages, but the previous generation's slot is still intact.
+ * Accept any two fragments whose self-hash matches the GET digest. */
+static int load_page_from_chunk_unverified(uint32_t chunk_index, uint8_t *page_out)
+{
+    efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+    efs_place_fragments(g_client.nodes, g_client.node_count, EFS_META_TABLE_INO,
+                        chunk_index, nodes);
+
+    uint8_t *frag_buf = malloc(EFS_NUM_FRAGMENTS * EFS_META_FRAGMENT_SIZE);
+    if (!frag_buf)
+        return EFS_ERR_NOMEM;
+    uint8_t *frags[EFS_NUM_FRAGMENTS];
+    frag_ptrs(frag_buf, EFS_META_FRAGMENT_SIZE, frags);
+
+    struct frag_get_job jobs[EFS_NUM_FRAGMENTS];
+    pthread_t tids[EFS_NUM_FRAGMENTS];
+    int spawned[EFS_NUM_FRAGMENTS] = {0};
+    for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+        jobs[fi].node = nodes[fi];
+        jobs[fi].ino = EFS_META_TABLE_INO;
+        jobs[fi].chunk_index = chunk_index;
+        jobs[fi].fi = fi;
+        jobs[fi].frag_len = EFS_META_FRAGMENT_SIZE;
+        jobs[fi].out = frags[fi];
+        jobs[fi].len = 0;
+        jobs[fi].rc = EFS_ERR_NET;
+        if (pthread_create(&tids[fi], NULL, frag_get_thread, &jobs[fi]) == 0)
+            spawned[fi] = 1;
+        else
+            frag_get_thread(&jobs[fi]);
+    }
+
+    int have[EFS_NUM_FRAGMENTS] = {0};
+    for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+        if (spawned[fi])
+            pthread_join(tids[fi], NULL);
+        if (jobs[fi].rc != 0 || jobs[fi].len != EFS_META_FRAGMENT_SIZE)
+            continue;
+        have[fi] = 1;
+    }
+
+    int missing = -1, a = -1, b = -1;
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (!have[i]) {
+            if (missing < 0)
+                missing = i;
+        } else if (a < 0) {
+            a = i;
+        } else if (b < 0) {
+            b = i;
+        }
+    }
+    if (missing < 0) {
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            if (i != a && i != b) {
+                missing = i;
+                break;
+            }
+        }
+    }
+    int rc = EFS_ERR_DECODE;
+    if (a >= 0 && b >= 0 && missing >= 0 &&
+        efs_decode_chunk(frags, EFS_META_PAGE_SIZE, a, b, missing, page_out,
+                         EFS_META_PAGE_SIZE) == 0)
+        rc = EFS_OK;
+    else if (a >= 0 && b < 0)
+        rc = EFS_ERR_CHECKSUM;
+    free(frag_buf);
+    return rc;
+}
+
+static int load_export_from_prev_slot(const struct efs_export_root *root)
+{
+    if (!root || root->generation == 0 || root->page_count == 0)
+        return EFS_ERR_INVAL;
+
+    uint64_t prev = root->generation - 1;
+    fprintf(stderr,
+            "meta: trying previous dual-slot generation %llu (%u pages)\n",
+            (unsigned long long)prev, root->page_count);
+    fflush(stderr);
+
+    uint8_t (*pages)[EFS_META_PAGE_SIZE] = calloc(root->page_count,
+                                                  EFS_META_PAGE_SIZE);
+    if (!pages)
+        return EFS_ERR_NOMEM;
+
+    for (uint32_t pi = 0; pi < root->page_count; pi++) {
+        uint32_t try_ci[3];
+        int ntry = efs_meta_page_ci_candidates(prev, root->version,
+                                               root->ino_page_count,
+                                               root->chunk_page_count, pi,
+                                               try_ci);
+        int loaded = 0;
+        int rc = EFS_ERR_INVAL;
+        for (int ti = 0; ti < ntry && !loaded; ti++) {
+            rc = load_page_from_chunk_unverified(try_ci[ti], pages[pi]);
+            if (rc == EFS_OK)
+                loaded = 1;
+        }
+        if (!loaded) {
+            fprintf(stderr,
+                    "meta: prev-slot page %u/%u failed rc=%d (%s)\n",
+                    pi, root->page_count, rc, efs_strerror(rc));
+            fflush(stderr);
+            free(pages);
+            return rc;
+        }
+        if ((pi % 1000u) == 0) {
+            fprintf(stderr, "meta: prev-slot loaded %u/%u\n",
+                    pi, root->page_count);
+            fflush(stderr);
+        }
+    }
+
+    size_t blob_len = (size_t)root->page_count * EFS_META_PAGE_SIZE;
+    char *blob = malloc(blob_len);
+    if (!blob) {
+        free(pages);
+        return EFS_ERR_NOMEM;
+    }
+    for (uint32_t i = 0; i < root->page_count; i++)
+        memcpy(blob + (size_t)i * EFS_META_PAGE_SIZE, pages[i],
+               EFS_META_PAGE_SIZE);
+    free(pages);
+
+    pthread_mutex_lock(&g_client.lock);
+    int rc = efs_export_deserialize(&g_client.export, blob, blob_len);
+    if (rc == EFS_OK) {
+        g_client.export.meta_fragmented = 1;
+        if (efs_export_root_copy(&g_client.export.root, root) != EFS_OK)
+            rc = EFS_ERR_NOMEM;
+        else {
+            /* Keep the published generation so the next flush is strictly
+             * newer and replaces the torn root. */
+            g_client.export.root.generation = root->generation;
+            g_client.export.next_ino = g_client.export.next_ino
+                                           ? g_client.export.next_ino
+                                           : root->next_ino;
+            uint32_t cs = root->chunk_size;
+            g_client.export.chunk_size = efs_chunk_size_valid(cs) ? cs
+                                                                  : EFS_DEFAULT_CHUNK_SIZE;
+            g_client.export.features = root->features;
+        }
+    }
+    pthread_mutex_unlock(&g_client.lock);
+    free(blob);
+    if (rc == EFS_OK) {
+        fprintf(stderr,
+                "meta: recovered tables from generation %llu "
+                "(inodes=%llu chunks=%llu); will republish on flush\n",
+                (unsigned long long)prev,
+                (unsigned long long)g_client.export.inode_count,
+                (unsigned long long)g_client.export.chunk_count);
+        fflush(stderr);
+        g_client.meta_dirty = 1;
+    }
+    return rc;
+}
+
 static int load_export_from_root(const struct efs_export_root *root)
 {
     if (root->page_count == 0 || root->blob_len == 0)
@@ -579,6 +740,13 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
                 (unsigned long long)best_root.generation, best_root.page_count,
                 best_root.blob_len);
         int rc = load_export_from_root(&best_root);
+        if (rc != EFS_OK) {
+            fprintf(stderr,
+                    "meta: page reconstruct failed (%s); trying previous dual-slot\n",
+                    efs_strerror(rc));
+            fflush(stderr);
+            rc = load_export_from_prev_slot(&best_root);
+        }
         efs_export_root_free(&best_root);
         if (rc == EFS_OK) {
             free(best_legacy);
