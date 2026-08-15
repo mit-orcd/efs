@@ -105,7 +105,7 @@ void efs_client_table_unlock(void)
 static void grow_inodes_exclusive(void)
 {
     efs_client_table_lock();
-    (void)efs_export_reserve_inodes(&g_client.export, 64);
+    (void)efs_export_reserve_inodes(&g_client.export, 65536);
     efs_client_table_unlock();
 }
 

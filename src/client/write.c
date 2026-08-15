@@ -2509,16 +2509,21 @@ static struct dir_pack *dir_pack_get(efs_ino_t dir_ino, uint32_t chunk_size)
         return NULL;
     p->dir_ino = dir_ino;
     p->live = 1;
-    /* Next pack chunk index: one past the highest existing chunk of dir. */
+    /* Next pack chunk index: one past the highest existing chunk of dir.
+     * Chunk indexes are dense from 0 — do not scan the whole chunk table. */
     uint32_t max_ci = 0;
     int any = 0;
-    for (uint64_t i = 0; i < g_client.export.chunk_count; i++) {
-        if (g_client.export.chunks[i].ino == dir_ino) {
-            if (!any || g_client.export.chunks[i].chunk_index + 1 > max_ci)
-                max_ci = g_client.export.chunks[i].chunk_index + 1;
-            any = 1;
-        }
+    struct efs_chunk_entry ce;
+    pthread_mutex_lock(&g_client.idx_mu);
+    for (uint32_t ci = 0;
+         efs_export_get_chunk(&g_client.export, dir_ino, ci, &ce) == 0;
+         ci++) {
+        any = 1;
+        max_ci = ci + 1;
+        if (ci == UINT32_MAX)
+            break;
     }
+    pthread_mutex_unlock(&g_client.idx_mu);
     p->ci = any ? max_ci : 0;
     return p;
 }

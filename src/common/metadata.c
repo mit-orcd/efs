@@ -356,16 +356,31 @@ static void export_drop_zero_inodes(struct efs_export *ex)
     }
 }
 
-static int export_reindex(struct efs_export *ex)
+/* Size hash tables for capacity, not live count, so a create burst does
+ * not immediately rehash. */
+static uint64_t inode_idx_hint(const struct efs_export *ex)
+{
+    uint64_t n = ex->inode_count ? ex->inode_count : 16;
+    if (ex->inode_capacity > n)
+        n = ex->inode_capacity;
+    return n;
+}
+
+static uint64_t chunk_idx_hint(const struct efs_export *ex)
+{
+    uint64_t n = ex->chunk_count ? ex->chunk_count : 16;
+    if (ex->chunk_capacity > n)
+        n = ex->chunk_capacity;
+    return n;
+}
+
+static int export_reindex_inodes(struct efs_export *ex)
 {
     if (idx_init(&ex->ino_keys, &ex->ino_vals, &ex->ino_mask,
-                 ex->inode_count ? ex->inode_count : 16) != 0)
+                 inode_idx_hint(ex)) != 0)
         return -1;
     if (idx_init(&ex->name_keys, &ex->name_vals, &ex->name_mask,
-                 ex->inode_count ? ex->inode_count : 16) != 0)
-        return -1;
-    if (idx_init(&ex->chunk_keys, &ex->chunk_vals, &ex->chunk_mask,
-                 ex->chunk_count ? ex->chunk_count : 16) != 0)
+                 inode_idx_hint(ex)) != 0)
         return -1;
     for (uint64_t i = 0; i < ex->inode_count; i++) {
         if (ex->inodes[i].ino == 0)
@@ -373,24 +388,38 @@ static int export_reindex(struct efs_export *ex)
         idx_put(ex->ino_keys, ex->ino_vals, ex->ino_mask, ex->inodes[i].ino, i);
         name_idx_put(ex, ex->inodes[i].parent, ex->inodes[i].name, i);
     }
-    for (uint64_t i = 0; i < ex->chunk_count; i++) {
-        chunk_idx_put(ex, ex->chunks[i].ino, ex->chunks[i].chunk_index, i);
-    }
     return 0;
+}
+
+static int export_reindex_chunks(struct efs_export *ex)
+{
+    if (idx_init(&ex->chunk_keys, &ex->chunk_vals, &ex->chunk_mask,
+                 chunk_idx_hint(ex)) != 0)
+        return -1;
+    for (uint64_t i = 0; i < ex->chunk_count; i++)
+        chunk_idx_put(ex, ex->chunks[i].ino, ex->chunks[i].chunk_index, i);
+    return 0;
+}
+
+static int export_reindex(struct efs_export *ex)
+{
+    if (export_reindex_inodes(ex) != 0)
+        return -1;
+    return export_reindex_chunks(ex);
 }
 
 static int export_ensure_inode_idx(struct efs_export *ex)
 {
     if (ex->ino_keys && ex->inode_count * 2 <= ex->ino_mask + 1)
         return 0;
-    return export_reindex(ex);
+    return export_reindex_inodes(ex);
 }
 
 static int export_ensure_chunk_idx(struct efs_export *ex)
 {
     if (ex->chunk_keys && ex->chunk_count * 2 <= ex->chunk_mask + 1)
         return 0;
-    return export_reindex(ex);
+    return export_reindex_chunks(ex);
 }
 
 static struct efs_inode *inode_ptr(struct efs_export *ex, efs_ino_t ino)
