@@ -38,6 +38,35 @@ int main(void)
     expect_u32("lastok", efs_meta_page_chunk_index(0, EFS_META_MAX_PAGES - 1),
                EFS_META_MAX_PAGES - 1);
 
+    /* v4 vs v5 chunk-region bases differ; inode pages at even gen match. */
+    expect_u32("v4 chunk0",
+               efs_meta_assembled_page_ci(0, 4, 4772, 1266, 4772),
+               EFS_META_V4_CHUNK_BASE);
+    expect_u32("v5 chunk0",
+               efs_meta_assembled_page_ci(0, 5, 4772, 1266, 4772),
+               EFS_META_CHUNK_PAGE_BASE);
+    expect_u32("v4 ino0", efs_meta_assembled_page_ci(0, 4, 4772, 1266, 0), 0);
+    expect_u32("v5 ino0", efs_meta_assembled_page_ci(0, 5, 4772, 1266, 0), 0);
+
+    uint32_t cis[3];
+    int nc = efs_meta_page_ci_candidates(0, 5, 4772, 1266, 4772, cis);
+    if (nc < 2 || cis[0] != EFS_META_CHUNK_PAGE_BASE ||
+        cis[1] != EFS_META_V4_CHUNK_BASE) {
+        fprintf(stderr, "FAIL v5-labeled candidates: n=%d ci0=%u ci1=%u\n",
+                nc, cis[0], cis[1]);
+        failures++;
+    }
+    expect_u32("layout v4",
+               efs_meta_page_ci_layout(0, 4772, 1266, 4772,
+                                       EFS_META_V4_CHUNK_BASE),
+               4);
+    expect_u32("layout v5",
+               efs_meta_page_ci_layout(0, 4772, 1266, 4772,
+                                       EFS_META_CHUNK_PAGE_BASE),
+               5);
+    expect_u32("layout ambiguous ino",
+               efs_meta_page_ci_layout(0, 4772, 1266, 0, 0), 0);
+
     if (failures == 0) {
         printf("test_meta_slot: OK\n");
         return 0;

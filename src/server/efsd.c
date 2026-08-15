@@ -457,6 +457,11 @@ int main(int argc, char **argv)
                 server.nwriters, server.storage_path_count);
         return 1;
     }
+    if (server_verify_start(&server) != 0) {
+        fprintf(stderr, "Failed to start fragment verify thread\n");
+        server_writer_pool_stop(&server);
+        return 1;
+    }
     server_start_heartbeat(&server);
     server_start_migration(&server);
     server_start_meta_catchup(&server);
@@ -545,6 +550,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "shutdown: %d conn threads still live after drain "
                 "timeout; forcing teardown\n", g_live_conns);
 
+    server_verify_stop(&server);
     server_writer_pool_stop(&server);
     server_usage_flush_dirty(&server);
 

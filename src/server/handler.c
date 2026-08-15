@@ -255,31 +255,24 @@ void server_handle_conn(int fd)
                         payload_len < sizeof(*req) + req->data_len) {
                         reply = EFS_PUT_CHUNK_ERROR;
                     } else {
+                        /* ACK after length + store. Blake3 is async (verify
+                         * thread); a mismatch heals this replica from peers. */
                         uint8_t zero_ck[EFS_HASH_SIZE];
                         efs_hash_zero_fragment_len(expect, zero_ck);
-                        int sum_ok = 0;
-                        if (memcmp(req->checksum, zero_ck, EFS_HASH_SIZE) == 0) {
-                            /* Trust the cached zero digest on the PUT hot path.
-                             * Writer/store already short-circuit to a shared
-                             * zero page; re-scanning 64KiB+ here dominated
-                             * single-stream dd if=/dev/zero. */
-                            sum_ok = 1;
-                        } else {
-                            uint8_t verify[EFS_HASH_SIZE];
-                            efs_hash(data, expect, verify);
-                            sum_ok = (memcmp(verify, req->checksum,
-                                             EFS_HASH_SIZE) == 0);
-                        }
-                        if (!sum_ok) {
-                            reply = EFS_PUT_CHUNK_ERROR;
-                        } else {
-                            rc = server_write_fragment_with_sum(
-                                g_server, ex, req->ino, req->chunk_index,
-                                req->fragment_index, data, expect, req->checksum);
-                            if (rc == 0)
-                                reply = EFS_PUT_CHUNK_OK;
-                            else if (rc == EFS_ERR_QUOTA)
-                                reply = EFS_PUT_CHUNK_QUOTA_EXCEEDED;
+                        int is_zero = (memcmp(req->checksum, zero_ck,
+                                              EFS_HASH_SIZE) == 0);
+                        rc = server_write_fragment_with_sum(
+                            g_server, ex, req->ino, req->chunk_index,
+                            req->fragment_index, data, expect, req->checksum);
+                        if (rc == 0) {
+                            reply = EFS_PUT_CHUNK_OK;
+                            if (!is_zero)
+                                server_verify_enqueue(
+                                    g_server, req->export_id, req->ino,
+                                    req->chunk_index, req->fragment_index,
+                                    expect, req->checksum);
+                        } else if (rc == EFS_ERR_QUOTA) {
+                            reply = EFS_PUT_CHUNK_QUOTA_EXCEEDED;
                         }
                     }
                 }
@@ -350,8 +343,14 @@ void server_handle_conn(int fd)
                             efs_export_root_free(&root);
                         } else {
                             uint64_t old_gen = ex->root.generation;
-                            uint32_t old_pages = ex->root.page_count;
-                            uint32_t new_pages = root.page_count;
+                            uint32_t old_ino_pc = ex->root.ino_page_count
+                                                      ? ex->root.ino_page_count
+                                                      : ex->root.page_count;
+                            uint32_t old_ch_pc = ex->root.chunk_page_count;
+                            uint32_t new_ino_pc = root.ino_page_count
+                                                      ? root.ino_page_count
+                                                      : root.page_count;
+                            uint32_t new_ch_pc = root.chunk_page_count;
                             int had_frag = ex->meta_fragmented;
                             uint32_t prev_features = ex->root.features;
                             ex->meta_fragmented = 1;
@@ -395,11 +394,13 @@ void server_handle_conn(int fd)
                              * the retired dual-slot generation's out-of-range
                              * pages only (in-range fragments stay for reuse by
                              * dirty-page skip references). */
-                            if (had_frag && old_pages > 0 && old_gen != new_gen)
+                            if (had_frag && (old_ino_pc > 0 || old_ch_pc > 0) &&
+                                old_gen != new_gen)
                                 server_gc_meta_slot_pages(g_server,
                                                           &g_server->exports[0],
-                                                          old_gen, old_pages,
-                                                          new_pages);
+                                                          old_gen, old_ino_pc,
+                                                          old_ch_pc, new_ino_pc,
+                                                          new_ch_pc);
                         }
                     }
                 } else if (efs_meta_blob_is_export(payload, payload_len)) {

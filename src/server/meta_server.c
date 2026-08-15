@@ -152,22 +152,22 @@ static int fetch_meta_fragment(struct efsd_server *s, struct efs_export *ex,
                                          chunk_index, fragment_index, data, checksum);
 }
 
-void server_gc_meta_slot_pages(struct efsd_server *s, struct efs_export *ex,
-                               uint64_t dead_generation, uint32_t page_count,
-                               uint32_t live_page_count)
+static void gc_region_pages(struct efsd_server *s, struct efs_export *ex,
+                            uint64_t dead_generation, int region,
+                            uint32_t old_pc, uint32_t live_pc, uint32_t layout_ver)
 {
-    if (!s || !ex || page_count == 0)
-        return;
-    if (page_count > EFS_META_MAX_PAGES)
-        page_count = EFS_META_MAX_PAGES;
-    if (live_page_count > EFS_META_MAX_PAGES)
-        live_page_count = EFS_META_MAX_PAGES;
-    /* Pages still in range of the live generation must survive: a dirty-page
-     * flush skips re-PUTting unchanged pages, so the live (and next
-     * same-parity) generation reads those fragments from this slot. Only
-     * pages the live generation no longer covers are reclaimed here. */
-    for (uint32_t pi = live_page_count; pi < page_count; pi++) {
-        uint32_t ci = efs_meta_page_chunk_index(dead_generation, pi);
+    uint32_t cap = (region == EFS_META_REGION_CHUNK)
+                       ? (layout_ver >= 5 ? EFS_META_CHUNK_PAGE_MAX
+                                          : EFS_META_V4_CHUNK_MAX)
+                       : (layout_ver >= 5 ? EFS_META_INO_PAGE_MAX
+                                          : EFS_META_V4_INO_MAX);
+    if (old_pc > cap)
+        old_pc = cap;
+    if (live_pc > old_pc)
+        live_pc = old_pc;
+    for (uint32_t pi = live_pc; pi < old_pc; pi++) {
+        uint32_t ci = efs_meta_region_page_chunk_index_ver(dead_generation, region,
+                                                          pi, layout_ver);
         if (ci == UINT32_MAX)
             continue;
         efs_node_id_t placed[EFS_NUM_FRAGMENTS];
@@ -183,6 +183,33 @@ void server_gc_meta_slot_pages(struct efsd_server *s, struct efs_export *ex,
                                          (uint32_t)fi);
         }
     }
+}
+
+void server_gc_meta_slot_pages(struct efsd_server *s, struct efs_export *ex,
+                               uint64_t dead_generation,
+                               uint32_t old_ino_pages, uint32_t old_chunk_pages,
+                               uint32_t live_ino_pages, uint32_t live_chunk_pages)
+{
+    if (!s || !ex)
+        return;
+    /* Legacy single-space: chunk counts are 0; inode count is the old
+     * packed page_count. */
+    int old_v5 = old_ino_pages > EFS_META_V4_INO_MAX ||
+                 old_chunk_pages > EFS_META_V4_CHUNK_MAX;
+    int live_v5 = live_ino_pages > EFS_META_V4_INO_MAX ||
+                  live_chunk_pages > EFS_META_V4_CHUNK_MAX;
+    if (old_v5 != live_v5)
+        return; /* v4↔v5 slot windows differ; leave the retired layout */
+    uint32_t ver = old_v5 ? 5 : 4;
+    if (old_chunk_pages == 0 && live_chunk_pages == 0) {
+        gc_region_pages(s, ex, dead_generation, EFS_META_REGION_INO,
+                        old_ino_pages, live_ino_pages, ver);
+        return;
+    }
+    gc_region_pages(s, ex, dead_generation, EFS_META_REGION_INO,
+                    old_ino_pages, live_ino_pages, ver);
+    gc_region_pages(s, ex, dead_generation, EFS_META_REGION_CHUNK,
+                    old_chunk_pages, live_chunk_pages, ver);
 }
 
 static int put_meta_fragment(struct efsd_server *s, struct efs_export *ex,
@@ -242,6 +269,7 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
     const struct efs_export_root *root = &snap;
     const uint64_t start_gen = root->generation;
     const uint32_t page_count = root->page_count;
+    int saw_v4_ci = 0, saw_v5_ci = 0;
 
     uint8_t (*pages)[EFS_META_PAGE_SIZE] =
         calloc(page_count, EFS_META_PAGE_SIZE);
@@ -297,19 +325,23 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
         if (cached)
             continue;
 
-        /* Prefer dual-slot keys for this generation; fall back to legacy
-         * page_index-only keys for exports flushed before dual-slot. */
-        uint32_t try_ci[2];
-        int ntry = 0;
-        uint32_t slotted = efs_meta_page_chunk_index(start_gen, pi);
-        if (slotted != UINT32_MAX)
-            try_ci[ntry++] = slotted;
-        if (slotted != pi)
-            try_ci[ntry++] = pi;
+        /* Advertised layout, then the other v4↔v5 window, then legacy pi.
+         * A save used to rewrite v4 roots as v5 without moving pages. */
+        uint32_t try_ci[3];
+        int ntry = efs_meta_page_ci_candidates(start_gen, root->version,
+                                               root->ino_page_count,
+                                               root->chunk_page_count, pi,
+                                               try_ci);
 
         int decoded = 0;
         for (int ti = 0; ti < ntry && !decoded; ti++) {
             uint32_t ci = try_ci[ti];
+            uint32_t ci_layout = efs_meta_page_ci_layout(
+                start_gen, root->ino_page_count, root->chunk_page_count, pi,
+                ci);
+            const char *ci_scheme = ci_layout == 5
+                                        ? "v5"
+                                        : (ci_layout == 4 ? "v4" : "legacy");
             efs_node_id_t placed[EFS_NUM_FRAGMENTS];
             pthread_mutex_lock(&s->lock);
             efs_place_fragments(s->nodes, s->node_count, EFS_META_TABLE_INO, ci,
@@ -332,8 +364,7 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
                         fprintf(stderr,
                                 "meta-rebuild: page %u frag %u checksum mismatch "
                                 "(node %u ci=%u scheme=%s)\n",
-                                pi, fi, placed[fi], ci,
-                                ti == 0 && slotted != UINT32_MAX ? "slot" : "legacy");
+                                pi, fi, placed[fi], ci, ci_scheme);
                 } else {
                     fprintf(stderr,
                             "meta-rebuild: page %u frag %u fetch failed rc=%d "
@@ -365,11 +396,17 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
                 efs_decode_chunk(fragments, EFS_META_PAGE_SIZE, a, b, missing,
                                  pages[pi], EFS_META_PAGE_SIZE) == 0) {
                 decoded = 1;
-                if (ci == pi && slotted != pi)
+                if (ci_layout == 4)
+                    saw_v4_ci = 1;
+                else if (ci_layout == 5)
+                    saw_v5_ci = 1;
+                if (ci_layout != 0 &&
+                    ci_layout != (root->version >= 5 ? 5u : 4u))
                     fprintf(stderr,
-                            "meta-rebuild: page %u loaded via legacy "
-                            "chunk_index (gen=%llu)\n",
-                            pi, (unsigned long long)start_gen);
+                            "meta-rebuild: page %u loaded via v%u "
+                            "chunk_index (root claimed v%u gen=%llu)\n",
+                            pi, ci_layout, root->version,
+                            (unsigned long long)start_gen);
 
                 /* Best-effort: rewrite missing/corrupt frags this node owns. */
                 int need_heal = 0;
@@ -471,6 +508,12 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
     ex->meta_fragmented = 1;
     ex->meta_needs_rebuild = 0;
     efs_export_root_move(&ex->root, &snap);
+    /* A poisoned v5 label on v4-resident pages must not stay v5: the next
+     * GET_META / incremental flush would address the empty 32k window. */
+    if (saw_v4_ci && !saw_v5_ci && ex->root.version >= 5)
+        ex->root.version = 4;
+    else if (saw_v5_ci && !saw_v4_ci && ex->root.version < 5)
+        ex->root.version = 5;
     ex->next_ino = ex->root.next_ino;
     if (efs_chunk_size_valid(ex->root.chunk_size))
         ex->chunk_size = ex->root.chunk_size;
@@ -582,9 +625,11 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     size_t blob_len = 0;
     uint64_t new_gen = 1;
     uint64_t old_gen = 0;
-    uint32_t old_pages = 0;
+    uint32_t old_ino_pc = 0, old_ch_pc = 0;
+    uint32_t ino_blob_len = 0, chunk_blob_len = 0;
     pthread_mutex_lock(&s->lock);
-    if (efs_export_serialize(ex, &blob, &blob_len) != EFS_OK) {
+    if (efs_export_serialize_ex(ex, &blob, &blob_len, &ino_blob_len,
+                                &chunk_blob_len) != EFS_OK) {
         pthread_mutex_unlock(&s->lock);
         return -1;
     }
@@ -593,7 +638,9 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
         new_gen = 1;
     if (ex->meta_fragmented) {
         old_gen = ex->root.generation;
-        old_pages = ex->root.page_count;
+        old_ino_pc = ex->root.ino_page_count ? ex->root.ino_page_count
+                                             : ex->root.page_count;
+        old_ch_pc = ex->root.chunk_page_count;
     }
     pthread_mutex_unlock(&s->lock);
 
@@ -609,7 +656,8 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     struct efs_export_root root;
     memset(&root, 0, sizeof(root));
     pthread_mutex_lock(&s->lock);
-    int prc = efs_export_root_prepare(&root, ex, new_gen, (uint32_t)blob_len);
+    int prc = efs_export_root_prepare(&root, ex, new_gen, ino_blob_len,
+                                      chunk_blob_len);
     pthread_mutex_unlock(&s->lock);
     if (prc != EFS_OK) {
         free(blob);
@@ -630,8 +678,18 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
         frag_buf + 2 * EFS_META_FRAGMENT_SIZE
     };
 
-    for (uint32_t pi = 0; pi < root.page_count; pi++) {
-        if (efs_meta_extract_page(blob, (uint32_t)blob_len, pi, page) != EFS_OK) {
+    for (uint32_t packed = 0; packed < root.page_count; packed++) {
+        int region = (packed < root.ino_page_count) ? EFS_META_REGION_INO
+                                                    : EFS_META_REGION_CHUNK;
+        uint32_t pi = (region == EFS_META_REGION_INO)
+                          ? packed
+                          : packed - root.ino_page_count;
+        const char *rbase = (region == EFS_META_REGION_INO)
+                                ? blob
+                                : blob + ino_blob_len;
+        uint32_t rlen = (region == EFS_META_REGION_INO) ? ino_blob_len
+                                                       : chunk_blob_len;
+        if (efs_meta_extract_page(rbase, rlen, pi, page) != EFS_OK) {
             free(page);
             free(frag_buf);
             free(blob);
@@ -643,7 +701,7 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
             efs_hash(fragments[fi], EFS_META_FRAGMENT_SIZE, checksums[fi]);
 
-        uint32_t ci = efs_meta_page_chunk_index(new_gen, pi);
+        uint32_t ci = efs_meta_region_page_chunk_index(new_gen, region, pi);
         if (ci == UINT32_MAX) {
             free(page);
             free(frag_buf);
@@ -709,7 +767,7 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
                 fprintf(stderr,
                         "meta-flush: page %u frag %u put failed rc=%d "
                         "(node %u export=%u ci=%u)\n",
-                        pi, fi, prc, placed[fi], ex->id, ci);
+                        packed, fi, prc, placed[fi], ex->id, ci);
             }
         }
         if (acks < 2) {
@@ -720,7 +778,7 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
             return -1;
         }
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
-            memcpy(efs_export_root_checksum(&root, pi, fi), checksums[fi],
+            memcpy(efs_export_root_checksum(&root, packed, fi), checksums[fi],
                    EFS_HASH_SIZE);
     }
     free(page);
@@ -798,7 +856,9 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
 
     /* Quorum reached: install + persist locally. Persist under lock so a
      * concurrent peer PUT_META cannot free page_checksums mid-fwrite. */
-    uint32_t new_pages = root.page_count;
+    uint32_t new_ino_pc = root.ino_page_count ? root.ino_page_count
+                                              : root.page_count;
+    uint32_t new_ch_pc = root.chunk_page_count;
     pthread_mutex_lock(&s->lock);
     ex->meta_fragmented = 1;
     efs_export_root_move(&ex->root, &root);
@@ -810,8 +870,9 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     /* Retire the previous generation's dual-slot pages (best-effort). Only
      * pages beyond the new generation's page count are dead; in-range
      * fragments stay for dirty-page skip reuse by future same-parity gens. */
-    if (old_pages > 0 && old_gen != new_gen)
-        server_gc_meta_slot_pages(s, ex, old_gen, old_pages, new_pages);
+    if ((old_ino_pc > 0 || old_ch_pc > 0) && old_gen != new_gen)
+        server_gc_meta_slot_pages(s, ex, old_gen, old_ino_pc, old_ch_pc,
+                                  new_ino_pc, new_ch_pc);
     return 0;
 }
 

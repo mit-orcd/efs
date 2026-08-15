@@ -201,6 +201,14 @@ int server_default_writer_threads(void);
 int server_writer_pool_start(struct efsd_server *s);
 void server_writer_pool_stop(struct efsd_server *s);
 
+/* Async Blake3 of a stored fragment vs the client sidecar; heal from peers. */
+int server_verify_start(struct efsd_server *s);
+void server_verify_stop(struct efsd_server *s);
+void server_verify_enqueue(struct efsd_server *s, efs_export_id_t export_id,
+                           efs_ino_t ino, uint32_t chunk_index,
+                           uint32_t fragment_index, uint32_t data_len,
+                           const uint8_t checksum[EFS_HASH_SIZE]);
+
 /* pthread_create with a larger stack (hello_ack / node snapshots are ~16KiB). */
 int efsd_pthread_create(pthread_t *tid, void *(*fn)(void *), void *arg);
 
@@ -262,8 +270,9 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex);
  * in-range fragments are left in place for reuse (they are overwritten by
  * the next same-parity flush that actually changes them). */
 void server_gc_meta_slot_pages(struct efsd_server *s, struct efs_export *ex,
-                               uint64_t dead_generation, uint32_t page_count,
-                               uint32_t live_page_count);
+                               uint64_t dead_generation,
+                               uint32_t old_ino_pages, uint32_t old_chunk_pages,
+                               uint32_t live_ino_pages, uint32_t live_chunk_pages);
 
 /* Rebuild in-memory export tables from meta pages referenced by ex->root. */
 int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *ex);

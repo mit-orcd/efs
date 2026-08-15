@@ -15,6 +15,26 @@ struct efs_client {
     char export_name[EFS_MAX_NAME];
     struct efs_export export;
     pthread_mutex_t lock;
+    /* Per-parent-directory stripes: create/unlink/chmod in different dirs
+     * overlap. g_client.lock stays the rare table lock (realloc / snapshot). */
+#define EFS_DIR_LOCKS 64
+    pthread_mutex_t dir_lock[EFS_DIR_LOCKS];
+    pthread_mutex_t dirty_mu; /* dirty-set growth + dirty-ops counter */
+    pthread_mutex_t idx_mu;   /* inode/name/chunk index mutations */
+    int dir_locks_ready;
+
+    /* Last successful EFSM blob (point 2): patch dirty rows instead of
+     * re-serializing the whole table on a batched flush. */
+    char *meta_cache_blob;      /* header + inode rows */
+    size_t meta_cache_cap;
+    char *meta_cache_ch;        /* chunk rows (separate so ino growth does not memmove) */
+    size_t meta_cache_ch_cap;
+    size_t meta_cache_len;
+    uint32_t meta_cache_ino_len;
+    uint32_t meta_cache_ch_len;
+    uint64_t meta_cache_icount;
+    uint64_t meta_cache_ccount;
+    uint64_t meta_cache_epoch;
 
     /* Inode allocation namespace. When non-zero, new inodes are allocated as
      * (ino_namespace | counter) so that concurrent clients never assign the
@@ -56,9 +76,14 @@ struct efs_client {
      * fragment PUT is skipped and the committed fragment checksums are
      * reused verbatim — the flush's network cost becomes O(dirty pages),
      * not O(table). Only touched by the flush path (g_repl_mu serializes). */
-    uint8_t *meta_slot_hashes[2]; /* meta_slot_pages[p] * EFS_HASH_SIZE */
-    uint8_t *meta_slot_sums[2];   /* meta_slot_pages[p] * 3 * EFS_HASH_SIZE */
-    uint32_t meta_slot_pages[2];
+    /* Logical-page skip tables (index = inode pi, or CHUNK_PAGE_BASE+pj).
+     * Sized EFS_META_MAX_PAGES so growing the inode region cannot shift
+     * chunk-page slots. */
+    uint8_t *meta_slot_hashes[2];
+    uint8_t *meta_slot_sums[2];
+    uint32_t meta_slot_ino_pages[2];
+    uint32_t meta_slot_chunk_pages[2];
+    uint32_t meta_slot_pages[2]; /* ino+chunk; kept for cleanup/compat */
 
     /* Dirty tracking for batched meta flushes (meta_batch only).
      * Inodes: open-addressing set (key 0 = empty).
@@ -82,12 +107,28 @@ struct efs_client {
     int meta_flush_req;
     int meta_flush_stop;
     int meta_flush_started;
+    int meta_flush_force; /* next flush does a full serialize */
 };
 
 /* Mark inode/chunk dirty for the next batched metadata delta flush.
- * No-ops when meta_batch is disabled. Caller must hold g_client.lock. */
+ * No-ops when meta_batch is disabled. Takes dirty_mu internally. */
 void efs_client_mark_ino_dirty(efs_ino_t ino);
 void efs_client_mark_chunk_dirty(efs_ino_t ino, uint32_t chunk_index);
+
+void efs_client_ensure_dir_locks(void);
+void efs_client_lock_dir(efs_ino_t parent);
+void efs_client_unlock_dir(efs_ino_t parent);
+void efs_client_lock_dirs2(efs_ino_t a, efs_ino_t b);
+void efs_client_unlock_dirs2(efs_ino_t a, efs_ino_t b);
+void efs_client_lock_all_dirs(void);
+void efs_client_unlock_all_dirs(void);
+/* Table lock + every dir stripe: realloc / export-wide snapshot. */
+void efs_client_table_lock(void);
+void efs_client_table_unlock(void);
+
+/* Seal a staged small file into its parent directory pack (FUSE release). */
+int efs_client_pack_seal(efs_ino_t ino);
+void efs_client_pack_flush_all(void);
 
 extern struct efs_client g_client;
 
@@ -107,6 +148,11 @@ int efs_client_replicate_metadata(void);
  * until meta_batch_ops changes accumulate (or force!=0). */
 int efs_client_note_meta_change(int force);
 void efs_client_stop_meta_flush(void);
+
+/* Decoded-chunk cache for sub-chunk reads and RMW. */
+int efs_rdcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len);
+void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t len);
+void efs_rdcache_invalidate(efs_ino_t ino, uint32_t ci);
 
 /* Enable coalesced metadata replication for the FUSE client. */
 void efs_client_enable_meta_batch(uint32_t every_n_ops);

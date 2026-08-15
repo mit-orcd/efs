@@ -150,6 +150,56 @@ int main(void)
         expect_u64("norollup root.tree_bytes", root.tree_bytes, 75);
     }
 
+    /* Child-vec table at capacity used to leave needs_inode_grow stuck
+     * because reserve_inodes ignored it — create then spun and failed. */
+    ex.child_vec_cap = ex.child_vec_count;
+    if (!efs_export_needs_inode_grow(&ex)) {
+        fprintf(stderr, "FAIL expected needs_grow when child vecs full\n");
+        failures++;
+    }
+    if (efs_export_reserve_inodes(&ex, 64) != 0) {
+        fprintf(stderr, "FAIL reserve_inodes with full child vecs\n");
+        failures++;
+    }
+    if (efs_export_needs_inode_grow(&ex)) {
+        fprintf(stderr, "FAIL needs_grow after child-vec reserve "
+                "(count=%llu cap=%llu)\n",
+                (unsigned long long)ex.child_vec_count,
+                (unsigned long long)ex.child_vec_cap);
+        failures++;
+    }
+    efs_ino_t extra = efs_export_create(&ex, EFS_ROOT_INO, S_IFDIR | 0755, 0, 0,
+                                       "extra-after-vec-full");
+    if (!extra) {
+        fprintf(stderr, "FAIL create after child-vec reserve\n");
+        failures++;
+    }
+
+    /* Two ino namespaces with the same low counters must both resolve.
+     * A raw (ino & mask) index collapses tag<<40 and walks the first
+     * namespace's run on every second-namespace lookup. */
+    {
+        struct efs_export ns;
+        efs_export_init(&ns, 2, "ns");
+        efs_ino_t a = efs_export_create_with_ino(&ns, (1ULL << 40) | 5,
+                                                EFS_ROOT_INO, S_IFREG | 0644,
+                                                0, 0, "a");
+        efs_ino_t b = efs_export_create_with_ino(&ns, (2ULL << 40) | 5,
+                                                EFS_ROOT_INO, S_IFREG | 0644,
+                                                0, 0, "b");
+        struct efs_inode ia, ib;
+        if (!a || !b ||
+            efs_export_get_inode(&ns, a, &ia) != 0 ||
+            efs_export_get_inode(&ns, b, &ib) != 0 ||
+            ia.ino != a || ib.ino != b ||
+            strcmp(ia.name, "a") != 0 || strcmp(ib.name, "b") != 0) {
+            fprintf(stderr, "FAIL two-namespace ino index a=%llu b=%llu\n",
+                    (unsigned long long)a, (unsigned long long)b);
+            failures++;
+        }
+        efs_export_free(&ns);
+    }
+
     efs_export_free(&ex);
 
     if (failures == 0) {

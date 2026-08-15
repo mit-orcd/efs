@@ -46,7 +46,8 @@ TEST_BINS = tests/test_erasure tests/test_placement tests/test_integration tests
 
 SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/handler.c \
               src/server/cluster.c src/server/meta_server.c src/server/migrate.c \
-              src/server/peer_pool.c src/server/writer.c src/server/bench_local.c
+              src/server/peer_pool.c src/server/writer.c src/server/verify.c \
+              src/server/bench_local.c
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 
 CLIENT_SRCS = src/client/efs_fuse.c

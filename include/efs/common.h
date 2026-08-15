@@ -65,12 +65,20 @@
  * High bit set so it cannot collide with client inode namespaces. */
 #define EFS_META_TABLE_INO   ((efs_ino_t)0x8000000000000002ULL)
 /* Max pages for a fragmented metadata blob (each page = EFS_META_PAGE_SIZE).
- * 8192 × 128 KiB = 1 GiB — enough for ~millions of inodes (ImageNet-scale). */
-#define EFS_META_MAX_PAGES   8192
+ * 32768 × 128 KiB = 4 GiB — two-region EFSR v5 (16k ino + 16k chunk pages). */
+#define EFS_META_MAX_PAGES   32768
+#define EFS_META_INO_PAGE_MAX      16384
+#define EFS_META_CHUNK_PAGE_BASE   16384
+#define EFS_META_CHUNK_PAGE_MAX    (EFS_META_MAX_PAGES - EFS_META_CHUNK_PAGE_BASE)
 /* Dual-slot meta pages: generation parity selects which on-disk chunk_index
  * range is written. Flush writes the new gen's slot only, then flips EFSR so
  * a torn flush cannot clobber the live generation. */
 #define EFS_META_SLOT_STRIDE EFS_META_MAX_PAGES
+/* On-disk EFSR v4 used a smaller window. Load still maps those pages. */
+#define EFS_META_V4_MAX_PAGES    8192
+#define EFS_META_V4_INO_MAX      6144
+#define EFS_META_V4_CHUNK_BASE   6144
+#define EFS_META_V4_CHUNK_MAX    2048
 /* On-disk inode directory sharding: five base-10000 groups (0000-9999)
  * encode any uint64 ino uniquely (10^20 > 2^64). seg[0] is least-significant. */
 #define EFS_INO_PATH_SEGS    5
@@ -117,15 +125,127 @@ static inline uint32_t efs_frag_size(uint32_t chunk_size)
     return chunk_size / 2;
 }
 
-/* Map (generation, page) → fragment chunk_index. page must be < EFS_META_MAX_PAGES.
+/* Map (generation, page) → fragment chunk_index. page must be < stride.
  * Returns UINT32_MAX if page_index is out of range. */
+static inline uint32_t efs_meta_page_chunk_index_stride(uint64_t generation,
+                                                        uint32_t page_index,
+                                                        uint32_t stride)
+{
+    if (page_index >= stride)
+        return UINT32_MAX;
+    return page_index +
+           (uint32_t)((generation & 1ULL) * (uint64_t)stride);
+}
+
 static inline uint32_t efs_meta_page_chunk_index(uint64_t generation,
                                                 uint32_t page_index)
 {
-    if (page_index >= EFS_META_MAX_PAGES)
+    return efs_meta_page_chunk_index_stride(generation, page_index,
+                                           EFS_META_SLOT_STRIDE);
+}
+
+#define EFS_META_REGION_INO   0
+#define EFS_META_REGION_CHUNK 1
+
+/* version < 5: EFSR v4 8k-window. version >= 5: 32k-window. */
+static inline uint32_t efs_meta_region_page_chunk_index_ver(uint64_t generation,
+                                                            int region,
+                                                            uint32_t page_index,
+                                                            uint32_t version)
+{
+    uint32_t base, ino_max, ch_max, stride;
+    if (version >= 5) {
+        base = EFS_META_CHUNK_PAGE_BASE;
+        ino_max = EFS_META_INO_PAGE_MAX;
+        ch_max = EFS_META_CHUNK_PAGE_MAX;
+        stride = EFS_META_SLOT_STRIDE;
+    } else {
+        base = EFS_META_V4_CHUNK_BASE;
+        ino_max = EFS_META_V4_INO_MAX;
+        ch_max = EFS_META_V4_CHUNK_MAX;
+        stride = EFS_META_V4_MAX_PAGES;
+    }
+    uint32_t logical = (region == EFS_META_REGION_CHUNK)
+                           ? (base + page_index)
+                           : page_index;
+    uint32_t lim = (region == EFS_META_REGION_CHUNK) ? ch_max : ino_max;
+    if (page_index >= lim)
         return UINT32_MAX;
-    return page_index +
-           (uint32_t)((generation & 1ULL) * (uint64_t)EFS_META_SLOT_STRIDE);
+    return efs_meta_page_chunk_index_stride(generation, logical, stride);
+}
+
+/* Map (generation, region, page-in-region) → fragment chunk_index (v5). */
+static inline uint32_t efs_meta_region_page_chunk_index(uint64_t generation,
+                                                        int region,
+                                                        uint32_t page_index)
+{
+    return efs_meta_region_page_chunk_index_ver(generation, region, page_index, 5);
+}
+
+/* On-disk chunk_index for assembled-blob page `pi` under a given EFSR layout. */
+static inline uint32_t efs_meta_assembled_page_ci(uint64_t generation,
+                                                  uint32_t version,
+                                                  uint32_t ino_page_count,
+                                                  uint32_t chunk_page_count,
+                                                  uint32_t pi)
+{
+    if (chunk_page_count > 0) {
+        int region = (pi < ino_page_count) ? EFS_META_REGION_INO
+                                           : EFS_META_REGION_CHUNK;
+        uint32_t rpi = (region == EFS_META_REGION_INO)
+                           ? pi
+                           : (pi - ino_page_count);
+        return efs_meta_region_page_chunk_index_ver(generation, region, rpi,
+                                                    version);
+    }
+    uint32_t stride = (version >= 5) ? EFS_META_SLOT_STRIDE
+                                     : EFS_META_V4_MAX_PAGES;
+    return efs_meta_page_chunk_index_stride(generation, pi, stride);
+}
+
+/* Candidate chunk_index values for a meta page: advertised layout, the other
+ * v4↔v5 window, then pre-dual-slot `pi`. Returns 1–3 unique entries. */
+static inline int efs_meta_page_ci_candidates(uint64_t generation,
+                                              uint32_t version,
+                                              uint32_t ino_page_count,
+                                              uint32_t chunk_page_count,
+                                              uint32_t pi, uint32_t out[3])
+{
+    uint32_t pref = version >= 5 ? 5u : 4u;
+    uint32_t alt = pref == 5u ? 4u : 5u;
+    uint32_t a = efs_meta_assembled_page_ci(generation, pref, ino_page_count,
+                                            chunk_page_count, pi);
+    uint32_t b = efs_meta_assembled_page_ci(generation, alt, ino_page_count,
+                                            chunk_page_count, pi);
+    int n = 0;
+    if (a != UINT32_MAX)
+        out[n++] = a;
+    if (b != UINT32_MAX && b != a)
+        out[n++] = b;
+    if (pi != a && pi != b && n < 3)
+        out[n++] = pi;
+    return n;
+}
+
+/* Layout version that produced `ci`, or 0 if legacy / unknown. */
+static inline uint32_t efs_meta_page_ci_layout(uint64_t generation,
+                                               uint32_t ino_page_count,
+                                               uint32_t chunk_page_count,
+                                               uint32_t pi, uint32_t ci)
+{
+    uint32_t c5 = efs_meta_assembled_page_ci(generation, 5, ino_page_count,
+                                             chunk_page_count, pi);
+    uint32_t c4 = efs_meta_assembled_page_ci(generation, 4, ino_page_count,
+                                             chunk_page_count, pi);
+    /* Even-gen inode pages share the same ci in v4 and v5. Those must not
+     * count as evidence of either layout or a poisoned v5 label sticks. */
+    if (c5 == c4)
+        return 0;
+    if (ci == c5)
+        return 5;
+    if (ci == c4)
+        return 4;
+    return 0;
 }
 
 /* True if size is a power of two in [EFS_MIN_CHUNK_SIZE, EFS_MAX_CHUNK_SIZE]. */

@@ -1150,8 +1150,9 @@ static int efs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
  * small worker pool issue overlapping write_no_replicate calls. Single-stream
  * dd+conv=fsync still waits for durability on fsync/release, but PUTs from
  * consecutive syscalls overlap — needed to approach store-bench throughput. */
-#define EFS_WB_DEPTH   32
-#define EFS_WB_WORKERS 4
+#define EFS_WB_DEPTH        256
+#define EFS_WB_WORKERS_MAX  64
+#define EFS_WB_RESERVED     4
 
 struct efs_wb_job {
     efs_ino_t ino;
@@ -1193,7 +1194,8 @@ static struct {
     int err;
     int ready;
     int shutdown;
-    pthread_t workers[EFS_WB_WORKERS];
+    pthread_t workers[EFS_WB_WORKERS_MAX];
+    int nworkers;
 } g_wb = {
     .mu = PTHREAD_MUTEX_INITIALIZER,
     .not_empty = PTHREAD_COND_INITIALIZER,
@@ -1271,13 +1273,27 @@ static void *efs_wb_thread(void *arg)
     }
 }
 
+static int wb_worker_count(void)
+{
+    long n = sysconf(_SC_NPROCESSORS_ONLN);
+    if (n < 1)
+        n = 4;
+    n -= EFS_WB_RESERVED;
+    if (n < 4)
+        n = 4;
+    if (n > EFS_WB_WORKERS_MAX)
+        n = EFS_WB_WORKERS_MAX;
+    return (int)n;
+}
+
 static int efs_wb_ensure(void)
 {
     if (g_wb.ready)
         return 0;
     pthread_mutex_lock(&g_wb.mu);
     if (!g_wb.ready) {
-        for (int i = 0; i < EFS_WB_WORKERS; i++) {
+        g_wb.nworkers = wb_worker_count();
+        for (int i = 0; i < g_wb.nworkers; i++) {
             if (pthread_create(&g_wb.workers[i], NULL, efs_wb_thread, NULL) != 0) {
                 g_wb.shutdown = 1;
                 pthread_cond_broadcast(&g_wb.not_empty);
@@ -1627,9 +1643,9 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
 
 static void efs_fuse_sync_rollups(void)
 {
-    pthread_mutex_lock(&g_client.lock);
+    efs_client_table_lock();
     efs_export_ensure_rollups(&g_client.export);
-    pthread_mutex_unlock(&g_client.lock);
+    efs_client_table_unlock();
 }
 
 static int efs_fuse_fsync(const char *path, int isdatasync,
@@ -1648,6 +1664,12 @@ static int efs_fuse_fsync(const char *path, int isdatasync,
         efs_fuse_log_err("fsync", rc, 0, 0, 0, path);
         return -EIO;
     }
+    {
+        struct efs_inode ino;
+        if (efs_client_lookup(path, &ino) == 0 && !efs_mode_is_dir(ino.mode))
+            (void)efs_client_pack_seal(ino.ino);
+    }
+    efs_client_pack_flush_all();
     efs_client_note_meta_change(1);
     return 0;
 }
@@ -1655,9 +1677,11 @@ static int efs_fuse_fsync(const char *path, int isdatasync,
 static int efs_fuse_flush(const char *path, struct fuse_file_info *fi)
 {
     (void)fi;
+    /* Close: drain this file's coalesced run and the WB queue. Rollups and
+     * a forced meta flush wait for fsync/unmount — doing them on every fio
+     * close serialized the 2M-inode table under the table lock. */
     coal_flush_path(path);
     int rc = efs_wb_sync();
-    efs_fuse_sync_rollups();
     if (rc == EFS_ERR_QUOTA) {
         efs_fuse_log_err("flush", rc, 0, 0, 0, path);
         return -ENOSPC;
@@ -1667,6 +1691,16 @@ static int efs_fuse_flush(const char *path, struct fuse_file_info *fi)
         return -EIO;
     }
     return 0;
+}
+
+static int fuse_create_errno(efs_ino_t parent, const char *name)
+{
+    efs_client_lock_dir(parent);
+    pthread_mutex_lock(&g_client.idx_mu);
+    int found = efs_export_lookup(&g_client.export, parent, name, NULL);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(parent);
+    return found == EFS_OK ? -EEXIST : -EIO;
 }
 
 static int efs_fuse_create(const char *path, mode_t mode, struct fuse_file_info *fi)
@@ -1683,8 +1717,13 @@ static int efs_fuse_create(const char *path, mode_t mode, struct fuse_file_info 
     struct fuse_context *ctx = fuse_get_context();
     efs_ino_t ino = efs_client_create(parent.ino, name, S_IFREG | mode,
                                       ctx->uid, ctx->gid);
-    if (ino == 0)
-        return -EEXIST;
+    if (ino == 0) {
+        int e = fuse_create_errno(parent.ino, name);
+        if (e != -EEXIST)
+            fprintf(stderr, "create %s failed (%s)\n", path,
+                    e == -EIO ? "EIO" : "err");
+        return e;
+    }
     return 0;
 }
 
@@ -1702,7 +1741,7 @@ static int efs_fuse_mkdir(const char *path, mode_t mode)
     efs_ino_t ino = efs_client_create(parent.ino, name, S_IFDIR | mode,
                                       ctx->uid, ctx->gid);
     if (ino == 0)
-        return -EEXIST;
+        return fuse_create_errno(parent.ino, name);
     return 0;
 }
 
@@ -1867,7 +1906,7 @@ static int efs_fuse_symlink(const char *link, const char *path)
     efs_ino_t ino = efs_client_create(parent.ino, name, S_IFLNK | 0777,
                                       ctx->uid, ctx->gid);
     if (ino == 0)
-        return -EEXIST;
+        return fuse_create_errno(parent.ino, name);
 
     size_t len = strlen(link);
     if (len > 0) {
@@ -2039,6 +2078,11 @@ static int efs_fuse_release(const char *path, struct fuse_file_info *fi)
         efs_fuse_log_err("release", rc, 0, 0, 0, path);
         return -EIO;
     }
+    {
+        struct efs_inode ino;
+        if (efs_client_lookup(path, &ino) == 0 && !efs_mode_is_dir(ino.mode))
+            (void)efs_client_pack_seal(ino.ino);
+    }
     /* Coalesced: only flushes every meta_batch_ops releases/creates. */
     efs_client_note_meta_change(0);
     return 0;
@@ -2049,12 +2093,13 @@ static void efs_fuse_destroy(void *userdata)
     (void)userdata;
     coal_flush_all();
     (void)efs_wb_sync();
+    efs_client_pack_flush_all();
     if (g_wb.ready) {
         pthread_mutex_lock(&g_wb.mu);
         g_wb.shutdown = 1;
         pthread_cond_broadcast(&g_wb.not_empty);
         pthread_mutex_unlock(&g_wb.mu);
-        for (int i = 0; i < EFS_WB_WORKERS; i++)
+        for (int i = 0; i < g_wb.nworkers; i++)
             pthread_join(g_wb.workers[i], NULL);
         g_wb.ready = 0;
         g_wb.shutdown = 0;
@@ -2116,6 +2161,10 @@ static void *efs_fuse_init(struct fuse_conn_info *conn)
                 want = (16u << 20);
             if (conn->max_write == 0 || conn->max_write > want)
                 conn->max_write = want;
+            /* 8+ fio jobs × pipelined chunk GETs need more than the
+             * libfuse default (12) outstanding FUSE requests. */
+            if (conn->max_background < 128)
+                conn->max_background = 128;
         }
 #ifdef FUSE_CAP_WRITEBACK_CACHE
         if (conn->capable & FUSE_CAP_WRITEBACK_CACHE)
@@ -2352,6 +2401,26 @@ int main(int argc, char **argv)
     }
     printf("export id=%u name=%s\n", g_client.export_id,
            g_client.export.name[0] ? g_client.export.name : g_client.export_name);
+    {
+        struct efs_inode root;
+        int rrc = efs_export_get_inode(&g_client.export, EFS_ROOT_INO, &root);
+        uint64_t z = 0, ones = 0;
+        for (uint64_t i = 0; i < g_client.export.inode_count; i++) {
+            efs_ino_t n = g_client.export.inodes[i].ino;
+            if (n == 0)
+                z++;
+            else if (n == EFS_ROOT_INO)
+                ones++;
+        }
+        printf("meta ready gen=%llu ver=%u inodes=%llu chunks=%llu "
+               "root_get=%d mode=%o ino0=%llu ino1=%llu\n",
+               (unsigned long long)g_client.export.root.generation,
+               g_client.export.root.version,
+               (unsigned long long)g_client.export.inode_count,
+               (unsigned long long)g_client.export.chunk_count, rrc,
+               rrc == 0 ? root.mode : 0,
+               (unsigned long long)z, (unsigned long long)ones);
+    }
     fflush(stdout);
 
     char *fuse_argv[64];

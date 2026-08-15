@@ -42,6 +42,11 @@ struct efs_inode {
     uint64_t imm_files, imm_dirs, tree_files, tree_dirs;
     uint64_t imm_bytes, tree_bytes;
     uint64_t imm_tmin, imm_tmax, tree_tmin, tree_tmax;
+    /* Small-file pack (EFSM v5): pack_ino==0 means this file has its own
+     * chunks. Otherwise payload lives in pack_ino's data at [off, off+len). */
+    efs_ino_t pack_ino;
+    uint32_t pack_off;
+    uint32_t pack_len;
 };
 
 /* In-memory parent → child slot list (not serialized). */
@@ -60,10 +65,16 @@ struct efs_export_root {
     char name[EFS_MAX_NAME];
     uint64_t next_ino;
     uint64_t generation;
-    uint32_t blob_len;   /* length of the EFSM blob packed into pages */
-    uint32_t page_count; /* ceil(blob_len / EFS_META_PAGE_SIZE) */
+    uint32_t blob_len;   /* ino_blob_len + chunk_blob_len */
+    uint32_t page_count; /* ino_page_count + chunk_page_count */
     uint32_t chunk_size; /* data chunk size for this export */
     uint32_t features;   /* EFS_FEATURE_* bitmask (EFSR v3+) */
+    /* EFSR v4: two-region page counts. v1–v3 leave chunk_* at 0 and treat
+     * the whole blob as the inode region (legacy single-space). */
+    uint32_t ino_blob_len;
+    uint32_t chunk_blob_len;
+    uint32_t ino_page_count;
+    uint32_t chunk_page_count;
     uint8_t *page_checksums;
 };
 
@@ -117,8 +128,18 @@ struct efs_export {
     uint8_t *pending_rollup_touch;
     uint64_t pending_rollup_count;
     uint64_t pending_rollup_cap;
+    /* Bumped when inode/chunk rows are swap-removed so incremental meta
+     * serialize knows the cached blob layout is stale. */
+    uint64_t layout_epoch;
     struct efs_export_root root;
 };
+
+/* EFSM v5 wire sizes (fixed-width; keep in sync with metadata.c). */
+#define EFS_META_HDR_SIZE     284
+#define EFS_INODE_WIRE_SIZE   420
+#define EFS_CHUNK_WIRE_SIZE   120
+#define EFS_ROLLUP_TOUCH      1
+#define EFS_ROLLUP_CREATE     2
 
 /* Initialize an empty export. */
 void efs_export_init(struct efs_export *ex, efs_export_id_t id, const char *name);
@@ -218,8 +239,24 @@ typedef int (*efs_child_cb)(struct efs_export *ex, uint64_t slot, void *arg);
 int efs_export_foreach_child(struct efs_export *ex, efs_ino_t parent,
                              efs_child_cb cb, void *arg);
 
-/* Serialize export metadata to a memory buffer. Caller must free *buf. */
+/* Serialize export metadata to a memory buffer. Caller must free *buf.
+ * v5 layout: fixed-size inode records, then chunk records. Optional
+ * *ino_blob_len / *chunk_blob_len return the two-region split (header+inodes
+ * vs chunks) so a flush can page them in disjoint index spaces. */
 int efs_export_serialize(struct efs_export *ex, char **buf, size_t *len);
+int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
+                            uint32_t *ino_blob_len, uint32_t *chunk_blob_len);
+void efs_export_pack_header(const struct efs_export *ex, uint8_t out[EFS_META_HDR_SIZE]);
+void efs_export_pack_inode(const struct efs_inode *ino, uint8_t out[EFS_INODE_WIRE_SIZE]);
+void efs_export_pack_chunk(const struct efs_chunk_entry *ce,
+                           uint8_t out[EFS_CHUNK_WIRE_SIZE]);
+int efs_export_inode_slot(struct efs_export *ex, efs_ino_t ino, uint64_t *slot);
+int efs_export_chunk_slot(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index,
+                          uint64_t *slot);
+int efs_export_needs_inode_grow(const struct efs_export *ex);
+int efs_export_needs_chunk_grow(const struct efs_export *ex);
+int efs_export_reserve_inodes(struct efs_export *ex, uint64_t extra);
+int efs_export_reserve_chunks(struct efs_export *ex, uint64_t extra);
 
 /* Deserialize export metadata, replacing current contents. */
 int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len);
@@ -255,11 +292,14 @@ int efs_export_root_serialize(const struct efs_export_root *root,
 int efs_export_root_deserialize(struct efs_export_root *root,
                                 const char *buf, size_t len);
 
-/* Fill root header from export (allocates page_checksums for page_count). */
+/* Fill root header from export (allocates page_checksums for page_count).
+ * Two-region: pass the split lengths from efs_export_serialize_ex. A legacy
+ * single-space flush can pass chunk_blob_len=0. */
 int efs_export_root_prepare(struct efs_export_root *root,
                             const struct efs_export *ex,
                             uint64_t generation,
-                            uint32_t blob_len);
+                            uint32_t ino_blob_len,
+                            uint32_t chunk_blob_len);
 
 /* Free page_checksums; safe on zeroed roots. */
 void efs_export_root_free(struct efs_export_root *root);

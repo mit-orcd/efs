@@ -17,6 +17,99 @@ static uint64_t now(void)
     return (uint64_t)ts.tv_sec;
 }
 
+void efs_client_ensure_dir_locks(void)
+{
+    if (g_client.dir_locks_ready)
+        return;
+    static pthread_mutex_t init_mu = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&init_mu);
+    if (!g_client.dir_locks_ready) {
+        for (int i = 0; i < EFS_DIR_LOCKS; i++)
+            pthread_mutex_init(&g_client.dir_lock[i], NULL);
+        pthread_mutex_init(&g_client.dirty_mu, NULL);
+        pthread_mutex_init(&g_client.idx_mu, NULL);
+        g_client.dir_locks_ready = 1;
+    }
+    pthread_mutex_unlock(&init_mu);
+}
+
+static int dir_stripe(efs_ino_t parent)
+{
+    return (int)((uint64_t)parent % EFS_DIR_LOCKS);
+}
+
+void efs_client_lock_dir(efs_ino_t parent)
+{
+    efs_client_ensure_dir_locks();
+    pthread_mutex_lock(&g_client.dir_lock[dir_stripe(parent)]);
+}
+
+void efs_client_unlock_dir(efs_ino_t parent)
+{
+    pthread_mutex_unlock(&g_client.dir_lock[dir_stripe(parent)]);
+}
+
+void efs_client_lock_dirs2(efs_ino_t a, efs_ino_t b)
+{
+    efs_client_ensure_dir_locks();
+    int ia = dir_stripe(a), ib = dir_stripe(b);
+    if (ia == ib) {
+        pthread_mutex_lock(&g_client.dir_lock[ia]);
+        return;
+    }
+    if (ia < ib) {
+        pthread_mutex_lock(&g_client.dir_lock[ia]);
+        pthread_mutex_lock(&g_client.dir_lock[ib]);
+    } else {
+        pthread_mutex_lock(&g_client.dir_lock[ib]);
+        pthread_mutex_lock(&g_client.dir_lock[ia]);
+    }
+}
+
+void efs_client_unlock_dirs2(efs_ino_t a, efs_ino_t b)
+{
+    int ia = dir_stripe(a), ib = dir_stripe(b);
+    if (ia == ib) {
+        pthread_mutex_unlock(&g_client.dir_lock[ia]);
+        return;
+    }
+    pthread_mutex_unlock(&g_client.dir_lock[ia]);
+    pthread_mutex_unlock(&g_client.dir_lock[ib]);
+}
+
+void efs_client_lock_all_dirs(void)
+{
+    efs_client_ensure_dir_locks();
+    for (int i = 0; i < EFS_DIR_LOCKS; i++)
+        pthread_mutex_lock(&g_client.dir_lock[i]);
+}
+
+void efs_client_unlock_all_dirs(void)
+{
+    for (int i = EFS_DIR_LOCKS - 1; i >= 0; i--)
+        pthread_mutex_unlock(&g_client.dir_lock[i]);
+}
+
+void efs_client_table_lock(void)
+{
+    pthread_mutex_lock(&g_client.lock);
+    efs_client_lock_all_dirs();
+}
+
+void efs_client_table_unlock(void)
+{
+    efs_client_unlock_all_dirs();
+    pthread_mutex_unlock(&g_client.lock);
+}
+
+static void grow_inodes_exclusive(void)
+{
+    efs_client_table_lock();
+    (void)efs_export_reserve_inodes(&g_client.export, 64);
+    efs_client_table_unlock();
+}
+
+
 int efs_client_lookup(const char *path, struct efs_inode *out)
 {
     if (!path || path[0] != '/')
@@ -24,9 +117,9 @@ int efs_client_lookup(const char *path, struct efs_inode *out)
 
     efs_ino_t parent = EFS_ROOT_INO;
     if (strcmp(path, "/") == 0) {
-        pthread_mutex_lock(&g_client.lock);
+        efs_client_lock_dir(EFS_ROOT_INO);
         int rc = efs_export_get_inode(&g_client.export, EFS_ROOT_INO, out);
-        pthread_mutex_unlock(&g_client.lock);
+        efs_client_unlock_dir(EFS_ROOT_INO);
         return rc;
     }
 
@@ -40,11 +133,16 @@ int efs_client_lookup(const char *path, struct efs_inode *out)
     char *save = NULL;
     char *part = strtok_r(pbuf, "/", &save);
 
-    pthread_mutex_lock(&g_client.lock);
+    efs_client_ensure_dir_locks();
     int rc = EFS_ERR_NOT_FOUND;
     while (part) {
+        efs_client_lock_dir(parent);
+        pthread_mutex_lock(&g_client.idx_mu);
         struct efs_inode child;
-        if (efs_export_lookup(&g_client.export, parent, part, &child) != 0) {
+        int lrc = efs_export_lookup(&g_client.export, parent, part, &child);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(parent);
+        if (lrc != 0) {
             rc = EFS_ERR_NOT_FOUND;
             break;
         }
@@ -53,7 +151,6 @@ int efs_client_lookup(const char *path, struct efs_inode *out)
         rc = EFS_OK;
         part = strtok_r(NULL, "/", &save);
     }
-    pthread_mutex_unlock(&g_client.lock);
 
     return rc;
 }
@@ -61,23 +158,41 @@ int efs_client_lookup(const char *path, struct efs_inode *out)
 efs_ino_t efs_client_create(efs_ino_t parent, const char *name, uint32_t mode,
                             uid_t uid, gid_t gid)
 {
-    pthread_mutex_lock(&g_client.lock);
-    efs_ino_t ino;
-    if (g_client.ino_namespace != 0) {
-        /* Allocate from this client's private namespace so concurrent clients
-         * can never assign the same ino to different files. */
-        efs_ino_t candidate = g_client.ino_namespace | (g_client.ino_counter++);
-        ino = efs_export_create_with_ino(&g_client.export, candidate, parent,
-                                         mode, uid, gid, name);
-    } else {
-        ino = efs_export_create(&g_client.export, parent, mode, uid, gid, name);
+    efs_ino_t ino = 0;
+    for (int attempt = 0; attempt < 8; attempt++) {
+        if (efs_export_needs_inode_grow(&g_client.export))
+            grow_inodes_exclusive();
+        efs_client_lock_dir(parent);
+        pthread_mutex_lock(&g_client.idx_mu);
+        if (efs_export_needs_inode_grow(&g_client.export)) {
+            pthread_mutex_unlock(&g_client.idx_mu);
+            efs_client_unlock_dir(parent);
+            continue;
+        }
+        if (efs_export_lookup(&g_client.export, parent, name, NULL) == EFS_OK) {
+            pthread_mutex_unlock(&g_client.idx_mu);
+            efs_client_unlock_dir(parent);
+            return 0;
+        }
+        if (g_client.ino_namespace != 0) {
+            efs_ino_t candidate = g_client.ino_namespace | (g_client.ino_counter++);
+            ino = efs_export_create_with_ino(&g_client.export, candidate, parent,
+                                             mode, uid, gid, name);
+        } else {
+            ino = efs_export_create(&g_client.export, parent, mode, uid, gid, name);
+        }
+        if (ino != 0)
+            efs_export_set_mtime(&g_client.export, parent, now());
+        pthread_mutex_unlock(&g_client.idx_mu);
+        if (ino != 0) {
+            efs_client_mark_ino_dirty(ino);
+            efs_client_mark_ino_dirty(parent);
+            efs_client_unlock_dir(parent);
+            break;
+        }
+        efs_client_unlock_dir(parent);
+        /* ino collision or a failed idx insert: try the next candidate */
     }
-    if (ino != 0) {
-        efs_export_set_mtime(&g_client.export, parent, now());
-        efs_client_mark_ino_dirty(ino);
-        efs_client_mark_ino_dirty(parent);
-    }
-    pthread_mutex_unlock(&g_client.lock);
     if (ino != 0)
         efs_client_note_meta_change(0);
     return ino;
@@ -85,11 +200,13 @@ efs_ino_t efs_client_create(efs_ino_t parent, const char *name, uint32_t mode,
 
 int efs_client_chmod(efs_ino_t ino, uint32_t mode)
 {
-    pthread_mutex_lock(&g_client.lock);
+    efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
     int rc = efs_export_set_mode(&g_client.export, ino, mode);
+    pthread_mutex_unlock(&g_client.idx_mu);
     if (rc == 0)
         efs_client_mark_ino_dirty(ino);
-    pthread_mutex_unlock(&g_client.lock);
+    efs_client_unlock_dir(ino);
     /* Mode is already applied locally; a later meta flush failure must not
      * surface as chmod EINVAL (ImageNet-scale batches can temporarily exceed
      * caps or hit transient quorum). */
@@ -100,11 +217,13 @@ int efs_client_chmod(efs_ino_t ino, uint32_t mode)
 
 int efs_client_chown(efs_ino_t ino, uid_t uid, gid_t gid)
 {
-    pthread_mutex_lock(&g_client.lock);
+    efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
     int rc = efs_export_set_owner(&g_client.export, ino, uid, gid);
+    pthread_mutex_unlock(&g_client.idx_mu);
     if (rc == 0)
         efs_client_mark_ino_dirty(ino);
-    pthread_mutex_unlock(&g_client.lock);
+    efs_client_unlock_dir(ino);
     if (rc == 0)
         rc = efs_client_note_meta_change(0);
     return rc;
@@ -117,11 +236,13 @@ int efs_client_utime(efs_ino_t ino, uint64_t mtime)
 
 int efs_client_utimens(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec)
 {
-    pthread_mutex_lock(&g_client.lock);
+    efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
     int rc = efs_export_set_mtime_ns(&g_client.export, ino, mtime, mtime_nsec);
+    pthread_mutex_unlock(&g_client.idx_mu);
     if (rc == 0)
         efs_client_mark_ino_dirty(ino);
-    pthread_mutex_unlock(&g_client.lock);
+    efs_client_unlock_dir(ino);
     if (rc == 0)
         rc = efs_client_note_meta_change(0);
     return rc;
@@ -129,11 +250,13 @@ int efs_client_utimens(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec)
 
 int efs_client_set_atime(efs_ino_t ino, uint64_t atime)
 {
-    pthread_mutex_lock(&g_client.lock);
+    efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
     int rc = efs_export_set_atime(&g_client.export, ino, atime);
+    pthread_mutex_unlock(&g_client.idx_mu);
     if (rc == 0)
         efs_client_mark_ino_dirty(ino);
-    pthread_mutex_unlock(&g_client.lock);
+    efs_client_unlock_dir(ino);
     if (rc == 0)
         rc = efs_client_note_meta_change(0);
     return rc;
@@ -141,14 +264,14 @@ int efs_client_set_atime(efs_ino_t ino, uint64_t atime)
 
 int efs_client_truncate(efs_ino_t ino, uint64_t size)
 {
-    pthread_mutex_lock(&g_client.lock);
+    efs_client_lock_dir(ino);
     struct efs_inode inode;
     if (efs_export_get_inode(&g_client.export, ino, &inode) != 0) {
-        pthread_mutex_unlock(&g_client.lock);
+        efs_client_unlock_dir(ino);
         return EFS_ERR_NOT_FOUND;
     }
     uint64_t old_size = inode.size;
-    pthread_mutex_unlock(&g_client.lock);
+    efs_client_unlock_dir(ino);
 
     if (size == old_size)
         return EFS_OK;
@@ -185,23 +308,25 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
                 first_drop = ci;
             }
         }
-        pthread_mutex_lock(&g_client.lock);
+        efs_client_lock_dir(ino);
+        pthread_mutex_lock(&g_client.idx_mu);
         efs_export_drop_chunks_from(&g_client.export, ino, first_drop);
         int rc = efs_export_set_size(&g_client.export, ino, size);
+        pthread_mutex_unlock(&g_client.idx_mu);
         if (rc == 0)
             efs_client_mark_ino_dirty(ino);
-        pthread_mutex_unlock(&g_client.lock);
+        efs_client_unlock_dir(ino);
         if (rc == 0)
             rc = efs_client_note_meta_change(0);
         return rc;
     }
 
     /* Grow: logical sparse hole; reads of unmapped chunks return zeros. */
-    pthread_mutex_lock(&g_client.lock);
+    efs_client_lock_dir(ino);
     int rc = efs_export_set_size(&g_client.export, ino, size);
     if (rc == 0)
         efs_client_mark_ino_dirty(ino);
-    pthread_mutex_unlock(&g_client.lock);
+    efs_client_unlock_dir(ino);
     if (rc == 0)
         rc = efs_client_note_meta_change(0);
     return rc;
@@ -209,13 +334,15 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
 
 int efs_client_rename(efs_ino_t ino, efs_ino_t new_parent, const char *new_name)
 {
-    pthread_mutex_lock(&g_client.lock);
+    efs_client_lock_dirs2(ino, new_parent);
+    pthread_mutex_lock(&g_client.idx_mu);
     int rc = efs_export_rename(&g_client.export, ino, new_parent, new_name);
+    pthread_mutex_unlock(&g_client.idx_mu);
     if (rc == 0) {
         efs_client_mark_ino_dirty(ino);
         efs_client_mark_ino_dirty(new_parent);
     }
-    pthread_mutex_unlock(&g_client.lock);
+    efs_client_unlock_dirs2(ino, new_parent);
     if (rc == 0)
         rc = efs_client_note_meta_change(0);
     return rc;
@@ -223,26 +350,30 @@ int efs_client_rename(efs_ino_t ino, efs_ino_t new_parent, const char *new_name)
 
 int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
 {
-    pthread_mutex_lock(&g_client.lock);
+    efs_client_lock_dir(parent);
+    pthread_mutex_lock(&g_client.idx_mu);
     struct efs_inode ino;
     if (efs_export_lookup(&g_client.export, parent, name, &ino) != 0) {
-        pthread_mutex_unlock(&g_client.lock);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(parent);
         return EFS_ERR_NOT_FOUND;
     }
     if (efs_mode_is_dir(ino.mode) != is_dir) {
-        pthread_mutex_unlock(&g_client.lock);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(parent);
         return EFS_ERR_INVAL;
     }
 
     efs_ino_t removed = ino.ino;
     int rc = efs_export_unlink_name(&g_client.export, parent, name);
+    pthread_mutex_unlock(&g_client.idx_mu);
     /* Merge cannot delete; full replicate when not batched. When batched,
      * mark parent (and remaining hard-link names) dirty. Tombstones TBD. */
     if (rc == 0) {
         efs_client_mark_ino_dirty(parent);
         efs_client_mark_ino_dirty(removed);
     }
-    pthread_mutex_unlock(&g_client.lock);
+    efs_client_unlock_dir(parent);
     if (rc == 0)
         efs_client_note_meta_change(0);
     return rc;
@@ -250,13 +381,17 @@ int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
 
 int efs_client_link(efs_ino_t src_ino, efs_ino_t new_parent, const char *new_name)
 {
-    pthread_mutex_lock(&g_client.lock);
+    if (efs_export_needs_inode_grow(&g_client.export))
+        grow_inodes_exclusive();
+    efs_client_lock_dirs2(src_ino, new_parent);
+    pthread_mutex_lock(&g_client.idx_mu);
     int rc = efs_export_link(&g_client.export, src_ino, new_parent, new_name);
+    pthread_mutex_unlock(&g_client.idx_mu);
     if (rc == 0) {
         efs_client_mark_ino_dirty(src_ino);
         efs_client_mark_ino_dirty(new_parent);
     }
-    pthread_mutex_unlock(&g_client.lock);
+    efs_client_unlock_dirs2(src_ino, new_parent);
     if (rc == 0)
         rc = efs_client_note_meta_change(0);
     return rc;

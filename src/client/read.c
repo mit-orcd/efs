@@ -28,6 +28,12 @@ static void frag_ptrs(uint8_t *buf, uint32_t frag_len, uint8_t *frags[EFS_NUM_FR
         frags[i] = buf + (size_t)i * frag_len;
 }
 
+struct frag_batch {
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    int remaining;
+};
+
 struct frag_get_job {
     efs_node_id_t node;
     efs_ino_t ino;
@@ -37,6 +43,7 @@ struct frag_get_job {
     uint8_t *out;
     uint32_t len;
     int rc;
+    struct frag_batch *bp;
 };
 
 static void *frag_get_thread(void *arg)
@@ -46,6 +53,133 @@ static void *frag_get_thread(void *arg)
     j->rc = efs_client_get_fragment(j->node, j->ino, j->chunk_index, j->fi,
                                     j->frag_len, j->out, &j->len, sum);
     return NULL;
+}
+
+/* Persistent fragment GET workers. decode used to pthread_create+join two
+ * threads per chunk; at GB/s that is tens of thousands of creates/s. A
+ * dedicated pool (separate from the chunk GET pool) keeps the two preferred
+ * fragments concurrent without a create/join storm, and cannot deadlock
+ * with chunk workers that wait on this pool. */
+#define FRAG_POOL_WORKERS (2 * EFS_WRITE_PIPELINE)
+#define FRAG_POOL_QDEPTH  (8 * EFS_WRITE_PIPELINE)
+static struct {
+    pthread_mutex_t mu;
+    pthread_cond_t not_empty;
+    pthread_cond_t not_full;
+    struct frag_get_job *q[FRAG_POOL_QDEPTH];
+    int head, tail, count;
+    pthread_t tids[FRAG_POOL_WORKERS];
+    int nworkers;
+    int ready;
+    int shutdown;
+} g_frag_pool = {
+    .mu = PTHREAD_MUTEX_INITIALIZER,
+    .not_empty = PTHREAD_COND_INITIALIZER,
+    .not_full = PTHREAD_COND_INITIALIZER,
+};
+
+static void *frag_pool_thread(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        pthread_mutex_lock(&g_frag_pool.mu);
+        while (g_frag_pool.count == 0 && !g_frag_pool.shutdown)
+            pthread_cond_wait(&g_frag_pool.not_empty, &g_frag_pool.mu);
+        if (g_frag_pool.shutdown && g_frag_pool.count == 0) {
+            pthread_mutex_unlock(&g_frag_pool.mu);
+            return NULL;
+        }
+        struct frag_get_job *job = g_frag_pool.q[g_frag_pool.head];
+        g_frag_pool.head = (g_frag_pool.head + 1) % FRAG_POOL_QDEPTH;
+        g_frag_pool.count--;
+        pthread_cond_signal(&g_frag_pool.not_full);
+        pthread_mutex_unlock(&g_frag_pool.mu);
+
+        frag_get_thread(job);
+
+        struct frag_batch *bp = job->bp;
+        if (bp) {
+            pthread_mutex_lock(&bp->mu);
+            if (--bp->remaining == 0)
+                pthread_cond_signal(&bp->cv);
+            pthread_mutex_unlock(&bp->mu);
+        }
+    }
+}
+
+static int frag_pool_ensure(void)
+{
+    if (g_frag_pool.ready)
+        return 0;
+    pthread_mutex_lock(&g_frag_pool.mu);
+    if (!g_frag_pool.ready) {
+        for (int i = 0; i < FRAG_POOL_WORKERS; i++) {
+            if (pthread_create(&g_frag_pool.tids[i], NULL, frag_pool_thread,
+                               NULL) != 0) {
+                g_frag_pool.shutdown = 1;
+                pthread_cond_broadcast(&g_frag_pool.not_empty);
+                pthread_mutex_unlock(&g_frag_pool.mu);
+                for (int j = 0; j < i; j++)
+                    pthread_join(g_frag_pool.tids[j], NULL);
+                g_frag_pool.shutdown = 0;
+                return -1;
+            }
+        }
+        g_frag_pool.nworkers = FRAG_POOL_WORKERS;
+        g_frag_pool.ready = 1;
+    }
+    pthread_mutex_unlock(&g_frag_pool.mu);
+    return 0;
+}
+
+static int frag_pool_run(struct frag_get_job *jobs, int n)
+{
+    if (n <= 0)
+        return 0;
+    if (n == 1 || frag_pool_ensure() != 0) {
+        for (int i = 0; i < n; i++)
+            frag_get_thread(&jobs[i]);
+        return 0;
+    }
+    struct frag_batch bp;
+    pthread_mutex_init(&bp.mu, NULL);
+    pthread_cond_init(&bp.cv, NULL);
+    bp.remaining = n;
+
+    pthread_mutex_lock(&g_frag_pool.mu);
+    for (int i = 0; i < n; i++) {
+        jobs[i].bp = &bp;
+        while (g_frag_pool.count == FRAG_POOL_QDEPTH && !g_frag_pool.shutdown)
+            pthread_cond_wait(&g_frag_pool.not_full, &g_frag_pool.mu);
+        g_frag_pool.q[g_frag_pool.tail] = &jobs[i];
+        g_frag_pool.tail = (g_frag_pool.tail + 1) % FRAG_POOL_QDEPTH;
+        g_frag_pool.count++;
+        pthread_cond_signal(&g_frag_pool.not_empty);
+    }
+    pthread_mutex_unlock(&g_frag_pool.mu);
+
+    pthread_mutex_lock(&bp.mu);
+    while (bp.remaining > 0)
+        pthread_cond_wait(&bp.cv, &bp.mu);
+    pthread_mutex_unlock(&bp.mu);
+    pthread_mutex_destroy(&bp.mu);
+    pthread_cond_destroy(&bp.cv);
+    return 0;
+}
+
+/* Reuse the fragment scratch across decodes on the same worker thread. */
+static uint8_t *decode_frag_scratch(uint32_t need)
+{
+    static __thread uint8_t *buf;
+    static __thread uint32_t cap;
+    if (cap < need) {
+        uint8_t *nbuf = realloc(buf, need);
+        if (!nbuf)
+            return NULL;
+        buf = nbuf;
+        cap = need;
+    }
+    return buf;
 }
 
 /* Reconstruct one logical chunk from any 2 of 3 fragments. The three GETs run
@@ -74,9 +208,9 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     if (max_attempts < 1)
         max_attempts = 1;
 
-    /* Heap-allocate: three fragments on a FUSE/main stack overflows easily and
+    /* Heap / TLS: three fragments on a FUSE/main stack overflows easily and
      * SIGSEGV handlers without an alt stack cannot even log. */
-    uint8_t *frag_buf = malloc(EFS_NUM_FRAGMENTS * frag_len);
+    uint8_t *frag_buf = decode_frag_scratch(EFS_NUM_FRAGMENTS * frag_len);
     if (!frag_buf)
         return EFS_ERR_NOMEM;
     uint8_t *frags[EFS_NUM_FRAGMENTS];
@@ -95,12 +229,11 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
          * efs_client_get_fragment (down-mark) and fails fast into the parity
          * fallback. */
         struct frag_get_job jobs[EFS_NUM_FRAGMENTS];
-        pthread_t tids[EFS_NUM_FRAGMENTS];
-        int spawned[EFS_NUM_FRAGMENTS] = {0, 0, 0};
 
         /* Stage 1: the two preferred fragments in parallel. */
         for (int i = 0; i < 2; i++) {
             int fi = order[i];
+            memset(&jobs[i], 0, sizeof(jobs[i]));
             jobs[i].node = nodes[fi];
             jobs[i].ino = ino;
             jobs[i].chunk_index = chunk_index;
@@ -109,14 +242,9 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
             jobs[i].out = frags[fi];
             jobs[i].len = 0;
             jobs[i].rc = EFS_ERR_NET;
-            if (pthread_create(&tids[i], NULL, frag_get_thread, &jobs[i]) == 0)
-                spawned[i] = 1;
-            else
-                frag_get_thread(&jobs[i]); /* no thread budget: run inline */
         }
+        frag_pool_run(jobs, 2);
         for (int i = 0; i < 2; i++) {
-            if (spawned[i])
-                pthread_join(tids[i], NULL);
             if (jobs[i].rc == 0 && jobs[i].len == frag_len && !have[jobs[i].fi]) {
                 have[jobs[i].fi] = 1;
                 good++;
@@ -172,7 +300,6 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
             break;
         }
     }
-    free(frag_buf);
     return rc;
 }
 
@@ -186,28 +313,79 @@ static int efs_client_decode_placed_chunk(efs_ino_t ino, uint32_t chunk_index,
 static int load_page_from_chunk(const struct efs_export_root *root, uint32_t pi,
                                 uint32_t chunk_index, uint8_t *page_out)
 {
-    if (efs_client_decode_placed_chunk_attempts(EFS_META_TABLE_INO, chunk_index,
-                                                page_out, EFS_META_PAGE_SIZE,
-                                                EFS_META_FRAGMENT_SIZE, 2) != EFS_OK)
-        return EFS_ERR_DECODE;
+    /* Same rule as server rebuild: only fragments whose hash matches the
+     * EFSR page checksums are usable. Dual-slot reuse leaves stale same-ci
+     * fragments; decoding any 2 of those yields a page that then fails the
+     * re-encode check. */
+    efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+    efs_place_fragments(g_client.nodes, g_client.node_count, EFS_META_TABLE_INO,
+                        chunk_index, nodes);
 
     uint8_t *frag_buf = malloc(EFS_NUM_FRAGMENTS * EFS_META_FRAGMENT_SIZE);
     if (!frag_buf)
         return EFS_ERR_NOMEM;
     uint8_t *frags[EFS_NUM_FRAGMENTS];
     frag_ptrs(frag_buf, EFS_META_FRAGMENT_SIZE, frags);
-    efs_encode_chunk(page_out, EFS_META_PAGE_SIZE, EFS_META_PAGE_SIZE, frags);
+
+    struct frag_get_job jobs[EFS_NUM_FRAGMENTS];
+    pthread_t tids[EFS_NUM_FRAGMENTS];
+    int spawned[EFS_NUM_FRAGMENTS] = {0};
     for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+        jobs[fi].node = nodes[fi];
+        jobs[fi].ino = EFS_META_TABLE_INO;
+        jobs[fi].chunk_index = chunk_index;
+        jobs[fi].fi = fi;
+        jobs[fi].frag_len = EFS_META_FRAGMENT_SIZE;
+        jobs[fi].out = frags[fi];
+        jobs[fi].len = 0;
+        jobs[fi].rc = EFS_ERR_NET;
+        if (pthread_create(&tids[fi], NULL, frag_get_thread, &jobs[fi]) == 0)
+            spawned[fi] = 1;
+        else
+            frag_get_thread(&jobs[fi]);
+    }
+
+    int have[EFS_NUM_FRAGMENTS] = {0};
+    for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+        if (spawned[fi])
+            pthread_join(tids[fi], NULL);
+        if (jobs[fi].rc != 0 || jobs[fi].len != EFS_META_FRAGMENT_SIZE)
+            continue;
         uint8_t sum[EFS_HASH_SIZE];
         efs_hash(frags[fi], EFS_META_FRAGMENT_SIZE, sum);
         if (memcmp(sum, efs_export_root_checksum_const(root, pi, fi),
-                   EFS_HASH_SIZE) != 0) {
-            free(frag_buf);
-            return EFS_ERR_CHECKSUM;
+                   EFS_HASH_SIZE) == 0)
+            have[fi] = 1;
+    }
+
+    int missing = -1, a = -1, b = -1;
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (!have[i]) {
+            if (missing < 0)
+                missing = i;
+        } else if (a < 0) {
+            a = i;
+        } else if (b < 0) {
+            b = i;
         }
     }
+    if (missing < 0) {
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            if (i != a && i != b) {
+                missing = i;
+                break;
+            }
+        }
+    }
+    int rc = EFS_ERR_DECODE;
+    if (a >= 0 && b >= 0 && missing >= 0 &&
+        efs_decode_chunk(frags, EFS_META_PAGE_SIZE, a, b, missing, page_out,
+                         EFS_META_PAGE_SIZE) == 0)
+        rc = EFS_OK;
+    else if (a >= 0 && b < 0)
+        rc = EFS_ERR_CHECKSUM;
     free(frag_buf);
-    return EFS_OK;
+    return rc;
 }
 
 static int load_export_from_root(const struct efs_export_root *root)
@@ -219,30 +397,42 @@ static int load_export_from_root(const struct efs_export_root *root)
     if (!pages)
         return EFS_ERR_NOMEM;
 
+    int saw_v4_ci = 0, saw_v5_ci = 0;
     for (uint32_t pi = 0; pi < root->page_count; pi++) {
-        uint32_t slotted = efs_meta_page_chunk_index(root->generation, pi);
+        uint32_t try_ci[3];
+        int ntry = efs_meta_page_ci_candidates(root->generation, root->version,
+                                               root->ino_page_count,
+                                               root->chunk_page_count, pi,
+                                               try_ci);
         int rc = EFS_ERR_INVAL;
-        const char *scheme = "slot";
+        const char *scheme = "v5";
+        int loaded = 0;
 
-        if (slotted != UINT32_MAX) {
-            rc = load_page_from_chunk(root, pi, slotted, pages[pi]);
-            if (rc == EFS_OK)
+        for (int ti = 0; ti < ntry && !loaded; ti++) {
+            uint32_t ci = try_ci[ti];
+            uint32_t layout = efs_meta_page_ci_layout(
+                root->generation, root->ino_page_count, root->chunk_page_count,
+                pi, ci);
+            scheme = layout == 5 ? "v5" : (layout == 4 ? "v4" : "legacy");
+            rc = load_page_from_chunk(root, pi, ci, pages[pi]);
+            if (rc != EFS_OK)
                 continue;
-        }
-        /* Pre-dual-slot exports: chunk_index == page_index. */
-        if (slotted != pi) {
-            scheme = "legacy";
-            rc = load_page_from_chunk(root, pi, pi, pages[pi]);
-            if (rc == EFS_OK) {
+            loaded = 1;
+            if (layout == 4)
+                saw_v4_ci = 1;
+            else if (layout == 5)
+                saw_v5_ci = 1;
+            if (layout != 0 && layout != (root->version >= 5 ? 5u : 4u)) {
                 fprintf(stderr,
-                        "meta: page %u/%u loaded via legacy chunk_index "
-                        "(gen=%llu)\n",
-                        pi, root->page_count,
-                        (unsigned long long)root->generation);
+                        "meta: page %u/%u loaded via %s chunk_index "
+                        "(gen=%llu root v%u)\n",
+                        pi, root->page_count, scheme,
+                        (unsigned long long)root->generation, root->version);
                 fflush(stderr);
-                continue;
             }
         }
+        if (loaded)
+            continue;
         fprintf(stderr,
                 "meta: page reconstruct failed page=%u/%u gen=%llu "
                 "blob_len=%u scheme=%s rc=%d (%s)\n",
@@ -267,6 +457,11 @@ static int load_export_from_root(const struct efs_export_root *root)
         if (efs_export_root_copy(&g_client.export.root, root) != EFS_OK)
             rc = EFS_ERR_NOMEM;
         else {
+            if (saw_v4_ci && !saw_v5_ci && g_client.export.root.version >= 5)
+                g_client.export.root.version = 4;
+            else if (saw_v5_ci && !saw_v4_ci &&
+                     g_client.export.root.version < 5)
+                g_client.export.root.version = 5;
             g_client.export.next_ino = root->next_ino;
             uint32_t cs = root->chunk_size;
             g_client.export.chunk_size = efs_chunk_size_valid(cs) ? cs
@@ -496,25 +691,211 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
     return EFS_ERR_NET;
 }
 
+struct get_batch {
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    int remaining;
+};
+
+#define RDCACHE_SLOTS 1024
+struct rdcache_ent {
+    efs_ino_t ino;
+    uint32_t ci;
+    uint8_t *data;
+    uint32_t len;
+};
+static struct {
+    pthread_mutex_t mu;
+    struct rdcache_ent e[RDCACHE_SLOTS];
+} g_rdcache = { .mu = PTHREAD_MUTEX_INITIALIZER };
+
+static uint32_t rdcache_slot(efs_ino_t ino, uint32_t ci)
+{
+    uint64_t h = (uint64_t)ino * 0x9E3779B97F4A7C15ULL;
+    h ^= (uint64_t)ci * 0xBF58476D1CE4E5B9ULL;
+    return (uint32_t)(h & (RDCACHE_SLOTS - 1));
+}
+
+int efs_rdcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
+{
+    uint32_t s = rdcache_slot(ino, ci);
+    pthread_mutex_lock(&g_rdcache.mu);
+    struct rdcache_ent *e = &g_rdcache.e[s];
+    if (e->data && e->ino == ino && e->ci == ci && e->len >= len) {
+        memcpy(dst, e->data, len);
+        pthread_mutex_unlock(&g_rdcache.mu);
+        return 0;
+    }
+    pthread_mutex_unlock(&g_rdcache.mu);
+    return -1;
+}
+
+void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t len)
+{
+    if (!src || !len)
+        return;
+    uint32_t s = rdcache_slot(ino, ci);
+    pthread_mutex_lock(&g_rdcache.mu);
+    struct rdcache_ent *e = &g_rdcache.e[s];
+    if (!e->data || e->len < len) {
+        uint8_t *nbuf = realloc(e->data, len);
+        if (!nbuf) {
+            pthread_mutex_unlock(&g_rdcache.mu);
+            return;
+        }
+        e->data = nbuf;
+        e->len = len;
+    }
+    memcpy(e->data, src, len);
+    e->ino = ino;
+    e->ci = ci;
+    pthread_mutex_unlock(&g_rdcache.mu);
+}
+
+void efs_rdcache_invalidate(efs_ino_t ino, uint32_t ci)
+{
+    uint32_t s = rdcache_slot(ino, ci);
+    pthread_mutex_lock(&g_rdcache.mu);
+    struct rdcache_ent *e = &g_rdcache.e[s];
+    if (e->ino == ino && e->ci == ci)
+        e->ino = 0;
+    pthread_mutex_unlock(&g_rdcache.mu);
+}
+
 struct chunk_get_job {
     efs_ino_t ino;
     uint32_t ci;
     int have_ce;
+    int cacheable;
     int rc;
     uint8_t *chunk; /* data_chunk_size() bytes, owned by caller */
+    struct get_batch *bp;
 };
 
 static void *chunk_get_worker(void *arg)
 {
     struct chunk_get_job *job = arg;
     uint32_t chunk_size = data_chunk_size();
+    if (efs_rdcache_get(job->ino, job->ci, job->chunk, chunk_size) == 0) {
+        job->rc = EFS_OK;
+        return NULL;
+    }
     if (!job->have_ce) {
         memset(job->chunk, 0, chunk_size);
         job->rc = EFS_OK;
         return NULL;
     }
     job->rc = efs_client_decode_placed_chunk(job->ino, job->ci, job->chunk);
+    if (job->rc == EFS_OK && job->cacheable)
+        efs_rdcache_put(job->ino, job->ci, job->chunk, chunk_size);
     return NULL;
+}
+
+#define GET_POOL_QDEPTH (8 * EFS_WRITE_PIPELINE)
+static struct {
+    pthread_mutex_t mu;
+    pthread_cond_t not_empty;
+    pthread_cond_t not_full;
+    struct chunk_get_job *q[GET_POOL_QDEPTH];
+    int head, tail, count;
+    pthread_t tids[EFS_WRITE_PIPELINE];
+    int nworkers;
+    int ready;
+    int shutdown;
+} g_get_pool = {
+    .mu = PTHREAD_MUTEX_INITIALIZER,
+    .not_empty = PTHREAD_COND_INITIALIZER,
+    .not_full = PTHREAD_COND_INITIALIZER,
+};
+
+static void *get_pool_thread(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        pthread_mutex_lock(&g_get_pool.mu);
+        while (g_get_pool.count == 0 && !g_get_pool.shutdown)
+            pthread_cond_wait(&g_get_pool.not_empty, &g_get_pool.mu);
+        if (g_get_pool.shutdown && g_get_pool.count == 0) {
+            pthread_mutex_unlock(&g_get_pool.mu);
+            return NULL;
+        }
+        struct chunk_get_job *job = g_get_pool.q[g_get_pool.head];
+        g_get_pool.head = (g_get_pool.head + 1) % GET_POOL_QDEPTH;
+        g_get_pool.count--;
+        pthread_cond_signal(&g_get_pool.not_full);
+        pthread_mutex_unlock(&g_get_pool.mu);
+
+        chunk_get_worker(job);
+
+        struct get_batch *bp = job->bp;
+        if (bp) {
+            pthread_mutex_lock(&bp->mu);
+            if (--bp->remaining == 0)
+                pthread_cond_signal(&bp->cv);
+            pthread_mutex_unlock(&bp->mu);
+        }
+    }
+}
+
+static int get_pool_ensure(void)
+{
+    if (g_get_pool.ready)
+        return 0;
+    pthread_mutex_lock(&g_get_pool.mu);
+    if (!g_get_pool.ready) {
+        uint32_t n = EFS_WRITE_PIPELINE;
+        for (uint32_t i = 0; i < n; i++) {
+            if (pthread_create(&g_get_pool.tids[i], NULL, get_pool_thread,
+                               NULL) != 0) {
+                g_get_pool.shutdown = 1;
+                pthread_cond_broadcast(&g_get_pool.not_empty);
+                pthread_mutex_unlock(&g_get_pool.mu);
+                for (uint32_t j = 0; j < i; j++)
+                    pthread_join(g_get_pool.tids[j], NULL);
+                g_get_pool.shutdown = 0;
+                return -1;
+            }
+        }
+        g_get_pool.nworkers = (int)n;
+        g_get_pool.ready = 1;
+    }
+    pthread_mutex_unlock(&g_get_pool.mu);
+    return 0;
+}
+
+static int get_pool_run(struct chunk_get_job *jobs, uint32_t batch)
+{
+    if (batch == 0)
+        return 0;
+    if (batch == 1 || get_pool_ensure() != 0) {
+        for (uint32_t i = 0; i < batch; i++)
+            chunk_get_worker(&jobs[i]);
+        return 0;
+    }
+    struct get_batch bp;
+    pthread_mutex_init(&bp.mu, NULL);
+    pthread_cond_init(&bp.cv, NULL);
+    bp.remaining = (int)batch;
+
+    pthread_mutex_lock(&g_get_pool.mu);
+    for (uint32_t i = 0; i < batch; i++) {
+        jobs[i].bp = &bp;
+        while (g_get_pool.count == GET_POOL_QDEPTH && !g_get_pool.shutdown)
+            pthread_cond_wait(&g_get_pool.not_full, &g_get_pool.mu);
+        g_get_pool.q[g_get_pool.tail] = &jobs[i];
+        g_get_pool.tail = (g_get_pool.tail + 1) % GET_POOL_QDEPTH;
+        g_get_pool.count++;
+        pthread_cond_signal(&g_get_pool.not_empty);
+    }
+    pthread_mutex_unlock(&g_get_pool.mu);
+
+    pthread_mutex_lock(&bp.mu);
+    while (bp.remaining > 0)
+        pthread_cond_wait(&bp.cv, &bp.mu);
+    pthread_mutex_unlock(&bp.mu);
+    pthread_mutex_destroy(&bp.mu);
+    pthread_cond_destroy(&bp.cv);
+    return 0;
 }
 
 int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size_t *out_len)
@@ -524,21 +905,34 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
         return EFS_OK;
     }
 
-    pthread_mutex_lock(&g_client.lock);
+    efs_client_lock_dir(ino);
     struct efs_inode inode;
     if (efs_export_get_inode(&g_client.export, ino, &inode) != 0) {
-        pthread_mutex_unlock(&g_client.lock);
+        efs_client_unlock_dir(ino);
         return EFS_ERR_NOT_FOUND;
     }
     uint64_t file_size = inode.size;
-    pthread_mutex_unlock(&g_client.lock);
+    efs_ino_t pack_ino = inode.pack_ino;
+    uint32_t pack_off = inode.pack_off;
+    uint32_t pack_len = inode.pack_len;
+    efs_client_unlock_dir(ino);
 
-    if (offset >= file_size) {
+    if (pack_ino && pack_len) {
+        if (offset >= pack_len) {
+            *out_len = 0;
+            return EFS_OK;
+        }
+        if (offset + size > pack_len)
+            size = (size_t)(pack_len - offset);
+        ino = pack_ino;
+        offset = (uint64_t)pack_off + offset;
+        file_size = offset + size;
+    } else if (offset >= file_size) {
         *out_len = 0;
         return EFS_OK;
-    }
-    if (offset + size > file_size)
+    } else if (offset + size > file_size) {
         size = (size_t)(file_size - offset);
+    }
 
     size_t total = 0;
     uint64_t end = offset + size;
@@ -550,8 +944,6 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
     for (uint64_t pos = offset; pos < end; ) {
         /* Build a batch of whole chunks covering [pos, end). */
         struct chunk_get_job jobs[EFS_WRITE_PIPELINE];
-        pthread_t tids[EFS_WRITE_PIPELINE];
-        int threaded[EFS_WRITE_PIPELINE];
         uint32_t batch = 0;
         uint64_t batch_pos = pos;
 
@@ -567,32 +959,24 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
                 return EFS_ERR_NOMEM;
             }
             jobs[batch].rc = EFS_ERR_IO;
-            struct efs_chunk_entry ce;
-            pthread_mutex_lock(&g_client.lock);
-            jobs[batch].have_ce =
-                (efs_export_get_chunk(&g_client.export, ino, ci, &ce) == EFS_OK);
-            pthread_mutex_unlock(&g_client.lock);
-            threaded[batch] = 0;
+            jobs[batch].cacheable = (size < chunk_size);
             batch_pos = ((uint64_t)ci + 1) * chunk_size;
             batch++;
         }
 
-        for (uint32_t i = 0; i < batch; i++) {
-            if (batch > 1 &&
-                pthread_create(&tids[i], NULL, chunk_get_worker, &jobs[i]) == 0) {
-                threaded[i] = 1;
-            } else {
-                chunk_get_worker(&jobs[i]);
-            }
-        }
-        for (uint32_t i = 0; i < batch; i++) {
-            if (threaded[i])
-                pthread_join(tids[i], NULL);
-        }
+        /* Index lookup is idx_mu, not the table lock — g_client.lock is held
+         * across serialize/snapshot and would stall every multi-job read. */
+        pthread_mutex_lock(&g_client.idx_mu);
+        for (uint32_t i = 0; i < batch; i++)
+            jobs[i].have_ce =
+                (efs_export_get_chunk(&g_client.export, jobs[i].ino,
+                                      jobs[i].ci, NULL) == EFS_OK);
+        pthread_mutex_unlock(&g_client.idx_mu);
+
+        get_pool_run(jobs, batch);
 
         for (uint32_t i = 0; i < batch; i++) {
             if (jobs[i].rc != EFS_OK) {
-                /* Chunks [0, i) were already freed below; release [i, batch). */
                 for (uint32_t j = i; j < batch; j++)
                     free(jobs[j].chunk);
                 return jobs[i].rc;
