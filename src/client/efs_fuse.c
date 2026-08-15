@@ -1751,8 +1751,21 @@ static int efs_fuse_fsync(const char *path, int isdatasync,
         if (efs_client_lookup(path, &ino) == 0 && !efs_mode_is_dir(ino.mode))
             (void)efs_client_pack_seal(ino.ino);
     }
+    /* Packed small files may still sit in a dir-pack tail; flush those
+     * fragments so fsync data is on the servers. */
     efs_client_pack_flush_all();
-    efs_client_note_meta_change(1);
+    /* Incremental publish of dirty inode/chunk rows. force=1 used to
+     * memcpy the whole table (~2M inodes) on every fsync and inverted
+     * the 8×1G + end_fsync job versus plain 1M write. */
+    rc = efs_client_sync_meta();
+    if (rc == EFS_ERR_QUOTA) {
+        efs_fuse_log_err("fsync-meta", rc, 0, 0, 0, path);
+        return -ENOSPC;
+    }
+    if (rc != 0) {
+        efs_fuse_log_err("fsync-meta", rc, 0, 0, 0, path);
+        return -EIO;
+    }
     return 0;
 }
 

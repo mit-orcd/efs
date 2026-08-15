@@ -629,6 +629,8 @@ static int load_export_from_root(const struct efs_export_root *root)
                                                                   : EFS_DEFAULT_CHUNK_SIZE;
             g_client.export.features = root->features;
         }
+        if (rc == EFS_OK && efs_client_meta_cache_adopt(blob, blob_len) == 0)
+            blob = NULL;
     }
     pthread_mutex_unlock(&g_client.lock);
     free(blob);
@@ -766,6 +768,9 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
         pthread_mutex_lock(&g_client.lock);
         int rc = efs_export_deserialize(&g_client.export, best_legacy, best_legacy_len);
         g_client.export.meta_fragmented = 0;
+        if (rc == EFS_OK &&
+            efs_client_meta_cache_adopt(best_legacy, best_legacy_len) == 0)
+            best_legacy = NULL;
         pthread_mutex_unlock(&g_client.lock);
         free(best_legacy);
         return rc;

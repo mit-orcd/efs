@@ -329,6 +329,12 @@ static int send_meta_root(const char *buf, size_t len)
 /* Serialize concurrent replicators so two flushes don't interleave page PUTs /
  * gen bumps. This replaces holding g_client.lock across serialize+network. */
 static pthread_mutex_t g_repl_mu = PTHREAD_MUTEX_INITIALIZER;
+/* Waiters must not block on g_repl_mu: replicate_metadata() takes it, so
+ * locking it here serialized 8 fsyncs into 8 flushes. */
+static pthread_mutex_t g_sync_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_sync_meta_cv = PTHREAD_COND_INITIALIZER;
+static int g_sync_meta_active;
+static int g_sync_meta_rc;
 
 /* Pack the full export into 2+1 pages, then push the EFSR root (≥2 acks). */
 /* One flush attempt: serialize the full export and PUT all meta pages.
@@ -812,6 +818,26 @@ static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
                                                               : ch_dirty_pg;
                 row_dirty = bm && bm[pi];
             }
+            /* Clean incremental page: do not hash or PUT. The other dual
+             * slot already holds this content from the last same-parity
+             * gen; reuse the committed root checksums. After remount the
+             * skip tables are empty, and hashing/PUTing all 11k pages
+             * wedged the first fsync for minutes. */
+            if (incremental && !row_dirty &&
+                g_client.export.root.page_checksums &&
+                packed < g_client.export.root.page_count) {
+                memcpy(new_sums + (size_t)packed * EFS_NUM_FRAGMENTS *
+                           EFS_HASH_SIZE,
+                       efs_export_root_checksum_const(&g_client.export.root,
+                                                      packed, 0),
+                       EFS_NUM_FRAGMENTS * EFS_HASH_SIZE);
+                memcpy(efs_export_root_checksum(&root, packed, 0),
+                       new_sums + (size_t)packed * EFS_NUM_FRAGMENTS *
+                           EFS_HASH_SIZE,
+                       EFS_NUM_FRAGMENTS * EFS_HASH_SIZE);
+                page_skip++;
+                continue;
+            }
             if (!row_dirty && pi < last_npc && pi < committed_npc &&
                 g_client.meta_slot_hashes[parity] &&
                 logi < EFS_META_MAX_PAGES) {
@@ -1066,23 +1092,30 @@ static int efs_client_replicate_metadata_locked(void)
     int packed = 0;
     if (!full && g_client.meta_cache_blob &&
         ds.layout_epoch == g_client.meta_cache_epoch &&
-        (ds.ino_count || ds.chunk_count) &&
         ex->inode_count >= g_client.meta_cache_icount &&
         ex->chunk_count >= g_client.meta_cache_ccount) {
-        char *pb = NULL;
-        size_t plen = 0;
-        uint32_t pino = 0, pch = 0;
-        uint8_t *pid = NULL, *pcd = NULL;
-        if (incremental_serialize(ex, &ds, &pb, &plen, &pino, &pch,
-                                  &pid, &pcd, NULL, NULL) == 0) {
-            ds.packed = pb;
-            ds.packed_len = plen;
-            ds.packed_ino_len = pino;
-            ds.packed_ch_len = pch;
-            ds.ino_dirty_pg = pid;
-            ds.ch_dirty_pg = pcd;
-            ds.packed_is_cache = 1;
-            packed = 1;
+        if (ds.ino_count || ds.chunk_count) {
+            char *pb = NULL;
+            size_t plen = 0;
+            uint32_t pino = 0, pch = 0;
+            uint8_t *pid = NULL, *pcd = NULL;
+            if (incremental_serialize(ex, &ds, &pb, &plen, &pino, &pch,
+                                      &pid, &pcd, NULL, NULL) == 0) {
+                ds.packed = pb;
+                ds.packed_len = plen;
+                ds.packed_ino_len = pino;
+                ds.packed_ch_len = pch;
+                ds.ino_dirty_pg = pid;
+                ds.ch_dirty_pg = pcd;
+                ds.packed_is_cache = 1;
+                packed = 1;
+            }
+        } else if (ds.meta_dirty) {
+            /* Nothing row-dirty: do not bump a generation. */
+            dirty_snap_free(&ds);
+            pthread_mutex_unlock(&g_client.dirty_mu);
+            efs_client_table_unlock();
+            return EFS_OK;
         }
     }
     if (!packed) {
@@ -1210,6 +1243,74 @@ static int efs_client_replicate_metadata_nb(void)
         }
     }
     return rc;
+}
+
+/* fsync: one incremental publish shared by all waiters. 8× end_fsync used
+ * to each run a full/incremental flush (5–18s) because every caller took
+ * g_repl_mu and found new dirty from the others still writing. */
+int efs_client_sync_meta(void)
+{
+    pthread_mutex_lock(&g_sync_mu);
+    int waited = 0;
+    for (;;) {
+        if (!g_sync_meta_active) {
+            if (waited) {
+                pthread_mutex_lock(&g_client.dirty_mu);
+                int clean = (g_client.dirty_ino_count == 0 &&
+                             g_client.dirty_chunk_count == 0 &&
+                             !g_client.meta_dirty);
+                pthread_mutex_unlock(&g_client.dirty_mu);
+                if (clean) {
+                    int rc = g_sync_meta_rc;
+                    pthread_mutex_unlock(&g_sync_mu);
+                    return rc;
+                }
+            }
+            g_sync_meta_active = 1;
+            pthread_mutex_unlock(&g_sync_mu);
+            int rc = efs_client_replicate_metadata();
+            pthread_mutex_lock(&g_sync_mu);
+            g_sync_meta_rc = rc;
+            g_sync_meta_active = 0;
+            pthread_cond_broadcast(&g_sync_meta_cv);
+            pthread_mutex_unlock(&g_sync_mu);
+            return rc;
+        }
+        waited = 1;
+        pthread_cond_wait(&g_sync_meta_cv, &g_sync_mu);
+    }
+}
+
+int efs_client_meta_cache_adopt(char *blob, size_t blob_len)
+{
+    if (!blob || blob_len < EFS_META_HDR_SIZE)
+        return -1;
+    uint64_t ic = g_client.export.inode_count;
+    uint64_t cc = g_client.export.chunk_count;
+    uint32_t ino_len = (uint32_t)(EFS_META_HDR_SIZE +
+                                  ic * EFS_INODE_WIRE_SIZE);
+    uint32_t ch_len = (uint32_t)(cc * EFS_CHUNK_WIRE_SIZE);
+    if (blob_len < (size_t)ino_len + (size_t)ch_len)
+        return -1;
+    free(g_client.meta_cache_blob);
+    free(g_client.meta_cache_ch);
+    g_client.meta_cache_ch = NULL;
+    g_client.meta_cache_ch_cap = 0;
+    g_client.meta_cache_blob = blob;
+    g_client.meta_cache_cap = blob_len;
+    g_client.meta_cache_len = blob_len;
+    g_client.meta_cache_ino_len = ino_len;
+    g_client.meta_cache_ch_len = ch_len;
+    g_client.meta_cache_icount = ic;
+    g_client.meta_cache_ccount = cc;
+    g_client.meta_cache_epoch = g_client.export.layout_epoch;
+    fprintf(stderr,
+            "meta: adopted cache blob %zuB ino_len=%u ch_len=%u "
+            "inodes=%llu chunks=%llu\n",
+            blob_len, ino_len, ch_len,
+            (unsigned long long)ic, (unsigned long long)cc);
+    fflush(stderr);
+    return 0;
 }
 
 int efs_client_replicate_metadata(void)
@@ -2185,8 +2286,6 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
 /* Close/truncate used to walk all 65536 slots (and 64 shard locks) per
  * file. ecopy hit that on flush+release+ftruncate (~200k locks/file).
  * Chunks are dense from 0, so only those hashed slots can hold this ino. */
-#define DCACHE_FLUSH_SCAN_SLOTS  4096
-
 static int dcache_flush_all_slots(efs_ino_t only_ino, int have_only)
 {
     int rc = EFS_OK;
@@ -2213,7 +2312,11 @@ int efs_dcache_flush_ino(efs_ino_t ino)
         if (nci == 0)
             nci = 1;
     }
-    if (nci > DCACHE_FLUSH_SCAN_SLOTS)
+    /* Hashed slots are exact for dense ci 0..nci-1. Walking all 65536
+     * slots was the old fallback once nci > 4096 (a 512 MiB file) and
+     * made 1G fsync take tens of seconds. Only scan the table when
+     * hashing every ci would touch more slots than exist. */
+    if (nci > DCACHE_SLOTS)
         return dcache_flush_all_slots(ino, 1);
 
     int rc = EFS_OK;

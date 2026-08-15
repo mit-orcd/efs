@@ -148,6 +148,10 @@ int efs_client_fetch_metadata(const char *host, uint16_t port);
 /* Must be called without g_client.lock held; it takes the lock only to
  * serialize, then releases it for the duration of the network I/O. */
 int efs_client_replicate_metadata(void);
+int efs_client_sync_meta(void);
+/* Take ownership of a tight EFSM blob (hdr+inodes+chunks) as the
+ * incremental cache. 0 = adopted (caller must not free); -1 = too small. */
+int efs_client_meta_cache_adopt(char *blob, size_t blob_len);
 
 /* Record a local metadata mutation. With meta_batch==0 this replicates
  * immediately (test / C-API behaviour). With meta_batch!=0 it coalesces
