@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <limits.h>
 #include <pthread.h>
@@ -329,6 +330,26 @@ static int efs_client_decode_placed_chunk(efs_ino_t ino, uint32_t chunk_index,
                                                    data_chunk_size(), data_frag_size(), 2);
 }
 
+/* Placement is a hint. After add-storage / 4-node join, meta fragments of
+ * one page can sit on nodes the current hash ring does not name. Ask every
+ * member for a missing (chunk, fi) before giving up. */
+static int get_meta_frag_any_node(uint32_t chunk_index, uint32_t fi,
+                                  efs_node_id_t skip, uint8_t *out)
+{
+    uint8_t ck[EFS_HASH_SIZE];
+    for (uint32_t i = 0; i < g_client.node_count; i++) {
+        efs_node_id_t id = g_client.nodes[i].id;
+        if (id == 0 || id == skip)
+            continue;
+        uint32_t got = 0;
+        if (efs_client_get_fragment(id, EFS_META_TABLE_INO, chunk_index, fi,
+                                    EFS_META_FRAGMENT_SIZE, out, &got, ck) == 0 &&
+            got == EFS_META_FRAGMENT_SIZE)
+            return EFS_OK;
+    }
+    return EFS_ERR_NOT_FOUND;
+}
+
 static int load_page_from_chunk(const struct efs_export_root *root, uint32_t pi,
                                 uint32_t chunk_index, uint8_t *page_out)
 {
@@ -376,6 +397,25 @@ static int load_page_from_chunk(const struct efs_export_root *root, uint32_t pi,
                    EFS_HASH_SIZE) == 0)
             have[fi] = 1;
     }
+    int used_scan = 0;
+    for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+        if (have[fi])
+            continue;
+        if (get_meta_frag_any_node(chunk_index, (uint32_t)fi, nodes[fi],
+                                   frags[fi]) != EFS_OK)
+            continue;
+        uint8_t sum[EFS_HASH_SIZE];
+        efs_hash(frags[fi], EFS_META_FRAGMENT_SIZE, sum);
+        if (memcmp(sum, efs_export_root_checksum_const(root, pi, fi),
+                   EFS_HASH_SIZE) == 0) {
+            have[fi] = 1;
+            used_scan = 1;
+        }
+    }
+    if (used_scan)
+        fprintf(stderr,
+                "meta: page %u ci=%u recovered fragment(s) via all-node scan\n",
+                pi, chunk_index);
 
     int missing = -1, a = -1, b = -1;
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
@@ -447,6 +487,13 @@ static int load_page_from_chunk_unverified(uint32_t chunk_index, uint8_t *page_o
         if (jobs[fi].rc != 0 || jobs[fi].len != EFS_META_FRAGMENT_SIZE)
             continue;
         have[fi] = 1;
+    }
+    for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+        if (have[fi])
+            continue;
+        if (get_meta_frag_any_node(chunk_index, (uint32_t)fi, nodes[fi],
+                                   frags[fi]) == EFS_OK)
+            have[fi] = 1;
     }
 
     int missing = -1, a = -1, b = -1;
@@ -568,6 +615,99 @@ static int load_export_from_prev_slot(const struct efs_export_root *root)
     return rc;
 }
 
+/* Some published EFSRs checksum chunk-region pages that were written at a
+ * shifted logical index (this cluster: page 16382 lives at 18017/50785, not
+ * v5 16384/49152). Discover that even logical CI by matching EFSR checksums,
+ * then reuse (ci - rpi) for the rest of the region. */
+static uint32_t g_meta_chunk_ci_even_base = UINT32_MAX;
+static uint32_t g_last_chunk_even_ci = UINT32_MAX;
+static int g_chunk_skip_streak = 0;
+
+static void add_meta_ci(uint32_t *cis, int *n, int cap, uint32_t ci)
+{
+    if (ci == UINT32_MAX || *n >= cap)
+        return;
+    for (int i = 0; i < *n; i++) {
+        if (cis[i] == ci)
+            return;
+    }
+    cis[(*n)++] = ci;
+}
+
+static int meta_frag_matches(uint32_t ci, uint32_t fi, const uint8_t *want)
+{
+    uint8_t buf[EFS_META_FRAGMENT_SIZE];
+    if (get_meta_frag_any_node(ci, fi, 0, buf) != EFS_OK)
+        return 0;
+    uint8_t sum[EFS_HASH_SIZE];
+    efs_hash(buf, EFS_META_FRAGMENT_SIZE, sum);
+    return memcmp(sum, want, EFS_HASH_SIZE) == 0;
+}
+
+static int meta_ci_quorum(const struct efs_export_root *root, uint32_t pi,
+                          uint32_t ci)
+{
+    int n = 0;
+    for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+        if (meta_frag_matches(ci, (uint32_t)fi,
+                              efs_export_root_checksum_const(root, pi, fi)))
+            n++;
+    }
+    return n;
+}
+
+static uint32_t hunt_chunk_page_even_ci(const struct efs_export_root *root,
+                                        uint32_t pi)
+{
+    uint32_t rpi = pi - root->ino_page_count;
+    fprintf(stderr,
+            "meta: hunting shifted chunk-page CI for page %u (rpi=%u)\n",
+            pi, rpi);
+    fflush(stderr);
+
+    /* Full 32k scan is too slow when the page was never written. Search
+     * near the last hit and the v5 chunk window; caller may skip. */
+    uint32_t lo = 0, hi = EFS_META_MAX_PAGES;
+    if (g_last_chunk_even_ci != UINT32_MAX) {
+        lo = (g_last_chunk_even_ci > 4096) ? g_last_chunk_even_ci - 4096 : 0;
+        hi = g_last_chunk_even_ci + 4096;
+        if (hi > EFS_META_MAX_PAGES)
+            hi = EFS_META_MAX_PAGES;
+    }
+    const uint32_t windows[3][2] = {
+        { lo, hi },
+        { EFS_META_CHUNK_PAGE_BASE, EFS_META_CHUNK_PAGE_BASE + 4096 },
+        { 0, 2048 },
+    };
+    int odd_first = (int)(root->generation & 1ULL);
+    for (int w = 0; w < 3; w++) {
+        for (uint32_t logical = windows[w][0]; logical < windows[w][1];
+             logical++) {
+            uint32_t even = logical;
+            uint32_t odd = logical + EFS_META_SLOT_STRIDE;
+            uint32_t pair[2];
+            pair[0] = odd_first ? odd : even;
+            pair[1] = odd_first ? even : odd;
+            for (int s = 0; s < 2; s++) {
+                if (meta_ci_quorum(root, pi, pair[s]) < 2)
+                    continue;
+                fprintf(stderr,
+                        "meta: found page %u fragments at ci=%u "
+                        "(even logical=%u base=%u)\n",
+                        pi, pair[s], logical, logical - rpi);
+                fflush(stderr);
+                return logical;
+            }
+            if (((logical - windows[w][0]) % 1024u) == 0 &&
+                logical > windows[w][0]) {
+                fprintf(stderr, "meta: CI hunt logical=%u\n", logical);
+                fflush(stderr);
+            }
+        }
+    }
+    return UINT32_MAX;
+}
+
 static int load_export_from_root(const struct efs_export_root *root)
 {
     if (root->page_count == 0 || root->blob_len == 0)
@@ -577,37 +717,57 @@ static int load_export_from_root(const struct efs_export_root *root)
     if (!pages)
         return EFS_ERR_NOMEM;
 
+    g_meta_chunk_ci_even_base = UINT32_MAX;
+    g_last_chunk_even_ci = UINT32_MAX;
+    g_chunk_skip_streak = 0;
     int saw_v4_ci = 0, saw_v5_ci = 0;
     for (uint32_t pi = 0; pi < root->page_count; pi++) {
-        uint32_t try_ci[6];
+        /* Tail pages past ino_blob_len / chunk_blob_len are not in the EFSM. */
+        if (root->chunk_page_count > 0) {
+            if (pi < root->ino_page_count) {
+                if ((uint64_t)pi * EFS_META_PAGE_SIZE >= root->ino_blob_len)
+                    continue;
+            } else if ((uint64_t)(pi - root->ino_page_count) * EFS_META_PAGE_SIZE >=
+                       root->chunk_blob_len) {
+                continue;
+            }
+        } else if ((uint64_t)pi * EFS_META_PAGE_SIZE >= root->blob_len) {
+            continue;
+        }
+        uint32_t try_ci[12];
         int ntry = efs_meta_page_ci_candidates(root->generation, root->version,
                                                root->ino_page_count,
                                                root->chunk_page_count, pi,
                                                try_ci);
         /* Two clients can overwrite the published slot's page while the
          * previous dual-slot still matches this EFSR. Try that CI too. */
-        if (root->generation > 0 && ntry < 6) {
+        if (root->generation > 0) {
             uint32_t alt[3];
             int na = efs_meta_page_ci_candidates(root->generation - 1,
                                                  root->version,
                                                  root->ino_page_count,
                                                  root->chunk_page_count, pi,
                                                  alt);
-            for (int i = 0; i < na && ntry < 6; i++) {
-                int dup = 0;
-                for (int j = 0; j < ntry; j++) {
-                    if (try_ci[j] == alt[i]) {
-                        dup = 1;
-                        break;
-                    }
-                }
-                if (!dup)
-                    try_ci[ntry++] = alt[i];
-            }
+            for (int i = 0; i < na; i++)
+                add_meta_ci(try_ci, &ntry, 12, alt[i]);
+        }
+        int is_chunk = root->chunk_page_count > 0 && pi >= root->ino_page_count;
+        if (is_chunk && g_meta_chunk_ci_even_base != UINT32_MAX) {
+            uint32_t rpi = pi - root->ino_page_count;
+            add_meta_ci(try_ci, &ntry, 12, g_meta_chunk_ci_even_base + rpi);
+            add_meta_ci(try_ci, &ntry, 12,
+                        g_meta_chunk_ci_even_base + rpi + EFS_META_SLOT_STRIDE);
+        }
+        if (is_chunk && g_last_chunk_even_ci != UINT32_MAX &&
+            g_last_chunk_even_ci + 1 < EFS_META_MAX_PAGES) {
+            add_meta_ci(try_ci, &ntry, 12, g_last_chunk_even_ci + 1);
+            add_meta_ci(try_ci, &ntry, 12,
+                        g_last_chunk_even_ci + 1 + EFS_META_SLOT_STRIDE);
         }
         int rc = EFS_ERR_INVAL;
         const char *scheme = "v5";
         int loaded = 0;
+        uint32_t used_ci = UINT32_MAX;
 
         for (int ti = 0; ti < ntry && !loaded; ti++) {
             uint32_t ci = try_ci[ti];
@@ -619,6 +779,7 @@ static int load_export_from_root(const struct efs_export_root *root)
             if (rc != EFS_OK)
                 continue;
             loaded = 1;
+            used_ci = ci;
             if (layout == 4)
                 saw_v4_ci = 1;
             else if (layout == 5)
@@ -632,8 +793,70 @@ static int load_export_from_root(const struct efs_export_root *root)
                 fflush(stderr);
             }
         }
-        if (loaded)
+        if (!loaded && is_chunk && g_last_chunk_even_ci != UINT32_MAX &&
+            g_chunk_skip_streak < 3) {
+            for (int d = 0; d <= 64 && !loaded; d++) {
+                for (int sgn = 0; sgn < 2 && !loaded; sgn++) {
+                    if (d == 0 && sgn == 1)
+                        continue;
+                    int64_t even64 = (int64_t)g_last_chunk_even_ci +
+                                     (sgn ? -(int64_t)d : (int64_t)d);
+                    if (even64 < 0 || even64 >= (int64_t)EFS_META_MAX_PAGES)
+                        continue;
+                    uint32_t even = (uint32_t)even64;
+                    uint32_t pair[2] = { even, even + EFS_META_SLOT_STRIDE };
+                    for (int s = 0; s < 2 && !loaded; s++) {
+                        if (meta_ci_quorum(root, pi, pair[s]) < 2)
+                            continue;
+                        rc = load_page_from_chunk(root, pi, pair[s], pages[pi]);
+                        if (rc != EFS_OK)
+                            continue;
+                        loaded = 1;
+                        used_ci = pair[s];
+                        if (d > 1)
+                            fprintf(stderr,
+                                    "meta: page %u at ci=%u (delta %d from last)\n",
+                                    pi, pair[s], sgn ? -d : d);
+                    }
+                }
+            }
+        }
+        if (!loaded && is_chunk && g_last_chunk_even_ci == UINT32_MAX) {
+            uint32_t rpi = pi - root->ino_page_count;
+            uint32_t even = hunt_chunk_page_even_ci(root, pi);
+            if (even != UINT32_MAX) {
+                if (even >= rpi)
+                    g_meta_chunk_ci_even_base = even - rpi;
+                uint32_t found[2] = { even, even + EFS_META_SLOT_STRIDE };
+                for (int ti = 0; ti < 2 && !loaded; ti++) {
+                    rc = load_page_from_chunk(root, pi, found[ti], pages[pi]);
+                    if (rc == EFS_OK) {
+                        loaded = 1;
+                        used_ci = found[ti];
+                    }
+                }
+            }
+        }
+        if (loaded) {
+            g_chunk_skip_streak = 0;
+            if (is_chunk && used_ci != UINT32_MAX)
+                g_last_chunk_even_ci = (used_ci >= EFS_META_SLOT_STRIDE)
+                                           ? used_ci - EFS_META_SLOT_STRIDE
+                                           : used_ci;
+            if ((pi % 1000u) == 0) {
+                fprintf(stderr, "meta: loaded %u/%u\n", pi, root->page_count);
+                fflush(stderr);
+            }
             continue;
+        }
+        if (is_chunk) {
+            g_chunk_skip_streak++;
+            fprintf(stderr,
+                    "meta: skipping unrecoverable chunk page %u/%u rc=%d (%s)\n",
+                    pi, root->page_count, rc, efs_strerror(rc));
+            fflush(stderr);
+            continue;
+        }
         fprintf(stderr,
                 "meta: page reconstruct failed page=%u/%u gen=%llu "
                 "blob_len=%u scheme=%s rc=%d (%s)\n",

@@ -141,15 +141,46 @@ static int fetch_meta_fragment(struct efsd_server *s, struct efs_export *ex,
     if (node_id == s->id) {
         uint32_t len = 0;
         if (server_read_fragment(s, ex, EFS_META_TABLE_INO, chunk_index,
-                                 fragment_index, data, &len) != EFS_OK)
-            return EFS_ERR_NOT_FOUND;
-        return EFS_OK;
+                                 fragment_index, data, &len) == EFS_OK)
+            return EFS_OK;
+    } else {
+        struct efs_node n;
+        if (copy_node_by_id(s, node_id, &n) == 0 &&
+            server_get_fragment_from_peer(n.addr, n.port, ex->id,
+                                          EFS_META_TABLE_INO, chunk_index,
+                                          fragment_index, data, checksum) == EFS_OK)
+            return EFS_OK;
     }
-    struct efs_node n;
-    if (copy_node_by_id(s, node_id, &n) != 0)
-        return EFS_ERR_NOT_FOUND;
-    return server_get_fragment_from_peer(n.addr, n.port, ex->id, EFS_META_TABLE_INO,
-                                         chunk_index, fragment_index, data, checksum);
+
+    /* Placement can be stale: try every other member (and local if the
+     * hint was a peer). */
+    struct efs_node snap[EFS_MAX_NODES];
+    uint32_t nc = 0;
+    efs_node_id_t self = 0;
+    pthread_mutex_lock(&s->lock);
+    nc = s->node_count;
+    if (nc > EFS_MAX_NODES)
+        nc = EFS_MAX_NODES;
+    memcpy(snap, s->nodes, sizeof(struct efs_node) * nc);
+    self = s->id;
+    pthread_mutex_unlock(&s->lock);
+
+    for (uint32_t i = 0; i < nc; i++) {
+        if (snap[i].id == 0 || snap[i].id == node_id)
+            continue;
+        if (snap[i].id == self) {
+            uint32_t len = 0;
+            if (server_read_fragment(s, ex, EFS_META_TABLE_INO, chunk_index,
+                                     fragment_index, data, &len) == EFS_OK)
+                return EFS_OK;
+            continue;
+        }
+        if (server_get_fragment_from_peer(snap[i].addr, snap[i].port, ex->id,
+                                          EFS_META_TABLE_INO, chunk_index,
+                                          fragment_index, data, checksum) == EFS_OK)
+            return EFS_OK;
+    }
+    return EFS_ERR_NOT_FOUND;
 }
 
 static void gc_region_pages(struct efsd_server *s, struct efs_export *ex,
