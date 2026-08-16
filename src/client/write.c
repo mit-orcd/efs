@@ -2054,14 +2054,20 @@ static struct dcache_ent *dcache_find(uint32_t s, efs_ino_t ino, uint32_t ci)
 
 int efs_dcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
 {
+    return efs_dcache_copy(ino, ci, 0, dst, len);
+}
+
+int efs_dcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
+                    uint8_t *dst, uint32_t len)
+{
     if (!dst || !len)
         return -1;
     uint32_t s = dcache_slot(ino, ci);
     pthread_mutex_t *mu = dcache_mu(s);
     pthread_mutex_lock(mu);
     struct dcache_ent *e = dcache_find(s, ino, ci);
-    if (e && e->len >= len) {
-        memcpy(dst, e->data, len);
+    if (e && (uint64_t)off + len <= e->len) {
+        memcpy(dst, e->data + off, len);
         pthread_mutex_unlock(mu);
         return 0;
     }
@@ -2099,6 +2105,12 @@ void efs_dcache_drop(efs_ino_t ino, uint32_t ci)
     pthread_mutex_unlock(mu);
 }
 
+static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
+                              uint32_t chunk_size);
+static int dcache_merge_owned(efs_ino_t ino, uint32_t ci, uint32_t off,
+                              const uint8_t *src, uint32_t len,
+                              uint8_t *chunk, uint32_t cs);
+
 static int dcache_patch(efs_ino_t ino, uint32_t ci, uint32_t off, const uint8_t *src,
                         uint32_t len)
 {
@@ -2111,10 +2123,65 @@ static int dcache_patch(efs_ino_t ino, uint32_t ci, uint32_t off, const uint8_t 
     if (e && e->dirty && off + len <= e->len) {
         memcpy(e->data + off, src, len);
         pthread_mutex_unlock(mu);
+        efs_rdcache_invalidate(ino, ci);
         return 0;
     }
     pthread_mutex_unlock(mu);
     return -1;
+}
+
+/* First 4k to a chunk: pull the base (rdcache / servers / zeros) into the
+ * dirty cache so later random writes patch in place instead of RMW+PUT. */
+static int dcache_load_and_patch(efs_ino_t ino, uint32_t ci, uint32_t off,
+                                 const uint8_t *src, uint32_t len, uint32_t cs)
+{
+    if (dcache_patch(ino, ci, off, src, len) == 0)
+        return 0;
+
+    uint8_t *chunk = malloc(cs);
+    if (!chunk)
+        return -1;
+
+    if (efs_rdcache_get(ino, ci, chunk, cs) != 0) {
+        int have = 0;
+        pthread_mutex_lock(&g_client.idx_mu);
+        have = (efs_export_get_chunk(&g_client.export, ino, ci, NULL) == 0);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        if (!have) {
+            memset(chunk, 0, cs);
+        } else {
+            size_t got = 0;
+            int rrc = efs_client_read(ino, (uint64_t)ci * cs, cs,
+                                      (char *)chunk, &got);
+            if (rrc != EFS_OK) {
+                free(chunk);
+                return -1;
+            }
+            if (got < cs)
+                memset(chunk + got, 0, cs - got);
+        }
+    }
+    memcpy(chunk + off, src, len);
+    if (dcache_merge_owned(ino, ci, off, src, len, chunk, cs) != 0) {
+        free(chunk);
+        return -1;
+    }
+    return 0;
+}
+
+static void dcache_note_size(efs_ino_t ino, uint64_t end)
+{
+    efs_client_lock_dir(ino);
+    struct efs_inode cur;
+    if (efs_export_get_inode(&g_client.export, ino, &cur) == 0 &&
+        cur.size < end) {
+        efs_export_set_size_norollup(&g_client.export, ino, end);
+        efs_client_mark_ino_dirty(ino);
+    }
+    /* Overwrite of an already-cached chunk: skip mtime + dirty-ino.
+     * Random 4k used to take idx/dir locks and mark the inode dirty
+     * on every patch (~250k/s), which capped rw-4k and flooded meta. */
+    efs_client_unlock_dir(ino);
 }
 
 int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
@@ -2129,21 +2196,10 @@ int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
     uint32_t off = (uint32_t)(offset % cs);
     if ((uint64_t)off + len > cs)
         return -1;
-    if (dcache_patch(ino, ci, off, src, len) != 0)
+    if (dcache_patch(ino, ci, off, src, len) != 0 &&
+        dcache_load_and_patch(ino, ci, off, src, len, cs) != 0)
         return -1;
-
-    uint64_t end = offset + len;
-    efs_client_lock_dir(ino);
-    struct efs_inode cur;
-    if (efs_export_get_inode(&g_client.export, ino, &cur) == 0 &&
-        cur.size < end) {
-        efs_export_set_size_norollup(&g_client.export, ino, end);
-        efs_client_mark_ino_dirty(ino);
-    }
-    /* Overwrite of an already-cached chunk: skip mtime + dirty-ino.
-     * Random 4k used to take idx/dir locks and mark the inode dirty
-     * on every patch (~250k/s), which capped rw-4k and flooded meta. */
-    efs_client_unlock_dir(ino);
+    dcache_note_size(ino, offset + len);
     return 0;
 }
 
@@ -2250,6 +2306,31 @@ static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
     n->next = head->next;
     head->next = n;
     pthread_mutex_unlock(mu);
+    return 0;
+}
+
+/* Install a freshly loaded+patched chunk, or fold just [off,len) into a
+ * chunk another writer dirtied while we were fetching. Steals `chunk` on
+ * success (including the fold path, which frees it). */
+static int dcache_merge_owned(efs_ino_t ino, uint32_t ci, uint32_t off,
+                              const uint8_t *src, uint32_t len,
+                              uint8_t *chunk, uint32_t cs)
+{
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(s, ino, ci);
+    if (e && e->dirty && e->len >= cs && off + len <= e->len) {
+        memcpy(e->data + off, src, len);
+        pthread_mutex_unlock(mu);
+        free(chunk);
+        efs_rdcache_invalidate(ino, ci);
+        return 0;
+    }
+    pthread_mutex_unlock(mu);
+    if (dcache_store_owned(ino, ci, chunk, cs) != 0)
+        return -1;
+    efs_rdcache_invalidate(ino, ci);
     return 0;
 }
 

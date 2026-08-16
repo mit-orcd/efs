@@ -170,10 +170,13 @@ void efs_rdcache_invalidate(efs_ino_t ino, uint32_t ci);
 
 /* Dirty assembled chunks: combine partial writes and PUT on flush/evict. */
 int efs_dcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len);
+int efs_dcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
+                    uint8_t *dst, uint32_t len);
 int efs_dcache_flush_all(void);
 int efs_dcache_flush_ino(efs_ino_t ino);
 void efs_dcache_drop(efs_ino_t ino, uint32_t ci);
-/* Patch a dirty cached chunk in place. 0 = hit (size/mtime updated), -1 = miss. */
+/* Patch a cached chunk, loading it (rdcache / servers / zeros) on miss.
+ * 0 = cached (size updated if the write grew the file), -1 = cannot cache. */
 int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
                          const uint8_t *src);
 

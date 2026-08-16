@@ -2401,13 +2401,23 @@ static void *efs_fuse_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
             conn->max_write = want;
         if (conn->max_readahead == 0 || conn->max_readahead > (16u << 20))
             conn->max_readahead = 16u << 20;
-        /* Do not set FUSE_CAP_WRITEBACK_CACHE. Kernel writebacks unaligned
-         * windows; RMW of in-flight chunks still returns EIO (seen on a
-         * 64 MiB /dev/urandom dd). Keep writes syscall-shaped. */
+        /* Do not set FUSE_CAP_WRITEBACK_CACHE. It is EIO-safe now, but
+         * kernel dirty-throttled writeback cut 8-job 1M writes from
+         * ~6 GB/s to ~2.4 GB/s and made end_fsync slower. */
         /* 8+ fio jobs × pipelined chunk GETs need more than the
          * libfuse default (12) outstanding FUSE requests. */
         if (conn->max_background < 128)
             conn->max_background = 128;
+#ifdef FUSE_CAP_ASYNC_READ
+        if (conn->capable & FUSE_CAP_ASYNC_READ)
+            conn->want |= FUSE_CAP_ASYNC_READ;
+#endif
+#ifdef FUSE_CAP_PARALLEL_DIROPS
+        if (conn->capable & FUSE_CAP_PARALLEL_DIROPS)
+            conn->want |= FUSE_CAP_PARALLEL_DIROPS;
+#endif
+        if (conn->congestion_threshold < 96)
+            conn->congestion_threshold = 96;
     }
     /* Coalesce metadata PUTs so bulk creates are not O(n^2) full-metadata
      * syncs. Override with EFS_META_BATCH_OPS for heavy profiling loads. */

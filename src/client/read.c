@@ -905,7 +905,7 @@ struct get_batch {
     int remaining;
 };
 
-#define RDCACHE_SLOTS  32768
+#define RDCACHE_SLOTS  65536
 #define RDCACHE_WAYS   2
 #define RDCACHE_STRIPES 64
 struct rdcache_ent {
@@ -1236,23 +1236,20 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
     size_t total = 0;
     uint64_t end = offset + size;
     uint32_t chunk_size = data_chunk_size();
-    /* Sub-chunk read: serve from the decoded cache without malloc(128k). */
+    /* Sub-chunk read: dirty dcache first (newer than rdcache), then
+     * decoded cache — no malloc(128k) on the 4k path. */
     if (chunk_size && size < chunk_size &&
         (offset / chunk_size) == ((end - 1) / chunk_size)) {
         uint32_t ci = (uint32_t)(offset / chunk_size);
         uint32_t off = (uint32_t)(offset % chunk_size);
+        if (efs_dcache_copy(ino, ci, off, (uint8_t *)buf, (uint32_t)size) == 0) {
+            *out_len = size;
+            return EFS_OK;
+        }
         if (efs_rdcache_copy(ino, ci, off, (uint8_t *)buf, (uint32_t)size) == 0) {
             *out_len = size;
             return EFS_OK;
         }
-        uint8_t *full = malloc(chunk_size);
-        if (full && efs_dcache_get(ino, ci, full, chunk_size) == 0) {
-            memcpy(buf, full + off, size);
-            free(full);
-            *out_len = size;
-            return EFS_OK;
-        }
-        free(full);
     }
     uint32_t pipe = EFS_WRITE_PIPELINE;
     if (pipe < 1)
