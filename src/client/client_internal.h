@@ -108,6 +108,10 @@ struct efs_client {
     int meta_flush_stop;
     int meta_flush_started;
     int meta_flush_force; /* next flush does a full serialize */
+    /* After a hunted/skipped reconstruct, rewrite chunk-table pages to
+     * canonical CIs (same-parity gen+2) so the next mount does not hunt. */
+    int meta_heal;
+    uint32_t meta_heal_skipped;
 };
 
 /* Mark inode/chunk dirty for the next batched metadata delta flush.
@@ -157,6 +161,8 @@ int efs_client_meta_cache_adopt(char *blob, size_t blob_len);
  * immediately (test / C-API behaviour). With meta_batch!=0 it coalesces
  * until meta_batch_ops changes accumulate (or force!=0). */
 int efs_client_note_meta_change(int force);
+/* Background: PUT recovered chunk-table pages at v5 indexes and publish. */
+void efs_client_schedule_meta_heal(void);
 void efs_client_stop_meta_flush(void);
 
 /* Decoded-chunk cache for sub-chunk reads and RMW. */

@@ -412,10 +412,12 @@ static int load_page_from_chunk(const struct efs_export_root *root, uint32_t pi,
             used_scan = 1;
         }
     }
-    if (used_scan)
+    if (used_scan) {
+        g_client.meta_heal = 1;
         fprintf(stderr,
                 "meta: page %u ci=%u recovered fragment(s) via all-node scan\n",
                 pi, chunk_index);
+    }
 
     int missing = -1, a = -1, b = -1;
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
@@ -665,22 +667,31 @@ static uint32_t hunt_chunk_page_even_ci(const struct efs_export_root *root,
             pi, rpi);
     fflush(stderr);
 
-    /* Full 32k scan is too slow when the page was never written. Search
-     * near the last hit and the v5 chunk window; caller may skip. */
-    uint32_t lo = 0, hi = EFS_META_MAX_PAGES;
+    /* First hunt: v5 chunk window (16384+). Later hunts: near last hit. */
+    uint32_t windows[3][2];
+    int nwin;
     if (g_last_chunk_even_ci != UINT32_MAX) {
-        lo = (g_last_chunk_even_ci > 4096) ? g_last_chunk_even_ci - 4096 : 0;
-        hi = g_last_chunk_even_ci + 4096;
+        uint32_t last = g_last_chunk_even_ci;
+        uint32_t lo = (last > 4096) ? last - 4096 : 0;
+        uint32_t hi = last + 4096;
         if (hi > EFS_META_MAX_PAGES)
             hi = EFS_META_MAX_PAGES;
+        windows[0][0] = lo;
+        windows[0][1] = hi;
+        windows[1][0] = EFS_META_CHUNK_PAGE_BASE;
+        windows[1][1] = EFS_META_CHUNK_PAGE_BASE + 4096;
+        windows[2][0] = 0;
+        windows[2][1] = 2048;
+        nwin = 3;
+    } else {
+        windows[0][0] = EFS_META_CHUNK_PAGE_BASE;
+        windows[0][1] = EFS_META_MAX_PAGES;
+        windows[1][0] = 0;
+        windows[1][1] = EFS_META_CHUNK_PAGE_BASE;
+        nwin = 2;
     }
-    const uint32_t windows[3][2] = {
-        { lo, hi },
-        { EFS_META_CHUNK_PAGE_BASE, EFS_META_CHUNK_PAGE_BASE + 4096 },
-        { 0, 2048 },
-    };
     int odd_first = (int)(root->generation & 1ULL);
-    for (int w = 0; w < 3; w++) {
+    for (int w = 0; w < nwin; w++) {
         for (uint32_t logical = windows[w][0]; logical < windows[w][1];
              logical++) {
             uint32_t even = logical;
@@ -720,6 +731,7 @@ static int load_export_from_root(const struct efs_export_root *root)
     g_meta_chunk_ci_even_base = UINT32_MAX;
     g_last_chunk_even_ci = UINT32_MAX;
     g_chunk_skip_streak = 0;
+    g_client.meta_heal_skipped = 0;
     int saw_v4_ci = 0, saw_v5_ci = 0;
     for (uint32_t pi = 0; pi < root->page_count; pi++) {
         /* Tail pages past ino_blob_len / chunk_blob_len are not in the EFSM. */
@@ -813,10 +825,12 @@ static int load_export_from_root(const struct efs_export_root *root)
                             continue;
                         loaded = 1;
                         used_ci = pair[s];
-                        if (d > 1)
+                        if (d > 1) {
+                            g_client.meta_heal = 1;
                             fprintf(stderr,
                                     "meta: page %u at ci=%u (delta %d from last)\n",
                                     pi, pair[s], sgn ? -d : d);
+                        }
                     }
                 }
             }
@@ -825,6 +839,7 @@ static int load_export_from_root(const struct efs_export_root *root)
             uint32_t rpi = pi - root->ino_page_count;
             uint32_t even = hunt_chunk_page_even_ci(root, pi);
             if (even != UINT32_MAX) {
+                g_client.meta_heal = 1;
                 if (even >= rpi)
                     g_meta_chunk_ci_even_base = even - rpi;
                 uint32_t found[2] = { even, even + EFS_META_SLOT_STRIDE };
@@ -851,6 +866,8 @@ static int load_export_from_root(const struct efs_export_root *root)
         }
         if (is_chunk) {
             g_chunk_skip_streak++;
+            g_client.meta_heal = 1;
+            g_client.meta_heal_skipped++;
             fprintf(stderr,
                     "meta: skipping unrecoverable chunk page %u/%u rc=%d (%s)\n",
                     pi, root->page_count, rc, efs_strerror(rc));

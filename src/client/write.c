@@ -648,7 +648,7 @@ static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
                           uint32_t committed_ino_pc, uint32_t committed_ch_pc,
                           uint8_t **out_hashes, uint8_t **out_sums,
                           uint32_t *out_pages, struct efs_export_root *out_root,
-                          struct dirty_snap *ds, int full)
+                          struct dirty_snap *ds, int full, int heal)
 {
     char *blob = NULL;
     size_t blob_len = 0;
@@ -818,6 +818,8 @@ static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
                                                               : ch_dirty_pg;
                 row_dirty = bm && bm[pi];
             }
+            if (heal && region == EFS_META_REGION_CHUNK)
+                row_dirty = 1;
             /* Clean incremental page: do not hash or PUT. The other dual
              * slot already holds this content from the last same-parity
              * gen; reuse the committed root checksums. After remount the
@@ -946,6 +948,11 @@ static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
                 return rc;
             }
             page_put++;
+            if (heal && (page_put % 500u) == 0) {
+                fprintf(stderr, "meta: heal PUT %u/%u chunk pages\n",
+                        page_put, ndirty);
+                fflush(stderr);
+            }
             for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
                 memcpy(efs_export_root_checksum(&root, d->packed, fi),
                        checksums[fi], EFS_HASH_SIZE);
@@ -1049,9 +1056,10 @@ static int efs_client_replicate_metadata_locked(void)
     efs_client_table_lock();
     efs_client_ensure_dir_locks();
     pthread_mutex_lock(&g_client.dirty_mu);
+    int heal = g_client.meta_heal;
     if (g_client.meta_batch &&
         g_client.dirty_ino_count == 0 && g_client.dirty_chunk_count == 0 &&
-        !g_client.meta_dirty) {
+        !g_client.meta_dirty && !heal) {
         g_client.meta_dirty_ops = 0;
         pthread_mutex_unlock(&g_client.dirty_mu);
         efs_client_table_unlock();
@@ -1067,9 +1075,17 @@ static int efs_client_replicate_metadata_locked(void)
     snap.inode_count = ex->inode_count;
     snap.chunk_count = ex->chunk_count;
     snap.layout_epoch = ex->layout_epoch;
-    new_gen = ex->root.generation + 1;
+    new_gen = ex->root.generation + (heal ? 2ULL : 1ULL);
     if (new_gen == 0)
         new_gen = 1;
+    if (heal) {
+        fprintf(stderr,
+                "meta: heal rewriting chunk-table pages to canonical CIs "
+                "(gen %llu -> %llu; %u skipped page(s) published as zeros)\n",
+                (unsigned long long)ex->root.generation,
+                (unsigned long long)new_gen, g_client.meta_heal_skipped);
+        fflush(stderr);
+    }
     committed_ino_pc = ex->root.ino_page_count ? ex->root.ino_page_count
                                                : ex->root.page_count;
     committed_ch_pc = ex->root.chunk_page_count;
@@ -1110,12 +1126,40 @@ static int efs_client_replicate_metadata_locked(void)
                 ds.packed_is_cache = 1;
                 packed = 1;
             }
-        } else if (ds.meta_dirty) {
+        } else if (ds.meta_dirty && !heal) {
             /* Nothing row-dirty: do not bump a generation. */
             dirty_snap_free(&ds);
             pthread_mutex_unlock(&g_client.dirty_mu);
             efs_client_table_unlock();
             return EFS_OK;
+        }
+    }
+    if (heal && packed && ds.ch_dirty_pg) {
+        uint32_t ch_pc = efs_meta_page_count_for_blob(ds.packed_ch_len);
+        if (ch_pc)
+            memset(ds.ch_dirty_pg, 1, ch_pc);
+    } else if (heal && !packed && g_client.meta_cache_blob &&
+               ds.layout_epoch == g_client.meta_cache_epoch) {
+        uint32_t ino_len = g_client.meta_cache_ino_len;
+        uint32_t ch_len = g_client.meta_cache_ch_len;
+        uint32_t ino_pc = efs_meta_page_count_for_blob(ino_len);
+        uint32_t ch_pc = efs_meta_page_count_for_blob(ch_len);
+        uint8_t *idirty = calloc(ino_pc ? ino_pc : 1, 1);
+        uint8_t *cdirty = calloc(ch_pc ? ch_pc : 1, 1);
+        if (idirty && cdirty) {
+            if (ch_pc)
+                memset(cdirty, 1, ch_pc);
+            ds.packed = g_client.meta_cache_blob;
+            ds.packed_len = g_client.meta_cache_len;
+            ds.packed_ino_len = ino_len;
+            ds.packed_ch_len = ch_len;
+            ds.ino_dirty_pg = idirty;
+            ds.ch_dirty_pg = cdirty;
+            ds.packed_is_cache = 1;
+            packed = 1;
+        } else {
+            free(idirty);
+            free(cdirty);
         }
     }
     if (!packed) {
@@ -1144,12 +1188,15 @@ static int efs_client_replicate_metadata_locked(void)
     efs_client_table_unlock();
 
     int rc = flush_snapshot(&snap, new_gen, committed_ino_pc, committed_ch_pc,
-                            &hashes, &sums, &pages, &new_root, &ds, full);
+                            &hashes, &sums, &pages, &new_root, &ds, full,
+                            heal);
     free(snap.inodes);
     free(snap.chunks);
 
     pthread_mutex_lock(&g_client.lock);
     if (rc == EFS_OK) {
+        if (heal)
+            g_client.meta_heal = 0;
         g_client.export.meta_fragmented = 1;
         efs_export_root_move(&g_client.export.root, &new_root);
         {
@@ -1377,6 +1424,30 @@ void efs_client_enable_meta_batch(uint32_t every_n_ops)
                            NULL) == 0)
             g_client.meta_flush_started = 1;
     }
+    if (g_client.meta_heal)
+        efs_client_schedule_meta_heal();
+}
+
+void efs_client_schedule_meta_heal(void)
+{
+    if (!g_client.meta_heal)
+        return;
+    efs_client_ensure_dir_locks();
+    pthread_mutex_lock(&g_client.dirty_mu);
+    g_client.meta_dirty = 1;
+    pthread_mutex_unlock(&g_client.dirty_mu);
+    fprintf(stderr,
+            "meta: scheduling background heal flush (%u skipped chunk page(s))\n",
+            g_client.meta_heal_skipped);
+    fflush(stderr);
+    if (g_client.meta_flush_started) {
+        pthread_mutex_lock(&g_client.meta_flush_mu);
+        g_client.meta_flush_req = 1;
+        pthread_cond_signal(&g_client.meta_flush_cv);
+        pthread_mutex_unlock(&g_client.meta_flush_mu);
+        return;
+    }
+    (void)efs_client_replicate_metadata_nb();
 }
 
 void efs_client_stop_meta_flush(void)
