@@ -112,12 +112,33 @@ struct efs_client {
      * canonical CIs (same-parity gen+2) so the next mount does not hunt. */
     int meta_heal;
     uint32_t meta_heal_skipped;
+    int meta_heal_pending; /* heal requested; run when dirty set is idle */
+    int meta_cap_blocked;  /* last flush hit the page cap; skip until shrink */
+    int last_err;          /* EFS_ERR_* from the last mutating client op */
+    int write_readonly;    /* another client holds the EFSR write lease */
+    uint64_t write_lease_id;
+    uint32_t dirty_stripe_ops[EFS_DIR_LOCKS];
+    int last_dirty_stripe;
 };
 
 /* Mark inode/chunk dirty for the next batched metadata delta flush.
  * No-ops when meta_batch is disabled. Takes dirty_mu internally. */
 void efs_client_mark_ino_dirty(efs_ino_t ino);
 void efs_client_mark_chunk_dirty(efs_ino_t ino, uint32_t chunk_index);
+int efs_client_ensure_meta_room(uint64_t extra_inodes, uint64_t extra_chunks);
+int efs_client_take_write_lease(void);
+int efs_client_rpc_lookup(efs_export_id_t export_id, efs_ino_t parent,
+                          const char *name, struct efs_inode *out);
+int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
+                          const char *name, uint32_t mode, uid_t uid, gid_t gid,
+                          efs_ino_t *out_ino);
+int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
+                           struct efs_inode *out);
+int efs_client_rpc_readdir(efs_export_id_t export_id, efs_ino_t parent,
+                           struct efs_inode *ents, uint32_t *inout_count);
+int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
+                          const char *name, int is_dir);
+int efs_client_load_shard(uint32_t shard);
 
 void efs_client_ensure_dir_locks(void);
 void efs_client_lock_dir(efs_ino_t parent);
@@ -185,6 +206,8 @@ void efs_dcache_drop(efs_ino_t ino, uint32_t ci);
  * 0 = cached (size updated if the write grew the file), -1 = cannot cache. */
 int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
                          const uint8_t *src);
+/* If dirty assembled chunks exceed the cap, PUT them now. */
+void efs_dcache_maybe_reclaim(void);
 
 /* Enable coalesced metadata replication for the FUSE client. */
 void efs_client_enable_meta_batch(uint32_t every_n_ops);

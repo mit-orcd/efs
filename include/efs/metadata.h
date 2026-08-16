@@ -76,6 +76,12 @@ struct efs_export_root {
     uint32_t ino_page_count;
     uint32_t chunk_page_count;
     uint8_t *page_checksums;
+    /* EFSR v6: inode-range shards + exclusive write lease. v5 loads as
+     * shard_count=1, shard_bits=0 (single blob, no lease). */
+    uint32_t shard_count;
+    uint32_t shard_bits; /* shard = ino >> shard_bits; 0 = one shard */
+    uint64_t write_lease_id;
+    uint64_t write_lease_until_ms;
 };
 
 struct efs_export {
@@ -87,6 +93,9 @@ struct efs_export {
     struct efs_inode *inodes;
     uint64_t inode_count;
     uint64_t inode_capacity;
+    /* Packed v6 dentry tail: sum of (2 + namelen) over live inode rows.
+     * Maintained on create/link/unlink/rename; recomputed on deserialize. */
+    uint64_t dentry_bytes;
     struct efs_chunk_entry *chunks;
     uint64_t chunk_count;
     uint64_t chunk_capacity;
@@ -132,14 +141,35 @@ struct efs_export {
      * serialize knows the cached blob layout is stale. */
     uint64_t layout_epoch;
     struct efs_export_root root;
+    /* EFSM blob version last serialized (5 = 420 B inodes, 6 = compact +
+     * variable dentries). Deserialize accepts both. */
+    uint32_t efsm_version;
 };
 
 /* EFSM v5 wire sizes (fixed-width; keep in sync with metadata.c). */
 #define EFS_META_HDR_SIZE     284
 #define EFS_INODE_WIRE_SIZE   420
+/* EFSM v6: inode row without name / tree rollups. Names live in a packed
+ * dentry tail in the same inode-region blob. */
+#define EFS_INODE_COMPACT_SIZE 124
 #define EFS_CHUNK_WIRE_SIZE   120
 #define EFS_ROLLUP_TOUCH      1
 #define EFS_ROLLUP_CREATE     2
+#define EFS_META_EFSM_V5      5
+#define EFS_META_EFSM_V6      6
+
+/* True if adding extra inode/chunk rows would exceed the v5 page caps. */
+int efs_export_fits_page_cap(const struct efs_export *ex, uint64_t extra_inodes,
+                             uint64_t extra_chunks);
+/* Inode/chunk page counts for the current table (v6 compact accounting). */
+void efs_export_meta_page_usage(const struct efs_export *ex,
+                                uint32_t *ino_pages, uint32_t *chunk_pages);
+uint32_t efs_export_shard_of(efs_ino_t ino, uint32_t shard_bits);
+
+static inline efs_ino_t efs_meta_shard_table_ino(uint32_t shard)
+{
+    return EFS_META_SHARD_INO_BASE + (efs_ino_t)shard;
+}
 
 /* Initialize an empty export. */
 void efs_export_init(struct efs_export *ex, efs_export_id_t id, const char *name);
@@ -233,6 +263,9 @@ void efs_export_recompute_rollups(struct efs_export *ex);
 /* Format directory rollup fields into .stats text. Returns bytes written
  * (excluding NUL), or -1 if buf is too small / not a directory. */
 int efs_export_format_stats(const struct efs_inode *dir, char *buf, size_t buflen);
+int efs_export_format_stats_ex(const struct efs_export *ex,
+                               const struct efs_inode *dir, char *buf,
+                               size_t buflen);
 
 /* Visit each lookupable child slot under parent (skips the dir itself,
  * ino==0 holes, and rows the name index cannot resolve). */
@@ -248,7 +281,11 @@ int efs_export_serialize(struct efs_export *ex, char **buf, size_t *len);
 int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
                             uint32_t *ino_blob_len, uint32_t *chunk_blob_len);
 void efs_export_pack_header(const struct efs_export *ex, uint8_t out[EFS_META_HDR_SIZE]);
+void efs_export_pack_header_ver(const struct efs_export *ex,
+                                uint8_t out[EFS_META_HDR_SIZE], uint32_t ver);
 void efs_export_pack_inode(const struct efs_inode *ino, uint8_t out[EFS_INODE_WIRE_SIZE]);
+void efs_export_pack_inode_compact(const struct efs_inode *ino,
+                                   uint8_t out[EFS_INODE_COMPACT_SIZE]);
 void efs_export_pack_chunk(const struct efs_chunk_entry *ce,
                            uint8_t out[EFS_CHUNK_WIRE_SIZE]);
 int efs_export_inode_slot(struct efs_export *ex, efs_ino_t ino, uint64_t *slot);

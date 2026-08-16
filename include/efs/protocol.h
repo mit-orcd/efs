@@ -55,6 +55,19 @@ enum efs_msg_type {
     /* Append local --storage roots on a live node (no restart). */
     EFS_MSG_ADD_STORAGE = 41,
     EFS_MSG_ADD_STORAGE_REPLY = 42,
+    /* Server inode/dentry RPCs (EFSR v6 sharded metadata). */
+    EFS_MSG_INODE_LOOKUP = 43,
+    EFS_MSG_INODE_LOOKUP_REPLY = 44,
+    EFS_MSG_INODE_CREATE = 45,
+    EFS_MSG_INODE_CREATE_REPLY = 46,
+    EFS_MSG_INODE_GETATTR = 47,
+    EFS_MSG_INODE_GETATTR_REPLY = 48,
+    EFS_MSG_INODE_READDIR = 49,
+    EFS_MSG_INODE_READDIR_REPLY = 50,
+    EFS_MSG_INODE_UNLINK = 51,
+    EFS_MSG_INODE_UNLINK_REPLY = 52,
+    EFS_MSG_UPGRADE_META = 53,
+    EFS_MSG_UPGRADE_META_REPLY = 54,
 };
 
 /* Set per-export features. Only bits in set_mask are changed (to the
@@ -255,6 +268,72 @@ struct efs_msg_export_entry {
 struct efs_msg_list_exports_reply {
     uint32_t export_count;
     struct efs_msg_export_entry exports[EFS_MAX_EXPORTS];
+};
+
+#define EFS_INODE_RPC_OK         0
+#define EFS_INODE_RPC_NOT_FOUND  1
+#define EFS_INODE_RPC_EXIST      2
+#define EFS_INODE_RPC_ERROR      3
+#define EFS_INODE_RPC_QUOTA      4
+#define EFS_INODE_RPC_BUSY       5
+
+struct efs_msg_inode_lookup {
+    efs_export_id_t export_id;
+    efs_ino_t parent;
+    char name[EFS_MAX_NAME];
+};
+
+struct efs_msg_inode_create {
+    efs_export_id_t export_id;
+    efs_ino_t parent;
+    char name[EFS_MAX_NAME];
+    uint32_t mode;
+    uint32_t uid;
+    uint32_t gid;
+};
+
+struct efs_msg_inode_getattr {
+    efs_export_id_t export_id;
+    efs_ino_t ino;
+};
+
+struct efs_msg_inode_readdir {
+    efs_export_id_t export_id;
+    efs_ino_t parent;
+    uint32_t max_ents;
+};
+
+struct efs_msg_inode_unlink {
+    efs_export_id_t export_id;
+    efs_ino_t parent;
+    char name[EFS_MAX_NAME];
+    uint8_t is_dir;
+};
+
+struct efs_msg_inode_reply {
+    uint8_t status;
+    struct efs_inode inode;
+};
+
+#define EFS_READDIR_MAX 64
+struct efs_msg_inode_readdir_reply {
+    uint8_t status;
+    uint32_t count;
+    struct efs_inode ents[EFS_READDIR_MAX];
+};
+
+struct efs_msg_upgrade_meta {
+    char export_name[EFS_MAX_NAME];
+    uint32_t shard_bits;
+};
+
+#define EFS_UPGRADE_OK     0
+#define EFS_UPGRADE_ERROR  1
+#define EFS_UPGRADE_NOT_FOUND 2
+
+struct efs_msg_upgrade_meta_reply {
+    uint8_t status;
+    uint32_t shard_count;
 };
 
 /* Send a single message. */

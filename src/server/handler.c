@@ -769,6 +769,138 @@ void server_handle_conn(int fd)
             efs_send_msg(fd, EFS_MSG_QUERY_STATS_REPLY, &reply, sizeof(reply));
             break;
         }
+        case EFS_MSG_INODE_LOOKUP:
+        case EFS_MSG_INODE_CREATE:
+        case EFS_MSG_INODE_GETATTR:
+        case EFS_MSG_INODE_UNLINK: {
+            struct efs_msg_inode_reply r;
+            memset(&r, 0, sizeof(r));
+            r.status = EFS_INODE_RPC_ERROR;
+            pthread_mutex_lock(&g_server->lock);
+            struct efs_export *ex = NULL;
+            efs_export_id_t eid = 0;
+            if (type == EFS_MSG_INODE_LOOKUP &&
+                payload_len >= sizeof(struct efs_msg_inode_lookup))
+                eid = ((struct efs_msg_inode_lookup *)payload)->export_id;
+            else if (type == EFS_MSG_INODE_CREATE &&
+                     payload_len >= sizeof(struct efs_msg_inode_create))
+                eid = ((struct efs_msg_inode_create *)payload)->export_id;
+            else if (type == EFS_MSG_INODE_GETATTR &&
+                     payload_len >= sizeof(struct efs_msg_inode_getattr))
+                eid = ((struct efs_msg_inode_getattr *)payload)->export_id;
+            else if (type == EFS_MSG_INODE_UNLINK &&
+                     payload_len >= sizeof(struct efs_msg_inode_unlink))
+                eid = ((struct efs_msg_inode_unlink *)payload)->export_id;
+            for (uint32_t i = 0; i < g_server->export_count; i++) {
+                if (g_server->exports[i].id == eid ||
+                    (eid == 0 && i == 0)) {
+                    ex = &g_server->exports[i];
+                    break;
+                }
+            }
+            if (!ex) {
+                r.status = EFS_INODE_RPC_NOT_FOUND;
+            } else if (type == EFS_MSG_INODE_LOOKUP) {
+                struct efs_msg_inode_lookup *req = payload;
+                if (efs_export_lookup(ex, req->parent, req->name, &r.inode) == 0)
+                    r.status = EFS_INODE_RPC_OK;
+                else
+                    r.status = EFS_INODE_RPC_NOT_FOUND;
+            } else if (type == EFS_MSG_INODE_GETATTR) {
+                struct efs_msg_inode_getattr *req = payload;
+                if (efs_export_get_inode(ex, req->ino, &r.inode) == 0)
+                    r.status = EFS_INODE_RPC_OK;
+                else
+                    r.status = EFS_INODE_RPC_NOT_FOUND;
+            } else if (type == EFS_MSG_INODE_CREATE) {
+                struct efs_msg_inode_create *req = payload;
+                if (!efs_export_fits_page_cap(ex, 1, 0)) {
+                    r.status = EFS_INODE_RPC_QUOTA;
+                } else {
+                    efs_ino_t ino = efs_export_create(ex, req->parent, req->mode,
+                                                      (uid_t)req->uid,
+                                                      (gid_t)req->gid, req->name);
+                    if (ino) {
+                        efs_export_get_inode(ex, ino, &r.inode);
+                        r.status = EFS_INODE_RPC_OK;
+                    } else {
+                        r.status = EFS_INODE_RPC_EXIST;
+                    }
+                }
+            } else if (type == EFS_MSG_INODE_UNLINK) {
+                struct efs_msg_inode_unlink *req = payload;
+                int urc = efs_export_unlink_name(ex, req->parent, req->name);
+                r.status = (urc == 0) ? EFS_INODE_RPC_OK : EFS_INODE_RPC_NOT_FOUND;
+            }
+            pthread_mutex_unlock(&g_server->lock);
+            uint8_t rtype = (type == EFS_MSG_INODE_LOOKUP) ? EFS_MSG_INODE_LOOKUP_REPLY
+                          : (type == EFS_MSG_INODE_CREATE) ? EFS_MSG_INODE_CREATE_REPLY
+                          : (type == EFS_MSG_INODE_GETATTR) ? EFS_MSG_INODE_GETATTR_REPLY
+                          : EFS_MSG_INODE_UNLINK_REPLY;
+            efs_send_msg(fd, rtype, &r, sizeof(r));
+            break;
+        }
+        case EFS_MSG_INODE_READDIR: {
+            struct efs_msg_inode_readdir_reply r;
+            memset(&r, 0, sizeof(r));
+            r.status = EFS_INODE_RPC_ERROR;
+            if (payload_len >= sizeof(struct efs_msg_inode_readdir)) {
+                struct efs_msg_inode_readdir *req = payload;
+                pthread_mutex_lock(&g_server->lock);
+                struct efs_export *ex = NULL;
+                for (uint32_t i = 0; i < g_server->export_count; i++) {
+                    if (g_server->exports[i].id == req->export_id ||
+                        (req->export_id == 0 && i == 0)) {
+                        ex = &g_server->exports[i];
+                        break;
+                    }
+                }
+                if (!ex) {
+                    r.status = EFS_INODE_RPC_NOT_FOUND;
+                } else {
+                    uint32_t max = req->max_ents;
+                    if (max == 0 || max > EFS_READDIR_MAX)
+                        max = EFS_READDIR_MAX;
+                    for (uint64_t i = 0; i < ex->inode_count && r.count < max; i++) {
+                        if (ex->inodes[i].parent == req->parent &&
+                            ex->inodes[i].ino != req->parent)
+                            r.ents[r.count++] = ex->inodes[i];
+                    }
+                    r.status = EFS_INODE_RPC_OK;
+                }
+                pthread_mutex_unlock(&g_server->lock);
+            }
+            efs_send_msg(fd, EFS_MSG_INODE_READDIR_REPLY, &r, sizeof(r));
+            break;
+        }
+        case EFS_MSG_UPGRADE_META: {
+            struct efs_msg_upgrade_meta_reply r;
+            memset(&r, 0, sizeof(r));
+            r.status = EFS_UPGRADE_ERROR;
+            if (payload_len >= sizeof(struct efs_msg_upgrade_meta)) {
+                struct efs_msg_upgrade_meta *req = payload;
+                pthread_mutex_lock(&g_server->lock);
+                struct efs_export *ex = server_find_export(g_server, req->export_name);
+                if (!ex && g_server->export_count)
+                    ex = &g_server->exports[0];
+                if (!ex) {
+                    r.status = EFS_UPGRADE_NOT_FOUND;
+                } else {
+                    uint32_t bits = req->shard_bits;
+                    if (bits > 20)
+                        bits = 20;
+                    ex->root.version = 6;
+                    ex->root.shard_bits = bits;
+                    ex->root.shard_count = bits ? (1u << bits) : 1u;
+                    ex->efsm_version = EFS_META_EFSM_V6;
+                    r.shard_count = ex->root.shard_count;
+                    r.status = EFS_UPGRADE_OK;
+                }
+                pthread_mutex_unlock(&g_server->lock);
+            }
+            efs_send_msg(fd, EFS_MSG_UPGRADE_META_REPLY, &r, sizeof(r));
+            break;
+        }
         default:
             break;
         }

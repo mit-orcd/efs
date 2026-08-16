@@ -5,6 +5,7 @@
 #include "efs/placement.h"
 #include "efs/protocol.h"
 #include <stddef.h>
+#include <stdint.h>
 #include <errno.h>
 #include <pthread.h>
 #include <poll.h>
@@ -23,7 +24,8 @@
 enum bench_mode {
     BENCH_MODE_NONE = 0,
     BENCH_MODE_NET,   /* --time: BENCH_PUT discard */
-    BENCH_MODE_STORE, /* --size: real PUT_CHUNK store */
+    BENCH_MODE_STORE, /* --size and/or --time: real PUT_CHUNK store */
+    BENCH_MODE_READ,  /* --read --time: GET_CHUNK 2-of-3 */
 };
 
 static void usage(const char *prog)
@@ -36,8 +38,13 @@ static void usage(const char *prog)
             "  %s <seed_host:port> --size <bytes|[K|M|G|T]>\n"
             "      Discover cluster; write that many logical bytes (chunk-aligned)\n"
             "      with real PUT_CHUNK so servers store fragments (2+1 EC fanout).\n"
-            "  Optional: --perf  (perf record -g on this process; EFS_PERF_PATH)\n",
-            prog, prog);
+            "  %s <seed_host:port> --store --time <seconds>\n"
+            "      PUT_CHUNK for a fixed duration (disk write load).\n"
+            "  %s <seed_host:port> --read --time <seconds> [--window <chunks>]\n"
+            "      GET 2-of-3 fragments for chunk_index %% window (disk read load).\n"
+            "  Optional: --perf  (perf record -g on this process; EFS_PERF_PATH)\n"
+            "            --id <n>  chunk-index base so parallel writers do not collide\n",
+            prog, prog, prog, prog);
 }
 
 static pid_t g_perf_pid = -1;
@@ -367,12 +374,52 @@ static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
     return (acks >= 2) ? EFS_OK : EFS_ERR_NO_QUORUM;
 }
 
+static int get_two_frags(efs_ino_t ino, uint32_t chunk_index,
+                         const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
+                         uint8_t *buf0, uint8_t *buf1,
+                         uint64_t per_node_bytes[EFS_MAX_NODES])
+{
+    uint8_t *bufs[2] = {buf0, buf1};
+    uint32_t got = 0;
+    int ok = 0;
+    for (int i = 0; i < 2; i++) {
+        uint8_t ck[EFS_HASH_SIZE];
+        uint32_t len = 0;
+        int rc = efs_client_get_fragment(nodes[i], ino, chunk_index, (uint32_t)i,
+                                         EFS_FRAGMENT_SIZE, bufs[i], &len, ck);
+        if (rc == EFS_OK && len == EFS_FRAGMENT_SIZE) {
+            ok++;
+            int idx = bench_node_index(nodes[i]);
+            if (idx >= 0)
+                per_node_bytes[idx] += EFS_FRAGMENT_SIZE;
+        }
+        (void)got;
+    }
+    if (ok >= 2)
+        return EFS_OK;
+    /* Parity fallback */
+    uint8_t ck[EFS_HASH_SIZE];
+    uint32_t len = 0;
+    int rc = efs_client_get_fragment(nodes[2], ino, chunk_index, 2,
+                                     EFS_FRAGMENT_SIZE, buf0, &len, ck);
+    if (rc == EFS_OK && len == EFS_FRAGMENT_SIZE && ok >= 1) {
+        int idx = bench_node_index(nodes[2]);
+        if (idx >= 0)
+            per_node_bytes[idx] += EFS_FRAGMENT_SIZE;
+        return EFS_OK;
+    }
+    return (ok >= 1 && rc == EFS_OK) ? EFS_OK : EFS_ERR_IO;
+}
+
 struct worker_arg {
     int id;
     int store;
-    double deadline;      /* net mode */
-    uint64_t target_chunks; /* store mode; 0 = unlimited/time */
-    uint64_t bytes;       /* fragment bytes sent */
+    int reading;
+    double deadline;      /* net / timed store / read */
+    uint64_t target_chunks; /* store mode; UINT64_MAX = time-only */
+    uint64_t chunk_base;
+    uint64_t read_window;
+    uint64_t bytes;       /* fragment bytes sent/received */
     uint64_t logical_bytes;
     uint64_t chunks_ok;
     uint64_t chunks_fail;
@@ -391,7 +438,7 @@ static uint64_t next_chunk(void)
 static void *worker_main(void *arg)
 {
     struct worker_arg *a = arg;
-    /* One synthetic file inode for store mode so chunks are contiguous;
+    /* One synthetic file inode for store/read so chunks are contiguous;
      * net mode still spreads via seq for placement churn. */
     efs_ino_t ino = ((efs_ino_t)0xBEEF << 32) | 1ULL;
 
@@ -400,12 +447,47 @@ static void *worker_main(void *arg)
     for (int i = 0; i < EFS_MAX_NODES; i++)
         sticky[i] = -1;
 
+    uint8_t *rbuf0 = NULL;
+    uint8_t *rbuf1 = NULL;
+    if (a->reading) {
+        rbuf0 = malloc(EFS_FRAGMENT_SIZE);
+        rbuf1 = malloc(EFS_FRAGMENT_SIZE);
+        if (!rbuf0 || !rbuf1) {
+            a->chunks_fail++;
+            free(rbuf0);
+            free(rbuf1);
+            return NULL;
+        }
+    }
+
     for (;;) {
-        if (a->store) {
+        if (a->deadline > 0.0 && now_sec() >= a->deadline)
+            break;
+        if (a->reading) {
             uint64_t seq = next_chunk();
-            if (seq >= a->target_chunks)
+            uint64_t win = a->read_window ? a->read_window : 1;
+            uint32_t chunk_index = (uint32_t)(a->chunk_base + (seq % win));
+            efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+            efs_place_fragments(g_client.nodes, g_client.node_count, ino,
+                                chunk_index, nodes);
+            int rc = get_two_frags(ino, chunk_index, nodes, rbuf0, rbuf1,
+                                   a->per_node_bytes);
+            if (rc == EFS_OK) {
+                a->chunks_ok++;
+                a->bytes += 2ULL * EFS_FRAGMENT_SIZE;
+                a->logical_bytes += EFS_CHUNK_SIZE;
+            } else {
+                a->chunks_fail++;
+            }
+        } else if (a->store) {
+            uint64_t seq = next_chunk();
+            if (a->target_chunks != UINT64_MAX && seq >= a->target_chunks)
                 break;
-            uint32_t chunk_index = (uint32_t)seq;
+            uint32_t chunk_index;
+            if (a->target_chunks == UINT64_MAX && a->read_window)
+                chunk_index = (uint32_t)(a->chunk_base + (seq % a->read_window));
+            else
+                chunk_index = (uint32_t)(a->chunk_base + seq);
             efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
             efs_place_fragments(g_client.nodes, g_client.node_count, ino,
                                 chunk_index, nodes);
@@ -419,8 +501,6 @@ static void *worker_main(void *arg)
                 a->chunks_fail++;
             }
         } else {
-            if (now_sec() >= a->deadline)
-                break;
             uint64_t seq = next_chunk();
             uint32_t chunk_index = (uint32_t)(seq & 0xffffffffu);
             efs_ino_t net_ino = ino + (seq >> 20);
@@ -439,6 +519,9 @@ static void *worker_main(void *arg)
         }
     }
 
+    free(rbuf0);
+    free(rbuf1);
+
     for (uint32_t i = 0; i < g_client.node_count; i++) {
         if (sticky[i] >= 0) {
             efs_client_conn_release(g_client.nodes[i].id, sticky[i]);
@@ -455,31 +538,57 @@ int main(int argc, char **argv)
 
     const char *seed = NULL;
     enum bench_mode mode = BENCH_MODE_NONE;
-    double time_sec = 10.0;
+    double time_sec = 0.0;
     uint64_t size_bytes = 0;
+    uint64_t chunk_base = 0;
+    uint64_t read_window = 32768; /* 4 GiB of 128 KiB chunks */
     int want_perf = 0;
+    int nworkers_arg = 0;
+    int have_time = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--time") == 0 && i + 1 < argc) {
-            if (mode == BENCH_MODE_STORE) {
-                fprintf(stderr, "Use either --time or --size, not both\n");
-                return 1;
-            }
-            mode = BENCH_MODE_NET;
             time_sec = atof(argv[++i]);
+            have_time = 1;
             if (time_sec <= 0.0) {
                 fprintf(stderr, "Invalid --time\n");
                 return 1;
             }
         } else if (strcmp(argv[i], "--size") == 0 && i + 1 < argc) {
-            if (mode == BENCH_MODE_NET) {
-                fprintf(stderr, "Use either --time or --size, not both\n");
+            if (mode == BENCH_MODE_READ) {
+                fprintf(stderr, "--size is for store writes only\n");
                 return 1;
             }
             mode = BENCH_MODE_STORE;
             size_bytes = efs_parse_quota(argv[++i]);
             if (size_bytes == 0) {
                 fprintf(stderr, "Invalid --size (examples: 1G, 512M, 1048576)\n");
+                return 1;
+            }
+        } else if (strcmp(argv[i], "--store") == 0) {
+            if (mode == BENCH_MODE_READ) {
+                fprintf(stderr, "--store cannot combine with --read\n");
+                return 1;
+            }
+            mode = BENCH_MODE_STORE;
+        } else if (strcmp(argv[i], "--read") == 0) {
+            if (mode == BENCH_MODE_STORE) {
+                fprintf(stderr, "--read cannot combine with --store/--size\n");
+                return 1;
+            }
+            mode = BENCH_MODE_READ;
+        } else if (strcmp(argv[i], "--window") == 0 && i + 1 < argc) {
+            read_window = strtoull(argv[++i], NULL, 10);
+            if (read_window == 0) {
+                fprintf(stderr, "Invalid --window\n");
+                return 1;
+            }
+        } else if (strcmp(argv[i], "--id") == 0 && i + 1 < argc) {
+            chunk_base = strtoull(argv[++i], NULL, 10);
+        } else if (strcmp(argv[i], "--workers") == 0 && i + 1 < argc) {
+            nworkers_arg = atoi(argv[++i]);
+            if (nworkers_arg < 1) {
+                fprintf(stderr, "Invalid --workers\n");
                 return 1;
             }
         } else if (strcmp(argv[i], "--perf") == 0) {
@@ -500,8 +609,18 @@ int main(int argc, char **argv)
         }
     }
 
+    if (mode == BENCH_MODE_NONE && have_time)
+        mode = BENCH_MODE_NET;
     if (!seed || mode == BENCH_MODE_NONE) {
         usage(argv[0]);
+        return 1;
+    }
+    if (mode == BENCH_MODE_READ && !have_time) {
+        fprintf(stderr, "--read requires --time\n");
+        return 1;
+    }
+    if (mode == BENCH_MODE_STORE && !have_time && size_bytes == 0) {
+        fprintf(stderr, "--store requires --size and/or --time\n");
         return 1;
     }
 
@@ -520,16 +639,31 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    if (mode == BENCH_MODE_STORE || mode == BENCH_MODE_READ)
+        g_client.export_id = EFS_BENCH_EXPORT_ID;
+
     uint64_t target_chunks = 0;
     if (mode == BENCH_MODE_STORE) {
-        target_chunks = size_bytes / EFS_CHUNK_SIZE;
-        if (target_chunks == 0)
-            target_chunks = 1;
-        size_bytes = target_chunks * EFS_CHUNK_SIZE;
+        if (size_bytes > 0) {
+            target_chunks = size_bytes / EFS_CHUNK_SIZE;
+            if (target_chunks == 0)
+                target_chunks = 1;
+            size_bytes = target_chunks * EFS_CHUNK_SIZE;
+        } else {
+            target_chunks = UINT64_MAX;
+        }
         printf("bench store seed=%s:%u nodes=%u conns_per_node=%d "
-               "logical_bytes=%llu chunks=%llu export_id=%u\n",
+               "logical_bytes=%llu chunks=%llu time_s=%.3f chunk_base=%llu "
+               "export_id=%u\n",
                host, port, g_client.node_count, g_client.conn_pool_size,
                (unsigned long long)size_bytes, (unsigned long long)target_chunks,
+               time_sec, (unsigned long long)chunk_base,
+               (unsigned)EFS_BENCH_EXPORT_ID);
+    } else if (mode == BENCH_MODE_READ) {
+        printf("bench read seed=%s:%u nodes=%u conns_per_node=%d time_s=%.3f "
+               "window=%llu chunk_base=%llu export_id=%u\n",
+               host, port, g_client.node_count, g_client.conn_pool_size, time_sec,
+               (unsigned long long)read_window, (unsigned long long)chunk_base,
                (unsigned)EFS_BENCH_EXPORT_ID);
     } else {
         printf("bench net seed=%s:%u nodes=%u conns_per_node=%d time_s=%.3f "
@@ -567,13 +701,15 @@ int main(int argc, char **argv)
     }
 
     /* Sticky workers hold one conn per node; never exceed the pool. */
-    int nworkers = g_client.conn_pool_size;
+    int nworkers = nworkers_arg;
+    if (nworkers < 1)
+        nworkers = g_client.conn_pool_size;
     if (nworkers < 1)
         nworkers = 1;
     if (nworkers > 64)
         nworkers = 64;
     if (mode == BENCH_MODE_STORE && target_chunks < (uint64_t)nworkers &&
-        target_chunks > 0)
+        target_chunks > 0 && target_chunks != UINT64_MAX)
         nworkers = (int)target_chunks;
 
     struct worker_arg *args = calloc((size_t)nworkers, sizeof(*args));
@@ -587,12 +723,15 @@ int main(int argc, char **argv)
 
     g_chunk_seq = 0;
     double t0 = now_sec();
-    double deadline = t0 + time_sec;
+    double deadline = have_time ? (t0 + time_sec) : 0.0;
     for (int i = 0; i < nworkers; i++) {
         args[i].id = i;
         args[i].store = (mode == BENCH_MODE_STORE);
+        args[i].reading = (mode == BENCH_MODE_READ);
         args[i].deadline = deadline;
         args[i].target_chunks = target_chunks;
+        args[i].chunk_base = chunk_base;
+        args[i].read_window = read_window;
         args[i].zero_frag = zero_frag;
         memcpy(args[i].checksum, checksum, EFS_HASH_SIZE);
         if (pthread_create(&tids[i], NULL, worker_main, &args[i]) != 0) {
@@ -635,6 +774,14 @@ int main(int argc, char **argv)
     if (mode == BENCH_MODE_STORE) {
         printf("BENCH_OK kind=store wall_s=%.3f logical_bytes=%llu "
                "logical_GiB_s=%.3f stored_bytes=%llu stored_GiB_s=%.3f "
+               "workers=%d chunks_ok=%llu chunks_fail=%llu nodes=%u\n",
+               wall, (unsigned long long)logical, logical_gib_s,
+               (unsigned long long)total, gib_s, nworkers,
+               (unsigned long long)ok, (unsigned long long)fail,
+               g_client.node_count);
+    } else if (mode == BENCH_MODE_READ) {
+        printf("BENCH_OK kind=read wall_s=%.3f logical_bytes=%llu "
+               "logical_GiB_s=%.3f wire_bytes=%llu wire_GiB_s=%.3f "
                "workers=%d chunks_ok=%llu chunks_fail=%llu nodes=%u\n",
                wall, (unsigned long long)logical, logical_gib_s,
                (unsigned long long)total, gib_s, nworkers,
@@ -696,5 +843,7 @@ int main(int argc, char **argv)
     free(args);
     free(tids);
     efs_client_shutdown();
-    return (ok == 0 || (mode == BENCH_MODE_STORE && fail != 0)) ? 1 : 0;
+    return (ok == 0 || (mode == BENCH_MODE_STORE && !have_time && fail != 0))
+               ? 1
+               : 0;
 }

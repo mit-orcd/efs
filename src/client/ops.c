@@ -109,6 +109,19 @@ static void grow_inodes_exclusive(void)
     efs_client_table_unlock();
 }
 
+int efs_client_ensure_meta_room(uint64_t extra_inodes, uint64_t extra_chunks)
+{
+    if (g_client.write_readonly) {
+        g_client.last_err = EFS_ERR_BUSY;
+        return EFS_ERR_BUSY;
+    }
+    if (!efs_export_fits_page_cap(&g_client.export, extra_inodes, extra_chunks)) {
+        g_client.last_err = EFS_ERR_QUOTA;
+        return EFS_ERR_QUOTA;
+    }
+    return EFS_OK;
+}
+
 
 int efs_client_lookup(const char *path, struct efs_inode *out)
 {
@@ -159,6 +172,9 @@ efs_ino_t efs_client_create(efs_ino_t parent, const char *name, uint32_t mode,
                             uid_t uid, gid_t gid)
 {
     efs_ino_t ino = 0;
+    g_client.last_err = EFS_OK;
+    if (efs_client_ensure_meta_room(1, 0) != EFS_OK)
+        return 0;
     for (int attempt = 0; attempt < 8; attempt++) {
         if (efs_export_needs_inode_grow(&g_client.export))
             grow_inodes_exclusive();
@@ -193,8 +209,20 @@ efs_ino_t efs_client_create(efs_ino_t parent, const char *name, uint32_t mode,
         efs_client_unlock_dir(parent);
         /* ino collision or a failed idx insert: try the next candidate */
     }
-    if (ino != 0)
-        efs_client_note_meta_change(0);
+    if (ino != 0) {
+        int nrc = efs_client_note_meta_change(0);
+        if (nrc == EFS_ERR_QUOTA || nrc == EFS_ERR_INVAL) {
+            g_client.last_err = nrc;
+            efs_client_lock_dir(parent);
+            pthread_mutex_lock(&g_client.idx_mu);
+            (void)efs_export_unlink_name(&g_client.export, parent, name);
+            pthread_mutex_unlock(&g_client.idx_mu);
+            efs_client_unlock_dir(parent);
+            return 0;
+        }
+    } else if (g_client.last_err == EFS_OK) {
+        g_client.last_err = EFS_ERR_INVAL;
+    }
     return ino;
 }
 
@@ -207,11 +235,10 @@ int efs_client_chmod(efs_ino_t ino, uint32_t mode)
     if (rc == 0)
         efs_client_mark_ino_dirty(ino);
     efs_client_unlock_dir(ino);
-    /* Mode is already applied locally; a later meta flush failure must not
-     * surface as chmod EINVAL (ImageNet-scale batches can temporarily exceed
-     * caps or hit transient quorum). */
     if (rc == 0)
-        (void)efs_client_note_meta_change(0);
+        rc = efs_client_note_meta_change(0);
+    if (rc != 0)
+        g_client.last_err = rc;
     return rc;
 }
 
@@ -381,6 +408,9 @@ int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
 
 int efs_client_link(efs_ino_t src_ino, efs_ino_t new_parent, const char *new_name)
 {
+    int room = efs_client_ensure_meta_room(1, 0);
+    if (room != EFS_OK)
+        return room;
     if (efs_export_needs_inode_grow(&g_client.export))
         grow_inodes_exclusive();
     efs_client_lock_dirs2(src_ino, new_parent);

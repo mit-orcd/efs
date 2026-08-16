@@ -35,6 +35,8 @@ const char *efs_strerror(int rc)
     case EFS_ERR_DECODE: return "decode error";
     case EFS_ERR_CHECKSUM: return "checksum mismatch";
     case EFS_ERR_QUOTA:  return "quota exceeded";
+    case EFS_ERR_NOT_EMPTY: return "directory not empty";
+    case EFS_ERR_BUSY:   return "resource busy";
     default:             return "unknown error";
     }
 }

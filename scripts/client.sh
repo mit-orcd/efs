@@ -84,16 +84,24 @@ MOUNT_PATH=$2
 EXPORT_NAME=${3:-fs}
 shift 3 || shift $#
 
-# Clear a stale/dead FUSE mount before mkdir. After efs-fuse crashes, every
-# stat on the path returns ENOTCONN ("Transport endpoint is not connected").
+LOCK_DIR=$(dirname "$MOUNT_PATH")
+LOCK_FILE="$LOCK_DIR/.efs-$(basename "$MOUNT_PATH").lock"
+mkdir -p "$LOCK_DIR"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    echo "ERROR: another efs-fuse already holds $MOUNT_PATH ($LOCK_FILE)" >&2
+    exit 1
+fi
+
+# A live healthy mount must not be stolen. Stale ENOTCONN mounts are cleared.
 if is_listed_mount "$MOUNT_PATH" || mountpoint -q "$MOUNT_PATH" 2>/dev/null; then
-    echo "Mount point busy or stale; unmounting first..."
+    if pgrep -f "[e]fs-fuse .* ${MOUNT_PATH}( |$)" >/dev/null 2>&1; then
+        echo "ERROR: $MOUNT_PATH is already mounted by a live efs-fuse" >&2
+        exit 1
+    fi
+    echo "Mount point stale; unmounting first..."
     cmd_stop "$MOUNT_PATH"
 fi
-# Always poke fusermount3 once more — covers ENOTCONN when /proc path differs.
-fusermount3 -u "$MOUNT_PATH" 2>/dev/null || \
-    fusermount3 -uz "$MOUNT_PATH" 2>/dev/null || true
-umount "$MOUNT_PATH" 2>/dev/null || umount -l "$MOUNT_PATH" 2>/dev/null || true
 
 mkdir -p "$MOUNT_PATH"
 

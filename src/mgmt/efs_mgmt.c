@@ -961,6 +961,50 @@ static int cmd_feature(int argc, char **argv)
     return failed ? 1 : 0;
 }
 
+static int cmd_upgrade(int argc, char **argv)
+{
+    if (argc < 2) {
+        fprintf(stderr, "usage: upgrade <node:port> <export> [shard-bits]\n");
+        return 1;
+    }
+    char host[64];
+    uint16_t port;
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    struct efs_msg_upgrade_meta req;
+    memset(&req, 0, sizeof(req));
+    strncpy(req.export_name, argv[1], EFS_MAX_NAME - 1);
+    req.shard_bits = (argc >= 3) ? (uint32_t)atoi(argv[2]) : 0;
+    int fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "connect failed\n");
+        return 1;
+    }
+    uint8_t rtype = 0;
+    void *reply = NULL;
+    uint32_t rlen = 0;
+    int rc = send_recv(fd, EFS_MSG_UPGRADE_META, &req, sizeof(req),
+                       &rtype, &reply, &rlen);
+    close(fd);
+    if (rc != 0 || rtype != EFS_MSG_UPGRADE_META_REPLY ||
+        rlen < sizeof(struct efs_msg_upgrade_meta_reply)) {
+        fprintf(stderr, "upgrade failed\n");
+        free(reply);
+        return 1;
+    }
+    struct efs_msg_upgrade_meta_reply *r = reply;
+    if (r->status != EFS_UPGRADE_OK) {
+        fprintf(stderr, "upgrade status %u\n", r->status);
+        free(reply);
+        return 1;
+    }
+    printf("upgraded %s to EFSR v6 shards=%u\n", argv[1], r->shard_count);
+    free(reply);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -976,7 +1020,8 @@ int main(int argc, char **argv)
                     "  remove-node <node:port>\n"
                     "  shrink-quota <node:port> <amount>[T|G|M|K]\n"
                     "  add-storage <node:port> <path>[,path...]\n"
-                    "  feature <node:port> <export> show|<stats|find> <on|off>\n",
+                    "  feature <node:port> <export> show|<stats|find> <on|off>\n"
+                    "  upgrade <node:port> <export> [shard-bits]\n",
             argv[0]);
     return 1;
 }
@@ -1004,6 +1049,8 @@ int main(int argc, char **argv)
         return cmd_add_storage(argc - 2, argv + 2);
     if (strcmp(cmd, "feature") == 0)
         return cmd_feature(argc - 2, argv + 2);
+    if (strcmp(cmd, "upgrade") == 0)
+        return cmd_upgrade(argc - 2, argv + 2);
 
     fprintf(stderr, "Unknown command: %s\n", cmd);
     return 1;

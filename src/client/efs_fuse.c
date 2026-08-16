@@ -174,11 +174,13 @@ static int stats_compute_locked(struct stats_ent *e, efs_ino_t dir_ino)
     efs_export_ensure_rollups(&g_client.export);
     struct efs_inode fresh;
     int grc = efs_export_get_inode(&g_client.export, dir_ino, &fresh);
+    int n = -1;
+    if (grc == 0)
+        n = efs_export_format_stats_ex(&g_client.export, &fresh, e->text,
+                                       EFS_STATS_TEXT - 48);
     pthread_mutex_unlock(&g_client.lock);
     if (grc != 0)
         return -ENOENT;
-
-    int n = efs_export_format_stats(&fresh, e->text, EFS_STATS_TEXT - 48);
     if (n < 0)
         return -EIO;
     struct timespec ts;
@@ -1041,10 +1043,12 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
      * .stats is lookup-only (getattr/open/read by explicit path) and is
      * intentionally omitted from readdir so ls of the directory hides it. */
     struct readdir_collect_arg col = {0};
-    pthread_mutex_lock(&g_client.lock);
+    efs_client_lock_dir(parent.ino);
+    pthread_mutex_lock(&g_client.idx_mu);
     rc = efs_export_foreach_child(&g_client.export, parent.ino,
                                   readdir_collect_cb, &col);
-    pthread_mutex_unlock(&g_client.lock);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(parent.ino);
     if (rc != 0) {
         free(col.ents);
         return rc;
@@ -1826,8 +1830,6 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
     if (!copy)
         return -ENOMEM;
     memcpy(copy, buf, size);
-    /* Every write waits for 2-of-3 fragment PUT quorum. dcache/coalesce
-     * used to ACK here with the only copy still in RAM. */
     rc = efs_wb_enqueue_owned(ino, (uint64_t)offset, size, copy, NULL,
                               copy_cap);
     if (rc == EFS_ERR_QUOTA) {
@@ -1872,7 +1874,6 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
         return -EIO;
     }
 
-    /* Every write waits for 2-of-3 fragment PUT quorum. */
     rc = efs_wb_enqueue_owned(ino, (uint64_t)offset, size, copy, NULL,
                               copy_cap);
     if (rc == EFS_ERR_QUOTA) {
@@ -1951,6 +1952,10 @@ static int fuse_create_errno(efs_ino_t parent, const char *name)
     int found = efs_export_lookup(&g_client.export, parent, name, NULL);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);
+    if (g_client.last_err == EFS_ERR_QUOTA)
+        return -ENOSPC;
+    if (g_client.last_err == EFS_ERR_BUSY)
+        return -EBUSY;
     return found == EFS_OK ? -EEXIST : -EIO;
 }
 
@@ -2064,9 +2069,19 @@ static int efs_fuse_statfs(const char *path, struct statvfs *stbuf)
     stbuf->f_blocks = total_logical / 512;
     stbuf->f_bfree = avail / 512;
     stbuf->f_bavail = avail / 512;
-    stbuf->f_files = g_client.export.inode_count;
-    stbuf->f_ffree = 0;
+    uint32_t ino_pg = 0, ch_pg = 0;
+    efs_export_meta_page_usage(&g_client.export, &ino_pg, &ch_pg);
+    uint64_t ino_room = 0;
+    if (ino_pg < EFS_META_INO_PAGE_MAX) {
+        uint64_t bytes_left = (uint64_t)(EFS_META_INO_PAGE_MAX - ino_pg) *
+                              EFS_META_PAGE_SIZE;
+        ino_room = bytes_left / EFS_INODE_COMPACT_SIZE;
+    }
+    stbuf->f_files = g_client.export.inode_count + ino_room;
+    stbuf->f_ffree = ino_room;
+    stbuf->f_favail = ino_room;
     stbuf->f_namemax = EFS_MAX_NAME;
+    (void)ch_pg;
 
     pthread_mutex_unlock(&g_client.lock);
     return 0;
@@ -2700,6 +2715,8 @@ int main(int argc, char **argv)
         }
         efs_client_enable_meta_batch(batch);
     }
+    if (efs_client_take_write_lease() == EFS_ERR_BUSY)
+        fprintf(stderr, "efs-fuse: mounted read-only (write lease busy)\n");
 
     char *fuse_argv[64];
     int fuse_argc = 0;

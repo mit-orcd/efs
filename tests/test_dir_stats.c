@@ -211,13 +211,26 @@ int main(void)
             failures++;
         } else {
             int found = 0;
-            for (size_t off = EFS_META_HDR_SIZE;
-                 off + EFS_INODE_WIRE_SIZE <= blen;
-                 off += EFS_INODE_WIRE_SIZE) {
-                if (strcmp(blob + off + 68, "ghost.jpg") == 0) {
-                    memset(blob + off, 0, 8);
-                    found = 1;
-                    break;
+            size_t compact_off = EFS_META_HDR_SIZE;
+            size_t compact_bytes = (size_t)ex.inode_count * EFS_INODE_COMPACT_SIZE;
+            if (compact_off + compact_bytes < blen) {
+                const char *dents = blob + compact_off + compact_bytes;
+                size_t dent_off = 0;
+                size_t dent_lim = blen - (compact_off + compact_bytes);
+                for (uint64_t i = 0; i < ex.inode_count && dent_off + 2 <= dent_lim;
+                     i++) {
+                    uint16_t ln = 0;
+                    memcpy(&ln, dents + dent_off, 2);
+                    dent_off += 2;
+                    if (dent_off + ln > dent_lim)
+                        break;
+                    if (ln == 9 && memcmp(dents + dent_off, "ghost.jpg", 9) == 0) {
+                        memset(blob + compact_off + i * EFS_INODE_COMPACT_SIZE,
+                               0, 8);
+                        found = 1;
+                        break;
+                    }
+                    dent_off += ln;
                 }
             }
             struct efs_export loaded;

@@ -123,6 +123,9 @@ void efs_client_mark_ino_dirty(efs_ino_t ino)
     }
     dirty_set_put(g_client.dirty_ino_keys, g_client.dirty_ino_mask, ino,
                   &g_client.dirty_ino_count);
+    int stripe = (int)((uint64_t)ino % EFS_DIR_LOCKS);
+    g_client.last_dirty_stripe = stripe;
+    g_client.dirty_stripe_ops[stripe]++;
     pthread_mutex_unlock(&g_client.dirty_mu);
 }
 
@@ -496,6 +499,184 @@ static int cache_grow(char **p, size_t *cap, size_t need)
     return 0;
 }
 
+/* Split a leftover combined [ino|chunk] blob (full serialize / adopt). */
+static int split_combined_cache(void)
+{
+    if (g_client.meta_cache_ch || !g_client.meta_cache_ch_len)
+        return 0;
+    if (g_client.meta_cache_len < (size_t)g_client.meta_cache_ino_len +
+                                      g_client.meta_cache_ch_len)
+        return -1;
+    size_t old_ch = g_client.meta_cache_ch_len;
+    if (cache_grow(&g_client.meta_cache_ch, &g_client.meta_cache_ch_cap,
+                   old_ch) != 0)
+        return -1;
+    memcpy(g_client.meta_cache_ch,
+           g_client.meta_cache_blob + g_client.meta_cache_ino_len, old_ch);
+    return 0;
+}
+
+/* A record that straddles a 128 KiB page must dirty both pages. */
+#define MARK_SPAN(bm, npc, off0, rec) do {                          \
+    uint32_t _a = (uint32_t)(off0) / EFS_META_PAGE_SIZE;            \
+    uint32_t _b = (uint32_t)((off0) + (rec) - 1) / EFS_META_PAGE_SIZE; \
+    if (_a < (npc)) (bm)[_a] = 1;                                   \
+    if (_b < (npc)) (bm)[_b] = 1;                                   \
+} while (0)
+
+/* EFSM v6 incremental: patch dirty compact slots + append new dentries.
+ * Overwrite/mtime (inode_count unchanged) does not walk names or rewrite
+ * the dentry tail. Create memmoves the tail by the compact growth. */
+static int incremental_serialize_v6(struct efs_export *snap, struct dirty_snap *ds,
+                                    char **blob, size_t *blob_len,
+                                    uint32_t *ino_blob_len, uint32_t *chunk_blob_len,
+                                    uint8_t **ino_dirty_pages, uint8_t **ch_dirty_pages,
+                                    uint32_t *ino_pc_out, uint32_t *ch_pc_out)
+{
+    size_t dent = (size_t)snap->dentry_bytes;
+    size_t compact = (size_t)snap->inode_count * EFS_INODE_COMPACT_SIZE;
+    uint64_t total64 = (uint64_t)EFS_META_HDR_SIZE + compact + dent;
+    if (total64 > (uint64_t)UINT32_MAX)
+        return -1;
+    uint32_t ino_len = (uint32_t)total64;
+    size_t ch_bytes = (size_t)snap->chunk_count * EFS_CHUNK_WIRE_SIZE;
+    size_t total = (size_t)ino_len + ch_bytes;
+
+    uint64_t old_ic = g_client.meta_cache_icount;
+    uint64_t old_cc = g_client.meta_cache_ccount;
+    size_t old_compact = (size_t)old_ic * EFS_INODE_COMPACT_SIZE;
+    size_t old_dent_off = EFS_META_HDR_SIZE + old_compact;
+    size_t old_ino_len = g_client.meta_cache_ino_len;
+    size_t old_ch_len = g_client.meta_cache_ch_len;
+    if (old_ino_len < old_dent_off)
+        return -1;
+    size_t existing_dent = old_ino_len - old_dent_off;
+    if (snap->inode_count < old_ic || snap->chunk_count < old_cc)
+        return -1;
+    if (snap->inode_count == old_ic && existing_dent != dent)
+        return -1;
+    if (snap->inode_count > old_ic && existing_dent > dent)
+        return -1;
+
+    if (split_combined_cache() != 0)
+        return -1;
+    if (cache_grow(&g_client.meta_cache_blob, &g_client.meta_cache_cap,
+                   ino_len) != 0)
+        return -1;
+    if (ch_bytes &&
+        cache_grow(&g_client.meta_cache_ch, &g_client.meta_cache_ch_cap,
+                   ch_bytes) != 0)
+        return -1;
+
+    uint32_t ino_pc = efs_meta_page_count_for_blob(ino_len);
+    uint32_t ch_pc = efs_meta_page_count_for_blob((uint32_t)ch_bytes);
+    uint8_t *idirty = calloc(ino_pc ? ino_pc : 1, 1);
+    uint8_t *cdirty = calloc(ch_pc ? ch_pc : 1, 1);
+    if (!idirty || !cdirty) {
+        free(idirty);
+        free(cdirty);
+        return -1;
+    }
+
+    char *b = g_client.meta_cache_blob;
+    char *cb = g_client.meta_cache_ch;
+    size_t new_dent_off = EFS_META_HDR_SIZE + compact;
+    if (snap->inode_count > old_ic && existing_dent) {
+        memmove(b + new_dent_off, b + old_dent_off, existing_dent);
+        uint32_t p0 = (uint32_t)(old_dent_off < new_dent_off ? old_dent_off
+                                                             : new_dent_off) /
+                      EFS_META_PAGE_SIZE;
+        uint32_t p1 = (ino_len - 1) / EFS_META_PAGE_SIZE;
+        for (uint32_t p = p0; p <= p1 && p < ino_pc; p++)
+            idirty[p] = 1;
+    }
+
+    efs_export_pack_header(snap, (uint8_t *)b);
+    if (ino_pc)
+        idirty[0] = 1;
+
+    for (uint64_t i = old_ic; i < snap->inode_count; i++) {
+        uint32_t off = (uint32_t)(EFS_META_HDR_SIZE + i * EFS_INODE_COMPACT_SIZE);
+        efs_export_pack_inode_compact(&snap->inodes[i], (uint8_t *)b + off);
+        MARK_SPAN(idirty, ino_pc, off, EFS_INODE_COMPACT_SIZE);
+    }
+    if (ds->ino_slots) {
+        for (uint64_t i = 0; i < ds->ino_count; i++) {
+            uint64_t slot = ds->ino_slots[i];
+            if (slot >= snap->inode_count)
+                continue;
+            uint32_t off = (uint32_t)(EFS_META_HDR_SIZE +
+                                      slot * EFS_INODE_COMPACT_SIZE);
+            efs_export_pack_inode_compact(&snap->inodes[slot],
+                                          (uint8_t *)b + off);
+            MARK_SPAN(idirty, ino_pc, off, EFS_INODE_COMPACT_SIZE);
+        }
+    }
+
+    uint8_t *dp = (uint8_t *)b + new_dent_off + existing_dent;
+    for (uint64_t i = old_ic; i < snap->inode_count; i++) {
+        uint16_t ln = (uint16_t)strnlen(snap->inodes[i].name, EFS_MAX_NAME - 1);
+        uint32_t off = (uint32_t)(dp - (uint8_t *)b);
+        memcpy(dp, &ln, 2);
+        dp += 2;
+        if (ln) {
+            memcpy(dp, snap->inodes[i].name, ln);
+            dp += ln;
+        }
+        MARK_SPAN(idirty, ino_pc, off, (uint32_t)(2 + ln));
+    }
+    if ((size_t)(dp - (uint8_t *)(b + new_dent_off)) != dent) {
+        free(idirty);
+        free(cdirty);
+        return -1;
+    }
+    if (ino_len > old_ino_len && ino_pc) {
+        uint32_t p0 = (uint32_t)old_ino_len / EFS_META_PAGE_SIZE;
+        uint32_t p1 = (ino_len - 1) / EFS_META_PAGE_SIZE;
+        for (uint32_t p = p0; p <= p1 && p < ino_pc; p++)
+            idirty[p] = 1;
+    }
+
+    if (ch_bytes > old_ch_len && ch_pc) {
+        uint32_t p0 = (uint32_t)old_ch_len / EFS_META_PAGE_SIZE;
+        uint32_t p1 = (uint32_t)(ch_bytes - 1) / EFS_META_PAGE_SIZE;
+        for (uint32_t p = p0; p <= p1 && p < ch_pc; p++)
+            cdirty[p] = 1;
+    }
+    for (uint64_t i = old_cc; i < snap->chunk_count; i++) {
+        uint32_t off = (uint32_t)(i * EFS_CHUNK_WIRE_SIZE);
+        efs_export_pack_chunk(&snap->chunks[i], (uint8_t *)cb + off);
+        MARK_SPAN(cdirty, ch_pc, off, EFS_CHUNK_WIRE_SIZE);
+    }
+    if (ds->chunk_slots) {
+        for (uint64_t i = 0; i < ds->chunk_count; i++) {
+            uint64_t slot = ds->chunk_slots[i];
+            if (slot >= snap->chunk_count)
+                continue;
+            uint32_t off = (uint32_t)(slot * EFS_CHUNK_WIRE_SIZE);
+            efs_export_pack_chunk(&snap->chunks[slot], (uint8_t *)cb + off);
+            MARK_SPAN(cdirty, ch_pc, off, EFS_CHUNK_WIRE_SIZE);
+        }
+    }
+
+    g_client.meta_cache_ino_len = ino_len;
+    g_client.meta_cache_ch_len = (uint32_t)ch_bytes;
+    g_client.meta_cache_len = total;
+    g_client.meta_cache_icount = snap->inode_count;
+    g_client.meta_cache_ccount = snap->chunk_count;
+    *blob = b;
+    *blob_len = total;
+    *ino_blob_len = ino_len;
+    *chunk_blob_len = (uint32_t)ch_bytes;
+    *ino_dirty_pages = idirty;
+    *ch_dirty_pages = cdirty;
+    if (ino_pc_out)
+        *ino_pc_out = ino_pc;
+    if (ch_pc_out)
+        *ch_pc_out = ch_pc;
+    return 0;
+}
+
 /* Patch dirty/appended rows into the cached EFSM regions in place.
  * Caller holds the table lock and passes the live export. Returns 0 and
  * fills *blob (the ino-region cache pointer — do not free). -1 = full serialize. */
@@ -515,22 +696,21 @@ static int incremental_serialize(struct efs_export *snap, struct dirty_snap *ds,
     if (!ds->ino_slots && ds->ino_count)
         return -1;
 
+    uint32_t cache_ver = EFS_META_EFSM_V5;
+    if (g_client.meta_cache_blob && g_client.meta_cache_len >= 8)
+        memcpy(&cache_ver, g_client.meta_cache_blob + 4, 4);
+    if (cache_ver >= EFS_META_EFSM_V6)
+        return incremental_serialize_v6(snap, ds, blob, blob_len, ino_blob_len,
+                                        chunk_blob_len, ino_dirty_pages,
+                                        ch_dirty_pages, ino_pc_out, ch_pc_out);
+
     size_t ino_bytes = (size_t)snap->inode_count * EFS_INODE_WIRE_SIZE;
     size_t ch_bytes = (size_t)snap->chunk_count * EFS_CHUNK_WIRE_SIZE;
     uint32_t ino_len = (uint32_t)(EFS_META_HDR_SIZE + ino_bytes);
     size_t total = (size_t)ino_len + ch_bytes;
 
-    /* Split a leftover combined blob from a full serialize. */
-    if (!g_client.meta_cache_ch && g_client.meta_cache_ch_len &&
-        g_client.meta_cache_len >= (size_t)g_client.meta_cache_ino_len +
-                                       g_client.meta_cache_ch_len) {
-        size_t old_ch = g_client.meta_cache_ch_len;
-        if (cache_grow(&g_client.meta_cache_ch, &g_client.meta_cache_ch_cap,
-                       old_ch) != 0)
-            return -1;
-        memcpy(g_client.meta_cache_ch,
-               g_client.meta_cache_blob + g_client.meta_cache_ino_len, old_ch);
-    }
+    if (split_combined_cache() != 0)
+        return -1;
 
     size_t old_ino_len = g_client.meta_cache_ino_len
                              ? g_client.meta_cache_ino_len
@@ -552,7 +732,7 @@ static int incremental_serialize(struct efs_export *snap, struct dirty_snap *ds,
 
     char *b = g_client.meta_cache_blob;
     char *cb = g_client.meta_cache_ch;
-    efs_export_pack_header(snap, (uint8_t *)b);
+    efs_export_pack_header_ver(snap, (uint8_t *)b, EFS_META_EFSM_V5);
     uint32_t ino_pc = efs_meta_page_count_for_blob(ino_len);
     uint32_t ch_pc = efs_meta_page_count_for_blob((uint32_t)ch_bytes);
     uint8_t *idirty = calloc(ino_pc ? ino_pc : 1, 1);
@@ -564,16 +744,6 @@ static int incremental_serialize(struct efs_export *snap, struct dirty_snap *ds,
     }
     if (ino_pc)
         idirty[0] = 1; /* header */
-
-    /* A record that straddles a 128 KiB page must dirty both pages.
-     * Marking only the start page left the tail on the previous generation
-     * (ino==0 + leftover name → readdir lists a path lookup cannot find). */
-    #define MARK_SPAN(bm, npc, off0, rec) do {                          \
-        uint32_t _a = (uint32_t)(off0) / EFS_META_PAGE_SIZE;            \
-        uint32_t _b = (uint32_t)((off0) + (rec) - 1) / EFS_META_PAGE_SIZE; \
-        if (_a < (npc)) (bm)[_a] = 1;                                   \
-        if (_b < (npc)) (bm)[_b] = 1;                                   \
-    } while (0)
 
     /* New bytes at the end of a region (including a newly created last page
      * that only holds the tail of a spanning record) must be flushed. */
@@ -695,17 +865,20 @@ static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
         return EFS_ERR_NOMEM;
     if (efs_meta_page_count_for_blob(ino_blob_len) > EFS_META_INO_PAGE_MAX ||
         efs_meta_page_count_for_blob(chunk_blob_len) > EFS_META_CHUNK_PAGE_MAX) {
-        fprintf(stderr,
-                "meta replicate: region pages exceed cap (ino %u/%u chunk %u/%u)\n",
-                efs_meta_page_count_for_blob(ino_blob_len),
-                (unsigned)EFS_META_INO_PAGE_MAX,
-                efs_meta_page_count_for_blob(chunk_blob_len),
-                (unsigned)EFS_META_CHUNK_PAGE_MAX);
-        fflush(stderr);
+        if (!g_client.meta_cap_blocked) {
+            fprintf(stderr,
+                    "meta replicate: region pages exceed cap (ino %u/%u chunk %u/%u)\n",
+                    efs_meta_page_count_for_blob(ino_blob_len),
+                    (unsigned)EFS_META_INO_PAGE_MAX,
+                    efs_meta_page_count_for_blob(chunk_blob_len),
+                    (unsigned)EFS_META_CHUNK_PAGE_MAX);
+            fflush(stderr);
+            g_client.meta_cap_blocked = 1;
+        }
         free(ino_dirty_pg);
         free(ch_dirty_pg);
         if (!blob_is_cache) free(blob);
-        return EFS_ERR_INVAL;
+        return EFS_ERR_QUOTA;
     }
 
     /* 2+1 EC needs 3 distinct nodes; on a 1-2 node ring placement wraps and
@@ -1075,6 +1248,8 @@ static int efs_client_replicate_metadata_locked(void)
     snap.inode_count = ex->inode_count;
     snap.chunk_count = ex->chunk_count;
     snap.layout_epoch = ex->layout_epoch;
+    snap.dentry_bytes = ex->dentry_bytes;
+    snap.efsm_version = ex->efsm_version;
     new_gen = ex->root.generation + (heal ? 2ULL : 1ULL);
     if (new_gen == 0)
         new_gen = 1;
@@ -1163,6 +1338,10 @@ static int efs_client_replicate_metadata_locked(void)
         }
     }
     if (!packed) {
+        /* Incremental pack can miss (adopt split, epoch, dentry drift).
+         * Fall back to a full snapshot instead of failing fsync with INVAL. */
+        if (!full && !heal)
+            full = 1;
         if (snap.inode_count) {
             snap.inodes = malloc(snap.inode_count * sizeof(*snap.inodes));
             if (snap.inodes)
@@ -1179,8 +1358,13 @@ static int efs_client_replicate_metadata_locked(void)
             (snap.chunk_count && !snap.chunks)) {
             free(snap.inodes);
             free(snap.chunks);
+            snap.inodes = NULL;
+            snap.chunks = NULL;
             pthread_mutex_unlock(&g_client.dirty_mu);
             efs_client_table_unlock();
+            pthread_mutex_lock(&g_client.lock);
+            dirty_snap_merge_back_locked(&ds);
+            pthread_mutex_unlock(&g_client.lock);
             return EFS_ERR_NOMEM;
         }
     }
@@ -1334,9 +1518,17 @@ int efs_client_meta_cache_adopt(char *blob, size_t blob_len)
         return -1;
     uint64_t ic = g_client.export.inode_count;
     uint64_t cc = g_client.export.chunk_count;
-    uint32_t ino_len = (uint32_t)(EFS_META_HDR_SIZE +
-                                  ic * EFS_INODE_WIRE_SIZE);
+    uint32_t ver = EFS_META_EFSM_V5;
+    memcpy(&ver, blob + 4, 4);
+    uint32_t ino_len;
     uint32_t ch_len = (uint32_t)(cc * EFS_CHUNK_WIRE_SIZE);
+    if (ver >= EFS_META_EFSM_V6) {
+        size_t dent = (size_t)g_client.export.dentry_bytes;
+        ino_len = (uint32_t)(EFS_META_HDR_SIZE +
+                             ic * EFS_INODE_COMPACT_SIZE + dent);
+    } else {
+        ino_len = (uint32_t)(EFS_META_HDR_SIZE + ic * EFS_INODE_WIRE_SIZE);
+    }
     if (blob_len < (size_t)ino_len + (size_t)ch_len)
         return -1;
     free(g_client.meta_cache_blob);
@@ -1362,14 +1554,24 @@ int efs_client_meta_cache_adopt(char *blob, size_t blob_len)
 
 int efs_client_replicate_metadata(void)
 {
+    if (g_client.meta_cap_blocked) {
+        if (efs_export_fits_page_cap(&g_client.export, 0, 0))
+            g_client.meta_cap_blocked = 0;
+        else
+            return EFS_ERR_QUOTA;
+    }
     /* Bulk copies (ecopy/rsync) hit a full meta flush every meta_batch_ops
      * creates/chmods. Transient net/quorum blips show up as fchmod EIO —
      * retry with exponential backoff + jitter before surfacing failure. */
     int rc = EFS_ERR_NET;
     for (int attempt = 1; attempt <= 4; attempt++) {
         rc = efs_client_replicate_metadata_once();
-        if (rc == EFS_OK)
+        if (rc == EFS_OK) {
+            g_client.meta_cap_blocked = 0;
             return EFS_OK;
+        }
+        if (rc == EFS_ERR_QUOTA || rc == EFS_ERR_INVAL)
+            break;
         if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM)
             break;
         fprintf(stderr, "meta replicate attempt %d/4 failed: %s\n",
@@ -1400,7 +1602,30 @@ static void *meta_flush_main(void *arg)
             break;
         g_client.meta_flush_req = 0;
         pthread_mutex_unlock(&g_client.meta_flush_mu);
+        /* Heal waits until the dirty set is idle so ingest PUTs win. */
+        if (g_client.meta_heal) {
+            pthread_mutex_lock(&g_client.dirty_mu);
+            int busy = (g_client.dirty_ino_count || g_client.dirty_chunk_count ||
+                        g_client.meta_dirty_ops);
+            pthread_mutex_unlock(&g_client.dirty_mu);
+            if (busy) {
+                g_client.meta_heal_pending = 1;
+                pthread_mutex_lock(&g_client.meta_flush_mu);
+                continue;
+            }
+        }
         (void)efs_client_replicate_metadata();
+        if (g_client.meta_heal_pending && !g_client.meta_heal) {
+            g_client.meta_heal_pending = 0;
+        } else if (g_client.meta_heal_pending) {
+            pthread_mutex_lock(&g_client.dirty_mu);
+            int idle = (g_client.dirty_ino_count == 0 &&
+                        g_client.dirty_chunk_count == 0 &&
+                        g_client.meta_dirty_ops == 0);
+            pthread_mutex_unlock(&g_client.dirty_mu);
+            if (idle)
+                efs_client_schedule_meta_heal();
+        }
         pthread_mutex_lock(&g_client.meta_flush_mu);
     }
     pthread_mutex_unlock(&g_client.meta_flush_mu);
@@ -1424,6 +1649,7 @@ void efs_client_enable_meta_batch(uint32_t every_n_ops)
                            NULL) == 0)
             g_client.meta_flush_started = 1;
     }
+    /* Heal only when idle; ingest dirties the table immediately after mount. */
     if (g_client.meta_heal)
         efs_client_schedule_meta_heal();
 }
@@ -1434,6 +1660,13 @@ void efs_client_schedule_meta_heal(void)
         return;
     efs_client_ensure_dir_locks();
     pthread_mutex_lock(&g_client.dirty_mu);
+    int busy = (g_client.dirty_ino_count || g_client.dirty_chunk_count ||
+                g_client.meta_dirty_ops);
+    if (busy) {
+        g_client.meta_heal_pending = 1;
+        pthread_mutex_unlock(&g_client.dirty_mu);
+        return;
+    }
     g_client.meta_dirty = 1;
     pthread_mutex_unlock(&g_client.dirty_mu);
     fprintf(stderr,
@@ -1448,6 +1681,37 @@ void efs_client_schedule_meta_heal(void)
         return;
     }
     (void)efs_client_replicate_metadata_nb();
+}
+
+int efs_client_take_write_lease(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    uint64_t now_ms = (uint64_t)ts.tv_sec * 1000ull +
+                      (uint64_t)ts.tv_nsec / 1000000ull;
+    struct efs_export_root *r = &g_client.export.root;
+    if (r->write_lease_id && r->write_lease_until_ms > now_ms &&
+        r->write_lease_id != g_client.write_lease_id) {
+        g_client.write_readonly = 1;
+        fprintf(stderr, "meta: write lease held by %llu until %llu; read-only\n",
+                (unsigned long long)r->write_lease_id,
+                (unsigned long long)r->write_lease_until_ms);
+        fflush(stderr);
+        return EFS_ERR_BUSY;
+    }
+    uint64_t id = ((uint64_t)getpid() << 32) ^ now_ms ^
+                  (uint64_t)(uintptr_t)&g_client;
+    if (id == 0)
+        id = 1;
+    g_client.write_lease_id = id;
+    g_client.write_readonly = 0;
+    r->write_lease_id = id;
+    r->write_lease_until_ms = now_ms + 3600ull * 1000ull;
+    if (r->version < 6)
+        r->version = 6;
+    if (r->shard_count == 0)
+        r->shard_count = 1;
+    return EFS_OK;
 }
 
 void efs_client_stop_meta_flush(void)
@@ -1475,7 +1739,11 @@ int efs_client_note_meta_change(int force)
     g_client.meta_dirty_ops++;
     uint32_t ops = g_client.meta_dirty_ops;
     uint32_t thresh = g_client.meta_batch_ops ? g_client.meta_batch_ops : 4096;
-    int flush = (ops >= thresh);
+    int stripe = g_client.last_dirty_stripe;
+    if (stripe < 0 || stripe >= EFS_DIR_LOCKS)
+        stripe = 0;
+    uint32_t stripe_ops = g_client.dirty_stripe_ops[stripe];
+    int flush = (ops >= thresh) || (stripe_ops >= thresh);
     pthread_mutex_unlock(&g_client.dirty_mu);
 
     /* Batched threshold flush: hand off to the dedicated flush thread so the
@@ -2069,20 +2337,44 @@ static void *chunk_put_worker(void *arg);
  * serialized PUTs on one mutex and tanked 4k IOPS) — the caller PUTs now. */
 #define DCACHE_SLOTS  65536
 #define DCACHE_SHARDS 64
+#define DCACHE_NR     8
 struct dcache_ent {
     efs_ino_t ino;
     uint32_t ci;
     uint8_t *data;
     uint32_t len;
     int dirty;
+    int have_base; /* 1 = data[] is a complete chunk; 0 = sparse patches */
+    uint8_t nrange;
+    uint32_t roff[DCACHE_NR];
+    uint32_t rlen[DCACHE_NR];
     struct dcache_ent *next;
 };
 static struct {
     pthread_mutex_t shard[DCACHE_SHARDS];
     struct dcache_ent e[DCACHE_SLOTS];
     int inited;
+    uint64_t dirty_bytes;
 } g_dcache;
 static pthread_once_t g_dcache_once = PTHREAD_ONCE_INIT;
+
+static void dcache_note_dirty_bytes(int64_t delta)
+{
+    if (delta > 0)
+        __atomic_add_fetch(&g_dcache.dirty_bytes, (uint64_t)delta,
+                           __ATOMIC_RELAXED);
+    else if (delta < 0) {
+        uint64_t sub = (uint64_t)(-delta);
+        uint64_t cur = __atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_RELAXED);
+        while (cur) {
+            uint64_t next = cur > sub ? cur - sub : 0;
+            if (__atomic_compare_exchange_n(&g_dcache.dirty_bytes, &cur, next,
+                                            0, __ATOMIC_RELAXED,
+                                            __ATOMIC_RELAXED))
+                break;
+        }
+    }
+}
 
 static void dcache_init(void)
 {
@@ -2132,6 +2424,11 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
     if (rc != EFS_OK)
         return rc;
 
+    if (efs_export_get_chunk(&g_client.export, ino, ci, NULL) != 0) {
+        int room = efs_client_ensure_meta_room(0, 1);
+        if (room != EFS_OK)
+            return room;
+    }
     if (efs_export_needs_chunk_grow(&g_client.export)) {
         efs_client_table_lock();
         (void)efs_export_reserve_chunks(&g_client.export, 64);
@@ -2185,6 +2482,8 @@ void efs_dcache_drop(efs_ino_t ino, uint32_t ci)
     pthread_mutex_lock(mu);
     struct dcache_ent *head = &g_dcache.e[s];
     if (head->ino == ino && head->ci == ci) {
+        if (head->dirty && head->len)
+            dcache_note_dirty_bytes(-(int64_t)head->len);
         free(head->data);
         if (head->next) {
             struct dcache_ent *n = head->next;
@@ -2199,6 +2498,8 @@ void efs_dcache_drop(efs_ino_t ino, uint32_t ci)
     struct dcache_ent *prev = head;
     for (struct dcache_ent *e = head->next; e; prev = e, e = e->next) {
         if (e->ino == ino && e->ci == ci) {
+            if (e->dirty && e->len)
+                dcache_note_dirty_bytes(-(int64_t)e->len);
             prev->next = e->next;
             free(e->data);
             free(e);
@@ -2214,6 +2515,32 @@ static int dcache_merge_owned(efs_ino_t ino, uint32_t ci, uint32_t off,
                               const uint8_t *src, uint32_t len,
                               uint8_t *chunk, uint32_t cs);
 
+static void dcache_add_range(struct dcache_ent *e, uint32_t off, uint32_t len)
+{
+    if (!e || e->have_base || !len)
+        return;
+    uint32_t end = off + len;
+    for (uint8_t i = 0; i < e->nrange; i++) {
+        uint32_t a = e->roff[i], b = a + e->rlen[i];
+        if (off <= b && a <= end) {
+            uint32_t lo = a < off ? a : off;
+            uint32_t hi = b > end ? b : end;
+            e->roff[i] = lo;
+            e->rlen[i] = hi - lo;
+            return;
+        }
+    }
+    if (e->nrange < DCACHE_NR) {
+        e->roff[e->nrange] = off;
+        e->rlen[e->nrange] = len;
+        e->nrange++;
+        return;
+    }
+    e->roff[0] = 0;
+    e->rlen[0] = e->len ? e->len : end;
+    e->nrange = 1;
+}
+
 static int dcache_patch(efs_ino_t ino, uint32_t ci, uint32_t off, const uint8_t *src,
                         uint32_t len)
 {
@@ -2225,6 +2552,7 @@ static int dcache_patch(efs_ino_t ino, uint32_t ci, uint32_t off, const uint8_t 
     struct dcache_ent *e = dcache_find(s, ino, ci);
     if (e && e->dirty && off + len <= e->len) {
         memcpy(e->data + off, src, len);
+        dcache_add_range(e, off, len);
         pthread_mutex_unlock(mu);
         efs_rdcache_invalidate(ino, ci);
         return 0;
@@ -2233,8 +2561,8 @@ static int dcache_patch(efs_ino_t ino, uint32_t ci, uint32_t off, const uint8_t 
     return -1;
 }
 
-/* First 4k to a chunk: pull the base (rdcache / servers / zeros) into the
- * dirty cache so later random writes patch in place instead of RMW+PUT. */
+/* First 4k to a chunk: cache the patch without a 128 KiB GET. Published
+ * chunks stay have_base=0 until flush, which fetches once and overlays. */
 static int dcache_load_and_patch(efs_ino_t ino, uint32_t ci, uint32_t off,
                                  const uint8_t *src, uint32_t len, uint32_t cs)
 {
@@ -2245,30 +2573,33 @@ static int dcache_load_and_patch(efs_ino_t ino, uint32_t ci, uint32_t off,
     if (!chunk)
         return -1;
 
-    if (efs_rdcache_get(ino, ci, chunk, cs) != 0) {
-        int have = 0;
+    int have_base = 0;
+    if (efs_rdcache_get(ino, ci, chunk, cs) == 0) {
+        have_base = 1;
+    } else {
+        int published = 0;
         pthread_mutex_lock(&g_client.idx_mu);
-        have = (efs_export_get_chunk(&g_client.export, ino, ci, NULL) == 0);
+        published = (efs_export_get_chunk(&g_client.export, ino, ci, NULL) == 0);
         pthread_mutex_unlock(&g_client.idx_mu);
-        if (!have) {
-            memset(chunk, 0, cs);
-        } else {
-            size_t got = 0;
-            int rrc = efs_client_read(ino, (uint64_t)ci * cs, cs,
-                                      (char *)chunk, &got);
-            if (rrc != EFS_OK) {
-                free(chunk);
-                return -1;
-            }
-            if (got < cs)
-                memset(chunk + got, 0, cs - got);
-        }
+        memset(chunk, 0, cs);
+        have_base = !published;
     }
     memcpy(chunk + off, src, len);
     if (dcache_merge_owned(ino, ci, off, src, len, chunk, cs) != 0) {
         free(chunk);
         return -1;
     }
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(s, ino, ci);
+    if (e) {
+        e->have_base = have_base;
+        e->nrange = 0;
+        if (!have_base)
+            dcache_add_range(e, off, len);
+    }
+    pthread_mutex_unlock(mu);
     return 0;
 }
 
@@ -2309,6 +2640,7 @@ int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
 static int dcache_fill(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
                        const uint8_t *chunk, uint32_t chunk_size)
 {
+    int was_dirty = e->dirty && e->data;
     if (e->len != chunk_size || !e->data) {
         uint8_t *nbuf = realloc(e->data, chunk_size);
         if (!nbuf)
@@ -2320,6 +2652,10 @@ static int dcache_fill(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
     e->ino = ino;
     e->ci = ci;
     e->dirty = 1;
+    e->have_base = 1;
+    e->nrange = 0;
+    if (!was_dirty)
+        dcache_note_dirty_bytes((int64_t)chunk_size);
     return 0;
 }
 
@@ -2328,6 +2664,7 @@ static int dcache_fill(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
 static int dcache_take(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
                        uint8_t *chunk, uint32_t chunk_size)
 {
+    int was_dirty = e->dirty && e->data;
     if (e->data && e->data != chunk)
         free(e->data);
     e->data = chunk;
@@ -2335,6 +2672,10 @@ static int dcache_take(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
     e->ino = ino;
     e->ci = ci;
     e->dirty = 1;
+    e->have_base = 1;
+    e->nrange = 0;
+    if (!was_dirty)
+        dcache_note_dirty_bytes((int64_t)chunk_size);
     return 0;
 }
 
@@ -2425,6 +2766,7 @@ static int dcache_merge_owned(efs_ino_t ino, uint32_t ci, uint32_t off,
     struct dcache_ent *e = dcache_find(s, ino, ci);
     if (e && e->dirty && e->len >= cs && off + len <= e->len) {
         memcpy(e->data + off, src, len);
+        dcache_add_range(e, off, len);
         pthread_mutex_unlock(mu);
         free(chunk);
         efs_rdcache_invalidate(ino, ci);
@@ -2451,6 +2793,13 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
         efs_ino_t ino = e->ino;
         uint32_t ci = e->ci;
         uint32_t len = e->len;
+        int have_base = e->have_base;
+        uint8_t nrange = e->nrange;
+        uint32_t roff[DCACHE_NR], rlen[DCACHE_NR];
+        if (!have_base && nrange) {
+            memcpy(roff, e->roff, (size_t)nrange * sizeof(uint32_t));
+            memcpy(rlen, e->rlen, (size_t)nrange * sizeof(uint32_t));
+        }
         uint8_t *copy = malloc(len);
         if (!copy) {
             pthread_mutex_unlock(mu);
@@ -2459,6 +2808,39 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
         memcpy(copy, e->data, len);
         e->dirty = 0;
         pthread_mutex_unlock(mu);
+        if (!have_base) {
+            uint8_t *base = malloc(len);
+            if (!base) {
+                free(copy);
+                pthread_mutex_lock(mu);
+                if (e->ino == ino && e->ci == ci && e->data)
+                    e->dirty = 1;
+                pthread_mutex_unlock(mu);
+                return EFS_ERR_NOMEM;
+            }
+            size_t got = 0;
+            int rrc = efs_client_read(ino, (uint64_t)ci * len, len,
+                                      (char *)base, &got);
+            if (rrc != EFS_OK) {
+                free(base);
+                free(copy);
+                pthread_mutex_lock(mu);
+                if (e->ino == ino && e->ci == ci && e->data)
+                    e->dirty = 1;
+                if (rc == EFS_OK)
+                    rc = rrc;
+                e = e->next;
+                continue;
+            }
+            if (got < len)
+                memset(base + got, 0, len - got);
+            for (uint8_t i = 0; i < nrange; i++) {
+                if (roff[i] + rlen[i] <= len)
+                    memcpy(base + roff[i], copy + roff[i], rlen[i]);
+            }
+            memcpy(copy, base, len);
+            free(base);
+        }
         int prc = dcache_put_now(ino, ci, copy, len);
         free(copy);
         pthread_mutex_lock(mu);
@@ -2472,6 +2854,7 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
             continue;
         }
         if (!e->dirty && e->ino == ino && e->ci == ci) {
+            dcache_note_dirty_bytes(-(int64_t)len);
             free(e->data);
             e->data = NULL;
             e->len = 0;
@@ -2533,6 +2916,20 @@ int efs_dcache_flush_ino(efs_ino_t ino)
 int efs_dcache_flush_all(void)
 {
     return dcache_flush_all_slots(0, 0);
+}
+
+void efs_dcache_maybe_reclaim(void)
+{
+    uint64_t lim = 2ull << 30;
+    const char *env = getenv("EFS_DCACHE_BYTES");
+    if (env && *env) {
+        char *end = NULL;
+        unsigned long long v = strtoull(env, &end, 10);
+        if (end != env && v >= (1ull << 20) && v <= (4ull << 30))
+            lim = (uint64_t)v;
+    }
+    if (__atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_RELAXED) > lim)
+        (void)efs_dcache_flush_all();
 }
 
 /* Persistent PUT workers draining a shared FIFO of chunk jobs. Reentrant:
@@ -2809,6 +3206,13 @@ static int pack_put_chunk(efs_ino_t dir_ino, uint32_t ci, const uint8_t *chunk,
     int rc = efs_client_put_fragments_parallel(dir_ino, ci, nodes, cfrags,
                                                frag_len, checksums);
     if (rc == EFS_OK) {
+        if (efs_export_get_chunk(&g_client.export, dir_ino, ci, NULL) != 0) {
+            int room = efs_client_ensure_meta_room(0, 1);
+            if (room != EFS_OK) {
+                free(frag_buf);
+                return room;
+            }
+        }
         if (efs_export_needs_chunk_grow(&g_client.export)) {
             efs_client_table_lock();
             (void)efs_export_reserve_chunks(&g_client.export, 64);
@@ -3145,6 +3549,11 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
         if (rc != EFS_OK)
             return rc;
 
+        if (efs_export_get_chunk(&g_client.export, ino, ci, NULL) != 0) {
+            int room = efs_client_ensure_meta_room(0, 1);
+            if (room != EFS_OK)
+                return room;
+        }
         if (efs_export_needs_chunk_grow(&g_client.export)) {
             efs_client_table_lock();
             (void)efs_export_reserve_chunks(&g_client.export, 64);
@@ -3192,8 +3601,16 @@ int efs_client_write_no_replicate(efs_ino_t ino, uint64_t offset, size_t size, c
     int packed = (inode.pack_ino != 0);
     efs_client_unlock_dir(ino);
 
-    /* Do not stage small files in RAM. write() must not return until
-     * fragments have 2-of-3 quorum on the servers. */
+    /* Default: stage ImageNet-sized writes into the parent dir pack so
+     * most files add zero chunk-table rows. Seal on FUSE release. */
+    if (g_client.meta_batch && !packed && offset == 0) {
+        uint32_t cs = data_chunk_size();
+        if (size < cs) {
+            efs_ino_t parent = inode.parent;
+            if (pack_stage_append(ino, parent, offset, size, buf, cs) == 0)
+                return EFS_OK;
+        }
+    }
 
     if (packed) {
         efs_client_lock_dir(ino);
@@ -3251,6 +3668,11 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
                 return jobs[i].rc;
             if (jobs[i].deferred)
                 continue;
+            if (efs_export_get_chunk(&g_client.export, ino, jobs[i].ci, NULL) != 0) {
+                int room = efs_client_ensure_meta_room(0, 1);
+                if (room != EFS_OK)
+                    return room;
+            }
             if (efs_export_needs_chunk_grow(&g_client.export)) {
                 efs_client_table_lock();
                 (void)efs_export_reserve_chunks(&g_client.export, 64);

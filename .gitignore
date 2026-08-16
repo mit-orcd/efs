@@ -24,6 +24,8 @@ tests/test_query
 tests/test_quota
 tests/test_rejoin
 tests/test_meta_slot
+tests/test_meta_cap
+tests/test_meta_v6
 
 # profiling / job runtime output
 /logs/
