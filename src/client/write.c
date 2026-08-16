@@ -1862,8 +1862,20 @@ static int assemble_write_chunk(efs_ino_t ino, uint64_t old_size,
             size_t got = 0;
             int rrc = efs_client_read(ino, chunk_start, existing, (char *)chunk, &got);
             if (rrc != EFS_OK || got != existing) {
-                /* RMW base unreadable: refuse rather than zero over live data. */
-                return (rrc != EFS_OK) ? rrc : EFS_ERR_IO;
+                struct efs_chunk_entry ce;
+                if (efs_export_get_chunk(&g_client.export, ino, ci, &ce) != 0) {
+                    /* Size can be ahead of the store (async WB / dcache
+                     * patch). No published chunk yet — base is zeros. */
+                    *from_zero_out = 1;
+                    if (off_in_chunk > 0)
+                        memset(chunk, 0, off_in_chunk);
+                    if (off_in_chunk + wr_len < chunk_size)
+                        memset(chunk + off_in_chunk + wr_len, 0,
+                               chunk_size - off_in_chunk - wr_len);
+                } else {
+                    /* Chunk is in the table; a failed GET is real IO. */
+                    return (rrc != EFS_OK) ? rrc : EFS_ERR_IO;
+                }
             }
             if (existing < chunk_size)
                 memset(chunk + existing, 0, chunk_size - existing);
@@ -2126,13 +2138,11 @@ int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
     if (efs_export_get_inode(&g_client.export, ino, &cur) == 0 &&
         cur.size < end) {
         efs_export_set_size_norollup(&g_client.export, ino, end);
-    } else {
-        uint64_t sec;
-        uint32_t nsec;
-        now_ns(&sec, &nsec);
-        efs_export_set_mtime_ns_norollup(&g_client.export, ino, sec, nsec);
+        efs_client_mark_ino_dirty(ino);
     }
-    efs_client_mark_ino_dirty(ino);
+    /* Overwrite of an already-cached chunk: skip mtime + dirty-ino.
+     * Random 4k used to take idx/dir locks and mark the inode dirty
+     * on every patch (~250k/s), which capped rw-4k and flooded meta. */
     efs_client_unlock_dir(ino);
     return 0;
 }
@@ -2477,19 +2487,15 @@ static void *chunk_put_worker(void *arg)
     if (covers_full) {
         size_t src_off = (size_t)(wr_start - job->offset);
         if (efs_bytes_are_zero(job->buf + src_off, chunk_size)) {
-            const uint8_t *z = efs_zero_bytes(frag_len);
-            if (!z) {
-                job->rc = EFS_ERR_NOMEM;
-                return NULL;
-            }
-            const uint8_t *cfrags[EFS_NUM_FRAGMENTS] = {z, z, z};
             efs_hash_zero_fragment_len(frag_len, job->checksums[0]);
             efs_hash_zero_fragment_len(frag_len, job->checksums[1]);
             efs_hash_zero_fragment_len(frag_len, job->checksums[2]);
             efs_place_fragments(g_client.nodes, g_client.node_count, job->ino,
                                 job->ci, job->nodes);
-            job->rc = efs_client_put_fragments_parallel(
-                job->ino, job->ci, job->nodes, cfrags, frag_len, job->checksums);
+            /* Do not PUT all-zero fragments. The chunk table stores the
+             * well-known zero digest; decode synthesizes zeros on read.
+             * dd if=/dev/zero was spending ~1 GB/s on 2-ack PUTs of zeros. */
+            job->rc = EFS_OK;
             return NULL;
         }
 
@@ -3098,11 +3104,22 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
             }
             efs_client_lock_dir(ino);
             pthread_mutex_lock(&g_client.idx_mu);
-            efs_export_set_chunk(&g_client.export, ino, jobs[i].ci, jobs[i].nodes,
-                                 jobs[i].checksums);
-            pthread_mutex_unlock(&g_client.idx_mu);
-            efs_client_unlock_dir(ino);
-            efs_client_mark_chunk_dirty(ino, jobs[i].ci);
+            {
+                struct efs_chunk_entry prev;
+                int same = (efs_export_get_chunk(&g_client.export, ino,
+                                                 jobs[i].ci, &prev) == 0 &&
+                            memcmp(prev.fragment_nodes, jobs[i].nodes,
+                                   sizeof(prev.fragment_nodes)) == 0 &&
+                            memcmp(prev.checksums, jobs[i].checksums,
+                                   sizeof(prev.checksums)) == 0);
+                if (!same)
+                    efs_export_set_chunk(&g_client.export, ino, jobs[i].ci,
+                                         jobs[i].nodes, jobs[i].checksums);
+                pthread_mutex_unlock(&g_client.idx_mu);
+                efs_client_unlock_dir(ino);
+                if (!same)
+                    efs_client_mark_chunk_dirty(ino, jobs[i].ci);
+            }
         }
         base += batch;
     }

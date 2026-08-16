@@ -161,6 +161,10 @@ void efs_client_stop_meta_flush(void);
 
 /* Decoded-chunk cache for sub-chunk reads and RMW. */
 int efs_rdcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len);
+/* Copy [off, off+len) from a cached chunk. 0 = hit. Avoids a 128 KiB malloc
+ * on the 4k random-read path. */
+int efs_rdcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
+                     uint8_t *dst, uint32_t len);
 void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t len);
 void efs_rdcache_invalidate(efs_ino_t ino, uint32_t ci);
 

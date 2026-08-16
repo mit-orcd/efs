@@ -1085,7 +1085,29 @@ static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
         return -EISDIR; /* .find is a directory; query via .find/<term> */
     }
     struct efs_inode ino;
-    return efs_client_lookup(path, &ino) == 0 ? 0 : -ENOENT;
+    if (efs_client_lookup(path, &ino) != 0)
+        return -ENOENT;
+    if (fi)
+        fi->fh = ino.ino;
+    return 0;
+}
+
+/* Open/create stash the inode so write/read skip a path walk + idx_mu
+ * on every 4k I/O. */
+static int fuse_file_ino(const char *path, struct fuse_file_info *fi,
+                         efs_ino_t *ino_out)
+{
+    if (fi && fi->fh) {
+        *ino_out = (efs_ino_t)fi->fh;
+        return 0;
+    }
+    struct efs_inode ino;
+    if (efs_client_lookup(path, &ino) != 0)
+        return -ENOENT;
+    if (efs_mode_is_dir(ino.mode))
+        return -EISDIR;
+    *ino_out = ino.ino;
+    return 0;
 }
 
 static void efs_fuse_log_err(const char *where, int efs_rc, efs_ino_t ino,
@@ -1097,7 +1119,6 @@ static int coal_read_sync(efs_ino_t ino);
 static int efs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
                          struct fuse_file_info *fi)
 {
-    (void)fi;
     struct efs_inode parent;
     if (path_is_stats(path, &parent) == 0) {
         if (!feature_enabled(EFS_FEATURE_STATS))
@@ -1126,26 +1147,24 @@ static int efs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
         return -EISDIR; /* .find is a directory; query via .find/<term> */
     }
 
-    struct efs_inode ino;
-    int rc = efs_client_lookup(path, &ino);
+    efs_ino_t ino;
+    int rc = fuse_file_ino(path, fi, &ino);
     if (rc != 0)
-        return -ENOENT;
-    if (efs_mode_is_dir(ino.mode))
-        return -EISDIR;
+        return rc;
 
     /* Read-your-writes: commit any coalesced (not yet written-back) data for
      * this file before reading from the servers. Pure reads skip this via the
      * active-run counter, so the read path stays fast when nothing is dirty. */
-    if (coal_read_sync(ino.ino) != 0) {
-        efs_fuse_log_err("read-wbsync", EFS_ERR_IO, ino.ino, (uint64_t)offset,
+    if (coal_read_sync(ino) != 0) {
+        efs_fuse_log_err("read-wbsync", EFS_ERR_IO, ino, (uint64_t)offset,
                          size, path);
         return -EIO;
     }
 
     size_t got = 0;
-    rc = efs_client_read(ino.ino, (uint64_t)offset, size, buf, &got);
+    rc = efs_client_read(ino, (uint64_t)offset, size, buf, &got);
     if (rc != 0) {
-        efs_fuse_log_err("read", rc, ino.ino, (uint64_t)offset, size, path);
+        efs_fuse_log_err("read", rc, ino, (uint64_t)offset, size, path);
         return -EIO;
     }
     return (int)got;
@@ -1167,6 +1186,8 @@ struct efs_wb_job {
     /* If set, this is the allocation that contains buf (stolen FUSE
      * receive buffer). Free this instead of buf when the job completes. */
     char *free_base;
+    /* Non-zero: buf/free_base came from the bounce pool (see bounce_release). */
+    size_t buf_cap;
 };
 
 /* Per-ino write serialization. WB workers run jobs concurrently, but two jobs
@@ -1205,6 +1226,8 @@ static struct {
     int shutdown;
     pthread_t workers[EFS_WB_WORKERS_MAX];
     efs_ino_t busy_ino[EFS_WB_WORKERS_MAX];
+    uint64_t busy_off[EFS_WB_WORKERS_MAX];
+    size_t busy_len[EFS_WB_WORKERS_MAX];
     int nworkers;
 } g_wb = {
     .mu = PTHREAD_MUTEX_INITIALIZER,
@@ -1212,6 +1235,91 @@ static struct {
     .not_full = PTHREAD_COND_INITIALIZER,
     .idle = PTHREAD_COND_INITIALIZER,
 };
+
+/* glibc mmaps allocations >= 128 KiB. Every 128k/1M write_buf was then
+ * mmap + 256 page-faults + munmap, so a single psync stream's FUSE ACK
+ * took about as long as the PUT and the WB queue never piled up. */
+#define EFS_BOUNCE_POOL   256
+#define EFS_BOUNCE_SMALL  (128u << 10)
+#define EFS_BOUNCE_LARGE  (1u << 20)
+
+static struct {
+    pthread_mutex_t mu;
+    char *p[EFS_BOUNCE_POOL];
+    size_t cap[EFS_BOUNCE_POOL];
+    int n;
+} g_bounce = { .mu = PTHREAD_MUTEX_INITIALIZER };
+
+static char *bounce_fresh(size_t cap)
+{
+    char *p = malloc(cap);
+    if (!p)
+        return NULL;
+    /* Fault the pages once so the first write_buf memcpy is not the tax. */
+    for (size_t o = 0; o < cap; o += 4096)
+        p[o] = 0;
+    if (cap)
+        p[cap - 1] = 0;
+    return p;
+}
+
+static char *bounce_alloc(size_t size, size_t *cap_out)
+{
+    if (size < EFS_BOUNCE_SMALL) {
+        char *p = malloc(size);
+        if (cap_out)
+            *cap_out = 0;
+        return p;
+    }
+    size_t want = (size <= EFS_BOUNCE_LARGE) ? EFS_BOUNCE_LARGE : size;
+    if (size <= EFS_BOUNCE_SMALL)
+        want = EFS_BOUNCE_SMALL;
+    pthread_mutex_lock(&g_bounce.mu);
+    for (int i = g_bounce.n - 1; i >= 0; i--) {
+        if (g_bounce.cap[i] >= size) {
+            char *p = g_bounce.p[i];
+            size_t cap = g_bounce.cap[i];
+            g_bounce.n--;
+            g_bounce.p[i] = g_bounce.p[g_bounce.n];
+            g_bounce.cap[i] = g_bounce.cap[g_bounce.n];
+            pthread_mutex_unlock(&g_bounce.mu);
+            if (cap_out)
+                *cap_out = cap;
+            return p;
+        }
+    }
+    pthread_mutex_unlock(&g_bounce.mu);
+    char *p = bounce_fresh(want);
+    if (cap_out)
+        *cap_out = p ? want : 0;
+    return p;
+}
+
+static void bounce_release(char *p, size_t cap)
+{
+    if (!p)
+        return;
+    if (!cap) {
+        free(p);
+        return;
+    }
+    pthread_mutex_lock(&g_bounce.mu);
+    if (g_bounce.n < EFS_BOUNCE_POOL) {
+        g_bounce.p[g_bounce.n] = p;
+        g_bounce.cap[g_bounce.n] = cap;
+        g_bounce.n++;
+        pthread_mutex_unlock(&g_bounce.mu);
+        return;
+    }
+    pthread_mutex_unlock(&g_bounce.mu);
+    free(p);
+}
+
+static void wb_job_release_buf(char *copy, char *free_base, size_t buf_cap)
+{
+    char *p = free_base ? free_base : copy;
+    bounce_release(p, buf_cap);
+}
 
 static void efs_fuse_log_err(const char *where, int efs_rc, efs_ino_t ino,
                              uint64_t offset, size_t size, const char *path)
@@ -1230,6 +1338,26 @@ static void efs_fuse_log_err(const char *where, int efs_rc, efs_ino_t ino,
     fflush(stderr);
 }
 
+static int wb_ranges_overlap(uint64_t a0, size_t al, uint64_t b0, size_t bl)
+{
+    if (!al || !bl)
+        return 0;
+    return a0 < b0 + (uint64_t)bl && b0 < a0 + (uint64_t)al;
+}
+
+/* Caller holds g_wb.mu. True if another worker already claimed an
+ * overlapping range of this inode (aligned PUT vs RMW GET race). */
+static int wb_overlap_inflight(int self, efs_ino_t ino, uint64_t off, size_t len)
+{
+    for (int i = 0; i < g_wb.nworkers; i++) {
+        if (i == self || g_wb.busy_ino[i] != ino || !g_wb.busy_len[i])
+            continue;
+        if (wb_ranges_overlap(off, len, g_wb.busy_off[i], g_wb.busy_len[i]))
+            return 1;
+    }
+    return 0;
+}
+
 static void *efs_wb_thread(void *arg)
 {
     int wid = (int)(intptr_t)arg;
@@ -1245,18 +1373,34 @@ static void *efs_wb_thread(void *arg)
         g_wb.head = (g_wb.head + 1) % EFS_WB_DEPTH;
         g_wb.count--;
         g_wb.inflight++;
-        g_wb.busy_ino[wid] = job.ino;
         pthread_cond_signal(&g_wb.not_full);
+        /* Claim the range only after overlapping in-flight jobs finish.
+         * writeback_cache can deliver an unaligned window while a full
+         * overwrite of the same chunks is still PUTting; RMW GET then
+         * misses and used to return EIO. */
+        while (wb_overlap_inflight(wid, job.ino, job.offset, job.size))
+            pthread_cond_wait(&g_wb.idle, &g_wb.mu);
+        g_wb.busy_ino[wid] = job.ino;
+        g_wb.busy_off[wid] = job.offset;
+        g_wb.busy_len[wid] = job.size;
         pthread_mutex_unlock(&g_wb.mu);
 
-        /* Serialize same-ino writebacks: partial-chunk RMW is not atomic, so
-         * two overlapping WB jobs on one file would otherwise lose updates. */
-        pthread_mutex_t *ilock = efs_wb_ino_lock(job.ino);
-        pthread_mutex_lock(ilock);
+        /* Partial-chunk RMW is not atomic. Full-chunk overwrites of
+         * distinct ranges are independent — the per-ino lock used to
+         * force 128k×8 and 1M×1 through one PUT at a time. */
+        uint32_t cs = fuse_chunk_size();
+        int aligned = cs && job.size >= cs &&
+                      (job.offset % cs) == 0 && (job.size % cs) == 0;
+        pthread_mutex_t *ilock = NULL;
+        if (!aligned) {
+            ilock = efs_wb_ino_lock(job.ino);
+            pthread_mutex_lock(ilock);
+        }
         int rc = efs_client_write_no_replicate(job.ino, job.offset, job.size,
                                                job.buf);
-        pthread_mutex_unlock(ilock);
-        free(job.free_base ? job.free_base : job.buf);
+        if (ilock)
+            pthread_mutex_unlock(ilock);
+        wb_job_release_buf(job.buf, job.free_base, job.buf_cap);
 
         pthread_mutex_lock(&g_wb.mu);
         if (rc != EFS_OK) {
@@ -1280,6 +1424,8 @@ static void *efs_wb_thread(void *arg)
         }
         g_wb.inflight--;
         g_wb.busy_ino[wid] = 0;
+        g_wb.busy_off[wid] = 0;
+        g_wb.busy_len[wid] = 0;
         pthread_cond_broadcast(&g_wb.idle);
         pthread_mutex_unlock(&g_wb.mu);
     }
@@ -1325,12 +1471,14 @@ static int efs_wb_ensure(void)
 
 /* Enqueue a WB job taking ownership of an already-allocated buffer.
  * free_base, if non-NULL, is the pointer to free when the job finishes
- * (stolen FUSE receive buffer); otherwise `copy` is freed. */
+ * (stolen FUSE receive buffer); otherwise `copy` is released.
+ * buf_cap != 0 means the buffer came from bounce_alloc and goes back
+ * to the pool; 0 means a plain malloc. */
 static int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
-                                char *copy, char *free_base)
+                                char *copy, char *free_base, size_t buf_cap)
 {
     if (efs_wb_ensure() != 0) {
-        free(free_base ? free_base : copy);
+        wb_job_release_buf(copy, free_base, buf_cap);
         return EFS_ERR_NOMEM;
     }
     pthread_mutex_lock(&g_wb.mu);
@@ -1341,7 +1489,7 @@ static int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
         pthread_cond_wait(&g_wb.not_full, &g_wb.mu);
     if (g_wb.shutdown) {
         pthread_mutex_unlock(&g_wb.mu);
-        free(free_base ? free_base : copy);
+        wb_job_release_buf(copy, free_base, buf_cap);
         return EFS_ERR_IO;
     }
     g_wb.q[g_wb.tail].ino = ino;
@@ -1349,6 +1497,7 @@ static int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
     g_wb.q[g_wb.tail].size = size;
     g_wb.q[g_wb.tail].buf = copy;
     g_wb.q[g_wb.tail].free_base = free_base;
+    g_wb.q[g_wb.tail].buf_cap = buf_cap;
     g_wb.tail = (g_wb.tail + 1) % EFS_WB_DEPTH;
     g_wb.count++;
     pthread_cond_signal(&g_wb.not_empty);
@@ -1476,7 +1625,8 @@ static void coal_detach_locked(struct coal_run *r)
 static int coal_submit(struct coal_run *r)
 {
     int rc = efs_wb_enqueue_owned(r->ino, r->start,
-                                  (size_t)(r->end - r->start), r->buf, NULL);
+                                  (size_t)(r->end - r->start), r->buf, NULL,
+                                  r->cap);
     free(r);
     return rc;
 }
@@ -1505,6 +1655,21 @@ static int coal_has_ino(efs_ino_t ino)
     return has;
 }
 
+/* Sequential small writes append here. Random 4k used to see coal_has_ino
+ * and skip dcache_try_patch, so every write flushed a 4k run through WB. */
+static int coal_can_append(efs_ino_t ino, uint64_t offset, size_t size)
+{
+    if (!g_coalesce_enabled ||
+        __atomic_load_n(&g_coal.active, __ATOMIC_RELAXED) == 0)
+        return 0;
+    pthread_mutex_lock(&g_coal.mu);
+    struct coal_run *r = coal_find_locked(ino);
+    int ok = r && offset == r->end &&
+             (uint64_t)(r->end - r->start) + size <= EFS_COALESCE_CAP;
+    pthread_mutex_unlock(&g_coal.mu);
+    return ok;
+}
+
 static void coal_discard_ino(efs_ino_t ino)
 {
     pthread_mutex_lock(&g_coal.mu);
@@ -1513,7 +1678,7 @@ static void coal_discard_ino(efs_ino_t ino)
         coal_detach_locked(r);
     pthread_mutex_unlock(&g_coal.mu);
     if (r) {
-        free(r->buf);
+        bounce_release(r->buf, r->cap);
         free(r);
     }
 }
@@ -1532,7 +1697,8 @@ static int coal_read_sync(efs_ino_t ino)
 
 /* Coalesce a small write into the ino's run; consumes copy on EFS_OK.
  * Falls back to a direct WB enqueue when coalescing is not possible. */
-static int coal_write(efs_ino_t ino, uint64_t offset, size_t size, char *copy)
+static int coal_write(efs_ino_t ino, uint64_t offset, size_t size, char *copy,
+                      size_t copy_cap)
 {
     struct coal_run *flush = NULL;
     int have_copy = 1;
@@ -1541,28 +1707,12 @@ static int coal_write(efs_ino_t ino, uint64_t offset, size_t size, char *copy)
     struct coal_run *r = coal_find_locked(ino);
     if (r && offset == r->end &&
         (uint64_t)(r->end - r->start) + size <= EFS_COALESCE_CAP) {
-        size_t need = (size_t)(r->end - r->start) + size;
-        if (need > r->cap) {
-            size_t ncap = r->cap ? r->cap : (64u << 10);
-            while (ncap < need)
-                ncap *= 2;
-            char *nb = realloc(r->buf, ncap);
-            if (nb) {
-                r->buf = nb;
-                r->cap = ncap;
-            } else {
-                coal_detach_locked(r); /* cannot grow: flush, start fresh */
-                flush = r;
-                r = NULL;
-            }
-        }
-        if (r) {
-            memcpy(r->buf + (r->end - r->start), copy, size);
-            r->end += size;
-            pthread_mutex_unlock(&g_coal.mu);
-            free(copy);
-            return EFS_OK;
-        }
+        /* Runs start at CAP, so the append always fits. */
+        memcpy(r->buf + (r->end - r->start), copy, size);
+        r->end += size;
+        pthread_mutex_unlock(&g_coal.mu);
+        bounce_release(copy, copy_cap);
+        return EFS_OK;
     } else if (r) {
         /* non-contiguous or would exceed the cap: flush it, start new */
         coal_detach_locked(r);
@@ -1572,27 +1722,24 @@ static int coal_write(efs_ino_t ino, uint64_t offset, size_t size, char *copy)
 
     if (g_coal.active < EFS_COALESCE_MAX_RUNS) {
         struct coal_run *nr = malloc(sizeof(*nr));
-        size_t icap = 64u << 10;
-        if (icap < size)
-            icap = size;
-        if (icap > EFS_COALESCE_CAP)
-            icap = EFS_COALESCE_CAP;
-        char *nb = nr ? malloc(icap) : NULL;
+        size_t icap = 0;
+        char *nb = nr ? bounce_alloc(EFS_COALESCE_CAP, &icap) : NULL;
         if (nr && nb) {
             memcpy(nb, copy, size);
             nr->ino = ino;
             nr->start = offset;
             nr->end = offset + size;
-            nr->cap = icap;
+            nr->cap = icap ? icap : EFS_COALESCE_CAP;
             nr->buf = nb;
             unsigned h = (unsigned)((uint64_t)ino % EFS_COALESCE_SLOTS);
             nr->next = g_coal.slots[h];
             g_coal.slots[h] = nr;
             g_coal.active++;
             have_copy = 0;
-            free(copy);
+            bounce_release(copy, copy_cap);
         } else {
             free(nr);
+            bounce_release(nb, icap);
         }
     }
     pthread_mutex_unlock(&g_coal.mu);
@@ -1601,7 +1748,7 @@ static int coal_write(efs_ino_t ino, uint64_t offset, size_t size, char *copy)
         coal_submit(flush); /* a WB error here surfaces on the next sync */
 
     if (have_copy) /* could not coalesce: write through directly */
-        return efs_wb_enqueue_owned(ino, offset, size, copy, NULL);
+        return efs_wb_enqueue_owned(ino, offset, size, copy, NULL, copy_cap);
     return EFS_OK;
 }
 
@@ -1639,36 +1786,42 @@ static void coal_flush_all(void)
 static int efs_fuse_write(const char *path, const char *buf, size_t size,
                           off_t offset, struct fuse_file_info *fi)
 {
-    (void)fi;
     if (path_is_stats(path, NULL) == 0)
         return -EACCES;
     if (path_is_find(path, NULL) == 0)
         return -EISDIR; /* .find is a virtual directory */
     if (path_is_find_query_path(path))
         return -EACCES; /* .find/<term> query files are read-only */
-    struct efs_inode ino;
-    int rc = efs_client_lookup(path, &ino);
+    efs_ino_t ino;
+    int rc = fuse_file_ino(path, fi, &ino);
     if (rc != 0)
-        return -ENOENT;
-    if (efs_mode_is_dir(ino.mode))
-        return -EISDIR;
+        return rc;
 
     if (size == 0)
         return 0;
-    char *copy = malloc(size);
+    size_t copy_cap = 0;
+    char *copy = bounce_alloc(size, &copy_cap);
     if (!copy)
         return -ENOMEM;
     memcpy(copy, buf, size);
-    if (g_coalesce_enabled && size < fuse_chunk_size())
-        rc = coal_write(ino.ino, (uint64_t)offset, size, copy);
+    uint32_t cs = fuse_chunk_size();
+    if (size < cs && !coal_can_append(ino, (uint64_t)offset, size) &&
+        efs_dcache_try_patch(ino, (uint64_t)offset, (uint32_t)size,
+                             (const uint8_t *)copy) == 0) {
+        bounce_release(copy, copy_cap);
+        return (int)size;
+    }
+    if (g_coalesce_enabled && size < cs)
+        rc = coal_write(ino, (uint64_t)offset, size, copy, copy_cap);
     else
-        rc = efs_wb_enqueue_owned(ino.ino, (uint64_t)offset, size, copy, NULL);
+        rc = efs_wb_enqueue_owned(ino, (uint64_t)offset, size, copy, NULL,
+                                  copy_cap);
     if (rc == EFS_ERR_QUOTA) {
-        efs_fuse_log_err("write", rc, ino.ino, (uint64_t)offset, size, path);
+        efs_fuse_log_err("write", rc, ino, (uint64_t)offset, size, path);
         return -ENOSPC;
     }
     if (rc != 0) {
-        efs_fuse_log_err("write", rc, ino.ino, (uint64_t)offset, size, path);
+        efs_fuse_log_err("write", rc, ino, (uint64_t)offset, size, path);
         return -EIO;
     }
     return (int)size;
@@ -1679,51 +1832,51 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
 static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
                               off_t offset, struct fuse_file_info *fi)
 {
-    (void)fi;
     if (path_is_stats(path, NULL) == 0)
         return -EACCES;
     if (path_is_find(path, NULL) == 0)
         return -EISDIR; /* .find is a virtual directory */
     if (path_is_find_query_path(path))
         return -EACCES; /* .find/<term> query files are read-only */
-    struct efs_inode ino;
-    int rc = efs_client_lookup(path, &ino);
+    efs_ino_t ino;
+    int rc = fuse_file_ino(path, fi, &ino);
     if (rc != 0)
-        return -ENOENT;
-    if (efs_mode_is_dir(ino.mode))
-        return -EISDIR;
+        return rc;
 
     size_t size = fuse_buf_size(buf);
     if (size == 0)
         return 0;
 
-    char *copy = malloc(size);
+    size_t copy_cap = 0;
+    char *copy = bounce_alloc(size, &copy_cap);
     if (!copy)
         return -ENOMEM;
     struct fuse_bufvec dst = FUSE_BUFVEC_INIT(size);
     dst.buf[0].mem = copy;
     if (fuse_buf_copy(&dst, buf, FUSE_BUF_NO_SPLICE) < 0) {
-        free(copy);
+        bounce_release(copy, copy_cap);
         return -EIO;
     }
 
-    if (size <= 4096 && !coal_has_ino(ino.ino) &&
-        efs_dcache_try_patch(ino.ino, (uint64_t)offset, (uint32_t)size,
+    uint32_t cs = fuse_chunk_size();
+    if (size < cs && !coal_can_append(ino, (uint64_t)offset, size) &&
+        efs_dcache_try_patch(ino, (uint64_t)offset, (uint32_t)size,
                              (const uint8_t *)copy) == 0) {
-        free(copy);
+        bounce_release(copy, copy_cap);
         return (int)size;
     }
 
-    if (g_coalesce_enabled && size < fuse_chunk_size())
-        rc = coal_write(ino.ino, (uint64_t)offset, size, copy);
+    if (g_coalesce_enabled && size < cs)
+        rc = coal_write(ino, (uint64_t)offset, size, copy, copy_cap);
     else
-        rc = efs_wb_enqueue_owned(ino.ino, (uint64_t)offset, size, copy, NULL);
+        rc = efs_wb_enqueue_owned(ino, (uint64_t)offset, size, copy, NULL,
+                                  copy_cap);
     if (rc == EFS_ERR_QUOTA) {
-        efs_fuse_log_err("write_buf", rc, ino.ino, (uint64_t)offset, size, path);
+        efs_fuse_log_err("write_buf", rc, ino, (uint64_t)offset, size, path);
         return -ENOSPC;
     }
     if (rc != 0) {
-        efs_fuse_log_err("write_buf", rc, ino.ino, (uint64_t)offset, size, path);
+        efs_fuse_log_err("write_buf", rc, ino, (uint64_t)offset, size, path);
         return -EIO;
     }
     return (int)size;
@@ -1799,7 +1952,6 @@ static int fuse_create_errno(efs_ino_t parent, const char *name)
 
 static int efs_fuse_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-    (void)fi;
     char name[EFS_MAX_NAME];
     struct efs_inode parent;
     int rc = split_parent_name(path, name, sizeof(name), &parent);
@@ -1818,6 +1970,8 @@ static int efs_fuse_create(const char *path, mode_t mode, struct fuse_file_info 
                     e == -EIO ? "EIO" : "err");
         return e;
     }
+    if (fi)
+        fi->fh = ino;
     return 0;
 }
 
@@ -2247,14 +2401,13 @@ static void *efs_fuse_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
             conn->max_write = want;
         if (conn->max_readahead == 0 || conn->max_readahead > (16u << 20))
             conn->max_readahead = 16u << 20;
+        /* Do not set FUSE_CAP_WRITEBACK_CACHE. Kernel writebacks unaligned
+         * windows; RMW of in-flight chunks still returns EIO (seen on a
+         * 64 MiB /dev/urandom dd). Keep writes syscall-shaped. */
         /* 8+ fio jobs × pipelined chunk GETs need more than the
          * libfuse default (12) outstanding FUSE requests. */
         if (conn->max_background < 128)
             conn->max_background = 128;
-        /* fuse3 actually honors writeback_cache (2.9 rejected the mount
-         * option). Kernel then writebacks unaligned windows; RMW reads of
-         * not-yet-PUT chunks return EIO and close fails after a fast dd.
-         * Keep writes syscall-shaped until RMW can see in-flight WB. */
     }
     /* Coalesce metadata PUTs so bulk creates are not O(n^2) full-metadata
      * syncs. Override with EFS_META_BATCH_OPS for heavy profiling loads. */

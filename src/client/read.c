@@ -216,6 +216,20 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     uint8_t *frags[EFS_NUM_FRAGMENTS];
     frag_ptrs(frag_buf, frag_len, frags);
 
+    {
+        struct efs_chunk_entry ce;
+        if (efs_export_get_chunk(&g_client.export, ino, chunk_index, &ce) == 0) {
+            uint8_t zck[EFS_HASH_SIZE];
+            efs_hash_zero_fragment_len(frag_len, zck);
+            if (memcmp(ce.checksums[0], zck, EFS_HASH_SIZE) == 0 &&
+                memcmp(ce.checksums[1], zck, EFS_HASH_SIZE) == 0 &&
+                memcmp(ce.checksums[2], zck, EFS_HASH_SIZE) == 0) {
+                memset(chunk_out, 0, chunk_size);
+                return EFS_OK;
+            }
+        }
+    }
+
     int rc = EFS_ERR_DECODE;
     for (int attempt = 0; attempt < max_attempts; attempt++) {
         int have[EFS_NUM_FRAGMENTS] = {0, 0, 0};
@@ -560,11 +574,32 @@ static int load_export_from_root(const struct efs_export_root *root)
 
     int saw_v4_ci = 0, saw_v5_ci = 0;
     for (uint32_t pi = 0; pi < root->page_count; pi++) {
-        uint32_t try_ci[3];
+        uint32_t try_ci[6];
         int ntry = efs_meta_page_ci_candidates(root->generation, root->version,
                                                root->ino_page_count,
                                                root->chunk_page_count, pi,
                                                try_ci);
+        /* Two clients can overwrite the published slot's page while the
+         * previous dual-slot still matches this EFSR. Try that CI too. */
+        if (root->generation > 0 && ntry < 6) {
+            uint32_t alt[3];
+            int na = efs_meta_page_ci_candidates(root->generation - 1,
+                                                 root->version,
+                                                 root->ino_page_count,
+                                                 root->chunk_page_count, pi,
+                                                 alt);
+            for (int i = 0; i < na && ntry < 6; i++) {
+                int dup = 0;
+                for (int j = 0; j < ntry; j++) {
+                    if (try_ci[j] == alt[i]) {
+                        dup = 1;
+                        break;
+                    }
+                }
+                if (!dup)
+                    try_ci[ntry++] = alt[i];
+            }
+        }
         int rc = EFS_ERR_INVAL;
         const char *scheme = "v5";
         int loaded = 0;
@@ -870,17 +905,37 @@ struct get_batch {
     int remaining;
 };
 
-#define RDCACHE_SLOTS 8192
+#define RDCACHE_SLOTS  32768
+#define RDCACHE_WAYS   2
+#define RDCACHE_STRIPES 64
 struct rdcache_ent {
     efs_ino_t ino;
     uint32_t ci;
     uint8_t *data;
     uint32_t len;
+    uint32_t tick;
 };
 static struct {
-    pthread_mutex_t mu;
-    struct rdcache_ent e[RDCACHE_SLOTS];
-} g_rdcache = { .mu = PTHREAD_MUTEX_INITIALIZER };
+    pthread_mutex_t mu[RDCACHE_STRIPES];
+    int mu_ready;
+    struct rdcache_ent e[RDCACHE_SLOTS][RDCACHE_WAYS];
+    uint32_t tick;
+} g_rdcache;
+
+static pthread_mutex_t g_rdcache_init_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static void rdcache_ensure(void)
+{
+    if (__atomic_load_n(&g_rdcache.mu_ready, __ATOMIC_ACQUIRE))
+        return;
+    pthread_mutex_lock(&g_rdcache_init_mu);
+    if (!g_rdcache.mu_ready) {
+        for (int i = 0; i < RDCACHE_STRIPES; i++)
+            pthread_mutex_init(&g_rdcache.mu[i], NULL);
+        __atomic_store_n(&g_rdcache.mu_ready, 1, __ATOMIC_RELEASE);
+    }
+    pthread_mutex_unlock(&g_rdcache_init_mu);
+}
 
 static uint32_t rdcache_slot(efs_ino_t ino, uint32_t ci)
 {
@@ -889,20 +944,59 @@ static uint32_t rdcache_slot(efs_ino_t ino, uint32_t ci)
     return (uint32_t)(h & (RDCACHE_SLOTS - 1));
 }
 
+static pthread_mutex_t *rdcache_mu(uint32_t slot)
+{
+    rdcache_ensure();
+    return &g_rdcache.mu[slot & (RDCACHE_STRIPES - 1)];
+}
+
+static struct rdcache_ent *rdcache_find(uint32_t s, efs_ino_t ino, uint32_t ci)
+{
+    for (int w = 0; w < RDCACHE_WAYS; w++) {
+        struct rdcache_ent *e = &g_rdcache.e[s][w];
+        if (e->data && e->ino == ino && e->ci == ci)
+            return e;
+    }
+    return NULL;
+}
+
 int efs_rdcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
 {
     /* Dirty write-combined chunks are newer than anything on the servers. */
     if (efs_dcache_get(ino, ci, dst, len) == 0)
         return 0;
+    if (!dst || !len)
+        return -1;
     uint32_t s = rdcache_slot(ino, ci);
-    pthread_mutex_lock(&g_rdcache.mu);
-    struct rdcache_ent *e = &g_rdcache.e[s];
-    if (e->data && e->ino == ino && e->ci == ci && e->len >= len) {
+    pthread_mutex_t *mu = rdcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct rdcache_ent *e = rdcache_find(s, ino, ci);
+    if (e && e->len >= len) {
         memcpy(dst, e->data, len);
-        pthread_mutex_unlock(&g_rdcache.mu);
+        e->tick = ++g_rdcache.tick;
+        pthread_mutex_unlock(mu);
         return 0;
     }
-    pthread_mutex_unlock(&g_rdcache.mu);
+    pthread_mutex_unlock(mu);
+    return -1;
+}
+
+int efs_rdcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
+                     uint8_t *dst, uint32_t len)
+{
+    if (!dst || !len)
+        return -1;
+    uint32_t s = rdcache_slot(ino, ci);
+    pthread_mutex_t *mu = rdcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct rdcache_ent *e = rdcache_find(s, ino, ci);
+    if (e && (uint64_t)off + len <= e->len) {
+        memcpy(dst, e->data + off, len);
+        e->tick = ++g_rdcache.tick;
+        pthread_mutex_unlock(mu);
+        return 0;
+    }
+    pthread_mutex_unlock(mu);
     return -1;
 }
 
@@ -911,12 +1005,24 @@ void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t le
     if (!src || !len)
         return;
     uint32_t s = rdcache_slot(ino, ci);
-    pthread_mutex_lock(&g_rdcache.mu);
-    struct rdcache_ent *e = &g_rdcache.e[s];
+    pthread_mutex_t *mu = rdcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct rdcache_ent *e = rdcache_find(s, ino, ci);
+    if (!e) {
+        e = &g_rdcache.e[s][0];
+        for (int w = 1; w < RDCACHE_WAYS; w++) {
+            if (!g_rdcache.e[s][w].data) {
+                e = &g_rdcache.e[s][w];
+                break;
+            }
+            if (g_rdcache.e[s][w].tick < e->tick)
+                e = &g_rdcache.e[s][w];
+        }
+    }
     if (!e->data || e->len < len) {
         uint8_t *nbuf = realloc(e->data, len);
         if (!nbuf) {
-            pthread_mutex_unlock(&g_rdcache.mu);
+            pthread_mutex_unlock(mu);
             return;
         }
         e->data = nbuf;
@@ -925,17 +1031,19 @@ void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t le
     memcpy(e->data, src, len);
     e->ino = ino;
     e->ci = ci;
-    pthread_mutex_unlock(&g_rdcache.mu);
+    e->tick = ++g_rdcache.tick;
+    pthread_mutex_unlock(mu);
 }
 
 void efs_rdcache_invalidate(efs_ino_t ino, uint32_t ci)
 {
     uint32_t s = rdcache_slot(ino, ci);
-    pthread_mutex_lock(&g_rdcache.mu);
-    struct rdcache_ent *e = &g_rdcache.e[s];
-    if (e->ino == ino && e->ci == ci)
+    pthread_mutex_t *mu = rdcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct rdcache_ent *e = rdcache_find(s, ino, ci);
+    if (e)
         e->ino = 0;
-    pthread_mutex_unlock(&g_rdcache.mu);
+    pthread_mutex_unlock(mu);
 }
 
 struct chunk_get_job {
@@ -1128,6 +1236,24 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
     size_t total = 0;
     uint64_t end = offset + size;
     uint32_t chunk_size = data_chunk_size();
+    /* Sub-chunk read: serve from the decoded cache without malloc(128k). */
+    if (chunk_size && size < chunk_size &&
+        (offset / chunk_size) == ((end - 1) / chunk_size)) {
+        uint32_t ci = (uint32_t)(offset / chunk_size);
+        uint32_t off = (uint32_t)(offset % chunk_size);
+        if (efs_rdcache_copy(ino, ci, off, (uint8_t *)buf, (uint32_t)size) == 0) {
+            *out_len = size;
+            return EFS_OK;
+        }
+        uint8_t *full = malloc(chunk_size);
+        if (full && efs_dcache_get(ino, ci, full, chunk_size) == 0) {
+            memcpy(buf, full + off, size);
+            free(full);
+            *out_len = size;
+            return EFS_OK;
+        }
+        free(full);
+    }
     uint32_t pipe = EFS_WRITE_PIPELINE;
     if (pipe < 1)
         pipe = 1;
