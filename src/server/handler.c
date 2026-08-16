@@ -10,34 +10,6 @@
 #include <errno.h>
 #include <arpa/inet.h>
 
-static int refresh_peer_usage(const char *host, uint16_t port, uint64_t *quota, uint64_t *used)
-{
-    int fd = server_peer_conn_get(host, port);
-    if (fd < 0)
-        return -1;
-
-    uint8_t type;
-    void *reply = NULL;
-    uint32_t reply_len = 0;
-    int rc = -1;
-    int net_ok = (efs_send_msg(fd, EFS_MSG_STATUS, NULL, 0) == 0 &&
-                  efs_recv_msg(fd, &type, &reply, &reply_len) == 0);
-    if (net_ok && type == EFS_MSG_STATUS_REPLY &&
-        reply_len == sizeof(struct efs_msg_status_reply)) {
-        struct efs_msg_status_reply *r = reply;
-        *quota = r->quota;
-        *used = r->used;
-        rc = 0;
-    }
-
-    free(reply);
-    if (net_ok)
-        server_peer_conn_release(host, port, fd);
-    else
-        server_peer_conn_drop(host, port, fd);
-    return rc;
-}
-
 void server_handle_conn(int fd)
 {
     while (1) {
@@ -446,49 +418,22 @@ void server_handle_conn(int fd)
             break;
         }
         case EFS_MSG_LIST_NODES: {
-            /* used comes from the cached counter (meta/usage.bin); no tree walk. */
-            struct efs_node *nodes = malloc(sizeof(struct efs_node) * EFS_MAX_NODES);
+            /* Local snapshot only. Do not RPC peers here: after a bounce,
+             * meta-rebuild owns the peer pool and a 30s STATUS-per-peer
+             * made LIST_NODES miss the client timeout (fuse could not mount).
+             * efs-mgmt probes each advertised node itself. */
             struct efs_msg_list_nodes_reply *reply = calloc(1, sizeof(*reply));
-            if (!nodes || !reply) {
-                free(nodes);
-                free(reply);
+            if (!reply)
                 break;
-            }
             pthread_mutex_lock(&g_server->lock);
+            server_dedupe_nodes_locked(g_server);
             uint32_t node_count = g_server->node_count;
             if (node_count > EFS_MAX_NODES)
                 node_count = EFS_MAX_NODES;
-            memcpy(nodes, g_server->nodes, sizeof(struct efs_node) * node_count);
-            efs_node_id_t self = g_server->id;
-            pthread_mutex_unlock(&g_server->lock);
-
-            for (uint32_t i = 0; i < node_count; i++) {
-                if (nodes[i].id == self)
-                    continue;
-                uint64_t q = 0, u = 0;
-                if (refresh_peer_usage(nodes[i].addr, nodes[i].port, &q, &u) == 0) {
-                    pthread_mutex_lock(&g_server->lock);
-                    /* Match the peer we contacted by addr:port (not only id),
-                     * so a corrupt duplicate-id row cannot steal the update. */
-                    for (uint32_t j = 0; j < g_server->node_count; j++) {
-                        if (g_server->nodes[j].port == nodes[i].port &&
-                            strcmp(g_server->nodes[j].addr, nodes[i].addr) == 0) {
-                            g_server->nodes[j].quota = q;
-                            g_server->nodes[j].used = u;
-                            break;
-                        }
-                    }
-                    pthread_mutex_unlock(&g_server->lock);
-                }
-            }
-
-            pthread_mutex_lock(&g_server->lock);
-            server_dedupe_nodes_locked(g_server);
-            reply->node_count = g_server->node_count;
+            reply->node_count = node_count;
             memcpy(reply->nodes, g_server->nodes, sizeof(g_server->nodes));
             pthread_mutex_unlock(&g_server->lock);
             efs_send_msg(fd, EFS_MSG_LIST_NODES_REPLY, reply, sizeof(*reply));
-            free(nodes);
             free(reply);
             break;
         }

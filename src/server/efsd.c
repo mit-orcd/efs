@@ -417,7 +417,6 @@ int main(int argc, char **argv)
             server.rejoin_port = port;
             server_start_rejoin(&server);
         } else {
-            server_fetch_metadata_from(&server, host, port);
             server_save_nodes(&server);
         }
     } else if (server.node_count > 1) {
@@ -426,22 +425,16 @@ int main(int argc, char **argv)
                     "Could not rejoin cluster from persisted peers; starting as standalone and retrying in background\n");
             server_start_rejoin(&server);
         } else {
-            /* Refresh export root + bulk pages from a live peer when possible. */
-            for (uint32_t i = 0; i < server.node_count; i++) {
-                if (server.nodes[i].id == server.id)
-                    continue;
-                if (server_fetch_metadata_from(&server, server.nodes[i].addr,
-                                               server.nodes[i].port) == 0)
-                    break;
-            }
             server_save_nodes(&server);
         }
     } else {
         server_save_nodes(&server);
     }
 
-    /* Membership is known; reconstruct bulk metadata from 2+1 pages. */
-    server_rebuild_fragmented_exports(&server);
+    /* Do not rebuild 2+1 meta pages on this thread. A large export (tens of
+     * thousands of pages) used to block accept() for minutes after a bounce,
+     * so joiners never came up and the client timed out every GET. Catch-up
+     * rebuilds in the background; GET_CHUNK is served from disk immediately. */
 
     {
         struct sigaction sa;

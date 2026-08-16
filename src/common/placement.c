@@ -4,22 +4,66 @@
 #include <unistd.h>
 #include <netdb.h>
 
-void efs_get_placement(uint32_t node_count, efs_ino_t ino, uint32_t chunk_index,
-                       efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS])
+static uint64_t fnv1a_u64(uint64_t key)
 {
-    if (node_count == 0) node_count = 1;
-
-    uint64_t key = ((uint64_t)ino << 32) | (uint64_t)chunk_index;
     uint64_t hash = 14695981039346656037ULL;
     for (int i = 0; i < 8; i++) {
         hash ^= (key >> (i * 8)) & 0xFFULL;
         hash *= 1099511628211ULL;
     }
+    return hash;
+}
 
-    uint32_t start = (uint32_t)(hash % (uint64_t)node_count);
-    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+/* Original ring: consecutive ranks from hash(ino, chunk). Meta pages are
+ * located this way and must not move. */
+static void place_consecutive(uint32_t node_count, efs_ino_t ino,
+                              uint32_t chunk_index,
+                              efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS])
+{
+    uint64_t key = ((uint64_t)ino << 32) | (uint64_t)chunk_index;
+    uint32_t start = (uint32_t)(fnv1a_u64(key) % (uint64_t)node_count);
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
         fragment_nodes[i] = (efs_node_id_t)((start + i) % node_count + 1);
+}
+
+/* Widest spread: 3 distinct ranks, stride around the ring, start walks
+ * with chunk_index so successive chunks of one file use different servers. */
+static void place_wide(uint32_t node_count, efs_ino_t ino, uint32_t chunk_index,
+                       efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS])
+{
+    uint32_t start = (uint32_t)((fnv1a_u64((uint64_t)ino) +
+                                 (uint64_t)chunk_index) %
+                                (uint64_t)node_count);
+    uint32_t stride = node_count / (uint32_t)EFS_NUM_FRAGMENTS;
+    if (stride < 1)
+        stride = 1;
+
+    uint8_t used[EFS_MAX_NODES];
+    memset(used, 0, sizeof(used));
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        uint32_t idx = (start + (uint32_t)i * stride) % node_count;
+        uint32_t hops = 0;
+        while (used[idx] && hops < node_count) {
+            idx = (idx + 1) % node_count;
+            hops++;
+        }
+        used[idx] = 1;
+        fragment_nodes[i] = (efs_node_id_t)(idx + 1);
     }
+}
+
+void efs_get_placement(uint32_t node_count, efs_ino_t ino, uint32_t chunk_index,
+                       efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS])
+{
+    if (node_count == 0)
+        node_count = 1;
+    if (node_count > EFS_MAX_NODES)
+        node_count = EFS_MAX_NODES;
+
+    if (ino == EFS_META_TABLE_INO)
+        place_consecutive(node_count, ino, chunk_index, fragment_nodes);
+    else
+        place_wide(node_count, ino, chunk_index, fragment_nodes);
 }
 
 void efs_place_fragments(const struct efs_node *nodes, uint32_t node_count,

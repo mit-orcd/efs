@@ -72,9 +72,22 @@ int server_default_writer_threads(void)
     return (int)n;
 }
 
+/* Mix inode/chunk/frag/node so stripe members and successive chunks of
+ * one file do not all pick the same newly-empty path index. */
+static uint32_t path_spread_hash(const struct writer_job *job)
+{
+    uint64_t k = (uint64_t)job->ino;
+    k ^= (uint64_t)job->chunk_index * 0x9E3779B97F4A7C15ULL;
+    k ^= (uint64_t)job->fragment_index * 0xBF58476D1CE4E5B9ULL;
+    if (job->s)
+        k ^= (uint64_t)job->s->id * 0x94D049BB133111EBULL;
+    return (uint32_t)(k ^ (k >> 32));
+}
+
 /* Pick a local disk: reuse an existing fragment's root on overwrite; else
  * minimize in-flight jobs (latency) with bytes-assigned as tie-break so
- * all paths stay roughly even under sequential EC placement. */
+ * all paths stay roughly even. Near-ties (new empty disks) are broken by
+ * a per-file hash so one inode does not pile onto one path. */
 static uint32_t pick_write_path(struct writer_job *job)
 {
     uint32_t n = (uint32_t)g_pool.npaths;
@@ -87,19 +100,27 @@ static uint32_t pick_write_path(struct writer_job *job)
     if (existing >= 0 && (uint32_t)existing < n)
         return (uint32_t)existing;
 
-    uint32_t best = 0;
+    uint64_t score[EFS_MAX_STORAGE_PATHS];
     uint64_t best_score = UINT64_MAX;
     for (uint32_t i = 0; i < n; i++) {
         /* One in-flight job ≈ 4 MiB of fairness debt so a backed-up disk
          * sheds new work even if historical bytes are slightly behind. */
-        uint64_t score = (uint64_t)g_pool.inflight[i] * (4ull << 20) +
-                         g_pool.assigned_bytes[i];
-        if (score < best_score) {
-            best_score = score;
-            best = i;
-        }
+        score[i] = (uint64_t)g_pool.inflight[i] * (4ull << 20) +
+                   g_pool.assigned_bytes[i];
+        if (score[i] < best_score)
+            best_score = score[i];
     }
-    return best;
+    /* 64 MiB band: empty add-storage roots all qualify; full 01-04 do not. */
+    uint64_t slack = 64ull << 20;
+    uint32_t cand[EFS_MAX_STORAGE_PATHS];
+    uint32_t nc = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        if (score[i] <= best_score + slack)
+            cand[nc++] = i;
+    }
+    if (nc <= 1)
+        return cand[0];
+    return cand[path_spread_hash(job) % nc];
 }
 
 static int run_job(struct writer_job *job)
