@@ -278,7 +278,7 @@ void efs_client_shutdown(void);
 /* PUT all three fragments concurrently (send-all / recv-all on three
  * pooled sockets). Returns EFS_OK if quorum (>=2) acks, else an error. */
 int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
-                                      const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
+                                      efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                                       const uint8_t *fragments[EFS_NUM_FRAGMENTS],
                                       uint32_t frag_len,
                                       const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE]);

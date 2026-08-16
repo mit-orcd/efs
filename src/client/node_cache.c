@@ -11,6 +11,10 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <pthread.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 
 /* Mark a peer down after this many consecutive failures. */
 #define EFS_NODE_DOWN_FAILS 4
@@ -181,6 +185,44 @@ void efs_client_node_note_fail(efs_node_id_t node_id)
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
 }
 
+/* Pool slots can sit in CLOSE-WAIT after the peer FINs (EMFILE, restart,
+ * idle timeout). Reusing them looks like a live checkout, then every PUT
+ * gets POLLHUP / recv 0 and we report no quorum while the servers are up. */
+static int conn_fd_is_dead(int fd)
+{
+    if (fd < 0)
+        return 1;
+#ifdef TCP_INFO
+    {
+        struct tcp_info ti;
+        socklen_t il = sizeof(ti);
+        if (getsockopt(fd, IPPROTO_TCP, TCP_INFO, &ti, &il) == 0 &&
+            ti.tcpi_state != TCP_ESTABLISHED)
+            return 1;
+    }
+#endif
+    struct pollfd p = { .fd = fd, .events = POLLIN };
+    int pr = poll(&p, 1, 0);
+    if (pr < 0)
+        return 1;
+    if (p.revents & (POLLERR | POLLHUP | POLLNVAL))
+        return 1;
+    /* Always peek: IPoIB CLOSE-WAIT sometimes reports no POLLIN/HUP. */
+    {
+        char b;
+        ssize_t n = recv(fd, &b, 1, MSG_PEEK | MSG_DONTWAIT);
+        if (n == 0)
+            return 1;
+        if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+            return 1;
+    }
+    int err = 0;
+    socklen_t el = sizeof(err);
+    if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &el) == 0 && err != 0)
+        return 1;
+    return 0;
+}
+
 int efs_client_conn_get(efs_node_id_t node_id)
 {
     int idx = node_index_for_id(node_id);
@@ -267,8 +309,13 @@ int efs_client_conn_get(efs_node_id_t node_id)
             return fd;
         }
 
-        g_client.conn_busy[idx][free_slot] = 1;
         int fd = g_client.conn_fd[idx][free_slot];
+        if (conn_fd_is_dead(fd)) {
+            close(fd);
+            g_client.conn_fd[idx][free_slot] = -1;
+            continue;
+        }
+        g_client.conn_busy[idx][free_slot] = 1;
         pthread_mutex_unlock(&g_client.conn_lock[idx]);
         return fd;
     }

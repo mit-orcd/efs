@@ -1,5 +1,6 @@
 #include "server_internal.h"
 #include "efs/checksum.h"
+#include "efs/protocol.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1094,6 +1095,150 @@ void server_format_storage_paths(const struct efsd_server *s, char *buf, size_t 
             break;
         off += (size_t)wrote;
     }
+}
+
+static void strip_trailing_slashes(char *p)
+{
+    size_t n = strlen(p);
+    while (n > 1 && p[n - 1] == '/')
+        p[--n] = '\0';
+}
+
+static int storage_path_known(const struct efsd_server *s, const char *p)
+{
+    for (uint32_t i = 0; i < s->storage_path_count; i++) {
+        if (strcmp(s->storage_paths[i], p) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+static int prepare_storage_root(const char *root)
+{
+    char sub[8192];
+    make_dir(root);
+    snprintf(sub, sizeof(sub), "%s/data", root);
+    make_dir(sub);
+    snprintf(sub, sizeof(sub), "%s/meta", root);
+    make_dir(sub);
+    snprintf(sub, sizeof(sub), "%s/log", root);
+    make_dir(sub);
+    struct stat st;
+    if (stat(root, &st) != 0 || !S_ISDIR(st.st_mode))
+        return -1;
+    return 0;
+}
+
+int server_add_storage_paths(struct efsd_server *s, const char *csv,
+                             uint32_t *count_out)
+{
+    if (!s || !csv || !*csv)
+        return EFS_ADD_STORAGE_INVALID;
+
+    char buf[EFS_MAX_PATH];
+    strncpy(buf, csv, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    char add[EFS_MAX_STORAGE_PATHS][EFS_MAX_PATH];
+    uint32_t nadd = 0;
+    char *save = NULL;
+    for (char *tok = strtok_r(buf, ",", &save); tok; tok = strtok_r(NULL, ",", &save)) {
+        while (*tok == ' ' || *tok == '\t')
+            tok++;
+        if (!*tok)
+            continue;
+        strip_trailing_slashes(tok);
+        if (tok[0] != '/')
+            return EFS_ADD_STORAGE_INVALID;
+        int dup = 0;
+        for (uint32_t i = 0; i < nadd; i++) {
+            if (strcmp(add[i], tok) == 0) {
+                dup = 1;
+                break;
+            }
+        }
+        if (dup)
+            continue;
+        if (nadd >= EFS_MAX_STORAGE_PATHS)
+            return EFS_ADD_STORAGE_FULL;
+        strncpy(add[nadd], tok, sizeof(add[0]) - 1);
+        add[nadd][sizeof(add[0]) - 1] = '\0';
+        nadd++;
+    }
+    if (nadd == 0)
+        return EFS_ADD_STORAGE_INVALID;
+
+    pthread_mutex_lock(&s->lock);
+    uint32_t have = s->storage_path_count;
+    char fresh[EFS_MAX_STORAGE_PATHS][EFS_MAX_PATH];
+    uint32_t nfresh = 0;
+    for (uint32_t i = 0; i < nadd; i++) {
+        if (storage_path_known(s, add[i]))
+            continue;
+        if (have + nfresh >= EFS_MAX_STORAGE_PATHS) {
+            pthread_mutex_unlock(&s->lock);
+            return EFS_ADD_STORAGE_FULL;
+        }
+        memcpy(fresh[nfresh], add[i], sizeof(fresh[0]));
+        nfresh++;
+    }
+    uint32_t total = have;
+    pthread_mutex_unlock(&s->lock);
+
+    if (nfresh == 0) {
+        if (count_out)
+            *count_out = have;
+        return EFS_ADD_STORAGE_OK;
+    }
+
+    for (uint32_t i = 0; i < nfresh; i++) {
+        if (prepare_storage_root(fresh[i]) != 0)
+            return EFS_ADD_STORAGE_ERROR;
+    }
+
+    pthread_mutex_lock(&s->lock);
+    for (uint32_t i = 0; i < nfresh; i++) {
+        if (storage_path_known(s, fresh[i]))
+            continue;
+        if (s->storage_path_count >= EFS_MAX_STORAGE_PATHS) {
+            pthread_mutex_unlock(&s->lock);
+            return EFS_ADD_STORAGE_FULL;
+        }
+        strncpy(s->storage_paths[s->storage_path_count], fresh[i],
+                sizeof(s->storage_paths[0]) - 1);
+        s->storage_paths[s->storage_path_count][sizeof(s->storage_paths[0]) - 1] = '\0';
+        s->storage_path_count++;
+    }
+    total = s->storage_path_count;
+    struct efs_node *local = server_local_node(s);
+    if (local)
+        server_format_storage_paths(s, local->storage_path,
+                                    sizeof(local->storage_path));
+    server_nodes_mark_dirty(s);
+    pthread_mutex_unlock(&s->lock);
+
+    server_writer_set_npaths(total);
+    server_nodes_flush_dirty(s);
+
+    struct efs_msg_hello h;
+    memset(&h, 0, sizeof(h));
+    h.version = EFS_VERSION_PACK;
+    strncpy(h.build_id, EFS_BUILD_ID, sizeof(h.build_id) - 1);
+    h.node_id = s->id;
+    strncpy(h.addr, s->addr, sizeof(h.addr) - 1);
+    h.port = s->port;
+    server_format_storage_paths(s, h.storage_path, sizeof(h.storage_path));
+    h.quota = s->quota;
+    {
+        struct efs_node *ln = server_local_node(s);
+        h.used = ln ? ln->used : 0;
+    }
+    server_gossip_membership(s, &h);
+
+    if (count_out)
+        *count_out = total;
+    printf("add-storage: now %u local root(s)\n", total);
+    return EFS_ADD_STORAGE_OK;
 }
 
 struct efs_node *server_local_node(struct efsd_server *s)

@@ -193,18 +193,6 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     efs_place_fragments(g_client.nodes, g_client.node_count, ino, chunk_index,
                         nodes);
 
-    int order[EFS_NUM_FRAGMENTS] = {0, 1, 2};
-    if (g_client.local_node_id != 0) {
-        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-            if (nodes[i] == g_client.local_node_id) {
-                int tmp = order[0];
-                order[0] = order[i];
-                order[i] = tmp;
-                break;
-            }
-        }
-    }
-
     if (max_attempts < 1)
         max_attempts = 1;
 
@@ -226,6 +214,23 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
                 memcmp(ce.checksums[2], zck, EFS_HASH_SIZE) == 0) {
                 memset(chunk_out, 0, chunk_size);
                 return EFS_OK;
+            }
+            /* Writes may have steered a fragment onto a spare when a stripe
+             * member was down. The chunk table is the source of truth. */
+            if (ce.fragment_nodes[0] || ce.fragment_nodes[1] ||
+                ce.fragment_nodes[2])
+                memcpy(nodes, ce.fragment_nodes, sizeof(nodes));
+        }
+    }
+
+    int order[EFS_NUM_FRAGMENTS] = {0, 1, 2};
+    if (g_client.local_node_id != 0) {
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            if (nodes[i] == g_client.local_node_id) {
+                int tmp = order[0];
+                order[0] = order[i];
+                order[i] = tmp;
+                break;
             }
         }
     }

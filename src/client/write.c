@@ -1740,8 +1740,36 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
     return EFS_ERR_NO_QUORUM;
 }
 
+/* If a stripe member is down (or failed the last attempt), put that
+ * fragment on an unused live node. Four-node cluster, one down: the
+ * remaining three still take a full 2+1 stripe. */
+static void reroute_down_fragments(efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
+                                   const int *failed)
+{
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        int bad = (nodes[i] == 0) || efs_client_node_is_down(nodes[i]) ||
+                  (failed && failed[i] == 1);
+        if (!bad)
+            continue;
+        for (uint32_t n = 0; n < g_client.node_count; n++) {
+            efs_node_id_t id = g_client.nodes[n].id;
+            if (id == 0 || efs_client_node_is_down(id))
+                continue;
+            int used = 0;
+            for (int j = 0; j < EFS_NUM_FRAGMENTS; j++) {
+                if (j != i && nodes[j] == id)
+                    used = 1;
+            }
+            if (!used) {
+                nodes[i] = id;
+                break;
+            }
+        }
+    }
+}
+
 int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
-                                      const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
+                                      efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                                       const uint8_t *fragments[EFS_NUM_FRAGMENTS],
                                       uint32_t frag_len,
                                       const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE])
@@ -1762,8 +1790,9 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
 
     /* Retry transient blips; only invalidate peers that actually failed. */
     int rc = EFS_ERR_NET;
+    int failed[EFS_NUM_FRAGMENTS] = {0, 0, 0};
     for (int attempt = 1; attempt <= 4; attempt++) {
-        int failed[EFS_NUM_FRAGMENTS];
+        reroute_down_fragments(nodes, attempt == 1 ? NULL : failed);
         rc = put_fragments_parallel_once(ino, chunk_index, nodes, fragments,
                                          frag_len, checksums, failed);
         if (rc == EFS_OK || rc == EFS_ERR_QUOTA)
@@ -1858,7 +1887,10 @@ static int assemble_write_chunk(efs_ino_t ino, uint64_t old_size,
         if (existing > chunk_size)
             existing = chunk_size;
         uint32_t ci = (uint32_t)(chunk_start / chunk_size);
-        if (efs_rdcache_get(ino, ci, chunk, chunk_size) != 0) {
+        /* Do not use rdcache as the RMW base. A prior sub-chunk read
+         * caches the full 128 KiB (new 4k + zeros). The next 4k write
+         * then PUTs that stale chunk and drops every later 4k in it. */
+        if (efs_dcache_get(ino, ci, chunk, chunk_size) != 0) {
             size_t got = 0;
             int rrc = efs_client_read(ino, chunk_start, existing, (char *)chunk, &got);
             if (rrc != EFS_OK || got != existing) {
@@ -2358,9 +2390,16 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
         pthread_mutex_unlock(mu);
         int prc = dcache_put_now(ino, ci, copy, len);
         free(copy);
-        if (prc != EFS_OK && rc == EFS_OK)
-            rc = prc;
         pthread_mutex_lock(mu);
+        if (prc != EFS_OK) {
+            if (rc == EFS_OK)
+                rc = prc;
+            /* PUT failed: this slot is the only copy. Keep it dirty. */
+            if (e->ino == ino && e->ci == ci && e->data)
+                e->dirty = 1;
+            e = e->next;
+            continue;
+        }
         if (!e->dirty && e->ino == ino && e->ci == ci) {
             free(e->data);
             e->data = NULL;
@@ -2548,21 +2587,6 @@ static void *chunk_put_worker(void *arg)
     int covers_full = (wr_start == chunk_start &&
                        wr_end == chunk_start + chunk_size);
 
-    if (covers_full)
-        efs_dcache_drop(job->ino, job->ci);
-    else {
-        size_t off_in = (size_t)(wr_start - chunk_start);
-        size_t wr_len = (size_t)(wr_end - wr_start);
-        size_t src_off = (size_t)(wr_start - job->offset);
-        if (dcache_patch(job->ino, job->ci, (uint32_t)off_in,
-                         (const uint8_t *)job->buf + src_off,
-                         (uint32_t)wr_len) == 0) {
-            job->rc = EFS_OK;
-            job->deferred = 1;
-            return NULL;
-        }
-    }
-
     /* dd if=/dev/zero / full-chunk zeros: skip assemble/encode/malloc and PUT
      * shared zero pages with the cached zero digest. */
     if (covers_full) {
@@ -2576,6 +2600,7 @@ static void *chunk_put_worker(void *arg)
             /* Do not PUT all-zero fragments. The chunk table stores the
              * well-known zero digest; decode synthesizes zeros on read.
              * dd if=/dev/zero was spending ~1 GB/s on 2-ack PUTs of zeros. */
+            efs_dcache_drop(job->ino, job->ci);
             job->rc = EFS_OK;
             return NULL;
         }
@@ -2602,6 +2627,10 @@ static void *chunk_put_worker(void *arg)
             job->ino, job->ci, job->nodes, cfrags2, frag_len, job->checksums);
         free(parity);
         efs_rdcache_invalidate(job->ino, job->ci);
+        if (job->rc == EFS_OK)
+            efs_dcache_drop(job->ino, job->ci);
+        else
+            (void)dcache_store(job->ino, job->ci, src, chunk_size);
         return NULL;
     }
 
@@ -2629,24 +2658,6 @@ static void *chunk_put_worker(void *arg)
         return NULL;
     }
 
-    /* Partial chunk: hold the assembled bytes and skip encode/hash/PUT.
-     * Close / fsync persist. Collision: PUT this write now (do not evict). */
-    if (!covers_full) {
-        int st = dcache_store_owned(job->ino, job->ci, chunk, chunk_size);
-        if (st == 0) {
-            job->rc = EFS_OK;
-            job->deferred = 1;
-            free(frag_buf);
-            return NULL;
-        }
-        if (st < 0) {
-            job->rc = st;
-            free(chunk);
-            free(frag_buf);
-            return NULL;
-        }
-    }
-
     const uint8_t *cfrags[EFS_NUM_FRAGMENTS];
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
         cfrags[i] = frags[i];
@@ -2657,6 +2668,11 @@ static void *chunk_put_worker(void *arg)
                         job->nodes);
     job->rc = efs_client_put_fragments_parallel(job->ino, job->ci, job->nodes,
                                                 cfrags, frag_len, job->checksums);
+    efs_rdcache_invalidate(job->ino, job->ci);
+    if (job->rc != EFS_OK)
+        (void)dcache_store(job->ino, job->ci, chunk, chunk_size);
+    else
+        efs_dcache_drop(job->ino, job->ci);
     free(chunk);
     free(frag_buf);
     return NULL;
@@ -3102,25 +3118,11 @@ int efs_client_write_no_replicate(efs_ino_t ino, uint64_t offset, size_t size, c
         return EFS_ERR_NOT_FOUND;
     }
     uint64_t old_size = inode.size;
-    efs_ino_t parent = inode.parent;
     int packed = (inode.pack_ino != 0);
-    struct efs_chunk_entry ce;
-    int has_chunk = (efs_export_get_chunk(&g_client.export, ino, 0, &ce) == 0);
     efs_client_unlock_dir(ino);
 
-    uint32_t chunk_size = data_chunk_size();
-    uint64_t end = offset + size;
-    if (g_client.meta_batch && !packed && !has_chunk &&
-        end <= chunk_size &&
-        pack_stage_append(ino, parent, offset, size, buf, chunk_size) == EFS_OK) {
-        efs_client_lock_dir(ino);
-        if (efs_export_get_inode(&g_client.export, ino, &inode) == 0 &&
-            inode.size < end)
-            efs_export_set_size_norollup(&g_client.export, ino, end);
-        efs_client_mark_ino_dirty(ino);
-        efs_client_unlock_dir(ino);
-        return EFS_OK;
-    }
+    /* Do not stage small files in RAM. write() must not return until
+     * fragments have 2-of-3 quorum on the servers. */
 
     if (packed) {
         efs_client_lock_dir(ino);

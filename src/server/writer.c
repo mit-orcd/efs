@@ -249,6 +249,17 @@ static int submit_and_wait(struct writer_job *job)
     return rc;
 }
 
+void server_writer_set_npaths(uint32_t n)
+{
+    if (n < 1)
+        n = 1;
+    if (n > EFS_MAX_STORAGE_PATHS)
+        n = EFS_MAX_STORAGE_PATHS;
+    pthread_mutex_lock(&g_pool.lock);
+    g_pool.npaths = (int)n;
+    pthread_mutex_unlock(&g_pool.lock);
+}
+
 int server_writer_pool_start(struct efsd_server *s)
 {
     memset(&g_pool, 0, sizeof(g_pool));

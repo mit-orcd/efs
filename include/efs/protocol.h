@@ -52,6 +52,9 @@ enum efs_msg_type {
     EFS_MSG_SET_FEATURES_REPLY = 38,
     EFS_MSG_GET_FEATURES = 39,
     EFS_MSG_GET_FEATURES_REPLY = 40,
+    /* Append local --storage roots on a live node (no restart). */
+    EFS_MSG_ADD_STORAGE = 41,
+    EFS_MSG_ADD_STORAGE_REPLY = 42,
 };
 
 /* Set per-export features. Only bits in set_mask are changed (to the
@@ -179,6 +182,21 @@ struct efs_msg_node_left {
 #define EFS_SHRINK_QUOTA_OK     0
 #define EFS_SHRINK_QUOTA_ERROR  1
 #define EFS_SHRINK_QUOTA_IN_PROGRESS 2
+
+/* Comma-separated absolute roots to append. Existing paths are skipped. */
+struct efs_msg_add_storage {
+    char paths[EFS_MAX_PATH];
+};
+
+#define EFS_ADD_STORAGE_OK       0
+#define EFS_ADD_STORAGE_ERROR    1
+#define EFS_ADD_STORAGE_FULL     2
+#define EFS_ADD_STORAGE_INVALID  3
+
+struct efs_msg_add_storage_reply {
+    uint8_t status;
+    uint32_t path_count; /* node's storage_path_count after the call */
+};
 
 /* Wire values match enum efsd_server_state in server_internal.h */
 #define EFS_NODE_STATE_ACTIVE    0

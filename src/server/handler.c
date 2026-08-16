@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include <arpa/inet.h>
 
 static int refresh_peer_usage(const char *host, uint16_t port, uint64_t *quota, uint64_t *used)
@@ -45,8 +46,12 @@ void server_handle_conn(int fd)
         uint32_t payload_len = 0;
 
         int rc = efs_recv_msg(fd, &type, &payload, &payload_len);
-        if (rc != 0)
+        if (rc != 0) {
+            /* Idle SO_RCVTIMEO must not kill a pooled client fd. */
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
+                continue;
             break;
+        }
 
         switch (type) {
         case EFS_MSG_HEARTBEAT: {
@@ -606,6 +611,25 @@ void server_handle_conn(int fd)
                 pthread_mutex_unlock(&g_server->lock);
             }
             efs_send_msg(fd, EFS_MSG_SHRINK_QUOTA_REPLY, &reply, 1);
+            break;
+        }
+        case EFS_MSG_ADD_STORAGE: {
+            struct efs_msg_add_storage_reply r;
+            memset(&r, 0, sizeof(r));
+            r.status = EFS_ADD_STORAGE_INVALID;
+            if (payload_len >= sizeof(struct efs_msg_add_storage)) {
+                struct efs_msg_add_storage *req = payload;
+                req->paths[sizeof(req->paths) - 1] = '\0';
+                uint32_t n = 0;
+                r.status = (uint8_t)server_add_storage_paths(g_server, req->paths, &n);
+                r.path_count = n;
+                if (r.status == EFS_ADD_STORAGE_OK && n == 0) {
+                    pthread_mutex_lock(&g_server->lock);
+                    r.path_count = g_server->storage_path_count;
+                    pthread_mutex_unlock(&g_server->lock);
+                }
+            }
+            efs_send_msg(fd, EFS_MSG_ADD_STORAGE_REPLY, &r, sizeof(r));
             break;
         }
         case EFS_MSG_NODE_LEFT: {

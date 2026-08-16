@@ -16,6 +16,10 @@ int efs_set_recv_timeout(int fd, int ms);
 /* Set send timeout in milliseconds. */
 int efs_set_send_timeout(int fd, int ms);
 
+/* SO_KEEPALIVE + short TCP_KEEPIDLE so a peer that FINs/vanishes is
+ * reaped without a userspace recv timeout tearing down idle pool fds. */
+int efs_tcp_keepalive(int fd);
+
 /* Send exactly len bytes. Returns 0 on success, -1 on error. */
 int efs_send_all(int fd, const void *buf, size_t len);
 

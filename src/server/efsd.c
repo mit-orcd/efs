@@ -228,10 +228,12 @@ static volatile int g_live_conns;
 static void *conn_thread(void *arg)
 {
     int fd = (intptr_t)arg;
-    /* Long recv timeout so clients can keep a pooled connection idle between
-     * requests without the server tearing it down every few seconds. */
-    efs_set_recv_timeout(fd, 60000);
+    /* No SO_RCVTIMEO: a 60s idle timeout FINed pooled client fds and left
+     * the FUSE pool in CLOSE-WAIT, so later PUTs never reached the cluster.
+     * Wait forever for the next request; keepalive reaps a dead peer. */
+    efs_set_recv_timeout(fd, 0);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_tcp_keepalive(fd);
     server_handle_conn(fd);
     close(fd);
     __sync_fetch_and_sub(&g_live_conns, 1);

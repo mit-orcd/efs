@@ -200,6 +200,13 @@ int server_write_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
 int server_default_writer_threads(void);
 int server_writer_pool_start(struct efsd_server *s);
 void server_writer_pool_stop(struct efsd_server *s);
+/* Grow the least-q path set after a live add-storage (append-only). */
+void server_writer_set_npaths(uint32_t n);
+
+/* Append local storage roots without restart. csv is comma-separated
+ * absolute paths. Existing roots are skipped. count_out is the new total. */
+int server_add_storage_paths(struct efsd_server *s, const char *csv,
+                             uint32_t *count_out);
 
 /* Async Blake3 of a stored fragment vs the client sidecar; heal from peers. */
 int server_verify_start(struct efsd_server *s);

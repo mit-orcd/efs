@@ -1170,10 +1170,10 @@ static int efs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
     return (int)got;
 }
 
-/* Userspace writeback: ACK the FUSE write after a bounce copy and let a
- * small worker pool issue overlapping write_no_replicate calls. Single-stream
- * dd+conv=fsync still waits for durability on fsync/release, but PUTs from
- * consecutive syscalls overlap — needed to approach store-bench throughput. */
+/* Write pool: FUSE write() waits until each job's PUT has 2-of-3 fragment
+ * quorum. The pool still overlaps PUTs across concurrent FUSE requests
+ * (many files / max_background). Do not ACK after a bounce copy — that
+ * made ewrite succeed while servers never saw the data. */
 #define EFS_WB_DEPTH        256
 #define EFS_WB_WORKERS_MAX  16
 #define EFS_WB_RESERVED     4
@@ -1188,6 +1188,11 @@ struct efs_wb_job {
     char *free_base;
     /* Non-zero: buf/free_base came from the bounce pool (see bounce_release). */
     size_t buf_cap;
+    /* Caller waits for PUT quorum. Worker writes rc and signals done_cv
+     * while holding g_wb.mu. */
+    int *done;
+    int *done_rc;
+    pthread_cond_t *done_cv;
 };
 
 /* Per-ino write serialization. WB workers run jobs concurrently, but two jobs
@@ -1403,6 +1408,11 @@ static void *efs_wb_thread(void *arg)
         wb_job_release_buf(job.buf, job.free_base, job.buf_cap);
 
         pthread_mutex_lock(&g_wb.mu);
+        if (job.done) {
+            *job.done_rc = rc;
+            *job.done = 1;
+            pthread_cond_signal(job.done_cv);
+        }
         if (rc != EFS_OK) {
             if (g_wb.err == EFS_OK) {
                 g_wb.err = rc;
@@ -1473,7 +1483,8 @@ static int efs_wb_ensure(void)
  * free_base, if non-NULL, is the pointer to free when the job finishes
  * (stolen FUSE receive buffer); otherwise `copy` is released.
  * buf_cap != 0 means the buffer came from bounce_alloc and goes back
- * to the pool; 0 means a plain malloc. */
+ * to the pool; 0 means a plain malloc.
+ * Blocks until the PUT has 2-of-3 fragment quorum (or fails). */
 static int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
                                 char *copy, char *free_base, size_t buf_cap)
 {
@@ -1481,6 +1492,10 @@ static int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
         wb_job_release_buf(copy, free_base, buf_cap);
         return EFS_ERR_NOMEM;
     }
+    int done = 0;
+    int job_rc = EFS_ERR_IO;
+    pthread_cond_t done_cv;
+    pthread_cond_init(&done_cv, NULL);
     pthread_mutex_lock(&g_wb.mu);
     /* Do not refuse new files because an earlier inode's PUT failed.
      * That sticky g_wb.err used to make every later write/close EIO
@@ -1489,6 +1504,7 @@ static int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
         pthread_cond_wait(&g_wb.not_full, &g_wb.mu);
     if (g_wb.shutdown) {
         pthread_mutex_unlock(&g_wb.mu);
+        pthread_cond_destroy(&done_cv);
         wb_job_release_buf(copy, free_base, buf_cap);
         return EFS_ERR_IO;
     }
@@ -1498,11 +1514,17 @@ static int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
     g_wb.q[g_wb.tail].buf = copy;
     g_wb.q[g_wb.tail].free_base = free_base;
     g_wb.q[g_wb.tail].buf_cap = buf_cap;
+    g_wb.q[g_wb.tail].done = &done;
+    g_wb.q[g_wb.tail].done_rc = &job_rc;
+    g_wb.q[g_wb.tail].done_cv = &done_cv;
     g_wb.tail = (g_wb.tail + 1) % EFS_WB_DEPTH;
     g_wb.count++;
     pthread_cond_signal(&g_wb.not_empty);
+    while (!done)
+        pthread_cond_wait(&done_cv, &g_wb.mu);
     pthread_mutex_unlock(&g_wb.mu);
-    return EFS_OK;
+    pthread_cond_destroy(&done_cv);
+    return job_rc;
 }
 
 static int efs_wb_sync(void)
@@ -1804,18 +1826,10 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
     if (!copy)
         return -ENOMEM;
     memcpy(copy, buf, size);
-    uint32_t cs = fuse_chunk_size();
-    if (size < cs && !coal_can_append(ino, (uint64_t)offset, size) &&
-        efs_dcache_try_patch(ino, (uint64_t)offset, (uint32_t)size,
-                             (const uint8_t *)copy) == 0) {
-        bounce_release(copy, copy_cap);
-        return (int)size;
-    }
-    if (g_coalesce_enabled && size < cs)
-        rc = coal_write(ino, (uint64_t)offset, size, copy, copy_cap);
-    else
-        rc = efs_wb_enqueue_owned(ino, (uint64_t)offset, size, copy, NULL,
-                                  copy_cap);
+    /* Every write waits for 2-of-3 fragment PUT quorum. dcache/coalesce
+     * used to ACK here with the only copy still in RAM. */
+    rc = efs_wb_enqueue_owned(ino, (uint64_t)offset, size, copy, NULL,
+                              copy_cap);
     if (rc == EFS_ERR_QUOTA) {
         efs_fuse_log_err("write", rc, ino, (uint64_t)offset, size, path);
         return -ENOSPC;
@@ -1858,19 +1872,9 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
         return -EIO;
     }
 
-    uint32_t cs = fuse_chunk_size();
-    if (size < cs && !coal_can_append(ino, (uint64_t)offset, size) &&
-        efs_dcache_try_patch(ino, (uint64_t)offset, (uint32_t)size,
-                             (const uint8_t *)copy) == 0) {
-        bounce_release(copy, copy_cap);
-        return (int)size;
-    }
-
-    if (g_coalesce_enabled && size < cs)
-        rc = coal_write(ino, (uint64_t)offset, size, copy, copy_cap);
-    else
-        rc = efs_wb_enqueue_owned(ino, (uint64_t)offset, size, copy, NULL,
-                                  copy_cap);
+    /* Every write waits for 2-of-3 fragment PUT quorum. */
+    rc = efs_wb_enqueue_owned(ino, (uint64_t)offset, size, copy, NULL,
+                              copy_cap);
     if (rc == EFS_ERR_QUOTA) {
         efs_fuse_log_err("write_buf", rc, ino, (uint64_t)offset, size, path);
         return -ENOSPC;

@@ -39,6 +39,7 @@ static int connect_sockaddr(const struct sockaddr *addr, socklen_t addrlen)
 
     int yes = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+    efs_tcp_keepalive(fd);
     /* Large buffers help IB/IPoIB bulk fragment PUT streams. */
     int buf = 4 * 1024 * 1024;
     setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &buf, sizeof(buf));
@@ -186,6 +187,22 @@ int efs_set_send_timeout(int fd, int ms)
     return set_timeout(fd, ms, SO_SNDTIMEO);
 }
 
+int efs_tcp_keepalive(int fd)
+{
+    int yes = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes)) != 0)
+        return -1;
+#ifdef TCP_KEEPIDLE
+    int idle = 30;
+    int intvl = 10;
+    int cnt = 3;
+    setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
+    setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof(intvl));
+    setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &cnt, sizeof(cnt));
+#endif
+    return 0;
+}
+
 int efs_send_all(int fd, const void *buf, size_t len)
 {
     const uint8_t *p = buf;
@@ -211,6 +228,8 @@ int efs_recv_all(int fd, void *buf, size_t len)
         if (n <= 0) {
             if (n < 0 && errno == EINTR)
                 continue;
+            if (n == 0)
+                errno = ECONNRESET;
             return -1;
         }
         got += (size_t)n;

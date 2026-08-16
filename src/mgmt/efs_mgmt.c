@@ -716,6 +716,87 @@ static int cmd_shrink_quota(int argc, char **argv)
     return (status == EFS_SHRINK_QUOTA_IN_PROGRESS) ? 0 : 1;
 }
 
+static int cmd_add_storage(int argc, char **argv)
+{
+    if (argc < 2) {
+        fprintf(stderr, "usage: add-storage <node:port> <path>[,path...]\n");
+        return 1;
+    }
+    char host[64];
+    uint16_t port;
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+
+    struct efs_msg_add_storage req;
+    memset(&req, 0, sizeof(req));
+    size_t off = 0;
+    for (int i = 1; i < argc; i++) {
+        const char *p = argv[i];
+        size_t n = strlen(p);
+        if (n == 0)
+            continue;
+        if (off + n + (off ? 1 : 0) >= sizeof(req.paths)) {
+            fprintf(stderr, "Path list too long\n");
+            return 1;
+        }
+        if (off) {
+            req.paths[off++] = ',';
+            req.paths[off] = '\0';
+        }
+        memcpy(req.paths + off, p, n + 1);
+        off += n;
+    }
+    if (off == 0) {
+        fprintf(stderr, "No storage paths given\n");
+        return 1;
+    }
+
+    int fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    if (send_recv(fd, EFS_MSG_ADD_STORAGE, &req, sizeof(req),
+                  &reply_type, &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_ADD_STORAGE_REPLY ||
+        reply_len != sizeof(struct efs_msg_add_storage_reply)) {
+        fprintf(stderr, "Failed to send add-storage request\n");
+        close(fd);
+        return 1;
+    }
+
+    struct efs_msg_add_storage_reply *r = reply;
+    int rc = 1;
+    switch (r->status) {
+    case EFS_ADD_STORAGE_OK:
+        printf("Added storage on %s:%u; now %u local root(s)\n",
+               host, port, r->path_count);
+        rc = 0;
+        break;
+    case EFS_ADD_STORAGE_FULL:
+        fprintf(stderr, "add-storage: too many roots (max %d)\n",
+                EFS_MAX_STORAGE_PATHS);
+        break;
+    case EFS_ADD_STORAGE_INVALID:
+        fprintf(stderr, "add-storage: invalid path list (absolute paths only)\n");
+        break;
+    default:
+        fprintf(stderr, "add-storage failed\n");
+        break;
+    }
+    free(reply);
+    close(fd);
+    return rc;
+}
+
 static int feature_rpc(const char *host, uint16_t port, const char *export,
                        int do_set, uint32_t set_mask, uint32_t features,
                        uint32_t *out_feat, uint8_t *out_status)
@@ -894,6 +975,7 @@ int main(int argc, char **argv)
                     "  undrain-node <node:port>\n"
                     "  remove-node <node:port>\n"
                     "  shrink-quota <node:port> <amount>[T|G|M|K]\n"
+                    "  add-storage <node:port> <path>[,path...]\n"
                     "  feature <node:port> <export> show|<stats|find> <on|off>\n",
             argv[0]);
     return 1;
@@ -918,6 +1000,8 @@ int main(int argc, char **argv)
         return cmd_remove_node(argc - 2, argv + 2);
     if (strcmp(cmd, "shrink-quota") == 0)
         return cmd_shrink_quota(argc - 2, argv + 2);
+    if (strcmp(cmd, "add-storage") == 0)
+        return cmd_add_storage(argc - 2, argv + 2);
     if (strcmp(cmd, "feature") == 0)
         return cmd_feature(argc - 2, argv + 2);
 

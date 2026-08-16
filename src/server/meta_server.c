@@ -1157,7 +1157,11 @@ static void *meta_catchup_thread(void *arg)
         /* Debounce rebuild storms: continuous PUT_META under load used to
          * rebuild hundreds of times/min. Peer TCP is pooled, but pacing still
          * keeps catch-up from thrashing. Hot-path clients are unaffected. */
-        if (did_work)
+        /* Failed rebuilds used to retry every 2s and leak peer fds until
+         * accept() hit EMFILE — clients then sat in CLOSE-WAIT with no quorum. */
+        if (!did_work && any_dirty)
+            sleep(15);
+        else if (did_work)
             sleep(1);
         else
             sleep(2);
