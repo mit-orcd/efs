@@ -271,16 +271,47 @@ void server_handle_conn(int fd)
         }
         case EFS_MSG_GET_META: {
             pthread_mutex_lock(&g_server->lock);
-            struct efs_export *ex = (g_server->export_count > 0) ? &g_server->exports[0] : NULL;
-            char *buf = NULL;
-            size_t len = 0;
+            struct efs_export *ex = NULL;
+            if (payload_len > 0) {
+                char want[EFS_MAX_NAME];
+                memset(want, 0, sizeof(want));
+                memcpy(want, payload,
+                       payload_len < EFS_MAX_NAME ? payload_len : EFS_MAX_NAME - 1);
+                ex = server_find_export(g_server, want);
+            }
+            if (!ex && g_server->export_count > 0)
+                ex = &g_server->exports[0];
+            char *rbuf = NULL, *ebuf = NULL, *buf = NULL;
+            size_t rlen = 0, elen = 0, len = 0;
             if (ex) {
-                if (ex->meta_fragmented)
-                    efs_export_root_serialize(&ex->root, &buf, &len);
-                else
-                    efs_export_serialize(ex, &buf, &len);
+                if (ex->meta_fragmented && ex->root.page_count > 0)
+                    efs_export_root_serialize(&ex->root, &rbuf, &rlen);
+                /* Prefer the live in-memory tables when catch-up has already
+                 * rebuilt them. Page reconstruct of a torn EFSR is optional. */
+                if (ex->inode_count > 0 && !ex->meta_needs_rebuild)
+                    efs_export_serialize(ex, &ebuf, &elen);
+                else if (!ex->meta_fragmented)
+                    efs_export_serialize(ex, &ebuf, &elen);
             }
             pthread_mutex_unlock(&g_server->lock);
+            if (rbuf && ebuf) {
+                buf = malloc(rlen + elen);
+                if (buf) {
+                    memcpy(buf, rbuf, rlen);
+                    memcpy(buf + rlen, ebuf, elen);
+                    len = rlen + elen;
+                }
+            } else if (rbuf) {
+                buf = rbuf;
+                rbuf = NULL;
+                len = rlen;
+            } else if (ebuf) {
+                buf = ebuf;
+                ebuf = NULL;
+                len = elen;
+            }
+            free(rbuf);
+            free(ebuf);
             if (buf) {
                 efs_send_msg(fd, EFS_MSG_GET_META_REPLY, buf, (uint32_t)len);
                 free(buf);

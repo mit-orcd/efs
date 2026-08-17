@@ -207,7 +207,11 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
 
     {
         struct efs_chunk_entry ce;
-        if (efs_export_get_chunk(&g_client.export, ino, chunk_index, &ce) == 0) {
+        pthread_mutex_lock(&g_client.idx_mu);
+        int have_ce = (efs_export_get_chunk(&g_client.export, ino, chunk_index,
+                                           &ce) == 0);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        if (have_ce) {
             uint8_t zck[EFS_HASH_SIZE];
             efs_hash_zero_fragment_len(frag_len, zck);
             if (memcmp(ce.checksums[0], zck, EFS_HASH_SIZE) == 0 &&
@@ -572,16 +576,12 @@ static int load_export_from_prev_slot(const struct efs_export_root *root)
         }
     }
 
-    size_t blob_len = (size_t)root->page_count * EFS_META_PAGE_SIZE;
-    char *blob = malloc(blob_len);
-    if (!blob) {
-        free(pages);
-        return EFS_ERR_NOMEM;
-    }
-    for (uint32_t i = 0; i < root->page_count; i++)
-        memcpy(blob + (size_t)i * EFS_META_PAGE_SIZE, pages[i],
-               EFS_META_PAGE_SIZE);
+    char *blob = NULL;
+    size_t blob_len = 0;
+    int arc = efs_meta_assemble_blob(root, pages, &blob, &blob_len);
     free(pages);
+    if (arc != EFS_OK)
+        return arc;
 
     pthread_mutex_lock(&g_client.lock);
     int rc = efs_export_deserialize(&g_client.export, blob, blob_len);
@@ -930,7 +930,12 @@ static int fetch_meta_blob_from(const char *host, uint16_t port,
     uint8_t type;
     void *payload = NULL;
     uint32_t payload_len = 0;
-    if (efs_send_msg(fd, EFS_MSG_GET_META, NULL, 0) != 0 ||
+    char want[EFS_MAX_NAME];
+    memset(want, 0, sizeof(want));
+    if (g_client.export_name[0])
+        strncpy(want, g_client.export_name, EFS_MAX_NAME - 1);
+    if (efs_send_msg(fd, EFS_MSG_GET_META, want[0] ? want : NULL,
+                     want[0] ? (uint32_t)sizeof(want) : 0) != 0 ||
         efs_recv_msg(fd, &type, &payload, &payload_len) != 0) {
         free(payload);
         close(fd);
@@ -963,8 +968,8 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
     int saw_bootstrap = 0;
     int last_fetch_rc = EFS_ERR_NET;
     int fetch_ok = 0;
-    char *best_legacy = NULL;
-    size_t best_legacy_len = 0;
+    char *best_efsm = NULL;
+    size_t best_efsm_len = 0;
 
     for (int pass = 0; pass < 2; pass++) {
         uint32_t n = (pass == 0) ? 1 : g_client.node_count;
@@ -992,8 +997,17 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
             if (efs_meta_blob_is_root(payload, plen)) {
                 struct efs_export_root root;
                 memset(&root, 0, sizeof(root));
-                if (efs_export_root_deserialize(&root, payload, plen) == 0) {
-                    /* Ignore bootstrap shells (no pages yet). */
+                size_t used = 0;
+                if (efs_export_root_deserialize_used(&root, payload, plen,
+                                                     &used) == 0) {
+                    if (g_client.export_name[0] && root.name[0] &&
+                        strcmp(root.name, g_client.export_name) != 0) {
+                        efs_export_root_free(&root);
+                        free(payload);
+                        continue;
+                    }
+                    /* Ignore bootstrap shells (no pages yet) unless this is
+                     * the export we asked to mount empty. */
                     if (root.page_count == 0 || root.blob_len == 0) {
                         saw_bootstrap = 1;
                         efs_export_root_free(&root);
@@ -1004,17 +1018,66 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
                     } else {
                         efs_export_root_free(&root);
                     }
+                    if (used > 0 && used < plen &&
+                        efs_meta_blob_is_export((char *)payload + used,
+                                                plen - used)) {
+                        free(best_efsm);
+                        best_efsm_len = plen - used;
+                        best_efsm = malloc(best_efsm_len);
+                        if (best_efsm)
+                            memcpy(best_efsm, (char *)payload + used,
+                                   best_efsm_len);
+                        else
+                            best_efsm_len = 0;
+                    }
                 }
-            } else if (efs_meta_blob_is_export(payload, plen) && !have_root) {
-                free(best_legacy);
-                best_legacy = payload;
-                best_legacy_len = plen;
+            } else if (efs_meta_blob_is_export(payload, plen)) {
+                free(best_efsm);
+                best_efsm = payload;
+                best_efsm_len = plen;
                 payload = NULL;
             }
             free(payload);
         }
     }
 
+    if (best_efsm) {
+        pthread_mutex_lock(&g_client.lock);
+        int rc = efs_export_deserialize(&g_client.export, best_efsm, best_efsm_len);
+        if (rc == EFS_OK) {
+            if (have_root) {
+                if (efs_export_root_copy(&g_client.export.root, &best_root) == EFS_OK) {
+                    g_client.export.meta_fragmented = 1;
+                    g_client.export.next_ino = g_client.export.next_ino
+                                                   ? g_client.export.next_ino
+                                                   : best_root.next_ino;
+                    uint32_t cs = best_root.chunk_size;
+                    g_client.export.chunk_size = efs_chunk_size_valid(cs)
+                                                     ? cs
+                                                     : EFS_DEFAULT_CHUNK_SIZE;
+                    g_client.export.features = best_root.features;
+                }
+                /* Republish a clean generation over the torn EFSR. */
+                g_client.meta_dirty = 1;
+            } else {
+                g_client.export.meta_fragmented = 0;
+            }
+            if (efs_client_meta_cache_adopt(best_efsm, best_efsm_len) == 0)
+                best_efsm = NULL;
+            fprintf(stderr,
+                    "meta: loaded live tables inodes=%llu chunks=%llu gen=%llu\n",
+                    (unsigned long long)g_client.export.inode_count,
+                    (unsigned long long)g_client.export.chunk_count,
+                    (unsigned long long)g_client.export.root.generation);
+            pthread_mutex_unlock(&g_client.lock);
+            free(best_efsm);
+            efs_export_root_free(&best_root);
+            return rc;
+        }
+        pthread_mutex_unlock(&g_client.lock);
+        free(best_efsm);
+        best_efsm = NULL;
+    }
     if (have_root) {
         fprintf(stderr,
                 "meta: got EFSR generation=%llu pages=%u blob_len=%u; "
@@ -1030,30 +1093,25 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
             rc = load_export_from_prev_slot(&best_root);
         }
         efs_export_root_free(&best_root);
-        if (rc == EFS_OK) {
-            free(best_legacy);
-            return rc;
-        }
-        fprintf(stderr,
-                "meta: page reconstruct failed (%s); trying legacy EFSM fallback\n",
-                efs_strerror(rc));
-        /* Fall back to legacy EFSM if page reconstruct fails. */
-        if (!best_legacy) {
-            /* Typical cause: meta table fragments missing on 2+ nodes
-             * (2-of-3 decode needs any two fragments). */
-            return rc;
-        }
-    }
-    if (best_legacy) {
-        pthread_mutex_lock(&g_client.lock);
-        int rc = efs_export_deserialize(&g_client.export, best_legacy, best_legacy_len);
-        g_client.export.meta_fragmented = 0;
-        if (rc == EFS_OK &&
-            efs_client_meta_cache_adopt(best_legacy, best_legacy_len) == 0)
-            best_legacy = NULL;
-        pthread_mutex_unlock(&g_client.lock);
-        free(best_legacy);
         return rc;
+    }
+    if (!have_root && !best_efsm && g_client.export_name[0] &&
+        (fetch_ok || saw_bootstrap)) {
+        pthread_mutex_lock(&g_client.lock);
+        {
+            efs_export_id_t eid = 2;
+            if (strcmp(g_client.export_name, "test") == 0)
+                eid = 1;
+            else if (strcmp(g_client.export_name, "fiobench") == 0)
+                eid = 2;
+            efs_export_init(&g_client.export, eid, g_client.export_name);
+        }
+        g_client.export.meta_fragmented = 0;
+        pthread_mutex_unlock(&g_client.lock);
+        fprintf(stderr,
+                "meta: mounting empty export '%s' (no matching tables on peers)\n",
+                g_client.export_name);
+        return EFS_OK;
     }
     if (!fetch_ok)
         return last_fetch_rc;

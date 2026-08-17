@@ -1025,13 +1025,28 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
 {
     if (!s || !payload || payload_len == 0)
         return -1;
-    if (!efs_meta_blob_is_root(payload, payload_len))
+    if (!efs_meta_blob_is_root(payload, payload_len) &&
+        !efs_meta_blob_is_export(payload, payload_len))
         return 0;
 
     struct efs_export_root root;
     memset(&root, 0, sizeof(root));
-    if (efs_export_root_deserialize(&root, payload, payload_len) != 0)
-        return -1;
+    size_t used = 0;
+    const char *efsm = NULL;
+    uint32_t efsm_len = 0;
+    if (efs_meta_blob_is_root(payload, payload_len)) {
+        if (efs_export_root_deserialize_used(&root, payload, payload_len,
+                                             &used) != 0)
+            return -1;
+        if (used > 0 && used < payload_len &&
+            efs_meta_blob_is_export((const char *)payload + used,
+                                    payload_len - used)) {
+            efsm = (const char *)payload + used;
+            efsm_len = payload_len - (uint32_t)used;
+        }
+    } else {
+        return 0;
+    }
 
     pthread_mutex_lock(&s->lock);
     if (s->export_count == 0) {
@@ -1059,8 +1074,23 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
     ex->next_ino = ex->root.next_ino;
     if (efs_chunk_size_valid(ex->root.chunk_size))
         ex->chunk_size = ex->root.chunk_size;
-    if (ex->root.page_count > 0)
+    if (efsm && efsm_len) {
+        struct efs_export_root keep;
+        memset(&keep, 0, sizeof(keep));
+        if (efs_export_root_copy(&keep, &ex->root) == 0 &&
+            efs_export_deserialize(ex, efsm, efsm_len) == 0) {
+            efs_export_root_move(&ex->root, &keep);
+            ex->meta_fragmented = 1;
+            ex->meta_needs_rebuild = 0;
+        } else {
+            efs_export_root_move(&ex->root, &keep);
+            ex->meta_fragmented = 1;
+            if (ex->root.page_count > 0)
+                ex->meta_needs_rebuild = 1;
+        }
+    } else if (ex->root.page_count > 0) {
         ex->meta_needs_rebuild = 1;
+    }
     s->export_meta_dirty = 1;
     server_save_export(s, ex);
     pthread_mutex_unlock(&s->lock);

@@ -285,7 +285,7 @@ static int chunk_idx_put(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
 static int chunk_idx_get(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index,
                          uint64_t *pos)
 {
-    if (!ex->chunk_keys || ex->chunk_mask == 0)
+    if (!ex->chunk_keys || !ex->chunk_vals || !ex->chunks || ex->chunk_mask == 0)
         return -1;
     uint64_t key = hash_chunk_key(ino, chunk_index);
     uint64_t i = key & ex->chunk_mask;
@@ -2796,6 +2796,12 @@ int efs_export_root_serialize(const struct efs_export_root *root,
 int efs_export_root_deserialize(struct efs_export_root *root,
                                 const char *buf, size_t len)
 {
+    return efs_export_root_deserialize_used(root, buf, len, NULL);
+}
+
+int efs_export_root_deserialize_used(struct efs_export_root *root,
+                                     const char *buf, size_t len, size_t *used)
+{
     if (!root || !buf)
         return EFS_ERR_INVAL;
 
@@ -2912,6 +2918,10 @@ int efs_export_root_deserialize(struct efs_export_root *root,
             fclose(f);
             return EFS_ERR_PROTO;
         }
+    }
+    if (used) {
+        long pos = ftell(f);
+        *used = (pos > 0) ? (size_t)pos : 0;
     }
     fclose(f);
     return EFS_OK;

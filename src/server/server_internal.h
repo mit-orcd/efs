@@ -7,7 +7,7 @@
 
 /* Soft cap on concurrent accept/handler threads. Excess sockets are closed
  * immediately so one connection storm cannot exhaust RLIMIT_NOFILE. */
-#define EFS_SERVER_MAX_CONNS 512
+#define EFS_SERVER_MAX_CONNS 4096
 
 /* Persistent server→server TCP pool (meta/migrate/heartbeat/status). */
 void server_peer_pool_init(void);

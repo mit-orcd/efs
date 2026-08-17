@@ -329,6 +329,10 @@ int efs_export_root_serialize(const struct efs_export_root *root,
                               char **buf, size_t *len);
 int efs_export_root_deserialize(struct efs_export_root *root,
                                 const char *buf, size_t len);
+/* Like deserialize, and reports how many prefix bytes were the EFSR
+ * (so a trailing live EFSM can follow in the same GET_META payload). */
+int efs_export_root_deserialize_used(struct efs_export_root *root,
+                                     const char *buf, size_t len, size_t *used);
 
 /* Fill root header from export (allocates page_checksums for page_count).
  * Two-region: pass the split lengths from efs_export_serialize_ex. A legacy

@@ -85,7 +85,9 @@ static int pool_size(void)
 void efs_client_conn_init(void)
 {
     const char *env = getenv("EFS_CLIENT_CONNS_PER_NODE");
-    int n = EFS_CLIENT_CONNS_PER_NODE;
+    /* Default 16: 9 clients × 256 × 4 nodes overflows EFS_SERVER_MAX_CONNS
+     * (512 on the running cluster) and accept() starts dropping fds. */
+    int n = 16;
     if (env && *env) {
         int v = atoi(env);
         if (v >= 1 && v <= EFS_CLIENT_CONNS_PER_NODE)

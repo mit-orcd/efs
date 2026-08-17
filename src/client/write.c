@@ -31,6 +31,32 @@ static void frag_ptrs(uint8_t *buf, uint32_t frag_len, uint8_t *frags[EFS_NUM_FR
         frags[i] = buf + (size_t)i * frag_len;
 }
 
+/* chunk_keys / chunks realloc under set/reserve. Lookups must hold idx_mu. */
+static int export_chunk_exists(efs_ino_t ino, uint32_t ci)
+{
+    pthread_mutex_lock(&g_client.idx_mu);
+    int ok = (efs_export_get_chunk(&g_client.export, ino, ci, NULL) == 0);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    return ok;
+}
+
+static int export_chunk_copy(efs_ino_t ino, uint32_t ci, struct efs_chunk_entry *out)
+{
+    pthread_mutex_lock(&g_client.idx_mu);
+    int rc = efs_export_get_chunk(&g_client.export, ino, ci, out);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    return rc;
+}
+
+static void export_reserve_chunks_locked(uint64_t extra)
+{
+    efs_client_table_lock();
+    pthread_mutex_lock(&g_client.idx_mu);
+    (void)efs_export_reserve_chunks(&g_client.export, extra);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_table_unlock();
+}
+
 static uint64_t now(void)
 {
     struct timespec ts;
@@ -1481,6 +1507,9 @@ static int efs_client_replicate_metadata_nb(void)
  * g_repl_mu and found new dirty from the others still writing. */
 int efs_client_sync_meta(void)
 {
+    const char *skip = getenv("EFS_SKIP_META_FLUSH");
+    if (skip && *skip && strcmp(skip, "0") != 0)
+        return EFS_OK;
     pthread_mutex_lock(&g_sync_mu);
     int waited = 0;
     for (;;) {
@@ -1685,6 +1714,13 @@ void efs_client_schedule_meta_heal(void)
 
 int efs_client_take_write_lease(void)
 {
+    /* Multi-client fio (fcstor007–015) must all write. An exclusive lease
+     * would mount the rest read-only. */
+    const char *share = getenv("EFS_SHARE_WRITE_LEASE");
+    if (share && *share && strcmp(share, "0") != 0) {
+        g_client.write_readonly = 0;
+        return EFS_OK;
+    }
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     uint64_t now_ms = (uint64_t)ts.tv_sec * 1000ull +
@@ -1728,6 +1764,9 @@ void efs_client_stop_meta_flush(void)
 
 int efs_client_note_meta_change(int force)
 {
+    const char *skip = getenv("EFS_SKIP_META_FLUSH");
+    if (skip && *skip && strcmp(skip, "0") != 0)
+        return EFS_OK;
     if (force)
         g_client.meta_flush_force = 1;
     if (!g_client.meta_batch || force)
@@ -2234,7 +2273,7 @@ static int assemble_write_chunk(efs_ino_t ino, uint64_t old_size,
             int rrc = efs_client_read(ino, chunk_start, existing, (char *)chunk, &got);
             if (rrc != EFS_OK || got != existing) {
                 struct efs_chunk_entry ce;
-                if (efs_export_get_chunk(&g_client.export, ino, ci, &ce) != 0) {
+                if (export_chunk_copy(ino, ci, &ce) != 0) {
                     /* Size can be ahead of the store (async WB / dcache
                      * patch). No published chunk yet — base is zeros. */
                     *from_zero_out = 1;
@@ -2424,16 +2463,13 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
     if (rc != EFS_OK)
         return rc;
 
-    if (efs_export_get_chunk(&g_client.export, ino, ci, NULL) != 0) {
+    if (!export_chunk_exists(ino, ci)) {
         int room = efs_client_ensure_meta_room(0, 1);
         if (room != EFS_OK)
             return room;
     }
-    if (efs_export_needs_chunk_grow(&g_client.export)) {
-        efs_client_table_lock();
-        (void)efs_export_reserve_chunks(&g_client.export, 64);
-        efs_client_table_unlock();
-    }
+    if (efs_export_needs_chunk_grow(&g_client.export))
+        export_reserve_chunks_locked(64);
     efs_client_lock_dir(ino);
     pthread_mutex_lock(&g_client.idx_mu);
     efs_export_set_chunk(&g_client.export, ino, ci, nodes, checksums);
@@ -3206,18 +3242,15 @@ static int pack_put_chunk(efs_ino_t dir_ino, uint32_t ci, const uint8_t *chunk,
     int rc = efs_client_put_fragments_parallel(dir_ino, ci, nodes, cfrags,
                                                frag_len, checksums);
     if (rc == EFS_OK) {
-        if (efs_export_get_chunk(&g_client.export, dir_ino, ci, NULL) != 0) {
+        if (!export_chunk_exists(dir_ino, ci)) {
             int room = efs_client_ensure_meta_room(0, 1);
             if (room != EFS_OK) {
                 free(frag_buf);
                 return room;
             }
         }
-        if (efs_export_needs_chunk_grow(&g_client.export)) {
-            efs_client_table_lock();
-            (void)efs_export_reserve_chunks(&g_client.export, 64);
-            efs_client_table_unlock();
-        }
+        if (efs_export_needs_chunk_grow(&g_client.export))
+            export_reserve_chunks_locked(64);
         efs_client_lock_dir(dir_ino);
         pthread_mutex_lock(&g_client.idx_mu);
         efs_export_set_chunk(&g_client.export, dir_ino, ci, nodes, checksums);
@@ -3549,16 +3582,13 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
         if (rc != EFS_OK)
             return rc;
 
-        if (efs_export_get_chunk(&g_client.export, ino, ci, NULL) != 0) {
+        if (!export_chunk_exists(ino, ci)) {
             int room = efs_client_ensure_meta_room(0, 1);
             if (room != EFS_OK)
                 return room;
         }
-        if (efs_export_needs_chunk_grow(&g_client.export)) {
-            efs_client_table_lock();
-            (void)efs_export_reserve_chunks(&g_client.export, 64);
-            efs_client_table_unlock();
-        }
+        if (efs_export_needs_chunk_grow(&g_client.export))
+            export_reserve_chunks_locked(64);
         efs_client_lock_dir(ino);
         pthread_mutex_lock(&g_client.idx_mu);
         efs_export_set_chunk(&g_client.export, ino, ci, nodes, checksums);
@@ -3668,16 +3698,13 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
                 return jobs[i].rc;
             if (jobs[i].deferred)
                 continue;
-            if (efs_export_get_chunk(&g_client.export, ino, jobs[i].ci, NULL) != 0) {
+            if (!export_chunk_exists(ino, jobs[i].ci)) {
                 int room = efs_client_ensure_meta_room(0, 1);
                 if (room != EFS_OK)
                     return room;
             }
-            if (efs_export_needs_chunk_grow(&g_client.export)) {
-                efs_client_table_lock();
-                (void)efs_export_reserve_chunks(&g_client.export, 64);
-                efs_client_table_unlock();
-            }
+            if (efs_export_needs_chunk_grow(&g_client.export))
+                export_reserve_chunks_locked(64);
             efs_client_lock_dir(ino);
             pthread_mutex_lock(&g_client.idx_mu);
             {

@@ -7,7 +7,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define EFS_WRITER_QUEUE_CAP 256
+#define EFS_WRITER_QUEUE_CAP 1024
 
 enum writer_op {
     WRITER_OP_FRAGMENT = 1,
