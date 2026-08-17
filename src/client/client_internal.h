@@ -3,6 +3,7 @@
 
 #include "efs/common.h"
 #include "efs/metadata.h"
+#include "efs/network.h"
 #include <pthread.h>
 #include <sys/types.h>
 
@@ -44,11 +45,12 @@ struct efs_client {
     uint64_t ino_namespace;
     uint64_t ino_counter;
 
-    /* Persistent TCP connection pool to each server. The server's accept
-     * loop handles multiple requests per connection; a pool of sockets lets
+    /* Persistent connection pool to each server. The server's accept
+     * loop handles multiple requests per connection; a pool of conns lets
      * FUSE workers and parallel fragment PUTs proceed without serializing
-     * on a single fd. Checkout waits if all slots are busy. */
-    int conn_fd[EFS_MAX_NODES][EFS_CLIENT_CONNS_PER_NODE];
+     * on a single fd. Each conn is TCP or TCP+RDMA (struct efs_conn).
+     * Checkout waits if all slots are busy. */
+    struct efs_conn *conn[EFS_MAX_NODES][EFS_CLIENT_CONNS_PER_NODE];
     int conn_busy[EFS_MAX_NODES][EFS_CLIENT_CONNS_PER_NODE];
     pthread_mutex_t conn_lock[EFS_MAX_NODES];
     pthread_cond_t conn_cv[EFS_MAX_NODES];
@@ -272,17 +274,17 @@ void efs_client_init_nodes(struct efs_client *c, const char *node_list[EFS_MAX_N
 /* Discover the full cluster membership by asking one server. Returns 0 on success. */
 int efs_client_discover_nodes(struct efs_client *c, const char *host, uint16_t port);
 
-/* Borrow a live TCP fd for node_id (1-based). Blocks until a pool slot is
- * free. Caller must efs_client_conn_release(node_id, fd) or _drop(...). */
-int efs_client_conn_get(efs_node_id_t node_id);
+/* Borrow a live conn for node_id (1-based). Blocks until a pool slot is
+ * free. Caller must efs_client_conn_release(node_id, conn) or _drop(...). */
+struct efs_conn *efs_client_conn_get(efs_node_id_t node_id);
 
 /* Return a healthy connection to the pool. */
-void efs_client_conn_release(efs_node_id_t node_id, int fd);
+void efs_client_conn_release(efs_node_id_t node_id, struct efs_conn *conn);
 
 /* Close a broken connection and free its pool slot. Also closes other
- * idle pooled sockets to the same node (they are often stale after an
+ * idle pooled conns to the same node (they are often stale after an
  * efsd restart). */
-void efs_client_conn_drop(efs_node_id_t node_id, int fd);
+void efs_client_conn_drop(efs_node_id_t node_id, struct efs_conn *conn);
 
 /* Close all idle pooled sockets to node_id so the next checkout reconnects.
  * In-flight (busy) sockets are left alone until their owners drop/release. */

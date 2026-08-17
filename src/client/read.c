@@ -61,7 +61,10 @@ static void *frag_get_thread(void *arg)
  * dedicated pool (separate from the chunk GET pool) keeps the two preferred
  * fragments concurrent without a create/join storm, and cannot deadlock
  * with chunk workers that wait on this pool. */
-#define FRAG_POOL_WORKERS (2 * EFS_WRITE_PIPELINE)
+/* Workers cap outstanding fragment GETs (one in flight per worker); client
+ * read throughput ≈ workers × frag_size / RTT. 4× pipeline keeps the conn
+ * pool, not the pool, the limiter. */
+#define FRAG_POOL_WORKERS (4 * EFS_WRITE_PIPELINE)
 #define FRAG_POOL_QDEPTH  (8 * EFS_WRITE_PIPELINE)
 static struct {
     pthread_mutex_t mu;
@@ -1134,8 +1137,8 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
         return EFS_ERR_NET;
 
     for (int attempt = 1; attempt <= 3; attempt++) {
-        int fd = efs_client_conn_get(node_id);
-        if (fd < 0) {
+        struct efs_conn *conn = efs_client_conn_get(node_id);
+        if (!conn) {
             efs_client_node_note_fail(node_id);
             if (attempt < 3) {
                 usleep(50000u * (unsigned)attempt);
@@ -1155,12 +1158,12 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
          * caller's buffers — no malloc + 64 KiB memcpy per GET. */
         uint8_t reply_type = 0;
         uint8_t status = 0;
-        if (efs_send_msg(fd, EFS_MSG_GET_CHUNK, &req, sizeof(req)) != 0 ||
-            efs_recv_msg_into(fd, &reply_type, &status,
-                              checksum, EFS_HASH_SIZE,
-                              data, expected_frag_len) != 0 ||
+        if (efs_conn_send_msg(conn, EFS_MSG_GET_CHUNK, &req, sizeof(req)) != 0 ||
+            efs_conn_recv_msg_into(conn, &reply_type, &status,
+                                   checksum, EFS_HASH_SIZE,
+                                   data, expected_frag_len) != 0 ||
             reply_type != EFS_MSG_GET_CHUNK_REPLY) {
-            efs_client_conn_drop(node_id, fd);
+            efs_client_conn_drop(node_id, conn);
             efs_client_node_note_fail(node_id);
             if (attempt < 3) {
                 usleep(50000u * (unsigned)attempt);
@@ -1170,32 +1173,44 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
         }
 
         if (status != EFS_GET_CHUNK_OK) {
-            efs_client_conn_release(node_id, fd);
+            efs_client_conn_release(node_id, conn);
             return EFS_ERR_NOT_FOUND;
         }
         *data_len = expected_frag_len;
 
         /* Verify payload. Known-zero digests are trusted (writer/store already
-         * short-circuit zeros); avoid a 64KiB memcmp on every GET. */
-        uint8_t zero_ck[EFS_HASH_SIZE];
-        if (expected_frag_len == EFS_META_FRAGMENT_SIZE)
-            efs_hash_zero_fragment(zero_ck);
-        else
-            efs_hash_zero_fragment_len(expected_frag_len, zero_ck);
+         * short-circuit zeros); avoid a 64KiB memcmp on every GET.
+         * EFS_SKIP_READ_VERIFY=1 skips the blake3 re-hash entirely — at GB/s
+         * per client the inline verify costs several cores and caps the frag
+         * pool. Benchmarks only: drops the end-to-end integrity check. */
+        static int skip_verify = -1;
+        if (skip_verify < 0) {
+            const char *v = getenv("EFS_SKIP_READ_VERIFY");
+            skip_verify = (v && *v && strcmp(v, "0") != 0) ? 1 : 0;
+        }
         int sum_ok;
-        if (memcmp(checksum, zero_ck, EFS_HASH_SIZE) == 0) {
+        if (skip_verify) {
             sum_ok = 1;
         } else {
-            uint8_t verify[EFS_HASH_SIZE];
-            efs_hash(data, expected_frag_len, verify);
-            sum_ok = (memcmp(verify, checksum, EFS_HASH_SIZE) == 0);
+            uint8_t zero_ck[EFS_HASH_SIZE];
+            if (expected_frag_len == EFS_META_FRAGMENT_SIZE)
+                efs_hash_zero_fragment(zero_ck);
+            else
+                efs_hash_zero_fragment_len(expected_frag_len, zero_ck);
+            if (memcmp(checksum, zero_ck, EFS_HASH_SIZE) == 0) {
+                sum_ok = 1;
+            } else {
+                uint8_t verify[EFS_HASH_SIZE];
+                efs_hash(data, expected_frag_len, verify);
+                sum_ok = (memcmp(verify, checksum, EFS_HASH_SIZE) == 0);
+            }
         }
         if (!sum_ok) {
-            efs_client_conn_release(node_id, fd);
+            efs_client_conn_release(node_id, conn);
             return EFS_ERR_CHECKSUM;
         }
 
-        efs_client_conn_release(node_id, fd);
+        efs_client_conn_release(node_id, conn);
         efs_client_node_note_ok(node_id);
         return EFS_OK;
     }

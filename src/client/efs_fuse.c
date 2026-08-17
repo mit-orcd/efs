@@ -1,5 +1,5 @@
 #define _GNU_SOURCE
-#define FUSE_USE_VERSION 31
+#define FUSE_USE_VERSION 32
 
 #include "client_internal.h"
 #include "efs/common.h"
@@ -11,6 +11,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <fuse.h>
+#include <fuse_lowlevel.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -2596,6 +2597,11 @@ static void stop_perf_recorder(void)
     }
 }
 
+/* Custom fuse_main replacement that uses fuse_loop_mt with max_idle_threads
+ * to avoid the default 10-thread limit that caps throughput. */
+static int efs_fuse_main_mt(int argc, char *argv[],
+                            const struct fuse_operations *op, void *private_data);
+
 int main(int argc, char **argv)
 {
     /* Line-buffer logs even when stdout is a pipe (client.sh | tee). */
@@ -2787,9 +2793,84 @@ int main(int argc, char **argv)
         }
     }
 
-    int ret = fuse_main(fuse_argc, fuse_argv, &efs_ops, NULL);
+    int ret = efs_fuse_main_mt(fuse_argc, fuse_argv, &efs_ops, NULL);
     stop_perf_recorder();
     /* destroy() already shut down on clean unmount; call again is a no-op. */
     efs_client_shutdown();
+    return ret;
+}
+
+static int efs_fuse_main_mt(int argc, char *argv[],
+                            const struct fuse_operations *op, void *private_data)
+{
+    struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
+    struct fuse_cmdline_opts opts;
+    struct fuse *f;
+    struct fuse_loop_config config;
+    int ret = -1;
+
+    if (fuse_parse_cmdline(&args, &opts) != 0)
+        return 1;
+
+    if (opts.show_version) {
+        printf("FUSE library version %s\n", fuse_pkgversion());
+        ret = 0;
+        goto out;
+    }
+
+    if (opts.show_help) {
+        printf("usage: %s [options] <mountpoint>\n\n", args.argv[0]);
+        fuse_lib_help(&args);
+        ret = 1;
+        goto out;
+    }
+
+    if (!opts.mountpoint) {
+        fprintf(stderr, "error: no mountpoint specified\n");
+        ret = 1;
+        goto out;
+    }
+
+    f = fuse_new(&args, op, sizeof(*op), private_data);
+    if (f == NULL) {
+        ret = 1;
+        goto out;
+    }
+
+    if (fuse_mount(f, opts.mountpoint) != 0) {
+        fuse_destroy(f);
+        ret = 1;
+        goto out;
+    }
+
+    if (fuse_daemonize(opts.foreground) != 0) {
+        fuse_unmount(f);
+        fuse_destroy(f);
+        ret = 1;
+        goto out;
+    }
+
+    if (fuse_set_signal_handlers(fuse_get_session(f)) != 0) {
+        fuse_unmount(f);
+        fuse_destroy(f);
+        ret = 1;
+        goto out;
+    }
+
+    memset(&config, 0, sizeof(config));
+    config.clone_fd = opts.clone_fd;
+    config.max_idle_threads = opts.max_idle_threads;
+    if (config.max_idle_threads == 0)
+        config.max_idle_threads = 64;
+
+    ret = fuse_loop_mt(f, &config);
+
+    fuse_remove_signal_handlers(fuse_get_session(f));
+    fuse_unmount(f);
+    fuse_destroy(f);
+
+out:
+    free(opts.mountpoint);
+    fuse_opt_free_args(&args);
     return ret;
 }

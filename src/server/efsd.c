@@ -234,8 +234,15 @@ static void *conn_thread(void *arg)
     efs_set_recv_timeout(fd, 0);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_tcp_keepalive(fd);
-    server_handle_conn(fd);
-    close(fd);
+    struct efs_conn *conn = efs_conn_wrap_tcp(fd, 1);
+    if (!conn) {
+        close(fd);
+        __sync_fetch_and_sub(&g_live_conns, 1);
+        return NULL;
+    }
+    server_handle_conn(conn);
+    efs_conn_destroy(conn); /* QP (if upgraded) + fd */
+    server_handler_tls_cleanup();
     __sync_fetch_and_sub(&g_live_conns, 1);
     return NULL;
 }

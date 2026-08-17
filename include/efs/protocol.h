@@ -68,6 +68,9 @@ enum efs_msg_type {
     EFS_MSG_INODE_UNLINK_REPLY = 52,
     EFS_MSG_UPGRADE_META = 53,
     EFS_MSG_UPGRADE_META_REPLY = 54,
+    /* RDMA QP bootstrap over the TCP conn; unknown-type/error -> stay TCP. */
+    EFS_MSG_RDMA_SETUP = 55,
+    EFS_MSG_RDMA_SETUP_REPLY = 56,
 };
 
 /* Set per-export features. Only bits in set_mask are changed (to the
@@ -336,6 +339,28 @@ struct efs_msg_upgrade_meta_reply {
     uint32_t shard_count;
 };
 
+/* RDMA QP bootstrap. Both ends create an RC QP first, then exchange the
+ * addressing needed for the RTR transition. Native IB only: dlid + sl. */
+#define EFS_RDMA_STATUS_OK          0
+#define EFS_RDMA_STATUS_UNSUPPORTED 1
+
+struct efs_msg_rdma_setup {
+    uint32_t lid;      /* sender port LID */
+    uint32_t qpn;      /* sender QP number */
+    uint32_t psn;      /* sender initial PSN */
+    uint32_t mtu;      /* sender active MTU (enum ibv_mtu value) */
+    uint32_t buf_size; /* sender recv buffer size = max RDMA frame accepted */
+};
+
+struct efs_msg_rdma_setup_reply {
+    uint32_t status;   /* EFS_RDMA_STATUS_* */
+    uint32_t lid;
+    uint32_t qpn;
+    uint32_t psn;
+    uint32_t mtu;
+    uint32_t buf_size;
+};
+
 /* Send a single message. */
 int efs_send_msg(int fd, uint8_t type, const void *payload, uint32_t payload_len);
 
@@ -359,5 +384,30 @@ int efs_recv_msg_into(int fd, uint8_t *type, uint8_t *status,
 /* Hot-path helper: receive a 1-byte status reply without malloc.
  * On success sets *type and *status. Returns EFS_OK or an error. */
 int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status);
+
+/* ---- transport-dispatching variants (struct efs_conn, network.h) ----
+ * Same semantics as the fd-based originals. With a live RDMA QP, frames up
+ * to the pool buffer size go over the QP; larger frames (and GET_META, whose
+ * reply is unbounded) use the TCP side-channel. Replies follow the request's
+ * channel, so the receiver always knows where to wait (c->recv_chan). */
+struct efs_conn;
+
+int efs_conn_send_msg(struct efs_conn *c, uint8_t type, const void *payload,
+                      uint32_t payload_len);
+int efs_conn_send_msg_parts(struct efs_conn *c, uint8_t type,
+                            const void *part1, uint32_t part1_len,
+                            const void *part2, uint32_t part2_len);
+int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **payload,
+                      uint32_t *payload_len);
+int efs_conn_recv_msg_into(struct efs_conn *c, uint8_t *type, uint8_t *status,
+                           void *hdr, uint32_t hdr_len,
+                           void *body, uint32_t body_len);
+int efs_conn_recv_u8_reply(struct efs_conn *c, uint8_t *type, uint8_t *status);
+
+/* For multi-conn reply polling (parallel PUT): arm/peek the reply channel.
+ * Returns EFS_CONN_REPLY_READY when a reply is already available, -1 on
+ * error, else an fd (>= 0) to poll for POLLIN. */
+#define EFS_CONN_REPLY_READY (-2)
+int efs_conn_reply_watch(struct efs_conn *c);
 
 #endif

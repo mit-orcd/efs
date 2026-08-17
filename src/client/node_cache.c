@@ -2,6 +2,7 @@
 #include "efs/placement.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
+#include "efs/rdma.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -97,10 +98,10 @@ void efs_client_conn_init(void)
 
     for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
         for (int s = 0; s < EFS_CLIENT_CONNS_PER_NODE; s++) {
-            /* First init: BSS zeros look like fd 0 — do not close. */
-            if (conn_pool_inited && g_client.conn_fd[i][s] >= 0)
-                close(g_client.conn_fd[i][s]);
-            g_client.conn_fd[i][s] = -1;
+            /* First init: BSS zeros are NULL — do not destroy. */
+            if (conn_pool_inited && g_client.conn[i][s])
+                efs_conn_destroy(g_client.conn[i][s]);
+            g_client.conn[i][s] = NULL;
             g_client.conn_busy[i][s] = 0;
         }
         g_client.node_fail_streak[i] = 0;
@@ -113,11 +114,11 @@ void efs_client_conn_init(void)
     conn_pool_inited = 1;
 }
 
-static int slot_for_fd(uint32_t idx, int fd)
+static int slot_for_conn(uint32_t idx, struct efs_conn *conn)
 {
     int n = pool_size();
     for (int s = 0; s < n; s++) {
-        if (g_client.conn_fd[idx][s] == fd)
+        if (g_client.conn[idx][s] == conn)
             return s;
     }
     return -1;
@@ -225,18 +226,18 @@ static int conn_fd_is_dead(int fd)
     return 0;
 }
 
-int efs_client_conn_get(efs_node_id_t node_id)
+struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
 {
     int idx = node_index_for_id(node_id);
     if (idx < 0)
-        return -1;
+        return NULL;
     int n = pool_size();
 
     pthread_mutex_lock(&g_client.conn_lock[idx]);
     int64_t now = monotonic_ms();
     if (g_client.node_down_until_ms[idx] > now) {
         pthread_mutex_unlock(&g_client.conn_lock[idx]);
-        return -1;
+        return NULL;
     }
     /* Cooldown expired — clear streak so a recovered peer gets a clean probe. */
     if (g_client.node_down_until_ms[idx] > 0) {
@@ -263,15 +264,15 @@ int efs_client_conn_get(efs_node_id_t node_id)
                                              &g_client.conn_lock[idx], &ts);
             if (wrc == ETIMEDOUT) {
                 pthread_mutex_unlock(&g_client.conn_lock[idx]);
-                return -1;
+                return NULL;
             }
             continue;
         }
 
-        if (g_client.conn_fd[idx][free_slot] < 0) {
+        if (!g_client.conn[idx][free_slot]) {
             /* Connect outside the lock: a blackholed peer's connect timeout
              * must not stall every other checkout for this node. Reserve the
-             * slot (busy, fd=-1) so waiters block on the cond instead. */
+             * slot (busy, conn=NULL) so waiters block on the cond instead. */
             char host[64];
             uint16_t port = g_client.nodes[idx].port;
             strncpy(host, g_client.nodes[idx].addr, sizeof(host) - 1);
@@ -280,7 +281,22 @@ int efs_client_conn_get(efs_node_id_t node_id)
             pthread_mutex_unlock(&g_client.conn_lock[idx]);
 
             int fd = efs_connect_tcp(host, port);
-            if (fd < 0) {
+            struct efs_conn *nc = NULL;
+            if (fd >= 0) {
+                efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+                efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+                nc = efs_conn_wrap_tcp(fd, 0);
+                if (!nc) {
+                    close(fd);
+                } else if (efs_rdma_available() &&
+                           efs_rdma_client_upgrade(nc) != 0 &&
+                           efs_rdma_transport() == EFS_TRANSPORT_RDMA) {
+                    /* Strict mode: no silent TCP fallback. */
+                    efs_conn_destroy(nc);
+                    nc = NULL;
+                }
+            }
+            if (!nc) {
                 pthread_mutex_lock(&g_client.conn_lock[idx]);
                 g_client.conn_busy[idx][free_slot] = 0;
                 now = monotonic_ms();
@@ -291,45 +307,43 @@ int efs_client_conn_get(efs_node_id_t node_id)
                     g_client.node_down_until_ms[idx] = now + EFS_NODE_DOWN_MS;
                 pthread_cond_signal(&g_client.conn_cv[idx]);
                 pthread_mutex_unlock(&g_client.conn_lock[idx]);
-                return -1;
+                return NULL;
             }
-            efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-            efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
 
             pthread_mutex_lock(&g_client.conn_lock[idx]);
-            if (g_client.conn_fd[idx][free_slot] >= 0) {
-                /* Slot reused while we connected — keep the existing fd. */
-                close(fd);
-                fd = g_client.conn_fd[idx][free_slot];
+            if (g_client.conn[idx][free_slot]) {
+                /* Slot reused while we connected — keep the existing conn. */
+                efs_conn_destroy(nc);
+                nc = g_client.conn[idx][free_slot];
             } else {
-                g_client.conn_fd[idx][free_slot] = fd;
+                g_client.conn[idx][free_slot] = nc;
             }
             g_client.node_fail_streak[idx] = 0;
             g_client.node_down_until_ms[idx] = 0;
             /* busy already set */
             pthread_mutex_unlock(&g_client.conn_lock[idx]);
-            return fd;
+            return nc;
         }
 
-        int fd = g_client.conn_fd[idx][free_slot];
-        if (conn_fd_is_dead(fd)) {
-            close(fd);
-            g_client.conn_fd[idx][free_slot] = -1;
+        struct efs_conn *c = g_client.conn[idx][free_slot];
+        if (conn_fd_is_dead(c->fd)) {
+            efs_conn_destroy(c);
+            g_client.conn[idx][free_slot] = NULL;
             continue;
         }
         g_client.conn_busy[idx][free_slot] = 1;
         pthread_mutex_unlock(&g_client.conn_lock[idx]);
-        return fd;
+        return c;
     }
 }
 
-void efs_client_conn_release(efs_node_id_t node_id, int fd)
+void efs_client_conn_release(efs_node_id_t node_id, struct efs_conn *conn)
 {
     int idx = node_index_for_id(node_id);
-    if (idx < 0 || fd < 0)
+    if (idx < 0 || !conn)
         return;
     pthread_mutex_lock(&g_client.conn_lock[idx]);
-    int s = slot_for_fd((uint32_t)idx, fd);
+    int s = slot_for_conn((uint32_t)idx, conn);
     if (s >= 0)
         g_client.conn_busy[idx][s] = 0;
     pthread_cond_signal(&g_client.conn_cv[idx]);
@@ -346,39 +360,39 @@ void efs_client_conn_invalidate_node(efs_node_id_t node_id)
     for (int s = 0; s < n; s++) {
         if (g_client.conn_busy[idx][s])
             continue;
-        if (g_client.conn_fd[idx][s] >= 0) {
-            close(g_client.conn_fd[idx][s]);
-            g_client.conn_fd[idx][s] = -1;
+        if (g_client.conn[idx][s]) {
+            efs_conn_destroy(g_client.conn[idx][s]);
+            g_client.conn[idx][s] = NULL;
         }
     }
     pthread_cond_broadcast(&g_client.conn_cv[idx]);
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
 }
 
-void efs_client_conn_drop(efs_node_id_t node_id, int fd)
+void efs_client_conn_drop(efs_node_id_t node_id, struct efs_conn *conn)
 {
     int idx = node_index_for_id(node_id);
-    if (idx < 0 || fd < 0)
+    if (idx < 0 || !conn)
         return;
     int n = pool_size();
     pthread_mutex_lock(&g_client.conn_lock[idx]);
-    int s = slot_for_fd((uint32_t)idx, fd);
+    int s = slot_for_conn((uint32_t)idx, conn);
     if (s >= 0) {
-        if (g_client.conn_fd[idx][s] >= 0)
-            close(g_client.conn_fd[idx][s]);
-        g_client.conn_fd[idx][s] = -1;
+        if (g_client.conn[idx][s])
+            efs_conn_destroy(g_client.conn[idx][s]);
+        g_client.conn[idx][s] = NULL;
         g_client.conn_busy[idx][s] = 0;
     } else {
-        close(fd);
+        efs_conn_destroy(conn);
     }
     /* After efsd restart the whole idle pool for this peer is usually dead;
-     * flush it so the next checkout opens fresh TCP connections. */
+     * flush it so the next checkout opens fresh connections. */
     for (int i = 0; i < n; i++) {
         if (g_client.conn_busy[idx][i])
             continue;
-        if (g_client.conn_fd[idx][i] >= 0) {
-            close(g_client.conn_fd[idx][i]);
-            g_client.conn_fd[idx][i] = -1;
+        if (g_client.conn[idx][i]) {
+            efs_conn_destroy(g_client.conn[idx][i]);
+            g_client.conn[idx][i] = NULL;
         }
     }
     pthread_cond_broadcast(&g_client.conn_cv[idx]);
@@ -403,9 +417,9 @@ void efs_client_shutdown(void)
         for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
             pthread_mutex_lock(&g_client.conn_lock[i]);
             for (int s = 0; s < EFS_CLIENT_CONNS_PER_NODE; s++) {
-                if (g_client.conn_fd[i][s] >= 0) {
-                    close(g_client.conn_fd[i][s]);
-                    g_client.conn_fd[i][s] = -1;
+                if (g_client.conn[i][s]) {
+                    efs_conn_destroy(g_client.conn[i][s]);
+                    g_client.conn[i][s] = NULL;
                 }
                 g_client.conn_busy[i][s] = 0;
             }

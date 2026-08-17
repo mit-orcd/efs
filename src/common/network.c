@@ -1,4 +1,5 @@
 #include "efs/network.h"
+#include "efs/rdma.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -13,6 +14,7 @@
 #include <sys/select.h>
 #include <signal.h>
 #include <pthread.h>
+#include <stdlib.h>
 
 /* Keep short: a missing peer must not stall small-file meta flushes for long.
  * Down-marked peers are skipped entirely for EFS_NODE_DOWN_MS after one fail. */
@@ -235,4 +237,28 @@ int efs_recv_all(int fd, void *buf, size_t len)
         got += (size_t)n;
     }
     return 0;
+}
+
+struct efs_conn *efs_conn_wrap_tcp(int fd, int is_server)
+{
+    struct efs_conn *c = calloc(1, sizeof(*c));
+    if (!c)
+        return NULL;
+    c->kind = EFS_CONN_TCP;
+    c->is_server = is_server;
+    c->fd = fd;
+    c->recv_chan = EFS_CONN_TCP;
+    c->rc = NULL;
+    return c;
+}
+
+void efs_conn_destroy(struct efs_conn *c)
+{
+    if (!c)
+        return;
+    if (c->rc)
+        efs_rdma_conn_destroy(c->rc);
+    if (c->fd >= 0)
+        close(c->fd);
+    free(c);
 }

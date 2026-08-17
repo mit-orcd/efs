@@ -26,4 +26,25 @@ int efs_send_all(int fd, const void *buf, size_t len);
 /* Receive exactly len bytes. Returns 0 on success, -1 on error/EOF. */
 int efs_recv_all(int fd, void *buf, size_t len);
 
+/* Transport handle: a TCP fd that may additionally carry an RDMA QP.
+ * The fd stays open as the side-channel for oversized frames and as the
+ * liveness/keepalive path even when kind == EFS_CONN_RDMA. */
+#define EFS_CONN_TCP  0
+#define EFS_CONN_RDMA 1
+
+struct efs_conn {
+    int kind;      /* EFS_CONN_TCP / EFS_CONN_RDMA */
+    int is_server; /* responder: reply channel follows the request channel */
+    int fd;
+    int recv_chan; /* client: channel the in-flight reply arrives on;
+                      server: channel the current request arrived on */
+    struct efs_rdma_conn *rc;
+};
+
+/* Take ownership of fd. */
+struct efs_conn *efs_conn_wrap_tcp(int fd, int is_server);
+
+/* Destroy the QP (if any), close the fd, free the handle. */
+void efs_conn_destroy(struct efs_conn *c);
+
 #endif

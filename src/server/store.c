@@ -983,6 +983,62 @@ int server_read_fragment(struct efsd_server *s, struct efs_export *ex,
     return EFS_OK;
 }
 
+/* Combined fragment+checksum read. Single-root fast path: one dir format,
+ * direct opens, legacy layout tried only on ENOENT — the generic resolver
+ * otherwise burns several snprintf path builds and access() probes per GET.
+ * *sum_ok is set when the sidecar supplied the sum (caller hashes otherwise).
+ * Multi-root keeps the generic probe pair (placement can be on any root). */
+int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
+                                  efs_ino_t ino, uint32_t chunk_index,
+                                  uint32_t fragment_index, uint8_t *data,
+                                  uint32_t *data_len,
+                                  uint8_t checksum[EFS_HASH_SIZE], int *sum_ok)
+{
+    uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
+    *sum_ok = 0;
+    if (n != 1) {
+        int rc = server_read_fragment(s, ex, ino, chunk_index, fragment_index,
+                                      data, data_len);
+        if (rc != EFS_OK)
+            return rc;
+        *sum_ok = server_read_fragment_sum(s, ex, ino, chunk_index,
+                                           fragment_index, checksum) == EFS_OK;
+        return EFS_OK;
+    }
+
+    uint32_t want = server_frag_len(ex, ino);
+    char dir[8192];
+    char path[8300];
+    format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[0], ex->id, ino,
+                         chunk_index);
+    int plen = snprintf(path, sizeof(path), "%s/%u.%u", dir, chunk_index,
+                        fragment_index);
+    uint32_t got = 0;
+    int rc = read_file_bytes(s, path, data, want, &got);
+    if (rc == EFS_ERR_NOT_FOUND) {
+        format_ino_chunk_dir_legacy(dir, sizeof(dir), s->storage_paths[0],
+                                    ex->id, ino, chunk_index);
+        plen = snprintf(path, sizeof(path), "%s/%u.%u", dir, chunk_index,
+                        fragment_index);
+        rc = read_file_bytes(s, path, data, want, &got);
+    }
+    if (rc != EFS_OK)
+        return rc;
+    *data_len = got;
+
+    if (plen > 0 && (size_t)plen + 5 <= sizeof(path)) {
+        memcpy(path + plen, ".sum", 5);
+        int fd = open(path, O_RDONLY);
+        if (fd >= 0) {
+            ssize_t rn = read(fd, checksum, EFS_HASH_SIZE);
+            close(fd);
+            if (rn == (ssize_t)EFS_HASH_SIZE)
+                *sum_ok = 1;
+        }
+    }
+    return EFS_OK;
+}
+
 static void server_fragment_sum_path_at(struct efsd_server *s, uint32_t root_idx,
                                        struct efs_export *ex, efs_ino_t ino,
                                        uint32_t chunk_index, uint32_t fragment_index,

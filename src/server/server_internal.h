@@ -163,6 +163,17 @@ int server_read_fragment(struct efsd_server *s, struct efs_export *ex,
                          efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                          uint8_t *data, uint32_t *data_len);
 
+/* Combined fragment+checksum read (single-root fast path). *sum_ok set when
+ * the sidecar supplied the checksum; caller hashes the data otherwise. */
+int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
+                                  efs_ino_t ino, uint32_t chunk_index,
+                                  uint32_t fragment_index, uint8_t *data,
+                                  uint32_t *data_len,
+                                  uint8_t checksum[EFS_HASH_SIZE], int *sum_ok);
+
+/* Free per-connection-thread hot-path arenas (call when a conn thread ends). */
+void server_handler_tls_cleanup(void);
+
 /* Writer-thread hint from writer.c: payload already verified as all zeros. */
 extern __thread int efs_tls_write_known_zero;
 
@@ -257,7 +268,8 @@ void server_dedupe_nodes_locked(struct efsd_server *s);
 bool server_would_exceed_quota(struct efsd_server *s, uint64_t fragment_size);
 
 /* Handle one client connection. */
-void server_handle_conn(int fd);
+struct efs_conn;
+void server_handle_conn(struct efs_conn *conn);
 
 /* Join an existing cluster by contacting a peer. */
 int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t peer_port);

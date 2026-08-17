@@ -5,37 +5,40 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static int rpc_first_fd(void)
+static struct efs_conn *rpc_first_conn(efs_node_id_t *nid_out)
 {
     for (uint32_t i = 0; i < g_client.node_count; i++) {
         if (efs_client_node_is_down(g_client.nodes[i].id))
             continue;
-        int fd = efs_client_conn_get(g_client.nodes[i].id);
-        if (fd >= 0)
-            return fd;
+        struct efs_conn *conn = efs_client_conn_get(g_client.nodes[i].id);
+        if (conn) {
+            *nid_out = g_client.nodes[i].id;
+            return conn;
+        }
     }
-    return -1;
+    return NULL;
 }
 
 static int rpc_send_recv(uint8_t type, const void *req, uint32_t req_len,
                          uint8_t expect, void *reply, uint32_t reply_len)
 {
-    int fd = rpc_first_fd();
-    if (fd < 0)
+    efs_node_id_t nid = 0;
+    struct efs_conn *conn = rpc_first_conn(&nid);
+    if (!conn)
         return EFS_ERR_NET;
-    if (efs_send_msg(fd, type, req, req_len) != 0) {
-        efs_client_conn_drop(g_client.nodes[0].id, fd);
+    if (efs_conn_send_msg(conn, type, req, req_len) != 0) {
+        efs_client_conn_drop(nid, conn);
         return EFS_ERR_NET;
     }
     uint8_t rtype = 0;
     void *payload = NULL;
     uint32_t plen = 0;
-    int rc = efs_recv_msg(fd, &rtype, &payload, &plen);
+    int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
     if (rc != 0) {
-        efs_client_conn_drop(g_client.nodes[0].id, fd);
+        efs_client_conn_drop(nid, conn);
         return EFS_ERR_NET;
     }
-    efs_client_conn_release(g_client.nodes[0].id, fd);
+    efs_client_conn_release(nid, conn);
     if (rtype != expect || plen < reply_len) {
         free(payload);
         return EFS_ERR_PROTO;

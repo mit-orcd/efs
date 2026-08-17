@@ -13,7 +13,7 @@ CFLAGS = -O3 -g -fno-omit-frame-pointer -march=native -mtune=native \
          -DEFS_BUILD_ID='"$(EFS_GIT_ID)"'
 INCLUDES = -Iinclude -Isrc/common -Ideps/blake3
 
-LDFLAGS = -lpthread -lm -ldl
+LDFLAGS = -lpthread -lm -ldl -libverbs
 
 COMMON_DIR = src/common
 BLAKE3_DIR = deps/blake3
@@ -25,6 +25,7 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
               $(COMMON_DIR)/erasure.c \
               $(COMMON_DIR)/checksum.c \
               $(COMMON_DIR)/network.c \
+              $(COMMON_DIR)/rdma.c \
               $(BLAKE3_DIR)/blake3.c \
               $(BLAKE3_DIR)/blake3_portable.c \
               $(BLAKE3_DIR)/blake3_dispatch.c \
@@ -42,8 +43,8 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
-TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c tests/test_dir_stats.c tests/test_ino_path.c tests/test_meta_slot.c tests/test_add_storage.c tests/test_meta_cap.c tests/test_meta_v6.c
-TEST_BINS = tests/test_erasure tests/test_placement tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports tests/test_dir_stats tests/test_ino_path tests/test_meta_slot tests/test_add_storage tests/test_meta_cap tests/test_meta_v6
+TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c tests/test_dir_stats.c tests/test_ino_path.c tests/test_meta_slot.c tests/test_add_storage.c tests/test_meta_cap.c tests/test_meta_v6.c tests/test_rdma_xprt.c
+TEST_BINS = tests/test_erasure tests/test_placement tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports tests/test_dir_stats tests/test_ino_path tests/test_meta_slot tests/test_add_storage tests/test_meta_cap tests/test_meta_v6 tests/test_rdma_xprt
 
 SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/handler.c \
               src/server/cluster.c src/server/meta_server.c src/server/migrate.c \

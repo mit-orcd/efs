@@ -1,6 +1,7 @@
 #include "efs/common.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
+#include "efs/rdma.h"
 #include "efs/checksum.h"
 #include "server_internal.h"
 #include <stdio.h>
@@ -8,26 +9,150 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <poll.h>
 #include <arpa/inet.h>
 
-void server_handle_conn(int fd)
+/* Per-connection-thread arenas. Fragment PUTs/GETs used to each cost a
+ * malloc/free pair per message; with ~144 conns at ~100K msg/s that showed
+ * up as arena-lock contention. TLS arenas grow once and are reused for the
+ * life of the conn thread; freed by server_handler_tls_cleanup on exit.
+ * Frames larger than EFS_HANDLER_TLS_MAX (rare meta blobs) still malloc. */
+#define EFS_HANDLER_TLS_MAX (1024 * 1024)
+
+static __thread uint8_t *tls_payload;
+static __thread uint32_t tls_payload_cap;
+static __thread uint8_t *tls_reply;
+static __thread uint32_t tls_reply_cap;
+
+void server_handler_tls_cleanup(void)
 {
+    free(tls_payload);
+    tls_payload = NULL;
+    tls_payload_cap = 0;
+    free(tls_reply);
+    tls_reply = NULL;
+    tls_reply_cap = 0;
+}
+
+/* Wait for the next request on either channel of an RDMA-capable conn.
+ * Returns EFS_CONN_TCP / EFS_CONN_RDMA, or -1 on error / peer close.
+ * Pure-TCP conns return EFS_CONN_TCP immediately (caller blocks in recv). */
+static int conn_wait_request(struct efs_conn *conn)
+{
+    if (!conn->rc)
+        return EFS_CONN_TCP;
+    struct efs_rdma_conn *rc = conn->rc;
+    for (;;) {
+        int r = efs_rdma_reply_ready(rc);
+        if (r < 0)
+            return -1;
+        if (r > 0)
+            return EFS_CONN_RDMA;
+        struct pollfd p = { .fd = conn->fd, .events = POLLIN };
+        if (poll(&p, 1, 0) < 0)
+            return -1;
+        if (p.revents & (POLLERR | POLLHUP | POLLNVAL))
+            return -1;
+        if (p.revents & POLLIN)
+            return EFS_CONN_TCP;
+        /* Neither channel ready: block on the TCP fd + the CQ channel. */
+        struct pollfd pf[2] = {
+            { .fd = conn->fd, .events = POLLIN },
+            { .fd = efs_rdma_reply_fd(rc), .events = POLLIN },
+        };
+        int br = poll(pf, 2, -1);
+        if (br < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+        if (pf[0].revents & (POLLERR | POLLHUP | POLLNVAL))
+            return -1;
+        if (pf[0].revents & POLLIN)
+            return EFS_CONN_TCP;
+        if (pf[1].revents & POLLIN)
+            return EFS_CONN_RDMA; /* recv_wait harvests the CQ event */
+    }
+}
+
+void server_handle_conn(struct efs_conn *conn)
+{
+    int fd = conn->fd;
     while (1) {
-        uint8_t type;
+        uint8_t type = 0;
         void *payload = NULL;
         uint32_t payload_len = 0;
+        void *to_free = NULL;
+        int rdma_frame = 0;
+        int rc = 0;
 
-        int rc = efs_recv_msg(fd, &type, &payload, &payload_len);
-        if (rc != 0) {
-            /* Idle SO_RCVTIMEO must not kill a pooled client fd. */
-            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
-                continue;
+        int chan = conn_wait_request(conn);
+        if (chan < 0)
             break;
+        conn->recv_chan = chan;
+
+        if (chan == EFS_CONN_RDMA) {
+            /* The payload aliases a QP recv pool buffer; it is reposted
+             * after the switch (every handler consumes it synchronously). */
+            if (efs_rdma_recv_wait(conn->rc, -1) != 0)
+                break;
+            uint32_t flen = 0;
+            uint8_t *frame = efs_rdma_recv_frame(conn->rc, &flen);
+            if (!frame || flen < 5) {
+                efs_rdma_recv_repost(conn->rc);
+                break;
+            }
+            uint32_t nlen;
+            memcpy(&nlen, frame, 4);
+            nlen = ntohl(nlen);
+            if (nlen == 0 || nlen > 16 * 1024 * 1024 || flen != 4 + nlen) {
+                efs_rdma_recv_repost(conn->rc);
+                break;
+            }
+            type = frame[4];
+            payload = frame + 5;
+            payload_len = nlen - 1;
+            rdma_frame = 1;
+        } else {
+            uint32_t len = 0;
+            if (efs_recv_all(fd, &len, sizeof(len)) != 0) {
+                /* Idle SO_RCVTIMEO must not kill a pooled client fd. */
+                if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
+                    continue;
+                break;
+            }
+            len = ntohl(len);
+            if (len == 0 || len > 16 * 1024 * 1024)
+                break;
+            if (efs_recv_all(fd, &type, 1) != 0)
+                break;
+            payload_len = len - 1;
+            if (payload_len > 0) {
+                if (payload_len <= EFS_HANDLER_TLS_MAX) {
+                    if (tls_payload_cap < payload_len) {
+                        uint8_t *nb = realloc(tls_payload, payload_len);
+                        if (!nb)
+                            break;
+                        tls_payload = nb;
+                        tls_payload_cap = payload_len;
+                    }
+                    payload = tls_payload;
+                } else {
+                    payload = malloc(payload_len);
+                    if (!payload)
+                        break;
+                    to_free = payload;
+                }
+                if (efs_recv_all(fd, payload, payload_len) != 0) {
+                    free(to_free);
+                    break;
+                }
+            }
         }
 
         switch (type) {
         case EFS_MSG_HEARTBEAT: {
-            efs_send_msg(fd, EFS_MSG_HEARTBEAT_ACK, NULL, 0);
+            efs_conn_send_msg(conn, EFS_MSG_HEARTBEAT_ACK, NULL, 0);
             break;
         }
         case EFS_MSG_HELLO: {
@@ -65,7 +190,7 @@ void server_handle_conn(int fd)
                                 ? h->build_id : "<pre-build-id>",
                             payload_len >= sizeof(h->version) ? h->version : 0,
                             EFS_BUILD_ID, EFS_VERSION_PACK);
-                    efs_send_msg(fd, EFS_MSG_HELLO_ACK, rej, sizeof(*rej));
+                    efs_conn_send_msg(conn, EFS_MSG_HELLO_ACK, rej, sizeof(*rej));
                     free(rej);
                     break;
                 }
@@ -132,7 +257,7 @@ void server_handle_conn(int fd)
                     server_nodes_mark_dirty(g_server);
                 pthread_mutex_unlock(&g_server->lock);
                 server_nodes_flush_dirty(g_server);
-                efs_send_msg(fd, EFS_MSG_HELLO_ACK, ack, sizeof(*ack));
+                efs_conn_send_msg(conn, EFS_MSG_HELLO_ACK, ack, sizeof(*ack));
                 free(ack);
                 /* Converge the placement ring: relay this membership change to
                  * every other peer (HELLO only updates the contacted node). */
@@ -150,42 +275,58 @@ void server_handle_conn(int fd)
                 pthread_mutex_unlock(&g_server->lock);
 
                 uint32_t frag_len = server_frag_len(ex, req->ino);
-                uint8_t *reply = malloc(1 + EFS_HASH_SIZE + frag_len);
-                uint8_t *data = malloc(frag_len);
-                if (!reply || !data) {
-                    free(reply);
-                    free(data);
-                    uint8_t err = EFS_GET_CHUNK_ERROR;
-                    efs_send_msg(fd, EFS_MSG_GET_CHUNK_REPLY, &err, 1);
-                    break;
+                /* The fragment is read straight into the reply buffer — no
+                 * per-GET malloc and no 64 KiB reply-assembly memcpy. Over
+                 * RDMA the reply buffer is a registered QP send buffer, so
+                 * the disk read is also the DMA source (zero data copies). */
+                uint32_t need = 1 + EFS_HASH_SIZE + frag_len;
+                uint8_t *reply = NULL;
+                int rdma_buf = 0;
+                if (chan == EFS_CONN_RDMA) {
+                    reply = efs_rdma_send_buf(conn->rc, need);
+                    if (reply)
+                        rdma_buf = 1;
                 }
+                if (!reply) {
+                    if (tls_reply_cap < need) {
+                        uint8_t *nb = realloc(tls_reply, need);
+                        if (!nb) {
+                            uint8_t err = EFS_GET_CHUNK_ERROR;
+                            efs_conn_send_msg(conn, EFS_MSG_GET_CHUNK_REPLY, &err, 1);
+                            server_export_put(g_server, ex);
+                            break;
+                        }
+                        tls_reply = nb;
+                        tls_reply_cap = need;
+                    }
+                    reply = tls_reply;
+                }
+                uint32_t out_len = 1;
                 if (!ex) {
                     reply[0] = EFS_GET_CHUNK_ERROR;
-                    efs_send_msg(fd, EFS_MSG_GET_CHUNK_REPLY, reply, 1);
                 } else {
                     uint32_t data_len = 0;
-                    uint8_t hash[EFS_HASH_SIZE];
-                    rc = server_read_fragment(g_server, ex, req->ino,
-                                              req->chunk_index, req->fragment_index,
-                                              data, &data_len);
+                    uint8_t *dptr = reply + 1 + EFS_HASH_SIZE;
+                    int sum_ok = 0;
+                    rc = server_read_fragment_with_sum(
+                        g_server, ex, req->ino, req->chunk_index,
+                        req->fragment_index, dptr, &data_len,
+                        reply + 1, &sum_ok);
                     if (rc != 0) {
                         reply[0] = EFS_GET_CHUNK_NOT_FOUND;
-                        efs_send_msg(fd, EFS_MSG_GET_CHUNK_REPLY, reply, 1);
                     } else {
-                        if (server_read_fragment_sum(g_server, ex, req->ino,
-                                                     req->chunk_index,
-                                                     req->fragment_index,
-                                                     hash) != 0)
-                            efs_hash(data, data_len, hash);
+                        if (!sum_ok)
+                            efs_hash(dptr, data_len, reply + 1);
                         reply[0] = EFS_GET_CHUNK_OK;
-                        memcpy(reply + 1, hash, EFS_HASH_SIZE);
-                        memcpy(reply + 1 + EFS_HASH_SIZE, data, data_len);
-                        efs_send_msg(fd, EFS_MSG_GET_CHUNK_REPLY, reply,
-                                     1 + EFS_HASH_SIZE + data_len);
+                        out_len = 1 + EFS_HASH_SIZE + data_len;
                     }
                 }
-                free(reply);
-                free(data);
+                if (rdma_buf)
+                    efs_rdma_send_commit(conn->rc, reply,
+                                         EFS_MSG_GET_CHUNK_REPLY, out_len);
+                else
+                    efs_conn_send_msg(conn, EFS_MSG_GET_CHUNK_REPLY, reply,
+                                      out_len);
                 server_export_put(g_server, ex);
             }
             break;
@@ -254,7 +395,7 @@ void server_handle_conn(int fd)
                     }
                 }
                 server_export_put(g_server, ex);
-                efs_send_msg(fd, EFS_MSG_PUT_CHUNK_REPLY, &reply, 1);
+                efs_conn_send_msg(conn, EFS_MSG_PUT_CHUNK_REPLY, &reply, 1);
             }
             break;
         }
@@ -266,7 +407,7 @@ void server_handle_conn(int fd)
                 if (payload_len >= sizeof(*req) + req->data_len)
                     reply = EFS_BENCH_PUT_OK;
             }
-            efs_send_msg(fd, EFS_MSG_BENCH_PUT_REPLY, &reply, 1);
+            efs_conn_send_msg(conn, EFS_MSG_BENCH_PUT_REPLY, &reply, 1);
             break;
         }
         case EFS_MSG_GET_META: {
@@ -313,10 +454,10 @@ void server_handle_conn(int fd)
             free(rbuf);
             free(ebuf);
             if (buf) {
-                efs_send_msg(fd, EFS_MSG_GET_META_REPLY, buf, (uint32_t)len);
+                efs_conn_send_msg(conn, EFS_MSG_GET_META_REPLY, buf, (uint32_t)len);
                 free(buf);
             } else {
-                efs_send_msg(fd, EFS_MSG_GET_META_REPLY, NULL, 0);
+                efs_conn_send_msg(conn, EFS_MSG_GET_META_REPLY, NULL, 0);
             }
             break;
         }
@@ -444,7 +585,7 @@ void server_handle_conn(int fd)
                 memset(&m, 0, sizeof(m));
                 m.status = reply;
                 m.new_epoch = g_server->epoch;
-                efs_send_msg(fd, EFS_MSG_PUT_META_REPLY, &m, sizeof(m));
+                efs_conn_send_msg(conn, EFS_MSG_PUT_META_REPLY, &m, sizeof(m));
             }
             break;
         }
@@ -464,7 +605,7 @@ void server_handle_conn(int fd)
             reply->node_count = node_count;
             memcpy(reply->nodes, g_server->nodes, sizeof(g_server->nodes));
             pthread_mutex_unlock(&g_server->lock);
-            efs_send_msg(fd, EFS_MSG_LIST_NODES_REPLY, reply, sizeof(*reply));
+            efs_conn_send_msg(conn, EFS_MSG_LIST_NODES_REPLY, reply, sizeof(*reply));
             free(reply);
             break;
         }
@@ -477,7 +618,7 @@ void server_handle_conn(int fd)
             reply.used = local ? local->used : 0;
             reply.state = (uint32_t)g_server->state;
             pthread_mutex_unlock(&g_server->lock);
-            efs_send_msg(fd, EFS_MSG_STATUS_REPLY, &reply, sizeof(reply));
+            efs_conn_send_msg(conn, EFS_MSG_STATUS_REPLY, &reply, sizeof(reply));
             break;
         }
         case EFS_MSG_DRAIN_NODE: {
@@ -511,7 +652,7 @@ void server_handle_conn(int fd)
                 }
                 pthread_mutex_unlock(&g_server->lock);
             }
-            efs_send_msg(fd, EFS_MSG_DRAIN_NODE_REPLY, &reply, 1);
+            efs_conn_send_msg(conn, EFS_MSG_DRAIN_NODE_REPLY, &reply, 1);
             break;
         }
         case EFS_MSG_UNDRAIN_NODE: {
@@ -525,7 +666,7 @@ void server_handle_conn(int fd)
                 reply = EFS_UNDRAIN_NODE_OK;
             }
             pthread_mutex_unlock(&g_server->lock);
-            efs_send_msg(fd, EFS_MSG_UNDRAIN_NODE_REPLY, &reply, 1);
+            efs_conn_send_msg(conn, EFS_MSG_UNDRAIN_NODE_REPLY, &reply, 1);
             break;
         }
         case EFS_MSG_REMOVE_NODE: {
@@ -558,7 +699,7 @@ void server_handle_conn(int fd)
             }
             if (do_notify)
                 server_notify_node_left(g_server, g_server->id);
-            efs_send_msg(fd, EFS_MSG_REMOVE_NODE_REPLY, &reply, 1);
+            efs_conn_send_msg(conn, EFS_MSG_REMOVE_NODE_REPLY, &reply, 1);
             break;
         }
         case EFS_MSG_SHRINK_QUOTA: {
@@ -586,7 +727,7 @@ void server_handle_conn(int fd)
                 }
                 pthread_mutex_unlock(&g_server->lock);
             }
-            efs_send_msg(fd, EFS_MSG_SHRINK_QUOTA_REPLY, &reply, 1);
+            efs_conn_send_msg(conn, EFS_MSG_SHRINK_QUOTA_REPLY, &reply, 1);
             break;
         }
         case EFS_MSG_ADD_STORAGE: {
@@ -605,7 +746,7 @@ void server_handle_conn(int fd)
                     pthread_mutex_unlock(&g_server->lock);
                 }
             }
-            efs_send_msg(fd, EFS_MSG_ADD_STORAGE_REPLY, &r, sizeof(r));
+            efs_conn_send_msg(conn, EFS_MSG_ADD_STORAGE_REPLY, &r, sizeof(r));
             break;
         }
         case EFS_MSG_NODE_LEFT: {
@@ -660,7 +801,7 @@ void server_handle_conn(int fd)
                     if (server_replicate_metadata(g_server, ex) < 0)
                         reply = EFS_CREATE_EXPORT_REPLICATE_FAILED;
                 }
-                efs_send_msg(fd, EFS_MSG_CREATE_EXPORT_REPLY, &reply, 1);
+                efs_conn_send_msg(conn, EFS_MSG_CREATE_EXPORT_REPLY, &reply, 1);
             }
             break;
         }
@@ -675,7 +816,7 @@ void server_handle_conn(int fd)
                 else if (rc == EFS_ERR_NOT_FOUND)
                     reply = EFS_DESTROY_EXPORT_NOT_FOUND;
             }
-            efs_send_msg(fd, EFS_MSG_DESTROY_EXPORT_REPLY, &reply, 1);
+            efs_conn_send_msg(conn, EFS_MSG_DESTROY_EXPORT_REPLY, &reply, 1);
             break;
         }
         case EFS_MSG_LIST_EXPORTS: {
@@ -689,7 +830,7 @@ void server_handle_conn(int fd)
                         sizeof(reply.exports[i].name) - 1);
             }
             pthread_mutex_unlock(&g_server->lock);
-            efs_send_msg(fd, EFS_MSG_LIST_EXPORTS_REPLY, &reply, sizeof(reply));
+            efs_conn_send_msg(conn, EFS_MSG_LIST_EXPORTS_REPLY, &reply, sizeof(reply));
             break;
         }
         case EFS_MSG_GET_FEATURES: {
@@ -705,7 +846,7 @@ void server_handle_conn(int fd)
                     r.status = EFS_FEATURES_OK;
                 }
                 pthread_mutex_unlock(&g_server->lock);
-                efs_send_msg(fd, EFS_MSG_GET_FEATURES_REPLY, &r, sizeof(r));
+                efs_conn_send_msg(conn, EFS_MSG_GET_FEATURES_REPLY, &r, sizeof(r));
             }
             break;
         }
@@ -729,7 +870,7 @@ void server_handle_conn(int fd)
                     r.status = EFS_FEATURES_OK;
                 }
                 pthread_mutex_unlock(&g_server->lock);
-                efs_send_msg(fd, EFS_MSG_SET_FEATURES_REPLY, &r, sizeof(r));
+                efs_conn_send_msg(conn, EFS_MSG_SET_FEATURES_REPLY, &r, sizeof(r));
             }
             break;
         }
@@ -741,7 +882,7 @@ void server_handle_conn(int fd)
                     reply = EFS_JOIN_ERROR;
                 if (reply == EFS_JOIN_OK)
                     server_fetch_metadata_from(g_server, req->peer_host, req->peer_port);
-                efs_send_msg(fd, EFS_MSG_JOIN_REPLY, &reply, 1);
+                efs_conn_send_msg(conn, EFS_MSG_JOIN_REPLY, &reply, 1);
             }
             break;
         }
@@ -797,7 +938,7 @@ void server_handle_conn(int fd)
                 }
             }
             pthread_mutex_unlock(&g_server->lock);
-            efs_send_msg(fd, EFS_MSG_QUERY_STATS_REPLY, &reply, sizeof(reply));
+            efs_conn_send_msg(conn, EFS_MSG_QUERY_STATS_REPLY, &reply, sizeof(reply));
             break;
         }
         case EFS_MSG_INODE_LOOKUP:
@@ -868,7 +1009,7 @@ void server_handle_conn(int fd)
                           : (type == EFS_MSG_INODE_CREATE) ? EFS_MSG_INODE_CREATE_REPLY
                           : (type == EFS_MSG_INODE_GETATTR) ? EFS_MSG_INODE_GETATTR_REPLY
                           : EFS_MSG_INODE_UNLINK_REPLY;
-            efs_send_msg(fd, rtype, &r, sizeof(r));
+            efs_conn_send_msg(conn, rtype, &r, sizeof(r));
             break;
         }
         case EFS_MSG_INODE_READDIR: {
@@ -901,7 +1042,7 @@ void server_handle_conn(int fd)
                 }
                 pthread_mutex_unlock(&g_server->lock);
             }
-            efs_send_msg(fd, EFS_MSG_INODE_READDIR_REPLY, &r, sizeof(r));
+            efs_conn_send_msg(conn, EFS_MSG_INODE_READDIR_REPLY, &r, sizeof(r));
             break;
         }
         case EFS_MSG_UPGRADE_META: {
@@ -929,13 +1070,24 @@ void server_handle_conn(int fd)
                 }
                 pthread_mutex_unlock(&g_server->lock);
             }
-            efs_send_msg(fd, EFS_MSG_UPGRADE_META_REPLY, &r, sizeof(r));
+            efs_conn_send_msg(conn, EFS_MSG_UPGRADE_META_REPLY, &r, sizeof(r));
+            break;
+        }
+        case EFS_MSG_RDMA_SETUP: {
+            /* Arrived over TCP (the QP does not exist yet); the reply goes
+             * back over TCP because recv_chan is TCP for this frame. */
+            struct efs_msg_rdma_setup_reply rep;
+            uint32_t rlen = sizeof(rep);
+            efs_rdma_server_accept(conn, payload, payload_len, &rep, &rlen);
+            efs_conn_send_msg(conn, EFS_MSG_RDMA_SETUP_REPLY, &rep, rlen);
             break;
         }
         default:
             break;
         }
 
-        free(payload);
+        if (rdma_frame)
+            efs_rdma_recv_repost(conn->rc);
+        free(to_free);
     }
 }
