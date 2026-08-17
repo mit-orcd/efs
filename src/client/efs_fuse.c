@@ -1354,6 +1354,23 @@ static int wb_ranges_overlap(uint64_t a0, size_t al, uint64_t b0, size_t bl)
     return a0 < b0 + (uint64_t)bl && b0 < a0 + (uint64_t)al;
 }
 
+/* Expand a partial write to whole chunks so two 4k RMWs of the same
+ * 128 KiB chunk cannot GET/PUT in parallel (lost update → later EIO). */
+static void wb_claim_span(uint64_t off, size_t len, uint32_t cs,
+                          uint64_t *out_off, size_t *out_len)
+{
+    if (!cs || !len ||
+        (len >= cs && (off % cs) == 0 && (len % cs) == 0)) {
+        *out_off = off;
+        *out_len = len;
+        return;
+    }
+    uint64_t a = (off / cs) * cs;
+    uint64_t b = (off + (uint64_t)len + cs - 1) / cs * cs;
+    *out_off = a;
+    *out_len = (size_t)(b - a);
+}
+
 /* Caller holds g_wb.mu. True if another worker already claimed an
  * overlapping range of this inode (aligned PUT vs RMW GET race). */
 static int wb_overlap_inflight(int self, efs_ino_t ino, uint64_t off, size_t len)
@@ -1386,12 +1403,17 @@ static void *efs_wb_thread(void *arg)
         /* Claim the range only after overlapping in-flight jobs finish.
          * writeback_cache can deliver an unaligned window while a full
          * overwrite of the same chunks is still PUTting; RMW GET then
-         * misses and used to return EIO. */
-        while (wb_overlap_inflight(wid, job.ino, job.offset, job.size))
+         * misses and used to return EIO. Partial 4k jobs claim the
+         * whole chunk so they do not RMW the same 128 KiB in parallel. */
+        uint32_t claim_cs = fuse_chunk_size();
+        uint64_t claim_off = job.offset;
+        size_t claim_len = job.size;
+        wb_claim_span(job.offset, job.size, claim_cs, &claim_off, &claim_len);
+        while (wb_overlap_inflight(wid, job.ino, claim_off, claim_len))
             pthread_cond_wait(&g_wb.idle, &g_wb.mu);
         g_wb.busy_ino[wid] = job.ino;
-        g_wb.busy_off[wid] = job.offset;
-        g_wb.busy_len[wid] = job.size;
+        g_wb.busy_off[wid] = claim_off;
+        g_wb.busy_len[wid] = claim_len;
         pthread_mutex_unlock(&g_wb.mu);
 
         /* Partial-chunk RMW is not atomic. Full-chunk overwrites of
@@ -1825,6 +1847,11 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
 
     if (size == 0)
         return 0;
+    if (efs_dcache_try_patch(ino, (uint64_t)offset, (uint32_t)size,
+                             (const uint8_t *)buf) == 0) {
+        efs_dcache_maybe_reclaim();
+        return (int)size;
+    }
     size_t copy_cap = 0;
     char *copy = bounce_alloc(size, &copy_cap);
     if (!copy)
@@ -1872,6 +1899,16 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
     if (fuse_buf_copy(&dst, buf, FUSE_BUF_NO_SPLICE) < 0) {
         bounce_release(copy, copy_cap);
         return -EIO;
+    }
+
+    /* Sub-chunk 4k: patch the dirty chunk in memory. Sending every 4k
+     * through writeback did a 128 KiB RMW+PUT and EIO'd when the GET
+     * missed under load. */
+    if (efs_dcache_try_patch(ino, (uint64_t)offset, (uint32_t)size,
+                             (const uint8_t *)copy) == 0) {
+        bounce_release(copy, copy_cap);
+        efs_dcache_maybe_reclaim();
+        return (int)size;
     }
 
     rc = efs_wb_enqueue_owned(ino, (uint64_t)offset, size, copy, NULL,

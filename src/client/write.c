@@ -2272,6 +2272,11 @@ static int assemble_write_chunk(efs_ino_t ino, uint64_t old_size,
             size_t got = 0;
             int rrc = efs_client_read(ino, chunk_start, existing, (char *)chunk, &got);
             if (rrc != EFS_OK || got != existing) {
+                got = 0;
+                rrc = efs_client_read(ino, chunk_start, existing,
+                                      (char *)chunk, &got);
+            }
+            if (rrc != EFS_OK || got != existing) {
                 struct efs_chunk_entry ce;
                 if (export_chunk_copy(ino, ci, &ce) != 0) {
                     /* Size can be ahead of the store (async WB / dcache
@@ -2857,6 +2862,11 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
             size_t got = 0;
             int rrc = efs_client_read(ino, (uint64_t)ci * len, len,
                                       (char *)base, &got);
+            if (rrc != EFS_OK) {
+                got = 0;
+                rrc = efs_client_read(ino, (uint64_t)ci * len, len,
+                                      (char *)base, &got);
+            }
             if (rrc != EFS_OK) {
                 free(base);
                 free(copy);
