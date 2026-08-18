@@ -2593,7 +2593,11 @@ int efs_dcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
     pthread_mutex_t *mu = dcache_mu(s);
     pthread_mutex_lock(mu);
     struct dcache_ent *e = dcache_find(s, ino, ci);
-    if (e && (uint64_t)off + len <= e->len) {
+    /* have_base=0 entries are sparse patches over an unfetched published
+     * chunk: unpatched bytes are zeros, not data. Serving them here would
+     * return those zeros to readers / RMW bases — only complete chunks may
+     * be copied out. */
+    if (e && e->have_base && (uint64_t)off + len <= e->len) {
         memcpy(dst, e->data + off, len);
         pthread_mutex_unlock(mu);
         return 0;
@@ -2934,14 +2938,22 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
         }
         memcpy(copy, e->data, len);
         e->dirty = 0;
+        /* Un-count now, while the state transition is atomic. The old code
+         * decremented only if the entry was still clean after the network
+         * PUT; a re-dirty during the PUT re-added a full chunk, so every
+         * flush/redirty race leaked 128 KiB into dirty_bytes and pinned it
+         * above the reclaim limit (perpetual flush storms). */
+        dcache_note_dirty_bytes(-(int64_t)len);
         pthread_mutex_unlock(mu);
         if (!have_base) {
             uint8_t *base = malloc(len);
             if (!base) {
                 free(copy);
                 pthread_mutex_lock(mu);
-                if (e->ino == ino && e->ci == ci && e->data)
+                if (e->ino == ino && e->ci == ci && e->data && !e->dirty) {
                     e->dirty = 1;
+                    dcache_note_dirty_bytes((int64_t)len);
+                }
                 pthread_mutex_unlock(mu);
                 return EFS_ERR_NOMEM;
             }
@@ -2957,8 +2969,10 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
                 free(base);
                 free(copy);
                 pthread_mutex_lock(mu);
-                if (e->ino == ino && e->ci == ci && e->data)
+                if (e->ino == ino && e->ci == ci && e->data && !e->dirty) {
                     e->dirty = 1;
+                    dcache_note_dirty_bytes((int64_t)len);
+                }
                 if (rc == EFS_OK)
                     rc = rrc;
                 e = e->next;
@@ -2980,13 +2994,14 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
             if (rc == EFS_OK)
                 rc = prc;
             /* PUT failed: this slot is the only copy. Keep it dirty. */
-            if (e->ino == ino && e->ci == ci && e->data)
+            if (e->ino == ino && e->ci == ci && e->data && !e->dirty) {
                 e->dirty = 1;
+                dcache_note_dirty_bytes((int64_t)len);
+            }
             e = e->next;
             continue;
         }
         if (!e->dirty && e->ino == ino && e->ci == ci) {
-            dcache_note_dirty_bytes(-(int64_t)len);
             free(e->data);
             e->data = NULL;
             e->len = 0;
@@ -3050,7 +3065,30 @@ int efs_dcache_flush_all(void)
     return dcache_flush_all_slots(0, 0);
 }
 
-void efs_dcache_maybe_reclaim(void)
+/* Background incremental reclaim. The old maybe_reclaim ran a full
+ * efs_dcache_flush_all() on the WRITER thread once dirty_bytes crossed the
+ * limit: a 65536-slot walk with a synchronous GET+PUT per dirty chunk. With
+ * a working set at/over the limit (random 4k on >= 2 GiB files) that fired
+ * constantly — flush_all was 41% of efs-fuse CPU and chunks were re-PUT ~4x
+ * per test as writers re-dirtied slots mid-walk. Now writers just signal;
+ * a small pool sweeps slots round-robin until dirty_bytes is back under the
+ * low-water mark, so drain cost is spread and parallel instead of a stall. */
+#define DCACHE_RECLAIM_THREADS 4
+#define DCACHE_RECLAIM_SCAN    64 /* slots per worker wake */
+static struct {
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    uint32_t cursor;
+    uint64_t lim;
+    int shutdown;
+    int active;
+} g_reclaim = {
+    .mu = PTHREAD_MUTEX_INITIALIZER,
+    .cv = PTHREAD_COND_INITIALIZER,
+};
+static pthread_once_t g_reclaim_once = PTHREAD_ONCE_INIT;
+
+static uint64_t dcache_reclaim_limit(void)
 {
     uint64_t lim = 2ull << 30;
     const char *env = getenv("EFS_DCACHE_BYTES");
@@ -3060,8 +3098,98 @@ void efs_dcache_maybe_reclaim(void)
         if (end != env && v >= (1ull << 20) && v <= (4ull << 30))
             lim = (uint64_t)v;
     }
-    if (__atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_RELAXED) > lim)
-        (void)efs_dcache_flush_all();
+    return lim;
+}
+
+static void *dcache_reclaim_main(void *arg)
+{
+    (void)arg;
+    pthread_mutex_lock(&g_reclaim.mu);
+    for (;;) {
+        while (!g_reclaim.shutdown &&
+               __atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_RELAXED) <=
+                   g_reclaim.lim)
+            pthread_cond_wait(&g_reclaim.cv, &g_reclaim.mu);
+        if (g_reclaim.shutdown)
+            break;
+        g_reclaim.active++;
+        pthread_mutex_unlock(&g_reclaim.mu);
+
+        uint64_t low = g_reclaim.lim - g_reclaim.lim / 8;
+        for (int i = 0; i < DCACHE_RECLAIM_SCAN; i++) {
+            if (__atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_RELAXED) <=
+                low)
+                break;
+            uint32_t s = __atomic_fetch_add(&g_reclaim.cursor, 1,
+                                            __ATOMIC_RELAXED) &
+                         (DCACHE_SLOTS - 1);
+            (void)dcache_flush_slot(s, 0, 0);
+        }
+        pthread_mutex_lock(&g_reclaim.mu);
+        g_reclaim.active--;
+        pthread_cond_broadcast(&g_reclaim.cv);
+    }
+    pthread_mutex_unlock(&g_reclaim.mu);
+    return NULL;
+}
+
+static void dcache_reclaim_start(void)
+{
+    g_reclaim.lim = dcache_reclaim_limit();
+    for (int i = 0; i < DCACHE_RECLAIM_THREADS; i++) {
+        pthread_t t;
+        if (pthread_create(&t, NULL, dcache_reclaim_main, NULL) != 0) {
+            g_reclaim.shutdown = 1;
+            pthread_cond_broadcast(&g_reclaim.cv);
+            return;
+        }
+        pthread_detach(t);
+    }
+}
+
+void efs_dcache_maybe_reclaim(void)
+{
+    /* getenv per write walks environ on the hot path; the limit is fixed
+     * for the process, so read it once (idempotent benign race). */
+    static uint64_t lim;
+    if (!lim)
+        lim = dcache_reclaim_limit();
+    uint64_t dirty =
+        __atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_RELAXED);
+    if (dirty <= lim)
+        return;
+    pthread_once(&g_reclaim_once, dcache_reclaim_start);
+    pthread_mutex_lock(&g_reclaim.mu);
+    pthread_cond_signal(&g_reclaim.cv);
+    pthread_mutex_unlock(&g_reclaim.mu);
+    /* Hard cap at 2x: the background pool is drain-limited (a sparse-entry
+     * flush is a GET+PUT at disk latency), so writers that outpace it must
+     * help — otherwise a >>limit working set grows the dcache without bound.
+     * A few slots inline is backpressure, not the old full-table stall. */
+    if (dirty > lim * 2) {
+        for (int i = 0; i < 8; i++) {
+            uint32_t s = __atomic_fetch_add(&g_reclaim.cursor, 1,
+                                            __ATOMIC_RELAXED) &
+                         (DCACHE_SLOTS - 1);
+            (void)dcache_flush_slot(s, 0, 0);
+            if (__atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_RELAXED) <=
+                lim * 2)
+                break;
+        }
+    }
+}
+
+/* Stop the reclaim pool before shutdown-time state (conns, export) goes
+ * away; an in-flight flush would otherwise touch freed client state. Waits
+ * until no worker is mid-flush. */
+void efs_dcache_reclaim_stop(void)
+{
+    pthread_mutex_lock(&g_reclaim.mu);
+    g_reclaim.shutdown = 1;
+    pthread_cond_broadcast(&g_reclaim.cv);
+    while (g_reclaim.active > 0)
+        pthread_cond_wait(&g_reclaim.cv, &g_reclaim.mu);
+    pthread_mutex_unlock(&g_reclaim.mu);
 }
 
 /* Persistent PUT workers draining a shared FIFO of chunk jobs. Reentrant:

@@ -406,6 +406,9 @@ void efs_client_shutdown(void)
         return;
     done = 1;
 
+    /* Quiesce the reclaim pool first: its in-flight GET/PUT would otherwise
+     * race the connection teardown below. */
+    efs_dcache_reclaim_stop();
     /* Persist any write-combined chunks before tearing down connections. */
     (void)efs_dcache_flush_all();
 
