@@ -314,7 +314,7 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
             if (keep != 0) {
                 /* Rewrite last kept chunk with a zeroed tail so a later
                  * truncate-up does not resurrect discarded bytes. */
-                uint8_t *chunk = malloc(chunk_size);
+                uint8_t *chunk = efs_buf_alloc(chunk_size);
                 if (!chunk)
                     return EFS_ERR_NOMEM;
                 memset(chunk, 0, chunk_size);
@@ -327,7 +327,7 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
                 memset(chunk + keep, 0, chunk_size - keep);
                 int wrc = efs_client_write(ino, chunk_start, chunk_size,
                                            (const char *)chunk);
-                free(chunk);
+                efs_buf_free(chunk, chunk_size);
                 if (wrc != 0)
                     return wrc;
                 first_drop = ci + 1;

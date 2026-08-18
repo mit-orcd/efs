@@ -37,6 +37,7 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
               src/client/ops.c \
               src/client/read.c \
               src/client/write.c \
+              src/client/bufpool.c \
               src/client/inode_rpc.c \
               src/client/node_cache.c
 

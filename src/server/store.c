@@ -194,6 +194,24 @@ struct efs_export *server_get_export(struct efsd_server *s, efs_export_id_t id)
     return NULL;
 }
 
+/* Exact-name lookup with NO side effects. server_find_export creates (or
+ * rebrands a placeholder into) an export on miss — correct for CREATE_EXPORT,
+ * disastrous on read paths: a GET_META for a typo'd name used to MINT an
+ * empty export and serve it, mounting the client onto a void table whose
+ * flushes then lost every generation check against the real export[0]. */
+struct efs_export *server_find_export_no_create(struct efsd_server *s,
+                                                const char *name)
+{
+    if (!s || !name || !*name)
+        return NULL;
+    for (uint32_t i = 0; i < s->export_count; i++) {
+        if (!export_is_placeholder(&s->exports[i]) &&
+            strcmp(s->exports[i].name, name) == 0)
+            return &s->exports[i];
+    }
+    return NULL;
+}
+
 int server_export_index_locked(struct efsd_server *s, struct efs_export *ex)
 {
     if (!ex)

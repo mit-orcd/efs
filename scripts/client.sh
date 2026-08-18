@@ -110,6 +110,13 @@ if [ -z "${FUSE_THREAD_STACK:-}" ]; then
     export FUSE_THREAD_STACK=8388608
 fi
 
+# Cap glibc malloc arenas: with 200+ FUSE/RDMA threads the default
+# 8-per-core arena policy fanned residual malloc churn into ~300 x 64 MiB
+# arenas (16.9 GB of RSS that never returns to the OS).
+if [ -z "${MALLOC_ARENA_MAX:-}" ]; then
+    export MALLOC_ARENA_MAX=4
+fi
+
 LOG_DIR=$(dirname "$MOUNT_PATH")
 LOG_FILE="${EFS_FUSE_LOG:-$LOG_DIR/efs-fuse-$(basename "$MOUNT_PATH").log}"
 

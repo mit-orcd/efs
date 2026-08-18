@@ -7,6 +7,12 @@
 #include <pthread.h>
 #include <sys/types.h>
 
+/* Chunk-buffer pool (bufpool.c): recycles <=EFS_CHUNK_SIZE buffers so the
+ * dcache/rdcache/flush churn stays out of malloc (arena bloat added ~17 GB
+ * of RSS across 200+ threads). Free with the SAME len passed at alloc. */
+void *efs_buf_alloc(uint32_t len);
+void efs_buf_free(void *p, uint32_t len);
+
 struct efs_client {
     struct efs_node nodes[EFS_MAX_NODES];
     uint32_t node_count;

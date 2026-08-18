@@ -1298,7 +1298,10 @@ struct get_batch {
     int remaining;
 };
 
-#define RDCACHE_SLOTS  65536
+/* 4096 x 2 x 128 KiB = 1 GiB worst case (was 16 GiB at 65536 slots). The
+ * kernel page cache already covers buffered reads; this only serves direct
+ * I/O re-reads and dcache RMW bases, which have small working sets. */
+#define RDCACHE_SLOTS  4096
 #define RDCACHE_WAYS   2
 #define RDCACHE_STRIPES 64
 struct rdcache_ent {
@@ -1412,15 +1415,20 @@ void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t le
                 e = &g_rdcache.e[s][w];
         }
     }
-    if (!e->data || e->len < len) {
-        uint8_t *nbuf = realloc(e->data, len);
-        if (!nbuf) {
+    if (e->data && e->len < len) {
+        /* Oversized-chunk export: the pooled buffer can't grow. */
+        efs_buf_free(e->data, e->len);
+        e->data = NULL;
+    }
+    if (!e->data) {
+        /* Pool buffers are EFS_CHUNK_SIZE-capacity; allocate once per way. */
+        e->data = efs_buf_alloc(len);
+        if (!e->data) {
             pthread_mutex_unlock(mu);
             return;
         }
-        e->data = nbuf;
-        e->len = len;
     }
+    e->len = len;
     memcpy(e->data, src, len);
     e->ino = ino;
     e->ci = ci;
@@ -1659,10 +1667,10 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
             memset(&jobs[batch], 0, sizeof(jobs[batch]));
             jobs[batch].ino = ino;
             jobs[batch].ci = ci;
-            jobs[batch].chunk = malloc(chunk_size);
+            jobs[batch].chunk = efs_buf_alloc(chunk_size);
             if (!jobs[batch].chunk) {
                 for (uint32_t j = 0; j < batch; j++)
-                    free(jobs[j].chunk);
+                    efs_buf_free(jobs[j].chunk, chunk_size);
                 return EFS_ERR_NOMEM;
             }
             jobs[batch].rc = EFS_ERR_IO;
@@ -1685,7 +1693,7 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
         for (uint32_t i = 0; i < batch; i++) {
             if (jobs[i].rc != EFS_OK) {
                 for (uint32_t j = i; j < batch; j++)
-                    free(jobs[j].chunk);
+                    efs_buf_free(jobs[j].chunk, chunk_size);
                 return jobs[i].rc;
             }
             uint64_t chunk_start = (uint64_t)jobs[i].ci * chunk_size;
@@ -1696,7 +1704,7 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
             memcpy(buf + total, jobs[i].chunk + chunk_off, to_copy);
             total += to_copy;
             pos += to_copy;
-            free(jobs[i].chunk);
+            efs_buf_free(jobs[i].chunk, chunk_size);
             jobs[i].chunk = NULL;
         }
     }

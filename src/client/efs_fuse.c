@@ -2728,9 +2728,15 @@ int main(int argc, char **argv)
     g_client.export_id = g_client.export.id ? g_client.export.id : 1;
     if (g_client.export.name[0] &&
         strcmp(g_client.export.name, g_client.export_name) != 0) {
+        /* Hard fail: writing into the wrong export used to be possible when
+         * the server minted an empty export for an unknown name — the
+         * client's flushes then lost every generation check against the real
+         * export and looped STALE forever. Refuse instead. */
         fprintf(stderr,
-                "Warning: mounted as '%s' but server export[0] is '%s' (id=%u)\n",
+                "ERROR: requested export '%s' but the cluster serves '%s' "
+                "(id=%u). Refusing to mount the wrong export.\n",
                 g_client.export_name, g_client.export.name, g_client.export_id);
+        return 1;
     }
     printf("export id=%u name=%s\n", g_client.export_id,
            g_client.export.name[0] ? g_client.export.name : g_client.export_name);

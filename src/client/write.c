@@ -2090,7 +2090,19 @@ int efs_client_replicate_metadata(void)
      * retry with exponential backoff + jitter before surfacing failure. */
     int rc = EFS_ERR_NET;
     int hard_fails = 0;
-    for (int attempt = 1; attempt <= 64; attempt++) {
+    /* STALE/BUSY are election races, not outages: the server FIFO grants the
+     * queue head the next free election, so a writer that keeps BEGINing is
+     * guaranteed a turn within one grant cycle. A cycle is N_writers x
+     * flush-time — with 9+ writers flushing a multi-hundred-MB blob that is
+     * minutes, far beyond the old 64-attempt (~58 s) budget, which is why
+     * fsyncs returned EIO under copy storms. Race for up to 4 minutes
+     * (queue entries live 300 s and refresh on every BEGIN). NET/NO_QUORUM
+     * stay short-fused: those mean the cluster is genuinely down. */
+    struct timespec rts;
+    clock_gettime(CLOCK_MONOTONIC, &rts);
+    int64_t race_deadline_ms = (int64_t)rts.tv_sec * 1000 +
+                               (int64_t)rts.tv_nsec / 1000000 + 240000;
+    for (int attempt = 1; attempt <= 512; attempt++) {
         rc = efs_client_replicate_metadata_once();
         if (rc == EFS_OK) {
             g_client.meta_cap_blocked = 0;
@@ -2101,24 +2113,25 @@ int efs_client_replicate_metadata(void)
         if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM &&
             rc != EFS_ERR_STALE && rc != EFS_ERR_BUSY)
             break;
-        /* STALE resyncs (we're behind); BUSY just backs off — another
-         * writer is mid-flush and our gen may still be next. Both are
-         * races against concurrent writers, not outages: keep racing with
-         * jittered backoff. Each election round admits one winner, so with
-         * N writers everyone commits within ~N rounds. NET/NO_QUORUM stay
-         * short-fused: those mean the cluster is genuinely down. */
-        if (rc == EFS_ERR_STALE)
-            efs_client_meta_resync();
         if (rc == EFS_ERR_NET || rc == EFS_ERR_NO_QUORUM) {
             if (++hard_fails >= 4)
                 break;
             fprintf(stderr, "meta replicate attempt %d/4 failed: %s\n",
                     hard_fails, efs_strerror(rc));
             fflush(stderr);
-        } else if (rc == EFS_ERR_STALE && (attempt <= 3 || attempt % 16 == 0)) {
-            fprintf(stderr, "meta replicate attempt %d: %s (racing concurrent writers)\n",
-                    attempt, efs_strerror(rc));
-            fflush(stderr);
+        } else {
+            clock_gettime(CLOCK_MONOTONIC, &rts);
+            int64_t now_ms = (int64_t)rts.tv_sec * 1000 +
+                             (int64_t)rts.tv_nsec / 1000000;
+            if (now_ms >= race_deadline_ms)
+                break;
+            if (rc == EFS_ERR_STALE)
+                efs_client_meta_resync();
+            if (attempt <= 3 || attempt % 16 == 0) {
+                fprintf(stderr, "meta replicate attempt %d: %s (racing concurrent writers)\n",
+                        attempt, efs_strerror(rc));
+                fflush(stderr);
+            }
         }
         useconds_t base = 100000u << (attempt < 4 ? (attempt - 1) : 3);
         usleep(base + (useconds_t)(rand() % 100000));
@@ -3016,7 +3029,7 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
                           uint32_t chunk_size)
 {
     uint32_t frag_len = chunk_size / 2;
-    uint8_t *parity = malloc(frag_len);
+    uint8_t *parity = efs_buf_alloc(frag_len);
     if (!parity)
         return EFS_ERR_NOMEM;
 
@@ -3036,7 +3049,7 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
     efs_place_fragments(g_client.nodes, g_client.node_count, ino, ci, nodes);
     int rc = efs_client_put_fragments_parallel(ino, ci, nodes, cfrags, frag_len,
                                                checksums);
-    free(parity);
+    efs_buf_free(parity, frag_len);
     if (rc != EFS_OK)
         return rc;
 
@@ -3101,7 +3114,7 @@ void efs_dcache_drop(efs_ino_t ino, uint32_t ci)
     if (head->ino == ino && head->ci == ci) {
         if (head->dirty && head->len)
             dcache_note_dirty_bytes(-(int64_t)head->len);
-        free(head->data);
+        efs_buf_free(head->data, head->len);
         if (head->next) {
             struct dcache_ent *n = head->next;
             *head = *n;
@@ -3118,7 +3131,7 @@ void efs_dcache_drop(efs_ino_t ino, uint32_t ci)
             if (e->dirty && e->len)
                 dcache_note_dirty_bytes(-(int64_t)e->len);
             prev->next = e->next;
-            free(e->data);
+            efs_buf_free(e->data, e->len);
             free(e);
             break;
         }
@@ -3186,7 +3199,7 @@ static int dcache_load_and_patch(efs_ino_t ino, uint32_t ci, uint32_t off,
     if (dcache_patch(ino, ci, off, src, len) == 0)
         return 0;
 
-    uint8_t *chunk = malloc(cs);
+    uint8_t *chunk = efs_buf_alloc(cs);
     if (!chunk)
         return -1;
 
@@ -3203,7 +3216,7 @@ static int dcache_load_and_patch(efs_ino_t ino, uint32_t ci, uint32_t off,
     }
     memcpy(chunk + off, src, len);
     if (dcache_merge_owned(ino, ci, off, src, len, chunk, cs) != 0) {
-        free(chunk);
+        efs_buf_free(chunk, cs);
         return -1;
     }
     uint32_t s = dcache_slot(ino, ci);
@@ -3258,13 +3271,15 @@ static int dcache_fill(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
                        const uint8_t *chunk, uint32_t chunk_size)
 {
     int was_dirty = e->dirty && e->data;
-    if (e->len != chunk_size || !e->data) {
-        uint8_t *nbuf = realloc(e->data, chunk_size);
-        if (!nbuf)
+    /* Pool buffers are always EFS_CHUNK_SIZE-capacity; only allocate when
+     * the slot has none. (The old realloc path also mixed pool/non-pool
+     * buffers, which the pool's len-keyed free can't distinguish.) */
+    if (!e->data) {
+        e->data = efs_buf_alloc(chunk_size);
+        if (!e->data)
             return EFS_ERR_NOMEM;
-        e->data = nbuf;
-        e->len = chunk_size;
     }
+    e->len = chunk_size;
     memcpy(e->data, chunk, chunk_size);
     e->ino = ino;
     e->ci = ci;
@@ -3276,14 +3291,14 @@ static int dcache_fill(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
     return 0;
 }
 
-/* Take ownership of a malloc'd assemble buffer. Caller must not free
+/* Take ownership of a pool-allocated assemble buffer. Caller must not free
  * `chunk` after success. */
 static int dcache_take(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
                        uint8_t *chunk, uint32_t chunk_size)
 {
     int was_dirty = e->dirty && e->data;
     if (e->data && e->data != chunk)
-        free(e->data);
+        efs_buf_free(e->data, e->len);
     e->data = chunk;
     e->len = chunk_size;
     e->ino = ino;
@@ -3385,7 +3400,7 @@ static int dcache_merge_owned(efs_ino_t ino, uint32_t ci, uint32_t off,
         memcpy(e->data + off, src, len);
         dcache_add_range(e, off, len);
         pthread_mutex_unlock(mu);
-        free(chunk);
+        efs_buf_free(chunk, cs);
         efs_rdcache_invalidate(ino, ci);
         return 0;
     }
@@ -3417,7 +3432,7 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
             memcpy(roff, e->roff, (size_t)nrange * sizeof(uint32_t));
             memcpy(rlen, e->rlen, (size_t)nrange * sizeof(uint32_t));
         }
-        uint8_t *copy = malloc(len);
+        uint8_t *copy = efs_buf_alloc(len);
         if (!copy) {
             pthread_mutex_unlock(mu);
             return EFS_ERR_NOMEM;
@@ -3432,9 +3447,9 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
         dcache_note_dirty_bytes(-(int64_t)len);
         pthread_mutex_unlock(mu);
         if (!have_base) {
-            uint8_t *base = malloc(len);
+            uint8_t *base = efs_buf_alloc(len);
             if (!base) {
-                free(copy);
+                efs_buf_free(copy, len);
                 pthread_mutex_lock(mu);
                 if (e->ino == ino && e->ci == ci && e->data && !e->dirty) {
                     e->dirty = 1;
@@ -3452,8 +3467,8 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
                                       (char *)base, &got);
             }
             if (rrc != EFS_OK) {
-                free(base);
-                free(copy);
+                efs_buf_free(base, len);
+                efs_buf_free(copy, len);
                 pthread_mutex_lock(mu);
                 if (e->ino == ino && e->ci == ci && e->data && !e->dirty) {
                     e->dirty = 1;
@@ -3471,10 +3486,10 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
                     memcpy(base + roff[i], copy + roff[i], rlen[i]);
             }
             memcpy(copy, base, len);
-            free(base);
+            efs_buf_free(base, len);
         }
         int prc = dcache_put_now(ino, ci, copy, len);
-        free(copy);
+        efs_buf_free(copy, len);
         pthread_mutex_lock(mu);
         if (prc != EFS_OK) {
             if (rc == EFS_OK)
@@ -3488,7 +3503,7 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
             continue;
         }
         if (!e->dirty && e->ino == ino && e->ci == ci) {
-            free(e->data);
+            efs_buf_free(e->data, e->len);
             e->data = NULL;
             e->len = 0;
             e->ino = 0;
@@ -3576,7 +3591,10 @@ static pthread_once_t g_reclaim_once = PTHREAD_ONCE_INIT;
 
 static uint64_t dcache_reclaim_limit(void)
 {
-    uint64_t lim = 2ull << 30;
+    /* 512 MiB default (was 2 GiB): push data down the pipe sooner. The
+     * write-behind window only needs to absorb burst jitter, not hold
+     * minutes of throughput. */
+    uint64_t lim = 512ull << 20;
     const char *env = getenv("EFS_DCACHE_BYTES");
     if (env && *env) {
         char *end = NULL;
@@ -3820,11 +3838,17 @@ static void *chunk_put_worker(void *arg)
         }
 
         /* Full overwrite: encode in place from the caller's buffer — skip the
-         * extra 128 KiB assemble memcpy that showed up as 8–10% of seq write. */
-        uint8_t *parity = malloc(frag_len);
-        if (!parity) {
-            job->rc = EFS_ERR_NOMEM;
-            return NULL;
+         * extra 128 KiB assemble memcpy that showed up as 8–10% of seq write.
+         * Parity scratch is a per-thread static (default geometry): one less
+         * malloc/free per chunk PUT. */
+        static __thread uint8_t parity_tls[EFS_FRAGMENT_SIZE];
+        uint8_t *parity = parity_tls;
+        if (frag_len > EFS_FRAGMENT_SIZE) {
+            parity = malloc(frag_len);
+            if (!parity) {
+                job->rc = EFS_ERR_NOMEM;
+                return NULL;
+            }
         }
         uint8_t *frags[EFS_NUM_FRAGMENTS];
         const uint8_t *src = (const uint8_t *)job->buf + src_off;
@@ -3839,7 +3863,8 @@ static void *chunk_put_worker(void *arg)
                             job->ci, job->nodes);
         job->rc = efs_client_put_fragments_parallel(
             job->ino, job->ci, job->nodes, cfrags2, frag_len, job->checksums);
-        free(parity);
+        if (frag_len > EFS_FRAGMENT_SIZE)
+            free(parity);
         efs_rdcache_invalidate(job->ino, job->ci);
         if (job->rc == EFS_OK)
             efs_dcache_drop(job->ino, job->ci);
@@ -3848,14 +3873,20 @@ static void *chunk_put_worker(void *arg)
         return NULL;
     }
 
-    /* Heap-allocate — large chunks exceed some FUSE/pthread stacks when the
-     * worker runs inline on a FUSE thread (pthread_create failed / batch=1). */
-    uint8_t *chunk = malloc(chunk_size);
-    uint8_t *frag_buf = malloc(EFS_NUM_FRAGMENTS * frag_len);
+    /* Pool-allocate the assemble buffer (malloc churn here was the arena
+     * bloat source); frag scratch is a per-thread static for the default
+     * geometry. Heap, not stack: large chunks exceed some FUSE/pthread
+     * stacks when the worker runs inline on a FUSE thread. */
+    static __thread uint8_t frag_tls[EFS_NUM_FRAGMENTS * EFS_FRAGMENT_SIZE];
+    uint8_t *chunk = efs_buf_alloc(chunk_size);
+    uint8_t *frag_buf = frag_tls;
     uint8_t *frags[EFS_NUM_FRAGMENTS];
+    if (frag_len > EFS_FRAGMENT_SIZE)
+        frag_buf = malloc(EFS_NUM_FRAGMENTS * frag_len);
     if (!chunk || !frag_buf) {
-        free(chunk);
-        free(frag_buf);
+        efs_buf_free(chunk, chunk_size);
+        if (frag_buf != frag_tls)
+            free(frag_buf);
         job->rc = EFS_ERR_NOMEM;
         return NULL;
     }
@@ -3866,8 +3897,9 @@ static void *chunk_put_worker(void *arg)
                                    job->buf, chunk_start, wr_start, wr_end,
                                    chunk_size, chunk, &from_zero);
     if (arc != EFS_OK) {
-        free(chunk);
-        free(frag_buf);
+        efs_buf_free(chunk, chunk_size);
+        if (frag_buf != frag_tls)
+            free(frag_buf);
         job->rc = arc;
         return NULL;
     }
@@ -3887,8 +3919,9 @@ static void *chunk_put_worker(void *arg)
         (void)dcache_store(job->ino, job->ci, chunk, chunk_size);
     else
         efs_dcache_drop(job->ino, job->ci);
-    free(chunk);
-    free(frag_buf);
+    efs_buf_free(chunk, chunk_size);
+    if (frag_buf != frag_tls)
+        free(frag_buf);
     return NULL;
 }
 
@@ -4254,12 +4287,16 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
         uint64_t wr_end = (end < chunk_start + chunk_size) ? end
                                                               : chunk_start + chunk_size;
 
-        uint8_t *chunk = malloc(chunk_size);
-        uint8_t *frag_buf = malloc(EFS_NUM_FRAGMENTS * frag_len);
+        static __thread uint8_t frag_tls[EFS_NUM_FRAGMENTS * EFS_FRAGMENT_SIZE];
+        uint8_t *chunk = efs_buf_alloc(chunk_size);
+        uint8_t *frag_buf = frag_tls;
         uint8_t *frags[EFS_NUM_FRAGMENTS];
+        if (frag_len > EFS_FRAGMENT_SIZE)
+            frag_buf = malloc(EFS_NUM_FRAGMENTS * frag_len);
         if (!chunk || !frag_buf) {
-            free(chunk);
-            free(frag_buf);
+            efs_buf_free(chunk, chunk_size);
+            if (frag_buf != frag_tls)
+                free(frag_buf);
             return EFS_ERR_NOMEM;
         }
         frag_ptrs(frag_buf, frag_len, frags);
@@ -4268,8 +4305,9 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
                                        chunk_start, wr_start, wr_end,
                                        chunk_size, chunk, &from_zero);
         if (arc != EFS_OK) {
-            free(chunk);
-            free(frag_buf);
+            efs_buf_free(chunk, chunk_size);
+            if (frag_buf != frag_tls)
+                free(frag_buf);
             return arc;
         }
 
@@ -4287,8 +4325,9 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
 
         int rc = efs_client_put_fragments_parallel(ino, ci, nodes, cfrags, frag_len,
                                                    checksums);
-        free(chunk);
-        free(frag_buf);
+        efs_buf_free(chunk, chunk_size);
+        if (frag_buf != frag_tls)
+            free(frag_buf);
         if (rc != EFS_OK)
             return rc;
 

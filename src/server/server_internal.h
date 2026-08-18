@@ -136,6 +136,9 @@ extern struct efsd_server *g_server;
 
 /* Find or create an export by name. */
 struct efs_export *server_find_export(struct efsd_server *s, const char *name);
+/* Exact-name lookup without create/placeholder-rebrand side effects. */
+struct efs_export *server_find_export_no_create(struct efsd_server *s,
+                                                const char *name);
 
 /* Get export by id. */
 struct efs_export *server_get_export(struct efsd_server *s, efs_export_id_t id);

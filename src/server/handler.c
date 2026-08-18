@@ -522,7 +522,9 @@ send_reply:
                 memset(want, 0, sizeof(want));
                 memcpy(want, payload,
                        payload_len < EFS_MAX_NAME ? payload_len : EFS_MAX_NAME - 1);
-                ex = server_find_export(g_server, want);
+                /* Read path must not mint exports: exact match only, else
+                 * fall back to the primary export (client checks the name). */
+                ex = server_find_export_no_create(g_server, want);
             }
             if (!ex && g_server->export_count > 0)
                 ex = &g_server->exports[0];
@@ -582,7 +584,12 @@ send_reply:
                     uint64_t committed = ex->meta_fragmented
                                              ? ex->root.generation : 0;
                     br.committed_gen = committed;
-                    if (b.gen <= committed) {
+                    if (b.export_id && ex->id && b.export_id != ex->id) {
+                        /* Wrong export: fail loudly. Judging a foreign
+                         * export's gen against ours answers STALE forever,
+                         * which the client retries as a resync loop. */
+                        br.status = EFS_PUT_META_ERROR;
+                    } else if (b.gen <= committed) {
                         br.status = EFS_PUT_META_STALE;
                     } else {
                         uint64_t now = handler_now_ms();
@@ -649,7 +656,18 @@ send_reply:
                          * dropped PUT_META) legitimately observes a gap. Accept
                          * any strictly-newer gen; the fence+rebuild below brings
                          * the tables convergent with the newest root. */
-                        if (ex->meta_fragmented &&
+                        if (ex->meta_fragmented && ex->id && root.id &&
+                            root.id != ex->id) {
+                            /* Root for a different export than the one this
+                             * server established: reject loudly (see BEGIN). */
+                            fprintf(stderr,
+                                    "put-meta: rejecting root for export "
+                                    "id=%u name='%s' (serving id=%u '%s')\n",
+                                    root.id, root.name, ex->id, ex->name);
+                            reply = EFS_PUT_META_ERROR;
+                            pthread_mutex_unlock(&g_server->lock);
+                            efs_export_root_free(&root);
+                        } else if (ex->meta_fragmented &&
                             root.generation <= ex->root.generation) {
                             reply = EFS_PUT_META_STALE;
                             pthread_mutex_unlock(&g_server->lock);
