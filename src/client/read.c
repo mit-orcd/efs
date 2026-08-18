@@ -1253,16 +1253,18 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
 
         /* Verify payload. Known-zero digests are trusted (writer/store already
          * short-circuit zeros); avoid a 64KiB memcmp on every GET.
-         * EFS_SKIP_READ_VERIFY=1 skips the blake3 re-hash entirely — at GB/s
-         * per client the inline verify costs several cores and caps the frag
-         * pool. Benchmarks only: drops the end-to-end integrity check. */
-        static int skip_verify = -1;
-        if (skip_verify < 0) {
-            const char *v = getenv("EFS_SKIP_READ_VERIFY");
-            skip_verify = (v && *v && strcmp(v, "0") != 0) ? 1 : 0;
+         * Read-verify is OFF by default: at GB/s per client the inline
+         * blake3 re-hash costs several cores and caps the frag pool, and
+         * integrity is already covered server-side (write-time verify plus
+         * the background scrubber, which also heals). EFS_READ_VERIFY=1
+         * re-enables the end-to-end check for RDMA-CRC/ECC paranoia. */
+        static int read_verify = -1;
+        if (read_verify < 0) {
+            const char *v = getenv("EFS_READ_VERIFY");
+            read_verify = (v && *v && strcmp(v, "0") != 0) ? 1 : 0;
         }
         int sum_ok;
-        if (skip_verify) {
+        if (!read_verify) {
             sum_ok = 1;
         } else {
             uint8_t zero_ck[EFS_HASH_SIZE];

@@ -23,6 +23,7 @@ struct verify_job {
 struct verify_pool {
     int running;
     pthread_t tid;
+    pthread_t scrub_tid;
     pthread_mutex_t lock;
     pthread_cond_t cv;
     struct verify_job q[VERIFY_Q];
@@ -281,6 +282,102 @@ static void *verify_thread(void *arg)
     return NULL;
 }
 
+/* Background scrubber: with client read-verify off by default, disk rot on
+ * cold data is found only here. Walks the live chunk table in small batches
+ * and enqueues a verify job for every fragment this node owns; verify_one
+ * re-hashes and heals from peers on mismatch. Best-effort: the index cursor
+ * is approximate across table rebuilds (rows may shift), so individual
+ * chunks can be skipped or repeated within a pass — the next pass covers
+ * them. At SCRUB_BATCH per SCRUB_SLEEP_MS a multi-million-chunk table takes
+ * hours per sweep, which is the intended disk-rot cadence. */
+#define SCRUB_BATCH 128
+#define SCRUB_SLEEP_MS 1000
+
+struct scrub_ent {
+    efs_ino_t ino;
+    uint32_t ci;
+    uint32_t fi;
+    uint32_t len;
+    uint8_t ck[EFS_HASH_SIZE];
+};
+
+static void *scrub_thread(void *arg)
+{
+    struct efsd_server *s = arg;
+    uint64_t cursor = 0;
+    static struct scrub_ent batch[SCRUB_BATCH];
+
+    for (;;) {
+        pthread_mutex_lock(&g_vfy.lock);
+        int running = g_vfy.running;
+        pthread_mutex_unlock(&g_vfy.lock);
+        if (!running)
+            break;
+
+        uint32_t bn = 0;
+        efs_export_id_t eid = 0;
+        pthread_mutex_lock(&s->lock);
+        if (s->export_count > 0) {
+            struct efs_export *ex = &s->exports[0];
+            if (ex->meta_fragmented && !ex->meta_needs_rebuild &&
+                ex->chunk_count > 0) {
+                eid = ex->id;
+                uint64_t n = ex->chunk_count;
+                if (cursor >= n)
+                    cursor = 0;
+                uint8_t zck[EFS_HASH_SIZE];
+                uint32_t zck_len = 0;
+                uint64_t i = cursor;
+                for (; i < n && bn < SCRUB_BATCH; i++) {
+                    const struct efs_chunk_entry *ce = &ex->chunks[i];
+                    if (ce->ino == EFS_META_TABLE_INO)
+                        continue;
+                    uint32_t fi = EFS_NUM_FRAGMENTS;
+                    for (uint32_t k = 0; k < EFS_NUM_FRAGMENTS; k++)
+                        if (ce->fragment_nodes[k] == s->id) {
+                            fi = k;
+                            break;
+                        }
+                    if (fi == EFS_NUM_FRAGMENTS)
+                        continue;
+                    uint32_t fl = server_frag_len(ex, ce->ino);
+                    if (fl == 0)
+                        continue;
+                    if (zck_len != fl) {
+                        efs_hash_zero_fragment_len(fl, zck);
+                        zck_len = fl;
+                    }
+                    if (memcmp(ce->checksums[fi], zck, EFS_HASH_SIZE) == 0)
+                        continue; /* sparse zero chunk: nothing on disk */
+                    batch[bn].ino = ce->ino;
+                    batch[bn].ci = ce->chunk_index;
+                    batch[bn].fi = fi;
+                    batch[bn].len = fl;
+                    memcpy(batch[bn].ck, ce->checksums[fi], EFS_HASH_SIZE);
+                    bn++;
+                }
+                cursor = i;
+            }
+        }
+        pthread_mutex_unlock(&s->lock);
+
+        for (uint32_t j = 0; j < bn; j++)
+            server_verify_enqueue(s, eid, batch[j].ino, batch[j].ci,
+                                  batch[j].fi, batch[j].len, batch[j].ck);
+
+        /* Stoppable sleep: shutdown must not wait a full interval. */
+        for (int w = 0; w < SCRUB_SLEEP_MS / 50; w++) {
+            usleep(50000);
+            pthread_mutex_lock(&g_vfy.lock);
+            running = g_vfy.running;
+            pthread_mutex_unlock(&g_vfy.lock);
+            if (!running)
+                break;
+        }
+    }
+    return NULL;
+}
+
 int server_verify_start(struct efsd_server *s)
 {
     memset(&g_vfy, 0, sizeof(g_vfy));
@@ -291,6 +388,10 @@ int server_verify_start(struct efsd_server *s)
     if (efsd_pthread_create(&g_vfy.tid, verify_thread, s) != 0) {
         g_vfy.running = 0;
         return -1;
+    }
+    if (efsd_pthread_create(&g_vfy.scrub_tid, scrub_thread, s) != 0) {
+        /* Scrubber is best-effort: the write/read verify pool still works. */
+        g_vfy.scrub_tid = 0;
     }
     return 0;
 }
@@ -303,6 +404,8 @@ void server_verify_stop(struct efsd_server *s)
     pthread_cond_broadcast(&g_vfy.cv);
     pthread_mutex_unlock(&g_vfy.lock);
     pthread_join(g_vfy.tid, NULL);
+    if (g_vfy.scrub_tid)
+        pthread_join(g_vfy.scrub_tid, NULL);
     pthread_mutex_destroy(&g_vfy.lock);
     pthread_cond_destroy(&g_vfy.cv);
     g_vfy_s = NULL;

@@ -389,12 +389,42 @@ void server_handle_conn(struct efs_conn *conn)
                     if (rc != 0) {
                         reply[0] = EFS_GET_CHUNK_NOT_FOUND;
                     } else {
+                        /* Server-side read-verify for data fragments: the
+                         * .sum sidecar is already in hand, so one blake3
+                         * detects disk rot on the read path without any
+                         * client CPU. A mismatch fails this fragment (the
+                         * client's 2+1 decode falls back to the other
+                         * fragments) and queues a heal. Meta pages skip this:
+                         * their integrity is the EFSR root checksums, and
+                         * dual-slot churn would obsolete the jobs anyway.
+                         * Default on; EFS_SERVER_READ_VERIFY=0 disables. */
+                        static int srv_verify = -1;
+                        if (srv_verify < 0) {
+                            const char *v = getenv("EFS_SERVER_READ_VERIFY");
+                            srv_verify = !(v && *v && strcmp(v, "0") == 0);
+                        }
+                        if (srv_verify && sum_ok &&
+                            req->ino != EFS_META_TABLE_INO) {
+                            uint8_t vh[EFS_HASH_SIZE];
+                            efs_hash(dptr, data_len, vh);
+                            if (memcmp(vh, reply + 1, EFS_HASH_SIZE) != 0) {
+                                server_verify_enqueue(g_server, req->export_id,
+                                                      req->ino,
+                                                      req->chunk_index,
+                                                      req->fragment_index,
+                                                      data_len, reply + 1);
+                                reply[0] = EFS_GET_CHUNK_NOT_FOUND;
+                                out_len = 1;
+                                goto send_reply;
+                            }
+                        }
                         if (!sum_ok)
                             efs_hash(dptr, data_len, reply + 1);
                         reply[0] = EFS_GET_CHUNK_OK;
                         out_len = 1 + EFS_HASH_SIZE + data_len;
                     }
                 }
+send_reply:
                 if (rdma_buf)
                     efs_rdma_send_commit(conn->rc, reply,
                                          EFS_MSG_GET_CHUNK_REPLY, out_len);
@@ -590,8 +620,10 @@ void server_handle_conn(struct efs_conn *conn)
                 }
                 pthread_mutex_unlock(&g_server->lock);
             }
-            return efs_conn_send_msg(conn, EFS_MSG_META_FLUSH_BEGIN_REPLY,
-                                     &br, sizeof(br));
+            /* Keep the pooled conn alive for the client's page/root PUTs. */
+            efs_conn_send_msg(conn, EFS_MSG_META_FLUSH_BEGIN_REPLY,
+                              &br, sizeof(br));
+            break;
         }
         case EFS_MSG_PUT_META: {
             if (payload_len > 0) {
