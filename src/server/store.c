@@ -818,18 +818,22 @@ void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
     }
 }
 
-static int read_file_bytes(struct efsd_server *s, const char *path,
-                           uint8_t *buf, uint32_t want_len, uint32_t *got)
+/* direct: caller decides per-ino — data fragments only. Metadata pages and
+ * .sum sidecars stay buffered: they are small, randomly re-read (rebuild
+ * sweeps, verify, catch-up), and the kernel cache is a feature there. */
+static int read_file_bytes(const char *path,
+                           uint8_t *buf, uint32_t want_len, uint32_t *got,
+                           int direct)
 {
     int flags = O_RDONLY;
-    if (s->direct_io)
+    if (direct)
         flags |= O_DIRECT;
     int fd = open(path, flags);
     if (fd < 0)
         return EFS_ERR_NOT_FOUND;
 
     ssize_t n;
-    if (s->direct_io) {
+    if (direct) {
         uint8_t *aligned = NULL;
         uint32_t alloc = (want_len + 4095u) & ~4095u;
         if (alloc < 4096)
@@ -865,6 +869,7 @@ struct shard_io_arg {
     uint8_t *buf;
     uint32_t len;
     int is_write;
+    int direct; /* data fragments only; meta stays buffered */
     int result;
 };
 
@@ -873,7 +878,7 @@ static void *shard_io_thread(void *arg)
     struct shard_io_arg *a = arg;
     if (a->is_write) {
         int flags = O_WRONLY | O_CREAT | O_TRUNC;
-        if (a->s->direct_io)
+        if (a->direct)
             flags |= O_DIRECT;
         int fd = open(a->path, flags, 0644);
         if (fd < 0 && errno == ENOENT) {
@@ -885,7 +890,7 @@ static void *shard_io_thread(void *arg)
             return NULL;
         }
         size_t written = 0;
-        if (a->s->direct_io) {
+        if (a->direct) {
             uint8_t *aligned = NULL;
             uint32_t alloc = (a->len + 4095u) & ~4095u;
             if (alloc < 4096)
@@ -960,7 +965,8 @@ static void *shard_io_thread(void *arg)
         a->result = EFS_OK;
     } else {
         uint32_t got = 0;
-        a->result = read_file_bytes(a->s, a->path, a->buf, a->len, &got);
+        a->result = read_file_bytes(a->path, a->buf, a->len, &got,
+                                    a->direct);
         if (a->result == EFS_OK && got < a->len)
             memset(a->buf + got, 0, a->len - got);
     }
@@ -976,7 +982,8 @@ int server_read_fragment(struct efsd_server *s, struct efs_export *ex,
                           sizeof(path));
     uint32_t want = server_frag_len(ex, ino);
     uint32_t got = 0;
-    int rc = read_file_bytes(s, path, data, want, &got);
+    int rc = read_file_bytes(path, data, want, &got,
+                             s->direct_io && ino != EFS_META_TABLE_INO);
     if (rc != EFS_OK)
         return rc;
     *data_len = got;
@@ -1035,6 +1042,7 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
     *sum_ok = 0;
     if (n != 1) {
         uint32_t want = server_frag_len(ex, ino);
+        int direct = s->direct_io && ino != EFS_META_TABLE_INO;
         char dir[8192];
         char path[8300];
         int plen = 0;
@@ -1057,7 +1065,7 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                                      ino, chunk_index);
             plen = snprintf(path, sizeof(path), "%s/%u.%u", dir, chunk_index,
                             fragment_index);
-            rc = read_file_bytes(s, path, data, want, &got);
+            rc = read_file_bytes(path, data, want, &got, direct);
             if (rc == EFS_ERR_NOT_FOUND) {
                 loc->valid = 0;
                 rc = EFS_ERR_NOT_FOUND;
@@ -1071,14 +1079,14 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                                      ex->id, ino, chunk_index);
                 plen = snprintf(path, sizeof(path), "%s/%u.%u", dir,
                                 chunk_index, fragment_index);
-                rc = read_file_bytes(s, path, data, want, &got);
+                rc = read_file_bytes(path, data, want, &got, direct);
                 if (rc == EFS_ERR_NOT_FOUND) {
                     format_ino_chunk_dir_legacy(dir, sizeof(dir),
                                                 s->storage_paths[ri], ex->id,
                                                 ino, chunk_index);
                     plen = snprintf(path, sizeof(path), "%s/%u.%u", dir,
                                     chunk_index, fragment_index);
-                    rc = read_file_bytes(s, path, data, want, &got);
+                    rc = read_file_bytes(path, data, want, &got, direct);
                     if (rc == EFS_OK) {
                         loc->export_id = ex->id;
                         loc->ino = ino;
@@ -1118,6 +1126,7 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
     }
 
     uint32_t want = server_frag_len(ex, ino);
+    int direct = s->direct_io && ino != EFS_META_TABLE_INO;
     char dir[8192];
     char path[8300];
     format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[0], ex->id, ino,
@@ -1125,13 +1134,13 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
     int plen = snprintf(path, sizeof(path), "%s/%u.%u", dir, chunk_index,
                         fragment_index);
     uint32_t got = 0;
-    int rc = read_file_bytes(s, path, data, want, &got);
+    int rc = read_file_bytes(path, data, want, &got, direct);
     if (rc == EFS_ERR_NOT_FOUND) {
         format_ino_chunk_dir_legacy(dir, sizeof(dir), s->storage_paths[0],
                                     ex->id, ino, chunk_index);
         plen = snprintf(path, sizeof(path), "%s/%u.%u", dir, chunk_index,
                         fragment_index);
-        rc = read_file_bytes(s, path, data, want, &got);
+        rc = read_file_bytes(path, data, want, &got, direct);
     }
     if (rc != EFS_OK)
         return rc;
@@ -1646,7 +1655,8 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
     arg.s = s;
     arg.buf = (uint8_t *)data;
     arg.len = data_len;
-    if (s->direct_io)
+    arg.direct = s->direct_io && ino != EFS_META_TABLE_INO;
+    if (arg.direct)
         arg.len = server_frag_len(ex, ino);
     arg.is_write = 1;
     arg.result = EFS_ERR_IO;
