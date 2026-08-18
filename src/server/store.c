@@ -617,6 +617,29 @@ void server_load_exports(struct efsd_server *s)
     closedir(d);
 }
 
+/* One-pass path append helpers. The snprintf chain they replace (7+ calls
+ * per fragment path, 2+ paths per PUT) was ~13% of efsd CPU under the
+ * 9-client ImageNet small-file storm. */
+static inline char *path_append_str(char *p, const char *s)
+{
+    size_t n = strlen(s);
+    memcpy(p, s, n);
+    return p + n;
+}
+
+static inline char *path_append_u64(char *p, uint64_t v)
+{
+    char tmp[20];
+    int n = 0;
+    do {
+        tmp[n++] = (char)('0' + (v % 10));
+        v /= 10;
+    } while (v);
+    while (n)
+        *p++ = tmp[--n];
+    return p;
+}
+
 /* Sharded: .../exports/{id}/{d4}/{d3}/{d2}/{d1}/{d0}/{chunk>>10}
  * seg[0] is the least-significant group (rightmost path component). */
 static int format_ino_chunk_dir(char *path, size_t path_len, const char *root,
@@ -625,11 +648,39 @@ static int format_ino_chunk_dir(char *path, size_t path_len, const char *root,
 {
     char seg[EFS_INO_PATH_SEGS][5];
     efs_ino_path_segments(ino, seg);
-    return snprintf(path, path_len,
-                    "%s/data/exports/%u/%s/%s/%s/%s/%s/%u",
-                    root, export_id,
-                    seg[4], seg[3], seg[2], seg[1], seg[0],
-                    chunk_index >> 10);
+    size_t root_len = strlen(root);
+    /* root + literal + id + 5×("/"+4seg) + "/"+ci — bail to snprintf if the
+     * caller's buffer is unexpectedly tight (never with the 8 KiB stacks). */
+    if (root_len + 96 > path_len)
+        return snprintf(path, path_len,
+                        "%s/data/exports/%u/%s/%s/%s/%s/%s/%u", root,
+                        export_id, seg[4], seg[3], seg[2], seg[1], seg[0],
+                        chunk_index >> 10);
+    char *p = path;
+    p = path_append_str(p, root);
+    p = path_append_str(p, "/data/exports/");
+    p = path_append_u64(p, export_id);
+    for (int i = EFS_INO_PATH_SEGS - 1; i >= 0; i--) {
+        *p++ = '/';
+        memcpy(p, seg[i], 4);
+        p += 4;
+    }
+    *p++ = '/';
+    p = path_append_u64(p, chunk_index >> 10);
+    *p = '\0';
+    return (int)(p - path);
+}
+
+/* Append "/{ci}.{fi}" onto a dir built by format_ino_chunk_dir. */
+static inline char *path_append_frag(char *p, uint32_t chunk_index,
+                                     uint32_t fragment_index)
+{
+    *p++ = '/';
+    p = path_append_u64(p, chunk_index);
+    *p++ = '.';
+    p = path_append_u64(p, fragment_index);
+    *p = '\0';
+    return p;
 }
 
 /* Pre-sharding layout: .../exports/{id}/{ino}/{chunk>>10} */
@@ -675,10 +726,10 @@ static void fragment_path_at(struct efsd_server *s, uint32_t root_idx,
                              uint32_t chunk_index, uint32_t fragment_index,
                              char *path, size_t path_len)
 {
-    char dir[8192];
-    format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[root_idx], ex->id,
-                         ino, chunk_index);
-    snprintf(path, path_len, "%s/%u.%u", dir, chunk_index, fragment_index);
+    int n = format_ino_chunk_dir(path, path_len, s->storage_paths[root_idx],
+                                 ex->id, ino, chunk_index);
+    if (n > 0 && (size_t)n + 32 <= path_len)
+        path_append_frag(path + n, chunk_index, fragment_index);
 }
 
 static void fragment_path_at_legacy(struct efsd_server *s, uint32_t root_idx,
@@ -1189,7 +1240,11 @@ static int write_sum_for_path(const char *frag_path,
                               const uint8_t checksum[EFS_HASH_SIZE])
 {
     char spath[8200];
-    snprintf(spath, sizeof(spath), "%s.sum", frag_path);
+    size_t flen = strlen(frag_path);
+    if (flen + 5 > sizeof(spath))
+        return EFS_ERR_IO;
+    memcpy(spath, frag_path, flen);
+    memcpy(spath + flen, ".sum", 5);
     int fd = open(spath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0)
         return EFS_ERR_IO;
@@ -1610,9 +1665,13 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
                                         const uint8_t *data, uint32_t data_len,
                                         const uint8_t checksum[EFS_HASH_SIZE]);
 
-int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
-                               efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
-                               const uint8_t *data, uint32_t data_len)
+/* path must be the server_fragment_path() result for this fragment — built
+ * once by the caller so with_sum doesn't format it twice per PUT. */
+static int server_write_fragment_to_path(struct efsd_server *s, struct efs_export *ex,
+                                         efs_ino_t ino, uint32_t chunk_index,
+                                         uint32_t fragment_index,
+                                         const uint8_t *data, uint32_t data_len,
+                                         const char *path)
 {
     /* Quota charges logical fragment size (not raw EC bytes), and only once
      * per fragment — overwrites must not inflate the cached used counter.
@@ -1660,8 +1719,11 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
         arg.len = server_frag_len(ex, ino);
     arg.is_write = 1;
     arg.result = EFS_ERR_IO;
-    server_fragment_path(s, ex, ino, chunk_index, fragment_index, arg.path,
-                         sizeof(arg.path));
+    size_t plen = strlen(path);
+    if (plen >= sizeof(arg.path))
+        plen = sizeof(arg.path) - 1;
+    memcpy(arg.path, path, plen);
+    arg.path[plen] = '\0';
     shard_io_thread(&arg);
     if (arg.result != EFS_OK) {
         if (charge_quota) {
@@ -1677,21 +1739,32 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
     return EFS_OK;
 }
 
-/* Combined fragment+checksum write: one dir resolution, the .sum emitted in
- * the same just-created directory (no second make_dir / access walk). */
+int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
+                               efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
+                               const uint8_t *data, uint32_t data_len)
+{
+    char path[8192];
+    server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
+                         sizeof(path));
+    return server_write_fragment_to_path(s, ex, ino, chunk_index,
+                                         fragment_index, data, data_len, path);
+}
+
+/* Combined fragment+checksum write: one path format per PUT — the .sum goes
+ * next to the fragment in the same just-created directory. */
 int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export *ex,
                                         efs_ino_t ino, uint32_t chunk_index,
                                         uint32_t fragment_index,
                                         const uint8_t *data, uint32_t data_len,
                                         const uint8_t checksum[EFS_HASH_SIZE])
 {
-    int rc = server_write_fragment_sync(s, ex, ino, chunk_index, fragment_index,
-                                        data, data_len);
-    if (rc != EFS_OK)
-        return rc;
     char path[8192];
     server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
                          sizeof(path));
+    int rc = server_write_fragment_to_path(s, ex, ino, chunk_index,
+                                           fragment_index, data, data_len, path);
+    if (rc != EFS_OK)
+        return rc;
     return write_sum_for_path(path, checksum);
 }
 

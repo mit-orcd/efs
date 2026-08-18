@@ -779,6 +779,10 @@ int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms)
     }
     int64_t spin_end = now_us() + spin_us();
     int64_t deadline = timeout_ms >= 0 ? now_ms() + timeout_ms : -1;
+    /* now_us() is a vDSO clock_gettime (~20 ns); called per CQ poll it was
+     * ~20% of efs-fuse CPU under the 9-client ecopy storm. Gate the clock to
+     * every 64th poll — spin-exit granularity stays in the low µs. */
+    uint32_t polls = 0;
     for (;;) {
         struct ibv_wc wc;
         int n = ibv_poll_cq(rc->recv_cq, 1, &wc);
@@ -793,7 +797,7 @@ int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms)
                 drain_chan(rc);
             return EFS_OK;
         }
-        if (now_us() < spin_end)
+        if (((++polls) & 63) != 0 || now_us() < spin_end)
             continue;
         if (!rc->armed) {
             if (ibv_req_notify_cq(rc->recv_cq, 0) != 0) {
