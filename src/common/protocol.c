@@ -89,7 +89,7 @@ int efs_recv_msg(int fd, uint8_t *type, void **payload, uint32_t *payload_len)
     if (efs_recv_all(fd, &len, sizeof(len)) != 0)
         return EFS_ERR_NET;
     len = ntohl(len);
-    if (len == 0 || len > 16 * 1024 * 1024)
+    if (len == 0 || len > EFS_MSG_MAX_LEN)
         return EFS_ERR_PROTO;
 
     uint8_t t;
@@ -139,7 +139,7 @@ int efs_recv_msg_into(int fd, uint8_t *type, uint8_t *status,
     if (efs_recv_all(fd, &len, sizeof(len)) != 0)
         return EFS_ERR_NET;
     len = ntohl(len);
-    if (len == 0 || len > 16 * 1024 * 1024)
+    if (len == 0 || len > EFS_MSG_MAX_LEN)
         return EFS_ERR_PROTO;
 
     uint8_t t;

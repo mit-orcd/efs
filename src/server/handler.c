@@ -122,7 +122,7 @@ void server_handle_conn(struct efs_conn *conn)
                 break;
             }
             len = ntohl(len);
-            if (len == 0 || len > 16 * 1024 * 1024)
+            if (len == 0 || len > EFS_MSG_MAX_LEN)
                 break;
             if (efs_recv_all(fd, &type, 1) != 0)
                 break;

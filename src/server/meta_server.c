@@ -357,12 +357,33 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
             continue;
 
         /* Advertised layout, then the other v4↔v5 window, then legacy pi.
-         * A save used to rewrite v4 roots as v5 without moving pages. */
-        uint32_t try_ci[3];
+         * A save used to rewrite v4 roots as v5 without moving pages.
+         * Also try the previous generation's dual-slot: the flush PUTs only
+         * dirty pages, so pages clean at start_gen still live at gen-1 (or
+         * older, same parity) slots while the flipped EFSR matches their
+         * content. The client read path already does this; the rebuild
+         * wedged on restarts without it. */
+        uint32_t try_ci[6];
         int ntry = efs_meta_page_ci_candidates(start_gen, root->version,
                                                root->ino_page_count,
                                                root->chunk_page_count, pi,
                                                try_ci);
+        if (start_gen > 0) {
+            uint32_t alt[3];
+            int na = efs_meta_page_ci_candidates(start_gen - 1,
+                                                 root->version,
+                                                 root->ino_page_count,
+                                                 root->chunk_page_count, pi,
+                                                 alt);
+            for (int i = 0; i < na; i++) {
+                int seen = 0;
+                for (int j = 0; j < ntry; j++)
+                    if (try_ci[j] == alt[i])
+                        seen = 1;
+                if (!seen && ntry < 6)
+                    try_ci[ntry++] = alt[i];
+            }
+        }
 
         int decoded = 0;
         for (int ti = 0; ti < ntry && !decoded; ti++) {
@@ -997,13 +1018,15 @@ int server_fetch_metadata_from(struct efsd_server *s, const char *host, uint16_t
             ex->next_ino = ex->root.next_ino;
             if (efs_chunk_size_valid(ex->root.chunk_size))
                 ex->chunk_size = ex->root.chunk_size;
+            /* Never rebuild here: this runs on the startup rejoin path (main
+             * thread, before accept()) and on the JOIN handler. A synchronous
+             * 2+1 page rebuild blocks accept() for the whole sweep, and when
+             * every node restarts together each peer fetch waits out the full
+             * I/O timeout because the peer's accept loop isn't up yet — the
+             * cluster deadlocks for hours. Install the root, flag the rebuild,
+             * and let the meta catch-up thread do it once we can serve. */
             ex->meta_needs_rebuild = (ex->root.page_count > 0);
-            pthread_mutex_unlock(&s->lock);
-            rc = server_rebuild_export_from_pages(s, ex);
-            pthread_mutex_lock(&s->lock);
-            if (rc == EFS_OK)
-                server_save_export(s, ex);
-            rc = (rc == EFS_OK) ? 0 : -1;
+            rc = 0;
         }
     } else if (efs_meta_blob_is_export(payload, payload_len)) {
         if (efs_export_deserialize(ex, payload, payload_len) == 0) {
@@ -1054,11 +1077,19 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
         s->export_count = 1;
     }
     struct efs_export *ex = &s->exports[0];
-    /* Skip stale or identical generations once we already hold an EFSR root. */
+    /* Skip stale or identical generations once we already hold an EFSR root.
+     * Exception: same generation, our fragment rebuild is stuck (e.g.
+     * dual-slot pages vanished from every node), and the peer shipped its
+     * live tables — adopt them to escape the rebuild dead-end. */
     if (ex->meta_fragmented && root.generation <= ex->root.generation) {
-        pthread_mutex_unlock(&s->lock);
-        efs_export_root_free(&root);
-        return 0;
+        int adopt_same = efsm && efsm_len &&
+                         root.generation == ex->root.generation &&
+                         ex->meta_needs_rebuild;
+        if (!adopt_same) {
+            pthread_mutex_unlock(&s->lock);
+            efs_export_root_free(&root);
+            return 0;
+        }
     }
     if (!ex->meta_fragmented && root.generation == 0) {
         pthread_mutex_unlock(&s->lock);
@@ -1173,6 +1204,7 @@ static void *meta_catchup_thread(void *arg)
         }
         pthread_mutex_unlock(&s->lock);
 
+        int rebuild_failed = 0;
         for (uint32_t e = 0; e < ec; e++) {
             if (!need[e] || !s->running)
                 continue;
@@ -1191,6 +1223,7 @@ static void *meta_catchup_thread(void *arg)
                 fprintf(stderr, "meta-catchup: rebuild export=%s rc=%d\n",
                         ex->name, rc);
                 /* Decode/IO failure: back off; leave meta_needs_rebuild set. */
+                rebuild_failed = 1;
             }
         }
 
@@ -1207,7 +1240,10 @@ static void *meta_catchup_thread(void *arg)
         }
         pthread_mutex_unlock(&s->lock);
 
-        if (!any_dirty && node_count > 1 && s->running) {
+        /* Poll peers when clean (normal catch-up) OR when a rebuild just
+         * failed: a peer holding live tables at the same generation can
+         * ship its blob, which fragment rebuild may be unable to recover. */
+        if ((!any_dirty || rebuild_failed) && node_count > 1 && s->running) {
             int prc = catchup_poll_peer_root(s);
             if (prc > 0)
                 did_work = 1;

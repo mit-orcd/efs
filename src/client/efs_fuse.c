@@ -1092,8 +1092,15 @@ static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
     struct efs_inode ino;
     if (efs_client_lookup(path, &ino) != 0)
         return -ENOENT;
-    if (fi)
+    if (fi) {
         fi->fh = ino.ino;
+        /* FUSE does not propagate O_DIRECT on its own: unless the daemon
+         * echoes it into direct_io, "direct" reads are silently served from
+         * the page cache (fio direct=1 benchmarks then measure DRAM, not the
+         * network). */
+        if (fi->flags & O_DIRECT)
+            fi->direct_io = 1;
+    }
     return 0;
 }
 
@@ -2017,8 +2024,11 @@ static int efs_fuse_create(const char *path, mode_t mode, struct fuse_file_info 
                     e == -EIO ? "EIO" : "err");
         return e;
     }
-    if (fi)
+    if (fi) {
         fi->fh = ino;
+        if (fi->flags & O_DIRECT)
+            fi->direct_io = 1;
+    }
     return 0;
 }
 

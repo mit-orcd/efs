@@ -8,6 +8,13 @@
 /* Length-prefixed TCP frames: 4 bytes length (network order), 1 byte type,
  * length-1 bytes payload. */
 
+/* Sanity bound on one frame's payload. GET_META_REPLY carries the full EFSM
+ * blob: ~315 B per file (inode + chunk entry + name), so a 1.33M-file
+ * ImageNet copy is already ~420 MB and the old 256 MB cap made mounts of
+ * such exports fail with EFS_ERR_NET. 1 GiB covers ~3.4M files; still
+ * bounds bogus mallocs. */
+#define EFS_MSG_MAX_LEN (1024u * 1024 * 1024)
+
 enum efs_msg_type {
     EFS_MSG_HEARTBEAT = 0,
     EFS_MSG_HEARTBEAT_ACK = 1,

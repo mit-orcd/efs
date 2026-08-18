@@ -983,11 +983,48 @@ int server_read_fragment(struct efsd_server *s, struct efs_export *ex,
     return EFS_OK;
 }
 
-/* Combined fragment+checksum read. Single-root fast path: one dir format,
- * direct opens, legacy layout tried only on ENOENT — the generic resolver
- * otherwise burns several snprintf path builds and access() probes per GET.
- * *sum_ok is set when the sidecar supplied the sum (caller hashes otherwise).
- * Multi-root keeps the generic probe pair (placement can be on any root). */
+/* Per-thread resolved-location cache for multi-root reads. Adaptive write
+ * placement makes the root non-deterministic, so without a hint every GET
+ * open()-probes roots×layouts through a deep dir walk — the top server CPU
+ * cost at scale. A hit turns the probe into one open; the open itself
+ * validates the entry (ENOENT -> reprobe and refill). Caveat: if an
+ * overwrite left duplicate fragments on several roots, a cached entry may
+ * return a different copy than canonical probe order would (both are
+ * checksum-valid generations; the probe order itself is already arbitrary
+ * in that case). */
+/* Sized so a conn thread's share of a multi-client streaming working set
+ * (several thousand fragments) fits; a direct-mapped cache smaller than
+ * the cyclical working set thrashes to ~0% hits. */
+#define FRAG_LOC_CACHE_SIZE 16384
+struct frag_loc {
+    efs_export_id_t export_id;
+    efs_ino_t ino;
+    uint32_t chunk_index;
+    uint32_t fragment_index;
+    uint8_t root;
+    uint8_t legacy;
+    uint8_t valid;
+};
+static __thread struct frag_loc frag_loc_cache[FRAG_LOC_CACHE_SIZE];
+
+static uint32_t frag_loc_slot(efs_export_id_t export_id, efs_ino_t ino,
+                              uint32_t chunk_index, uint32_t fragment_index)
+{
+    uint64_t h = (uint64_t)ino * 0x9e3779b97f4a7c15ull;
+    h ^= (uint64_t)chunk_index * 0xbf58476d1ce4e5b9ull;
+    h ^= (uint64_t)fragment_index << 1;
+    h ^= (uint64_t)export_id * 0x2545f4914f6cdd1dull;
+    h ^= h >> 29;
+    return (uint32_t)h & (FRAG_LOC_CACHE_SIZE - 1);
+}
+
+/* Combined fragment+checksum read. Single probe pass per GET: the data
+ * open() itself is the probe (no access()+open() doubling), and the .sum
+ * sidecar rides the same resolved path instead of running a second
+ * all-roots probe loop. Probe order matches server_find_fragment_root
+ * (roots low to high, new layout before legacy) so duplicate-shadowing
+ * semantics are unchanged. *sum_ok is set when the sidecar supplied the
+ * sum (caller hashes otherwise). */
 int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index, uint8_t *data,
@@ -997,12 +1034,86 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
     *sum_ok = 0;
     if (n != 1) {
-        int rc = server_read_fragment(s, ex, ino, chunk_index, fragment_index,
-                                      data, data_len);
+        uint32_t want = server_frag_len(ex, ino);
+        char dir[8192];
+        char path[8300];
+        int plen = 0;
+        uint32_t got = 0;
+        int rc = EFS_ERR_NOT_FOUND;
+        struct frag_loc *loc =
+            &frag_loc_cache[frag_loc_slot(ex->id, ino, chunk_index,
+                                          fragment_index)];
+        if (loc->valid && loc->export_id == ex->id && loc->ino == ino &&
+            loc->chunk_index == chunk_index &&
+            loc->fragment_index == fragment_index &&
+            loc->root < n) {
+            if (loc->legacy)
+                format_ino_chunk_dir_legacy(dir, sizeof(dir),
+                                            s->storage_paths[loc->root],
+                                            ex->id, ino, chunk_index);
+            else
+                format_ino_chunk_dir(dir, sizeof(dir),
+                                     s->storage_paths[loc->root], ex->id,
+                                     ino, chunk_index);
+            plen = snprintf(path, sizeof(path), "%s/%u.%u", dir, chunk_index,
+                            fragment_index);
+            rc = read_file_bytes(s, path, data, want, &got);
+            if (rc == EFS_ERR_NOT_FOUND) {
+                loc->valid = 0;
+                rc = EFS_ERR_NOT_FOUND;
+            } else if (rc != EFS_OK) {
+                return rc;
+            }
+        }
+        if (rc == EFS_ERR_NOT_FOUND) {
+            for (uint32_t ri = 0; ri < n; ri++) {
+                format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[ri],
+                                     ex->id, ino, chunk_index);
+                plen = snprintf(path, sizeof(path), "%s/%u.%u", dir,
+                                chunk_index, fragment_index);
+                rc = read_file_bytes(s, path, data, want, &got);
+                if (rc == EFS_ERR_NOT_FOUND) {
+                    format_ino_chunk_dir_legacy(dir, sizeof(dir),
+                                                s->storage_paths[ri], ex->id,
+                                                ino, chunk_index);
+                    plen = snprintf(path, sizeof(path), "%s/%u.%u", dir,
+                                    chunk_index, fragment_index);
+                    rc = read_file_bytes(s, path, data, want, &got);
+                    if (rc == EFS_OK) {
+                        loc->export_id = ex->id;
+                        loc->ino = ino;
+                        loc->chunk_index = chunk_index;
+                        loc->fragment_index = fragment_index;
+                        loc->root = (uint8_t)ri;
+                        loc->legacy = 1;
+                        loc->valid = 1;
+                    }
+                } else if (rc == EFS_OK) {
+                    loc->export_id = ex->id;
+                    loc->ino = ino;
+                    loc->chunk_index = chunk_index;
+                    loc->fragment_index = fragment_index;
+                    loc->root = (uint8_t)ri;
+                    loc->legacy = 0;
+                    loc->valid = 1;
+                }
+                if (rc != EFS_ERR_NOT_FOUND)
+                    break;
+            }
+        }
         if (rc != EFS_OK)
             return rc;
-        *sum_ok = server_read_fragment_sum(s, ex, ino, chunk_index,
-                                           fragment_index, checksum) == EFS_OK;
+        *data_len = got;
+        if (plen > 0 && (size_t)plen + 5 <= sizeof(path)) {
+            memcpy(path + plen, ".sum", 5);
+            int fd = open(path, O_RDONLY);
+            if (fd >= 0) {
+                ssize_t rn = read(fd, checksum, EFS_HASH_SIZE);
+                close(fd);
+                if (rn == (ssize_t)EFS_HASH_SIZE)
+                    *sum_ok = 1;
+            }
+        }
         return EFS_OK;
     }
 
