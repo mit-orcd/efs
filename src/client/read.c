@@ -586,7 +586,11 @@ static int load_export_from_prev_slot(const struct efs_export_root *root)
     if (arc != EFS_OK)
         return arc;
 
-    pthread_mutex_lock(&g_client.lock);
+    /* table_lock (g_client.lock + all dir stripes) + idx_mu: deserialize
+     * frees/reallocs the inode/chunk tables that op-path workers walk under
+     * lock_dir/idx_mu (chmod and wb_thread raced a resync → SIGSEGV). */
+    efs_client_table_lock();
+    pthread_mutex_lock(&g_client.idx_mu);
     int rc = efs_export_deserialize(&g_client.export, blob, blob_len);
     if (rc == EFS_OK) {
         g_client.export.meta_fragmented = 1;
@@ -605,7 +609,8 @@ static int load_export_from_prev_slot(const struct efs_export_root *root)
             g_client.export.features = root->features;
         }
     }
-    pthread_mutex_unlock(&g_client.lock);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_table_unlock();
     free(blob);
     if (rc == EFS_OK) {
         fprintf(stderr,
@@ -894,7 +899,8 @@ static int load_export_from_root(const struct efs_export_root *root)
     if (rc != EFS_OK)
         return rc;
 
-    pthread_mutex_lock(&g_client.lock);
+    efs_client_table_lock();
+    pthread_mutex_lock(&g_client.idx_mu); /* table swap vs op-path workers */
     rc = efs_export_deserialize(&g_client.export, blob, blob_len);
     if (rc == EFS_OK) {
         g_client.export.meta_fragmented = 1;
@@ -915,7 +921,8 @@ static int load_export_from_root(const struct efs_export_root *root)
         if (rc == EFS_OK && efs_client_meta_cache_adopt(blob, blob_len) == 0)
             blob = NULL;
     }
-    pthread_mutex_unlock(&g_client.lock);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_table_unlock();
     free(blob);
     return rc;
 }
@@ -961,10 +968,18 @@ static int fetch_meta_blob_from(const char *host, uint16_t port,
     return EFS_OK;
 }
 
-int efs_client_fetch_metadata(const char *host, uint16_t port)
+/* Network-only phase of metadata fetch: query the bootstrap node first, then
+ * all nodes, keeping the newest EFSR and its assembled EFSM blob when a
+ * server has one. No locks taken and no g_client mutation, so callers can
+ * run it unlocked and then swap tables under their own lock hold (the STALE
+ * resync snapshots dirty state in the same critical section as the swap). */
+int efs_client_fetch_meta_best(const char *host, uint16_t port,
+                               struct efs_meta_fetch *f)
 {
     /* Prefer the newest EFSR generation across the cluster so a root that
      * missed the last 2-ack quorum cannot shadow fresher peers. */
+    memset(f, 0, sizeof(*f));
+    f->last_rc = EFS_ERR_NET;
     struct efs_export_root best_root;
     memset(&best_root, 0, sizeof(best_root));
     int have_root = 0;
@@ -1018,34 +1033,90 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
                         efs_export_root_free(&best_root);
                         efs_export_root_move(&best_root, &root);
                         have_root = 1;
-                    } else {
-                        efs_export_root_free(&root);
-                    }
-                    if (used > 0 && used < plen &&
-                        efs_meta_blob_is_export((char *)payload + used,
-                                                plen - used)) {
+                        /* The table blob must belong to the SAME generation
+                         * as the root we adopt: take this node's blob, or
+                         * drop any blob a previous node gave us — keeping an
+                         * older blob under a newer root silently regresses
+                         * the table (subtrees committed in between vanish). */
                         free(best_efsm);
-                        best_efsm_len = plen - used;
-                        best_efsm = malloc(best_efsm_len);
-                        if (best_efsm)
-                            memcpy(best_efsm, (char *)payload + used,
-                                   best_efsm_len);
-                        else
-                            best_efsm_len = 0;
+                        best_efsm = NULL;
+                        best_efsm_len = 0;
+                        if (used > 0 && used < plen &&
+                            efs_meta_blob_is_export((char *)payload + used,
+                                                    plen - used)) {
+                            best_efsm_len = plen - used;
+                            best_efsm = malloc(best_efsm_len);
+                            if (best_efsm)
+                                memcpy(best_efsm, (char *)payload + used,
+                                       best_efsm_len);
+                            else
+                                best_efsm_len = 0;
+                        }
+                    } else {
+                        /* Same generation as the adopted root: if that node
+                         * gave no blob (mid-rebuild) but this one has the
+                         * table live, take its blob — same gen means same
+                         * content. */
+                        if (have_root &&
+                            root.generation == best_root.generation &&
+                            !best_efsm && used > 0 && used < plen &&
+                            efs_meta_blob_is_export((char *)payload + used,
+                                                    plen - used)) {
+                            best_efsm_len = plen - used;
+                            best_efsm = malloc(best_efsm_len);
+                            if (best_efsm)
+                                memcpy(best_efsm, (char *)payload + used,
+                                       best_efsm_len);
+                            else
+                                best_efsm_len = 0;
+                        }
+                        efs_export_root_free(&root);
                     }
                 }
             } else if (efs_meta_blob_is_export(payload, plen)) {
-                free(best_efsm);
-                best_efsm = payload;
-                best_efsm_len = plen;
-                payload = NULL;
+                /* Bare EFSM (legacy, no root): usable only when no
+                 * generation-tracked root is in play. */
+                if (!have_root) {
+                    free(best_efsm);
+                    best_efsm = payload;
+                    best_efsm_len = plen;
+                    payload = NULL;
+                }
             }
             free(payload);
         }
     }
 
+    f->have_root = have_root;
+    f->saw_bootstrap = saw_bootstrap;
+    f->fetch_ok = fetch_ok;
+    f->last_rc = last_fetch_rc;
+    f->efsm = best_efsm;
+    f->efsm_len = best_efsm_len;
+    if (have_root)
+        efs_export_root_move(&f->root, &best_root);
+    efs_export_root_free(&best_root);
+    return fetch_ok ? EFS_OK : last_fetch_rc;
+}
+
+int efs_client_fetch_metadata(const char *host, uint16_t port)
+{
+    struct efs_meta_fetch f;
+    (void)efs_client_fetch_meta_best(host, port, &f);
+    int have_root = f.have_root;
+    int saw_bootstrap = f.saw_bootstrap;
+    int fetch_ok = f.fetch_ok;
+    int last_fetch_rc = f.last_rc;
+    char *best_efsm = f.efsm;
+    size_t best_efsm_len = f.efsm_len;
+    struct efs_export_root best_root;
+    memset(&best_root, 0, sizeof(best_root));
+    if (have_root)
+        efs_export_root_move(&best_root, &f.root);
+
     if (best_efsm) {
-        pthread_mutex_lock(&g_client.lock);
+        efs_client_table_lock();
+        pthread_mutex_lock(&g_client.idx_mu); /* table swap vs op-path workers */
         int rc = efs_export_deserialize(&g_client.export, best_efsm, best_efsm_len);
         if (rc == EFS_OK) {
             if (have_root) {
@@ -1072,12 +1143,14 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
                     (unsigned long long)g_client.export.inode_count,
                     (unsigned long long)g_client.export.chunk_count,
                     (unsigned long long)g_client.export.root.generation);
-            pthread_mutex_unlock(&g_client.lock);
+            pthread_mutex_unlock(&g_client.idx_mu);
+            efs_client_table_unlock();
             free(best_efsm);
             efs_export_root_free(&best_root);
             return rc;
         }
-        pthread_mutex_unlock(&g_client.lock);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_table_unlock();
         free(best_efsm);
         best_efsm = NULL;
     }

@@ -197,6 +197,13 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
                                      efs_ino_t parent, uint32_t mode,
                                      uid_t uid, gid_t gid, const char *name);
 
+/* Authoritative upsert of a complete inode record: the incoming row wins
+ * outright (unlike efs_export_merge's newer-wins). Keeps the ino/name/child
+ * indexes and dentry_bytes in sync; does not touch chunks or rollups —
+ * callers re-add chunks and recompute rollups. Used by the client rebase
+ * that preserves uncommitted dirty state across a STALE resync. */
+int efs_export_upsert_inode(struct efs_export *ex, const struct efs_inode *rec);
+
 /* Remove an inode and all of its chunk entries. */
 int efs_export_unlink(struct efs_export *ex, efs_ino_t ino);
 

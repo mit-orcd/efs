@@ -171,6 +171,24 @@ int efs_client_lookup(const char *path, struct efs_inode *out);
 /* Fetch full metadata from a server and replace local copy. */
 int efs_client_fetch_metadata(const char *host, uint16_t port);
 
+/* Result of the network-only metadata fetch phase. efsm is malloc'd and
+ * owned by the caller; root is valid when have_root is set. */
+struct efs_meta_fetch {
+    struct efs_export_root root;
+    int have_root;
+    int saw_bootstrap;
+    int fetch_ok;
+    int last_rc;
+    char *efsm;
+    size_t efsm_len;
+};
+
+/* Network-only metadata fetch: newest EFSR across nodes + assembled EFSM
+ * blob when available. Takes no locks and does not touch g_client, so a
+ * caller can swap tables under its own critical section (STALE resync). */
+int efs_client_fetch_meta_best(const char *host, uint16_t port,
+                               struct efs_meta_fetch *f);
+
 /* Replicate local metadata to all servers. Returns number of acks. */
 /* Must be called without g_client.lock held; it takes the lock only to
  * serialize, then releases it for the duration of the network I/O. */

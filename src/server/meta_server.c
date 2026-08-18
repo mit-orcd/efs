@@ -248,6 +248,31 @@ static int put_meta_fragment(struct efsd_server *s, struct efs_export *ex,
                              uint32_t fragment_index, const uint8_t *data,
                              const uint8_t *checksum);
 
+/* Meta heal coordinator: the lowest-numbered live node pushes reconstructed
+ * fragments to peer-owned slots. Every server rebuilds concurrently, so
+ * without a single coordinator all nodes would duplicate the same heal PUTs. */
+static int server_is_meta_heal_coordinator(struct efsd_server *s)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    uint64_t now_ms = (uint64_t)ts.tv_sec * 1000ull +
+                      (uint64_t)ts.tv_nsec / 1000000ull;
+    int coord = 1;
+    pthread_mutex_lock(&s->lock);
+    for (uint32_t i = 0; i < s->node_count; i++) {
+        struct efs_node *n = &s->nodes[i];
+        if (n->id == s->id)
+            continue;
+        if (n->id < s->id &&
+            (n->down_until_ms == 0 || n->down_until_ms <= now_ms)) {
+            coord = 0;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&s->lock);
+    return coord;
+}
+
 void server_rebuild_fragmented_exports(struct efsd_server *s)
 {
     for (uint32_t i = 0; i < s->export_count; i++) {
@@ -315,6 +340,7 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
         frag_buf, frag_buf + EFS_META_FRAGMENT_SIZE,
         frag_buf + 2 * EFS_META_FRAGMENT_SIZE
     };
+    uint32_t holed = 0;
 
     for (uint32_t pi = 0; pi < page_count; pi++) {
         /* Early-abort on a stale root: if a concurrent flush advanced the
@@ -460,10 +486,15 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
                             pi, ci_layout, root->version,
                             (unsigned long long)start_gen);
 
-                /* Best-effort: rewrite missing/corrupt frags this node owns. */
+                /* Server-side heal, not client-triggered: rewrite every
+                 * missing/corrupt fragment of this page. Self-owned frags are
+                 * written locally; peer-owned holes are pushed by the single
+                 * heal coordinator (lowest live node id) so concurrent
+                 * rebuilds on all servers don't duplicate the same PUTs. */
+                int coord = -1; /* computed lazily */
                 int need_heal = 0;
                 for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
-                    if (placed[fi] == self && !have[fi]) {
+                    if (!have[fi]) {
                         need_heal = 1;
                         break;
                     }
@@ -472,21 +503,29 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
                     efs_encode_chunk(pages[pi], EFS_META_PAGE_SIZE,
                                      EFS_META_PAGE_SIZE, fragments) == 0) {
                     for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
-                        if (placed[fi] != self || have[fi])
+                        if (have[fi])
                             continue;
+                        if (placed[fi] != self) {
+                            if (coord < 0)
+                                coord = server_is_meta_heal_coordinator(s);
+                            if (!coord)
+                                continue;
+                        }
                         const uint8_t *csum =
                             efs_export_root_checksum_const(root, pi, fi);
-                        int hrc = put_meta_fragment(s, ex, self, ci, (uint32_t)fi,
+                        int hrc = put_meta_fragment(s, ex, placed[fi], ci,
+                                                    (uint32_t)fi,
                                                     fragments[fi], csum);
                         if (hrc == EFS_OK)
                             fprintf(stderr,
-                                    "meta-heal: export=%s page=%u fi=%u ci=%u\n",
-                                    ex->name, pi, fi, ci);
+                                    "meta-heal: export=%s page=%u fi=%u ci=%u "
+                                    "node=%u\n",
+                                    ex->name, pi, fi, ci, placed[fi]);
                         else
                             fprintf(stderr,
                                     "meta-heal: failed export=%s page=%u fi=%u "
-                                    "ci=%u rc=%d\n",
-                                    ex->name, pi, fi, ci, hrc);
+                                    "ci=%u node=%u rc=%d\n",
+                                    ex->name, pi, fi, ci, placed[fi], hrc);
                     }
                 }
             } else if (ti + 1 >= ntry) {
@@ -498,13 +537,27 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
             }
         }
         if (!decoded) {
-            free(frag_buf);
-            free(pages);
-            efs_export_root_free(&snap);
-            return EFS_ERR_DECODE;
+            /* Hopeless page (no candidate CI yields 2 checksum-matching
+             * fragments): zero-fill and keep rebuilding the rest. Aborting
+             * the whole rebuild here fenced the export's tables forever and
+             * re-ran the same doomed O(pages) pass on every trigger — the
+             * meta-rebuild livelock. The hole is bounded to this page; a
+             * later client flush that still has the real content re-publishes
+             * the page and overwrites the zeros. */
+            memset(pages[pi], 0, EFS_META_PAGE_SIZE);
+            holed++;
+            fprintf(stderr,
+                    "meta-rebuild: page %u unrecoverable across all nodes; "
+                    "zero-filled (gen=%llu)\n",
+                    pi, (unsigned long long)start_gen);
         }
     }
     free(frag_buf);
+    if (holed)
+        fprintf(stderr,
+                "meta-rebuild: export=%s gen=%llu completed with %u "
+                "zero-filled page(s)\n",
+                ex->name, (unsigned long long)start_gen, holed);
 
     char *blob = NULL;
     size_t blob_len = 0;
@@ -533,6 +586,7 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
         efs_export_root_move(&ex->root, &snap);
         ex->meta_fragmented = 1;
         ex->meta_needs_rebuild = 1;
+        fprintf(stderr, "FENCE-SITE rebuild-deserialize-fail rc=%d\n", rc);
         pthread_mutex_unlock(&s->lock);
         return rc;
     }
@@ -1026,6 +1080,9 @@ int server_fetch_metadata_from(struct efsd_server *s, const char *host, uint16_t
              * cluster deadlocks for hours. Install the root, flag the rebuild,
              * and let the meta catch-up thread do it once we can serve. */
             ex->meta_needs_rebuild = (ex->root.page_count > 0);
+            if (ex->meta_needs_rebuild)
+                fprintf(stderr, "FENCE-SITE fetch-from-peer %s:%u gen=%llu\n",
+                        host, port, (unsigned long long)ex->root.generation);
             rc = 0;
         }
     } else if (efs_meta_blob_is_export(payload, payload_len)) {
@@ -1116,11 +1173,15 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
         } else {
             efs_export_root_move(&ex->root, &keep);
             ex->meta_fragmented = 1;
-            if (ex->root.page_count > 0)
+            if (ex->root.page_count > 0) {
                 ex->meta_needs_rebuild = 1;
+                fprintf(stderr, "FENCE-SITE catchup-blob-deserialize-fail\n");
+            }
         }
     } else if (ex->root.page_count > 0) {
         ex->meta_needs_rebuild = 1;
+        fprintf(stderr, "FENCE-SITE catchup-root-no-blob gen=%llu\n",
+                (unsigned long long)ex->root.generation);
     }
     s->export_meta_dirty = 1;
     server_save_export(s, ex);

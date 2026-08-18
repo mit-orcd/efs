@@ -34,6 +34,10 @@ enum efsd_server_state {
     SERVER_STATE_DRAINED = 4,   /* empty; rejects new PUTs until undrain or remove */
 };
 
+/* Max queued meta-flush contenders per export (well above expected client
+ * count; overflow writers simply get BUSY and re-BEGIN, re-entering). */
+#define EFS_META_WRITER_QMAX 32
+
 struct efsd_server {
     efs_node_id_t id;
     char addr[64];
@@ -93,7 +97,39 @@ struct efsd_server {
     uint64_t meta_blob_cache_gen[EFS_MAX_EXPORTS];
     uint8_t *meta_blob_sums[EFS_MAX_EXPORTS]; /* pages * 3 * EFS_HASH_SIZE */
     uint32_t meta_blob_pages[EFS_MAX_EXPORTS];
+
+    /* Meta flush election (per export slot): the writer that won a
+     * META_FLUSH_BEGIN majority. While live (now < expiry), PUT_META roots
+     * from any other writer are rejected STALE, so two clients can never
+     * interleave page PUTs on the same dual-slot generation. Cleared on
+     * commit or after EFS_META_WRITER_EXPIRY_MS. Guarded by s->lock.
+     *
+     * Fairness: contenders are queued FIFO (meta_writer_q). When the
+     * election is free, only the queue head is granted it — a writer that
+     * just lost a race cannot be lapped forever by faster resyncers, which
+     * previously starved unlucky clients into ever-growing dirty sets.
+     * Queue capacity is EFS_META_WRITER_QMAX. */
+    uint64_t meta_writer_id[EFS_MAX_EXPORTS];
+    uint64_t meta_writer_gen[EFS_MAX_EXPORTS];
+    uint64_t meta_writer_expiry[EFS_MAX_EXPORTS];
+    uint64_t meta_writer_q[EFS_MAX_EXPORTS][EFS_META_WRITER_QMAX];
+    uint64_t meta_writer_q_ms[EFS_MAX_EXPORTS][EFS_META_WRITER_QMAX];
+    uint32_t meta_writer_q_len[EFS_MAX_EXPORTS];
 };
+
+/* A crashed writer's flush election self-clears after this long. Must
+ * comfortably exceed the slowest legitimate flush (page PUTs + root),
+ * including a starved client's first huge dirty-set flush. */
+#define EFS_META_WRITER_EXPIRY_MS 60000ull
+
+/* Queued contenders keep their FIFO slot for this long without re-BEGINing.
+ * Must exceed the slowest STALE resync (fetch full blob + deserialize a
+ * multi-million-row table + rebase a huge dirty set) — a resyncing queue
+ * head that lost its slot here was starved forever: every resync finished
+ * to find the slot expired and the gen lapped again. A dead head costs one
+ * window of stall; live writers re-BEGIN every <1s so false drops need the
+ * full window of silence. */
+#define EFS_META_WRITER_Q_EXPIRY_MS 300000ull
 
 /* Global server instance used by worker threads. */
 extern struct efsd_server *g_server;

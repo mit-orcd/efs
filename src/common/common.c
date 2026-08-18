@@ -13,10 +13,16 @@ int efs_chunk_size_valid(uint32_t chunk_size)
 
 void efs_ino_path_segments(efs_ino_t ino, char seg[EFS_INO_PATH_SEGS][5])
 {
+    /* Inline digits: 5×snprintf per call was measurable under PUT storms. */
     uint64_t v = (uint64_t)ino;
     for (int i = 0; i < EFS_INO_PATH_SEGS; i++) {
-        snprintf(seg[i], 5, "%04llu", (unsigned long long)(v % 10000ULL));
+        uint64_t g = v % 10000ULL;
         v /= 10000ULL;
+        seg[i][0] = (char)('0' + (g / 1000) % 10);
+        seg[i][1] = (char)('0' + (g / 100) % 10);
+        seg[i][2] = (char)('0' + (g / 10) % 10);
+        seg[i][3] = (char)('0' + g % 10);
+        seg[i][4] = '\0';
     }
 }
 
@@ -37,6 +43,7 @@ const char *efs_strerror(int rc)
     case EFS_ERR_QUOTA:  return "quota exceeded";
     case EFS_ERR_NOT_EMPTY: return "directory not empty";
     case EFS_ERR_BUSY:   return "resource busy";
+    case EFS_ERR_STALE:  return "stale generation";
     default:             return "unknown error";
     }
 }

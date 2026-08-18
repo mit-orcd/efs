@@ -78,6 +78,12 @@ enum efs_msg_type {
     /* RDMA QP bootstrap over the TCP conn; unknown-type/error -> stay TCP. */
     EFS_MSG_RDMA_SETUP = 55,
     EFS_MSG_RDMA_SETUP_REPLY = 56,
+    /* Meta flush election: a client must win a majority of nodes before
+     * PUTting meta pages for a new generation. Concurrent writers used to
+     * PUT the same dual-slot page CIs with different content, tearing every
+     * page they overlapped on; the election serializes flushes cluster-wide. */
+    EFS_MSG_META_FLUSH_BEGIN = 57,
+    EFS_MSG_META_FLUSH_BEGIN_REPLY = 58,
 };
 
 /* Set per-export features. Only bits in set_mask are changed (to the
@@ -165,6 +171,22 @@ struct efs_msg_put_meta {
 #define EFS_PUT_META_OK     0
 #define EFS_PUT_META_ERROR  1
 #define EFS_PUT_META_STALE  2
+#define EFS_PUT_META_BUSY   3 /* flush election held by another live writer */
+
+/* Meta flush election request/response. writer_id is the client's
+ * write_lease_id (also carried in the published root, so the server can
+ * check the root publisher against the election holder). */
+struct efs_msg_meta_flush_begin {
+    uint32_t export_id;
+    uint32_t pad;
+    uint64_t gen;
+    uint64_t writer_id;
+};
+struct efs_msg_meta_flush_begin_reply {
+    uint8_t status;
+    uint8_t pad[7];
+    uint64_t committed_gen; /* server's committed gen; >= req gen means stale */
+};
 
 struct efs_msg_put_meta_reply {
     uint8_t status;

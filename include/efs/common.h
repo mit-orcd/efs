@@ -99,6 +99,7 @@
 #define EFS_ERR_QUOTA      -11
 #define EFS_ERR_NOT_EMPTY  -12
 #define EFS_ERR_BUSY       -13
+#define EFS_ERR_STALE      -14
 
 typedef uint64_t efs_ino_t;
 typedef uint32_t efs_export_id_t;

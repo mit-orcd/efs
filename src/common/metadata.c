@@ -1968,6 +1968,44 @@ int efs_export_merge(struct efs_export *ex, const struct efs_export *inc)
     return EFS_OK;
 }
 
+int efs_export_upsert_inode(struct efs_export *ex, const struct efs_inode *rec)
+{
+    if (!ex || !rec || rec->ino == 0)
+        return EFS_ERR_INVAL;
+    if (!ex->ino_keys && export_reindex(ex) != 0)
+        return EFS_ERR_NOMEM;
+
+    struct efs_inode *cur = inode_ptr(ex, rec->ino);
+    if (!cur) {
+        if (grow_inodes(ex) != 0)
+            return EFS_ERR_NOMEM;
+        if (export_ensure_inode_idx(ex) != 0)
+            return EFS_ERR_NOMEM;
+        uint64_t pos = ex->inode_count++;
+        ex->inodes[pos] = *rec;
+        dentry_bytes_add(ex, rec->name);
+        idx_put(ex->ino_keys, ex->ino_vals, ex->ino_mask, rec->ino, pos);
+        name_idx_put(ex, rec->parent, rec->name, pos);
+        child_idx_add(ex, rec->parent, pos);
+        return EFS_OK;
+    }
+    if (cur->parent != rec->parent || strcmp(cur->name, rec->name) != 0) {
+        /* Rebind the existing row (rename between base fetch and rebase):
+         * same index dance as efs_export_rename. */
+        uint64_t slot = (uint64_t)(cur - ex->inodes);
+        child_idx_del(ex, cur->parent, slot);
+        name_idx_del(ex, cur->parent, cur->name);
+        dentry_bytes_sub(ex, cur->name);
+        *cur = *rec;
+        dentry_bytes_add(ex, rec->name);
+        name_idx_put(ex, rec->parent, rec->name, slot);
+        child_idx_add(ex, rec->parent, slot);
+        return EFS_OK;
+    }
+    *cur = *rec;
+    return EFS_OK;
+}
+
 static int write_u32(FILE *f, uint32_t v)
 {
     return fwrite(&v, sizeof(v), 1, f) == 1 ? 0 : -1;
@@ -2439,17 +2477,36 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
     }
 
     if (version >= 6) {
+        /* Dentry region bounds: chunks occupy the fixed-size tail, so the
+         * dentry region ends chunk_count*WIRE bytes before the blob end. A
+         * holed (zero-filled) meta page inside the dentry area desyncs the
+         * walk — garbage lengths used to fail the whole deserialize (PROTO),
+         * which fenced server tables into a rebuild livelock. Bound the walk
+         * and hole out unreadable names instead; the rows stay addressable
+         * under a synthetic name until a later client flush re-publishes the
+         * real page content. */
+        long dent_end = (long)len -
+                        (long)v5_chunk_count * (long)EFS_CHUNK_WIRE_SIZE;
+        int holed = 0;
         for (uint32_t i = 0; i < inode_count && i < ex->inode_count; i++) {
+            long pos = ftell(f);
             uint16_t ln = 0;
-            if (fread(&ln, 2, 1, f) != 1 || ln >= EFS_MAX_NAME) {
-                fclose(f);
-                return EFS_ERR_PROTO;
-            }
             memset(ex->inodes[i].name, 0, EFS_MAX_NAME);
-            if (ln && fread(ex->inodes[i].name, ln, 1, f) != 1) {
-                fclose(f);
-                return EFS_ERR_PROTO;
-            }
+            if (!holed && pos >= 0 && pos + 2 <= dent_end &&
+                fread(&ln, 2, 1, f) == 1 && ln < EFS_MAX_NAME &&
+                pos + 2 + ln <= dent_end &&
+                (!ln || fread(ex->inodes[i].name, ln, 1, f) == 1))
+                continue;
+            snprintf(ex->inodes[i].name, EFS_MAX_NAME, ".efshole.%llu",
+                     (unsigned long long)ex->inodes[i].ino);
+            holed = 1; /* stream position untrustworthy from here on */
+        }
+        if (holed) {
+            fprintf(stderr,
+                    "meta: deserialize tolerated holed dentry region; "
+                    "some names synthetic\n");
+            if (dent_end > 0)
+                fseek(f, dent_end, SEEK_SET);
         }
     }
 
@@ -2473,11 +2530,19 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
             ex->chunks = new;
             ex->chunk_capacity = new_cap;
         }
-        struct efs_chunk_entry *ce = &ex->chunks[ex->chunk_count++];
-        read_u64(f, &ce->ino);
-        read_u32(f, &ce->chunk_index);
-        fread(ce->fragment_nodes, sizeof(efs_node_id_t), EFS_NUM_FRAGMENTS, f);
-        fread(ce->checksums, EFS_HASH_SIZE, EFS_NUM_FRAGMENTS, f);
+        struct efs_chunk_entry *ce = &ex->chunks[ex->chunk_count];
+        if (read_u64(f, &ce->ino) != 0 ||
+            read_u32(f, &ce->chunk_index) != 0 ||
+            fread(ce->fragment_nodes, sizeof(efs_node_id_t),
+                  EFS_NUM_FRAGMENTS, f) != EFS_NUM_FRAGMENTS ||
+            fread(ce->checksums, EFS_HASH_SIZE, EFS_NUM_FRAGMENTS, f) !=
+                EFS_NUM_FRAGMENTS)
+            break; /* truncated tail (holed page): keep what decoded */
+        /* A zero-filled meta page in the chunk region decodes as all-zero
+         * records; ino 0 is never valid, so drop the hole rows. */
+        if (ce->ino == 0)
+            continue;
+        ex->chunk_count++;
     }
 
     fclose(f);

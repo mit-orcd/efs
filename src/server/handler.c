@@ -75,6 +75,80 @@ static int conn_wait_request(struct efs_conn *conn)
     }
 }
 
+static uint64_t handler_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000ull + (uint64_t)ts.tv_nsec / 1000000ull;
+}
+
+/* A pending flush election blocks other writers only while unexpired AND
+ * not yet committed: once the winner's root lands (committed >= election
+ * gen) the slot must not fence out the next flush. Caller holds s->lock. */
+static int meta_writer_live(struct efsd_server *s, int ei, uint64_t now_ms)
+{
+    uint64_t committed = s->exports[ei].meta_fragmented
+                             ? s->exports[ei].root.generation : 0;
+    return s->meta_writer_id[ei] != 0 &&
+           now_ms < s->meta_writer_expiry[ei] &&
+           s->meta_writer_gen[ei] > committed;
+}
+
+/* Drop queued contenders that stopped re-BEGINing (crashed or gave up).
+ * Caller holds s->lock. */
+static void meta_writer_q_expire(struct efsd_server *s, int ei, uint64_t now_ms)
+{
+    uint32_t n = s->meta_writer_q_len[ei];
+    uint32_t out = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        if (now_ms - s->meta_writer_q_ms[ei][i] >= EFS_META_WRITER_Q_EXPIRY_MS)
+            continue;
+        if (out != i) {
+            s->meta_writer_q[ei][out] = s->meta_writer_q[ei][i];
+            s->meta_writer_q_ms[ei][out] = s->meta_writer_q_ms[ei][i];
+        }
+        out++;
+    }
+    s->meta_writer_q_len[ei] = out;
+}
+
+/* Returns 0-based queue position of writer_id, adding/refreshing its entry.
+ * Caller holds s->lock. */
+static uint32_t meta_writer_q_touch(struct efsd_server *s, int ei,
+                                    uint64_t writer_id, uint64_t now_ms)
+{
+    uint32_t n = s->meta_writer_q_len[ei];
+    for (uint32_t i = 0; i < n; i++) {
+        if (s->meta_writer_q[ei][i] == writer_id) {
+            s->meta_writer_q_ms[ei][i] = now_ms;
+            return i;
+        }
+    }
+    if (n < EFS_META_WRITER_QMAX) {
+        s->meta_writer_q[ei][n] = writer_id;
+        s->meta_writer_q_ms[ei][n] = now_ms;
+        s->meta_writer_q_len[ei] = n + 1;
+    }
+    return n; /* at the end (or unrecorded when full) */
+}
+
+/* Remove writer_id from the queue (on grant). Caller holds s->lock. */
+static void meta_writer_q_remove(struct efsd_server *s, int ei,
+                                 uint64_t writer_id)
+{
+    uint32_t n = s->meta_writer_q_len[ei];
+    for (uint32_t i = 0; i < n; i++) {
+        if (s->meta_writer_q[ei][i] == writer_id) {
+            for (uint32_t j = i + 1; j < n; j++) {
+                s->meta_writer_q[ei][j - 1] = s->meta_writer_q[ei][j];
+                s->meta_writer_q_ms[ei][j - 1] = s->meta_writer_q_ms[ei][j];
+            }
+            s->meta_writer_q_len[ei] = n - 1;
+            return;
+        }
+    }
+}
+
 void server_handle_conn(struct efs_conn *conn)
 {
     int fd = conn->fd;
@@ -461,6 +535,64 @@ void server_handle_conn(struct efs_conn *conn)
             }
             break;
         }
+        case EFS_MSG_META_FLUSH_BEGIN: {
+            struct efs_msg_meta_flush_begin_reply br;
+            memset(&br, 0, sizeof(br));
+            br.status = EFS_PUT_META_ERROR;
+            if (payload_len >= sizeof(struct efs_msg_meta_flush_begin)) {
+                struct efs_msg_meta_flush_begin b;
+                memcpy(&b, payload, sizeof(b));
+                pthread_mutex_lock(&g_server->lock);
+                if (g_server->export_count == 0) {
+                    /* Fresh server: nothing committed yet; accept. */
+                    br.status = EFS_PUT_META_OK;
+                    br.committed_gen = 0;
+                } else {
+                    struct efs_export *ex = &g_server->exports[0];
+                    uint64_t committed = ex->meta_fragmented
+                                             ? ex->root.generation : 0;
+                    br.committed_gen = committed;
+                    if (b.gen <= committed) {
+                        br.status = EFS_PUT_META_STALE;
+                    } else {
+                        uint64_t now = handler_now_ms();
+                        /* Expire a dead holder so the queue can advance. */
+                        if (g_server->meta_writer_id[0] != 0 &&
+                            !meta_writer_live(g_server, 0, now)) {
+                            g_server->meta_writer_id[0] = 0;
+                        }
+                        meta_writer_q_expire(g_server, 0, now);
+                        if (g_server->meta_writer_id[0] == b.writer_id) {
+                            /* Holder re-BEGINing (retry): re-grant. */
+                            g_server->meta_writer_gen[0] = b.gen;
+                            g_server->meta_writer_expiry[0] =
+                                now + EFS_META_WRITER_EXPIRY_MS;
+                            br.status = EFS_PUT_META_OK;
+                        } else if (g_server->meta_writer_id[0] == 0 &&
+                                   (g_server->meta_writer_q_len[0] == 0 ||
+                                    g_server->meta_writer_q[0][0] ==
+                                        b.writer_id)) {
+                            /* Election free and we are at the head of the
+                             * FIFO (or nobody waits): grant. */
+                            meta_writer_q_remove(g_server, 0, b.writer_id);
+                            g_server->meta_writer_id[0] = b.writer_id;
+                            g_server->meta_writer_gen[0] = b.gen;
+                            g_server->meta_writer_expiry[0] =
+                                now + EFS_META_WRITER_EXPIRY_MS;
+                            br.status = EFS_PUT_META_OK;
+                        } else {
+                            /* Held by another live writer, or others are
+                             * ahead in the FIFO: wait for your turn. */
+                            meta_writer_q_touch(g_server, 0, b.writer_id, now);
+                            br.status = EFS_PUT_META_BUSY;
+                        }
+                    }
+                }
+                pthread_mutex_unlock(&g_server->lock);
+            }
+            return efs_conn_send_msg(conn, EFS_MSG_META_FLUSH_BEGIN_REPLY,
+                                     &br, sizeof(br));
+        }
         case EFS_MSG_PUT_META: {
             if (payload_len > 0) {
                 uint8_t reply = EFS_PUT_META_ERROR;
@@ -487,6 +619,18 @@ void server_handle_conn(struct efs_conn *conn)
                          * the tables convergent with the newest root. */
                         if (ex->meta_fragmented &&
                             root.generation <= ex->root.generation) {
+                            reply = EFS_PUT_META_STALE;
+                            pthread_mutex_unlock(&g_server->lock);
+                            efs_export_root_free(&root);
+                        } else if (root.write_lease_id &&
+                                   meta_writer_live(g_server, 0,
+                                                    handler_now_ms()) &&
+                                   g_server->meta_writer_id[0] !=
+                                       root.write_lease_id) {
+                            /* A live flush election is held by another
+                             * writer: reject so the holder's page PUTs and
+                             * root commit can't interleave/tear. STALE makes
+                             * the loser resync and retry. */
                             reply = EFS_PUT_META_STALE;
                             pthread_mutex_unlock(&g_server->lock);
                             efs_export_root_free(&root);
@@ -531,6 +675,8 @@ void server_handle_conn(struct efs_conn *conn)
                             }
                             g_server->epoch++;
                             g_server->export_meta_dirty = 1;
+                            /* Commit consumes the flush election. */
+                            g_server->meta_writer_id[0] = 0;
                             /* Save while holding the lock: concurrent PUT_META
                              * can efs_export_root_move and free page_checksums
                              * under a raced unlocked save (SIGSEGV). */

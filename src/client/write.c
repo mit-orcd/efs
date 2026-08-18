@@ -13,6 +13,7 @@
 #include <time.h>
 #include <poll.h>
 #include <pthread.h>
+#include <sys/stat.h>
 
 static uint32_t data_chunk_size(void)
 {
@@ -55,13 +56,6 @@ static void export_reserve_chunks_locked(uint64_t extra)
     (void)efs_export_reserve_chunks(&g_client.export, extra);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_table_unlock();
-}
-
-static uint64_t now(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return (uint64_t)ts.tv_sec;
 }
 
 static void now_ns(uint64_t *sec, uint32_t *nsec)
@@ -202,9 +196,13 @@ out:
 }
 
 /* One PUT_META reply from a conn that reply_watch marked ready (or whose
- * poll fd fired). Consumes the reply; releases on OK, drops otherwise. */
+ * poll fd fired). Consumes the reply; releases on OK, drops otherwise.
+ * STALE means the node is healthy but already holds a newer generation —
+ * count it separately and do NOT mark the node failed: with N concurrent
+ * meta writers every race has a loser, and treating STALE as a node failure
+ * wedged every loser's flush until remount. */
 static void meta_root_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
-                                 int *acks)
+                                 int *acks, int *stales)
 {
     uint8_t type = 0;
     void *reply = NULL;
@@ -222,10 +220,216 @@ static void meta_root_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
         (*acks)++;
         efs_client_node_note_ok(nid);
         efs_client_conn_release(nid, conn);
+    } else if (status == EFS_PUT_META_STALE) {
+        (*stales)++;
+        efs_client_conn_release(nid, conn);
     } else {
         efs_client_conn_drop(nid, conn);
         efs_client_node_note_fail(nid);
     }
+}
+
+/* Consume one META_FLUSH_BEGIN reply. BUSY/STALE mark healthy nodes — only
+ * transport/parse failures drop the conn and note the node down. */
+static void meta_begin_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
+                                  uint64_t gen, int *oks, int *busy,
+                                  int *stale, int *answered)
+{
+    uint8_t type = 0;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    if (efs_conn_recv_msg(conn, &type, &reply, &reply_len) != 0 ||
+        type != EFS_MSG_META_FLUSH_BEGIN_REPLY ||
+        reply_len < sizeof(struct efs_msg_meta_flush_begin_reply)) {
+        free(reply);
+        efs_client_conn_drop(nid, conn);
+        efs_client_node_note_fail(nid);
+        (*answered)++;
+        return;
+    }
+    struct efs_msg_meta_flush_begin_reply r;
+    memcpy(&r, reply, sizeof(r));
+    free(reply);
+    (*answered)++;
+    if (r.status == EFS_PUT_META_OK) {
+        (*oks)++;
+        efs_client_node_note_ok(nid);
+    } else if (r.status == EFS_PUT_META_BUSY) {
+        (*busy)++;
+    }
+    if (r.status == EFS_PUT_META_STALE || r.committed_gen >= gen)
+        *stale = 1;
+    efs_client_conn_release(nid, conn);
+}
+
+/* Meta flush election: pin (gen, writer_id) on a majority of nodes before
+ * PUTting any meta page. Concurrent writers used to PUT the same dual-slot
+ * page CIs with different content, tearing every overlapped page — the
+ * election serializes flushes cluster-wide. Returns EFS_OK when the
+ * election is won, EFS_ERR_STALE when a node already holds a committed gen
+ * >= ours (caller must resync), EFS_ERR_BUSY when another live writer holds
+ * the election (retry with backoff; our gen may still be next), and
+ * EFS_ERR_NO_QUORUM when too few nodes answered. */
+static int send_meta_begin(uint64_t gen, uint64_t writer_id)
+{
+    uint32_t n = g_client.node_count;
+    if (n > EFS_MAX_NODES)
+        n = EFS_MAX_NODES;
+    if (n == 0)
+        return EFS_ERR_NET;
+    const int mq = (int)(n / 2 + 1);
+
+    struct efs_msg_meta_flush_begin b;
+    memset(&b, 0, sizeof(b));
+    b.export_id = g_client.export_id;
+    b.gen = gen;
+    b.writer_id = writer_id;
+
+    struct efs_conn *conns[EFS_MAX_NODES];
+    efs_node_id_t nids[EFS_MAX_NODES];
+    int pending[EFS_MAX_NODES];
+    int oks = 0, busy = 0, stale = 0, answered = 0, sent = 0;
+
+    for (uint32_t i = 0; i < n; i++) {
+        conns[i] = NULL;
+        pending[i] = 0;
+        nids[i] = g_client.nodes[i].id;
+        if (nids[i] == 0 || efs_client_node_is_down(nids[i]))
+            continue;
+        conns[i] = efs_client_conn_get(nids[i]);
+        if (!conns[i]) {
+            efs_client_node_note_fail(nids[i]);
+            continue;
+        }
+        if (efs_conn_send_msg(conns[i], EFS_MSG_META_FLUSH_BEGIN, &b,
+                              sizeof(b)) != 0) {
+            efs_client_conn_drop(nids[i], conns[i]);
+            efs_client_node_note_fail(nids[i]);
+            conns[i] = NULL;
+            continue;
+        }
+        pending[i] = 1;
+        sent++;
+    }
+    if (sent < mq) {
+        for (uint32_t i = 0; i < n; i++)
+            if (conns[i])
+                efs_client_conn_drop(nids[i], conns[i]);
+        return EFS_ERR_NO_QUORUM;
+    }
+
+    struct timespec ts0;
+    clock_gettime(CLOCK_MONOTONIC, &ts0);
+    int64_t deadline_ms = (int64_t)ts0.tv_sec * 1000 +
+                          (int64_t)ts0.tv_nsec / 1000000 + EFS_IO_TIMEOUT_MS;
+
+    while (oks < mq && !stale) {
+        /* Harvest replies that are already here (RDMA CQE / readable fd). */
+        for (uint32_t i = 0; i < n && oks < mq && !stale; i++) {
+            if (!pending[i] || !conns[i])
+                continue;
+            int w = efs_conn_reply_watch(conns[i]);
+            if (w == EFS_CONN_REPLY_READY) {
+                meta_begin_recv_reply(nids[i], conns[i], gen, &oks, &busy,
+                                      &stale, &answered);
+                conns[i] = NULL;
+                pending[i] = 0;
+            } else if (w < 0) {
+                efs_client_conn_drop(nids[i], conns[i]);
+                efs_client_node_note_fail(nids[i]);
+                conns[i] = NULL;
+                pending[i] = 0;
+                answered++;
+            }
+        }
+        if (oks >= mq || stale)
+            break;
+
+        struct pollfd pfds[EFS_MAX_NODES];
+        int map[EFS_MAX_NODES];
+        int npoll = 0;
+        for (uint32_t i = 0; i < n; i++) {
+            if (!pending[i] || !conns[i])
+                continue;
+            int w = efs_conn_reply_watch(conns[i]);
+            if (w == EFS_CONN_REPLY_READY) {
+                meta_begin_recv_reply(nids[i], conns[i], gen, &oks, &busy,
+                                      &stale, &answered);
+                conns[i] = NULL;
+                pending[i] = 0;
+                continue;
+            } else if (w < 0) {
+                efs_client_conn_drop(nids[i], conns[i]);
+                efs_client_node_note_fail(nids[i]);
+                conns[i] = NULL;
+                pending[i] = 0;
+                answered++;
+                continue;
+            }
+            pfds[npoll].fd = w;
+            pfds[npoll].events = POLLIN;
+            pfds[npoll].revents = 0;
+            map[npoll] = (int)i;
+            npoll++;
+        }
+        if (oks >= mq || stale)
+            break;
+        if (npoll == 0)
+            break;
+
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        int64_t now_ms = (int64_t)ts.tv_sec * 1000 + (int64_t)ts.tv_nsec / 1000000;
+        int64_t left = deadline_ms - now_ms;
+        if (left <= 0) {
+            for (uint32_t i = 0; i < n; i++) {
+                if (!pending[i] || !conns[i])
+                    continue;
+                efs_client_conn_drop(nids[i], conns[i]);
+                efs_client_node_note_fail(nids[i]);
+                conns[i] = NULL;
+                pending[i] = 0;
+            }
+            break;
+        }
+        int wait_ms = left > 2000 ? 2000 : (int)left;
+        int pr = poll(pfds, (nfds_t)npoll, wait_ms);
+        if (pr <= 0)
+            continue;
+
+        for (int p = 0; p < npoll; p++) {
+            if (!(pfds[p].revents & (POLLIN | POLLERR | POLLHUP)))
+                continue;
+            int i = map[p];
+            if (!pending[i] || !conns[i])
+                continue;
+            meta_begin_recv_reply(nids[i], conns[i], gen, &oks, &busy,
+                                  &stale, &answered);
+            conns[i] = NULL;
+            pending[i] = 0;
+        }
+    }
+
+    /* Election decided: drop stragglers without blocking on RCVTIMEO. */
+    for (uint32_t i = 0; i < n; i++) {
+        if (!pending[i] || !conns[i])
+            continue;
+        efs_client_conn_drop(nids[i], conns[i]);
+        if (oks < mq && !stale)
+            efs_client_node_note_fail(nids[i]);
+        conns[i] = NULL;
+        pending[i] = 0;
+    }
+
+    if (stale)
+        return EFS_ERR_STALE;
+    if (oks >= mq)
+        return EFS_OK;
+    if (answered >= mq && busy > 0)
+        return EFS_ERR_BUSY;
+    if (answered < mq)
+        return EFS_ERR_NO_QUORUM;
+    return EFS_ERR_BUSY;
 }
 
 /* Replicate the tiny export root (EFSR) to all nodes; need ≥2 acks.
@@ -234,6 +438,7 @@ static void meta_root_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
 static int send_meta_root(const char *buf, size_t len)
 {
     uint32_t n = g_client.node_count;
+    int stales = 0;
     if (n > EFS_MAX_NODES)
         n = EFS_MAX_NODES;
 
@@ -287,7 +492,7 @@ static int send_meta_root(const char *buf, size_t len)
                 continue;
             int w = efs_conn_reply_watch(conns[i]);
             if (w == EFS_CONN_REPLY_READY) {
-                meta_root_recv_reply(nids[i], conns[i], &acks);
+                meta_root_recv_reply(nids[i], conns[i], &acks, &stales);
                 conns[i] = NULL;
                 pending[i] = 0;
             } else if (w < 0) {
@@ -308,7 +513,7 @@ static int send_meta_root(const char *buf, size_t len)
                 continue;
             int w = efs_conn_reply_watch(conns[i]);
             if (w == EFS_CONN_REPLY_READY) {
-                meta_root_recv_reply(nids[i], conns[i], &acks);
+                meta_root_recv_reply(nids[i], conns[i], &acks, &stales);
                 conns[i] = NULL;
                 pending[i] = 0;
                 continue;
@@ -356,7 +561,7 @@ static int send_meta_root(const char *buf, size_t len)
             int i = map[p];
             if (!pending[i] || !conns[i])
                 continue;
-            meta_root_recv_reply(nids[i], conns[i], &acks);
+            meta_root_recv_reply(nids[i], conns[i], &acks, &stales);
             conns[i] = NULL;
             pending[i] = 0;
         }
@@ -367,7 +572,7 @@ static int send_meta_root(const char *buf, size_t len)
         if (!conns[i])
             continue;
         if (acks >= 2 && efs_conn_reply_watch(conns[i]) == EFS_CONN_REPLY_READY)
-            meta_root_recv_reply(nids[i], conns[i], &acks);
+            meta_root_recv_reply(nids[i], conns[i], &acks, &stales);
         else if (acks < 2) {
             efs_client_conn_drop(nids[i], conns[i]);
             efs_client_node_note_fail(nids[i]);
@@ -378,7 +583,13 @@ static int send_meta_root(const char *buf, size_t len)
         pending[i] = 0;
     }
 
-    return (acks >= 2) ? EFS_OK : EFS_ERR_NO_QUORUM;
+    if (acks >= 2)
+        return EFS_OK;
+    /* A quorum of STALE replies means our generation is behind a concurrent
+     * writer's committed root — the nodes are fine, we must resync. */
+    if (stales >= 2)
+        return EFS_ERR_STALE;
+    return EFS_ERR_NO_QUORUM;
 }
 
 /* Serialize concurrent replicators so two flushes don't interleave page PUTs /
@@ -1132,6 +1343,25 @@ static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
         }
     }
 
+    /* Win the cluster-wide flush election before PUTting a single page:
+     * concurrent writers' page PUTs share dual-slot CIs and tear each
+     * other's pages. STALE = our gen is already behind (caller resyncs);
+     * BUSY = another writer is mid-flush (caller retries with backoff). */
+    int brc = send_meta_begin(new_gen, g_client.write_lease_id);
+    if (brc != EFS_OK) {
+        free(dirty);
+        free(pad);
+        free(frag_buf);
+        free(new_hashes);
+        free(new_sums);
+        free(ino_dirty_pg);
+        free(ch_dirty_pg);
+        if (!blob_is_cache)
+            free(blob);
+        efs_export_root_free(&root);
+        return brc;
+    }
+
     /* Pass 2: encode + PUT dirty pages, pipelined. */
     uint32_t pipe = EFS_WRITE_PIPELINE;
     if (pipe < 1)
@@ -1503,6 +1733,241 @@ static int efs_client_replicate_metadata_once(void)
     return rc;
 }
 
+/* A STALE quorum means a concurrent writer committed a newer generation.
+ * Re-fetch the newest root+tables so the next attempt republishes our
+ * still-dirty ops on top of it. The fetch REPLACES the local table, so the
+ * uncommitted rows the dirty sets point at would be freed out from under
+ * them (writes then failed NOT_FOUND and creates vanished). Rebase instead:
+ * snapshot every dirty inode/chunk row from the current table, swap tables,
+ * then replay the snapshot onto the fetched one — dirty inos absent locally
+ * are unlinks and are removed from the fetched table. The whole
+ * snapshot+swap+replay runs under table_lock+idx_mu+dirty_mu so op-path
+ * workers can't land changes in the doomed old table mid-resync. */
+static int efs_client_meta_resync(void)
+{
+    if (g_client.node_count == 0)
+        return EFS_ERR_NET;
+    fprintf(stderr, "meta: resync after STALE quorum (local gen %llu)\n",
+            (unsigned long long)g_client.export.root.generation);
+    fflush(stderr);
+
+    /* Serialize against flushes: an in-flight flush holds the dirty sets
+     * swapped out (dirty_snap), so snapshotting without g_repl_mu could
+     * capture incomplete dirty state — the later merge-back would then
+     * reference rows our table swap already freed (lost creates → ENOENT).
+     * Callers invoke resync AFTER releasing g_repl_mu, so no self-deadlock. */
+    pthread_mutex_lock(&g_repl_mu);
+
+    /* Network phase without the table locks: ops keep running and land in
+     * the current table, which the locked phase below snapshots before
+     * swapping. g_repl_mu keeps the dirty sets complete meanwhile. */
+    struct efs_meta_fetch f;
+    int frc = efs_client_fetch_meta_best(g_client.nodes[0].addr,
+                                         g_client.nodes[0].port, &f);
+    if (frc != EFS_OK || !f.efsm) {
+        pthread_mutex_unlock(&g_repl_mu);
+        free(f.efsm);
+        efs_export_root_free(&f.root);
+        return frc != EFS_OK ? frc : EFS_ERR_NET;
+    }
+
+    efs_client_table_lock();
+    pthread_mutex_lock(&g_client.idx_mu);
+    pthread_mutex_lock(&g_client.dirty_mu);
+
+    uint64_t cap_ino = g_client.dirty_ino_count;
+    uint64_t cap_ch = g_client.dirty_chunk_count;
+    struct efs_inode *ino_recs = malloc((cap_ino ? cap_ino : 1) *
+                                        sizeof(*ino_recs));
+    uint64_t *del_inos = malloc((cap_ino ? cap_ino : 1) * sizeof(*del_inos));
+    struct efs_chunk_entry *ch_recs = malloc((cap_ch ? cap_ch : 1) *
+                                             sizeof(*ch_recs));
+    if (!ino_recs || !del_inos || !ch_recs) {
+        free(ino_recs);
+        free(del_inos);
+        free(ch_recs);
+        pthread_mutex_unlock(&g_client.dirty_mu);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_table_unlock();
+        pthread_mutex_unlock(&g_repl_mu);
+        free(f.efsm);
+        efs_export_root_free(&f.root);
+        return EFS_ERR_NOMEM;
+    }
+
+    uint64_t nrec = 0, ndel = 0, nch = 0;
+    if (g_client.dirty_ino_keys) {
+        for (uint64_t i = 0; i <= g_client.dirty_ino_mask; i++) {
+            uint64_t ino = g_client.dirty_ino_keys[i];
+            if (!ino)
+                continue;
+            struct efs_inode rec;
+            if (efs_export_get_inode(&g_client.export, ino, &rec) == 0)
+                ino_recs[nrec++] = rec;
+            else
+                del_inos[ndel++] = ino; /* dirty but gone: unlinked */
+        }
+    }
+    for (uint64_t i = 0; i < g_client.dirty_chunk_count; i++) {
+        struct efs_chunk_entry ce;
+        if (efs_export_get_chunk(&g_client.export, g_client.dirty_chunk_inos[i],
+                                 g_client.dirty_chunk_idxs[i], &ce) == 0)
+            ch_recs[nch++] = ce;
+        /* Absent locally = truncated away; the inode upsert below drops the
+         * fetched table's beyond-size suffix for every dirty regular file. */
+    }
+    uint64_t old_next_ino = g_client.export.next_ino;
+
+    int rc = efs_export_deserialize(&g_client.export, f.efsm, f.efsm_len);
+    if (rc == EFS_OK && f.have_root &&
+        efs_export_root_copy(&g_client.export.root, &f.root) == EFS_OK) {
+        g_client.export.meta_fragmented = 1;
+        if (!g_client.export.next_ino)
+            g_client.export.next_ino = f.root.next_ino;
+        uint32_t cs = f.root.chunk_size;
+        g_client.export.chunk_size = efs_chunk_size_valid(cs)
+                                         ? cs : EFS_DEFAULT_CHUNK_SIZE;
+        g_client.export.features = f.root.features;
+    }
+    if (rc == EFS_OK) {
+        /* Republish a clean generation over the adopted one. */
+        g_client.meta_dirty = 1;
+        if (g_client.export.next_ino < old_next_ino)
+            g_client.export.next_ino = old_next_ino;
+
+        for (uint64_t i = 0; i < ndel; i++) {
+            struct efs_inode tmp;
+            if (efs_export_get_inode(&g_client.export, del_inos[i], &tmp) == 0)
+                efs_export_unlink(&g_client.export, del_inos[i]);
+        }
+
+        /* Concurrent mkdir of the same path by two clients produces duplicate
+         * (parent,name) rows with different inos; the name index can only
+         * bind one, orphaning the other subtree. Dedup dirty DIR records
+         * against the fetched table: adopt the committed row's ino and remap
+         * our ino away (children + chunks rewritten below). Fixpoint because
+         * nested dirty dirs ("/a" and "/a/b" in one batch) chain remaps. */
+        uint64_t *map_old = malloc((nrec ? nrec : 1) * sizeof(*map_old));
+        uint64_t *map_new = malloc((nrec ? nrec : 1) * sizeof(*map_new));
+        uint8_t *done = calloc(nrec ? nrec : 1, 1);
+        uint64_t nmap = 0;
+        if (map_old && map_new && done) {
+            int progress = 1;
+            for (uint64_t iter = 0; progress && iter <= nrec; iter++) {
+                progress = 0;
+                for (uint64_t i = 0; i < nrec; i++) {
+                    if (done[i] || (ino_recs[i].mode & S_IFMT) != S_IFDIR)
+                        continue;
+                    for (uint64_t m = 0; m < nmap; m++)
+                        if (ino_recs[i].parent == map_old[m]) {
+                            ino_recs[i].parent = map_new[m];
+                            break;
+                        }
+                    struct efs_inode exst;
+                    int lrc = efs_export_lookup(&g_client.export,
+                                                ino_recs[i].parent,
+                                                ino_recs[i].name, &exst);
+                    if (lrc == 0 && exst.ino == ino_recs[i].ino) {
+                        done[i] = 1; /* already committed row, refresh below */
+                        efs_export_upsert_inode(&g_client.export, &ino_recs[i]);
+                        progress = 1;
+                    } else if (lrc == 0 && (exst.mode & S_IFMT) == S_IFDIR) {
+                        map_old[nmap] = ino_recs[i].ino;
+                        map_new[nmap] = exst.ino;
+                        nmap++;
+                        done[i] = 1;
+                        progress = 1;
+                    } else if (lrc == 0) {
+                        /* file/dir type clash: dir wins the name */
+                        efs_export_unlink(&g_client.export, exst.ino);
+                        efs_export_upsert_inode(&g_client.export, &ino_recs[i]);
+                        done[i] = 1;
+                        progress = 1;
+                    } else {
+                        struct efs_inode pr;
+                        if (efs_export_get_inode(&g_client.export,
+                                                 ino_recs[i].parent,
+                                                 &pr) == 0 ||
+                            ino_recs[i].parent == EFS_ROOT_INO) {
+                            efs_export_upsert_inode(&g_client.export,
+                                                    &ino_recs[i]);
+                            done[i] = 1;
+                            progress = 1;
+                        }
+                        /* else: parent is a dirty dir not yet placed — defer */
+                    }
+                }
+            }
+        }
+        /* Any dirs left unplaced after the fixpoint (shouldn't happen): drop
+         * them rather than insert unreachable rows. */
+
+        uint32_t cs = g_client.export.chunk_size
+                          ? g_client.export.chunk_size : EFS_DEFAULT_CHUNK_SIZE;
+        for (uint64_t i = 0; i < nrec; i++) {
+            if ((ino_recs[i].mode & S_IFMT) == S_IFDIR)
+                continue; /* handled in pass 1 */
+            for (uint64_t m = 0; m < nmap; m++)
+                if (ino_recs[i].parent == map_old[m]) {
+                    ino_recs[i].parent = map_new[m];
+                    break;
+                }
+            struct efs_inode exst;
+            if (efs_export_lookup(&g_client.export, ino_recs[i].parent,
+                                  ino_recs[i].name, &exst) == 0 &&
+                exst.ino != ino_recs[i].ino) {
+                /* Same-path collision with another writer's row. Last writer
+                 * wins for files; never destroy a committed DIR for a file. */
+                if ((exst.mode & S_IFMT) == S_IFDIR)
+                    goto skip_file;
+                efs_export_unlink(&g_client.export, exst.ino);
+            }
+            efs_export_upsert_inode(&g_client.export, &ino_recs[i]);
+            if ((ino_recs[i].mode & S_IFMT) == S_IFREG && !ino_recs[i].pack_ino)
+                efs_export_drop_chunks_from(&g_client.export, ino_recs[i].ino,
+                                            (uint32_t)((ino_recs[i].size + cs - 1) / cs));
+        skip_file:;
+        }
+        for (uint64_t i = 0; i < nch; i++) {
+            for (uint64_t m = 0; m < nmap; m++)
+                if (ch_recs[i].ino == map_old[m]) {
+                    ch_recs[i].ino = map_new[m];
+                    break;
+                }
+            efs_export_set_chunk(&g_client.export, ch_recs[i].ino,
+                                 ch_recs[i].chunk_index,
+                                 ch_recs[i].fragment_nodes, ch_recs[i].checksums);
+        }
+        free(map_old);
+        free(map_new);
+        free(done);
+        if (nmap)
+            fprintf(stderr, "meta: resync deduped %llu duplicate dir(s)\n",
+                    (unsigned long long)nmap);
+        efs_export_recompute_rollups(&g_client.export);
+        if (efs_client_meta_cache_adopt(f.efsm, f.efsm_len) == 0)
+            f.efsm = NULL;
+        fprintf(stderr,
+                "meta: resync rebased %llu inode(s) (%llu deleted) + %llu "
+                "chunk(s) onto gen %llu\n",
+                (unsigned long long)nrec, (unsigned long long)ndel,
+                (unsigned long long)nch,
+                (unsigned long long)g_client.export.root.generation);
+        fflush(stderr);
+    }
+
+    free(ino_recs);
+    free(del_inos);
+    free(ch_recs);
+    pthread_mutex_unlock(&g_client.dirty_mu);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_table_unlock();
+    pthread_mutex_unlock(&g_repl_mu);
+    free(f.efsm);
+    efs_export_root_free(&f.root);
+    return rc;
+}
+
 /* Non-blocking flush for the batched hot path. If another flush is already in
  * flight it serializes the full table, which coalesces our dirty ops — so
  * return instead of stalling every worker behind g_repl_mu for the whole
@@ -1518,8 +1983,13 @@ static int efs_client_replicate_metadata_nb(void)
         pthread_mutex_unlock(&g_repl_mu);
         if (rc == EFS_OK)
             return EFS_OK;
-        if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM)
+        if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM &&
+            rc != EFS_ERR_STALE && rc != EFS_ERR_BUSY)
             break;
+        /* STALE resyncs (we're behind); BUSY just backs off — another
+         * writer is mid-flush and our gen may still be next. */
+        if (rc == EFS_ERR_STALE)
+            efs_client_meta_resync();
         if (attempt < 4) {
             useconds_t base = 100000u << (attempt - 1);
             usleep(base + (useconds_t)(rand() % 50000));
@@ -1619,7 +2089,8 @@ int efs_client_replicate_metadata(void)
      * creates/chmods. Transient net/quorum blips show up as fchmod EIO —
      * retry with exponential backoff + jitter before surfacing failure. */
     int rc = EFS_ERR_NET;
-    for (int attempt = 1; attempt <= 4; attempt++) {
+    int hard_fails = 0;
+    for (int attempt = 1; attempt <= 64; attempt++) {
         rc = efs_client_replicate_metadata_once();
         if (rc == EFS_OK) {
             g_client.meta_cap_blocked = 0;
@@ -1627,15 +2098,30 @@ int efs_client_replicate_metadata(void)
         }
         if (rc == EFS_ERR_QUOTA || rc == EFS_ERR_INVAL)
             break;
-        if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM)
+        if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM &&
+            rc != EFS_ERR_STALE && rc != EFS_ERR_BUSY)
             break;
-        fprintf(stderr, "meta replicate attempt %d/4 failed: %s\n",
-                attempt, efs_strerror(rc));
-        fflush(stderr);
-        if (attempt < 4) {
-            useconds_t base = 100000u << (attempt - 1); /* 100,200,400ms */
-            usleep(base + (useconds_t)(rand() % 50000));
+        /* STALE resyncs (we're behind); BUSY just backs off — another
+         * writer is mid-flush and our gen may still be next. Both are
+         * races against concurrent writers, not outages: keep racing with
+         * jittered backoff. Each election round admits one winner, so with
+         * N writers everyone commits within ~N rounds. NET/NO_QUORUM stay
+         * short-fused: those mean the cluster is genuinely down. */
+        if (rc == EFS_ERR_STALE)
+            efs_client_meta_resync();
+        if (rc == EFS_ERR_NET || rc == EFS_ERR_NO_QUORUM) {
+            if (++hard_fails >= 4)
+                break;
+            fprintf(stderr, "meta replicate attempt %d/4 failed: %s\n",
+                    hard_fails, efs_strerror(rc));
+            fflush(stderr);
+        } else if (rc == EFS_ERR_STALE && (attempt <= 3 || attempt % 16 == 0)) {
+            fprintf(stderr, "meta replicate attempt %d: %s (racing concurrent writers)\n",
+                    attempt, efs_strerror(rc));
+            fflush(stderr);
         }
+        useconds_t base = 100000u << (attempt < 4 ? (attempt - 1) : 3);
+        usleep(base + (useconds_t)(rand() % 100000));
     }
     fprintf(stderr, "meta replicate giving up: %s\n", efs_strerror(rc));
     fflush(stderr);

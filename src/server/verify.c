@@ -32,6 +32,7 @@ struct verify_pool {
     uint64_t dropped;
     uint64_t mismatch;
     uint64_t healed;
+    uint64_t skipped; /* jobs obsoleted by a newer write to the same fragment */
 };
 
 static struct verify_pool g_vfy;
@@ -182,6 +183,16 @@ static int heal_from_peers(struct efsd_server *s, struct efs_export *ex,
         goto out;
     }
 
+    /* A newer write may have landed while we fetched peers: re-check the
+     * sidecar so a stale heal can't clobber a fresh fragment. */
+    uint8_t cur_sum[EFS_HASH_SIZE];
+    if (server_read_fragment_sum(s, ex, job->ino, job->chunk_index,
+                                 job->fragment_index, cur_sum) == 0 &&
+        memcmp(cur_sum, job->checksum, EFS_HASH_SIZE) != 0) {
+        rc = EFS_ERR_BUSY;
+        goto out;
+    }
+
     rc = server_write_fragment_with_sum(s, ex, job->ino, job->chunk_index,
                                         job->fragment_index, healed, frag_len,
                                         job->checksum);
@@ -208,6 +219,21 @@ static void verify_one(struct efsd_server *s, const struct verify_job *job)
     int rc = server_read_fragment(s, ex, job->ino, job->chunk_index,
                                   job->fragment_index, buf, &got);
     if (rc == 0 && got == job->data_len) {
+        /* Obsolescence check: a newer write may have rewritten this fragment
+         * since the job was enqueued (meta dual-slot pages flip every other
+         * generation under concurrent flushers). If the on-disk sidecar sum
+         * no longer matches the job's checksum, the job is stale — verifying
+         * against the old expectation would mismatch and trigger a pointless
+         * heal storm. The newer write's own verify job checks the content. */
+        uint8_t cur_sum[EFS_HASH_SIZE];
+        if (server_read_fragment_sum(s, ex, job->ino, job->chunk_index,
+                                     job->fragment_index, cur_sum) == 0 &&
+            memcmp(cur_sum, job->checksum, EFS_HASH_SIZE) != 0) {
+            g_vfy.skipped++;
+            free(buf);
+            server_export_put(s, ex);
+            return;
+        }
         uint8_t hash[EFS_HASH_SIZE];
         efs_hash(buf, job->data_len, hash);
         if (memcmp(hash, job->checksum, EFS_HASH_SIZE) != 0) {
