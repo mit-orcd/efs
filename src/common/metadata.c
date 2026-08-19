@@ -977,11 +977,24 @@ static void rollup_expand_parents_of(struct efs_export *ex, efs_ino_t ino)
     }
 }
 
-static void recompute_dir_postorder(struct efs_export *ex, efs_ino_t dir_ino)
+static void recompute_dir_postorder(struct efs_export *ex, efs_ino_t dir_ino,
+                                    uint8_t *vis)
 {
     struct efs_inode *d = inode_ptr(ex, dir_ino);
     if (!d || !efs_mode_is_dir(d->mode))
         return;
+    /* A torn/holed meta page can scramble parent pointers into a directory
+     * cycle (a dir that is its own ancestor). Recursing on it overflowed the
+     * catch-up thread's stack — the "raced deserialize SIGSEGV". Mark visited
+     * dir slots and bail on a revisit so a garbage table cannot recurse
+     * forever; the cycle's rollups stay stale until a clean flush re-publishes
+     * the subtree. */
+    size_t dslot = (size_t)(d - ex->inodes);
+    if (dslot < ex->inode_count) {
+        if (vis[dslot])
+            return;
+        vis[dslot] = 1;
+    }
     inode_clear_rollups(d);
     struct efs_child_vec *v = child_vec_get(ex, dir_ino, 0);
     if (!v)
@@ -994,7 +1007,7 @@ static void recompute_dir_postorder(struct efs_export *ex, efs_ino_t dir_ino)
         if (c->ino == dir_ino)
             continue;
         if (efs_mode_is_dir(c->mode))
-            recompute_dir_postorder(ex, c->ino);
+            recompute_dir_postorder(ex, c->ino, vis);
         parent_add_child(d, c);
     }
 }
@@ -1068,7 +1081,14 @@ void efs_export_recompute_rollups(struct efs_export *ex)
             inode_clear_rollups(&ex->inodes[i]);
     }
     child_idx_rebuild(ex);
-    recompute_dir_postorder(ex, EFS_ROOT_INO);
+    /* Visited-set for cycle-safe postorder (see recompute_dir_postorder). On
+     * allocation failure skip the recompute rather than risk the recursion —
+     * rollups stay cleared (stale) instead of crashing the catch-up thread. */
+    uint8_t *vis = calloc(ex->inode_count ? ex->inode_count : 1, 1);
+    if (vis) {
+        recompute_dir_postorder(ex, EFS_ROOT_INO, vis);
+        free(vis);
+    }
     pending_rollup_clear(ex);
 }
 
