@@ -212,11 +212,11 @@ int main(void)
         } else {
             int found = 0;
             size_t compact_off = EFS_META_HDR_SIZE;
-            size_t compact_bytes = (size_t)ex.inode_count * EFS_INODE_COMPACT_SIZE;
-            if (compact_off + compact_bytes < blen) {
-                const char *dents = blob + compact_off + compact_bytes;
+            size_t dent_base = efs_meta_dent_off(EFS_META_VERSION, ex.inode_count);
+            if (dent_base < blen) {
+                const char *dents = blob + dent_base;
                 size_t dent_off = 0;
-                size_t dent_lim = blen - (compact_off + compact_bytes);
+                size_t dent_lim = blen - dent_base;
                 for (uint64_t i = 0; i < ex.inode_count && dent_off + 2 <= dent_lim;
                      i++) {
                     uint16_t ln = 0;

@@ -167,6 +167,26 @@ struct efs_export {
 #define EFS_ROLLUP_CREATE     2
 #define EFS_META_EFSM_V5      5
 #define EFS_META_EFSM_V6      6
+#define EFS_META_EFSM_V7      7
+/* Current serialize (wire) version. v7 page-aligns the dentry region. */
+#define EFS_META_VERSION      EFS_META_EFSM_V7
+
+/* Inode-region dentry byte offset. v6 packs dentries immediately after the
+ * compact inode rows, so appending one row memmoves the whole dentry tail and
+ * re-dirties every page it spans (O(table) flush per create). v7 page-aligns
+ * the dentry region: its offset depends only on inode_count, so a create that
+ * does not cross a compact-page boundary leaves the dentry pages untouched
+ * (O(1) flush). Deserialize recomputes the offset from the header's
+ * inode_count, so no extra header field is needed. */
+static inline size_t efs_meta_dent_off(uint32_t efsm_version, uint64_t inode_count)
+{
+    size_t off = (size_t)EFS_META_HDR_SIZE +
+                 (size_t)inode_count * EFS_INODE_COMPACT_SIZE;
+    if (efsm_version >= EFS_META_EFSM_V7)
+        off = (off + (size_t)EFS_META_PAGE_SIZE - 1) &
+              ~((size_t)EFS_META_PAGE_SIZE - 1);
+    return off;
+}
 
 /* True if adding extra inode/chunk rows would exceed the v5 page caps. */
 int efs_export_fits_page_cap(const struct efs_export *ex, uint64_t extra_inodes,

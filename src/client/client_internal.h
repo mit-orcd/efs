@@ -116,6 +116,11 @@ struct efs_client {
     int meta_flush_stop;
     int meta_flush_started;
     int meta_flush_force; /* next flush does a full serialize */
+    /* Set once this process commits a v7 (page-aligned dentry) generation.
+     * Until then the first flush is forced full so every on-disk page is
+     * rewritten in v7 layout — the mounted cache may sit on v6 pages even
+     * when the adopted blob reads v7 (GET_META re-serializes server-side). */
+    int meta_v7_committed;
     /* After a hunted/skipped reconstruct, rewrite chunk-table pages to
      * canonical CIs (same-parity gen+2) so the next mount does not hunt. */
     int meta_heal;

@@ -14,6 +14,39 @@ static void expect_str(const char *label, const char *got, const char *want)
     }
 }
 
+/* Build a v6 wire blob (contiguous dentry tail, version 6) from a table, to
+ * verify the deserializer still reads the legacy layout. */
+static char *build_v6_blob(struct efs_export *ex, size_t *out_len)
+{
+    size_t hdr = EFS_META_HDR_SIZE;
+    size_t ino_bytes = (size_t)ex->inode_count * EFS_INODE_COMPACT_SIZE;
+    size_t dent = (size_t)ex->dentry_bytes;
+    size_t ch = (size_t)ex->chunk_count * EFS_CHUNK_WIRE_SIZE;
+    size_t total = hdr + ino_bytes + dent + ch;
+    uint8_t *b = calloc(1, total ? total : 1);
+    if (!b)
+        return NULL;
+    efs_export_pack_header_ver(ex, b, EFS_META_EFSM_V6);
+    uint8_t *p = b + hdr;
+    for (uint64_t i = 0; i < ex->inode_count; i++) {
+        efs_export_pack_inode_compact(&ex->inodes[i], p);
+        p += EFS_INODE_COMPACT_SIZE;
+    }
+    for (uint64_t i = 0; i < ex->inode_count; i++) {
+        uint16_t ln = (uint16_t)strnlen(ex->inodes[i].name, EFS_MAX_NAME - 1);
+        memcpy(p, &ln, 2);
+        p += 2;
+        if (ln) {
+            memcpy(p, ex->inodes[i].name, ln);
+            p += ln;
+        }
+    }
+    for (uint64_t i = 0; i < ex->chunk_count; i++)
+        efs_export_pack_chunk(&ex->chunks[i], p + i * EFS_CHUNK_WIRE_SIZE);
+    *out_len = total;
+    return (char *)b;
+}
+
 int main(void)
 {
     struct efs_export ex;
@@ -42,16 +75,34 @@ int main(void)
     }
     uint32_t ver = 0;
     memcpy(&ver, blob + 4, 4);
-    if (ver != EFS_META_EFSM_V6) {
-        fprintf(stderr, "FAIL efsm version %u\n", ver);
+    if (ver != EFS_META_EFSM_V7) {
+        fprintf(stderr, "FAIL efsm version %u (want v7)\n", ver);
         failures++;
     }
-    /* Compact + short names must beat the v5 420 B/inode blob. */
+    /* v7 page-aligns the dentry region: dentries start at the first page
+     * boundary at/after HDR + inode_count*124. */
+    size_t want_dent_off = efs_meta_dent_off(EFS_META_EFSM_V7, ex.inode_count);
+    if (want_dent_off % EFS_META_PAGE_SIZE != 0) {
+        fprintf(stderr, "FAIL dent_off %zu not page-aligned\n", want_dent_off);
+        failures++;
+    }
+    if (blen != want_dent_off + ex.dentry_bytes +
+                  ex.chunk_count * EFS_CHUNK_WIRE_SIZE) {
+        fprintf(stderr, "FAIL v7 blob len %zu\n", blen);
+        failures++;
+    }
+    /* v7 trades a <1-page dentry pad for O(1) creates, so a tiny table is
+     * larger than v5's dense 420 B/inode blob; at scale the pad is noise.
+     * Just assert the compact rows still beat v5 here (dentries excluded). */
     size_t v5 = (size_t)EFS_META_HDR_SIZE +
                 ex.inode_count * EFS_INODE_WIRE_SIZE +
                 ex.chunk_count * EFS_CHUNK_WIRE_SIZE;
-    if (blen >= v5) {
-        fprintf(stderr, "FAIL v6 blob %zu not smaller than v5 %zu\n", blen, v5);
+    size_t compact_only = (size_t)EFS_META_HDR_SIZE +
+                          ex.inode_count * EFS_INODE_COMPACT_SIZE +
+                          ex.chunk_count * EFS_CHUNK_WIRE_SIZE;
+    if (compact_only >= v5) {
+        fprintf(stderr, "FAIL compact rows %zu not smaller than v5 %zu\n",
+                compact_only, v5);
         failures++;
     }
 
@@ -63,7 +114,7 @@ int main(void)
     } else {
         struct efs_inode out;
         if (efs_export_lookup(&ex2, d, "short.jpg", &out) != 0) {
-            fprintf(stderr, "FAIL lookup after v6 round-trip\n");
+            fprintf(stderr, "FAIL lookup after v7 round-trip\n");
             failures++;
         } else {
             expect_str("name", out.name, "short.jpg");
@@ -73,8 +124,8 @@ int main(void)
                 failures++;
             }
         }
-        if (ex2.efsm_version != EFS_META_EFSM_V6) {
-            fprintf(stderr, "FAIL efsm_version %u\n", ex2.efsm_version);
+        if (ex2.efsm_version != EFS_META_EFSM_V7) {
+            fprintf(stderr, "FAIL efsm_version %u (want v7)\n", ex2.efsm_version);
             failures++;
         }
         if (ex2.dentry_bytes != want_dent) {
@@ -82,6 +133,97 @@ int main(void)
                     (unsigned long long)ex2.dentry_bytes,
                     (unsigned long long)want_dent);
             failures++;
+        }
+    }
+    efs_export_free(&ex2);
+    free(blob);
+
+    /* Page-crossing round-trip: enough inodes to push the dentry region past
+     * several compact-page boundaries (128 KiB / 124 B ≈ 1056 rows/page). */
+    struct efs_export big;
+    efs_export_init(&big, 9, "big");
+    efs_ino_t bd = efs_export_create(&big, EFS_ROOT_INO, S_IFDIR | 0755, 0, 0, "bd");
+    int nfiles = 3000;
+    for (int i = 0; i < nfiles; i++) {
+        char nm[64];
+        snprintf(nm, sizeof(nm), "file-%04d.dat", i);
+        if (!efs_export_create(&big, bd, S_IFREG | 0644, 0, 0, nm)) {
+            fprintf(stderr, "FAIL big create %d\n", i);
+            failures++;
+            break;
+        }
+    }
+    char *bblob = NULL;
+    size_t bblen = 0;
+    if (efs_export_serialize(&big, &bblob, &bblen) != 0) {
+        fprintf(stderr, "FAIL big serialize\n");
+        failures++;
+    } else {
+        /* The dentry region must be page-aligned and at/after the v6
+         * contiguous offset (the pad is by definition < 1 page). */
+        size_t v6_off = (size_t)EFS_META_HDR_SIZE +
+                        big.inode_count * EFS_INODE_COMPACT_SIZE;
+        size_t v7_off = efs_meta_dent_off(EFS_META_EFSM_V7, big.inode_count);
+        if (v7_off % EFS_META_PAGE_SIZE != 0 || v7_off < v6_off) {
+            fprintf(stderr, "FAIL v7 dent_off %zu (v6 %zu) not aligned\n",
+                    v7_off, v6_off);
+            failures++;
+        }
+        struct efs_export big2;
+        efs_export_init(&big2, 0, "");
+        if (efs_export_deserialize(&big2, bblob, bblen) != 0) {
+            fprintf(stderr, "FAIL big deserialize\n");
+            failures++;
+        } else {
+            if (big2.inode_count != big.inode_count) {
+                fprintf(stderr, "FAIL big inode_count %llu want %llu\n",
+                        (unsigned long long)big2.inode_count,
+                        (unsigned long long)big.inode_count);
+                failures++;
+            }
+            /* Spot-check lookups across the whole range. */
+            for (int i = 0; i < nfiles; i += 250) {
+                char nm[64];
+                snprintf(nm, sizeof(nm), "file-%04d.dat", i);
+                struct efs_inode out;
+                if (efs_export_lookup(&big2, bd, nm, &out) != 0) {
+                    fprintf(stderr, "FAIL big lookup %s\n", nm);
+                    failures++;
+                }
+            }
+        }
+        efs_export_free(&big2);
+        free(bblob);
+    }
+    efs_export_free(&big);
+
+    /* v6 read-compat: a hand-built legacy blob must still deserialize. */
+    {
+        size_t v6len = 0;
+        char *v6 = build_v6_blob(&ex, &v6len);
+        if (!v6) {
+            fprintf(stderr, "FAIL build v6 blob\n");
+            failures++;
+        } else {
+            struct efs_export ex6;
+            efs_export_init(&ex6, 0, "");
+            if (efs_export_deserialize(&ex6, v6, v6len) != 0) {
+                fprintf(stderr, "FAIL v6 deserialize\n");
+                failures++;
+            } else {
+                struct efs_inode out;
+                if (efs_export_lookup(&ex6, d, "short.jpg", &out) != 0)
+                    fprintf(stderr, "FAIL v6 lookup\n"), failures++;
+                else
+                    expect_str("v6 name", out.name, "short.jpg");
+                if (ex6.efsm_version != EFS_META_EFSM_V6) {
+                    fprintf(stderr, "FAIL v6 efsm_version %u\n",
+                            ex6.efsm_version);
+                    failures++;
+                }
+            }
+            efs_export_free(&ex6);
+            free(v6);
         }
     }
 
@@ -105,9 +247,7 @@ int main(void)
         failures++;
     }
 
-    efs_export_free(&ex2);
     efs_export_free(&ex);
-    free(blob);
     if (failures) {
         printf("test_meta_v6: %d failures\n", failures);
         return 1;

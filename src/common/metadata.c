@@ -20,8 +20,12 @@
 /* EFSM: v2: uid/gid. v3: mtime_nsec after mtime. v4: atime + dir rollups.
  * v5: fixed-size inode records + pack fields; chunk table is a separate
  * page region so creates do not shift chunk pages.
- * v6: compact inodes (no name / tree rollups) + packed dentries. */
-#define EFS_META_VERSION EFS_META_EFSM_V6
+ * v6: compact inodes (no name / tree rollups) + packed dentries.
+ * v7: dentry region page-aligned within the inode region (offset derived
+ * from inode_count) so a create no longer shifts/re-dirties the dentry
+ * tail — O(1) metadata flush per create instead of O(table).
+ * EFS_META_VERSION is in metadata.h (shared with the client incremental
+ * serialize). */
 /* EFS_INODE_WIRE_SIZE is in metadata.h (EFSM v5). */
 
 static size_t dentry_bytes_for(const struct efs_export *ex, uint64_t extra_inodes);
@@ -2268,12 +2272,14 @@ int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
         return EFS_ERR_INVAL;
     efs_export_ensure_rollups(ex);
 
-    /* v6: compact inode rows + packed dentries, then the chunk region. */
-    size_t hdr = EFS_META_HDR_SIZE;
-    size_t ino_bytes = (size_t)ex->inode_count * EFS_INODE_COMPACT_SIZE;
+    /* v7: compact inode rows, zero pad to the page-aligned dentry offset,
+     * packed dentries, then the chunk region. The pad keeps the dentry region
+     * stable as inode_count grows within a compact page (see
+     * efs_meta_dent_off). */
     size_t dent_bytes = dentry_bytes_for(ex, 0);
     size_t chunk_bytes = (size_t)ex->chunk_count * EFS_CHUNK_WIRE_SIZE;
-    size_t total = hdr + ino_bytes + dent_bytes + chunk_bytes;
+    size_t dent_off = efs_meta_dent_off(EFS_META_VERSION, ex->inode_count);
+    size_t total = dent_off + dent_bytes + chunk_bytes;
 
     uint8_t *b = malloc(total ? total : 1);
     if (!b)
@@ -2300,6 +2306,11 @@ int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
     for (uint64_t i = 0; i < ex->inode_count; i++) {
         efs_export_pack_inode_compact(&ex->inodes[i], p);
         p += EFS_INODE_COMPACT_SIZE;
+    }
+    /* Zero pad to the page-aligned dentry offset (v7). */
+    if ((size_t)(p - b) < dent_off) {
+        memset(p, 0, dent_off - (size_t)(p - b));
+        p = b + dent_off;
     }
     for (uint64_t i = 0; i < ex->inode_count; i++) {
         uint16_t ln = (uint16_t)strnlen(ex->inodes[i].name, EFS_MAX_NAME - 1);
@@ -2359,7 +2370,7 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
     uint32_t version;
     if (read_u32(f, &version) != 0 ||
         (version != 2 && version != 3 && version != 4 && version != 5 &&
-         version != 6)) {
+         version != 6 && version != 7)) {
         fclose(f);
         return EFS_ERR_PROTO;
     }
@@ -2482,6 +2493,13 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
     }
 
     if (version >= 6) {
+        /* v7 page-aligns the dentry region within the inode region; skip the
+         * zero pad between the compact rows and the first dentry. */
+        if (version >= 7) {
+            long dent_off = (long)efs_meta_dent_off(version, inode_count);
+            if (dent_off > 0 && dent_off <= (long)len)
+                fseek(f, dent_off, SEEK_SET);
+        }
         /* Dentry region bounds: chunks occupy the fixed-size tail, so the
          * dentry region ends chunk_count*WIRE bytes before the blob end. A
          * holed (zero-filled) meta page inside the dentry area desyncs the
@@ -2567,7 +2585,9 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
     }
 
     fclose(f);
-    ex->efsm_version = version >= 6 ? EFS_META_EFSM_V6 : EFS_META_EFSM_V5;
+    ex->efsm_version = version >= 7 ? EFS_META_EFSM_V7
+                       : version >= 6 ? EFS_META_EFSM_V6
+                                      : EFS_META_EFSM_V5;
     export_drop_zero_inodes(ex);
     dentry_bytes_recompute(ex);
     if (export_reindex(ex) != 0)
@@ -2654,8 +2674,7 @@ int efs_export_fits_page_cap(const struct efs_export *ex, uint64_t extra_inodes,
     if (extra_inodes == 0)
         return 1;
     uint64_t ic = ex->inode_count + extra_inodes;
-    uint64_t ino_blob = (uint64_t)EFS_META_HDR_SIZE +
-                        ic * (uint64_t)EFS_INODE_COMPACT_SIZE +
+    uint64_t ino_blob = (uint64_t)efs_meta_dent_off(EFS_META_VERSION, ic) +
                         dentry_bytes_for(ex, extra_inodes);
     return page_count_u64(ino_blob) <= EFS_META_INO_PAGE_MAX;
 }
@@ -2665,8 +2684,8 @@ void efs_export_meta_page_usage(const struct efs_export *ex,
 {
     uint32_t ip = 0, cp = 0;
     if (ex) {
-        uint64_t ino_blob = (uint64_t)EFS_META_HDR_SIZE +
-                            ex->inode_count * (uint64_t)EFS_INODE_COMPACT_SIZE +
+        uint64_t ino_blob = (uint64_t)efs_meta_dent_off(EFS_META_VERSION,
+                                                        ex->inode_count) +
                             dentry_bytes_for(ex, 0);
         ip = page_count_u64(ino_blob);
         cp = page_count_u64(ex->chunk_count * (uint64_t)EFS_CHUNK_WIRE_SIZE);

@@ -797,8 +797,10 @@ static int incremental_serialize_v6(struct efs_export *snap, struct dirty_snap *
                                     uint32_t *ino_pc_out, uint32_t *ch_pc_out)
 {
     size_t dent = (size_t)snap->dentry_bytes;
-    size_t compact = (size_t)snap->inode_count * EFS_INODE_COMPACT_SIZE;
-    uint64_t total64 = (uint64_t)EFS_META_HDR_SIZE + compact + dent;
+    /* v7: the dentry region is page-aligned, so its offset moves only when
+     * inode_count crosses a compact-page boundary — not on every create. */
+    size_t new_dent_off = efs_meta_dent_off(EFS_META_VERSION, snap->inode_count);
+    uint64_t total64 = (uint64_t)new_dent_off + dent;
     if (total64 > (uint64_t)UINT32_MAX)
         return -1;
     uint32_t ino_len = (uint32_t)total64;
@@ -807,8 +809,7 @@ static int incremental_serialize_v6(struct efs_export *snap, struct dirty_snap *
 
     uint64_t old_ic = g_client.meta_cache_icount;
     uint64_t old_cc = g_client.meta_cache_ccount;
-    size_t old_compact = (size_t)old_ic * EFS_INODE_COMPACT_SIZE;
-    size_t old_dent_off = EFS_META_HDR_SIZE + old_compact;
+    size_t old_dent_off = efs_meta_dent_off(EFS_META_VERSION, old_ic);
     size_t old_ino_len = g_client.meta_cache_ino_len;
     size_t old_ch_len = g_client.meta_cache_ch_len;
     if (old_ino_len < old_dent_off)
@@ -843,8 +844,10 @@ static int incremental_serialize_v6(struct efs_export *snap, struct dirty_snap *
 
     char *b = g_client.meta_cache_blob;
     char *cb = g_client.meta_cache_ch;
-    size_t new_dent_off = EFS_META_HDR_SIZE + compact;
-    if (snap->inode_count > old_ic && existing_dent) {
+    /* Shift the dentry region only when its page-aligned base moved (a
+     * compact-page boundary crossing, ~1 in 1056 creates). Common-case
+     * creates leave it in place so the dentry tail pages stay clean. */
+    if (new_dent_off != old_dent_off && existing_dent) {
         memmove(b + new_dent_off, b + old_dent_off, existing_dent);
         uint32_t p0 = (uint32_t)(old_dent_off < new_dent_off ? old_dent_off
                                                              : new_dent_off) /
@@ -962,10 +965,14 @@ static int incremental_serialize(struct efs_export *snap, struct dirty_snap *ds,
     uint32_t cache_ver = EFS_META_EFSM_V5;
     if (g_client.meta_cache_blob && g_client.meta_cache_len >= 8)
         memcpy(&cache_ver, g_client.meta_cache_blob + 4, 4);
-    if (cache_ver >= EFS_META_EFSM_V6)
-        return incremental_serialize_v6(snap, ds, blob, blob_len, ino_blob_len,
-                                        chunk_blob_len, ino_dirty_pages,
-                                        ch_dirty_pages, ino_pc_out, ch_pc_out);
+    /* Incremental only against a current-version (v7) cache. An older
+     * (v5/v6) cache falls back to a full serialize, which upgrades the blob
+     * and rewrites every on-disk page as v7 (migration). */
+    if (cache_ver != EFS_META_VERSION)
+        return -1;
+    return incremental_serialize_v6(snap, ds, blob, blob_len, ino_blob_len,
+                                    chunk_blob_len, ino_dirty_pages,
+                                    ch_dirty_pages, ino_pc_out, ch_pc_out);
 
     size_t ino_bytes = (size_t)snap->inode_count * EFS_INODE_WIRE_SIZE;
     size_t ch_bytes = (size_t)snap->chunk_count * EFS_CHUNK_WIRE_SIZE;
@@ -1590,6 +1597,12 @@ static int efs_client_replicate_metadata_locked(void)
     /* EFSR v4 → v5 moves the dual-slot window; skip tables are stale. */
     if (ex->root.version < 5)
         full = 1;
+    /* v7 migration: until this process commits a v7 generation, force a full
+     * serialize so every on-disk page is rewritten in the page-aligned v7
+     * layout (the mounted cache may sit on v6 pages even when the adopted
+     * blob reads v7). */
+    if (!g_client.meta_v7_committed)
+        full = 1;
 
     /* Incremental: pack dirty rows into the cached blob under the lock.
      * Avoids memcpy of the whole inode table (~0.5–1 GiB) every batch. */
@@ -1694,6 +1707,8 @@ static int efs_client_replicate_metadata_locked(void)
     if (rc == EFS_OK) {
         if (heal)
             g_client.meta_heal = 0;
+        if (full)
+            g_client.meta_v7_committed = 1; /* on-disk pages now v7 */
         g_client.export.meta_fragmented = 1;
         efs_export_root_move(&g_client.export.root, &new_root);
         {
@@ -2119,8 +2134,7 @@ int efs_client_meta_cache_adopt(char *blob, size_t blob_len)
     uint32_t ch_len = (uint32_t)(cc * EFS_CHUNK_WIRE_SIZE);
     if (ver >= EFS_META_EFSM_V6) {
         size_t dent = (size_t)g_client.export.dentry_bytes;
-        ino_len = (uint32_t)(EFS_META_HDR_SIZE +
-                             ic * EFS_INODE_COMPACT_SIZE + dent);
+        ino_len = (uint32_t)(efs_meta_dent_off(ver, ic) + dent);
     } else {
         ino_len = (uint32_t)(EFS_META_HDR_SIZE + ic * EFS_INODE_WIRE_SIZE);
     }
