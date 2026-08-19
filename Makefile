@@ -104,8 +104,15 @@ test: all
 	./tests/test_find.sh
 
 # Rebuild when public headers change (struct layouts in metadata.h, etc.).
+# .build_id.stamp changes content (and mtime) only when the git id changes,
+# so every object picks up a moved HEAD or dirty-flag flip — a stale object
+# keeping the old -DEFS_BUILD_ID splits the cluster at the HELLO gate.
+.build_id.stamp: FORCE
+	@echo '$(EFS_GIT_ID)' | cmp -s - $@ 2>/dev/null || echo '$(EFS_GIT_ID)' > $@
+
 $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(MGMT_OBJ) $(QUERY_OBJ): \
-	include/efs/common.h include/efs/metadata.h include/efs/protocol.h
+	include/efs/common.h include/efs/metadata.h include/efs/protocol.h \
+	.build_id.stamp
 
 $(LIB): $(COMMON_OBJS)
 	ar rcs $@ $^
@@ -143,6 +150,7 @@ clean:
 	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(MGMT_OBJ) $(QUERY_OBJ)
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query blake3-bench
 	rm -f $(TEST_BINS)
+	rm -f .build_id.stamp
 
 $(BLAKE3_DIR)/blake3_sse2.o: $(BLAKE3_DIR)/blake3_sse2.c
 	$(CC) $(CFLAGS) $(INCLUDES) -msse2 -c -o $@ $<

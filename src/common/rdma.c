@@ -867,23 +867,33 @@ int efs_rdma_reply_ready(struct efs_rdma_conn *rc)
         }
         rc->armed = 1;
     }
-    struct ibv_wc wc;
-    int n = ibv_poll_cq(rc->recv_cq, 1, &wc);
-    if (n < 0) {
-        rc->broken = 1;
-        return -1;
-    }
-    if (n > 0) {
-        if (recv_wc_ok(rc, &wc) != 0)
+    /* Arm first (so a later completion still fires the channel event), then
+     * spin-poll before reporting "not ready". Callers react to 0 by
+     * sleep-polling the comp channel, whose interrupt-moderated wakeup cost
+     * ~1.9 ms per request-reply exchange here — 4x slower than TCP and 380x
+     * the 5 us hardware RTT. The spin catches replies within microseconds. */
+    int64_t spin_end = now_us() + spin_us();
+    uint32_t polls = 0;
+    for (;;) {
+        struct ibv_wc wc;
+        int n = ibv_poll_cq(rc->recv_cq, 1, &wc);
+        if (n < 0) {
+            rc->broken = 1;
             return -1;
-        rc->pend_valid = 1;
-        rc->pend_buf = rc->cur_buf;
-        rc->pend_len = rc->cur_len;
-        rc->cur_buf = -1;
-        drain_chan(rc);
-        return 1;
+        }
+        if (n > 0) {
+            if (recv_wc_ok(rc, &wc) != 0)
+                return -1;
+            rc->pend_valid = 1;
+            rc->pend_buf = rc->cur_buf;
+            rc->pend_len = rc->cur_len;
+            rc->cur_buf = -1;
+            drain_chan(rc);
+            return 1;
+        }
+        if (((++polls) & 63) == 0 && now_us() >= spin_end)
+            return 0;
     }
-    return 0;
 }
 
 int efs_rdma_reply_fd(struct efs_rdma_conn *rc)

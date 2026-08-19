@@ -1215,16 +1215,60 @@ static int catchup_poll_peer_root(struct efsd_server *s)
         if (!host[0] || port == 0)
             continue;
 
+        /* Phase 1: root-only poll. A full GET_META here cost every server
+         * 3 x ~1 GiB of memcpy + network every 2 s even at rest — the
+         * memmove storm pinned idle efsd at 60%+ CPU and starved client IO. */
         int fd = server_peer_conn_get(host, port);
         if (fd < 0)
             continue;
-        if (efs_send_msg(fd, EFS_MSG_GET_META, NULL, 0) != 0) {
+        if (efs_send_msg(fd, EFS_MSG_GET_META_ROOT, NULL, 0) != 0) {
             server_peer_conn_drop(host, port, fd);
             continue;
         }
         uint8_t type;
         void *payload = NULL;
         uint32_t payload_len = 0;
+        if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
+            type != EFS_MSG_GET_META_ROOT_REPLY || payload_len == 0) {
+            free(payload);
+            server_peer_conn_drop(host, port, fd);
+            continue;
+        }
+
+        uint64_t peer_gen = 0;
+        if (efs_meta_blob_is_root(payload, payload_len)) {
+            struct efs_export_root r;
+            memset(&r, 0, sizeof(r));
+            if (efs_export_root_deserialize_used(&r, payload, payload_len,
+                                                 NULL) == 0)
+                peer_gen = r.generation;
+            efs_export_root_free(&r);
+        }
+        free(payload);
+
+        pthread_mutex_lock(&s->lock);
+        uint64_t our_gen = 0;
+        int stuck = 0;
+        if (s->export_count > 0) {
+            our_gen = s->exports[0].root.generation;
+            stuck = s->exports[0].meta_needs_rebuild;
+        }
+        pthread_mutex_unlock(&s->lock);
+
+        /* Phase 2: full blob only when the peer is strictly newer, or same
+         * generation while our rebuild is stuck (peer may hold live tables
+         * that fragment rebuild cannot recover). */
+        int want = (peer_gen > our_gen) || (peer_gen > 0 && peer_gen == our_gen && stuck);
+        if (!want) {
+            server_peer_conn_release(host, port, fd);
+            continue;
+        }
+        if (efs_send_msg(fd, EFS_MSG_GET_META, NULL, 0) != 0) {
+            server_peer_conn_drop(host, port, fd);
+            continue;
+        }
+        payload = NULL;
+        payload_len = 0;
         if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
             type != EFS_MSG_GET_META_REPLY || payload_len == 0) {
             free(payload);
@@ -1273,6 +1317,25 @@ static void *meta_catchup_thread(void *arg)
             int rc = server_rebuild_export_from_pages(s, ex);
             if (rc == EFS_OK) {
                 pthread_mutex_lock(&s->lock);
+                /* Repair torn-era counters on every rebuild: pages holed by
+                 * pre-election dual-slot tears could reset next_ino below
+                 * live inos (create collisions) and leave stale rollups.
+                 * next_ino only ever moves forward; rollups are derived
+                 * state and always safe to recompute. */
+                uint64_t maxino = 0;
+                for (uint64_t ri = 0; ri < ex->inode_count; ri++)
+                    if (ex->inodes[ri].ino > maxino)
+                        maxino = ex->inodes[ri].ino;
+                if (ex->next_ino <= maxino) {
+                    fprintf(stderr,
+                            "meta-repair: export=%s next_ino %llu -> %llu\n",
+                            ex->name, (unsigned long long)ex->next_ino,
+                            (unsigned long long)(maxino + 1));
+                    ex->next_ino = maxino + 1;
+                }
+                if (ex->root.next_ino <= maxino)
+                    ex->root.next_ino = maxino + 1;
+                efs_export_recompute_rollups(ex);
                 /* Fresh table for the same generation: the GET_META cache
                  * (possibly a root-only reply from mid-rebuild) is stale. */
                 free(ex->gm_blob);

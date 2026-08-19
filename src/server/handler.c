@@ -601,6 +601,32 @@ send_reply:
             }
             break;
         }
+        case EFS_MSG_GET_META_ROOT: {
+            pthread_mutex_lock(&g_server->lock);
+            struct efs_export *ex = NULL;
+            if (payload_len > 0) {
+                char want[EFS_MAX_NAME];
+                memset(want, 0, sizeof(want));
+                memcpy(want, payload,
+                       payload_len < EFS_MAX_NAME ? payload_len : EFS_MAX_NAME - 1);
+                ex = server_find_export_no_create(g_server, want);
+            } else if (g_server->export_count > 0) {
+                ex = &g_server->exports[0];
+            }
+            char *buf = NULL;
+            size_t len = 0;
+            if (ex && ex->meta_fragmented)
+                efs_export_root_serialize(&ex->root, &buf, &len);
+            pthread_mutex_unlock(&g_server->lock);
+            if (buf) {
+                efs_conn_send_msg(conn, EFS_MSG_GET_META_ROOT_REPLY, buf,
+                                  (uint32_t)len);
+                free(buf);
+            } else {
+                efs_conn_send_msg(conn, EFS_MSG_GET_META_ROOT_REPLY, NULL, 0);
+            }
+            break;
+        }
         case EFS_MSG_META_FLUSH_BEGIN: {
             struct efs_msg_meta_flush_begin_reply br;
             memset(&br, 0, sizeof(br));

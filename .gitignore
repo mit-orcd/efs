@@ -37,3 +37,4 @@ slurm-jobs/state/
 /notes.txt
 /blake3-bench
 tests/test_ino_path
+/.build_id.stamp

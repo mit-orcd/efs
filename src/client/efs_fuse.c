@@ -2082,18 +2082,89 @@ static int efs_fuse_rmdir(const char *path)
     return efs_client_unlink(parent.ino, name, true) == 0 ? 0 : -EIO;
 }
 
+/* Refresh node used/quota from STATUS at most every 5 s (df callers). The
+ * discovery-time values otherwise never move, and a df that never moves
+ * looks like a quota bug. Best-effort: failures keep the last values. */
+static void statfs_refresh_usage(void)
+{
+    static uint64_t last_ms;
+    static pthread_mutex_t ref_mu = PTHREAD_MUTEX_INITIALIZER;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    uint64_t now_ms = (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+    pthread_mutex_lock(&ref_mu);
+    if (now_ms - last_ms < 5000) {
+        pthread_mutex_unlock(&ref_mu);
+        return;
+    }
+    last_ms = now_ms;
+    pthread_mutex_unlock(&ref_mu);
+
+    uint32_t n = g_client.node_count;
+    if (n > EFS_MAX_NODES)
+        n = EFS_MAX_NODES;
+    for (uint32_t i = 0; i < n; i++) {
+        char addr[64];
+        uint16_t port;
+        efs_node_id_t nid;
+        pthread_mutex_lock(&g_client.lock);
+        memcpy(addr, g_client.nodes[i].addr, sizeof(addr));
+        port = g_client.nodes[i].port;
+        nid = g_client.nodes[i].id;
+        pthread_mutex_unlock(&g_client.lock);
+        int fd = efs_connect_tcp(addr, port);
+        if (fd < 0)
+            continue;
+        efs_set_recv_timeout(fd, 2000);
+        efs_set_send_timeout(fd, 2000);
+        uint8_t type;
+        void *payload = NULL;
+        uint32_t plen = 0;
+        if (efs_send_msg(fd, EFS_MSG_STATUS, NULL, 0) == 0 &&
+            efs_recv_msg(fd, &type, &payload, &plen) == 0 &&
+            type == EFS_MSG_STATUS_REPLY &&
+            plen >= sizeof(struct efs_msg_status_reply)) {
+            struct efs_msg_status_reply r;
+            memcpy(&r, payload, sizeof(r));
+            pthread_mutex_lock(&g_client.lock);
+            for (uint32_t j = 0; j < g_client.node_count; j++)
+                if (g_client.nodes[j].id == nid) {
+                    g_client.nodes[j].used = r.used;
+                    if (r.quota)
+                        g_client.nodes[j].quota = r.quota;
+                    break;
+                }
+            pthread_mutex_unlock(&g_client.lock);
+        }
+        free(payload);
+        close(fd);
+    }
+}
+
 static int efs_fuse_statfs(const char *path, struct statvfs *stbuf)
 {
     (void)path;
     memset(stbuf, 0, sizeof(*stbuf));
 
+    statfs_refresh_usage();
     pthread_mutex_lock(&g_client.lock);
 
-    uint64_t used_logical = 0;
-    for (uint64_t i = 0; i < g_client.export.inode_count; i++) {
-        struct efs_inode *ino = &g_client.export.inodes[i];
-        if (!efs_mode_is_dir(ino->mode))
-            used_logical += ino->size;
+    /* Report physical truth: sum server-reported per-node disk usage and
+     * divide out the 2+1 amplification. Summing inode size fields is wrong
+     * here twice over: sparse files under-report, and torn meta pages left
+     * reachable rows with inflated sizes (a 75 TiB phantom on a 2 TiB
+     * cluster). node.used is refreshed at discovery; slightly stale is
+     * still truthful. */
+    uint64_t phys = 0;
+    for (uint32_t i = 0; i < g_client.node_count; i++)
+        phys += g_client.nodes[i].used;
+    uint64_t used_logical = (phys * 2) / 3;
+    if (used_logical == 0) {
+        for (uint64_t i = 0; i < g_client.export.inode_count; i++) {
+            struct efs_inode *ino = &g_client.export.inodes[i];
+            if (!efs_mode_is_dir(ino->mode))
+                used_logical += ino->size;
+        }
     }
 
     uint64_t min_quota = 0;

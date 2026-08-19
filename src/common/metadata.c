@@ -2500,8 +2500,24 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
             if (!holed && pos >= 0 && pos + 2 <= dent_end &&
                 fread(&ln, 2, 1, f) == 1 && ln < EFS_MAX_NAME &&
                 pos + 2 + ln <= dent_end &&
-                (!ln || fread(ex->inodes[i].name, ln, 1, f) == 1))
+                (!ln || fread(ex->inodes[i].name, ln, 1, f) == 1)) {
+                /* A torn page can also yield a name the walk consumes
+                 * cleanly but the kernel rejects in readdir — empty, or
+                 * containing '/' / control bytes — turning ls into EIO.
+                 * The stream is still in sync, so just rename the row. */
+                uint64_t rino = ex->inodes[i].ino;
+                if (rino != 0 && rino != EFS_ROOT_INO) {
+                    int bad = (ln == 0);
+                    for (uint16_t k = 0; !bad && k < ln; k++)
+                        if (ex->inodes[i].name[k] == '/' ||
+                            (unsigned char)ex->inodes[i].name[k] < 0x20)
+                            bad = 1;
+                    if (bad)
+                        snprintf(ex->inodes[i].name, EFS_MAX_NAME,
+                                 ".efshole.%llu", (unsigned long long)rino);
+                }
                 continue;
+            }
             snprintf(ex->inodes[i].name, EFS_MAX_NAME, ".efshole.%llu",
                      (unsigned long long)ex->inodes[i].ino);
             holed = 1; /* stream position untrustworthy from here on */

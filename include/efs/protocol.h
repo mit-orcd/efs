@@ -86,6 +86,12 @@ enum efs_msg_type {
      * page they overlapped on; the election serializes flushes cluster-wide. */
     EFS_MSG_META_FLUSH_BEGIN = 57,
     EFS_MSG_META_FLUSH_BEGIN_REPLY = 58,
+    /* Root-only meta poll for server catchup: same payload rules as GET_META
+     * (empty = primary export, else export name) but the reply is just the
+     * EFSR root (~KiB), never the GiB-scale EFSM blob. Catchup polls this
+     * every 2 s per peer; full GET_META only fires when a peer is newer. */
+    EFS_MSG_GET_META_ROOT = 59,
+    EFS_MSG_GET_META_ROOT_REPLY = 60,
 };
 
 /* Set per-export features. Only bits in set_mask are changed (to the
