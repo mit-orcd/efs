@@ -934,8 +934,20 @@ static int fetch_meta_blob_from(const char *host, uint16_t port,
     if (fd < 0)
         return EFS_ERR_NET;
 
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    /* The GET_META reply is the full serialized table — over a GiB at
+     * multi-million-inode scale, and the server serializes it on a
+     * rebuild-busy handler. The 30 s IO timeout was killing mount fetches
+     * and STALE resyncs under load (rc=-6 loops). Default 180 s,
+     * EFS_FETCH_TIMEOUT_MS overrides. */
+    static int fetch_timeout_ms = -1;
+    if (fetch_timeout_ms < 0) {
+        const char *e = getenv("EFS_FETCH_TIMEOUT_MS");
+        fetch_timeout_ms = (e && *e) ? atoi(e) : 180000;
+        if (fetch_timeout_ms < 1000)
+            fetch_timeout_ms = 1000;
+    }
+    efs_set_recv_timeout(fd, fetch_timeout_ms);
+    efs_set_send_timeout(fd, fetch_timeout_ms);
 
     uint8_t type;
     void *payload = NULL;
@@ -1028,6 +1040,8 @@ int efs_client_fetch_meta_best(const char *host, uint16_t port,
                      * the export we asked to mount empty. */
                     if (root.page_count == 0 || root.blob_len == 0) {
                         saw_bootstrap = 1;
+                        if (root.id)
+                            f->bootstrap_id = root.id;
                         efs_export_root_free(&root);
                     } else if (!have_root || root.generation > best_root.generation) {
                         efs_export_root_free(&best_root);
@@ -1171,21 +1185,27 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
         efs_export_root_free(&best_root);
         return rc;
     }
-    if (!have_root && !best_efsm && g_client.export_name[0] &&
-        (fetch_ok || saw_bootstrap)) {
+    /* Mounting an export that does not exist is a hard error. The ONLY
+     * empty-mount case is a bootstrap shell: a root with the requested name
+     * but no pages yet, which is exactly what mkfs publishes. Anything else
+     * (typo'd name, table mid-rebuild everywhere) must fail, not silently
+     * attach the client to a void table it can never flush. */
+    if (!have_root && !best_efsm && g_client.export_name[0] && saw_bootstrap) {
         pthread_mutex_lock(&g_client.lock);
         {
-            efs_export_id_t eid = 2;
-            if (strcmp(g_client.export_name, "test") == 0)
-                eid = 1;
-            else if (strcmp(g_client.export_name, "fiobench") == 0)
-                eid = 2;
+            efs_export_id_t eid = f.bootstrap_id ? f.bootstrap_id : 2;
+            if (!f.bootstrap_id) {
+                if (strcmp(g_client.export_name, "test") == 0)
+                    eid = 1;
+                else if (strcmp(g_client.export_name, "fiobench") == 0)
+                    eid = 2;
+            }
             efs_export_init(&g_client.export, eid, g_client.export_name);
         }
         g_client.export.meta_fragmented = 0;
         pthread_mutex_unlock(&g_client.lock);
         fprintf(stderr,
-                "meta: mounting empty export '%s' (no matching tables on peers)\n",
+                "meta: mounting empty export '%s' (bootstrap root, no pages yet)\n",
                 g_client.export_name);
         return EFS_OK;
     }

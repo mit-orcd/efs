@@ -1326,6 +1326,7 @@ void efs_export_free(struct efs_export *ex)
     idx_free(&ex->chunk_keys, &ex->chunk_vals, &ex->chunk_mask);
     child_vecs_free(ex);
     efs_export_root_free(&ex->root);
+    free(ex->gm_blob);
     memset(ex, 0, sizeof(*ex));
 }
 
@@ -2340,6 +2341,10 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
 {
     if (!ex || !buf)
         return EFS_ERR_INVAL;
+
+    /* Table swap: any cached GET_META serialize of the old table is stale. */
+    free(ex->gm_blob);
+    ex->gm_blob = NULL;
 
     FILE *f = fmemopen((void *)buf, len, "r");
     if (!f)

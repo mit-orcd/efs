@@ -127,6 +127,16 @@ struct efs_export {
     /* Set when root advanced but inode/chunk tables not yet rebuilt from pages.
      * Cleared by server_rebuild_export_from_pages. */
     int meta_needs_rebuild;
+    /* Server-only GET_META serialize cache (never on the wire, never in
+     * metadata.bin): serializing a multi-GiB table costs seconds under the
+     * server lock (9M+ strnlens) and resync storms otherwise pin the server
+     * at 100% CPU re-serializing the same generation. Valid while
+     * (gm_gen, gm_epoch) match the current root generation + server epoch;
+     * the handler hands out a memcpy under the lock (~0.1 s) instead. */
+    char *gm_blob;
+    size_t gm_blob_len;
+    uint64_t gm_gen;
+    uint64_t gm_epoch;
     /* Size/mtime updated via *_norollup; parent dir tree stats/times need
      * efs_export_ensure_rollups before serialize or incremental rollups. */
     int rollups_stale;

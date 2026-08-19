@@ -13,6 +13,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/resource.h>
 #include <time.h>
 
 struct efsd_server *g_server = NULL;
@@ -261,6 +262,19 @@ int main(int argc, char **argv)
 {
     /* Install before any work — imagenet load has produced silent SIGSEGVs. */
     efsd_install_crash_handlers();
+
+    /* The 1024-fd soft cap put accept() into EMFILE backoff under conn
+     * storms (~500 live conns + data files), which wedged new mounts and
+     * resync fetches. Raise to the hard cap (524288) at startup. */
+    {
+        struct rlimit rl;
+        if (getrlimit(RLIMIT_NOFILE, &rl) == 0 && rl.rlim_cur < rl.rlim_max) {
+            rl.rlim_cur = rl.rlim_max;
+            if (setrlimit(RLIMIT_NOFILE, &rl) != 0)
+                fprintf(stderr, "setrlimit(RLIMIT_NOFILE) failed: %s\n",
+                        strerror(errno));
+        }
+    }
 
     struct efsd_server server;
     memset(&server, 0, sizeof(server));

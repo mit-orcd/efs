@@ -185,6 +185,7 @@ struct efs_meta_fetch {
     int saw_bootstrap;
     int fetch_ok;
     int last_rc;
+    uint32_t bootstrap_id; /* export id carried by the bootstrap root shell */
     char *efsm;
     size_t efsm_len;
 };

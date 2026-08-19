@@ -522,43 +522,77 @@ send_reply:
                 memset(want, 0, sizeof(want));
                 memcpy(want, payload,
                        payload_len < EFS_MAX_NAME ? payload_len : EFS_MAX_NAME - 1);
-                /* Read path must not mint exports: exact match only, else
-                 * fall back to the primary export (client checks the name). */
+                /* Read path must not mint exports: exact match only. A
+                 * named request that matches nothing gets an empty reply
+                 * (NOT_FOUND) — never the primary export's table, so no
+                 * client can accidentally attach to the wrong export. */
                 ex = server_find_export_no_create(g_server, want);
-            }
-            if (!ex && g_server->export_count > 0)
+            } else if (g_server->export_count > 0) {
+                /* Unnamed GET_META (server catchup, discovery): primary. */
                 ex = &g_server->exports[0];
-            char *rbuf = NULL, *ebuf = NULL, *buf = NULL;
-            size_t rlen = 0, elen = 0, len = 0;
+            }
+            char *buf = NULL;
+            size_t len = 0;
             if (ex) {
-                if (ex->meta_fragmented && ex->root.page_count > 0)
-                    efs_export_root_serialize(&ex->root, &rbuf, &rlen);
-                /* Prefer the live in-memory tables when catch-up has already
-                 * rebuilt them. Page reconstruct of a torn EFSR is optional. */
-                if (ex->inode_count > 0 && !ex->meta_needs_rebuild)
-                    efs_export_serialize(ex, &ebuf, &elen);
-                else if (!ex->meta_fragmented)
-                    efs_export_serialize(ex, &ebuf, &elen);
+                uint64_t gen = ex->meta_fragmented ? ex->root.generation : 0;
+                if (ex->gm_blob && ex->gm_gen == gen &&
+                    ex->gm_epoch == g_server->epoch) {
+                    /* Serve the cached serialize: a fresh 1+ GiB
+                     * efs_export_serialize is seconds under this lock
+                     * (strnlen per name), and resync storms pinned the
+                     * server at 100% CPU serializing the same generation.
+                     * The memcpy is ~0.1 s and 15x cheaper. */
+                    buf = malloc(ex->gm_blob_len);
+                    if (buf) {
+                        memcpy(buf, ex->gm_blob, ex->gm_blob_len);
+                        len = ex->gm_blob_len;
+                    }
+                } else {
+                    char *rbuf = NULL, *ebuf = NULL;
+                    size_t rlen = 0, elen = 0;
+                    if (ex->meta_fragmented && ex->root.page_count > 0)
+                        efs_export_root_serialize(&ex->root, &rbuf, &rlen);
+                    /* Prefer the live in-memory tables when catch-up has
+                     * already rebuilt them. Page reconstruct of a torn EFSR
+                     * is optional. */
+                    if (ex->inode_count > 0 && !ex->meta_needs_rebuild)
+                        efs_export_serialize(ex, &ebuf, &elen);
+                    else if (!ex->meta_fragmented)
+                        efs_export_serialize(ex, &ebuf, &elen);
+                    if (rbuf && ebuf) {
+                        buf = malloc(rlen + elen);
+                        if (buf) {
+                            memcpy(buf, rbuf, rlen);
+                            memcpy(buf + rlen, ebuf, elen);
+                            len = rlen + elen;
+                        }
+                    } else if (rbuf) {
+                        buf = rbuf;
+                        rbuf = NULL;
+                        len = rlen;
+                    } else if (ebuf) {
+                        buf = ebuf;
+                        ebuf = NULL;
+                        len = elen;
+                    }
+                    free(rbuf);
+                    free(ebuf);
+                    /* Cache this reply for (gen, epoch); root commits and
+                     * table swaps free gm_blob explicitly. */
+                    free(ex->gm_blob);
+                    ex->gm_blob = NULL;
+                    if (buf && len) {
+                        ex->gm_blob = malloc(len);
+                        if (ex->gm_blob) {
+                            memcpy(ex->gm_blob, buf, len);
+                            ex->gm_blob_len = len;
+                            ex->gm_gen = gen;
+                            ex->gm_epoch = g_server->epoch;
+                        }
+                    }
+                }
             }
             pthread_mutex_unlock(&g_server->lock);
-            if (rbuf && ebuf) {
-                buf = malloc(rlen + elen);
-                if (buf) {
-                    memcpy(buf, rbuf, rlen);
-                    memcpy(buf + rlen, ebuf, elen);
-                    len = rlen + elen;
-                }
-            } else if (rbuf) {
-                buf = rbuf;
-                rbuf = NULL;
-                len = rlen;
-            } else if (ebuf) {
-                buf = ebuf;
-                ebuf = NULL;
-                len = elen;
-            }
-            free(rbuf);
-            free(ebuf);
             if (buf) {
                 efs_conn_send_msg(conn, EFS_MSG_GET_META_REPLY, buf, (uint32_t)len);
                 free(buf);
@@ -673,14 +707,18 @@ send_reply:
                             pthread_mutex_unlock(&g_server->lock);
                             efs_export_root_free(&root);
                         } else if (root.write_lease_id &&
-                                   meta_writer_live(g_server, 0,
-                                                    handler_now_ms()) &&
-                                   g_server->meta_writer_id[0] !=
-                                       root.write_lease_id) {
-                            /* A live flush election is held by another
-                             * writer: reject so the holder's page PUTs and
-                             * root commit can't interleave/tear. STALE makes
-                             * the loser resync and retry. */
+                                   (!meta_writer_live(g_server, 0,
+                                                      handler_now_ms()) ||
+                                    g_server->meta_writer_id[0] !=
+                                        root.write_lease_id)) {
+                            /* A stamped writer must CURRENTLY hold the flush
+                             * election to commit. "No live holder" used to
+                             * pass too: a writer whose lease lapsed mid-flush
+                             * committed late, over pages a newer holder was
+                             * already PUTting for a same-parity generation —
+                             * dual-slot tear. STALE makes the loser resync
+                             * and retry. Roots with no lease id (mkfs,
+                             * legacy tools) skip the gate entirely. */
                             reply = EFS_PUT_META_STALE;
                             pthread_mutex_unlock(&g_server->lock);
                             efs_export_root_free(&root);
@@ -725,6 +763,9 @@ send_reply:
                             }
                             g_server->epoch++;
                             g_server->export_meta_dirty = 1;
+                            /* New generation: drop the GET_META cache. */
+                            free(ex->gm_blob);
+                            ex->gm_blob = NULL;
                             /* Commit consumes the flush election. */
                             g_server->meta_writer_id[0] = 0;
                             /* Save while holding the lock: concurrent PUT_META
@@ -764,6 +805,8 @@ send_reply:
                         if (efs_export_merge(ex, &inc) == 0) {
                             ex->meta_fragmented = 0;
                             g_server->epoch++;
+                            free(ex->gm_blob);
+                            ex->gm_blob = NULL;
                             g_server->export_meta_dirty = 1;
                             if (ex->name[0] && strcmp(ex->name, "pending") != 0) {
                                 server_save_export(g_server, ex);

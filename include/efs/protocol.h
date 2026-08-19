@@ -11,9 +11,11 @@
 /* Sanity bound on one frame's payload. GET_META_REPLY carries the full EFSM
  * blob: ~315 B per file (inode + chunk entry + name), so a 1.33M-file
  * ImageNet copy is already ~420 MB and the old 256 MB cap made mounts of
- * such exports fail with EFS_ERR_NET. 1 GiB covers ~3.4M files; still
- * bounds bogus mallocs. */
-#define EFS_MSG_MAX_LEN (1024u * 1024 * 1024)
+ * such exports fail with EFS_ERR_NET. 3 GiB covers ~10M files; still
+ * bounds bogus mallocs. The wire length field is u32, so this must stay
+ * under 4 GiB — before the blob approaches that, GET_META needs a
+ * chunked/streamed variant. */
+#define EFS_MSG_MAX_LEN (3072u * 1024 * 1024)
 
 enum efs_msg_type {
     EFS_MSG_HEARTBEAT = 0,

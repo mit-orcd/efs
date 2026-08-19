@@ -2716,12 +2716,20 @@ int main(int argc, char **argv)
         fflush(stdout);
     }
     if (rc != 0) {
-        fprintf(stderr,
-                "Could not fetch metadata from any node (%s).\n"
-                "status/list-exports can still work while mount fails if the\n"
-                "export root exists but its 2+1 meta table pages cannot be\n"
-                "reconstructed (missing/corrupt fragments on peers).\n",
-                efs_strerror(rc));
+        if (rc == EFS_ERR_NOT_FOUND && g_client.export_name[0]) {
+            fprintf(stderr,
+                    "ERROR: export '%s' does not exist on this cluster.\n"
+                    "Create it with efs-mgmt mkfs (or check the name with\n"
+                    "efs-mgmt list-exports). Refusing to mount.\n",
+                    g_client.export_name);
+        } else {
+            fprintf(stderr,
+                    "Could not fetch metadata from any node (%s).\n"
+                    "status/list-exports can still work while mount fails if the\n"
+                    "export root exists but its 2+1 meta table pages cannot be\n"
+                    "reconstructed (missing/corrupt fragments on peers).\n",
+                    efs_strerror(rc));
+        }
         return 1;
     }
     /* PUTs carry export_id; do not leave the hardcoded 1 if meta says otherwise. */

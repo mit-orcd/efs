@@ -1273,6 +1273,11 @@ static void *meta_catchup_thread(void *arg)
             int rc = server_rebuild_export_from_pages(s, ex);
             if (rc == EFS_OK) {
                 pthread_mutex_lock(&s->lock);
+                /* Fresh table for the same generation: the GET_META cache
+                 * (possibly a root-only reply from mid-rebuild) is stale. */
+                free(ex->gm_blob);
+                ex->gm_blob = NULL;
+                s->epoch++;
                 server_save_export(s, ex);
                 pthread_mutex_unlock(&s->lock);
                 fprintf(stderr, "meta-catchup: rebuilt export=%s\n", ex->name);

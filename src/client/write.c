@@ -1361,12 +1361,43 @@ static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
         efs_export_root_free(&root);
         return brc;
     }
+    /* The election lease (EFS_META_WRITER_EXPIRY_MS, 60 s) is shorter than
+     * a big flush: thousands of dirty pages under load take minutes. If the
+     * lease lapsed mid-flush, another writer won the election and PUT the
+     * same-parity pages concurrently — the very tear the election exists
+     * to prevent — and our root commit was rejected STALE, wedging us into
+     * the resync loop. Renew every 15 s; a failed renewal aborts the flush
+     * before our PUTs can overlap another holder's. */
+    struct timespec rnw;
+    clock_gettime(CLOCK_MONOTONIC, &rnw);
+    int64_t last_renew_ms = (int64_t)rnw.tv_sec * 1000 +
+                            (int64_t)rnw.tv_nsec / 1000000;
 
     /* Pass 2: encode + PUT dirty pages, pipelined. */
     uint32_t pipe = EFS_WRITE_PIPELINE;
     if (pipe < 1)
         pipe = 1;
     for (uint32_t base = 0; base < ndirty; ) {
+        clock_gettime(CLOCK_MONOTONIC, &rnw);
+        int64_t now_ms = (int64_t)rnw.tv_sec * 1000 +
+                         (int64_t)rnw.tv_nsec / 1000000;
+        if (now_ms - last_renew_ms > 15000) {
+            brc = send_meta_begin(new_gen, g_client.write_lease_id);
+            if (brc != EFS_OK) {
+                free(dirty);
+                free(pad);
+                free(frag_buf);
+                free(new_hashes);
+                free(new_sums);
+                free(ino_dirty_pg);
+                free(ch_dirty_pg);
+                if (!blob_is_cache)
+                    free(blob);
+                efs_export_root_free(&root);
+                return brc;
+            }
+            last_renew_ms = now_ms;
+        }
         uint32_t batch = ndirty - base;
         if (batch > pipe)
             batch = pipe;
@@ -1765,6 +1796,12 @@ static int efs_client_meta_resync(void)
     int frc = efs_client_fetch_meta_best(g_client.nodes[0].addr,
                                          g_client.nodes[0].port, &f);
     if (frc != EFS_OK || !f.efsm) {
+        fprintf(stderr,
+                "meta: resync fetch unusable frc=%d have_root=%d efsm=%p "
+                "root_gen=%llu\n",
+                frc, f.have_root, (void *)f.efsm,
+                f.have_root ? (unsigned long long)f.root.generation : 0ull);
+        fflush(stderr);
         pthread_mutex_unlock(&g_repl_mu);
         free(f.efsm);
         efs_export_root_free(&f.root);
@@ -1819,6 +1856,11 @@ static int efs_client_meta_resync(void)
     uint64_t old_next_ino = g_client.export.next_ino;
 
     int rc = efs_export_deserialize(&g_client.export, f.efsm, f.efsm_len);
+    if (rc != EFS_OK) {
+        fprintf(stderr, "meta: resync deserialize failed rc=%d len=%zu\n",
+                rc, f.efsm_len);
+        fflush(stderr);
+    }
     if (rc == EFS_OK && f.have_root &&
         efs_export_root_copy(&g_client.export.root, &f.root) == EFS_OK) {
         g_client.export.meta_fragmented = 1;
