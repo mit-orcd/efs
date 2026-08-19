@@ -1808,6 +1808,36 @@ static int efs_client_meta_resync(void)
         return frc != EFS_OK ? frc : EFS_ERR_NET;
     }
 
+    /* Deserialize into a STAGING export WITHOUT the table locks. This parse
+     * of ~1 GiB / millions of rows + reindex takes seconds; done in place
+     * under efs_client_table_lock it wedged every FUSE op on the client (the
+     * fcstor007 13 GB / 116% CPU wedge). Ops keep running against the live
+     * table meanwhile — we re-snapshot their dirty state under the lock below
+     * and merge it onto the staged table, then swap (pointer moves only). */
+    struct efs_export staging;
+    memset(&staging, 0, sizeof(staging));
+    int rc = efs_export_deserialize(&staging, f.efsm, f.efsm_len);
+    if (rc != EFS_OK) {
+        fprintf(stderr, "meta: resync deserialize failed rc=%d len=%zu\n",
+                rc, f.efsm_len);
+        fflush(stderr);
+        efs_export_free(&staging);
+        pthread_mutex_unlock(&g_repl_mu);
+        free(f.efsm);
+        efs_export_root_free(&f.root);
+        return rc;
+    }
+    if (f.have_root &&
+        efs_export_root_copy(&staging.root, &f.root) == EFS_OK) {
+        staging.meta_fragmented = 1;
+        if (!staging.next_ino)
+            staging.next_ino = f.root.next_ino;
+        uint32_t cs = f.root.chunk_size;
+        staging.chunk_size = efs_chunk_size_valid(cs)
+                                 ? cs : EFS_DEFAULT_CHUNK_SIZE;
+        staging.features = f.root.features;
+    }
+
     efs_client_table_lock();
     pthread_mutex_lock(&g_client.idx_mu);
     pthread_mutex_lock(&g_client.dirty_mu);
@@ -1823,6 +1853,7 @@ static int efs_client_meta_resync(void)
         free(ino_recs);
         free(del_inos);
         free(ch_recs);
+        efs_export_free(&staging);
         pthread_mutex_unlock(&g_client.dirty_mu);
         pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_table_unlock();
@@ -1855,32 +1886,20 @@ static int efs_client_meta_resync(void)
     }
     uint64_t old_next_ino = g_client.export.next_ino;
 
-    int rc = efs_export_deserialize(&g_client.export, f.efsm, f.efsm_len);
-    if (rc != EFS_OK) {
-        fprintf(stderr, "meta: resync deserialize failed rc=%d len=%zu\n",
-                rc, f.efsm_len);
-        fflush(stderr);
-    }
-    if (rc == EFS_OK && f.have_root &&
-        efs_export_root_copy(&g_client.export.root, &f.root) == EFS_OK) {
-        g_client.export.meta_fragmented = 1;
-        if (!g_client.export.next_ino)
-            g_client.export.next_ino = f.root.next_ino;
-        uint32_t cs = f.root.chunk_size;
-        g_client.export.chunk_size = efs_chunk_size_valid(cs)
-                                         ? cs : EFS_DEFAULT_CHUNK_SIZE;
-        g_client.export.features = f.root.features;
-    }
-    if (rc == EFS_OK) {
+    /* Merge our still-dirty rows onto the STAGED table (the fetched gen), then
+     * swap it in. All efs_export_* calls below target `staging`, not the live
+     * g_client.export — the live table is only read for the dirty snapshot
+     * above and is replaced wholesale by the swap at the end. */
+    {
         /* Republish a clean generation over the adopted one. */
         g_client.meta_dirty = 1;
-        if (g_client.export.next_ino < old_next_ino)
-            g_client.export.next_ino = old_next_ino;
+        if (staging.next_ino < old_next_ino)
+            staging.next_ino = old_next_ino;
 
         for (uint64_t i = 0; i < ndel; i++) {
             struct efs_inode tmp;
-            if (efs_export_get_inode(&g_client.export, del_inos[i], &tmp) == 0)
-                efs_export_unlink(&g_client.export, del_inos[i]);
+            if (efs_export_get_inode(&staging, del_inos[i], &tmp) == 0)
+                efs_export_unlink(&staging, del_inos[i]);
         }
 
         /* Concurrent mkdir of the same path by two clients produces duplicate
@@ -1906,12 +1925,12 @@ static int efs_client_meta_resync(void)
                             break;
                         }
                     struct efs_inode exst;
-                    int lrc = efs_export_lookup(&g_client.export,
+                    int lrc = efs_export_lookup(&staging,
                                                 ino_recs[i].parent,
                                                 ino_recs[i].name, &exst);
                     if (lrc == 0 && exst.ino == ino_recs[i].ino) {
                         done[i] = 1; /* already committed row, refresh below */
-                        efs_export_upsert_inode(&g_client.export, &ino_recs[i]);
+                        efs_export_upsert_inode(&staging, &ino_recs[i]);
                         progress = 1;
                     } else if (lrc == 0 && (exst.mode & S_IFMT) == S_IFDIR) {
                         map_old[nmap] = ino_recs[i].ino;
@@ -1921,17 +1940,17 @@ static int efs_client_meta_resync(void)
                         progress = 1;
                     } else if (lrc == 0) {
                         /* file/dir type clash: dir wins the name */
-                        efs_export_unlink(&g_client.export, exst.ino);
-                        efs_export_upsert_inode(&g_client.export, &ino_recs[i]);
+                        efs_export_unlink(&staging, exst.ino);
+                        efs_export_upsert_inode(&staging, &ino_recs[i]);
                         done[i] = 1;
                         progress = 1;
                     } else {
                         struct efs_inode pr;
-                        if (efs_export_get_inode(&g_client.export,
+                        if (efs_export_get_inode(&staging,
                                                  ino_recs[i].parent,
                                                  &pr) == 0 ||
                             ino_recs[i].parent == EFS_ROOT_INO) {
-                            efs_export_upsert_inode(&g_client.export,
+                            efs_export_upsert_inode(&staging,
                                                     &ino_recs[i]);
                             done[i] = 1;
                             progress = 1;
@@ -1944,8 +1963,8 @@ static int efs_client_meta_resync(void)
         /* Any dirs left unplaced after the fixpoint (shouldn't happen): drop
          * them rather than insert unreachable rows. */
 
-        uint32_t cs = g_client.export.chunk_size
-                          ? g_client.export.chunk_size : EFS_DEFAULT_CHUNK_SIZE;
+        uint32_t cs = staging.chunk_size
+                          ? staging.chunk_size : EFS_DEFAULT_CHUNK_SIZE;
         for (uint64_t i = 0; i < nrec; i++) {
             if ((ino_recs[i].mode & S_IFMT) == S_IFDIR)
                 continue; /* handled in pass 1 */
@@ -1955,18 +1974,18 @@ static int efs_client_meta_resync(void)
                     break;
                 }
             struct efs_inode exst;
-            if (efs_export_lookup(&g_client.export, ino_recs[i].parent,
+            if (efs_export_lookup(&staging, ino_recs[i].parent,
                                   ino_recs[i].name, &exst) == 0 &&
                 exst.ino != ino_recs[i].ino) {
                 /* Same-path collision with another writer's row. Last writer
                  * wins for files; never destroy a committed DIR for a file. */
                 if ((exst.mode & S_IFMT) == S_IFDIR)
                     goto skip_file;
-                efs_export_unlink(&g_client.export, exst.ino);
+                efs_export_unlink(&staging, exst.ino);
             }
-            efs_export_upsert_inode(&g_client.export, &ino_recs[i]);
+            efs_export_upsert_inode(&staging, &ino_recs[i]);
             if ((ino_recs[i].mode & S_IFMT) == S_IFREG && !ino_recs[i].pack_ino)
-                efs_export_drop_chunks_from(&g_client.export, ino_recs[i].ino,
+                efs_export_drop_chunks_from(&staging, ino_recs[i].ino,
                                             (uint32_t)((ino_recs[i].size + cs - 1) / cs));
         skip_file:;
         }
@@ -1976,7 +1995,7 @@ static int efs_client_meta_resync(void)
                     ch_recs[i].ino = map_new[m];
                     break;
                 }
-            efs_export_set_chunk(&g_client.export, ch_recs[i].ino,
+            efs_export_set_chunk(&staging, ch_recs[i].ino,
                                  ch_recs[i].chunk_index,
                                  ch_recs[i].fragment_nodes, ch_recs[i].checksums);
         }
@@ -1986,7 +2005,16 @@ static int efs_client_meta_resync(void)
         if (nmap)
             fprintf(stderr, "meta: resync deduped %llu duplicate dir(s)\n",
                     (unsigned long long)nmap);
-        efs_export_recompute_rollups(&g_client.export);
+        efs_export_recompute_rollups(&staging);
+
+        /* Swap the merged staging table in for the live one. efs_export_free
+         * releases the old table's arrays (pointer frees); the struct copy
+         * moves the staged pointers. Ops were blocked only for this O(dirty)
+         * merge + O(1) swap, not the O(table) deserialize above. */
+        efs_export_free(&g_client.export);
+        g_client.export = staging;
+        memset(&staging, 0, sizeof(staging));
+
         if (efs_client_meta_cache_adopt(f.efsm, f.efsm_len) == 0)
             f.efsm = NULL;
         fprintf(stderr,

@@ -657,8 +657,28 @@ send_reply:
                         if (g_server->meta_writer_id[0] != 0 &&
                             !meta_writer_live(g_server, 0, now)) {
                             g_server->meta_writer_id[0] = 0;
+                            g_server->meta_writer_since[0] = 0;
                         }
                         meta_writer_q_expire(g_server, 0, now);
+                        /* Yield an over-held election: a holder re-BEGINing
+                         * (flush retry) past EFS_META_WRITER_MAX_HOLD_MS while
+                         * contenders queue is moved to the back of the FIFO and
+                         * the election freed, so the head-of-queue writer gets
+                         * the next grant. Without this a wedged/slow writer
+                         * re-grants itself forever and starves the cluster.
+                         * Only under contention (q_len > 0): a lone writer is
+                         * never yielded. Its partial pages are fenced by the
+                         * PUT_META commit gate and overwritten next flush. */
+                        if (g_server->meta_writer_id[0] == b.writer_id &&
+                            g_server->meta_writer_since[0] != 0 &&
+                            now - g_server->meta_writer_since[0] >
+                                EFS_META_WRITER_MAX_HOLD_MS &&
+                            g_server->meta_writer_q_len[0] > 0) {
+                            uint64_t old = g_server->meta_writer_id[0];
+                            g_server->meta_writer_id[0] = 0;
+                            g_server->meta_writer_since[0] = 0;
+                            meta_writer_q_touch(g_server, 0, old, now);
+                        }
                         if (g_server->meta_writer_id[0] == b.writer_id) {
                             /* Holder re-BEGINing (retry): re-grant. */
                             g_server->meta_writer_gen[0] = b.gen;
@@ -676,6 +696,7 @@ send_reply:
                             g_server->meta_writer_gen[0] = b.gen;
                             g_server->meta_writer_expiry[0] =
                                 now + EFS_META_WRITER_EXPIRY_MS;
+                            g_server->meta_writer_since[0] = now;
                             br.status = EFS_PUT_META_OK;
                         } else {
                             /* Held by another live writer, or others are
@@ -794,6 +815,7 @@ send_reply:
                             ex->gm_blob = NULL;
                             /* Commit consumes the flush election. */
                             g_server->meta_writer_id[0] = 0;
+                            g_server->meta_writer_since[0] = 0;
                             /* Save while holding the lock: concurrent PUT_META
                              * can efs_export_root_move and free page_checksums
                              * under a raced unlocked save (SIGSEGV). */

@@ -112,6 +112,12 @@ struct efsd_server {
     uint64_t meta_writer_id[EFS_MAX_EXPORTS];
     uint64_t meta_writer_gen[EFS_MAX_EXPORTS];
     uint64_t meta_writer_expiry[EFS_MAX_EXPORTS];
+    /* When the current holder first won the election. A holder re-BEGINing
+     * (flush retry) refreshes expiry each time, so without a hold cap a slow
+     * or wedged writer can monopolize the FIFO for minutes while contenders
+     * starve on BUSY. Re-grants past EFS_META_WRITER_MAX_HOLD_MS yield to the
+     * queue head instead. 0 = no holder. Guarded by s->lock. */
+    uint64_t meta_writer_since[EFS_MAX_EXPORTS];
     uint64_t meta_writer_q[EFS_MAX_EXPORTS][EFS_META_WRITER_QMAX];
     uint64_t meta_writer_q_ms[EFS_MAX_EXPORTS][EFS_META_WRITER_QMAX];
     uint32_t meta_writer_q_len[EFS_MAX_EXPORTS];
@@ -121,6 +127,14 @@ struct efsd_server {
  * comfortably exceed the slowest legitimate flush (page PUTs + root),
  * including a starved client's first huge dirty-set flush. */
 #define EFS_META_WRITER_EXPIRY_MS 60000ull
+
+/* Max wall-clock time one writer may hold the flush election across re-BEGIN
+ * retries while contenders are queued. Generous vs. any legitimate flush
+ * (page PUTs + root commit, even a starved client's large dirty set), so a
+ * healthy writer never hits it — but a wedged/slow one yields to the FIFO
+ * head instead of monopolizing the election for the whole client race
+ * budget. Only applies under contention (queue non-empty). */
+#define EFS_META_WRITER_MAX_HOLD_MS 30000ull
 
 /* Queued contenders keep their FIFO slot for this long without re-BEGINing.
  * Must exceed the slowest STALE resync (fetch full blob + deserialize a

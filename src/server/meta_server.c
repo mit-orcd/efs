@@ -568,28 +568,43 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
         return rc;
     }
 
-    /* Deserialize mutates ex (frees tables/root). Hold the server lock so a
-     * concurrent PUT_META/handler cannot observe a half-freed export. */
+    /* Deserialize into a STAGING export without s->lock. At GiB scale this
+     * parses millions of inode/chunk rows and reindexes — seconds of work
+     * that, done in place under s->lock, stalled every handler (the
+     * post-restart rebuild storm). The assembled blob is self-contained, so
+     * staging needs no shared state; the lock is taken only to swap the
+     * finished table in (pointer moves, not a reparse). */
+    struct efs_export staging;
+    memset(&staging, 0, sizeof(staging));
+    rc = efs_export_deserialize(&staging, blob, blob_len);
+
     pthread_mutex_lock(&s->lock);
     if (ex->root.generation != start_gen) {
         pthread_mutex_unlock(&s->lock);
+        efs_export_free(&staging);
         free(blob);
         efs_export_root_free(&snap);
         return EFS_ERR_PROTO;
     }
-
-    rc = efs_export_deserialize(ex, blob, blob_len);
     if (rc != EFS_OK) {
+        /* Staging failed; the live export keeps its previous table (better
+         * than the old in-place path, which left ex half-freed). Restore the
+         * EFSR from snap is unnecessary — ex->root was never touched. */
+        efs_export_free(&staging);
         free(blob);
-        /* Root was cleared by a failed/partial deserialize path; restore snap
-         * so the node keeps a usable EFSR and can retry. */
-        efs_export_root_move(&ex->root, &snap);
         ex->meta_fragmented = 1;
         ex->meta_needs_rebuild = 1;
         fprintf(stderr, "FENCE-SITE rebuild-deserialize-fail rc=%d\n", rc);
         pthread_mutex_unlock(&s->lock);
         return rc;
     }
+
+    /* Commit: free the old table's contents and move the staged pointers in.
+     * efs_export_free zeroes ex (including root.page_checksums); the staged
+     * root is empty (EFSM carries no EFSR), then root_move reinstalls snap. */
+    efs_export_free(ex);
+    *ex = staging;
+    memset(&staging, 0, sizeof(staging));
 
     /* Success: keep the assembled blob (plus this generation's page
      * checksums) as the incremental-rebuild cache so the next rebuild only
