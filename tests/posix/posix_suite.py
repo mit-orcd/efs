@@ -797,6 +797,421 @@ def attr_ctime_after_chmod(d):
 
 
 # ==========================================================================
+# Permissions (unprivileged user; root bypasses — those tests no-op)
+# ==========================================================================
+def _root():
+    return os.geteuid() == 0
+
+
+def _write_script(path):
+    with open(path, "w") as f:
+        f.write("#!%s\nimport sys\nsys.exit(0)\n" % sys.executable)
+
+
+@test
+def perm_file_000_denied(d):
+    if _root():
+        return
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    os.chmod(p, 0o000)
+    expect_err(errno.EACCES, open, p, "rb")
+    expect_err(errno.EACCES, open, p, "wb")
+    expect_err(errno.EACCES, open, p, "ab")
+    assert not os.access(p, os.R_OK)
+    assert not os.access(p, os.W_OK)
+    assert not os.access(p, os.X_OK)
+
+
+@test
+def perm_file_write_only(d):
+    if _root():
+        return
+    p = os.path.join(d, "f")
+    wr(p, b"old")
+    os.chmod(p, 0o200)
+    with open(p, "wb") as f:
+        f.write(b"new")
+    expect_err(errno.EACCES, open, p, "rb")
+    assert os.access(p, os.W_OK)
+    assert not os.access(p, os.R_OK)
+
+
+@test
+def perm_file_read_only_ops(d):
+    if _root():
+        return
+    p = os.path.join(d, "f")
+    wr(p, b"keep")
+    os.chmod(p, 0o400)
+    eq(rd(p), b"keep", "read still works")
+    expect_err(errno.EACCES, open, p, "wb")
+    expect_err(errno.EACCES, open, p, "ab")
+    expect_err(errno.EACCES, os.open, p, os.O_RDWR)
+    expect_err(errno.EACCES, os.open, p, os.O_WRONLY | os.O_TRUNC)
+    expect_err(errno.EACCES, os.truncate, p, 1)
+    eq(rd(p), b"keep", "denied writes did not mutate")
+
+
+@test
+def perm_owner_bits_not_other(d):
+    if _root():
+        return
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    os.chmod(p, 0o007)   # --- --- rwx : owner has nothing
+    expect_err(errno.EACCES, open, p, "rb")
+    expect_err(errno.EACCES, open, p, "wb")
+    assert not os.access(p, os.R_OK | os.W_OK | os.X_OK)
+
+
+@test
+def perm_owner_bits_not_group(d):
+    if _root():
+        return
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    os.chmod(p, 0o070)
+    expect_err(errno.EACCES, open, p, "rb")
+    assert not os.access(p, os.R_OK)
+
+
+@test
+def perm_create_mode_000_reopen(d):
+    if _root():
+        return
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_WRONLY, 0o000)
+    os.write(fd, b"x")
+    os.close(fd)
+    eq(statmod.S_IMODE(os.stat(p).st_mode), 0o000, "create mode 000")
+    expect_err(errno.EACCES, open, p, "rb")
+    expect_err(errno.EACCES, open, p, "wb")
+
+
+@test
+def perm_open_fd_survives_chmod(d):
+    if _root():
+        return
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    os.write(fd, b"abcd")
+    os.chmod(p, 0o000)
+    expect_err(errno.EACCES, open, p, "rb")   # new open denied
+    os.lseek(fd, 0, os.SEEK_SET)
+    eq(os.read(fd, 4), b"abcd", "existing fd still readable")
+    os.lseek(fd, 0, os.SEEK_SET)
+    os.write(fd, b"efgh")
+    os.fsync(fd)
+    os.close(fd)
+    os.chmod(p, 0o644)
+    eq(rd(p), b"efgh", "existing fd still writable")
+
+
+@test
+def perm_owner_chmod_restore(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    os.chmod(p, 0o000)
+    os.chmod(p, 0o644)   # owner may chmod regardless of mode
+    eq(rd(p), b"x", "readable after restore")
+
+
+@test
+def perm_owner_utime_readonly(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    os.chmod(p, 0o444)
+    os.utime(p, (1000000000, 1000000000))   # owner may utime
+    eq(int(os.stat(p).st_mtime), 1000000000, "owner utime on 0444")
+
+
+@test
+def perm_fchmod(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        os.fchmod(fd, 0o600)
+    finally:
+        os.close(fd)
+    eq(statmod.S_IMODE(os.stat(p).st_mode), 0o600, "fchmod")
+
+
+@test
+def perm_ftruncate_after_chmod(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    os.write(fd, b"ABCDEFGH")
+    os.chmod(p, 0o444)
+    try:
+        os.ftruncate(fd, 3)   # already-open fd, not a new open
+    finally:
+        os.close(fd)
+    os.chmod(p, 0o644)
+    eq(rd(p), b"ABC", "ftruncate via fd after 0444")
+
+
+@test
+def perm_access_rwx(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    os.chmod(p, 0o644)
+    assert os.access(p, os.R_OK), "644 R"
+    assert os.access(p, os.W_OK), "644 W"
+    if not _root():
+        assert not os.access(p, os.X_OK), "644 not X"
+    os.chmod(p, 0o755)
+    assert os.access(p, os.R_OK | os.W_OK | os.X_OK), "755 RWX"
+    os.chmod(p, 0o111)
+    if not _root():
+        assert os.access(p, os.X_OK), "111 X"
+        assert not os.access(p, os.R_OK), "111 not R"
+        assert not os.access(p, os.W_OK), "111 not W"
+
+
+@test
+def perm_exec_denied_no_x(d):
+    if _root():
+        return
+    p = os.path.join(d, "s")
+    _write_script(p)
+    os.chmod(p, 0o644)
+    try:
+        subprocess.run([p], timeout=8, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+    except OSError as e:
+        if e.errno == errno.EACCES:
+            return
+        raise Fail("exec 644: %s" % e)
+    raise Fail("exec of mode 644 succeeded")
+
+
+@test
+def perm_exec_allowed_with_x(d):
+    p = os.path.join(d, "s")
+    _write_script(p)
+    os.chmod(p, 0o755)
+    r = subprocess.run([p], timeout=8, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+    if r.returncode != 0:
+        raise Fail("exec 755 rc=%d" % r.returncode)
+
+
+@test
+def perm_suid_sgid_sticky_stored(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    os.chmod(p, 0o4755)
+    eq(statmod.S_IMODE(os.stat(p).st_mode), 0o4755, "suid")
+    os.chmod(p, 0o2755)
+    eq(statmod.S_IMODE(os.stat(p).st_mode), 0o2755, "sgid")
+    os.chmod(p, 0o1755)
+    eq(statmod.S_IMODE(os.stat(p).st_mode), 0o1755, "sticky file")
+    sub = os.path.join(d, "sub")
+    os.mkdir(sub)
+    os.chmod(sub, 0o1755)
+    eq(statmod.S_IMODE(os.stat(sub).st_mode), 0o1755, "sticky dir")
+
+
+@test
+def perm_sticky_owner_can_unlink(d):
+    sub = os.path.join(d, "sub")
+    os.mkdir(sub)
+    os.chmod(sub, 0o1777)
+    wr(os.path.join(sub, "f"), b"x")
+    os.unlink(os.path.join(sub, "f"))   # owner always may; no 2nd uid here
+    assert not os.path.exists(os.path.join(sub, "f"))
+
+
+@test
+def perm_chown_other_uid_denied(d):
+    if _root():
+        return
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    expect_err((errno.EPERM, errno.EACCES), os.chown, p, os.getuid() + 1, -1)
+    eq(os.stat(p).st_uid, os.getuid(), "uid unchanged")
+
+
+@test
+def perm_chown_other_gid_denied(d):
+    if _root():
+        return
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    mine = set(os.getgroups())
+    mine.add(os.getgid())
+    target = None
+    for g in (65534, 99, 1, 65535, 0):
+        if g not in mine:
+            target = g
+            break
+    if target is None:
+        raise Fail("no foreign gid to test", soft=True)
+    expect_err((errno.EPERM, errno.EACCES), os.chown, p, -1, target)
+    eq(os.stat(p).st_gid, os.getgid(), "gid unchanged")
+
+
+@test
+def perm_dir_readonly_mutate(d):
+    if _root():
+        return
+    sub = os.path.join(d, "sub")
+    os.mkdir(sub)
+    wr(os.path.join(sub, "a"), b"x")
+    wr(os.path.join(sub, "b"), b"y")
+    os.chmod(sub, 0o555)
+    try:
+        expect_err(errno.EACCES, wr, os.path.join(sub, "c"), b"z")
+        expect_err(errno.EACCES, os.mkdir, os.path.join(sub, "n"))
+        expect_err(errno.EACCES, os.unlink, os.path.join(sub, "a"))
+        expect_err(errno.EACCES, os.rename,
+                   os.path.join(sub, "a"), os.path.join(sub, "z"))
+        expect_err(errno.EACCES, os.link,
+                   os.path.join(sub, "a"), os.path.join(sub, "hl"))
+        expect_err(errno.EACCES, os.symlink, "a", os.path.join(sub, "sl"))
+        assert os.path.exists(os.path.join(sub, "a"))
+        eq(rd(os.path.join(sub, "a")), b"x", "denied mutate left file")
+    finally:
+        os.chmod(sub, 0o755)
+
+
+@test
+def perm_dir_no_x_search(d):
+    if _root():
+        return
+    sub = os.path.join(d, "sub")
+    os.mkdir(sub)
+    wr(os.path.join(sub, "child"), b"x")
+    os.chmod(sub, 0o400)   # r--------
+    cwd = os.getcwd()
+    try:
+        eq(set(os.listdir(sub)), {"child"}, "r lets listdir")
+        expect_err(errno.EACCES, open, os.path.join(sub, "child"), "rb")
+        expect_err(errno.EACCES, os.stat, os.path.join(sub, "child"))
+        expect_err(errno.EACCES, os.chdir, sub)
+        assert os.access(sub, os.R_OK)
+        assert not os.access(sub, os.X_OK)
+        assert not os.access(sub, os.W_OK)
+    finally:
+        os.chdir(cwd)
+        os.chmod(sub, 0o755)
+
+
+@test
+def perm_dir_no_r_list(d):
+    if _root():
+        return
+    sub = os.path.join(d, "sub")
+    os.mkdir(sub)
+    wr(os.path.join(sub, "child"), b"hid")
+    os.chmod(sub, 0o100)   # --x------
+    try:
+        expect_err(errno.EACCES, os.listdir, sub)
+        eq(rd(os.path.join(sub, "child")), b"hid", "x lets named lookup")
+        assert os.access(sub, os.X_OK)
+        assert not os.access(sub, os.R_OK)
+    finally:
+        os.chmod(sub, 0o755)
+
+
+@test
+def perm_dir_wx_no_r(d):
+    if _root():
+        return
+    sub = os.path.join(d, "sub")
+    os.mkdir(sub)
+    os.chmod(sub, 0o300)   # -wx------
+    try:
+        wr(os.path.join(sub, "g"), b"ok")
+        eq(rd(os.path.join(sub, "g")), b"ok", "wx lets create+open by name")
+        expect_err(errno.EACCES, os.listdir, sub)
+        os.unlink(os.path.join(sub, "g"))
+    finally:
+        os.chmod(sub, 0o755)
+
+
+@test
+def perm_dir_000_restore(d):
+    sub = os.path.join(d, "sub")
+    os.mkdir(sub)
+    wr(os.path.join(sub, "f"), b"x")
+    os.chmod(sub, 0o000)
+    if not _root():
+        expect_err(errno.EACCES, os.listdir, sub)
+    os.chmod(sub, 0o755)   # owner chmod does not need x on the dir
+    eq(rd(os.path.join(sub, "f")), b"x", "restored")
+
+
+@test
+def perm_unlink_mode_000_file(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    os.chmod(p, 0o000)
+    os.unlink(p)   # unlink is parent wx, not file write
+    assert not os.path.exists(p)
+
+
+@test
+def perm_nested_parent_no_x(d):
+    if _root():
+        return
+    a = os.path.join(d, "a")
+    os.makedirs(os.path.join(a, "b"))
+    wr(os.path.join(a, "b", "c"), b"deep")
+    os.chmod(a, 0o000)
+    try:
+        expect_err(errno.EACCES, open, os.path.join(a, "b", "c"), "rb")
+        expect_err(errno.EACCES, os.stat, os.path.join(a, "b"))
+    finally:
+        os.chmod(a, 0o755)
+
+
+@test
+def perm_rename_into_readonly_dir(d):
+    if _root():
+        return
+    src = os.path.join(d, "src")
+    dst = os.path.join(d, "dst")
+    os.mkdir(src)
+    os.mkdir(dst)
+    wr(os.path.join(src, "f"), b"x")
+    os.chmod(dst, 0o555)
+    try:
+        expect_err(errno.EACCES, os.rename,
+                   os.path.join(src, "f"), os.path.join(dst, "f"))
+        assert os.path.exists(os.path.join(src, "f"))
+    finally:
+        os.chmod(dst, 0o755)
+
+
+@test
+def perm_symlink_target_denied(d):
+    if _root():
+        return
+    t = os.path.join(d, "t")
+    wr(t, b"x")
+    os.symlink("t", os.path.join(d, "sl"))
+    os.chmod(t, 0o000)
+    expect_err(errno.EACCES, open, os.path.join(d, "sl"), "rb")
+    os.lstat(os.path.join(d, "sl"))   # lstat must still work
+
+
+@test
+def perm_hardlink_shares_mode(d):
+    if _root():
+        return
+    a = os.path.join(d, "a")
+    b = os.path.join(d, "b")
+    wr(a, b"shared")
+    os.link(a, b)
+    os.chmod(a, 0o444)
+    eq(statmod.S_IMODE(os.stat(b).st_mode), 0o444, "mode via other name")
+    expect_err(errno.EACCES, open, b, "wb")
+    eq(rd(b), b"shared", "read via other name")
+
+
+# ==========================================================================
 # Crazy / adversarial file names
 # ==========================================================================
 CRAZY_NAMES = [
