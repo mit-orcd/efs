@@ -132,6 +132,14 @@ struct efsd_server {
     pthread_cond_t rpc_dirty_cv;
     pthread_t meta_flush_tid;
     int meta_flush_started;
+    /* Serializes server_flush_fragmented_meta: the meta-flush thread and a
+     * synchronous REPORT_CHUNKS(fs sync) flush both call it, and without a
+     * mutex both compute the same new_gen (= root.generation+1) and race to the
+     * peers — the loser's root is rejected STALE (gen <= peer's), so the sync
+     * fsync sees 0 peer acks and returns EIO even though the data commits on
+     * the retry. Holding this for the whole flush makes each compute a fresh
+     * gen. */
+    pthread_mutex_t meta_flush_mu;
 };
 
 /* A crashed writer's flush election self-clears after this long. Must
@@ -402,6 +410,10 @@ void server_start_meta_catchup(struct efsd_server *s);
  * live node) — the single writer that flushes RPC-driven dirty exports.
  * Caller holds s->lock. */
 int server_is_meta_primary_locked(struct efsd_server *s);
+
+/* Phase 2b: the metadata primary's node id (lowest-id live node). Caller
+ * holds s->lock. */
+efs_node_id_t server_meta_primary_id_locked(struct efsd_server *s);
 
 /* Phase 2a: start the background meta-flush thread (batched server-side
  * flush of RPC-driven dirty exports). */

@@ -92,6 +92,21 @@ enum efs_msg_type {
      * every 2 s per peer; full GET_META only fires when a peer is newer. */
     EFS_MSG_GET_META_ROOT = 59,
     EFS_MSG_GET_META_ROOT_REPLY = 60,
+    /* Phase 2b: additional server-owned metadata mutations. Replies reuse
+     * struct efs_msg_inode_reply (status + resulting inode). */
+    EFS_MSG_INODE_RENAME = 61,
+    EFS_MSG_INODE_RENAME_REPLY = 62,
+    EFS_MSG_INODE_SETATTR = 63,
+    EFS_MSG_INODE_SETATTR_REPLY = 64,
+    EFS_MSG_INODE_LINK = 65,
+    EFS_MSG_INODE_LINK_REPLY = 66,
+    /* Phase 2b: client reports written-chunk mappings (ino → nodes + checksums)
+     * to the metadata primary, batched. This replaces the client blob flush for
+     * the data path: the server applies each record via efs_export_set_chunk and
+     * marks the export dirty so the meta-flush thread persists it. The reply is
+     * struct efs_msg_inode_reply (status + primary_id; inode unused). */
+    EFS_MSG_REPORT_CHUNKS = 67,
+    EFS_MSG_REPORT_CHUNKS_REPLY = 68,
 };
 
 /* Set per-export features. Only bits in set_mask are changed (to the
@@ -316,6 +331,10 @@ struct efs_msg_list_exports_reply {
 #define EFS_INODE_RPC_ERROR      3
 #define EFS_INODE_RPC_QUOTA      4
 #define EFS_INODE_RPC_BUSY       5
+#define EFS_INODE_RPC_INVAL      6
+/* Phase 2b: mutation sent to a non-primary node; client should re-resolve the
+ * primary and retry. */
+#define EFS_INODE_RPC_NOT_PRIMARY 7
 
 struct efs_msg_inode_lookup {
     efs_export_id_t export_id;
@@ -352,6 +371,9 @@ struct efs_msg_inode_unlink {
 
 struct efs_msg_inode_reply {
     uint8_t status;
+    /* Phase 2b: on EFS_INODE_RPC_NOT_PRIMARY, the server's view of the
+     * metadata primary (lowest-id live node) so the client can retry there. */
+    efs_node_id_t primary_id;
     struct efs_inode inode;
 };
 
@@ -360,6 +382,71 @@ struct efs_msg_inode_readdir_reply {
     uint8_t status;
     uint32_t count;
     struct efs_inode ents[EFS_READDIR_MAX];
+};
+
+/* Phase 2b: rename/move an inode to a new parent + name. */
+struct efs_msg_inode_rename {
+    efs_export_id_t export_id;
+    efs_ino_t ino;
+    efs_ino_t new_parent;
+    char new_name[EFS_MAX_NAME];
+};
+
+/* Phase 2b: setattr mask bits — which fields to apply. */
+#define EFS_SETATTR_MODE  (1u << 0)
+#define EFS_SETATTR_UID   (1u << 1)
+#define EFS_SETATTR_GID   (1u << 2)
+#define EFS_SETATTR_SIZE  (1u << 3)
+#define EFS_SETATTR_MTIME (1u << 4)
+#define EFS_SETATTR_ATIME (1u << 5)
+struct efs_msg_inode_setattr {
+    efs_export_id_t export_id;
+    efs_ino_t ino;
+    uint32_t mask;
+    uint32_t mode;
+    uint32_t uid;
+    uint32_t gid;
+    uint64_t size;
+    uint64_t mtime;
+    uint32_t mtime_nsec;
+    uint64_t atime;
+};
+
+/* Phase 2b: add a hard link (extra name) for an existing non-directory inode. */
+struct efs_msg_inode_link {
+    efs_export_id_t export_id;
+    efs_ino_t src_ino;
+    efs_ino_t new_parent;
+    char new_name[EFS_MAX_NAME];
+};
+
+/* Phase 2b: one written-chunk mapping record (matches efs_export_set_chunk). */
+struct efs_chunk_rec {
+    efs_ino_t ino;
+    uint32_t chunk_index;
+    efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+    uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+};
+
+/* Phase 2b: one inode size/mtime update (the write path grows a file and bumps
+ * mtime without a full inode upsert, so other fields are left untouched). */
+struct efs_ino_size_rec {
+    efs_ino_t ino;
+    uint64_t size;
+    uint64_t mtime;
+    uint32_t mtime_nsec;
+};
+
+/* Phase 2b: batched dirty-metadata report (replaces the client blob flush).
+ * The request payload is this header, then `count` struct efs_chunk_rec, then
+ * `ino_count` struct efs_ino_size_rec. When sync is set, the primary commits
+ * the export (server_flush_fragmented_meta) before replying — this is the
+ * fsync durability barrier now that clients no longer blob-flush. */
+struct efs_msg_report_chunks {
+    efs_export_id_t export_id;
+    uint32_t count;     /* chunk recs */
+    uint32_t sync;      /* 0 = async (mark dirty); 1 = commit before replying */
+    uint32_t ino_count; /* inode size/mtime recs (after the chunk recs) */
 };
 
 struct efs_msg_upgrade_meta {

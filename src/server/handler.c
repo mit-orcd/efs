@@ -1278,7 +1278,10 @@ send_reply:
         case EFS_MSG_INODE_LOOKUP:
         case EFS_MSG_INODE_CREATE:
         case EFS_MSG_INODE_GETATTR:
-        case EFS_MSG_INODE_UNLINK: {
+        case EFS_MSG_INODE_UNLINK:
+        case EFS_MSG_INODE_RENAME:
+        case EFS_MSG_INODE_SETATTR:
+        case EFS_MSG_INODE_LINK: {
             struct efs_msg_inode_reply r;
             memset(&r, 0, sizeof(r));
             r.status = EFS_INODE_RPC_ERROR;
@@ -1298,6 +1301,15 @@ send_reply:
             else if (type == EFS_MSG_INODE_UNLINK &&
                      payload_len >= sizeof(struct efs_msg_inode_unlink))
                 eid = ((struct efs_msg_inode_unlink *)payload)->export_id;
+            else if (type == EFS_MSG_INODE_RENAME &&
+                     payload_len >= sizeof(struct efs_msg_inode_rename))
+                eid = ((struct efs_msg_inode_rename *)payload)->export_id;
+            else if (type == EFS_MSG_INODE_SETATTR &&
+                     payload_len >= sizeof(struct efs_msg_inode_setattr))
+                eid = ((struct efs_msg_inode_setattr *)payload)->export_id;
+            else if (type == EFS_MSG_INODE_LINK &&
+                     payload_len >= sizeof(struct efs_msg_inode_link))
+                eid = ((struct efs_msg_inode_link *)payload)->export_id;
             for (uint32_t i = 0; i < g_server->export_count; i++) {
                 if (g_server->exports[i].id == eid ||
                     (eid == 0 && i == 0)) {
@@ -1308,6 +1320,14 @@ send_reply:
             }
             if (!ex) {
                 r.status = EFS_INODE_RPC_NOT_FOUND;
+            } else if (type != EFS_MSG_INODE_LOOKUP &&
+                       type != EFS_MSG_INODE_GETATTR &&
+                       !server_is_meta_primary_locked(g_server)) {
+                /* Phase 2b: a mutation on a non-primary wouldn't be flushed
+                 * (the meta-flush thread is primary-only), so reject and tell
+                 * the client who the primary is. Reads may go to any node. */
+                r.status = EFS_INODE_RPC_NOT_PRIMARY;
+                r.primary_id = server_meta_primary_id_locked(g_server);
             } else if (type == EFS_MSG_INODE_LOOKUP) {
                 struct efs_msg_inode_lookup *req = payload;
                 if (efs_export_lookup(ex, req->parent, req->name, &r.inode) == 0)
@@ -1344,13 +1364,174 @@ send_reply:
                 r.status = (urc == 0) ? EFS_INODE_RPC_OK : EFS_INODE_RPC_NOT_FOUND;
                 if (urc == 0)
                     server_meta_mark_rpc_dirty_locked(g_server, eidx);
+            } else if (type == EFS_MSG_INODE_RENAME) {
+                struct efs_msg_inode_rename *req = payload;
+                int rrc = efs_export_rename(ex, req->ino, req->new_parent,
+                                            req->new_name);
+                if (rrc == 0) {
+                    efs_export_get_inode(ex, req->ino, &r.inode);
+                    r.status = EFS_INODE_RPC_OK;
+                    server_meta_mark_rpc_dirty_locked(g_server, eidx);
+                } else {
+                    r.status = (rrc == EFS_ERR_NOT_FOUND) ? EFS_INODE_RPC_NOT_FOUND
+                             : (rrc == EFS_ERR_EXIST) ? EFS_INODE_RPC_EXIST
+                             : EFS_INODE_RPC_INVAL;
+                }
+            } else if (type == EFS_MSG_INODE_SETATTR) {
+                struct efs_msg_inode_setattr *req = payload;
+                struct efs_inode cur;
+                if (efs_export_get_inode(ex, req->ino, &cur) != 0) {
+                    r.status = EFS_INODE_RPC_NOT_FOUND;
+                } else {
+                    if (req->mask & EFS_SETATTR_MODE)
+                        efs_export_set_mode(ex, req->ino, req->mode);
+                    if (req->mask & (EFS_SETATTR_UID | EFS_SETATTR_GID))
+                        efs_export_set_owner(ex, req->ino,
+                                (req->mask & EFS_SETATTR_UID) ? (uid_t)req->uid
+                                                              : (uid_t)-1,
+                                (req->mask & EFS_SETATTR_GID) ? (gid_t)req->gid
+                                                              : (gid_t)-1);
+                    if (req->mask & EFS_SETATTR_SIZE) {
+                        /* Shrink: drop chunks wholly beyond the new size. The
+                         * client rewrites the partial last kept chunk (data
+                         * path) before calling, so here we only trim whole
+                         * chunks. */
+                        if (req->size < cur.size) {
+                            uint32_t cs = server_data_chunk_size(ex);
+                            uint32_t first_drop = (req->size == 0) ? 0
+                                : (uint32_t)((req->size + cs - 1) / cs);
+                            efs_export_drop_chunks_from(ex, req->ino, first_drop);
+                        }
+                        efs_export_set_size(ex, req->ino, req->size);
+                    }
+                    if (req->mask & EFS_SETATTR_MTIME)
+                        efs_export_set_mtime_ns(ex, req->ino, req->mtime,
+                                                req->mtime_nsec);
+                    if (req->mask & EFS_SETATTR_ATIME)
+                        efs_export_set_atime(ex, req->ino, req->atime);
+                    server_meta_mark_rpc_dirty_locked(g_server, eidx);
+                    efs_export_get_inode(ex, req->ino, &r.inode);
+                    r.status = EFS_INODE_RPC_OK;
+                }
+            } else if (type == EFS_MSG_INODE_LINK) {
+                struct efs_msg_inode_link *req = payload;
+                int lrc = efs_export_link(ex, req->src_ino, req->new_parent,
+                                          req->new_name);
+                if (lrc == 0) {
+                    efs_export_get_inode(ex, req->src_ino, &r.inode);
+                    r.status = EFS_INODE_RPC_OK;
+                    server_meta_mark_rpc_dirty_locked(g_server, eidx);
+                } else {
+                    r.status = (lrc == EFS_ERR_NOT_FOUND) ? EFS_INODE_RPC_NOT_FOUND
+                             : (lrc == EFS_ERR_EXIST) ? EFS_INODE_RPC_EXIST
+                             : EFS_INODE_RPC_INVAL;
+                }
             }
             pthread_mutex_unlock(&g_server->lock);
             uint8_t rtype = (type == EFS_MSG_INODE_LOOKUP) ? EFS_MSG_INODE_LOOKUP_REPLY
                           : (type == EFS_MSG_INODE_CREATE) ? EFS_MSG_INODE_CREATE_REPLY
                           : (type == EFS_MSG_INODE_GETATTR) ? EFS_MSG_INODE_GETATTR_REPLY
+                          : (type == EFS_MSG_INODE_RENAME) ? EFS_MSG_INODE_RENAME_REPLY
+                          : (type == EFS_MSG_INODE_SETATTR) ? EFS_MSG_INODE_SETATTR_REPLY
+                          : (type == EFS_MSG_INODE_LINK) ? EFS_MSG_INODE_LINK_REPLY
                           : EFS_MSG_INODE_UNLINK_REPLY;
             efs_conn_send_msg(conn, rtype, &r, sizeof(r));
+            break;
+        }
+        case EFS_MSG_REPORT_CHUNKS: {
+            /* Phase 2b: batched write-path chunk mappings. Applies each record
+             * to the in-memory table and marks the export dirty; the meta-flush
+             * thread persists it. Primary-only (it is a mutation). */
+            struct efs_msg_inode_reply r;
+            memset(&r, 0, sizeof(r));
+            r.status = EFS_INODE_RPC_ERROR;
+            int bad = 0;
+            uint32_t count = 0;
+            uint32_t sync = 0;
+            uint32_t ino_count = 0;
+            const struct efs_chunk_rec *recs = NULL;
+            const struct efs_ino_size_rec *irecs = NULL;
+            efs_export_id_t eid = 0;
+            if (payload_len >= sizeof(struct efs_msg_report_chunks)) {
+                struct efs_msg_report_chunks *req = payload;
+                eid = req->export_id;
+                sync = req->sync;
+                ino_count = req->ino_count;
+                size_t avail = payload_len - sizeof(*req);
+                count = req->count;
+                recs = (const struct efs_chunk_rec *)((const uint8_t *)payload +
+                                                      sizeof(*req));
+                irecs = (const struct efs_ino_size_rec *)(recs + count);
+                if (count > avail / sizeof(struct efs_chunk_rec))
+                    bad = 1; /* truncated payload */
+                else if (ino_count >
+                         (avail - (size_t)count * sizeof(struct efs_chunk_rec)) /
+                             sizeof(struct efs_ino_size_rec))
+                    bad = 1; /* truncated inode recs */
+            } else {
+                bad = 1;
+            }
+            int do_flush = 0;
+            pthread_mutex_lock(&g_server->lock);
+            struct efs_export *ex = NULL;
+            uint32_t eidx = 0;
+            for (uint32_t i = 0; i < g_server->export_count; i++) {
+                if (g_server->exports[i].id == eid || (eid == 0 && i == 0)) {
+                    ex = &g_server->exports[i];
+                    eidx = i;
+                    break;
+                }
+            }
+            if (bad) {
+                r.status = EFS_INODE_RPC_INVAL;
+            } else if (!ex) {
+                r.status = EFS_INODE_RPC_NOT_FOUND;
+            } else if (!server_is_meta_primary_locked(g_server)) {
+                r.status = EFS_INODE_RPC_NOT_PRIMARY;
+                r.primary_id = server_meta_primary_id_locked(g_server);
+            } else {
+                uint32_t applied = 0;
+                for (uint32_t k = 0; k < count; k++) {
+                    if (efs_export_set_chunk(ex, recs[k].ino, recs[k].chunk_index,
+                                             recs[k].nodes,
+                                             recs[k].checksums) == 0)
+                        applied++;
+                }
+                /* Write-path size/mtime updates (a bulk write grows the file
+                 * and bumps mtime). Apply size then mtime; norollup variants
+                 * aren't available server-side, but these are dirt-cheap. */
+                for (uint32_t k = 0; k < ino_count; k++) {
+                    if (efs_export_get_inode(ex, irecs[k].ino, NULL) != 0)
+                        continue; /* inode not (yet) on the server; skip */
+                    if (efs_export_set_size(ex, irecs[k].ino,
+                                            irecs[k].size) == 0)
+                        applied++;
+                    efs_export_set_mtime_ns(ex, irecs[k].ino, irecs[k].mtime,
+                                            irecs[k].mtime_nsec);
+                }
+                if (applied)
+                    server_meta_mark_rpc_dirty_locked(g_server, eidx);
+                r.status = EFS_INODE_RPC_OK;
+                /* fsync barrier: commit synchronously so the client's fsync is
+                 * durable when it returns. Flush whenever sync is set — even
+                 * with count==0 there may be earlier async-reported ops still
+                 * uncommitted (and the meta-flush thread resets rpc_dirty_ops
+                 * before its flush commits, so dirty-count alone can't prove a
+                 * barrier). Flush outside the lock (it does network I/O and
+                 * re-takes s->lock internally). */
+                if (sync)
+                    do_flush = 1;
+            }
+            pthread_mutex_unlock(&g_server->lock);
+            if (do_flush) {
+                if (server_flush_fragmented_meta(g_server, ex) != 0) {
+                    /* Flush failed (no quorum / fenced): the in-memory mutation
+                     * is still dirty and the meta-flush thread will retry, but
+                     * the client's fsync cannot be told it's durable. */
+                    r.status = EFS_INODE_RPC_ERROR;
+                }
+            }
+            efs_conn_send_msg(conn, EFS_MSG_REPORT_CHUNKS_REPLY, &r, sizeof(r));
             break;
         }
         case EFS_MSG_INODE_READDIR: {

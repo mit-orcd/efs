@@ -717,6 +717,100 @@ static void dirty_snap_merge_back_locked(struct dirty_snap *ds)
     dirty_snap_free(ds);
 }
 
+/* Phase 2b: report the dirty set to the metadata primary (chunk mappings +
+ * inode size/mtime) instead of blob-flushing the whole table. The primary
+ * applies them to its in-memory table; the server meta-flush thread persists
+ * them (or, for sync=1, commits before replying — the fsync durability
+ * barrier). On success the dirty set is dropped; on failure it is merged back
+ * so the next flush retries. The dirty set / rebase machinery is unchanged —
+ * only the flush mechanism (blob PUT -> targeted RPC) differs. */
+int efs_client_report_dirty(int sync)
+{
+    struct dirty_snap ds;
+    memset(&ds, 0, sizeof(ds));
+
+    efs_client_table_lock();
+    efs_client_ensure_dir_locks();
+    pthread_mutex_lock(&g_client.dirty_mu);
+    if (g_client.dirty_ino_count == 0 && g_client.dirty_chunk_count == 0 &&
+        !g_client.meta_dirty && !sync) {
+        pthread_mutex_unlock(&g_client.dirty_mu);
+        efs_client_table_unlock();
+        return EFS_OK;
+    }
+    dirty_snap_save_locked(&ds);
+    pthread_mutex_unlock(&g_client.dirty_mu);
+
+    /* Build chunk + inode size/mtime recs from the live table (still holding
+     * the table lock so the entries are consistent). */
+    struct efs_chunk_rec *crecs = NULL;
+    struct efs_ino_size_rec *irecs = NULL;
+    uint32_t cn = 0, in = 0;
+    if (ds.chunk_count)
+        crecs = malloc((size_t)ds.chunk_count * sizeof(*crecs));
+    if (ds.ino_count)
+        irecs = malloc((size_t)ds.ino_count * sizeof(*irecs));
+    if ((ds.chunk_count && !crecs) || (ds.ino_count && !irecs)) {
+        free(crecs);
+        free(irecs);
+        /* table lock held (not dirty_mu — merge_back takes it internally). */
+        dirty_snap_merge_back_locked(&ds);
+        efs_client_table_unlock();
+        return EFS_ERR_NOMEM;
+    }
+    for (uint64_t i = 0; i < ds.chunk_count; i++) {
+        struct efs_chunk_entry ce;
+        if (efs_export_get_chunk(&g_client.export, ds.chunk_inos[i],
+                                 ds.chunk_idxs[i], &ce) != 0)
+            continue; /* truncated away before the report; skip */
+        crecs[cn].ino = ds.chunk_inos[i];
+        crecs[cn].chunk_index = ds.chunk_idxs[i];
+        memcpy(crecs[cn].nodes, ce.fragment_nodes, sizeof(crecs[cn].nodes));
+        memcpy(crecs[cn].checksums, ce.checksums, sizeof(crecs[cn].checksums));
+        cn++;
+    }
+    for (uint64_t i = 0; i <= ds.ino_mask; i++) {
+        if (!ds.ino_keys || !ds.ino_keys[i])
+            continue;
+        struct efs_inode inode;
+        if (efs_export_get_inode(&g_client.export, ds.ino_keys[i], &inode) != 0)
+            continue; /* unlinked before the report; skip */
+        irecs[in].ino = ds.ino_keys[i];
+        irecs[in].size = inode.size;
+        irecs[in].mtime = inode.mtime;
+        irecs[in].mtime_nsec = inode.mtime_nsec;
+        in++;
+    }
+    efs_client_table_unlock();
+
+    /* Send the report. NOT_PRIMARY is retried inside rpc_send_recv_primary;
+     * retry transient NET/NO_QUORUM a few times (the conn is dropped and
+     * re-established on each attempt). The recs are already built, so a retry
+     * just re-sends. */
+    int rc = EFS_ERR_NET;
+    for (int attempt = 0; attempt < 4; attempt++) {
+        rc = efs_client_rpc_report_dirty(g_client.export_id, crecs, cn,
+                                         irecs, in, sync);
+        if (rc == EFS_OK)
+            break;
+        if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM &&
+            rc != EFS_ERR_NOT_PRIMARY)
+            break; /* hard error (INVAL/ERROR): don't retry */
+        usleep(50000u << attempt);
+    }
+    free(crecs);
+    free(irecs);
+    if (rc == EFS_OK) {
+        dirty_snap_free(&ds);
+    } else {
+        efs_client_table_lock();
+        dirty_snap_merge_back_locked(&ds);
+        efs_client_table_unlock();
+        g_client.report_flush_failed = 1;
+    }
+    return rc;
+}
+
 /* Serialize the snapshot and publish a new metadata generation: EC-encode
  * each 128 KiB page, skip PUTs for pages identical to the last committed
  * same-parity flush, PUT the rest, then flip the root. Does NOT hold
@@ -2128,7 +2222,9 @@ int efs_client_sync_meta(void)
             }
             g_sync_meta_active = 1;
             pthread_mutex_unlock(&g_sync_mu);
-            int rc = efs_client_replicate_metadata();
+            /* Phase 2b fsync barrier: report dirty state and have the primary
+             * commit the export before replying. */
+            int rc = efs_client_report_dirty(1);
             pthread_mutex_lock(&g_sync_mu);
             g_sync_meta_rc = rc;
             g_sync_meta_active = 0;
@@ -2271,7 +2367,8 @@ static void *meta_flush_main(void *arg)
                 continue;
             }
         }
-        (void)efs_client_replicate_metadata();
+        /* Phase 2b: background threshold flush reports dirty state via RPC. */
+        (void)efs_client_report_dirty(0);
         if (g_client.meta_heal_pending && !g_client.meta_heal) {
             g_client.meta_heal_pending = 0;
         } else if (g_client.meta_heal_pending) {
@@ -2398,7 +2495,8 @@ int efs_client_note_meta_change(int force)
     if (force)
         g_client.meta_flush_force = 1;
     if (!g_client.meta_batch || force)
-        return efs_client_replicate_metadata();
+        /* Forced flush (fsync/unmount) or non-batched C API: durable report. */
+        return efs_client_report_dirty(1);
 
     efs_client_ensure_dir_locks();
     pthread_mutex_lock(&g_client.dirty_mu);
@@ -2425,7 +2523,7 @@ int efs_client_note_meta_change(int force)
             pthread_mutex_unlock(&g_client.meta_flush_mu);
             return EFS_OK;
         }
-        return efs_client_replicate_metadata_nb();
+        return efs_client_report_dirty(0);
     }
     return EFS_OK;
 }
@@ -4463,7 +4561,8 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
     }
     efs_client_mark_ino_dirty(ino);
     efs_client_unlock_dir(ino);
-    efs_client_replicate_metadata();
+    /* Phase 2b: report dirty chunk/size to the primary instead of blob-flush. */
+    efs_client_report_dirty(0);
 
     return EFS_OK;
 }

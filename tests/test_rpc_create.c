@@ -59,7 +59,7 @@ int main(int argc, char **argv)
     if (strcmp(op, "create") == 0) {
         efs_ino_t ino = 0;
         int rc = efs_client_rpc_create(export_id, EFS_ROOT_INO, name, 0100644,
-                                       getuid(), getgid(), &ino);
+                                       getuid(), getgid(), &ino, NULL);
         if (rc != EFS_OK) {
             fprintf(stderr, "rpc_create failed rc=%d\n", rc);
             return 1;

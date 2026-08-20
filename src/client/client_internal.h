@@ -132,6 +132,11 @@ struct efs_client {
     uint64_t write_lease_id;
     uint32_t dirty_stripe_ops[EFS_DIR_LOCKS];
     int last_dirty_stripe;
+
+    /* Phase 2b: sticky flag set when a dirty-report RPC fails (so fsync can
+     * report EIO). The dirty set itself is the pending-report queue (reused
+     * from the crash-safe rebase); report_dirty clears it on success. */
+    int report_flush_failed;
 };
 
 /* Mark inode/chunk dirty for the next batched metadata delta flush.
@@ -144,13 +149,36 @@ int efs_client_rpc_lookup(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, struct efs_inode *out);
 int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, uint32_t mode, uid_t uid, gid_t gid,
-                          efs_ino_t *out_ino);
+                          efs_ino_t *out_ino, struct efs_inode *out);
 int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
                            struct efs_inode *out);
 int efs_client_rpc_readdir(efs_export_id_t export_id, efs_ino_t parent,
                            struct efs_inode *ents, uint32_t *inout_count);
 int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, int is_dir);
+int efs_client_rpc_rename(efs_export_id_t export_id, efs_ino_t ino,
+                          efs_ino_t new_parent, const char *new_name,
+                          struct efs_inode *out);
+int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
+                           uint32_t mask, uint32_t mode, uid_t uid, gid_t gid,
+                           uint64_t size, uint64_t mtime, uint32_t mtime_nsec,
+                           uint64_t atime, struct efs_inode *out);
+int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
+                        efs_ino_t new_parent, const char *new_name,
+                        struct efs_inode *out);
+/* Phase 2b: report dirty metadata (chunk mappings + inode size/mtime) to the
+ * metadata primary, replacing the client blob flush. sync=1 makes the primary
+ * commit the export before replying (the fsync durability barrier). */
+struct efs_chunk_rec;
+struct efs_ino_size_rec;
+int efs_client_rpc_report_dirty(efs_export_id_t export_id,
+                                const struct efs_chunk_rec *recs,
+                                uint32_t count,
+                                const struct efs_ino_size_rec *irecs,
+                                uint32_t ino_count, int sync);
+/* Phase 2b: snapshot the dirty set and report it to the primary (the flush
+ * mechanism that replaces the blob flush). sync=1 = fsync barrier. */
+int efs_client_report_dirty(int sync);
 int efs_client_load_shard(uint32_t shard);
 
 void efs_client_ensure_dir_locks(void);

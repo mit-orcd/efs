@@ -807,8 +807,25 @@ static void bootstrap_export_on_peers(struct efsd_server *s, struct efs_export *
     free(buf);
 }
 
-/* Write all meta pages (2+1) and persist/replicate the EFSR root. */
+static int server_flush_fragmented_meta_locked(struct efsd_server *s,
+                                               struct efs_export *ex);
+
+/* Write all meta pages (2+1) and persist/replicate the EFSR root.
+ * Serialized on s->meta_flush_mu: the meta-flush thread and a synchronous
+ * REPORT_CHUNKS (fsync barrier) flush both call this, and without the mutex
+ * both compute the same new_gen (= root.generation+1) and race to the peers —
+ * the loser's root is rejected STALE (gen <= peer's), so the sync fsync sees
+ * 0 peer acks and returns EIO even though the data commits on the retry. */
 int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
+{
+    pthread_mutex_lock(&s->meta_flush_mu);
+    int rc = server_flush_fragmented_meta_locked(s, ex);
+    pthread_mutex_unlock(&s->meta_flush_mu);
+    return rc;
+}
+
+static int server_flush_fragmented_meta_locked(struct efsd_server *s,
+                                               struct efs_export *ex)
 {
     /* Peers must know the export before accepting meta-page PUT_CHUNKs. */
     bootstrap_export_on_peers(s, ex);
@@ -870,6 +887,16 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
         free(blob);
         return -1;
     }
+
+    /* Server-owned metadata (Phase 2): the primary's flush thread is the sole
+     * metadata writer — there is no client flush election to carry forward.
+     * Clear the lease so peers skip the writer gate; a stale pre-2a client
+     * lease would otherwise be rejected as not-currently-held (the peers'
+     * post-restart election state is inconsistent, so some accept and some
+     * reject, and the root never reaches quorum). The gen CAS still fences a
+     * lagging writer. */
+    root.write_lease_id = 0;
+    root.write_lease_until_ms = 0;
 
     /* CoW (EFSR v7): allocate each page a fresh chunk_index above the legacy
      * dual-slot window. Carry the allocator forward from the committed root
@@ -1558,7 +1585,7 @@ void server_start_meta_catchup(struct efsd_server *s)
  * live (it is running), so start from s->id and look for a lower-id live
  * peer. Funneling all RPC mutations to one writer keeps replicas convergent
  * (two concurrent flushes would collide on CoW cis from the same root). */
-int server_is_meta_primary_locked(struct efsd_server *s)
+efs_node_id_t server_meta_primary_id_locked(struct efsd_server *s)
 {
     efs_node_id_t best = s->id;
     for (uint32_t i = 0; i < s->node_count; i++) {
@@ -1570,7 +1597,12 @@ int server_is_meta_primary_locked(struct efsd_server *s)
         if (id < best)
             best = id;
     }
-    return best == s->id;
+    return best;
+}
+
+int server_is_meta_primary_locked(struct efsd_server *s)
+{
+    return server_meta_primary_id_locked(s) == s->id;
 }
 
 void server_meta_mark_rpc_dirty_locked(struct efsd_server *s, uint32_t eidx)

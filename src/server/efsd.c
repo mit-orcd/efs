@@ -284,6 +284,7 @@ int main(int argc, char **argv)
     server.listen_fd = -1;
     g_server = &server;
     pthread_mutex_init(&server.lock, NULL);
+    pthread_mutex_init(&server.meta_flush_mu, NULL);
     pthread_cond_init(&server.export_idle_cv, NULL);
     pthread_cond_init(&server.rpc_dirty_cv, NULL);
     server_peer_pool_init();
@@ -618,6 +619,7 @@ int main(int argc, char **argv)
 
     server_peer_pool_shutdown();
     pthread_mutex_destroy(&server.lock);
+    pthread_mutex_destroy(&server.meta_flush_mu);
     pthread_cond_destroy(&server.rpc_dirty_cv);
     for (uint32_t i = 0; i < server.export_count; i++)
         efs_export_free(&server.exports[i]);
