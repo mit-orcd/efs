@@ -201,6 +201,16 @@ static int setattr_rpc_dual_apply(efs_ino_t ino, uint32_t mask, uint32_t mode,
     }
     efs_client_lock_dir(ino);
     pthread_mutex_lock(&g_client.idx_mu);
+    /* The primary's returned inode lags the data path: it learns the size only
+     * via the async REPORT_CHUNKS flush, so for a non-truncate setattr its
+     * size can be stale (0 after a chmod hides the file's data — reads then
+     * return empty). Preserve the local data-path size (tracked synchronously
+     * by writes) unless this setattr is itself a truncate. */
+    if (!(mask & EFS_SETATTR_SIZE)) {
+        struct efs_inode cur;
+        if (efs_export_get_inode(&g_client.export, ino, &cur) == 0)
+            out.size = cur.size;
+    }
     efs_export_upsert_inode(&g_client.export, &out);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
