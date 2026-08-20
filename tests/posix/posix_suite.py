@@ -177,6 +177,76 @@ def basic_dd_rw(d):
     eq(r.stdout.strip(), b"32768", "dd read bytes")
 
 
+@test
+def basic_o_trunc(d):
+    p = os.path.join(d, "f")
+    wr(p, b"0123456789")
+    fd = os.open(p, os.O_WRONLY | os.O_TRUNC)
+    os.write(fd, b"Z")
+    os.close(fd)
+    eq(rd(p), b"Z", "O_TRUNC then write")
+    eq(os.path.getsize(p), 1, "O_TRUNC size")
+
+
+@test
+def basic_pread_pwrite(d):
+    p = os.path.join(d, "f")
+    wr(p, b"0123456789")
+    fd = os.open(p, os.O_RDWR)
+    try:
+        eq(os.pread(fd, 3, 4), b"456", "pread")
+        os.pwrite(fd, b"XXX", 2)
+        eq(os.pread(fd, 10, 0), b"01XXX56789", "pwrite visible via pread")
+        eq(os.lseek(fd, 0, os.SEEK_CUR), 0, "pwrite does not move offset")
+    finally:
+        os.close(fd)
+
+
+@test
+def basic_dup_write(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    os.write(fd, b"ab")
+    fd2 = os.dup(fd)
+    os.write(fd2, b"cd")
+    os.close(fd)
+    os.lseek(fd2, 0, os.SEEK_SET)
+    eq(os.read(fd2, 4), b"abcd", "dup shares offset and data")
+    os.close(fd2)
+
+
+# efs default data chunk is 128 KiB; straddle + exact boundary.
+_CHUNK = 128 * 1024
+
+
+@test
+def basic_chunk_boundary(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        os.write(fd, b"A" * _CHUNK)
+        os.write(fd, b"B")
+        os.lseek(fd, _CHUNK - 2, os.SEEK_SET)
+        os.write(fd, b"XY")
+        eq(os.pread(fd, 3, _CHUNK - 2), b"XYB", "straddle chunk boundary")
+        eq(os.pread(fd, 1, _CHUNK), b"B", "first byte of next chunk")
+    finally:
+        os.close(fd)
+    eq(os.path.getsize(p), _CHUNK + 1, "size after boundary write")
+
+
+@test
+def fsync_reopen_visible(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    os.write(fd, b"quorum")
+    os.fsync(fd)
+    os.close(fd)
+    fd2 = os.open(p, os.O_RDONLY)
+    eq(os.read(fd2, 6), b"quorum", "fsync then new fd sees data")
+    os.close(fd2)
+
+
 # ==========================================================================
 # Truncate + sparse files
 # ==========================================================================
@@ -223,6 +293,23 @@ def trunc_to_zero(d):
     wr(p, b"data")
     os.truncate(p, 0)
     eq(os.path.getsize(p), 0, "truncate to 0")
+
+
+@test
+def sparse_st_blocks(d):
+    """A 1 MiB hole should not count as fully allocated in st_blocks."""
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    os.lseek(fd, 1 << 20, os.SEEK_SET)
+    os.write(fd, b"END")
+    os.close(fd)
+    st = os.stat(p)
+    eq(st.st_size, (1 << 20) + 3, "sparse size")
+    allocated = st.st_blocks * 512
+    if allocated >= st.st_size:
+        raise Fail("st_blocks=%d implies %d allocated bytes for a 1MiB hole "
+                   "(st_size=%d); holes look fully allocated" %
+                   (st.st_blocks, allocated, st.st_size))
 
 
 # ==========================================================================
@@ -286,6 +373,63 @@ def dir_move_into_subdir(d):
     wr(os.path.join(d, "a/f"), b"x")
     os.rename(os.path.join(d, "a/f"), os.path.join(d, "b/f"))
     eq(rd(os.path.join(d, "b/f")), b"x", "move across dirs")
+
+
+@test
+def dir_rename_file_over_dir(d):
+    wr(os.path.join(d, "f"), b"x")
+    os.mkdir(os.path.join(d, "sub"))
+    expect_err((errno.EISDIR, errno.ENOTDIR), os.rename,
+               os.path.join(d, "f"), os.path.join(d, "sub"))
+
+
+@test
+def dir_rename_dir_over_file(d):
+    os.mkdir(os.path.join(d, "sub"))
+    wr(os.path.join(d, "f"), b"x")
+    expect_err((errno.ENOTDIR, errno.EISDIR), os.rename,
+               os.path.join(d, "sub"), os.path.join(d, "f"))
+
+
+@test
+def dir_rename_dir_over_nonempty(d):
+    os.makedirs(os.path.join(d, "a"))
+    os.makedirs(os.path.join(d, "b"))
+    wr(os.path.join(d, "b/f"), b"x")
+    expect_err((errno.ENOTEMPTY, errno.EEXIST), os.rename,
+               os.path.join(d, "a"), os.path.join(d, "b"))
+
+
+@test
+def dir_rename_noreplace(d):
+    wr(os.path.join(d, "a"), b"new")
+    wr(os.path.join(d, "b"), b"old")
+    flags = getattr(os, "RENAME_NOREPLACE", 1)
+    if hasattr(os, "renameat2"):
+        expect_err(errno.EEXIST, os.renameat2,
+                   os.path.join(d, "a"), os.path.join(d, "b"), flags=flags)
+    else:
+        libc = __import__("ctypes").CDLL("libc.so.6", use_errno=True)
+        AT_FDCWD = -100
+        rc = libc.renameat2(AT_FDCWD, os.path.join(d, "a").encode(),
+                            AT_FDCWD, os.path.join(d, "b").encode(), flags)
+        if rc == 0:
+            raise Fail("RENAME_NOREPLACE succeeded over existing file")
+        err = __import__("ctypes").get_errno()
+        if err != errno.EEXIST:
+            raise Fail("RENAME_NOREPLACE errno %s, want EEXIST" % err)
+    eq(rd(os.path.join(d, "b")), b"old", "target unchanged")
+    eq(rd(os.path.join(d, "a")), b"new", "source still there")
+
+
+@test
+def dir_rename_symlink(d):
+    wr(os.path.join(d, "t"), b"data")
+    os.symlink("t", os.path.join(d, "sl"))
+    os.rename(os.path.join(d, "sl"), os.path.join(d, "sl2"))
+    eq(os.readlink(os.path.join(d, "sl2")), "t", "rename moves the symlink")
+    assert not os.path.exists(os.path.join(d, "sl"))
+    eq(rd(os.path.join(d, "t")), b"data", "target intact")
 
 
 @test
@@ -806,6 +950,156 @@ def concurrent_appends(d):
         t.join()
     lines = rd(p).splitlines()
     eq(len(lines), 4 * 50, "all appends landed (O_APPEND atomic)")
+
+
+@test
+def concurrent_appends_two_proc(d):
+    p = os.path.join(d, "f")
+    wr(p, b"")
+    snippet = (
+        "import os,sys\n"
+        "fd=os.open(sys.argv[1], os.O_WRONLY|os.O_APPEND)\n"
+        "for _ in range(40):\n"
+        "    os.write(fd, (sys.argv[2]+chr(10)).encode())\n"
+        "os.close(fd)\n"
+    )
+    procs = [
+        subprocess.Popen([sys.executable, "-c", snippet, p, str(i)])
+        for i in range(3)
+    ]
+    for pr in procs:
+        if pr.wait() != 0:
+            raise Fail("append child rc=%d" % pr.returncode)
+    eq(len(rd(p).splitlines()), 3 * 40, "two-process O_APPEND all landed")
+
+
+@test
+def concurrent_writes_disjoint(d):
+    import threading
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    os.ftruncate(fd, 8192)
+    os.close(fd)
+    errors = []
+
+    def worker(off, byte):
+        try:
+            f = os.open(p, os.O_RDWR)
+            os.pwrite(f, byte * 4096, off)
+            os.close(f)
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    t0 = threading.Thread(target=worker, args=(0, b"A"))
+    t1 = threading.Thread(target=worker, args=(4096, b"B"))
+    t0.start()
+    t1.start()
+    t0.join()
+    t1.join()
+    if errors:
+        raise Fail("disjoint write: %s" % errors[0])
+    data = rd(p)
+    eq(data[:4096], b"A" * 4096, "low range")
+    eq(data[4096:8192], b"B" * 4096, "high range")
+
+
+# ==========================================================================
+# Virtual .stats / .find (efs FUSE extras; skip if feature off)
+# ==========================================================================
+@test
+def virt_stats_readable(d):
+    wr(os.path.join(d, "a"), b"x")
+    p = os.path.join(d, ".stats")
+    if not os.path.exists(p):
+        raise Fail(".stats absent (feature off?)", soft=True)
+    st = os.lstat(p)
+    assert statmod.S_ISREG(st.st_mode), ".stats is a regular file"
+    text = rd(p)
+    if len(text) == 0:
+        raise Fail(".stats empty")
+    expect_err((errno.EPERM, errno.EACCES, errno.ENOENT, errno.EIO),
+               os.unlink, p)
+
+
+@test
+def virt_find_query(d):
+    wr(os.path.join(d, "report.txt"), b"x")
+    finddir = os.path.join(d, ".find")
+    if not os.path.isdir(finddir) and not os.path.exists(finddir):
+        raise Fail(".find absent (feature off?)", soft=True)
+    q = os.path.join(d, ".find", "*report*")
+    try:
+        out = rd(q)
+    except OSError as e:
+        raise Fail(".find query: %s" % e, soft=True)
+    if b"report.txt" not in out:
+        raise Fail(".find *report* missed report.txt: %r" % out[:200])
+
+
+@test
+def virt_find_not_a_real_dir(d):
+    finddir = os.path.join(d, ".find")
+    if not os.path.exists(finddir) and not os.path.lexists(finddir):
+        raise Fail(".find absent (feature off?)", soft=True)
+    expect_err((errno.EPERM, errno.EACCES, errno.ENOENT, errno.EEXIST,
+                errno.ENOTDIR, errno.EIO),
+               wr, os.path.join(d, ".find", "not-a-create"), b"x")
+
+
+# ==========================================================================
+# Optional POSIX (success or EOPNOTSUPP — both OK)
+# ==========================================================================
+@test
+def opt_fallocate(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        os.posix_fallocate(fd, 0, 4096)
+    except OSError as e:
+        if e.errno in (errno.EOPNOTSUPP, errno.ENOTSUP):
+            os.close(fd)
+            return
+        os.close(fd)
+        raise Fail("posix_fallocate: %s" % e)
+    sz = os.fstat(fd).st_size
+    os.close(fd)
+    if sz < 4096:
+        raise Fail("fallocate size %d, want >= 4096" % sz)
+
+
+@test
+def opt_xattr(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    try:
+        os.setxattr(p, "user.efs", b"1")
+        eq(os.getxattr(p, "user.efs"), b"1", "xattr roundtrip")
+    except OSError as e:
+        if e.errno in (errno.EOPNOTSUPP, errno.ENOTSUP, errno.EACCES):
+            return
+        raise Fail("xattr: %s" % e)
+
+
+@test
+def flock_second_fd_exclusive(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    fd1 = os.open(p, os.O_RDWR)
+    fd2 = os.open(p, os.O_RDWR)
+    try:
+        fcntl.flock(fd1, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            fcntl.flock(fd2, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as e:
+            if e.errno in (errno.EAGAIN, errno.EACCES):
+                return
+            raise Fail("second LOCK_EX errno %s" % e)
+        raise Fail("second fd took LOCK_EX|NB while first held it "
+                   "(locks look like no-ops)")
+    finally:
+        fcntl.flock(fd1, fcntl.LOCK_UN)
+        os.close(fd1)
+        os.close(fd2)
 
 
 # ==========================================================================
