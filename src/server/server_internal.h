@@ -121,6 +121,17 @@ struct efsd_server {
     uint64_t meta_writer_q[EFS_MAX_EXPORTS][EFS_META_WRITER_QMAX];
     uint64_t meta_writer_q_ms[EFS_MAX_EXPORTS][EFS_META_WRITER_QMAX];
     uint32_t meta_writer_q_len[EFS_MAX_EXPORTS];
+
+    /* Phase 2a (server-owned metadata): RPC mutation handlers
+     * (INODE_CREATE/UNLINK/...) apply to the in-memory table under s->lock
+     * and bump rpc_dirty_ops[export_slot]; the meta-flush thread batches and
+     * flushes dirty exports via server_flush_fragmented_meta (primary only).
+     * rpc_dirty_cv wakes the flush thread early once EFS_META_FLUSH_OPS
+     * accumulate. Guarded by s->lock. */
+    uint64_t rpc_dirty_ops[EFS_MAX_EXPORTS];
+    pthread_cond_t rpc_dirty_cv;
+    pthread_t meta_flush_tid;
+    int meta_flush_started;
 };
 
 /* A crashed writer's flush election self-clears after this long. Must
@@ -144,6 +155,12 @@ struct efsd_server {
  * window of stall; live writers re-BEGIN every <1s so false drops need the
  * full window of silence. */
 #define EFS_META_WRITER_Q_EXPIRY_MS 300000ull
+
+/* Phase 2a: server-side meta-flush batching. The flush thread commits a
+ * dirty export at most every EFS_META_FLUSH_MS, or early once
+ * EFS_META_FLUSH_OPS RPC mutations accumulate (whichever first). */
+#define EFS_META_FLUSH_MS 100ull
+#define EFS_META_FLUSH_OPS 1000ull
 
 /* Global server instance used by worker threads. */
 extern struct efsd_server *g_server;
@@ -380,6 +397,20 @@ void server_start_migration(struct efsd_server *s);
 
 /* Start background meta catch-up (rebuild dirty roots + heal local pages). */
 void server_start_meta_catchup(struct efsd_server *s);
+
+/* Phase 2a: non-zero when this server is the metadata primary (lowest-id
+ * live node) — the single writer that flushes RPC-driven dirty exports.
+ * Caller holds s->lock. */
+int server_is_meta_primary_locked(struct efsd_server *s);
+
+/* Phase 2a: start the background meta-flush thread (batched server-side
+ * flush of RPC-driven dirty exports). */
+void server_start_meta_flush(struct efsd_server *s);
+
+/* Phase 2a: note an RPC mutation on export slot `eidx` (bumps the dirty-ops
+ * counter; signals the flush thread once EFS_META_FLUSH_OPS accumulate).
+ * Caller holds s->lock. */
+void server_meta_mark_rpc_dirty_locked(struct efsd_server *s, uint32_t eidx);
 
 /* Start the background cluster rejoin retry thread. */
 void server_start_rejoin(struct efsd_server *s);

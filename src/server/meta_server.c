@@ -827,6 +827,14 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     uint32_t *new_cis = NULL;
     uint32_t new_cis_count = 0;
     pthread_mutex_lock(&s->lock);
+    if (ex->meta_needs_rebuild) {
+        /* Fenced by a concurrent client-driven PUT_META (counts zeroed): the
+         * in-memory table is stale and the catchup rebuild will overwrite it,
+         * so serializing now would flush an empty/torn table and lose the
+         * client's data. Refuse; the caller retries after the rebuild. */
+        pthread_mutex_unlock(&s->lock);
+        return -1;
+    }
     if (efs_export_serialize_ex(ex, &blob, &blob_len, &ino_blob_len,
                                 &chunk_blob_len) != EFS_OK) {
         pthread_mutex_unlock(&s->lock);
@@ -1543,5 +1551,115 @@ void server_start_meta_catchup(struct efsd_server *s)
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
     pthread_create(&s->meta_catchup_tid, &attr, meta_catchup_thread, s);
+    pthread_attr_destroy(&attr);
+}
+
+/* Phase 2a: the metadata primary is the lowest-id live node. This server is
+ * live (it is running), so start from s->id and look for a lower-id live
+ * peer. Funneling all RPC mutations to one writer keeps replicas convergent
+ * (two concurrent flushes would collide on CoW cis from the same root). */
+int server_is_meta_primary_locked(struct efsd_server *s)
+{
+    efs_node_id_t best = s->id;
+    for (uint32_t i = 0; i < s->node_count; i++) {
+        efs_node_id_t id = s->nodes[i].id;
+        if (id == s->id)
+            continue;
+        if (server_node_is_down_locked(s, id))
+            continue;
+        if (id < best)
+            best = id;
+    }
+    return best == s->id;
+}
+
+void server_meta_mark_rpc_dirty_locked(struct efsd_server *s, uint32_t eidx)
+{
+    if (eidx >= EFS_MAX_EXPORTS)
+        return;
+    s->rpc_dirty_ops[eidx]++;
+    uint64_t total = 0;
+    for (uint32_t e = 0; e < s->export_count && e < EFS_MAX_EXPORTS; e++)
+        total += s->rpc_dirty_ops[e];
+    if (total >= EFS_META_FLUSH_OPS)
+        pthread_cond_signal(&s->rpc_dirty_cv);
+}
+
+/* Phase 2a: batched server-side flush of RPC-driven dirty exports. Wakes on
+ * the dirty signal (EFS_META_FLUSH_OPS) or the EFS_META_FLUSH_MS batch window,
+ * and flushes each dirty export via server_flush_fragmented_meta — but only
+ * when this server is the metadata primary (a non-primary must not flush, or
+ * two writers could tear a generation). */
+static void *meta_flush_thread(void *arg)
+{
+    struct efsd_server *s = arg;
+    while (1) {
+        pthread_mutex_lock(&s->lock);
+        if (!s->running) {
+            pthread_mutex_unlock(&s->lock);
+            break;
+        }
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        uint64_t ns = (uint64_t)ts.tv_nsec + EFS_META_FLUSH_MS * 1000000ull;
+        ts.tv_sec += (time_t)(ns / 1000000000ull);
+        ts.tv_nsec = (long)(ns % 1000000000ull);
+        pthread_cond_timedwait(&s->rpc_dirty_cv, &s->lock, &ts);
+        if (!s->running) {
+            pthread_mutex_unlock(&s->lock);
+            break;
+        }
+        uint32_t dirty[EFS_MAX_EXPORTS];
+        uint32_t ndirty = 0;
+        if (server_is_meta_primary_locked(s)) {
+            for (uint32_t e = 0; e < s->export_count && e < EFS_MAX_EXPORTS;
+                 e++) {
+                if (s->rpc_dirty_ops[e] > 0) {
+                    if (s->exports[e].meta_needs_rebuild) {
+                        /* Fenced by a concurrent client-driven PUT_META: the
+                         * in-memory table is stale and the catchup rebuild
+                         * will overwrite it, so these RPC mutations are lost
+                         * — don't flush a stale table. (Transition-only race;
+                         * goes away in 2b when clients stop blob-flushing.) */
+                        fprintf(stderr,
+                                "meta-flush: export=%s dirty under rebuild; "
+                                "dropping %llu RPC op(s) (client-flush race)\n",
+                                s->exports[e].name,
+                                (unsigned long long)s->rpc_dirty_ops[e]);
+                        s->rpc_dirty_ops[e] = 0;
+                        continue;
+                    }
+                    dirty[ndirty++] = e;
+                    s->rpc_dirty_ops[e] = 0;
+                }
+            }
+        }
+        pthread_mutex_unlock(&s->lock);
+
+        /* Flush outside the lock: server_flush_fragmented_meta does network
+         * I/O (page PUTs + root PUT_META) and re-takes s->lock internally. */
+        for (uint32_t i = 0; i < ndirty; i++) {
+            if (!s->running)
+                break;
+            if (server_flush_fragmented_meta(s, &s->exports[dirty[i]]) != 0) {
+                /* Flush failed (no quorum / net): re-mark dirty so the next
+                 * window retries instead of losing the in-memory mutations. */
+                pthread_mutex_lock(&s->lock);
+                if (s->rpc_dirty_ops[dirty[i]] == 0)
+                    s->rpc_dirty_ops[dirty[i]] = 1;
+                pthread_mutex_unlock(&s->lock);
+            }
+        }
+    }
+    return NULL;
+}
+
+void server_start_meta_flush(struct efsd_server *s)
+{
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    if (pthread_create(&s->meta_flush_tid, &attr, meta_flush_thread, s) == 0)
+        s->meta_flush_started = 1;
     pthread_attr_destroy(&attr);
 }

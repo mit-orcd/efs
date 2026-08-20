@@ -285,6 +285,7 @@ int main(int argc, char **argv)
     g_server = &server;
     pthread_mutex_init(&server.lock, NULL);
     pthread_cond_init(&server.export_idle_cv, NULL);
+    pthread_cond_init(&server.rpc_dirty_cv, NULL);
     server_peer_pool_init();
 
     char *join_peer = NULL;
@@ -481,6 +482,7 @@ int main(int argc, char **argv)
     server_start_heartbeat(&server);
     server_start_migration(&server);
     server_start_meta_catchup(&server);
+    server_start_meta_flush(&server);
 
     {
         const char *stripe = (server.storage_path_count > 1) ? "leastq" : "none";
@@ -577,6 +579,34 @@ int main(int argc, char **argv)
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += 10;
     pthread_timedjoin_np(server.meta_catchup_tid, NULL, &ts);
+    /* Phase 2a: wake + join the meta-flush thread, then commit any RPC-dirty
+     * exports so a graceful restart doesn't lose acknowledged mutations. */
+    if (server.meta_flush_started) {
+        pthread_mutex_lock(&server.lock);
+        pthread_cond_signal(&server.rpc_dirty_cv);
+        pthread_mutex_unlock(&server.lock);
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 10;
+        pthread_timedjoin_np(server.meta_flush_tid, NULL, &ts);
+    }
+    {
+        pthread_mutex_lock(&server.lock);
+        int primary = server_is_meta_primary_locked(&server);
+        uint32_t dirty[EFS_MAX_EXPORTS];
+        uint32_t ndirty = 0;
+        if (primary) {
+            for (uint32_t e = 0; e < server.export_count &&
+                 e < EFS_MAX_EXPORTS; e++) {
+                if (server.rpc_dirty_ops[e] > 0) {
+                    dirty[ndirty++] = e;
+                    server.rpc_dirty_ops[e] = 0;
+                }
+            }
+        }
+        pthread_mutex_unlock(&server.lock);
+        for (uint32_t i = 0; i < ndirty; i++)
+            server_flush_fragmented_meta(&server, &server.exports[dirty[i]]);
+    }
 
     pthread_mutex_lock(&server.lock);
     if (server.export_meta_dirty) {
@@ -588,6 +618,7 @@ int main(int argc, char **argv)
 
     server_peer_pool_shutdown();
     pthread_mutex_destroy(&server.lock);
+    pthread_cond_destroy(&server.rpc_dirty_cv);
     for (uint32_t i = 0; i < server.export_count; i++)
         efs_export_free(&server.exports[i]);
     return 0;

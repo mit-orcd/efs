@@ -1284,6 +1284,7 @@ send_reply:
             r.status = EFS_INODE_RPC_ERROR;
             pthread_mutex_lock(&g_server->lock);
             struct efs_export *ex = NULL;
+            uint32_t eidx = 0;
             efs_export_id_t eid = 0;
             if (type == EFS_MSG_INODE_LOOKUP &&
                 payload_len >= sizeof(struct efs_msg_inode_lookup))
@@ -1301,6 +1302,7 @@ send_reply:
                 if (g_server->exports[i].id == eid ||
                     (eid == 0 && i == 0)) {
                     ex = &g_server->exports[i];
+                    eidx = i;
                     break;
                 }
             }
@@ -1329,6 +1331,9 @@ send_reply:
                     if (ino) {
                         efs_export_get_inode(ex, ino, &r.inode);
                         r.status = EFS_INODE_RPC_OK;
+                        /* Phase 2a: the mutation is in-memory only until the
+                         * meta-flush thread commits it. */
+                        server_meta_mark_rpc_dirty_locked(g_server, eidx);
                     } else {
                         r.status = EFS_INODE_RPC_EXIST;
                     }
@@ -1337,6 +1342,8 @@ send_reply:
                 struct efs_msg_inode_unlink *req = payload;
                 int urc = efs_export_unlink_name(ex, req->parent, req->name);
                 r.status = (urc == 0) ? EFS_INODE_RPC_OK : EFS_INODE_RPC_NOT_FOUND;
+                if (urc == 0)
+                    server_meta_mark_rpc_dirty_locked(g_server, eidx);
             }
             pthread_mutex_unlock(&g_server->lock);
             uint8_t rtype = (type == EFS_MSG_INODE_LOOKUP) ? EFS_MSG_INODE_LOOKUP_REPLY
