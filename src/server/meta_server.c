@@ -593,6 +593,24 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
             }
         }
         if (!decoded) {
+            /* CoW (EFSR v7): an unrecoverable page is a catchup-vs-GC race,
+             * not genuine loss — with the cluster up, all of a CoW page's
+             * fragments exist unless a peer committed a newer root and its GC
+             * reclaimed this generation's dead cis (2+1 EC tolerates one
+             * fragment loss, so genuine loss needs 2+ nodes down). Zero-fill
+             * would corrupt the table (garbage next_ino, rebuild loop). Bail
+             * out as PROTO so the catchup re-polls the newest root (whose cis
+             * are live) and retries. */
+            if (efs_export_root_is_cow(root)) {
+                fprintf(stderr,
+                        "meta-rebuild: page %u unrecoverable (CoW ci=%u); "
+                        "gen %llu raced with GC, re-polling (not zero-fill)\n",
+                        pi, try_ci[0], (unsigned long long)start_gen);
+                free(frag_buf);
+                free(pages);
+                efs_export_root_free(&snap);
+                return EFS_ERR_PROTO;
+            }
             /* Hopeless page (no candidate CI yields 2 checksum-matching
              * fragments): zero-fill and keep rebuilding the rest. Aborting
              * the whole rebuild here fenced the export's tables forever and
@@ -1465,8 +1483,13 @@ static void *meta_catchup_thread(void *arg)
                 fprintf(stderr, "meta-catchup: rebuilt export=%s\n", ex->name);
                 did_work = 1;
             } else if (rc == EFS_ERR_PROTO) {
-                /* Gen raced with PUT_META; retry promptly. */
+                /* Gen raced with PUT_META, or a CoW rebuild hit the
+                 * catchup-vs-GC race (a peer reclaimed this gen's dead cis).
+                 * Retry promptly AND re-poll peers for the newest root (whose
+                 * cis are live) — without the poll, a stuck-at-old-gen server
+                 * would rebuild the same reclaimed gen forever. */
                 did_work = 1;
+                rebuild_failed = 1;
             } else {
                 fprintf(stderr, "meta-catchup: rebuild export=%s rc=%d\n",
                         ex->name, rc);
