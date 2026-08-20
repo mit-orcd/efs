@@ -1179,6 +1179,17 @@ static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
         return prc;
     }
 
+    /* Copy-on-write placement (EFSR v7): the new root carries an explicit
+     * page_cis[]. Each dirty page is written to a fresh ci = next_ci++ and
+     * recorded in page_cis[]; clean pages carry forward the committed root's
+     * ci. cow_ok is false when the committed root has no valid page_cis[] yet
+     * (fresh mkfs root or legacy v6), in which case every page is written to
+     * a fresh ci starting at EFS_META_COW_BASE. */
+    const struct efs_export_root *committed = &g_client.export.root;
+    int cow_ok = efs_export_root_is_cow(committed) &&
+                 committed->next_ci >= EFS_META_COW_BASE;
+    root.next_ci = cow_ok ? committed->next_ci : EFS_META_COW_BASE;
+
     uint8_t *pad = malloc(EFS_META_PAGE_SIZE);
     uint8_t *frag_buf = malloc(EFS_NUM_FRAGMENTS * EFS_META_FRAGMENT_SIZE);
     new_hashes = malloc((size_t)root.page_count * EFS_HASH_SIZE);
@@ -1268,22 +1279,23 @@ static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
              * gen; reuse the committed root checksums. After remount the
              * skip tables are empty, and hashing/PUTing all 11k pages
              * wedged the first fsync for minutes. */
-            if (incremental && !row_dirty &&
-                g_client.export.root.page_checksums &&
-                packed < g_client.export.root.page_count) {
+            if (cow_ok && incremental && !row_dirty &&
+                committed->page_checksums &&
+                packed < committed->page_count) {
                 memcpy(new_sums + (size_t)packed * EFS_NUM_FRAGMENTS *
                            EFS_HASH_SIZE,
-                       efs_export_root_checksum_const(&g_client.export.root,
-                                                      packed, 0),
+                       efs_export_root_checksum_const(committed, packed, 0),
                        EFS_NUM_FRAGMENTS * EFS_HASH_SIZE);
                 memcpy(efs_export_root_checksum(&root, packed, 0),
                        new_sums + (size_t)packed * EFS_NUM_FRAGMENTS *
                            EFS_HASH_SIZE,
                        EFS_NUM_FRAGMENTS * EFS_HASH_SIZE);
+                /* CoW: the clean page stays at its committed chunk_index. */
+                root.page_cis[packed] = committed->page_cis[packed];
                 page_skip++;
                 continue;
             }
-            if (!row_dirty && pi < last_npc && pi < committed_npc &&
+            if (cow_ok && !row_dirty && pi < last_npc && pi < committed_npc &&
                 g_client.meta_slot_hashes[parity] &&
                 logi < EFS_META_MAX_PAGES) {
                 memcpy(new_hashes + (size_t)packed * EFS_HASH_SIZE,
@@ -1299,6 +1311,7 @@ static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
                        new_sums + (size_t)packed * EFS_NUM_FRAGMENTS *
                            EFS_HASH_SIZE,
                        EFS_NUM_FRAGMENTS * EFS_HASH_SIZE);
+                root.page_cis[packed] = committed->page_cis[packed];
                 page_skip++;
                 continue;
             }
@@ -1306,7 +1319,7 @@ static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
             efs_hash(pg, EFS_META_PAGE_SIZE,
                      new_hashes + (size_t)packed * EFS_HASH_SIZE);
             int can_skip = 0;
-            if (pi < last_npc && pi < committed_npc &&
+            if (cow_ok && pi < last_npc && pi < committed_npc &&
                 g_client.meta_slot_hashes[parity] &&
                 logi < EFS_META_MAX_PAGES &&
                 memcmp(new_hashes + (size_t)packed * EFS_HASH_SIZE,
@@ -1322,24 +1335,30 @@ static int flush_snapshot(struct efs_export *snap, uint64_t new_gen,
                        new_sums + (size_t)packed * EFS_NUM_FRAGMENTS *
                            EFS_HASH_SIZE,
                        EFS_NUM_FRAGMENTS * EFS_HASH_SIZE);
+                root.page_cis[packed] = committed->page_cis[packed];
                 page_skip++;
                 can_skip = 1;
             }
             if (can_skip)
                 continue;
-            uint32_t ci = efs_meta_region_page_chunk_index(new_gen, region, pi);
-            if (ci == UINT32_MAX) {
+            /* CoW: write the dirty page to a fresh, never-referenced
+             * chunk_index and record it in the new root's page_cis[]. The
+             * committed root still points at the old ci, so an interrupted
+             * flush cannot tear a page the committed root references. */
+            if (root.next_ci == UINT32_MAX) {
                 free(dirty);
                 free(pad);
                 free(frag_buf);
                 free(new_hashes);
                 free(new_sums);
                 free(ino_dirty_pg);
-        free(ch_dirty_pg);
-        if (!blob_is_cache) free(blob);
+                free(ch_dirty_pg);
+                if (!blob_is_cache) free(blob);
                 efs_export_root_free(&root);
                 return EFS_ERR_INVAL;
             }
+            uint32_t ci = root.next_ci++;
+            root.page_cis[packed] = ci;
             dirty[ndirty].packed = packed;
             dirty[ndirty].ci = ci;
             dirty[ndirty].region = region;

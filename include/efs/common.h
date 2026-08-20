@@ -76,6 +76,12 @@
  * range is written. Flush writes the new gen's slot only, then flips EFSR so
  * a torn flush cannot clobber the live generation. */
 #define EFS_META_SLOT_STRIDE EFS_META_MAX_PAGES
+/* EFSR v7 copy-on-write: page chunk_indices are allocated monotonically from
+ * this base (above the legacy dual-slot window [0, 2*SLOT_STRIDE)) and stored
+ * per-page in the root's page_cis[]. A flush writes each dirty page to a fresh
+ * ci = next_ci++ and commits the root, so an interrupted flush never
+ * overwrites a chunk the committed root still references. */
+#define EFS_META_COW_BASE    (2u * EFS_META_SLOT_STRIDE)
 /* On-disk EFSR v4 used a smaller window. Load still maps those pages. */
 #define EFS_META_V4_MAX_PAGES    8192
 #define EFS_META_V4_INO_MAX      6144

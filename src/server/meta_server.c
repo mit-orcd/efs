@@ -243,6 +243,51 @@ void server_gc_meta_slot_pages(struct efsd_server *s, struct efs_export *ex,
                     old_chunk_pages, live_chunk_pages, ver);
 }
 
+static int u32_cmp(const void *a, const void *b)
+{
+    uint32_t x = *(const uint32_t *)a, y = *(const uint32_t *)b;
+    return (x > y) - (x < y);
+}
+
+/* CoW (EFSR v7) GC: reclaim the chunk_indices the previous committed root
+ * referenced but the new root no longer does. The flush writes each dirty
+ * page to a fresh ci, so the dead cis are exactly old_cis[] - new page_cis[].
+ * Best-effort: a missed reclaim leaks a page until a later GC, never
+ * corrupts (a live ci is never unlinked — it is always in new page_cis[]). */
+void server_gc_meta_cow_pages(struct efsd_server *s, struct efs_export *ex,
+                              const uint32_t *old_cis, uint32_t old_count,
+                              const uint32_t *new_cis, uint32_t new_count)
+{
+    if (!s || !ex || !old_cis || !new_cis)
+        return;
+    uint32_t n = new_count;
+    uint32_t *live = malloc((size_t)n * sizeof(uint32_t));
+    if (!live)
+        return;
+    memcpy(live, new_cis, (size_t)n * sizeof(uint32_t));
+    qsort(live, n, sizeof(uint32_t), u32_cmp);
+    for (uint32_t i = 0; i < old_count; i++) {
+        uint32_t ci = old_cis[i];
+        if (ci < EFS_META_COW_BASE)
+            continue; /* legacy dual-slot / never-written slot */
+        if (bsearch(&ci, live, n, sizeof(uint32_t), u32_cmp))
+            continue; /* still referenced by the new root */
+        efs_node_id_t placed[EFS_NUM_FRAGMENTS];
+        pthread_mutex_lock(&s->lock);
+        efs_place_fragments(s->nodes, s->node_count, EFS_META_TABLE_INO, ci,
+                            placed);
+        efs_node_id_t self = s->id;
+        pthread_mutex_unlock(&s->lock);
+        for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+            if (placed[fi] != self)
+                continue;
+            server_unlink_fragment_files(s, ex, EFS_META_TABLE_INO, ci,
+                                         (uint32_t)fi);
+        }
+    }
+    free(live);
+}
+
 static int put_meta_fragment(struct efsd_server *s, struct efs_export *ex,
                              efs_node_id_t node_id, uint32_t chunk_index,
                              uint32_t fragment_index, const uint8_t *data,
@@ -390,24 +435,35 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
          * content. The client read path already does this; the rebuild
          * wedged on restarts without it. */
         uint32_t try_ci[6];
-        int ntry = efs_meta_page_ci_candidates(start_gen, root->version,
+        int ntry;
+        if (efs_export_root_is_cow(root)) {
+            /* CoW (EFSR v7): the root carries each page's exact chunk_index.
+             * Read it directly — no dual-slot / v4-window candidate search.
+             * An interrupted flush never overwrote this ci (the flush writes
+             * dirty pages to fresh cis and only then flips the root), so the
+             * fragments here always match the committed checksums. */
+            try_ci[0] = root->page_cis[pi];
+            ntry = 1;
+        } else {
+            ntry = efs_meta_page_ci_candidates(start_gen, root->version,
                                                root->ino_page_count,
                                                root->chunk_page_count, pi,
                                                try_ci);
-        if (start_gen > 0) {
-            uint32_t alt[3];
-            int na = efs_meta_page_ci_candidates(start_gen - 1,
-                                                 root->version,
-                                                 root->ino_page_count,
-                                                 root->chunk_page_count, pi,
-                                                 alt);
-            for (int i = 0; i < na; i++) {
-                int seen = 0;
-                for (int j = 0; j < ntry; j++)
-                    if (try_ci[j] == alt[i])
-                        seen = 1;
-                if (!seen && ntry < 6)
-                    try_ci[ntry++] = alt[i];
+            if (start_gen > 0) {
+                uint32_t alt[3];
+                int na = efs_meta_page_ci_candidates(start_gen - 1,
+                                                     root->version,
+                                                     root->ino_page_count,
+                                                     root->chunk_page_count,
+                                                     pi, alt);
+                for (int i = 0; i < na; i++) {
+                    int seen = 0;
+                    for (int j = 0; j < ntry; j++)
+                        if (try_ci[j] == alt[i])
+                            seen = 1;
+                    if (!seen && ntry < 6)
+                        try_ci[ntry++] = alt[i];
+                }
             }
         }
 
@@ -748,6 +804,10 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     uint64_t old_gen = 0;
     uint32_t old_ino_pc = 0, old_ch_pc = 0;
     uint32_t ino_blob_len = 0, chunk_blob_len = 0;
+    uint32_t *old_cis = NULL;
+    uint32_t old_cis_count = 0;
+    uint32_t *new_cis = NULL;
+    uint32_t new_cis_count = 0;
     pthread_mutex_lock(&s->lock);
     if (efs_export_serialize_ex(ex, &blob, &blob_len, &ino_blob_len,
                                 &chunk_blob_len) != EFS_OK) {
@@ -784,6 +844,16 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
         free(blob);
         return -1;
     }
+
+    /* CoW (EFSR v7): allocate each page a fresh chunk_index above the legacy
+     * dual-slot window. Carry the allocator forward from the committed root
+     * so a re-flush never reuses a ci the committed root still references. */
+    pthread_mutex_lock(&s->lock);
+    int cow_ok = efs_export_root_is_cow(&ex->root) &&
+                 ex->root.next_ci >= EFS_META_COW_BASE;
+    uint32_t committed_next = ex->root.next_ci;
+    pthread_mutex_unlock(&s->lock);
+    root.next_ci = cow_ok ? committed_next : EFS_META_COW_BASE;
 
     uint8_t *page = malloc(EFS_META_PAGE_SIZE);
     uint8_t *frag_buf = malloc(EFS_NUM_FRAGMENTS * EFS_META_FRAGMENT_SIZE);
@@ -822,14 +892,17 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
             efs_hash(fragments[fi], EFS_META_FRAGMENT_SIZE, checksums[fi]);
 
-        uint32_t ci = efs_meta_region_page_chunk_index(new_gen, region, pi);
-        if (ci == UINT32_MAX) {
+        /* CoW (EFSR v7): write the page to a fresh, never-referenced
+         * chunk_index and record it in the new root's page_cis[]. */
+        if (root.next_ci == UINT32_MAX) {
             free(page);
             free(frag_buf);
             free(blob);
             efs_export_root_free(&root);
             return -1;
         }
+        uint32_t ci = root.next_ci++;
+        root.page_cis[packed] = ci;
 
         efs_node_id_t placed[EFS_NUM_FRAGMENTS];
         pthread_mutex_lock(&s->lock);
@@ -982,18 +1055,49 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     uint32_t new_ch_pc = root.chunk_page_count;
     pthread_mutex_lock(&s->lock);
     ex->meta_fragmented = 1;
+    /* CoW (EFSR v7): snapshot the outgoing root's page_cis[] and the new
+     * root's page_cis[] so the GC runs lock-free on stable copies. */
+    if (ex->root.page_cis && ex->root.page_count > 0) {
+        old_cis_count = ex->root.page_count;
+        old_cis = malloc((size_t)old_cis_count * sizeof(uint32_t));
+        if (old_cis)
+            memcpy(old_cis, ex->root.page_cis,
+                   (size_t)old_cis_count * sizeof(uint32_t));
+        else
+            old_cis_count = 0;
+    }
+    if (root.page_cis && root.page_count > 0) {
+        new_cis_count = root.page_count;
+        new_cis = malloc((size_t)new_cis_count * sizeof(uint32_t));
+        if (new_cis)
+            memcpy(new_cis, root.page_cis,
+                   (size_t)new_cis_count * sizeof(uint32_t));
+        else
+            new_cis_count = 0;
+    }
     efs_export_root_move(&ex->root, &root);
     s->export_meta_dirty = 1;
     server_save_export(s, ex);
     s->export_meta_dirty = 0;
     pthread_mutex_unlock(&s->lock);
 
-    /* Retire the previous generation's dual-slot pages (best-effort). Only
-     * pages beyond the new generation's page count are dead; in-range
-     * fragments stay for dirty-page skip reuse by future same-parity gens. */
-    if ((old_ino_pc > 0 || old_ch_pc > 0) && old_gen != new_gen)
-        server_gc_meta_slot_pages(s, ex, old_gen, old_ino_pc, old_ch_pc,
-                                  new_ino_pc, new_ch_pc);
+    /* Retire the previous generation's metadata pages (best-effort). */
+    if (old_gen != new_gen) {
+        if (old_cis && new_cis) {
+            /* Old root was CoW (EFSR v7): reclaim the cis it referenced but
+             * the new root no longer does. */
+            server_gc_meta_cow_pages(s, ex, old_cis, old_cis_count,
+                                     new_cis, new_cis_count);
+        } else if (old_ino_pc > 0 || old_ch_pc > 0) {
+            /* Old root was dual-slot (v6 and earlier): only pages beyond the
+             * new generation's page count are dead; in-range fragments stay
+             * for dirty-page skip reuse by future same-parity gens. */
+            server_gc_meta_slot_pages(s, ex, old_gen, old_ino_pc, old_ch_pc,
+                                      new_ino_pc, new_ch_pc);
+        }
+    }
+    free(old_cis);
+    free(new_cis);
     return 0;
 }
 

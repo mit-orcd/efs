@@ -781,6 +781,34 @@ send_reply:
                             uint32_t new_ch_pc = root.chunk_page_count;
                             int had_frag = ex->meta_fragmented;
                             uint32_t prev_features = ex->root.features;
+                            /* CoW (EFSR v7): snapshot the outgoing and incoming
+                             * roots' page_cis[] so the GC runs lock-free on
+                             * stable copies (a concurrent PUT_META could move
+                             * ex->root once we drop the lock). */
+                            uint32_t *old_cis = NULL, *new_cis = NULL;
+                            uint32_t old_cis_count = 0, new_cis_count = 0;
+                            if (ex->root.page_cis && ex->root.page_count > 0) {
+                                old_cis_count = ex->root.page_count;
+                                old_cis = malloc((size_t)old_cis_count *
+                                                 sizeof(uint32_t));
+                                if (old_cis)
+                                    memcpy(old_cis, ex->root.page_cis,
+                                           (size_t)old_cis_count *
+                                               sizeof(uint32_t));
+                                else
+                                    old_cis_count = 0;
+                            }
+                            if (root.page_cis && root.page_count > 0) {
+                                new_cis_count = root.page_count;
+                                new_cis = malloc((size_t)new_cis_count *
+                                                 sizeof(uint32_t));
+                                if (new_cis)
+                                    memcpy(new_cis, root.page_cis,
+                                           (size_t)new_cis_count *
+                                               sizeof(uint32_t));
+                                else
+                                    new_cis_count = 0;
+                            }
                             ex->meta_fragmented = 1;
                             efs_export_root_move(&ex->root, &root);
                             ex->id = ex->root.id;
@@ -824,17 +852,36 @@ send_reply:
                             uint64_t new_gen = ex->root.generation;
                             pthread_mutex_unlock(&g_server->lock);
                             reply = EFS_PUT_META_OK;
-                            /* Client-driven root flip: drop local fragments for
-                             * the retired dual-slot generation's out-of-range
-                             * pages only (in-range fragments stay for reuse by
-                             * dirty-page skip references). */
-                            if (had_frag && (old_ino_pc > 0 || old_ch_pc > 0) &&
-                                old_gen != new_gen)
-                                server_gc_meta_slot_pages(g_server,
-                                                          &g_server->exports[0],
-                                                          old_gen, old_ino_pc,
-                                                          old_ch_pc, new_ino_pc,
-                                                          new_ch_pc);
+                            /* Client-driven root flip: reclaim the retired
+                             * generation's metadata pages (best-effort). */
+                            if (old_gen != new_gen) {
+                                if (old_cis && new_cis) {
+                                    /* Old root was CoW (EFSR v7): reclaim the
+                                     * cis it referenced but the new root no
+                                     * longer does. */
+                                    server_gc_meta_cow_pages(g_server,
+                                                             &g_server->exports[0],
+                                                             old_cis,
+                                                             old_cis_count,
+                                                             new_cis,
+                                                             new_cis_count);
+                                } else if (had_frag &&
+                                           (old_ino_pc > 0 || old_ch_pc > 0)) {
+                                    /* Old root was dual-slot (v6 and earlier):
+                                     * drop only the retired gen's out-of-range
+                                     * pages (in-range fragments stay for reuse
+                                     * by dirty-page skip references). */
+                                    server_gc_meta_slot_pages(g_server,
+                                                              &g_server->exports[0],
+                                                              old_gen,
+                                                              old_ino_pc,
+                                                              old_ch_pc,
+                                                              new_ino_pc,
+                                                              new_ch_pc);
+                                }
+                            }
+                            free(old_cis);
+                            free(new_cis);
                         }
                     }
                 } else if (efs_meta_blob_is_export(payload, payload_len)) {

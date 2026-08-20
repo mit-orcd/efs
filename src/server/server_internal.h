@@ -345,6 +345,12 @@ void server_gc_meta_slot_pages(struct efsd_server *s, struct efs_export *ex,
                                uint64_t dead_generation,
                                uint32_t old_ino_pages, uint32_t old_chunk_pages,
                                uint32_t live_ino_pages, uint32_t live_chunk_pages);
+/* CoW (EFSR v7) GC: reclaim cis in old_cis[] no longer referenced by
+ * new_cis[] (the new committed root's page_cis[]). Both arrays are caller-
+ * owned copies captured under the server lock (the GC runs lock-free). */
+void server_gc_meta_cow_pages(struct efsd_server *s, struct efs_export *ex,
+                              const uint32_t *old_cis, uint32_t old_count,
+                              const uint32_t *new_cis, uint32_t new_count);
 
 /* Rebuild in-memory export tables from meta pages referenced by ex->root. */
 int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *ex);

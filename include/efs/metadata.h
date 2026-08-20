@@ -56,6 +56,19 @@ struct efs_child_vec {
     uint64_t cap;
 };
 
+/* EFSR (root) wire versions. v1 = no chunk_size; v2 = chunk_size after
+ * page_count; v3 = features; v4 = two-region ino/chunk page counts; v5 = wider
+ * page window; v6 = per-page fragment checksums; v7 = copy-on-write page
+ * placement (page_cis[] + next_ci). */
+#define EFS_META_ROOT_VERSION_V1 1
+#define EFS_META_ROOT_VERSION_V2 2
+#define EFS_META_ROOT_VERSION_V3 3
+#define EFS_META_ROOT_VERSION_V4 4
+#define EFS_META_ROOT_VERSION_V5 5
+#define EFS_META_ROOT_VERSION_V6 6
+#define EFS_META_ROOT_VERSION_V7 7
+#define EFS_META_ROOT_VERSION EFS_META_ROOT_VERSION_V7
+
 /* Tiny fully-replicated export root. Bulk inode/chunk tables live in
  * 2+1 metadata pages under EFS_META_TABLE_INO (see efs_meta_page_*).
  * page_checksums is heap-allocated: page_count * EFS_NUM_FRAGMENTS * HASH. */
@@ -82,7 +95,23 @@ struct efs_export_root {
     uint32_t shard_bits; /* shard = ino >> shard_bits; 0 = one shard */
     uint64_t write_lease_id;
     uint64_t write_lease_until_ms;
+    /* EFSR v7: copy-on-write page placement. page_cis[i] is the chunk_index
+     * (under EFS_META_TABLE_INO) holding page i's fragments; the flush writes
+     * each dirty page to a fresh ci = next_ci++ and records it here, so an
+     * interrupted flush never overwrites a chunk the committed root still
+     * references. next_ci is the next never-used chunk_index. Heap-allocated:
+     * page_count * sizeof(uint32_t). NULL for v6 and earlier (dual-slot). */
+    uint32_t *page_cis;
+    uint32_t next_ci;
 };
+
+/* Copy-on-write placement (EFSR v7): the root carries an explicit page_cis[]
+ * so a flush writes each dirty page to a fresh chunk_index and commits the
+ * root atomically. Returns nonzero if this root uses CoW placement. */
+static inline int efs_export_root_is_cow(const struct efs_export_root *r)
+{
+    return r->version >= EFS_META_ROOT_VERSION_V7 && r->page_cis != NULL;
+}
 
 struct efs_export {
     efs_export_id_t id;

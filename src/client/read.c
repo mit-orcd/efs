@@ -539,6 +539,9 @@ static int load_export_from_prev_slot(const struct efs_export_root *root)
 {
     if (!root || root->generation == 0 || root->page_count == 0)
         return EFS_ERR_INVAL;
+    /* CoW (EFSR v7): pages live at page_cis[], not a dual-slot generation. */
+    if (efs_export_root_is_cow(root))
+        return EFS_ERR_INVAL;
 
     uint64_t prev = root->generation - 1;
     fprintf(stderr,
@@ -741,6 +744,10 @@ static int load_export_from_root(const struct efs_export_root *root)
     g_chunk_skip_streak = 0;
     g_client.meta_heal_skipped = 0;
     int saw_v4_ci = 0, saw_v5_ci = 0;
+    /* CoW (EFSR v7): the root carries each page's exact chunk_index, so the
+     * dual-slot / v4-window candidate search and the torn-page CI hunting are
+     * all skipped — page pi lives at page_cis[pi], full stop. */
+    int cow = efs_export_root_is_cow(root);
     for (uint32_t pi = 0; pi < root->page_count; pi++) {
         /* Tail pages past ino_blob_len / chunk_blob_len are not in the EFSM. */
         if (root->chunk_page_count > 0) {
@@ -755,34 +762,42 @@ static int load_export_from_root(const struct efs_export_root *root)
             continue;
         }
         uint32_t try_ci[12];
-        int ntry = efs_meta_page_ci_candidates(root->generation, root->version,
+        int ntry;
+        int is_chunk = root->chunk_page_count > 0 && pi >= root->ino_page_count;
+        if (cow) {
+            /* CoW (EFSR v7): exact chunk_index from the root. */
+            try_ci[0] = root->page_cis[pi];
+            ntry = 1;
+        } else {
+            ntry = efs_meta_page_ci_candidates(root->generation, root->version,
                                                root->ino_page_count,
                                                root->chunk_page_count, pi,
                                                try_ci);
-        /* Two clients can overwrite the published slot's page while the
-         * previous dual-slot still matches this EFSR. Try that CI too. */
-        if (root->generation > 0) {
-            uint32_t alt[3];
-            int na = efs_meta_page_ci_candidates(root->generation - 1,
-                                                 root->version,
-                                                 root->ino_page_count,
-                                                 root->chunk_page_count, pi,
-                                                 alt);
-            for (int i = 0; i < na; i++)
-                add_meta_ci(try_ci, &ntry, 12, alt[i]);
-        }
-        int is_chunk = root->chunk_page_count > 0 && pi >= root->ino_page_count;
-        if (is_chunk && g_meta_chunk_ci_even_base != UINT32_MAX) {
-            uint32_t rpi = pi - root->ino_page_count;
-            add_meta_ci(try_ci, &ntry, 12, g_meta_chunk_ci_even_base + rpi);
-            add_meta_ci(try_ci, &ntry, 12,
-                        g_meta_chunk_ci_even_base + rpi + EFS_META_SLOT_STRIDE);
-        }
-        if (is_chunk && g_last_chunk_even_ci != UINT32_MAX &&
-            g_last_chunk_even_ci + 1 < EFS_META_MAX_PAGES) {
-            add_meta_ci(try_ci, &ntry, 12, g_last_chunk_even_ci + 1);
-            add_meta_ci(try_ci, &ntry, 12,
-                        g_last_chunk_even_ci + 1 + EFS_META_SLOT_STRIDE);
+            /* Two clients can overwrite the published slot's page while the
+             * previous dual-slot still matches this EFSR. Try that CI too. */
+            if (root->generation > 0) {
+                uint32_t alt[3];
+                int na = efs_meta_page_ci_candidates(root->generation - 1,
+                                                     root->version,
+                                                     root->ino_page_count,
+                                                     root->chunk_page_count, pi,
+                                                     alt);
+                for (int i = 0; i < na; i++)
+                    add_meta_ci(try_ci, &ntry, 12, alt[i]);
+            }
+            if (is_chunk && g_meta_chunk_ci_even_base != UINT32_MAX) {
+                uint32_t rpi = pi - root->ino_page_count;
+                add_meta_ci(try_ci, &ntry, 12, g_meta_chunk_ci_even_base + rpi);
+                add_meta_ci(try_ci, &ntry, 12,
+                            g_meta_chunk_ci_even_base + rpi +
+                                EFS_META_SLOT_STRIDE);
+            }
+            if (is_chunk && g_last_chunk_even_ci != UINT32_MAX &&
+                g_last_chunk_even_ci + 1 < EFS_META_MAX_PAGES) {
+                add_meta_ci(try_ci, &ntry, 12, g_last_chunk_even_ci + 1);
+                add_meta_ci(try_ci, &ntry, 12,
+                            g_last_chunk_even_ci + 1 + EFS_META_SLOT_STRIDE);
+            }
         }
         int rc = EFS_ERR_INVAL;
         const char *scheme = "v5";
@@ -813,7 +828,7 @@ static int load_export_from_root(const struct efs_export_root *root)
                 fflush(stderr);
             }
         }
-        if (!loaded && is_chunk && g_last_chunk_even_ci != UINT32_MAX &&
+        if (!cow && !loaded && is_chunk && g_last_chunk_even_ci != UINT32_MAX &&
             g_chunk_skip_streak < 3) {
             for (int d = 0; d <= 64 && !loaded; d++) {
                 for (int sgn = 0; sgn < 2 && !loaded; sgn++) {
@@ -843,7 +858,7 @@ static int load_export_from_root(const struct efs_export_root *root)
                 }
             }
         }
-        if (!loaded && is_chunk && g_last_chunk_even_ci == UINT32_MAX) {
+        if (!cow && !loaded && is_chunk && g_last_chunk_even_ci == UINT32_MAX) {
             uint32_t rpi = pi - root->ino_page_count;
             uint32_t even = hunt_chunk_page_even_ci(root, pi);
             if (even != UINT32_MAX) {
