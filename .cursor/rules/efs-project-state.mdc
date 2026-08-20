@@ -1,0 +1,169 @@
+---
+description: efs project memory — what's done, key root-cause learnings, where we are (keep current)
+alwaysApply: true
+---
+
+# efs project state (compact memory)
+
+efs: distributed FS, 2+1 XOR EC, FUSE client, RDMA (RC QP), 128 KiB chunks.
+Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
+
+## Where we are
+Cluster live on **v7-CoW (EFSR v7 copy-on-write metadata)** + catchup-vs-GC
+fix + **Phase 2a (cffb138) + Phase 2b (d7d2c7c)**, healthy (4 up / 0 down).
+4 servers + 13 clients (see efs-fcstor-deploy rule). Export `efs-test`.
+CoW = **debe6dd**, catchup-vs-GC fix = **76753ef**, Phase 2 design doc =
+**d07ed05** (docs/phase2-server-owned-metadata.md).
+**Phase 2b DONE + validated (d7d2c7c): FUSE mutations route through RPC to the
+metadata primary, dual-applied to the local snapshot; data path reports chunk
+mappings via REPORT_CHUNKS (client blob flush + election GONE); fsync = sync
+barrier. Next: Phase 2c (client read cache, gen-check).** Stuck-catchup
+(todo 15) DEFERRED by user.
+**Test suite committed (d52287e)**: reusable POSIX + perf suites, results
+tracked in git under `results/`. See "Test suite" section below.
+**2 client data-path fixes (7fa99e8)**: packed-file overwrite/append + rename/
+link data loss (see "Root causes" below). POSIX suite 64/69 (was 16 fail).
+
+## Test suite (d52287e)
+Run from the login node (needs ssh to nodes): `tests/run_tests.sh
+posix|perf|setup|all`. `setup` rsyncs+builds+mounts the 9 pure clients.
+- **POSIX** (`tests/posix/posix_suite.py`, 69 tests, @test-extensible): run vs
+  an XFS baseline (node9901:/data1/efs); `compare.py` → efs bug = PASS on XFS,
+  FAIL on efs. Baseline is 69/69 on XFS.
+- **Perf** (`tests/perf/perf_node.sh`): dd + 9-job fio, single|multi client
+  (parallel), aggregated to `results/perf/history.tsv`. Harness logs stay
+  LOCAL (don't depend on the efs read-after-write path being benchmarked).
+- Multi-client baseline: write ceiling SHARED (~4.9 GB/s aggregate sw-1m
+  across 9 ≈ single-client), read scales (~25 GB/s aggregate sr-1m).
+
+## POSIX gaps vs XFS (suite, Aug 20) — 5 fails (was 16; data-path FIXED 7fa99e8)
+FIXED (7fa99e8): packed-file overwrite/append + rename/link data loss (see
+"Root causes" below). All data-path tests pass (basic_append, basic_oappend,
+basic_overwrite_middle, basic_terminal_cp_cat, basic_dd_rw, dir_rename_*,
+hardlink_*, unlink_open_file).
+**unlink-open investigated — NOT reproducing**: the theoretical concern
+(efs_export_unlink_name removes inode+chunks on nlink->0, breaking open-fd
+reads) does NOT manifest. Reads via the open fd succeed for buffered AND
+O_DIRECT, small packed AND large chunked, flushed AND unflushed. No fix needed.
+Remaining 5 (functional gaps, NOT data corruption):
+- **O_APPEND not atomic** (concurrent_appends): ~34/200 appends landed.
+- **Permission enforcement**: attr_access + err_write_readonly_file — efs-fuse
+  doesn't enforce write permission (write to 0o444 succeeds).
+- **Semantics**: err_rmdir_nonempty (no ENOTEMPTY), names_too_long_component
+  (returns ENOENT not ENAMETOOLONG).
+- **Hardlink** (known FUSE kernel-level gap, below) — much improved by the
+  7fa99e8 link fix (hardlink_* now pass) but the kernel-level dentry gap
+  remains latent.
+
+## Phase 2 sub-phase state
+- **2a server-side mutation durability (DONE, cffb138)**: RPC INODE_CREATE/
+  UNLINK handlers bump rpc_dirty_ops[eidx]; primary-only meta_flush_thread
+  batches + commits dirty exports via CoW server_flush_fragmented_meta.
+- **2b route FUSE through RPC (DONE, d7d2c7c)**: all FUSE mutations (create/
+  unlink/rename/setattr/link/symlink/readlink) run on the primary via RPC
+  (rpc_send_recv_primary retries NOT_PRIMARY), dual-applied to the local
+  snapshot via efs_export_upsert_inode. Server allocates inos (next_ino moved
+  server-side). Data path: efs_client_report_dirty snapshots the dirty set and
+  sends REPORT_CHUNKS (chunk mappings + ino size/mtime) to the primary instead
+  of the client blob flush — the client flush/election/dirty-set machinery is
+  no longer the flush path. fsync = sync REPORT_CHUNKS + server commits before
+  replying. Validated on a fresh mkfs cluster: all mutations + data + sparse
+  holes persist across remount, flush failures 0.
+  **Two server flush bugs fixed in 2b**: (1) server_flush_fragmented_meta
+  carried a stale pre-2a client write_lease_id → peers rejected the root (no
+  quorum, mutations lost); now cleared. (2) meta_flush_thread raced a sync
+  fsync flush on the same new_gen → loser rejected STALE → fsync EIO; now
+  serialized by efsd_server.meta_flush_mu.
+- **2c client read cache (gen-check) (NEXT)**: not started.
+
+## Known live issues
+- **Hardlink (`ln`) flaky at the FUSE kernel level** (pre-existing, NOT a 2b
+  regression): the kernel intermittently fails the link's *source* path
+  resolution from a cached dentry WITHOUT calling the daemon (efs_fuse_link
+  never invoked). The 2b link RPC itself is correct (server applies it —
+  nlink bumps). efs-fuse uses the high-level FUSE API which has NO .lookup op
+  (never had one) — likely a dentry/generation-tracking gap. Doesn't affect
+  fio/rclone/dd (no hardlinks). Not yet root-caused.
+- **efs-fuse double-free SIGABRT** (reported Aug 19): was on the client-driven
+  flush+resync path. **2b removed that flush path** (clients no longer
+  blob-flush), so this is likely moot now — but the resync/rebase path still
+  exists. If it recurs under 2b, reproduce with an ASan efs-fuse.
+
+## Known live issues (not yet root-caused)
+- **efs-fuse double-free SIGABRT** (reported Aug 19): `double free or
+  corruption (!prev)` during heavy write (`ewrite.sh /tmp/efs-mount/001 1 32`,
+  32 jobs) + resync/rebase under transient no-quorum. Log: STALE quorum →
+  resync → `rebased ... onto gen 100623` → abort. Backtrace only shows libc
+  `free`→abort (efs-fuse frame is just the fatal-signal handler). Code review
+  of resync (fetch/deserialize/merge/swap/adopt/frees), flush blob ownership
+  (`blob_is_cache`, `dirty_snap_free`), `incremental_serialize_v6` bounds,
+  `efs_export_root_copy` (deep), `MARK_SPAN` (bounds-checked) found NO obvious
+  double-free/overflow. Crash binaries (with debug_info) in ~/git/efs/logs/.
+  Cluster healthy after (4 up/0 down). **Next step: reproduce with an
+  ASan build of efs-fuse (`-fsanitize=address`) under the same workload to
+  pinpoint the exact free.** This is the client-driven flush+resync path that
+  Phase 2 replaces — so Phase 2 is the long-term fix, but the bug is live
+  until then.
+
+## Done — don't re-test
+- Phase 1 perf fixes (8b71dd3, bed1123, 00323c4, cddf692, 41d047e): RDMA
+  latency, statfs phantom usage, torn-name readdir, meta-flush election
+  hardening, GET_META serialize cache, efs-fuse RSS ~27GB→~4GB, read-verify
+  moved server-side, resync/rebuild staged out of global locks.
+- **v7 wire format** (f147fb8): split inode/dentry regions, page-aligned
+  dentries → O(1) creates. Validated to 50K files, ~5.6 ms create+fdatasync.
+- **Cycle fix** (d7b95fb): recompute_dir_postorder stack-overflow on cyclic
+  garbage tables (the "raced deserialize SIGSEGV" that killed fcstor005).
+- **CoW metadata flush / EFSR v7** (debe6dd): root carries page_cis[] +
+  next_ci; flush writes each dirty page to a fresh ci and commits the root
+  only after all pages land; rebuild reads page_cis[i] exactly; GC
+  (server_gc_meta_cow_pages) reclaims cis the old root no longer references.
+  Validated: kill -9 mid-flush (touch + fsync-heavy) remounts clean, no torn
+  pages. **Torn-page root cause is fixed.**
+- Scaling roadmap Phases 2–4 (0a381b8): docs/scaling-roadmap.md.
+- Validation: fio suite on fcstor007 all rc=0, no segfault under load
+  (sw 4.6 GB/s, sr 2.4 GB/s, 4k rand ~40k IOPS). rclone 32×10GiB copy rc=0.
+
+## Root causes already found — don't re-diagnose
+- **Packed-file overwrite/append = rdcache staleness (FIXED, 7fa99e8)**:
+  dcache_put_now wrote the merged chunk to the servers but never invalidated
+  the rdcache entry that the flush's have_base=0 merge-base read had populated
+  with the OLD published chunk → a later read served the stale rdcache copy
+  and lost the update. Fix: efs_rdcache_invalidate(ino, ci) after a
+  successful PUT.
+- **rename/link data loss = dual-apply upsert (FIXED, 7fa99e8)**: the 2b
+  dual-apply upserted the RPC-returned inode, which carries a stale size=0
+  (the close's metadata flush is batched/async, so the server hasn't seen the
+  size yet) → upserting wiped the fresher local data-path state (size, pack
+  fields, chunk mappings). Fix: dual-apply via efs_export_rename /
+  efs_export_link (name/parent/nlink/ctime only), fallback to upsert.
+- Slow creates = **v6 dentry-shift** (O(table) memmove of the packed dentry
+  region on every create), NOT fdatasync/election. Fixed by v7.
+- **Torn metadata pages = non-atomic dual-slot flush** (PUT dirty pages to a
+  same-parity slot before committing the root; kill mid-flush overwrites a
+  page the committed root references → checksum mismatch → zero-fill →
+  garbage next_ino). Fixed by CoW (debe6dd).
+- fcstor005 SIGSEGV = **pre-existing rebuild-race** (torn page → cyclic garbage
+  table → infinite postorder recursion), NOT v7. Fixed by cycle detection.
+- **Catchup-vs-GC race (FIXED, 76753ef)**: a catching-up server rebuilding an
+  OLD root lost the race to GC reclaiming that root's CoW cis → zero-fill →
+  corrupt table. Fix: for a CoW root, an unrecoverable page = GC-race (not
+  genuine loss), so rebuild returns EFS_ERR_PROTO (no zero-fill) and the
+  catchup re-polls for the newest root. Validated: 20k fsync-creates while a
+  wiped server caught up → 65 GC-races, 0 zero-fills, no corruption.
+- **Stuck catchup (DEFERRED, todo 15)**: during that validation fcstor006's
+  catchup hung ~7 min (0% CPU, idle conns, all S-state) after installing the
+  final gen. NOT a blocking recv — peer conns already have SO_RCVTIMEO
+  (peer_pool.c:173). Likely a futex (s->lock) or logic stall; needs
+  gdb/instrumentation to root-cause. Workaround: restart the node.
+- `used=0 B` in `efs-mgmt status` can be **stale gossip**, not data loss —
+  check on-disk (`du`) before concluding.
+- Build-ID gate: rolling efsd restart only works within the same commit.
+
+## Housekeeping
+- Integration tests `test_quota` / `test_migrate` are **pre-existing flaky**
+  (unrelated to recent changes) — don't chase them as regressions.
+
+---
+**After any milestone/fix/validation, update "Where we are" + "Done" so the
+next session doesn't repeat completed work.**

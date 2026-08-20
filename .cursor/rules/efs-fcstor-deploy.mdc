@@ -1,0 +1,47 @@
+---
+description: How to build/deploy/restart efs on the dedicated fcstor test cluster (NO Slurm)
+alwaysApply: true
+---
+
+# efs deployment on the fcstor test cluster
+
+**Never use Slurm for efs.** Build/test runs on the dedicated fcstor test
+environment, reached via the `efs-test-ssh` wrapper:
+`~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh <host> '<cmd>'`
+
+## Topology (current)
+
+- 4 servers (`efsd`), port 19810, 6 NVMe paths each
+  (`/data1/01/efs` … `/data1/06/efs`), `--quota 36T --direct-io`:
+  - node 1 = fcstor003 = 172.16.223.57  (primary/seed — no `--join`)
+  - node 2 = fcstor004 = 172.16.223.58  (`--join 172.16.223.57:19810`)
+  - node 3 = fcstor005 = 172.16.223.59  (`--join 172.16.223.57:19810`)
+  - node 4 = fcstor006 = 172.16.223.60  (`--join 172.16.223.57:19810`)
+- 13 clients (`efs-fuse`): fcstor003–015. fcstor003–006 run BOTH efsd + efs-fuse.
+- Export `efs-test` (id=1), mounted at `/tmp/efs/mnt`.
+
+## Deploy procedure
+
+1. **rsync** repo to node-local scratch on each target (exclude the live mount
+   + logs so `--delete` doesn't fight FUSE), run ON the node:
+   `rsync -a --delete --exclude='/mnt/' --exclude='*.log' "$HOME/git/efs/" /tmp/efs/`
+2. **Build on the node** (never the NFS home, never a login node):
+   `cd /tmp/efs && make efsd` (servers) / `make efs-fuse` (clients).
+3. **Rolling restart** — one node at a time; verify it rejoins
+   (`./efs-mgmt status 172.16.223.57:19810`) before the next.
+
+### Restart one efsd (server)
+`pkill -x efsd` — exact name; NEVER `pkill -f "efsd --node-id N"` (the pattern
+matches the ssh remote command and kills your own shell). Then:
+`cd /tmp/efs && setsid ./efsd --node-id N --addr 172.16.223.5X --port 19810 --storage /data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs --quota 36T --direct-io [--join 172.16.223.57:19810] >efsd.log 2>&1 </dev/null &`
+Use `setsid … </dev/null &` to detach; a bare `nohup … &` can hang the ssh session.
+
+### Restart one efs-fuse (client)
+`fusermount3 -u /tmp/efs/mnt; pkill -x efs-fuse`, then:
+`cd /tmp/efs && setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &`
+
+## Build-ID gate
+
+`efsd` HELLO requires a matching `EFS_BUILD_ID`. Rolling restart works only
+when the ID is unchanged (same commit, `-dirty`). After a NEW commit, restart
+ALL servers together — mixed build IDs are rejected.
