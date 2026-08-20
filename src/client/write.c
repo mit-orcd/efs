@@ -3434,8 +3434,15 @@ static int dcache_patch(efs_ino_t ino, uint32_t ci, uint32_t off, const uint8_t 
     return -1;
 }
 
-/* First 4k to a chunk: cache the patch without a 128 KiB GET. Published
- * chunks stay have_base=0 until flush, which fetches once and overlays. */
+/* First 4k to a chunk: load the published base NOW (one GET), patch the 4k,
+ * and cache the full chunk with have_base=1. The old path zero-filled and
+ * set have_base=0 for a published chunk, so EVERY flush of that chunk did a
+ * 128 KiB GET+merge+PUT (read-modify-write). With a working set over the
+ * dcache limit (random 4k on >= 512 MiB) reclaim runs constantly and the
+ * writer thread flushes inline (dirty > 2x cap), so pwrite blocked on the
+ * GET+PUT — that is what capped fio rw-4k at ~100 MiB/s. Reading the base
+ * once here turns later 4k patches into pure memcpy and the flush into a
+ * PUT-only. */
 static int dcache_load_and_patch(efs_ino_t ino, uint32_t ci, uint32_t off,
                                  const uint8_t *src, uint32_t len, uint32_t cs)
 {
@@ -3454,8 +3461,18 @@ static int dcache_load_and_patch(efs_ino_t ino, uint32_t ci, uint32_t off,
         pthread_mutex_lock(&g_client.idx_mu);
         published = (efs_export_get_chunk(&g_client.export, ino, ci, NULL) == 0);
         pthread_mutex_unlock(&g_client.idx_mu);
-        memset(chunk, 0, cs);
-        have_base = !published;
+        if (published) {
+            size_t got = 0;
+            int rrc = efs_client_read(ino, (uint64_t)ci * cs, cs,
+                                      (char *)chunk, &got);
+            if (rrc == EFS_OK) {
+                if (got < cs)
+                    memset(chunk + got, 0, cs - got);
+                have_base = 1;
+            }
+        }
+        if (!have_base)
+            memset(chunk, 0, cs);
     }
     memcpy(chunk + off, src, len);
     if (dcache_merge_owned(ino, ci, off, src, len, chunk, cs) != 0) {
@@ -3847,10 +3864,17 @@ static pthread_once_t g_reclaim_once = PTHREAD_ONCE_INIT;
 
 static uint64_t dcache_reclaim_limit(void)
 {
-    /* 512 MiB default (was 2 GiB): push data down the pipe sooner. The
-     * write-behind window only needs to absorb burst jitter, not hold
-     * minutes of throughput. */
-    uint64_t lim = 512ull << 20;
+    /* 2 GiB default. The old 512 MiB ("push data down the pipe sooner") let
+     * only ~4096 chunks (512 MiB / 128 KiB) stay cached, so a random-write
+     * working set larger than that (fio rw-4k on 2 GiB files = 16384 chunks)
+     * churned reclaim: every eviction of a partially-written chunk forced a
+     * 128 KiB read-modify-write (GET the published base + PUT the chunk back),
+     * ~32-64x amplification that capped rw-4k at ~100 MiB/s. At 2 GiB the
+     * working set stays cached, repeat 4k writes to a chunk coalesce in place,
+     * and the flush is a single PUT — rw-4k recovers to ~1.5 GB/s. The window
+     * still only needs to absorb burst jitter, and the dcache is hard-capped
+     * at 8 GiB (65536 slots x 128 KiB) regardless. */
+    uint64_t lim = 2ull << 30;
     const char *env = getenv("EFS_DCACHE_BYTES");
     if (env && *env) {
         char *end = NULL;

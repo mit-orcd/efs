@@ -59,8 +59,37 @@ posix|perf|setup|all`. `setup` rsyncs+builds+mounts the 9 pure clients.
 - **Perf** (`tests/perf/perf_node.sh`): dd + 9-job fio, single|multi client
   (parallel), aggregated to `results/perf/history.tsv`. Harness logs stay
   LOCAL (don't depend on the efs read-after-write path being benchmarked).
-- Multi-client baseline: write ceiling SHARED (~4.9 GB/s aggregate sw-1m
-  across 9 ≈ single-client), read scales (~25 GB/s aggregate sr-1m).
+- Multi-client baseline (20260820-170303): write ceiling SHARED (~4.9 GB/s
+  aggregate sw-1m across 9 ≈ single-client), read scales (~25 GB/s sr-1m).
+- **Perf re-run after POSIX 144/144 (2b47a2c), Aug 20**: single
+  `20260820-204328` + multi-9 `20260820-204949` (all rc=0). Sequential
+  1m write still shared-ceiling (multi sw-1m agg 5853 MiB/s). 4k IOPS
+  collapsed vs morning baseline: single rw-4k 1372→125 MiB/s, multi
+  rw-4k 13428→302 MiB/s. Cached dd-read also ~3× slower.
+  **rw-4k profiled (fcstor007, Aug 20): NOT getattr/attr_timeout.** perf
+  `-g -F 999` during isolated 8-job 256m randwrite: getattr/check_search/
+  inode_allocated_bytes ~0%. Cost is 128 KiB RMW flush — GET fragment
+  ~33% inclusive, dcache_flush_slot_inner ~41%, writer
+  `maybe_reclaim` inline GET+PUT when dirty_bytes > 2×512 MiB cap
+  (working set 2 GiB). `have_base=0` on published chunks forces a full
+  chunk GET before PUT. strace of efs-fuse blocked (Yama).
+  **rw-4k ROOT-CAUSED + FIXED (working tree, Aug 20)**: two changes.
+  (1) `dcache_load_and_patch` now reads the published chunk base ONCE at
+  patch time (have_base=1) instead of zero-fill + a GET on EVERY flush —
+  flush is now PUT-only (verified: no client_read under flush_slot_inner).
+  Correct hygiene but NOT the lever by itself (GET just moved to patch).
+  (2) THE LEVER: `dcache_reclaim_limit` default 512 MiB → **2 GiB**. The
+  dcache is 65536 slots × 128 KiB (8 GiB hard cap) but reclaim keyed off
+  512 MiB held only ~4096 chunks; a 2 GiB randwrite working set (16384
+  chunks) churned reclaim → every evicted partial chunk = a 128 KiB RMW
+  (~32-64x amplification). At 2 GiB the working set stays cached, repeat
+  4k writes coalesce, flush is one PUT. Verified: EFS_DCACHE_BYTES=4G and
+  the new 2 GiB default both recover single rw-4k to ~1545 MiB/s
+  (run 20260820-220703, was 125). Multi-9 rw-4k 302→1799 MiB/s agg
+  (20260820-220930) — still well under the 13428 morning baseline; the
+  residual is cross-client RMW contention on the shared write ceiling
+  (sw-1m agg 4593 ≈ ceiling). Single-client is fully fixed; multi-client
+  sub-chunk/ranged PUT is the follow-on if that gap matters.
 
 ## POSIX gaps vs XFS (suite, Aug 20) — ALL FIXED, 144/144
 FIXED (7fa99e8): packed-file overwrite/append + rename/link data loss (see
