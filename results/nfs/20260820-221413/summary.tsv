@@ -1,0 +1,15 @@
+run_id	host	suite	test	bw_mib_s	iops	rc	target
+20260820-221413	fcstor007	dd	seq1m.write	653.0	-	0	nfs
+20260820-221413	fcstor007	dd	seq1m.read	2969.6	-	0	nfs
+20260820-221413	fcstor007	dd	seq1m_cached.write	1433.6	-	0	nfs
+20260820-221413	fcstor007	dd	seq1m_cached.read	2969.6	-	0	nfs
+20260820-221413	fcstor007	fio	warmup-sw	4457.0	-	0	nfs
+20260820-221413	fcstor007	fio	sw-1m	5725.0	5724	0	nfs
+20260820-221413	fcstor007	fio	ow-1m	5642.0	5641	0	nfs
+20260820-221413	fcstor007	fio	sr-1m	17817.6	17.8k	0	nfs
+20260820-221413	fcstor007	fio	rw-1m	5550.0	5550	0	nfs
+20260820-221413	fcstor007	fio	rr-1m	17715.2	17.7k	0	nfs
+20260820-221413	fcstor007	fio	rw-128k	1914.0	15.3k	0	nfs
+20260820-221413	fcstor007	fio	rr-128k	7528.0	60.2k	0	nfs
+20260820-221413	fcstor007	fio	rw-4k	131.0	33.6k	0	nfs
+20260820-221413	fcstor007	fio	rr-4k	486.0	124k	0	nfs

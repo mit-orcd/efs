@@ -16,6 +16,11 @@ results/
     <run_id>/
       perf-<host>.tsv       # per-node dd + fio rows
       summary.tsv           # all nodes merged
+  nfs/
+    history.tsv             # Engaging scratch NFS baseline (not mixed into perf/)
+    <run_id>/
+      perf-<host>.tsv
+      summary.tsv
 ```
 
 ## Running
