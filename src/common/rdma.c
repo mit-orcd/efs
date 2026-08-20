@@ -37,6 +37,11 @@
 #define EFS_RDMA_NRECV_DEFAULT 4 /* posted recv buffers per QP */
 #define EFS_RDMA_NSEND         2 /* pool send buffers per QP */
 #define EFS_RDMA_SPIN_US       200
+/* Floor for the adaptive recv-spin budget: low enough that idle/sparse conns
+ * don't burn CPU, high enough to still catch a reply within ~2x the ~5 us HW
+ * RTT (validated: a fixed 20 us spin cut server CPU from ~70% us to ~6% us
+ * under a 9-client write load without costing throughput). */
+#define EFS_RDMA_SPIN_MIN      16
 #define EFS_RDMA_SEND_WAIT_US  (5 * 1000 * 1000) /* a stuck send = dead QP */
 
 #define SEND_WRID_POOL   0x1000
@@ -112,10 +117,32 @@ static struct efs_rdma_dev g_devs[4];
 static int g_dev_count;
 static pthread_mutex_t g_dev_lock = PTHREAD_MUTEX_INITIALIZER;
 static int g_live_conns;
+static int g_spinning; /* conn threads currently in the recv-CQ spin loop */
 
 int efs_rdma_live_conns(void)
 {
     return __sync_fetch_and_add(&g_live_conns, 0);
+}
+
+/* Adaptive recv-spin budget, scaled by the number of conn threads currently
+ * spinning (g_spinning). Idle conns block on the comp channel and don't burn
+ * CPU, so the aggregate spin cost tracks ACTIVE spinners, not live conns (the
+ * cluster keeps ~200 conns mounted even when one client does IO, so live-conn
+ * count is the wrong signal). Few spinners (single active client) → full
+ * budget for lowest latency; many spinners (many active clients) → decay
+ * toward EFS_RDMA_SPIN_MIN, since throughput is then pipelined across conns
+ * and the aggregate spin would otherwise saturate the CPU (a fixed 200 us
+ * spin across ~70+ spinners burned ~60-70% of server CPU under a 9-client
+ * write load). */
+static int spin_budget_for_load(void)
+{
+    int spinning = __sync_fetch_and_add(&g_spinning, 0);
+    int max = spin_us();
+    if (spinning <= 16)
+        return max;
+    if (spinning >= 64)
+        return EFS_RDMA_SPIN_MIN;
+    return max - (max - EFS_RDMA_SPIN_MIN) * (spinning - 16) / (64 - 16);
 }
 
 static int rdma_port_no(void)
@@ -871,29 +898,42 @@ int efs_rdma_reply_ready(struct efs_rdma_conn *rc)
      * spin-poll before reporting "not ready". Callers react to 0 by
      * sleep-polling the comp channel, whose interrupt-moderated wakeup cost
      * ~1.9 ms per request-reply exchange here — 4x slower than TCP and 380x
-     * the 5 us hardware RTT. The spin catches replies within microseconds. */
-    int64_t spin_end = now_us() + spin_us();
+     * the 5 us hardware RTT. The spin catches replies within microseconds.
+     *
+     * The budget scales with the active-spinner count (spin_budget_for_load):
+     * full for a single active client, decaying toward EFS_RDMA_SPIN_MIN under
+     * many concurrent spinners where a fixed 200 us spin would saturate CPU. */
+    __sync_fetch_and_add(&g_spinning, 1);
+    int budget = spin_budget_for_load();
+    int64_t spin_end = now_us() + budget;
     uint32_t polls = 0;
+    int result = 0;
     for (;;) {
         struct ibv_wc wc;
         int n = ibv_poll_cq(rc->recv_cq, 1, &wc);
         if (n < 0) {
             rc->broken = 1;
-            return -1;
+            result = -1;
+            break;
         }
         if (n > 0) {
-            if (recv_wc_ok(rc, &wc) != 0)
-                return -1;
+            if (recv_wc_ok(rc, &wc) != 0) {
+                result = -1;
+                break;
+            }
             rc->pend_valid = 1;
             rc->pend_buf = rc->cur_buf;
             rc->pend_len = rc->cur_len;
             rc->cur_buf = -1;
             drain_chan(rc);
-            return 1;
+            result = 1;
+            break;
         }
         if (((++polls) & 63) == 0 && now_us() >= spin_end)
-            return 0;
+            break; /* result = 0 */
     }
+    __sync_fetch_and_sub(&g_spinning, 1);
+    return result;
 }
 
 int efs_rdma_reply_fd(struct efs_rdma_conn *rc)
