@@ -779,6 +779,9 @@ int efs_client_report_dirty(int sync)
         irecs[in].size = inode.size;
         irecs[in].mtime = inode.mtime;
         irecs[in].mtime_nsec = inode.mtime_nsec;
+        irecs[in].pack_ino = inode.pack_ino;
+        irecs[in].pack_off = inode.pack_off;
+        irecs[in].pack_len = inode.pack_len;
         in++;
     }
     efs_client_table_unlock();
@@ -3336,13 +3339,17 @@ int efs_dcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
     return -1;
 }
 
-void efs_dcache_drop(efs_ino_t ino, uint32_t ci)
+static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)
 {
     uint32_t s = dcache_slot(ino, ci);
     pthread_mutex_t *mu = dcache_mu(s);
     pthread_mutex_lock(mu);
     struct dcache_ent *head = &g_dcache.e[s];
     if (head->ino == ino && head->ci == ci) {
+        if (skip_dirty && head->dirty) {
+            pthread_mutex_unlock(mu);
+            return;
+        }
         if (head->dirty && head->len)
             dcache_note_dirty_bytes(-(int64_t)head->len);
         efs_buf_free(head->data, head->len);
@@ -3359,6 +3366,8 @@ void efs_dcache_drop(efs_ino_t ino, uint32_t ci)
     struct dcache_ent *prev = head;
     for (struct dcache_ent *e = head->next; e; prev = e, e = e->next) {
         if (e->ino == ino && e->ci == ci) {
+            if (skip_dirty && e->dirty)
+                break;
             if (e->dirty && e->len)
                 dcache_note_dirty_bytes(-(int64_t)e->len);
             prev->next = e->next;
@@ -3368,6 +3377,16 @@ void efs_dcache_drop(efs_ino_t ino, uint32_t ci)
         }
     }
     pthread_mutex_unlock(mu);
+}
+
+void efs_dcache_drop(efs_ino_t ino, uint32_t ci)
+{
+    dcache_drop_locked(ino, ci, 0);
+}
+
+void efs_dcache_drop_if_clean(efs_ino_t ino, uint32_t ci)
+{
+    dcache_drop_locked(ino, ci, 1);
 }
 
 static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,

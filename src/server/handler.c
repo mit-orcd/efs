@@ -1520,6 +1520,15 @@ send_reply:
                         applied++;
                     efs_export_set_mtime_ns(ex, irecs[k].ino, irecs[k].mtime,
                                             irecs[k].mtime_nsec);
+                    if (irecs[k].pack_ino || irecs[k].pack_len) {
+                        struct efs_inode cur;
+                        if (efs_export_get_inode(ex, irecs[k].ino, &cur) == 0) {
+                            cur.pack_ino = irecs[k].pack_ino;
+                            cur.pack_off = irecs[k].pack_off;
+                            cur.pack_len = irecs[k].pack_len;
+                            (void)efs_export_upsert_inode(ex, &cur);
+                        }
+                    }
                 }
                 if (applied)
                     server_meta_mark_rpc_dirty_locked(g_server, eidx);
@@ -1567,16 +1576,90 @@ send_reply:
                     uint32_t max = req->max_ents;
                     if (max == 0 || max > EFS_READDIR_MAX)
                         max = EFS_READDIR_MAX;
+                    uint32_t start = 0;
+                    if (payload_len >= sizeof(*req))
+                        start = req->start;
+                    uint32_t seen = 0;
                     for (uint64_t i = 0; i < ex->inode_count && r.count < max; i++) {
-                        if (ex->inodes[i].parent == req->parent &&
-                            ex->inodes[i].ino != req->parent)
-                            r.ents[r.count++] = ex->inodes[i];
+                        if (ex->inodes[i].ino == 0)
+                            continue;
+                        if (ex->inodes[i].name[0] == '\0')
+                            continue;
+                        if (ex->inodes[i].parent != req->parent)
+                            continue;
+                        if (ex->inodes[i].ino == req->parent)
+                            continue;
+                        if (seen++ < start)
+                            continue;
+                        r.ents[r.count++] = ex->inodes[i];
                     }
                     r.status = EFS_INODE_RPC_OK;
                 }
                 pthread_mutex_unlock(&g_server->lock);
             }
             efs_conn_send_msg(conn, EFS_MSG_INODE_READDIR_REPLY, &r, sizeof(r));
+            break;
+        }
+        case EFS_MSG_INODE_GETCHUNKS: {
+            struct efs_msg_inode_getchunks_reply r;
+            memset(&r, 0, sizeof(r));
+            r.status = EFS_INODE_RPC_ERROR;
+            if (payload_len >= sizeof(struct efs_msg_inode_getchunks)) {
+                struct efs_msg_inode_getchunks *req = payload;
+                pthread_mutex_lock(&g_server->lock);
+                struct efs_export *ex = NULL;
+                for (uint32_t i = 0; i < g_server->export_count; i++) {
+                    if (g_server->exports[i].id == req->export_id ||
+                        (req->export_id == 0 && i == 0)) {
+                        ex = &g_server->exports[i];
+                        break;
+                    }
+                }
+                if (!ex) {
+                    r.status = EFS_INODE_RPC_NOT_FOUND;
+                } else {
+                    struct efs_inode ino;
+                    if (efs_export_get_inode(ex, req->ino, &ino) != 0) {
+                        r.status = EFS_INODE_RPC_NOT_FOUND;
+                    } else {
+                        uint32_t cs = server_data_chunk_size(ex);
+                        uint64_t bytes = ino.size;
+                        if (ino.pack_len > bytes)
+                            bytes = ino.pack_len;
+                        uint32_t nci = 0;
+                        if (cs && bytes)
+                            nci = (uint32_t)((bytes + cs - 1) / cs);
+                        uint32_t max = req->max;
+                        if (max == 0 || max > EFS_GETCHUNKS_MAX)
+                            max = EFS_GETCHUNKS_MAX;
+                        /* Indexed only. A size-0 pack container still has
+                         * chunks; the client names the window (pack_off).
+                         * Never walk ex->chunks[] — that is O(table) under
+                         * g_server->lock and stalled the cluster. */
+                        uint32_t ci = req->start;
+                        uint32_t limit = (nci > 0) ? nci : (req->start + max);
+                        for (; ci < limit && r.count < max; ci++) {
+                            struct efs_chunk_entry ce;
+                            if (efs_export_get_chunk(ex, req->ino, ci,
+                                                     &ce) != 0) {
+                                if (nci == 0)
+                                    break;
+                                continue;
+                            }
+                            r.recs[r.count].ino = req->ino;
+                            r.recs[r.count].chunk_index = ci;
+                            memcpy(r.recs[r.count].nodes, ce.fragment_nodes,
+                                   sizeof(r.recs[r.count].nodes));
+                            memcpy(r.recs[r.count].checksums, ce.checksums,
+                                   sizeof(r.recs[r.count].checksums));
+                            r.count++;
+                        }
+                        r.status = EFS_INODE_RPC_OK;
+                    }
+                }
+                pthread_mutex_unlock(&g_server->lock);
+            }
+            efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS_REPLY, &r, sizeof(r));
             break;
         }
         case EFS_MSG_UPGRADE_META: {

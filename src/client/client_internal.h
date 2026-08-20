@@ -153,7 +153,12 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
 int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
                            struct efs_inode *out);
 int efs_client_rpc_readdir(efs_export_id_t export_id, efs_ino_t parent,
-                           struct efs_inode *ents, uint32_t *inout_count);
+                           struct efs_inode *ents, uint32_t *inout_count,
+                           uint32_t start);
+struct efs_chunk_rec;
+int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
+                             uint32_t start, struct efs_chunk_rec *recs,
+                             uint32_t *inout_count);
 int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, int is_dir);
 int efs_client_rpc_rename(efs_export_id_t export_id, efs_ino_t ino,
@@ -264,6 +269,8 @@ int efs_dcache_flush_all(void);
 int efs_dcache_flush_ino(efs_ino_t ino);
 void efs_dcache_reclaim_stop(void);
 void efs_dcache_drop(efs_ino_t ino, uint32_t ci);
+/* Drop a cached chunk only if it is not dirty (peer layout change). */
+void efs_dcache_drop_if_clean(efs_ino_t ino, uint32_t ci);
 /* Patch a cached chunk, loading it (rdcache / servers / zeros) on miss.
  * 0 = cached (size updated if the write grew the file), -1 = cannot cache. */
 int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,

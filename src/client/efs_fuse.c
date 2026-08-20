@@ -1000,11 +1000,8 @@ static int check_search_path(const char *path)
     while (part) {
         int more = (save && *save);
         struct efs_inode child;
-        efs_client_lock_dir(parent);
-        pthread_mutex_lock(&g_client.idx_mu);
-        int lrc = efs_export_lookup(&g_client.export, parent, part, &child);
-        pthread_mutex_unlock(&g_client.idx_mu);
-        efs_client_unlock_dir(parent);
+        int lrc = efs_client_rpc_lookup(g_client.export_id, parent, part,
+                                        &child);
         if (lrc != 0)
             return 0;
         if (more) {
@@ -1167,26 +1164,6 @@ struct readdir_collect_arg {
     size_t cap;
 };
 
-static int readdir_collect_cb(struct efs_export *ex, uint64_t slot, void *arg)
-{
-    struct readdir_collect_arg *a = arg;
-    struct efs_inode *child = &ex->inodes[slot];
-    if (a->count >= a->cap) {
-        size_t ncap = a->cap ? a->cap * 2 : 16;
-        struct readdir_ent *n = realloc(a->ents, ncap * sizeof(*n));
-        if (!n)
-            return -ENOMEM;
-        a->ents = n;
-        a->cap = ncap;
-    }
-    struct readdir_ent *e = &a->ents[a->count++];
-    memset(e, 0, sizeof(*e));
-    strncpy(e->name, child->name, EFS_MAX_NAME - 1);
-    e->st.st_ino = child->ino;
-    e->st.st_mode = child->mode;
-    return 0;
-}
-
 static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                             off_t offset, struct fuse_file_info *fi,
                             enum fuse_readdir_flags flags)
@@ -1222,20 +1199,47 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
             return -EACCES;
     }
 
-    /* Snapshot under the lock; call filler unlocked so a same-thread
-     * getattr re-entry cannot double-lock g_client.lock.
-     * .stats is lookup-only (getattr/open/read by explicit path) and is
-     * intentionally omitted from readdir so ls of the directory hides it. */
+    /* Ask the primary so a peer sees creates it did not dual-apply.
+     * Fetch off-lock; filler unlocked so a same-thread getattr re-entry
+     * cannot deadlock. .stats stays lookup-only (omitted from readdir). */
     struct readdir_collect_arg col = {0};
-    efs_client_lock_dir(parent.ino);
-    pthread_mutex_lock(&g_client.idx_mu);
-    rc = efs_export_foreach_child(&g_client.export, parent.ino,
-                                  readdir_collect_cb, &col);
-    pthread_mutex_unlock(&g_client.idx_mu);
-    efs_client_unlock_dir(parent.ino);
-    if (rc != 0) {
-        free(col.ents);
-        return rc;
+    uint32_t start = 0;
+    for (;;) {
+        struct efs_inode ents[EFS_READDIR_MAX];
+        uint32_t n = EFS_READDIR_MAX;
+        rc = efs_client_rpc_readdir(g_client.export_id, parent.ino, ents, &n,
+                                    start);
+        if (rc != 0) {
+            free(col.ents);
+            return (rc == EFS_ERR_NOT_FOUND) ? -ENOENT : -EIO;
+        }
+        if (n == 0)
+            break;
+        size_t need = col.count + n;
+        if (need > col.cap) {
+            size_t ncap = col.cap ? col.cap : 16;
+            while (ncap < need)
+                ncap *= 2;
+            struct readdir_ent *ne = realloc(col.ents, ncap * sizeof(*ne));
+            if (!ne) {
+                free(col.ents);
+                return -ENOMEM;
+            }
+            col.ents = ne;
+            col.cap = ncap;
+        }
+        for (uint32_t i = 0; i < n; i++) {
+            if (ents[i].ino == 0 || ents[i].name[0] == '\0')
+                continue;
+            struct readdir_ent *e = &col.ents[col.count++];
+            memset(e, 0, sizeof(*e));
+            strncpy(e->name, ents[i].name, EFS_MAX_NAME - 1);
+            e->st.st_ino = ents[i].ino;
+            e->st.st_mode = ents[i].mode;
+        }
+        start += n;
+        if (n < EFS_READDIR_MAX)
+            break;
     }
 
     filler(buf, ".", NULL, 0, 0);
@@ -2250,20 +2254,24 @@ static int efs_fuse_flush(const char *path, struct fuse_file_info *fi)
         efs_fuse_log_err("flush", rc, 0, 0, 0, path);
         return -EIO;
     }
+    /* Publish size/chunk mappings to the primary so a peer getattr/read
+     * via RPC sees this close (not only after the batched meta flush). */
+    (void)efs_client_report_dirty(0);
     return 0;
 }
 
 static int fuse_create_errno(efs_ino_t parent, const char *name)
 {
-    efs_client_lock_dir(parent);
-    pthread_mutex_lock(&g_client.idx_mu);
-    int found = efs_export_lookup(&g_client.export, parent, name, NULL);
-    pthread_mutex_unlock(&g_client.idx_mu);
-    efs_client_unlock_dir(parent);
     if (g_client.last_err == EFS_ERR_QUOTA)
         return -ENOSPC;
     if (g_client.last_err == EFS_ERR_BUSY)
         return -EBUSY;
+    if (g_client.last_err == EFS_ERR_EXIST)
+        return -EEXIST;
+    /* Peer create of a name this client never dual-applied: the primary
+     * already has the row (EEXIST) but a local lookup would miss and we
+     * used to return EIO (IOR-hard). Ask the primary. */
+    int found = efs_client_rpc_lookup(g_client.export_id, parent, name, NULL);
     return found == EFS_OK ? -EEXIST : -EIO;
 }
 

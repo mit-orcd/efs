@@ -17,8 +17,13 @@ CoW = **debe6dd**, catchup-vs-GC fix = **76753ef**, Phase 2 design doc =
 **Phase 2b DONE + validated (d7d2c7c): FUSE mutations route through RPC to the
 metadata primary, dual-applied to the local snapshot; data path reports chunk
 mappings via REPORT_CHUNKS (client blob flush + election GONE); fsync = sync
-barrier. Next: Phase 2c (client read cache, gen-check).** Stuck-catchup
-(todo 15) DEFERRED by user.
+barrier.** Stuck-catchup (todo 15) DEFERRED by user.
+**2b reads DONE (working tree, Aug 20): lookup / getattr / readdir / access
+go to the primary (not the local snapshot). GETCHUNKS + pack fields on
+REPORT_CHUNKS so a peer can read packed/chunked data. posix2 12/12
+(`results/posix2/20260820-234707`). Do not build a full-table 2c gen-check
+cache — next is Phase 3 (per-shard tables); cache as Phase 3 describes
+(per-shard, on-demand, evict).**
 **Test suite committed (d52287e)**: reusable POSIX + perf suites, results
 tracked in git under `results/`. See "Test suite" section below.
 **2 client data-path fixes (7fa99e8)**: packed-file overwrite/append + rename/
@@ -55,13 +60,17 @@ Run from the login node (needs ssh to nodes): `tests/run_tests.sh
 posix|posix2|perf|setup|all`. `setup` rsyncs+builds+mounts the 9 pure clients.
 - **POSIX** (`tests/posix/posix_suite.py`, 144 tests, @test-extensible): run vs
   an XFS baseline (node9901:/data1/efs); `compare.py` → efs bug = PASS on XFS,
-  FAIL on efs. efs is 144/144 (fcstor007, Aug 20).
+  FAIL on efs. efs was 144/144 (fcstor007, Aug 20) before RPC reads;
+  after 2b-reads smoke: **135/144** (`results/posix/20260820-234634`) —
+  4 same-fd read-your-writes regressions (zeros): `basic_rdwr_no_reopen`,
+  `basic_chunk_boundary`, `perm_open_fd_survives_chmod`, `unlink_open_file`.
+  Close+reopen still passes. Next fix before Phase 3.
 - **POSIX 2-client** (`tests/posix/posix_2client.py`, 12 tests): create/mkdir/
   rename/O_CREAT on client A, check client B with no remount. XFS 12/12;
-  efs 1/12 (20260820-225801, A=fcstor007 B=fcstor008). 11 EFS-BUGs are the
-  Phase 2c snapshot gap. `peer_shared_creat` is the IOR-hard abort: B
-  `open(O_CREAT|O_RDWR)` of A's file returns EIO. `peer_unlink_gone` passes
-  vacuously (B never saw the name). Run: `tests/run_tests.sh posix2`.
+  efs **12/12** (20260820-234707, A=fcstor007 B=fcstor008) after RPC
+  metadata reads + GETCHUNKS + size-merge on peer grow. Harness remounts B
+  only if the parent is missing (RPC should make prepare visible).
+  `fusermount3 -uz` — a busy FUSE remount hangs. Run: `tests/run_tests.sh posix2`.
 - **Perf** (`tests/perf/perf_node.sh`): dd + 9-job fio, single|multi client
   (parallel), aggregated to `results/perf/history.tsv`. Harness logs stay
   LOCAL (don't depend on the efs read-after-write path being benchmarked).
@@ -155,7 +164,15 @@ FIXED (7e442fa) — the last 5:
   quorum, mutations lost); now cleared. (2) meta_flush_thread raced a sync
   fsync flush on the same new_gen → loser rejected STALE → fsync EIO; now
   serialized by efsd_server.meta_flush_mu.
-- **2c client read cache (gen-check) (NEXT)**: not started.
+- **2b reads (DONE, working tree, Aug 20)**: lookup/getattr/readdir via
+  `rpc_send_recv_primary`. `adopt_rpc_inode` upserts new rows only; merge
+  remote size/pack when the primary grew (or newer+shrink). GETCHUNKS is
+  indexed (`start` = chunk_index) — never scan `ex->chunks[]` (387k-row
+  scan under `g_server->lock` stalled the cluster). Packed files: pull
+  only the pack_off window. `posix2` 12/12. Single-client POSIX 135/144
+  (4 same-fd zeros — see Test suite).
+- **2c full-table gen-check cache**: skip. Phase 3 wants per-shard load+LRU.
+- **Phase 3 (NEXT)**: shard tables, per-shard flush, route `shard = ino >> bits`.
 
 ## Known live issues
 - **Hardlink (`ln`) flaky at the FUSE kernel level** (pre-existing, NOT a 2b

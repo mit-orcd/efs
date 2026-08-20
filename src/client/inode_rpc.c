@@ -5,49 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static struct efs_conn *rpc_first_conn(efs_node_id_t *nid_out)
-{
-    for (uint32_t i = 0; i < g_client.node_count; i++) {
-        if (efs_client_node_is_down(g_client.nodes[i].id))
-            continue;
-        struct efs_conn *conn = efs_client_conn_get(g_client.nodes[i].id);
-        if (conn) {
-            *nid_out = g_client.nodes[i].id;
-            return conn;
-        }
-    }
-    return NULL;
-}
-
-static int rpc_send_recv(uint8_t type, const void *req, uint32_t req_len,
-                         uint8_t expect, void *reply, uint32_t reply_len)
-{
-    efs_node_id_t nid = 0;
-    struct efs_conn *conn = rpc_first_conn(&nid);
-    if (!conn)
-        return EFS_ERR_NET;
-    if (efs_conn_send_msg(conn, type, req, req_len) != 0) {
-        efs_client_conn_drop(nid, conn);
-        return EFS_ERR_NET;
-    }
-    uint8_t rtype = 0;
-    void *payload = NULL;
-    uint32_t plen = 0;
-    int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
-    if (rc != 0) {
-        efs_client_conn_drop(nid, conn);
-        return EFS_ERR_NET;
-    }
-    efs_client_conn_release(nid, conn);
-    if (rtype != expect || plen < reply_len) {
-        free(payload);
-        return EFS_ERR_PROTO;
-    }
-    memcpy(reply, payload, reply_len);
-    free(payload);
-    return EFS_OK;
-}
-
 static int rpc_status_to_efs(uint8_t st)
 {
     switch (st) {
@@ -141,8 +98,8 @@ int efs_client_rpc_lookup(efs_export_id_t export_id, efs_ino_t parent,
     if (name)
         strncpy(req.name, name, EFS_MAX_NAME - 1);
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv(EFS_MSG_INODE_LOOKUP, &req, sizeof(req),
-                           EFS_MSG_INODE_LOOKUP_REPLY, &r, sizeof(r));
+    int rc = rpc_send_recv_primary(EFS_MSG_INODE_LOOKUP, &req, sizeof(req),
+                                   EFS_MSG_INODE_LOOKUP_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
@@ -187,8 +144,8 @@ int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
     req.export_id = export_id;
     req.ino = ino;
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv(EFS_MSG_INODE_GETATTR, &req, sizeof(req),
-                           EFS_MSG_INODE_GETATTR_REPLY, &r, sizeof(r));
+    int rc = rpc_send_recv_primary(EFS_MSG_INODE_GETATTR, &req, sizeof(req),
+                                   EFS_MSG_INODE_GETATTR_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
@@ -199,27 +156,102 @@ int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
 }
 
 int efs_client_rpc_readdir(efs_export_id_t export_id, efs_ino_t parent,
-                           struct efs_inode *ents, uint32_t *inout_count)
+                           struct efs_inode *ents, uint32_t *inout_count,
+                           uint32_t start)
 {
     struct efs_msg_inode_readdir req;
     memset(&req, 0, sizeof(req));
     req.export_id = export_id;
     req.parent = parent;
     req.max_ents = inout_count ? *inout_count : EFS_READDIR_MAX;
-    struct efs_msg_inode_readdir_reply r;
-    int rc = rpc_send_recv(EFS_MSG_INODE_READDIR, &req, sizeof(req),
-                           EFS_MSG_INODE_READDIR_REPLY, &r, sizeof(r));
-    if (rc != EFS_OK)
-        return rc;
-    if (r.status != EFS_INODE_RPC_OK)
-        return rpc_status_to_efs(r.status);
-    uint32_t n = r.count;
+    req.start = start;
+    /* Readdir reply is not efs_msg_inode_reply (no primary_id). Send to
+     * the primary so we do not list a stale replica. */
+    efs_node_id_t nid = 0;
+    struct efs_conn *conn = rpc_primary_conn(&nid);
+    if (!conn)
+        return EFS_ERR_NET;
+    if (efs_conn_send_msg(conn, EFS_MSG_INODE_READDIR, &req, sizeof(req)) != 0) {
+        efs_client_conn_drop(nid, conn);
+        return EFS_ERR_NET;
+    }
+    uint8_t rtype = 0;
+    void *payload = NULL;
+    uint32_t plen = 0;
+    int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
+    if (rc != 0) {
+        efs_client_conn_drop(nid, conn);
+        return EFS_ERR_NET;
+    }
+    efs_client_conn_release(nid, conn);
+    if (rtype != EFS_MSG_INODE_READDIR_REPLY ||
+        plen < sizeof(struct efs_msg_inode_readdir_reply)) {
+        free(payload);
+        return EFS_ERR_PROTO;
+    }
+    struct efs_msg_inode_readdir_reply *r = payload;
+    if (r->status != EFS_INODE_RPC_OK) {
+        int st = rpc_status_to_efs(r->status);
+        free(payload);
+        return st;
+    }
+    uint32_t n = r->count;
     if (inout_count && n > *inout_count)
         n = *inout_count;
     if (ents && n)
-        memcpy(ents, r.ents, n * sizeof(ents[0]));
+        memcpy(ents, r->ents, n * sizeof(ents[0]));
     if (inout_count)
         *inout_count = n;
+    free(payload);
+    return EFS_OK;
+}
+
+int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
+                             uint32_t start, struct efs_chunk_rec *recs,
+                             uint32_t *inout_count)
+{
+    struct efs_msg_inode_getchunks req;
+    memset(&req, 0, sizeof(req));
+    req.export_id = export_id;
+    req.ino = ino;
+    req.start = start;
+    req.max = inout_count ? *inout_count : EFS_GETCHUNKS_MAX;
+    efs_node_id_t nid = 0;
+    struct efs_conn *conn = rpc_primary_conn(&nid);
+    if (!conn)
+        return EFS_ERR_NET;
+    if (efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS, &req, sizeof(req)) != 0) {
+        efs_client_conn_drop(nid, conn);
+        return EFS_ERR_NET;
+    }
+    uint8_t rtype = 0;
+    void *payload = NULL;
+    uint32_t plen = 0;
+    int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
+    if (rc != 0) {
+        efs_client_conn_drop(nid, conn);
+        return EFS_ERR_NET;
+    }
+    efs_client_conn_release(nid, conn);
+    if (rtype != EFS_MSG_INODE_GETCHUNKS_REPLY ||
+        plen < sizeof(struct efs_msg_inode_getchunks_reply)) {
+        free(payload);
+        return EFS_ERR_PROTO;
+    }
+    struct efs_msg_inode_getchunks_reply *r = payload;
+    if (r->status != EFS_INODE_RPC_OK) {
+        int st = rpc_status_to_efs(r->status);
+        free(payload);
+        return st;
+    }
+    uint32_t n = r->count;
+    if (inout_count && n > *inout_count)
+        n = *inout_count;
+    if (recs && n)
+        memcpy(recs, r->recs, n * sizeof(recs[0]));
+    if (inout_count)
+        *inout_count = n;
+    free(payload);
     return EFS_OK;
 }
 

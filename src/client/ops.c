@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 
 static uint32_t data_chunk_size(void)
 {
@@ -117,12 +118,144 @@ int efs_client_ensure_meta_room(uint64_t extra_inodes, uint64_t extra_chunks)
 }
 
 
+static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *recs,
+                             uint32_t n)
+{
+    efs_client_lock_dir(lock_ino);
+    pthread_mutex_lock(&g_client.idx_mu);
+    for (uint32_t i = 0; i < n; i++)
+        (void)efs_export_set_chunk(&g_client.export, recs[i].ino,
+                                   recs[i].chunk_index, recs[i].nodes,
+                                   recs[i].checksums);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(lock_ino);
+}
+
+/* Fetch chunk mappings in [start_ci, end_ci). Never walk the whole table. */
+static void pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci)
+{
+    if (!ino || start_ci >= end_ci)
+        return;
+    uint32_t start = start_ci;
+    while (start < end_ci) {
+        struct efs_chunk_rec recs[EFS_GETCHUNKS_MAX];
+        uint32_t n = end_ci - start;
+        if (n > EFS_GETCHUNKS_MAX)
+            n = EFS_GETCHUNKS_MAX;
+        if (efs_client_rpc_getchunks(g_client.export_id, ino, start, recs,
+                                     &n) != EFS_OK || n == 0)
+            break;
+        apply_chunk_recs(ino, recs, n);
+        uint32_t next = recs[n - 1].chunk_index + 1;
+        if (next <= start)
+            break;
+        start = next;
+        if (n < EFS_GETCHUNKS_MAX)
+            break;
+    }
+}
+
+static void pull_chunks_for_ino(efs_ino_t ino, uint64_t size)
+{
+    uint32_t cs = data_chunk_size();
+    uint32_t nci = 0;
+    if (cs && size)
+        nci = (uint32_t)((size + cs - 1) / cs);
+    if (!nci)
+        return;
+    pull_chunks_range(ino, 0, nci);
+}
+
+static void pull_file_layout(const struct efs_inode *rpc)
+{
+    if ((rpc->mode & S_IFMT) != S_IFREG)
+        return;
+    if (rpc->pack_ino && rpc->pack_ino != rpc->ino) {
+        uint32_t cs = data_chunk_size();
+        uint64_t span = rpc->pack_len ? rpc->pack_len : rpc->size;
+        uint32_t c0 = cs ? (uint32_t)(rpc->pack_off / cs) : 0;
+        uint32_t c1 = c0 + 1;
+        if (cs && span) {
+            uint64_t hi = (uint64_t)rpc->pack_off + span;
+            c1 = (uint32_t)((hi - 1) / cs) + 1;
+        }
+        pull_chunks_range(rpc->pack_ino, c0, c1);
+    } else {
+        pull_chunks_for_ino(rpc->ino, rpc->size);
+    }
+}
+
+static void invalidate_file_layout(const struct efs_inode *rpc)
+{
+    uint32_t cs = data_chunk_size();
+    if (rpc->pack_ino && rpc->pack_ino != rpc->ino) {
+        uint32_t c0 = cs ? (uint32_t)(rpc->pack_off / cs) : 0;
+        efs_rdcache_invalidate(rpc->pack_ino, c0);
+        efs_dcache_drop_if_clean(rpc->pack_ino, c0);
+    }
+    uint32_t nci = 0;
+    if (cs && rpc->size)
+        nci = (uint32_t)((rpc->size + cs - 1) / cs);
+    for (uint32_t ci = 0; ci < nci; ci++) {
+        efs_rdcache_invalidate(rpc->ino, ci);
+        efs_dcache_drop_if_clean(rpc->ino, ci);
+    }
+}
+
+/* Adopt an inode the primary just confirmed. A local row that this client
+ * dirtied stays (size/pack fresher until REPORT_CHUNKS). A peer's later
+ * write is newer on the primary — merge size/pack when remote grew or
+ * has a newer mtime (posix2 peer_shared_pwrite). */
+static void adopt_rpc_inode(const struct efs_inode *rpc)
+{
+    if (!rpc || rpc->ino == 0)
+        return;
+    int is_new = 0;
+    int take_remote = 0;
+    efs_ino_t lock = rpc->parent ? rpc->parent : rpc->ino;
+    efs_client_lock_dir(lock);
+    pthread_mutex_lock(&g_client.idx_mu);
+    struct efs_inode local;
+    if (efs_export_get_inode(&g_client.export, rpc->ino, &local) != 0) {
+        (void)efs_export_upsert_inode(&g_client.export, rpc);
+        is_new = 1;
+    } else if ((rpc->mode & S_IFMT) == S_IFREG) {
+        /* Size growth = a peer published more data. mtime-only (chmod)
+         * must not clobber the writer's unflushed dcache — that was the
+         * POSIX same-fd-read / chmod / unlink-open regression. Shrink
+         * only when the primary is newer (peer truncate). */
+        int newer = rpc->mtime > local.mtime ||
+                    (rpc->mtime == local.mtime &&
+                     rpc->mtime_nsec > local.mtime_nsec);
+        if (rpc->size > local.size ||
+            (newer && rpc->size < local.size)) {
+            local.size = rpc->size;
+            local.pack_ino = rpc->pack_ino;
+            local.pack_off = rpc->pack_off;
+            local.pack_len = rpc->pack_len;
+            local.mtime = rpc->mtime;
+            local.mtime_nsec = rpc->mtime_nsec;
+            (void)efs_export_upsert_inode(&g_client.export, &local);
+            take_remote = 1;
+        }
+    }
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(lock);
+    if (is_new) {
+        pull_file_layout(rpc);
+        return;
+    }
+    if (take_remote) {
+        invalidate_file_layout(rpc);
+        pull_file_layout(rpc);
+    }
+}
+
 int efs_client_lookup(const char *path, struct efs_inode *out)
 {
     if (!path || path[0] != '/')
         return EFS_ERR_INVAL;
 
-    efs_ino_t parent = EFS_ROOT_INO;
     if (strcmp(path, "/") == 0) {
         efs_client_lock_dir(EFS_ROOT_INO);
         int rc = efs_export_get_inode(&g_client.export, EFS_ROOT_INO, out);
@@ -141,18 +274,29 @@ int efs_client_lookup(const char *path, struct efs_inode *out)
     char *part = strtok_r(pbuf, "/", &save);
 
     efs_client_ensure_dir_locks();
+    efs_ino_t parent = EFS_ROOT_INO;
     int rc = EFS_ERR_NOT_FOUND;
     while (part) {
-        efs_client_lock_dir(parent);
-        pthread_mutex_lock(&g_client.idx_mu);
         struct efs_inode child;
-        int lrc = efs_export_lookup(&g_client.export, parent, part, &child);
-        pthread_mutex_unlock(&g_client.idx_mu);
-        efs_client_unlock_dir(parent);
-        if (lrc != 0) {
-            rc = EFS_ERR_NOT_FOUND;
+        /* Phase 2b reads: ask the primary. The local snapshot is only
+         * dual-applied on the mutating client, so a peer walk that stays
+         * local misses creates (posix2 / IOR-hard EIO). */
+        int lrc = efs_client_rpc_lookup(g_client.export_id, parent, part,
+                                        &child);
+        if (lrc != EFS_OK) {
+            rc = (lrc == EFS_ERR_NOT_FOUND) ? EFS_ERR_NOT_FOUND : lrc;
             break;
         }
+        adopt_rpc_inode(&child);
+        /* Prefer the local row when we already have one: the writer's
+         * size/pack fields are newer than the primary until REPORT_CHUNKS. */
+        efs_client_lock_dir(child.parent ? child.parent : child.ino);
+        pthread_mutex_lock(&g_client.idx_mu);
+        struct efs_inode local;
+        if (efs_export_get_inode(&g_client.export, child.ino, &local) == 0)
+            child = local;
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(child.parent ? child.parent : child.ino);
         parent = child.ino;
         *out = child;
         rc = EFS_OK;

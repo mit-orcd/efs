@@ -107,6 +107,9 @@ enum efs_msg_type {
      * struct efs_msg_inode_reply (status + primary_id; inode unused). */
     EFS_MSG_REPORT_CHUNKS = 67,
     EFS_MSG_REPORT_CHUNKS_REPLY = 68,
+    /* Phase 2b reads: peer pulls chunk mappings for an inode it just looked up. */
+    EFS_MSG_INODE_GETCHUNKS = 69,
+    EFS_MSG_INODE_GETCHUNKS_REPLY = 70,
 };
 
 /* Set per-export features. Only bits in set_mask are changed (to the
@@ -362,6 +365,8 @@ struct efs_msg_inode_readdir {
     efs_export_id_t export_id;
     efs_ino_t parent;
     uint32_t max_ents;
+    /* Skip this many matching children (pagination). Older senders leave 0. */
+    uint32_t start;
 };
 
 struct efs_msg_inode_unlink {
@@ -437,6 +442,24 @@ struct efs_ino_size_rec {
     uint64_t size;
     uint64_t mtime;
     uint32_t mtime_nsec;
+    /* So a peer getattr sees packed-file layout, not size-with-no-chunks. */
+    efs_ino_t pack_ino;
+    uint32_t pack_off;
+    uint32_t pack_len;
+};
+
+#define EFS_GETCHUNKS_MAX 64
+struct efs_msg_inode_getchunks {
+    efs_export_id_t export_id;
+    efs_ino_t ino;
+    uint32_t start; /* first chunk_index to consider */
+    uint32_t max;
+};
+
+struct efs_msg_inode_getchunks_reply {
+    uint8_t status;
+    uint32_t count;
+    struct efs_chunk_rec recs[EFS_GETCHUNKS_MAX];
 };
 
 /* Phase 2b: batched dirty-metadata report (replaces the client blob flush).

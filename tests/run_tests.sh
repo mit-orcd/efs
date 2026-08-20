@@ -59,7 +59,7 @@ ensure_mounted() { # host
 remount_client() { # host
     local h=$1
     say "  $h: remount efs-fuse"
-    $SSH "$h" 'fusermount3 -u /tmp/efs/mnt 2>/dev/null; pkill -x efs-fuse; sleep 0.4
+    $SSH "$h" 'fusermount3 -uz /tmp/efs/mnt 2>/dev/null; pkill -x efs-fuse; sleep 0.4
         cd /tmp/efs && mkdir -p /tmp/efs/mnt
         setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &
         for i in $(seq 1 20); do
@@ -139,12 +139,16 @@ cmd_posix2() { # [host-a] [host-b]
     ensure_mounted "$host_a" || { say "  $host_a not mounted"; return 1; }
     ensure_mounted "$host_b" || { say "  $host_b not mounted"; return 1; }
     $SSH "$host_a" "python3 '$py' --prepare '$EFS_MNT'"
-    remount_client "$host_b" || return 1
-    # Parent must be visible on B after remount (server has A's mkdirs).
-    $SSH "$host_b" "test -d '$EFS_MNT/posix-2c'" || {
-        say "  $host_b still cannot see $EFS_MNT/posix-2c after remount"
-        return 1
-    }
+    # RPC metadata reads: B should see A's prepare without remount.
+    # Remount only if the parent is missing (and never block forever on FUSE).
+    if ! $SSH "$host_b" "timeout -k 2 15 test -d '$EFS_MNT/posix-2c'"; then
+        say "  $host_b cannot see parent yet; remounting"
+        remount_client "$host_b" || return 1
+        $SSH "$host_b" "timeout -k 2 15 test -d '$EFS_MNT/posix-2c'" || {
+            say "  $host_b still cannot see $EFS_MNT/posix-2c after remount"
+            return 1
+        }
+    fi
     python3 "$py" --remote "$host_a" "$host_b" --mnt "$EFS_MNT" \
         --results "$pdir/efs-${host_a%.ib}-${host_b%.ib}.tsv"
     local rc=$?
