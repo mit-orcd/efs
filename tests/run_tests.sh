@@ -1,0 +1,182 @@
+#!/bin/bash
+# efs test orchestrator — runs the POSIX + perf suites on the fcstor test
+# nodes from the login node, collects results into the git-tracked results/
+# tree, and appends to results/perf/history.tsv for trend tracking.
+#
+# Usage:
+#   run_tests.sh posix [efs-host ...]            POSIX suite vs XFS baseline
+#   run_tests.sh perf single <host> [quick|full] perf on one client
+#   run_tests.sh perf multi [host ...] [quick|full]
+#                                                perf across clients (parallel)
+#   run_tests.sh all [efs-host ...]              posix + perf multi
+#
+# Env:
+#   XFS_HOST (default node9901.ib)  XFS_DIR (default /data1/efs)
+#   EFS_MNT  (default /tmp/efs/mnt)
+#   EFS_HOSTS default = fcstor007..015 (the 9 pure clients)
+#   COMMIT=1 to git-commit the new results at the end.
+#
+# NOTE: must run with network/ssh access to the test nodes (outside the
+# sandbox) because it shells out to efs-ssh for each node.
+set -u
+SSH="${EFS_SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+RESULTS="$REPO/results"
+XFS_HOST=${XFS_HOST:-node9901.ib}
+XFS_DIR=${XFS_DIR:-/data1/efs}
+EFS_MNT=${EFS_MNT:-/tmp/efs/mnt}
+DEFAULT_HOSTS=(fcstor007.ib fcstor008.ib fcstor009.ib fcstor010.ib \
+               fcstor011.ib fcstor012.ib fcstor013.ib fcstor014.ib fcstor015.ib)
+RUN_ID=$(date -u +%Y%m%d-%H%M%S)
+
+say() { echo "[run_tests] $*"; }
+
+# rsync the tests dir to a node's /tmp/efs/tests
+push_tests() { # host
+    $SSH "$1" 'mkdir -p /tmp/efs && rsync -a --delete "$HOME/git/efs/tests/" /tmp/efs/tests/' \
+        >/dev/null 2>&1
+}
+
+# mount a client if not already mounted (assumes a current efs-fuse binary)
+ensure_mounted() { # host
+    local h=$1
+    if $SSH "$h" 'grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts' 2>/dev/null; then
+        return 0
+    fi
+    say "  $h: mounting efs-fuse"
+    $SSH "$h" 'cd /tmp/efs && [ -x ./efs-fuse ] || make efs-fuse >/dev/null 2>&1; \
+        mkdir -p /tmp/efs/mnt; \
+        (setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &); \
+        sleep 5; grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts' 2>/dev/null
+}
+
+# rsync source + build efs-fuse + mount, per client (setup before perf multi)
+cmd_setup() { # [host ...]
+    local hosts=("$@")
+    [ ${#hosts[@]} -eq 0 ] && hosts=("${DEFAULT_HOSTS[@]}")
+    say "setup: rsync+build+mount on: ${hosts[*]}"
+    local pids=()
+    for h in "${hosts[@]}"; do
+        ( $SSH "$h" 'rsync -a --delete --exclude="/mnt/" --exclude="*.log" \
+              "$HOME/git/efs/" /tmp/efs/ >/dev/null 2>&1 && \
+              cd /tmp/efs && make efs-fuse >/dev/null 2>&1' && \
+          ensure_mounted "$h" && \
+          $SSH "$h" 'grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts' && \
+          echo "  $h: ready" || echo "  $h: SETUP FAILED" ) &
+        pids+=($!)
+    done
+    for p in "${pids[@]}"; do wait "$p"; done
+}
+
+# ---------------------------------------------------------------- posix ---
+cmd_posix() { # [efs-host ...]
+    local hosts=("$@")
+    [ ${#hosts[@]} -eq 0 ] && hosts=("${DEFAULT_HOSTS[@]:0:1}")
+    local pdir="$RESULTS/posix/$RUN_ID"
+    mkdir -p "$pdir"
+
+    say "posix: XFS baseline on $XFS_HOST:$XFS_DIR"
+    push_tests "$XFS_HOST"
+    $SSH "$XFS_HOST" "python3 /tmp/efs/tests/posix/posix_suite.py '$XFS_DIR' \
+        --results /tmp/posix-xfs.tsv >/dev/null 2>&1; cat /tmp/posix-xfs.tsv" \
+        > "$pdir/xfs-baseline.tsv"
+    say "  baseline: $(grep -c $'\tPASS' "$pdir/xfs-baseline.tsv") pass"
+
+    local rc=0
+    for h in "${hosts[@]}"; do
+        say "posix: efs on $h:$EFS_MNT"
+        push_tests "$h"
+        $SSH "$h" "python3 /tmp/efs/tests/posix/posix_suite.py '$EFS_MNT' \
+            --results /tmp/posix-efs.tsv >/dev/null 2>&1; cat /tmp/posix-efs.tsv" \
+            > "$pdir/efs-${h%.ib}.tsv"
+        say "  --- compare $h vs XFS baseline ---"
+        python3 "$REPO/tests/posix/compare.py" "$pdir/xfs-baseline.tsv" \
+            "$pdir/efs-${h%.ib}.tsv" | tee "$pdir/compare-${h%.ib}.txt"
+        [ ${PIPESTATUS[0]} -ne 0 ] && rc=1
+    done
+    say "posix results in $pdir"
+    return $rc
+}
+
+# ----------------------------------------------------------------- perf ---
+perf_one() { # host mode outdir  (runs on the node, collects TSV back)
+    local h=$1 mode=$2 outdir=$3
+    push_tests "$h"
+    $SSH "$h" "bash /tmp/efs/tests/perf/perf_node.sh '$EFS_MNT' \
+        /tmp/perf-$RUN_ID.tsv '$mode' >/dev/null 2>&1; cat /tmp/perf-$RUN_ID.tsv"
+}
+
+cmd_perf() { # single|multi [host ...] [quick|full]
+    local sub=$1; shift
+    local hosts=() mode=full
+    if [ "$sub" = single ]; then
+        hosts=("${1:?perf single needs a host}")
+        shift
+        [ $# -gt 0 ] && mode=$1
+    else # multi
+        for a in "$@"; do
+            case "$a" in quick|full) mode=$a ;; *) hosts+=("$a") ;; esac
+        done
+        [ ${#hosts[@]} -eq 0 ] && hosts=("${DEFAULT_HOSTS[@]}")
+    fi
+    local pdir="$RESULTS/perf/$RUN_ID"
+    mkdir -p "$pdir"
+    say "perf ($sub, $mode) on: ${hosts[*]}"
+
+    # make sure every client is mounted before benchmarking
+    for h in "${hosts[@]}"; do ensure_mounted "$h" || say "  WARN: $h not mounted"; done
+
+    # run all hosts in parallel, one TSV each
+    local pids=()
+    for h in "${hosts[@]}"; do
+        perf_one "$h" "$mode" "$pdir" > "$pdir/perf-${h%.ib}.tsv" 2>&1 &
+        pids+=($!)
+    done
+    for p in "${pids[@]}"; do wait "$p"; done
+
+    # aggregate into a run summary + append to history
+    local summary="$pdir/summary.tsv"
+    {
+        echo -e "run_id\thost\tsuite\ttest\tbw_mib_s\tiops\trc"
+        for h in "${hosts[@]}"; do
+            grep -vE '^(ts|===|PERF_NODE_DONE)' "$pdir/perf-${h%.ib}.tsv" 2>/dev/null | \
+                awk -v rid="$RUN_ID" -F'\t' 'NF>=7{print rid"\t"$2"\t"$3"\t"$4"\t"$5"\t"$6"\t"$7}'
+        done
+    } > "$summary"
+    # history: one line per (run, suite, test) summed across hosts
+    awk -F'\t' 'NR>1 && NF>=7 { k=$3"\t"$4; bw[k]+=$5; n[k]++ }
+        END { for (k in bw) printf "%s\t%s\t%.1f\t%d\n", "'"$RUN_ID"'", k, bw[k], n[k] }' \
+        "$summary" >> "$RESULTS/perf/history.tsv"
+    say "perf results in $pdir ; history appended"
+    column -t -s$'\t' "$summary" | head -40
+}
+
+# ------------------------------------------------------------------ all ---
+cmd_all() { # [efs-host ...]
+    local hosts=("$@")
+    [ ${#hosts[@]} -eq 0 ] && hosts=("${DEFAULT_HOSTS[@]}")
+    cmd_posix "${hosts[@]}"
+    cmd_perf multi "${hosts[@]}"
+}
+
+main() {
+    mkdir -p "$RESULTS/posix" "$RESULTS/perf"
+    touch "$RESULTS/perf/history.tsv"
+    local cmd=${1:-}
+    shift || true
+    case "$cmd" in
+        posix) cmd_posix "$@" ;;
+        perf)  cmd_perf "$@" ;;
+        setup) cmd_setup "$@" ;;
+        all)   cmd_all "$@" ;;
+        *) sed -n '2,20p' "$0"; return 2 ;;
+    esac
+    local rc=$?
+    if [ "${COMMIT:-0}" = 1 ]; then
+        ( cd "$REPO" && git add results && \
+          git commit -q -m "test results $RUN_ID ($cmd)" && \
+          say "committed results $RUN_ID" )
+    fi
+    return $rc
+}
+main "$@"
