@@ -21,6 +21,11 @@ results/
     <run_id>/
       perf-<host>.tsv
       summary.tsv
+  nvme/
+    history.tsv             # local /data1/01-06 NVMe ceiling (fcstor003-006)
+    <run_id>/
+      nvme-<host>.tsv       # per-server, per-drive, serial + parallel
+      summary.tsv
 ```
 
 ## Running
@@ -33,6 +38,7 @@ tests/run_tests.sh perf   single fcstor007.ib quick
 tests/run_tests.sh perf   multi  quick            # all 9 pure clients
 tests/run_tests.sh all                            # posix + perf multi
 COMMIT=1 tests/run_tests.sh perf multi full       # + git-commit the results
+tests/run_tests.sh nvme full both                 # 4-server /data1/01-06 NVMe ceiling
 ```
 
 `tests/posix/posix_suite.py <dir>` and `tests/perf/perf_node.sh <mnt> <out>`

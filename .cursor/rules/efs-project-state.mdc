@@ -66,6 +66,15 @@ posix|perf|setup|all`. `setup` rsyncs+builds+mounts the 9 pure clients.
   All rc=0. fio sw-1m 5725 / sr-1m 17818 / rw-4k 131 MiB/s. Sequential
   read is well above efs single-client; 4k random write is in the same
   ballpark as the collapsed efs number before the dcache-limit fix.
+- **Local NVMe ceiling (20260820-221902)**: same suite on fcstor003-006
+  `/data1/01`–`06` (6×7T XFS NVMe each). Harness:
+  `tests/run_tests.sh nvme` → `tests/perf/perf_local_nvme.sh`. Writes only
+  under `<path>/fio-ceil` (never live `<path>/efs`); efsd stayed up.
+  All rc=0. Per-drive serial typical: sw-1m ~3.5–3.9 GB/s, sr-1m
+  ~3.2–4.1 GB/s, rw-4k ~2.4 GB/s. Host-sum with all 6 busy: sw-1m
+  16.7–21.4 GB/s, sr-1m 21.4–23.5 GB/s, rw-4k 11.2–12.4 GB/s. Two
+  serial outliers (fcstor004 /data1/01 sw-1m 642, fcstor006 /data1/03
+  rw-4k 647) — likely momentary efsd/device contention, not a dead drive.
 - Multi-client baseline (20260820-170303): write ceiling SHARED (~4.9 GB/s
   aggregate sw-1m across 9 ≈ single-client), read scales (~25 GB/s sr-1m).
 - **Perf re-run after POSIX 144/144 (2b47a2c), Aug 20**: single

@@ -9,6 +9,8 @@
 #   run_tests.sh perf multi [host ...] [quick|full]
 #                                                perf across clients (parallel)
 #   run_tests.sh all [efs-host ...]              posix + perf multi
+#   run_tests.sh nvme [quick|full] [serial|parallel|both]
+#                                                local NVMe ceiling on efsd servers
 #
 # Env:
 #   XFS_HOST (default node9901.ib)  XFS_DIR (default /data1/efs)
@@ -27,6 +29,7 @@ XFS_DIR=${XFS_DIR:-/data1/efs}
 EFS_MNT=${EFS_MNT:-/tmp/efs/mnt}
 DEFAULT_HOSTS=(fcstor007.ib fcstor008.ib fcstor009.ib fcstor010.ib \
                fcstor011.ib fcstor012.ib fcstor013.ib fcstor014.ib fcstor015.ib)
+NVME_HOSTS=(fcstor003.ib fcstor004.ib fcstor005.ib fcstor006.ib)
 RUN_ID=$(date -u +%Y%m%d-%H%M%S)
 
 say() { echo "[run_tests] $*"; }
@@ -151,6 +154,69 @@ cmd_perf() { # single|multi [host ...] [quick|full]
     column -t -s$'\t' "$summary" | head -40
 }
 
+# ----------------------------------------------------------- local nvme ---
+# Ceiling of the 4 efsd servers' /data1/01..06 NVMe mounts. Data lands in
+# <path>/fio-ceil only (never <path>/efs). efsd stays up; idle metadata
+# I/O is negligible next to the fio working set.
+cmd_nvme() { # [quick|full] [serial|parallel|both]
+    local mode=full layout=both
+    for a in "$@"; do
+        case "$a" in
+            quick|full) mode=$a ;;
+            serial|parallel|both) layout=$a ;;
+            *) say "nvme: unknown arg $a"; return 2 ;;
+        esac
+    done
+    local pdir="$RESULTS/nvme/$RUN_ID"
+    mkdir -p "$pdir" "$RESULTS/nvme"
+    touch "$RESULTS/nvme/history.tsv"
+    [ -s "$RESULTS/nvme/history.tsv" ] || \
+        echo -e "run_id\thost\tpath\tlayout\tsuite\ttest\tbw_mib_s\tn" \
+            >"$RESULTS/nvme/history.tsv"
+    say "nvme ($mode, $layout) on: ${NVME_HOSTS[*]}"
+
+    local h pids=()
+    for h in "${NVME_HOSTS[@]}"; do
+        (
+            push_tests "$h"
+            $SSH "$h" "bash /tmp/efs/tests/perf/perf_local_nvme.sh \
+                /tmp/perf-nvme-$RUN_ID.tsv '$mode' '$layout'; \
+                cat /tmp/perf-nvme-$RUN_ID.tsv"
+        ) > "$pdir/nvme-${h%.ib}.tsv" 2>"$pdir/nvme-${h%.ib}.log" &
+        pids+=($!)
+    done
+    local rc=0
+    for p in "${pids[@]}"; do wait "$p" || rc=1; done
+
+    local summary="$pdir/summary.tsv"
+    {
+        echo -e "run_id\thost\tpath\tlayout\tsuite\ttest\tbw_mib_s\tiops\trc"
+        for h in "${NVME_HOSTS[@]}"; do
+            awk -v rid="$RUN_ID" -F'\t' '
+                NR==1 { next }
+                $1 ~ /^PERF_LOCAL_NVME_DONE/ { next }
+                NF>=9 { print rid"\t"$2"\t"$3"\t"$4"\t"$5"\t"$6"\t"$7"\t"$8"\t"$9 }
+            ' "$pdir/nvme-${h%.ib}.tsv" 2>/dev/null
+        done
+    } > "$summary"
+    awk -F'\t' 'NR>1 && NF>=9 {
+            k=$2"\t"$3"\t"$4"\t"$5"\t"$6; bw[k]+=$7; n[k]++
+        }
+        END { for (k in bw) printf "%s\t%s\t%.1f\t%d\n", "'"$RUN_ID"'", k, bw[k], n[k] }' \
+        "$summary" >> "$RESULTS/nvme/history.tsv"
+    say "nvme results in $pdir ; history appended"
+    echo "--- per-drive serial sw-1m / sr-1m / rw-4k ---"
+    awk -F'\t' 'NR>1 && $4=="serial" && $6 ~ /^(sw-1m|sr-1m|rw-4k)$/ {
+            printf "%s  %s  %-6s  %8s\n", $2, $3, $6, $7
+        }' "$summary" | sort
+    echo "--- host-sum parallel (all 6 drives busy) ---"
+    awk -F'\t' 'NR>1 && $4=="parallel" && $6 ~ /^(sw-1m|sr-1m|rw-4k)$/ {
+            k=$2"\t"$6; bw[k]+=$7
+        }
+        END { for (k in bw) printf "%s  %8.1f\n", k, bw[k] }' "$summary" | sort
+    return $rc
+}
+
 # ------------------------------------------------------------------ all ---
 cmd_all() { # [efs-host ...]
     local hosts=("$@")
@@ -160,16 +226,17 @@ cmd_all() { # [efs-host ...]
 }
 
 main() {
-    mkdir -p "$RESULTS/posix" "$RESULTS/perf"
+    mkdir -p "$RESULTS/posix" "$RESULTS/perf" "$RESULTS/nvme"
     touch "$RESULTS/perf/history.tsv"
     local cmd=${1:-}
     shift || true
     case "$cmd" in
         posix) cmd_posix "$@" ;;
         perf)  cmd_perf "$@" ;;
+        nvme)  cmd_nvme "$@" ;;
         setup) cmd_setup "$@" ;;
         all)   cmd_all "$@" ;;
-        *) sed -n '2,20p' "$0"; return 2 ;;
+        *) sed -n '2,21p' "$0"; return 2 ;;
     esac
     local rc=$?
     if [ "${COMMIT:-0}" = 1 ]; then
