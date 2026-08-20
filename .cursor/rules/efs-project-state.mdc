@@ -23,6 +23,9 @@ barrier. Next: Phase 2c (client read cache, gen-check).** Stuck-catchup
 tracked in git under `results/`. See "Test suite" section below.
 **2 client data-path fixes (7fa99e8)**: packed-file overwrite/append + rename/
 link data loss (see "Root causes" below). POSIX suite 64/69 (was 16 fail).
+**5 POSIX gaps fixed (7e442fa) → suite 69/69**: daemon-side permission checks
+(access/open via check_access), rmdir ENOTEMPTY, ENAMETOOLONG, serialized
+O_APPEND, + a concurrent-write dcache flush race (see "Root causes").
 
 ## Test suite (d52287e)
 Run from the login node (needs ssh to nodes): `tests/run_tests.sh
@@ -36,7 +39,7 @@ posix|perf|setup|all`. `setup` rsyncs+builds+mounts the 9 pure clients.
 - Multi-client baseline: write ceiling SHARED (~4.9 GB/s aggregate sw-1m
   across 9 ≈ single-client), read scales (~25 GB/s aggregate sr-1m).
 
-## POSIX gaps vs XFS (suite, Aug 20) — 5 fails (was 16; data-path FIXED 7fa99e8)
+## POSIX gaps vs XFS (suite, Aug 20) — ALL FIXED, 69/69 (7e442fa)
 FIXED (7fa99e8): packed-file overwrite/append + rename/link data loss (see
 "Root causes" below). All data-path tests pass (basic_append, basic_oappend,
 basic_overwrite_middle, basic_terminal_cp_cat, basic_dd_rw, dir_rename_*,
@@ -45,12 +48,16 @@ hardlink_*, unlink_open_file).
 (efs_export_unlink_name removes inode+chunks on nlink->0, breaking open-fd
 reads) does NOT manifest. Reads via the open fd succeed for buffered AND
 O_DIRECT, small packed AND large chunked, flushed AND unflushed. No fix needed.
-Remaining 5 (functional gaps, NOT data corruption):
-- **O_APPEND not atomic** (concurrent_appends): ~34/200 appends landed.
-- **Permission enforcement**: attr_access + err_write_readonly_file — efs-fuse
-  doesn't enforce write permission (write to 0o444 succeeds).
-- **Semantics**: err_rmdir_nonempty (no ENOTEMPTY), names_too_long_component
-  (returns ENOENT not ENAMETOOLONG).
+FIXED (7e442fa) — the last 5:
+- **O_APPEND atomicity** (concurrent_appends): serialized daemon-side
+  (g_append_mu + re-read true end) AND the underlying concurrent-write dcache
+  flush race (see "Root causes" — the real data-loss bug).
+- **Permission enforcement** (attr_access, err_write_readonly_file): daemon-side
+  check_access helper in the access + open handlers. NOT default_permissions
+  (that opt gated the root-owned export root → whole mount read-only).
+- **rmdir-nonempty ENOTEMPTY**: client fast-path + authoritative server check
+  (EFS_INODE_RPC_NOT_EMPTY).
+- **ENAMETOOLONG**: name-component >255 check in split_parent_name.
 - **Hardlink** (known FUSE kernel-level gap, below) — much improved by the
   7fa99e8 link fix (hardlink_* now pass) but the kernel-level dentry gap
   remains latent.
@@ -125,6 +132,14 @@ Remaining 5 (functional gaps, NOT data corruption):
   (sw 4.6 GB/s, sr 2.4 GB/s, 4k rand ~40k IOPS). rclone 32×10GiB copy rc=0.
 
 ## Root causes already found — don't re-diagnose
+- **Concurrent-write data loss = dcache flush base-read race (FIXED, 7e442fa)**:
+  dcache_flush_slot dropped the shard lock (dcache_mu) before the network
+  merge-base read + PUT, so two concurrent flushes of the SAME chunk (e.g. 4
+  threads appending to one file, each close→flush) both read a stale pre-PUT
+  base and the last PUT wiped the other's just-written ranges → NUL holes with
+  a correct file size. Fix: per-shard shard_io mutex held across the whole
+  flush (base-read + PUT). Lock order shard_io → dcache_mu; the base-read's
+  efs_client_read only takes dcache_mu, so no deadlock.
 - **Packed-file overwrite/append = rdcache staleness (FIXED, 7fa99e8)**:
   dcache_put_now wrote the merged chunk to the servers but never invalidated
   the rdcache entry that the flush's have_base=0 merge-base read had populated
