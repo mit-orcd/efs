@@ -3401,8 +3401,20 @@ static int dcache_patch(efs_ino_t ino, uint32_t ci, uint32_t off, const uint8_t 
     pthread_mutex_t *mu = dcache_mu(s);
     pthread_mutex_lock(mu);
     struct dcache_ent *e = dcache_find(s, ino, ci);
-    if (e && e->dirty && off + len <= e->len) {
+    if (e && e->data && off + len <= e->len) {
         memcpy(e->data + off, src, len);
+        if (!e->dirty) {
+            /* The entry is mid-flush: its snapshot was taken and dirty cleared,
+             * but e->data is not freed until the flush's post-PUT "!e->dirty"
+             * check. Patch it and re-dirty so this write is not lost — that
+             * check then leaves the entry in place and a later flush writes it
+             * back. Without this, a write landing during another thread's flush
+             * falls through to load_and_patch, sees the not-yet-published chunk
+             * (the in-flight PUT has not set the mapping), and builds a zeroed
+             * have_base=1 entry that overwrites the in-flight data. */
+            e->dirty = 1;
+            dcache_note_dirty_bytes((int64_t)e->len);
+        }
         dcache_add_range(e, off, len);
         pthread_mutex_unlock(mu);
         efs_rdcache_invalidate(ino, ci);
