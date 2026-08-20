@@ -52,10 +52,16 @@ fixes → 126/144, then the last 18 POSIX gaps fixed → 144/144 on fcstor007**:
 
 ## Test suite (d52287e)
 Run from the login node (needs ssh to nodes): `tests/run_tests.sh
-posix|perf|setup|all`. `setup` rsyncs+builds+mounts the 9 pure clients.
+posix|posix2|perf|setup|all`. `setup` rsyncs+builds+mounts the 9 pure clients.
 - **POSIX** (`tests/posix/posix_suite.py`, 144 tests, @test-extensible): run vs
   an XFS baseline (node9901:/data1/efs); `compare.py` → efs bug = PASS on XFS,
   FAIL on efs. efs is 144/144 (fcstor007, Aug 20).
+- **POSIX 2-client** (`tests/posix/posix_2client.py`, 12 tests): create/mkdir/
+  rename/O_CREAT on client A, check client B with no remount. XFS 12/12;
+  efs 1/12 (20260820-225801, A=fcstor007 B=fcstor008). 11 EFS-BUGs are the
+  Phase 2c snapshot gap. `peer_shared_creat` is the IOR-hard abort: B
+  `open(O_CREAT|O_RDWR)` of A's file returns EIO. `peer_unlink_gone` passes
+  vacuously (B never saw the name). Run: `tests/run_tests.sh posix2`.
 - **Perf** (`tests/perf/perf_node.sh`): dd + 9-job fio, single|multi client
   (parallel), aggregated to `results/perf/history.tsv`. Harness logs stay
   LOCAL (don't depend on the efs read-after-write path being benchmarked).

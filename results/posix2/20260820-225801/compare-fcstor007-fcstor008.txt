@@ -1,0 +1,20 @@
+================================================================
+POSIX baseline comparison: 12 tests
+  both pass        : 1
+  EFS BUGS         : 11  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  peer_creat_excl_eexist           [FAIL] B O_EXCL got errno 5 (Input/output error), want EEXIST
+  peer_create_visible              [FAIL] B does not see A's file
+  peer_listdir_siblings            [FAIL] B listdir missing ['ior_file_easy.00000000', 'ior_file_easy.00000001', 'ior_file_easy.00000002'] (saw [])
+  peer_mkdir_then_create           [FAIL] B read nested file: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_mkdir_then_create/dir/f'
+  peer_mkdir_visible               [FAIL] B listdir missing 'sub' (saw [])
+  peer_open_existing               [FAIL] B open(O_RDWR) of A's file: No such file or directory (errno 2)
+  peer_rename_visible              [FAIL] B listdir missing 'new' (saw [])
+  peer_shared_creat                [FAIL] B open(O_CREAT|O_RDWR) of A's shared file: Input/output error (errno 5) — IOR-hard abort
+  peer_shared_pwrite               [FAIL] B open shared file: Input/output error (errno 5)
+  peer_stat_size                   [FAIL] B stat: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_stat_size/f'
+  peer_write_read                  [FAIL] B does not see A's file

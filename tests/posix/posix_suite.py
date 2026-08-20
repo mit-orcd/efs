@@ -14,8 +14,8 @@ Usage:
 
 Exit code: 0 if every selected test passes, 1 otherwise.
 
-Not yet implemented: two efs-fuse clients on one export (needs a second
-mount from the harness). See the section comment above the runner.
+Two-client visibility (create on A, see on B without remount) lives in
+posix_2client.py — run via `tests/run_tests.sh posix2`.
 """
 import errno
 import fcntl
@@ -1990,17 +1990,8 @@ def flock_second_fd_exclusive(d):
         os.close(fd2)
 
 
-# ==========================================================================
-# Two FUSE clients on one export — to be implemented
-# ==========================================================================
-# Single-mount runner cannot cover this. The Slurm / compare harness needs
-# to start a second efs-fuse of the same export and pass both mount dirs.
-# Then add tests for:
-#   - create/write on A, read/stat/unlink visible on B
-#   - rename on A visible on B (and the reverse)
-#   - same-name create from both (EEXIST / last-writer)
-#   - flock / fcntl lock exclusivity across the two clients
-#   - one client unlinks while the other has the file open
+# Two-client live visibility is posix_2client.py (run_tests.sh posix2).
+# Still uncovered there: cross-client flock, and unlink-while-peer-has-fd.
 #
 # ==========================================================================
 # Runner

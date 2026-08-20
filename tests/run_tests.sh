@@ -5,6 +5,7 @@
 #
 # Usage:
 #   run_tests.sh posix [efs-host ...]            POSIX suite vs XFS baseline
+#   run_tests.sh posix2 [host-a] [host-b]        two-client visibility vs XFS
 #   run_tests.sh perf single <host> [quick|full] perf on one client
 #   run_tests.sh perf multi [host ...] [quick|full]
 #                                                perf across clients (parallel)
@@ -53,6 +54,21 @@ ensure_mounted() { # host
         sleep 5; grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts' 2>/dev/null
 }
 
+# Drop and remount one pure-client efs-fuse so it refetches the server snapshot.
+# Do not use on a host that also runs efsd unless you intend to bounce FUSE only.
+remount_client() { # host
+    local h=$1
+    say "  $h: remount efs-fuse"
+    $SSH "$h" 'fusermount3 -u /tmp/efs/mnt 2>/dev/null; pkill -x efs-fuse; sleep 0.4
+        cd /tmp/efs && mkdir -p /tmp/efs/mnt
+        setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &
+        for i in $(seq 1 20); do
+            sleep 0.5
+            grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts && exit 0
+        done
+        echo remount-timeout; tail -8 fuse.log; exit 1'
+}
+
 # rsync source + build efs-fuse + mount, per client (setup before perf multi)
 cmd_setup() { # [host ...]
     local hosts=("$@")
@@ -98,6 +114,48 @@ cmd_posix() { # [efs-host ...]
         [ ${PIPESTATUS[0]} -ne 0 ] && rc=1
     done
     say "posix results in $pdir"
+    return $rc
+}
+
+# ----------------------------------------------------------- posix2 -----
+# Two efs-fuse clients, same export. Prepare testdirs on A, remount B so
+# both see the parent, then mutate on A and check B with no further remount.
+# XFS baseline uses the same directory as both sides (kernel namespace).
+cmd_posix2() { # [host-a] [host-b]
+    local host_a=${1:-fcstor007.ib}
+    local host_b=${2:-fcstor008.ib}
+    local pdir="$RESULTS/posix2/$RUN_ID"
+    mkdir -p "$pdir" "$RESULTS/posix2"
+    local py="$REPO/tests/posix/posix_2client.py"
+
+    say "posix2: XFS baseline on $XFS_HOST:$XFS_DIR (same path twice)"
+    push_tests "$XFS_HOST"
+    $SSH "$XFS_HOST" "python3 /tmp/efs/tests/posix/posix_2client.py --local \
+        '$XFS_DIR' '$XFS_DIR' --results /tmp/posix2-xfs.tsv; \
+        cat /tmp/posix2-xfs.tsv" > "$pdir/xfs-baseline.tsv"
+    say "  baseline: $(grep -c $'\tPASS' "$pdir/xfs-baseline.tsv") pass"
+
+    say "posix2: efs A=$host_a B=$host_b mnt=$EFS_MNT"
+    ensure_mounted "$host_a" || { say "  $host_a not mounted"; return 1; }
+    ensure_mounted "$host_b" || { say "  $host_b not mounted"; return 1; }
+    $SSH "$host_a" "python3 '$py' --prepare '$EFS_MNT'"
+    remount_client "$host_b" || return 1
+    # Parent must be visible on B after remount (server has A's mkdirs).
+    $SSH "$host_b" "test -d '$EFS_MNT/posix-2c'" || {
+        say "  $host_b still cannot see $EFS_MNT/posix-2c after remount"
+        return 1
+    }
+    python3 "$py" --remote "$host_a" "$host_b" --mnt "$EFS_MNT" \
+        --results "$pdir/efs-${host_a%.ib}-${host_b%.ib}.tsv"
+    local rc=$?
+    $SSH "$host_a" "rm -rf '$EFS_MNT/posix-2c'" || true
+
+    say "  --- compare two-client efs vs XFS ---"
+    python3 "$REPO/tests/posix/compare.py" "$pdir/xfs-baseline.tsv" \
+        "$pdir/efs-${host_a%.ib}-${host_b%.ib}.tsv" | \
+        tee "$pdir/compare-${host_a%.ib}-${host_b%.ib}.txt"
+    [ ${PIPESTATUS[0]} -ne 0 ] && rc=1
+    say "posix2 results in $pdir"
     return $rc
 }
 
@@ -226,12 +284,13 @@ cmd_all() { # [efs-host ...]
 }
 
 main() {
-    mkdir -p "$RESULTS/posix" "$RESULTS/perf" "$RESULTS/nvme"
+    mkdir -p "$RESULTS/posix" "$RESULTS/posix2" "$RESULTS/perf" "$RESULTS/nvme"
     touch "$RESULTS/perf/history.tsv"
     local cmd=${1:-}
     shift || true
     case "$cmd" in
         posix) cmd_posix "$@" ;;
+        posix2) cmd_posix2 "$@" ;;
         perf)  cmd_perf "$@" ;;
         nvme)  cmd_nvme "$@" ;;
         setup) cmd_setup "$@" ;;
