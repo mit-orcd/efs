@@ -3254,6 +3254,12 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
     if (rc != EFS_OK)
         return rc;
 
+    /* The servers now hold newer data than any cached copy. A have_base=0
+     * flush reads the OLD published chunk as its merge base, which populates
+     * the rdcache with stale bytes; without invalidating, a later read serves
+     * that stale rdcache entry and loses the just-written update. */
+    efs_rdcache_invalidate(ino, ci);
+
     if (!export_chunk_exists(ino, ci)) {
         int room = efs_client_ensure_meta_room(0, 1);
         if (room != EFS_OK)

@@ -1897,7 +1897,6 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
     size_t size = fuse_buf_size(buf);
     if (size == 0)
         return 0;
-
     size_t copy_cap = 0;
     char *copy = bounce_alloc(size, &copy_cap);
     if (!copy)
