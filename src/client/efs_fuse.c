@@ -1099,6 +1099,9 @@ static int efs_fuse_access(const char *path, int mask)
     return check_access(&ino, ctx->uid, ctx->gid, mask);
 }
 
+static int efs_fuse_truncate(const char *path, off_t size,
+                             struct fuse_file_info *fi);
+
 static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
 {
     struct efs_inode parent;
@@ -1140,6 +1143,16 @@ static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
             mask |= W_OK;
         if (mask && check_access(&ino, ctx->uid, ctx->gid, mask) != 0)
             return -EACCES;
+    }
+    /* O_TRUNC on open: this FUSE path does not get a separate truncate call
+     * for it, so reset the length here (the kernel expects size 0 after an
+     * O_TRUNC open). Only when opened for writing. */
+    if (fi && (fi->flags & O_TRUNC) && (fi->flags & O_ACCMODE) != O_RDONLY) {
+        if (efs_mode_is_dir(ino.mode))
+            return -EISDIR;
+        int trc = efs_fuse_truncate(path, 0, fi);
+        if (trc != 0)
+            return trc;
     }
     if (fi) {
         fi->fh = ino.ino;
