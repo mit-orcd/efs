@@ -343,6 +343,13 @@ int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
         efs_client_unlock_dir(parent);
         return EFS_ERR_INVAL;
     }
+    /* rmdir fast-path: refuse a non-empty directory locally (the server also
+     * enforces this authoritatively via EFS_INODE_RPC_NOT_EMPTY). */
+    if (is_dir && !efs_export_dir_empty(&g_client.export, ino.ino)) {
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(parent);
+        return EFS_ERR_NOT_EMPTY;
+    }
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);
 

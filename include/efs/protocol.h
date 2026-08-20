@@ -335,6 +335,8 @@ struct efs_msg_list_exports_reply {
 /* Phase 2b: mutation sent to a non-primary node; client should re-resolve the
  * primary and retry. */
 #define EFS_INODE_RPC_NOT_PRIMARY 7
+/* rmdir on a directory that still has children. */
+#define EFS_INODE_RPC_NOT_EMPTY  8
 
 struct efs_msg_inode_lookup {
     efs_export_id_t export_id;

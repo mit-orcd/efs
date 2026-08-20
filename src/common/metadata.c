@@ -642,6 +642,20 @@ int efs_export_foreach_child(struct efs_export *ex, efs_ino_t parent,
     return EFS_OK;
 }
 
+static int dir_nonempty_cb(struct efs_export *ex, uint64_t slot, void *arg)
+{
+    (void)ex;
+    (void)slot;
+    (void)arg;
+    return 1;  /* any child terminates the walk with a non-zero rc */
+}
+
+/* Return 1 if the directory has no children, 0 otherwise. */
+int efs_export_dir_empty(struct efs_export *ex, efs_ino_t ino)
+{
+    return efs_export_foreach_child(ex, ino, dir_nonempty_cb, NULL) == 0;
+}
+
 /* ---- directory rollups ---- */
 
 static uint64_t entry_tmin(const struct efs_inode *e)

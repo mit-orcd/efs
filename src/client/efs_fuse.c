@@ -1063,6 +1063,42 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return 0;
 }
 
+/* POSIX permission check: does the caller (uid/gid) have the requested access
+ * (mask: R_OK/W_OK/X_OK) to a file with the given mode/uid/gid? Root (uid 0)
+ * bypasses. Returns 0 if allowed, -EACCES otherwise. We enforce this in the
+ * daemon (not via the default_permissions mount opt) because that option would
+ * also gate the export root, which is owned by root — making the whole mount
+ * read-only for unprivileged users. */
+static int check_access(const struct efs_inode *ino, uid_t uid, gid_t gid,
+                        int mask)
+{
+    if (uid == 0)
+        return 0;
+    uint32_t perm;
+    if (uid == ino->uid)
+        perm = (ino->mode >> 6) & 7;        /* owner */
+    else if (gid == ino->gid)
+        perm = (ino->mode >> 3) & 7;        /* group */
+    else
+        perm = ino->mode & 7;               /* other */
+    if ((mask & R_OK) && !(perm & 4))
+        return -EACCES;
+    if ((mask & W_OK) && !(perm & 2))
+        return -EACCES;
+    if ((mask & X_OK) && !(perm & 1))
+        return -EACCES;
+    return 0;
+}
+
+static int efs_fuse_access(const char *path, int mask)
+{
+    struct efs_inode ino;
+    if (efs_client_lookup(path, &ino) != 0)
+        return -ENOENT;
+    struct fuse_context *ctx = fuse_get_context();
+    return check_access(&ino, ctx->uid, ctx->gid, mask);
+}
+
 static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
 {
     struct efs_inode parent;
@@ -1092,6 +1128,19 @@ static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
     struct efs_inode ino;
     if (efs_client_lookup(path, &ino) != 0)
         return -ENOENT;
+    /* Enforce the open permission against the file's mode + the caller's
+     * uid/gid (read for O_RDONLY/O_RDWR, write for O_WRONLY/O_RDWR). */
+    {
+        struct fuse_context *ctx = fuse_get_context();
+        int accmode = fi ? (fi->flags & O_ACCMODE) : O_RDONLY;
+        int mask = 0;
+        if (accmode != O_WRONLY)
+            mask |= R_OK;
+        if (accmode != O_RDONLY)
+            mask |= W_OK;
+        if (mask && check_access(&ino, ctx->uid, ctx->gid, mask) != 0)
+            return -EACCES;
+    }
     if (fi) {
         fi->fh = ino.ino;
         /* FUSE does not propagate O_DIRECT on its own: unless the daemon
@@ -1839,6 +1888,25 @@ static void coal_flush_all(void)
     }
 }
 
+/* O_APPEND writes: the kernel sets the offset from its i_size but does not
+ * serialize concurrent appends to a FUSE file (no i_rwsem around the
+ * read-i_size + write + update-i_size sequence), so two racing appends can
+ * read the same i_size and overwrite each other. Serialize them here and
+ * re-read the true end from the local table (updated synchronously by each
+ * write via dcache_note_size / the writeback worker). */
+static pthread_mutex_t g_append_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static off_t append_end_offset(efs_ino_t ino)
+{
+    struct efs_inode cur;
+    efs_client_lock_dir(ino);
+    uint64_t size = 0;
+    if (efs_export_get_inode(&g_client.export, ino, &cur) == 0)
+        size = cur.size;
+    efs_client_unlock_dir(ino);
+    return (off_t)size;
+}
+
 static int efs_fuse_write(const char *path, const char *buf, size_t size,
                           off_t offset, struct fuse_file_info *fi)
 {
@@ -1855,18 +1923,30 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
 
     if (size == 0)
         return 0;
+    int append = fi && (fi->flags & O_APPEND);
+    if (append) {
+        pthread_mutex_lock(&g_append_mu);
+        offset = append_end_offset(ino);
+    }
     if (efs_dcache_try_patch(ino, (uint64_t)offset, (uint32_t)size,
                              (const uint8_t *)buf) == 0) {
         efs_dcache_maybe_reclaim();
+        if (append)
+            pthread_mutex_unlock(&g_append_mu);
         return (int)size;
     }
     size_t copy_cap = 0;
     char *copy = bounce_alloc(size, &copy_cap);
-    if (!copy)
+    if (!copy) {
+        if (append)
+            pthread_mutex_unlock(&g_append_mu);
         return -ENOMEM;
+    }
     memcpy(copy, buf, size);
     rc = efs_wb_enqueue_owned(ino, (uint64_t)offset, size, copy, NULL,
                               copy_cap);
+    if (append)
+        pthread_mutex_unlock(&g_append_mu);
     if (rc == EFS_ERR_QUOTA) {
         efs_fuse_log_err("write", rc, ino, (uint64_t)offset, size, path);
         return -ENOSPC;
@@ -1908,6 +1988,11 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
         return -EIO;
     }
 
+    int append = fi && (fi->flags & O_APPEND);
+    if (append) {
+        pthread_mutex_lock(&g_append_mu);
+        offset = append_end_offset(ino);
+    }
     /* Sub-chunk 4k: patch the dirty chunk in memory. Sending every 4k
      * through writeback did a 128 KiB RMW+PUT and EIO'd when the GET
      * missed under load. */
@@ -1915,11 +2000,15 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
                              (const uint8_t *)copy) == 0) {
         bounce_release(copy, copy_cap);
         efs_dcache_maybe_reclaim();
+        if (append)
+            pthread_mutex_unlock(&g_append_mu);
         return (int)size;
     }
 
     rc = efs_wb_enqueue_owned(ino, (uint64_t)offset, size, copy, NULL,
                               copy_cap);
+    if (append)
+        pthread_mutex_unlock(&g_append_mu);
     if (rc == EFS_ERR_QUOTA) {
         efs_fuse_log_err("write_buf", rc, ino, (uint64_t)offset, size, path);
         return -ENOSPC;
@@ -2078,7 +2167,14 @@ static int efs_fuse_rmdir(const char *path)
     if (rc != 0)
         return rc;
 
-    return efs_client_unlink(parent.ino, name, true) == 0 ? 0 : -EIO;
+    int urc = efs_client_unlink(parent.ino, name, true);
+    if (urc == 0)
+        return 0;
+    if (urc == EFS_ERR_NOT_EMPTY)
+        return -ENOTEMPTY;
+    if (urc == EFS_ERR_NOT_FOUND)
+        return -ENOENT;
+    return -EIO;
 }
 
 /* Refresh node used/quota from STATUS at most every 5 s (df callers). The
@@ -2272,6 +2368,10 @@ static int split_parent_name(const char *path, char *name, size_t name_len,
     }
     *base = '\0';
     base++;
+    if (strlen(base) > 255) {   /* NAME_MAX */
+        free(p);
+        return -ENAMETOOLONG;
+    }
     strncpy(name, base, name_len - 1);
     name[name_len - 1] = '\0';
     int rc = efs_client_lookup(p[0] ? p : "/", parent);
@@ -2578,6 +2678,7 @@ static struct fuse_operations efs_ops = {
     .statfs  = efs_fuse_statfs,
     .readdir = efs_fuse_readdir,
     .open    = efs_fuse_open,
+    .access  = efs_fuse_access,
     .read    = efs_fuse_read,
     .write   = efs_fuse_write,
     .write_buf = efs_fuse_write_buf,

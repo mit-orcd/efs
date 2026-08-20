@@ -58,6 +58,7 @@ static int rpc_status_to_efs(uint8_t st)
     case EFS_INODE_RPC_BUSY:        return EFS_ERR_BUSY;
     case EFS_INODE_RPC_INVAL:       return EFS_ERR_INVAL;
     case EFS_INODE_RPC_NOT_PRIMARY: return EFS_ERR_NOT_PRIMARY;
+    case EFS_INODE_RPC_NOT_EMPTY:   return EFS_ERR_NOT_EMPTY;
     default:                        return EFS_ERR_IO;
     }
 }

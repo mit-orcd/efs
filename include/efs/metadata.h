@@ -338,6 +338,8 @@ int efs_export_format_stats_ex(const struct efs_export *ex,
 typedef int (*efs_child_cb)(struct efs_export *ex, uint64_t slot, void *arg);
 int efs_export_foreach_child(struct efs_export *ex, efs_ino_t parent,
                              efs_child_cb cb, void *arg);
+/* Return 1 if the directory has no children, 0 otherwise. */
+int efs_export_dir_empty(struct efs_export *ex, efs_ino_t ino);
 
 /* Serialize export metadata to a memory buffer. Caller must free *buf.
  * v5 layout: fixed-size inode records, then chunk records. Optional

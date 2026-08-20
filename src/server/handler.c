@@ -1360,10 +1360,21 @@ send_reply:
                 }
             } else if (type == EFS_MSG_INODE_UNLINK) {
                 struct efs_msg_inode_unlink *req = payload;
-                int urc = efs_export_unlink_name(ex, req->parent, req->name);
-                r.status = (urc == 0) ? EFS_INODE_RPC_OK : EFS_INODE_RPC_NOT_FOUND;
-                if (urc == 0)
-                    server_meta_mark_rpc_dirty_locked(g_server, eidx);
+                /* rmdir: refuse to remove a non-empty directory (ENOTEMPTY). */
+                struct efs_inode victim;
+                if (req->is_dir &&
+                    efs_export_lookup(ex, req->parent, req->name,
+                                      &victim) == 0 &&
+                    !efs_export_dir_empty(ex, victim.ino)) {
+                    r.status = EFS_INODE_RPC_NOT_EMPTY;
+                } else {
+                    int urc = efs_export_unlink_name(ex, req->parent,
+                                                     req->name);
+                    r.status = (urc == 0) ? EFS_INODE_RPC_OK
+                                          : EFS_INODE_RPC_NOT_FOUND;
+                    if (urc == 0)
+                        server_meta_mark_rpc_dirty_locked(g_server, eidx);
+                }
             } else if (type == EFS_MSG_INODE_RENAME) {
                 struct efs_msg_inode_rename *req = payload;
                 int rrc = efs_export_rename(ex, req->ino, req->new_parent,

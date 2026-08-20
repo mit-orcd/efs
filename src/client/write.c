@@ -3182,6 +3182,12 @@ struct dcache_ent {
 };
 static struct {
     pthread_mutex_t shard[DCACHE_SHARDS];
+    /* Serializes the network base-read + PUT phase of a flush per shard.
+     * dcache_mu is dropped before that I/O (to avoid holding it over the
+     * network), so two concurrent flushes of the same chunk could otherwise
+     * both read a stale pre-PUT base and the last PUT would wipe the other's
+     * just-written ranges (concurrent-append data loss). */
+    pthread_mutex_t shard_io[DCACHE_SHARDS];
     struct dcache_ent e[DCACHE_SLOTS];
     int inited;
     uint64_t dirty_bytes;
@@ -3208,8 +3214,10 @@ static void dcache_note_dirty_bytes(int64_t delta)
 
 static void dcache_init(void)
 {
-    for (int i = 0; i < DCACHE_SHARDS; i++)
+    for (int i = 0; i < DCACHE_SHARDS; i++) {
         pthread_mutex_init(&g_dcache.shard[i], NULL);
+        pthread_mutex_init(&g_dcache.shard_io[i], NULL);
+    }
     g_dcache.inited = 1;
 }
 
@@ -3224,6 +3232,12 @@ static pthread_mutex_t *dcache_mu(uint32_t slot)
 {
     pthread_once(&g_dcache_once, dcache_init);
     return &g_dcache.shard[slot & (DCACHE_SHARDS - 1)];
+}
+
+static pthread_mutex_t *dcache_io_mu(uint32_t slot)
+{
+    pthread_once(&g_dcache_once, dcache_init);
+    return &g_dcache.shard_io[slot & (DCACHE_SHARDS - 1)];
 }
 
 static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
@@ -3618,7 +3632,7 @@ static int dcache_merge_owned(efs_ino_t ino, uint32_t ci, uint32_t off,
     return 0;
 }
 
-static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
+static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only)
 {
     pthread_mutex_t *mu = dcache_mu(s);
     int rc = EFS_OK;
@@ -3719,6 +3733,19 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
         e = e->next;
     }
     pthread_mutex_unlock(mu);
+    return rc;
+}
+
+/* Hold the shard I/O lock across the whole flush so the base-read + PUT of
+ * one flush completes before a concurrent flush of the same shard reads its
+ * merge base. Lock order is shard_io -> dcache_mu (never the reverse), and
+ * the base-read's efs_client_read only takes dcache_mu, so no deadlock. */
+static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
+{
+    pthread_mutex_t *io = dcache_io_mu(s);
+    pthread_mutex_lock(io);
+    int rc = dcache_flush_slot_inner(s, only_ino, have_only);
+    pthread_mutex_unlock(io);
     return rc;
 }
 
