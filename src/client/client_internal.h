@@ -256,6 +256,7 @@ void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t le
 void efs_rdcache_invalidate(efs_ino_t ino, uint32_t ci);
 
 /* Dirty assembled chunks: combine partial writes and PUT on flush/evict. */
+int efs_dcache_has(efs_ino_t ino, uint32_t ci);
 int efs_dcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len);
 int efs_dcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
                     uint8_t *dst, uint32_t len);

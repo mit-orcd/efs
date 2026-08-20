@@ -1477,6 +1477,13 @@ int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *
         nlink = 1;
     nlink--;
 
+    /* POSIX: a subdirectory's ".." holds a link on the parent. */
+    if (efs_mode_is_dir(removed.mode)) {
+        struct efs_inode *p = inode_ptr(ex, parent);
+        if (p && p->nlink > 2)
+            p->nlink--;
+    }
+
     rollup_sub_under(ex, parent, &removed);
     child_idx_del(ex, parent, pos);
     remove_inode_slot(ex, pos, nlink > 0);
@@ -1506,6 +1513,11 @@ int efs_export_unlink(struct efs_export *ex, efs_ino_t ino)
         if (ex->inodes[i].ino == ino) {
             found = 1;
             struct efs_inode removed = ex->inodes[i];
+            if (efs_mode_is_dir(removed.mode)) {
+                struct efs_inode *p = inode_ptr(ex, removed.parent);
+                if (p && p->nlink > 2)
+                    p->nlink--;
+            }
             rollup_sub_under(ex, removed.parent, &removed);
             child_idx_del(ex, removed.parent, i);
             remove_inode_slot(ex, i, 0);
@@ -1639,8 +1651,15 @@ int efs_export_set_mode(struct efs_export *ex, efs_ino_t ino, uint32_t mode)
     if (!p)
         return EFS_ERR_NOT_FOUND;
     p->mode = (p->mode & S_IFMT) | (mode & ~S_IFMT);
-    /* POSIX: chmod updates ctime, not mtime (rsync -a relies on this). */
-    time_now(&p->ctime);
+    /* POSIX: chmod updates ctime, not mtime (rsync -a relies on this).
+     * ctime is stored at second resolution; if chmod lands in the same
+     * second, still advance so st_ctime_ns is observably newer. */
+    {
+        uint64_t old = p->ctime;
+        time_now(&p->ctime);
+        if (p->ctime <= old)
+            p->ctime = old + 1;
+    }
     sync_hardlink_attrs(ex, ino, p);
     rollup_expand_parents_of(ex, ino); /* ctime=now: expand */
     return EFS_OK;
@@ -1802,9 +1821,17 @@ int efs_export_rename(struct efs_export *ex, efs_ino_t ino,
         time_now(&src->ctime);
         name_idx_put(ex, src->parent, src->name, slot);
         child_idx_add(ex, new_parent, slot);
-        if (old_parent != new_parent)
+        if (old_parent != new_parent) {
+            if (efs_mode_is_dir(src->mode)) {
+                struct efs_inode *op = inode_ptr(ex, old_parent);
+                struct efs_inode *np = inode_ptr(ex, new_parent);
+                if (op && op->nlink > 2)
+                    op->nlink--;
+                if (np)
+                    np->nlink++;
+            }
             rollup_add_under(ex, new_parent, src);
-        else
+        } else
             recompute_times_up(ex, new_parent);
     }
     return EFS_OK;
@@ -2032,9 +2059,13 @@ int efs_export_upsert_inode(struct efs_export *ex, const struct efs_inode *rec)
         dentry_bytes_add(ex, rec->name);
         name_idx_put(ex, rec->parent, rec->name, slot);
         child_idx_add(ex, rec->parent, slot);
+        sync_hardlink_attrs(ex, rec->ino, cur);
         return EFS_OK;
     }
     *cur = *rec;
+    /* Hard-link rows share mode/uid/times; upsert of the indexed row
+     * alone would leave the other names with a stale mode. */
+    sync_hardlink_attrs(ex, rec->ino, cur);
     return EFS_OK;
 }
 

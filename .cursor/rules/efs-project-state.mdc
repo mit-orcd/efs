@@ -26,20 +26,43 @@ link data loss (see "Root causes" below). POSIX suite 64/69 (was 16 fail).
 **5 POSIX gaps fixed (7e442fa) → suite 69/69**: daemon-side permission checks
 (access/open via check_access), rmdir ENOTEMPTY, ENAMETOOLONG, serialized
 O_APPEND, + a concurrent-write dcache flush race (see "Root causes").
+**Suite extended to 144 tests (user, ef4e9cd + working tree) + 3 more data
+fixes → 126/144, then the last 18 POSIX gaps fixed → 144/144 on fcstor007**:
+- O_TRUNC in efs_fuse_open (ce269e0) — kernel gives no separate truncate for
+  O_TRUNC on open, so truncate in the open handler.
+- Concurrent-append re-dirty (c129b39) — a write landing during another
+  thread's flush of the same chunk found dirty cleared, fell to load_and_patch,
+  saw the not-yet-published chunk, and built a zeroed have_base=1 entry that
+  overwrote in-flight data. Fix: patch the mid-flush entry + re-dirty it
+  (pairs with the shard_io flush lock, which serializes the re-flush).
+- chmod/setattr dual-apply size (396c1b8) — primary's returned inode lags the
+  data path (learns size via async REPORT_CHUNKS), so a non-truncate setattr
+  upserted a stale size=0, hiding data. Preserve local size unless truncate.
+**18 POSIX gaps FIXED (working tree, Aug 20) → 144/144**:
+- Permissions: daemon-side W|X on create/mkdir/unlink/rmdir/rename/link/
+  symlink (export root skipped — root-owned 0755), ancestor X on getattr/
+  open/access, R on readdir, W on path truncate, EPERM chown for non-root.
+- Metadata: create dual-apply via create_with_ino (parent nlink++), unlink/
+  rename adjust dir nlink, chmod bumps ctime even in the same second,
+  setattr mode/owner applied locally so hard-link rows share mode;
+  attr_timeout=0 so the high-level path cache cannot hide the other name.
+- Errno: rename-over-nonempty maps EFS_ERR_NOT_EMPTY → ENOTEMPTY (was EIO).
+- Features: st_blocks counts present chunks (not holes), .lock implements
+  overlapping exclusive byte-range locks, .lseek implements SEEK_HOLE/DATA.
 
 ## Test suite (d52287e)
 Run from the login node (needs ssh to nodes): `tests/run_tests.sh
 posix|perf|setup|all`. `setup` rsyncs+builds+mounts the 9 pure clients.
-- **POSIX** (`tests/posix/posix_suite.py`, 69 tests, @test-extensible): run vs
+- **POSIX** (`tests/posix/posix_suite.py`, 144 tests, @test-extensible): run vs
   an XFS baseline (node9901:/data1/efs); `compare.py` → efs bug = PASS on XFS,
-  FAIL on efs. Baseline is 69/69 on XFS.
+  FAIL on efs. efs is 144/144 (fcstor007, Aug 20).
 - **Perf** (`tests/perf/perf_node.sh`): dd + 9-job fio, single|multi client
   (parallel), aggregated to `results/perf/history.tsv`. Harness logs stay
   LOCAL (don't depend on the efs read-after-write path being benchmarked).
 - Multi-client baseline: write ceiling SHARED (~4.9 GB/s aggregate sw-1m
   across 9 ≈ single-client), read scales (~25 GB/s aggregate sr-1m).
 
-## POSIX gaps vs XFS (suite, Aug 20) — ALL FIXED, 69/69 (7e442fa)
+## POSIX gaps vs XFS (suite, Aug 20) — ALL FIXED, 144/144
 FIXED (7fa99e8): packed-file overwrite/append + rename/link data loss (see
 "Root causes" below). All data-path tests pass (basic_append, basic_oappend,
 basic_overwrite_middle, basic_terminal_cp_cat, basic_dd_rw, dir_rename_*,

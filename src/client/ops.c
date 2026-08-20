@@ -178,7 +178,12 @@ efs_ino_t efs_client_create(efs_ino_t parent, const char *name, uint32_t mode,
     }
     efs_client_lock_dir(parent);
     pthread_mutex_lock(&g_client.idx_mu);
-    efs_export_upsert_inode(&g_client.export, &out);
+    /* create_with_ino applies the same side effects as the primary
+     * (parent nlink++ for a subdirectory, indexes, rollups). Upsert
+     * alone would leave the local parent nlink stale. */
+    if (efs_export_create_with_ino(&g_client.export, out.ino, parent, mode,
+                                   uid, gid, name) == 0)
+        efs_export_upsert_inode(&g_client.export, &out);
     efs_export_set_mtime(&g_client.export, parent, now());
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);
@@ -211,7 +216,15 @@ static int setattr_rpc_dual_apply(efs_ino_t ino, uint32_t mask, uint32_t mode,
         if (efs_export_get_inode(&g_client.export, ino, &cur) == 0)
             out.size = cur.size;
     }
-    efs_export_upsert_inode(&g_client.export, &out);
+    /* Apply mode/owner locally so hard-link rows share the new attrs
+     * (upsert of the primary's indexed row alone left the other name
+     * with a stale mode when the returned nlink was 1). */
+    if (mask & EFS_SETATTR_MODE)
+        efs_export_set_mode(&g_client.export, ino, mode);
+    if (mask & (EFS_SETATTR_UID | EFS_SETATTR_GID))
+        efs_export_set_owner(&g_client.export, ino, uid, gid);
+    if (!(mask & (EFS_SETATTR_MODE | EFS_SETATTR_UID | EFS_SETATTR_GID)))
+        efs_export_upsert_inode(&g_client.export, &out);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
     return EFS_OK;

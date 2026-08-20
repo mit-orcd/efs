@@ -3299,6 +3299,16 @@ static struct dcache_ent *dcache_find(uint32_t s, efs_ino_t ino, uint32_t ci)
     return NULL;
 }
 
+int efs_dcache_has(efs_ino_t ino, uint32_t ci)
+{
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    pthread_mutex_lock(mu);
+    int has = dcache_find(s, ino, ci) != NULL;
+    pthread_mutex_unlock(mu);
+    return has;
+}
+
 int efs_dcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
 {
     return efs_dcache_copy(ino, ci, 0, dst, len);

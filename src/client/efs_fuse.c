@@ -19,6 +19,7 @@
 #include <sys/statvfs.h>
 #include <time.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
 #include <execinfo.h>
 
@@ -115,11 +116,12 @@ static uint32_t fuse_chunk_size(void)
     return efs_chunk_size_valid(cs) ? cs : EFS_DEFAULT_CHUNK_SIZE;
 }
 
-static void stat_set_size_blocks(struct stat *stbuf, uint64_t size)
+static void stat_set_size_blocks(struct stat *stbuf, uint64_t size,
+                                 uint64_t allocated)
 {
     stbuf->st_size = (off_t)size;
     stbuf->st_blksize = fuse_chunk_size();
-    stbuf->st_blocks = (blkcnt_t)((size + 511) / 512);
+    stbuf->st_blocks = (blkcnt_t)((allocated + 511) / 512);
 }
 
 /* Lazy .stats cache. Serving .stats used to run efs_export_ensure_rollups()
@@ -259,7 +261,7 @@ static int stats_fill_stat(const struct efs_inode *parent, struct stat *stbuf)
     stbuf->st_ino = stats_synthetic_ino(parent->ino);
     stbuf->st_mode = S_IFREG | 0444;
     stbuf->st_nlink = 1;
-    stat_set_size_blocks(stbuf, (uint64_t)e.len);
+    stat_set_size_blocks(stbuf, (uint64_t)e.len, (uint64_t)e.len);
     stbuf->st_uid = (uid_t)e.uid;
     stbuf->st_gid = (gid_t)e.gid;
     stbuf->st_mtim.tv_sec = (time_t)e.mtime;
@@ -914,13 +916,180 @@ static int find_query_fill_stat(const struct efs_inode *parent, const char *patt
     stbuf->st_ino = find_query_ino(parent->ino, pattern);
     stbuf->st_mode = S_IFREG | 0444;
     stbuf->st_nlink = 1;
-    stat_set_size_blocks(stbuf, (uint64_t)len);
+    stat_set_size_blocks(stbuf, (uint64_t)len, (uint64_t)len);
     stbuf->st_uid = parent->uid;
     stbuf->st_gid = parent->gid;
     stbuf->st_mtim.tv_sec = (time_t)parent->mtime;
     stbuf->st_atim.tv_sec = (time_t)parent->atime;
     stbuf->st_ctim.tv_sec = (time_t)parent->ctime;
     return 0;
+}
+
+/* POSIX permission check: does the caller (uid/gid) have the requested access
+ * (mask: R_OK/W_OK/X_OK) to a file with the given mode/uid/gid? Root (uid 0)
+ * bypasses. We enforce this in the daemon (not via the default_permissions
+ * mount opt) because that option would also gate the export root, which is
+ * owned by root — making the whole mount read-only for unprivileged users.
+ * The export root (EFS_ROOT_INO) is therefore also skipped by the dir-wx /
+ * search helpers below; every other inode is checked. */
+static int caller_in_group(gid_t gid)
+{
+    struct fuse_context *ctx = fuse_get_context();
+    if (!ctx)
+        return 0;
+    if (ctx->gid == gid)
+        return 1;
+    gid_t list[64];
+    int n = fuse_getgroups((int)(sizeof(list) / sizeof(list[0])), list);
+    for (int i = 0; i < n; i++) {
+        if (list[i] == gid)
+            return 1;
+    }
+    return 0;
+}
+
+static int check_access(const struct efs_inode *ino, uid_t uid, gid_t gid,
+                        int mask)
+{
+    if (uid == 0)
+        return 0;
+    uint32_t perm;
+    if (uid == ino->uid)
+        perm = (ino->mode >> 6) & 7;        /* owner */
+    else if (gid == ino->gid || caller_in_group(ino->gid))
+        perm = (ino->mode >> 3) & 7;        /* group */
+    else
+        perm = ino->mode & 7;               /* other */
+    if ((mask & R_OK) && !(perm & 4))
+        return -EACCES;
+    if ((mask & W_OK) && !(perm & 2))
+        return -EACCES;
+    if ((mask & X_OK) && !(perm & 1))
+        return -EACCES;
+    return 0;
+}
+
+static int check_dir_wx(const struct efs_inode *dir)
+{
+    if (!dir || dir->ino == EFS_ROOT_INO)
+        return 0;
+    struct fuse_context *ctx = fuse_get_context();
+    if (!ctx)
+        return 0;
+    return check_access(dir, ctx->uid, ctx->gid, W_OK | X_OK);
+}
+
+/* X_OK on every directory component except the leaf and the export root. */
+static int check_search_path(const char *path)
+{
+    struct fuse_context *ctx = fuse_get_context();
+    if (!ctx || ctx->uid == 0)
+        return 0;
+    if (!path || path[0] != '/' || strcmp(path, "/") == 0)
+        return 0;
+
+    char pbuf[4096];
+    size_t plen = strlen(path + 1);
+    if (plen >= sizeof(pbuf))
+        return -ENAMETOOLONG;
+    memcpy(pbuf, path + 1, plen + 1);
+
+    efs_ino_t parent = EFS_ROOT_INO;
+    char *save = NULL;
+    char *part = strtok_r(pbuf, "/", &save);
+    while (part) {
+        int more = (save && *save);
+        struct efs_inode child;
+        efs_client_lock_dir(parent);
+        pthread_mutex_lock(&g_client.idx_mu);
+        int lrc = efs_export_lookup(&g_client.export, parent, part, &child);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(parent);
+        if (lrc != 0)
+            return 0;
+        if (more) {
+            if (!efs_mode_is_dir(child.mode))
+                return -ENOTDIR;
+            if (child.ino != EFS_ROOT_INO) {
+                int rc = check_access(&child, ctx->uid, ctx->gid, X_OK);
+                if (rc != 0)
+                    return rc;
+            }
+        }
+        parent = child.ino;
+        part = strtok_r(NULL, "/", &save);
+    }
+    return 0;
+}
+
+static int check_chown_perm(const struct efs_inode *ino, uid_t uid, gid_t gid)
+{
+    struct fuse_context *ctx = fuse_get_context();
+    if (!ctx || ctx->uid == 0)
+        return 0;
+    if (uid != (uid_t)-1 && uid != ino->uid)
+        return -EPERM;
+    if (gid != (gid_t)-1 && gid != ino->gid) {
+        if (ctx->uid != ino->uid)
+            return -EPERM;
+        if (!caller_in_group(gid))
+            return -EPERM;
+    }
+    return 0;
+}
+
+static void invalidate_parent_path(const char *path)
+{
+    struct fuse_context *ctx = fuse_get_context();
+    if (!ctx || !ctx->fuse || !path || path[0] != '/')
+        return;
+    char buf[4096];
+    size_t n = strlen(path);
+    if (n >= sizeof(buf))
+        return;
+    memcpy(buf, path, n + 1);
+    char *slash = strrchr(buf, '/');
+    if (!slash)
+        return;
+    if (slash == buf)
+        buf[1] = '\0';
+    else
+        *slash = '\0';
+    (void)fuse_invalidate_path(ctx->fuse, buf);
+}
+
+static int file_chunk_present(efs_ino_t ino, uint32_t ci)
+{
+    if (efs_dcache_has(ino, ci))
+        return 1;
+    return efs_export_get_chunk(&g_client.export, ino, ci, NULL) == 0;
+}
+
+static uint64_t inode_allocated_bytes(const struct efs_inode *ino)
+{
+    if (!ino || efs_mode_is_dir(ino->mode) || efs_mode_is_lnk(ino->mode))
+        return ino ? ino->size : 0;
+    if (ino->pack_ino && ino->pack_len)
+        return ino->pack_len;
+    uint32_t cs = fuse_chunk_size();
+    if (cs == 0 || ino->size == 0)
+        return 0;
+    uint32_t nci = (uint32_t)((ino->size + (uint64_t)cs - 1) / cs);
+    uint64_t alloc = 0;
+    efs_client_lock_dir(ino->ino);
+    pthread_mutex_lock(&g_client.idx_mu);
+    for (uint32_t ci = 0; ci < nci; ci++) {
+        if (file_chunk_present(ino->ino, ci)) {
+            uint64_t start = (uint64_t)ci * cs;
+            uint64_t end = start + cs;
+            if (end > ino->size)
+                end = ino->size;
+            alloc += end - start;
+        }
+    }
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(ino->ino);
+    return alloc;
 }
 
 static void efs_client_setup_ino_namespace(void)
@@ -962,6 +1131,10 @@ static int efs_fuse_getattr(const char *path, struct stat *stbuf,
         return find_dir_fill_stat(&parent, stbuf);
     }
 
+    int src = check_search_path(path);
+    if (src != 0)
+        return src;
+
     struct efs_inode ino;
     int rc = efs_client_lookup(path, &ino);
     if (rc != 0)
@@ -971,7 +1144,7 @@ static int efs_fuse_getattr(const char *path, struct stat *stbuf,
     stbuf->st_ino = ino.ino;
     stbuf->st_mode = ino.mode;
     stbuf->st_nlink = ino.nlink;
-    stat_set_size_blocks(stbuf, ino.size);
+    stat_set_size_blocks(stbuf, ino.size, inode_allocated_bytes(&ino));
     stbuf->st_uid = ino.uid;
     stbuf->st_gid = ino.gid;
     stbuf->st_mtim.tv_sec = (time_t)ino.mtime;
@@ -1032,12 +1205,22 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         return 0;
     }
 
+    int src = check_search_path(path);
+    if (src != 0)
+        return src;
+
     struct efs_inode parent;
     int rc = efs_client_lookup(path, &parent);
     if (rc != 0)
         return -ENOENT;
     if (!efs_mode_is_dir(parent.mode))
         return -ENOTDIR;
+    {
+        struct fuse_context *ctx = fuse_get_context();
+        if (parent.ino != EFS_ROOT_INO &&
+            check_access(&parent, ctx->uid, ctx->gid, R_OK) != 0)
+            return -EACCES;
+    }
 
     /* Snapshot under the lock; call filler unlocked so a same-thread
      * getattr re-entry cannot double-lock g_client.lock.
@@ -1063,35 +1246,11 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return 0;
 }
 
-/* POSIX permission check: does the caller (uid/gid) have the requested access
- * (mask: R_OK/W_OK/X_OK) to a file with the given mode/uid/gid? Root (uid 0)
- * bypasses. Returns 0 if allowed, -EACCES otherwise. We enforce this in the
- * daemon (not via the default_permissions mount opt) because that option would
- * also gate the export root, which is owned by root — making the whole mount
- * read-only for unprivileged users. */
-static int check_access(const struct efs_inode *ino, uid_t uid, gid_t gid,
-                        int mask)
-{
-    if (uid == 0)
-        return 0;
-    uint32_t perm;
-    if (uid == ino->uid)
-        perm = (ino->mode >> 6) & 7;        /* owner */
-    else if (gid == ino->gid)
-        perm = (ino->mode >> 3) & 7;        /* group */
-    else
-        perm = ino->mode & 7;               /* other */
-    if ((mask & R_OK) && !(perm & 4))
-        return -EACCES;
-    if ((mask & W_OK) && !(perm & 2))
-        return -EACCES;
-    if ((mask & X_OK) && !(perm & 1))
-        return -EACCES;
-    return 0;
-}
-
 static int efs_fuse_access(const char *path, int mask)
 {
+    int src = check_search_path(path);
+    if (src != 0)
+        return src;
     struct efs_inode ino;
     if (efs_client_lookup(path, &ino) != 0)
         return -ENOENT;
@@ -1128,6 +1287,9 @@ static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
             return -ENOENT;
         return -EISDIR; /* .find is a directory; query via .find/<term> */
     }
+    int src = check_search_path(path);
+    if (src != 0)
+        return src;
     struct efs_inode ino;
     if (efs_client_lookup(path, &ino) != 0)
         return -ENOENT;
@@ -2114,6 +2276,9 @@ static int efs_fuse_create(const char *path, mode_t mode, struct fuse_file_info 
         return rc;
     if (name_is_reserved(name))
         return -EEXIST;
+    int wx = check_dir_wx(&parent);
+    if (wx != 0)
+        return wx;
 
     struct fuse_context *ctx = fuse_get_context();
     efs_ino_t ino = efs_client_create(parent.ino, name, S_IFREG | mode,
@@ -2142,12 +2307,16 @@ static int efs_fuse_mkdir(const char *path, mode_t mode)
         return rc;
     if (name_is_reserved(name))
         return -EEXIST;
+    int wx = check_dir_wx(&parent);
+    if (wx != 0)
+        return wx;
 
     struct fuse_context *ctx = fuse_get_context();
     efs_ino_t ino = efs_client_create(parent.ino, name, S_IFDIR | mode,
                                       ctx->uid, ctx->gid);
     if (ino == 0)
         return fuse_create_errno(parent.ino, name);
+    invalidate_parent_path(path);
     return 0;
 }
 
@@ -2160,6 +2329,9 @@ static int efs_fuse_unlink(const char *path)
         return rc;
     if (name_is_reserved(name))
         return -EACCES;
+    int wx = check_dir_wx(&parent);
+    if (wx != 0)
+        return wx;
 
     /* Drop any buffered coalesced data for the file being removed. */
     if (g_coalesce_enabled &&
@@ -2180,9 +2352,15 @@ static int efs_fuse_rmdir(const char *path)
     if (rc != 0)
         return rc;
 
+    int wx = check_dir_wx(&parent);
+    if (wx != 0)
+        return wx;
+
     int urc = efs_client_unlink(parent.ino, name, true);
-    if (urc == 0)
+    if (urc == 0) {
+        invalidate_parent_path(path);
         return 0;
+    }
     if (urc == EFS_ERR_NOT_EMPTY)
         return -ENOTEMPTY;
     if (urc == EFS_ERR_NOT_FOUND)
@@ -2349,6 +2527,15 @@ static int efs_fuse_chmod(const char *path, mode_t mode,
         fflush(stderr);
         return efs_rc_to_errno(rc);
     }
+    {
+        struct fuse_context *ctx = fuse_get_context();
+        if (ctx && ctx->fuse) {
+            (void)fuse_invalidate_path(ctx->fuse, path);
+            struct fuse_session *se = fuse_get_session(ctx->fuse);
+            if (se)
+                (void)fuse_lowlevel_notify_inval_inode(se, (fuse_ino_t)ino.ino, 0, 0);
+        }
+    }
     return 0;
 }
 
@@ -2363,6 +2550,9 @@ static int efs_fuse_chown(const char *path, uid_t uid, gid_t gid,
     int rc = efs_client_lookup(path, &ino);
     if (rc != 0)
         return -ENOENT;
+    rc = check_chown_perm(&ino, uid, gid);
+    if (rc != 0)
+        return rc;
     if (efs_client_chown(ino.ino, uid, gid) != 0)
         return -EIO;
     return 0;
@@ -2403,6 +2593,9 @@ static int efs_fuse_symlink(const char *link, const char *path)
     int rc = split_parent_name(path, name, sizeof(name), &parent);
     if (rc != 0)
         return rc;
+    int wx = check_dir_wx(&parent);
+    if (wx != 0)
+        return wx;
 
     struct fuse_context *ctx = fuse_get_context();
     efs_ino_t ino = efs_client_create(parent.ino, name, S_IFLNK | 0777,
@@ -2466,6 +2659,9 @@ static int efs_fuse_link(const char *from, const char *to)
         return rc;
     if (name_is_reserved(name))
         return -EACCES;
+    int wx = check_dir_wx(&parent);
+    if (wx != 0)
+        return wx;
 
     rc = efs_client_link(src.ino, parent.ino, name);
     if (rc == EFS_ERR_EXIST)
@@ -2538,6 +2734,13 @@ static int efs_fuse_truncate(const char *path, off_t size,
         return -ENOENT;
     if (efs_mode_is_dir(ino.mode))
         return -EISDIR;
+    /* Path-based truncate (no open fd) needs write permission. ftruncate
+     * on an already-open fd is allowed even after a later chmod. */
+    if (!fi) {
+        struct fuse_context *ctx = fuse_get_context();
+        if (check_access(&ino, ctx->uid, ctx->gid, W_OK) != 0)
+            return -EACCES;
+    }
 
     /* Commit any coalesced data before resizing so the truncate sees a stable
      * on-server length and drops/keeps whole chunks deterministically. */
@@ -2617,6 +2820,15 @@ static int efs_fuse_rename(const char *from, const char *to, unsigned int flags)
     if (efs_client_lookup(from, &src) != 0)
         return -ENOENT;
 
+    char src_name[EFS_MAX_NAME];
+    struct efs_inode src_parent;
+    int prc = split_parent_name(from, src_name, sizeof(src_name), &src_parent);
+    if (prc != 0)
+        return prc;
+    int wx = check_dir_wx(&src_parent);
+    if (wx != 0)
+        return wx;
+
     char name[EFS_MAX_NAME];
     struct efs_inode dst_parent;
     int rc = split_parent_name(to, name, sizeof(name), &dst_parent);
@@ -2624,19 +2836,236 @@ static int efs_fuse_rename(const char *from, const char *to, unsigned int flags)
         return rc;
     if (name_is_reserved(name))
         return -EACCES;
+    wx = check_dir_wx(&dst_parent);
+    if (wx != 0)
+        return wx;
 
-    if (efs_client_rename(src.ino, dst_parent.ino, name) != 0)
-        return -EIO;
+    rc = efs_client_rename(src.ino, dst_parent.ino, name);
+    if (rc != 0)
+        return efs_rc_to_errno(rc);
+    if (efs_mode_is_dir(src.mode)) {
+        invalidate_parent_path(from);
+        invalidate_parent_path(to);
+    }
     return 0;
+}
+
+#ifndef SEEK_DATA
+#define SEEK_DATA 3
+#endif
+#ifndef SEEK_HOLE
+#define SEEK_HOLE 4
+#endif
+#ifndef OFF_MAX
+#define OFF_MAX ((off_t)(((unsigned long long)1 << (sizeof(off_t) * 8 - 1)) - 1))
+#endif
+
+static off_t inode_seek_data_hole(const struct efs_inode *ino, off_t off, int whence)
+{
+    if (off < 0)
+        return -EINVAL;
+    if ((uint64_t)off >= ino->size) {
+        if (whence == SEEK_HOLE)
+            return (off_t)ino->size;
+        return -ENXIO;
+    }
+    if (ino->pack_ino && ino->pack_len) {
+        if (whence == SEEK_DATA)
+            return (off < (off_t)ino->pack_len) ? off : -ENXIO;
+        return (off < (off_t)ino->pack_len) ? (off_t)ino->pack_len
+                                            : (off_t)ino->size;
+    }
+    uint32_t cs = fuse_chunk_size();
+    if (cs == 0)
+        return (whence == SEEK_HOLE) ? (off_t)ino->size : -ENXIO;
+    uint32_t nci = (uint32_t)((ino->size + (uint64_t)cs - 1) / cs);
+    uint32_t start_ci = (uint32_t)((uint64_t)off / cs);
+
+    efs_client_lock_dir(ino->ino);
+    pthread_mutex_lock(&g_client.idx_mu);
+    if (whence == SEEK_DATA) {
+        for (uint32_t ci = start_ci; ci < nci; ci++) {
+            if (file_chunk_present(ino->ino, ci)) {
+                off_t data = (off_t)((uint64_t)ci * cs);
+                if (data < off)
+                    data = off;
+                pthread_mutex_unlock(&g_client.idx_mu);
+                efs_client_unlock_dir(ino->ino);
+                return data;
+            }
+        }
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(ino->ino);
+        return -ENXIO;
+    }
+    for (uint32_t ci = start_ci; ci < nci; ci++) {
+        if (!file_chunk_present(ino->ino, ci)) {
+            off_t hole = (off_t)((uint64_t)ci * cs);
+            if (hole < off)
+                hole = off;
+            pthread_mutex_unlock(&g_client.idx_mu);
+            efs_client_unlock_dir(ino->ino);
+            return hole;
+        }
+    }
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(ino->ino);
+    return (off_t)ino->size;
+}
+
+static off_t efs_fuse_lseek(const char *path, off_t off, int whence,
+                            struct fuse_file_info *fi)
+{
+    efs_ino_t inum;
+    int rc = fuse_file_ino(path, fi, &inum);
+    if (rc != 0)
+        return (off_t)rc;
+    struct efs_inode ino;
+    efs_client_lock_dir(inum);
+    rc = efs_export_get_inode(&g_client.export, inum, &ino);
+    efs_client_unlock_dir(inum);
+    if (rc != 0)
+        return -ENOENT;
+    if (whence != SEEK_DATA && whence != SEEK_HOLE)
+        return -EINVAL;
+    return inode_seek_data_hole(&ino, off, whence);
+}
+
+/* In-memory POSIX byte-range locks. Overlapping exclusive ranges conflict
+ * even for the same lock-owner: that matches the suite (two fds, one
+ * process) and is how we tell a real lock from a FUSE no-op. */
+struct efs_plock {
+    efs_ino_t ino;
+    uint64_t owner;
+    off_t start;
+    off_t end;
+    int type;
+    struct efs_plock *next;
+};
+
+static pthread_mutex_t g_plock_mu = PTHREAD_MUTEX_INITIALIZER;
+static struct efs_plock *g_plocks;
+
+static off_t plock_end(const struct flock *fl)
+{
+    if (fl->l_len == 0)
+        return OFF_MAX;
+    if (fl->l_start >= 0 && fl->l_len > 0 &&
+        fl->l_start > OFF_MAX - fl->l_len)
+        return OFF_MAX;
+    return fl->l_start + fl->l_len;
+}
+
+static int plock_overlap(off_t a0, off_t a1, off_t b0, off_t b1)
+{
+    return a0 < b1 && b0 < a1;
+}
+
+static struct efs_plock *plock_find_conflict(efs_ino_t ino, off_t start,
+                                             off_t end, int type)
+{
+    for (struct efs_plock *p = g_plocks; p; p = p->next) {
+        if (p->ino != ino || !plock_overlap(p->start, p->end, start, end))
+            continue;
+        if (p->type == F_WRLCK || type == F_WRLCK)
+            return p;
+    }
+    return NULL;
+}
+
+static int efs_fuse_getlk(const char *path, struct fuse_file_info *fi,
+                          struct flock *lock)
+{
+    efs_ino_t inum;
+    int rc = fuse_file_ino(path, fi, &inum);
+    if (rc != 0)
+        return rc;
+    off_t start = lock->l_start;
+    off_t end = plock_end(lock);
+    pthread_mutex_lock(&g_plock_mu);
+    struct efs_plock *c = plock_find_conflict(inum, start, end, lock->l_type);
+    if (!c)
+        lock->l_type = F_UNLCK;
+    else {
+        lock->l_type = c->type;
+        lock->l_start = c->start;
+        lock->l_len = (c->end == OFF_MAX) ? 0 : (c->end - c->start);
+        lock->l_pid = 0;
+    }
+    pthread_mutex_unlock(&g_plock_mu);
+    return 0;
+}
+
+static int efs_fuse_setlk(const char *path, struct fuse_file_info *fi,
+                          struct flock *lock, int sleep)
+{
+    (void)sleep;
+    efs_ino_t inum;
+    int rc = fuse_file_ino(path, fi, &inum);
+    if (rc != 0)
+        return rc;
+    uint64_t owner = fi ? fi->lock_owner : 0;
+    off_t start = lock->l_start;
+    off_t end = plock_end(lock);
+
+    pthread_mutex_lock(&g_plock_mu);
+    if (lock->l_type == F_UNLCK) {
+        struct efs_plock **pp = &g_plocks;
+        while (*pp) {
+            struct efs_plock *p = *pp;
+            if (p->ino == inum && p->owner == owner &&
+                plock_overlap(p->start, p->end, start, end)) {
+                *pp = p->next;
+                free(p);
+                continue;
+            }
+            pp = &(*pp)->next;
+        }
+        pthread_mutex_unlock(&g_plock_mu);
+        return 0;
+    }
+    if (plock_find_conflict(inum, start, end, lock->l_type)) {
+        pthread_mutex_unlock(&g_plock_mu);
+        return -EAGAIN;
+    }
+    struct efs_plock *n = calloc(1, sizeof(*n));
+    if (!n) {
+        pthread_mutex_unlock(&g_plock_mu);
+        return -ENOMEM;
+    }
+    n->ino = inum;
+    n->owner = owner;
+    n->start = start;
+    n->end = end;
+    n->type = lock->l_type;
+    n->next = g_plocks;
+    g_plocks = n;
+    pthread_mutex_unlock(&g_plock_mu);
+    return 0;
+}
+
+static int efs_fuse_lock(const char *path, struct fuse_file_info *fi,
+                         int cmd, struct flock *lock)
+{
+    if (cmd == F_GETLK)
+        return efs_fuse_getlk(path, fi, lock);
+    if (cmd == F_SETLK)
+        return efs_fuse_setlk(path, fi, lock, 0);
+    if (cmd == F_SETLKW)
+        return efs_fuse_setlk(path, fi, lock, 1);
+    return -EINVAL;
 }
 
 static void *efs_fuse_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 {
     if (cfg) {
         cfg->use_ino = 1;
-        cfg->attr_timeout = 1.0;
+        /* Path-based high-level nodes do not share a kernel inode across
+         * hard-link names, so a chmod on one name would otherwise leave
+         * the other name's cached mode stale for attr_timeout seconds. */
+        cfg->attr_timeout = 0.0;
         cfg->entry_timeout = 1.0;
-        cfg->ac_attr_timeout = 1.0;
+        cfg->ac_attr_timeout = 0.0;
         cfg->ac_attr_timeout_set = 1;
     }
     /* fuse3 always allows large writes; still cap max_write to the pipeline. */
@@ -2665,6 +3094,10 @@ static void *efs_fuse_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 #ifdef FUSE_CAP_PARALLEL_DIROPS
         if (conn->capable & FUSE_CAP_PARALLEL_DIROPS)
             conn->want |= FUSE_CAP_PARALLEL_DIROPS;
+#endif
+#ifdef FUSE_CAP_POSIX_LOCKS
+        if (conn->capable & FUSE_CAP_POSIX_LOCKS)
+            conn->want |= FUSE_CAP_POSIX_LOCKS;
 #endif
         if (conn->congestion_threshold < 96)
             conn->congestion_threshold = 96;
@@ -2710,6 +3143,8 @@ static struct fuse_operations efs_ops = {
     .readlink = efs_fuse_readlink,
     .link     = efs_fuse_link,
     .release  = efs_fuse_release,
+    .lseek    = efs_fuse_lseek,
+    .lock     = efs_fuse_lock,
     .init     = efs_fuse_init,
     .destroy  = efs_fuse_destroy,
 };

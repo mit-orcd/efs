@@ -1386,6 +1386,7 @@ send_reply:
                 } else {
                     r.status = (rrc == EFS_ERR_NOT_FOUND) ? EFS_INODE_RPC_NOT_FOUND
                              : (rrc == EFS_ERR_EXIST) ? EFS_INODE_RPC_EXIST
+                             : (rrc == EFS_ERR_NOT_EMPTY) ? EFS_INODE_RPC_NOT_EMPTY
                              : EFS_INODE_RPC_INVAL;
                 }
             } else if (type == EFS_MSG_INODE_SETATTR) {
