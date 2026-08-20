@@ -13,6 +13,9 @@ Usage:
     posix_suite.py <mount-dir> [--results <file>] [--keep] [--filter <substr>]
 
 Exit code: 0 if every selected test passes, 1 otherwise.
+
+Not yet implemented: two efs-fuse clients on one export (needs a second
+mount from the harness). See the section comment above the runner.
 """
 import errno
 import fcntl
@@ -247,6 +250,52 @@ def fsync_reopen_visible(d):
     os.close(fd2)
 
 
+@test
+def basic_ftruncate_vs_truncate(d):
+    p = os.path.join(d, "f")
+    wr(p, b"A" * 8000)
+    fd = os.open(p, os.O_RDWR)
+    os.ftruncate(fd, 2000)
+    os.close(fd)
+    eq(os.path.getsize(p), 2000, "ftruncate size")
+    eq(rd(p), b"A" * 2000, "ftruncate content")
+    os.truncate(p, 500)
+    eq(os.path.getsize(p), 500, "path truncate size")
+
+
+@test
+def basic_seek_end_then_write(d):
+    p = os.path.join(d, "f")
+    wr(p, b"abc")
+    fd = os.open(p, os.O_RDWR)
+    os.lseek(fd, 0, os.SEEK_END)
+    os.write(fd, b"def")
+    os.close(fd)
+    eq(rd(p), b"abcdef", "SEEK_END write")
+
+
+@test
+def basic_seek_cur_past_eof_write(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    os.write(fd, b"XY")
+    os.lseek(fd, 8, os.SEEK_CUR)   # offset 10
+    os.write(fd, b"Z")
+    os.close(fd)
+    eq(os.path.getsize(p), 11, "implicit hole size")
+    eq(rd(p), b"XY" + b"\x00" * 8 + b"Z", "hole is zeros")
+
+
+@test
+def basic_rdwr_no_reopen(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    os.write(fd, b"ping")
+    os.lseek(fd, 0, os.SEEK_SET)
+    eq(os.read(fd, 4), b"ping", "read same fd after write")
+    os.close(fd)
+
+
 # ==========================================================================
 # Truncate + sparse files
 # ==========================================================================
@@ -466,6 +515,78 @@ def dir_dot_entries(d):
     eq(out, {".", ".."}, "ls -a shows only . and .. in empty dir")
 
 
+@test
+def dir_hidden_files(d):
+    wr(os.path.join(d, ".hidden"), b"secret")
+    wr(os.path.join(d, "visible"), b"ok")
+    wr(os.path.join(d, ".dot.mid"), b"x")
+    listed = set(os.listdir(d))
+    eq(listed, {".hidden", "visible", ".dot.mid"}, "listdir includes hidden")
+    r = sh("ls", cwd=d)
+    eq(set(r.stdout.decode().split()), {"visible"}, "ls hides dotfiles")
+    r = sh("ls -a", cwd=d)
+    eq(set(r.stdout.decode().split()), {".", "..", ".hidden", "visible", ".dot.mid"},
+       "ls -a shows hidden")
+    eq(rd(os.path.join(d, ".hidden")), b"secret", "hidden content")
+    os.unlink(os.path.join(d, ".hidden"))
+    assert not os.path.exists(os.path.join(d, ".hidden"))
+
+
+@test
+def dir_mkdir_umask(d):
+    old = os.umask(0o022)
+    try:
+        os.mkdir(os.path.join(d, "sub"), 0o777)
+        eq(statmod.S_IMODE(os.stat(os.path.join(d, "sub")).st_mode), 0o755,
+           "mkdir umask 022 -> 755")
+    finally:
+        os.umask(old)
+
+
+@test
+def dir_chmod_and_create_denied(d):
+    sub = os.path.join(d, "sub")
+    os.mkdir(sub)
+    os.chmod(sub, 0o500)
+    eq(statmod.S_IMODE(os.stat(sub).st_mode), 0o500, "dir chmod")
+    if os.geteuid() != 0:
+        expect_err(errno.EACCES, wr, os.path.join(sub, "f"), b"x")
+    os.chmod(sub, 0o755)
+
+
+@test
+def dir_nlink(d):
+    sub = os.path.join(d, "sub")
+    os.mkdir(sub)
+    n0 = os.stat(sub).st_nlink
+    os.mkdir(os.path.join(sub, "a"))
+    eq(os.stat(sub).st_nlink, n0 + 1, "mkdir child bumps dir nlink")
+    os.rmdir(os.path.join(sub, "a"))
+    eq(os.stat(sub).st_nlink, n0, "rmdir child restores nlink")
+
+
+@test
+def dir_readdir_while_unlink(d):
+    for i in range(40):
+        wr(os.path.join(d, "f%02d" % i), b"x")
+    fd = os.open(d, os.O_RDONLY)
+    try:
+        it = os.scandir(d)
+        seen = 0
+        for i, ent in enumerate(it):
+            seen += 1
+            if i == 5:
+                try:
+                    os.unlink(os.path.join(d, "f00"))
+                except OSError:
+                    pass
+        it.close()
+        if seen < 2:
+            raise Fail("scandir died after mutate, saw %d" % seen)
+    finally:
+        os.close(fd)
+
+
 # ==========================================================================
 # Links: symlinks + hardlinks
 # ==========================================================================
@@ -545,6 +666,45 @@ def hardlink_terminal_ln(d):
     eq(os.stat(os.path.join(d, "orig")).st_nlink, 2, "ln bumps nlink")
 
 
+@test
+def hardlink_rename_one_name(d):
+    wr(os.path.join(d, "orig"), b"shared")
+    os.link(os.path.join(d, "orig"), os.path.join(d, "hl"))
+    os.rename(os.path.join(d, "orig"), os.path.join(d, "moved"))
+    eq(rd(os.path.join(d, "hl")), b"shared", "other name after rename")
+    eq(os.stat(os.path.join(d, "hl")).st_ino,
+       os.stat(os.path.join(d, "moved")).st_ino, "same ino after rename")
+
+
+@test
+def symlink_unlink_keeps_target(d):
+    wr(os.path.join(d, "t"), b"keep")
+    os.symlink("t", os.path.join(d, "sl"))
+    os.unlink(os.path.join(d, "sl"))
+    eq(rd(os.path.join(d, "t")), b"keep", "unlink symlink leaves target")
+
+
+@test
+def symlink_relative_after_parent_rename(d):
+    os.makedirs(os.path.join(d, "a"))
+    wr(os.path.join(d, "t"), b"rel")
+    os.symlink("../t", os.path.join(d, "a/sl"))
+    eq(rd(os.path.join(d, "a/sl")), b"rel", "relative symlink before rename")
+    os.rename(os.path.join(d, "a"), os.path.join(d, "b"))
+    eq(os.readlink(os.path.join(d, "b/sl")), "../t", "link text unchanged")
+    eq(rd(os.path.join(d, "b/sl")), b"rel", "relative still resolves")
+
+
+@test
+def symlink_chmod_follows(d):
+    p = os.path.join(d, "t")
+    wr(p, b"x")
+    os.symlink("t", os.path.join(d, "sl"))
+    os.chmod(os.path.join(d, "sl"), 0o600)
+    eq(statmod.S_IMODE(os.stat(p).st_mode), 0o600, "chmod via symlink follows")
+    assert statmod.S_ISLNK(os.lstat(os.path.join(d, "sl")).st_mode)
+
+
 # ==========================================================================
 # Attributes: chmod/chown/utimens/stat/access
 # ==========================================================================
@@ -622,6 +782,20 @@ def attr_access(d):
         assert not os.access(p, os.W_OK), "not writable"
 
 
+@test
+def attr_ctime_after_chmod(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    c0 = os.stat(p).st_ctime_ns
+    time.sleep(0.05)
+    os.chmod(p, 0o600)
+    c1 = os.stat(p).st_ctime_ns
+    if c1 < c0:
+        raise Fail("ctime went backwards after chmod")
+    if c1 == c0:
+        raise Fail("ctime unchanged after chmod")
+
+
 # ==========================================================================
 # Crazy / adversarial file names
 # ==========================================================================
@@ -692,6 +866,82 @@ def names_too_long_component(d):
 def names_reserved_dots(d):
     expect_err(errno.EEXIST, os.mkdir, os.path.join(d, "."))
     expect_err(errno.EEXIST, os.mkdir, os.path.join(d, ".."))
+
+
+# Linux PATH_MAX is 4096 including the trailing NUL, so the longest
+# pathname string is 4095 bytes. efs uses the same bound (EFS_MAX_PATH).
+# Each component stays <= 255 (NAME_MAX).
+_PATH_MAX_STR = 4095
+_NAME_MAX = 255
+
+
+def _mkdir_deep(d, max_abs):
+    """Nest dirs under d until the abs path is as long as possible while
+    leaving room for '/x' and staying < max_abs. Returns the abs dir."""
+    cur = os.path.abspath(d)
+    while True:
+        room = max_abs - len(cur) - 1
+        n = min(_NAME_MAX, room - 2)
+        if n < 1:
+            break
+        nxt = os.path.join(cur, "a" * n)
+        os.mkdir(nxt)
+        cur = nxt
+        if n < _NAME_MAX:
+            break
+    return cur
+
+
+@test
+def names_near_path_max(d):
+    cur = _mkdir_deep(d, _PATH_MAX_STR)
+    room = _PATH_MAX_STR - len(cur) - 1
+    if room < 1 or room > _NAME_MAX:
+        raise Fail("deepen left name room %d (prefix %d)" % (room, len(cur)))
+    p = os.path.join(cur, "f" * room)
+    if not (4000 <= len(p) <= _PATH_MAX_STR):
+        raise Fail("constructed path %d bytes, want 4000..%d" %
+                   (len(p), _PATH_MAX_STR))
+    wr(p, b"near-path-max")
+    eq(rd(p), b"near-path-max", "read back")
+    eq(os.stat(p).st_size, 13, "size")
+    if ("f" * room) not in os.listdir(cur):
+        raise Fail("readdir missed long-path file")
+    os.unlink(p)
+    assert not os.path.exists(p)
+
+
+@test
+def names_near_path_max_dir(d):
+    cur = _mkdir_deep(d, _PATH_MAX_STR)
+    room = _PATH_MAX_STR - len(cur) - 1
+    if room < 1 or room > _NAME_MAX:
+        raise Fail("deepen left name room %d (prefix %d)" % (room, len(cur)))
+    p = os.path.join(cur, "d" * room)
+    if not (4000 <= len(p) <= _PATH_MAX_STR):
+        raise Fail("constructed path %d bytes, want 4000..%d" %
+                   (len(p), _PATH_MAX_STR))
+    os.mkdir(p)
+    assert os.path.isdir(p)
+    os.rmdir(p)
+    assert not os.path.exists(p)
+
+
+@test
+def names_path_too_long(d):
+    cur = _mkdir_deep(d, _PATH_MAX_STR)
+    room = (_PATH_MAX_STR + 1) - len(cur) - 1
+    if room < 1:
+        room = 1
+    if room > _NAME_MAX:
+        raise Fail("cannot push past PATH_MAX with one component (prefix %d)"
+                   % len(cur))
+    p = os.path.join(cur, "b" * room)
+    if len(p) < _PATH_MAX_STR + 1:
+        raise Fail("constructed path %d, want >= %d" %
+                   (len(p), _PATH_MAX_STR + 1))
+    expect_err(errno.ENAMETOOLONG, wr, p, b"x")
+    expect_err(errno.ENAMETOOLONG, os.mkdir, p)
 
 
 # ==========================================================================
@@ -801,6 +1051,21 @@ def err_stat_nonexistent(d):
     expect_err(errno.ENOENT, os.stat, os.path.join(d, "ghost"))
 
 
+@test
+def err_unlink_a_directory(d):
+    os.mkdir(os.path.join(d, "sub"))
+    expect_err((errno.EISDIR, errno.EPERM), os.unlink, os.path.join(d, "sub"))
+
+
+@test
+def err_rmdir_dot_dotdot(d):
+    os.mkdir(os.path.join(d, "sub"))
+    expect_err((errno.EINVAL, errno.ENOTEMPTY, errno.EBUSY),
+               os.rmdir, os.path.join(d, "sub", "."))
+    expect_err((errno.ENOTEMPTY, errno.EINVAL, errno.EBUSY),
+               os.rmdir, os.path.join(d, "sub", ".."))
+
+
 # ==========================================================================
 # fsync / fdatasync / durability surface
 # ==========================================================================
@@ -873,6 +1138,87 @@ def fcntl_lock_basic(d):
     os.close(fd)
 
 
+@test
+def flock_shared_then_exclusive(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    fd1 = os.open(p, os.O_RDWR)
+    fd2 = os.open(p, os.O_RDWR)
+    try:
+        fcntl.flock(fd1, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        fcntl.flock(fd2, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        try:
+            fcntl.flock(fd2, fcntl.LOCK_UN)
+            fcntl.flock(fd2, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as e:
+            if e.errno in (errno.EAGAIN, errno.EACCES):
+                return
+            raise Fail("upgrade to LOCK_EX: %s" % e)
+        raise Fail("LOCK_EX taken while another fd holds LOCK_SH")
+    finally:
+        try:
+            fcntl.flock(fd1, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        os.close(fd1)
+        os.close(fd2)
+
+
+@test
+def flock_two_proc_exclusive(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    snippet = (
+        "import fcntl,os,sys,time\n"
+        "fd=os.open(sys.argv[1], os.O_RDWR)\n"
+        "fcntl.flock(fd, fcntl.LOCK_EX)\n"
+        "time.sleep(1.2)\n"
+        "fcntl.flock(fd, fcntl.LOCK_UN)\n"
+        "os.close(fd)\n"
+    )
+    child = subprocess.Popen([sys.executable, "-c", snippet, p])
+    time.sleep(0.2)
+    fd = os.open(p, os.O_RDWR)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            held = True
+        except OSError as e:
+            if e.errno not in (errno.EAGAIN, errno.EACCES):
+                raise Fail("parent lock errno %s" % e)
+            held = False
+        if held:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            raise Fail("parent got LOCK_EX|NB while child held LOCK_EX")
+    finally:
+        os.close(fd)
+        child.wait()
+
+
+@test
+def fcntl_byte_range_lock(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x" * 100)
+    fd1 = os.open(p, os.O_RDWR)
+    fd2 = os.open(p, os.O_RDWR)
+    try:
+        fcntl.lockf(fd1, fcntl.LOCK_EX | fcntl.LOCK_NB, 50, 0)
+        try:
+            fcntl.lockf(fd2, fcntl.LOCK_EX | fcntl.LOCK_NB, 20, 10)
+        except OSError as e:
+            if e.errno in (errno.EAGAIN, errno.EACCES):
+                return
+            raise Fail("overlapping lockf: %s" % e)
+        raise Fail("overlapping lockf both succeeded (range locks look like no-ops)")
+    finally:
+        try:
+            fcntl.lockf(fd1, fcntl.LOCK_UN, 50, 0)
+        except OSError:
+            pass
+        os.close(fd1)
+        os.close(fd2)
+
+
 # ==========================================================================
 # mmap (may be unsupported by the FUSE client — report, don't hard-fail)
 # ==========================================================================
@@ -892,6 +1238,23 @@ def mmap_write_read(d):
     m.close()
     os.close(fd)
     eq(rd(p)[:5], b"mmap!", "mmap write visible")
+
+
+@test
+def mmap_private_not_visible(d):
+    import mmap as mmapmod
+    p = os.path.join(d, "f")
+    wr(p, b"\x00" * 4096)
+    fd = os.open(p, os.O_RDWR)
+    try:
+        m = mmapmod.mmap(fd, 4096, access=mmapmod.ACCESS_COPY)
+    except OSError as e:
+        os.close(fd)
+        raise Fail("mmap private unsupported: %s" % e, soft=True)
+    m[0:3] = b"xyz"
+    m.close()
+    os.close(fd)
+    eq(rd(p)[:3], b"\x00\x00\x00", "MAP_PRIVATE must not dirty the file")
 
 
 # ==========================================================================
@@ -1003,6 +1366,59 @@ def concurrent_writes_disjoint(d):
     eq(data[4096:8192], b"B" * 4096, "high range")
 
 
+@test
+def concurrent_create_unlink_two_proc(d):
+    snippet = (
+        "import os,sys,time\n"
+        "d=sys.argv[1]; tag=sys.argv[2]\n"
+        "for i in range(30):\n"
+        "    p=os.path.join(d,'c%s-%d'%(tag,i))\n"
+        "    fd=os.open(p, os.O_CREAT|os.O_WRONLY, 0o644)\n"
+        "    os.write(fd,b'x'); os.close(fd)\n"
+        "    os.unlink(p)\n"
+    )
+    procs = [
+        subprocess.Popen([sys.executable, "-c", snippet, d, str(i)])
+        for i in range(3)
+    ]
+    for pr in procs:
+        if pr.wait() != 0:
+            raise Fail("create/unlink child rc=%d" % pr.returncode)
+    leftover = [n for n in os.listdir(d) if n.startswith("c")]
+    eq(leftover, [], "no leftover create/unlink names")
+
+
+@test
+def concurrent_write_and_readdir(d):
+    import threading
+    wr(os.path.join(d, "seed"), b"x")
+    errors = []
+
+    def writer():
+        try:
+            for i in range(40):
+                wr(os.path.join(d, "w%02d" % i), b"x")
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    def reader():
+        try:
+            for _ in range(40):
+                os.listdir(d)
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    tw = threading.Thread(target=writer)
+    tr = threading.Thread(target=reader)
+    tw.start()
+    tr.start()
+    tw.join()
+    tr.join()
+    if errors:
+        raise Fail("write+readdir: %s" % errors[0])
+    eq(len([n for n in os.listdir(d) if n.startswith("w")]), 40, "all writes listed")
+
+
 # ==========================================================================
 # Virtual .stats / .find (efs FUSE extras; skip if feature off)
 # ==========================================================================
@@ -1081,6 +1497,63 @@ def opt_xattr(d):
 
 
 @test
+def opt_seek_hole_data(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    os.pwrite(fd, b"END", 1 << 20)
+    try:
+        hole = os.lseek(fd, 0, os.SEEK_HOLE)
+        data = os.lseek(fd, 0, os.SEEK_DATA)
+    except (OSError, AttributeError) as e:
+        os.close(fd)
+        if isinstance(e, AttributeError) or getattr(e, "errno", None) in (
+                errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP):
+            raise Fail("SEEK_HOLE/DATA unsupported: %s" % e, soft=True)
+        raise Fail("SEEK_HOLE/DATA: %s" % e)
+    os.close(fd)
+    if hole != 0:
+        raise Fail("SEEK_HOLE from 0 got %d, want 0 (leading hole)" % hole)
+    if data < (1 << 20):
+        raise Fail("SEEK_DATA from 0 got %d, want >= 1MiB" % data)
+
+
+@test
+def opt_copy_file_range(d):
+    src = os.path.join(d, "src")
+    dst = os.path.join(d, "dst")
+    wr(src, b"ABCDEFGH")
+    fd_s = os.open(src, os.O_RDONLY)
+    fd_d = os.open(dst, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        n = os.copy_file_range(fd_s, fd_d, 8)
+    except OSError as e:
+        os.close(fd_s)
+        os.close(fd_d)
+        if e.errno in (errno.EOPNOTSUPP, errno.ENOTSUP, errno.EXDEV, errno.EINVAL):
+            return
+        raise Fail("copy_file_range: %s" % e)
+    os.close(fd_s)
+    os.close(fd_d)
+    if n != 8 or rd(dst) != b"ABCDEFGH":
+        raise Fail("copy_file_range n=%s dst=%r" % (n, rd(dst)))
+
+
+@test
+def opt_openat(d):
+    os.mkdir(os.path.join(d, "sub"))
+    wr(os.path.join(d, "sub", "f"), b"at")
+    dirfd = os.open(os.path.join(d, "sub"), os.O_RDONLY)
+    try:
+        fd = os.open("f", os.O_RDONLY, dir_fd=dirfd)
+        eq(os.read(fd, 2), b"at", "openat")
+        os.close(fd)
+        os.unlink("f", dir_fd=dirfd)
+    finally:
+        os.close(dirfd)
+    assert not os.path.exists(os.path.join(d, "sub", "f"))
+
+
+@test
 def flock_second_fd_exclusive(d):
     p = os.path.join(d, "f")
     wr(p, b"x")
@@ -1102,6 +1575,18 @@ def flock_second_fd_exclusive(d):
         os.close(fd2)
 
 
+# ==========================================================================
+# Two FUSE clients on one export — to be implemented
+# ==========================================================================
+# Single-mount runner cannot cover this. The Slurm / compare harness needs
+# to start a second efs-fuse of the same export and pass both mount dirs.
+# Then add tests for:
+#   - create/write on A, read/stat/unlink visible on B
+#   - rename on A visible on B (and the reverse)
+#   - same-name create from both (EEXIST / last-writer)
+#   - flock / fcntl lock exclusivity across the two clients
+#   - one client unlinks while the other has the file open
+#
 # ==========================================================================
 # Runner
 # ==========================================================================
