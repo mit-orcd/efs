@@ -1497,17 +1497,22 @@ static void *chunk_get_worker(void *arg)
     struct chunk_get_job *job = arg;
     uint32_t chunk_size = data_chunk_size();
     if (efs_rdcache_get(job->ino, job->ci, job->chunk, chunk_size) == 0) {
+        efs_dcache_overlay(job->ino, job->ci, job->chunk, chunk_size);
         job->rc = EFS_OK;
         return NULL;
     }
     if (!job->have_ce) {
         memset(job->chunk, 0, chunk_size);
+        efs_dcache_overlay(job->ino, job->ci, job->chunk, chunk_size);
         job->rc = EFS_OK;
         return NULL;
     }
     job->rc = efs_client_decode_placed_chunk(job->ino, job->ci, job->chunk);
-    if (job->rc == EFS_OK && job->cacheable)
-        efs_rdcache_put(job->ino, job->ci, job->chunk, chunk_size);
+    if (job->rc == EFS_OK) {
+        efs_dcache_overlay(job->ino, job->ci, job->chunk, chunk_size);
+        if (job->cacheable)
+            efs_rdcache_put(job->ino, job->ci, job->chunk, chunk_size);
+    }
     return NULL;
 }
 

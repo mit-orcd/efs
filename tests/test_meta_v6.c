@@ -246,6 +246,173 @@ int main(void)
         fprintf(stderr, "FAIL shard table ino\n");
         failures++;
     }
+    {
+        efs_node_id_t live[4] = {2, 4, 1, 3};
+        if (efs_shard_owner_of(0, 1, live, 4) != 1 ||
+            efs_shard_owner_of(0, 0, live, 4) != 1 ||
+            efs_shard_owner_of(5, 8, live, 4) != live[5 % 4] ||
+            efs_shard_owner_of(0, 8, NULL, 0) != 0) {
+            fprintf(stderr, "FAIL shard_owner_of\n");
+            failures++;
+        }
+    }
+    {
+        struct efs_export sh;
+        efs_export_init(&sh, 1, "shard-alloc");
+        sh.root.shard_bits = 8;
+        sh.root.shard_count = 256;
+        sh.next_ino = 2;
+        efs_ino_t a = efs_export_alloc_ino(&sh, EFS_ROOT_INO);
+        efs_ino_t b = efs_export_alloc_ino(&sh, EFS_ROOT_INO);
+        if (a != 2 || b != 3 ||
+            efs_export_shard_of(a, 8) != 0 ||
+            efs_export_shard_of(b, 8) != 0) {
+            fprintf(stderr, "FAIL alloc_ino shard0: a=%llu b=%llu\n",
+                    (unsigned long long)a, (unsigned long long)b);
+            failures++;
+        }
+        /* Parent in shard 1 (ino 256): allocate in 256..511. */
+        efs_ino_t c = efs_export_alloc_ino(&sh, 256);
+        if (c != 256 || efs_export_shard_of(c, 8) != 1) {
+            fprintf(stderr, "FAIL alloc_ino shard1: c=%llu\n",
+                    (unsigned long long)c);
+            failures++;
+        }
+        efs_export_free(&sh);
+    }
+    {
+        struct efs_export sh;
+        efs_export_init(&sh, 2, "two-shard");
+        sh.root.shard_bits = 8;
+        sh.root.shard_count = 256;
+        struct efs_export *t0 = efs_export_table_for_ino(&sh, EFS_ROOT_INO);
+        struct efs_export *t1 = efs_export_table(&sh, 1);
+        if (t0 != &sh || !t1 || t1 == &sh) {
+            fprintf(stderr, "FAIL table_for_ino split\n");
+            failures++;
+        } else {
+            efs_ino_t child = efs_export_create(t1, 256, S_IFREG | 0644,
+                                                0, 0, "in-shard-1");
+            struct efs_inode got;
+            if (!child || efs_export_shard_of(child, 8) != 1 ||
+                efs_export_lookup(t1, 256, "in-shard-1", &got) != 0 ||
+                efs_export_lookup(&sh, 256, "in-shard-1", &got) != 0 ||
+                efs_export_table_for_ino(&sh, child) != t1) {
+                fprintf(stderr, "FAIL two-shard create/lookup child=%llu\n",
+                        (unsigned long long)child);
+                failures++;
+            }
+            if (!efs_ino_is_meta_table(efs_meta_shard_table_ino(0)) ||
+                !efs_ino_is_meta_table(efs_meta_shard_table_ino(3)) ||
+                efs_ino_is_meta_table(EFS_ROOT_INO)) {
+                fprintf(stderr, "FAIL efs_ino_is_meta_table\n");
+                failures++;
+            }
+        }
+        efs_export_free(&sh);
+    }
+    {
+        struct efs_export sh;
+        efs_export_init(&sh, 3, "v8-root");
+        char *blob = NULL;
+        size_t blen = 0;
+        uint32_t ino_len = 0, ch_len = 0;
+        if (efs_export_serialize_ex(&sh, &blob, &blen, &ino_len, &ch_len) != 0) {
+            fprintf(stderr, "FAIL v8 serialize table\n");
+            failures++;
+        } else {
+            struct efs_export_root r;
+            memset(&r, 0, sizeof(r));
+            if (efs_export_root_prepare(&r, &sh, 7, ino_len, ch_len) != 0) {
+                fprintf(stderr, "FAIL v8 prepare\n");
+                failures++;
+            } else {
+                char *rbuf = NULL;
+                size_t rlen = 0;
+                struct efs_export_root back;
+                memset(&back, 0, sizeof(back));
+                if (r.version != EFS_META_ROOT_VERSION_V8 ||
+                    efs_export_root_serialize(&r, &rbuf, &rlen) != 0 ||
+                    efs_export_root_deserialize(&back, rbuf, rlen) != 0 ||
+                    back.version != EFS_META_ROOT_VERSION_V8 ||
+                    back.generation != 7 ||
+                    back.extra_shard_count != 0) {
+                    fprintf(stderr, "FAIL v8 roundtrip ver=%u extra=%u gen=%llu\n",
+                            back.version, back.extra_shard_count,
+                            (unsigned long long)back.generation);
+                    failures++;
+                }
+                efs_export_root_free(&back);
+                free(rbuf);
+            }
+            efs_export_root_free(&r);
+        }
+        free(blob);
+        efs_export_free(&sh);
+    }
+    {
+        struct efs_export sh;
+        efs_export_init(&sh, 4, "spread");
+        sh.root.shard_bits = 3;
+        sh.root.shard_count = 8;
+        sh.create_stride = 1;
+        efs_ino_t a = efs_export_create(&sh, EFS_ROOT_INO, S_IFREG | 0644,
+                                        0, 0, "a");
+        efs_ino_t b = efs_export_create(&sh, EFS_ROOT_INO, S_IFREG | 0644,
+                                        0, 0, "b");
+        efs_ino_t d = efs_export_create(&sh, EFS_ROOT_INO, S_IFDIR | 0755,
+                                        0, 0, "d");
+        struct efs_inode ga, gb, gd;
+        if (!a || !b || !d ||
+            efs_export_lookup(&sh, EFS_ROOT_INO, "a", &ga) != 0 ||
+            efs_export_lookup(&sh, EFS_ROOT_INO, "b", &gb) != 0 ||
+            efs_export_lookup(&sh, EFS_ROOT_INO, "d", &gd) != 0 ||
+            efs_export_shard_of(d, 3) != 0 ||
+            ga.ino != a || gb.ino != b) {
+            fprintf(stderr, "FAIL spread create/lookup a=%llu b=%llu d=%llu\n",
+                    (unsigned long long)a, (unsigned long long)b,
+                    (unsigned long long)d);
+            failures++;
+        } else if (efs_export_shard_of(a, 3) == efs_export_shard_of(b, 3) &&
+                   a != b) {
+            /* stride=1 should place consecutive files on different shards */
+            fprintf(stderr, "FAIL spread same-shard a=%llu b=%llu\n",
+                    (unsigned long long)a, (unsigned long long)b);
+            failures++;
+        }
+        if (efs_export_unlink_name(&sh, EFS_ROOT_INO, "a") != 0 ||
+            efs_export_lookup(&sh, EFS_ROOT_INO, "a", NULL) == 0) {
+            fprintf(stderr, "FAIL spread unlink\n");
+            failures++;
+        }
+        efs_export_free(&sh);
+    }
+    {
+        struct efs_export sh;
+        efs_export_init(&sh, 5, "rehash");
+        sh.next_ino = 20; /* so the file lands in shard 2 after bits=3 */
+        efs_ino_t f = efs_export_create(&sh, EFS_ROOT_INO, S_IFREG | 0644,
+                                        0, 0, "f");
+        if (!f || efs_export_rehash(&sh, 3) != 0 ||
+            sh.root.shard_bits != 3 || sh.root.shard_count != 8) {
+            fprintf(stderr, "FAIL rehash bits\n");
+            failures++;
+        } else {
+            struct efs_inode got;
+            if (efs_export_lookup(&sh, EFS_ROOT_INO, "f", &got) != 0 ||
+                got.ino != f) {
+                fprintf(stderr, "FAIL rehash lookup f=%llu\n",
+                        (unsigned long long)f);
+                failures++;
+            }
+            efs_export_evict_cold_shards(&sh, 1);
+            if (efs_export_load_shard(&sh, efs_export_shard_of(f, 3)) != 0) {
+                fprintf(stderr, "FAIL load_shard after evict\n");
+                failures++;
+            }
+        }
+        efs_export_free(&sh);
+    }
 
     efs_export_free(&ex);
     if (failures) {

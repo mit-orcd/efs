@@ -4,9 +4,11 @@
 
 This is the plan for raising the inode ceiling from the current ~14M to at
 least 2³² (4.29 billion) files/folders. It is a **multi-phase** effort. Phase 1
-(already shipped) makes the current model robust; Phases 2–4 change the
-metadata architecture. Nothing here is implemented yet beyond Phase 1 — this
-document exists to store the design.
+(shipped) makes the current model robust; Phase 2 (shipped: server-owned
+RPCs + RPC reads) is in place; Phase 3 (started — see
+[phase3-sharding.md](phase3-sharding.md)) splits the table. Phase 4 is density.
+**Skip Phase 2c** (full-table gen-check cache); cache as Phase 3 item 4
+(per-shard, on-demand, evict).
 
 ## Why the current model caps at ~14M
 
@@ -91,21 +93,16 @@ working set. **This is the phase that actually raises the cap.**
 
 **Work:**
 
-1. Implement per-shard paged metadata tables: each shard is an independent
-   blob with its own page range, checksums, and generation
-   (`efs_meta_shard_table_ino`).
-2. **Per-shard flush / election / resync** — the single writer becomes N
-   independent shard writers, so metadata concurrency scales with shard count.
-3. Shard ownership / routing: `shard = ino >> shard_bits`; route each op to the
-   owning server/shard.
-4. **On-demand shard loading + LRU eviction** on servers (and for any
-   client-side cache), so a node holds only hot shards — complete
-   `efs_client_load_shard` and add the server-side equivalent.
-5. **ino allocation across shards**: replace the single global `next_ino` with
-   per-shard ranges (or an allocator) so creates distribute across shards.
-6. **Online re-shard**: `efs-mgmt upgrade <shard-bits>` rehashes live inodes
-   into shards without downtime. Backward compat: v5/v6 single-blob loads as
-   `shard_count = 1`.
+1. Per-shard paged tables (`efs_meta_shard_table_ino`) — **done**.
+2. Per-shard flush + v8 extra roots; extra owners flush their pages and
+   PUT_META extras; primary flushes shard 0 — **done**.
+3. Owner routing (`rpc_owner_conn` + server `NOT_PRIMARY`) — **done**.
+   **Do not enable bits>0 on the live cluster until extra-shard restart
+   is proven.**
+4. On-demand load + LRU (`efs_export_table` / `evict_cold_shards` /
+   `efs_client_load_shard`) — **done**.
+5. Spread creates (parent dentry + child inode, stride=nlive) — **done**.
+6. Online re-shard (`efs_export_rehash` via `efs-mgmt upgrade`) — **done**.
 
 **Sizing example:** target ~1M inodes/shard. 2³² inodes / 2²⁰-per-shard ⇒
 `shard_bits = 20` gives up to 2^(32−20) = 4096 shards, each ~150 MB blob —

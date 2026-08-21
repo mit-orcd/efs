@@ -90,7 +90,7 @@ static int heal_from_peers(struct efsd_server *s, struct efs_export *ex,
                            const struct verify_job *job)
 {
     uint32_t frag_len = job->data_len;
-    uint32_t chunk_size = (job->ino == EFS_META_TABLE_INO)
+    uint32_t chunk_size = (efs_ino_is_meta_table(job->ino))
                               ? EFS_META_PAGE_SIZE
                               : (frag_len * 2u);
     if (chunk_size == 0)
@@ -330,7 +330,7 @@ static void *scrub_thread(void *arg)
                 uint64_t i = cursor;
                 for (; i < n && bn < SCRUB_BATCH; i++) {
                     const struct efs_chunk_entry *ce = &ex->chunks[i];
-                    if (ce->ino == EFS_META_TABLE_INO)
+                    if (efs_ino_is_meta_table(ce->ino))
                         continue;
                     uint32_t fi = EFS_NUM_FRAGMENTS;
                     for (uint32_t k = 0; k < EFS_NUM_FRAGMENTS; k++)

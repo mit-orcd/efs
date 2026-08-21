@@ -9,21 +9,24 @@ efs: distributed FS, 2+1 XOR EC, FUSE client, RDMA (RC QP), 128 KiB chunks.
 Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 
 ## Where we are
-Cluster live on **v7-CoW (EFSR v7 copy-on-write metadata)** + catchup-vs-GC
-fix + **Phase 2a (cffb138) + Phase 2b (d7d2c7c)**, healthy (4 up / 0 down).
+Cluster live on **EFSR v8** (v7 CoW + extra-shard roots in the cluster
+EFSR) + Phase 2a/2b + Phase 3 tables/flush/v8, healthy (4 up / 0 down).
 4 servers + 13 clients (see efs-fcstor-deploy rule). Export `efs-test`.
-CoW = **debe6dd**, catchup-vs-GC fix = **76753ef**, Phase 2 design doc =
-**d07ed05** (docs/phase2-server-owned-metadata.md).
-**Phase 2b DONE + validated (d7d2c7c): FUSE mutations route through RPC to the
-metadata primary, dual-applied to the local snapshot; data path reports chunk
-mappings via REPORT_CHUNKS (client blob flush + election GONE); fsync = sync
-barrier.** Stuck-catchup (todo 15) DEFERRED by user.
-**2b reads DONE (working tree, Aug 20): lookup / getattr / readdir / access
-go to the primary (not the local snapshot). GETCHUNKS + pack fields on
-REPORT_CHUNKS so a peer can read packed/chunked data. posix2 12/12
-(`results/posix2/20260820-234707`). Do not build a full-table 2c gen-check
-cache — next is Phase 3 (per-shard tables); cache as Phase 3 describes
-(per-shard, on-demand, evict).**
+CoW = **debe6dd**, catchup-vs-GC = **76753ef**, 2b reads = **94f96fd**.
+**Phase 3 code-complete (working tree, Aug 21):** tables + v8 persist +
+owner routing + owner extra flush + on-demand LRU + spread creates
+(dentry on parent, inode on child, stride=nlive) + `efs_export_rehash`
+(`efs-mgmt upgrade`). Same-fd zeros fixed (dcache overlay).
+**Do not set `shard_bits>0` on the live cluster** until extra-shard
+restart is proven on a throwaway export. Live path remains bits=0.
+**Same-fd POSIX zeros FIXED (working tree):** `dcache_copy` now serves
+fully-covered `have_base=0` dirty ranges; GET overlays those ranges onto
+a zero/fetched chunk. That was the 2b-reads regression
+(`basic_rdwr_no_reopen` et al.) — not a getattr/adopt size clobber.
+**POSIX 144/144** (`results/posix/20260821-005111`, fcstor007) after Phase 3
+code-complete (bits=0 live path). Re-run `20260821-010553`: 1 flake
+(`concurrent_create_unlink_two_proc` rc=1) that passed on isolated retry.
+**posix2 12/12** (`results/posix2/20260821-010629`, A=007 B=008).
 **Test suite committed (d52287e)**: reusable POSIX + perf suites, results
 tracked in git under `results/`. See "Test suite" section below.
 **2 client data-path fixes (7fa99e8)**: packed-file overwrite/append + rename/
@@ -60,11 +63,11 @@ Run from the login node (needs ssh to nodes): `tests/run_tests.sh
 posix|posix2|perf|setup|all`. `setup` rsyncs+builds+mounts the 9 pure clients.
 - **POSIX** (`tests/posix/posix_suite.py`, 144 tests, @test-extensible): run vs
   an XFS baseline (node9901:/data1/efs); `compare.py` → efs bug = PASS on XFS,
-  FAIL on efs. efs was 144/144 (fcstor007, Aug 20) before RPC reads;
-  after 2b-reads smoke: **135/144** (`results/posix/20260820-234634`) —
-  4 same-fd read-your-writes regressions (zeros): `basic_rdwr_no_reopen`,
-  `basic_chunk_boundary`, `perm_open_fd_survives_chmod`, `unlink_open_file`.
-  Close+reopen still passes. Next fix before Phase 3.
+  FAIL on efs. **144/144** again (`results/posix/20260821-003433`) after
+  the same-fd dcache overlay fix. The 2b-reads zeros
+  (`basic_rdwr_no_reopen`, `basic_chunk_boundary`,
+  `perm_open_fd_survives_chmod`, `unlink_open_file`) were have_base=0
+  dirty ranges that `dcache_copy` refused, so the reader GETed zeros.
 - **POSIX 2-client** (`tests/posix/posix_2client.py`, 12 tests): create/mkdir/
   rename/O_CREAT on client A, check client B with no remount. XFS 12/12;
   efs **12/12** (20260820-234707, A=fcstor007 B=fcstor008) after RPC
@@ -171,8 +174,14 @@ FIXED (7e442fa) — the last 5:
   scan under `g_server->lock` stalled the cluster). Packed files: pull
   only the pack_off window. `posix2` 12/12. Single-client POSIX 135/144
   (4 same-fd zeros — see Test suite).
-- **2c full-table gen-check cache**: skip. Phase 3 wants per-shard load+LRU.
-- **Phase 3 (NEXT)**: shard tables, per-shard flush, route `shard = ino >> bits`.
+- **2c full-table gen-check cache**: **skip, never needed.** One-gen/one-blob
+  cache would be ripped out for Phase 3. The *idea* (don't RPC every stat)
+  is Phase 3 item 4: per-shard on-demand LRU. Same-fd POSIX zeros land there.
+- **Phase 3 (STARTED, Aug 20)**: design `docs/phase3-sharding.md`. This cut:
+  `efs_shard_owner_of`, `efs_export_alloc_ino` (parent shard when bits>0;
+  today's `next_ino++` when bits=0), RPC send path takes an owner ino
+  (still the export primary until per-shard flush). Next: split the table
+  + flush (`efs_meta_shard_table_ino`), then ungate `rpc_owner_conn`.
 
 ## Known live issues
 - **Hardlink (`ln`) flaky at the FUSE kernel level** (pre-existing, NOT a 2b
@@ -223,6 +232,14 @@ FIXED (7e442fa) — the last 5:
   (sw 4.6 GB/s, sr 2.4 GB/s, 4k rand ~40k IOPS). rclone 32×10GiB copy rc=0.
 
 ## Root causes already found — don't re-diagnose
+- **Same-fd read-your-writes zeros after 2b-reads (FIXED, working tree)**:
+  a first write to an unpublished chunk is `have_base=0` (zeros + dirty
+  ranges). `dcache_copy` refused those entries (unpatched bytes are not
+  data), so same-fd read fell through to GET/rdcache zeros. Close+reopen
+  flushed then read published data and passed. Fix: serve a have_base=0
+  entry when the requested range is fully dirty; overlay dirty ranges
+  onto a GET/zero chunk when a read straddles chunks
+  (`basic_chunk_boundary`).
 - **Concurrent-write data loss = dcache flush base-read race (FIXED, 7e442fa)**:
   dcache_flush_slot dropped the shard lock (dcache_mu) before the network
   merge-base read + PUT, so two concurrent flushes of the SAME chunk (e.g. 4

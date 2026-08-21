@@ -67,7 +67,8 @@ struct efs_child_vec {
 #define EFS_META_ROOT_VERSION_V5 5
 #define EFS_META_ROOT_VERSION_V6 6
 #define EFS_META_ROOT_VERSION_V7 7
-#define EFS_META_ROOT_VERSION EFS_META_ROOT_VERSION_V7
+#define EFS_META_ROOT_VERSION_V8 8
+#define EFS_META_ROOT_VERSION EFS_META_ROOT_VERSION_V8
 
 /* Tiny fully-replicated export root. Bulk inode/chunk tables live in
  * 2+1 metadata pages under EFS_META_TABLE_INO (see efs_meta_page_*).
@@ -103,6 +104,11 @@ struct efs_export_root {
      * page_count * sizeof(uint32_t). NULL for v6 and earlier (dual-slot). */
     uint32_t *page_cis;
     uint32_t next_ci;
+    /* EFSR v8: extra shards (shard > 0). Each has its own pages under
+     * efs_meta_shard_table_ino(id). v7 loads as extra_shard_count=0. */
+    uint32_t extra_shard_count;
+    uint32_t *extra_shard_ids;
+    struct efs_export_root *extra_roots;
 };
 
 /* Copy-on-write placement (EFSR v7): the root carries an explicit page_cis[]
@@ -183,7 +189,18 @@ struct efs_export {
     /* EFSM blob version last serialized (5 = 420 B inodes, 6 = compact +
      * variable dentries). Deserialize accepts both. */
     uint32_t efsm_version;
+    /* Phase 3: on-demand tables for shard > 0. shard 0 is this export.
+     * shard_tabs[i] is NULL until first create/lookup in that shard. */
+    struct efs_export **shard_tabs;
+    uint32_t shard_tab_cap;
+    uint32_t create_rr;     /* spread-create cursor */
+    uint32_t create_stride; /* keep creates on the same owner (nlive) */
+    uint32_t shard_id;
+    uint64_t shard_tick;
+    int shard_dirty;
 };
+
+#define EFS_SHARD_LRU_KEEP 64
 
 /* EFSM v5 wire sizes (fixed-width; keep in sync with metadata.c). */
 #define EFS_META_HDR_SIZE     284
@@ -224,6 +241,24 @@ int efs_export_fits_page_cap(const struct efs_export *ex, uint64_t extra_inodes,
 void efs_export_meta_page_usage(const struct efs_export *ex,
                                 uint32_t *ino_pages, uint32_t *chunk_pages);
 uint32_t efs_export_shard_of(efs_ino_t ino, uint32_t shard_bits);
+/* Owner among live node ids (sorted or not). shard_count<=1 → lowest id
+ * (today's meta primary). Else live[shard % nlive]. */
+efs_node_id_t efs_shard_owner_of(uint32_t shard, uint32_t shard_count,
+                                 const efs_node_id_t *live, uint32_t nlive);
+/* Next inode for a create under parent. bits==0: next_ino++. bits>0:
+ * allocate inside the parent's shard range. */
+efs_ino_t efs_export_alloc_ino(struct efs_export *ex, efs_ino_t parent);
+/* Table that owns `ino` (or parent for name ops). bits==0 → `ex`. */
+struct efs_export *efs_export_table_for_ino(struct efs_export *ex, efs_ino_t ino);
+struct efs_export *efs_export_table(struct efs_export *ex, uint32_t shard);
+/* Instantiate shard_tabs from a v8 root's extra_roots (needs rebuild). */
+void efs_export_install_extra_roots(struct efs_export *ex);
+/* Move inode/chunk rows into dest shards; keep dentries on the parent shard. */
+int efs_export_rehash(struct efs_export *ex, uint32_t shard_bits);
+/* Evict cold extra tables that are not dirty (reload from v8 extras). */
+void efs_export_evict_cold_shards(struct efs_export *ex, uint32_t keep);
+/* Ensure shard table exists (reinstall extra root if the cluster has one). */
+int efs_export_load_shard(struct efs_export *ex, uint32_t shard);
 
 static inline efs_ino_t efs_meta_shard_table_ino(uint32_t shard)
 {
@@ -410,6 +445,8 @@ int efs_export_root_prepare(struct efs_export_root *root,
                             uint64_t generation,
                             uint32_t ino_blob_len,
                             uint32_t chunk_blob_len);
+int efs_export_root_capture_extras(struct efs_export_root *root,
+                                   const struct efs_export *ex);
 
 /* Free page_checksums; safe on zeroed roots. */
 void efs_export_root_free(struct efs_export_root *root);

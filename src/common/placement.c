@@ -60,7 +60,7 @@ void efs_get_placement(uint32_t node_count, efs_ino_t ino, uint32_t chunk_index,
     if (node_count > EFS_MAX_NODES)
         node_count = EFS_MAX_NODES;
 
-    if (ino == EFS_META_TABLE_INO)
+    if (efs_ino_is_meta_table(ino))
         place_consecutive(node_count, ino, chunk_index, fragment_nodes);
     else
         place_wide(node_count, ino, chunk_index, fragment_nodes);

@@ -265,6 +265,8 @@ int efs_dcache_has(efs_ino_t ino, uint32_t ci);
 int efs_dcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len);
 int efs_dcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
                     uint8_t *dst, uint32_t len);
+/* Overlay dirty dcache bytes onto a fetched/zero chunk (have_base=0 ranges). */
+void efs_dcache_overlay(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len);
 int efs_dcache_flush_all(void);
 int efs_dcache_flush_ino(efs_ino_t ino);
 void efs_dcache_reclaim_stop(void);

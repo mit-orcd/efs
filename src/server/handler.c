@@ -34,6 +34,78 @@ void server_handler_tls_cleanup(void)
     tls_reply_cap = 0;
 }
 
+/* Phase 3: name ops use the parent shard; inode ops use the file shard.
+ * shard_bits==0 returns `ex` (today's single table). */
+static struct efs_export *table_for_ino(struct efs_export *ex, efs_ino_t ino)
+{
+    struct efs_export *tab = efs_export_table_for_ino(ex, ino);
+    return tab ? tab : ex;
+}
+
+static uint32_t server_nlive_locked(struct efsd_server *s, efs_node_id_t *live)
+{
+    uint32_t n = 0;
+    if (!s || !live)
+        return 0;
+    live[n++] = s->id;
+    for (uint32_t i = 0; i < s->node_count && n < EFS_MAX_NODES; i++) {
+        efs_node_id_t id = s->nodes[i].id;
+        if (id == 0 || id == s->id)
+            continue;
+        if (server_node_is_down_locked(s, id))
+            continue;
+        live[n++] = id;
+    }
+    return n;
+}
+
+static efs_ino_t inode_rpc_key(uint8_t type, const void *payload)
+{
+    if (!payload)
+        return EFS_ROOT_INO;
+    switch (type) {
+    case EFS_MSG_INODE_LOOKUP:
+        return ((const struct efs_msg_inode_lookup *)payload)->parent;
+    case EFS_MSG_INODE_CREATE:
+        return ((const struct efs_msg_inode_create *)payload)->parent;
+    case EFS_MSG_INODE_UNLINK:
+        return ((const struct efs_msg_inode_unlink *)payload)->parent;
+    case EFS_MSG_INODE_GETATTR:
+        return ((const struct efs_msg_inode_getattr *)payload)->ino;
+    case EFS_MSG_INODE_SETATTR:
+        return ((const struct efs_msg_inode_setattr *)payload)->ino;
+    case EFS_MSG_INODE_RENAME:
+        return ((const struct efs_msg_inode_rename *)payload)->new_parent;
+    case EFS_MSG_INODE_LINK:
+        return ((const struct efs_msg_inode_link *)payload)->new_parent;
+    default:
+        return EFS_ROOT_INO;
+    }
+}
+
+static efs_node_id_t server_shard_owner_id_locked(struct efsd_server *s,
+                                                 struct efs_export *ex,
+                                                 uint8_t type,
+                                                 const void *payload)
+{
+    if (!s)
+        return 0;
+    if (!ex || ex->root.shard_bits == 0 || ex->root.shard_count <= 1)
+        return server_meta_primary_id_locked(s);
+    efs_node_id_t live[EFS_MAX_NODES];
+    uint32_t nlive = server_nlive_locked(s, live);
+    uint32_t shard = efs_export_shard_of(inode_rpc_key(type, payload),
+                                        ex->root.shard_bits);
+    return efs_shard_owner_of(shard, ex->root.shard_count, live, nlive);
+}
+
+static int server_owns_req_locked(struct efsd_server *s, struct efs_export *ex,
+                                  uint8_t type, const void *payload)
+{
+    efs_node_id_t owner = server_shard_owner_id_locked(s, ex, type, payload);
+    return owner != 0 && owner == s->id;
+}
+
 /* Wait for the next request on either channel of an RDMA-capable conn.
  * Returns EFS_CONN_TCP / EFS_CONN_RDMA, or -1 on error / peer close.
  * Pure-TCP conns return EFS_CONN_TCP immediately (caller blocks in recv). */
@@ -404,7 +476,7 @@ void server_handle_conn(struct efs_conn *conn)
                             srv_verify = !(v && *v && strcmp(v, "0") == 0);
                         }
                         if (srv_verify && sum_ok &&
-                            req->ino != EFS_META_TABLE_INO) {
+                            !efs_ino_is_meta_table(req->ino)) {
                             uint8_t vh[EFS_HASH_SIZE];
                             efs_hash(dptr, data_len, vh);
                             if (memcmp(vh, reply + 1, EFS_HASH_SIZE) != 0) {
@@ -456,7 +528,7 @@ send_reply:
                 }
                 /* Learn data chunk_size from first non-meta PUT when still
                  * default (peer may not have applied EFSR yet). */
-                if (ex && req->ino != EFS_META_TABLE_INO &&
+                if (ex && !efs_ino_is_meta_table(req->ino) &&
                     req->data_len > 0 &&
                     (ex->chunk_size == 0 ||
                      ex->chunk_size == EFS_DEFAULT_CHUNK_SIZE) &&
@@ -836,6 +908,7 @@ send_reply:
                                 ex->chunk_count = 0;
                                 ex->inode_count = 0;
                             }
+                            efs_export_install_extra_roots(ex);
                             g_server->epoch++;
                             g_server->export_meta_dirty = 1;
                             /* New generation: drop the GET_META cache. */
@@ -1322,12 +1395,10 @@ send_reply:
                 r.status = EFS_INODE_RPC_NOT_FOUND;
             } else if (type != EFS_MSG_INODE_LOOKUP &&
                        type != EFS_MSG_INODE_GETATTR &&
-                       !server_is_meta_primary_locked(g_server)) {
-                /* Phase 2b: a mutation on a non-primary wouldn't be flushed
-                 * (the meta-flush thread is primary-only), so reject and tell
-                 * the client who the primary is. Reads may go to any node. */
+                       !server_owns_req_locked(g_server, ex, type, payload)) {
                 r.status = EFS_INODE_RPC_NOT_PRIMARY;
-                r.primary_id = server_meta_primary_id_locked(g_server);
+                r.primary_id = server_shard_owner_id_locked(g_server, ex, type,
+                                                            payload);
             } else if (type == EFS_MSG_INODE_LOOKUP) {
                 struct efs_msg_inode_lookup *req = payload;
                 if (efs_export_lookup(ex, req->parent, req->name, &r.inode) == 0)
@@ -1336,13 +1407,18 @@ send_reply:
                     r.status = EFS_INODE_RPC_NOT_FOUND;
             } else if (type == EFS_MSG_INODE_GETATTR) {
                 struct efs_msg_inode_getattr *req = payload;
-                if (efs_export_get_inode(ex, req->ino, &r.inode) == 0)
+                struct efs_export *tab = table_for_ino(ex, req->ino);
+                if (efs_export_get_inode(tab, req->ino, &r.inode) == 0)
                     r.status = EFS_INODE_RPC_OK;
                 else
                     r.status = EFS_INODE_RPC_NOT_FOUND;
             } else if (type == EFS_MSG_INODE_CREATE) {
                 struct efs_msg_inode_create *req = payload;
-                if (!efs_export_fits_page_cap(ex, 1, 0)) {
+                efs_node_id_t live[EFS_MAX_NODES];
+                uint32_t nlive = server_nlive_locked(g_server, live);
+                ex->create_stride = nlive ? nlive : 1;
+                struct efs_export *tab = table_for_ino(ex, req->parent);
+                if (!efs_export_fits_page_cap(tab, 1, 0)) {
                     r.status = EFS_INODE_RPC_QUOTA;
                 } else {
                     efs_ino_t ino = efs_export_create(ex, req->parent, req->mode,
@@ -1354,6 +1430,7 @@ send_reply:
                         /* Phase 2a: the mutation is in-memory only until the
                          * meta-flush thread commits it. */
                         server_meta_mark_rpc_dirty_locked(g_server, eidx);
+                        efs_export_evict_cold_shards(ex, EFS_SHARD_LRU_KEEP);
                     } else {
                         r.status = EFS_INODE_RPC_EXIST;
                     }
@@ -1365,7 +1442,8 @@ send_reply:
                 if (req->is_dir &&
                     efs_export_lookup(ex, req->parent, req->name,
                                       &victim) == 0 &&
-                    !efs_export_dir_empty(ex, victim.ino)) {
+                    !efs_export_dir_empty(table_for_ino(ex, victim.ino),
+                                          victim.ino)) {
                     r.status = EFS_INODE_RPC_NOT_EMPTY;
                 } else {
                     int urc = efs_export_unlink_name(ex, req->parent,
@@ -1391,14 +1469,15 @@ send_reply:
                 }
             } else if (type == EFS_MSG_INODE_SETATTR) {
                 struct efs_msg_inode_setattr *req = payload;
+                struct efs_export *tab = table_for_ino(ex, req->ino);
                 struct efs_inode cur;
-                if (efs_export_get_inode(ex, req->ino, &cur) != 0) {
+                if (efs_export_get_inode(tab, req->ino, &cur) != 0) {
                     r.status = EFS_INODE_RPC_NOT_FOUND;
                 } else {
                     if (req->mask & EFS_SETATTR_MODE)
-                        efs_export_set_mode(ex, req->ino, req->mode);
+                        efs_export_set_mode(tab, req->ino, req->mode);
                     if (req->mask & (EFS_SETATTR_UID | EFS_SETATTR_GID))
-                        efs_export_set_owner(ex, req->ino,
+                        efs_export_set_owner(tab, req->ino,
                                 (req->mask & EFS_SETATTR_UID) ? (uid_t)req->uid
                                                               : (uid_t)-1,
                                 (req->mask & EFS_SETATTR_GID) ? (gid_t)req->gid
@@ -1412,17 +1491,17 @@ send_reply:
                             uint32_t cs = server_data_chunk_size(ex);
                             uint32_t first_drop = (req->size == 0) ? 0
                                 : (uint32_t)((req->size + cs - 1) / cs);
-                            efs_export_drop_chunks_from(ex, req->ino, first_drop);
+                            efs_export_drop_chunks_from(tab, req->ino, first_drop);
                         }
-                        efs_export_set_size(ex, req->ino, req->size);
+                        efs_export_set_size(tab, req->ino, req->size);
                     }
                     if (req->mask & EFS_SETATTR_MTIME)
-                        efs_export_set_mtime_ns(ex, req->ino, req->mtime,
+                        efs_export_set_mtime_ns(tab, req->ino, req->mtime,
                                                 req->mtime_nsec);
                     if (req->mask & EFS_SETATTR_ATIME)
-                        efs_export_set_atime(ex, req->ino, req->atime);
+                        efs_export_set_atime(tab, req->ino, req->atime);
                     server_meta_mark_rpc_dirty_locked(g_server, eidx);
-                    efs_export_get_inode(ex, req->ino, &r.inode);
+                    efs_export_get_inode(tab, req->ino, &r.inode);
                     r.status = EFS_INODE_RPC_OK;
                 }
             } else if (type == EFS_MSG_INODE_LINK) {
@@ -1498,13 +1577,26 @@ send_reply:
                 r.status = EFS_INODE_RPC_INVAL;
             } else if (!ex) {
                 r.status = EFS_INODE_RPC_NOT_FOUND;
-            } else if (!server_is_meta_primary_locked(g_server)) {
+            } else if (!server_is_meta_primary_locked(g_server) &&
+                       (ex->root.shard_bits == 0 ||
+                        ex->root.shard_count <= 1)) {
                 r.status = EFS_INODE_RPC_NOT_PRIMARY;
                 r.primary_id = server_meta_primary_id_locked(g_server);
             } else {
                 uint32_t applied = 0;
+                efs_node_id_t live[EFS_MAX_NODES];
+                uint32_t nlive = server_nlive_locked(g_server, live);
+                uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+                uint32_t bits = ex->root.shard_bits;
                 for (uint32_t k = 0; k < count; k++) {
-                    if (efs_export_set_chunk(ex, recs[k].ino, recs[k].chunk_index,
+                    if (bits && sc > 1) {
+                        uint32_t sh = efs_export_shard_of(recs[k].ino, bits);
+                        if (efs_shard_owner_of(sh, sc, live, nlive) !=
+                            g_server->id)
+                            continue;
+                    }
+                    struct efs_export *tab = table_for_ino(ex, recs[k].ino);
+                    if (efs_export_set_chunk(tab, recs[k].ino, recs[k].chunk_index,
                                              recs[k].nodes,
                                              recs[k].checksums) == 0)
                         applied++;
@@ -1513,20 +1605,27 @@ send_reply:
                  * and bumps mtime). Apply size then mtime; norollup variants
                  * aren't available server-side, but these are dirt-cheap. */
                 for (uint32_t k = 0; k < ino_count; k++) {
-                    if (efs_export_get_inode(ex, irecs[k].ino, NULL) != 0)
+                    if (bits && sc > 1) {
+                        uint32_t sh = efs_export_shard_of(irecs[k].ino, bits);
+                        if (efs_shard_owner_of(sh, sc, live, nlive) !=
+                            g_server->id)
+                            continue;
+                    }
+                    struct efs_export *tab = table_for_ino(ex, irecs[k].ino);
+                    if (efs_export_get_inode(tab, irecs[k].ino, NULL) != 0)
                         continue; /* inode not (yet) on the server; skip */
-                    if (efs_export_set_size(ex, irecs[k].ino,
+                    if (efs_export_set_size(tab, irecs[k].ino,
                                             irecs[k].size) == 0)
                         applied++;
-                    efs_export_set_mtime_ns(ex, irecs[k].ino, irecs[k].mtime,
+                    efs_export_set_mtime_ns(tab, irecs[k].ino, irecs[k].mtime,
                                             irecs[k].mtime_nsec);
                     if (irecs[k].pack_ino || irecs[k].pack_len) {
                         struct efs_inode cur;
-                        if (efs_export_get_inode(ex, irecs[k].ino, &cur) == 0) {
+                        if (efs_export_get_inode(tab, irecs[k].ino, &cur) == 0) {
                             cur.pack_ino = irecs[k].pack_ino;
                             cur.pack_off = irecs[k].pack_off;
                             cur.pack_len = irecs[k].pack_len;
-                            (void)efs_export_upsert_inode(ex, &cur);
+                            (void)efs_export_upsert_inode(tab, &cur);
                         }
                     }
                 }
@@ -1573,6 +1672,7 @@ send_reply:
                 if (!ex) {
                     r.status = EFS_INODE_RPC_NOT_FOUND;
                 } else {
+                    struct efs_export *tab = table_for_ino(ex, req->parent);
                     uint32_t max = req->max_ents;
                     if (max == 0 || max > EFS_READDIR_MAX)
                         max = EFS_READDIR_MAX;
@@ -1580,18 +1680,18 @@ send_reply:
                     if (payload_len >= sizeof(*req))
                         start = req->start;
                     uint32_t seen = 0;
-                    for (uint64_t i = 0; i < ex->inode_count && r.count < max; i++) {
-                        if (ex->inodes[i].ino == 0)
+                    for (uint64_t i = 0; i < tab->inode_count && r.count < max; i++) {
+                        if (tab->inodes[i].ino == 0)
                             continue;
-                        if (ex->inodes[i].name[0] == '\0')
+                        if (tab->inodes[i].name[0] == '\0')
                             continue;
-                        if (ex->inodes[i].parent != req->parent)
+                        if (tab->inodes[i].parent != req->parent)
                             continue;
-                        if (ex->inodes[i].ino == req->parent)
+                        if (tab->inodes[i].ino == req->parent)
                             continue;
                         if (seen++ < start)
                             continue;
-                        r.ents[r.count++] = ex->inodes[i];
+                        r.ents[r.count++] = tab->inodes[i];
                     }
                     r.status = EFS_INODE_RPC_OK;
                 }
@@ -1618,8 +1718,9 @@ send_reply:
                 if (!ex) {
                     r.status = EFS_INODE_RPC_NOT_FOUND;
                 } else {
+                    struct efs_export *tab = table_for_ino(ex, req->ino);
                     struct efs_inode ino;
-                    if (efs_export_get_inode(ex, req->ino, &ino) != 0) {
+                    if (efs_export_get_inode(tab, req->ino, &ino) != 0) {
                         r.status = EFS_INODE_RPC_NOT_FOUND;
                     } else {
                         uint32_t cs = server_data_chunk_size(ex);
@@ -1640,7 +1741,7 @@ send_reply:
                         uint32_t limit = (nci > 0) ? nci : (req->start + max);
                         for (; ci < limit && r.count < max; ci++) {
                             struct efs_chunk_entry ce;
-                            if (efs_export_get_chunk(ex, req->ino, ci,
+                            if (efs_export_get_chunk(tab, req->ino, ci,
                                                      &ce) != 0) {
                                 if (nci == 0)
                                     break;
@@ -1678,12 +1779,13 @@ send_reply:
                     uint32_t bits = req->shard_bits;
                     if (bits > 20)
                         bits = 20;
-                    ex->root.version = 6;
-                    ex->root.shard_bits = bits;
-                    ex->root.shard_count = bits ? (1u << bits) : 1u;
-                    ex->efsm_version = EFS_META_EFSM_V6;
-                    r.shard_count = ex->root.shard_count;
-                    r.status = EFS_UPGRADE_OK;
+                    if (efs_export_rehash(ex, bits) == EFS_OK) {
+                        r.shard_count = ex->root.shard_count;
+                        r.status = EFS_UPGRADE_OK;
+                        server_meta_mark_rpc_dirty_locked(g_server, 0);
+                    } else {
+                        r.status = EFS_UPGRADE_ERROR;
+                    }
                 }
                 pthread_mutex_unlock(&g_server->lock);
             }

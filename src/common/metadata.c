@@ -3,6 +3,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdint.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -1347,6 +1348,17 @@ void efs_export_free(struct efs_export *ex)
 {
     if (!ex)
         return;
+    if (ex->shard_tabs) {
+        for (uint32_t i = 0; i < ex->shard_tab_cap; i++) {
+            if (!ex->shard_tabs[i])
+                continue;
+            efs_export_free(ex->shard_tabs[i]);
+            free(ex->shard_tabs[i]);
+        }
+        free(ex->shard_tabs);
+        ex->shard_tabs = NULL;
+        ex->shard_tab_cap = 0;
+    }
     free(ex->inodes);
     free(ex->chunks);
     free(ex->pending_rollup_inos);
@@ -1361,16 +1373,343 @@ void efs_export_free(struct efs_export *ex)
     memset(ex, 0, sizeof(*ex));
 }
 
+static void efs_export_init_empty_table(struct efs_export *ex, efs_export_id_t id,
+                                        const char *name, uint32_t shard_bits,
+                                        uint32_t shard_count, uint32_t shard)
+{
+    memset(ex, 0, sizeof(*ex));
+    ex->id = id;
+    if (name)
+        strncpy(ex->name, name, EFS_MAX_NAME - 1);
+    ex->chunk_size = EFS_DEFAULT_CHUNK_SIZE;
+    ex->features = EFS_FEATURES_DEFAULT;
+    ex->inode_capacity = 16;
+    ex->inodes = calloc(ex->inode_capacity, sizeof(struct efs_inode));
+    ex->chunk_capacity = 16;
+    ex->chunks = calloc(ex->chunk_capacity, sizeof(struct efs_chunk_entry));
+    ex->efsm_version = EFS_META_VERSION;
+    ex->root.shard_count = shard_count;
+    ex->root.shard_bits = shard_bits;
+    if (shard_bits)
+        ex->next_ino = (efs_ino_t)shard << shard_bits;
+    export_reindex(ex);
+    child_idx_rebuild(ex);
+}
+
+struct efs_export *efs_export_table(struct efs_export *ex, uint32_t shard)
+{
+    if (!ex)
+        return NULL;
+    uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+    if (shard == 0 || ex->root.shard_bits == 0 || sc <= 1)
+        return ex;
+    if (shard >= sc || shard >= EFS_META_MAX_SHARDS)
+        return NULL;
+    if (!ex->shard_tabs || ex->shard_tab_cap < sc) {
+        struct efs_export **n = calloc(sc, sizeof(*n));
+        if (!n)
+            return NULL;
+        if (ex->shard_tabs) {
+            uint32_t old = ex->shard_tab_cap < sc ? ex->shard_tab_cap : sc;
+            memcpy(n, ex->shard_tabs, (size_t)old * sizeof(*n));
+            free(ex->shard_tabs);
+        }
+        ex->shard_tabs = n;
+        ex->shard_tab_cap = sc;
+    }
+    if (!ex->shard_tabs[shard]) {
+        struct efs_export *tab = calloc(1, sizeof(*tab));
+        if (!tab)
+            return NULL;
+        efs_export_init_empty_table(tab, ex->id, ex->name, ex->root.shard_bits,
+                                    sc, shard);
+        tab->chunk_size = ex->chunk_size;
+        tab->features = ex->features;
+        tab->shard_id = shard;
+        /* Reload a previously flushed extra from the cluster root. */
+        for (uint32_t i = 0; i < ex->root.extra_shard_count; i++) {
+            if (ex->root.extra_shard_ids && ex->root.extra_shard_ids[i] == shard &&
+                ex->root.extra_roots) {
+                if (efs_export_root_copy(&tab->root, &ex->root.extra_roots[i]) ==
+                    EFS_OK) {
+                    tab->meta_fragmented = 1;
+                    tab->meta_needs_rebuild = (tab->root.page_count > 0);
+                    tab->next_ino = tab->root.next_ino;
+                }
+                break;
+            }
+        }
+        ex->shard_tabs[shard] = tab;
+    }
+    ex->shard_tabs[shard]->shard_tick = ++ex->shard_tick;
+    return ex->shard_tabs[shard];
+}
+
+struct efs_export *efs_export_table_for_ino(struct efs_export *ex, efs_ino_t ino)
+{
+    if (!ex)
+        return NULL;
+    if (ex->root.shard_bits == 0)
+        return ex;
+    return efs_export_table(ex, efs_export_shard_of(ino, ex->root.shard_bits));
+}
+
+void efs_export_install_extra_roots(struct efs_export *ex)
+{
+    if (!ex || !ex->root.extra_shard_count || !ex->root.extra_roots)
+        return;
+    for (uint32_t i = 0; i < ex->root.extra_shard_count; i++) {
+        uint32_t sh = ex->root.extra_shard_ids ? ex->root.extra_shard_ids[i] : 0;
+        if (sh == 0)
+            continue;
+        struct efs_export *tab = efs_export_table(ex, sh);
+        if (!tab)
+            continue;
+        if (efs_export_root_copy(&tab->root, &ex->root.extra_roots[i]) != EFS_OK)
+            continue;
+        tab->meta_fragmented = 1;
+        tab->meta_needs_rebuild = (tab->root.page_count > 0);
+        tab->next_ino = tab->root.next_ino;
+    }
+}
+
+static int export_is_sharded_root(struct efs_export *ex)
+{
+    return ex && ex->root.shard_bits && ex->root.shard_count > 1 &&
+           inode_ptr(ex, EFS_ROOT_INO) != NULL;
+}
+
+int efs_export_load_shard(struct efs_export *ex, uint32_t shard)
+{
+    if (!ex)
+        return EFS_ERR_INVAL;
+    if (shard == 0 || ex->root.shard_bits == 0)
+        return EFS_OK;
+    return efs_export_table(ex, shard) ? EFS_OK : EFS_ERR_NOMEM;
+}
+
+void efs_export_evict_cold_shards(struct efs_export *ex, uint32_t keep)
+{
+    if (!ex || !ex->shard_tabs || keep == 0)
+        return;
+    uint32_t n = 0;
+    for (uint32_t i = 1; i < ex->shard_tab_cap; i++)
+        if (ex->shard_tabs[i])
+            n++;
+    while (n > keep) {
+        uint32_t victim = 0;
+        uint64_t oldest = UINT64_MAX;
+        for (uint32_t i = 1; i < ex->shard_tab_cap; i++) {
+            struct efs_export *tab = ex->shard_tabs[i];
+            if (!tab || tab->shard_dirty || tab->meta_needs_rebuild)
+                continue;
+            if (tab->shard_tick < oldest) {
+                oldest = tab->shard_tick;
+                victim = i;
+            }
+        }
+        if (!victim)
+            break;
+        efs_export_free(ex->shard_tabs[victim]);
+        free(ex->shard_tabs[victim]);
+        ex->shard_tabs[victim] = NULL;
+        n--;
+    }
+}
+
+int efs_export_rehash(struct efs_export *ex, uint32_t new_bits)
+{
+    if (!ex)
+        return EFS_ERR_INVAL;
+    if (new_bits > 20)
+        new_bits = 20;
+    uint32_t new_sc = new_bits ? (1u << new_bits) : 1u;
+    if (new_sc > EFS_META_MAX_SHARDS)
+        new_sc = EFS_META_MAX_SHARDS;
+
+    uint64_t nino = ex->inode_count;
+    uint64_t nch = ex->chunk_count;
+    if (ex->shard_tabs) {
+        for (uint32_t i = 1; i < ex->shard_tab_cap; i++) {
+            if (!ex->shard_tabs[i])
+                continue;
+            nino += ex->shard_tabs[i]->inode_count;
+            nch += ex->shard_tabs[i]->chunk_count;
+        }
+    }
+    struct efs_inode *inos = nino ? malloc((size_t)nino * sizeof(*inos)) : NULL;
+    struct efs_chunk_entry *chs = nch ? malloc((size_t)nch * sizeof(*chs)) : NULL;
+    if ((nino && !inos) || (nch && !chs)) {
+        free(inos);
+        free(chs);
+        return EFS_ERR_NOMEM;
+    }
+    uint64_t wi = 0, wc = 0;
+    for (uint64_t i = 0; i < ex->inode_count; i++)
+        inos[wi++] = ex->inodes[i];
+    for (uint64_t i = 0; i < ex->chunk_count; i++)
+        chs[wc++] = ex->chunks[i];
+    if (ex->shard_tabs) {
+        for (uint32_t s = 1; s < ex->shard_tab_cap; s++) {
+            struct efs_export *tab = ex->shard_tabs[s];
+            if (!tab)
+                continue;
+            for (uint64_t i = 0; i < tab->inode_count; i++)
+                inos[wi++] = tab->inodes[i];
+            for (uint64_t i = 0; i < tab->chunk_count; i++)
+                chs[wc++] = tab->chunks[i];
+        }
+    }
+
+    ex->root.shard_bits = new_bits;
+    ex->root.shard_count = new_sc;
+    ex->root.version = EFS_META_ROOT_VERSION_V8;
+
+    if (new_bits == 0) {
+        for (uint64_t i = 0; i < wi; i++) {
+            if (inos[i].ino == EFS_ROOT_INO)
+                continue;
+            if (inode_ptr(ex, inos[i].ino) == NULL)
+                (void)efs_export_upsert_inode(ex, &inos[i]);
+        }
+        for (uint64_t i = 0; i < wc; i++)
+            (void)efs_export_set_chunk(ex, chs[i].ino, chs[i].chunk_index,
+                                       chs[i].fragment_nodes, chs[i].checksums);
+        if (ex->shard_tabs) {
+            for (uint32_t s = 1; s < ex->shard_tab_cap; s++) {
+                if (!ex->shard_tabs[s])
+                    continue;
+                efs_export_free(ex->shard_tabs[s]);
+                free(ex->shard_tabs[s]);
+                ex->shard_tabs[s] = NULL;
+            }
+        }
+        free(inos);
+        free(chs);
+        return EFS_OK;
+    }
+
+    for (uint64_t i = 0; i < wi; i++) {
+        if (inos[i].ino == 0)
+            continue;
+        uint32_t dest = efs_export_shard_of(inos[i].ino, new_bits);
+        uint32_t psh = efs_export_shard_of(inos[i].parent, new_bits);
+        struct efs_export *dtab = efs_export_table(ex, dest);
+        if (dtab)
+            (void)efs_export_upsert_inode(dtab, &inos[i]);
+        if (dest != psh) {
+            struct efs_export *ptab = efs_export_table(ex, psh);
+            if (ptab && ptab != dtab)
+                (void)efs_export_upsert_inode(ptab, &inos[i]);
+        }
+    }
+    for (uint64_t i = 0; i < wc; i++) {
+        uint32_t dest = efs_export_shard_of(chs[i].ino, new_bits);
+        struct efs_export *dtab = efs_export_table(ex, dest);
+        if (dtab)
+            (void)efs_export_set_chunk(dtab, chs[i].ino, chs[i].chunk_index,
+                                       chs[i].fragment_nodes, chs[i].checksums);
+    }
+    for (uint64_t i = ex->inode_count; i > 0; i--) {
+        struct efs_inode *p = &ex->inodes[i - 1];
+        if (p->ino == EFS_ROOT_INO)
+            continue;
+        uint32_t dest = efs_export_shard_of(p->ino, new_bits);
+        uint32_t psh = efs_export_shard_of(p->parent, new_bits);
+        if (dest != 0 && psh != 0)
+            (void)efs_export_unlink(ex, p->ino);
+    }
+    free(inos);
+    free(chs);
+    return EFS_OK;
+}
+
+static efs_ino_t create_sharded(struct efs_export *ex, efs_ino_t parent,
+                                uint32_t mode, uid_t uid, gid_t gid,
+                                const char *name)
+{
+    uint32_t bits = ex->root.shard_bits;
+    uint32_t sc = ex->root.shard_count;
+    uint32_t psh = efs_export_shard_of(parent, bits);
+    uint32_t stride = ex->create_stride ? ex->create_stride : 1;
+    uint32_t target = psh;
+    if (!efs_mode_is_dir(mode) && sc > 1)
+        target = (psh + (ex->create_rr++ * stride)) % sc;
+    struct efs_export *ctab = efs_export_table(ex, target);
+    if (!ctab)
+        return 0;
+    efs_ino_t hint = target ? ((efs_ino_t)target << bits) : EFS_ROOT_INO;
+    efs_ino_t ino = efs_export_alloc_ino(ctab, hint);
+    if (!ino)
+        return 0;
+    if (!efs_export_create_with_ino(ctab, ino, parent, mode, uid, gid, name))
+        return 0;
+    ctab->shard_dirty = 1;
+    if (target != psh) {
+        struct efs_export *ptab = efs_export_table(ex, psh);
+        if (ptab && ptab != ctab) {
+            (void)efs_export_create_with_ino(ptab, ino, parent, mode, uid, gid,
+                                             name);
+            ptab->shard_dirty = 1;
+        }
+    }
+    return ino;
+}
+
 int efs_export_lookup(struct efs_export *ex, efs_ino_t parent,
                       const char *name, struct efs_inode *out)
 {
     if (!ex || !name)
         return EFS_ERR_INVAL;
 
+    if (export_is_sharded_root(ex)) {
+        uint32_t bits = ex->root.shard_bits;
+        struct efs_export *ptab =
+            efs_export_table(ex, efs_export_shard_of(parent, bits));
+        if (!ptab)
+            return EFS_ERR_NOT_FOUND;
+        if (ptab != ex) {
+            int rc = efs_export_lookup(ptab, parent, name, out);
+            if (rc != EFS_OK || !out)
+                return rc;
+            uint32_t csh = efs_export_shard_of(out->ino, bits);
+            if (csh != efs_export_shard_of(parent, bits)) {
+                struct efs_export *ctab = efs_export_table(ex, csh);
+                struct efs_inode full;
+                if (ctab && efs_export_get_inode(ctab, out->ino, &full) == 0) {
+                    char nbuf[EFS_MAX_NAME];
+                    memcpy(nbuf, out->name, EFS_MAX_NAME);
+                    efs_ino_t p = out->parent;
+                    *out = full;
+                    memcpy(out->name, nbuf, EFS_MAX_NAME);
+                    out->parent = p;
+                }
+            }
+            return EFS_OK;
+        }
+        /* parent lives on shard 0 (this table): fall through, then stitch. */
+    }
+
     uint64_t pos = 0;
     if (name_idx_get(ex, parent, name, &pos) == 0) {
         if (out)
             *out = ex->inodes[pos];
+        if (out && export_is_sharded_root(ex)) {
+            uint32_t bits = ex->root.shard_bits;
+            uint32_t csh = efs_export_shard_of(out->ino, bits);
+            if (csh != 0) {
+                struct efs_export *ctab = efs_export_table(ex, csh);
+                struct efs_inode full;
+                if (ctab && efs_export_get_inode(ctab, out->ino, &full) == 0) {
+                    char nbuf[EFS_MAX_NAME];
+                    memcpy(nbuf, out->name, EFS_MAX_NAME);
+                    efs_ino_t p = out->parent;
+                    *out = full;
+                    memcpy(out->name, nbuf, EFS_MAX_NAME);
+                    out->parent = p;
+                }
+            }
+        }
         return EFS_OK;
     }
     return EFS_ERR_NOT_FOUND;
@@ -1381,6 +1720,11 @@ int efs_export_get_inode(struct efs_export *ex, efs_ino_t ino,
 {
     if (!ex)
         return EFS_ERR_INVAL;
+    if (export_is_sharded_root(ex)) {
+        struct efs_export *tab = efs_export_table_for_ino(ex, ino);
+        if (tab && tab != ex)
+            return efs_export_get_inode(tab, ino, out);
+    }
     struct efs_inode *p = inode_ptr(ex, ino);
     if (!p)
         return EFS_ERR_NOT_FOUND;
@@ -1403,8 +1747,8 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
     if (efs_export_lookup(ex, parent, name, NULL) == EFS_OK)
         return 0;
 
-    if (efs_export_get_inode(ex, ino_num, NULL) == EFS_OK)
-        return 0; /* ino already in use */
+    if (inode_ptr(ex, ino_num))
+        return 0; /* ino already in use on this table */
 
     if (ex->inode_count >= ex->inode_capacity) {
         uint64_t new_cap = ex->inode_capacity * 2;
@@ -1452,16 +1796,66 @@ efs_ino_t efs_export_create(struct efs_export *ex, efs_ino_t parent,
 {
     if (!ex)
         return 0;
-    efs_ino_t ino = efs_export_create_with_ino(ex, ex->next_ino, parent, mode, uid, gid, name);
-    if (ino != 0)
-        ex->next_ino++;
-    return ino;
+    if (export_is_sharded_root(ex))
+        return create_sharded(ex, parent, mode, uid, gid, name);
+    efs_ino_t ino = efs_export_alloc_ino(ex, parent);
+    if (!ino)
+        return 0;
+    efs_ino_t created = efs_export_create_with_ino(ex, ino, parent, mode, uid, gid, name);
+    if (!created && ex->root.shard_bits == 0 && ex->next_ino == ino + 1)
+        ex->next_ino = ino; /* reuse on collision (name exists) */
+    return created;
 }
 
 int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *name)
 {
     if (!ex || !name)
         return EFS_ERR_INVAL;
+    if (export_is_sharded_root(ex)) {
+        uint32_t bits = ex->root.shard_bits;
+        struct efs_inode victim;
+        struct efs_export *ptab =
+            efs_export_table(ex, efs_export_shard_of(parent, bits));
+        if (!ptab)
+            return EFS_ERR_NOT_FOUND;
+        if (ptab != ex) {
+            if (efs_export_lookup(ptab, parent, name, &victim) != 0)
+                return EFS_ERR_NOT_FOUND;
+            int urc = efs_export_unlink_name(ptab, parent, name);
+            if (urc != 0)
+                return urc;
+            ptab->shard_dirty = 1;
+            uint32_t csh = efs_export_shard_of(victim.ino, bits);
+            if (csh != efs_export_shard_of(parent, bits)) {
+                struct efs_export *ctab = efs_export_table(ex, csh);
+                if (ctab && ctab != ptab) {
+                    (void)efs_export_unlink(ctab, victim.ino);
+                    ctab->shard_dirty = 1;
+                }
+            }
+            return EFS_OK;
+        }
+        if (efs_export_lookup(ex, parent, name, &victim) != 0)
+            return EFS_ERR_NOT_FOUND;
+        uint32_t saved_bits = ex->root.shard_bits;
+        uint32_t saved_sc = ex->root.shard_count;
+        ex->root.shard_bits = 0;
+        ex->root.shard_count = 1;
+        int local_rc = efs_export_unlink_name(ex, parent, name);
+        ex->root.shard_bits = saved_bits;
+        ex->root.shard_count = saved_sc;
+        if (local_rc != 0)
+            return local_rc;
+        uint32_t csh = efs_export_shard_of(victim.ino, bits);
+        if (csh != 0) {
+            struct efs_export *ctab = efs_export_table(ex, csh);
+            if (ctab) {
+                (void)efs_export_unlink(ctab, victim.ino);
+                ctab->shard_dirty = 1;
+            }
+        }
+        return EFS_OK;
+    }
     if (strcmp(name, EFS_STATS_NAME) == 0)
         return EFS_ERR_INVAL;
     efs_export_ensure_rollups(ex);
@@ -1843,6 +2237,12 @@ int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
 {
     if (!ex)
         return EFS_ERR_INVAL;
+    if (export_is_sharded_root(ex)) {
+        struct efs_export *tab = efs_export_table_for_ino(ex, ino);
+        if (tab && tab != ex)
+            return efs_export_set_chunk(tab, ino, chunk_index, fragment_nodes,
+                                        checksums);
+    }
 
     uint64_t pos = 0;
     if (chunk_idx_get(ex, ino, chunk_index, &pos) == 0) {
@@ -1880,6 +2280,11 @@ int efs_export_get_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
 {
     if (!ex)
         return EFS_ERR_INVAL;
+    if (export_is_sharded_root(ex)) {
+        struct efs_export *tab = efs_export_table_for_ino(ex, ino);
+        if (tab && tab != ex)
+            return efs_export_get_chunk(tab, ino, chunk_index, out);
+    }
 
     uint64_t pos = 0;
     if (chunk_idx_get(ex, ino, chunk_index, &pos) == 0) {
@@ -2031,6 +2436,11 @@ int efs_export_upsert_inode(struct efs_export *ex, const struct efs_inode *rec)
 {
     if (!ex || !rec || rec->ino == 0)
         return EFS_ERR_INVAL;
+    if (export_is_sharded_root(ex)) {
+        struct efs_export *tab = efs_export_table_for_ino(ex, rec->ino);
+        if (tab && tab != ex)
+            return efs_export_upsert_inode(tab, rec);
+    }
     if (!ex->ino_keys && export_reindex(ex) != 0)
         return EFS_ERR_NOMEM;
 
@@ -2761,6 +3171,57 @@ uint32_t efs_export_shard_of(efs_ino_t ino, uint32_t shard_bits)
     return (uint32_t)((uint64_t)ino >> shard_bits);
 }
 
+efs_node_id_t efs_shard_owner_of(uint32_t shard, uint32_t shard_count,
+                                 const efs_node_id_t *live, uint32_t nlive)
+{
+    if (!live || nlive == 0)
+        return 0;
+    if (shard_count <= 1) {
+        efs_node_id_t best = 0;
+        for (uint32_t i = 0; i < nlive; i++) {
+            if (live[i] == 0)
+                continue;
+            if (best == 0 || live[i] < best)
+                best = live[i];
+        }
+        return best;
+    }
+    return live[shard % nlive];
+}
+
+efs_ino_t efs_export_alloc_ino(struct efs_export *ex, efs_ino_t parent)
+{
+    if (!ex)
+        return 0;
+    uint32_t bits = ex->root.shard_bits;
+    if (bits == 0) {
+        efs_ino_t ino = ex->next_ino;
+        if (ino <= EFS_ROOT_INO)
+            ino = EFS_ROOT_INO + 1;
+        ex->next_ino = ino + 1;
+        return ino;
+    }
+    /* Stay in the parent shard so dentries + child share one table until
+     * Phase 3 splits parent-dentry / child-inode. */
+    uint32_t shard = efs_export_shard_of(parent, bits);
+    uint64_t span = 1ull << bits;
+    uint64_t base = (uint64_t)shard << bits;
+    uint64_t end = base + span;
+    uint64_t cand = ex->next_ino;
+    if (cand < base || cand >= end)
+        cand = (base == 0) ? (EFS_ROOT_INO + 1) : base;
+    while (cand < end) {
+        if (cand != EFS_ROOT_INO &&
+            efs_export_get_inode(ex, (efs_ino_t)cand, NULL) != 0) {
+            if ((efs_ino_t)(cand + 1) > ex->next_ino)
+                ex->next_ino = (efs_ino_t)(cand + 1);
+            return (efs_ino_t)cand;
+        }
+        cand++;
+    }
+    return 0; /* shard full */
+}
+
 int efs_meta_extract_page(const char *blob, uint32_t blob_len, uint32_t page_index,
                           uint8_t page_out[EFS_META_PAGE_SIZE])
 {
@@ -2830,6 +3291,15 @@ void efs_export_root_free(struct efs_export_root *root)
 {
     if (!root)
         return;
+    if (root->extra_roots) {
+        for (uint32_t i = 0; i < root->extra_shard_count; i++)
+            efs_export_root_free(&root->extra_roots[i]);
+        free(root->extra_roots);
+        root->extra_roots = NULL;
+    }
+    free(root->extra_shard_ids);
+    root->extra_shard_ids = NULL;
+    root->extra_shard_count = 0;
     free(root->page_checksums);
     root->page_checksums = NULL;
     free(root->page_cis);
@@ -2854,22 +3324,45 @@ int efs_export_root_copy(struct efs_export_root *dst, const struct efs_export_ro
     *dst = *src;
     dst->page_checksums = NULL;
     dst->page_cis = NULL;
-    if (src->page_count == 0 || !src->page_checksums)
-        return EFS_OK;
-    size_t n = (size_t)src->page_count * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE;
-    dst->page_checksums = malloc(n);
-    if (!dst->page_checksums)
-        return EFS_ERR_NOMEM;
-    memcpy(dst->page_checksums, src->page_checksums, n);
-    if (src->page_cis) {
-        size_t cn = (size_t)src->page_count * sizeof(uint32_t);
-        dst->page_cis = malloc(cn);
-        if (!dst->page_cis) {
-            free(dst->page_checksums);
-            dst->page_checksums = NULL;
+    dst->extra_shard_ids = NULL;
+    dst->extra_roots = NULL;
+    dst->extra_shard_count = 0;
+    if (src->page_count > 0 && src->page_checksums) {
+        size_t n = (size_t)src->page_count * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE;
+        dst->page_checksums = malloc(n);
+        if (!dst->page_checksums)
+            return EFS_ERR_NOMEM;
+        memcpy(dst->page_checksums, src->page_checksums, n);
+        if (src->page_cis) {
+            size_t cn = (size_t)src->page_count * sizeof(uint32_t);
+            dst->page_cis = malloc(cn);
+            if (!dst->page_cis) {
+                free(dst->page_checksums);
+                dst->page_checksums = NULL;
+                return EFS_ERR_NOMEM;
+            }
+            memcpy(dst->page_cis, src->page_cis, cn);
+        }
+    }
+    if (src->extra_shard_count && src->extra_roots && src->extra_shard_ids) {
+        dst->extra_shard_ids = malloc((size_t)src->extra_shard_count *
+                                      sizeof(uint32_t));
+        dst->extra_roots = calloc(src->extra_shard_count,
+                                  sizeof(struct efs_export_root));
+        if (!dst->extra_shard_ids || !dst->extra_roots) {
+            efs_export_root_free(dst);
             return EFS_ERR_NOMEM;
         }
-        memcpy(dst->page_cis, src->page_cis, cn);
+        memcpy(dst->extra_shard_ids, src->extra_shard_ids,
+               (size_t)src->extra_shard_count * sizeof(uint32_t));
+        dst->extra_shard_count = src->extra_shard_count;
+        for (uint32_t i = 0; i < src->extra_shard_count; i++) {
+            if (efs_export_root_copy(&dst->extra_roots[i],
+                                     &src->extra_roots[i]) != EFS_OK) {
+                efs_export_root_free(dst);
+                return EFS_ERR_NOMEM;
+            }
+        }
     }
     return EFS_OK;
 }
@@ -2918,6 +3411,48 @@ int efs_export_root_prepare(struct efs_export_root *root,
                 return EFS_ERR_NOMEM;
         }
     }
+    return efs_export_root_capture_extras(root, ex);
+}
+
+int efs_export_root_capture_extras(struct efs_export_root *root,
+                                   const struct efs_export *ex)
+{
+    if (!root || !ex)
+        return EFS_ERR_INVAL;
+    if (root->extra_roots) {
+        for (uint32_t i = 0; i < root->extra_shard_count; i++)
+            efs_export_root_free(&root->extra_roots[i]);
+        free(root->extra_roots);
+        root->extra_roots = NULL;
+    }
+    free(root->extra_shard_ids);
+    root->extra_shard_ids = NULL;
+    root->extra_shard_count = 0;
+    if (!ex->shard_tabs || root->version < EFS_META_ROOT_VERSION_V8)
+        return EFS_OK;
+    uint32_t n = 0;
+    for (uint32_t i = 1; i < ex->shard_tab_cap; i++) {
+        struct efs_export *tab = ex->shard_tabs[i];
+        if (tab && tab->root.page_count && tab->root.page_checksums)
+            n++;
+    }
+    if (!n)
+        return EFS_OK;
+    root->extra_shard_ids = malloc((size_t)n * sizeof(uint32_t));
+    root->extra_roots = calloc(n, sizeof(struct efs_export_root));
+    if (!root->extra_shard_ids || !root->extra_roots)
+        return EFS_ERR_NOMEM;
+    uint32_t w = 0;
+    for (uint32_t i = 1; i < ex->shard_tab_cap && w < n; i++) {
+        struct efs_export *tab = ex->shard_tabs[i];
+        if (!tab || !tab->root.page_count || !tab->root.page_checksums)
+            continue;
+        root->extra_shard_ids[w] = i;
+        if (efs_export_root_copy(&root->extra_roots[w], &tab->root) != EFS_OK)
+            return EFS_ERR_NOMEM;
+        w++;
+    }
+    root->extra_shard_count = w;
     return EFS_OK;
 }
 
@@ -2941,8 +3476,8 @@ int efs_export_root_serialize(const struct efs_export_root *root,
      * in the v4 8k window. */
     {
         uint32_t ver = root->version;
-        if (ver < EFS_META_ROOT_VERSION_V4 || ver > EFS_META_ROOT_VERSION_V7)
-            ver = EFS_META_ROOT_VERSION_V7;
+        if (ver < EFS_META_ROOT_VERSION_V4 || ver > EFS_META_ROOT_VERSION_V8)
+            ver = EFS_META_ROOT_VERSION_V8;
         write_u32(f, ver);
     }
     write_u32(f, root->id);
@@ -2978,6 +3513,28 @@ int efs_export_root_serialize(const struct efs_export_root *root,
                 return EFS_ERR_INVAL;
             }
             fwrite(root->page_cis, sizeof(uint32_t), root->page_count, f);
+        }
+    }
+    if (root->version >= EFS_META_ROOT_VERSION_V8) {
+        write_u32(f, root->extra_shard_count);
+        for (uint32_t i = 0; i < root->extra_shard_count; i++) {
+            write_u32(f, root->extra_shard_ids ? root->extra_shard_ids[i] : 0);
+            char *ibuf = NULL;
+            size_t ilen = 0;
+            if (!root->extra_roots ||
+                efs_export_root_serialize(&root->extra_roots[i], &ibuf,
+                                          &ilen) != EFS_OK) {
+                free(ibuf);
+                fclose(f);
+                return EFS_ERR_INVAL;
+            }
+            write_u32(f, (uint32_t)ilen);
+            if (ilen && fwrite(ibuf, 1, ilen, f) != ilen) {
+                free(ibuf);
+                fclose(f);
+                return EFS_ERR_IO;
+            }
+            free(ibuf);
         }
     }
     fclose(f);
@@ -3016,7 +3573,8 @@ int efs_export_root_deserialize_used(struct efs_export_root *root,
          version != EFS_META_ROOT_VERSION_V4 &&
          version != EFS_META_ROOT_VERSION_V5 &&
          version != EFS_META_ROOT_VERSION_V6 &&
-         version != EFS_META_ROOT_VERSION_V7)) {
+         version != EFS_META_ROOT_VERSION_V7 &&
+         version != EFS_META_ROOT_VERSION_V8)) {
         fclose(f);
         return EFS_ERR_PROTO;
     }
@@ -3135,6 +3693,52 @@ int efs_export_root_deserialize_used(struct efs_export_root *root,
                 root->page_checksums = NULL;
                 fclose(f);
                 return EFS_ERR_PROTO;
+            }
+        }
+    }
+    if (version >= EFS_META_ROOT_VERSION_V8) {
+        uint32_t n = 0;
+        if (read_u32(f, &n) != 0) {
+            fclose(f);
+            return EFS_ERR_PROTO;
+        }
+        if (n > EFS_META_MAX_SHARDS) {
+            fclose(f);
+            return EFS_ERR_PROTO;
+        }
+        if (n) {
+            root->extra_shard_ids = malloc((size_t)n * sizeof(uint32_t));
+            root->extra_roots = calloc(n, sizeof(struct efs_export_root));
+            if (!root->extra_shard_ids || !root->extra_roots) {
+                fclose(f);
+                return EFS_ERR_NOMEM;
+            }
+            root->extra_shard_count = n;
+            for (uint32_t i = 0; i < n; i++) {
+                uint32_t sid = 0, ilen = 0;
+                if (read_u32(f, &sid) != 0 || read_u32(f, &ilen) != 0 ||
+                    ilen == 0 || ilen > 64u * 1024u * 1024u) {
+                    fclose(f);
+                    return EFS_ERR_PROTO;
+                }
+                root->extra_shard_ids[i] = sid;
+                char *ibuf = malloc(ilen);
+                if (!ibuf) {
+                    fclose(f);
+                    return EFS_ERR_NOMEM;
+                }
+                if (fread(ibuf, 1, ilen, f) != ilen) {
+                    free(ibuf);
+                    fclose(f);
+                    return EFS_ERR_PROTO;
+                }
+                int irc = efs_export_root_deserialize(&root->extra_roots[i],
+                                                      ibuf, ilen);
+                free(ibuf);
+                if (irc != EFS_OK) {
+                    fclose(f);
+                    return irc;
+                }
             }
         }
     }

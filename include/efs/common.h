@@ -64,8 +64,10 @@
 /* Reserved inode for 2+1 metadata table pages (not a user-visible file).
  * High bit set so it cannot collide with client inode namespaces. */
 #define EFS_META_TABLE_INO   ((efs_ino_t)0x8000000000000002ULL)
-/* Per-shard metadata table inode (shard 0 == EFS_META_TABLE_INO). */
+/* Per-shard metadata table inode (shard 0 == EFS_META_TABLE_INO).
+ * Roadmap: bits=20 → 4096 shards. */
 #define EFS_META_SHARD_INO_BASE EFS_META_TABLE_INO
+#define EFS_META_MAX_SHARDS     4096
 /* Max pages for a fragmented metadata blob (each page = EFS_META_PAGE_SIZE).
  * 32768 × 128 KiB = 4 GiB — two-region EFSR v5 (16k ino + 16k chunk pages). */
 #define EFS_META_MAX_PAGES   32768
@@ -113,6 +115,12 @@
 typedef uint64_t efs_ino_t;
 typedef uint32_t efs_export_id_t;
 typedef uint32_t efs_node_id_t;
+
+static inline int efs_ino_is_meta_table(efs_ino_t ino)
+{
+    return ino >= EFS_META_SHARD_INO_BASE &&
+           (uint64_t)(ino - EFS_META_SHARD_INO_BASE) < EFS_META_MAX_SHARDS;
+}
 
 void efs_ino_path_segments(efs_ino_t ino, char seg[EFS_INO_PATH_SEGS][5]);
 

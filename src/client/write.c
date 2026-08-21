@@ -3317,6 +3317,29 @@ int efs_dcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
     return efs_dcache_copy(ino, ci, 0, dst, len);
 }
 
+static int dcache_range_covered(const struct dcache_ent *e, uint32_t off,
+                                uint32_t len)
+{
+    if (!e || !len)
+        return 0;
+    uint32_t need = off;
+    uint32_t end = off + len;
+    while (need < end) {
+        int hit = 0;
+        for (uint8_t i = 0; i < e->nrange; i++) {
+            uint32_t a = e->roff[i], b = a + e->rlen[i];
+            if (a <= need && need < b) {
+                need = b;
+                hit = 1;
+                break;
+            }
+        }
+        if (!hit)
+            return 0;
+    }
+    return 1;
+}
+
 int efs_dcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
                     uint8_t *dst, uint32_t len)
 {
@@ -3326,17 +3349,48 @@ int efs_dcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
     pthread_mutex_t *mu = dcache_mu(s);
     pthread_mutex_lock(mu);
     struct dcache_ent *e = dcache_find(s, ino, ci);
-    /* have_base=0 entries are sparse patches over an unfetched published
-     * chunk: unpatched bytes are zeros, not data. Serving them here would
-     * return those zeros to readers / RMW bases — only complete chunks may
-     * be copied out. */
-    if (e && e->have_base && (uint64_t)off + len <= e->len) {
+    /* have_base=1: the whole chunk is valid. have_base=0: only dirty
+     * ranges are valid (the rest is unfetched). Same-fd read-your-writes
+     * after a first 4k on a new file land here — refusing them sent the
+     * reader to GET/rdcache zeros (POSIX basic_rdwr_no_reopen). */
+    if (e && (uint64_t)off + len <= e->len &&
+        (e->have_base || dcache_range_covered(e, off, len))) {
         memcpy(dst, e->data + off, len);
         pthread_mutex_unlock(mu);
         return 0;
     }
     pthread_mutex_unlock(mu);
     return -1;
+}
+
+void efs_dcache_overlay(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
+{
+    if (!dst || !len)
+        return;
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(s, ino, ci);
+    if (!e) {
+        pthread_mutex_unlock(mu);
+        return;
+    }
+    if (e->have_base && len <= e->len) {
+        memcpy(dst, e->data, len);
+        pthread_mutex_unlock(mu);
+        return;
+    }
+    if (!e->have_base) {
+        for (uint8_t i = 0; i < e->nrange; i++) {
+            uint32_t a = e->roff[i], n = e->rlen[i];
+            if (a >= len || !n)
+                continue;
+            if (a + n > len)
+                n = len - a;
+            memcpy(dst + a, e->data + a, n);
+        }
+    }
+    pthread_mutex_unlock(mu);
 }
 
 static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)

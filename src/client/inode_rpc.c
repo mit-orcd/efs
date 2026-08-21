@@ -24,14 +24,15 @@ static int rpc_status_to_efs(uint8_t st)
  * reach it (the meta-flush thread is primary-only). */
 static struct efs_conn *rpc_primary_conn(efs_node_id_t *nid_out)
 {
-    efs_node_id_t best = 0;
-    for (uint32_t i = 0; i < g_client.node_count; i++) {
+    efs_node_id_t live[EFS_MAX_NODES];
+    uint32_t nlive = 0;
+    for (uint32_t i = 0; i < g_client.node_count && nlive < EFS_MAX_NODES; i++) {
         efs_node_id_t id = g_client.nodes[i].id;
         if (efs_client_node_is_down(id))
             continue;
-        if (best == 0 || id < best)
-            best = id;
+        live[nlive++] = id;
     }
+    efs_node_id_t best = efs_shard_owner_of(0, 1, live, nlive);
     if (best == 0)
         return NULL;
     struct efs_conn *conn = efs_client_conn_get(best);
@@ -40,13 +41,38 @@ static struct efs_conn *rpc_primary_conn(efs_node_id_t *nid_out)
     return conn;
 }
 
-/* Phase 2b: send a mutation to the primary, retrying on NOT_PRIMARY with the
- * primary_id the server reports (the client's liveness view can be stale).
- * The reply must be a struct efs_msg_inode_reply. */
-static int rpc_send_recv_primary(uint8_t type, const void *req, uint32_t req_len,
-                                 uint8_t expect, void *reply, uint32_t reply_len)
+/* Route to live[shard % nlive] when bits>0. Mutations still require the
+ * export primary until that owner flushes (server rejects NOT_PRIMARY). */
+static struct efs_conn *rpc_owner_conn(efs_ino_t ino, efs_node_id_t *nid_out)
 {
-    efs_node_id_t target = 0; /* 0 = compute the primary from our view */
+    uint32_t sc = g_client.export.root.shard_count;
+    uint32_t bits = g_client.export.root.shard_bits;
+    if (sc <= 1 || bits == 0)
+        return rpc_primary_conn(nid_out);
+    efs_node_id_t live[EFS_MAX_NODES];
+    uint32_t nlive = 0;
+    for (uint32_t i = 0; i < g_client.node_count && nlive < EFS_MAX_NODES; i++) {
+        efs_node_id_t id = g_client.nodes[i].id;
+        if (efs_client_node_is_down(id))
+            continue;
+        live[nlive++] = id;
+    }
+    uint32_t shard = efs_export_shard_of(ino, bits);
+    efs_node_id_t owner = efs_shard_owner_of(shard, sc, live, nlive);
+    if (owner == 0)
+        return rpc_primary_conn(nid_out);
+    struct efs_conn *conn = efs_client_conn_get(owner);
+    if (conn)
+        *nid_out = owner;
+    return conn;
+}
+
+/* Send to the shard owner (today: export primary). Retry NOT_PRIMARY. */
+static int rpc_send_recv_owner(efs_ino_t ino, uint8_t type, const void *req,
+                               uint32_t req_len, uint8_t expect, void *reply,
+                               uint32_t reply_len)
+{
+    efs_node_id_t target = 0; /* 0 = compute the owner from our view */
     for (int attempt = 0; attempt < 4; attempt++) {
         efs_node_id_t nid = 0;
         struct efs_conn *conn;
@@ -54,7 +80,7 @@ static int rpc_send_recv_primary(uint8_t type, const void *req, uint32_t req_len
             conn = efs_client_conn_get(target);
             nid = target;
         } else {
-            conn = rpc_primary_conn(&nid);
+            conn = rpc_owner_conn(ino, &nid);
         }
         if (!conn)
             return EFS_ERR_NET;
@@ -98,8 +124,8 @@ int efs_client_rpc_lookup(efs_export_id_t export_id, efs_ino_t parent,
     if (name)
         strncpy(req.name, name, EFS_MAX_NAME - 1);
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_primary(EFS_MSG_INODE_LOOKUP, &req, sizeof(req),
-                                   EFS_MSG_INODE_LOOKUP_REPLY, &r, sizeof(r));
+    int rc = rpc_send_recv_owner(parent, EFS_MSG_INODE_LOOKUP, &req, sizeof(req),
+                                 EFS_MSG_INODE_LOOKUP_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
@@ -123,8 +149,8 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
     req.uid = (uint32_t)uid;
     req.gid = (uint32_t)gid;
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_primary(EFS_MSG_INODE_CREATE, &req, sizeof(req),
-                                   EFS_MSG_INODE_CREATE_REPLY, &r, sizeof(r));
+    int rc = rpc_send_recv_owner(parent, EFS_MSG_INODE_CREATE, &req, sizeof(req),
+                                 EFS_MSG_INODE_CREATE_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
@@ -144,8 +170,8 @@ int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
     req.export_id = export_id;
     req.ino = ino;
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_primary(EFS_MSG_INODE_GETATTR, &req, sizeof(req),
-                                   EFS_MSG_INODE_GETATTR_REPLY, &r, sizeof(r));
+    int rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_GETATTR, &req, sizeof(req),
+                                 EFS_MSG_INODE_GETATTR_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
@@ -165,10 +191,9 @@ int efs_client_rpc_readdir(efs_export_id_t export_id, efs_ino_t parent,
     req.parent = parent;
     req.max_ents = inout_count ? *inout_count : EFS_READDIR_MAX;
     req.start = start;
-    /* Readdir reply is not efs_msg_inode_reply (no primary_id). Send to
-     * the primary so we do not list a stale replica. */
+    /* Readdir reply is not efs_msg_inode_reply (no primary_id). */
     efs_node_id_t nid = 0;
-    struct efs_conn *conn = rpc_primary_conn(&nid);
+    struct efs_conn *conn = rpc_owner_conn(parent, &nid);
     if (!conn)
         return EFS_ERR_NET;
     if (efs_conn_send_msg(conn, EFS_MSG_INODE_READDIR, &req, sizeof(req)) != 0) {
@@ -217,7 +242,7 @@ int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
     req.start = start;
     req.max = inout_count ? *inout_count : EFS_GETCHUNKS_MAX;
     efs_node_id_t nid = 0;
-    struct efs_conn *conn = rpc_primary_conn(&nid);
+    struct efs_conn *conn = rpc_owner_conn(ino, &nid);
     if (!conn)
         return EFS_ERR_NET;
     if (efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS, &req, sizeof(req)) != 0) {
@@ -266,8 +291,8 @@ int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
         strncpy(req.name, name, EFS_MAX_NAME - 1);
     req.is_dir = is_dir ? 1 : 0;
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_primary(EFS_MSG_INODE_UNLINK, &req, sizeof(req),
-                                   EFS_MSG_INODE_UNLINK_REPLY, &r, sizeof(r));
+    int rc = rpc_send_recv_owner(parent, EFS_MSG_INODE_UNLINK, &req, sizeof(req),
+                                 EFS_MSG_INODE_UNLINK_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)
         return rc;
     return rpc_status_to_efs(r.status);
@@ -285,8 +310,8 @@ int efs_client_rpc_rename(efs_export_id_t export_id, efs_ino_t ino,
     if (new_name)
         strncpy(req.new_name, new_name, EFS_MAX_NAME - 1);
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_primary(EFS_MSG_INODE_RENAME, &req, sizeof(req),
-                                   EFS_MSG_INODE_RENAME_REPLY, &r, sizeof(r));
+    int rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_RENAME, &req, sizeof(req),
+                                 EFS_MSG_INODE_RENAME_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
@@ -314,8 +339,8 @@ int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
     req.mtime_nsec = mtime_nsec;
     req.atime = atime;
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_primary(EFS_MSG_INODE_SETATTR, &req, sizeof(req),
-                                   EFS_MSG_INODE_SETATTR_REPLY, &r, sizeof(r));
+    int rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_SETATTR, &req, sizeof(req),
+                                 EFS_MSG_INODE_SETATTR_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
@@ -337,8 +362,8 @@ int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
     if (new_name)
         strncpy(req.new_name, new_name, EFS_MAX_NAME - 1);
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_primary(EFS_MSG_INODE_LINK, &req, sizeof(req),
-                                   EFS_MSG_INODE_LINK_REPLY, &r, sizeof(r));
+    int rc = rpc_send_recv_owner(new_parent, EFS_MSG_INODE_LINK, &req, sizeof(req),
+                                 EFS_MSG_INODE_LINK_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
@@ -378,8 +403,9 @@ int efs_client_rpc_report_dirty(efs_export_id_t export_id,
     if (ino_count)
         memcpy(p, irecs, (size_t)ino_count * sizeof(*irecs));
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_primary(EFS_MSG_REPORT_CHUNKS, buf, (uint32_t)len,
-                                   EFS_MSG_REPORT_CHUNKS_REPLY, &r, sizeof(r));
+    int rc = rpc_send_recv_owner(EFS_ROOT_INO, EFS_MSG_REPORT_CHUNKS, buf,
+                                 (uint32_t)len, EFS_MSG_REPORT_CHUNKS_REPLY,
+                                 &r, sizeof(r));
     free(buf);
     if (rc != EFS_OK)
         return rc;
@@ -389,12 +415,13 @@ int efs_client_rpc_report_dirty(efs_export_id_t export_id,
 int efs_client_load_shard(uint32_t shard)
 {
     uint32_t n = g_client.export.root.shard_count;
-    if (n <= 1)
+    uint32_t bits = g_client.export.root.shard_bits;
+    if (bits == 0 || n <= 1)
         return shard == 0 ? EFS_OK : EFS_ERR_NOT_FOUND;
     if (shard >= n)
         return EFS_ERR_INVAL;
-    /* Multi-shard page fetch lands in a later cut; shard 0 is the v5 blob. */
-    if (shard == 0)
-        return EFS_OK;
-    return EFS_ERR_NOT_FOUND;
+    int rc = efs_export_load_shard(&g_client.export, shard);
+    if (rc == EFS_OK)
+        efs_export_evict_cold_shards(&g_client.export, EFS_SHARD_LRU_KEEP);
+    return rc;
 }

@@ -211,7 +211,7 @@ void server_save_export(struct efsd_server *s, struct efs_export *ex);
 /* Fragment byte length for this inode: meta pages are fixed; data uses export. */
 static inline uint32_t server_frag_len(const struct efs_export *ex, efs_ino_t ino)
 {
-    if (ino == EFS_META_TABLE_INO)
+    if (efs_ino_is_meta_table(ino))
         return EFS_META_FRAGMENT_SIZE;
     uint32_t cs = (ex && efs_chunk_size_valid(ex->chunk_size))
                       ? ex->chunk_size

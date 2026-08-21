@@ -1052,7 +1052,7 @@ int server_read_fragment(struct efsd_server *s, struct efs_export *ex,
     uint32_t want = server_frag_len(ex, ino);
     uint32_t got = 0;
     int rc = read_file_bytes(path, data, want, &got,
-                             s->direct_io && ino != EFS_META_TABLE_INO);
+                             s->direct_io && !efs_ino_is_meta_table(ino));
     if (rc != EFS_OK)
         return rc;
     *data_len = got;
@@ -1111,7 +1111,7 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
     *sum_ok = 0;
     if (n != 1) {
         uint32_t want = server_frag_len(ex, ino);
-        int direct = s->direct_io && ino != EFS_META_TABLE_INO;
+        int direct = s->direct_io && !efs_ino_is_meta_table(ino);
         char dir[8192];
         char path[8300];
         int plen = 0;
@@ -1195,7 +1195,7 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
     }
 
     uint32_t want = server_frag_len(ex, ino);
-    int direct = s->direct_io && ino != EFS_META_TABLE_INO;
+    int direct = s->direct_io && !efs_ino_is_meta_table(ino);
     char dir[8192];
     char path[8300];
     format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[0], ex->id, ino,
@@ -1698,7 +1698,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
     int is_new = 1;
     if (s->quota > 0)
         is_new = !fragment_exists_on_disk(s, ex, ino, chunk_index, fragment_index);
-    int charge_quota = (ino != EFS_META_TABLE_INO) && is_new && (s->quota > 0);
+    int charge_quota = (!efs_ino_is_meta_table(ino)) && is_new && (s->quota > 0);
 
     pthread_mutex_lock(&s->lock);
     struct efs_node *local = server_local_node(s);
@@ -1732,7 +1732,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
     arg.s = s;
     arg.buf = (uint8_t *)data;
     arg.len = data_len;
-    arg.direct = s->direct_io && ino != EFS_META_TABLE_INO;
+    arg.direct = s->direct_io && !efs_ino_is_meta_table(ino);
     if (arg.direct)
         arg.len = server_frag_len(ex, ino);
     arg.is_write = 1;

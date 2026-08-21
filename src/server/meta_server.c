@@ -134,20 +134,21 @@ static int server_put_fragment_to_peer(const char *host, uint16_t port,
 }
 
 static int fetch_meta_fragment(struct efsd_server *s, struct efs_export *ex,
-                               efs_node_id_t node_id, uint32_t chunk_index,
-                               uint32_t fragment_index, uint8_t *data)
+                               efs_ino_t table_ino, efs_node_id_t node_id,
+                               uint32_t chunk_index, uint32_t fragment_index,
+                               uint8_t *data)
 {
     uint8_t checksum[EFS_HASH_SIZE];
     if (node_id == s->id) {
         uint32_t len = 0;
-        if (server_read_fragment(s, ex, EFS_META_TABLE_INO, chunk_index,
+        if (server_read_fragment(s, ex, table_ino, chunk_index,
                                  fragment_index, data, &len) == EFS_OK)
             return EFS_OK;
     } else {
         struct efs_node n;
         if (copy_node_by_id(s, node_id, &n) == 0 &&
             server_get_fragment_from_peer(n.addr, n.port, ex->id,
-                                          EFS_META_TABLE_INO, chunk_index,
+                                          table_ino, chunk_index,
                                           fragment_index, data, checksum) == EFS_OK)
             return EFS_OK;
     }
@@ -170,13 +171,13 @@ static int fetch_meta_fragment(struct efsd_server *s, struct efs_export *ex,
             continue;
         if (snap[i].id == self) {
             uint32_t len = 0;
-            if (server_read_fragment(s, ex, EFS_META_TABLE_INO, chunk_index,
+            if (server_read_fragment(s, ex, table_ino, chunk_index,
                                      fragment_index, data, &len) == EFS_OK)
                 return EFS_OK;
             continue;
         }
         if (server_get_fragment_from_peer(snap[i].addr, snap[i].port, ex->id,
-                                          EFS_META_TABLE_INO, chunk_index,
+                                          table_ino, chunk_index,
                                           fragment_index, data, checksum) == EFS_OK)
             return EFS_OK;
     }
@@ -184,8 +185,9 @@ static int fetch_meta_fragment(struct efsd_server *s, struct efs_export *ex,
 }
 
 static void gc_region_pages(struct efsd_server *s, struct efs_export *ex,
-                            uint64_t dead_generation, int region,
-                            uint32_t old_pc, uint32_t live_pc, uint32_t layout_ver)
+                            efs_ino_t table_ino, uint64_t dead_generation,
+                            int region, uint32_t old_pc, uint32_t live_pc,
+                            uint32_t layout_ver)
 {
     uint32_t cap = (region == EFS_META_REGION_CHUNK)
                        ? (layout_ver >= 5 ? EFS_META_CHUNK_PAGE_MAX
@@ -203,14 +205,14 @@ static void gc_region_pages(struct efsd_server *s, struct efs_export *ex,
             continue;
         efs_node_id_t placed[EFS_NUM_FRAGMENTS];
         pthread_mutex_lock(&s->lock);
-        efs_place_fragments(s->nodes, s->node_count, EFS_META_TABLE_INO, ci,
+        efs_place_fragments(s->nodes, s->node_count, table_ino, ci,
                             placed);
         efs_node_id_t self = s->id;
         pthread_mutex_unlock(&s->lock);
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
             if (placed[fi] != self)
                 continue;
-            server_unlink_fragment_files(s, ex, EFS_META_TABLE_INO, ci,
+            server_unlink_fragment_files(s, ex, table_ino, ci,
                                          (uint32_t)fi);
         }
     }
@@ -233,14 +235,14 @@ void server_gc_meta_slot_pages(struct efsd_server *s, struct efs_export *ex,
         return; /* v4↔v5 slot windows differ; leave the retired layout */
     uint32_t ver = old_v5 ? 5 : 4;
     if (old_chunk_pages == 0 && live_chunk_pages == 0) {
-        gc_region_pages(s, ex, dead_generation, EFS_META_REGION_INO,
-                        old_ino_pages, live_ino_pages, ver);
+        gc_region_pages(s, ex, EFS_META_TABLE_INO, dead_generation,
+                        EFS_META_REGION_INO, old_ino_pages, live_ino_pages, ver);
         return;
     }
-    gc_region_pages(s, ex, dead_generation, EFS_META_REGION_INO,
-                    old_ino_pages, live_ino_pages, ver);
-    gc_region_pages(s, ex, dead_generation, EFS_META_REGION_CHUNK,
-                    old_chunk_pages, live_chunk_pages, ver);
+    gc_region_pages(s, ex, EFS_META_TABLE_INO, dead_generation,
+                    EFS_META_REGION_INO, old_ino_pages, live_ino_pages, ver);
+    gc_region_pages(s, ex, EFS_META_TABLE_INO, dead_generation,
+                    EFS_META_REGION_CHUNK, old_chunk_pages, live_chunk_pages, ver);
 }
 
 static int u32_cmp(const void *a, const void *b)
@@ -289,9 +291,12 @@ void server_gc_meta_cow_pages(struct efsd_server *s, struct efs_export *ex,
 }
 
 static int put_meta_fragment(struct efsd_server *s, struct efs_export *ex,
-                             efs_node_id_t node_id, uint32_t chunk_index,
-                             uint32_t fragment_index, const uint8_t *data,
-                             const uint8_t *checksum);
+                             efs_ino_t table_ino, efs_node_id_t node_id,
+                             uint32_t chunk_index, uint32_t fragment_index,
+                             const uint8_t *data, const uint8_t *checksum);
+static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
+                                                struct efs_export *ex,
+                                                efs_ino_t table_ino);
 
 /* Meta heal coordinator: the lowest-numbered live node pushes reconstructed
  * fragments to peer-owned slots. Every server rebuilds concurrently, so
@@ -324,8 +329,21 @@ void server_rebuild_fragmented_exports(struct efsd_server *s)
         struct efs_export *ex = &s->exports[i];
         if (!ex->meta_fragmented)
             continue;
-        if (server_rebuild_export_from_pages(s, ex) == EFS_OK)
+        if (server_rebuild_export_from_pages(s, ex) == EFS_OK) {
+            pthread_mutex_lock(&s->lock);
+            efs_export_install_extra_roots(ex);
+            pthread_mutex_unlock(&s->lock);
+            if (ex->shard_tabs) {
+                for (uint32_t i = 1; i < ex->shard_tab_cap; i++) {
+                    struct efs_export *tab = ex->shard_tabs[i];
+                    if (!tab || !tab->meta_needs_rebuild)
+                        continue;
+                    (void)server_rebuild_export_from_pages_ino(
+                        s, tab, efs_meta_shard_table_ino(i));
+                }
+            }
             continue;
+        }
         /* Fall back to pulling root+pages from any peer. */
         int ok = 0;
         for (uint32_t n = 0; n < s->node_count; n++) {
@@ -346,6 +364,13 @@ void server_rebuild_fragmented_exports(struct efsd_server *s)
 }
 
 int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *ex)
+{
+    return server_rebuild_export_from_pages_ino(s, ex, EFS_META_TABLE_INO);
+}
+
+static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
+                                                struct efs_export *ex,
+                                                efs_ino_t table_ino)
 {
     if (!s || !ex || !ex->meta_fragmented)
         return EFS_ERR_INVAL;
@@ -478,7 +503,7 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
                                         : (ci_layout == 4 ? "v4" : "legacy");
             efs_node_id_t placed[EFS_NUM_FRAGMENTS];
             pthread_mutex_lock(&s->lock);
-            efs_place_fragments(s->nodes, s->node_count, EFS_META_TABLE_INO, ci,
+            efs_place_fragments(s->nodes, s->node_count, table_ino, ci,
                                 placed);
             efs_node_id_t self = s->id;
             pthread_mutex_unlock(&s->lock);
@@ -486,7 +511,8 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
             int have[EFS_NUM_FRAGMENTS] = {0};
 
             for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
-                int frc = fetch_meta_fragment(s, ex, placed[fi], ci, (uint32_t)fi,
+                int frc = fetch_meta_fragment(s, ex, table_ino,
+                                              placed[fi], ci, (uint32_t)fi,
                                               fragments[fi]);
                 if (frc == EFS_OK) {
                     uint8_t sum[EFS_HASH_SIZE];
@@ -569,8 +595,8 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
                         }
                         const uint8_t *csum =
                             efs_export_root_checksum_const(root, pi, fi);
-                        int hrc = put_meta_fragment(s, ex, placed[fi], ci,
-                                                    (uint32_t)fi,
+                        int hrc = put_meta_fragment(s, ex, EFS_META_TABLE_INO,
+                                                    placed[fi], ci, (uint32_t)fi,
                                                     fragments[fi], csum);
                         if (hrc == EFS_OK)
                             fprintf(stderr,
@@ -720,24 +746,24 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
 }
 
 static int put_meta_fragment(struct efsd_server *s, struct efs_export *ex,
-                             efs_node_id_t node_id, uint32_t chunk_index,
-                             uint32_t fragment_index, const uint8_t *data,
-                             const uint8_t *checksum)
+                             efs_ino_t table_ino, efs_node_id_t node_id,
+                             uint32_t chunk_index, uint32_t fragment_index,
+                             const uint8_t *data, const uint8_t *checksum)
 {
     if (node_id == s->id) {
         /* Use sync writers to avoid pool re-entrancy during meta flush. */
-        int rc = server_write_fragment_sync(s, ex, EFS_META_TABLE_INO, chunk_index,
+        int rc = server_write_fragment_sync(s, ex, table_ino, chunk_index,
                                             fragment_index, data,
                                             EFS_META_FRAGMENT_SIZE);
         if (rc != EFS_OK)
             return rc;
-        return server_write_fragment_sum_sync(s, ex, EFS_META_TABLE_INO, chunk_index,
+        return server_write_fragment_sum_sync(s, ex, table_ino, chunk_index,
                                               fragment_index, checksum);
     }
     struct efs_node n;
     if (copy_node_by_id(s, node_id, &n) != 0)
         return EFS_ERR_NOT_FOUND;
-    return server_put_fragment_to_peer(n.addr, n.port, ex->id, EFS_META_TABLE_INO,
+    return server_put_fragment_to_peer(n.addr, n.port, ex->id, table_ino,
                                        chunk_index, fragment_index, data, checksum);
 }
 
@@ -745,6 +771,7 @@ static int put_meta_fragment(struct efsd_server *s, struct efs_export *ex,
 struct meta_put_job {
     struct efsd_server *s;
     struct efs_export *ex;
+    efs_ino_t table_ino;
     efs_node_id_t node;
     uint32_t ci;
     int fi;
@@ -756,8 +783,8 @@ struct meta_put_job {
 static void *meta_put_thread(void *arg)
 {
     struct meta_put_job *j = arg;
-    j->rc = put_meta_fragment(j->s, j->ex, j->node, j->ci, (uint32_t)j->fi,
-                              j->frag, j->checksum);
+    j->rc = put_meta_fragment(j->s, j->ex, j->table_ino, j->node, j->ci,
+                              (uint32_t)j->fi, j->frag, j->checksum);
     return NULL;
 }
 
@@ -808,7 +835,88 @@ static void bootstrap_export_on_peers(struct efsd_server *s, struct efs_export *
 }
 
 static int server_flush_fragmented_meta_locked(struct efsd_server *s,
-                                               struct efs_export *ex);
+                                               struct efs_export *ex,
+                                               efs_ino_t table_ino,
+                                               int commit_cluster_root);
+static int server_commit_cluster_extras(struct efsd_server *s,
+                                        struct efs_export *ex);
+
+/* PUT_META the current cluster root with refreshed extra-shard descriptors
+ * (no shard-0 page rewrite). Used by a non-primary extra-shard owner. */
+static int server_commit_cluster_extras(struct efsd_server *s,
+                                        struct efs_export *ex)
+{
+    struct efs_export_root root;
+    memset(&root, 0, sizeof(root));
+    pthread_mutex_lock(&s->lock);
+    if (efs_export_root_copy(&root, &ex->root) != EFS_OK) {
+        pthread_mutex_unlock(&s->lock);
+        return -1;
+    }
+    root.generation = ex->root.generation + 1;
+    root.version = EFS_META_ROOT_VERSION_V8;
+    int crc = efs_export_root_capture_extras(&root, ex);
+    pthread_mutex_unlock(&s->lock);
+    if (crc != EFS_OK) {
+        efs_export_root_free(&root);
+        return -1;
+    }
+    char *root_buf = NULL;
+    size_t root_len = 0;
+    if (efs_export_root_serialize(&root, &root_buf, &root_len) != EFS_OK) {
+        efs_export_root_free(&root);
+        return -1;
+    }
+    int acks = 0;
+    struct efs_node *nodes = malloc(sizeof(struct efs_node) * EFS_MAX_NODES);
+    if (!nodes) {
+        free(root_buf);
+        efs_export_root_free(&root);
+        return -1;
+    }
+    pthread_mutex_lock(&s->lock);
+    uint32_t node_count = s->node_count;
+    if (node_count > EFS_MAX_NODES)
+        node_count = EFS_MAX_NODES;
+    memcpy(nodes, s->nodes, sizeof(struct efs_node) * node_count);
+    efs_node_id_t self = s->id;
+    pthread_mutex_unlock(&s->lock);
+    for (uint32_t i = 0; i < node_count; i++) {
+        if (nodes[i].id == self)
+            continue;
+        int fd = server_peer_conn_get(nodes[i].addr, nodes[i].port);
+        if (fd < 0)
+            continue;
+        uint8_t type;
+        void *reply = NULL;
+        uint32_t reply_len = 0;
+        int net_ok = (efs_send_msg(fd, EFS_MSG_PUT_META, root_buf,
+                                   (uint32_t)root_len) == 0 &&
+                      efs_recv_msg(fd, &type, &reply, &reply_len) == 0);
+        if (net_ok && type == EFS_MSG_PUT_META_REPLY && reply_len >= 1 &&
+            ((uint8_t *)reply)[0] == EFS_PUT_META_OK)
+            acks++;
+        free(reply);
+        if (net_ok)
+            server_peer_conn_release(nodes[i].addr, nodes[i].port, fd);
+        else
+            server_peer_conn_drop(nodes[i].addr, nodes[i].port, fd);
+    }
+    free(nodes);
+    free(root_buf);
+    uint32_t need = (node_count >= EFS_NUM_FRAGMENTS) ? 2
+                    : (node_count > 1) ? 1 : 0;
+    if (acks < (int)need) {
+        efs_export_root_free(&root);
+        return -1;
+    }
+    pthread_mutex_lock(&s->lock);
+    efs_export_root_move(&ex->root, &root);
+    server_save_export(s, ex);
+    pthread_mutex_unlock(&s->lock);
+    efs_export_root_free(&root);
+    return 0;
+}
 
 /* Write all meta pages (2+1) and persist/replicate the EFSR root.
  * Serialized on s->meta_flush_mu: the meta-flush thread and a synchronous
@@ -819,13 +927,59 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
 int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
 {
     pthread_mutex_lock(&s->meta_flush_mu);
-    int rc = server_flush_fragmented_meta_locked(s, ex);
+    int rc = 0;
+    int flushed_extra = 0;
+    pthread_mutex_lock(&s->lock);
+    efs_node_id_t live[EFS_MAX_NODES];
+    uint32_t nlive = 0;
+    live[nlive++] = s->id;
+    for (uint32_t i = 0; i < s->node_count && nlive < EFS_MAX_NODES; i++) {
+        efs_node_id_t id = s->nodes[i].id;
+        if (id == 0 || id == s->id)
+            continue;
+        if (server_node_is_down_locked(s, id))
+            continue;
+        live[nlive++] = id;
+    }
+    uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+    uint32_t bits = ex->root.shard_bits;
+    int primary = server_is_meta_primary_locked(s);
+    pthread_mutex_unlock(&s->lock);
+    /* Extra-shard pages must land before the cluster root references them. */
+    if (bits && ex->shard_tabs) {
+        for (uint32_t i = 1; i < ex->shard_tab_cap; i++) {
+            struct efs_export *tab = ex->shard_tabs[i];
+            if (!tab || tab->inode_count == 0)
+                continue;
+            if (sc > 1 &&
+                efs_shard_owner_of(i, sc, live, nlive) != s->id)
+                continue;
+            int src = server_flush_fragmented_meta_locked(
+                s, tab, efs_meta_shard_table_ino(i), 0);
+            if (src != 0)
+                rc = src;
+            else {
+                flushed_extra = 1;
+                tab->shard_dirty = 0;
+            }
+        }
+    }
+    if (primary) {
+        int rc0 = server_flush_fragmented_meta_locked(s, ex, EFS_META_TABLE_INO,
+                                                      1);
+        if (rc0 != 0)
+            rc = rc0;
+    } else if (flushed_extra && rc == 0) {
+        rc = server_commit_cluster_extras(s, ex);
+    }
     pthread_mutex_unlock(&s->meta_flush_mu);
     return rc;
 }
 
 static int server_flush_fragmented_meta_locked(struct efsd_server *s,
-                                               struct efs_export *ex)
+                                               struct efs_export *ex,
+                                               efs_ino_t table_ino,
+                                               int commit_cluster_root)
 {
     /* Peers must know the export before accepting meta-page PUT_CHUNKs. */
     bootstrap_export_on_peers(s, ex);
@@ -959,7 +1113,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
 
         efs_node_id_t placed[EFS_NUM_FRAGMENTS];
         pthread_mutex_lock(&s->lock);
-        efs_place_fragments(s->nodes, s->node_count, EFS_META_TABLE_INO, ci,
+        efs_place_fragments(s->nodes, s->node_count, table_ino, ci,
                             placed);
         /* Re-route fragments off heartbeat-marked-down nodes so a dead peer
          * doesn't consume a full PUT timeout per page. */
@@ -987,6 +1141,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
             jobs[fi].s = s;
             jobs[fi].ex = ex;
+            jobs[fi].table_ino = table_ino;
             jobs[fi].node = placed[fi];
             jobs[fi].ci = ci;
             jobs[fi].fi = fi;
@@ -1005,8 +1160,9 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
             int prc = jobs[fi].rc;
             if (prc != EFS_OK) {
                 /* Peer may not have finished bootstrap yet — retry once. */
-                prc = put_meta_fragment(s, ex, placed[fi], ci, (uint32_t)fi,
-                                        fragments[fi], checksums[fi]);
+                prc = put_meta_fragment(s, ex, table_ino, placed[fi], ci,
+                                        (uint32_t)fi, fragments[fi],
+                                        checksums[fi]);
             }
             if (prc == EFS_OK) {
                 acks++;
@@ -1031,6 +1187,17 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     free(page);
     free(frag_buf);
     free(blob);
+
+    /* Extra shards (Phase 3): pages live under table_ino. Do not PUT_META
+     * this root — that would replace the export-level shard-0 EFSR. v8 will
+     * fold per-shard gens into the cluster root. */
+    if (!commit_cluster_root) {
+        pthread_mutex_lock(&s->lock);
+        ex->meta_fragmented = 1;
+        efs_export_root_move(&ex->root, &root);
+        pthread_mutex_unlock(&s->lock);
+        return 0;
+    }
 
     /* Two-phase commit: the new root is NOT installed locally until a quorum
      * of peers has acknowledged it. Serialize the candidate root for fan-out
@@ -1643,7 +1810,13 @@ static void *meta_flush_thread(void *arg)
         }
         uint32_t dirty[EFS_MAX_EXPORTS];
         uint32_t ndirty = 0;
-        if (server_is_meta_primary_locked(s)) {
+        int can_flush = server_is_meta_primary_locked(s);
+        if (!can_flush && s->export_count) {
+            /* Extra-shard owners flush their own tables when bits>0. */
+            can_flush = (s->exports[0].root.shard_bits &&
+                         s->exports[0].root.shard_count > 1);
+        }
+        if (can_flush) {
             for (uint32_t e = 0; e < s->export_count && e < EFS_MAX_EXPORTS;
                  e++) {
                 if (s->rpc_dirty_ops[e] > 0) {
