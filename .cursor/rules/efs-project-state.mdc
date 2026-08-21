@@ -17,7 +17,7 @@ CoW = **debe6dd**, catchup-vs-GC = **76753ef**, 2b reads = **94f96fd**.
 owner routing + owner extra flush + on-demand LRU + spread creates
 (dentry on parent, inode on child, stride=nlive) + `efs_export_rehash`
 (`efs-mgmt upgrade`). Same-fd zeros fixed (dcache overlay).
-**Phase 3 VALIDATED on a throwaway sharded export (Aug 21 PM):**
+**Phase 3 VALIDATED on a throwaway sharded export (Aug 21 PM, 0298143):**
 `efs-s3` bits=3 (8 shards), single-export cluster (see multi-export gap
 below). Low-bits ino encoding (`ino & (2^bits-1)`, root pinned to shard 0),
 canonical sorted-live ownership, server rebuild preserves shard_id,
