@@ -1,0 +1,15 @@
+# posix-2client host_a=fcstor007.ib host_b=fcstor008.ib mnt=/tmp/efs/mnt 2026-08-20T23:42:00Z
+test	result	detail
+peer_mkdir_visible	PASS	
+peer_create_visible	PASS	
+peer_write_read	PASS	
+peer_listdir_siblings	PASS	
+peer_shared_creat	PASS	
+peer_open_existing	PASS	
+peer_creat_excl_eexist	PASS	
+peer_stat_size	PASS	
+peer_rename_visible	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-2c/peer_rename_visible/old'
+peer_mkdir_then_create	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-2c/peer_mkdir_then_create/dir'
+peer_shared_pwrite	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-2c/peer_shared_pwrite/file'
+peer_unlink_gone	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-2c/peer_unlink_gone/gone'
+# summary pass=8 fail=4 skip=0 total=12 dur=7.2

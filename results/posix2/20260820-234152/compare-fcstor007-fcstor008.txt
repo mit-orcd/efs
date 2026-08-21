@@ -1,0 +1,13 @@
+================================================================
+POSIX baseline comparison: 12 tests
+  both pass        : 8
+  EFS BUGS         : 4  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  peer_mkdir_then_create           [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-2c/peer_mkdir_then_create/dir'
+  peer_rename_visible              [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-2c/peer_rename_visible/old'
+  peer_shared_pwrite               [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-2c/peer_shared_pwrite/file'
+  peer_unlink_gone                 [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-2c/peer_unlink_gone/gone'

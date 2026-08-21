@@ -1,0 +1,15 @@
+# posix-2client host_a=fcstor007.ib host_b=fcstor008.ib mnt=/tmp/efs/mnt 2026-08-20T23:40:36Z
+test	result	detail
+peer_mkdir_visible	PASS	
+peer_create_visible	PASS	
+peer_write_read	PASS	
+peer_listdir_siblings	PASS	
+peer_shared_creat	PASS	
+peer_open_existing	PASS	
+peer_creat_excl_eexist	PASS	
+peer_stat_size	PASS	
+peer_rename_visible	PASS	
+peer_mkdir_then_create	PASS	
+peer_shared_pwrite	FAIL	A cannot read B's 4k at offset 4096 (got b'')
+peer_unlink_gone	PASS	
+# summary pass=11 fail=1 skip=0 total=12 dur=9.5
