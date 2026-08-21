@@ -350,6 +350,28 @@ int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
     return EFS_OK;
 }
 
+/* Cross-client O_APPEND: reserve the next len bytes at the owner; returns
+ * the post-advance size (append offset = *new_size_out - len). */
+int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
+                                  uint64_t len, uint64_t *new_size_out)
+{
+    struct efs_msg_inode_append req;
+    memset(&req, 0, sizeof(req));
+    req.export_id = export_id;
+    req.ino = ino;
+    req.len = len;
+    struct efs_msg_inode_reply r;
+    int rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_APPEND, &req, sizeof(req),
+                                 EFS_MSG_INODE_APPEND_REPLY, &r, sizeof(r));
+    if (rc != EFS_OK)
+        return rc;
+    if (r.status != EFS_INODE_RPC_OK)
+        return rpc_status_to_efs(r.status);
+    if (new_size_out)
+        *new_size_out = r.inode.size;
+    return EFS_OK;
+}
+
 int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
                         efs_ino_t new_parent, const char *new_name,
                         struct efs_inode *out)

@@ -9,6 +9,17 @@ alwaysApply: true
 environment, reached via the `efs-test-ssh` wrapper:
 `~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh <host> '<cmd>'`
 
+**Disposable cluster (standing permission from the user, Aug 21 2026):** you
+may always tear down the whole cluster and wipe all data on fcstor003–006
+for testing — no rolling restart, no build-id dance, just fresh mkfs —
+UNLESS the user says differently for a particular run.
+
+**Wipe with `edelete`, NEVER `rm -rf`** (rm -rf on millions of chunk files
+takes many minutes; edelete does all 6 paths on 4 nodes in seconds):
+`for d in 01..06; do ~/git/ereport/edelete --delete --force /data1/$d/efs; done`
+then `mkdir -p` the dirs again (edelete removes the start dir too).
+Same for any big test-tree cleanup on these nodes.
+
 ## Topology (current)
 
 - 4 servers (`efsd`), port 19810, 6 NVMe paths each

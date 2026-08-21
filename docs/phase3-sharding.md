@@ -36,11 +36,17 @@ Skip 2c. Do not implement a monolithic gen-check cache.
               per-shard flush / catchup / dirty
 ```
 
-`shard = ino >> shard_bits` (`efs_export_shard_of`). Shard 0 is today's
+`shard = ino & (shard_count - 1)` (`efs_export_shard_of`; the root ino is
+pinned to shard 0). Low bits, not `ino >> shard_bits`: the shift scheme gave
+each shard only `2^bits` inos (shard 0 exhausted after two creates → every
+mkdir returned EEXIST) and unbounded shard ids. Each shard allocates from its
+own congruence class, so per-shard ino space is unbounded. Shard 0 is today's
 single blob (`shard_bits = 0`, `shard_count = 1`). Each shard's pages live
 under `efs_meta_shard_table_ino(shard)` (shard 0 == `EFS_META_TABLE_INO`).
 
-Owner (4 nodes, ids 1..4): among **live** nodes, `live[shard % nlive]`.
+Owner (4 nodes, ids 1..4): among **live** nodes, `sorted_live[shard % nlive]`
+— the live list is sorted ascending inside `efs_shard_owner_of` so every
+node and client computes the same owner regardless of list order.
 When `shard_count <= 1` this is the current meta primary (lowest live id).
 Until a shard has its own table+flush, **every RPC still goes to the export
 primary** — routing to a replica would mutate a copy that does not flush.

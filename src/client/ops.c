@@ -227,8 +227,14 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
         int newer = rpc->mtime > local.mtime ||
                     (rpc->mtime == local.mtime &&
                      rpc->mtime_nsec > local.mtime_nsec);
+        /* Equal-size with a newer mtime also takes the remote: a peer can
+         * change chunk mappings without changing size (writing into a
+         * pre-sized file's holes). Size-only growth misses that — the
+         * reader then serves zeros/stale mappings forever (mc_stress
+         * rwfile). Our own reports echo back with the same mtime, so this
+         * does not re-pull on our own writes. */
         if (rpc->size > local.size ||
-            (newer && rpc->size < local.size)) {
+            (newer && rpc->size <= local.size)) {
             local.size = rpc->size;
             local.pack_ino = rpc->pack_ino;
             local.pack_off = rpc->pack_off;
@@ -324,10 +330,25 @@ efs_ino_t efs_client_create(efs_ino_t parent, const char *name, uint32_t mode,
     pthread_mutex_lock(&g_client.idx_mu);
     /* create_with_ino applies the same side effects as the primary
      * (parent nlink++ for a subdirectory, indexes, rollups). Upsert
-     * alone would leave the local parent nlink stale. */
-    if (efs_export_create_with_ino(&g_client.export, out.ino, parent, mode,
+     * alone would leave the local parent nlink stale.
+     * On a sharded export mirror the server's apply: the full row lives
+     * on the child shard's table (so the data path's get_inode finds it),
+     * plus a dentry row on the parent's shard when the two differ.
+     * bits==0: both are the main table — identical to the old path. */
+    struct efs_export *ctab = efs_export_table_for_ino(&g_client.export,
+                                                       out.ino);
+    struct efs_export *ptab = efs_export_table_for_ino(&g_client.export,
+                                                       parent);
+    if (!ctab)
+        ctab = &g_client.export;
+    if (efs_export_create_with_ino(ctab, out.ino, parent, mode,
                                    uid, gid, name) == 0)
-        efs_export_upsert_inode(&g_client.export, &out);
+        efs_export_upsert_inode(ctab, &out);
+    if (ptab && ptab != ctab) {
+        if (efs_export_create_with_ino(ptab, out.ino, parent, mode,
+                                       uid, gid, name) == 0)
+            efs_export_upsert_inode(ptab, &out);
+    }
     efs_export_set_mtime(&g_client.export, parent, now());
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);

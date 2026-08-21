@@ -596,7 +596,7 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
                         }
                         const uint8_t *csum =
                             efs_export_root_checksum_const(root, pi, fi);
-                        int hrc = put_meta_fragment(s, ex, EFS_META_TABLE_INO,
+                        int hrc = put_meta_fragment(s, ex, table_ino,
                                                     placed[fi], ci, (uint32_t)fi,
                                                     fragments[fi], csum);
                         if (hrc == EFS_OK)
@@ -702,9 +702,13 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
 
     /* Commit: free the old table's contents and move the staged pointers in.
      * efs_export_free zeroes ex (including root.page_checksums); the staged
-     * root is empty (EFSM carries no EFSR), then root_move reinstalls snap. */
+     * root is empty (EFSM carries no EFSR), then root_move reinstalls snap.
+     * Preserve shard_id: for an extra-shard table the deserialize staging
+     * zeroed it, and alloc_ino keys the ino congruence class off it. */
+    uint32_t saved_shard_id = ex->shard_id;
     efs_export_free(ex);
     *ex = staging;
+    ex->shard_id = saved_shard_id;
     memset(&staging, 0, sizeof(staging));
 
     /* Success: keep the assembled blob (plus this generation's page
@@ -854,7 +858,14 @@ static int server_commit_cluster_extras(struct efsd_server *s,
         pthread_mutex_unlock(&s->lock);
         return -1;
     }
-    root.generation = ex->root.generation + 1;
+    /* Do NOT bump the main generation: the primary is the sole shard-0
+     * writer and owns the gen sequence. An extras commit that bumped the gen
+     * made receivers (including the primary) install our STALE copy of the
+     * shard-0 page_cis and fence their live tables — unflushed RPC ops were
+     * dropped and rebuilds fetched long-GC'd pages (mc_stress data loss).
+     * Same-gen + identical shard-0 checksums is recognized as an extras
+     * refresh and merged without fencing. */
+    root.generation = ex->root.generation;
     root.version = EFS_META_ROOT_VERSION_V8;
     int crc = efs_export_root_capture_extras(&root, ex);
     pthread_mutex_unlock(&s->lock);
@@ -1484,6 +1495,43 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
         s->export_count = 1;
     }
     struct efs_export *ex = &s->exports[0];
+    /* The catchup/install path is single-export (exports[0]): a root for a
+     * DIFFERENT export must not morph this slot (root_move overwrites
+     * ex->id/name). Multi-export catchup is a known gap — test clusters run
+     * one export at a time. */
+    if (ex->meta_fragmented && ex->id && root.id && root.id != ex->id) {
+        pthread_mutex_unlock(&s->lock);
+        efs_export_root_free(&root);
+        return 0;
+    }
+    /* Unflushed RPC mutations mean our in-memory table is ahead of ANY root
+     * a peer can serve: roots are made by flushing a snapshot that predates
+     * those ops. Installing this root (and especially rebuilding/adopting
+     * from it) would wipe the dirty state — the primary's own in-flight
+     * flush commits the root to peers before root_move updates it locally,
+     * so its catchup can see that newer root and rebuild away newer
+     * in-memory reports (mc_stress: cdir files back to size 0). Defer; the
+     * flush advances our local root past this gen and the next poll is a
+     * no-op. */
+    for (uint32_t e = 0; e < s->export_count && e < EFS_MAX_EXPORTS; e++) {
+        if (s->rpc_dirty_ops[e] > 0) {
+            pthread_mutex_unlock(&s->lock);
+            efs_export_root_free(&root);
+            return 0;
+        }
+    }
+    /* Extras-only refresh (same shard-0 pages, newer gen): adopt the gen and
+     * merge the extra-shard descriptors without touching the live tables. */
+    if (ex->meta_fragmented &&
+        efs_export_root_same_pages(&root, &ex->root)) {
+        ex->root.generation = root.generation;
+        efs_export_merge_extra_roots(ex, &root);
+        s->export_meta_dirty = 1;
+        server_save_export(s, ex);
+        pthread_mutex_unlock(&s->lock);
+        efs_export_root_free(&root);
+        return 1;
+    }
     /* Skip stale or identical generations once we already hold an EFSR root.
      * Exception: same generation, our fragment rebuild is stuck (e.g.
      * dual-slot pages vanished from every node), and the peer shipped its
@@ -1701,9 +1749,24 @@ static void *meta_catchup_thread(void *arg)
                 free(ex->gm_blob);
                 ex->gm_blob = NULL;
                 s->epoch++;
+                /* The main rebuild's efs_export_free wiped shard_tabs.
+                 * Reinstall the extra-shard roots (marks each table
+                 * meta_needs_rebuild) and rebuild them below — otherwise a
+                 * restarted server lazily recreates its shard tables EMPTY
+                 * and every non-zero-shard file reads back as size 0. */
+                efs_export_install_extra_roots(ex);
                 server_save_export(s, ex);
                 pthread_mutex_unlock(&s->lock);
                 fprintf(stderr, "meta-catchup: rebuilt export=%s\n", ex->name);
+                if (ex->shard_tabs) {
+                    for (uint32_t i = 1; i < ex->shard_tab_cap; i++) {
+                        struct efs_export *tab = ex->shard_tabs[i];
+                        if (!tab || !tab->meta_needs_rebuild)
+                            continue;
+                        (void)server_rebuild_export_from_pages_ino(
+                            s, tab, efs_meta_shard_table_ino(i));
+                    }
+                }
                 did_work = 1;
             } else if (rc == EFS_ERR_PROTO) {
                 /* Gen raced with PUT_META, or a CoW rebuild hit the
@@ -1831,7 +1894,8 @@ static void *meta_flush_thread(void *arg)
         }
         uint32_t dirty[EFS_MAX_EXPORTS];
         uint32_t ndirty = 0;
-        int can_flush = server_is_meta_primary_locked(s);
+        int can_flush_primary = server_is_meta_primary_locked(s);
+        int can_flush = can_flush_primary;
         if (!can_flush && s->export_count) {
             /* Extra-shard owners flush their own tables when bits>0. */
             can_flush = (s->exports[0].root.shard_bits &&
@@ -1841,12 +1905,15 @@ static void *meta_flush_thread(void *arg)
             for (uint32_t e = 0; e < s->export_count && e < EFS_MAX_EXPORTS;
                  e++) {
                 if (s->rpc_dirty_ops[e] > 0) {
-                    if (s->exports[e].meta_needs_rebuild) {
+                    if (s->exports[e].meta_needs_rebuild && can_flush_primary) {
                         /* Fenced by a concurrent client-driven PUT_META: the
                          * in-memory table is stale and the catchup rebuild
                          * will overwrite it, so these RPC mutations are lost
                          * — don't flush a stale table. (Transition-only race;
-                         * goes away in 2b when clients stop blob-flushing.) */
+                         * goes away in 2b when clients stop blob-flushing.)
+                         * Non-primary: the dirty ops live in OWNED shard
+                         * tables, which a main-table fence does not touch —
+                         * they flush fine, so don't drop them. */
                         fprintf(stderr,
                                 "meta-flush: export=%s dirty under rebuild; "
                                 "dropping %llu RPC op(s) (client-flush race)\n",

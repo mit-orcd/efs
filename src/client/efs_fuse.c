@@ -2086,6 +2086,29 @@ static off_t append_end_offset(efs_ino_t ino)
     return (off_t)size;
 }
 
+/* Cross-client append: reserve the region at the metadata owner so two
+ * clients never write at the same end offset (the local table only knows
+ * our own appends). Falls back to the local end if the RPC fails. */
+static off_t append_reserve_offset(efs_ino_t ino, uint64_t len)
+{
+    uint64_t ns = 0;
+    if (efs_client_rpc_append_reserve(g_client.export_id, ino, len,
+                                      &ns) != 0 ||
+        ns < len)
+        return append_end_offset(ino);
+    /* Reflect the reservation locally so same-client readers and the next
+     * append see the advanced end before our data flushes. */
+    efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
+    struct efs_inode cur;
+    if (efs_export_get_inode(&g_client.export, ino, &cur) == 0 &&
+        cur.size < ns)
+        efs_export_set_size(&g_client.export, ino, ns);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(ino);
+    return (off_t)(ns - len);
+}
+
 static int efs_fuse_write(const char *path, const char *buf, size_t size,
                           off_t offset, struct fuse_file_info *fi)
 {
@@ -2105,7 +2128,7 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
     int append = fi && (fi->flags & O_APPEND);
     if (append) {
         pthread_mutex_lock(&g_append_mu);
-        offset = append_end_offset(ino);
+        offset = append_reserve_offset(ino, (uint64_t)size);
     }
     if (efs_dcache_try_patch(ino, (uint64_t)offset, (uint32_t)size,
                              (const uint8_t *)buf) == 0) {
@@ -2170,7 +2193,7 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
     int append = fi && (fi->flags & O_APPEND);
     if (append) {
         pthread_mutex_lock(&g_append_mu);
-        offset = append_end_offset(ino);
+        offset = append_reserve_offset(ino, (uint64_t)size);
     }
     /* Sub-chunk 4k: patch the dirty chunk in memory. Sending every 4k
      * through writeback did a 128 KiB RMW+PUT and EIO'd when the GET

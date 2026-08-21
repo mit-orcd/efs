@@ -17,8 +17,50 @@ CoW = **debe6dd**, catchup-vs-GC = **76753ef**, 2b reads = **94f96fd**.
 owner routing + owner extra flush + on-demand LRU + spread creates
 (dentry on parent, inode on child, stride=nlive) + `efs_export_rehash`
 (`efs-mgmt upgrade`). Same-fd zeros fixed (dcache overlay).
-**Do not set `shard_bits>0` on the live cluster** until extra-shard
-restart is proven on a throwaway export. Live path remains bits=0.
+**Phase 3 VALIDATED on a throwaway sharded export (Aug 21 PM):**
+`efs-s3` bits=3 (8 shards), single-export cluster (see multi-export gap
+below). Low-bits ino encoding (`ino & (2^bits-1)`, root pinned to shard 0),
+canonical sorted-live ownership, server rebuild preserves shard_id,
+catchup rebuilds shard tables after main rebuild, client dual-apply
+mirrors server (child full row + parent dentry), attr accessors route to
+the canonical shard row (`shard_route`). **Root-protocol fix (the big
+one):** extra-shard owners no longer bump the main gen on extras commits
+(`server_commit_cluster_extras` same-gen), and PUT_META/catchup recognize
+identical shard-0 checksums as an extras-only refresh — merge descriptors
+(`efs_export_merge_extra_roots`: skip dirty tabs, skip >= gen), never
+fence live tables. Flush thread drops dirty ops only when primary.
+Cross-client O_APPEND is atomic via `EFS_MSG_INODE_APPEND` reserve RPC;
+REPORT_CHUNKS applies size grow-only / mtime newer-only; `adopt_rpc_inode`
+re-pulls chunk mappings on newer mtime even at same size.
+**mc_stress (tests/stress/, 2 clients, bits=3): VERIFY-OK on both** —
+200 same-dir creates cross-visible with content, 200 appends (100+100,
+0 torn), 64×128 KiB disjoint chunks of a shared 8 MiB file intact on both
+clients, rename churn clean, growfile monotonic. kill -9 shard owner →
+16/16 failover reads OK; restart rejoined; cold mount 16/16 + appfile
+200 lines. Zero "dirty under rebuild"/"unrecoverable" log lines on all
+4 servers during the stress.
+**Regression after all Phase 3 fixes (Aug 21 PM, bits=0 efs-test):**
+POSIX **144/144** (`results/posix/20260821-185338`, fcstor007; 5
+target-better = known XFS-baseline quirks), posix2 **12/12**
+(`results/posix2/20260821-185357`, A=007 B=008), perf quick: single
+007 sw-1m **5049** / ow-1m 4970 / sr-1m 4686 / rw-4k **1559** (399k IOPS);
+multi-9 agg sw-1m **4842** / sr-1m 24576 / rw-4k **13917** (≈ the 13428
+pre-collapse baseline; rw-128k 121 GB/s agg is the known not-credible
+dcache artifact). No regression anywhere.
+**Known gaps found during sharded validation:** (1) server metadata layer
+is single-export (`exports[0]`-only): PUT_META rejects other export ids,
+catchup polls only exports[0] — multi-export clusters diverge; run ONE
+export per cluster until fixed. (2) shard-table pages are never GC'd
+(the commit=0 flush path skips the CoW GC block) — slow space leak.
+(3) `entry_timeout=1.0` gives ~1 s stale negative dentries (rename-churn
+EEXIST noise; POSIX suites pass regardless). (4) shard ownership remap on
+membership change has no gen-fencing (stable membership assumed).
+**Multi sw-1m FIXED (working tree, Aug 21):** 023817's 1274 agg
+(~140/client lockstep) was a 100MB-table flush stalling PUTs — serialize
+and peer deserialize ran under `s->lock`, and overwrite REPORTed every
+checksum. Snapshot-serialize + unlocked catchup adopt + checksum-only
+skip dirty. Single overwrite **4564** MiB/s; 9-client sw-1m agg **~4326**
+(shared write ceiling; was 4593 on 220930). Live table ~880k chunks.
 **Same-fd POSIX zeros FIXED (working tree):** `dcache_copy` now serves
 fully-covered `have_base=0` dirty ranges; GET overlays those ranges onto
 a zero/fetched chunk. That was the 2b-reads regression
@@ -75,8 +117,15 @@ posix|posix2|perf|setup|all`. `setup` rsyncs+builds+mounts the 9 pure clients.
   only if the parent is missing (RPC should make prepare visible).
   `fusermount3 -uz` — a busy FUSE remount hangs. Run: `tests/run_tests.sh posix2`.
 - **Perf** (`tests/perf/perf_node.sh`): dd + 9-job fio, single|multi client
-  (parallel), aggregated to `results/perf/history.tsv`. Harness logs stay
-  LOCAL (don't depend on the efs read-after-write path being benchmarked).
+ (parallel), aggregated to `results/perf/history.tsv`. Harness logs stay
+ LOCAL (don't depend on the efs read-after-write path being benchmarked).
+- **Multi-client stress** (`tests/stress/mc_stress_worker.sh` A|B on two
+ clients + `mc_stress_verify.sh`): same-dir creates, same-file O_APPEND,
+ disjoint 128 KiB chunks of one shared file (chunk-aligned — sub-chunk
+ cross-client RMW is still a follow-on), rename churn, read-during-write
+ monotonicity. VERIFY-OK on both clients = pass. NOTE: run the harness
+ UNSANDBOXED (ssh to the nodes); a sandboxed run fails ssh silently and
+ produces empty 0-test results.
 - **NFS scratch baseline (20260820-221413)**: same suite, one client
   (fcstor007) vs Engaging ORCD scratch NFS
   (`~/orcd/scratch/efs/nfs-fio-baseline` → fstor004.ib, nfs4, 294T).
@@ -124,6 +173,25 @@ posix|posix2|perf|setup|all`. `setup` rsyncs+builds+mounts the 9 pure clients.
   residual is cross-client RMW contention on the shared write ceiling
   (sw-1m agg 4593 ≈ ceiling). Single-client is fully fixed; multi-client
   sub-chunk/ranged PUT is the follow-on if that gap matters.
+- **Perf after Phase 3 (2b63d31), Aug 21**: single `20260821-013841` all
+  rc=0 — sw-1m 4255 / sr-1m 3566 / rw-4k 1554 (matches 220703). First
+  multi `20260821-023152` is invalid (009–015 still on stale v7 FUSE,
+  all rc=1 in 1s). Remounted those seven; multi `20260821-023817` all
+  rc=0. dd seq1m.write agg 18944 / sr-1m 9171 / rw-4k 9225. fio sw-1m
+  collapsed to 1274 agg (~140/client) vs 4593 on 220930 — 9-way write
+  lockstep, not a single-client regression. rw-128k agg 90 GB/s is not
+  credible (likely dcache-served or a parse/report artifact).
+  **FIXED (working tree):** (1) flush/GET_META serialize via table snapshot
+  unlocked; (2) catchup `deserialize` into a tmp table then
+  `efs_export_adopt_tables` (was under `s->lock` for 800k chunks);
+  (3) REPORT norollup + yield every 8k; (4) overwrite with same placement
+  does not `mark_chunk_dirty` (checksum-only). That flush+peer-rebuild
+  storm is what pinned 9 writers at ~140. Revalidated after efsd bounce +
+  remount 007–015: single overwrite 4564; 9-client warmup ~231/client
+  (~2.1 GB/s agg first-write), sw-1m 262×8 + 2230 on 015 ≈ **4326 agg**
+  (shared ceiling). First-write of *new* files on a huge table is still
+  ~1.7 GB/s single (grow + REPORT); overwrite is the apples-to-apples
+  number. dd-of-zero still skips PUTs — do not trust seq1m.write agg.
 
 ## POSIX gaps vs XFS (suite, Aug 20) — ALL FIXED, 144/144
 FIXED (7fa99e8): packed-file overwrite/append + rename/link data loss (see
@@ -232,6 +300,31 @@ FIXED (7e442fa) — the last 5:
   (sw 4.6 GB/s, sr 2.4 GB/s, 4k rand ~40k IOPS). rclone 32×10GiB copy rc=0.
 
 ## Root causes already found — don't re-diagnose
+- **Sharded-export data loss = dual-writer root gen (FIXED, working tree)**:
+  the primary AND every extra-shard owner bumped the SAME cluster-root gen
+  (owner's `server_commit_cluster_extras` did gen+1 with a STALE copy of
+  the shard-0 page_cis). The primary's PUT_META handler accepted the newer
+  gen, fenced+zeroed its live table, and the flush thread dropped the
+  unflushed RPC ops ("dirty under rebuild"); the rebuild then fetched cis
+  the primary's own flushes had long superseded (GC'd → unrecoverable).
+  mc_stress symptoms: cross-client appends vanished (appfile 100/200, all
+  one client's), packed files read size 0 on the peer, rwfile chunks
+  missing. Fix: extras commits keep the main gen; receivers compare shard-0
+  page checksums — identical ⇒ extras-only refresh, merge descriptors
+  without fencing (per-shard single-writer makes gen-compare safe; dirty
+  tabs are never fenced). Also: cross-client O_APPEND needed a server-side
+  reserve RPC (local size reads race), and pre-sized files needed
+  mtime-newer chunk re-pulls in adopt_rpc_inode (size-only growth missed
+  peer writes into an already-sized file).
+- **Multi-client sw-1m ~140 MiB/s lockstep (FIXED, working tree)**: not
+  RDMA, not 1m-try_patch. After warmup, each close REPORTed ~32k new
+  chunk recs; `meta_flush_thread` serialized the live 100MB table under
+  `g_server->lock` (every PUT takes that lock for `export_acquire`).
+  Peers then GET_META + `deserialize` of 800k chunks, also under the
+  lock. Overwrite also dirtied checksum-only updates so the storm
+  continued into sw-1m. Fix: snapshot serialize, unlocked catchup adopt,
+  norollup REPORT, skip dirty when placement is unchanged. dd-of-zero
+  "18 GB/s" is fake (`chunk_put_worker` skips all-zero PUTs).
 - **Same-fd read-your-writes zeros after 2b-reads (FIXED, working tree)**:
   a first write to an unpublished chunk is `have_base=0` (zeros + dirty
   ranges). `dcache_copy` refused those entries (unpatched bytes are not

@@ -237,7 +237,10 @@ int main(void)
         failures++;
     }
 
-    if (efs_export_shard_of(1, 0) != 0 || efs_export_shard_of(1ULL << 10, 10) != 1) {
+    /* Low-bits sharding: shard s owns ino == s (mod 2^bits); root -> 0. */
+    if (efs_export_shard_of(1, 0) != 0 || efs_export_shard_of(EFS_ROOT_INO, 5) != 0 ||
+        efs_export_shard_of(5, 2) != 1 || efs_export_shard_of(6, 2) != 2 ||
+        efs_export_shard_of(8, 3) != 0 || efs_export_shard_of(9, 3) != 1) {
         fprintf(stderr, "FAIL shard_of\n");
         failures++;
     }
@@ -248,9 +251,14 @@ int main(void)
     }
     {
         efs_node_id_t live[4] = {2, 4, 1, 3};
+        efs_node_id_t live2[4] = {1, 2, 3, 4};
+        /* Canonical (sorted) ownership: input order must not matter. */
         if (efs_shard_owner_of(0, 1, live, 4) != 1 ||
             efs_shard_owner_of(0, 0, live, 4) != 1 ||
-            efs_shard_owner_of(5, 8, live, 4) != live[5 % 4] ||
+            efs_shard_owner_of(5, 8, live, 4) != 2 ||
+            efs_shard_owner_of(5, 8, live2, 4) != 2 ||
+            efs_shard_owner_of(1, 8, live, 4) != 2 ||
+            efs_shard_owner_of(4, 8, live, 4) != 1 ||
             efs_shard_owner_of(0, 8, NULL, 0) != 0) {
             fprintf(stderr, "FAIL shard_owner_of\n");
             failures++;
@@ -262,18 +270,21 @@ int main(void)
         sh.root.shard_bits = 8;
         sh.root.shard_count = 256;
         sh.next_ino = 2;
+        /* Main table (shard 0): class 0 — 0 invalid and 1 is the root,
+         * so the first allocatable ino is 256, then 512. */
         efs_ino_t a = efs_export_alloc_ino(&sh, EFS_ROOT_INO);
         efs_ino_t b = efs_export_alloc_ino(&sh, EFS_ROOT_INO);
-        if (a != 2 || b != 3 ||
+        if (a != 256 || b != 512 ||
             efs_export_shard_of(a, 8) != 0 ||
             efs_export_shard_of(b, 8) != 0) {
             fprintf(stderr, "FAIL alloc_ino shard0: a=%llu b=%llu\n",
                     (unsigned long long)a, (unsigned long long)b);
             failures++;
         }
-        /* Parent in shard 1 (ino 256): allocate in 256..511. */
-        efs_ino_t c = efs_export_alloc_ino(&sh, 256);
-        if (c != 256 || efs_export_shard_of(c, 8) != 1) {
+        /* Shard-1 table: class 1 — skips 1 (root), first free is 257. */
+        struct efs_export *t1 = efs_export_table(&sh, 1);
+        efs_ino_t c = t1 ? efs_export_alloc_ino(t1, 0) : 0;
+        if (c != 257 || efs_export_shard_of(c, 8) != 1) {
             fprintf(stderr, "FAIL alloc_ino shard1: c=%llu\n",
                     (unsigned long long)c);
             failures++;
@@ -291,12 +302,17 @@ int main(void)
             fprintf(stderr, "FAIL table_for_ino split\n");
             failures++;
         } else {
-            efs_ino_t child = efs_export_create(t1, 256, S_IFREG | 0644,
+            /* A class-1 parent dir (ino 257) whose row lives on shard 1. */
+            efs_ino_t pdir = efs_export_create_with_ino(t1, 257, EFS_ROOT_INO,
+                                                        S_IFDIR | 0755,
+                                                        0, 0, "pdir");
+            efs_ino_t child = efs_export_create(t1, 257, S_IFREG | 0644,
                                                 0, 0, "in-shard-1");
             struct efs_inode got;
-            if (!child || efs_export_shard_of(child, 8) != 1 ||
-                efs_export_lookup(t1, 256, "in-shard-1", &got) != 0 ||
-                efs_export_lookup(&sh, 256, "in-shard-1", &got) != 0 ||
+            if (!pdir || !child || child == 257 ||
+                efs_export_shard_of(child, 8) != 1 ||
+                efs_export_lookup(t1, 257, "in-shard-1", &got) != 0 ||
+                efs_export_lookup(&sh, 257, "in-shard-1", &got) != 0 ||
                 efs_export_table_for_ino(&sh, child) != t1) {
                 fprintf(stderr, "FAIL two-shard create/lookup child=%llu\n",
                         (unsigned long long)child);
@@ -417,7 +433,7 @@ int main(void)
     {
         struct efs_export sh;
         efs_export_init(&sh, 5, "rehash");
-        sh.next_ino = 20; /* so the file lands in shard 2 after bits=3 */
+        sh.next_ino = 20; /* ino 20 lands on shard 20 & 7 = 4 after bits=3 */
         efs_ino_t f = efs_export_create(&sh, EFS_ROOT_INO, S_IFREG | 0644,
                                         0, 0, "f");
         if (!f || efs_export_rehash(&sh, 3) != 0 ||

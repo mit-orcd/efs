@@ -74,6 +74,8 @@ static efs_ino_t inode_rpc_key(uint8_t type, const void *payload)
         return ((const struct efs_msg_inode_getattr *)payload)->ino;
     case EFS_MSG_INODE_SETATTR:
         return ((const struct efs_msg_inode_setattr *)payload)->ino;
+    case EFS_MSG_INODE_APPEND:
+        return ((const struct efs_msg_inode_append *)payload)->ino;
     case EFS_MSG_INODE_RENAME:
         return ((const struct efs_msg_inode_rename *)payload)->new_parent;
     case EFS_MSG_INODE_LINK:
@@ -838,7 +840,22 @@ send_reply:
                             efs_export_root_free(&root);
                         } else if (ex->meta_fragmented &&
                             root.generation <= ex->root.generation) {
-                            reply = EFS_PUT_META_STALE;
+                            /* Same-gen root with identical shard-0 pages and
+                             * extra-shard descriptors: an extra-shard owner's
+                             * extras refresh (it must NOT bump the main gen —
+                             * the primary is the sole shard-0 writer). Merge
+                             * the descriptors; our live tables stay put. */
+                            if (root.generation == ex->root.generation &&
+                                root.extra_shard_count > 0 &&
+                                efs_export_root_same_pages(&root, &ex->root)) {
+                                efs_export_merge_extra_roots(ex, &root);
+                                g_server->export_meta_dirty = 1;
+                                server_save_export(g_server, ex);
+                                g_server->export_meta_dirty = 0;
+                                reply = EFS_PUT_META_OK;
+                            } else {
+                                reply = EFS_PUT_META_STALE;
+                            }
                             pthread_mutex_unlock(&g_server->lock);
                             efs_export_root_free(&root);
                         } else if (root.write_lease_id &&
@@ -855,6 +872,27 @@ send_reply:
                              * and retry. Roots with no lease id (mkfs,
                              * legacy tools) skip the gate entirely. */
                             reply = EFS_PUT_META_STALE;
+                            pthread_mutex_unlock(&g_server->lock);
+                            efs_export_root_free(&root);
+                        } else if (ex->meta_fragmented &&
+                                   efs_export_root_same_pages(&root,
+                                                              &ex->root)) {
+                            /* Newer gen but identical shard-0 pages: the
+                             * sender added no shard-0 content (extras-only
+                             * refresh that crossed a gen, or a redundant
+                             * re-commit of our own root). Adopt the gen so
+                             * future commits stay monotonic, merge the extra
+                             * descriptors — but keep our live shard-0 table,
+                             * placement, next_ino and next_ci. Fencing here
+                             * is what wiped unflushed RPC ops on the primary
+                             * (mc_stress: appfile/cdir data loss). */
+                            ex->root.generation = root.generation;
+                            efs_export_merge_extra_roots(ex, &root);
+                            g_server->epoch++;
+                            g_server->export_meta_dirty = 1;
+                            server_save_export(g_server, ex);
+                            g_server->export_meta_dirty = 0;
+                            reply = EFS_PUT_META_OK;
                             pthread_mutex_unlock(&g_server->lock);
                             efs_export_root_free(&root);
                         } else {
@@ -924,7 +962,10 @@ send_reply:
                                 ex->chunk_count = 0;
                                 ex->inode_count = 0;
                             }
-                            efs_export_install_extra_roots(ex);
+                            /* Selective: a shard table we still write (dirty,
+                             * or same/newer gen) keeps its state; only
+                             * genuinely newer foreign descriptors land. */
+                            efs_export_merge_extra_roots(ex, &ex->root);
                             g_server->epoch++;
                             g_server->export_meta_dirty = 1;
                             /* New generation: drop the GET_META cache. */
@@ -1370,6 +1411,7 @@ send_reply:
         case EFS_MSG_INODE_UNLINK:
         case EFS_MSG_INODE_RENAME:
         case EFS_MSG_INODE_SETATTR:
+        case EFS_MSG_INODE_APPEND:
         case EFS_MSG_INODE_LINK: {
             struct efs_msg_inode_reply r;
             memset(&r, 0, sizeof(r));
@@ -1396,6 +1438,9 @@ send_reply:
             else if (type == EFS_MSG_INODE_SETATTR &&
                      payload_len >= sizeof(struct efs_msg_inode_setattr))
                 eid = ((struct efs_msg_inode_setattr *)payload)->export_id;
+            else if (type == EFS_MSG_INODE_APPEND &&
+                     payload_len >= sizeof(struct efs_msg_inode_append))
+                eid = ((struct efs_msg_inode_append *)payload)->export_id;
             else if (type == EFS_MSG_INODE_LINK &&
                      payload_len >= sizeof(struct efs_msg_inode_link))
                 eid = ((struct efs_msg_inode_link *)payload)->export_id;
@@ -1520,6 +1565,24 @@ send_reply:
                     efs_export_get_inode(tab, req->ino, &r.inode);
                     r.status = EFS_INODE_RPC_OK;
                 }
+            } else if (type == EFS_MSG_INODE_APPEND) {
+                struct efs_msg_inode_append *req = payload;
+                struct efs_export *tab = table_for_ino(ex, req->ino);
+                struct efs_inode cur;
+                if (efs_export_get_inode(tab, req->ino, &cur) != 0 ||
+                    !efs_mode_is_reg(cur.mode)) {
+                    r.status = EFS_INODE_RPC_NOT_FOUND;
+                } else {
+                    /* Atomically reserve [cur.size, cur.size+len): the size
+                     * advances under s->lock, so two clients can never be
+                     * handed the same append region. The client writes the
+                     * data afterwards via the dcache/PUT/REPORT path. */
+                    efs_export_set_size_norollup(tab, req->ino,
+                                                 cur.size + req->len);
+                    server_meta_mark_rpc_dirty_locked(g_server, eidx);
+                    efs_export_get_inode(tab, req->ino, &r.inode);
+                    r.status = EFS_INODE_RPC_OK;
+                }
             } else if (type == EFS_MSG_INODE_LINK) {
                 struct efs_msg_inode_link *req = payload;
                 int lrc = efs_export_link(ex, req->src_ino, req->new_parent,
@@ -1540,6 +1603,7 @@ send_reply:
                           : (type == EFS_MSG_INODE_GETATTR) ? EFS_MSG_INODE_GETATTR_REPLY
                           : (type == EFS_MSG_INODE_RENAME) ? EFS_MSG_INODE_RENAME_REPLY
                           : (type == EFS_MSG_INODE_SETATTR) ? EFS_MSG_INODE_SETATTR_REPLY
+                          : (type == EFS_MSG_INODE_APPEND) ? EFS_MSG_INODE_APPEND_REPLY
                           : (type == EFS_MSG_INODE_LINK) ? EFS_MSG_INODE_LINK_REPLY
                           : EFS_MSG_INODE_UNLINK_REPLY;
             efs_conn_send_msg(conn, rtype, &r, sizeof(r));
@@ -1635,21 +1699,35 @@ send_reply:
                             continue;
                     }
                     struct efs_export *tab = table_for_ino(ex, irecs[k].ino);
-                    if (efs_export_get_inode(tab, irecs[k].ino, NULL) != 0)
+                    struct efs_inode cur;
+                    if (efs_export_get_inode(tab, irecs[k].ino, &cur) != 0)
                         continue; /* inode not (yet) on the server; skip */
-                    if (efs_export_set_size_norollup(tab, irecs[k].ino,
+                    /* Grow-only: a lagging client's report must not shrink a
+                     * size another client already advanced (cross-client
+                     * O_APPEND reserves size server-side ahead of its data
+                     * report). Shrinks only ever arrive via SETATTR. Same for
+                     * mtime: apply only when newer. */
+                    if (irecs[k].size > cur.size &&
+                        efs_export_set_size_norollup(tab, irecs[k].ino,
                                                      irecs[k].size) == 0)
                         applied++;
-                    efs_export_set_mtime_ns_norollup(tab, irecs[k].ino,
-                                                     irecs[k].mtime,
-                                                     irecs[k].mtime_nsec);
+                    if (irecs[k].mtime > cur.mtime ||
+                        (irecs[k].mtime == cur.mtime &&
+                         irecs[k].mtime_nsec > cur.mtime_nsec)) {
+                        efs_export_set_mtime_ns_norollup(tab, irecs[k].ino,
+                                                         irecs[k].mtime,
+                                                         irecs[k].mtime_nsec);
+                        applied++;
+                    }
                     if (irecs[k].pack_ino || irecs[k].pack_len) {
-                        struct efs_inode cur;
-                        if (efs_export_get_inode(tab, irecs[k].ino, &cur) == 0) {
-                            cur.pack_ino = irecs[k].pack_ino;
-                            cur.pack_off = irecs[k].pack_off;
-                            cur.pack_len = irecs[k].pack_len;
-                            (void)efs_export_upsert_inode(tab, &cur);
+                        /* Re-fetch: cur above predates the size grow, and
+                         * upsert writes the whole row back. */
+                        struct efs_inode pc;
+                        if (efs_export_get_inode(tab, irecs[k].ino, &pc) == 0) {
+                            pc.pack_ino = irecs[k].pack_ino;
+                            pc.pack_off = irecs[k].pack_off;
+                            pc.pack_len = irecs[k].pack_len;
+                            (void)efs_export_upsert_inode(tab, &pc);
                         }
                     }
                 }

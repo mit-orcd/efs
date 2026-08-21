@@ -457,6 +457,20 @@ int efs_export_root_prepare(struct efs_export_root *root,
 int efs_export_root_capture_extras(struct efs_export_root *root,
                                    const struct efs_export *ex);
 
+/* Nonzero when both roots reference the same shard-0 pages (CoW checksums).
+ * Used to recognize an extras-only root refresh: the sender contributed no
+ * shard-0 content, so the receiver must not fence its live shard-0 table. */
+int efs_export_root_same_pages(const struct efs_export_root *a,
+                               const struct efs_export_root *b);
+
+/* Merge incoming->extra_roots into the local shard tables without touching
+ * shard-0. A descriptor is skipped when the local shard table is dirty
+ * (unflushed ops would be fenced) or already holds an equal/newer generation
+ * (single writer per shard => local is authoritative). Refreshes
+ * ex->root.extra_roots from the merged tables. */
+void efs_export_merge_extra_roots(struct efs_export *ex,
+                                  const struct efs_export_root *incoming);
+
 /* Free page_checksums; safe on zeroed roots. */
 void efs_export_root_free(struct efs_export_root *root);
 

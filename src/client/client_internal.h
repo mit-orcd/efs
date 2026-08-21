@@ -171,6 +171,9 @@ int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
 int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
                         efs_ino_t new_parent, const char *new_name,
                         struct efs_inode *out);
+/* Cross-client O_APPEND reservation (offset = *new_size_out - len). */
+int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
+                                  uint64_t len, uint64_t *new_size_out);
 /* Phase 2b: report dirty metadata (chunk mappings + inode size/mtime) to the
  * metadata primary, replacing the client blob flush. sync=1 makes the primary
  * commit the export before replying (the fsync durability barrier). */

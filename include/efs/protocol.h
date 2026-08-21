@@ -110,6 +110,14 @@ enum efs_msg_type {
     /* Phase 2b reads: peer pulls chunk mappings for an inode it just looked up. */
     EFS_MSG_INODE_GETCHUNKS = 69,
     EFS_MSG_INODE_GETCHUNKS_REPLY = 70,
+    /* Cross-client O_APPEND: atomically reserve the next `len` bytes at the
+     * metadata owner (size advances under s->lock) and return the resulting
+     * inode; the append offset is reply.size - len. The client then writes
+     * the data there via the normal dcache/PUT/REPORT path. Without this,
+     * two clients each appended at their own stale cached end and tore or
+     * lost each other's lines (mc_stress appfile). */
+    EFS_MSG_INODE_APPEND = 71,
+    EFS_MSG_INODE_APPEND_REPLY = 72,
 };
 
 /* Set per-export features. Only bits in set_mask are changed (to the
@@ -425,6 +433,14 @@ struct efs_msg_inode_link {
     efs_ino_t src_ino;
     efs_ino_t new_parent;
     char new_name[EFS_MAX_NAME];
+};
+
+/* Cross-client O_APPEND reservation; reply is struct efs_msg_inode_reply
+ * with the inode AFTER the size advance (offset = inode.size - len). */
+struct efs_msg_inode_append {
+    efs_export_id_t export_id;
+    efs_ino_t ino;
+    uint64_t len;
 };
 
 /* Phase 2b: one written-chunk mapping record (matches efs_export_set_chunk). */

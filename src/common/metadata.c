@@ -1391,7 +1391,7 @@ static void efs_export_init_empty_table(struct efs_export *ex, efs_export_id_t i
     ex->root.shard_count = shard_count;
     ex->root.shard_bits = shard_bits;
     if (shard_bits)
-        ex->next_ino = (efs_ino_t)shard << shard_bits;
+        ex->next_ino = shard; /* low-bits: this shard's congruence-class base */
     export_reindex(ex);
     child_idx_rebuild(ex);
 }
@@ -1471,6 +1471,56 @@ void efs_export_install_extra_roots(struct efs_export *ex)
         tab->meta_needs_rebuild = (tab->root.page_count > 0);
         tab->next_ino = tab->root.next_ino;
     }
+}
+
+int efs_export_root_same_pages(const struct efs_export_root *a,
+                               const struct efs_export_root *b)
+{
+    if (!a || !b || a->page_count == 0 || a->page_count != b->page_count)
+        return 0;
+    if (!a->page_checksums || !b->page_checksums)
+        return 0;
+    return memcmp(a->page_checksums, b->page_checksums,
+                  (size_t)a->page_count * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE) == 0;
+}
+
+void efs_export_merge_extra_roots(struct efs_export *ex,
+                                  const struct efs_export_root *incoming)
+{
+    if (!ex || !incoming || !incoming->extra_shard_count ||
+        !incoming->extra_roots)
+        return;
+    for (uint32_t i = 0; i < incoming->extra_shard_count; i++) {
+        uint32_t sh = incoming->extra_shard_ids ? incoming->extra_shard_ids[i]
+                                                : 0;
+        if (sh == 0)
+            continue;
+        const struct efs_export_root *desc = &incoming->extra_roots[i];
+        struct efs_export *tab = efs_export_table(ex, sh);
+        if (!tab)
+            continue;
+        /* Never fence a shard table with unflushed ops: its in-memory state
+         * is ahead of any descriptor a peer can propagate (descriptors are
+         * written by flushing a snapshot that predates those ops). */
+        if (tab->shard_dirty)
+            continue;
+        /* Single writer per shard (its owner) => equal/higher local gen is
+         * authoritative-or-equal content. Skip: installing an older/equal
+         * descriptor would regress next_ino and trigger a pointless rebuild
+         * of pages we already have (or, worse, pages GC'd after our newer
+         * flush superseded them). */
+        if (tab->meta_fragmented && tab->root.page_count > 0 &&
+            tab->root.generation >= desc->generation)
+            continue;
+        if (efs_export_root_copy(&tab->root, desc) != EFS_OK)
+            continue;
+        tab->meta_fragmented = 1;
+        tab->meta_needs_rebuild = (tab->root.page_count > 0);
+        tab->next_ino = tab->root.next_ino;
+    }
+    /* Re-capture so ex->root.extra_roots reflects the merge (owned shards
+     * keep their local descriptors; adopted ones land in their tabs). */
+    (void)efs_export_root_capture_extras(&ex->root, ex);
 }
 
 static int export_is_sharded_root(struct efs_export *ex)
@@ -1638,8 +1688,8 @@ static efs_ino_t create_sharded(struct efs_export *ex, efs_ino_t parent,
     struct efs_export *ctab = efs_export_table(ex, target);
     if (!ctab)
         return 0;
-    efs_ino_t hint = target ? ((efs_ino_t)target << bits) : EFS_ROOT_INO;
-    efs_ino_t ino = efs_export_alloc_ino(ctab, hint);
+    /* The target table allocates from its own congruence class. */
+    efs_ino_t ino = efs_export_alloc_ino(ctab, target);
     if (!ino)
         return 0;
     if (!efs_export_create_with_ino(ctab, ino, parent, mode, uid, gid, name))
@@ -1988,11 +2038,25 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
     return EFS_OK;
 }
 
+/* Attr accessors want the canonical row, which on a sharded export lives on
+ * the child shard's table (same routing as efs_export_get_inode). The
+ * parent-shard dentry copy carries name/parent only. */
+static struct efs_export *shard_route(struct efs_export *ex, efs_ino_t ino)
+{
+    if (export_is_sharded_root(ex)) {
+        struct efs_export *tab = efs_export_table_for_ino(ex, ino);
+        if (tab)
+            return tab;
+    }
+    return ex;
+}
+
 static int set_size_common(struct efs_export *ex, efs_ino_t ino, uint64_t size,
                            int do_rollups)
 {
     if (!ex)
         return EFS_ERR_INVAL;
+    ex = shard_route(ex, ino);
     if (do_rollups)
         efs_export_ensure_rollups(ex);
     struct efs_inode *p = inode_ptr(ex, ino);
@@ -2040,6 +2104,7 @@ int efs_export_set_mode(struct efs_export *ex, efs_ino_t ino, uint32_t mode)
 {
     if (!ex)
         return EFS_ERR_INVAL;
+    ex = shard_route(ex, ino);
     efs_export_ensure_rollups(ex);
     struct efs_inode *p = inode_ptr(ex, ino);
     if (!p)
@@ -2063,6 +2128,7 @@ int efs_export_set_owner(struct efs_export *ex, efs_ino_t ino, uid_t uid, gid_t 
 {
     if (!ex)
         return EFS_ERR_INVAL;
+    ex = shard_route(ex, ino);
     efs_export_ensure_rollups(ex);
     struct efs_inode *p = inode_ptr(ex, ino);
     if (!p)
@@ -2084,6 +2150,7 @@ static int set_mtime_ns_common(struct efs_export *ex, efs_ino_t ino,
 {
     if (!ex)
         return EFS_ERR_INVAL;
+    ex = shard_route(ex, ino);
     if (do_rollups)
         efs_export_ensure_rollups(ex);
     struct efs_inode *p = inode_ptr(ex, ino);
@@ -2127,6 +2194,7 @@ int efs_export_set_atime(struct efs_export *ex, efs_ino_t ino, uint64_t atime)
 {
     if (!ex)
         return EFS_ERR_INVAL;
+    ex = shard_route(ex, ino);
     efs_export_ensure_rollups(ex);
     struct efs_inode *p = inode_ptr(ex, ino);
     if (!p)
@@ -3275,7 +3343,15 @@ uint32_t efs_export_shard_of(efs_ino_t ino, uint32_t shard_bits)
 {
     if (shard_bits == 0)
         return 0;
-    return (uint32_t)((uint64_t)ino >> shard_bits);
+    /* The root inode and its dentries always live on the main table. */
+    if (ino == EFS_ROOT_INO)
+        return 0;
+    /* Low bits select the shard: shard s owns the congruence class
+     * ino == s (mod 2^bits), so every shard has an unbounded ino space.
+     * (The old ino >> bits scheme gave each shard only 2^bits inos, so
+     * shard 0 exhausted after two creates and every mkdir failed with
+     * EEXIST; shard ids were also unbounded, overflowing shard_tabs.) */
+    return (uint32_t)((uint64_t)ino & ((1ull << shard_bits) - 1));
 }
 
 efs_node_id_t efs_shard_owner_of(uint32_t shard, uint32_t shard_count,
@@ -3283,17 +3359,28 @@ efs_node_id_t efs_shard_owner_of(uint32_t shard, uint32_t shard_count,
 {
     if (!live || nlive == 0)
         return 0;
-    if (shard_count <= 1) {
-        efs_node_id_t best = 0;
-        for (uint32_t i = 0; i < nlive; i++) {
-            if (live[i] == 0)
-                continue;
-            if (best == 0 || live[i] < best)
-                best = live[i];
+    /* Canonical order: sort ascending. Callers build their live lists in
+     * different orders (client: cluster order; server: self first), and
+     * live[shard % nlive] on unsorted lists made every node compute a
+     * different owner for the same shard — non-shard-0 recs were dropped
+     * by everyone and no node flushed the extra shards. */
+    efs_node_id_t sorted[EFS_MAX_NODES];
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < nlive && n < EFS_MAX_NODES; i++) {
+        if (live[i] == 0)
+            continue;
+        uint32_t j = n++;
+        while (j > 0 && sorted[j - 1] > live[i]) {
+            sorted[j] = sorted[j - 1];
+            j--;
         }
-        return best;
+        sorted[j] = live[i];
     }
-    return live[shard % nlive];
+    if (n == 0)
+        return 0;
+    if (shard_count <= 1)
+        return sorted[0]; /* lowest live id = metadata primary */
+    return sorted[shard % n];
 }
 
 efs_ino_t efs_export_alloc_ino(struct efs_export *ex, efs_ino_t parent)
@@ -3308,25 +3395,29 @@ efs_ino_t efs_export_alloc_ino(struct efs_export *ex, efs_ino_t parent)
         ex->next_ino = ino + 1;
         return ino;
     }
-    /* Stay in the parent shard so dentries + child share one table until
-     * Phase 3 splits parent-dentry / child-inode. */
-    uint32_t shard = efs_export_shard_of(parent, bits);
+    /* Low-bits sharding: this table owns the congruence class
+     * ino == shard_id (mod 2^bits); probe that class. With 2^bits shards
+     * each class is unbounded, so a shard can never "fill up" the way the
+     * old [shard << bits, (shard+1) << bits) window did after 2^bits
+     * creates. The parent argument is unused here: create_sharded picks
+     * the target table, and a table allocates only from its own class. */
+    (void)parent;
+    uint32_t shard = ex->shard_id;
     uint64_t span = 1ull << bits;
-    uint64_t base = (uint64_t)shard << bits;
-    uint64_t end = base + span;
+    const uint64_t limit = 1ull << 40; /* sanity bound, ~2^32 goal is 2^32 */
     uint64_t cand = ex->next_ino;
-    if (cand < base || cand >= end)
-        cand = (base == 0) ? (EFS_ROOT_INO + 1) : base;
-    while (cand < end) {
-        if (cand != EFS_ROOT_INO &&
-            efs_export_get_inode(ex, (efs_ino_t)cand, NULL) != 0) {
-            if ((efs_ino_t)(cand + 1) > ex->next_ino)
-                ex->next_ino = (efs_ino_t)(cand + 1);
+    if (cand >= limit || (cand & (span - 1)) != shard)
+        cand = shard;
+    while (cand <= EFS_ROOT_INO)
+        cand += span; /* ino 0 is invalid; ino 1 is the root */
+    while (cand < limit) {
+        if (efs_export_get_inode(ex, (efs_ino_t)cand, NULL) != 0) {
+            ex->next_ino = (efs_ino_t)(cand + span);
             return (efs_ino_t)cand;
         }
-        cand++;
+        cand += span;
     }
-    return 0; /* shard full */
+    return 0;
 }
 
 int efs_meta_extract_page(const char *blob, uint32_t blob_len, uint32_t page_index,
