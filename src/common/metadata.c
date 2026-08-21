@@ -2733,6 +2733,113 @@ int efs_export_reserve_chunks(struct efs_export *ex, uint64_t extra)
     return EFS_OK;
 }
 
+int efs_export_table_snapshot(const struct efs_export *ex,
+                              struct efs_export *snap)
+{
+    if (!ex || !snap)
+        return EFS_ERR_INVAL;
+    memset(snap, 0, sizeof(*snap));
+    snap->id = ex->id;
+    memcpy(snap->name, ex->name, EFS_MAX_NAME);
+    snap->chunk_size = ex->chunk_size;
+    snap->features = ex->features;
+    snap->next_ino = ex->next_ino;
+    snap->inode_count = ex->inode_count;
+    snap->chunk_count = ex->chunk_count;
+    snap->dentry_bytes = ex->dentry_bytes;
+    if (ex->inode_count) {
+        size_t n = (size_t)ex->inode_count * sizeof(*snap->inodes);
+        snap->inodes = malloc(n);
+        if (!snap->inodes)
+            return EFS_ERR_NOMEM;
+        memcpy(snap->inodes, ex->inodes, n);
+        snap->inode_capacity = ex->inode_count;
+    }
+    if (ex->chunk_count) {
+        size_t n = (size_t)ex->chunk_count * sizeof(*snap->chunks);
+        snap->chunks = malloc(n);
+        if (!snap->chunks) {
+            free(snap->inodes);
+            snap->inodes = NULL;
+            return EFS_ERR_NOMEM;
+        }
+        memcpy(snap->chunks, ex->chunks, n);
+        snap->chunk_capacity = ex->chunk_count;
+    }
+    return EFS_OK;
+}
+
+void efs_export_table_snapshot_free(struct efs_export *snap)
+{
+    if (!snap)
+        return;
+    free(snap->inodes);
+    free(snap->chunks);
+    memset(snap, 0, sizeof(*snap));
+}
+
+void efs_export_adopt_tables(struct efs_export *dst, struct efs_export *src)
+{
+    if (!dst || !src)
+        return;
+    free(dst->inodes);
+    free(dst->chunks);
+    free(dst->pending_rollup_inos);
+    free(dst->pending_rollup_deltas);
+    free(dst->pending_rollup_touch);
+    idx_free(&dst->ino_keys, &dst->ino_vals, &dst->ino_mask);
+    idx_free(&dst->name_keys, &dst->name_vals, &dst->name_mask);
+    idx_free(&dst->chunk_keys, &dst->chunk_vals, &dst->chunk_mask);
+    child_vecs_free(dst);
+
+    dst->inodes = src->inodes;
+    dst->inode_count = src->inode_count;
+    dst->inode_capacity = src->inode_capacity;
+    dst->dentry_bytes = src->dentry_bytes;
+    dst->chunks = src->chunks;
+    dst->chunk_count = src->chunk_count;
+    dst->chunk_capacity = src->chunk_capacity;
+    dst->ino_keys = src->ino_keys;
+    dst->ino_vals = src->ino_vals;
+    dst->ino_mask = src->ino_mask;
+    dst->name_keys = src->name_keys;
+    dst->name_vals = src->name_vals;
+    dst->name_mask = src->name_mask;
+    dst->chunk_keys = src->chunk_keys;
+    dst->chunk_vals = src->chunk_vals;
+    dst->chunk_mask = src->chunk_mask;
+    dst->child_keys = src->child_keys;
+    dst->child_vals = src->child_vals;
+    dst->child_mask = src->child_mask;
+    dst->child_vecs = src->child_vecs;
+    dst->child_vec_count = src->child_vec_count;
+    dst->child_vec_cap = src->child_vec_cap;
+    dst->pending_rollup_inos = src->pending_rollup_inos;
+    dst->pending_rollup_deltas = src->pending_rollup_deltas;
+    dst->pending_rollup_touch = src->pending_rollup_touch;
+    dst->pending_rollup_count = src->pending_rollup_count;
+    dst->pending_rollup_cap = src->pending_rollup_cap;
+    dst->rollups_stale = src->rollups_stale;
+    dst->next_ino = src->next_ino;
+    dst->layout_epoch++;
+
+    src->inodes = NULL;
+    src->chunks = NULL;
+    src->pending_rollup_inos = NULL;
+    src->pending_rollup_deltas = NULL;
+    src->pending_rollup_touch = NULL;
+    src->ino_keys = src->ino_vals = NULL;
+    src->name_keys = src->name_vals = NULL;
+    src->chunk_keys = src->chunk_vals = NULL;
+    src->child_keys = src->child_vals = NULL;
+    src->child_vecs = NULL;
+    src->inode_count = src->inode_capacity = 0;
+    src->chunk_count = src->chunk_capacity = 0;
+    src->ino_mask = src->name_mask = src->chunk_mask = src->child_mask = 0;
+    src->child_vec_count = src->child_vec_cap = 0;
+    src->pending_rollup_count = src->pending_rollup_cap = 0;
+}
+
 int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
                             uint32_t *ino_blob_len, uint32_t *chunk_blob_len)
 {

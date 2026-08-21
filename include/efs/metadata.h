@@ -383,6 +383,15 @@ int efs_export_dir_empty(struct efs_export *ex, efs_ino_t ino);
 int efs_export_serialize(struct efs_export *ex, char **buf, size_t *len);
 int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
                             uint32_t *ino_blob_len, uint32_t *chunk_blob_len);
+/* Copy inode/chunk rows (and header fields serialize needs) so the
+ * O(table) pack can run without holding the server lock. Does not copy
+ * indexes. Caller must efs_export_table_snapshot_free(snap). */
+int efs_export_table_snapshot(const struct efs_export *ex,
+                              struct efs_export *snap);
+void efs_export_table_snapshot_free(struct efs_export *snap);
+/* Steal inode/chunk/index/child tables from src into dst (dst's old tables
+ * are freed). Does not touch root, gm_blob, or shard_tabs. src is emptied. */
+void efs_export_adopt_tables(struct efs_export *dst, struct efs_export *src);
 void efs_export_pack_header(const struct efs_export *ex, uint8_t out[EFS_META_HDR_SIZE]);
 void efs_export_pack_header_ver(const struct efs_export *ex,
                                 uint8_t out[EFS_META_HDR_SIZE], uint32_t ver);

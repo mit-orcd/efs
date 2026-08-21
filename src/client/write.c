@@ -4812,18 +4812,24 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
             pthread_mutex_lock(&g_client.idx_mu);
             {
                 struct efs_chunk_entry prev;
-                int same = (efs_export_get_chunk(&g_client.export, ino,
-                                                 jobs[i].ci, &prev) == 0 &&
-                            memcmp(prev.fragment_nodes, jobs[i].nodes,
-                                   sizeof(prev.fragment_nodes)) == 0 &&
-                            memcmp(prev.checksums, jobs[i].checksums,
-                                   sizeof(prev.checksums)) == 0);
-                if (!same)
+                int have = (efs_export_get_chunk(&g_client.export, ino,
+                                                 jobs[i].ci, &prev) == 0);
+                int same_nodes = have &&
+                    memcmp(prev.fragment_nodes, jobs[i].nodes,
+                           sizeof(prev.fragment_nodes)) == 0;
+                int same_ck = have &&
+                    memcmp(prev.checksums, jobs[i].checksums,
+                           sizeof(prev.checksums)) == 0;
+                if (!same_nodes || !same_ck)
                     efs_export_set_chunk(&g_client.export, ino, jobs[i].ci,
                                          jobs[i].nodes, jobs[i].checksums);
                 pthread_mutex_unlock(&g_client.idx_mu);
                 efs_client_unlock_dir(ino);
-                if (!same)
+                /* Placement change must reach the primary. Checksum-only
+                 * overwrite of an existing stripe is already on disk; reporting
+                 * it dirtied 32k recs per fio file, flushed a 100MB table, and
+                 * made every peer rebuild under s->lock (sw-1m → ~140 MiB/s). */
+                if (!same_nodes)
                     efs_client_mark_chunk_dirty(ino, jobs[i].ci);
             }
         }

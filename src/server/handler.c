@@ -620,17 +620,28 @@ send_reply:
                         len = ex->gm_blob_len;
                     }
                 } else {
-                    char *rbuf = NULL, *ebuf = NULL;
-                    size_t rlen = 0, elen = 0;
-                    if (ex->meta_fragmented && ex->root.page_count > 0)
+                    /* Snapshot + pack unlocked. A live serialize of an
+                     * 800k-chunk table is seconds under this lock and
+                     * stalls every PUT while peers GET_META after a flush. */
+                    struct efs_export snap;
+                    memset(&snap, 0, sizeof(snap));
+                    int do_tab = (ex->inode_count > 0 && !ex->meta_needs_rebuild) ||
+                                 !ex->meta_fragmented;
+                    int do_root = ex->meta_fragmented && ex->root.page_count > 0;
+                    char *rbuf = NULL;
+                    size_t rlen = 0;
+                    if (do_root)
                         efs_export_root_serialize(&ex->root, &rbuf, &rlen);
-                    /* Prefer the live in-memory tables when catch-up has
-                     * already rebuilt them. Page reconstruct of a torn EFSR
-                     * is optional. */
-                    if (ex->inode_count > 0 && !ex->meta_needs_rebuild)
-                        efs_export_serialize(ex, &ebuf, &elen);
-                    else if (!ex->meta_fragmented)
-                        efs_export_serialize(ex, &ebuf, &elen);
+                    if (do_tab)
+                        efs_export_ensure_rollups(ex);
+                    int src = do_tab ? efs_export_table_snapshot(ex, &snap)
+                                     : EFS_OK;
+                    pthread_mutex_unlock(&g_server->lock);
+                    char *ebuf = NULL;
+                    size_t elen = 0;
+                    if (src == EFS_OK && do_tab)
+                        efs_export_serialize(&snap, &ebuf, &elen);
+                    efs_export_table_snapshot_free(&snap);
                     if (rbuf && ebuf) {
                         buf = malloc(rlen + elen);
                         if (buf) {
@@ -649,17 +660,22 @@ send_reply:
                     }
                     free(rbuf);
                     free(ebuf);
-                    /* Cache this reply for (gen, epoch); root commits and
-                     * table swaps free gm_blob explicitly. */
-                    free(ex->gm_blob);
-                    ex->gm_blob = NULL;
-                    if (buf && len) {
-                        ex->gm_blob = malloc(len);
-                        if (ex->gm_blob) {
-                            memcpy(ex->gm_blob, buf, len);
-                            ex->gm_blob_len = len;
-                            ex->gm_gen = gen;
-                            ex->gm_epoch = g_server->epoch;
+                    pthread_mutex_lock(&g_server->lock);
+                    /* Cache for this gen if the export is still the same. */
+                    if (ex && buf && len) {
+                        uint64_t ngen = ex->meta_fragmented ? ex->root.generation
+                                                            : 0;
+                        if (ngen == gen) {
+                            free(ex->gm_blob);
+                            ex->gm_blob = malloc(len);
+                            if (ex->gm_blob) {
+                                memcpy(ex->gm_blob, buf, len);
+                                ex->gm_blob_len = len;
+                                ex->gm_gen = gen;
+                                ex->gm_epoch = g_server->epoch;
+                            } else {
+                                ex->gm_blob = NULL;
+                            }
                         }
                     }
                 }
@@ -1589,6 +1605,12 @@ send_reply:
                 uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
                 uint32_t bits = ex->root.shard_bits;
                 for (uint32_t k = 0; k < count; k++) {
+                    if ((k & 8191u) == 8191u) {
+                        pthread_mutex_unlock(&g_server->lock);
+                        pthread_mutex_lock(&g_server->lock);
+                        if (ex->meta_needs_rebuild)
+                            break;
+                    }
                     if (bits && sc > 1) {
                         uint32_t sh = efs_export_shard_of(recs[k].ino, bits);
                         if (efs_shard_owner_of(sh, sc, live, nlive) !=
@@ -1601,9 +1623,10 @@ send_reply:
                                              recs[k].checksums) == 0)
                         applied++;
                 }
-                /* Write-path size/mtime updates (a bulk write grows the file
-                 * and bumps mtime). Apply size then mtime; norollup variants
-                 * aren't available server-side, but these are dirt-cheap. */
+                /* Write-path size/mtime. Use norollup: the rolling
+                 * set_size/set_mtime walk parent rollups on every rec and a
+                 * 9-client close-report held s->lock across tens of thousands
+                 * of those. Flush calls ensure_rollups once before serialize. */
                 for (uint32_t k = 0; k < ino_count; k++) {
                     if (bits && sc > 1) {
                         uint32_t sh = efs_export_shard_of(irecs[k].ino, bits);
@@ -1614,11 +1637,12 @@ send_reply:
                     struct efs_export *tab = table_for_ino(ex, irecs[k].ino);
                     if (efs_export_get_inode(tab, irecs[k].ino, NULL) != 0)
                         continue; /* inode not (yet) on the server; skip */
-                    if (efs_export_set_size(tab, irecs[k].ino,
-                                            irecs[k].size) == 0)
+                    if (efs_export_set_size_norollup(tab, irecs[k].ino,
+                                                     irecs[k].size) == 0)
                         applied++;
-                    efs_export_set_mtime_ns(tab, irecs[k].ino, irecs[k].mtime,
-                                            irecs[k].mtime_nsec);
+                    efs_export_set_mtime_ns_norollup(tab, irecs[k].ino,
+                                                     irecs[k].mtime,
+                                                     irecs[k].mtime_nsec);
                     if (irecs[k].pack_ino || irecs[k].pack_len) {
                         struct efs_inode cur;
                         if (efs_export_get_inode(tab, irecs[k].ino, &cur) == 0) {

@@ -351,6 +351,33 @@ int main(void)
         efs_export_free(&sh);
     }
     {
+        struct efs_export sh, snap;
+        efs_export_init(&sh, 3, "snap");
+        efs_ino_t f = efs_export_create(&sh, EFS_ROOT_INO, S_IFREG | 0644,
+                                        0, 0, "snapf");
+        efs_node_id_t nodes[EFS_NUM_FRAGMENTS] = {1, 2, 3};
+        uint8_t cks[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+        memset(cks, 0xab, sizeof(cks));
+        if (!f || efs_export_set_chunk(&sh, f, 0, nodes, cks) != 0 ||
+            efs_export_table_snapshot(&sh, &snap) != 0) {
+            fprintf(stderr, "FAIL table snapshot\n");
+            failures++;
+        } else {
+            char *a = NULL, *b = NULL;
+            size_t la = 0, lb = 0;
+            if (efs_export_serialize(&sh, &a, &la) != 0 ||
+                efs_export_serialize(&snap, &b, &lb) != 0 ||
+                la != lb || memcmp(a, b, la) != 0) {
+                fprintf(stderr, "FAIL snapshot serialize mismatch\n");
+                failures++;
+            }
+            free(a);
+            free(b);
+            efs_export_table_snapshot_free(&snap);
+        }
+        efs_export_free(&sh);
+    }
+    {
         struct efs_export sh;
         efs_export_init(&sh, 4, "spread");
         sh.root.shard_bits = 3;

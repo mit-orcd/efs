@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 
 /* Snapshot peer by id under lock (do not return a live s->nodes pointer). */
 static int copy_node_by_id(struct efsd_server *s, efs_node_id_t id,
@@ -984,9 +985,12 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     /* Peers must know the export before accepting meta-page PUT_CHUNKs. */
     bootstrap_export_on_peers(s, ex);
 
-    /* Serialize under the lock: handlers mutate ex (inode/chunk tables) and a
-     * concurrent peer PUT_META can move ex->root, so an unlocked serialize is
-     * a torn-blob / UAF window. */
+    /* Snapshot tables under the lock, then pack unlocked. A live serialize
+     * of a large table is seconds of strnlen/memcpy under s->lock — every
+     * PUT_CHUNK takes that lock for export_acquire, so a post-warmup flush
+     * wedged 9-client sw-1m at ~140 MiB/s. The memcpy snapshot is tens of
+     * ms; handlers keep mutating the live table and those ops stay dirty
+     * for the next flush. */
     char *blob = NULL;
     size_t blob_len = 0;
     uint64_t new_gen = 1;
@@ -997,6 +1001,8 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     uint32_t old_cis_count = 0;
     uint32_t *new_cis = NULL;
     uint32_t new_cis_count = 0;
+    struct efs_export snap;
+    memset(&snap, 0, sizeof(snap));
     pthread_mutex_lock(&s->lock);
     if (ex->meta_needs_rebuild) {
         /* Fenced by a concurrent client-driven PUT_META (counts zeroed): the
@@ -1006,11 +1012,8 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
         pthread_mutex_unlock(&s->lock);
         return -1;
     }
-    if (efs_export_serialize_ex(ex, &blob, &blob_len, &ino_blob_len,
-                                &chunk_blob_len) != EFS_OK) {
-        pthread_mutex_unlock(&s->lock);
-        return -1;
-    }
+    efs_export_ensure_rollups(ex);
+    int snap_rc = efs_export_table_snapshot(ex, &snap);
     new_gen = ex->root.generation + 1;
     if (new_gen == 0)
         new_gen = 1;
@@ -1021,6 +1024,14 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
         old_ch_pc = ex->root.chunk_page_count;
     }
     pthread_mutex_unlock(&s->lock);
+    if (snap_rc != EFS_OK)
+        return -1;
+    if (efs_export_serialize_ex(&snap, &blob, &blob_len, &ino_blob_len,
+                                &chunk_blob_len) != EFS_OK) {
+        efs_export_table_snapshot_free(&snap);
+        return -1;
+    }
+    efs_export_table_snapshot_free(&snap);
 
     if (blob_len > (size_t)EFS_META_MAX_PAGES * EFS_META_PAGE_SIZE) {
         free(blob);
@@ -1501,23 +1512,11 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
     ex->next_ino = ex->root.next_ino;
     if (efs_chunk_size_valid(ex->root.chunk_size))
         ex->chunk_size = ex->root.chunk_size;
-    if (efsm && efsm_len) {
-        struct efs_export_root keep;
-        memset(&keep, 0, sizeof(keep));
-        if (efs_export_root_copy(&keep, &ex->root) == 0 &&
-            efs_export_deserialize(ex, efsm, efsm_len) == 0) {
-            efs_export_root_move(&ex->root, &keep);
-            ex->meta_fragmented = 1;
-            ex->meta_needs_rebuild = 0;
-        } else {
-            efs_export_root_move(&ex->root, &keep);
-            ex->meta_fragmented = 1;
-            if (ex->root.page_count > 0) {
-                ex->meta_needs_rebuild = 1;
-                fprintf(stderr, "FENCE-SITE catchup-blob-deserialize-fail\n");
-            }
-        }
-    } else if (ex->root.page_count > 0) {
+    /* Keep the live tables serving PUTs. Deserialize the 97MB+ blob
+     * unlocked, then adopt. The old path parsed 800k chunks under s->lock
+     * and stalled every PUT_CHUNK (sw-1m collapsed to ~140 MiB/s). */
+    int have_blob = (efsm && efsm_len);
+    if (!have_blob && ex->root.page_count > 0) {
         ex->meta_needs_rebuild = 1;
         fprintf(stderr, "FENCE-SITE catchup-root-no-blob gen=%llu\n",
                 (unsigned long long)ex->root.generation);
@@ -1525,6 +1524,28 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
     s->export_meta_dirty = 1;
     server_save_export(s, ex);
     pthread_mutex_unlock(&s->lock);
+
+    if (have_blob) {
+        struct efs_export tmp;
+        memset(&tmp, 0, sizeof(tmp));
+        int drc = efs_export_deserialize(&tmp, efsm, efsm_len);
+        pthread_mutex_lock(&s->lock);
+        if (drc == 0 && ex->root.generation == new_gen) {
+            efs_export_adopt_tables(ex, &tmp);
+            ex->meta_fragmented = 1;
+            ex->meta_needs_rebuild = 0;
+            free(ex->gm_blob);
+            ex->gm_blob = NULL;
+        } else if (drc != 0 && ex->root.generation == new_gen &&
+                   ex->root.page_count > 0) {
+            ex->meta_needs_rebuild = 1;
+            fprintf(stderr, "FENCE-SITE catchup-blob-deserialize-fail\n");
+        }
+        s->export_meta_dirty = 1;
+        server_save_export(s, ex);
+        pthread_mutex_unlock(&s->lock);
+        efs_export_free(&tmp);
+    }
 
     fprintf(stderr, "meta-catchup: installed newer root gen=%llu\n",
             (unsigned long long)new_gen);
