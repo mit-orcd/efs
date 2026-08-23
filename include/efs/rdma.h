@@ -66,6 +66,13 @@ int efs_rdma_recv_repost(struct efs_rdma_conn *rc);
  * a frame is ready (recv_wait returns immediately), 0 when not (poll
  * efs_rdma_reply_fd()), -1 on error. */
 int efs_rdma_reply_ready(struct efs_rdma_conn *rc);
+/* Same contract, but a single non-spinning poll (still arms the CQ so a
+ * later completion fires the comp channel). For harvest loops that check
+ * several conns per wait — a full adaptive spin per conn multiplies CPU by
+ * the conn count (the sw-1m client CPU sink). */
+int efs_rdma_reply_ready_quick(struct efs_rdma_conn *rc);
+/* Fixed-budget spin variant (PUT reply wait; see rdma.c). */
+int efs_rdma_reply_ready_us(struct efs_rdma_conn *rc, int budget_us);
 int efs_rdma_reply_fd(struct efs_rdma_conn *rc);
 
 /* Largest frame this conn carries over RDMA (min of both ends' buffers). */

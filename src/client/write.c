@@ -2716,11 +2716,14 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                           (int64_t)ts0.tv_nsec / 1000000 + EFS_IO_TIMEOUT_MS;
 
     while (acks < 2) {
-        /* Harvest replies that are already here (RDMA CQE / readable fd). */
+        /* Harvest replies that are already here (RDMA CQE / readable fd).
+         * Quick (non-spinning) checks: a full-budget spin per conn per
+         * iteration was the single-client CPU sink (up to 6 spins per
+         * chunk across the two loops). */
         for (int i = 0; i < EFS_NUM_FRAGMENTS && acks < 2; i++) {
             if (!pending[i] || !conns[i])
                 continue;
-            int w = efs_conn_reply_watch(conns[i]);
+            int w = efs_conn_reply_watch_quick(conns[i]);
             if (w == EFS_CONN_REPLY_READY) {
                 int r = put_recv_reply(nodes[i], conns[i]);
                 if (r > 0)
@@ -2743,13 +2746,47 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         if (acks >= 2)
             break;
 
+        /* Nothing ready: ONE short fixed-budget spin on the first pending
+         * conn. The legs' replies land within a few us of each other (same
+         * server disk latency), so the wave is caught here and reaped by
+         * the quick harvest on the next iteration. The budget is capped:
+         * the adaptive watch hands out up to 200us whenever fewer than 16
+         * of the 32 put workers spin at once, which was ~8 cores of pure
+         * spin at 5 GB/s; the poll below catches late replies. */
+        for (int i = 0; i < EFS_NUM_FRAGMENTS && acks < 2; i++) {
+            if (!pending[i] || !conns[i])
+                continue;
+            int w = efs_conn_reply_watch_us(conns[i], 24);
+            if (w == EFS_CONN_REPLY_READY) {
+                int r = put_recv_reply(nodes[i], conns[i]);
+                if (r > 0)
+                    acks++;
+                else if (r == 0)
+                    quota_errors++;
+                else if (failed_out)
+                    failed_out[i] = 1;
+                conns[i] = NULL;
+                pending[i] = 0;
+            } else if (w < 0) {
+                efs_client_conn_drop(nodes[i], conns[i]);
+                efs_client_node_note_fail(nodes[i]);
+                if (failed_out)
+                    failed_out[i] = 1;
+                conns[i] = NULL;
+                pending[i] = 0;
+            }
+            break; /* spin on one conn per iteration at most */
+        }
+        if (acks >= 2)
+            break;
+
         struct pollfd pfds[EFS_NUM_FRAGMENTS];
         int map[EFS_NUM_FRAGMENTS];
         int npoll = 0;
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
             if (!pending[i] || !conns[i])
                 continue;
-            int w = efs_conn_reply_watch(conns[i]);
+            int w = efs_conn_reply_watch_quick(conns[i]);
             if (w == EFS_CONN_REPLY_READY) {
                 int r = put_recv_reply(nodes[i], conns[i]);
                 if (r > 0)
@@ -2844,7 +2881,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
             for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
                 if (!conns[i])
                     continue;
-                int w = efs_conn_reply_watch(conns[i]);
+                int w = efs_conn_reply_watch_quick(conns[i]);
                 if (w == EFS_CONN_REPLY_READY) {
                     put_recv_reply(nodes[i], conns[i]);
                     conns[i] = NULL;

@@ -338,3 +338,27 @@ int efs_conn_reply_watch(struct efs_conn *c)
         return -1;
     return efs_rdma_reply_fd(c->rc);
 }
+
+int efs_conn_reply_watch_quick(struct efs_conn *c)
+{
+    if (!c->rc || c->recv_chan == EFS_CONN_TCP)
+        return efs_conn_reply_watch(c); /* TCP poll(0) is already spin-free */
+    int r = efs_rdma_reply_ready_quick(c->rc);
+    if (r > 0)
+        return EFS_CONN_REPLY_READY;
+    if (r < 0)
+        return -1;
+    return efs_rdma_reply_fd(c->rc);
+}
+
+int efs_conn_reply_watch_us(struct efs_conn *c, int budget_us)
+{
+    if (!c->rc || c->recv_chan == EFS_CONN_TCP)
+        return efs_conn_reply_watch(c); /* TCP poll(0) is already spin-free */
+    int r = efs_rdma_reply_ready_us(c->rc, budget_us);
+    if (r > 0)
+        return EFS_CONN_REPLY_READY;
+    if (r < 0)
+        return -1;
+    return efs_rdma_reply_fd(c->rc);
+}

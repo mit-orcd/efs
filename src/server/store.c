@@ -874,13 +874,6 @@ static int resolve_fragment_path(struct efsd_server *s, struct efs_export *ex,
 }
 
 /* True if this fragment is already on disk (overwrite must not re-charge quota). */
-static int fragment_exists_on_disk(struct efsd_server *s, struct efs_export *ex,
-                                   efs_ino_t ino, uint32_t chunk_index,
-                                   uint32_t fragment_index)
-{
-    return server_find_fragment_root(s, ex, ino, chunk_index, fragment_index) >= 0;
-}
-
 /* Unlink fragment data + checksum sidecars (stripe + legacy + old EC shards). */
 void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
@@ -964,6 +957,7 @@ struct shard_io_arg {
     uint32_t len;
     int is_write;
     int direct; /* data fragments only; meta stays buffered */
+    int no_create; /* write only if the file already exists (overwrite probe) */
     int result;
 };
 
@@ -971,10 +965,16 @@ static void *shard_io_thread(void *arg)
 {
     struct shard_io_arg *a = arg;
     if (a->is_write) {
-        int flags = O_WRONLY | O_CREAT | O_TRUNC;
+        int flags = O_WRONLY | O_TRUNC;
+        if (!a->no_create)
+            flags |= O_CREAT;
         if (a->direct)
             flags |= O_DIRECT;
         int fd = open(a->path, flags, 0644);
+        if (fd < 0 && errno == ENOENT && a->no_create) {
+            a->result = EFS_ERR_NOT_FOUND; /* caller: charge quota + create */
+            return NULL;
+        }
         if (fd < 0 && errno == ENOENT) {
             make_dir_for_file(a->path);
             fd = open(a->path, flags, 0644);
@@ -985,7 +985,6 @@ static void *shard_io_thread(void *arg)
         }
         size_t written = 0;
         if (a->direct) {
-            uint8_t *aligned = NULL;
             uint32_t alloc = (a->len + 4095u) & ~4095u;
             if (alloc < 4096)
                 alloc = 4096;
@@ -1017,28 +1016,44 @@ static void *shard_io_thread(void *arg)
                 }
                 wbuf = zero_dio;
                 pthread_mutex_unlock(&zero_dio_mu);
+            } else if (((uintptr_t)a->buf & 4095u) == 0 && a->len == alloc) {
+                /* Fast path: the RDMA recv layout places the frame payload
+                 * on a 4096 boundary, so O_DIRECT can write straight out of
+                 * the recv buffer — no 64 KiB bounce copy per fragment.
+                 * Only when no pad is needed: the bounce path zero-pads
+                 * short tails and the on-disk image must not change. */
+                wbuf = a->buf;
             } else {
-                if (posix_memalign((void **)&aligned, 4096, alloc) != 0) {
-                    close(fd);
-                    a->result = EFS_ERR_NOMEM;
-                    return NULL;
+                /* Per-thread O_DIRECT bounce buffer for unaligned sources
+                 * (TCP fallback path). posix_memalign+free per PUT was pure
+                 * churn, so the buffer is cached per thread. */
+                static __thread uint8_t *aligned_tls;
+                static __thread uint32_t aligned_tls_len;
+                if (aligned_tls_len < alloc) {
+                    free(aligned_tls);
+                    aligned_tls = NULL;
+                    if (posix_memalign((void **)&aligned_tls, 4096, alloc) != 0) {
+                        aligned_tls_len = 0;
+                        close(fd);
+                        a->result = EFS_ERR_NOMEM;
+                        return NULL;
+                    }
+                    aligned_tls_len = alloc;
                 }
-                memcpy(aligned, a->buf, a->len);
+                memcpy(aligned_tls, a->buf, a->len);
                 if (a->len < alloc)
-                    memset(aligned + a->len, 0, alloc - a->len);
-                wbuf = aligned;
+                    memset(aligned_tls + a->len, 0, alloc - a->len);
+                wbuf = aligned_tls;
             }
             while (written < alloc) {
                 ssize_t n = write(fd, wbuf + written, alloc - written);
                 if (n <= 0) {
-                    free(aligned);
                     close(fd);
                     a->result = EFS_ERR_IO;
                     return NULL;
                 }
                 written += (size_t)n;
             }
-            free(aligned);
         } else {
             while (written < a->len) {
                 ssize_t n = write(fd, a->buf + written, a->len - written);
@@ -1718,40 +1733,14 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
 {
     /* Quota charges logical fragment size (not raw EC bytes), and only once
      * per fragment — overwrites must not inflate the cached used counter.
-     * Skip the on-disk exists probe when quota is unlimited: it is several
-     * access() syscalls per PUT and dominates single-stream create workloads. */
-    int is_new = 1;
-    if (s->quota > 0)
-        is_new = !fragment_exists_on_disk(s, ex, ino, chunk_index, fragment_index);
-    int charge_quota = (!efs_ino_is_meta_table(ino)) && is_new && (s->quota > 0);
+     * Existence is determined by the write open itself: a no-create open
+     * first (overwrite = no charge), ENOENT falls through to the create
+     * path with the quota charge. The old access()-probe did up to 12
+     * uncached directory reads per PUT and capped the whole store path. */
+    (void)chunk_index;
+    (void)fragment_index;
+    int may_charge = (!efs_ino_is_meta_table(ino)) && (s->quota > 0);
 
-    pthread_mutex_lock(&s->lock);
-    struct efs_node *local = server_local_node(s);
-    if (!local) {
-        pthread_mutex_unlock(&s->lock);
-        return EFS_ERR_INVAL;
-    }
-    if (charge_quota && s->quota > 0 && local->used + data_len > s->quota) {
-        pthread_mutex_unlock(&s->lock);
-        return EFS_ERR_QUOTA;
-    }
-    int flush_usage = 0;
-    if (charge_quota) {
-        local->used += data_len;
-        /* Persist at most every ~64 MiB charged (writer thread, not heartbeat). */
-        static uint64_t charged_since_save;
-        uint64_t sum = __atomic_add_fetch(&charged_since_save, (uint64_t)data_len,
-                                          __ATOMIC_RELAXED);
-        if (sum >= (64ull << 20)) {
-            __atomic_store_n(&charged_since_save, 0, __ATOMIC_RELAXED);
-            flush_usage = 1;
-        }
-    }
-    pthread_mutex_unlock(&s->lock);
-    if (flush_usage)
-        server_usage_save(s);
-
-    /* One full fragment on the writer-selected storage root. */
     struct shard_io_arg arg;
     memset(&arg, 0, sizeof(arg));
     arg.s = s;
@@ -1767,11 +1756,51 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
         plen = sizeof(arg.path) - 1;
     memcpy(arg.path, path, plen);
     arg.path[plen] = '\0';
+
+    if (may_charge) {
+        arg.no_create = 1;
+        shard_io_thread(&arg);
+        if (arg.result == EFS_OK)
+            return EFS_OK; /* overwrite of an existing fragment: no charge */
+        if (arg.result != EFS_ERR_NOT_FOUND)
+            return EFS_ERR_IO;
+    }
+
+    int charge_quota = may_charge; /* reaching here under quota = new file */
+    int flush_usage = 0;
+    if (charge_quota) {
+        pthread_mutex_lock(&s->lock);
+        struct efs_node *local = server_local_node(s);
+        if (!local) {
+            pthread_mutex_unlock(&s->lock);
+            return EFS_ERR_INVAL;
+        }
+        if (local->used + data_len > s->quota) {
+            pthread_mutex_unlock(&s->lock);
+            return EFS_ERR_QUOTA;
+        }
+        local->used += data_len;
+        /* Persist at most every ~64 MiB charged (writer thread, not heartbeat). */
+        static uint64_t charged_since_save;
+        uint64_t sum = __atomic_add_fetch(&charged_since_save, (uint64_t)data_len,
+                                          __ATOMIC_RELAXED);
+        if (sum >= (64ull << 20)) {
+            __atomic_store_n(&charged_since_save, 0, __ATOMIC_RELAXED);
+            flush_usage = 1;
+        }
+        pthread_mutex_unlock(&s->lock);
+        if (flush_usage)
+            server_usage_save(s);
+    }
+
+    /* One full fragment on the writer-selected storage root. */
+    arg.no_create = 0;
+    arg.result = EFS_ERR_IO;
     shard_io_thread(&arg);
     if (arg.result != EFS_OK) {
         if (charge_quota) {
             pthread_mutex_lock(&s->lock);
-            local = server_local_node(s);
+            struct efs_node *local = server_local_node(s);
             if (local && local->used >= data_len)
                 local->used -= data_len;
             pthread_mutex_unlock(&s->lock);

@@ -794,12 +794,20 @@ static void *meta_put_thread(void *arg)
 
 /* Ensure peers have an export row before we PUT meta-page fragments.
  * Send a legacy empty EFSM shell (not EFSR) so clients never treat a
- * page-less bootstrap root as authoritative. */
+ * page-less bootstrap root as authoritative. The shell is a fresh empty
+ * export carrying only id+name: serializing the LIVE table here ran unlocked
+ * against concurrent REPORT_CHUNKS array growth (SIGSEGV in
+ * efs_export_serialize_ex) and fanned a full-table blob out per flush that
+ * every peer then deserialized+merged under s->lock. */
 static void bootstrap_export_on_peers(struct efsd_server *s, struct efs_export *ex)
 {
+    struct efs_export shell;
+    efs_export_init(&shell, ex->id, ex->name);
     char *buf = NULL;
     size_t len = 0;
-    if (efs_export_serialize(ex, &buf, &len) != EFS_OK)
+    int src = efs_export_serialize(&shell, &buf, &len);
+    efs_export_free(&shell);
+    if (src != EFS_OK)
         return;
 
     struct efs_node *nodes = malloc(sizeof(struct efs_node) * EFS_MAX_NODES);

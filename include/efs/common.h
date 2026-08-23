@@ -40,7 +40,9 @@
 /* Max TCP connections the client keeps open to each server (pool size).
  * Sized for many FUSE writers × fragment fanout × chunk pipeline. */
 #define EFS_CLIENT_CONNS_PER_NODE 256
-/* How many data chunks one FUSE write may PUT concurrently. */
+/* How many data chunks one FUSE write may PUT concurrently. 64 workers
+ * measured WORSE than 32 (3780 vs 4686 MiB/s sw-1m): single-client is bound
+ * by per-chunk latency + client CPU (blake3/memmove), not pipeline depth. */
 #define EFS_WRITE_PIPELINE 32
 #define EFS_MAX_EXPORTS      16
 #define EFS_MAX_PATH         4096

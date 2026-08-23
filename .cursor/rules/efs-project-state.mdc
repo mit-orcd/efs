@@ -13,6 +13,41 @@ Cluster live on **EFSR v8** (v7 CoW + extra-shard roots in the cluster
 EFSR) + Phase 2a/2b + Phase 3 tables/flush/v8, healthy (4 up / 0 down).
 4 servers + 13 clients (see efs-fcstor-deploy rule). Export `efs-test`.
 CoW = **debe6dd**, catchup-vs-GC = **76753ef**, 2b reads = **94f96fd**.
+**Perf push (Aug 23, committed, all on top of the above):** a chain of
+CPU/lock fixes validated on a FRESH cluster (wiped with edelete + mkfs —
+accumulated chunk-table state was silently degrading throughput ~15-40%, so
+A/B on a grown table is meaningless; always measure perf on a fresh mkfs).
+Fresh-cluster peaks (all rc=0): single 007 sw-1m **5656** (was 4993); multi-9
+agg sw-1m **9342** (was 8270) / sr-1m **30513** (was 27931) / rw-4k **13934**
+(~flat). Server CPU during multi write dropped from 13-15 cores to ~2.6.
+Fixes, in order: (1) shared-CQ + single poller thread replaced per-conn CQ
+spin-polling (top CPU on client AND server); (2) generation-tagged recv
+`wr_id` (`gen<<32|reg_idx<<8|buf`) so a stale completion from a destroyed QP
+can't be injected into a reused conn slot (was corrupting `g_server->lock` →
+SIGSEGVs); (3) server conn-thread leak — `efs_rdma_recv_wait` now polls the
+TCP control fd alongside the efd (a silently-dead peer never errors the QP)
+and drains the efd when the pend ring empties (4091 leaked threads → 32);
+(4) server conn threads use `efs_rdma_reply_ready_quick` (no adaptive spin —
+~13 cores of pure spin under 9 clients); (5) O_DIRECT write fast path —
+`EFS_RDMA_RECV_ALIGN` places the PUT payload on a 4096 boundary so
+`shard_io_thread` writes straight out of the recv buffer (no 64KiB bounce
+memcpy, was 11% CPU); (6) clock-gated `now_us()` in the poller + recv_wait
+spins (was ~1 core of pure clock_gettime); (7) client PUT reply wait capped
+to a fixed 24us spin (`efs_conn_reply_watch_us`) — the adaptive budget handed
+200us to each of 32 put workers (~8 cores of spin at 5 GB/s); (8) THE
+multi-write lever: `REPORT_CHUNKS` held `g_server->lock` for ~8ms per report
+(applying tens of thousands of chunk recs, yielding only every 8192) while
+every data-path `PUT_CHUNK` blocked on the same lock — multi sw-1m was 12ms
+avg / 1.5s max write latency. Now yields every 1024 recs + `sched_yield()` so
+PUTs interleave → 8.8ms avg / 447ms max, multi sw-1m 7550→9342. **Remaining
+write ceiling:** per-chunk server latency inflates ~870us→~3.9ms under 9-way
+contention (residual `g_server->lock` sharing between REPORT/flush/PUT +
+single recv_poller at 30% CPU). Next levers: partition the metadata lock or
+N recv CQs/pollers; the real fix is Phase 3 data-path sharding (bits>0).
+EFS_WRITE_PIPELINE 64 measured WORSE than 32 (single 3780 vs 4686) — depth
+is not the limiter. EFS_RDMA_BUFS 32 ≈ 4 (recv depth not the limiter).
+POSIX after the perf chain: 143/144 + `concurrent_creates_same_dir` flake
+(passes 3/3 isolated) + 5 known XFS quirks.
 **Phase 3 code-complete (working tree, Aug 21):** tables + v8 persist +
 owner routing + owner extra flush + on-demand LRU + spread creates
 (dentry on parent, inode on child, stride=nlive) + `efs_export_rehash`

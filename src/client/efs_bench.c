@@ -569,10 +569,34 @@ static void *worker_main(void *arg)
     return NULL;
 }
 
+/* TEMP DEBUG: in-process crash backtrace (ptrace is blocked on the nodes). */
+#include <execinfo.h>
+#include <signal.h>
+static void bench_fatal(int sig)
+{
+    void *frames[48];
+    int nf = backtrace(frames, 48);
+    backtrace_symbols_fd(frames, nf, STDERR_FILENO);
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+static void bench_fatal_install(void)
+{
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = bench_fatal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESETHAND;
+    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGABRT, &sa, NULL);
+    sigaction(SIGBUS, &sa, NULL);
+}
+
 int main(int argc, char **argv)
 {
     setlinebuf(stdout);
     setlinebuf(stderr);
+    bench_fatal_install();
 
     const char *seed = NULL;
     enum bench_mode mode = BENCH_MODE_NONE;

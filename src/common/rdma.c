@@ -8,8 +8,12 @@
  * the peer's reply channel is deterministic: replies follow the request's
  * channel, oversized replies (GET_META) are pinned to TCP by the client.
  *
- * Recv waits spin briefly (RDMA RTT is a few us) and then block on the CQ
- * event channel — the direct analog of today's blocking recv().
+ * All conns share one recv CQ per device, harvested by a single poller
+ * thread that fans completions out to per-conn SPSC rings (wr_id encodes
+ * the conn's registry slot). Recv waits spin briefly on the ring (an atomic
+ * load — no CQ lock) and then block on the conn's eventfd. This replaced
+ * per-conn recv CQs, whose per-thread spin-polling (ibv_poll_cq lock churn)
+ * was the top CPU consumer on both client and server under load.
  */
 #include "efs/rdma.h"
 #include "efs/network.h"
@@ -30,6 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/eventfd.h>
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
@@ -43,6 +48,16 @@
  * under a 9-client write load without costing throughput). */
 #define EFS_RDMA_SPIN_MIN      16
 #define EFS_RDMA_SEND_WAIT_US  (5 * 1000 * 1000) /* a stuck send = dead QP */
+
+/* Recv SGEs are posted this far into each recv buffer so the fragment data
+ * of a PUT_CHUNK (5-byte frame header + efs_msg_put_chunk) lands exactly on
+ * a 4096 boundary. The server's O_DIRECT fragment write can then go
+ * DMA->disk with no bounce-buffer copy (that copy was ~11% of efsd CPU
+ * under a 9-client write load). Only PUT data needs the alignment; other
+ * payloads simply sit at an unaligned offset, which they never notice. */
+#define EFS_RDMA_RECV_ALIGN \
+    ((4096 - ((5 + sizeof(struct efs_msg_put_chunk)) % 4096)) % 4096)
+#define EFS_RDMA_RECV_STRIDE   4096 /* extra slack per recv buffer */
 
 #define SEND_WRID_POOL   0x1000
 #define SEND_WRID_INLINE 0x2000
@@ -111,13 +126,33 @@ struct efs_rdma_dev {
     uint8_t port;
     uint16_t lid;
     enum ibv_mtu mtu;
+    /* Shared recv completion channel: every conn's QP posts recvs here and
+     * ONE poller thread harvests all completions, pushing frames onto
+     * per-conn SPSC rings. Replaces per-conn CQs, whose spin-polling by
+     * every conn thread was the top CPU consumer on client AND server. */
+    struct ibv_cq *recv_cq;
+    struct ibv_comp_channel *recv_chan;
+    pthread_t poller;
+    int poller_started;
 };
 
 static struct efs_rdma_dev g_devs[4];
 static int g_dev_count;
 static pthread_mutex_t g_dev_lock = PTHREAD_MUTEX_INITIALIZER;
 static int g_live_conns;
-static int g_spinning; /* conn threads currently in the recv-CQ spin loop */
+static int g_spinning; /* conn threads currently in the recv-ring spin wait */
+
+/* Conn registry: recv WR wr_id = (gen << 32) | (reg_idx << 8) | buf_idx, so
+ * the shared-CQ poller can map a completion back to its conn. The generation
+ * tag is bumped each time a slot is freed: completions a dead QP already
+ * generated live on in the SHARED CQ after ibv_destroy_qp (a per-conn CQ took
+ * them to the grave), and without the tag the poller would inject them into
+ * whoever reuses the slot. */
+#define EFS_RDMA_MAX_CONNS  4096
+#define EFS_RDMA_PEND_RING  64 /* >= max nrecv bufs per conn */
+static struct efs_rdma_conn *g_conn_reg[EFS_RDMA_MAX_CONNS];
+static uint32_t g_reg_gen[EFS_RDMA_MAX_CONNS];
+static pthread_mutex_t g_reg_lock = PTHREAD_MUTEX_INITIALIZER;
 
 int efs_rdma_live_conns(void)
 {
@@ -324,8 +359,6 @@ struct efs_rdma_conn {
     struct efs_rdma_dev *dev;
     struct ibv_qp *qp;
     struct ibv_cq *send_cq;
-    struct ibv_cq *recv_cq;
-    struct ibv_comp_channel *recv_chan;
     struct ibv_mr *mr;
     uint8_t *arena;
     int nrecv;
@@ -338,29 +371,147 @@ struct efs_rdma_conn {
     int send_rr;
     int reserved; /* send buf held by efs_rdma_send_buf, -1 when none */
     int broken;
-    int armed;    /* recv CQ notification armed */
-    int pend_valid; /* completion harvested by efs_rdma_reply_ready */
-    int pend_buf;
-    uint32_t pend_len;
+    int reg_idx;  /* conn registry slot ((wr_id >> 8) & 0xFFFFFF), -1 until registered */
+    uint32_t reg_gen; /* registry slot generation (wr_id >> 32) */
+    int efd;      /* eventfd: poller signals when the pend ring empties->fills */
+    /* SPSC pend ring: the shared-CQ poller is the only producer; the conn's
+     * current owner thread is the only consumer. Capacity covers every
+     * posted recv buffer, so it can never overflow in correct operation. */
+    uint8_t pr_buf[EFS_RDMA_PEND_RING];
+    uint32_t pr_len[EFS_RDMA_PEND_RING];
+    int pr_head; /* poller-written */
+    int pr_tail; /* consumer-written */
     int cur_buf;  /* buffer owned by the caller between wait and repost */
     uint32_t cur_len;
     int counted;  /* counted in g_live_conns (set on successful handshake) */
+    int tcp_fd;   /* control-channel socket, borrowed from efs_conn: polled
+                   * alongside efd so a dead peer (FIN/RST) wakes the wait
+                   * even though the QP itself never errors when idle */
 };
 
 static int post_recv(struct efs_rdma_conn *rc, int idx)
 {
     struct ibv_sge sge = {
-        .addr = (uintptr_t)rc->recv_bufs[idx],
+        .addr = (uintptr_t)rc->recv_bufs[idx] + EFS_RDMA_RECV_ALIGN,
         .length = rc->bufsz,
         .lkey = rc->mr->lkey,
     };
     struct ibv_recv_wr wr = {
-        .wr_id = (uint64_t)idx,
+        .wr_id = ((uint64_t)rc->reg_gen << 32) |
+                 ((uint64_t)(uint32_t)rc->reg_idx << 8) | (uint64_t)idx,
         .num_sge = 1,
         .sg_list = &sge,
     };
     struct ibv_recv_wr *bad = NULL;
     return ibv_post_recv(rc->qp, &wr, &bad);
+}
+
+/* Push one harvested recv completion onto the conn's pend ring. Called only
+ * by the device's shared-CQ poller. */
+static void pend_push(struct efs_rdma_conn *rc, int buf, uint32_t len)
+{
+    int head = rc->pr_head;
+    int next = (head + 1) & (EFS_RDMA_PEND_RING - 1);
+    if (next == __atomic_load_n(&rc->pr_tail, __ATOMIC_ACQUIRE)) {
+        rc->broken = 1; /* ring overflow: protocol/bug — kill the conn */
+        buf = -1;
+    }
+    if (buf >= 0) {
+        rc->pr_buf[head] = (uint8_t)buf;
+        rc->pr_len[head] = len;
+        __atomic_store_n(&rc->pr_head, next, __ATOMIC_RELEASE);
+    }
+    int empty_before = (head == __atomic_load_n(&rc->pr_tail,
+                                                __ATOMIC_ACQUIRE));
+    if (empty_before || buf < 0) {
+        uint64_t one = 1;
+        if (write(rc->efd, &one, sizeof(one)) < 0 && errno != EAGAIN)
+            rc->broken = 1;
+    }
+}
+
+/* Shared-CQ poller: spin briefly, then block on the comp channel; harvest in
+ * batches and fan out to per-conn rings. One spinner per device replaces
+ * per-conn CQ spin-polling by every conn thread. */
+static void *recv_poller(void *arg)
+{
+    struct efs_rdma_dev *dev = arg;
+    struct ibv_wc wcs[32];
+    for (;;) {
+        if (ibv_req_notify_cq(dev->recv_cq, 0) != 0) {
+            usleep(1000);
+            continue;
+        }
+        int64_t spin_end = now_us() + spin_us();
+        uint32_t polls = 0;
+        for (;;) {
+            int n = ibv_poll_cq(dev->recv_cq, 32, wcs);
+            if (n < 0) {
+                usleep(1000);
+                break;
+            }
+            if (n > 0) {
+                for (int i = 0; i < n; i++) {
+                    uint32_t gen = (uint32_t)(wcs[i].wr_id >> 32);
+                    uint32_t reg =
+                        ((uint32_t)(wcs[i].wr_id >> 8)) & 0xFFFFFF;
+                    int buf = (int)(wcs[i].wr_id & 0xFF);
+                    if (reg >= EFS_RDMA_MAX_CONNS)
+                        continue;
+                    pthread_mutex_lock(&g_reg_lock);
+                    struct efs_rdma_conn *rc = g_conn_reg[reg];
+                    if (rc && rc->reg_gen != gen)
+                        rc = NULL; /* stale completion from a destroyed QP */
+                    if (rc) {
+                        if (wcs[i].status != IBV_WC_SUCCESS) {
+                            rc->broken = 1;
+                            uint64_t one = 1;
+                            if (write(rc->efd, &one, sizeof(one)) < 0 &&
+                                errno != EAGAIN)
+                                rc->broken = 1;
+                        } else {
+                            pend_push(rc, buf, wcs[i].byte_len);
+                        }
+                    }
+                    pthread_mutex_unlock(&g_reg_lock);
+                }
+                spin_end = now_us() + spin_us(); /* busy: stay hot */
+                continue;
+            }
+            /* Gate the clock to every 64th idle poll: an ungated now_us()
+             * here was the single hottest thread in efsd (~1 core of pure
+             * clock_gettime) under a 9-client write load. */
+            if (((++polls) & 63) == 0 && now_us() >= spin_end)
+                break;
+        }
+        struct pollfd p = { .fd = dev->recv_chan->fd, .events = POLLIN };
+        poll(&p, 1, 100); /* tick so a wedged device can't hang us forever */
+        struct ibv_cq *cq = NULL;
+        void *ctx = NULL;
+        if (ibv_get_cq_event(dev->recv_chan, &cq, &ctx) == 0)
+            ibv_ack_cq_events(cq, 1);
+    }
+    return NULL;
+}
+
+/* Lazily create the shared recv CQ + poller for a device (first conn). */
+static int dev_shared_cq_start(struct efs_rdma_dev *dev)
+{
+    if (dev->poller_started)
+        return 0;
+    dev->recv_chan = ibv_create_comp_channel(dev->ctx);
+    if (!dev->recv_chan)
+        return -1;
+    /* Sized for every conn's posted recvs with headroom; CQ entries are
+     * cheap driver-side. */
+    dev->recv_cq = ibv_create_cq(dev->ctx, 1 << 16, NULL, dev->recv_chan, 0);
+    if (!dev->recv_cq)
+        return -1;
+    if (pthread_create(&dev->poller, NULL, recv_poller, dev) != 0)
+        return -1;
+    pthread_detach(dev->poller);
+    dev->poller_started = 1;
+    return 0;
 }
 
 static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
@@ -373,20 +524,46 @@ static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
     rc->bufsz = EFS_RDMA_BUFSZ;
     rc->reserved = -1;
     rc->cur_buf = -1;
+    rc->reg_idx = -1;
+    rc->efd = -1;
+    rc->tcp_fd = -1;
     rc->psn = (uint32_t)(rand() & 0xFFFFFF);
 
-    rc->recv_chan = ibv_create_comp_channel(dev->ctx);
-    if (!rc->recv_chan)
+    pthread_mutex_lock(&g_dev_lock);
+    int cq_rc = dev_shared_cq_start(dev);
+    pthread_mutex_unlock(&g_dev_lock);
+    if (cq_rc != 0)
+        goto fail;
+
+    /* Registry slot must be live before any recv is posted: the wr_id
+     * encodes it, and the poller may harvest as soon as the QP is RTS. */
+    pthread_mutex_lock(&g_reg_lock);
+    for (int i = 0; i < EFS_RDMA_MAX_CONNS; i++) {
+        if (!g_conn_reg[i]) {
+            rc->reg_idx = i;
+            break;
+        }
+    }
+    if (rc->reg_idx >= 0) {
+        rc->reg_gen = g_reg_gen[rc->reg_idx];
+        g_conn_reg[rc->reg_idx] = rc;
+    }
+    pthread_mutex_unlock(&g_reg_lock);
+    if (rc->reg_idx < 0)
+        goto fail;
+
+    rc->efd = eventfd(0, EFD_NONBLOCK);
+    if (rc->efd < 0)
         goto fail;
     /* Send completions are reaped on every send/recv op; the send CQ only
      * ever holds a handful of unreaped entries. */
     rc->send_cq = ibv_create_cq(dev->ctx, 64, NULL, NULL, 0);
-    rc->recv_cq = ibv_create_cq(dev->ctx, rc->nrecv + 4, NULL,
-                                rc->recv_chan, 0);
-    if (!rc->send_cq || !rc->recv_cq)
+    if (!rc->send_cq)
         goto fail;
 
-    size_t total = (size_t)(rc->nrecv + EFS_RDMA_NSEND) * rc->bufsz;
+    size_t recv_stride = rc->bufsz + EFS_RDMA_RECV_STRIDE;
+    size_t total = (size_t)rc->nrecv * recv_stride +
+                   (size_t)EFS_RDMA_NSEND * rc->bufsz;
     if (posix_memalign((void **)&rc->arena, 4096, total) != 0)
         goto fail;
     rc->mr = ibv_reg_mr(dev->pd, rc->arena, total, IBV_ACCESS_LOCAL_WRITE);
@@ -398,14 +575,15 @@ static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
     if (!rc->recv_bufs || !rc->send_bufs)
         goto fail;
     for (int i = 0; i < rc->nrecv; i++)
-        rc->recv_bufs[i] = rc->arena + (size_t)i * rc->bufsz;
+        rc->recv_bufs[i] = rc->arena + (size_t)i * recv_stride;
     for (int i = 0; i < EFS_RDMA_NSEND; i++)
-        rc->send_bufs[i] = rc->arena + (size_t)(rc->nrecv + i) * rc->bufsz;
+        rc->send_bufs[i] = rc->arena + (size_t)rc->nrecv * recv_stride +
+                           (size_t)i * rc->bufsz;
 
     struct ibv_qp_init_attr ia;
     memset(&ia, 0, sizeof(ia));
     ia.send_cq = rc->send_cq;
-    ia.recv_cq = rc->recv_cq;
+    ia.recv_cq = dev->recv_cq;
     ia.cap.max_send_wr = 32;
     ia.cap.max_recv_wr = rc->nrecv + 4;
     ia.cap.max_send_sge = 1;
@@ -528,6 +706,7 @@ int efs_rdma_client_upgrade(struct efs_conn *c)
     }
     c->rc = rc;
     c->kind = EFS_CONN_RDMA;
+    rc->tcp_fd = c->fd;
     rc->counted = 1;
     __sync_fetch_and_add(&g_live_conns, 1);
     static int logged;
@@ -577,6 +756,7 @@ int efs_rdma_server_accept(struct efs_conn *c, const void *setup_payload,
 
     c->rc = rc;
     c->kind = EFS_CONN_RDMA;
+    rc->tcp_fd = c->fd;
     rc->counted = 1;
     __sync_fetch_and_add(&g_live_conns, 1);
     static int logged;
@@ -590,14 +770,25 @@ void efs_rdma_conn_destroy(struct efs_rdma_conn *rc)
 {
     if (!rc)
         return;
+    /* Destroy the QP first so no new recv completions can arrive, then
+     * clear the registry slot under the lock: the poller holds g_reg_lock
+     * while pushing, so after this it can never touch rc. Bumping the slot
+     * generation makes already-queued completions from the dead QP
+     * recognizable as stale (they outlive the QP in the shared CQ). */
     if (rc->qp)
         ibv_destroy_qp(rc->qp);
+    if (rc->reg_idx >= 0) {
+        pthread_mutex_lock(&g_reg_lock);
+        if (g_conn_reg[rc->reg_idx] == rc) {
+            g_conn_reg[rc->reg_idx] = NULL;
+            g_reg_gen[rc->reg_idx]++;
+        }
+        pthread_mutex_unlock(&g_reg_lock);
+    }
     if (rc->send_cq)
         ibv_destroy_cq(rc->send_cq);
-    if (rc->recv_cq)
-        ibv_destroy_cq(rc->recv_cq);
-    if (rc->recv_chan)
-        ibv_destroy_comp_channel(rc->recv_chan);
+    if (rc->efd >= 0)
+        close(rc->efd);
     if (rc->mr)
         ibv_dereg_mr(rc->mr);
     int counted = rc->counted;
@@ -768,72 +959,69 @@ int efs_rdma_send_commit(struct efs_rdma_conn *rc, void *buf, uint8_t type,
 
 /* ---------------- recv path ---------------- */
 
-/* Pair every retrieved channel event with an ack; drain is only ever called
- * when the CQ was armed and we harvested a CQE directly (the event for it
- * may or may not have been queued yet). */
-static void drain_chan(struct efs_rdma_conn *rc)
+/* Pop one pended frame (poller-produced) into cur_buf/cur_len. */
+static int pend_pop(struct efs_rdma_conn *rc)
 {
-    struct pollfd p = { .fd = rc->recv_chan->fd, .events = POLLIN };
-    if (poll(&p, 1, 0) > 0 && (p.revents & POLLIN)) {
-        struct ibv_cq *cq = NULL;
-        void *ctx = NULL;
-        if (ibv_get_cq_event(rc->recv_chan, &cq, &ctx) == 0)
-            ibv_ack_cq_events(cq, 1);
-    }
-    rc->armed = 0;
+    int tail = rc->pr_tail;
+    if (tail == __atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE))
+        return 0;
+    rc->cur_buf = rc->pr_buf[tail];
+    rc->cur_len = rc->pr_len[tail];
+    __atomic_store_n(&rc->pr_tail, (tail + 1) & (EFS_RDMA_PEND_RING - 1),
+                     __ATOMIC_RELEASE);
+    return 1;
 }
 
-static int recv_wc_ok(struct efs_rdma_conn *rc, struct ibv_wc *wc)
+/* Ring empty → drain the eventfd so the next push re-signals it. Must be
+ * called with the ring already observed empty; a concurrent push either
+ * lands before this read (drained here, but the ring check that follows
+ * every wait iteration sees it) or after (counter stays > 0 → poll fires). */
+static void pend_drain_efd(struct efs_rdma_conn *rc)
 {
-    if (wc->status != IBV_WC_SUCCESS) {
+    uint64_t tmp;
+    if (read(rc->efd, &tmp, sizeof(tmp)) < 0 && errno != EAGAIN)
         rc->broken = 1;
-        return EFS_ERR_NET;
-    }
-    rc->cur_buf = (int)wc->wr_id;
-    rc->cur_len = wc->byte_len;
-    return EFS_OK;
 }
 
 int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms)
 {
-    if (rc->broken)
-        return EFS_ERR_NET;
-    if (rc->pend_valid) {
-        rc->pend_valid = 0;
-        rc->cur_buf = rc->pend_buf;
-        rc->cur_len = rc->pend_len;
-        return EFS_OK;
-    }
-    int64_t spin_end = now_us() + spin_us();
     int64_t deadline = timeout_ms >= 0 ? now_ms() + timeout_ms : -1;
-    /* now_us() is a vDSO clock_gettime (~20 ns); called per CQ poll it was
-     * ~20% of efs-fuse CPU under the 9-client ecopy storm. Gate the clock to
-     * every 64th poll — spin-exit granularity stays in the low µs. */
-    uint32_t polls = 0;
     for (;;) {
-        struct ibv_wc wc;
-        int n = ibv_poll_cq(rc->recv_cq, 1, &wc);
-        if (n < 0) {
-            rc->broken = 1;
-            return EFS_ERR_NET;
-        }
-        if (n > 0) {
-            if (recv_wc_ok(rc, &wc) != 0)
-                return EFS_ERR_NET;
-            if (rc->armed)
-                drain_chan(rc);
+        if (pend_pop(rc)) {
+            /* Keep efd == "ring non-empty": a pop that empties the ring
+             * clears the stale signal so other pollers of the fd
+             * (conn_wait_request) don't spuriously route back here. The
+             * ring stays the source of truth; a push racing the drain
+             * re-signals and is seen by the next ring check. */
+            if (__atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) == rc->pr_tail)
+                pend_drain_efd(rc);
             return EFS_OK;
         }
-        if (((++polls) & 63) != 0 || now_us() < spin_end)
-            continue;
-        if (!rc->armed) {
-            if (ibv_req_notify_cq(rc->recv_cq, 0) != 0) {
-                rc->broken = 1;
+        if (rc->broken)
+            return EFS_ERR_NET;
+        pend_drain_efd(rc);
+        if (pend_pop(rc))
+            return EFS_OK;
+        if (rc->broken)
+            return EFS_ERR_NET;
+        /* Brief ring spin: catches the poller's push within microseconds
+         * without a sleep/wakeup. Cheap — an atomic load, no CQ lock. The
+         * clock is gated to every 64th check: now_us() per iteration was
+         * ~30% of efs-fuse CPU under an 8-job write load. */
+        int64_t spin_end = now_us() + spin_us();
+        uint32_t polls = 0;
+        for (;;) {
+            if (__atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail)
+                break;
+            if (rc->broken)
                 return EFS_ERR_NET;
-            }
-            rc->armed = 1;
-            continue; /* re-poll: catches anything queued before the arm */
+            if (((++polls) & 63) == 0 && now_us() >= spin_end)
+                break;
         }
+        if (pend_pop(rc))
+            return EFS_OK;
+        if (rc->broken)
+            return EFS_ERR_NET;
         int ms = -1;
         if (deadline >= 0) {
             int64_t left = deadline - now_ms();
@@ -841,21 +1029,30 @@ int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms)
                 return EFS_ERR_NET;
             ms = left > INT32_MAX ? INT32_MAX : (int)left;
         }
-        struct pollfd p = { .fd = rc->recv_chan->fd, .events = POLLIN };
-        int pr = poll(&p, 1, ms);
+        /* Poll the eventfd AND the control-channel socket. An idle RC QP
+         * never errors when the peer vanishes (no CM to drive a state
+         * transition), so without the socket a dead peer would strand the
+         * waiter here forever — the conn-thread leak this fixed piled up
+         * thousands of stuck server threads. Post-upgrade the TCP channel
+         * carries no traffic, so any event on it means the peer is gone
+         * (a clean FIN polls as POLLIN). */
+        struct pollfd pf[2] = {
+            { .fd = rc->efd, .events = POLLIN },
+            { .fd = rc->tcp_fd, .events = POLLIN },
+        };
+        nfds_t nf = rc->tcp_fd >= 0 ? 2 : 1;
+        int pr = poll(pf, nf, ms);
         if (pr == 0)
             return EFS_ERR_NET; /* timeout: caller drops the conn */
-        if (pr < 0) {
-            if (errno == EINTR)
-                continue;
+        if (pr < 0 && errno != EINTR) {
             rc->broken = 1;
             return EFS_ERR_NET;
         }
-        struct ibv_cq *cq = NULL;
-        void *ctx = NULL;
-        if (ibv_get_cq_event(rc->recv_chan, &cq, &ctx) == 0)
-            ibv_ack_cq_events(cq, 1);
-        rc->armed = 0;
+        if (rc->tcp_fd >= 0 &&
+            (pf[1].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL))) {
+            rc->broken = 1;
+            return EFS_ERR_NET;
+        }
     }
 }
 
@@ -865,7 +1062,7 @@ void *efs_rdma_recv_frame(struct efs_rdma_conn *rc, uint32_t *frame_len)
         return NULL;
     if (frame_len)
         *frame_len = rc->cur_len;
-    return rc->recv_bufs[rc->cur_buf];
+    return rc->recv_bufs[rc->cur_buf] + EFS_RDMA_RECV_ALIGN;
 }
 
 int efs_rdma_recv_repost(struct efs_rdma_conn *rc)
@@ -881,62 +1078,69 @@ int efs_rdma_recv_repost(struct efs_rdma_conn *rc)
     return EFS_OK;
 }
 
+/* Check whether the poller has pended a reply frame. The full variant spins
+ * briefly on the ring (adaptive budget); the quick variant is a single
+ * atomic check. Neither touches ibverbs — the CQ lock churn that dominated
+ * both client and server CPU under load is gone from the wait path. */
 int efs_rdma_reply_ready(struct efs_rdma_conn *rc)
 {
     if (rc->broken)
         return -1;
-    if (rc->pend_valid)
+    if (__atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail)
         return 1;
-    if (!rc->armed) {
-        if (ibv_req_notify_cq(rc->recv_cq, 0) != 0) {
-            rc->broken = 1;
-            return -1;
-        }
-        rc->armed = 1;
-    }
-    /* Arm first (so a later completion still fires the channel event), then
-     * spin-poll before reporting "not ready". Callers react to 0 by
-     * sleep-polling the comp channel, whose interrupt-moderated wakeup cost
-     * ~1.9 ms per request-reply exchange here — 4x slower than TCP and 380x
-     * the 5 us hardware RTT. The spin catches replies within microseconds.
-     *
-     * The budget scales with the active-spinner count (spin_budget_for_load):
-     * full for a single active client, decaying toward EFS_RDMA_SPIN_MIN under
-     * many concurrent spinners where a fixed 200 us spin would saturate CPU. */
     __sync_fetch_and_add(&g_spinning, 1);
     int budget = spin_budget_for_load();
     int64_t spin_end = now_us() + budget;
     uint32_t polls = 0;
     int result = 0;
     for (;;) {
-        struct ibv_wc wc;
-        int n = ibv_poll_cq(rc->recv_cq, 1, &wc);
-        if (n < 0) {
-            rc->broken = 1;
-            result = -1;
-            break;
-        }
-        if (n > 0) {
-            if (recv_wc_ok(rc, &wc) != 0) {
-                result = -1;
-                break;
-            }
-            rc->pend_valid = 1;
-            rc->pend_buf = rc->cur_buf;
-            rc->pend_len = rc->cur_len;
-            rc->cur_buf = -1;
-            drain_chan(rc);
+        if (__atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail) {
             result = 1;
             break;
         }
+        if (rc->broken) {
+            result = -1;
+            break;
+        }
         if (((++polls) & 63) == 0 && now_us() >= spin_end)
-            break; /* result = 0 */
+            break;
     }
     __sync_fetch_and_sub(&g_spinning, 1);
     return result;
 }
 
+int efs_rdma_reply_ready_quick(struct efs_rdma_conn *rc)
+{
+    if (rc->broken)
+        return -1;
+    return __atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail;
+}
+
+/* Fixed-budget variant for the PUT reply wait: the adaptive budget only
+ * shrinks when >16 threads spin at once, but the 32-worker put pool sits
+ * just under that — every worker burned the full 200us per chunk (~8 cores
+ * of pure spin at 5 GB/s). The caller picks the budget; the poll that
+ * follows catches whatever the spin misses, so this only trades ~2us of
+ * wakeup latency for the freed cores. */
+int efs_rdma_reply_ready_us(struct efs_rdma_conn *rc, int budget_us)
+{
+    if (rc->broken)
+        return -1;
+    if (__atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail)
+        return 1;
+    int64_t spin_end = now_us() + budget_us;
+    uint32_t polls = 0;
+    for (;;) {
+        if (__atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail)
+            return 1;
+        if (rc->broken)
+            return -1;
+        if (((++polls) & 63) == 0 && now_us() >= spin_end)
+            return 0;
+    }
+}
+
 int efs_rdma_reply_fd(struct efs_rdma_conn *rc)
 {
-    return rc->recv_chan->fd;
+    return rc->efd;
 }

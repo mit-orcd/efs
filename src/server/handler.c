@@ -117,7 +117,13 @@ static int conn_wait_request(struct efs_conn *conn)
         return EFS_CONN_TCP;
     struct efs_rdma_conn *rc = conn->rc;
     for (;;) {
-        int r = efs_rdma_reply_ready(rc);
+        /* Quick check only: a server conn thread has nothing to gain from
+         * spin-polling the ring — with dozens of live conns the aggregate
+         * spin was ~13 cores/server under a 9-client write load. It blocks
+         * on the eventfd below; the wakeup costs ~2us, nothing next to the
+         * per-request work. The client's latency-critical reply path keeps
+         * the adaptive spin. */
+        int r = efs_rdma_reply_ready_quick(rc);
         if (r < 0)
             return -1;
         if (r > 0)
@@ -1020,10 +1026,15 @@ send_reply:
                         }
                     }
                 } else if (efs_meta_blob_is_export(payload, payload_len)) {
-                    /* Legacy full-blob merge (pre-fragmented peers / tests). */
+                    /* Legacy full-blob merge (pre-fragmented peers / tests).
+                     * An empty blob is a bootstrap shell: it exists only to
+                     * plant the export row, so it must NOT flip a fragmented
+                     * export back to legacy mode or trigger a save. */
                     struct efs_export inc;
                     efs_export_init(&inc, 1, "pending");
                     if (efs_export_deserialize(&inc, payload, payload_len) == 0) {
+                        int empty_shell =
+                            (inc.inode_count == 0 && inc.chunk_count == 0);
                         pthread_mutex_lock(&g_server->lock);
                         struct efs_export *ex =
                             server_get_export_create(g_server,
@@ -1031,14 +1042,17 @@ send_reply:
                                                      inc.name[0] ? inc.name
                                                                  : "pending");
                         if (ex && efs_export_merge(ex, &inc) == 0) {
-                            ex->meta_fragmented = 0;
-                            g_server->epoch++;
-                            free(ex->gm_blob);
-                            ex->gm_blob = NULL;
-                            g_server->export_meta_dirty = 1;
-                            if (ex->name[0] && strcmp(ex->name, "pending") != 0) {
-                                server_save_export(g_server, ex);
-                                g_server->export_meta_dirty = 0;
+                            if (!empty_shell) {
+                                ex->meta_fragmented = 0;
+                                g_server->epoch++;
+                                free(ex->gm_blob);
+                                ex->gm_blob = NULL;
+                                g_server->export_meta_dirty = 1;
+                                if (ex->name[0] &&
+                                    strcmp(ex->name, "pending") != 0) {
+                                    server_save_export(g_server, ex);
+                                    g_server->export_meta_dirty = 0;
+                                }
                             }
                             reply = EFS_PUT_META_OK;
                             pthread_mutex_unlock(&g_server->lock);
@@ -1698,8 +1712,17 @@ send_reply:
                 uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
                 uint32_t bits = ex->root.shard_bits;
                 for (uint32_t k = 0; k < count; k++) {
-                    if ((k & 8191u) == 8191u) {
+                    /* Yield the global lock every 1024 recs. A 9-client
+                     * close-report applies tens of thousands of chunk recs;
+                     * at 8192 the lock was held ~8ms straight, and every
+                     * data-path PUT_CHUNK (which takes g_server->lock briefly
+                     * to acquire the export) stalled behind it — the multi-
+                     * client sw-1m ceiling (12ms avg / 1.5s max write latency).
+                     * sched_yield between unlock/lock so a waiting PUT
+                     * actually wins the reacquire, not just the reporter. */
+                    if ((k & 1023u) == 1023u) {
                         pthread_mutex_unlock(&g_server->lock);
+                        sched_yield();
                         pthread_mutex_lock(&g_server->lock);
                         if (ex->meta_needs_rebuild)
                             break;

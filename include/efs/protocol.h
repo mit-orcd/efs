@@ -574,5 +574,10 @@ int efs_conn_recv_u8_reply(struct efs_conn *c, uint8_t *type, uint8_t *status);
  * error, else an fd (>= 0) to poll for POLLIN. */
 #define EFS_CONN_REPLY_READY (-2)
 int efs_conn_reply_watch(struct efs_conn *c);
+/* Same contract, but never spin-polls the CQ: for harvest loops that check
+ * several conns per wait iteration. */
+int efs_conn_reply_watch_quick(struct efs_conn *c);
+/* Fixed-budget spin variant for the PUT reply wait. */
+int efs_conn_reply_watch_us(struct efs_conn *c, int budget_us);
 
 #endif
