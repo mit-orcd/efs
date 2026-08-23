@@ -38,3 +38,6 @@ slurm-jobs/state/
 /blake3-bench
 tests/test_ino_path
 /.build_id.stamp
+
+# python
+__pycache__/

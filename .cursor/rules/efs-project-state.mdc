@@ -47,14 +47,50 @@ target-better = known XFS-baseline quirks), posix2 **12/12**
 multi-9 agg sw-1m **4842** / sr-1m 24576 / rw-4k **13917** (≈ the 13428
 pre-collapse baseline; rw-128k 121 GB/s agg is the known not-credible
 dcache artifact). No regression anywhere.
-**Known gaps found during sharded validation:** (1) server metadata layer
-is single-export (`exports[0]`-only): PUT_META rejects other export ids,
-catchup polls only exports[0] — multi-export clusters diverge; run ONE
-export per cluster until fixed. (2) shard-table pages are never GC'd
-(the commit=0 flush path skips the CoW GC block) — slow space leak.
-(3) `entry_timeout=1.0` gives ~1 s stale negative dentries (rename-churn
-EEXIST noise; POSIX suites pass regardless). (4) shard ownership remap on
-membership change has no gen-fencing (stable membership assumed).
+**Known gaps from sharded validation — ALL FIXED (Aug 22-23, working
+tree):** (1) multi-export server metadata: PUT_META/GET_META/catchup are
+per-export (named requests, per-export dirty/flush); two exports
+(`efs-test` bits=0 + `efs-s3` bits=3) coexist on one cluster. (2)
+shard-table pages GC'd on the commit=0 flush path too. (3)
+`entry_timeout=0`/`negative_timeout=0` — no stale negative dentries.
+(4) shard ownership remap fenced (commit-time recheck + extras filter).
+Plus: sharded hardlink/unlink nlink routing (`efs_export_link`/
+`efs_export_unlink_name` shard-aware), primary-owned extra-shard
+durability (commit captures local tabs + max-merges previous
+descriptors), self-heal create (parent dentry authoritative).
+**Cross-client data fixes (Aug 22-23):** O_APPEND barrier
+(`EFS_MSG_INODE_APPEND` reserve RPC + `append_rsv` table; barrier
+released by REPORT after data lands — `dcache_put_now` marks the ino
+dirty). rwfile staleness: (A) read-miss self-heal —
+`efs_client_read` pulls the mapping range from the owner
+(`efs_client_pull_layout_miss`, rate-limited 1/s/ino) instead of
+zero-filling a stale-cache "hole"; (B) `dcache_note_size` bumps mtime
+on EVERY write (reports are newer-only; a frozen mtime left peers
+without an adopt trigger). FUSE flush/release use `fi->fh` (no path
+re-lookup) so a failed lookup RPC can no longer silently skip the
+close-time flush.
+**efs-s3 root clobber FIXED (Aug 23):** non-primary servers in a
+rebuild storm (root-only GET_META window after each primary commit →
+peer page rebuilds; 114-116 rebuilds/5.5h) eventually adopted a
+newer-gen root that lacked extra-shard descriptors; the catchup adopt
+(`catchup_install_newer_root`) did a wholesale `root_move` with no
+extras preservation, the rebuild wiped `shard_tabs` and reinstalled
+from the (empty) extras → shard tables permanently lost → clients saw
+3 inodes. Fix: `efs_export_root_maxmerge_extras` (per-shard
+higher-gen-wins + carry-forward-missing) applied on EVERY adopt/commit
+path — primary commit capture, PUT_META full-adopt, catchup install,
+and `efs_export_merge_extra_roots` (which otherwise dropped
+descriptors for shards with no local tab). Extras are now monotonic.
+**Fresh-cluster validation (Aug 23, post-fix, efs-test + efs-s3
+coexisting):** mc_stress on efs-s3 VERIFY-OK both clients + kill -9
+shard owner failover OK + restart rejoin OK + cold mount OK; rebuild
+counts 0/6/2/5 (storm gone), zero fence/dirty-drop lines. POSIX
+**0 EFS bugs** on efs-test (`results/posix/20260823-071727`) AND on
+efs-s3 (`20260823-071843`); posix2 **12/12**
+(`results/posix2/20260823-071901`). Perf quick: single 007 sw-1m
+**4993** / ow-1m 4974 / sr-1m 4578 / rw-4k **1536** (393k IOPS);
+multi-9 agg sw-1m **8270** / sr-1m 27931 / rw-4k **13817** — all at or
+above the Aug 21 baselines, all rc=0.
 **Multi sw-1m FIXED (working tree, Aug 21):** 023817's 1274 agg
 (~140/client lockstep) was a 100MB-table flush stalling PUTs — serialize
 and peer deserialize ran under `s->lock`, and overwrite REPORTed every
@@ -300,6 +336,16 @@ FIXED (7e442fa) — the last 5:
   (sw 4.6 GB/s, sr 2.4 GB/s, 4k rand ~40k IOPS). rclone 32×10GiB copy rc=0.
 
 ## Root causes already found — don't re-diagnose
+- **efs-s3 metadata clobber = extras loss on adopt (FIXED, Aug 23)**: a
+  newer-gen root missing extra-shard descriptors (born during a rebuild
+  storm) was wholesale-`root_move`d by `catchup_install_newer_root`;
+  the rebuild then wiped `shard_tabs` and reinstalled from the empty
+  extras → permanent shard loss (clients saw 3 inodes). All adopt/commit
+  paths now `efs_export_root_maxmerge_extras` (per-shard higher-gen-wins
+  + carry-forward-missing), so descriptors are monotonic. The storm
+  itself = peers rebuilding whenever they poll during the primary's
+  root-only GET_META window (gm_blob freed on new gen before the new
+  blob is cached) — a perf nit, not a correctness bug.
 - **Sharded-export data loss = dual-writer root gen (FIXED, working tree)**:
   the primary AND every extra-shard owner bumped the SAME cluster-root gen
   (owner's `server_commit_cluster_extras` did gen+1 with a STALE copy of

@@ -1,0 +1,16 @@
+ts	host	suite	test	bw_mib_s	iops	rc
+2026-08-23T07:22:13Z	fcstor011	dd	seq1m.write	1945.6	-	0
+2026-08-23T07:22:13Z	fcstor011	dd	seq1m.read	3174.4	-	0
+2026-08-23T07:22:13Z	fcstor011	dd	seq1m_cached.write	1433.6	-	0
+2026-08-23T07:22:13Z	fcstor011	dd	seq1m_cached.read	1843.2	-	0
+2026-08-23T07:22:13Z	fcstor011	fio	warmup-sw	488.0	-	0
+2026-08-23T07:22:13Z	fcstor011	fio	sw-1m	622.0	621	0
+2026-08-23T07:22:13Z	fcstor011	fio	ow-1m	1756.0	1755	0
+2026-08-23T07:22:13Z	fcstor011	fio	sr-1m	2113.0	2112	0
+2026-08-23T07:22:13Z	fcstor011	fio	rw-1m	1791.0	1791	0
+2026-08-23T07:22:13Z	fcstor011	fio	rr-1m	3078.0	3078	0
+2026-08-23T07:22:13Z	fcstor011	fio	rw-128k	12902.4	103k	0
+2026-08-23T07:22:13Z	fcstor011	fio	rr-128k	3308.0	26.5k	0
+2026-08-23T07:22:13Z	fcstor011	fio	rw-4k	1539.0	394k	0
+2026-08-23T07:22:13Z	fcstor011	fio	rr-4k	304.0	77.8k	0
+PERF_NODE_DONE host=fcstor011 mode=quick 2026-08-23T03:24:07-04:00

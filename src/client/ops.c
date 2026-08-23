@@ -185,6 +185,50 @@ static void pull_file_layout(const struct efs_inode *rpc)
     }
 }
 
+/* Read-miss self-heal (Phase 2b follow-on): the local chunk table is only
+ * a cache, filled by adopt-time pulls. A client that never got the adopt
+ * trigger (the file's server mtime/size never advanced past its snapshot)
+ * would zero-fill real peer data as "holes" forever (mc_stress rwfile).
+ * On a read miss inside the file size, pull the mapping range from the
+ * owner and let the caller re-check. Rate-limited per ino so genuinely
+ * sparse files cost at most one GETCHUNKS per second, not one per read. */
+int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
+{
+    static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
+    static struct {
+        efs_ino_t ino;
+        uint64_t ns;
+    } seen[64];
+    static uint32_t next;
+    if (!ino || ci0 >= ci1 || efs_ino_is_meta_table(ino))
+        return 0;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    uint64_t now = (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+    int go;
+    pthread_mutex_lock(&mu);
+    int slot = -1;
+    for (uint32_t i = 0; i < 64; i++) {
+        if (seen[i].ino == ino) {
+            slot = (int)i;
+            break;
+        }
+    }
+    if (slot < 0) {
+        slot = (int)(next++ % 64);
+        seen[slot].ino = ino;
+        seen[slot].ns = 0;
+    }
+    go = (now - seen[slot].ns >= 1000000000ull);
+    if (go)
+        seen[slot].ns = now;
+    pthread_mutex_unlock(&mu);
+    if (!go)
+        return 0;
+    pull_chunks_range(ino, ci0, ci1);
+    return 1;
+}
+
 static void invalidate_file_layout(const struct efs_inode *rpc)
 {
     uint32_t cs = data_chunk_size();

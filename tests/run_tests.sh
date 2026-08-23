@@ -76,7 +76,7 @@ cmd_setup() { # [host ...]
     say "setup: rsync+build+mount on: ${hosts[*]}"
     local pids=()
     for h in "${hosts[@]}"; do
-        ( $SSH "$h" 'rsync -a --delete --exclude="/mnt/" --exclude="*.log" \
+        ( $SSH "$h" 'rsync -a --delete --exclude="/mnt/" --exclude="/mnt-s3/" --exclude="/mnt-cold/" --exclude="*.log" \
               "$HOME/git/efs/" /tmp/efs/ >/dev/null 2>&1 && \
               cd /tmp/efs && make efs-fuse >/dev/null 2>&1' && \
           ensure_mounted "$h" && \

@@ -725,31 +725,31 @@ send_reply:
                 struct efs_msg_meta_flush_begin b;
                 memcpy(&b, payload, sizeof(b));
                 pthread_mutex_lock(&g_server->lock);
-                if (g_server->export_count == 0) {
-                    /* Fresh server: nothing committed yet; accept. */
+                struct efs_export *ex = b.export_id
+                                            ? server_get_export(g_server,
+                                                                b.export_id)
+                                            : NULL;
+                if (!ex) {
+                    /* Export not established here yet (fresh server / new
+                     * export): nothing committed for it; accept. */
                     br.status = EFS_PUT_META_OK;
                     br.committed_gen = 0;
                 } else {
-                    struct efs_export *ex = &g_server->exports[0];
+                    int ei = server_export_index_locked(g_server, ex);
                     uint64_t committed = ex->meta_fragmented
                                              ? ex->root.generation : 0;
                     br.committed_gen = committed;
-                    if (b.export_id && ex->id && b.export_id != ex->id) {
-                        /* Wrong export: fail loudly. Judging a foreign
-                         * export's gen against ours answers STALE forever,
-                         * which the client retries as a resync loop. */
-                        br.status = EFS_PUT_META_ERROR;
-                    } else if (b.gen <= committed) {
+                    if (b.gen <= committed) {
                         br.status = EFS_PUT_META_STALE;
                     } else {
                         uint64_t now = handler_now_ms();
                         /* Expire a dead holder so the queue can advance. */
-                        if (g_server->meta_writer_id[0] != 0 &&
-                            !meta_writer_live(g_server, 0, now)) {
-                            g_server->meta_writer_id[0] = 0;
-                            g_server->meta_writer_since[0] = 0;
+                        if (g_server->meta_writer_id[ei] != 0 &&
+                            !meta_writer_live(g_server, ei, now)) {
+                            g_server->meta_writer_id[ei] = 0;
+                            g_server->meta_writer_since[ei] = 0;
                         }
-                        meta_writer_q_expire(g_server, 0, now);
+                        meta_writer_q_expire(g_server, ei, now);
                         /* Yield an over-held election: a holder re-BEGINing
                          * (flush retry) past EFS_META_WRITER_MAX_HOLD_MS while
                          * contenders queue is moved to the back of the FIFO and
@@ -759,39 +759,40 @@ send_reply:
                          * Only under contention (q_len > 0): a lone writer is
                          * never yielded. Its partial pages are fenced by the
                          * PUT_META commit gate and overwritten next flush. */
-                        if (g_server->meta_writer_id[0] == b.writer_id &&
-                            g_server->meta_writer_since[0] != 0 &&
-                            now - g_server->meta_writer_since[0] >
+                        if (g_server->meta_writer_id[ei] == b.writer_id &&
+                            g_server->meta_writer_since[ei] != 0 &&
+                            now - g_server->meta_writer_since[ei] >
                                 EFS_META_WRITER_MAX_HOLD_MS &&
-                            g_server->meta_writer_q_len[0] > 0) {
-                            uint64_t old = g_server->meta_writer_id[0];
-                            g_server->meta_writer_id[0] = 0;
-                            g_server->meta_writer_since[0] = 0;
-                            meta_writer_q_touch(g_server, 0, old, now);
+                            g_server->meta_writer_q_len[ei] > 0) {
+                            uint64_t old = g_server->meta_writer_id[ei];
+                            g_server->meta_writer_id[ei] = 0;
+                            g_server->meta_writer_since[ei] = 0;
+                            meta_writer_q_touch(g_server, ei, old, now);
                         }
-                        if (g_server->meta_writer_id[0] == b.writer_id) {
+                        if (g_server->meta_writer_id[ei] == b.writer_id) {
                             /* Holder re-BEGINing (retry): re-grant. */
-                            g_server->meta_writer_gen[0] = b.gen;
-                            g_server->meta_writer_expiry[0] =
+                            g_server->meta_writer_gen[ei] = b.gen;
+                            g_server->meta_writer_expiry[ei] =
                                 now + EFS_META_WRITER_EXPIRY_MS;
                             br.status = EFS_PUT_META_OK;
-                        } else if (g_server->meta_writer_id[0] == 0 &&
-                                   (g_server->meta_writer_q_len[0] == 0 ||
-                                    g_server->meta_writer_q[0][0] ==
+                        } else if (g_server->meta_writer_id[ei] == 0 &&
+                                   (g_server->meta_writer_q_len[ei] == 0 ||
+                                    g_server->meta_writer_q[ei][0] ==
                                         b.writer_id)) {
                             /* Election free and we are at the head of the
                              * FIFO (or nobody waits): grant. */
-                            meta_writer_q_remove(g_server, 0, b.writer_id);
-                            g_server->meta_writer_id[0] = b.writer_id;
-                            g_server->meta_writer_gen[0] = b.gen;
-                            g_server->meta_writer_expiry[0] =
+                            meta_writer_q_remove(g_server, ei, b.writer_id);
+                            g_server->meta_writer_id[ei] = b.writer_id;
+                            g_server->meta_writer_gen[ei] = b.gen;
+                            g_server->meta_writer_expiry[ei] =
                                 now + EFS_META_WRITER_EXPIRY_MS;
-                            g_server->meta_writer_since[0] = now;
+                            g_server->meta_writer_since[ei] = now;
                             br.status = EFS_PUT_META_OK;
                         } else {
                             /* Held by another live writer, or others are
                              * ahead in the FIFO: wait for your turn. */
-                            meta_writer_q_touch(g_server, 0, b.writer_id, now);
+                            meta_writer_q_touch(g_server, ei, b.writer_id,
+                                                now);
                             br.status = EFS_PUT_META_BUSY;
                         }
                     }
@@ -811,11 +812,22 @@ send_reply:
                     memset(&root, 0, sizeof(root));
                     if (efs_export_root_deserialize(&root, payload, payload_len) == 0) {
                         pthread_mutex_lock(&g_server->lock);
-                        if (g_server->export_count == 0) {
-                            efs_export_init(&g_server->exports[0], root.id, root.name);
-                            g_server->export_count = 1;
+                        /* Multi-export: the root lands in ITS OWN export's
+                         * slot (find-or-create by id). Keying off exports[0]
+                         * morphed slot 0 into whatever root arrived last and
+                         * diverged multi-export clusters. */
+                        struct efs_export *ex =
+                            server_get_export_create(g_server, root.id,
+                                                     root.name);
+                        if (!ex) {
+                            pthread_mutex_unlock(&g_server->lock);
+                            efs_export_root_free(&root);
+                            reply = EFS_PUT_META_ERROR;
+                            efs_conn_send_msg(conn, EFS_MSG_PUT_META_REPLY,
+                                              &reply, 1);
+                            break;
                         }
-                        struct efs_export *ex = &g_server->exports[0];
+                        int ei = server_export_index_locked(g_server, ex);
                         /* Strict monotonic CAS: once we hold an EFSR, reject
                          * any generation we have already seen (<=). Equal gen
                          * from a second writer would collide in the same
@@ -827,18 +839,7 @@ send_reply:
                          * dropped PUT_META) legitimately observes a gap. Accept
                          * any strictly-newer gen; the fence+rebuild below brings
                          * the tables convergent with the newest root. */
-                        if (ex->meta_fragmented && ex->id && root.id &&
-                            root.id != ex->id) {
-                            /* Root for a different export than the one this
-                             * server established: reject loudly (see BEGIN). */
-                            fprintf(stderr,
-                                    "put-meta: rejecting root for export "
-                                    "id=%u name='%s' (serving id=%u '%s')\n",
-                                    root.id, root.name, ex->id, ex->name);
-                            reply = EFS_PUT_META_ERROR;
-                            pthread_mutex_unlock(&g_server->lock);
-                            efs_export_root_free(&root);
-                        } else if (ex->meta_fragmented &&
+                        if (ex->meta_fragmented &&
                             root.generation <= ex->root.generation) {
                             /* Same-gen root with identical shard-0 pages and
                              * extra-shard descriptors: an extra-shard owner's
@@ -859,9 +860,9 @@ send_reply:
                             pthread_mutex_unlock(&g_server->lock);
                             efs_export_root_free(&root);
                         } else if (root.write_lease_id &&
-                                   (!meta_writer_live(g_server, 0,
+                                   (!meta_writer_live(g_server, ei,
                                                       handler_now_ms()) ||
-                                    g_server->meta_writer_id[0] !=
+                                    g_server->meta_writer_id[ei] !=
                                         root.write_lease_id)) {
                             /* A stamped writer must CURRENTLY hold the flush
                              * election to commit. "No live holder" used to
@@ -936,6 +937,11 @@ send_reply:
                                     new_cis_count = 0;
                             }
                             ex->meta_fragmented = 1;
+                            /* Never let an adopt orphan a shard: carry
+                             * forward extra-shard descriptors the incoming
+                             * root lacks (per-shard higher gen wins). */
+                            (void)efs_export_root_maxmerge_extras(&root,
+                                                                  &ex->root);
                             efs_export_root_move(&ex->root, &root);
                             ex->id = ex->root.id;
                             strncpy(ex->name, ex->root.name, EFS_MAX_NAME - 1);
@@ -972,8 +978,8 @@ send_reply:
                             free(ex->gm_blob);
                             ex->gm_blob = NULL;
                             /* Commit consumes the flush election. */
-                            g_server->meta_writer_id[0] = 0;
-                            g_server->meta_writer_since[0] = 0;
+                            g_server->meta_writer_id[ei] = 0;
+                            g_server->meta_writer_since[ei] = 0;
                             /* Save while holding the lock: concurrent PUT_META
                              * can efs_export_root_move and free page_checksums
                              * under a raced unlocked save (SIGSEGV). */
@@ -989,8 +995,8 @@ send_reply:
                                     /* Old root was CoW (EFSR v7): reclaim the
                                      * cis it referenced but the new root no
                                      * longer does. */
-                                    server_gc_meta_cow_pages(g_server,
-                                                             &g_server->exports[0],
+                                    server_gc_meta_cow_pages(g_server, ex,
+                                                             EFS_META_TABLE_INO,
                                                              old_cis,
                                                              old_cis_count,
                                                              new_cis,
@@ -1001,8 +1007,7 @@ send_reply:
                                      * drop only the retired gen's out-of-range
                                      * pages (in-range fragments stay for reuse
                                      * by dirty-page skip references). */
-                                    server_gc_meta_slot_pages(g_server,
-                                                              &g_server->exports[0],
+                                    server_gc_meta_slot_pages(g_server, ex,
                                                               old_gen,
                                                               old_ino_pc,
                                                               old_ch_pc,
@@ -1020,14 +1025,12 @@ send_reply:
                     efs_export_init(&inc, 1, "pending");
                     if (efs_export_deserialize(&inc, payload, payload_len) == 0) {
                         pthread_mutex_lock(&g_server->lock);
-                        if (g_server->export_count == 0) {
-                            efs_export_init(&g_server->exports[0],
-                                            inc.id ? inc.id : 1,
-                                            inc.name[0] ? inc.name : "pending");
-                            g_server->export_count = 1;
-                        }
-                        struct efs_export *ex = &g_server->exports[0];
-                        if (efs_export_merge(ex, &inc) == 0) {
+                        struct efs_export *ex =
+                            server_get_export_create(g_server,
+                                                     inc.id ? inc.id : 1,
+                                                     inc.name[0] ? inc.name
+                                                                 : "pending");
+                        if (ex && efs_export_merge(ex, &inc) == 0) {
                             ex->meta_fragmented = 0;
                             g_server->epoch++;
                             free(ex->gm_blob);
@@ -1573,15 +1576,41 @@ send_reply:
                     !efs_mode_is_reg(cur.mode)) {
                     r.status = EFS_INODE_RPC_NOT_FOUND;
                 } else {
-                    /* Atomically reserve [cur.size, cur.size+len): the size
-                     * advances under s->lock, so two clients can never be
-                     * handed the same append region. The client writes the
-                     * data afterwards via the dcache/PUT/REPORT path. */
-                    efs_export_set_size_norollup(tab, req->ino,
-                                                 cur.size + req->len);
-                    server_meta_mark_rpc_dirty_locked(g_server, eidx);
-                    efs_export_get_inode(tab, req->ino, &r.inode);
-                    r.status = EFS_INODE_RPC_OK;
+                    /* Append barrier. The table size advances only via
+                     * REPORT_CHUNKS (grow-only — i.e. only after the
+                     * appender's data is PUT). Handing out a second
+                     * reservation while an earlier one is still unflushed
+                     * lets the new appender's merge-base read of the shared
+                     * tail chunk miss the earlier appender's bytes, and its
+                     * whole-chunk PUT then clobbers them (mc_stress appfile
+                     * torn lines). So: one outstanding reservation per ino;
+                     * the next reserve is BUSY until the table size catches
+                     * up. A stale reservation (crashed appender) expires;
+                     * its region stays a hole, keeping offsets stable.
+                     * Atomic under s->lock; the rsv state is in-memory only
+                     * (nothing to flush here). */
+                    struct timespec ts;
+                    clock_gettime(CLOCK_REALTIME, &ts);
+                    uint64_t now_ms = (uint64_t)ts.tv_sec * 1000ull +
+                                      (uint64_t)ts.tv_nsec / 1000000ull;
+                    uint32_t si = (uint32_t)(req->ino % EFS_APPEND_RSV_SLOTS);
+                    uint64_t rsv_end = 0, rsv_ts = 0;
+                    if (tab->append_rsv[si].ino == req->ino) {
+                        rsv_end = tab->append_rsv[si].end;
+                        rsv_ts = tab->append_rsv[si].ts_ms;
+                    }
+                    if (rsv_end > cur.size && now_ms - rsv_ts < 30000ull) {
+                        r.status = EFS_INODE_RPC_BUSY;
+                        r.inode = cur;
+                    } else {
+                        uint64_t off = rsv_end > cur.size ? rsv_end : cur.size;
+                        tab->append_rsv[si].ino = req->ino;
+                        tab->append_rsv[si].end = off + req->len;
+                        tab->append_rsv[si].ts_ms = now_ms;
+                        r.inode = cur;
+                        r.inode.size = off + req->len;
+                        r.status = EFS_INODE_RPC_OK;
+                    }
                 }
             } else if (type == EFS_MSG_INODE_LINK) {
                 struct efs_msg_inode_link *req = payload;
@@ -1884,7 +1913,10 @@ send_reply:
                     if (efs_export_rehash(ex, bits) == EFS_OK) {
                         r.shard_count = ex->root.shard_count;
                         r.status = EFS_UPGRADE_OK;
-                        server_meta_mark_rpc_dirty_locked(g_server, 0);
+                        int uidx = server_export_index_locked(g_server, ex);
+                        server_meta_mark_rpc_dirty_locked(g_server,
+                                                          uidx >= 0 ? uidx
+                                                                    : 0);
                     } else {
                         r.status = EFS_UPGRADE_ERROR;
                     }

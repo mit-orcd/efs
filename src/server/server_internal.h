@@ -181,6 +181,10 @@ struct efs_export *server_find_export_no_create(struct efsd_server *s,
 
 /* Get export by id. */
 struct efs_export *server_get_export(struct efsd_server *s, efs_export_id_t id);
+/* By-id find-or-create for the replication paths. Caller holds s->lock. */
+struct efs_export *server_get_export_create(struct efsd_server *s,
+                                            efs_export_id_t id,
+                                            const char *name);
 
 /* Export lifetime for unlocked I/O. Acquire returns the export (or NULL if
  * missing/being destroyed) with a use-count held; the caller MUST pair it with
@@ -374,6 +378,7 @@ void server_gc_meta_slot_pages(struct efsd_server *s, struct efs_export *ex,
  * new_cis[] (the new committed root's page_cis[]). Both arrays are caller-
  * owned copies captured under the server lock (the GC runs lock-free). */
 void server_gc_meta_cow_pages(struct efsd_server *s, struct efs_export *ex,
+                              efs_ino_t table_ino,
                               const uint32_t *old_cis, uint32_t old_count,
                               const uint32_t *new_cis, uint32_t new_count);
 

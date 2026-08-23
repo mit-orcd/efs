@@ -1695,6 +1695,7 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
     uint32_t pipe = EFS_WRITE_PIPELINE;
     if (pipe < 1)
         pipe = 1;
+    int layout_pulled = 0;
 
     for (uint64_t pos = offset; pos < end; ) {
         /* Build a batch of whole chunks covering [pos, end). */
@@ -1727,6 +1728,31 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
                 (efs_export_get_chunk(&g_client.export, jobs[i].ino,
                                       jobs[i].ci, NULL) == EFS_OK);
         pthread_mutex_unlock(&g_client.idx_mu);
+
+        /* A missing row inside the file size may be a stale local cache,
+         * not a real hole — pull the layout once per read and re-check
+         * before zero-filling (mc_stress rwfile read zeros forever). */
+        if (!layout_pulled) {
+            uint32_t miss0 = UINT32_MAX, miss1 = 0;
+            for (uint32_t i = 0; i < batch; i++) {
+                if (!jobs[i].have_ce) {
+                    if (jobs[i].ci < miss0)
+                        miss0 = jobs[i].ci;
+                    if (jobs[i].ci > miss1)
+                        miss1 = jobs[i].ci;
+                }
+            }
+            if (miss0 != UINT32_MAX &&
+                efs_client_pull_layout_miss(ino, miss0, miss1 + 1)) {
+                layout_pulled = 1;
+                pthread_mutex_lock(&g_client.idx_mu);
+                for (uint32_t i = 0; i < batch; i++)
+                    jobs[i].have_ce =
+                        (efs_export_get_chunk(&g_client.export, jobs[i].ino,
+                                              jobs[i].ci, NULL) == EFS_OK);
+                pthread_mutex_unlock(&g_client.idx_mu);
+            }
+        }
 
         get_pool_run(jobs, batch);
 

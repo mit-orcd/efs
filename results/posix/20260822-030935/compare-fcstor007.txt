@@ -1,0 +1,17 @@
+================================================================
+POSIX baseline comparison: 144 tests
+  both pass        : 138
+  EFS BUGS         : 1  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  hardlink_terminal_ln             [FAIL] ln bumps nlink: got 1, want 2
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

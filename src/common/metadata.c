@@ -1519,8 +1519,12 @@ void efs_export_merge_extra_roots(struct efs_export *ex,
         tab->next_ino = tab->root.next_ino;
     }
     /* Re-capture so ex->root.extra_roots reflects the merge (owned shards
-     * keep their local descriptors; adopted ones land in their tabs). */
+     * keep their local descriptors; adopted ones land in their tabs).
+     * Capture only sees LOCAL tables — carry forward descriptors for shards
+     * we have no table for, or a refresh would drop them from the recovery
+     * record. */
     (void)efs_export_root_capture_extras(&ex->root, ex);
+    (void)efs_export_root_maxmerge_extras(&ex->root, incoming);
 }
 
 static int export_is_sharded_root(struct efs_export *ex)
@@ -1688,6 +1692,29 @@ static efs_ino_t create_sharded(struct efs_export *ex, efs_ino_t parent,
     struct efs_export *ctab = efs_export_table(ex, target);
     if (!ctab)
         return 0;
+    struct efs_export *ptab = efs_export_table(ex, psh);
+    if (!ptab)
+        return 0;
+    /* The parent table's dentry is the authoritative existence record: lookups
+     * and unlinks route by parent and only ever consult ptab. Checking the
+     * child table first (via create_with_ino's internal lookup) let a stale
+     * split-brain row there (membership flap, no fencing) wedge the name:
+     * EEXIST on create, ENOENT on lookup, uncleanable. Check ptab first, and
+     * drop an unreachable same-name row from ctab before writing. */
+    if (efs_export_lookup(ex, parent, name, NULL) == EFS_OK)
+        return 0;
+    if (target != psh) {
+        uint64_t stale;
+        if (name_idx_get(ctab, parent, name, &stale) == 0) {
+            struct efs_inode victim = ctab->inodes[stale];
+            rollup_sub_under(ctab, parent, &victim);
+            child_idx_del(ctab, parent, stale);
+            remove_inode_slot(ctab, stale, 0);
+            fprintf(stderr, "create: dropped stale child-table row "
+                    "parent=%llu name=%s (split-brain remnant)\n",
+                    (unsigned long long)parent, name);
+        }
+    }
     /* The target table allocates from its own congruence class. */
     efs_ino_t ino = efs_export_alloc_ino(ctab, target);
     if (!ino)
@@ -1695,13 +1722,10 @@ static efs_ino_t create_sharded(struct efs_export *ex, efs_ino_t parent,
     if (!efs_export_create_with_ino(ctab, ino, parent, mode, uid, gid, name))
         return 0;
     ctab->shard_dirty = 1;
-    if (target != psh) {
-        struct efs_export *ptab = efs_export_table(ex, psh);
-        if (ptab && ptab != ctab) {
-            (void)efs_export_create_with_ino(ptab, ino, parent, mode, uid, gid,
-                                             name);
-            ptab->shard_dirty = 1;
-        }
+    if (target != psh && ptab != ctab) {
+        (void)efs_export_create_with_ino(ptab, ino, parent, mode, uid, gid,
+                                         name);
+        ptab->shard_dirty = 1;
     }
     return ino;
 }
@@ -1863,46 +1887,79 @@ int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *
         return EFS_ERR_INVAL;
     if (export_is_sharded_root(ex)) {
         uint32_t bits = ex->root.shard_bits;
-        struct efs_inode victim;
+        uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
         struct efs_export *ptab =
             efs_export_table(ex, efs_export_shard_of(parent, bits));
         if (!ptab)
             return EFS_ERR_NOT_FOUND;
-        if (ptab != ex) {
-            if (efs_export_lookup(ptab, parent, name, &victim) != 0)
-                return EFS_ERR_NOT_FOUND;
-            int urc = efs_export_unlink_name(ptab, parent, name);
-            if (urc != 0)
-                return urc;
-            ptab->shard_dirty = 1;
-            uint32_t csh = efs_export_shard_of(victim.ino, bits);
-            if (csh != efs_export_shard_of(parent, bits)) {
-                struct efs_export *ctab = efs_export_table(ex, csh);
-                if (ctab && ctab != ptab) {
-                    (void)efs_export_unlink(ctab, victim.ino);
-                    ctab->shard_dirty = 1;
-                }
+
+        /* The dentry row lives on the PARENT's shard table. */
+        uint64_t pos = 0;
+        if (name_idx_get(ptab, parent, name, &pos) != 0)
+            return EFS_ERR_NOT_FOUND;
+        struct efs_inode removed = ptab->inodes[pos];
+        efs_ino_t ino = removed.ino;
+
+        if (efs_mode_is_dir(removed.mode)) {
+            /* rmdir: a dir's only row lives on the PARENT's shard table
+             * (create_sharded targets psh for dirs, so ino == psh's class).
+             * Let efs_export_unlink remove the row itself: it decrements the
+             * parent's nlink only where the parent row coexists (ptab), so
+             * the ".." link drops exactly once. Removing the row here first
+             * (old code) made that lookup miss and the parent kept nlink=3
+             * after rmdir (posix dir_nlink on bits>0). */
+            for (uint32_t sh = 0; sh < sc; sh++) {
+                struct efs_export *tab = efs_export_table(ex, sh);
+                if (!tab)
+                    continue;
+                if (efs_export_unlink(tab, ino) == EFS_OK && tab != ex)
+                    tab->shard_dirty = 1;
             }
             return EFS_OK;
         }
-        if (efs_export_lookup(ex, parent, name, &victim) != 0)
-            return EFS_ERR_NOT_FOUND;
-        uint32_t saved_bits = ex->root.shard_bits;
-        uint32_t saved_sc = ex->root.shard_count;
-        ex->root.shard_bits = 0;
-        ex->root.shard_count = 1;
-        int local_rc = efs_export_unlink_name(ex, parent, name);
-        ex->root.shard_bits = saved_bits;
-        ex->root.shard_count = saved_sc;
-        if (local_rc != 0)
-            return local_rc;
-        uint32_t csh = efs_export_shard_of(victim.ino, bits);
-        if (csh != 0) {
-            struct efs_export *ctab = efs_export_table(ex, csh);
-            if (ctab) {
-                (void)efs_export_unlink(ctab, victim.ino);
-                ctab->shard_dirty = 1;
+
+        uint32_t nlink = removed.nlink;
+        if (nlink == 0)
+            nlink = 1;
+        nlink--;
+        rollup_sub_under(ptab, parent, &removed);
+        child_idx_del(ptab, parent, pos);
+        remove_inode_slot(ptab, pos, nlink > 0);
+        if (ptab != ex)
+            ptab->shard_dirty = 1;
+
+        if (nlink == 0) {
+            /* Last link: drop every row for this ino in EVERY shard table
+             * (canonical row on the child shard + dentry copies on other
+             * parents' shards) and the chunks (child shard only). The old
+             * code removed only the child-shard rows when the shards
+             * differed — and, worse, did so even when OTHER hard links kept
+             * the inode alive. */
+            for (uint32_t sh = 0; sh < sc; sh++) {
+                struct efs_export *tab = efs_export_table(ex, sh);
+                if (!tab)
+                    continue;
+                if (efs_export_unlink(tab, ino) == EFS_OK && tab != ex)
+                    tab->shard_dirty = 1;
             }
+            return EFS_OK;
+        }
+
+        /* Remaining hard links keep the decremented nlink — on every row
+         * carrying this ino in every shard table. */
+        for (uint32_t sh = 0; sh < sc; sh++) {
+            struct efs_export *tab = efs_export_table(ex, sh);
+            if (!tab)
+                continue;
+            int hit = 0;
+            for (uint64_t i = 0; i < tab->inode_count; i++) {
+                if (tab->inodes[i].ino == ino) {
+                    tab->inodes[i].nlink = nlink;
+                    hit = 1;
+                }
+            }
+            if (hit && tab != ex)
+                tab->shard_dirty = 1;
         }
         return EFS_OK;
     }
@@ -1983,6 +2040,84 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
         return EFS_ERR_INVAL;
     if (strcmp(new_name, EFS_STATS_NAME) == 0)
         return EFS_ERR_INVAL;
+
+    /* Sharded root: the canonical src row lives on the CHILD shard's table
+     * and the new dentry belongs on the NEW PARENT's shard table. The
+     * unsharded path below would look src up only in the main (shard-0)
+     * table — NOT_FOUND for any other shard, so the link never landed
+     * server-side (posix hardlink_terminal_ln on bits>0). */
+    if (export_is_sharded_root(ex)) {
+        uint32_t bits = ex->root.shard_bits;
+        struct efs_export *ctab = efs_export_table_for_ino(ex, src_ino);
+        struct efs_inode *csrc = ctab ? inode_ptr(ctab, src_ino) : NULL;
+        if (!csrc)
+            return EFS_ERR_NOT_FOUND;
+        if (efs_mode_is_dir(csrc->mode))
+            return EFS_ERR_INVAL;
+        if (efs_export_lookup(ex, new_parent, new_name, NULL) == EFS_OK)
+            return EFS_ERR_EXIST;
+        struct efs_export *ptab =
+            efs_export_table(ex, efs_export_shard_of(new_parent, bits));
+        struct efs_inode *pdir = ptab ? inode_ptr(ptab, new_parent) : NULL;
+        if (!pdir || !efs_mode_is_dir(pdir->mode))
+            return EFS_ERR_INVAL;
+
+        uint32_t nlink = csrc->nlink + 1;
+        /* Bump nlink on every row carrying this ino in every shard table
+         * (canonical row + parent-shard dentry copies). */
+        uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+        for (uint32_t sh = 0; sh < sc; sh++) {
+            struct efs_export *tab = efs_export_table(ex, sh);
+            if (!tab)
+                continue;
+            int hit = 0;
+            for (uint64_t i = 0; i < tab->inode_count; i++) {
+                if (tab->inodes[i].ino == src_ino) {
+                    tab->inodes[i].nlink = nlink;
+                    hit = 1;
+                }
+            }
+            if (hit && tab != ex)
+                tab->shard_dirty = 1;
+        }
+
+        efs_export_ensure_rollups(ptab);
+        if (ptab->inode_count >= ptab->inode_capacity) {
+            uint64_t new_cap = ptab->inode_capacity * 2;
+            struct efs_inode *nw =
+                realloc(ptab->inodes, new_cap * sizeof(struct efs_inode));
+            if (!nw)
+                return EFS_ERR_NOMEM;
+            ptab->inodes = nw;
+            ptab->inode_capacity = new_cap;
+        }
+        if (export_ensure_inode_idx(ptab) != 0)
+            return EFS_ERR_NOMEM;
+        /* Re-fetch after the possible realloc (ptab may == ctab). */
+        csrc = inode_ptr(ctab, src_ino);
+        if (!csrc)
+            return EFS_ERR_NOT_FOUND;
+
+        uint64_t pos = ptab->inode_count++;
+        struct efs_inode *dst = &ptab->inodes[pos];
+        *dst = *csrc;
+        dst->parent = new_parent;
+        dst->nlink = nlink;
+        inode_clear_rollups(dst);
+        strncpy(dst->name, new_name, EFS_MAX_NAME - 1);
+        dst->name[EFS_MAX_NAME - 1] = '\0';
+        dentry_bytes_add(ptab, dst->name);
+        time_now(&dst->ctime);
+        name_idx_put(ptab, new_parent, new_name, pos);
+        child_idx_add(ptab, new_parent, pos);
+        rollup_add_under(ptab, new_parent, dst);
+        if (ptab != ex)
+            ptab->shard_dirty = 1;
+        if (ctab != ex)
+            ctab->shard_dirty = 1;
+        return EFS_OK;
+    }
+
     efs_export_ensure_rollups(ex);
 
     struct efs_inode *src = inode_ptr(ex, src_ino);
@@ -3651,6 +3786,60 @@ int efs_export_root_capture_extras(struct efs_export_root *root,
         w++;
     }
     root->extra_shard_count = w;
+    return EFS_OK;
+}
+
+/* Max-merge prev's extra-shard descriptors into root: per shard id, keep the
+ * higher-generation descriptor, and carry forward shards that root lacks
+ * entirely. A cluster root is the recovery record for EVERY shard — an
+ * adopt/commit that drops or regresses a descriptor orphans that shard's
+ * tables (the efs-s3 clobber: a catchup adopt of an extras-less root wiped
+ * the descriptors, the rebuild then reinstalled nothing, and the next
+ * commit persisted the loss). */
+int efs_export_root_maxmerge_extras(struct efs_export_root *root,
+                                    const struct efs_export_root *prev)
+{
+    if (!root || !prev)
+        return EFS_ERR_INVAL;
+    for (uint32_t i = 0; i < prev->extra_shard_count; i++) {
+        uint32_t sh = prev->extra_shard_ids ? prev->extra_shard_ids[i] : 0;
+        if (sh == 0)
+            continue;
+        const struct efs_export_root *p = &prev->extra_roots[i];
+        uint32_t j = 0;
+        while (j < root->extra_shard_count && root->extra_shard_ids[j] != sh)
+            j++;
+        if (j < root->extra_shard_count) {
+            if (root->extra_roots[j].generation >= p->generation)
+                continue; /* root's descriptor is fresher-or-equal: keep it */
+            efs_export_root_free(&root->extra_roots[j]);
+            if (efs_export_root_copy(&root->extra_roots[j], p) != EFS_OK)
+                return EFS_ERR_NOMEM;
+            continue;
+        }
+        uint32_t n = root->extra_shard_count;
+        uint32_t *ids = realloc(root->extra_shard_ids,
+                                (size_t)(n + 1) * sizeof(uint32_t));
+        struct efs_export_root *er =
+            realloc(root->extra_roots,
+                    (size_t)(n + 1) * sizeof(struct efs_export_root));
+        if (!ids || !er) {
+            /* A failed realloc leaves the original arrays owned by root —
+             * free only whichever NEW allocation succeeded. */
+            if (ids)
+                free(ids);
+            if (er)
+                free(er);
+            return EFS_ERR_NOMEM;
+        }
+        root->extra_shard_ids = ids;
+        root->extra_roots = er;
+        memset(&root->extra_roots[n], 0, sizeof(root->extra_roots[n]));
+        if (efs_export_root_copy(&root->extra_roots[n], p) != EFS_OK)
+            return EFS_ERR_NOMEM;
+        root->extra_shard_ids[n] = sh;
+        root->extra_shard_count = n + 1;
+    }
     return EFS_OK;
 }
 

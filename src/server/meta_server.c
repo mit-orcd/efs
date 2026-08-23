@@ -258,6 +258,7 @@ static int u32_cmp(const void *a, const void *b)
  * Best-effort: a missed reclaim leaks a page until a later GC, never
  * corrupts (a live ci is never unlinked — it is always in new page_cis[]). */
 void server_gc_meta_cow_pages(struct efsd_server *s, struct efs_export *ex,
+                              efs_ino_t table_ino,
                               const uint32_t *old_cis, uint32_t old_count,
                               const uint32_t *new_cis, uint32_t new_count)
 {
@@ -277,15 +278,13 @@ void server_gc_meta_cow_pages(struct efsd_server *s, struct efs_export *ex,
             continue; /* still referenced by the new root */
         efs_node_id_t placed[EFS_NUM_FRAGMENTS];
         pthread_mutex_lock(&s->lock);
-        efs_place_fragments(s->nodes, s->node_count, EFS_META_TABLE_INO, ci,
-                            placed);
+        efs_place_fragments(s->nodes, s->node_count, table_ino, ci, placed);
         efs_node_id_t self = s->id;
         pthread_mutex_unlock(&s->lock);
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
             if (placed[fi] != self)
                 continue;
-            server_unlink_fragment_files(s, ex, EFS_META_TABLE_INO, ci,
-                                         (uint32_t)fi);
+            server_unlink_fragment_files(s, ex, table_ino, ci, (uint32_t)fi);
         }
     }
     free(live);
@@ -842,7 +841,9 @@ static void bootstrap_export_on_peers(struct efsd_server *s, struct efs_export *
 static int server_flush_fragmented_meta_locked(struct efsd_server *s,
                                                struct efs_export *ex,
                                                efs_ino_t table_ino,
-                                               int commit_cluster_root);
+                                               int commit_cluster_root,
+                                               uint32_t shard_idx,
+                                               uint32_t shard_count);
 static int server_commit_cluster_extras(struct efsd_server *s,
                                         struct efs_export *ex);
 
@@ -868,6 +869,42 @@ static int server_commit_cluster_extras(struct efsd_server *s,
     root.generation = ex->root.generation;
     root.version = EFS_META_ROOT_VERSION_V8;
     int crc = efs_export_root_capture_extras(&root, ex);
+    /* Ownership remap fence: only push descriptors for shards we CURRENTLY
+     * own. After a membership change a shard we used to own must come from
+     * its new owner — pushing our (now stale) descriptor could collide with
+     * the new owner's same-gen commit. */
+    if (crc == EFS_OK && root.extra_shard_count > 0) {
+        efs_node_id_t live[EFS_MAX_NODES];
+        uint32_t nlive = 0;
+        live[nlive++] = s->id;
+        for (uint32_t ni = 0; ni < s->node_count && nlive < EFS_MAX_NODES;
+             ni++) {
+            efs_node_id_t id = s->nodes[ni].id;
+            if (id == 0 || id == s->id)
+                continue;
+            if (server_node_is_down_locked(s, id))
+                continue;
+            live[nlive++] = id;
+        }
+        uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+        uint32_t out = 0;
+        for (uint32_t i = 0; i < root.extra_shard_count; i++) {
+            uint32_t sh = root.extra_shard_ids ? root.extra_shard_ids[i] : 0;
+            if (sh == 0)
+                continue;
+            if (sc > 1 && efs_shard_owner_of(sh, sc, live, nlive) != s->id) {
+                efs_export_root_free(&root.extra_roots[i]);
+                continue;
+            }
+            if (out != i) {
+                root.extra_roots[out] = root.extra_roots[i];
+                if (root.extra_shard_ids)
+                    root.extra_shard_ids[out] = sh;
+            }
+            out++;
+        }
+        root.extra_shard_count = out;
+    }
     pthread_mutex_unlock(&s->lock);
     if (crc != EFS_OK) {
         efs_export_root_free(&root);
@@ -923,7 +960,54 @@ static int server_commit_cluster_extras(struct efsd_server *s,
         return -1;
     }
     pthread_mutex_lock(&s->lock);
-    efs_export_root_move(&ex->root, &root);
+    /* Adopt only the descriptors this commit refreshed (owned shards); carry
+     * every other descriptor forward from the existing root. A full
+     * root_move would persist the ownership-FILTERED root and wipe the
+     * restart path for shards this node doesn't own — the wire filter exists
+     * to avoid pushing stale same-gen descriptors, not to shrink the local
+     * recovery record. root's non-extras fields are a same-gen copy of
+     * ex->root's (copied at entry, gen unchanged), so no root_move. */
+    for (uint32_t i = 0; i < root.extra_shard_count; i++) {
+        uint32_t sh = root.extra_shard_ids ? root.extra_shard_ids[i] : 0;
+        if (sh == 0)
+            continue;
+        uint32_t j = 0;
+        while (j < ex->root.extra_shard_count &&
+               (!ex->root.extra_shard_ids || ex->root.extra_shard_ids[j] != sh))
+            j++;
+        if (j < ex->root.extra_shard_count) {
+            if (ex->root.extra_roots[j].generation >=
+                root.extra_roots[i].generation)
+                continue;
+            efs_export_root_free(&ex->root.extra_roots[j]);
+            if (efs_export_root_copy(&ex->root.extra_roots[j],
+                                     &root.extra_roots[i]) != EFS_OK)
+                break;
+        } else {
+            uint32_t n = ex->root.extra_shard_count;
+            uint32_t *ids = realloc(ex->root.extra_shard_ids,
+                                    (size_t)(n + 1) * sizeof(uint32_t));
+            struct efs_export_root *er =
+                realloc(ex->root.extra_roots,
+                        (size_t)(n + 1) * sizeof(struct efs_export_root));
+            if (!ids || !er) {
+                if (ids)
+                    ex->root.extra_shard_ids = ids;
+                if (er)
+                    ex->root.extra_roots = er;
+                break;
+            }
+            ex->root.extra_shard_ids = ids;
+            ex->root.extra_roots = er;
+            memset(&ex->root.extra_roots[n], 0,
+                   sizeof(ex->root.extra_roots[n]));
+            if (efs_export_root_copy(&ex->root.extra_roots[n],
+                                     &root.extra_roots[i]) != EFS_OK)
+                break;
+            ex->root.extra_shard_ids[n] = sh;
+            ex->root.extra_shard_count = n + 1;
+        }
+    }
     server_save_export(s, ex);
     pthread_mutex_unlock(&s->lock);
     efs_export_root_free(&root);
@@ -964,10 +1048,17 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
             if (!tab || tab->inode_count == 0)
                 continue;
             if (sc > 1 &&
-                efs_shard_owner_of(i, sc, live, nlive) != s->id)
+                efs_shard_owner_of(i, sc, live, nlive) != s->id) {
+                /* Lost ownership (membership remap): the unflushed ops in
+                 * this tab are lost (crash-like window — the new owner
+                 * rebuilds from the last committed descriptor). Clear dirty
+                 * so the descriptor merge can adopt the new owner's tables;
+                 * a dirty tab is never merged and would stay stale forever. */
+                tab->shard_dirty = 0;
                 continue;
+            }
             int src = server_flush_fragmented_meta_locked(
-                s, tab, efs_meta_shard_table_ino(i), 0);
+                s, tab, efs_meta_shard_table_ino(i), 0, i, sc);
             if (src != 0)
                 rc = src;
             else {
@@ -978,7 +1069,7 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     }
     if (primary) {
         int rc0 = server_flush_fragmented_meta_locked(s, ex, EFS_META_TABLE_INO,
-                                                      1);
+                                                      1, 0, sc);
         if (rc0 != 0)
             rc = rc0;
     } else if (flushed_extra && rc == 0) {
@@ -991,7 +1082,9 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
 static int server_flush_fragmented_meta_locked(struct efsd_server *s,
                                                struct efs_export *ex,
                                                efs_ino_t table_ino,
-                                               int commit_cluster_root)
+                                               int commit_cluster_root,
+                                               uint32_t shard_idx,
+                                               uint32_t shard_count)
 {
     /* Peers must know the export before accepting meta-page PUT_CHUNKs. */
     bootstrap_export_on_peers(s, ex);
@@ -1215,10 +1308,88 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
      * fold per-shard gens into the cluster root. */
     if (!commit_cluster_root) {
         pthread_mutex_lock(&s->lock);
+        /* Ownership remap fence: re-verify we still own this shard AT COMMIT
+         * TIME (membership is updated under this same lock, so check+commit
+         * are atomic w.r.t. membership changes). A flush that started while
+         * we were owner must not commit after a remap — its same-gen
+         * descriptor would silently collide with the new owner's. */
+        if (shard_count > 1 && shard_idx > 0) {
+            efs_node_id_t live[EFS_MAX_NODES];
+            uint32_t nlive = 0;
+            live[nlive++] = s->id;
+            for (uint32_t ni = 0; ni < s->node_count && nlive < EFS_MAX_NODES;
+                 ni++) {
+                efs_node_id_t id = s->nodes[ni].id;
+                if (id == 0 || id == s->id)
+                    continue;
+                if (server_node_is_down_locked(s, id))
+                    continue;
+                live[nlive++] = id;
+            }
+            if (efs_shard_owner_of(shard_idx, shard_count, live, nlive) !=
+                s->id) {
+                pthread_mutex_unlock(&s->lock);
+                efs_export_root_free(&root);
+                return -1;
+            }
+        }
         ex->meta_fragmented = 1;
+        /* Snapshot outgoing/incoming page_cis for the GC below — same CoW
+         * reclaim as the cluster-root path, or every shard flush leaks its
+         * superseded pages forever. */
+        if (ex->root.page_cis && ex->root.page_count > 0) {
+            old_cis_count = ex->root.page_count;
+            old_cis = malloc((size_t)old_cis_count * sizeof(uint32_t));
+            if (old_cis)
+                memcpy(old_cis, ex->root.page_cis,
+                       (size_t)old_cis_count * sizeof(uint32_t));
+            else
+                old_cis_count = 0;
+        }
+        if (root.page_cis && root.page_count > 0) {
+            new_cis_count = root.page_count;
+            new_cis = malloc((size_t)new_cis_count * sizeof(uint32_t));
+            if (new_cis)
+                memcpy(new_cis, root.page_cis,
+                       (size_t)new_cis_count * sizeof(uint32_t));
+            else
+                new_cis_count = 0;
+        }
         efs_export_root_move(&ex->root, &root);
         pthread_mutex_unlock(&s->lock);
+        if (old_cis && new_cis)
+            server_gc_meta_cow_pages(s, ex, table_ino, old_cis, old_cis_count,
+                                     new_cis, new_cis_count);
+        free(old_cis);
+        free(new_cis);
         return 0;
+    }
+
+    /* Fold extra-shard descriptors into the cluster root (v8).
+     * server_commit_cluster_extras only runs on NON-primary owners — so for
+     * shards owned by the primary itself, the shard flush above updated
+     * tab->root in memory but nothing ever published it: a restart rebuilt
+     * those shards from their upgrade-time descriptors and every later
+     * create/write on them was lost (post-bounce size=0 on primary-owned
+     * shards). Capture the local tables, then MAX-MERGE the previous root's
+     * descriptors: the persisted root is the recovery record for EVERY shard,
+     * so a descriptor must never be dropped or regressed — an ownership
+     * filter here garbage-collected shard 4's descriptor during a heartbeat
+     * flap and wiped its recovery path. Receivers skip descriptors with
+     * gen <= theirs, so carrying an unowned shard's older descriptor is
+     * harmless. */
+    if (shard_count > 1) {
+        pthread_mutex_lock(&s->lock);
+        int crc = efs_export_root_capture_extras(&root, ex);
+        if (crc == EFS_OK)
+            crc = efs_export_root_maxmerge_extras(&root, &ex->root);
+        pthread_mutex_unlock(&s->lock);
+        if (crc != EFS_OK) {
+            free(old_cis);
+            free(new_cis);
+            efs_export_root_free(&root);
+            return -1;
+        }
     }
 
     /* Two-phase commit: the new root is NOT installed locally until a quorum
@@ -1328,7 +1499,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
         if (old_cis && new_cis) {
             /* Old root was CoW (EFSR v7): reclaim the cis it referenced but
              * the new root no longer does. */
-            server_gc_meta_cow_pages(s, ex, old_cis, old_cis_count,
+            server_gc_meta_cow_pages(s, ex, table_ino, old_cis, old_cis_count,
                                      new_cis, new_cis_count);
         } else if (old_ino_pc > 0 || old_ch_pc > 0) {
             /* Old root was dual-slot (v6 and earlier): only pages beyond the
@@ -1392,70 +1563,118 @@ int server_replicate_metadata(struct efsd_server *s, struct efs_export *ex)
     return server_flush_fragmented_meta(s, ex);
 }
 
+/* Join-time bootstrap: fetch EVERY export the peer serves (LIST_EXPORTS,
+ * then a named GET_META per export). The old single unnamed GET_META only
+ * ever carried the peer's exports[0], so a joining node never learned the
+ * other exports until their owners happened to flush. */
 int server_fetch_metadata_from(struct efsd_server *s, const char *host, uint16_t port)
 {
     int fd = server_peer_conn_get(host, port);
     if (fd < 0)
         return -1;
 
-    if (efs_send_msg(fd, EFS_MSG_GET_META, NULL, 0) != 0) {
+    if (efs_send_msg(fd, EFS_MSG_LIST_EXPORTS, NULL, 0) != 0) {
         server_peer_conn_drop(host, port, fd);
         return -1;
     }
-
     uint8_t type;
     void *payload = NULL;
     uint32_t payload_len = 0;
     if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
-        type != EFS_MSG_GET_META_REPLY || payload_len == 0) {
+        type != EFS_MSG_LIST_EXPORTS_REPLY ||
+        payload_len < sizeof(struct efs_msg_list_exports_reply)) {
         free(payload);
         server_peer_conn_drop(host, port, fd);
         return -1;
     }
-    server_peer_conn_release(host, port, fd);
-
-    pthread_mutex_lock(&s->lock);
-    if (s->export_count == 0) {
-        efs_export_init(&s->exports[0], 1, "default");
-        s->export_count = 1;
+    struct efs_msg_list_exports_reply list;
+    memcpy(&list, payload, sizeof(list));
+    free(payload);
+    if (list.export_count > EFS_MAX_EXPORTS)
+        list.export_count = EFS_MAX_EXPORTS;
+    if (list.export_count == 0) {
+        server_peer_conn_release(host, port, fd);
+        return -1;
     }
-    struct efs_export *ex = &s->exports[0];
 
     int rc = -1;
-    if (efs_meta_blob_is_root(payload, payload_len)) {
-        struct efs_export_root root;
-        memset(&root, 0, sizeof(root));
-        if (efs_export_root_deserialize(&root, payload, payload_len) == 0) {
-            ex->meta_fragmented = 1;
-            efs_export_root_move(&ex->root, &root);
-            ex->id = ex->root.id;
-            strncpy(ex->name, ex->root.name, EFS_MAX_NAME - 1);
-            ex->next_ino = ex->root.next_ino;
-            if (efs_chunk_size_valid(ex->root.chunk_size))
-                ex->chunk_size = ex->root.chunk_size;
-            /* Never rebuild here: this runs on the startup rejoin path (main
-             * thread, before accept()) and on the JOIN handler. A synchronous
-             * 2+1 page rebuild blocks accept() for the whole sweep, and when
-             * every node restarts together each peer fetch waits out the full
-             * I/O timeout because the peer's accept loop isn't up yet — the
-             * cluster deadlocks for hours. Install the root, flag the rebuild,
-             * and let the meta catch-up thread do it once we can serve. */
-            ex->meta_needs_rebuild = (ex->root.page_count > 0);
-            if (ex->meta_needs_rebuild)
-                fprintf(stderr, "FENCE-SITE fetch-from-peer %s:%u gen=%llu\n",
-                        host, port, (unsigned long long)ex->root.generation);
-            rc = 0;
+    for (uint32_t i = 0; i < list.export_count; i++) {
+        list.exports[i].name[EFS_MAX_NAME - 1] = '\0';
+        const char *ename = list.exports[i].name;
+        if (!ename[0])
+            continue;
+        if (efs_send_msg(fd, EFS_MSG_GET_META, ename,
+                         (uint32_t)strlen(ename) + 1) != 0)
+            break;
+        payload = NULL;
+        payload_len = 0;
+        if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
+            type != EFS_MSG_GET_META_REPLY || payload_len == 0) {
+            free(payload);
+            break;
         }
-    } else if (efs_meta_blob_is_export(payload, payload_len)) {
-        if (efs_export_deserialize(ex, payload, payload_len) == 0) {
-            ex->meta_fragmented = 0;
-            server_save_export(s, ex);
-            rc = 0;
-        }
-    }
-    pthread_mutex_unlock(&s->lock);
 
-    free(payload);
+        pthread_mutex_lock(&s->lock);
+        int one = -1;
+        if (efs_meta_blob_is_root(payload, payload_len)) {
+            struct efs_export_root root;
+            memset(&root, 0, sizeof(root));
+            if (efs_export_root_deserialize(&root, payload, payload_len) == 0) {
+                struct efs_export *ex =
+                    server_get_export_create(s, root.id, root.name);
+                if (ex) {
+                    ex->meta_fragmented = 1;
+                    efs_export_root_move(&ex->root, &root);
+                    ex->id = ex->root.id;
+                    strncpy(ex->name, ex->root.name, EFS_MAX_NAME - 1);
+                    ex->next_ino = ex->root.next_ino;
+                    if (efs_chunk_size_valid(ex->root.chunk_size))
+                        ex->chunk_size = ex->root.chunk_size;
+                    /* Never rebuild here: this runs on the startup rejoin
+                     * path (main thread, before accept()) and on the JOIN
+                     * handler. A synchronous 2+1 page rebuild blocks accept()
+                     * for the whole sweep, and when every node restarts
+                     * together each peer fetch waits out the full I/O timeout
+                     * because the peer's accept loop isn't up yet — the
+                     * cluster deadlocks for hours. Install the root, flag the
+                     * rebuild, and let the meta catch-up thread do it once we
+                     * can serve. */
+                    ex->meta_needs_rebuild = (ex->root.page_count > 0);
+                    if (ex->meta_needs_rebuild)
+                        fprintf(stderr,
+                                "FENCE-SITE fetch-from-peer %s:%u gen=%llu\n",
+                                host, port,
+                                (unsigned long long)ex->root.generation);
+                    one = 0;
+                } else {
+                    efs_export_root_free(&root);
+                }
+            }
+        } else if (efs_meta_blob_is_export(payload, payload_len)) {
+            struct efs_export tmp;
+            efs_export_init(&tmp, 1, "pending");
+            if (efs_export_deserialize(&tmp, payload, payload_len) == 0) {
+                struct efs_export *ex =
+                    server_get_export_create(s, tmp.id ? tmp.id : 1,
+                                             tmp.name[0] ? tmp.name
+                                                         : "pending");
+                if (ex) {
+                    efs_export_free(ex);
+                    *ex = tmp;
+                    memset(&tmp, 0, sizeof(tmp));
+                    ex->meta_fragmented = 0;
+                    server_save_export(s, ex);
+                    one = 0;
+                }
+            }
+            efs_export_free(&tmp);
+        }
+        pthread_mutex_unlock(&s->lock);
+        free(payload);
+        if (one == 0)
+            rc = 0;
+    }
+    server_peer_conn_release(host, port, fd);
     return rc;
 }
 
@@ -1490,20 +1709,16 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
     }
 
     pthread_mutex_lock(&s->lock);
-    if (s->export_count == 0) {
-        efs_export_init(&s->exports[0], root.id, root.name);
-        s->export_count = 1;
-    }
-    struct efs_export *ex = &s->exports[0];
-    /* The catchup/install path is single-export (exports[0]): a root for a
-     * DIFFERENT export must not morph this slot (root_move overwrites
-     * ex->id/name). Multi-export catchup is a known gap — test clusters run
-     * one export at a time. */
-    if (ex->meta_fragmented && ex->id && root.id && root.id != ex->id) {
+    /* Multi-export: the root lands in ITS OWN export's slot (find-or-create
+     * by id). Keying off exports[0] morphed slot 0 into whatever root
+     * arrived last and diverged multi-export clusters. */
+    struct efs_export *ex = server_get_export_create(s, root.id, root.name);
+    if (!ex) {
         pthread_mutex_unlock(&s->lock);
         efs_export_root_free(&root);
         return 0;
     }
+    int ei = server_export_index_locked(s, ex);
     /* Unflushed RPC mutations mean our in-memory table is ahead of ANY root
      * a peer can serve: roots are made by flushing a snapshot that predates
      * those ops. Installing this root (and especially rebuilding/adopting
@@ -1513,12 +1728,10 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
      * in-memory reports (mc_stress: cdir files back to size 0). Defer; the
      * flush advances our local root past this gen and the next poll is a
      * no-op. */
-    for (uint32_t e = 0; e < s->export_count && e < EFS_MAX_EXPORTS; e++) {
-        if (s->rpc_dirty_ops[e] > 0) {
-            pthread_mutex_unlock(&s->lock);
-            efs_export_root_free(&root);
-            return 0;
-        }
+    if (ei >= 0 && s->rpc_dirty_ops[ei] > 0) {
+        pthread_mutex_unlock(&s->lock);
+        efs_export_root_free(&root);
+        return 0;
     }
     /* Extras-only refresh (same shard-0 pages, newer gen): adopt the gen and
      * merge the extra-shard descriptors without touching the live tables. */
@@ -1554,6 +1767,11 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
 
     uint64_t new_gen = root.generation;
     ex->meta_fragmented = 1;
+    /* Never orphan a shard: carry forward extra-shard descriptors the
+     * incoming root lacks (per-shard higher gen wins). The rebuild
+     * reinstalls shard tables from these descriptors, so dropping one here
+     * loses that shard permanently (the efs-s3 clobber). */
+    (void)efs_export_root_maxmerge_extras(&root, &ex->root);
     efs_export_root_move(&ex->root, &root);
     ex->id = ex->root.id;
     strncpy(ex->name, ex->root.name, EFS_MAX_NAME - 1);
@@ -1600,18 +1818,29 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
     return 1;
 }
 
-/* Best-effort GET_META from ALL peers; install the highest-generation root
- * found (install function still rejects anything not strictly newer). Polling
- * only the first peer could strand a lagging node when that peer is behind. */
+/* Best-effort GET_META from ALL peers, PER EXPORT (named requests — the
+ * unnamed variant serves only the peer's exports[0], which diverged
+ * multi-export clusters). Install the highest-generation root found per
+ * export (install function still rejects anything not strictly newer).
+ * Polling only the first peer could strand a lagging node when that peer
+ * is behind. */
 static int catchup_poll_peer_root(struct efsd_server *s)
 {
     struct efs_node nodes[EFS_MAX_NODES];
+    char names[EFS_MAX_EXPORTS][EFS_MAX_NAME];
     pthread_mutex_lock(&s->lock);
     uint32_t node_count = s->node_count;
     if (node_count > EFS_MAX_NODES)
         node_count = EFS_MAX_NODES;
     memcpy(nodes, s->nodes, sizeof(struct efs_node) * node_count);
     efs_node_id_t self = s->id;
+    uint32_t ec = s->export_count;
+    if (ec > EFS_MAX_EXPORTS)
+        ec = EFS_MAX_EXPORTS;
+    for (uint32_t e = 0; e < ec; e++) {
+        memcpy(names[e], s->exports[e].name, EFS_MAX_NAME);
+        names[e][EFS_MAX_NAME - 1] = '\0';
+    }
     pthread_mutex_unlock(&s->lock);
 
     int best = 0;
@@ -1623,72 +1852,90 @@ static int catchup_poll_peer_root(struct efsd_server *s)
         if (!host[0] || port == 0)
             continue;
 
-        /* Phase 1: root-only poll. A full GET_META here cost every server
-         * 3 x ~1 GiB of memcpy + network every 2 s even at rest — the
-         * memmove storm pinned idle efsd at 60%+ CPU and starved client IO. */
         int fd = server_peer_conn_get(host, port);
         if (fd < 0)
             continue;
-        if (efs_send_msg(fd, EFS_MSG_GET_META_ROOT, NULL, 0) != 0) {
-            server_peer_conn_drop(host, port, fd);
-            continue;
-        }
-        uint8_t type;
-        void *payload = NULL;
-        uint32_t payload_len = 0;
-        if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
-            type != EFS_MSG_GET_META_ROOT_REPLY || payload_len == 0) {
+        int conn_ok = 1;
+        for (uint32_t e = 0; e < ec && conn_ok; e++) {
+            if (!names[e][0])
+                continue;
+            /* Phase 1: root-only poll. A full GET_META here cost every
+             * server 3 x ~1 GiB of memcpy + network every 2 s even at rest
+             * — the memmove storm pinned idle efsd at 60%+ CPU and starved
+             * client IO. */
+            if (efs_send_msg(fd, EFS_MSG_GET_META_ROOT, names[e],
+                             (uint32_t)strlen(names[e]) + 1) != 0) {
+                conn_ok = 0;
+                break;
+            }
+            uint8_t type;
+            void *payload = NULL;
+            uint32_t payload_len = 0;
+            if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
+                type != EFS_MSG_GET_META_ROOT_REPLY) {
+                free(payload);
+                conn_ok = 0;
+                break;
+            }
+            if (payload_len == 0) {
+                /* Peer does not have this export. */
+                free(payload);
+                continue;
+            }
+
+            uint64_t peer_gen = 0;
+            efs_export_id_t peer_id = 0;
+            if (efs_meta_blob_is_root(payload, payload_len)) {
+                struct efs_export_root r;
+                memset(&r, 0, sizeof(r));
+                if (efs_export_root_deserialize_used(&r, payload,
+                                                     payload_len, NULL) == 0) {
+                    peer_gen = r.generation;
+                    peer_id = r.id;
+                }
+                efs_export_root_free(&r);
+            }
             free(payload);
-            server_peer_conn_drop(host, port, fd);
-            continue;
-        }
 
-        uint64_t peer_gen = 0;
-        if (efs_meta_blob_is_root(payload, payload_len)) {
-            struct efs_export_root r;
-            memset(&r, 0, sizeof(r));
-            if (efs_export_root_deserialize_used(&r, payload, payload_len,
-                                                 NULL) == 0)
-                peer_gen = r.generation;
-            efs_export_root_free(&r);
-        }
-        free(payload);
+            pthread_mutex_lock(&s->lock);
+            struct efs_export *ex = peer_id ? server_get_export(s, peer_id)
+                                            : NULL;
+            if (!ex)
+                ex = server_find_export_no_create(s, names[e]);
+            uint64_t our_gen = ex ? ex->root.generation : 0;
+            int stuck = ex ? ex->meta_needs_rebuild : 0;
+            pthread_mutex_unlock(&s->lock);
 
-        pthread_mutex_lock(&s->lock);
-        uint64_t our_gen = 0;
-        int stuck = 0;
-        if (s->export_count > 0) {
-            our_gen = s->exports[0].root.generation;
-            stuck = s->exports[0].meta_needs_rebuild;
-        }
-        pthread_mutex_unlock(&s->lock);
+            /* Phase 2: full blob only when the peer is strictly newer, or
+             * same generation while our rebuild is stuck (peer may hold
+             * live tables that fragment rebuild cannot recover). */
+            int want = (peer_gen > our_gen) ||
+                       (peer_gen > 0 && peer_gen == our_gen && stuck);
+            if (!want)
+                continue;
+            if (efs_send_msg(fd, EFS_MSG_GET_META, names[e],
+                             (uint32_t)strlen(names[e]) + 1) != 0) {
+                conn_ok = 0;
+                break;
+            }
+            payload = NULL;
+            payload_len = 0;
+            if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
+                type != EFS_MSG_GET_META_REPLY || payload_len == 0) {
+                free(payload);
+                conn_ok = 0;
+                break;
+            }
 
-        /* Phase 2: full blob only when the peer is strictly newer, or same
-         * generation while our rebuild is stuck (peer may hold live tables
-         * that fragment rebuild cannot recover). */
-        int want = (peer_gen > our_gen) || (peer_gen > 0 && peer_gen == our_gen && stuck);
-        if (!want) {
+            int rc = catchup_install_newer_root(s, payload, payload_len);
+            free(payload);
+            if (rc > best)
+                best = rc;
+        }
+        if (conn_ok)
             server_peer_conn_release(host, port, fd);
-            continue;
-        }
-        if (efs_send_msg(fd, EFS_MSG_GET_META, NULL, 0) != 0) {
+        else
             server_peer_conn_drop(host, port, fd);
-            continue;
-        }
-        payload = NULL;
-        payload_len = 0;
-        if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
-            type != EFS_MSG_GET_META_REPLY || payload_len == 0) {
-            free(payload);
-            server_peer_conn_drop(host, port, fd);
-            continue;
-        }
-        server_peer_conn_release(host, port, fd);
-
-        int rc = catchup_install_newer_root(s, payload, payload_len);
-        free(payload);
-        if (rc > best)
-            best = rc;
     }
     return best;
 }
@@ -1781,6 +2028,36 @@ static void *meta_catchup_thread(void *arg)
                         ex->name, rc);
                 /* Decode/IO failure: back off; leave meta_needs_rebuild set. */
                 rebuild_failed = 1;
+            }
+        }
+
+        /* Shard tables needing a rebuild are NOT tied to the main table's
+         * state: after a clean restart the main table loads from the local
+         * EFSM (meta_needs_rebuild=0) while shard tables exist only as
+         * descriptors in the root's extra_roots. Rebuild any flagged shard
+         * table from its pages, or this node serves its own shards empty. */
+        for (uint32_t e = 0; e < ec; e++) {
+            if (!s->running)
+                break;
+            struct efs_export *ex = &s->exports[e];
+            if (!ex->shard_tabs)
+                continue;
+            for (uint32_t i = 1; i < ex->shard_tab_cap; i++) {
+                pthread_mutex_lock(&s->lock);
+                struct efs_export *tab = ex->shard_tabs[i];
+                int tn = (tab && tab->meta_needs_rebuild &&
+                          tab->root.page_count > 0);
+                pthread_mutex_unlock(&s->lock);
+                if (!tn)
+                    continue;
+                int src = server_rebuild_export_from_pages_ino(
+                    s, tab, efs_meta_shard_table_ino(i));
+                if (src == EFS_OK)
+                    fprintf(stderr, "meta-catchup: rebuilt export=%s shard=%u\n",
+                            ex->name, i);
+                else
+                    rebuild_failed = 1;
+                did_work = 1;
             }
         }
 
@@ -1895,36 +2172,37 @@ static void *meta_flush_thread(void *arg)
         uint32_t dirty[EFS_MAX_EXPORTS];
         uint32_t ndirty = 0;
         int can_flush_primary = server_is_meta_primary_locked(s);
-        int can_flush = can_flush_primary;
-        if (!can_flush && s->export_count) {
-            /* Extra-shard owners flush their own tables when bits>0. */
-            can_flush = (s->exports[0].root.shard_bits &&
-                         s->exports[0].root.shard_count > 1);
-        }
-        if (can_flush) {
-            for (uint32_t e = 0; e < s->export_count && e < EFS_MAX_EXPORTS;
-                 e++) {
-                if (s->rpc_dirty_ops[e] > 0) {
-                    if (s->exports[e].meta_needs_rebuild && can_flush_primary) {
-                        /* Fenced by a concurrent client-driven PUT_META: the
-                         * in-memory table is stale and the catchup rebuild
-                         * will overwrite it, so these RPC mutations are lost
-                         * — don't flush a stale table. (Transition-only race;
-                         * goes away in 2b when clients stop blob-flushing.)
-                         * Non-primary: the dirty ops live in OWNED shard
-                         * tables, which a main-table fence does not touch —
-                         * they flush fine, so don't drop them. */
-                        fprintf(stderr,
-                                "meta-flush: export=%s dirty under rebuild; "
-                                "dropping %llu RPC op(s) (client-flush race)\n",
-                                s->exports[e].name,
-                                (unsigned long long)s->rpc_dirty_ops[e]);
-                        s->rpc_dirty_ops[e] = 0;
-                        continue;
-                    }
-                    dirty[ndirty++] = e;
+        for (uint32_t e = 0; e < s->export_count && e < EFS_MAX_EXPORTS;
+             e++) {
+            /* Per-export flush eligibility: the primary flushes everything;
+             * a non-primary flushes only sharded exports (as an extra-shard
+             * owner). Keying this off exports[0] stranded the shard tables
+             * of every other export on non-primary nodes. */
+            int can_flush = can_flush_primary ||
+                            (s->exports[e].root.shard_bits &&
+                             s->exports[e].root.shard_count > 1);
+            if (!can_flush)
+                continue;
+            if (s->rpc_dirty_ops[e] > 0) {
+                if (s->exports[e].meta_needs_rebuild && can_flush_primary) {
+                    /* Fenced by a concurrent client-driven PUT_META: the
+                     * in-memory table is stale and the catchup rebuild
+                     * will overwrite it, so these RPC mutations are lost
+                     * — don't flush a stale table. (Transition-only race;
+                     * goes away in 2b when clients stop blob-flushing.)
+                     * Non-primary: the dirty ops live in OWNED shard
+                     * tables, which a main-table fence does not touch —
+                     * they flush fine, so don't drop them. */
+                    fprintf(stderr,
+                            "meta-flush: export=%s dirty under rebuild; "
+                            "dropping %llu RPC op(s) (client-flush race)\n",
+                            s->exports[e].name,
+                            (unsigned long long)s->rpc_dirty_ops[e]);
                     s->rpc_dirty_ops[e] = 0;
+                    continue;
                 }
+                dirty[ndirty++] = e;
+                s->rpc_dirty_ops[e] = 0;
             }
         }
         pthread_mutex_unlock(&s->lock);

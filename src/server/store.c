@@ -194,6 +194,24 @@ struct efs_export *server_get_export(struct efsd_server *s, efs_export_id_t id)
     return NULL;
 }
 
+/* By-id find-or-create for the replication paths (PUT_META / catchup): a
+ * root must land in ITS OWN export's slot — keying off exports[0] morphed
+ * slot 0 into whatever root arrived last and diverged multi-export
+ * clusters. Caller holds s->lock. */
+struct efs_export *server_get_export_create(struct efsd_server *s,
+                                            efs_export_id_t id,
+                                            const char *name)
+{
+    struct efs_export *ex = server_get_export(s, id);
+    if (ex)
+        return ex;
+    if (s->export_count >= EFS_MAX_EXPORTS)
+        return NULL;
+    ex = &s->exports[s->export_count++];
+    efs_export_init(ex, id, (name && name[0]) ? name : "pending");
+    return ex;
+}
+
 /* Exact-name lookup with NO side effects. server_find_export creates (or
  * rebrands a placeholder into) an export on miss — correct for CREATE_EXPORT,
  * disastrous on read paths: a GET_META for a typo'd name used to MINT an
@@ -630,7 +648,14 @@ void server_load_exports(struct efsd_server *s)
         if (!loaded) {
             fprintf(stderr, "Failed to load metadata for export %s\n", entry->d_name);
             s->export_count--;
+            continue;
         }
+        /* Shard tables are not in the local save — only their descriptors
+         * (in the v8 root's extra_roots). Recreate each shard table from its
+         * descriptor and flag it for a pages rebuild by the catch-up thread;
+         * otherwise a cleanly-restarted node serves its OWN shards from an
+         * empty table and every non-shard-0 file reads back size 0. */
+        efs_export_install_extra_roots(ex);
     }
     closedir(d);
 }

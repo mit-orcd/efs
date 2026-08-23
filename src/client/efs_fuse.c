@@ -2088,16 +2088,43 @@ static off_t append_end_offset(efs_ino_t ino)
 
 /* Cross-client append: reserve the region at the metadata owner so two
  * clients never write at the same end offset (the local table only knows
- * our own appends). Falls back to the local end if the RPC fails. */
+ * our own appends). The owner refuses (BUSY) while a prior reserved append
+ * is still unflushed — see the INODE_APPEND handler — so on BUSY we flush
+ * and report our own pending data for this ino (releasing the barrier when
+ * it's ours) and retry. On success, drop cached copies of the tail chunk so
+ * the patch below merges onto a FRESH base: the barrier guarantees every
+ * previously reserved append is on the servers, and a stale rdcache copy
+ * would resurrect bytes a peer's PUT already replaced. Falls back to the
+ * local end if the RPC fails. */
 static off_t append_reserve_offset(efs_ino_t ino, uint64_t len)
 {
     uint64_t ns = 0;
-    if (efs_client_rpc_append_reserve(g_client.export_id, ino, len,
-                                      &ns) != 0 ||
-        ns < len)
+    int rc = EFS_ERR_BUSY;
+    for (int attempt = 0; attempt < 2000; attempt++) {
+        rc = efs_client_rpc_append_reserve(g_client.export_id, ino, len, &ns);
+        if (rc != EFS_ERR_BUSY)
+            break;
+        (void)coal_flush_ino(ino);
+        (void)efs_wb_sync_ino(ino);
+        (void)efs_dcache_flush_ino(ino);
+        (void)efs_client_report_dirty(0);
+        usleep(5000);
+    }
+    if (rc != EFS_OK || ns < len)
         return append_end_offset(ino);
+    uint64_t off = ns - len;
+    if (len > 0) {
+        uint32_t cs = g_client.export.chunk_size ? g_client.export.chunk_size
+                                                 : EFS_CHUNK_SIZE;
+        for (uint64_t ci = off / cs; ci <= (off + len - 1) / cs; ci++)
+            efs_rdcache_invalidate(ino, (uint32_t)ci);
+    }
     /* Reflect the reservation locally so same-client readers and the next
-     * append see the advanced end before our data flushes. */
+     * append see the advanced end before our data flushes. The ino is NOT
+     * marked dirty here: the append barrier must release only after the data
+     * is PUT, and an early report (periodic reporter) carrying the reflected
+     * size would release it prematurely. dcache_put_now marks the ino dirty
+     * once the flush lands. */
     efs_client_lock_dir(ino);
     pthread_mutex_lock(&g_client.idx_mu);
     struct efs_inode cur;
@@ -2106,7 +2133,7 @@ static off_t append_reserve_offset(efs_ino_t ino, uint64_t len)
         efs_export_set_size(&g_client.export, ino, ns);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
-    return (off_t)(ns - len);
+    return (off_t)off;
 }
 
 static int efs_fuse_write(const char *path, const char *buf, size_t size,
@@ -2262,13 +2289,28 @@ static int efs_fuse_fsync(const char *path, int isdatasync,
     return 0;
 }
 
+/* Close-time flush keyed by the open handle's ino (fi->fh), not a fresh path
+ * lookup: with entry_timeout=0 the lookup is an RPC, and the path version
+ * returned EFS_OK when that RPC failed — the dirty dcache entries were then
+ * never flushed by the close and sat until some unrelated later flush. */
+static int efs_file_data_sync_fh(const char *path, struct fuse_file_info *fi)
+{
+    efs_ino_t ino = 0;
+    if (fuse_file_ino(path, fi, &ino) != 0)
+        return efs_file_data_sync_ino(path);
+    if (g_coalesce_enabled)
+        (void)coal_flush_ino(ino);
+    int rc = efs_wb_sync_ino(ino);
+    if (rc != EFS_OK)
+        return rc;
+    return efs_dcache_flush_ino(ino);
+}
+
 static int efs_fuse_flush(const char *path, struct fuse_file_info *fi)
 {
-    (void)fi;
     /* Close: drain this file only. A global WB wait serialized every ecopy
      * close behind every other in-flight write. */
-    coal_flush_path(path);
-    int rc = efs_file_data_sync_ino(path);
+    int rc = efs_file_data_sync_fh(path, fi);
     if (rc == EFS_ERR_QUOTA) {
         efs_fuse_log_err("flush", rc, 0, 0, 0, path);
         return -ENOSPC;
@@ -2786,9 +2828,7 @@ static int efs_fuse_truncate(const char *path, off_t size,
 
 static int efs_fuse_release(const char *path, struct fuse_file_info *fi)
 {
-    (void)fi;
-    coal_flush_path(path);
-    int rc = efs_file_data_sync_ino(path);
+    int rc = efs_file_data_sync_fh(path, fi);
     if (rc == EFS_ERR_QUOTA) {
         efs_fuse_log_err("release", rc, 0, 0, 0, path);
         return -ENOSPC;
@@ -3093,9 +3133,14 @@ static void *efs_fuse_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
         cfg->use_ino = 1;
         /* Path-based high-level nodes do not share a kernel inode across
          * hard-link names, so a chmod on one name would otherwise leave
-         * the other name's cached mode stale for attr_timeout seconds. */
+         * the other name's cached mode stale for attr_timeout seconds.
+         * entry/negative_timeout=0: a cached negative dentry outlives a
+         * peer's (or a rename-churn cycle's) create and turns a later
+         * O_CREAT open into a spurious EEXIST; every lookup is an RPC to
+         * the shard owner anyway, so the name cache buys nothing. */
         cfg->attr_timeout = 0.0;
-        cfg->entry_timeout = 1.0;
+        cfg->entry_timeout = 0.0;
+        cfg->negative_timeout = 0.0;
         cfg->ac_attr_timeout = 0.0;
         cfg->ac_attr_timeout_set = 1;
     }

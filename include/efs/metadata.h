@@ -198,6 +198,19 @@ struct efs_export {
     uint32_t shard_id;
     uint64_t shard_tick;
     int shard_dirty;
+    /* Cross-client O_APPEND barrier (in-memory only, never serialized): the
+     * last reserved-but-maybe-unflushed append end per ino (tiny hash). The
+     * INODE_APPEND handler refuses a reserve (BUSY) while a prior reserved
+     * append is unflushed, so an appender's merge-base read always includes
+     * every previously reserved line — otherwise two clients patching the
+     * same tail chunk from stale bases clobber each other (mc_stress
+     * appfile torn lines). A crashed appender's reservation expires. */
+#define EFS_APPEND_RSV_SLOTS 64
+    struct {
+        efs_ino_t ino;
+        uint64_t end;
+        uint64_t ts_ms;
+    } append_rsv[EFS_APPEND_RSV_SLOTS];
 };
 
 #define EFS_SHARD_LRU_KEEP 64
@@ -456,6 +469,13 @@ int efs_export_root_prepare(struct efs_export_root *root,
                             uint32_t chunk_blob_len);
 int efs_export_root_capture_extras(struct efs_export_root *root,
                                    const struct efs_export *ex);
+
+/* Max-merge prev's extra-shard descriptors into root: per shard id keep the
+ * higher-generation descriptor and carry forward shards root lacks. Call
+ * before adopting/committing any cluster root so a descriptor is never
+ * dropped or regressed (an orphaned shard's tables are unrecoverable). */
+int efs_export_root_maxmerge_extras(struct efs_export_root *root,
+                                    const struct efs_export_root *prev);
 
 /* Nonzero when both roots reference the same shard-0 pages (CoW checksums).
  * Used to recognize an extras-only root refresh: the sender contributed no

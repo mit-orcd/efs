@@ -188,6 +188,9 @@ int efs_client_rpc_report_dirty(efs_export_id_t export_id,
  * mechanism that replaces the blob flush). sync=1 = fsync barrier. */
 int efs_client_report_dirty(int sync);
 int efs_client_load_shard(uint32_t shard);
+/* Read-miss self-heal: pull chunk mappings for [ci0, ci1) from the owner,
+ * rate-limited per ino. Returns 1 when a pull ran (re-check the table). */
+int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1);
 
 void efs_client_ensure_dir_locks(void);
 void efs_client_lock_dir(efs_ino_t parent);

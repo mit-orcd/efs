@@ -3290,6 +3290,12 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
     efs_client_mark_chunk_dirty(ino, ci);
+    /* Mark the ino too so the next report carries its size/mtime irec. The
+     * append path reflects the reserved size before the patch, so
+     * dcache_note_size sees no growth and skips its mark — and the
+     * server-side append barrier releases only when a REPORT grows the
+     * table size past the reservation, i.e. only after this PUT landed. */
+    efs_client_mark_ino_dirty(ino);
     return EFS_OK;
 }
 
@@ -3570,14 +3576,28 @@ static void dcache_note_size(efs_ino_t ino, uint64_t end)
 {
     efs_client_lock_dir(ino);
     struct efs_inode cur;
-    if (efs_export_get_inode(&g_client.export, ino, &cur) == 0 &&
-        cur.size < end) {
-        efs_export_set_size_norollup(&g_client.export, ino, end);
-        efs_client_mark_ino_dirty(ino);
+    if (efs_export_get_inode(&g_client.export, ino, &cur) == 0) {
+        if (cur.size < end) {
+            /* Size grow bumps mtime itself. */
+            efs_export_set_size_norollup(&g_client.export, ino, end);
+            efs_client_mark_ino_dirty(ino);
+        } else if (cur.size > 0) {
+            /* Overwrite at the same size must still advance the local
+             * mtime: reports are newer-only, so a frozen mtime leaves the
+             * server at the first writer's mtime and peers never get an
+             * adopt trigger to re-pull the layout (mc_stress rwfile
+             * identical-content rerun). Field update only — the dirty mark
+             * still happens once per flush in dcache_put_now, so rw-4k does
+             * not reflood the report path (that flood capped rw-4k before). */
+            uint64_t sec;
+            uint32_t nsec;
+            now_ns(&sec, &nsec);
+            if (sec > cur.mtime ||
+                (sec == cur.mtime && nsec > cur.mtime_nsec))
+                efs_export_set_mtime_ns_norollup(&g_client.export, ino,
+                                                 sec, nsec);
+        }
     }
-    /* Overwrite of an already-cached chunk: skip mtime + dirty-ino.
-     * Random 4k used to take idx/dir locks and mark the inode dirty
-     * on every patch (~250k/s), which capped rw-4k and flooded meta. */
     efs_client_unlock_dir(ino);
 }
 
