@@ -98,6 +98,16 @@ struct efsd_server {
     uint8_t *meta_blob_sums[EFS_MAX_EXPORTS]; /* pages * 3 * EFS_HASH_SIZE */
     uint32_t meta_blob_pages[EFS_MAX_EXPORTS];
 
+    /* Per-shard incremental rebuild cache: [export slot][shard id]. Same
+     * blob+checksums scheme as meta_blob_cache, but keyed by the shard
+     * table's own root (the extra-shard descriptor). Without it every
+     * extra-shard descriptor refresh re-fetched every page of that shard
+     * (the bits>0 multi-write catchup storm). */
+    uint8_t *shard_blob_cache[EFS_MAX_EXPORTS][EFS_META_MAX_SHARDS];
+    uint32_t shard_blob_cache_len[EFS_MAX_EXPORTS][EFS_META_MAX_SHARDS];
+    uint8_t *shard_blob_sums[EFS_MAX_EXPORTS][EFS_META_MAX_SHARDS];
+    uint32_t shard_blob_pages[EFS_MAX_EXPORTS][EFS_META_MAX_SHARDS];
+
     /* Meta flush election (per export slot): the writer that won a
      * META_FLUSH_BEGIN majority. While live (now < expiry), PUT_META roots
      * from any other writer are rejected STALE, so two clients can never

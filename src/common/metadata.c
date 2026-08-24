@@ -1678,6 +1678,21 @@ int efs_export_rehash(struct efs_export *ex, uint32_t new_bits)
     return EFS_OK;
 }
 
+uint32_t efs_export_create_target(struct efs_export *ex, efs_ino_t parent,
+                                  uint32_t mode)
+{
+    if (!ex)
+        return 0;
+    uint32_t bits = ex->root.shard_bits;
+    uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+    uint32_t psh = efs_export_shard_of(parent, bits);
+    /* Dirs stay on the parent shard so their dentries stay local. Files
+     * round-robin across ALL shards so write-path ownership spreads. */
+    if (efs_mode_is_dir(mode) || sc <= 1 || bits == 0)
+        return psh;
+    return ex->create_rr % sc;
+}
+
 static efs_ino_t create_sharded(struct efs_export *ex, efs_ino_t parent,
                                 uint32_t mode, uid_t uid, gid_t gid,
                                 const char *name)
@@ -1685,10 +1700,9 @@ static efs_ino_t create_sharded(struct efs_export *ex, efs_ino_t parent,
     uint32_t bits = ex->root.shard_bits;
     uint32_t sc = ex->root.shard_count;
     uint32_t psh = efs_export_shard_of(parent, bits);
-    uint32_t stride = ex->create_stride ? ex->create_stride : 1;
-    uint32_t target = psh;
+    uint32_t target = efs_export_create_target(ex, parent, mode);
     if (!efs_mode_is_dir(mode) && sc > 1)
-        target = (psh + (ex->create_rr++ * stride)) % sc;
+        ex->create_rr++;
     struct efs_export *ctab = efs_export_table(ex, target);
     if (!ctab)
         return 0;
@@ -2033,6 +2047,140 @@ int efs_export_unlink(struct efs_export *ex, efs_ino_t ino)
     return EFS_OK;
 }
 
+static void shard_set_nlink(struct efs_export *ex, efs_ino_t src_ino,
+                            uint32_t nlink)
+{
+    uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+    for (uint32_t sh = 0; sh < sc; sh++) {
+        struct efs_export *tab = efs_export_table(ex, sh);
+        if (!tab)
+            continue;
+        int hit = 0;
+        for (uint64_t i = 0; i < tab->inode_count; i++) {
+            if (tab->inodes[i].ino == src_ino) {
+                tab->inodes[i].nlink = nlink;
+                hit = 1;
+            }
+        }
+        if (hit && tab != ex)
+            tab->shard_dirty = 1;
+    }
+}
+
+int efs_export_nlink_inc(struct efs_export *ex, efs_ino_t src_ino,
+                         struct efs_inode *out)
+{
+    if (!ex || !src_ino)
+        return EFS_ERR_INVAL;
+    struct efs_export *ctab = efs_export_table_for_ino(ex, src_ino);
+    struct efs_inode *csrc = ctab ? inode_ptr(ctab, src_ino) : NULL;
+    if (!csrc)
+        return EFS_ERR_NOT_FOUND;
+    if (efs_mode_is_dir(csrc->mode))
+        return EFS_ERR_INVAL;
+    uint32_t nlink = csrc->nlink + 1;
+    shard_set_nlink(ex, src_ino, nlink);
+    if (ctab != ex)
+        ctab->shard_dirty = 1;
+    if (out) {
+        csrc = inode_ptr(ctab, src_ino);
+        if (csrc)
+            *out = *csrc;
+    }
+    return EFS_OK;
+}
+
+int efs_export_nlink_dec(struct efs_export *ex, efs_ino_t src_ino,
+                         struct efs_inode *out)
+{
+    if (!ex || !src_ino)
+        return EFS_ERR_INVAL;
+    struct efs_export *ctab = efs_export_table_for_ino(ex, src_ino);
+    struct efs_inode *csrc = ctab ? inode_ptr(ctab, src_ino) : NULL;
+    if (!csrc)
+        return EFS_ERR_NOT_FOUND;
+    uint32_t nlink = csrc->nlink;
+    if (nlink == 0)
+        nlink = 1;
+    nlink--;
+    if (nlink == 0) {
+        uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+        for (uint32_t sh = 0; sh < sc; sh++) {
+            struct efs_export *tab = efs_export_table(ex, sh);
+            if (!tab)
+                continue;
+            if (efs_export_unlink(tab, src_ino) == EFS_OK && tab != ex)
+                tab->shard_dirty = 1;
+        }
+        if (out)
+            memset(out, 0, sizeof(*out));
+        return EFS_OK;
+    }
+    shard_set_nlink(ex, src_ino, nlink);
+    if (ctab != ex)
+        ctab->shard_dirty = 1;
+    if (out) {
+        csrc = inode_ptr(ctab, src_ino);
+        if (csrc)
+            *out = *csrc;
+    }
+    return EFS_OK;
+}
+
+int efs_export_link_dentry(struct efs_export *ex, const struct efs_inode *src,
+                           efs_ino_t new_parent, const char *new_name)
+{
+    if (!ex || !src || !src->ino || !new_name || !*new_name)
+        return EFS_ERR_INVAL;
+    if (strcmp(new_name, EFS_STATS_NAME) == 0)
+        return EFS_ERR_INVAL;
+    if (efs_mode_is_dir(src->mode))
+        return EFS_ERR_INVAL;
+    if (efs_export_lookup(ex, new_parent, new_name, NULL) == EFS_OK)
+        return EFS_ERR_EXIST;
+
+    uint32_t bits = ex->root.shard_bits;
+    struct efs_export *ptab =
+        export_is_sharded_root(ex)
+            ? efs_export_table(ex, efs_export_shard_of(new_parent, bits))
+            : ex;
+    struct efs_inode *pdir = ptab ? inode_ptr(ptab, new_parent) : NULL;
+    if (!pdir || !efs_mode_is_dir(pdir->mode))
+        return EFS_ERR_INVAL;
+
+    efs_export_ensure_rollups(ptab);
+    if (ptab->inode_count >= ptab->inode_capacity) {
+        uint64_t new_cap = ptab->inode_capacity * 2;
+        struct efs_inode *nw =
+            realloc(ptab->inodes, new_cap * sizeof(struct efs_inode));
+        if (!nw)
+            return EFS_ERR_NOMEM;
+        ptab->inodes = nw;
+        ptab->inode_capacity = new_cap;
+    }
+    if (export_ensure_inode_idx(ptab) != 0)
+        return EFS_ERR_NOMEM;
+
+    shard_set_nlink(ex, src->ino, src->nlink);
+
+    uint64_t pos = ptab->inode_count++;
+    struct efs_inode *dst = &ptab->inodes[pos];
+    *dst = *src;
+    dst->parent = new_parent;
+    dst->nlink = src->nlink;
+    inode_clear_rollups(dst);
+    strncpy(dst->name, new_name, EFS_MAX_NAME - 1);
+    dst->name[EFS_MAX_NAME - 1] = '\0';
+    dentry_bytes_add(ptab, dst->name);
+    time_now(&dst->ctime);
+    name_idx_put(ptab, new_parent, new_name, pos);
+    child_idx_add(ptab, new_parent, pos);
+    rollup_add_under(ptab, new_parent, dst);
+    if (ptab != ex)
+        ptab->shard_dirty = 1;
+    return EFS_OK;
+}
+
 int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
                     efs_ino_t new_parent, const char *new_name)
 {
@@ -2045,77 +2193,18 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
      * and the new dentry belongs on the NEW PARENT's shard table. The
      * unsharded path below would look src up only in the main (shard-0)
      * table — NOT_FOUND for any other shard, so the link never landed
-     * server-side (posix hardlink_terminal_ln on bits>0). */
+     * server-side (posix hardlink_terminal_ln on bits>0). When the child
+     * row is on a peer, the caller (LINK handler) nlink_inc's remotely
+     * and uses efs_export_link_dentry. */
     if (export_is_sharded_root(ex)) {
-        uint32_t bits = ex->root.shard_bits;
-        struct efs_export *ctab = efs_export_table_for_ino(ex, src_ino);
-        struct efs_inode *csrc = ctab ? inode_ptr(ctab, src_ino) : NULL;
-        if (!csrc)
-            return EFS_ERR_NOT_FOUND;
-        if (efs_mode_is_dir(csrc->mode))
-            return EFS_ERR_INVAL;
         if (efs_export_lookup(ex, new_parent, new_name, NULL) == EFS_OK)
             return EFS_ERR_EXIST;
-        struct efs_export *ptab =
-            efs_export_table(ex, efs_export_shard_of(new_parent, bits));
-        struct efs_inode *pdir = ptab ? inode_ptr(ptab, new_parent) : NULL;
-        if (!pdir || !efs_mode_is_dir(pdir->mode))
-            return EFS_ERR_INVAL;
-
-        uint32_t nlink = csrc->nlink + 1;
-        /* Bump nlink on every row carrying this ino in every shard table
-         * (canonical row + parent-shard dentry copies). */
-        uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
-        for (uint32_t sh = 0; sh < sc; sh++) {
-            struct efs_export *tab = efs_export_table(ex, sh);
-            if (!tab)
-                continue;
-            int hit = 0;
-            for (uint64_t i = 0; i < tab->inode_count; i++) {
-                if (tab->inodes[i].ino == src_ino) {
-                    tab->inodes[i].nlink = nlink;
-                    hit = 1;
-                }
-            }
-            if (hit && tab != ex)
-                tab->shard_dirty = 1;
-        }
-
-        efs_export_ensure_rollups(ptab);
-        if (ptab->inode_count >= ptab->inode_capacity) {
-            uint64_t new_cap = ptab->inode_capacity * 2;
-            struct efs_inode *nw =
-                realloc(ptab->inodes, new_cap * sizeof(struct efs_inode));
-            if (!nw)
-                return EFS_ERR_NOMEM;
-            ptab->inodes = nw;
-            ptab->inode_capacity = new_cap;
-        }
-        if (export_ensure_inode_idx(ptab) != 0)
-            return EFS_ERR_NOMEM;
-        /* Re-fetch after the possible realloc (ptab may == ctab). */
-        csrc = inode_ptr(ctab, src_ino);
-        if (!csrc)
-            return EFS_ERR_NOT_FOUND;
-
-        uint64_t pos = ptab->inode_count++;
-        struct efs_inode *dst = &ptab->inodes[pos];
-        *dst = *csrc;
-        dst->parent = new_parent;
-        dst->nlink = nlink;
-        inode_clear_rollups(dst);
-        strncpy(dst->name, new_name, EFS_MAX_NAME - 1);
-        dst->name[EFS_MAX_NAME - 1] = '\0';
-        dentry_bytes_add(ptab, dst->name);
-        time_now(&dst->ctime);
-        name_idx_put(ptab, new_parent, new_name, pos);
-        child_idx_add(ptab, new_parent, pos);
-        rollup_add_under(ptab, new_parent, dst);
-        if (ptab != ex)
-            ptab->shard_dirty = 1;
-        if (ctab != ex)
-            ctab->shard_dirty = 1;
-        return EFS_OK;
+        struct efs_inode bumped;
+        memset(&bumped, 0, sizeof(bumped));
+        int rc = efs_export_nlink_inc(ex, src_ino, &bumped);
+        if (rc != EFS_OK)
+            return rc;
+        return efs_export_link_dentry(ex, &bumped, new_parent, new_name);
     }
 
     efs_export_ensure_rollups(ex);

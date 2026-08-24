@@ -337,6 +337,17 @@ int efs_client_lookup(const char *path, struct efs_inode *out)
             rc = (lrc == EFS_ERR_NOT_FOUND) ? EFS_ERR_NOT_FOUND : lrc;
             break;
         }
+        /* After cross-server create the parent owner holds only a
+         * dentry stub (size 0). getattr the child owner for the full row
+         * so adopt/pull_file_layout see the real size. */
+        if (g_client.export.root.shard_bits &&
+            g_client.export.root.shard_count > 1 &&
+            efs_mode_is_reg(child.mode)) {
+            struct efs_inode full;
+            if (efs_client_rpc_getattr(g_client.export_id, child.ino,
+                                       &full) == EFS_OK)
+                child = full;
+        }
         adopt_rpc_inode(&child);
         /* Prefer the local row when we already have one: the writer's
          * size/pack fields are newer than the primary until REPORT_CHUNKS. */

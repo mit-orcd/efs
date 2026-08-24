@@ -175,15 +175,16 @@ int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
 int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
                                   uint64_t len, uint64_t *new_size_out);
 /* Phase 2b: report dirty metadata (chunk mappings + inode size/mtime) to the
- * metadata primary, replacing the client blob flush. sync=1 makes the primary
- * commit the export before replying (the fsync durability barrier). */
+ * shard owner of route_ino (EFS_ROOT_INO = primary). sync=1 makes that owner
+ * commit before replying (the fsync durability barrier). */
 struct efs_chunk_rec;
 struct efs_ino_size_rec;
 int efs_client_rpc_report_dirty(efs_export_id_t export_id,
                                 const struct efs_chunk_rec *recs,
                                 uint32_t count,
                                 const struct efs_ino_size_rec *irecs,
-                                uint32_t ino_count, int sync);
+                                uint32_t ino_count, int sync,
+                                efs_ino_t route_ino);
 /* Phase 2b: snapshot the dirty set and report it to the primary (the flush
  * mechanism that replaces the blob flush). sync=1 = fsync barrier. */
 int efs_client_report_dirty(int sync);

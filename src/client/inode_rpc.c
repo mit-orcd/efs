@@ -396,16 +396,18 @@ int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
 }
 
 /* Phase 2b: report dirty metadata (chunk mappings + inode size/mtime) to the
- * metadata primary, replacing the client blob flush. sync=1 makes the primary
- * commit the export before replying (the fsync durability barrier). */
+ * owner of route_ino. sync=1 makes that owner commit before replying. */
 int efs_client_rpc_report_dirty(efs_export_id_t export_id,
                                 const struct efs_chunk_rec *recs,
                                 uint32_t count,
                                 const struct efs_ino_size_rec *irecs,
-                                uint32_t ino_count, int sync)
+                                uint32_t ino_count, int sync,
+                                efs_ino_t route_ino)
 {
     if (count == 0 && ino_count == 0 && !sync)
         return EFS_OK;
+    if (!route_ino)
+        route_ino = EFS_ROOT_INO;
     size_t len = sizeof(struct efs_msg_report_chunks) +
                  (size_t)count * sizeof(struct efs_chunk_rec) +
                  (size_t)ino_count * sizeof(struct efs_ino_size_rec);
@@ -425,7 +427,7 @@ int efs_client_rpc_report_dirty(efs_export_id_t export_id,
     if (ino_count)
         memcpy(p, irecs, (size_t)ino_count * sizeof(*irecs));
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_owner(EFS_ROOT_INO, EFS_MSG_REPORT_CHUNKS, buf,
+    int rc = rpc_send_recv_owner(route_ino, EFS_MSG_REPORT_CHUNKS, buf,
                                  (uint32_t)len, EFS_MSG_REPORT_CHUNKS_REPLY,
                                  &r, sizeof(r));
     free(buf);

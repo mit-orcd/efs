@@ -9,11 +9,54 @@ efs: distributed FS, 2+1 XOR EC, FUSE client, RDMA (RC QP), 128 KiB chunks.
 Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 
 ## Where we are
-Cluster live on **EFSR v8** (v7 CoW + extra-shard roots in the cluster
-EFSR) + Phase 2a/2b + Phase 3 tables/flush/v8, healthy (4 up / 0 down).
-4 servers + 13 clients (see efs-fcstor-deploy rule). Export `efs-test`.
-CoW = **debe6dd**, catchup-vs-GC = **76753ef**, 2b reads = **94f96fd**.
-**Perf push (Aug 23, committed, all on top of the above):** a chain of
+Cluster live on **EFSR v8** + Phase 3 data-path sharding Stages 0–3
+(committed), healthy (4 up / 0 down). Fresh mkfs
+`efs-test` is **bits=3** (8 shards) on 4 servers + 9 clients mounted
+at `/tmp/efs/mnt`. CoW = **debe6dd**, catchup-vs-GC = **76753ef**,
+2b reads = **94f96fd**.
+**Data-path sharding LANDED (Aug 23 night):** both
+blockers from the morning finding are fixed together (fixing only one
+= silent data loss). (1) REPORT_CHUNKS is per-shard (`write.c`
+`efs_client_report_dirty` partitions by `efs_export_shard_of`; server
+loud-`NOT_PRIMARY` instead of silent drop). (2) file creates
+round-robin `create_rr % sc` (dirs stay on parent shard);
+parent-owner fans `EFS_MSG_INODE_CREATE_SHARD` to the child owner,
+then writes the dentry locally. Probe
+`tests/stress/shard_spread_probe.sh` PASS: 32 files, 8 distinct shards,
+non-primary-owned, md5 match on a second client. Extra: hardlink/
+last-link unlink fan `LINK_SHARD`/`UNLINK_SHARD` to the child owner
+(parent-local `nlink_inc` was NOT_FOUND → EIO). PUT_META never fences
+a live table for extras-only roots (that dropped unflushed mkdir
+ops and made sharded dirs vanish mid-create).
+**POSIX after datapath sharding:** bits=0 `efs-test`
+`20260823-232541` 0 EFS bugs; bits=3 `20260823-233448` 0 EFS bugs
+(hardlink 8/8 after LINK_SHARD); posix2 12/12 both
+(`20260823-232632` bits=0, `20260823-233514` bits=3).
+**Perf on fresh bits=3 mkfs (Aug 23 233721/233849, all rc=0):**
+single 007 sw-1m **5772** (new peak, was 5656 bits=0). Multi-9 sw-1m
+agg **6925** — did NOT beat bits=0 **9342** / missed the ≥3× single
+(~17 GB/s) gate. Files DID spread (007 f.0–f.7 inos cover shards
+0–7). Residual: extras-commit catchup storm (~113–131
+`rebuilt export=efs-test shard=N` per server during the multi run)
+re-centralizes work. Next lever: skip extra-shard rebuild when the
+local tab is already at/above the incoming extras gen (or batch
+extras so peers don't rebuild every commit). Guide remains
+`docs/phase3-datapath-sharding-impl.md`.
+**Extras catchup storm FIXED (Aug 24):** two changes.
+(1) Per-shard incremental rebuild cache
+(`s->shard_blob_cache[export][shard]`) so a shard rebuild only fetches
+pages whose checksums changed (was: every descriptor refresh re-fetched
+every page). (2) THE LEVER: `server_flush_fragmented_meta` now only
+flushes shards with `shard_dirty` set (was: flushed every shard on
+every 100ms window, bumping every descriptor gen and making every peer
+rebuild every shard). Multi-9 sw-1m agg **7569** (was 6925), rebuild
+lines per server 113–131 → **7–8**. Still below bits=0 **9342**;
+residual is per-chunk server latency under 9-way contention
+(`g_server->lock` sharing between REPORT/flush/PUT). mc_stress on
+bits=3 VERIFY-OK both clients; kill -9 non-primary shard owner
+(fcstor005) → 200/200 failover reads OK, restart rejoined, cold-mount
+client read OK. Cluster healthy (4 up / 0 down).
+**Perf push (Aug 23, committed, bits=0, all on top of the above):** a chain of
 CPU/lock fixes validated on a FRESH cluster (wiped with edelete + mkfs —
 accumulated chunk-table state was silently degrading throughput ~15-40%, so
 A/B on a grown table is meaningless; always measure perf on a fresh mkfs).
@@ -48,6 +91,10 @@ EFS_WRITE_PIPELINE 64 measured WORSE than 32 (single 3780 vs 4686) — depth
 is not the limiter. EFS_RDMA_BUFS 32 ≈ 4 (recv depth not the limiter).
 POSIX after the perf chain: 143/144 + `concurrent_creates_same_dir` flake
 (passes 3/3 isolated) + 5 known XFS quirks.
+**Data-path sharding load-split (the Aug 23 morning finding) is FIXED**
+— see the "LANDED" paragraph above. The old
+silent-drop + create-stride=`nlive` pair is gone. The remaining
+multi-write gap vs bits=0 is extras catchup rebuild, not routing.
 **Phase 3 code-complete (working tree, Aug 21):** tables + v8 persist +
 owner routing + owner extra flush + on-demand LRU + spread creates
 (dentry on parent, inode on child, stride=nlive) + `efs_export_rehash`

@@ -261,6 +261,11 @@ efs_node_id_t efs_shard_owner_of(uint32_t shard, uint32_t shard_count,
 /* Next inode for a create under parent. bits==0: next_ino++. bits>0:
  * allocate inside the parent's shard range. */
 efs_ino_t efs_export_alloc_ino(struct efs_export *ex, efs_ino_t parent);
+/* Peek the shard a create under parent would land on. Dirs stay on the
+ * parent shard; files round-robin across all shards (create_rr % sc).
+ * Does not advance create_rr. */
+uint32_t efs_export_create_target(struct efs_export *ex, efs_ino_t parent,
+                                  uint32_t mode);
 /* Table that owns `ino` (or parent for name ops). bits==0 → `ex`. */
 struct efs_export *efs_export_table_for_ino(struct efs_export *ex, efs_ino_t ino);
 struct efs_export *efs_export_table(struct efs_export *ex, uint32_t shard);
@@ -320,6 +325,17 @@ int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *
 /* Add a hard link (extra name) for an existing non-directory inode. */
 int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
                     efs_ino_t new_parent, const char *new_name);
+
+/* Cross-server hardlink helpers. nlink_inc/dec mutate every local row of
+ * src_ino (canonical child table + any dentry copies). link_dentry writes
+ * the new name on new_parent using src as the template; src.nlink is the
+ * already-bumped value. */
+int efs_export_nlink_inc(struct efs_export *ex, efs_ino_t src_ino,
+                         struct efs_inode *out);
+int efs_export_nlink_dec(struct efs_export *ex, efs_ino_t src_ino,
+                         struct efs_inode *out);
+int efs_export_link_dentry(struct efs_export *ex, const struct efs_inode *src,
+                           efs_ino_t new_parent, const char *new_name);
 
 /* Set inode size. */
 int efs_export_set_size(struct efs_export *ex, efs_ino_t ino, uint64_t size);

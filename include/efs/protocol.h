@@ -118,6 +118,18 @@ enum efs_msg_type {
      * lost each other's lines (mc_stress appfile). */
     EFS_MSG_INODE_APPEND = 71,
     EFS_MSG_INODE_APPEND_REPLY = 72,
+    /* Phase 3 data-path sharding: parent owner fans a child-row create to
+     * the target shard's owner. Reply is struct efs_msg_inode_reply. */
+    EFS_MSG_INODE_CREATE_SHARD = 73,
+    EFS_MSG_INODE_CREATE_SHARD_REPLY = 74,
+    /* Parent owner fans nlink++ / nlink-- to the child-row owner. Reply is
+     * struct efs_msg_inode_reply. Without this, hardlink on a spread-created
+     * file is NOT_FOUND on the parent (EIO) and last-link unlink orphans
+     * the child row + chunks. */
+    EFS_MSG_INODE_LINK_SHARD = 75,
+    EFS_MSG_INODE_LINK_SHARD_REPLY = 76,
+    EFS_MSG_INODE_UNLINK_SHARD = 77,
+    EFS_MSG_INODE_UNLINK_SHARD_REPLY = 78,
 };
 
 /* Set per-export features. Only bits in set_mask are changed (to the
@@ -364,6 +376,19 @@ struct efs_msg_inode_create {
     uint32_t gid;
 };
 
+/* Nested create on the target shard owner (parent owner already decided
+ * the shard). The receiver allocates an ino from target_shard's class and
+ * writes the full row; the parent owner writes only the dentry. */
+struct efs_msg_inode_create_shard {
+    efs_export_id_t export_id;
+    efs_ino_t parent;
+    char name[EFS_MAX_NAME];
+    uint32_t mode;
+    uint32_t uid;
+    uint32_t gid;
+    uint32_t target_shard;
+};
+
 struct efs_msg_inode_getattr {
     efs_export_id_t export_id;
     efs_ino_t ino;
@@ -433,6 +458,17 @@ struct efs_msg_inode_link {
     efs_ino_t src_ino;
     efs_ino_t new_parent;
     char new_name[EFS_MAX_NAME];
+};
+
+/* Nested nlink mutation on the child-row owner. */
+struct efs_msg_inode_link_shard {
+    efs_export_id_t export_id;
+    efs_ino_t src_ino;
+};
+
+struct efs_msg_inode_unlink_shard {
+    efs_export_id_t export_id;
+    efs_ino_t src_ino;
 };
 
 /* Cross-client O_APPEND reservation; reply is struct efs_msg_inode_reply

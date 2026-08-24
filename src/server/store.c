@@ -521,7 +521,8 @@ int server_destroy_export(struct efsd_server *s, const char *name)
         s->export_destroying[idx] = 0;
     }
     /* Keep the incremental-rebuild blob cache aligned with the compaction:
-     * the doomed slot's cache is freed; the moved slot's cache follows it. */
+     * the doomed slot's cache is freed; the moved slot's cache follows it.
+     * Same for the per-shard caches. */
     free(s->meta_blob_cache[idx]);
     free(s->meta_blob_sums[idx]);
     s->meta_blob_cache[idx] = NULL;
@@ -529,18 +530,38 @@ int server_destroy_export(struct efsd_server *s, const char *name)
     s->meta_blob_cache_len[idx] = 0;
     s->meta_blob_cache_gen[idx] = 0;
     s->meta_blob_pages[idx] = 0;
+    for (uint32_t sh = 0; sh < EFS_META_MAX_SHARDS; sh++) {
+        free(s->shard_blob_cache[idx][sh]);
+        free(s->shard_blob_sums[idx][sh]);
+        s->shard_blob_cache[idx][sh] = NULL;
+        s->shard_blob_sums[idx][sh] = NULL;
+        s->shard_blob_cache_len[idx][sh] = 0;
+        s->shard_blob_pages[idx][sh] = 0;
+    }
     if ((uint32_t)idx != last) {
         s->meta_blob_cache[idx] = s->meta_blob_cache[last];
         s->meta_blob_sums[idx] = s->meta_blob_sums[last];
         s->meta_blob_cache_len[idx] = s->meta_blob_cache_len[last];
         s->meta_blob_cache_gen[idx] = s->meta_blob_cache_gen[last];
         s->meta_blob_pages[idx] = s->meta_blob_pages[last];
+        for (uint32_t sh = 0; sh < EFS_META_MAX_SHARDS; sh++) {
+            s->shard_blob_cache[idx][sh] = s->shard_blob_cache[last][sh];
+            s->shard_blob_sums[idx][sh] = s->shard_blob_sums[last][sh];
+            s->shard_blob_cache_len[idx][sh] = s->shard_blob_cache_len[last][sh];
+            s->shard_blob_pages[idx][sh] = s->shard_blob_pages[last][sh];
+        }
     }
     s->meta_blob_cache[last] = NULL;
     s->meta_blob_sums[last] = NULL;
     s->meta_blob_cache_len[last] = 0;
     s->meta_blob_cache_gen[last] = 0;
     s->meta_blob_pages[last] = 0;
+    for (uint32_t sh = 0; sh < EFS_META_MAX_SHARDS; sh++) {
+        s->shard_blob_cache[last][sh] = NULL;
+        s->shard_blob_sums[last][sh] = NULL;
+        s->shard_blob_cache_len[last][sh] = 0;
+        s->shard_blob_pages[last][sh] = 0;
+    }
     memset(&s->exports[last], 0, sizeof(s->exports[last]));
     s->export_inflight[last] = 0;
     s->export_destroying[last] = 0;

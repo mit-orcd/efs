@@ -786,20 +786,82 @@ int efs_client_report_dirty(int sync)
     }
     efs_client_table_unlock();
 
-    /* Send the report. NOT_PRIMARY is retried inside rpc_send_recv_primary;
-     * retry transient NET/NO_QUORUM a few times (the conn is dropped and
-     * re-established on each attempt). The recs are already built, so a retry
-     * just re-sends. */
-    int rc = EFS_ERR_NET;
-    for (int attempt = 0; attempt < 4; attempt++) {
-        rc = efs_client_rpc_report_dirty(g_client.export_id, crecs, cn,
-                                         irecs, in, sync);
-        if (rc == EFS_OK)
-            break;
-        if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM &&
-            rc != EFS_ERR_NOT_PRIMARY)
-            break; /* hard error (INVAL/ERROR): don't retry */
-        usleep(50000u << attempt);
+    /* Send the report. bits==0: one RPC to the primary. bits>0: one RPC
+     * per non-empty shard, routed to that shard's owner. NOT_PRIMARY is
+     * retried inside rpc_send_recv_owner; retry transient NET/NO_QUORUM
+     * a few times. If ANY shard fails, merge the whole snap back. */
+    int rc = EFS_OK;
+    uint32_t bits = g_client.export.root.shard_bits;
+    uint32_t sc = g_client.export.root.shard_count;
+    if (bits == 0 || sc <= 1) {
+        rc = EFS_ERR_NET;
+        for (int attempt = 0; attempt < 4; attempt++) {
+            rc = efs_client_rpc_report_dirty(g_client.export_id, crecs, cn,
+                                             irecs, in, sync, EFS_ROOT_INO);
+            if (rc == EFS_OK)
+                break;
+            if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM &&
+                rc != EFS_ERR_NOT_PRIMARY)
+                break;
+            usleep(50000u << attempt);
+        }
+    } else {
+        struct efs_chunk_rec *cbuf = NULL;
+        struct efs_ino_size_rec *ibuf = NULL;
+        if (cn)
+            cbuf = malloc((size_t)cn * sizeof(*cbuf));
+        if (in)
+            ibuf = malloc((size_t)in * sizeof(*ibuf));
+        if ((cn && !cbuf) || (in && !ibuf)) {
+            free(cbuf);
+            free(ibuf);
+            free(crecs);
+            free(irecs);
+            efs_client_table_lock();
+            dirty_snap_merge_back_locked(&ds);
+            efs_client_table_unlock();
+            return EFS_ERR_NOMEM;
+        }
+        for (uint32_t s = 0; s < sc && rc == EFS_OK; s++) {
+            uint32_t n_c = 0, n_i = 0;
+            efs_ino_t route = 0;
+            for (uint32_t k = 0; k < cn; k++) {
+                if (efs_export_shard_of(crecs[k].ino, bits) == s) {
+                    cbuf[n_c++] = crecs[k];
+                    if (!route)
+                        route = crecs[k].ino;
+                }
+            }
+            for (uint32_t k = 0; k < in; k++) {
+                if (efs_export_shard_of(irecs[k].ino, bits) == s) {
+                    ibuf[n_i++] = irecs[k];
+                    if (!route)
+                        route = irecs[k].ino;
+                }
+            }
+            if (n_c == 0 && n_i == 0)
+                continue;
+            int one = EFS_ERR_NET;
+            for (int attempt = 0; attempt < 4; attempt++) {
+                one = efs_client_rpc_report_dirty(g_client.export_id,
+                                                  cbuf, n_c, ibuf, n_i,
+                                                  sync, route);
+                if (one == EFS_OK)
+                    break;
+                if (one != EFS_ERR_NET && one != EFS_ERR_NO_QUORUM &&
+                    one != EFS_ERR_NOT_PRIMARY)
+                    break;
+                usleep(50000u << attempt);
+            }
+            rc = one;
+        }
+        /* fsync with no dirty recs: still need a durability barrier. */
+        if (rc == EFS_OK && sync && cn == 0 && in == 0) {
+            rc = efs_client_rpc_report_dirty(g_client.export_id, NULL, 0,
+                                             NULL, 0, 1, EFS_ROOT_INO);
+        }
+        free(cbuf);
+        free(ibuf);
     }
     free(crecs);
     free(irecs);

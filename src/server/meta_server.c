@@ -388,6 +388,12 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
     }
     int ei = server_export_index_locked(s, ex);
     int crc = efs_export_root_copy(&snap, &ex->root);
+    /* Extra-shard tables get their own incremental cache slot (the main
+     * meta_blob_cache is per-export and would be clobbered by shard rebuilds). */
+    uint32_t shard_slot = 0;
+    if (table_ino != EFS_META_TABLE_INO && ex->shard_id > 0 &&
+        ex->shard_id < EFS_META_MAX_SHARDS)
+        shard_slot = ex->shard_id;
     pthread_mutex_unlock(&s->lock);
     if (crc != EFS_OK)
         return crc;
@@ -422,21 +428,38 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
         uint64_t cur_gen = ex->root.generation;
         /* Cache hit: the page's fragment checksums are unchanged from the
          * last rebuild's generation, so the assembled-blob cache already
-         * holds exactly this page's content — memcpy instead of peer fetch. */
+         * holds exactly this page's content — memcpy instead of peer fetch.
+         * Shard tables use their per-shard slot; the main table uses the
+         * per-export slot. */
         int cached = 0;
-        if (cur_gen == start_gen && ei >= 0 && pi < s->meta_blob_pages[ei] &&
-            s->meta_blob_cache[ei] && s->meta_blob_sums[ei] &&
-            memcmp(s->meta_blob_sums[ei] +
-                       (size_t)pi * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE,
+        uint8_t *cache = NULL;
+        uint32_t cache_len = 0;
+        const uint8_t *sums = NULL;
+        uint32_t cache_pages = 0;
+        if (ei >= 0) {
+            if (shard_slot) {
+                cache = s->shard_blob_cache[ei][shard_slot];
+                cache_len = s->shard_blob_cache_len[ei][shard_slot];
+                sums = s->shard_blob_sums[ei][shard_slot];
+                cache_pages = s->shard_blob_pages[ei][shard_slot];
+            } else {
+                cache = s->meta_blob_cache[ei];
+                cache_len = s->meta_blob_cache_len[ei];
+                sums = s->meta_blob_sums[ei];
+                cache_pages = s->meta_blob_pages[ei];
+            }
+        }
+        if (cur_gen == start_gen && cache && sums &&
+            pi < cache_pages &&
+            memcmp(sums + (size_t)pi * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE,
                    efs_export_root_checksum_const(root, pi, 0),
                    EFS_NUM_FRAGMENTS * EFS_HASH_SIZE) == 0) {
             size_t off = (size_t)pi * EFS_META_PAGE_SIZE;
-            size_t avail = (off < s->meta_blob_cache_len[ei])
-                               ? s->meta_blob_cache_len[ei] - off : 0;
+            size_t avail = (off < cache_len) ? cache_len - off : 0;
             if (avail > 0) {
                 size_t n = avail > EFS_META_PAGE_SIZE ? EFS_META_PAGE_SIZE
                                                       : avail;
-                memcpy(pages[pi], s->meta_blob_cache[ei] + off, n);
+                memcpy(pages[pi], cache + off, n);
                 if (n < EFS_META_PAGE_SIZE)
                     memset(pages[pi] + n, 0, EFS_META_PAGE_SIZE - n);
                 cached = 1;
@@ -712,20 +735,37 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
 
     /* Success: keep the assembled blob (plus this generation's page
      * checksums) as the incremental-rebuild cache so the next rebuild only
-     * fetches pages whose checksums changed. */
+     * fetches pages whose checksums changed. Shard tables use their
+     * per-shard slot so a shard rebuild never clobbers the main table's
+     * cache (and vice versa). */
     if (ei >= 0) {
-        free(s->meta_blob_cache[ei]);
-        free(s->meta_blob_sums[ei]);
-        s->meta_blob_cache[ei] = (uint8_t *)blob;
-        s->meta_blob_cache_len[ei] = (uint32_t)blob_len;
-        s->meta_blob_cache_gen[ei] = start_gen;
-        s->meta_blob_pages[ei] = page_count;
+        uint8_t **cachep;
+        uint32_t *cache_lenp;
+        uint8_t **sumsp;
+        uint32_t *cache_pagesp;
+        if (shard_slot) {
+            cachep = &s->shard_blob_cache[ei][shard_slot];
+            cache_lenp = &s->shard_blob_cache_len[ei][shard_slot];
+            sumsp = &s->shard_blob_sums[ei][shard_slot];
+            cache_pagesp = &s->shard_blob_pages[ei][shard_slot];
+        } else {
+            cachep = &s->meta_blob_cache[ei];
+            cache_lenp = &s->meta_blob_cache_len[ei];
+            sumsp = &s->meta_blob_sums[ei];
+            cache_pagesp = &s->meta_blob_pages[ei];
+            s->meta_blob_cache_gen[ei] = start_gen;
+        }
+        free(*cachep);
+        free(*sumsp);
+        *cachep = (uint8_t *)blob;
+        *cache_lenp = (uint32_t)blob_len;
+        *cache_pagesp = page_count;
         size_t sum_n = (size_t)page_count * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE;
-        s->meta_blob_sums[ei] = malloc(sum_n);
-        if (s->meta_blob_sums[ei])
-            memcpy(s->meta_blob_sums[ei], root->page_checksums, sum_n);
+        *sumsp = malloc(sum_n);
+        if (*sumsp)
+            memcpy(*sumsp, root->page_checksums, sum_n);
         else
-            s->meta_blob_pages[ei] = 0; /* no sums: cache unusable, freed next */
+            *cache_pagesp = 0; /* no sums: cache unusable, freed next */
         blob = NULL; /* owned by the cache */
     }
     free(blob);
@@ -1049,7 +1089,11 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     uint32_t bits = ex->root.shard_bits;
     int primary = server_is_meta_primary_locked(s);
     pthread_mutex_unlock(&s->lock);
-    /* Extra-shard pages must land before the cluster root references them. */
+    /* Extra-shard pages must land before the cluster root references them.
+     * Only flush shards that are actually dirty: an export-level dirty mark
+     * covers every shard, and flushing clean shards on every window is what
+     * fanned the extras-commit catchup storm (every clean flush bumped that
+     * shard's descriptor gen and made every peer rebuild it). */
     if (bits && ex->shard_tabs) {
         for (uint32_t i = 1; i < ex->shard_tab_cap; i++) {
             struct efs_export *tab = ex->shard_tabs[i];
@@ -1065,6 +1109,8 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
                 tab->shard_dirty = 0;
                 continue;
             }
+            if (!tab->shard_dirty)
+                continue;
             int src = server_flush_fragmented_meta_locked(
                 s, tab, efs_meta_shard_table_ino(i), 0, i, sc);
             if (src != 0)
