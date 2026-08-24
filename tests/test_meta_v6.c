@@ -423,9 +423,22 @@ int main(void)
                     (unsigned long long)a, (unsigned long long)b);
             failures++;
         }
+        uint32_t loaded_before = 0;
+        for (uint32_t i = 1; sh.shard_tabs && i < sh.shard_tab_cap; i++)
+            if (sh.shard_tabs[i])
+                loaded_before++;
         if (efs_export_unlink_name(&sh, EFS_ROOT_INO, "a") != 0 ||
             efs_export_lookup(&sh, EFS_ROOT_INO, "a", NULL) == 0) {
             fprintf(stderr, "FAIL spread unlink\n");
+            failures++;
+        }
+        uint32_t loaded_after = 0;
+        for (uint32_t i = 1; sh.shard_tabs && i < sh.shard_tab_cap; i++)
+            if (sh.shard_tabs[i])
+                loaded_after++;
+        if (loaded_after > loaded_before) {
+            fprintf(stderr, "FAIL unlink instantiated extras %u -> %u\n",
+                    loaded_before, loaded_after);
             failures++;
         }
         efs_export_free(&sh);

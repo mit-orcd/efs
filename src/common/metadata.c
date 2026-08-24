@@ -1466,23 +1466,25 @@ struct efs_export *efs_export_table_for_ino(struct efs_export *ex, efs_ino_t ino
     return efs_export_table(ex, efs_export_shard_of(ino, ex->root.shard_bits));
 }
 
+struct efs_export *efs_export_shard_tab(struct efs_export *ex, uint32_t shard)
+{
+    if (!ex)
+        return NULL;
+    if (shard == 0 || ex->root.shard_bits == 0 ||
+        (ex->root.shard_count ? ex->root.shard_count : 1) <= 1)
+        return ex;
+    if (!ex->shard_tabs || shard >= ex->shard_tab_cap)
+        return NULL;
+    return ex->shard_tabs[shard];
+}
+
 void efs_export_install_extra_roots(struct efs_export *ex)
 {
-    if (!ex || !ex->root.extra_shard_count || !ex->root.extra_roots)
-        return;
-    for (uint32_t i = 0; i < ex->root.extra_shard_count; i++) {
-        uint32_t sh = ex->root.extra_shard_ids ? ex->root.extra_shard_ids[i] : 0;
-        if (sh == 0)
-            continue;
-        struct efs_export *tab = efs_export_table(ex, sh);
-        if (!tab)
-            continue;
-        if (efs_export_root_copy(&tab->root, &ex->root.extra_roots[i]) != EFS_OK)
-            continue;
-        tab->meta_fragmented = 1;
-        tab->meta_needs_rebuild = (tab->root.page_count > 0);
-        tab->next_ino = tab->root.next_ino;
-    }
+    /* Pages + the v8 extra_roots descriptors are the database. Instantiating
+     * every extra table here forced every peer to rebuild every shard after
+     * every extras PUT_META (the create/unlink heal storm). The owner
+     * catchup loads a shard when this node owns it. */
+    (void)ex;
 }
 
 int efs_export_root_same_pages(const struct efs_export_root *a,
@@ -1508,13 +1510,13 @@ void efs_export_merge_extra_roots(struct efs_export *ex,
         if (sh == 0)
             continue;
         const struct efs_export_root *desc = &incoming->extra_roots[i];
-        struct efs_export *tab = efs_export_table(ex, sh);
-        if (!tab)
+        struct efs_export *tab = efs_export_shard_tab(ex, sh);
+        if (!tab || tab == ex)
             continue;
         /* Never fence a shard table with unflushed ops: its in-memory state
          * is ahead of any descriptor a peer can propagate (descriptors are
          * written by flushing a snapshot that predates those ops). */
-        if (tab->shard_dirty)
+        if (tab->shard_dirty || tab->meta_needs_rebuild)
             continue;
         /* Single writer per shard (its owner) => equal/higher local gen is
          * authoritative-or-equal content. Skip: installing an older/equal
@@ -1524,11 +1526,12 @@ void efs_export_merge_extra_roots(struct efs_export *ex,
         if (tab->meta_fragmented && tab->root.page_count > 0 &&
             tab->root.generation >= desc->generation)
             continue;
-        if (efs_export_root_copy(&tab->root, desc) != EFS_OK)
-            continue;
-        tab->meta_fragmented = 1;
-        tab->meta_needs_rebuild = (tab->root.page_count > 0);
-        tab->next_ino = tab->root.next_ino;
+        /* Stale materialized copy: drop it. Do not mark needs_rebuild —
+         * that made every peer reassemble the shard. Pages + descriptor
+         * are enough; the owner reloads on demand. */
+        efs_export_free(tab);
+        free(tab);
+        ex->shard_tabs[sh] = NULL;
     }
     /* Re-capture so ex->root.extra_roots reflects the merge (owned shards
      * keep their local descriptors; adopted ones land in their tabs).
@@ -1774,7 +1777,7 @@ int efs_export_lookup(struct efs_export *ex, efs_ino_t parent,
                 return rc;
             uint32_t csh = efs_export_shard_of(out->ino, bits);
             if (csh != efs_export_shard_of(parent, bits)) {
-                struct efs_export *ctab = efs_export_table(ex, csh);
+                struct efs_export *ctab = efs_export_shard_tab(ex, csh);
                 struct efs_inode full;
                 if (ctab && efs_export_get_inode(ctab, out->ino, &full) == 0) {
                     char nbuf[EFS_MAX_NAME];
@@ -1798,7 +1801,7 @@ int efs_export_lookup(struct efs_export *ex, efs_ino_t parent,
             uint32_t bits = ex->root.shard_bits;
             uint32_t csh = efs_export_shard_of(out->ino, bits);
             if (csh != 0) {
-                struct efs_export *ctab = efs_export_table(ex, csh);
+                struct efs_export *ctab = efs_export_shard_tab(ex, csh);
                 struct efs_inode full;
                 if (ctab && efs_export_get_inode(ctab, out->ino, &full) == 0) {
                     char nbuf[EFS_MAX_NAME];
@@ -1821,9 +1824,13 @@ int efs_export_get_inode(struct efs_export *ex, efs_ino_t ino,
     if (!ex)
         return EFS_ERR_INVAL;
     if (export_is_sharded_root(ex)) {
-        struct efs_export *tab = efs_export_table_for_ino(ex, ino);
-        if (tab && tab != ex)
+        uint32_t sh = efs_export_shard_of(ino, ex->root.shard_bits);
+        if (sh != 0) {
+            struct efs_export *tab = efs_export_shard_tab(ex, sh);
+            if (!tab)
+                return EFS_ERR_NOT_FOUND;
             return efs_export_get_inode(tab, ino, out);
+        }
     }
     struct efs_inode *p = inode_ptr(ex, ino);
     if (!p)
@@ -1908,13 +1915,50 @@ efs_ino_t efs_export_create(struct efs_export *ex, efs_ino_t parent,
     return created;
 }
 
+/* Touch already-materialized extra tables only. Instantiating every shard
+ * here (the old unlink/nlink loops) made the parent owner hold the world.
+ * skip_shard is the canonical child table (owner applies nlink/chunks). */
+static void for_each_loaded_tab(struct efs_export *ex, uint32_t skip_shard,
+                                void (*fn)(struct efs_export *tab, efs_ino_t ino,
+                                           uint32_t nlink),
+                                efs_ino_t ino, uint32_t nlink)
+{
+    if (ex->shard_id != skip_shard)
+        fn(ex, ino, nlink);
+    if (!ex->shard_tabs)
+        return;
+    for (uint32_t i = 1; i < ex->shard_tab_cap; i++) {
+        if (ex->shard_tabs[i] && i != skip_shard)
+            fn(ex->shard_tabs[i], ino, nlink);
+    }
+}
+
+static void tab_unlink_ino(struct efs_export *tab, efs_ino_t ino, uint32_t nlink)
+{
+    (void)nlink;
+    if (efs_export_unlink(tab, ino) == EFS_OK && tab->shard_id)
+        tab->shard_dirty = 1;
+}
+
+static void tab_set_nlink(struct efs_export *tab, efs_ino_t ino, uint32_t nlink)
+{
+    int hit = 0;
+    for (uint64_t i = 0; i < tab->inode_count; i++) {
+        if (tab->inodes[i].ino == ino) {
+            tab->inodes[i].nlink = nlink;
+            hit = 1;
+        }
+    }
+    if (hit && tab->shard_id)
+        tab->shard_dirty = 1;
+}
+
 int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *name)
 {
     if (!ex || !name)
         return EFS_ERR_INVAL;
     if (export_is_sharded_root(ex)) {
         uint32_t bits = ex->root.shard_bits;
-        uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
         struct efs_export *ptab =
             efs_export_table(ex, efs_export_shard_of(parent, bits));
         if (!ptab)
@@ -1928,20 +1972,11 @@ int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *
         efs_ino_t ino = removed.ino;
 
         if (efs_mode_is_dir(removed.mode)) {
-            /* rmdir: a dir's only row lives on the PARENT's shard table
-             * (create_sharded targets psh for dirs, so ino == psh's class).
-             * Let efs_export_unlink remove the row itself: it decrements the
-             * parent's nlink only where the parent row coexists (ptab), so
-             * the ".." link drops exactly once. Removing the row here first
-             * (old code) made that lookup miss and the parent kept nlink=3
-             * after rmdir (posix dir_nlink on bits>0). */
-            for (uint32_t sh = 0; sh < sc; sh++) {
-                struct efs_export *tab = efs_export_table(ex, sh);
-                if (!tab)
-                    continue;
-                if (efs_export_unlink(tab, ino) == EFS_OK && tab != ex)
-                    tab->shard_dirty = 1;
-            }
+            /* rmdir: the dir row lives on the parent shard. Do not
+             * instantiate other shards. */
+            if (efs_export_unlink(ptab, ino) == EFS_OK && ptab != ex)
+                ptab->shard_dirty = 1;
+            parent_touch(ptab, parent);
             return EFS_OK;
         }
 
@@ -1951,43 +1986,19 @@ int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *
         nlink--;
         rollup_sub_under(ptab, parent, &removed);
         child_idx_del(ptab, parent, pos);
+        parent_touch(ptab, parent);
         remove_inode_slot(ptab, pos, nlink > 0);
         if (ptab != ex)
             ptab->shard_dirty = 1;
 
-        if (nlink == 0) {
-            /* Last link: drop every row for this ino in EVERY shard table
-             * (canonical row on the child shard + dentry copies on other
-             * parents' shards) and the chunks (child shard only). The old
-             * code removed only the child-shard rows when the shards
-             * differed — and, worse, did so even when OTHER hard links kept
-             * the inode alive. */
-            for (uint32_t sh = 0; sh < sc; sh++) {
-                struct efs_export *tab = efs_export_table(ex, sh);
-                if (!tab)
-                    continue;
-                if (efs_export_unlink(tab, ino) == EFS_OK && tab != ex)
-                    tab->shard_dirty = 1;
-            }
-            return EFS_OK;
-        }
-
-        /* Remaining hard links keep the decremented nlink — on every row
-         * carrying this ino in every shard table. */
-        for (uint32_t sh = 0; sh < sc; sh++) {
-            struct efs_export *tab = efs_export_table(ex, sh);
-            if (!tab)
-                continue;
-            int hit = 0;
-            for (uint64_t i = 0; i < tab->inode_count; i++) {
-                if (tab->inodes[i].ino == ino) {
-                    tab->inodes[i].nlink = nlink;
-                    hit = 1;
-                }
-            }
-            if (hit && tab != ex)
-                tab->shard_dirty = 1;
-        }
+        /* Update copies we already hold (including a loaded child table).
+         * Never efs_export_table(all). If the canonical table is not
+         * loaded, the owner applies nlink/chunks (handler nlink_dec /
+         * UNLINK_SHARD). */
+        if (nlink == 0)
+            for_each_loaded_tab(ex, UINT32_MAX, tab_unlink_ino, ino, 0);
+        else
+            for_each_loaded_tab(ex, UINT32_MAX, tab_set_nlink, ino, nlink);
         return EFS_OK;
     }
     if (strcmp(name, EFS_STATS_NAME) == 0)
@@ -2064,21 +2075,7 @@ int efs_export_unlink(struct efs_export *ex, efs_ino_t ino)
 static void shard_set_nlink(struct efs_export *ex, efs_ino_t src_ino,
                             uint32_t nlink)
 {
-    uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
-    for (uint32_t sh = 0; sh < sc; sh++) {
-        struct efs_export *tab = efs_export_table(ex, sh);
-        if (!tab)
-            continue;
-        int hit = 0;
-        for (uint64_t i = 0; i < tab->inode_count; i++) {
-            if (tab->inodes[i].ino == src_ino) {
-                tab->inodes[i].nlink = nlink;
-                hit = 1;
-            }
-        }
-        if (hit && tab != ex)
-            tab->shard_dirty = 1;
-    }
+    for_each_loaded_tab(ex, UINT32_MAX, tab_set_nlink, src_ino, nlink);
 }
 
 int efs_export_nlink_inc(struct efs_export *ex, efs_ino_t src_ino,
@@ -2118,14 +2115,7 @@ int efs_export_nlink_dec(struct efs_export *ex, efs_ino_t src_ino,
         nlink = 1;
     nlink--;
     if (nlink == 0) {
-        uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
-        for (uint32_t sh = 0; sh < sc; sh++) {
-            struct efs_export *tab = efs_export_table(ex, sh);
-            if (!tab)
-                continue;
-            if (efs_export_unlink(tab, src_ino) == EFS_OK && tab != ex)
-                tab->shard_dirty = 1;
-        }
+        for_each_loaded_tab(ex, UINT32_MAX, tab_unlink_ino, src_ino, 0);
         if (out)
             memset(out, 0, sizeof(*out));
         return EFS_OK;

@@ -106,8 +106,11 @@ working set. **This is the phase that actually raises the cap.**
 3. Owner routing (`rpc_owner_conn` + server `NOT_PRIMARY`) — **done**.
    **Do not enable bits>0 on the live cluster until extra-shard restart
    is proven.**
-4. On-demand load + LRU (`efs_export_table` / `evict_cold_shards` /
-   `efs_client_load_shard`) — **done**.
+4. On-demand load — **pages are the DB (Aug 24):** extras PUT_META
+   updates descriptors and evicts a stale copy; only the shard owner
+   materializes the table. Not a journal — CoW pages + root commit.
+   `evict_cold_shards` is a RAM cap, not the load path. Unlink/nlink
+   no longer instantiate every extra table on the parent.
 5. Spread creates (parent dentry + child inode, stride=nlive) — **done**.
 6. Online re-shard (`efs_export_rehash` via `efs-mgmt upgrade`) — **done**.
 

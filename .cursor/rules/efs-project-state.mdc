@@ -9,19 +9,16 @@ efs: distributed FS, 2+1 XOR EC, FUSE client, RDMA (RC QP), 128 KiB chunks.
 Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 
 ## Where we are
-**RPC-storm + streaming-write plan in-tree, VALIDATION GATE 1 RED (Aug 24).**
-Stages 0–4 + skip-`.efsm`-on-fragmented-save. Cluster on
-build `1afda5433e6b-dirty`; 4 up / 0 down; 007 remounted. Stage 0
-baseline `results/meta/20260824-160528` w=1: create 604 / stat 355 /
-getattr 3793 / setattr 1206 / unlink 365. Quiet retry: create 93 /
-stat 242 / setattr 453 / unlink 26. After dropping the 71 MB × 6
-`metadata.efsm` dump on extras PUT_META (`results/meta/20260824-173430`):
-create **116** / stat **223** / setattr **3638** / rename **3354** /
-unlink **24** (getattr 66k untrustworthy). setattr/rename recovered
-above baseline; create/unlink still red — post-unlink all 4 nodes were
-healing extra shards. Residual is extras flush + catchup rebuild, not
-the .efsm serialize. **Stopped — do not push posix/ewrite/ecopy.**
-LOOKUP_PATH did not speed stat. FUSE timeouts still 0. No caches.
+**Page-as-DB + unlink-no-instantiate (Aug 24, uncommitted).** Extras
+PUT_META updates descriptors and evicts a stale copy; only the shard
+owner materializes the table. No WAL. Unlink/nlink walk only already-
+loaded tables (was `efs_export_table` × every shard → parent held the
+world). Child owner applies canonical nlink + chunks. Meta gate
+`20260824-181510` (pre-unlink-fix) still red: create **98** / stat
+**222** / unlink **30** (baseline 604 / 355 / 365). Next: deploy this
+cut and re-bench; then stop `create_sharded` from writing a child row
+on an unowned shard. **Stopped — do not push posix/ewrite/ecopy.**
+FUSE timeouts still 0. No caches.
 Cluster live on **EFSR v8** + Phase 3 data-path sharding Stages 0–3
 (committed). Fresh mkfs `efs-test` is **bits=3** (8 shards) on 4 servers
 + 9 clients mounted at `/tmp/efs/mnt`. CoW = **debe6dd**, catchup-vs-GC

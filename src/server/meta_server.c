@@ -420,6 +420,66 @@ static int server_is_meta_heal_coordinator(struct efsd_server *s)
     return coord;
 }
 
+static uint32_t server_live_ids_locked(struct efsd_server *s, efs_node_id_t *live)
+{
+    uint32_t n = 0;
+    if (!s || !live)
+        return 0;
+    live[n++] = s->id;
+    for (uint32_t i = 0; i < s->node_count && n < EFS_MAX_NODES; i++) {
+        efs_node_id_t id = s->nodes[i].id;
+        if (id == 0 || id == s->id)
+            continue;
+        if (server_node_is_down_locked(s, id))
+            continue;
+        live[n++] = id;
+    }
+    return n;
+}
+
+/* Materialize extra-shard tables only for shards this node owns. Peers keep
+ * the v8 descriptors and the pages; they do not assemble those tables. */
+static void server_rebuild_owned_extras(struct efsd_server *s,
+                                        struct efs_export *ex)
+{
+    if (!s || !ex || !ex->root.shard_bits)
+        return;
+    uint32_t n = 0;
+    uint32_t ids[EFS_META_MAX_SHARDS];
+    pthread_mutex_lock(&s->lock);
+    n = ex->root.extra_shard_count;
+    if (n > EFS_META_MAX_SHARDS)
+        n = EFS_META_MAX_SHARDS;
+    efs_node_id_t live[EFS_MAX_NODES];
+    uint32_t nlive = server_live_ids_locked(s, live);
+    uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+    uint32_t want = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        uint32_t sh = ex->root.extra_shard_ids ? ex->root.extra_shard_ids[i] : 0;
+        if (!sh)
+            continue;
+        if (efs_shard_owner_of(sh, sc, live, nlive) != s->id)
+            continue;
+        ids[want++] = sh;
+    }
+    pthread_mutex_unlock(&s->lock);
+    for (uint32_t i = 0; i < want; i++) {
+        uint32_t sh = ids[i];
+        pthread_mutex_lock(&s->lock);
+        struct efs_export *tab = efs_export_table(ex, sh);
+        int need = tab && tab->root.page_count > 0 &&
+                   (tab->meta_needs_rebuild || tab->inode_count == 0);
+        pthread_mutex_unlock(&s->lock);
+        if (!need)
+            continue;
+        int rc = server_rebuild_export_from_pages_ino(
+            s, tab, efs_meta_shard_table_ino(sh));
+        if (rc == EFS_OK)
+            fprintf(stderr, "meta-catchup: rebuilt export=%s shard=%u (owned)\n",
+                    ex->name, sh);
+    }
+}
+
 void server_rebuild_fragmented_exports(struct efsd_server *s)
 {
     for (uint32_t i = 0; i < s->export_count; i++) {
@@ -427,18 +487,7 @@ void server_rebuild_fragmented_exports(struct efsd_server *s)
         if (!ex->meta_fragmented)
             continue;
         if (server_rebuild_export_from_pages(s, ex) == EFS_OK) {
-            pthread_mutex_lock(&s->lock);
-            efs_export_install_extra_roots(ex);
-            pthread_mutex_unlock(&s->lock);
-            if (ex->shard_tabs) {
-                for (uint32_t i = 1; i < ex->shard_tab_cap; i++) {
-                    struct efs_export *tab = ex->shard_tabs[i];
-                    if (!tab || !tab->meta_needs_rebuild)
-                        continue;
-                    (void)server_rebuild_export_from_pages_ino(
-                        s, tab, efs_meta_shard_table_ino(i));
-                }
-            }
+            server_rebuild_owned_extras(s, ex);
             continue;
         }
         /* Fall back to pulling root+pages from any peer. */
@@ -2160,19 +2209,10 @@ static void *meta_catchup_thread(void *arg)
                  * meta_needs_rebuild) and rebuild them below — otherwise a
                  * restarted server lazily recreates its shard tables EMPTY
                  * and every non-zero-shard file reads back as size 0. */
-                efs_export_install_extra_roots(ex);
                 server_save_export(s, ex);
                 pthread_mutex_unlock(&s->lock);
                 fprintf(stderr, "meta-catchup: rebuilt export=%s\n", ex->name);
-                if (ex->shard_tabs) {
-                    for (uint32_t i = 1; i < ex->shard_tab_cap; i++) {
-                        struct efs_export *tab = ex->shard_tabs[i];
-                        if (!tab || !tab->meta_needs_rebuild)
-                            continue;
-                        (void)server_rebuild_export_from_pages_ino(
-                            s, tab, efs_meta_shard_table_ino(i));
-                    }
-                }
+                server_rebuild_owned_extras(s, ex);
                 did_work = 1;
             } else if (rc == EFS_ERR_PROTO) {
                 /* Gen raced with PUT_META, or a CoW rebuild hit the
@@ -2190,34 +2230,30 @@ static void *meta_catchup_thread(void *arg)
             }
         }
 
-        /* Shard tables needing a rebuild are NOT tied to the main table's
-         * state: after a clean restart the main table loads from the local
-         * EFSM (meta_needs_rebuild=0) while shard tables exist only as
-         * descriptors in the root's extra_roots. Rebuild any flagged shard
-         * table from its pages, or this node serves its own shards empty. */
+        /* Owned extra shards only. Peers keep descriptors and do not
+         * assemble those tables (that was the extras catchup storm). */
         for (uint32_t e = 0; e < ec; e++) {
             if (!s->running)
                 break;
             struct efs_export *ex = &s->exports[e];
-            if (!ex->shard_tabs)
+            if (!ex->root.shard_bits || ex->root.extra_shard_count == 0)
                 continue;
-            for (uint32_t i = 1; i < ex->shard_tab_cap; i++) {
-                pthread_mutex_lock(&s->lock);
-                struct efs_export *tab = ex->shard_tabs[i];
-                int tn = (tab && tab->meta_needs_rebuild &&
-                          tab->root.page_count > 0);
-                pthread_mutex_unlock(&s->lock);
-                if (!tn)
-                    continue;
-                int src = server_rebuild_export_from_pages_ino(
-                    s, tab, efs_meta_shard_table_ino(i));
-                if (src == EFS_OK)
-                    fprintf(stderr, "meta-catchup: rebuilt export=%s shard=%u\n",
-                            ex->name, i);
-                else
-                    rebuild_failed = 1;
+            uint32_t before = 0, after = 0;
+            pthread_mutex_lock(&s->lock);
+            for (uint32_t i = 1; ex->shard_tabs && i < ex->shard_tab_cap; i++)
+                if (ex->shard_tabs[i] && !ex->shard_tabs[i]->meta_needs_rebuild &&
+                    ex->shard_tabs[i]->inode_count > 0)
+                    before++;
+            pthread_mutex_unlock(&s->lock);
+            server_rebuild_owned_extras(s, ex);
+            pthread_mutex_lock(&s->lock);
+            for (uint32_t i = 1; ex->shard_tabs && i < ex->shard_tab_cap; i++)
+                if (ex->shard_tabs[i] && !ex->shard_tabs[i]->meta_needs_rebuild &&
+                    ex->shard_tabs[i]->inode_count > 0)
+                    after++;
+            pthread_mutex_unlock(&s->lock);
+            if (after > before)
                 did_work = 1;
-            }
         }
 
         int any_dirty = 0;

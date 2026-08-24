@@ -1605,11 +1605,17 @@ send_reply:
                     r.status = EFS_INODE_RPC_NOT_FOUND;
             } else if (type == EFS_MSG_INODE_GETATTR) {
                 struct efs_msg_inode_getattr *req = payload;
-                struct efs_export *tab = table_for_ino(ex, req->ino);
-                if (efs_export_get_inode(tab, req->ino, &r.inode) == 0)
-                    r.status = EFS_INODE_RPC_OK;
-                else
-                    r.status = EFS_INODE_RPC_NOT_FOUND;
+                if (!server_owns_req_locked(g_server, ex, type, payload)) {
+                    r.status = EFS_INODE_RPC_NOT_PRIMARY;
+                    r.primary_id = server_shard_owner_id_locked(g_server, ex,
+                                                                type, payload);
+                } else {
+                    struct efs_export *tab = table_for_ino(ex, req->ino);
+                    if (efs_export_get_inode(tab, req->ino, &r.inode) == 0)
+                        r.status = EFS_INODE_RPC_OK;
+                    else
+                        r.status = EFS_INODE_RPC_NOT_FOUND;
+                }
             } else if (type == EFS_MSG_INODE_CREATE) {
                 struct efs_msg_inode_create *req = payload;
                 efs_node_id_t live[EFS_MAX_NODES];
@@ -1751,7 +1757,13 @@ send_reply:
                                                                bits);
                             efs_node_id_t owner =
                                 efs_shard_owner_of(csh, sc, live, nlive);
-                            if (owner != 0 && owner != g_server->id) {
+                            if (owner == 0 || owner == g_server->id) {
+                                /* unlink_name already applied a loaded
+                                 * child table. Only fault-in if missing. */
+                                if (!efs_export_shard_tab(ex, csh))
+                                    (void)efs_export_nlink_dec(ex, victim.ino,
+                                                               &r.inode);
+                            } else {
                                 struct efs_msg_inode_unlink_shard ureq;
                                 struct efs_msg_inode_reply ur;
                                 char host[64];

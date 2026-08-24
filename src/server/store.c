@@ -683,11 +683,9 @@ void server_load_exports(struct efsd_server *s)
             s->export_count--;
             continue;
         }
-        /* Shard tables are not in the local save — only their descriptors
-         * (in the v8 root's extra_roots). Recreate each shard table from its
-         * descriptor and flag it for a pages rebuild by the catch-up thread;
-         * otherwise a cleanly-restarted node serves its OWN shards from an
-         * empty table and every non-shard-0 file reads back size 0. */
+        /* Extra-shard tables are not in the local save — only descriptors
+         * on the v8 root. The catch-up thread materializes shards this node
+         * owns; peers keep descriptors and do not assemble those tables. */
         efs_export_install_extra_roots(ex);
     }
     closedir(d);

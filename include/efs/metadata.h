@@ -269,7 +269,10 @@ uint32_t efs_export_create_target(struct efs_export *ex, efs_ino_t parent,
 /* Table that owns `ino` (or parent for name ops). bits==0 → `ex`. */
 struct efs_export *efs_export_table_for_ino(struct efs_export *ex, efs_ino_t ino);
 struct efs_export *efs_export_table(struct efs_export *ex, uint32_t shard);
-/* Instantiate shard_tabs from a v8 root's extra_roots (needs rebuild). */
+/* Existing shard table only — does not allocate. shard 0 / bits=0 → ex. */
+struct efs_export *efs_export_shard_tab(struct efs_export *ex, uint32_t shard);
+/* Kept for callers; does not instantiate extra-shard tables (descriptors
+ * stay on the v8 root; the owner catchup loads a shard on demand). */
 void efs_export_install_extra_roots(struct efs_export *ex);
 /* Move inode/chunk rows into dest shards; keep dentries on the parent shard. */
 int efs_export_rehash(struct efs_export *ex, uint32_t shard_bits);

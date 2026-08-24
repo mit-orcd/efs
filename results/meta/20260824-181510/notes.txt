@@ -1,0 +1,14 @@
+Page-as-DB extras: merge evicts stale tabs, no peer rebuild; owner-only
+materialize (server_rebuild_owned_extras). Deployed 34bb94c78ede-dirty,
+4 up, heal idle gen=372 before bench. Same grown table.
+
+w=1 vs baseline / after .efsm skip / this run:
+  create  97.6  (604 / 116)  still red
+  stat    222   (355 / 223)  still red
+  setattr 94305 — untrustworthy
+  rename  2226  (1791 / 3354)
+  unlink  29.8  (365 / 26)   still red
+
+Post-unlink Heal showed tables 5–6/8 dirty on all 4 nodes (no page
+rebuild progress). create_sharded still instantiates child tabs on the
+parent owner. Gate 1 still red.

@@ -77,10 +77,19 @@ primary** — routing to a replica would mutate a copy that does not flush.
    computes `live[shard % nlive]` when bits>0. Server accepts mutations
    on that shard's owner. Extra owners flush their pages and PUT_META
    extras (no shard-0 rewrite). Primary still flushes shard 0.
-5. **On-demand load + LRU (done)** — `efs_export_table` reloads an extra
-   from the v8 root; `efs_export_evict_cold_shards` drops cold extras;
-   `efs_client_load_shard` instantiates the client table. getattr skips
-   RPC when dcache has the ino (writer read-your-writes).
+5. **On-demand load (the real storage model, Aug 24)** — pages + the v8
+   extra-root descriptors **are** the database. A node materializes an
+   extra-shard table only if it **owns** that shard (catchup /
+   `server_rebuild_owned_extras`). Extras PUT_META updates descriptors
+   and **evicts** a stale non-dirty copy; it does not mark
+   `meta_needs_rebuild` on every peer (that was the create/unlink heal
+   storm). Lookup stitches a child inode only if that table is already
+   loaded. No WAL: CoW page write + root commit is the crash-safe log.
+   `efs_export_evict_cold_shards` remains a RAM cap on materialized extras.
+   Unlink/nlink walk only already-loaded tables — never
+   `efs_export_table` for every shard (that made the parent owner hold
+   the world). The child owner applies canonical nlink + chunks
+   (`nlink_dec` / `UNLINK_SHARD`).
 6. **Spread creates (done)** — files round-robin across shards with
    `create_stride = nlive` (same owner as the parent). Dentry stays on
    the parent shard; inode+chunks live on the child shard. Dirs stay
