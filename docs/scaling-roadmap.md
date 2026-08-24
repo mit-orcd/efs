@@ -11,7 +11,9 @@ see [phase3-sharding.md](phase3-sharding.md)) splits the table. Phase 4 is densi
 (per-shard, on-demand, evict). Write-throughput next steps (lock partition,
 N pollers, bits>0 data path) live in **Performance next** below, alongside
 two Aug 24 workstreams: the **metadata op storm** (many small files) and the
-**streaming-write barrier** (ewrite vs NFS).
+**streaming-write barrier** (ewrite vs NFS). **All data traffic goes via
+RDMA** (client path already does; server↔server chunk/fragment payloads
+must follow — see below).
 
 ## Why the current model caps at ~14M
 
@@ -270,6 +272,33 @@ ci=0..~800k on a 100 GiB file.
 at 2 jobs; baseline run 20260824-140120 = 98.5/152/198/203 MiB/s at
 2/4/8/16), stretch toward the fio ~5 GiB/s single-client ceiling at 8–16
 jobs; posix write-path tests + mc_stress green.
+
+---
+
+## Performance next — all data traffic via RDMA
+
+Client chunk PUT/GET is already RDMA (RC QP after `RDMA_SETUP`). Any
+**payload** that is a chunk or EC fragment must use the same path —
+including traffic that today rides the TCP peer pool:
+
+- File-data **verify-heal** (`src/server/verify.c`: GET two peer
+  fragments, XOR-reconstruct, write local)
+- **Drain / migrate** and **node-left orphan heal**
+  (`src/server/migrate.c`: GET/PUT fragments between servers)
+- **Meta-page** GET/PUT_CHUNK during CoW flush, catchup rebuild, and
+  meta-heal (`src/server/meta_server.c`)
+
+Control stays TCP: HELLO, heartbeat, `PUT_META` / `GET_META` roots,
+inode RPCs, status. Those are small messages, not data.
+
+**Work:** give the peer pool RDMA QPs (or reuse the existing server
+accept path) and send `GET_CHUNK` / `PUT_CHUNK` payloads over them.
+Same 2+1 placement and quorum rules; only the transport changes.
+
+**Milestone:** heal, migrate, and meta-page replicate no longer use
+`efs_send_msg` TCP for fragment bytes; a drain or verify-heal under
+load does not regress client RDMA write/read. HELLO/heartbeat/PUT_META
+may remain TCP.
 
 ---
 
