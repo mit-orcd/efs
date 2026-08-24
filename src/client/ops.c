@@ -268,10 +268,16 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
         /* Size growth = a peer published more data. mtime-only (chmod)
          * must not clobber the writer's unflushed dcache — that was the
          * POSIX same-fd-read / chmod / unlink-open regression. Shrink
-         * only when the primary is newer (peer truncate). */
+         * only when the primary is newer (peer truncate) AND this client
+         * has nothing unflushed: fsync/lookup getattr still sees the
+         * post-truncate size 0 until REPORT lands, and the owner's
+         * set_size-stamped mtime can look newer than the local write.
+         * Taking that shrink is trunc_open_other_fd fstat=0 under 9-way
+         * load (and then REPORT publishes the clobbered 0). */
         int newer = rpc->mtime > local.mtime ||
                     (rpc->mtime == local.mtime &&
                      rpc->mtime_nsec > local.mtime_nsec);
+        int local_dirty = efs_client_ino_is_dirty(rpc->ino);
         /* Equal-size with a newer mtime also takes the remote: a peer can
          * change chunk mappings without changing size (writing into a
          * pre-sized file's holes). Size-only growth misses that — the
@@ -279,7 +285,8 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
          * rwfile). Our own reports echo back with the same mtime, so this
          * does not re-pull on our own writes. */
         if (rpc->size > local.size ||
-            (newer && rpc->size <= local.size)) {
+            (newer && rpc->size == local.size) ||
+            (newer && rpc->size < local.size && !local_dirty)) {
             local.size = rpc->size;
             local.pack_ino = rpc->pack_ino;
             local.pack_off = rpc->pack_off;

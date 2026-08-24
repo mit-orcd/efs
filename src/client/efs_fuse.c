@@ -1330,6 +1330,7 @@ static void efs_fuse_log_err(const char *where, int efs_rc, efs_ino_t ino,
                              uint64_t offset, size_t size, const char *path);
 static int efs_wb_sync(void);
 static int efs_file_data_sync_ino(const char *path);
+static int efs_file_data_sync_fh(const char *path, struct fuse_file_info *fi);
 static int coal_read_sync(efs_ino_t ino);
 
 static int efs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
@@ -2244,8 +2245,17 @@ static int efs_fuse_fsync(const char *path, int isdatasync,
                           struct fuse_file_info *fi)
 {
     (void)isdatasync;
-    coal_flush_path(path);
-    int rc = efs_file_data_sync(path);
+    /* Flush by open ino, not a path lookup: lookup getattr+adopt can
+     * shrink the local size back to the owner's still-unreported 0
+     * (trunc_open_other_fd under parallel clients). */
+    if (fi && fi->fh) {
+        if (g_coalesce_enabled)
+            (void)coal_flush_ino((efs_ino_t)fi->fh);
+    } else {
+        coal_flush_path(path);
+    }
+    int rc = (fi && fi->fh) ? efs_file_data_sync_fh(path, fi)
+                            : efs_file_data_sync(path);
     /* Directory rollups walk the inode table; they are not required for
      * file-data durability. Leave them for unmount / .stats. */
     if (rc == EFS_ERR_QUOTA) {

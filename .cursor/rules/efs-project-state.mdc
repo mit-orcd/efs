@@ -20,7 +20,13 @@ corners, rename-over-symlink, more peer visibility). The Aug 24 gaps are fixed: 
 (keep_last + HOLD), same-fd empty reads (getattr prefers local size after
 adopt — RPC size 0 was clobbering kernel i_size), `peer_symlink_visible`
 (owner getattr for non-dir leaf + sync REPORT after symlink write).
-BUILD_ID `016cf7629bd7-dirty`. Cluster OK 4/0. **Do not push ewrite/ecopy.**
+**9-way POSIX (Aug 24 night):** sequential clean ≠ parallel. `trunc_open_other_fd`
+fstat 0: adopt shrank a dirty local size to the owner's still-0 getattr
+(fsync path-lookup). Fix: skip shrink when ino dirty; fsync by `fi->fh`.
+`concurrent_appends*` lost lines: `append_rsv[ino%64]` stole another ino's
+live reservation. Fix: open-address, never evict a live rsv. 008 hang =
+`rmtree` D-state after 9 suites finish together — use `--keep`; not a
+suite-correctness bug. **Do not push ewrite/ecopy.**
 **Phase 3 storage model (Aug 24).** Pages + v8 descriptors are the DB.
 Commits: `38dd6f0` (owner-only extras + unlink no-instantiate),
 `9eff867` (reuse unchanged CoW pages), `a3485eb` (skip chunk snapshot

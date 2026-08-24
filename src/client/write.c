@@ -130,6 +130,30 @@ static void dirty_sets_clear(void)
     g_client.dirty_chunk_count = 0;
 }
 
+int efs_client_ino_is_dirty(efs_ino_t ino)
+{
+    if (!ino || !g_client.dirty_ino_keys || !g_client.dirty_ino_mask)
+        return 0;
+    pthread_mutex_lock(&g_client.dirty_mu);
+    uint64_t mask = g_client.dirty_ino_mask;
+    uint64_t *keys = g_client.dirty_ino_keys;
+    int hit = 0;
+    if (keys && mask) {
+        uint64_t i = (uint64_t)ino & mask;
+        for (uint64_t n = 0; n <= mask; n++) {
+            if (keys[i] == 0)
+                break;
+            if (keys[i] == (uint64_t)ino) {
+                hit = 1;
+                break;
+            }
+            i = (i + 1) & mask;
+        }
+    }
+    pthread_mutex_unlock(&g_client.dirty_mu);
+    return hit;
+}
+
 void efs_client_mark_ino_dirty(efs_ino_t ino)
 {
     if (!g_client.meta_batch || ino == 0)

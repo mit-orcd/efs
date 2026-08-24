@@ -145,6 +145,7 @@ struct efs_client {
 /* Mark inode/chunk dirty for the next batched metadata delta flush.
  * No-ops when meta_batch is disabled. Takes dirty_mu internally. */
 void efs_client_mark_ino_dirty(efs_ino_t ino);
+int efs_client_ino_is_dirty(efs_ino_t ino);
 void efs_client_mark_chunk_dirty(efs_ino_t ino, uint32_t chunk_index);
 int efs_client_ensure_meta_room(uint64_t extra_inodes, uint64_t extra_chunks);
 int efs_client_take_write_lease(void);

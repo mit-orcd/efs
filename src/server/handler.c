@@ -2005,16 +2005,38 @@ send_reply:
                     clock_gettime(CLOCK_REALTIME, &ts);
                     uint64_t now_ms = (uint64_t)ts.tv_sec * 1000ull +
                                       (uint64_t)ts.tv_nsec / 1000000ull;
-                    uint32_t si = (uint32_t)(req->ino % EFS_APPEND_RSV_SLOTS);
+                    /* Open-address: a single (ino % 64) slot was overwritten
+                     * by any other ino that hashed here. Under 9-way POSIX
+                     * that drops the barrier and two appends share an
+                     * offset (concurrent_appends lost lines). Probe for
+                     * this ino first; never steal another ino's live rsv. */
+                    uint32_t start = (uint32_t)(req->ino % EFS_APPEND_RSV_SLOTS);
+                    int32_t found = -1, empty = -1;
                     uint64_t rsv_end = 0, rsv_ts = 0;
-                    if (tab->append_rsv[si].ino == req->ino) {
-                        rsv_end = tab->append_rsv[si].end;
-                        rsv_ts = tab->append_rsv[si].ts_ms;
+                    for (uint32_t p = 0; p < EFS_APPEND_RSV_SLOTS; p++) {
+                        uint32_t si = (start + p) % EFS_APPEND_RSV_SLOTS;
+                        efs_ino_t slo = tab->append_rsv[si].ino;
+                        uint64_t ts = tab->append_rsv[si].ts_ms;
+                        int live = slo && tab->append_rsv[si].end > 0 &&
+                                   now_ms - ts < 30000ull;
+                        if (slo == req->ino) {
+                            found = (int32_t)si;
+                            rsv_end = tab->append_rsv[si].end;
+                            rsv_ts = ts;
+                            break;
+                        }
+                        if (!live && empty < 0)
+                            empty = (int32_t)si;
                     }
-                    if (rsv_end > cur.size && now_ms - rsv_ts < 30000ull) {
+                    if (found >= 0 && rsv_end > cur.size &&
+                        now_ms - rsv_ts < 30000ull) {
+                        r.status = EFS_INODE_RPC_BUSY;
+                        r.inode = cur;
+                    } else if (found < 0 && empty < 0) {
                         r.status = EFS_INODE_RPC_BUSY;
                         r.inode = cur;
                     } else {
+                        uint32_t si = (uint32_t)(found >= 0 ? found : empty);
                         uint64_t off = rsv_end > cur.size ? rsv_end : cur.size;
                         tab->append_rsv[si].ino = req->ino;
                         tab->append_rsv[si].end = off + req->len;
