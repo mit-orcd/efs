@@ -544,6 +544,13 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
     if (crc != EFS_OK)
         return crc;
 
+    fprintf(stderr,
+            "meta-catchup: rebuilding export=%s table_ino=%llu gen=%llu "
+            "pages=%u inodes=%llu\n",
+            ex->name, (unsigned long long)table_ino,
+            (unsigned long long)snap.generation, snap.page_count,
+            (unsigned long long)ex->inode_count);
+
     const struct efs_export_root *root = &snap;
     const uint64_t start_gen = root->generation;
     const uint32_t page_count = root->page_count;
@@ -1330,6 +1337,11 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
          * in-memory table is stale and the catchup rebuild will overwrite it,
          * so serializing now would flush an empty/torn table and lose the
          * client's data. Refuse; the caller retries after the rebuild. */
+        fprintf(stderr,
+                "meta-flush: export=%s bail needs_rebuild gen=%llu "
+                "pages=%u inodes=%llu\n",
+                ex->name, (unsigned long long)ex->root.generation,
+                ex->root.page_count, (unsigned long long)ex->inode_count);
         pthread_mutex_unlock(&s->lock);
         return -1;
     }
@@ -2265,11 +2277,14 @@ static void *meta_catchup_thread(void *arg)
             ec = EFS_MAX_EXPORTS;
         for (uint32_t e = 0; e < ec; e++) {
             struct efs_export *ex = &s->exports[e];
-            /* Only rebuild when explicitly dirty. Do NOT key off inode_count<=1:
-             * an empty export stays at 1 inode forever and used to spin-rebuild
-             * (hundreds of times) until a raced deserialize SIGSEGV'd. */
+            /* Rebuild when fenced, or when RAM is a hollow 1-inode table
+             * but the root advertises a real page blob (missed rebuild /
+             * stale .efsm). Do NOT key off inode_count<=1 alone: an empty
+             * export stays at 1 inode and used to spin-rebuild. */
             need[e] = (ex->meta_fragmented && ex->root.page_count > 0 &&
-                       ex->meta_needs_rebuild);
+                       (ex->meta_needs_rebuild ||
+                        (ex->inode_count <= 1 &&
+                         ex->root.blob_len > 65536u)));
         }
         pthread_mutex_unlock(&s->lock);
 
@@ -2481,20 +2496,16 @@ static void *meta_flush_thread(void *arg)
                 continue;
             if (s->rpc_dirty_ops[e] > 0) {
                 if (s->exports[e].meta_needs_rebuild && can_flush_primary) {
-                    /* Fenced by a concurrent client-driven PUT_META: the
-                     * in-memory table is stale and the catchup rebuild
-                     * will overwrite it, so these RPC mutations are lost
-                     * — don't flush a stale table. (Transition-only race;
-                     * goes away in 2b when clients stop blob-flushing.)
-                     * Non-primary: the dirty ops live in OWNED shard
-                     * tables, which a main-table fence does not touch —
-                     * they flush fine, so don't drop them. */
+                    /* Keep the dirty mark: dropping it made creates look
+                     * successful while flush never ran (RAM-only, gen
+                     * stuck). Retry after catchup clears needs_rebuild. */
                     fprintf(stderr,
-                            "meta-flush: export=%s dirty under rebuild; "
-                            "dropping %llu RPC op(s) (client-flush race)\n",
+                            "meta-flush: export=%s hold %llu op(s) until "
+                            "rebuild gen=%llu\n",
                             s->exports[e].name,
-                            (unsigned long long)s->rpc_dirty_ops[e]);
-                    s->rpc_dirty_ops[e] = 0;
+                            (unsigned long long)s->rpc_dirty_ops[e],
+                            (unsigned long long)
+                                s->exports[e].root.generation);
                     continue;
                 }
                 dirty[ndirty++] = e;

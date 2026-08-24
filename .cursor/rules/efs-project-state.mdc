@@ -12,18 +12,22 @@ Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 **Phase 3 storage model (Aug 24).** Pages + v8 descriptors are the DB.
 Commits: `38dd6f0` (owner-only extras + unlink no-instantiate),
 `9eff867` (reuse unchanged CoW pages), `a3485eb` (skip chunk snapshot
-when chunk_epoch unchanged). Trustworthy meta (grown table):
-`20260824-143428` create **119** / unlink **30** (baseline 604 / 365);
-Heal idle. Page-reuse-only deploy hung create (~10 min, 71 MB serialize
-under the lock). After `a3485eb` restart, Heal showed gen=0 and
-**no meta-flush lines**; a w=1 bench printed 70k ops/s — treat as
-untrustworthy (mutations likely RAM-only while flush bails). Next:
-get post-restart page rebuild + flush running again, then re-bench.
+when chunk_epoch unchanged). **Post-restart rebuild + flush FIXED**
+(this commit): unsharded create/unlink/link now set `shard_dirty`
+(flush was no-oping after `rpc_dirty` only); never adopt leftover
+`.efsm` (that cleared `needs_rebuild` on a 1-inode table). Catchup
+rebuilds a hollow table when `blob_len > 64K`. Flush holds dirty
+ops until rebuild instead of dropping them. Trustworthy meta w=1
+`20260824-150410` on the grown table: create **69325** / unlink
+**60047** (was 119 / 30); flush `reused 546/547`, Heal gen 1→2.
+Persist: `--keep` 32 files, gen→3, kill+restart all 4, rebuild,
+cold FUSE mount saw all 32. The earlier 70k print was RAM-only;
+this one is RPC apply + async CoW reuse. **Live `efs-test` is
+bits=0** (on-disk `shard_bits=0`, 547 pages / 71 MB) — not bits=3.
 **Stopped — do not push posix/ewrite/ecopy.** FUSE timeouts 0. No caches.
 Cluster live on **EFSR v8** + Phase 3 data-path sharding Stages 0–3
-(committed). Fresh mkfs `efs-test` is **bits=3** (8 shards) on 4 servers
-+ 9 clients mounted at `/tmp/efs/mnt`. CoW = **debe6dd**, catchup-vs-GC
-= **76753ef**, 2b reads = **94f96fd**.
+(committed). CoW = **debe6dd**, catchup-vs-GC = **76753ef**, 2b reads
+= **94f96fd**.
 **Data-path sharding LANDED (Aug 23 night):** both
 blockers from the morning finding are fixed together (fixing only one
 = silent data loss). (1) REPORT_CHUNKS is per-shard (`write.c`

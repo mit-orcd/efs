@@ -1897,6 +1897,10 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
 
     rollup_add_under(ex, parent, ino);
     parent_touch(ex, parent);
+    /* Unsharded create (bits=0) used to leave shard_dirty clear: the flush
+     * thread saw rpc_dirty, called flush, then skipped shard 0 — RAM-only
+     * mutations and the 70k-ops/s "bench" that never hit disk. */
+    ex->shard_dirty = 1;
     return ino->ino;
 }
 
@@ -2027,6 +2031,7 @@ int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *
     child_idx_del(ex, parent, pos);
     parent_touch(ex, parent);
     remove_inode_slot(ex, pos, nlink > 0);
+    ex->shard_dirty = 1;
 
     if (nlink == 0) {
         remove_chunks_for_ino(ex, ino);
@@ -2262,6 +2267,7 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
     child_idx_add(ex, new_parent, pos);
     rollup_add_under(ex, new_parent, dst);
     parent_touch(ex, new_parent);
+    ex->shard_dirty = 1;
     return EFS_OK;
 }
 

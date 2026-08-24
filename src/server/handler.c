@@ -719,8 +719,18 @@ send_reply:
                      * stalls every PUT while peers GET_META after a flush. */
                     struct efs_export snap;
                     memset(&snap, 0, sizeof(snap));
-                    int do_tab = (ex->inode_count > 0 && !ex->meta_needs_rebuild) ||
-                                 !ex->meta_fragmented;
+                    /* A 1-inode table plus a 71 MB page root is a hollow
+                     * load (.efsm adopt / missed rebuild). Serve root-only
+                     * so the client assembles pages instead of adopting
+                     * the empty RAM table. */
+                    int hollow = ex->meta_fragmented &&
+                                 ex->root.page_count > 0 &&
+                                 (ex->meta_needs_rebuild ||
+                                  ex->inode_count <= 1);
+                    int do_tab = !hollow &&
+                                 ((ex->inode_count > 0 &&
+                                   !ex->meta_needs_rebuild) ||
+                                  !ex->meta_fragmented);
                     int do_root = ex->meta_fragmented && ex->root.page_count > 0;
                     char *rbuf = NULL;
                     size_t rlen = 0;
@@ -1690,6 +1700,7 @@ send_reply:
                     if (ino) {
                         efs_export_get_inode(ex, ino, &r.inode);
                         r.status = EFS_INODE_RPC_OK;
+                        ex->shard_dirty = 1;
                         server_meta_mark_rpc_dirty_locked(g_server, eidx);
                         efs_export_evict_cold_shards(ex, EFS_SHARD_LRU_KEEP);
                     } else {

@@ -634,47 +634,21 @@ void server_load_exports(struct efsd_server *s)
             export_meta_path_at(s, ri, ex, path, sizeof(path));
             if (efs_export_load(ex, path) == 0) {
                 loaded = 1;
-                if (ex->meta_fragmented && ex->inode_count <= 1) {
-                    char epath[EFS_MAX_PATH];
-                    export_efsm_path_at(s, ri, ex, epath, sizeof(epath));
-                    FILE *ef = fopen(epath, "rb");
-                    if (ef) {
-                        if (fseek(ef, 0, SEEK_END) == 0) {
-                            long elen = ftell(ef);
-                            if (elen > 0 && fseek(ef, 0, SEEK_SET) == 0) {
-                                char *ebuf = malloc((size_t)elen);
-                                if (ebuf &&
-                                    fread(ebuf, 1, (size_t)elen, ef) ==
-                                        (size_t)elen) {
-                                    struct efs_export_root keep;
-                                    memset(&keep, 0, sizeof(keep));
-                                    if (efs_export_root_copy(&keep, &ex->root) ==
-                                        0) {
-                                        if (efs_export_deserialize(
-                                                ex, ebuf, (size_t)elen) == 0) {
-                                            efs_export_root_move(&ex->root,
-                                                                 &keep);
-                                            ex->meta_fragmented = 1;
-                                            ex->meta_needs_rebuild = 0;
-                                            fprintf(stderr,
-                                                    "loaded live tables for %s "
-                                                    "inodes=%llu\n",
-                                                    ex->name,
-                                                    (unsigned long long)
-                                                        ex->inode_count);
-                                        } else {
-                                            efs_export_root_move(&ex->root,
-                                                                 &keep);
-                                            ex->meta_fragmented = 1;
-                                        }
-                                    }
-                                }
-                                free(ebuf);
-                            }
-                        }
-                        fclose(ef);
-                    }
-                }
+                /* Pages are the database. A leftover metadata.efsm is a
+                 * generation-mismatched RAM dump: adopting it cleared
+                 * needs_rebuild on a 1-inode table and catchup never
+                 * rebuilt the 71 MB page root. */
+                if (ex->meta_fragmented && ex->root.page_count > 0 &&
+                    ex->inode_count <= 1)
+                    ex->meta_needs_rebuild = 1;
+                fprintf(stderr,
+                        "loaded export=%s gen=%llu pages=%u blob=%u "
+                        "inodes=%llu needs_rebuild=%d bits=%u\n",
+                        ex->name,
+                        (unsigned long long)ex->root.generation,
+                        ex->root.page_count, ex->root.blob_len,
+                        (unsigned long long)ex->inode_count,
+                        ex->meta_needs_rebuild, ex->root.shard_bits);
                 break;
             }
         }
