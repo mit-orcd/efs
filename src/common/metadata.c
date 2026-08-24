@@ -1227,6 +1227,7 @@ static void sync_hardlink_attrs(struct efs_export *ex, efs_ino_t ino,
 /* Swap-remove chunks[j]; caller already bumped layout_epoch. */
 static void remove_chunk_at(struct efs_export *ex, uint64_t j)
 {
+    ex->chunk_epoch++;
     uint32_t cidx = ex->chunks[j].chunk_index;
     efs_ino_t ino = ex->chunks[j].ino;
     chunk_idx_del(ex, ino, cidx);
@@ -2548,6 +2549,7 @@ int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
                sizeof(efs_node_id_t) * EFS_NUM_FRAGMENTS);
         memcpy(ex->chunks[pos].checksums, checksums,
                EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+        ex->chunk_epoch++;
         return EFS_OK;
     }
 
@@ -2570,6 +2572,7 @@ int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
     memcpy(ce->fragment_nodes, fragment_nodes, sizeof(efs_node_id_t) * EFS_NUM_FRAGMENTS);
     memcpy(ce->checksums, checksums, EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
     chunk_idx_put(ex, ino, chunk_index, pos);
+    ex->chunk_epoch++;
     return EFS_OK;
 }
 
@@ -2719,6 +2722,7 @@ int efs_export_merge(struct efs_export *ex, const struct efs_export *inc)
             ex->chunks[pos] = *cc;
             chunk_idx_put(ex, cc->ino, cc->chunk_index, pos);
         }
+        ex->chunk_epoch++;
     }
 
     if (inc->next_ino > ex->next_ino)
@@ -3031,8 +3035,8 @@ int efs_export_reserve_chunks(struct efs_export *ex, uint64_t extra)
     return EFS_OK;
 }
 
-int efs_export_table_snapshot(const struct efs_export *ex,
-                              struct efs_export *snap)
+int efs_export_table_snapshot_ex(const struct efs_export *ex,
+                                 struct efs_export *snap, int omit_chunks)
 {
     if (!ex || !snap)
         return EFS_ERR_INVAL;
@@ -3053,7 +3057,7 @@ int efs_export_table_snapshot(const struct efs_export *ex,
         memcpy(snap->inodes, ex->inodes, n);
         snap->inode_capacity = ex->inode_count;
     }
-    if (ex->chunk_count) {
+    if (ex->chunk_count && !omit_chunks) {
         size_t n = (size_t)ex->chunk_count * sizeof(*snap->chunks);
         snap->chunks = malloc(n);
         if (!snap->chunks) {
@@ -3065,6 +3069,12 @@ int efs_export_table_snapshot(const struct efs_export *ex,
         snap->chunk_capacity = ex->chunk_count;
     }
     return EFS_OK;
+}
+
+int efs_export_table_snapshot(const struct efs_export *ex,
+                              struct efs_export *snap)
+{
+    return efs_export_table_snapshot_ex(ex, snap, 0);
 }
 
 void efs_export_table_snapshot_free(struct efs_export *snap)
@@ -3196,12 +3206,14 @@ int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
     }
     uint32_t ino_len = (uint32_t)(p - b);
 
-    for (uint64_t i = 0; i < ex->chunk_count; i++) {
-        struct efs_chunk_entry *ce = &ex->chunks[i];
-        W_64(ce->ino);
-        W_32(ce->chunk_index);
-        W_RAW(ce->fragment_nodes, sizeof(efs_node_id_t) * EFS_NUM_FRAGMENTS);
-        W_RAW(ce->checksums, EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+    if (ex->chunks) {
+        for (uint64_t i = 0; i < ex->chunk_count; i++) {
+            struct efs_chunk_entry *ce = &ex->chunks[i];
+            W_64(ce->ino);
+            W_32(ce->chunk_index);
+            W_RAW(ce->fragment_nodes, sizeof(efs_node_id_t) * EFS_NUM_FRAGMENTS);
+            W_RAW(ce->checksums, EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+        }
     }
 #undef W_RAW
 #undef W_32

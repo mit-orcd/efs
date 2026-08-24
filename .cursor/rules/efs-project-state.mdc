@@ -15,9 +15,10 @@ WAL. Unlink/nlink walk only loaded tables. Meta after unlink-fix
 `20260824-143428`: create **119** / stat **198** / unlink **30**
 (baseline 604 / 355 / 365) — Heal idle (storm gone); leftover is the
 primary rewriting every CoW page of the 71 MB shard-0 table. Next
-lever (this cut): reuse unchanged CoW pages + flush shard 0 only when
-dirty. **Stopped — do not push posix/ewrite/ecopy.** FUSE timeouts
-still 0. No caches.
+lever (this cut): reuse unchanged CoW pages + skip O(chunks) snapshot
+when the chunk table is unchanged. Page-reuse deploy hung create
+(~10 min, efsd 36% serializing 71 MB under the lock). **Stopped —
+do not push posix/ewrite/ecopy.** FUSE timeouts still 0. No caches.
 Cluster live on **EFSR v8** + Phase 3 data-path sharding Stages 0–3
 (committed). Fresh mkfs `efs-test` is **bits=3** (8 shards) on 4 servers
 + 9 clients mounted at `/tmp/efs/mnt`. CoW = **debe6dd**, catchup-vs-GC

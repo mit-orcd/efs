@@ -1334,7 +1334,11 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
         return -1;
     }
     efs_export_ensure_rollups(ex);
-    int snap_rc = efs_export_table_snapshot(ex, &snap);
+    int omit_chunks = (ex->chunk_epoch == ex->flushed_chunk_epoch &&
+                       ex->root.chunk_blob_len > 0);
+    uint64_t snap_chunk_epoch = ex->chunk_epoch;
+    uint32_t keep_ch_len = ex->root.chunk_blob_len;
+    int snap_rc = efs_export_table_snapshot_ex(ex, &snap, omit_chunks);
     new_gen = ex->root.generation + 1;
     if (new_gen == 0)
         new_gen = 1;
@@ -1353,6 +1357,10 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
         return -1;
     }
     efs_export_table_snapshot_free(&snap);
+    if (omit_chunks) {
+        chunk_blob_len = keep_ch_len;
+        blob_len = (size_t)ino_blob_len;
+    }
 
     if (blob_len > (size_t)EFS_META_MAX_PAGES * EFS_META_PAGE_SIZE) {
         free(blob);
@@ -1655,6 +1663,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
                 new_cis_count = 0;
         }
         efs_export_root_move(&ex->root, &root);
+        ex->flushed_chunk_epoch = snap_chunk_epoch;
         pthread_mutex_unlock(&s->lock);
         if (old_cis && new_cis)
             server_gc_meta_cow_pages(s, ex, table_ino, old_cis, old_cis_count,
@@ -1788,6 +1797,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
             new_cis_count = 0;
     }
     efs_export_root_move(&ex->root, &root);
+    ex->flushed_chunk_epoch = snap_chunk_epoch;
     s->export_meta_dirty = 1;
     server_save_export(s, ex);
     s->export_meta_dirty = 0;

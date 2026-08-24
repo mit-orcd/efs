@@ -198,6 +198,10 @@ struct efs_export {
     uint32_t shard_id;
     uint64_t shard_tick;
     int shard_dirty;
+    /* Bumped when the chunk table changes. Flush skips the O(chunks)
+     * snapshot/serialize when this matches flushed_chunk_epoch. */
+    uint64_t chunk_epoch;
+    uint64_t flushed_chunk_epoch;
     /* Cross-client O_APPEND barrier (in-memory only, never serialized): the
      * last reserved-but-maybe-unflushed append end per ino (tiny hash). The
      * INODE_APPEND handler refuses a reserve (BUSY) while a prior reserved
@@ -420,6 +424,9 @@ int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
  * indexes. Caller must efs_export_table_snapshot_free(snap). */
 int efs_export_table_snapshot(const struct efs_export *ex,
                               struct efs_export *snap);
+/* omit_chunks: keep chunk_count for the header but do not copy rows. */
+int efs_export_table_snapshot_ex(const struct efs_export *ex,
+                                 struct efs_export *snap, int omit_chunks);
 void efs_export_table_snapshot_free(struct efs_export *snap);
 /* Steal inode/chunk/index/child tables from src into dst (dst's old tables
  * are freed). Does not touch root, gm_blob, or shard_tabs. src is emptied. */
