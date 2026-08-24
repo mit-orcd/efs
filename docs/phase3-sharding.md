@@ -89,7 +89,9 @@ primary** — routing to a replica would mutate a copy that does not flush.
    Unlink/nlink walk only already-loaded tables — never
    `efs_export_table` for every shard (that made the parent owner hold
    the world). The child owner applies canonical nlink + chunks
-   (`nlink_dec` / `UNLINK_SHARD`).
+   (`nlink_dec` / `UNLINK_SHARD`). Server CoW flush reuses committed
+   pages whose fragment checksums match and skips a shard-0 rewrite
+   when only extras are dirty.
 6. **Spread creates (done)** — files round-robin across shards with
    `create_stride = nlive` (same owner as the parent). Dentry stays on
    the parent shard; inode+chunks live on the child shard. Dirs stay

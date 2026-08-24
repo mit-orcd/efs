@@ -9,16 +9,15 @@ efs: distributed FS, 2+1 XOR EC, FUSE client, RDMA (RC QP), 128 KiB chunks.
 Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 
 ## Where we are
-**Page-as-DB + unlink-no-instantiate (Aug 24, uncommitted).** Extras
-PUT_META updates descriptors and evicts a stale copy; only the shard
-owner materializes the table. No WAL. Unlink/nlink walk only already-
-loaded tables (was `efs_export_table` × every shard → parent held the
-world). Child owner applies canonical nlink + chunks. Meta gate
-`20260824-181510` (pre-unlink-fix) still red: create **98** / stat
-**222** / unlink **30** (baseline 604 / 355 / 365). Next: deploy this
-cut and re-bench; then stop `create_sharded` from writing a child row
-on an unowned shard. **Stopped — do not push posix/ewrite/ecopy.**
-FUSE timeouts still 0. No caches.
+**Phase 3 storage model (Aug 24, `38dd6f0` + CoW page reuse).** Pages
++ v8 descriptors are the DB; only the owner materializes a shard. No
+WAL. Unlink/nlink walk only loaded tables. Meta after unlink-fix
+`20260824-143428`: create **119** / stat **198** / unlink **30**
+(baseline 604 / 355 / 365) — Heal idle (storm gone); leftover is the
+primary rewriting every CoW page of the 71 MB shard-0 table. Next
+lever (this cut): reuse unchanged CoW pages + flush shard 0 only when
+dirty. **Stopped — do not push posix/ewrite/ecopy.** FUSE timeouts
+still 0. No caches.
 Cluster live on **EFSR v8** + Phase 3 data-path sharding Stages 0–3
 (committed). Fresh mkfs `efs-test` is **bits=3** (8 shards) on 4 servers
 + 9 clients mounted at `/tmp/efs/mnt`. CoW = **debe6dd**, catchup-vs-GC

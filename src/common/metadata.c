@@ -1936,7 +1936,7 @@ static void for_each_loaded_tab(struct efs_export *ex, uint32_t skip_shard,
 static void tab_unlink_ino(struct efs_export *tab, efs_ino_t ino, uint32_t nlink)
 {
     (void)nlink;
-    if (efs_export_unlink(tab, ino) == EFS_OK && tab->shard_id)
+    if (efs_export_unlink(tab, ino) == EFS_OK)
         tab->shard_dirty = 1;
 }
 
@@ -1949,7 +1949,7 @@ static void tab_set_nlink(struct efs_export *tab, efs_ino_t ino, uint32_t nlink)
             hit = 1;
         }
     }
-    if (hit && tab->shard_id)
+    if (hit)
         tab->shard_dirty = 1;
 }
 
@@ -1974,7 +1974,7 @@ int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *
         if (efs_mode_is_dir(removed.mode)) {
             /* rmdir: the dir row lives on the parent shard. Do not
              * instantiate other shards. */
-            if (efs_export_unlink(ptab, ino) == EFS_OK && ptab != ex)
+            if (efs_export_unlink(ptab, ino) == EFS_OK)
                 ptab->shard_dirty = 1;
             parent_touch(ptab, parent);
             return EFS_OK;
@@ -1988,8 +1988,7 @@ int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *
         child_idx_del(ptab, parent, pos);
         parent_touch(ptab, parent);
         remove_inode_slot(ptab, pos, nlink > 0);
-        if (ptab != ex)
-            ptab->shard_dirty = 1;
+        ptab->shard_dirty = 1;
 
         /* Update copies we already hold (including a loaded child table).
          * Never efs_export_table(all). If the canonical table is not
@@ -2091,8 +2090,7 @@ int efs_export_nlink_inc(struct efs_export *ex, efs_ino_t src_ino,
         return EFS_ERR_INVAL;
     uint32_t nlink = csrc->nlink + 1;
     shard_set_nlink(ex, src_ino, nlink);
-    if (ctab != ex)
-        ctab->shard_dirty = 1;
+    ctab->shard_dirty = 1;
     if (out) {
         csrc = inode_ptr(ctab, src_ino);
         if (csrc)
@@ -2121,8 +2119,7 @@ int efs_export_nlink_dec(struct efs_export *ex, efs_ino_t src_ino,
         return EFS_OK;
     }
     shard_set_nlink(ex, src_ino, nlink);
-    if (ctab != ex)
-        ctab->shard_dirty = 1;
+    ctab->shard_dirty = 1;
     if (out) {
         csrc = inode_ptr(ctab, src_ino);
         if (csrc)
@@ -2181,8 +2178,7 @@ int efs_export_link_dentry(struct efs_export *ex, const struct efs_inode *src,
     child_idx_add(ptab, new_parent, pos);
     rollup_add_under(ptab, new_parent, dst);
     parent_touch(ptab, new_parent);
-    if (ptab != ex)
-        ptab->shard_dirty = 1;
+    ptab->shard_dirty = 1;
     return EFS_OK;
 }
 

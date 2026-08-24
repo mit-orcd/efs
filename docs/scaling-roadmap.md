@@ -110,7 +110,8 @@ working set. **This is the phase that actually raises the cap.**
    updates descriptors and evicts a stale copy; only the shard owner
    materializes the table. Not a journal — CoW pages + root commit.
    `evict_cold_shards` is a RAM cap, not the load path. Unlink/nlink
-   no longer instantiate every extra table on the parent.
+   no longer instantiate every extra table on the parent. CoW flush
+   reuses unchanged pages; shard 0 flushes only when dirty.
 5. Spread creates (parent dentry + child inode, stride=nlive) — **done**.
 6. Online re-shard (`efs_export_rehash` via `efs-mgmt upgrade`) — **done**.
 

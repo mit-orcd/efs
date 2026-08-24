@@ -1276,10 +1276,19 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
         }
     }
     if (primary) {
-        int rc0 = server_flush_fragmented_meta_locked(s, ex, EFS_META_TABLE_INO,
-                                                      1, 0, sc);
-        if (rc0 != 0)
-            rc = rc0;
+        /* Shard 0 used to flush on every rpc_dirty window even when only
+         * extras changed — a 71 MB serialize + PUT of every CoW page.
+         * Only rewrite it when the main table itself is dirty. */
+        if (ex->shard_dirty) {
+            int rc0 = server_flush_fragmented_meta_locked(
+                s, ex, EFS_META_TABLE_INO, 1, 0, sc);
+            if (rc0 != 0)
+                rc = rc0;
+            else
+                ex->shard_dirty = 0;
+        } else if (flushed_extra && rc == 0) {
+            rc = server_commit_cluster_extras(s, ex);
+        }
     } else if (flushed_extra && rc == 0) {
         rc = server_commit_cluster_extras(s, ex);
     }
@@ -1399,12 +1408,66 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
         frag_buf + 2 * EFS_META_FRAGMENT_SIZE
     };
 
+    /* Reuse committed CoW pages whose fragment checksums match. Create and
+     * unlink only touch a couple of inode pages; rewriting every chunk page
+     * of a 71 MB table was the remaining create/unlink tax. */
+    uint8_t *skip_sums = NULL;
+    uint32_t *skip_cis = NULL;
+    uint32_t skip_pc = 0, skip_ino_pc = 0, skip_ch_len = 0;
+    pthread_mutex_lock(&s->lock);
+    if (cow_ok && ex->root.page_checksums && ex->root.page_cis &&
+        ex->root.page_count > 0) {
+        skip_pc = ex->root.page_count;
+        skip_ino_pc = ex->root.ino_page_count;
+        skip_ch_len = ex->root.chunk_blob_len;
+        size_t sn = (size_t)skip_pc * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE;
+        skip_sums = malloc(sn);
+        skip_cis = malloc((size_t)skip_pc * sizeof(uint32_t));
+        if (skip_sums && skip_cis) {
+            memcpy(skip_sums, ex->root.page_checksums, sn);
+            memcpy(skip_cis, ex->root.page_cis,
+                   (size_t)skip_pc * sizeof(uint32_t));
+        } else {
+            free(skip_sums);
+            free(skip_cis);
+            skip_sums = NULL;
+            skip_cis = NULL;
+            skip_pc = 0;
+        }
+    }
+    pthread_mutex_unlock(&s->lock);
+    uint32_t pages_reused = 0;
+
     for (uint32_t packed = 0; packed < root.page_count; packed++) {
         int region = (packed < root.ino_page_count) ? EFS_META_REGION_INO
                                                     : EFS_META_REGION_CHUNK;
         uint32_t pi = (region == EFS_META_REGION_INO)
                           ? packed
                           : packed - root.ino_page_count;
+        uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+        int reuse = 0;
+        if (skip_sums && skip_cis && packed < skip_pc) {
+            int in_ino = (region == EFS_META_REGION_INO);
+            int layout_ok = (root.ino_page_count == skip_ino_pc);
+            if (!in_ino && layout_ok && chunk_blob_len == skip_ch_len) {
+                reuse = 1;
+            } else if (in_ino && packed < skip_ino_pc) {
+                /* Hash after encode; compared below. */
+            } else if (!in_ino && !layout_ok) {
+                reuse = 0;
+            }
+        }
+        if (reuse) {
+            memcpy(checksums,
+                   skip_sums + (size_t)packed * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE,
+                   sizeof(checksums));
+            root.page_cis[packed] = skip_cis[packed];
+            for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
+                memcpy(efs_export_root_checksum(&root, packed, fi),
+                       checksums[fi], EFS_HASH_SIZE);
+            pages_reused++;
+            continue;
+        }
         const char *rbase = (region == EFS_META_REGION_INO)
                                 ? blob
                                 : blob + ino_blob_len;
@@ -1414,13 +1477,32 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
             free(page);
             free(frag_buf);
             free(blob);
+            free(skip_sums);
+            free(skip_cis);
             efs_export_root_free(&root);
             return -1;
         }
         efs_encode_chunk(page, EFS_META_PAGE_SIZE, EFS_META_PAGE_SIZE, fragments);
-        uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
             efs_hash(fragments[fi], EFS_META_FRAGMENT_SIZE, checksums[fi]);
+        if (skip_sums && skip_cis && packed < skip_pc &&
+            ((region == EFS_META_REGION_INO && packed < skip_ino_pc) ||
+             (region == EFS_META_REGION_CHUNK &&
+              root.ino_page_count == skip_ino_pc))) {
+            const uint8_t *old = skip_sums +
+                (size_t)packed * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE;
+            if (memcmp(checksums[0], old, EFS_HASH_SIZE) == 0 &&
+                memcmp(checksums[1], old + EFS_HASH_SIZE, EFS_HASH_SIZE) == 0 &&
+                memcmp(checksums[2], old + 2 * EFS_HASH_SIZE,
+                       EFS_HASH_SIZE) == 0) {
+                root.page_cis[packed] = skip_cis[packed];
+                for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
+                    memcpy(efs_export_root_checksum(&root, packed, fi),
+                           checksums[fi], EFS_HASH_SIZE);
+                pages_reused++;
+                continue;
+            }
+        }
 
         /* CoW (EFSR v7): write the page to a fresh, never-referenced
          * chunk_index and record it in the new root's page_cis[]. */
@@ -1428,6 +1510,8 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
             free(page);
             free(frag_buf);
             free(blob);
+            free(skip_sums);
+            free(skip_cis);
             efs_export_root_free(&root);
             return -1;
         }
@@ -1500,6 +1584,8 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
             free(page);
             free(frag_buf);
             free(blob);
+            free(skip_sums);
+            free(skip_cis);
             efs_export_root_free(&root);
             return -1;
         }
@@ -1510,6 +1596,11 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     free(page);
     free(frag_buf);
     free(blob);
+    free(skip_sums);
+    free(skip_cis);
+    if (pages_reused >= 16)
+        fprintf(stderr, "meta-flush: reused %u/%u unchanged CoW pages\n",
+                pages_reused, root.page_count);
 
     /* Extra shards (Phase 3): pages live under table_ino. Do not PUT_META
      * this root — that would replace the export-level shard-0 EFSR. v8 will

@@ -1808,6 +1808,7 @@ send_reply:
                 if (rrc == 0) {
                     efs_export_get_inode(ex, req->ino, &r.inode);
                     r.status = EFS_INODE_RPC_OK;
+                    ex->shard_dirty = 1;
                     server_meta_mark_rpc_dirty_locked(g_server, eidx);
                 } else {
                     r.status = (rrc == EFS_ERR_NOT_FOUND) ? EFS_INODE_RPC_NOT_FOUND
@@ -1848,6 +1849,7 @@ send_reply:
                                                 req->mtime_nsec);
                     if (req->mask & EFS_SETATTR_ATIME)
                         efs_export_set_atime(tab, req->ino, req->atime);
+                    tab->shard_dirty = 1;
                     server_meta_mark_rpc_dirty_locked(g_server, eidx);
                     efs_export_get_inode(tab, req->ino, &r.inode);
                     r.status = EFS_INODE_RPC_OK;
@@ -2159,8 +2161,10 @@ send_reply:
                     struct efs_export *tab = table_for_ino(ex, recs[k].ino);
                     if (efs_export_set_chunk(tab, recs[k].ino, recs[k].chunk_index,
                                              recs[k].nodes,
-                                             recs[k].checksums) == 0)
+                                             recs[k].checksums) == 0) {
                         applied++;
+                        tab->shard_dirty = 1;
+                    }
                 }
                 /* Write-path size/mtime. Use norollup: the rolling
                  * set_size/set_mtime walk parent rollups on every rec and a
@@ -2189,8 +2193,10 @@ send_reply:
                      * mtime: apply only when newer. */
                     if (irecs[k].size > cur.size &&
                         efs_export_set_size_norollup(tab, irecs[k].ino,
-                                                     irecs[k].size) == 0)
+                                                     irecs[k].size) == 0) {
                         applied++;
+                        tab->shard_dirty = 1;
+                    }
                     if (irecs[k].mtime > cur.mtime ||
                         (irecs[k].mtime == cur.mtime &&
                          irecs[k].mtime_nsec > cur.mtime_nsec)) {
@@ -2198,6 +2204,7 @@ send_reply:
                                                          irecs[k].mtime,
                                                          irecs[k].mtime_nsec);
                         applied++;
+                        tab->shard_dirty = 1;
                     }
                     if (irecs[k].pack_ino || irecs[k].pack_len) {
                         /* Re-fetch: cur above predates the size grow, and

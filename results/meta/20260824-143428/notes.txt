@@ -1,0 +1,14 @@
+Unlink-no-instantiate deploy 38dd6f0084eb-dirty. 4 up, heal idle
+gen=380 before bench. Same grown table (20k inodes / 569k chunks).
+
+w=1 vs Stage 0 / page-as-DB 181510 / this run:
+  create  118.9  (604 / 98)   still red
+  stat    197.6  (355 / 222)  still red
+  setattr 3618   (1206 / 94k) trustworthy, matches .efsm-skip
+  rename  3470   (1791 / 2226)
+  unlink  30.4   (365 / 30)   still red
+
+Post-unlink Heal: idle on all 4 (no 5–6/8 dirty). The all-shard
+instantiate storm is gone; create/unlink cost is now the primary
+rewriting every CoW page of the 71 MB shard-0 table on each flush.
+Gate 1 still red. Do not push posix/ewrite/ecopy.
