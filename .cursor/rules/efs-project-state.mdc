@@ -9,16 +9,17 @@ efs: distributed FS, 2+1 XOR EC, FUSE client, RDMA (RC QP), 128 KiB chunks.
 Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 
 ## Where we are
-**Phase 3 storage model (Aug 24, `38dd6f0` + CoW page reuse).** Pages
-+ v8 descriptors are the DB; only the owner materializes a shard. No
-WAL. Unlink/nlink walk only loaded tables. Meta after unlink-fix
-`20260824-143428`: create **119** / stat **198** / unlink **30**
-(baseline 604 / 355 / 365) — Heal idle (storm gone); leftover is the
-primary rewriting every CoW page of the 71 MB shard-0 table. Next
-lever (this cut): reuse unchanged CoW pages + skip O(chunks) snapshot
-when the chunk table is unchanged. Page-reuse deploy hung create
-(~10 min, efsd 36% serializing 71 MB under the lock). **Stopped —
-do not push posix/ewrite/ecopy.** FUSE timeouts still 0. No caches.
+**Phase 3 storage model (Aug 24).** Pages + v8 descriptors are the DB.
+Commits: `38dd6f0` (owner-only extras + unlink no-instantiate),
+`9eff867` (reuse unchanged CoW pages), `a3485eb` (skip chunk snapshot
+when chunk_epoch unchanged). Trustworthy meta (grown table):
+`20260824-143428` create **119** / unlink **30** (baseline 604 / 365);
+Heal idle. Page-reuse-only deploy hung create (~10 min, 71 MB serialize
+under the lock). After `a3485eb` restart, Heal showed gen=0 and
+**no meta-flush lines**; a w=1 bench printed 70k ops/s — treat as
+untrustworthy (mutations likely RAM-only while flush bails). Next:
+get post-restart page rebuild + flush running again, then re-bench.
+**Stopped — do not push posix/ewrite/ecopy.** FUSE timeouts 0. No caches.
 Cluster live on **EFSR v8** + Phase 3 data-path sharding Stages 0–3
 (committed). Fresh mkfs `efs-test` is **bits=3** (8 shards) on 4 servers
 + 9 clients mounted at `/tmp/efs/mnt`. CoW = **debe6dd**, catchup-vs-GC
