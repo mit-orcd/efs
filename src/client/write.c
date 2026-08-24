@@ -3674,6 +3674,7 @@ static int dcache_load_and_patch(efs_ino_t ino, uint32_t ci, uint32_t off,
 static void dcache_note_size(efs_ino_t ino, uint64_t end)
 {
     efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
     struct efs_inode cur;
     if (efs_export_get_inode(&g_client.export, ino, &cur) == 0) {
         if (cur.size < end) {
@@ -3697,6 +3698,7 @@ static void dcache_note_size(efs_ino_t ino, uint64_t end)
                                                  sec, nsec);
         }
     }
+    pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
 }
 
@@ -4040,8 +4042,14 @@ int efs_dcache_flush_ino(efs_ino_t ino)
     uint32_t cs = data_chunk_size();
     uint32_t nci = 1;
     struct efs_inode inode;
-    if (cs && efs_export_get_inode(&g_client.export, ino, &inode) == 0 &&
-        inode.size > 0) {
+    /* idx_mu: create dual-apply reindexes (idx_init frees ino_keys).
+     * Close without this lock raced that free → SIGSEGV → ENOTCONN
+     * mid-ImageNet copy on node9901. */
+    pthread_mutex_lock(&g_client.idx_mu);
+    int have = (cs && efs_export_get_inode(&g_client.export, ino, &inode) == 0 &&
+                inode.size > 0);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    if (have) {
         uint64_t n = (inode.size + (uint64_t)cs - 1) / (uint64_t)cs;
         if (n > UINT32_MAX)
             return dcache_flush_all_slots(ino, 1);
@@ -4739,6 +4747,7 @@ int efs_client_pack_seal(efs_ino_t ino)
     pthread_mutex_unlock(&g_pack_mu);
 
     efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
     struct efs_inode cur;
     if (efs_export_get_inode(&g_client.export, ino, &cur) == 0) {
         struct efs_inode *ip = NULL;
@@ -4754,6 +4763,7 @@ int efs_client_pack_seal(efs_ino_t ino)
         }
         efs_client_mark_ino_dirty(ino);
     }
+    pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
     free(s->buf);
     free(s);
@@ -4777,12 +4787,15 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
         return EFS_OK;
 
     efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
     struct efs_inode inode;
     if (efs_export_get_inode(&g_client.export, ino, &inode) != 0) {
+        pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_unlock_dir(ino);
         return EFS_ERR_NOT_FOUND;
     }
     uint64_t old_size = inode.size;
+    pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
 
     uint64_t end = offset + size;
@@ -4859,6 +4872,7 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
     }
 
     efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
     /* Grow size (sets mtime) OR bump mtime alone — never both (each used to
      * run sync_hardlink_attrs + parent rollups). Skip rollups until flush. */
     struct efs_inode cur;
@@ -4870,6 +4884,7 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
         now_ns(&sec, &nsec);
         efs_export_set_mtime_ns_norollup(&g_client.export, ino, sec, nsec);
     }
+    pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_mark_ino_dirty(ino);
     efs_client_unlock_dir(ino);
     /* Phase 2b: report dirty chunk/size to the primary instead of blob-flush. */
@@ -4884,13 +4899,16 @@ int efs_client_write_no_replicate(efs_ino_t ino, uint64_t offset, size_t size, c
         return EFS_OK;
 
     efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
     struct efs_inode inode;
     if (efs_export_get_inode(&g_client.export, ino, &inode) != 0) {
+        pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_unlock_dir(ino);
         return EFS_ERR_NOT_FOUND;
     }
     uint64_t old_size = inode.size;
     int packed = (inode.pack_ino != 0);
+    pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
 
     /* Default: stage ImageNet-sized writes into the parent dir pack so
@@ -4906,6 +4924,7 @@ int efs_client_write_no_replicate(efs_ino_t ino, uint64_t offset, size_t size, c
 
     if (packed) {
         efs_client_lock_dir(ino);
+        pthread_mutex_lock(&g_client.idx_mu);
         uint64_t slot = 0;
         if (efs_export_inode_slot(&g_client.export, ino, &slot) == 0) {
             g_client.export.inodes[slot].pack_ino = 0;
@@ -4913,6 +4932,7 @@ int efs_client_write_no_replicate(efs_ino_t ino, uint64_t offset, size_t size, c
             g_client.export.inodes[slot].pack_len = 0;
             efs_client_mark_ino_dirty(ino);
         }
+        pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_unlock_dir(ino);
     }
     return write_chunks_no_replicate(ino, offset, size, buf, old_size);
@@ -4996,6 +5016,7 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
     }
 
     efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
     /* Grow the size based on the current value under the lock, not the stale
      * copy read before the (unlocked) write loop, so concurrent writes on
      * different FUSE worker threads cannot shrink or mis-set the size.
@@ -5010,6 +5031,7 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
         now_ns(&sec, &nsec);
         efs_export_set_mtime_ns_norollup(&g_client.export, ino, sec, nsec);
     }
+    pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_mark_ino_dirty(ino);
     efs_client_unlock_dir(ino);
 

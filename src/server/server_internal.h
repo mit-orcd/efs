@@ -409,6 +409,13 @@ void server_gc_meta_cow_pages(struct efsd_server *s, struct efs_export *ex,
 /* Rebuild in-memory export tables from meta pages referenced by ex->root. */
 int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *ex);
 
+/* Caller holds s->lock. If this node owns `shard` and the table is still
+ * hollow (descriptor present, pages not assembled), drop the lock, rebuild
+ * from pages, and reacquire. Returns 0 when the table is safe to mutate,
+ * -1 if it is still hollow (caller should reply BUSY). */
+int server_ensure_shard_ready(struct efsd_server *s, struct efs_export *ex,
+                              uint32_t shard);
+
 /* After membership is known, rebuild any EFSR exports from meta pages. */
 void server_rebuild_fragmented_exports(struct efsd_server *s);
 

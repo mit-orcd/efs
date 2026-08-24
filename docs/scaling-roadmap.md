@@ -5,8 +5,8 @@
 This is the plan for raising the inode ceiling from the current ~14M to at
 least 2³² (4.29 billion) files/folders. It is a **multi-phase** effort. Phase 1
 (shipped) makes the current model robust; Phase 2 (shipped: server-owned
-RPCs + RPC reads) is in place; Phase 3 (started — see
-[phase3-sharding.md](phase3-sharding.md)) splits the table. Phase 4 is density.
+RPCs + RPC reads) is in place; Phase 3 (proven on throwaway bits=3 —
+see [phase3-sharding.md](phase3-sharding.md)) splits the table. Phase 4 is density.
 **Skip Phase 2c** (full-table gen-check cache); cache as Phase 3 item 4
 (per-shard, on-demand, evict). Write-throughput next steps (lock partition,
 N pollers, bits>0 data path) live in **Performance next** below, alongside
@@ -104,8 +104,8 @@ working set. **This is the phase that actually raises the cap.**
 2. Per-shard flush + v8 extra roots; extra owners flush their pages and
    PUT_META extras; primary flushes shard 0 — **done**.
 3. Owner routing (`rpc_owner_conn` + server `NOT_PRIMARY`) — **done**.
-   **Do not enable bits>0 on the live cluster until extra-shard restart
-   is proven.**
+   Extra-shard restart + owner-only rebuild proven on throwaway
+   `efs-s3` bits=3 (Aug 24). Live `efs-test` stays bits=0.
 4. On-demand load — **pages are the DB (Aug 24):** extras PUT_META
    updates descriptors and evicts a stale copy; only the shard owner
    materializes the table. Not a journal — CoW pages + root commit.
@@ -121,9 +121,10 @@ a per-shard flush/resync is then bounded and fast.
 
 **Depends on:** Phase 2 (clean shard ownership needs server-owned metadata).
 
-**Milestone:** an export with `shard_count > 1` serves creates/lookups/readdir
-across shards; per-shard flush cost is independent of total inode count;
-memory per node tracks the hot working set, not the table.
+**Milestone (proven Aug 24, throwaway `efs-s3` bits=3):** create/lookup
+across 8 shards; extra-owner kill/restart rebuilds only owned extras;
+cold remount + peer md5; same-gen extras merge from `GET_META_ROOT`.
+Live `efs-test` remains bits=0.
 
 ---
 

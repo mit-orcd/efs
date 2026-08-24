@@ -1051,13 +1051,20 @@ int efs_client_fetch_meta_best(const char *host, uint16_t port,
                         free(payload);
                         continue;
                     }
-                    /* Ignore bootstrap shells (no pages yet) unless this is
-                     * the export we asked to mount empty. */
+                    /* Empty / not-yet-flushed root: still keep it when it
+                     * carries shard_bits. Discarding it left clients at
+                     * bits=0 so REPORT/GETATTR never reached extra owners. */
                     if (root.page_count == 0 || root.blob_len == 0) {
                         saw_bootstrap = 1;
                         if (root.id)
                             f->bootstrap_id = root.id;
-                        efs_export_root_free(&root);
+                        if (!have_root && root.shard_bits) {
+                            efs_export_root_free(&best_root);
+                            efs_export_root_move(&best_root, &root);
+                            have_root = 1;
+                        } else {
+                            efs_export_root_free(&root);
+                        }
                     } else if (!have_root || root.generation > best_root.generation) {
                         efs_export_root_free(&best_root);
                         efs_export_root_move(&best_root, &root);
@@ -1182,6 +1189,32 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
         efs_client_table_unlock();
         free(best_efsm);
         best_efsm = NULL;
+    }
+    if (have_root && (best_root.page_count == 0 || best_root.blob_len == 0)) {
+        /* Fresh bits>0 export: root carries shard_bits but no pages yet.
+         * Do not reconstruct; adopt the descriptor so REPORT/GETATTR route. */
+        efs_client_table_lock();
+        pthread_mutex_lock(&g_client.idx_mu);
+        efs_export_init(&g_client.export,
+                        best_root.id ? best_root.id : 2,
+                        best_root.name[0] ? best_root.name
+                                          : g_client.export_name);
+        if (efs_export_root_copy(&g_client.export.root, &best_root) == EFS_OK) {
+            g_client.export.meta_fragmented = 1;
+            if (best_root.next_ino)
+                g_client.export.next_ino = best_root.next_ino;
+            uint32_t cs = best_root.chunk_size;
+            g_client.export.chunk_size = efs_chunk_size_valid(cs)
+                                             ? cs : EFS_DEFAULT_CHUNK_SIZE;
+            g_client.export.features = best_root.features;
+        }
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_table_unlock();
+        fprintf(stderr,
+                "meta: mounting export bits=%u shards=%u (bootstrap root)\n",
+                best_root.shard_bits, best_root.shard_count);
+        efs_export_root_free(&best_root);
+        return EFS_OK;
     }
     if (have_root) {
         fprintf(stderr,
@@ -1631,8 +1664,10 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
     }
 
     efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
     struct efs_inode inode;
     if (efs_export_get_inode(&g_client.export, ino, &inode) != 0) {
+        pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_unlock_dir(ino);
         return EFS_ERR_NOT_FOUND;
     }
@@ -1640,6 +1675,7 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
     efs_ino_t pack_ino = inode.pack_ino;
     uint32_t pack_off = inode.pack_off;
     uint32_t pack_len = inode.pack_len;
+    pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
 
     if (!pack_ino) {

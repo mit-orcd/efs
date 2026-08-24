@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 static int rpc_status_to_efs(uint8_t st)
 {
@@ -75,7 +76,7 @@ static int rpc_send_recv_owner(efs_ino_t ino, uint8_t type, const void *req,
                                uint32_t reply_len)
 {
     efs_node_id_t target = 0; /* 0 = compute the owner from our view */
-    for (int attempt = 0; attempt < 4; attempt++) {
+    for (int attempt = 0; attempt < 16; attempt++) {
         efs_node_id_t nid = 0;
         struct efs_conn *conn;
         if (target != 0) {
@@ -106,6 +107,13 @@ static int rpc_send_recv_owner(efs_ino_t ino, uint8_t type, const void *req,
         memcpy(reply, payload, reply_len);
         free(payload);
         struct efs_msg_inode_reply *r = reply;
+        if (r->status == EFS_INODE_RPC_BUSY) {
+            /* Extra-shard owner is still assembling pages after restart.
+             * Same target — do not flip to another node. */
+            unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
+            usleep(50000u << shift);
+            continue;
+        }
         if (r->status != EFS_INODE_RPC_NOT_PRIMARY)
             return EFS_OK;
         /* NOT_PRIMARY: retry on the server-reported primary. */
@@ -266,29 +274,45 @@ int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
     req.ino = ino;
     req.start = start;
     req.max = inout_count ? *inout_count : EFS_GETCHUNKS_MAX;
-    efs_node_id_t nid = 0;
-    struct efs_conn *conn = rpc_owner_conn(ino, &nid);
-    if (!conn)
-        return EFS_ERR_NET;
-    if (efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS, &req, sizeof(req)) != 0) {
-        efs_client_conn_drop(nid, conn);
-        return EFS_ERR_NET;
-    }
-    uint8_t rtype = 0;
+    struct efs_msg_inode_getchunks_reply *r = NULL;
     void *payload = NULL;
-    uint32_t plen = 0;
-    int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
-    if (rc != 0) {
-        efs_client_conn_drop(nid, conn);
-        return EFS_ERR_NET;
-    }
-    efs_client_conn_release(nid, conn);
-    if (rtype != EFS_MSG_INODE_GETCHUNKS_REPLY ||
-        plen < sizeof(struct efs_msg_inode_getchunks_reply)) {
+    for (int attempt = 0; attempt < 16; attempt++) {
+        efs_node_id_t nid = 0;
+        struct efs_conn *conn = rpc_owner_conn(ino, &nid);
+        if (!conn)
+            return EFS_ERR_NET;
+        if (efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS, &req,
+                              sizeof(req)) != 0) {
+            efs_client_conn_drop(nid, conn);
+            return EFS_ERR_NET;
+        }
+        uint8_t rtype = 0;
+        uint32_t plen = 0;
+        payload = NULL;
+        int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
+        if (rc != 0) {
+            efs_client_conn_drop(nid, conn);
+            return EFS_ERR_NET;
+        }
+        efs_client_conn_release(nid, conn);
+        if (rtype != EFS_MSG_INODE_GETCHUNKS_REPLY ||
+            plen < sizeof(struct efs_msg_inode_getchunks_reply)) {
+            free(payload);
+            return EFS_ERR_PROTO;
+        }
+        r = payload;
+        if (r->status != EFS_INODE_RPC_BUSY)
+            break;
         free(payload);
-        return EFS_ERR_PROTO;
+        payload = NULL;
+        r = NULL;
+        unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
+        usleep(50000u << shift);
     }
-    struct efs_msg_inode_getchunks_reply *r = payload;
+    if (!r) {
+        free(payload);
+        return EFS_ERR_BUSY;
+    }
     if (r->status != EFS_INODE_RPC_OK) {
         int st = rpc_status_to_efs(r->status);
         free(payload);

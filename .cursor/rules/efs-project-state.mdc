@@ -9,6 +9,19 @@ efs: distributed FS, 2+1 XOR EC, FUSE client, RDMA (RC QP), 128 KiB chunks.
 Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 
 ## Where we are
+**Phase 3 PROVEN (Aug 24) on throwaway `efs-s3` bits=3.** Extra-owner
+restart + owner-only RAM + same-gen extras merge. Kill fcstor005 →
+failover read 32/32; restart loaded `extras=7`, rebuilt only shards
+2 and 6; cold remount A 32/32 size+md5; B match; post-restart 8
+creates visible on B. Fixes that unblocked the gate: (1) GET_META /
+GET_META_ROOT send EFSR when `shard_bits` even with no pages;
+(2) client keeps a bootstrap bits>0 root; (3) catchup adopts leftover
+empty bits=0; (4) `catchup_merge_peer_extras` from ROOT at same gen;
+(5) `efs_export_merge_extra_roots` is monotonic max-merge (capture-
+replace orphaned unowned extras and oscillated 5↔7). Live `efs-test`
+stays **bits=0** gen=271 (ImageNet on node9901 `/tmp/efs-mount`).
+Do not upgrade the live table in place. Cluster OK 4/0, efs-s3 gen=15.
+**Stopped — do not push posix/ewrite/ecopy.**
 **Phase 3 storage model (Aug 24).** Pages + v8 descriptors are the DB.
 Commits: `38dd6f0` (owner-only extras + unlink no-instantiate),
 `9eff867` (reuse unchanged CoW pages), `a3485eb` (skip chunk snapshot

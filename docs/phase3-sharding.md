@@ -2,11 +2,13 @@
 
 [Roadmap](scaling-roadmap.md) · [Phase 2](phase2-server-owned-metadata.md)
 
-Status: **code complete (Aug 21).** Phase 2 owns the table on the server and
-routes FUSE through RPC. Phase 3 splits that table so no op and no flush is
-O(total inodes). This is the phase that raises the ~14M inode cap.
-**Do not set `shard_bits>0` on the live cluster** until an extra-shard
-restart + owner flush is proven on a throwaway export.
+Status: **proven (Aug 24)** on throwaway `efs-s3` bits=3. Phase 2 owns
+the table on the server and routes FUSE through RPC. Phase 3 splits that
+table so no op and no flush is O(total inodes). This is the phase that
+raises the ~14M inode cap.
+**Live `efs-test` stays `shard_bits=0`** (ImageNet). Enable bits>0 on a
+production export only after a dedicated mkfs — do not upgrade the live
+table in place.
 
 ## Do we need Phase 2c?
 
@@ -108,7 +110,11 @@ primary** — routing to a replica would mutate a copy that does not flush.
 
 ## Milestone
 
-`shard_count > 1` serves create/lookup/readdir across shards (unit-tested);
-a flush of an extra shard does not rewrite shard 0; RAM tracks the hot set
-via LRU. POSIX same-fd zeros closed by the dcache overlay (not 2c). Live
-cluster stays `shard_bits=0` until extra-shard restart is proven.
+**Proven on throwaway `efs-s3` bits=3 (Aug 24):** 32 files across 8 shards;
+peer md5 match; kill extra-owner fcstor005 → failover read 32/32; restart
+loads `extras=7`, rebuilds only owned shards 2 and 6; cold remount 32/32
+size+md5; post-restart creates visible on a second client. Catchup merges
+same-gen extra-root descriptors from `GET_META_ROOT` (extras commits do
+not bump the main gen). `efs_export_merge_extra_roots` is a monotonic
+max-merge — capture-replace orphaned unowned descriptors under owner-only
+RAM. Live `efs-test` stays bits=0.

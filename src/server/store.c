@@ -643,12 +643,13 @@ void server_load_exports(struct efsd_server *s)
                     ex->meta_needs_rebuild = 1;
                 fprintf(stderr,
                         "loaded export=%s gen=%llu pages=%u blob=%u "
-                        "inodes=%llu needs_rebuild=%d bits=%u\n",
+                        "inodes=%llu needs_rebuild=%d bits=%u extras=%u\n",
                         ex->name,
                         (unsigned long long)ex->root.generation,
                         ex->root.page_count, ex->root.blob_len,
                         (unsigned long long)ex->inode_count,
-                        ex->meta_needs_rebuild, ex->root.shard_bits);
+                        ex->meta_needs_rebuild, ex->root.shard_bits,
+                        ex->root.extra_shard_count);
                 break;
             }
         }

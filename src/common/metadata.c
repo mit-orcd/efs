@@ -1534,12 +1534,11 @@ void efs_export_merge_extra_roots(struct efs_export *ex,
         free(tab);
         ex->shard_tabs[sh] = NULL;
     }
-    /* Re-capture so ex->root.extra_roots reflects the merge (owned shards
-     * keep their local descriptors; adopted ones land in their tabs).
-     * Capture only sees LOCAL tables — carry forward descriptors for shards
-     * we have no table for, or a refresh would drop them from the recovery
-     * record. */
-    (void)efs_export_root_capture_extras(&ex->root, ex);
+    /* Monotonic union. Capture-then-maxmerge used to wipe descriptors this
+     * node has no local table for (owner-only RAM) and then restore only
+     * THIS incoming's extras — extra-owner PUT_META is filtered to the
+     * sender's shards, so each refresh orphaned everyone else's recovery
+     * record and catchup oscillated 5↔7. */
     (void)efs_export_root_maxmerge_extras(&ex->root, incoming);
 }
 

@@ -2053,9 +2053,11 @@ static off_t append_end_offset(efs_ino_t ino)
 {
     struct efs_inode cur;
     efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
     uint64_t size = 0;
     if (efs_export_get_inode(&g_client.export, ino, &cur) == 0)
         size = cur.size;
+    pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
     return (off_t)size;
 }
@@ -2997,7 +2999,9 @@ static off_t efs_fuse_lseek(const char *path, off_t off, int whence,
         return (off_t)rc;
     struct efs_inode ino;
     efs_client_lock_dir(inum);
+    pthread_mutex_lock(&g_client.idx_mu);
     rc = efs_export_get_inode(&g_client.export, inum, &ino);
+    pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(inum);
     if (rc != 0)
         return -ENOENT;

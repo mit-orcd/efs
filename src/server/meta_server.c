@@ -480,6 +480,46 @@ static void server_rebuild_owned_extras(struct efsd_server *s,
     }
 }
 
+int server_ensure_shard_ready(struct efsd_server *s, struct efs_export *ex,
+                              uint32_t shard)
+{
+    if (!s || !ex)
+        return -1;
+    /* Caller holds s->lock. */
+    uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+    if (ex->root.shard_bits == 0 || sc <= 1 || shard == 0) {
+        int need = ex->meta_fragmented && ex->root.page_count > 0 &&
+                   (ex->meta_needs_rebuild ||
+                    (ex->inode_count <= 1 && ex->root.blob_len > 65536u));
+        if (!need)
+            return 0;
+        pthread_mutex_unlock(&s->lock);
+        int rc = server_rebuild_export_from_pages(s, ex);
+        pthread_mutex_lock(&s->lock);
+        return (rc == EFS_OK && !ex->meta_needs_rebuild) ? 0 : -1;
+    }
+    efs_node_id_t live[EFS_MAX_NODES];
+    uint32_t nlive = server_live_ids_locked(s, live);
+    if (efs_shard_owner_of(shard, sc, live, nlive) != s->id)
+        return -1;
+    struct efs_export *tab = efs_export_table(ex, shard);
+    if (!tab)
+        return -1;
+    /* Never flushed: an empty extra is the truth, first create is fine. */
+    if (tab->root.page_count == 0)
+        return 0;
+    if (!tab->meta_needs_rebuild && tab->inode_count > 0)
+        return 0;
+    pthread_mutex_unlock(&s->lock);
+    int rc = server_rebuild_export_from_pages_ino(
+        s, tab, efs_meta_shard_table_ino(shard));
+    pthread_mutex_lock(&s->lock);
+    if (rc == EFS_OK)
+        fprintf(stderr, "meta-ensure: rebuilt export=%s shard=%u (on-demand)\n",
+                ex->name, shard);
+    return (rc == EFS_OK && tab && !tab->meta_needs_rebuild) ? 0 : -1;
+}
+
 void server_rebuild_fragmented_exports(struct efsd_server *s)
 {
     for (uint32_t i = 0; i < s->export_count; i++) {
@@ -2066,11 +2106,21 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
         efs_export_root_free(&root);
         return 1;
     }
-    /* Skip stale or identical generations once we already hold an EFSR root.
-     * Exception: same generation, our fragment rebuild is stuck (e.g.
-     * dual-slot pages vanished from every node), and the peer shipped its
-     * live tables — adopt them to escape the rebuild dead-end. */
-    if (ex->meta_fragmented && root.generation <= ex->root.generation) {
+    /* A joiner can load a leftover empty bits=0 efs-s3 (destroy missed this
+     * node). That must not win against a peer's sharded root or extra-shard
+     * restart never rebuilds extras (GETATTR size 0 on shards 2/6). */
+    int local_empty = !ex->meta_fragmented ||
+                      (ex->root.page_count == 0 && ex->inode_count <= 1 &&
+                       ex->root.shard_bits == 0);
+    int incoming_real = root.shard_bits || root.generation > 0 ||
+                        root.page_count > 0;
+    if (local_empty && incoming_real) {
+        fprintf(stderr,
+                "meta-catchup: adopt peer export=%s gen=%llu bits=%u "
+                "(local was empty bits=0)\n",
+                root.name[0] ? root.name : ex->name,
+                (unsigned long long)root.generation, root.shard_bits);
+    } else if (ex->meta_fragmented && root.generation <= ex->root.generation) {
         int adopt_same = efsm && efsm_len &&
                          root.generation == ex->root.generation &&
                          ex->meta_needs_rebuild;
@@ -2134,8 +2184,61 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
         efs_export_free(&tmp);
     }
 
-    fprintf(stderr, "meta-catchup: installed newer root gen=%llu\n",
-            (unsigned long long)new_gen);
+    fprintf(stderr,
+            "meta-catchup: installed newer root gen=%llu extras=%u bits=%u\n",
+            (unsigned long long)new_gen, ex->root.extra_shard_count,
+            ex->root.shard_bits);
+    if (ex->root.shard_bits)
+        server_rebuild_owned_extras(s, ex);
+    return 1;
+}
+
+/* Same-gen extras refresh from a peer ROOT. Extra-shard owners publish
+ * descriptors without bumping the main gen, so a joiner that adopted a
+ * primary root missing extras (extra_count=0 at gen N) would otherwise
+ * skip GET_META forever (peer_gen==our_gen && !stuck) and GETATTR its
+ * own shards as size 0. GET_META_ROOT already carries the nested EFSRs. */
+static int catchup_merge_peer_extras(struct efsd_server *s, const char *name,
+                                     const struct efs_export_root *incoming)
+{
+    if (!s || !incoming || incoming->extra_shard_count == 0)
+        return 0;
+
+    pthread_mutex_lock(&s->lock);
+    struct efs_export *ex = incoming->id ? server_get_export(s, incoming->id)
+                                         : NULL;
+    if (!ex && name && name[0])
+        ex = server_find_export_no_create(s, name);
+    if (!ex || !ex->root.shard_bits) {
+        pthread_mutex_unlock(&s->lock);
+        return 0;
+    }
+    uint32_t before_n = ex->root.extra_shard_count;
+    uint64_t before_g = 0;
+    for (uint32_t i = 0; i < before_n; i++)
+        if (ex->root.extra_roots)
+            before_g += ex->root.extra_roots[i].generation;
+
+    efs_export_merge_extra_roots(ex, incoming);
+
+    uint32_t after_n = ex->root.extra_shard_count;
+    uint64_t after_g = 0;
+    for (uint32_t i = 0; i < after_n; i++)
+        if (ex->root.extra_roots)
+            after_g += ex->root.extra_roots[i].generation;
+    if (after_n == before_n && after_g == before_g) {
+        pthread_mutex_unlock(&s->lock);
+        return 0;
+    }
+    s->export_meta_dirty = 1;
+    server_save_export(s, ex);
+    fprintf(stderr,
+            "meta-catchup: extras-merge export=%s %u->%u "
+            "(peer extras=%u gen=%llu)\n",
+            ex->name, before_n, after_n, incoming->extra_shard_count,
+            (unsigned long long)incoming->generation);
+    pthread_mutex_unlock(&s->lock);
+    server_rebuild_owned_extras(s, ex);
     return 1;
 }
 
@@ -2199,13 +2302,29 @@ static int catchup_poll_peer_root(struct efsd_server *s)
                 break;
             }
             if (payload_len == 0) {
-                /* Peer does not have this export. */
                 free(payload);
-                continue;
+                /* ROOT is omitted when the peer has not marked the export
+                 * fragmented. A leftover empty bits=0 table still has to
+                 * pull GET_META or extra-shard restart never sees extras. */
+                pthread_mutex_lock(&s->lock);
+                struct efs_export *lex =
+                    server_find_export_no_create(s, names[e]);
+                int pull_empty = lex && !lex->root.shard_bits &&
+                                 lex->root.page_count == 0 &&
+                                 lex->inode_count <= 1;
+                pthread_mutex_unlock(&s->lock);
+                if (!pull_empty)
+                    continue;
+                fprintf(stderr,
+                        "meta-catchup: poll %s peer=%u empty-local, "
+                        "GET_META despite empty ROOT\n",
+                        names[e], (unsigned)nodes[i].id);
+                goto pull_full;
             }
 
             uint64_t peer_gen = 0;
             efs_export_id_t peer_id = 0;
+            uint32_t peer_extras = 0;
             if (efs_meta_blob_is_root(payload, payload_len)) {
                 struct efs_export_root r;
                 memset(&r, 0, sizeof(r));
@@ -2213,6 +2332,10 @@ static int catchup_poll_peer_root(struct efsd_server *s)
                                                      payload_len, NULL) == 0) {
                     peer_gen = r.generation;
                     peer_id = r.id;
+                    peer_extras = r.extra_shard_count;
+                    int m = catchup_merge_peer_extras(s, names[e], &r);
+                    if (m > best)
+                        best = m;
                 }
                 efs_export_root_free(&r);
             }
@@ -2225,15 +2348,26 @@ static int catchup_poll_peer_root(struct efsd_server *s)
                 ex = server_find_export_no_create(s, names[e]);
             uint64_t our_gen = ex ? ex->root.generation : 0;
             int stuck = ex ? ex->meta_needs_rebuild : 0;
+            uint32_t our_extras = ex ? ex->root.extra_shard_count : 0;
             pthread_mutex_unlock(&s->lock);
 
             /* Phase 2: full blob only when the peer is strictly newer, or
              * same generation while our rebuild is stuck (peer may hold
-             * live tables that fragment rebuild cannot recover). */
+             * live tables that fragment rebuild cannot recover).
+             * Also pull when we have an empty leftover and the peer has
+             * any real gen (extra-shard owner restart). */
+            int local_empty = !ex ||
+                              (!ex->root.shard_bits &&
+                               ex->root.page_count == 0 &&
+                               ex->inode_count <= 1);
             int want = (peer_gen > our_gen) ||
-                       (peer_gen > 0 && peer_gen == our_gen && stuck);
+                       (peer_gen > 0 && peer_gen == our_gen && stuck) ||
+                       (local_empty && peer_gen > 0) ||
+                       (ex && ex->root.shard_bits &&
+                        peer_extras > our_extras);
             if (!want)
                 continue;
+        pull_full:
             if (efs_send_msg(fd, EFS_MSG_GET_META, names[e],
                              (uint32_t)strlen(names[e]) + 1) != 0) {
                 conn_ok = 0;
@@ -2495,17 +2629,40 @@ static void *meta_flush_thread(void *arg)
             if (!can_flush)
                 continue;
             if (s->rpc_dirty_ops[e] > 0) {
-                if (s->exports[e].meta_needs_rebuild && can_flush_primary) {
+                int extra_hold = 0;
+                if (s->exports[e].root.shard_bits &&
+                    s->exports[e].shard_tabs) {
+                    efs_node_id_t xlive[EFS_MAX_NODES];
+                    uint32_t xnlive = server_live_ids_locked(s, xlive);
+                    uint32_t xsc = s->exports[e].root.shard_count
+                                       ? s->exports[e].root.shard_count
+                                       : 1;
+                    for (uint32_t i = 1; i < s->exports[e].shard_tab_cap &&
+                         i < EFS_META_MAX_SHARDS; i++) {
+                        struct efs_export *tab = s->exports[e].shard_tabs[i];
+                        if (!tab || !tab->meta_needs_rebuild ||
+                            tab->root.page_count == 0)
+                            continue;
+                        if (efs_shard_owner_of(i, xsc, xlive, xnlive) ==
+                            s->id) {
+                            extra_hold = 1;
+                            break;
+                        }
+                    }
+                }
+                if ((s->exports[e].meta_needs_rebuild && can_flush_primary) ||
+                    extra_hold) {
                     /* Keep the dirty mark: dropping it made creates look
                      * successful while flush never ran (RAM-only, gen
                      * stuck). Retry after catchup clears needs_rebuild. */
                     fprintf(stderr,
                             "meta-flush: export=%s hold %llu op(s) until "
-                            "rebuild gen=%llu\n",
+                            "rebuild gen=%llu extra_hold=%d\n",
                             s->exports[e].name,
                             (unsigned long long)s->rpc_dirty_ops[e],
                             (unsigned long long)
-                                s->exports[e].root.generation);
+                                s->exports[e].root.generation,
+                            extra_hold);
                     continue;
                 }
                 dirty[ndirty++] = e;

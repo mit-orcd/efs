@@ -127,6 +127,22 @@ static int server_owns_req_locked(struct efsd_server *s, struct efs_export *ex,
     return owner != 0 && owner == s->id;
 }
 
+/* Caller holds g_server->lock. May drop and reacquire it while rebuilding
+ * a hollow extra. Sets r->status = BUSY and returns 1 when the table is
+ * not yet safe to mutate (client retries). */
+static int reply_if_shard_busy(struct efs_export *ex, efs_ino_t ino,
+                               struct efs_msg_inode_reply *r)
+{
+    uint32_t sh = 0;
+    if (ex && ex->root.shard_bits)
+        sh = efs_export_shard_of(ino, ex->root.shard_bits);
+    if (server_ensure_shard_ready(g_server, ex, sh) != 0) {
+        r->status = EFS_INODE_RPC_BUSY;
+        return 1;
+    }
+    return 0;
+}
+
 static int server_node_addr_locked(struct efsd_server *s, efs_node_id_t id,
                                    char *host, size_t host_sz, uint16_t *port)
 {
@@ -731,7 +747,14 @@ send_reply:
                                  ((ex->inode_count > 0 &&
                                    !ex->meta_needs_rebuild) ||
                                   !ex->meta_fragmented);
-                    int do_root = ex->meta_fragmented && ex->root.page_count > 0;
+                    /* Always send the EFSR when the export is sharded:
+                     * a fresh bits>0 table can be 1 inode / no pages, and
+                     * a bare EFSM left clients at shard_bits=0 — they then
+                     * REPORT only to the primary, which drops extra-shard
+                     * recs (peer reads size 0). */
+                    int do_root = ex->root.shard_bits ||
+                                  (ex->meta_fragmented &&
+                                   ex->root.page_count > 0);
                     char *rbuf = NULL;
                     size_t rlen = 0;
                     if (do_root)
@@ -807,7 +830,7 @@ send_reply:
             }
             char *buf = NULL;
             size_t len = 0;
-            if (ex && ex->meta_fragmented)
+            if (ex && (ex->meta_fragmented || ex->root.shard_bits))
                 efs_export_root_serialize(&ex->root, &buf, &len);
             pthread_mutex_unlock(&g_server->lock);
             if (buf) {
@@ -1619,6 +1642,8 @@ send_reply:
                     r.status = EFS_INODE_RPC_NOT_PRIMARY;
                     r.primary_id = server_shard_owner_id_locked(g_server, ex,
                                                                 type, payload);
+                } else if (reply_if_shard_busy(ex, req->ino, &r)) {
+                    /* hollow extra: client retries */
                 } else {
                     struct efs_export *tab = table_for_ino(ex, req->ino);
                     if (efs_export_get_inode(tab, req->ino, &r.inode) == 0)
@@ -1693,6 +1718,9 @@ send_reply:
                             }
                         }
                     }
+                } else if (bits && sc > 1 && target != 0 &&
+                           server_ensure_shard_ready(g_server, ex, target) != 0) {
+                    r.status = EFS_INODE_RPC_BUSY;
                 } else {
                     efs_ino_t ino = efs_export_create(ex, req->parent, req->mode,
                                                       (uid_t)req->uid,
@@ -1712,6 +1740,9 @@ send_reply:
                 uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
                 if (req->target_shard >= sc) {
                     r.status = EFS_INODE_RPC_INVAL;
+                } else if (server_ensure_shard_ready(g_server, ex,
+                                                    req->target_shard) != 0) {
+                    r.status = EFS_INODE_RPC_BUSY;
                 } else {
                     struct efs_export *ctab =
                         efs_export_table(ex, req->target_shard);
@@ -1803,6 +1834,9 @@ send_reply:
                 }
             } else if (type == EFS_MSG_INODE_UNLINK_SHARD) {
                 struct efs_msg_inode_unlink_shard *req = payload;
+                if (reply_if_shard_busy(ex, req->src_ino, &r)) {
+                    /* hollow extra */
+                } else {
                 int urc = efs_export_nlink_dec(ex, req->src_ino, &r.inode);
                 if (urc == 0) {
                     r.status = EFS_INODE_RPC_OK;
@@ -1811,6 +1845,7 @@ send_reply:
                     r.status = (urc == EFS_ERR_NOT_FOUND)
                                    ? EFS_INODE_RPC_NOT_FOUND
                                    : EFS_INODE_RPC_INVAL;
+                }
                 }
             } else if (type == EFS_MSG_INODE_RENAME) {
                 struct efs_msg_inode_rename *req = payload;
@@ -1829,6 +1864,9 @@ send_reply:
                 }
             } else if (type == EFS_MSG_INODE_SETATTR) {
                 struct efs_msg_inode_setattr *req = payload;
+                if (reply_if_shard_busy(ex, req->ino, &r)) {
+                    /* hollow extra */
+                } else {
                 struct efs_export *tab = table_for_ino(ex, req->ino);
                 struct efs_inode cur;
                 if (efs_export_get_inode(tab, req->ino, &cur) != 0) {
@@ -1865,8 +1903,12 @@ send_reply:
                     efs_export_get_inode(tab, req->ino, &r.inode);
                     r.status = EFS_INODE_RPC_OK;
                 }
+                }
             } else if (type == EFS_MSG_INODE_APPEND) {
                 struct efs_msg_inode_append *req = payload;
+                if (reply_if_shard_busy(ex, req->ino, &r)) {
+                    /* hollow extra */
+                } else {
                 struct efs_export *tab = table_for_ino(ex, req->ino);
                 struct efs_inode cur;
                 if (efs_export_get_inode(tab, req->ino, &cur) != 0 ||
@@ -1908,6 +1950,7 @@ send_reply:
                         r.inode.size = off + req->len;
                         r.status = EFS_INODE_RPC_OK;
                     }
+                }
                 }
             } else if (type == EFS_MSG_INODE_LINK) {
                 struct efs_msg_inode_link *req = payload;
@@ -1984,6 +2027,9 @@ send_reply:
                 }
             } else if (type == EFS_MSG_INODE_LINK_SHARD) {
                 struct efs_msg_inode_link_shard *req = payload;
+                if (reply_if_shard_busy(ex, req->src_ino, &r)) {
+                    /* hollow extra */
+                } else {
                 int lrc = efs_export_nlink_inc(ex, req->src_ino, &r.inode);
                 if (lrc == 0) {
                     r.status = EFS_INODE_RPC_OK;
@@ -1992,6 +2038,7 @@ send_reply:
                     r.status = (lrc == EFS_ERR_NOT_FOUND)
                                    ? EFS_INODE_RPC_NOT_FOUND
                                    : EFS_INODE_RPC_INVAL;
+                }
                 }
             }
             pthread_mutex_unlock(&g_server->lock);
@@ -2142,6 +2189,36 @@ send_reply:
                 uint32_t nlive = server_nlive_locked(g_server, live);
                 uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
                 uint32_t bits = ex->root.shard_bits;
+                int shard_busy = 0;
+                if (bits && sc > 1) {
+                    uint8_t seen[EFS_META_MAX_SHARDS];
+                    memset(seen, 0, sizeof(seen));
+                    for (uint32_t k = 0; k < count && !shard_busy; k++) {
+                        uint32_t sh = efs_export_shard_of(recs[k].ino, bits);
+                        if (sh >= EFS_META_MAX_SHARDS || seen[sh])
+                            continue;
+                        seen[sh] = 1;
+                        if (efs_shard_owner_of(sh, sc, live, nlive) !=
+                            g_server->id)
+                            continue;
+                        if (server_ensure_shard_ready(g_server, ex, sh) != 0)
+                            shard_busy = 1;
+                    }
+                    for (uint32_t k = 0; k < ino_count && !shard_busy; k++) {
+                        uint32_t sh = efs_export_shard_of(irecs[k].ino, bits);
+                        if (sh >= EFS_META_MAX_SHARDS || seen[sh])
+                            continue;
+                        seen[sh] = 1;
+                        if (efs_shard_owner_of(sh, sc, live, nlive) !=
+                            g_server->id)
+                            continue;
+                        if (server_ensure_shard_ready(g_server, ex, sh) != 0)
+                            shard_busy = 1;
+                    }
+                }
+                if (shard_busy) {
+                    r.status = EFS_INODE_RPC_BUSY;
+                } else {
                 for (uint32_t k = 0; k < count; k++) {
                     /* Yield the global lock every 1024 recs. A 9-client
                      * close-report applies tens of thousands of chunk recs;
@@ -2253,6 +2330,7 @@ send_reply:
                  * re-takes s->lock internally). */
                 if (sync)
                     do_flush = 1;
+                }
             }
             pthread_mutex_unlock(&g_server->lock);
             if (do_flush) {
@@ -2329,6 +2407,13 @@ send_reply:
                 }
                 if (!ex) {
                     r.status = EFS_INODE_RPC_NOT_FOUND;
+                } else if (server_ensure_shard_ready(
+                               g_server, ex,
+                               ex->root.shard_bits
+                                   ? efs_export_shard_of(req->ino,
+                                                         ex->root.shard_bits)
+                                   : 0) != 0) {
+                    r.status = EFS_INODE_RPC_BUSY;
                 } else {
                     struct efs_export *tab = table_for_ino(ex, req->ino);
                     struct efs_inode ino;
