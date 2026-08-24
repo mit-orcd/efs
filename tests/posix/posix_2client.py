@@ -24,6 +24,7 @@ Internal (harness / --remote):
 from __future__ import print_function
 
 import errno
+import fcntl
 import os
 import shutil
 import subprocess
@@ -294,6 +295,322 @@ def peer_unlink_gone():
             raise Fail("B still sees unlinked 'gone'")
 
     return [("a", a), ("b", b)]
+
+
+@test
+def peer_chmod_visible():
+    """A chmod; B must see the new mode."""
+    def a(d):
+        p = os.path.join(d, "f")
+        wr(p, b"x")
+        os.chmod(p, 0o600)
+
+    def b(d):
+        mode = os.stat(os.path.join(d, "f")).st_mode & 0o777
+        eq(mode, 0o600, "B mode")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_utimens_visible():
+    """A utime; B must see the new mtime."""
+    def a(d):
+        p = os.path.join(d, "f")
+        wr(p, b"x")
+        os.utime(p, (1500000000, 1500000000))
+
+    def b(d):
+        eq(int(os.stat(os.path.join(d, "f")).st_mtime), 1500000000, "B mtime")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_truncate_visible():
+    """A truncate; B must see the new size and prefix."""
+    def a(d):
+        p = os.path.join(d, "f")
+        wr(p, b"0123456789")
+        os.truncate(p, 4)
+
+    def b(d):
+        p = os.path.join(d, "f")
+        eq(os.path.getsize(p), 4, "B size after truncate")
+        eq(rd(p), b"0123", "B data after truncate")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_hardlink_visible():
+    """A hardlink; B sees both names, same ino, shared data."""
+    def a(d):
+        wr(os.path.join(d, "f"), b"shared")
+        os.link(os.path.join(d, "f"), os.path.join(d, "g"))
+
+    def b(d):
+        f = os.path.join(d, "f")
+        g = os.path.join(d, "g")
+        if not os.path.exists(g):
+            raise Fail("B does not see hardlink g")
+        eq(os.stat(f).st_ino, os.stat(g).st_ino, "B same ino")
+        eq(os.stat(f).st_nlink, 2, "B nlink")
+        eq(rd(g), b"shared", "B read via g")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_symlink_visible():
+    """A symlink; B readlink + follow."""
+    def a(d):
+        wr(os.path.join(d, "t"), b"tgt")
+        os.symlink("t", os.path.join(d, "l"))
+
+    def b(d):
+        l = os.path.join(d, "l")
+        if not os.path.islink(l):
+            raise Fail("B does not see symlink l")
+        eq(os.readlink(l), "t", "B readlink")
+        eq(rd(l), b"tgt", "B follow")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_negative_dentry():
+    """B ENOENT, A create, B must see the file (no sticky negative dentry)."""
+    def b1(d):
+        try:
+            os.stat(os.path.join(d, "later"))
+        except OSError as e:
+            if e.errno != errno.ENOENT:
+                raise Fail("B stat later errno %s" % e.errno)
+        else:
+            raise Fail("later existed before A created it")
+
+    def a(d):
+        wr(os.path.join(d, "later"), b"now")
+
+    def b2(d):
+        eq(rd(os.path.join(d, "later")), b"now", "B after create")
+
+    return [("b", b1), ("a", a), ("b", b2)]
+
+
+@test
+def peer_fsync_then_read():
+    """A write+fsync; B reads the bytes."""
+    payload = b"fsync-vis" * 64
+
+    def a(d):
+        fd = os.open(os.path.join(d, "f"), os.O_CREAT | os.O_WRONLY, 0o644)
+        os.write(fd, payload)
+        os.fsync(fd)
+        os.close(fd)
+
+    def b(d):
+        eq(rd(os.path.join(d, "f")), payload, "B after A fsync")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_mkdir_rmdir_recreate():
+    """A mkdir, rmdir, mkdir again; B sees the new directory."""
+    def a(d):
+        p = os.path.join(d, "sub")
+        os.mkdir(p)
+        os.rmdir(p)
+        os.mkdir(p)
+        wr(os.path.join(p, "inner"), b"y")
+
+    def b(d):
+        p = os.path.join(d, "sub")
+        if not os.path.isdir(p):
+            raise Fail("B does not see recreated sub")
+        eq(rd(os.path.join(p, "inner")), b"y", "B inner")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_oappend():
+    """A writes, B O_APPEND, A reads both lines (cross-client append)."""
+    def a(d):
+        wr(os.path.join(d, "f"), b"line1\n")
+
+    def b(d):
+        fd = os.open(os.path.join(d, "f"), os.O_WRONLY | os.O_APPEND)
+        os.write(fd, b"line2\n")
+        os.close(fd)
+
+    def a2(d):
+        eq(rd(os.path.join(d, "f")), b"line1\nline2\n", "A sees B O_APPEND")
+
+    return [("a", a), ("b", b), ("a", a2)]
+
+
+@test
+def peer_rename_over():
+    """A rename-over; B sees old name gone and dest content replaced."""
+    def a(d):
+        wr(os.path.join(d, "src"), b"NEW")
+        wr(os.path.join(d, "dst"), b"OLD")
+        os.rename(os.path.join(d, "src"), os.path.join(d, "dst"))
+
+    def b(d):
+        if os.path.exists(os.path.join(d, "src")):
+            raise Fail("B still sees renamed-away src")
+        eq(rd(os.path.join(d, "dst")), b"NEW", "B dest after rename-over")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_flock_exclusive():
+    """A holds flock EX; B LOCK_EX|NB must fail; unlock lets B in."""
+    def a(d):
+        wr(os.path.join(d, "f"), b"x")
+        _spawn_holder(d, "flock")
+
+    def b(d):
+        fd = os.open(os.path.join(d, "f"), os.O_RDWR)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as e:
+            if e.errno not in (errno.EAGAIN, errno.EWOULDBLOCK):
+                raise Fail("B flock errno %s (want EAGAIN)" % e.errno)
+        else:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            raise Fail("B acquired LOCK_EX while A held it")
+        finally:
+            os.close(fd)
+
+    def a2(d):
+        _holder_go(d)
+        fd = os.open(os.path.join(d, "f"), os.O_RDWR)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        except OSError as e:
+            raise Fail("A could not LOCK_EX after holder released: %s" % e)
+        finally:
+            os.close(fd)
+
+    return [("a", a), ("b", b), ("a", a2)]
+
+
+@test
+def peer_unlink_while_b_has_fd():
+    """B holds an fd; A unlinks the name; B still reads the bytes."""
+    def a(d):
+        wr(os.path.join(d, "f"), b"still-here")
+
+    def b(d):
+        _spawn_holder(d, "holdfd")
+
+    def a2(d):
+        os.unlink(os.path.join(d, "f"))
+        if os.path.exists(os.path.join(d, "f")):
+            raise Fail("name still exists after unlink")
+
+    def b2(d):
+        data = _holder_go(d)
+        eq(data, b"still-here", "B fd read after A unlink")
+
+    return [("a", a), ("b", b), ("a", a2), ("b", b2)]
+
+
+_HOLD_SCRIPT = r"""import fcntl, os, sys, time
+mode, path, ready, go, result = sys.argv[1:6]
+fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+data = b""
+rc = 2
+try:
+    if mode == "flock":
+        fcntl.flock(fd, fcntl.LOCK_EX)
+    with open(ready, "w") as f:
+        f.write("1\n")
+        f.flush()
+        os.fsync(f.fileno())
+    deadline = time.time() + 20.0
+    while time.time() < deadline:
+        if os.path.exists(go):
+            if mode == "holdfd":
+                os.lseek(fd, 0, os.SEEK_SET)
+                data = os.read(fd, 4096)
+            else:
+                data = b"ok\n"
+            rc = 0
+            break
+        time.sleep(0.05)
+finally:
+    try:
+        os.close(fd)
+    except OSError:
+        pass
+    try:
+        with open(result, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+    except OSError:
+        pass
+sys.exit(rc)
+"""
+
+
+def _holder_paths(d):
+    return (os.path.join(d, ".hold-ready"),
+            os.path.join(d, ".hold-go"),
+            os.path.join(d, ".hold-result"))
+
+
+def _spawn_holder(d, mode):
+    ready, go, result = _holder_paths(d)
+    for p in (ready, go, result):
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
+    script = "/tmp/efs-posix2-hold.py"
+    with open(script, "w") as f:
+        f.write(_HOLD_SCRIPT)
+    target = os.path.join(d, "f")
+    subprocess.Popen(
+        [sys.executable, script, mode, target, ready, go, result],
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        if os.path.exists(ready):
+            return
+        time.sleep(0.05)
+    raise Fail("holder %s did not become ready" % mode)
+
+
+def _holder_go(d):
+    ready, go, result = _holder_paths(d)
+    with open(go, "w") as f:
+        f.write("1\n")
+        f.flush()
+        os.fsync(f.fileno())
+    deadline = time.time() + 8.0
+    while time.time() < deadline:
+        if os.path.exists(result):
+            with open(result, "rb") as f:
+                return f.read()
+        if not os.path.exists(ready):
+            break
+        time.sleep(0.05)
+    if os.path.exists(result):
+        with open(result, "rb") as f:
+            return f.read()
+    return b""
 
 
 def stat_isdir(st):

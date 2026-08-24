@@ -29,6 +29,103 @@ static int copy_node_by_id(struct efsd_server *s, efs_node_id_t id,
     return -1;
 }
 
+static uint64_t heal_mono_us(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000ull;
+}
+
+static void heal_prog_begin(struct efsd_server *s, const char *name,
+                            uint32_t shard, uint32_t pages, uint64_t gen)
+{
+    if (!s)
+        return;
+    pthread_mutex_lock(&s->lock);
+    s->heal_active = 1;
+    memset(s->heal_export, 0, sizeof(s->heal_export));
+    if (name)
+        strncpy(s->heal_export, name, sizeof(s->heal_export) - 1);
+    s->heal_shard = shard;
+    s->heal_pages_done = 0;
+    s->heal_pages_total = pages;
+    s->heal_gen = gen;
+    s->heal_started_us = heal_mono_us();
+    s->heal_last_us = s->heal_started_us;
+    pthread_mutex_unlock(&s->lock);
+}
+
+static void heal_prog_page(struct efsd_server *s, uint32_t done)
+{
+    if (!s)
+        return;
+    pthread_mutex_lock(&s->lock);
+    s->heal_pages_done = done;
+    s->heal_last_us = heal_mono_us();
+    pthread_mutex_unlock(&s->lock);
+}
+
+static void heal_prog_end(struct efsd_server *s)
+{
+    if (!s)
+        return;
+    pthread_mutex_lock(&s->lock);
+    s->heal_active = 0;
+    pthread_mutex_unlock(&s->lock);
+}
+
+void server_fill_heal_status(struct efsd_server *s,
+                             struct efs_msg_heal_status_reply *r)
+{
+    memset(r, 0, sizeof(*r));
+    if (!s)
+        return;
+    pthread_mutex_lock(&s->lock);
+    uint32_t n = s->export_count;
+    if (n > EFS_MAX_EXPORTS)
+        n = EFS_MAX_EXPORTS;
+    r->export_count = n;
+    uint64_t now = heal_mono_us();
+    for (uint32_t e = 0; e < n; e++) {
+        struct efs_export *ex = &s->exports[e];
+        struct efs_msg_heal_status_export *o = &r->exports[e];
+        strncpy(o->name, ex->name, EFS_MAX_NAME - 1);
+        o->gen = ex->root.generation;
+        uint32_t total = 1, need = 0;
+        if (ex->meta_fragmented && ex->root.page_count > 0 &&
+            ex->meta_needs_rebuild)
+            need++;
+        if (ex->shard_tabs) {
+            for (uint32_t i = 1; i < ex->shard_tab_cap &&
+                 i < EFS_META_MAX_SHARDS; i++) {
+                struct efs_export *tab = ex->shard_tabs[i];
+                if (!tab)
+                    continue;
+                total++;
+                if (tab->meta_needs_rebuild && tab->root.page_count > 0)
+                    need++;
+            }
+        }
+        o->tables_total = total;
+        o->tables_need = need;
+        if (need)
+            o->flags |= EFS_HEAL_F_TABLES;
+        if (s->heal_active &&
+            (s->heal_export[0] == '\0' ||
+             strcmp(s->heal_export, ex->name) == 0)) {
+            o->flags |= EFS_HEAL_F_REBUILD;
+            o->cur_shard = s->heal_shard;
+            o->pages_done = s->heal_pages_done;
+            o->pages_total = s->heal_pages_total;
+            if (s->heal_started_us && now >= s->heal_started_us)
+                o->elapsed_us = now - s->heal_started_us;
+        }
+        if (o->flags)
+            r->healing = 1;
+    }
+    pthread_mutex_unlock(&s->lock);
+}
+
 static int server_get_fragment_on_fd(int fd, efs_export_id_t export_id, efs_ino_t ino,
                                     uint32_t chunk_index, uint32_t fragment_index,
                                     uint8_t *data, uint8_t *checksum)
@@ -417,6 +514,7 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
         frag_buf + 2 * EFS_META_FRAGMENT_SIZE
     };
     uint32_t holed = 0;
+    heal_prog_begin(s, ex->name, shard_slot, page_count, start_gen);
 
     for (uint32_t pi = 0; pi < page_count; pi++) {
         /* Early-abort on a stale root: if a concurrent flush advanced the
@@ -470,8 +568,10 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
             free(frag_buf);
             free(pages);
             efs_export_root_free(&snap);
+            heal_prog_end(s);
             return EFS_ERR_PROTO;
         }
+        heal_prog_page(s, pi + 1);
         if (cached)
             continue;
 
@@ -658,6 +758,7 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
                 free(frag_buf);
                 free(pages);
                 efs_export_root_free(&snap);
+                heal_prog_end(s);
                 return EFS_ERR_PROTO;
             }
             /* Hopeless page (no candidate CI yields 2 checksum-matching
@@ -688,6 +789,7 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
     free(pages);
     if (rc != EFS_OK) {
         efs_export_root_free(&snap);
+        heal_prog_end(s);
         return rc;
     }
 
@@ -707,6 +809,7 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
         efs_export_free(&staging);
         free(blob);
         efs_export_root_free(&snap);
+        heal_prog_end(s);
         return EFS_ERR_PROTO;
     }
     if (rc != EFS_OK) {
@@ -719,6 +822,7 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
         ex->meta_needs_rebuild = 1;
         fprintf(stderr, "FENCE-SITE rebuild-deserialize-fail rc=%d\n", rc);
         pthread_mutex_unlock(&s->lock);
+        heal_prog_end(s);
         return rc;
     }
 
@@ -786,6 +890,7 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
      * the export's working copy from the (server-preserved) root. */
     ex->features = ex->root.features;
     pthread_mutex_unlock(&s->lock);
+    heal_prog_end(s);
     return EFS_OK;
 }
 

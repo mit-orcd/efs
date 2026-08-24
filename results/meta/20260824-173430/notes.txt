@@ -1,0 +1,16 @@
+Skip full-table metadata.efsm serialize on fragmented server_save_export
+(store.c). Persist EFSR root only; unlink stale .efsm. Deployed all 4 efsd
+together on 1afda5433e6b-dirty. Cluster 4 up / 0 down, heal idle gen=363
+before bench. efs-bench --meta w=1 only (trust w=1). Same grown table
+(20347 inodes / 569406 chunks).
+
+vs Stage 0 baseline 20260824-160528 w=1 and quiet-retry (create 93 / unlink 26):
+  create  116  (was 604 / 93)   still red
+  stat    223  (was 355 / 242)  still red
+  getattr 65781 — local, untrustworthy
+  setattr 3638 (was 1206 / 453) recovered, above baseline
+  rename  3354 (was 1791 / 1091) recovered, above baseline
+  unlink  23.7 (was 365 / 26)   still red
+
+After unlink all 4 nodes were healing extra shards. Residual create/unlink
+tax is extras flush + catchup rebuild, not the .efsm dump.

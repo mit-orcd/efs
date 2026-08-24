@@ -16,6 +16,8 @@ static int rpc_status_to_efs(uint8_t st)
     case EFS_INODE_RPC_INVAL:       return EFS_ERR_INVAL;
     case EFS_INODE_RPC_NOT_PRIMARY: return EFS_ERR_NOT_PRIMARY;
     case EFS_INODE_RPC_NOT_EMPTY:   return EFS_ERR_NOT_EMPTY;
+    case EFS_INODE_RPC_SYMLINK:
+    case EFS_INODE_RPC_DEEP:        return EFS_ERR_PROTO;
     default:                        return EFS_ERR_IO;
     }
 }
@@ -112,6 +114,29 @@ static int rpc_send_recv_owner(efs_ino_t ino, uint8_t type, const void *req,
         target = r->primary_id;
     }
     return EFS_ERR_NOT_PRIMARY;
+}
+
+int efs_client_rpc_lookup_path(efs_export_id_t export_id, const char *path,
+                               uint32_t flags,
+                               struct efs_msg_inode_lookup_path_reply *out)
+{
+    struct efs_msg_inode_lookup_path req;
+    memset(&req, 0, sizeof(req));
+    req.export_id = export_id;
+    req.flags = flags;
+    if (path)
+        strncpy(req.path, path, sizeof(req.path) - 1);
+    struct efs_msg_inode_lookup_path_reply r;
+    int rc = rpc_send_recv_owner(EFS_ROOT_INO, EFS_MSG_INODE_LOOKUP_PATH, &req,
+                                 sizeof(req), EFS_MSG_INODE_LOOKUP_PATH_REPLY,
+                                 &r, sizeof(r));
+    if (rc != EFS_OK)
+        return rc;
+    if (r.status != EFS_INODE_RPC_OK)
+        return rpc_status_to_efs(r.status);
+    if (out)
+        *out = r;
+    return EFS_OK;
 }
 
 int efs_client_rpc_lookup(efs_export_id_t export_id, efs_ino_t parent,

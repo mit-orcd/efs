@@ -113,6 +113,7 @@
 /* Phase 2b: a metadata mutation was sent to a non-primary node; the client
  * should re-resolve the primary and retry. */
 #define EFS_ERR_NOT_PRIMARY -15
+#define EFS_ERR_ACCES       -16 /* EACCES (search/execute denied) */
 
 typedef uint64_t efs_ino_t;
 typedef uint32_t efs_export_id_t;

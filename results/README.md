@@ -26,6 +26,17 @@ results/
     <run_id>/
       nvme-<host>.tsv       # per-server, per-drive, serial + parallel
       summary.tsv
+  ewrite/
+    history.tsv             # ewrite.sh runs (30s efs sweep + full NFS 1 2)
+    <run_id>/
+      ewrite-<host>.tsv     # per-host rows + script chatter
+      summary.tsv           # ts host jobs wall_s bytes mib_s rc [dest]
+      notes.txt             # optional: dest, compare to efs
+  meta/
+    history.tsv             # efs-bench --meta ops/s (read+write phases)
+    <run_id>/
+      meta-<host>-wN.txt    # raw bench output per worker count
+      summary.tsv           # run_id host workers phase rw ops wall_s ops_s
 ```
 
 ## Running
@@ -39,6 +50,8 @@ tests/run_tests.sh perf   multi  quick            # all 9 pure clients
 tests/run_tests.sh all                            # posix + perf multi
 COMMIT=1 tests/run_tests.sh perf multi full       # + git-commit the results
 tests/run_tests.sh nvme full both                 # 4-server /data1/01-06 NVMe ceiling
+tests/run_tests.sh ewrite fcstor007.ib            # 30s ewrite.sh 1 2/4/8/16
+tests/run_tests.sh meta fcstor007.ib              # efs-bench --meta 1/4/16 workers
 ```
 
 `tests/posix/posix_suite.py <dir>` and `tests/perf/perf_node.sh <mnt> <out>`

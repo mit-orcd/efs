@@ -4,6 +4,7 @@
 #include "efs/common.h"
 #include "efs/metadata.h"
 #include "efs/network.h"
+#include "efs/protocol.h"
 #include <pthread.h>
 #include <sys/types.h>
 
@@ -147,6 +148,9 @@ int efs_client_ensure_meta_room(uint64_t extra_inodes, uint64_t extra_chunks);
 int efs_client_take_write_lease(void);
 int efs_client_rpc_lookup(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, struct efs_inode *out);
+int efs_client_rpc_lookup_path(efs_export_id_t export_id, const char *path,
+                               uint32_t flags,
+                               struct efs_msg_inode_lookup_path_reply *out);
 int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, uint32_t mode, uid_t uid, gid_t gid,
                           efs_ino_t *out_ino, struct efs_inode *out);
@@ -218,6 +222,17 @@ extern struct efs_client g_client;
 
 /* Resolve a path to an inode number. Returns 0 on success. */
 int efs_client_lookup(const char *path, struct efs_inode *out);
+
+/* Path walk + ancestor X_OK. uid==0 skips the check (same as lookup). */
+int efs_client_lookup_x(const char *path, uid_t uid, gid_t gid,
+                        const gid_t *groups, int ngroups, struct efs_inode *out);
+
+/* Set atime and mtime in one SETATTR RPC. */
+int efs_client_utimens_both(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec,
+                            uint64_t atime);
+
+/* Client inode-number namespace so concurrent writers do not collide. */
+void efs_client_setup_ino_namespace(void);
 
 /* Fetch full metadata from a server and replace local copy. */
 int efs_client_fetch_metadata(const char *host, uint16_t port);

@@ -35,6 +35,18 @@ static void time_now(uint64_t *t)
     *t = (uint64_t)ts.tv_sec;
 }
 
+static struct efs_inode *inode_ptr(struct efs_export *ex, efs_ino_t ino);
+
+static void parent_touch(struct efs_export *ex, efs_ino_t parent)
+{
+    struct efs_inode *p = inode_ptr(ex, parent);
+    if (!p)
+        return;
+    time_now(&p->mtime);
+    p->ctime = p->mtime;
+    p->mtime_nsec = 0;
+}
+
 static uint64_t hash_mix(uint64_t x)
 {
     x ^= x >> 30;
@@ -1876,6 +1888,7 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
     }
 
     rollup_add_under(ex, parent, ino);
+    parent_touch(ex, parent);
     return ino->ino;
 }
 
@@ -2001,6 +2014,7 @@ int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *
 
     rollup_sub_under(ex, parent, &removed);
     child_idx_del(ex, parent, pos);
+    parent_touch(ex, parent);
     remove_inode_slot(ex, pos, nlink > 0);
 
     if (nlink == 0) {
@@ -2176,6 +2190,7 @@ int efs_export_link_dentry(struct efs_export *ex, const struct efs_inode *src,
     name_idx_put(ptab, new_parent, new_name, pos);
     child_idx_add(ptab, new_parent, pos);
     rollup_add_under(ptab, new_parent, dst);
+    parent_touch(ptab, new_parent);
     if (ptab != ex)
         ptab->shard_dirty = 1;
     return EFS_OK;
@@ -2259,6 +2274,7 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
     name_idx_put(ex, new_parent, new_name, pos);
     child_idx_add(ex, new_parent, pos);
     rollup_add_under(ex, new_parent, dst);
+    parent_touch(ex, new_parent);
     return EFS_OK;
 }
 
@@ -2517,8 +2533,12 @@ int efs_export_rename(struct efs_export *ex, efs_ino_t ino,
                     np->nlink++;
             }
             rollup_add_under(ex, new_parent, src);
-        } else
+            parent_touch(ex, old_parent);
+            parent_touch(ex, new_parent);
+        } else {
             recompute_times_up(ex, new_parent);
+            parent_touch(ex, new_parent);
+        }
     }
     return EFS_OK;
 }

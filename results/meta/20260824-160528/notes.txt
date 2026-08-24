@@ -1,0 +1,20 @@
+Baseline before op-path fixes. bits=3 efs-test, fcstor007, 5000 files / 64 dirs.
+
+Bench-self profile (5000 files, 4 workers, --perf): dominant symbol
+efs_rdma_recv_wait 37%. No snprintf/malloc/strtok in the timed path.
+Bench-owned userspace is noise; the bench waits on the server.
+
+Trust w=1 as the single-stream baseline (matches ecopy's iodepth=1):
+  create   604 ops/s
+  stat     355 ops/s   (full-path walk; the hot path)
+  getattr 3793 ops/s   (by ino)
+  setattr 1206 ops/s   (2 RPCs/file)
+  rename  1790 ops/s
+  unlink   365 ops/s
+  readdir  ~1.2M ops/s (tiny dirs; not a limiter)
+
+w=4/16: writes scale poorly (create 604 -> 1222 -> 1523) as expected
+from g_server->lock. Some read phases look too fast or getattr-flaky
+(w=4 getattr 3750 fail once); do not use those as the A/B number.
+
+Target after stages 1-2: stat/setattr >= 5-10x vs w=1, create/unlink >= 2-3x.

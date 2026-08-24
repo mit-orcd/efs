@@ -312,6 +312,18 @@ void server_save_export(struct efsd_server *s, struct efs_export *ex)
         if (efs_export_save(ex, path) != EFS_OK)
             fprintf(stderr, "Failed to save metadata for export %s on %s\n",
                     ex->name, s->storage_paths[ri]);
+        /* Fragmented/CoW exports persist via the EFSR root + page fragments.
+         * Dumping the live table to metadata.efsm is O(chunks) and was the
+         * create/unlink hot path: 71 MB × 6 NVMe + fsync on every extras
+         * PUT_META, under g_server->lock on the connection thread. Drop any
+         * stale blob so a later restart rebuilds from pages instead of
+         * adopting a generation-mismatched snapshot. Legacy (non-fragmented)
+         * exports still write the compact blob. */
+        if (ex->meta_fragmented) {
+            export_efsm_path_at(s, ri, ex, path, sizeof(path));
+            unlink(path);
+            continue;
+        }
         if (ex->inode_count > 0 && !ex->meta_needs_rebuild) {
             char *blob = NULL;
             size_t blen = 0;

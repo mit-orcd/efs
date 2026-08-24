@@ -19,6 +19,7 @@ posix_2client.py — run via `tests/run_tests.sh posix2`.
 """
 import errno
 import fcntl
+import mmap
 import os
 import shutil
 import stat as statmod
@@ -1990,8 +1991,347 @@ def flock_second_fd_exclusive(d):
         os.close(fd2)
 
 
+# ==========================================================================
+# O_DIRECT, vectored I/O, packed→chunked grow, two-fd visibility
+# ==========================================================================
+_DIO_ALIGN = 4096
+
+
+def _dio_mmap(n):
+    """Page-aligned anonymous buffer for O_DIRECT."""
+    if n < 1:
+        raise Fail("dio mmap size %d" % n)
+    return mmap.mmap(-1, n)
+
+
+def _dio_write(fd, data, off=None):
+    m = _dio_mmap(len(data))
+    m[:] = data
+    try:
+        if off is None:
+            return os.writev(fd, [m])
+        if hasattr(os, "pwritev"):
+            return os.pwritev(fd, [m], off)
+        os.lseek(fd, off, os.SEEK_SET)
+        return os.writev(fd, [m])
+    finally:
+        m.close()
+
+
+def _dio_read(fd, n, off=0):
+    m = _dio_mmap(n)
+    try:
+        if hasattr(os, "preadv"):
+            k = os.preadv(fd, [m], off)
+        else:
+            os.lseek(fd, off, os.SEEK_SET)
+            k = os.readv(fd, [m])
+        return bytes(m[:k])
+    finally:
+        m.close()
+
+
+@test
+def direct_aligned_rdwr(d):
+    p = os.path.join(d, "f")
+    payload = b"D" * _DIO_ALIGN
+    fd = os.open(p, os.O_CREAT | os.O_RDWR | os.O_DIRECT, 0o644)
+    try:
+        _dio_write(fd, payload)
+        os.fsync(fd)
+        eq(_dio_read(fd, _DIO_ALIGN, 0), payload, "O_DIRECT same-fd read")
+    finally:
+        os.close(fd)
+    fd2 = os.open(p, os.O_RDONLY | os.O_DIRECT)
+    try:
+        eq(_dio_read(fd2, _DIO_ALIGN, 0), payload, "O_DIRECT reopen read")
+    finally:
+        os.close(fd2)
+
+
+@test
+def direct_unaligned_einval(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x" * _DIO_ALIGN)
+    fd = os.open(p, os.O_RDWR | os.O_DIRECT)
+    try:
+        expect_err(errno.EINVAL, os.write, fd, b"short")
+    finally:
+        os.close(fd)
+
+
+@test
+def direct_rmw_4k_in_chunk(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR | os.O_DIRECT, 0o644)
+    try:
+        _dio_write(fd, b"A" * _CHUNK)
+        os.fsync(fd)
+        _dio_write(fd, b"B" * _DIO_ALIGN, off=8192)
+        os.fsync(fd)
+        got = _dio_read(fd, _CHUNK, 0)
+    finally:
+        os.close(fd)
+    eq(got[:8192], b"A" * 8192, "prefix before 4k patch")
+    eq(got[8192:8192 + _DIO_ALIGN], b"B" * _DIO_ALIGN, "4k patch")
+    eq(got[8192 + _DIO_ALIGN:], b"A" * (_CHUNK - 8192 - _DIO_ALIGN),
+       "suffix after 4k patch")
+
+
+@test
+def packed_then_grow_past_chunk(d):
+    """Small (packed) file must keep its prefix after growing past 128 KiB."""
+    p = os.path.join(d, "f")
+    prefix = b"PACKED-HEAD"
+    wr(p, prefix)
+    fd = os.open(p, os.O_RDWR)
+    try:
+        os.fsync(fd)
+        os.lseek(fd, 0, os.SEEK_END)
+        os.write(fd, b"M" * _CHUNK)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    data = rd(p)
+    eq(data[:len(prefix)], prefix, "packed prefix survived grow")
+    eq(data[len(prefix):], b"M" * _CHUNK, "grown tail")
+
+
+@test
+def writev_readv_chunk_straddle(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        n = os.writev(fd, [b"A" * (_CHUNK - 3), b"XYZ", b"B" * 16])
+        eq(n, _CHUNK - 3 + 3 + 16, "writev n")
+        os.lseek(fd, _CHUNK - 3, os.SEEK_SET)
+        bufs = [bytearray(3), bytearray(16)]
+        n = os.readv(fd, bufs)
+        eq(n, 19, "readv n")
+        eq(bytes(bufs[0]), b"XYZ", "readv straddle")
+        eq(bytes(bufs[1]), b"B" * 16, "readv tail")
+    finally:
+        os.close(fd)
+
+
+@test
+def zero_length_write(d):
+    p = os.path.join(d, "f")
+    wr(p, b"keep")
+    fd = os.open(p, os.O_RDWR)
+    try:
+        n = os.write(fd, b"")
+        eq(n, 0, "zero-length write n")
+    finally:
+        os.close(fd)
+    eq(rd(p), b"keep", "zero-length write must not change data")
+    eq(os.path.getsize(p), 4, "zero-length write must not change size")
+
+
+@test
+def fcntl_setfl_oappend(d):
+    p = os.path.join(d, "f")
+    wr(p, b"aaa")
+    fd = os.open(p, os.O_RDWR)
+    try:
+        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_APPEND)
+        os.lseek(fd, 0, os.SEEK_SET)
+        os.write(fd, b"ZZZ")
+    finally:
+        os.close(fd)
+    eq(rd(p), b"aaaZZZ", "F_SETFL O_APPEND writes at EOF")
+
+
+@test
+def two_fds_size_mtime(d):
+    p = os.path.join(d, "f")
+    fd1 = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    fd2 = os.open(p, os.O_RDONLY)
+    try:
+        os.write(fd1, b"abcdef")
+        os.fsync(fd1)
+        st = os.fstat(fd2)
+        eq(st.st_size, 6, "other-fd fstat size")
+        os.lseek(fd2, 0, os.SEEK_SET)
+        eq(os.read(fd2, 6), b"abcdef", "other-fd read")
+    finally:
+        os.close(fd1)
+        os.close(fd2)
+
+
+@test
+def trunc_open_other_fd(d):
+    p = os.path.join(d, "f")
+    wr(p, b"0123456789")
+    fd1 = os.open(p, os.O_RDWR)
+    fd2 = os.open(p, os.O_WRONLY | os.O_TRUNC)
+    try:
+        os.write(fd2, b"Z")
+        os.fsync(fd2)
+        eq(os.fstat(fd1).st_size, 1, "open fd sees O_TRUNC size")
+        os.lseek(fd1, 0, os.SEEK_SET)
+        eq(os.read(fd1, 8), b"Z", "open fd sees O_TRUNC data")
+    finally:
+        os.close(fd1)
+        os.close(fd2)
+
+
+@test
+def link_across_dirs(d):
+    a = os.path.join(d, "a")
+    b = os.path.join(d, "b")
+    os.mkdir(a)
+    os.mkdir(b)
+    wr(os.path.join(a, "f"), b"shared")
+    os.link(os.path.join(a, "f"), os.path.join(b, "g"))
+    eq(os.stat(os.path.join(a, "f")).st_nlink, 2, "nlink after cross-dir link")
+    eq(os.stat(os.path.join(a, "f")).st_ino,
+       os.stat(os.path.join(b, "g")).st_ino, "same ino")
+    eq(rd(os.path.join(b, "g")), b"shared", "read via other dir")
+
+
+@test
+def last_link_unlink_other_dir(d):
+    a = os.path.join(d, "a")
+    b = os.path.join(d, "b")
+    os.mkdir(a)
+    os.mkdir(b)
+    wr(os.path.join(a, "f"), b"keep")
+    os.link(os.path.join(a, "f"), os.path.join(b, "g"))
+    os.unlink(os.path.join(a, "f"))
+    eq(rd(os.path.join(b, "g")), b"keep", "survived first-name unlink")
+    eq(os.stat(os.path.join(b, "g")).st_nlink, 1, "nlink after first unlink")
+    os.unlink(os.path.join(b, "g"))
+    assert not os.path.exists(os.path.join(b, "g"))
+
+
+@test
+def nlink_after_unlink_open(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    os.write(fd, b"open-nlink")
+    os.unlink(p)
+    try:
+        st = os.fstat(fd)
+        eq(st.st_nlink, 0, "nlink 0 after last-name unlink")
+        os.lseek(fd, 0, os.SEEK_SET)
+        eq(os.read(fd, 10), b"open-nlink", "data after last unlink")
+    finally:
+        os.close(fd)
+    assert not os.path.exists(p)
+
+
+@test
+def o_nofollow(d):
+    wr(os.path.join(d, "t"), b"x")
+    os.symlink("t", os.path.join(d, "l"))
+    expect_err(errno.ELOOP, os.open, os.path.join(d, "l"),
+               os.O_RDONLY | os.O_NOFOLLOW)
+
+
+@test
+def o_directory(d):
+    wr(os.path.join(d, "f"), b"x")
+    os.mkdir(os.path.join(d, "sub"))
+    expect_err(errno.ENOTDIR, os.open, os.path.join(d, "f"),
+               os.O_RDONLY | os.O_DIRECTORY)
+    fd = os.open(os.path.join(d, "sub"), os.O_RDONLY | os.O_DIRECTORY)
+    os.close(fd)
+
+
+@test
+def ctime_on_link_rename(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    c0 = os.lstat(p).st_ctime
+    time.sleep(1.1)
+    os.link(p, os.path.join(d, "g"))
+    c1 = os.lstat(p).st_ctime
+    if c1 < c0:
+        raise Fail("ctime went backwards on link")
+    if c1 == c0:
+        raise Fail("ctime did not bump on link")
+    time.sleep(1.1)
+    os.rename(os.path.join(d, "g"), os.path.join(d, "h"))
+    c2 = os.lstat(p).st_ctime
+    if c2 < c1:
+        raise Fail("ctime went backwards on rename of other name")
+    if c2 == c1:
+        raise Fail("ctime did not bump on rename of other name")
+
+
+@test
+def st_ino_unique_hardlink_same(d):
+    a = os.path.join(d, "a")
+    b = os.path.join(d, "b")
+    wr(a, b"1")
+    wr(b, b"2")
+    ia, ib = os.stat(a).st_ino, os.stat(b).st_ino
+    if ia == ib:
+        raise Fail("two creates share ino %d" % ia)
+    os.link(a, os.path.join(d, "c"))
+    eq(os.stat(a).st_ino, os.stat(os.path.join(d, "c")).st_ino,
+       "hardlink same ino")
+    eq(os.stat(a).st_dev, os.stat(os.path.join(d, "c")).st_dev,
+       "hardlink same dev")
+
+
+@test
+def create_excl_two_proc(d):
+    p = os.path.join(d, "f")
+    snippet = (
+        "import os,sys,errno\n"
+        "p=sys.argv[1]\n"
+        "try:\n"
+        "    fd=os.open(p, os.O_CREAT|os.O_EXCL|os.O_WRONLY, 0o644)\n"
+        "    os.write(fd, b'x'); os.close(fd); sys.exit(0)\n"
+        "except OSError as e:\n"
+        "    sys.exit(17 if e.errno==errno.EEXIST else 2)\n"
+    )
+    procs = [
+        subprocess.Popen([sys.executable, "-c", snippet, p])
+        for _ in range(2)
+    ]
+    rcs = [pr.wait() for pr in procs]
+    wins = rcs.count(0)
+    exists = rcs.count(17)
+    if wins != 1 or exists != 1:
+        raise Fail("O_EXCL two-proc rcs=%s (want one 0 and one 17)" % rcs)
+    eq(rd(p), b"x", "winner content")
+
+
+@test
+def concurrent_overlap_write(d):
+    """Overlapping pwrites: size stays 4k and the file is one pattern, not a mix."""
+    import threading
+    p = os.path.join(d, "f")
+    wr(p, b"\x00" * 4096)
+    errors = []
+
+    def worker(byte):
+        try:
+            fd = os.open(p, os.O_RDWR)
+            os.pwrite(fd, byte * 4096, 0)
+            os.close(fd)
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    t0 = threading.Thread(target=worker, args=(b"A",))
+    t1 = threading.Thread(target=worker, args=(b"B",))
+    t0.start()
+    t1.start()
+    t0.join()
+    t1.join()
+    if errors:
+        raise Fail("overlap write: %s" % errors[0])
+    data = rd(p)
+    eq(len(data), 4096, "overlap size")
+    if data != b"A" * 4096 and data != b"B" * 4096:
+        raise Fail("torn overlap write (mix of A and B)")
+
+
 # Two-client live visibility is posix_2client.py (run_tests.sh posix2).
-# Still uncovered there: cross-client flock, and unlink-while-peer-has-fd.
 #
 # ==========================================================================
 # Runner

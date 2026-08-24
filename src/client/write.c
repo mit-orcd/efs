@@ -3382,7 +3382,7 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
             return room;
     }
     if (efs_export_needs_chunk_grow(&g_client.export))
-        export_reserve_chunks_locked(64);
+        export_reserve_chunks_locked(4096);
     efs_client_lock_dir(ino);
     pthread_mutex_lock(&g_client.idx_mu);
     efs_export_set_chunk(&g_client.export, ino, ci, nodes, checksums);
@@ -3700,6 +3700,31 @@ static void dcache_note_size(efs_ino_t ino, uint64_t end)
     efs_client_unlock_dir(ino);
 }
 
+static int dcache_store_full_chunk(efs_ino_t ino, uint32_t ci,
+                                   const uint8_t *src, uint32_t cs)
+{
+    if (dcache_patch(ino, ci, 0, src, cs) == 0)
+        return 0;
+    uint8_t *chunk = efs_buf_alloc(cs);
+    if (!chunk)
+        return -1;
+    memcpy(chunk, src, cs);
+    if (dcache_merge_owned(ino, ci, 0, src, cs, chunk, cs) != 0) {
+        efs_buf_free(chunk, cs);
+        return -1;
+    }
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(s, ino, ci);
+    if (e) {
+        e->have_base = 1;
+        e->nrange = 0;
+    }
+    pthread_mutex_unlock(mu);
+    return 0;
+}
+
 int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
                          const uint8_t *src)
 {
@@ -3708,13 +3733,28 @@ int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
     uint32_t cs = data_chunk_size();
     if (cs == 0)
         return -1;
-    uint32_t ci = (uint32_t)(offset / cs);
-    uint32_t off = (uint32_t)(offset % cs);
-    if ((uint64_t)off + len > cs)
-        return -1;
-    if (dcache_patch(ino, ci, off, src, len) != 0 &&
-        dcache_load_and_patch(ino, ci, off, src, len, cs) != 0)
-        return -1;
+    uint64_t remaining = len;
+    uint64_t pos = offset;
+    const uint8_t *p = src;
+    while (remaining) {
+        uint32_t ci = (uint32_t)(pos / cs);
+        uint32_t off = (uint32_t)(pos % cs);
+        uint32_t n = cs - off;
+        if ((uint64_t)n > remaining)
+            n = (uint32_t)remaining;
+        int rc;
+        if (off == 0 && n == cs)
+            rc = dcache_store_full_chunk(ino, ci, p, cs);
+        else if (dcache_patch(ino, ci, off, p, n) == 0)
+            rc = 0;
+        else
+            rc = dcache_load_and_patch(ino, ci, off, p, n, cs);
+        if (rc != 0)
+            return -1;
+        pos += n;
+        p += n;
+        remaining -= n;
+    }
     dcache_note_size(ino, offset + len);
     return 0;
 }
@@ -4039,7 +4079,7 @@ int efs_dcache_flush_all(void)
  * per test as writers re-dirtied slots mid-walk. Now writers just signal;
  * a small pool sweeps slots round-robin until dirty_bytes is back under the
  * low-water mark, so drain cost is spread and parallel instead of a stall. */
-#define DCACHE_RECLAIM_THREADS 4
+#define DCACHE_RECLAIM_THREADS 16
 #define DCACHE_RECLAIM_SCAN    64 /* slots per worker wake */
 static struct {
     pthread_mutex_t mu;
@@ -4465,7 +4505,7 @@ static int pack_put_chunk(efs_ino_t dir_ino, uint32_t ci, const uint8_t *chunk,
             }
         }
         if (efs_export_needs_chunk_grow(&g_client.export))
-            export_reserve_chunks_locked(64);
+            export_reserve_chunks_locked(4096);
         efs_client_lock_dir(dir_ino);
         pthread_mutex_lock(&g_client.idx_mu);
         efs_export_set_chunk(&g_client.export, dir_ino, ci, nodes, checksums);
@@ -4809,7 +4849,7 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
                 return room;
         }
         if (efs_export_needs_chunk_grow(&g_client.export))
-            export_reserve_chunks_locked(64);
+            export_reserve_chunks_locked(4096);
         efs_client_lock_dir(ino);
         pthread_mutex_lock(&g_client.idx_mu);
         efs_export_set_chunk(&g_client.export, ino, ci, nodes, checksums);
@@ -4926,7 +4966,7 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
                     return room;
             }
             if (efs_export_needs_chunk_grow(&g_client.export))
-                export_reserve_chunks_locked(64);
+                export_reserve_chunks_locked(4096);
             efs_client_lock_dir(ino);
             pthread_mutex_lock(&g_client.idx_mu);
             {

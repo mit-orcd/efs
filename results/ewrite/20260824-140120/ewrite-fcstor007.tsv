@@ -1,0 +1,11 @@
+ewrite_sweep host=fcstor007 mnt=/tmp/efs/mnt secs=30 jobs=2 4 8 16
+  jobs=2    wall=30.145s  written=2.899 GiB  98.5 MiB/s
+  jobs=4    wall=30.484s  written=4.525 GiB  152.0 MiB/s
+  jobs=8    wall=30.166s  written=5.826 GiB  197.8 MiB/s
+  jobs=16   wall=30.612s  written=6.054 GiB  202.5 MiB/s
+ewrite_sweep done -> /tmp/ewrite-20260824-140120.tsv
+ts	host	jobs	wall_s	bytes	mib_s	rc
+2026-08-24T14:01:21Z	fcstor007	2	30.145	3112326144	98.5	0
+2026-08-24T14:01:21Z	fcstor007	4	30.484	4858901504	152.0	0
+2026-08-24T14:01:21Z	fcstor007	8	30.166	6255409664	197.8	0
+2026-08-24T14:01:21Z	fcstor007	16	30.612	6500789248	202.5	0

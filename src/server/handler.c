@@ -90,6 +90,8 @@ static efs_ino_t inode_rpc_key(uint8_t type, const void *payload)
         return ((const struct efs_msg_inode_link_shard *)payload)->src_ino;
     case EFS_MSG_INODE_UNLINK_SHARD:
         return ((const struct efs_msg_inode_unlink_shard *)payload)->src_ino;
+    case EFS_MSG_INODE_LOOKUP_PATH:
+        return EFS_ROOT_INO;
     default:
         return EFS_ROOT_INO;
     }
@@ -1201,6 +1203,13 @@ send_reply:
             efs_conn_send_msg(conn, EFS_MSG_STATUS_REPLY, &reply, sizeof(reply));
             break;
         }
+        case EFS_MSG_HEAL_STATUS: {
+            struct efs_msg_heal_status_reply reply;
+            server_fill_heal_status(g_server, &reply);
+            efs_conn_send_msg(conn, EFS_MSG_HEAL_STATUS_REPLY, &reply,
+                              sizeof(reply));
+            break;
+        }
         case EFS_MSG_DRAIN_NODE: {
             uint8_t reply = EFS_DRAIN_NODE_ERROR;
             pthread_mutex_lock(&g_server->lock);
@@ -1973,6 +1982,78 @@ send_reply:
                           : (type == EFS_MSG_INODE_UNLINK_SHARD) ? EFS_MSG_INODE_UNLINK_SHARD_REPLY
                           : EFS_MSG_INODE_UNLINK_REPLY;
             efs_conn_send_msg(conn, rtype, &r, sizeof(r));
+            break;
+        }
+        case EFS_MSG_INODE_LOOKUP_PATH: {
+            struct efs_msg_inode_lookup_path_reply r;
+            memset(&r, 0, sizeof(r));
+            r.status = EFS_INODE_RPC_ERROR;
+            if (payload_len < sizeof(struct efs_msg_inode_lookup_path)) {
+                efs_conn_send_msg(conn, EFS_MSG_INODE_LOOKUP_PATH_REPLY, &r,
+                                  sizeof(r));
+                break;
+            }
+            struct efs_msg_inode_lookup_path *req = payload;
+            req->path[sizeof(req->path) - 1] = '\0';
+            pthread_mutex_lock(&g_server->lock);
+            struct efs_export *ex = NULL;
+            efs_export_id_t eid = req->export_id;
+            for (uint32_t i = 0; i < g_server->export_count; i++) {
+                if (g_server->exports[i].id == eid ||
+                    (eid == 0 && i == 0)) {
+                    ex = &g_server->exports[i];
+                    break;
+                }
+            }
+            if (!ex) {
+                r.status = EFS_INODE_RPC_NOT_FOUND;
+            } else if (req->path[0] != '/') {
+                r.status = EFS_INODE_RPC_INVAL;
+            } else if (req->path[1] == '\0') {
+                if (efs_export_get_inode(ex, EFS_ROOT_INO, &r.inode) == 0)
+                    r.status = EFS_INODE_RPC_OK;
+                else
+                    r.status = EFS_INODE_RPC_NOT_FOUND;
+            } else {
+                char pbuf[4096];
+                memcpy(pbuf, req->path + 1, sizeof(pbuf) - 1);
+                pbuf[sizeof(pbuf) - 1] = '\0';
+                char *save = NULL;
+                char *part = strtok_r(pbuf, "/", &save);
+                efs_ino_t parent = EFS_ROOT_INO;
+                r.status = EFS_INODE_RPC_NOT_FOUND;
+                while (part) {
+                    int more = (save && *save);
+                    struct efs_inode row;
+                    if (efs_export_lookup(ex, parent, part, &row) != 0) {
+                        r.status = EFS_INODE_RPC_NOT_FOUND;
+                        break;
+                    }
+                    if (more && efs_mode_is_lnk(row.mode)) {
+                        r.status = EFS_INODE_RPC_SYMLINK;
+                        break;
+                    }
+                    if (more && (req->flags & EFS_LOOKUP_PATH_F_ANCESTORS)) {
+                        if (r.ancestor_count >= EFS_LOOKUP_PATH_MAX_DEPTH) {
+                            r.status = EFS_INODE_RPC_DEEP;
+                            break;
+                        }
+                        struct efs_lookup_path_anc *a =
+                            &r.ancestors[r.ancestor_count++];
+                        a->ino = row.ino;
+                        a->mode = row.mode;
+                        a->uid = row.uid;
+                        a->gid = row.gid;
+                    }
+                    parent = row.ino;
+                    r.inode = row;
+                    r.status = EFS_INODE_RPC_OK;
+                    part = strtok_r(NULL, "/", &save);
+                }
+            }
+            pthread_mutex_unlock(&g_server->lock);
+            efs_conn_send_msg(conn, EFS_MSG_INODE_LOOKUP_PATH_REPLY, &r,
+                              sizeof(r));
             break;
         }
         case EFS_MSG_REPORT_CHUNKS: {

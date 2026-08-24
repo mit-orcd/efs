@@ -130,6 +130,10 @@ enum efs_msg_type {
     EFS_MSG_INODE_LINK_SHARD_REPLY = 76,
     EFS_MSG_INODE_UNLINK_SHARD = 77,
     EFS_MSG_INODE_UNLINK_SHARD_REPLY = 78,
+    EFS_MSG_INODE_LOOKUP_PATH = 79,
+    EFS_MSG_INODE_LOOKUP_PATH_REPLY = 80,
+    EFS_MSG_HEAL_STATUS = 81,
+    EFS_MSG_HEAL_STATUS_REPLY = 82,
 };
 
 /* Set per-export features. Only bits in set_mask are changed (to the
@@ -360,11 +364,55 @@ struct efs_msg_list_exports_reply {
 #define EFS_INODE_RPC_NOT_PRIMARY 7
 /* rmdir on a directory that still has children. */
 #define EFS_INODE_RPC_NOT_EMPTY  8
+#define EFS_INODE_RPC_SYMLINK    9
+#define EFS_INODE_RPC_DEEP      10
 
 struct efs_msg_inode_lookup {
     efs_export_id_t export_id;
     efs_ino_t parent;
     char name[EFS_MAX_NAME];
+};
+
+#define EFS_LOOKUP_PATH_MAX_DEPTH 64
+#define EFS_LOOKUP_PATH_F_ANCESTORS (1u << 0)
+struct efs_msg_inode_lookup_path {
+    efs_export_id_t export_id;
+    uint32_t flags;
+    char path[4096];
+};
+struct efs_lookup_path_anc {
+    efs_ino_t ino;
+    uint32_t mode;
+    uint32_t uid;
+    uint32_t gid;
+};
+/* First two fields match efs_msg_inode_reply so rpc_send_recv_owner can
+ * inspect NOT_PRIMARY without a separate decoder. */
+struct efs_msg_inode_lookup_path_reply {
+    uint8_t status;
+    efs_node_id_t primary_id;
+    struct efs_inode inode;
+    uint32_t ancestor_count;
+    struct efs_lookup_path_anc ancestors[EFS_LOOKUP_PATH_MAX_DEPTH];
+};
+
+#define EFS_HEAL_F_TABLES  (1u << 0) /* one or more tables still need rebuild */
+#define EFS_HEAL_F_REBUILD (1u << 1) /* a page rebuild is in progress now */
+struct efs_msg_heal_status_export {
+    char name[EFS_MAX_NAME];
+    uint64_t gen;
+    uint32_t flags;
+    uint32_t tables_need;
+    uint32_t tables_total;
+    uint32_t cur_shard;
+    uint32_t pages_done;
+    uint32_t pages_total;
+    uint64_t elapsed_us;
+};
+struct efs_msg_heal_status_reply {
+    uint32_t export_count;
+    uint32_t healing; /* any export has flags set */
+    struct efs_msg_heal_status_export exports[EFS_MAX_EXPORTS];
 };
 
 struct efs_msg_inode_create {

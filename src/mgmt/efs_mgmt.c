@@ -201,6 +201,12 @@ static int cmd_status(int argc, char **argv)
     printf("Cluster state: %s (%d up, %d down)\n", cluster_state, up_nodes,
            down_nodes);
 
+    uint32_t ncopy = list->node_count;
+    if (ncopy > EFS_MAX_NODES)
+        ncopy = EFS_MAX_NODES;
+    struct efs_node nodes_copy[EFS_MAX_NODES];
+    memcpy(nodes_copy, list->nodes, ncopy * sizeof(nodes_copy[0]));
+
     free(reply);
     reply = NULL;
 
@@ -220,6 +226,93 @@ static int cmd_status(int argc, char **argv)
         printf("Node %s:%u state: %s\n", host, port, state_name);
     }
     free(reply);
+    reply = NULL;
+
+    printf("Heal:\n");
+    {
+        int any = 0;
+        for (uint32_t i = 0; i < ncopy; i++) {
+            if (!probe_node_up(nodes_copy[i].addr, nodes_copy[i].port)) {
+                printf("  node %u: DOWN\n", nodes_copy[i].id);
+                continue;
+            }
+            int hfd = efs_connect_tcp(nodes_copy[i].addr, nodes_copy[i].port);
+            if (hfd < 0) {
+                printf("  node %u: unreachable\n", nodes_copy[i].id);
+                continue;
+            }
+            efs_set_recv_timeout(hfd, EFS_STATUS_PROBE_MS);
+            efs_set_send_timeout(hfd, EFS_STATUS_PROBE_MS);
+            uint8_t ht = 0;
+            void *hp = NULL;
+            uint32_t hl = 0;
+            if (efs_send_msg(hfd, EFS_MSG_HEAL_STATUS, NULL, 0) != 0 ||
+                efs_recv_msg(hfd, &ht, &hp, &hl) != 0 ||
+                ht != EFS_MSG_HEAL_STATUS_REPLY ||
+                hl != sizeof(struct efs_msg_heal_status_reply)) {
+                printf("  node %u: heal-status unsupported\n",
+                       nodes_copy[i].id);
+                free(hp);
+                close(hfd);
+                continue;
+            }
+            struct efs_msg_heal_status_reply *hs = hp;
+            if (!hs->healing && hs->export_count == 0) {
+                printf("  node %u: idle\n", nodes_copy[i].id);
+                any = 1;
+                free(hp);
+                close(hfd);
+                continue;
+            }
+            if (!hs->healing) {
+                printf("  node %u: idle", nodes_copy[i].id);
+                for (uint32_t e = 0; e < hs->export_count; e++) {
+                    if (hs->exports[e].name[0])
+                        printf("  %s gen=%llu", hs->exports[e].name,
+                               (unsigned long long)hs->exports[e].gen);
+                }
+                printf("\n");
+                any = 1;
+                free(hp);
+                close(hfd);
+                continue;
+            }
+            for (uint32_t e = 0; e < hs->export_count; e++) {
+                struct efs_msg_heal_status_export *x = &hs->exports[e];
+                if (!x->flags)
+                    continue;
+                any = 1;
+                printf("  node %u: healing  %s", nodes_copy[i].id,
+                       x->name[0] ? x->name : "?");
+                if (x->flags & EFS_HEAL_F_REBUILD)
+                    printf("  shard=%u  pages %u/%u", x->cur_shard,
+                           x->pages_done, x->pages_total);
+                if (x->tables_need)
+                    printf("  tables %u/%u dirty", x->tables_need,
+                           x->tables_total);
+                printf("  gen=%llu", (unsigned long long)x->gen);
+                if ((x->flags & EFS_HEAL_F_REBUILD) && x->pages_done > 0 &&
+                    x->pages_total > x->pages_done && x->elapsed_us > 0) {
+                    uint64_t left = (x->elapsed_us / x->pages_done) *
+                                    (x->pages_total - x->pages_done);
+                    if (left < 1000000ull)
+                        printf("  ~<1s left");
+                    else if (left < 60000000ull)
+                        printf("  ~%llu s left",
+                               (unsigned long long)(left / 1000000ull));
+                    else
+                        printf("  ~%llu min left",
+                               (unsigned long long)(left / 60000000ull));
+                }
+                printf("\n");
+            }
+            free(hp);
+            close(hfd);
+        }
+        if (!any)
+            printf("  (no heal data)\n");
+    }
+
     close(fd);
     return (down_nodes > 0) ? 1 : 0;
 }

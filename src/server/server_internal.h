@@ -150,7 +150,21 @@ struct efsd_server {
      * the retry. Holding this for the whole flush makes each compute a fresh
      * gen. */
     pthread_mutex_t meta_flush_mu;
+
+    /* Catchup/heal progress for EFS_MSG_HEAL_STATUS (single catchup thread). */
+    int heal_active;
+    char heal_export[EFS_MAX_NAME];
+    uint32_t heal_shard;
+    uint32_t heal_pages_done;
+    uint32_t heal_pages_total;
+    uint64_t heal_gen;
+    uint64_t heal_started_us;
+    uint64_t heal_last_us;
 };
+
+struct efs_msg_heal_status_reply;
+void server_fill_heal_status(struct efsd_server *s,
+                             struct efs_msg_heal_status_reply *r);
 
 /* A crashed writer's flush election self-clears after this long. Must
  * comfortably exceed the slowest legitimate flush (page PUTs + root),

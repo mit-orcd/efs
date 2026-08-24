@@ -44,6 +44,7 @@ const char *efs_strerror(int rc)
     case EFS_ERR_NOT_EMPTY: return "directory not empty";
     case EFS_ERR_BUSY:   return "resource busy";
     case EFS_ERR_STALE:  return "stale generation";
+    case EFS_ERR_ACCES:  return "permission denied";
     default:             return "unknown error";
     }
 }

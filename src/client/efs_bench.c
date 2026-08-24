@@ -1,6 +1,7 @@
 #include "client_internal.h"
 #include "efs/checksum.h"
 #include "efs/common.h"
+#include "efs/metadata.h"
 #include "efs/network.h"
 #include "efs/placement.h"
 #include "efs/protocol.h"
@@ -10,6 +11,7 @@
 #include <pthread.h>
 #include <poll.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +28,7 @@ enum bench_mode {
     BENCH_MODE_NET,   /* --time: BENCH_PUT discard */
     BENCH_MODE_STORE, /* --size and/or --time: real PUT_CHUNK store */
     BENCH_MODE_READ,  /* --read --time: GET_CHUNK 2-of-3 */
+    BENCH_MODE_META,  /* --meta: metadata create/stat/setattr/readdir/... */
 };
 
 static void usage(const char *prog)
@@ -42,9 +45,13 @@ static void usage(const char *prog)
             "      PUT_CHUNK for a fixed duration (disk write load).\n"
             "  %s <seed_host:port> --read --time <seconds> [--window <chunks>]\n"
             "      GET 2-of-3 fragments for chunk_index %% window (disk read load).\n"
+            "  %s <seed_host:port> --meta [--export NAME] [--files N] [--dirs D]\n"
+            "      [--workers W] [--size bytes] [--phases csv] [--keep] [--id n]\n"
+            "      Metadata read+write phases (mkdir/create/stat/getattr/readdir/\n"
+            "      setattr/rename/unlink). No caches; every op is a real RPC.\n"
             "  Optional: --perf  (perf record -g on this process; EFS_PERF_PATH)\n"
             "            --id <n>  chunk-index base so parallel writers do not collide\n",
-            prog, prog, prog, prog);
+            prog, prog, prog, prog, prog);
 }
 
 static pid_t g_perf_pid = -1;
@@ -569,6 +576,592 @@ static void *worker_main(void *arg)
     return NULL;
 }
 
+/* ---------- metadata bench (--meta) ---------- */
+
+#define META_PATH_LEN  256
+#define META_NAME_LEN  32
+#define META_PHASE_MKDIR    (1u << 0)
+#define META_PHASE_CREATE   (1u << 1)
+#define META_PHASE_STAT     (1u << 2)
+#define META_PHASE_GETATTR  (1u << 3)
+#define META_PHASE_READDIR  (1u << 4)
+#define META_PHASE_SETATTR  (1u << 5)
+#define META_PHASE_RENAME   (1u << 6)
+#define META_PHASE_UNLINK   (1u << 7)
+#define META_PHASE_ALL      0xffu
+
+enum meta_phase {
+    MP_MKDIR = 0,
+    MP_CREATE,
+    MP_STAT,
+    MP_GETATTR,
+    MP_READDIR,
+    MP_SETATTR,
+    MP_RENAME,
+    MP_UNLINK
+};
+
+struct meta_dir {
+    efs_ino_t ino;
+    char name[META_NAME_LEN];
+};
+
+struct meta_file {
+    efs_ino_t ino;
+    uint32_t dir_idx;
+    char name[META_NAME_LEN];
+    char path[META_PATH_LEN];
+};
+
+struct meta_state {
+    efs_ino_t root_ino;
+    char root_name[64];
+    char root_path[128];
+    uint32_t ndirs;
+    uint32_t nfiles;
+    uint64_t write_size;
+    int keep;
+    struct meta_dir *dirs;
+    struct meta_file *files;
+    char *write_buf;
+};
+
+struct meta_warg {
+    int id;
+    int nworkers;
+    enum meta_phase phase;
+    struct meta_state *st;
+    uint64_t ops;
+    uint64_t fail;
+    int first_rc;
+};
+
+static int u64_dec(char *dst, size_t cap, uint64_t v)
+{
+    char tmp[24];
+    int n = 0;
+    do {
+        tmp[n++] = (char)('0' + (unsigned)(v % 10));
+        v /= 10;
+    } while (v);
+    if ((size_t)n + 1 > cap)
+        return -1;
+    for (int i = 0; i < n; i++)
+        dst[i] = tmp[n - 1 - i];
+    dst[n] = '\0';
+    return n;
+}
+
+static int cat3(char *dst, size_t cap, const char *a, const char *b, const char *c)
+{
+    size_t na = strlen(a), nb = strlen(b), nc = c ? strlen(c) : 0;
+    if (na + nb + nc + 1 > cap)
+        return -1;
+    memcpy(dst, a, na);
+    memcpy(dst + na, b, nb);
+    if (c)
+        memcpy(dst + na + nb, c, nc);
+    dst[na + nb + nc] = '\0';
+    return 0;
+}
+
+static uint32_t parse_meta_phases(const char *s)
+{
+    uint32_t m = 0;
+    char buf[256];
+    size_t n = strlen(s);
+    if (n >= sizeof(buf))
+        return 0;
+    memcpy(buf, s, n + 1);
+    char *save = NULL;
+    for (char *tok = strtok_r(buf, ",", &save); tok; tok = strtok_r(NULL, ",", &save)) {
+        if (strcmp(tok, "all") == 0)
+            return META_PHASE_ALL;
+        else if (strcmp(tok, "mkdir") == 0)
+            m |= META_PHASE_MKDIR;
+        else if (strcmp(tok, "create") == 0)
+            m |= META_PHASE_CREATE;
+        else if (strcmp(tok, "stat") == 0)
+            m |= META_PHASE_STAT;
+        else if (strcmp(tok, "getattr") == 0)
+            m |= META_PHASE_GETATTR;
+        else if (strcmp(tok, "readdir") == 0)
+            m |= META_PHASE_READDIR;
+        else if (strcmp(tok, "setattr") == 0)
+            m |= META_PHASE_SETATTR;
+        else if (strcmp(tok, "rename") == 0)
+            m |= META_PHASE_RENAME;
+        else if (strcmp(tok, "unlink") == 0)
+            m |= META_PHASE_UNLINK;
+        else
+            return 0;
+    }
+    return m;
+}
+
+static void *meta_worker(void *arg)
+{
+    struct meta_warg *a = arg;
+    struct meta_state *st = a->st;
+    int w = a->id, nw = a->nworkers;
+
+    switch (a->phase) {
+    case MP_MKDIR:
+        for (uint32_t i = (uint32_t)w; i < st->ndirs; i += (uint32_t)nw) {
+            efs_ino_t ino = efs_client_create(st->root_ino, st->dirs[i].name,
+                                              S_IFDIR | 0755, 0, 0);
+            if (ino == 0) {
+                a->fail++;
+                continue;
+            }
+            st->dirs[i].ino = ino;
+            a->ops++;
+        }
+        break;
+    case MP_CREATE:
+        for (uint32_t i = (uint32_t)w; i < st->nfiles; i += (uint32_t)nw) {
+            uint32_t di = i % st->ndirs;
+            efs_ino_t ino = efs_client_create(st->dirs[di].ino, st->files[i].name,
+                                              S_IFREG | 0644, 0, 0);
+            if (ino == 0) {
+                a->fail++;
+                continue;
+            }
+            __atomic_store_n(&st->files[i].ino, ino, __ATOMIC_RELEASE);
+            st->files[i].dir_idx = di;
+            if (st->write_size && st->write_buf) {
+                if (efs_client_write(ino, 0, (size_t)st->write_size,
+                                     st->write_buf) != 0)
+                    a->fail++;
+            }
+            a->ops++;
+        }
+        break;
+    case MP_STAT:
+        for (uint32_t i = (uint32_t)w; i < st->nfiles; i += (uint32_t)nw) {
+            struct efs_inode row;
+            if (efs_client_lookup(st->files[i].path, &row) != 0)
+                a->fail++;
+            else
+                a->ops++;
+        }
+        break;
+    case MP_GETATTR:
+        for (uint32_t i = (uint32_t)w; i < st->nfiles; i += (uint32_t)nw) {
+            struct efs_inode row;
+            efs_ino_t ino = __atomic_load_n(&st->files[i].ino, __ATOMIC_ACQUIRE);
+            if (ino == 0) {
+                a->fail++;
+                if (!a->first_rc)
+                    a->first_rc = -1;
+            } else {
+                int grc = efs_client_rpc_getattr(g_client.export_id, ino, &row);
+                if (grc != EFS_OK) {
+                    a->fail++;
+                    if (!a->first_rc)
+                        a->first_rc = grc;
+                } else {
+                    a->ops++;
+                }
+            }
+        }
+        break;
+    case MP_READDIR:
+        for (uint32_t i = (uint32_t)w; i < st->ndirs; i += (uint32_t)nw) {
+            uint32_t start = 0;
+            for (;;) {
+                struct efs_inode ents[EFS_READDIR_MAX];
+                uint32_t n = EFS_READDIR_MAX;
+                int rc = efs_client_rpc_readdir(g_client.export_id,
+                                                st->dirs[i].ino, ents, &n,
+                                                start);
+                if (rc != EFS_OK) {
+                    a->fail++;
+                    break;
+                }
+                a->ops += n;
+                if (n < EFS_READDIR_MAX)
+                    break;
+                start += n;
+            }
+        }
+        break;
+    case MP_SETATTR: {
+        uint64_t now = (uint64_t)time(NULL);
+        for (uint32_t i = (uint32_t)w; i < st->nfiles; i += (uint32_t)nw) {
+            efs_ino_t ino = __atomic_load_n(&st->files[i].ino, __ATOMIC_ACQUIRE);
+            if (ino == 0) {
+                a->fail++;
+                continue;
+            }
+            if (efs_client_chmod(ino, 0644) != 0)
+                a->fail++;
+            else
+                a->ops++;
+            if (efs_client_utimens(ino, now, 0) != 0)
+                a->fail++;
+            else
+                a->ops++;
+        }
+        break;
+    }
+    case MP_RENAME:
+        for (uint32_t i = (uint32_t)w; i < st->nfiles; i += (uint32_t)nw) {
+            efs_ino_t ino = __atomic_load_n(&st->files[i].ino, __ATOMIC_ACQUIRE);
+            uint32_t di = st->files[i].dir_idx;
+            char tmp[META_NAME_LEN];
+            tmp[0] = 'g';
+            if (ino == 0 || di >= st->ndirs ||
+                u64_dec(tmp + 1, sizeof(tmp) - 1, i) < 0) {
+                a->fail++;
+                continue;
+            }
+            if (efs_client_rename(ino, st->dirs[di].ino, tmp) != 0) {
+                a->fail++;
+                continue;
+            }
+            a->ops++;
+            if (efs_client_rename(ino, st->dirs[di].ino, st->files[i].name) != 0)
+                a->fail++;
+            else
+                a->ops++;
+        }
+        break;
+    case MP_UNLINK:
+        for (uint32_t i = (uint32_t)w; i < st->nfiles; i += (uint32_t)nw) {
+            uint32_t di = st->files[i].dir_idx;
+            if (di >= st->ndirs ||
+                efs_client_unlink(st->dirs[di].ino, st->files[i].name, false) != 0)
+                a->fail++;
+            else
+                a->ops++;
+        }
+        break;
+    }
+    return NULL;
+}
+
+static int run_meta_phase(struct meta_state *st, enum meta_phase phase,
+                          const char *name, const char *rw, int nworkers,
+                          uint32_t nitems)
+{
+    if (nitems == 0)
+        return 0;
+    int nw = nworkers;
+    if (nw > (int)nitems)
+        nw = (int)nitems;
+    if (nw < 1)
+        nw = 1;
+    struct meta_warg *args = calloc((size_t)nw, sizeof(*args));
+    pthread_t *tids = calloc((size_t)nw, sizeof(*tids));
+    if (!args || !tids) {
+        free(args);
+        free(tids);
+        return -1;
+    }
+    double t0 = now_sec();
+    for (int i = 0; i < nw; i++) {
+        args[i].id = i;
+        args[i].nworkers = nw;
+        args[i].phase = phase;
+        args[i].st = st;
+        if (pthread_create(&tids[i], NULL, meta_worker, &args[i]) != 0) {
+            args[i].fail++;
+            tids[i] = 0;
+        }
+    }
+    for (int i = 0; i < nw; i++) {
+        if (tids[i])
+            pthread_join(tids[i], NULL);
+    }
+    double wall = now_sec() - t0;
+    if (wall < 1e-9)
+        wall = 1e-9;
+    uint64_t ops = 0, fail = 0;
+    for (int i = 0; i < nw; i++) {
+        ops += args[i].ops;
+        fail += args[i].fail;
+    }
+    printf("BENCH_OK kind=meta phase=%s rw=%s ops=%llu wall_s=%.3f ops_s=%.1f "
+           "workers=%d fail=%llu",
+           name, rw, (unsigned long long)ops, wall, (double)ops / wall, nw,
+           (unsigned long long)fail);
+    for (int i = 0; i < nw; i++) {
+        if (args[i].first_rc)
+            printf(" first_rc_w%d=%d", i, args[i].first_rc);
+    }
+    printf("\n");
+    fflush(stdout);
+    free(args);
+    free(tids);
+    return fail ? 1 : 0;
+}
+
+static int meta_preformat(struct meta_state *st)
+{
+    for (uint32_t i = 0; i < st->ndirs; i++) {
+        st->dirs[i].name[0] = 'd';
+        if (u64_dec(st->dirs[i].name + 1, sizeof(st->dirs[i].name) - 1, i) < 0)
+            return -1;
+        st->dirs[i].ino = 0;
+    }
+    for (uint32_t i = 0; i < st->nfiles; i++) {
+        uint32_t di = i % st->ndirs;
+        st->files[i].dir_idx = di;
+        st->files[i].ino = 0;
+        st->files[i].name[0] = 'f';
+        if (u64_dec(st->files[i].name + 1, sizeof(st->files[i].name) - 1, i) < 0)
+            return -1;
+        char mid[META_PATH_LEN];
+        if (cat3(mid, sizeof(mid), st->root_path, "/", st->dirs[di].name) != 0)
+            return -1;
+        if (cat3(st->files[i].path, sizeof(st->files[i].path), mid, "/",
+                 st->files[i].name) != 0)
+            return -1;
+    }
+    return 0;
+}
+
+static int run_meta_bench(const char *seed, const char *export_name,
+                          uint32_t nfiles, uint32_t ndirs, uint64_t write_size,
+                          uint32_t phases, int keep, uint64_t id, int nworkers,
+                          int want_perf)
+{
+    char host[64];
+    uint16_t port = 0;
+    if (parse_host_port(seed, host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid seed address: %s\n", seed);
+        return 1;
+    }
+
+    memset(&g_client, 0, sizeof(g_client));
+    pthread_mutex_init(&g_client.lock, NULL);
+    const char *boot[EFS_MAX_NODES];
+    char seed_copy[128];
+    snprintf(seed_copy, sizeof(seed_copy), "%s", seed);
+    boot[0] = seed_copy;
+    efs_client_init_nodes(&g_client, boot, 1);
+    strncpy(g_client.export_name, export_name, EFS_MAX_NAME - 1);
+    g_client.export_id = 1;
+    efs_export_init(&g_client.export, g_client.export_id, g_client.export_name);
+    efs_client_setup_ino_namespace();
+
+    if (efs_client_discover_nodes(&g_client, host, port) != 0) {
+        fprintf(stderr, "Failed to discover cluster from %s:%u\n", host, port);
+        return 1;
+    }
+    int rc = -1;
+    for (uint32_t i = 0; i < g_client.node_count; i++) {
+        rc = efs_client_fetch_metadata(g_client.nodes[i].addr,
+                                       g_client.nodes[i].port);
+        if (rc == 0)
+            break;
+    }
+    if (rc != 0) {
+        fprintf(stderr, "Could not fetch metadata (%s)\n", efs_strerror(rc));
+        return 1;
+    }
+    g_client.export_id = g_client.export.id ? g_client.export.id : 1;
+
+    if (nworkers < 1)
+        nworkers = g_client.conn_pool_size;
+    if (nworkers < 1)
+        nworkers = 1;
+    if (nworkers > 64)
+        nworkers = 64;
+    if (nworkers > g_client.conn_pool_size)
+        fprintf(stderr,
+                "note: workers=%d > conn_pool=%d; raise EFS_CLIENT_CONNS_PER_NODE\n",
+                nworkers, g_client.conn_pool_size);
+
+    int need_files = (phases & (META_PHASE_CREATE | META_PHASE_STAT |
+                                META_PHASE_GETATTR | META_PHASE_READDIR |
+                                META_PHASE_SETATTR | META_PHASE_RENAME |
+                                META_PHASE_UNLINK)) != 0;
+    int need_tree = need_files || (phases & META_PHASE_MKDIR);
+    if (ndirs == 0)
+        ndirs = 1;
+    if (nfiles == 0 && need_files)
+        nfiles = 1;
+
+    struct meta_state st;
+    memset(&st, 0, sizeof(st));
+    st.ndirs = ndirs;
+    st.nfiles = nfiles;
+    st.write_size = write_size;
+    st.keep = keep;
+    st.dirs = calloc(ndirs, sizeof(*st.dirs));
+    st.files = calloc(nfiles ? nfiles : 1, sizeof(*st.files));
+    if (!st.dirs || !st.files) {
+        free(st.dirs);
+        free(st.files);
+        return 1;
+    }
+    if (write_size) {
+        st.write_buf = malloc((size_t)write_size);
+        if (!st.write_buf) {
+            free(st.dirs);
+            free(st.files);
+            return 1;
+        }
+        memset(st.write_buf, 'A', (size_t)write_size);
+    }
+
+    {
+        char pidbuf[16], idbuf[16];
+        u64_dec(pidbuf, sizeof(pidbuf), (uint64_t)getpid());
+        u64_dec(idbuf, sizeof(idbuf), id);
+        snprintf(st.root_name, sizeof(st.root_name), "bench-meta-%s-%s",
+                 pidbuf, idbuf);
+        snprintf(st.root_path, sizeof(st.root_path), "/%s", st.root_name);
+    }
+    if (meta_preformat(&st) != 0) {
+        fprintf(stderr, "meta: path overflow\n");
+        free(st.write_buf);
+        free(st.dirs);
+        free(st.files);
+        return 1;
+    }
+
+    char perf_path[512];
+    perf_path[0] = '\0';
+    if (want_perf) {
+        const char *pp = getenv("EFS_PERF_PATH");
+        if (pp && *pp)
+            snprintf(perf_path, sizeof(perf_path), "%s", pp);
+        else
+            snprintf(perf_path, sizeof(perf_path),
+                     "/tmp/efs-bench-perf-%d/perf.data", (int)getpid());
+        g_perf_pid = start_perf_recorder(getpid(), perf_path);
+        if (g_perf_pid < 0)
+            fprintf(stderr, "Warning: could not start perf; continuing\n");
+        else
+            printf("perf recording -> %s\n", perf_path);
+        fflush(stdout);
+    }
+
+    printf("bench meta seed=%s:%u export=%s id=%u files=%u dirs=%u workers=%d "
+           "size=%llu phases=0x%x keep=%d\n",
+           host, port, g_client.export_name, (unsigned)g_client.export_id,
+           nfiles, ndirs, nworkers, (unsigned long long)write_size, phases,
+           keep);
+    fflush(stdout);
+
+    int any_fail = 0;
+    if (need_tree) {
+        st.root_ino = efs_client_create(EFS_ROOT_INO, st.root_name,
+                                        S_IFDIR | 0755, 0, 0);
+        if (st.root_ino == 0) {
+            fprintf(stderr, "meta: failed to create bench root %s\n",
+                    st.root_name);
+            stop_perf_recorder();
+            free(st.write_buf);
+            free(st.dirs);
+            free(st.files);
+            efs_client_shutdown();
+            return 1;
+        }
+    }
+
+    if (need_tree)
+        any_fail |= run_meta_phase(&st, MP_MKDIR, "mkdir", "write", nworkers,
+                                   st.ndirs);
+    if (need_files)
+        any_fail |= run_meta_phase(&st, MP_CREATE, "create", "write", nworkers,
+                                   st.nfiles);
+    if (need_files) {
+        uint32_t nzero = 0;
+        for (uint32_t i = 0; i < st.nfiles; i++) {
+            if (__atomic_load_n(&st.files[i].ino, __ATOMIC_ACQUIRE) == 0)
+                nzero++;
+        }
+        if (nzero)
+            fprintf(stderr, "meta: %u/%u file inos still 0 after create\n",
+                    nzero, st.nfiles);
+    }
+    if (phases & META_PHASE_STAT)
+        any_fail |= run_meta_phase(&st, MP_STAT, "stat", "read", nworkers,
+                                   st.nfiles);
+    if (phases & META_PHASE_GETATTR)
+        any_fail |= run_meta_phase(&st, MP_GETATTR, "getattr", "read", nworkers,
+                                   st.nfiles);
+    if (phases & META_PHASE_READDIR)
+        any_fail |= run_meta_phase(&st, MP_READDIR, "readdir", "read", nworkers,
+                                   st.ndirs);
+    if (phases & META_PHASE_SETATTR)
+        any_fail |= run_meta_phase(&st, MP_SETATTR, "setattr", "write", nworkers,
+                                   st.nfiles);
+    if (phases & META_PHASE_RENAME)
+        any_fail |= run_meta_phase(&st, MP_RENAME, "rename", "write", nworkers,
+                                   st.nfiles);
+    if (write_size && need_files) {
+        (void)efs_dcache_flush_all();
+        (void)efs_client_report_dirty(1);
+    }
+    if (!keep && need_tree) {
+        if (need_files)
+            any_fail |= run_meta_phase(&st, MP_UNLINK, "unlink", "write",
+                                       nworkers, st.nfiles);
+        for (uint32_t i = 0; i < st.ndirs; i++) {
+            if (st.dirs[i].ino)
+                (void)efs_client_unlink(st.root_ino, st.dirs[i].name, true);
+        }
+        if (st.root_ino)
+            (void)efs_client_unlink(EFS_ROOT_INO, st.root_name, true);
+    }
+
+    stop_perf_recorder();
+    if (want_perf && perf_path[0]) {
+        char report[600], hot[600], cmd[900];
+        snprintf(report, sizeof(report), "%s.report.txt", perf_path);
+        snprintf(hot, sizeof(hot), "%s.hotpath.txt", perf_path);
+        snprintf(cmd, sizeof(cmd),
+                 "perf report --stdio --no-children --percent-limit 0.4 -i '%s' "
+                 "> '%s' 2>/dev/null || true",
+                 perf_path, report);
+        (void)system(cmd);
+        FILE *in = fopen(report, "r");
+        FILE *out = fopen(hot, "w");
+        if (out) {
+            fprintf(out, "=== efs / blake3 / network hotspots ===\n");
+            if (in) {
+                char line[1024];
+                int tops = 0;
+                while (fgets(line, sizeof(line), in)) {
+                    if (strstr(line, "blake3") || strstr(line, "efs_") ||
+                        strstr(line, "memcpy") || strstr(line, "memmove") ||
+                        strstr(line, "send") || strstr(line, "recv") ||
+                        strstr(line, "hash") || strstr(line, "write") ||
+                        strstr(line, "put_") || strstr(line, "lookup") ||
+                        strstr(line, "strtok") || strstr(line, "snprintf") ||
+                        strstr(line, "malloc") || strstr(line, "free"))
+                        fputs(line, out);
+                }
+                rewind(in);
+                fprintf(out, "--- top symbols ---\n");
+                while (fgets(line, sizeof(line), in) && tops < 25) {
+                    const char *s = line;
+                    while (*s == ' ' || *s == '\t')
+                        s++;
+                    if (s[0] >= '0' && s[0] <= '9' && strstr(s, "%")) {
+                        fputs(line, out);
+                        tops++;
+                    }
+                }
+                fclose(in);
+            }
+            fclose(out);
+        }
+        printf("perf report: %s\nperf hotpath: %s\n", report, hot);
+    }
+
+    free(st.write_buf);
+    free(st.dirs);
+    free(st.files);
+    efs_client_shutdown();
+    return any_fail ? 1 : 0;
+}
+
 /* TEMP DEBUG: in-process crash backtrace (ptrace is blocked on the nodes). */
 #include <execinfo.h>
 #include <signal.h>
@@ -607,6 +1200,12 @@ int main(int argc, char **argv)
     int want_perf = 0;
     int nworkers_arg = 0;
     int have_time = 0;
+    const char *meta_export = "efs-test";
+    uint32_t meta_files = 5000;
+    uint32_t meta_dirs = 64;
+    uint32_t meta_phases = META_PHASE_ALL;
+    int meta_keep = 0;
+    uint64_t meta_id = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--time") == 0 && i + 1 < argc) {
@@ -621,15 +1220,16 @@ int main(int argc, char **argv)
                 fprintf(stderr, "--size is for store writes only\n");
                 return 1;
             }
-            mode = BENCH_MODE_STORE;
             size_bytes = efs_parse_quota(argv[++i]);
             if (size_bytes == 0) {
                 fprintf(stderr, "Invalid --size (examples: 1G, 512M, 1048576)\n");
                 return 1;
             }
+            if (mode != BENCH_MODE_META)
+                mode = BENCH_MODE_STORE;
         } else if (strcmp(argv[i], "--store") == 0) {
-            if (mode == BENCH_MODE_READ) {
-                fprintf(stderr, "--store cannot combine with --read\n");
+            if (mode == BENCH_MODE_READ || mode == BENCH_MODE_META) {
+                fprintf(stderr, "--store cannot combine with --read/--meta\n");
                 return 1;
             }
             mode = BENCH_MODE_STORE;
@@ -647,6 +1247,36 @@ int main(int argc, char **argv)
             }
         } else if (strcmp(argv[i], "--id") == 0 && i + 1 < argc) {
             chunk_base = strtoull(argv[++i], NULL, 10);
+            meta_id = chunk_base;
+        } else if (strcmp(argv[i], "--meta") == 0) {
+            if (mode != BENCH_MODE_NONE && mode != BENCH_MODE_META) {
+                fprintf(stderr, "--meta cannot combine with --store/--read/--time\n");
+                return 1;
+            }
+            mode = BENCH_MODE_META;
+        } else if (strcmp(argv[i], "--export") == 0 && i + 1 < argc) {
+            meta_export = argv[++i];
+        } else if (strcmp(argv[i], "--files") == 0 && i + 1 < argc) {
+            meta_files = (uint32_t)strtoul(argv[++i], NULL, 10);
+            if (meta_files == 0) {
+                fprintf(stderr, "Invalid --files\n");
+                return 1;
+            }
+        } else if (strcmp(argv[i], "--dirs") == 0 && i + 1 < argc) {
+            meta_dirs = (uint32_t)strtoul(argv[++i], NULL, 10);
+            if (meta_dirs == 0) {
+                fprintf(stderr, "Invalid --dirs\n");
+                return 1;
+            }
+        } else if (strcmp(argv[i], "--phases") == 0 && i + 1 < argc) {
+            meta_phases = parse_meta_phases(argv[++i]);
+            if (meta_phases == 0) {
+                fprintf(stderr, "Invalid --phases (mkdir,create,stat,getattr,"
+                                "readdir,setattr,rename,unlink,all)\n");
+                return 1;
+            }
+        } else if (strcmp(argv[i], "--keep") == 0) {
+            meta_keep = 1;
         } else if (strcmp(argv[i], "--workers") == 0 && i + 1 < argc) {
             nworkers_arg = atoi(argv[++i]);
             if (nworkers_arg < 1) {
@@ -676,6 +1306,11 @@ int main(int argc, char **argv)
     if (!seed || mode == BENCH_MODE_NONE) {
         usage(argv[0]);
         return 1;
+    }
+    if (mode == BENCH_MODE_META) {
+        return run_meta_bench(seed, meta_export, meta_files, meta_dirs,
+                              size_bytes, meta_phases, meta_keep, meta_id,
+                              nworkers_arg, want_perf);
     }
     if (mode == BENCH_MODE_READ && !have_time) {
         fprintf(stderr, "--read requires --time\n");

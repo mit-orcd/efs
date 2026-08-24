@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -301,7 +302,33 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
     }
 }
 
-int efs_client_lookup(const char *path, struct efs_inode *out)
+static int lookup_access_ok(const struct efs_inode *ino, uid_t uid, gid_t gid,
+                            const gid_t *groups, int ngroups, int mask)
+{
+    if (uid == 0)
+        return 0;
+    uint32_t perm;
+    if (uid == ino->uid)
+        perm = (ino->mode >> 6) & 7;
+    else {
+        int in_group = (gid == ino->gid);
+        for (int i = 0; !in_group && i < ngroups; i++) {
+            if (groups[i] == ino->gid)
+                in_group = 1;
+        }
+        perm = in_group ? ((ino->mode >> 3) & 7) : (ino->mode & 7);
+    }
+    if ((mask & 4) && !(perm & 4))
+        return -1;
+    if ((mask & 2) && !(perm & 2))
+        return -1;
+    if ((mask & 1) && !(perm & 1))
+        return -1;
+    return 0;
+}
+
+static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
+                       uid_t uid, gid_t gid, const gid_t *groups, int ngroups)
 {
     if (!path || path[0] != '/')
         return EFS_ERR_INVAL;
@@ -324,9 +351,58 @@ int efs_client_lookup(const char *path, struct efs_inode *out)
     char *part = strtok_r(pbuf, "/", &save);
 
     efs_client_ensure_dir_locks();
+
+    {
+        struct efs_msg_inode_lookup_path_reply pr;
+        uint32_t flags = do_x ? EFS_LOOKUP_PATH_F_ANCESTORS : 0;
+        int prc = efs_client_rpc_lookup_path(g_client.export_id, path, flags,
+                                             &pr);
+        if (prc == EFS_OK) {
+            if (do_x) {
+                for (uint32_t i = 0; i < pr.ancestor_count; i++) {
+                    struct efs_inode a;
+                    memset(&a, 0, sizeof(a));
+                    a.ino = pr.ancestors[i].ino;
+                    a.mode = pr.ancestors[i].mode;
+                    a.uid = pr.ancestors[i].uid;
+                    a.gid = pr.ancestors[i].gid;
+                    if (a.ino == EFS_ROOT_INO)
+                        continue;
+                    if (!efs_mode_is_dir(a.mode))
+                        return EFS_ERR_INVAL;
+                    if (lookup_access_ok(&a, uid, gid, groups, ngroups, 1) != 0)
+                        return EFS_ERR_ACCES;
+                }
+            }
+            struct efs_inode child = pr.inode;
+            if (g_client.export.root.shard_bits &&
+                g_client.export.root.shard_count > 1 &&
+                efs_mode_is_reg(child.mode)) {
+                struct efs_inode full;
+                if (efs_client_rpc_getattr(g_client.export_id, child.ino,
+                                           &full) == EFS_OK)
+                    child = full;
+            }
+            adopt_rpc_inode(&child);
+            efs_client_lock_dir(child.parent ? child.parent : child.ino);
+            pthread_mutex_lock(&g_client.idx_mu);
+            struct efs_inode local;
+            if (efs_export_get_inode(&g_client.export, child.ino, &local) == 0)
+                child = local;
+            pthread_mutex_unlock(&g_client.idx_mu);
+            efs_client_unlock_dir(child.parent ? child.parent : child.ino);
+            *out = child;
+            return EFS_OK;
+        }
+        if (prc != EFS_ERR_PROTO)
+            return prc;
+        /* symlink / depth>64: fall back to the per-component walk */
+    }
+
     efs_ino_t parent = EFS_ROOT_INO;
     int rc = EFS_ERR_NOT_FOUND;
     while (part) {
+        int more = (save && *save);
         struct efs_inode child;
         /* Phase 2b reads: ask the primary. The local snapshot is only
          * dual-applied on the mutating client, so a peer walk that stays
@@ -337,10 +413,18 @@ int efs_client_lookup(const char *path, struct efs_inode *out)
             rc = (lrc == EFS_ERR_NOT_FOUND) ? EFS_ERR_NOT_FOUND : lrc;
             break;
         }
+        if (do_x && more) {
+            if (!efs_mode_is_dir(child.mode))
+                return EFS_ERR_INVAL;
+            if (child.ino != EFS_ROOT_INO &&
+                lookup_access_ok(&child, uid, gid, groups, ngroups, 1) != 0)
+                return EFS_ERR_ACCES;
+        }
         /* After cross-server create the parent owner holds only a
          * dentry stub (size 0). getattr the child owner for the full row
-         * so adopt/pull_file_layout see the real size. */
-        if (g_client.export.root.shard_bits &&
+         * so adopt/pull_file_layout see the real size. Only the LEAF:
+         * intermediates are directories. */
+        if (!more && g_client.export.root.shard_bits &&
             g_client.export.root.shard_count > 1 &&
             efs_mode_is_reg(child.mode)) {
             struct efs_inode full;
@@ -365,6 +449,19 @@ int efs_client_lookup(const char *path, struct efs_inode *out)
     }
 
     return rc;
+}
+
+int efs_client_lookup(const char *path, struct efs_inode *out)
+{
+    return lookup_walk(path, out, 0, 0, 0, NULL, 0);
+}
+
+int efs_client_lookup_x(const char *path, uid_t uid, gid_t gid,
+                        const gid_t *groups, int ngroups, struct efs_inode *out)
+{
+    if (uid == 0)
+        return lookup_walk(path, out, 0, 0, 0, NULL, 0);
+    return lookup_walk(path, out, 1, uid, gid, groups, ngroups);
 }
 
 efs_ino_t efs_client_create(efs_ino_t parent, const char *name, uint32_t mode,
@@ -480,6 +577,13 @@ int efs_client_set_atime(efs_ino_t ino, uint64_t atime)
 {
     return setattr_rpc_dual_apply(ino, EFS_SETATTR_ATIME, 0, 0, 0, 0, 0, 0,
                                   atime);
+}
+
+int efs_client_utimens_both(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec,
+                            uint64_t atime)
+{
+    return setattr_rpc_dual_apply(ino, EFS_SETATTR_ATIME | EFS_SETATTR_MTIME,
+                                  0, 0, 0, 0, mtime, mtime_nsec, atime);
 }
 
 int efs_client_truncate(efs_ino_t ino, uint64_t size)
@@ -630,4 +734,20 @@ int efs_client_link(efs_ino_t src_ino, efs_ino_t new_parent, const char *new_nam
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dirs2(src_ino, new_parent);
     return EFS_OK;
+}
+
+void efs_client_setup_ino_namespace(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    srandom((unsigned)(ts.tv_nsec ^ ts.tv_sec ^ (getpid() << 8)));
+    uint64_t tag = ((uint64_t)getpid() << 32) ^
+                   ((uint64_t)ts.tv_sec << 12) ^
+                   (uint64_t)ts.tv_nsec ^
+                   ((uint64_t)random() << 20);
+    tag &= 0x7FFFFF; /* 23 bits, keeps the ino positive */
+    if (tag == 0)
+        tag = 1;
+    g_client.ino_namespace = tag << 40;
+    g_client.ino_counter = 1;
 }

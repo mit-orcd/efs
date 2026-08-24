@@ -1,0 +1,6 @@
+# ewrite.sh 1 2 complete run (not 30s-capped)
+# host=fcstor007 dest=$HOME/orcd/scratch/001 (NFS fstor004.ib:/)
+# start=2026-08-24T15:09:15Z end=2026-08-24T15:12:01Z
+# ewrite.sh: 2/2 jobs ok, 200.000 GiB written in 165.948 s, 1.205 GiB/s
+ts	host	jobs	wall_s	bytes	mib_s	rc	dest
+2026-08-24T15:09:15Z	fcstor007	2	165.965	214748364800	1233.9	0	nfs-scratch:/orcd/scratch/orcd/001/erbmi1/001

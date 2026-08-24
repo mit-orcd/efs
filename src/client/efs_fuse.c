@@ -979,44 +979,35 @@ static int check_dir_wx(const struct efs_inode *dir)
     return check_access(dir, ctx->uid, ctx->gid, W_OK | X_OK);
 }
 
-/* X_OK on every directory component except the leaf and the export root. */
-static int check_search_path(const char *path)
+static int lookup_path_fuse(const char *path, struct efs_inode *out)
 {
     struct fuse_context *ctx = fuse_get_context();
     if (!ctx || ctx->uid == 0)
-        return 0;
-    if (!path || path[0] != '/' || strcmp(path, "/") == 0)
-        return 0;
+        return efs_client_lookup(path, out);
+    gid_t list[64];
+    int n = fuse_getgroups((int)(sizeof(list) / sizeof(list[0])), list);
+    if (n < 0)
+        n = 0;
+    return efs_client_lookup_x(path, ctx->uid, ctx->gid, list, n, out);
+}
 
-    char pbuf[4096];
-    size_t plen = strlen(path + 1);
-    if (plen >= sizeof(pbuf))
-        return -ENAMETOOLONG;
-    memcpy(pbuf, path + 1, plen + 1);
+static uint64_t inode_allocated_bytes(const struct efs_inode *ino);
 
-    efs_ino_t parent = EFS_ROOT_INO;
-    char *save = NULL;
-    char *part = strtok_r(pbuf, "/", &save);
-    while (part) {
-        int more = (save && *save);
-        struct efs_inode child;
-        int lrc = efs_client_rpc_lookup(g_client.export_id, parent, part,
-                                        &child);
-        if (lrc != 0)
-            return 0;
-        if (more) {
-            if (!efs_mode_is_dir(child.mode))
-                return -ENOTDIR;
-            if (child.ino != EFS_ROOT_INO) {
-                int rc = check_access(&child, ctx->uid, ctx->gid, X_OK);
-                if (rc != 0)
-                    return rc;
-            }
-        }
-        parent = child.ino;
-        part = strtok_r(NULL, "/", &save);
-    }
-    return 0;
+static void fill_stat_from_inode(struct stat *stbuf, const struct efs_inode *ino)
+{
+    memset(stbuf, 0, sizeof(*stbuf));
+    stbuf->st_ino = ino->ino;
+    stbuf->st_mode = ino->mode;
+    stbuf->st_nlink = ino->nlink;
+    stat_set_size_blocks(stbuf, ino->size, inode_allocated_bytes(ino));
+    stbuf->st_uid = ino->uid;
+    stbuf->st_gid = ino->gid;
+    stbuf->st_mtim.tv_sec = (time_t)ino->mtime;
+    stbuf->st_mtim.tv_nsec = (long)ino->mtime_nsec;
+    stbuf->st_atim.tv_sec = (time_t)ino->atime;
+    stbuf->st_atim.tv_nsec = 0;
+    stbuf->st_ctim.tv_sec = (time_t)ino->ctime;
+    stbuf->st_ctim.tv_nsec = 0;
 }
 
 static int check_chown_perm(const struct efs_inode *ino, uid_t uid, gid_t gid)
@@ -1089,26 +1080,9 @@ static uint64_t inode_allocated_bytes(const struct efs_inode *ino)
     return alloc;
 }
 
-static void efs_client_setup_ino_namespace(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    srandom((unsigned)(ts.tv_nsec ^ ts.tv_sec ^ (getpid() << 8)));
-    uint64_t tag = ((uint64_t)getpid() << 32) ^
-                   ((uint64_t)ts.tv_sec << 12) ^
-                   (uint64_t)ts.tv_nsec ^
-                   ((uint64_t)random() << 20);
-    tag &= 0x7FFFFF; /* 23 bits, keeps the ino positive */
-    if (tag == 0)
-        tag = 1;
-    g_client.ino_namespace = tag << 40;
-    g_client.ino_counter = 1;
-}
-
 static int efs_fuse_getattr(const char *path, struct stat *stbuf,
                             struct fuse_file_info *fi)
 {
-    (void)fi;
     struct efs_inode parent;
     if (path_is_stats(path, &parent) == 0) {
         if (!feature_enabled(EFS_FEATURE_STATS))
@@ -1128,28 +1102,24 @@ static int efs_fuse_getattr(const char *path, struct stat *stbuf,
         return find_dir_fill_stat(&parent, stbuf);
     }
 
-    int src = check_search_path(path);
-    if (src != 0)
-        return src;
+    if (fi && fi->fh) {
+        struct efs_inode row;
+        if (efs_client_rpc_getattr(g_client.export_id, (efs_ino_t)fi->fh,
+                                   &row) == EFS_OK) {
+            fill_stat_from_inode(stbuf, &row);
+            return 0;
+        }
+    }
 
     struct efs_inode ino;
-    int rc = efs_client_lookup(path, &ino);
+    int rc = lookup_path_fuse(path, &ino);
+    if (rc == EFS_ERR_ACCES)
+        return -EACCES;
+    if (rc == EFS_ERR_INVAL)
+        return -ENOTDIR;
     if (rc != 0)
         return -ENOENT;
-
-    memset(stbuf, 0, sizeof(*stbuf));
-    stbuf->st_ino = ino.ino;
-    stbuf->st_mode = ino.mode;
-    stbuf->st_nlink = ino.nlink;
-    stat_set_size_blocks(stbuf, ino.size, inode_allocated_bytes(&ino));
-    stbuf->st_uid = ino.uid;
-    stbuf->st_gid = ino.gid;
-    stbuf->st_mtim.tv_sec = (time_t)ino.mtime;
-    stbuf->st_mtim.tv_nsec = (long)ino.mtime_nsec;
-    stbuf->st_atim.tv_sec = (time_t)ino.atime;
-    stbuf->st_atim.tv_nsec = 0;
-    stbuf->st_ctim.tv_sec = (time_t)ino.ctime;
-    stbuf->st_ctim.tv_nsec = 0;
+    fill_stat_from_inode(stbuf, &ino);
     return 0;
 }
 
@@ -1182,12 +1152,12 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         return 0;
     }
 
-    int src = check_search_path(path);
-    if (src != 0)
-        return src;
-
     struct efs_inode parent;
-    int rc = efs_client_lookup(path, &parent);
+    int rc = lookup_path_fuse(path, &parent);
+    if (rc == EFS_ERR_ACCES)
+        return -EACCES;
+    if (rc == EFS_ERR_INVAL)
+        return -ENOTDIR;
     if (rc != 0)
         return -ENOENT;
     if (!efs_mode_is_dir(parent.mode))
@@ -1252,11 +1222,13 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 static int efs_fuse_access(const char *path, int mask)
 {
-    int src = check_search_path(path);
-    if (src != 0)
-        return src;
     struct efs_inode ino;
-    if (efs_client_lookup(path, &ino) != 0)
+    int lrc = lookup_path_fuse(path, &ino);
+    if (lrc == EFS_ERR_ACCES)
+        return -EACCES;
+    if (lrc == EFS_ERR_INVAL)
+        return -ENOTDIR;
+    if (lrc != 0)
         return -ENOENT;
     struct fuse_context *ctx = fuse_get_context();
     return check_access(&ino, ctx->uid, ctx->gid, mask);
@@ -1291,11 +1263,13 @@ static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
             return -ENOENT;
         return -EISDIR; /* .find is a directory; query via .find/<term> */
     }
-    int src = check_search_path(path);
-    if (src != 0)
-        return src;
     struct efs_inode ino;
-    if (efs_client_lookup(path, &ino) != 0)
+    int lrc = lookup_path_fuse(path, &ino);
+    if (lrc == EFS_ERR_ACCES)
+        return -EACCES;
+    if (lrc == EFS_ERR_INVAL)
+        return -ENOTDIR;
+    if (lrc != 0)
         return -ENOENT;
     /* Enforce the open permission against the file's mode + the caller's
      * uid/gid (read for O_RDONLY/O_RDWR, write for O_WRONLY/O_RDWR). */
@@ -2253,7 +2227,6 @@ static int efs_fuse_fsync(const char *path, int isdatasync,
                           struct fuse_file_info *fi)
 {
     (void)isdatasync;
-    (void)fi;
     coal_flush_path(path);
     int rc = efs_file_data_sync(path);
     /* Directory rollups walk the inode table; they are not required for
@@ -2266,7 +2239,9 @@ static int efs_fuse_fsync(const char *path, int isdatasync,
         efs_fuse_log_err("fsync", rc, 0, 0, 0, path);
         return -EIO;
     }
-    {
+    if (fi && fi->fh)
+        (void)efs_client_pack_seal((efs_ino_t)fi->fh);
+    else {
         struct efs_inode ino;
         if (efs_client_lookup(path, &ino) == 0 && !efs_mode_is_dir(ino.mode))
             (void)efs_client_pack_seal(ino.ino);
@@ -2575,6 +2550,7 @@ static int efs_rc_to_errno(int rc)
     case EFS_ERR_INVAL:     return -EINVAL;
     case EFS_ERR_QUOTA:     return -ENOSPC;
     case EFS_ERR_NOT_EMPTY: return -ENOTEMPTY;
+    case EFS_ERR_ACCES:     return -EACCES;
     case EFS_ERR_NO_QUORUM:
     case EFS_ERR_NET:
     default:                return -EIO;
@@ -2584,14 +2560,19 @@ static int efs_rc_to_errno(int rc)
 static int efs_fuse_chmod(const char *path, mode_t mode,
                           struct fuse_file_info *fi)
 {
-    (void)fi;
     if (path_is_stats(path, NULL) == 0 || path_is_find(path, NULL) == 0 ||
         path_is_find_query_path(path))
         return -EACCES;
     struct efs_inode ino;
-    int rc = efs_client_lookup(path, &ino);
-    if (rc != 0)
-        return -ENOENT;
+    int rc;
+    if (fi && fi->fh) {
+        ino.ino = (efs_ino_t)fi->fh;
+        rc = 0;
+    } else {
+        rc = efs_client_lookup(path, &ino);
+        if (rc != 0)
+            return -ENOENT;
+    }
     /* Mode is applied in-memory first; failure here is almost always a
      * batched metadata flush (see efs_client_note_meta_change), not chmod. */
     rc = efs_client_chmod(ino.ino, mode);
@@ -2615,14 +2596,21 @@ static int efs_fuse_chmod(const char *path, mode_t mode,
 static int efs_fuse_chown(const char *path, uid_t uid, gid_t gid,
                           struct fuse_file_info *fi)
 {
-    (void)fi;
     if (path_is_stats(path, NULL) == 0 || path_is_find(path, NULL) == 0 ||
         path_is_find_query_path(path))
         return -EACCES;
     struct efs_inode ino;
-    int rc = efs_client_lookup(path, &ino);
-    if (rc != 0)
-        return -ENOENT;
+    int rc;
+    if (fi && fi->fh) {
+        if (efs_client_rpc_getattr(g_client.export_id, (efs_ino_t)fi->fh,
+                                   &ino) != EFS_OK)
+            return -ENOENT;
+        rc = 0;
+    } else {
+        rc = efs_client_lookup(path, &ino);
+        if (rc != 0)
+            return -ENOENT;
+    }
     rc = check_chown_perm(&ino, uid, gid);
     if (rc != 0)
         return rc;
@@ -2747,46 +2735,59 @@ static int efs_fuse_link(const char *from, const char *to)
 static int efs_fuse_utimens(const char *path, const struct timespec tv[2],
                             struct fuse_file_info *fi)
 {
-    (void)fi;
     if (path_is_stats(path, NULL) == 0 || path_is_find(path, NULL) == 0 ||
         path_is_find_query_path(path))
         return -EACCES;
-    struct efs_inode ino;
-    int rc = efs_client_lookup(path, &ino);
-    if (rc != 0)
-        return -ENOENT;
+    efs_ino_t ino;
+    if (fi && fi->fh) {
+        ino = (efs_ino_t)fi->fh;
+    } else {
+        struct efs_inode row;
+        if (efs_client_lookup(path, &row) != 0)
+            return -ENOENT;
+        ino = row.ino;
+    }
 
     /* tv[0]=atime, tv[1]=mtime; honor UTIME_OMIT / UTIME_NOW. */
-    if (tv && tv[0].tv_nsec != UTIME_OMIT) {
-        uint64_t asec;
+    int set_a = tv && tv[0].tv_nsec != UTIME_OMIT;
+    int set_m = tv && tv[1].tv_nsec != UTIME_OMIT;
+    if (!set_a && !set_m)
+        return 0;
+
+    struct timespec now;
+    int have_now = 0;
+    uint64_t asec = 0, msec = 0;
+    uint32_t nsec = 0;
+    if (set_a) {
         if (tv[0].tv_nsec == UTIME_NOW) {
-            struct timespec now;
             clock_gettime(CLOCK_REALTIME, &now);
+            have_now = 1;
             asec = (uint64_t)now.tv_sec;
         } else {
             asec = (uint64_t)tv[0].tv_sec;
         }
-        if (efs_client_set_atime(ino.ino, asec) != 0)
+    }
+    if (set_m) {
+        if (tv[1].tv_nsec == UTIME_NOW) {
+            if (!have_now)
+                clock_gettime(CLOCK_REALTIME, &now);
+            msec = (uint64_t)now.tv_sec;
+            nsec = (uint32_t)now.tv_nsec;
+        } else {
+            msec = (uint64_t)tv[1].tv_sec;
+            nsec = (uint32_t)tv[1].tv_nsec;
+            if (nsec >= 1000000000u)
+                nsec = 0;
+        }
+    }
+    if (set_a && set_m) {
+        if (efs_client_utimens_both(ino, msec, nsec, asec) != 0)
             return -EIO;
-    }
-
-    uint64_t sec;
-    uint32_t nsec;
-    if (!tv || tv[1].tv_nsec == UTIME_OMIT) {
         return 0;
-    } else if (tv[1].tv_nsec == UTIME_NOW) {
-        struct timespec now;
-        clock_gettime(CLOCK_REALTIME, &now);
-        sec = (uint64_t)now.tv_sec;
-        nsec = (uint32_t)now.tv_nsec;
-    } else {
-        sec = (uint64_t)tv[1].tv_sec;
-        nsec = (uint32_t)tv[1].tv_nsec;
-        if (nsec >= 1000000000u)
-            nsec = 0;
     }
-
-    if (efs_client_utimens(ino.ino, sec, nsec) != 0)
+    if (set_a && efs_client_set_atime(ino, asec) != 0)
+        return -EIO;
+    if (set_m && efs_client_utimens(ino, msec, nsec) != 0)
         return -EIO;
     return 0;
 }
@@ -2794,7 +2795,6 @@ static int efs_fuse_utimens(const char *path, const struct timespec tv[2],
 static int efs_fuse_truncate(const char *path, off_t size,
                              struct fuse_file_info *fi)
 {
-    (void)fi;
     if (path_is_stats(path, NULL) == 0)
         return -EACCES;
     if (path_is_find(path, NULL) == 0)
@@ -2802,14 +2802,16 @@ static int efs_fuse_truncate(const char *path, off_t size,
     if (path_is_find_query_path(path))
         return -EACCES; /* query files are read-only */
     struct efs_inode ino;
-    int rc = efs_client_lookup(path, &ino);
-    if (rc != 0)
-        return -ENOENT;
-    if (efs_mode_is_dir(ino.mode))
-        return -EISDIR;
-    /* Path-based truncate (no open fd) needs write permission. ftruncate
-     * on an already-open fd is allowed even after a later chmod. */
-    if (!fi) {
+    if (fi && fi->fh) {
+        ino.ino = (efs_ino_t)fi->fh;
+        ino.mode = S_IFREG;
+    } else {
+        int rc = efs_client_lookup(path, &ino);
+        if (rc != 0)
+            return -ENOENT;
+        if (efs_mode_is_dir(ino.mode))
+            return -EISDIR;
+        /* Path-based truncate (no open fd) needs write permission. */
         struct fuse_context *ctx = fuse_get_context();
         if (check_access(&ino, ctx->uid, ctx->gid, W_OK) != 0)
             return -EACCES;
@@ -2837,7 +2839,9 @@ static int efs_fuse_release(const char *path, struct fuse_file_info *fi)
         efs_fuse_log_err("release", rc, 0, 0, 0, path);
         return -EIO;
     }
-    {
+    if (fi && fi->fh)
+        (void)efs_client_pack_seal((efs_ino_t)fi->fh);
+    else {
         struct efs_inode ino;
         if (efs_client_lookup(path, &ino) == 0 && !efs_mode_is_dir(ino.mode))
             (void)efs_client_pack_seal(ino.ino);

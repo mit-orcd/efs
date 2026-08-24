@@ -9,11 +9,23 @@ efs: distributed FS, 2+1 XOR EC, FUSE client, RDMA (RC QP), 128 KiB chunks.
 Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 
 ## Where we are
+**RPC-storm + streaming-write plan in-tree, VALIDATION GATE 1 RED (Aug 24).**
+Stages 0–4 + skip-`.efsm`-on-fragmented-save. Cluster on
+build `1afda5433e6b-dirty`; 4 up / 0 down; 007 remounted. Stage 0
+baseline `results/meta/20260824-160528` w=1: create 604 / stat 355 /
+getattr 3793 / setattr 1206 / unlink 365. Quiet retry: create 93 /
+stat 242 / setattr 453 / unlink 26. After dropping the 71 MB × 6
+`metadata.efsm` dump on extras PUT_META (`results/meta/20260824-173430`):
+create **116** / stat **223** / setattr **3638** / rename **3354** /
+unlink **24** (getattr 66k untrustworthy). setattr/rename recovered
+above baseline; create/unlink still red — post-unlink all 4 nodes were
+healing extra shards. Residual is extras flush + catchup rebuild, not
+the .efsm serialize. **Stopped — do not push posix/ewrite/ecopy.**
+LOOKUP_PATH did not speed stat. FUSE timeouts still 0. No caches.
 Cluster live on **EFSR v8** + Phase 3 data-path sharding Stages 0–3
-(committed), healthy (4 up / 0 down). Fresh mkfs
-`efs-test` is **bits=3** (8 shards) on 4 servers + 9 clients mounted
-at `/tmp/efs/mnt`. CoW = **debe6dd**, catchup-vs-GC = **76753ef**,
-2b reads = **94f96fd**.
+(committed). Fresh mkfs `efs-test` is **bits=3** (8 shards) on 4 servers
++ 9 clients mounted at `/tmp/efs/mnt`. CoW = **debe6dd**, catchup-vs-GC
+= **76753ef**, 2b reads = **94f96fd**.
 **Data-path sharding LANDED (Aug 23 night):** both
 blockers from the morning finding are fixed together (fixing only one
 = silent data loss). (1) REPORT_CHUNKS is per-shard (`write.c`
@@ -28,6 +40,17 @@ last-link unlink fan `LINK_SHARD`/`UNLINK_SHARD` to the child owner
 (parent-local `nlink_inc` was NOT_FOUND → EIO). PUT_META never fences
 a live table for extras-only roots (that dropped unflushed mkdir
 ops and made sharded dirs vanish mid-create).
+**POSIX suite extended (Aug 24):** `posix_suite.py` 144 → **162**,
+`posix_2client.py` 12 → **24**. bits=3 run `20260824-131138` /
+`20260824-131451`: 16/18 new single-client PASS; all 10 new
+sequential posix2 PASS (chmod/utimens/truncate/hardlink/symlink/
+negative-dentry/fsync/mkdir-rmdir-recreate/O_APPEND/rename-over).
+**4 new EFS gaps** (XFS PASS): `ctime_on_link_rename` (link does
+not bump ctime); `direct_unaligned_einval` (FUSE accepts unaligned
+O_DIRECT — aligned O_DIRECT rdwr + 4k RMW PASS); `peer_flock_exclusive`
+(flock is per-client, not cluster-wide); `peer_unlink_while_b_has_fd`
+(A last-link unlink zeros B's open-fd read). Same-client
+`nlink_after_unlink_open` PASS. 5 known XFS target-better unchanged.
 **POSIX after datapath sharding:** bits=0 `efs-test`
 `20260823-232541` 0 EFS bugs; bits=3 `20260823-233448` 0 EFS bugs
 (hardlink 8/8 after LINK_SHARD); posix2 12/12 both
@@ -221,19 +244,20 @@ fixes → 126/144, then the last 18 POSIX gaps fixed → 144/144 on fcstor007**:
 ## Test suite (d52287e)
 Run from the login node (needs ssh to nodes): `tests/run_tests.sh
 posix|posix2|perf|setup|all`. `setup` rsyncs+builds+mounts the 9 pure clients.
-- **POSIX** (`tests/posix/posix_suite.py`, 144 tests, @test-extensible): run vs
+- **ewrite sweep** (`tests/run_tests.sh ewrite [host]`): 30s
+  `ewrite.sh <mnt> 1 {2,4,8,16}`, kill, record bytes/wall. Default
+  fcstor007:/tmp/efs/mnt. Results: `results/ewrite/`.
+- **POSIX** (`tests/posix/posix_suite.py`, **162** tests, @test-extensible): run vs
   an XFS baseline (node9901:/data1/efs); `compare.py` → efs bug = PASS on XFS,
-  FAIL on efs. **144/144** again (`results/posix/20260821-003433`) after
-  the same-fd dcache overlay fix. The 2b-reads zeros
-  (`basic_rdwr_no_reopen`, `basic_chunk_boundary`,
-  `perm_open_fd_survives_chmod`, `unlink_open_file`) were have_base=0
-  dirty ranges that `dcache_copy` refused, so the reader GETed zeros.
-- **POSIX 2-client** (`tests/posix/posix_2client.py`, 12 tests): create/mkdir/
-  rename/O_CREAT on client A, check client B with no remount. XFS 12/12;
-  efs **12/12** (20260820-234707, A=fcstor007 B=fcstor008) after RPC
-  metadata reads + GETCHUNKS + size-merge on peer grow. Harness remounts B
-  only if the parent is missing (RPC should make prepare visible).
-  `fusermount3 -uz` — a busy FUSE remount hangs. Run: `tests/run_tests.sh posix2`.
+  FAIL on efs. Extended Aug 24 (+18). Latest bits=3 `20260824-131138`:
+  155 both-PASS, 2 new EFS bugs (`ctime_on_link_rename`,
+  `direct_unaligned_einval`), 5 known XFS target-better.
+- **POSIX 2-client** (`tests/posix/posix_2client.py`, **24** tests): create/mkdir/
+  rename/O_CREAT on client A, check client B with no remount. Extended Aug 24
+  (+12). Latest bits=3 `20260824-131451`: 22/24; EFS bugs
+  `peer_flock_exclusive` + `peer_unlink_while_b_has_fd`. Harness remounts B
+  only if the parent is missing. `fusermount3 -uz` — a busy FUSE remount hangs.
+  Run: `tests/run_tests.sh posix2`.
 - **Perf** (`tests/perf/perf_node.sh`): dd + 9-job fio, single|multi client
  (parallel), aggregated to `results/perf/history.tsv`. Harness logs stay
  LOCAL (don't depend on the efs read-after-write path being benchmarked).
