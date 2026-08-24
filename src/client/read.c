@@ -1663,13 +1663,32 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
         return EFS_OK;
     }
 
+    /* Dirty dcache is the truth for same-fd read-your-writes. A bits>0
+     * dentry stub (size 0) or an unlink-open ghost must not hide it. */
+    {
+        uint32_t cs = data_chunk_size();
+        if (cs && size > 0 &&
+            (offset / cs) == ((offset + size - 1) / cs)) {
+            uint32_t ci = (uint32_t)(offset / cs);
+            uint32_t off = (uint32_t)(offset % cs);
+            if (efs_dcache_copy(ino, ci, off, (uint8_t *)buf,
+                                (uint32_t)size) == 0) {
+                *out_len = size;
+                return EFS_OK;
+            }
+        }
+    }
+
     efs_client_lock_dir(ino);
     pthread_mutex_lock(&g_client.idx_mu);
     struct efs_inode inode;
     if (efs_export_get_inode(&g_client.export, ino, &inode) != 0) {
         pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_unlock_dir(ino);
-        return EFS_ERR_NOT_FOUND;
+        /* Missing row (unlink-open ghost, bits>0 stub): dcache already
+         * tried for a single-chunk request. Do not EIO an open fd. */
+        *out_len = 0;
+        return EFS_OK;
     }
     uint64_t file_size = inode.size;
     efs_ino_t pack_ino = inode.pack_ino;
@@ -1704,6 +1723,19 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
             return EFS_OK;
         }
     } else if (offset >= file_size) {
+        /* Size not yet reflected (dentry stub / unlink-open ghost): still
+         * serve a dirty dcache range from this same fd. */
+        uint32_t cs = data_chunk_size();
+        if (cs && size > 0 &&
+            (offset / cs) == ((offset + size - 1) / cs)) {
+            uint32_t ci = (uint32_t)(offset / cs);
+            uint32_t off = (uint32_t)(offset % cs);
+            if (efs_dcache_copy(ino, ci, off, (uint8_t *)buf,
+                                (uint32_t)size) == 0) {
+                *out_len = size;
+                return EFS_OK;
+            }
+        }
         *out_len = 0;
         return EFS_OK;
     } else if (offset + size > file_size) {

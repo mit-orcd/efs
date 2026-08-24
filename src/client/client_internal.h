@@ -51,6 +51,8 @@ struct efs_client {
      * export.next_ino (single-client / test behaviour). */
     uint64_t ino_namespace;
     uint64_t ino_counter;
+    /* Per-mount token for cluster flock / open-hold (not a POSIX lock owner). */
+    uint64_t flock_token;
 
     /* Persistent connection pool to each server. The server's accept
      * loop handles multiple requests per connection; a pool of conns lets
@@ -156,6 +158,8 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
                           efs_ino_t *out_ino, struct efs_inode *out);
 int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
                            struct efs_inode *out);
+/* RPC getattr + adopt, then prefer the local row (unflushed size). */
+int efs_client_stat_ino(efs_ino_t ino, struct efs_inode *out);
 int efs_client_rpc_readdir(efs_export_id_t export_id, efs_ino_t parent,
                            struct efs_inode *ents, uint32_t *inout_count,
                            uint32_t start);
@@ -168,6 +172,9 @@ int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
 int efs_client_rpc_rename(efs_export_id_t export_id, efs_ino_t ino,
                           efs_ino_t new_parent, const char *new_name,
                           struct efs_inode *out);
+int efs_client_rpc_rename_at(efs_export_id_t export_id, efs_ino_t old_parent,
+                             const char *old_name, efs_ino_t new_parent,
+                             const char *new_name, struct efs_inode *out);
 int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
                            uint32_t mask, uint32_t mode, uid_t uid, gid_t gid,
                            uint64_t size, uint64_t mtime, uint32_t mtime_nsec,
@@ -178,6 +185,10 @@ int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
 /* Cross-client O_APPEND reservation (offset = *new_size_out - len). */
 int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
                                   uint64_t len, uint64_t *new_size_out);
+int efs_client_rpc_hold(efs_export_id_t export_id, efs_ino_t ino, int open,
+                        uint64_t owner);
+int efs_client_rpc_flock(efs_export_id_t export_id, efs_ino_t ino, uint32_t op,
+                         uint64_t owner);
 /* Phase 2b: report dirty metadata (chunk mappings + inode size/mtime) to the
  * shard owner of route_ino (EFS_ROOT_INO = primary). sync=1 makes that owner
  * commit before replying (the fsync durability barrier). */
@@ -357,6 +368,8 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size);
 
 /* Rename/move an inode to a new parent and name. */
 int efs_client_rename(efs_ino_t ino, efs_ino_t new_parent, const char *new_name);
+int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_name,
+                         efs_ino_t new_parent, const char *new_name);
 
 /* Initialize node cache from the list of nodes. */
 void efs_client_init_nodes(struct efs_client *c, const char *node_list[EFS_MAX_NODES],

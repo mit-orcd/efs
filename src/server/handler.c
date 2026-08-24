@@ -43,6 +43,38 @@ static struct efs_export *table_for_ino(struct efs_export *ex, efs_ino_t ino)
     return tab ? tab : ex;
 }
 
+#define EFS_FLOCK_SH 1u
+#define EFS_FLOCK_EX 2u
+#define EFS_FLOCK_NB 4u
+#define EFS_FLOCK_UN 8u
+
+/* Caller holds g_server->lock. */
+static struct efs_ino_hold *hold_find(efs_export_id_t eid, efs_ino_t ino,
+                                      int create)
+{
+    struct efs_ino_hold *h;
+    for (h = g_server->ino_holds; h; h = h->next) {
+        if (h->eid == eid && h->ino == ino)
+            return h;
+    }
+    if (!create)
+        return NULL;
+    h = calloc(1, sizeof(*h));
+    if (!h)
+        return NULL;
+    h->eid = eid;
+    h->ino = ino;
+    h->next = g_server->ino_holds;
+    g_server->ino_holds = h;
+    return h;
+}
+
+static uint32_t hold_refs(efs_export_id_t eid, efs_ino_t ino)
+{
+    struct efs_ino_hold *h = hold_find(eid, ino, 0);
+    return h ? h->refs : 0;
+}
+
 static uint32_t server_nlive_locked(struct efsd_server *s, efs_node_id_t *live)
 {
     uint32_t n = 0;
@@ -84,6 +116,8 @@ static efs_ino_t inode_rpc_key(uint8_t type, const void *payload)
         return ((const struct efs_msg_inode_append *)payload)->ino;
     case EFS_MSG_INODE_RENAME:
         return ((const struct efs_msg_inode_rename *)payload)->new_parent;
+    case EFS_MSG_INODE_RENAME_AT:
+        return ((const struct efs_msg_inode_rename_at *)payload)->old_parent;
     case EFS_MSG_INODE_LINK:
         return ((const struct efs_msg_inode_link *)payload)->new_parent;
     case EFS_MSG_INODE_LINK_SHARD:
@@ -92,6 +126,10 @@ static efs_ino_t inode_rpc_key(uint8_t type, const void *payload)
         return ((const struct efs_msg_inode_unlink_shard *)payload)->src_ino;
     case EFS_MSG_INODE_LOOKUP_PATH:
         return EFS_ROOT_INO;
+    case EFS_MSG_INODE_HOLD:
+        return ((const struct efs_msg_inode_hold *)payload)->ino;
+    case EFS_MSG_INODE_FLOCK:
+        return ((const struct efs_msg_inode_flock *)payload)->ino;
     default:
         return EFS_ROOT_INO;
     }
@@ -1569,11 +1607,14 @@ send_reply:
         case EFS_MSG_INODE_GETATTR:
         case EFS_MSG_INODE_UNLINK:
         case EFS_MSG_INODE_RENAME:
+        case EFS_MSG_INODE_RENAME_AT:
         case EFS_MSG_INODE_SETATTR:
         case EFS_MSG_INODE_APPEND:
         case EFS_MSG_INODE_LINK:
         case EFS_MSG_INODE_LINK_SHARD:
-        case EFS_MSG_INODE_UNLINK_SHARD: {
+        case EFS_MSG_INODE_UNLINK_SHARD:
+        case EFS_MSG_INODE_HOLD:
+        case EFS_MSG_INODE_FLOCK: {
             struct efs_msg_inode_reply r;
             memset(&r, 0, sizeof(r));
             r.status = EFS_INODE_RPC_ERROR;
@@ -1599,6 +1640,9 @@ send_reply:
             else if (type == EFS_MSG_INODE_RENAME &&
                      payload_len >= sizeof(struct efs_msg_inode_rename))
                 eid = ((struct efs_msg_inode_rename *)payload)->export_id;
+            else if (type == EFS_MSG_INODE_RENAME_AT &&
+                     payload_len >= sizeof(struct efs_msg_inode_rename_at))
+                eid = ((struct efs_msg_inode_rename_at *)payload)->export_id;
             else if (type == EFS_MSG_INODE_SETATTR &&
                      payload_len >= sizeof(struct efs_msg_inode_setattr))
                 eid = ((struct efs_msg_inode_setattr *)payload)->export_id;
@@ -1614,6 +1658,12 @@ send_reply:
             else if (type == EFS_MSG_INODE_UNLINK_SHARD &&
                      payload_len >= sizeof(struct efs_msg_inode_unlink_shard))
                 eid = ((struct efs_msg_inode_unlink_shard *)payload)->export_id;
+            else if (type == EFS_MSG_INODE_HOLD &&
+                     payload_len >= sizeof(struct efs_msg_inode_hold))
+                eid = ((struct efs_msg_inode_hold *)payload)->export_id;
+            else if (type == EFS_MSG_INODE_FLOCK &&
+                     payload_len >= sizeof(struct efs_msg_inode_flock))
+                eid = ((struct efs_msg_inode_flock *)payload)->export_id;
             for (uint32_t i = 0; i < g_server->export_count; i++) {
                 if (g_server->exports[i].id == eid ||
                     (eid == 0 && i == 0)) {
@@ -1778,8 +1828,11 @@ send_reply:
                                           victim.ino)) {
                     r.status = EFS_INODE_RPC_NOT_EMPTY;
                 } else {
-                    int urc = efs_export_unlink_name(ex, req->parent,
-                                                     req->name);
+                    int keep = 0;
+                    if (have_victim && !req->is_dir)
+                        keep = hold_refs(ex->id, victim.ino) > 0;
+                    int urc = efs_export_unlink_name_ex(ex, req->parent,
+                                                        req->name, keep);
                     r.status = (urc == 0) ? EFS_INODE_RPC_OK
                                           : EFS_INODE_RPC_NOT_FOUND;
                     if (urc == 0)
@@ -1803,8 +1856,8 @@ send_reply:
                                 /* unlink_name already applied a loaded
                                  * child table. Only fault-in if missing. */
                                 if (!efs_export_shard_tab(ex, csh))
-                                    (void)efs_export_nlink_dec(ex, victim.ino,
-                                                               &r.inode);
+                                    (void)efs_export_nlink_dec_ex(
+                                        ex, victim.ino, &r.inode, keep);
                             } else {
                                 struct efs_msg_inode_unlink_shard ureq;
                                 struct efs_msg_inode_reply ur;
@@ -1837,7 +1890,9 @@ send_reply:
                 if (reply_if_shard_busy(ex, req->src_ino, &r)) {
                     /* hollow extra */
                 } else {
-                int urc = efs_export_nlink_dec(ex, req->src_ino, &r.inode);
+                int keep = hold_refs(ex->id, req->src_ino) > 0;
+                int urc = efs_export_nlink_dec_ex(ex, req->src_ino, &r.inode,
+                                                  keep);
                 if (urc == 0) {
                     r.status = EFS_INODE_RPC_OK;
                     server_meta_mark_rpc_dirty_locked(g_server, eidx);
@@ -1846,6 +1901,24 @@ send_reply:
                                    ? EFS_INODE_RPC_NOT_FOUND
                                    : EFS_INODE_RPC_INVAL;
                 }
+                }
+            } else if (type == EFS_MSG_INODE_RENAME_AT) {
+                struct efs_msg_inode_rename_at *req = payload;
+                int rrc = efs_export_rename_at(ex, req->old_parent, req->old_name,
+                                               req->new_parent, req->new_name);
+                if (rrc == 0) {
+                    struct efs_inode row;
+                    if (efs_export_lookup(ex, req->new_parent, req->new_name,
+                                          &row) == 0)
+                        r.inode = row;
+                    r.status = EFS_INODE_RPC_OK;
+                    ex->shard_dirty = 1;
+                    server_meta_mark_rpc_dirty_locked(g_server, eidx);
+                } else {
+                    r.status = (rrc == EFS_ERR_NOT_FOUND) ? EFS_INODE_RPC_NOT_FOUND
+                             : (rrc == EFS_ERR_EXIST) ? EFS_INODE_RPC_EXIST
+                             : (rrc == EFS_ERR_NOT_EMPTY) ? EFS_INODE_RPC_NOT_EMPTY
+                             : EFS_INODE_RPC_INVAL;
                 }
             } else if (type == EFS_MSG_INODE_RENAME) {
                 struct efs_msg_inode_rename *req = payload;
@@ -2040,6 +2113,78 @@ send_reply:
                                    : EFS_INODE_RPC_INVAL;
                 }
                 }
+            } else if (type == EFS_MSG_INODE_HOLD) {
+                struct efs_msg_inode_hold *req = payload;
+                if (payload_len < sizeof(*req) || reply_if_shard_busy(ex, req->ino, &r)) {
+                    if (payload_len < sizeof(*req))
+                        r.status = EFS_INODE_RPC_INVAL;
+                } else {
+                    struct efs_ino_hold *h = hold_find(ex->id, req->ino, 1);
+                    if (!h) {
+                        r.status = EFS_INODE_RPC_ERROR;
+                    } else if (req->flags) {
+                        h->refs++;
+                        r.status = EFS_INODE_RPC_OK;
+                    } else {
+                        if (h->refs > 0)
+                            h->refs--;
+                        if (h->refs == 0) {
+                            h->flock_n = 0;
+                            (void)efs_export_purge_unlinked(ex, req->ino);
+                            server_meta_mark_rpc_dirty_locked(g_server, eidx);
+                        }
+                        r.status = EFS_INODE_RPC_OK;
+                    }
+                }
+            } else if (type == EFS_MSG_INODE_FLOCK) {
+                struct efs_msg_inode_flock *req = payload;
+                if (payload_len < sizeof(*req) || reply_if_shard_busy(ex, req->ino, &r)) {
+                    if (payload_len < sizeof(*req))
+                        r.status = EFS_INODE_RPC_INVAL;
+                } else {
+                    uint32_t op = req->op;
+                    struct efs_ino_hold *h = hold_find(ex->id, req->ino, 1);
+                    if (!h) {
+                        r.status = EFS_INODE_RPC_ERROR;
+                    } else if (op & EFS_FLOCK_UN) {
+                        uint32_t w = 0;
+                        for (uint32_t i = 0; i < h->flock_n; i++) {
+                            if (h->flock_owner[i] != req->owner) {
+                                h->flock_owner[w] = h->flock_owner[i];
+                                h->flock_ex[w] = h->flock_ex[i];
+                                w++;
+                            }
+                        }
+                        h->flock_n = w;
+                        r.status = EFS_INODE_RPC_OK;
+                    } else if (op & (EFS_FLOCK_EX | EFS_FLOCK_SH)) {
+                        int want_ex = (op & EFS_FLOCK_EX) ? 1 : 0;
+                        int conflict = 0, mine = -1;
+                        for (uint32_t i = 0; i < h->flock_n; i++) {
+                            if (h->flock_owner[i] == req->owner) {
+                                mine = (int)i;
+                                continue;
+                            }
+                            if (h->flock_ex[i] || want_ex)
+                                conflict = 1;
+                        }
+                        if (conflict)
+                            r.status = EFS_INODE_RPC_BUSY;
+                        else if (mine >= 0) {
+                            h->flock_ex[mine] = (uint8_t)want_ex;
+                            r.status = EFS_INODE_RPC_OK;
+                        } else if (h->flock_n >= 8) {
+                            r.status = EFS_INODE_RPC_BUSY;
+                        } else {
+                            h->flock_owner[h->flock_n] = req->owner;
+                            h->flock_ex[h->flock_n] = (uint8_t)want_ex;
+                            h->flock_n++;
+                            r.status = EFS_INODE_RPC_OK;
+                        }
+                    } else {
+                        r.status = EFS_INODE_RPC_INVAL;
+                    }
+                }
             }
             pthread_mutex_unlock(&g_server->lock);
             uint8_t rtype = (type == EFS_MSG_INODE_LOOKUP) ? EFS_MSG_INODE_LOOKUP_REPLY
@@ -2047,11 +2192,14 @@ send_reply:
                           : (type == EFS_MSG_INODE_CREATE_SHARD) ? EFS_MSG_INODE_CREATE_SHARD_REPLY
                           : (type == EFS_MSG_INODE_GETATTR) ? EFS_MSG_INODE_GETATTR_REPLY
                           : (type == EFS_MSG_INODE_RENAME) ? EFS_MSG_INODE_RENAME_REPLY
+                          : (type == EFS_MSG_INODE_RENAME_AT) ? EFS_MSG_INODE_RENAME_AT_REPLY
                           : (type == EFS_MSG_INODE_SETATTR) ? EFS_MSG_INODE_SETATTR_REPLY
                           : (type == EFS_MSG_INODE_APPEND) ? EFS_MSG_INODE_APPEND_REPLY
                           : (type == EFS_MSG_INODE_LINK) ? EFS_MSG_INODE_LINK_REPLY
                           : (type == EFS_MSG_INODE_LINK_SHARD) ? EFS_MSG_INODE_LINK_SHARD_REPLY
                           : (type == EFS_MSG_INODE_UNLINK_SHARD) ? EFS_MSG_INODE_UNLINK_SHARD_REPLY
+                          : (type == EFS_MSG_INODE_HOLD) ? EFS_MSG_INODE_HOLD_REPLY
+                          : (type == EFS_MSG_INODE_FLOCK) ? EFS_MSG_INODE_FLOCK_REPLY
                           : EFS_MSG_INODE_UNLINK_REPLY;
             efs_conn_send_msg(conn, rtype, &r, sizeof(r));
             break;

@@ -19,6 +19,7 @@
 #include <sys/statvfs.h>
 #include <time.h>
 #include <fcntl.h>
+#include <sys/file.h>
 #include <limits.h>
 #include <signal.h>
 #include <execinfo.h>
@@ -1104,8 +1105,7 @@ static int efs_fuse_getattr(const char *path, struct stat *stbuf,
 
     if (fi && fi->fh) {
         struct efs_inode row;
-        if (efs_client_rpc_getattr(g_client.export_id, (efs_ino_t)fi->fh,
-                                   &row) == EFS_OK) {
+        if (efs_client_stat_ino((efs_ino_t)fi->fh, &row) == EFS_OK) {
             fill_stat_from_inode(stbuf, &row);
             return 0;
         }
@@ -1302,6 +1302,8 @@ static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
          * network). */
         if (fi->flags & O_DIRECT)
             fi->direct_io = 1;
+        (void)efs_client_rpc_hold(g_client.export_id, ino.ino, 1,
+                                  g_client.flock_token);
     }
     return 0;
 }
@@ -1365,6 +1367,9 @@ static int efs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
     int rc = fuse_file_ino(path, fi, &ino);
     if (rc != 0)
         return rc;
+    if (fi && ((fi->flags & O_DIRECT) || fi->direct_io) &&
+        ((offset & 4095) || (size & 4095)))
+        return -EINVAL;
 
     /* Read-your-writes: commit any coalesced (not yet written-back) data for
      * this file before reading from the servers. Pure reads skip this via the
@@ -2080,11 +2085,15 @@ static off_t append_reserve_offset(efs_ino_t ino, uint64_t len)
         rc = efs_client_rpc_append_reserve(g_client.export_id, ino, len, &ns);
         if (rc != EFS_ERR_BUSY)
             break;
+        /* Flush without g_append_mu: other appenders, close, and writeback
+         * of this ino must run so REPORT can release the server barrier. */
+        pthread_mutex_unlock(&g_append_mu);
         (void)coal_flush_ino(ino);
         (void)efs_wb_sync_ino(ino);
         (void)efs_dcache_flush_ino(ino);
         (void)efs_client_report_dirty(0);
         usleep(5000);
+        pthread_mutex_lock(&g_append_mu);
     }
     if (rc != EFS_OK || ns < len)
         return append_end_offset(ino);
@@ -2128,6 +2137,9 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
 
     if (size == 0)
         return 0;
+    if (fi && ((fi->flags & O_DIRECT) || fi->direct_io) &&
+        ((offset & 4095) || (size & 4095)))
+        return -EINVAL;
     int append = fi && (fi->flags & O_APPEND);
     if (append) {
         pthread_mutex_lock(&g_append_mu);
@@ -2182,6 +2194,9 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
     size_t size = fuse_buf_size(buf);
     if (size == 0)
         return 0;
+    if (fi && ((fi->flags & O_DIRECT) || fi->direct_io) &&
+        ((offset & 4095) || (size & 4095)))
+        return -EINVAL;
     size_t copy_cap = 0;
     char *copy = bounce_alloc(size, &copy_cap);
     if (!copy)
@@ -2344,6 +2359,8 @@ static int efs_fuse_create(const char *path, mode_t mode, struct fuse_file_info 
         fi->fh = ino;
         if (fi->flags & O_DIRECT)
             fi->direct_io = 1;
+        (void)efs_client_rpc_hold(g_client.export_id, ino, 1,
+                                  g_client.flock_token);
     }
     return 0;
 }
@@ -2676,6 +2693,11 @@ static int efs_fuse_symlink(const char *link, const char *path)
         if (efs_client_truncate(ino, 0) != 0)
             return -EIO;
     }
+    /* Peers getattr the symlink owner for the target size. write() only
+     * kicks an async REPORT; wait so readlink on another client is not
+     * empty (posix2 peer_symlink_visible). */
+    if (efs_client_report_dirty(1) != EFS_OK)
+        return -EIO;
     return 0;
 }
 
@@ -2850,6 +2872,9 @@ static int efs_fuse_release(const char *path, struct fuse_file_info *fi)
     }
     /* Coalesced: only flushes every meta_batch_ops releases/creates. */
     efs_client_note_meta_change(0);
+    if (fi && fi->fh)
+        (void)efs_client_rpc_hold(g_client.export_id, (efs_ino_t)fi->fh, 0,
+                                  g_client.flock_token);
     return 0;
 }
 
@@ -2917,7 +2942,8 @@ static int efs_fuse_rename(const char *from, const char *to, unsigned int flags)
     if (wx != 0)
         return wx;
 
-    rc = efs_client_rename(src.ino, dst_parent.ino, name);
+    rc = efs_client_rename_at(src.ino, src_parent.ino, src_name,
+                              dst_parent.ino, name);
     if (rc != 0)
         return efs_rc_to_errno(rc);
     if (efs_mode_is_dir(src.mode)) {
@@ -3135,6 +3161,26 @@ static int efs_fuse_lock(const char *path, struct fuse_file_info *fi,
     return -EINVAL;
 }
 
+static int efs_fuse_flock(const char *path, struct fuse_file_info *fi, int op)
+{
+    efs_ino_t ino;
+    int rc = fuse_file_ino(path, fi, &ino);
+    if (rc != 0)
+        return rc;
+    /* fi->fh is the inode (shared by every fd). Use the fi pointer so two
+     * opens of the same file are distinct lock owners. */
+    uint64_t owner = g_client.flock_token ^ ((uint64_t)(uintptr_t)fi << 8);
+    struct fuse_context *ctx = fuse_get_context();
+    if (ctx)
+        owner ^= ((uint64_t)ctx->pid << 1);
+    rc = efs_client_rpc_flock(g_client.export_id, ino, (uint32_t)op, owner);
+    if (rc == EFS_ERR_BUSY)
+        return -EAGAIN;
+    if (rc != EFS_OK)
+        return -EIO;
+    return 0;
+}
+
 static void *efs_fuse_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 {
     if (cfg) {
@@ -3229,6 +3275,7 @@ static struct fuse_operations efs_ops = {
     .release  = efs_fuse_release,
     .lseek    = efs_fuse_lseek,
     .lock     = efs_fuse_lock,
+    .flock    = efs_fuse_flock,
     .init     = efs_fuse_init,
     .destroy  = efs_fuse_destroy,
 };

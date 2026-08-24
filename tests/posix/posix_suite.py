@@ -2331,6 +2331,338 @@ def concurrent_overlap_write(d):
         raise Fail("torn overlap write (mix of A and B)")
 
 
+# ==========================================================================
+# Extra POSIX corners (getattr size, hardlinks, rename, *at, holes)
+# ==========================================================================
+@test
+def fstat_size_after_write(d):
+    """Kernel i_size after a write must match fstat without a reopen."""
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        os.write(fd, b"abcdef")
+        eq(os.fstat(fd).st_size, 6, "fstat size after write")
+        os.lseek(fd, 0, os.SEEK_SET)
+        eq(os.read(fd, 6), b"abcdef", "read after fstat")
+    finally:
+        os.close(fd)
+
+
+@test
+def trunc_shrink_same_fd(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        os.write(fd, b"0123456789")
+        os.ftruncate(fd, 4)
+        eq(os.fstat(fd).st_size, 4, "ftruncate size")
+        os.lseek(fd, 0, os.SEEK_SET)
+        eq(os.read(fd, 16), b"0123", "read after shrink")
+    finally:
+        os.close(fd)
+
+
+@test
+def unlink_open_then_recreate(d):
+    """Unlinked fd keeps old bytes; a new name is a new inode."""
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    os.write(fd, b"old-bytes")
+    ino0 = os.fstat(fd).st_ino
+    os.unlink(p)
+    wr(p, b"new")
+    ino1 = os.stat(p).st_ino
+    try:
+        if ino0 == ino1:
+            raise Fail("recreate reused inode %d of the unlinked fd" % ino0)
+        os.lseek(fd, 0, os.SEEK_SET)
+        eq(os.read(fd, 9), b"old-bytes", "unlinked fd still has old data")
+        eq(rd(p), b"new", "new name is independent")
+    finally:
+        os.close(fd)
+
+
+@test
+def rename_to_self(d):
+    p = os.path.join(d, "f")
+    wr(p, b"same")
+    os.rename(p, p)
+    eq(rd(p), b"same", "rename-to-self")
+    eq(os.stat(p).st_nlink, 1, "nlink after rename-to-self")
+
+
+@test
+def rename_empty_over_empty_dir(d):
+    a = os.path.join(d, "a")
+    b = os.path.join(d, "b")
+    os.mkdir(a)
+    os.mkdir(b)
+    os.rename(a, b)
+    assert os.path.isdir(b)
+    assert not os.path.exists(a)
+    eq(os.listdir(b), [], "replaced dir empty")
+
+
+@test
+def lstat_symlink_size(d):
+    os.symlink("target-name", os.path.join(d, "l"))
+    st = os.lstat(os.path.join(d, "l"))
+    if not statmod.S_ISLNK(st.st_mode):
+        raise Fail("lstat is not a symlink")
+    eq(st.st_size, len("target-name"), "symlink st_size is target length")
+    eq(os.readlink(os.path.join(d, "l")), "target-name", "readlink")
+
+
+@test
+def chmod_preserves_mtime(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    os.utime(p, ns=(1_000_000_000_000_000_000, 1_111_111_111_000_000_000))
+    m0 = os.stat(p).st_mtime_ns
+    os.chmod(p, 0o600)
+    st = os.stat(p)
+    eq(st.st_mtime_ns, m0, "chmod must not change mtime")
+    eq(statmod.S_IMODE(st.st_mode), 0o600, "mode applied")
+
+
+@test
+def unlink_recreate_new_ino(d):
+    p = os.path.join(d, "f")
+    wr(p, b"a")
+    i0 = os.stat(p).st_ino
+    os.unlink(p)
+    wr(p, b"b")
+    i1 = os.stat(p).st_ino
+    if i0 == i1:
+        raise Fail("unlink+create reused ino %d" % i0)
+    eq(rd(p), b"b", "new content")
+
+
+@test
+def case_sensitive_names(d):
+    wr(os.path.join(d, "Foo"), b"A")
+    wr(os.path.join(d, "foo"), b"B")
+    names = set(os.listdir(d))
+    if "Foo" not in names or "foo" not in names:
+        raise Fail("listdir missing Foo/foo: %s" % sorted(names))
+    eq(rd(os.path.join(d, "Foo")), b"A", "Foo")
+    eq(rd(os.path.join(d, "foo")), b"B", "foo")
+
+
+@test
+def o_append_pwrite_absolute(d):
+    """Linux (unlike POSIX) makes pwrite honor O_APPEND and write at EOF."""
+    p = os.path.join(d, "f")
+    wr(p, b"aaaa")
+    fd = os.open(p, os.O_RDWR | os.O_APPEND)
+    try:
+        n = os.pwrite(fd, b"ZZ", 1)
+        eq(n, 2, "pwrite n")
+    finally:
+        os.close(fd)
+    eq(rd(p), b"aaaaZZ", "Linux pwrite+O_APPEND appends")
+
+
+@test
+def two_fds_independent_offset(d):
+    p = os.path.join(d, "f")
+    wr(p, b"0123456789")
+    a = os.open(p, os.O_RDONLY)
+    b = os.open(p, os.O_RDONLY)
+    try:
+        eq(os.read(a, 3), b"012", "fd a")
+        eq(os.read(b, 3), b"012", "fd b starts at 0")
+        eq(os.read(a, 2), b"34", "fd a continues")
+        eq(os.read(b, 2), b"34", "fd b continues independently")
+    finally:
+        os.close(a)
+        os.close(b)
+
+
+@test
+def dir_nlink_after_rmdir_child(d):
+    parent = os.path.join(d, "p")
+    os.mkdir(parent)
+    n0 = os.stat(parent).st_nlink
+    os.mkdir(os.path.join(parent, "c"))
+    if os.stat(parent).st_nlink != n0 + 1:
+        raise Fail("mkdir child did not bump parent nlink (got %d want %d)" %
+                   (os.stat(parent).st_nlink, n0 + 1))
+    os.rmdir(os.path.join(parent, "c"))
+    eq(os.stat(parent).st_nlink, n0, "rmdir child restores parent nlink")
+
+
+@test
+def access_f_ok_after_unlink(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    os.unlink(p)
+    if os.access(p, os.F_OK):
+        raise Fail("F_OK true after unlink")
+
+
+@test
+def write_hole_pread_zeros(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        os.pwrite(fd, b"Z", 100)
+        eq(os.pread(fd, 5, 0), b"\x00" * 5, "leading hole is zeros")
+        eq(os.pread(fd, 1, 100), b"Z", "data at 100")
+        eq(os.fstat(fd).st_size, 101, "size after hole write")
+    finally:
+        os.close(fd)
+
+
+@test
+def hardlink_three_names(d):
+    a = os.path.join(d, "a")
+    wr(a, b"abc")
+    os.link(a, os.path.join(d, "b"))
+    os.link(a, os.path.join(d, "c"))
+    eq(os.stat(a).st_nlink, 3, "nlink=3")
+    with open(os.path.join(d, "b"), "wb") as f:
+        f.write(b"XYZ")
+    eq(rd(os.path.join(d, "c")), b"XYZ", "write via b seen via c")
+    os.unlink(os.path.join(d, "b"))
+    eq(os.stat(a).st_nlink, 2, "nlink=2 after one unlink")
+    eq(rd(a), b"XYZ", "surviving names")
+
+
+@test
+def rename_file_over_symlink(d):
+    wr(os.path.join(d, "t"), b"tgt")
+    os.symlink("t", os.path.join(d, "l"))
+    wr(os.path.join(d, "s"), b"src")
+    os.rename(os.path.join(d, "s"), os.path.join(d, "l"))
+    assert not os.path.islink(os.path.join(d, "l")), "dest is no longer a link"
+    eq(rd(os.path.join(d, "l")), b"src", "rename-over-symlink content")
+    eq(rd(os.path.join(d, "t")), b"tgt", "symlink target file survives")
+
+
+@test
+def flock_unlock_on_close(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    fd1 = os.open(p, os.O_RDWR)
+    fcntl.flock(fd1, fcntl.LOCK_EX)
+    os.close(fd1)
+    fd2 = os.open(p, os.O_RDWR)
+    try:
+        fcntl.flock(fd2, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd2, fcntl.LOCK_UN)
+    except OSError as e:
+        raise Fail("LOCK_EX after other fd close: %s" % e)
+    finally:
+        os.close(fd2)
+
+
+@test
+def mkdirat_unlinkat(d):
+    dirfd = os.open(d, os.O_RDONLY)
+    try:
+        os.mkdir("sub", dir_fd=dirfd)
+        wr(os.path.join(d, "sub", "f"), b"x")
+        expect_err(errno.ENOTEMPTY, os.rmdir, "sub", dir_fd=dirfd)
+        os.unlink(os.path.join(d, "sub", "f"))
+        os.rmdir("sub", dir_fd=dirfd)
+    finally:
+        os.close(dirfd)
+    assert not os.path.exists(os.path.join(d, "sub"))
+
+
+@test
+def trailing_slash_on_file(d):
+    wr(os.path.join(d, "f"), b"x")
+    expect_err(errno.ENOTDIR, os.stat, os.path.join(d, "f") + "/")
+    expect_err(errno.ENOTDIR, os.open, os.path.join(d, "f") + "/", os.O_RDONLY)
+
+
+@test
+def creat_existing_dir_eisdir(d):
+    os.mkdir(os.path.join(d, "sub"))
+    expect_err(errno.EISDIR, os.open, os.path.join(d, "sub"),
+               os.O_CREAT | os.O_WRONLY, 0o644)
+
+
+@test
+def fsync_then_fstat_size(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        os.write(fd, b"Q" * 777)
+        os.fsync(fd)
+        eq(os.fstat(fd).st_size, 777, "fstat after fsync")
+    finally:
+        os.close(fd)
+    eq(os.path.getsize(p), 777, "path size after fsync")
+
+
+@test
+def chdir_dotdot_after_mkdir(d):
+    sub = os.path.join(d, "sub")
+    os.mkdir(sub)
+    wr(os.path.join(sub, "f"), b"in")
+    cwd = os.getcwd()
+    try:
+        os.chdir(sub)
+        eq(rd("f"), b"in", "relative in sub")
+        os.chdir("..")
+        assert os.path.isdir("sub"), "dotdot is the testdir"
+    finally:
+        os.chdir(cwd)
+
+
+@test
+def mtime_bumps_on_write(d):
+    p = os.path.join(d, "f")
+    wr(p, b"a")
+    os.utime(p, ns=(1_000_000_000_000_000_000, 1_000_000_000_000_000_000))
+    m0 = os.stat(p).st_mtime_ns
+    time.sleep(0.02)
+    with open(p, "ab") as f:
+        f.write(b"b")
+    m1 = os.stat(p).st_mtime_ns
+    if m1 <= m0:
+        raise Fail("mtime did not advance on write (%d -> %d)" % (m0, m1))
+
+
+@test
+def rename_dir_same_parent(d):
+    os.mkdir(os.path.join(d, "old"))
+    wr(os.path.join(d, "old", "f"), b"keep")
+    os.rename(os.path.join(d, "old"), os.path.join(d, "new"))
+    assert not os.path.exists(os.path.join(d, "old"))
+    eq(rd(os.path.join(d, "new", "f")), b"keep", "dir rename keeps child")
+
+
+@test
+def link_of_symlink(d):
+    """Linux link() does not follow: both names are the same symlink inode."""
+    wr(os.path.join(d, "t"), b"data")
+    os.symlink("t", os.path.join(d, "l"))
+    os.link(os.path.join(d, "l"), os.path.join(d, "h"))
+    if not os.path.islink(os.path.join(d, "h")):
+        raise Fail("link() of a symlink followed the target")
+    eq(os.lstat(os.path.join(d, "l")).st_ino,
+       os.lstat(os.path.join(d, "h")).st_ino, "same symlink ino")
+    eq(os.lstat(os.path.join(d, "l")).st_nlink, 2, "symlink nlink")
+    eq(os.readlink(os.path.join(d, "h")), "t", "other name readlink")
+    eq(rd(os.path.join(d, "h")), b"data", "follow via new name")
+
+
+@test
+def write_beyond_eof_then_seek_end(d):
+    p = os.path.join(d, "f")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        os.pwrite(fd, b"X", 50)
+        end = os.lseek(fd, 0, os.SEEK_END)
+        eq(end, 51, "SEEK_END after pwrite past EOF")
+    finally:
+        os.close(fd)
+
+
 # Two-client live visibility is posix_2client.py (run_tests.sh posix2).
 #
 # ==========================================================================

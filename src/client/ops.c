@@ -302,6 +302,37 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
     }
 }
 
+/* getattr for an open fd (and any ino-keyed stat). Path lookup already
+ * prefers the local row after adopt; the FUSE getattr(fi->fh) path used
+ * to return the RPC row raw. The owner learns size via async
+ * REPORT_CHUNKS, so that row is often still size 0 after a same-fd
+ * write. The kernel then sets i_size=0 (attr_timeout=0) and never
+ * calls .read — POSIX same-fd / unlink-open / chmod-open all empty. */
+int efs_client_stat_ino(efs_ino_t ino, struct efs_inode *out)
+{
+    if (!out || !ino)
+        return EFS_ERR_INVAL;
+    struct efs_inode rpc;
+    int have_rpc = (efs_client_rpc_getattr(g_client.export_id, ino, &rpc)
+                    == EFS_OK);
+    if (have_rpc)
+        adopt_rpc_inode(&rpc);
+    efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
+    if (efs_export_get_inode(&g_client.export, ino, out) == 0) {
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(ino);
+        return EFS_OK;
+    }
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(ino);
+    if (have_rpc) {
+        *out = rpc;
+        return EFS_OK;
+    }
+    return EFS_ERR_NOT_FOUND;
+}
+
 static int lookup_access_ok(const struct efs_inode *ino, uid_t uid, gid_t gid,
                             const gid_t *groups, int ngroups, int mask)
 {
@@ -377,7 +408,7 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
             struct efs_inode child = pr.inode;
             if (g_client.export.root.shard_bits &&
                 g_client.export.root.shard_count > 1 &&
-                efs_mode_is_reg(child.mode)) {
+                !efs_mode_is_dir(child.mode)) {
                 struct efs_inode full;
                 if (efs_client_rpc_getattr(g_client.export_id, child.ino,
                                            &full) == EFS_OK)
@@ -426,7 +457,7 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
          * intermediates are directories. */
         if (!more && g_client.export.root.shard_bits &&
             g_client.export.root.shard_count > 1 &&
-            efs_mode_is_reg(child.mode)) {
+            !efs_mode_is_dir(child.mode)) {
             struct efs_inode full;
             if (efs_client_rpc_getattr(g_client.export_id, child.ino,
                                        &full) == EFS_OK)
@@ -674,6 +705,27 @@ int efs_client_rename(efs_ino_t ino, efs_ino_t new_parent, const char *new_name)
     return EFS_OK;
 }
 
+int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_name,
+                         efs_ino_t new_parent, const char *new_name)
+{
+    struct efs_inode out;
+    int rc = efs_client_rpc_rename_at(g_client.export_id, old_parent, old_name,
+                                      new_parent, new_name, &out);
+    if (rc != EFS_OK) {
+        g_client.last_err = rc;
+        return rc;
+    }
+    efs_client_lock_dirs2(ino, new_parent);
+    pthread_mutex_lock(&g_client.idx_mu);
+    if (efs_export_rename_at(&g_client.export, old_parent, old_name,
+                             new_parent, new_name) != EFS_OK &&
+        efs_export_rename(&g_client.export, ino, new_parent, new_name) != EFS_OK)
+        efs_export_upsert_inode(&g_client.export, &out);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dirs2(ino, new_parent);
+    return EFS_OK;
+}
+
 int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
 {
     /* Validate type locally (and to surface ENOENT/EISDIR before the RPC). */
@@ -706,7 +758,8 @@ int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
         return rc;
     efs_client_lock_dir(parent);
     pthread_mutex_lock(&g_client.idx_mu);
-    efs_export_unlink_name(&g_client.export, parent, name);
+    /* Keep a nlink=0 ghost so an already-open fd can still get_inode. */
+    efs_export_unlink_name_ex(&g_client.export, parent, name, is_dir ? 0 : 1);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);
     return EFS_OK;
@@ -750,4 +803,9 @@ void efs_client_setup_ino_namespace(void)
         tag = 1;
     g_client.ino_namespace = tag << 40;
     g_client.ino_counter = 1;
+    if (!g_client.flock_token) {
+        g_client.flock_token = tag ^ ((uint64_t)getpid() << 1);
+        if (!g_client.flock_token)
+            g_client.flock_token = 1;
+    }
 }

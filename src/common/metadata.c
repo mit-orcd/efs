@@ -35,6 +35,39 @@ static void time_now(uint64_t *t)
     *t = (uint64_t)ts.tv_sec;
 }
 
+/* POSIX link/rename bump ctime. Second resolution would hide a same-second
+ * link, so advance by 1 when the clock has not moved. */
+static void inode_bump_ctime(struct efs_inode *p)
+{
+    if (!p)
+        return;
+    uint64_t old = p->ctime;
+    time_now(&p->ctime);
+    if (p->ctime <= old)
+        p->ctime = old + 1;
+}
+
+static void stamp_ctime_loaded(struct efs_export *ex, efs_ino_t ino, uint64_t ct)
+{
+    if (!ex || !ino)
+        return;
+    for (uint64_t i = 0; i < ex->inode_count; i++) {
+        if (ex->inodes[i].ino == ino)
+            ex->inodes[i].ctime = ct;
+    }
+    if (!ex->shard_tabs)
+        return;
+    for (uint32_t s = 1; s < ex->shard_tab_cap; s++) {
+        struct efs_export *t = ex->shard_tabs[s];
+        if (!t)
+            continue;
+        for (uint64_t i = 0; i < t->inode_count; i++) {
+            if (t->inodes[i].ino == ino)
+                t->inodes[i].ctime = ct;
+        }
+    }
+}
+
 static struct efs_inode *inode_ptr(struct efs_export *ex, efs_ino_t ino);
 
 static void parent_touch(struct efs_export *ex, efs_ino_t parent)
@@ -173,6 +206,9 @@ static void idx_del(uint64_t *keys, uint64_t *vals, uint64_t mask, uint64_t key)
 static int name_idx_put(struct efs_export *ex, efs_ino_t parent, const char *name,
                         uint64_t pos)
 {
+    /* nlink=0 open-fd ghosts keep the inode row but have no directory name. */
+    if (!name || !name[0] || parent == 0)
+        return -1;
     if (!ex->name_keys || ex->name_mask == 0)
         return -1;
     uint64_t key = hash_name_key(parent, name);
@@ -619,6 +655,8 @@ static void child_idx_rebuild(struct efs_export *ex)
             continue;
         if (ex->inodes[i].ino == EFS_ROOT_INO &&
             ex->inodes[i].parent == EFS_ROOT_INO)
+            continue;
+        if (!ex->inodes[i].name[0] || ex->inodes[i].parent == 0)
             continue;
         child_idx_add(ex, ex->inodes[i].parent, i);
     }
@@ -1959,6 +1997,12 @@ static void tab_set_nlink(struct efs_export *tab, efs_ino_t ino, uint32_t nlink)
 
 int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *name)
 {
+    return efs_export_unlink_name_ex(ex, parent, name, 0);
+}
+
+int efs_export_unlink_name_ex(struct efs_export *ex, efs_ino_t parent,
+                              const char *name, int keep_last)
+{
     if (!ex || !name)
         return EFS_ERR_INVAL;
     if (export_is_sharded_root(ex)) {
@@ -1997,10 +2041,13 @@ int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *
         /* Update copies we already hold (including a loaded child table).
          * Never efs_export_table(all). If the canonical table is not
          * loaded, the owner applies nlink/chunks (handler nlink_dec /
-         * UNLINK_SHARD). */
-        if (nlink == 0)
-            for_each_loaded_tab(ex, UINT32_MAX, tab_unlink_ino, ino, 0);
-        else
+         * UNLINK_SHARD). keep_last (open fds) leaves nlink=0 + chunks. */
+        if (nlink == 0) {
+            if (keep_last)
+                for_each_loaded_tab(ex, UINT32_MAX, tab_set_nlink, ino, 0);
+            else
+                for_each_loaded_tab(ex, UINT32_MAX, tab_unlink_ino, ino, 0);
+        } else
             for_each_loaded_tab(ex, UINT32_MAX, tab_set_nlink, ino, nlink);
         return EFS_OK;
     }
@@ -2029,6 +2076,18 @@ int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *
     rollup_sub_under(ex, parent, &removed);
     child_idx_del(ex, parent, pos);
     parent_touch(ex, parent);
+    if (nlink == 0 && keep_last) {
+        /* Drop the directory name but keep the inode + chunks so an
+         * already-open fd on another client can still read. */
+        name_idx_del(ex, parent, removed.name);
+        dentry_bytes_sub(ex, removed.name);
+        ex->inodes[pos].nlink = 0;
+        ex->inodes[pos].name[0] = '\0';
+        ex->inodes[pos].parent = 0;
+        ex->shard_dirty = 1;
+        return EFS_OK;
+    }
+
     remove_inode_slot(ex, pos, nlink > 0);
     ex->shard_dirty = 1;
 
@@ -2093,8 +2152,11 @@ int efs_export_nlink_inc(struct efs_export *ex, efs_ino_t src_ino,
         return EFS_ERR_NOT_FOUND;
     if (efs_mode_is_dir(csrc->mode))
         return EFS_ERR_INVAL;
+    inode_bump_ctime(csrc);
+    uint64_t ct = csrc->ctime;
     uint32_t nlink = csrc->nlink + 1;
     shard_set_nlink(ex, src_ino, nlink);
+    stamp_ctime_loaded(ex, src_ino, ct);
     ctab->shard_dirty = 1;
     if (out) {
         csrc = inode_ptr(ctab, src_ino);
@@ -2107,6 +2169,12 @@ int efs_export_nlink_inc(struct efs_export *ex, efs_ino_t src_ino,
 int efs_export_nlink_dec(struct efs_export *ex, efs_ino_t src_ino,
                          struct efs_inode *out)
 {
+    return efs_export_nlink_dec_ex(ex, src_ino, out, 0);
+}
+
+int efs_export_nlink_dec_ex(struct efs_export *ex, efs_ino_t src_ino,
+                            struct efs_inode *out, int keep_last)
+{
     if (!ex || !src_ino)
         return EFS_ERR_INVAL;
     struct efs_export *ctab = efs_export_table_for_ino(ex, src_ino);
@@ -2118,6 +2186,18 @@ int efs_export_nlink_dec(struct efs_export *ex, efs_ino_t src_ino,
         nlink = 1;
     nlink--;
     if (nlink == 0) {
+        if (keep_last) {
+            shard_set_nlink(ex, src_ino, 0);
+            csrc = inode_ptr(ctab, src_ino);
+            if (csrc) {
+                csrc->name[0] = '\0';
+                csrc->parent = 0;
+            }
+            ctab->shard_dirty = 1;
+            if (out && csrc)
+                *out = *csrc;
+            return EFS_OK;
+        }
         for_each_loaded_tab(ex, UINT32_MAX, tab_unlink_ino, src_ino, 0);
         if (out)
             memset(out, 0, sizeof(*out));
@@ -2131,6 +2211,18 @@ int efs_export_nlink_dec(struct efs_export *ex, efs_ino_t src_ino,
             *out = *csrc;
     }
     return EFS_OK;
+}
+
+int efs_export_purge_unlinked(struct efs_export *ex, efs_ino_t ino)
+{
+    if (!ex || !ino)
+        return EFS_ERR_INVAL;
+    struct efs_inode cur;
+    if (efs_export_get_inode(ex, ino, &cur) != 0)
+        return EFS_ERR_NOT_FOUND;
+    if (cur.nlink != 0)
+        return EFS_OK;
+    return efs_export_unlink(ex, ino);
 }
 
 int efs_export_link_dentry(struct efs_export *ex, const struct efs_inode *src,
@@ -2242,12 +2334,15 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
     if (!src)
         return EFS_ERR_NOT_FOUND;
 
+    inode_bump_ctime(src);
+    uint64_t ct = src->ctime;
     uint32_t nlink = src->nlink + 1;
     sync_hardlink_attrs(ex, src_ino, src);
     for (uint64_t i = 0; i < ex->inode_count; i++) {
         if (ex->inodes[i].ino == src_ino)
             ex->inodes[i].nlink = nlink;
     }
+    stamp_ctime_loaded(ex, src_ino, ct);
     src = inode_ptr(ex, src_ino);
 
     uint64_t pos = ex->inode_count++;
@@ -2437,6 +2532,30 @@ int efs_export_set_atime(struct efs_export *ex, efs_ino_t ino, uint64_t atime)
     return EFS_OK;
 }
 
+int efs_export_rename_at(struct efs_export *ex, efs_ino_t old_parent,
+                         const char *old_name, efs_ino_t new_parent,
+                         const char *new_name)
+{
+    if (!ex || !old_name || !new_name)
+        return EFS_ERR_INVAL;
+    struct efs_export *tab = ex;
+    if (export_is_sharded_root(ex) && ex->root.shard_bits) {
+        uint32_t sh = efs_export_shard_of(old_parent, ex->root.shard_bits);
+        if (sh != 0) {
+            tab = efs_export_table(ex, sh);
+            if (!tab)
+                return EFS_ERR_NOT_FOUND;
+        }
+    }
+    uint64_t pos = 0;
+    if (name_idx_get(tab, old_parent, old_name, &pos) != 0)
+        return EFS_ERR_NOT_FOUND;
+    efs_ino_t ino = tab->inodes[pos].ino;
+    if (tab->ino_keys)
+        idx_put(tab->ino_keys, tab->ino_vals, tab->ino_mask, ino, pos);
+    return efs_export_rename(tab == ex ? ex : tab, ino, new_parent, new_name);
+}
+
 int efs_export_rename(struct efs_export *ex, efs_ino_t ino,
                       efs_ino_t new_parent, const char *new_name)
 {
@@ -2511,8 +2630,10 @@ int efs_export_rename(struct efs_export *ex, efs_ino_t ino,
         src->name[EFS_MAX_NAME - 1] = '\0';
         dentry_bytes_add(ex, src->name);
         src->parent = new_parent;
-        /* Preserve mtime across rename (rsync partial → final); bump ctime only. */
-        time_now(&src->ctime);
+        /* Preserve mtime across rename (rsync partial → final); bump ctime
+         * on every hard-link row so lstat of the other name sees it. */
+        inode_bump_ctime(src);
+        stamp_ctime_loaded(ex, ino, src->ctime);
         name_idx_put(ex, src->parent, src->name, slot);
         child_idx_add(ex, new_parent, slot);
         if (old_parent != new_parent) {

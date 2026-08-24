@@ -523,6 +523,177 @@ def peer_unlink_while_b_has_fd():
     return [("a", a), ("b", b), ("a", a2), ("b", b2)]
 
 
+@test
+def peer_rmdir_gone():
+    """A mkdir then rmdir; B must not see the directory."""
+    def a(d):
+        os.mkdir(os.path.join(d, "gone"))
+        os.rmdir(os.path.join(d, "gone"))
+
+    def b(d):
+        if os.path.exists(os.path.join(d, "gone")):
+            raise Fail("B still sees rmdir'd gone")
+        names = os.listdir(d)
+        if "gone" in names:
+            raise Fail("B listdir still has gone")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_nlink_after_link():
+    """A hardlink; B sees nlink=2 and the same ino."""
+    def a(d):
+        wr(os.path.join(d, "f"), b"x")
+        os.link(os.path.join(d, "f"), os.path.join(d, "g"))
+
+    def b(d):
+        sf = os.stat(os.path.join(d, "f"))
+        sg = os.stat(os.path.join(d, "g"))
+        eq(sf.st_nlink, 2, "B nlink")
+        eq(sf.st_ino, sg.st_ino, "B same ino")
+        eq(rd(os.path.join(d, "g")), b"x", "B read via g")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_hardlink_write():
+    """A writes via one name; B reads the other."""
+    def a(d):
+        wr(os.path.join(d, "f"), b"aaa")
+        os.link(os.path.join(d, "f"), os.path.join(d, "g"))
+        with open(os.path.join(d, "g"), "ab") as f:
+            f.write(b"bbb")
+
+    def b(d):
+        eq(rd(os.path.join(d, "f")), b"aaabbb", "B via f")
+        eq(rd(os.path.join(d, "g")), b"aaabbb", "B via g")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_rename_dir():
+    """A rename a directory with a child; B sees the new path."""
+    def a(d):
+        os.mkdir(os.path.join(d, "old"))
+        wr(os.path.join(d, "old", "f"), b"keep")
+        os.rename(os.path.join(d, "old"), os.path.join(d, "new"))
+
+    def b(d):
+        if os.path.exists(os.path.join(d, "old")):
+            raise Fail("B still sees old/")
+        eq(rd(os.path.join(d, "new", "f")), b"keep", "B child after dir rename")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_o_trunc_visible():
+    """A O_TRUNC + write; B sees the new size and bytes."""
+    def a(d):
+        wr(os.path.join(d, "f"), b"0123456789")
+        fd = os.open(os.path.join(d, "f"), os.O_WRONLY | os.O_TRUNC)
+        os.write(fd, b"Z")
+        os.fsync(fd)
+        os.close(fd)
+
+    def b(d):
+        eq(os.path.getsize(os.path.join(d, "f")), 1, "B size after O_TRUNC")
+        eq(rd(os.path.join(d, "f")), b"Z", "B content after O_TRUNC")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_unlink_recreate():
+    """A unlink + create same name; B sees the new inode/content."""
+    def a(d):
+        wr(os.path.join(d, "f"), b"old")
+        os.unlink(os.path.join(d, "f"))
+        wr(os.path.join(d, "f"), b"new")
+
+    def b(d):
+        eq(rd(os.path.join(d, "f")), b"new", "B sees recreated file")
+        eq(os.path.getsize(os.path.join(d, "f")), 3, "B size")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_lstat_symlink_size():
+    """A symlink; B lstat size is the target string length."""
+    def a(d):
+        wr(os.path.join(d, "t"), b"tgt")
+        os.symlink("t", os.path.join(d, "l"))
+
+    def b(d):
+        l = os.path.join(d, "l")
+        if not os.path.islink(l):
+            raise Fail("B does not see symlink")
+        eq(os.lstat(l).st_size, 1, "B symlink st_size")
+        eq(os.readlink(l), "t", "B readlink")
+        eq(rd(l), b"tgt", "B follow")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_listdir_after_unlink():
+    """A creates two files and unlinks one; B readdir matches."""
+    def a(d):
+        wr(os.path.join(d, "keep"), b"k")
+        wr(os.path.join(d, "drop"), b"d")
+        os.unlink(os.path.join(d, "drop"))
+
+    def b(d):
+        names = set(os.listdir(d))
+        if "keep" not in names:
+            raise Fail("B missing keep (saw %s)" % sorted(names))
+        if "drop" in names:
+            raise Fail("B still lists drop")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_chmod_via_hardlink():
+    """A chmod via one name; B sees the mode on the other."""
+    def a(d):
+        wr(os.path.join(d, "f"), b"x")
+        os.link(os.path.join(d, "f"), os.path.join(d, "g"))
+        os.chmod(os.path.join(d, "g"), 0o600)
+
+    def b(d):
+        eq(os.stat(os.path.join(d, "f")).st_mode & 0o777, 0o600, "B mode via f")
+        eq(os.stat(os.path.join(d, "g")).st_mode & 0o777, 0o600, "B mode via g")
+
+    return [("a", a), ("b", b)]
+
+
+@test
+def peer_sparse_size():
+    """A pwrite at 1 MiB; B stat size and reads the hole."""
+    def a(d):
+        fd = os.open(os.path.join(d, "f"), os.O_CREAT | os.O_RDWR, 0o644)
+        os.pwrite(fd, b"Z", 1 << 20)
+        os.fsync(fd)
+        os.close(fd)
+
+    def b(d):
+        p = os.path.join(d, "f")
+        eq(os.path.getsize(p), (1 << 20) + 1, "B sparse size")
+        fd = os.open(p, os.O_RDONLY)
+        try:
+            eq(os.pread(fd, 4, 0), b"\x00" * 4, "B hole zeros")
+            eq(os.pread(fd, 1, 1 << 20), b"Z", "B data at 1MiB")
+        finally:
+            os.close(fd)
+
+    return [("a", a), ("b", b)]
+
+
 _HOLD_SCRIPT = r"""import fcntl, os, sys, time
 mode, path, ready, go, result = sys.argv[1:6]
 fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)

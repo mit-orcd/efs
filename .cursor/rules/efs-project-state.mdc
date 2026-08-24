@@ -9,20 +9,18 @@ efs: distributed FS, 2+1 XOR EC, FUSE client, RDMA (RC QP), 128 KiB chunks.
 Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 
 ## Where we are
-**Phase 3 PROVEN (Aug 24) on throwaway `efs-s3` bits=3.** Extra-owner
-restart + owner-only RAM + same-gen extras merge. Kill fcstor005 →
-failover read 32/32; restart loaded `extras=7`, rebuilt only shards
-2 and 6; cold remount A 32/32 size+md5; B match; post-restart 8
-creates visible on B. Fixes that unblocked the gate: (1) GET_META /
-GET_META_ROOT send EFSR when `shard_bits` even with no pages;
-(2) client keeps a bootstrap bits>0 root; (3) catchup adopts leftover
-empty bits=0; (4) `catchup_merge_peer_extras` from ROOT at same gen;
-(5) `efs_export_merge_extra_roots` is monotonic max-merge (capture-
-replace orphaned unowned extras and oscillated 5↔7). **Fresh cluster
-(Aug 24 wipe):** `edelete` of all 6 paths on fcstor003–006, mkfs
-`efs-test`, upgrade **bits=3** (8 shards). ImageNet gone. BUILD_ID
-`c4fe8ab8a820-dirty`. Cluster OK 4/0, used≈0, FUSE on fcstor003–015
-at `/tmp/efs/mnt`. **Stopped — do not push posix/ewrite/ecopy.**
+**POSIX + posix2 CLEAN on bits=3 (Aug 24).** Fresh `efs-test` shards=8.
+Single-client `posix_suite.py` **188/188** (`results/posix/20260824-214726`,
+0 EFS bugs vs XFS; 5 target-better = known XFS quirks). Two-client
+`posix_2client.py` **34/34** A=007 B=008 (`results/posix2/20260824-214648`,
+0 EFS bugs). Suite grown 162→188 and 24→34 (same-fd size, hardlink/symlink
+corners, rename-over-symlink, more peer visibility). The Aug 24 gaps are fixed: `ctime_on_link_rename` (RENAME_AT
++ ctime bump), `direct_unaligned_einval` (4k O_DIRECT), cluster flock
+(HOLD/FLOCK RPCs + per-`fi` owner), unlink-open / peer unlink-while-fd
+(keep_last + HOLD), same-fd empty reads (getattr prefers local size after
+adopt — RPC size 0 was clobbering kernel i_size), `peer_symlink_visible`
+(owner getattr for non-dir leaf + sync REPORT after symlink write).
+BUILD_ID `016cf7629bd7-dirty`. Cluster OK 4/0. **Do not push ewrite/ecopy.**
 **Phase 3 storage model (Aug 24).** Pages + v8 descriptors are the DB.
 Commits: `38dd6f0` (owner-only extras + unlink no-instantiate),
 `9eff867` (reuse unchanged CoW pages), `a3485eb` (skip chunk snapshot
@@ -36,9 +34,8 @@ ops until rebuild instead of dropping them. Trustworthy meta w=1
 **60047** (was 119 / 30); flush `reused 546/547`, Heal gen 1→2.
 Persist: `--keep` 32 files, gen→3, kill+restart all 4, rebuild,
 cold FUSE mount saw all 32. The earlier 70k print was RAM-only;
-this one is RPC apply + async CoW reuse. **Live `efs-test` is
-bits=0** (on-disk `shard_bits=0`, 547 pages / 71 MB) — not bits=3.
-**Stopped — do not push posix/ewrite/ecopy.** FUSE timeouts 0. No caches.
+this one is RPC apply + async CoW reuse. **Current throwaway `efs-test`
+is bits=3** (posix/posix2 above). FUSE timeouts 0. No caches.
 Cluster live on **EFSR v8** + Phase 3 data-path sharding Stages 0–3
 (committed). CoW = **debe6dd**, catchup-vs-GC = **76753ef**, 2b reads
 = **94f96fd**.
@@ -56,17 +53,11 @@ last-link unlink fan `LINK_SHARD`/`UNLINK_SHARD` to the child owner
 (parent-local `nlink_inc` was NOT_FOUND → EIO). PUT_META never fences
 a live table for extras-only roots (that dropped unflushed mkdir
 ops and made sharded dirs vanish mid-create).
-**POSIX suite extended (Aug 24):** `posix_suite.py` 144 → **162**,
-`posix_2client.py` 12 → **24**. bits=3 run `20260824-131138` /
-`20260824-131451`: 16/18 new single-client PASS; all 10 new
-sequential posix2 PASS (chmod/utimens/truncate/hardlink/symlink/
-negative-dentry/fsync/mkdir-rmdir-recreate/O_APPEND/rename-over).
-**4 new EFS gaps** (XFS PASS): `ctime_on_link_rename` (link does
-not bump ctime); `direct_unaligned_einval` (FUSE accepts unaligned
-O_DIRECT — aligned O_DIRECT rdwr + 4k RMW PASS); `peer_flock_exclusive`
-(flock is per-client, not cluster-wide); `peer_unlink_while_b_has_fd`
-(A last-link unlink zeros B's open-fd read). Same-client
-`nlink_after_unlink_open` PASS. 5 known XFS target-better unchanged.
+**POSIX suite extended (Aug 24):** `posix_suite.py` 144 → 162 → **188**,
+`posix_2client.py` 12 → 24 → **34**. bits=3 **188/188** + **34/34**
+— 0 EFS bugs. The four Aug 24 gaps (`ctime_on_link_rename`,
+`direct_unaligned_einval`, `peer_flock_exclusive`,
+`peer_unlink_while_b_has_fd`) are fixed.
 **POSIX after datapath sharding:** bits=0 `efs-test`
 `20260823-232541` 0 EFS bugs; bits=3 `20260823-233448` 0 EFS bugs
 (hardlink 8/8 after LINK_SHARD); posix2 12/12 both

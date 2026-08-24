@@ -38,6 +38,17 @@ enum efsd_server_state {
  * count; overflow writers simply get BUSY and re-BEGIN, re-entering). */
 #define EFS_META_WRITER_QMAX 32
 
+/* RAM-only open-fd + flock state. Never serialized. */
+struct efs_ino_hold {
+    efs_export_id_t eid;
+    efs_ino_t ino;
+    uint32_t refs;
+    uint64_t flock_owner[8];
+    uint8_t flock_ex[8];
+    uint32_t flock_n;
+    struct efs_ino_hold *next;
+};
+
 struct efsd_server {
     efs_node_id_t id;
     char addr[64];
@@ -150,6 +161,9 @@ struct efsd_server {
      * the retry. Holding this for the whole flush makes each compute a fresh
      * gen. */
     pthread_mutex_t meta_flush_mu;
+
+    /* Open-fd refs + cluster flock (guarded by s->lock). */
+    struct efs_ino_hold *ino_holds;
 
     /* Catchup/heal progress for EFS_MSG_HEAL_STATUS (single catchup thread). */
     int heal_active;

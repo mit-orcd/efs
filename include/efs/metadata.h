@@ -328,6 +328,11 @@ int efs_export_unlink(struct efs_export *ex, efs_ino_t ino);
 
 /* Remove one directory name. If it was the last hard link, also remove chunks. */
 int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *name);
+/* keep_last: drop the name but keep inode+chunks (open fds still exist). */
+int efs_export_unlink_name_ex(struct efs_export *ex, efs_ino_t parent,
+                              const char *name, int keep_last);
+/* Drop a nlink=0 ghost inode + its chunks (last open fd closed). */
+int efs_export_purge_unlinked(struct efs_export *ex, efs_ino_t ino);
 
 /* Add a hard link (extra name) for an existing non-directory inode. */
 int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
@@ -341,6 +346,8 @@ int efs_export_nlink_inc(struct efs_export *ex, efs_ino_t src_ino,
                          struct efs_inode *out);
 int efs_export_nlink_dec(struct efs_export *ex, efs_ino_t src_ino,
                          struct efs_inode *out);
+int efs_export_nlink_dec_ex(struct efs_export *ex, efs_ino_t src_ino,
+                            struct efs_inode *out, int keep_last);
 int efs_export_link_dentry(struct efs_export *ex, const struct efs_inode *src,
                            efs_ino_t new_parent, const char *new_name);
 
@@ -384,6 +391,9 @@ int efs_export_set_atime(struct efs_export *ex, efs_ino_t ino, uint64_t atime);
    directories. Returns EFS_ERR_NOT_FOUND if the source does not exist. */
 int efs_export_rename(struct efs_export *ex, efs_ino_t ino,
                       efs_ino_t new_parent, const char *new_name);
+int efs_export_rename_at(struct efs_export *ex, efs_ino_t old_parent,
+                         const char *old_name, efs_ino_t new_parent,
+                         const char *new_name);
 
 /* Add or update a chunk entry. */
 int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index,

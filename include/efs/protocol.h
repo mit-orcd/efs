@@ -134,6 +134,17 @@ enum efs_msg_type {
     EFS_MSG_INODE_LOOKUP_PATH_REPLY = 80,
     EFS_MSG_HEAL_STATUS = 81,
     EFS_MSG_HEAL_STATUS_REPLY = 82,
+    /* Open-fd refcount on the shard owner. Last-link unlink keeps inode+
+     * chunks while refs>0 so a peer with an open fd can still read. */
+    EFS_MSG_INODE_HOLD = 83,
+    EFS_MSG_INODE_HOLD_REPLY = 84,
+    /* Cluster-wide whole-file flock. Reply is struct efs_msg_inode_reply
+     * (BUSY = would block). */
+    EFS_MSG_INODE_FLOCK = 85,
+    EFS_MSG_INODE_FLOCK_REPLY = 86,
+    /* Rename a specific directory name (hard links share an ino). */
+    EFS_MSG_INODE_RENAME_AT = 87,
+    EFS_MSG_INODE_RENAME_AT_REPLY = 88,
 };
 
 /* Set per-export features. Only bits in set_mask are changed (to the
@@ -480,6 +491,14 @@ struct efs_msg_inode_rename {
     char new_name[EFS_MAX_NAME];
 };
 
+struct efs_msg_inode_rename_at {
+    efs_export_id_t export_id;
+    efs_ino_t old_parent;
+    char old_name[EFS_MAX_NAME];
+    efs_ino_t new_parent;
+    char new_name[EFS_MAX_NAME];
+};
+
 /* Phase 2b: setattr mask bits — which fields to apply. */
 #define EFS_SETATTR_MODE  (1u << 0)
 #define EFS_SETATTR_UID   (1u << 1)
@@ -525,6 +544,23 @@ struct efs_msg_inode_append {
     efs_export_id_t export_id;
     efs_ino_t ino;
     uint64_t len;
+};
+
+/* flags: 1 = open (+1 ref), 0 = close (-1 ref). owner identifies the
+ * client mount so close can drop that client's flock. */
+struct efs_msg_inode_hold {
+    efs_export_id_t export_id;
+    efs_ino_t ino;
+    uint32_t flags;
+    uint64_t owner;
+};
+
+/* op is the flock(2) operation (LOCK_SH/EX/UN, optional LOCK_NB). */
+struct efs_msg_inode_flock {
+    efs_export_id_t export_id;
+    efs_ino_t ino;
+    uint32_t op;
+    uint64_t owner;
 };
 
 /* Phase 2b: one written-chunk mapping record (matches efs_export_set_chunk). */

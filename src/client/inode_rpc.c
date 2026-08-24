@@ -108,6 +108,11 @@ static int rpc_send_recv_owner(efs_ino_t ino, uint8_t type, const void *req,
         free(payload);
         struct efs_msg_inode_reply *r = reply;
         if (r->status == EFS_INODE_RPC_BUSY) {
+            /* INODE_APPEND uses BUSY as the unflushed-reservation barrier.
+             * The caller must flush + report before retrying; spinning here
+             * holds g_append_mu for ~10s and deadlocks concurrent O_APPEND. */
+            if (type == EFS_MSG_INODE_APPEND || type == EFS_MSG_INODE_FLOCK)
+                return EFS_OK;
             /* Extra-shard owner is still assembling pages after restart.
              * Same target — do not flip to another node. */
             unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
@@ -370,6 +375,32 @@ int efs_client_rpc_rename(efs_export_id_t export_id, efs_ino_t ino,
     return EFS_OK;
 }
 
+int efs_client_rpc_rename_at(efs_export_id_t export_id, efs_ino_t old_parent,
+                             const char *old_name, efs_ino_t new_parent,
+                             const char *new_name, struct efs_inode *out)
+{
+    struct efs_msg_inode_rename_at req;
+    memset(&req, 0, sizeof(req));
+    req.export_id = export_id;
+    req.old_parent = old_parent;
+    req.new_parent = new_parent;
+    if (old_name)
+        strncpy(req.old_name, old_name, EFS_MAX_NAME - 1);
+    if (new_name)
+        strncpy(req.new_name, new_name, EFS_MAX_NAME - 1);
+    struct efs_msg_inode_reply r;
+    int rc = rpc_send_recv_owner(old_parent, EFS_MSG_INODE_RENAME_AT, &req,
+                                 sizeof(req), EFS_MSG_INODE_RENAME_AT_REPLY,
+                                 &r, sizeof(r));
+    if (rc != EFS_OK)
+        return rc;
+    if (r.status != EFS_INODE_RPC_OK)
+        return rpc_status_to_efs(r.status);
+    if (out)
+        *out = r.inode;
+    return EFS_OK;
+}
+
 int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
                            uint32_t mask, uint32_t mode, uid_t uid, gid_t gid,
                            uint64_t size, uint64_t mtime, uint32_t mtime_nsec,
@@ -419,6 +450,40 @@ int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
     if (new_size_out)
         *new_size_out = r.inode.size;
     return EFS_OK;
+}
+
+int efs_client_rpc_hold(efs_export_id_t export_id, efs_ino_t ino, int open,
+                        uint64_t owner)
+{
+    struct efs_msg_inode_hold req;
+    memset(&req, 0, sizeof(req));
+    req.export_id = export_id;
+    req.ino = ino;
+    req.flags = open ? 1u : 0u;
+    req.owner = owner;
+    struct efs_msg_inode_reply r;
+    int rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_HOLD, &req, sizeof(req),
+                                 EFS_MSG_INODE_HOLD_REPLY, &r, sizeof(r));
+    if (rc != EFS_OK)
+        return rc;
+    return rpc_status_to_efs(r.status);
+}
+
+int efs_client_rpc_flock(efs_export_id_t export_id, efs_ino_t ino, uint32_t op,
+                         uint64_t owner)
+{
+    struct efs_msg_inode_flock req;
+    memset(&req, 0, sizeof(req));
+    req.export_id = export_id;
+    req.ino = ino;
+    req.op = op;
+    req.owner = owner;
+    struct efs_msg_inode_reply r;
+    int rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_FLOCK, &req, sizeof(req),
+                                 EFS_MSG_INODE_FLOCK_REPLY, &r, sizeof(r));
+    if (rc != EFS_OK)
+        return rc;
+    return rpc_status_to_efs(r.status);
 }
 
 int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,

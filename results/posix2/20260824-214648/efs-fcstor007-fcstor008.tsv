@@ -1,0 +1,37 @@
+# posix-2client host_a=fcstor007.ib host_b=fcstor008.ib mnt=/tmp/efs/mnt 2026-08-24T21:47:10Z
+test	result	detail
+peer_mkdir_visible	PASS	
+peer_create_visible	PASS	
+peer_write_read	PASS	
+peer_listdir_siblings	PASS	
+peer_shared_creat	PASS	
+peer_open_existing	PASS	
+peer_creat_excl_eexist	PASS	
+peer_stat_size	PASS	
+peer_rename_visible	PASS	
+peer_mkdir_then_create	PASS	
+peer_shared_pwrite	PASS	
+peer_unlink_gone	PASS	
+peer_chmod_visible	PASS	
+peer_utimens_visible	PASS	
+peer_truncate_visible	PASS	
+peer_hardlink_visible	PASS	
+peer_symlink_visible	PASS	
+peer_negative_dentry	PASS	
+peer_fsync_then_read	PASS	
+peer_mkdir_rmdir_recreate	PASS	
+peer_oappend	PASS	
+peer_rename_over	PASS	
+peer_flock_exclusive	PASS	
+peer_unlink_while_b_has_fd	PASS	
+peer_rmdir_gone	PASS	
+peer_nlink_after_link	PASS	
+peer_hardlink_write	PASS	
+peer_rename_dir	PASS	
+peer_o_trunc_visible	PASS	
+peer_unlink_recreate	PASS	
+peer_lstat_symlink_size	PASS	
+peer_listdir_after_unlink	PASS	
+peer_chmod_via_hardlink	PASS	
+peer_sparse_size	PASS	
+# summary pass=34 fail=0 skip=0 total=34 dur=20.1
