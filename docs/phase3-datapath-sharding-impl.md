@@ -117,9 +117,11 @@ pass. Keep this script; run it after every stage.
 
 ### Deploy + fresh cluster (standing permission to wipe)
 Use the `efs-test-ssh` wrapper: `~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh <host> '<cmd>'`.
-The cluster is disposable. To reset: tear down clients/servers, wipe with
-`edelete` (NEVER `rm -rf`), re-`mkfs`. See the `efs-fcstor-deploy` rule for the
-exact restart commands. **Always measure perf on a fresh mkfs** — accumulated
+The cluster is disposable. To reset: **kill all `efs-fuse` first**
+(`killall -9` on fcstor003–015), then efsd, then `edelete` (NEVER
+`rm -rf`), re-`mkfs`. `tests/wipe_cluster.sh`. See the
+`efs-fcstor-deploy` rule. A leftover client flushes the old RAM table
+onto the new primary. **Always measure perf on a fresh mkfs** — accumulated
 chunk-table state silently degrades throughput 15-40% and makes A/B meaningless.
 
 ---

@@ -799,9 +799,27 @@ def testdir(mnt, name):
 def do_prepare(mnt):
     base = os.path.join(mnt, PARENT)
     shutil.rmtree(base, ignore_errors=True)
-    os.makedirs(base)
+    if os.path.isdir(base):
+        for n in os.listdir(base):
+            p = os.path.join(base, n)
+            shutil.rmtree(p, ignore_errors=True)
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+    os.makedirs(base, exist_ok=True)
     for name, _steps, _doc in TESTS:
-        os.makedirs(os.path.join(base, name))
+        os.makedirs(os.path.join(base, name), exist_ok=True)
+    # Commit so a remounted peer adopts these inos (GET_META is last
+    # commit, not unflushed RAM). Without this, B remounts the previous
+    # posix-2c and LOOKUP walks the empty old dir.
+    keep = os.path.join(base, ".keep")
+    fd = os.open(keep, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o644)
+    try:
+        os.write(fd, b"x")
+        os.fsync(fd)
+    finally:
+        os.close(fd)
     print("prepared %s (%d testdirs)" % (base, len(TESTS)))
 
 

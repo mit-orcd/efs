@@ -20,6 +20,14 @@ static uint64_t now(void)
     return (uint64_t)ts.tv_sec;
 }
 
+static void now_ns(uint64_t *sec, uint32_t *nsec)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    *sec = (uint64_t)ts.tv_sec;
+    *nsec = (uint32_t)ts.tv_nsec;
+}
+
 void efs_client_ensure_dir_locks(void)
 {
     if (g_client.dir_locks_ready)
@@ -132,27 +140,39 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
     efs_client_unlock_dir(lock_ino);
 }
 
-/* Fetch chunk mappings in [start_ci, end_ci). Never walk the whole table. */
+/* Fetch chunk mappings in [start_ci, end_ci). Split at group boundaries so
+ * each GETCHUNKS goes to that group's owner. An empty group is a hole, not
+ * the end of the file. */
 static void pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci)
 {
     if (!ino || start_ci >= end_ci)
         return;
     uint32_t start = start_ci;
     while (start < end_ci) {
-        struct efs_chunk_rec recs[EFS_GETCHUNKS_MAX];
-        uint32_t n = end_ci - start;
-        if (n > EFS_GETCHUNKS_MAX)
-            n = EFS_GETCHUNKS_MAX;
-        if (efs_client_rpc_getchunks(g_client.export_id, ino, start, recs,
-                                     &n) != EFS_OK || n == 0)
-            break;
-        apply_chunk_recs(ino, recs, n);
-        uint32_t next = recs[n - 1].chunk_index + 1;
-        if (next <= start)
-            break;
-        start = next;
-        if (n < EFS_GETCHUNKS_MAX)
-            break;
+        uint32_t group_end = (start | (EFS_CHUNK_GROUP_SIZE - 1u)) + 1u;
+        if (group_end > end_ci)
+            group_end = end_ci;
+        uint32_t cur = start;
+        while (cur < group_end) {
+            struct efs_chunk_rec recs[EFS_GETCHUNKS_MAX];
+            uint32_t n = group_end - cur;
+            if (n > EFS_GETCHUNKS_MAX)
+                n = EFS_GETCHUNKS_MAX;
+            int grc = efs_client_rpc_getchunks(g_client.export_id, ino, cur,
+                                               recs, &n);
+            if (grc != EFS_OK)
+                return;
+            if (n == 0)
+                break;
+            apply_chunk_recs(ino, recs, n);
+            uint32_t next = recs[n - 1].chunk_index + 1;
+            if (next <= cur)
+                break;
+            cur = next;
+            if (n < EFS_GETCHUNKS_MAX)
+                break;
+        }
+        start = group_end;
     }
 }
 
@@ -277,22 +297,47 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
         int newer = rpc->mtime > local.mtime ||
                     (rpc->mtime == local.mtime &&
                      rpc->mtime_nsec > local.mtime_nsec);
+        int times_differ = rpc->mtime != local.mtime ||
+                           rpc->mtime_nsec != local.mtime_nsec;
         int local_dirty = efs_client_ino_is_dirty(rpc->ino);
+        int mtime_pinned = efs_client_mtime_is_pinned(rpc->ino);
         /* Equal-size with a newer mtime also takes the remote: a peer can
          * change chunk mappings without changing size (writing into a
          * pre-sized file's holes). Size-only growth misses that — the
          * reader then serves zeros/stale mappings forever (mc_stress
          * rwfile). Our own reports echo back with the same mtime, so this
-         * does not re-pull on our own writes. */
-        if (rpc->size > local.size ||
-            (newer && rpc->size == local.size) ||
-            (newer && rpc->size < local.size && !local_dirty)) {
-            local.size = rpc->size;
-            local.pack_ino = rpc->pack_ino;
-            local.pack_off = rpc->pack_off;
-            local.pack_len = rpc->pack_len;
-            local.mtime = rpc->mtime;
-            local.mtime_nsec = rpc->mtime_nsec;
+         * does not re-pull on our own writes.
+         * utimens may move mtime backwards. Once REPORT has cleared dirty
+         * the owner is authoritative, including an older setattr. A
+         * pinned dirty row must not take a newer REPORT echo ("now"). */
+        int take_mtime = 0;
+        if (mtime_pinned)
+            take_mtime = 0;
+        else if (!local_dirty && times_differ)
+            take_mtime = 1;
+        else if (newer)
+            take_mtime = 1;
+        /* Shrink only on a newer owner (peer truncate). An older
+         * setattr mtime must not pull size 0 from a lagging owner
+         * after dirty cleared — that zeroed basic_dd_rw / O_TRUNC. */
+        int grow = rpc->size > local.size;
+        int same = rpc->size == local.size;
+        int shrink = rpc->size < local.size && !local_dirty && newer;
+        if (grow || (take_mtime && same) || shrink) {
+            if (grow || shrink) {
+                local.size = rpc->size;
+                local.pack_ino = rpc->pack_ino;
+                local.pack_off = rpc->pack_off;
+                local.pack_len = rpc->pack_len;
+            } else if (same && take_mtime) {
+                local.pack_ino = rpc->pack_ino;
+                local.pack_off = rpc->pack_off;
+                local.pack_len = rpc->pack_len;
+            }
+            if (take_mtime) {
+                local.mtime = rpc->mtime;
+                local.mtime_nsec = rpc->mtime_nsec;
+            }
             (void)efs_export_upsert_inode(&g_client.export, &local);
             take_remote = 1;
         }
@@ -365,6 +410,102 @@ static int lookup_access_ok(const struct efs_inode *ino, uid_t uid, gid_t gid,
     return 0;
 }
 
+/* Dual-applied local table only — no RPC. Used so a client that just
+ * mkdir'd its own parents does not LOOKUP_PATH them on every create.
+ * A miss (peer-created name) falls through to RPC. Intermediate
+ * symlink → PROTO so LOOKUP_PATH can return SYMLINK. */
+static int lookup_walk_local(const char *path, struct efs_inode *out, int do_x,
+                             uid_t uid, gid_t gid, const gid_t *groups,
+                             int ngroups)
+{
+    if (!path || path[0] != '/')
+        return EFS_ERR_INVAL;
+
+    efs_client_ensure_dir_locks();
+    if (strcmp(path, "/") == 0) {
+        efs_client_lock_dir(EFS_ROOT_INO);
+        pthread_mutex_lock(&g_client.idx_mu);
+        int rc = efs_export_get_inode(&g_client.export, EFS_ROOT_INO, out);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(EFS_ROOT_INO);
+        return rc;
+    }
+
+    char pbuf[4096];
+    size_t plen = strlen(path + 1);
+    if (plen >= sizeof(pbuf))
+        return EFS_ERR_INVAL;
+    memcpy(pbuf, path + 1, plen + 1);
+    char *save = NULL;
+    char *part = strtok_r(pbuf, "/", &save);
+    efs_ino_t parent = EFS_ROOT_INO;
+    struct efs_inode child;
+    memset(&child, 0, sizeof(child));
+    while (part) {
+        int more = (save && *save);
+        if (strlen(part) > 255)
+            return EFS_ERR_NAMETOOLONG;
+        efs_client_lock_dir(parent);
+        pthread_mutex_lock(&g_client.idx_mu);
+        int lrc = efs_export_lookup(&g_client.export, parent, part, &child);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(parent);
+        if (lrc != 0)
+            return EFS_ERR_NOT_FOUND;
+        if (more && efs_mode_is_lnk(child.mode))
+            return EFS_ERR_PROTO;
+        if (more && !efs_mode_is_dir(child.mode))
+            return EFS_ERR_INVAL;
+        if (do_x && more && child.ino != EFS_ROOT_INO &&
+            lookup_access_ok(&child, uid, gid, groups, ngroups, 1) != 0)
+            return EFS_ERR_ACCES;
+        parent = child.ino;
+        part = strtok_r(NULL, "/", &save);
+    }
+    *out = child;
+    return EFS_OK;
+}
+
+/* Parent of the last component from the local table, plus the leaf name.
+ * Used so dest-stat LOOKUP goes to the parent owner instead of LOOKUP_PATH
+ * on shard 0 (every rsync ENOENT was landing on the primary). */
+static int lookup_parent_local(const char *path, efs_ino_t *parent_out,
+                               char *name_out, size_t name_cap, int do_x,
+                               uid_t uid, gid_t gid, const gid_t *groups,
+                               int ngroups)
+{
+    if (!path || path[0] != '/' || !parent_out || !name_out || name_cap < 2)
+        return EFS_ERR_INVAL;
+    const char *slash = strrchr(path, '/');
+    if (!slash || slash[1] == '\0')
+        return EFS_ERR_INVAL;
+    size_t nlen = strlen(slash + 1);
+    if (nlen > 255)
+        return EFS_ERR_NAMETOOLONG;
+    if (nlen >= name_cap)
+        return EFS_ERR_NAMETOOLONG;
+    memcpy(name_out, slash + 1, nlen + 1);
+    if (slash == path) {
+        *parent_out = EFS_ROOT_INO;
+        return EFS_OK;
+    }
+    char pbuf[4096];
+    size_t plen = (size_t)(slash - path);
+    if (plen >= sizeof(pbuf))
+        return EFS_ERR_INVAL;
+    memcpy(pbuf, path, plen);
+    pbuf[plen] = '\0';
+    struct efs_inode par;
+    int rc = lookup_walk_local(pbuf, &par, do_x, uid, gid, groups, ngroups);
+    if (rc != EFS_OK || !efs_mode_is_dir(par.mode))
+        return EFS_ERR_NOT_FOUND;
+    if (do_x && par.ino != EFS_ROOT_INO &&
+        lookup_access_ok(&par, uid, gid, groups, ngroups, 1) != 0)
+        return EFS_ERR_ACCES;
+    *parent_out = par.ino;
+    return EFS_OK;
+}
+
 static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
                        uid_t uid, gid_t gid, const gid_t *groups, int ngroups)
 {
@@ -376,6 +517,101 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
         int rc = efs_export_get_inode(&g_client.export, EFS_ROOT_INO, out);
         efs_client_unlock_dir(EFS_ROOT_INO);
         return rc;
+    }
+
+    /* Dirs this client already dual-applied (its own mkdir tree): serve
+     * locally. Files and local misses still RPC — posix2 peer create /
+     * unlink / chmod / size must not be answered from a stale row. */
+    {
+        struct efs_inode local;
+        int lrc = lookup_walk_local(path, &local, do_x, uid, gid, groups,
+                                    ngroups);
+        if (lrc == EFS_ERR_ACCES || lrc == EFS_ERR_INVAL ||
+            lrc == EFS_ERR_NAMETOOLONG)
+            return lrc;
+        if (lrc == EFS_OK && efs_mode_is_dir(local.mode)) {
+            *out = local;
+            return EFS_OK;
+        }
+        /* Writer's own unflushed file: local size/mtime are newer than
+         * the owner until REPORT. Peers do not have a dirty row, so they
+         * still RPC (posix2 chmod/unlink/append). */
+        if (lrc == EFS_OK && !efs_mode_is_dir(local.mode) &&
+            efs_client_ino_is_dirty(local.ino)) {
+            *out = local;
+            return EFS_OK;
+        }
+    }
+
+    /* Parent resolved locally: one LOOKUP on the parent owner. ENOENT
+     * dest-stat (rsync -c) used to LOOKUP_PATH every miss on shard 0. */
+    {
+        efs_ino_t par = 0;
+        char last[EFS_MAX_NAME];
+        int prc = lookup_parent_local(path, &par, last, sizeof(last), do_x,
+                                      uid, gid, groups, ngroups);
+        if (prc == EFS_ERR_ACCES || prc == EFS_ERR_INVAL ||
+            prc == EFS_ERR_NAMETOOLONG)
+            return prc;
+        if (prc == EFS_OK) {
+            /* Parent we mkdir'd/created into this session: local miss is
+             * ENOENT. REPORT does not forget this (unlike dirty_*).
+             * Remounted peers have an empty created-set and still LOOKUP. */
+            if (efs_client_ino_is_created(par)) {
+                struct efs_inode ch;
+                int hit;
+                efs_client_lock_dir(par);
+                pthread_mutex_lock(&g_client.idx_mu);
+                hit = efs_export_lookup(&g_client.export, par, last, &ch);
+                pthread_mutex_unlock(&g_client.idx_mu);
+                efs_client_unlock_dir(par);
+                if (hit != 0)
+                    return EFS_ERR_NOT_FOUND;
+                /* Hit: this client created the parent (mkdir/create) and
+                 * dual-applied the name. Falling through to LOOKUP/GETATTR
+                 * wedged FUSE on the new name of a cross-dir hardlink
+                 * (link_across_dirs hung in request_wait_answer). Remounted
+                 * peers have an empty created-set and still RPC. */
+                *out = ch;
+                return EFS_OK;
+            }
+            struct efs_inode child;
+            int lrc = efs_client_rpc_lookup(g_client.export_id, par, last,
+                                            &child);
+            if (lrc == EFS_ERR_NOT_FOUND)
+                return EFS_ERR_NOT_FOUND;
+            if (lrc == EFS_OK) {
+                if (g_client.export.root.shard_bits &&
+                    g_client.export.root.shard_count > 1 &&
+                    !efs_mode_is_dir(child.mode) &&
+                    !efs_client_ino_is_dirty(child.ino)) {
+                    /* Dentry stub is size 0 / create mtime. A remounted
+                     * peer often has that stub locally — skipping GETATTR
+                     * then overwriting the RPC with it hid utimens
+                     * (peer_utimens_visible: B saw now, size 0). Writers
+                     * keep the dirty local row. */
+                    struct efs_inode full;
+                    if (efs_client_rpc_getattr(g_client.export_id,
+                                               child.ino, &full) == EFS_OK)
+                        child = full;
+                }
+                adopt_rpc_inode(&child);
+                if (efs_client_ino_is_dirty(child.ino)) {
+                    efs_client_lock_dir(child.parent ? child.parent
+                                                     : child.ino);
+                    pthread_mutex_lock(&g_client.idx_mu);
+                    struct efs_inode loc;
+                    if (efs_export_get_inode(&g_client.export, child.ino,
+                                             &loc) == 0)
+                        child = loc;
+                    pthread_mutex_unlock(&g_client.idx_mu);
+                    efs_client_unlock_dir(child.parent ? child.parent
+                                                       : child.ino);
+                }
+                *out = child;
+                return EFS_OK;
+            }
+        }
     }
 
     /* Copy onto the stack (bounded by PATH_MAX) instead of a per-lookup
@@ -395,6 +631,13 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
         uint32_t flags = do_x ? EFS_LOOKUP_PATH_F_ANCESTORS : 0;
         int prc = efs_client_rpc_lookup_path(g_client.export_id, path, flags,
                                              &pr);
+        /* Old servers returned DEEP (mapped to PROTO) at 64 ancestors.
+         * Retry without the ancestor list so a deep path stays 1 RPC
+         * instead of one LOOKUP per component. */
+        if (prc == EFS_ERR_PROTO && flags) {
+            flags = 0;
+            prc = efs_client_rpc_lookup_path(g_client.export_id, path, 0, &pr);
+        }
         if (prc == EFS_OK) {
             if (do_x) {
                 for (uint32_t i = 0; i < pr.ancestor_count; i++) {
@@ -415,20 +658,27 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
             struct efs_inode child = pr.inode;
             if (g_client.export.root.shard_bits &&
                 g_client.export.root.shard_count > 1 &&
-                !efs_mode_is_dir(child.mode)) {
+                !efs_mode_is_dir(child.mode) &&
+                !efs_client_ino_is_dirty(child.ino)) {
+                /* Dentry stub on the parent owner is size 0. Skip GETATTR
+                 * only for this client's dirty data-path row. */
                 struct efs_inode full;
                 if (efs_client_rpc_getattr(g_client.export_id, child.ino,
                                            &full) == EFS_OK)
                     child = full;
             }
             adopt_rpc_inode(&child);
-            efs_client_lock_dir(child.parent ? child.parent : child.ino);
-            pthread_mutex_lock(&g_client.idx_mu);
-            struct efs_inode local;
-            if (efs_export_get_inode(&g_client.export, child.ino, &local) == 0)
-                child = local;
-            pthread_mutex_unlock(&g_client.idx_mu);
-            efs_client_unlock_dir(child.parent ? child.parent : child.ino);
+            if (efs_client_ino_is_dirty(child.ino)) {
+                efs_client_lock_dir(child.parent ? child.parent : child.ino);
+                pthread_mutex_lock(&g_client.idx_mu);
+                struct efs_inode local;
+                if (efs_export_get_inode(&g_client.export, child.ino,
+                                         &local) == 0)
+                    child = local;
+                pthread_mutex_unlock(&g_client.idx_mu);
+                efs_client_unlock_dir(child.parent ? child.parent
+                                                   : child.ino);
+            }
             *out = child;
             return EFS_OK;
         }
@@ -464,22 +714,26 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
          * intermediates are directories. */
         if (!more && g_client.export.root.shard_bits &&
             g_client.export.root.shard_count > 1 &&
-            !efs_mode_is_dir(child.mode)) {
+            !efs_mode_is_dir(child.mode) &&
+            !efs_client_ino_is_dirty(child.ino)) {
             struct efs_inode full;
             if (efs_client_rpc_getattr(g_client.export_id, child.ino,
                                        &full) == EFS_OK)
                 child = full;
         }
         adopt_rpc_inode(&child);
-        /* Prefer the local row when we already have one: the writer's
-         * size/pack fields are newer than the primary until REPORT_CHUNKS. */
-        efs_client_lock_dir(child.parent ? child.parent : child.ino);
-        pthread_mutex_lock(&g_client.idx_mu);
-        struct efs_inode local;
-        if (efs_export_get_inode(&g_client.export, child.ino, &local) == 0)
-            child = local;
-        pthread_mutex_unlock(&g_client.idx_mu);
-        efs_client_unlock_dir(child.parent ? child.parent : child.ino);
+        /* Writer: local size/pack is newer than the owner until REPORT.
+         * Peer remount stubs must not clobber GETATTR. */
+        if (efs_client_ino_is_dirty(child.ino)) {
+            efs_client_lock_dir(child.parent ? child.parent : child.ino);
+            pthread_mutex_lock(&g_client.idx_mu);
+            struct efs_inode local;
+            if (efs_export_get_inode(&g_client.export, child.ino,
+                                     &local) == 0)
+                child = local;
+            pthread_mutex_unlock(&g_client.idx_mu);
+            efs_client_unlock_dir(child.parent ? child.parent : child.ino);
+        }
         parent = child.ino;
         *out = child;
         rc = EFS_OK;
@@ -505,13 +759,19 @@ int efs_client_lookup_x(const char *path, uid_t uid, gid_t gid,
 efs_ino_t efs_client_create(efs_ino_t parent, const char *name, uint32_t mode,
                             uid_t uid, gid_t gid)
 {
+    return efs_client_create_ex(parent, name, mode, uid, gid, 0);
+}
+
+efs_ino_t efs_client_create_ex(efs_ino_t parent, const char *name, uint32_t mode,
+                               uid_t uid, gid_t gid, uint32_t flags)
+{
     g_client.last_err = EFS_OK;
     /* Phase 2b: the mutation runs on the metadata primary (which allocates the
      * ino and persists via the server flush thread). Dual-apply the returned
      * inode to the local snapshot so the data path sees it immediately. */
     struct efs_inode out;
     int rc = efs_client_rpc_create(g_client.export_id, parent, name, mode,
-                                   uid, gid, NULL, &out);
+                                   uid, gid, flags, NULL, &out);
     if (rc != EFS_OK) {
         g_client.last_err = rc;
         return 0;
@@ -542,6 +802,11 @@ efs_ino_t efs_client_create(efs_ino_t parent, const char *name, uint32_t mode,
     efs_export_set_mtime(&g_client.export, parent, now());
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);
+    /* So same-client dest-stat (rsync -c) serves the just-created row
+     * instead of LOOKUP_PATH. Peers never mark this ino dirty. */
+    efs_client_mark_ino_dirty(out.ino);
+    efs_client_mark_ino_dirty(parent);
+    efs_client_note_created(out.ino);
     return out.ino;
 }
 
@@ -551,6 +816,12 @@ static int setattr_rpc_dual_apply(efs_ino_t ino, uint32_t mask, uint32_t mode,
                                   uint64_t mtime, uint32_t mtime_nsec,
                                   uint64_t atime)
 {
+    /* wr() close kicks REPORT async. A later utimens/truncate must
+     * drain that report first: a late size/mtime rec with "now" lands
+     * after SETATTR and newer-only mtime undoes utime(1500000000)
+     * (posix2 peer_utimens_visible). */
+    if (mask & (EFS_SETATTR_MTIME | EFS_SETATTR_SIZE))
+        (void)efs_client_report_dirty(1);
     struct efs_inode out;
     int rc = efs_client_rpc_setattr(g_client.export_id, ino, mask, mode,
                                     uid, gid, size, mtime, mtime_nsec, atime,
@@ -571,15 +842,29 @@ static int setattr_rpc_dual_apply(efs_ino_t ino, uint32_t mask, uint32_t mode,
         if (efs_export_get_inode(&g_client.export, ino, &cur) == 0)
             out.size = cur.size;
     }
-    /* Apply mode/owner locally so hard-link rows share the new attrs
-     * (upsert of the primary's indexed row alone left the other name
-     * with a stale mode when the returned nlink was 1). */
+    /* Owner reply can lag the data path (mtime still "now" from the
+     * write, or a hollow extra-shard row). chmod already applied
+     * mode/owner locally for that reason — do the same for times,
+     * then stamp them on `out` so a later upsert cannot put "now"
+     * back. Pin so dcache_note_size / REPORT cannot either. */
+    if (mask & EFS_SETATTR_MTIME) {
+        out.mtime = mtime;
+        out.mtime_nsec = mtime_nsec;
+    }
+    if (mask & EFS_SETATTR_ATIME)
+        out.atime = atime;
     if (mask & EFS_SETATTR_MODE)
         efs_export_set_mode(&g_client.export, ino, mode);
     if (mask & (EFS_SETATTR_UID | EFS_SETATTR_GID))
         efs_export_set_owner(&g_client.export, ino, uid, gid);
     if (!(mask & (EFS_SETATTR_MODE | EFS_SETATTR_UID | EFS_SETATTR_GID)))
         efs_export_upsert_inode(&g_client.export, &out);
+    if (mask & EFS_SETATTR_MTIME) {
+        efs_export_set_mtime_ns(&g_client.export, ino, mtime, mtime_nsec);
+        efs_client_mtime_pin(ino);
+    }
+    if (mask & EFS_SETATTR_ATIME)
+        efs_export_set_atime(&g_client.export, ino, atime);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
     return EFS_OK;
@@ -664,10 +949,31 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
 
     /* Phase 2b: the size change (and server-side chunk drop on shrink) runs on
      * the primary. Dual-apply: drop the same chunks locally + upsert the
-     * returned inode. Grow is a logical sparse hole (no chunk work). */
+     * returned inode. Grow is a logical sparse hole (no chunk work).
+     * Stamp client-clock mtime with SIZE: REPORT grow is rejected when
+     * the report mtime is older than the row. Server-clock "now" from
+     * set_size alone is a different host, so a slightly-behind client
+     * then REPORTs size 1 with an older mtime and the grow is dropped
+     * (peer_o_trunc_visible: B saw 0). Same-client now is strictly
+     * after the pre-trunc write, so the stale close-REPORT stays stale
+     * and the post-trunc write is newer. */
+    (void)efs_client_report_dirty(1);
+    uint64_t sec;
+    uint32_t nsec;
+    now_ns(&sec, &nsec);
+    if (sec < inode.mtime ||
+        (sec == inode.mtime && nsec <= inode.mtime_nsec)) {
+        sec = inode.mtime;
+        nsec = inode.mtime_nsec + 1u;
+        if (nsec >= 1000000000u) {
+            sec++;
+            nsec = 0;
+        }
+    }
     struct efs_inode out;
-    int rc = efs_client_rpc_setattr(g_client.export_id, ino, EFS_SETATTR_SIZE,
-                                    0, 0, 0, size, 0, 0, 0, &out);
+    int rc = efs_client_rpc_setattr(g_client.export_id, ino,
+                                    EFS_SETATTR_SIZE | EFS_SETATTR_MTIME,
+                                    0, 0, 0, size, sec, nsec, 0, &out);
     if (rc != EFS_OK) {
         g_client.last_err = rc;
         return rc;
@@ -709,6 +1015,7 @@ int efs_client_rename(efs_ino_t ino, efs_ino_t new_parent, const char *new_name)
         efs_export_upsert_inode(&g_client.export, &out);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dirs2(ino, new_parent);
+    efs_client_mark_ino_dirty(ino);
     return EFS_OK;
 }
 
@@ -730,6 +1037,7 @@ int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_na
         efs_export_upsert_inode(&g_client.export, &out);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dirs2(ino, new_parent);
+    efs_client_mark_ino_dirty(ino);
     return EFS_OK;
 }
 

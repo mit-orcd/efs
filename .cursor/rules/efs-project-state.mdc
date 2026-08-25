@@ -9,6 +9,110 @@ efs: distributed FS, 2+1 XOR EC, FUSE client, RDMA (RC QP), 128 KiB chunks.
 Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 
 ## Where we are
+**Default is bits=3 (Aug 25).** `mkfs` creates `EFS_DEFAULT_SHARD_BITS=3`
+(8 shards) — no `upgrade` step. bits=0 is not a product mode; cluster
+wipe is allowed. `root.id` is stamped on that create so bootstrap
+GET_META does not invent export id=2.
+**Cluster (Aug 25 evening):** bits=3 grown table (~5k inodes), 4/4
+up, clients 007–015 mounted. Do not timeout-skip. A leftover
+`efs-fuse` still causes the 232MB adopt — wipe clients first.
+**bits=3 gate (this cut, working tree):** single-client posix
+`20260825-160200` **188/188**. posix2 A=007 B=008
+`20260825-162207` **34/34, 0 EFS bugs**. unlink-storm 9×4000
+`20260825-163504` **9/9 RM_OK+ALIVE** (~3.2s create / ~3.2s rmtree).
+**posix2 EIO / size-0 was three bugs:** (1) wr() close kicks async
+REPORT; O_TRUNC setattr size=0; late grow-only REPORT restores the
+old size (B saw 10). REPORT grow is now rejected when the rec mtime
+is older than the row. SETATTR SIZE also stamps client-clock mtime
+so a behind-client post-trunc REPORT is not treated as stale (B
+saw 0). (2) remounted peer LOOKUP skipped GETATTR / overwrote RPC
+with a local size-0 stub → utimens showed "now". GETATTR unless
+dirty; keep local only when dirty. (3) posix2 harness remounts B
+after prepare fsync (`.keep`) so B does not walk an old posix-2c
+ino. Drain REPORT before utimens/truncate. fcstor004 catchup stuck
+at gen=329 vs 347 broke flock/unlink mid-suite — restart joiner.
+**link_across_dirs** (earlier this cut): created-set local hit must
+return the stitched inode (LOOKUP/GETATTR wedged FUSE).
+**Isolated PASS this cut:** `attr_utimens` / `attr_utimens_ns` /
+`attr_touch_terminal` / `perm_owner_utime_readonly` (setattr now
+applies times locally + pin so data-path "now" cannot clobber);
+`names_too_long_component` (lookup returned EFS_ERR_INVAL → ENOTDIR;
+now EFS_ERR_NAMETOOLONG + f_namemax=255).
+**Still open:** `link_across_dirs` hang (FUSE request wait). 9-way
+posix `20260825-132231` hung there after ~153 tests. posix2 and
+unlink-storm not re-gated on a clean mkfs.
+**Fixes this cut (working tree):** (1) serialize `dentry_bytes` +
+bounds — flush SIGABRT. (2) bootstrap no longer invents export id=2.
+(3) `mkfs` default bits=3 + stamp `root.id`. (4) `create_with_ino`
+uses `lookup_on_tab` (parent dentry skip → 1/8 readdir miss).
+(5) catchup no longer bails on gen=0+`shard_bits` mkfs root (joiners
+stayed bits=0 → CREATE_SHARD NOT_PRIMARY → file create EIO).
+(6) `efs_export_lookup` consults dentry shards only — walking extras
+found the child-row name after rename/unlink. Isolated
+`dir_rename_file` / `dir_rename_symlink` / `unlink_open_file` PASS.
+(7) utimens: local set_mtime/set_atime after setattr upsert +
+mtime pin vs dcache_note_size/REPORT echo; adopt takes owner times
+when !dirty. Do not shrink size on an older setattr mtime — that
+zeroed basic_dd_rw after dirty cleared. (8) NAMETOOLONG:
+EFS_ERR_NAMETOOLONG, not INVAL. Deployed efs-fuse on 007–015.
+Isolated gates PASS. Full suite on the ~440k leftover table hung
+in FUSE wait on `fsync_reopen_visible`. Need a clean mkfs before
+re-gating posix/posix2/storm.
+**Wipe always kills clients first** (`killall -9 efs-fuse` on
+003–015) — leftover fuse is the 232MB/1.9M-chunk re-adopt.
+**Phase 3b gates (Aug 24 late, build `09d38fe9c2b8-dirty`)** — cluster
+rebuilt after a 13-way NFS rsync of `results/` wedged the first deploy.
+**bits=0:** posix `20260825-034030` 182 both-PASS; 1 classified EFS bug
+`dir_move_into_subdir` (ConnectionAbortedError) **isolated PASS**; fcntl
+matches XFS FAIL; 3 virt SKIPs. posix2 first run 23/34 — primary
+**SIGABRT** (`corrupted size vs. prev_size`) in
+`efs_export_table_snapshot_free` ← `server_flush_fragmented_meta_locked`
+(heap smash during flush, not 11 independent bugs). Restart + remount:
+posix2 `20260825-035117` **34/34, 0 EFS bugs**. **bits=3 blocked:**
+fresh mkfs+upgrade shards=8, FUSE bootstrap `export id=2` vs
+`efs-mgmt list-exports` `id=1` → `mkdir` EIO (CREATE to missing id).
+mc_stress + multi-9 sw-1m not run. Do not treat bits=3 as green.
+**Phase 3b implemented (Aug 24 night, working tree)** — Items 0–2 of
+docs/scaling-roadmap.md. Item 3 (replica-3 meta pages) left optional / not
+in this cut. `test_meta_v6` OK; efsd + efs-fuse build clean. **Fresh
+`edelete`+`mkfs` required** (chunk routing is not backward compatible).
+- Item 0: op-class comments on REPORT (commutative), CREATE (independent),
+  RENAME (conflicting) in protocol.h / handler.c.
+- Item 1: `efs_export_chunk_shard_of` — group 0 stays on `shard_of(ino)`
+  (small-file locality); later 8 MiB groups mix. REPORT/GETCHUNKS route by
+  group via `rpc_owner_conn_shard` (no crafted ino). GETCHUNKS serves one
+  group, no inode required on that shard, loud NOT_PRIMARY. Truncate/last-
+  link unlink fan `EFS_MSG_INODE_DROP_CHUNKS` to other shard owners.
+  `drop_chunks_from` scans the table (extent groups are not dense from 0).
+- Item 2: `EFS_DIR_SPREAD_MIN` (65k) derived from rollups. Dentries go to
+  `hash(parent,name)` past the threshold; LOOKUP tries hash then parent;
+  readdir merges `EFS_READDIR_F_LOCAL_ONLY` per shard; unlink prefers hash
+  shard (hash-shard row wins a crash duplicate). Stress:
+  `tests/stress/hotdir_spread_probe.sh`.
+**Roadmap gained Phase 3b (Aug 24 night)** from the architecture review
+(plan still in docs/scaling-roadmap.md). Rejected: consensus-group sprawl,
+MVCC, SPDK, universal hash dentries, range leases.
+**rsync 10-round (Aug 24 night).** `rsync -avvvcSP` of `ecrawl-synt-small`
+onto FUSE, 70s windows. Peak **16156 files/70s** (r9; r10 15983) vs r1
+13889 / old LOOKUP_PATH-era ~230/70s. NFS→local same tree is ~3238/s —
+efs is the limiter. C levers that mattered: hashed `hold_find`; same-dir
+rename `expand_parent_chain` + skip child_idx; **`stamp_ctime_loaded`
+nlink<=1 is O(1)** (was a full-table scan per rsync temp→final — 9% efsd
+on a grown table). Also: LOOKUP last-component to parent owner; session
+`created_set` skips dest-stat ENOENT under dirs this client mkdir'd
+(remounted peers still RPC). Flush window 10s/20k. Reverted parent-shard
+file create (piled work on shard 0). Residual: CREATE+RENAME RTTs
+(~11k temps from `-P`). **Do not push ewrite/ecopy.**
+**Unlink-storm 9×4000 PASS (Aug 24 night).** First run wedged at ~4–7 creates/s
+(9-way LOOKUP_PATH+CREATE+HOLD+blocking REPORT, plus 100 ms extras flush).
+Fixes (no new caches): local-table getattr for dirs this client already
+dual-applied; `EFS_CREATE_F_HOLD` piggybacked on CREATE; close kicks
+REPORT off the FUSE worker; server flush window 100 ms→2 s / 1000→8000 ops.
+Grown leftover table (~65k inodes) still ~8 min/4000; **fresh mkfs bits=3**
+is **~10 s create + ~3 s rmtree** (`results/stress/unlink-storm-20260825-000136`,
+9/9 RM_OK+ALIVE). POSIX: isolated `dir_move_into_subdir` PASS; posix2
+**34/34** (`20260825-001749`). Full 188-row tsv has one timeout-abort
+artifact from a 300 s SSH cut. **Do not push ewrite/ecopy.**
 **POSIX + posix2 CLEAN on bits=3 (Aug 24).** Fresh `efs-test` shards=8.
 Single-client `posix_suite.py` **188/188** (`results/posix/20260824-214726`,
 0 EFS bugs vs XFS; 5 target-better = known XFS quirks). Two-client
@@ -455,6 +559,18 @@ FIXED (7e442fa) — the last 5:
   (sw 4.6 GB/s, sr 2.4 GB/s, 4k rand ~40k IOPS). rclone 32×10GiB copy rc=0.
 
 ## Root causes already found — don't re-diagnose
+- **232MB / 1.9M-chunk adopt after wipe (Aug 25)**: not a client disk
+  cache and not leftover `.efsm` on the NVMe. `adopted cache blob` is
+  the GET_META payload kept in RAM. Wipe of `/data1/*/efs` + new `mkfs`
+  while **any** `efs-fuse` is still alive (often D-state; `pkill -x`
+  without `-9` misses it) lets that daemon REPORT/flush the old table
+  onto the empty primary. Next mount sees the same fingerprint
+  (`232007402B`, 110 inodes, 1932296 chunks, gen=102). **Wipe order:
+  `killall -9 efs-fuse` on fcstor003–015, confirm zero, then efsd,
+  then edelete.** `tests/wipe_cluster.sh`. A 1-second `cat fuse.log`
+  can also show the previous mount's 232MB line because
+  `rsync --exclude='*.log'` never deletes it — `rm -f fuse.log`
+  before start; trust `meta ready` from the new process, not a stale log.
 - **efs-s3 metadata clobber = extras loss on adopt (FIXED, Aug 23)**: a
   newer-gen root missing extra-shard descriptors (born during a rebuild
   storm) was wholesale-`root_move`d by `catchup_install_newer_root`;

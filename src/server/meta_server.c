@@ -490,7 +490,7 @@ int server_ensure_shard_ready(struct efsd_server *s, struct efs_export *ex,
     if (ex->root.shard_bits == 0 || sc <= 1 || shard == 0) {
         int need = ex->meta_fragmented && ex->root.page_count > 0 &&
                    (ex->meta_needs_rebuild ||
-                    (ex->inode_count <= 1 && ex->root.blob_len > 65536u));
+                    (ex->inode_count <= 1 && ex->root.blob_len > (1u << 20)));
         if (!need)
             return 0;
         pthread_mutex_unlock(&s->lock);
@@ -1042,13 +1042,16 @@ static void *meta_put_thread(void *arg)
  * every peer then deserialized+merged under s->lock. */
 static void bootstrap_export_on_peers(struct efsd_server *s, struct efs_export *ex)
 {
-    struct efs_export shell;
-    efs_export_init(&shell, ex->id, ex->name);
+    /* Publish the live EFSR (id + shard_bits). A bits=0 empty-shell EFSM
+     * left joiners at shard_bits=0; CREATE_SHARD then returned NOT_PRIMARY
+     * and file create was EIO until a later gen>0 flush — which a fresh
+     * mkfs never produced. */
     char *buf = NULL;
     size_t len = 0;
-    int src = efs_export_serialize(&shell, &buf, &len);
-    efs_export_free(&shell);
-    if (src != EFS_OK)
+    pthread_mutex_lock(&s->lock);
+    int src = efs_export_root_serialize(&ex->root, &buf, &len);
+    pthread_mutex_unlock(&s->lock);
+    if (src != EFS_OK || !buf)
         return;
 
     struct efs_node *nodes = malloc(sizeof(struct efs_node) * EFS_MAX_NODES);
@@ -2130,7 +2133,11 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
             return 0;
         }
     }
-    if (!ex->meta_fragmented && root.generation == 0) {
+    /* Fresh mkfs is gen=0 + shard_bits>0 (no pages yet). That is a real
+     * export: skip only a worthless empty root. Bailing on every gen=0
+     * left joiners at bits=0 after the "adopt peer" log, so CREATE_SHARD
+     * for shards 1–7 came back NOT_PRIMARY and file create was EIO. */
+    if (!ex->meta_fragmented && root.generation == 0 && !incoming_real) {
         pthread_mutex_unlock(&s->lock);
         efs_export_root_free(&root);
         return 0;
@@ -2325,6 +2332,7 @@ static int catchup_poll_peer_root(struct efsd_server *s)
             uint64_t peer_gen = 0;
             efs_export_id_t peer_id = 0;
             uint32_t peer_extras = 0;
+            uint32_t peer_bits = 0;
             if (efs_meta_blob_is_root(payload, payload_len)) {
                 struct efs_export_root r;
                 memset(&r, 0, sizeof(r));
@@ -2333,6 +2341,7 @@ static int catchup_poll_peer_root(struct efsd_server *s)
                     peer_gen = r.generation;
                     peer_id = r.id;
                     peer_extras = r.extra_shard_count;
+                    peer_bits = r.shard_bits;
                     int m = catchup_merge_peer_extras(s, names[e], &r);
                     if (m > best)
                         best = m;
@@ -2349,20 +2358,25 @@ static int catchup_poll_peer_root(struct efsd_server *s)
             uint64_t our_gen = ex ? ex->root.generation : 0;
             int stuck = ex ? ex->meta_needs_rebuild : 0;
             uint32_t our_extras = ex ? ex->root.extra_shard_count : 0;
+            uint32_t our_bits = ex ? ex->root.shard_bits : 0;
             pthread_mutex_unlock(&s->lock);
 
             /* Phase 2: full blob only when the peer is strictly newer, or
              * same generation while our rebuild is stuck (peer may hold
              * live tables that fragment rebuild cannot recover).
              * Also pull when we have an empty leftover and the peer has
-             * any real gen (extra-shard owner restart). */
+             * any real export — gen>0 OR shard_bits (fresh mkfs is gen=0
+             * + bits=3, no pages). peer_gen>0 alone left joiners at
+             * bits=0; CREATE_SHARD then returned NOT_PRIMARY and file
+             * create was EIO (basic_empty_file on a clean cluster). */
             int local_empty = !ex ||
                               (!ex->root.shard_bits &&
                                ex->root.page_count == 0 &&
                                ex->inode_count <= 1);
             int want = (peer_gen > our_gen) ||
                        (peer_gen > 0 && peer_gen == our_gen && stuck) ||
-                       (local_empty && peer_gen > 0) ||
+                       (local_empty && (peer_gen > 0 || peer_bits > 0)) ||
+                       (our_bits == 0 && peer_bits > 0) ||
                        (ex && ex->root.shard_bits &&
                         peer_extras > our_extras);
             if (!want)
@@ -2414,11 +2428,13 @@ static void *meta_catchup_thread(void *arg)
             /* Rebuild when fenced, or when RAM is a hollow 1-inode table
              * but the root advertises a real page blob (missed rebuild /
              * stale .efsm). Do NOT key off inode_count<=1 alone: an empty
-             * export stays at 1 inode and used to spin-rebuild. */
+             * export stays at 1 inode. A fresh mkfs is 2 pages (~128 KiB);
+             * the old 64 KiB cutoff spun rebuild forever and wedged
+             * CREATE_SHARD (BUSY / FUSE hang on empty-file create). */
             need[e] = (ex->meta_fragmented && ex->root.page_count > 0 &&
                        (ex->meta_needs_rebuild ||
                         (ex->inode_count <= 1 &&
-                         ex->root.blob_len > 65536u)));
+                         ex->root.blob_len > (1u << 20))));
         }
         pthread_mutex_unlock(&s->lock);
 
@@ -2523,6 +2539,23 @@ static void *meta_catchup_thread(void *arg)
          * failed: a peer holding live tables at the same generation can
          * ship its blob, which fragment rebuild may be unable to recover. */
         if ((!any_dirty || rebuild_failed) && node_count > 1 && s->running) {
+            /* catchup_poll only walks local names. A joiner up before
+             * mkfs has export_count==0 and would never learn efs-test. */
+            uint32_t local_ec = 0;
+            struct efs_node seed;
+            memset(&seed, 0, sizeof(seed));
+            pthread_mutex_lock(&s->lock);
+            local_ec = s->export_count;
+            for (uint32_t i = 0; i < s->node_count; i++) {
+                if (s->nodes[i].id != s->id && s->nodes[i].addr[0] &&
+                    s->nodes[i].port) {
+                    seed = s->nodes[i];
+                    break;
+                }
+            }
+            pthread_mutex_unlock(&s->lock);
+            if (local_ec == 0 && seed.port)
+                (void)server_fetch_metadata_from(s, seed.addr, seed.port);
             int prc = catchup_poll_peer_root(s);
             if (prc > 0)
                 did_work = 1;

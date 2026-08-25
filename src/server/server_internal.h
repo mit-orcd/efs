@@ -204,9 +204,12 @@ void server_fill_heal_status(struct efsd_server *s,
 
 /* Phase 2a: server-side meta-flush batching. The flush thread commits a
  * dirty export at most every EFS_META_FLUSH_MS, or early once
- * EFS_META_FLUSH_OPS RPC mutations accumulate (whichever first). */
-#define EFS_META_FLUSH_MS 100ull
-#define EFS_META_FLUSH_OPS 1000ull
+ * EFS_META_FLUSH_OPS RPC mutations accumulate (whichever first).
+ * 100 ms flushed on every create window and fanned extras-commit catchup
+ * (9-way unlink-storm create wedged at ~4 files/s). fsync still flushes
+ * synchronously. */
+#define EFS_META_FLUSH_MS 10000ull
+#define EFS_META_FLUSH_OPS 20000ull
 
 /* Global server instance used by worker threads. */
 extern struct efsd_server *g_server;

@@ -1,4 +1,5 @@
 #include "efs/metadata.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -47,10 +48,21 @@ static void inode_bump_ctime(struct efs_inode *p)
         p->ctime = old + 1;
 }
 
+static struct efs_inode *inode_ptr(struct efs_export *ex, efs_ino_t ino);
+
 static void stamp_ctime_loaded(struct efs_export *ex, efs_ino_t ino, uint64_t ct)
 {
     if (!ex || !ino)
         return;
+    /* Common case (rsync temp→final, nlink=1): the row we already hold.
+     * The old full-table scan was O(inodes) per rename and made a grown
+     * export's rsync O(n²). */
+    struct efs_inode *p = inode_ptr(ex, ino);
+    if (p) {
+        p->ctime = ct;
+        if (p->nlink <= 1)
+            return;
+    }
     for (uint64_t i = 0; i < ex->inode_count; i++) {
         if (ex->inodes[i].ino == ino)
             ex->inodes[i].ctime = ct;
@@ -67,8 +79,6 @@ static void stamp_ctime_loaded(struct efs_export *ex, efs_ino_t ino, uint64_t ct
         }
     }
 }
-
-static struct efs_inode *inode_ptr(struct efs_export *ex, efs_ino_t ino);
 
 static void parent_touch(struct efs_export *ex, efs_ino_t parent)
 {
@@ -89,6 +99,8 @@ static uint64_t hash_mix(uint64_t x)
     x ^= x >> 31;
     return x ? x : 1;
 }
+
+static int export_is_sharded_root(struct efs_export *ex);
 
 static uint64_t hash_name_key(efs_ino_t parent, const char *name)
 {
@@ -1280,16 +1292,26 @@ static void remove_chunk_at(struct efs_export *ex, uint64_t j)
     }
 }
 
-/* Chunk indexes for one ino are dense from 0 (writes and pack tails). */
-static void remove_chunks_for_ino(struct efs_export *ex, efs_ino_t ino)
+/* Scan this table's chunk array. After extent sharding a single table
+ * only holds some groups, so a sequential ci walk stops at the first
+ * hole and leaks the rest. */
+static void drop_chunks_scan(struct efs_export *ex, efs_ino_t ino,
+                             uint32_t first_chunk)
 {
     ex->layout_epoch++;
-    uint32_t ci = 0;
-    uint64_t pos;
-    while (chunk_idx_get(ex, ino, ci, &pos) == 0) {
-        remove_chunk_at(ex, pos);
-        ci++;
+    uint64_t i = 0;
+    while (i < ex->chunk_count) {
+        if (ex->chunks[i].ino == ino &&
+            ex->chunks[i].chunk_index >= first_chunk)
+            remove_chunk_at(ex, i);
+        else
+            i++;
     }
+}
+
+static void remove_chunks_for_ino(struct efs_export *ex, efs_ino_t ino)
+{
+    efs_export_drop_chunks_from(ex, ino, 0);
 }
 
 void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
@@ -1297,13 +1319,17 @@ void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
 {
     if (!ex)
         return;
-    ex->layout_epoch++;
-    uint32_t ci = first_chunk;
-    uint64_t pos;
-    while (chunk_idx_get(ex, ino, ci, &pos) == 0) {
-        remove_chunk_at(ex, pos);
-        ci++;
+    if (export_is_sharded_root(ex) && ex->root.shard_count > 1) {
+        drop_chunks_scan(ex, ino, first_chunk);
+        if (ex->shard_tabs) {
+            for (uint32_t s = 1; s < ex->shard_tab_cap; s++) {
+                if (ex->shard_tabs[s])
+                    drop_chunks_scan(ex->shard_tabs[s], ino, first_chunk);
+            }
+        }
+        return;
     }
+    drop_chunks_scan(ex, ino, first_chunk);
 }
 
 /* Swap-remove inode array slot i; refresh indexes for the moved row.
@@ -1711,7 +1737,8 @@ int efs_export_rehash(struct efs_export *ex, uint32_t new_bits)
         }
     }
     for (uint64_t i = 0; i < wc; i++) {
-        uint32_t dest = efs_export_shard_of(chs[i].ino, new_bits);
+        uint32_t dest = efs_export_chunk_shard_of(chs[i].ino, chs[i].chunk_index,
+                                                 new_bits);
         struct efs_export *dtab = efs_export_table(ex, dest);
         if (dtab)
             (void)efs_export_set_chunk(dtab, chs[i].ino, chs[i].chunk_index,
@@ -1746,6 +1773,17 @@ uint32_t efs_export_create_target(struct efs_export *ex, efs_ino_t parent,
     return ex->create_rr % sc;
 }
 
+static int lookup_on_tab(struct efs_export *tab, efs_ino_t parent,
+                         const char *name, struct efs_inode *out)
+{
+    uint64_t pos = 0;
+    if (!tab || !name || name_idx_get(tab, parent, name, &pos) != 0)
+        return EFS_ERR_NOT_FOUND;
+    if (out)
+        *out = tab->inodes[pos];
+    return EFS_OK;
+}
+
 static efs_ino_t create_sharded(struct efs_export *ex, efs_ino_t parent,
                                 uint32_t mode, uid_t uid, gid_t gid,
                                 const char *name)
@@ -1762,15 +1800,19 @@ static efs_ino_t create_sharded(struct efs_export *ex, efs_ino_t parent,
     struct efs_export *ptab = efs_export_table(ex, psh);
     if (!ptab)
         return 0;
-    /* The parent table's dentry is the authoritative existence record: lookups
-     * and unlinks route by parent and only ever consult ptab. Checking the
-     * child table first (via create_with_ino's internal lookup) let a stale
-     * split-brain row there (membership flap, no fencing) wedge the name:
-     * EEXIST on create, ENOENT on lookup, uncleanable. Check ptab first, and
-     * drop an unreachable same-name row from ctab before writing. */
-    if (efs_export_lookup(ex, parent, name, NULL) == EFS_OK)
+    /* Phase 3b: once the parent is past EFS_DIR_SPREAD_MIN the dentry
+     * lands on hash(parent, name), not the parent shard. */
+    uint32_t dsh = psh;
+    if (efs_export_dir_is_spread(ex, parent))
+        dsh = efs_export_dentry_shard_of(parent, name, bits);
+    struct efs_export *dtab = efs_export_table(ex, dsh);
+    if (!dtab)
         return 0;
-    if (target != psh) {
+    if (lookup_on_tab(dtab, parent, name, NULL) == EFS_OK)
+        return 0;
+    if (dtab != ptab && lookup_on_tab(ptab, parent, name, NULL) == EFS_OK)
+        return 0;
+    if (target != dsh) {
         uint64_t stale;
         if (name_idx_get(ctab, parent, name, &stale) == 0) {
             struct efs_inode victim = ctab->inodes[stale];
@@ -1782,19 +1824,44 @@ static efs_ino_t create_sharded(struct efs_export *ex, efs_ino_t parent,
                     (unsigned long long)parent, name);
         }
     }
-    /* The target table allocates from its own congruence class. */
-    efs_ino_t ino = efs_export_alloc_ino(ctab, target);
+    efs_ino_t ino = efs_export_alloc_ino_for_shard(ex, target);
     if (!ino)
         return 0;
     if (!efs_export_create_with_ino(ctab, ino, parent, mode, uid, gid, name))
         return 0;
     ctab->shard_dirty = 1;
-    if (target != psh && ptab != ctab) {
-        (void)efs_export_create_with_ino(ptab, ino, parent, mode, uid, gid,
+    if (dtab != ctab) {
+        (void)efs_export_create_with_ino(dtab, ino, parent, mode, uid, gid,
                                          name);
-        ptab->shard_dirty = 1;
+        dtab->shard_dirty = 1;
+    }
+    /* Rollups live on the parent inode row. If neither write landed
+     * on the parent table, bump it here. */
+    if (ptab != ctab && ptab != dtab) {
+        struct efs_inode dent;
+        if (lookup_on_tab(dtab, parent, name, &dent) == EFS_OK ||
+            lookup_on_tab(ctab, parent, name, &dent) == EFS_OK)
+            rollup_add_under(ptab, parent, &dent);
     }
     return ino;
+}
+
+static void lookup_stitch_child(struct efs_export *ex, struct efs_inode *out)
+{
+    if (!ex || !out || !export_is_sharded_root(ex))
+        return;
+    uint32_t bits = ex->root.shard_bits;
+    uint32_t csh = efs_export_shard_of(out->ino, bits);
+    struct efs_export *ctab = (csh == 0) ? ex : efs_export_shard_tab(ex, csh);
+    struct efs_inode full;
+    if (ctab && efs_export_get_inode(ctab, out->ino, &full) == 0) {
+        char nbuf[EFS_MAX_NAME];
+        memcpy(nbuf, out->name, EFS_MAX_NAME);
+        efs_ino_t p = out->parent;
+        *out = full;
+        memcpy(out->name, nbuf, EFS_MAX_NAME);
+        out->parent = p;
+    }
 }
 
 int efs_export_lookup(struct efs_export *ex, efs_ino_t parent,
@@ -1805,52 +1872,38 @@ int efs_export_lookup(struct efs_export *ex, efs_ino_t parent,
 
     if (export_is_sharded_root(ex)) {
         uint32_t bits = ex->root.shard_bits;
-        struct efs_export *ptab =
-            efs_export_table(ex, efs_export_shard_of(parent, bits));
-        if (!ptab)
-            return EFS_ERR_NOT_FOUND;
-        if (ptab != ex) {
-            int rc = efs_export_lookup(ptab, parent, name, out);
-            if (rc != EFS_OK || !out)
-                return rc;
-            uint32_t csh = efs_export_shard_of(out->ino, bits);
-            if (csh != efs_export_shard_of(parent, bits)) {
-                struct efs_export *ctab = efs_export_shard_tab(ex, csh);
-                struct efs_inode full;
-                if (ctab && efs_export_get_inode(ctab, out->ino, &full) == 0) {
-                    char nbuf[EFS_MAX_NAME];
-                    memcpy(nbuf, out->name, EFS_MAX_NAME);
-                    efs_ino_t p = out->parent;
-                    *out = full;
-                    memcpy(out->name, nbuf, EFS_MAX_NAME);
-                    out->parent = p;
+        uint32_t psh = efs_export_shard_of(parent, bits);
+        /* Dentry shards only. Walking every extra tab found the child-row
+         * name (create_with_ino writes parent+name on ctab), so rename and
+         * unlink left exists(old) true after the parent dentry was gone. */
+        struct efs_export *ptab = (psh == 0) ? ex
+            : efs_export_shard_tab(ex, psh);
+        if (efs_export_dir_is_spread(ex, parent)) {
+            uint32_t dsh = efs_export_dentry_shard_of(parent, name, bits);
+            if (dsh != psh) {
+                struct efs_export *htab = (dsh == 0) ? ex
+                    : efs_export_shard_tab(ex, dsh);
+                if (htab && lookup_on_tab(htab, parent, name, out) == EFS_OK) {
+                    if (out)
+                        lookup_stitch_child(ex, out);
+                    return EFS_OK;
                 }
             }
-            return EFS_OK;
         }
-        /* parent lives on shard 0 (this table): fall through, then stitch. */
+        if (!ptab)
+            return EFS_ERR_NOT_FOUND;
+        int rc = lookup_on_tab(ptab, parent, name, out);
+        if (rc == EFS_OK && out)
+            lookup_stitch_child(ex, out);
+        return rc;
     }
 
     uint64_t pos = 0;
     if (name_idx_get(ex, parent, name, &pos) == 0) {
         if (out)
             *out = ex->inodes[pos];
-        if (out && export_is_sharded_root(ex)) {
-            uint32_t bits = ex->root.shard_bits;
-            uint32_t csh = efs_export_shard_of(out->ino, bits);
-            if (csh != 0) {
-                struct efs_export *ctab = efs_export_shard_tab(ex, csh);
-                struct efs_inode full;
-                if (ctab && efs_export_get_inode(ctab, out->ino, &full) == 0) {
-                    char nbuf[EFS_MAX_NAME];
-                    memcpy(nbuf, out->name, EFS_MAX_NAME);
-                    efs_ino_t p = out->parent;
-                    *out = full;
-                    memcpy(out->name, nbuf, EFS_MAX_NAME);
-                    out->parent = p;
-                }
-            }
-        }
+        if (out)
+            lookup_stitch_child(ex, out);
         return EFS_OK;
     }
     return EFS_ERR_NOT_FOUND;
@@ -1889,7 +1942,12 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
 
     efs_export_ensure_rollups(ex);
 
-    if (efs_export_lookup(ex, parent, name, NULL) == EFS_OK)
+    /* This insert is table-local. efs_export_lookup on a sharded root
+     * walks every loaded extra tab, so the child-row we just wrote on
+     * ctab makes the parent-dentry create_with_ino look like EEXIST —
+     * readdir of the parent then misses every file whose inode shard
+     * is instantiated on this node (1/8 of creates on bits=3). */
+    if (lookup_on_tab(ex, parent, name, NULL) == EFS_OK)
         return 0;
 
     if (inode_ptr(ex, ino_num))
@@ -2007,23 +2065,35 @@ int efs_export_unlink_name_ex(struct efs_export *ex, efs_ino_t parent,
         return EFS_ERR_INVAL;
     if (export_is_sharded_root(ex)) {
         uint32_t bits = ex->root.shard_bits;
-        struct efs_export *ptab =
-            efs_export_table(ex, efs_export_shard_of(parent, bits));
+        uint32_t psh = efs_export_shard_of(parent, bits);
+        struct efs_export *ptab = efs_export_table(ex, psh);
         if (!ptab)
             return EFS_ERR_NOT_FOUND;
 
-        /* The dentry row lives on the PARENT's shard table. */
+        /* Spread: hash-shard dentry first, parent-shard leftover second.
+         * Crash between dest-create and source-delete may leave both;
+         * hash-shard row wins, parent-shard is the duplicate we drop. */
+        struct efs_export *dtab = ptab;
         uint64_t pos = 0;
-        if (name_idx_get(ptab, parent, name, &pos) != 0)
+        if (efs_export_dir_is_spread(ex, parent)) {
+            uint32_t dsh = efs_export_dentry_shard_of(parent, name, bits);
+            struct efs_export *htab = (dsh == 0) ? ex
+                : efs_export_shard_tab(ex, dsh);
+            if (htab && name_idx_get(htab, parent, name, &pos) == 0)
+                dtab = htab;
+        }
+        if (dtab == ptab && name_idx_get(ptab, parent, name, &pos) != 0)
             return EFS_ERR_NOT_FOUND;
-        struct efs_inode removed = ptab->inodes[pos];
+        if (dtab != ptab && name_idx_get(dtab, parent, name, &pos) != 0)
+            return EFS_ERR_NOT_FOUND;
+        struct efs_inode removed = dtab->inodes[pos];
         efs_ino_t ino = removed.ino;
 
         if (efs_mode_is_dir(removed.mode)) {
-            /* rmdir: the dir row lives on the parent shard. Do not
-             * instantiate other shards. */
-            if (efs_export_unlink(ptab, ino) == EFS_OK)
-                ptab->shard_dirty = 1;
+            if (efs_export_unlink(dtab, ino) == EFS_OK)
+                dtab->shard_dirty = 1;
+            if (dtab != ptab)
+                rollup_sub_under(ptab, parent, &removed);
             parent_touch(ptab, parent);
             return EFS_OK;
         }
@@ -2033,10 +2103,12 @@ int efs_export_unlink_name_ex(struct efs_export *ex, efs_ino_t parent,
             nlink = 1;
         nlink--;
         rollup_sub_under(ptab, parent, &removed);
-        child_idx_del(ptab, parent, pos);
+        child_idx_del(dtab, parent, pos);
         parent_touch(ptab, parent);
-        remove_inode_slot(ptab, pos, nlink > 0);
-        ptab->shard_dirty = 1;
+        remove_inode_slot(dtab, pos, nlink > 0);
+        dtab->shard_dirty = 1;
+        if (ptab != dtab)
+            ptab->shard_dirty = 1;
 
         /* Update copies we already hold (including a loaded child table).
          * Never efs_export_table(all). If the canonical table is not
@@ -2623,7 +2695,9 @@ int efs_export_rename(struct efs_export *ex, efs_ino_t ino,
         struct efs_inode snap = *src;
         if (old_parent != new_parent)
             rollup_sub_under(ex, old_parent, &snap);
-        child_idx_del(ex, old_parent, slot);
+        /* Same-dir rename: slot stays in the parent child-vec. */
+        if (old_parent != new_parent)
+            child_idx_del(ex, old_parent, slot);
         name_idx_del(ex, src->parent, src->name);
         dentry_bytes_sub(ex, src->name);
         strncpy(src->name, new_name, EFS_MAX_NAME - 1);
@@ -2635,7 +2709,8 @@ int efs_export_rename(struct efs_export *ex, efs_ino_t ino,
         inode_bump_ctime(src);
         stamp_ctime_loaded(ex, ino, src->ctime);
         name_idx_put(ex, src->parent, src->name, slot);
-        child_idx_add(ex, new_parent, slot);
+        if (old_parent != new_parent)
+            child_idx_add(ex, new_parent, slot);
         if (old_parent != new_parent) {
             if (efs_mode_is_dir(src->mode)) {
                 struct efs_inode *op = inode_ptr(ex, old_parent);
@@ -2649,7 +2724,11 @@ int efs_export_rename(struct efs_export *ex, efs_ino_t ino,
             parent_touch(ex, old_parent);
             parent_touch(ex, new_parent);
         } else {
-            recompute_times_up(ex, new_parent);
+            /* Same-dir rename only bumps ctime (time-forward). Expand
+             * in O(depth) — recompute_times_up rescans every child and
+             * made rsync temp→final O(n²) in a wide directory. */
+            expand_parent_chain(ex, src->ino, new_parent,
+                                entry_tmin(src), entry_tmax(src));
             parent_touch(ex, new_parent);
         }
     }
@@ -2663,7 +2742,8 @@ int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
     if (!ex)
         return EFS_ERR_INVAL;
     if (export_is_sharded_root(ex)) {
-        struct efs_export *tab = efs_export_table_for_ino(ex, ino);
+        struct efs_export *tab = efs_export_table_for_chunk(ex, ino,
+                                                           chunk_index);
         if (tab && tab != ex)
             return efs_export_set_chunk(tab, ino, chunk_index, fragment_nodes,
                                         checksums);
@@ -2708,7 +2788,8 @@ int efs_export_get_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
     if (!ex)
         return EFS_ERR_INVAL;
     if (export_is_sharded_root(ex)) {
-        struct efs_export *tab = efs_export_table_for_ino(ex, ino);
+        struct efs_export *tab = efs_export_table_for_chunk(ex, ino,
+                                                           chunk_index);
         if (tab && tab != ex)
             return efs_export_get_chunk(tab, ino, chunk_index, out);
     }
@@ -3284,7 +3365,11 @@ int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
     /* v7: compact inode rows, zero pad to the page-aligned dentry offset,
      * packed dentries, then the chunk region. The pad keeps the dentry region
      * stable as inode_count grows within a compact page (see
-     * efs_meta_dent_off). */
+     * efs_meta_dent_off).
+     * Size from the names we will write — a stale-low dentry_bytes made
+     * malloc short and the dentry loop smashed the next heap chunk
+     * (SIGABRT "corrupted size vs. prev_size" in snapshot_free). */
+    dentry_bytes_recompute(ex);
     size_t dent_bytes = dentry_bytes_for(ex, 0);
     size_t chunk_bytes = (size_t)ex->chunk_count * EFS_CHUNK_WIRE_SIZE;
     size_t dent_off = efs_meta_dent_off(EFS_META_VERSION, ex->inode_count);
@@ -3295,9 +3380,15 @@ int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
         return EFS_ERR_NOMEM;
     uint8_t *p = b;
 
-#define W_RAW(v, n) do { memcpy(p, (v), (n)); p += (n); } while (0)
-#define W_32(v) do { uint32_t v_ = (uint32_t)(v); memcpy(p, &v_, 4); p += 4; } while (0)
-#define W_64(v) do { uint64_t v_ = (uint64_t)(v); memcpy(p, &v_, 8); p += 8; } while (0)
+#define NEED(n) do { \
+        if ((size_t)(p - b) + (size_t)(n) > total) { \
+            free(b); \
+            return EFS_ERR_INVAL; \
+        } \
+    } while (0)
+#define W_RAW(v, n) do { NEED(n); memcpy(p, (v), (n)); p += (n); } while (0)
+#define W_32(v) do { uint32_t v_ = (uint32_t)(v); W_RAW(&v_, 4); } while (0)
+#define W_64(v) do { uint64_t v_ = (uint64_t)(v); W_RAW(&v_, 8); } while (0)
 
     W_RAW(EFS_META_MAGIC, 4);
     W_32(EFS_META_VERSION);
@@ -3313,6 +3404,7 @@ int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
     W_32((uint32_t)ex->chunk_count);
 
     for (uint64_t i = 0; i < ex->inode_count; i++) {
+        NEED(EFS_INODE_COMPACT_SIZE);
         efs_export_pack_inode_compact(&ex->inodes[i], p);
         p += EFS_INODE_COMPACT_SIZE;
     }
@@ -3323,6 +3415,7 @@ int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
     }
     for (uint64_t i = 0; i < ex->inode_count; i++) {
         uint16_t ln = (uint16_t)strnlen(ex->inodes[i].name, EFS_MAX_NAME - 1);
+        NEED(2u + (size_t)ln);
         memcpy(p, &ln, 2);
         p += 2;
         if (ln) {
@@ -3341,6 +3434,7 @@ int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
             W_RAW(ce->checksums, EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
         }
     }
+#undef NEED
 #undef W_RAW
 #undef W_32
 #undef W_64
@@ -3722,6 +3816,58 @@ uint32_t efs_export_shard_of(efs_ino_t ino, uint32_t shard_bits)
     return (uint32_t)((uint64_t)ino & ((1ull << shard_bits) - 1));
 }
 
+uint32_t efs_export_chunk_shard_of(efs_ino_t ino, uint32_t chunk_index,
+                                   uint32_t shard_bits)
+{
+    if (shard_bits == 0)
+        return 0;
+    uint32_t base = efs_export_shard_of(ino, shard_bits);
+    uint32_t group = chunk_index >> EFS_CHUNK_GROUP_SHIFT;
+    uint32_t mask = (1u << shard_bits) - 1u;
+    /* Group 0 stays on the inode shard so a small file's mappings and
+     * inode row share an owner (one GETCHUNKS hop). Later groups mix. */
+    uint32_t mix = group ? (uint32_t)hash_mix((uint64_t)group) : 0;
+    return base ^ (mix & mask);
+}
+
+struct efs_export *efs_export_table_for_chunk(struct efs_export *ex,
+                                              efs_ino_t ino,
+                                              uint32_t chunk_index)
+{
+    if (!ex)
+        return NULL;
+    if (!export_is_sharded_root(ex))
+        return ex;
+    return efs_export_table(ex, efs_export_chunk_shard_of(ino, chunk_index,
+                                                         ex->root.shard_bits));
+}
+
+uint32_t efs_export_dentry_shard_of(efs_ino_t parent, const char *name,
+                                    uint32_t shard_bits)
+{
+    if (shard_bits == 0 || !name)
+        return 0;
+    uint64_t h = hash_name_key(parent, name);
+    return (uint32_t)(h & ((1ull << shard_bits) - 1));
+}
+
+int efs_inode_dir_is_spread(const struct efs_inode *dir)
+{
+    if (!dir)
+        return 0;
+    return (dir->imm_files + dir->imm_dirs) >= EFS_DIR_SPREAD_MIN;
+}
+
+int efs_export_dir_is_spread(struct efs_export *ex, efs_ino_t dir)
+{
+    struct efs_inode d;
+    if (!ex || !dir)
+        return 0;
+    if (efs_export_get_inode(ex, dir, &d) != 0)
+        return 0;
+    return efs_inode_dir_is_spread(&d);
+}
+
 efs_node_id_t efs_shard_owner_of(uint32_t shard, uint32_t shard_count,
                                  const efs_node_id_t *live, uint32_t nlive)
 {
@@ -3784,6 +3930,27 @@ efs_ino_t efs_export_alloc_ino(struct efs_export *ex, efs_ino_t parent)
             return (efs_ino_t)cand;
         }
         cand += span;
+    }
+    return 0;
+}
+
+efs_ino_t efs_export_alloc_ino_for_shard(struct efs_export *ex, uint32_t shard)
+{
+    if (!ex)
+        return 0;
+    struct efs_export *ctab = efs_export_table(ex, shard);
+    if (!ctab)
+        return 0;
+    if (ctab == ex)
+        return efs_export_alloc_ino(ex, shard);
+    for (int n = 0; n < (1 << 20); n++) {
+        efs_ino_t ino = efs_export_alloc_ino(ctab, shard);
+        if (!ino)
+            return 0;
+        uint64_t slot = 0;
+        /* Main-table row = a parent dentry for this ino. Do not reuse. */
+        if (efs_export_inode_slot(ex, ino, &slot) != 0)
+            return ino;
     }
     return 0;
 }

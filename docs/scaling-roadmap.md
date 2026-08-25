@@ -7,6 +7,8 @@ least 2³² (4.29 billion) files/folders. It is a **multi-phase** effort. Phase 
 (shipped) makes the current model robust; Phase 2 (shipped: server-owned
 RPCs + RPC reads) is in place; Phase 3 (proven on throwaway bits=3 —
 see [phase3-sharding.md](phase3-sharding.md)) splits the table. Phase 4 is density.
+**Phase 3b** (below, from the Aug 24 architecture review) shards chunk
+metadata by extent and adds threshold-based hot-directory spread.
 **Skip Phase 2c** (full-table gen-check cache); cache as Phase 3 item 4
 (per-shard, on-demand, evict). Write-throughput next steps (lock partition,
 N pollers, bits>0 data path) live in **Performance next** below, alongside
@@ -127,6 +129,177 @@ a per-shard flush/resync is then bounded and fast.
 across 8 shards; extra-owner kill/restart rebuilds only owned extras;
 cold remount + peer md5; same-gen extras merge from `GET_META_ROOT`.
 Live `efs-test` remains bits=0.
+
+---
+
+## Phase 3b — extent sharding + hot dirs (Aug 24 architecture review)
+
+An external design review (Ceph/DAOS-style "everything is a distributed
+object, no MDS") was evaluated against what efs already is. Most of it we
+already have (identical nodes, client-computed placement, client-side 2+1
+EC, data path bypasses metadata ordering, grow-only size apply, batched
+dirty-ops → CoW page flush). **Apply exactly the three items below; the
+rest is rejected** (see the rejected list at the end — do not revive).
+
+Written to be executed by an agent without design judgment: follow the
+steps in order, run the gates after every step, do not improvise.
+
+### Item 0 — the design rule (documentation only, do first)
+
+Every metadata operation is one of three classes. When adding or touching
+an op, record its class in a comment and handle it accordingly:
+
+| Class | Rule | Existing examples |
+|---|---|---|
+| **Commutative** | apply without ordering; max/newer wins | REPORT size grow-only + mtime newer-only (`EFS_MSG_REPORT_CHUNKS` handler), rollup counters |
+| **Independent** | shard-local commit, no cross-shard talk | create/unlink inside one dir, disjoint-chunk writes |
+| **Conflicting** | owner-serialized RPC + dual-apply | rename, unlink-vs-open (HOLD), O_APPEND reserve, flock |
+
+If a new op does not obviously fit Commutative or Independent, it is
+Conflicting. Never "optimize" a Conflicting op into a lock-free one.
+
+### Item 1 — extent-sharded chunk metadata
+
+**Problem.** Phase 3 shards *inode rows* by `efs_export_shard_of(ino, bits)`
+(low bits of ino, `src/common/metadata.c`). Chunk mappings follow the inode:
+every `efs_chunk_rec` for a file lives on `shard_of(ino)`. A 100 TB file at
+128 KiB chunks is ~800M chunk recs (~100 B each ≈ 80 GB) on **one** shard
+table — that breaks the per-shard bound (~1M inodes, ~150 MB blob) the whole
+phase relies on. Fix: shard chunk records by `(ino, chunk_group)`, not `ino`.
+
+**Current routing map (all keyed on `shard_of(ino)` — touch all of these):**
+
+- Client report partition: `efs_client_report_dirty` (`src/client/write.c`,
+  the `for (s = 0; s < sc; s++)` loop partitioning `crecs`/`irecs`).
+- Server report apply + ownership drop: `EFS_MSG_REPORT_CHUNKS` handler
+  (`src/server/handler.c`) → `efs_export_set_chunk(table_for_ino(...))`.
+- Table routing: `efs_export_set_chunk` / `efs_export_get_chunk` /
+  `efs_export_drop_chunks_from` (`src/common/metadata.c`) via
+  `efs_export_table_for_ino(ex, ino)`.
+- Read-side pull: `pull_chunks_range` (`src/client/ops.c`) →
+  `efs_client_rpc_getchunks` (routes by ino); server
+  `EFS_MSG_INODE_GETCHUNKS` handler ensures `shard_of(req->ino)` and reads
+  `table_for_ino`. Also `efs_client_pull_layout_miss` (read-miss self-heal)
+  and `pull_file_layout` (adopt-time pull) — both funnel through
+  `pull_chunks_range`.
+
+**Steps:**
+
+1. **Pure refactor, no behavior change.** Add
+   `uint32_t efs_export_chunk_shard_of(efs_ino_t ino, uint32_t chunk_index, uint32_t bits)`
+   in `src/common/metadata.c` (+ decl in `include/efs/metadata.h`), body
+   `return efs_export_shard_of(ino, bits);`. Route every site in the map
+   above through it. Run the full gate (below). This must change nothing.
+2. **The change.** `#define EFS_CHUNK_GROUP_SHIFT 6` (64 chunks = 8 MiB per
+   group). Body becomes: group = `chunk_index >> EFS_CHUNK_GROUP_SHIFT`;
+   return `efs_export_shard_of(ino, bits) ^ (mix32(group) & shard_mask)`
+   where `mix32` is any fixed integer mix (reuse the `hash_mix` style
+   already in metadata.c; **group 0 mixes to 0** so the first 8 MiB stays
+   on the inode shard) and `shard_mask = (1u << bits) - 1`. Must be a
+   pure function of `(ino, chunk_index, bits)` — every node computes it
+   identically. **Not backward compatible with grown tables: fresh
+   `edelete` + `mkfs` only.** Inode rows and `efs_ino_size_rec` stay on
+   `shard_of(ino)` — do not move them.
+3. **GETCHUNKS windows.** Client `pull_chunks_range`: split `[start, end)`
+   at group boundaries; send one GETCHUNKS per group routed to that group's
+   owner (add a shard-explicit routing variant — do **not** fake it by
+   passing a crafted ino through `rpc_owner_conn`). Server handler: ensure
+   the request's group shard is ready, serve only that group's range from
+   that shard's table, and loud-`NOT_PRIMARY` (like REPORT) when the group
+   isn't owned — never silently return an empty/partial list.
+4. **Truncate / last-link unlink fan-out.** `efs_export_drop_chunks_from`
+   (truncate, `src/client/ops.c`) and the unlink chunk-drop path must drop
+   across all group shards. Follow the existing `UNLINK_SHARD` fan-out
+   pattern (`server_peer_inode_rpc` in `src/server/handler.c`). These are
+   rare ops; a simple loop over shards is fine.
+
+**Wire format:** unchanged. `efs_chunk_rec` already carries `(ino,
+chunk_index)`; routing is computed, never carried. No new opcodes.
+
+**Gates (after every step):** `make test`; posix_suite 188/188 and posix2
+34/34 with **0 EFS bugs on bits=0 and bits=3**; mc_stress VERIFY-OK on both
+clients including kill -9 of a shard owner + restart + cold mount read;
+fresh-mkfs multi-9 sw-1m within 5% of the pre-change number (grown tables
+lie — always perf-test on a fresh mkfs).
+
+### Item 2 — threshold-based hot-directory spread
+
+**Problem.** Dentries always live on the parent's shard
+(`efs_export_create_target` returns the parent shard for dirs;
+`create_sharded` writes the dentry row to the parent table and the full
+inode row to the child table). readdir is one local RPC
+(`efs_client_rpc_readdir`) — keep that for normal dirs; the rsync wins this
+week came from exactly that locality. But a 100M-entry directory puts 100M
+dentries in one shard table: unbounded. Fix: spread a directory's dentries
+by `hash(parent, name)` **only after it crosses a threshold**.
+
+**Steps:**
+
+1. **Spread predicate with no new state.** Do not add an inode field or
+   wire flag. Derive it from the rollups every node already maintains:
+   `is_spread(dir) = (dir->imm_files + dir->imm_dirs) >= EFS_DIR_SPREAD_MIN`
+   with `#define EFS_DIR_SPREAD_MIN (1u << 16)` (65k so tests can reach it).
+   Counts are fuzzy during in-flight ops, so the boundary rule below keeps
+   correctness when nodes disagree by a few.
+2. **Create.** When the parent is spread, the dentry row goes to shard
+   `hash_name_key(parent, name) & shard_mask` (function already exists in
+   `src/common/metadata.c`); the inode row still round-robins. Server
+   CREATE handler must compute the identical target.
+3. **Lookup.** Parent not spread: unchanged. Parent spread: LOOKUP to the
+   hash shard first; on NOT_FOUND there, fall back to the parent shard
+   (covers the boundary window). Never answer ENOENT from one shard alone
+   when the dir is spread.
+4. **Readdir.** Client-side merge: READDIR the parent owner plus one
+   spread-READDIR per shard owner (add a flag on the existing
+   `EFS_MSG_INODE_READDIR` request meaning "return dentries with this
+   parent from *your* shard table"), dedupe by name.
+   `efs_fuse_readdir` already collects the full dir per call, so merging
+   is local and simple. Slow is acceptable; wrong is not.
+5. **Unlink / rename.** Unlink: try the hash shard first when spread, then
+   the parent shard. Rename inside a spread dir can move the dentry between
+   shards — extend the `RENAME_AT` path to create the dentry on the
+   destination shard then delete it on the source shard, following the
+   existing `CREATE_SHARD`/`UNLINK_SHARD` fan-out pattern. **This is the
+   risk item** (see the Aug 23 dual-apply rename data-loss history): a
+   crash between the two steps may leave a duplicate dentry; document the
+   reconcile rule (parent-shard row loses; hash-shard row wins) in a
+   comment and cover it with the suite's rename-over tests.
+6. **rmdir.** `efs_export_dir_empty` only sees the local child vec. For a
+   spread dir, also issue spread-READDIR (max 1 entry) to each shard until
+   any entry is found. Slow is fine.
+
+**Gates:** same suite gates as Item 1, plus a new stress (add to
+`tests/stress/`): 300k creates in one dir on bits=3, readdir count equals
+create count, peer client sees them without remount, rename churn clean,
+rmdir succeeds after emptying.
+
+### Item 3 — (optional, orthogonal) replica-3 metadata pages
+
+Meta pages currently ride the data 2+1 EC path (each CoW page = fresh ci =
+2 data + 1 parity fragments). Change: meta-designated pages store **3 full
+copies** instead. Buys double-failure durability (metadata loss kills the
+filesystem; data loss kills files — over-protect meta) and simpler catchup
+(fetch 1 copy, no XOR decode). Costs 2× metadata storage — negligible at
+metadata scale. **Hard requirement:** implement as a replica-3 bit in the
+v8 page descriptor on the *same* chunk PUT/GET/checksum/GC path — never a
+parallel storage path (two-paths-diverge is the bug class that has bitten
+us twice). The commit/fence/gen/GC protocol is untouched; expect no bug-rate
+change. Gate: kill -9 mid-flush remounts clean + the 76753ef catchup-vs-GC
+reproducer.
+
+### Rejected from the review (do not implement)
+
+- **Millions of tiny consensus groups.** Our 8 shards already produced the
+  catchup storm, dual-writer root-gen, extras-loss-on-adopt, and
+  catchup-vs-GC bugs. More groups = more of exactly that.
+- **MVCC / per-inode epochs.** CoW gen pages already give crash recovery;
+  the cost is GC, and GC is where the races were.
+- **SPDK / bypassing XFS.** Server CPU is ~2.6 cores under 9-way write;
+  the local FS is not the bottleneck. Lock contention and RPC RTTs are.
+- **Universal hash dentries.** Regresses readdir/stat locality for every
+  directory to fix the rare huge one — Item 2's threshold is the fix.
+- **Distributed range leases.** Revisit only if sub-chunk cross-client RMW
+  becomes a measured need; `append_rsv` covers today's cases.
 
 ---
 
@@ -349,6 +522,20 @@ memory and serialize time drop accordingly.
   client would face the same RPC cost. If mdtest-class numbers are ever
   needed, add an opt-in relaxed-coherence mount mode (entry_timeout>0 +
   server-driven invalidation / lease RPCs) — not a kernel module.
+
+- **`efs-mgmt` kick-clients (ops, not started):** a management call that
+  tells every `efs-fuse` to disconnect so an upgrade / wipe / rolling
+  restart cannot leave a live mount REPORT/flushing onto a new table
+  (the 232 MB leftover-client adopt). Today there is **no mount census**
+  — HELLO is node-join only; `flock_token` is per-open-hold, not a
+  registered mount; servers only see anonymous `efs_conn` slots mixed
+  with peer efsd and mgmt. A first cut can close non-peer client conns
+  on every efsd (enough to fence leftovers). A proper command
+  (`efs-mgmt disconnect-clients` / `list-clients`) needs a client
+  HELLO that records host + mountpoint + token, then a push
+  (unicast RPC or conn close) that makes `efs-fuse` umount/exit
+  rather than silently reconnect. Use before `upgrade`, mkfs, and
+  build-id rolls. Do not implement in this cut.
 
 - **readdir/lookup across shards**: the name index is per-export today; with
   sharding, dentries live in the parent's shard. `efs_export_foreach_child`

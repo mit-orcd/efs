@@ -153,6 +153,28 @@ static int export_is_placeholder(const struct efs_export *ex)
     return ex && (ex->name[0] == '\0' || strcmp(ex->name, "pending") == 0);
 }
 
+/* mkfs / find-or-create: exports start at EFS_DEFAULT_SHARD_BITS. Do not
+ * call on PUT_META placeholders — those adopt the incoming root. */
+static int export_apply_default_shards(struct efs_export *ex)
+{
+    if (!ex)
+        return EFS_ERR_INVAL;
+    if (ex->root.shard_bits)
+        return EFS_OK;
+    int rc = efs_export_rehash(ex, EFS_DEFAULT_SHARD_BITS);
+    if (rc != EFS_OK)
+        return rc;
+    ex->root.id = ex->id;
+    strncpy(ex->root.name, ex->name, EFS_MAX_NAME - 1);
+    ex->root.name[EFS_MAX_NAME - 1] = '\0';
+    /* So mkfs's CREATE_EXPORT flush actually publishes the bits=3 root.
+     * rpc_dirty alone left server_flush_fragmented_meta as a no-op
+     * (!shard_dirty), joiners never learned the export, and CREATE_SHARD
+     * came back NOT_FOUND / NOT_PRIMARY (basic_empty_file EIO). */
+    ex->shard_dirty = 1;
+    return EFS_OK;
+}
+
 struct efs_export *server_find_export(struct efsd_server *s, const char *name)
 {
     if (!s || !name || !*name)
@@ -171,6 +193,7 @@ struct efs_export *server_find_export(struct efsd_server *s, const char *name)
             ex->name[EFS_MAX_NAME - 1] = '\0';
             if (ex->id == 0)
                 ex->id = i + 1;
+            (void)export_apply_default_shards(ex);
             server_save_export(s, ex);
             return ex;
         }
@@ -181,6 +204,11 @@ struct efs_export *server_find_export(struct efsd_server *s, const char *name)
 
     struct efs_export *ex = &s->exports[s->export_count++];
     efs_export_init(ex, s->export_count, name);
+    if (export_apply_default_shards(ex) != EFS_OK) {
+        efs_export_free(ex);
+        s->export_count--;
+        return NULL;
+    }
     server_save_export(s, ex);
     return ex;
 }

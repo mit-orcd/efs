@@ -92,6 +92,16 @@ enum efs_msg_type {
      * every 2 s per peer; full GET_META only fires when a peer is newer. */
     EFS_MSG_GET_META_ROOT = 59,
     EFS_MSG_GET_META_ROOT_REPLY = 60,
+    /* Phase 3b op class (docs/scaling-roadmap.md Item 0):
+     *   Commutative  — apply unordered; max/newer wins (REPORT size/mtime).
+     *                  Size is grow-only, and a grow whose mtime is older
+     *                  than the row is dropped (stale close-REPORT must
+     *                  not undo SETATTR/O_TRUNC).
+     *   Independent  — shard-local commit (CREATE/UNLINK inside one dir,
+     *                  disjoint-chunk writes).
+     *   Conflicting  — owner-serialized RPC + dual-apply (RENAME, HOLD,
+     *                  APPEND reserve, FLOCK). If a new op is not obviously
+     *                  the first two, it is Conflicting. */
     /* Phase 2b: additional server-owned metadata mutations. Replies reuse
      * struct efs_msg_inode_reply (status + resulting inode). */
     EFS_MSG_INODE_RENAME = 61,
@@ -145,6 +155,11 @@ enum efs_msg_type {
     /* Rename a specific directory name (hard links share an ino). */
     EFS_MSG_INODE_RENAME_AT = 87,
     EFS_MSG_INODE_RENAME_AT_REPLY = 88,
+    /* Phase 3b: drop chunk mappings with chunk_index >= first on the
+     * receiving node's owned shard tables. Used by truncate / last-link
+     * unlink so extent-sharded groups on peer shards are not leaked. */
+    EFS_MSG_INODE_DROP_CHUNKS = 89,
+    EFS_MSG_INODE_DROP_CHUNKS_REPLY = 90,
 };
 
 /* Set per-export features. Only bits in set_mask are changed (to the
@@ -426,6 +441,11 @@ struct efs_msg_heal_status_reply {
     struct efs_msg_heal_status_export exports[EFS_MAX_EXPORTS];
 };
 
+/* Piggyback an open hold on CREATE so create+open is one RPC. Release
+ * still sends HOLD−1; skipping that leaks refs and last-link unlink
+ * never deletes. */
+#define EFS_CREATE_F_HOLD (1u << 0)
+
 struct efs_msg_inode_create {
     efs_export_id_t export_id;
     efs_ino_t parent;
@@ -433,6 +453,7 @@ struct efs_msg_inode_create {
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;
+    uint32_t flags;
 };
 
 /* Nested create on the target shard owner (parent owner already decided
@@ -446,6 +467,10 @@ struct efs_msg_inode_create_shard {
     uint32_t uid;
     uint32_t gid;
     uint32_t target_shard;
+    uint32_t flags;
+    /* Phase 3b: 0 = allocate; else write this ino as a dentry on
+     * target_shard (spread-dir hash shard, inode already allocated). */
+    efs_ino_t ino;
 };
 
 struct efs_msg_inode_getattr {
@@ -453,12 +478,18 @@ struct efs_msg_inode_getattr {
     efs_ino_t ino;
 };
 
+/* Return dentries with this parent from the receiver's own shard table
+ * (not the parent-owner table). Used to merge a spread directory. */
+#define EFS_READDIR_F_LOCAL_ONLY (1u << 0)
 struct efs_msg_inode_readdir {
     efs_export_id_t export_id;
     efs_ino_t parent;
     uint32_t max_ents;
     /* Skip this many matching children (pagination). Older senders leave 0. */
     uint32_t start;
+    uint32_t flags;
+    /* EFS_READDIR_F_LOCAL_ONLY: serve this shard's table. */
+    uint32_t shard;
 };
 
 struct efs_msg_inode_unlink {
@@ -594,8 +625,18 @@ struct efs_msg_inode_getchunks {
 
 struct efs_msg_inode_getchunks_reply {
     uint8_t status;
+    /* On NOT_PRIMARY: owner of the request's chunk group. */
+    efs_node_id_t primary_id;
     uint32_t count;
     struct efs_chunk_rec recs[EFS_GETCHUNKS_MAX];
+};
+
+/* Phase 3b: drop mappings with chunk_index >= first_chunk. Reply is
+ * struct efs_msg_inode_reply. */
+struct efs_msg_inode_drop_chunks {
+    efs_export_id_t export_id;
+    efs_ino_t ino;
+    uint32_t first_chunk;
 };
 
 /* Phase 2b: batched dirty-metadata report (replaces the client blob flush).

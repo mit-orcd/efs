@@ -61,8 +61,10 @@ ensure_mounted() { # host
 remount_client() { # host
     local h=$1
     say "  $h: remount efs-fuse"
-    $SSH "$h" 'fusermount3 -uz /tmp/efs/mnt 2>/dev/null; pkill -x efs-fuse; sleep 0.4
-        cd /tmp/efs && mkdir -p /tmp/efs/mnt
+    $SSH "$h" 'fusermount3 -uz /tmp/efs/mnt 2>/dev/null
+        killall -9 efs-fuse 2>/dev/null || pkill -9 -x efs-fuse 2>/dev/null || true
+        sleep 0.4
+        cd /tmp/efs && mkdir -p /tmp/efs/mnt && rm -f fuse.log
         setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &
         for i in $(seq 1 20); do
             sleep 0.5
@@ -140,17 +142,24 @@ cmd_posix2() { # [host-a] [host-b]
     say "posix2: efs A=$host_a B=$host_b mnt=$EFS_MNT"
     ensure_mounted "$host_a" || { say "  $host_a not mounted"; return 1; }
     ensure_mounted "$host_b" || { say "  $host_b not mounted"; return 1; }
-    $SSH "$host_a" "python3 '$py' --prepare '$EFS_MNT'"
-    # RPC metadata reads: B should see A's prepare without remount.
-    # Remount only if the parent is missing (and never block forever on FUSE).
-    if ! $SSH "$host_b" "timeout -k 2 15 test -d '$EFS_MNT/posix-2c'"; then
-        say "  $host_b cannot see parent yet; remounting"
-        remount_client "$host_b" || return 1
-        $SSH "$host_b" "timeout -k 2 15 test -d '$EFS_MNT/posix-2c'" || {
-            say "  $host_b still cannot see $EFS_MNT/posix-2c after remount"
-            return 1
-        }
-    fi
+    # Drop keep_last / hold fds from a prior run so rmtree of posix-2c
+    # can finish (peer_unlink_while_b_has_fd leaves a ghost dir).
+    remount_client "$host_a" || return 1
+    remount_client "$host_b" || return 1
+    $SSH "$host_a" "python3 '$py' --prepare '$EFS_MNT'" || {
+        say "  prepare failed on $host_a"
+        return 1
+    }
+    # Prepare fsyncs .keep so the testdirs are committed. Remount B so
+    # it adopts those inos — a leftover local posix-2c (same name, old
+    # ino) makes test -d succeed and then LOOKUP walks the empty old
+    # dir (ENOENT / EIO on B). Never block forever on FUSE.
+    say "  remount $host_b after prepare"
+    remount_client "$host_b" || return 1
+    $SSH "$host_b" "timeout -k 2 15 test -d '$EFS_MNT/posix-2c'" || {
+        say "  $host_b still cannot see $EFS_MNT/posix-2c after remount"
+        return 1
+    }
     python3 "$py" --remote "$host_a" "$host_b" --mnt "$EFS_MNT" \
         --results "$pdir/efs-${host_a%.ib}-${host_b%.ib}.tsv"
     local rc=$?

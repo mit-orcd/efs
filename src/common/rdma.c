@@ -1033,9 +1033,9 @@ int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms)
          * never errors when the peer vanishes (no CM to drive a state
          * transition), so without the socket a dead peer would strand the
          * waiter here forever — the conn-thread leak this fixed piled up
-         * thousands of stuck server threads. Post-upgrade the TCP channel
-         * carries no traffic, so any event on it means the peer is gone
-         * (a clean FIN polls as POLLIN). */
+         * thousands of stuck server threads. TCP still carries inode RPC
+         * and GET_META, so POLLIN is a side-channel frame (return AGAIN
+         * so the server wait loop handles it), not peer death. */
         struct pollfd pf[2] = {
             { .fd = rc->efd, .events = POLLIN },
             { .fd = rc->tcp_fd, .events = POLLIN },
@@ -1048,10 +1048,18 @@ int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms)
             rc->broken = 1;
             return EFS_ERR_NET;
         }
-        if (rc->tcp_fd >= 0 &&
-            (pf[1].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL))) {
-            rc->broken = 1;
-            return EFS_ERR_NET;
+        if (rc->tcp_fd >= 0) {
+            short ev = pf[1].revents;
+            if (ev & (POLLERR | POLLNVAL)) {
+                rc->broken = 1;
+                return EFS_ERR_NET;
+            }
+            if (ev & POLLIN)
+                return EFS_ERR_AGAIN;
+            if (ev & POLLHUP) {
+                rc->broken = 1;
+                return EFS_ERR_NET;
+            }
         }
     }
 }

@@ -1065,10 +1065,19 @@ static uint64_t inode_allocated_bytes(const struct efs_inode *ino)
         return 0;
     uint32_t nci = (uint32_t)((ino->size + (uint64_t)cs - 1) / cs);
     uint64_t alloc = 0;
-    efs_client_lock_dir(ino->ino);
-    pthread_mutex_lock(&g_client.idx_mu);
     for (uint32_t ci = 0; ci < nci; ci++) {
-        if (file_chunk_present(ino->ino, ci)) {
+        int present = 0;
+        /* idx_mu then dcache_mu deadlocks the flush path (dcache then
+         * efs_client_read → idx_mu). Check the table and dcache separately. */
+        efs_client_lock_dir(ino->ino);
+        pthread_mutex_lock(&g_client.idx_mu);
+        present = (efs_export_get_chunk(&g_client.export, ino->ino, ci,
+                                        NULL) == 0);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(ino->ino);
+        if (!present)
+            present = efs_dcache_has(ino->ino, ci);
+        if (present) {
             uint64_t start = (uint64_t)ci * cs;
             uint64_t end = start + cs;
             if (end > ino->size)
@@ -1076,8 +1085,6 @@ static uint64_t inode_allocated_bytes(const struct efs_inode *ino)
             alloc += end - start;
         }
     }
-    pthread_mutex_unlock(&g_client.idx_mu);
-    efs_client_unlock_dir(ino->ino);
     return alloc;
 }
 
@@ -1115,6 +1122,8 @@ static int efs_fuse_getattr(const char *path, struct stat *stbuf,
     int rc = lookup_path_fuse(path, &ino);
     if (rc == EFS_ERR_ACCES)
         return -EACCES;
+    if (rc == EFS_ERR_NAMETOOLONG)
+        return -ENAMETOOLONG;
     if (rc == EFS_ERR_INVAL)
         return -ENOTDIR;
     if (rc != 0)
@@ -1156,6 +1165,8 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     int rc = lookup_path_fuse(path, &parent);
     if (rc == EFS_ERR_ACCES)
         return -EACCES;
+    if (rc == EFS_ERR_NAMETOOLONG)
+        return -ENAMETOOLONG;
     if (rc == EFS_ERR_INVAL)
         return -ENOTDIR;
     if (rc != 0)
@@ -1169,47 +1180,69 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
             return -EACCES;
     }
 
-    /* Ask the primary so a peer sees creates it did not dual-apply.
-     * Fetch off-lock; filler unlocked so a same-thread getattr re-entry
-     * cannot deadlock. .stats stays lookup-only (omitted from readdir). */
+    /* Ask the owner so a peer sees creates it did not dual-apply.
+     * Spread dirs: merge LOCAL_ONLY from every shard, dedupe by name
+     * (hash-shard row wins — first insert is the hash shard when we
+     * walk shards in order and skip names already present after the
+     * hash-matching shard is collected... we just skip dups). */
     struct readdir_collect_arg col = {0};
-    uint32_t start = 0;
-    for (;;) {
-        struct efs_inode ents[EFS_READDIR_MAX];
-        uint32_t n = EFS_READDIR_MAX;
-        rc = efs_client_rpc_readdir(g_client.export_id, parent.ino, ents, &n,
-                                    start);
-        if (rc != 0) {
-            free(col.ents);
-            return (rc == EFS_ERR_NOT_FOUND) ? -ENOENT : -EIO;
-        }
-        if (n == 0)
-            break;
-        size_t need = col.count + n;
-        if (need > col.cap) {
-            size_t ncap = col.cap ? col.cap : 16;
-            while (ncap < need)
-                ncap *= 2;
-            struct readdir_ent *ne = realloc(col.ents, ncap * sizeof(*ne));
-            if (!ne) {
+    uint32_t bits = g_client.export.root.shard_bits;
+    uint32_t sc = g_client.export.root.shard_count;
+    int spread = efs_inode_dir_is_spread(&parent) && bits && sc > 1;
+    uint32_t nshard = spread ? sc : 1;
+    for (uint32_t s = 0; s < nshard; s++) {
+        uint32_t start = 0;
+        for (;;) {
+            struct efs_inode ents[EFS_READDIR_MAX];
+            uint32_t n = EFS_READDIR_MAX;
+            if (spread)
+                rc = efs_client_rpc_readdir_ex(g_client.export_id, parent.ino,
+                                               ents, &n, start,
+                                               EFS_READDIR_F_LOCAL_ONLY, s);
+            else
+                rc = efs_client_rpc_readdir(g_client.export_id, parent.ino,
+                                            ents, &n, start);
+            if (rc != 0) {
                 free(col.ents);
-                return -ENOMEM;
+                return (rc == EFS_ERR_NOT_FOUND) ? -ENOENT : -EIO;
             }
-            col.ents = ne;
-            col.cap = ncap;
+            if (n == 0)
+                break;
+            size_t need = col.count + n;
+            if (need > col.cap) {
+                size_t ncap = col.cap ? col.cap : 16;
+                while (ncap < need)
+                    ncap *= 2;
+                struct readdir_ent *ne = realloc(col.ents, ncap * sizeof(*ne));
+                if (!ne) {
+                    free(col.ents);
+                    return -ENOMEM;
+                }
+                col.ents = ne;
+                col.cap = ncap;
+            }
+            for (uint32_t i = 0; i < n; i++) {
+                if (ents[i].ino == 0 || ents[i].name[0] == '\0')
+                    continue;
+                int dup = 0;
+                for (size_t j = 0; j < col.count; j++) {
+                    if (strcmp(col.ents[j].name, ents[i].name) == 0) {
+                        dup = 1;
+                        break;
+                    }
+                }
+                if (dup)
+                    continue;
+                struct readdir_ent *e = &col.ents[col.count++];
+                memset(e, 0, sizeof(*e));
+                strncpy(e->name, ents[i].name, EFS_MAX_NAME - 1);
+                e->st.st_ino = ents[i].ino;
+                e->st.st_mode = ents[i].mode;
+            }
+            start += n;
+            if (n < EFS_READDIR_MAX)
+                break;
         }
-        for (uint32_t i = 0; i < n; i++) {
-            if (ents[i].ino == 0 || ents[i].name[0] == '\0')
-                continue;
-            struct readdir_ent *e = &col.ents[col.count++];
-            memset(e, 0, sizeof(*e));
-            strncpy(e->name, ents[i].name, EFS_MAX_NAME - 1);
-            e->st.st_ino = ents[i].ino;
-            e->st.st_mode = ents[i].mode;
-        }
-        start += n;
-        if (n < EFS_READDIR_MAX)
-            break;
     }
 
     filler(buf, ".", NULL, 0, 0);
@@ -1226,6 +1259,8 @@ static int efs_fuse_access(const char *path, int mask)
     int lrc = lookup_path_fuse(path, &ino);
     if (lrc == EFS_ERR_ACCES)
         return -EACCES;
+    if (lrc == EFS_ERR_NAMETOOLONG)
+        return -ENAMETOOLONG;
     if (lrc == EFS_ERR_INVAL)
         return -ENOTDIR;
     if (lrc != 0)
@@ -1267,6 +1302,8 @@ static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
     int lrc = lookup_path_fuse(path, &ino);
     if (lrc == EFS_ERR_ACCES)
         return -EACCES;
+    if (lrc == EFS_ERR_NAMETOOLONG)
+        return -ENAMETOOLONG;
     if (lrc == EFS_ERR_INVAL)
         return -ENOTDIR;
     if (lrc != 0)
@@ -2084,21 +2121,35 @@ static off_t append_reserve_offset(efs_ino_t ino, uint64_t len)
     int rc = EFS_ERR_BUSY;
     for (int attempt = 0; attempt < 2000; attempt++) {
         rc = efs_client_rpc_append_reserve(g_client.export_id, ino, len, &ns);
-        if (rc != EFS_ERR_BUSY)
+        if (rc == EFS_OK && ns >= len) {
+            uint64_t off = ns - len;
+            uint64_t local = (uint64_t)append_end_offset(ino);
+            /* Close only kicks REPORT (async). Same-client write-then-
+             * append used to trust a still-0 owner size and overwrite. */
+            if (local <= off)
+                break;
+        } else if (rc != EFS_ERR_BUSY) {
             break;
+        }
         /* Flush without g_append_mu: other appenders, close, and writeback
          * of this ino must run so REPORT can release the server barrier. */
         pthread_mutex_unlock(&g_append_mu);
         (void)coal_flush_ino(ino);
         (void)efs_wb_sync_ino(ino);
         (void)efs_dcache_flush_ino(ino);
-        (void)efs_client_report_dirty(0);
-        usleep(5000);
+        (void)efs_client_report_dirty(rc == EFS_OK ? 1 : 0);
+        if (rc != EFS_OK)
+            usleep(5000);
         pthread_mutex_lock(&g_append_mu);
     }
     if (rc != EFS_OK || ns < len)
         return append_end_offset(ino);
     uint64_t off = ns - len;
+    uint64_t local_end = (uint64_t)append_end_offset(ino);
+    if (local_end > off) {
+        off = local_end;
+        ns = local_end + len;
+    }
     if (len > 0) {
         uint32_t cs = g_client.export.chunk_size ? g_client.export.chunk_size
                                                  : EFS_CHUNK_SIZE;
@@ -2321,9 +2372,11 @@ static int efs_fuse_flush(const char *path, struct fuse_file_info *fi)
         efs_fuse_log_err("flush", rc, 0, 0, 0, path);
         return -EIO;
     }
-    /* Publish size/chunk mappings to the primary so a peer getattr/read
-     * via RPC sees this close (not only after the batched meta flush). */
-    (void)efs_client_report_dirty(0);
+    /* Publish size/chunk mappings so a peer getattr/read sees this close.
+     * Kick the reporter; do not block the FUSE worker on REPORT_CHUNKS
+     * (9-way create was ~250 ms/file waiting here). posix2 A→B is an
+     * SSH barrier, so the async report lands before B looks. */
+    efs_client_kick_meta_flush();
     return 0;
 }
 
@@ -2356,21 +2409,49 @@ static int efs_fuse_create(const char *path, mode_t mode, struct fuse_file_info 
         return wx;
 
     struct fuse_context *ctx = fuse_get_context();
-    efs_ino_t ino = efs_client_create(parent.ino, name, S_IFREG | mode,
-                                      ctx->uid, ctx->gid);
+    efs_ino_t ino = efs_client_create_ex(parent.ino, name, S_IFREG | mode,
+                                         ctx->uid, ctx->gid,
+                                         fi ? EFS_CREATE_F_HOLD : 0);
     if (ino == 0) {
         int e = fuse_create_errno(parent.ino, name);
-        if (e != -EEXIST)
-            fprintf(stderr, "create %s failed (%s)\n", path,
-                    e == -EIO ? "EIO" : "err");
-        return e;
+        /* O_CREAT without O_EXCL: a retry after a successful CREATE (or a
+         * peer winning the name) must open the existing file, not fail. */
+        if (e == -EEXIST && fi && !(fi->flags & O_EXCL)) {
+            /* CREATE_SHARD can win the ino before the parent dentry
+             * is visible; unlink-storm then saw FileExistsError on
+             * open("w") of a unique name. Retry LOOKUP briefly. */
+            struct efs_inode exist;
+            int found = 0;
+            for (int t = 0; t < 8 && !found; t++) {
+                if (efs_client_rpc_lookup(g_client.export_id, parent.ino,
+                                          name, &exist) == EFS_OK)
+                    found = 1;
+                else if (t < 7)
+                    usleep(1000u << t);
+            }
+            if (found) {
+                ino = exist.ino;
+                if (fi->flags & O_TRUNC)
+                    (void)efs_client_truncate(ino, 0);
+                (void)efs_client_rpc_hold(g_client.export_id, ino, 1,
+                                          g_client.flock_token);
+            } else {
+                if (e != -EEXIST)
+                    fprintf(stderr, "create %s failed (%s)\n", path,
+                            e == -EIO ? "EIO" : "err");
+                return e;
+            }
+        } else {
+            if (e != -EEXIST)
+                fprintf(stderr, "create %s failed (%s)\n", path,
+                        e == -EIO ? "EIO" : "err");
+            return e;
+        }
     }
     if (fi) {
         fi->fh = ino;
         if (fi->flags & O_DIRECT)
             fi->direct_io = 1;
-        (void)efs_client_rpc_hold(g_client.export_id, ino, 1,
-                                  g_client.flock_token);
     }
     return 0;
 }
@@ -2562,7 +2643,7 @@ static int efs_fuse_statfs(const char *path, struct statvfs *stbuf)
     stbuf->f_files = g_client.export.inode_count + ino_room;
     stbuf->f_ffree = ino_room;
     stbuf->f_favail = ino_room;
-    stbuf->f_namemax = EFS_MAX_NAME;
+    stbuf->f_namemax = 255; /* NAME_MAX; EFS_MAX_NAME is 256 with NUL */
     (void)ch_pg;
 
     pthread_mutex_unlock(&g_client.lock);
@@ -2580,6 +2661,7 @@ static int efs_rc_to_errno(int rc)
     case EFS_ERR_QUOTA:     return -ENOSPC;
     case EFS_ERR_NOT_EMPTY: return -ENOTEMPTY;
     case EFS_ERR_ACCES:     return -EACCES;
+    case EFS_ERR_NAMETOOLONG: return -ENAMETOOLONG;
     case EFS_ERR_NO_QUORUM:
     case EFS_ERR_NET:
     default:                return -EIO;

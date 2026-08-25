@@ -48,12 +48,24 @@ static struct efs_export *table_for_ino(struct efs_export *ex, efs_ino_t ino)
 #define EFS_FLOCK_NB 4u
 #define EFS_FLOCK_UN 8u
 
+/* Open-addressed buckets: rsync create+HOLD walked a single list of
+ * every live hold (~10% of server cycles at 14k files). */
+#define EFS_HOLD_BUCK 4096u
+static struct efs_ino_hold *hold_buck[EFS_HOLD_BUCK];
+
+static uint32_t hold_hash(efs_export_id_t eid, efs_ino_t ino)
+{
+    uint64_t x = ((uint64_t)eid << 1) ^ (uint64_t)ino * 0x9e3779b97f4a7c15ull;
+    return (uint32_t)(x ^ (x >> 32));
+}
+
 /* Caller holds g_server->lock. */
 static struct efs_ino_hold *hold_find(efs_export_id_t eid, efs_ino_t ino,
                                       int create)
 {
+    uint32_t b = hold_hash(eid, ino) & (EFS_HOLD_BUCK - 1u);
     struct efs_ino_hold *h;
-    for (h = g_server->ino_holds; h; h = h->next) {
+    for (h = hold_buck[b]; h; h = h->next) {
         if (h->eid == eid && h->ino == ino)
             return h;
     }
@@ -64,8 +76,8 @@ static struct efs_ino_hold *hold_find(efs_export_id_t eid, efs_ino_t ino,
         return NULL;
     h->eid = eid;
     h->ino = ino;
-    h->next = g_server->ino_holds;
-    g_server->ino_holds = h;
+    h->next = hold_buck[b];
+    hold_buck[b] = h;
     return h;
 }
 
@@ -73,6 +85,13 @@ static uint32_t hold_refs(efs_export_id_t eid, efs_ino_t ino)
 {
     struct efs_ino_hold *h = hold_find(eid, ino, 0);
     return h ? h->refs : 0;
+}
+
+static void hold_inc(efs_export_id_t eid, efs_ino_t ino)
+{
+    struct efs_ino_hold *h = hold_find(eid, ino, 1);
+    if (h)
+        h->refs++;
 }
 
 static uint32_t server_nlive_locked(struct efsd_server *s, efs_node_id_t *live)
@@ -130,6 +149,8 @@ static efs_ino_t inode_rpc_key(uint8_t type, const void *payload)
         return ((const struct efs_msg_inode_hold *)payload)->ino;
     case EFS_MSG_INODE_FLOCK:
         return ((const struct efs_msg_inode_flock *)payload)->ino;
+    case EFS_MSG_INODE_DROP_CHUNKS:
+        return ((const struct efs_msg_inode_drop_chunks *)payload)->ino;
     default:
         return EFS_ROOT_INO;
     }
@@ -248,6 +269,66 @@ static int server_peer_create_shard(const char *host, uint16_t port,
                                  out);
 }
 
+/* Last-link unlink / truncate: drop mappings on every owned table, then
+ * fan to the other shard owners. Caller holds s->lock (may drop it). */
+static void fan_drop_chunks(struct efsd_server *s, struct efs_export *ex,
+                            efs_export_id_t eid, efs_ino_t ino,
+                            uint32_t first)
+{
+    if (!s || !ex || !ino)
+        return;
+    uint32_t bits = ex->root.shard_bits;
+    uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+    if (bits && sc > 1) {
+        efs_node_id_t live[EFS_MAX_NODES];
+        uint32_t nlive = server_nlive_locked(s, live);
+        for (uint32_t sh = 0; sh < sc; sh++) {
+            if (efs_shard_owner_of(sh, sc, live, nlive) == s->id)
+                (void)server_ensure_shard_ready(s, ex, sh);
+        }
+    }
+    efs_export_drop_chunks_from(ex, ino, first);
+    if (!bits || sc <= 1)
+        return;
+    efs_node_id_t live[EFS_MAX_NODES];
+    uint32_t nlive = server_nlive_locked(s, live);
+    efs_node_id_t seen[EFS_MAX_NODES];
+    uint32_t nseen = 0;
+    seen[nseen++] = s->id;
+    struct efs_msg_inode_drop_chunks req;
+    memset(&req, 0, sizeof(req));
+    req.export_id = eid;
+    req.ino = ino;
+    req.first_chunk = first;
+    for (uint32_t sh = 0; sh < sc; sh++) {
+        efs_node_id_t own = efs_shard_owner_of(sh, sc, live, nlive);
+        if (!own)
+            continue;
+        int already = 0;
+        for (uint32_t i = 0; i < nseen; i++) {
+            if (seen[i] == own) {
+                already = 1;
+                break;
+            }
+        }
+        if (already)
+            continue;
+        if (nseen < EFS_MAX_NODES)
+            seen[nseen++] = own;
+        char host[64];
+        uint16_t port = 0;
+        if (server_node_addr_locked(s, own, host, sizeof(host), &port) != 0)
+            continue;
+        pthread_mutex_unlock(&s->lock);
+        struct efs_msg_inode_reply ur;
+        memset(&ur, 0, sizeof(ur));
+        (void)server_peer_inode_rpc(host, port, EFS_MSG_INODE_DROP_CHUNKS,
+                                    &req, sizeof(req),
+                                    EFS_MSG_INODE_DROP_CHUNKS_REPLY, &ur);
+        pthread_mutex_lock(&s->lock);
+    }
+}
+
 /* Wait for the next request on either channel of an RDMA-capable conn.
  * Returns EFS_CONN_TCP / EFS_CONN_RDMA, or -1 on error / peer close.
  * Pure-TCP conns return EFS_CONN_TCP immediately (caller blocks in recv). */
@@ -290,8 +371,22 @@ static int conn_wait_request(struct efs_conn *conn)
             return -1;
         if (pf[0].revents & POLLIN)
             return EFS_CONN_TCP;
-        if (pf[1].revents & POLLIN)
-            return EFS_CONN_RDMA; /* recv_wait harvests the CQ event */
+        if (pf[1].revents & POLLIN) {
+            /* efd is level-triggered leftovers after a consumed RDMA
+             * frame or a send-side wake. Only take RDMA when a recv is
+             * actually queued — otherwise recv_wait(-1) blocks forever
+             * and treats a later TCP request as peer death. */
+            int r2 = efs_rdma_reply_ready_quick(rc);
+            if (r2 < 0)
+                return -1;
+            if (r2 > 0)
+                return EFS_CONN_RDMA;
+            uint64_t tmp;
+            if (read(efs_rdma_reply_fd(rc), &tmp, sizeof(tmp)) < 0 &&
+                errno != EAGAIN)
+                return -1;
+            continue;
+        }
     }
 }
 
@@ -388,7 +483,10 @@ void server_handle_conn(struct efs_conn *conn)
         if (chan == EFS_CONN_RDMA) {
             /* The payload aliases a QP recv pool buffer; it is reposted
              * after the switch (every handler consumes it synchronously). */
-            if (efs_rdma_recv_wait(conn->rc, -1) != 0)
+            int wr = efs_rdma_recv_wait(conn->rc, -1);
+            if (wr == EFS_ERR_AGAIN)
+                continue; /* TCP side-channel has a request */
+            if (wr != 0)
                 break;
             uint32_t flen = 0;
             uint8_t *frame = efs_rdma_recv_frame(conn->rc, &flen);
@@ -1447,6 +1545,9 @@ send_reply:
                         if (ex != NULL) {
                             ex->chunk_size = chunk_size;
                             server_save_export(g_server, ex);
+                            int cidx = server_export_index_locked(g_server, ex);
+                            server_meta_mark_rpc_dirty_locked(
+                                g_server, cidx >= 0 ? (uint32_t)cidx : 0);
                             reply = EFS_CREATE_EXPORT_OK;
                         }
                     } else {
@@ -1614,7 +1715,8 @@ send_reply:
         case EFS_MSG_INODE_LINK_SHARD:
         case EFS_MSG_INODE_UNLINK_SHARD:
         case EFS_MSG_INODE_HOLD:
-        case EFS_MSG_INODE_FLOCK: {
+        case EFS_MSG_INODE_FLOCK:
+        case EFS_MSG_INODE_DROP_CHUNKS: {
             struct efs_msg_inode_reply r;
             memset(&r, 0, sizeof(r));
             r.status = EFS_INODE_RPC_ERROR;
@@ -1664,6 +1766,9 @@ send_reply:
             else if (type == EFS_MSG_INODE_FLOCK &&
                      payload_len >= sizeof(struct efs_msg_inode_flock))
                 eid = ((struct efs_msg_inode_flock *)payload)->export_id;
+            else if (type == EFS_MSG_INODE_DROP_CHUNKS &&
+                     payload_len >= sizeof(struct efs_msg_inode_drop_chunks))
+                eid = ((struct efs_msg_inode_drop_chunks *)payload)->export_id;
             for (uint32_t i = 0; i < g_server->export_count; i++) {
                 if (g_server->exports[i].id == eid ||
                     (eid == 0 && i == 0)) {
@@ -1676,6 +1781,7 @@ send_reply:
                 r.status = EFS_INODE_RPC_NOT_FOUND;
             } else if (type != EFS_MSG_INODE_LOOKUP &&
                        type != EFS_MSG_INODE_GETATTR &&
+                       type != EFS_MSG_INODE_DROP_CHUNKS &&
                        !server_owns_req_locked(g_server, ex, type, payload)) {
                 r.status = EFS_INODE_RPC_NOT_PRIMARY;
                 r.primary_id = server_shard_owner_id_locked(g_server, ex, type,
@@ -1702,7 +1808,12 @@ send_reply:
                         r.status = EFS_INODE_RPC_NOT_FOUND;
                 }
             } else if (type == EFS_MSG_INODE_CREATE) {
+                /* Phase 3b Independent: shard-local create. Spread dirs
+                 * place the dentry on hash(parent,name); inode still RR. */
                 struct efs_msg_inode_create *req = payload;
+                uint32_t cflags = 0;
+                if (payload_len >= sizeof(*req))
+                    cflags = req->flags;
                 efs_node_id_t live[EFS_MAX_NODES];
                 uint32_t nlive = server_nlive_locked(g_server, live);
                 uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
@@ -1735,7 +1846,11 @@ send_reply:
                         creq.uid = req->uid;
                         creq.gid = req->gid;
                         creq.target_shard = target;
-                        if (server_node_addr_locked(g_server, owner, host,
+                        creq.flags = cflags;
+                        creq.ino = efs_export_alloc_ino_for_shard(ex, target);
+                        if (!creq.ino) {
+                            r.status = EFS_INODE_RPC_ERROR;
+                        } else if (server_node_addr_locked(g_server, owner, host,
                                                     sizeof(host), &port) != 0) {
                             r.status = EFS_INODE_RPC_ERROR;
                         } else {
@@ -1751,19 +1866,63 @@ send_reply:
                                 r.status = cr.status;
                                 r.primary_id = cr.primary_id;
                             } else {
-                                struct efs_export *ptab =
-                                    table_for_ino(ex, req->parent);
-                                if (!efs_export_create_with_ino(
-                                        ptab, cr.inode.ino, req->parent,
-                                        req->mode, (uid_t)req->uid,
-                                        (gid_t)req->gid, req->name)) {
-                                    r.status = EFS_INODE_RPC_EXIST;
-                                } else {
-                                    ptab->shard_dirty = 1;
+                                uint32_t psh = efs_export_shard_of(req->parent,
+                                                                   bits);
+                                uint32_t dsh = psh;
+                                if (efs_export_dir_is_spread(ex, req->parent))
+                                    dsh = efs_export_dentry_shard_of(
+                                        req->parent, req->name, bits);
+                                efs_node_id_t down =
+                                    efs_shard_owner_of(dsh, sc, live, nlive);
+                                if (dsh == target) {
                                     r.inode = cr.inode;
                                     r.status = EFS_INODE_RPC_OK;
                                     server_meta_mark_rpc_dirty_locked(g_server,
                                                                       eidx);
+                                } else if (down == 0 || down == g_server->id) {
+                                    struct efs_export *dtab =
+                                        efs_export_table(ex, dsh);
+                                    if (!dtab || !efs_export_create_with_ino(
+                                            dtab, cr.inode.ino, req->parent,
+                                            req->mode, (uid_t)req->uid,
+                                            (gid_t)req->gid, req->name)) {
+                                        r.status = EFS_INODE_RPC_EXIST;
+                                    } else {
+                                        dtab->shard_dirty = 1;
+                                        r.inode = cr.inode;
+                                        r.status = EFS_INODE_RPC_OK;
+                                        server_meta_mark_rpc_dirty_locked(
+                                            g_server, eidx);
+                                    }
+                                } else {
+                                    struct efs_msg_inode_create_shard dreq = creq;
+                                    struct efs_msg_inode_reply dr;
+                                    char dhost[64];
+                                    uint16_t dport = 0;
+                                    memset(&dr, 0, sizeof(dr));
+                                    memset(dhost, 0, sizeof(dhost));
+                                    dreq.target_shard = dsh;
+                                    dreq.ino = cr.inode.ino;
+                                    if (server_node_addr_locked(g_server, down,
+                                                                dhost,
+                                                                sizeof(dhost),
+                                                                &dport) != 0) {
+                                        r.status = EFS_INODE_RPC_ERROR;
+                                    } else {
+                                        pthread_mutex_unlock(&g_server->lock);
+                                        int drc = server_peer_create_shard(
+                                            dhost, dport, &dreq, &dr);
+                                        pthread_mutex_lock(&g_server->lock);
+                                        if (drc != 0 ||
+                                            dr.status != EFS_INODE_RPC_OK) {
+                                            r.status = EFS_INODE_RPC_ERROR;
+                                        } else {
+                                            r.inode = cr.inode;
+                                            r.status = EFS_INODE_RPC_OK;
+                                            server_meta_mark_rpc_dirty_locked(
+                                                g_server, eidx);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1778,6 +1937,8 @@ send_reply:
                     if (ino) {
                         efs_export_get_inode(ex, ino, &r.inode);
                         r.status = EFS_INODE_RPC_OK;
+                        if (cflags & EFS_CREATE_F_HOLD)
+                            hold_inc(ex->id, ino);
                         ex->shard_dirty = 1;
                         server_meta_mark_rpc_dirty_locked(g_server, eidx);
                         efs_export_evict_cold_shards(ex, EFS_SHARD_LRU_KEEP);
@@ -1787,6 +1948,9 @@ send_reply:
                 }
             } else if (type == EFS_MSG_INODE_CREATE_SHARD) {
                 struct efs_msg_inode_create_shard *req = payload;
+                uint32_t cflags = 0;
+                if (payload_len >= sizeof(*req))
+                    cflags = req->flags;
                 uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
                 if (req->target_shard >= sc) {
                     r.status = EFS_INODE_RPC_INVAL;
@@ -1799,8 +1963,11 @@ send_reply:
                     if (!ctab || !efs_export_fits_page_cap(ctab, 1, 0)) {
                         r.status = EFS_INODE_RPC_QUOTA;
                     } else {
-                        efs_ino_t ino = efs_export_alloc_ino(ctab,
-                                                            req->target_shard);
+                        efs_ino_t given = 0;
+                        if (payload_len >= sizeof(*req))
+                            given = req->ino;
+                        efs_ino_t ino = given ? given
+                            : efs_export_alloc_ino(ctab, req->target_shard);
                         if (!ino ||
                             !efs_export_create_with_ino(ctab, ino, req->parent,
                                                         req->mode,
@@ -1812,6 +1979,8 @@ send_reply:
                             ctab->shard_dirty = 1;
                             efs_export_get_inode(ctab, ino, &r.inode);
                             r.status = EFS_INODE_RPC_OK;
+                            if (cflags & EFS_CREATE_F_HOLD)
+                                hold_inc(ex->id, ino);
                             server_meta_mark_rpc_dirty_locked(g_server, eidx);
                         }
                     }
@@ -1883,6 +2052,9 @@ send_reply:
                                 }
                             }
                         }
+                        if (urc == 0 && have_victim && !req->is_dir && !keep)
+                            fan_drop_chunks(g_server, ex, req->export_id,
+                                            victim.ino, 0);
                     }
                 }
             } else if (type == EFS_MSG_INODE_UNLINK_SHARD) {
@@ -1896,6 +2068,9 @@ send_reply:
                 if (urc == 0) {
                     r.status = EFS_INODE_RPC_OK;
                     server_meta_mark_rpc_dirty_locked(g_server, eidx);
+                    if (!keep && r.inode.nlink == 0)
+                        fan_drop_chunks(g_server, ex, req->export_id,
+                                        req->src_ino, 0);
                 } else {
                     r.status = (urc == EFS_ERR_NOT_FOUND)
                                    ? EFS_INODE_RPC_NOT_FOUND
@@ -1921,6 +2096,7 @@ send_reply:
                              : EFS_INODE_RPC_INVAL;
                 }
             } else if (type == EFS_MSG_INODE_RENAME) {
+                /* Phase 3b Conflicting: owner-serialized + dual-apply. */
                 struct efs_msg_inode_rename *req = payload;
                 int rrc = efs_export_rename(ex, req->ino, req->new_parent,
                                             req->new_name);
@@ -1957,12 +2133,14 @@ send_reply:
                         /* Shrink: drop chunks wholly beyond the new size. The
                          * client rewrites the partial last kept chunk (data
                          * path) before calling, so here we only trim whole
-                         * chunks. */
+                         * chunks. Extent-sharded groups live on many shards
+                         * — fan the drop. */
                         if (req->size < cur.size) {
                             uint32_t cs = server_data_chunk_size(ex);
                             uint32_t first_drop = (req->size == 0) ? 0
                                 : (uint32_t)((req->size + cs - 1) / cs);
-                            efs_export_drop_chunks_from(tab, req->ino, first_drop);
+                            fan_drop_chunks(g_server, ex, req->export_id,
+                                            req->ino, first_drop);
                         }
                         efs_export_set_size(tab, req->ino, req->size);
                     }
@@ -2207,6 +2385,29 @@ send_reply:
                         r.status = EFS_INODE_RPC_INVAL;
                     }
                 }
+            } else if (type == EFS_MSG_INODE_DROP_CHUNKS) {
+                struct efs_msg_inode_drop_chunks *req = payload;
+                if (payload_len < sizeof(*req)) {
+                    r.status = EFS_INODE_RPC_INVAL;
+                } else {
+                    uint32_t bits = ex->root.shard_bits;
+                    uint32_t sc = ex->root.shard_count
+                                      ? ex->root.shard_count : 1;
+                    if (bits && sc > 1) {
+                        efs_node_id_t live[EFS_MAX_NODES];
+                        uint32_t nlive = server_nlive_locked(g_server, live);
+                        for (uint32_t sh = 0; sh < sc; sh++) {
+                            if (efs_shard_owner_of(sh, sc, live, nlive) ==
+                                g_server->id)
+                                (void)server_ensure_shard_ready(g_server, ex,
+                                                                sh);
+                        }
+                    }
+                    efs_export_drop_chunks_from(ex, req->ino, req->first_chunk);
+                    ex->shard_dirty = 1;
+                    server_meta_mark_rpc_dirty_locked(g_server, eidx);
+                    r.status = EFS_INODE_RPC_OK;
+                }
             }
             pthread_mutex_unlock(&g_server->lock);
             uint8_t rtype = (type == EFS_MSG_INODE_LOOKUP) ? EFS_MSG_INODE_LOOKUP_REPLY
@@ -2222,6 +2423,7 @@ send_reply:
                           : (type == EFS_MSG_INODE_UNLINK_SHARD) ? EFS_MSG_INODE_UNLINK_SHARD_REPLY
                           : (type == EFS_MSG_INODE_HOLD) ? EFS_MSG_INODE_HOLD_REPLY
                           : (type == EFS_MSG_INODE_FLOCK) ? EFS_MSG_INODE_FLOCK_REPLY
+                          : (type == EFS_MSG_INODE_DROP_CHUNKS) ? EFS_MSG_INODE_DROP_CHUNKS_REPLY
                           : EFS_MSG_INODE_UNLINK_REPLY;
             efs_conn_send_msg(conn, rtype, &r, sizeof(r));
             break;
@@ -2275,11 +2477,8 @@ send_reply:
                         r.status = EFS_INODE_RPC_SYMLINK;
                         break;
                     }
-                    if (more && (req->flags & EFS_LOOKUP_PATH_F_ANCESTORS)) {
-                        if (r.ancestor_count >= EFS_LOOKUP_PATH_MAX_DEPTH) {
-                            r.status = EFS_INODE_RPC_DEEP;
-                            break;
-                        }
+                    if (more && (req->flags & EFS_LOOKUP_PATH_F_ANCESTORS) &&
+                        r.ancestor_count < EFS_LOOKUP_PATH_MAX_DEPTH) {
                         struct efs_lookup_path_anc *a =
                             &r.ancestors[r.ancestor_count++];
                         a->ino = row.ino;
@@ -2287,6 +2486,9 @@ send_reply:
                         a->uid = row.uid;
                         a->gid = row.gid;
                     }
+                    /* Never abort with DEEP: a 65+ component dest-stat
+                     * (rsync of deep_skinny_chain) used to PROTO-fallback
+                     * to one LOOKUP RPC per component. Keep walking. */
                     parent = row.ino;
                     r.inode = row;
                     r.status = EFS_INODE_RPC_OK;
@@ -2299,9 +2501,9 @@ send_reply:
             break;
         }
         case EFS_MSG_REPORT_CHUNKS: {
-            /* Phase 2b: batched write-path chunk mappings. Applies each record
-             * to the in-memory table and marks the export dirty; the meta-flush
-             * thread persists it. Primary-only (it is a mutation). */
+            /* Phase 3b Commutative: size grow-only, mtime newer-only.
+             * Chunk recs route by chunk_shard_of(ino, index); inode size
+             * recs stay on shard_of(ino). */
             struct efs_msg_inode_reply r;
             memset(&r, 0, sizeof(r));
             r.status = EFS_INODE_RPC_ERROR;
@@ -2364,7 +2566,9 @@ send_reply:
                     uint8_t seen[EFS_META_MAX_SHARDS];
                     memset(seen, 0, sizeof(seen));
                     for (uint32_t k = 0; k < count && !shard_busy; k++) {
-                        uint32_t sh = efs_export_shard_of(recs[k].ino, bits);
+                        uint32_t sh = efs_export_chunk_shard_of(recs[k].ino,
+                                                                recs[k].chunk_index,
+                                                                bits);
                         if (sh >= EFS_META_MAX_SHARDS || seen[sh])
                             continue;
                         seen[sh] = 1;
@@ -2406,7 +2610,8 @@ send_reply:
                             break;
                     }
                     if (bits && sc > 1) {
-                        uint32_t sh = efs_export_shard_of(recs[k].ino, bits);
+                        uint32_t sh = efs_export_chunk_shard_of(
+                            recs[k].ino, recs[k].chunk_index, bits);
                         efs_node_id_t own =
                             efs_shard_owner_of(sh, sc, live, nlive);
                         if (own != g_server->id) {
@@ -2416,12 +2621,15 @@ send_reply:
                             continue;
                         }
                     }
-                    struct efs_export *tab = table_for_ino(ex, recs[k].ino);
-                    if (efs_export_set_chunk(tab, recs[k].ino, recs[k].chunk_index,
+                    /* Route by chunk group, not inode shard. */
+                    if (efs_export_set_chunk(ex, recs[k].ino, recs[k].chunk_index,
                                              recs[k].nodes,
                                              recs[k].checksums) == 0) {
                         applied++;
-                        tab->shard_dirty = 1;
+                        struct efs_export *tab = efs_export_table_for_chunk(
+                            ex, recs[k].ino, recs[k].chunk_index);
+                        if (tab)
+                            tab->shard_dirty = 1;
                     }
                 }
                 /* Write-path size/mtime. Use norollup: the rolling
@@ -2444,12 +2652,21 @@ send_reply:
                     struct efs_inode cur;
                     if (efs_export_get_inode(tab, irecs[k].ino, &cur) != 0)
                         continue; /* inode not (yet) on the server; skip */
-                    /* Grow-only: a lagging client's report must not shrink a
-                     * size another client already advanced (cross-client
-                     * O_APPEND reserves size server-side ahead of its data
-                     * report). Shrinks only ever arrive via SETATTR. Same for
-                     * mtime: apply only when newer. */
-                    if (irecs[k].size > cur.size &&
+                    /* Grow-only: a lagging report must not shrink an
+                     * O_APPEND reserve (size advances server-side ahead
+                     * of the data report). Shrinks only arrive via
+                     * SETATTR. A stale close-REPORT must also not *grow*
+                     * over a newer setattr: wr() close kicks REPORT
+                     * async, O_TRUNC setattr size=0, then the pre-trunc
+                     * report lands and grow-only restores the old size
+                     * (posix2 peer_o_trunc_visible: B still saw 10).
+                     * SETATTR size stamps mtime=now; reject a grow whose
+                     * mtime is older than the row. */
+                    int report_stale =
+                        irecs[k].mtime < cur.mtime ||
+                        (irecs[k].mtime == cur.mtime &&
+                         irecs[k].mtime_nsec < cur.mtime_nsec);
+                    if (irecs[k].size > cur.size && !report_stale &&
                         efs_export_set_size_norollup(tab, irecs[k].ino,
                                                      irecs[k].size) == 0) {
                         applied++;
@@ -2532,7 +2749,20 @@ send_reply:
                 if (!ex) {
                     r.status = EFS_INODE_RPC_NOT_FOUND;
                 } else {
+                    uint32_t flags = 0, want_shard = 0;
+                    if (payload_len >= sizeof(*req)) {
+                        flags = req->flags;
+                        want_shard = req->shard;
+                    }
                     struct efs_export *tab = table_for_ino(ex, req->parent);
+                    if (flags & EFS_READDIR_F_LOCAL_ONLY) {
+                        if (ex->root.shard_bits)
+                            (void)server_ensure_shard_ready(g_server, ex,
+                                                            want_shard);
+                        tab = efs_export_table(ex, want_shard);
+                        if (!tab)
+                            tab = ex;
+                    }
                     uint32_t max = req->max_ents;
                     if (max == 0 || max > EFS_READDIR_MAX)
                         max = EFS_READDIR_MAX;
@@ -2577,52 +2807,48 @@ send_reply:
                 }
                 if (!ex) {
                     r.status = EFS_INODE_RPC_NOT_FOUND;
-                } else if (server_ensure_shard_ready(
-                               g_server, ex,
-                               ex->root.shard_bits
-                                   ? efs_export_shard_of(req->ino,
-                                                         ex->root.shard_bits)
-                                   : 0) != 0) {
-                    r.status = EFS_INODE_RPC_BUSY;
                 } else {
-                    struct efs_export *tab = table_for_ino(ex, req->ino);
-                    struct efs_inode ino;
-                    if (efs_export_get_inode(tab, req->ino, &ino) != 0) {
-                        r.status = EFS_INODE_RPC_NOT_FOUND;
-                    } else {
-                        uint32_t cs = server_data_chunk_size(ex);
-                        uint64_t bytes = ino.size;
-                        if (ino.pack_len > bytes)
-                            bytes = ino.pack_len;
-                        uint32_t nci = 0;
-                        if (cs && bytes)
-                            nci = (uint32_t)((bytes + cs - 1) / cs);
-                        uint32_t max = req->max;
-                        if (max == 0 || max > EFS_GETCHUNKS_MAX)
-                            max = EFS_GETCHUNKS_MAX;
-                        /* Indexed only. A size-0 pack container still has
-                         * chunks; the client names the window (pack_off).
-                         * Never walk ex->chunks[] — that is O(table) under
-                         * g_server->lock and stalled the cluster. */
-                        uint32_t ci = req->start;
-                        uint32_t limit = (nci > 0) ? nci : (req->start + max);
-                        for (; ci < limit && r.count < max; ci++) {
-                            struct efs_chunk_entry ce;
-                            if (efs_export_get_chunk(tab, req->ino, ci,
-                                                     &ce) != 0) {
-                                if (nci == 0)
-                                    break;
-                                continue;
-                            }
-                            r.recs[r.count].ino = req->ino;
-                            r.recs[r.count].chunk_index = ci;
-                            memcpy(r.recs[r.count].nodes, ce.fragment_nodes,
-                                   sizeof(r.recs[r.count].nodes));
-                            memcpy(r.recs[r.count].checksums, ce.checksums,
-                                   sizeof(r.recs[r.count].checksums));
-                            r.count++;
+                    uint32_t bits = ex->root.shard_bits;
+                    uint32_t sc = ex->root.shard_count
+                                      ? ex->root.shard_count : 1;
+                    uint32_t gsh = efs_export_chunk_shard_of(req->ino,
+                                                             req->start, bits);
+                    if (bits && sc > 1) {
+                        efs_node_id_t live[EFS_MAX_NODES];
+                        uint32_t nlive = server_nlive_locked(g_server, live);
+                        efs_node_id_t own =
+                            efs_shard_owner_of(gsh, sc, live, nlive);
+                        if (own != g_server->id) {
+                            r.status = EFS_INODE_RPC_NOT_PRIMARY;
+                            r.primary_id = own;
+                        } else if (server_ensure_shard_ready(g_server, ex,
+                                                             gsh) != 0) {
+                            r.status = EFS_INODE_RPC_BUSY;
                         }
-                        r.status = EFS_INODE_RPC_OK;
+                    }
+                    if (r.status != EFS_INODE_RPC_NOT_PRIMARY &&
+                        r.status != EFS_INODE_RPC_BUSY) {
+                    /* Serve this group only. The inode row may live on a
+                     * different shard — do not require it here. */
+                    uint32_t max = req->max;
+                    if (max == 0 || max > EFS_GETCHUNKS_MAX)
+                        max = EFS_GETCHUNKS_MAX;
+                    uint32_t group_end =
+                        (req->start | (EFS_CHUNK_GROUP_SIZE - 1u)) + 1u;
+                    uint32_t ci = req->start;
+                    for (; ci < group_end && r.count < max; ci++) {
+                        struct efs_chunk_entry ce;
+                        if (efs_export_get_chunk(ex, req->ino, ci, &ce) != 0)
+                            continue;
+                        r.recs[r.count].ino = req->ino;
+                        r.recs[r.count].chunk_index = ci;
+                        memcpy(r.recs[r.count].nodes, ce.fragment_nodes,
+                               sizeof(r.recs[r.count].nodes));
+                        memcpy(r.recs[r.count].checksums, ce.checksums,
+                               sizeof(r.recs[r.count].checksums));
+                        r.count++;
+                    }
+                    r.status = EFS_INODE_RPC_OK;
                     }
                 }
                 pthread_mutex_unlock(&g_server->lock);

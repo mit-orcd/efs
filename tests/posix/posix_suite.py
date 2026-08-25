@@ -10,7 +10,8 @@ Covers both "possible" operations (must succeed) and "impossible" ones
 terminal commands (mkdir, ln, dd, cp, mv, stat, ...) via subprocess.
 
 Usage:
-    posix_suite.py <mount-dir> [--results <file>] [--keep] [--filter <substr>]
+    posix_suite.py <mount-dir> [--results <file>] [--keep] [--stop]
+                   [--filter <substr>]
 
 Exit code: 0 if every selected test passes, 1 otherwise.
 
@@ -2676,6 +2677,7 @@ def main():
     mnt = args[0]
     results_file = None
     keep = False
+    stop = False
     filt = None
     i = 1
     while i < len(args):
@@ -2684,6 +2686,9 @@ def main():
             i += 2
         elif args[i] == "--keep":
             keep = True
+            i += 1
+        elif args[i] == "--stop":
+            stop = True
             i += 1
         elif args[i] == "--filter":
             filt = args[i + 1]
@@ -2715,10 +2720,16 @@ def main():
                     nfail += 1
                     RESULTS.append((name, "FAIL", str(e)))
                     print("FAIL %-32s %s" % (name, e))
+                    if stop:
+                        print("stopped on first fail (--stop)")
+                        break
             except Exception as e:  # noqa: BLE001
                 nfail += 1
                 RESULTS.append((name, "FAIL", "%s: %s" % (type(e).__name__, e)))
                 print("FAIL %-32s %s: %s" % (name, type(e).__name__, e))
+                if stop:
+                    print("stopped on first fail (--stop)")
+                    break
             else:
                 npass += 1
                 RESULTS.append((name, "PASS", ""))

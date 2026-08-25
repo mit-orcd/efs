@@ -244,6 +244,41 @@ int main(void)
         fprintf(stderr, "FAIL shard_of\n");
         failures++;
     }
+    /* Phase 3b: chunk groups spread independently of the inode shard. */
+    if (efs_export_chunk_shard_of(9, 0, 0) != 0 ||
+        efs_export_chunk_shard_of(9, 0, 3) != efs_export_shard_of(9, 3)) {
+        fprintf(stderr, "FAIL chunk_shard_of identity-at-group0\n");
+        failures++;
+    }
+    {
+        uint32_t seen = 0;
+        for (uint32_t g = 0; g < 32; g++) {
+            uint32_t ci = g << EFS_CHUNK_GROUP_SHIFT;
+            uint32_t sh = efs_export_chunk_shard_of(9, ci, 3);
+            if (sh >= 8) {
+                fprintf(stderr, "FAIL chunk_shard_of range %u\n", sh);
+                failures++;
+                break;
+            }
+            seen |= 1u << sh;
+        }
+        if (seen == (1u << efs_export_shard_of(9, 3))) {
+            fprintf(stderr, "FAIL chunk_shard_of did not spread groups\n");
+            failures++;
+        }
+        if (efs_export_chunk_shard_of(9, 0, 3) !=
+            efs_export_chunk_shard_of(9, EFS_CHUNK_GROUP_SIZE - 1, 3)) {
+            fprintf(stderr, "FAIL chunk_shard_of not constant in group\n");
+            failures++;
+        }
+        if (!efs_inode_dir_is_spread(&(struct efs_inode){
+                .imm_files = EFS_DIR_SPREAD_MIN, .imm_dirs = 0}) ||
+            efs_inode_dir_is_spread(&(struct efs_inode){
+                .imm_files = EFS_DIR_SPREAD_MIN - 1, .imm_dirs = 0})) {
+            fprintf(stderr, "FAIL dir_is_spread threshold\n");
+            failures++;
+        }
+    }
     if (efs_meta_shard_table_ino(0) != EFS_META_TABLE_INO ||
         efs_meta_shard_table_ino(3) != EFS_META_TABLE_INO + 3) {
         fprintf(stderr, "FAIL shard table ino\n");
@@ -444,6 +479,50 @@ int main(void)
         efs_export_free(&sh);
     }
     {
+        /* Parent-shard dentries must exist for off-shard file inodes.
+         * create_with_ino used to efs_export_lookup the sharded root and
+         * see the child-tab row, skipping the parent copy. */
+        struct efs_export sh;
+        efs_export_init(&sh, 6, "pdent");
+        sh.root.shard_bits = 3;
+        sh.root.shard_count = 8;
+        sh.create_stride = 1;
+        uint32_t on_parent = 0;
+        for (int i = 0; i < 8; i++) {
+            char n[8];
+            snprintf(n, sizeof(n), "p%d", i);
+            if (!efs_export_create(&sh, EFS_ROOT_INO, S_IFREG | 0644, 0, 0, n))
+                failures++;
+        }
+        for (uint64_t i = 0; i < sh.inode_count; i++)
+            if (sh.inodes[i].parent == EFS_ROOT_INO &&
+                sh.inodes[i].ino != EFS_ROOT_INO &&
+                sh.inodes[i].name[0] == 'p')
+                on_parent++;
+        if (on_parent != 8) {
+            fprintf(stderr, "FAIL parent dentries %u want 8\n", on_parent);
+            failures++;
+        }
+        /* Child-tab rows keep the create name; lookup must not see it
+         * after the parent dentry is renamed/unlinked. */
+        if (efs_export_rename_at(&sh, EFS_ROOT_INO, "p0", EFS_ROOT_INO, "q0") !=
+                0 ||
+            efs_export_lookup(&sh, EFS_ROOT_INO, "p0", NULL) == EFS_OK) {
+            fprintf(stderr, "FAIL lookup ghost after rename p0\n");
+            failures++;
+        }
+        if (efs_export_lookup(&sh, EFS_ROOT_INO, "q0", NULL) != EFS_OK) {
+            fprintf(stderr, "FAIL lookup q0 after rename\n");
+            failures++;
+        }
+        if (efs_export_unlink_name(&sh, EFS_ROOT_INO, "p1") != 0 ||
+            efs_export_lookup(&sh, EFS_ROOT_INO, "p1", NULL) == EFS_OK) {
+            fprintf(stderr, "FAIL lookup ghost after unlink p1\n");
+            failures++;
+        }
+        efs_export_free(&sh);
+    }
+    {
         struct efs_export sh;
         efs_export_init(&sh, 5, "rehash");
         sh.next_ino = 20; /* ino 20 lands on shard 20 & 7 = 4 after bits=3 */
@@ -468,6 +547,27 @@ int main(void)
             }
         }
         efs_export_free(&sh);
+    }
+    {
+        /* Stale-low dentry_bytes used to undersize the serialize blob and
+         * smash the next malloc chunk (flush SIGABRT). */
+        struct efs_export st;
+        char *sb = NULL;
+        size_t sl = 0;
+        efs_export_init(&st, 1, "stale-dent");
+        if (!efs_export_create(&st, EFS_ROOT_INO, S_IFREG | 0644, 0, 0,
+                               "longish-name")) {
+            fprintf(stderr, "FAIL stale-dent create\n");
+            failures++;
+        } else {
+            st.dentry_bytes = 1;
+            if (efs_export_serialize(&st, &sb, &sl) != 0 || !sb) {
+                fprintf(stderr, "FAIL stale-dent serialize\n");
+                failures++;
+            }
+            free(sb);
+        }
+        efs_export_free(&st);
     }
 
     efs_export_free(&ex);

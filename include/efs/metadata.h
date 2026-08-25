@@ -90,10 +90,11 @@ struct efs_export_root {
     uint32_t ino_page_count;
     uint32_t chunk_page_count;
     uint8_t *page_checksums;
-    /* EFSR v6: inode-range shards + exclusive write lease. v5 loads as
-     * shard_count=1, shard_bits=0 (single blob, no lease). */
+    /* EFSR v6: inode-range shards + exclusive write lease.
+     * shard = ino & ((1 << shard_bits) - 1); root stays on shard 0.
+     * mkfs uses EFS_DEFAULT_SHARD_BITS (not 0). */
     uint32_t shard_count;
-    uint32_t shard_bits; /* shard = ino >> shard_bits; 0 = one shard */
+    uint32_t shard_bits;
     uint64_t write_lease_id;
     uint64_t write_lease_until_ms;
     /* EFSR v7: copy-on-write page placement. page_cis[i] is the chunk_index
@@ -256,6 +257,20 @@ int efs_export_fits_page_cap(const struct efs_export *ex, uint64_t extra_inodes,
 void efs_export_meta_page_usage(const struct efs_export *ex,
                                 uint32_t *ino_pages, uint32_t *chunk_pages);
 uint32_t efs_export_shard_of(efs_ino_t ino, uint32_t shard_bits);
+/* Phase 3b: shard that stores the chunk mapping for (ino, chunk_index).
+ * bits==0 → 0. Independent of inode-row placement (shard_of(ino)). */
+uint32_t efs_export_chunk_shard_of(efs_ino_t ino, uint32_t chunk_index,
+                                   uint32_t shard_bits);
+/* Table that stores the chunk mapping (loads the shard on demand). */
+struct efs_export *efs_export_table_for_chunk(struct efs_export *ex,
+                                              efs_ino_t ino,
+                                              uint32_t chunk_index);
+/* Phase 3b: dentry shard for a spread directory. bits==0 → 0. */
+uint32_t efs_export_dentry_shard_of(efs_ino_t parent, const char *name,
+                                    uint32_t shard_bits);
+/* Derived from rollups: imm_files + imm_dirs >= EFS_DIR_SPREAD_MIN. */
+int efs_inode_dir_is_spread(const struct efs_inode *dir);
+int efs_export_dir_is_spread(struct efs_export *ex, efs_ino_t dir);
 /* Owner among live node ids (sorted or not). shard_count<=1 → lowest id
  * (today's meta primary). Else live[shard % nlive]. */
 efs_node_id_t efs_shard_owner_of(uint32_t shard, uint32_t shard_count,
@@ -263,6 +278,11 @@ efs_node_id_t efs_shard_owner_of(uint32_t shard, uint32_t shard_count,
 /* Next inode for a create under parent. bits==0: next_ino++. bits>0:
  * allocate inside the parent's shard range. */
 efs_ino_t efs_export_alloc_ino(struct efs_export *ex, efs_ino_t parent);
+/* Allocate in `shard`'s congruence class. Skips inos that already have a
+ * row on the main table (parent dentries for extra-shard children). A
+ * joiner whose extra tab rebuilt empty would otherwise reissue those
+ * inos and CREATE_SHARD would look like EEXIST. */
+efs_ino_t efs_export_alloc_ino_for_shard(struct efs_export *ex, uint32_t shard);
 /* Peek the shard a create under parent would land on. Dirs stay on the
  * parent shard; files round-robin across all shards (create_rr % sc).
  * Does not advance create_rr. */

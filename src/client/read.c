@@ -1195,8 +1195,14 @@ int efs_client_fetch_metadata(const char *host, uint16_t port)
          * Do not reconstruct; adopt the descriptor so REPORT/GETATTR route. */
         efs_client_table_lock();
         pthread_mutex_lock(&g_client.idx_mu);
-        efs_export_init(&g_client.export,
-                        best_root.id ? best_root.id : 2,
+        /* Fresh bits>0 mkfs publishes an EFSR with no pages yet. root.id
+         * can be 0 on that bootstrap; never invent id=2 (that was the
+         * efs-test+efs-s3 pair). CREATE with a missing id is mkdir EIO. */
+        efs_export_id_t eid = best_root.id ? best_root.id
+                                           : g_client.export_id;
+        if (!eid)
+            eid = 1;
+        efs_export_init(&g_client.export, eid,
                         best_root.name[0] ? best_root.name
                                           : g_client.export_name);
         if (efs_export_root_copy(&g_client.export.root, &best_root) == EFS_OK) {

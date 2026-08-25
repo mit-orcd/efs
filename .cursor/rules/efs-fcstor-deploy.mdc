@@ -14,11 +14,26 @@ may always tear down the whole cluster and wipe all data on fcstor003–006
 for testing — no rolling restart, no build-id dance, just fresh mkfs —
 UNLESS the user says differently for a particular run.
 
-**Wipe with `edelete`, NEVER `rm -rf`** (rm -rf on millions of chunk files
-takes many minutes; edelete does all 6 paths on 4 nodes in seconds):
-`for d in 01..06; do ~/git/ereport/edelete --delete --force /data1/$d/efs; done`
-then `mkdir -p` the dirs again (edelete removes the start dir too).
-Same for any big test-tree cleanup on these nodes.
+**Wipe clients FIRST, then servers, then disks.** A leftover `efs-fuse`
+still holds the old table in RAM and will REPORT/flush it onto a fresh
+`mkfs` — that is the recurring `adopted cache blob 232MB / chunks=1932296
+/ gen=102`. `pkill -x efs-fuse` without `-9` misses D-state daemons.
+Use `tests/wipe_cluster.sh` from the login node, or do this by hand:
+
+1. **Every client (fcstor003–015):** `fusermount3 -uz /tmp/efs/mnt`;
+   `killall -9 efs-fuse` (or `pkill -9 -x efs-fuse`). Confirm
+   `pgrep -x efs-fuse` is empty on **all 13** before touching disks.
+2. **Every server:** `pkill -9 -x efsd` (exact name; NEVER `pkill -f`).
+3. **Wipe with `edelete`, NEVER `rm -rf`** (rm -rf on millions of chunk
+   files takes many minutes; edelete does all 6 paths on 4 nodes in
+   seconds):
+   `for d in 01..06; do ~/git/ereport/edelete --delete --force /data1/$d/efs; done`
+   then `mkdir -p` the dirs again (edelete removes the start dir too).
+   Same for any big test-tree cleanup on these nodes.
+
+Do not start `efs-fuse` until `mkfs` has finished. `rm -f /tmp/efs/fuse.log`
+before each mount — `rsync --exclude='*.log'` leaves the old log, and a
+1-second `cat` of it looks like another 232MB adopt.
 
 ## Topology (current)
 
@@ -48,7 +63,8 @@ matches the ssh remote command and kills your own shell). Then:
 Use `setsid … </dev/null &` to detach; a bare `nohup … &` can hang the ssh session.
 
 ### Restart one efs-fuse (client)
-`fusermount3 -u /tmp/efs/mnt; pkill -x efs-fuse`, then:
+`fusermount3 -uz /tmp/efs/mnt; killall -9 efs-fuse` (or `pkill -9 -x`),
+then `rm -f fuse.log` and:
 `cd /tmp/efs && setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &`
 
 ## Build-ID gate

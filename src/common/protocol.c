@@ -191,6 +191,20 @@ static int conn_pick_send_chan(struct efs_conn *c, uint8_t type,
         return c->recv_chan == EFS_CONN_RDMA ? EFS_CONN_RDMA : EFS_CONN_TCP;
     if (type == EFS_MSG_GET_META)
         return EFS_CONN_TCP;
+    /* Inode RPCs (LOOKUP/CREATE/READDIR/...) on a fresh bits=3 mount
+     * hung the FUSE worker in RDMA recv: first control message after
+     * upgrade never completed, so ls/create blocked forever. Chunk
+     * PUT/GET stay RDMA. GET_META was already TCP. */
+    if (type == EFS_MSG_INODE_LOOKUP || type == EFS_MSG_INODE_LOOKUP_PATH ||
+        type == EFS_MSG_INODE_CREATE || type == EFS_MSG_INODE_CREATE_SHARD ||
+        type == EFS_MSG_INODE_GETATTR || type == EFS_MSG_INODE_SETATTR ||
+        type == EFS_MSG_INODE_UNLINK || type == EFS_MSG_INODE_RENAME ||
+        type == EFS_MSG_INODE_RENAME_AT || type == EFS_MSG_INODE_LINK ||
+        type == EFS_MSG_INODE_LINK_SHARD || type == EFS_MSG_INODE_UNLINK_SHARD ||
+        type == EFS_MSG_INODE_READDIR || type == EFS_MSG_INODE_APPEND ||
+        type == EFS_MSG_INODE_HOLD || type == EFS_MSG_INODE_FLOCK ||
+        type == EFS_MSG_INODE_DROP_CHUNKS || type == EFS_MSG_INODE_GETCHUNKS)
+        return EFS_CONN_TCP;
     return EFS_CONN_RDMA;
 }
 

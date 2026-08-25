@@ -429,8 +429,9 @@ static int cmd_mkfs(int argc, char **argv)
         uint32_t effective = chunk_size ? chunk_size : EFS_DEFAULT_CHUNK_SIZE;
         char cs_str[32];
         format_bytes(effective, cs_str, sizeof(cs_str));
-        printf("Export '%s' created on %s:%u (chunk_size=%s)\n",
-               argv[1], host, port, cs_str);
+        printf("Export '%s' created on %s:%u (chunk_size=%s shards=%u)\n",
+               argv[1], host, port, cs_str,
+               1u << EFS_DEFAULT_SHARD_BITS);
         rc = 0;
     } else if (status == EFS_CREATE_EXPORT_EXISTS) {
         fprintf(stderr, "Export '%s' already exists on %s:%u\n", argv[1], host, port);

@@ -45,6 +45,8 @@ const char *efs_strerror(int rc)
     case EFS_ERR_BUSY:   return "resource busy";
     case EFS_ERR_STALE:  return "stale generation";
     case EFS_ERR_ACCES:  return "permission denied";
+    case EFS_ERR_NAMETOOLONG: return "name too long";
+    case EFS_ERR_AGAIN:  return "try again";
     default:             return "unknown error";
     }
 }

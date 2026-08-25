@@ -154,6 +154,98 @@ int efs_client_ino_is_dirty(efs_ino_t ino)
     return hit;
 }
 
+/* Inodes this client created (mkdir/create). REPORT does not clear this —
+ * dest-stat ENOENT under our mkdir tree stays local for the whole rsync. */
+static uint64_t *created_keys;
+static uint64_t created_mask;
+static uint64_t created_count;
+
+void efs_client_note_created(efs_ino_t ino)
+{
+    if (!ino)
+        return;
+    pthread_mutex_lock(&g_client.dirty_mu);
+    if (dirty_set_ensure(&created_keys, &created_mask, created_count + 1) == 0)
+        dirty_set_put(created_keys, created_mask, (uint64_t)ino,
+                      &created_count);
+    pthread_mutex_unlock(&g_client.dirty_mu);
+}
+
+int efs_client_ino_is_created(efs_ino_t ino)
+{
+    if (!ino || !created_keys || !created_mask)
+        return 0;
+    pthread_mutex_lock(&g_client.dirty_mu);
+    uint64_t mask = created_mask;
+    uint64_t *keys = created_keys;
+    int hit = 0;
+    if (keys && mask) {
+        uint64_t i = (uint64_t)ino & mask;
+        for (uint64_t n = 0; n <= mask; n++) {
+            if (keys[i] == 0)
+                break;
+            if (keys[i] == (uint64_t)ino) {
+                hit = 1;
+                break;
+            }
+            i = (i + 1) & mask;
+        }
+    }
+    pthread_mutex_unlock(&g_client.dirty_mu);
+    return hit;
+}
+
+#define MTIME_PIN_MAX 256
+static efs_ino_t mtime_pin[MTIME_PIN_MAX];
+static int mtime_pin_n;
+
+void efs_client_mtime_pin(efs_ino_t ino)
+{
+    if (!ino)
+        return;
+    pthread_mutex_lock(&g_client.dirty_mu);
+    for (int i = 0; i < mtime_pin_n; i++) {
+        if (mtime_pin[i] == ino) {
+            pthread_mutex_unlock(&g_client.dirty_mu);
+            return;
+        }
+    }
+    if (mtime_pin_n < MTIME_PIN_MAX)
+        mtime_pin[mtime_pin_n++] = ino;
+    pthread_mutex_unlock(&g_client.dirty_mu);
+}
+
+void efs_client_mtime_unpin(efs_ino_t ino)
+{
+    if (!ino)
+        return;
+    pthread_mutex_lock(&g_client.dirty_mu);
+    for (int i = 0; i < mtime_pin_n; i++) {
+        if (mtime_pin[i] == ino) {
+            mtime_pin[i] = mtime_pin[mtime_pin_n - 1];
+            mtime_pin_n--;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_client.dirty_mu);
+}
+
+int efs_client_mtime_is_pinned(efs_ino_t ino)
+{
+    if (!ino)
+        return 0;
+    pthread_mutex_lock(&g_client.dirty_mu);
+    int hit = 0;
+    for (int i = 0; i < mtime_pin_n; i++) {
+        if (mtime_pin[i] == ino) {
+            hit = 1;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_client.dirty_mu);
+    return hit;
+}
+
 void efs_client_mark_ino_dirty(efs_ino_t ino)
 {
     if (!g_client.meta_batch || ino == 0)
@@ -750,8 +842,13 @@ static void dirty_snap_merge_back_locked(struct dirty_snap *ds)
  * only the flush mechanism (blob PUT -> targeted RPC) differs. */
 int efs_client_report_dirty(int sync)
 {
+    static pthread_mutex_t report_mu = PTHREAD_MUTEX_INITIALIZER;
     struct dirty_snap ds;
     memset(&ds, 0, sizeof(ds));
+
+    /* Close kicks REPORT on the flush thread. setattr (utimens /
+     * truncate) drains first so a late rec cannot undo SETATTR. */
+    pthread_mutex_lock(&report_mu);
 
     efs_client_table_lock();
     efs_client_ensure_dir_locks();
@@ -760,6 +857,7 @@ int efs_client_report_dirty(int sync)
         !g_client.meta_dirty && !sync) {
         pthread_mutex_unlock(&g_client.dirty_mu);
         efs_client_table_unlock();
+        pthread_mutex_unlock(&report_mu);
         return EFS_OK;
     }
     dirty_snap_save_locked(&ds);
@@ -780,6 +878,7 @@ int efs_client_report_dirty(int sync)
         /* table lock held (not dirty_mu — merge_back takes it internally). */
         dirty_snap_merge_back_locked(&ds);
         efs_client_table_unlock();
+        pthread_mutex_unlock(&report_mu);
         return EFS_ERR_NOMEM;
     }
     for (uint64_t i = 0; i < ds.chunk_count; i++) {
@@ -844,32 +943,30 @@ int efs_client_report_dirty(int sync)
             efs_client_table_lock();
             dirty_snap_merge_back_locked(&ds);
             efs_client_table_unlock();
+            pthread_mutex_unlock(&report_mu);
             return EFS_ERR_NOMEM;
         }
         for (uint32_t s = 0; s < sc && rc == EFS_OK; s++) {
             uint32_t n_c = 0, n_i = 0;
-            efs_ino_t route = 0;
             for (uint32_t k = 0; k < cn; k++) {
-                if (efs_export_shard_of(crecs[k].ino, bits) == s) {
+                if (efs_export_chunk_shard_of(crecs[k].ino,
+                                              crecs[k].chunk_index,
+                                              bits) == s)
                     cbuf[n_c++] = crecs[k];
-                    if (!route)
-                        route = crecs[k].ino;
-                }
             }
             for (uint32_t k = 0; k < in; k++) {
-                if (efs_export_shard_of(irecs[k].ino, bits) == s) {
+                if (efs_export_shard_of(irecs[k].ino, bits) == s)
                     ibuf[n_i++] = irecs[k];
-                    if (!route)
-                        route = irecs[k].ino;
-                }
             }
             if (n_c == 0 && n_i == 0)
                 continue;
             int one = EFS_ERR_NET;
             for (int attempt = 0; attempt < 4; attempt++) {
-                one = efs_client_rpc_report_dirty(g_client.export_id,
-                                                  cbuf, n_c, ibuf, n_i,
-                                                  sync, route);
+                /* Route by shard id — not by a crafted ino. Chunk groups
+                 * for one file live on many shards after Phase 3b. */
+                one = efs_client_rpc_report_dirty_on_shard(g_client.export_id,
+                                                           cbuf, n_c, ibuf,
+                                                           n_i, sync, s);
                 if (one == EFS_OK)
                     break;
                 if (one != EFS_ERR_NET && one != EFS_ERR_NO_QUORUM &&
@@ -897,6 +994,7 @@ int efs_client_report_dirty(int sync)
         efs_client_table_unlock();
         g_client.report_flush_failed = 1;
     }
+    pthread_mutex_unlock(&report_mu);
     return rc;
 }
 
@@ -2361,6 +2459,13 @@ int efs_client_meta_cache_adopt(char *blob, size_t blob_len)
             "inodes=%llu chunks=%llu\n",
             blob_len, ino_len, ch_len,
             (unsigned long long)ic, (unsigned long long)cc);
+    /* Leftover efs-fuse after a server-only wipe REPORT/flushes the old
+     * table onto a fresh mkfs. Same fingerprint every time we missed
+     * kill -9 on clients: ~232MB / ~1.9M chunks / gen=102. */
+    if (cc > 100000ull || blob_len > (10u * 1024u * 1024u))
+        fprintf(stderr,
+                "meta: WARNING huge adopt — leftover efs-fuse after wipe? "
+                "killall -9 efs-fuse on fcstor003-015, then edelete+mkfs\n");
     fflush(stderr);
     return 0;
 }
@@ -2574,6 +2679,21 @@ void efs_client_stop_meta_flush(void)
     pthread_mutex_unlock(&g_client.meta_flush_mu);
     pthread_join(g_client.meta_flush_tid, NULL);
     g_client.meta_flush_started = 0;
+}
+
+void efs_client_kick_meta_flush(void)
+{
+    if (g_client.meta_flush_started) {
+        pthread_mutex_lock(&g_client.meta_flush_mu);
+        g_client.meta_flush_req = 1;
+        pthread_cond_signal(&g_client.meta_flush_cv);
+        pthread_mutex_unlock(&g_client.meta_flush_mu);
+        return;
+    }
+    efs_client_ensure_dir_locks();
+    pthread_mutex_lock(&g_client.dirty_mu);
+    g_client.meta_dirty = 1;
+    pthread_mutex_unlock(&g_client.dirty_mu);
 }
 
 int efs_client_note_meta_change(int force)
@@ -3716,8 +3836,9 @@ static void dcache_note_size(efs_ino_t ino, uint64_t end)
             uint64_t sec;
             uint32_t nsec;
             now_ns(&sec, &nsec);
-            if (sec > cur.mtime ||
-                (sec == cur.mtime && nsec > cur.mtime_nsec))
+            if (!efs_client_mtime_is_pinned(ino) &&
+                (sec > cur.mtime ||
+                 (sec == cur.mtime && nsec > cur.mtime_nsec)))
                 efs_export_set_mtime_ns_norollup(&g_client.export, ino,
                                                  sec, nsec);
         }
@@ -4807,6 +4928,7 @@ void efs_client_pack_flush_all(void)
 
 int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *buf)
 {
+    efs_client_mtime_unpin(ino);
     if (size == 0)
         return EFS_OK;
 
@@ -4919,6 +5041,7 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
 
 int efs_client_write_no_replicate(efs_ino_t ino, uint64_t offset, size_t size, const char *buf)
 {
+    efs_client_mtime_unpin(ino);
     if (size == 0)
         return EFS_OK;
 

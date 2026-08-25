@@ -146,6 +146,13 @@ struct efs_client {
  * No-ops when meta_batch is disabled. Takes dirty_mu internally. */
 void efs_client_mark_ino_dirty(efs_ino_t ino);
 int efs_client_ino_is_dirty(efs_ino_t ino);
+void efs_client_note_created(efs_ino_t ino);
+int efs_client_ino_is_created(efs_ino_t ino);
+/* Explicit utimens: data-path mtime bumps and REPORT echoes must not
+ * put "now" back over a user-set (possibly older) mtime. */
+void efs_client_mtime_pin(efs_ino_t ino);
+void efs_client_mtime_unpin(efs_ino_t ino);
+int efs_client_mtime_is_pinned(efs_ino_t ino);
 void efs_client_mark_chunk_dirty(efs_ino_t ino, uint32_t chunk_index);
 int efs_client_ensure_meta_room(uint64_t extra_inodes, uint64_t extra_chunks);
 int efs_client_take_write_lease(void);
@@ -156,7 +163,8 @@ int efs_client_rpc_lookup_path(efs_export_id_t export_id, const char *path,
                                struct efs_msg_inode_lookup_path_reply *out);
 int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, uint32_t mode, uid_t uid, gid_t gid,
-                          efs_ino_t *out_ino, struct efs_inode *out);
+                          uint32_t flags, efs_ino_t *out_ino,
+                          struct efs_inode *out);
 int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
                            struct efs_inode *out);
 /* RPC getattr + adopt, then prefer the local row (unflushed size). */
@@ -164,6 +172,9 @@ int efs_client_stat_ino(efs_ino_t ino, struct efs_inode *out);
 int efs_client_rpc_readdir(efs_export_id_t export_id, efs_ino_t parent,
                            struct efs_inode *ents, uint32_t *inout_count,
                            uint32_t start);
+int efs_client_rpc_readdir_ex(efs_export_id_t export_id, efs_ino_t parent,
+                              struct efs_inode *ents, uint32_t *inout_count,
+                              uint32_t start, uint32_t flags, uint32_t shard);
 struct efs_chunk_rec;
 int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
                              uint32_t start, struct efs_chunk_rec *recs,
@@ -201,6 +212,12 @@ int efs_client_rpc_report_dirty(efs_export_id_t export_id,
                                 const struct efs_ino_size_rec *irecs,
                                 uint32_t ino_count, int sync,
                                 efs_ino_t route_ino);
+int efs_client_rpc_report_dirty_on_shard(efs_export_id_t export_id,
+                                         const struct efs_chunk_rec *recs,
+                                         uint32_t count,
+                                         const struct efs_ino_size_rec *irecs,
+                                         uint32_t ino_count, int sync,
+                                         uint32_t shard);
 /* Phase 2b: snapshot the dirty set and report it to the primary (the flush
  * mechanism that replaces the blob flush). sync=1 = fsync barrier. */
 int efs_client_report_dirty(int sync);
@@ -281,6 +298,11 @@ int efs_client_meta_cache_adopt(char *blob, size_t blob_len);
  * immediately (test / C-API behaviour). With meta_batch!=0 it coalesces
  * until meta_batch_ops changes accumulate (or force!=0). */
 int efs_client_note_meta_change(int force);
+/* Wake the background reporter; do not wait. Close-time size publish
+ * used to block every FUSE flush on REPORT_CHUNKS (unlink-storm create
+ * ran at ~4 files/s). posix2 still sees the report: B starts only after
+ * A's SSH step returns, which is far longer than one async REPORT. */
+void efs_client_kick_meta_flush(void);
 /* Background: PUT recovered chunk-table pages at v5 indexes and publish. */
 void efs_client_schedule_meta_heal(void);
 void efs_client_stop_meta_flush(void);
@@ -339,9 +361,13 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
    (e.g. on FUSE release). */
 int efs_client_write_no_replicate(efs_ino_t ino, uint64_t offset, size_t size, const char *buf);
 
-/* Create a file or directory. Returns the inode number or 0 on error. */
+/* Create a file or directory. Returns the inode number or 0 on error.
+ * flags: EFS_CREATE_F_HOLD to increment the server open-hold in the
+ * same CREATE RPC (FUSE create+open). */
 efs_ino_t efs_client_create(efs_ino_t parent, const char *name, uint32_t mode,
                             uid_t uid, gid_t gid);
+efs_ino_t efs_client_create_ex(efs_ino_t parent, const char *name, uint32_t mode,
+                               uid_t uid, gid_t gid, uint32_t flags);
 
 /* Remove a file or directory. */
 int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir);
