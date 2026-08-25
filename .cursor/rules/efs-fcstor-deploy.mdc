@@ -20,9 +20,11 @@ still holds the old table in RAM and will REPORT/flush it onto a fresh
 / gen=102`. `pkill -x efs-fuse` without `-9` misses D-state daemons.
 Use `tests/wipe_cluster.sh` from the login node, or do this by hand:
 
-1. **Every client (fcstor003–015):** `fusermount3 -uz /tmp/efs/mnt`;
-   `killall -9 efs-fuse` (or `pkill -9 -x efs-fuse`). Confirm
+1. **Every client (fcstor003–015):** `killall -9 efs-fuse` **first**
+   (or `pkill -9 -x efs-fuse`), then `timeout 3 fusermount3 -uz /tmp/efs/mnt`.
+   fusermount-first on a D-state mount hangs SSH forever. Confirm
    `pgrep -x efs-fuse` is empty on **all 13** before touching disks.
+   Every remote command needs `EFS_SSH_TIMEOUT` (see efs-remote-timeouts).
 2. **Every server:** `pkill -9 -x efsd` (exact name; NEVER `pkill -f`).
 3. **Wipe with `edelete`, NEVER `rm -rf`** (rm -rf on millions of chunk
    files takes many minutes; edelete does all 6 paths on 4 nodes in
@@ -63,7 +65,7 @@ matches the ssh remote command and kills your own shell). Then:
 Use `setsid … </dev/null &` to detach; a bare `nohup … &` can hang the ssh session.
 
 ### Restart one efs-fuse (client)
-`fusermount3 -uz /tmp/efs/mnt; killall -9 efs-fuse` (or `pkill -9 -x`),
+`killall -9 efs-fuse` first, then `timeout 3 fusermount3 -uz /tmp/efs/mnt`,
 then `rm -f fuse.log` and:
 `cd /tmp/efs && setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &`
 

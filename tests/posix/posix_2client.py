@@ -8,15 +8,16 @@ that issued it. A peer does not see mkdir/create/rename until remount
 shared file; the creator's peers get EIO/ENOENT instead of the inode.
 
 Each test is a sequence of steps on side A then B (same export path, two
-mounts / two hosts). B is never remounted during a test.
+mounts / two hosts). B is never remounted during a test. A step of
+("ab", (fn_a, fn_b)) runs both sides at the same time (layer-3 races).
 
 Usage (on one host, two paths — XFS baseline uses the same path twice):
     posix_2client.py --local <mnt-a> <mnt-b> [--results FILE] [--filter SUB]
 
 Usage (login node, two efs-fuse hosts; parent dirs must already be visible
 on B — run --prepare on A, remount B, then --remote):
-    posix_2client.py --prepare <mnt>
-    posix_2client.py --remote <host-a> <host-b> --mnt <mnt> [--results FILE]
+    posix_2client.py --prepare <mnt> [--parent NAME]
+    posix_2client.py --remote <host-a> <host-b> --mnt <mnt> [--parent NAME] [--results FILE]
 
 Internal (harness / --remote):
     posix_2client.py --exec <test> <a|b> <dir>
@@ -29,9 +30,10 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 
-PARENT = "posix-2c"
+PARENT = os.environ.get("EFS_POSIX2_PARENT") or "posix-2c"
 TESTS = []          # list of (name, steps)  steps = [("a"|"b", fn), ...]
 RESULTS = []
 
@@ -61,6 +63,55 @@ def rd(path):
 def eq(got, want, what=""):
     if got != want:
         raise Fail("%s: got %r, want %r" % (what, got, want))
+
+
+def pwrite_at(path, data, off, creat=False):
+    flags = os.O_RDWR | (os.O_CREAT if creat else 0)
+    fd = os.open(path, flags, 0o644)
+    try:
+        os.pwrite(fd, data, off)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def pread_at(path, n, off):
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        return os.pread(fd, n, off)
+    finally:
+        os.close(fd)
+
+
+def fsync_path(path):
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _run_pair(fa, da, fb, db):
+    """Run A and B callables at the same time (local two-mount / XFS)."""
+    errors = []
+
+    def wrap(fn, path, label):
+        try:
+            fn(path)
+        except Exception as e:  # noqa: BLE001
+            errors.append((label, e))
+
+    ta = threading.Thread(target=wrap, args=(fa, da, "a"))
+    tb = threading.Thread(target=wrap, args=(fb, db, "b"))
+    ta.start()
+    tb.start()
+    ta.join()
+    tb.join()
+    if errors:
+        label, e = errors[0]
+        if isinstance(e, Fail):
+            raise Fail("%s: %s" % (label, e))
+        raise Fail("%s: %s: %s" % (label, type(e).__name__, e))
 
 
 # ==========================================================================
@@ -694,6 +745,805 @@ def peer_sparse_size():
     return [("a", a), ("b", b)]
 
 
+# ==========================================================================
+# Adversarial: A and B mutate at the same time (layer 3)
+# Step ("ab", (fn_a, fn_b)) runs both sides concurrently.
+# ==========================================================================
+
+@test
+def peer_overlap_pwrite_same_range():
+    """A and B pwrite the same 4 KiB. Final region is all-A or all-B, never torn."""
+    def a0(d):
+        pwrite_at(os.path.join(d, "f"), b"\x00" * 4096, 0, creat=True)
+
+    def a(d):
+        pwrite_at(os.path.join(d, "f"), b"A" * 4096, 0)
+
+    def b(d):
+        pwrite_at(os.path.join(d, "f"), b"B" * 4096, 0)
+
+    def a2(d):
+        data = pread_at(os.path.join(d, "f"), 4096, 0)
+        if data != b"A" * 4096 and data != b"B" * 4096:
+            raise Fail("torn same-range pwrite (mix of A/B)")
+
+    return [("a", a0), ("ab", (a, b)), ("a", a2)]
+
+
+@test
+def peer_overlap_pwrite_partial():
+    """A writes [0,8192); B writes [4096,12288). Ends exclusive; overlap serializes."""
+    def a0(d):
+        pwrite_at(os.path.join(d, "f"), b"\x00" * 12288, 0, creat=True)
+
+    def a(d):
+        pwrite_at(os.path.join(d, "f"), b"A" * 8192, 0)
+
+    def b(d):
+        pwrite_at(os.path.join(d, "f"), b"B" * 8192, 4096)
+
+    def a2(d):
+        data = pread_at(os.path.join(d, "f"), 12288, 0)
+        if data[0:4096] != b"A" * 4096:
+            raise Fail("[0,4096) is not A's exclusive range")
+        if data[8192:12288] != b"B" * 4096:
+            raise Fail("[8192,12288) is not B's exclusive range")
+        mid = data[4096:8192]
+        if mid != b"A" * 4096 and mid != b"B" * 4096:
+            raise Fail("torn overlap [4096,8192)")
+
+    return [("a", a0), ("ab", (a, b)), ("a", a2)]
+
+
+@test
+def peer_overlap_pwrite_chunk_straddle():
+    """Two clients write across the 128 KiB chunk: 127 KiB and 129 KiB."""
+    cs = 128 * 1024
+
+    def a0(d):
+        pwrite_at(os.path.join(d, "f"), b"\x00" * (cs + 4096), 0, creat=True)
+
+    def a(d):
+        pwrite_at(os.path.join(d, "f"), b"A" * 4096, cs - 1024)
+
+    def b(d):
+        pwrite_at(os.path.join(d, "f"), b"B" * 4096, cs - 1024 + 2048)
+
+    def a2(d):
+        # A: [cs-1024, cs+3072). B: [cs+1024, cs+5120).
+        # Exclusive: [cs-1024, cs+1024) = A, [cs+3072, cs+5120) = B.
+        lo = pread_at(os.path.join(d, "f"), 2048, cs - 1024)
+        hi = pread_at(os.path.join(d, "f"), 2048, cs + 3072)
+        if lo != b"A" * 2048:
+            raise Fail("below-chunk exclusive range not A")
+        if hi != b"B" * 2048:
+            raise Fail("above-chunk exclusive range not B")
+        mid = pread_at(os.path.join(d, "f"), 2048, cs + 1024)
+        if mid != b"A" * 2048 and mid != b"B" * 2048:
+            raise Fail("torn chunk-straddle overlap")
+
+    return [("a", a0), ("ab", (a, b)), ("a", a2)]
+
+
+@test
+def peer_concurrent_append():
+    """A and B each O_APPEND 400 unique records. All 800 land, none torn."""
+    n = 400
+
+    def a0(d):
+        wr(os.path.join(d, "f"), b"")
+        fsync_path(os.path.join(d, "f"))
+
+    def a(d):
+        fd = os.open(os.path.join(d, "f"), os.O_WRONLY | os.O_APPEND)
+        try:
+            for i in range(n):
+                os.write(fd, ("A%04d\n" % i).encode())
+        finally:
+            os.close(fd)
+
+    def b(d):
+        fd = os.open(os.path.join(d, "f"), os.O_WRONLY | os.O_APPEND)
+        try:
+            for i in range(n):
+                os.write(fd, ("B%04d\n" % i).encode())
+        finally:
+            os.close(fd)
+
+    def a2(d):
+        lines = rd(os.path.join(d, "f")).splitlines()
+        eq(len(lines), 2 * n, "append record count")
+        seen = {}
+        for ln in lines:
+            if len(ln) != 5 or ln[0] not in b"AB" or not ln[1:].isdigit():
+                raise Fail("partial/corrupt record %r" % ln)
+            if ln in seen:
+                raise Fail("duplicate record %r" % ln)
+            seen[ln] = 1
+        for i in range(n):
+            if ("A%04d" % i).encode() not in seen:
+                raise Fail("missing A%04d" % i)
+            if ("B%04d" % i).encode() not in seen:
+                raise Fail("missing B%04d" % i)
+
+    return [("a", a0), ("ab", (a, b)), ("a", a2)]
+
+
+@test
+def peer_append_while_truncate():
+    """A O_APPENDs while B truncates. File stays readable; records are whole."""
+    def a0(d):
+        wr(os.path.join(d, "f"), b"")
+        fsync_path(os.path.join(d, "f"))
+
+    def a(d):
+        fd = os.open(os.path.join(d, "f"), os.O_WRONLY | os.O_APPEND)
+        try:
+            for i in range(80):
+                os.write(fd, ("A%04d\n" % i).encode())
+        finally:
+            os.close(fd)
+
+    def b(d):
+        p = os.path.join(d, "f")
+        for _ in range(16):
+            try:
+                os.truncate(p, 0)
+            except OSError:
+                pass
+            time.sleep(0.01)
+
+    def a2(d):
+        data = rd(os.path.join(d, "f"))
+        if data and not data.endswith(b"\n"):
+            raise Fail("truncated mid-record: %r" % data[-16:])
+        for ln in data.splitlines():
+            if ln and (len(ln) != 5 or ln[0] != ord("A") or not ln[1:].isdigit()):
+                raise Fail("corrupt leftover record %r" % ln)
+
+    return [("a", a0), ("ab", (a, b)), ("a", a2)]
+
+
+@test
+def peer_disjoint_extend():
+    """A pwrite at 1 MiB, B at 8 MiB. st_size is the max committed end."""
+    def a0(d):
+        wr(os.path.join(d, "f"), b"")
+
+    def a(d):
+        pwrite_at(os.path.join(d, "f"), b"A", 1 << 20)
+
+    def b(d):
+        pwrite_at(os.path.join(d, "f"), b"B", 8 << 20)
+
+    def a2(d):
+        p = os.path.join(d, "f")
+        eq(os.path.getsize(p), (8 << 20) + 1, "size is max write end")
+        eq(pread_at(p, 1, 1 << 20), b"A", "low extend survived")
+        eq(pread_at(p, 1, 8 << 20), b"B", "high extend survived")
+
+    return [("a", a0), ("ab", (a, b)), ("a", a2)]
+
+
+@test
+def peer_disjoint_extend_reverse_completion():
+    """High offset lands first; later low-offset REPORT must not shrink size."""
+    def a(d):
+        pwrite_at(os.path.join(d, "f"), b"H", 8 << 20, creat=True)
+        fsync_path(os.path.join(d, "f"))
+
+    def b(d):
+        pwrite_at(os.path.join(d, "f"), b"L", 1 << 20)
+
+    def a2(d):
+        p = os.path.join(d, "f")
+        sz = os.path.getsize(p)
+        if sz < (8 << 20) + 1:
+            raise Fail("low-offset write shrank size to %d" % sz)
+        eq(pread_at(p, 1, 8 << 20), b"H", "high byte")
+        eq(pread_at(p, 1, 1 << 20), b"L", "low byte")
+
+    return [("a", a), ("b", b), ("a", a2)]
+
+
+@test
+def peer_extend_and_truncate():
+    """A extends to 1 MiB while B truncate(4k). Size is one of the two ends."""
+    def a0(d):
+        wr(os.path.join(d, "f"), b"x" * 8192)
+        fsync_path(os.path.join(d, "f"))
+
+    def a(d):
+        pwrite_at(os.path.join(d, "f"), b"A", 1 << 20)
+
+    def b(d):
+        os.truncate(os.path.join(d, "f"), 4096)
+
+    def a2(d):
+        p = os.path.join(d, "f")
+        sz = os.path.getsize(p)
+        if sz not in (4096, (1 << 20) + 1):
+            raise Fail("illegal size %d (want 4096 or 1MiB+1)" % sz)
+        if sz == 4096:
+            eq(len(rd(p)), 4096, "trunc data")
+        else:
+            eq(pread_at(p, 1, 1 << 20), b"A", "extend survived truncate")
+
+    return [("a", a0), ("ab", (a, b)), ("a", a2)]
+
+
+@test
+def peer_stat_during_extend():
+    """B stats while A extends. Size is 0 or the committed end, never a hole."""
+    def a0(d):
+        wr(os.path.join(d, "f"), b"")
+
+    def a(d):
+        pwrite_at(os.path.join(d, "f"), b"Z", 2 << 20)
+
+    def b(d):
+        p = os.path.join(d, "f")
+        sizes = []
+        for _ in range(40):
+            try:
+                sizes.append(os.path.getsize(p))
+            except OSError as e:
+                raise Fail("B stat during extend: %s" % e)
+            time.sleep(0.01)
+        for sz in sizes:
+            if sz not in (0, (2 << 20) + 1):
+                raise Fail("B saw illegal size %d (want 0 or 2MiB+1)" % sz)
+
+    return [("a", a0), ("ab", (a, b))]
+
+
+@test
+def peer_trunc_then_pwrite_old_fd():
+    """A holds fd; B truncate(4k); A pwrite at 1 MiB on the old fd."""
+    def a0(d):
+        pwrite_at(os.path.join(d, "f"), b"X" * 8192, 0, creat=True)
+
+    def a(d):
+        _spawn_holder(d, "pwrite1m")
+
+    def b(d):
+        os.truncate(os.path.join(d, "f"), 4096)
+
+    def a2(d):
+        _holder_go(d)
+        sz = os.path.getsize(os.path.join(d, "f"))
+        if sz != (1 << 20) + 1:
+            raise Fail("size after old-fd pwrite past trunc: %d" % sz)
+
+    return [("a", a0), ("a", a), ("b", b), ("a", a2)]
+
+
+@test
+def peer_trunc_zero_then_high_pwrite():
+    """A truncate 0; B pwrite at 1 MiB. No stale prefix below the hole."""
+    def a0(d):
+        pwrite_at(os.path.join(d, "f"), b"OLD" * 100, 0, creat=True)
+        fsync_path(os.path.join(d, "f"))
+
+    def a(d):
+        os.truncate(os.path.join(d, "f"), 0)
+
+    def b(d):
+        pwrite_at(os.path.join(d, "f"), b"N", 1 << 20)
+
+    def a2(d):
+        p = os.path.join(d, "f")
+        eq(os.path.getsize(p), (1 << 20) + 1, "size after trunc0+high")
+        eq(pread_at(p, 3, 0), b"\x00\x00\x00", "no stale prefix")
+        eq(pread_at(p, 1, 1 << 20), b"N", "high byte")
+
+    return [("a", a0), ("a", a), ("b", b), ("a", a2)]
+
+
+@test
+def peer_pwrite_then_peer_truncate():
+    """A pwrite 1 MiB; B truncate 4 KiB. B's size and prefix win if later."""
+    def a(d):
+        pwrite_at(os.path.join(d, "f"), b"A" * 4096, 1 << 20, creat=True)
+
+    def b(d):
+        os.truncate(os.path.join(d, "f"), 4096)
+
+    def a2(d):
+        p = os.path.join(d, "f")
+        eq(os.path.getsize(p), 4096, "size after later truncate")
+        data = rd(p)
+        eq(len(data), 4096, "trunc length")
+        if b"A" in data:
+            raise Fail("extent past EOF survived truncate")
+
+    return [("a", a), ("b", b), ("a", a2)]
+
+
+@test
+def peer_rename_same_src_two_dst():
+    """A rename x→y and B rename x→z. Exactly one dest consumes x."""
+    def a0(d):
+        wr(os.path.join(d, "x"), b"src")
+        fsync_path(os.path.join(d, "x"))
+
+    def a(d):
+        try:
+            os.rename(os.path.join(d, "x"), os.path.join(d, "y"))
+        except OSError:
+            pass
+
+    def b(d):
+        try:
+            os.rename(os.path.join(d, "x"), os.path.join(d, "z"))
+        except OSError:
+            pass
+
+    def a2(d):
+        y = os.path.exists(os.path.join(d, "y"))
+        z = os.path.exists(os.path.join(d, "z"))
+        x = os.path.exists(os.path.join(d, "x"))
+        if y and z:
+            raise Fail("both y and z exist (src consumed twice)")
+        if not y and not z:
+            if x:
+                raise Fail("neither rename landed and x remains")
+            raise Fail("x vanished with no dest")
+        if x:
+            raise Fail("x still exists after a winning rename")
+        winner = os.path.join(d, "y" if y else "z")
+        eq(rd(winner), b"src", "winner content")
+
+    return [("a", a0), ("ab", (a, b)), ("a", a2)]
+
+
+@test
+def peer_rename_vs_unlink_src():
+    """A rename a→b while B unlinks a. Exactly one of a,b exists."""
+    def a0(d):
+        wr(os.path.join(d, "a"), b"n")
+        fsync_path(os.path.join(d, "a"))
+
+    def a(d):
+        try:
+            os.rename(os.path.join(d, "a"), os.path.join(d, "b"))
+        except OSError:
+            pass
+
+    def b(d):
+        try:
+            os.unlink(os.path.join(d, "a"))
+        except OSError:
+            pass
+
+    def a2(d):
+        has_a = os.path.exists(os.path.join(d, "a"))
+        has_b = os.path.exists(os.path.join(d, "b"))
+        if has_a and has_b:
+            raise Fail("both a and b exist")
+        if not has_a and not has_b:
+            return
+        if has_b:
+            eq(rd(os.path.join(d, "b")), b"n", "renamed content")
+
+    return [("a", a0), ("ab", (a, b)), ("a", a2)]
+
+
+@test
+def peer_rename_vs_unlink_dst():
+    """A rename a→b while B unlinks b. Legal: a gone, b is a or missing."""
+    def a0(d):
+        wr(os.path.join(d, "a"), b"NEW")
+        wr(os.path.join(d, "b"), b"OLD")
+        fsync_path(os.path.join(d, "a"))
+
+    def a(d):
+        try:
+            os.rename(os.path.join(d, "a"), os.path.join(d, "b"))
+        except OSError:
+            pass
+
+    def b(d):
+        try:
+            os.unlink(os.path.join(d, "b"))
+        except OSError:
+            pass
+
+    def a2(d):
+        has_a = os.path.exists(os.path.join(d, "a"))
+        has_b = os.path.exists(os.path.join(d, "b"))
+        if has_a and has_b:
+            if rd(os.path.join(d, "b")) == b"NEW":
+                raise Fail("a still exists after rename-over")
+        if has_b:
+            data = rd(os.path.join(d, "b"))
+            if data not in (b"NEW", b"OLD"):
+                raise Fail("b has corrupt content %r" % data)
+
+    return [("a", a0), ("ab", (a, b)), ("a", a2)]
+
+
+@test
+def peer_rename_across_dirs_chase():
+    """A rename dir1/x → dir2/x; B rename dir2/x → dir3/x. x exists once."""
+    def a0(d):
+        os.mkdir(os.path.join(d, "d1"))
+        os.mkdir(os.path.join(d, "d2"))
+        os.mkdir(os.path.join(d, "d3"))
+        wr(os.path.join(d, "d1", "x"), b"moved")
+        fsync_path(os.path.join(d, "d1", "x"))
+
+    def a(d):
+        try:
+            os.rename(os.path.join(d, "d1", "x"), os.path.join(d, "d2", "x"))
+        except OSError:
+            pass
+
+    def b(d):
+        deadline = time.time() + 5.0
+        while time.time() < deadline:
+            src = os.path.join(d, "d2", "x")
+            if os.path.exists(src):
+                try:
+                    os.rename(src, os.path.join(d, "d3", "x"))
+                    return
+                except OSError:
+                    return
+            time.sleep(0.05)
+
+    def a2(d):
+        hits = []
+        for name in ("d1/x", "d2/x", "d3/x"):
+            p = os.path.join(d, name)
+            if os.path.exists(p):
+                eq(rd(p), b"moved", name)
+                hits.append(name)
+        if len(hits) != 1:
+            raise Fail("x at %s (want exactly one)" % hits)
+
+    return [("a", a0), ("ab", (a, b)), ("a", a2)]
+
+
+@test
+def peer_creat_excl_race():
+    """A and B O_CREAT|O_EXCL the same name. Exactly one wins; one EEXIST."""
+    def a(d):
+        p = os.path.join(d, "foo")
+        try:
+            fd = os.open(p, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            os.write(fd, b"A")
+            os.close(fd)
+            wr(os.path.join(d, ".a-won"), b"1")
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise Fail("A excl errno %s" % e.errno)
+            wr(os.path.join(d, ".a-exist"), b"1")
+
+    def b(d):
+        p = os.path.join(d, "foo")
+        try:
+            fd = os.open(p, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            os.write(fd, b"B")
+            os.close(fd)
+            wr(os.path.join(d, ".b-won"), b"1")
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise Fail("B excl errno %s" % e.errno)
+            wr(os.path.join(d, ".b-exist"), b"1")
+
+    def a2(d):
+        a_won = os.path.exists(os.path.join(d, ".a-won"))
+        b_won = os.path.exists(os.path.join(d, ".b-won"))
+        if a_won == b_won:
+            raise Fail("O_EXCL winners a=%s b=%s (want exactly one)" %
+                       (a_won, b_won))
+        data = rd(os.path.join(d, "foo"))
+        if data not in (b"A", b"B"):
+            raise Fail("foo content %r" % data)
+        eq(os.stat(os.path.join(d, "foo")).st_nlink, 1, "single inode")
+
+    return [("ab", (a, b)), ("a", a2)]
+
+
+@test
+def peer_create_unlink_stat_churn():
+    """A create/unlink foo; B open/stat. Never EIO or foreign inode bytes."""
+    def a(d):
+        p = os.path.join(d, "foo")
+        for i in range(40):
+            try:
+                wr(p, ("N%03d" % i).encode())
+                os.unlink(p)
+            except OSError:
+                pass
+
+    def b(d):
+        p = os.path.join(d, "foo")
+        for _ in range(40):
+            try:
+                st = os.stat(p)
+                fd = os.open(p, os.O_RDONLY)
+                try:
+                    data = os.read(fd, 16)
+                finally:
+                    os.close(fd)
+                if data and not data.startswith(b"N"):
+                    raise Fail("B read foreign content %r ino=%s" %
+                               (data, st.st_ino))
+            except OSError as e:
+                if e.errno == errno.EIO:
+                    raise Fail("B saw EIO during create/unlink churn")
+                if e.errno not in (errno.ENOENT,):
+                    raise Fail("B errno %s" % e.errno)
+
+    return [("ab", (a, b))]
+
+
+@test
+def peer_negative_after_unlink():
+    """B caches a positive lookup; A unlinks; B sees ENOENT."""
+    def a(d):
+        wr(os.path.join(d, "foo"), b"x")
+        fsync_path(os.path.join(d, "foo"))
+
+    def b1(d):
+        eq(rd(os.path.join(d, "foo")), b"x", "B cached positive")
+
+    def a2(d):
+        os.unlink(os.path.join(d, "foo"))
+
+    def b2(d):
+        try:
+            os.stat(os.path.join(d, "foo"))
+        except OSError as e:
+            if e.errno != errno.ENOENT:
+                raise Fail("B after unlink errno %s" % e.errno)
+        else:
+            raise Fail("B still sees unlinked foo")
+
+    return [("a", a), ("b", b1), ("a", a2), ("b", b2)]
+
+
+@test
+def peer_rename_negative():
+    """B caches oldname; A rename old→new; B old ENOENT, new is the object."""
+    def a(d):
+        wr(os.path.join(d, "old"), b"obj")
+        fsync_path(os.path.join(d, "old"))
+
+    def b1(d):
+        eq(rd(os.path.join(d, "old")), b"obj", "B cached old")
+
+    def a2(d):
+        os.rename(os.path.join(d, "old"), os.path.join(d, "new"))
+
+    def b2(d):
+        if os.path.exists(os.path.join(d, "old")):
+            raise Fail("B still sees old after rename")
+        eq(rd(os.path.join(d, "new")), b"obj", "B new")
+
+    return [("a", a), ("b", b1), ("a", a2), ("b", b2)]
+
+
+@test
+def peer_unlink_recreate_stale_ino():
+    """B stats foo (ino1); A unlink+create foo (ino2); B must see ino2/content."""
+    def a(d):
+        wr(os.path.join(d, "foo"), b"one")
+        fsync_path(os.path.join(d, "foo"))
+
+    def b1(d):
+        wr(os.path.join(d, ".ino1"),
+           str(os.stat(os.path.join(d, "foo")).st_ino).encode())
+        eq(rd(os.path.join(d, "foo")), b"one", "B first incarnation")
+
+    def a2(d):
+        os.unlink(os.path.join(d, "foo"))
+        wr(os.path.join(d, "foo"), b"two")
+        fsync_path(os.path.join(d, "foo"))
+
+    def b2(d):
+        p = os.path.join(d, "foo")
+        eq(rd(p), b"two", "B second incarnation content")
+        ino1 = int(rd(os.path.join(d, ".ino1")))
+        ino2 = os.stat(p).st_ino
+        if ino2 == ino1:
+            raise Fail("B still bound to inode %s after recreate" % ino1)
+
+    return [("a", a), ("b", b1), ("a", a2), ("b", b2)]
+
+
+@test
+def peer_open_unlink_nlink():
+    """A opens foo; B unlinks; A fd still works, nlink 0; B cannot lookup."""
+    def a0(d):
+        wr(os.path.join(d, "f"), b"live")
+        fsync_path(os.path.join(d, "f"))
+
+    def a(d):
+        _spawn_holder(d, "holdfd")
+
+    def b(d):
+        os.unlink(os.path.join(d, "f"))
+        if os.path.exists(os.path.join(d, "f")):
+            raise Fail("B still looks up unlinked f")
+
+    def a2(d):
+        data = _holder_go(d)
+        eq(data, b"live", "A fd after B unlink")
+
+    return [("a", a0), ("a", a), ("b", b), ("a", a2)]
+
+
+@test
+def peer_open_rename_fd():
+    """A opens foo; B rename foo→bar; A's fd still reads; bar is the object."""
+    def a0(d):
+        wr(os.path.join(d, "f"), b"fdok")
+        fsync_path(os.path.join(d, "f"))
+
+    def a(d):
+        _spawn_holder(d, "holdfd")
+
+    def b(d):
+        os.rename(os.path.join(d, "f"), os.path.join(d, "bar"))
+
+    def a2(d):
+        data = _holder_go(d)
+        eq(data, b"fdok", "A fd after B rename")
+        eq(rd(os.path.join(d, "bar")), b"fdok", "bar")
+        if os.path.exists(os.path.join(d, "f")):
+            raise Fail("f still present after rename")
+
+    return [("a", a0), ("a", a), ("b", b), ("a", a2)]
+
+
+@test
+def peer_unlink_recreate_old_fd():
+    """B unlinks and recreates foo; A's old fd still has the old bytes."""
+    def a0(d):
+        wr(os.path.join(d, "f"), b"OLDINC")
+        fsync_path(os.path.join(d, "f"))
+
+    def a(d):
+        _spawn_holder(d, "holdfd")
+
+    def b(d):
+        os.unlink(os.path.join(d, "f"))
+        wr(os.path.join(d, "f"), b"NEWINC")
+        fsync_path(os.path.join(d, "f"))
+
+    def a2(d):
+        data = _holder_go(d)
+        eq(data, b"OLDINC", "old fd is old object")
+        eq(rd(os.path.join(d, "f")), b"NEWINC", "name is new object")
+
+    return [("a", a0), ("a", a), ("b", b), ("a", a2)]
+
+
+@test
+def peer_concurrent_hardlink():
+    """A link f→a and B link f→b. nlink == 3, both names work."""
+    def a0(d):
+        wr(os.path.join(d, "f"), b"hl")
+        fsync_path(os.path.join(d, "f"))
+
+    def a(d):
+        os.link(os.path.join(d, "f"), os.path.join(d, "a"))
+
+    def b(d):
+        os.link(os.path.join(d, "f"), os.path.join(d, "b"))
+
+    def a2(d):
+        eq(os.stat(os.path.join(d, "f")).st_nlink, 3, "nlink after two links")
+        eq(os.stat(os.path.join(d, "a")).st_ino,
+           os.stat(os.path.join(d, "b")).st_ino, "same ino")
+        eq(rd(os.path.join(d, "a")), b"hl", "a")
+        eq(rd(os.path.join(d, "b")), b"hl", "b")
+
+    return [("a", a0), ("ab", (a, b)), ("a", a2)]
+
+
+@test
+def peer_concurrent_unlink_hardlinks():
+    """After nlink=3, A unlinks a and B unlinks b. nlink == 1, f remains."""
+    def a0(d):
+        wr(os.path.join(d, "f"), b"hl")
+        os.link(os.path.join(d, "f"), os.path.join(d, "a"))
+        os.link(os.path.join(d, "f"), os.path.join(d, "b"))
+        fsync_path(os.path.join(d, "f"))
+
+    def a(d):
+        os.unlink(os.path.join(d, "a"))
+
+    def b(d):
+        os.unlink(os.path.join(d, "b"))
+
+    def a2(d):
+        eq(os.stat(os.path.join(d, "f")).st_nlink, 1, "nlink after unlinks")
+        eq(rd(os.path.join(d, "f")), b"hl", "f survived")
+        if os.path.exists(os.path.join(d, "a")) or os.path.exists(os.path.join(d, "b")):
+            raise Fail("a or b still present")
+
+    return [("a", a0), ("ab", (a, b)), ("a", a2)]
+
+
+@test
+def peer_fcntl_range_conflict():
+    """A lockf [0,4096); B lockf same range is denied."""
+    def a(d):
+        wr(os.path.join(d, "f"), b"x" * 8192)
+        _spawn_holder(d, "fcntl0")
+
+    def b(d):
+        fd = os.open(os.path.join(d, "f"), os.O_RDWR)
+        try:
+            try:
+                fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB, 4096)
+            except OSError as e:
+                if e.errno not in (errno.EAGAIN, errno.EACCES, errno.EWOULDBLOCK):
+                    raise Fail("B lockf errno %s" % e.errno)
+            else:
+                fcntl.lockf(fd, fcntl.LOCK_UN, 4096)
+                raise Fail("B acquired overlapping lockf")
+        finally:
+            os.close(fd)
+
+    def a2(d):
+        _holder_go(d)
+
+    return [("a", a), ("b", b), ("a", a2)]
+
+
+@test
+def peer_fcntl_range_adjacent():
+    """A lockf [0,4096); B lockf [4096,8192) succeeds."""
+    def a(d):
+        wr(os.path.join(d, "f"), b"x" * 8192)
+        _spawn_holder(d, "fcntl0")
+
+    def b(d):
+        fd = os.open(os.path.join(d, "f"), os.O_RDWR)
+        try:
+            os.lseek(fd, 4096, os.SEEK_SET)
+            fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB, 4096)
+            fcntl.lockf(fd, fcntl.LOCK_UN, 4096)
+        except OSError as e:
+            raise Fail("B adjacent lockf failed: %s" % e)
+        finally:
+            os.close(fd)
+
+    def a2(d):
+        _holder_go(d)
+
+    return [("a", a), ("b", b), ("a", a2)]
+
+
+@test
+def peer_mtime_no_regress():
+    """A then B write disjoint ranges; mtime must not go backwards."""
+    def a(d):
+        pwrite_at(os.path.join(d, "f"), b"A" * 4096, 0, creat=True)
+        wr(os.path.join(d, ".mt-a"),
+           str(os.stat(os.path.join(d, "f")).st_mtime_ns).encode())
+
+    def b(d):
+        pwrite_at(os.path.join(d, "f"), b"B" * 4096, 4096)
+        wr(os.path.join(d, ".mt-b"),
+           str(os.stat(os.path.join(d, "f")).st_mtime_ns).encode())
+
+    def a2(d):
+        ma = int(rd(os.path.join(d, ".mt-a")))
+        mb = int(rd(os.path.join(d, ".mt-b")))
+        now = os.stat(os.path.join(d, "f")).st_mtime_ns
+        if mb < ma:
+            raise Fail("B mtime %s < A mtime %s" % (mb, ma))
+        if now < mb:
+            raise Fail("final mtime %s < B mtime %s" % (now, mb))
+
+    return [("a", a), ("b", b), ("a", a2)]
+
+
 _HOLD_SCRIPT = r"""import fcntl, os, sys, time
 mode, path, ready, go, result = sys.argv[1:6]
 fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
@@ -702,6 +1552,8 @@ rc = 2
 try:
     if mode == "flock":
         fcntl.flock(fd, fcntl.LOCK_EX)
+    elif mode == "fcntl0":
+        fcntl.lockf(fd, fcntl.LOCK_EX, 4096)
     with open(ready, "w") as f:
         f.write("1\n")
         f.flush()
@@ -712,6 +1564,9 @@ try:
             if mode == "holdfd":
                 os.lseek(fd, 0, os.SEEK_SET)
                 data = os.read(fd, 4096)
+            elif mode == "pwrite1m":
+                os.pwrite(fd, b"Y", 1 << 20)
+                data = b"ok\n"
             else:
                 data = b"ok\n"
             rc = 0
@@ -823,7 +1678,7 @@ def do_prepare(mnt):
     print("prepared %s (%d testdirs)" % (base, len(TESTS)))
 
 
-def run_step_index(name, idx, d):
+def run_step_index(name, idx, d, ab_side=None):
     steps = None
     for n, s, _doc in TESTS:
         if n == name:
@@ -833,8 +1688,15 @@ def run_step_index(name, idx, d):
         raise Fail("unknown test %s" % name)
     if idx < 0 or idx >= len(steps):
         raise Fail("bad step index %d for %s" % (idx, name))
-    _side, fn = steps[idx]
-    fn(d)
+    side, fn = steps[idx]
+    if side == "ab":
+        fa, fb = fn
+        if ab_side == "b":
+            fb(d)
+        else:
+            fa(d)
+    else:
+        fn(d)
 
 
 def write_results(path, host_a, host_b, mnt, npass, nfail, dt):
@@ -877,7 +1739,11 @@ def run_local(mnt_a, mnt_b, results_file, filt, keep):
                 continue
             try:
                 for side, fn in steps:
-                    fn(da if side == "a" else db)
+                    if side == "ab":
+                        fa, fb = fn
+                        _run_pair(fa, da, fb, db)
+                    else:
+                        fn(da if side == "a" else db)
             except Fail as e:
                 nfail += 1
                 RESULTS.append((name, "FAIL", str(e)))
@@ -905,11 +1771,52 @@ def run_local(mnt_a, mnt_b, results_file, filt, keep):
     return 0 if nfail == 0 else 1
 
 
+def _check_exec_result(side, i, rc, out, err):
+    line = ""
+    for ln in out.splitlines():
+        if ln.startswith("RESULT\t"):
+            line = ln
+    if not line:
+        raise Fail("no RESULT from %s step %d: rc=%d out=%r err=%r" %
+                   (side, i, rc, out[-300:], err[-300:]))
+    parts = line.split("\t", 2)
+    status = parts[1] if len(parts) > 1 else "?"
+    detail = parts[2] if len(parts) > 2 else ""
+    if status != "PASS":
+        raise Fail(detail or status)
+
+
+def _remote_ab(ssh, script, host_a, host_b, name, idx, d):
+    results = [None, None]
+
+    def one(slot, host, ab_side):
+        cmd = "python3 %s --exec %s %d %s %s" % (
+            _q(script), _q(name), idx, _q(d), ab_side)
+        results[slot] = ssh_cmd(ssh, host, cmd)
+
+    ta = threading.Thread(target=one, args=(0, host_a, "a"))
+    tb = threading.Thread(target=one, args=(1, host_b, "b"))
+    ta.start()
+    tb.start()
+    ta.join()
+    tb.join()
+    for slot, label in ((0, "a"), (1, "b")):
+        rc, out, err = results[slot]
+        _check_exec_result("ab-%s" % label, idx, rc, out, err)
+
+
 def ssh_cmd(ssh, host, remote):
+    sec = int(os.environ.get("POSIX2_STEP_SEC", os.environ.get(
+        "EFS_SSH_TIMEOUT", "15")))
+    env = os.environ.copy()
+    env["EFS_SSH_TIMEOUT"] = str(sec)
     r = subprocess.run([ssh, host, remote],
-                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                       env=env)
     out = r.stdout.decode("utf-8", "replace")
     err = r.stderr.decode("utf-8", "replace")
+    if r.returncode == 124:
+        err = (err + " ssh timeout after %ss" % sec).strip()
     return r.returncode, out, err
 
 
@@ -933,22 +1840,14 @@ def run_remote(host_a, host_b, mnt, ssh, script, results_file, filt):
         d = testdir(mnt, name)
         try:
             for i, (side, _fn) in enumerate(steps):
+                if side == "ab":
+                    _remote_ab(ssh, script, host_a, host_b, name, i, d)
+                    continue
                 host = host_a if side == "a" else host_b
                 cmd = "python3 %s --exec %s %d %s" % (
                     _q(script), _q(name), i, _q(d))
                 rc, out, err = ssh_cmd(ssh, host, cmd)
-                line = ""
-                for ln in out.splitlines():
-                    if ln.startswith("RESULT\t"):
-                        line = ln
-                if not line:
-                    raise Fail("no RESULT from %s step %d: rc=%d out=%r err=%r" %
-                               (side, i, rc, out[-300:], err[-300:]))
-                parts = line.split("\t", 2)
-                status = parts[1] if len(parts) > 1 else "?"
-                detail = parts[2] if len(parts) > 2 else ""
-                if status != "PASS":
-                    raise Fail(detail or status)
+                _check_exec_result(side, i, rc, out, err)
         except Fail as e:
             nfail += 1
             RESULTS.append((name, "FAIL", str(e)))
@@ -973,6 +1872,7 @@ def _q(s):
 
 
 def main(argv):
+    global PARENT
     args = list(argv)
     if not args or args[0] in ("-h", "--help"):
         print(__doc__)
@@ -998,6 +1898,10 @@ def main(argv):
         elif args[i] == "--keep":
             keep = True
             i += 1
+        elif args[i] == "--parent":
+            PARENT = args[i + 1]
+            os.environ["EFS_POSIX2_PARENT"] = PARENT
+            i += 2
         elif args[i] == "--mnt":
             mnt = args[i + 1]
             i += 2
@@ -1018,13 +1922,14 @@ def main(argv):
         return 0
 
     if cmd == "--exec":
-        # --exec <test> <step-index> <dir>
+        # --exec <test> <step-index> <dir> [a|b]
         if len(args) < 4:
-            print("usage: --exec <test> <step-index> <dir>")
+            print("usage: --exec <test> <step-index> <dir> [a|b]")
             return 2
         name, idx_s, d = args[1], args[2], args[3]
+        ab_side = args[4] if len(args) >= 5 else None
         try:
-            run_step_index(name, int(idx_s), d)
+            run_step_index(name, int(idx_s), d, ab_side)
         except Fail as e:
             print("RESULT\tFAIL\t%s" % e)
             return 1

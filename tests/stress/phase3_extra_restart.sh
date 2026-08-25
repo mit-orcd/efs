@@ -10,6 +10,7 @@
 #   tests/stress/phase3_extra_restart.sh
 set -u
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
+export EFS_SSH_TIMEOUT="${EFS_SSH_TIMEOUT:-60}"
 PRIMARY="${PRIMARY:-fcstor003.ib}"
 EXTRA_OWNER="${EXTRA_OWNER:-fcstor005.ib}"
 EXTRA_NODE_ID="${EXTRA_NODE_ID:-3}"
@@ -55,7 +56,8 @@ mount_s3() {
 
 umount_s3() {
     local h=$1
-    $SSH "$h" "fusermount3 -uz $MNT 2>/dev/null; sleep 1; true"
+    $SSH "$h" "killall -9 efs-fuse 2>/dev/null || true
+        timeout 3 fusermount3 -uz $MNT 2>/dev/null || true; sleep 1; true"
 }
 
 start_extra_owner() {

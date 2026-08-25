@@ -74,6 +74,9 @@ static void heal_prog_end(struct efsd_server *s)
     pthread_mutex_unlock(&s->lock);
 }
 
+static uint32_t server_live_ids_locked(struct efsd_server *s,
+                                       efs_node_id_t *live);
+
 void server_fill_heal_status(struct efsd_server *s,
                              struct efs_msg_heal_status_reply *r)
 {
@@ -86,20 +89,34 @@ void server_fill_heal_status(struct efsd_server *s,
         n = EFS_MAX_EXPORTS;
     r->export_count = n;
     uint64_t now = heal_mono_us();
+    efs_node_id_t live[EFS_MAX_NODES];
+    uint32_t nlive = server_live_ids_locked(s, live);
     for (uint32_t e = 0; e < n; e++) {
         struct efs_export *ex = &s->exports[e];
         struct efs_msg_heal_status_export *o = &r->exports[e];
         strncpy(o->name, ex->name, EFS_MAX_NAME - 1);
         o->gen = ex->root.generation;
-        uint32_t total = 1, need = 0;
-        if (ex->meta_fragmented && ex->root.page_count > 0 &&
-            ex->meta_needs_rebuild)
-            need++;
+        /* Only tables this node owns. Counting every extra-shard pointer
+         * on the primary made status stick at "healing tables 6/8 dirty"
+         * while gen advanced — those extras live on other owners. */
+        uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+        uint32_t total = 0, need = 0;
+        int own0 = (sc <= 1 ||
+                    efs_shard_owner_of(0, sc, live, nlive) == s->id);
+        if (own0) {
+            total++;
+            if (ex->meta_fragmented && ex->root.page_count > 0 &&
+                ex->meta_needs_rebuild)
+                need++;
+        }
         if (ex->shard_tabs) {
             for (uint32_t i = 1; i < ex->shard_tab_cap &&
                  i < EFS_META_MAX_SHARDS; i++) {
                 struct efs_export *tab = ex->shard_tabs[i];
                 if (!tab)
+                    continue;
+                if (sc > 1 &&
+                    efs_shard_owner_of(i, sc, live, nlive) != s->id)
                     continue;
                 total++;
                 if (tab->meta_needs_rebuild && tab->root.page_count > 0)
@@ -1315,6 +1332,14 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
             }
             if (!tab->shard_dirty)
                 continue;
+            /* A hollow extra (still catching up) cannot be serialized —
+             * flush_locked bails needs_rebuild and used to fail the
+             * caller's fsync (9-way first-finisher EIO). Leave it dirty
+             * for catchup; the sync REPORT retries as BUSY. */
+            if (tab->meta_needs_rebuild && tab->root.page_count > 0) {
+                rc = -1;
+                continue;
+            }
             int src = server_flush_fragmented_meta_locked(
                 s, tab, efs_meta_shard_table_ino(i), 0, i, sc);
             if (src != 0)

@@ -11,7 +11,7 @@ terminal commands (mkdir, ln, dd, cp, mv, stat, ...) via subprocess.
 
 Usage:
     posix_suite.py <mount-dir> [--results <file>] [--keep] [--stop]
-                   [--filter <substr>]
+                   [--filter <substr>] [--timeout-s <sec>]
 
 Exit code: 0 if every selected test passes, 1 otherwise.
 
@@ -23,6 +23,7 @@ import fcntl
 import mmap
 import os
 import shutil
+import signal
 import stat as statmod
 import subprocess
 import sys
@@ -49,6 +50,14 @@ class Fail(Exception):
     def __init__(self, msg, soft=False):
         super().__init__(msg)
         self.soft = soft
+
+
+class TestTimeout(Fail):
+    """One test exceeded --timeout-s. D-state FUSE may still ignore SIGALRM;
+    the remote SSH deadline in run_tests.sh is the outer backstop."""
+
+    def __init__(self, sec):
+        Fail.__init__(self, "timeout after %ss" % sec)
 
 
 def expect_err(want, fn, *a, **kw):
@@ -91,6 +100,40 @@ def rd(path):
 def eq(got, want, what=""):
     if got != want:
         raise Fail("%s: got %r, want %r" % (what, got, want))
+
+
+def close_leaked_mount_fds(mnt):
+    """Drop FUSE fds a test leaked so suite exit is not a close storm."""
+    try:
+        mnt_abs = os.path.realpath(mnt)
+    except OSError:
+        return
+    try:
+        names = os.listdir("/proc/self/fd")
+    except OSError:
+        return
+    for n in names:
+        try:
+            fd = int(n)
+        except ValueError:
+            continue
+        if fd < 3:
+            continue
+        try:
+            tgt = os.readlink("/proc/self/fd/%d" % fd)
+        except OSError:
+            continue
+        if not tgt.startswith("/"):
+            continue
+        try:
+            real = os.path.realpath(tgt)
+        except OSError:
+            continue
+        if real == mnt_abs or real.startswith(mnt_abs + os.sep):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
 
 
 # ==========================================================================
@@ -2653,6 +2696,84 @@ def link_of_symlink(d):
 
 
 @test
+def concurrent_extend_high_then_low(d):
+    """High-offset write first, low-offset second: size must stay the high end."""
+    import threading
+    p = os.path.join(d, "f")
+    wr(p, b"")
+    errors = []
+
+    def high():
+        try:
+            fd = os.open(p, os.O_RDWR)
+            os.pwrite(fd, b"H", 8 << 20)
+            os.close(fd)
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    def low():
+        time.sleep(0.05)
+        try:
+            fd = os.open(p, os.O_RDWR)
+            os.pwrite(fd, b"L", 1 << 20)
+            os.close(fd)
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    t0 = threading.Thread(target=high)
+    t1 = threading.Thread(target=low)
+    t0.start()
+    t1.start()
+    t0.join()
+    t1.join()
+    if errors:
+        raise Fail("extend: %s" % errors[0])
+    eq(os.path.getsize(p), (8 << 20) + 1, "size stayed high end")
+    fd = os.open(p, os.O_RDONLY)
+    try:
+        eq(os.pread(fd, 1, 8 << 20), b"H", "high byte")
+        eq(os.pread(fd, 1, 1 << 20), b"L", "low byte")
+    finally:
+        os.close(fd)
+
+
+@test
+def mtime_monotonic_many_writes(d):
+    """st_mtime_ns must not go backwards across many overwrites."""
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    last = os.stat(p).st_mtime_ns
+    for i in range(80):
+        with open(p, "ab") as f:
+            f.write(b"y")
+        now = os.stat(p).st_mtime_ns
+        if now < last:
+            raise Fail("mtime went backwards at write %d (%s < %s)" %
+                       (i, now, last))
+        last = now
+
+
+@test
+def trunc_zero_then_high_pwrite(d):
+    """truncate(0) then pwrite at 1 MiB: prefix is a hole, not stale bytes."""
+    p = os.path.join(d, "f")
+    wr(p, b"OLDPREFIX")
+    os.truncate(p, 0)
+    fd = os.open(p, os.O_RDWR)
+    try:
+        os.pwrite(fd, b"N", 1 << 20)
+    finally:
+        os.close(fd)
+    eq(os.path.getsize(p), (1 << 20) + 1, "size")
+    fd = os.open(p, os.O_RDONLY)
+    try:
+        eq(os.pread(fd, 9, 0), b"\x00" * 9, "no stale prefix")
+        eq(os.pread(fd, 1, 1 << 20), b"N", "high byte")
+    finally:
+        os.close(fd)
+
+
+@test
 def write_beyond_eof_then_seek_end(d):
     p = os.path.join(d, "f")
     fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
@@ -2679,6 +2800,7 @@ def main():
     keep = False
     stop = False
     filt = None
+    test_timeout = int(os.environ.get("POSIX_TEST_SEC", "15"))
     i = 1
     while i < len(args):
         if args[i] == "--results":
@@ -2693,6 +2815,9 @@ def main():
         elif args[i] == "--filter":
             filt = args[i + 1]
             i += 2
+        elif args[i] == "--timeout-s":
+            test_timeout = int(args[i + 1])
+            i += 2
         else:
             i += 1
 
@@ -2700,6 +2825,22 @@ def main():
         print("ERROR: %s is not a mounted directory" % mnt)
         return 2
 
+    def leave_fuse_cwd():
+        """Exit closes cwd. A cwd on the FUSE mount left 008–015 hung in
+        request_wait_answer after the TSV was written (9-way --keep)."""
+        mnt_abs = os.path.realpath(mnt)
+        for t in (os.path.expanduser("~"), "/tmp", "/"):
+            try:
+                if not t or not os.path.isdir(t):
+                    continue
+                os.chdir(t)
+                cwd = os.path.realpath(os.getcwd())
+                if cwd != mnt_abs and not cwd.startswith(mnt_abs + os.sep):
+                    return
+            except OSError:
+                continue
+
+    leave_fuse_cwd()
     base = tempfile.mkdtemp(prefix="posix-", dir=mnt)
     npass = nfail = nskip = 0
     t0 = time.time()
@@ -2710,7 +2851,16 @@ def main():
             tdir = os.path.join(base, name)
             os.makedirs(tdir, exist_ok=True)
             try:
-                fn(tdir)
+                if test_timeout > 0:
+                    def _on_alarm(_signum, _frame):
+                        raise TestTimeout(test_timeout)
+                    signal.signal(signal.SIGALRM, _on_alarm)
+                    signal.alarm(test_timeout)
+                try:
+                    fn(tdir)
+                finally:
+                    if test_timeout > 0:
+                        signal.alarm(0)
             except Fail as e:
                 if getattr(e, "soft", False):
                     nskip += 1
@@ -2734,7 +2884,9 @@ def main():
                 npass += 1
                 RESULTS.append((name, "PASS", ""))
                 print("pass %-32s" % name)
+            close_leaked_mount_fds(mnt)
     finally:
+        leave_fuse_cwd()
         if keep:
             print("kept test tree: %s" % base)
         else:
@@ -2760,7 +2912,39 @@ def main():
                     (npass, nfail, nskip, total, dt))
         print("wrote %s" % results_file)
 
-    return 0 if nfail == 0 else 1
+    # Interpreter teardown closes leftover FUSE fds (cwd, listdir,
+    # leaked test fds). That sat in request_wait_answer after the TSV
+    # was already written (9-way 008–015). Leave the mount and _exit.
+    leave_fuse_cwd()
+    try:
+        mnt_abs = os.path.realpath(mnt)
+        for n in os.listdir("/proc/self/fd"):
+            try:
+                fd = int(n)
+            except ValueError:
+                continue
+            if fd < 3:
+                continue
+            try:
+                tgt = os.readlink("/proc/self/fd/%d" % fd)
+            except OSError:
+                continue
+            if not tgt.startswith("/"):
+                continue
+            try:
+                real = os.path.realpath(tgt)
+            except OSError:
+                continue
+            if real == mnt_abs or real.startswith(mnt_abs + os.sep):
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0 if nfail == 0 else 1)
 
 
 if __name__ == "__main__":

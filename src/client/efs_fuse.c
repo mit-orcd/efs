@@ -2113,21 +2113,21 @@ static off_t append_end_offset(efs_ino_t ino)
  * it's ours) and retry. On success, drop cached copies of the tail chunk so
  * the patch below merges onto a FRESH base: the barrier guarantees every
  * previously reserved append is on the servers, and a stale rdcache copy
- * would resurrect bytes a peer's PUT already replaced. Falls back to the
- * local end if the RPC fails. */
-static off_t append_reserve_offset(efs_ino_t ino, uint64_t len)
+ * would resurrect bytes a peer's PUT already replaced. Does not fall
+ * back to an unreserved local end (that clobbered two-proc O_APPEND). */
+static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
 {
     uint64_t ns = 0;
     int rc = EFS_ERR_BUSY;
-    for (int attempt = 0; attempt < 2000; attempt++) {
+    for (int attempt = 0; attempt < 4000; attempt++) {
         rc = efs_client_rpc_append_reserve(g_client.export_id, ino, len, &ns);
         if (rc == EFS_OK && ns >= len) {
-            uint64_t off = ns - len;
-            uint64_t local = (uint64_t)append_end_offset(ino);
             /* Close only kicks REPORT (async). Same-client write-then-
-             * append used to trust a still-0 owner size and overwrite. */
-            if (local <= off)
-                break;
+             * append used to trust a still-0 owner size and overwrite.
+             * If local is already past this reservation, the post-loop
+             * clamp uses local — do not re-APPEND (that BUSYs our own
+             * outstanding rsv). */
+            break;
         } else if (rc != EFS_ERR_BUSY) {
             break;
         }
@@ -2137,13 +2137,14 @@ static off_t append_reserve_offset(efs_ino_t ino, uint64_t len)
         (void)coal_flush_ino(ino);
         (void)efs_wb_sync_ino(ino);
         (void)efs_dcache_flush_ino(ino);
-        (void)efs_client_report_dirty(rc == EFS_OK ? 1 : 0);
-        if (rc != EFS_OK)
-            usleep(5000);
+        (void)efs_client_report_dirty(0);
+        usleep(2000);
         pthread_mutex_lock(&g_append_mu);
     }
+    /* Never fall back to an unreserved local end: under 9-way that
+     * overlapped another process's reservation and dropped ~40 lines. */
     if (rc != EFS_OK || ns < len)
-        return append_end_offset(ino);
+        return -EIO;
     uint64_t off = ns - len;
     uint64_t local_end = (uint64_t)append_end_offset(ino);
     if (local_end > off) {
@@ -2170,7 +2171,9 @@ static off_t append_reserve_offset(efs_ino_t ino, uint64_t len)
         efs_export_set_size(&g_client.export, ino, ns);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
-    return (off_t)off;
+    if (off_out)
+        *off_out = (off_t)off;
+    return 0;
 }
 
 static int efs_fuse_write(const char *path, const char *buf, size_t size,
@@ -2195,7 +2198,11 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
     int append = fi && (fi->flags & O_APPEND);
     if (append) {
         pthread_mutex_lock(&g_append_mu);
-        offset = append_reserve_offset(ino, (uint64_t)size);
+        rc = append_reserve_offset(ino, (uint64_t)size, &offset);
+        if (rc != 0) {
+            pthread_mutex_unlock(&g_append_mu);
+            return rc;
+        }
     }
     if (efs_dcache_try_patch(ino, (uint64_t)offset, (uint32_t)size,
                              (const uint8_t *)buf) == 0) {
@@ -2263,7 +2270,12 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
     int append = fi && (fi->flags & O_APPEND);
     if (append) {
         pthread_mutex_lock(&g_append_mu);
-        offset = append_reserve_offset(ino, (uint64_t)size);
+        rc = append_reserve_offset(ino, (uint64_t)size, &offset);
+        if (rc != 0) {
+            bounce_release(copy, copy_cap);
+            pthread_mutex_unlock(&g_append_mu);
+            return rc;
+        }
     }
     /* Sub-chunk 4k: patch the dirty chunk in memory. Sending every 4k
      * through writeback did a 128 KiB RMW+PUT and EIO'd when the GET
@@ -2946,23 +2958,13 @@ static int efs_fuse_truncate(const char *path, off_t size,
 
 static int efs_fuse_release(const char *path, struct fuse_file_info *fi)
 {
-    int rc = efs_file_data_sync_fh(path, fi);
-    if (rc == EFS_ERR_QUOTA) {
-        efs_fuse_log_err("release", rc, 0, 0, 0, path);
-        return -ENOSPC;
-    }
-    if (rc != 0) {
-        efs_fuse_log_err("release", rc, 0, 0, 0, path);
-        return -EIO;
-    }
+    /* flush() already ran data_sync on close. Doing it again here
+     * stacked every last-close behind PUT+REPORT; 9-way suite exit
+     * then sat in request_wait_answer with leaked fds. Seal + hold
+     * only — durability is the flush path. */
+    (void)path;
     if (fi && fi->fh)
         (void)efs_client_pack_seal((efs_ino_t)fi->fh);
-    else {
-        struct efs_inode ino;
-        if (efs_client_lookup(path, &ino) == 0 && !efs_mode_is_dir(ino.mode))
-            (void)efs_client_pack_seal(ino.ino);
-    }
-    /* Coalesced: only flushes every meta_batch_ops releases/creates. */
     efs_client_note_meta_change(0);
     if (fi && fi->fh)
         (void)efs_client_rpc_hold(g_client.export_id, (efs_ino_t)fi->fh, 0,

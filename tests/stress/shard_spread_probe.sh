@@ -18,6 +18,7 @@
 #   BITS         shard bits (default: 3 → 8 shards)
 set -u
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
+export EFS_SSH_TIMEOUT="${EFS_SSH_TIMEOUT:-45}"
 PRIMARY="${PRIMARY:-fcstor003.ib}"
 CLIENT_A="${CLIENT_A:-fcstor007.ib}"
 CLIENT_B="${CLIENT_B:-fcstor008.ib}"

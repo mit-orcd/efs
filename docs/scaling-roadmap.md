@@ -406,8 +406,9 @@ caches are ruled out as the fix. A true 10k files/s needs kernel dentry
 caching and is explicitly **not** the target.
 
 **Milestone:** meta-bench walk-dominated phases (stat, setattr) ≥ 5–10×
-baseline, create/unlink ≥ 2–3×, no phase regresses; posix 162 + posix2 24
-stay 0-EFS-bug on bits=0 **and** bits=3; ecopy defaults improve several×.
+baseline, create/unlink ≥ 2–3×, no phase regresses; posix_suite + posix2
+stay 0-EFS-bug on bits=3 (current: 191 + 63; re-run XFS baseline after
+new names); ecopy defaults improve several×.
 
 ---
 
@@ -548,11 +549,88 @@ memory and serialize time drop accordingly.
   path (`server_rebuild_export_from_pages`, meta-repair) extend per shard.
 - **Testing**: each phase keeps `make test` green plus a multi-shard smoke
   (create/lookup/rename/readdir across shard boundaries, server restart
-  rebuild, concurrent writers on disjoint shards). Perf gates: posix 162 +
-  posix2 24 (0 EFS bugs), mc_stress, `tests/run_tests.sh perf` (throughput),
-  `tests/run_tests.sh meta` (metadata ops/s vs baseline) and
-  `tests/run_tests.sh ewrite` (streaming-write sweep vs baseline) — the last
-  two are the regression harnesses for the two Aug 24 workstreams above.
+  rebuild, concurrent writers on disjoint shards). Live gates: posix_suite
+  191 + posix2 63 (0 EFS bugs vs XFS; re-run baseline after new names),
+  mc_stress, unlink-storm, `tests/run_tests.sh perf` / `meta` / `ewrite`.
+  **Tests still to write** are listed in the next section — do not dump
+  crash/EC/partition cases into `posix_suite.py`.
+
+## Testing still to write (Aug 25)
+
+POSIX layers 1–3 are in `tests/posix/posix_suite.py` (191) and
+`posix_2client.py` (63). Catalog: `tests/posix/TEST_CATALOG.txt`.
+Those are syscall + peer-visibility + same-file races. They do **not**
+cover crash, EC, partition, or several product-specific checks. XFS PASS
+is not the oracle for any of the items below.
+
+### Already written — do not reinvent
+
+`make test`; posix + posix2; `mc_stress` (2 clients + kill -9 shard owner
++ restart + cold mount); unlink-storm 9×4000; `shard_spread_probe` /
+`hotdir_spread_probe`; `phase3_extra_restart`; perf / meta / ewrite
+sweeps.
+
+### Layer 4 — fault-injection harness (new, not posix_suite)
+
+Need `tests/run_tests.sh crash` (or `fault`) that can kill `efsd` /
+`efs-fuse`, partition a node, and inject on-disk checksum errors. Cases:
+
+1. **Crash after fsync** — `fsync` returns; kill client and/or primary;
+   remount (same and other host) sees the durable bytes and size.
+2. **Kill between EC / meta stages** — mid-PUT (1 of 3 fragments acked),
+   mid-CoW page write, mid-extras commit; remount / peer must not see a
+   torn page or a half-applied dentry (or must recover via the documented
+   reconcile rule).
+3. **Degraded rebuild** — one node down; reads reconstruct from 2/3;
+   writes still quorum; node returns; heal fills the missing fragments;
+   cold read matches.
+4. **Silent checksum repair** — corrupt one fragment on disk; next read
+   skips or repairs it; file content intact; no zero-fill of a live page.
+5. **Network partition / fencing** — split one server or one client; no
+   dual-writer on the same shard; leftover `efs-fuse` must not
+   REPORT/flush onto a fresh `mkfs` (the 232 MB leftover-client adopt).
+6. **Lock-holder crash** — holder dies; lease expires; new holder wins;
+   a late write from the dead holder is fenced.
+7. **Kill mid-rename on a spread dir** — Item 2 risk: duplicate dentry;
+   hash-shard row wins, parent-shard row loses. Cover after the 300k
+   hot-dir stress exists.
+
+Layer 4 is efs-specific. Do not require an XFS PASS row.
+
+### POSIX / VFS cases still missing from the suites
+
+1. **Second uid** — other-user / other-group / sticky-cannot-delete-others.
+   Needs two uids on the mount (root-only suite no-ops most `perm_*`).
+2. **mmap `MAP_SHARED` across clients** — document as unsupported, or add
+   a posix2 case if the product claims it. Local mmap is already in
+   posix_suite.
+3. **1 GiB pwrite** — posix2 races use 8 MiB sparse; a large write is a
+   different REPORT / size / layout path.
+4. **100-client nlink / hardlink storm** — scale, not a 2-client race.
+5. **Parent-dir mtime/ctime** on create/unlink/rename/link — product gap
+   listed under **Performance next — metadata op storm**; write the tests
+   when the bumps land (local + peer).
+
+### Invariant / ops harnesses still missing
+
+1. **`efs fsck --verify-only`** (or equivalent) after randomized load and
+   after every Layer 4 case — inode/dentry/chunk/EC invariants, not
+   another syscall.
+2. **Hot-dir spread stress** (Item 2 gate, not written): 300k creates in
+   one dir on bits=3, readdir count == create count, peer sees them
+   without remount, rename churn clean, rmdir after empty.
+3. **Leftover-client fence** once `efs-mgmt disconnect-clients` exists —
+   wipe+mkfs with a live mount on another host must fail closed.
+4. **Stuck-catchup joiner** — fcstor004-class gen lag must restart-or-fail
+   the gate, not timeout-skip.
+
+### Contract
+
+- Append `@test` functions for syscall cases; runner auto-registers.
+- Concurrent peer cases use `("ab", (fn_a, fn_b))`.
+- Re-run the XFS baseline after adding posix / posix2 names so
+  `compare.py` sees them.
+- Crash/EC/partition stay out of `posix_suite.py`.
 
 ## Phase ordering rationale
 

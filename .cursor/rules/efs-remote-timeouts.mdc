@@ -1,0 +1,21 @@
+---
+description: Tight remote timeouts; make the work fast instead of waiting
+alwaysApply: true
+---
+
+# Remote timeouts — fail fast, then make it fast
+
+Prefer a **low** timeout and a **fast** command. Do not pad "just in case".
+If a job needs minutes, remove the hot path or parallelize; do not raise
+the clock.
+
+`efs-ssh.sh` defaults to **15s** (`EFS_SSH_TIMEOUT`). SSH `ServerAlive`
+does not kill D-state (`fusermount3`, FUSE `request_wait_answer`).
+
+- Budget = expected runtime + small slack. Probe/kill 10, rsync+make 60,
+  edelete 30, posix test 15, posix suite 180, posix2 step 15, perf 400.
+- Parallelize independent hosts (wipe kills, setup, 9-way posix).
+- Poll instead of `sleep 5` for mounts. Kill `efs-fuse` before
+  `timeout 3 fusermount3`.
+- Timeout is a **FAIL**, not a skip. Do not retry-until-forever.
+- No `EFS_SSH_TIMEOUT=0`. Raise only after the work is already fast.

@@ -924,7 +924,7 @@ int efs_client_report_dirty(int sync)
             if (rc == EFS_OK)
                 break;
             if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM &&
-                rc != EFS_ERR_NOT_PRIMARY)
+                rc != EFS_ERR_NOT_PRIMARY && rc != EFS_ERR_BUSY)
                 break;
             usleep(50000u << attempt);
         }
@@ -970,7 +970,7 @@ int efs_client_report_dirty(int sync)
                 if (one == EFS_OK)
                     break;
                 if (one != EFS_ERR_NET && one != EFS_ERR_NO_QUORUM &&
-                    one != EFS_ERR_NOT_PRIMARY)
+                    one != EFS_ERR_NOT_PRIMARY && one != EFS_ERR_BUSY)
                     break;
                 usleep(50000u << attempt);
             }

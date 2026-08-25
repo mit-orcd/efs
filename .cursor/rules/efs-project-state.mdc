@@ -13,13 +13,42 @@ Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 (8 shards) — no `upgrade` step. bits=0 is not a product mode; cluster
 wipe is allowed. `root.id` is stamped on that create so bootstrap
 GET_META does not invent export id=2.
-**Cluster (Aug 25 evening):** bits=3 grown table (~5k inodes), 4/4
-up, clients 007–015 mounted. Do not timeout-skip. A leftover
-`efs-fuse` still causes the 232MB adopt — wipe clients first.
-**bits=3 gate (this cut, working tree):** single-client posix
+**Cluster (Aug 25 evening):** efsd+fuse rolled with the 9-way fixes
+on the grown leftover table (no wipe). After that 9-way, remount
+failed: EFSR gen=571 pages decode-error on all 4 nodes. **Needs
+wipe+mkfs** (clients first). Do not timeout-skip.
+**Fixes this cut (working tree, not committed):** (1) fsync EIO —
+sync REPORT flush failure is BUSY (retry), skip hollow extras
+instead of failing the barrier; client retries BUSY. (2) two-proc
+O_APPEND — rsv slot is free once size catches up (was live 30s);
+256 slots; never fall back to an unreserved local end. (3) suite
+exit hang — cwd off the mount, close leaked FUSE fds per test,
+`os._exit` after TSV; release no longer re-does data_sync (flush
+already did; 014 D-state on close of leaked fds). (4) posix2
+`--parent` + `run_tests.sh posix2 multi` unique per-pair parents.
+(5) heal status counts **owned** tables only; label is
+need-rebuild not "dirty". After efsd restart, status was idle
+gen=177 (was stuck "healing 6/8 dirty").
+**Re-gate on dirty table (partial):** isolated 007 fsync+two-proc
+PASS. 9-way: two-proc PASS on every host that finished; 007/008
+original 4 fsync EIO gone (EEXIST leftovers instead). 012/014
+188/188 then hung (leaked fds + blocking release) — TSV written.
+Some later hosts still EIO on fsync-path tests. Clean mkfs gate
+not done (pages now corrupt).
+**9-way posix `20260825-170203` (pre-fix):** 6/9 clients 0 EFS
+bugs. 007 4 fsync EIO; 008/010 two-proc lost lines; 008–015 hung
+after TSV.
+**posix2 multi-pair `20260825-171200`:** 4 pairs **34/34** on
+remount-A+prepare+remount-B. Leftover `posix-2c` was harness.
+**POSIX suites (working tree):** posix_suite **191** (+3 local:
+high-then-low extend, mtime monotonic, trunc0+high pwrite).
+posix_2client **63** (+29 adversarial). Harness now runs
+`("ab", (fn_a, fn_b))` A∥B. Layer 4 crash/EC/partition is **not**
+in this suite. Re-run XFS baseline before the next compare.
+**bits=3 gate (committed `af6f380`):** single-client posix
 `20260825-160200` **188/188**. posix2 A=007 B=008
-`20260825-162207` **34/34, 0 EFS bugs**. unlink-storm 9×4000
-`20260825-163504` **9/9 RM_OK+ALIVE** (~3.2s create / ~3.2s rmtree).
+`20260825-162207` **34/34**. unlink-storm 9×4000
+`20260825-163504` **9/9 RM_OK+ALIVE**.
 **posix2 EIO / size-0 was three bugs:** (1) wr() close kicks async
 REPORT; O_TRUNC setattr size=0; late grow-only REPORT restores the
 old size (B saw 10). REPORT grow is now rejected when the rec mtime
@@ -38,9 +67,9 @@ return the stitched inode (LOOKUP/GETATTR wedged FUSE).
 applies times locally + pin so data-path "now" cannot clobber);
 `names_too_long_component` (lookup returned EFS_ERR_INVAL → ENOTDIR;
 now EFS_ERR_NAMETOOLONG + f_namemax=255).
-**Still open:** `link_across_dirs` hang (FUSE request wait). 9-way
-posix `20260825-132231` hung there after ~153 tests. posix2 and
-unlink-storm not re-gated on a clean mkfs.
+**Still open:** 9-way `20260825-170203` — 007 4× fsync-path EIO;
+008/010 two-proc O_APPEND dropped lines; post-suite FUSE wait on
+exit. posix2 multi-pair is green when testdirs are clean.
 **Fixes this cut (working tree):** (1) serialize `dentry_bytes` +
 bounds — flush SIGABRT. (2) bootstrap no longer invents export id=2.
 (3) `mkfs` default bits=3 + stamp `root.id`. (4) `create_with_ino`

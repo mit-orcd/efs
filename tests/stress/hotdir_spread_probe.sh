@@ -9,6 +9,8 @@
 #   tests/stress/hotdir_spread_probe.sh
 set -u
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
+# Parallel creates keep this under a tight budget (do not pad to 30 min).
+export EFS_SSH_TIMEOUT="${EFS_SSH_TIMEOUT:-180}"
 CLIENT_A="${CLIENT_A:-fcstor007.ib}"
 CLIENT_B="${CLIENT_B:-fcstor008.ib}"
 N="${N:-300000}"
@@ -21,18 +23,18 @@ bad() { echo "[hotdir] FAIL: $*"; FAIL=$((FAIL+1)); }
 
 say "create $N files in $MNT/$DIR on $CLIENT_A"
 $SSH "$CLIENT_A" "python3 - <<'PY'
-import os, sys
-mnt = os.environ.get('MNT', '$MNT')
-n = int(os.environ.get('N', '$N'))
-d = os.path.join(mnt, '$DIR')
+import os
+from concurrent.futures import ThreadPoolExecutor
+n = $N
+d = os.path.join('$MNT', '$DIR')
 os.makedirs(d, exist_ok=True)
-for i in range(n):
-    p = os.path.join(d, 'f%06d' % i)
-    fd = os.open(p, os.O_CREAT | os.O_WRONLY, 0o644)
+workers = min(8, max(1, n // 10000))
+def one(i):
+    fd = os.open(os.path.join(d, 'f%06d' % i), os.O_CREAT | os.O_WRONLY, 0o644)
     os.close(fd)
-    if i and i % 50000 == 0:
-        print('created', i, flush=True)
-print('created', n, flush=True)
+with ThreadPoolExecutor(max_workers=workers) as ex:
+    list(ex.map(one, range(n), chunksize=max(1, n // (workers * 8))))
+print('created', n, 'workers', workers, flush=True)
 PY
 "
 
@@ -60,10 +62,14 @@ echo rename-ok
 
 say "empty + rmdir"
 $SSH "$CLIENT_A" "python3 - <<'PY'
-import os, shutil
+import os
+from concurrent.futures import ThreadPoolExecutor
 d = '$MNT/$DIR'
-for name in os.listdir(d):
+names = os.listdir(d)
+def un(name):
     os.unlink(os.path.join(d, name))
+with ThreadPoolExecutor(max_workers=8) as ex:
+    list(ex.map(un, names, chunksize=max(1, len(names) // 64)))
 os.rmdir(d)
 print('rmdir-ok')
 PY

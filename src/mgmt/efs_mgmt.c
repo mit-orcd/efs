@@ -288,7 +288,7 @@ static int cmd_status(int argc, char **argv)
                     printf("  shard=%u  pages %u/%u", x->cur_shard,
                            x->pages_done, x->pages_total);
                 if (x->tables_need)
-                    printf("  tables %u/%u dirty", x->tables_need,
+                    printf("  tables %u/%u need-rebuild", x->tables_need,
                            x->tables_total);
                 printf("  gen=%llu", (unsigned long long)x->gen);
                 if ((x->flags & EFS_HEAL_F_REBUILD) && x->pages_done > 0 &&

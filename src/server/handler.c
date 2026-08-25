@@ -2195,15 +2195,34 @@ send_reply:
                         uint32_t si = (start + p) % EFS_APPEND_RSV_SLOTS;
                         efs_ino_t slo = tab->append_rsv[si].ino;
                         uint64_t ts = tab->append_rsv[si].ts_ms;
-                        int live = slo && tab->append_rsv[si].end > 0 &&
-                                   now_ms - ts < 30000ull;
+                        uint64_t end = tab->append_rsv[si].end;
+                        /* Slot is blocking only while the reserved end is
+                         * still ahead of that ino's table size. Treating
+                         * any 30s-old entry as live filled 64 slots under
+                         * 9-way POSIX and forced later appends to fall
+                         * back to an unreserved local end (lost lines). */
+                        int expired = !ts || now_ms < ts ||
+                                      now_ms - ts >= 30000ull;
+                        int outstanding = 0;
+                        if (slo && end > 0 && !expired) {
+                            if (slo == req->ino)
+                                outstanding = end > cur.size;
+                            else {
+                                struct efs_inode oth;
+                                if (efs_export_get_inode(tab, slo,
+                                                         &oth) != 0)
+                                    outstanding = 1;
+                                else
+                                    outstanding = end > oth.size;
+                            }
+                        }
                         if (slo == req->ino) {
                             found = (int32_t)si;
-                            rsv_end = tab->append_rsv[si].end;
+                            rsv_end = end;
                             rsv_ts = ts;
                             break;
                         }
-                        if (!live && empty < 0)
+                        if (!outstanding && empty < 0)
                             empty = (int32_t)si;
                     }
                     if (found >= 0 && rsv_end > cur.size &&
@@ -2722,10 +2741,12 @@ send_reply:
             pthread_mutex_unlock(&g_server->lock);
             if (do_flush) {
                 if (server_flush_fragmented_meta(g_server, ex) != 0) {
-                    /* Flush failed (no quorum / fenced): the in-memory mutation
-                     * is still dirty and the meta-flush thread will retry, but
-                     * the client's fsync cannot be told it's durable. */
-                    r.status = EFS_INODE_RPC_ERROR;
+                    /* Flush failed (rebuild in flight / no quorum / fenced).
+                     * BUSY so the client retries — ERROR used to become
+                     * fsync EIO on the first attempt (9-way 007). The
+                     * in-memory mutation stays dirty. */
+                    if (r.status == EFS_INODE_RPC_OK)
+                        r.status = EFS_INODE_RPC_BUSY;
                 }
             }
             efs_conn_send_msg(conn, EFS_MSG_REPORT_CHUNKS_REPLY, &r, sizeof(r));

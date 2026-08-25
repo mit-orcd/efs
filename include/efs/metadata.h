@@ -208,7 +208,7 @@ struct efs_export {
      * The handler refuses a second reserve (BUSY) while one is unflushed.
      * A single-slot (ino%N) table used to evict another ino's live rsv
      * (9-way POSIX lost append lines). A crashed appender's rsv expires. */
-#define EFS_APPEND_RSV_SLOTS 64
+#define EFS_APPEND_RSV_SLOTS 256
     struct {
         efs_ino_t ino;
         uint64_t end;

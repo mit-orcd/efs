@@ -18,6 +18,8 @@ NFILES="${NFILES:-4000}"
 NDIRS="${NDIRS:-20}"
 RM_SEC="${RM_SEC:-400}"
 WAIT_SEC="${WAIT_SEC:-600}"
+# Worker SSH can run WAIT_SEC+RM_SEC; short probes override to 30.
+export EFS_SSH_TIMEOUT="${EFS_SSH_TIMEOUT:-$((WAIT_SEC + RM_SEC + 60))}"
 HOSTS="${HOSTS:-fcstor007.ib fcstor008.ib fcstor009.ib fcstor010.ib fcstor011.ib fcstor012.ib fcstor013.ib fcstor014.ib fcstor015.ib}"
 HERE=$(cd "$(dirname "$0")" && pwd)
 WORKER="$HERE/unlink_storm_worker.py"
@@ -33,11 +35,11 @@ say "clients=$ncli nfiles=$NFILES ndirs=$NDIRS rm_sec=$RM_SEC -> $OUTDIR"
 
 first=
 for h in $HOSTS; do first=$h; break; done
-$SSH "$first" "test -d $MNT && echo MNT_OK" | grep -q MNT_OK || {
+EFS_SSH_TIMEOUT=10 $SSH "$first" "test -d $MNT && echo MNT_OK" | grep -q MNT_OK || {
   say "FAIL: mount not usable on $first"
   exit 2
 }
-$SSH "$first" "python3 - <<PY
+EFS_SSH_TIMEOUT=10 $SSH "$first" "python3 - <<PY
 import os
 m = '$MNT'
 for n in os.listdir(m):
@@ -51,14 +53,14 @@ PY"
 
 # Push worker next to the node-local suite (NFS home also works; this is faster).
 for h in $HOSTS; do
-  $SSH "$h" "mkdir -p /tmp/efs/tests/stress && cp -f '$WORKER' /tmp/efs/tests/stress/unlink_storm_worker.py" &
+  EFS_SSH_TIMEOUT=10 $SSH "$h" "mkdir -p /tmp/efs/tests/stress && cp -f '$WORKER' /tmp/efs/tests/stress/unlink_storm_worker.py" &
 done
 wait
 
 i=0
 for h in $HOSTS; do
   short=${h%.ib}
-  $SSH "$h" "PYTHONUNBUFFERED=1 python3 /tmp/efs/tests/stress/unlink_storm_worker.py $MNT $NFILES $NDIRS $RM_SEC $WAIT_SEC" \
+  EFS_SSH_TIMEOUT=$((WAIT_SEC + RM_SEC + 60)) $SSH "$h" "PYTHONUNBUFFERED=1 python3 /tmp/efs/tests/stress/unlink_storm_worker.py $MNT $NFILES $NDIRS $RM_SEC $WAIT_SEC" \
     > "$OUTDIR/log-$short.txt" 2>&1 &
   eval "wpid_$i=$!"
   i=$((i + 1))
@@ -68,7 +70,7 @@ say "waiting for $ncli ready files"
 ready_deadline=$(( $(date +%s) + WAIT_SEC ))
 while :; do
   hostlist=$(echo $HOSTS | sed 's/\.ib//g')
-  nready=$($SSH "$first" "python3 - <<PY
+  nready=$(EFS_SSH_TIMEOUT=10 $SSH "$first" "python3 - <<PY
 import os
 m='$MNT'
 hosts='$hostlist'
@@ -86,7 +88,7 @@ PY" 2>/dev/null | tail -1 | tr -dc '0-9')
   sleep 0.2
 done
 
-$SSH "$first" "touch $MNT/ustorm-go" || say "WARN: could not write ustorm-go"
+EFS_SSH_TIMEOUT=10 $SSH "$first" "touch $MNT/ustorm-go" || say "WARN: could not write ustorm-go"
 
 fail=0
 i=0

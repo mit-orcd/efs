@@ -3,6 +3,7 @@
 # Run from the Engaging login node. Does not compile.
 set -euo pipefail
 SSH="${EFS_SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
+export EFS_SSH_TIMEOUT="${EFS_SSH_TIMEOUT:-$(( ${RUNTIME:-8} + 60 ))}"
 HOSTS=(fcstor007.ib fcstor008.ib fcstor009.ib fcstor010.ib
        fcstor011.ib fcstor012.ib fcstor013.ib fcstor014.ib fcstor015.ib)
 MNT=/tmp/efs/mnt-4n

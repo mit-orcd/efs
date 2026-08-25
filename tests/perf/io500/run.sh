@@ -22,6 +22,7 @@
 set -euo pipefail
 
 SSH="${EFS_SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
+export EFS_SSH_TIMEOUT="${EFS_SSH_TIMEOUT:-400}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 IO500_DIR=${IO500_DIR:-$HOME/orcd/scratch/efs-io500}
 SRC="$IO500_DIR/io500"

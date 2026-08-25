@@ -4,8 +4,10 @@
 # tree, and appends to results/perf/history.tsv for trend tracking.
 #
 # Usage:
-#   run_tests.sh posix [efs-host ...]            POSIX suite vs XFS baseline
+#   run_tests.sh posix [--keep] [--parallel] [efs-host ...]
+#                                                POSIX suite vs XFS baseline
 #   run_tests.sh posix2 [host-a] [host-b]        two-client visibility vs XFS
+#   run_tests.sh posix2 multi                    4 non-overlapping pairs in parallel
 #   run_tests.sh perf single <host> [quick|full] perf on one client
 #   run_tests.sh perf multi [host ...] [quick|full]
 #                                                perf across clients (parallel)
@@ -20,6 +22,9 @@
 #   EFS_MNT  (default /tmp/efs/mnt)
 #   EFS_HOSTS default = fcstor007..015 (the 9 pure clients)
 #   COMMIT=1 to git-commit the new results at the end.
+#   POSIX_SSH_SEC (default 180)  POSIX2_STEP_SEC (default 15)
+#   POSIX_TEST_SEC (default 15, per-test alarm in posix_suite.py)
+#   BUILD_SSH_SEC (default 60)  PERF_SSH_SEC (default 400)
 #
 # NOTE: must run with network/ssh access to the test nodes (outside the
 # sandbox) because it shells out to efs-ssh for each node.
@@ -34,26 +39,43 @@ DEFAULT_HOSTS=(fcstor007.ib fcstor008.ib fcstor009.ib fcstor010.ib \
                fcstor011.ib fcstor012.ib fcstor013.ib fcstor014.ib fcstor015.ib)
 NVME_HOSTS=(fcstor003.ib fcstor004.ib fcstor005.ib fcstor006.ib)
 RUN_ID=$(date -u +%Y%m%d-%H%M%S)
+POSIX_SSH_SEC=${POSIX_SSH_SEC:-180}
+POSIX2_STEP_SEC=${POSIX2_STEP_SEC:-15}
+BUILD_SSH_SEC=${BUILD_SSH_SEC:-60}
+PERF_SSH_SEC=${PERF_SSH_SEC:-400}
+PROBE_SSH_SEC=${PROBE_SSH_SEC:-10}
 
 say() { echo "[run_tests] $*"; }
 
+# Every remote call has a hard deadline (efs-ssh default is 30s).
+ssh_to() { # timeout_sec host [remote]
+    local t=$1; shift
+    EFS_SSH_TIMEOUT=$t "$SSH" "$@"
+    local rc=$?
+    if [ $rc -eq 124 ]; then
+        say "TIMEOUT ${t}s: $*"
+    fi
+    return $rc
+}
+
 # rsync the tests dir to a node's /tmp/efs/tests
 push_tests() { # host
-    $SSH "$1" 'mkdir -p /tmp/efs && rsync -a --delete "$HOME/git/efs/tests/" /tmp/efs/tests/' \
+    ssh_to 20 "$1" 'mkdir -p /tmp/efs && rsync -a --delete "$HOME/git/efs/tests/" /tmp/efs/tests/' \
         >/dev/null 2>&1
 }
 
 # mount a client if not already mounted (assumes a current efs-fuse binary)
 ensure_mounted() { # host
     local h=$1
-    if $SSH "$h" 'grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts' 2>/dev/null; then
+    if ssh_to "$PROBE_SSH_SEC" "$h" 'grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts' 2>/dev/null; then
         return 0
     fi
     say "  $h: mounting efs-fuse"
-    $SSH "$h" 'cd /tmp/efs && [ -x ./efs-fuse ] || make efs-fuse >/dev/null 2>&1; \
+    ssh_to "$BUILD_SSH_SEC" "$h" 'cd /tmp/efs && [ -x ./efs-fuse ] || make efs-fuse >/dev/null 2>&1; \
         mkdir -p /tmp/efs/mnt; \
         (setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &); \
-        sleep 5; grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts' 2>/dev/null
+        for i in $(seq 1 20); do sleep 0.15; \
+            grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts && exit 0; done; exit 1' 2>/dev/null
 }
 
 # Drop and remount one pure-client efs-fuse so it refetches the server snapshot.
@@ -61,13 +83,12 @@ ensure_mounted() { # host
 remount_client() { # host
     local h=$1
     say "  $h: remount efs-fuse"
-    $SSH "$h" 'fusermount3 -uz /tmp/efs/mnt 2>/dev/null
-        killall -9 efs-fuse 2>/dev/null || pkill -9 -x efs-fuse 2>/dev/null || true
-        sleep 0.4
+    ssh_to 15 "$h" 'killall -9 efs-fuse 2>/dev/null || pkill -9 -x efs-fuse 2>/dev/null || true
+        timeout 3 fusermount3 -uz /tmp/efs/mnt 2>/dev/null || true
         cd /tmp/efs && mkdir -p /tmp/efs/mnt && rm -f fuse.log
         setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &
         for i in $(seq 1 20); do
-            sleep 0.5
+            sleep 0.15
             grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts && exit 0
         done
         echo remount-timeout; tail -8 fuse.log; exit 1'
@@ -80,11 +101,11 @@ cmd_setup() { # [host ...]
     say "setup: rsync+build+mount on: ${hosts[*]}"
     local pids=()
     for h in "${hosts[@]}"; do
-        ( $SSH "$h" 'rsync -a --delete --exclude="/mnt/" --exclude="/mnt-s3/" --exclude="/mnt-cold/" --exclude="*.log" \
+        ( ssh_to "$BUILD_SSH_SEC" "$h" 'rsync -a --delete --exclude="/mnt/" --exclude="/mnt-s3/" --exclude="/mnt-cold/" --exclude="*.log" \
               "$HOME/git/efs/" /tmp/efs/ >/dev/null 2>&1 && \
               cd /tmp/efs && make efs-fuse >/dev/null 2>&1' && \
           ensure_mounted "$h" && \
-          $SSH "$h" 'grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts' && \
+          ssh_to "$PROBE_SSH_SEC" "$h" 'grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts' && \
           echo "  $h: ready" || echo "  $h: SETUP FAILED" ) &
         pids+=($!)
     done
@@ -92,31 +113,57 @@ cmd_setup() { # [host ...]
 }
 
 # ---------------------------------------------------------------- posix ---
-cmd_posix() { # [efs-host ...]
-    local hosts=("$@")
+cmd_posix() { # [--keep] [--parallel] [efs-host ...]
+    local keep="" parallel=0 hosts=()
+    for a in "$@"; do
+        case "$a" in
+            --keep) keep="--keep" ;;
+            --parallel) parallel=1 ;;
+            *) hosts+=("$a") ;;
+        esac
+    done
     [ ${#hosts[@]} -eq 0 ] && hosts=("${DEFAULT_HOSTS[@]:0:1}")
     local pdir="$RESULTS/posix/$RUN_ID"
     mkdir -p "$pdir"
 
     say "posix: XFS baseline on $XFS_HOST:$XFS_DIR"
     push_tests "$XFS_HOST"
-    $SSH "$XFS_HOST" "python3 /tmp/efs/tests/posix/posix_suite.py '$XFS_DIR' \
+    ssh_to "$POSIX_SSH_SEC" "$XFS_HOST" "timeout -k 5 $((POSIX_SSH_SEC - 15)) \
+        python3 /tmp/efs/tests/posix/posix_suite.py '$XFS_DIR' \
+        --timeout-s ${POSIX_TEST_SEC:-15} \
         --results /tmp/posix-xfs.tsv >/dev/null 2>&1; cat /tmp/posix-xfs.tsv" \
         > "$pdir/xfs-baseline.tsv"
     say "  baseline: $(grep -c $'\tPASS' "$pdir/xfs-baseline.tsv") pass"
 
-    local rc=0
-    for h in "${hosts[@]}"; do
-        say "posix: efs on $h:$EFS_MNT"
+    posix_one() { # host
+        local h=$1
+        say "posix: efs on $h:$EFS_MNT $keep"
         push_tests "$h"
-        $SSH "$h" "python3 /tmp/efs/tests/posix/posix_suite.py '$EFS_MNT' \
+        ssh_to "$POSIX_SSH_SEC" "$h" "timeout -k 5 $((POSIX_SSH_SEC - 15)) \
+            python3 /tmp/efs/tests/posix/posix_suite.py '$EFS_MNT' \
+            $keep --timeout-s ${POSIX_TEST_SEC:-15} \
             --results /tmp/posix-efs.tsv >/dev/null 2>&1; cat /tmp/posix-efs.tsv" \
             > "$pdir/efs-${h%.ib}.tsv"
         say "  --- compare $h vs XFS baseline ---"
         python3 "$REPO/tests/posix/compare.py" "$pdir/xfs-baseline.tsv" \
             "$pdir/efs-${h%.ib}.tsv" | tee "$pdir/compare-${h%.ib}.txt"
-        [ ${PIPESTATUS[0]} -ne 0 ] && rc=1
-    done
+    }
+
+    local rc=0
+    if [ "$parallel" = 1 ]; then
+        local pids=()
+        for h in "${hosts[@]}"; do
+            posix_one "$h" &
+            pids+=($!)
+        done
+        for p in "${pids[@]}"; do
+            wait "$p" || rc=1
+        done
+    else
+        for h in "${hosts[@]}"; do
+            posix_one "$h" || rc=1
+        done
+    fi
     say "posix results in $pdir"
     return $rc
 }
@@ -125,51 +172,81 @@ cmd_posix() { # [efs-host ...]
 # Two efs-fuse clients, same export. Prepare testdirs on A, remount B so
 # both see the parent, then mutate on A and check B with no further remount.
 # XFS baseline uses the same directory as both sides (kernel namespace).
-cmd_posix2() { # [host-a] [host-b]
-    local host_a=${1:-fcstor007.ib}
-    local host_b=${2:-fcstor008.ib}
+posix2_one_pair() { # host-a host-b results-dir parent
+    local host_a=$1 host_b=$2 pdir=$3 parent=$4
+    local py="$REPO/tests/posix/posix_2client.py"
+    say "posix2: efs A=$host_a B=$host_b parent=$parent"
+    ensure_mounted "$host_a" || { say "  $host_a not mounted"; return 1; }
+    ensure_mounted "$host_b" || { say "  $host_b not mounted"; return 1; }
+    # Unique parent per pair so a leftover posix-2c (EEXIST/EIO/false
+    # flock) cannot leak across parallel pairs. Remount A+B around
+    # prepare so B does not walk an old ino of the same name.
+    remount_client "$host_a" || return 1
+    remount_client "$host_b" || return 1
+    ssh_to 60 "$host_a" "python3 '$py' --prepare '$EFS_MNT' --parent '$parent'" || {
+        say "  prepare failed on $host_a"
+        return 1
+    }
+    say "  remount $host_b after prepare"
+    remount_client "$host_b" || return 1
+    ssh_to 20 "$host_b" "timeout -k 2 15 test -d '$EFS_MNT/$parent'" || {
+        say "  $host_b still cannot see $EFS_MNT/$parent after remount"
+        return 1
+    }
+    EFS_SSH_TIMEOUT=$POSIX2_STEP_SEC POSIX2_STEP_SEC=$POSIX2_STEP_SEC \
+        python3 "$py" --remote "$host_a" "$host_b" --mnt "$EFS_MNT" \
+        --parent "$parent" \
+        --results "$pdir/efs-${host_a%.ib}-${host_b%.ib}.tsv"
+    local rc=$?
+    ssh_to 10 "$host_a" "timeout -k 2 8 rm -rf '$EFS_MNT/$parent'" || true
+    say "  --- compare $host_a/$host_b vs XFS ---"
+    python3 "$REPO/tests/posix/compare.py" "$pdir/xfs-baseline.tsv" \
+        "$pdir/efs-${host_a%.ib}-${host_b%.ib}.tsv" | \
+        tee "$pdir/compare-${host_a%.ib}-${host_b%.ib}.txt"
+    [ ${PIPESTATUS[0]} -ne 0 ] && rc=1
+    return $rc
+}
+
+cmd_posix2() { # [host-a] [host-b]  |  multi
     local pdir="$RESULTS/posix2/$RUN_ID"
     mkdir -p "$pdir" "$RESULTS/posix2"
     local py="$REPO/tests/posix/posix_2client.py"
 
     say "posix2: XFS baseline on $XFS_HOST:$XFS_DIR (same path twice)"
     push_tests "$XFS_HOST"
-    $SSH "$XFS_HOST" "python3 /tmp/efs/tests/posix/posix_2client.py --local \
+    ssh_to "$POSIX_SSH_SEC" "$XFS_HOST" "timeout -k 5 $((POSIX_SSH_SEC - 15)) \
+        python3 /tmp/efs/tests/posix/posix_2client.py --local \
         '$XFS_DIR' '$XFS_DIR' --results /tmp/posix2-xfs.tsv; \
         cat /tmp/posix2-xfs.tsv" > "$pdir/xfs-baseline.tsv"
     say "  baseline: $(grep -c $'\tPASS' "$pdir/xfs-baseline.tsv") pass"
 
-    say "posix2: efs A=$host_a B=$host_b mnt=$EFS_MNT"
-    ensure_mounted "$host_a" || { say "  $host_a not mounted"; return 1; }
-    ensure_mounted "$host_b" || { say "  $host_b not mounted"; return 1; }
-    # Drop keep_last / hold fds from a prior run so rmtree of posix-2c
-    # can finish (peer_unlink_while_b_has_fd leaves a ghost dir).
-    remount_client "$host_a" || return 1
-    remount_client "$host_b" || return 1
-    $SSH "$host_a" "python3 '$py' --prepare '$EFS_MNT'" || {
-        say "  prepare failed on $host_a"
-        return 1
-    }
-    # Prepare fsyncs .keep so the testdirs are committed. Remount B so
-    # it adopts those inos — a leftover local posix-2c (same name, old
-    # ino) makes test -d succeed and then LOOKUP walks the empty old
-    # dir (ENOENT / EIO on B). Never block forever on FUSE.
-    say "  remount $host_b after prepare"
-    remount_client "$host_b" || return 1
-    $SSH "$host_b" "timeout -k 2 15 test -d '$EFS_MNT/posix-2c'" || {
-        say "  $host_b still cannot see $EFS_MNT/posix-2c after remount"
-        return 1
-    }
-    python3 "$py" --remote "$host_a" "$host_b" --mnt "$EFS_MNT" \
-        --results "$pdir/efs-${host_a%.ib}-${host_b%.ib}.tsv"
-    local rc=$?
-    $SSH "$host_a" "rm -rf '$EFS_MNT/posix-2c'" || true
+    if [ "${1:-}" = "multi" ]; then
+        # Non-overlapping hosts so 4 pairs can run at once.
+        local pairs=(
+            "fcstor007.ib fcstor008.ib"
+            "fcstor009.ib fcstor012.ib"
+            "fcstor010.ib fcstor013.ib"
+            "fcstor011.ib fcstor015.ib"
+        )
+        local pids=() rc=0
+        for pair in "${pairs[@]}"; do
+            local ha=${pair%% *} hb=${pair#* }
+            local parent="posix-2c-${ha%.ib}-${hb%.ib}"
+            posix2_one_pair "$ha" "$hb" "$pdir" "$parent" &
+            pids+=($!)
+        done
+        for p in "${pids[@]}"; do
+            wait "$p" || rc=1
+        done
+        say "posix2 results in $pdir"
+        return $rc
+    fi
 
-    say "  --- compare two-client efs vs XFS ---"
-    python3 "$REPO/tests/posix/compare.py" "$pdir/xfs-baseline.tsv" \
-        "$pdir/efs-${host_a%.ib}-${host_b%.ib}.tsv" | \
-        tee "$pdir/compare-${host_a%.ib}-${host_b%.ib}.txt"
-    [ ${PIPESTATUS[0]} -ne 0 ] && rc=1
+    local host_a=${1:-fcstor007.ib}
+    local host_b=${2:-fcstor008.ib}
+    local parent="posix-2c-${host_a%.ib}-${host_b%.ib}"
+    posix2_one_pair "$host_a" "$host_b" "$pdir" "$parent"
+    local rc=$?
     say "posix2 results in $pdir"
     return $rc
 }
@@ -178,7 +255,8 @@ cmd_posix2() { # [host-a] [host-b]
 perf_one() { # host mode outdir  (runs on the node, collects TSV back)
     local h=$1 mode=$2 outdir=$3
     push_tests "$h"
-    $SSH "$h" "bash /tmp/efs/tests/perf/perf_node.sh '$EFS_MNT' \
+    ssh_to "$PERF_SSH_SEC" "$h" "timeout -k 10 $((PERF_SSH_SEC - 20)) \
+        bash /tmp/efs/tests/perf/perf_node.sh '$EFS_MNT' \
         /tmp/perf-$RUN_ID.tsv '$mode' >/dev/null 2>&1; cat /tmp/perf-$RUN_ID.tsv"
 }
 
@@ -252,7 +330,8 @@ cmd_nvme() { # [quick|full] [serial|parallel|both]
     for h in "${NVME_HOSTS[@]}"; do
         (
             push_tests "$h"
-            $SSH "$h" "bash /tmp/efs/tests/perf/perf_local_nvme.sh \
+            ssh_to "$PERF_SSH_SEC" "$h" "timeout -k 10 $((PERF_SSH_SEC - 20)) \
+                bash /tmp/efs/tests/perf/perf_local_nvme.sh \
                 /tmp/perf-nvme-$RUN_ID.tsv '$mode' '$layout'; \
                 cat /tmp/perf-nvme-$RUN_ID.tsv"
         ) > "$pdir/nvme-${h%.ib}.tsv" 2>"$pdir/nvme-${h%.ib}.log" &
@@ -299,7 +378,8 @@ cmd_ewrite() { # [host]
     say "ewrite: 30s sweep (1 2/4/8/16) on $host:$EFS_MNT"
     ensure_mounted "$host" || { say "  $host not mounted"; return 1; }
     push_tests "$host"
-    $SSH "$host" "bash /tmp/efs/tests/perf/ewrite_sweep.sh '$EFS_MNT' \
+    ssh_to 150 "$host" "timeout -k 5 140 \
+        bash /tmp/efs/tests/perf/ewrite_sweep.sh '$EFS_MNT' \
         /tmp/ewrite-$RUN_ID.tsv; cat /tmp/ewrite-$RUN_ID.tsv" \
         | tee "$pdir/ewrite-${host%.ib}.tsv"
     # keep a clean TSV (drop the human lines the script prints)
@@ -329,7 +409,7 @@ cmd_meta() { # [host]
     local pdir="$RESULTS/meta/$RUN_ID"
     mkdir -p "$pdir" "$RESULTS/meta"
     say "meta: efs-bench --meta on $host (workers 1/4/16)"
-    $SSH "$host" 'rsync -a --delete --exclude="/mnt/" --exclude="*.log" \
+    ssh_to "$BUILD_SSH_SEC" "$host" 'rsync -a --delete --exclude="/mnt/" --exclude="*.log" \
         "$HOME/git/efs/" /tmp/efs/ && cd /tmp/efs && make efs-bench' \
         >"$pdir/build.log" 2>&1 || { say "  build failed"; cat "$pdir/build.log"; return 1; }
     local w out
@@ -343,7 +423,8 @@ cmd_meta() { # [host]
     for w in 1 4 16; do
         out="$pdir/meta-${host%.ib}-w${w}.txt"
         say "  workers=$w"
-        $SSH "$host" "cd /tmp/efs && ./efs-bench 172.16.223.57:19810 --meta \
+        ssh_to 120 "$host" "timeout -k 5 110 \
+            cd /tmp/efs && ./efs-bench 172.16.223.57:19810 --meta \
             --export efs-test --files 5000 --dirs 64 --workers $w" \
             | tee "$out"
         awk -v rid="$RUN_ID" -v host="${host%.ib}" -v w="$w" '
