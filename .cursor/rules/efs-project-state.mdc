@@ -734,25 +734,38 @@ FIXED (7e442fa) — the last 5:
 
 ## Root causes already found — don't re-diagnose
 - **names_crazy_roundtrip / `.fuse_hidden` leftover (ROOT-CAUSED + FIXED,
-  Aug 26)**: NOT an efs bug — the kernel defers the final `fput`/FUSE
-  `release` (task_work / delayed_fput) by a few hundred µs. When a test
-  unlinks a file immediately after close, the unlink lands in the deferral
-  window; the kernel still counts the file open → **silly-renames** it to
-  `.fuse_hidden<hex>`, then unlinks it for real ~300µs later when the
-  deferred release completes. Proven with a timestamped open/flush/release/
-  unlink/rename daemon trace (`EFS_SILLY_DBG`): the silly-renamed cycle is
-  missing the read-close `release` before the unlink (a normal cycle has it);
-  the release lands ~103µs AFTER the unlink, then `.fuse_hidden` is unlinked
-  ~63µs after that. Always transient, never leaks (0 lingering after 19k
-  cycles). Writeback cache is OFF, so not writeback-related. Repro:
-  `tests/debug/silly_race.py` (tight close→unlink window + churn).
+  Aug 26)**: NOT an efs bug, and the silly-rename is done by **libfuse's
+  high-level API** (the userspace lib efs-fuse links), NOT the kernel.
+  Mechanism: the kernel defers the final `fput`/FUSE `release` (task_work /
+  delayed_fput) by a few hundred µs, so it sends FUSE_UNLINK before
+  FUSE_RELEASE. libfuse's `fuse_lib_unlink` then sees the file still open in
+  its internal tree (`is_open`) and calls `hide_node` → renames it to
+  `.fuse_hidden%08x%08x` (nodeid, hidectr); when the deferred release is
+  processed, libfuse unlinks the `.fuse_hidden`. Proven with a timestamped
+  open/flush/release/unlink/rename daemon trace (`EFS_SILLY_DBG`): the
+  silly-renamed cycle is missing the read-close `release` before the unlink
+  (a normal cycle has it); the release lands ~103µs AFTER the unlink, then
+  `.fuse_hidden` is unlinked ~63µs after that. Always transient, never leaks
+  (0 lingering after 19k cycles). Repro: `tests/debug/silly_race.py`.
+  **`.fuse_hidden*` is the ONLY namespace artifact libfuse injects** — both
+  unlink-of-open (`fuse_lib_unlink`) and rename-over-open (`fuse_lib_rename`
+  → `hide_node`) use the same pattern; an exhaustive grep of lib/fuse.c found
+  no other generated names. The kernel adds nothing to the mounted namespace.
+  **`hard_remove` mount opt considered + REJECTED**: it skips the silly-rename
+  but then read/write/fsync/fstat/ftruncate on the still-open fd fail ENOENT
+  (libfuse removed the node) — breaks unlink-while-open (posix
+  `unlink_open_file`/`unlink_open_then_recreate`). libfuse docs explicitly
+  recommend against it.
   **Fix = daemon readdir hides `.fuse_hidden*` entries** (efs_fuse.c) — a
   deleted-open file is never user-visible; the open fd uses `fi->fh` (ino),
-  not a path lookup, so filtering is safe and the kernel still cleans up.
-  Test reverted to a STRICT `listdir == []` (a leftover now = a real bug).
-  The only way to eliminate silly-rename entirely is the low-level
-  (inode-based) FUSE API — a large rewrite, not warranted for a transient
-  cosmetic artifact. Single-client gate after fix: 186/191, 0 EFS bugs.
+  not a path lookup, so filtering is safe and libfuse still cleans up.
+  Prefix match on `.fuse_hidden` covers both the unlink and rename cases and
+  any hex length. Edge case: a user file literally named `.fuse_hidden*`
+  would be hidden too (de-facto-reserved namespace; accepted). Test reverted
+  to a STRICT `listdir == []` (a leftover now = a real bug). The only way to
+  eliminate silly-rename entirely is the low-level (inode-based) FUSE API —
+  a large rewrite, not warranted for a transient cosmetic artifact.
+  Single-client gate after fix: 186/191, 0 EFS bugs.
 - **232MB / 1.9M-chunk adopt after wipe (Aug 25)**: not a client disk
   cache and not leftover `.efsm` on the NVMe. `adopted cache blob` is
   the GET_META payload kept in RAM. Wipe of `/data1/*/efs` + new `mkfs`
