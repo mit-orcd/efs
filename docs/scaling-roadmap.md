@@ -502,6 +502,82 @@ memory and serialize time drop accordingly.
 
 ---
 
+## Client architecture — low-level (inode-based) FUSE API
+
+**Goal:** replace the high-level (path-based) `fuse_operations` API with the
+low-level (inode-based) API. This is a **client-glue rewrite, not a scaling
+phase** — it does not raise the inode cap. It eliminates two known live issue
+classes that are *both* high-level-API limitations, and removes a redundant
+path-resolution layer. Consistent with the **stay-on-FUSE** decision (see
+Cross-cutting concerns): this is the way to get kernel-client semantics
+without a kernel module.
+
+**Why — the two correctness wins:**
+
+1. **Silly-rename / `.fuse_hidden` (root-caused Aug 26).** The high-level API
+   silly-renames an unlinked-while-open file to `.fuse_hidden<hex>` (libfuse
+   `hide_node`, in `fuse_lib_unlink` / `fuse_lib_rename`); we currently hide
+   it in `efs_fuse_readdir`. Low-level `unlink` removes the name and keeps the
+   inode alive via the kernel's reference until `forget` — no artifact, no
+   filter. (`hard_remove` is NOT the answer: it makes read/write/fsync/fstat
+   on the still-open fd fail ENOENT, breaking unlink-while-open.)
+2. **Hardlink flakiness (known live issue).** The high-level API has no
+   daemon-controlled `.lookup`, so the kernel intermittently resolves a link's
+   source path from a stale cached dentry without calling the daemon
+   (`efs_fuse_link` never invoked). Low-level is inode-native (one inode, many
+   names) — hardlinks work by construction.
+
+**Secondary wins:**
+
+3. **No double path resolution.** Today every op pays libfuse's tree walk
+   (under a lock) to rebuild the path string, then efs-fuse's
+   `lookup_path_fuse` walks its own tables. Low-level sends
+   `(parent_nodeid, name)` and efs does ONE lookup in its own metadata.
+4. **Explicit inode lifecycle.** `lookup`/`forget` give precise refcounting —
+   cleaner than HOLD-on-open/release, and tells efs exactly when the kernel
+   drops an inode (client cache eviction).
+5. **Finer cache control.** Per-entry `entry_timeout`/`attr_timeout`/negative
+   caching per inode (today blanket 0). Useful if a relaxed-coherence mount
+   mode is ever added.
+
+**Work:**
+
+1. Implement `lookup` (parent_ino + name → ino + attr + timeouts) and
+   `forget` (inode refcount dec; evict from the client cache at 0). The
+   daemon owns the nodeid space — map nodeid ↔ efs ino (can be 1:1).
+2. Migrate every handler in `efs_ops` (`src/client/efs_fuse.c`) from
+   path-based to inode-based: open/read/write/flush/release/fsync take
+   nodeid + `fi->fh`; create/mkdir/unlink/rename/link/symlink take
+   (parent_nodeid, name). Most handlers already resolve to an ino
+   internally — the change is dropping the path round-trip, not new logic.
+3. Rework path-based conveniences: `.find`/`.stats` virtual files and
+   daemon-side ancestor access checks must be re-expressed as
+   (parent_ino, name) + walking efs's own parent pointers.
+4. Keep the data path (chunk PUT/GET, dcache, REPORT) untouched — it is
+   already ino-keyed.
+
+**Risks / watch-items:**
+
+- nodeid/refcount bugs leak or prematurely evict inodes — cover with the
+  valgrind leak gate (`tests/run_tests.sh leaks`) plus a lookup/forget
+  balance check.
+- unlink-while-open and rename-over-open must keep working (posix
+  `unlink_open_file`, `unlink_open_then_recreate`, rename-over tests) — these
+  are exactly the cases the high-level silly-rename used to paper over.
+- Large, high-touch rewrite: land it alone on a fresh cluster, not mixed
+  with other changes; full gate behind it.
+
+**Gates:** `make test`; posix_suite 191 + posix2 63 with 0 EFS bugs on
+bits=3; mc_stress VERIFY-OK; `tests/run_tests.sh leaks` clean; unlink-storm
+9×4000; `.fuse_hidden` never appears (the suite's strict `listdir == []`
+already catches it) and a `ln` hardlink storm passes.
+
+**Milestone:** efs-fuse mounts on the low-level API; the two issue classes
+above are gone by construction; no perf regression on the single-client
+posix suite or sw-1m.
+
+---
+
 ## Cross-cutting concerns
 
 - **Unprivileged on-demand clusters (goal, Aug 24):** users must be able to
@@ -522,7 +598,10 @@ memory and serialize time drop accordingly.
   gap is the wire protocol (RPCs per op), not FUSE upcalls, and a kernel
   client would face the same RPC cost. If mdtest-class numbers are ever
   needed, add an opt-in relaxed-coherence mount mode (entry_timeout>0 +
-  server-driven invalidation / lease RPCs) — not a kernel module.
+  server-driven invalidation / lease RPCs) — not a kernel module. Separately,
+  the high-level → **low-level (inode-based) FUSE API** migration (its own
+  section above) fixes the silly-rename / hardlink gaps without a kernel
+  module.
 
 - **`efs-mgmt` kick-clients (ops, not started):** a management call that
   tells every `efs-fuse` to disconnect so an upgrade / wipe / rolling
