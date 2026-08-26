@@ -2297,7 +2297,21 @@ static int efs_fuse_rmdir(const char *path)
     if (wx != 0)
         return wx;
 
-    int urc = efs_client_unlink(parent.ino, name, true);
+    /* A dir whose only remaining entries are deleted-but-still-open files is
+     * reported NOT_EMPTY until libfuse's deferred release unlinks the
+     * silly-renamed .fuse_hidden* dentry (~100us, more under load). XFS drops
+     * the dir entry at unlink even while open, so rmdir succeeds there.
+     * Retry briefly to ride out the transient and match XFS; a genuinely
+     * non-empty dir still fails, just after the bounded delay. */
+    int urc = EFS_ERR_NOT_EMPTY;
+    for (int attempt = 0; attempt < 20 && urc == EFS_ERR_NOT_EMPTY;
+         attempt++) {
+        urc = efs_client_unlink(parent.ino, name, true);
+        if (urc == EFS_ERR_NOT_EMPTY) {
+            struct timespec ts = { .tv_sec = 0, .tv_nsec = 1000000 };
+            nanosleep(&ts, NULL);
+        }
+    }
     if (urc == 0) {
         invalidate_parent_path(path);
         return 0;

@@ -1853,12 +1853,15 @@ def concurrent_create_unlink_two_proc(d):
         "    os.unlink(p)\n"
     )
     procs = [
-        subprocess.Popen([sys.executable, "-c", snippet, d, str(i)])
+        subprocess.Popen([sys.executable, "-c", snippet, d, str(i)],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         for i in range(3)
     ]
     for pr in procs:
-        if pr.wait() != 0:
-            raise Fail("create/unlink child rc=%d" % pr.returncode)
+        _out, err = pr.communicate()
+        if pr.returncode != 0:
+            raise Fail("create/unlink child rc=%d: %s"
+                       % (pr.returncode, err.decode(errors="replace")[-300:]))
     leftover = [n for n in os.listdir(d) if n.startswith("c")]
     eq(leftover, [], "no leftover create/unlink names")
 
