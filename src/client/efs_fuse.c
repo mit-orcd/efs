@@ -3261,12 +3261,15 @@ static int efs_fuse_flock(const char *path, struct fuse_file_info *fi, int op)
     int rc = fuse_file_ino(path, fi, &ino);
     if (rc != 0)
         return rc;
-    /* fi->fh is the inode (shared by every fd). Use the fi pointer so two
-     * opens of the same file are distinct lock owners. */
-    uint64_t owner = g_client.flock_token ^ ((uint64_t)(uintptr_t)fi << 8);
-    struct fuse_context *ctx = fuse_get_context();
-    if (ctx)
-        owner ^= ((uint64_t)ctx->pid << 1);
+    /* fi->fh is the inode (shared by every fd). Use the kernel's lock_owner:
+     * it is stable per open file description (distinct for two opens of the
+     * same file). The fi pointer is NOT — libfuse reuses one stack fi across
+     * requests on a single worker thread, so two fds flock'd from the same
+     * thread would collide owners and the second LOCK_EX would look like a
+     * re-lock by the same owner (no conflict). */
+    uint64_t lk = fi ? fi->lock_owner : 0;
+    uint64_t owner = g_client.flock_token ^
+                     (lk ? lk : ((uint64_t)(uintptr_t)fi << 8));
     rc = efs_client_rpc_flock(g_client.export_id, ino, (uint32_t)op, owner);
     if (rc == EFS_ERR_BUSY)
         return -EAGAIN;
