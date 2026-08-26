@@ -18,11 +18,16 @@ one-time allocs (libfuse fuse_new session bufs, glibc dl-init constructors,
 pthread TLS 288B/thread). **Found+fixed (1124e6d): uninitialised padding in
 struct efs_ino_size_rec sent on the wire** (REPORT_CHUNKS) — malloc→calloc.
 Root/installs rule added (6cb5791): always ask user, never work around.
-**Repeatable leak gate (957c6df):** `tests/run_tests.sh leaks [host]` →
-tests/valgrind_leaks.sh. Self-contained single-node on a private port +
-scratch (never touches the live cluster); gates unit + efsd + efs-fuse under
-memcheck. Hard-fail on definite/indirect leaks, uninit-on-wire, invalid rw;
-possibly-lost only flagged when the direct caller is efs code. Verified PASS.
+**Repeatable leak gate (957c6df, RDMA added 1b72183):** `tests/run_tests.sh
+leaks [host]` → tests/valgrind_leaks.sh. Self-contained single-node on a
+private port + scratch (never touches the live cluster); gates unit + efsd +
+efs-fuse under memcheck over **BOTH TCP and RDMA, client AND server**.
+Hard-fail on definite/indirect leaks, uninit-on-wire, invalid rw;
+possibly-lost only flagged when the direct caller is efs code. RDMA phase is
+leaks-only (ibverbs/DMA fills structs valgrind can't track → uninit
+false-positives by design). RDMA exercised via eager upgrade on connect +
+metadata/packed ops (avoids the known-broken chunk data path). Verified PASS
+on fcstor003: 0 definite / 0 indirect everywhere.
 NOTE: valgrind on efsd needs a clean exit for full leak stacks (SIGTERM gives
 summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
