@@ -470,10 +470,13 @@ int efs_client_report_dirty(int sync)
     struct efs_chunk_rec *crecs = NULL;
     struct efs_ino_size_rec *irecs = NULL;
     uint32_t cn = 0, in = 0;
+    /* calloc: efs_ino_size_rec has 4B of alignment padding (mtime_nsec ->
+     * pack_ino) that field-by-field fills never touch — malloc would send
+     * uninitialised heap on the wire (valgrind writev warning). */
     if (ds.chunk_count)
-        crecs = malloc((size_t)ds.chunk_count * sizeof(*crecs));
+        crecs = calloc(ds.chunk_count, sizeof(*crecs));
     if (ds.ino_count)
-        irecs = malloc((size_t)ds.ino_count * sizeof(*irecs));
+        irecs = calloc(ds.ino_count, sizeof(*irecs));
     if ((ds.chunk_count && !crecs) || (ds.ino_count && !irecs)) {
         free(crecs);
         free(irecs);
