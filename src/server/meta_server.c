@@ -975,10 +975,55 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
      * Preserve shard_id: for an extra-shard table the deserialize staging
      * zeroed it, and alloc_ino keys the ino congruence class off it. */
     uint32_t saved_shard_id = ex->shard_id;
+
+    /* A MAIN-table rebuild must not drop dirty shard tables. efs_export_free
+     * recursively frees ex->shard_tabs; but a shard owner holds ACKED-yet-
+     * unflushed CREATE_SHARD rows in its dirty shard tables (flush window
+     * ~2s). Wiping one lets its alloc_ino re-hand-out those inos, and the
+     * next create's parent-dentry write then collides with the orphaned
+     * dentry on the dentry shard -> spurious EEXIST under parallel creates.
+     * Detach dirty shard tables before the free, reattach them after the
+     * staging swap. Clean shard tables are dropped and rebuilt from the new
+     * root's pages by server_rebuild_owned_extras (they match committed
+     * state, so rebuilding is both safe and refreshes them). */
+    struct efs_export **dirty_tabs = NULL;
+    uint32_t dirty_cap = 0;
+    if (table_ino == EFS_META_TABLE_INO && ex->shard_tabs) {
+        dirty_cap = ex->shard_tab_cap;
+        dirty_tabs = calloc(dirty_cap, sizeof(*dirty_tabs));
+        if (dirty_tabs) {
+            for (uint32_t i = 0; i < dirty_cap; i++) {
+                struct efs_export *t = ex->shard_tabs[i];
+                if (t && t->shard_dirty) {
+                    dirty_tabs[i] = t;        /* keep */
+                    ex->shard_tabs[i] = NULL; /* efs_export_free skips NULL */
+                }
+            }
+        }
+    }
     efs_export_free(ex);
     *ex = staging;
     ex->shard_id = saved_shard_id;
     memset(&staging, 0, sizeof(staging));
+    if (dirty_tabs) {
+        uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+        uint32_t cap = dirty_cap > sc ? dirty_cap : sc;
+        struct efs_export **arr = calloc(cap, sizeof(*arr));
+        if (arr) {
+            ex->shard_tabs = arr;
+            ex->shard_tab_cap = cap;
+            for (uint32_t i = 0; i < dirty_cap && i < cap; i++)
+                if (dirty_tabs[i])
+                    arr[i] = dirty_tabs[i];
+        } else {
+            for (uint32_t i = 0; i < dirty_cap; i++)
+                if (dirty_tabs[i]) {
+                    efs_export_free(dirty_tabs[i]);
+                    free(dirty_tabs[i]);
+                }
+        }
+        free(dirty_tabs);
+    }
 
     /* Success: keep the assembled blob (plus this generation's page
      * checksums) as the incremental-rebuild cache so the next rebuild only
