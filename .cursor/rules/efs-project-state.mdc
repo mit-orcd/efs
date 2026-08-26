@@ -733,6 +733,26 @@ FIXED (7e442fa) — the last 5:
   (sw 4.6 GB/s, sr 2.4 GB/s, 4k rand ~40k IOPS). rclone 32×10GiB copy rc=0.
 
 ## Root causes already found — don't re-diagnose
+- **names_crazy_roundtrip / `.fuse_hidden` leftover (ROOT-CAUSED + FIXED,
+  Aug 26)**: NOT an efs bug — the kernel defers the final `fput`/FUSE
+  `release` (task_work / delayed_fput) by a few hundred µs. When a test
+  unlinks a file immediately after close, the unlink lands in the deferral
+  window; the kernel still counts the file open → **silly-renames** it to
+  `.fuse_hidden<hex>`, then unlinks it for real ~300µs later when the
+  deferred release completes. Proven with a timestamped open/flush/release/
+  unlink/rename daemon trace (`EFS_SILLY_DBG`): the silly-renamed cycle is
+  missing the read-close `release` before the unlink (a normal cycle has it);
+  the release lands ~103µs AFTER the unlink, then `.fuse_hidden` is unlinked
+  ~63µs after that. Always transient, never leaks (0 lingering after 19k
+  cycles). Writeback cache is OFF, so not writeback-related. Repro:
+  `tests/debug/silly_race.py` (tight close→unlink window + churn).
+  **Fix = daemon readdir hides `.fuse_hidden*` entries** (efs_fuse.c) — a
+  deleted-open file is never user-visible; the open fd uses `fi->fh` (ino),
+  not a path lookup, so filtering is safe and the kernel still cleans up.
+  Test reverted to a STRICT `listdir == []` (a leftover now = a real bug).
+  The only way to eliminate silly-rename entirely is the low-level
+  (inode-based) FUSE API — a large rewrite, not warranted for a transient
+  cosmetic artifact. Single-client gate after fix: 186/191, 0 EFS bugs.
 - **232MB / 1.9M-chunk adopt after wipe (Aug 25)**: not a client disk
   cache and not leftover `.efsm` on the NVMe. `adopted cache blob` is
   the GET_META payload kept in RAM. Wipe of `/data1/*/efs` + new `mkfs`

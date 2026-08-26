@@ -1249,8 +1249,16 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
     filler(buf, ".", NULL, 0, 0);
     filler(buf, "..", NULL, 0, 0);
-    for (size_t i = 0; i < col.count; i++)
+    for (size_t i = 0; i < col.count; i++) {
+        /* Hide the kernel's silly-rename artifacts (.fuse_hidden<hex>): a
+         * file unlinked while still open is renamed aside by the kernel and
+         * unlinked for real when the last fd's deferred release lands. It is
+         * a deleted-open file — never user-visible. The open fd keeps using
+         * fi->fh (ino), so filtering the listing does not affect it. */
+        if (strncmp(col.ents[i].name, ".fuse_hidden", 12) == 0)
+            continue;
         filler(buf, col.ents[i].name, &col.ents[i].st, 0, 0);
+    }
     free(col.ents);
     return 0;
 }
