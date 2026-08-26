@@ -627,6 +627,18 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
     if (table_ino != EFS_META_TABLE_INO && ex->shard_id > 0 &&
         ex->shard_id < EFS_META_MAX_SHARDS)
         shard_slot = ex->shard_id;
+    /* DIAG: rebuilding a DIRTY shard table from committed pages drops the
+     * uncommitted ops (the live table is newer than the pages). Log loudly
+     * so we can confirm/deny this as the source of the parallel
+     * dir_many_files "one unlink lost" flake. */
+    if (table_ino != EFS_META_TABLE_INO && ex->shard_dirty)
+        fprintf(stderr,
+                "DIRTY-REBUILD: export=%s table_ino=%llu shard=%u gen=%llu "
+                "inodes=%llu — rebuilding a dirty shard table drops "
+                "uncommitted ops\n",
+                ex->name, (unsigned long long)table_ino, ex->shard_id,
+                (unsigned long long)ex->root.generation,
+                (unsigned long long)ex->inode_count);
     pthread_mutex_unlock(&s->lock);
     if (crc != EFS_OK)
         return crc;
@@ -1419,10 +1431,10 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
                 s, tab, efs_meta_shard_table_ino(i), 0, i, sc);
             if (src != 0)
                 rc = src;
-            else {
+            else
                 flushed_extra = 1;
-                tab->shard_dirty = 0;
-            }
+            /* shard_dirty is now cleared inside the flush, only when no op
+             * landed during the unlocked window (flush-race fix). */
         }
     }
     if (primary) {
@@ -1434,8 +1446,8 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
                 s, ex, EFS_META_TABLE_INO, 1, 0, sc);
             if (rc0 != 0)
                 rc = rc0;
-            else
-                ex->shard_dirty = 0;
+            /* shard_dirty is now cleared inside the flush, only when no op
+             * landed during the unlocked window (flush-race fix). */
         } else if (flushed_extra && rc == 0) {
             rc = server_commit_cluster_extras(s, ex);
         }
@@ -1493,6 +1505,13 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
                        ex->root.chunk_blob_len > 0);
     uint64_t snap_chunk_epoch = ex->chunk_epoch;
     uint32_t keep_ch_len = ex->root.chunk_blob_len;
+    /* DIAG flush-race: capture the live table's mutation signals so the commit
+     * path can detect an op that landed during the unlocked PUT window (such
+     * an op is NOT in this snapshot; if the caller then clears shard_dirty it
+     * is lost on a later rebuild). inode_count catches create/unlink;
+     * layout_epoch catches unlink (and a concurrent table adopt). */
+    uint64_t snap_icount = ex->inode_count;
+    uint64_t snap_lepoch = ex->layout_epoch;
     int snap_rc = efs_export_table_snapshot_ex(ex, &snap, omit_chunks);
     new_gen = ex->root.generation + 1;
     if (new_gen == 0)
@@ -1770,6 +1789,16 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
      * fold per-shard gens into the cluster root. */
     if (!commit_cluster_root) {
         pthread_mutex_lock(&s->lock);
+        if (ex->inode_count != snap_icount || ex->layout_epoch != snap_lepoch)
+            fprintf(stderr,
+                    "FLUSH-RACE: export=%s table_ino=%llu shard=%u changed "
+                    "during flush (inodes %llu->%llu layout %llu->%llu)\n",
+                    ex->name, (unsigned long long)table_ino,
+                    ex->shard_id,
+                    (unsigned long long)snap_icount,
+                    (unsigned long long)ex->inode_count,
+                    (unsigned long long)snap_lepoch,
+                    (unsigned long long)ex->layout_epoch);
         /* Ownership remap fence: re-verify we still own this shard AT COMMIT
          * TIME (membership is updated under this same lock, so check+commit
          * are atomic w.r.t. membership changes). A flush that started while
@@ -1819,6 +1848,14 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
         }
         efs_export_root_move(&ex->root, &root);
         ex->flushed_chunk_epoch = snap_chunk_epoch;
+        /* Flush-race fix: the snapshot was taken under the lock, then the lock
+         * was dropped for serialize/PUT. An op that landed in that window is
+         * NOT in the committed root. The caller used to clear shard_dirty
+         * unconditionally, losing such an op on a later rebuild. Clear dirty
+         * only if the table is unchanged since the snapshot; otherwise keep
+         * it dirty so the next flush commits the straggler. */
+        if (ex->inode_count == snap_icount && ex->layout_epoch == snap_lepoch)
+            ex->shard_dirty = 0;
         pthread_mutex_unlock(&s->lock);
         if (old_cis && new_cis)
             server_gc_meta_cow_pages(s, ex, table_ino, old_cis, old_cis_count,
@@ -1936,6 +1973,15 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
                                               : root.page_count;
     uint32_t new_ch_pc = root.chunk_page_count;
     pthread_mutex_lock(&s->lock);
+    if (ex->inode_count != snap_icount || ex->layout_epoch != snap_lepoch)
+        fprintf(stderr,
+                "FLUSH-RACE: export=%s table_ino=%llu (cluster-root) changed "
+                "during flush (inodes %llu->%llu layout %llu->%llu)\n",
+                ex->name, (unsigned long long)table_ino,
+                (unsigned long long)snap_icount,
+                (unsigned long long)ex->inode_count,
+                (unsigned long long)snap_lepoch,
+                (unsigned long long)ex->layout_epoch);
     ex->meta_fragmented = 1;
     /* CoW (EFSR v7): snapshot the outgoing root's page_cis[] and the new
      * root's page_cis[] so the GC runs lock-free on stable copies. */
@@ -1959,6 +2005,11 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     }
     efs_export_root_move(&ex->root, &root);
     ex->flushed_chunk_epoch = snap_chunk_epoch;
+    /* Flush-race fix (see shard path): clear shard_dirty only if no op landed
+     * during the unlocked serialize/PUT window; otherwise keep it dirty so the
+     * next flush commits the straggler instead of losing it on a rebuild. */
+    if (ex->inode_count == snap_icount && ex->layout_epoch == snap_lepoch)
+        ex->shard_dirty = 0;
     s->export_meta_dirty = 1;
     server_save_export(s, ex);
     s->export_meta_dirty = 0;

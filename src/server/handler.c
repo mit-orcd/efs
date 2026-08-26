@@ -2772,6 +2772,27 @@ send_reply:
                         }
                         cand[ncand++] = &tab->inodes[i];
                     }
+                    /* DIAG: catch duplicate dentries (same name, two inos).
+                     * The names_crazy removal flake ("got 1, want 0") could be
+                     * a duplicate revealed after one unlink removed its twin;
+                     * the create-phase listdir dedupes by name so a dup passes
+                     * the create check but leaves one row behind. */
+                    for (uint64_t a = 0; a < ncand; a++)
+                        for (uint64_t b = a + 1; b < ncand; b++)
+                            if (strncmp(cand[a]->name, cand[b]->name,
+                                        EFS_MAX_NAME) == 0)
+                                fprintf(stderr,
+                                        "READDIR-DUP: parent=%llu name=%s "
+                                        "ino1=%llu ino2=%llu shard=%u gen=%llu "
+                                        "dirty=%d cnt=%llu\n",
+                                        (unsigned long long)req->parent,
+                                        cand[a]->name,
+                                        (unsigned long long)cand[a]->ino,
+                                        (unsigned long long)cand[b]->ino,
+                                        tab->shard_id,
+                                        (unsigned long long)tab->root.generation,
+                                        tab->shard_dirty,
+                                        (unsigned long long)tab->inode_count);
                     if (ncand > 1)
                         qsort(cand, ncand, sizeof(*cand), readdir_row_cmp);
                     for (uint64_t k = 0; k < ncand && r.count < max; k++)

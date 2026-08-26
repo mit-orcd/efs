@@ -1538,6 +1538,19 @@ static void *chunk_get_worker(void *arg)
         return NULL;
     }
     if (!job->have_ce) {
+        /* have_ce was snapshotted by the reader thread before this worker
+         * ran. A concurrent flush commits the chunk (dcache_put_now sets the
+         * local chunk mapping) and the reclaimer can then drop the dcache
+         * entry, so the overlay below would find nothing and zero-fill a
+         * chunk that really has data (basic_chunk_boundary read XY\0). Re-
+         * check the local mapping now; if it landed, fall through to fetch. */
+        pthread_mutex_lock(&g_client.idx_mu);
+        if (efs_export_get_chunk(&g_client.export, job->ino, job->ci,
+                                 NULL) == EFS_OK)
+            job->have_ce = 1;
+        pthread_mutex_unlock(&g_client.idx_mu);
+    }
+    if (!job->have_ce) {
         memset(job->chunk, 0, chunk_size);
         efs_dcache_overlay(job->ino, job->ci, job->chunk, chunk_size);
         job->rc = EFS_OK;
