@@ -1,0 +1,20 @@
+[leaks] building (after any rsync --delete) ...
+[leaks] phase 1: unit tests under valgrind
+[leaks] unit/test_meta_v6: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_erasure: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_placement: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_meta_slot: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_dir_stats: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_ino_path: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] unit/test_add_storage: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] phase 2: efsd under valgrind (efs-bench workload, SIGTERM summary)
+tests/valgrind_leaks.sh: line 163: 3907843 Aborted                 (core dumped) EFS_TRANSPORT=tcp ./efs-bench "$SEED" --store --time 5 > /dev/null 2>&1
+[leaks] efsd: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] phase 3: efs-fuse under valgrind (mini-POSIX through the mount)
+[leaks] efs-fuse: definite=0B indirect=0B uninit=0 invalid=0
+[leaks] FAIL: efs-fuse: efs-code possibly-lost blocks:
+==3908005== 16 bytes in 1 blocks are possibly lost in loss record 17 of 53
+==3908005== 102 bytes in 1 blocks are possibly lost in loss record 38 of 53
+
+[leaks] 1 gate failure(s) — logs under /tmp/efs-vg-*.vg (kept on failure)
+tests/valgrind_leaks.sh: line 207: 3907966 Killed                  EFS_TRANSPORT=tcp setsid ./efsd --node-id 1 --addr 127.0.0.1 --port "$PORT" --storage "$STORAGE" --quota 1G > "$WORK-efsd-plain.out" 2>&1 < /dev/null
