@@ -71,14 +71,6 @@ static struct efs_conn *rpc_owner_conn_shard(uint32_t shard,
     return conn;
 }
 
-/* Route to live[shard % nlive] when bits>0. Mutations still require the
- * export primary until that owner flushes (server rejects NOT_PRIMARY). */
-static struct efs_conn *rpc_owner_conn(efs_ino_t ino, efs_node_id_t *nid_out)
-{
-    uint32_t bits = g_client.export.root.shard_bits;
-    return rpc_owner_conn_shard(efs_export_shard_of(ino, bits), nid_out);
-}
-
 /* Send to the owner of `shard`. Retry NOT_PRIMARY. */
 static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
                                uint32_t req_len, uint8_t expect, void *reply,
@@ -629,18 +621,4 @@ int efs_client_rpc_report_dirty_on_shard(efs_export_id_t export_id,
     if (rc != EFS_OK)
         return rc;
     return rpc_status_to_efs(r.status);
-}
-
-int efs_client_load_shard(uint32_t shard)
-{
-    uint32_t n = g_client.export.root.shard_count;
-    uint32_t bits = g_client.export.root.shard_bits;
-    if (bits == 0 || n <= 1)
-        return shard == 0 ? EFS_OK : EFS_ERR_NOT_FOUND;
-    if (shard >= n)
-        return EFS_ERR_INVAL;
-    int rc = efs_export_load_shard(&g_client.export, shard);
-    if (rc == EFS_OK)
-        efs_export_evict_cold_shards(&g_client.export, EFS_SHARD_LRU_KEEP);
-    return rc;
 }

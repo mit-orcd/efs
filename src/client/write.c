@@ -800,61 +800,6 @@ int efs_client_note_meta_change(int force)
     return EFS_OK;
 }
 
-int efs_client_put_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk_index,
-                            uint32_t fragment_index, const uint8_t *data, uint32_t frag_len,
-                            const uint8_t checksum[EFS_HASH_SIZE])
-{
-    if (node_id == 0 || frag_len == 0)
-        return EFS_ERR_INVAL;
-
-    /* Retry after efsd bounce: pooled fds die; drop invalidates the idle
-     * pool and the next attempt reconnects. */
-    for (int attempt = 1; attempt <= 3; attempt++) {
-        struct efs_conn *conn = efs_client_conn_get(node_id);
-        if (!conn) {
-            if (attempt < 3) {
-                usleep(100000u * (unsigned)attempt);
-                continue;
-            }
-            return EFS_ERR_NET;
-        }
-
-        struct efs_msg_put_chunk hdr;
-        memset(&hdr, 0, sizeof(hdr));
-        hdr.export_id = g_client.export_id;
-        hdr.ino = ino;
-        hdr.chunk_index = chunk_index;
-        hdr.fragment_index = fragment_index;
-        hdr.data_len = frag_len;
-        memcpy(hdr.checksum, checksum, EFS_HASH_SIZE);
-
-        uint8_t reply_type;
-        void *reply = NULL;
-        uint32_t reply_len = 0;
-        if (efs_conn_send_msg_parts(conn, EFS_MSG_PUT_CHUNK, &hdr, sizeof(hdr),
-                                    data, frag_len) != 0 ||
-            efs_conn_recv_msg(conn, &reply_type, &reply, &reply_len) != 0 ||
-            reply_type != EFS_MSG_PUT_CHUNK_REPLY || reply_len != 1) {
-            free(reply);
-            efs_client_conn_drop(node_id, conn);
-            if (attempt < 3) {
-                usleep(100000u * (unsigned)attempt);
-                continue;
-            }
-            return EFS_ERR_NET;
-        }
-        uint8_t status = ((uint8_t *)reply)[0];
-        free(reply);
-        efs_client_conn_release(node_id, conn);
-        if (status == EFS_PUT_CHUNK_OK)
-            return EFS_OK;
-        if (status == EFS_PUT_CHUNK_QUOTA_EXCEEDED)
-            return EFS_ERR_QUOTA;
-        return EFS_ERR_IO;
-    }
-    return EFS_ERR_NET;
-}
-
 /* Consume one PUT_CHUNK reply from a conn that reply_watch marked ready
  * (or whose poll fd fired). Returns 1 on OK ack, 0 on quota, -1 when the
  * conn was dropped. */

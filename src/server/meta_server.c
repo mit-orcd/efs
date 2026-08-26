@@ -576,35 +576,6 @@ int server_ensure_shard_ready(struct efsd_server *s, struct efs_export *ex,
     return (rc == EFS_OK && tab && !tab->meta_needs_rebuild) ? 0 : -1;
 }
 
-void server_rebuild_fragmented_exports(struct efsd_server *s)
-{
-    for (uint32_t i = 0; i < s->export_count; i++) {
-        struct efs_export *ex = &s->exports[i];
-        if (!ex->meta_fragmented)
-            continue;
-        if (server_rebuild_export_from_pages(s, ex) == EFS_OK) {
-            server_rebuild_owned_extras(s, ex);
-            continue;
-        }
-        /* Fall back to pulling root+pages from any peer. */
-        int ok = 0;
-        for (uint32_t n = 0; n < s->node_count; n++) {
-            if (s->nodes[n].id == s->id)
-                continue;
-            if (server_fetch_metadata_from(s, s->nodes[n].addr,
-                                           s->nodes[n].port) == 0) {
-                ok = 1;
-                break;
-            }
-        }
-        if (!ok) {
-            fprintf(stderr,
-                    "Export %s: root loaded; bulk meta pages not yet rebuilt\n",
-                    ex->name);
-        }
-    }
-}
-
 int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *ex)
 {
     return server_rebuild_export_from_pages_ino(s, ex, EFS_META_TABLE_INO);

@@ -1370,7 +1370,6 @@ static void efs_fuse_log_err(const char *where, int efs_rc, efs_ino_t ino,
 static int efs_wb_sync(void);
 static int efs_file_data_sync_ino(const char *path);
 static int efs_file_data_sync_fh(const char *path, struct fuse_file_info *fi);
-static int coal_read_sync(efs_ino_t ino);
 
 static int efs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
                          struct fuse_file_info *fi)
@@ -1410,15 +1409,6 @@ static int efs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
     if (fi && ((fi->flags & O_DIRECT) || fi->direct_io) &&
         ((offset & 4095) || (size & 4095)))
         return -EINVAL;
-
-    /* Read-your-writes: commit any coalesced (not yet written-back) data for
-     * this file before reading from the servers. Pure reads skip this via the
-     * active-run counter, so the read path stays fast when nothing is dirty. */
-    if (coal_read_sync(ino) != 0) {
-        efs_fuse_log_err("read-wbsync", EFS_ERR_IO, ino, (uint64_t)offset,
-                         size, path);
-        return -EIO;
-    }
 
     size_t got = 0;
     rc = efs_client_read(ino, (uint64_t)offset, size, buf, &got);
@@ -1874,218 +1864,6 @@ static int efs_file_data_sync_ino(const char *path)
     return efs_dcache_flush_ino(ino.ino);
 }
 
-/* ---- Write coalescing -----------------------------------------------------
- * Every FUSE write otherwise becomes its own writeback job -> its own chunk
- * read-modify-write + PUT, so N small writes to one chunk cost N full-chunk
- * PUTs (~192x amplification at bs=1024). Small sub-chunk writes are instead
- * accumulated into a per-ino contiguous run and flushed as one large write
- * (full chunks -> no RMW). Large (>= chunk) writes bypass straight to the WB
- * queue. Durability is unchanged: fsync/flush/release flush the run and then
- * drain the WB queue. Read-your-writes: a read of a file with an open run
- * flushes + drains it first; pure reads skip via the active-run counter. */
-#define EFS_COALESCE_CAP      (1u << 20) /* 1 MiB per run */
-#define EFS_COALESCE_MAX_RUNS 64
-#define EFS_COALESCE_SLOTS    128
-
-struct coal_run {
-    efs_ino_t ino;
-    uint64_t start, end;
-    size_t cap;
-    char *buf;
-    struct coal_run *next;
-};
-
-static struct {
-    pthread_mutex_t mu;
-    struct coal_run *slots[EFS_COALESCE_SLOTS];
-    int active;
-} g_coal = { .mu = PTHREAD_MUTEX_INITIALIZER };
-
-static int g_coalesce_enabled = 1;
-
-static struct coal_run *coal_find_locked(efs_ino_t ino)
-{
-    unsigned h = (unsigned)((uint64_t)ino % EFS_COALESCE_SLOTS);
-    struct coal_run *r = g_coal.slots[h];
-    while (r && r->ino != ino)
-        r = r->next;
-    return r;
-}
-
-/* caller holds g_coal.mu */
-static void coal_detach_locked(struct coal_run *r)
-{
-    unsigned h = (unsigned)((uint64_t)r->ino % EFS_COALESCE_SLOTS);
-    struct coal_run **pp = &g_coal.slots[h];
-    while (*pp && *pp != r)
-        pp = &(*pp)->next;
-    if (*pp)
-        *pp = r->next;
-    g_coal.active--;
-}
-
-/* Hand a detached run's buffer to the WB pool (takes over r->buf). */
-static int coal_submit(struct coal_run *r)
-{
-    int rc = efs_wb_enqueue_owned(r->ino, r->start,
-                                  (size_t)(r->end - r->start), r->buf, NULL,
-                                  r->cap);
-    free(r);
-    return rc;
-}
-
-/* Flush any buffered run for ino to the WB pool. 1 if flushed, 0 if none. */
-static int coal_flush_ino(efs_ino_t ino)
-{
-    pthread_mutex_lock(&g_coal.mu);
-    struct coal_run *r = coal_find_locked(ino);
-    if (r)
-        coal_detach_locked(r);
-    pthread_mutex_unlock(&g_coal.mu);
-    if (!r)
-        return 0;
-    return coal_submit(r) == EFS_OK ? 1 : -1;
-}
-
-static int coal_has_ino(efs_ino_t ino)
-{
-    if (!g_coalesce_enabled ||
-        __atomic_load_n(&g_coal.active, __ATOMIC_RELAXED) == 0)
-        return 0;
-    pthread_mutex_lock(&g_coal.mu);
-    int has = coal_find_locked(ino) != NULL;
-    pthread_mutex_unlock(&g_coal.mu);
-    return has;
-}
-
-/* Sequential small writes append here. Random 4k used to see coal_has_ino
- * and skip dcache_try_patch, so every write flushed a 4k run through WB. */
-static int coal_can_append(efs_ino_t ino, uint64_t offset, size_t size)
-{
-    if (!g_coalesce_enabled ||
-        __atomic_load_n(&g_coal.active, __ATOMIC_RELAXED) == 0)
-        return 0;
-    pthread_mutex_lock(&g_coal.mu);
-    struct coal_run *r = coal_find_locked(ino);
-    int ok = r && offset == r->end &&
-             (uint64_t)(r->end - r->start) + size <= EFS_COALESCE_CAP;
-    pthread_mutex_unlock(&g_coal.mu);
-    return ok;
-}
-
-static void coal_discard_ino(efs_ino_t ino)
-{
-    pthread_mutex_lock(&g_coal.mu);
-    struct coal_run *r = coal_find_locked(ino);
-    if (r)
-        coal_detach_locked(r);
-    pthread_mutex_unlock(&g_coal.mu);
-    if (r) {
-        bounce_release(r->buf, r->cap);
-        free(r);
-    }
-}
-
-/* Read path helper: if ino has a buffered coalesced run, flush it and drain
- * the WB pool so the read observes it. Returns 0, or -EIO on a WB error. */
-static int coal_read_sync(efs_ino_t ino)
-{
-    if (!g_coalesce_enabled ||
-        __atomic_load_n(&g_coal.active, __ATOMIC_RELAXED) == 0)
-        return 0;
-    if (coal_flush_ino(ino) != 1)
-        return 0;
-    return efs_wb_sync() == EFS_OK ? 0 : -1;
-}
-
-/* Coalesce a small write into the ino's run; consumes copy on EFS_OK.
- * Falls back to a direct WB enqueue when coalescing is not possible. */
-static int coal_write(efs_ino_t ino, uint64_t offset, size_t size, char *copy,
-                      size_t copy_cap)
-{
-    struct coal_run *flush = NULL;
-    int have_copy = 1;
-
-    pthread_mutex_lock(&g_coal.mu);
-    struct coal_run *r = coal_find_locked(ino);
-    if (r && offset == r->end &&
-        (uint64_t)(r->end - r->start) + size <= EFS_COALESCE_CAP) {
-        /* Runs start at CAP, so the append always fits. */
-        memcpy(r->buf + (r->end - r->start), copy, size);
-        r->end += size;
-        pthread_mutex_unlock(&g_coal.mu);
-        bounce_release(copy, copy_cap);
-        return EFS_OK;
-    } else if (r) {
-        /* non-contiguous or would exceed the cap: flush it, start new */
-        coal_detach_locked(r);
-        flush = r;
-        r = NULL;
-    }
-
-    if (g_coal.active < EFS_COALESCE_MAX_RUNS) {
-        struct coal_run *nr = malloc(sizeof(*nr));
-        size_t icap = 0;
-        char *nb = nr ? bounce_alloc(EFS_COALESCE_CAP, &icap) : NULL;
-        if (nr && nb) {
-            memcpy(nb, copy, size);
-            nr->ino = ino;
-            nr->start = offset;
-            nr->end = offset + size;
-            nr->cap = icap ? icap : EFS_COALESCE_CAP;
-            nr->buf = nb;
-            unsigned h = (unsigned)((uint64_t)ino % EFS_COALESCE_SLOTS);
-            nr->next = g_coal.slots[h];
-            g_coal.slots[h] = nr;
-            g_coal.active++;
-            have_copy = 0;
-            bounce_release(copy, copy_cap);
-        } else {
-            free(nr);
-            bounce_release(nb, icap);
-        }
-    }
-    pthread_mutex_unlock(&g_coal.mu);
-
-    if (flush)
-        coal_submit(flush); /* a WB error here surfaces on the next sync */
-
-    if (have_copy) /* could not coalesce: write through directly */
-        return efs_wb_enqueue_owned(ino, offset, size, copy, NULL, copy_cap);
-    return EFS_OK;
-}
-
-/* Flush the buffered run for the file at path (best-effort; used before
- * fsync/flush/release so the file's data reaches the WB pool). */
-static void coal_flush_path(const char *path)
-{
-    if (!g_coalesce_enabled ||
-        __atomic_load_n(&g_coal.active, __ATOMIC_RELAXED) == 0)
-        return;
-    struct efs_inode ino;
-    if (efs_client_lookup(path, &ino) == 0 && !efs_mode_is_dir(ino.mode))
-        (void)coal_flush_ino(ino.ino);
-}
-
-static void coal_flush_all(void)
-{
-    for (;;) {
-        pthread_mutex_lock(&g_coal.mu);
-        struct coal_run *r = NULL;
-        for (int i = 0; i < EFS_COALESCE_SLOTS; i++) {
-            if (g_coal.slots[i]) {
-                r = g_coal.slots[i];
-                coal_detach_locked(r);
-                break;
-            }
-        }
-        pthread_mutex_unlock(&g_coal.mu);
-        if (!r)
-            break;
-        coal_submit(r);
-    }
-}
-
 /* O_APPEND writes: the kernel sets the offset from its i_size but does not
  * serialize concurrent appends to a FUSE file (no i_rwsem around the
  * read-i_size + write + update-i_size sequence), so two racing appends can
@@ -2136,7 +1914,6 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
         /* Flush without g_append_mu: other appenders, close, and writeback
          * of this ino must run so REPORT can release the server barrier. */
         pthread_mutex_unlock(&g_append_mu);
-        (void)coal_flush_ino(ino);
         (void)efs_wb_sync_ino(ino);
         (void)efs_dcache_flush_ino(ino);
         (void)efs_client_report_dirty(0);
@@ -2313,12 +2090,6 @@ static int efs_fuse_fsync(const char *path, int isdatasync,
     /* Flush by open ino, not a path lookup: lookup getattr+adopt can
      * shrink the local size back to the owner's still-unreported 0
      * (trunc_open_other_fd under parallel clients). */
-    if (fi && fi->fh) {
-        if (g_coalesce_enabled)
-            (void)coal_flush_ino((efs_ino_t)fi->fh);
-    } else {
-        coal_flush_path(path);
-    }
     int rc = (fi && fi->fh) ? efs_file_data_sync_fh(path, fi)
                             : efs_file_data_sync(path);
     /* Directory rollups walk the inode table; they are not required for
@@ -2365,8 +2136,6 @@ static int efs_file_data_sync_fh(const char *path, struct fuse_file_info *fi)
     efs_ino_t ino = 0;
     if (fuse_file_ino(path, fi, &ino) != 0)
         return efs_file_data_sync_ino(path);
-    if (g_coalesce_enabled)
-        (void)coal_flush_ino(ino);
     int rc = efs_wb_sync_ino(ino);
     if (rc != EFS_OK)
         return rc;
@@ -2504,14 +2273,6 @@ static int efs_fuse_unlink(const char *path)
     int wx = check_dir_wx(&parent);
     if (wx != 0)
         return wx;
-
-    /* Drop any buffered coalesced data for the file being removed. */
-    if (g_coalesce_enabled &&
-        __atomic_load_n(&g_coal.active, __ATOMIC_RELAXED) > 0) {
-        struct efs_inode victim;
-        if (efs_client_lookup(path, &victim) == 0)
-            coal_discard_ino(victim.ino);
-    }
 
     return efs_client_unlink(parent.ino, name, false) == 0 ? 0 : -EIO;
 }
@@ -2947,10 +2708,8 @@ static int efs_fuse_truncate(const char *path, off_t size,
             return -EACCES;
     }
 
-    /* Commit any coalesced data before resizing so the truncate sees a stable
+    /* Flush dirty data before resizing so the truncate sees a stable
      * on-server length and drops/keeps whole chunks deterministically. */
-    if (g_coalesce_enabled && coal_flush_ino(ino.ino) == 1)
-        (void)efs_wb_sync();
     (void)efs_dcache_flush_ino(ino.ino);
 
     if (efs_client_truncate(ino.ino, (uint64_t)size) != 0)
@@ -2977,7 +2736,6 @@ static int efs_fuse_release(const char *path, struct fuse_file_info *fi)
 static void efs_fuse_destroy(void *userdata)
 {
     (void)userdata;
-    coal_flush_all();
     (void)efs_wb_sync();
     (void)efs_dcache_flush_all();
     efs_client_pack_flush_all();
@@ -3341,10 +3099,6 @@ static void *efs_fuse_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
             batch = (uint32_t)v;
     }
     efs_client_enable_meta_batch(batch);
-    /* Write coalescing is on by default; EFS_WRITE_COALESCE=0 disables it. */
-    const char *ce = getenv("EFS_WRITE_COALESCE");
-    if (ce && *ce && atoi(ce) == 0)
-        g_coalesce_enabled = 0;
     return NULL;
 }
 

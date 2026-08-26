@@ -336,10 +336,6 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
                                         const uint8_t checksum[EFS_HASH_SIZE]);
 
 /* Queue fragment write onto the writer pool (or run inline if pool is off). */
-int server_write_fragment(struct efsd_server *s, struct efs_export *ex,
-                          efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
-                          const uint8_t *data, uint32_t data_len);
-
 /* Fragment data + checksum sidecar as one pooled job. */
 int server_write_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                                    efs_ino_t ino, uint32_t chunk_index,
@@ -404,8 +400,6 @@ void server_sync_local_membership(struct efsd_server *s);
 void server_dedupe_nodes_locked(struct efsd_server *s);
 
 /* Return true if adding fragment_size bytes would exceed the server's quota. */
-bool server_would_exceed_quota(struct efsd_server *s, uint64_t fragment_size);
-
 /* Handle one client connection. */
 struct efs_conn;
 void server_handle_conn(struct efs_conn *conn);
@@ -450,8 +444,6 @@ int server_ensure_shard_ready(struct efsd_server *s, struct efs_export *ex,
                               uint32_t shard);
 
 /* After membership is known, rebuild any EFSR exports from meta pages. */
-void server_rebuild_fragmented_exports(struct efsd_server *s);
-
 /* Send metadata to all peers. Returns number of acks. */
 int server_replicate_metadata(struct efsd_server *s, struct efs_export *ex);
 
@@ -518,9 +510,6 @@ int server_write_fragment_sum_sync(struct efsd_server *s, struct efs_export *ex,
                                    efs_ino_t ino, uint32_t chunk_index,
                                    uint32_t fragment_index,
                                    const uint8_t checksum[EFS_HASH_SIZE]);
-int server_write_fragment_sum(struct efsd_server *s, struct efs_export *ex,
-                              efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
-                              const uint8_t checksum[EFS_HASH_SIZE]);
 int server_read_fragment_sum(struct efsd_server *s, struct efs_export *ex,
                              efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                              uint8_t checksum[EFS_HASH_SIZE]);

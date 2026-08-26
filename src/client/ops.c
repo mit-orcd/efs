@@ -885,11 +885,6 @@ int efs_client_chown(efs_ino_t ino, uid_t uid, gid_t gid)
     return setattr_rpc_dual_apply(ino, mask, 0, uid, gid, 0, 0, 0, 0);
 }
 
-int efs_client_utime(efs_ino_t ino, uint64_t mtime)
-{
-    return efs_client_utimens(ino, mtime, 0);
-}
-
 int efs_client_utimens(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec)
 {
     return setattr_rpc_dual_apply(ino, EFS_SETATTR_MTIME, 0, 0, 0, 0,

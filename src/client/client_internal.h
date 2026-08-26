@@ -214,7 +214,6 @@ int efs_client_rpc_report_dirty_on_shard(efs_export_id_t export_id,
 /* Phase 2b: snapshot the dirty set and report it to the primary (the flush
  * mechanism that replaces the blob flush). sync=1 = fsync barrier. */
 int efs_client_report_dirty(int sync);
-int efs_client_load_shard(uint32_t shard);
 /* Read-miss self-heal: pull chunk mappings for [ci0, ci1) from the owner,
  * rate-limited per ino. Returns 1 when a pull ran (re-check the table). */
 int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1);
@@ -337,10 +336,6 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
                             uint8_t checksum[EFS_HASH_SIZE]);
 
 /* Store a fragment on a node. Returns 0 on success. */
-int efs_client_put_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk_index,
-                            uint32_t fragment_index, const uint8_t *data, uint32_t frag_len,
-                            const uint8_t checksum[EFS_HASH_SIZE]);
-
 /* Read bytes from a file. Returns 0 on success. */
 int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size_t *out_len);
 
@@ -372,8 +367,6 @@ int efs_client_chmod(efs_ino_t ino, uint32_t mode);
 int efs_client_chown(efs_ino_t ino, uid_t uid, gid_t gid);
 
 /* Set modification time (seconds; nsec cleared). */
-int efs_client_utime(efs_ino_t ino, uint64_t mtime);
-
 /* Set modification time with nanoseconds (for utimensat / rsync). */
 int efs_client_utimens(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec);
 

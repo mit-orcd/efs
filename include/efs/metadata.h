@@ -302,7 +302,6 @@ int efs_export_rehash(struct efs_export *ex, uint32_t shard_bits);
 void efs_export_evict_cold_shards(struct efs_export *ex, uint32_t keep);
 /* Ensure shard table exists (reinstall extra root if the cluster has one). */
 int efs_export_load_shard(struct efs_export *ex, uint32_t shard);
-
 static inline efs_ino_t efs_meta_shard_table_ino(uint32_t shard)
 {
     return EFS_META_SHARD_INO_BASE + (efs_ino_t)shard;

@@ -10,8 +10,6 @@
 #define EFS_WRITER_QUEUE_CAP 1024
 
 enum writer_op {
-    WRITER_OP_FRAGMENT = 1,
-    WRITER_OP_FRAGMENT_SUM = 2,
     WRITER_OP_FRAGMENT_WITH_SUM = 3,
 };
 
@@ -141,16 +139,6 @@ static int run_job(struct writer_job *job)
         efs_tls_write_root = (int)pick_write_path(job);
 
     switch (job->op) {
-    case WRITER_OP_FRAGMENT:
-        rc = server_write_fragment_sync(job->s, job->ex, job->ino,
-                                        job->chunk_index, job->fragment_index,
-                                        job->data, job->data_len);
-        break;
-    case WRITER_OP_FRAGMENT_SUM:
-        rc = server_write_fragment_sum_sync(job->s, job->ex, job->ino,
-                                            job->chunk_index, job->fragment_index,
-                                            job->checksum);
-        break;
     case WRITER_OP_FRAGMENT_WITH_SUM:
         if (job->checksum)
             rc = server_write_fragment_with_sum_sync(job->s, job->ex, job->ino,
@@ -348,39 +336,6 @@ void server_writer_pool_stop(struct efsd_server *s)
     }
     g_pool.npaths = 0;
     g_pool.nwriters = 0;
-}
-
-int server_write_fragment(struct efsd_server *s, struct efs_export *ex,
-                          efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
-                          const uint8_t *data, uint32_t data_len)
-{
-    struct writer_job job;
-    memset(&job, 0, sizeof(job));
-    job.op = WRITER_OP_FRAGMENT;
-    job.s = s;
-    job.ex = ex;
-    job.ino = ino;
-    job.chunk_index = chunk_index;
-    job.fragment_index = fragment_index;
-    job.data = data;
-    job.data_len = data_len;
-    return submit_and_wait(&job);
-}
-
-int server_write_fragment_sum(struct efsd_server *s, struct efs_export *ex,
-                              efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
-                              const uint8_t checksum[EFS_HASH_SIZE])
-{
-    struct writer_job job;
-    memset(&job, 0, sizeof(job));
-    job.op = WRITER_OP_FRAGMENT_SUM;
-    job.s = s;
-    job.ex = ex;
-    job.ino = ino;
-    job.chunk_index = chunk_index;
-    job.fragment_index = fragment_index;
-    job.checksum = checksum;
-    return submit_and_wait(&job);
 }
 
 int server_write_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,

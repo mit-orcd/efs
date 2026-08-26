@@ -321,12 +321,6 @@ static void export_efsm_path_at(struct efsd_server *s, uint32_t root_idx,
              s->storage_paths[root_idx], ex->name);
 }
 
-static void export_meta_path(struct efsd_server *s, struct efs_export *ex,
-                             char *path, size_t path_len)
-{
-    export_meta_path_at(s, 0, ex, path, path_len);
-}
-
 void server_save_export(struct efsd_server *s, struct efs_export *ex)
 {
     /* Mirror small metadata to every local root so a data-disk loss cannot
@@ -887,16 +881,6 @@ int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
 {
     fragment_path_at(s, write_root_index(s, chunk_index), ex, ino, chunk_index,
                      fragment_index, path, path_len);
-    return 0;
-}
-
-static int server_fragment_path_legacy(struct efsd_server *s, struct efs_export *ex,
-                                       efs_ino_t ino, uint32_t chunk_index,
-                                       uint32_t fragment_index,
-                                       char *path, size_t path_len)
-{
-    fragment_path_at_legacy(s, write_root_index(s, chunk_index), ex, ino,
-                            chunk_index, fragment_index, path, path_len);
     return 0;
 }
 
@@ -1756,16 +1740,6 @@ void server_init_local_usage(struct efsd_server *s)
         return;
     }
     server_update_local_usage(s);
-}
-
-bool server_would_exceed_quota(struct efsd_server *s, uint64_t fragment_size)
-{
-    if (s->quota == 0)
-        return false;
-    struct efs_node *local = server_local_node(s);
-    if (!local)
-        return true;
-    return local->used + fragment_size > s->quota;
 }
 
 int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export *ex,
