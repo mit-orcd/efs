@@ -8,6 +8,20 @@ alwaysApply: true
 efs: distributed FS, 2+1 XOR EC, FUSE client, RDMA (RC QP), 128 KiB chunks.
 Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 
+**Code-hygiene pass (Aug 26 PM, commits 4a959ac/1124e6d/6bb83b8/6cb5791):**
+dead code removed (~469 lines: client coal subsystem, client meta-flush/
+election leftovers, unused server helpers), obsolete slurm-jobs/ + old
+scripts/fio-*.sh deleted (docs/testing.md now points at fcstor run_tests.sh).
+**Valgrind memcheck: NO LEAKS** — unit tests, full efsd workload, and full
+efs-fuse workload all 0 definite / 0 indirect. Possibly-lost are benign
+one-time allocs (libfuse fuse_new session bufs, glibc dl-init constructors,
+pthread TLS 288B/thread). **Found+fixed (1124e6d): uninitialised padding in
+struct efs_ino_size_rec sent on the wire** (REPORT_CHUNKS) — malloc→calloc.
+Root/installs rule added (6cb5791): always ask user, never work around.
+NOTE: valgrind on efsd needs a clean exit for full leak stacks (SIGTERM gives
+summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
+2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
+
 ## Where we are
 **2PC metadata root commit LANDED (Aug 26 early AM, working tree) — the
 GC-wedge fix.** `PUT_META` is now phase-1 PREPARE (peer stashes the root as
