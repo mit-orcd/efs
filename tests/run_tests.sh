@@ -161,6 +161,20 @@ cmd_posix() { # [--keep] [--parallel] [efs-host ...]
                  python3 "$REPO/tests/posix/compare.py" "$pdir/xfs-baseline.tsv" \
                      "$pdir/efs-${h%.ib}.tsv" > "$pdir/compare-${h%.ib}.txt" 2>/dev/null; \
                  return 1; }
+        # Warmup: confirm the mount serves ops (not just present in /proc/mounts)
+        # and ride out the fresh-cluster convergence transient before the real
+        # suite — a quick create+read+rmtree, retried. The first 4-way run right
+        # after a fresh setup can otherwise wedge (every test 15s-timeout).
+        ssh_to 70 "$h" 'for i in $(seq 1 20); do
+            if timeout 3 python3 -c "
+import os, tempfile, shutil
+d = tempfile.mkdtemp(prefix=\"warmup-\", dir=\"/tmp/efs/mnt\")
+p = os.path.join(d, \"f\"); open(p, \"w\").write(\"x\")
+assert open(p).read() == \"x\"
+shutil.rmtree(d)
+" 2>/dev/null; then exit 0; fi
+            sleep 0.5
+        done; echo "  WARN: $h warmup did not converge" >&2; exit 0'
         ssh_to "$POSIX_SSH_SEC" "$h" "rm -f '$remote_tsv'
             PYTHONUNBUFFERED=1 timeout -k 5 $((POSIX_SSH_SEC - 15)) \
             python3 /tmp/efs/tests/posix/posix_suite.py '$EFS_MNT' \
