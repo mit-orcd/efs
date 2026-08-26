@@ -1,0 +1,43 @@
+================================================================
+POSIX baseline comparison: 191 tests
+  both pass        : 159
+  EFS BUGS         : 27  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  basic_append                     [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-99helz2p/basic_append/f'
+  basic_dup_write                  [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-99helz2p/basic_dup_write/f'
+  basic_rdwr_no_reopen             [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-99helz2p/basic_rdwr_no_reopen/f'
+  basic_read_past_eof              [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-99helz2p/basic_read_past_eof/f'
+  basic_terminal_cp_cat            [FAIL] cmd 'echo hello >> dst' failed rc=1: /bin/sh: line 1: echo: write error: Input/output error 
+  ctime_on_link_rename             [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-99helz2p/ctime_on_link_rename/f' -> '/tmp/efs/mnt/posix-99helz2p/ctime_on_link_rename/g'
+  dir_deep_nesting                 [FAIL] OSError: [Errno 39] Directory not empty: '/tmp/efs/mnt/posix-99helz2p/dir_deep_nesting/d00'
+  dir_hidden_files                 [FAIL] ls -a shows hidden: got {'..', '.', '.hidden', 'visible'}, want {'..', '.', '.hidden', 'visible', '.dot.mid'}
+  dir_many_files                   [FAIL] many files listed: got 296, want 300
+  dir_readdir_listing              [FAIL] readdir returns all entries: got {'f34', 'f22', 'f2', 'f36', 'f35', 'f37', 'f33', 'f30', 'f40', 'f3', 'f7', 'f26', 'f38', 'f15', 'f5', 'f0', 'f41', 'f27', 'f48', 'f49', 'f42', 'f45', 'f19', 'f47', 'f20', 'f14', 'f16', 'f12', 'f28', 'f10', 'f6', 'f9', 'f4', 'f24', 'f23', 'f32', 'f1', 'f44', 'f46', 'f43', 'f11', 'f18', 'f39', 'f31', 'f29'}, want {'f34', 'f25', 'f22', 'f2', 'f36', 'f33', 'f35', 'f37', 'f30', 'f40', 'f3', 'f8', 'f7', 'f26', 'f38', 'f15', 'f5', 'f0', 'f41', 'f27', 'f29', 'f48', 'f49', 'f42', 'f45', 'f19', 'f47', 'f20', 'f14', 'f16', 'f12', 'f28', 'f17', 'f10', 'f6', 'f21', 'f9', 'f4', 'f13', 'f24', 'f32', 'f1', 'f44', 'f46', 'f43', 'f11', 'f18', 'f39', 'f31', 'f23'}
+  hardlink_basic                   [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-99helz2p/hardlink_basic/orig' -> '/tmp/efs/mnt/posix-99helz2p/hardlink_basic/hl'
+  hardlink_rename_one_name         [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-99helz2p/hardlink_rename_one_name/orig' -> '/tmp/efs/mnt/posix-99helz2p/hardlink_rename_one_name/hl'
+  hardlink_shared_data             [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-99helz2p/hardlink_shared_data/orig' -> '/tmp/efs/mnt/posix-99helz2p/hardlink_shared_data/hl'
+  hardlink_terminal_ln             [FAIL] cmd ['ln', 'orig', 'hl'] failed rc=1: ln: failed to create hard link 'hl' => 'orig': Input/output error 
+  hardlink_three_names             [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-99helz2p/hardlink_three_names/a' -> '/tmp/efs/mnt/posix-99helz2p/hardlink_three_names/b'
+  hardlink_unlink_one              [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-99helz2p/hardlink_unlink_one/orig' -> '/tmp/efs/mnt/posix-99helz2p/hardlink_unlink_one/hl'
+  link_of_symlink                  [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-99helz2p/link_of_symlink/l' -> '/tmp/efs/mnt/posix-99helz2p/link_of_symlink/h'
+  nlink_after_unlink_open          [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-99helz2p/nlink_after_unlink_open/f'
+  perm_hardlink_shares_mode        [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-99helz2p/perm_hardlink_shares_mode/a' -> '/tmp/efs/mnt/posix-99helz2p/perm_hardlink_shares_mode/b'
+  rename_dir_same_parent           [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-99helz2p/rename_dir_same_parent/old' -> '/tmp/efs/mnt/posix-99helz2p/rename_dir_same_parent/new'
+  rename_empty_over_empty_dir      [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-99helz2p/rename_empty_over_empty_dir/a' -> '/tmp/efs/mnt/posix-99helz2p/rename_empty_over_empty_dir/b'
+  rename_file_over_symlink         [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-99helz2p/rename_file_over_symlink/s' -> '/tmp/efs/mnt/posix-99helz2p/rename_file_over_symlink/l'
+  st_ino_unique_hardlink_same      [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-99helz2p/st_ino_unique_hardlink_same/a' -> '/tmp/efs/mnt/posix-99helz2p/st_ino_unique_hardlink_same/c'
+  symlink_relative_after_parent_rename [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-99helz2p/symlink_relative_after_parent_rename/a' -> '/tmp/efs/mnt/posix-99helz2p/symlink_relative_after_parent_rename/b'
+  trunc_to_zero                    [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-99helz2p/trunc_to_zero/f'
+  unlink_open_file                 [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-99helz2p/unlink_open_file/f'
+  unlink_open_then_recreate        [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-99helz2p/unlink_open_then_recreate/f'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

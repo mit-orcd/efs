@@ -1,0 +1,118 @@
+================================================================
+POSIX baseline comparison: 191 tests
+  both pass        : 86
+  EFS BUGS         : 100  (baseline PASS, target FAIL)
+  both fail (match): 4
+  target better    : 1
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  access_f_ok_after_unlink         [FAIL] timeout after 15s
+  attr_umask_respected             [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-nibu9eom/attr_umask_respected/f'
+  attr_utimens                     [FAIL] timeout after 15s
+  basic_o_trunc                    [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-nibu9eom/basic_o_trunc/f'
+  basic_terminal_cp_cat            [FAIL] cmd 'echo hello >> dst' failed rc=1: /bin/sh: line 1: echo: write error: Input/output error 
+  case_sensitive_names             [FAIL] timeout after 15s
+  chdir_dotdot_after_mkdir         [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-nibu9eom/chdir_dotdot_after_mkdir/sub/f'
+  chmod_preserves_mtime            [FAIL] timeout after 15s
+  concurrent_appends               [FAIL] timeout after 15s
+  concurrent_appends_two_proc      [FAIL] timeout after 15s
+  concurrent_create_unlink_two_proc [FAIL] timeout after 15s
+  concurrent_creates_same_dir      [FAIL] timeout after 15s
+  concurrent_extend_high_then_low  [FAIL] timeout after 15s
+  concurrent_overlap_write         [FAIL] timeout after 15s
+  concurrent_write_and_readdir     [FAIL] timeout after 15s
+  concurrent_writes_disjoint       [FAIL] timeout after 15s
+  creat_existing_dir_eisdir        [FAIL] timeout after 15s
+  create_excl_two_proc             [FAIL] timeout after 15s
+  ctime_on_link_rename             [FAIL] timeout after 15s
+  dir_deep_nesting                 [FAIL] OSError: [Errno 39] Directory not empty: '/tmp/efs/mnt/posix-nibu9eom/dir_deep_nesting/d00'
+  dir_many_files                   [FAIL] many files listed: got 291, want 300
+  dir_nlink_after_rmdir_child      [FAIL] timeout after 15s
+  dir_readdir_listing              [FAIL] readdir returns all entries: got {'f48', 'f22', 'f9', 'f2', 'f8', 'f11', 'f38', 'f40', 'f0', 'f3', 'f36', 'f21', 'f32', 'f14', 'f31', 'f43', 'f35', 'f20', 'f33', 'f47', 'f6', 'f12', 'f16', 'f24', 'f28', 'f37', 'f17', 'f10', 'f25', 'f29', 'f44', 'f45', 'f7', 'f27', 'f18', 'f5', 'f23', 'f49', 'f39', 'f13', 'f46', 'f42', 'f1', 'f34', 'f30', 'f41', 'f19', 'f26'}, want {'f48', 'f4', 'f22', 'f9', 'f2', 'f8', 'f11', 'f38', 'f40', 'f0', 'f3', 'f36', 'f21', 'f32', 'f14', 'f31', 'f35', 'f43', 'f20', 'f33', 'f47', 'f6', 'f12', 'f16', 'f24', 'f28', 'f37', 'f17', 'f10', 'f25', 'f29', 'f44', 'f45', 'f15', 'f7', 'f27', 'f18', 'f5', 'f23', 'f49', 'f39', 'f13', 'f46', 'f42', 'f1', 'f34', 'f30', 'f41', 'f19', 'f26'}
+  dir_rename_dir_with_contents     [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-nibu9eom/dir_rename_dir_with_contents/src' -> '/tmp/efs/mnt/posix-nibu9eom/dir_rename_dir_with_contents/dst'
+  dir_rename_file                  [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-nibu9eom/dir_rename_file/a' -> '/tmp/efs/mnt/posix-nibu9eom/dir_rename_file/b'
+  direct_aligned_rdwr              [FAIL] timeout after 15s
+  direct_rmw_4k_in_chunk           [FAIL] timeout after 15s
+  direct_unaligned_einval          [FAIL] timeout after 15s
+  err_symlink_loop                 [FAIL] timeout after 15s
+  fcntl_lock_basic                 [FAIL] timeout after 15s
+  fcntl_setfl_oappend              [FAIL] timeout after 15s
+  fdatasync_write                  [FAIL] timeout after 15s
+  flock_basic                      [FAIL] timeout after 15s
+  flock_second_fd_exclusive        [FAIL] timeout after 15s
+  flock_shared_then_exclusive      [FAIL] timeout after 15s
+  flock_two_proc_exclusive         [FAIL] timeout after 15s
+  flock_unlock_on_close            [FAIL] timeout after 15s
+  fstat_size_after_write           [FAIL] timeout after 15s
+  fsync_dir                        [FAIL] timeout after 15s
+  fsync_then_fstat_size            [FAIL] timeout after 15s
+  fsync_write                      [FAIL] timeout after 15s
+  hardlink_basic                   [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-nibu9eom/hardlink_basic/orig' -> '/tmp/efs/mnt/posix-nibu9eom/hardlink_basic/hl'
+  hardlink_rename_one_name         [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-nibu9eom/hardlink_rename_one_name/orig' -> '/tmp/efs/mnt/posix-nibu9eom/hardlink_rename_one_name/hl'
+  hardlink_shared_data             [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-nibu9eom/hardlink_shared_data/orig' -> '/tmp/efs/mnt/posix-nibu9eom/hardlink_shared_data/hl'
+  hardlink_terminal_ln             [FAIL] cmd ['ln', 'orig', 'hl'] failed rc=1: ln: failed to create hard link 'hl' => 'orig': Input/output error 
+  hardlink_three_names             [FAIL] timeout after 15s
+  hardlink_unlink_one              [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-nibu9eom/hardlink_unlink_one/orig' -> '/tmp/efs/mnt/posix-nibu9eom/hardlink_unlink_one/hl'
+  last_link_unlink_other_dir       [FAIL] timeout after 15s
+  link_across_dirs                 [FAIL] timeout after 15s
+  link_of_symlink                  [FAIL] timeout after 15s
+  lstat_symlink_size               [FAIL] timeout after 15s
+  mkdirat_unlinkat                 [FAIL] timeout after 15s
+  mmap_private_not_visible         [FAIL] timeout after 15s
+  mmap_write_read                  [FAIL] timeout after 15s
+  mtime_bumps_on_write             [FAIL] timeout after 15s
+  mtime_monotonic_many_writes      [FAIL] timeout after 15s
+  names_crazy_roundtrip            [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-nibu9eom/names_crazy_roundtrip/with space'
+  names_dash_prefix_terminal       [FAIL] timeout after 15s
+  nlink_after_unlink_open          [FAIL] timeout after 15s
+  o_append_pwrite_absolute         [FAIL] timeout after 15s
+  o_directory                      [FAIL] timeout after 15s
+  o_nofollow                       [FAIL] timeout after 15s
+  opt_copy_file_range              [FAIL] timeout after 15s
+  opt_fallocate                    [FAIL] timeout after 15s
+  opt_openat                       [FAIL] timeout after 15s
+  opt_seek_hole_data               [FAIL] timeout after 15s
+  opt_xattr                        [FAIL] timeout after 15s
+  packed_then_grow_past_chunk      [FAIL] timeout after 15s
+  perm_exec_allowed_with_x         [FAIL] timeout after 15s
+  perm_exec_denied_no_x            [FAIL] timeout after 15s
+  perm_file_write_only             [FAIL] timeout after 15s
+  perm_ftruncate_after_chmod       [FAIL] timeout after 15s
+  perm_hardlink_shares_mode        [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-nibu9eom/perm_hardlink_shares_mode/a' -> '/tmp/efs/mnt/posix-nibu9eom/perm_hardlink_shares_mode/b'
+  perm_open_fd_survives_chmod      [FAIL] timeout after 15s
+  perm_owner_utime_readonly        [FAIL] timeout after 15s
+  perm_symlink_target_denied       [FAIL] timeout after 15s
+  rename_dir_same_parent           [FAIL] timeout after 15s
+  rename_empty_over_empty_dir      [FAIL] timeout after 15s
+  rename_file_over_symlink         [FAIL] timeout after 15s
+  rename_to_self                   [FAIL] timeout after 15s
+  st_ino_unique_hardlink_same      [FAIL] timeout after 15s
+  statfs_sane                      [FAIL] timeout after 15s
+  symlink_chain                    [FAIL] timeout after 15s
+  symlink_chmod_follows            [FAIL] timeout after 15s
+  symlink_relative_after_parent_rename [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-nibu9eom/symlink_relative_after_parent_rename/a' -> '/tmp/efs/mnt/posix-nibu9eom/symlink_relative_after_parent_rename/b'
+  symlink_unlink_keeps_target      [FAIL] timeout after 15s
+  trailing_slash_on_file           [FAIL] timeout after 15s
+  trunc_open_other_fd              [FAIL] timeout after 15s
+  trunc_shrink_same_fd             [FAIL] timeout after 15s
+  trunc_to_zero                    [FAIL] timeout after 15s
+  trunc_zero_then_high_pwrite      [FAIL] timeout after 15s
+  two_fds_independent_offset       [FAIL] timeout after 15s
+  two_fds_size_mtime               [FAIL] timeout after 15s
+  unlink_open_file                 [FAIL] timeout after 15s
+  unlink_open_then_recreate        [FAIL] timeout after 15s
+  unlink_recreate_new_ino          [FAIL] timeout after 15s
+  write_beyond_eof_then_seek_end   [FAIL] timeout after 15s
+  write_hole_pread_zeros           [FAIL] timeout after 15s
+  writev_readv_chunk_straddle      [FAIL] timeout after 15s
+  zero_length_write                [FAIL] timeout after 15s
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+
+--- both fail (behaviour matches baseline) ---
+  fcntl_byte_range_lock            base=FAIL target=FAIL
+  virt_find_not_a_real_dir         base=SKIP target=FAIL
+  virt_find_query                  base=SKIP target=FAIL
+  virt_stats_readable              base=SKIP target=FAIL

@@ -1,0 +1,7 @@
+CREATE_PROG n=500 131.47s
+Traceback (most recent call last):
+  File "/tmp/efs/tests/stress/unlink_storm_worker.py", line 64, in <module>
+    sys.exit(main())
+  File "/tmp/efs/tests/stress/unlink_storm_worker.py", line 27, in main
+    with open(p, "w") as f:
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs/mnt/ustorm-fcstor014-1787614468/5/785'

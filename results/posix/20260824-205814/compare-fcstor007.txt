@@ -1,0 +1,7 @@
+================================================================
+POSIX baseline comparison: 0 tests
+  both pass        : 0
+  EFS BUGS         : 0  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+================================================================

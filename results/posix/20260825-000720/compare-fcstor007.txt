@@ -1,0 +1,19 @@
+================================================================
+POSIX baseline comparison: 188 tests
+  both pass        : 182
+  EFS BUGS         : 1  (baseline PASS, target FAIL)
+  both fail (match): 4
+  target better    : 1
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  dir_move_into_subdir             [FAIL] ConnectionAbortedError: [Errno 103] Software caused connection abort: '/tmp/efs/mnt/posix-41ovdo8y/dir_move_into_subdir/b/f'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+
+--- both fail (behaviour matches baseline) ---
+  fcntl_byte_range_lock            base=FAIL target=FAIL
+  virt_find_not_a_real_dir         base=SKIP target=SKIP
+  virt_find_query                  base=SKIP target=SKIP
+  virt_stats_readable              base=SKIP target=SKIP

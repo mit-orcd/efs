@@ -1,0 +1,23 @@
+================================================================
+POSIX baseline comparison: 191 tests
+  both pass        : 179
+  EFS BUGS         : 7  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  concurrent_extend_high_then_low  [None] 
+  dir_readdir_listing              [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-tzxbgebz/dir_readdir_listing/f1'
+  dir_rename_file                  [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-tzxbgebz/dir_rename_file/a'
+  mtime_monotonic_many_writes      [None] 
+  sparse_st_blocks                 [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-tzxbgebz/sparse_st_blocks/f'
+  trunc_open_other_fd              [FAIL] OSError: [Errno 5] Input/output error
+  trunc_zero_then_high_pwrite      [None] 
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

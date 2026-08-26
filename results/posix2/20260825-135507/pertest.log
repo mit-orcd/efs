@@ -1,0 +1,162 @@
+----- peer_mkdir_visible rc=1 -----
+FAIL peer_mkdir_visible               B listdir missing 'sub' (saw [])
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (1.7s)
+wrote /tmp/posix2-one.tsv
+----- peer_create_visible rc=1 -----
+FAIL peer_create_visible              B does not see A's file
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (1.9s)
+wrote /tmp/posix2-one.tsv
+----- peer_write_read rc=1 -----
+FAIL peer_write_read                  B does not see A's file
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (1.4s)
+wrote /tmp/posix2-one.tsv
+----- peer_listdir_siblings rc=1 -----
+FAIL peer_listdir_siblings            B listdir missing ['ior_file_easy.00000000', 'ior_file_easy.00000001', 'ior_file_easy.00000002'] (saw [])
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (2.7s)
+wrote /tmp/posix2-one.tsv
+----- peer_shared_creat rc=0 -----
+pass peer_shared_creat               
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (4.1s)
+wrote /tmp/posix2-one.tsv
+----- peer_open_existing rc=1 -----
+FAIL peer_open_existing               B open(O_RDWR) of A's file: No such file or directory (errno 2)
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (1.3s)
+wrote /tmp/posix2-one.tsv
+----- peer_creat_excl_eexist rc=1 -----
+FAIL peer_creat_excl_eexist           B O_EXCL succeeded — peer create was invisible
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (1.8s)
+wrote /tmp/posix2-one.tsv
+----- peer_stat_size rc=1 -----
+FAIL peer_stat_size                   B stat: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_stat_size/f'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (9.1s)
+wrote /tmp/posix2-one.tsv
+----- peer_rename_visible rc=1 -----
+FAIL peer_rename_visible              B listdir missing 'new' (saw [])
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (1.2s)
+wrote /tmp/posix2-one.tsv
+----- peer_mkdir_then_create rc=1 -----
+FAIL peer_mkdir_then_create           B read nested file: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_mkdir_then_create/dir/f'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (1.6s)
+wrote /tmp/posix2-one.tsv
+----- peer_shared_pwrite rc=1 -----
+FAIL peer_shared_pwrite               A cannot read B's 4k at offset 4096 (got b'')
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (3.6s)
+wrote /tmp/posix2-one.tsv
+----- peer_unlink_gone rc=0 -----
+pass peer_unlink_gone                
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (2.2s)
+wrote /tmp/posix2-one.tsv
+----- peer_chmod_visible rc=1 -----
+FAIL peer_chmod_visible               FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_chmod_visible/f'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (4.4s)
+wrote /tmp/posix2-one.tsv
+----- peer_utimens_visible rc=1 -----
+FAIL peer_utimens_visible             FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_utimens_visible/f'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (1.9s)
+wrote /tmp/posix2-one.tsv
+----- peer_truncate_visible rc=1 -----
+FAIL peer_truncate_visible            FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_truncate_visible/f'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (7.2s)
+wrote /tmp/posix2-one.tsv
+----- peer_hardlink_visible rc=1 -----
+FAIL peer_hardlink_visible            B does not see hardlink g
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (0.8s)
+wrote /tmp/posix2-one.tsv
+----- peer_symlink_visible rc=1 -----
+FAIL peer_symlink_visible             OSError: [Errno 5] Input/output error: 't' -> '/tmp/efs/mnt/posix-2c/peer_symlink_visible/l'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (31.0s)
+wrote /tmp/posix2-one.tsv
+----- peer_negative_dentry rc=1 -----
+FAIL peer_negative_dentry             FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_negative_dentry/later'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (1.0s)
+wrote /tmp/posix2-one.tsv
+----- peer_fsync_then_read rc=124 -----
+
+TIMEOUT peer_fsync_then_read
+----- peer_mkdir_rmdir_recreate rc=1 -----
+FAIL peer_mkdir_rmdir_recreate        B does not see recreated sub
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (1.1s)
+wrote /tmp/posix2-one.tsv
+----- peer_oappend rc=1 -----
+FAIL peer_oappend                     FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_oappend/f'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (1.7s)
+wrote /tmp/posix2-one.tsv
+----- peer_rename_over rc=1 -----
+FAIL peer_rename_over                 FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_rename_over/dst'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (2.9s)
+wrote /tmp/posix2-one.tsv
+----- peer_flock_exclusive rc=1 -----
+FAIL peer_flock_exclusive             FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_flock_exclusive/f'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (2.3s)
+wrote /tmp/posix2-one.tsv
+----- peer_unlink_while_b_has_fd rc=124 -----
+
+TIMEOUT peer_unlink_while_b_has_fd
+----- peer_rmdir_gone rc=0 -----
+pass peer_rmdir_gone                 
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (0.8s)
+wrote /tmp/posix2-one.tsv
+----- peer_nlink_after_link rc=1 -----
+FAIL peer_nlink_after_link            FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_nlink_after_link/f'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (6.7s)
+wrote /tmp/posix2-one.tsv
+----- peer_hardlink_write rc=1 -----
+FAIL peer_hardlink_write              FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_hardlink_write/f'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (3.2s)
+wrote /tmp/posix2-one.tsv
+----- peer_rename_dir rc=1 -----
+FAIL peer_rename_dir                  FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_rename_dir/new/f'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (2.9s)
+wrote /tmp/posix2-one.tsv
+----- peer_o_trunc_visible rc=124 -----
+
+TIMEOUT peer_o_trunc_visible
+----- peer_unlink_recreate rc=1 -----
+FAIL peer_unlink_recreate             FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_unlink_recreate/f'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (6.7s)
+wrote /tmp/posix2-one.tsv
+----- peer_lstat_symlink_size rc=1 -----
+FAIL peer_lstat_symlink_size          OSError: [Errno 5] Input/output error: 't' -> '/tmp/efs/mnt/posix-2c/peer_lstat_symlink_size/l'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (31.1s)
+wrote /tmp/posix2-one.tsv
+----- peer_listdir_after_unlink rc=1 -----
+FAIL peer_listdir_after_unlink        B missing keep (saw [])
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (7.0s)
+wrote /tmp/posix2-one.tsv
+----- peer_chmod_via_hardlink rc=1 -----
+FAIL peer_chmod_via_hardlink          FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-2c/peer_chmod_via_hardlink/f'
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (3.2s)
+wrote /tmp/posix2-one.tsv
+----- peer_sparse_size rc=124 -----
+
+TIMEOUT peer_sparse_size

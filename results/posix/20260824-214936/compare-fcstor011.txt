@@ -1,0 +1,17 @@
+================================================================
+POSIX baseline comparison: 188 tests
+  both pass        : 182
+  EFS BUGS         : 1  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  trunc_open_other_fd              [FAIL] open fd sees O_TRUNC size: got 0, want 1
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

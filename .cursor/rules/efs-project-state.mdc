@@ -9,6 +9,48 @@ efs: distributed FS, 2+1 XOR EC, FUSE client, RDMA (RC QP), 128 KiB chunks.
 Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 
 ## Where we are
+**2PC metadata root commit LANDED (Aug 26 early AM, working tree) — the
+GC-wedge fix.** `PUT_META` is now phase-1 PREPARE (peer stashes the root as
+`pending_root[ei]` + raw bytes in `pending_blob[ei]`, NO install/persist/
+fence/GC). New `EFS_MSG_META_COMMIT`=91 is phase-2: after the writer's
+prepare quorum + local commit, it broadcasts COMMIT(export, gen, root_sum);
+peers promote only on a fingerprint match (`efs_hash` of the stashed prepare
+bytes) — a same-gen retry that rewrote the same cis can never promote a
+superseded prepare. Stragglers converge via GET_META_ROOT catchup (only ever
+serves committed roots). Client-side metadata write path DELETED (write
+lease, `meta_heal`, `replicate_metadata`, `send_meta_root`, server
+`META_FLUSH_BEGIN` election, dead `server_send_metadata_to`) — **the server
+is the sole metadata writer.** Validated on a fresh bits=3 cluster: primary
+committed gen→135 under 4-way, peers `meta-commit: promoted` + catchup,
+**0 unrecoverable / 0 "raced with GC"** — the wedge is gone.
+**Two bugs fixed in the 2PC path itself:** (1) `META_COMMIT` busy guard uses
+`ex->shard_dirty` (main table) not `rpc_dirty_ops` (shard tabs) — the broad
+guard was blocking every promote. (2) use-after-free: the writer hashed
+`root_buf` for the fingerprint AFTER `free(root_buf)` → garbage fingerprint
+→ 0 promotions (all catchup). Now hashed at serialize time into a local
+`root_sum[]` before the free.
+**HARNESS FALSE-PASS BUG FIXED (critical):** `cmd_posix` never verified the
+mount. After `wipe_cluster.sh` kills all efs-fuse, `/tmp/efs/mnt` is a plain
+local dir and the suite was silently passing 186/191 against **tmpfs** (0
+"EFS bugs" trivially) — the Aug 25-late "clean 4/9-way" results were NOT
+against efs. `run_tests.sh` `posix_one` now refuses to run unless
+`findmnt` shows `fuse.efs-fuse` (writes an ERROR stub + fails the host).
+**Real gate status on a fresh cluster (EFS_TRANSPORT=tcp):** single-client
+007 **185/191, 1 bug** = `names_crazy_roundtrip` (known parallel-visibility
+flake, passes isolated). 4-way: no wedge, but **flaky concurrency
+correctness** — per-run ~1-2 of 4 clients hit a cluster of rename→EINVAL /
+hardlink→EIO / readdir-missing-just-created-entries / FileExistsError on
+unique names. Failures move between clients across runs (not
+client-specific). Hypothesis: a dirty SHARD table fenced+rebuilt from stale
+pages drops unflushed creates (the main table is protected by the
+`shard_dirty` COMMIT guard; shard tabs are not). Added `rename-fail:` log in
+the RENAME_AT handler failure branch (prints rrc, shard, tab ptr,
+np_present, tab_rebuild, tab inode_count, gen) — **rebuilt efsd on all 4,
+needs rolling restart + a 4-way `--filter rename` repro to confirm.**
+**Shell exec env went unresponsive mid-session (infra)** — resume by:
+rolling-restart the 4 efsd (same commit-dirty build-id), `run_tests.sh
+setup` all 9 clients, then 4-way gate and read `rename-fail` lines on the
+shard owners.
 **Default is bits=3 (Aug 25).** `mkfs` creates `EFS_DEFAULT_SHARD_BITS=3`
 (8 shards) — no `upgrade` step. bits=0 is not a product mode; cluster
 wipe is allowed. `root.id` is stamped on that create so bootstrap
@@ -17,6 +59,85 @@ GET_META does not invent export id=2.
 on the grown leftover table (no wipe). After that 9-way, remount
 failed: EFSR gen=571 pages decode-error on all 4 nodes. **Needs
 wipe+mkfs** (clients first). Do not timeout-skip.
+**GC-wedge ROOT-CAUSED via instrumentation (Aug 25 PM):** the chain is
+**root adopted before its pages are local, then old pages GC'd.**
+Instrumented `meta-flush: committed` / `meta-adopt` / `meta-gc` logs on
+a fresh gen=1 cluster + 16-way posix suite showed: primary (fcstor003)
+commits gen=1,2,3 via its own flush (page0_ci 65536→65538→65541, real
+writes). Then gen=4 and gen=5 appear ONLY as `meta-adopt: PUT_META
+old_gen=3 new_gen=4 page0_ci=65544` / `new_gen=5 page0_ci=65546` on
+EVERY node — **no node logged `meta-flush: committed` for gen=4/5**, so
+no node ever wrote the page fragments for ci=65544/65546. The adopt
+(catchup_install_newer_root full-adopt, meta_server.c:2210-2234, and the
+PUT_META full-adopt handler.c:1175+) installs the new root, fences the
+table (`meta_needs_rebuild=1`, `FENCE-SITE catchup-root-no-blob`), and
+the SAME adopt then GC's the PREVIOUS gen's cis (handler.c:1274
+server_gc_meta_cow_pages). Rebuild then fetches ci=65544/65546 → rc=-3
+on all nodes (never written, or already GC'd by the symmetric adopt on
+peers) → `page 0 unrecoverable, gen N raced with GC, re-polling`
+forever → shard-0 never ready → REPORT_CHUNKS BUSY → client
+meta_flush_main spins (inode_rpc.c:128) → all fuse_flush D-state.
+**The defect: a node adopts + persists + GC's a root whose CoW pages it
+has NOT fetched/verified locally.** The pages for the new gen live only
+on the original writer's placement; once every node adopts-and-GCs, the
+fragments are gone everywhere. Fix direction: catchup/PUT_META adopt
+must FETCH the new root's pages (or confirm 2+1 fragments present)
+BEFORE server_save_export + before the old-gen GC runs; defer the
+old-cis reclaim until the new root's pages are local. (My earlier
+live-root recheck in server_gc_meta_cow_pages only skips cis STILL in
+the current root — it cannot save a ci that was correctly absent from
+the adopted new root but never written.) Also still open: REPORT_CHUNKS
+BUSY retry has no give-up (amplifier), and the RDMA data path never
+completes a CQE on a fresh mount (gate runs on EFS_TRANSPORT=tcp).
+**GC-reclaims-live-root-pages race REPRODUCED on a FRESH cluster (Aug 25 PM):**
+after a clean wipe+mkfs (gen=1, verified stable), running the 16-way
+posix suite drove the export to gen=96, then the primary (node 1)
+wedged: `meta-rebuild: page 0 unrecoverable (CoW ci=65600); gen 96
+raced with GC, re-polling` — page 0's fragments are rc=-3 (gone) on
+ALL of nodes 3,4,1. Restarting the primary does NOT help (it re-reads
+the on-disk gen=96 root whose page_cis[0]=65600 is GC'd). So GC
+reclaimed pages still referenced by the LIVE committed root gen=96 —
+that is the bug, not a leftover-table artifact. Effect chain:
+`server_ensure_shard_ready(0)` fails forever → REPORT_CHUNKS shard 0
+BUSY → client `meta_flush_main` spins in `rpc_send_recv_shard` BUSY
+retry (inode_rpc.c:128, usleep 50ms<<shift, attempt<16, NO give-up for
+REPORT_CHUNKS — the INODE_APPEND/FLOCK early-return guard at line 123
+does NOT cover it) → dirty set never drains → every close-time
+`fuse_flush` wedges D-state (kernel `fuse_flush`+`request_wait_answer`).
+Two client wedges from ONE server bug. Hardening gaps: (a) GC must
+never reclaim a ci still in the committed root's page_cis[]; (b)
+REPORT_CHUNKS BUSY retry needs a give-up/circuit-breaker so an
+unready shard EIOs instead of wedging the mount; (c) the rebuild
+"re-poll newest root" is a livelock when gen=96 IS the newest root.
+**RDMA data path broken on fresh mount (Aug 25 PM, separate bug):**
+chunk PUT/GET over RDMA never completes a CQE (QP reaches RTS, first
+SEND/recv after upgrade lost). write 10B took 10.36s, read timed out
+20s. `EFS_TRANSPORT=tcp` on the SAME clean cluster: write 0.005s,
+read 0.023s — perfect. Inode RPCs + REPORT_CHUNKS were already forced
+TCP (protocol.c conn_pick_send_chan); the data PUT/GET path was left
+on RDMA and is broken the same way. **Gate runs on EFS_TRANSPORT=tcp
+until RDMA is root-caused.** On TCP, single-client posix suite:
+185/191 both-pass, 1 EFS bug `names_crazy_roundtrip` (passes isolated
+— parallel-visibility flake), 5 target-better XFS quirks. Then the
+16-way suite triggered the GC race above and wedged the cluster.
+**vfs_unlink D-state / create+unlink hang ROOT-CAUSED (Aug 25 PM):**
+NOT a C bug — the cluster was still on the **corrupt leftover table**
+(build af6f380, log starts extras-merge gen=7→80, never a fresh mkfs).
+Primary efsd loops `meta-rebuild: page 0 unrecoverable (CoW ci=65554)
+gen 80 raced with GC` — shard-0 pages are corrupt (`scheme=legacy`
+checksum mismatch + frag fetch rc=-3). So `server_ensure_shard_ready(0)`
+fails forever → every REPORT_CHUNKS for shard 0 gets BUSY → client
+`append_reserve_offset` BUSY-flush loop spins holding `g_append_mu`
+inside FUSE `.write_buf` → kernel holds the inode write lock → the
+suite's cleanup `unlink` wedges D-state in `vfs_unlink+0x48` (before
+FUSE is called; gdb showed all 10 FUSE workers idle in
+`fuse_dev_do_read`, one thread in the report BUSY retry). First suite
+test `basic_oappend_flag` (ino 3224) hung before the TSV was written.
+**Fix = wipe+fresh mkfs, not code.** Hardening gaps to consider later:
+(a) `append_reserve_offset` spins 4000× (~8s+) holding `g_append_mu`
+with no give-up-and-EIO, so an unready shard wedges the whole mount's
+O_APPEND + blocks unlink on the same inode; (b) no circuit-breaker when
+REPORT itself returns BUSY repeatedly (shard permanently unready).
 **Fixes this cut (working tree, not committed):** (1) fsync EIO —
 sync REPORT flush failure is BUSY (retry), skip hollow extras
 instead of failing the barrier; client retries BUSY. (2) two-proc

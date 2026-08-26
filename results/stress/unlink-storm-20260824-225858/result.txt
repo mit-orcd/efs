@@ -1,0 +1,5 @@
+FAIL
+9 clients × 4000 files. After 9.5 min still creating (fcstor007 dir0=117
+files ≈ 2340/4000). 0 ready files, never reached rmtree. All 9 workers
+Ss/wchan=request (blocked in FUSE). Cluster OK 4/0, used 1.31→4.58 GiB.
+Remounted 007–015 to unstick.

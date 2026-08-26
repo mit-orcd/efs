@@ -1,0 +1,12 @@
+================================================================
+POSIX baseline comparison: 34 tests
+  both pass        : 31
+  EFS BUGS         : 3  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  peer_flock_exclusive             [FAIL] B acquired LOCK_EX while A held it
+  peer_fsync_then_read             [FAIL] OSError: [Errno 5] Input/output error
+  peer_unlink_while_b_has_fd       [FAIL] OSError: [Errno 5] Input/output error

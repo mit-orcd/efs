@@ -1,0 +1,17 @@
+pass attr_utimens                    
+pass attr_utimens_ns                 
+kept test tree: /tmp/efs/mnt/posix-9p8w09a5
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip  (9.2s)
+pass attr_touch_terminal             
+kept test tree: /tmp/efs/mnt/posix-_wane61c
+============================================================
+POSIX suite: 1/1 pass, 0 fail, 0 skip  (1.1s)
+pass perm_owner_utime_readonly       
+kept test tree: /tmp/efs/mnt/posix-kr66apps
+============================================================
+POSIX suite: 1/1 pass, 0 fail, 0 skip  (0.0s)
+pass names_too_long_component        
+kept test tree: /tmp/efs/mnt/posix-pqe0_niq
+============================================================
+POSIX suite: 1/1 pass, 0 fail, 0 skip  (0.0s)

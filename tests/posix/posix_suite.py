@@ -1314,7 +1314,26 @@ def names_crazy_roundtrip(d):
     eq(listed, set(CRAZY_NAMES), "all crazy names listed")
     for n in CRAZY_NAMES:
         os.unlink(os.path.join(d, n))
-    eq(len(os.listdir(d)), 0, "all crazy names removed")
+    # The kernel silly-renames an open-at-unlink file to .fuse_hidden<...> and
+    # unlinks it on last close; the daemon may process that unlink a beat late.
+    # Retry briefly to distinguish a timing race from a leaked dentry.
+    import time as _time
+    left = os.listdir(d)
+    tries = 0
+    while left and tries < 50:
+        _time.sleep(0.1)
+        left = os.listdir(d)
+        tries += 1
+    if left:
+        det = []
+        for nm in left:
+            try:
+                st = os.stat(os.path.join(d, nm))
+                det.append("%r REAL ino=%d nlink=%d" % (nm, st.st_ino, st.st_nlink))
+            except OSError as e:
+                det.append("%r PHANTOM errno=%d" % (nm, e.errno))
+        eq(len(left), 0, "all crazy names removed (after %d retries): leftover %s"
+           % (tries, det))
 
 
 @test

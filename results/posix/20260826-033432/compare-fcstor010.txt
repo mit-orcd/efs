@@ -1,0 +1,40 @@
+================================================================
+POSIX baseline comparison: 191 tests
+  both pass        : 162
+  EFS BUGS         : 24  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  ctime_on_link_rename             [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-paifo7bt/ctime_on_link_rename/f' -> '/tmp/efs/mnt/posix-paifo7bt/ctime_on_link_rename/g'
+  dir_many_files                   [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-paifo7bt/dir_many_files/f0200'
+  dir_rename_dir_over_nonempty     [FAIL] wrong errno: got 22 (Invalid argument), want one of (39, 17)
+  dir_rename_dir_with_contents     [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-paifo7bt/dir_rename_dir_with_contents/src' -> '/tmp/efs/mnt/posix-paifo7bt/dir_rename_dir_with_contents/dst'
+  dir_rename_file                  [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-paifo7bt/dir_rename_file/a' -> '/tmp/efs/mnt/posix-paifo7bt/dir_rename_file/b'
+  dir_rename_over_existing         [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-paifo7bt/dir_rename_over_existing/a' -> '/tmp/efs/mnt/posix-paifo7bt/dir_rename_over_existing/b'
+  dir_rename_symlink               [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-paifo7bt/dir_rename_symlink/sl' -> '/tmp/efs/mnt/posix-paifo7bt/dir_rename_symlink/sl2'
+  hardlink_basic                   [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-paifo7bt/hardlink_basic/orig' -> '/tmp/efs/mnt/posix-paifo7bt/hardlink_basic/hl'
+  hardlink_rename_one_name         [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-paifo7bt/hardlink_rename_one_name/orig' -> '/tmp/efs/mnt/posix-paifo7bt/hardlink_rename_one_name/hl'
+  hardlink_shared_data             [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-paifo7bt/hardlink_shared_data/orig' -> '/tmp/efs/mnt/posix-paifo7bt/hardlink_shared_data/hl'
+  hardlink_terminal_ln             [FAIL] cmd ['ln', 'orig', 'hl'] failed rc=1: ln: failed to create hard link 'hl' => 'orig': Input/output error 
+  hardlink_three_names             [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-paifo7bt/hardlink_three_names/a' -> '/tmp/efs/mnt/posix-paifo7bt/hardlink_three_names/b'
+  hardlink_unlink_one              [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-paifo7bt/hardlink_unlink_one/orig' -> '/tmp/efs/mnt/posix-paifo7bt/hardlink_unlink_one/hl'
+  link_of_symlink                  [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-paifo7bt/link_of_symlink/l' -> '/tmp/efs/mnt/posix-paifo7bt/link_of_symlink/h'
+  names_crazy_roundtrip            [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-paifo7bt/names_crazy_roundtrip/quote"double'
+  nlink_after_unlink_open          [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-paifo7bt/nlink_after_unlink_open/f'
+  perm_hardlink_shares_mode        [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-paifo7bt/perm_hardlink_shares_mode/a' -> '/tmp/efs/mnt/posix-paifo7bt/perm_hardlink_shares_mode/b'
+  rename_dir_same_parent           [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-paifo7bt/rename_dir_same_parent/old' -> '/tmp/efs/mnt/posix-paifo7bt/rename_dir_same_parent/new'
+  rename_empty_over_empty_dir      [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-paifo7bt/rename_empty_over_empty_dir/a' -> '/tmp/efs/mnt/posix-paifo7bt/rename_empty_over_empty_dir/b'
+  rename_file_over_symlink         [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-paifo7bt/rename_file_over_symlink/s' -> '/tmp/efs/mnt/posix-paifo7bt/rename_file_over_symlink/l'
+  st_ino_unique_hardlink_same      [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-paifo7bt/st_ino_unique_hardlink_same/a' -> '/tmp/efs/mnt/posix-paifo7bt/st_ino_unique_hardlink_same/c'
+  symlink_relative_after_parent_rename [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-paifo7bt/symlink_relative_after_parent_rename/a' -> '/tmp/efs/mnt/posix-paifo7bt/symlink_relative_after_parent_rename/b'
+  unlink_open_file                 [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-paifo7bt/unlink_open_file/f'
+  unlink_open_then_recreate        [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-paifo7bt/unlink_open_then_recreate/f'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

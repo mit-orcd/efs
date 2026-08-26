@@ -514,7 +514,10 @@ static void server_rebuild_owned_extras(struct efsd_server *s,
         uint32_t sh = ids[i];
         pthread_mutex_lock(&s->lock);
         struct efs_export *tab = efs_export_table(ex, sh);
-        int need = tab && tab->root.page_count > 0 &&
+        /* Never rebuild a dirty shard table: this server owns it (single
+         * writer), so the dirty table is ahead of the committed root and a
+         * rebuild would drop the ACKED-but-uncommitted ops (DIRTY-REBUILD). */
+        int need = tab && tab->root.page_count > 0 && !tab->shard_dirty &&
                    (tab->meta_needs_rebuild || tab->inode_count == 0);
         pthread_mutex_unlock(&s->lock);
         if (!need)
@@ -554,6 +557,12 @@ int server_ensure_shard_ready(struct efsd_server *s, struct efs_export *ex,
         return -1;
     /* Never flushed: an empty extra is the truth, first create is fine. */
     if (tab->root.page_count == 0)
+        return 0;
+    /* Dirty: the table holds ACKED-but-uncommitted ops. This server owns the
+     * shard (single writer), so the dirty table is AHEAD of the committed
+     * root, never behind it — rebuilding from the committed root would only
+     * drop the uncommitted ops (DIRTY-REBUILD). Keep it; the flush commits. */
+    if (tab->shard_dirty)
         return 0;
     if (!tab->meta_needs_rebuild && tab->inode_count > 0)
         return 0;

@@ -1,0 +1,19 @@
+================================================================
+POSIX baseline comparison: 191 tests
+  both pass        : 183
+  EFS BUGS         : 3  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  concurrent_creates_same_dir      [FAIL] all concurrent creates present: got 159, want 160
+  rename_to_self                   [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-1namt235/rename_to_self/f'
+  unlink_recreate_new_ino          [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-1namt235/unlink_recreate_new_ino/f'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

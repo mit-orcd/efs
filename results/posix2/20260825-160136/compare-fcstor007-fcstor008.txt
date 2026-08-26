@@ -1,0 +1,11 @@
+================================================================
+POSIX baseline comparison: 34 tests
+  both pass        : 32
+  EFS BUGS         : 2  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  peer_o_trunc_visible             [FAIL] OSError: [Errno 5] Input/output error
+  peer_sparse_size                 [FAIL] OSError: [Errno 5] Input/output error
