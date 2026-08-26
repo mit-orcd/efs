@@ -2861,15 +2861,23 @@ def main():
                 continue
 
     leave_fuse_cwd()
-    # Always drop leftover posix-* trees from earlier --keep runs.
-    # This run's tree is created after; --keep only retains that one.
+    host = subprocess.run(["hostname", "-s"], stdout=subprocess.PIPE
+                          ).stdout.decode().strip()
+    # Drop this host's leftover trees from earlier --keep / crashed runs. The
+    # base prefix is PER-HOST: with several clients sharing one mount, a
+    # client must never rmtree another concurrently-running client's active
+    # base. (A shared "posix-" sweep did exactly that — a later-starting
+    # client's startup sweep removed an earlier client's live tree, orphaning
+    # its per-test dirs and failing its rename/hardlink/unlink with
+    # EINVAL/EIO. That was the 4-way parallel flake.)
+    me = "posix-%s-" % host
     try:
         for name in os.listdir(mnt):
-            if name.startswith("posix-") and not name.startswith("posix-2c"):
+            if name.startswith(me):
                 shutil.rmtree(os.path.join(mnt, name), ignore_errors=True)
     except OSError:
         pass
-    base = tempfile.mkdtemp(prefix="posix-", dir=mnt)
+    base = tempfile.mkdtemp(prefix=me, dir=mnt)
     npass = nfail = nskip = 0
     t0 = time.time()
     selected = []
@@ -2882,8 +2890,6 @@ def main():
 
     tsv_mu = threading.Lock()
     by_name = {}
-    host = subprocess.run(["hostname", "-s"], stdout=subprocess.PIPE
-                          ).stdout.decode().strip()
 
     def flush_tsv():
         if not results_file:
