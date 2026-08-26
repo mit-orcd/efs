@@ -390,80 +390,6 @@ static int conn_wait_request(struct efs_conn *conn)
     }
 }
 
-static uint64_t handler_now_ms(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000ull + (uint64_t)ts.tv_nsec / 1000000ull;
-}
-
-/* A pending flush election blocks other writers only while unexpired AND
- * not yet committed: once the winner's root lands (committed >= election
- * gen) the slot must not fence out the next flush. Caller holds s->lock. */
-static int meta_writer_live(struct efsd_server *s, int ei, uint64_t now_ms)
-{
-    uint64_t committed = s->exports[ei].meta_fragmented
-                             ? s->exports[ei].root.generation : 0;
-    return s->meta_writer_id[ei] != 0 &&
-           now_ms < s->meta_writer_expiry[ei] &&
-           s->meta_writer_gen[ei] > committed;
-}
-
-/* Drop queued contenders that stopped re-BEGINing (crashed or gave up).
- * Caller holds s->lock. */
-static void meta_writer_q_expire(struct efsd_server *s, int ei, uint64_t now_ms)
-{
-    uint32_t n = s->meta_writer_q_len[ei];
-    uint32_t out = 0;
-    for (uint32_t i = 0; i < n; i++) {
-        if (now_ms - s->meta_writer_q_ms[ei][i] >= EFS_META_WRITER_Q_EXPIRY_MS)
-            continue;
-        if (out != i) {
-            s->meta_writer_q[ei][out] = s->meta_writer_q[ei][i];
-            s->meta_writer_q_ms[ei][out] = s->meta_writer_q_ms[ei][i];
-        }
-        out++;
-    }
-    s->meta_writer_q_len[ei] = out;
-}
-
-/* Returns 0-based queue position of writer_id, adding/refreshing its entry.
- * Caller holds s->lock. */
-static uint32_t meta_writer_q_touch(struct efsd_server *s, int ei,
-                                    uint64_t writer_id, uint64_t now_ms)
-{
-    uint32_t n = s->meta_writer_q_len[ei];
-    for (uint32_t i = 0; i < n; i++) {
-        if (s->meta_writer_q[ei][i] == writer_id) {
-            s->meta_writer_q_ms[ei][i] = now_ms;
-            return i;
-        }
-    }
-    if (n < EFS_META_WRITER_QMAX) {
-        s->meta_writer_q[ei][n] = writer_id;
-        s->meta_writer_q_ms[ei][n] = now_ms;
-        s->meta_writer_q_len[ei] = n + 1;
-    }
-    return n; /* at the end (or unrecorded when full) */
-}
-
-/* Remove writer_id from the queue (on grant). Caller holds s->lock. */
-static void meta_writer_q_remove(struct efsd_server *s, int ei,
-                                 uint64_t writer_id)
-{
-    uint32_t n = s->meta_writer_q_len[ei];
-    for (uint32_t i = 0; i < n; i++) {
-        if (s->meta_writer_q[ei][i] == writer_id) {
-            for (uint32_t j = i + 1; j < n; j++) {
-                s->meta_writer_q[ei][j - 1] = s->meta_writer_q[ei][j];
-                s->meta_writer_q_ms[ei][j - 1] = s->meta_writer_q_ms[ei][j];
-            }
-            s->meta_writer_q_len[ei] = n - 1;
-            return;
-        }
-    }
-}
-
 void server_handle_conn(struct efs_conn *conn)
 {
     int fd = conn->fd;
@@ -978,93 +904,6 @@ send_reply:
             }
             break;
         }
-        case EFS_MSG_META_FLUSH_BEGIN: {
-            struct efs_msg_meta_flush_begin_reply br;
-            memset(&br, 0, sizeof(br));
-            br.status = EFS_PUT_META_ERROR;
-            if (payload_len >= sizeof(struct efs_msg_meta_flush_begin)) {
-                struct efs_msg_meta_flush_begin b;
-                memcpy(&b, payload, sizeof(b));
-                pthread_mutex_lock(&g_server->lock);
-                struct efs_export *ex = b.export_id
-                                            ? server_get_export(g_server,
-                                                                b.export_id)
-                                            : NULL;
-                if (!ex) {
-                    /* Export not established here yet (fresh server / new
-                     * export): nothing committed for it; accept. */
-                    br.status = EFS_PUT_META_OK;
-                    br.committed_gen = 0;
-                } else {
-                    int ei = server_export_index_locked(g_server, ex);
-                    uint64_t committed = ex->meta_fragmented
-                                             ? ex->root.generation : 0;
-                    br.committed_gen = committed;
-                    if (b.gen <= committed) {
-                        br.status = EFS_PUT_META_STALE;
-                    } else {
-                        uint64_t now = handler_now_ms();
-                        /* Expire a dead holder so the queue can advance. */
-                        if (g_server->meta_writer_id[ei] != 0 &&
-                            !meta_writer_live(g_server, ei, now)) {
-                            g_server->meta_writer_id[ei] = 0;
-                            g_server->meta_writer_since[ei] = 0;
-                        }
-                        meta_writer_q_expire(g_server, ei, now);
-                        /* Yield an over-held election: a holder re-BEGINing
-                         * (flush retry) past EFS_META_WRITER_MAX_HOLD_MS while
-                         * contenders queue is moved to the back of the FIFO and
-                         * the election freed, so the head-of-queue writer gets
-                         * the next grant. Without this a wedged/slow writer
-                         * re-grants itself forever and starves the cluster.
-                         * Only under contention (q_len > 0): a lone writer is
-                         * never yielded. Its partial pages are fenced by the
-                         * PUT_META commit gate and overwritten next flush. */
-                        if (g_server->meta_writer_id[ei] == b.writer_id &&
-                            g_server->meta_writer_since[ei] != 0 &&
-                            now - g_server->meta_writer_since[ei] >
-                                EFS_META_WRITER_MAX_HOLD_MS &&
-                            g_server->meta_writer_q_len[ei] > 0) {
-                            uint64_t old = g_server->meta_writer_id[ei];
-                            g_server->meta_writer_id[ei] = 0;
-                            g_server->meta_writer_since[ei] = 0;
-                            meta_writer_q_touch(g_server, ei, old, now);
-                        }
-                        if (g_server->meta_writer_id[ei] == b.writer_id) {
-                            /* Holder re-BEGINing (retry): re-grant. */
-                            g_server->meta_writer_gen[ei] = b.gen;
-                            g_server->meta_writer_expiry[ei] =
-                                now + EFS_META_WRITER_EXPIRY_MS;
-                            br.status = EFS_PUT_META_OK;
-                        } else if (g_server->meta_writer_id[ei] == 0 &&
-                                   (g_server->meta_writer_q_len[ei] == 0 ||
-                                    g_server->meta_writer_q[ei][0] ==
-                                        b.writer_id)) {
-                            /* Election free and we are at the head of the
-                             * FIFO (or nobody waits): grant. */
-                            meta_writer_q_remove(g_server, ei, b.writer_id);
-                            g_server->meta_writer_id[ei] = b.writer_id;
-                            g_server->meta_writer_gen[ei] = b.gen;
-                            g_server->meta_writer_expiry[ei] =
-                                now + EFS_META_WRITER_EXPIRY_MS;
-                            g_server->meta_writer_since[ei] = now;
-                            br.status = EFS_PUT_META_OK;
-                        } else {
-                            /* Held by another live writer, or others are
-                             * ahead in the FIFO: wait for your turn. */
-                            meta_writer_q_touch(g_server, ei, b.writer_id,
-                                                now);
-                            br.status = EFS_PUT_META_BUSY;
-                        }
-                    }
-                }
-                pthread_mutex_unlock(&g_server->lock);
-            }
-            /* Keep the pooled conn alive for the client's page/root PUTs. */
-            efs_conn_send_msg(conn, EFS_MSG_META_FLUSH_BEGIN_REPLY,
-                              &br, sizeof(br));
-            break;
-        }
         case EFS_MSG_PUT_META: {
             if (payload_len > 0) {
                 uint8_t reply = EFS_PUT_META_ERROR;
@@ -1120,179 +959,71 @@ send_reply:
                             }
                             pthread_mutex_unlock(&g_server->lock);
                             efs_export_root_free(&root);
-                        } else if (root.write_lease_id &&
-                                   (!meta_writer_live(g_server, ei,
-                                                      handler_now_ms()) ||
-                                    g_server->meta_writer_id[ei] !=
-                                        root.write_lease_id)) {
-                            /* A stamped writer must CURRENTLY hold the flush
-                             * election to commit. "No live holder" used to
-                             * pass too: a writer whose lease lapsed mid-flush
-                             * committed late, over pages a newer holder was
-                             * already PUTting for a same-parity generation —
-                             * dual-slot tear. STALE makes the loser resync
-                             * and retry. Roots with no lease id (mkfs,
-                             * legacy tools) skip the gate entirely. */
-                            reply = EFS_PUT_META_STALE;
-                            pthread_mutex_unlock(&g_server->lock);
-                            efs_export_root_free(&root);
-                        } else if (ex->meta_fragmented &&
-                                   efs_export_root_same_pages(&root,
-                                                              &ex->root)) {
-                            /* Newer gen but identical shard-0 pages: the
-                             * sender added no shard-0 content (extras-only
-                             * refresh that crossed a gen, or a redundant
-                             * re-commit of our own root). Adopt the gen so
-                             * future commits stay monotonic, merge the extra
-                             * descriptors — but keep our live shard-0 table,
-                             * placement, next_ino and next_ci. Fencing here
-                             * is what wiped unflushed RPC ops on the primary
-                             * (mc_stress: appfile/cdir data loss). */
-                            ex->root.generation = root.generation;
-                            efs_export_merge_extra_roots(ex, &root);
-                            g_server->epoch++;
-                            g_server->export_meta_dirty = 1;
-                            server_save_export(g_server, ex);
-                            g_server->export_meta_dirty = 0;
-                            reply = EFS_PUT_META_OK;
-                            pthread_mutex_unlock(&g_server->lock);
-                            efs_export_root_free(&root);
-                        } else if (root.extra_shard_count > 0 &&
-                                   ex->inode_count > 0) {
-                            /* Extra-shard owner sent a root whose shard-0
-                             * pages don't match (stale catchup copy, or it
-                             * briefly thought it was primary and bumped
-                             * gen). Never fence a live table for extras —
-                             * that dropped unflushed mkdir/dentry ops and
-                             * made sharded dirs vanish mid-create. */
-                            efs_export_merge_extra_roots(ex, &root);
-                            g_server->export_meta_dirty = 1;
-                            server_save_export(g_server, ex);
-                            g_server->export_meta_dirty = 0;
-                            reply = EFS_PUT_META_OK;
-                            pthread_mutex_unlock(&g_server->lock);
-                            efs_export_root_free(&root);
                         } else {
-                            uint64_t old_gen = ex->root.generation;
-                            uint32_t old_ino_pc = ex->root.ino_page_count
-                                                      ? ex->root.ino_page_count
-                                                      : ex->root.page_count;
-                            uint32_t old_ch_pc = ex->root.chunk_page_count;
-                            uint32_t new_ino_pc = root.ino_page_count
-                                                      ? root.ino_page_count
-                                                      : root.page_count;
-                            uint32_t new_ch_pc = root.chunk_page_count;
-                            int had_frag = ex->meta_fragmented;
-                            uint32_t prev_features = ex->root.features;
-                            /* CoW (EFSR v7): snapshot the outgoing and incoming
-                             * roots' page_cis[] so the GC runs lock-free on
-                             * stable copies (a concurrent PUT_META could move
-                             * ex->root once we drop the lock). */
-                            uint32_t *old_cis = NULL, *new_cis = NULL;
-                            uint32_t old_cis_count = 0, new_cis_count = 0;
-                            if (ex->root.page_cis && ex->root.page_count > 0) {
-                                old_cis_count = ex->root.page_count;
-                                old_cis = malloc((size_t)old_cis_count *
-                                                 sizeof(uint32_t));
-                                if (old_cis)
-                                    memcpy(old_cis, ex->root.page_cis,
-                                           (size_t)old_cis_count *
-                                               sizeof(uint32_t));
-                                else
-                                    old_cis_count = 0;
-                            }
-                            if (root.page_cis && root.page_count > 0) {
-                                new_cis_count = root.page_count;
-                                new_cis = malloc((size_t)new_cis_count *
-                                                 sizeof(uint32_t));
-                                if (new_cis)
-                                    memcpy(new_cis, root.page_cis,
-                                           (size_t)new_cis_count *
-                                               sizeof(uint32_t));
-                                else
-                                    new_cis_count = 0;
-                            }
-                            ex->meta_fragmented = 1;
-                            /* Never let an adopt orphan a shard: carry
-                             * forward extra-shard descriptors the incoming
-                             * root lacks (per-shard higher gen wins). */
-                            (void)efs_export_root_maxmerge_extras(&root,
-                                                                  &ex->root);
-                            efs_export_root_move(&ex->root, &root);
-                            ex->id = ex->root.id;
-                            strncpy(ex->name, ex->root.name, EFS_MAX_NAME - 1);
-                            ex->next_ino = ex->root.next_ino;
-                            if (efs_chunk_size_valid(ex->root.chunk_size))
-                                ex->chunk_size = ex->root.chunk_size;
-                            /* Features are server-owned: ignore the client's
-                             * root.features so a flush can't revert an admin
-                             * toggle. A fresh export (no prior committed root)
-                             * adopts the incoming value; thereafter only
-                             * SET_FEATURES changes it. */
-                            if (had_frag)
-                                ex->root.features = prev_features;
-                            else if (ex->root.features == 0)
-                                ex->root.features = EFS_FEATURES_DEFAULT;
-                            ex->features = ex->root.features;
-                            /* Never rebuild on this handler thread: peer page
-                             * fetches would block the pooled client connection
-                             * and can cascade into multi-node stalls. Fence the
-                             * now-stale inode/chunk tables so migrate/stats
-                             * cannot act on maps from the old generation. */
-                            if (ex->root.page_count > 0) {
-                                ex->meta_needs_rebuild = 1;
-                                ex->chunk_count = 0;
-                                ex->inode_count = 0;
-                            }
-                            /* Selective: a shard table we still write (dirty,
-                             * or same/newer gen) keeps its state; only
-                             * genuinely newer foreign descriptors land. */
-                            efs_export_merge_extra_roots(ex, &ex->root);
-                            g_server->epoch++;
-                            g_server->export_meta_dirty = 1;
-                            /* New generation: drop the GET_META cache. */
-                            free(ex->gm_blob);
-                            ex->gm_blob = NULL;
-                            /* Commit consumes the flush election. */
-                            g_server->meta_writer_id[ei] = 0;
-                            g_server->meta_writer_since[ei] = 0;
-                            /* Save while holding the lock: concurrent PUT_META
-                             * can efs_export_root_move and free page_checksums
-                             * under a raced unlocked save (SIGSEGV). */
-                            server_save_export(g_server, ex);
-                            g_server->export_meta_dirty = 0;
-                            uint64_t new_gen = ex->root.generation;
-                            pthread_mutex_unlock(&g_server->lock);
-                            reply = EFS_PUT_META_OK;
-                            /* Client-driven root flip: reclaim the retired
-                             * generation's metadata pages (best-effort). */
-                            if (old_gen != new_gen) {
-                                if (old_cis && new_cis) {
-                                    /* Old root was CoW (EFSR v7): reclaim the
-                                     * cis it referenced but the new root no
-                                     * longer does. */
-                                    server_gc_meta_cow_pages(g_server, ex,
-                                                             EFS_META_TABLE_INO,
-                                                             old_cis,
-                                                             old_cis_count,
-                                                             new_cis,
-                                                             new_cis_count);
-                                } else if (had_frag &&
-                                           (old_ino_pc > 0 || old_ch_pc > 0)) {
-                                    /* Old root was dual-slot (v6 and earlier):
-                                     * drop only the retired gen's out-of-range
-                                     * pages (in-range fragments stay for reuse
-                                     * by dirty-page skip references). */
-                                    server_gc_meta_slot_pages(g_server, ex,
-                                                              old_gen,
-                                                              old_ino_pc,
-                                                              old_ch_pc,
-                                                              new_ino_pc,
-                                                              new_ch_pc);
+                            /* 2PC phase 1 (prepare): a gen-advancing root is
+                             * STASHED as pending — never installed, persisted,
+                             * fenced, or GC'd here. The writer may still fail
+                             * its prepare quorum and discard this root; a
+                             * same-gen retry then rewrites the SAME CoW cis
+                             * with different content, so installing an
+                             * uncommitted root corrupts the pages it
+                             * references (the shard-0 "gen raced with GC"
+                             * wedge: every node adopted gen=N+1 and GC'd
+                             * gen=N's pages, but gen=N+1's pages were
+                             * overwritten by the retry). Promotion happens
+                             * only on EFS_MSG_META_COMMIT, after the writer's
+                             * quorum — by which point the gen's pages are
+                             * 2-of-3 placed. A newer prepare supersedes any
+                             * pending root (same-gen retry writes fresh cis;
+                             * the old pending's pages are unreferenced and
+                             * simply overwritten). */
+                            /* Stash the raw prepare bytes so COMMIT can
+                             * fingerprint-match (a same-gen retry with new
+                             * content at the same cis must never promote a
+                             * superseded prepare). No blob, no prepare — the
+                             * writer's quorum must know. */
+                            uint8_t *pb = ei >= 0 ? malloc(payload_len) : NULL;
+                            if (ei >= 0 && pb) {
+                                efs_export_root_free(&g_server->pending_root[ei]);
+                                memset(&g_server->pending_root[ei], 0,
+                                       sizeof(g_server->pending_root[ei]));
+                                free(g_server->pending_blob[ei]);
+                                memcpy(pb, payload, payload_len);
+                                g_server->pending_blob[ei] = pb;
+                                g_server->pending_blob_len[ei] =
+                                    (uint32_t)payload_len;
+                                {
+                                    struct sockaddr_in pa;
+                                    socklen_t pl = sizeof(pa);
+                                    char ip[64] = "?";
+                                    if (getpeername(conn->fd,
+                                                    (struct sockaddr *)&pa,
+                                                    &pl) == 0)
+                                        inet_ntop(AF_INET, &pa.sin_addr, ip,
+                                                  sizeof(ip));
+                                    fprintf(stderr,
+                                            "meta-prepare: stashed export=%s "
+                                            "gen=%llu page0_ci=%u (was committed "
+                                            "gen=%llu) from=%s:%u\n",
+                                            ex->name,
+                                            (unsigned long long)root.generation,
+                                            root.page_cis && root.page_count > 0
+                                                ? root.page_cis[0]
+                                                : 0,
+                                            (unsigned long long)ex->root.generation,
+                                            ip, ntohs(pa.sin_port));
                                 }
+                                g_server->pending_root[ei] = root; /* move */
+                                g_server->pending_valid[ei] = 1;
+                                reply = EFS_PUT_META_OK;
+                                pthread_mutex_unlock(&g_server->lock);
+                                /* root ownership moved to pending — not freed */
+                            } else {
+                                free(pb);
+                                pthread_mutex_unlock(&g_server->lock);
+                                efs_export_root_free(&root);
+                                reply = EFS_PUT_META_ERROR;
                             }
-                            free(old_cis);
-                            free(new_cis);
                         }
                     }
                 } else if (efs_meta_blob_is_export(payload, payload_len)) {
@@ -1338,6 +1069,161 @@ send_reply:
                 m.new_epoch = g_server->epoch;
                 efs_conn_send_msg(conn, EFS_MSG_PUT_META_REPLY, &m, sizeof(m));
             }
+            break;
+        }
+        case EFS_MSG_META_COMMIT: {
+            /* 2PC phase 2: promote a pending (prepared) root to committed.
+             * Only now — with the writer's prepare quorum behind it and the
+             * gen's pages 2-of-3 placed — is it safe to install, persist,
+             * fence stale tables, and GC the previous gen's cis. */
+            uint8_t reply = EFS_PUT_META_STALE;
+            if (payload_len >= sizeof(struct efs_msg_meta_commit)) {
+                struct efs_msg_meta_commit c;
+                memcpy(&c, payload, sizeof(c));
+                uint32_t *old_cis = NULL, *new_cis = NULL;
+                uint32_t old_cis_count = 0, new_cis_count = 0;
+                efs_ino_t gc_table_ino = 0;
+                struct efs_export *gex = NULL;
+                pthread_mutex_lock(&g_server->lock);
+                struct efs_export *ex = server_get_export(g_server,
+                                                          c.export_id);
+                int ei = ex ? server_export_index_locked(g_server, ex) : -1;
+                /* Fingerprint match: the pending root must be exactly the
+                 * prepare the writer committed. A same-gen retry rewrites the
+                 * same cis with new content; promoting a superseded prepare
+                 * would reference overwritten pages (checksum mismatch →
+                 * permanent rebuild wedge). Mismatch → keep pending, reply
+                 * STALE, converge via catchup. */
+                int fp_match = 0;
+                if (ex && ei >= 0 && g_server->pending_valid[ei] &&
+                    g_server->pending_root[ei].generation == c.gen &&
+                    g_server->pending_blob[ei]) {
+                    uint8_t sum[EFS_HASH_SIZE];
+                    efs_hash(g_server->pending_blob[ei],
+                             g_server->pending_blob_len[ei], sum);
+                    fp_match = (memcmp(sum, c.root_sum, EFS_HASH_SIZE) == 0);
+                }
+                if (ex && ei >= 0 && fp_match) {
+                    if (ex->shard_dirty) {
+                        /* We hold unflushed MAIN-table ops for this export —
+                         * we are (or believe we are) the cluster-root writer.
+                         * Installing a foreign root now would fence and drop
+                         * them. Keep the pending root; catchup converges once
+                         * our flush advances past this gen. Dirty SHARD tabs
+                         * (rpc_dirty_ops) are not fenced by this install, so
+                         * they must not block it. */
+                        reply = EFS_PUT_META_BUSY;
+                        pthread_mutex_unlock(&g_server->lock);
+                    } else {
+                        struct efs_export_root *pend =
+                            &g_server->pending_root[ei];
+                        int same_pages =
+                            ex->meta_fragmented &&
+                            efs_export_root_same_pages(pend, &ex->root);
+                        uint64_t old_gen = ex->root.generation;
+                        int had_frag = ex->meta_fragmented;
+                        uint32_t prev_features = ex->root.features;
+                        /* Snapshot outgoing + incoming page_cis for the
+                         * lock-free GC below. */
+                        if (ex->root.page_cis && ex->root.page_count > 0) {
+                            old_cis_count = ex->root.page_count;
+                            old_cis = malloc((size_t)old_cis_count *
+                                             sizeof(uint32_t));
+                            if (old_cis)
+                                memcpy(old_cis, ex->root.page_cis,
+                                       (size_t)old_cis_count *
+                                           sizeof(uint32_t));
+                            else
+                                old_cis_count = 0;
+                        }
+                        if (pend->page_cis && pend->page_count > 0) {
+                            new_cis_count = pend->page_count;
+                            new_cis = malloc((size_t)new_cis_count *
+                                             sizeof(uint32_t));
+                            if (new_cis)
+                                memcpy(new_cis, pend->page_cis,
+                                       (size_t)new_cis_count *
+                                           sizeof(uint32_t));
+                            else
+                                new_cis_count = 0;
+                        }
+                        ex->meta_fragmented = 1;
+                        /* Never let a commit orphan a shard: carry forward
+                         * extra-shard descriptors the incoming root lacks
+                         * (per-shard higher gen wins). */
+                        (void)efs_export_root_maxmerge_extras(pend,
+                                                              &ex->root);
+                        efs_export_root_move(&ex->root, pend);
+                        memset(pend, 0, sizeof(*pend));
+                        g_server->pending_valid[ei] = 0;
+                        free(g_server->pending_blob[ei]);
+                        g_server->pending_blob[ei] = NULL;
+                        g_server->pending_blob_len[ei] = 0;
+                        ex->id = ex->root.id;
+                        strncpy(ex->name, ex->root.name, EFS_MAX_NAME - 1);
+                        ex->next_ino = ex->root.next_ino;
+                        if (efs_chunk_size_valid(ex->root.chunk_size))
+                            ex->chunk_size = ex->root.chunk_size;
+                        /* Features are server-owned: ignore the incoming
+                         * root.features so a flush can't revert an admin
+                         * toggle. A fresh export adopts the incoming value;
+                         * thereafter only SET_FEATURES changes it. */
+                        if (had_frag)
+                            ex->root.features = prev_features;
+                        else if (ex->root.features == 0)
+                            ex->root.features = EFS_FEATURES_DEFAULT;
+                        ex->features = ex->root.features;
+                        if (!same_pages && ex->root.page_count > 0) {
+                            /* Never rebuild on this handler thread: peer page
+                             * fetches would block the pooled client
+                             * connection. Fence the now-stale tables so
+                             * migrate/stats cannot act on old-gen maps. */
+                            ex->meta_needs_rebuild = 1;
+                            ex->chunk_count = 0;
+                            ex->inode_count = 0;
+                        }
+                        efs_export_merge_extra_roots(ex, &ex->root);
+                        g_server->epoch++;
+                        g_server->export_meta_dirty = 1;
+                        free(ex->gm_blob);
+                        ex->gm_blob = NULL;
+                        /* Save under the lock: a concurrent PUT_META can
+                         * root_move and free page_checksums under a raced
+                         * unlocked save (SIGSEGV). */
+                        server_save_export(g_server, ex);
+                        g_server->export_meta_dirty = 0;
+                        gc_table_ino = EFS_META_TABLE_INO;
+                        gex = ex;
+                        uint64_t new_gen = ex->root.generation;
+                        uint32_t commit_pc0 =
+                            (ex->root.page_cis && ex->root.page_count > 0)
+                                ? ex->root.page_cis[0]
+                                : 0;
+                        pthread_mutex_unlock(&g_server->lock);
+                        fprintf(stderr,
+                                "meta-commit: promoted export=%s old_gen=%llu "
+                                "new_gen=%llu page0_ci=%u same_pages=%d\n",
+                                ex->name, (unsigned long long)old_gen,
+                                (unsigned long long)new_gen, commit_pc0,
+                                same_pages);
+                        /* Reclaim the retired gen's pages. Safe here: this
+                         * gen's pages were 2-of-3 placed before the writer's
+                         * prepare, and the committed root now references
+                         * exactly new_cis. */
+                        if (old_cis && new_cis)
+                            server_gc_meta_cow_pages(g_server, gex,
+                                                     gc_table_ino,
+                                                     old_cis, old_cis_count,
+                                                     new_cis, new_cis_count);
+                        reply = EFS_PUT_META_OK;
+                    }
+                } else {
+                    pthread_mutex_unlock(&g_server->lock);
+                }
+                free(old_cis);
+                free(new_cis);
+            }
+            efs_conn_send_msg(conn, EFS_MSG_META_COMMIT_REPLY, &reply, 1);
             break;
         }
         case EFS_MSG_LIST_NODES: {
@@ -1847,10 +1733,16 @@ send_reply:
                         creq.gid = req->gid;
                         creq.target_shard = target;
                         creq.flags = cflags;
-                        creq.ino = efs_export_alloc_ino_for_shard(ex, target);
-                        if (!creq.ino) {
-                            r.status = EFS_INODE_RPC_ERROR;
-                        } else if (server_node_addr_locked(g_server, owner, host,
+                        /* ino=0: the TARGET owner allocates from its own
+                         * authoritative shard table. Allocating here from
+                         * our local copy of that shard is wrong — a
+                         * non-owner's shard table is stale or hollow
+                         * (evicted/never-rebuilt), so its next_ino hands
+                         * out inos the owner already used → CREATE_SHARD
+                         * fails EXIST on the ino collision and parallel
+                         * creates spuriously fail with EEXIST. */
+                        creq.ino = 0;
+                        if (server_node_addr_locked(g_server, owner, host,
                                                     sizeof(host), &port) != 0) {
                             r.status = EFS_INODE_RPC_ERROR;
                         } else {
@@ -2094,6 +1986,23 @@ send_reply:
                              : (rrc == EFS_ERR_EXIST) ? EFS_INODE_RPC_EXIST
                              : (rrc == EFS_ERR_NOT_EMPTY) ? EFS_INODE_RPC_NOT_EMPTY
                              : EFS_INODE_RPC_INVAL;
+                    uint32_t rsh = efs_export_shard_of(req->old_parent,
+                                                       ex->root.shard_bits);
+                    struct efs_export *rtab = rsh ? efs_export_table(ex, rsh)
+                                                  : ex;
+                    struct efs_inode np;
+                    int np_ok = (rtab && efs_export_get_inode(rtab,
+                                        req->new_parent, &np) == 0);
+                    fprintf(stderr,
+                            "rename-fail: rrc=%d old_par=%llu old=%s "
+                            "new_par=%llu new=%s shard=%u tab=%p np_present=%d "
+                            "tab_rebuild=%d tab_inodes=%llu gen=%llu\n",
+                            rrc, (unsigned long long)req->old_parent,
+                            req->old_name, (unsigned long long)req->new_parent,
+                            req->new_name, rsh, (void *)rtab, np_ok,
+                            rtab ? rtab->meta_needs_rebuild : -1,
+                            rtab ? (unsigned long long)rtab->inode_count : 0,
+                            (unsigned long long)ex->root.generation);
                 }
             } else if (type == EFS_MSG_INODE_RENAME) {
                 /* Phase 3b Conflicting: owner-serialized + dual-apply. */

@@ -420,7 +420,9 @@ static int load_page_from_chunk(const struct efs_export_root *root, uint32_t pi,
         }
     }
     if (used_scan) {
-        g_client.meta_heal = 1;
+        /* Fragment recovered via all-node scan. The server-side heal
+         * coordinator re-replicates it; the client no longer republishes
+         * metadata (server is the sole writer). */
         fprintf(stderr,
                 "meta: page %u ci=%u recovered fragment(s) via all-node scan\n",
                 pi, chunk_index);
@@ -742,7 +744,6 @@ static int load_export_from_root(const struct efs_export_root *root)
     g_meta_chunk_ci_even_base = UINT32_MAX;
     g_last_chunk_even_ci = UINT32_MAX;
     g_chunk_skip_streak = 0;
-    g_client.meta_heal_skipped = 0;
     int saw_v4_ci = 0, saw_v5_ci = 0;
     /* CoW (EFSR v7): the root carries each page's exact chunk_index, so the
      * dual-slot / v4-window candidate search and the torn-page CI hunting are
@@ -849,7 +850,6 @@ static int load_export_from_root(const struct efs_export_root *root)
                         loaded = 1;
                         used_ci = pair[s];
                         if (d > 1) {
-                            g_client.meta_heal = 1;
                             fprintf(stderr,
                                     "meta: page %u at ci=%u (delta %d from last)\n",
                                     pi, pair[s], sgn ? -d : d);
@@ -862,7 +862,6 @@ static int load_export_from_root(const struct efs_export_root *root)
             uint32_t rpi = pi - root->ino_page_count;
             uint32_t even = hunt_chunk_page_even_ci(root, pi);
             if (even != UINT32_MAX) {
-                g_client.meta_heal = 1;
                 if (even >= rpi)
                     g_meta_chunk_ci_even_base = even - rpi;
                 uint32_t found[2] = { even, even + EFS_META_SLOT_STRIDE };
@@ -889,8 +888,6 @@ static int load_export_from_root(const struct efs_export_root *root)
         }
         if (is_chunk) {
             g_chunk_skip_streak++;
-            g_client.meta_heal = 1;
-            g_client.meta_heal_skipped++;
             fprintf(stderr,
                     "meta: skipping unrecoverable chunk page %u/%u rc=%d (%s)\n",
                     pi, root->page_count, rc, efs_strerror(rc));

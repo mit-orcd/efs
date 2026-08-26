@@ -23,7 +23,8 @@
 #   EFS_HOSTS default = fcstor007..015 (the 9 pure clients)
 #   COMMIT=1 to git-commit the new results at the end.
 #   POSIX_SSH_SEC (default 180)  POSIX2_STEP_SEC (default 15)
-#   POSIX_TEST_SEC (default 15, per-test alarm in posix_suite.py)
+#   POSIX_TEST_SEC (default 15, per-test deadline in posix_suite.py)
+#   POSIX_JOBS (default 16; isolated testdirs run concurrently)
 #   BUILD_SSH_SEC (default 60)  PERF_SSH_SEC (default 400)
 #
 # NOTE: must run with network/ssh access to the test nodes (outside the
@@ -71,11 +72,11 @@ ensure_mounted() { # host
         return 0
     fi
     say "  $h: mounting efs-fuse"
-    ssh_to "$BUILD_SSH_SEC" "$h" 'cd /tmp/efs && [ -x ./efs-fuse ] || make efs-fuse >/dev/null 2>&1; \
+    ssh_to "$BUILD_SSH_SEC" "$h" "cd /tmp/efs && [ -x ./efs-fuse ] || make efs-fuse >/dev/null 2>&1; \
         mkdir -p /tmp/efs/mnt; \
-        (setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &); \
-        for i in $(seq 1 20); do sleep 0.15; \
-            grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts && exit 0; done; exit 1' 2>/dev/null
+        (EFS_TRANSPORT='${EFS_TRANSPORT:-tcp}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &); \
+        for i in \$(seq 1 20); do sleep 0.15; \
+            grep -q \"efs-fuse /tmp/efs/mnt \" /proc/mounts && exit 0; done; exit 1" 2>/dev/null
 }
 
 # Drop and remount one pure-client efs-fuse so it refetches the server snapshot.
@@ -83,15 +84,15 @@ ensure_mounted() { # host
 remount_client() { # host
     local h=$1
     say "  $h: remount efs-fuse"
-    ssh_to 15 "$h" 'killall -9 efs-fuse 2>/dev/null || pkill -9 -x efs-fuse 2>/dev/null || true
+    ssh_to 15 "$h" "killall -9 efs-fuse 2>/dev/null || pkill -9 -x efs-fuse 2>/dev/null || true
         timeout 3 fusermount3 -uz /tmp/efs/mnt 2>/dev/null || true
         cd /tmp/efs && mkdir -p /tmp/efs/mnt && rm -f fuse.log
-        setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &
-        for i in $(seq 1 20); do
+        EFS_TRANSPORT='${EFS_TRANSPORT:-tcp}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &
+        for i in \$(seq 1 20); do
             sleep 0.15
-            grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts && exit 0
+            grep -q \"efs-fuse /tmp/efs/mnt \" /proc/mounts && exit 0
         done
-        echo remount-timeout; tail -8 fuse.log; exit 1'
+        echo remount-timeout; tail -8 fuse.log; exit 1"
 }
 
 # rsync source + build efs-fuse + mount, per client (setup before perf multi)
@@ -128,21 +129,47 @@ cmd_posix() { # [--keep] [--parallel] [efs-host ...]
 
     say "posix: XFS baseline on $XFS_HOST:$XFS_DIR"
     push_tests "$XFS_HOST"
-    ssh_to "$POSIX_SSH_SEC" "$XFS_HOST" "timeout -k 5 $((POSIX_SSH_SEC - 15)) \
+    local xfs_tsv="/tmp/posix-xfs-$RUN_ID.tsv"
+    ssh_to "$POSIX_SSH_SEC" "$XFS_HOST" "rm -f '$xfs_tsv'
+        PYTHONUNBUFFERED=1 timeout -k 5 $((POSIX_SSH_SEC - 15)) \
         python3 /tmp/efs/tests/posix/posix_suite.py '$XFS_DIR' \
-        --timeout-s ${POSIX_TEST_SEC:-15} \
-        --results /tmp/posix-xfs.tsv >/dev/null 2>&1; cat /tmp/posix-xfs.tsv" \
+        --timeout-s ${POSIX_TEST_SEC:-15} --jobs ${POSIX_JOBS:-16} \
+        --results '$xfs_tsv'
+        if [ ! -s '$xfs_tsv' ]; then
+            printf '%s\\n' '# TIMEOUT no TSV' 'test	result	detail' \
+                '# summary pass=0 fail=0 skip=0 total=0 dur=0'
+            exit 124
+        fi
+        cat '$xfs_tsv'" \
         > "$pdir/xfs-baseline.tsv"
     say "  baseline: $(grep -c $'\tPASS' "$pdir/xfs-baseline.tsv") pass"
 
     posix_one() { # host
         local h=$1
+        local remote_tsv="/tmp/posix-efs-${RUN_ID}-${h%.ib}.tsv"
         say "posix: efs on $h:$EFS_MNT $keep"
         push_tests "$h"
-        ssh_to "$POSIX_SSH_SEC" "$h" "timeout -k 5 $((POSIX_SSH_SEC - 15)) \
+        # Guard: a dead efs-fuse leaves /tmp/efs/mnt as a plain local dir and
+        # the suite would silently pass against tmpfs (0 "EFS bugs"). Refuse
+        # to run unless EFS_MNT is a live fuse.efs-fuse mount.
+        ssh_to 15 "$h" "findmnt -n -o FSTYPE '$EFS_MNT' | grep -q '^fuse\.efs-fuse$'" \
+            || { say "  ERROR: $h:$EFS_MNT is not a live efs-fuse mount — skipping (run setup)"; \
+                 printf '# ERROR not an efs-fuse mount\ntest\tresult\tdetail\n# summary pass=0 fail=0 skip=0 total=0 dur=0\n' \
+                     > "$pdir/efs-${h%.ib}.tsv"; \
+                 python3 "$REPO/tests/posix/compare.py" "$pdir/xfs-baseline.tsv" \
+                     "$pdir/efs-${h%.ib}.tsv" > "$pdir/compare-${h%.ib}.txt" 2>/dev/null; \
+                 return 1; }
+        ssh_to "$POSIX_SSH_SEC" "$h" "rm -f '$remote_tsv'
+            PYTHONUNBUFFERED=1 timeout -k 5 $((POSIX_SSH_SEC - 15)) \
             python3 /tmp/efs/tests/posix/posix_suite.py '$EFS_MNT' \
-            $keep --timeout-s ${POSIX_TEST_SEC:-15} \
-            --results /tmp/posix-efs.tsv >/dev/null 2>&1; cat /tmp/posix-efs.tsv" \
+            $keep --timeout-s ${POSIX_TEST_SEC:-15} --jobs ${POSIX_JOBS:-16} \
+            --results '$remote_tsv'
+            if [ ! -s '$remote_tsv' ]; then
+                printf '%s\\n' '# TIMEOUT no TSV' 'test	result	detail' \
+                    '# summary pass=0 fail=0 skip=0 total=0 dur=0'
+                exit 124
+            fi
+            cat '$remote_tsv'" \
             > "$pdir/efs-${h%.ib}.tsv"
         say "  --- compare $h vs XFS baseline ---"
         python3 "$REPO/tests/posix/compare.py" "$pdir/xfs-baseline.tsv" \

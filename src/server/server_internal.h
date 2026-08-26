@@ -165,6 +165,22 @@ struct efsd_server {
     /* Open-fd refs + cluster flock (guarded by s->lock). */
     struct efs_ino_hold *ino_holds;
 
+    /* 2PC pending root (per export slot): a gen-advancing root received via
+     * PUT_META (prepare) that the writer has NOT committed yet. Stashed here
+     * untouched — not installed, persisted, fenced, or GC'd — until
+     * EFS_MSG_META_COMMIT arrives for its generation. A newer prepare for the
+     * same export replaces it (same-gen retry after a failed quorum writes
+     * fresh cis; the superseded pending root's pages are unreferenced and
+     * simply overwritten). Cleared on promote or on catchup install.
+     * Guarded by s->lock. */
+    struct efs_export_root pending_root[EFS_MAX_EXPORTS];
+    uint8_t pending_valid[EFS_MAX_EXPORTS];
+    /* Raw prepare payload (serialized root) stashed alongside pending_root:
+     * META_COMMIT carries efs_hash(root bytes) so a same-gen retry with new
+     * content at the same cis can never promote a superseded prepare. */
+    uint8_t *pending_blob[EFS_MAX_EXPORTS];
+    uint32_t pending_blob_len[EFS_MAX_EXPORTS];
+
     /* Catchup/heal progress for EFS_MSG_HEAL_STATUS (single catchup thread). */
     int heal_active;
     char heal_export[EFS_MAX_NAME];
@@ -438,10 +454,6 @@ void server_rebuild_fragmented_exports(struct efsd_server *s);
 
 /* Send metadata to all peers. Returns number of acks. */
 int server_replicate_metadata(struct efsd_server *s, struct efs_export *ex);
-
-/* Send a metadata snapshot (EFSR root or legacy EFSM) to a peer. */
-int server_send_metadata_to(struct efsd_server *s, struct efs_export *ex,
-                              const char *host, uint16_t port);
 
 /* Fetch metadata from a peer. */
 int server_fetch_metadata_from(struct efsd_server *s, const char *host, uint16_t port);

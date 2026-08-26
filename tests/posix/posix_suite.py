@@ -11,7 +11,7 @@ terminal commands (mkdir, ln, dd, cp, mv, stat, ...) via subprocess.
 
 Usage:
     posix_suite.py <mount-dir> [--results <file>] [--keep] [--stop]
-                   [--filter <substr>] [--timeout-s <sec>]
+                   [--filter <substr>] [--timeout-s <sec>] [--jobs N]
 
 Exit code: 0 if every selected test passes, 1 otherwise.
 
@@ -28,7 +28,9 @@ import stat as statmod
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
 # --------------------------------------------------------------------------
 # Test registry + result tracking
@@ -40,6 +42,12 @@ RESULTS = []        # list of (name, ok, detail)
 def test(fn):
     """Register a test function. The function name becomes the test id."""
     TESTS.append((fn.__name__, fn))
+    return fn
+
+
+def serial(fn):
+    """Process-global umask or cwd — runner will not overlap this test."""
+    fn._posix_serial = True
     return fn
 
 
@@ -578,6 +586,7 @@ def dir_hidden_files(d):
 
 
 @test
+@serial
 def dir_mkdir_umask(d):
     old = os.umask(0o022)
     try:
@@ -806,6 +815,7 @@ def attr_stat_fields(d):
 
 
 @test
+@serial
 def attr_umask_respected(d):
     old = os.umask(0o022)
     try:
@@ -1122,6 +1132,7 @@ def perm_dir_readonly_mutate(d):
 
 
 @test
+@serial
 def perm_dir_no_x_search(d):
     if _root():
         return
@@ -1500,6 +1511,7 @@ def err_create_under_a_file(d):
 
 
 @test
+@serial
 def err_chdir_into_file(d):
     p = os.path.join(d, "f")
     wr(p, b"x")
@@ -2643,6 +2655,7 @@ def fsync_then_fstat_size(d):
 
 
 @test
+@serial
 def chdir_dotdot_after_mkdir(d):
     sub = os.path.join(d, "sub")
     os.mkdir(sub)
@@ -2801,6 +2814,7 @@ def main():
     stop = False
     filt = None
     test_timeout = int(os.environ.get("POSIX_TEST_SEC", "15"))
+    jobs = int(os.environ.get("POSIX_JOBS", "16"))
     i = 1
     while i < len(args):
         if args[i] == "--results":
@@ -2817,6 +2831,9 @@ def main():
             i += 2
         elif args[i] == "--timeout-s":
             test_timeout = int(args[i + 1])
+            i += 2
+        elif args[i] == "--jobs":
+            jobs = int(args[i + 1])
             i += 2
         else:
             i += 1
@@ -2841,50 +2858,167 @@ def main():
                 continue
 
     leave_fuse_cwd()
+    # Always drop leftover posix-* trees from earlier --keep runs.
+    # This run's tree is created after; --keep only retains that one.
+    try:
+        for name in os.listdir(mnt):
+            if name.startswith("posix-") and not name.startswith("posix-2c"):
+                shutil.rmtree(os.path.join(mnt, name), ignore_errors=True)
+    except OSError:
+        pass
     base = tempfile.mkdtemp(prefix="posix-", dir=mnt)
     npass = nfail = nskip = 0
     t0 = time.time()
+    selected = []
+    for name, fn in TESTS:
+        if filt and filt not in name:
+            continue
+        tdir = os.path.join(base, name)
+        os.makedirs(tdir, exist_ok=True)
+        selected.append((name, fn, tdir))
+
+    tsv_mu = threading.Lock()
+    by_name = {}
+    host = subprocess.run(["hostname", "-s"], stdout=subprocess.PIPE
+                          ).stdout.decode().strip()
+
+    def flush_tsv():
+        if not results_file:
+            return
+        ordered = [(n, by_name[n][0], by_name[n][1])
+                   for n, _fn, _td in selected if n in by_name]
+        dt = time.time() - t0
+        tmp = results_file + ".tmp"
+        with open(tmp, "w") as f:
+            f.write("# posix-suite host=%s mnt=%s %s\n" %
+                    (host, mnt, time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                              time.gmtime())))
+            f.write("test\tresult\tdetail\n")
+            for name, res, detail in ordered:
+                f.write("%s\t%s\t%s\n" %
+                        (name, res, detail.replace("\n", " ")))
+            f.write("# summary pass=%d fail=%d skip=%d total=%d dur=%.1f\n" %
+                    (npass, nfail, nskip, npass + nfail + nskip, dt))
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, results_file)
+
+    def record(name, status, detail):
+        nonlocal npass, nfail, nskip
+        with tsv_mu:
+            by_name[name] = (status, detail)
+            RESULTS.append((name, status, detail))
+            if status == "PASS":
+                npass += 1
+                print("pass %-32s" % name, flush=True)
+            elif status == "SKIP":
+                nskip += 1
+                print("SKIP %-32s %s" % (name, detail), flush=True)
+            else:
+                nfail += 1
+                print("FAIL %-32s %s" % (name, detail), flush=True)
+            flush_tsv()
+
+    def invoke(fn, tdir):
+        try:
+            fn(tdir)
+        except Fail as e:
+            if getattr(e, "soft", False):
+                return "SKIP", str(e)
+            return "FAIL", str(e)
+        except Exception as e:  # noqa: BLE001
+            return "FAIL", "%s: %s" % (type(e).__name__, e)
+        return "PASS", ""
+
+    def run_serial_one(name, fn, tdir):
+        if test_timeout > 0:
+            def _on_alarm(_signum, _frame):
+                raise TestTimeout(test_timeout)
+            signal.signal(signal.SIGALRM, _on_alarm)
+            signal.alarm(test_timeout)
+        try:
+            return invoke(fn, tdir)
+        finally:
+            if test_timeout > 0:
+                signal.alarm(0)
+
     try:
-        for name, fn in TESTS:
-            if filt and filt not in name:
-                continue
-            tdir = os.path.join(base, name)
-            os.makedirs(tdir, exist_ok=True)
-            try:
-                if test_timeout > 0:
-                    def _on_alarm(_signum, _frame):
-                        raise TestTimeout(test_timeout)
-                    signal.signal(signal.SIGALRM, _on_alarm)
-                    signal.alarm(test_timeout)
+        parallel = [(n, fn, td) for n, fn, td in selected
+                    if not getattr(fn, "_posix_serial", False)]
+        serials = [(n, fn, td) for n, fn, td in selected
+                   if getattr(fn, "_posix_serial", False)]
+        abort = False
+
+        if jobs <= 1:
+            for name, fn, tdir in selected:
+                st, det = run_serial_one(name, fn, tdir)
+                by_name[name] = (st, det)
+                record(name, st, det)
+                close_leaked_mount_fds(mnt)
+                if stop and st == "FAIL":
+                    print("stopped on first fail (--stop)")
+                    abort = True
+                    break
+        else:
+            if parallel:
+                print("parallel %d tests jobs=%d (serial %d after)" %
+                      (len(parallel), jobs, len(serials)))
+                ex = ThreadPoolExecutor(max_workers=jobs)
+                start = {}
+                futs = {}
+                for name, fn, tdir in parallel:
+                    fut = ex.submit(invoke, fn, tdir)
+                    futs[fut] = name
+                    start[fut] = time.time()
+                pending = set(futs)
+                while pending:
+                    done, pending = wait(pending, timeout=0.2,
+                                         return_when=FIRST_COMPLETED)
+                    now = time.time()
+                    for fut in done:
+                        name = futs[fut]
+                        try:
+                            st, det = fut.result()
+                        except Exception as e:  # noqa: BLE001
+                            st, det = "FAIL", "%s: %s" % (
+                                type(e).__name__, e)
+                        by_name[name] = (st, det)
+                        record(name, st, det)
+                        if stop and st == "FAIL":
+                            print("stopped on first fail (--stop)")
+                            abort = True
+                            pending.clear()
+                            break
+                    if abort:
+                        break
+                    if test_timeout <= 0:
+                        continue
+                    for fut in list(pending):
+                        if now - start[fut] < test_timeout:
+                            continue
+                        name = futs[fut]
+                        by_name[name] = (
+                            "FAIL", "timeout after %ss" % test_timeout)
+                        record(name, *by_name[name])
+                        pending.discard(fut)
                 try:
-                    fn(tdir)
-                finally:
-                    if test_timeout > 0:
-                        signal.alarm(0)
-            except Fail as e:
-                if getattr(e, "soft", False):
-                    nskip += 1
-                    RESULTS.append((name, "SKIP", str(e)))
-                    print("SKIP %-32s %s" % (name, e))
-                else:
-                    nfail += 1
-                    RESULTS.append((name, "FAIL", str(e)))
-                    print("FAIL %-32s %s" % (name, e))
-                    if stop:
+                    ex.shutdown(wait=False, cancel_futures=True)
+                except TypeError:
+                    ex.shutdown(wait=False)
+            close_leaked_mount_fds(mnt)
+            if not abort:
+                for name, fn, tdir in serials:
+                    st, det = run_serial_one(name, fn, tdir)
+                    by_name[name] = (st, det)
+                    record(name, st, det)
+                    close_leaked_mount_fds(mnt)
+                    if stop and st == "FAIL":
                         print("stopped on first fail (--stop)")
                         break
-            except Exception as e:  # noqa: BLE001
-                nfail += 1
-                RESULTS.append((name, "FAIL", "%s: %s" % (type(e).__name__, e)))
-                print("FAIL %-32s %s: %s" % (name, type(e).__name__, e))
-                if stop:
-                    print("stopped on first fail (--stop)")
-                    break
-            else:
-                npass += 1
-                RESULTS.append((name, "PASS", ""))
-                print("pass %-32s" % name)
-            close_leaked_mount_fds(mnt)
+
+        # TSV / summary follow TESTS registration order.
+        RESULTS[:] = [(n, by_name[n][0], by_name[n][1])
+                      for n, _fn, _td in selected if n in by_name]
     finally:
         leave_fuse_cwd()
         if keep:
@@ -2899,17 +3033,7 @@ def main():
           (npass, total, nfail, nskip, dt))
 
     if results_file:
-        host = subprocess.run(["hostname", "-s"], stdout=subprocess.PIPE
-                              ).stdout.decode().strip()
-        with open(results_file, "w") as f:
-            f.write("# posix-suite host=%s mnt=%s %s\n" %
-                    (host, mnt, time.strftime("%Y-%m-%dT%H:%M:%SZ",
-                                              time.gmtime())))
-            f.write("test\tresult\tdetail\n")
-            for name, res, detail in RESULTS:
-                f.write("%s\t%s\t%s\n" % (name, res, detail.replace("\n", " ")))
-            f.write("# summary pass=%d fail=%d skip=%d total=%d dur=%.1f\n" %
-                    (npass, nfail, nskip, total, dt))
+        flush_tsv()
         print("wrote %s" % results_file)
 
     # Interpreter teardown closes leftover FUSE fds (cwd, listdir,

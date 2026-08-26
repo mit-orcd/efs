@@ -3613,21 +3613,9 @@ int main(int argc, char **argv)
                (unsigned long long)z, (unsigned long long)ones);
     }
     fflush(stdout);
-    /* Start the flush thread before fuse_main so a hunted reconstruct
-     * republishes canonical chunk pages without waiting for the first
-     * kernel request (which is when .init would otherwise run). */
-    if (g_client.meta_heal) {
-        uint32_t batch = 4096;
-        const char *env = getenv("EFS_META_BATCH_OPS");
-        if (env && *env) {
-            unsigned long v = strtoul(env, NULL, 10);
-            if (v > 0 && v < 1000000)
-                batch = (uint32_t)v;
-        }
-        efs_client_enable_meta_batch(batch);
-    }
-    if (efs_client_take_write_lease() == EFS_ERR_BUSY)
-        fprintf(stderr, "efs-fuse: mounted read-only (write lease busy)\n");
+    /* The server is the sole metadata writer: no client write lease, no
+     * client-side root flush. The background REPORT thread starts in .init
+     * (efs_client_enable_meta_batch). */
 
     char *fuse_argv[64];
     int fuse_argc = 0;

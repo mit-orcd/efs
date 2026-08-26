@@ -392,9 +392,39 @@ void server_gc_meta_cow_pages(struct efsd_server *s, struct efs_export *ex,
             continue; /* still referenced by the new root */
         efs_node_id_t placed[EFS_NUM_FRAGMENTS];
         pthread_mutex_lock(&s->lock);
-        efs_place_fragments(s->nodes, s->node_count, table_ino, ci, placed);
+        /* Re-check against the LIVE committed root, not just the new_cis
+         * snapshot the caller took: a concurrent PUT_META can re-adopt a
+         * root that still references this ci (e.g. a stale gen re-adopted
+         * after a newer gen's GC already ran), or the root can advance and
+         * carry the ci forward via page reuse. Reclaiming a ci the committed
+         * root still references makes that page unrecoverable on the next
+         * rebuild (gen raced with GC, permanent shard wedge). A missed
+         * reclaim only leaks a page until a later GC — never corrupts. */
+        int still_live = 0;
+        if (ex->root.page_cis) {
+            for (uint32_t p = 0; p < ex->root.page_count; p++) {
+                if (ex->root.page_cis[p] == ci) {
+                    still_live = 1;
+                    break;
+                }
+            }
+        }
+        if (!still_live)
+            efs_place_fragments(s->nodes, s->node_count, table_ino, ci, placed);
         efs_node_id_t self = s->id;
+        uint64_t live_gen = ex->root.generation;
         pthread_mutex_unlock(&s->lock);
+        if (still_live) {
+            fprintf(stderr,
+                    "meta-gc: SKIP live ci=%u table_ino=%llu (still in "
+                    "committed root gen=%llu)\n",
+                    ci, (unsigned long long)table_ino,
+                    (unsigned long long)live_gen);
+            continue;
+        }
+        fprintf(stderr,
+                "meta-gc: reclaim ci=%u table_ino=%llu (committed gen=%llu)\n",
+                ci, (unsigned long long)table_ino, (unsigned long long)live_gen);
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
             if (placed[fi] != self)
                 continue;
@@ -1790,6 +1820,12 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
         efs_export_root_free(&root);
         return -1;
     }
+    /* Fingerprint the exact root bytes the prepares carry, computed NOW —
+     * root_buf is freed after the prepare fan-out but the COMMIT broadcast
+     * below needs the hash. Peers promote only a pending root whose stashed
+     * prepare bytes hash to this same value. */
+    uint8_t root_sum[EFS_HASH_SIZE];
+    efs_hash(root_buf, root_len, root_sum);
 
     int acks = 0;
     struct efs_node *nodes = malloc(sizeof(struct efs_node) * EFS_MAX_NODES);
@@ -1881,7 +1917,61 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     s->export_meta_dirty = 1;
     server_save_export(s, ex);
     s->export_meta_dirty = 0;
+    uint32_t commit_pc0 = (ex->root.page_cis && ex->root.page_count > 0)
+                              ? ex->root.page_cis[0]
+                              : 0;
+    uint32_t commit_nextci = ex->root.next_ci;
+    efs_export_id_t commit_export_id = ex->root.id;
     pthread_mutex_unlock(&s->lock);
+    fprintf(stderr,
+            "meta-flush: committed export=%s gen=%llu pages=%u page0_ci=%u "
+            "next_ci=%u (old_gen=%llu)\n",
+            ex->name, (unsigned long long)new_gen, new_ino_pc, commit_pc0,
+            commit_nextci, (unsigned long long)old_gen);
+
+    /* 2PC phase 2: the root is committed locally and peers hold it as a
+     * pending prepare. Broadcast the commit so they promote + persist + GC
+     * it. Best-effort: a peer that misses this converges via GET_META_ROOT
+     * catchup (which only ever serves committed roots). The reply must be
+     * drained so the pooled peer conn stays in sync. */
+    {
+        struct efs_msg_meta_commit cm;
+        memset(&cm, 0, sizeof(cm));
+        cm.export_id = commit_export_id;
+        cm.gen = new_gen;
+        /* Fingerprint computed at serialize time (root_buf is freed above). */
+        memcpy(cm.root_sum, root_sum, EFS_HASH_SIZE);
+        struct efs_node *cn = malloc(sizeof(struct efs_node) * EFS_MAX_NODES);
+        if (cn) {
+            pthread_mutex_lock(&s->lock);
+            uint32_t cn_count = s->node_count;
+            if (cn_count > EFS_MAX_NODES)
+                cn_count = EFS_MAX_NODES;
+            memcpy(cn, s->nodes, sizeof(struct efs_node) * cn_count);
+            efs_node_id_t cn_self = s->id;
+            pthread_mutex_unlock(&s->lock);
+            for (uint32_t i = 0; i < cn_count; i++) {
+                if (cn[i].id == cn_self)
+                    continue;
+                int fd = server_peer_conn_get(cn[i].addr, cn[i].port);
+                if (fd < 0)
+                    continue;
+                uint8_t type;
+                void *reply = NULL;
+                uint32_t reply_len = 0;
+                int net_ok =
+                    (efs_send_msg(fd, EFS_MSG_META_COMMIT, &cm,
+                                  (uint32_t)sizeof(cm)) == 0 &&
+                     efs_recv_msg(fd, &type, &reply, &reply_len) == 0);
+                free(reply);
+                if (net_ok)
+                    server_peer_conn_release(cn[i].addr, cn[i].port, fd);
+                else
+                    server_peer_conn_drop(cn[i].addr, cn[i].port, fd);
+            }
+            free(cn);
+        }
+    }
 
     /* Retire the previous generation's metadata pages (best-effort). */
     if (old_gen != new_gen) {
@@ -1901,49 +1991,6 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     free(old_cis);
     free(new_cis);
     return 0;
-}
-
-int server_send_metadata_to(struct efsd_server *s, struct efs_export *ex,
-                              const char *host, uint16_t port)
-{
-    char *buf = NULL;
-    size_t len = 0;
-    int rc;
-
-    pthread_mutex_lock(&s->lock);
-    if (ex->meta_fragmented)
-        rc = efs_export_root_serialize(&ex->root, &buf, &len);
-    else
-        rc = efs_export_serialize(ex, &buf, &len);
-    pthread_mutex_unlock(&s->lock);
-
-    if (rc != EFS_OK || !buf)
-        return -1;
-
-    int fd = server_peer_conn_get(host, port);
-    if (fd < 0) {
-        free(buf);
-        return -1;
-    }
-
-    rc = efs_send_msg(fd, EFS_MSG_PUT_META, buf, (uint32_t)len);
-    free(buf);
-    if (rc != 0) {
-        server_peer_conn_drop(host, port, fd);
-        return -1;
-    }
-
-    uint8_t type;
-    void *payload = NULL;
-    uint32_t payload_len = 0;
-    rc = efs_recv_msg(fd, &type, &payload, &payload_len);
-    free(payload);
-    if (rc != 0) {
-        server_peer_conn_drop(host, port, fd);
-        return -1;
-    }
-    server_peer_conn_release(host, port, fd);
-    return (type == EFS_MSG_PUT_META_REPLY) ? 0 : -1;
 }
 
 int server_replicate_metadata(struct efsd_server *s, struct efs_export *ex)
@@ -2121,6 +2168,18 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
         pthread_mutex_unlock(&s->lock);
         efs_export_root_free(&root);
         return 0;
+    }
+    /* Installing a committed root supersedes any pending 2PC prepare at or
+     * below its gen (the writer's COMMIT may never arrive here; this root
+     * came from a peer that already committed it). */
+    if (ei >= 0 && s->pending_valid[ei] &&
+        s->pending_root[ei].generation <= root.generation) {
+        efs_export_root_free(&s->pending_root[ei]);
+        memset(&s->pending_root[ei], 0, sizeof(s->pending_root[ei]));
+        s->pending_valid[ei] = 0;
+        free(s->pending_blob[ei]);
+        s->pending_blob[ei] = NULL;
+        s->pending_blob_len[ei] = 0;
     }
     /* Extras-only refresh (same shard-0 pages, newer gen): adopt the gen and
      * merge the extra-shard descriptors without touching the live tables. */

@@ -602,6 +602,23 @@ int server_destroy_export(struct efsd_server *s, const char *name)
         s->shard_blob_cache_len[last][sh] = 0;
         s->shard_blob_pages[last][sh] = 0;
     }
+    /* Keep the 2PC pending-root stash aligned with the compaction: free the
+     * doomed slot's pending root + blob, move the tail slot's down, clear
+     * the tail. */
+    efs_export_root_free(&s->pending_root[idx]);
+    memset(&s->pending_root[idx], 0, sizeof(s->pending_root[idx]));
+    s->pending_valid[idx] = 0;
+    free(s->pending_blob[idx]);
+    if ((uint32_t)idx != last) {
+        s->pending_root[idx] = s->pending_root[last];
+        s->pending_valid[idx] = s->pending_valid[last];
+        s->pending_blob[idx] = s->pending_blob[last];
+        s->pending_blob_len[idx] = s->pending_blob_len[last];
+    }
+    memset(&s->pending_root[last], 0, sizeof(s->pending_root[last]));
+    s->pending_valid[last] = 0;
+    s->pending_blob[last] = NULL;
+    s->pending_blob_len[last] = 0;
     memset(&s->exports[last], 0, sizeof(s->exports[last]));
     s->export_inflight[last] = 0;
     s->export_destroying[last] = 0;

@@ -1699,8 +1699,9 @@ def run_step_index(name, idx, d, ab_side=None):
         fn(d)
 
 
-def write_results(path, host_a, host_b, mnt, npass, nfail, dt):
-    with open(path, "w") as f:
+def write_results(path, host_a, host_b, mnt, npass, nfail, dt, quiet=False):
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
         f.write("# posix-2client host_a=%s host_b=%s mnt=%s %s\n" %
                 (host_a, host_b, mnt,
                  time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())))
@@ -1710,7 +1711,11 @@ def write_results(path, host_a, host_b, mnt, npass, nfail, dt):
                     (name, res, detail.replace("\n", " ")))
         f.write("# summary pass=%d fail=%d skip=0 total=%d dur=%.1f\n" %
                 (npass, nfail, npass + nfail, dt))
-    print("wrote %s" % path)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+    if not quiet:
+        print("wrote %s" % path, flush=True)
 
 
 def run_local(mnt_a, mnt_b, results_file, filt, keep):
@@ -1735,7 +1740,7 @@ def run_local(mnt_a, mnt_b, results_file, filt, keep):
                 nfail += 1
                 RESULTS.append((name, "FAIL",
                                 "testdir missing on B (stale snapshot?)"))
-                print("FAIL %-32s testdir missing on B" % name)
+                print("FAIL %-32s testdir missing on B" % name, flush=True)
                 continue
             try:
                 for side, fn in steps:
@@ -1747,15 +1752,15 @@ def run_local(mnt_a, mnt_b, results_file, filt, keep):
             except Fail as e:
                 nfail += 1
                 RESULTS.append((name, "FAIL", str(e)))
-                print("FAIL %-32s %s" % (name, e))
+                print("FAIL %-32s %s" % (name, e), flush=True)
             except Exception as e:  # noqa: BLE001
                 nfail += 1
                 RESULTS.append((name, "FAIL", "%s: %s" % (type(e).__name__, e)))
-                print("FAIL %-32s %s: %s" % (name, type(e).__name__, e))
+                print("FAIL %-32s %s: %s" % (name, type(e).__name__, e), flush=True)
             else:
                 npass += 1
                 RESULTS.append((name, "PASS", ""))
-                print("pass %-32s" % name)
+                print("pass %-32s" % name, flush=True)
     finally:
         if not keep:
             shutil.rmtree(os.path.join(mnt_a, PARENT), ignore_errors=True)
@@ -1851,11 +1856,14 @@ def run_remote(host_a, host_b, mnt, ssh, script, results_file, filt):
         except Fail as e:
             nfail += 1
             RESULTS.append((name, "FAIL", str(e)))
-            print("FAIL %-32s %s" % (name, e))
+            print("FAIL %-32s %s" % (name, e), flush=True)
         else:
             npass += 1
             RESULTS.append((name, "PASS", ""))
-            print("pass %-32s" % name)
+            print("pass %-32s" % name, flush=True)
+        if results_file:
+            write_results(results_file, host_a, host_b, mnt, npass, nfail,
+                          time.time() - t0, quiet=True)
 
     dt = time.time() - t0
     total = npass + nfail

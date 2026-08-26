@@ -160,6 +160,38 @@ enum efs_msg_type {
      * unlink so extent-sharded groups on peer shards are not leaked. */
     EFS_MSG_INODE_DROP_CHUNKS = 89,
     EFS_MSG_INODE_DROP_CHUNKS_REPLY = 90,
+    /* Two-phase metadata root commit. PUT_META is phase 1 (prepare): the
+     * receiver STASHES the root as pending and acks, but does not install,
+     * persist, fence tables, or GC — the writer may still fail quorum and
+     * discard it, and an uncommitted root must never become visible (a
+     * same-gen retry rewrites the same CoW cis with different content, so
+     * installing an uncommitted root corrupts the pages it references).
+     * Phase 2: after a prepare quorum the writer commits locally and then
+     * broadcasts META_COMMIT(export, gen); a receiver promotes its matching
+     * pending root (install + persist + fence + GC old cis — safe now: the
+     * gen's pages were 2-of-3 placed before the prepare was even sent).
+     * Stragglers that miss COMMIT catch up via GET_META_ROOT, which only
+     * ever serves committed roots. */
+    EFS_MSG_META_COMMIT = 91,
+    EFS_MSG_META_COMMIT_REPLY = 92,
+};
+
+/* META_COMMIT request: promote the pending (prepared) root for this export
+ * whose generation matches gen AND whose stashed prepare bytes hash to
+ * root_sum. The fingerprint matters because a failed flush retries the SAME
+ * gen with fresh content at the SAME CoW cis: a peer that missed the retry's
+ * prepare but matched on gen alone would promote a stale root whose pages
+ * were already overwritten (checksum mismatch → unrecoverable wedge). On
+ * mismatch the peer keeps its pending root and converges via catchup.
+ * Reply is EFS_PUT_META_OK on promote, EFS_PUT_META_STALE when there is no
+ * matching pending root (already committed, superseded, fingerprint
+ * mismatch, or never prepared — the writer treats all as
+ * success-equivalent since catchup converges stragglers). */
+struct efs_msg_meta_commit {
+    uint32_t export_id;
+    uint32_t pad;
+    uint64_t gen;
+    uint8_t root_sum[EFS_HASH_SIZE];
 };
 
 /* Set per-export features. Only bits in set_mask are changed (to the

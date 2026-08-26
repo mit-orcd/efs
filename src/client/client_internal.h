@@ -124,15 +124,9 @@ struct efs_client {
      * rewritten in v7 layout — the mounted cache may sit on v6 pages even
      * when the adopted blob reads v7 (GET_META re-serializes server-side). */
     int meta_v7_committed;
-    /* After a hunted/skipped reconstruct, rewrite chunk-table pages to
-     * canonical CIs (same-parity gen+2) so the next mount does not hunt. */
-    int meta_heal;
-    uint32_t meta_heal_skipped;
-    int meta_heal_pending; /* heal requested; run when dirty set is idle */
     int meta_cap_blocked;  /* last flush hit the page cap; skip until shrink */
     int last_err;          /* EFS_ERR_* from the last mutating client op */
-    int write_readonly;    /* another client holds the EFSR write lease */
-    uint64_t write_lease_id;
+    int write_readonly;    /* mount is read-only (no write path enabled) */
     uint32_t dirty_stripe_ops[EFS_DIR_LOCKS];
     int last_dirty_stripe;
 
@@ -155,7 +149,6 @@ void efs_client_mtime_unpin(efs_ino_t ino);
 int efs_client_mtime_is_pinned(efs_ino_t ino);
 void efs_client_mark_chunk_dirty(efs_ino_t ino, uint32_t chunk_index);
 int efs_client_ensure_meta_room(uint64_t extra_inodes, uint64_t extra_chunks);
-int efs_client_take_write_lease(void);
 int efs_client_rpc_lookup(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, struct efs_inode *out);
 int efs_client_rpc_lookup_path(efs_export_id_t export_id, const char *path,
@@ -288,7 +281,6 @@ int efs_client_fetch_meta_best(const char *host, uint16_t port,
 /* Replicate local metadata to all servers. Returns number of acks. */
 /* Must be called without g_client.lock held; it takes the lock only to
  * serialize, then releases it for the duration of the network I/O. */
-int efs_client_replicate_metadata(void);
 int efs_client_sync_meta(void);
 /* Take ownership of a tight EFSM blob (hdr+inodes+chunks) as the
  * incremental cache. 0 = adopted (caller must not free); -1 = too small. */
@@ -303,8 +295,6 @@ int efs_client_note_meta_change(int force);
  * ran at ~4 files/s). posix2 still sees the report: B starts only after
  * A's SSH step returns, which is far longer than one async REPORT. */
 void efs_client_kick_meta_flush(void);
-/* Background: PUT recovered chunk-table pages at v5 indexes and publish. */
-void efs_client_schedule_meta_heal(void);
 void efs_client_stop_meta_flush(void);
 
 /* Decoded-chunk cache for sub-chunk reads and RMW. */

@@ -25,6 +25,9 @@ Each entry is: test_id — what it does — PASS condition.
 
 Harness (posix_suite.py):
   • One FUSE (or XFS) mount. Each test gets a fresh empty directory.
+  • Isolated testdirs run concurrently (--jobs, default 16). Tests that
+    change umask or cwd are @serial and run after the parallel wave.
+    TSV is assembled in registration order at the end.
   • Fail(msg) = FAIL. Fail(msg, soft=True) = SKIP (feature absent).
   • Root (euid 0) no-ops many perm_* tests (Linux root bypasses mode bits).
   • efs data chunk is 128 KiB. Several tests straddle that boundary on purpose.
