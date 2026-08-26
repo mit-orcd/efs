@@ -264,24 +264,24 @@ int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
 
 int efs_client_rpc_readdir(efs_export_id_t export_id, efs_ino_t parent,
                            struct efs_inode *ents, uint32_t *inout_count,
-                           uint32_t start)
+                           uint64_t after_ino)
 {
     uint32_t bits = g_client.export.root.shard_bits;
     return efs_client_rpc_readdir_ex(export_id, parent, ents, inout_count,
-                                     start, 0,
+                                     after_ino, 0,
                                      efs_export_shard_of(parent, bits));
 }
 
 int efs_client_rpc_readdir_ex(efs_export_id_t export_id, efs_ino_t parent,
                               struct efs_inode *ents, uint32_t *inout_count,
-                              uint32_t start, uint32_t flags, uint32_t shard)
+                              uint64_t after_ino, uint32_t flags, uint32_t shard)
 {
     struct efs_msg_inode_readdir req;
     memset(&req, 0, sizeof(req));
     req.export_id = export_id;
     req.parent = parent;
     req.max_ents = inout_count ? *inout_count : EFS_READDIR_MAX;
-    req.start = start;
+    req.after_ino = after_ino;
     req.flags = flags;
     req.shard = shard;
     /* Readdir reply is not efs_msg_inode_reply (no primary_id). */

@@ -164,10 +164,10 @@ int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
 int efs_client_stat_ino(efs_ino_t ino, struct efs_inode *out);
 int efs_client_rpc_readdir(efs_export_id_t export_id, efs_ino_t parent,
                            struct efs_inode *ents, uint32_t *inout_count,
-                           uint32_t start);
+                           uint64_t after_ino);
 int efs_client_rpc_readdir_ex(efs_export_id_t export_id, efs_ino_t parent,
                               struct efs_inode *ents, uint32_t *inout_count,
-                              uint32_t start, uint32_t flags, uint32_t shard);
+                              uint64_t after_ino, uint32_t flags, uint32_t shard);
 struct efs_chunk_rec;
 int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
                              uint32_t start, struct efs_chunk_rec *recs,

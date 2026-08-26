@@ -1191,17 +1191,17 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     int spread = efs_inode_dir_is_spread(&parent) && bits && sc > 1;
     uint32_t nshard = spread ? sc : 1;
     for (uint32_t s = 0; s < nshard; s++) {
-        uint32_t start = 0;
+        uint64_t after = 0;
         for (;;) {
             struct efs_inode ents[EFS_READDIR_MAX];
             uint32_t n = EFS_READDIR_MAX;
             if (spread)
                 rc = efs_client_rpc_readdir_ex(g_client.export_id, parent.ino,
-                                               ents, &n, start,
+                                               ents, &n, after,
                                                EFS_READDIR_F_LOCAL_ONLY, s);
             else
                 rc = efs_client_rpc_readdir(g_client.export_id, parent.ino,
-                                            ents, &n, start);
+                                            ents, &n, after);
             if (rc != 0) {
                 free(col.ents);
                 return (rc == EFS_ERR_NOT_FOUND) ? -ENOENT : -EIO;
@@ -1224,6 +1224,9 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
             for (uint32_t i = 0; i < n; i++) {
                 if (ents[i].ino == 0 || ents[i].name[0] == '\0')
                     continue;
+                /* Server returns ascending inos; advance the stable cursor. */
+                if (ents[i].ino > after)
+                    after = ents[i].ino;
                 int dup = 0;
                 for (size_t j = 0; j < col.count; j++) {
                     if (strcmp(col.ents[j].name, ents[i].name) == 0) {
@@ -1239,7 +1242,6 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                 e->st.st_ino = ents[i].ino;
                 e->st.st_mode = ents[i].mode;
             }
-            start += n;
             if (n < EFS_READDIR_MAX)
                 break;
         }

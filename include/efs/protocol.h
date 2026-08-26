@@ -517,11 +517,15 @@ struct efs_msg_inode_readdir {
     efs_export_id_t export_id;
     efs_ino_t parent;
     uint32_t max_ents;
-    /* Skip this many matching children (pagination). Older senders leave 0. */
-    uint32_t start;
     uint32_t flags;
     /* EFS_READDIR_F_LOCAL_ONLY: serve this shard's table. */
     uint32_t shard;
+    /* Pagination cursor: return children with ino > after_ino, in ascending
+     * ino order. A positional skip is NOT stable — remove_inode_slot
+     * swap-compacts, so a concurrent unlink of ANOTHER dir on the same shard
+     * shifts this dir's rows across a page boundary and an entry is skipped.
+     * inos survive compaction, so an ino cursor is stable. 0 = from start. */
+    uint64_t after_ino;
 };
 
 struct efs_msg_inode_unlink {

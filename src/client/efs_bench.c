@@ -768,21 +768,23 @@ static void *meta_worker(void *arg)
         break;
     case MP_READDIR:
         for (uint32_t i = (uint32_t)w; i < st->ndirs; i += (uint32_t)nw) {
-            uint32_t start = 0;
+            uint64_t after = 0;
             for (;;) {
                 struct efs_inode ents[EFS_READDIR_MAX];
                 uint32_t n = EFS_READDIR_MAX;
                 int rc = efs_client_rpc_readdir(g_client.export_id,
                                                 st->dirs[i].ino, ents, &n,
-                                                start);
+                                                after);
                 if (rc != EFS_OK) {
                     a->fail++;
                     break;
                 }
                 a->ops += n;
+                for (uint32_t k = 0; k < n; k++)
+                    if (ents[k].ino > after)
+                        after = ents[k].ino;
                 if (n < EFS_READDIR_MAX)
                     break;
-                start += n;
             }
         }
         break;

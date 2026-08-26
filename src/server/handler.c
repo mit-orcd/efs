@@ -43,6 +43,18 @@ static struct efs_export *table_for_ino(struct efs_export *ex, efs_ino_t ino)
     return tab ? tab : ex;
 }
 
+/* qsort comparator for readdir candidate rows: ascending ino. */
+static int readdir_row_cmp(const void *a, const void *b)
+{
+    const struct efs_inode *ia = *(const struct efs_inode *const *)a;
+    const struct efs_inode *ib = *(const struct efs_inode *const *)b;
+    if (ia->ino < ib->ino)
+        return -1;
+    if (ia->ino > ib->ino)
+        return 1;
+    return 0;
+}
+
 #define EFS_FLOCK_SH 1u
 #define EFS_FLOCK_EX 2u
 #define EFS_FLOCK_NB 4u
@@ -1778,6 +1790,32 @@ send_reply:
                                             dtab, cr.inode.ino, req->parent,
                                             req->mode, (uid_t)req->uid,
                                             (gid_t)req->gid, req->name)) {
+                                        int name_dup = dtab &&
+                                            efs_export_lookup(dtab, req->parent,
+                                                              req->name,
+                                                              NULL) == EFS_OK;
+                                        struct efs_inode tmpi;
+                                        memset(&tmpi, 0, sizeof(tmpi));
+                                        int ino_dup = dtab && cr.inode.ino &&
+                                            efs_export_get_inode(dtab,
+                                                                 cr.inode.ino,
+                                                                 &tmpi) == 0;
+                                        fprintf(stderr,
+                                                "create-exist: dentry-write "
+                                                "parent=%llu name=%s dsh=%u "
+                                                "ino=%llu name_dup=%d "
+                                                "ino_dup=%d dtab_inodes=%llu "
+                                                "exist(parent=%llu name=%s "
+                                                "nlink=%u mode=%o)\n",
+                                                (unsigned long long)req->parent,
+                                                req->name, dsh,
+                                                (unsigned long long)cr.inode.ino,
+                                                name_dup, ino_dup,
+                                                dtab ? (unsigned long long)
+                                                    dtab->inode_count : 0,
+                                                (unsigned long long)tmpi.parent,
+                                                tmpi.name, tmpi.nlink,
+                                                tmpi.mode);
                                         r.status = EFS_INODE_RPC_EXIST;
                                     } else {
                                         dtab->shard_dirty = 1;
@@ -2696,11 +2734,23 @@ send_reply:
                     uint32_t max = req->max_ents;
                     if (max == 0 || max > EFS_READDIR_MAX)
                         max = EFS_READDIR_MAX;
-                    uint32_t start = 0;
+                    uint64_t after = 0;
                     if (payload_len >= sizeof(*req))
-                        start = req->start;
-                    uint32_t seen = 0;
-                    for (uint64_t i = 0; i < tab->inode_count && r.count < max; i++) {
+                        after = req->after_ino;
+                    /* Emit this dir's children with ino > after in ascending
+                     * ino order. Positional pagination over the live table is
+                     * unstable: remove_inode_slot swap-compacts, so a
+                     * concurrent unlink of ANOTHER dir on this shard shifts
+                     * this dir's rows across a page boundary and a just-
+                     * created child is skipped (readdir returned 299/300).
+                     * inos survive compaction, so an ino cursor is stable;
+                     * the dir's own child set is unchanged during its readdir,
+                     * so the sorted order is consistent page to page. Rows are
+                     * collected as pointers while holding the lock (the table
+                     * cannot move mid-page), then sorted and copied out. */
+                    const struct efs_inode **cand = NULL;
+                    uint64_t ncand = 0, ccap = 0;
+                    for (uint64_t i = 0; i < tab->inode_count; i++) {
                         if (tab->inodes[i].ino == 0)
                             continue;
                         if (tab->inodes[i].name[0] == '\0')
@@ -2709,10 +2759,24 @@ send_reply:
                             continue;
                         if (tab->inodes[i].ino == req->parent)
                             continue;
-                        if (seen++ < start)
+                        if (tab->inodes[i].ino <= after)
                             continue;
-                        r.ents[r.count++] = tab->inodes[i];
+                        if (ncand == ccap) {
+                            uint64_t ncap = ccap ? ccap * 2 : 64;
+                            const struct efs_inode **nc =
+                                realloc(cand, ncap * sizeof(*nc));
+                            if (!nc)
+                                break;
+                            cand = nc;
+                            ccap = ncap;
+                        }
+                        cand[ncand++] = &tab->inodes[i];
                     }
+                    if (ncand > 1)
+                        qsort(cand, ncand, sizeof(*cand), readdir_row_cmp);
+                    for (uint64_t k = 0; k < ncand && r.count < max; k++)
+                        r.ents[r.count++] = *cand[k];
+                    free(cand);
                     r.status = EFS_INODE_RPC_OK;
                 }
                 pthread_mutex_unlock(&g_server->lock);

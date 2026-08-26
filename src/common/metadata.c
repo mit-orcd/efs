@@ -1947,22 +1947,40 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
      * ctab makes the parent-dentry create_with_ino look like EEXIST —
      * readdir of the parent then misses every file whose inode shard
      * is instantiated on this node (1/8 of creates on bits=3). */
-    if (lookup_on_tab(ex, parent, name, NULL) == EFS_OK)
+    if (lookup_on_tab(ex, parent, name, NULL) == EFS_OK) {
+        fprintf(stderr, "cwi-fail: name_dup parent=%llu name=%s ino=%llu "
+                "shard=%u cnt=%llu\n", (unsigned long long)parent, name,
+                (unsigned long long)ino_num, ex->shard_id,
+                (unsigned long long)ex->inode_count);
         return 0;
+    }
 
-    if (inode_ptr(ex, ino_num))
+    if (inode_ptr(ex, ino_num)) {
+        fprintf(stderr, "cwi-fail: ino_dup parent=%llu name=%s ino=%llu "
+                "shard=%u cnt=%llu\n", (unsigned long long)parent, name,
+                (unsigned long long)ino_num, ex->shard_id,
+                (unsigned long long)ex->inode_count);
         return 0; /* ino already in use on this table */
+    }
 
     if (ex->inode_count >= ex->inode_capacity) {
         uint64_t new_cap = ex->inode_capacity * 2;
         struct efs_inode *new = realloc(ex->inodes, new_cap * sizeof(struct efs_inode));
-        if (!new)
+        if (!new) {
+            fprintf(stderr, "cwi-fail: realloc parent=%llu name=%s ino=%llu\n",
+                    (unsigned long long)parent, name,
+                    (unsigned long long)ino_num);
             return 0;
+        }
         ex->inodes = new;
         ex->inode_capacity = new_cap;
     }
-    if (export_ensure_inode_idx(ex) != 0)
+    if (export_ensure_inode_idx(ex) != 0) {
+        fprintf(stderr, "cwi-fail: idx parent=%llu name=%s ino=%llu\n",
+                (unsigned long long)parent, name,
+                (unsigned long long)ino_num);
         return 0;
+    }
 
     uint64_t pos = ex->inode_count++;
     struct efs_inode *ino = &ex->inodes[pos];
