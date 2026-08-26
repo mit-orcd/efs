@@ -1,8 +1,16 @@
 #!/bin/bash
-# Valgrind memcheck leak gate for efs: unit tests + efsd + efs-fuse.
+# Valgrind memcheck leak gate for efs: unit tests + efsd + efs-fuse, over BOTH
+# TCP and RDMA, client AND server side.
 #
 # Self-contained on one node: uses a private port + scratch storage so it
 # NEVER touches the live cluster. Repeatable: wipe scratch, build, run, gate.
+#
+# Phases:
+#   1. unit tests (metadata lifecycle)              — full gate
+#   2. efsd over TCP (efs-bench workload)           — full gate
+#   3. efs-fuse over TCP (mini-POSIX mount)         — full gate
+#   4. efsd + efs-fuse over RDMA (mount + meta/packed ops) — leaks-only gate
+#      (ibverbs/DMA uninit false-positives; see gate_leaks)
 #
 # Gate criteria (hard fail unless all hold):
 #   1. definitely lost  = 0 bytes   } the two real-leak kinds
@@ -46,6 +54,12 @@ EXPORT="vgtest"
 VG="valgrind --leak-check=full --show-leak-kinds=definite,indirect,possible"
 UNIT_TESTS="test_meta_v6 test_erasure test_placement test_meta_slot \
             test_dir_stats test_ino_path test_add_storage"
+
+# RDMA phase needs an RDMA-capable local IP (loopback has no ibdev, so the
+# upgrade would silently fall back to TCP and exercise nothing). Auto-detect
+# the host's 172.16.223.x (.ib) address; override with EFS_VG_RDMA_IP.
+RDMA_IP="${EFS_VG_RDMA_IP:-$(ip -o -4 addr show 2>/dev/null \
+    | awk '$4 ~ /^172\.16\.223\./ {sub(/\/.*$/, "", $4); print $4; exit}')}"
 
 fails=0
 note() { echo "[leaks] $*"; }
@@ -105,6 +119,29 @@ gate() {
     [ "${ind:-1}" = "0" ] || fail "$label: $ind bytes indirectly lost"
     [ "$uninit" = "0" ]   || fail "$label: $uninit uninitialised-byte errors"
     [ "$invalid" = "0" ]  || fail "$label: $invalid invalid read/write errors"
+    if [ -n "$susp" ]; then
+        fail "$label: efs-code possibly-lost blocks:"; echo "$susp"
+    fi
+}
+
+# Leaks-only gate for the RDMA phase. ibverbs fills structs via kernel ioctl /
+# DMA (dev->lid/mtu from ibv_query_port, qp_num from ibv_create_qp, the NIC
+# DMA'd recv arena) that valgrind cannot track as initialised, so the
+# uninit/invalid checks would false-positive on the RDMA path by design.
+# Leak detection (definite/indirect/efs-possibly-lost) is unaffected.
+gate_leaks() { # logfile label
+    local log=$1 label=$2
+    if [ ! -s "$log" ]; then
+        fail "$label: no valgrind log at $log (did it run?)"
+        return
+    fi
+    local def ind susp
+    def=$(vg_bytes "$log" "definitely")
+    ind=$(vg_bytes "$log" "indirectly")
+    susp=$(suspicious_possibly_lost "$log")
+    note "$label: definite=${def:-?}B indirect=${ind:-?}B (uninit/invalid skipped: ibverbs/DMA)"
+    [ "${def:-1}" = "0" ] || fail "$label: $def bytes definitely lost"
+    [ "${ind:-1}" = "0" ] || fail "$label: $ind bytes indirectly lost"
     if [ -n "$susp" ]; then
         fail "$label: efs-code possibly-lost blocks:"; echo "$susp"
     fi
@@ -196,6 +233,52 @@ sync
 fusermount3 -u "$MNT" 2>/dev/null   # clean exit -> full stacks in the log
 for i in $(seq 1 20); do grep -q "LEAK SUMMARY" "$WORK-fuse.vg" 2>/dev/null && break; sleep 1; done
 gate "$WORK-fuse.vg" "efs-fuse"
+
+# ---------------------------------------------------------------- rdma ---
+# Client + server over RDMA (default transport). The RDMA connection upgrade
+# is eager on connect (node_cache.c), so mount + metadata/packed-file ops +
+# unmount exercises the full QP/MR/arena/buffer alloc+teardown on BOTH sides
+# WITHOUT hanging on the known-broken RDMA chunk data path (metadata RPCs are
+# forced to TCP; packed files do no chunk PUT). Gated on leaks only (ibverbs
+# uninit false-positives — see gate_leaks).
+if [ -z "$RDMA_IP" ]; then
+    note "phase 4: SKIP — no 172.16.223.x RDMA IP found (set EFS_VG_RDMA_IP)"
+else
+    note "phase 4: efsd + efs-fuse over RDMA ($RDMA_IP)"
+    kill_ours 9; sleep 2
+    rm -rf "$STORAGE" "$MNT"; mkdir -p "$STORAGE" "$MNT"
+    # server under valgrind, default transport (RDMA listener up)
+    $VG --log-file="$WORK-efsd-rdma.vg" ./efsd --node-id 1 --addr "$RDMA_IP" \
+        --port "$PORT" --storage "$STORAGE" --quota 1G >"$WORK-efsd-rdma.out" 2>&1 &
+    for i in $(seq 1 40); do grep -q listening "$WORK-efsd-rdma.out" 2>/dev/null && break; sleep 0.5; done
+    ./efs-mgmt mkfs "$RDMA_IP:$PORT" "$EXPORT" >/dev/null 2>&1
+    # client under valgrind, default transport (RDMA upgrade on connect)
+    $VG --log-file="$WORK-fuse-rdma.vg" ./efs-fuse "$RDMA_IP:$PORT" "$EXPORT" "$MNT" \
+        >"$WORK-fuse-rdma.out" 2>&1 &
+    for i in $(seq 1 60); do grep -q "efs-fuse $MNT " /proc/mounts 2>/dev/null && break; sleep 0.5; done
+    if ! grep -q "efs-fuse $MNT " /proc/mounts; then
+        note "phase 4: fuse mount failed (RDMA may be unavailable) — skipping"
+        cat "$WORK-fuse-rdma.out"
+    else
+        grep -q "RDMA transport up" "$WORK-fuse-rdma.out" \
+            && note "  RDMA transport up (upgrade exercised)" \
+            || note "  WARN: no 'RDMA transport up' line — upgrade may not have run"
+        # metadata + packed-file ops (no chunk PUT -> no broken-data-path hang)
+        mkdir -p "$MNT/r1"
+        for i in $(seq 1 20); do echo "rdma-$i" >"$MNT/r1/f$i"; done
+        for i in $(seq 1 20); do cat "$MNT/r1/f$i" >/dev/null 2>&1; done
+        for i in $(seq 1 10); do mv "$MNT/r1/f$i" "$MNT/r1/g$i"; done
+        ls "$MNT/r1" >/dev/null 2>&1
+        for i in $(seq 11 20); do rm -f "$MNT/r1/f$i"; done
+        sync
+        fusermount3 -u "$MNT" 2>/dev/null   # clean exit -> full stacks
+        for i in $(seq 1 20); do grep -q "LEAK SUMMARY" "$WORK-fuse-rdma.vg" 2>/dev/null && break; sleep 1; done
+        gate_leaks "$WORK-fuse-rdma.vg" "efs-fuse/rdma"
+    fi
+    kill_ours TERM   # SIGTERM efsd -> leak summary
+    for i in $(seq 1 20); do grep -q "LEAK SUMMARY" "$WORK-efsd-rdma.vg" 2>/dev/null && break; sleep 1; done
+    gate_leaks "$WORK-efsd-rdma.vg" "efsd/rdma"
+fi
 
 # ---------------------------------------------------------------- done ---
 echo
