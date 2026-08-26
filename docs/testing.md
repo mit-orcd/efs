@@ -10,25 +10,9 @@ Runs:
 - cluster integration, quota, migrate, direct-io, rejoin, query, list-exports
 - `test_rw.sh` — real FUSE mount smoke test
 
-On MIT Engaging, compile and run binaries on a compute node (Slurm), not on
-a login node. See `.cursor/skills/slurm-execution/SKILL.md`.
-
-## Slurm harness
-
-`slurm-jobs/run.sh` builds on a compute node and starts a three-server
-cluster plus two client smoke jobs via `sbatch`. Server data and mounts use
-node-local `/scratch`; shared state and logs go under the path configured in
-those scripts.
-
-```bash
-./slurm-jobs/run.sh
-```
-
-Client jobs are small `dd` / `cp` / `rsync`-style checks with short timeouts.
-
-`slurm-jobs/stress-mixed-parallel.sh` is a single-job harness: 3 servers +
-FUSE client on one node, mixed-size create/write/verify, and `perf record`
-on the client and one server.
+Build and test on the dedicated fcstor test cluster (never Slurm). See
+`tests/run_tests.sh` (`posix|posix2|perf|setup|all`) and
+`.cursor/rules/efs-fcstor-deploy.mdc` for the deploy/gate procedure.
 
 ## Profiling
 
