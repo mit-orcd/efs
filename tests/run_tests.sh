@@ -16,6 +16,8 @@
 #                                                local NVMe ceiling on efsd servers
 #   run_tests.sh ewrite [host]                   30s ewrite.sh sweep (1 2/4/8/16)
 #   run_tests.sh meta [host]                     efs-bench --meta (1/4/16 workers)
+#   run_tests.sh leaks [host]                    valgrind memcheck gate
+#                                                (unit + efsd + efs-fuse)
 #
 # Env:
 #   XFS_HOST (default node9901.ib)  XFS_DIR (default /data1/efs)
@@ -477,6 +479,27 @@ cmd_meta() { # [host]
         "$pdir/summary.tsv"
 }
 
+cmd_leaks() { # [host]
+    local host=${1:-fcstor003.ib}
+    local pdir="$RESULTS/leaks/$RUN_ID"
+    mkdir -p "$pdir" "$RESULTS/leaks"
+    say "leaks: valgrind memcheck gate on $host (unit + efsd + efs-fuse)"
+    ssh_to "$BUILD_SSH_SEC" "$host" 'mkdir -p /tmp/efs && rsync -a --delete \
+        --exclude="/mnt/" --exclude="*.log" --exclude="results/" \
+        "$HOME/git/efs/" /tmp/efs/' >"$pdir/rsync.log" 2>&1 \
+        || { say "  rsync failed"; cat "$pdir/rsync.log"; return 1; }
+    # valgrind is ~20-50x slower; the whole gate is a few minutes.
+    ssh_to 600 "$host" 'cd /tmp/efs && bash tests/valgrind_leaks.sh /tmp/efs-vg' \
+        2>&1 | tee "$pdir/leaks.txt"
+    local rc=${PIPESTATUS[0]}
+    if [ $rc -eq 0 ]; then
+        say "leaks PASS — results in $pdir/leaks.txt"
+    else
+        say "leaks FAIL (rc=$rc) — see $pdir/leaks.txt"
+    fi
+    return $rc
+}
+
 # ------------------------------------------------------------------ all ---
 cmd_all() { # [efs-host ...]
     local hosts=("$@")
@@ -487,7 +510,7 @@ cmd_all() { # [efs-host ...]
 
 main() {
     mkdir -p "$RESULTS/posix" "$RESULTS/posix2" "$RESULTS/perf" "$RESULTS/nvme" \
-             "$RESULTS/ewrite" "$RESULTS/meta"
+             "$RESULTS/ewrite" "$RESULTS/meta" "$RESULTS/leaks"
     touch "$RESULTS/perf/history.tsv"
     local cmd=${1:-}
     shift || true
@@ -498,6 +521,7 @@ main() {
         nvme)  cmd_nvme "$@" ;;
         ewrite) cmd_ewrite "$@" ;;
         meta) cmd_meta "$@" ;;
+        leaks) cmd_leaks "$@" ;;
         setup) cmd_setup "$@" ;;
         all)   cmd_all "$@" ;;
         *) sed -n '2,21p' "$0"; return 2 ;;
