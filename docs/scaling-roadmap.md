@@ -690,6 +690,49 @@ Layer 4 is efs-specific. Do not require an XFS PASS row.
    listed under **Performance next — metadata op storm**; write the tests
    when the bumps land (local + peer).
 
+### Suite determinism + taxonomy (Aug 26 external review)
+
+The four-layer model, contract tags, and `("ab", (fn_a, fn_b))` mode are
+validated as the right direction. The race *coverage* the review asks for is
+already present (overlap-pwrite, high/low extend, create-excl, rename/unlink,
+open-unlink-recreate, hardlink/nlink, cross-client append + locks — see
+TEST_CATALOG PART 2 Layer 3). The highest-value remaining work is making those
+races **deterministic** — today they create concurrency but do not force the
+collision:
+
+1. **Force the collision, don't fork-and-pray.** The posix2 `ab` runner
+   (`posix_2client.py`) and the local threaded tests use bare `thread.start()`
+   + `sleep()` hints, so whether the two ops actually overlap is
+   timing-dependent. Add a `threading.Barrier` (or event pairs) so the
+   critical ops start simultaneously / in a forced order:
+   - `concurrent_extend_high_then_low`: the 8 MiB write must **commit**
+     (fsync + event) before the 1 MiB write starts — the current
+     `sleep(0.05)` only delays the low thread's *start*, not the high write's
+     size commit, so the stale-size bug can slip through.
+   - posix2 `ab` runner: barrier-start both sides so `peer_overlap_*`,
+     `peer_creat_excl_race`, `peer_rename_*` actually collide.
+2. **`trunc_zero_then_high_pwrite` is too weak.** The original data is 9 bytes
+   (sub-chunk), so it never exercises multi-chunk stale resurrection. Make the
+   original 512 KiB of patterned data, `truncate(0)`, `pwrite` at 1 MiB, then
+   verify zeros straddling the 128 KiB boundaries: offsets 0, 127 KiB,
+   128 KiB, 129 KiB, 255 KiB, 256 KiB, 511 KiB. Add a variant where the new
+   write lands *inside* a formerly-allocated chunk.
+3. **Cross-client mtime monotonic (new test).** `mtime_monotonic_many_writes`
+   is local rapid writes (one clock). Add the authority-change case: rapid
+   writes to one file from client A (shard X) and client B (shard Y);
+   `mtime_ns` must not regress when the metadata authority / clock differs.
+   (`peer_mtime_no_regress` is sequential A→B; this is the concurrent version.)
+4. **Taxonomy: split layer 3 into 3a/3b.** Intra-client concurrency
+   (threads/processes on ONE mount) vs inter-client concurrency (independent
+   mounts) exercise different paths — a FUSE mount can serialize/coalesce
+   intra-mount ops while two clients go through separate cache/lease/RPC
+   paths. Update `TEST_CATALOG.txt` (the "Concurrent / race" line).
+5. **Propagate the annotations.** Today only the 3 newest tests carry
+   "(layer N, contract)" tags. Tag every test with (layer, contract, feature
+   area) so the catalog becomes a requirements matrix — this is what lets a
+   failure be classified as a correctness blocker vs an intentional semantic
+   choice (cf. the 5 XFS target-better quirks).
+
 ### Invariant / ops harnesses still missing
 
 1. **`efs fsck --verify-only`** (or equivalent) after randomized load and
