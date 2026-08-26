@@ -2819,6 +2819,7 @@ def main():
     keep = False
     stop = False
     filt = None
+    tag = None
     test_timeout = int(os.environ.get("POSIX_TEST_SEC", "15"))
     jobs = int(os.environ.get("POSIX_JOBS", "16"))
     i = 1
@@ -2840,6 +2841,9 @@ def main():
             i += 2
         elif args[i] == "--jobs":
             jobs = int(args[i + 1])
+            i += 2
+        elif args[i] == "--tag":
+            tag = args[i + 1]
             i += 2
         else:
             i += 1
@@ -2867,13 +2871,15 @@ def main():
     host = subprocess.run(["hostname", "-s"], stdout=subprocess.PIPE
                           ).stdout.decode().strip()
     # Drop this host's leftover trees from earlier --keep / crashed runs. The
-    # base prefix is PER-HOST: with several clients sharing one mount, a
-    # client must never rmtree another concurrently-running client's active
-    # base. (A shared "posix-" sweep did exactly that — a later-starting
-    # client's startup sweep removed an earlier client's live tree, orphaning
-    # its per-test dirs and failing its rename/hardlink/unlink with
-    # EINVAL/EIO. That was the 4-way parallel flake.)
-    me = "posix-%s-" % host
+    # base prefix is PER-HOST (and per --tag instance): with several clients
+    # sharing one mount, a client must never rmtree another concurrently-running
+    # client's active base. (A shared "posix-" sweep did exactly that — a
+    # later-starting client's startup sweep removed an earlier client's live
+    # tree, orphaning its per-test dirs and failing its rename/hardlink/unlink
+    # with EINVAL/EIO. That was the 4-way parallel flake.) The --tag suffix
+    # extends this so several suite instances on the SAME host (POSIX_PER_HOST
+    # stress) each sweep only their own leftovers, never a sibling's live tree.
+    me = "posix-%s-" % host if not tag else "posix-%s-%s-" % (host, tag)
     try:
         for name in os.listdir(mnt):
             if name.startswith(me):

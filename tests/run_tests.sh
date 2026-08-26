@@ -77,7 +77,7 @@ ensure_mounted() { # host
     ssh_to "$BUILD_SSH_SEC" "$h" "cd /tmp/efs && [ -x ./efs-fuse ] || make efs-fuse >/dev/null 2>&1; \
         mkdir -p /tmp/efs/mnt; \
         (EFS_TRANSPORT='${EFS_TRANSPORT:-tcp}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &); \
-        for i in \$(seq 1 20); do sleep 0.15; \
+        for i in \$(seq 1 100); do sleep 0.15; \
             grep -q \"efs-fuse /tmp/efs/mnt \" /proc/mounts && exit 0; done; exit 1" 2>/dev/null
 }
 
@@ -90,7 +90,7 @@ remount_client() { # host
         timeout 3 fusermount3 -uz /tmp/efs/mnt 2>/dev/null || true
         cd /tmp/efs && mkdir -p /tmp/efs/mnt && rm -f fuse.log
         EFS_TRANSPORT='${EFS_TRANSPORT:-tcp}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &
-        for i in \$(seq 1 20); do
+        for i in \$(seq 1 100); do
             sleep 0.15
             grep -q \"efs-fuse /tmp/efs/mnt \" /proc/mounts && exit 0
         done
@@ -146,10 +146,49 @@ cmd_posix() { # [--keep] [--parallel] [efs-host ...]
         > "$pdir/xfs-baseline.tsv"
     say "  baseline: $(grep -c $'\tPASS' "$pdir/xfs-baseline.tsv") pass"
 
+    # One suite instance on a host. With POSIX_PER_HOST>1 the instance gets a
+    # unique --tag so its per-host testdir prefix and startup sweep never touch
+    # a concurrently-running sibling's tree on the same host.
+    posix_instance() { # host idx per
+        local h=$1 i=$2 per=$3
+        local tag="" suffix=""
+        if [ "$per" -gt 1 ]; then
+            tag="--tag $i"
+            suffix="-$i"
+        fi
+        local remote_tsv="/tmp/posix-efs-${RUN_ID}-${h%.ib}${suffix}.tsv"
+        ssh_to "$POSIX_SSH_SEC" "$h" "rm -f '$remote_tsv'
+            PYTHONUNBUFFERED=1 timeout -k 5 $((POSIX_SSH_SEC - 15)) \
+            python3 /tmp/efs/tests/posix/posix_suite.py '$EFS_MNT' \
+            $keep $tag --timeout-s ${POSIX_TEST_SEC:-15} --jobs ${POSIX_JOBS:-16} \
+            --results '$remote_tsv'
+            if [ ! -s '$remote_tsv' ]; then
+                printf '%s\\n' '# TIMEOUT no TSV' 'test\tresult\tdetail' \
+                    '# summary pass=0 fail=0 skip=0 total=0 dur=0'
+                exit 124
+            fi
+            cat '$remote_tsv'" \
+            > "$pdir/efs-${h%.ib}${suffix}.tsv"
+        if [ "$per" -le 1 ]; then
+            say "  --- compare $h vs XFS baseline ---"
+            python3 "$REPO/tests/posix/compare.py" "$pdir/xfs-baseline.tsv" \
+                "$pdir/efs-${h%.ib}${suffix}.tsv" | tee "$pdir/compare-${h%.ib}${suffix}.txt"
+            return ${PIPESTATUS[0]}
+        fi
+        python3 "$REPO/tests/posix/compare.py" "$pdir/xfs-baseline.tsv" \
+            "$pdir/efs-${h%.ib}${suffix}.tsv" > "$pdir/compare-${h%.ib}${suffix}.txt" 2>/dev/null
+        local crc=$?
+        local bp bugs
+        bp=$(awk '/both pass/{print $4; exit}' "$pdir/compare-${h%.ib}${suffix}.txt")
+        bugs=$(awk '/EFS BUGS/{print $4; exit}' "$pdir/compare-${h%.ib}${suffix}.txt")
+        say "  ${h%.ib}${suffix}: ${bp:-0} both-pass, ${bugs:-0} EFS-bugs"
+        return $crc
+    }
+
     posix_one() { # host
         local h=$1
-        local remote_tsv="/tmp/posix-efs-${RUN_ID}-${h%.ib}.tsv"
-        say "posix: efs on $h:$EFS_MNT $keep"
+        local per=${POSIX_PER_HOST:-1}
+        say "posix: efs on $h:$EFS_MNT $keep (x$per)"
         push_tests "$h"
         # Guard: a dead efs-fuse leaves /tmp/efs/mnt as a plain local dir and
         # the suite would silently pass against tmpfs (0 "EFS bugs"). Refuse
@@ -175,21 +214,16 @@ shutil.rmtree(d)
 " 2>/dev/null; then exit 0; fi
             sleep 0.5
         done; echo "  WARN: $h warmup did not converge" >&2; exit 0'
-        ssh_to "$POSIX_SSH_SEC" "$h" "rm -f '$remote_tsv'
-            PYTHONUNBUFFERED=1 timeout -k 5 $((POSIX_SSH_SEC - 15)) \
-            python3 /tmp/efs/tests/posix/posix_suite.py '$EFS_MNT' \
-            $keep --timeout-s ${POSIX_TEST_SEC:-15} --jobs ${POSIX_JOBS:-16} \
-            --results '$remote_tsv'
-            if [ ! -s '$remote_tsv' ]; then
-                printf '%s\\n' '# TIMEOUT no TSV' 'test	result	detail' \
-                    '# summary pass=0 fail=0 skip=0 total=0 dur=0'
-                exit 124
-            fi
-            cat '$remote_tsv'" \
-            > "$pdir/efs-${h%.ib}.tsv"
-        say "  --- compare $h vs XFS baseline ---"
-        python3 "$REPO/tests/posix/compare.py" "$pdir/xfs-baseline.tsv" \
-            "$pdir/efs-${h%.ib}.tsv" | tee "$pdir/compare-${h%.ib}.txt"
+        # Run $per full-suite instances in parallel on this host.
+        local pids=() rc=0 i p
+        for i in $(seq 0 $((per - 1))); do
+            posix_instance "$h" "$i" "$per" &
+            pids+=($!)
+        done
+        for p in "${pids[@]}"; do
+            wait "$p" || rc=1
+        done
+        return $rc
     }
 
     local rc=0
@@ -514,6 +548,19 @@ cmd_leaks() { # [host]
     return $rc
 }
 
+# ------------------------------------------------------------- posixstress ---
+# High-parallelism stress: N full posix suites per host, all hosts in parallel.
+# Default 9 clients x 4 = 36 concurrent suite instances. Each instance gets a
+# unique --tag so its testdir prefix/sweep never collides with a sibling.
+cmd_posixstress() { # [N] [efs-host ...]
+    local n=4
+    if [ $# -gt 0 ] && [[ "$1" =~ ^[0-9]+$ ]]; then n=$1; shift; fi
+    local hosts=("$@")
+    [ ${#hosts[@]} -eq 0 ] && hosts=("${DEFAULT_HOSTS[@]}")
+    say "posixstress: ${#hosts[@]} hosts x $n suites/host = $(( ${#hosts[@]} * n )) instances"
+    POSIX_PER_HOST=$n cmd_posix --parallel "${hosts[@]}"
+}
+
 # ------------------------------------------------------------------ all ---
 cmd_all() { # [efs-host ...]
     local hosts=("$@")
@@ -530,6 +577,7 @@ main() {
     shift || true
     case "$cmd" in
         posix) cmd_posix "$@" ;;
+        posixstress) cmd_posixstress "$@" ;;
         posix2) cmd_posix2 "$@" ;;
         perf)  cmd_perf "$@" ;;
         nvme)  cmd_nvme "$@" ;;

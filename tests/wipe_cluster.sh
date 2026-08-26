@@ -8,8 +8,10 @@
 #
 #   1. kill -9 every efs-fuse on fcstor003–015 (clients first)
 #   2. kill -9 every efsd on fcstor003–006
-#   3. edelete /data1/01..06/efs on the four servers (never rm -rf)
-#   4. mkdir the storage dirs back (edelete removes the start dir)
+#   3. mv /data1/01..06/efs to /data1/01..06/_delete/efs.<unique> (instant
+#      same-filesystem rename) and mkdir the storage dirs back — the wipe
+#      returns in ms instead of blocking on edelete of millions of chunks
+#   4. a detached background edelete reclaims the _delete dirs (never rm -rf)
 #
 # Run from the login node. Does not mkfs or restart — do that after.
 set -eu
@@ -35,9 +37,17 @@ kill_fuse() {
     local h=$1
     # Kill first. fusermount on a D-state mount hangs the SSH session
     # forever (ServerAlive does not fire — the host still answers).
-    ssh_to 10 "$h" 'killall -9 efs-fuse 2>/dev/null || pkill -9 -x efs-fuse 2>/dev/null || true
+    # A D-state efs-fuse is transiently alive right after kill -9 (the
+    # signal is pending until the D-state resolves), so poll pgrep for a
+    # few seconds rather than aborting the wipe on a daemon about to die.
+    ssh_to 15 "$h" 'killall -9 efs-fuse 2>/dev/null || pkill -9 -x efs-fuse 2>/dev/null || true
         timeout 3 fusermount3 -uz /tmp/efs/mnt 2>/dev/null || true
         n=$(pgrep -x efs-fuse | wc -l)
+        for i in $(seq 1 40); do
+            [ "$n" -eq 0 ] && break
+            sleep 0.2
+            n=$(pgrep -x efs-fuse | wc -l)
+        done
         echo fuse=$n'
 }
 
@@ -75,19 +85,28 @@ for h in "${SERVERS[@]}"; do
 done
 wait
 
-say "3/4 edelete storage"
+say "3/4 move storage aside (instant rename) + recreate empty dirs"
+# Rename /data1/$d/efs to /data1/$d/_delete/efs.<unique> (instant on the same
+# filesystem) and recreate the empty dir. efsd is already dead (step 2), so no
+# open fds point into the moved tree. The actual reclaim is deferred to a
+# detached background edelete (step 4) so the wipe returns in milliseconds.
 for h in "${SERVERS[@]}"; do
-    ssh_to 30 "$h" 'for d in 01 02 03 04 05 06; do
-        ~/git/ereport/edelete --delete --force /data1/$d/efs
+    ( ssh_to 15 "$h" 'for d in 01 02 03 04 05 06; do
+        if [ -d /data1/$d/efs ]; then
+            mkdir -p /data1/$d/_delete
+            mv /data1/$d/efs "/data1/$d/_delete/efs.$(date +%s%N).$$"
+        fi
+        mkdir -p /data1/$d/efs
     done
-    echo WIPED' &
+    echo MOVED' ) &
 done
 wait
 
-say "4/4 recreate empty storage dirs (parallel)"
+say "4/4 background edelete of _delete dirs (detached, survives ssh)"
+# setsid + </dev/null + & detaches so the ssh session returns immediately and
+# the edelete keeps running after we disconnect. Globs all 6 data dirs at once.
 for h in "${SERVERS[@]}"; do
-    ( ssh_to 10 "$h" 'for d in 01 02 03 04 05 06; do mkdir -p /data1/$d/efs; done
-        echo READY' ) &
+    ( ssh_to 10 "$h" "setsid bash -c 'for old in /data1/*/_delete/*; do [ -e \"\$old\" ] && ~/git/ereport/edelete --delete --force \"\$old\" >/dev/null 2>&1; done' </dev/null >/dev/null 2>&1 & echo BG-DELETE" ) &
 done
 wait
 
