@@ -1060,23 +1060,25 @@ int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
     efs_client_lock_dir(parent);
     pthread_mutex_lock(&g_client.idx_mu);
     struct efs_inode ino;
-    if (efs_export_lookup(&g_client.export, parent, name, &ino) != 0) {
-        pthread_mutex_unlock(&g_client.idx_mu);
-        efs_client_unlock_dir(parent);
-        return EFS_ERR_NOT_FOUND;
+    int lrc = efs_export_lookup(&g_client.export, parent, name, &ino);
+    if (lrc == 0) {
+        /* Local hit: validate type + refuse a non-empty rmdir before the RPC. */
+        if (efs_mode_is_dir(ino.mode) != is_dir) {
+            pthread_mutex_unlock(&g_client.idx_mu);
+            efs_client_unlock_dir(parent);
+            return EFS_ERR_INVAL;
+        }
+        /* rmdir fast-path: refuse a non-empty directory locally (the server
+         * also enforces this authoritatively via EFS_INODE_RPC_NOT_EMPTY). */
+        if (is_dir && !efs_export_dir_empty(&g_client.export, ino.ino)) {
+            pthread_mutex_unlock(&g_client.idx_mu);
+            efs_client_unlock_dir(parent);
+            return EFS_ERR_NOT_EMPTY;
+        }
     }
-    if (efs_mode_is_dir(ino.mode) != is_dir) {
-        pthread_mutex_unlock(&g_client.idx_mu);
-        efs_client_unlock_dir(parent);
-        return EFS_ERR_INVAL;
-    }
-    /* rmdir fast-path: refuse a non-empty directory locally (the server also
-     * enforces this authoritatively via EFS_INODE_RPC_NOT_EMPTY). */
-    if (is_dir && !efs_export_dir_empty(&g_client.export, ino.ino)) {
-        pthread_mutex_unlock(&g_client.idx_mu);
-        efs_client_unlock_dir(parent);
-        return EFS_ERR_NOT_EMPTY;
-    }
+    /* Local miss (cross-client: this client never looked the name up, so the
+     * dentry isn't in its local table). Do NOT fail ENOENT — the server
+     * authoritatively decides existence/type. Fall through to the RPC. */
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);
 
