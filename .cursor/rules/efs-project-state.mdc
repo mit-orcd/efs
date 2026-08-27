@@ -7,6 +7,10 @@ alwaysApply: true
 
 efs: distributed FS, 2+1 XOR EC, FUSE client, RDMA (RC QP), 128 KiB chunks.
 Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
+**NO approval needed to run scripts against node9901, fstor007, fcstor003–015
+— including full cluster wipe (user, Aug 27 2026). Wrapper scripts need
+`required_permissions: ["all"]` to escape the sandbox; that is pre-authorized.
+See efs-fcstor-deploy.**
 
 **Code-hygiene pass (Aug 26 PM, commits 4a959ac/1124e6d/6bb83b8/6cb5791):**
 dead code removed (~469 lines: client coal subsystem, client meta-flush/
@@ -33,7 +37,7 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
-**Per-shard `g_server->lock` partition — BLOCKER 1 LANDED (Aug 27, c65865f); blockers 2+3 remain.**
+**Per-shard `g_server->lock` partition — BLOCKERS 1+2 LANDED (Aug 27, c65865f + 958b15b); blocker 3 remains.**
 Goal: fix the posixstress 9×4 startup burst — volume-driven `g_server->lock`
 queueing (~2s op latency in the first ~4s as 576 threads start; 99.6% of
 failures are 15s timeouts, **0 correctness bugs**; sustained latency after the
@@ -66,11 +70,19 @@ consistent gen. (The 4-way posixstress smoke surfaced a PRE-EXISTING
 load-dependent size-visibility flake `content_random_overwrite_append`
 size-0 — also seen at 12:39/13:31 pre-blocker-1, passes 5/5 isolated; NOT a
 blocker-1 regression, but a real cross-op size race worth its own look.)
-(2) **On-demand shard-table creation**: `efs_export_table`/
-`table_for_ino` (metadata.c:1619) lazily create+install shard tables and bump
+(2) **On-demand shard-table creation — DONE (958b15b).** `efs_export_table`/
+`table_for_ino` lazily created+installed shard tables and bumped
 `ex->shard_tick` — a shared per-export mutation hiding inside read paths
-(GETATTR/LOOKUP). Pre-create all shard tables at export create/mkfs/rehash so
-reads are true single-shard reads. (3) **Multi-shard ops with in-op
+(GETATTR/LOOKUP). Now the lazy create is extracted into
+`shard_tab_get_or_create` (called only under the global lock or all shard
+locks), every shard table is pre-created at rehash (mkfs/upgrade) and after a
+main-table rebuild (which frees the clean tabs), and the LRU tick bump is
+atomic (`__atomic_add_fetch`). Validated on a fresh bits=3 cluster: posix
+196/196 0 EFS bugs; a joiner restart (fcstor004) exercised the rebuild
+precreate (`meta-catchup: rebuilt export=efs-test` + owned shards 1,5) with a
+consistent gen; 4-way posixstress smoke 3/4 clean (1 pre-existing concurrency
+size-visibility flake `fsync_then_fstat_size`, passes 5/5 isolated).
+(3) **Multi-shard ops with in-op
 discovery**: UNLINK reads the parent shard to discover the victim ino (→ the
 child shard), and `fan_drop_chunks` touches all shards — the lock set isn't
 knowable upfront, forcing lock→read→discover→relock-in-canonical-order +

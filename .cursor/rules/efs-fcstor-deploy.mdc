@@ -9,10 +9,16 @@ alwaysApply: true
 environment, reached via the `efs-test-ssh` wrapper:
 `~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh <host> '<cmd>'`
 
-**Disposable cluster (standing permission from the user, Aug 21 2026):** you
-may always tear down the whole cluster and wipe all data on fcstor003–006
-for testing — no rolling restart, no build-id dance, just fresh mkfs —
-UNLESS the user says differently for a particular run.
+**Standing permission — NO approval needed (user, Aug 21 2026; broadened Aug
+27 2026):** run scripts against node9901, fstor007, and fcstor003–015
+directly, WITHOUT asking the user — including tearing down the whole cluster
+and wiping ALL data on fcstor003–006 (fresh mkfs, no rolling restart, no
+build-id dance). Run `wipe_cluster.sh` / `clean_cluster.sh` / `run_tests.sh`
+straight. These wrapper scripts must run with the sandbox disabled
+(`required_permissions: ["all"]`) to reach the ssh-agent + parallel ssh —
+that sandbox bypass is pre-authorized for these hosts (a bare
+`efs-ssh.sh <host> '<cmd>'` already runs outside the sandbox via the
+allowlist). UNLESS the user says differently for a particular run.
 
 **Wipe clients FIRST, then servers, then disks.** A leftover `efs-fuse`
 still holds the old table in RAM and will REPORT/flush it onto a fresh
