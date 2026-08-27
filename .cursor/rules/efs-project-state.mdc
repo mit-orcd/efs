@@ -33,6 +33,38 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+**posix2 cross-client fixes (Aug 26 PM, commits c65ca48/731d023/5525d49/
+5062a9b).** posix2 was 15-34 bugs; now ~56-59/63. Fixes: (1) `c65ca48`
+created-set getattr refresh (truncate stale-size). (2) `731d023` unlink
+non-fatal on local-table miss (peer_open_unlink_nlink EIO). (3) `5525d49`
+REMOVED the created-set short-circuit from `lookup_walk` — it was not
+authoritative for a shared dir (a peer can create/rename/unlink names in a
+dir this client created); now every clean-file lookup under a locally-known
+parent does LOOKUP+GETATTR (2 RPCs, inherent to sharding: parent-shard LOOKUP
+returns a size-0 dentry stub because the child shard tab is hollow on the
+parent owner, so GETATTR on the child owner gets the full row). This fixed 7
+visibility/nlink/excl bugs. (4) `5062a9b` SETATTR size-shrink clears the ino's
+stale append reservations (a truncated-away rsv looked permanently
+outstanding, BUSYing the next O_APPEND into -EIO; peer_append_while_truncate).
+**Remaining posix2 bugs:** `peer_fcntl_range_conflict` (byte-range lockf is
+per-client in-memory `efs_fuse_lock`, NOT coordinated cross-client — deep
+feature, needs server-side range-lock tracking); `peer_rename_across_dirs_chase`
+(x in two places — FLAKY, passes 5/5 isolated, load-dependent cross-shard
+rename race); flaky EIO/timeout on concurrent truncate/extend/pwrite tests
+(load-dependent, amplified by the created-set removal's 2-RPC lookup cost
+adding g_server->lock contention). The 15s POSIX2_STEP_SEC is too aggressive
+post-removal; 45s gives a cleaner signal. **posixstress 9×4 RE-RUN on the
+created-set-removal build (Aug 27, results/posix/20260827-121700, fresh
+bits=3, TCP):** 36 instances, 1665 EFS bugs, **1658 (99.6%) are
+`timeout after 15s` (saturation); 7 (0.4%) non-timeout — and ALL 7 pass in
+isolation** (flock_two_proc_exclusive ×5 = the test's 0.2s child-flock sleep
+is too short under load — the child's LOCK_EX RPC hasn't landed when the
+parent's LOCK_EX|NB arrives; fdatasync_write ×1; dir_deep_nesting_beyond_64
+×1). **ZERO genuine correctness bugs under 36-way.** The GETATTR in the
+2-RPC lookup is NOT redundant (parent-shard LOOKUP returns a size-0 dentry
+stub; GETATTR on the child owner gets the full row) — it's inherent to
+sharding + immediate visibility. The saturation lever is the
+`g_server->lock` partition (roadmap Perf lever 1), not fewer lookup RPCs.
 **posix suite 191→201: seeded random content + strange-name/depth tests
 (Aug 26 PM).** `rand_bytes(seed,n)` = SHA-256-keystream generator mixing
 ASCII/whitespace/control/NUL/high bytes (NOT zeros/repetitive — zero-fill/
