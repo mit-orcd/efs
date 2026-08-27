@@ -33,6 +33,41 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+**posix suite 191→201: seeded random content + strange-name/depth tests
+(Aug 26 PM).** `rand_bytes(seed,n)` = SHA-256-keystream generator mixing
+ASCII/whitespace/control/NUL/high bytes (NOT zeros/repetitive — zero-fill/
+dedup bugs can't hide); same seed → same bytes on any client (peer-verifiable).
+New tests: content random roundtrip across 128KiB chunk boundaries,
+all-256-byte values, whitespace/line-endings, NUL+control, random
+overwrite+append, 2MiB multichunk (sha256-verified); raw-byte names
+(control/DEL/high/space-only), unicode NFC-vs-NFD coexistence, crazy names
+as dirs, dir nesting past the 64-ancestor LOOKUP_PATH cap. basic_dd_rw now
+dd's a seeded-random file (was /dev/zero). `rmdir_rideout_sillyrename` rides
+out the FUSE silly-rename ENOTEMPTY transient that outlasts the daemon's
+20ms retry under concurrent open/close load. **Limits (from code):** name
+component ≤255B (`EFS_MAX_NAME`, ENAMETOOLONG per-component), path ≤4096B
+(`EFS_MAX_PATH`), NO hard depth cap (LOOKUP_PATH batches ≤64 ancestors then
+falls back to a per-component walk; `find` reporting caps at 128 comps).
+Single-client fcstor007: 196 both-pass, 0 EFS bugs, 3 consecutive runs.
+**9×4 posixstress harness + first run (Aug 26 PM, commits d123fa4/79df463).**
+`run_tests.sh posixstress [N] [hosts]` = N full posix suites per host, all
+hosts in parallel (default 9×4=36). posix_suite `--tag` gives each instance a
+unique testdir prefix (`posix-<host>-<tag>-`) so same-host siblings never sweep
+each other; `posix_one` fans out to `posix_instance`. wipe_cluster now renames
+`/data1/*/efs` aside + recreates instantly (detached background edelete
+reclaims) and polls for D-state efs-fuse — wipe is ~ms not minutes.
+**First 9×4 run (results/posix/20260826-224050, fresh bits=3, TCP):** all 36
+instances completed; cluster STABLE after (4 up, gen=1060 consistent, no
+wedge/GC, client probe OK). ALL 337 failures are `timeout after 15s`
+(saturation), ZERO correctness/assertion failures. Always-timeout (36/36):
+`concurrent_appends` + `concurrent_appends_two_proc` (O_APPEND reserve-RPC
+path). Near-always: `mtime_monotonic_many_writes` (32),
+`concurrent_create_unlink_two_proc` (32), `create_excl_two_proc` (31).
+Per-instance 2–22 bugs (fcstor012 cleanest at 2). The `Bad file descriptor`
+stderr flood = worker threads of a timed-out `concurrent_appends` erroring
+during cleanup (cosmetic). Finding: 36-way concurrency saturates the cluster;
+O_APPEND + same-dir concurrent create/unlink serialize worst. Not yet
+root-caused.
 **2PC metadata root commit LANDED (Aug 26 early AM, working tree) — the
 GC-wedge fix.** `PUT_META` is now phase-1 PREPARE (peer stashes the root as
 `pending_root[ei]` + raw bytes in `pending_blob[ei]`, NO install/persist/

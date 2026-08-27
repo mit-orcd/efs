@@ -8,6 +8,8 @@
 #                                                POSIX suite vs XFS baseline
 #   run_tests.sh posix2 [host-a] [host-b]        two-client visibility vs XFS
 #   run_tests.sh posix2 multi                    4 non-overlapping pairs in parallel
+#   run_tests.sh posixstress [N] [host ...]      N full suites per host in parallel
+#                                                (default N=4, all 9 clients)
 #   run_tests.sh perf single <host> [quick|full] perf on one client
 #   run_tests.sh perf multi [host ...] [quick|full]
 #                                                perf across clients (parallel)
@@ -27,6 +29,10 @@
 #   POSIX_SSH_SEC (default 180)  POSIX2_STEP_SEC (default 15)
 #   POSIX_TEST_SEC (default 15, per-test deadline in posix_suite.py)
 #   POSIX_JOBS (default 16; isolated testdirs run concurrently)
+#   POSIX_PER_HOST (default 1; run this many full-suite instances in parallel
+#                  on EACH host — e.g. POSIX_PER_HOST=4 posix --parallel runs
+#                  9 hosts x 4 = 36 concurrent suites. Each instance gets a
+#                  unique --tag so their testdir prefixes/sweeps never collide.)
 #   BUILD_SSH_SEC (default 60)  PERF_SSH_SEC (default 400)
 #
 # NOTE: must run with network/ssh access to the test nodes (outside the

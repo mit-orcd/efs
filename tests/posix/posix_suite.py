@@ -20,6 +20,7 @@ posix_2client.py — run via `tests/run_tests.sh posix2`.
 """
 import errno
 import fcntl
+import hashlib
 import mmap
 import os
 import shutil
@@ -108,6 +109,65 @@ def rd(path):
 def eq(got, want, what=""):
     if got != want:
         raise Fail("%s: got %r, want %r" % (what, got, want))
+
+
+# Seeded content generator: reproducible mixed ascii/binary data (NOT zeros or
+# a repeated char) so zero-fill / dedup / repetitive-data bugs can't hide. A
+# SHA-256 counter keystream is mapped through _MIX_TABLE for a realistic blend.
+def _build_mix_table():
+    t = bytearray(256)
+    for r in range(256):
+        if r < 108:                    # ~42% printable ASCII (0x20..0x7e)
+            t[r] = 0x20 + (r % 0x5f)
+        elif r < 132:                  # ~9% whitespace (space, \t, \n, \r)
+            t[r] = (0x20, 0x09, 0x0a, 0x0d)[r % 4]
+        elif r < 152:                  # ~8% control bytes (0x01..0x1f)
+            t[r] = 0x01 + (r % 0x1f)
+        elif r < 162:                  # ~4% NUL
+            t[r] = 0x00
+        else:                          # ~37% high / binary bytes (0x80..0xff)
+            t[r] = r
+    return bytes(t)
+
+
+_MIX_TABLE = _build_mix_table()
+
+
+def rand_bytes(seed, n):
+    """`n` reproducible pseudo-random bytes from `seed` (str/int/bytes): a
+    deliberate mix of printable ASCII, spaces/whitespace, control chars, NULs,
+    and high/binary bytes. Same seed -> same bytes on any client, so a peer can
+    verify content it did not write. Deterministic across Python versions
+    (SHA-256 counter, not the Mersenne RNG)."""
+    if isinstance(seed, str):
+        seed = seed.encode("utf-8")
+    elif isinstance(seed, int):
+        seed = str(seed).encode("ascii")
+    out = bytearray()
+    ctr = 0
+    while len(out) < n:
+        out += hashlib.sha256(seed + ctr.to_bytes(4, "big")).digest()
+        ctr += 1
+    return bytes(out[:n]).translate(_MIX_TABLE)
+
+
+def rmdir_rideout_sillyrename(p, tries=200, delay=0.005):
+    """os.rmdir, riding out the FUSE silly-rename transient. Unlinking a file
+    whose close-release the kernel has deferred leaves a .fuse_hidden dentry
+    until libfuse's release lands, so rmdir transiently reports ENOTEMPTY
+    (~100us idle, but longer under the suite's concurrent open/close load —
+    beyond the daemon's own 20ms retry). XFS has no silly-rename, so the
+    baseline passes immediately; retry briefly to compare like-for-like. A
+    genuinely non-empty dir still fails, just after the bounded delay."""
+    for _ in range(tries):
+        try:
+            os.rmdir(p)
+            return
+        except OSError as e:
+            if e.errno != errno.ENOTEMPTY:
+                raise
+            time.sleep(delay)
+    os.rmdir(p)  # final attempt: raises if still (genuinely) non-empty
 
 
 def close_leaked_mount_fds(mnt):
@@ -227,10 +287,13 @@ def basic_terminal_cp_cat(d):
 
 @test
 def basic_dd_rw(d):
-    sh("dd if=/dev/zero of=f bs=4k count=8 2>/dev/null", cwd=d)
+    # dd a seeded-random source (not /dev/zero) so zero-fill / repetitive-data
+    # bugs can't hide; verify the copied content byte-for-byte.
+    data = rand_bytes("basic_dd_rw", 32768)
+    wr(os.path.join(d, "src"), data)
+    sh("dd if=src of=f bs=4k count=8 2>/dev/null", cwd=d)
     eq(os.path.getsize(os.path.join(d, "f")), 32768, "dd size")
-    r = sh("dd if=f bs=4k count=8 2>/dev/null | wc -c", cwd=d)
-    eq(r.stdout.strip(), b"32768", "dd read bytes")
+    eq(rd(os.path.join(d, "f")), data, "dd copied random content")
 
 
 @test
@@ -1416,6 +1479,180 @@ def names_path_too_long(d):
                    (len(p), _PATH_MAX_STR + 1))
     expect_err(errno.ENAMETOOLONG, wr, p, b"x")
     expect_err(errno.ENAMETOOLONG, os.mkdir, p)
+
+
+# ==========================================================================
+# Strange names: raw bytes / unicode normalization / crazy dirs / deep nesting
+# POSIX allows any byte in a name except NUL and '/'.
+# ==========================================================================
+@test
+def names_control_and_high_bytes(d):
+    # Raw-byte names: control chars, DEL, high/non-UTF8 bytes, whitespace-only.
+    # Use bytes paths (os accepts them) so we are not limited to valid UTF-8.
+    names = [
+        b"ctrl-\x01\x02\x1f",
+        b"del-\x7f",
+        b"high-\x80\xff\xfe",
+        b"mix- \t\x01\x7f\x80\xff",
+        b" ",                  # single space
+        b"   ",                # only spaces
+        b" leading ",          # leading+trailing space
+        b"trailing\t",         # trailing tab
+        b"a",                  # single char
+        b"\xe4\xb8\xad\xe6\x96\x87",  # valid UTF-8 (Chinese) as bytes
+    ]
+    bd = os.fsencode(d)
+    for n in names:
+        p = os.path.join(bd, n)
+        with open(p, "wb") as f:
+            f.write(b"x")
+        with open(p, "rb") as f:
+            eq(f.read(), b"x", "byte-name content %r" % n)
+    listed = set(os.listdir(bd))
+    for n in names:
+        if n not in listed:
+            raise Fail("byte-name %r missing from readdir" % n)
+    for n in names:
+        os.unlink(os.path.join(bd, n))
+    eq(os.listdir(bd), [], "byte-names removed: leftover %r" % os.listdir(bd))
+
+
+@test
+def names_unicode_nfc_nfd_coexist(d):
+    # NFC (é = U+00E9 precomposed) vs NFD (e + U+0301 combining) are different
+    # byte sequences for the same glyph; both must coexist as distinct names.
+    nfc = "cafe\u00e9"  # NFC: precomposed U+00E9
+    nfd = "cafe\u0301"  # NFD: e + combining acute U+0301
+    if nfc == nfd:
+        raise Fail("test setup: NFC == NFD")
+    wr(os.path.join(d, nfc), b"nfc")
+    wr(os.path.join(d, nfd), b"nfd")
+    eq(rd(os.path.join(d, nfc)), b"nfc", "NFC roundtrip")
+    eq(rd(os.path.join(d, nfd)), b"nfd", "NFD roundtrip")
+    eq(len(os.listdir(d)), 2, "NFC and NFD coexist as distinct names")
+
+
+@test
+def names_crazy_dirs(d):
+    # Crazy names as DIRECTORIES: mkdir, a file inside, readdir, then remove.
+    for n in CRAZY_NAMES:
+        sub = os.path.join(d, n)
+        os.mkdir(sub)
+        wr(os.path.join(sub, "inner"), b"y")
+        eq(rd(os.path.join(sub, "inner")), b"y", "file inside crazy dir %r" % n)
+        eq(os.listdir(sub), ["inner"], "readdir crazy dir %r" % n)
+    for n in CRAZY_NAMES:
+        sub = os.path.join(d, n)
+        os.unlink(os.path.join(sub, "inner"))
+        rmdir_rideout_sillyrename(sub)
+    eq(os.listdir(d), [], "crazy dirs removed: leftover %r" % os.listdir(d))
+
+
+@test
+def dir_deep_nesting_beyond_64(d):
+    # EFS_LOOKUP_PATH_MAX_DEPTH is 64 (the batched-ancestor cap). Deeper paths
+    # must still work via the client's no-ancestor retry / per-component walk.
+    depth = 100
+    cur = d
+    for _ in range(depth):
+        cur = os.path.join(cur, "d")
+        os.mkdir(cur)
+    p = os.path.join(cur, "leaf")
+    wr(p, b"deep")
+    eq(rd(p), b"deep", "read at depth ~%d" % depth)
+    eq(os.stat(p).st_size, 4, "stat at depth")
+    eq(os.listdir(cur), ["leaf"], "readdir at depth")
+
+
+# ==========================================================================
+# File content: seeded random + strange bytes (byte-exact round-trip)
+# ==========================================================================
+@test
+def content_random_roundtrip(d):
+    # Seeded random data at sizes around the 128 KiB chunk boundary and
+    # multi-chunk. Deterministic seed -> we know the exact expected bytes.
+    sizes = [1, 2, 63, 64, 65, 4096, 65535, 131071, 131072, 131073,
+             262144, 400000]
+    for i, n in enumerate(sizes):
+        data = rand_bytes("roundtrip-%d" % i, n)
+        p = os.path.join(d, "f%d" % i)
+        wr(p, data)
+        eq(os.path.getsize(p), n, "size n=%d" % n)
+        eq(rd(p), data, "random content roundtrip n=%d" % n)
+
+
+@test
+def content_all_byte_values(d):
+    # Every byte value 0x00..0xff, in order and shuffled, must round-trip.
+    p = os.path.join(d, "allbytes")
+    data = bytes(range(256)) * 4
+    wr(p, data)
+    eq(rd(p), data, "all 256 byte values in order")
+    shuf = rand_bytes("shuffled", 8192)
+    wr(p, shuf)
+    eq(rd(p), shuf, "shuffled random bytes roundtrip")
+
+
+@test
+def content_whitespace_and_line_endings(d):
+    p = os.path.join(d, "ws")
+    data = (b"  leading spaces\n"
+            b"trailing spaces   \n"
+            b"\t\ttabs\t\t\n"
+            b"blank lines\n\n\n\n"
+            b"crlf\r\nline\r\n"
+            b"lone cr\rline\r"
+            b"mixed \t \t spaces \t\n"
+            b"no trailing newline")
+    wr(p, data)
+    eq(rd(p), data, "whitespace/line-ending content")
+    wr(p, b"     ")
+    eq(rd(p), b"     ", "only-spaces file")
+    wr(p, b"\n\n\n")
+    eq(rd(p), b"\n\n\n", "only-newlines file")
+    wr(p, b" \t\r\n ")
+    eq(rd(p), b" \t\r\n ", "only-whitespace mix")
+
+
+@test
+def content_nul_and_control(d):
+    p = os.path.join(d, "bin")
+    data = bytes(range(0x00, 0x20)) * 8   # NUL + all control chars
+    wr(p, data)
+    eq(rd(p), data, "NUL + control bytes")
+    eq(os.path.getsize(p), len(data), "binary size")
+
+
+@test
+def content_random_overwrite_append(d):
+    base = bytearray(rand_bytes("ov-base", 65536))
+    p = os.path.join(d, "f")
+    wr(p, bytes(base))
+    patch = rand_bytes("ov-patch", 10000)     # random overwrite of the middle
+    fd = os.open(p, os.O_RDWR)
+    os.pwrite(fd, patch, 20000)
+    os.close(fd)
+    base[20000:20000 + 10000] = patch
+    eq(rd(p), bytes(base), "random overwrite middle merged")
+    tail = rand_bytes("ov-tail", 5000)        # random append
+    with open(p, "ab") as f:
+        f.write(tail)
+    base += tail
+    eq(rd(p), bytes(base), "random append merged")
+    eq(os.path.getsize(p), len(base), "size after overwrite+append")
+
+
+@test
+def content_random_large_multichunk(d):
+    # 2 MiB of seeded random spanning many 128 KiB chunks; compare hashes so
+    # we don't hold two full copies. Same seed -> same hash on any client.
+    n = 2 * 1024 * 1024
+    data = rand_bytes("large-2m", n)
+    p = os.path.join(d, "big")
+    wr(p, data)
+    eq(os.path.getsize(p), n, "large size")
+    eq(hashlib.sha256(rd(p)).hexdigest(), hashlib.sha256(data).hexdigest(),
+       "large random content sha256")
 
 
 # ==========================================================================
