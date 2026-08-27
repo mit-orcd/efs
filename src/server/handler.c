@@ -64,6 +64,13 @@ static int readdir_row_cmp(const void *a, const void *b)
  * every live hold (~10% of server cycles at 14k files). */
 #define EFS_HOLD_BUCK 4096u
 static struct efs_ino_hold *hold_buck[EFS_HOLD_BUCK];
+/* hold_mu guards hold_buck (the unlink-while-open / flock table). A dedicated
+ * lock, separate from g_server->lock, so a partitioned shard op can take it
+ * briefly. It is a LEAF lock: no shard/global lock is acquired while holding
+ * it (lock order global -> shard -> hold_mu). The hold ops are O(1) (hash +
+ * refcount), so the hold time is tiny and won't bottleneck like the global
+ * lock did. Blocker 3. */
+static pthread_mutex_t hold_mu = PTHREAD_MUTEX_INITIALIZER;
 
 static uint32_t hold_hash(efs_export_id_t eid, efs_ino_t ino)
 {
@@ -71,7 +78,7 @@ static uint32_t hold_hash(efs_export_id_t eid, efs_ino_t ino)
     return (uint32_t)(x ^ (x >> 32));
 }
 
-/* Caller holds g_server->lock. */
+/* Caller holds hold_mu. */
 static struct efs_ino_hold *hold_find(efs_export_id_t eid, efs_ino_t ino,
                                       int create)
 {
@@ -95,15 +102,20 @@ static struct efs_ino_hold *hold_find(efs_export_id_t eid, efs_ino_t ino,
 
 static uint32_t hold_refs(efs_export_id_t eid, efs_ino_t ino)
 {
+    pthread_mutex_lock(&hold_mu);
     struct efs_ino_hold *h = hold_find(eid, ino, 0);
-    return h ? h->refs : 0;
+    uint32_t r = h ? h->refs : 0;
+    pthread_mutex_unlock(&hold_mu);
+    return r;
 }
 
 static void hold_inc(efs_export_id_t eid, efs_ino_t ino)
 {
+    pthread_mutex_lock(&hold_mu);
     struct efs_ino_hold *h = hold_find(eid, ino, 1);
     if (h)
         h->refs++;
+    pthread_mutex_unlock(&hold_mu);
 }
 
 static uint32_t server_nlive_locked(struct efsd_server *s, efs_node_id_t *live)
@@ -1759,7 +1771,8 @@ send_reply:
                             r.status = EFS_INODE_RPC_ERROR;
                         } else {
                             if (!efs_mode_is_dir(req->mode) && sc > 1)
-                                ex->create_rr++;
+                                (void)__atomic_add_fetch(&ex->create_rr, 1,
+                                                         __ATOMIC_RELAXED);
                             pthread_mutex_unlock(&g_server->lock);
                             int nrc = server_peer_create_shard(host, port,
                                                                &creq, &cr);
@@ -2300,17 +2313,28 @@ send_reply:
                     if (payload_len < sizeof(*req))
                         r.status = EFS_INODE_RPC_INVAL;
                 } else {
+                    /* HOLD-table mutation under hold_mu (leaf); the refs==0
+                     * purge is an export op and runs under the shard/global
+                     * lock the handler already holds, NOT under hold_mu. */
+                    int do_purge = 0;
+                    pthread_mutex_lock(&hold_mu);
                     struct efs_ino_hold *h = hold_find(ex->id, req->ino, 1);
                     if (!h) {
+                        pthread_mutex_unlock(&hold_mu);
                         r.status = EFS_INODE_RPC_ERROR;
                     } else if (req->flags) {
                         h->refs++;
+                        pthread_mutex_unlock(&hold_mu);
                         r.status = EFS_INODE_RPC_OK;
                     } else {
                         if (h->refs > 0)
                             h->refs--;
                         if (h->refs == 0) {
                             h->flock_n = 0;
+                            do_purge = 1;
+                        }
+                        pthread_mutex_unlock(&hold_mu);
+                        if (do_purge) {
                             (void)efs_export_purge_unlinked(ex, req->ino);
                             server_meta_mark_rpc_dirty_locked(g_server, eidx);
                         }
@@ -2323,7 +2347,10 @@ send_reply:
                     if (payload_len < sizeof(*req))
                         r.status = EFS_INODE_RPC_INVAL;
                 } else {
+                    /* FLOCK state lives entirely in the HOLD table -> the whole
+                     * critical section runs under hold_mu (leaf). */
                     uint32_t op = req->op;
+                    pthread_mutex_lock(&hold_mu);
                     struct efs_ino_hold *h = hold_find(ex->id, req->ino, 1);
                     if (!h) {
                         r.status = EFS_INODE_RPC_ERROR;
@@ -2365,6 +2392,7 @@ send_reply:
                     } else {
                         r.status = EFS_INODE_RPC_INVAL;
                     }
+                    pthread_mutex_unlock(&hold_mu);
                 }
             } else if (type == EFS_MSG_INODE_DROP_CHUNKS) {
                 struct efs_msg_inode_drop_chunks *req = payload;

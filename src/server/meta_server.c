@@ -2301,7 +2301,8 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
      * in-memory reports (mc_stress: cdir files back to size 0). Defer; the
      * flush advances our local root past this gen and the next poll is a
      * no-op. */
-    if (ei >= 0 && s->rpc_dirty_ops[ei] > 0) {
+    if (ei >= 0 &&
+        __atomic_load_n(&s->rpc_dirty_ops[ei], __ATOMIC_RELAXED) > 0) {
         pthread_mutex_unlock(&s->lock);
         efs_export_root_free(&root);
         return 0;
@@ -2836,10 +2837,15 @@ void server_meta_mark_rpc_dirty_locked(struct efsd_server *s, uint32_t eidx)
 {
     if (eidx >= EFS_MAX_EXPORTS)
         return;
-    s->rpc_dirty_ops[eidx]++;
+    /* Blocker 3: under the per-shard partition this is called holding a shard
+     * lock, NOT s->lock, so the bump and the threshold sum are atomic (the
+     * flush thread reads/resets with atomics too). The condvar signal is not
+     * sent under s->lock here, so it can race — but the flush thread's timed
+     * wait covers a missed wake; the signal is only an early-flush hint. */
+    (void)__atomic_add_fetch(&s->rpc_dirty_ops[eidx], 1, __ATOMIC_RELAXED);
     uint64_t total = 0;
     for (uint32_t e = 0; e < s->export_count && e < EFS_MAX_EXPORTS; e++)
-        total += s->rpc_dirty_ops[e];
+        total += __atomic_load_n(&s->rpc_dirty_ops[e], __ATOMIC_RELAXED);
     if (total >= EFS_META_FLUSH_OPS)
         pthread_cond_signal(&s->rpc_dirty_cv);
 }
@@ -2882,7 +2888,7 @@ static void *meta_flush_thread(void *arg)
                              s->exports[e].root.shard_count > 1);
             if (!can_flush)
                 continue;
-            if (s->rpc_dirty_ops[e] > 0) {
+            if (__atomic_load_n(&s->rpc_dirty_ops[e], __ATOMIC_RELAXED) > 0) {
                 int extra_hold = 0;
                 if (s->exports[e].root.shard_bits &&
                     s->exports[e].shard_tabs) {
@@ -2913,14 +2919,15 @@ static void *meta_flush_thread(void *arg)
                             "meta-flush: export=%s hold %llu op(s) until "
                             "rebuild gen=%llu extra_hold=%d\n",
                             s->exports[e].name,
-                            (unsigned long long)s->rpc_dirty_ops[e],
+                            (unsigned long long)__atomic_load_n(
+                                &s->rpc_dirty_ops[e], __ATOMIC_RELAXED),
                             (unsigned long long)
                                 s->exports[e].root.generation,
                             extra_hold);
                     continue;
                 }
                 dirty[ndirty++] = e;
-                s->rpc_dirty_ops[e] = 0;
+                __atomic_store_n(&s->rpc_dirty_ops[e], 0, __ATOMIC_RELAXED);
             }
         }
         pthread_mutex_unlock(&s->lock);
@@ -2932,10 +2939,14 @@ static void *meta_flush_thread(void *arg)
                 break;
             if (server_flush_fragmented_meta(s, &s->exports[dirty[i]]) != 0) {
                 /* Flush failed (no quorum / net): re-mark dirty so the next
-                 * window retries instead of losing the in-memory mutations. */
+                 * window retries instead of losing the in-memory mutations.
+                 * CAS so a concurrent op's mark (now lock-free) isn't lost. */
                 pthread_mutex_lock(&s->lock);
-                if (s->rpc_dirty_ops[dirty[i]] == 0)
-                    s->rpc_dirty_ops[dirty[i]] = 1;
+                uint64_t zero = 0;
+                (void)__atomic_compare_exchange_n(&s->rpc_dirty_ops[dirty[i]],
+                                                  &zero, 1, 0,
+                                                  __ATOMIC_RELAXED,
+                                                  __ATOMIC_RELAXED);
                 pthread_mutex_unlock(&s->lock);
             }
         }

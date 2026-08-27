@@ -1959,7 +1959,10 @@ uint32_t efs_export_create_target(struct efs_export *ex, efs_ino_t parent,
      * round-robin across ALL shards so write-path ownership spreads. */
     if (efs_mode_is_dir(mode) || sc <= 1 || bits == 0)
         return psh;
-    return ex->create_rr % sc;
+    /* create_rr is bumped by every file create no matter which shard lock the
+     * op holds (blocker 3 partition), so read it atomically. The value only
+     * picks a target shard — a benign race just skews distribution. */
+    return __atomic_load_n(&ex->create_rr, __ATOMIC_RELAXED) % sc;
 }
 
 static int lookup_on_tab(struct efs_export *tab, efs_ino_t parent,
@@ -1982,7 +1985,7 @@ static efs_ino_t create_sharded(struct efs_export *ex, efs_ino_t parent,
     uint32_t psh = efs_export_shard_of(parent, bits);
     uint32_t target = efs_export_create_target(ex, parent, mode);
     if (!efs_mode_is_dir(mode) && sc > 1)
-        ex->create_rr++;
+        (void)__atomic_add_fetch(&ex->create_rr, 1, __ATOMIC_RELAXED);
     struct efs_export *ctab = efs_export_table(ex, target);
     if (!ctab)
         return 0;

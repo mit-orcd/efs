@@ -606,9 +606,11 @@ int main(int argc, char **argv)
         if (primary) {
             for (uint32_t e = 0; e < server.export_count &&
                  e < EFS_MAX_EXPORTS; e++) {
-                if (server.rpc_dirty_ops[e] > 0) {
+                if (__atomic_load_n(&server.rpc_dirty_ops[e],
+                                    __ATOMIC_RELAXED) > 0) {
                     dirty[ndirty++] = e;
-                    server.rpc_dirty_ops[e] = 0;
+                    __atomic_store_n(&server.rpc_dirty_ops[e], 0,
+                                     __ATOMIC_RELAXED);
                 }
             }
         }
