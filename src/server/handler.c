@@ -1711,11 +1711,21 @@ send_reply:
                 } else if (reply_if_shard_busy(ex, req->ino, &r)) {
                     /* hollow extra: client retries */
                 } else {
+                    /* Transitional: hold the shard lock for the table read.
+                     * The ensure above already ran (it may drop the global
+                     * lock for a rebuild) BEFORE we take the shard lock, so
+                     * we never hold a shard lock across a rebuild's
+                     * lock_all. Global lock is still held -> no parallelism
+                     * yet; this establishes the discipline. */
+                    uint32_t gsh = efs_export_shard_of(req->ino,
+                                                       ex->root.shard_bits);
+                    server_shard_lock(g_server, eidx, gsh);
                     struct efs_export *tab = table_for_ino(ex, req->ino);
                     if (efs_export_get_inode(tab, req->ino, &r.inode) == 0)
                         r.status = EFS_INODE_RPC_OK;
                     else
                         r.status = EFS_INODE_RPC_NOT_FOUND;
+                    server_shard_unlock(g_server, eidx, gsh);
                 }
             } else if (type == EFS_MSG_INODE_CREATE) {
                 /* Phase 3b Independent: shard-local create. Spread dirs
@@ -1901,6 +1911,9 @@ send_reply:
                                                     req->target_shard) != 0) {
                     r.status = EFS_INODE_RPC_BUSY;
                 } else {
+                    /* Transitional: shard lock for the create. The ensure
+                     * above ran before we take the shard lock. */
+                    server_shard_lock(g_server, eidx, req->target_shard);
                     struct efs_export *ctab =
                         efs_export_table(ex, req->target_shard);
                     if (!ctab || !efs_export_fits_page_cap(ctab, 1, 0)) {
@@ -1927,6 +1940,7 @@ send_reply:
                             server_meta_mark_rpc_dirty_locked(g_server, eidx);
                         }
                     }
+                    server_shard_unlock(g_server, eidx, req->target_shard);
                 }
             } else if (type == EFS_MSG_INODE_UNLINK) {
                 struct efs_msg_inode_unlink *req = payload;
@@ -2135,6 +2149,11 @@ send_reply:
                 if (reply_if_shard_busy(ex, req->ino, &r)) {
                     /* hollow extra */
                 } else {
+                /* Transitional: shard lock for the append reservation (the
+                 * ensure above ran before we take the shard lock). */
+                uint32_t ash = efs_export_shard_of(req->ino,
+                                                   ex->root.shard_bits);
+                server_shard_lock(g_server, eidx, ash);
                 struct efs_export *tab = table_for_ino(ex, req->ino);
                 struct efs_inode cur;
                 if (efs_export_get_inode(tab, req->ino, &cur) != 0 ||
@@ -2218,6 +2237,7 @@ send_reply:
                         r.status = EFS_INODE_RPC_OK;
                     }
                 }
+                server_shard_unlock(g_server, eidx, ash);
                 }
             } else if (type == EFS_MSG_INODE_LINK) {
                 struct efs_msg_inode_link *req = payload;
@@ -2856,10 +2876,12 @@ send_reply:
                 struct efs_msg_inode_getchunks *req = payload;
                 pthread_mutex_lock(&g_server->lock);
                 struct efs_export *ex = NULL;
+                uint32_t eidx = 0;
                 for (uint32_t i = 0; i < g_server->export_count; i++) {
                     if (g_server->exports[i].id == req->export_id ||
                         (req->export_id == 0 && i == 0)) {
                         ex = &g_server->exports[i];
+                        eidx = i;
                         break;
                     }
                 }
@@ -2886,6 +2908,9 @@ send_reply:
                     }
                     if (r.status != EFS_INODE_RPC_NOT_PRIMARY &&
                         r.status != EFS_INODE_RPC_BUSY) {
+                    /* Transitional: shard lock for the chunk-group read (the
+                     * ensure above ran before we take the shard lock). */
+                    server_shard_lock(g_server, eidx, gsh);
                     /* Serve this group only. The inode row may live on a
                      * different shard — do not require it here. */
                     uint32_t max = req->max;
@@ -2907,6 +2932,7 @@ send_reply:
                         r.count++;
                     }
                     r.status = EFS_INODE_RPC_OK;
+                    server_shard_unlock(g_server, eidx, gsh);
                     }
                 }
                 pthread_mutex_unlock(&g_server->lock);
