@@ -1070,6 +1070,13 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
         free(dirty_tabs);
     }
 
+    /* Blocker 2: a main-table rebuild freed every clean shard table above.
+     * Pre-create them all so later op/read paths find an existing table and
+     * never do the per-export lazy-create mutation under a single shard lock.
+     * Holds s->lock + all the export's shard locks (blocker 1). */
+    if (table_ino == EFS_META_TABLE_INO)
+        (void)efs_export_precreate_shards(ex);
+
     /* Success: keep the assembled blob (plus this generation's page
      * checksums) as the incremental-rebuild cache so the next rebuild only
      * fetches pages whose checksums changed. Shard tables use their

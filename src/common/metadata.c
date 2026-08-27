@@ -1616,15 +1616,17 @@ static void efs_export_init_empty_table(struct efs_export *ex, efs_export_id_t i
     child_idx_rebuild(ex);
 }
 
-struct efs_export *efs_export_table(struct efs_export *ex, uint32_t shard)
+/* Get or lazily create the shard table for `shard`: grow the shard_tabs
+ * array, calloc + init the table, and reload a previously flushed shard root
+ * from the cluster root's extra_roots (this is the on-demand shard load).
+ * This is a PER-EXPORT mutation — call only under the global lock or while
+ * holding all the export's shard locks (rebuild). Blocker 2 pre-creates every
+ * table at rehash/rebuild so op/read paths never reach this under a single
+ * shard lock. */
+static struct efs_export *shard_tab_get_or_create(struct efs_export *ex,
+                                                  uint32_t shard)
 {
-    if (!ex)
-        return NULL;
     uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
-    if (shard == 0 || ex->root.shard_bits == 0 || sc <= 1)
-        return ex;
-    if (shard >= sc || shard >= EFS_META_MAX_SHARDS)
-        return NULL;
     if (!ex->shard_tabs || ex->shard_tab_cap < sc) {
         struct efs_export **n = calloc(sc, sizeof(*n));
         if (!n)
@@ -1661,8 +1663,43 @@ struct efs_export *efs_export_table(struct efs_export *ex, uint32_t shard)
         }
         ex->shard_tabs[shard] = tab;
     }
-    ex->shard_tabs[shard]->shard_tick = ++ex->shard_tick;
     return ex->shard_tabs[shard];
+}
+
+struct efs_export *efs_export_table(struct efs_export *ex, uint32_t shard)
+{
+    if (!ex)
+        return NULL;
+    uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+    if (shard == 0 || ex->root.shard_bits == 0 || sc <= 1)
+        return ex;
+    if (shard >= sc || shard >= EFS_META_MAX_SHARDS)
+        return NULL;
+    struct efs_export *tab = shard_tab_get_or_create(ex, shard);
+    if (!tab)
+        return NULL;
+    /* LRU tick. Atomic so a (future) shard-lock-holding read path can bump it
+     * without the global lock; the value only guides cold-shard eviction. */
+    tab->shard_tick = __atomic_add_fetch(&ex->shard_tick, 1, __ATOMIC_RELAXED);
+    return tab;
+}
+
+/* Blocker 2: pre-create every shard table so op/read paths find an existing
+ * table and never do the per-export lazy-create mutation under a single shard
+ * lock. Caller holds the global lock (rehash) or all the export's shard locks
+ * (rebuild). Cheap: non-owned tables stay empty/hollow until their owner
+ * rebuilds them. */
+int efs_export_precreate_shards(struct efs_export *ex)
+{
+    if (!ex || ex->root.shard_bits == 0)
+        return EFS_OK;
+    uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+    if (sc > EFS_META_MAX_SHARDS)
+        sc = EFS_META_MAX_SHARDS;
+    for (uint32_t shard = 1; shard < sc; shard++)
+        if (!shard_tab_get_or_create(ex, shard))
+            return EFS_ERR_NOMEM;
+    return EFS_OK;
 }
 
 struct efs_export *efs_export_table_for_ino(struct efs_export *ex, efs_ino_t ino)
@@ -1863,6 +1900,15 @@ int efs_export_rehash(struct efs_export *ex, uint32_t new_bits)
         free(inos);
         free(chs);
         return EFS_OK;
+    }
+
+    /* Blocker 2: pre-create every shard table so later op/read paths find an
+     * existing table and never do the per-export lazy-create mutation under a
+     * single shard lock. */
+    if (efs_export_precreate_shards(ex) != EFS_OK) {
+        free(inos);
+        free(chs);
+        return EFS_ERR_NOMEM;
     }
 
     for (uint64_t i = 0; i < wi; i++) {
