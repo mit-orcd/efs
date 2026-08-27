@@ -554,45 +554,13 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
             prc == EFS_ERR_NAMETOOLONG)
             return prc;
         if (prc == EFS_OK) {
-            /* Parent we mkdir'd/created into this session: local miss is
-             * ENOENT. REPORT does not forget this (unlike dirty_*).
-             * Remounted peers have an empty created-set and still LOOKUP. */
-            if (efs_client_ino_is_created(par)) {
-                struct efs_inode ch;
-                int hit;
-                efs_client_lock_dir(par);
-                pthread_mutex_lock(&g_client.idx_mu);
-                hit = efs_export_lookup(&g_client.export, par, last, &ch);
-                pthread_mutex_unlock(&g_client.idx_mu);
-                efs_client_unlock_dir(par);
-                if (hit != 0)
-                    return EFS_ERR_NOT_FOUND;
-                /* Hit: this client created the parent (mkdir/create) and
-                 * dual-applied the name. But a peer may have mutated the
-                 * file since (posix2 truncate/extend) — our local row's
-                 * size/mtime is then stale. Refresh a non-dir from the owner
-                 * by ino (NOT a name LOOKUP, which wedged on a cross-dir
-                 * hardlink's new name). adopt prefers our dirty row, so the
-                 * writer's own unflushed data is still safe. Remounted peers
-                 * have an empty created-set and still RPC. */
-                if (!efs_mode_is_dir(ch.mode) &&
-                    !efs_client_ino_is_dirty(ch.ino)) {
-                    struct efs_inode full;
-                    if (efs_client_rpc_getattr(g_client.export_id, ch.ino,
-                                               &full) == EFS_OK) {
-                        adopt_rpc_inode(&full);
-                        efs_client_lock_dir(par);
-                        pthread_mutex_lock(&g_client.idx_mu);
-                        if (efs_export_get_inode(&g_client.export, ch.ino,
-                                                 &full) == 0)
-                            ch = full;
-                        pthread_mutex_unlock(&g_client.idx_mu);
-                        efs_client_unlock_dir(par);
-                    }
-                }
-                *out = ch;
-                return EFS_OK;
-            }
+            /* Parent resolved locally. Always do the name LOOKUP on the parent
+             * owner — the local created-set is NOT authoritative for a shared
+             * dir: a peer can create, rename, or unlink names in a dir this
+             * client created (posix2 open_rename_fd / mtime_no_regress /
+             * unlink_recreate_old_fd / rename_same_src_two_dst). The RPC path
+             * below refreshes size/mtime via GETATTR and prefers a dirty local
+             * row, so the writer's own unflushed data is still safe. */
             struct efs_inode child;
             int lrc = efs_client_rpc_lookup(g_client.export_id, par, last,
                                             &child);
