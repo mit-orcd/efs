@@ -37,7 +37,7 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
-**Per-shard `g_server->lock` partition — BLOCKERS 1+2 LANDED (Aug 27, c65865f + 958b15b); blocker 3 remains.**
+**Per-shard `g_server->lock` partition — BLOCKERS 1+2+3 LANDED (Aug 27, c65865f + 958b15b + b167ea2); transitional nested-lock step remains.**
 Goal: fix the posixstress 9×4 startup burst — volume-driven `g_server->lock`
 queueing (~2s op latency in the first ~4s as 576 threads start; 99.6% of
 failures are 15s timeouts, **0 correctness bugs**; sustained latency after the
@@ -82,18 +82,28 @@ atomic (`__atomic_add_fetch`). Validated on a fresh bits=3 cluster: posix
 precreate (`meta-catchup: rebuilt export=efs-test` + owned shards 1,5) with a
 consistent gen; 4-way posixstress smoke 3/4 clean (1 pre-existing concurrency
 size-visibility flake `fsync_then_fstat_size`, passes 5/5 isolated).
-(3) **Multi-shard ops with in-op
-discovery**: UNLINK reads the parent shard to discover the victim ino (→ the
-child shard), and `fan_drop_chunks` touches all shards — the lock set isn't
-knowable upfront, forcing lock→read→discover→relock-in-canonical-order +
-re-validate. Also: the HOLD table (`hold_buck`, handler.c:66) is GLOBAL not
-per-shard; dirty-marking (`rpc_dirty_ops`+`rpc_dirty_cv`) is global (even
-single-shard ops need a brief global lock to mark dirty). **Plan:** land
-blockers (1)(2)(3) → nested-lock transitional step (global+shard held
-together, no parallelism, safe) → drop the global lock per op, gating each
-with posix suite + posixstress + valgrind. NOTE: on a FRESH cluster the
-shards are not hollow, so the rebuild-deadlock (blocker 1) doesn't fire in
-the posixstress gate — but it MUST be fixed before this is rejoin-safe.
+(3) **Global-state + multi-shard ops — global-state DONE (b167ea2).** The
+three pieces of global state the partition touches are now safe to touch
+without the global lock: `ex->create_rr` is a single atomic fetch_add
+(bumped by every create); `s->rpc_dirty_ops[]` is atomic bump/read/reset
+(the flush trigger); the HOLD table (`hold_buck`, handler.c) has a dedicated
+`hold_mu` leaf lock. All behavior-preserving under the still-held global
+lock (no handler takes shard locks yet). Validated on a fresh bits=3
+cluster: posix suite (5 runs, 0-2 pre-existing flakes/run, one clean
+196/196) + 4-way posixstress smoke (2/4 clean) — only the pre-existing
+size-visibility/ENOTEMPTY flake family, each passing isolated; no
+regression. **Deferred to the transitional step:** the multi-shard
+discover-relock — UNLINK reads the parent shard to discover the victim ino
+(→ the child shard), and `fan_drop_chunks` touches all shards, so the lock
+set isn't knowable upfront (lock→read→discover→relock-in-canonical-order +
+re-validate). `fan_drop_chunks` re-acquires the global lock mid-op and
+`server_ensure_shard_ready` can trigger a rebuild — an ordering entanglement
+that doesn't belong in a clean global-lock-still-held step. **Plan:**
+nested-lock transitional step (handlers take global+shard together, no
+parallelism, safe) → drop the global lock per op, gating each with posix
+suite + posixstress + valgrind. NOTE: on a FRESH cluster the shards are not
+hollow, so the rebuild-deadlock (blocker 1) doesn't fire in the posixstress
+gate — but it MUST stay fixed for this to be rejoin-safe.
 **posix2 cross-client fixes (Aug 26 PM, commits c65ca48/731d023/5525d49/
 5062a9b).** posix2 was 15-34 bugs; now ~56-59/63. Fixes: (1) `c65ca48`
 created-set getattr refresh (truncate stale-size). (2) `731d023` unlink
