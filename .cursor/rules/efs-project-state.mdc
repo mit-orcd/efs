@@ -33,6 +33,55 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+**Per-shard `g_server->lock` partition — BLOCKER 1 LANDED (Aug 27, c65865f); blockers 2+3 remain.**
+Goal: fix the posixstress 9×4 startup burst — volume-driven `g_server->lock`
+queueing (~2s op latency in the first ~4s as 576 threads start; 99.6% of
+failures are 15s timeouts, **0 correctness bugs**; sustained latency after the
+burst is ~7ms). The `drop_chunks` O(chunk_count)→O(chunks_of_ino) fix
+(commit a2b90cf, `icnt` per-ino live-chunk map) gave only ~5% — the burst is
+op-VOLUME, not long lock-holds. **This partition is a MULTI-DAY refactor, not
+a quick win.** Infrastructure + blocker 1 LANDED (commit c65865f):
+`g_server->shard_locks` heap array (`[eidx*EFS_META_MAX_SHARDS + shard]`,
+malloc+init in efsd.c) + canonical-order helpers `server_shard_lock/
+lockn/unlockn/lock_all/unlock_all` in server_internal.h. **Design:** per-shard
+locks for the ~17 inode RPCs + REPORT_CHUNKS + LOOKUP_PATH/READDIR/GETCHUNKS;
+ONE global lock kept for membership + flush + rebuild + catchup + append
+barrier; strict **global→shard** ordering (never hold a shard lock while
+acquiring `s->lock`); flush/rebuild take global + ALL shard locks of the
+export; `create_rr` becomes a single atomic `fetch_add` (it lives on shard 0
+but is bumped by every create). **Expected benefit ~2×/server at bits=3**
+(only 2 shards/server to parallelize); more at higher bits.
+**3 foundational BLOCKERS — must land BEFORE any handler is partitioned:**
+(1) **Rebuild manages `s->lock` internally — DONE (c65865f).** The rebuild's
+table-swap commit in `server_rebuild_export_from_pages_ino` now holds the
+export's shard locks in global→shard order via `rebuild_shards_lock`/
+`rebuild_shards_unlock` (meta_server.c): ALL shards for a main-table rebuild
+(`server_shard_lock_all`, since `efs_export_free` drops every shard tab),
+ONE for an extra-shard rebuild. The page fetch still runs lock-free (network
+I/O). No handler holds shard locks yet, so this is a no-op — it establishes
+the discipline. Validated on a fresh bits=3 cluster: posix 196/196 0 EFS
+bugs; a joiner restart (fcstor004) exercised BOTH rebuild paths (main
+all-shards gen=49, extra single-shard shards 1+5) with no deadlock and a
+consistent gen. (The 4-way posixstress smoke surfaced a PRE-EXISTING
+load-dependent size-visibility flake `content_random_overwrite_append`
+size-0 — also seen at 12:39/13:31 pre-blocker-1, passes 5/5 isolated; NOT a
+blocker-1 regression, but a real cross-op size race worth its own look.)
+(2) **On-demand shard-table creation**: `efs_export_table`/
+`table_for_ino` (metadata.c:1619) lazily create+install shard tables and bump
+`ex->shard_tick` — a shared per-export mutation hiding inside read paths
+(GETATTR/LOOKUP). Pre-create all shard tables at export create/mkfs/rehash so
+reads are true single-shard reads. (3) **Multi-shard ops with in-op
+discovery**: UNLINK reads the parent shard to discover the victim ino (→ the
+child shard), and `fan_drop_chunks` touches all shards — the lock set isn't
+knowable upfront, forcing lock→read→discover→relock-in-canonical-order +
+re-validate. Also: the HOLD table (`hold_buck`, handler.c:66) is GLOBAL not
+per-shard; dirty-marking (`rpc_dirty_ops`+`rpc_dirty_cv`) is global (even
+single-shard ops need a brief global lock to mark dirty). **Plan:** land
+blockers (1)(2)(3) → nested-lock transitional step (global+shard held
+together, no parallelism, safe) → drop the global lock per op, gating each
+with posix suite + posixstress + valgrind. NOTE: on a FRESH cluster the
+shards are not hollow, so the rebuild-deadlock (blocker 1) doesn't fire in
+the posixstress gate — but it MUST be fixed before this is rejoin-safe.
 **posix2 cross-client fixes (Aug 26 PM, commits c65ca48/731d023/5525d49/
 5062a9b).** posix2 was 15-34 bugs; now ~56-59/63. Fixes: (1) `c65ca48`
 created-set getattr refresh (truncate stale-size). (2) `731d023` unlink
@@ -65,6 +114,28 @@ parent's LOCK_EX|NB arrives; fdatasync_write ×1; dir_deep_nesting_beyond_64
 stub; GETATTR on the child owner gets the full row) — it's inherent to
 sharding + immediate visibility. The saturation lever is the
 `g_server->lock` partition (roadmap Perf lever 1), not fewer lookup RPCs.
+**posixstress saturation CONFIRMED = `g_server->lock` latency, not CPU
+(Aug 27 profiling on a fresh bits=3 TCP cluster, 36-way):** servers NOT
+CPU-saturated (primary ~7.5/24 cores, joiners ~2.8/24; client efs-fuse
+~0.43 cores) — a LATENCY bottleneck, not throughput. On-CPU work (perf
+record): blake3 chunk hashing, memmove, `drop_chunks_scan`, serialize.
+wchan identical at rest AND under load (156 `wait_woken` + 22
+`futex_do_wait` = idle worker pool, NOT elevated lock contention — the
+per-op hold is short, threads don't pile up). Per-op latency probe under
+load vs rest: **create (touch) 5-13ms → 100-350ms (~20-70x)**; stat/readdir
+stay ~2-3ms. ALL inode RPCs (LOOKUP/GETATTR/CREATE/UNLINK/...) take the
+SINGLE global `g_server->lock` (handler.c:1621). Two lock-hold bottlenecks
+confirmed in code: (1) `drop_chunks_scan` is O(chunk_count) under the lock
+per unlink/truncate (handler.c:2387 INODE_DROP_CHUNKS, metadata.c:1298);
+(2) the CoW flush snapshots the table (memcpy) under the lock
+(meta_server.c:1469-1505 server_flush_fragmented_meta_locked). The CREATE
+handler already releases the lock during the fan-out CREATE_SHARD RPC
+(handler.c:1763-1766), but a create still takes the lock 3x (parent 2x +
+child 1x) + the fan-out RTT. Under 36-way the lock arrival rate exceeds the
+service rate → creates queue 100-350ms → tests exceed the 15s
+POSIX_TEST_SEC. Lever: partition g_server->lock (per-shard/per-export) or
+shrink the hold time (chunk-index drop_chunks instead of a table scan;
+snapshot without holding the lock).
 **posix suite 191→201: seeded random content + strange-name/depth tests
 (Aug 26 PM).** `rand_bytes(seed,n)` = SHA-256-keystream generator mixing
 ASCII/whitespace/control/NUL/high bytes (NOT zeros/repetitive — zero-fill/
