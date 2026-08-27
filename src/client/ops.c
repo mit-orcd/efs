@@ -568,10 +568,28 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
                 if (hit != 0)
                     return EFS_ERR_NOT_FOUND;
                 /* Hit: this client created the parent (mkdir/create) and
-                 * dual-applied the name. Falling through to LOOKUP/GETATTR
-                 * wedged FUSE on the new name of a cross-dir hardlink
-                 * (link_across_dirs hung in request_wait_answer). Remounted
-                 * peers have an empty created-set and still RPC. */
+                 * dual-applied the name. But a peer may have mutated the
+                 * file since (posix2 truncate/extend) — our local row's
+                 * size/mtime is then stale. Refresh a non-dir from the owner
+                 * by ino (NOT a name LOOKUP, which wedged on a cross-dir
+                 * hardlink's new name). adopt prefers our dirty row, so the
+                 * writer's own unflushed data is still safe. Remounted peers
+                 * have an empty created-set and still RPC. */
+                if (!efs_mode_is_dir(ch.mode) &&
+                    !efs_client_ino_is_dirty(ch.ino)) {
+                    struct efs_inode full;
+                    if (efs_client_rpc_getattr(g_client.export_id, ch.ino,
+                                               &full) == EFS_OK) {
+                        adopt_rpc_inode(&full);
+                        efs_client_lock_dir(par);
+                        pthread_mutex_lock(&g_client.idx_mu);
+                        if (efs_export_get_inode(&g_client.export, ch.ino,
+                                                 &full) == 0)
+                            ch = full;
+                        pthread_mutex_unlock(&g_client.idx_mu);
+                        efs_client_unlock_dir(par);
+                    }
+                }
                 *out = ch;
                 return EFS_OK;
             }
