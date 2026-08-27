@@ -147,6 +147,13 @@ struct efs_export {
     uint64_t *chunk_keys;
     uint64_t *chunk_vals;
     uint64_t chunk_mask;
+    /* ino → live chunk count in THIS table (key 0 = empty). Rebuilt alongside
+     * chunk_idx in export_reindex_chunks; inc/dec on set_chunk/merge/
+     * remove_chunk_at. Lets drop_chunks touch only the ino's chunks instead
+     * of scanning the whole chunk array under the metadata lock. */
+    uint64_t *icnt_keys;
+    uint32_t *icnt_vals;
+    uint64_t icnt_mask;
 
     /* parent_ino → efs_child_vec (in-memory only; rebuilt on load/merge). */
     uint64_t *child_keys;

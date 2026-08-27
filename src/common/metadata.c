@@ -364,6 +364,116 @@ static int chunk_idx_get(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
     return -1;
 }
 
+/* --- per-ino live chunk count (ino -> count in this table) --- */
+static uint32_t icnt_get(const struct efs_export *ex, efs_ino_t ino)
+{
+    if (!ex->icnt_keys || ex->icnt_mask == 0 || ino == 0)
+        return 0;
+    uint64_t i = idx_slot(ino, ex->icnt_mask);
+    for (uint64_t n = 0; n <= ex->icnt_mask; n++) {
+        if (ex->icnt_keys[i] == 0)
+            return 0;
+        if (ex->icnt_keys[i] == ino)
+            return ex->icnt_vals[i];
+        i = (i + 1) & ex->icnt_mask;
+    }
+    return 0;
+}
+
+static void icnt_put(struct efs_export *ex, efs_ino_t ino, uint32_t count)
+{
+    uint64_t i = idx_slot(ino, ex->icnt_mask);
+    for (uint64_t n = 0; n <= ex->icnt_mask; n++) {
+        if (ex->icnt_keys[i] == 0 || ex->icnt_keys[i] == ino) {
+            ex->icnt_keys[i] = ino;
+            ex->icnt_vals[i] = count;
+            return;
+        }
+        i = (i + 1) & ex->icnt_mask;
+    }
+}
+
+static void icnt_inc(struct efs_export *ex, efs_ino_t ino)
+{
+    if (!ex->icnt_keys || ex->icnt_mask == 0 || ino == 0)
+        return;
+    uint64_t i = idx_slot(ino, ex->icnt_mask);
+    for (uint64_t n = 0; n <= ex->icnt_mask; n++) {
+        if (ex->icnt_keys[i] == 0) {
+            ex->icnt_keys[i] = ino;
+            ex->icnt_vals[i] = 1;
+            return;
+        }
+        if (ex->icnt_keys[i] == ino) {
+            ex->icnt_vals[i]++;
+            return;
+        }
+        i = (i + 1) & ex->icnt_mask;
+    }
+}
+
+static void icnt_dec(struct efs_export *ex, efs_ino_t ino)
+{
+    if (!ex->icnt_keys || ex->icnt_mask == 0 || ino == 0)
+        return;
+    uint64_t i = idx_slot(ino, ex->icnt_mask);
+    for (uint64_t n = 0; n <= ex->icnt_mask; n++) {
+        if (ex->icnt_keys[i] == 0)
+            return;
+        if (ex->icnt_keys[i] == ino)
+            break;
+        i = (i + 1) & ex->icnt_mask;
+    }
+    if (ex->icnt_keys[i] != ino)
+        return;
+    if (ex->icnt_vals[i] > 1) {
+        ex->icnt_vals[i]--;
+        return;
+    }
+    /* count hits 0: delete with backfill (mirror chunk_idx_del). */
+    ex->icnt_keys[i] = 0;
+    ex->icnt_vals[i] = 0;
+    uint64_t j = (i + 1) & ex->icnt_mask;
+    while (ex->icnt_keys[j] != 0) {
+        uint64_t k = ex->icnt_keys[j];
+        uint32_t v = ex->icnt_vals[j];
+        ex->icnt_keys[j] = 0;
+        ex->icnt_vals[j] = 0;
+        icnt_put(ex, k, v);
+        j = (j + 1) & ex->icnt_mask;
+    }
+}
+
+static int icnt_init(struct efs_export *ex, uint64_t n_hint)
+{
+    uint64_t cap = 16;
+    while (cap < n_hint * 2)
+        cap *= 2;
+    free(ex->icnt_keys);
+    free(ex->icnt_vals);
+    ex->icnt_keys = calloc(cap, sizeof(uint64_t));
+    ex->icnt_vals = calloc(cap, sizeof(uint32_t));
+    if (!ex->icnt_keys || !ex->icnt_vals) {
+        free(ex->icnt_keys);
+        free(ex->icnt_vals);
+        ex->icnt_keys = NULL;
+        ex->icnt_vals = NULL;
+        ex->icnt_mask = 0;
+        return -1;
+    }
+    ex->icnt_mask = cap - 1;
+    return 0;
+}
+
+static void icnt_free(struct efs_export *ex)
+{
+    free(ex->icnt_keys);
+    free(ex->icnt_vals);
+    ex->icnt_keys = NULL;
+    ex->icnt_vals = NULL;
+    ex->icnt_mask = 0;
+}
+
 static void chunk_idx_del(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index)
 {
     if (!ex->chunk_keys || ex->chunk_mask == 0)
@@ -462,8 +572,13 @@ static int export_reindex_chunks(struct efs_export *ex)
     if (idx_init(&ex->chunk_keys, &ex->chunk_vals, &ex->chunk_mask,
                  chunk_idx_hint(ex)) != 0)
         return -1;
-    for (uint64_t i = 0; i < ex->chunk_count; i++)
+    /* Rebuild the per-ino chunk count alongside chunk_idx (same headroom). */
+    if (icnt_init(ex, chunk_idx_hint(ex)) != 0)
+        return -1;
+    for (uint64_t i = 0; i < ex->chunk_count; i++) {
         chunk_idx_put(ex, ex->chunks[i].ino, ex->chunks[i].chunk_index, i);
+        icnt_inc(ex, ex->chunks[i].ino);
+    }
     return 0;
 }
 
@@ -1281,6 +1396,7 @@ static void remove_chunk_at(struct efs_export *ex, uint64_t j)
     uint32_t cidx = ex->chunks[j].chunk_index;
     efs_ino_t ino = ex->chunks[j].ino;
     chunk_idx_del(ex, ino, cidx);
+    icnt_dec(ex, ino);
     uint64_t clast = ex->chunk_count - 1;
     if (j != clast) {
         chunk_idx_del(ex, ex->chunks[clast].ino, ex->chunks[clast].chunk_index);
@@ -1299,6 +1415,32 @@ static void drop_chunks_scan(struct efs_export *ex, efs_ino_t ino,
                              uint32_t first_chunk)
 {
     ex->layout_epoch++;
+    /* Fast path: probe by chunk_index via chunk_idx, bounded by the per-ino
+     * live count, instead of scanning the whole chunk array under the
+     * metadata lock. Only valid for a full drop (first_chunk==0): the count
+     * is the exact number of this ino's chunks in this table, so finding
+     * `total` of them means none are left. A partial truncate (first_chunk>0)
+     * has no exact per-range count, and a missing or stale count falls
+     * through to the authoritative scan below. */
+    if (first_chunk == 0) {
+        uint32_t total = icnt_get(ex, ino);
+        if (total > 0) {
+            uint32_t found = 0;
+            /* Generous bound: a dense file needs `total` probes, a sparse one
+             * more. On exhaustion (stale/inflated count or extreme layout)
+             * fall through to the scan. */
+            uint64_t limit = (uint64_t)total * 4 + 4096;
+            for (uint64_t ci = 0; found < total && ci < limit; ci++) {
+                uint64_t pos = 0;
+                if (chunk_idx_get(ex, ino, (uint32_t)ci, &pos) == 0) {
+                    remove_chunk_at(ex, pos);
+                    found++;
+                }
+            }
+            if (found == total)
+                return;
+        }
+    }
     uint64_t i = 0;
     while (i < ex->chunk_count) {
         if (ex->chunks[i].ino == ino &&
@@ -1444,6 +1586,7 @@ void efs_export_free(struct efs_export *ex)
     idx_free(&ex->ino_keys, &ex->ino_vals, &ex->ino_mask);
     idx_free(&ex->name_keys, &ex->name_vals, &ex->name_mask);
     idx_free(&ex->chunk_keys, &ex->chunk_vals, &ex->chunk_mask);
+    icnt_free(ex);
     child_vecs_free(ex);
     efs_export_root_free(&ex->root);
     free(ex->gm_blob);
@@ -2796,6 +2939,7 @@ int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
     memcpy(ce->fragment_nodes, fragment_nodes, sizeof(efs_node_id_t) * EFS_NUM_FRAGMENTS);
     memcpy(ce->checksums, checksums, EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
     chunk_idx_put(ex, ino, chunk_index, pos);
+    icnt_inc(ex, ino);
     ex->chunk_epoch++;
     return EFS_OK;
 }
@@ -2946,6 +3090,7 @@ int efs_export_merge(struct efs_export *ex, const struct efs_export *inc)
             pos = ex->chunk_count++;
             ex->chunks[pos] = *cc;
             chunk_idx_put(ex, cc->ino, cc->chunk_index, pos);
+            icnt_inc(ex, cc->ino);
         }
         ex->chunk_epoch++;
     }
@@ -3323,6 +3468,7 @@ void efs_export_adopt_tables(struct efs_export *dst, struct efs_export *src)
     idx_free(&dst->ino_keys, &dst->ino_vals, &dst->ino_mask);
     idx_free(&dst->name_keys, &dst->name_vals, &dst->name_mask);
     idx_free(&dst->chunk_keys, &dst->chunk_vals, &dst->chunk_mask);
+    icnt_free(dst);
     child_vecs_free(dst);
 
     dst->inodes = src->inodes;
@@ -3341,6 +3487,9 @@ void efs_export_adopt_tables(struct efs_export *dst, struct efs_export *src)
     dst->chunk_keys = src->chunk_keys;
     dst->chunk_vals = src->chunk_vals;
     dst->chunk_mask = src->chunk_mask;
+    dst->icnt_keys = src->icnt_keys;
+    dst->icnt_vals = src->icnt_vals;
+    dst->icnt_mask = src->icnt_mask;
     dst->child_keys = src->child_keys;
     dst->child_vals = src->child_vals;
     dst->child_mask = src->child_mask;
@@ -3364,11 +3513,14 @@ void efs_export_adopt_tables(struct efs_export *dst, struct efs_export *src)
     src->ino_keys = src->ino_vals = NULL;
     src->name_keys = src->name_vals = NULL;
     src->chunk_keys = src->chunk_vals = NULL;
+    src->icnt_keys = NULL;
+    src->icnt_vals = NULL;
     src->child_keys = src->child_vals = NULL;
     src->child_vecs = NULL;
     src->inode_count = src->inode_capacity = 0;
     src->chunk_count = src->chunk_capacity = 0;
     src->ino_mask = src->name_mask = src->chunk_mask = src->child_mask = 0;
+    src->icnt_mask = 0;
     src->child_vec_count = src->child_vec_cap = 0;
     src->pending_rollup_count = src->pending_rollup_cap = 0;
 }
