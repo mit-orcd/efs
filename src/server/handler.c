@@ -2088,6 +2088,21 @@ send_reply:
                                 : (uint32_t)((req->size + cs - 1) / cs);
                             fan_drop_chunks(g_server, ex, req->export_id,
                                             req->ino, first_drop);
+                            /* A shrink drops the data a live append rsv
+                             * points at. The reserve barrier keys on
+                             * rsv_end > size, so a truncated-away rsv would
+                             * look permanently outstanding and BUSY the next
+                             * append into EIO (peer_append_while_truncate).
+                             * Release this ino's stale reservations. */
+                            for (uint32_t i = 0; i < EFS_APPEND_RSV_SLOTS;
+                                 i++) {
+                                if (tab->append_rsv[i].ino == req->ino &&
+                                    tab->append_rsv[i].end > req->size) {
+                                    tab->append_rsv[i].ino = 0;
+                                    tab->append_rsv[i].end = 0;
+                                    tab->append_rsv[i].ts_ms = 0;
+                                }
+                            }
                         }
                         efs_export_set_size(tab, req->ino, req->size);
                     }
