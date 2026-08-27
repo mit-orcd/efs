@@ -581,6 +581,53 @@ int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *e
     return server_rebuild_export_from_pages_ino(s, ex, EFS_META_TABLE_INO);
 }
 
+/* Per-shard partition (blocker 1): the rebuild's table swap must be
+ * serialized with handlers that will hold per-shard locks. Take the export's
+ * shard locks in global->shard order (caller holds s->lock). A main-table
+ * rebuild frees/reinstalls EVERY shard table (efs_export_free drops
+ * ex->shard_tabs), so it locks all sc shards; an extra-shard rebuild touches
+ * only its own table, so it locks just that shard. The page fetch above runs
+ * with NO shard lock held (it is network I/O). Returns the export index whose
+ * locks were taken (>=0), or -1 to fall back to s->lock only. */
+static int rebuild_shards_lock(struct efsd_server *s, struct efs_export *ex,
+                               efs_ino_t table_ino, uint32_t *sc_out)
+{
+    int meidx;
+    if (table_ino == EFS_META_TABLE_INO) {
+        meidx = server_export_index_locked(s, ex);
+    } else {
+        /* The shard table is heap-allocated (not in s->exports[]); find the
+         * main export by id (efs_export_init_empty_table copies it). */
+        meidx = -1;
+        for (uint32_t i = 0; i < s->export_count; i++)
+            if (s->exports[i].id == ex->id) {
+                meidx = (int)i;
+                break;
+            }
+    }
+    if (meidx < 0)
+        return -1;
+    uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+    if (table_ino == EFS_META_TABLE_INO)
+        server_shard_lock_all(s, (uint32_t)meidx, sc);
+    else
+        server_shard_lock(s, (uint32_t)meidx, ex->shard_id);
+    *sc_out = sc;
+    return meidx;
+}
+
+static void rebuild_shards_unlock(struct efsd_server *s, int meidx,
+                                  struct efs_export *ex, efs_ino_t table_ino,
+                                  uint32_t sc)
+{
+    if (meidx < 0)
+        return;
+    if (table_ino == EFS_META_TABLE_INO)
+        server_shard_unlock_all(s, (uint32_t)meidx, sc);
+    else
+        server_shard_unlock(s, (uint32_t)meidx, ex->shard_id);
+}
+
 static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
                                                 struct efs_export *ex,
                                                 efs_ino_t table_ino)
@@ -939,7 +986,12 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
     rc = efs_export_deserialize(&staging, blob, blob_len);
 
     pthread_mutex_lock(&s->lock);
+    /* Hold the export's shard locks across the table swap below so it is
+     * serialized with (future) shard-lock-holding handlers. global->shard. */
+    uint32_t shard_sc = 0;
+    int shard_eidx = rebuild_shards_lock(s, ex, table_ino, &shard_sc);
     if (ex->root.generation != start_gen) {
+        rebuild_shards_unlock(s, shard_eidx, ex, table_ino, shard_sc);
         pthread_mutex_unlock(&s->lock);
         efs_export_free(&staging);
         free(blob);
@@ -956,6 +1008,7 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
         ex->meta_fragmented = 1;
         ex->meta_needs_rebuild = 1;
         fprintf(stderr, "FENCE-SITE rebuild-deserialize-fail rc=%d\n", rc);
+        rebuild_shards_unlock(s, shard_eidx, ex, table_ino, shard_sc);
         pthread_mutex_unlock(&s->lock);
         heal_prog_end(s);
         return rc;
@@ -1069,6 +1122,7 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
     /* Features are root-owned; the EFSM blob does not carry them, so restore
      * the export's working copy from the (server-preserved) root. */
     ex->features = ex->root.features;
+    rebuild_shards_unlock(s, shard_eidx, ex, table_ino, shard_sc);
     pthread_mutex_unlock(&s->lock);
     heal_prog_end(s);
     return EFS_OK;

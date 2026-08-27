@@ -287,6 +287,14 @@ int main(int argc, char **argv)
     pthread_mutex_init(&server.meta_flush_mu, NULL);
     pthread_cond_init(&server.export_idle_cv, NULL);
     pthread_cond_init(&server.rpc_dirty_cv, NULL);
+    server.shard_locks = malloc((size_t)EFS_MAX_EXPORTS * EFS_META_MAX_SHARDS *
+                                sizeof(pthread_mutex_t));
+    if (!server.shard_locks) {
+        fprintf(stderr, "shard_locks alloc failed\n");
+        return 1;
+    }
+    for (size_t i = 0; i < (size_t)EFS_MAX_EXPORTS * EFS_META_MAX_SHARDS; i++)
+        pthread_mutex_init(&server.shard_locks[i], NULL);
     server_peer_pool_init();
 
     char *join_peer = NULL;

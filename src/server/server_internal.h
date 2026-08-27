@@ -77,6 +77,14 @@ struct efsd_server {
     uint32_t epoch;
 
     pthread_mutex_t lock;
+    /* Per-shard metadata locks: shard_locks[eidx * EFS_META_MAX_SHARDS + shard].
+     * Heap-allocated (EFS_MAX_EXPORTS * EFS_META_MAX_SHARDS mutexes) at startup
+     * so the array survives export rebuilds (which efs_export_free + struct-copy
+     * the export slot and would destroy an inline lock). Lock ordering is
+     * strictly global (s->lock) -> shard; a handler must never hold a shard
+     * lock while acquiring s->lock. Flush/rebuild take s->lock plus ALL shard
+     * locks of the export. */
+    pthread_mutex_t *shard_locks;
     int listen_fd;
     int running;
 
@@ -191,6 +199,71 @@ struct efsd_server {
     uint64_t heal_started_us;
     uint64_t heal_last_us;
 };
+
+/* Per-shard metadata lock helpers. Ordering is strictly global (s->lock)
+ * -> shard, and a multi-shard op locks in ascending shard id, so concurrent
+ * handlers can never deadlock. A handler must never hold a shard lock while
+ * acquiring s->lock (release the shard lock first). Flush/rebuild hold
+ * s->lock and take ALL shard locks of the export via server_shard_lock_all. */
+
+static inline pthread_mutex_t *server_shard_mu(struct efsd_server *s,
+                                               uint32_t eidx,
+                                               uint32_t shard) {
+    return &s->shard_locks[(size_t)eidx * EFS_META_MAX_SHARDS + shard];
+}
+
+static inline void server_shard_lock(struct efsd_server *s, uint32_t eidx,
+                                     uint32_t shard) {
+    pthread_mutex_lock(server_shard_mu(s, eidx, shard));
+}
+
+static inline void server_shard_unlock(struct efsd_server *s, uint32_t eidx,
+                                       uint32_t shard) {
+    pthread_mutex_unlock(server_shard_mu(s, eidx, shard));
+}
+
+/* Lock 1..3 shards of one export in ascending (deadlock-free) order. Sorts
+ * sh[] in place; the caller keeps the original per-role shard ids in separate
+ * variables for the op logic and passes the (now sorted) sh[] to unlockn. */
+static inline void server_shard_lockn(struct efsd_server *s, uint32_t eidx,
+                                      uint32_t *sh, int n) {
+    for (int i = 1; i < n; i++) {
+        uint32_t v = sh[i];
+        int j = i - 1;
+        while (j >= 0 && sh[j] > v) { sh[j + 1] = sh[j]; j--; }
+        sh[j + 1] = v;
+    }
+    uint32_t prev = UINT32_MAX;
+    for (int i = 0; i < n; i++) {
+        if (sh[i] == prev) continue;
+        pthread_mutex_lock(server_shard_mu(s, eidx, sh[i]));
+        prev = sh[i];
+    }
+}
+
+static inline void server_shard_unlockn(struct efsd_server *s, uint32_t eidx,
+                                        const uint32_t *sh, int n) {
+    uint32_t prev = UINT32_MAX;
+    for (int i = n - 1; i >= 0; i--) {
+        if (sh[i] == prev) continue;
+        pthread_mutex_unlock(server_shard_mu(s, eidx, sh[i]));
+        prev = sh[i];
+    }
+}
+
+/* Flush/rebuild: lock every shard of an export (caller already holds
+ * s->lock, so global -> shard order is preserved). */
+static inline void server_shard_lock_all(struct efsd_server *s, uint32_t eidx,
+                                         uint32_t sc) {
+    for (uint32_t i = 0; i < sc; i++)
+        pthread_mutex_lock(server_shard_mu(s, eidx, i));
+}
+
+static inline void server_shard_unlock_all(struct efsd_server *s, uint32_t eidx,
+                                           uint32_t sc) {
+    for (uint32_t i = 0; i < sc; i++)
+        pthread_mutex_unlock(server_shard_mu(s, eidx, i));
+}
 
 struct efs_msg_heal_status_reply;
 void server_fill_heal_status(struct efsd_server *s,
