@@ -59,8 +59,24 @@ before each mount — `rsync --exclude='*.log'` leaves the old log, and a
 1. **rsync** repo to node-local scratch on each target (exclude the live mount
    + logs so `--delete` doesn't fight FUSE), run ON the node:
    `rsync -a --delete --exclude='/mnt/' --exclude='*.log' "$HOME/git/efs/" /tmp/efs/`
-2. **Build on the node** (never the NFS home, never a login node):
-   `cd /tmp/efs && make efsd` (servers) / `make efs-fuse` (clients).
+2. **Build on the node** (never the NFS home, never a login node). Always
+   `make clean` ON THE NODE right after the rsync, then a parallel build:
+   `cd /tmp/efs && make clean && make -j"$(nproc)" efsd` (servers) /
+   `... efs-fuse` (clients). The on-node `make clean` is the safeguard that
+   removes any stale `.o` the rsync carried over (see the warning below), so
+   the build is always a genuine on-node `-march=native` rebuild.
+
+**NEVER run `make` in the NFS-home workspace (`$HOME/git/efs`) — not even a
+"quick compile check".** The login node is Intel (AVX-512); fcstor003–015 are
+AMD EPYC Zen2 (**no AVX-512**). A local `make` litters `src/` with `.o` files
+built `-march=native` for the login node; the deploy rsync then carries them
+to the nodes, where `make` sees them as up-to-date and just relinks → the
+binary has AVX-512 (`vmovdqu8 %zmm0`) and **SIGILLs at startup** ("trap
+invalid opcode", e.g. in `efsd_install_crash_handlers`). Symptom: fresh efsd
+core-dumps before writing any log. Fix: `make clean` in the workspace, then
+re-deploy (the rsync `--delete` clears the stale `.o` and forces a real
+on-node rebuild). To check compilation, build on a node or use a throwaway
+build dir / `make clean` immediately after. (Bit us Aug 27 2026.)
 3. **Rolling restart** — one node at a time; verify it rejoins
    (`./efs-mgmt status 172.16.223.57:19810`) before the next.
 

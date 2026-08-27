@@ -36,7 +36,8 @@ if [ "$DEPLOY" = 1 ]; then
     for h in "${SERVERS[@]}"; do
         ( ssh_to 120 "$h" 'rsync -a --delete --exclude="/mnt/" --exclude="*.log" \
               "$HOME/git/efs/" /tmp/efs/ >/dev/null 2>&1 && \
-              cd /tmp/efs && make efsd efs-mgmt >/dev/null 2>&1' \
+              cd /tmp/efs && make clean >/dev/null 2>&1 && \
+              make -j"$(nproc)" efsd efs-mgmt >/dev/null 2>&1' \
               && echo "  ${h%.ib} build OK" || echo "  ${h%.ib} BUILD FAIL" ) &
     done
     wait
