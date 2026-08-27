@@ -40,7 +40,9 @@ kill_fuse() {
     # A D-state efs-fuse is transiently alive right after kill -9 (the
     # signal is pending until the D-state resolves), so poll pgrep for a
     # few seconds rather than aborting the wipe on a daemon about to die.
-    ssh_to 15 "$h" 'killall -9 efs-fuse 2>/dev/null || pkill -9 -x efs-fuse 2>/dev/null || true
+    # 20s (not 15): the shared login node is sometimes so loaded (load >500
+    # from other tenants) that the ssh connection setup itself takes seconds.
+    ssh_to 20 "$h" 'killall -9 efs-fuse 2>/dev/null || pkill -9 -x efs-fuse 2>/dev/null || true
         timeout 3 fusermount3 -uz /tmp/efs/mnt 2>/dev/null || true
         n=$(pgrep -x efs-fuse | wc -l)
         for i in $(seq 1 40); do
@@ -69,6 +71,23 @@ for h in "${CLIENTS[@]}"; do
     ) &
 done
 wait
+# Serial retry for any host the parallel pass didn't confirm dead. Parallel
+# ssh fails when the shared login node is overloaded (rc=255 before auth —
+# the box can't schedule 13 concurrent connections); a single ssh gets CPU.
+# Don't abort the wipe on a transient ssh failure.
+for h in "${CLIENTS[@]}"; do
+    n=$(cat "$tmp/$h" 2>/dev/null || echo 1)
+    if [ "${n:-1}" != "0" ]; then
+        for _att in 1 2 3 4; do
+            out=$(kill_fuse "$h") || out="TIMEOUT fuse=1"
+            n="${out##*fuse=}"
+            [ "$n" = "0" ] && break
+            sleep 1
+        done
+        echo "  ${h%.ib} serial-retry: $out"
+        echo "$n" >"$tmp/${h}"
+    fi
+done
 for h in "${CLIENTS[@]}"; do
     n=$(cat "$tmp/$h" 2>/dev/null || echo 1)
     left=$((left + ${n:-1}))
