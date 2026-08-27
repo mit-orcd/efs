@@ -17,6 +17,17 @@ two Aug 24 workstreams: the **metadata op storm** (many small files) and the
 RDMA** (client path already does; server↔server chunk/fragment payloads
 must follow — see below).
 
+**Status at a glance (Aug 27):** Phase 1 **shipped**; Phase 2 **shipped**
+(server sole metadata writer, 2PC root commit Aug 26); Phase 3 **done**
+(bits=3 is the live default); Phase 3b Items 0–2 **done**, Item 3 optional;
+Phase 4 **not started**. Open perf work: `g_server->lock` partition (the
+next write lever + the posixstress-saturation suspect), N pollers,
+streaming-write barrier (ewrite), RDMA data path (**broken on fresh mount —
+gates on TCP**). Open correctness: cross-client byte-range locks
+(`peer_fcntl_range_conflict`), load-dependent posix2 flakes. Open client
+rewrite: low-level FUSE API. Open test harnesses: Layer 4 fault injection,
+fsck, hot-dir 300k. Each step below is annotated **DONE / PARTIAL / NOT DONE**.
+
 ## Why the current model caps at ~14M
 
 The metadata is a **single monolithic blob**, fully replicated and fully
@@ -66,22 +77,28 @@ Today `efs-fuse` mutates a local table copy and periodically serializes +
 replicates the *entire* blob through a cluster-wide election. That is the
 scaling killer: every client pays O(table) RAM and O(table) flush.
 
-**Work:**
+**Work:** *(status Aug 27)*
 
-1. Route FUSE metadata mutations (`create`/`mkdir`/`unlink`/`rename`/
+1. **DONE (2b, d7d2c7c).** Route FUSE metadata mutations (`create`/`mkdir`/`unlink`/`rename`/
    `setattr`/`link`) through the `inode_rpc.c` path instead of local-table
    mutation + blob flush.
-2. Servers become the metadata writers: own the authoritative in-memory table,
+2. **DONE (2a cffb138 + 2b + Aug 26 2PC root commit).** Servers become the
+   metadata writers: own the authoritative in-memory table,
    apply RPC ops, and handle persistence + server-to-server replication
    internally (the election/blob-flush becomes a server concern, off the
-   client critical path).
+   client critical path). *Aug 26: client-side metadata write path fully
+   DELETED; server is the sole writer; PUT_META is 2PC PREPARE+META_COMMIT.*
 3. Client keeps an invalidation-based **read cache** for lookup/readdir/getattr
    (not the authoritative copy), so read-heavy workloads stay fast.
    **Superseded (Aug 24):** no client metadata cache — immediate cross-client
    visibility (posix2) forbids TTL/negative caching, so the metadata op storm
    is fixed by *round-trip elimination* instead (whole-path `LOOKUP_PATH`,
    `fi->fh` fast paths). See **Performance next — metadata op storm**.
-4. Data path (chunk PUT/GET) is unchanged — it already scales and stays
+   *Aug 27 update: the client local table is now authoritative-ONLY for dirs
+   this client created + dirty files; every clean-file lookup does
+   LOOKUP+GETATTR (created-set short-circuit removed, 5525d49 — it broke
+   posix2 cross-client visibility).*
+4. **DONE.** Data path (chunk PUT/GET) is unchanged — it already scales and stays
    client→server direct.
 
 **Why:** clients become thin (no full-table RAM, no blob serialize, no
@@ -109,7 +126,9 @@ working set. **This is the phase that actually raises the cap.**
    PUT_META extras; primary flushes shard 0 — **done**.
 3. Owner routing (`rpc_owner_conn` + server `NOT_PRIMARY`) — **done**.
    Extra-shard restart + owner-only rebuild proven on throwaway
-   `efs-s3` bits=3 (Aug 24). Live `efs-test` stays bits=0.
+   `efs-s3` bits=3 (Aug 24). *Aug 25: `mkfs` now defaults to bits=3
+   (`EFS_DEFAULT_SHARD_BITS=3`); live `efs-test` is bits=3, bits=0 is not a
+   product mode.*
 4. On-demand load — **pages are the DB (Aug 24):** extras PUT_META
    updates descriptors and evicts a stale copy; only the shard owner
    materializes the table. Not a journal — CoW pages + root commit.
@@ -128,7 +147,7 @@ a per-shard flush/resync is then bounded and fast.
 **Milestone (proven Aug 24, throwaway `efs-s3` bits=3):** create/lookup
 across 8 shards; extra-owner kill/restart rebuilds only owned extras;
 cold remount + peer md5; same-gen extras merge from `GET_META_ROOT`.
-Live `efs-test` remains bits=0.
+*Aug 25: live `efs-test` is now bits=3 by default (mkfs stamps it).*
 
 ---
 
@@ -144,7 +163,7 @@ rest is rejected** (see the rejected list at the end — do not revive).
 Written to be executed by an agent without design judgment: follow the
 steps in order, run the gates after every step, do not improvise.
 
-### Item 0 — the design rule (documentation only, do first)
+### Item 0 — the design rule (documentation only, do first) — **DONE (Aug 24)**
 
 Every metadata operation is one of three classes. When adding or touching
 an op, record its class in a comment and handle it accordingly:
@@ -158,7 +177,7 @@ an op, record its class in a comment and handle it accordingly:
 If a new op does not obviously fit Commutative or Independent, it is
 Conflicting. Never "optimize" a Conflicting op into a lock-free one.
 
-### Item 1 — extent-sharded chunk metadata
+### Item 1 — extent-sharded chunk metadata — **DONE (Aug 24 night, all 4 steps + gates)**
 
 **Problem.** Phase 3 shards *inode rows* by `efs_export_shard_of(ino, bits)`
 (low bits of ino, `src/common/metadata.c`). Chunk mappings follow the inode:
@@ -222,7 +241,7 @@ clients including kill -9 of a shard owner + restart + cold mount read;
 fresh-mkfs multi-9 sw-1m within 5% of the pre-change number (grown tables
 lie — always perf-test on a fresh mkfs).
 
-### Item 2 — threshold-based hot-directory spread
+### Item 2 — threshold-based hot-directory spread — **DONE (Aug 24 night, steps 1–6; 300k stress gate still to write)**
 
 **Problem.** Dentries always live on the parent's shard
 (`efs_export_create_target` returns the parent shard for dirs;
@@ -273,7 +292,7 @@ by `hash(parent, name)` **only after it crosses a threshold**.
 create count, peer client sees them without remount, rename churn clean,
 rmdir succeeds after emptying.
 
-### Item 3 — (optional, orthogonal) replica-3 metadata pages
+### Item 3 — (optional, orthogonal) replica-3 metadata pages — **NOT DONE (left optional / not in this cut)**
 
 Meta pages currently ride the data 2+1 EC path (each CoW page = fresh ci =
 2 data + 1 parity fragments). Change: meta-designated pages store **3 full
@@ -333,27 +352,32 @@ inflates ~870 µs → ~3.9 ms (8.8 ms avg / 447 ms max fio clat after the
 REPORT yield; was 12 ms / 1.5 s). Residual `g_server->lock` sharing
 between REPORT / flush / PUT plus a single `recv_poller` at ~30% CPU.
 
-**Next levers, in order:**
+**Next levers, in order:** *(status Aug 27)*
 
-1. **Partition `g_server->lock`.** Today every `PUT_CHUNK` takes the
+1. **Partition `g_server->lock`. — NOT DONE (the next lever).** Today every `PUT_CHUNK` takes the
    global lock just to `export_acquire`, and `REPORT_CHUNKS` still holds
    it across 1024 recs (was 8192). Split export-lookup / inflight from
    table mutate so data-path PUTs never wait on a report or flush.
    Expected: most of the 870 µs → 3.9 ms inflation goes away; multi
    sw-1m should climb toward N × single until the next wall.
-2. **N recv CQs / pollers.** One shared CQ + one poller harvests every
+   *Aug 27: this is also the prime suspect for the 36-way posixstress
+   saturation + posix2 flaky-EIO — the created-set removal (5525d49) raised
+   LOOKUP+GETATTR RPC traffic, and all inode RPCs serialize on this lock.*
+2. **N recv CQs / pollers. — NOT DONE.** One shared CQ + one poller harvests every
    incoming PUT. `ibv_poll_cq` is 30% of server CPU under 9 writers —
    not yet saturated, but will be as (1) raises completion rate. One
    poller (or CQ) per NIC / per NUMA / per N conns.
-3. **Phase 3 data-path sharding (`bits>0` on the live write path).**
+3. **Phase 3 data-path sharding (`bits>0` on the live write path). — DONE (Aug 23–25).**
    The real fix: `REPORT_CHUNKS` and table apply become per-shard-owner,
-   so 9 clients no longer serialize on one primary. Do this after (1)
-   unless a sharded export is already the target of the next validation.
-4. **Table-growth cost.** `set_chunk` / REPORT apply get more expensive
+   so 9 clients no longer serialize on one primary. *Landed: per-shard
+   REPORT + create round-robin + extent sharding (Item 1). bits=3 is the
+   live default. Residual multi-write gap is extras catchup (fixed Aug 24)
+   + per-chunk server latency under contention (lever 1).*
+4. **Table-growth cost. — NOT DONE.** `set_chunk` / REPORT apply get more expensive
    as the live table grows (the silent 15–40% drop). Hash/index the
    chunk table or evict cold mappings (Phase 3 on-demand LRU already
    exists for *shards*; bits=0 still holds the whole table).
-5. **Client CPU (lower priority).** At 5.6 GB/s single, blake3 + memmove
+5. **Client CPU (lower priority). — NOT DONE.** At 5.6 GB/s single, blake3 + memmove
    are ~33% of efs-fuse. Worth it only after (1)–(3): the multi write
    ceiling is the server lock, not client hash.
 
@@ -377,26 +401,29 @@ ignores `fi->fh`; non-root callers double every walk via
 every op. Server side each LOOKUP is O(1) but all inode RPCs serialize
 under `g_server->lock`.
 
-**Levers, in order (no caches — see note):**
+**Levers, in order (no caches — see note):** *(status Aug 27)*
 
-1. **`efs-bench --meta` + baseline FIRST.** New metadata mode
+1. **`efs-bench --meta` + baseline FIRST. — DONE.** New metadata mode
    (mkdir/create/stat/setattr/readdir/unlink phases, ops/s per phase,
    multi-worker, no caching in the bench) driving the same client op
    functions FUSE uses; `tests/run_tests.sh meta`, results in
    `results/meta/`. Baseline on the current build before any fix; the
    bench stays as the permanent metadata regression gate.
-2. **Client-only round-trip cuts:** `fi->fh` fast paths in
+2. **Client-only round-trip cuts: — PARTIAL.** `fi->fh` fast paths in
    release/getattr/utimens/chmod/truncate, single SETATTR for
    atime+mtime, leaf-only GETATTR in the walk, fuse `check_search_path`
    into the lookup walk (halves non-root cost).
-3. **`LOOKUP_PATH` RPC** (opcodes 79/80): client sends the whole path;
+   *Aug 27: the created-set removal (5525d49) went the OTHER way for
+   correctness — every clean-file lookup is now LOOKUP+GETATTR. Reclaiming
+   those RTTs without re-introducing staleness is open.*
+3. **`LOOKUP_PATH` RPC** (opcodes 79/80) — **DONE.** client sends the whole path;
    the server walks all components under one lock hold (dirs never leave
    the parent-shard chain, so one server resolves everything); reply
    carries ancestor mode/uid/gid so `check_search_path` costs 0 extra
    RPCs; symlink/deep-path statuses fall back to today's walk. Any path
    resolve becomes 1–2 RPCs regardless of depth. Full-cluster
    rebuild+restart (build-id gate).
-4. **POSIX parent-dir mtime/ctime bumps** on create/unlink/rename/link —
+4. **POSIX parent-dir mtime/ctime bumps** on create/unlink/rename/link — **NOT DONE.**
    a known POSIX gap, and the per-dir validator if a gen-checked name
    cache is ever revisited.
 
@@ -407,7 +434,7 @@ caching and is explicitly **not** the target.
 
 **Milestone:** meta-bench walk-dominated phases (stat, setattr) ≥ 5–10×
 baseline, create/unlink ≥ 2–3×, no phase regresses; posix_suite + posix2
-stay 0-EFS-bug on bits=3 (current: 191 + 63; re-run XFS baseline after
+stay 0-EFS-bug on bits=3 (current: 201 + 63; re-run XFS baseline after
 new names); ecopy defaults improve several×.
 
 ---
@@ -428,18 +455,18 @@ keeping 8 requests in flight. First-write amplifiers:
 on chunk-table growth; close-time `efs_dcache_flush_ino` scans
 ci=0..~800k on a 100 GiB file.
 
-**Levers, in order:**
+**Levers, in order:** *(status Aug 27: all NOT DONE — ewrite still ~49 MiB/s/stream vs NFS ~600)*
 
-1. **Multi-chunk `try_patch`:** split >128 KiB writes into per-chunk
+1. **Multi-chunk `try_patch`: — NOT DONE (the lever).** split >128 KiB writes into per-chunk
    patches (full-chunk pieces `have_base=0` fully-dirty, no GET);
    `write()` ACKs after the patch for *all* sizes — the ≤128 KiB path
    already has exactly these semantics. Bounded writeback (2 GiB soft /
    4 GiB hard dirty-bytes) stays the only throttle; durability still
    lands at flush/fsync/close (POSIX). Not a cache.
-2. **Flush throughput:** reclaim threads 4 → 16 and/or pipeline
+2. **Flush throughput: — NOT DONE.** reclaim threads 4 → 16 and/or pipeline
    `dcache_flush_slot` PUTs through the put pool (`EFS_WRITE_PIPELINE`=32)
    so async flush sustains the stream rate.
-3. **First-write amplifiers:** bigger chunk-table growth strides,
+3. **First-write amplifiers: — NOT DONE.** bigger chunk-table growth strides,
    dirty-set batching, per-ino dirty list so close stops scanning 0..nci.
 
 **Milestone:** `tests/run_tests.sh ewrite` ≥ NFS parity (~1.2 GiB/s agg
@@ -450,6 +477,13 @@ jobs; posix write-path tests + mc_stress green.
 ---
 
 ## Performance next — all data traffic via RDMA
+
+*Status Aug 27: client chunk PUT/GET is RDMA, but the **RDMA data path is
+broken on a fresh mount** (Aug 25: chunk PUT/GET over RDMA never completes a
+CQE — QP reaches RTS, first SEND/recv after upgrade lost; write 10B took
+10.36s, read timed out 20s; same cluster on `EFS_TRANSPORT=tcp` is perfect).
+**All gates run on `EFS_TRANSPORT=tcp` until RDMA is root-caused.**
+Server↔server fragment RDMA (below) is NOT DONE.*
 
 Client chunk PUT/GET is already RDMA (RC QP after `RDMA_SETUP`). Any
 **payload** that is a chunk or EC fragment must use the same path —
@@ -483,13 +517,13 @@ may remain TCP.
 `struct efs_inode` is ~384 B, dominated by `name[EFS_MAX_NAME]` (256 B inline)
 and 80 B of directory rollups.
 
-**Work:**
+**Work:** *(status Aug 27: NOT DONE — Phase 4 not started; depends on Phase 3)*
 
-1. Move `name` out of the inline struct into a separate **dentry store** (the
+1. **NOT DONE.** Move `name` out of the inline struct into a separate **dentry store** (the
    v6 wire format already packs dentries separately — mirror that in memory).
-2. Make the 80 B of rollups **optional/lazy**: maintain only where the
+2. **NOT DONE.** Make the 80 B of rollups **optional/lazy**: maintain only where the
    `.stats`/`.find` features are on, or compute on demand.
-3. Re-audit field widths (`pack_off`/`pack_len` already 32-bit).
+3. **NOT DONE.** Re-audit field widths (`pack_off`/`pack_len` already 32-bit).
 
 **Target:** ~96–128 B/inode in memory → 2³² × 128 B ≈ 512 GiB total, ~128 MB
 per shard at 4096 shards.
@@ -540,20 +574,23 @@ without a kernel module.
    caching per inode (today blanket 0). Useful if a relaxed-coherence mount
    mode is ever added.
 
-**Work:**
+**Work:** *(status Aug 27: NOT DONE — large rewrite, not started. The
+`.fuse_hidden` artifact is currently handled by the readdir filter
+(efs_fuse.c); the hardlink flake is latent. Land this alone on a fresh
+cluster when scheduled.)*
 
-1. Implement `lookup` (parent_ino + name → ino + attr + timeouts) and
+1. **NOT DONE.** Implement `lookup` (parent_ino + name → ino + attr + timeouts) and
    `forget` (inode refcount dec; evict from the client cache at 0). The
    daemon owns the nodeid space — map nodeid ↔ efs ino (can be 1:1).
-2. Migrate every handler in `efs_ops` (`src/client/efs_fuse.c`) from
+2. **NOT DONE.** Migrate every handler in `efs_ops` (`src/client/efs_fuse.c`) from
    path-based to inode-based: open/read/write/flush/release/fsync take
    nodeid + `fi->fh`; create/mkdir/unlink/rename/link/symlink take
    (parent_nodeid, name). Most handlers already resolve to an ino
    internally — the change is dropping the path round-trip, not new logic.
-3. Rework path-based conveniences: `.find`/`.stats` virtual files and
+3. **NOT DONE.** Rework path-based conveniences: `.find`/`.stats` virtual files and
    daemon-side ancestor access checks must be re-expressed as
    (parent_ino, name) + walking efs's own parent pointers.
-4. Keep the data path (chunk PUT/GET, dcache, REPORT) untouched — it is
+4. **NOT DONE.** Keep the data path (chunk PUT/GET, dcache, REPORT) untouched — it is
    already ino-keyed.
 
 **Risks / watch-items:**
@@ -580,7 +617,7 @@ posix suite or sw-1m.
 
 ## Cross-cutting concerns
 
-- **Unprivileged on-demand clusters (goal, Aug 24):** users must be able to
+- **Unprivileged on-demand clusters (goal, Aug 24) — PARTIAL (no-root already works today; the 4 missing items below are NOT DONE):** users must be able to
   create and use a cluster from clients with no root anywhere. Already true
   today: `efsd` runs as the unprivileged user (user port, user-owned storage,
   unprivileged uverbs), and `efs-fuse` mounts via setuid `fusermount3` with
@@ -603,7 +640,7 @@ posix suite or sw-1m.
   section above) fixes the silly-rename / hardlink gaps without a kernel
   module.
 
-- **`efs-mgmt` kick-clients (ops, not started):** a management call that
+- **`efs-mgmt` kick-clients (ops) — NOT DONE (not started; no mount census today):** a management call that
   tells every `efs-fuse` to disconnect so an upgrade / wipe / rolling
   restart cannot leave a live mount REPORT/flushing onto a new table
   (the 232 MB leftover-client adopt). Today there is **no mount census**
@@ -617,30 +654,41 @@ posix suite or sw-1m.
   rather than silently reconnect. Use before `upgrade`, mkfs, and
   build-id rolls. Do not implement in this cut.
 
-- **readdir/lookup across shards**: the name index is per-export today; with
+- **readdir/lookup across shards — DONE (Phase 3)**: the name index is per-export today; with
   sharding, dentries live in the parent's shard. `efs_export_foreach_child`
   and the name index need a shard-aware form.
-- **Rollups/tree stats**: `.stats`/`.find` rollups must aggregate across shard
+- **Rollups/tree stats — DONE (Phase 3)**: `.stats`/`.find` rollups must aggregate across shard
   boundaries (or be computed per-shard and merged).
-- **Backward compatibility / migration**: every phase must load existing v5/v6
-  single-blob exports (`shard_count = 1`) and upgrade in place.
-- **Failure tolerance**: per-shard dual-slot paging and the rebuild/repair
+- **Backward compatibility / migration — DONE (Phase 3)**: every phase must load existing v5/v6
+  single-blob exports (`shard_count = 1`) and upgrade in place. *Aug 25:
+  mkfs defaults to bits=3; bits=0 is not a product mode.*
+- **Failure tolerance — DONE (Phase 3)**: per-shard dual-slot paging and the rebuild/repair
   path (`server_rebuild_export_from_pages`, meta-repair) extend per shard.
 - **Testing**: each phase keeps `make test` green plus a multi-shard smoke
   (create/lookup/rename/readdir across shard boundaries, server restart
   rebuild, concurrent writers on disjoint shards). Live gates: posix_suite
-  191 + posix2 63 (0 EFS bugs vs XFS; re-run baseline after new names),
+  **201** + posix2 63 (0 EFS bugs vs XFS; re-run baseline after new names),
   mc_stress, unlink-storm, `tests/run_tests.sh perf` / `meta` / `ewrite`.
   **Tests still to write** are listed in the next section — do not dump
   crash/EC/partition cases into `posix_suite.py`.
 
 ## Testing still to write (Aug 25)
 
-POSIX layers 1–3 are in `tests/posix/posix_suite.py` (191) and
+POSIX layers 1–3 are in `tests/posix/posix_suite.py` (**201** — Aug 26 added
+seeded-random content + strange-name/depth tests) and
 `posix_2client.py` (63). Catalog: `tests/posix/TEST_CATALOG.txt`.
 Those are syscall + peer-visibility + same-file races. They do **not**
 cover crash, EC, partition, or several product-specific checks. XFS PASS
 is not the oracle for any of the items below.
+
+*Aug 27 gate status: single-client posix 196 both-pass / 0 EFS bugs (3
+consecutive runs, fcstor007). posix2 56–59/63 — remaining: `peer_fcntl_range_conflict`
+(byte-range lockf is per-client in-memory, NOT coordinated cross-client —
+needs server-side range-lock tracking, a deep feature); `peer_rename_across_dirs_chase`
++ a few EIOs are load-dependent flakes amplified by the created-set removal
+(5525d49) raising LOOKUP+GETATTR RPC traffic onto `g_server->lock`.
+`run_tests.sh posixstress N hosts` (N parallel suites/host) exists; first
+9×4 run = 100% `timeout after 15s` (saturation), 0 correctness bugs.*
 
 ### Already written — do not reinvent
 
@@ -649,7 +697,7 @@ is not the oracle for any of the items below.
 `hotdir_spread_probe`; `phase3_extra_restart`; perf / meta / ewrite
 sweeps.
 
-### Layer 4 — fault-injection harness (new, not posix_suite)
+### Layer 4 — fault-injection harness (new, not posix_suite) — **NOT DONE (harness not written; cases 1–7 below all open)**
 
 Need `tests/run_tests.sh crash` (or `fault`) that can kill `efsd` /
 `efs-fuse`, partition a node, and inject on-disk checksum errors. Cases:
@@ -676,7 +724,7 @@ Need `tests/run_tests.sh crash` (or `fault`) that can kill `efsd` /
 
 Layer 4 is efs-specific. Do not require an XFS PASS row.
 
-### POSIX / VFS cases still missing from the suites
+### POSIX / VFS cases still missing from the suites — **NOT DONE (cases 1–5 below all open)**
 
 1. **Second uid** — other-user / other-group / sticky-cannot-delete-others.
    Needs two uids on the mount (root-only suite no-ops most `perm_*`).
@@ -690,7 +738,7 @@ Layer 4 is efs-specific. Do not require an XFS PASS row.
    listed under **Performance next — metadata op storm**; write the tests
    when the bumps land (local + peer).
 
-### Suite determinism + taxonomy (Aug 26 external review)
+### Suite determinism + taxonomy (Aug 26 external review) — **PARTIAL (seeded-random content + strange names/depth DONE Aug 26; the 5 determinism/taxonomy items below NOT DONE)**
 
 The four-layer model, contract tags, and `("ab", (fn_a, fn_b))` mode are
 validated as the right direction. The race *coverage* the review asks for is
@@ -733,7 +781,7 @@ collision:
    failure be classified as a correctness blocker vs an intentional semantic
    choice (cf. the 5 XFS target-better quirks).
 
-### Invariant / ops harnesses still missing
+### Invariant / ops harnesses still missing — **NOT DONE (items 1–4 below all open)**
 
 1. **`efs fsck --verify-only`** (or equivalent) after randomized load and
    after every Layer 4 case — inode/dentry/chunk/EC invariants, not
