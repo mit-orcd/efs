@@ -4,7 +4,7 @@
 # stat each leftover to distinguish real (unlink lost) vs phantom (readdir).
 import os, sys, threading
 
-MNT = sys.argv[1] if len(sys.argv) > 1 else "/tmp/efs/mnt"
+MNT = sys.argv[1] if len(sys.argv) > 1 else "/tmp/efs-mount"
 THREADS = int(sys.argv[2]) if len(sys.argv) > 2 else 16
 NFILES = int(sys.argv[3]) if len(sys.argv) > 3 else 300
 ITERS = int(sys.argv[4]) if len(sys.argv) > 4 else 40

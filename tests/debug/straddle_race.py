@@ -4,7 +4,7 @@
 # file to keep the dcache under reclaim pressure (working set > 2 GiB cap).
 import os, sys, threading, errno, time
 
-MNT = sys.argv[1] if len(sys.argv) > 1 else "/tmp/efs/mnt"
+MNT = sys.argv[1] if len(sys.argv) > 1 else "/tmp/efs-mount"
 CHUNK = 128 * 1024
 THREADS = int(sys.argv[2]) if len(sys.argv) > 2 else 16
 ITERS = int(sys.argv[3]) if len(sys.argv) > 3 else 60

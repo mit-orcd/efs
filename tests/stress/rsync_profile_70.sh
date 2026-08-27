@@ -4,7 +4,7 @@
 set -u
 TAG=${1:-r}
 SRC=${SRC:-$HOME/orcd/scratch/ecrawl-synt-small/}
-MNT=${MNT:-/tmp/efs/mnt}
+MNT=${MNT:-/tmp/efs-mount}
 DEST="$MNT/ecrawl-$TAG"
 OUT=${OUT:-/tmp/efs-rsync-prof/$TAG}
 SECS=${SECS:-70}

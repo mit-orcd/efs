@@ -5,7 +5,7 @@
 # tree from many clients at once, FUSE workers D-state in unlink/rmdir.
 # Not a posix_suite test (not an XFS-compare).
 #
-# Usage (login node, cluster already up, FUSE at /tmp/efs/mnt):
+# Usage (login node, cluster already up, FUSE at /tmp/efs-mount):
 #   tests/stress/unlink_storm.sh
 #   NFILES=4000 tests/stress/unlink_storm.sh
 #
@@ -13,7 +13,7 @@
 # accepts a create. Fail: any client times out (hang) or EIO.
 set -u
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
-MNT="${MNT:-/tmp/efs/mnt}"
+MNT="${MNT:-/tmp/efs-mount}"
 NFILES="${NFILES:-4000}"
 NDIRS="${NDIRS:-20}"
 RM_SEC="${RM_SEC:-400}"

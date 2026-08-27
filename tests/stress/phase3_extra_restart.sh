@@ -21,7 +21,7 @@ SEED="${SEED:-172.16.223.57:19810}"
 N="${N:-32}"
 BITS="${BITS:-3}"
 SC=$((1 << BITS))
-MNT=/tmp/efs/mnt-s3
+MNT=/tmp/efs-mount-s3
 EXPORT=efs-s3
 FAIL=0
 

@@ -23,7 +23,7 @@
 #
 # Env:
 #   XFS_HOST (default node9901.ib)  XFS_DIR (default /data1/efs)
-#   EFS_MNT  (default /tmp/efs/mnt)
+#   EFS_MNT  (default /tmp/efs-mount)
 #   EFS_HOSTS default = fcstor007..015 (the 9 pure clients)
 #   COMMIT=1 to git-commit the new results at the end.
 #   POSIX_SSH_SEC (default 180)  POSIX2_STEP_SEC (default 15)
@@ -43,7 +43,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 RESULTS="$REPO/results"
 XFS_HOST=${XFS_HOST:-node9901.ib}
 XFS_DIR=${XFS_DIR:-/data1/efs}
-EFS_MNT=${EFS_MNT:-/tmp/efs/mnt}
+EFS_MNT=${EFS_MNT:-/tmp/efs-mount}
 DEFAULT_HOSTS=(fcstor007.ib fcstor008.ib fcstor009.ib fcstor010.ib \
                fcstor011.ib fcstor012.ib fcstor013.ib fcstor014.ib fcstor015.ib)
 NVME_HOSTS=(fcstor003.ib fcstor004.ib fcstor005.ib fcstor006.ib)
@@ -76,15 +76,15 @@ push_tests() { # host
 # mount a client if not already mounted (assumes a current efs-fuse binary)
 ensure_mounted() { # host
     local h=$1
-    if ssh_to "$PROBE_SSH_SEC" "$h" 'grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts' 2>/dev/null; then
+    if ssh_to "$PROBE_SSH_SEC" "$h" 'grep -q "efs-fuse /tmp/efs-mount " /proc/mounts' 2>/dev/null; then
         return 0
     fi
     say "  $h: mounting efs-fuse"
     ssh_to "$BUILD_SSH_SEC" "$h" "cd /tmp/efs && [ -x ./efs-fuse ] || make efs-fuse >/dev/null 2>&1; \
-        mkdir -p /tmp/efs/mnt; \
-        (EFS_TRANSPORT='${EFS_TRANSPORT:-tcp}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &); \
+        mkdir -p /tmp/efs-mount; \
+        (EFS_TRANSPORT='${EFS_TRANSPORT:-tcp}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &); \
         for i in \$(seq 1 100); do sleep 0.15; \
-            grep -q \"efs-fuse /tmp/efs/mnt \" /proc/mounts && exit 0; done; exit 1" 2>/dev/null
+            grep -q \"efs-fuse /tmp/efs-mount \" /proc/mounts && exit 0; done; exit 1" 2>/dev/null
 }
 
 # Drop and remount one pure-client efs-fuse so it refetches the server snapshot.
@@ -93,12 +93,12 @@ remount_client() { # host
     local h=$1
     say "  $h: remount efs-fuse"
     ssh_to 15 "$h" "killall -9 efs-fuse 2>/dev/null || pkill -9 -x efs-fuse 2>/dev/null || true
-        timeout 3 fusermount3 -uz /tmp/efs/mnt 2>/dev/null || true
-        cd /tmp/efs && mkdir -p /tmp/efs/mnt && rm -f fuse.log
-        EFS_TRANSPORT='${EFS_TRANSPORT:-tcp}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &
+        timeout 3 fusermount3 -uz /tmp/efs-mount 2>/dev/null || true
+        cd /tmp/efs && mkdir -p /tmp/efs-mount && rm -f fuse.log
+        EFS_TRANSPORT='${EFS_TRANSPORT:-tcp}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &
         for i in \$(seq 1 100); do
             sleep 0.15
-            grep -q \"efs-fuse /tmp/efs/mnt \" /proc/mounts && exit 0
+            grep -q \"efs-fuse /tmp/efs-mount \" /proc/mounts && exit 0
         done
         echo remount-timeout; tail -8 fuse.log; exit 1"
 }
@@ -114,7 +114,7 @@ cmd_setup() { # [host ...]
               "$HOME/git/efs/" /tmp/efs/ >/dev/null 2>&1 && \
               cd /tmp/efs && make efs-fuse >/dev/null 2>&1' && \
           ensure_mounted "$h" && \
-          ssh_to "$PROBE_SSH_SEC" "$h" 'grep -q "efs-fuse /tmp/efs/mnt " /proc/mounts' && \
+          ssh_to "$PROBE_SSH_SEC" "$h" 'grep -q "efs-fuse /tmp/efs-mount " /proc/mounts' && \
           echo "  $h: ready" || echo "  $h: SETUP FAILED" ) &
         pids+=($!)
     done
@@ -196,7 +196,7 @@ cmd_posix() { # [--keep] [--parallel] [efs-host ...]
         local per=${POSIX_PER_HOST:-1}
         say "posix: efs on $h:$EFS_MNT $keep (x$per)"
         push_tests "$h"
-        # Guard: a dead efs-fuse leaves /tmp/efs/mnt as a plain local dir and
+        # Guard: a dead efs-fuse leaves /tmp/efs-mount as a plain local dir and
         # the suite would silently pass against tmpfs (0 "EFS bugs"). Refuse
         # to run unless EFS_MNT is a live fuse.efs-fuse mount.
         ssh_to 15 "$h" "findmnt -n -o FSTYPE '$EFS_MNT' | grep -q '^fuse\.efs-fuse$'" \
@@ -213,7 +213,7 @@ cmd_posix() { # [--keep] [--parallel] [efs-host ...]
         ssh_to 70 "$h" 'for i in $(seq 1 20); do
             if timeout 3 python3 -c "
 import os, tempfile, shutil
-d = tempfile.mkdtemp(prefix=\"warmup-\", dir=\"/tmp/efs/mnt\")
+d = tempfile.mkdtemp(prefix=\"warmup-\", dir=\"/tmp/efs-mount\")
 p = os.path.join(d, \"f\"); open(p, \"w\").write(\"x\")
 assert open(p).read() == \"x\"
 shutil.rmtree(d)

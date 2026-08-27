@@ -2,7 +2,7 @@
 # Faithful rerun of the fio-stagger suite (single host), direct=1.
 # Same job set/order as the original: warmup then 9 jobs back-to-back.
 set -u
-MNT=${MNT:-/tmp/efs/mnt}
+MNT=${MNT:-/tmp/efs-mount}
 DIR=$MNT/fio/$(hostname -s)
 SIZE=${SIZE:-512m}
 SIZE4K=${SIZE4K:-256m}

@@ -14,7 +14,7 @@ export EFS_SSH_TIMEOUT="${EFS_SSH_TIMEOUT:-180}"
 CLIENT_A="${CLIENT_A:-fcstor007.ib}"
 CLIENT_B="${CLIENT_B:-fcstor008.ib}"
 N="${N:-300000}"
-MNT="${MNT:-/tmp/efs/mnt}"
+MNT="${MNT:-/tmp/efs-mount}"
 DIR=hotdir-spread
 FAIL=0
 

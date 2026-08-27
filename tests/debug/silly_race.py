@@ -6,7 +6,7 @@
 # open-at-unlink file.
 import os, sys, threading, time
 
-MNT = sys.argv[1] if len(sys.argv) > 1 else "/tmp/efs/mnt"
+MNT = sys.argv[1] if len(sys.argv) > 1 else "/tmp/efs-mount"
 THREADS = int(sys.argv[2]) if len(sys.argv) > 2 else 16
 ITERS = int(sys.argv[3]) if len(sys.argv) > 3 else 200
 

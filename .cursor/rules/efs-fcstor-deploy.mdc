@@ -27,7 +27,7 @@ still holds the old table in RAM and will REPORT/flush it onto a fresh
 Use `tests/wipe_cluster.sh` from the login node, or do this by hand:
 
 1. **Every client (fcstor003–015):** `killall -9 efs-fuse` **first**
-   (or `pkill -9 -x efs-fuse`), then `timeout 3 fusermount3 -uz /tmp/efs/mnt`.
+   (or `pkill -9 -x efs-fuse`), then `timeout 3 fusermount3 -uz /tmp/efs-mount`.
    fusermount-first on a D-state mount hangs SSH forever. Confirm
    `pgrep -x efs-fuse` is empty on **all 13** before touching disks.
    Every remote command needs `EFS_SSH_TIMEOUT` (see efs-remote-timeouts).
@@ -52,7 +52,7 @@ before each mount — `rsync --exclude='*.log'` leaves the old log, and a
   - node 3 = fcstor005 = 172.16.223.59  (`--join 172.16.223.57:19810`)
   - node 4 = fcstor006 = 172.16.223.60  (`--join 172.16.223.57:19810`)
 - 13 clients (`efs-fuse`): fcstor003–015. fcstor003–006 run BOTH efsd + efs-fuse.
-- Export `efs-test` (id=1), mounted at `/tmp/efs/mnt`.
+- Export `efs-test` (id=1), mounted at `/tmp/efs-mount`.
 
 ## Deploy procedure
 
@@ -87,9 +87,9 @@ matches the ssh remote command and kills your own shell). Then:
 Use `setsid … </dev/null &` to detach; a bare `nohup … &` can hang the ssh session.
 
 ### Restart one efs-fuse (client)
-`killall -9 efs-fuse` first, then `timeout 3 fusermount3 -uz /tmp/efs/mnt`,
+`killall -9 efs-fuse` first, then `timeout 3 fusermount3 -uz /tmp/efs-mount`,
 then `rm -f fuse.log` and:
-`cd /tmp/efs && setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs/mnt >fuse.log 2>&1 </dev/null &`
+`cd /tmp/efs && setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &`
 
 ## Build-ID gate
 

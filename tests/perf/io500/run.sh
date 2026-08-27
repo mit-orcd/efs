@@ -12,7 +12,7 @@
 #
 # Env:
 #   IO500_DIR   build tree (default $HOME/orcd/scratch/efs-io500)
-#   EFS_MNT     FUSE mount (default /tmp/efs/mnt)
+#   EFS_MNT     FUSE mount (default /tmp/efs-mount)
 #   RANK0       MPI launch host (default fcstor007.ib)
 #   SLOTS       ranks per client (default 1 → 9 ranks)
 #   NP          total ranks (default: 9 * SLOTS)
@@ -26,7 +26,7 @@ export EFS_SSH_TIMEOUT="${EFS_SSH_TIMEOUT:-400}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 IO500_DIR=${IO500_DIR:-$HOME/orcd/scratch/efs-io500}
 SRC="$IO500_DIR/io500"
-EFS_MNT=${EFS_MNT:-/tmp/efs/mnt}
+EFS_MNT=${EFS_MNT:-/tmp/efs-mount}
 RANK0=${RANK0:-fcstor007.ib}
 SLOTS=${SLOTS:-1}
 NP=${NP:-$((9 * SLOTS))}

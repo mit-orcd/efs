@@ -3,7 +3,7 @@
 # Runs ON a single node. Appends result rows to $OUT (TSV).
 #
 # Usage: perf_node.sh <mnt> <out-tsv> [quick|full]
-#   mnt  : mounted filesystem dir to test (e.g. /tmp/efs/mnt)
+#   mnt  : mounted filesystem dir to test (e.g. /tmp/efs-mount)
 #   out  : results TSV path
 #   mode : quick (small sizes, short runtimes) | full (default)
 #

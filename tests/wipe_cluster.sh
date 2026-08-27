@@ -43,7 +43,7 @@ kill_fuse() {
     # 20s (not 15): the shared login node is sometimes so loaded (load >500
     # from other tenants) that the ssh connection setup itself takes seconds.
     ssh_to 20 "$h" 'killall -9 efs-fuse 2>/dev/null || pkill -9 -x efs-fuse 2>/dev/null || true
-        timeout 3 fusermount3 -uz /tmp/efs/mnt 2>/dev/null || true
+        timeout 3 fusermount3 -uz /tmp/efs-mount 2>/dev/null || true
         n=$(pgrep -x efs-fuse | wc -l)
         for i in $(seq 1 40); do
             [ "$n" -eq 0 ] && break

@@ -1,7 +1,7 @@
 # IO-500 IOR suite (efs FUSE clients)
 
 Scripts only — they do **not** start `efsd` or mount FUSE. The 4-node cluster
-(`fcstor003`–`006`) and 9 client mounts (`fcstor007`–`015` at `/tmp/efs/mnt`)
+(`fcstor003`–`006`) and 9 client mounts (`fcstor007`–`015` at `/tmp/efs-mount`)
 must already be up.
 
 This drives **IOR easy + IOR hard** through the official
@@ -52,7 +52,7 @@ tests/perf/io500/run.sh ior         # 30s stonewall IOR easy+hard
 tests/perf/io500/run.sh dry-run debug
 ```
 
-Overrides: `STONEWALL=60 SLOTS=2 NP=18 EFS_MNT=/tmp/efs/mnt tests/perf/io500/run.sh ior`
+Overrides: `STONEWALL=60 SLOTS=2 NP=18 EFS_MNT=/tmp/efs-mount tests/perf/io500/run.sh ior`
 
 IOR data goes to `$EFS_MNT/io500` (through FUSE, not `/data1` on the servers).
 Results go to `$EFS_MNT/io500-results` and the driver's `result_summary.txt`.
