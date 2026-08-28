@@ -1698,10 +1698,15 @@ send_reply:
                                                             payload);
             } else if (type == EFS_MSG_INODE_LOOKUP) {
                 struct efs_msg_inode_lookup *req = payload;
+                /* Transitional: all shard locks for the table read (global
+                 * lock still held -> no parallelism yet). */
+                uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+                server_shard_lock_all(g_server, eidx, sc);
                 if (efs_export_lookup(ex, req->parent, req->name, &r.inode) == 0)
                     r.status = EFS_INODE_RPC_OK;
                 else
                     r.status = EFS_INODE_RPC_NOT_FOUND;
+                server_shard_unlock_all(g_server, eidx, sc);
             } else if (type == EFS_MSG_INODE_GETATTR) {
                 struct efs_msg_inode_getattr *req = payload;
                 if (!server_owns_req_locked(g_server, ex, type, payload)) {
@@ -1748,6 +1753,9 @@ send_reply:
                            owner != g_server->id) {
                     /* Child row lives on a peer. Create it there first,
                      * then write only the parent dentry locally. */
+                    /* Transitional: all shard locks; released around each
+                     * fan-out global-lock drop below. */
+                    server_shard_lock_all(g_server, eidx, sc);
                     if (efs_export_lookup(ex, req->parent, req->name,
                                           NULL) == EFS_OK) {
                         r.status = EFS_INODE_RPC_EXIST;
@@ -1783,10 +1791,12 @@ send_reply:
                             if (!efs_mode_is_dir(req->mode) && sc > 1)
                                 (void)__atomic_add_fetch(&ex->create_rr, 1,
                                                          __ATOMIC_RELAXED);
+                            server_shard_unlock_all(g_server, eidx, sc);
                             pthread_mutex_unlock(&g_server->lock);
                             int nrc = server_peer_create_shard(host, port,
                                                                &creq, &cr);
                             pthread_mutex_lock(&g_server->lock);
+                            server_shard_lock_all(g_server, eidx, sc);
                             if (nrc != 0) {
                                 r.status = EFS_INODE_RPC_ERROR;
                             } else if (cr.status != EFS_INODE_RPC_OK) {
@@ -1862,10 +1872,14 @@ send_reply:
                                                                 &dport) != 0) {
                                         r.status = EFS_INODE_RPC_ERROR;
                                     } else {
+                                        server_shard_unlock_all(g_server,
+                                                                eidx, sc);
                                         pthread_mutex_unlock(&g_server->lock);
                                         int drc = server_peer_create_shard(
                                             dhost, dport, &dreq, &dr);
                                         pthread_mutex_lock(&g_server->lock);
+                                        server_shard_lock_all(g_server, eidx,
+                                                              sc);
                                         if (drc != 0 ||
                                             dr.status != EFS_INODE_RPC_OK) {
                                             r.status = EFS_INODE_RPC_ERROR;
@@ -1880,10 +1894,14 @@ send_reply:
                             }
                         }
                     }
+                    server_shard_unlock_all(g_server, eidx, sc);
                 } else if (bits && sc > 1 && target != 0 &&
                            server_ensure_shard_ready(g_server, ex, target) != 0) {
                     r.status = EFS_INODE_RPC_BUSY;
                 } else {
+                    /* Transitional: all shard locks (the ensure in the
+                     * else-if above ran before we take them). */
+                    server_shard_lock_all(g_server, eidx, sc);
                     efs_ino_t ino = efs_export_create(ex, req->parent, req->mode,
                                                       (uid_t)req->uid,
                                                       (gid_t)req->gid, req->name);
@@ -1898,6 +1916,7 @@ send_reply:
                     } else {
                         r.status = EFS_INODE_RPC_EXIST;
                     }
+                    server_shard_unlock_all(g_server, eidx, sc);
                 }
             } else if (type == EFS_MSG_INODE_CREATE_SHARD) {
                 struct efs_msg_inode_create_shard *req = payload;
@@ -1944,6 +1963,10 @@ send_reply:
                 }
             } else if (type == EFS_MSG_INODE_UNLINK) {
                 struct efs_msg_inode_unlink *req = payload;
+                /* Transitional: all shard locks; released around the fan
+                 * global-lock drop and fan_drop_chunks below. */
+                uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+                server_shard_lock_all(g_server, eidx, sc);
                 /* rmdir: refuse to remove a non-empty directory (ENOTEMPTY). */
                 struct efs_inode victim;
                 memset(&victim, 0, sizeof(victim));
@@ -1967,8 +1990,6 @@ send_reply:
                      * the parent dentry is gone, fan nlink-- / last-link
                      * drop there so spread-created files don't leak. */
                     if (urc == 0 && have_victim && !req->is_dir) {
-                        uint32_t sc = ex->root.shard_count
-                                          ? ex->root.shard_count : 1;
                         uint32_t bits = ex->root.shard_bits;
                         if (bits && sc > 1) {
                             efs_node_id_t live[EFS_MAX_NODES];
@@ -1998,6 +2019,8 @@ send_reply:
                                                             host,
                                                             sizeof(host),
                                                             &port) == 0) {
+                                    server_shard_unlock_all(g_server, eidx,
+                                                            sc);
                                     pthread_mutex_unlock(&g_server->lock);
                                     (void)server_peer_inode_rpc(
                                         host, port,
@@ -2006,36 +2029,55 @@ send_reply:
                                         EFS_MSG_INODE_UNLINK_SHARD_REPLY,
                                         &ur);
                                     pthread_mutex_lock(&g_server->lock);
+                                    server_shard_lock_all(g_server, eidx, sc);
                                 }
                             }
                         }
-                        if (urc == 0 && have_victim && !req->is_dir && !keep)
+                        if (urc == 0 && have_victim && !req->is_dir && !keep) {
+                            /* fan_drop_chunks drops the global lock mid-op. */
+                            server_shard_unlock_all(g_server, eidx, sc);
                             fan_drop_chunks(g_server, ex, req->export_id,
                                             victim.ino, 0);
+                            server_shard_lock_all(g_server, eidx, sc);
+                        }
                     }
                 }
+                server_shard_unlock_all(g_server, eidx, sc);
             } else if (type == EFS_MSG_INODE_UNLINK_SHARD) {
                 struct efs_msg_inode_unlink_shard *req = payload;
                 if (reply_if_shard_busy(ex, req->src_ino, &r)) {
                     /* hollow extra */
                 } else {
+                /* Transitional: all shard locks (taken after the busy-ensure,
+                 * which may drop the global lock); released around
+                 * fan_drop_chunks. */
+                uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+                server_shard_lock_all(g_server, eidx, sc);
                 int keep = hold_refs(ex->id, req->src_ino) > 0;
                 int urc = efs_export_nlink_dec_ex(ex, req->src_ino, &r.inode,
                                                   keep);
                 if (urc == 0) {
                     r.status = EFS_INODE_RPC_OK;
                     server_meta_mark_rpc_dirty_locked(g_server, eidx);
-                    if (!keep && r.inode.nlink == 0)
+                    if (!keep && r.inode.nlink == 0) {
+                        /* fan_drop_chunks drops the global lock mid-op. */
+                        server_shard_unlock_all(g_server, eidx, sc);
                         fan_drop_chunks(g_server, ex, req->export_id,
                                         req->src_ino, 0);
+                        server_shard_lock_all(g_server, eidx, sc);
+                    }
                 } else {
                     r.status = (urc == EFS_ERR_NOT_FOUND)
                                    ? EFS_INODE_RPC_NOT_FOUND
                                    : EFS_INODE_RPC_INVAL;
                 }
+                server_shard_unlock_all(g_server, eidx, sc);
                 }
             } else if (type == EFS_MSG_INODE_RENAME_AT) {
                 struct efs_msg_inode_rename_at *req = payload;
+                /* Transitional: all shard locks for the rename. */
+                uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+                server_shard_lock_all(g_server, eidx, sc);
                 int rrc = efs_export_rename_at(ex, req->old_parent, req->old_name,
                                                req->new_parent, req->new_name);
                 if (rrc == 0) {
@@ -2069,9 +2111,13 @@ send_reply:
                             rtab ? (unsigned long long)rtab->inode_count : 0,
                             (unsigned long long)ex->root.generation);
                 }
+                server_shard_unlock_all(g_server, eidx, sc);
             } else if (type == EFS_MSG_INODE_RENAME) {
                 /* Phase 3b Conflicting: owner-serialized + dual-apply. */
                 struct efs_msg_inode_rename *req = payload;
+                /* Transitional: all shard locks for the rename. */
+                uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+                server_shard_lock_all(g_server, eidx, sc);
                 int rrc = efs_export_rename(ex, req->ino, req->new_parent,
                                             req->new_name);
                 if (rrc == 0) {
@@ -2085,11 +2131,16 @@ send_reply:
                              : (rrc == EFS_ERR_NOT_EMPTY) ? EFS_INODE_RPC_NOT_EMPTY
                              : EFS_INODE_RPC_INVAL;
                 }
+                server_shard_unlock_all(g_server, eidx, sc);
             } else if (type == EFS_MSG_INODE_SETATTR) {
                 struct efs_msg_inode_setattr *req = payload;
                 if (reply_if_shard_busy(ex, req->ino, &r)) {
                     /* hollow extra */
                 } else {
+                /* Transitional: all shard locks (taken after the
+                 * busy-ensure); released around fan_drop_chunks on shrink. */
+                uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+                server_shard_lock_all(g_server, eidx, sc);
                 struct efs_export *tab = table_for_ino(ex, req->ino);
                 struct efs_inode cur;
                 if (efs_export_get_inode(tab, req->ino, &cur) != 0) {
@@ -2113,8 +2164,11 @@ send_reply:
                             uint32_t cs = server_data_chunk_size(ex);
                             uint32_t first_drop = (req->size == 0) ? 0
                                 : (uint32_t)((req->size + cs - 1) / cs);
+                            /* fan_drop_chunks drops the global lock mid-op. */
+                            server_shard_unlock_all(g_server, eidx, sc);
                             fan_drop_chunks(g_server, ex, req->export_id,
                                             req->ino, first_drop);
+                            server_shard_lock_all(g_server, eidx, sc);
                             /* A shrink drops the data a live append rsv
                              * points at. The reserve barrier keys on
                              * rsv_end > size, so a truncated-away rsv would
@@ -2143,6 +2197,7 @@ send_reply:
                     efs_export_get_inode(tab, req->ino, &r.inode);
                     r.status = EFS_INODE_RPC_OK;
                 }
+                server_shard_unlock_all(g_server, eidx, sc);
                 }
             } else if (type == EFS_MSG_INODE_APPEND) {
                 struct efs_msg_inode_append *req = payload;
@@ -2243,6 +2298,9 @@ send_reply:
                 struct efs_msg_inode_link *req = payload;
                 uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
                 uint32_t bits = ex->root.shard_bits;
+                /* Transitional: all shard locks; released around the fan
+                 * global-lock drop below. */
+                server_shard_lock_all(g_server, eidx, sc);
                 efs_node_id_t owner = 0;
                 if (bits && sc > 1) {
                     efs_node_id_t live[EFS_MAX_NODES];
@@ -2268,12 +2326,14 @@ send_reply:
                                                     sizeof(host), &port) != 0) {
                             r.status = EFS_INODE_RPC_ERROR;
                         } else {
+                            server_shard_unlock_all(g_server, eidx, sc);
                             pthread_mutex_unlock(&g_server->lock);
                             int nrc = server_peer_inode_rpc(
                                 host, port, EFS_MSG_INODE_LINK_SHARD, &lreq,
                                 sizeof(lreq), EFS_MSG_INODE_LINK_SHARD_REPLY,
                                 &lr);
                             pthread_mutex_lock(&g_server->lock);
+                            server_shard_lock_all(g_server, eidx, sc);
                             if (nrc != 0) {
                                 r.status = EFS_INODE_RPC_ERROR;
                             } else if (lr.status != EFS_INODE_RPC_OK) {
@@ -2312,11 +2372,16 @@ send_reply:
                                              : EFS_INODE_RPC_INVAL;
                     }
                 }
+                server_shard_unlock_all(g_server, eidx, sc);
             } else if (type == EFS_MSG_INODE_LINK_SHARD) {
                 struct efs_msg_inode_link_shard *req = payload;
                 if (reply_if_shard_busy(ex, req->src_ino, &r)) {
                     /* hollow extra */
                 } else {
+                /* Transitional: all shard locks (taken after the
+                 * busy-ensure). */
+                uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+                server_shard_lock_all(g_server, eidx, sc);
                 int lrc = efs_export_nlink_inc(ex, req->src_ino, &r.inode);
                 if (lrc == 0) {
                     r.status = EFS_INODE_RPC_OK;
@@ -2326,6 +2391,7 @@ send_reply:
                                    ? EFS_INODE_RPC_NOT_FOUND
                                    : EFS_INODE_RPC_INVAL;
                 }
+                server_shard_unlock_all(g_server, eidx, sc);
                 }
             } else if (type == EFS_MSG_INODE_HOLD) {
                 struct efs_msg_inode_hold *req = payload;
@@ -2355,8 +2421,15 @@ send_reply:
                         }
                         pthread_mutex_unlock(&hold_mu);
                         if (do_purge) {
+                            /* Transitional: shard locks for the export op.
+                             * hold_mu is already released; lock order is
+                             * global -> shard -> hold_mu. */
+                            uint32_t sc = ex->root.shard_count
+                                              ? ex->root.shard_count : 1;
+                            server_shard_lock_all(g_server, eidx, sc);
                             (void)efs_export_purge_unlinked(ex, req->ino);
                             server_meta_mark_rpc_dirty_locked(g_server, eidx);
+                            server_shard_unlock_all(g_server, eidx, sc);
                         }
                         r.status = EFS_INODE_RPC_OK;
                     }
@@ -2432,10 +2505,14 @@ send_reply:
                                                                 sh);
                         }
                     }
+                    /* Transitional: all shard locks (the ensure loop above
+                     * ran first — it may drop the global lock). */
+                    server_shard_lock_all(g_server, eidx, sc);
                     efs_export_drop_chunks_from(ex, req->ino, req->first_chunk);
                     ex->shard_dirty = 1;
                     server_meta_mark_rpc_dirty_locked(g_server, eidx);
                     r.status = EFS_INODE_RPC_OK;
+                    server_shard_unlock_all(g_server, eidx, sc);
                 }
             }
             pthread_mutex_unlock(&g_server->lock);
@@ -2470,11 +2547,13 @@ send_reply:
             req->path[sizeof(req->path) - 1] = '\0';
             pthread_mutex_lock(&g_server->lock);
             struct efs_export *ex = NULL;
+            uint32_t eidx = 0;
             efs_export_id_t eid = req->export_id;
             for (uint32_t i = 0; i < g_server->export_count; i++) {
                 if (g_server->exports[i].id == eid ||
                     (eid == 0 && i == 0)) {
                     ex = &g_server->exports[i];
+                    eidx = i;
                     break;
                 }
             }
@@ -2488,6 +2567,10 @@ send_reply:
                 else
                     r.status = EFS_INODE_RPC_NOT_FOUND;
             } else {
+                /* Transitional: all shard locks for the whole walk (no
+                 * global-lock drop inside). */
+                uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+                server_shard_lock_all(g_server, eidx, sc);
                 char pbuf[4096];
                 memcpy(pbuf, req->path + 1, sizeof(pbuf) - 1);
                 pbuf[sizeof(pbuf) - 1] = '\0';
@@ -2523,6 +2606,7 @@ send_reply:
                     r.status = EFS_INODE_RPC_OK;
                     part = strtok_r(NULL, "/", &save);
                 }
+                server_shard_unlock_all(g_server, eidx, sc);
             }
             pthread_mutex_unlock(&g_server->lock);
             efs_conn_send_msg(conn, EFS_MSG_INODE_LOOKUP_PATH_REPLY, &r,
@@ -2622,6 +2706,10 @@ send_reply:
                 if (shard_busy) {
                     r.status = EFS_INODE_RPC_BUSY;
                 } else {
+                /* Transitional: all shard locks (the ensure loop above ran
+                 * first — it may drop the global lock); released around the
+                 * yield below. */
+                server_shard_lock_all(g_server, eidx, sc);
                 for (uint32_t k = 0; k < count; k++) {
                     /* Yield the global lock every 1024 recs. A 9-client
                      * close-report applies tens of thousands of chunk recs;
@@ -2632,9 +2720,11 @@ send_reply:
                      * sched_yield between unlock/lock so a waiting PUT
                      * actually wins the reacquire, not just the reporter. */
                     if ((k & 1023u) == 1023u) {
+                        server_shard_unlock_all(g_server, eidx, sc);
                         pthread_mutex_unlock(&g_server->lock);
                         sched_yield();
                         pthread_mutex_lock(&g_server->lock);
+                        server_shard_lock_all(g_server, eidx, sc);
                         if (ex->meta_needs_rebuild)
                             break;
                     }
@@ -2746,6 +2836,7 @@ send_reply:
                  * re-takes s->lock internally). */
                 if (sync)
                     do_flush = 1;
+                server_shard_unlock_all(g_server, eidx, sc);
                 }
             }
             pthread_mutex_unlock(&g_server->lock);
@@ -2770,10 +2861,12 @@ send_reply:
                 struct efs_msg_inode_readdir *req = payload;
                 pthread_mutex_lock(&g_server->lock);
                 struct efs_export *ex = NULL;
+                uint32_t eidx = 0;
                 for (uint32_t i = 0; i < g_server->export_count; i++) {
                     if (g_server->exports[i].id == req->export_id ||
                         (req->export_id == 0 && i == 0)) {
                         ex = &g_server->exports[i];
+                        eidx = i;
                         break;
                     }
                 }
@@ -2794,6 +2887,12 @@ send_reply:
                         if (!tab)
                             tab = ex;
                     }
+                    /* Transitional: all shard locks for the read loop (the
+                     * ensure above ran first — it may drop the global
+                     * lock). */
+                    uint32_t sc = ex->root.shard_count
+                                      ? ex->root.shard_count : 1;
+                    server_shard_lock_all(g_server, eidx, sc);
                     uint32_t max = req->max_ents;
                     if (max == 0 || max > EFS_READDIR_MAX)
                         max = EFS_READDIR_MAX;
@@ -2862,6 +2961,7 @@ send_reply:
                         r.ents[r.count++] = *cand[k];
                     free(cand);
                     r.status = EFS_INODE_RPC_OK;
+                    server_shard_unlock_all(g_server, eidx, sc);
                 }
                 pthread_mutex_unlock(&g_server->lock);
             }
