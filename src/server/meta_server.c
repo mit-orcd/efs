@@ -1571,11 +1571,40 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     pthread_mutex_unlock(&s->meta_flush_mu);
     if (efs_lock_prof_on)
         fprintf(stderr,
-                "LOCK-PROF lock_all_calls=%llu lock_all_wait_us=%llu "
-                "lock_all_shards=%llu\n",
+                "LOCK-PROF all_calls=%llu all_wait_us=%llu all_hold_us=%llu "
+                "all_shards=%llu n_calls=%llu n_wait_us=%llu\n",
                 __atomic_load_n(&efs_lock_all_calls, __ATOMIC_RELAXED),
                 __atomic_load_n(&efs_lock_all_wait_us, __ATOMIC_RELAXED),
-                __atomic_load_n(&efs_lock_all_shards, __ATOMIC_RELAXED));
+                __atomic_load_n(&efs_lock_all_hold_us, __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_lock_all_shards, __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_lockn_calls, __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_lockn_wait_us, __ATOMIC_RELAXED));
+    if (efs_lock_prof_on) {
+        unsigned long long tot = 0;
+        for (int i = 0; i < 256; i++)
+            tot += __atomic_load_n(&efs_rpc_count[i], __ATOMIC_RELAXED);
+        fprintf(stderr,
+                "RPC-PROF total=%llu report=%llu getattr=%llu lookup=%llu "
+                "create=%llu create_shard=%llu getchunks=%llu lookup_path=%llu "
+                "readdir=%llu\n",
+                tot,
+                __atomic_load_n(&efs_rpc_count[EFS_MSG_REPORT_CHUNKS],
+                                __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_rpc_count[EFS_MSG_INODE_GETATTR],
+                                __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_rpc_count[EFS_MSG_INODE_LOOKUP],
+                                __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_rpc_count[EFS_MSG_INODE_CREATE],
+                                __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_rpc_count[EFS_MSG_INODE_CREATE_SHARD],
+                                __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_rpc_count[EFS_MSG_INODE_GETCHUNKS],
+                                __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_rpc_count[EFS_MSG_INODE_LOOKUP_PATH],
+                                __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_rpc_count[EFS_MSG_INODE_READDIR],
+                                __ATOMIC_RELAXED));
+    }
     if (getenv("EFS_FLUSH_PROF"))
         fprintf(stderr,
                 "FLUSH-WINDOW export=%s shards=%u tabs_nonempty=%u "

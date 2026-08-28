@@ -2252,6 +2252,12 @@ static void tab_unlink_ino(struct efs_export *tab, efs_ino_t ino, uint32_t nlink
 
 static void tab_set_nlink(struct efs_export *tab, efs_ino_t ino, uint32_t nlink)
 {
+    /* Same authoritative-index early-out as efs_export_unlink: this is fanned
+     * across every loaded shard table, so the scan must not run on tables that
+     * cannot hold the ino. The scan still runs when the ino IS present, since
+     * hardlinks put several rows on one table and the index holds only one. */
+    if (tab->ino_keys && !inode_ptr(tab, ino))
+        return;
     int hit = 0;
     for (uint64_t i = 0; i < tab->inode_count; i++) {
         if (tab->inodes[i].ino == ino) {
@@ -2390,6 +2396,15 @@ int efs_export_unlink(struct efs_export *ex, efs_ino_t ino)
 {
     if (!ex)
         return EFS_ERR_INVAL;
+
+    /* The ino index is authoritative (see inode_ptr): a miss means this table
+     * holds no row for the ino, so the scan below cannot find one. Skip it.
+     * unlink/rename fan this call across EVERY loaded shard table
+     * (for_each_loaded_tab), so without the early-out a single unlink costs
+     * O(total inodes in the export) — the same full-scan-under-a-fan shape
+     * that made stamp_ctime_loaded 9% of efsd on a grown table. */
+    if (ex->ino_keys && !inode_ptr(ex, ino))
+        return EFS_ERR_NOT_FOUND;
 
     /* Remove every directory name for this inode, then chunks. */
     int found = 0;

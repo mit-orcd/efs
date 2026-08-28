@@ -228,6 +228,35 @@ struct efsd_server {
  * acquiring s->lock (release the shard lock first). Flush/rebuild hold
  * s->lock and take ALL shard locks of the export via server_shard_lock_all. */
 
+/* EFS_LOCK_PROF accounting. Shard-lock waits are off-CPU (futex), so
+ * `perf record` cannot see any of this. Counters are relaxed atomics —
+ * contention on them would itself distort the measurement. */
+extern int efs_lock_prof_on;
+extern unsigned long long efs_lock_all_calls;
+extern unsigned long long efs_lock_all_wait_us;
+extern unsigned long long efs_lock_all_shards;
+/* How long lock_all HOLDS every shard. This is the real cost of the
+ * transitional handlers: while one holds all N shards, every per-op handler
+ * (CREATE/APPEND, which take only their own shards) is blocked, and the hold
+ * widens with shard_count. Acquire time alone hides this entirely. */
+extern unsigned long long efs_lock_all_hold_us;
+/* Per-op shard-lock wait — what a per-op handler pays queueing behind a
+ * transitional lock_all. */
+extern unsigned long long efs_lockn_calls;
+extern unsigned long long efs_lockn_wait_us;
+extern __thread unsigned long long efs_lock_all_t0;
+/* Per-opcode RPC counts. Shard count changes how a client's dirty set and
+ * lookups partition across owners, so it changes the RPC count for the same
+ * workload — that is invisible in any server-side lock or CPU measurement. */
+extern unsigned long long efs_rpc_count[256];
+
+static inline unsigned long long server_lock_prof_us(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (unsigned long long)ts.tv_sec * 1000000ull +
+           (unsigned long long)ts.tv_nsec / 1000ull;
+}
+
 static inline pthread_mutex_t *server_shard_mu(struct efsd_server *s,
                                                uint32_t eidx,
                                                uint32_t shard) {
@@ -255,11 +284,17 @@ static inline void server_shard_lockn(struct efsd_server *s, uint32_t eidx,
         while (j >= 0 && sh[j] > v) { sh[j + 1] = sh[j]; j--; }
         sh[j + 1] = v;
     }
+    unsigned long long t0 = efs_lock_prof_on ? server_lock_prof_us() : 0;
     uint32_t prev = UINT32_MAX;
     for (int i = 0; i < n; i++) {
         if (sh[i] == prev) continue;
         pthread_mutex_lock(server_shard_mu(s, eidx, sh[i]));
         prev = sh[i];
+    }
+    if (efs_lock_prof_on) {
+        __atomic_add_fetch(&efs_lockn_wait_us, server_lock_prof_us() - t0,
+                           __ATOMIC_RELAXED);
+        __atomic_add_fetch(&efs_lockn_calls, 1, __ATOMIC_RELAXED);
     }
 }
 
@@ -275,22 +310,6 @@ static inline void server_shard_unlockn(struct efsd_server *s, uint32_t eidx,
 
 /* Flush/rebuild: lock every shard of an export (caller already holds
  * s->lock, so global -> shard order is preserved). */
-/* EFS_LOCK_PROF accounting for lock_all. This is the O(shard_count) path every
- * transitional handler still takes, so its cost grows with shard_bits — and the
- * wait is off-CPU (futex), so `perf record` cannot see it. Counters are plain
- * relaxed atomics: contention on them would itself distort the measurement. */
-extern int efs_lock_prof_on;
-extern unsigned long long efs_lock_all_calls;
-extern unsigned long long efs_lock_all_wait_us;
-extern unsigned long long efs_lock_all_shards;
-
-static inline unsigned long long server_lock_prof_us(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (unsigned long long)ts.tv_sec * 1000000ull +
-           (unsigned long long)ts.tv_nsec / 1000ull;
-}
-
 static inline void server_shard_lock_all(struct efsd_server *s, uint32_t eidx,
                                          uint32_t sc) {
     if (!efs_lock_prof_on) {
@@ -301,7 +320,8 @@ static inline void server_shard_lock_all(struct efsd_server *s, uint32_t eidx,
     unsigned long long t0 = server_lock_prof_us();
     for (uint32_t i = 0; i < sc; i++)
         pthread_mutex_lock(server_shard_mu(s, eidx, i));
-    __atomic_add_fetch(&efs_lock_all_wait_us, server_lock_prof_us() - t0,
+    efs_lock_all_t0 = server_lock_prof_us();
+    __atomic_add_fetch(&efs_lock_all_wait_us, efs_lock_all_t0 - t0,
                        __ATOMIC_RELAXED);
     __atomic_add_fetch(&efs_lock_all_calls, 1, __ATOMIC_RELAXED);
     __atomic_add_fetch(&efs_lock_all_shards, sc, __ATOMIC_RELAXED);
@@ -309,6 +329,12 @@ static inline void server_shard_lock_all(struct efsd_server *s, uint32_t eidx,
 
 static inline void server_shard_unlock_all(struct efsd_server *s, uint32_t eidx,
                                            uint32_t sc) {
+    if (efs_lock_prof_on && efs_lock_all_t0) {
+        __atomic_add_fetch(&efs_lock_all_hold_us,
+                           server_lock_prof_us() - efs_lock_all_t0,
+                           __ATOMIC_RELAXED);
+        efs_lock_all_t0 = 0;
+    }
     for (uint32_t i = 0; i < sc; i++)
         pthread_mutex_unlock(server_shard_mu(s, eidx, i));
 }

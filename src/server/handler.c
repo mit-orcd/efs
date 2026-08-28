@@ -492,6 +492,8 @@ void server_handle_conn(struct efs_conn *conn)
             }
         }
 
+        if (efs_lock_prof_on && type < 256)
+            __atomic_add_fetch(&efs_rpc_count[type], 1, __ATOMIC_RELAXED);
         switch (type) {
         case EFS_MSG_HEARTBEAT: {
             efs_conn_send_msg(conn, EFS_MSG_HEARTBEAT_ACK, NULL, 0);
