@@ -37,6 +37,42 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+**BIGGEST WIN TO DATE — fsync flush GROUP COMMIT (Aug 28, 886f75b): 36-way
+posixstress 34.7 -> 7.2 EFS-bugs/instance (4.8x), 3 fresh-wipe runs each.**
+Every sync REPORT_CHUNKS (every client fsync/close) ran its OWN full metadata
+flush, all serialized on the single `meta_flush_mu`: ~55 flushes/s x ~14ms =
+~77% duty on one mutex, so each flush queued ~88ms. **85% of the flush window
+was pure WAIT, not work** (flush wait 126.7s -> 0.30s, 428x; calls 1441 ->
+610). Concurrent fsyncs now share a flush: the caller's mutation is already
+applied before it reaches the flush, so any flush that *starts* after that
+point includes it — a caller finding one in flight waits for the NEXT one.
+Leader keeps flushing while callers are queued, tracked as the highest
+generation anyone needs (`flush_target`), NOT a waiter count (waiters can only
+decrement after the leader drops the mutex, which would spin the leader).
+Gates: posix 195-196/201 0 real bugs; posix2 60/63 at POSIX2_STEP_SEC=45.
+**unlink/nlink fan de-scanned (e754c23):** `efs_export_unlink` and
+`tab_set_nlink` linearly scanned `inodes[]` while `for_each_loaded_tab` fans
+them across EVERY loaded shard tab → one unlink was **O(total inodes)**. Now
+early-out on the authoritative ino index. Neutral at bits=3 (small tabs),
+~15% at bits=5, and removes a term that is FATAL at 2^32.
+**bits=5 STILL ~8x worse than bits=3 (7.1 vs 57.3, 3 runs each) — CAUSE NOT
+FOUND. Ruled out by direct measurement, do NOT re-investigate these:**
+flush work (identical: 1441/19.7s vs 1448/22.2s) and flush wait (fixed by
+group commit); `lock_all` acquire (0.09s vs 0.11s) AND hold (bits=3 is
+*worse*: 2.88s vs 2.44s); per-op `lockn` wait (bits=3 worse: 0.19s vs 0.14s);
+shard rebuild/evict churn (0 lines); per-op cost unloaded (single suite 3.5s
+vs 4.0s); RPC amplification (bits=5 issues FEWER RPCs: 755k vs 846k — it
+completes less work). Under load all 4 servers are IDLE (154/183 threads in
+`wait_woken`) and efs-fuse is at 11% CPU, so **the bottleneck is client-side
+or on the wire, not the server.** Client profile is flat (memmove 12%,
+blake3 9%, mutex 5%). NEXT PROBE: client-side per-op latency/RPC-wait
+instrumentation, or wire round-trip count per op.
+**Tooling added (env-gated, off by default):** `EFS_FLUSH_PROF` (per-stage
+flush timing, separating lock WAIT from work — this is what found the group
+commit win), `EFS_LOCK_PROF` (lock_all calls/wait/**hold**, per-op lockn
+wait, per-opcode RPC counts). Shard-lock waits are off-CPU (futex) so
+`perf record` CANNOT see them — that is why the on-CPU profile was
+misleading for two rounds.
 **STOP-THE-LINE MEASUREMENT (Aug 28, 51ebb17) — the per-shard lock partition
 has produced NO measurable throughput change. A 7-point bisect of 36-way
 posixstress, every point a fresh wipe+mkfs at bits=3, EFS-bugs per instance:**
