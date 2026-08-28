@@ -37,7 +37,54 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
-**Per-shard `g_server->lock` partition — BLOCKERS 1+2+3 LANDED (Aug 27, c65865f + 958b15b + b167ea2); transitional nested-lock step remains.**
+**Per-shard `g_server->lock` partition — BLOCKERS 1+2+3 + TRANSITIONAL STEP LANDED (Aug 27, c65865f + 958b15b + b167ea2 + d462ab0 + aa7bd5a); per-op global-lock drop remains.**
+**Transitional nested-lock step DONE (d462ab0 Batch 1: GETATTR/CREATE_SHARD/
+APPEND/GETCHUNKS per-shard; aa7bd5a Batch 2: LOOKUP/CREATE/UNLINK/UNLINK_SHARD/
+RENAME/RENAME_AT/SETATTR/LINK/LINK_SHARD/HOLD/DROP_CHUNKS/LOOKUP_PATH/READDIR/
+REPORT_CHUNKS via `server_shard_lock_all`).** Global lock stays HELD in every
+handler (no parallelism yet) — this only establishes global→shard discipline.
+Every mid-op global-lock drop (CREATE/UNLINK/LINK fan-out, REPORT_CHUNKS yield)
+and every `fan_drop_chunks` call is wrapped unlock_all→drop→relock→lock_all so
+no shard lock is held across a global-lock drop (would deadlock vs the rebuild's
+`rebuild_shards_lock`). Shard locks taken after any ensure/reply_if_shard_busy.
+**Because ALL handlers now hold lock_all, the earlier per-op use-after-free
+(CREATE realloc of `ex->inodes[]` racing a shard-only GETATTR) is now IMPOSSIBLE
+— a per-op reader holding shard X excludes with any writer's lock_all.** Gate
+(fresh bits=3, TCP): posix 194-196/201 (only the pre-existing size-visibility
+flake family, moving run to run); 4-way posixstress smoke 3/4 clean + 1 same
+flake, NO deadlock/wedge. **GOTCHA: the posix harness `ensure_mounted` REUSES an
+existing mount — a manual `efs-fuse` started without `EFS_TRANSPORT=tcp` comes
+up on RDMA (broken data path on fresh mount) and the suite then mass-times-out
+looking exactly like a server deadlock (server idle, gen stuck, client D-state
+request_wait_answer). Always let the harness mount, or mount with
+EFS_TRANSPORT=tcp.** NEXT (hard, the actual ~2x win): per-op drop of the global
+lock for the hot ops. Reads (GETATTR/LOOKUP/READDIR/LOOKUP_PATH/GETCHUNKS) are
+the easy/safe ones (no fan-out/yield) but don't fix the create burst; the burst
+needs per-op CREATE/UNLINK/REPORT_CHUNKS, which must take the global lock only
+briefly (export lookup + membership + ensure) then run on their shard set —
+hard because of the CREATE fan-out, UNLINK fan/fan_drop_chunks, and the
+REPORT_CHUNKS yield all currently relying on the global lock.
+**Per-op CREATE LANDED (working tree, first per-op write).** CREATE now holds
+the global lock ONLY for the membership/ownership/node-addr snapshot +
+shard-ready ensure (all stable during a burst), then drops it
+(`global_held=0`, dispatch unlock guarded by the flag) and runs on per-shard
+locks: remote branch {psh,dsh} for the EXIST check + local dentry write,
+fan-out with NO lock; local branch {psh,dsh,target} around `efs_export_create`.
+Landmines handled: (1) `dsh`/`dir_is_spread` is computed under the psh lock —
+it reads the parent inode, and a global-lock-only read would race a concurrent
+per-op create's `inodes[]` realloc (the same UAF as the original GETATTR bug);
+(2) `mark_rpc_dirty` is global-lock-free (atomic + CV hint, safe under a shard
+lock); (3) `evict_cold_shards` is SKIPPED in the per-op path — it FREES shard
+tables = UAF vs per-op shard locks (no-op at bits=3; needs shard-lock-aware
+eviction as a follow-up for higher bits); (4) `hold_inc` uses the leaf
+`hold_mu` (safe under a shard lock); (5) fence re-check (`meta_needs_rebuild`)
+after each shard-lock acquisition → BUSY. The fan-out EXIST→create non-
+atomicity (orphan row on a duplicate) is PRE-EXISTING (the old code also
+dropped the global lock for the fan-out). Gate (fresh bits=3, TCP): posix
+196/201 0 bugs (clean run; other runs 0-2 pre-existing size-visibility flakes);
+4-way posixstress smoke 0-2 bugs/instance (flake family, no deadlock, no
+consistent FileExistsError — the one 7-bug spike was the wipe's background
+edelete). NEXT: per-op UNLINK/REPORT_CHUNKS/SETATTR/APPEND + the reads.
 Goal: fix the posixstress 9×4 startup burst — volume-driven `g_server->lock`
 queueing (~2s op latency in the first ~4s as 576 threads start; 99.6% of
 failures are 15s timeouts, **0 correctness bugs**; sustained latency after the

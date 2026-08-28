@@ -1631,6 +1631,8 @@ send_reply:
             memset(&r, 0, sizeof(r));
             r.status = EFS_INODE_RPC_ERROR;
             pthread_mutex_lock(&g_server->lock);
+            int global_held = 1; /* per-op handlers clear this when they drop
+                                  * the global lock mid-op (see CREATE). */
             struct efs_export *ex = NULL;
             uint32_t eidx = 0;
             efs_export_id_t eid = 0;
@@ -1747,176 +1749,216 @@ send_reply:
                                                            req->mode);
                 efs_node_id_t owner = efs_shard_owner_of(target, sc, live, nlive);
                 struct efs_export *tab = table_for_ino(ex, req->parent);
+                uint32_t psh = efs_export_shard_of(req->parent, bits);
+                int remote = (bits && sc > 1 && owner != 0 &&
+                              owner != g_server->id);
+                char host[64];
+                uint16_t port = 0;
+                int have_addr = 0;
+                if (remote) {
+                    memset(host, 0, sizeof(host));
+                    have_addr = (server_node_addr_locked(g_server, owner, host,
+                                                         sizeof(host),
+                                                         &port) == 0);
+                }
+                /* Per-op: the global lock is held only for the membership /
+                 * ownership / node-address snapshot and the shard-ready
+                 * ensure (all stable during a burst). The table work runs
+                 * under per-shard locks so concurrent creates on different
+                 * shards proceed in parallel. mark_rpc_dirty is global-lock-
+                 * free (atomic + CV hint). evict_cold_shards is skipped: it
+                 * frees shard tables — a use-after-free against per-op shard
+                 * locks (no-op at bits=3; needs shard-lock-aware eviction). */
                 if (!efs_export_fits_page_cap(tab, 1, 0)) {
                     r.status = EFS_INODE_RPC_QUOTA;
-                } else if (bits && sc > 1 && owner != 0 &&
-                           owner != g_server->id) {
-                    /* Child row lives on a peer. Create it there first,
-                     * then write only the parent dentry locally. */
-                    /* Transitional: all shard locks; released around each
-                     * fan-out global-lock drop below. */
-                    server_shard_lock_all(g_server, eidx, sc);
-                    if (efs_export_lookup(ex, req->parent, req->name,
-                                          NULL) == EFS_OK) {
-                        r.status = EFS_INODE_RPC_EXIST;
+                } else if (remote && !have_addr) {
+                    r.status = EFS_INODE_RPC_ERROR;
+                } else if (remote) {
+                    /* Child row lives on a peer. Create it there first, then
+                     * write only the parent dentry locally. */
+                    pthread_mutex_unlock(&g_server->lock);
+                    global_held = 0;
+                    /* dsh needs the psh lock: dir_is_spread reads the parent
+                     * inode, which a concurrent per-op create can realloc. */
+                    server_shard_lock(g_server, eidx, psh);
+                    if (ex->meta_needs_rebuild) {
+                        server_shard_unlock(g_server, eidx, psh);
+                        r.status = EFS_INODE_RPC_BUSY;
                     } else {
-                        struct efs_msg_inode_create_shard creq;
-                        struct efs_msg_inode_reply cr;
-                        char host[64];
-                        uint16_t port = 0;
-                        memset(&creq, 0, sizeof(creq));
-                        memset(&cr, 0, sizeof(cr));
-                        memset(host, 0, sizeof(host));
-                        creq.export_id = req->export_id;
-                        creq.parent = req->parent;
-                        memcpy(creq.name, req->name, EFS_MAX_NAME);
-                        creq.mode = req->mode;
-                        creq.uid = req->uid;
-                        creq.gid = req->gid;
-                        creq.target_shard = target;
-                        creq.flags = cflags;
-                        /* ino=0: the TARGET owner allocates from its own
-                         * authoritative shard table. Allocating here from
-                         * our local copy of that shard is wrong — a
-                         * non-owner's shard table is stale or hollow
-                         * (evicted/never-rebuilt), so its next_ino hands
-                         * out inos the owner already used → CREATE_SHARD
-                         * fails EXIST on the ino collision and parallel
-                         * creates spuriously fail with EEXIST. */
-                        creq.ino = 0;
-                        if (server_node_addr_locked(g_server, owner, host,
-                                                    sizeof(host), &port) != 0) {
-                            r.status = EFS_INODE_RPC_ERROR;
+                        uint32_t dsh = psh;
+                        if (efs_export_dir_is_spread(ex, req->parent))
+                            dsh = efs_export_dentry_shard_of(req->parent,
+                                                             req->name, bits);
+                        server_shard_unlock(g_server, eidx, psh);
+                        efs_node_id_t down = efs_shard_owner_of(dsh, sc, live,
+                                                                nlive);
+                        uint32_t eshs[2] = { psh, dsh };
+                        server_shard_lockn(g_server, eidx, eshs, 2);
+                        if (ex->meta_needs_rebuild) {
+                            server_shard_unlockn(g_server, eidx, eshs, 2);
+                            r.status = EFS_INODE_RPC_BUSY;
+                        } else if (efs_export_lookup(ex, req->parent, req->name,
+                                                     NULL) == EFS_OK) {
+                            server_shard_unlockn(g_server, eidx, eshs, 2);
+                            r.status = EFS_INODE_RPC_EXIST;
                         } else {
+                            server_shard_unlockn(g_server, eidx, eshs, 2);
+                            struct efs_msg_inode_create_shard creq;
+                            struct efs_msg_inode_reply cr;
+                            memset(&creq, 0, sizeof(creq));
+                            memset(&cr, 0, sizeof(cr));
+                            creq.export_id = req->export_id;
+                            creq.parent = req->parent;
+                            memcpy(creq.name, req->name, EFS_MAX_NAME);
+                            creq.mode = req->mode;
+                            creq.uid = req->uid;
+                            creq.gid = req->gid;
+                            creq.target_shard = target;
+                            creq.flags = cflags;
+                            /* ino=0: the TARGET owner allocates from its own
+                             * authoritative shard table. */
+                            creq.ino = 0;
                             if (!efs_mode_is_dir(req->mode) && sc > 1)
                                 (void)__atomic_add_fetch(&ex->create_rr, 1,
                                                          __ATOMIC_RELAXED);
-                            server_shard_unlock_all(g_server, eidx, sc);
-                            pthread_mutex_unlock(&g_server->lock);
                             int nrc = server_peer_create_shard(host, port,
                                                                &creq, &cr);
-                            pthread_mutex_lock(&g_server->lock);
-                            server_shard_lock_all(g_server, eidx, sc);
                             if (nrc != 0) {
                                 r.status = EFS_INODE_RPC_ERROR;
                             } else if (cr.status != EFS_INODE_RPC_OK) {
                                 r.status = cr.status;
                                 r.primary_id = cr.primary_id;
-                            } else {
-                                uint32_t psh = efs_export_shard_of(req->parent,
-                                                                   bits);
-                                uint32_t dsh = psh;
-                                if (efs_export_dir_is_spread(ex, req->parent))
-                                    dsh = efs_export_dentry_shard_of(
-                                        req->parent, req->name, bits);
-                                efs_node_id_t down =
-                                    efs_shard_owner_of(dsh, sc, live, nlive);
-                                if (dsh == target) {
+                            } else if (dsh == target) {
+                                r.inode = cr.inode;
+                                r.status = EFS_INODE_RPC_OK;
+                                server_meta_mark_rpc_dirty_locked(g_server,
+                                                                  eidx);
+                            } else if (down == 0 || down == g_server->id) {
+                                uint32_t dshs[2] = { psh, dsh };
+                                server_shard_lockn(g_server, eidx, dshs, 2);
+                                struct efs_export *dtab = ex->meta_needs_rebuild
+                                    ? NULL : efs_export_table(ex, dsh);
+                                if (!dtab) {
+                                    server_shard_unlockn(g_server, eidx, dshs,
+                                                         2);
+                                    r.status = EFS_INODE_RPC_BUSY;
+                                } else if (!efs_export_create_with_ino(
+                                        dtab, cr.inode.ino, req->parent,
+                                        req->mode, (uid_t)req->uid,
+                                        (gid_t)req->gid, req->name)) {
+                                    int name_dup =
+                                        efs_export_lookup(dtab, req->parent,
+                                                          req->name,
+                                                          NULL) == EFS_OK;
+                                    struct efs_inode tmpi;
+                                    memset(&tmpi, 0, sizeof(tmpi));
+                                    int ino_dup = cr.inode.ino &&
+                                        efs_export_get_inode(dtab, cr.inode.ino,
+                                                             &tmpi) == 0;
+                                    fprintf(stderr,
+                                            "create-exist: dentry-write "
+                                            "parent=%llu name=%s dsh=%u "
+                                            "ino=%llu name_dup=%d ino_dup=%d "
+                                            "dtab_inodes=%llu exist(parent=%llu"
+                                            " name=%s nlink=%u mode=%o)\n",
+                                            (unsigned long long)req->parent,
+                                            req->name, dsh,
+                                            (unsigned long long)cr.inode.ino,
+                                            name_dup, ino_dup,
+                                            (unsigned long long)dtab->inode_count,
+                                            (unsigned long long)tmpi.parent,
+                                            tmpi.name, tmpi.nlink, tmpi.mode);
+                                    server_shard_unlockn(g_server, eidx, dshs,
+                                                         2);
+                                    r.status = EFS_INODE_RPC_EXIST;
+                                } else {
+                                    dtab->shard_dirty = 1;
                                     r.inode = cr.inode;
                                     r.status = EFS_INODE_RPC_OK;
                                     server_meta_mark_rpc_dirty_locked(g_server,
                                                                       eidx);
-                                } else if (down == 0 || down == g_server->id) {
-                                    struct efs_export *dtab =
-                                        efs_export_table(ex, dsh);
-                                    if (!dtab || !efs_export_create_with_ino(
-                                            dtab, cr.inode.ino, req->parent,
-                                            req->mode, (uid_t)req->uid,
-                                            (gid_t)req->gid, req->name)) {
-                                        int name_dup = dtab &&
-                                            efs_export_lookup(dtab, req->parent,
-                                                              req->name,
-                                                              NULL) == EFS_OK;
-                                        struct efs_inode tmpi;
-                                        memset(&tmpi, 0, sizeof(tmpi));
-                                        int ino_dup = dtab && cr.inode.ino &&
-                                            efs_export_get_inode(dtab,
-                                                                 cr.inode.ino,
-                                                                 &tmpi) == 0;
-                                        fprintf(stderr,
-                                                "create-exist: dentry-write "
-                                                "parent=%llu name=%s dsh=%u "
-                                                "ino=%llu name_dup=%d "
-                                                "ino_dup=%d dtab_inodes=%llu "
-                                                "exist(parent=%llu name=%s "
-                                                "nlink=%u mode=%o)\n",
-                                                (unsigned long long)req->parent,
-                                                req->name, dsh,
-                                                (unsigned long long)cr.inode.ino,
-                                                name_dup, ino_dup,
-                                                dtab ? (unsigned long long)
-                                                    dtab->inode_count : 0,
-                                                (unsigned long long)tmpi.parent,
-                                                tmpi.name, tmpi.nlink,
-                                                tmpi.mode);
-                                        r.status = EFS_INODE_RPC_EXIST;
+                                    server_shard_unlockn(g_server, eidx, dshs,
+                                                         2);
+                                }
+                            } else {
+                                /* Remote dentry write: resolve the owner addr
+                                 * under the global lock (no shard lock held). */
+                                char dhost[64];
+                                uint16_t dport = 0;
+                                memset(dhost, 0, sizeof(dhost));
+                                pthread_mutex_lock(&g_server->lock);
+                                int aok = (server_node_addr_locked(g_server,
+                                                                   down, dhost,
+                                                                   sizeof(dhost),
+                                                                   &dport) == 0);
+                                pthread_mutex_unlock(&g_server->lock);
+                                if (!aok) {
+                                    r.status = EFS_INODE_RPC_ERROR;
+                                } else {
+                                    struct efs_msg_inode_create_shard dreq = creq;
+                                    struct efs_msg_inode_reply dr;
+                                    memset(&dr, 0, sizeof(dr));
+                                    dreq.target_shard = dsh;
+                                    dreq.ino = cr.inode.ino;
+                                    int drc = server_peer_create_shard(dhost,
+                                                                       dport,
+                                                                       &dreq,
+                                                                       &dr);
+                                    if (drc != 0 ||
+                                        dr.status != EFS_INODE_RPC_OK) {
+                                        r.status = EFS_INODE_RPC_ERROR;
                                     } else {
-                                        dtab->shard_dirty = 1;
                                         r.inode = cr.inode;
                                         r.status = EFS_INODE_RPC_OK;
                                         server_meta_mark_rpc_dirty_locked(
                                             g_server, eidx);
                                     }
-                                } else {
-                                    struct efs_msg_inode_create_shard dreq = creq;
-                                    struct efs_msg_inode_reply dr;
-                                    char dhost[64];
-                                    uint16_t dport = 0;
-                                    memset(&dr, 0, sizeof(dr));
-                                    memset(dhost, 0, sizeof(dhost));
-                                    dreq.target_shard = dsh;
-                                    dreq.ino = cr.inode.ino;
-                                    if (server_node_addr_locked(g_server, down,
-                                                                dhost,
-                                                                sizeof(dhost),
-                                                                &dport) != 0) {
-                                        r.status = EFS_INODE_RPC_ERROR;
-                                    } else {
-                                        server_shard_unlock_all(g_server,
-                                                                eidx, sc);
-                                        pthread_mutex_unlock(&g_server->lock);
-                                        int drc = server_peer_create_shard(
-                                            dhost, dport, &dreq, &dr);
-                                        pthread_mutex_lock(&g_server->lock);
-                                        server_shard_lock_all(g_server, eidx,
-                                                              sc);
-                                        if (drc != 0 ||
-                                            dr.status != EFS_INODE_RPC_OK) {
-                                            r.status = EFS_INODE_RPC_ERROR;
-                                        } else {
-                                            r.inode = cr.inode;
-                                            r.status = EFS_INODE_RPC_OK;
-                                            server_meta_mark_rpc_dirty_locked(
-                                                g_server, eidx);
-                                        }
-                                    }
                                 }
                             }
                         }
                     }
-                    server_shard_unlock_all(g_server, eidx, sc);
                 } else if (bits && sc > 1 && target != 0 &&
                            server_ensure_shard_ready(g_server, ex, target) != 0) {
                     r.status = EFS_INODE_RPC_BUSY;
                 } else {
-                    /* Transitional: all shard locks (the ensure in the
-                     * else-if above ran before we take them). */
-                    server_shard_lock_all(g_server, eidx, sc);
-                    efs_ino_t ino = efs_export_create(ex, req->parent, req->mode,
-                                                      (uid_t)req->uid,
-                                                      (gid_t)req->gid, req->name);
-                    if (ino) {
-                        efs_export_get_inode(ex, ino, &r.inode);
-                        r.status = EFS_INODE_RPC_OK;
-                        if (cflags & EFS_CREATE_F_HOLD)
-                            hold_inc(ex->id, ino);
-                        ex->shard_dirty = 1;
-                        server_meta_mark_rpc_dirty_locked(g_server, eidx);
-                        efs_export_evict_cold_shards(ex, EFS_SHARD_LRU_KEEP);
+                    /* Local create (target shard owned here). The ensure in
+                     * the else-if above ran under the global lock. */
+                    pthread_mutex_unlock(&g_server->lock);
+                    global_held = 0;
+                    server_shard_lock(g_server, eidx, psh);
+                    if (ex->meta_needs_rebuild) {
+                        server_shard_unlock(g_server, eidx, psh);
+                        r.status = EFS_INODE_RPC_BUSY;
                     } else {
-                        r.status = EFS_INODE_RPC_EXIST;
+                        uint32_t dsh = psh;
+                        if (efs_export_dir_is_spread(ex, req->parent))
+                            dsh = efs_export_dentry_shard_of(req->parent,
+                                                             req->name, bits);
+                        server_shard_unlock(g_server, eidx, psh);
+                        uint32_t shs[3] = { psh, dsh, target };
+                        server_shard_lockn(g_server, eidx, shs, 3);
+                        if (ex->meta_needs_rebuild) {
+                            r.status = EFS_INODE_RPC_BUSY;
+                        } else {
+                            efs_ino_t ino = efs_export_create(ex, req->parent,
+                                                              req->mode,
+                                                              (uid_t)req->uid,
+                                                              (gid_t)req->gid,
+                                                              req->name);
+                            if (ino) {
+                                efs_export_get_inode(ex, ino, &r.inode);
+                                r.status = EFS_INODE_RPC_OK;
+                                if (cflags & EFS_CREATE_F_HOLD)
+                                    hold_inc(ex->id, ino);
+                                ex->shard_dirty = 1;
+                                server_meta_mark_rpc_dirty_locked(g_server,
+                                                                  eidx);
+                            } else {
+                                r.status = EFS_INODE_RPC_EXIST;
+                            }
+                        }
+                        server_shard_unlockn(g_server, eidx, shs, 3);
                     }
-                    server_shard_unlock_all(g_server, eidx, sc);
                 }
             } else if (type == EFS_MSG_INODE_CREATE_SHARD) {
                 struct efs_msg_inode_create_shard *req = payload;
@@ -2515,7 +2557,8 @@ send_reply:
                     server_shard_unlock_all(g_server, eidx, sc);
                 }
             }
-            pthread_mutex_unlock(&g_server->lock);
+            if (global_held)
+                pthread_mutex_unlock(&g_server->lock);
             uint8_t rtype = (type == EFS_MSG_INODE_LOOKUP) ? EFS_MSG_INODE_LOOKUP_REPLY
                           : (type == EFS_MSG_INODE_CREATE) ? EFS_MSG_INODE_CREATE_REPLY
                           : (type == EFS_MSG_INODE_CREATE_SHARD) ? EFS_MSG_INODE_CREATE_SHARD_REPLY
