@@ -2246,14 +2246,19 @@ send_reply:
                 if (reply_if_shard_busy(ex, req->ino, &r)) {
                     /* hollow extra */
                 } else {
-                /* Transitional: shard lock for the append reservation (the
-                 * ensure above ran before we take the shard lock). */
+                /* Per-op: drop the global lock; the append reservation
+                 * touches only the ino's shard (the ensure above ran under
+                 * the global lock). */
                 uint32_t ash = efs_export_shard_of(req->ino,
                                                    ex->root.shard_bits);
+                pthread_mutex_unlock(&g_server->lock);
+                global_held = 0;
                 server_shard_lock(g_server, eidx, ash);
                 struct efs_export *tab = table_for_ino(ex, req->ino);
                 struct efs_inode cur;
-                if (efs_export_get_inode(tab, req->ino, &cur) != 0 ||
+                if (ex->meta_needs_rebuild) {
+                    r.status = EFS_INODE_RPC_BUSY;
+                } else if (efs_export_get_inode(tab, req->ino, &cur) != 0 ||
                     !efs_mode_is_reg(cur.mode)) {
                     r.status = EFS_INODE_RPC_NOT_FOUND;
                 } else {
