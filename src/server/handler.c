@@ -2889,7 +2889,7 @@ send_reply:
             }
             pthread_mutex_unlock(&g_server->lock);
             if (do_flush) {
-                if (server_flush_fragmented_meta(g_server, ex) != 0) {
+                if (server_flush_meta_grouped(g_server, ex) != 0) {
                     /* Flush failed (rebuild in flight / no quorum / fenced).
                      * BUSY so the client retries — ERROR used to become
                      * fsync EIO on the first attempt (9-way 007). The

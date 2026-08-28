@@ -4,6 +4,7 @@
 #include "efs/common.h"
 #include "efs/metadata.h"
 #include <pthread.h>
+#include <time.h>
 
 /* Soft cap on concurrent accept/handler threads. Excess sockets are closed
  * immediately so one connection storm cannot exhaust RLIMIT_NOFILE. */
@@ -170,6 +171,27 @@ struct efsd_server {
      * gen. */
     pthread_mutex_t meta_flush_mu;
 
+    /* Group commit for the fsync flush (guarded by flush_grp_mu). Every
+     * synchronous REPORT_CHUNKS runs a full flush, so 36-way posixstress
+     * issued ~55 flushes/s of ~14 ms each against the single meta_flush_mu —
+     * ~77% duty on one serialized resource, which queued each flush ~88 ms
+     * (85% of the measured flush window was pure wait). Concurrent fsyncs
+     * share one flush instead: a caller that finds a flush already running
+     * waits for the NEXT one, which is guaranteed to snapshot after its
+     * mutation was applied. Per export slot, since a flush only covers the
+     * export it ran on. */
+    pthread_mutex_t flush_grp_mu;
+    pthread_cond_t flush_grp_cv;
+    uint64_t flush_started[EFS_MAX_EXPORTS];
+    uint64_t flush_done[EFS_MAX_EXPORTS];
+    /* Highest flush generation any queued caller still needs. The leader keeps
+     * flushing until flush_done reaches it — a waiter count cannot be used
+     * here, since waiters only decrement it after the leader drops the mutex,
+     * which would spin the leader on flushes nobody needs. */
+    uint64_t flush_target[EFS_MAX_EXPORTS];
+    int flush_running[EFS_MAX_EXPORTS];
+    int flush_last_rc[EFS_MAX_EXPORTS];
+
     /* Open-fd refs + cluster flock (guarded by s->lock). */
     struct efs_ino_hold *ino_holds;
 
@@ -253,10 +275,36 @@ static inline void server_shard_unlockn(struct efsd_server *s, uint32_t eidx,
 
 /* Flush/rebuild: lock every shard of an export (caller already holds
  * s->lock, so global -> shard order is preserved). */
+/* EFS_LOCK_PROF accounting for lock_all. This is the O(shard_count) path every
+ * transitional handler still takes, so its cost grows with shard_bits — and the
+ * wait is off-CPU (futex), so `perf record` cannot see it. Counters are plain
+ * relaxed atomics: contention on them would itself distort the measurement. */
+extern int efs_lock_prof_on;
+extern unsigned long long efs_lock_all_calls;
+extern unsigned long long efs_lock_all_wait_us;
+extern unsigned long long efs_lock_all_shards;
+
+static inline unsigned long long server_lock_prof_us(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (unsigned long long)ts.tv_sec * 1000000ull +
+           (unsigned long long)ts.tv_nsec / 1000ull;
+}
+
 static inline void server_shard_lock_all(struct efsd_server *s, uint32_t eidx,
                                          uint32_t sc) {
+    if (!efs_lock_prof_on) {
+        for (uint32_t i = 0; i < sc; i++)
+            pthread_mutex_lock(server_shard_mu(s, eidx, i));
+        return;
+    }
+    unsigned long long t0 = server_lock_prof_us();
     for (uint32_t i = 0; i < sc; i++)
         pthread_mutex_lock(server_shard_mu(s, eidx, i));
+    __atomic_add_fetch(&efs_lock_all_wait_us, server_lock_prof_us() - t0,
+                       __ATOMIC_RELAXED);
+    __atomic_add_fetch(&efs_lock_all_calls, 1, __ATOMIC_RELAXED);
+    __atomic_add_fetch(&efs_lock_all_shards, sc, __ATOMIC_RELAXED);
 }
 
 static inline void server_shard_unlock_all(struct efsd_server *s, uint32_t eidx,
@@ -486,6 +534,10 @@ void server_gossip_membership(struct efsd_server *s, const struct efs_msg_hello 
 
 /* Persist export as 2+1 meta pages + EFSR root; push root to peers. */
 int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex);
+/* Group-commit wrapper: concurrent fsync flushes of the same export share one
+ * flush instead of each running a full serialized one. Use this on the fsync
+ * path; the flush thread and migrate call the plain version. */
+int server_flush_meta_grouped(struct efsd_server *s, struct efs_export *ex);
 
 /* Best-effort unlink local meta page fragments for a retired generation slot.
  * Non-fatal; space leak only if unlink fails. With dirty-page flushing the

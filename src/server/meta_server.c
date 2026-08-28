@@ -1417,9 +1417,72 @@ static int server_commit_cluster_extras(struct efsd_server *s,
  * both compute the same new_gen (= root.generation+1) and race to the peers —
  * the loser's root is rejected STALE (gen <= peer's), so the sync fsync sees
  * 0 peer acks and returns EIO even though the data commits on the retry. */
+/* Group commit for the synchronous fsync flush.
+ *
+ * The caller's mutation is already applied to the live table before it gets
+ * here, so ANY flush that *starts* after this point snapshots it (the snapshot
+ * is taken under s->lock inside the flush). That makes coalescing safe: a
+ * caller that finds a flush already running cannot rely on it — that flush may
+ * have snapshotted first — but it can wait for the NEXT one.
+ *
+ * The leader keeps flushing while callers are still queued, so a waiter can
+ * never block forever waiting for a flush that nobody starts.
+ *
+ * Returns the rc of the flush that covered the caller. If several completed,
+ * the last rc is used; a failure only costs the client a BUSY retry.
+ */
+int server_flush_meta_grouped(struct efsd_server *s, struct efs_export *ex)
+{
+    uint32_t eidx = (uint32_t)(ex - s->exports);
+    if (eidx >= EFS_MAX_EXPORTS)
+        return server_flush_fragmented_meta(s, ex);
+
+    pthread_mutex_lock(&s->flush_grp_mu);
+    if (s->flush_running[eidx]) {
+        /* The in-flight flush may have snapshotted before this caller's
+         * mutation, so it proves nothing; the next one is guaranteed to
+         * include it. */
+        uint64_t target = s->flush_started[eidx] + 1;
+        if (s->flush_target[eidx] < target)
+            s->flush_target[eidx] = target;
+        while (s->flush_done[eidx] < target)
+            pthread_cond_wait(&s->flush_grp_cv, &s->flush_grp_mu);
+        int rc = s->flush_last_rc[eidx];
+        pthread_mutex_unlock(&s->flush_grp_mu);
+        return rc;
+    }
+    s->flush_running[eidx] = 1;
+
+    int rc = 0;
+    for (;;) {
+        s->flush_started[eidx]++;
+        pthread_mutex_unlock(&s->flush_grp_mu);
+
+        rc = server_flush_fragmented_meta(s, ex);
+
+        pthread_mutex_lock(&s->flush_grp_mu);
+        s->flush_done[eidx] = s->flush_started[eidx];
+        s->flush_last_rc[eidx] = rc;
+        pthread_cond_broadcast(&s->flush_grp_cv);
+        /* Callers that queued during this flush need one that starts after
+         * their mutation — run it rather than leaving them stranded. */
+        if (s->flush_done[eidx] >= s->flush_target[eidx])
+            break;
+    }
+    s->flush_running[eidx] = 0;
+    pthread_mutex_unlock(&s->flush_grp_mu);
+    return rc;
+}
+
 int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
 {
+    uint64_t t_win0 = heal_mono_us();
+    uint32_t tabs_seen = 0, tabs_flushed = 0;
     pthread_mutex_lock(&s->meta_flush_mu);
+    /* Time spent queued behind another flush (the flush thread and every sync
+     * fsync REPORT_CHUNKS serialize on meta_flush_mu). Kept separate from the
+     * extras loop so a queueing problem is never misread as per-shard cost. */
+    uint64_t t_wait = heal_mono_us() - t_win0;
     int rc = 0;
     int flushed_extra = 0;
     pthread_mutex_lock(&s->lock);
@@ -1448,6 +1511,7 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
             struct efs_export *tab = ex->shard_tabs[i];
             if (!tab || tab->inode_count == 0)
                 continue;
+            tabs_seen++;
             if (sc > 1 &&
                 efs_shard_owner_of(i, sc, live, nlive) != s->id) {
                 /* Lost ownership (membership remap): the unflushed ops in
@@ -1470,6 +1534,7 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
             }
             int src = server_flush_fragmented_meta_locked(
                 s, tab, efs_meta_shard_table_ino(i), 0, i, sc);
+            tabs_flushed++;
             if (src != 0)
                 rc = src;
             else
@@ -1478,6 +1543,10 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
              * landed during the unlocked window (flush-race fix). */
         }
     }
+    int main_dirty = ex->shard_dirty;
+    uint64_t t_extras = heal_mono_us() - t_win0 - t_wait;
+    uint64_t t_main0 = heal_mono_us();
+    uint64_t t_commit = 0;
     if (primary) {
         /* Shard 0 used to flush on every rpc_dirty window even when only
          * extras changed — a 71 MB serialize + PUT of every CoW page.
@@ -1490,12 +1559,34 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
             /* shard_dirty is now cleared inside the flush, only when no op
              * landed during the unlocked window (flush-race fix). */
         } else if (flushed_extra && rc == 0) {
+            uint64_t c0 = heal_mono_us();
             rc = server_commit_cluster_extras(s, ex);
+            t_commit = heal_mono_us() - c0;
         }
     } else if (flushed_extra && rc == 0) {
+        uint64_t c0 = heal_mono_us();
         rc = server_commit_cluster_extras(s, ex);
+        t_commit = heal_mono_us() - c0;
     }
     pthread_mutex_unlock(&s->meta_flush_mu);
+    if (efs_lock_prof_on)
+        fprintf(stderr,
+                "LOCK-PROF lock_all_calls=%llu lock_all_wait_us=%llu "
+                "lock_all_shards=%llu\n",
+                __atomic_load_n(&efs_lock_all_calls, __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_lock_all_wait_us, __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_lock_all_shards, __ATOMIC_RELAXED));
+    if (getenv("EFS_FLUSH_PROF"))
+        fprintf(stderr,
+                "FLUSH-WINDOW export=%s shards=%u tabs_nonempty=%u "
+                "tabs_flushed=%u main_dirty=%d wait=%lluus extras=%lluus "
+                "main=%lluus commit=%lluus total=%lluus\n",
+                ex->name, sc, tabs_seen, tabs_flushed, main_dirty,
+                (unsigned long long)t_wait,
+                (unsigned long long)t_extras,
+                (unsigned long long)(heal_mono_us() - t_main0),
+                (unsigned long long)t_commit,
+                (unsigned long long)(heal_mono_us() - t_win0));
     return rc;
 }
 
@@ -1527,7 +1618,14 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     uint32_t new_cis_count = 0;
     struct efs_export snap;
     memset(&snap, 0, sizeof(snap));
+    /* EFS_FLUSH_PROF: per-stage timing. The flush pays a FIXED cost per shard
+     * table, so raising shard_bits multiplies it (bits=5 measured 3x worse on
+     * posixstress). Breaks the cost into lock-wait / snapshot / serialize /
+     * page-PUT / commit so the per-table overhead is attributable. */
+    uint64_t t_begin = heal_mono_us();
+    uint64_t t_lockwait = 0, t_snap = 0, t_ser = 0, t_pages = 0;
     pthread_mutex_lock(&s->lock);
+    t_lockwait = heal_mono_us() - t_begin;
     if (ex->meta_needs_rebuild) {
         /* Fenced by a concurrent client-driven PUT_META (counts zeroed): the
          * in-memory table is stale and the catchup rebuild will overwrite it,
@@ -1564,14 +1662,17 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
         old_ch_pc = ex->root.chunk_page_count;
     }
     pthread_mutex_unlock(&s->lock);
+    t_snap = heal_mono_us() - t_begin - t_lockwait;
     if (snap_rc != EFS_OK)
         return -1;
+    uint64_t t_ser0 = heal_mono_us();
     if (efs_export_serialize_ex(&snap, &blob, &blob_len, &ino_blob_len,
                                 &chunk_blob_len) != EFS_OK) {
         efs_export_table_snapshot_free(&snap);
         return -1;
     }
     efs_export_table_snapshot_free(&snap);
+    t_ser = heal_mono_us() - t_ser0;
     if (omit_chunks) {
         chunk_blob_len = keep_ch_len;
         blob_len = (size_t)ino_blob_len;
@@ -1660,6 +1761,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     }
     pthread_mutex_unlock(&s->lock);
     uint32_t pages_reused = 0;
+    uint64_t t_pages0 = heal_mono_us();
 
     for (uint32_t packed = 0; packed < root.page_count; packed++) {
         int region = (packed < root.ino_page_count) ? EFS_META_REGION_INO
@@ -1821,6 +1923,17 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     free(blob);
     free(skip_sums);
     free(skip_cis);
+    t_pages = heal_mono_us() - t_pages0;
+    if (getenv("EFS_FLUSH_PROF"))
+        fprintf(stderr,
+                "FLUSH-PROF shard=%u pages=%u written=%u reused=%u "
+                "lockwait=%lluus snap=%lluus ser=%lluus pages=%lluus "
+                "total=%lluus\n",
+                shard_idx, root.page_count, root.page_count - pages_reused,
+                pages_reused, (unsigned long long)t_lockwait,
+                (unsigned long long)t_snap, (unsigned long long)t_ser,
+                (unsigned long long)t_pages,
+                (unsigned long long)(heal_mono_us() - t_begin));
     if (pages_reused >= 16)
         fprintf(stderr, "meta-flush: reused %u/%u unchanged CoW pages\n",
                 pages_reused, root.page_count);

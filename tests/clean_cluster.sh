@@ -22,7 +22,14 @@ start_efsd() { # host node-id addr [join]
     local h=$1 nid=$2 addr=$3 join=${4:-}
     local j=""; [ -n "$join" ] && j="--join $join"
     # setsid detaches; the ssh session may linger (harmless) so allow rc=124.
-    ssh_to 15 "$h" "cd /tmp/efs && setsid ./efsd --node-id $nid --addr $addr \
+    # EFS_FLUSH_PROF=1 makes efsd emit FLUSH-PROF/FLUSH-WINDOW lines (metadata
+    # flush per-stage timing). Must stay UNSET when the caller did not ask for
+    # it — efsd tests it with getenv(), so even an empty value turns it on.
+    local prof=""
+    [ -n "${EFS_FLUSH_PROF:-}" ] && prof="EFS_FLUSH_PROF=$EFS_FLUSH_PROF"
+    [ -n "${EFS_LOCK_PROF:-}" ] && prof="$prof EFS_LOCK_PROF=$EFS_LOCK_PROF"
+    ssh_to 15 "$h" "cd /tmp/efs && $prof \
+        setsid ./efsd --node-id $nid --addr $addr \
         --port 19810 --storage $STORAGE --quota 36T --direct-io $j \
         >efsd.log 2>&1 </dev/null & sleep 3; pgrep -x efsd >/dev/null && echo UP" \
         2>/dev/null | grep -q UP
