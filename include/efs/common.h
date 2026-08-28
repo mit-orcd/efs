@@ -77,11 +77,12 @@
  * Roadmap: bits=20 → 4096 shards. */
 #define EFS_META_SHARD_INO_BASE EFS_META_TABLE_INO
 #define EFS_META_MAX_SHARDS     4096
-/* New exports are born sharded. 8 shards on a 4-node cluster (2 per
- * server) is the live default — enough extra-shard owners to exercise
- * routing, not so many descriptors that catchup explodes. bits=0 is
- * not a product mode. */
-#define EFS_DEFAULT_SHARD_BITS  3
+/* New exports are born sharded. 32 shards on a 4-node cluster (8 per
+ * server) is the live default — enough per-server shards for the
+ * per-shard lock partition to exploit real parallelism, not so many
+ * descriptors that catchup explodes (the per-shard incremental rebuild
+ * cache keeps rehash/catchup cheap). bits=0 is not a product mode. */
+#define EFS_DEFAULT_SHARD_BITS  5
 /* Max pages for a fragmented metadata blob (each page = EFS_META_PAGE_SIZE).
  * 32768 × 128 KiB = 4 GiB — two-region EFSR v5 (16k ino + 16k chunk pages). */
 #define EFS_META_MAX_PAGES   32768
