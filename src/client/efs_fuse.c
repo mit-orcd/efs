@@ -2758,8 +2758,11 @@ static int efs_fuse_release(const char *path, struct fuse_file_info *fi)
 static void efs_fuse_destroy(void *userdata)
 {
     (void)userdata;
-    (void)efs_wb_sync();
-    (void)efs_dcache_flush_all();
+    int wrc = efs_wb_sync();
+    int drc = efs_dcache_flush_all();
+    if (wrc != EFS_OK || drc != EFS_OK)
+        fprintf(stderr, "efs-fuse: unmount: data flush incomplete "
+                        "(writeback=%d dcache=%d)\n", wrc, drc);
     efs_client_pack_flush_all();
     if (g_wb.ready) {
         pthread_mutex_lock(&g_wb.mu);
@@ -2771,8 +2774,39 @@ static void efs_fuse_destroy(void *userdata)
         g_wb.ready = 0;
         g_wb.shutdown = 0;
     }
-    /* Final flush so the last dirty batch is not lost on unmount. */
-    efs_client_note_meta_change(1);
+    /* Drain the dirty set before efs_client_shutdown frees the table.
+     *
+     * One forced report is not enough. efs_client_report_dirty gives up on a
+     * shard after 4 attempts (~750 ms total) while its owner answers BUSY,
+     * which is exactly what an owner does while it is rebuilding a shard --
+     * something every node does briefly after a fresh mkfs, and again
+     * whenever a joiner catches up. On give-up the records are merged back
+     * into the in-memory table, and shutdown then frees it, so the writes
+     * were lost with no error and no log line: files came back after the
+     * remount with the correct size and all-zero contents.
+     *
+     * The BUSY window is short (seconds) and self-healing, so retry until the
+     * report succeeds. If it still will not drain, say so -- an unmount that
+     * silently discards acknowledged writes is worse than a noisy one. */
+    {
+        const long drain_s = 60;
+        struct timespec t0, now;
+        int mrc;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        for (;;) {
+            mrc = efs_client_note_meta_change(1);
+            if (mrc == EFS_OK)
+                break;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            if (now.tv_sec - t0.tv_sec >= drain_s)
+                break;
+            usleep(200000);
+        }
+        if (mrc != EFS_OK)
+            fprintf(stderr, "efs-fuse: UNMOUNT DATA LOSS: metadata flush "
+                            "still failing (rc=%d) after %lds; writes that "
+                            "were never reported are gone\n", mrc, drain_s);
+    }
     /* Free the .find index and cached query results. */
     pthread_mutex_lock(&g_find_idx_mu);
     find_index_free_locked();
