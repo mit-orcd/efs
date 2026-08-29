@@ -48,10 +48,29 @@ for h in $HOSTS; do
 done
 wait
 
-EFS_SSH_TIMEOUT=20 $SSH "$first.ib" "test -d $MNT && findmnt -n -o FSTYPE $MNT" | grep -q fuse || {
-  say "FAIL: $MNT on $first is not a FUSE mount"
-  exit 2
+# Check EVERY host, and re-check before every step rather than once at startup.
+#
+# A dead efs-fuse leaves $MNT as an ordinary local directory, and the workers
+# then happily create files on the node's own disk: the run reports a rate no
+# cluster could produce and a per-inode size no metadata could fit in. One run
+# spanning a cluster wipe recorded 500k creates/s at 10 B/inode against a
+# measured ceiling of ~40k/s and ~1.3 KB/inode -- entirely local-disk numbers.
+# A startup-only check on a single host cannot catch that, because these runs
+# last hours and the mount goes away in the middle.
+check_mounts() { # context
+  local bad=""
+  for h in $HOSTS; do
+    EFS_SSH_TIMEOUT=20 $SSH "$h.ib" \
+      "findmnt -n -o FSTYPE $MNT 2>/dev/null" | grep -q '^fuse\.efs-fuse$' \
+      || bad="$bad $h"
+  done
+  [ -z "$bad" ] && return 0
+  say "FAIL ($1): $MNT is not a live efs-fuse mount on:$bad"
+  say "      refusing to continue -- results would be from the local disk"
+  return 1
 }
+
+check_mounts startup || exit 2
 
 server_rss() {
   local sum=0 max=0
@@ -71,6 +90,8 @@ for target in $STEPS; do
   prev_per=$((prev / nh))
   delta=$((per_client - prev_per))
   [ "$delta" -le 0 ] && continue
+
+  check_mounts "before step $target" || exit 2
 
   say "growing to $target total ($per_client/client, +$delta each)"
   t0=$(date +%s)
