@@ -538,7 +538,22 @@ int server_ensure_shard_ready(struct efsd_server *s, struct efs_export *ex,
     /* Caller holds s->lock. */
     uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
     if (ex->root.shard_bits == 0 || sc <= 1 || shard == 0) {
+        /* Same DIRTY-REBUILD rule the extra-shard path below has always had,
+         * which the main table was missing. A dirty main table holds ops this
+         * server has already ACKed but not yet committed, so it is AHEAD of
+         * the committed root; rebuilding from that root drops them.
+         *
+         * That is the post-mkfs data loss: while joiners churn through
+         * rebuilds, shard 0 got rebuilt out from under acknowledged work, so
+         * creates vanished (a directory came back with 3 of 500 files), chunk
+         * mappings vanished (correct size, all-zero contents) -- and because
+         * the rebuild also restores next_ino from the older root, the
+         * allocator handed out inos that were already live
+         * (`cwi-fail: ino_dup ... shard=0`), which surfaced to applications as
+         * EEXIST on a brand-new name. fsync did not help: the report had
+         * already succeeded before the rebuild threw the row away. */
         int need = ex->meta_fragmented && ex->root.page_count > 0 &&
+                   !ex->shard_dirty &&
                    (ex->meta_needs_rebuild ||
                     (ex->inode_count <= 1 && ex->root.blob_len > (1u << 20)));
         if (!need)
@@ -1020,6 +1035,11 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
      * Preserve shard_id: for an extra-shard table the deserialize staging
      * zeroed it, and alloc_ino keys the ino congruence class off it. */
     uint32_t saved_shard_id = ex->shard_id;
+    /* The allocator watermark of the table we are about to replace. The swap
+     * below discards it, and the committed root can be older, so without this
+     * the rebuild reissues inos that are still live (see the next_ino floor
+     * where the root is installed). */
+    efs_ino_t saved_next_ino = ex->next_ino;
 
     /* A MAIN-table rebuild must not drop dirty shard tables. efs_export_free
      * recursively frees ex->shard_tabs; but a shard owner holds ACKED-yet-
@@ -1123,7 +1143,19 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
         ex->root.version = 4;
     else if (saw_v5_ci && !saw_v4_ci && ex->root.version < 5)
         ex->root.version = 5;
+    /* next_ino only ever moves FORWARD, across the rebuild too.
+     *
+     * Plain assignment let a rebuild from an older root hand back ino numbers
+     * that were already allocated and live; the dentry write then rejected
+     * them as duplicates (`cwi-fail: ino_dup`) and the caller saw EEXIST on a
+     * name that did not exist. The DIRTY-REBUILD guards should keep us off a
+     * table whose allocations are still uncommitted, but reusing a live ino is
+     * severe enough to refuse outright: skipping ino numbers costs nothing,
+     * reissuing one corrupts a file. Same reasoning as the dirty shard tables
+     * preserved across the swap above. */
     ex->next_ino = ex->root.next_ino;
+    if (saved_next_ino > ex->next_ino)
+        ex->next_ino = saved_next_ino;
     if (efs_chunk_size_valid(ex->root.chunk_size))
         ex->chunk_size = ex->root.chunk_size;
     /* Features are root-owned; the EFSM blob does not carry them, so restore
@@ -2812,7 +2844,12 @@ static void *meta_catchup_thread(void *arg)
              * export stays at 1 inode. A fresh mkfs is 2 pages (~128 KiB);
              * the old 64 KiB cutoff spun rebuild forever and wedged
              * CREATE_SHARD (BUSY / FUSE hang on empty-file create). */
+            /* DIRTY-REBUILD: never rebuild a main table with unflushed ops --
+             * it is ahead of the committed root, so a rebuild only loses the
+             * ops (and rolls next_ino back). The flush clears shard_dirty and
+             * this picks the table up on the next pass. */
             need[e] = (ex->meta_fragmented && ex->root.page_count > 0 &&
+                       !ex->shard_dirty &&
                        (ex->meta_needs_rebuild ||
                         (ex->inode_count <= 1 &&
                          ex->root.blob_len > (1u << 20))));
