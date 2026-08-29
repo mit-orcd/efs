@@ -1668,6 +1668,22 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
         pthread_mutex_unlock(&s->lock);
         return -1;
     }
+    /* Take the shard locks for the snapshot, in global->shard order.
+     *
+     * The snapshot memcpy's ex->inodes[], and since the per-op CREATE path
+     * drops the global lock and reallocs that array holding only a shard
+     * lock, the global lock alone no longer excludes a writer: the flush
+     * thread read a freed pointer and took a SIGSEGV in
+     * efs_export_table_snapshot_ex under a 9-client 10M-inode create load.
+     *
+     * This is the same global+all-shards discipline the rebuild already
+     * follows (rebuild_shards_lock, blocker 1); the flush is the other
+     * whole-table reader and was simply never converted when the per-op
+     * writers landed. A main-table flush needs every shard lock because a
+     * create may land on any shard; a single-shard flush needs only its own. */
+    uint32_t fsc = 0;
+    int fidx = rebuild_shards_lock(s, ex, table_ino, &fsc);
+
     efs_export_ensure_rollups(ex);
     int omit_chunks = (ex->chunk_epoch == ex->flushed_chunk_epoch &&
                        ex->root.chunk_blob_len > 0);
@@ -1690,6 +1706,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
                                              : ex->root.page_count;
         old_ch_pc = ex->root.chunk_page_count;
     }
+    rebuild_shards_unlock(s, fidx, ex, table_ino, fsc);
     pthread_mutex_unlock(&s->lock);
     t_snap = heal_mono_us() - t_begin - t_lockwait;
     if (snap_rc != EFS_OK)

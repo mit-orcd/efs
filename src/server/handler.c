@@ -55,6 +55,41 @@ static int readdir_row_cmp(const void *a, const void *b)
     return 0;
 }
 
+/* Collects a directory's child rows for one readdir page.
+ *
+ * Rows are gathered as pointers under the shard locks (the table cannot move
+ * mid-page), then sorted by ino by the caller. The `after` cursor is an ino
+ * rather than a position because remove_inode_slot swap-compacts the table:
+ * an unlink in an unrelated directory on the same shard shifts this
+ * directory's rows across a page boundary, which used to skip entries. */
+struct readdir_collect {
+    const struct efs_inode **cand;
+    uint64_t n;
+    uint64_t cap;
+    uint64_t after;
+    int rc;
+};
+
+static int readdir_collect_cb(struct efs_export *ex, uint64_t slot, void *arg)
+{
+    struct readdir_collect *c = arg;
+    const struct efs_inode *in = &ex->inodes[slot];
+    if (in->ino <= c->after)
+        return 0;
+    if (c->n == c->cap) {
+        uint64_t ncap = c->cap ? c->cap * 2 : 64;
+        const struct efs_inode **nc = realloc(c->cand, ncap * sizeof(*nc));
+        if (!nc) {
+            c->rc = EFS_ERR_NOMEM;
+            return 1; /* stop the walk */
+        }
+        c->cand = nc;
+        c->cap = ncap;
+    }
+    c->cand[c->n++] = in;
+    return 0;
+}
+
 #define EFS_FLOCK_SH 1u
 #define EFS_FLOCK_EX 2u
 #define EFS_FLOCK_NB 4u
@@ -847,10 +882,23 @@ send_reply:
                     size_t rlen = 0;
                     if (do_root)
                         efs_export_root_serialize(&ex->root, &rbuf, &rlen);
+                    /* Shard locks for the snapshot, global->shard order: the
+                     * per-op CREATE path reallocs ex->inodes[] under a shard
+                     * lock alone, so the global lock no longer makes this
+                     * memcpy safe. Same fix as the flush snapshot. */
+                    int gm_eidx = server_export_index_locked(g_server, ex);
+                    uint32_t gm_sc = ex->root.shard_count
+                                         ? ex->root.shard_count : 1;
+                    if (do_tab && gm_eidx >= 0)
+                        server_shard_lock_all(g_server, (uint32_t)gm_eidx,
+                                              gm_sc);
                     if (do_tab)
                         efs_export_ensure_rollups(ex);
                     int src = do_tab ? efs_export_table_snapshot(ex, &snap)
                                      : EFS_OK;
+                    if (do_tab && gm_eidx >= 0)
+                        server_shard_unlock_all(g_server, (uint32_t)gm_eidx,
+                                                gm_sc);
                     pthread_mutex_unlock(&g_server->lock);
                     char *ebuf = NULL;
                     size_t elen = 0;
@@ -2960,51 +3008,27 @@ send_reply:
                      * so the sorted order is consistent page to page. Rows are
                      * collected as pointers while holding the lock (the table
                      * cannot move mid-page), then sorted and copied out. */
-                    const struct efs_inode **cand = NULL;
-                    uint64_t ncand = 0, ccap = 0;
-                    for (uint64_t i = 0; i < tab->inode_count; i++) {
-                        if (tab->inodes[i].ino == 0)
-                            continue;
-                        if (tab->inodes[i].name[0] == '\0')
-                            continue;
-                        if (tab->inodes[i].parent != req->parent)
-                            continue;
-                        if (tab->inodes[i].ino == req->parent)
-                            continue;
-                        if (tab->inodes[i].ino <= after)
-                            continue;
-                        if (ncand == ccap) {
-                            uint64_t ncap = ccap ? ccap * 2 : 64;
-                            const struct efs_inode **nc =
-                                realloc(cand, ncap * sizeof(*nc));
-                            if (!nc)
-                                break;
-                            cand = nc;
-                            ccap = ncap;
-                        }
-                        cand[ncand++] = &tab->inodes[i];
-                    }
-                    /* DIAG: catch duplicate dentries (same name, two inos).
-                     * The names_crazy removal flake ("got 1, want 0") could be
-                     * a duplicate revealed after one unlink removed its twin;
-                     * the create-phase listdir dedupes by name so a dup passes
-                     * the create check but leaves one row behind. */
-                    for (uint64_t a = 0; a < ncand; a++)
-                        for (uint64_t b = a + 1; b < ncand; b++)
-                            if (strncmp(cand[a]->name, cand[b]->name,
-                                        EFS_MAX_NAME) == 0)
-                                fprintf(stderr,
-                                        "READDIR-DUP: parent=%llu name=%s "
-                                        "ino1=%llu ino2=%llu shard=%u gen=%llu "
-                                        "dirty=%d cnt=%llu\n",
-                                        (unsigned long long)req->parent,
-                                        cand[a]->name,
-                                        (unsigned long long)cand[a]->ino,
-                                        (unsigned long long)cand[b]->ino,
-                                        tab->shard_id,
-                                        (unsigned long long)tab->root.generation,
-                                        tab->shard_dirty,
-                                        (unsigned long long)tab->inode_count);
+                    /* Walk the parent's child index, not the table. The scan
+                     * this replaces was O(rows in the shard table) per PAGE,
+                     * and readdir fans a page to every shard, so listing one
+                     * directory cost O(inodes in the export) per page no
+                     * matter how few children it had: a 1000-entry directory
+                     * took 31 ms at 90k inodes and 1.9 s at 10M.
+                     *
+                     * efs_export_foreach_child also drops the O(ncand^2)
+                     * duplicate-dentry diagnostic that used to run here. It
+                     * emits a slot only when the name index maps (parent,
+                     * name) back to that same slot, so a duplicate name cannot
+                     * reach the reply and the pairwise strncmp had nothing
+                     * left to find — it was pure cost, ~500k comparisons per
+                     * page on a 1000-entry directory. */
+                    struct readdir_collect col = {
+                        .after = after, .rc = EFS_OK,
+                    };
+                    (void)efs_export_foreach_child(tab, req->parent,
+                                                   readdir_collect_cb, &col);
+                    const struct efs_inode **cand = col.cand;
+                    uint64_t ncand = col.n;
                     if (ncand > 1)
                         qsort(cand, ncand, sizeof(*cand), readdir_row_cmp);
                     for (uint64_t k = 0; k < ncand && r.count < max; k++)
