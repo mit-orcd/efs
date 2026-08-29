@@ -37,6 +37,92 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+**DURABILITY GATE ADDED (Aug 28, b2e0dce) — `run_tests.sh posixpersist`.**
+Every other suite writes and verifies inside ONE mount session, so all of them
+would pass even if efs never made anything durable (the client cache answers
+the reads). `tests/posix/posix_persist.py` splits each of 26 tests across two
+processes — `--phase prepare`, unmount, remount, `--phase verify` — with
+content derived from the test name via `rand_bytes` so verify recomputes what
+prepare should have written instead of trusting a file. Self-validating, NO
+XFS baseline. Two guards, both load-bearing: the unmount is a real
+`fusermount3 -u` (NOT `remount_client`, which SIGKILLs — a clean unmount must
+preserve everything written, a crash only what was fsynced; `--crash` picks
+the kill deliberately) and it NEVER falls back to a kill; and the run fails if
+the efs-fuse pid did not change, since a surviving daemon serves the reads
+from cache and passes vacuously. Validated both ways before trusting it:
+26/26 on a local FS, and a negative control (truncate / zero-fill / delete one
+of 500) fails exactly those 3.
+**FOUND+FIXED on the first run: unlink freed the chunks of a file that still
+had links.** `ln a b; rm a` left b with the right size and nlink but reading
+all zeros, PERMANENTLY (identical after a second remount). Invisible
+in-session — the client still had the data cached — which is why posix's
+hardlink tests never caught it. The parent-owner UNLINK handler dropped chunks
+for ANY non-dir unlink (`urc==0 && have_victim && !is_dir && !keep`); the
+sibling UNLINK_SHARD path always gated on `nlink == 0`. Now reads the
+surviving link count from the authoritative row (`efs_export_get_inode`, or
+the child owner's UNLINK_SHARD reply) — `victim.nlink` is the PRE-unlink count
+and on a parent shard can be a dentry stub. Gates: posixpersist 26/26 settled,
+posix 0 EFS bugs.
+**FIXED (Aug 28, cad1083) — the post-wipe loss was a DIRTY MAIN TABLE being
+rebuilt.** The extra-shard paths have always refused to rebuild a table with
+unflushed ops (DIRTY-REBUILD: the owner is the single writer, so a dirty table
+is AHEAD of the committed root and a rebuild can only discard ACKed work); the
+**main table had no such guard** — missing in both `server_ensure_shard_ready`'s
+shard-0 branch and the catchup thread's `need[e]`. The rebuild also did
+`ex->next_ino = ex->root.next_ino` AFTER `*ex = staging`, so the live watermark
+was discarded and an older root rolled the allocator BACKWARDS; next_ino is now
+floored at the pre-swap value (captured next to `saved_shard_id`). Reusing a
+live ino corrupts a file, skipping ino numbers costs nothing.
+**Gate: posixpersist immediately after a fresh wipe 25-26/26 (was 11-16 LOST),
+0 `ino_dup`, 0 `raced with GC` on all 4 servers (fcstor004 alone had 45
+rebuilds + 11 races before); posix 195/201, only the known size-visibility
+flake.** The metadata half of the loss (missing creates, ENOENT, spurious
+EEXIST) is GONE. What remains is content-only ("size correct, contents zeros")
+and the servers are idle and flushing normally through it — that is the
+separate clean-unmount drain item below, NOT this.
+**Original diagnosis, kept for the symptom list:** a fresh `mkfs` is followed
+by MINUTES of metadata rebuild churn
+(measured: fcstor004 45 `meta-rebuild` + 11 `raced with GC`, fcstor006 25,
+fcstor005 6). **While that churn runs, the servers silently drop applied
+metadata ops.** All of these are the SAME bug, not separate ones:
+- chunk mappings lost → "size correct, contents all zeros" (11-16 of 26);
+- whole creates lost → `many_files_in_one_dir` came back **3 of 500**,
+ symlinks/files ENOENT;
+- the ino allocator ROLLS BACK → `cwi-fail: ino_dup parent=8 name=f043 ino=19
+ shard=0 cnt=45` on the primary → **spurious EEXIST on a brand-new name**,
+ then the file does not exist. **Note this is the scale-test `ino_dup`
+ signature WITH per-op CREATE already reverted (bc27e0c), so per-op CREATE
+ was NOT its only cause** — a rebuild reloading a shard table from stale/GC'd
+ pages loses recently applied rows and the allocator re-issues their inos.
+**Once the rebuild churn stops the cluster is stable and posixpersist is
+25-26/26.** So it is a startup/catch-up window, not steady-state corruption —
+but it is silent, and `fsynced_file` was among the lost, i.e. **fsync returned
+success and the data was gone** (the report succeeded, then the rebuild threw
+the row away). All of the above is fixed by cad1083.
+**RULED OUT as the cause (do not re-chase):** the client. `efs_client_report_dirty`
+merges the dirty snapshot back on failure and sets `report_flush_failed`, and
+in every failing run the client logged NOTHING because the report returned OK.
+`efs_fuse_destroy` was still hardened (845b853): it flushed once, discarded the
+rc, and let `efs_client_shutdown` free the merged-back table — retry-until-drain
++ a loud message now, but that loop never engages here.
+**HARNESS CONSEQUENCE: a cluster is NOT usable the moment `clean_cluster.sh` +
+`setup` return.** Runs started immediately after a wipe measure the churn
+window, not the build (this is what made one posixpersist run look 16/26 and
+the next 26/26). Wait for `meta-rebuild|rebuilt export` counts to stop growing
+on all 4 servers, or accept the noise.
+**Residual, separate, still open — CONTENT-ONLY unmount drain.** Post-cad1083 a
+wipe+immediate posixpersist still loses 0-4 of 26, always "size correct,
+contents all zeros" (`closed_but_not_fsynced` every time; also
+`multichunk_file` / `overwrite_middle` / `sparse_file`), while the servers log
+only normal `meta-flush: committed` + `meta-prepare: stashed` — no rebuild, no
+GC-race, no ino_dup. So chunk records are not reaching durability on a clean
+unmount; metadata does. Same family as `large_file_size_only` (64 MiB file,
+tail chunk at size-128KiB, ~1 run in 3 even settled; isolated repro of the same
+write always survives, with and without fsync). **NOTE while chasing this:
+peers log `meta-prepare: stashed ... (was committed gen=3)` for every gen up to
+11 — the 2PC COMMIT phase is not promoting on the peers, so only the primary
+holds recent gens. Unrelated to the loss seen here (the primary serves) but a
+real durability exposure of its own.**
 **SCALE TEST BUILT + FIRST 10M-INODE RUN (Aug 28) — every number before this
 was from a table under 440k against a 2^32 goal. `tests/stress/scale_grow.sh`
 (+ scale_worker.py / scale_probe.py) grows an export in steps and records
