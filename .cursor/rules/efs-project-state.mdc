@@ -37,7 +37,60 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
-**BIGGEST WIN TO DATE — fsync flush GROUP COMMIT (Aug 28, 886f75b): 36-way
+**SCALE TEST BUILT + FIRST 10M-INODE RUN (Aug 28) — every number before this
+was from a table under 440k against a 2^32 goal. `tests/stress/scale_grow.sh`
+(+ scale_worker.py / scale_probe.py) grows an export in steps and records
+create rate, idle per-op latency, server RSS and error count at each size.
+It found four things in one afternoon; three are FIXED.**
+1. **SILENT DATA LOSS: per-op CREATE dropped ~5% of concurrent creates —
+   REVERTED (bc27e0c).** O_CREAT|O_EXCL on unique never-used names returned
+   EEXIST and the file was then absent (stat ENOENT); 111/111 sampled dirs
+   were short (4-67 of 1000 files). 407k `cwi-fail: ino_dup` on the primary,
+   **all shard=0**. Cause: `efs_export_alloc_ino_for_shard` consults the MAIN
+   table (`efs_export_inode_slot(ex, ino)`) on EVERY alloc, but per-op CREATE
+   locks only {psh,dsh,target} — when none is 0 it read shard 0's ino index
+   while a concurrent create was inserting + reallocating it → missed a live
+   row → handed out an in-use ino → the dentry write onto main rejected it.
+   0 errors at 1 thread vs 27 at 16 threads (same client, same size) = pure
+   race. **Revert was also FASTER: 500k/9x16 errors 25017→0, creates/s
+   23809→39999, unlink p50 0.95→0.53ms, RSS 2055→1265MB.** Consistent with
+   402d14a (partition perf-neutral). Locking shard 0 per create would
+   serialize all creates = the thing the partition existed to avoid, so
+   there is **no cheap correct version**; the allocator's dependency on the
+   main table must be designed away first. Transitional step (d462ab0,
+   aa7bd5a) is NOT implicated and stays.
+2. **readdir was O(inodes in export) PER PAGE — FIXED (60cbef3).** The
+   handler scanned the whole shard table for rows with a matching parent, and
+   readdir fans each page to every shard. A 1000-entry dir: 31ms at 90k →
+   1.9s at 10M. The parent→children index already existed
+   (`efs_export_foreach_child`) and just was not used. Now **4.6ms at 5M and
+   FLAT** (4.4/4.3/4.6 at 100k/1M/5M). Also retired an O(ncand^2)
+   duplicate-dentry DIAG (~500k strncmp/page) — foreach_child only yields a
+   slot the name index maps back, so a dup cannot reach the reply.
+3. **Flush + GET_META snapshots took only the global lock — FIXED
+   (60cbef3).** Fine until per-op CREATE started reallocating `ex->inodes[]`
+   under a shard lock alone; then the snapshot memcpy could read freed
+   memory. **2 of 4 servers died with SIGSEGV in
+   `efs_export_table_snapshot_ex` on the flush thread** under 9x10M creates,
+   and the other 2 wedged re-polling for pages the dead nodes held. Both now
+   take global + all shard locks (same `rebuild_shards_lock` discipline as
+   the rebuild). RSS at 5M also fell 27.5GB→7.4GB, consistent with the racing
+   snapshot reading torn `inode_count`s. **This was the "flush is not
+   shard-lock-aware" gap that higher bits were blocked on.**
+4. **STILL OPEN — RAM is the 2^32 wall.** Marginal ~1.3-1.5 KB/inode
+   (5M→10M: +6.6GB for 5M inodes) cluster-wide, tables fully RAM-resident.
+   2^32 x 1.3KB ≈ **5.6 TB aggregate** = ~1.4 TB/node on 4 nodes. Reaching
+   2^32 needs a paged/on-disk table or ~40-100 nodes, NOT more shard bits.
+   Measure again now that the snapshot race is fixed.
+**Scale curve (post-fix, 9 clients x 16 threads, bits=3, TCP):** creates
+16.6k-40k/s and NOT degrading with size; stat p50 flat 0.27ms 100k→5M;
+create p50 0.28→0.34ms; readdir flat ~4.4ms; **unlink still grows
+0.44→0.53→4.6ms (100k/500k/5M) — next thing to chase.**
+**HARNESS GOTCHA (cost an hour):** the worker swallowed `FileExistsError` as
+benign, so a 5%-per-dir loss reported `errors=0`; and it batched progress at
+2000/thread so a 694-file slice printed 0 forever and a dead cluster looked
+like a hang. Both fixed. **Never treat EEXIST on a unique name as benign.**
+**BIGGEST PERF WIN — fsync flush GROUP COMMIT (Aug 28, 886f75b): 36-way
 posixstress 34.7 -> 7.2 EFS-bugs/instance (4.8x), 3 fresh-wipe runs each.**
 Every sync REPORT_CHUNKS (every client fsync/close) ran its OWN full metadata
 flush, all serialized on the single `meta_flush_mu`: ~55 flushes/s x ~14ms =
