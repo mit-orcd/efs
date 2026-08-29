@@ -2040,6 +2040,10 @@ send_reply:
                      * the parent dentry is gone, fan nlink-- / last-link
                      * drop there so spread-created files don't leak. */
                     if (urc == 0 && have_victim && !req->is_dir) {
+                        /* Link count left on the victim after this unlink. -1
+                         * until we learn it; the child owner reports it when
+                         * the row lives on another shard. */
+                        int nlink_left = -1;
                         uint32_t bits = ex->root.shard_bits;
                         if (bits && sc > 1) {
                             efs_node_id_t live[EFS_MAX_NODES];
@@ -2080,10 +2084,34 @@ send_reply:
                                         &ur);
                                     pthread_mutex_lock(&g_server->lock);
                                     server_shard_lock_all(g_server, eidx, sc);
+                                    if (ur.status == EFS_INODE_RPC_OK)
+                                        nlink_left = (int)ur.inode.nlink;
                                 }
                             }
                         }
-                        if (urc == 0 && have_victim && !req->is_dir && !keep) {
+                        /* Free the data only once the LAST link is gone.
+                         *
+                         * This used to drop on every file unlink, so
+                         * `ln a b; rm a` released the chunks while b still
+                         * referenced them: b kept its size and read back as
+                         * zeros. Nothing in-session noticed, because the
+                         * client still had the data cached -- it only
+                         * appeared after a remount. The UNLINK_SHARD path
+                         * below always gated on nlink reaching 0.
+                         *
+                         * victim.nlink is the count from BEFORE the unlink,
+                         * and on a parent shard it can be a dentry stub whose
+                         * nlink is not authoritative, so re-read the row
+                         * rather than subtracting from it. */
+                        if (nlink_left < 0) {
+                            struct efs_inode after;
+                            memset(&after, 0, sizeof(after));
+                            nlink_left =
+                                (efs_export_get_inode(ex, victim.ino,
+                                                      &after) == 0)
+                                    ? (int)after.nlink : 0;
+                        }
+                        if (!keep && nlink_left == 0) {
                             /* fan_drop_chunks drops the global lock mid-op. */
                             server_shard_unlock_all(g_server, eidx, sc);
                             fan_drop_chunks(g_server, ex, req->export_id,

@@ -10,6 +10,8 @@
 #   run_tests.sh posix2 multi                    4 non-overlapping pairs in parallel
 #   run_tests.sh posixstress [N] [host ...]      N full suites per host in parallel
 #                                                (default N=4, all 9 clients)
+#   run_tests.sh posixpersist [--crash] [host ...] write, unmount, remount, verify
+#                                                (durability across a remount)
 #   run_tests.sh perf single <host> [quick|full] perf on one client
 #   run_tests.sh perf multi [host ...] [quick|full]
 #                                                perf across clients (parallel)
@@ -101,6 +103,27 @@ remount_client() { # host
             grep -q \"efs-fuse /tmp/efs-mount \" /proc/mounts && exit 0
         done
         echo remount-timeout; tail -8 fuse.log; exit 1"
+}
+
+# Cleanly unmount one client: ask the kernel to unmount and let efs-fuse exit
+# on its own, so it gets the chance to flush anything still dirty.
+#
+# Deliberately NOT remount_client, which SIGKILLs the daemon. The difference is
+# the whole point of the durability gate: a clean unmount must preserve
+# everything that was written, whereas a kill only has to preserve what was
+# fsynced. Using the wrong one silently answers the wrong question.
+#
+# Never falls back to a kill -- if the daemon will not exit, the caller has to
+# hear about it rather than get a crash test mislabelled as a clean unmount.
+clean_unmount_client() { # host
+    local h=$1
+    say "  $h: clean unmount (no kill)"
+    ssh_to 40 "$h" "fusermount3 -u /tmp/efs-mount 2>&1 || umount /tmp/efs-mount 2>&1 || true
+        for i in \$(seq 1 100); do
+            pgrep -x efs-fuse >/dev/null || exit 0
+            sleep 0.2
+        done
+        echo 'efs-fuse still alive after unmount'; exit 1"
 }
 
 # rsync source + build efs-fuse + mount, per client (setup before perf multi)
@@ -248,6 +271,105 @@ shutil.rmtree(d)
         done
     fi
     say "posix results in $pdir"
+    return $rc
+}
+
+# -------------------------------------------------------- posixpersist ---
+# Durability gate: write on a mount, tear the mount down, bring it back, and
+# check the writes are still there. Every other suite writes and verifies
+# inside one mount session, so all of them would pass even if efs kept
+# everything in client memory.
+cmd_posixpersist() { # [--keep] [--crash] [efs-host ...]
+    local keep="" mode=clean hosts=()
+    for a in "$@"; do
+        case "$a" in
+            --keep) keep="--keep" ;;
+            # --crash SIGKILLs the daemon instead of unmounting it. Then only
+            # fsynced data is required to survive, so expect the un-fsynced
+            # tests to fail; that is the POSIX contract, not a bug.
+            --crash) mode=crash ;;
+            *) hosts+=("$a") ;;
+        esac
+    done
+    [ ${#hosts[@]} -eq 0 ] && hosts=("${DEFAULT_HOSTS[@]:0:1}")
+    local pdir="$RESULTS/posixpersist/$RUN_ID"
+    mkdir -p "$pdir"
+    local py=/tmp/efs/tests/posix/posix_persist.py
+    local sec=${PERSIST_SSH_SEC:-600}
+    local rc=0
+
+    for h in "${hosts[@]}"; do
+        local short=${h%.ib}
+        say "posixpersist: $h:$EFS_MNT (unmount mode: $mode)"
+        push_tests "$h"
+        ensure_mounted "$h" || { say "  $h: not mounted"; rc=1; continue; }
+        # Same guard as cmd_posix: a dead efs-fuse leaves EFS_MNT as a plain
+        # local directory, and a durability suite would then be testing the
+        # local disk's durability rather than efs's.
+        ssh_to 15 "$h" "findmnt -n -o FSTYPE '$EFS_MNT' | grep -q '^fuse\.efs-fuse$'" \
+            || { say "  ERROR: $h:$EFS_MNT is not a live efs-fuse mount — run setup"; rc=1; continue; }
+
+        # Record which daemon wrote the data, so we can prove it is gone.
+        local pid_before
+        pid_before=$(ssh_to 15 "$h" 'pgrep -x efs-fuse | head -1' | tr -d '[:space:]')
+
+        say "  phase 1/2: prepare (writing)"
+        ssh_to "$sec" "$h" "rm -f /tmp/persist-prep.tsv
+            PYTHONUNBUFFERED=1 timeout -k 5 $((sec - 20)) \
+            python3 $py '$EFS_MNT' --phase prepare \
+            --timeout-s ${PERSIST_TEST_SEC:-60} --results /tmp/persist-prep.tsv
+            cat /tmp/persist-prep.tsv 2>/dev/null" > "$pdir/prepare-$short.tsv"
+        local pfail
+        pfail=$(awk -F'fail=' '/# summary/{split($2,a," "); print a[1]}' \
+                "$pdir/prepare-$short.tsv")
+        say "  prepare: $(grep -c $'\tPASS' "$pdir/prepare-$short.tsv") wrote, ${pfail:-?} failed"
+        if [ "${pfail:-1}" != "0" ]; then
+            say "  NOTE: prepare had failures — verify results below are only"
+            say "        meaningful for the tests that prepared cleanly"
+        fi
+
+        if [ "$mode" = crash ]; then
+            # kill -9: only fsynced data is required to survive.
+            say "  CRASH mode: SIGKILL efs-fuse (only fsynced data need survive)"
+            remount_client "$h" || { say "  $h: remount failed"; rc=1; continue; }
+        else
+            # Clean unmount: everything written must survive, fsynced or not.
+            clean_unmount_client "$h" \
+                || { say "  $h: clean unmount failed — refusing to fall back to a kill"; rc=1; continue; }
+            ensure_mounted "$h" || { say "  $h: remount failed"; rc=1; continue; }
+        fi
+
+        # The whole gate rests on the mount really having gone away. If the
+        # daemon survived, its page cache could serve the reads and every test
+        # would pass without anything having been made durable.
+        local pid_after
+        pid_after=$(ssh_to 15 "$h" 'pgrep -x efs-fuse | head -1' | tr -d '[:space:]')
+        if [ -z "$pid_after" ] || [ "$pid_before" = "$pid_after" ]; then
+            say "  ERROR: efs-fuse pid did not change ($pid_before -> ${pid_after:-none});"
+            say "         the mount was not actually torn down — result would be meaningless"
+            rc=1
+            continue
+        fi
+        say "  efs-fuse restarted: pid $pid_before -> $pid_after"
+
+        say "  phase 2/2: verify (reading back after remount)"
+        ssh_to "$sec" "$h" "rm -f /tmp/persist-ver.tsv
+            PYTHONUNBUFFERED=1 timeout -k 5 $((sec - 20)) \
+            python3 $py '$EFS_MNT' --phase verify $keep \
+            --timeout-s ${PERSIST_TEST_SEC:-60} --results /tmp/persist-ver.tsv
+            cat /tmp/persist-ver.tsv 2>/dev/null" > "$pdir/verify-$short.tsv"
+
+        local vpass vfail
+        vpass=$(grep -c $'\tPASS' "$pdir/verify-$short.tsv")
+        vfail=$(grep -c $'\tFAIL' "$pdir/verify-$short.tsv")
+        say "  --- $short: survived the remount: $vpass, LOST: $vfail ---"
+        if [ "${vfail:-0}" != "0" ]; then
+            grep $'\tFAIL' "$pdir/verify-$short.tsv" \
+                | awk -F'\t' '{printf "    DATA LOSS  %-28s %s\n", $1, $3}'
+            rc=1
+        fi
+    done
+    say "results in $pdir"
     return $rc
 }
 
@@ -584,6 +706,7 @@ main() {
     case "$cmd" in
         posix) cmd_posix "$@" ;;
         posixstress) cmd_posixstress "$@" ;;
+        posixpersist) cmd_posixpersist "$@" ;;
         posix2) cmd_posix2 "$@" ;;
         perf)  cmd_perf "$@" ;;
         nvme)  cmd_nvme "$@" ;;
