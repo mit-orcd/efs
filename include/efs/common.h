@@ -77,6 +77,10 @@
  * Roadmap: bits=20 → 4096 shards. */
 #define EFS_META_SHARD_INO_BASE EFS_META_TABLE_INO
 #define EFS_META_MAX_SHARDS     4096
+/* Shard tables flushed concurrently per metadata flush window. Each one is
+ * ~1 ms of page round trips, so flushing them serially made the window linear
+ * in the dirty-shard count while holding meta_flush_mu. */
+#define EFS_META_FLUSH_PARALLEL 32
 /* New exports are born sharded. 8 shards (2 per server on a 4-node
  * cluster) is the live default. bits=5 was measured 3-6x WORSE on the
  * full posixstress suite: the metadata flush pays a fixed per-shard-table

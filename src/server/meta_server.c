@@ -1189,6 +1189,30 @@ static int put_meta_fragment(struct efsd_server *s, struct efs_export *ex,
                                        chunk_index, fragment_index, data, checksum);
 }
 
+static int server_flush_fragmented_meta_locked(struct efsd_server *s,
+                                               struct efs_export *ex,
+                                               efs_ino_t table_ino,
+                                               int commit_root,
+                                               uint32_t shard_idx,
+                                               uint32_t shard_total);
+
+/* One shard table's flush, for the parallel extras pass below. */
+struct extra_flush_job {
+    struct efsd_server *s;
+    struct efs_export *tab;
+    uint32_t shard;
+    uint32_t sc;
+    int rc;
+};
+
+static void *extra_flush_thread(void *arg)
+{
+    struct extra_flush_job *j = arg;
+    j->rc = server_flush_fragmented_meta_locked(
+        j->s, j->tab, efs_meta_shard_table_ino(j->shard), 0, j->shard, j->sc);
+    return NULL;
+}
+
 /* One fragment PUT for the parallel meta flush. */
 struct meta_put_job {
     struct efsd_server *s;
@@ -1539,7 +1563,23 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
      * fanned the extras-commit catchup storm (every clean flush bumped that
      * shard's descriptor gen and made every peer rebuild it). */
     if (bits && ex->shard_tabs) {
-        for (uint32_t i = 1; i < ex->shard_tab_cap; i++) {
+        /* Pick the tables to flush first, then flush them concurrently.
+         *
+         * Flushing them one at a time made the window linear in the number of
+         * dirty shards at ~1 ms each (measured: 62 tables = 65 ms of a 78 ms
+         * window), and the whole window holds meta_flush_mu, so every fsync
+         * queues behind it. That per-table millisecond is almost entirely the
+         * page write -- lockwait 0 us, snapshot 1 us, serialize 3 us, pages
+         * 789 us -- i.e. round trips to the fragment peers, not CPU and not
+         * lock contention. Serially, 4096 shards would put a flush window near
+         * a second, which is what makes high shard_bits unaffordable today.
+         *
+         * The tables are independent (distinct shard, distinct table_ino,
+         * distinct shard lock), so the pass is a straight fan-out. */
+        uint32_t want = 0;
+        struct extra_flush_job *jobs =
+            calloc(ex->shard_tab_cap, sizeof(*jobs));
+        for (uint32_t i = 1; jobs && i < ex->shard_tab_cap; i++) {
             struct efs_export *tab = ex->shard_tabs[i];
             if (!tab || tab->inode_count == 0)
                 continue;
@@ -1564,16 +1604,43 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
                 rc = -1;
                 continue;
             }
-            int src = server_flush_fragmented_meta_locked(
-                s, tab, efs_meta_shard_table_ino(i), 0, i, sc);
+            jobs[want].s = s;
+            jobs[want].tab = tab;
+            jobs[want].shard = i;
+            jobs[want].sc = sc;
+            jobs[want].rc = 0;
+            want++;
+        }
+        /* Bounded so a wide export cannot spawn thousands of threads at once;
+         * the win is overlapping the page round trips, which saturates well
+         * below that. */
+        for (uint32_t done = 0; jobs && done < want; ) {
+            uint32_t n = want - done;
+            if (n > EFS_META_FLUSH_PARALLEL)
+                n = EFS_META_FLUSH_PARALLEL;
+            pthread_t tids[EFS_META_FLUSH_PARALLEL];
+            int spawned[EFS_META_FLUSH_PARALLEL];
+            for (uint32_t k = 0; k < n; k++) {
+                spawned[k] = (pthread_create(&tids[k], NULL, extra_flush_thread,
+                                             &jobs[done + k]) == 0);
+                if (!spawned[k])
+                    extra_flush_thread(&jobs[done + k]);
+            }
+            for (uint32_t k = 0; k < n; k++)
+                if (spawned[k])
+                    pthread_join(tids[k], NULL);
+            done += n;
+        }
+        for (uint32_t k = 0; k < want; k++) {
             tabs_flushed++;
-            if (src != 0)
-                rc = src;
+            if (jobs[k].rc != 0)
+                rc = jobs[k].rc;
             else
                 flushed_extra = 1;
             /* shard_dirty is now cleared inside the flush, only when no op
              * landed during the unlocked window (flush-race fix). */
         }
+        free(jobs);
     }
     int main_dirty = ex->shard_dirty;
     uint64_t t_extras = heal_mono_us() - t_win0 - t_wait;

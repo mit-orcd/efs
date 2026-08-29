@@ -11,7 +11,11 @@
  * connect once per peer, reuse across meta rebuild/flush/migrate. Drop on
  * protocol/net errors so the next checkout reconnects. */
 
-#define EFS_PEER_CONNS_PER_NODE 4
+/* Callers BLOCK on the condvar below once every connection to a peer is busy,
+ * so this is the hard ceiling on server->server concurrency. At 4 it capped the
+ * parallel metadata flush at 4-way no matter how many shard tables were fanned
+ * out, which is most of why flushing 62 tables still took ~65 ms. */
+#define EFS_PEER_CONNS_PER_NODE 32
 /* After this many consecutive connect failures, stop reconnecting for the
  * cooldown window so a dead peer does not stall every caller on connect(). */
 #define EFS_PEER_DOWN_FAILS 3
