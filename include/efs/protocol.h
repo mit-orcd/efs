@@ -645,11 +645,17 @@ struct efs_ino_size_rec {
     uint64_t size;
     uint64_t mtime;
     uint32_t mtime_nsec;
-    /* So a peer getattr sees packed-file layout, not size-with-no-chunks. */
+    /* EFS_INO_REC_F_TIMES: apply mtime/atime even if older, and grow
+     * size despite an older mtime. ecopy futimens pins times locally and
+     * piggybacks them on the close REPORT instead of a SETATTR RPC. */
+    uint32_t flags;
     efs_ino_t pack_ino;
     uint32_t pack_off;
     uint32_t pack_len;
+    uint64_t atime;
 };
+
+#define EFS_INO_REC_F_TIMES  0x1u
 
 #define EFS_GETCHUNKS_MAX 64
 struct efs_msg_inode_getchunks {

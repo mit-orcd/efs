@@ -552,9 +552,7 @@ int efs_client_report_dirty(int sync)
     struct efs_chunk_rec *crecs = NULL;
     struct efs_ino_size_rec *irecs = NULL;
     uint32_t cn = 0, in = 0;
-    /* calloc: efs_ino_size_rec has 4B of alignment padding (mtime_nsec ->
-     * pack_ino) that field-by-field fills never touch — malloc would send
-     * uninitialised heap on the wire (valgrind writev warning). */
+    /* calloc: flags/padding must be zero on the wire. */
     if (ds.chunk_count)
         crecs = calloc(ds.chunk_count, sizeof(*crecs));
     if (ds.ino_count)
@@ -589,6 +587,9 @@ int efs_client_report_dirty(int sync)
         irecs[in].size = inode.size;
         irecs[in].mtime = inode.mtime;
         irecs[in].mtime_nsec = inode.mtime_nsec;
+        if (efs_client_mtime_is_pinned(ds.ino_keys[i]))
+            irecs[in].flags = EFS_INO_REC_F_TIMES;
+        irecs[in].atime = inode.atime;
         irecs[in].pack_ino = inode.pack_ino;
         irecs[in].pack_off = inode.pack_off;
         irecs[in].pack_len = inode.pack_len;

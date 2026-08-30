@@ -3058,17 +3058,21 @@ send_reply:
                      * (posix2 peer_o_trunc_visible: B still saw 10).
                      * SETATTR size stamps mtime=now; reject a grow whose
                      * mtime is older than the row. */
+                    int force_times =
+                        (irecs[k].flags & EFS_INO_REC_F_TIMES) != 0;
                     int report_stale =
-                        irecs[k].mtime < cur.mtime ||
-                        (irecs[k].mtime == cur.mtime &&
-                         irecs[k].mtime_nsec < cur.mtime_nsec);
+                        !force_times &&
+                        (irecs[k].mtime < cur.mtime ||
+                         (irecs[k].mtime == cur.mtime &&
+                          irecs[k].mtime_nsec < cur.mtime_nsec));
                     if (irecs[k].size > cur.size && !report_stale &&
                         efs_export_set_size_norollup(tab, irecs[k].ino,
                                                      irecs[k].size) == 0) {
                         applied++;
                         tab->shard_dirty = 1;
                     }
-                    if (irecs[k].mtime > cur.mtime ||
+                    if (force_times ||
+                        irecs[k].mtime > cur.mtime ||
                         (irecs[k].mtime == cur.mtime &&
                          irecs[k].mtime_nsec > cur.mtime_nsec)) {
                         efs_export_set_mtime_ns_norollup(tab, irecs[k].ino,
@@ -3077,6 +3081,8 @@ send_reply:
                         applied++;
                         tab->shard_dirty = 1;
                     }
+                    if (force_times && irecs[k].atime)
+                        efs_export_set_atime(tab, irecs[k].ino, irecs[k].atime);
                     if (irecs[k].pack_ino || irecs[k].pack_len) {
                         /* Re-fetch: cur above predates the size grow, and
                          * upsert writes the whole row back. */

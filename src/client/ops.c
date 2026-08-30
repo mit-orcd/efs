@@ -1076,12 +1076,30 @@ int efs_client_chown(efs_ino_t ino, uid_t uid, gid_t gid)
 
 int efs_client_utimens(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec)
 {
+    if (efs_client_ino_is_dirty(ino)) {
+        efs_client_lock_dir(ino);
+        pthread_mutex_lock(&g_client.idx_mu);
+        efs_export_set_mtime_ns(&g_client.export, ino, mtime, mtime_nsec);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(ino);
+        efs_client_mtime_pin(ino);
+        return EFS_OK;
+    }
     return setattr_rpc_dual_apply(ino, EFS_SETATTR_MTIME, 0, 0, 0, 0,
                                   mtime, mtime_nsec, 0);
 }
 
 int efs_client_set_atime(efs_ino_t ino, uint64_t atime)
 {
+    if (efs_client_ino_is_dirty(ino)) {
+        efs_client_lock_dir(ino);
+        pthread_mutex_lock(&g_client.idx_mu);
+        efs_export_set_atime(&g_client.export, ino, atime);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(ino);
+        efs_client_mtime_pin(ino);
+        return EFS_OK;
+    }
     return setattr_rpc_dual_apply(ino, EFS_SETATTR_ATIME, 0, 0, 0, 0, 0, 0,
                                   atime);
 }
@@ -1089,6 +1107,16 @@ int efs_client_set_atime(efs_ino_t ino, uint64_t atime)
 int efs_client_utimens_both(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec,
                             uint64_t atime)
 {
+    if (efs_client_ino_is_dirty(ino)) {
+        efs_client_lock_dir(ino);
+        pthread_mutex_lock(&g_client.idx_mu);
+        efs_export_set_mtime_ns(&g_client.export, ino, mtime, mtime_nsec);
+        efs_export_set_atime(&g_client.export, ino, atime);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(ino);
+        efs_client_mtime_pin(ino);
+        return EFS_OK;
+    }
     return setattr_rpc_dual_apply(ino, EFS_SETATTR_ATIME | EFS_SETATTR_MTIME,
                                   0, 0, 0, 0, mtime, mtime_nsec, atime);
 }
