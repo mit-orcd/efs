@@ -28,7 +28,14 @@ unsigned long long efs_lock_all_shards = 0;
 unsigned long long efs_lock_all_hold_us = 0;
 unsigned long long efs_lockn_calls = 0;
 unsigned long long efs_lockn_wait_us = 0;
+unsigned long long efs_lock1_calls = 0;
+unsigned long long efs_lock1_wait_us = 0;
+unsigned long long efs_global_calls = 0;
+unsigned long long efs_global_wait_us = 0;
+unsigned long long efs_global_hold_us = 0;
+unsigned long long efs_busy_replies = 0;
 __thread unsigned long long efs_lock_all_t0 = 0;
+__thread unsigned long long efs_global_t0 = 0;
 unsigned long long efs_rpc_count[256];
 
 /* Conn/writer stacks: hello_ack is heap-allocated now, so 1 MiB is ample and

@@ -1,0 +1,27 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 187
+  EFS BUGS         : 9  (baseline PASS, target FAIL)
+  both fail (match): 1
+  target better    : 4
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  concurrent_appends               [FAIL] timeout after 15s
+  concurrent_appends_two_proc      [FAIL] timeout after 15s
+  concurrent_create_unlink_two_proc [FAIL] timeout after 15s
+  create_excl_two_proc             [FAIL] timeout after 15s
+  hardlink_three_names             [FAIL] timeout after 15s
+  link_of_symlink                  [FAIL] timeout after 15s
+  mtime_monotonic_many_writes      [FAIL] timeout after 15s
+  trunc_open_other_fd              [FAIL] timeout after 15s
+  trunc_zero_then_high_pwrite      [FAIL] timeout after 15s
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_stats_readable             
+
+--- both fail (behaviour matches baseline) ---
+  virt_find_query                  base=SKIP target=FAIL

@@ -15,7 +15,7 @@ PUT_CHUNK off the global lock, bits>0 already live) live in **Performance
 next** below, alongside two Aug 24 workstreams: the **metadata op storm**
 (many small files) and the **streaming-write barrier** (ewrite vs NFS).
 **All data traffic goes via RDMA** (client + server↔server chunk/fragment
-payloads; auto first-inode hang still open — see below).
+payloads; auto first-inode hang **closed Aug 30** — see below).
 
 **Status at a glance (Aug 30):** Phase 1 **shipped**; Phase 2 **shipped**
 (server sole metadata writer, 2PC root commit Aug 26); Phase 3 **done**
@@ -23,12 +23,15 @@ payloads; auto first-inode hang still open — see below).
 Phase 4 **not started**. Per-op drop of `g_server->lock` for hot inode RPCs
 **gated** (LINK/RENAME/HOLD still `lock_all`; `EFS_LOCK_PROF` shows they
 are not the 9×4 ceiling). 9×4 posixstress is still ~95% `timeout after
-15s` — **next lever is not more `lock_all` drops.** Open perf: N pollers,
+15s`; LOCK-PROF split (`20260830-160943`) is **H3 client/wire RTT** —
+`1_wait` 14 ms/run, `global_hold` 59 ms/run, `busy` ≈ APPEND. **Next
+lever is client `rpc_send_recv_shard`, not more server lock drops.**
+Open perf: N pollers,
 flush O(table) hash (ecopy decay), streaming-write barrier (ewrite),
 PUT_CHUNK still takes the global lock for `export_acquire`. RDMA
-data+control **landed Aug 30** (poller re-arm; peer-pool QP; default auto);
-**auto RDMA still hangs the first inode RPC after mount** (`stat` OK,
-`mkdir`/`ls` D-state) — that cut's posixstress gate was TCP. Open
+data+control **landed Aug 30** (poller re-arm; peer-pool QP; default auto).
+Auto first inode RPC after mount **gated** (`mkdir` + solo posix 196/201
+0 EFS bugs, `results/posix/20260830-154329`). Open
 correctness: cross-client byte-range locks (`peer_fcntl_range_conflict`),
 load-dependent posix2 flakes. Open client rewrite: low-level FUSE API.
 Open product feature: **expiry dates** (export sunset + per-inode scratch
@@ -367,8 +370,12 @@ between REPORT / flush / PUT plus a single `recv_poller` at ~30% CPU.
    GETCHUNKS/READDIR/LOOKUP_PATH) drop the global lock and run on shard
    locks. LINK/RENAME/HOLD still `lock_all`; after 3× 9×4, `all_hold_us` is
    5.6–17 ms for the whole run (~1–2 µs/call) so they are **not** the
-   remaining timeout. 9×4 is still ~95% `timeout after 15s` — do **not**
-   spend another cut dropping LINK/RENAME. Remaining of *this* lever:
+   remaining timeout. LOCK-PROF 9×4 `20260830-160943`: `1_wait_us=14ms`,
+   `global_hold_us=59ms`, `global_wait_us=2.85s` (28 µs/call), `busy` ≈
+   APPEND; 0 primary `meta-ensure` rebuilds. Saturation is **H3
+   client/wire RTT**, not shard mutex, not residual `s->lock` I/O, not
+   BUSY backoff. Do **not** spend another cut dropping LINK/RENAME or
+   `ensure_shard_ready`. Remaining of *this* lever:
    every `PUT_CHUNK` still takes the global lock just to `export_acquire`.
    Split export-lookup / inflight from table mutate so data-path PUTs
    never wait on a report or flush. Expected for the write ceiling: most
@@ -497,10 +504,15 @@ quiet gap — that was the Aug 25 "first SEND after upgrade" hang). Server↔ser
 peer pool upgrades the same way, so verify-heal / migrate / meta-page
 GET/PUT_CHUNK use the QP when the HCA is usable. Default `EFS_TRANSPORT` is
 auto (try RDMA, TCP fallback). `EFS_TRANSPORT=tcp` still forces TCP.
-**Still open:** auto RDMA hangs the first inode RPC after a fresh mount
-(`stat` of the root is OK; `mkdir`/`ls` D-state; server `create=0`). Poller
-re-arm + TCP `MSG_PEEK` + send-CQ wait did not unwedge it. Chase that before
-quoting RDMA posixstress; TCP gates are the lock-drop evidence.*
+**First inode RPC after mount gated Aug 30:** `stat` of the root is still
+local (GET_META is one-shot TCP). First `mkdir`/`ls` upgrades the pool
+conn and the CREATE/READDIR frame rides RDMA. Shared wait is
+`efs_conn_wait_request` (handler + `test_rdma_xprt` share it; the test
+sleeps 500ms then sends a CREATE-sized frame). Poller harvests after
+comp-channel POLLIN instead of ack-and-loop. Solo posix auto RDMA
+`results/posix/20260830-154329`: **196/201, 0 EFS bugs.** `EFS_RDMA_FIRST=1`
+prints the old six-site trace. Do not quote 9×4 posixstress as an RDMA
+correctness gate (still ~95% 15s timeouts = saturation).*
 
 Client chunk PUT/GET is RDMA (RC QP after `RDMA_SETUP`). Payload that is a
 chunk or EC fragment uses the same path, including traffic that used to ride
@@ -696,8 +708,10 @@ is not the oracle for any of the items below.
 *Aug 30 gate (TCP, per-op lock drop): solo posix 195/201, 1 flake
 `dir_rename_over_existing`. 3× 9×4 still ~95% `timeout after 15s` on
 saturated hosts; clean 196/0 is now common on hosts that keep up.
-`lock_all` hold is not the ceiling. Auto RDMA first-inode hang is open
-(do not quote RDMA posixstress for this cut). posix2 remaining:
+`lock_all` hold is not the ceiling. LOCK-PROF classify 9×4
+`20260830-160943` (36 tsv, 6× 196/0): **H3** — next is client RTT, not
+more server lock drops. Auto RDMA first-inode **closed**
+(solo posix `20260830-154329` 196/201 0 EFS bugs). posix2 remaining:
 `peer_fcntl_range_conflict` (byte-range lockf is per-client in-memory,
 NOT coordinated cross-client).*
 

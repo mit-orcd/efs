@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <poll.h>
+#include <sys/socket.h>
 #include <sys/uio.h>
 #include <unistd.h>
 
@@ -192,6 +193,91 @@ static int conn_pick_send_chan(struct efs_conn *c, uint8_t type,
     if (type == EFS_MSG_GET_META || type == EFS_MSG_GET_META_ROOT)
         return EFS_CONN_TCP;
     return EFS_CONN_RDMA;
+}
+
+/* True when the TCP fd has a real byte (or peer close). Spurious POLLIN
+ * after RDMA upgrade used to send us into efs_recv_all with SO_RCVTIMEO=0,
+ * which blocked forever while the CREATE sat on the RDMA ring. */
+static int tcp_has_request(int fd)
+{
+    char peek;
+    ssize_t n = recv(fd, &peek, 1, MSG_PEEK | MSG_DONTWAIT);
+    if (n > 0)
+        return 1;
+    if (n == 0)
+        return -1;
+    if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
+        return 0;
+    return -1;
+}
+
+int efs_conn_wait_request(struct efs_conn *c)
+{
+    if (!c->rc)
+        return EFS_CONN_TCP;
+    struct efs_rdma_conn *rc = c->rc;
+    for (;;) {
+        /* Quick check only: a server conn thread has nothing to gain from
+         * spin-polling the ring — with dozens of live conns the aggregate
+         * spin was ~13 cores/server under a 9-client write load. It blocks
+         * on the eventfd below; the wakeup costs ~2us, nothing next to the
+         * per-request work. The client's latency-critical reply path keeps
+         * the adaptive spin. */
+        int r = efs_rdma_reply_ready_quick(rc);
+        if (r < 0)
+            return -1;
+        if (r > 0)
+            return EFS_CONN_RDMA;
+        struct pollfd p = { .fd = c->fd, .events = POLLIN };
+        if (poll(&p, 1, 0) < 0)
+            return -1;
+        if (p.revents & (POLLERR | POLLHUP | POLLNVAL))
+            return -1;
+        if (p.revents & POLLIN) {
+            int t = tcp_has_request(c->fd);
+            if (t < 0)
+                return -1;
+            if (t > 0)
+                return EFS_CONN_TCP;
+        }
+        /* Neither channel ready: block on the TCP fd + the CQ eventfd. */
+        struct pollfd pf[2] = {
+            { .fd = c->fd, .events = POLLIN },
+            { .fd = efs_rdma_reply_fd(rc), .events = POLLIN },
+        };
+        int br = poll(pf, 2, -1);
+        if (br < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+        if (pf[0].revents & (POLLERR | POLLHUP | POLLNVAL))
+            return -1;
+        /* RDMA first when both are ready: inode ops ride RDMA, GET_META
+         * stays TCP. Preferring TCP here blocked recv_all forever. */
+        if (pf[1].revents & POLLIN) {
+            /* efd is level-triggered leftovers after a consumed RDMA
+             * frame or a send-side wake. Only take RDMA when a recv is
+             * actually queued — otherwise recv_wait(-1) blocks forever
+             * and treats a later TCP request as peer death. */
+            int r2 = efs_rdma_reply_ready_quick(rc);
+            if (r2 < 0)
+                return -1;
+            if (r2 > 0)
+                return EFS_CONN_RDMA;
+            uint64_t tmp;
+            if (read(efs_rdma_reply_fd(rc), &tmp, sizeof(tmp)) < 0 &&
+                errno != EAGAIN)
+                return -1;
+        }
+        if (pf[0].revents & POLLIN) {
+            int t = tcp_has_request(c->fd);
+            if (t < 0)
+                return -1;
+            if (t > 0)
+                return EFS_CONN_TCP;
+        }
+    }
 }
 
 int efs_conn_send_msg_parts(struct efs_conn *c, uint8_t type,

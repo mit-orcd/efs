@@ -2,18 +2,17 @@
  *
  * Skips (exit 0, "SKIP") when no usable IB device exists, so it is safe in
  * the generic `make test` run on non-IB nodes. On the efs test servers it
- * exercises: handshake, inline/small/pool-max frames both ways, the TCP
- * side-channel for oversized frames, GET_META pinning, and teardown.
+ * exercises: handshake, a 500ms quiet gap then a CREATE-sized frame,
+ * inline/small/pool-max frames both ways, the TCP side-channel for
+ * oversized frames, GET_META pinning, and teardown.
  *
- * Both endpoints live in this process on a socketpair; the server side is
- * driven by a thread that mimics handler.c (recv request, reply on the
- * request's channel).
+ * Both endpoints live in this process on a socketpair; the server side
+ * uses efs_conn_wait_request (same wait as handler.c).
  */
 #include "efs/network.h"
 #include "efs/protocol.h"
 #include "efs/rdma.h"
 #include <arpa/inet.h>
-#include <poll.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,39 +46,9 @@ static void *server_thread(void *arg)
     struct server_ctx *sc = arg;
     struct efs_conn *c = sc->conn;
     for (;;) {
-        /* Wait on both channels like conn_wait_request does. */
-        int chan = EFS_CONN_TCP;
-        if (c->rc) {
-            for (;;) {
-                int r = efs_rdma_reply_ready(c->rc);
-                if (r < 0)
-                    return NULL;
-                if (r > 0) {
-                    chan = EFS_CONN_RDMA;
-                    break;
-                }
-                struct pollfd pf[2] = {
-                    { .fd = c->fd, .events = POLLIN },
-                    { .fd = efs_rdma_reply_fd(c->rc), .events = POLLIN },
-                };
-                if (poll(pf, 2, -1) < 0)
-                    return NULL;
-                if (pf[0].revents & (POLLERR | POLLHUP | POLLNVAL))
-                    return NULL;
-                if (pf[0].revents & POLLIN) {
-                    chan = EFS_CONN_TCP;
-                    break;
-                }
-                if (pf[1].revents & POLLIN) {
-                    chan = EFS_CONN_RDMA;
-                    break;
-                }
-            }
-        } else {
-            struct pollfd p = { .fd = c->fd, .events = POLLIN };
-            if (poll(&p, 1, -1) <= 0 || (p.revents & (POLLERR | POLLHUP)))
-                return NULL;
-        }
+        int chan = efs_conn_wait_request(c);
+        if (chan < 0)
+            return NULL;
         c->recv_chan = chan;
 
         uint8_t type = 0;
@@ -195,6 +164,32 @@ int main(void)
     sc.conn = srv;
     pthread_t eth;
     CHECK(pthread_create(&eth, NULL, server_thread, &sc) == 0, "echo thread");
+
+    /* Quiet gap then a CREATE-sized frame: FUSE upgrades, sits idle through
+     * FUSE_INIT, then the first mkdir is the first RDMA control SEND.
+     * Immediate post-upgrade frames do not catch a poller that drops the
+     * next CQE after a quiet gap. */
+    usleep(500000);
+    {
+        struct efs_msg_inode_create cr;
+        memset(&cr, 0, sizeof(cr));
+        cr.export_id = 1;
+        cr.parent = 1;
+        memcpy(cr.name, "rdma-first", 10);
+        cr.mode = 0755;
+        uint8_t *out = NULL;
+        uint32_t olen = 0;
+        uint8_t rt = 0;
+        CHECK(sizeof(cr) + 5 > EFS_RDMA_INLINE_MAX, "CREATE exceeds INLINE");
+        CHECK(efs_conn_send_msg(cli, EFS_MSG_INODE_CREATE, &cr, sizeof(cr)) == 0,
+              "send CREATE-sized after quiet gap");
+        CHECK(efs_conn_recv_msg(cli, &rt, (void **)&out, &olen) == 0,
+              "recv CREATE-sized echo");
+        CHECK(rt == EFS_MSG_INODE_CREATE && olen == sizeof(cr),
+              "CREATE-sized echo hdr");
+        CHECK(memcmp(&cr, out, olen) == 0, "CREATE-sized echo payload");
+        free(out);
+    }
 
     /* 1. Tiny frame (inline path). */
     {

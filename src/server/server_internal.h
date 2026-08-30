@@ -4,6 +4,7 @@
 #include "efs/common.h"
 #include "efs/metadata.h"
 #include "efs/network.h"
+#include "efs/protocol.h"
 #include <pthread.h>
 #include <time.h>
 
@@ -246,7 +247,17 @@ extern unsigned long long efs_lock_all_hold_us;
  * transitional lock_all. */
 extern unsigned long long efs_lockn_calls;
 extern unsigned long long efs_lockn_wait_us;
+/* Single-shard server_shard_lock (LOOKUP/GETATTR/READDIR). lockn does not
+ * cover these; they were invisible in n_wait_us. */
+extern unsigned long long efs_lock1_calls;
+extern unsigned long long efs_lock1_wait_us;
+/* g_server->lock wait+hold on the inode-handler / REPORT sites. */
+extern unsigned long long efs_global_calls;
+extern unsigned long long efs_global_wait_us;
+extern unsigned long long efs_global_hold_us;
+extern unsigned long long efs_busy_replies;
 extern __thread unsigned long long efs_lock_all_t0;
+extern __thread unsigned long long efs_global_t0;
 /* Per-opcode RPC counts. Shard count changes how a client's dirty set and
  * lookups partition across owners, so it changes the RPC count for the same
  * workload — that is invisible in any server-side lock or CPU measurement. */
@@ -267,7 +278,45 @@ static inline pthread_mutex_t *server_shard_mu(struct efsd_server *s,
 
 static inline void server_shard_lock(struct efsd_server *s, uint32_t eidx,
                                      uint32_t shard) {
+    if (!efs_lock_prof_on) {
+        pthread_mutex_lock(server_shard_mu(s, eidx, shard));
+        return;
+    }
+    unsigned long long t0 = server_lock_prof_us();
     pthread_mutex_lock(server_shard_mu(s, eidx, shard));
+    __atomic_add_fetch(&efs_lock1_wait_us, server_lock_prof_us() - t0,
+                       __ATOMIC_RELAXED);
+    __atomic_add_fetch(&efs_lock1_calls, 1, __ATOMIC_RELAXED);
+}
+
+/* Timed g_server->lock for inode RPC + REPORT. Other sites (HELLO, PUT,
+ * flush) stay on the raw mutex so this split is the handler queue. */
+static inline void server_global_lock(struct efsd_server *s) {
+    if (!efs_lock_prof_on) {
+        pthread_mutex_lock(&s->lock);
+        return;
+    }
+    unsigned long long t0 = server_lock_prof_us();
+    pthread_mutex_lock(&s->lock);
+    unsigned long long t1 = server_lock_prof_us();
+    __atomic_add_fetch(&efs_global_wait_us, t1 - t0, __ATOMIC_RELAXED);
+    __atomic_add_fetch(&efs_global_calls, 1, __ATOMIC_RELAXED);
+    efs_global_t0 = t1;
+}
+
+static inline void server_global_unlock(struct efsd_server *s) {
+    if (efs_lock_prof_on && efs_global_t0) {
+        __atomic_add_fetch(&efs_global_hold_us,
+                           server_lock_prof_us() - efs_global_t0,
+                           __ATOMIC_RELAXED);
+        efs_global_t0 = 0;
+    }
+    pthread_mutex_unlock(&s->lock);
+}
+
+static inline void lock_prof_note_busy(uint8_t status) {
+    if (efs_lock_prof_on && status == EFS_INODE_RPC_BUSY)
+        __atomic_add_fetch(&efs_busy_replies, 1, __ATOMIC_RELAXED);
 }
 
 static inline void server_shard_unlock(struct efsd_server *s, uint32_t eidx,

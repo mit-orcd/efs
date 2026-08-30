@@ -37,6 +37,33 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+**POSIXSTRESS QUEUE CLASSIFIED H3 (Aug 30):** Extended `EFS_LOCK_PROF`
+(`1_wait_us`/`1_calls` on `server_shard_lock`, `global_wait_us`/
+`global_hold_us` on inode+REPORT `server_global_lock`, `busy` replies).
+One fresh TCP 9×4 `results/posix/20260830-160943`: 36 tsv, 1454 fail,
+**96.5% timeout**, 6× 196/0 (008×2, 011×3, 014×1). Primary last window:
+`1_wait_us=14ms` (`1_calls=75k`, 0.19 µs/call), `n_wait_us=2.2ms`,
+`all_hold_us=33ms`, `global_hold_us=59ms` (0.59 µs/call),
+`global_wait_us=2.85s` (28 µs/call) / joiners 5.3–5.4s,
+`busy=2873` with `append=4988` (joiners busy−append ≈ 200–350).
+**0 `meta-ensure` rebuilds on primary** (1 each joiner). H1/H2/H4 do not
+fit: parent-shard wait is not the queue, `ensure_shard_ready` I/O never
+ran, APPEND BUSY already returns without the 50ms<<n sleep. Do **not**
+drop LINK/RENAME, do **not** drop global before ensure, do **not** cap
+BUSY backoff as the 9×4 lever. Next is client `rpc_send_recv_shard` RTT
+(not more server lock drops). `clean_cluster.sh` now forwards
+`EFS_TRANSPORT` with `EFS_LOCK_PROF`.
+
+**AUTO RDMA FIRST INODE GATED (Aug 30):** First `mkdir`/`ls` after mount
+no longer D-states. Root `stat` is still local (GET_META one-shot TCP);
+the first pool checkout upgrades and CREATE/READDIR ride the QP.
+`efs_conn_wait_request` is shared with `test_rdma_xprt` (quiet-gap +
+CREATE-sized frame). Poller `poll_cq`s after comp-channel POLLIN.
+Gate: remount auto, `mkdir` in 5s, fuse.log `RDMA transport up`,
+solo posix `results/posix/20260830-154329` **196/201, 0 EFS bugs**.
+`EFS_RDMA_FIRST=1` for the six-site trace. Do not start 9×4 as an RDMA
+correctness gate. `EFS_TRANSPORT=tcp` remains the fallback.
+
 **PER-OP LOCK DROP GATED (Aug 30 afternoon):** Finished dropping `g_server->lock`
 for APPEND, CREATE_SHARD, GETCHUNKS, READDIR (one shard), LOOKUP_PATH (relock
 per component), UNLINK/UNLINK_SHARD/`fan_drop_chunks` (discover-relock, no
@@ -46,10 +73,9 @@ per component), UNLINK/UNLINK_SHARD/`fan_drop_chunks` (discover-relock, no
 ~1–2 ms). Harness: `wait_cluster_idle` + fail-closed warmup (empty-TSV trap).
 Sharded `unlink_name` is dentry-only; client dual-apply must `nlink_dec_ex` or
 hardlink tests see stale nlink (fixed in `ops.c`).
-**Gate was TCP** (`EFS_TRANSPORT=tcp`). Auto RDMA still hangs the first inode
-RPC after mount (`stat` OK, `mkdir`/`ls` D-state, server `create=0`); poller
-ack + TCP `MSG_PEEK` + send-CQ wait did not unwedge it. Do not quote RDMA
-posixstress for this cut.
+**Lock-drop gate was TCP** (`EFS_TRANSPORT=tcp`); auto first-inode is
+now gated separately (see above). Do not quote RDMA posixstress for the
+lock-drop cut.
 Solo posix `results/posix/20260830-143842`: **195/201**, 1 EFS bug
 `dir_rename_over_existing` (flake family), 0 hardlink bugs.
 **3× fresh 9×4 vs Aug 30 RDMA baseline `20260830-064913` (36 tsv, 5137 fail,

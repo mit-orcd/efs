@@ -77,6 +77,14 @@ static int64_t now_us(void)
     return (int64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
+static int rdma_first_log(void)
+{
+    static int v = -1;
+    if (v < 0)
+        v = getenv("EFS_RDMA_FIRST") ? 1 : 0;
+    return v;
+}
+
 int efs_rdma_transport(void)
 {
     static int mode = -1;
@@ -435,6 +443,14 @@ static void pend_push(struct efs_rdma_conn *rc, int buf, uint32_t len)
 
 static void harvest_recv_wcs(struct ibv_wc *wcs, int n)
 {
+    if (rdma_first_log()) {
+        static int nh;
+        int k = __sync_fetch_and_add(&nh, 1);
+        if (k < 6)
+            fprintf(stderr, "rdma-first: harvest n=%d status0=%d len0=%u\n",
+                    n, n > 0 ? (int)wcs[0].status : -1,
+                    n > 0 ? wcs[0].byte_len : 0);
+    }
     for (int i = 0; i < n; i++) {
         uint32_t gen = (uint32_t)(wcs[i].wr_id >> 32);
         uint32_t reg = ((uint32_t)(wcs[i].wr_id >> 8)) & 0xFFFFFF;
@@ -508,6 +524,12 @@ static void *recv_poller(void *arg)
         poll(&p, 1, 100); /* tick so a wedged device can't hang us forever */
         if (p.revents & POLLIN)
             ack_cq_events(dev);
+        /* Harvest before looping. ack-then-loop left a CQE sitting until
+         * the next 100ms tick if mlx5 delivered the WC without a second
+         * notify — first inode RPC after a quiet gap. */
+        n = ibv_poll_cq(dev->recv_cq, 32, wcs);
+        if (n > 0)
+            harvest_recv_wcs(wcs, n);
     }
     return NULL;
 }
@@ -741,6 +763,9 @@ int efs_rdma_client_upgrade(struct efs_conn *c)
                 "(lid %u, %u x %u KiB bufs/conn)\n",
                 dev->name, dev->port, dev->lid, rc->nrecv + EFS_RDMA_NSEND,
                 rc->bufsz / 1024);
+    if (rdma_first_log())
+        fprintf(stderr, "rdma-first: upgrade ok fd=%d qpn=%u lid=%u max_frame=%u\n",
+                c->fd, rc->qp->qp_num, dev->lid, rc->max_frame);
     return 0;
 }
 
@@ -933,6 +958,13 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
     if (l2)
         memcpy(b + 5 + l1, p2, l2);
     int inline_ok = (frame <= rc->max_inline);
+    if (rdma_first_log()) {
+        static int nsend;
+        int n = __sync_fetch_and_add(&nsend, 1);
+        if (n < 6)
+            fprintf(stderr, "rdma-first: send_frame post type=%u frame=%u inline=%d\n",
+                    type, frame, inline_ok);
+    }
     if (post_send(rc, SEND_WRID_POOL | (uint64_t)idx, b, frame, inline_ok) != 0)
         return EFS_ERR_NET;
     rc->send_busy[idx] = 1;
@@ -941,15 +973,25 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
      * SEND after upgrade hung the FUSE worker in recv instead of EIO. */
     int64_t end = now_us() + EFS_RDMA_SEND_WAIT_US;
     while (rc->send_busy[idx]) {
-        if (reap_sends(rc) != 0)
+        if (reap_sends(rc) != 0) {
+            fprintf(stderr, "efs: RDMA send type=%u reap NET\n", type);
             return EFS_ERR_NET;
+        }
         if (!rc->send_busy[idx])
             break;
         if (now_us() > end) {
             rc->broken = 1;
+            fprintf(stderr, "efs: RDMA send type=%u WAIT TIMEOUT\n", type);
             return EFS_ERR_NET;
         }
         sched_yield();
+    }
+    if (rdma_first_log()) {
+        static int ndone;
+        int n = __sync_fetch_and_add(&ndone, 1);
+        if (n < 6)
+            fprintf(stderr, "rdma-first: send_frame type=%u rc=0 busy_cleared\n",
+                    type);
     }
     return EFS_OK;
 }
@@ -1016,6 +1058,13 @@ static void pend_drain_efd(struct efs_rdma_conn *rc)
 
 int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms)
 {
+    if (rdma_first_log()) {
+        static int nwait;
+        int n = __sync_fetch_and_add(&nwait, 1);
+        if (n < 6)
+            fprintf(stderr, "rdma-first: recv_wait start timeout_ms=%d\n",
+                    timeout_ms);
+    }
     int64_t deadline = timeout_ms >= 0 ? now_ms() + timeout_ms : -1;
     for (;;) {
         if (pend_pop(rc)) {

@@ -486,93 +486,9 @@ static void fan_drop_chunks(struct efsd_server *s, struct efs_export *ex,
     }
 }
 
-/* True when the TCP fd has a real byte (or peer close). Spurious POLLIN
- * after RDMA upgrade used to send us into efs_recv_all with SO_RCVTIMEO=0,
- * which blocked forever while the CREATE sat on the RDMA ring. */
-static int tcp_has_request(int fd)
-{
-    char peek;
-    ssize_t n = recv(fd, &peek, 1, MSG_PEEK | MSG_DONTWAIT);
-    if (n > 0)
-        return 1;
-    if (n == 0)
-        return -1;
-    if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
-        return 0;
-    return -1;
-}
-
 /* Wait for the next request on either channel of an RDMA-capable conn.
- * Returns EFS_CONN_TCP / EFS_CONN_RDMA, or -1 on error / peer close.
- * Pure-TCP conns return EFS_CONN_TCP immediately (caller blocks in recv). */
-static int conn_wait_request(struct efs_conn *conn)
-{
-    if (!conn->rc)
-        return EFS_CONN_TCP;
-    struct efs_rdma_conn *rc = conn->rc;
-    for (;;) {
-        /* Quick check only: a server conn thread has nothing to gain from
-         * spin-polling the ring — with dozens of live conns the aggregate
-         * spin was ~13 cores/server under a 9-client write load. It blocks
-         * on the eventfd below; the wakeup costs ~2us, nothing next to the
-         * per-request work. The client's latency-critical reply path keeps
-         * the adaptive spin. */
-        int r = efs_rdma_reply_ready_quick(rc);
-        if (r < 0)
-            return -1;
-        if (r > 0)
-            return EFS_CONN_RDMA;
-        struct pollfd p = { .fd = conn->fd, .events = POLLIN };
-        if (poll(&p, 1, 0) < 0)
-            return -1;
-        if (p.revents & (POLLERR | POLLHUP | POLLNVAL))
-            return -1;
-        if (p.revents & POLLIN) {
-            int t = tcp_has_request(conn->fd);
-            if (t < 0)
-                return -1;
-            if (t > 0)
-                return EFS_CONN_TCP;
-        }
-        /* Neither channel ready: block on the TCP fd + the CQ channel. */
-        struct pollfd pf[2] = {
-            { .fd = conn->fd, .events = POLLIN },
-            { .fd = efs_rdma_reply_fd(rc), .events = POLLIN },
-        };
-        int br = poll(pf, 2, -1);
-        if (br < 0) {
-            if (errno == EINTR)
-                continue;
-            return -1;
-        }
-        if (pf[0].revents & (POLLERR | POLLHUP | POLLNVAL))
-            return -1;
-        /* RDMA first when both are ready: inode ops ride RDMA, GET_META
-         * stays TCP. Preferring TCP here blocked recv_all forever. */
-        if (pf[1].revents & POLLIN) {
-            /* efd is level-triggered leftovers after a consumed RDMA
-             * frame or a send-side wake. Only take RDMA when a recv is
-             * actually queued — otherwise recv_wait(-1) blocks forever
-             * and treats a later TCP request as peer death. */
-            int r2 = efs_rdma_reply_ready_quick(rc);
-            if (r2 < 0)
-                return -1;
-            if (r2 > 0)
-                return EFS_CONN_RDMA;
-            uint64_t tmp;
-            if (read(efs_rdma_reply_fd(rc), &tmp, sizeof(tmp)) < 0 &&
-                errno != EAGAIN)
-                return -1;
-        }
-        if (pf[0].revents & POLLIN) {
-            int t = tcp_has_request(conn->fd);
-            if (t < 0)
-                return -1;
-            if (t > 0)
-                return EFS_CONN_TCP;
-        }
-    }
-}
+ * See efs_conn_wait_request (protocol.c) — kept out of this file so the
+ * xprt test cannot drift from the server conn thread. */
 
 void server_handle_conn(struct efs_conn *conn)
 {
@@ -585,10 +501,18 @@ void server_handle_conn(struct efs_conn *conn)
         int rdma_frame = 0;
         int rc = 0;
 
-        int chan = conn_wait_request(conn);
+        int chan = efs_conn_wait_request(conn);
         if (chan < 0)
             break;
         conn->recv_chan = chan;
+        if (getenv("EFS_RDMA_FIRST")) {
+            static int nwait;
+            int n = __sync_fetch_and_add(&nwait, 1);
+            if (n < 8)
+                fprintf(stderr, "rdma-first: wait_request chan=%s rc=%p\n",
+                        chan == EFS_CONN_RDMA ? "RDMA" : "TCP",
+                        (void *)conn->rc);
+        }
 
         if (chan == EFS_CONN_RDMA) {
             /* The payload aliases a QP recv pool buffer; it is reposted
@@ -1864,10 +1788,13 @@ send_reply:
         case EFS_MSG_INODE_HOLD:
         case EFS_MSG_INODE_FLOCK:
         case EFS_MSG_INODE_DROP_CHUNKS: {
+            if (type == EFS_MSG_INODE_CREATE && getenv("EFS_RDMA_FIRST"))
+                fprintf(stderr, "rdma-first: CREATE entered chan=%s\n",
+                        conn->recv_chan == EFS_CONN_RDMA ? "RDMA" : "TCP");
             struct efs_msg_inode_reply r;
             memset(&r, 0, sizeof(r));
             r.status = EFS_INODE_RPC_ERROR;
-            pthread_mutex_lock(&g_server->lock);
+            server_global_lock(g_server);
             int global_held = 1; /* CREATE drops this after the membership snapshot */
             struct efs_export *ex = NULL;
             uint32_t eidx = 0;
@@ -1941,7 +1868,7 @@ send_reply:
                 /* Parent inode + unspread dentries live on psh. Spread
                  * dentries add dsh; take both after dropping the global
                  * lock so LOOKUP does not queue behind CREATE/REPORT. */
-                pthread_mutex_unlock(&g_server->lock);
+                server_global_unlock(g_server);
                 global_held = 0;
                 server_shard_lock(g_server, eidx, psh);
                 if (ex->meta_needs_rebuild) {
@@ -1984,7 +1911,7 @@ send_reply:
                 } else {
                     uint32_t gsh = efs_export_shard_of(req->ino,
                                                        ex->root.shard_bits);
-                    pthread_mutex_unlock(&g_server->lock);
+                    server_global_unlock(g_server);
                     global_held = 0;
                     server_shard_lock(g_server, eidx, gsh);
                     if (ex->meta_needs_rebuild) {
@@ -2036,7 +1963,7 @@ send_reply:
                 } else if (remote) {
                     /* Dir inode (hashed) lives on a peer. Create it there,
                      * then write only the parent dentry locally. */
-                    pthread_mutex_unlock(&g_server->lock);
+                    server_global_unlock(g_server);
                     global_held = 0;
                     server_shard_lock(g_server, eidx, psh);
                     if (ex->meta_needs_rebuild) {
@@ -2122,12 +2049,12 @@ send_reply:
                                 char dhost[64];
                                 uint16_t dport = 0;
                                 memset(dhost, 0, sizeof(dhost));
-                                pthread_mutex_lock(&g_server->lock);
+                                server_global_lock(g_server);
                                 int aok = (server_node_addr_locked(g_server,
                                                                    down, dhost,
                                                                    sizeof(dhost),
                                                                    &dport) == 0);
-                                pthread_mutex_unlock(&g_server->lock);
+                                server_global_unlock(g_server);
                                 if (!aok) {
                                     r.status = EFS_INODE_RPC_ERROR;
                                 } else {
@@ -2157,7 +2084,7 @@ send_reply:
                            server_ensure_shard_ready(g_server, ex, target) != 0) {
                     r.status = EFS_INODE_RPC_BUSY;
                 } else {
-                    pthread_mutex_unlock(&g_server->lock);
+                    server_global_unlock(g_server);
                     global_held = 0;
                     server_shard_lock(g_server, eidx, psh);
                     if (ex->meta_needs_rebuild) {
@@ -2205,7 +2132,7 @@ send_reply:
                                                     req->target_shard) != 0) {
                     r.status = EFS_INODE_RPC_BUSY;
                 } else {
-                    pthread_mutex_unlock(&g_server->lock);
+                    server_global_unlock(g_server);
                     global_held = 0;
                     server_shard_lock(g_server, eidx, req->target_shard);
                     if (ex->meta_needs_rebuild) {
@@ -2257,7 +2184,7 @@ send_reply:
                 if (server_ensure_shard_ready(g_server, ex, psh) != 0) {
                     r.status = EFS_INODE_RPC_BUSY;
                 } else {
-                    pthread_mutex_unlock(&g_server->lock);
+                    server_global_unlock(g_server);
                     global_held = 0;
                     server_shard_lock(g_server, eidx, psh);
                     if (ex->meta_needs_rebuild) {
@@ -2278,10 +2205,10 @@ send_reply:
                         server_shard_unlock(g_server, eidx, psh);
                         int cbusy = 0;
                         if (csh != psh) {
-                            pthread_mutex_lock(&g_server->lock);
+                            server_global_lock(g_server);
                             cbusy = server_ensure_shard_ready(g_server, ex,
                                                               csh) != 0;
-                            pthread_mutex_unlock(&g_server->lock);
+                            server_global_unlock(g_server);
                         }
                         if (cbusy) {
                             r.status = EFS_INODE_RPC_BUSY;
@@ -2385,7 +2312,7 @@ send_reply:
                 } else {
                     uint32_t csh = efs_export_shard_of(req->src_ino,
                                                        ex->root.shard_bits);
-                    pthread_mutex_unlock(&g_server->lock);
+                    server_global_unlock(g_server);
                     global_held = 0;
                     server_shard_lock(g_server, eidx, csh);
                     int do_fan = 0;
@@ -2479,7 +2406,7 @@ send_reply:
                      * was lock_all under the global lock per file. */
                     uint32_t ssh = efs_export_shard_of(req->ino,
                                                        ex->root.shard_bits);
-                    pthread_mutex_unlock(&g_server->lock);
+                    server_global_unlock(g_server);
                     global_held = 0;
                     server_shard_lock(g_server, eidx, ssh);
                     if (ex->meta_needs_rebuild) {
@@ -2515,7 +2442,7 @@ send_reply:
                 } else {
                     uint32_t ssh = efs_export_shard_of(req->ino,
                                                        ex->root.shard_bits);
-                    pthread_mutex_unlock(&g_server->lock);
+                    server_global_unlock(g_server);
                     global_held = 0;
                     server_shard_lock(g_server, eidx, ssh);
                     if (ex->meta_needs_rebuild) {
@@ -2581,7 +2508,7 @@ send_reply:
                 } else {
                 uint32_t ash = efs_export_shard_of(req->ino,
                                                    ex->root.shard_bits);
-                pthread_mutex_unlock(&g_server->lock);
+                server_global_unlock(g_server);
                 global_held = 0;
                 server_shard_lock(g_server, eidx, ash);
                 if (ex->meta_needs_rebuild) {
@@ -2685,12 +2612,12 @@ send_reply:
                             r.status = EFS_INODE_RPC_ERROR;
                         } else {
                             server_shard_unlock_all(g_server, eidx, sc);
-                            pthread_mutex_unlock(&g_server->lock);
+                            server_global_unlock(g_server);
                             int nrc = server_peer_inode_rpc(
                                 host, port, EFS_MSG_INODE_LINK_SHARD, &lreq,
                                 sizeof(lreq), EFS_MSG_INODE_LINK_SHARD_REPLY,
                                 &lr);
-                            pthread_mutex_lock(&g_server->lock);
+                            server_global_lock(g_server);
                             server_shard_lock_all(g_server, eidx, sc);
                             if (nrc != 0) {
                                 r.status = EFS_INODE_RPC_ERROR;
@@ -2856,7 +2783,7 @@ send_reply:
                     int nowned = server_collect_owned_shards(
                         g_server, ex, live, nlive, owned,
                         EFS_META_MAX_SHARDS);
-                    pthread_mutex_unlock(&g_server->lock);
+                    server_global_unlock(g_server);
                     global_held = 0;
                     if (nowned > 0)
                         server_shard_lockn(g_server, eidx, owned, nowned);
@@ -2877,7 +2804,7 @@ send_reply:
                 }
             }
             if (global_held)
-                pthread_mutex_unlock(&g_server->lock);
+                server_global_unlock(g_server);
             uint8_t rtype = (type == EFS_MSG_INODE_LOOKUP) ? EFS_MSG_INODE_LOOKUP_REPLY
                           : (type == EFS_MSG_INODE_CREATE) ? EFS_MSG_INODE_CREATE_REPLY
                           : (type == EFS_MSG_INODE_CREATE_SHARD) ? EFS_MSG_INODE_CREATE_SHARD_REPLY
@@ -2893,6 +2820,7 @@ send_reply:
                           : (type == EFS_MSG_INODE_FLOCK) ? EFS_MSG_INODE_FLOCK_REPLY
                           : (type == EFS_MSG_INODE_DROP_CHUNKS) ? EFS_MSG_INODE_DROP_CHUNKS_REPLY
                           : EFS_MSG_INODE_UNLINK_REPLY;
+            lock_prof_note_busy(r.status);
             efs_conn_send_msg(conn, rtype, &r, sizeof(r));
             break;
         }
@@ -2901,13 +2829,14 @@ send_reply:
             memset(&r, 0, sizeof(r));
             r.status = EFS_INODE_RPC_ERROR;
             if (payload_len < sizeof(struct efs_msg_inode_lookup_path)) {
+                lock_prof_note_busy(r.status);
                 efs_conn_send_msg(conn, EFS_MSG_INODE_LOOKUP_PATH_REPLY, &r,
                                   sizeof(r));
                 break;
             }
             struct efs_msg_inode_lookup_path *req = payload;
             req->path[sizeof(req->path) - 1] = '\0';
-            pthread_mutex_lock(&g_server->lock);
+            server_global_lock(g_server);
             struct efs_export *ex = NULL;
             uint32_t eidx = 0;
             efs_export_id_t eid = req->export_id;
@@ -2925,7 +2854,7 @@ send_reply:
                 r.status = EFS_INODE_RPC_INVAL;
             } else {
                 uint32_t bits = ex->root.shard_bits;
-                pthread_mutex_unlock(&g_server->lock);
+                server_global_unlock(g_server);
                 uint32_t held[3];
                 int nheld = 0;
                 uint32_t psh0 = efs_export_shard_of(EFS_ROOT_INO, bits);
@@ -3000,11 +2929,13 @@ send_reply:
                 }
                 if (nheld)
                     server_shard_unlockn(g_server, eidx, held, nheld);
+                lock_prof_note_busy(r.status);
                 efs_conn_send_msg(conn, EFS_MSG_INODE_LOOKUP_PATH_REPLY, &r,
                                   sizeof(r));
                 break;
             }
-            pthread_mutex_unlock(&g_server->lock);
+            server_global_unlock(g_server);
+            lock_prof_note_busy(r.status);
             efs_conn_send_msg(conn, EFS_MSG_INODE_LOOKUP_PATH_REPLY, &r,
                               sizeof(r));
             break;
@@ -3044,7 +2975,7 @@ send_reply:
             }
             int do_flush = 0;
             int report_gheld = 1;
-            pthread_mutex_lock(&g_server->lock);
+            server_global_lock(g_server);
             struct efs_export *ex = NULL;
             uint32_t eidx = 0;
             for (uint32_t i = 0; i < g_server->export_count; i++) {
@@ -3127,7 +3058,7 @@ send_reply:
                     shs[nsh++] = sh;
                 }
                 efs_node_id_t meta_pri = server_meta_primary_id_locked(g_server);
-                pthread_mutex_unlock(&g_server->lock);
+                server_global_unlock(g_server);
                 report_gheld = 0;
                 if (nsh)
                     server_shard_lockn(g_server, eidx, shs, nsh);
@@ -3266,7 +3197,7 @@ send_reply:
                 }
             }
             if (report_gheld)
-                pthread_mutex_unlock(&g_server->lock);
+                server_global_unlock(g_server);
             if (do_flush) {
                 if (server_flush_meta_grouped(g_server, ex) != 0) {
                     /* Flush failed (rebuild in flight / no quorum / fenced).
@@ -3277,6 +3208,7 @@ send_reply:
                         r.status = EFS_INODE_RPC_BUSY;
                 }
             }
+            lock_prof_note_busy(r.status);
             efs_conn_send_msg(conn, EFS_MSG_REPORT_CHUNKS_REPLY, &r, sizeof(r));
             break;
         }
@@ -3286,7 +3218,7 @@ send_reply:
             r.status = EFS_INODE_RPC_ERROR;
             if (payload_len >= sizeof(struct efs_msg_inode_readdir)) {
                 struct efs_msg_inode_readdir *req = payload;
-                pthread_mutex_lock(&g_server->lock);
+                server_global_lock(g_server);
                 struct efs_export *ex = NULL;
                 uint32_t eidx = 0;
                 for (uint32_t i = 0; i < g_server->export_count; i++) {
@@ -3299,7 +3231,7 @@ send_reply:
                 }
                 if (!ex) {
                     r.status = EFS_INODE_RPC_NOT_FOUND;
-                    pthread_mutex_unlock(&g_server->lock);
+                    server_global_unlock(g_server);
                 } else {
                     uint32_t flags = 0, want_shard = 0;
                     if (payload_len >= sizeof(*req)) {
@@ -3312,7 +3244,7 @@ send_reply:
                         rsh = want_shard;
                     if (ex->root.shard_bits)
                         (void)server_ensure_shard_ready(g_server, ex, rsh);
-                    pthread_mutex_unlock(&g_server->lock);
+                    server_global_unlock(g_server);
                     server_shard_lock(g_server, eidx, rsh);
                     if (ex->meta_needs_rebuild) {
                         r.status = EFS_INODE_RPC_BUSY;
@@ -3346,6 +3278,7 @@ send_reply:
                     server_shard_unlock(g_server, eidx, rsh);
                 }
             }
+            lock_prof_note_busy(r.status);
             efs_conn_send_msg(conn, EFS_MSG_INODE_READDIR_REPLY, &r, sizeof(r));
             break;
         }
@@ -3355,7 +3288,7 @@ send_reply:
             r.status = EFS_INODE_RPC_ERROR;
             if (payload_len >= sizeof(struct efs_msg_inode_getchunks)) {
                 struct efs_msg_inode_getchunks *req = payload;
-                pthread_mutex_lock(&g_server->lock);
+                server_global_lock(g_server);
                 struct efs_export *ex = NULL;
                 uint32_t eidx = 0;
                 for (uint32_t i = 0; i < g_server->export_count; i++) {
@@ -3368,7 +3301,7 @@ send_reply:
                 }
                 if (!ex) {
                     r.status = EFS_INODE_RPC_NOT_FOUND;
-                    pthread_mutex_unlock(&g_server->lock);
+                    server_global_unlock(g_server);
                 } else {
                     uint32_t bits = ex->root.shard_bits;
                     uint32_t sc = ex->root.shard_count
@@ -3388,7 +3321,7 @@ send_reply:
                             r.status = EFS_INODE_RPC_BUSY;
                         }
                     }
-                    pthread_mutex_unlock(&g_server->lock);
+                    server_global_unlock(g_server);
                     if (r.status != EFS_INODE_RPC_NOT_PRIMARY &&
                         r.status != EFS_INODE_RPC_BUSY) {
                     server_shard_lock(g_server, eidx, gsh);
@@ -3419,6 +3352,7 @@ send_reply:
                     }
                 }
             }
+            lock_prof_note_busy(r.status);
             efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS_REPLY, &r, sizeof(r));
             break;
         }
@@ -3461,6 +3395,10 @@ send_reply:
             uint32_t rlen = sizeof(rep);
             efs_rdma_server_accept(conn, payload, payload_len, &rep, &rlen);
             efs_conn_send_msg(conn, EFS_MSG_RDMA_SETUP_REPLY, &rep, rlen);
+            if (getenv("EFS_RDMA_FIRST"))
+                fprintf(stderr,
+                        "rdma-first: SETUP done qpn=%u status=%u, back to wait\n",
+                        rep.qpn, rep.status);
             break;
         }
         default:

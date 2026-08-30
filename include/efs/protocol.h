@@ -773,6 +773,12 @@ int efs_conn_recv_msg_into(struct efs_conn *c, uint8_t *type, uint8_t *status,
                            void *body, uint32_t body_len);
 int efs_conn_recv_u8_reply(struct efs_conn *c, uint8_t *type, uint8_t *status);
 
+/* Wait for the next request on either channel. Returns EFS_CONN_TCP /
+ * EFS_CONN_RDMA, or -1 on error / peer close. Pure-TCP conns return
+ * EFS_CONN_TCP immediately (caller blocks in recv). Shared so the xprt
+ * test cannot drift from the server conn thread. */
+int efs_conn_wait_request(struct efs_conn *c);
+
 /* For multi-conn reply polling (parallel PUT): arm/peek the reply channel.
  * Returns EFS_CONN_REPLY_READY when a reply is already available, -1 on
  * error, else an fd (>= 0) to poll for POLLIN. */

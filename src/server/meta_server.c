@@ -1678,13 +1678,22 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     if (efs_lock_prof_on)
         fprintf(stderr,
                 "LOCK-PROF all_calls=%llu all_wait_us=%llu all_hold_us=%llu "
-                "all_shards=%llu n_calls=%llu n_wait_us=%llu\n",
+                "all_shards=%llu n_calls=%llu n_wait_us=%llu "
+                "1_calls=%llu 1_wait_us=%llu "
+                "global_calls=%llu global_wait_us=%llu global_hold_us=%llu "
+                "busy=%llu\n",
                 __atomic_load_n(&efs_lock_all_calls, __ATOMIC_RELAXED),
                 __atomic_load_n(&efs_lock_all_wait_us, __ATOMIC_RELAXED),
                 __atomic_load_n(&efs_lock_all_hold_us, __ATOMIC_RELAXED),
                 __atomic_load_n(&efs_lock_all_shards, __ATOMIC_RELAXED),
                 __atomic_load_n(&efs_lockn_calls, __ATOMIC_RELAXED),
-                __atomic_load_n(&efs_lockn_wait_us, __ATOMIC_RELAXED));
+                __atomic_load_n(&efs_lockn_wait_us, __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_lock1_calls, __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_lock1_wait_us, __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_global_calls, __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_global_wait_us, __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_global_hold_us, __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_busy_replies, __ATOMIC_RELAXED));
     if (efs_lock_prof_on) {
         unsigned long long tot = 0;
         for (int i = 0; i < 256; i++)
