@@ -37,6 +37,11 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+**ECOPY ROUND 6 (Aug 29 night):** Directories under ROOT hash to a shard.
+ecopy dest trees no longer funnel through the metadata primary.
+1-client 61 → **112 files/s**; primary create=1; dest owner does the rest.
+gens 11 (extras). Nested dirs stay on the dest shard (rename/hardlink).
+
 **ECOPY ROUND 5 (Aug 29 night):** SETATTR without SIZE (futimens/chmod)
 drops the global lock; one inode-shard lock. ~88 files/s.
 
