@@ -1691,8 +1691,8 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
             tot += __atomic_load_n(&efs_rpc_count[i], __ATOMIC_RELAXED);
         fprintf(stderr,
                 "RPC-PROF total=%llu report=%llu getattr=%llu lookup=%llu "
-                "create=%llu create_shard=%llu getchunks=%llu lookup_path=%llu "
-                "readdir=%llu\n",
+                "create=%llu create_shard=%llu setattr=%llu getchunks=%llu "
+                "lookup_path=%llu readdir=%llu\n",
                 tot,
                 __atomic_load_n(&efs_rpc_count[EFS_MSG_REPORT_CHUNKS],
                                 __ATOMIC_RELAXED),
@@ -1703,6 +1703,8 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
                 __atomic_load_n(&efs_rpc_count[EFS_MSG_INODE_CREATE],
                                 __ATOMIC_RELAXED),
                 __atomic_load_n(&efs_rpc_count[EFS_MSG_INODE_CREATE_SHARD],
+                                __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_rpc_count[EFS_MSG_INODE_SETATTR],
                                 __ATOMIC_RELAXED),
                 __atomic_load_n(&efs_rpc_count[EFS_MSG_INODE_GETCHUNKS],
                                 __ATOMIC_RELAXED),

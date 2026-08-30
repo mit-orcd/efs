@@ -359,16 +359,16 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
  * to return the RPC row raw. The owner learns size via async
  * REPORT_CHUNKS, so that row is often still size 0 after a same-fd
  * write. The kernel then sets i_size=0 (attr_timeout=0) and never
- * calls .read — POSIX same-fd / unlink-open / chmod-open all empty. */
+ * calls .read — POSIX same-fd / unlink-open / chmod-open all empty.
+ *
+ * ecopy (and every create/write/close) getattr's the open fd ~2x per
+ * file. The RPC was discarded whenever a local row existed — ~2 RTTs
+ * of pure wait on the dest owner's shard lock. Local-first: RPC only
+ * on a miss (peer-created ino, or a cold table). */
 int efs_client_stat_ino(efs_ino_t ino, struct efs_inode *out)
 {
     if (!out || !ino)
         return EFS_ERR_INVAL;
-    struct efs_inode rpc;
-    int have_rpc = (efs_client_rpc_getattr(g_client.export_id, ino, &rpc)
-                    == EFS_OK);
-    if (have_rpc)
-        adopt_rpc_inode(&rpc);
     efs_client_lock_dir(ino);
     pthread_mutex_lock(&g_client.idx_mu);
     if (efs_export_get_inode(&g_client.export, ino, out) == 0) {
@@ -378,11 +378,22 @@ int efs_client_stat_ino(efs_ino_t ino, struct efs_inode *out)
     }
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
-    if (have_rpc) {
-        *out = rpc;
+
+    struct efs_inode rpc;
+    if (efs_client_rpc_getattr(g_client.export_id, ino, &rpc) != EFS_OK)
+        return EFS_ERR_NOT_FOUND;
+    adopt_rpc_inode(&rpc);
+    efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
+    if (efs_export_get_inode(&g_client.export, ino, out) == 0) {
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(ino);
         return EFS_OK;
     }
-    return EFS_ERR_NOT_FOUND;
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(ino);
+    *out = rpc;
+    return EFS_OK;
 }
 
 static int lookup_access_ok(const struct efs_inode *ino, uid_t uid, gid_t gid,
