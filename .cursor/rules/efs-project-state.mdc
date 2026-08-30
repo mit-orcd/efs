@@ -37,6 +37,10 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+**ECOPY ROUND 4 (Aug 29 night):** Skip GETATTR after LOOKUP when the inode
+lives on the same shard as the dentry (files stay with parent). getattr
+3.0 → 1.9 per create. ~82 files/s.
+
 **ECOPY ROUND 3 (Aug 29 night):** REPORT_CHUNKS drops `g_server->lock` and
 takes only the shards the recs hit (not lock_all). 0 drops. Mix-dependent
 ~75–80 files/s (73 dirs) vs round 2's 98 files/s (333 dirs).

@@ -478,6 +478,24 @@ static int lookup_cache_hit(efs_ino_t parent, const char *name, efs_ino_t *ino_o
     return 0;
 }
 
+/* Parent-shard LOOKUP is a size-0 dentry stub only when the inode lives
+ * on another shard. Files stay on the parent shard, so LOOKUP already
+ * has the full row — GETATTR was 3–4 RPCs extra per ecopy file. */
+static int lookup_needs_getattr(const struct efs_inode *child, efs_ino_t parent)
+{
+    uint32_t bits, sc;
+    if (!child || efs_mode_is_dir(child->mode))
+        return 0;
+    if (efs_client_ino_is_dirty(child->ino))
+        return 0;
+    bits = g_client.export.root.shard_bits;
+    sc = g_client.export.root.shard_count;
+    if (!bits || sc <= 1)
+        return 0;
+    return efs_export_shard_of(child->ino, bits) !=
+           efs_export_shard_of(parent, bits);
+}
+
 static int lookup_cached_inode(efs_ino_t parent, const char *name,
                                struct efs_inode *out)
 {
@@ -728,15 +746,7 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
                 return EFS_ERR_NOT_FOUND;
             if (lrc == EFS_OK) {
                 lookup_cache_put(par, last, child.ino);
-                if (g_client.export.root.shard_bits &&
-                    g_client.export.root.shard_count > 1 &&
-                    !efs_mode_is_dir(child.mode) &&
-                    !efs_client_ino_is_dirty(child.ino)) {
-                    /* Dentry stub is size 0 / create mtime. A remounted
-                     * peer often has that stub locally — skipping GETATTR
-                     * then overwriting the RPC with it hid utimens
-                     * (peer_utimens_visible: B saw now, size 0). Writers
-                     * keep the dirty local row. */
+                if (lookup_needs_getattr(&child, par)) {
                     struct efs_inode full;
                     if (efs_client_rpc_getattr(g_client.export_id,
                                                child.ino, &full) == EFS_OK)
@@ -803,12 +813,8 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
                 }
             }
             struct efs_inode child = pr.inode;
-            if (g_client.export.root.shard_bits &&
-                g_client.export.root.shard_count > 1 &&
-                !efs_mode_is_dir(child.mode) &&
-                !efs_client_ino_is_dirty(child.ino)) {
-                /* Dentry stub on the parent owner is size 0. Skip GETATTR
-                 * only for this client's dirty data-path row. */
+            efs_ino_t lp_par = child.parent ? child.parent : EFS_ROOT_INO;
+            if (lookup_needs_getattr(&child, lp_par)) {
                 struct efs_inode full;
                 if (efs_client_rpc_getattr(g_client.export_id, child.ino,
                                            &full) == EFS_OK)
@@ -859,10 +865,7 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
          * dentry stub (size 0). getattr the child owner for the full row
          * so adopt/pull_file_layout see the real size. Only the LEAF:
          * intermediates are directories. */
-        if (!more && g_client.export.root.shard_bits &&
-            g_client.export.root.shard_count > 1 &&
-            !efs_mode_is_dir(child.mode) &&
-            !efs_client_ino_is_dirty(child.ino)) {
+        if (!more && lookup_needs_getattr(&child, parent)) {
             struct efs_inode full;
             if (efs_client_rpc_getattr(g_client.export_id, child.ino,
                                        &full) == EFS_OK)
