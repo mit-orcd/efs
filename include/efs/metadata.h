@@ -297,16 +297,18 @@ efs_node_id_t efs_shard_owner_of(uint32_t shard, uint32_t shard_count,
 /* Next inode for a create under parent. bits==0: next_ino++. bits>0:
  * allocate inside the parent's shard range. */
 efs_ino_t efs_export_alloc_ino(struct efs_export *ex, efs_ino_t parent);
-/* Allocate in `shard`'s congruence class. Skips inos that already have a
- * row on the main table (parent dentries for extra-shard children). A
- * joiner whose extra tab rebuilt empty would otherwise reissue those
- * inos and CREATE_SHARD would look like EEXIST. */
+/* Allocate in `shard`'s congruence class from that shard table only.
+ * The old main-table probe raced per-op CREATE (unlocked ino index while
+ * shard 0 realloc'd) and is unnecessary once the child row and dentry
+ * live on tables the caller has locked. */
 efs_ino_t efs_export_alloc_ino_for_shard(struct efs_export *ex, uint32_t shard);
-/* Peek the shard a create under parent would land on. Dirs stay on the
- * parent shard; files round-robin across all shards (create_rr % sc).
+/* Peek the shard a create would land on. Files and directories stay on
+ * the parent directory's shard so CREATE is local (no CREATE_SHARD RTT)
+ * and rename of ecopy .tmp → final stays one-node. Independent trees
+ * spread only when their parent inodes already live on different shards.
  * Does not advance create_rr. */
 uint32_t efs_export_create_target(struct efs_export *ex, efs_ino_t parent,
-                                  uint32_t mode);
+                                  uint32_t mode, const char *name);
 /* Table that owns `ino` (or parent for name ops). bits==0 → `ex`. */
 struct efs_export *efs_export_table_for_ino(struct efs_export *ex, efs_ino_t ino);
 struct efs_export *efs_export_table(struct efs_export *ex, uint32_t shard);

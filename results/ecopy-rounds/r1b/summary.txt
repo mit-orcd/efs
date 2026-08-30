@@ -1,0 +1,14 @@
+Round 1 (per-op CREATE, files stay on parent shard, shard-local ino alloc)
+
+Method: 60s ecopy of ecrawl-synt-small into a fresh dest on fuse.efs-fuse.
+Baseline (LOOKUP-cache only, CREATE held g_server->lock + lock_all): ~3646 files/60s = 61 files/s.
+
+This run: FILES=4085 DUR_MS=60611 ≈ 67 files/s. 0 ino_dup. gens 4562×4.
+
+RPC-PROF primary: create=4235 create_shard=0 lookup=9072 getattr=12906 report=4955
+Joiners: ~0 creates (tree still rooted on shard 0). CREATE no longer holds the
+global lock; same-dir creates still serialize on that directory's shard lock.
+
+Hashed-directory placement was tried first and reverted: 1914 files/60s, futimens
+ENOENT on hardlinks, CREATE_SHARD split inode vs dentry. Needs a cross-node
+rename/lookup stitch before dirs can leave the parent shard.

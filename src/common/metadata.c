@@ -1980,21 +1980,23 @@ int efs_export_rehash(struct efs_export *ex, uint32_t new_bits)
 }
 
 uint32_t efs_export_create_target(struct efs_export *ex, efs_ino_t parent,
-                                  uint32_t mode)
+                                  uint32_t mode, const char *name)
 {
     if (!ex)
         return 0;
     uint32_t bits = ex->root.shard_bits;
     uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
     uint32_t psh = efs_export_shard_of(parent, bits);
-    /* Dirs stay on the parent shard so their dentries stay local. Files
-     * round-robin across ALL shards so write-path ownership spreads. */
-    if (efs_mode_is_dir(mode) || sc <= 1 || bits == 0)
+    if (sc <= 1 || bits == 0)
         return psh;
-    /* create_rr is bumped by every file create no matter which shard lock the
-     * op holds (blocker 3 partition), so read it atomically. The value only
-     * picks a target shard — a benign race just skews distribution. */
-    return __atomic_load_n(&ex->create_rr, __ATOMIC_RELAXED) % sc;
+    (void)mode;
+    (void)name;
+    /* Files used to round-robin onto other shards, which made every create
+     * a parent-owner RPC plus CREATE_SHARD. Directories used to hash onto
+     * other shards, which split the dentry (parent) from the inode and
+     * broke ecopy rename/hardlink/futimens. Both stay on the parent shard
+     * until name ops are hashed with a real cross-node rename. */
+    return psh;
 }
 
 static int lookup_on_tab(struct efs_export *tab, efs_ino_t parent,
@@ -2013,11 +2015,8 @@ static efs_ino_t create_sharded(struct efs_export *ex, efs_ino_t parent,
                                 const char *name)
 {
     uint32_t bits = ex->root.shard_bits;
-    uint32_t sc = ex->root.shard_count;
     uint32_t psh = efs_export_shard_of(parent, bits);
-    uint32_t target = efs_export_create_target(ex, parent, mode);
-    if (!efs_mode_is_dir(mode) && sc > 1)
-        (void)__atomic_add_fetch(&ex->create_rr, 1, __ATOMIC_RELAXED);
+    uint32_t target = efs_export_create_target(ex, parent, mode, name);
     struct efs_export *ctab = efs_export_table(ex, target);
     if (!ctab)
         return 0;
@@ -4207,18 +4206,10 @@ efs_ino_t efs_export_alloc_ino_for_shard(struct efs_export *ex, uint32_t shard)
     struct efs_export *ctab = efs_export_table(ex, shard);
     if (!ctab)
         return 0;
-    if (ctab == ex)
-        return efs_export_alloc_ino(ex, shard);
-    for (int n = 0; n < (1 << 20); n++) {
-        efs_ino_t ino = efs_export_alloc_ino(ctab, shard);
-        if (!ino)
-            return 0;
-        uint64_t slot = 0;
-        /* Main-table row = a parent dentry for this ino. Do not reuse. */
-        if (efs_export_inode_slot(ex, ino, &slot) != 0)
-            return ino;
-    }
-    return 0;
+    /* Shard-local next_ino is authoritative for this congruence class.
+     * Probing the main table's ino index here was the per-op CREATE
+     * ino_dup: that index lives on shard 0 and was read without its lock. */
+    return efs_export_alloc_ino(ctab, shard);
 }
 
 int efs_meta_extract_page(const char *blob, uint32_t blob_len, uint32_t page_index,

@@ -222,6 +222,10 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
     req.gid = (uint32_t)gid;
     req.flags = flags;
     struct efs_msg_inode_reply r;
+    /* Name uniqueness lives on the parent directory's shard. Independent
+     * directories hash to different shards, so this is that directory's
+     * owner — not a cluster-wide metadata primary. Same-name conflict
+     * serializes there; disjoint names in other dirs do not. */
     int rc = rpc_send_recv_owner(parent, EFS_MSG_INODE_CREATE, &req, sizeof(req),
                                  EFS_MSG_INODE_CREATE_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)
