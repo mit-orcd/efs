@@ -14,6 +14,24 @@ Build and test on the dedicated fcstor test cluster (never Slurm). See
 `tests/run_tests.sh` (`posix|posix2|perf|setup|all`) and
 `.cursor/rules/efs-fcstor-deploy.mdc` for the deploy/gate procedure.
 
+**Fio bandwidth:** do not quote `run_tests.sh perf` write numbers — they are
+cache-inflated. Honest method + Aug 29 1/4/9-client table:
+`.cursor/rules/efs-fio-honest.mdc`. Harness:
+`tests/stress/fio_honest_matrix.sh` (writes `--end_fsync=1`, remount before
+reads). Results: `results/perf/20260829-honest/`.
+
+**2PC gen-sync:** after a one-client ecopy, all 4 servers must report the
+same committed generation (the joiners-stuck-at-gen-2/5 bug). Repeat:
+
+```
+bash tests/clean_cluster.sh && bash tests/run_tests.sh setup
+bash tests/stress/ecopy_gen_sync.sh
+```
+
+Workload is `~/git/direct_copy/ecopy ~/orcd/scratch/ecrawl-synt-small/ /tmp/efs-mount/`
+on fcstor007. Default copy window 180s (tree is ~6M files; finishing it is
+not the gate). `TRACE=1` attaches perf/strace to existing efsd pids.
+
 ## Profiling
 
 `--perf` on the server or client runs `perf record` against that process and

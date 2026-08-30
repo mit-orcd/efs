@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <poll.h>
 #include <arpa/inet.h>
+#include <sys/socket.h>
 
 /* Per-connection-thread arenas. Fragment PUTs/GETs used to each cost a
  * malloc/free pair per message; with ~144 conns at ~100K msg/s that showed
@@ -88,6 +89,40 @@ static int readdir_collect_cb(struct efs_export *ex, uint64_t slot, void *arg)
     }
     c->cand[c->n++] = in;
     return 0;
+}
+
+/* Map a peer TCP connection to a cluster node id. Used to refuse gen-advancing
+ * PUT_META prepares from anyone but the metadata primary (joiners' extras
+ * commits and extra-shard bootstrap were being stashed as cluster-root
+ * prepares, which is the gen-split). Caller holds g_server->lock. */
+static efs_node_id_t conn_peer_node_id_locked(struct efs_conn *conn)
+{
+    if (!conn || conn->fd < 0 || !g_server)
+        return 0;
+    struct sockaddr_in pa;
+    socklen_t pl = sizeof(pa);
+    char ip[64];
+    memset(ip, 0, sizeof(ip));
+    if (getpeername(conn->fd, (struct sockaddr *)&pa, &pl) != 0)
+        return 0;
+    if (!inet_ntop(AF_INET, &pa.sin_addr, ip, sizeof(ip)))
+        return 0;
+    for (uint32_t i = 0; i < g_server->node_count; i++) {
+        if (strcmp(g_server->nodes[i].addr, ip) == 0)
+            return g_server->nodes[i].id;
+    }
+    return 0;
+}
+
+static const char *put_meta_status_name(uint8_t st)
+{
+    switch (st) {
+    case EFS_PUT_META_OK:    return "OK";
+    case EFS_PUT_META_ERROR: return "ERROR";
+    case EFS_PUT_META_STALE: return "STALE";
+    case EFS_PUT_META_BUSY:  return "BUSY";
+    default:                 return "?";
+    }
 }
 
 #define EFS_FLOCK_SH 1u
@@ -1034,23 +1069,54 @@ send_reply:
                             pthread_mutex_unlock(&g_server->lock);
                             efs_export_root_free(&root);
                         } else {
-                            /* 2PC phase 1 (prepare): a gen-advancing root is
-                             * STASHED as pending — never installed, persisted,
-                             * fenced, or GC'd here. The writer may still fail
-                             * its prepare quorum and discard this root; a
-                             * same-gen retry then rewrites the SAME CoW cis
-                             * with different content, so installing an
-                             * uncommitted root corrupts the pages it
-                             * references (the shard-0 "gen raced with GC"
-                             * wedge: every node adopted gen=N+1 and GC'd
-                             * gen=N's pages, but gen=N+1's pages were
-                             * overwritten by the retry). Promotion happens
-                             * only on EFS_MSG_META_COMMIT, after the writer's
-                             * quorum — by which point the gen's pages are
-                             * 2-of-3 placed. A newer prepare supersedes any
-                             * pending root (same-gen retry writes fresh cis;
-                             * the old pending's pages are unreferenced and
-                             * simply overwritten). */
+                            /* 2PC phase 1 (prepare): ONLY the metadata primary
+                             * may stash a gen-advancing cluster root. A joiner
+                             * extras-commit or extra-shard bootstrap PUT_META
+                             * was being treated as a prepare: it overwrote
+                             * pending with a shard-tab EFSR (or an old joiner
+                             * gen), then META_COMMIT fingerprint-missed and
+                             * peers stayed at gen=2/5 while the primary ran
+                             * away. Joiners' extras are merged in-place;
+                             * anything else from a non-primary is STALE. */
+                            efs_node_id_t from =
+                                conn_peer_node_id_locked(conn);
+                            efs_node_id_t primary =
+                                server_meta_primary_id_locked(g_server);
+                            int from_primary =
+                                (from != 0 && from == primary);
+                            if (!from_primary) {
+                                if (root.extra_shard_count > 0) {
+                                    efs_export_merge_extra_roots(ex, &root);
+                                    g_server->export_meta_dirty = 1;
+                                    server_save_export(g_server, ex);
+                                    g_server->export_meta_dirty = 0;
+                                    reply = EFS_PUT_META_OK;
+                                    fprintf(stderr,
+                                            "meta-prepare: extras-merge from "
+                                            "joiner node=%u gen=%llu extras=%u "
+                                            "(committed gen=%llu) — not a "
+                                            "cluster-root prepare\n",
+                                            from,
+                                            (unsigned long long)root.generation,
+                                            root.extra_shard_count,
+                                            (unsigned long long)
+                                                ex->root.generation);
+                                } else {
+                                    reply = EFS_PUT_META_STALE;
+                                    fprintf(stderr,
+                                            "meta-prepare: ignored non-primary "
+                                            "PUT_META node=%u gen=%llu pages=%u "
+                                            "extras=0 (committed gen=%llu) — "
+                                            "shard-tab bootstrap\n",
+                                            from,
+                                            (unsigned long long)root.generation,
+                                            root.page_count,
+                                            (unsigned long long)
+                                                ex->root.generation);
+                                }
+                                pthread_mutex_unlock(&g_server->lock);
+                                efs_export_root_free(&root);
+                            } else {
                             /* Stash the raw prepare bytes so COMMIT can
                              * fingerprint-match (a same-gen retry with new
                              * content at the same cis must never promote a
@@ -1097,6 +1163,7 @@ send_reply:
                                 pthread_mutex_unlock(&g_server->lock);
                                 efs_export_root_free(&root);
                                 reply = EFS_PUT_META_ERROR;
+                            }
                             }
                         }
                     }
@@ -1178,14 +1245,20 @@ send_reply:
                     fp_match = (memcmp(sum, c.root_sum, EFS_HASH_SIZE) == 0);
                 }
                 if (ex && ei >= 0 && fp_match) {
-                    if (ex->shard_dirty) {
-                        /* We hold unflushed MAIN-table ops for this export —
-                         * we are (or believe we are) the cluster-root writer.
-                         * Installing a foreign root now would fence and drop
-                         * them. Keep the pending root; catchup converges once
-                         * our flush advances past this gen. Dirty SHARD tabs
-                         * (rpc_dirty_ops) are not fenced by this install, so
-                         * they must not block it. */
+                    int primary = server_is_meta_primary_locked(g_server);
+                    /* Joiners latch shard_dirty on the MAIN table from CREATE/
+                     * RENAME/DROP even though they never flush shard 0. BUSY
+                     * here pinned them at gen=2/5 forever. Only the primary
+                     * is the cluster-root writer; a dirty main table on a
+                     * joiner is not unflushed cluster-root work. */
+                    if (primary && ex->shard_dirty) {
+                        fprintf(stderr,
+                                "meta-commit: BUSY export=%s commit_gen=%llu "
+                                "pending_gen=%llu shard_dirty=1 primary=1 "
+                                "(keep pending)\n",
+                                ex->name, (unsigned long long)c.gen,
+                                (unsigned long long)
+                                    g_server->pending_root[ei].generation);
                         reply = EFS_PUT_META_BUSY;
                         pthread_mutex_unlock(&g_server->lock);
                     } else {
@@ -1257,6 +1330,11 @@ send_reply:
                             ex->inode_count = 0;
                         }
                         efs_export_merge_extra_roots(ex, &ex->root);
+                        /* A joiner's main-table dirty flag is not unflushed
+                         * cluster-root work (they do not flush shard 0). Clear
+                         * it so catchup can rebuild the fenced table. */
+                        if (!primary)
+                            ex->shard_dirty = 0;
                         g_server->epoch++;
                         g_server->export_meta_dirty = 1;
                         free(ex->gm_blob);
@@ -1292,12 +1370,31 @@ send_reply:
                         reply = EFS_PUT_META_OK;
                     }
                 } else {
+                    uint64_t pend_gen = 0;
+                    uint32_t pend_pages = 0;
+                    int pend_ok = 0;
+                    if (ei >= 0 && g_server->pending_valid[ei]) {
+                        pend_ok = 1;
+                        pend_gen = g_server->pending_root[ei].generation;
+                        pend_pages = g_server->pending_root[ei].page_count;
+                    }
+                    fprintf(stderr,
+                            "meta-commit: STALE export=%s commit_gen=%llu "
+                            "fp_match=0 pending_valid=%d pending_gen=%llu "
+                            "pending_pages=%u shard_dirty=%d\n",
+                            ex ? ex->name : "?",
+                            (unsigned long long)c.gen, pend_ok,
+                            (unsigned long long)pend_gen, pend_pages,
+                            ex ? ex->shard_dirty : -1);
                     pthread_mutex_unlock(&g_server->lock);
                 }
                 free(old_cis);
                 free(new_cis);
             }
             efs_conn_send_msg(conn, EFS_MSG_META_COMMIT_REPLY, &reply, 1);
+            if (reply != EFS_PUT_META_OK)
+                fprintf(stderr, "meta-commit: reply %s\n",
+                        put_meta_status_name(reply));
             break;
         }
         case EFS_MSG_LIST_NODES: {
@@ -2586,8 +2683,12 @@ send_reply:
                     /* Transitional: all shard locks (the ensure loop above
                      * ran first — it may drop the global lock). */
                     server_shard_lock_all(g_server, eidx, sc);
+                    /* drop_chunks_scan marks each table it actually modified.
+                     * Marking the main table here unconditionally latched
+                     * every peer dirty forever (peers never flush shard 0, so
+                     * nothing clears it) and wedged the META_COMMIT promote
+                     * gate, leaving recent gens only on the primary. */
                     efs_export_drop_chunks_from(ex, req->ino, req->first_chunk);
-                    ex->shard_dirty = 1;
                     server_meta_mark_rpc_dirty_locked(g_server, eidx);
                     r.status = EFS_INODE_RPC_OK;
                     server_shard_unlock_all(g_server, eidx, sc);

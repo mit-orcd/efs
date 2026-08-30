@@ -1,0 +1,41 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cpu-clock:u'
+# Event count (approx.): 667500000
+#
+# Overhead       Samples  Command  Shared Object         Symbol                                       
+# ........  ............  .......  ....................  .............................................
+#
+    20.19%           539  efsd     efsd                  [.] blake3_hash_many_avx2
+            |
+            ---blake3_hash_many_avx2
+               blake3_compress_subtree_wide
+               |          
+                --19.93%--blake3_compress_subtree_wide
+                          |          
+                           --19.55%--blake3_compress_subtree_wide
+                                     |          
+                                      --19.14%--blake3_compress_subtree_wide
+                                                blake3_hasher_update.part.0
+                                                efs_hash
+                                                |          
+                                                |--15.32%--server_flush_fragmented_meta_locked
+                                                |          |          
+                                                |          |--12.62%--server_flush_fragmented_meta
+                                                |          |          |          
+                                                |          |           --12.58%--server_flush_meta_grouped
+                                                |          |                     server_handle_conn
+                                                |          |                     conn_thread
+                                                |          |                     start_thread
+                                                |          |          
+                                                |           --2.70%--extra_flush_thread
+                                                |                     start_thread
+                                                |          
+                                                 --3.82%--verify_thread
+                                                           start_thread
+
+    12.21%           326  efsd     ld-linux-x86-64.so.2  [.] memset
+PERF_OK

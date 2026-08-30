@@ -142,6 +142,8 @@ void efs_client_mark_ino_dirty(efs_ino_t ino);
 int efs_client_ino_is_dirty(efs_ino_t ino);
 void efs_client_note_created(efs_ino_t ino);
 int efs_client_ino_is_created(efs_ino_t ino);
+/* 1 if this client created `ino` within the last max_ns (monotonic). */
+int efs_client_ino_created_recent(efs_ino_t ino, uint64_t max_ns);
 /* Explicit utimens: data-path mtime bumps and REPORT echoes must not
  * put "now" back over a user-set (possibly older) mtime. */
 void efs_client_mtime_pin(efs_ino_t ino);

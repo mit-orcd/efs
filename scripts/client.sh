@@ -7,7 +7,9 @@ Usage:
   $0 <server-addr:port> <mount-path> [export-name] [extra-efs-fuse-args...]
   $0 stop <mount-path>
 
-  start:  mount export at mount-path (default export name: fs)
+  start:  mount export at mount-path (default export name: fs).
+          Returns only after the mount is serving (stat works).
+          Pass -f to stay in the foreground.
   stop:   unmount mount-path (fusermount3 -u, then umount)
 EOF
     exit 1
@@ -120,9 +122,9 @@ fi
 LOG_DIR=$(dirname "$MOUNT_PATH")
 LOG_FILE="${EFS_FUSE_LOG:-$LOG_DIR/efs-fuse-$(basename "$MOUNT_PATH").log}"
 
-# libfuse daemonizes unless -f is set. After daemonize the parent exits 0 and
-# the child's stderr is detached from this tee — writeback EIO lines vanish.
-# Always force foreground so the log captures put_fragments / writeback errors.
+# Default: efs-fuse daemonizes and its parent exits 0 only after FUSE_INIT
+# (the kernel mount is actually serving). Pass -f / --foreground to stay
+# attached and log through tee (valgrind, interactive debug).
 HAS_FOREGROUND=0
 for a in "$@"; do
     if [ "$a" = "-f" ] || [ "$a" = "--foreground" ]; then
@@ -132,14 +134,31 @@ for a in "$@"; do
 done
 
 echo "Stop with: $0 stop $MOUNT_PATH"
-echo "Logging efs-fuse to $LOG_FILE (foreground; Ctrl-C or stop to unmount)"
-echo "Write/fsync EIO details (efs_rc, ino, offset) go to this log."
-# Keep a copy of stdout/stderr so the next silent death is not silent.
+echo "Logging efs-fuse to $LOG_FILE"
+
 if [ "$HAS_FOREGROUND" = 1 ]; then
+    echo "Foreground; Ctrl-C or stop to unmount"
     ./efs-fuse "$ADDR_PORT" "$EXPORT_NAME" "$MOUNT_PATH" "$@" 2>&1 | tee -a "$LOG_FILE"
-else
-    ./efs-fuse "$ADDR_PORT" "$EXPORT_NAME" "$MOUNT_PATH" -f "$@" 2>&1 | tee -a "$LOG_FILE"
+    rc=${PIPESTATUS[0]}
+    echo "efs-fuse exited rc=$rc" | tee -a "$LOG_FILE"
+    exit "$rc"
 fi
-rc=${PIPESTATUS[0]}
-echo "efs-fuse exited rc=$rc" | tee -a "$LOG_FILE"
-exit "$rc"
+
+set +e
+./efs-fuse "$ADDR_PORT" "$EXPORT_NAME" "$MOUNT_PATH" "$@" >>"$LOG_FILE" 2>&1
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+    echo "ERROR: efs-fuse failed rc=$rc (see $LOG_FILE)" >&2
+    tail -n 20 "$LOG_FILE" >&2 || true
+    exit "$rc"
+fi
+# Parent returned 0 after FUSE_INIT. Confirm a getattr actually works —
+# /proc/mounts can list the path a moment before the loop is reading.
+if ! timeout 3 stat "$MOUNT_PATH" >/dev/null 2>&1; then
+    echo "ERROR: $MOUNT_PATH is not serving (see $LOG_FILE)" >&2
+    tail -n 20 "$LOG_FILE" >&2 || true
+    exit 1
+fi
+echo "Mounted $MOUNT_PATH"
+exit 0

@@ -210,6 +210,18 @@ struct efs_export {
      * snapshot/serialize when this matches flushed_chunk_epoch. */
     uint64_t chunk_epoch;
     uint64_t flushed_chunk_epoch;
+    /* Flush page-reuse cache: the exact region bytes the last successful
+     * flush of THIS table committed, tagged with the generation it committed
+     * at. The flush byte-compares each page against these instead of
+     * EC-encoding + blake3-hashing all of them just to discover ~97% are
+     * unchanged (that hashing was ~1 GB/s on the single flush thread and grew
+     * linearly with the table). Valid only while flush_blob_gen ==
+     * root.generation; any adopt/rebuild moves the root and retires it.
+     * flush_blob_gen == 0 means "written but the commit did not land". */
+    char *flush_blob;
+    uint32_t flush_blob_ino_len;
+    uint32_t flush_blob_chunk_len;
+    uint64_t flush_blob_gen;
     /* Cross-client O_APPEND barrier (in-memory only, never serialized):
      * outstanding reserved-but-unflushed append end, open-addressed by ino.
      * The handler refuses a second reserve (BUSY) while one is unflushed.

@@ -1243,6 +1243,13 @@ static void *meta_put_thread(void *arg)
  * every peer then deserialized+merged under s->lock. */
 static void bootstrap_export_on_peers(struct efsd_server *s, struct efs_export *ex)
 {
+    /* Extra-shard flush used to PUT_META the shard-tab EFSR. Peers stashed
+     * that as a cluster-root prepare (gen-advancing, extras=0), which
+     * overwrote the primary's pending and split the committed gen. Peers
+     * already have the export row from mkfs/catchup; extra-page PUTs do not
+     * need a new cluster root. */
+    if (!ex || ex->shard_id != 0)
+        return;
     /* Publish the live EFSR (id + shard_bits). A bits=0 empty-shell EFSM
      * left joiners at shard_bits=0; CREATE_SHARD then returned NOT_PRIMARY
      * and file create was EIO until a later gen>0 flush — which a fresh
@@ -1718,6 +1725,32 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
     return rc;
 }
 
+/* Compare page `pi` of two zero-padded blob regions without materializing
+ * either one. efs_encode_chunk + efs_hash are deterministic, so identical
+ * page bytes imply identical fragments and identical checksums: comparing
+ * bytes we already hold is far cheaper than EC-encoding and blake3-hashing
+ * 128 KiB only to learn the page did not change. Both regions are logically
+ * zero-padded out to EFS_META_PAGE_SIZE, so equal content also requires the
+ * same valid prefix length. */
+static int meta_page_bytes_equal(const char *a, uint32_t alen,
+                                 const char *b, uint32_t blen, uint32_t pi)
+{
+    if (!a || !b)
+        return 0;
+    uint64_t off = (uint64_t)pi * EFS_META_PAGE_SIZE;
+    uint32_t na = (off >= (uint64_t)alen) ? 0 : (uint32_t)((uint64_t)alen - off);
+    uint32_t nb = (off >= (uint64_t)blen) ? 0 : (uint32_t)((uint64_t)blen - off);
+    if (na > EFS_META_PAGE_SIZE)
+        na = EFS_META_PAGE_SIZE;
+    if (nb > EFS_META_PAGE_SIZE)
+        nb = EFS_META_PAGE_SIZE;
+    if (na != nb)
+        return 0;
+    if (na == 0)
+        return 1;
+    return memcmp(a + off, b + off, na) == 0;
+}
+
 static int server_flush_fragmented_meta_locked(struct efsd_server *s,
                                                struct efs_export *ex,
                                                efs_ino_t table_ino,
@@ -1883,7 +1916,21 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     uint8_t *skip_sums = NULL;
     uint32_t *skip_cis = NULL;
     uint32_t skip_pc = 0, skip_ino_pc = 0, skip_ch_len = 0;
+    /* Bytes the committed root was built from, if we still have them. Taken
+     * (not borrowed) so no concurrent rebuild/adopt can free them underneath
+     * the unlocked page loop; whatever we take is freed or replaced below.
+     * Only valid when it is tagged with the generation we are diffing
+     * against — an adopted root has different pages than our last flush. */
+    char *cache_blob = NULL;
+    uint32_t cache_ino_len = 0, cache_chunk_len = 0;
     pthread_mutex_lock(&s->lock);
+    if (ex->flush_blob && ex->flush_blob_gen == ex->root.generation) {
+        cache_blob = ex->flush_blob;
+        cache_ino_len = ex->flush_blob_ino_len;
+        cache_chunk_len = ex->flush_blob_chunk_len;
+        ex->flush_blob = NULL;
+        ex->flush_blob_gen = 0;
+    }
     if (cow_ok && ex->root.page_checksums && ex->root.page_cis &&
         ex->root.page_count > 0) {
         skip_pc = ex->root.page_count;
@@ -1915,38 +1962,72 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
                           ? packed
                           : packed - root.ino_page_count;
         uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+        /* Where this page lives in the committed root. The ino region always
+         * starts at packed 0, so an ino page keeps its index even when the
+         * region grew. A chunk page moves with ino_page_count, so look it up
+         * at its OLD packed index rather than abandoning the whole region:
+         * one extra inode page used to force a re-encode of every chunk page,
+         * which is most of the table. */
+        uint32_t old_packed = 0;
+        int have_old = 0;
+        if (region == EFS_META_REGION_INO) {
+            old_packed = packed;
+            have_old = (packed < skip_ino_pc);
+        } else {
+            /* skip_ino_pc == 0 means the committed root predates the split
+             * regions and all of its pages are inode pages, so there is no
+             * old chunk page to map onto. */
+            old_packed = skip_ino_pc + pi;
+            have_old = (skip_ino_pc > 0);
+        }
+        have_old = have_old && skip_sums && skip_cis && old_packed < skip_pc;
+
+        const char *rbase = (region == EFS_META_REGION_INO)
+                                ? blob
+                                : blob + ino_blob_len;
+        uint32_t rlen = (region == EFS_META_REGION_INO) ? ino_blob_len
+                                                       : chunk_blob_len;
+
         int reuse = 0;
-        if (skip_sums && skip_cis && packed < skip_pc) {
-            int in_ino = (region == EFS_META_REGION_INO);
-            int layout_ok = (root.ino_page_count == skip_ino_pc);
-            if (!in_ino && layout_ok && chunk_blob_len == skip_ch_len) {
+        if (have_old) {
+            if (region == EFS_META_REGION_CHUNK && omit_chunks &&
+                chunk_blob_len == skip_ch_len) {
+                /* chunk_epoch unchanged, so the region was not serialized
+                 * into blob at all — there are no bytes to compare, but it is
+                 * provably identical to what the committed root holds. */
                 reuse = 1;
-            } else if (in_ino && packed < skip_ino_pc) {
-                /* Hash after encode; compared below. */
-            } else if (!in_ino && !layout_ok) {
-                reuse = 0;
+            } else if (cache_blob) {
+                const char *cbase = (region == EFS_META_REGION_INO)
+                                        ? cache_blob
+                                        : cache_blob + cache_ino_len;
+                uint32_t clen = (region == EFS_META_REGION_INO)
+                                    ? cache_ino_len
+                                    : cache_chunk_len;
+                /* The cached chunk region must be the one the committed root
+                 * was built from, or its page pi is not the page skip_cis
+                 * describes. */
+                if (region == EFS_META_REGION_INO ||
+                    (clen > 0 && clen == skip_ch_len))
+                    reuse = meta_page_bytes_equal(rbase, rlen, cbase, clen, pi);
             }
         }
         if (reuse) {
             memcpy(checksums,
-                   skip_sums + (size_t)packed * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE,
+                   skip_sums +
+                       (size_t)old_packed * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE,
                    sizeof(checksums));
-            root.page_cis[packed] = skip_cis[packed];
+            root.page_cis[packed] = skip_cis[old_packed];
             for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
                 memcpy(efs_export_root_checksum(&root, packed, fi),
                        checksums[fi], EFS_HASH_SIZE);
             pages_reused++;
             continue;
         }
-        const char *rbase = (region == EFS_META_REGION_INO)
-                                ? blob
-                                : blob + ino_blob_len;
-        uint32_t rlen = (region == EFS_META_REGION_INO) ? ino_blob_len
-                                                       : chunk_blob_len;
         if (efs_meta_extract_page(rbase, rlen, pi, page) != EFS_OK) {
             free(page);
             free(frag_buf);
             free(blob);
+            free(cache_blob);
             free(skip_sums);
             free(skip_cis);
             efs_export_root_free(&root);
@@ -1955,17 +2036,18 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
         efs_encode_chunk(page, EFS_META_PAGE_SIZE, EFS_META_PAGE_SIZE, fragments);
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
             efs_hash(fragments[fi], EFS_META_FRAGMENT_SIZE, checksums[fi]);
-        if (skip_sums && skip_cis && packed < skip_pc &&
-            ((region == EFS_META_REGION_INO && packed < skip_ino_pc) ||
-             (region == EFS_META_REGION_CHUNK &&
-              root.ino_page_count == skip_ino_pc))) {
+        /* Fallback for when we have no cached bytes to diff (first flush after
+         * a restart, rebuild, or adopted root): fall back to the old
+         * encode-then-compare-checksums path so those flushes still reuse
+         * unchanged pages. */
+        if (have_old) {
             const uint8_t *old = skip_sums +
-                (size_t)packed * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE;
+                (size_t)old_packed * EFS_NUM_FRAGMENTS * EFS_HASH_SIZE;
             if (memcmp(checksums[0], old, EFS_HASH_SIZE) == 0 &&
                 memcmp(checksums[1], old + EFS_HASH_SIZE, EFS_HASH_SIZE) == 0 &&
                 memcmp(checksums[2], old + 2 * EFS_HASH_SIZE,
                        EFS_HASH_SIZE) == 0) {
-                root.page_cis[packed] = skip_cis[packed];
+                root.page_cis[packed] = skip_cis[old_packed];
                 for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++)
                     memcpy(efs_export_root_checksum(&root, packed, fi),
                            checksums[fi], EFS_HASH_SIZE);
@@ -1980,6 +2062,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
             free(page);
             free(frag_buf);
             free(blob);
+            free(cache_blob);
             free(skip_sums);
             free(skip_cis);
             efs_export_root_free(&root);
@@ -2025,11 +2108,19 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
             jobs[fi].frag = fragments[fi];
             jobs[fi].checksum = checksums[fi];
             jobs[fi].rc = EFS_ERR_NET;
+        }
+        /* Spawn the other fragments, then run fragment 0 on this thread. All
+         * EFS_NUM_FRAGMENTS PUTs are still in flight together, but a page
+         * costs 2 pthread_creates instead of 3 — the flush thread was creating
+         * and joining 3 threads per page written, which is pure churn on the
+         * one thread that already serializes every flush. */
+        for (int fi = 1; fi < EFS_NUM_FRAGMENTS; fi++) {
             if (pthread_create(&tids[fi], NULL, meta_put_thread, &jobs[fi]) == 0)
                 spawned[fi] = 1;
             else
                 meta_put_thread(&jobs[fi]);
         }
+        meta_put_thread(&jobs[0]);
         int acks = 0;
         for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
             if (spawned[fi])
@@ -2054,6 +2145,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
             free(page);
             free(frag_buf);
             free(blob);
+            free(cache_blob);
             free(skip_sums);
             free(skip_cis);
             efs_export_root_free(&root);
@@ -2065,9 +2157,52 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     }
     free(page);
     free(frag_buf);
-    free(blob);
     free(skip_sums);
     free(skip_cis);
+
+    /* Park the bytes we just serialized as the diff base for the next flush.
+     * Ownership moves onto ex so none of the early returns below can leak it,
+     * and the gen tag stays 0 ("commit did not land") until the commit path
+     * stamps it — a failed flush therefore leaves behind a cache that can
+     * never be mistaken for the committed root's contents. */
+    char *new_cache = NULL;
+    uint32_t new_cache_ino = 0, new_cache_ch = 0;
+    if (!omit_chunks) {
+        new_cache = blob;
+        new_cache_ino = ino_blob_len;
+        new_cache_ch = chunk_blob_len;
+        blob = NULL;
+    } else if (cache_blob && cache_chunk_len == chunk_blob_len) {
+        /* The chunk region was not re-serialized this time (chunk_epoch
+         * unchanged), so carry the previous flush's copy of it forward. */
+        size_t n = (size_t)ino_blob_len + cache_chunk_len;
+        new_cache = malloc(n ? n : 1);
+        if (new_cache) {
+            memcpy(new_cache, blob, ino_blob_len);
+            memcpy(new_cache + ino_blob_len, cache_blob + cache_ino_len,
+                   cache_chunk_len);
+            new_cache_ino = ino_blob_len;
+            new_cache_ch = cache_chunk_len;
+        }
+    } else if (ino_blob_len > 0) {
+        new_cache = malloc(ino_blob_len);
+        if (new_cache) {
+            memcpy(new_cache, blob, ino_blob_len);
+            new_cache_ino = ino_blob_len;
+        }
+    }
+    free(blob);
+    blob = NULL;
+    free(cache_blob);
+    cache_blob = NULL;
+    pthread_mutex_lock(&s->lock);
+    free(ex->flush_blob);
+    ex->flush_blob = new_cache;
+    ex->flush_blob_ino_len = new_cache_ino;
+    ex->flush_blob_chunk_len = new_cache_ch;
+    ex->flush_blob_gen = 0;
+    pthread_mutex_unlock(&s->lock);
+
     t_pages = heal_mono_us() - t_pages0;
     if (getenv("EFS_FLUSH_PROF"))
         fprintf(stderr,
@@ -2147,6 +2282,9 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
         }
         efs_export_root_move(&ex->root, &root);
         ex->flushed_chunk_epoch = snap_chunk_epoch;
+        /* The parked bytes are now exactly what this root's pages hold, so
+         * the next flush may diff against them. */
+        ex->flush_blob_gen = ex->root.generation;
         /* Flush-race fix: the snapshot was taken under the lock, then the lock
          * was dropped for serialize/PUT. An op that landed in that window is
          * NOT in the committed root. The caller used to clear shard_dirty
@@ -2304,6 +2442,9 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     }
     efs_export_root_move(&ex->root, &root);
     ex->flushed_chunk_epoch = snap_chunk_epoch;
+    /* The parked bytes are now exactly what this root's pages hold, so the
+     * next flush may diff against them. */
+    ex->flush_blob_gen = ex->root.generation;
     /* Flush-race fix (see shard path): clear shard_dirty only if no op landed
      * during the unlocked serialize/PUT window; otherwise keep it dirty so the
      * next flush commits the straggler instead of losing it on a rebuild. */
@@ -2358,6 +2499,20 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
                     (efs_send_msg(fd, EFS_MSG_META_COMMIT, &cm,
                                   (uint32_t)sizeof(cm)) == 0 &&
                      efs_recv_msg(fd, &type, &reply, &reply_len) == 0);
+                uint8_t st = (net_ok && reply && reply_len >= 1)
+                                 ? ((uint8_t *)reply)[0]
+                                 : 0xff;
+                if (st != EFS_PUT_META_OK)
+                    fprintf(stderr,
+                            "meta-commit: peer %s:%u gen=%llu status=%u (%s) "
+                            "net_ok=%d\n",
+                            cn[i].addr, cn[i].port,
+                            (unsigned long long)new_gen, st,
+                            st == 0xff ? "no-reply" :
+                            st == EFS_PUT_META_BUSY ? "BUSY" :
+                            st == EFS_PUT_META_STALE ? "STALE" :
+                            st == EFS_PUT_META_ERROR ? "ERROR" : "?",
+                            net_ok);
                 free(reply);
                 if (net_ok)
                     server_peer_conn_release(cn[i].addr, cn[i].port, fd);
@@ -2911,12 +3066,16 @@ static void *meta_catchup_thread(void *arg)
              * export stays at 1 inode. A fresh mkfs is 2 pages (~128 KiB);
              * the old 64 KiB cutoff spun rebuild forever and wedged
              * CREATE_SHARD (BUSY / FUSE hang on empty-file create). */
-            /* DIRTY-REBUILD: never rebuild a main table with unflushed ops --
-             * it is ahead of the committed root, so a rebuild only loses the
-             * ops (and rolls next_ino back). The flush clears shard_dirty and
-             * this picks the table up on the next pass. */
+            /* DIRTY-REBUILD: never rebuild a PRIMARY main table with unflushed
+             * ops -- it is ahead of the committed root, so a rebuild only
+             * loses the ops (and rolls next_ino back). The flush clears
+             * shard_dirty and this picks the table up on the next pass.
+             * Joiners latch main shard_dirty from CREATE/DROP and never flush
+             * shard 0, so applying the same guard there left them fenced at
+             * gen=2 forever. */
+            int primary = server_is_meta_primary_locked(s);
             need[e] = (ex->meta_fragmented && ex->root.page_count > 0 &&
-                       !ex->shard_dirty &&
+                       !(primary && ex->shard_dirty) &&
                        (ex->meta_needs_rebuild ||
                         (ex->inode_count <= 1 &&
                          ex->root.blob_len > (1u << 20))));

@@ -157,17 +157,77 @@ int efs_client_ino_is_dirty(efs_ino_t ino)
 /* Inodes this client created (mkdir/create). REPORT does not clear this —
  * dest-stat ENOENT under our mkdir tree stays local for the whole rsync. */
 static uint64_t *created_keys;
+static uint64_t *created_at; /* CLOCK_MONOTONIC ns, parallel to keys */
 static uint64_t created_mask;
 static uint64_t created_count;
+
+static uint64_t created_mono_ns(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+}
+
+static int created_set_ensure(uint64_t count)
+{
+    if (created_keys && count * 2 <= created_mask + 1)
+        return 0;
+    uint64_t old_mask = created_mask;
+    uint64_t *old_keys = created_keys;
+    uint64_t *old_at = created_at;
+    uint64_t cap = 16;
+    while (cap < (count ? count * 4 : 16))
+        cap *= 2;
+    uint64_t *nk = calloc(cap, sizeof(uint64_t));
+    uint64_t *na = calloc(cap, sizeof(uint64_t));
+    if (!nk || !na) {
+        free(nk);
+        free(na);
+        return -1;
+    }
+    created_keys = nk;
+    created_at = na;
+    created_mask = cap - 1;
+    if (old_keys) {
+        for (uint64_t i = 0; i <= old_mask; i++) {
+            uint64_t k = old_keys[i];
+            if (!k)
+                continue;
+            uint64_t j = k & created_mask;
+            while (created_keys[j] != 0)
+                j = (j + 1) & created_mask;
+            created_keys[j] = k;
+            created_at[j] = old_at ? old_at[i] : 0;
+        }
+        free(old_keys);
+        free(old_at);
+    }
+    return 0;
+}
 
 void efs_client_note_created(efs_ino_t ino)
 {
     if (!ino)
         return;
+    uint64_t now = created_mono_ns();
     pthread_mutex_lock(&g_client.dirty_mu);
-    if (dirty_set_ensure(&created_keys, &created_mask, created_count + 1) == 0)
-        dirty_set_put(created_keys, created_mask, (uint64_t)ino,
-                      &created_count);
+    if (created_set_ensure(created_count + 1) == 0 && created_keys) {
+        uint64_t key = (uint64_t)ino;
+        uint64_t i = key & created_mask;
+        for (uint64_t n = 0; n <= created_mask; n++) {
+            if (created_keys[i] == 0) {
+                created_keys[i] = key;
+                created_at[i] = now;
+                created_count++;
+                break;
+            }
+            if (created_keys[i] == key) {
+                created_at[i] = now;
+                break;
+            }
+            i = (i + 1) & created_mask;
+        }
+    }
     pthread_mutex_unlock(&g_client.dirty_mu);
 }
 
@@ -190,6 +250,28 @@ int efs_client_ino_is_created(efs_ino_t ino)
             }
             i = (i + 1) & mask;
         }
+    }
+    pthread_mutex_unlock(&g_client.dirty_mu);
+    return hit;
+}
+
+int efs_client_ino_created_recent(efs_ino_t ino, uint64_t max_ns)
+{
+    if (!ino || !created_keys || !created_mask || !created_at || !max_ns)
+        return 0;
+    uint64_t now = created_mono_ns();
+    pthread_mutex_lock(&g_client.dirty_mu);
+    uint64_t i = (uint64_t)ino & created_mask;
+    int hit = 0;
+    for (uint64_t n = 0; n <= created_mask; n++) {
+        if (created_keys[i] == 0)
+            break;
+        if (created_keys[i] == (uint64_t)ino) {
+            uint64_t at = created_at[i];
+            hit = (now >= at && (now - at) < max_ns);
+            break;
+        }
+        i = (i + 1) & created_mask;
     }
     pthread_mutex_unlock(&g_client.dirty_mu);
     return hit;
@@ -679,13 +761,6 @@ int efs_client_meta_cache_adopt(char *blob, size_t blob_len)
             "inodes=%llu chunks=%llu\n",
             blob_len, ino_len, ch_len,
             (unsigned long long)ic, (unsigned long long)cc);
-    /* Leftover efs-fuse after a server-only wipe REPORT/flushes the old
-     * table onto a fresh mkfs. Same fingerprint every time we missed
-     * kill -9 on clients: ~232MB / ~1.9M chunks / gen=102. */
-    if (cc > 100000ull || blob_len > (10u * 1024u * 1024u))
-        fprintf(stderr,
-                "meta: WARNING huge adopt — leftover efs-fuse after wipe? "
-                "killall -9 efs-fuse on fcstor003-015, then edelete+mkfs\n");
     fflush(stderr);
     return 0;
 }

@@ -1414,6 +1414,20 @@ static void remove_chunk_at(struct efs_export *ex, uint64_t j)
 static void drop_chunks_scan(struct efs_export *ex, efs_ino_t ino,
                              uint32_t first_chunk)
 {
+    /* efs_export_drop_chunks_from fans this over the main table AND every
+     * loaded shard tab, but an ino's chunks live in only one or a few of them.
+     * For every other table icnt_get() is 0, the fast path below is skipped
+     * (it requires total > 0) and the fallback scans that unrelated table's
+     * entire chunk array -- so one unlink cost O(all chunks on this node).
+     * That is the term behind unlink p50 growing 0.44ms -> 4.6ms between 100k
+     * and 5M inodes. icnt is maintained everywhere chunk_idx is (set_chunk,
+     * merge, remove_chunk_at, export_reindex_chunks), so a zero is exactly as
+     * trustworthy as the count the fast path already returns on. Checked
+     * before layout_epoch++: a table with nothing to drop did not change, and
+     * a spurious bump makes the flush treat the table as raced and stay dirty.
+     * Holds for first_chunk > 0 too -- no chunks means none in any range. */
+    if (ex->icnt_keys && ex->icnt_mask != 0 && icnt_get(ex, ino) == 0)
+        return;
     ex->layout_epoch++;
     /* Fast path: probe by chunk_index via chunk_idx, bounded by the per-ino
      * live count, instead of scanning the whole chunk array under the
@@ -1422,6 +1436,7 @@ static void drop_chunks_scan(struct efs_export *ex, efs_ino_t ino,
      * `total` of them means none are left. A partial truncate (first_chunk>0)
      * has no exact per-range count, and a missing or stale count falls
      * through to the authoritative scan below. */
+    uint64_t removed = 0;
     if (first_chunk == 0) {
         uint32_t total = icnt_get(ex, ino);
         if (total > 0) {
@@ -1437,18 +1452,34 @@ static void drop_chunks_scan(struct efs_export *ex, efs_ino_t ino,
                     found++;
                 }
             }
-            if (found == total)
+            removed += found;
+            if (found == total) {
+                if (removed)
+                    ex->shard_dirty = 1;
                 return;
+            }
         }
     }
     uint64_t i = 0;
     while (i < ex->chunk_count) {
         if (ex->chunks[i].ino == ino &&
-            ex->chunks[i].chunk_index >= first_chunk)
+            ex->chunks[i].chunk_index >= first_chunk) {
             remove_chunk_at(ex, i);
-        else
+            removed++;
+        } else {
             i++;
+        }
     }
+    /* Mark dirty HERE, per table, and only when this table actually lost a
+     * chunk. The DROP_CHUNKS handler used to set ex->shard_dirty on the MAIN
+     * table unconditionally for every fanned drop, so one unlink anywhere
+     * latched every peer's main table dirty forever — nothing on a peer ever
+     * clears it, because only a main-table flush does and peers do not own
+     * shard 0. That permanently tripped the META_COMMIT promote gate
+     * (`if (ex->shard_dirty) reply = BUSY`), which is why peers stashed every
+     * prepare but stayed pinned at an old committed gen. */
+    if (removed)
+        ex->shard_dirty = 1;
 }
 
 static void remove_chunks_for_ino(struct efs_export *ex, efs_ino_t ino)
@@ -1590,6 +1621,7 @@ void efs_export_free(struct efs_export *ex)
     child_vecs_free(ex);
     efs_export_root_free(&ex->root);
     free(ex->gm_blob);
+    free(ex->flush_blob);
     memset(ex, 0, sizeof(*ex));
 }
 

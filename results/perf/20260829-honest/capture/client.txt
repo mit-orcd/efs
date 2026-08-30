@@ -1,0 +1,95 @@
+----- record log -----
+[ perf record: Woken up 151852 times to write data ]
+[ perf record: Captured and wrote 10.996 MB /tmp/perf-fuse.data (99829 samples) ]
+----- perf report -----
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 99K of event 'cpu-clock:u'
+# Event count (approx.): 24957250000
+#
+# Overhead       Samples  Command   Shared Object       Symbol                                 
+# ........  ............  ........  ..................  .......................................
+#
+    42.76%         42682  efs-fuse  efs-fuse            [.] blake3_hash_many_avx2
+            |
+            ---blake3_hash_many_avx2
+               |          
+                --42.70%--blake3_compress_subtree_wide
+                          |          
+                           --42.36%--blake3_compress_subtree_wide
+                                     |          
+                                     |--41.56%--blake3_compress_subtree_wide
+                                     |          |          
+                                     |          |--40.03%--blake3_compress_subtree_wide
+                                     |          |          blake3_hasher_update.part.0
+                                     |          |          efs_hash
+                                     |          |          |          
+                                     |          |          |--26.66%--hash_write_fragments
+                                     |          |          |          dcache_flush_slot_inner
+                                     |          |          |          |          
+                                     |          |          |          |--19.72%--dcache_reclaim_main
+                                     |          |          |          |          start_thread
+                                     |          |          |          |          
+                                     |          |          |          |--5.32%--efs_dcache_maybe_reclaim
+                                     |          |          |          |          efs_fuse_write_buf
+                                     |          |          |          |          fuse_fs_write_buf
+                                     |          |          |          |          0x1
+                                     |          |          |          |          
+                                     |          |          |           --1.62%--efs_dcache_flush_ino
+                                     |          |          |                     efs_fuse_fsync
+                                     |          |          |                     0x7fb89d9ea9d2
+                                     |          |          |                     0x107e3a0
+                                     |          |          |                     0x700000000
+                                     |          |          |                     0x746e756f6d2d
+                                     |          |          |          
+                                     |          |           --13.38%--dcache_flush_slot_inner
+                                     |          |                     |          
+                                     |          |                     |--9.77%--dcache_reclaim_main
+                                     |          |                     |          start_thread
+                                     |          |                     |          
+                                     |          |                     |--2.74%--efs_dcache_maybe_reclaim
+                                     |          |                     |          efs_fuse_write_buf
+----- perf stat -----
+
+ Performance counter stats for process id '3485524':
+
+         53,300.69 msec task-clock:HGu                   #    2.665 CPUs utilized             
+                 0      context-switches:HGu             #    0.000 /sec                      
+                 0      cpu-migrations:HGu               #    0.000 /sec                      
+         2,846,255      page-faults:HGu                  #   53.400 K/sec                     
+    79,591,697,371      cycles:HGu                       #    1.493 GHz                         (99.97%)
+     1,944,833,567      stalled-cycles-frontend:HGu      #    2.44% frontend cycles idle        (99.98%)
+    84,633,472,673      instructions:HGu                 #    1.06  insn per cycle            
+                                                  #    0.02  stalled cycles per insn     (99.98%)
+     1,249,509,840      branches:HGu                     #   23.443 M/sec                       (99.98%)
+        27,593,007      branch-misses:HGu                #    2.21% of all branches             (99.97%)
+
+      20.001745282 seconds time elapsed
+
+----- io after -----
+rchar: 38658680451
+wchar: 58079492666
+syscr: 38085
+syscw: 922546
+read_bytes: 0
+write_bytes: 0
+cancelled_write_bytes: 0
+----- wchan after -----
+     18 futex_do_wait
+     10 fuse_dev_do_read
+----- top threads -----
+3485524 3486044  7.8 efs-fuse
+3485524 3485708  4.7 efs-fuse
+3485524 3485707  4.6 efs-fuse
+3485524 3485706  4.6 efs-fuse
+3485524 3485709  4.4 efs-fuse
+3485524 3485732  4.3 efs-fuse
+3485524 3485735  3.9 efs-fuse
+3485524 3485526  3.9 efs-fuse
+3485524 3485525  3.8 efs-fuse
+3485524 3485734  3.6 efs-fuse
+3485524 3485727  2.7 efs-fuse
+3485524 3485726  2.7 efs-fuse

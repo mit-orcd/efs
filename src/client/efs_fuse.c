@@ -17,6 +17,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/statvfs.h>
+#include <poll.h>
 #include <time.h>
 #include <fcntl.h>
 #include <sys/file.h>
@@ -3094,6 +3095,53 @@ static int efs_fuse_flock(const char *path, struct fuse_file_info *fi, int op)
     return 0;
 }
 
+/* Parent of a daemonized efs-fuse waits on this until FUSE_INIT has run.
+ * fuse_mount() puts the path in /proc/mounts before fuse_loop_mt is reading,
+ * so a parent that returned at fuse_daemonize advertised a mount that could
+ * not yet serve. -1 when running foreground. */
+static int g_fuse_ready_wr = -1;
+
+static void efs_fuse_note_serving(void)
+{
+    int fd = g_fuse_ready_wr;
+    if (fd >= 0) {
+        g_fuse_ready_wr = -1;
+        char c = 'R';
+        (void)write(fd, &c, 1);
+        close(fd);
+    }
+    fprintf(stderr, "fuse serving\n");
+    fflush(stderr);
+}
+
+static int efs_fuse_wait_ready(int rfd, pid_t child, int timeout_ms)
+{
+    struct pollfd p = { .fd = rfd, .events = POLLIN };
+    while (timeout_ms > 0) {
+        int slice = timeout_ms > 200 ? 200 : timeout_ms;
+        int pr = poll(&p, 1, slice);
+        if (pr < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+        if (pr > 0) {
+            char c = 0;
+            ssize_t n = read(rfd, &c, 1);
+            return (n == 1 && c == 'R') ? 0 : -1;
+        }
+        int st = 0;
+        if (waitpid(child, &st, WNOHANG) == child)
+            return -1;
+        timeout_ms -= slice;
+    }
+    kill(child, SIGTERM);
+    usleep(200000);
+    kill(child, SIGKILL);
+    waitpid(child, NULL, 0);
+    return -1;
+}
+
 static void *efs_fuse_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 {
     if (cfg) {
@@ -3101,10 +3149,13 @@ static void *efs_fuse_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
         /* Path-based high-level nodes do not share a kernel inode across
          * hard-link names, so a chmod on one name would otherwise leave
          * the other name's cached mode stale for attr_timeout seconds.
-         * entry/negative_timeout=0: a cached negative dentry outlives a
-         * peer's (or a rename-churn cycle's) create and turns a later
-         * O_CREAT open into a spurious EEXIST; every lookup is an RPC to
-         * the shard owner anyway, so the name cache buys nothing. */
+         * negative_timeout=0: a cached ENOENT outlives a peer create and
+         * turns a later O_CREAT into EEXIST.
+         * entry_timeout stays 0 too: a positive kernel dentry outlives a
+         * peer unlink/rename (posix2 peer_open_rename_fd). The ecopy
+         * LOOKUP storm is coalesced in lookup_walk (~250ms created-recent
+         * + name cache), not here — kernel entry_timeout would ghost a
+         * peer unlink across posix2's mailbox. */
         cfg->attr_timeout = 0.0;
         cfg->entry_timeout = 0.0;
         cfg->negative_timeout = 0.0;
@@ -3155,6 +3206,7 @@ static void *efs_fuse_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
             batch = (uint32_t)v;
     }
     efs_client_enable_meta_batch(batch);
+    efs_fuse_note_serving();
     return NULL;
 }
 
@@ -3476,7 +3528,7 @@ static int efs_fuse_main_mt(int argc, char *argv[],
 {
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
     struct fuse_cmdline_opts opts;
-    struct fuse *f;
+    struct fuse *f = NULL;
     struct fuse_loop_config config;
     int ret = -1;
 
@@ -3502,6 +3554,42 @@ static int efs_fuse_main_mt(int argc, char *argv[],
         goto out;
     }
 
+    /* Do not fuse_daemonize(): it returns the parent at fuse_mount, before
+     * fuse_loop_mt, and it redirects stdout/stderr to /dev/null so a
+     * `>fuse.log` wrapper only captures pre-mount lines. Fork first, mount
+     * only in the child, and hold the parent until FUSE_INIT. */
+    if (!opts.foreground) {
+        int pfd[2];
+        if (pipe(pfd) != 0) {
+            ret = 1;
+            goto out;
+        }
+        pid_t child = fork();
+        if (child < 0) {
+            close(pfd[0]);
+            close(pfd[1]);
+            ret = 1;
+            goto out;
+        }
+        if (child > 0) {
+            close(pfd[1]);
+            int ok = efs_fuse_wait_ready(pfd[0], child, 30000);
+            close(pfd[0]);
+            if (ok != 0)
+                fprintf(stderr,
+                        "ERROR: efs-fuse did not start serving within 30s\n");
+            /* Do not return through efs_client_shutdown: that would close the
+             * child's dup'd server sockets. */
+            fflush(stderr);
+            _exit(ok == 0 ? 0 : 1);
+        }
+        close(pfd[0]);
+        g_fuse_ready_wr = pfd[1];
+        (void)setsid();
+        fprintf(stderr, "efs-fuse daemon pid=%d\n", (int)getpid());
+        fflush(stderr);
+    }
+
     f = fuse_new(&args, op, sizeof(*op), private_data);
     if (f == NULL) {
         ret = 1;
@@ -3509,13 +3597,6 @@ static int efs_fuse_main_mt(int argc, char *argv[],
     }
 
     if (fuse_mount(f, opts.mountpoint) != 0) {
-        fuse_destroy(f);
-        ret = 1;
-        goto out;
-    }
-
-    if (fuse_daemonize(opts.foreground) != 0) {
-        fuse_unmount(f);
         fuse_destroy(f);
         ret = 1;
         goto out;
@@ -3541,6 +3622,10 @@ static int efs_fuse_main_mt(int argc, char *argv[],
     fuse_destroy(f);
 
 out:
+    if (g_fuse_ready_wr >= 0) {
+        close(g_fuse_ready_wr);
+        g_fuse_ready_wr = -1;
+    }
     free(opts.mountpoint);
     fuse_opt_free_args(&args);
     return ret;

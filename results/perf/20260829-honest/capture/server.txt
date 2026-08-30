@@ -1,0 +1,97 @@
+----- record log -----
+[ perf record: Woken up 91 times to write data ]
+[ perf record: Captured and wrote 25.170 MB /tmp/perf-efsd.data (189728 samples) ]
+----- perf report -----
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 395  of event 'cpu-clock:u'
+# Event count (approx.): 98750000
+#
+# Overhead       Samples  Command  Shared Object  Symbol                                
+# ........  ............  .......  .............  ......................................
+#
+    73.42%           290  efsd     efsd           [.] blake3_hash_many_avx2
+            |
+            ---blake3_hash_many_avx2
+               blake3_compress_subtree_wide
+               |          
+               |--72.66%--blake3_compress_subtree_wide
+               |          |          
+               |          |--72.15%--blake3_compress_subtree_wide
+               |          |          |          
+               |          |          |--70.13%--blake3_compress_subtree_wide
+               |          |          |          blake3_hasher_update.part.0
+               |          |          |          efs_hash
+               |          |          |          verify_thread
+               |          |          |          start_thread
+               |          |          |          
+               |          |           --2.03%--blake3_hasher_update.part.0
+               |          |                     efs_hash
+               |          |                     verify_thread
+               |          |                     start_thread
+               |          |          
+               |           --0.51%--blake3_hasher_update.part.0
+               |                     efs_hash
+               |                     verify_thread
+               |                     start_thread
+               |          
+                --0.76%--blake3_hasher_update.part.0
+                          efs_hash
+                          verify_thread
+                          start_thread
+
+    10.13%            40  efsd     libc.so.6      [.] __memmove_avx_unaligned_erms
+            |
+            ---__memmove_avx_unaligned_erms
+               server_read_fragment
+               verify_thread
+               start_thread
+
+     2.53%            10  efsd     libc.so.6      [.] __vfprintf_internal
+            |
+----- perf stat -----
+
+ Performance counter stats for process id '105144':
+
+            202.76 msec task-clock:HGu                   #    0.010 CPUs utilized             
+                 0      context-switches:HGu             #    0.000 /sec                      
+                 0      cpu-migrations:HGu               #    0.000 /sec                      
+               100      page-faults:HGu                  #  493.198 /sec                      
+       291,423,915      cycles:HGu                       #    1.437 GHz                         (80.54%)
+        14,121,312      stalled-cycles-frontend:HGu      #    4.85% frontend cycles idle        (84.08%)
+       553,641,275      instructions:HGu                 #    1.90  insn per cycle            
+                                                  #    0.03  stalled cycles per insn     (82.31%)
+        15,894,868      branches:HGu                     #   78.393 M/sec                       (86.32%)
+           149,888      branch-misses:HGu                #    0.94% of all branches             (82.66%)
+
+      20.002315663 seconds time elapsed
+
+----- io after -----
+rchar: 6125036614
+wchar: 14559645163
+syscr: 186861
+syscw: 667914
+read_bytes: 6111821824
+write_bytes: 15440863232
+cancelled_write_bytes: 1716224
+----- wchan after -----
+     22 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+----- top threads -----
+ 105144  105165  4.5 efsd
+ 105144  105368  1.7 efsd
+ 105144  105369  1.6 efsd
+ 105144  105370  1.5 efsd
+ 105144  105371  1.4 efsd
+ 105144  105185  1.4 efsd
+ 105144  105372  1.3 efsd
+ 105144  105373  1.2 efsd
+ 105144  105374  1.0 efsd
+ 105144  105375  0.9 efsd
+ 105144  105376  0.8 efsd
+ 105144  105377  0.7 efsd

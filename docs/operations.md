@@ -21,6 +21,10 @@ If `efsd` exits immediately, it prints the last log lines.
 The client needs **one** server address; it discovers the rest. If it runs on
 the same host as a server, it prefers the local fragment.
 
+`client.sh` daemonizes and returns **only after** the mount is serving
+(FUSE_INIT completed and `stat` of the mountpoint works). `/proc/mounts`
+listing the path is not enough. Pass `-f` to stay in the foreground.
+
 ## Running the binaries yourself
 
 ```bash

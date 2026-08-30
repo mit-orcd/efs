@@ -37,6 +37,188 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+**ECOPY LOOKUP TAX CUT; RATE STILL ~60 FILES/S = CREATE (Aug 29 night).**
+The 56–70 LOOKUPs/file were real but not the 70 files/s ceiling. Client
+`lookup_walk` now coalesces same-client (parent,name)→ino for ~250ms
+(`ops.c`); needed because sharded upsert is child-shard while name lookup
+is parent-shard, so local HIT always missed and a name-only cache never
+fired. Keep `entry_timeout=0` (posix2 peer unlink/rename). Gate: fresh
+bits=3, dest **does not exist** so ecopy sets `destination_fresh` and skips
+its 512-wide dest-stat. 60s `ecopy …/ecrawl-synt-small/ /tmp/efs-mount/r3fresh`:
+3646 files, **FUSE_OK**, gens 6052×4. RPC delta: lookup 11098 / create 3782
+= **2.9 LOOKUPs/file** (was ~70 into an existing dest). Rate **61 files/s**
+unchanged — CREATE 63/s is the serial limit (primary idle CPU, lock_all hold
+~2.5μs). Copying into an **existing** dest still dest-stats 512 names/batch
+(~70 LOOKUPs/file) and is the same ~60/s. 1000 files/s is CREATE, not LOOKUP.
+Do not quote the interrupted 3-node `ino_dup` run (fcstor006 was DOWN).
+**2PC GEN-SYNC GATED (Aug 29, working tree, UNGATED commit).** Joiners no
+longer pin at gen=2/5 while the primary runs away. Repeatable gate:
+`bash tests/clean_cluster.sh && bash tests/run_tests.sh setup && bash tests/stress/ecopy_gen_sync.sh`
+— one client, `~/git/direct_copy/ecopy ~/orcd/scratch/ecrawl-synt-small/ /tmp/efs-mount/`
+(contents of SRC into DST; tree is ~6M files, default window 180s). First
+run `results/ecopy-gen-sync/20260829-163709`: **FUSE_OK**, 12057 files / 180s,
+**gens 5779 5779 5779 5779 PASS** (still 5887/5887/5887/5887 after). Joiners
+logged 5886 `meta-commit: promoted` each; **0 BUSY / 0 STALE**. Primary
+`perf record -p $(pgrep -x efsd)`: 20% blake3 in `server_flush_fragmented_meta_locked`
+(known O(table) flush). Joiner `strace -cf -p`: 61% futex / 24% recvfrom
+(followers waiting, not hashing). Do **not** wrap efsd in strace.
+Fixes: META_COMMIT BUSY only if `primary && shard_dirty`; PUT_META
+gen-advancing prepare only from the metadata primary (else extras-merge /
+STALE); extra-shard `bootstrap_export_on_peers` is a no-op; catchup rebuild
+allows joiner `shard_dirty`. Leftover compile trap: do not leave a stray
+`return 0;` after `put_meta_status_name`.
+**FIO / DATA-PATH (Aug 29) — method + table live in `.cursor/rules/efs-fio-honest.mdc`.
+Do not re-derive.** Honest writes `--end_fsync=1`; reads after remount.
+Harness: `tests/stress/fio_honest_matrix.sh`. Writes ~2.4 GiB/s (1 client)
+→ ~3.6–5.3 GiB/s (9 clients, 1.5–2.1×). Reads 7.8 → 49 GiB/s (6.3×).
+Stock `run_tests.sh perf` write column is cache-inflated — never quote.
+Last `perf`: client blake3 on flush (2.7 cores); primary off-CPU idle.
+Same shared serialization family as ecopy (9 clients only ~1.3× one).
+Cleanup gotcha (not a bug): a dir holding files fio still had open rmdir'd
+ENOTEMPTY forever while readdir showed it empty — a leaked libfuse
+`.fuse_hidden` node (readdir filters the prefix). A remount cleared it; the
+server had no orphan. Minimal create/rm/rmdir cycles are clean.
+**REAL-WORKLOAD SCALE FINDING (Aug 29) — ImageNet ecopy throughput DECAYS 2.2x
+as the table grows, and the primary is the single-threaded ceiling.**
+New harness `tests/stress/ecopy_rounds.sh` (+ `ecopy_verify.sh`): every client
+ecopy's a disjoint slice of ImageNet class dirs into its own subtree, one slice
+per round, so each round is fresh work on a strictly larger table and rounds are
+directly comparable. Source
+`/orcd/scratch/orcd/001/erbmi1/imagenet/images_complete/ilsvrc/train` (1000
+class dirs, 732-1300 files each, ~117 KB avg — metadata-bound, not bandwidth).
+**GOTCHA: `ecopy SRC DST` copies the CONTENTS of SRC into DST, not SRC as a
+subdir** — the harness mkdirs `DST/<class>` per class or ImageNet's shape is
+lost and per-class accounting reads 0.
+**6 rounds, 9 clients, 2 class dirs/client/round, fresh bits=3 cluster
+(`results/ecopy/20260829-031849`), files/s aggregate:**
+`84.5 | 75.2 | 65.6 | 59.4 | 46.9 | 37.6` over 23k->140k files. Monotonic,
+no plateau. Single-client solo is ~66 files/s (unchanged since Aug 24), so
+9 clients together only ever beat one client by 1.3x and end up BELOW it.
+**Correctness is CLEAN: `ecopy_verify.sh` = 139767/139767 files, 108/108 class
+dirs exact, 0 mismatches; 0 `ino_dup` / 0 `raced with GC` / 0 `meta-rebuild` on
+all 4 servers.** Short rounds (23183/23171/23213 vs 23400) are ImageNet's
+variable class sizes, NOT loss — always verify per-class before calling it a bug.
+**Cause is NOT the flush, measured directly and do NOT re-chase:** pages
+*written* per flush (the `next_ci` delta) is FLAT 3.1 -> 4.6 while the table
+grew 8 -> 149 pages, i.e. CoW page reuse works and metadata write volume is
+not what grows. 86861 commits in ~41 min (~35 flushes/s).
+**Cause IS a single-threaded serialization point on the primary:** mid-round
+sampling shows fcstor003 at **87.5% of ONE core (of 24)** while fcstor004/006
+are at 0.0%, fcstor005 at 6.7%, and `efs-fuse` on the clients at 0.0%. All the
+work funnels through one thread on one node; the other 3 servers and every
+client are idle. This is the same shape as the posixstress saturation
+(everything through the primary) but here it also *degrades with table size*,
+which the empty-file scale test did NOT show (create rate was flat to 5M) —
+so the growing term is on the chunk/REPORT_CHUNKS side, not create.
+**`peer-commit-promote` ROOT-CAUSED + FIXED (Aug 29, working tree, UNGATED).**
+Peers stashed every `meta-prepare` but stayed pinned at an old committed gen, so
+recent metadata generations existed ONLY on the primary — a real durability
+exposure. Cause: `EFS_MSG_INODE_DROP_CHUNKS` (handler.c ~2590) did
+`ex->shard_dirty = 1` on the **main** table unconditionally. `fan_drop_chunks`
+sends that RPC to EVERY node on EVERY unlink/truncate, so a peer set the flag
+even when it dropped nothing (its tables hold none of that ino's chunks), and
+**nothing on a peer ever clears it** — only a main-table flush clears
+`shard_dirty`, and peers do not own shard 0, so the primary is the only node
+that ever flushes it. One unlink anywhere therefore latched every peer's main
+table dirty PERMANENTLY, and the META_COMMIT promote gate
+(`if (ex->shard_dirty) { reply = BUSY; /* keep pending, do not promote */ }`,
+handler.c ~1181) then refused every subsequent commit forever. Matches the
+symptom exactly (prepares stashed for gens up to 11, still `committed gen=3`).
+**Ruled out first, do not re-chase:** the commit's `export_id`
+(`ex->root.id`, correct), the `root_sum` fingerprint (peer hashes the same
+prepare bytes the writer hashed), and prepare/commit reordering (both PUT_META
+and META_COMMIT are synchronous request/reply, so the writer cannot send
+prepare N+1 before the peer has processed commit N).
+Fix: mark dirty per-table and only when a table actually lost a chunk —
+`drop_chunks_scan` now counts removals and sets `ex->shard_dirty` on the table
+it modified; the blanket flag in the DROP_CHUNKS handler is gone.
+**GATE OWED: posixpersist + confirm peers advance `committed gen` under load.**
+**HYPOTHESIS WORTH TESTING FIRST — this may also be the residual
+`unmount-drain-chunks` / `large-file-tail` content loss.** Both are "size
+correct, contents all zeros" with idle, normally-flushing servers, i.e. the
+inode row survived but the chunk records did not. If peers were pinned at an
+old committed gen, then any post-remount read served from a peer's root is
+missing every chunk record written since that gen — which is exactly that
+symptom. Re-run posixpersist after this fix BEFORE chasing those two
+separately; they may already be closed.
+
+**FLUSH THREAD CHURN REDUCED (Aug 29, working tree, UNGATED).** Each page
+written spawned 3 threads (one per fragment) and joined all 3, on the single
+thread that already serializes every flush. Now spawns fragments 1..N-1 and
+runs fragment 0 inline: same concurrency, 2 pthread_creates per page instead
+of 3. The join loop was already guarded by `spawned[fi]`, so fragment 0 is
+correctly not joined.
+
+**UNLINK O(n) TERM FOUND + FIXED (Aug 29, working tree, UNGATED — no build was
+possible, shell backend dead).** `drop_chunks_scan` (metadata.c ~1414) took its
+bounded fast path only when `icnt_get(ex, ino) > 0`; when the count was **0** it
+fell through to a full `while (i < ex->chunk_count)` pass over that table's
+whole chunk array. `efs_export_drop_chunks_from` fans the scan over the main
+table AND **every loaded shard tab**, and an ino's chunks live in only one or a
+few of them — so for every other table the count is 0 and one unlink scanned
+that entire unrelated table. **One unlink was O(all chunks on this node)**,
+which is the measured unlink p50 0.44ms -> 4.6ms from 100k to 5M. Fix: if the
+icnt index exists and reports 0 for this ino, return immediately (checked
+BEFORE `layout_epoch++` — a table with nothing to drop did not change, and a
+spurious bump makes the flush treat it as raced and stay dirty). Safe because
+`icnt` is maintained everywhere `chunk_idx` is (`efs_export_set_chunk`, the
+merge path, `remove_chunk_at`, `export_reindex_chunks`), so a 0 is exactly as
+trustworthy as the non-zero count the existing fast path already returns on.
+Holds for `first_chunk > 0` too (no chunks means none in any range).
+`fan_drop_chunks` is fine — it dedups by node (O(nodes), not O(shards)) — but
+note its `server_ensure_shard_ready` loop is O(shard_count) per unlink, which
+is 2 owned shards at bits=3 but ~1024 at bits=12: fix that before raising bits.
+**GATE STILL OWED: build + posix + posixpersist + a scale_grow unlink curve.**
+
+**HOT PATH FOUND BY CODE READING (Aug 29, not yet measured — shell was dead):
+every flush re-serializes and re-HASHES the WHOLE table just to discover which
+pages changed.** `server_flush_fragmented_meta_locked` (meta_server.c ~1721):
+1. `efs_export_table_snapshot_ex` — full memcpy of inodes[]+chunks[] under
+ global + all shard locks;
+2. `efs_export_serialize_ex` — serializes the ENTIRE table to a ~20 MB blob
+ (156 pages x 128 KiB at 140k files);
+3. then **for every one of the 156 pages**: `efs_meta_extract_page` (128 KiB
+ memcpy) + `efs_encode_chunk` (EC encode) + **3x `efs_hash` over 64 KiB
+ fragments**, and only THEN compares the checksums against the committed
+ root's to decide the page is unchanged and can be reused.
+So ~4.6 pages are actually written but all 156 are encoded and blake3'd. Per
+flush that is ~78 MB touched incl. **~30 MB of blake3**; at ~35 flushes/s that
+is **~1 GB/s of hashing+memcpy on ONE thread** — the 87.5%-of-one-core, and it
+is LINEAR in table size, which is exactly the observed 2.2x decay. Matches the
+old bits=5 profile (`server_flush_fragmented_meta_locked` ~50% of efsd, blake3
+20% + memmove 12%) — that was the same cost multiplied by shard tables.
+`efs_export_set_chunk` is O(1) (hash idx + append) and REPORT_CHUNKS apply is
+O(recs), so **the apply path is NOT the problem — do not chase it.**
+**FIX, in order of value:**
+(a) cheap: cache the previous flush's serialized blob per table and `memcmp`
+ each page's raw bytes instead of encode+3x blake3 (encode is deterministic,
+ so identical bytes => identical fragments/checksums; same outcome, ~4-10x
+ less work on the ~97% of pages that are reused). Invalidate on layout
+ change (`ino_page_count`/`chunk_blob_len`) and on any failed flush.
+(b) structural: per-page dirty tracking so step 2 serializes only dirty pages
+ and step 3 never visits clean ones — removes the O(table) term entirely.
+ This is the one that matters for 2^32.
+NOTE `omit_chunks` already skips the chunk region when `chunk_epoch` is
+unchanged, but an ecopy/fio write workload dirties chunks every flush, so it
+never engages there.
+**NEXT: find which primary thread is hot and confirm the above.**
+`perf record -g` on efsd HUNG both times (perf report never returned);
+use `top -H` + `/proc/PID/task/TID/{comm,wchan,stack}` instead.
+**Harnesses staged but NEVER RUN (shell died first):**
+`tests/stress/fio_rounds.sh` (rounds of fio from all 9 clients, fresh dir per
+round so the table grows — same shape as ecopy_rounds so the two curves are
+comparable; a flat fio curve + decaying ecopy curve would localize the cost to
+metadata) and `ecopy_verify.sh deep` (remounts each client, then reads each
+host's files back FROM A DIFFERENT host and md5s them against the ImageNet
+source — the counts mode only proves the writer can still see its own writes,
+possibly from its own dcache).
+**INFRA: the shell exec env wedged right after this** — caused by
+`pkill -f "efsd-ecopy"`, which self-matched the shell's own command line and
+killed the session (the documented `pgrep/pkill -f` trap, third time it has bit
+this project). A round-7 ecopy (`results/ecopy/round7`, log `/tmp/r7.log`) was
+left in flight and its result was never read; the cluster still holds the ~140k
+file tree under `/tmp/efs-mount/ecopy/<host>/r<N>/`.
+
 **DURABILITY GATE ADDED (Aug 28, b2e0dce) — `run_tests.sh posixpersist`.**
 Every other suite writes and verifies inside ONE mount session, so all of them
 would pass even if efs never made anything durable (the client cache answers

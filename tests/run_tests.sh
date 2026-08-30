@@ -75,10 +75,12 @@ push_tests() { # host
         >/dev/null 2>&1
 }
 
-# mount a client if not already mounted (assumes a current efs-fuse binary)
+# mount a client if not already mounted (assumes a current efs-fuse binary).
+# /proc/mounts lists the path at fuse_mount, before fuse_loop_mt is serving —
+# require a successful stat so the caller does not use the mount too early.
 ensure_mounted() { # host
     local h=$1
-    if ssh_to "$PROBE_SSH_SEC" "$h" 'grep -q "efs-fuse /tmp/efs-mount " /proc/mounts' 2>/dev/null; then
+    if ssh_to "$PROBE_SSH_SEC" "$h" 'grep -q "efs-fuse /tmp/efs-mount " /proc/mounts && timeout 2 stat /tmp/efs-mount >/dev/null' 2>/dev/null; then
         return 0
     fi
     say "  $h: mounting efs-fuse"
@@ -86,7 +88,9 @@ ensure_mounted() { # host
         mkdir -p /tmp/efs-mount; \
         (EFS_TRANSPORT='${EFS_TRANSPORT:-tcp}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &); \
         for i in \$(seq 1 100); do sleep 0.15; \
-            grep -q \"efs-fuse /tmp/efs-mount \" /proc/mounts && exit 0; done; exit 1" 2>/dev/null
+            grep -q \"efs-fuse /tmp/efs-mount \" /proc/mounts || continue; \
+            timeout 1 stat /tmp/efs-mount >/dev/null 2>&1 && exit 0; \
+        done; echo mount-not-serving; tail -8 fuse.log; exit 1" 2>/dev/null
 }
 
 # Drop and remount one pure-client efs-fuse so it refetches the server snapshot.
@@ -100,7 +104,8 @@ remount_client() { # host
         EFS_TRANSPORT='${EFS_TRANSPORT:-tcp}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &
         for i in \$(seq 1 100); do
             sleep 0.15
-            grep -q \"efs-fuse /tmp/efs-mount \" /proc/mounts && exit 0
+            grep -q \"efs-fuse /tmp/efs-mount \" /proc/mounts || continue
+            timeout 1 stat /tmp/efs-mount >/dev/null 2>&1 && exit 0
         done
         echo remount-timeout; tail -8 fuse.log; exit 1"
 }

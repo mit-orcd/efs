@@ -1,0 +1,75 @@
+---
+description: Honest efs fio method, harness, and Aug 29 baseline — do not reinvent or quote the stock perf suite
+alwaysApply: true
+---
+
+# Honest fio (do not reinvent)
+
+`--direct=1` only skips the **kernel** page cache. It does **not** skip efs's
+userspace dcache. Stock `run_tests.sh perf` is `time_based` + no `end_fsync`
+→ write numbers are ~3–4× memory-bandwidth fiction (single sw-1m 9538,
+9-client 108954 / 106 GiB/s). Physically impossible: 30s at that rate is
+3.2 TiB, but only ~124 GB existed on the 4 servers. **Never quote those
+or Aug-24 "multi sw-1m 9342 / rw-128k 121 GB/s".** Sanity-check: bytes
+written ≤ on-disk `du` of `/data1/0*/efs` (× ~1.5 for 2+1 EC).
+
+## Method (required)
+
+- **Writes:** `--end_fsync=1`, **no** `--time_based`. Flush is in the clock.
+- **Reads:** remount every participating client first (or host N reads host
+  N+1's tree). Same-mount read after write is dcache.
+- **Shape:** 9 jobs × 2g, `psync`, `bs` per test; 4k tests use 256m.
+  50g file = **1 job**, `--filename=big50`.
+- **Hosts:** 1 = 007; 4 = 007–010; 9 = 007–015. Need `.ib` on
+  `run_tests.sh` host args.
+- **Must be the FUSE export.** Before every job: `findmnt -o FSTYPE` on
+  `/tmp/efs-mount` must be `fuse.efs-fuse`. Log line `FUSE_OK`. Treat
+  `NOT_FUSE` or fio `Disk stats: md0`/`sda` as abort — that is local disk
+  (dead daemon leaves a plain dir). Same class of bug as posix-on-tmpfs.
+- **Harness (use this, do not rewrite):**
+  `bash tests/stress/fio_honest_matrix.sh results/perf/<id>-honest`
+  Latest: `results/perf/20260829-honest/` (raw.tsv + per-host logs).
+  Aug 29 table: remount required `efs-fuse` in `/proc/mounts`; no `md0`
+  in any job log; 50g left **333 GiB used** on the servers. **Not** in
+  the table: the later strace-wrap attempt (353 MiB/s, `Disk stats: md0`)
+  — that was local RAID after we killed the daemons. The 2199 last-run
+  `perf` samples are inside `efs-fuse` / `fuse_fs_write_buf`.
+
+## Baseline (Aug 29, bits=3, TCP) — aggregate MiB/s
+
+| test | 1 | 4 | 9 | 9/1 |
+| sw-1m | 2355 | 3271 | 3599 | 1.5x |
+| ow-1m | 2463 | 4626 | 4923 | 2.0x |
+| rw-1m | 2580 | 4401 | 5064 | 2.0x |
+| rw-128k | 2538 | 4255 | 5278 | 2.1x |
+| rw-4k | 503 | 1961 | 2334 | 4.6x |
+| sr-1m | 7767 | 30526 | 48949 | 6.3x |
+| rr-1m | 7863 | 30989 | 52353 | 6.7x |
+| rr-128k | 6069 | 22368 | 42769 | 7.0x |
+| rr-4k | 434 | 1672 | 3538 | 8.2x |
+| sw-50g | 1712 | 3272 | 3726 | 2.2x |
+| sr-50g | 2356 | 9031 | 20170 | 8.6x |
+
+**Shape:** writes share a ~3.6–5.3 GiB/s ceiling (1 client already ~2/3 of
+9-way sw-1m; 9-way per-client lockstep 398–402 MiB/s). Reads scale.
+NVMe ceiling is 16.7–21.4 GB/s **per host** — this is software, not media.
+50g one-job is slower than 9×2g on 1 client (less parallelism), same
+ceiling at 4/9.
+
+## Profile a single write (not strace)
+
+`kernel.yama.ptrace_scope=2` → `strace` / `PTRACE_TRACEME` denied even as
+parent. `perf trace` needs tracefs. Do not restart daemons under strace
+(last attempt wrote 353 MiB/s to **local md0**). Same-uid:
+
+```
+perf record -e cpu-clock -g --call-graph fp -p $(pgrep -x efsd) -o /tmp/perf-efsd.data sleep 20
+perf stat -p $(pgrep -x efsd) sleep 20
+# same for efs-fuse; then:
+timeout 25 perf report --stdio --no-children -n -i /tmp/perf-efsd.data
+```
+
+Aug 29 last sw-1m (2199 MiB/s): client **2.7 cores**, 43% blake3 in
+`hash_write_fragments` / `dcache_flush_slot_inner`. Primary **0.01 CPUs**
+in `perf stat`; on-CPU leftover is `verify_thread` blake3; workers in
+`wait_woken`. Write ceiling is off-CPU (lock/RPC wait), not primary hash.

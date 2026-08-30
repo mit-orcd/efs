@@ -1,0 +1,14 @@
+PID=105144
+rchar: 3050553094
+wchar: 7281080096
+syscr: 93081
+syscw: 334637
+read_bytes: 3045982208
+write_bytes: 7722995712
+cancelled_write_bytes: 663552
+---wchan---
+     21 105175 wait_woken
+     21 105145 futex_do_wait
+      4 105166 hrtimer_nanosleep
+      1 105170 futex_do_wait
+      1 105144 inet_csk_accept

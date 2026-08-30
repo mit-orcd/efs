@@ -1,0 +1,38 @@
+sw-1m: (g=0): rw=write, bs=(R) 1024KiB-1024KiB, (W) 1024KiB-1024KiB, (T) 1024KiB-1024KiB, ioengine=psync, iodepth=1
+...
+fio-3.35
+Starting 9 processes
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+
+sw-1m: (groupid=0, jobs=9): err= 0: pid=1195868: Sat Aug 29 09:14:47 2026
+  write: IOPS=824, BW=824MiB/s (864MB/s)(18.0GiB/22357msec); 0 zone resets
+    clat (usec): min=317, max=801522, avg=7735.89, stdev=21121.31
+     lat (usec): min=347, max=801549, avg=7766.94, stdev=21120.87
+    clat percentiles (usec):
+     |  1.00th=[   445],  5.00th=[   586], 10.00th=[   701], 20.00th=[   857],
+     | 30.00th=[   963], 40.00th=[  3326], 50.00th=[  4555], 60.00th=[  6587],
+     | 70.00th=[  8848], 80.00th=[ 11994], 90.00th=[ 16909], 95.00th=[ 21365],
+     | 99.00th=[ 32375], 99.50th=[ 40109], 99.90th=[367002], 99.95th=[497026],
+     | 99.99th=[775947]
+   bw (  MiB/s): min=   38, max= 8848, per=100.00%, avg=1157.50, stdev=158.17, samples=283
+   iops        : min=   38, max= 8848, avg=1157.50, stdev=158.17, samples=283
+  lat (usec)   : 500=2.42%, 750=9.58%, 1000=19.36%
+  lat (msec)   : 2=2.15%, 4=12.74%, 10=27.54%, 20=19.84%, 50=6.02%
+  lat (msec)   : 100=0.12%, 250=0.08%, 500=0.10%, 750=0.02%, 1000=0.03%
+  cpu          : usr=0.30%, sys=0.12%, ctx=18562, majf=0, minf=91
+  IO depths    : 1=100.0%, 2=0.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=0.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     issued rwts: total=0,18432,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=1
+
+Run status group 0 (all jobs):
+  WRITE: bw=824MiB/s (864MB/s), 824MiB/s-824MiB/s (864MB/s-864MB/s), io=18.0GiB (19.3GB), run=22357-22357msec

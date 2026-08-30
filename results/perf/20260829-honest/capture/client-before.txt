@@ -1,0 +1,15 @@
+PID=3485524
+rchar: 19329291154
+wchar: 29039736546
+syscr: 18987
+syscw: 461208
+read_bytes: 0
+write_bytes: 0
+cancelled_write_bytes: 0
+---wchan---
+     16 3485712 futex_do_wait
+      5 3485695 fuse_dev_do_read
+      3 3485732 fuse_dev_do_read
+      2 3485525 fuse_dev_do_read
+      1 3485527 futex_do_wait
+      1 3485524 futex_do_wait
