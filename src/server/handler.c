@@ -1846,15 +1846,43 @@ send_reply:
                                                             payload);
             } else if (type == EFS_MSG_INODE_LOOKUP) {
                 struct efs_msg_inode_lookup *req = payload;
-                /* Transitional: all shard locks for the table read (global
-                 * lock still held -> no parallelism yet). */
-                uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
-                server_shard_lock_all(g_server, eidx, sc);
-                if (efs_export_lookup(ex, req->parent, req->name, &r.inode) == 0)
-                    r.status = EFS_INODE_RPC_OK;
-                else
-                    r.status = EFS_INODE_RPC_NOT_FOUND;
-                server_shard_unlock_all(g_server, eidx, sc);
+                uint32_t bits = ex->root.shard_bits;
+                uint32_t psh = efs_export_shard_of(req->parent, bits);
+                /* Parent inode + unspread dentries live on psh. Spread
+                 * dentries add dsh; take both after dropping the global
+                 * lock so LOOKUP does not queue behind CREATE/REPORT. */
+                pthread_mutex_unlock(&g_server->lock);
+                global_held = 0;
+                server_shard_lock(g_server, eidx, psh);
+                if (ex->meta_needs_rebuild) {
+                    server_shard_unlock(g_server, eidx, psh);
+                    r.status = EFS_INODE_RPC_BUSY;
+                } else {
+                    uint32_t dsh = psh;
+                    if (efs_export_dir_is_spread(ex, req->parent))
+                        dsh = efs_export_dentry_shard_of(req->parent,
+                                                         req->name, bits);
+                    if (dsh != psh) {
+                        server_shard_unlock(g_server, eidx, psh);
+                        uint32_t shs[2] = { psh, dsh };
+                        server_shard_lockn(g_server, eidx, shs, 2);
+                        if (ex->meta_needs_rebuild)
+                            r.status = EFS_INODE_RPC_BUSY;
+                        else if (efs_export_lookup(ex, req->parent, req->name,
+                                                   &r.inode) == 0)
+                            r.status = EFS_INODE_RPC_OK;
+                        else
+                            r.status = EFS_INODE_RPC_NOT_FOUND;
+                        server_shard_unlockn(g_server, eidx, shs, 2);
+                    } else {
+                        if (efs_export_lookup(ex, req->parent, req->name,
+                                              &r.inode) == 0)
+                            r.status = EFS_INODE_RPC_OK;
+                        else
+                            r.status = EFS_INODE_RPC_NOT_FOUND;
+                        server_shard_unlock(g_server, eidx, psh);
+                    }
+                }
             } else if (type == EFS_MSG_INODE_GETATTR) {
                 struct efs_msg_inode_getattr *req = payload;
                 if (!server_owns_req_locked(g_server, ex, type, payload)) {
@@ -1864,28 +1892,26 @@ send_reply:
                 } else if (reply_if_shard_busy(ex, req->ino, &r)) {
                     /* hollow extra: client retries */
                 } else {
-                    /* Transitional: hold the shard lock for the table read.
-                     * The ensure above already ran (it may drop the global
-                     * lock for a rebuild) BEFORE we take the shard lock, so
-                     * we never hold a shard lock across a rebuild's
-                     * lock_all. Global lock is still held -> no parallelism
-                     * yet; this establishes the discipline. */
                     uint32_t gsh = efs_export_shard_of(req->ino,
                                                        ex->root.shard_bits);
+                    pthread_mutex_unlock(&g_server->lock);
+                    global_held = 0;
                     server_shard_lock(g_server, eidx, gsh);
-                    struct efs_export *tab = table_for_ino(ex, req->ino);
-                    if (efs_export_get_inode(tab, req->ino, &r.inode) == 0)
-                        r.status = EFS_INODE_RPC_OK;
-                    else
-                        r.status = EFS_INODE_RPC_NOT_FOUND;
+                    if (ex->meta_needs_rebuild) {
+                        r.status = EFS_INODE_RPC_BUSY;
+                    } else {
+                        struct efs_export *tab = table_for_ino(ex, req->ino);
+                        if (efs_export_get_inode(tab, req->ino, &r.inode) == 0)
+                            r.status = EFS_INODE_RPC_OK;
+                        else
+                            r.status = EFS_INODE_RPC_NOT_FOUND;
+                    }
                     server_shard_unlock(g_server, eidx, gsh);
                 }
             } else if (type == EFS_MSG_INODE_CREATE) {
-                /* Independent creates: files stay on the parent directory's
-                 * shard (local). Directories hash(parent,name) so their
-                 * inodes — and later their children — spread across nodes.
-                 * Global lock is only for membership / ensure; table work
-                 * runs on {psh,dsh,target}. */
+                /* Independent creates: files and dirs stay on the parent
+                 * directory's shard. Global lock is only for membership /
+                 * ensure; table work runs on {psh,dsh,target}. */
                 struct efs_msg_inode_create *req = payload;
                 uint32_t cflags = 0;
                 if (payload_len >= sizeof(*req))

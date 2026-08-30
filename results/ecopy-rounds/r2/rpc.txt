@@ -1,0 +1,15 @@
+=== fcstor003.ib BEFORE ===
+=== fcstor004.ib BEFORE ===
+=== fcstor005.ib BEFORE ===
+=== fcstor006.ib BEFORE ===
+--- AFTER ---
+=== fcstor003.ib AFTER ===
+RPC-PROF total=52660 report=4344 getattr=11158 lookup=7901 create=3652 create_shard=0 getchunks=0 lookup_path=0 readdir=0
+ino_dup=0
+=== fcstor004.ib AFTER ===
+RPC-PROF total=3017 report=23 getattr=0 lookup=0 create=0 create_shard=0 getchunks=2 lookup_path=0 readdir=0
+ino_dup=0
+=== fcstor005.ib AFTER ===
+ino_dup=0
+=== fcstor006.ib AFTER ===
+ino_dup=0

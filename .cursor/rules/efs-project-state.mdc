@@ -37,16 +37,15 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
-**ECOPY ROUND 1 (Aug 29 night, working tree):** There is still a metadata
-primary for the CoW flush, but CREATE no longer holds `g_server->lock`.
-Files stay on the parent directory's shard (RR CREATE_SHARD fan-out is gone)
-and ino alloc is shard-local (no unlocked main-table probe — that was the
-per-op CREATE ino_dup). One-client ecopy 61→67 files/s; 0 ino_dup; gens
-matched. All creates still land on shard 0 because dest is under root and
-dirs stay on the parent. Hashed dirs were tried and reverted (split
-dentry/inode broke ecopy rename/hardlink). Next: drop the global lock for
-LOOKUP/GETATTR/REPORT, then hash independent directories once name ops can
-follow a split inode. Gate: `results/ecopy-rounds/r1b/`.
+**ECOPY ROUND 2 (Aug 29 night):** LOOKUP and GETATTR drop `g_server->lock`
+and run on the parent/ino shard lock. Fair empty-cluster ecopy
+61 → **98 files/s** (5962/60s, `results/ecopy-rounds/r2/`). CREATE still
+all on shard 0 (dest under root). Next: REPORT/SETATTR off the global lock,
+then independent directories.
+
+**ECOPY ROUND 1 (Aug 29 night):** CREATE no longer holds `g_server->lock`.
+Files stay on the parent directory's shard; ino alloc is shard-local.
+Hashed dirs tried and reverted (split dentry/inode broke ecopy rename).
 
 **ECOPY LOOKUP TAX CUT; RATE STILL ~60 FILES/S = CREATE (Aug 29 night).**
 The 56–70 LOOKUPs/file were real but not the 70 files/s ceiling. Client
