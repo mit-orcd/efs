@@ -37,6 +37,10 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+**ECOPY ROUND 3 (Aug 29 night):** REPORT_CHUNKS drops `g_server->lock` and
+takes only the shards the recs hit (not lock_all). 0 drops. Mix-dependent
+~75–80 files/s (73 dirs) vs round 2's 98 files/s (333 dirs).
+
 **ECOPY ROUND 2 (Aug 29 night):** LOOKUP and GETATTR drop `g_server->lock`
 and run on the parent/ino shard lock. Fair empty-cluster ecopy
 61 → **98 files/s** (5962/60s, `results/ecopy-rounds/r2/`). CREATE still

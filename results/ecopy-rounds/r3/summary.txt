@@ -1,0 +1,11 @@
+Round 3 (REPORT_CHUNKS drops g_server->lock; locks only touched shards)
+
+Fresh mkfs 60s ecopy: FILES=4823 DIRS=73 ≈ 80 files/s. Repeat on same
+cluster: 4506/77 ≈ 74 files/s. 0 ino_dup, 0 REPORT drops, gens matched.
+
+Round 2 was 5962 files / 333 dirs on a different mix (many small dirs).
+This mix is fewer dirs, larger files — not a regression of REPORT.
+
+REPORT used to lock_all 8 shards under the global lock for every close.
+Now: snapshot membership, drop global, lockn the 1-2 shards the recs
+actually hit. PUT/CREATE/LOOKUP no longer wait on REPORT's lock_all.

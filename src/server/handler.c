@@ -2865,6 +2865,7 @@ send_reply:
                 bad = 1;
             }
             int do_flush = 0;
+            int report_gheld = 1;
             pthread_mutex_lock(&g_server->lock);
             struct efs_export *ex = NULL;
             uint32_t eidx = 0;
@@ -2924,25 +2925,47 @@ send_reply:
                 if (shard_busy) {
                     r.status = EFS_INODE_RPC_BUSY;
                 } else {
-                /* Transitional: all shard locks (the ensure loop above ran
-                 * first — it may drop the global lock); released around the
-                 * yield below. */
-                server_shard_lock_all(g_server, eidx, sc);
+                uint32_t shs[EFS_META_MAX_SHARDS];
+                int nsh = 0;
+                uint8_t seen_sh[EFS_META_MAX_SHARDS];
+                memset(seen_sh, 0, sizeof(seen_sh));
                 for (uint32_t k = 0; k < count; k++) {
-                    /* Yield the global lock every 1024 recs. A 9-client
-                     * close-report applies tens of thousands of chunk recs;
-                     * at 8192 the lock was held ~8ms straight, and every
-                     * data-path PUT_CHUNK (which takes g_server->lock briefly
-                     * to acquire the export) stalled behind it — the multi-
-                     * client sw-1m ceiling (12ms avg / 1.5s max write latency).
-                     * sched_yield between unlock/lock so a waiting PUT
-                     * actually wins the reacquire, not just the reporter. */
+                    uint32_t sh = efs_export_chunk_shard_of(
+                        recs[k].ino, recs[k].chunk_index, bits);
+                    if (sh >= sc || seen_sh[sh])
+                        continue;
+                    if (efs_shard_owner_of(sh, sc, live, nlive) != g_server->id)
+                        continue;
+                    seen_sh[sh] = 1;
+                    shs[nsh++] = sh;
+                }
+                for (uint32_t k = 0; k < ino_count; k++) {
+                    uint32_t sh = efs_export_shard_of(irecs[k].ino, bits);
+                    if (sh >= sc || seen_sh[sh])
+                        continue;
+                    if (efs_shard_owner_of(sh, sc, live, nlive) != g_server->id)
+                        continue;
+                    seen_sh[sh] = 1;
+                    shs[nsh++] = sh;
+                }
+                efs_node_id_t meta_pri = server_meta_primary_id_locked(g_server);
+                pthread_mutex_unlock(&g_server->lock);
+                report_gheld = 0;
+                if (nsh)
+                    server_shard_lockn(g_server, eidx, shs, nsh);
+                if (ex->meta_needs_rebuild) {
+                    r.status = EFS_INODE_RPC_BUSY;
+                } else {
+                /* Apply under only the shards this report touches — not
+                 * g_server->lock, not lock_all. CREATE/LOOKUP/GETATTR on
+                 * other shards proceed; PUT no longer waits on REPORT. */
+                for (uint32_t k = 0; k < count; k++) {
                     if ((k & 1023u) == 1023u) {
-                        server_shard_unlock_all(g_server, eidx, sc);
-                        pthread_mutex_unlock(&g_server->lock);
+                        if (nsh)
+                            server_shard_unlockn(g_server, eidx, shs, nsh);
                         sched_yield();
-                        pthread_mutex_lock(&g_server->lock);
-                        server_shard_lock_all(g_server, eidx, sc);
+                        if (nsh)
+                            server_shard_lockn(g_server, eidx, shs, nsh);
                         if (ex->meta_needs_rebuild)
                             break;
                     }
@@ -3036,8 +3059,7 @@ send_reply:
                     /* Loud: a silent drop was data loss under a membership
                      * flap. Client retries NOT_PRIMARY by re-resolving. */
                     r.status = EFS_INODE_RPC_NOT_PRIMARY;
-                    r.primary_id = drop_owner ? drop_owner
-                                              : server_meta_primary_id_locked(g_server);
+                    r.primary_id = drop_owner ? drop_owner : meta_pri;
                     fprintf(stderr,
                             "REPORT_CHUNKS: dropped %u recs not owned here "
                             "(redirect %llu)\n",
@@ -3054,10 +3076,13 @@ send_reply:
                  * re-takes s->lock internally). */
                 if (sync)
                     do_flush = 1;
-                server_shard_unlock_all(g_server, eidx, sc);
+                }
+                if (nsh)
+                    server_shard_unlockn(g_server, eidx, shs, nsh);
                 }
             }
-            pthread_mutex_unlock(&g_server->lock);
+            if (report_gheld)
+                pthread_mutex_unlock(&g_server->lock);
             if (do_flush) {
                 if (server_flush_meta_grouped(g_server, ex) != 0) {
                     /* Flush failed (rebuild in flight / no quorum / fenced).

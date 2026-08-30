@@ -1,0 +1,5 @@
+Heal:
+  node 1: idle  efs-test gen=5522
+  node 4: idle  efs-test gen=5522
+  node 2: idle  efs-test gen=5522
+  node 3: idle  efs-test gen=5522
