@@ -978,11 +978,12 @@ static int setattr_rpc_dual_apply(efs_ino_t ino, uint32_t mask, uint32_t mode,
                                   uint64_t mtime, uint32_t mtime_nsec,
                                   uint64_t atime)
 {
-    /* wr() close kicks REPORT async. A later utimens/truncate must
-     * drain that report first: a late size/mtime rec with "now" lands
-     * after SETATTR and newer-only mtime undoes utime(1500000000)
-     * (posix2 peer_utimens_visible). */
-    if (mask & (EFS_SETATTR_MTIME | EFS_SETATTR_SIZE))
+    /* wr() close kicks REPORT async. Truncate must drain first: a late
+     * grow-only rec would restore the old size. utimens does not — ecopy
+     * stamps times before close, and draining here was a second full
+     * report per file. Pin after the RPC still guards posix2 utimens
+     * against a report already in flight with "now". */
+    if (mask & EFS_SETATTR_SIZE)
         (void)efs_client_report_dirty(1);
     struct efs_inode out;
     int rc = efs_client_rpc_setattr(g_client.export_id, ino, mask, mode,
@@ -1032,18 +1033,42 @@ static int setattr_rpc_dual_apply(efs_ino_t ino, uint32_t mask, uint32_t mode,
     return EFS_OK;
 }
 
+static int local_inode(efs_ino_t ino, struct efs_inode *out)
+{
+    int rc;
+    efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
+    rc = efs_export_get_inode(&g_client.export, ino, out);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(ino);
+    return rc;
+}
+
 int efs_client_chmod(efs_ino_t ino, uint32_t mode)
 {
+    struct efs_inode cur;
+    if (local_inode(ino, &cur) == 0 &&
+        (cur.mode & 07777) == (mode & 07777))
+        return EFS_OK;
     return setattr_rpc_dual_apply(ino, EFS_SETATTR_MODE, mode, 0, 0, 0, 0, 0, 0);
 }
 
 int efs_client_chown(efs_ino_t ino, uid_t uid, gid_t gid)
 {
+    struct efs_inode cur;
     uint32_t mask = 0;
+    if (local_inode(ino, &cur) == 0) {
+        if (uid != (uid_t)-1 && cur.uid == uid)
+            uid = (uid_t)-1;
+        if (gid != (gid_t)-1 && cur.gid == gid)
+            gid = (gid_t)-1;
+    }
     if (uid != (uid_t)-1)
         mask |= EFS_SETATTR_UID;
     if (gid != (gid_t)-1)
         mask |= EFS_SETATTR_GID;
+    if (!mask)
+        return EFS_OK;
     return setattr_rpc_dual_apply(ino, mask, 0, uid, gid, 0, 0, 0, 0);
 }
 
