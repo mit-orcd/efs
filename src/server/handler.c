@@ -2349,9 +2349,45 @@ send_reply:
                 struct efs_msg_inode_setattr *req = payload;
                 if (reply_if_shard_busy(ex, req->ino, &r)) {
                     /* hollow extra */
+                } else if (!(req->mask & EFS_SETATTR_SIZE)) {
+                    /* utimens/chmod/chown: one inode row. ecopy futimens
+                     * was lock_all under the global lock per file. */
+                    uint32_t ssh = efs_export_shard_of(req->ino,
+                                                       ex->root.shard_bits);
+                    pthread_mutex_unlock(&g_server->lock);
+                    global_held = 0;
+                    server_shard_lock(g_server, eidx, ssh);
+                    if (ex->meta_needs_rebuild) {
+                        r.status = EFS_INODE_RPC_BUSY;
+                    } else {
+                        struct efs_export *tab = table_for_ino(ex, req->ino);
+                        struct efs_inode cur;
+                        if (efs_export_get_inode(tab, req->ino, &cur) != 0) {
+                            r.status = EFS_INODE_RPC_NOT_FOUND;
+                        } else {
+                            if (req->mask & EFS_SETATTR_MODE)
+                                efs_export_set_mode(tab, req->ino, req->mode);
+                            if (req->mask & (EFS_SETATTR_UID | EFS_SETATTR_GID))
+                                efs_export_set_owner(tab, req->ino,
+                                        (req->mask & EFS_SETATTR_UID)
+                                            ? (uid_t)req->uid : (uid_t)-1,
+                                        (req->mask & EFS_SETATTR_GID)
+                                            ? (gid_t)req->gid : (gid_t)-1);
+                            if (req->mask & EFS_SETATTR_MTIME)
+                                efs_export_set_mtime_ns(tab, req->ino,
+                                                        req->mtime,
+                                                        req->mtime_nsec);
+                            if (req->mask & EFS_SETATTR_ATIME)
+                                efs_export_set_atime(tab, req->ino,
+                                                     req->atime);
+                            tab->shard_dirty = 1;
+                            server_meta_mark_rpc_dirty_locked(g_server, eidx);
+                            efs_export_get_inode(tab, req->ino, &r.inode);
+                            r.status = EFS_INODE_RPC_OK;
+                        }
+                    }
+                    server_shard_unlock(g_server, eidx, ssh);
                 } else {
-                /* Transitional: all shard locks (taken after the
-                 * busy-ensure); released around fan_drop_chunks on shrink. */
                 uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
                 server_shard_lock_all(g_server, eidx, sc);
                 struct efs_export *tab = table_for_ino(ex, req->ino);
