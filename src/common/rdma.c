@@ -25,6 +25,7 @@
 #include <arpa/inet.h>
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <netinet/in.h>
@@ -332,11 +333,16 @@ static struct efs_rdma_dev *dev_for_fd(int fd)
 
     char ifname[IF_NAMESIZE];
     char devname[64];
-    if (ifname_for_ip(ip, ifname, sizeof(ifname)) != 0)
-        return NULL;
-    if (ibdev_for_ifname(ifname, devname, sizeof(devname)) != 0)
-        return NULL;
-    return dev_cached(devname);
+    if (ifname_for_ip(ip, ifname, sizeof(ifname)) == 0 &&
+        ibdev_for_ifname(ifname, devname, sizeof(devname)) == 0) {
+        struct efs_rdma_dev *r = dev_cached(devname);
+        if (r)
+            return r;
+        /* TCP NIC mapped to a RoCE/down port (lid=0). Fall through to a
+         * native-IB HCA on the same host — fcstor Ethernet is mlx5_0,
+         * IPoIB data is mlx5_2. */
+    }
+    return dev_probe_first();
 }
 
 int efs_rdma_available(void)
@@ -344,12 +350,8 @@ int efs_rdma_available(void)
     static int avail = -1;
     if (efs_rdma_transport() == EFS_TRANSPORT_TCP)
         return 0;
-    if (avail < 0) {
-        struct ibv_device **list = ibv_get_device_list(NULL);
-        avail = (list && list[0]) ? 1 : 0;
-        if (list)
-            ibv_free_device_list(list);
-    }
+    if (avail < 0)
+        avail = (dev_probe_first() != NULL) ? 1 : 0;
     return avail;
 }
 
@@ -387,6 +389,7 @@ struct efs_rdma_conn {
     int tcp_fd;   /* control-channel socket, borrowed from efs_conn: polled
                    * alongside efd so a dead peer (FIN/RST) wakes the wait
                    * even though the QP itself never errors when idle */
+    uint32_t max_inline; /* actual QP inline cap (may be < EFS_RDMA_INLINE_MAX) */
 };
 
 static int post_recv(struct efs_rdma_conn *rc, int idx)
@@ -430,66 +433,81 @@ static void pend_push(struct efs_rdma_conn *rc, int buf, uint32_t len)
     }
 }
 
-/* Shared-CQ poller: spin briefly, then block on the comp channel; harvest in
- * batches and fan out to per-conn rings. One spinner per device replaces
- * per-conn CQ spin-polling by every conn thread. */
+static void harvest_recv_wcs(struct ibv_wc *wcs, int n)
+{
+    for (int i = 0; i < n; i++) {
+        uint32_t gen = (uint32_t)(wcs[i].wr_id >> 32);
+        uint32_t reg = ((uint32_t)(wcs[i].wr_id >> 8)) & 0xFFFFFF;
+        int buf = (int)(wcs[i].wr_id & 0xFF);
+        if (reg >= EFS_RDMA_MAX_CONNS)
+            continue;
+        pthread_mutex_lock(&g_reg_lock);
+        struct efs_rdma_conn *rc = g_conn_reg[reg];
+        if (rc && rc->reg_gen != gen)
+            rc = NULL; /* stale completion from a destroyed QP */
+        if (rc) {
+            if (wcs[i].status != IBV_WC_SUCCESS) {
+                rc->broken = 1;
+                uint64_t one = 1;
+                if (write(rc->efd, &one, sizeof(one)) < 0 && errno != EAGAIN)
+                    rc->broken = 1;
+            } else {
+                pend_push(rc, buf, wcs[i].byte_len);
+            }
+        }
+        pthread_mutex_unlock(&g_reg_lock);
+    }
+}
+
+/* Drain the completion channel. The fd is O_NONBLOCK so this cannot hang
+ * the poller (ibv_get_cq_event is otherwise blocking). Every req_notify
+ * that fires leaves an event that MUST be acked; skipping the ack (the
+ * old race-drain `continue`) left the next SEND without a notify. */
+static void ack_cq_events(struct efs_rdma_dev *dev)
+{
+    struct ibv_cq *cq = NULL;
+    void *ctx = NULL;
+    while (ibv_get_cq_event(dev->recv_chan, &cq, &ctx) == 0)
+        ibv_ack_cq_events(cq, 1);
+}
+
+/* Shared-CQ poller. Arm AFTER draining, race-drain, ALWAYS ack the notify
+ * we requested, then block. Never `continue` between req_notify and ack:
+ * that dropped the channel event and the next CQE after a quiet gap
+ * generated no wake — first inode RPC after a fresh RDMA mount hung
+ * forever while poll_cq saw an empty CQ (the WC sat un-notified). */
 static void *recv_poller(void *arg)
 {
     struct efs_rdma_dev *dev = arg;
     struct ibv_wc wcs[32];
     for (;;) {
+        int n = ibv_poll_cq(dev->recv_cq, 32, wcs);
+        if (n < 0) {
+            usleep(1000);
+            continue;
+        }
+        if (n > 0) {
+            harvest_recv_wcs(wcs, n);
+            continue;
+        }
         if (ibv_req_notify_cq(dev->recv_cq, 0) != 0) {
             usleep(1000);
             continue;
         }
-        int64_t spin_end = now_us() + spin_us();
-        uint32_t polls = 0;
-        for (;;) {
-            int n = ibv_poll_cq(dev->recv_cq, 32, wcs);
-            if (n < 0) {
-                usleep(1000);
-                break;
-            }
-            if (n > 0) {
-                for (int i = 0; i < n; i++) {
-                    uint32_t gen = (uint32_t)(wcs[i].wr_id >> 32);
-                    uint32_t reg =
-                        ((uint32_t)(wcs[i].wr_id >> 8)) & 0xFFFFFF;
-                    int buf = (int)(wcs[i].wr_id & 0xFF);
-                    if (reg >= EFS_RDMA_MAX_CONNS)
-                        continue;
-                    pthread_mutex_lock(&g_reg_lock);
-                    struct efs_rdma_conn *rc = g_conn_reg[reg];
-                    if (rc && rc->reg_gen != gen)
-                        rc = NULL; /* stale completion from a destroyed QP */
-                    if (rc) {
-                        if (wcs[i].status != IBV_WC_SUCCESS) {
-                            rc->broken = 1;
-                            uint64_t one = 1;
-                            if (write(rc->efd, &one, sizeof(one)) < 0 &&
-                                errno != EAGAIN)
-                                rc->broken = 1;
-                        } else {
-                            pend_push(rc, buf, wcs[i].byte_len);
-                        }
-                    }
-                    pthread_mutex_unlock(&g_reg_lock);
-                }
-                spin_end = now_us() + spin_us(); /* busy: stay hot */
-                continue;
-            }
-            /* Gate the clock to every 64th idle poll: an ungated now_us()
-             * here was the single hottest thread in efsd (~1 core of pure
-             * clock_gettime) under a 9-client write load. */
-            if (((++polls) & 63) == 0 && now_us() >= spin_end)
-                break;
+        n = ibv_poll_cq(dev->recv_cq, 32, wcs);
+        if (n < 0) {
+            usleep(1000);
+            continue;
         }
+        if (n > 0)
+            harvest_recv_wcs(wcs, n);
+        ack_cq_events(dev);
+        if (n > 0)
+            continue;
         struct pollfd p = { .fd = dev->recv_chan->fd, .events = POLLIN };
         poll(&p, 1, 100); /* tick so a wedged device can't hang us forever */
-        struct ibv_cq *cq = NULL;
-        void *ctx = NULL;
-        if (ibv_get_cq_event(dev->recv_chan, &cq, &ctx) == 0)
-            ibv_ack_cq_events(cq, 1);
+        if (p.revents & POLLIN)
+            ack_cq_events(dev);
     }
     return NULL;
 }
@@ -502,6 +520,11 @@ static int dev_shared_cq_start(struct efs_rdma_dev *dev)
     dev->recv_chan = ibv_create_comp_channel(dev->ctx);
     if (!dev->recv_chan)
         return -1;
+    {
+        int fl = fcntl(dev->recv_chan->fd, F_GETFL, 0);
+        if (fl >= 0)
+            (void)fcntl(dev->recv_chan->fd, F_SETFL, fl | O_NONBLOCK);
+    }
     /* Sized for every conn's posted recvs with headroom; CQ entries are
      * cheap driver-side. */
     dev->recv_cq = ibv_create_cq(dev->ctx, 1 << 16, NULL, dev->recv_chan, 0);
@@ -594,6 +617,9 @@ static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
     rc->qp = ibv_create_qp(dev->pd, &ia);
     if (!rc->qp)
         goto fail;
+    /* Driver may reduce the requested inline cap. Stack-buffer INLINE
+     * larger than this fails post_send (small LOOKUP after upgrade). */
+    rc->max_inline = ia.cap.max_inline_data;
 
     struct ibv_qp_attr attr;
     memset(&attr, 0, sizeof(attr));
@@ -892,20 +918,9 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
     if (frame > rc->max_frame)
         return EFS_ERR_NET; /* caller must use the TCP side-channel */
 
-    if (frame <= EFS_RDMA_INLINE_MAX) {
-        uint8_t tmp[EFS_RDMA_INLINE_MAX];
-        uint32_t nl = htonl(1 + payload);
-        memcpy(tmp, &nl, 4);
-        tmp[4] = type;
-        if (l1)
-            memcpy(tmp + 5, p1, l1);
-        if (l2)
-            memcpy(tmp + 5 + l1, p2, l2);
-        if (post_send(rc, SEND_WRID_INLINE, tmp, frame, 1) != 0)
-            return EFS_ERR_NET;
-        return reap_sends(rc);
-    }
-
+    /* Always copy into a registered send buffer. INLINE from a stack
+     * temporary is rejected on some mlx5 FW; INLINE from the MR is
+     * fine when the frame fits the QP's actual cap. */
     int idx = send_buf_pick(rc);
     if (idx < 0)
         return EFS_ERR_NET;
@@ -917,9 +932,25 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
         memcpy(b + 5, p1, l1);
     if (l2)
         memcpy(b + 5 + l1, p2, l2);
-    if (post_send(rc, SEND_WRID_POOL | (uint64_t)idx, b, frame, 0) != 0)
+    int inline_ok = (frame <= rc->max_inline);
+    if (post_send(rc, SEND_WRID_POOL | (uint64_t)idx, b, frame, inline_ok) != 0)
         return EFS_ERR_NET;
     rc->send_busy[idx] = 1;
+    /* Wait for the send CQE. Skipping this for non-INLINE left CREATE
+     * (name[256] is already > INLINE_MAX) fire-and-forget: a failed first
+     * SEND after upgrade hung the FUSE worker in recv instead of EIO. */
+    int64_t end = now_us() + EFS_RDMA_SEND_WAIT_US;
+    while (rc->send_busy[idx]) {
+        if (reap_sends(rc) != 0)
+            return EFS_ERR_NET;
+        if (!rc->send_busy[idx])
+            break;
+        if (now_us() > end) {
+            rc->broken = 1;
+            return EFS_ERR_NET;
+        }
+        sched_yield();
+    }
     return EFS_OK;
 }
 
@@ -1033,9 +1064,9 @@ int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms)
          * never errors when the peer vanishes (no CM to drive a state
          * transition), so without the socket a dead peer would strand the
          * waiter here forever — the conn-thread leak this fixed piled up
-         * thousands of stuck server threads. TCP still carries inode RPC
-         * and GET_META, so POLLIN is a side-channel frame (return AGAIN
-         * so the server wait loop handles it), not peer death. */
+         * thousands of stuck server threads. GET_META still rides TCP, so
+         * POLLIN is a side-channel frame (return AGAIN so the server wait
+         * loop handles it), not peer death. */
         struct pollfd pf[2] = {
             { .fd = rc->efd, .events = POLLIN },
             { .fd = rc->tcp_fd, .events = POLLIN },

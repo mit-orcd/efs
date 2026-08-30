@@ -755,9 +755,10 @@ int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status);
 
 /* ---- transport-dispatching variants (struct efs_conn, network.h) ----
  * Same semantics as the fd-based originals. With a live RDMA QP, frames up
- * to the pool buffer size go over the QP; larger frames (and GET_META, whose
- * reply is unbounded) use the TCP side-channel. Replies follow the request's
- * channel, so the receiver always knows where to wait (c->recv_chan). */
+ * to the pool buffer size go over the QP; larger frames (and GET_META /
+ * GET_META_ROOT, whose replies are unbounded) use the TCP side-channel.
+ * Replies follow the request's channel, so the receiver always knows where
+ * to wait (c->recv_chan). */
 struct efs_conn;
 
 int efs_conn_send_msg(struct efs_conn *c, uint8_t type, const void *payload,

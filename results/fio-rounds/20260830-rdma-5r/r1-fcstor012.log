@@ -1,0 +1,42 @@
+FUSE_CHECK fstype=fuse.efs-fuse mnt=/tmp/efs-mount
+FUSE_OK
+sw-1m: (g=0): rw=write, bs=(R) 1024KiB-1024KiB, (W) 1024KiB-1024KiB, (T) 1024KiB-1024KiB, ioengine=psync, iodepth=1
+...
+fio-3.35
+Starting 9 processes
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+sw-1m: Laying out IO file (1 file / 2048MiB)
+
+sw-1m: (groupid=0, jobs=9): err= 0: pid=1601916: Sun Aug 30 03:02:27 2026
+  write: IOPS=372, BW=372MiB/s (390MB/s)(18.0GiB/49499msec); 0 zone resets
+    clat (usec): min=337, max=1274.5k, avg=15864.16, stdev=27150.79
+     lat (usec): min=363, max=1274.5k, avg=15894.70, stdev=27149.50
+    clat percentiles (usec):
+     |  1.00th=[    453],  5.00th=[    510], 10.00th=[    742],
+     | 20.00th=[    906], 30.00th=[   1037], 40.00th=[   6980],
+     | 50.00th=[  10159], 60.00th=[  15008], 70.00th=[  20317],
+     | 80.00th=[  27132], 90.00th=[  38011], 95.00th=[  47973],
+     | 99.00th=[  68682], 99.50th=[  79168], 99.90th=[ 287310],
+     | 99.95th=[ 583009], 99.99th=[1266680]
+   bw (  KiB/s): min=51200, max=8642560, per=100.00%, avg=586146.27, stdev=113884.23, samples=572
+   iops        : min=   50, max= 8440, avg=572.38, stdev=111.21, samples=572
+  lat (usec)   : 500=4.07%, 750=6.18%, 1000=18.61%
+  lat (msec)   : 2=2.96%, 4=1.71%, 10=16.22%, 20=19.87%, 50=26.00%
+  lat (msec)   : 100=4.16%, 250=0.10%, 500=0.05%, 750=0.03%, 1000=0.02%
+  lat (msec)   : 2000=0.01%
+  cpu          : usr=0.13%, sys=0.05%, ctx=18526, majf=0, minf=90
+  IO depths    : 1=100.0%, 2=0.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=0.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     issued rwts: total=0,18432,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=1
+
+Run status group 0 (all jobs):
+  WRITE: bw=372MiB/s (390MB/s), 372MiB/s-372MiB/s (390MB/s-390MB/s), io=18.0GiB (19.3GB), run=49499-49499msec

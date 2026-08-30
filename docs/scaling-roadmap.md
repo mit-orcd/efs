@@ -10,23 +10,31 @@ see [phase3-sharding.md](phase3-sharding.md)) splits the table. Phase 4 is densi
 **Phase 3b** (below, from the Aug 24 architecture review) shards chunk
 metadata by extent and adds threshold-based hot-directory spread.
 **Skip Phase 2c** (full-table gen-check cache); cache as Phase 3 item 4
-(per-shard, on-demand, evict). Write-throughput next steps (lock partition,
-N pollers, bits>0 data path) live in **Performance next** below, alongside
-two Aug 24 workstreams: the **metadata op storm** (many small files) and the
-**streaming-write barrier** (ewrite vs NFS). **All data traffic goes via
-RDMA** (client path already does; server↔server chunk/fragment payloads
-must follow — see below).
+(per-shard, on-demand, evict). Write-throughput next steps (N pollers,
+PUT_CHUNK off the global lock, bits>0 already live) live in **Performance
+next** below, alongside two Aug 24 workstreams: the **metadata op storm**
+(many small files) and the **streaming-write barrier** (ewrite vs NFS).
+**All data traffic goes via RDMA** (client + server↔server chunk/fragment
+payloads; auto first-inode hang still open — see below).
 
-**Status at a glance (Aug 27):** Phase 1 **shipped**; Phase 2 **shipped**
+**Status at a glance (Aug 30):** Phase 1 **shipped**; Phase 2 **shipped**
 (server sole metadata writer, 2PC root commit Aug 26); Phase 3 **done**
 (bits=3 is the live default); Phase 3b Items 0–2 **done**, Item 3 optional;
-Phase 4 **not started**. Open perf work: `g_server->lock` partition (the
-next write lever + the posixstress-saturation suspect), N pollers,
-streaming-write barrier (ewrite), RDMA data path (**broken on fresh mount —
-gates on TCP**). Open correctness: cross-client byte-range locks
-(`peer_fcntl_range_conflict`), load-dependent posix2 flakes. Open client
-rewrite: low-level FUSE API. Open test harnesses: Layer 4 fault injection,
-fsck, hot-dir 300k. Each step below is annotated **DONE / PARTIAL / NOT DONE**.
+Phase 4 **not started**. Per-op drop of `g_server->lock` for hot inode RPCs
+**gated** (LINK/RENAME/HOLD still `lock_all`; `EFS_LOCK_PROF` shows they
+are not the 9×4 ceiling). 9×4 posixstress is still ~95% `timeout after
+15s` — **next lever is not more `lock_all` drops.** Open perf: N pollers,
+flush O(table) hash (ecopy decay), streaming-write barrier (ewrite),
+PUT_CHUNK still takes the global lock for `export_acquire`. RDMA
+data+control **landed Aug 30** (poller re-arm; peer-pool QP; default auto);
+**auto RDMA still hangs the first inode RPC after mount** (`stat` OK,
+`mkdir`/`ls` D-state) — that cut's posixstress gate was TCP. Open
+correctness: cross-client byte-range locks (`peer_fcntl_range_conflict`),
+load-dependent posix2 flakes. Open client rewrite: low-level FUSE API.
+Open product feature: **expiry dates** (export sunset + per-inode scratch
+TTL) — see that section; not started. Open test harnesses: Layer 4 fault
+injection, fsck, hot-dir 300k. Each step below is annotated
+**DONE / PARTIAL / NOT DONE**.
 
 ## Why the current model caps at ~14M
 
@@ -352,17 +360,21 @@ inflates ~870 µs → ~3.9 ms (8.8 ms avg / 447 ms max fio clat after the
 REPORT yield; was 12 ms / 1.5 s). Residual `g_server->lock` sharing
 between REPORT / flush / PUT plus a single `recv_poller` at ~30% CPU.
 
-**Next levers, in order:** *(status Aug 27)*
+**Next levers, in order:** *(status Aug 30)*
 
-1. **Partition `g_server->lock`. — NOT DONE (the next lever).** Today every `PUT_CHUNK` takes the
-   global lock just to `export_acquire`, and `REPORT_CHUNKS` still holds
-   it across 1024 recs (was 8192). Split export-lookup / inflight from
-   table mutate so data-path PUTs never wait on a report or flush.
-   Expected: most of the 870 µs → 3.9 ms inflation goes away; multi
-   sw-1m should climb toward N × single until the next wall.
-   *Aug 27: this is also the prime suspect for the 36-way posixstress
-   saturation + posix2 flaky-EIO — the created-set removal (5525d49) raised
-   LOOKUP+GETATTR RPC traffic, and all inode RPCs serialize on this lock.*
+1. **Partition `g_server->lock`. — PARTIAL (inode RPCs gated Aug 30; PUT still global).**
+   Hot metadata ops (CREATE/LOOKUP/GETATTR/REPORT/APPEND/UNLINK/SETATTR+SIZE/
+   GETCHUNKS/READDIR/LOOKUP_PATH) drop the global lock and run on shard
+   locks. LINK/RENAME/HOLD still `lock_all`; after 3× 9×4, `all_hold_us` is
+   5.6–17 ms for the whole run (~1–2 µs/call) so they are **not** the
+   remaining timeout. 9×4 is still ~95% `timeout after 15s` — do **not**
+   spend another cut dropping LINK/RENAME. Remaining of *this* lever:
+   every `PUT_CHUNK` still takes the global lock just to `export_acquire`.
+   Split export-lookup / inflight from table mutate so data-path PUTs
+   never wait on a report or flush. Expected for the write ceiling: most
+   of the 870 µs → 3.9 ms inflation goes away.
+   *Aug 27 suspected this lock for posixstress saturation; Aug 30 measured
+   that the metadata half is gone and saturation is not `lock_all`.*
 2. **N recv CQs / pollers. — NOT DONE.** One shared CQ + one poller harvests every
    incoming PUT. `ibv_poll_cq` is 30% of server CPU under 9 writers —
    not yet saturated, but will be as (1) raises completion rate. One
@@ -478,35 +490,30 @@ jobs; posix write-path tests + mc_stress green.
 
 ## Performance next — all data traffic via RDMA
 
-*Status Aug 27: client chunk PUT/GET is RDMA, but the **RDMA data path is
-broken on a fresh mount** (Aug 25: chunk PUT/GET over RDMA never completes a
-CQE — QP reaches RTS, first SEND/recv after upgrade lost; write 10B took
-10.36s, read timed out 20s; same cluster on `EFS_TRANSPORT=tcp` is perfect).
-**All gates run on `EFS_TRANSPORT=tcp` until RDMA is root-caused.**
-Server↔server fragment RDMA (below) is NOT DONE.*
+*Status Aug 30: client PUT/GET **and** inode/REPORT control (except unbounded
+GET_META / GET_META_ROOT) ride RDMA. Shared-CQ poller now arms after drain
+(the old arm-then-spin-then-`get_cq_event` loop dropped the next CQE after a
+quiet gap — that was the Aug 25 "first SEND after upgrade" hang). Server↔server
+peer pool upgrades the same way, so verify-heal / migrate / meta-page
+GET/PUT_CHUNK use the QP when the HCA is usable. Default `EFS_TRANSPORT` is
+auto (try RDMA, TCP fallback). `EFS_TRANSPORT=tcp` still forces TCP.
+**Still open:** auto RDMA hangs the first inode RPC after a fresh mount
+(`stat` of the root is OK; `mkdir`/`ls` D-state; server `create=0`). Poller
+re-arm + TCP `MSG_PEEK` + send-CQ wait did not unwedge it. Chase that before
+quoting RDMA posixstress; TCP gates are the lock-drop evidence.*
 
-Client chunk PUT/GET is already RDMA (RC QP after `RDMA_SETUP`). Any
-**payload** that is a chunk or EC fragment must use the same path —
-including traffic that today rides the TCP peer pool:
+Client chunk PUT/GET is RDMA (RC QP after `RDMA_SETUP`). Payload that is a
+chunk or EC fragment uses the same path, including traffic that used to ride
+the TCP peer pool:
 
-- File-data **verify-heal** (`src/server/verify.c`: GET two peer
-  fragments, XOR-reconstruct, write local)
-- **Drain / migrate** and **node-left orphan heal**
-  (`src/server/migrate.c`: GET/PUT fragments between servers)
+- File-data **verify-heal** (`src/server/verify.c`)
+- **Drain / migrate** and **node-left orphan heal** (`src/server/migrate.c`)
 - **Meta-page** GET/PUT_CHUNK during CoW flush, catchup rebuild, and
   meta-heal (`src/server/meta_server.c`)
 
-Control stays TCP: HELLO, heartbeat, `PUT_META` / `GET_META` roots,
-inode RPCs, status. Those are small messages, not data.
-
-**Work:** give the peer pool RDMA QPs (or reuse the existing server
-accept path) and send `GET_CHUNK` / `PUT_CHUNK` payloads over them.
-Same 2+1 placement and quorum rules; only the transport changes.
-
-**Milestone:** heal, migrate, and meta-page replicate no longer use
-`efs_send_msg` TCP for fragment bytes; a drain or verify-heal under
-load does not regress client RDMA write/read. HELLO/heartbeat/PUT_META
-may remain TCP.
+Control that must stay TCP: `GET_META` / `GET_META_ROOT` (unbounded replies).
+HELLO/heartbeat/PUT_META go RDMA when they fit the pool buffer; oversized
+PUT_META still uses the TCP side-channel.
 
 ---
 
@@ -654,6 +661,11 @@ posix suite or sw-1m.
   rather than silently reconnect. Use before `upgrade`, mkfs, and
   build-id rolls. Do not implement in this cut.
 
+- **Expiry dates — NOT DONE:** export sunset + per-inode `expire_at` (scratch
+  TTL). See **Expiry dates** below. Not a POSIX timestamp; server clock;
+  lazy LOOKUP + per-shard sweeper. Do not implement as atime purge or
+  client-side delete.
+
 - **readdir/lookup across shards — DONE (Phase 3)**: the name index is per-export today; with
   sharding, dentries live in the parent's shard. `efs_export_foreach_child`
   and the name index need a shard-aware form.
@@ -681,14 +693,13 @@ Those are syscall + peer-visibility + same-file races. They do **not**
 cover crash, EC, partition, or several product-specific checks. XFS PASS
 is not the oracle for any of the items below.
 
-*Aug 27 gate status: single-client posix 196 both-pass / 0 EFS bugs (3
-consecutive runs, fcstor007). posix2 56–59/63 — remaining: `peer_fcntl_range_conflict`
-(byte-range lockf is per-client in-memory, NOT coordinated cross-client —
-needs server-side range-lock tracking, a deep feature); `peer_rename_across_dirs_chase`
-+ a few EIOs are load-dependent flakes amplified by the created-set removal
-(5525d49) raising LOOKUP+GETATTR RPC traffic onto `g_server->lock`.
-`run_tests.sh posixstress N hosts` (N parallel suites/host) exists; first
-9×4 run = 100% `timeout after 15s` (saturation), 0 correctness bugs.*
+*Aug 30 gate (TCP, per-op lock drop): solo posix 195/201, 1 flake
+`dir_rename_over_existing`. 3× 9×4 still ~95% `timeout after 15s` on
+saturated hosts; clean 196/0 is now common on hosts that keep up.
+`lock_all` hold is not the ceiling. Auto RDMA first-inode hang is open
+(do not quote RDMA posixstress for this cut). posix2 remaining:
+`peer_fcntl_range_conflict` (byte-range lockf is per-client in-memory,
+NOT coordinated cross-client).*
 
 ### Already written — do not reinvent
 
@@ -802,7 +813,145 @@ collision:
   `compare.py` sees them.
 - Crash/EC/partition stay out of `posix_suite.py`.
 
+## Expiry dates (export sunset + per-inode TTL) — NOT DONE
+
+**Goal:** an object or an export can carry an **absolute expiry instant**. After
+that instant, new lookups do not see it, and the shard owner reclaims the
+inode, dentries, and chunks. This is a **product feature, not a scaling
+phase**. It does not raise the inode cap. Do not start it until the live
+posix/posix2 gates are green on the bits=3 tree you will ship it on.
+
+Scratch clusters (Engaging-style) want “this run dies on DATE” and “files
+under `/tmp/...` last N days.” There is no POSIX `st_expire`. Inventing a
+fourth timestamp that `utimens`/`rsync` can clobber is how you lose data.
+Expiry is a **separate inode field**, set only by an explicit API, compared
+only to **server** time.
+
+### Semantics
+
+- `expire_at` is Unix seconds (`time_t` / `CLOCK_REALTIME`). **0 = never.**
+- Comparison is `server_now >= expire_at`. Not client `utime`, not `atime`
+  (atime is never bumped on read today — `tmpwatch -a` would never fire).
+- Expired means **already unlinked** for any new namei: LOOKUP / GETATTR /
+  OPEN / CREATE-under return `ENOENT` (or `ESTALE` only if an fd is still
+  held — prefer `ENOENT` on the path).
+- Open fds match today’s unlink-while-open (`keep_last` / HOLD): the name
+  is gone; the fd still reads/writes until close; last close drops chunks.
+- **Root never expires.** A nonempty directory does not expire its children
+  as a side effect of the dir’s own `expire_at`. Recursive sunset is an
+  admin walk that stamps children, then expires the dir when empty.
+- New creates **inherit** the parent’s `expire_at` when the parent has one
+  and the create did not set its own. Export default (below) is applied
+  when the parent has 0.
+- A late `REPORT_CHUNKS` must not resurrect an expired inode (same class as
+  the post-trunc grow-only REPORT bug). Reject REPORT if the row is gone or
+  `expire_at` is in the past on the owner.
+
+### Two layers (ship in this order)
+
+1. **Export sunset (smaller).** `efs_export_root` grows `expire_at` (0 =
+   never). `efs-mgmt expire-export <name> --at SECS|--ttl DAYS` sets it.
+   After the instant: creates/mkdir fail `EROFS` (or `EPERM`); lookups of
+   existing names still work until layer 2 exists; `efs-mgmt` can refuse
+   mount with a loud line. Persistence is a root-field bump (v8 extras
+   already merge descriptors — add the u64 next to `features`, default 0
+   on old roots). No sweeper, no inode scan. This is the “the allocation
+   ends on DATE” knob.
+2. **Per-inode expire (the real TTL).** `struct efs_inode` grows
+   `uint64_t expire_at`. Compact pack / wire size bump; old rows read as 0.
+   Fresh `mkfs` or an explicit table upgrade — do not silent-extend a live
+   420-byte `EFS_INODE_WIRE_SIZE` in place. Phase 4 (slim inode) must keep
+   this field; it is not optional rollup data.
+
+Do not implement layer 2 as xattrs-only. `opt_xattr` is allowed to be
+`EOPNOTSUPP`; LOOKUP must see expiry without a xattr get. Xattr
+`user.efs.expire` (decimal Unix time, or empty to clear) is the **user
+surface** that writes the inode field via a SETATTR-class RPC.
+
+### How to implement (layer 2)
+
+**Clock.** The inode **owner** (Phase 3 shard owner) samples
+`clock_gettime(CLOCK_REALTIME)` on LOOKUP/OPEN and in the sweeper. Clients
+do not decide “is it expired.” If the server clock steps backward, the
+sweeper waits (do not expire early). If it steps forward, lazy LOOKUP
+catches it on the next namei. Expiry is coarse (seconds), not a security
+erase. Assume NTP; document that a years-wrong clock will purge or never
+purge.
+
+**RPC.** Add `EFS_MSG_INODE_SET_EXPIRE` (or a SETATTR flag that is **not**
+`UTIME_*`). Owner applies `expire_at`, bumps ctime, marks `shard_dirty`.
+`chmod`/`utimens`/`REPORT` must not clear or rewrite it. Inherit on
+CREATE/MKDIR in the owner’s create path (parent row already loaded).
+
+**Lazy expire (correctness).** On the owner, LOOKUP/GETATTR/OPEN of a row
+with `expire_at && now >= expire_at` runs the same last-link unlink path
+already used by `efs_export_unlink_name` (dentry, nlink, `INODE_DROP_CHUNKS`
+fan-out, spread-dir hash-shard rule). Then return `ENOENT`. Readdir skips
+expired names (and may kick lazy expire). This is the path that must work
+even if the sweeper is off — otherwise a file lives forever if no scan
+runs.
+
+**Sweeper (space).** Per-shard owner thread, not the metadata primary, not
+the client. Period ~30–60 s; scan the **local** shard table only (owner
+already materializes it). Batch like `REPORT_CHUNKS` (yield every N inodes;
+do not hold `g_server->lock` across the scan). Delete expired files first;
+dirs only when `efs_export_dir_empty` (spread-aware) is true. Never scan
+from a FUSE client; leftover `efs-fuse` after wipe is how we re-adopt a
+232 MB table — a client-side purge would be that class of bug.
+
+**Index.** v1 is the linear scan. At the Phase 3 sizing target (~1M
+inodes/shard) a 60 s walk is acceptable if it yields. Add an expire-bucket
+(day → ino list) only if the scan shows up in CPU. Do **not** put a
+cluster-wide expire index on shard 0 (re-centralizes the metadata storm).
+
+**FUSE.** `getxattr`/`setxattr`/`removexattr` for `user.efs.expire`.
+`listxattr` may omit it when 0. Daemon-side `check_access` W on the inode
+to set, R to read. Do not use `default_permissions`. Virtual `.expire`
+files are unnecessary (`.stats`/`.find` are enough magic).
+
+### Rejected
+
+- **atime/mtime purge as the only mechanism.** atime is not maintained;
+  mtime is user-settable (rsync, `touch`). That is a different policy
+  (`efs-mgmt prune --mtime-older`) and must not be conflated with
+  `expire_at`.
+- **Client-local expiry.** Clients are not authoritative (Phase 2).
+- **Per-chunk expire.** Chunks die with the inode; REPORT/layout stay
+  inode-scoped.
+- **Sub-second / lease-style expire.** Wrong tool; we already have write
+  leases and HOLD. This feature is days-to-months scratch TTL.
+- **MVCC “expired versions.”** CoW pages already recover crash; do not add
+  a second time axis.
+
+### Work
+
+1. **NOT DONE.** Export-root `expire_at` + `efs-mgmt expire-export` + create
+   `EROFS` after sunset. Gate: `efs-mgmt` round-trip; create fails after
+   `--at` in the past; existing files still read.
+2. **NOT DONE.** Inode field + pack/unpack + SET_EXPIRE RPC + inherit on
+   create. Gate: `test_meta_v6` (or successor) + isolated setattr/xattr.
+3. **NOT DONE.** Lazy expire on LOOKUP/OPEN/readdir; no REPORT resurrection.
+   Gate: set `--at` in the past; path is `ENOENT`; open fd still reads;
+   peer (posix2) does not see the name.
+4. **NOT DONE.** Owner sweeper + chunk reclaim (`used` drops). Gate: create
+   N files with past `expire_at`, wait one sweep, `efs-mgmt status` used
+   down, cold remount empty.
+5. **NOT DONE.** Tests — **not** vs XFS (`compare.py` would mark EFS-BUG).
+   Add `tests/posix/expire_suite.py` or `tests/stress/expire_probe.sh`
+   (efs-only). Cases: inherit; xattr set/clear; past-at lazy ENOENT;
+   unlink-while-open; nonempty dir does not delete children; late REPORT
+   does not revive; export sunset `EROFS`.
+
+**Depends on:** Phase 2 (owner applies the op) and Phase 3 (sweeper is
+per-shard). Fine to land on live bits=3. Does **not** depend on Phase 4 or
+low-level FUSE.
+
+**Milestone:** an unprivileged user can `setfattr -n user.efs.expire` on a
+file, a peer lookup misses after that instant, and the shard owner has
+dropped the chunks without a client walking the tree.
+
 ## Phase ordering rationale
+
 
 Phase 2 first because sharding (Phase 3) is far cleaner when a server owns the
 table rather than every client blob-flushing. Phase 4 last because it only

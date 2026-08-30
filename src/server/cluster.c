@@ -10,8 +10,8 @@
 
 int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t peer_port)
 {
-    int fd = server_peer_conn_get(peer_host, peer_port);
-    if (fd < 0) {
+    struct efs_conn *pc = server_peer_conn_get(peer_host, peer_port);
+    if (!pc) {
         fprintf(stderr, "Cannot connect to peer %s:%u\n", peer_host, peer_port);
         return -1;
     }
@@ -30,33 +30,33 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
         h.used = local ? local->used : server_compute_local_usage(s);
     }
 
-    if (efs_send_msg(fd, EFS_MSG_HELLO, &h, sizeof(h)) != 0) {
+    if (efs_conn_send_msg(pc, EFS_MSG_HELLO, &h, sizeof(h)) != 0) {
         fprintf(stderr, "Failed to send HELLO to peer %s:%u\n", peer_host, peer_port);
-        server_peer_conn_drop(peer_host, peer_port, fd);
+        server_peer_conn_drop(peer_host, peer_port, pc);
         return -1;
     }
 
     uint8_t type;
     void *payload = NULL;
     uint32_t payload_len = 0;
-    if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0) {
+    if (efs_conn_recv_msg(pc, &type, &payload, &payload_len) != 0) {
         fprintf(stderr, "No HELLO_ACK from peer %s:%u (timeout or disconnect)\n",
                 peer_host, peer_port);
-        server_peer_conn_drop(peer_host, peer_port, fd);
+        server_peer_conn_drop(peer_host, peer_port, pc);
         return -1;
     }
     if (type != EFS_MSG_HELLO_ACK) {
         fprintf(stderr, "Peer %s:%u replied with unexpected message type %u\n",
                 peer_host, peer_port, type);
         free(payload);
-        server_peer_conn_drop(peer_host, peer_port, fd);
+        server_peer_conn_drop(peer_host, peer_port, pc);
         return -1;
     }
     if (payload_len != sizeof(struct efs_msg_hello_ack)) {
         fprintf(stderr, "Peer %s:%u sent malformed HELLO_ACK (len %u)\n",
                 peer_host, peer_port, payload_len);
         free(payload);
-        server_peer_conn_drop(peer_host, peer_port, fd);
+        server_peer_conn_drop(peer_host, peer_port, pc);
         return -1;
     }
 
@@ -77,7 +77,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
                     (unsigned long long)s->id, ack->node_count);
         }
         free(payload);
-        server_peer_conn_drop(peer_host, peer_port, fd);
+        server_peer_conn_drop(peer_host, peer_port, pc);
         return -1;
     }
 
@@ -93,7 +93,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
                 "Join failed: peer %s:%u ACK omitted this node (id %llu)\n",
                 peer_host, peer_port, (unsigned long long)s->id);
         free(payload);
-        server_peer_conn_drop(peer_host, peer_port, fd);
+        server_peer_conn_drop(peer_host, peer_port, pc);
         return -1;
     }
 
@@ -133,7 +133,7 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
     pthread_mutex_unlock(&s->lock);
     server_nodes_flush_dirty(s);
     free(payload);
-    server_peer_conn_release(peer_host, peer_port, fd);
+    server_peer_conn_release(peer_host, peer_port, pc);
 
     printf("Joined cluster with %u nodes\n", joined);
     return 0;
@@ -147,21 +147,21 @@ static void gossip_hello_to(struct efsd_server *s, const struct efs_msg_hello *h
     struct in_addr a;
     if (!host || inet_pton(AF_INET, host, &a) != 1)
         return;
-    int fd = server_peer_conn_get(host, port);
-    if (fd < 0)
+    struct efs_conn *pc = server_peer_conn_get(host, port);
+    if (!pc)
         return;
-    if (efs_send_msg(fd, EFS_MSG_HELLO, h, sizeof(*h)) == 0) {
+    if (efs_conn_send_msg(pc, EFS_MSG_HELLO, h, sizeof(*h)) == 0) {
         uint8_t type;
         void *payload = NULL;
         uint32_t payload_len = 0;
-        int rc = efs_recv_msg(fd, &type, &payload, &payload_len);
+        int rc = efs_conn_recv_msg(pc, &type, &payload, &payload_len);
         free(payload);
         if (rc == 0) {
-            server_peer_conn_release(host, port, fd);
+            server_peer_conn_release(host, port, pc);
             return;
         }
     }
-    server_peer_conn_drop(host, port, fd);
+    server_peer_conn_drop(host, port, pc);
 }
 
 /* Broadcast a membership change (join/refresh) to every other known peer so
@@ -192,25 +192,25 @@ static int send_heartbeat(const char *host, uint16_t port)
     if (!host || inet_pton(AF_INET, host, &a) != 1)
         return -1;
 
-    int fd = server_peer_conn_get(host, port);
-    if (fd < 0)
+    struct efs_conn *pc = server_peer_conn_get(host, port);
+    if (!pc)
         return -1;
 
-    if (efs_send_msg(fd, EFS_MSG_HEARTBEAT, NULL, 0) != 0) {
-        server_peer_conn_drop(host, port, fd);
+    if (efs_conn_send_msg(pc, EFS_MSG_HEARTBEAT, NULL, 0) != 0) {
+        server_peer_conn_drop(host, port, pc);
         return -1;
     }
 
     uint8_t type;
     void *payload = NULL;
     uint32_t payload_len = 0;
-    int rc = efs_recv_msg(fd, &type, &payload, &payload_len);
+    int rc = efs_conn_recv_msg(pc, &type, &payload, &payload_len);
     free(payload);
     if (rc != 0) {
-        server_peer_conn_drop(host, port, fd);
+        server_peer_conn_drop(host, port, pc);
         return -1;
     }
-    server_peer_conn_release(host, port, fd);
+    server_peer_conn_release(host, port, pc);
     return (type == EFS_MSG_HEARTBEAT_ACK) ? 0 : -1;
 }
 

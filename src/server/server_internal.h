@@ -3,6 +3,7 @@
 
 #include "efs/common.h"
 #include "efs/metadata.h"
+#include "efs/network.h"
 #include <pthread.h>
 #include <time.h>
 
@@ -10,15 +11,16 @@
  * immediately so one connection storm cannot exhaust RLIMIT_NOFILE. */
 #define EFS_SERVER_MAX_CONNS 4096
 
-/* Persistent server→server TCP pool (meta/migrate/heartbeat/status). */
+/* Persistent server→server pool (meta/migrate/heartbeat/status). TCP plus
+ * RDMA upgrade when a usable IB HCA exists. */
 void server_peer_pool_init(void);
 void server_peer_pool_shutdown(void);
-/* Checkout a live fd to host:port (connects on miss). Returns -1 on failure. */
-int server_peer_conn_get(const char *host, uint16_t port);
-/* Return fd to the pool after a successful request/response. */
-void server_peer_conn_release(const char *host, uint16_t port, int fd);
-/* Close and discard a broken fd (net/protocol error). */
-void server_peer_conn_drop(const char *host, uint16_t port, int fd);
+/* Checkout a live conn to host:port (connects on miss). Returns NULL on failure. */
+struct efs_conn *server_peer_conn_get(const char *host, uint16_t port);
+/* Return conn to the pool after a successful request/response. */
+void server_peer_conn_release(const char *host, uint16_t port, struct efs_conn *c);
+/* Close and discard a broken conn (net/protocol error). */
+void server_peer_conn_drop(const char *host, uint16_t port, struct efs_conn *c);
 /* Shared PUT writer pool (one queue, all --storage paths). --writers n is
  * the total; n=0 is inline; n<0 (startup default) means auto from nproc. */
 #define EFS_WRITERS_RESERVED         4  /* main + heartbeat + migrate + catchup */
@@ -273,7 +275,7 @@ static inline void server_shard_unlock(struct efsd_server *s, uint32_t eidx,
     pthread_mutex_unlock(server_shard_mu(s, eidx, shard));
 }
 
-/* Lock 1..3 shards of one export in ascending (deadlock-free) order. Sorts
+/* Lock 1..N shards of one export in ascending (deadlock-free) order. Sorts
  * sh[] in place; the caller keeps the original per-role shard ids in separate
  * variables for the op logic and passes the (now sorted) sh[] to unlockn. */
 static inline void server_shard_lockn(struct efsd_server *s, uint32_t eidx,

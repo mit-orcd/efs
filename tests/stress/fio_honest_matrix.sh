@@ -27,7 +27,7 @@ remount() { # hosts...
         ssh_to 25 "$h" "killall -9 efs-fuse 2>/dev/null || true
             timeout 3 fusermount3 -uz $MNT 2>/dev/null || true
             cd /tmp/efs && mkdir -p $MNT && rm -f fuse.log
-            EFS_TRANSPORT=tcp setsid ./efs-fuse 172.16.223.57:19810 efs-test $MNT >fuse.log 2>&1 </dev/null &
+            EFS_TRANSPORT="${EFS_TRANSPORT:-}" setsid ./efs-fuse 172.16.223.57:19810 efs-test $MNT >fuse.log 2>&1 </dev/null &
             for i in \$(seq 1 40); do
                 grep -q \"efs-fuse $MNT \" /proc/mounts && exit 0
                 sleep 0.15

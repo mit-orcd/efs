@@ -58,6 +58,30 @@ PROBE_SSH_SEC=${PROBE_SSH_SEC:-10}
 
 say() { echo "[run_tests] $*"; }
 
+# Post-mkfs catchup: joiners rebuild shard tables for minutes. Starting
+# posix/posixstress/posix2 in that window wedges warmups in D-state with
+# used=0 and empty TSVs that look like lock saturation. Fail closed.
+wait_cluster_idle() {
+    local seed=${EFS_SEED:-172.16.223.57:19810}
+    local primary=${EFS_PRIMARY:-fcstor003.ib}
+    local i st idle gens ng
+    say "wait_cluster_idle: Heal idle + matching gen on all nodes"
+    for i in $(seq 1 45); do
+        st=$(ssh_to 10 "$primary" "cd /tmp/efs && ./efs-mgmt status $seed" 2>/dev/null) || true
+        idle=$(printf '%s\n' "$st" | grep -c 'idle' || true)
+        gens=$(printf '%s\n' "$st" | sed -n 's/.*gen=\([0-9][0-9]*\).*/\1/p' | sort -u)
+        ng=$(printf '%s\n' "$gens" | grep -c . || true)
+        if [ "$idle" -ge 4 ] && [ "$ng" = 1 ]; then
+            say "  idle gen=$(printf '%s' "$gens" | head -1) (${i}s)"
+            return 0
+        fi
+        sleep 2
+    done
+    say "  ERROR: cluster not idle after 90s (still in catchup) — refusing suite"
+    printf '%s\n' "$st" | grep -E 'node |Heal|gen=' | head -20 >&2 || true
+    return 1
+}
+
 # Every remote call has a hard deadline (efs-ssh default is 30s).
 ssh_to() { # timeout_sec host [remote]
     local t=$1; shift
@@ -86,7 +110,7 @@ ensure_mounted() { # host
     say "  $h: mounting efs-fuse"
     ssh_to "$BUILD_SSH_SEC" "$h" "cd /tmp/efs && [ -x ./efs-fuse ] || make efs-fuse >/dev/null 2>&1; \
         mkdir -p /tmp/efs-mount; \
-        (EFS_TRANSPORT='${EFS_TRANSPORT:-tcp}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &); \
+        (EFS_TRANSPORT='${EFS_TRANSPORT:-}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &); \
         for i in \$(seq 1 100); do sleep 0.15; \
             grep -q \"efs-fuse /tmp/efs-mount \" /proc/mounts || continue; \
             timeout 1 stat /tmp/efs-mount >/dev/null 2>&1 && exit 0; \
@@ -101,7 +125,7 @@ remount_client() { # host
     ssh_to 15 "$h" "killall -9 efs-fuse 2>/dev/null || pkill -9 -x efs-fuse 2>/dev/null || true
         timeout 3 fusermount3 -uz /tmp/efs-mount 2>/dev/null || true
         cd /tmp/efs && mkdir -p /tmp/efs-mount && rm -f fuse.log
-        EFS_TRANSPORT='${EFS_TRANSPORT:-tcp}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &
+        EFS_TRANSPORT='${EFS_TRANSPORT:-}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &
         for i in \$(seq 1 100); do
             sleep 0.15
             grep -q \"efs-fuse /tmp/efs-mount \" /proc/mounts || continue
@@ -162,6 +186,8 @@ cmd_posix() { # [--keep] [--parallel] [efs-host ...]
     [ ${#hosts[@]} -eq 0 ] && hosts=("${DEFAULT_HOSTS[@]:0:1}")
     local pdir="$RESULTS/posix/$RUN_ID"
     mkdir -p "$pdir"
+
+    wait_cluster_idle || return 1
 
     say "posix: XFS baseline on $XFS_HOST:$XFS_DIR"
     push_tests "$XFS_HOST"
@@ -234,10 +260,9 @@ cmd_posix() { # [--keep] [--parallel] [efs-host ...]
                  python3 "$REPO/tests/posix/compare.py" "$pdir/xfs-baseline.tsv" \
                      "$pdir/efs-${h%.ib}.tsv" > "$pdir/compare-${h%.ib}.txt" 2>/dev/null; \
                  return 1; }
-        # Warmup: confirm the mount serves ops (not just present in /proc/mounts)
-        # and ride out the fresh-cluster convergence transient before the real
-        # suite — a quick create+read+rmtree, retried. The first 4-way run right
-        # after a fresh setup can otherwise wedge (every test 15s-timeout).
+        # Warmup: confirm the mount serves ops (not just present in /proc/mounts).
+        # Failure is a FAIL — a WARN+continue in the catchup window produced
+        # empty TSVs that looked like lock saturation.
         ssh_to 70 "$h" 'for i in $(seq 1 20); do
             if timeout 3 python3 -c "
 import os, tempfile, shutil
@@ -247,7 +272,8 @@ assert open(p).read() == \"x\"
 shutil.rmtree(d)
 " 2>/dev/null; then exit 0; fi
             sleep 0.5
-        done; echo "  WARN: $h warmup did not converge" >&2; exit 0'
+        done; echo "  ERROR: '"$h"' warmup did not converge" >&2; exit 1' \
+            || { say "  ERROR: $h warmup failed — not starting suite"; return 1; }
         # Run $per full-suite instances in parallel on this host.
         local pids=() rc=0 i p
         for i in $(seq 0 $((per - 1))); do
@@ -421,6 +447,8 @@ cmd_posix2() { # [host-a] [host-b]  |  multi
     local pdir="$RESULTS/posix2/$RUN_ID"
     mkdir -p "$pdir" "$RESULTS/posix2"
     local py="$REPO/tests/posix/posix_2client.py"
+
+    wait_cluster_idle || return 1
 
     say "posix2: XFS baseline on $XFS_HOST:$XFS_DIR (same path twice)"
     push_tests "$XFS_HOST"

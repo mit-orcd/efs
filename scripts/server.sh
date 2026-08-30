@@ -10,6 +10,8 @@ Usage:
   start:  bind addr:port; one storage path or comma-separated 1..24 paths
           (optional :quota after the path list); optional join
   stop:   stop by first storage path (PID file) or by addr:port
+  env:    EFS_TRANSPORT=auto|tcp|rdma (default auto: RDMA if IB is up, else TCP)
+          rdma is strict (no TCP fallback). Optional EFS_RDMA_DEV=<ibdev>.
 EOF
     exit 1
 }

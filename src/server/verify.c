@@ -44,8 +44,8 @@ static int peer_get_fragment(const char *host, uint16_t port,
                              uint32_t chunk_index, uint32_t fragment_index,
                              uint32_t frag_len, uint8_t *data, uint8_t *checksum)
 {
-    int fd = server_peer_conn_get(host, port);
-    if (fd < 0)
+    struct efs_conn *pc = server_peer_conn_get(host, port);
+    if (!pc)
         return EFS_ERR_NET;
 
     struct efs_msg_get_chunk req;
@@ -60,8 +60,8 @@ static int peer_get_fragment(const char *host, uint16_t port,
     uint32_t reply_len = 0;
     int rc = EFS_ERR_NET;
 
-    if (efs_send_msg(fd, EFS_MSG_GET_CHUNK, &req, sizeof(req)) == 0 &&
-        efs_recv_msg(fd, &type, &reply, &reply_len) == 0 &&
+    if (efs_conn_send_msg(pc, EFS_MSG_GET_CHUNK, &req, sizeof(req)) == 0 &&
+        efs_conn_recv_msg(pc, &type, &reply, &reply_len) == 0 &&
         type == EFS_MSG_GET_CHUNK_REPLY && reply_len >= 1) {
         uint8_t *r = reply;
         if (r[0] == EFS_GET_CHUNK_OK &&
@@ -78,9 +78,9 @@ static int peer_get_fragment(const char *host, uint16_t port,
 
     free(reply);
     if (rc == EFS_ERR_NET)
-        server_peer_conn_drop(host, port, fd);
+        server_peer_conn_drop(host, port, pc);
     else
-        server_peer_conn_release(host, port, fd);
+        server_peer_conn_release(host, port, pc);
     return rc;
 }
 

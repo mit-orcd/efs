@@ -1,5 +1,6 @@
 #include "server_internal.h"
 #include "efs/network.h"
+#include "efs/rdma.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
@@ -7,9 +8,10 @@
 #include <errno.h>
 #include <time.h>
 
-/* Persistent server→server TCP pool. Same idea as the client conn pool:
- * connect once per peer, reuse across meta rebuild/flush/migrate. Drop on
- * protocol/net errors so the next checkout reconnects. */
+/* Persistent server→server pool. Same idea as the client conn pool:
+ * connect once per peer, upgrade to RDMA when the HCA is usable, reuse
+ * across meta rebuild/flush/migrate. Drop on protocol/net errors so the
+ * next checkout reconnects. */
 
 /* Callers BLOCK on the condvar below once every connection to a peer is busy,
  * so this is the hard ceiling on server->server concurrency. At 4 it capped the
@@ -25,7 +27,7 @@ struct peer_slot {
     char host[64];
     uint16_t port;
     int in_use; /* host/port assigned */
-    int fd[EFS_PEER_CONNS_PER_NODE];
+    struct efs_conn *conn[EFS_PEER_CONNS_PER_NODE];
     int busy[EFS_PEER_CONNS_PER_NODE];
     uint64_t down_until_ms; /* skip reconnect until this monotonic deadline */
     uint32_t fail_streak;
@@ -53,8 +55,6 @@ void server_peer_pool_init(void)
     }
     for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
         memset(&g_peers[i], 0, sizeof(g_peers[i]));
-        for (int s = 0; s < EFS_PEER_CONNS_PER_NODE; s++)
-            g_peers[i].fd[s] = -1;
         pthread_mutex_init(&g_peers[i].lock, NULL);
         pthread_cond_init(&g_peers[i].cv, NULL);
     }
@@ -73,9 +73,9 @@ void server_peer_pool_shutdown(void)
         struct peer_slot *p = &g_peers[i];
         pthread_mutex_lock(&p->lock);
         for (int s = 0; s < EFS_PEER_CONNS_PER_NODE; s++) {
-            if (p->fd[s] >= 0) {
-                close(p->fd[s]);
-                p->fd[s] = -1;
+            if (p->conn[s]) {
+                efs_conn_destroy(p->conn[s]);
+                p->conn[s] = NULL;
             }
             p->busy[s] = 0;
         }
@@ -118,19 +118,40 @@ static struct peer_slot *peer_slot_for(const char *host, uint16_t port)
     return free_slot;
 }
 
-int server_peer_conn_get(const char *host, uint16_t port)
+static struct efs_conn *peer_connect(const char *host, uint16_t port)
+{
+    int fd = efs_connect_tcp(host, port);
+    if (fd < 0)
+        return NULL;
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    struct efs_conn *nc = efs_conn_wrap_tcp(fd, 0);
+    if (!nc) {
+        close(fd);
+        return NULL;
+    }
+    if (efs_rdma_available() &&
+        efs_rdma_client_upgrade(nc) != 0 &&
+        efs_rdma_transport() == EFS_TRANSPORT_RDMA) {
+        efs_conn_destroy(nc);
+        return NULL;
+    }
+    return nc;
+}
+
+struct efs_conn *server_peer_conn_get(const char *host, uint16_t port)
 {
     struct peer_slot *p = peer_slot_for(host, port);
     if (!p)
-        return -1;
+        return NULL;
 
     uint64_t now = peer_now_ms();
     pthread_mutex_lock(&p->lock);
     /* Down-cooldown: don't even try to connect to a peer that has failed
-     * repeatedly; the caller treats -1 as "peer down" and skips it fast. */
+     * repeatedly; the caller treats NULL as "peer down" and skips it fast. */
     if (p->down_until_ms > now) {
         pthread_mutex_unlock(&p->lock);
-        return -1;
+        return NULL;
     }
     for (;;) {
         int free_s = -1;
@@ -149,12 +170,12 @@ int server_peer_conn_get(const char *host, uint16_t port)
             int wrc = pthread_cond_timedwait(&p->cv, &p->lock, &ts);
             if (wrc == ETIMEDOUT) {
                 pthread_mutex_unlock(&p->lock);
-                return -1;
+                return NULL;
             }
             continue;
         }
 
-        if (p->fd[free_s] < 0) {
+        if (!p->conn[free_s]) {
             char h[64];
             uint16_t pt = p->port;
             strncpy(h, p->host, sizeof(h) - 1);
@@ -162,8 +183,8 @@ int server_peer_conn_get(const char *host, uint16_t port)
             p->busy[free_s] = 1;
             pthread_mutex_unlock(&p->lock);
 
-            int fd = efs_connect_tcp(h, pt);
-            if (fd < 0) {
+            struct efs_conn *nc = peer_connect(h, pt);
+            if (!nc) {
                 pthread_mutex_lock(&p->lock);
                 p->busy[free_s] = 0;
                 if (p->fail_streak < 1000)
@@ -172,43 +193,42 @@ int server_peer_conn_get(const char *host, uint16_t port)
                     p->down_until_ms = peer_now_ms() + EFS_PEER_DOWN_MS;
                 pthread_cond_signal(&p->cv);
                 pthread_mutex_unlock(&p->lock);
-                return -1;
+                return NULL;
             }
-            efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-            efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
 
             pthread_mutex_lock(&p->lock);
-            if (p->fd[free_s] >= 0) {
-                close(fd);
-                fd = p->fd[free_s];
+            if (p->conn[free_s]) {
+                efs_conn_destroy(nc);
+                nc = p->conn[free_s];
             } else {
-                p->fd[free_s] = fd;
+                p->conn[free_s] = nc;
             }
             p->fail_streak = 0;
             p->down_until_ms = 0;
             pthread_mutex_unlock(&p->lock);
-            return fd;
+            return nc;
         }
 
         p->busy[free_s] = 1;
-        int fd = p->fd[free_s];
+        struct efs_conn *c = p->conn[free_s];
         pthread_mutex_unlock(&p->lock);
-        return fd;
+        return c;
     }
 }
 
-void server_peer_conn_release(const char *host, uint16_t port, int fd)
+void server_peer_conn_release(const char *host, uint16_t port,
+                              struct efs_conn *c)
 {
-    if (fd < 0 || !host)
+    if (!c || !host)
         return;
     struct peer_slot *p = peer_slot_for(host, port);
     if (!p) {
-        close(fd);
+        efs_conn_destroy(c);
         return;
     }
     pthread_mutex_lock(&p->lock);
     for (int s = 0; s < EFS_PEER_CONNS_PER_NODE; s++) {
-        if (p->fd[s] == fd) {
+        if (p->conn[s] == c) {
             p->busy[s] = 0;
             pthread_cond_signal(&p->cv);
             pthread_mutex_unlock(&p->lock);
@@ -216,30 +236,29 @@ void server_peer_conn_release(const char *host, uint16_t port, int fd)
         }
     }
     pthread_mutex_unlock(&p->lock);
-    /* Unknown fd — close to avoid leak. */
-    close(fd);
+    efs_conn_destroy(c);
 }
 
-void server_peer_conn_drop(const char *host, uint16_t port, int fd)
+void server_peer_conn_drop(const char *host, uint16_t port, struct efs_conn *c)
 {
-    if (fd < 0)
+    if (!c)
         return;
     struct peer_slot *p = peer_slot_for(host, port);
     if (!p) {
-        close(fd);
+        efs_conn_destroy(c);
         return;
     }
     pthread_mutex_lock(&p->lock);
     for (int s = 0; s < EFS_PEER_CONNS_PER_NODE; s++) {
-        if (p->fd[s] == fd) {
-            close(fd);
-            p->fd[s] = -1;
+        if (p->conn[s] == c) {
+            p->conn[s] = NULL;
             p->busy[s] = 0;
             pthread_cond_signal(&p->cv);
             pthread_mutex_unlock(&p->lock);
+            efs_conn_destroy(c);
             return;
         }
     }
     pthread_mutex_unlock(&p->lock);
-    close(fd);
+    efs_conn_destroy(c);
 }

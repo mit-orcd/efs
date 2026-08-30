@@ -1505,6 +1505,13 @@ void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
     drop_chunks_scan(ex, ino, first_chunk);
 }
 
+void efs_export_drop_chunks_table(struct efs_export *tab, efs_ino_t ino,
+                                  uint32_t first_chunk)
+{
+    if (tab)
+        drop_chunks_scan(tab, ino, first_chunk);
+}
+
 /* Swap-remove inode array slot i; refresh indexes for the moved row.
  * Caller must already have applied rollup_sub and child_idx_del for slot i.
  * expect_survivor: another hard-link row for this ino remains (nlink > 0). */
@@ -1989,12 +1996,12 @@ uint32_t efs_export_create_target(struct efs_export *ex, efs_ino_t parent,
     uint32_t psh = efs_export_shard_of(parent, bits);
     if (sc <= 1 || bits == 0)
         return psh;
-    /* Directories hash by (parent, name) so independent mkdir trees land
-     * on different shard owners — not a cluster-wide primary. Files stay
-     * on the parent directory's shard so same-dir rename/hardlink of
-     * .tmp names stay one-node. The dentry is still written on the
-     * parent shard (readdir); the inode lives on the hash shard. */
-    if (efs_mode_is_dir(mode) && name && name[0])
+    /* Only directories under ROOT hash. That puts an independent tree
+     * (posix testdir, ecopy dest) on hash(1, name) so creates do not all
+     * hit the metadata primary. Nested dirs stay on that dest shard so
+     * rename/hardlink stay one-node — hashing every dir splits dentry
+     * from inode and breaks rmdir-nonempty / LOOKUP / ecopy rename. */
+    if (efs_mode_is_dir(mode) && name && name[0] && parent == EFS_ROOT_INO)
         return efs_export_dentry_shard_of(parent, name, bits);
     (void)mode;
     return psh;
@@ -2358,17 +2365,9 @@ int efs_export_unlink_name_ex(struct efs_export *ex, efs_ino_t parent,
         if (ptab != dtab)
             ptab->shard_dirty = 1;
 
-        /* Update copies we already hold (including a loaded child table).
-         * Never efs_export_table(all). If the canonical table is not
-         * loaded, the owner applies nlink/chunks (handler nlink_dec /
-         * UNLINK_SHARD). keep_last (open fds) leaves nlink=0 + chunks. */
-        if (nlink == 0) {
-            if (keep_last)
-                for_each_loaded_tab(ex, UINT32_MAX, tab_set_nlink, ino, 0);
-            else
-                for_each_loaded_tab(ex, UINT32_MAX, tab_unlink_ino, ino, 0);
-        } else
-            for_each_loaded_tab(ex, UINT32_MAX, tab_set_nlink, ino, nlink);
+        /* Parent dentry only. Child nlink / last-link drop is the handler's
+         * UNLINK_SHARD (or local nlink_dec) — walking every loaded tab here
+         * requires lock_all. */
         return EFS_OK;
     }
     if (strcmp(name, EFS_STATS_NAME) == 0)
@@ -2527,7 +2526,9 @@ int efs_export_nlink_dec_ex(struct efs_export *ex, efs_ino_t src_ino,
                 *out = *csrc;
             return EFS_OK;
         }
-        for_each_loaded_tab(ex, UINT32_MAX, tab_unlink_ino, src_ino, 0);
+        /* Canonical child table only — lock_all is gone from UNLINK. */
+        if (efs_export_unlink(ctab, src_ino) == EFS_OK)
+            ctab->shard_dirty = 1;
         if (out)
             memset(out, 0, sizeof(*out));
         return EFS_OK;

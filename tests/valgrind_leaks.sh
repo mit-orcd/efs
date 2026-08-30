@@ -30,8 +30,9 @@
 #   - vgdb (on-demand leak_check) and LSan both need kernel.yama.ptrace_scope=0
 #     (the nodes run =2). We therefore rely on clean-exit / SIGTERM reports,
 #     not vgdb. Ask the user to lower ptrace_scope if deeper analysis is needed.
-#   - EFS_TRANSPORT=tcp for the FUSE mount: the RDMA data path does not
-#     complete a CQE on a fresh mount, so reads would EIO for the wrong reason.
+#   - EFS_TRANSPORT=tcp for the 127.0.0.1 phases (loopback has no IB
+#     device, so auto would skip the upgrade). The RDMA phase below uses
+#     the node's 172.16.223.x address and the default (auto) transport.
 #   - The efs-fuse phase mounts against a PLAIN (non-valgrind) efsd so FUSE
 #     reads are fast enough to succeed; the efsd leak phase drives its own
 #     valgrind'd efsd directly with efs-bench (no FUSE round-trip).
@@ -236,11 +237,9 @@ gate "$WORK-fuse.vg" "efs-fuse"
 
 # ---------------------------------------------------------------- rdma ---
 # Client + server over RDMA (default transport). The RDMA connection upgrade
-# is eager on connect (node_cache.c), so mount + metadata/packed-file ops +
-# unmount exercises the full QP/MR/arena/buffer alloc+teardown on BOTH sides
-# WITHOUT hanging on the known-broken RDMA chunk data path (metadata RPCs are
-# forced to TCP; packed files do no chunk PUT). Gated on leaks only (ibverbs
-# uninit false-positives — see gate_leaks).
+# is eager on connect (node_cache.c). Mount + metadata + a chunked write
+# exercise QP/MR/arena on BOTH sides including PUT/GET. Gated on leaks only
+# (ibverbs uninit false-positives — see gate_leaks).
 if [ -z "$RDMA_IP" ]; then
     note "phase 4: SKIP — no 172.16.223.x RDMA IP found (set EFS_VG_RDMA_IP)"
 else
@@ -267,6 +266,9 @@ else
         mkdir -p "$MNT/r1"
         for i in $(seq 1 20); do echo "rdma-$i" >"$MNT/r1/f$i"; done
         for i in $(seq 1 20); do cat "$MNT/r1/f$i" >/dev/null 2>&1; done
+        # Chunk PUT/GET (128 KiB+ is not packed).
+        dd if=/dev/urandom of="$MNT/r1/chunk" bs=256k count=1 status=none
+        dd if="$MNT/r1/chunk" of=/dev/null bs=256k status=none
         for i in $(seq 1 10); do mv "$MNT/r1/f$i" "$MNT/r1/g$i"; done
         ls "$MNT/r1" >/dev/null 2>&1
         for i in $(seq 11 20); do rm -f "$MNT/r1/f$i"; done

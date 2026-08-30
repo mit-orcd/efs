@@ -30,13 +30,70 @@ Hard-fail on definite/indirect leaks, uninit-on-wire, invalid rw;
 possibly-lost only flagged when the direct caller is efs code. RDMA phase is
 leaks-only (ibverbs/DMA fills structs valgrind can't track → uninit
 false-positives by design). RDMA exercised via eager upgrade on connect +
-metadata/packed ops (avoids the known-broken chunk data path). Verified PASS
+metadata/packed + chunk PUT/GET ops. Verified PASS
 on fcstor003: 0 definite / 0 indirect everywhere.
 NOTE: valgrind on efsd needs a clean exit for full leak stacks (SIGTERM gives
 summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+**PER-OP LOCK DROP GATED (Aug 30 afternoon):** Finished dropping `g_server->lock`
+for APPEND, CREATE_SHARD, GETCHUNKS, READDIR (one shard), LOOKUP_PATH (relock
+per component), UNLINK/UNLINK_SHARD/`fan_drop_chunks` (discover-relock, no
+`lock_all`, no global across peer RPC), SETATTR+SIZE. LINK/RENAME/HOLD still
+`lock_all` — `EFS_LOCK_PROF` after 9×4 shows they are not the ceiling
+(`all_hold_us` 5.6–17 ms total for the whole run, ~1–2 μs/call; `n_wait_us`
+~1–2 ms). Harness: `wait_cluster_idle` + fail-closed warmup (empty-TSV trap).
+Sharded `unlink_name` is dentry-only; client dual-apply must `nlink_dec_ex` or
+hardlink tests see stale nlink (fixed in `ops.c`).
+**Gate was TCP** (`EFS_TRANSPORT=tcp`). Auto RDMA still hangs the first inode
+RPC after mount (`stat` OK, `mkdir`/`ls` D-state, server `create=0`); poller
+ack + TCP `MSG_PEEK` + send-CQ wait did not unwedge it. Do not quote RDMA
+posixstress for this cut.
+Solo posix `results/posix/20260830-143842`: **195/201**, 1 EFS bug
+`dir_rename_over_existing` (flake family), 0 hardlink bugs.
+**3× fresh 9×4 vs Aug 30 RDMA baseline `20260830-064913` (36 tsv, 5137 fail,
+98.6% timeout, 1 clean):**
+| run | dir | tsv | fail | timeout | clean/near/sat |
+| r1 | `20260830-144643` | 28 | 1458 | 95.5% | 12/2/14 |
+| r2 | `20260830-145338` | 32 | 1827 | 96.4% | 10/2/20 |
+| r3 | `20260830-145931` | 28 | 1118 | 94.9% | 13/4/11 |
+tsv < 36 = fail-closed warmup on 1–2 hosts that started while others were
+already in-suite (008/009, 007, 009/013). Clean 196/0 is now common (whole
+hosts 012/014/015 or 011/012). Saturated hosts still ~95% `timeout after 15s`
+— not `lock_all`. Next lever is not RENAME/LINK.
+
+**FIO ROUNDS RDMA (Aug 30):** Honest 9-client sw-1m, 5 rounds, fresh
+bits=3, auto RDMA (`results/fio-rounds/20260830-rdma-5r/`). FUSE_OK every
+job, no `md0`. Agg MiB/s **3409 | 3234 | 3117 | 3126 | 3104** (1.10× decay
+r1→r5 — not the ecopy 2.2×). Per-client lockstep ~338–372 MiB/s; 18 GiB
+written per host per round; primary `used=304 GiB` after 5 rounds matches
+9×18×5=810 GiB logical × ~1.5 EC / 4 nodes. Aug 29 TCP 9-way sw-1m was
+3599. `fio_rounds.sh` is now honest (`--end_fsync=1`, no `time_based`, 9×2g).
+First attempt EIO: 9 clients `mkdir` the same ROOT name `fio` at once and
+wedged RDMA QPs; dirs are now `fio-<host>/rN`.
+
+**RDMA posixstress (Aug 30):** Nested dir hashing (`cda9ac9`, every mkdir
+hashed) split dentry vs inode and broke posix (rmdir-nonempty, LOOKUP,
+rename). Reverted to ROOT-only hash (`1df9a31`: testdir/ecopy dest spreads;
+nested stay on that shard). Single-client posix over auto RDMA:
+**196/201, 0 EFS bugs** (`results/posix/20260830-064840`). 9×4 posixstress
+over RDMA (`results/posix/20260830-064913`): 36 instances finished, cluster
+idle gen=109; **fcstor008-2 clean 196/0**. Aggregate ~4971 EFS-bugs,
+**99.3% `timeout after 15s`** (same saturation family as TCP 9×4, not
+RDMA-specific correctness). 36 non-timeouts (`dir_deep_nesting` EIO leaf
+×12, `dir_many_files` ×4, rest singles) — load flakes, 0 of those on the
+solo gate. Do not start posixstress in the post-mkfs catchup window (first
+attempt: all 9 warmups D-state, used=0, empty TSVs).
+
+**RDMA (Aug 30):** Shared-CQ poller re-arms after drain (the old loop dropped
+the next CQE after a quiet gap — inode/REPORT hung on a fresh mount so they
+were forced onto TCP). Small SEND copies into the registered pool (no stack
+INLINE). Peer pool is `efs_conn` + the same upgrade, so server↔server
+GET/PUT_CHUNK is RDMA. Default transport is auto; only GET_META /
+GET_META_ROOT stay TCP (unbounded replies). Gates no longer force
+`EFS_TRANSPORT=tcp`.
+
 **ECOPY ROUND 6 (Aug 29 night):** Directories under ROOT hash to a shard.
 ecopy dest trees no longer funnel through the metadata primary.
 1-client 61 → **112 files/s**; primary create=1; dest owner does the rest.
@@ -756,14 +813,15 @@ never reclaim a ci still in the committed root's page_cis[]; (b)
 REPORT_CHUNKS BUSY retry needs a give-up/circuit-breaker so an
 unready shard EIOs instead of wedging the mount; (c) the rebuild
 "re-poll newest root" is a livelock when gen=96 IS the newest root.
-**RDMA data path broken on fresh mount (Aug 25 PM, separate bug):**
-chunk PUT/GET over RDMA never completes a CQE (QP reaches RTS, first
-SEND/recv after upgrade lost). write 10B took 10.36s, read timed out
-20s. `EFS_TRANSPORT=tcp` on the SAME clean cluster: write 0.005s,
-read 0.023s — perfect. Inode RPCs + REPORT_CHUNKS were already forced
-TCP (protocol.c conn_pick_send_chan); the data PUT/GET path was left
-on RDMA and is broken the same way. **Gate runs on EFS_TRANSPORT=tcp
-until RDMA is root-caused.** On TCP, single-client posix suite:
+**RDMA data path broken on fresh mount (Aug 25 PM, FIXED Aug 30):**
+chunk PUT/GET over RDMA never completed a CQE (QP reaches RTS, first
+SEND/recv after upgrade lost). Cause: shared-CQ poller armed, spun,
+then blocked in `ibv_get_cq_event` without re-arming — the next CQE
+after a quiet gap generated no event. Inode/REPORT were forced TCP as
+a workaround. Fix: drain → req_notify → race-drain → block; small SEND
+from the registered pool; peer pool uses the same QP. Default transport
+is auto. Historical numbers: write 10B took 10.36s, read timed out 20s;
+`EFS_TRANSPORT=tcp` was 0.005s / 0.023s. On TCP, single-client posix suite:
 185/191 both-pass, 1 EFS bug `names_crazy_roundtrip` (passes isolated
 — parallel-visibility flake), 5 target-better XFS quirks. Then the
 16-way suite triggered the GC race above and wedged the cluster.

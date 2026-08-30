@@ -143,7 +143,7 @@ void server_fill_heal_status(struct efsd_server *s,
     pthread_mutex_unlock(&s->lock);
 }
 
-static int server_get_fragment_on_fd(int fd, efs_export_id_t export_id, efs_ino_t ino,
+static int server_get_fragment_on_conn(struct efs_conn *pc, efs_export_id_t export_id, efs_ino_t ino,
                                     uint32_t chunk_index, uint32_t fragment_index,
                                     uint8_t *data, uint8_t *checksum)
 {
@@ -159,8 +159,8 @@ static int server_get_fragment_on_fd(int fd, efs_export_id_t export_id, efs_ino_
     uint32_t reply_len = 0;
     int rc = EFS_ERR_NET;
 
-    if (efs_send_msg(fd, EFS_MSG_GET_CHUNK, &req, sizeof(req)) == 0 &&
-        efs_recv_msg(fd, &type, &reply, &reply_len) == 0 &&
+    if (efs_conn_send_msg(pc, EFS_MSG_GET_CHUNK, &req, sizeof(req)) == 0 &&
+        efs_conn_recv_msg(pc, &type, &reply, &reply_len) == 0 &&
         type == EFS_MSG_GET_CHUNK_REPLY && reply_len >= 1) {
         uint8_t *r = reply;
         if (r[0] == EFS_GET_CHUNK_OK &&
@@ -184,16 +184,16 @@ static int server_get_fragment_from_peer(const char *host, uint16_t port,
                                          uint32_t chunk_index, uint32_t fragment_index,
                                          uint8_t *data, uint8_t *checksum)
 {
-    int fd = server_peer_conn_get(host, port);
-    if (fd < 0)
+    struct efs_conn *pc = server_peer_conn_get(host, port);
+    if (!pc)
         return EFS_ERR_NET;
 
-    int rc = server_get_fragment_on_fd(fd, export_id, ino, chunk_index,
+    int rc = server_get_fragment_on_conn(pc, export_id, ino, chunk_index,
                                        fragment_index, data, checksum);
     if (rc == EFS_ERR_NET)
-        server_peer_conn_drop(host, port, fd);
+        server_peer_conn_drop(host, port, pc);
     else
-        server_peer_conn_release(host, port, fd);
+        server_peer_conn_release(host, port, pc);
     return rc;
 }
 
@@ -202,14 +202,14 @@ static int server_put_fragment_to_peer(const char *host, uint16_t port,
                                        uint32_t chunk_index, uint32_t fragment_index,
                                        const uint8_t *data, const uint8_t *checksum)
 {
-    int fd = server_peer_conn_get(host, port);
-    if (fd < 0)
+    struct efs_conn *pc = server_peer_conn_get(host, port);
+    if (!pc)
         return EFS_ERR_NET;
 
     size_t msg_len = sizeof(struct efs_msg_put_chunk) + EFS_META_FRAGMENT_SIZE;
     uint8_t *msg = malloc(msg_len);
     if (!msg) {
-        server_peer_conn_release(host, port, fd);
+        server_peer_conn_release(host, port, pc);
         return EFS_ERR_NOMEM;
     }
     struct efs_msg_put_chunk *req = (struct efs_msg_put_chunk *)msg;
@@ -227,8 +227,8 @@ static int server_put_fragment_to_peer(const char *host, uint16_t port,
     uint32_t reply_len = 0;
     int rc = EFS_ERR_NET;
 
-    if (efs_send_msg(fd, EFS_MSG_PUT_CHUNK, msg, (uint32_t)msg_len) == 0 &&
-        efs_recv_msg(fd, &type, &reply, &reply_len) == 0 &&
+    if (efs_conn_send_msg(pc, EFS_MSG_PUT_CHUNK, msg, (uint32_t)msg_len) == 0 &&
+        efs_conn_recv_msg(pc, &type, &reply, &reply_len) == 0 &&
         type == EFS_MSG_PUT_CHUNK_REPLY && reply_len == 1) {
         uint8_t *r = reply;
         if (r[0] == EFS_PUT_CHUNK_OK)
@@ -242,9 +242,9 @@ static int server_put_fragment_to_peer(const char *host, uint16_t port,
     free(msg);
     free(reply);
     if (rc == EFS_ERR_NET)
-        server_peer_conn_drop(host, port, fd);
+        server_peer_conn_drop(host, port, pc);
     else
-        server_peer_conn_release(host, port, fd);
+        server_peer_conn_release(host, port, pc);
     return rc;
 }
 
@@ -1280,19 +1280,19 @@ static void bootstrap_export_on_peers(struct efsd_server *s, struct efs_export *
             continue;
         const char *host = nodes[i].addr;
         uint16_t port = nodes[i].port;
-        int fd = server_peer_conn_get(host, port);
-        if (fd < 0)
+        struct efs_conn *pc = server_peer_conn_get(host, port);
+        if (!pc)
             continue;
         uint8_t type;
         void *reply = NULL;
         uint32_t reply_len = 0;
-        int ok = (efs_send_msg(fd, EFS_MSG_PUT_META, buf, (uint32_t)len) == 0 &&
-                  efs_recv_msg(fd, &type, &reply, &reply_len) == 0);
+        int ok = (efs_conn_send_msg(pc, EFS_MSG_PUT_META, buf, (uint32_t)len) == 0 &&
+                  efs_conn_recv_msg(pc, &type, &reply, &reply_len) == 0);
         free(reply);
         if (ok)
-            server_peer_conn_release(host, port, fd);
+            server_peer_conn_release(host, port, pc);
         else
-            server_peer_conn_drop(host, port, fd);
+            server_peer_conn_drop(host, port, pc);
     }
     free(nodes);
     free(buf);
@@ -1393,23 +1393,23 @@ static int server_commit_cluster_extras(struct efsd_server *s,
     for (uint32_t i = 0; i < node_count; i++) {
         if (nodes[i].id == self)
             continue;
-        int fd = server_peer_conn_get(nodes[i].addr, nodes[i].port);
-        if (fd < 0)
+        struct efs_conn *pc = server_peer_conn_get(nodes[i].addr, nodes[i].port);
+        if (!pc)
             continue;
         uint8_t type;
         void *reply = NULL;
         uint32_t reply_len = 0;
-        int net_ok = (efs_send_msg(fd, EFS_MSG_PUT_META, root_buf,
+        int net_ok = (efs_conn_send_msg(pc, EFS_MSG_PUT_META, root_buf,
                                    (uint32_t)root_len) == 0 &&
-                      efs_recv_msg(fd, &type, &reply, &reply_len) == 0);
+                      efs_conn_recv_msg(pc, &type, &reply, &reply_len) == 0);
         if (net_ok && type == EFS_MSG_PUT_META_REPLY && reply_len >= 1 &&
             ((uint8_t *)reply)[0] == EFS_PUT_META_OK)
             acks++;
         free(reply);
         if (net_ok)
-            server_peer_conn_release(nodes[i].addr, nodes[i].port, fd);
+            server_peer_conn_release(nodes[i].addr, nodes[i].port, pc);
         else
-            server_peer_conn_drop(nodes[i].addr, nodes[i].port, fd);
+            server_peer_conn_drop(nodes[i].addr, nodes[i].port, pc);
     }
     free(nodes);
     free(root_buf);
@@ -1692,7 +1692,7 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
         fprintf(stderr,
                 "RPC-PROF total=%llu report=%llu getattr=%llu lookup=%llu "
                 "create=%llu create_shard=%llu setattr=%llu getchunks=%llu "
-                "lookup_path=%llu readdir=%llu\n",
+                "lookup_path=%llu readdir=%llu unlink=%llu append=%llu\n",
                 tot,
                 __atomic_load_n(&efs_rpc_count[EFS_MSG_REPORT_CHUNKS],
                                 __ATOMIC_RELAXED),
@@ -1711,6 +1711,10 @@ int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex)
                 __atomic_load_n(&efs_rpc_count[EFS_MSG_INODE_LOOKUP_PATH],
                                 __ATOMIC_RELAXED),
                 __atomic_load_n(&efs_rpc_count[EFS_MSG_INODE_READDIR],
+                                __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_rpc_count[EFS_MSG_INODE_UNLINK],
+                                __ATOMIC_RELAXED),
+                __atomic_load_n(&efs_rpc_count[EFS_MSG_INODE_APPEND],
                                 __ATOMIC_RELAXED));
     }
     if (getenv("EFS_FLUSH_PROF"))
@@ -2368,24 +2372,24 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
             continue;
         const char *host = nodes[i].addr;
         uint16_t port = nodes[i].port;
-        int fd = server_peer_conn_get(host, port);
-        if (fd < 0)
+        struct efs_conn *pc = server_peer_conn_get(host, port);
+        if (!pc)
             continue;
         uint8_t type;
         void *reply = NULL;
         uint32_t reply_len = 0;
-        int net_ok = (efs_send_msg(fd, EFS_MSG_PUT_META, root_buf,
+        int net_ok = (efs_conn_send_msg(pc, EFS_MSG_PUT_META, root_buf,
                                    (uint32_t)root_len) == 0 &&
-                      efs_recv_msg(fd, &type, &reply, &reply_len) == 0);
+                      efs_conn_recv_msg(pc, &type, &reply, &reply_len) == 0);
         if (net_ok && type == EFS_MSG_PUT_META_REPLY && reply_len >= 1 &&
             ((uint8_t *)reply)[0] == EFS_PUT_META_OK) {
             acks++;
         }
         free(reply);
         if (net_ok)
-            server_peer_conn_release(host, port, fd);
+            server_peer_conn_release(host, port, pc);
         else
-            server_peer_conn_drop(host, port, fd);
+            server_peer_conn_drop(host, port, pc);
     }
     free(nodes);
     free(root_buf);
@@ -2491,16 +2495,16 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
             for (uint32_t i = 0; i < cn_count; i++) {
                 if (cn[i].id == cn_self)
                     continue;
-                int fd = server_peer_conn_get(cn[i].addr, cn[i].port);
-                if (fd < 0)
+                struct efs_conn *pc = server_peer_conn_get(cn[i].addr, cn[i].port);
+                if (!pc)
                     continue;
                 uint8_t type;
                 void *reply = NULL;
                 uint32_t reply_len = 0;
                 int net_ok =
-                    (efs_send_msg(fd, EFS_MSG_META_COMMIT, &cm,
+                    (efs_conn_send_msg(pc, EFS_MSG_META_COMMIT, &cm,
                                   (uint32_t)sizeof(cm)) == 0 &&
-                     efs_recv_msg(fd, &type, &reply, &reply_len) == 0);
+                     efs_conn_recv_msg(pc, &type, &reply, &reply_len) == 0);
                 uint8_t st = (net_ok && reply && reply_len >= 1)
                                  ? ((uint8_t *)reply)[0]
                                  : 0xff;
@@ -2517,9 +2521,9 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
                             net_ok);
                 free(reply);
                 if (net_ok)
-                    server_peer_conn_release(cn[i].addr, cn[i].port, fd);
+                    server_peer_conn_release(cn[i].addr, cn[i].port, pc);
                 else
-                    server_peer_conn_drop(cn[i].addr, cn[i].port, fd);
+                    server_peer_conn_drop(cn[i].addr, cn[i].port, pc);
             }
             free(cn);
         }
@@ -2557,22 +2561,22 @@ int server_replicate_metadata(struct efsd_server *s, struct efs_export *ex)
  * other exports until their owners happened to flush. */
 int server_fetch_metadata_from(struct efsd_server *s, const char *host, uint16_t port)
 {
-    int fd = server_peer_conn_get(host, port);
-    if (fd < 0)
+    struct efs_conn *pc = server_peer_conn_get(host, port);
+    if (!pc)
         return -1;
 
-    if (efs_send_msg(fd, EFS_MSG_LIST_EXPORTS, NULL, 0) != 0) {
-        server_peer_conn_drop(host, port, fd);
+    if (efs_conn_send_msg(pc, EFS_MSG_LIST_EXPORTS, NULL, 0) != 0) {
+        server_peer_conn_drop(host, port, pc);
         return -1;
     }
     uint8_t type;
     void *payload = NULL;
     uint32_t payload_len = 0;
-    if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
+    if (efs_conn_recv_msg(pc, &type, &payload, &payload_len) != 0 ||
         type != EFS_MSG_LIST_EXPORTS_REPLY ||
         payload_len < sizeof(struct efs_msg_list_exports_reply)) {
         free(payload);
-        server_peer_conn_drop(host, port, fd);
+        server_peer_conn_drop(host, port, pc);
         return -1;
     }
     struct efs_msg_list_exports_reply list;
@@ -2581,7 +2585,7 @@ int server_fetch_metadata_from(struct efsd_server *s, const char *host, uint16_t
     if (list.export_count > EFS_MAX_EXPORTS)
         list.export_count = EFS_MAX_EXPORTS;
     if (list.export_count == 0) {
-        server_peer_conn_release(host, port, fd);
+        server_peer_conn_release(host, port, pc);
         return -1;
     }
 
@@ -2591,12 +2595,12 @@ int server_fetch_metadata_from(struct efsd_server *s, const char *host, uint16_t
         const char *ename = list.exports[i].name;
         if (!ename[0])
             continue;
-        if (efs_send_msg(fd, EFS_MSG_GET_META, ename,
+        if (efs_conn_send_msg(pc, EFS_MSG_GET_META, ename,
                          (uint32_t)strlen(ename) + 1) != 0)
             break;
         payload = NULL;
         payload_len = 0;
-        if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
+        if (efs_conn_recv_msg(pc, &type, &payload, &payload_len) != 0 ||
             type != EFS_MSG_GET_META_REPLY || payload_len == 0) {
             free(payload);
             break;
@@ -2662,7 +2666,7 @@ int server_fetch_metadata_from(struct efsd_server *s, const char *host, uint16_t
         if (one == 0)
             rc = 0;
     }
-    server_peer_conn_release(host, port, fd);
+    server_peer_conn_release(host, port, pc);
     return rc;
 }
 
@@ -2920,8 +2924,8 @@ static int catchup_poll_peer_root(struct efsd_server *s)
         if (!host[0] || port == 0)
             continue;
 
-        int fd = server_peer_conn_get(host, port);
-        if (fd < 0)
+        struct efs_conn *pc = server_peer_conn_get(host, port);
+        if (!pc)
             continue;
         int conn_ok = 1;
         for (uint32_t e = 0; e < ec && conn_ok; e++) {
@@ -2931,7 +2935,7 @@ static int catchup_poll_peer_root(struct efsd_server *s)
              * server 3 x ~1 GiB of memcpy + network every 2 s even at rest
              * — the memmove storm pinned idle efsd at 60%+ CPU and starved
              * client IO. */
-            if (efs_send_msg(fd, EFS_MSG_GET_META_ROOT, names[e],
+            if (efs_conn_send_msg(pc, EFS_MSG_GET_META_ROOT, names[e],
                              (uint32_t)strlen(names[e]) + 1) != 0) {
                 conn_ok = 0;
                 break;
@@ -2939,7 +2943,7 @@ static int catchup_poll_peer_root(struct efsd_server *s)
             uint8_t type;
             void *payload = NULL;
             uint32_t payload_len = 0;
-            if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
+            if (efs_conn_recv_msg(pc, &type, &payload, &payload_len) != 0 ||
                 type != EFS_MSG_GET_META_ROOT_REPLY) {
                 free(payload);
                 conn_ok = 0;
@@ -3019,14 +3023,14 @@ static int catchup_poll_peer_root(struct efsd_server *s)
             if (!want)
                 continue;
         pull_full:
-            if (efs_send_msg(fd, EFS_MSG_GET_META, names[e],
+            if (efs_conn_send_msg(pc, EFS_MSG_GET_META, names[e],
                              (uint32_t)strlen(names[e]) + 1) != 0) {
                 conn_ok = 0;
                 break;
             }
             payload = NULL;
             payload_len = 0;
-            if (efs_recv_msg(fd, &type, &payload, &payload_len) != 0 ||
+            if (efs_conn_recv_msg(pc, &type, &payload, &payload_len) != 0 ||
                 type != EFS_MSG_GET_META_REPLY || payload_len == 0) {
                 free(payload);
                 conn_ok = 0;
@@ -3039,9 +3043,9 @@ static int catchup_poll_peer_root(struct efsd_server *s)
                 best = rc;
         }
         if (conn_ok)
-            server_peer_conn_release(host, port, fd);
+            server_peer_conn_release(host, port, pc);
         else
-            server_peer_conn_drop(host, port, fd);
+            server_peer_conn_drop(host, port, pc);
     }
     return best;
 }

@@ -211,6 +211,22 @@ int main(void)
         free(out);
     }
 
+    /* 1b. Many small frames: catches the shared-CQ poller sleeping without
+     * re-arming after a harvest (the second LOOKUP after upgrade hung). */
+    for (int i = 0; i < 64; i++) {
+        uint8_t in[16], *out = NULL;
+        fill_pattern(in, sizeof(in), (uint8_t)(20 + i));
+        uint32_t olen = 0;
+        uint8_t rt = 0;
+        CHECK(efs_conn_send_msg(cli, EFS_MSG_BENCH_PUT, in, sizeof(in)) == 0,
+              "send tiny-n");
+        CHECK(efs_conn_recv_msg(cli, &rt, (void **)&out, &olen) == 0,
+              "recv tiny-n");
+        CHECK(rt == EFS_MSG_BENCH_PUT && olen == sizeof(in) &&
+              memcmp(in, out, olen) == 0, "tiny-n echo");
+        free(out);
+    }
+
     /* 2. Pool-max frame (registered-buffer path, 64 KiB fragment size). */
     {
         uint32_t len = EFS_RDMA_BUFSZ - 5;

@@ -1292,6 +1292,7 @@ int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
     /* Local miss (cross-client: this client never looked the name up, so the
      * dentry isn't in its local table). Do NOT fail ENOENT — the server
      * authoritatively decides existence/type. Fall through to the RPC. */
+    efs_ino_t victim_ino = (lrc == 0) ? ino.ino : 0;
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);
 
@@ -1303,6 +1304,12 @@ int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
     pthread_mutex_lock(&g_client.idx_mu);
     /* Keep a nlink=0 ghost so an already-open fd can still get_inode. */
     efs_export_unlink_name_ex(&g_client.export, parent, name, is_dir ? 0 : 1);
+    /* Sharded unlink_name is dentry-only (no lock_all). Remaining hardlink
+     * rows keep the old nlink unless we nlink_dec the same way the server
+     * does — getattr is local after dual-apply (entry_timeout=0 still hits
+     * the snapshot). */
+    if (!is_dir && victim_ino)
+        (void)efs_export_nlink_dec_ex(&g_client.export, victim_ino, NULL, 1);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);
     lookup_cache_inval(parent, name);
