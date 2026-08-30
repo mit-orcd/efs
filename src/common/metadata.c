@@ -1989,12 +1989,12 @@ uint32_t efs_export_create_target(struct efs_export *ex, efs_ino_t parent,
     uint32_t psh = efs_export_shard_of(parent, bits);
     if (sc <= 1 || bits == 0)
         return psh;
-    /* Only directories under ROOT hash. That puts an ecopy dest tree on
-     * whatever node owns hash(1, destname), so file creates do not all
-     * hit the metadata-flush primary. Nested dirs stay on that dest
-     * shard so rename/hardlink of .tmp files stay one-node (full-tree
-     * dir hashing split dentry vs inode and broke ecopy). */
-    if (efs_mode_is_dir(mode) && name && name[0] && parent == EFS_ROOT_INO)
+    /* Directories hash by (parent, name) so independent mkdir trees land
+     * on different shard owners — not a cluster-wide primary. Files stay
+     * on the parent directory's shard so same-dir rename/hardlink of
+     * .tmp names stay one-node. The dentry is still written on the
+     * parent shard (readdir); the inode lives on the hash shard. */
+    if (efs_mode_is_dir(mode) && name && name[0])
         return efs_export_dentry_shard_of(parent, name, bits);
     (void)mode;
     return psh;

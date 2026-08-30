@@ -489,13 +489,15 @@ static int lookup_cache_hit(efs_ino_t parent, const char *name, efs_ino_t *ino_o
     return 0;
 }
 
-/* Parent-shard LOOKUP is a size-0 dentry stub only when the inode lives
- * on another shard. Files stay on the parent shard, so LOOKUP already
- * has the full row — GETATTR was 3–4 RPCs extra per ecopy file. */
+/* Parent-shard LOOKUP is a size-0 dentry stub when the inode lives on
+ * another shard (hashed directories, spread dentries). Files on the
+ * parent shard already have the full row. Skipping GETATTR for dirs
+ * left the stub ino unstitched and broke hardlink/futimens after nested
+ * dir hashing. */
 static int lookup_needs_getattr(const struct efs_inode *child, efs_ino_t parent)
 {
     uint32_t bits, sc;
-    if (!child || efs_mode_is_dir(child->mode))
+    if (!child)
         return 0;
     if (efs_client_ino_is_dirty(child->ino))
         return 0;
