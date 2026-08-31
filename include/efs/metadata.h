@@ -222,6 +222,15 @@ struct efs_export {
     uint32_t flush_blob_ino_len;
     uint32_t flush_blob_chunk_len;
     uint64_t flush_blob_gen;
+    /* Per-page dirty bits against flush_blob. flush_full=1 means every page
+     * is dirty (unlink swap, adopt, or a packing shuffle). Same-count rename
+     * marks the compact slot + all dentry pages so ecopy temp→final can stay
+     * incremental. A missed mark would commit stale CoW pages, so unlink
+     * and layout shuffles set flush_full rather than guessing. Create /
+     * set_chunk / setattr mark individual pages. */
+#define EFS_FLUSH_DIRTY_BYTES ((EFS_META_MAX_PAGES + 7) / 8)
+    uint8_t flush_page_dirty[EFS_FLUSH_DIRTY_BYTES];
+    int flush_full;
     /* Cross-client O_APPEND barrier (in-memory only, never serialized):
      * outstanding reserved-but-unflushed append end, open-addressed by ino.
      * The handler refuses a second reserve (BUSY) while one is unflushed.
@@ -473,6 +482,24 @@ int efs_export_dir_empty(struct efs_export *ex, efs_ino_t ino);
 int efs_export_serialize(struct efs_export *ex, char **buf, size_t *len);
 int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
                             uint32_t *ino_blob_len, uint32_t *chunk_blob_len);
+/* Copy cache and rewrite dirty pages only. On success *used_incr=1 and
+ * *buf is the new blob. If the cache layout cannot be reused (flush_full,
+ * dent_off change, missing cache) *used_incr=0 and *buf is unchanged —
+ * caller must efs_export_serialize_ex. omit_chunks skips the chunk region
+ * (*chunk_blob_len = cache_chunk_len). */
+int efs_export_serialize_dirty(struct efs_export *ex,
+                               const char *cache, uint32_t cache_ino_len,
+                               uint32_t cache_chunk_len, int omit_chunks,
+                               char **buf, size_t *len,
+                               uint32_t *ino_blob_len, uint32_t *chunk_blob_len,
+                               int *used_incr);
+void efs_export_flush_mark_full(struct efs_export *ex);
+void efs_export_flush_mark_ino_slot(struct efs_export *ex, uint64_t slot);
+void efs_export_flush_mark_chunk_slot(struct efs_export *ex, uint64_t slot);
+void efs_export_flush_mark_dentry_tail(struct efs_export *ex);
+void efs_export_flush_mark_dentry_all(struct efs_export *ex);
+void efs_export_flush_clear_dirty(struct efs_export *ex);
+int efs_export_flush_page_is_dirty(const struct efs_export *ex, uint32_t packed);
 /* Copy inode/chunk rows (and header fields serialize needs) so the
  * O(table) pack can run without holding the server lock. Does not copy
  * indexes. Caller must efs_export_table_snapshot_free(snap). */

@@ -1,0 +1,1 @@
+mkdir: cannot create directory ‘/tmp/efs-mount/ecopy-fcstor014’: Input/output error

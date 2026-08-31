@@ -37,6 +37,30 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+**FLUSH SKIP-CLEAN + INCR SERIALIZE GATED (Aug 30/31):** Stopped O(table)
+encode+blake3 on clean CoW pages, then incremental serialize so a flush
+does not snapshot/pack every compact slot. Per-page dirty bits on
+create/set_chunk/setattr; same-count rename marks the compact slot + all
+dentry pages (mark_full disabled incr for the ecopy temp→final storm).
+Unlink/swap still `flush_full`. `serialize_dirty` copies the last blob,
+rewrites dirty compact pages (slot range, not a full inode scan) and
+dentries; page loop **memcmps** against `flush_blob` before reuse so a
+missed bit cannot keep a stale ci. `FLUSH-PROF incr=1` 46105 vs
+`incr=0` 34 on the primary after 6 ecopy rounds; last window
+pages=39 written=5–6 reused=33–34, `ser` ~1.5–2 ms.
+Gate: TCP posix `results/posix/20260830-174926` (fresh) and
+`results/posix/20260831-030124` (on the grown ecopy table) both
+**196/201, 0 EFS bugs**. ecopy_rounds 9×2 dirs, dest `ecopy-<host>/rN`,
+`results/ecopy/20260830-flush-incr3`: files/s
+**183.8 | 208.9 | 196.1 | 186.3 | 183.7 | 177.4** vs Aug 29
+**84.5 | 75.2 | 65.6 | 59.4 | 46.9 | 37.6** (2.2× decay). Peak-to-end
+now 1.18×. Harness keeps RESULT on ecopy erc=2. Residual: ~81/134567
+files missing (26 class dirs short 1–5, CREATE EIO / ftruncate; joiner
+fcstor005 293 `meta-rebuild` / 52 `raced with GC` — same catchup family,
+not the flatten term). Next cap cut: re-measure RAM+unlink
+(`scale_grow.sh`), then raise `shard_bits` only after this. Do not
+schedule LINK/RENAME lock drops or H3 client RTT as the 2^32 cut.
+
 **POSIXSTRESS QUEUE CLASSIFIED H3 (Aug 30):** Extended `EFS_LOCK_PROF`
 (`1_wait_us`/`1_calls` on `server_shard_lock`, `global_wait_us`/
 `global_hold_us` on inode+REPORT `server_global_lock`, `busy` replies).

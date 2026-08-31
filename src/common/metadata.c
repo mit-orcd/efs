@@ -49,6 +49,7 @@ static void inode_bump_ctime(struct efs_inode *p)
 }
 
 static struct efs_inode *inode_ptr(struct efs_export *ex, efs_ino_t ino);
+static void flush_mark_ptr(struct efs_export *ex, const struct efs_inode *p);
 
 static void stamp_ctime_loaded(struct efs_export *ex, efs_ino_t ino, uint64_t ct)
 {
@@ -60,12 +61,15 @@ static void stamp_ctime_loaded(struct efs_export *ex, efs_ino_t ino, uint64_t ct
     struct efs_inode *p = inode_ptr(ex, ino);
     if (p) {
         p->ctime = ct;
+        flush_mark_ptr(ex, p);
         if (p->nlink <= 1)
             return;
     }
     for (uint64_t i = 0; i < ex->inode_count; i++) {
-        if (ex->inodes[i].ino == ino)
+        if (ex->inodes[i].ino == ino) {
             ex->inodes[i].ctime = ct;
+            efs_export_flush_mark_ino_slot(ex, i);
+        }
     }
     if (!ex->shard_tabs)
         return;
@@ -74,8 +78,10 @@ static void stamp_ctime_loaded(struct efs_export *ex, efs_ino_t ino, uint64_t ct
         if (!t)
             continue;
         for (uint64_t i = 0; i < t->inode_count; i++) {
-            if (t->inodes[i].ino == ino)
+            if (t->inodes[i].ino == ino) {
                 t->inodes[i].ctime = ct;
+                efs_export_flush_mark_ino_slot(t, i);
+            }
         }
     }
 }
@@ -88,6 +94,7 @@ static void parent_touch(struct efs_export *ex, efs_ino_t parent)
     time_now(&p->mtime);
     p->ctime = p->mtime;
     p->mtime_nsec = 0;
+    flush_mark_ptr(ex, p);
 }
 
 static uint64_t hash_mix(uint64_t x)
@@ -529,6 +536,7 @@ static void export_drop_zero_inodes(struct efs_export *ex)
     if (w != ex->inode_count) {
         ex->inode_count = w;
         ex->layout_epoch++;
+        efs_export_flush_mark_full(ex);
     }
 }
 
@@ -620,6 +628,104 @@ static struct efs_inode *inode_ptr(struct efs_export *ex, efs_ino_t ino)
             return &ex->inodes[i];
     }
     return NULL;
+}
+
+void efs_export_flush_mark_full(struct efs_export *ex)
+{
+    if (ex)
+        ex->flush_full = 1;
+}
+
+void efs_export_flush_clear_dirty(struct efs_export *ex)
+{
+    if (!ex)
+        return;
+    memset(ex->flush_page_dirty, 0, sizeof(ex->flush_page_dirty));
+    ex->flush_full = 0;
+}
+
+static void flush_mark_page(struct efs_export *ex, uint32_t packed)
+{
+    if (!ex || ex->flush_full)
+        return;
+    if (packed >= EFS_META_MAX_PAGES) {
+        ex->flush_full = 1;
+        return;
+    }
+    ex->flush_page_dirty[packed / 8] |= (uint8_t)(1u << (packed % 8));
+}
+
+int efs_export_flush_page_is_dirty(const struct efs_export *ex, uint32_t packed)
+{
+    if (!ex || ex->flush_full || packed >= EFS_META_MAX_PAGES)
+        return 1;
+    return (ex->flush_page_dirty[packed / 8] >> (packed % 8)) & 1;
+}
+
+void efs_export_flush_mark_ino_slot(struct efs_export *ex, uint64_t slot)
+{
+    if (!ex || ex->flush_full)
+        return;
+    uint64_t off = (uint64_t)EFS_META_HDR_SIZE +
+                   slot * (uint64_t)EFS_INODE_COMPACT_SIZE;
+    uint64_t end = off + (uint64_t)EFS_INODE_COMPACT_SIZE - 1;
+    flush_mark_page(ex, (uint32_t)(off / EFS_META_PAGE_SIZE));
+    flush_mark_page(ex, (uint32_t)(end / EFS_META_PAGE_SIZE));
+}
+
+void efs_export_flush_mark_chunk_slot(struct efs_export *ex, uint64_t slot)
+{
+    if (!ex || ex->flush_full)
+        return;
+    uint32_t ino_pc = 0;
+    efs_export_meta_page_usage(ex, &ino_pc, NULL);
+    uint64_t off = slot * (uint64_t)EFS_CHUNK_WIRE_SIZE;
+    uint64_t end = off + (uint64_t)EFS_CHUNK_WIRE_SIZE - 1;
+    flush_mark_page(ex, ino_pc + (uint32_t)(off / EFS_META_PAGE_SIZE));
+    flush_mark_page(ex, ino_pc + (uint32_t)(end / EFS_META_PAGE_SIZE));
+    flush_mark_page(ex, 0); /* header chunk_count */
+}
+
+void efs_export_flush_mark_dentry_tail(struct efs_export *ex)
+{
+    if (!ex || ex->flush_full)
+        return;
+    size_t dent_off = efs_meta_dent_off(EFS_META_VERSION, ex->inode_count);
+    size_t dent_end = dent_off + (size_t)ex->dentry_bytes;
+    if (dent_end <= dent_off) {
+        flush_mark_page(ex, (uint32_t)(dent_off / EFS_META_PAGE_SIZE));
+        return;
+    }
+    uint32_t last = (uint32_t)((dent_end - 1) / EFS_META_PAGE_SIZE);
+    flush_mark_page(ex, last);
+    if (last > 0)
+        flush_mark_page(ex, last - 1);
+    flush_mark_page(ex, 0); /* header inode_count */
+}
+
+void efs_export_flush_mark_dentry_all(struct efs_export *ex)
+{
+    if (!ex || ex->flush_full)
+        return;
+    size_t dent_off = efs_meta_dent_off(EFS_META_VERSION, ex->inode_count);
+    size_t dent_end = dent_off + (size_t)ex->dentry_bytes;
+    if (dent_end <= dent_off)
+        dent_end = dent_off + 1;
+    uint32_t p0 = (uint32_t)(dent_off / EFS_META_PAGE_SIZE);
+    uint32_t p1 = (uint32_t)((dent_end - 1) / EFS_META_PAGE_SIZE);
+    for (uint32_t p = p0; p <= p1; p++)
+        flush_mark_page(ex, p);
+}
+
+static void flush_mark_ptr(struct efs_export *ex, const struct efs_inode *p)
+{
+    if (!ex || !p || !ex->inodes)
+        return;
+    if (p < ex->inodes)
+        return;
+    uint64_t slot = (uint64_t)(p - ex->inodes);
+    if (slot < ex->inode_count)
+        efs_export_flush_mark_ino_slot(ex, slot);
 }
 
 /* ---- parent → children index (in-memory) ---- */
@@ -1013,6 +1119,7 @@ static void recompute_times_one(struct efs_export *ex, efs_ino_t dir_ino)
         (void)tb;
         times_expand(&d->tree_tmin, &d->tree_tmax, tlo, thi, &has_tree);
     }
+    flush_mark_ptr(ex, d);
 }
 
 static void recompute_times_up(struct efs_export *ex, efs_ino_t dir_ino)
@@ -1037,6 +1144,7 @@ static void rollup_add_under(struct efs_export *ex, efs_ino_t parent,
 
     uint64_t tf, td, tb, tlo, thi;
     child_tree_contrib(child, &tf, &td, &tb, &tlo, &thi);
+    flush_mark_ptr(ex, p);
     efs_ino_t a = p->parent;
     efs_ino_t prev = parent;
     while (a != prev) {
@@ -1044,6 +1152,7 @@ static void rollup_add_under(struct efs_export *ex, efs_ino_t parent,
         if (!ap || !efs_mode_is_dir(ap->mode))
             break;
         ancestor_add_tree(ap, tf, td, tb, tlo, thi);
+        flush_mark_ptr(ex, ap);
         if (ap->parent == a)
             break;
         prev = a;
@@ -1061,6 +1170,7 @@ static void rollup_sub_under(struct efs_export *ex, efs_ino_t parent,
     uint64_t tf, td, tb, tlo, thi;
     child_tree_contrib(child, &tf, &td, &tb, &tlo, &thi);
     parent_sub_child_counts(p, child);
+    flush_mark_ptr(ex, p);
 
     efs_ino_t a = p->parent;
     efs_ino_t prev = parent;
@@ -1069,6 +1179,7 @@ static void rollup_sub_under(struct efs_export *ex, efs_ino_t parent,
         if (!ap || !efs_mode_is_dir(ap->mode))
             break;
         ancestor_sub_tree(ap, tf, td, tb);
+        flush_mark_ptr(ex, ap);
         if (ap->parent == a)
             break;
         prev = a;
@@ -1104,6 +1215,7 @@ static void rollup_size_delta(struct efs_export *ex, efs_ino_t parent,
             d->tree_bytes -= (uint64_t)(-delta);
         else
             d->tree_bytes = 0;
+        flush_mark_ptr(ex, d);
         if (d->parent == cur)
             break;
         prev = cur;
@@ -1135,6 +1247,7 @@ static void expand_parent_chain(struct efs_export *ex, efs_ino_t from_ino,
         }
         int hast = (d->tree_files + d->tree_dirs) > 0;
         times_expand(&d->tree_tmin, &d->tree_tmax, lo, hi, &hast);
+        flush_mark_ptr(ex, d);
         if (d->parent == cur)
             break;
         prev = cur;
@@ -1259,6 +1372,7 @@ void efs_export_recompute_rollups(struct efs_export *ex)
 {
     if (!ex)
         return;
+    efs_export_flush_mark_full(ex);
     for (uint64_t i = 0; i < ex->inode_count; i++) {
         if (efs_mode_is_dir(ex->inodes[i].mode))
             inode_clear_rollups(&ex->inodes[i]);
@@ -1386,6 +1500,7 @@ static void sync_hardlink_attrs(struct efs_export *ex, efs_ino_t ino,
         ex->inodes[i].imm_tmax = imm_tmax;
         ex->inodes[i].tree_tmin = tree_tmin;
         ex->inodes[i].tree_tmax = tree_tmax;
+        efs_export_flush_mark_ino_slot(ex, i);
     }
 }
 
@@ -1454,8 +1569,10 @@ static void drop_chunks_scan(struct efs_export *ex, efs_ino_t ino,
             }
             removed += found;
             if (found == total) {
-                if (removed)
+                if (removed) {
                     ex->shard_dirty = 1;
+                    efs_export_flush_mark_full(ex);
+                }
                 return;
             }
         }
@@ -1478,8 +1595,10 @@ static void drop_chunks_scan(struct efs_export *ex, efs_ino_t ino,
      * shard 0. That permanently tripped the META_COMMIT promote gate
      * (`if (ex->shard_dirty) reply = BUSY`), which is why peers stashed every
      * prepare but stayed pinned at an old committed gen. */
-    if (removed)
+    if (removed) {
         ex->shard_dirty = 1;
+        efs_export_flush_mark_full(ex);
+    }
 }
 
 static void remove_chunks_for_ino(struct efs_export *ex, efs_ino_t ino)
@@ -1526,6 +1645,7 @@ static void remove_inode_slot(struct efs_export *ex, uint64_t i, int expect_surv
     dentry_bytes_sub(ex, old_name);
 
     ex->layout_epoch++;
+    efs_export_flush_mark_full(ex);
     uint64_t last = ex->inode_count - 1;
     if (i != last) {
         efs_ino_t moved_parent = ex->inodes[last].parent;
@@ -2245,6 +2365,8 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
      * thread saw rpc_dirty, called flush, then skipped shard 0 — RAM-only
      * mutations and the 70k-ops/s "bench" that never hit disk. */
     ex->shard_dirty = 1;
+    efs_export_flush_mark_ino_slot(ex, pos);
+    efs_export_flush_mark_dentry_tail(ex);
     return ino->ino;
 }
 
@@ -2304,8 +2426,13 @@ static void tab_set_nlink(struct efs_export *tab, efs_ino_t ino, uint32_t nlink)
             hit = 1;
         }
     }
-    if (hit)
+    if (hit) {
         tab->shard_dirty = 1;
+        for (uint64_t i = 0; i < tab->inode_count; i++) {
+            if (tab->inodes[i].ino == ino)
+                efs_export_flush_mark_ino_slot(tab, i);
+        }
+    }
 }
 
 int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *name)
@@ -2692,6 +2819,8 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
     rollup_add_under(ex, new_parent, dst);
     parent_touch(ex, new_parent);
     ex->shard_dirty = 1;
+    efs_export_flush_mark_ino_slot(ex, pos);
+    efs_export_flush_mark_dentry_tail(ex);
     return EFS_OK;
 }
 
@@ -2729,6 +2858,7 @@ static int set_size_common(struct efs_export *ex, efs_ino_t ino, uint64_t size,
         p->mtime_nsec = (uint32_t)ts.tv_nsec;
     }
     sync_hardlink_attrs(ex, ino, p);
+    flush_mark_ptr(ex, p);
     if (!do_rollups) {
         int64_t delta = 0;
         if (!efs_mode_is_dir(p->mode) && size != old_size)
@@ -2777,6 +2907,7 @@ int efs_export_set_mode(struct efs_export *ex, efs_ino_t ino, uint32_t mode)
             p->ctime = old + 1;
     }
     sync_hardlink_attrs(ex, ino, p);
+    flush_mark_ptr(ex, p);
     rollup_expand_parents_of(ex, ino); /* ctime=now: expand */
     return EFS_OK;
 }
@@ -2797,6 +2928,7 @@ int efs_export_set_owner(struct efs_export *ex, efs_ino_t ino, uid_t uid, gid_t 
     /* POSIX: chown updates ctime, not mtime. */
     time_now(&p->ctime);
     sync_hardlink_attrs(ex, ino, p);
+    flush_mark_ptr(ex, p);
     rollup_expand_parents_of(ex, ino); /* ctime=now: expand */
     return EFS_OK;
 }
@@ -2818,6 +2950,7 @@ static int set_mtime_ns_common(struct efs_export *ex, efs_ino_t ino,
     p->mtime = mtime;
     p->mtime_nsec = mtime_nsec;
     sync_hardlink_attrs(ex, ino, p);
+    flush_mark_ptr(ex, p);
     if (!do_rollups) {
         if (pending_rollup_note(ex, ino, 0, 1) != 0)
             return EFS_ERR_NOMEM;
@@ -2858,6 +2991,7 @@ int efs_export_set_atime(struct efs_export *ex, efs_ino_t ino, uint64_t atime)
         return EFS_ERR_NOT_FOUND;
     p->atime = atime;
     sync_hardlink_attrs(ex, ino, p);
+    flush_mark_ptr(ex, p);
     rollup_expand_parents_of(ex, ino);
     return EFS_OK;
 }
@@ -2990,6 +3124,12 @@ int efs_export_rename(struct efs_export *ex, efs_ino_t ino,
             parent_touch(ex, new_parent);
         }
     }
+    /* Same-count rename only rewrites the dentry tail and the compact slot.
+     * mark_full would disable incremental serialize for the whole ecopy
+     * temp→final storm (every file is a rename). Overwrite already mark_full
+     * via unlink → remove_inode_slot. */
+    efs_export_flush_mark_ino_slot(ex, slot);
+    efs_export_flush_mark_dentry_all(ex);
     return EFS_OK;
 }
 
@@ -3014,6 +3154,7 @@ int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
         memcpy(ex->chunks[pos].checksums, checksums,
                EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
         ex->chunk_epoch++;
+        efs_export_flush_mark_chunk_slot(ex, pos);
         return EFS_OK;
     }
 
@@ -3038,6 +3179,7 @@ int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
     chunk_idx_put(ex, ino, chunk_index, pos);
     icnt_inc(ex, ino);
     ex->chunk_epoch++;
+    efs_export_flush_mark_chunk_slot(ex, pos);
     return EFS_OK;
 }
 
@@ -3225,6 +3367,8 @@ int efs_export_upsert_inode(struct efs_export *ex, const struct efs_inode *rec)
         idx_put(ex->ino_keys, ex->ino_vals, ex->ino_mask, rec->ino, pos);
         name_idx_put(ex, rec->parent, rec->name, pos);
         child_idx_add(ex, rec->parent, pos);
+        efs_export_flush_mark_ino_slot(ex, pos);
+        efs_export_flush_mark_dentry_tail(ex);
         return EFS_OK;
     }
     if (cur->parent != rec->parent || strcmp(cur->name, rec->name) != 0) {
@@ -3239,12 +3383,14 @@ int efs_export_upsert_inode(struct efs_export *ex, const struct efs_inode *rec)
         name_idx_put(ex, rec->parent, rec->name, slot);
         child_idx_add(ex, rec->parent, slot);
         sync_hardlink_attrs(ex, rec->ino, cur);
+        efs_export_flush_mark_full(ex);
         return EFS_OK;
     }
     *cur = *rec;
     /* Hard-link rows share mode/uid/times; upsert of the indexed row
      * alone would leave the other names with a stale mode. */
     sync_hardlink_attrs(ex, rec->ino, cur);
+    flush_mark_ptr(ex, cur);
     return EFS_OK;
 }
 
@@ -3601,6 +3747,10 @@ void efs_export_adopt_tables(struct efs_export *dst, struct efs_export *src)
     dst->rollups_stale = src->rollups_stale;
     dst->next_ino = src->next_ino;
     dst->layout_epoch++;
+    free(dst->flush_blob);
+    dst->flush_blob = NULL;
+    dst->flush_blob_gen = 0;
+    efs_export_flush_mark_full(dst);
 
     src->inodes = NULL;
     src->chunks = NULL;
@@ -3620,6 +3770,181 @@ void efs_export_adopt_tables(struct efs_export *dst, struct efs_export *src)
     src->icnt_mask = 0;
     src->child_vec_count = src->child_vec_cap = 0;
     src->pending_rollup_count = src->pending_rollup_cap = 0;
+}
+
+#define EFS_FLUSH_HDR_ICOUNT_OFF 276
+
+int efs_export_serialize_dirty(struct efs_export *ex,
+                               const char *cache, uint32_t cache_ino_len,
+                               uint32_t cache_chunk_len, int omit_chunks,
+                               char **buf, size_t *len,
+                               uint32_t *ino_blob_len, uint32_t *chunk_blob_len,
+                               int *used_incr)
+{
+    if (used_incr)
+        *used_incr = 0;
+    if (!ex || !buf || !len)
+        return EFS_ERR_INVAL;
+    efs_export_ensure_rollups(ex);
+    dentry_bytes_recompute(ex);
+
+    if (!cache || ex->flush_full || cache_ino_len < EFS_META_HDR_SIZE)
+        return EFS_OK;
+
+    uint32_t ver = 0, old_ic = 0;
+    memcpy(&ver, cache + 4, 4);
+    memcpy(&old_ic, cache + EFS_FLUSH_HDR_ICOUNT_OFF, 4);
+    if (ver != EFS_META_VERSION || ex->inode_count < old_ic)
+        return EFS_OK;
+
+    size_t dent_off = efs_meta_dent_off(EFS_META_VERSION, ex->inode_count);
+    size_t old_dent_off = efs_meta_dent_off(EFS_META_VERSION, old_ic);
+    if (dent_off != old_dent_off || cache_ino_len < old_dent_off)
+        return EFS_OK;
+
+    size_t dent_bytes = dentry_bytes_for(ex, 0);
+    size_t new_ino = dent_off + dent_bytes;
+    size_t old_dent_bytes = (size_t)cache_ino_len - old_dent_off;
+    if (efs_meta_page_count_for_blob((uint32_t)new_ino) !=
+        efs_meta_page_count_for_blob(cache_ino_len))
+        return EFS_OK;
+    if (new_ino > (size_t)UINT32_MAX)
+        return EFS_ERR_INVAL;
+
+    size_t chunk_bytes = omit_chunks ? 0
+        : (size_t)ex->chunk_count * EFS_CHUNK_WIRE_SIZE;
+    size_t total = new_ino + chunk_bytes;
+    uint8_t *b = calloc(1, total ? total : 1);
+    if (!b)
+        return EFS_ERR_NOMEM;
+
+    size_t copy_ino = cache_ino_len < (uint32_t)new_ino ? cache_ino_len
+                                                       : (size_t)new_ino;
+    memcpy(b, cache, copy_ino);
+    efs_export_pack_header(ex, b);
+
+    uint32_t ino_pc = efs_meta_page_count_for_blob((uint32_t)new_ino);
+    flush_mark_page(ex, 0);
+    for (uint64_t s = old_ic; s < ex->inode_count; s++)
+        efs_export_flush_mark_ino_slot(ex, s);
+    for (uint32_t pi = 0; pi < ino_pc; pi++) {
+        uint64_t start = (uint64_t)pi * EFS_META_PAGE_SIZE;
+        uint64_t end = start + EFS_META_PAGE_SIZE;
+        if (end > cache_ino_len && start < new_ino)
+            flush_mark_page(ex, pi);
+        if (start >= dent_off)
+            continue;
+        if (!efs_export_flush_page_is_dirty(ex, pi))
+            continue;
+        if (end <= EFS_META_HDR_SIZE)
+            continue;
+        uint64_t s0 = start > EFS_META_HDR_SIZE
+            ? (start - EFS_META_HDR_SIZE) / EFS_INODE_COMPACT_SIZE : 0;
+        uint64_t s1 = (end - EFS_META_HDR_SIZE - 1) / EFS_INODE_COMPACT_SIZE + 1;
+        if (s1 > ex->inode_count)
+            s1 = ex->inode_count;
+        for (uint64_t slot = s0; slot < s1; slot++) {
+            uint64_t off = (uint64_t)EFS_META_HDR_SIZE +
+                           slot * (uint64_t)EFS_INODE_COMPACT_SIZE;
+            if (off >= dent_off)
+                break;
+            efs_export_pack_inode_compact(&ex->inodes[slot], b + off);
+        }
+    }
+
+    int rewrite_dents = (dent_bytes != old_dent_bytes);
+    if (!rewrite_dents) {
+        uint32_t d0 = (uint32_t)(dent_off / EFS_META_PAGE_SIZE);
+        for (uint32_t pi = d0; pi < ino_pc; pi++) {
+            if (efs_export_flush_page_is_dirty(ex, pi)) {
+                rewrite_dents = 1;
+                break;
+            }
+        }
+    }
+    if (rewrite_dents) {
+        uint8_t *p = b + dent_off;
+        uint8_t *end = b + new_ino;
+        for (uint64_t slot = 0; slot < ex->inode_count; slot++) {
+            uint16_t ln = (uint16_t)strnlen(ex->inodes[slot].name,
+                                            EFS_MAX_NAME - 1);
+            if (p + 2u + (size_t)ln > end) {
+                free(b);
+                return EFS_OK;
+            }
+            memcpy(p, &ln, 2);
+            p += 2;
+            if (ln) {
+                memcpy(p, ex->inodes[slot].name, ln);
+                p += ln;
+            }
+        }
+        if (p != end) {
+            free(b);
+            return EFS_OK;
+        }
+        efs_export_flush_mark_dentry_all(ex);
+    } else if (ex->inode_count > old_ic) {
+        uint8_t *p = b + cache_ino_len;
+        uint8_t *end = b + new_ino;
+        for (uint64_t slot = old_ic; slot < ex->inode_count; slot++) {
+            uint16_t ln = (uint16_t)strnlen(ex->inodes[slot].name,
+                                            EFS_MAX_NAME - 1);
+            if (p + 2u + (size_t)ln > end) {
+                free(b);
+                return EFS_OK;
+            }
+            memcpy(p, &ln, 2);
+            p += 2;
+            if (ln) {
+                memcpy(p, ex->inodes[slot].name, ln);
+                p += ln;
+            }
+        }
+        if (p != end) {
+            free(b);
+            return EFS_OK;
+        }
+    }
+
+    if (!omit_chunks) {
+        size_t new_ch = (size_t)ex->chunk_count * EFS_CHUNK_WIRE_SIZE;
+        size_t copy_ch = cache_chunk_len;
+        if (copy_ch > new_ch)
+            copy_ch = new_ch;
+        if (copy_ch)
+            memcpy(b + new_ino, cache + cache_ino_len, copy_ch);
+        uint32_t ch_pc = efs_meta_page_count_for_blob((uint32_t)new_ch);
+        for (uint32_t pi = 0; pi < ch_pc; pi++) {
+            uint32_t packed = ino_pc + pi;
+            uint64_t start = (uint64_t)pi * EFS_META_PAGE_SIZE;
+            uint64_t end = start + EFS_META_PAGE_SIZE;
+            int is_new = start >= cache_chunk_len;
+            if (!is_new && !efs_export_flush_page_is_dirty(ex, packed))
+                continue;
+            if (is_new)
+                flush_mark_page(ex, packed);
+            uint64_t s0 = start / EFS_CHUNK_WIRE_SIZE;
+            uint64_t s1 = (end - 1) / EFS_CHUNK_WIRE_SIZE + 1;
+            if (s1 > ex->chunk_count)
+                s1 = ex->chunk_count;
+            for (uint64_t s = s0; s < s1; s++) {
+                uint64_t off = s * (uint64_t)EFS_CHUNK_WIRE_SIZE;
+                efs_export_pack_chunk(&ex->chunks[s], b + new_ino + off);
+            }
+        }
+    }
+
+    *buf = (char *)b;
+    *len = total;
+    if (ino_blob_len)
+        *ino_blob_len = (uint32_t)new_ino;
+    if (chunk_blob_len)
+        *chunk_blob_len = omit_chunks ? cache_chunk_len
+                                      : (uint32_t)chunk_bytes;
+    if (used_incr)
+        *used_incr = 1;
+    return EFS_OK;
 }
 
 int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,

@@ -1843,29 +1843,67 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
      * layout_epoch catches unlink (and a concurrent table adopt). */
     uint64_t snap_icount = ex->inode_count;
     uint64_t snap_lepoch = ex->layout_epoch;
-    int snap_rc = efs_export_table_snapshot_ex(ex, &snap, omit_chunks);
-    new_gen = ex->root.generation + 1;
-    if (new_gen == 0)
-        new_gen = 1;
-    if (ex->meta_fragmented) {
-        old_gen = ex->root.generation;
-        old_ino_pc = ex->root.ino_page_count ? ex->root.ino_page_count
-                                             : ex->root.page_count;
-        old_ch_pc = ex->root.chunk_page_count;
+    int used_incr = 0;
+
+    int try_incr = (ex->flush_blob &&
+                    ex->flush_blob_gen == ex->root.generation &&
+                    !ex->flush_full);
+    if (try_incr) {
+        uint64_t t_ser0 = heal_mono_us();
+        int drc = efs_export_serialize_dirty(ex, ex->flush_blob,
+                                             ex->flush_blob_ino_len,
+                                             ex->flush_blob_chunk_len,
+                                             omit_chunks, &blob, &blob_len,
+                                             &ino_blob_len, &chunk_blob_len,
+                                             &used_incr);
+        t_ser = heal_mono_us() - t_ser0;
+        if (drc != EFS_OK) {
+            rebuild_shards_unlock(s, fidx, ex, table_ino, fsc);
+            pthread_mutex_unlock(&s->lock);
+            return -1;
+        }
+        if (used_incr) {
+            /* Keep flush_blob so the page loop can memcmp against the
+             * committed cache. A missed dirty bit must not reuse a CoW ci. */
+            new_gen = ex->root.generation + 1;
+            if (new_gen == 0)
+                new_gen = 1;
+            if (ex->meta_fragmented) {
+                old_gen = ex->root.generation;
+                old_ino_pc = ex->root.ino_page_count ? ex->root.ino_page_count
+                                                     : ex->root.page_count;
+                old_ch_pc = ex->root.chunk_page_count;
+            }
+            rebuild_shards_unlock(s, fidx, ex, table_ino, fsc);
+            pthread_mutex_unlock(&s->lock);
+            t_snap = heal_mono_us() - t_begin - t_lockwait - t_ser;
+        }
     }
-    rebuild_shards_unlock(s, fidx, ex, table_ino, fsc);
-    pthread_mutex_unlock(&s->lock);
-    t_snap = heal_mono_us() - t_begin - t_lockwait;
-    if (snap_rc != EFS_OK)
-        return -1;
-    uint64_t t_ser0 = heal_mono_us();
-    if (efs_export_serialize_ex(&snap, &blob, &blob_len, &ino_blob_len,
-                                &chunk_blob_len) != EFS_OK) {
+    if (!used_incr) {
+        int snap_rc = efs_export_table_snapshot_ex(ex, &snap, omit_chunks);
+        new_gen = ex->root.generation + 1;
+        if (new_gen == 0)
+            new_gen = 1;
+        if (ex->meta_fragmented) {
+            old_gen = ex->root.generation;
+            old_ino_pc = ex->root.ino_page_count ? ex->root.ino_page_count
+                                                 : ex->root.page_count;
+            old_ch_pc = ex->root.chunk_page_count;
+        }
+        rebuild_shards_unlock(s, fidx, ex, table_ino, fsc);
+        pthread_mutex_unlock(&s->lock);
+        t_snap = heal_mono_us() - t_begin - t_lockwait;
+        if (snap_rc != EFS_OK)
+            return -1;
+        uint64_t t_ser0 = heal_mono_us();
+        if (efs_export_serialize_ex(&snap, &blob, &blob_len, &ino_blob_len,
+                                    &chunk_blob_len) != EFS_OK) {
+            efs_export_table_snapshot_free(&snap);
+            return -1;
+        }
         efs_export_table_snapshot_free(&snap);
-        return -1;
+        t_ser = heal_mono_us() - t_ser0;
     }
-    efs_export_table_snapshot_free(&snap);
-    t_ser = heal_mono_us() - t_ser0;
     if (omit_chunks) {
         chunk_blob_len = keep_ch_len;
         blob_len = (size_t)ino_blob_len;
@@ -2221,11 +2259,11 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     t_pages = heal_mono_us() - t_pages0;
     if (getenv("EFS_FLUSH_PROF"))
         fprintf(stderr,
-                "FLUSH-PROF shard=%u pages=%u written=%u reused=%u "
+                "FLUSH-PROF shard=%u pages=%u written=%u reused=%u incr=%d "
                 "lockwait=%lluus snap=%lluus ser=%lluus pages=%lluus "
                 "total=%lluus\n",
                 shard_idx, root.page_count, root.page_count - pages_reused,
-                pages_reused, (unsigned long long)t_lockwait,
+                pages_reused, used_incr, (unsigned long long)t_lockwait,
                 (unsigned long long)t_snap, (unsigned long long)t_ser,
                 (unsigned long long)t_pages,
                 (unsigned long long)(heal_mono_us() - t_begin));
@@ -2306,8 +2344,10 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
          * unconditionally, losing such an op on a later rebuild. Clear dirty
          * only if the table is unchanged since the snapshot; otherwise keep
          * it dirty so the next flush commits the straggler. */
-        if (ex->inode_count == snap_icount && ex->layout_epoch == snap_lepoch)
+        if (ex->inode_count == snap_icount && ex->layout_epoch == snap_lepoch) {
             ex->shard_dirty = 0;
+            efs_export_flush_clear_dirty(ex);
+        }
         pthread_mutex_unlock(&s->lock);
         if (old_cis && new_cis)
             server_gc_meta_cow_pages(s, ex, table_ino, old_cis, old_cis_count,
@@ -2463,8 +2503,10 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     /* Flush-race fix (see shard path): clear shard_dirty only if no op landed
      * during the unlocked serialize/PUT window; otherwise keep it dirty so the
      * next flush commits the straggler instead of losing it on a rebuild. */
-    if (ex->inode_count == snap_icount && ex->layout_epoch == snap_lepoch)
+    if (ex->inode_count == snap_icount && ex->layout_epoch == snap_lepoch) {
         ex->shard_dirty = 0;
+        efs_export_flush_clear_dirty(ex);
+    }
     s->export_meta_dirty = 1;
     server_save_export(s, ex);
     s->export_meta_dirty = 0;

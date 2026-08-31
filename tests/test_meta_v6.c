@@ -445,19 +445,15 @@ int main(void)
             efs_export_lookup(&sh, EFS_ROOT_INO, "a", &ga) != 0 ||
             efs_export_lookup(&sh, EFS_ROOT_INO, "b", &gb) != 0 ||
             efs_export_lookup(&sh, EFS_ROOT_INO, "d", &gd) != 0 ||
-            efs_export_shard_of(d, 3) != 0 ||
+            !efs_mode_is_dir(gd.mode) || gd.ino != d ||
             ga.ino != a || gb.ino != b) {
             fprintf(stderr, "FAIL spread create/lookup a=%llu b=%llu d=%llu\n",
                     (unsigned long long)a, (unsigned long long)b,
                     (unsigned long long)d);
             failures++;
-        } else if (efs_export_shard_of(a, 3) == efs_export_shard_of(b, 3) &&
-                   a != b) {
-            /* stride=1 should place consecutive files on different shards */
-            fprintf(stderr, "FAIL spread same-shard a=%llu b=%llu\n",
-                    (unsigned long long)a, (unsigned long long)b);
-            failures++;
         }
+        /* Files stay on the parent shard; only ROOT directories hash. The old
+         * create_stride round-robin is gone, so a and b may share shard 0. */
         uint32_t loaded_before = 0;
         for (uint32_t i = 1; sh.shard_tabs && i < sh.shard_tab_cap; i++)
             if (sh.shard_tabs[i])
@@ -567,6 +563,72 @@ int main(void)
             }
             free(sb);
         }
+        efs_export_free(&st);
+    }
+    {
+        /* Incremental serialize of a create+setattr must match a full pack. */
+        struct efs_export st;
+        char *cache = NULL, *full = NULL, *incr = NULL;
+        size_t cl = 0, fl = 0, il = 0;
+        uint32_t cino = 0, cch = 0, fino = 0, fch = 0, iino = 0, ich = 0;
+        int used = 0;
+        efs_export_init(&st, 1, "incr");
+        for (int i = 0; i < 2000; i++) {
+            char n[32];
+            snprintf(n, sizeof(n), "f%04d", i);
+            if (!efs_export_create(&st, EFS_ROOT_INO, S_IFREG | 0644, 0, 0, n)) {
+                fprintf(stderr, "FAIL incr create %d\n", i);
+                failures++;
+                break;
+            }
+        }
+        if (efs_export_serialize_ex(&st, &cache, &cl, &cino, &cch) != 0) {
+            fprintf(stderr, "FAIL incr cache serialize\n");
+            failures++;
+        } else {
+            efs_export_flush_clear_dirty(&st);
+            if (!efs_export_create(&st, EFS_ROOT_INO, S_IFREG | 0644, 0, 0,
+                                   "tail")) {
+                fprintf(stderr, "FAIL incr tail create\n");
+                failures++;
+            }
+            efs_export_set_size(&st, st.inodes[1].ino, 999);
+            if (efs_export_serialize_ex(&st, &full, &fl, &fino, &fch) != 0) {
+                fprintf(stderr, "FAIL incr full serialize\n");
+                failures++;
+            } else if (efs_export_serialize_dirty(&st, cache, cino, cch, 0,
+                                                 &incr, &il, &iino, &ich,
+                                                 &used) != 0 ||
+                       !used || !incr) {
+                fprintf(stderr, "FAIL incr dirty serialize used=%d\n", used);
+                failures++;
+            } else if (fl != il || fino != iino || fch != ich ||
+                       memcmp(full, incr, fl) != 0) {
+                fprintf(stderr, "FAIL incr mismatch full=%zu incr=%zu\n",
+                        fl, il);
+                failures++;
+            }
+            free(full);
+            free(incr);
+            full = incr = NULL;
+            efs_export_flush_clear_dirty(&st);
+            if (efs_export_rename(&st, st.inodes[1].ino, EFS_ROOT_INO,
+                                  "renamed") != 0) {
+                fprintf(stderr, "FAIL incr rename\n");
+                failures++;
+            } else if (efs_export_serialize_ex(&st, &full, &fl, &fino,
+                                              &fch) != 0 ||
+                       efs_export_serialize_dirty(&st, cache, cino, cch, 0,
+                                                  &incr, &il, &iino, &ich,
+                                                  &used) != 0 ||
+                       !used || fl != il || memcmp(full, incr, fl) != 0) {
+                fprintf(stderr, "FAIL incr rename serialize used=%d\n", used);
+                failures++;
+            }
+        }
+        free(cache);
+        free(full);
+        free(incr);
         efs_export_free(&st);
     }
 

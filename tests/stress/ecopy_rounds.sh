@@ -88,24 +88,28 @@ for r in $(seq 1 "$ROUNDS"); do
       dirs="$dirs ${CLASSES[$((base + k))]}"
     done
     if [ "$SHARED_DIR" = "1" ]; then
-      dst="$MNT/ecopy/shared"
+      dst="$MNT/ecopy-shared"
     else
-      dst="$MNT/ecopy/$h/r$r"
+      # Per-host ROOT name (not a shared /ecopy parent). Concurrent mkdir of
+      # the same ROOT dir returns ENOENT for the losers, and peer LOOKUP of
+      # children under a hashed ROOT dest is not visible to mkdir -p.
+      dst="$MNT/ecopy-$h/r$r"
     fi
     EFS_SSH_TIMEOUT="$ROUND_TIMEOUT" $SSH "$h.ib" "
         mkdir -p '$dst' || exit 1
         t0=\$(date +%s.%N)
+        erc=0
         for c in $dirs; do
             # ecopy copies the source directory's CONTENTS into the target, so
             # give each class its own directory -- otherwise every class lands
             # flat in one dir, which is not ImageNet's shape.
             mkdir -p '$dst'/\$c || exit 1
-            $ECOPY '$SRC'/\$c '$dst'/\$c >>/tmp/ecopy-round.log 2>&1 || exit 2
+            $ECOPY '$SRC'/\$c '$dst'/\$c >>/tmp/ecopy-round.log 2>&1 || erc=2
         done
         t1=\$(date +%s.%N)
         n=\$(find '$dst' -type f 2>/dev/null | wc -l)
         b=\$(du -sb '$dst' 2>/dev/null | cut -f1)
-        echo \"RESULT files=\${n:-0} bytes=\${b:-0} secs=\$(echo \"\$t1-\$t0\" | bc)\"
+        echo \"RESULT files=\${n:-0} bytes=\${b:-0} secs=\$(echo \"\$t1-\$t0\" | bc) erc=\${erc}\"
     " > "$OUTDIR/r$r-$h.txt" 2>&1 &
     hi=$((hi + 1))
   done
@@ -120,6 +124,8 @@ for r in $(seq 1 "$ROUNDS"); do
     f=$(echo "$line" | sed 's/.*files=\([0-9]*\).*/\1/')
     b=$(echo "$line" | sed 's/.*bytes=\([0-9]*\).*/\1/')
     s=$(echo "$line" | sed 's/.*secs=\([0-9.]*\).*/\1/')
+    erc=$(echo "$line" | sed -n 's/.*erc=\([0-9]*\).*/\1/p')
+    [ "${erc:-0}" != "0" ] && failed="$failed $h"
     files=$((files + f)); bytes=$((bytes + b))
     if [ "$(echo "$s > $slow_s" | bc)" = "1" ]; then
       slow_s=$(printf '%.1f' "$s"); slow_h="$h"

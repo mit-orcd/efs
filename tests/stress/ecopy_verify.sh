@@ -31,7 +31,7 @@ trap 'rm -rf "$tmp"' EXIT
 if [ "$MODE" = "counts" ]; then
   for h in $HOSTS; do
     EFS_SSH_TIMEOUT=600 $SSH "$h.ib" \
-      "find '$MNT/ecopy/$h' -mindepth 2 -maxdepth 2 -type d 2>/dev/null | \
+      "find '$MNT/ecopy-$h' -mindepth 2 -maxdepth 2 -type d 2>/dev/null | \
        while read -r d; do echo \"\$(basename \$d) \$(ls -U \"\$d\" | wc -l) \$d\"; done" \
       > "$tmp/$h.txt" 2>/dev/null &
   done
@@ -94,12 +94,12 @@ for pair in $readers; do
   writer=${pair%%:*}; reader=${pair##*:}
   # Sample files the writer produced, then read them back on the reader.
   EFS_SSH_TIMEOUT=300 $SSH "$reader.ib" \
-    "find '$MNT/ecopy/$writer' -type f 2>/dev/null | head -$DEEP_SAMPLE | \
+    "find '$MNT/ecopy-$writer' -type f 2>/dev/null | head -$DEEP_SAMPLE | \
      while read -r f; do echo \"\$(md5sum \"\$f\" | cut -d' ' -f1) \$f\"; done" \
     > "$tmp/deep-$writer.txt" 2>/dev/null
   while read -r sum path; do
     [ -n "${sum:-}" ] || continue
-    # .../ecopy/<writer>/r<N>/<class>/<file> -> source is <class>/<file>
+    # .../ecopy-<writer>/r<N>/<class>/<file> -> source is <class>/<file>
     cls=$(basename "$(dirname "$path")"); f=$(basename "$path")
     want=$(md5sum "$SRC/$cls/$f" 2>/dev/null | cut -d' ' -f1)
     checked=$((checked + 1))

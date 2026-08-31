@@ -26,9 +26,11 @@ are not the 9×4 ceiling). 9×4 posixstress is still ~95% `timeout after
 15s`; LOCK-PROF split (`20260830-160943`) is **H3 client/wire RTT** —
 `1_wait` 14 ms/run, `global_hold` 59 ms/run, `busy` ≈ APPEND. **Next
 lever is client `rpc_send_recv_shard`, not more server lock drops.**
-Open perf: N pollers,
-flush O(table) hash (ecopy decay), streaming-write barrier (ewrite),
-PUT_CHUNK still takes the global lock for `export_acquire`. RDMA
+Open perf: N pollers, streaming-write barrier (ewrite),
+PUT_CHUNK still takes the global lock for `export_acquire`.
+Flush O(table) encode+blake3 **gated Aug 30/31** (last-blob memcmp +
+incremental serialize; ecopy 9-way **209→177 files/s** vs Aug 29
+**84→37**; posix 196/201). Raise `shard_bits` only after that. RDMA
 data+control **landed Aug 30** (poller re-arm; peer-pool QP; default auto).
 Auto first inode RPC after mount **gated** (`mkdir` + solo posix 196/201
 0 EFS bugs, `results/posix/20260830-154329`). Open
@@ -445,6 +447,15 @@ under `g_server->lock`.
 4. **POSIX parent-dir mtime/ctime bumps** on create/unlink/rename/link — **NOT DONE.**
    a known POSIX gap, and the per-dir validator if a gen-checked name
    cache is ever revisited.
+5. **Flush skip-clean + incr serialize — DONE (Aug 30/31).**
+   `server_flush_fragmented_meta_locked` caches the last committed blob
+   and memcmps pages (skip encode+blake3 on match). `serialize_dirty`
+   packs only dirty compact slots / dentries when `!flush_full`. Gate:
+   `results/ecopy/20260830-flush-incr3` 9-way ImageNet
+   184|209|196|186|184|177 files/s (was 84→37); posix 196/201
+   `results/posix/20260830-174926` and `20260831-030124`. Residual
+   9-way CREATE EIO (~0.06% files) is joiner catchup/GC, not the
+   O(table) hash. Next: RAM+unlink remeasure, then bits>3.
 
 **Note:** kernel entry/attr timeouts stay 0; no TTL/negative/attr caches —
 immediate cross-client visibility (posix2) is a hard requirement, and
