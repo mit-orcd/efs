@@ -72,6 +72,55 @@ check_mounts() { # context
 
 check_mounts startup || exit 2
 
+# Post-mkfs catchup: Heal idle is not enough. A 9×16 create burst into the
+# catchup window fences tables (ino_dup / CREATE EIO) and the probe then
+# sees n=0. Wait until gens match AND rebuild counters stop moving.
+wait_idle() { # context
+  local seed="$PRIMARY" primary_host="fcstor003.ib"
+  local i st idle gens ng prev="" cur
+  say "wait idle ($1)"
+  for i in $(seq 1 45); do
+    st=$(EFS_SSH_TIMEOUT=10 $SSH "$primary_host" "cd /tmp/efs && ./efs-mgmt status $seed" 2>/dev/null) || true
+    idle=$(printf '%s\n' "$st" | grep -c 'idle' || true)
+    gens=$(printf '%s\n' "$st" | sed -n 's/.*gen=\([0-9][0-9]*\).*/\1/p' | sort -u)
+    ng=$(printf '%s\n' "$gens" | grep -c . || true)
+    if [ "$idle" -ge 4 ] && [ "$ng" = 1 ]; then
+      break
+    fi
+    if [ "$i" -eq 45 ]; then
+      say "FAIL: cluster not Heal-idle after 90s ($1)"
+      return 1
+    fi
+    sleep 2
+  done
+  prev=$(count_rebuilds)
+  sleep 3
+  for i in $(seq 1 20); do
+    cur=$(count_rebuilds)
+    if [ "$cur" = "$prev" ]; then
+      say "  idle gen=$(printf '%s' "$gens" | head -1) rebuilds=$cur"
+      return 0
+    fi
+    prev=$cur
+    sleep 3
+  done
+  say "FAIL: rebuilds still growing ($prev) ($1)"
+  return 1
+}
+
+count_rebuilds() {
+  local t=0 s n
+  for s in $SERVERS; do
+    n=$(EFS_SSH_TIMEOUT=10 $SSH "$s.ib" "grep -cE 'meta-rebuild:|raced with GC' /tmp/efs/efsd.log 2>/dev/null" || true)
+    n=$(printf '%s' "$n" | tr -d '[:space:]')
+    n=${n:-0}
+    t=$((t + n))
+  done
+  echo "$t"
+}
+
+wait_idle startup || exit 2
+
 server_rss() {
   local sum=0 max=0
   for s in $SERVERS; do
@@ -92,6 +141,7 @@ for target in $STEPS; do
   [ "$delta" -le 0 ] && continue
 
   check_mounts "before step $target" || exit 2
+  wait_idle "before $target" || exit 2
 
   say "growing to $target total ($per_client/client, +$delta each)"
   t0=$(date +%s)
@@ -114,6 +164,19 @@ for target in $STEPS; do
   step_files=$((delta * nh))
   rate=$((step_files / step_sec))
   nerr=$(cat "$OUTDIR"/grow-$target-*.txt 2>/dev/null | awk '/^ERRORS/ {s += $2} END {print s + 0}')
+  missing=""
+  for h in $HOSTS; do
+    grep -q '^ERRORS ' "$OUTDIR/grow-$target-$h.txt" 2>/dev/null || missing="$missing $h"
+  done
+  if [ -n "$missing" ]; then
+    say "FAIL: grow logs missing ERRORS (worker crashed) on:$missing"
+    say "      refusing to continue -- rates would be wall-clock fiction"
+    exit 2
+  fi
+  if [ "$nerr" -gt $((step_files / 20)) ]; then
+    say "FAIL: errors=$nerr > 5% of $step_files — catchup/GC or ino_dup, not a scale curve"
+    exit 2
+  fi
 
   read -r rss_max rss_sum <<< "$(server_rss)"
   # RSS is what decides whether 2^32 is reachable on this hardware, so carry
@@ -124,11 +187,17 @@ for target in $STEPS; do
   printf '%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\n' \
     "$target" "$per_client" "$step_files" "$step_sec" "$rate" "$nerr" "$rss_max" "$rss_sum" "$bpi" >> "$TSV"
 
+  wait_idle "after $target" || exit 2
   say "  probing idle latency at $target"
   EFS_SSH_TIMEOUT=600 $SSH "$first.ib" \
     "python3 /tmp/efs/tests/stress/scale_probe.py $MNT $first $per_client $FANOUT 200" \
     > "$OUTDIR/probe-$target.txt" 2>&1
   sed 's/^/    /' "$OUTDIR/probe-$target.txt"
+  if grep -q 'stat .* n=0' "$OUTDIR/probe-$target.txt" 2>/dev/null || \
+     grep -q 'FileNotFoundError' "$OUTDIR/probe-$target.txt" 2>/dev/null; then
+    say "FAIL: probe at $target saw no files (n=0) — tree missing or not FUSE"
+    exit 2
+  fi
 
   prev=$target
 done

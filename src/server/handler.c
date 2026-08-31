@@ -1339,9 +1339,13 @@ send_reply:
                              * fetches would block the pooled client
                              * connection. Fence the now-stale tables so
                              * migrate/stats cannot act on old-gen maps. */
+                            uint32_t fsc = ex->root.shard_count
+                                ? ex->root.shard_count : 1;
+                            server_shard_lock_all(g_server, (uint32_t)ei, fsc);
                             ex->meta_needs_rebuild = 1;
                             ex->chunk_count = 0;
                             ex->inode_count = 0;
+                            server_shard_unlock_all(g_server, (uint32_t)ei, fsc);
                         }
                         efs_export_merge_extra_roots(ex, &ex->root);
                         /* A joiner's main-table dirty flag is not unflushed

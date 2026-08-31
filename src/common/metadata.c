@@ -614,18 +614,25 @@ static int export_ensure_chunk_idx(struct efs_export *ex)
 static struct efs_inode *inode_ptr(struct efs_export *ex, efs_ino_t ino)
 {
     uint64_t pos = 0;
+    struct efs_inode *inos = ex->inodes;
+    if (!inos)
+        return NULL;
     if (ex->ino_keys) {
         /* Index is authoritative: a miss must not fall back to an O(n)
          * scan — every create/merge "is this ino free?" check would
          * otherwise re-walk the whole table. */
         if (idx_get(ex->ino_keys, ex->ino_vals, ex->ino_mask, ino, &pos) == 0 &&
-            pos < ex->inode_count && ex->inodes[pos].ino == ino)
-            return &ex->inodes[pos];
+            pos < ex->inode_count && pos < ex->inode_capacity &&
+            inos[pos].ino == ino)
+            return &inos[pos];
         return NULL;
     }
-    for (uint64_t i = 0; i < ex->inode_count; i++) {
-        if (ex->inodes[i].ino == ino)
-            return &ex->inodes[i];
+    uint64_t n = ex->inode_count;
+    if (n > ex->inode_capacity)
+        n = ex->inode_capacity;
+    for (uint64_t i = 0; i < n; i++) {
+        if (inos[i].ino == ino)
+            return &inos[i];
     }
     return NULL;
 }
@@ -1930,12 +1937,12 @@ void efs_export_merge_extra_roots(struct efs_export *ex,
         if (tab->meta_fragmented && tab->root.page_count > 0 &&
             tab->root.generation >= desc->generation)
             continue;
-        /* Stale materialized copy: drop it. Do not mark needs_rebuild —
-         * that made every peer reassemble the shard. Pages + descriptor
-         * are enough; the owner reloads on demand. */
-        efs_export_free(tab);
-        free(tab);
-        ex->shard_tabs[sh] = NULL;
+        /* Stale copy: leave the table in RAM. Freeing here ran under the
+         * global lock only, while per-op CREATE has dropped that lock and
+         * is in inode_ptr on this tab — primary SIGSEGV during 9×16
+         * scale_grow. Pages + descriptor remain the recovery path; the
+         * owner reloads via ensure_shard_ready. */
+        continue;
     }
     /* Monotonic union. Capture-then-maxmerge used to wipe descriptors this
      * node has no local table for (owner-only RAM) and then restore only
@@ -2145,10 +2152,10 @@ static efs_ino_t create_sharded(struct efs_export *ex, efs_ino_t parent,
     uint32_t bits = ex->root.shard_bits;
     uint32_t psh = efs_export_shard_of(parent, bits);
     uint32_t target = efs_export_create_target(ex, parent, mode, name);
-    struct efs_export *ctab = efs_export_table(ex, target);
+    struct efs_export *ctab = efs_export_shard_tab(ex, target);
     if (!ctab)
         return 0;
-    struct efs_export *ptab = efs_export_table(ex, psh);
+    struct efs_export *ptab = efs_export_shard_tab(ex, psh);
     if (!ptab)
         return 0;
     /* Phase 3b: once the parent is past EFS_DIR_SPREAD_MIN the dentry
@@ -2156,7 +2163,7 @@ static efs_ino_t create_sharded(struct efs_export *ex, efs_ino_t parent,
     uint32_t dsh = psh;
     if (efs_export_dir_is_spread(ex, parent))
         dsh = efs_export_dentry_shard_of(parent, name, bits);
-    struct efs_export *dtab = efs_export_table(ex, dsh);
+    struct efs_export *dtab = efs_export_shard_tab(ex, dsh);
     if (!dtab)
         return 0;
     if (lookup_on_tab(dtab, parent, name, NULL) == EFS_OK)

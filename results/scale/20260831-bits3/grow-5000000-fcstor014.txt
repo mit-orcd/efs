@@ -1,0 +1,29 @@
+  ... 3600 in 5s (719/s)
+  ... 3600 in 10s (360/s)
+  ... 3600 in 15s (240/s)
+  ... 3600 in 20s (180/s)
+  ... 3600 in 25s (144/s)
+  ... 3600 in 30s (120/s)
+  ... 3600 in 35s (103/s)
+  ... 3600 in 40s (90/s)
+  ... 3600 in 45s (80/s)
+  ... 24500 in 50s (490/s)
+  ... 51000 in 55s (926/s)
+  ... 78800 in 60s (1312/s)
+  ... 107200 in 65s (1648/s)
+  ... 132400 in 70s (1890/s)
+  ... 158400 in 75s (2110/s)
+  ... 182400 in 80s (2278/s)
+  ... 206500 in 85s (2427/s)
+  ... 229700 in 90s (2550/s)
+  ... 252000 in 95s (2650/s)
+  ... 273600 in 100s (2733/s)
+  ... 294567 in 105s (2803/s)
+  ... 313901 in 110s (2851/s)
+  ... 329867 in 115s (2866/s)
+  ... 333333 in 120s (2775/s)
+ERR /tmp/efs-mount/scale-fcstor014/d000225/f000225437: [Errno 5] Input/output error: '/tmp/efs-mount/scale-fcstor014/d000225/f000225437'
+ERR /tmp/efs-mount/scale-fcstor014/d000230/f000230686: [Errno 5] Input/output error: '/tmp/efs-mount/scale-fcstor014/d000230/f000230686'
+ERR /tmp/efs-mount/scale-fcstor014/d000227/f000227832: [Errno 5] Input/output error: '/tmp/efs-mount/scale-fcstor014/d000227/f000227832'
+ERRORS 3
+RATE 333333 120.12 2775.0

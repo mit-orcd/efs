@@ -25,7 +25,9 @@ def main():
     start, count = int(sys.argv[3]), int(sys.argv[4])
     nthreads, fanout = int(sys.argv[5]), int(sys.argv[6])
 
-    root = os.path.join(mnt, "scale", tag)
+    # Unique ROOT name per client. Nested scale/<tag> races nine mkdirs of the
+    # same hashed ROOT dir and losers see ENOENT (same class as ecopy dest).
+    root = os.path.join(mnt, "scale-" + tag)
     os.makedirs(root, exist_ok=True)
 
     # Directory index is derived from the global file index so that resuming at

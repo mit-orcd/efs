@@ -4,7 +4,114 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
+
+/* EFS_RPC_PROF: split inode-RPC wall time into conn checkout vs send vs
+ * recv vs BUSY backoff. Recv is the server+wire wait (the parked H3
+ * question). Checkout is pool serialization (16 conns/node). Off unless
+ * the env is set — empty still counts as on, same as EFS_LOCK_PROF. */
+static int efs_rpc_prof_on = -1;
+static unsigned long long efs_rpc_calls;
+static unsigned long long efs_rpc_checkout_us;
+static unsigned long long efs_rpc_send_us;
+static unsigned long long efs_rpc_recv_us;
+static unsigned long long efs_rpc_busy_us;
+static unsigned long long efs_rpc_busy_n;
+static unsigned long long efs_rpc_checkout_wait_n;
+static unsigned long long efs_rpc_n_op[256];
+static unsigned long long efs_rpc_recv_us_op[256];
+static unsigned long long efs_rpc_last_dump_us;
+
+static unsigned long long rpc_prof_now_us(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (unsigned long long)ts.tv_sec * 1000000ull +
+           (unsigned long long)ts.tv_nsec / 1000ull;
+}
+
+static int rpc_prof_enabled(void)
+{
+    if (efs_rpc_prof_on < 0)
+        efs_rpc_prof_on = getenv("EFS_RPC_PROF") != NULL;
+    return efs_rpc_prof_on;
+}
+
+static void rpc_prof_add(uint8_t type, unsigned long long checkout_us,
+                         unsigned long long send_us, unsigned long long recv_us,
+                         unsigned long long busy_us)
+{
+    if (!rpc_prof_enabled())
+        return;
+    __atomic_add_fetch(&efs_rpc_calls, 1, __ATOMIC_RELAXED);
+    __atomic_add_fetch(&efs_rpc_checkout_us, checkout_us, __ATOMIC_RELAXED);
+    __atomic_add_fetch(&efs_rpc_send_us, send_us, __ATOMIC_RELAXED);
+    __atomic_add_fetch(&efs_rpc_recv_us, recv_us, __ATOMIC_RELAXED);
+    __atomic_add_fetch(&efs_rpc_busy_us, busy_us, __ATOMIC_RELAXED);
+    if (busy_us)
+        __atomic_add_fetch(&efs_rpc_busy_n, 1, __ATOMIC_RELAXED);
+    if (checkout_us >= 100ull)
+        __atomic_add_fetch(&efs_rpc_checkout_wait_n, 1, __ATOMIC_RELAXED);
+    if (type < 256) {
+        __atomic_add_fetch(&efs_rpc_n_op[type], 1, __ATOMIC_RELAXED);
+        __atomic_add_fetch(&efs_rpc_recv_us_op[type], recv_us, __ATOMIC_RELAXED);
+    }
+    unsigned long long now = rpc_prof_now_us();
+    unsigned long long last = __atomic_load_n(&efs_rpc_last_dump_us,
+                                            __ATOMIC_RELAXED);
+    if (last && now - last < 2000000ull)
+        return;
+    if (!__atomic_compare_exchange_n(&efs_rpc_last_dump_us, &last, now, 0,
+                                     __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+        return;
+    fprintf(stderr,
+            "RPC-PROF calls=%llu checkout_us=%llu send_us=%llu recv_us=%llu "
+            "busy_us=%llu busy_n=%llu checkout_wait_n=%llu "
+            "lookup=%llu/%lluus getattr=%llu/%lluus create=%llu/%lluus "
+            "setattr=%llu/%lluus readdir=%llu/%lluus unlink=%llu/%lluus "
+            "append=%llu/%lluus report=%llu/%lluus getchunks=%llu/%lluus "
+            "lookup_path=%llu/%lluus\n",
+            __atomic_load_n(&efs_rpc_calls, __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_checkout_us, __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_send_us, __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_recv_us, __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_busy_us, __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_busy_n, __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_checkout_wait_n, __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_n_op[EFS_MSG_INODE_LOOKUP], __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_recv_us_op[EFS_MSG_INODE_LOOKUP],
+                            __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_n_op[EFS_MSG_INODE_GETATTR], __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_recv_us_op[EFS_MSG_INODE_GETATTR],
+                            __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_n_op[EFS_MSG_INODE_CREATE], __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_recv_us_op[EFS_MSG_INODE_CREATE],
+                            __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_n_op[EFS_MSG_INODE_SETATTR], __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_recv_us_op[EFS_MSG_INODE_SETATTR],
+                            __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_n_op[EFS_MSG_INODE_READDIR], __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_recv_us_op[EFS_MSG_INODE_READDIR],
+                            __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_n_op[EFS_MSG_INODE_UNLINK], __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_recv_us_op[EFS_MSG_INODE_UNLINK],
+                            __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_n_op[EFS_MSG_INODE_APPEND], __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_recv_us_op[EFS_MSG_INODE_APPEND],
+                            __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_n_op[EFS_MSG_REPORT_CHUNKS], __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_recv_us_op[EFS_MSG_REPORT_CHUNKS],
+                            __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_n_op[EFS_MSG_INODE_GETCHUNKS],
+                            __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_recv_us_op[EFS_MSG_INODE_GETCHUNKS],
+                            __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_n_op[EFS_MSG_INODE_LOOKUP_PATH],
+                            __ATOMIC_RELAXED),
+            __atomic_load_n(&efs_rpc_recv_us_op[EFS_MSG_INODE_LOOKUP_PATH],
+                            __ATOMIC_RELAXED));
+}
 
 static int rpc_status_to_efs(uint8_t st)
 {
@@ -77,25 +184,30 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
                                uint32_t reply_len)
 {
     efs_node_id_t target = 0; /* 0 = compute the owner from our view */
+    int prof = rpc_prof_enabled();
     for (int attempt = 0; attempt < 16; attempt++) {
         efs_node_id_t nid = 0;
         struct efs_conn *conn;
+        unsigned long long t0 = prof ? rpc_prof_now_us() : 0;
         if (target != 0) {
             conn = efs_client_conn_get(target);
             nid = target;
         } else {
             conn = rpc_owner_conn_shard(shard, &nid);
         }
+        unsigned long long t1 = prof ? rpc_prof_now_us() : 0;
         if (!conn)
             return EFS_ERR_NET;
         if (efs_conn_send_msg(conn, type, req, req_len) != 0) {
             efs_client_conn_drop(nid, conn);
             return EFS_ERR_NET;
         }
+        unsigned long long t2 = prof ? rpc_prof_now_us() : 0;
         uint8_t rtype = 0;
         void *payload = NULL;
         uint32_t plen = 0;
         int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
+        unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
         if (rc != 0) {
             efs_client_conn_drop(nid, conn);
             return EFS_ERR_NET;
@@ -112,14 +224,19 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             /* INODE_APPEND uses BUSY as the unflushed-reservation barrier.
              * The caller must flush + report before retrying; spinning here
              * holds g_append_mu for ~10s and deadlocks concurrent O_APPEND. */
-            if (type == EFS_MSG_INODE_APPEND || type == EFS_MSG_INODE_FLOCK)
+            if (type == EFS_MSG_INODE_APPEND || type == EFS_MSG_INODE_FLOCK) {
+                rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, 0);
                 return EFS_OK;
+            }
             /* Extra-shard owner is still assembling pages after restart.
              * Same target — do not flip to another node. */
             unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
-            usleep(50000u << shift);
+            unsigned long long sleep_us = 50000ull << shift;
+            usleep((useconds_t)sleep_us);
+            rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
         }
+        rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, 0);
         if (r->status != EFS_INODE_RPC_NOT_PRIMARY)
             return EFS_OK;
         /* NOT_PRIMARY: retry on the server-reported primary. */
@@ -282,22 +399,28 @@ int efs_client_rpc_readdir_ex(efs_export_id_t export_id, efs_ino_t parent,
     req.shard = shard;
     /* Readdir reply is not efs_msg_inode_reply (no primary_id). */
     efs_node_id_t nid = 0;
+    int prof = rpc_prof_enabled();
+    unsigned long long t0 = prof ? rpc_prof_now_us() : 0;
     struct efs_conn *conn = rpc_owner_conn_shard(shard, &nid);
+    unsigned long long t1 = prof ? rpc_prof_now_us() : 0;
     if (!conn)
         return EFS_ERR_NET;
     if (efs_conn_send_msg(conn, EFS_MSG_INODE_READDIR, &req, sizeof(req)) != 0) {
         efs_client_conn_drop(nid, conn);
         return EFS_ERR_NET;
     }
+    unsigned long long t2 = prof ? rpc_prof_now_us() : 0;
     uint8_t rtype = 0;
     void *payload = NULL;
     uint32_t plen = 0;
     int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
+    unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
     if (rc != 0) {
         efs_client_conn_drop(nid, conn);
         return EFS_ERR_NET;
     }
     efs_client_conn_release(nid, conn);
+    rpc_prof_add(EFS_MSG_INODE_READDIR, t1 - t0, t2 - t1, t3 - t2, 0);
     if (rtype != EFS_MSG_INODE_READDIR_REPLY ||
         plen < sizeof(struct efs_msg_inode_readdir_reply)) {
         free(payload);
@@ -337,10 +460,13 @@ int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
     efs_node_id_t target = 0;
     for (int attempt = 0; attempt < 16; attempt++) {
         efs_node_id_t nid = 0;
+        int prof = rpc_prof_enabled();
+        unsigned long long t0 = prof ? rpc_prof_now_us() : 0;
         struct efs_conn *conn = target ? efs_client_conn_get(target)
                                       : rpc_owner_conn_shard(shard, &nid);
         if (target)
             nid = target;
+        unsigned long long t1 = prof ? rpc_prof_now_us() : 0;
         if (!conn)
             return EFS_ERR_NET;
         if (efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS, &req,
@@ -348,15 +474,18 @@ int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
             efs_client_conn_drop(nid, conn);
             return EFS_ERR_NET;
         }
+        unsigned long long t2 = prof ? rpc_prof_now_us() : 0;
         uint8_t rtype = 0;
         uint32_t plen = 0;
         payload = NULL;
         int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
+        unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
         if (rc != 0) {
             efs_client_conn_drop(nid, conn);
             return EFS_ERR_NET;
         }
         efs_client_conn_release(nid, conn);
+        rpc_prof_add(EFS_MSG_INODE_GETCHUNKS, t1 - t0, t2 - t1, t3 - t2, 0);
         if (rtype != EFS_MSG_INODE_GETCHUNKS_REPLY ||
             plen < sizeof(struct efs_msg_inode_getchunks_reply)) {
             free(payload);

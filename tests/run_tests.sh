@@ -99,18 +99,28 @@ push_tests() { # host
         >/dev/null 2>&1
 }
 
+# Client env for efs-fuse. Empty EFS_RPC_PROF must not be exported — getenv
+# treats "" as on (same trap as EFS_LOCK_PROF on the server).
+fuse_client_env() {
+    local e="EFS_TRANSPORT='${EFS_TRANSPORT:-}'"
+    [ -n "${EFS_RPC_PROF:-}" ] && e="$e EFS_RPC_PROF=$EFS_RPC_PROF"
+    printf '%s' "$e"
+}
+
 # mount a client if not already mounted (assumes a current efs-fuse binary).
 # /proc/mounts lists the path at fuse_mount, before fuse_loop_mt is serving —
 # require a successful stat so the caller does not use the mount too early.
 ensure_mounted() { # host
     local h=$1
+    local env
+    env=$(fuse_client_env)
     if ssh_to "$PROBE_SSH_SEC" "$h" 'grep -q "efs-fuse /tmp/efs-mount " /proc/mounts && timeout 2 stat /tmp/efs-mount >/dev/null' 2>/dev/null; then
         return 0
     fi
     say "  $h: mounting efs-fuse"
     ssh_to "$BUILD_SSH_SEC" "$h" "cd /tmp/efs && [ -x ./efs-fuse ] || make efs-fuse >/dev/null 2>&1; \
         mkdir -p /tmp/efs-mount; \
-        (EFS_TRANSPORT='${EFS_TRANSPORT:-}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &); \
+        ($env setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &); \
         for i in \$(seq 1 100); do sleep 0.15; \
             grep -q \"efs-fuse /tmp/efs-mount \" /proc/mounts || continue; \
             timeout 1 stat /tmp/efs-mount >/dev/null 2>&1 && exit 0; \
@@ -121,11 +131,13 @@ ensure_mounted() { # host
 # Do not use on a host that also runs efsd unless you intend to bounce FUSE only.
 remount_client() { # host
     local h=$1
+    local env
+    env=$(fuse_client_env)
     say "  $h: remount efs-fuse"
     ssh_to 15 "$h" "killall -9 efs-fuse 2>/dev/null || pkill -9 -x efs-fuse 2>/dev/null || true
         timeout 3 fusermount3 -uz /tmp/efs-mount 2>/dev/null || true
         cd /tmp/efs && mkdir -p /tmp/efs-mount && rm -f fuse.log
-        EFS_TRANSPORT='${EFS_TRANSPORT:-}' setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &
+        $env setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &
         for i in \$(seq 1 100); do
             sleep 0.15
             grep -q \"efs-fuse /tmp/efs-mount \" /proc/mounts || continue

@@ -37,6 +37,19 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+**POSIXSTRESS 9×4 HOT PATH SPLIT (Aug 31):** Fresh bits=3 TCP
+`results/posix/20260831-140025` + `EFS_RPC_PROF` (client checkout/send/recv/
+BUSY). 28/36 tsv (009/010 warmup lost). **99.3% of fails are `timeout after
+15s`** (3297/3320); fcstor012 nearly clean (196/0 … 199 pass). Servers idle
+(primary **1.9/24** cores, 103 `wait_woken`). `lock_all` hold 19 ms/run,
+`1_wait` 4.7 ms, `global_wait` 0.56 s primary / 2.5 s worst joiner — not
+15 s. Client (007, 15k RPCs): checkout 6 µs, send 5 µs, **recv 124 µs**
+(LOOKUP 81 µs, CREATE 37 µs, REPORT 3.1 ms). **99% of client RPC wall is
+`usleep(50ms<<n)` on BUSY** (245 s / 609 events). APPEND does not take
+that sleep. Joiner extras rebuild was **not** the storm (0/0/1/4
+`meta-rebuild`, 0 GC-race). Next is per-opcode BUSY, not more lock drops
+and not “the wire is slow.”
+
 **FLUSH SKIP-CLEAN + INCR SERIALIZE GATED (Aug 30/31):** Stopped O(table)
 encode+blake3 on clean CoW pages, then incremental serialize so a flush
 does not snapshot/pack every compact slot. Per-page dirty bits on
@@ -57,9 +70,44 @@ Gate: TCP posix `results/posix/20260830-174926` (fresh) and
 now 1.18×. Harness keeps RESULT on ecopy erc=2. Residual: ~81/134567
 files missing (26 class dirs short 1–5, CREATE EIO / ftruncate; joiner
 fcstor005 293 `meta-rebuild` / 52 `raced with GC` — same catchup family,
-not the flatten term). Next cap cut: re-measure RAM+unlink
-(`scale_grow.sh`), then raise `shard_bits` only after this. Do not
-schedule LINK/RENAME lock drops or H3 client RTT as the 2^32 cut.
+not the flatten term). Do not schedule LINK/RENAME lock drops or H3
+client RTT as the 2^32 cut.
+
+**SCALE_GROW REMEASURE (Aug 31, bits=3 TCP):** Harness now uses a unique
+ROOT name per client (`scale-<host>`) — shared `scale/<host>` raced
+hashed ROOT mkdir (ENOENT) and invented 80k/s / 400 B/inode fiction.
+Fail-closed on missing ERRORS / probe n=0. Primary SIGSEGV in
+`inode_ptr` during 9×16 CREATE: extras merge freed shard tabs under
+the global lock only, extra flush could lock shard 0 if `shard_id`
+was 0, catchup `adopt_tables` swapped inodes without shard locks.
+Unlink is **flat** (drop_chunks_scan fix holds): p50
+0.14 / 0.14 / 0.14 / 0.14 / 0.15 / **0.17 ms** at 100k→10M
+(Aug 28 was 0.44→4.6 ms). stat ~0.16 ms flat; readdir ~4.1 ms flat;
+create p50 0.19→0.30 ms. Creates/s 20k–50k then 25k at 5M / 15k at
+10M (`results/scale/20260831-bits3`). errors 0 through 2M; 46 / 176
+at 5M / 10M (0.0015–0.0035%, catchup; rebuilds 42→86, 0 primary
+death). RSS **1.7 KB/inode at 10M** (16280 MB / 10M; 2.1 KB at 5M vs
+Aug 28 1.56 KB — `flush_blob` cache). 2^32 × 1.7 KB ≈ **7.3 TB**
+aggregate still cannot sit in RAM on 4 nodes. Next: bits=5 trial.
+
+**BITS=5 TRIAL (Aug 31, mkfs shards=32, default back to 3):**
+Dedicated mkfs (`EFS_DEFAULT_SHARD_BITS=5` for that wipe only).
+TCP posix `results/posix/20260831-041839`: **196/201, 0 EFS bugs**.
+ecopy_rounds 9×2 `results/ecopy/20260831-bits5`: files/s
+**230.7 | 209.3 | 205.4 | 191.5 | 186.8 | 174.6** (peak-to-end 1.32×
+vs bits=3 1.18× — flatten term still gone, not the old 2.2×).
+Most ecopy rounds FAILED on 4–7 hosts (CREATE EIO). Joiner
+**fcstor005** 313 `meta-rebuild` / 62 `raced with GC` (fcstor004
+48/6; primary 0). Same extras catchup/GC family; 32 tables amplified
+host-level EIO. Do **not** jump to bits=12; cap extra-shard commit
+rate before that.
+`scale_grow` to 1M on that table (`results/scale/20260831-bits5`,
+leftover ecopy in RSS at 100k): errors=0; creates 9k then **40k / 50k**/s;
+unlink p50 **0.135 / 0.138 / 0.141 ms** (flat, same as bits=3);
+stat ~0.16 ms; readdir ~4.1 ms. Rebuild log **unchanged** (362) across
+the 1M grow — empty-create burst does not trip the ecopy extras storm.
+Incremental RSS ~1.4 KB/inode (3060−1820 MB over +900k files). Next on
+the cap track is Phase 4 (name out of inode), not H3 RTT.
 
 **POSIXSTRESS QUEUE CLASSIFIED H3 (Aug 30):** Extended `EFS_LOCK_PROF`
 (`1_wait_us`/`1_calls` on `server_shard_lock`, `global_wait_us`/

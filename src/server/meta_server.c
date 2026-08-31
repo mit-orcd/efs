@@ -1208,6 +1208,11 @@ struct extra_flush_job {
 static void *extra_flush_thread(void *arg)
 {
     struct extra_flush_job *j = arg;
+    /* rebuild_shards_lock keys the extra mutex off tab->shard_id. A zero
+     * shard_id would lock shard 0 and serialize the live extra table
+     * without excluding CREATE on this shard (inode_ptr UAF). */
+    if (j->tab && j->shard)
+        j->tab->shard_id = j->shard;
     j->rc = server_flush_fragmented_meta_locked(
         j->s, j->tab, efs_meta_shard_table_ino(j->shard), 0, j->shard, j->sc);
     return NULL;
@@ -2702,9 +2707,14 @@ int server_fetch_metadata_from(struct efsd_server *s, const char *host, uint16_t
                                              tmp.name[0] ? tmp.name
                                                          : "pending");
                 if (ex) {
+                    uint32_t fsc = 0;
+                    int feidx = rebuild_shards_lock(s, ex, EFS_META_TABLE_INO,
+                                                    &fsc);
                     efs_export_free(ex);
                     *ex = tmp;
                     memset(&tmp, 0, sizeof(tmp));
+                    rebuild_shards_unlock(s, feidx, ex, EFS_META_TABLE_INO,
+                                          fsc);
                     ex->meta_fragmented = 0;
                     server_save_export(s, ex);
                     one = 0;
@@ -2867,7 +2877,12 @@ static int catchup_install_newer_root(struct efsd_server *s, const void *payload
         int drc = efs_export_deserialize(&tmp, efsm, efsm_len);
         pthread_mutex_lock(&s->lock);
         if (drc == 0 && ex->root.generation == new_gen) {
+            uint32_t adopt_sc = 0;
+            int adopt_eidx = rebuild_shards_lock(s, ex, EFS_META_TABLE_INO,
+                                                 &adopt_sc);
             efs_export_adopt_tables(ex, &tmp);
+            rebuild_shards_unlock(s, adopt_eidx, ex, EFS_META_TABLE_INO,
+                                  adopt_sc);
             ex->meta_fragmented = 1;
             ex->meta_needs_rebuild = 0;
             free(ex->gm_blob);

@@ -7,7 +7,7 @@ are looking for -- a linear scan, a rehash, a table walk under a lock.
 
     scale_probe.py MNT TAG NFILES FANOUT [ITERS]
 
-NFILES/FANOUT describe the population that already exists under scale/TAG, so
+NFILES/FANOUT describe the population that already exists under scale-<TAG>, so
 the probe can address random existing paths without listing anything (a listing
 would itself be O(dir) and would pollute the measurement).
 """
@@ -38,7 +38,7 @@ def main():
     nfiles, fanout = int(sys.argv[3]), int(sys.argv[4])
     iters = int(sys.argv[5]) if len(sys.argv) > 5 else 200
 
-    root = os.path.join(mnt, "scale", tag)
+    root = os.path.join(mnt, "scale-" + tag)
     rnd = random.Random(1234)
 
     def existing():
