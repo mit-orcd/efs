@@ -650,6 +650,204 @@ static void rebuild_shards_unlock(struct efsd_server *s, int meidx,
         server_shard_unlock(s, (uint32_t)meidx, ex->shard_id);
 }
 
+/* Fetch and EC-decode ONE committed metadata page into `out`.
+ *
+ * Factored out of the whole-table rebuild so the on-demand slab fault can use
+ * the same path: this is what lets a trimmed inode slab live on NVMe instead
+ * of in a second full-table RAM copy.
+ *
+ * Returns EFS_OK on decode; EFS_ERR_PROTO when a CoW page is unrecoverable
+ * (a catchup-vs-GC race, so the caller must re-poll the newest root rather
+ * than zero-fill); EFS_ERR_NOT_FOUND when no candidate ci yields two
+ * checksum-matching fragments. `fragments` is a caller-owned scratch buffer
+ * of EFS_NUM_FRAGMENTS x EFS_META_FRAGMENT_SIZE so a page loop can reuse one
+ * allocation. */
+static int server_fetch_meta_page(struct efsd_server *s, struct efs_export *ex,
+                                  efs_ino_t table_ino,
+                                  const struct efs_export_root *root,
+                                  uint64_t start_gen, uint32_t pi,
+                                  uint8_t *fragments[EFS_NUM_FRAGMENTS],
+                                  uint8_t out[EFS_META_PAGE_SIZE],
+                                  int *saw_v4_ci, int *saw_v5_ci)
+{
+    /* Advertised layout, then the other v4<->v5 window, then legacy pi.
+     * A save used to rewrite v4 roots as v5 without moving pages.
+     * Also try the previous generation's dual-slot: the flush PUTs only
+     * dirty pages, so pages clean at start_gen still live at gen-1 (or
+     * older, same parity) slots while the flipped EFSR matches their
+     * content. The client read path already does this; the rebuild
+     * wedged on restarts without it. */
+    uint32_t try_ci[6];
+    int ntry;
+    int decoded = 0;
+
+    if (efs_export_root_is_cow(root)) {
+        /* CoW (EFSR v7): the root carries each page's exact chunk_index.
+         * Read it directly — no dual-slot / v4-window candidate search.
+         * An interrupted flush never overwrote this ci (the flush writes
+         * dirty pages to fresh cis and only then flips the root), so the
+         * fragments here always match the committed checksums. */
+        try_ci[0] = root->page_cis[pi];
+        ntry = 1;
+    } else {
+        ntry = efs_meta_page_ci_candidates(start_gen, root->version,
+                                           root->ino_page_count,
+                                           root->chunk_page_count, pi, try_ci);
+        if (start_gen > 0) {
+            uint32_t alt[3];
+            int na = efs_meta_page_ci_candidates(start_gen - 1, root->version,
+                                                 root->ino_page_count,
+                                                 root->chunk_page_count, pi,
+                                                 alt);
+            for (int i = 0; i < na; i++) {
+                int seen = 0;
+                for (int j = 0; j < ntry; j++)
+                    if (try_ci[j] == alt[i])
+                        seen = 1;
+                if (!seen && ntry < 6)
+                    try_ci[ntry++] = alt[i];
+            }
+        }
+    }
+
+    for (int ti = 0; ti < ntry && !decoded; ti++) {
+        uint32_t ci = try_ci[ti];
+        uint32_t ci_layout = efs_meta_page_ci_layout(
+            start_gen, root->ino_page_count, root->chunk_page_count, pi, ci);
+        const char *ci_scheme =
+            ci_layout == 5 ? "v5" : (ci_layout == 4 ? "v4" : "legacy");
+        efs_node_id_t placed[EFS_NUM_FRAGMENTS];
+        pthread_mutex_lock(&s->lock);
+        efs_place_fragments(s->nodes, s->node_count, table_ino, ci, placed);
+        efs_node_id_t self = s->id;
+        pthread_mutex_unlock(&s->lock);
+
+        int have[EFS_NUM_FRAGMENTS] = {0};
+
+        for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+            int frc = fetch_meta_fragment(s, ex, table_ino, placed[fi], ci,
+                                          (uint32_t)fi, fragments[fi]);
+            if (frc == EFS_OK) {
+                uint8_t sum[EFS_HASH_SIZE];
+                efs_hash(fragments[fi], EFS_META_FRAGMENT_SIZE, sum);
+                if (memcmp(sum, efs_export_root_checksum_const(root, pi, fi),
+                           EFS_HASH_SIZE) == 0)
+                    have[fi] = 1;
+                else
+                    fprintf(stderr,
+                            "meta-rebuild: page %u frag %u checksum mismatch "
+                            "(node %u ci=%u scheme=%s)\n",
+                            pi, fi, placed[fi], ci, ci_scheme);
+            } else {
+                fprintf(stderr,
+                        "meta-rebuild: page %u frag %u fetch failed rc=%d "
+                        "(node %u export=%u ci=%u)\n",
+                        pi, fi, frc, placed[fi], ex->id, ci);
+            }
+        }
+
+        int missing = -1, a = -1, b = -1;
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            if (!have[i]) {
+                if (missing < 0)
+                    missing = i;
+            } else if (a < 0) {
+                a = i;
+            } else if (b < 0) {
+                b = i;
+            }
+        }
+        if (missing < 0) {
+            for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+                if (i != a && i != b) {
+                    missing = i;
+                    break;
+                }
+            }
+        }
+        if (a >= 0 && b >= 0 && missing >= 0 &&
+            efs_decode_chunk(fragments, EFS_META_PAGE_SIZE, a, b, missing, out,
+                             EFS_META_PAGE_SIZE) == 0) {
+            decoded = 1;
+            if (ci_layout == 4 && saw_v4_ci)
+                *saw_v4_ci = 1;
+            else if (ci_layout == 5 && saw_v5_ci)
+                *saw_v5_ci = 1;
+            if (ci_layout != 0 && ci_layout != (root->version >= 5 ? 5u : 4u))
+                fprintf(stderr,
+                        "meta-rebuild: page %u loaded via v%u "
+                        "chunk_index (root claimed v%u gen=%llu)\n",
+                        pi, ci_layout, root->version,
+                        (unsigned long long)start_gen);
+
+            /* Server-side heal, not client-triggered: rewrite every
+             * missing/corrupt fragment of this page. Self-owned frags are
+             * written locally; peer-owned holes are pushed by the single
+             * heal coordinator (lowest live node id) so concurrent
+             * rebuilds on all servers don't duplicate the same PUTs. */
+            int coord = -1; /* computed lazily */
+            int need_heal = 0;
+            for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+                if (!have[fi]) {
+                    need_heal = 1;
+                    break;
+                }
+            }
+            if (need_heal && efs_encode_chunk(out, EFS_META_PAGE_SIZE,
+                                              EFS_META_PAGE_SIZE,
+                                              fragments) == 0) {
+                for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+                    if (have[fi])
+                        continue;
+                    if (placed[fi] != self) {
+                        if (coord < 0)
+                            coord = server_is_meta_heal_coordinator(s);
+                        if (!coord)
+                            continue;
+                    }
+                    const uint8_t *csum =
+                        efs_export_root_checksum_const(root, pi, fi);
+                    int hrc = put_meta_fragment(s, ex, table_ino, placed[fi],
+                                                ci, (uint32_t)fi, fragments[fi],
+                                                csum);
+                    if (hrc == EFS_OK)
+                        fprintf(stderr,
+                                "meta-heal: export=%s page=%u fi=%u ci=%u "
+                                "node=%u\n",
+                                ex->name, pi, fi, ci, placed[fi]);
+                    else
+                        fprintf(stderr,
+                                "meta-heal: failed export=%s page=%u fi=%u "
+                                "ci=%u node=%u rc=%d\n",
+                                ex->name, pi, fi, ci, placed[fi], hrc);
+                }
+            }
+        } else if (ti + 1 >= ntry) {
+            fprintf(stderr,
+                    "meta-rebuild: decode failed page %u have=%d%d%d "
+                    "nodes=%u,%u,%u node_count=%u ci=%u\n",
+                    pi, have[0], have[1], have[2], placed[0], placed[1],
+                    placed[2], s->node_count, ci);
+        }
+    }
+    if (decoded)
+        return EFS_OK;
+    /* CoW (EFSR v7): an unrecoverable page is a catchup-vs-GC race, not
+     * genuine loss — with the cluster up, all of a CoW page's fragments
+     * exist unless a peer committed a newer root and its GC reclaimed this
+     * generation's dead cis (2+1 EC tolerates one fragment loss, so genuine
+     * loss needs 2+ nodes down). Zero-fill would corrupt the table (garbage
+     * next_ino, rebuild loop), so tell the caller to re-poll. */
+    if (efs_export_root_is_cow(root)) {
+        fprintf(stderr,
+                "meta-rebuild: page %u unrecoverable (CoW ci=%u); "
+                "gen %llu raced with GC, re-polling (not zero-fill)\n",
+                pi, try_ci[0], (unsigned long long)start_gen);
+        return EFS_ERR_PROTO;
+    }
+    return EFS_ERR_NOT_FOUND;
+}
+
 static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
                                                 struct efs_export *ex,
                                                 efs_ino_t table_ino)
@@ -779,205 +977,32 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
         if (cached)
             continue;
 
-        /* Advertised layout, then the other v4↔v5 window, then legacy pi.
-         * A save used to rewrite v4 roots as v5 without moving pages.
-         * Also try the previous generation's dual-slot: the flush PUTs only
-         * dirty pages, so pages clean at start_gen still live at gen-1 (or
-         * older, same parity) slots while the flipped EFSR matches their
-         * content. The client read path already does this; the rebuild
-         * wedged on restarts without it. */
-        uint32_t try_ci[6];
-        int ntry;
-        if (efs_export_root_is_cow(root)) {
-            /* CoW (EFSR v7): the root carries each page's exact chunk_index.
-             * Read it directly — no dual-slot / v4-window candidate search.
-             * An interrupted flush never overwrote this ci (the flush writes
-             * dirty pages to fresh cis and only then flips the root), so the
-             * fragments here always match the committed checksums. */
-            try_ci[0] = root->page_cis[pi];
-            ntry = 1;
-        } else {
-            ntry = efs_meta_page_ci_candidates(start_gen, root->version,
-                                               root->ino_page_count,
-                                               root->chunk_page_count, pi,
-                                               try_ci);
-            if (start_gen > 0) {
-                uint32_t alt[3];
-                int na = efs_meta_page_ci_candidates(start_gen - 1,
-                                                     root->version,
-                                                     root->ino_page_count,
-                                                     root->chunk_page_count,
-                                                     pi, alt);
-                for (int i = 0; i < na; i++) {
-                    int seen = 0;
-                    for (int j = 0; j < ntry; j++)
-                        if (try_ci[j] == alt[i])
-                            seen = 1;
-                    if (!seen && ntry < 6)
-                        try_ci[ntry++] = alt[i];
-                }
-            }
-        }
-
-        int decoded = 0;
-        for (int ti = 0; ti < ntry && !decoded; ti++) {
-            uint32_t ci = try_ci[ti];
-            uint32_t ci_layout = efs_meta_page_ci_layout(
-                start_gen, root->ino_page_count, root->chunk_page_count, pi,
-                ci);
-            const char *ci_scheme = ci_layout == 5
-                                        ? "v5"
-                                        : (ci_layout == 4 ? "v4" : "legacy");
-            efs_node_id_t placed[EFS_NUM_FRAGMENTS];
-            pthread_mutex_lock(&s->lock);
-            efs_place_fragments(s->nodes, s->node_count, table_ino, ci,
-                                placed);
-            efs_node_id_t self = s->id;
-            pthread_mutex_unlock(&s->lock);
-
-            int have[EFS_NUM_FRAGMENTS] = {0};
-
-            for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
-                int frc = fetch_meta_fragment(s, ex, table_ino,
-                                              placed[fi], ci, (uint32_t)fi,
-                                              fragments[fi]);
-                if (frc == EFS_OK) {
-                    uint8_t sum[EFS_HASH_SIZE];
-                    efs_hash(fragments[fi], EFS_META_FRAGMENT_SIZE, sum);
-                    if (memcmp(sum, efs_export_root_checksum_const(root, pi, fi),
-                               EFS_HASH_SIZE) == 0)
-                        have[fi] = 1;
-                    else
-                        fprintf(stderr,
-                                "meta-rebuild: page %u frag %u checksum mismatch "
-                                "(node %u ci=%u scheme=%s)\n",
-                                pi, fi, placed[fi], ci, ci_scheme);
-                } else {
-                    fprintf(stderr,
-                            "meta-rebuild: page %u frag %u fetch failed rc=%d "
-                            "(node %u export=%u ci=%u)\n",
-                            pi, fi, frc, placed[fi], ex->id, ci);
-                }
-            }
-
-            int missing = -1, a = -1, b = -1;
-            for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-                if (!have[i]) {
-                    if (missing < 0)
-                        missing = i;
-                } else if (a < 0) {
-                    a = i;
-                } else if (b < 0) {
-                    b = i;
-                }
-            }
-            if (missing < 0) {
-                for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-                    if (i != a && i != b) {
-                        missing = i;
-                        break;
-                    }
-                }
-            }
-            if (a >= 0 && b >= 0 && missing >= 0 &&
-                efs_decode_chunk(fragments, EFS_META_PAGE_SIZE, a, b, missing,
-                                 pages[pi], EFS_META_PAGE_SIZE) == 0) {
-                decoded = 1;
-                if (ci_layout == 4)
-                    saw_v4_ci = 1;
-                else if (ci_layout == 5)
-                    saw_v5_ci = 1;
-                if (ci_layout != 0 &&
-                    ci_layout != (root->version >= 5 ? 5u : 4u))
-                    fprintf(stderr,
-                            "meta-rebuild: page %u loaded via v%u "
-                            "chunk_index (root claimed v%u gen=%llu)\n",
-                            pi, ci_layout, root->version,
-                            (unsigned long long)start_gen);
-
-                /* Server-side heal, not client-triggered: rewrite every
-                 * missing/corrupt fragment of this page. Self-owned frags are
-                 * written locally; peer-owned holes are pushed by the single
-                 * heal coordinator (lowest live node id) so concurrent
-                 * rebuilds on all servers don't duplicate the same PUTs. */
-                int coord = -1; /* computed lazily */
-                int need_heal = 0;
-                for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
-                    if (!have[fi]) {
-                        need_heal = 1;
-                        break;
-                    }
-                }
-                if (need_heal &&
-                    efs_encode_chunk(pages[pi], EFS_META_PAGE_SIZE,
-                                     EFS_META_PAGE_SIZE, fragments) == 0) {
-                    for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
-                        if (have[fi])
-                            continue;
-                        if (placed[fi] != self) {
-                            if (coord < 0)
-                                coord = server_is_meta_heal_coordinator(s);
-                            if (!coord)
-                                continue;
-                        }
-                        const uint8_t *csum =
-                            efs_export_root_checksum_const(root, pi, fi);
-                        int hrc = put_meta_fragment(s, ex, table_ino,
-                                                    placed[fi], ci, (uint32_t)fi,
-                                                    fragments[fi], csum);
-                        if (hrc == EFS_OK)
-                            fprintf(stderr,
-                                    "meta-heal: export=%s page=%u fi=%u ci=%u "
-                                    "node=%u\n",
-                                    ex->name, pi, fi, ci, placed[fi]);
-                        else
-                            fprintf(stderr,
-                                    "meta-heal: failed export=%s page=%u fi=%u "
-                                    "ci=%u node=%u rc=%d\n",
-                                    ex->name, pi, fi, ci, placed[fi], hrc);
-                    }
-                }
-            } else if (ti + 1 >= ntry) {
-                fprintf(stderr,
-                        "meta-rebuild: decode failed page %u have=%d%d%d "
-                        "nodes=%u,%u,%u node_count=%u ci=%u\n",
-                        pi, have[0], have[1], have[2], placed[0], placed[1],
-                        placed[2], s->node_count, ci);
-            }
-        }
-        if (!decoded) {
-            /* CoW (EFSR v7): an unrecoverable page is a catchup-vs-GC race,
-             * not genuine loss — with the cluster up, all of a CoW page's
-             * fragments exist unless a peer committed a newer root and its GC
-             * reclaimed this generation's dead cis (2+1 EC tolerates one
-             * fragment loss, so genuine loss needs 2+ nodes down). Zero-fill
-             * would corrupt the table (garbage next_ino, rebuild loop). Bail
-             * out as PROTO so the catchup re-polls the newest root (whose cis
-             * are live) and retries. */
-            if (efs_export_root_is_cow(root)) {
-                fprintf(stderr,
-                        "meta-rebuild: page %u unrecoverable (CoW ci=%u); "
-                        "gen %llu raced with GC, re-polling (not zero-fill)\n",
-                        pi, try_ci[0], (unsigned long long)start_gen);
+        {
+            int prc = server_fetch_meta_page(s, ex, table_ino, root, start_gen,
+                                             pi, fragments, pages[pi],
+                                             &saw_v4_ci, &saw_v5_ci);
+            if (prc == EFS_ERR_PROTO) {
                 free(frag_buf);
                 free(pages);
                 efs_export_root_free(&snap);
                 heal_prog_end(s);
                 return EFS_ERR_PROTO;
             }
-            /* Hopeless page (no candidate CI yields 2 checksum-matching
-             * fragments): zero-fill and keep rebuilding the rest. Aborting
-             * the whole rebuild here fenced the export's tables forever and
-             * re-ran the same doomed O(pages) pass on every trigger — the
-             * meta-rebuild livelock. The hole is bounded to this page; a
-             * later client flush that still has the real content re-publishes
-             * the page and overwrites the zeros. */
-            memset(pages[pi], 0, EFS_META_PAGE_SIZE);
-            holed++;
-            fprintf(stderr,
-                    "meta-rebuild: page %u unrecoverable across all nodes; "
-                    "zero-filled (gen=%llu)\n",
-                    pi, (unsigned long long)start_gen);
+            if (prc != EFS_OK) {
+                /* Hopeless page (no candidate CI yields 2 checksum-matching
+                 * fragments): zero-fill and keep rebuilding the rest.
+                 * Aborting the whole rebuild here fenced the export's tables
+                 * forever and re-ran the same doomed O(pages) pass on every
+                 * trigger — the meta-rebuild livelock. The hole is bounded to
+                 * this page; a later client flush that still has the real
+                 * content re-publishes the page and overwrites the zeros. */
+                memset(pages[pi], 0, EFS_META_PAGE_SIZE);
+                holed++;
+                fprintf(stderr,
+                        "meta-rebuild: page %u unrecoverable across all nodes; "
+                        "zero-filled (gen=%llu)\n",
+                        pi, (unsigned long long)start_gen);
+            }
         }
     }
     free(frag_buf);
