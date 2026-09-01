@@ -24,10 +24,14 @@ next** below, alongside two Aug 24 workstreams: the **metadata op storm**
 **All data traffic goes via RDMA** (client + server↔server chunk/fragment
 payloads; auto first-inode hang **closed Aug 30** — see below).
 
-**Status at a glance (Aug 30):** Phase 1 **shipped**; Phase 2 **shipped**
+**Status at a glance (Sep 1):** Phase 1 **shipped**; Phase 2 **shipped**
 (server sole metadata writer, 2PC root commit Aug 26); Phase 3 **done**
 (bits=3 is the live default); Phase 3b Items 0–2 **done**, Item 3 optional;
-Phase 4 **not started**. Per-op drop of `g_server->lock` for hot inode RPCs
+Phase 4 **not started**. **The next work is [Phase M](#phase-m--carve-the-monolith-first-the-dev-cycle-lever)
+— carve the monolith into `raft/ kv/ meta/ wire/ data/ client/` behind
+interfaces.** It is the dev-cycle lever and the hard prerequisite for the
+architecture migration's simulator step; everything else forward-looking
+queues behind it. Per-op drop of `g_server->lock` for hot inode RPCs
 **gated** (LINK/RENAME/HOLD still `lock_all`; `EFS_LOCK_PROF` shows they
 are not the 9×4 ceiling). 9×4 posixstress is still ~95% `timeout after
 15s`; LOCK-PROF split (`20260830-160943`) is **H3 client/wire RTT** —
@@ -87,6 +91,70 @@ raise the cap. Phases 2–4 do.
   (`src/server/handler.c`).
 - **Stub**: `efs_client_load_shard` returns `EFS_ERR_NOT_FOUND` for shard > 0
   (`src/client/inode_rpc.c`) — multi-shard is not wired up.
+
+---
+
+## Phase M — carve the monolith FIRST (the dev-cycle lever)
+
+**This is the next work, ahead of every other forward-looking item in this
+document.** The architecture migration ([architecture.md](architecture.md)
+§10) lands the simulator, the ordered KV, and Raft as new components. They
+must be **born modular** ([architecture.md](architecture.md) §5.13). But the
+carve-up is also the dev-cycle lever in its own right: it is
+**behavior-preserving refactor, gated by the existing suites**, and it pays
+off on the *current* code before a single Raft line is written.
+
+**Why first.** Dev-cycle time is the project's bottleneck, and four files
+hold ~45% of the 36.5k-line tree — `metadata.c` (6042 lines), `efs_fuse.c`
+(3720), `meta_server.c` (3654), `handler.c` (3648). Every change today loads
+a whole 3–6k-line file into context and every test links the world. Worse,
+migration step 1 (the simulator) *requires* a pure state machine behind
+transport/storage interfaces — which is exactly what this phase extracts.
+Doing Raft first inside the monolith would only create the next 6000-line
+file. The carve-up needs no new design and no new test infrastructure, so it
+is the only forward work that is both immediately useful and a hard
+prerequisite for everything after it.
+
+**Target boundaries** (architecture.md §5.13): `raft/ kv/ meta/ wire/ data/
+client/`. Depend on interface **headers**, never another module's `.c`. State
+machines are pure: no globals, no inline I/O — all I/O behind the
+transport/storage interfaces.
+
+**Steps — each behavior-preserving, each gated, in order:**
+
+1. **`wire/` — the protocol boundary.** `protocol.c/.h` become a clean module:
+   versioned encode/decode only, no logic. Unit test: pack/unpack round-trips
+   for every message type, in isolation. Small, safe, immediate.
+2. **`data/` + the two interfaces.** EC encode/decode and the RDMA/TCP
+   transport go behind a `transport` interface; chunk storage behind a
+   `store` interface. These are the **same two interfaces** the simulator
+   implements with a message queue + fault-injecting in-memory disk — so this
+   step is literally migration step 1's prerequisite.
+3. **`meta/` — the pure state machine.** Split `metadata.c`: table ops
+   (create/unlink/setattr/rename/link over an abstracted store) into `meta/`,
+   pure (no sockets, no FUSE, no global locks it does not own); persistence
+   (serialize/flush/pages) moves behind the `kv/` interface seam. Unit tests
+   then drive table ops directly, in milliseconds, no cluster.
+4. **`server/` — thin dispatch.** `handler.c` becomes opcode → `meta/` call →
+   reply; `meta_server.c`'s flush/rebuild/catchup becomes a driver behind the
+   `kv/` interface. No handler reaches into `meta/` internals.
+5. **`client/` — thin adapter.** `efs_fuse.c` translates FUSE ops to
+   meta/data calls only; path resolution and the dcache stay behind client
+   interfaces.
+
+**Rules while carving:** no behavior change within a step; no new features
+mixed in; a file that crosses ~1000 lines splits by responsibility; every
+step keeps `make test` + solo posix green on the live cluster.
+
+**Gates (per step):** `make test`; solo posix at the 196/201-class (0 EFS
+bugs); the valgrind leak gate for anything touching ownership. **No cluster
+wipe needed** — these are refactors on the live table.
+
+**Milestone:** each module builds and unit-tests in isolation in ms; a change
+to one module rebuilds only its dependents; the same compiled `meta/` state
+machine links into both `efsd` and a simulator harness stub. Only then does
+migration step 1 (the simulator) start — against interfaces that already
+exist.
 
 ---
 

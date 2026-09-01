@@ -200,6 +200,20 @@ init → mount → done; no MDS tier, no special node types). **NAMING WARNING:*
 "extremfs" collides with XtreemFS (trademark, Quobyte) and "EFS" = Amazon EFS
 — pick a distinctive, searchable public name later; "efs" is a working name
 only. Do a trademark/search check before any public naming.
+**MODULARITY IS AN ARCHITECTURAL CONSTRAINT (Sep 1, user-directed) — and the
+roadmap does it FIRST.** `docs/architecture.md` §5.13: a module must be
+understandable/changeable/testable from its own source + interface header
+alone; no file over ~1000 lines; state machines pure (no globals, I/O behind
+transport/storage interfaces — the SAME property that lets the simulator
+reuse the compiled SM). Honest current state: 4 files hold ~45% of the
+36.5k-line tree (`metadata.c` 6042, `efs_fuse.c` 3720, `meta_server.c` 3654,
+`handler.c` 3648). **Roadmap "Phase M — carve the monolith FIRST"** (added to
+`docs/scaling-roadmap.md`, ahead of all other forward work): carve into
+`raft/ kv/ meta/ wire/ data/ client/` as behavior-preserving refactor gated by
+EXISTING suites (make test + solo posix, no wipe). It is both the dev-cycle
+lever AND the hard prerequisite for migration step 1 (the simulator can only
+reuse a state machine that is already pure). Do NOT build Raft/KV/txns as new
+monolith code — every new component lands inside the carved boundaries.
 Read `docs/architecture.md` before any metadata work. The scaling roadmap is
 now the increment plan toward that spec, not the spec itself.
 

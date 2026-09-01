@@ -888,6 +888,16 @@ stays runnable. **Do not** go straight `KV → Raft → done`.
     are demonstrably correct.
 ```
 
+**Step 1 has a hard prerequisite: the carve-up.** A pure state machine behind
+transport/storage interfaces does not exist today — four files hold ~45% of
+the tree and the state machine is fused with its I/O. So the *concrete* first
+move is **Phase M** in the roadmap: carve the monolith into `raft/ kv/ meta/
+wire/ data/ client/` behind interfaces (§5.13), as behavior-preserving
+refactor gated by the existing suites. It is the dev-cycle lever in its own
+right *and* the thing that makes step 1 possible — the simulator can only
+reuse a state machine that is already pure. Build nothing in steps 2–11 as
+new monolith code; every new component lands inside the carved boundaries.
+
 The detailed, gated steps live in the [scaling roadmap](scaling-roadmap.md);
 this document is the invariant they are measured against.
 

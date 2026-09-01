@@ -683,7 +683,8 @@ This is the honest distance between the spec and the code.</p>
 <table>
   <tr><th>#</th><th>Step</th><th>Status</th></tr>
   <tr><td>0</td><td>Freeze the placement model (shard fns, ino IDs + generations)</td><td><span class="chip cB">DONE</span> this spec, Sep 1</td></tr>
-  <tr><td>1</td><td>Simulator interfaces + the <i>current</i> state machine</td><td><span class="chip cM">MISSING</span></td></tr>
+  <tr><td>M</td><td><b>Carve the monolith into <code>raft/ kv/ meta/ wire/ data/ client/</code> behind interfaces</b> — the dev-cycle lever; behavior-preserving, gated by existing suites. Hard prerequisite for step 1.</td><td><span class="chip cP">PARTIAL</span> dirs exist · 4 files = 45% of code</td></tr>
+  <tr><td>1</td><td>Simulator interfaces + the <i>current</i> state machine</td><td><span class="chip cM">MISSING</span> blocked on Phase M</td></tr>
   <tr><td>2</td><td>RPC operation IDs + idempotency model</td><td><span class="chip cM">MISSING</span></td></tr>
   <tr><td>3</td><td>Ordered KV applied state (atomic batches)</td><td><span class="chip cM">MISSING</span></td></tr>
   <tr><td>4</td><td>Single-shard Raft (elect · replicate · apply · ReadIndex · snapshots)</td><td><span class="chip cM">MISSING</span></td></tr>
@@ -703,12 +704,19 @@ flush, parallel across leaders, or provable under failure. That is exactly why t
 and single-shard Raft (step 4) come first — everything else hangs off them.</div>
 
 <h2>9 · Migration — gated, never a big bang</h2>
+<p><b>Step 1 has a hard prerequisite: the carve-up (Phase M).</b> A pure state machine behind
+transport/storage interfaces does not exist today — four files hold ~45% of the tree and the state
+machine is fused with its I/O. The simulator can only reuse a state machine that is already pure, so
+the concrete first move is carving the monolith into modules — behavior-preserving, gated by the
+existing suites, and the dev-cycle lever in its own right. Nothing in steps 2–11 is built as new
+monolith code; every new component lands inside the carved boundaries.</p>
 <div class="flow">
-<svg viewBox="0 0 920 170" width="920" height="170">
-  <text class="lbl" x="20" y="22">DO NOT GO STRAIGHT KV → RAFT → DONE</text>
+<svg viewBox="0 0 920 210" width="920" height="210">
+  <text class="lbl" x="20" y="22">PHASE M FIRST — THEN THE MIGRATION STEPS</text>
   <g>
   <rect class="box"      x="20"  y="40" width="200" height="44" rx="8"/><text class="boxT" x="120" y="58" text-anchor="middle">0 · freeze placement</text><text class="boxS" x="120" y="74" text-anchor="middle">shard fns · ino IDs+gen</text>
-  <rect class="box good" x="20"  y="100" width="200" height="44" rx="8"/><text class="boxT" x="120" y="118" text-anchor="middle">1 · simulator</text><text class="boxS" x="120" y="134" text-anchor="middle">vs current code</text>
+  <rect class="box" style="stroke:#d29922;stroke-width:2" x="20"  y="100" width="200" height="44" rx="8"/><text class="boxT" x="120" y="118" text-anchor="middle">M · carve the monolith</text><text class="boxS" x="120" y="134" text-anchor="middle">raft/kv/meta/wire/data/client</text>
+  <rect class="box good" x="20"  y="156" width="200" height="44" rx="8"/><text class="boxT" x="120" y="174" text-anchor="middle">1 · simulator</text><text class="boxS" x="120" y="190" text-anchor="middle">reuses the pure meta/ SM</text>
   <rect class="box" x="240" y="40" width="200" height="44" rx="8"/><text class="boxT" x="340" y="58" text-anchor="middle">2 · op IDs + idempotency</text><text class="boxS" x="340" y="74" text-anchor="middle">exactly-once retries</text>
   <rect class="box" x="240" y="100" width="200" height="44" rx="8"/><text class="boxT" x="340" y="118" text-anchor="middle">3 · ordered KV</text><text class="boxS" x="340" y="134" text-anchor="middle">RAM → cache</text>
   <rect class="box" x="460" y="40" width="200" height="44" rx="8"/><text class="boxT" x="560" y="58" text-anchor="middle">4 · single-shard Raft</text><text class="boxS" x="560" y="74" text-anchor="middle">elect·repl·apply·ReadIndex</text>
@@ -716,11 +724,12 @@ and single-shard Raft (step 4) come first — everything else hangs off them.</d
   <rect class="box" x="680" y="40" width="220" height="44" rx="8"/><text class="boxT" x="790" y="58" text-anchor="middle">6 · safe reconfiguration</text><text class="boxS" x="790" y="74" text-anchor="middle">joint consensus</text>
   <rect class="box" x="680" y="100" width="220" height="44" rx="8"/><text class="boxT" x="790" y="118" text-anchor="middle">7 · cross-shard txns</text><text class="boxS" x="790" y="134" text-anchor="middle">Raft-backed 2PC</text>
   </g>
-  <text class="lbl" x="240" y="162">… 8 open-unlinked lifecycle · 9 data-gen publication/fencing · 10 delete snapshot/2PC · 11 FUSE cache opts last</text>
+  <path class="arrow" d="M120,84 V100"/><path class="arrowG" d="M120,144 V156"/>
+  <text class="lbl" x="240" y="196">… 8 open-unlinked lifecycle · 9 data-gen publication/fencing · 10 delete snapshot/2PC · 11 FUSE cache opts last</text>
 </svg>
 </div>
-<p class="note">The simulator comes first because it pays for itself against the <i>current</i> code
-and becomes the regression gate for every step after. Each step is gated; the system stays runnable
+<p class="note">Phase M comes first because it is both the dev-cycle lever and the only way the
+simulator (step 1) can reuse the real state machine. Each step is gated; the system stays runnable
 throughout. Detailed steps live in the <a href="scaling-roadmap.md">scaling roadmap</a>.</p>
 
 <!-- ============ REJECTED ============ -->
