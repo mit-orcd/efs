@@ -1,0 +1,22 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 190
+  EFS BUGS         : 6  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  concurrent_appends_two_proc      [FAIL] append child rc=1
+  dir_many_files                   [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor012-1-1peynl50/dir_many_files/f0022'
+  dir_move_into_subdir             [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor012-1-1peynl50/dir_move_into_subdir/a/f'
+  dir_readdir_listing              [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor012-1-1peynl50/dir_readdir_listing/f20'
+  flock_two_proc_exclusive         [FAIL] parent got LOCK_EX|NB while child held LOCK_EX
+  symlink_to_dir                   [FAIL] FileExistsError: [Errno 17] File exists: 'realdir' -> '/tmp/efs-mount/posix-fcstor012-1-1peynl50/symlink_to_dir/dirlink'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

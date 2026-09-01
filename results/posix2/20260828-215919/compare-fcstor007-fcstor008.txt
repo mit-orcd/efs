@@ -1,0 +1,17 @@
+================================================================
+POSIX baseline comparison: 63 tests
+  both pass        : 57
+  EFS BUGS         : 5  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 1
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  peer_concurrent_append           [FAIL] OSError: [Errno 5] Input/output error
+  peer_fcntl_range_conflict        [FAIL] B acquired overlapping lockf
+  peer_mkdir_then_create           [FAIL] nested: got b'\x00\x00\x00\x00\x00\x00', want b'nested'
+  peer_rename_across_dirs_chase    [FAIL] x at ['d2/x', 'd3/x'] (want exactly one)
+  peer_symlink_visible             [FAIL] B readlink: got '', want 't'
+
+--- target passes where baseline fails ---
+  peer_fcntl_range_adjacent       

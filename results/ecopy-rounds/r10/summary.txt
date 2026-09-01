@@ -1,0 +1,11 @@
+Round 10 (piggyback utimens on REPORT; skip SETATTR while dirty)
+
+Limiter after r9: ~1 SETATTR/create (futimens). A dirty inode now stamps
+times locally and sets EFS_INO_REC_F_TIMES on the close REPORT so the
+server applies older source mtimes and still grows size. Clean-inode
+utimens still RPCs (posix2).
+
+Fair 60s ecopy dest=r6fresh, FUSE_OK, ERR=0:
+  r9:  create=12715 ≈ 212/s  setattr~1/create
+  r10: create=14010 ≈ 233/s  setattr=730 (~0.05/create)
+  spread 3847/3920/4337/1906 on the 4 servers. gens 60×4.

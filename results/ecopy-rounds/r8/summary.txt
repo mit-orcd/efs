@@ -1,0 +1,15 @@
+Round 8 (skip no-op chmod/chown; do not drain REPORT before utimens)
+
+Limiter after r7: dest setattr=21996 vs create=7357 (~3/file). Two were
+no-op chmod/chown (create already had the mode/owner). The remaining
+utimens SETATTR also called report_dirty(sync=1) — a full metadata commit
+per file before the times RPC.
+
+Fair 60s ecopy dest=r6fresh, FUSE_OK:
+  r7: FILES=7260 ≈ 121 files/s. setattr=21996 report=6082
+  r8: create=231036 in 60s ≈ 3850 files/s. setattr=231445 (~1/create)
+      report=123154 getattr=0 lookup=271191. gens 4×4. 0 ino_dup.
+  os.walk of the dest hung (readdir of the grown tree); top-level ls
+  shows the synt-small names. Server CREATE count is the rate.
+
+The drain was the ceiling, not the shard lock.

@@ -1,0 +1,27 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 187
+  EFS BUGS         : 9  (baseline PASS, target FAIL)
+  both fail (match): 1
+  target better    : 4
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  concurrent_create_unlink_two_proc [FAIL] create/unlink child rc=1: Traceback (most recent call last):   File "<string>", line 7, in <module> OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-70mjf5a5/concurrent_create_unlink_two_proc/c0-16' 
+  dir_deep_nesting                 [FAIL] OSError: [Errno 39] Directory not empty: 'd54'
+  dir_move_into_subdir             [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs-mount/posix-fcstor007-70mjf5a5/dir_move_into_subdir/a/f' -> '/tmp/efs-mount/posix-fcstor007-70mjf5a5/dir_move_into_subdir/b/f'
+  dir_rename_dir_over_nonempty     [FAIL] expected errno (39, 17) but call succeeded
+  err_rmdir_nonempty               [FAIL] expected errno (39,) but call succeeded
+  flock_two_proc_exclusive         [FAIL] parent got LOCK_EX|NB while child held LOCK_EX
+  last_link_unlink_other_dir       [FAIL] survived first-name unlink: got b'', want b'keep'
+  mkdirat_unlinkat                 [FAIL] expected errno (39,) but call succeeded
+  trunc_zero_then_high_pwrite      [FAIL] no stale prefix: got b'OLDPREFIX', want b'\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_stats_readable             
+
+--- both fail (behaviour matches baseline) ---
+  virt_find_query                  base=SKIP target=FAIL

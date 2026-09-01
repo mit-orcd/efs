@@ -1,0 +1,12 @@
+  ... 2000 in 5s (400/s)
+  ... 12000 in 10s (1199/s)
+  ... 24000 in 15s (1598/s)
+  ... 44000 in 20s (2198/s)
+  ... 59889 in 25s (2393/s)
+  ... 75778 in 30s (2523/s)
+  ... 94500 in 35s (2697/s)
+  ... 105223 in 40s (2628/s)
+  ... 111111 in 45s (2467/s)
+ERR /tmp/efs-mount/scale/fcstor011/d000165/f000165100: [Errno 5] Input/output error: '/tmp/efs-mount/scale/fcstor011/d000165/f000165100'
+ERRORS 1
+RATE 111111 45.05 2466.6

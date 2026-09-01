@@ -1,0 +1,11 @@
+  ... 17400 in 5s (3475/s)
+  ... 34589 in 10s (3455/s)
+  ... 53640 in 15s (3572/s)
+  ... 55556 in 20s (2775/s)
+ERR SPURIOUS-EEXIST /tmp/efs-mount/scale/fcstor013/d000056/f000056258: [Errno 17] File exists: '/tmp/efs-mount/scale/fcstor013/d000056/f000056258'
+ERR SPURIOUS-EEXIST /tmp/efs-mount/scale/fcstor013/d000056/f000056453: [Errno 17] File exists: '/tmp/efs-mount/scale/fcstor013/d000056/f000056453'
+ERR SPURIOUS-EEXIST /tmp/efs-mount/scale/fcstor013/d000056/f000056554: [Errno 17] File exists: '/tmp/efs-mount/scale/fcstor013/d000056/f000056554'
+ERR SPURIOUS-EEXIST /tmp/efs-mount/scale/fcstor013/d000056/f000056577: [Errno 17] File exists: '/tmp/efs-mount/scale/fcstor013/d000056/f000056577'
+ERR SPURIOUS-EEXIST /tmp/efs-mount/scale/fcstor013/d000056/f000056596: [Errno 17] File exists: '/tmp/efs-mount/scale/fcstor013/d000056/f000056596'
+ERRORS 2869
+RATE 55556 20.02 2774.9

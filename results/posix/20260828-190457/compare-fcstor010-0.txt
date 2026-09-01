@@ -1,0 +1,182 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 32
+  EFS BUGS         : 164  (baseline PASS, target FAIL)
+  both fail (match): 4
+  target better    : 1
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  access_f_ok_after_unlink         [FAIL] timeout after 15s
+  attr_access                      [FAIL] timeout after 15s
+  attr_chmod                       [FAIL] timeout after 15s
+  attr_chown_self                  [FAIL] timeout after 15s
+  attr_ctime_after_chmod           [FAIL] timeout after 15s
+  attr_stat_fields                 [FAIL] timeout after 15s
+  attr_touch_terminal              [FAIL] timeout after 15s
+  attr_utimens                     [FAIL] timeout after 15s
+  attr_utimens_ns                  [FAIL] timeout after 15s
+  basic_dd_rw                      [FAIL] timeout after 15s
+  basic_ftruncate_vs_truncate      [FAIL] timeout after 15s
+  basic_o_trunc                    [FAIL] timeout after 15s
+  basic_terminal_cp_cat            [FAIL] timeout after 15s
+  case_sensitive_names             [FAIL] timeout after 15s
+  chmod_preserves_mtime            [FAIL] timeout after 15s
+  concurrent_appends               [FAIL] timeout after 15s
+  concurrent_appends_two_proc      [FAIL] timeout after 15s
+  concurrent_create_unlink_two_proc [FAIL] timeout after 15s
+  concurrent_creates_same_dir      [FAIL] timeout after 15s
+  concurrent_extend_high_then_low  [FAIL] timeout after 15s
+  concurrent_overlap_write         [FAIL] timeout after 15s
+  concurrent_write_and_readdir     [FAIL] timeout after 15s
+  concurrent_writes_disjoint       [FAIL] timeout after 15s
+  content_all_byte_values          [FAIL] timeout after 15s
+  content_nul_and_control          [FAIL] timeout after 15s
+  content_random_large_multichunk  [FAIL] timeout after 15s
+  content_random_overwrite_append  [FAIL] timeout after 15s
+  content_random_roundtrip         [FAIL] timeout after 15s
+  content_whitespace_and_line_endings [FAIL] timeout after 15s
+  creat_existing_dir_eisdir        [FAIL] timeout after 15s
+  create_excl_two_proc             [FAIL] timeout after 15s
+  ctime_on_link_rename             [FAIL] timeout after 15s
+  dir_deep_nesting_beyond_64       [FAIL] timeout after 15s
+  dir_dot_entries                  [FAIL] timeout after 15s
+  dir_hidden_files                 [FAIL] timeout after 15s
+  dir_mkdir_p_terminal             [FAIL] timeout after 15s
+  dir_nlink_after_rmdir_child      [FAIL] timeout after 15s
+  dir_readdir_listing              [FAIL] timeout after 15s
+  dir_readdir_while_unlink         [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor010-0-q9wkiwc2/dir_readdir_while_unlink/f10'
+  dir_rename_symlink               [FAIL] timeout after 15s
+  direct_aligned_rdwr              [FAIL] timeout after 15s
+  direct_rmw_4k_in_chunk           [FAIL] timeout after 15s
+  direct_unaligned_einval          [FAIL] timeout after 15s
+  err_create_excl_existing         [FAIL] timeout after 15s
+  err_create_under_a_file          [FAIL] timeout after 15s
+  err_hardlink_nonexistent_src     [FAIL] timeout after 15s
+  err_hardlink_to_dir              [FAIL] timeout after 15s
+  err_mkdir_existing               [FAIL] timeout after 15s
+  err_open_dir_for_write           [FAIL] timeout after 15s
+  err_read_from_dir                [FAIL] timeout after 15s
+  err_rename_dir_into_itself       [FAIL] timeout after 15s
+  err_rmdir_a_file                 [FAIL] timeout after 15s
+  err_rmdir_dot_dotdot             [FAIL] timeout after 15s
+  err_rmdir_nonempty               [FAIL] timeout after 15s
+  err_stat_nonexistent             [FAIL] timeout after 15s
+  err_symlink_loop                 [FAIL] timeout after 15s
+  err_unlink_a_directory           [FAIL] timeout after 15s
+  err_unlink_nonexistent           [FAIL] timeout after 15s
+  err_write_readonly_file          [FAIL] timeout after 15s
+  fcntl_lock_basic                 [FAIL] timeout after 15s
+  fcntl_setfl_oappend              [FAIL] timeout after 15s
+  fdatasync_write                  [FAIL] timeout after 15s
+  flock_basic                      [FAIL] timeout after 15s
+  flock_second_fd_exclusive        [FAIL] timeout after 15s
+  flock_shared_then_exclusive      [FAIL] timeout after 15s
+  flock_two_proc_exclusive         [FAIL] timeout after 15s
+  flock_unlock_on_close            [FAIL] timeout after 15s
+  fstat_size_after_write           [FAIL] timeout after 15s
+  fsync_dir                        [FAIL] timeout after 15s
+  fsync_reopen_visible             [FAIL] timeout after 15s
+  fsync_then_fstat_size            [FAIL] timeout after 15s
+  fsync_write                      [FAIL] timeout after 15s
+  hardlink_basic                   [FAIL] timeout after 15s
+  hardlink_rename_one_name         [FAIL] timeout after 15s
+  hardlink_shared_data             [FAIL] timeout after 15s
+  hardlink_terminal_ln             [FAIL] timeout after 15s
+  hardlink_three_names             [FAIL] timeout after 15s
+  hardlink_unlink_one              [FAIL] timeout after 15s
+  last_link_unlink_other_dir       [FAIL] timeout after 15s
+  link_across_dirs                 [FAIL] timeout after 15s
+  link_of_symlink                  [FAIL] timeout after 15s
+  lstat_symlink_size               [FAIL] timeout after 15s
+  mkdirat_unlinkat                 [FAIL] timeout after 15s
+  mmap_private_not_visible         [FAIL] timeout after 15s
+  mmap_write_read                  [FAIL] timeout after 15s
+  mtime_bumps_on_write             [FAIL] timeout after 15s
+  mtime_monotonic_many_writes      [FAIL] timeout after 15s
+  names_control_and_high_bytes     [FAIL] timeout after 15s
+  names_crazy_dirs                 [FAIL] timeout after 15s
+  names_crazy_roundtrip            [FAIL] timeout after 15s
+  names_dash_prefix_terminal       [FAIL] timeout after 15s
+  names_near_path_max              [FAIL] timeout after 15s
+  names_near_path_max_dir          [FAIL] timeout after 15s
+  names_path_too_long              [FAIL] timeout after 15s
+  names_reserved_dots              [FAIL] timeout after 15s
+  names_too_long_component         [FAIL] timeout after 15s
+  names_unicode_nfc_nfd_coexist    [FAIL] timeout after 15s
+  nlink_after_unlink_open          [FAIL] timeout after 15s
+  o_append_pwrite_absolute         [FAIL] timeout after 15s
+  o_directory                      [FAIL] timeout after 15s
+  o_nofollow                       [FAIL] timeout after 15s
+  opt_copy_file_range              [FAIL] timeout after 15s
+  opt_fallocate                    [FAIL] timeout after 15s
+  opt_openat                       [FAIL] timeout after 15s
+  opt_seek_hole_data               [FAIL] timeout after 15s
+  opt_xattr                        [FAIL] timeout after 15s
+  packed_then_grow_past_chunk      [FAIL] timeout after 15s
+  perm_access_rwx                  [FAIL] timeout after 15s
+  perm_chown_other_gid_denied      [FAIL] timeout after 15s
+  perm_chown_other_uid_denied      [FAIL] timeout after 15s
+  perm_create_mode_000_reopen      [FAIL] timeout after 15s
+  perm_dir_000_restore             [FAIL] timeout after 15s
+  perm_dir_no_r_list               [FAIL] timeout after 15s
+  perm_dir_readonly_mutate         [FAIL] timeout after 15s
+  perm_dir_wx_no_r                 [FAIL] timeout after 15s
+  perm_exec_allowed_with_x         [FAIL] timeout after 15s
+  perm_exec_denied_no_x            [FAIL] timeout after 15s
+  perm_fchmod                      [FAIL] timeout after 15s
+  perm_file_000_denied             [FAIL] timeout after 15s
+  perm_file_read_only_ops          [FAIL] timeout after 15s
+  perm_file_write_only             [FAIL] timeout after 15s
+  perm_ftruncate_after_chmod       [FAIL] timeout after 15s
+  perm_hardlink_shares_mode        [FAIL] timeout after 15s
+  perm_nested_parent_no_x          [FAIL] timeout after 15s
+  perm_open_fd_survives_chmod      [FAIL] timeout after 15s
+  perm_owner_bits_not_group        [FAIL] timeout after 15s
+  perm_owner_bits_not_other        [FAIL] timeout after 15s
+  perm_owner_chmod_restore         [FAIL] timeout after 15s
+  perm_owner_utime_readonly        [FAIL] timeout after 15s
+  perm_rename_into_readonly_dir    [FAIL] timeout after 15s
+  perm_sticky_owner_can_unlink     [FAIL] timeout after 15s
+  perm_suid_sgid_sticky_stored     [FAIL] timeout after 15s
+  perm_symlink_target_denied       [FAIL] timeout after 15s
+  perm_unlink_mode_000_file        [FAIL] timeout after 15s
+  rename_dir_same_parent           [FAIL] timeout after 15s
+  rename_empty_over_empty_dir      [FAIL] timeout after 15s
+  rename_file_over_symlink         [FAIL] timeout after 15s
+  rename_to_self                   [FAIL] timeout after 15s
+  st_ino_unique_hardlink_same      [FAIL] timeout after 15s
+  statfs_sane                      [FAIL] timeout after 15s
+  symlink_absolute                 [FAIL] timeout after 15s
+  symlink_chain                    [FAIL] timeout after 15s
+  symlink_chmod_follows            [FAIL] timeout after 15s
+  symlink_create_readlink          [FAIL] timeout after 15s
+  symlink_dangling                 [FAIL] timeout after 15s
+  symlink_relative_after_parent_rename [FAIL] timeout after 15s
+  symlink_to_dir                   [FAIL] timeout after 15s
+  symlink_unlink_keeps_target      [FAIL] timeout after 15s
+  trailing_slash_on_file           [FAIL] timeout after 15s
+  trunc_grow_sparse                [FAIL] timeout after 15s
+  trunc_open_other_fd              [FAIL] timeout after 15s
+  trunc_shrink                     [FAIL] timeout after 15s
+  trunc_shrink_same_fd             [FAIL] timeout after 15s
+  trunc_to_zero                    [FAIL] timeout after 15s
+  trunc_zero_then_high_pwrite      [FAIL] timeout after 15s
+  two_fds_independent_offset       [FAIL] timeout after 15s
+  two_fds_size_mtime               [FAIL] timeout after 15s
+  unlink_open_file                 [FAIL] timeout after 15s
+  unlink_open_then_recreate        [FAIL] timeout after 15s
+  unlink_recreate_new_ino          [FAIL] timeout after 15s
+  write_beyond_eof_then_seek_end   [FAIL] timeout after 15s
+  write_hole_pread_zeros           [FAIL] timeout after 15s
+  writev_readv_chunk_straddle      [FAIL] timeout after 15s
+  zero_length_write                [FAIL] timeout after 15s
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+
+--- both fail (behaviour matches baseline) ---
+  fcntl_byte_range_lock            base=FAIL target=FAIL
+  virt_find_not_a_real_dir         base=SKIP target=FAIL
+  virt_find_query                  base=SKIP target=FAIL
+  virt_stats_readable              base=SKIP target=FAIL

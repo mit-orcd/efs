@@ -1,0 +1,21 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 191
+  EFS BUGS         : 5  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  dir_many_files                   [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-0-k6i357n0/dir_many_files/f0046'
+  dir_readdir_listing              [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-0-k6i357n0/dir_readdir_listing/f24'
+  dir_rename_symlink               [FAIL] OSError: [Errno 5] Input/output error: 't' -> '/tmp/efs-mount/posix-fcstor007-0-k6i357n0/dir_rename_symlink/sl'
+  mmap_private_not_visible         [FAIL] ValueError: mmap length is greater than file size
+  mmap_write_read                  [FAIL] ValueError: mmap length is greater than file size
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

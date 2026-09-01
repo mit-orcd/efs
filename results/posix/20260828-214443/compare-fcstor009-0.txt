@@ -1,0 +1,19 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 193
+  EFS BUGS         : 3  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  dir_many_files                   [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor009-0-8uu9cpj8/dir_many_files/f0195'
+  perm_owner_bits_not_other        [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor009-0-8uu9cpj8/perm_owner_bits_not_other/f'
+  symlink_to_dir                   [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor009-0-8uu9cpj8/symlink_to_dir/realdir/f'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

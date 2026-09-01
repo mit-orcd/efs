@@ -1,0 +1,16 @@
+================================================================
+POSIX baseline comparison: 63 tests
+  both pass        : 58
+  EFS BUGS         : 4  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 1
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  peer_concurrent_hardlink         [FAIL] nlink after two links: got 2, want 3
+  peer_concurrent_unlink_hardlinks [FAIL] nlink after unlinks: got 2, want 1
+  peer_fcntl_range_conflict        [FAIL] B acquired overlapping lockf
+  peer_rename_across_dirs_chase    [FAIL] x at ['d2/x', 'd3/x'] (want exactly one)
+
+--- target passes where baseline fails ---
+  peer_fcntl_range_adjacent       

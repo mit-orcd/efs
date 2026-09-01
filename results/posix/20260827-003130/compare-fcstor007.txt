@@ -1,0 +1,20 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 194
+  EFS BUGS         : 1  (baseline PASS, target FAIL)
+  both fail (match): 1
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  names_crazy_dirs                 [FAIL] OSError: [Errno 39] Directory not empty: '/tmp/efs/mnt/posix-fcstor007-y0ryxv2w/names_crazy_dirs/bang!char'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             
+
+--- both fail (behaviour matches baseline) ---
+  names_unicode_nfc_nfd_coexist    base=FAIL target=FAIL

@@ -1,0 +1,22 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 192
+  EFS BUGS         : 4  (baseline PASS, target FAIL)
+  both fail (match): 1
+  target better    : 4
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  attr_stat_fields                 [FAIL] size: got 0, want 5
+  attr_touch_terminal              [FAIL] touch -d: got 1788270616, want 1000000000
+  content_random_roundtrip         [FAIL] size n=2: got 0, want 2
+  dir_deep_nesting_beyond_64       [FAIL] timeout after 15s
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_stats_readable             
+
+--- both fail (behaviour matches baseline) ---
+  virt_find_query                  base=SKIP target=FAIL

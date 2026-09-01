@@ -1,0 +1,25 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 187
+  EFS BUGS         : 9  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  concurrent_appends               [FAIL] timeout after 15s
+  concurrent_appends_two_proc      [FAIL] timeout after 15s
+  concurrent_create_unlink_two_proc [FAIL] timeout after 15s
+  create_excl_two_proc             [FAIL] timeout after 15s
+  dir_deep_nesting                 [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor013-3-22thz1jn/dir_deep_nesting/d00/d01/d02/d03/d04/d05/d06/d07/d08/d09/d10/d11/d12/d13/d14/d15/d16/d17/d18/d19/d20/d21/d22/d23/d24/d25/d26/d27/d28/d29/d30/d31/d32/d33/d34/d35/d36/d37/d38/d39/d40/d41/d42/d43/d44/d45/d46/d47/d48/d49/d50/d51/d52/d53/d54/d55/d56/d57/d58/d59/leaf'
+  dir_many_files                   [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor013-3-22thz1jn/dir_many_files/f0194'
+  dir_move_into_subdir             [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor013-3-22thz1jn/dir_move_into_subdir/a/f'
+  err_symlink_loop                 [FAIL] timeout after 15s
+  mtime_monotonic_many_writes      [FAIL] timeout after 15s
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

@@ -1,0 +1,4 @@
+FSTYPE=fuse.efs-fuse
+ECOPY_EC=124
+efs-ssh: TIMEOUT after 75s host=fcstor007.ib
+WALL=75.2

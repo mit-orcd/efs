@@ -1,0 +1,18 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 194
+  EFS BUGS         : 2  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  dir_many_files                   [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor014-0-hv50tpby/dir_many_files/f0029'
+  dir_readdir_listing              [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor014-0-hv50tpby/dir_readdir_listing/f23'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

@@ -1,0 +1,20 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 194
+  EFS BUGS         : 2  (baseline PASS, target FAIL)
+  both fail (match): 1
+  target better    : 4
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  dir_deep_nesting_beyond_64       [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-0-wjfypb2h/dir_deep_nesting_beyond_64/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d'
+  names_crazy_dirs                 [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-0-wjfypb2h/names_crazy_dirs/..dots..'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_stats_readable             
+
+--- both fail (behaviour matches baseline) ---
+  virt_find_query                  base=SKIP target=FAIL

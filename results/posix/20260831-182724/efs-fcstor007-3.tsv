@@ -1,0 +1,406 @@
+parallel 196 tests jobs=16 (serial 5 after)
+pass basic_write_read                
+pass basic_empty_file                
+pass basic_seek_read                 
+pass basic_read_past_eof             
+pass basic_rdwr_no_reopen            
+pass basic_oappend_flag              
+pass basic_dup_write                 
+pass basic_pread_pwrite              
+pass basic_overwrite_middle          
+pass basic_append                    
+pass basic_chunk_boundary            
+pass basic_seek_end_then_write       
+FAIL dir_rename_file                  OSError: [Errno 22] Invalid argument: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_file/a' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_file/b'
+FAIL dir_rename_dir_with_contents     OSError: [Errno 22] Invalid argument: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_dir_with_contents/src' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_dir_with_contents/dst'
+pass dir_move_into_subdir            
+pass basic_seek_cur_past_eof_write   
+pass sparse_st_blocks                
+pass sparse_write_huge_offset        
+pass dir_rename_file_over_dir        
+pass fsync_reopen_visible            
+FAIL dir_rename_over_existing         OSError: [Errno 22] Invalid argument: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_over_existing/a' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_over_existing/b'
+FAIL dir_rename_dir_over_nonempty     wrong errno: got 22 (Invalid argument), want one of (39, 17)
+pass dir_rename_dir_over_file        
+pass dir_rename_noreplace            
+FAIL dir_hidden_files                 listdir includes hidden: got set(), want {'visible', '.hidden', '.dot.mid'}
+pass dir_chmod_and_create_denied     
+pass dir_nlink                       
+FAIL dir_deep_nesting                 FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_deep_nesting/d00/d01/d02/d03/d04/d05/d06'
+pass dir_dot_entries                 
+FAIL dir_mkdir_p_terminal             cmd 'mkdir -p a/b/c/d/e' failed rc=1: mkdir: cannot create directory ‘a/b/c/d/e’: No such file or directory
+
+pass basic_dd_rw                     
+FAIL dir_many_files                   OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_many_files/f0010'
+FAIL hardlink_basic                   OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_basic/orig' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_basic/hl'
+FAIL hardlink_shared_data             OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_shared_data/orig' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_shared_data/hl'
+FAIL hardlink_unlink_one              OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_unlink_one/orig' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_unlink_one/hl'
+pass basic_terminal_cp_cat           
+pass trunc_to_zero                   
+FAIL hardlink_terminal_ln             cmd ['ln', 'orig', 'hl'] failed rc=1: ln: failed to create hard link 'hl' => 'orig': Input/output error
+
+FAIL hardlink_rename_one_name         OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_rename_one_name/orig' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_rename_one_name/hl'
+FAIL dir_mkdir_rmdir                  FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_mkdir_rmdir/sub'
+pass attr_chmod                      
+pass attr_chown_self                 
+pass attr_utimens                    
+pass attr_utimens_ns                 
+pass attr_touch_terminal             
+pass attr_stat_fields                
+pass trunc_shrink                    
+FAIL attr_access                      FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/attr_access/f'
+FAIL perm_file_000_denied             FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_file_000_denied/f'
+FAIL perm_file_write_only             FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_file_write_only/f'
+pass perm_file_read_only_ops         
+FAIL perm_owner_bits_not_other        FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_owner_bits_not_other/f'
+FAIL perm_owner_bits_not_group        FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_owner_bits_not_group/f'
+pass perm_create_mode_000_reopen     
+FAIL perm_open_fd_survives_chmod      FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_open_fd_survives_chmod/f'
+FAIL perm_owner_chmod_restore         FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_owner_chmod_restore/f'
+FAIL perm_owner_utime_readonly        FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_owner_utime_readonly/f'
+FAIL perm_fchmod                      FileNotFoundError: [Errno 2] No such file or directory
+FAIL dir_rename_symlink               FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_symlink/sl' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_symlink/sl2'
+FAIL perm_ftruncate_after_chmod       FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_ftruncate_after_chmod/f'
+FAIL perm_access_rwx                  FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_access_rwx/f'
+pass perm_exec_denied_no_x           
+FAIL dir_readdir_while_unlink         scandir died after mutate, saw 0
+FAIL perm_sticky_owner_can_unlink     FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_sticky_owner_can_unlink/sub'
+FAIL perm_suid_sgid_sticky_stored     FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_suid_sgid_sticky_stored/f'
+FAIL perm_exec_allowed_with_x         FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_exec_allowed_with_x/s'
+pass perm_chown_other_gid_denied     
+pass perm_chown_other_uid_denied     
+FAIL perm_dir_readonly_mutate         wrong errno: got 21 (Is a directory), want one of (13,)
+pass perm_dir_wx_no_r                
+pass perm_dir_no_r_list              
+pass attr_ctime_after_chmod          
+FAIL perm_nested_parent_no_x          FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_nested_parent_no_x/a'
+FAIL dir_readdir_listing              readdir returns all entries: got set(), want {'f25', 'f20', 'f26', 'f10', 'f2', 'f11', 'f21', 'f23', 'f46', 'f24', 'f31', 'f8', 'f27', 'f30', 'f12', 'f7', 'f13', 'f6', 'f35', 'f48', 'f49', 'f47', 'f32', 'f43', 'f40', 'f16', 'f28', 'f15', 'f22', 'f34', 'f0', 'f4', 'f5', 'f41', 'f42', 'f33', 'f9', 'f14', 'f19', 'f18', 'f36', 'f3', 'f38', 'f17', 'f44', 'f29', 'f39', 'f37', 'f45', 'f1'}
+pass perm_dir_000_restore            
+pass perm_rename_into_readonly_dir   
+FAIL perm_hardlink_shares_mode        OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_hardlink_shares_mode/a' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_hardlink_shares_mode/b'
+pass names_reserved_dots             
+pass names_too_long_component        
+FAIL names_near_path_max              FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/names_near_path_max/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+FAIL names_near_path_max_dir          FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/names_near_path_max_dir/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+FAIL perm_unlink_mode_000_file        OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_unlink_mode_000_file/f'
+FAIL names_path_too_long              NotADirectoryError: [Errno 20] Not a directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/names_path_too_long/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+pass basic_ftruncate_vs_truncate     
+FAIL names_unicode_nfc_nfd_coexist    NFC and NFD coexist as distinct names: got 0, want 2
+FAIL names_dash_prefix_terminal       cmd 'rm -- -rf' failed rc=1: rm: cannot remove '-rf': Input/output error
+
+pass symlink_dangling                
+FAIL dir_deep_nesting_beyond_64       FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_deep_nesting_beyond_64/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d'
+FAIL names_crazy_dirs                 readdir crazy dir '-rf': got ['d', 'inner'], want ['inner']
+pass content_nul_and_control         
+FAIL symlink_chain                    OSError: [Errno 5] Input/output error: 'c' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/symlink_chain/b'
+FAIL symlink_relative_after_parent_rename OSError: [Errno 5] Input/output error: '../t' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/symlink_relative_after_parent_rename/a/sl'
+pass err_mkdir_existing              
+FAIL content_random_overwrite_append  OSError: [Errno 5] Input/output error
+pass err_rmdir_a_file                
+FAIL symlink_unlink_keeps_target      OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/symlink_unlink_keeps_target/sl'
+pass err_open_dir_for_write          
+pass err_read_from_dir               
+FAIL names_control_and_high_bytes     byte-name b'ctrl-\x01\x02\x1f' missing from readdir
+pass err_hardlink_to_dir             
+pass err_rename_dir_into_itself      
+pass err_hardlink_nonexistent_src    
+pass err_unlink_nonexistent          
+pass err_create_excl_existing        
+pass err_write_readonly_file         
+pass err_stat_nonexistent            
+pass err_rmdir_dot_dotdot            
+pass err_unlink_a_directory          
+pass err_create_under_a_file         
+pass err_rmdir_nonempty              
+FAIL trunc_grow_sparse                FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/trunc_grow_sparse/f'
+FAIL unlink_open_file                 OSError: [Errno 22] Invalid argument: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/unlink_open_file/f'
+pass flock_basic                     
+pass fsync_dir                       
+pass fcntl_lock_basic                
+pass content_random_large_multichunk 
+pass flock_shared_then_exclusive     
+pass fcntl_byte_range_lock           
+pass fdatasync_write                 
+pass mmap_write_read                 
+pass fsync_write                     
+pass statfs_sane                     
+pass mmap_private_not_visible        
+pass content_random_roundtrip        
+FAIL names_crazy_roundtrip            all crazy names listed: got set(), want {'..dots..', 'trailingdot.', 'bang!char', 'plus+equals=', 'amp&ersand', 'comma,colon:char', 'paren(thesis)', 'tilde~char', 'with\nnewline', 'caret^char', 'quest?char', 'dollar$sign', 'percent%char', 'with\ttab', 'unicode-café-ümlaut-中文-🚀', 'brace{curly}', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', "quote'single", 'dash-prefix', 'semi;colon', 'with space', 'brack[et]', 'dot.mid.name', '-rf', '...', '--help', 'star*char', 'quote"double', 'pipe|char', 'back\\slash'}
+FAIL concurrent_creates_same_dir      all concurrent creates present: got 0, want 160
+pass virt_stats_readable             
+pass virt_find_query                 
+pass virt_find_not_a_real_dir        
+pass opt_fallocate                   
+pass opt_xattr                       
+FAIL opt_seek_hole_data               SEEK_HOLE from 0 got 131072, want 0 (leading hole)
+FAIL concurrent_write_and_readdir     write+readdir: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/concurrent_write_and_readdir/w22'
+FAIL opt_copy_file_range              OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/opt_copy_file_range/dst'
+FAIL fcntl_setfl_oappend              OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/fcntl_setfl_oappend/f'
+FAIL writev_readv_chunk_straddle      OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/writev_readv_chunk_straddle/f'
+FAIL direct_rmw_4k_in_chunk           OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/direct_rmw_4k_in_chunk/f'
+FAIL direct_aligned_rdwr              OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/direct_aligned_rdwr/f'
+FAIL opt_openat                       OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/opt_openat/sub'
+FAIL zero_length_write                OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/zero_length_write/f'
+FAIL packed_then_grow_past_chunk      OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/packed_then_grow_past_chunk/f'
+FAIL direct_unaligned_einval          OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/direct_unaligned_einval/f'
+FAIL flock_second_fd_exclusive        OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/flock_second_fd_exclusive/f'
+FAIL o_nofollow                       OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/o_nofollow/t'
+FAIL rename_to_self                   OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/rename_to_self/f'
+FAIL o_directory                      OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/o_directory/f'
+FAIL rename_empty_over_empty_dir      OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/rename_empty_over_empty_dir/a'
+FAIL ctime_on_link_rename             OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/ctime_on_link_rename/f'
+FAIL lstat_symlink_size               OSError: [Errno 5] Input/output error: 'target-name' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/lstat_symlink_size/l'
+FAIL st_ino_unique_hardlink_same      OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/st_ino_unique_hardlink_same/a'
+FAIL two_fds_size_mtime               OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/two_fds_size_mtime/f'
+FAIL chmod_preserves_mtime            OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/chmod_preserves_mtime/f'
+FAIL trunc_open_other_fd              OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/trunc_open_other_fd/f'
+FAIL unlink_recreate_new_ino          OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/unlink_recreate_new_ino/f'
+FAIL concurrent_overlap_write         OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/concurrent_overlap_write/f'
+FAIL link_across_dirs                 OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/link_across_dirs/a'
+FAIL case_sensitive_names             OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/case_sensitive_names/Foo'
+FAIL fstat_size_after_write           OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/fstat_size_after_write/f'
+FAIL last_link_unlink_other_dir       OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/last_link_unlink_other_dir/a'
+FAIL trunc_shrink_same_fd             OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/trunc_shrink_same_fd/f'
+FAIL nlink_after_unlink_open          OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/nlink_after_unlink_open/f'
+FAIL unlink_open_then_recreate        OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/unlink_open_then_recreate/f'
+FAIL dir_nlink_after_rmdir_child      OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_nlink_after_rmdir_child/p'
+FAIL fsync_then_fstat_size            OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/fsync_then_fstat_size/f'
+FAIL access_f_ok_after_unlink         OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/access_f_ok_after_unlink/f'
+FAIL mtime_bumps_on_write             OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/mtime_bumps_on_write/f'
+FAIL write_hole_pread_zeros           OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/write_hole_pread_zeros/f'
+FAIL rename_dir_same_parent           OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/rename_dir_same_parent/old'
+FAIL hardlink_three_names             OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_three_names/a'
+FAIL link_of_symlink                  OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/link_of_symlink/t'
+FAIL rename_file_over_symlink         OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/rename_file_over_symlink/t'
+FAIL concurrent_extend_high_then_low  OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/concurrent_extend_high_then_low/f'
+FAIL flock_unlock_on_close            OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/flock_unlock_on_close/f'
+FAIL mtime_monotonic_many_writes      OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/mtime_monotonic_many_writes/f'
+FAIL mkdirat_unlinkat                 OSError: [Errno 5] Input/output error: 'sub'
+FAIL o_append_pwrite_absolute         OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/o_append_pwrite_absolute/f'
+FAIL trunc_zero_then_high_pwrite      OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/trunc_zero_then_high_pwrite/f'
+FAIL trailing_slash_on_file           OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/trailing_slash_on_file/f'
+FAIL two_fds_independent_offset       OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/two_fds_independent_offset/f'
+FAIL write_beyond_eof_then_seek_end   OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/write_beyond_eof_then_seek_end/f'
+FAIL creat_existing_dir_eisdir        OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/creat_existing_dir_eisdir/sub'
+pass content_all_byte_values         
+FAIL flock_two_proc_exclusive         FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/flock_two_proc_exclusive/f'
+pass basic_o_trunc                   
+FAIL symlink_chmod_follows            FileNotFoundError: [Errno 2] No such file or directory: 't' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/symlink_chmod_follows/sl'
+FAIL create_excl_two_proc             timeout after 15s
+FAIL concurrent_create_unlink_two_proc timeout after 15s
+FAIL err_symlink_loop                 timeout after 15s
+FAIL concurrent_appends_two_proc      timeout after 15s
+FAIL symlink_absolute                 timeout after 15s
+FAIL symlink_to_dir                   timeout after 15s
+FAIL concurrent_writes_disjoint       timeout after 15s
+FAIL concurrent_appends               timeout after 15s
+FAIL perm_symlink_target_denied       timeout after 15s
+FAIL symlink_create_readlink          timeout after 15s
+FAIL content_whitespace_and_line_endings timeout after 15s
+# posix-suite host=fcstor007 mnt=/tmp/efs-mount 2026-08-31T18:27:49Z
+test	result	detail
+basic_write_read	PASS	
+basic_empty_file	PASS	
+basic_append	PASS	
+basic_oappend_flag	PASS	
+basic_seek_read	PASS	
+basic_overwrite_middle	PASS	
+basic_read_past_eof	PASS	
+basic_terminal_cp_cat	PASS	
+basic_dd_rw	PASS	
+basic_o_trunc	PASS	
+basic_pread_pwrite	PASS	
+basic_dup_write	PASS	
+basic_chunk_boundary	PASS	
+fsync_reopen_visible	PASS	
+basic_ftruncate_vs_truncate	PASS	
+basic_seek_end_then_write	PASS	
+basic_seek_cur_past_eof_write	PASS	
+basic_rdwr_no_reopen	PASS	
+trunc_shrink	PASS	
+trunc_grow_sparse	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/trunc_grow_sparse/f'
+sparse_write_huge_offset	PASS	
+trunc_to_zero	PASS	
+sparse_st_blocks	PASS	
+dir_mkdir_rmdir	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_mkdir_rmdir/sub'
+dir_mkdir_p_terminal	FAIL	cmd 'mkdir -p a/b/c/d/e' failed rc=1: mkdir: cannot create directory ‘a/b/c/d/e’: No such file or directory 
+dir_readdir_listing	FAIL	readdir returns all entries: got set(), want {'f25', 'f20', 'f26', 'f10', 'f2', 'f11', 'f21', 'f23', 'f46', 'f24', 'f31', 'f8', 'f27', 'f30', 'f12', 'f7', 'f13', 'f6', 'f35', 'f48', 'f49', 'f47', 'f32', 'f43', 'f40', 'f16', 'f28', 'f15', 'f22', 'f34', 'f0', 'f4', 'f5', 'f41', 'f42', 'f33', 'f9', 'f14', 'f19', 'f18', 'f36', 'f3', 'f38', 'f17', 'f44', 'f29', 'f39', 'f37', 'f45', 'f1'}
+dir_rename_file	FAIL	OSError: [Errno 22] Invalid argument: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_file/a' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_file/b'
+dir_rename_over_existing	FAIL	OSError: [Errno 22] Invalid argument: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_over_existing/a' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_over_existing/b'
+dir_rename_dir_with_contents	FAIL	OSError: [Errno 22] Invalid argument: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_dir_with_contents/src' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_dir_with_contents/dst'
+dir_move_into_subdir	PASS	
+dir_rename_file_over_dir	PASS	
+dir_rename_dir_over_file	PASS	
+dir_rename_dir_over_nonempty	FAIL	wrong errno: got 22 (Invalid argument), want one of (39, 17)
+dir_rename_noreplace	PASS	
+dir_rename_symlink	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_symlink/sl' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_rename_symlink/sl2'
+dir_deep_nesting	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_deep_nesting/d00/d01/d02/d03/d04/d05/d06'
+dir_many_files	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_many_files/f0010'
+dir_dot_entries	PASS	
+dir_hidden_files	FAIL	listdir includes hidden: got set(), want {'visible', '.hidden', '.dot.mid'}
+dir_chmod_and_create_denied	PASS	
+dir_nlink	PASS	
+dir_readdir_while_unlink	FAIL	scandir died after mutate, saw 0
+symlink_create_readlink	FAIL	timeout after 15s
+symlink_to_dir	FAIL	timeout after 15s
+symlink_dangling	PASS	
+symlink_chain	FAIL	OSError: [Errno 5] Input/output error: 'c' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/symlink_chain/b'
+symlink_absolute	FAIL	timeout after 15s
+hardlink_basic	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_basic/orig' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_basic/hl'
+hardlink_shared_data	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_shared_data/orig' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_shared_data/hl'
+hardlink_unlink_one	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_unlink_one/orig' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_unlink_one/hl'
+hardlink_terminal_ln	FAIL	cmd ['ln', 'orig', 'hl'] failed rc=1: ln: failed to create hard link 'hl' => 'orig': Input/output error 
+hardlink_rename_one_name	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_rename_one_name/orig' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_rename_one_name/hl'
+symlink_unlink_keeps_target	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/symlink_unlink_keeps_target/sl'
+symlink_relative_after_parent_rename	FAIL	OSError: [Errno 5] Input/output error: '../t' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/symlink_relative_after_parent_rename/a/sl'
+symlink_chmod_follows	FAIL	FileNotFoundError: [Errno 2] No such file or directory: 't' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/symlink_chmod_follows/sl'
+attr_chmod	PASS	
+attr_chown_self	PASS	
+attr_utimens	PASS	
+attr_utimens_ns	PASS	
+attr_touch_terminal	PASS	
+attr_stat_fields	PASS	
+attr_access	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/attr_access/f'
+attr_ctime_after_chmod	PASS	
+perm_file_000_denied	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_file_000_denied/f'
+perm_file_write_only	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_file_write_only/f'
+perm_file_read_only_ops	PASS	
+perm_owner_bits_not_other	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_owner_bits_not_other/f'
+perm_owner_bits_not_group	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_owner_bits_not_group/f'
+perm_create_mode_000_reopen	PASS	
+perm_open_fd_survives_chmod	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_open_fd_survives_chmod/f'
+perm_owner_chmod_restore	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_owner_chmod_restore/f'
+perm_owner_utime_readonly	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_owner_utime_readonly/f'
+perm_fchmod	FAIL	FileNotFoundError: [Errno 2] No such file or directory
+perm_ftruncate_after_chmod	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_ftruncate_after_chmod/f'
+perm_access_rwx	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_access_rwx/f'
+perm_exec_denied_no_x	PASS	
+perm_exec_allowed_with_x	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_exec_allowed_with_x/s'
+perm_suid_sgid_sticky_stored	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_suid_sgid_sticky_stored/f'
+perm_sticky_owner_can_unlink	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_sticky_owner_can_unlink/sub'
+perm_chown_other_uid_denied	PASS	
+perm_chown_other_gid_denied	PASS	
+perm_dir_readonly_mutate	FAIL	wrong errno: got 21 (Is a directory), want one of (13,)
+perm_dir_no_r_list	PASS	
+perm_dir_wx_no_r	PASS	
+perm_dir_000_restore	PASS	
+perm_unlink_mode_000_file	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_unlink_mode_000_file/f'
+perm_nested_parent_no_x	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_nested_parent_no_x/a'
+perm_rename_into_readonly_dir	PASS	
+perm_symlink_target_denied	FAIL	timeout after 15s
+perm_hardlink_shares_mode	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_hardlink_shares_mode/a' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/perm_hardlink_shares_mode/b'
+names_crazy_roundtrip	FAIL	all crazy names listed: got set(), want {'..dots..', 'trailingdot.', 'bang!char', 'plus+equals=', 'amp&ersand', 'comma,colon:char', 'paren(thesis)', 'tilde~char', 'with\nnewline', 'caret^char', 'quest?char', 'dollar$sign', 'percent%char', 'with\ttab', 'unicode-café-ümlaut-中文-🚀', 'brace{curly}', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', "quote'single", 'dash-prefix', 'semi;colon', 'with space', 'brack[et]', 'dot.mid.name', '-rf', '...', '--help', 'star*char', 'quote"double', 'pipe|char', 'back\\slash'}
+names_dash_prefix_terminal	FAIL	cmd 'rm -- -rf' failed rc=1: rm: cannot remove '-rf': Input/output error 
+names_too_long_component	PASS	
+names_reserved_dots	PASS	
+names_near_path_max	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/names_near_path_max/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+names_near_path_max_dir	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/names_near_path_max_dir/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+names_path_too_long	FAIL	NotADirectoryError: [Errno 20] Not a directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/names_path_too_long/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+names_control_and_high_bytes	FAIL	byte-name b'ctrl-\x01\x02\x1f' missing from readdir
+names_unicode_nfc_nfd_coexist	FAIL	NFC and NFD coexist as distinct names: got 0, want 2
+names_crazy_dirs	FAIL	readdir crazy dir '-rf': got ['d', 'inner'], want ['inner']
+dir_deep_nesting_beyond_64	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_deep_nesting_beyond_64/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d'
+content_random_roundtrip	PASS	
+content_all_byte_values	PASS	
+content_whitespace_and_line_endings	FAIL	timeout after 15s
+content_nul_and_control	PASS	
+content_random_overwrite_append	FAIL	OSError: [Errno 5] Input/output error
+content_random_large_multichunk	PASS	
+err_mkdir_existing	PASS	
+err_rmdir_nonempty	PASS	
+err_rmdir_a_file	PASS	
+err_open_dir_for_write	PASS	
+err_read_from_dir	PASS	
+err_create_excl_existing	PASS	
+err_rename_dir_into_itself	PASS	
+err_hardlink_to_dir	PASS	
+err_unlink_nonexistent	PASS	
+err_hardlink_nonexistent_src	PASS	
+err_write_readonly_file	PASS	
+err_symlink_loop	FAIL	timeout after 15s
+err_create_under_a_file	PASS	
+err_stat_nonexistent	PASS	
+err_unlink_a_directory	PASS	
+err_rmdir_dot_dotdot	PASS	
+fsync_write	PASS	
+fdatasync_write	PASS	
+fsync_dir	PASS	
+unlink_open_file	FAIL	OSError: [Errno 22] Invalid argument: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/unlink_open_file/f'
+flock_basic	PASS	
+fcntl_lock_basic	PASS	
+flock_shared_then_exclusive	PASS	
+flock_two_proc_exclusive	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/flock_two_proc_exclusive/f'
+fcntl_byte_range_lock	PASS	
+mmap_write_read	PASS	
+mmap_private_not_visible	PASS	
+statfs_sane	PASS	
+concurrent_creates_same_dir	FAIL	all concurrent creates present: got 0, want 160
+concurrent_appends	FAIL	timeout after 15s
+concurrent_appends_two_proc	FAIL	timeout after 15s
+concurrent_writes_disjoint	FAIL	timeout after 15s
+concurrent_create_unlink_two_proc	FAIL	timeout after 15s
+concurrent_write_and_readdir	FAIL	write+readdir: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/concurrent_write_and_readdir/w22'
+virt_stats_readable	PASS	
+virt_find_query	PASS	
+virt_find_not_a_real_dir	PASS	
+opt_fallocate	PASS	
+opt_xattr	PASS	
+opt_seek_hole_data	FAIL	SEEK_HOLE from 0 got 131072, want 0 (leading hole)
+opt_copy_file_range	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/opt_copy_file_range/dst'
+opt_openat	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/opt_openat/sub'
+flock_second_fd_exclusive	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/flock_second_fd_exclusive/f'
+direct_aligned_rdwr	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/direct_aligned_rdwr/f'
+direct_unaligned_einval	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/direct_unaligned_einval/f'
+direct_rmw_4k_in_chunk	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/direct_rmw_4k_in_chunk/f'
+packed_then_grow_past_chunk	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/packed_then_grow_past_chunk/f'
+writev_readv_chunk_straddle	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/writev_readv_chunk_straddle/f'
+zero_length_write	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/zero_length_write/f'
+fcntl_setfl_oappend	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/fcntl_setfl_oappend/f'
+two_fds_size_mtime	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/two_fds_size_mtime/f'
+trunc_open_other_fd	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/trunc_open_other_fd/f'
+link_across_dirs	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/link_across_dirs/a'
+last_link_unlink_other_dir	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/last_link_unlink_other_dir/a'
+nlink_after_unlink_open	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/nlink_after_unlink_open/f'
+o_nofollow	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/o_nofollow/t'
+o_directory	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/o_directory/f'
+ctime_on_link_rename	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/ctime_on_link_rename/f'
+st_ino_unique_hardlink_same	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/st_ino_unique_hardlink_same/a'
+create_excl_two_proc	FAIL	timeout after 15s
+concurrent_overlap_write	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/concurrent_overlap_write/f'
+fstat_size_after_write	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/fstat_size_after_write/f'
+trunc_shrink_same_fd	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/trunc_shrink_same_fd/f'
+unlink_open_then_recreate	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/unlink_open_then_recreate/f'
+rename_to_self	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/rename_to_self/f'
+rename_empty_over_empty_dir	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/rename_empty_over_empty_dir/a'
+lstat_symlink_size	FAIL	OSError: [Errno 5] Input/output error: 'target-name' -> '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/lstat_symlink_size/l'
+chmod_preserves_mtime	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/chmod_preserves_mtime/f'
+unlink_recreate_new_ino	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/unlink_recreate_new_ino/f'
+case_sensitive_names	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/case_sensitive_names/Foo'
+o_append_pwrite_absolute	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/o_append_pwrite_absolute/f'
+two_fds_independent_offset	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/two_fds_independent_offset/f'
+dir_nlink_after_rmdir_child	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/dir_nlink_after_rmdir_child/p'
+access_f_ok_after_unlink	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/access_f_ok_after_unlink/f'
+write_hole_pread_zeros	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/write_hole_pread_zeros/f'
+hardlink_three_names	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/hardlink_three_names/a'
+rename_file_over_symlink	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/rename_file_over_symlink/t'
+flock_unlock_on_close	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/flock_unlock_on_close/f'
+mkdirat_unlinkat	FAIL	OSError: [Errno 5] Input/output error: 'sub'
+trailing_slash_on_file	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/trailing_slash_on_file/f'
+creat_existing_dir_eisdir	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/creat_existing_dir_eisdir/sub'
+fsync_then_fstat_size	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/fsync_then_fstat_size/f'
+mtime_bumps_on_write	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/mtime_bumps_on_write/f'
+rename_dir_same_parent	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/rename_dir_same_parent/old'
+link_of_symlink	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/link_of_symlink/t'
+concurrent_extend_high_then_low	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/concurrent_extend_high_then_low/f'
+mtime_monotonic_many_writes	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/mtime_monotonic_many_writes/f'
+trunc_zero_then_high_pwrite	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/trunc_zero_then_high_pwrite/f'
+write_beyond_eof_then_seek_end	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-3-o7nx2bgd/write_beyond_eof_then_seek_end/f'
+# summary pass=82 fail=114 skip=0 total=196 dur=15.2
+[run_tests] TIMEOUT 400s: fcstor007.ib rm -f '/tmp/posix-efs-20260831-182724-fcstor007-3.tsv'
+            PYTHONUNBUFFERED=1 timeout -k 5 385             python3 /tmp/efs/tests/posix/posix_suite.py '/tmp/efs-mount'              --tag 3 --timeout-s 15 --jobs 16             --results '/tmp/posix-efs-20260831-182724-fcstor007-3.tsv'
+            if [ ! -s '/tmp/posix-efs-20260831-182724-fcstor007-3.tsv' ]; then
+                printf '%s\n' '# TIMEOUT no TSV' 'test\tresult\tdetail'                     '# summary pass=0 fail=0 skip=0 total=0 dur=0'
+                exit 124
+            fi
+            cat '/tmp/posix-efs-20260831-182724-fcstor007-3.tsv'

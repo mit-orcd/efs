@@ -1,0 +1,5 @@
+FSTYPE=fuse.efs-fuse
+ECOPY_EC=124
+ERR=0 0
+11
+WALL=62.4

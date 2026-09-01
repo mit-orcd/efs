@@ -1,0 +1,57 @@
+pass small_file                      
+FAIL closed_but_not_fsynced           content: size ok (8192) but differs at offset 0; rest is zeros
+pass fsynced_file                    
+FAIL multichunk_file                  sha256: got '5647f05ec18958947d32874eeb788fa396a05d0bab7c1b71f112ceb7e9b31eee', want '40df2d2a6e42cff5193fe4ba3effb5e1e4f3d95b82f764375c567d757c9ff62e'
+pass chunk_boundary_write            
+pass overwrite_middle                
+pass appended_file                   
+FAIL sparse_file                      head: size ok (1000) but differs at offset 0; rest is zeros
+pass truncate_shrink                 
+pass truncate_extend                 
+pass empty_file                      
+pass dd_written_file                 
+FAIL many_files_in_one_dir            content of f0002: size ok (64) but differs at offset 0; rest is zeros
+pass deep_tree                       
+FAIL strange_names                    content of 'tab\tchar': size ok (128) but differs at offset 0; rest is zeros
+pass renamed_file                    
+pass renamed_across_dirs             
+pass unlinked_file                   
+pass removed_dir                     
+pass hardlinks                       
+FAIL hardlink_after_unlink            content via surviving link: size ok (2048) but differs at offset 0; rest is zeros
+FAIL symlinks                         content through symlink: size ok (256) but differs at offset 0; rest is zeros
+pass file_mode                       
+pass dir_mode                        
+pass size_and_mtime                  
+FAIL large_file_size_only             head chunk: size ok (131072) but differs at offset 0; rest is zeros
+
+verify: pass=18 fail=8 total=26 in 0.6s
+# posix-persist host=fcstor007 mnt=/tmp/efs-mount phase=verify 2026-08-29T01:35:05Z
+test	result	detail
+small_file	PASS	
+closed_but_not_fsynced	FAIL	content: size ok (8192) but differs at offset 0; rest is zeros
+fsynced_file	PASS	
+multichunk_file	FAIL	sha256: got '5647f05ec18958947d32874eeb788fa396a05d0bab7c1b71f112ceb7e9b31eee', want '40df2d2a6e42cff5193fe4ba3effb5e1e4f3d95b82f764375c567d757c9ff62e'
+chunk_boundary_write	PASS	
+overwrite_middle	PASS	
+appended_file	PASS	
+sparse_file	FAIL	head: size ok (1000) but differs at offset 0; rest is zeros
+truncate_shrink	PASS	
+truncate_extend	PASS	
+empty_file	PASS	
+dd_written_file	PASS	
+many_files_in_one_dir	FAIL	content of f0002: size ok (64) but differs at offset 0; rest is zeros
+deep_tree	PASS	
+strange_names	FAIL	content of 'tab\tchar': size ok (128) but differs at offset 0; rest is zeros
+renamed_file	PASS	
+renamed_across_dirs	PASS	
+unlinked_file	PASS	
+removed_dir	PASS	
+hardlinks	PASS	
+hardlink_after_unlink	FAIL	content via surviving link: size ok (2048) but differs at offset 0; rest is zeros
+symlinks	FAIL	content through symlink: size ok (256) but differs at offset 0; rest is zeros
+file_mode	PASS	
+dir_mode	PASS	
+size_and_mtime	PASS	
+large_file_size_only	FAIL	head chunk: size ok (131072) but differs at offset 0; rest is zeros
+# summary pass=18 fail=8 skip=0 total=26 dur=0.6

@@ -1,0 +1,30 @@
+=== fcstor003.ib BEFORE ===
+RPC-PROF total=52 report=0 getattr=0 lookup=0 create=0 create_shard=0 getchunks=0 lookup_path=0 readdir=0
+CPU= 0.0
+=== fcstor004.ib BEFORE ===
+CPU= 0.0
+=== fcstor005.ib BEFORE ===
+CPU= 0.0
+=== fcstor006.ib BEFORE ===
+CPU= 0.0
+--- AFTER ---
+=== fcstor003.ib AFTER ===
+RPC-PROF total=14167 report=4862 getattr=682 lookup=371 create=337 create_shard=16 getchunks=0 lookup_path=0 readdir=0
+CPU= 1.1
+ino_dup=0
+create_exist=0
+=== fcstor004.ib AFTER ===
+RPC-PROF total=16298 report=1665 getattr=574 lookup=1800 create=2054 create_shard=17 getchunks=0 lookup_path=0 readdir=0
+CPU= 1.3
+ino_dup=0
+create_exist=0
+=== fcstor005.ib AFTER ===
+RPC-PROF total=12081 report=195 getattr=846 lookup=561 create=817 create_shard=2 getchunks=2 lookup_path=0 readdir=0
+CPU= 1.2
+ino_dup=0
+create_exist=0
+=== fcstor006.ib AFTER ===
+RPC-PROF total=17598 report=860 getattr=2163 lookup=1314 create=1145 create_shard=21 getchunks=0 lookup_path=0 readdir=0
+CPU= 1.6
+ino_dup=0
+create_exist=0

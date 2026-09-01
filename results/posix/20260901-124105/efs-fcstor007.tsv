@@ -1,0 +1,413 @@
+parallel 196 tests jobs=16 (serial 5 after)
+pass basic_write_read                
+pass basic_empty_file                
+pass basic_seek_read                 
+pass basic_read_past_eof             
+pass basic_dup_write                 
+pass basic_rdwr_no_reopen            
+pass basic_oappend_flag              
+pass basic_append                    
+pass basic_overwrite_middle          
+pass basic_chunk_boundary            
+pass sparse_st_blocks                
+pass dir_mkdir_rmdir                 
+pass basic_seek_cur_past_eof_write   
+pass sparse_write_huge_offset        
+pass dir_rename_over_existing        
+pass fsync_reopen_visible            
+pass basic_seek_end_then_write       
+pass basic_pread_pwrite              
+pass dir_rename_file                 
+pass dir_rename_file_over_dir        
+pass dir_rename_dir_over_file        
+pass basic_o_trunc                   
+FAIL dir_rename_symlink               FileExistsError: [Errno 17] File exists: 't' -> '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_rename_symlink/sl'
+pass dir_move_into_subdir            
+pass basic_dd_rw                     
+pass dir_rename_dir_over_nonempty    
+FAIL dir_chmod_and_create_denied      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_chmod_and_create_denied/sub'
+FAIL dir_nlink                        FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_nlink/sub'
+FAIL symlink_to_dir                   FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_to_dir/realdir'
+FAIL symlink_dangling                 FileExistsError: [Errno 17] File exists: 'nonexistent' -> '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_dangling/dangle'
+pass dir_rename_dir_with_contents    
+pass dir_rename_noreplace            
+pass dir_dot_entries                 
+FAIL dir_mkdir_p_terminal             cmd 'mkdir -p a/b/c/d/e' failed rc=1: mkdir: cannot create directory ‘a’: File exists
+
+pass basic_terminal_cp_cat           
+pass trunc_shrink                    
+pass trunc_grow_sparse               
+FAIL dir_deep_nesting                 FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_deep_nesting/d00/d01'
+FAIL symlink_relative_after_parent_rename FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_relative_after_parent_rename/a'
+pass trunc_to_zero                   
+pass basic_ftruncate_vs_truncate     
+FAIL dir_many_files                   FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_many_files/f0001'
+FAIL dir_hidden_files                 FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_hidden_files/.hidden'
+FAIL symlink_create_readlink          FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_create_readlink/target'
+FAIL dir_readdir_while_unlink         FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_readdir_while_unlink/f00'
+FAIL dir_readdir_listing              FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_readdir_listing/f9'
+FAIL symlink_chain                    FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_chain/c'
+FAIL symlink_absolute                 FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_absolute/t'
+FAIL hardlink_basic                   FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/hardlink_basic/orig'
+FAIL hardlink_shared_data             FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/hardlink_shared_data/orig'
+FAIL hardlink_unlink_one              FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/hardlink_unlink_one/orig'
+FAIL hardlink_terminal_ln             FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/hardlink_terminal_ln/orig'
+FAIL hardlink_rename_one_name         FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/hardlink_rename_one_name/orig'
+FAIL symlink_unlink_keeps_target      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_unlink_keeps_target/t'
+FAIL symlink_chmod_follows            FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_chmod_follows/t'
+FAIL attr_chmod                       FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_chmod/f'
+FAIL attr_chown_self                  FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_chown_self/f'
+FAIL attr_utimens                     FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_utimens/f'
+FAIL attr_utimens_ns                  FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_utimens_ns/f'
+FAIL attr_touch_terminal              FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_touch_terminal/f'
+FAIL attr_access                      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_access/f'
+FAIL attr_stat_fields                 FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_stat_fields/f'
+FAIL attr_ctime_after_chmod           FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_ctime_after_chmod/f'
+FAIL perm_file_000_denied             FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_file_000_denied/f'
+FAIL perm_sticky_owner_can_unlink     FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_sticky_owner_can_unlink/sub'
+FAIL perm_file_write_only             FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_file_write_only/f'
+FAIL perm_dir_readonly_mutate         FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_dir_readonly_mutate/sub'
+FAIL perm_dir_no_r_list               FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_dir_no_r_list/sub'
+FAIL perm_dir_wx_no_r                 FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_dir_wx_no_r/sub'
+FAIL perm_dir_000_restore             FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_dir_000_restore/sub'
+FAIL perm_file_read_only_ops          FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_file_read_only_ops/f'
+FAIL perm_owner_bits_not_other        FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_owner_bits_not_other/f'
+FAIL perm_rename_into_readonly_dir    FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_rename_into_readonly_dir/src'
+FAIL perm_nested_parent_no_x          FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_nested_parent_no_x/a/b'
+FAIL perm_owner_bits_not_group        FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_owner_bits_not_group/f'
+FAIL perm_create_mode_000_reopen      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_create_mode_000_reopen/f'
+FAIL perm_open_fd_survives_chmod      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_open_fd_survives_chmod/f'
+pass names_too_long_component        
+pass names_reserved_dots             
+FAIL names_near_path_max              FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_near_path_max/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+FAIL names_near_path_max_dir          FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_near_path_max_dir/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+FAIL perm_owner_chmod_restore         FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_owner_chmod_restore/f'
+FAIL names_path_too_long              FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_path_too_long/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+FAIL perm_owner_utime_readonly        FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_owner_utime_readonly/f'
+FAIL perm_fchmod                      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_fchmod/f'
+FAIL dir_deep_nesting_beyond_64       FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_deep_nesting_beyond_64/d'
+FAIL names_crazy_dirs                 FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_crazy_dirs/with space'
+FAIL perm_ftruncate_after_chmod       FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_ftruncate_after_chmod/f'
+FAIL perm_access_rwx                  FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_access_rwx/f'
+FAIL perm_exec_denied_no_x            FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_exec_denied_no_x/s'
+FAIL perm_chown_other_uid_denied      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_chown_other_uid_denied/f'
+FAIL perm_symlink_target_denied       FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_symlink_target_denied/t'
+FAIL err_rmdir_dot_dotdot             FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_rmdir_dot_dotdot/sub'
+FAIL perm_chown_other_gid_denied      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_chown_other_gid_denied/f'
+FAIL names_control_and_high_bytes     FileExistsError: [Errno 17] File exists: b'/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_control_and_high_bytes/ctrl-\x01\x02\x1f'
+FAIL err_hardlink_to_dir              FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_hardlink_to_dir/sub'
+FAIL perm_hardlink_shares_mode        FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_hardlink_shares_mode/a'
+FAIL names_unicode_nfc_nfd_coexist    FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_unicode_nfc_nfd_coexist/cafeé'
+pass err_unlink_nonexistent          
+FAIL names_crazy_roundtrip            FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_crazy_roundtrip/with space'
+FAIL err_mkdir_existing               FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_mkdir_existing/sub'
+pass err_hardlink_nonexistent_src    
+FAIL names_dash_prefix_terminal       FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_dash_prefix_terminal/-rf'
+FAIL err_rmdir_nonempty               FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_rmdir_nonempty/sub'
+FAIL content_random_roundtrip         FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/content_random_roundtrip/f0'
+FAIL perm_exec_allowed_with_x         FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_exec_allowed_with_x/s'
+FAIL err_symlink_loop                 FileExistsError: [Errno 17] File exists: 'b' -> '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_symlink_loop/a'
+FAIL err_open_dir_for_write           FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_open_dir_for_write/sub'
+FAIL perm_unlink_mode_000_file        FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_unlink_mode_000_file/f'
+FAIL content_all_byte_values          FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/content_all_byte_values/allbytes'
+FAIL perm_suid_sgid_sticky_stored     FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_suid_sgid_sticky_stored/f'
+FAIL err_read_from_dir                FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_read_from_dir/sub'
+FAIL err_unlink_a_directory           FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_unlink_a_directory/sub'
+FAIL fsync_dir                        FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fsync_dir/sub'
+FAIL err_rename_dir_into_itself       FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_rename_dir_into_itself/a/b'
+pass err_stat_nonexistent            
+FAIL content_whitespace_and_line_endings FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/content_whitespace_and_line_endings/ws'
+FAIL content_nul_and_control          FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/content_nul_and_control/bin'
+FAIL content_random_overwrite_append  FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/content_random_overwrite_append/f'
+FAIL err_rmdir_a_file                 FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_rmdir_a_file/f'
+pass statfs_sane                     
+FAIL err_create_excl_existing         FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_create_excl_existing/f'
+FAIL err_write_readonly_file          FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_write_readonly_file/f'
+FAIL err_create_under_a_file          FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_create_under_a_file/f'
+FAIL fdatasync_write                  FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fdatasync_write/f'
+FAIL fsync_write                      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fsync_write/f'
+FAIL unlink_open_file                 FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/unlink_open_file/f'
+FAIL flock_basic                      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/flock_basic/f'
+pass virt_find_not_a_real_dir        
+FAIL fcntl_lock_basic                 FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fcntl_lock_basic/f'
+FAIL flock_shared_then_exclusive      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/flock_shared_then_exclusive/f'
+FAIL flock_two_proc_exclusive         FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/flock_two_proc_exclusive/f'
+FAIL fcntl_byte_range_lock            FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fcntl_byte_range_lock/f'
+FAIL opt_openat                       FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/opt_openat/sub'
+FAIL content_random_large_multichunk  FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/content_random_large_multichunk/big'
+FAIL mmap_write_read                  FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/mmap_write_read/f'
+FAIL mmap_private_not_visible         FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/mmap_private_not_visible/f'
+FAIL concurrent_appends               FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_appends/f'
+FAIL concurrent_appends_two_proc      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_appends_two_proc/f'
+FAIL concurrent_writes_disjoint       FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_writes_disjoint/f'
+FAIL concurrent_write_and_readdir     FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_write_and_readdir/seed'
+FAIL virt_stats_readable              FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/virt_stats_readable/a'
+FAIL concurrent_create_unlink_two_proc create/unlink child rc=1: Traceback (most recent call last):
+  File "<string>", line 5, in <module>
+FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_create_unlink_two_proc/c0-0'
+
+FAIL virt_find_query                  FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/virt_find_query/report.txt'
+FAIL link_across_dirs                 FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/link_across_dirs/a'
+FAIL opt_fallocate                    FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/opt_fallocate/f'
+FAIL last_link_unlink_other_dir       FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/last_link_unlink_other_dir/a'
+FAIL opt_seek_hole_data               FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/opt_seek_hole_data/f'
+FAIL opt_xattr                        FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/opt_xattr/f'
+FAIL opt_copy_file_range              FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/opt_copy_file_range/src'
+FAIL flock_second_fd_exclusive        FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/flock_second_fd_exclusive/f'
+FAIL direct_aligned_rdwr              FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/direct_aligned_rdwr/f'
+FAIL create_excl_two_proc             O_EXCL two-proc rcs=[17, 17] (want one 0 and one 17)
+FAIL direct_unaligned_einval          FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/direct_unaligned_einval/f'
+FAIL direct_rmw_4k_in_chunk           FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/direct_rmw_4k_in_chunk/f'
+FAIL packed_then_grow_past_chunk      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/packed_then_grow_past_chunk/f'
+FAIL writev_readv_chunk_straddle      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/writev_readv_chunk_straddle/f'
+FAIL rename_empty_over_empty_dir      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/rename_empty_over_empty_dir/a'
+FAIL lstat_symlink_size               FileExistsError: [Errno 17] File exists: 'target-name' -> '/tmp/efs-mount/posix-fcstor007-zoolu4ty/lstat_symlink_size/l'
+FAIL zero_length_write                FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/zero_length_write/f'
+FAIL fcntl_setfl_oappend              FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fcntl_setfl_oappend/f'
+FAIL two_fds_size_mtime               FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/two_fds_size_mtime/f'
+FAIL trunc_open_other_fd              FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/trunc_open_other_fd/f'
+FAIL o_nofollow                       FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/o_nofollow/t'
+FAIL nlink_after_unlink_open          FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/nlink_after_unlink_open/f'
+FAIL dir_nlink_after_rmdir_child      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_nlink_after_rmdir_child/p'
+FAIL o_directory                      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/o_directory/f'
+FAIL ctime_on_link_rename             FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/ctime_on_link_rename/f'
+FAIL st_ino_unique_hardlink_same      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/st_ino_unique_hardlink_same/a'
+FAIL concurrent_overlap_write         FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_overlap_write/f'
+FAIL fstat_size_after_write           FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fstat_size_after_write/f'
+FAIL mkdirat_unlinkat                 FileExistsError: [Errno 17] File exists: 'sub'
+FAIL creat_existing_dir_eisdir        FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/creat_existing_dir_eisdir/sub'
+FAIL trunc_shrink_same_fd             FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/trunc_shrink_same_fd/f'
+FAIL unlink_open_then_recreate        FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/unlink_open_then_recreate/f'
+FAIL rename_dir_same_parent           FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/rename_dir_same_parent/old'
+FAIL rename_to_self                   FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/rename_to_self/f'
+FAIL chmod_preserves_mtime            FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/chmod_preserves_mtime/f'
+FAIL unlink_recreate_new_ino          FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/unlink_recreate_new_ino/f'
+FAIL o_append_pwrite_absolute         FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/o_append_pwrite_absolute/f'
+FAIL case_sensitive_names             FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/case_sensitive_names/Foo'
+FAIL two_fds_independent_offset       FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/two_fds_independent_offset/f'
+FAIL access_f_ok_after_unlink         FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/access_f_ok_after_unlink/f'
+FAIL write_hole_pread_zeros           FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/write_hole_pread_zeros/f'
+FAIL hardlink_three_names             FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/hardlink_three_names/a'
+FAIL rename_file_over_symlink         FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/rename_file_over_symlink/t'
+FAIL flock_unlock_on_close            FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/flock_unlock_on_close/f'
+FAIL trailing_slash_on_file           FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/trailing_slash_on_file/f'
+FAIL fsync_then_fstat_size            FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fsync_then_fstat_size/f'
+FAIL mtime_bumps_on_write             FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/mtime_bumps_on_write/f'
+FAIL link_of_symlink                  FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/link_of_symlink/t'
+FAIL concurrent_extend_high_then_low  FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_extend_high_then_low/f'
+FAIL mtime_monotonic_many_writes      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/mtime_monotonic_many_writes/f'
+FAIL trunc_zero_then_high_pwrite      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/trunc_zero_then_high_pwrite/f'
+FAIL write_beyond_eof_then_seek_end   FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/write_beyond_eof_then_seek_end/f'
+FAIL concurrent_creates_same_dir      concurrent create errors: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_creates_same_dir/t0-0'
+FAIL dir_mkdir_umask                  FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_mkdir_umask/sub'
+FAIL attr_umask_respected             FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_umask_respected/f'
+FAIL perm_dir_no_x_search             FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_dir_no_x_search/sub'
+FAIL err_chdir_into_file              FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_chdir_into_file/f'
+FAIL chdir_dotdot_after_mkdir         FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/chdir_dotdot_after_mkdir/sub'
+============================================================
+POSIX suite: 40/201 pass, 161 fail, 0 skip  (2.1s)
+wrote /tmp/posix-efs-20260901-124105-fcstor007.tsv
+# posix-suite host=fcstor007 mnt=/tmp/efs-mount 2026-09-01T12:41:15Z
+test	result	detail
+basic_write_read	PASS	
+basic_empty_file	PASS	
+basic_append	PASS	
+basic_oappend_flag	PASS	
+basic_seek_read	PASS	
+basic_overwrite_middle	PASS	
+basic_read_past_eof	PASS	
+basic_terminal_cp_cat	PASS	
+basic_dd_rw	PASS	
+basic_o_trunc	PASS	
+basic_pread_pwrite	PASS	
+basic_dup_write	PASS	
+basic_chunk_boundary	PASS	
+fsync_reopen_visible	PASS	
+basic_ftruncate_vs_truncate	PASS	
+basic_seek_end_then_write	PASS	
+basic_seek_cur_past_eof_write	PASS	
+basic_rdwr_no_reopen	PASS	
+trunc_shrink	PASS	
+trunc_grow_sparse	PASS	
+sparse_write_huge_offset	PASS	
+trunc_to_zero	PASS	
+sparse_st_blocks	PASS	
+dir_mkdir_rmdir	PASS	
+dir_mkdir_p_terminal	FAIL	cmd 'mkdir -p a/b/c/d/e' failed rc=1: mkdir: cannot create directory ‘a’: File exists 
+dir_readdir_listing	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_readdir_listing/f9'
+dir_rename_file	PASS	
+dir_rename_over_existing	PASS	
+dir_rename_dir_with_contents	PASS	
+dir_move_into_subdir	PASS	
+dir_rename_file_over_dir	PASS	
+dir_rename_dir_over_file	PASS	
+dir_rename_dir_over_nonempty	PASS	
+dir_rename_noreplace	PASS	
+dir_rename_symlink	FAIL	FileExistsError: [Errno 17] File exists: 't' -> '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_rename_symlink/sl'
+dir_deep_nesting	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_deep_nesting/d00/d01'
+dir_many_files	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_many_files/f0001'
+dir_dot_entries	PASS	
+dir_hidden_files	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_hidden_files/.hidden'
+dir_mkdir_umask	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_mkdir_umask/sub'
+dir_chmod_and_create_denied	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_chmod_and_create_denied/sub'
+dir_nlink	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_nlink/sub'
+dir_readdir_while_unlink	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_readdir_while_unlink/f00'
+symlink_create_readlink	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_create_readlink/target'
+symlink_to_dir	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_to_dir/realdir'
+symlink_dangling	FAIL	FileExistsError: [Errno 17] File exists: 'nonexistent' -> '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_dangling/dangle'
+symlink_chain	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_chain/c'
+symlink_absolute	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_absolute/t'
+hardlink_basic	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/hardlink_basic/orig'
+hardlink_shared_data	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/hardlink_shared_data/orig'
+hardlink_unlink_one	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/hardlink_unlink_one/orig'
+hardlink_terminal_ln	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/hardlink_terminal_ln/orig'
+hardlink_rename_one_name	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/hardlink_rename_one_name/orig'
+symlink_unlink_keeps_target	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_unlink_keeps_target/t'
+symlink_relative_after_parent_rename	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_relative_after_parent_rename/a'
+symlink_chmod_follows	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/symlink_chmod_follows/t'
+attr_chmod	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_chmod/f'
+attr_chown_self	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_chown_self/f'
+attr_utimens	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_utimens/f'
+attr_utimens_ns	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_utimens_ns/f'
+attr_touch_terminal	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_touch_terminal/f'
+attr_stat_fields	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_stat_fields/f'
+attr_umask_respected	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_umask_respected/f'
+attr_access	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_access/f'
+attr_ctime_after_chmod	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/attr_ctime_after_chmod/f'
+perm_file_000_denied	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_file_000_denied/f'
+perm_file_write_only	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_file_write_only/f'
+perm_file_read_only_ops	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_file_read_only_ops/f'
+perm_owner_bits_not_other	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_owner_bits_not_other/f'
+perm_owner_bits_not_group	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_owner_bits_not_group/f'
+perm_create_mode_000_reopen	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_create_mode_000_reopen/f'
+perm_open_fd_survives_chmod	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_open_fd_survives_chmod/f'
+perm_owner_chmod_restore	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_owner_chmod_restore/f'
+perm_owner_utime_readonly	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_owner_utime_readonly/f'
+perm_fchmod	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_fchmod/f'
+perm_ftruncate_after_chmod	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_ftruncate_after_chmod/f'
+perm_access_rwx	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_access_rwx/f'
+perm_exec_denied_no_x	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_exec_denied_no_x/s'
+perm_exec_allowed_with_x	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_exec_allowed_with_x/s'
+perm_suid_sgid_sticky_stored	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_suid_sgid_sticky_stored/f'
+perm_sticky_owner_can_unlink	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_sticky_owner_can_unlink/sub'
+perm_chown_other_uid_denied	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_chown_other_uid_denied/f'
+perm_chown_other_gid_denied	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_chown_other_gid_denied/f'
+perm_dir_readonly_mutate	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_dir_readonly_mutate/sub'
+perm_dir_no_x_search	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_dir_no_x_search/sub'
+perm_dir_no_r_list	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_dir_no_r_list/sub'
+perm_dir_wx_no_r	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_dir_wx_no_r/sub'
+perm_dir_000_restore	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_dir_000_restore/sub'
+perm_unlink_mode_000_file	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_unlink_mode_000_file/f'
+perm_nested_parent_no_x	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_nested_parent_no_x/a/b'
+perm_rename_into_readonly_dir	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_rename_into_readonly_dir/src'
+perm_symlink_target_denied	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_symlink_target_denied/t'
+perm_hardlink_shares_mode	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/perm_hardlink_shares_mode/a'
+names_crazy_roundtrip	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_crazy_roundtrip/with space'
+names_dash_prefix_terminal	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_dash_prefix_terminal/-rf'
+names_too_long_component	PASS	
+names_reserved_dots	PASS	
+names_near_path_max	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_near_path_max/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+names_near_path_max_dir	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_near_path_max_dir/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+names_path_too_long	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_path_too_long/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+names_control_and_high_bytes	FAIL	FileExistsError: [Errno 17] File exists: b'/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_control_and_high_bytes/ctrl-\x01\x02\x1f'
+names_unicode_nfc_nfd_coexist	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_unicode_nfc_nfd_coexist/cafeé'
+names_crazy_dirs	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/names_crazy_dirs/with space'
+dir_deep_nesting_beyond_64	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_deep_nesting_beyond_64/d'
+content_random_roundtrip	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/content_random_roundtrip/f0'
+content_all_byte_values	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/content_all_byte_values/allbytes'
+content_whitespace_and_line_endings	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/content_whitespace_and_line_endings/ws'
+content_nul_and_control	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/content_nul_and_control/bin'
+content_random_overwrite_append	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/content_random_overwrite_append/f'
+content_random_large_multichunk	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/content_random_large_multichunk/big'
+err_mkdir_existing	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_mkdir_existing/sub'
+err_rmdir_nonempty	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_rmdir_nonempty/sub'
+err_rmdir_a_file	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_rmdir_a_file/f'
+err_open_dir_for_write	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_open_dir_for_write/sub'
+err_read_from_dir	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_read_from_dir/sub'
+err_create_excl_existing	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_create_excl_existing/f'
+err_rename_dir_into_itself	FAIL	FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_rename_dir_into_itself/a/b'
+err_hardlink_to_dir	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_hardlink_to_dir/sub'
+err_unlink_nonexistent	PASS	
+err_hardlink_nonexistent_src	PASS	
+err_write_readonly_file	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_write_readonly_file/f'
+err_symlink_loop	FAIL	FileExistsError: [Errno 17] File exists: 'b' -> '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_symlink_loop/a'
+err_create_under_a_file	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_create_under_a_file/f'
+err_chdir_into_file	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_chdir_into_file/f'
+err_stat_nonexistent	PASS	
+err_unlink_a_directory	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_unlink_a_directory/sub'
+err_rmdir_dot_dotdot	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/err_rmdir_dot_dotdot/sub'
+fsync_write	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fsync_write/f'
+fdatasync_write	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fdatasync_write/f'
+fsync_dir	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fsync_dir/sub'
+unlink_open_file	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/unlink_open_file/f'
+flock_basic	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/flock_basic/f'
+fcntl_lock_basic	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fcntl_lock_basic/f'
+flock_shared_then_exclusive	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/flock_shared_then_exclusive/f'
+flock_two_proc_exclusive	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/flock_two_proc_exclusive/f'
+fcntl_byte_range_lock	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fcntl_byte_range_lock/f'
+mmap_write_read	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/mmap_write_read/f'
+mmap_private_not_visible	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/mmap_private_not_visible/f'
+statfs_sane	PASS	
+concurrent_creates_same_dir	FAIL	concurrent create errors: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_creates_same_dir/t0-0'
+concurrent_appends	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_appends/f'
+concurrent_appends_two_proc	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_appends_two_proc/f'
+concurrent_writes_disjoint	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_writes_disjoint/f'
+concurrent_create_unlink_two_proc	FAIL	create/unlink child rc=1: Traceback (most recent call last):   File "<string>", line 5, in <module> FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_create_unlink_two_proc/c0-0' 
+concurrent_write_and_readdir	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_write_and_readdir/seed'
+virt_stats_readable	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/virt_stats_readable/a'
+virt_find_query	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/virt_find_query/report.txt'
+virt_find_not_a_real_dir	PASS	
+opt_fallocate	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/opt_fallocate/f'
+opt_xattr	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/opt_xattr/f'
+opt_seek_hole_data	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/opt_seek_hole_data/f'
+opt_copy_file_range	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/opt_copy_file_range/src'
+opt_openat	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/opt_openat/sub'
+flock_second_fd_exclusive	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/flock_second_fd_exclusive/f'
+direct_aligned_rdwr	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/direct_aligned_rdwr/f'
+direct_unaligned_einval	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/direct_unaligned_einval/f'
+direct_rmw_4k_in_chunk	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/direct_rmw_4k_in_chunk/f'
+packed_then_grow_past_chunk	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/packed_then_grow_past_chunk/f'
+writev_readv_chunk_straddle	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/writev_readv_chunk_straddle/f'
+zero_length_write	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/zero_length_write/f'
+fcntl_setfl_oappend	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fcntl_setfl_oappend/f'
+two_fds_size_mtime	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/two_fds_size_mtime/f'
+trunc_open_other_fd	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/trunc_open_other_fd/f'
+link_across_dirs	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/link_across_dirs/a'
+last_link_unlink_other_dir	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/last_link_unlink_other_dir/a'
+nlink_after_unlink_open	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/nlink_after_unlink_open/f'
+o_nofollow	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/o_nofollow/t'
+o_directory	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/o_directory/f'
+ctime_on_link_rename	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/ctime_on_link_rename/f'
+st_ino_unique_hardlink_same	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/st_ino_unique_hardlink_same/a'
+create_excl_two_proc	FAIL	O_EXCL two-proc rcs=[17, 17] (want one 0 and one 17)
+concurrent_overlap_write	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_overlap_write/f'
+fstat_size_after_write	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fstat_size_after_write/f'
+trunc_shrink_same_fd	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/trunc_shrink_same_fd/f'
+unlink_open_then_recreate	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/unlink_open_then_recreate/f'
+rename_to_self	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/rename_to_self/f'
+rename_empty_over_empty_dir	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/rename_empty_over_empty_dir/a'
+lstat_symlink_size	FAIL	FileExistsError: [Errno 17] File exists: 'target-name' -> '/tmp/efs-mount/posix-fcstor007-zoolu4ty/lstat_symlink_size/l'
+chmod_preserves_mtime	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/chmod_preserves_mtime/f'
+unlink_recreate_new_ino	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/unlink_recreate_new_ino/f'
+case_sensitive_names	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/case_sensitive_names/Foo'
+o_append_pwrite_absolute	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/o_append_pwrite_absolute/f'
+two_fds_independent_offset	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/two_fds_independent_offset/f'
+dir_nlink_after_rmdir_child	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/dir_nlink_after_rmdir_child/p'
+access_f_ok_after_unlink	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/access_f_ok_after_unlink/f'
+write_hole_pread_zeros	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/write_hole_pread_zeros/f'
+hardlink_three_names	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/hardlink_three_names/a'
+rename_file_over_symlink	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/rename_file_over_symlink/t'
+flock_unlock_on_close	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/flock_unlock_on_close/f'
+mkdirat_unlinkat	FAIL	FileExistsError: [Errno 17] File exists: 'sub'
+trailing_slash_on_file	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/trailing_slash_on_file/f'
+creat_existing_dir_eisdir	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/creat_existing_dir_eisdir/sub'
+fsync_then_fstat_size	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/fsync_then_fstat_size/f'
+chdir_dotdot_after_mkdir	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/chdir_dotdot_after_mkdir/sub'
+mtime_bumps_on_write	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/mtime_bumps_on_write/f'
+rename_dir_same_parent	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/rename_dir_same_parent/old'
+link_of_symlink	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/link_of_symlink/t'
+concurrent_extend_high_then_low	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/concurrent_extend_high_then_low/f'
+mtime_monotonic_many_writes	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/mtime_monotonic_many_writes/f'
+trunc_zero_then_high_pwrite	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/trunc_zero_then_high_pwrite/f'
+write_beyond_eof_then_seek_end	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-zoolu4ty/write_beyond_eof_then_seek_end/f'
+# summary pass=40 fail=161 skip=0 total=201 dur=2.1

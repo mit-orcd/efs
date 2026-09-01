@@ -1,0 +1,14 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 196
+  EFS BUGS         : 0  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

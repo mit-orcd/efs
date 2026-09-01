@@ -1,0 +1,1010 @@
+===== round 1 14:00:32 =====
+=== efsd-003 ===
+3258968  0.0 33040   40 efsd
+3258968 3259203  0.0 efsd            wait_woken
+3258968 3259200  0.0 efsd            wait_woken
+3258968 3259197  0.0 efsd            wait_woken
+3258968 3259194  0.0 efsd            wait_woken
+3258968 3259191  0.0 efsd            wait_woken
+3258968 3259188  0.0 efsd            wait_woken
+3258968 3259185  0.0 efsd            wait_woken
+3258968 3259182  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=1 all_wait_us=0 all_hold_us=1 all_shards=8 n_calls=0 n_wait_us=0 1_calls=0 1_wait_us=0 global_calls=0 global_wait_us=0 global_hold_us=0 busy=0
+--RPC-SRV--
+RPC-PROF total=46 report=0 getattr=0 lookup=0 create=0 create_shard=0 setattr=0 getchunks=0 lookup_path=0 readdir=0 unlink=0 append=0
+--wchan efsd--
+     22 futex_do_wait
+     13 wait_woken
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  0.0 30532   40 efsd
+=== efsd-005 ===
+3911402  0.0 32016   40 efsd
+=== fuse-007 ===
+3872081  0.0 64312  133 efs-fuse
+3872081 3872455  0.0 efs-fuse        futex_do_wait
+3872081 3872454  0.0 efs-fuse        futex_do_wait
+3872081 3872453  0.0 efs-fuse        futex_do_wait
+3872081 3872452  0.0 efs-fuse        futex_do_wait
+3872081 3872451  0.0 efs-fuse        futex_do_wait
+3872081 3872450  0.0 efs-fuse        futex_do_wait
+3872081 3872449  0.0 efs-fuse        futex_do_wait
+3872081 3872448  0.0 efs-fuse        futex_do_wait
+--RPC-CLI--
+RPC-PROF calls=17 checkout_us=77 send_us=120 recv_us=664 busy_us=2350000 busy_n=6 checkout_wait_n=0 lookup=2/90us getattr=0/0us create=2/128us setattr=0/0us readdir=1/70us unlink=7/218us append=0/0us report=2/75us getchunks=0/0us lookup_path=0/0us
+--wchan fuse--
+    130 futex_do_wait
+      2 fuse_dev_do_read
+      1 hrtimer_nanosleep
+--python--
+1
+=== fuse-011 ===
+1479223  0.9 123420 205 efs-fuse
+RPC-PROF calls=12 checkout_us=146 send_us=104 recv_us=589 busy_us=0 busy_n=0 checkout_wait_n=0 lookup=2/71us getattr=0/0us create=2/70us setattr=0/0us readdir=2/141us unlink=2/58us append=0/0us report=1/163us getchunks=0/0us lookup_path=0/0us
+===== round 2 14:00:58 =====
+=== efsd-003 ===
+3258968  0.2 51108   56 efsd
+3258968 3259410  0.1 efsd            wait_woken
+3258968 3259484  0.0 efsd            wait_woken
+3258968 3259481  0.0 efsd            wait_woken
+3258968 3259429  0.0 efsd            wait_woken
+3258968 3259428  0.0 efsd            wait_woken
+3258968 3259427  0.0 efsd            wait_woken
+3258968 3259426  0.0 efsd            wait_woken
+3258968 3259419  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=750 all_wait_us=146 all_hold_us=850 all_shards=6000 n_calls=1673 n_wait_us=66 1_calls=3142 1_wait_us=263 global_calls=4248 global_wait_us=25211 global_hold_us=1900 busy=192
+--RPC-SRV--
+RPC-PROF total=6346 report=51 getattr=0 lookup=1203 create=1122 create_shard=0 setattr=49 getchunks=3 lookup_path=0 readdir=121 unlink=635 append=5
+--wchan efsd--
+     29 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  0.3 63412   67 efsd
+LOCK-PROF all_calls=547 all_wait_us=110 all_hold_us=411 all_shards=4376 n_calls=1384 n_wait_us=55 1_calls=2550 1_wait_us=189 global_calls=3154 global_wait_us=25296 global_hold_us=1767 busy=45
+RPC-PROF total=5480 report=39 getattr=0 lookup=1058 create=964 create_shard=34 setattr=17 getchunks=4 lookup_path=0 readdir=77 unlink=372 append=5
+=== efsd-005 ===
+3911402  0.4 68864   74 efsd
+LOCK-PROF all_calls=888 all_wait_us=172 all_hold_us=879 all_shards=7104 n_calls=1661 n_wait_us=141 1_calls=3698 1_wait_us=659 global_calls=4732 global_wait_us=389284 global_hold_us=3046 busy=306
+RPC-PROF total=7817 report=94 getattr=0 lookup=1957 create=1549 create_shard=22 setattr=26 getchunks=13 lookup_path=0 readdir=70 unlink=15 append=9
+=== fuse-007 ===
+3872081  1.1 138024 210 efs-fuse
+3872081 3873014  3.0 efs-fuse        futex_do_wait
+3872081 3872997  3.0 efs-fuse        futex_do_wait
+3872081 3872923  3.0 efs-fuse        futex_do_wait
+3872081 3873011  2.0 efs-fuse        futex_do_wait
+3872081 3872992  2.0 efs-fuse        futex_do_wait
+3872081 3872824  1.0 efs-fuse        futex_do_wait
+3872081 3872823  1.0 efs-fuse        futex_do_wait
+3872081 3872996  0.5 efs-fuse        futex_do_wait
+--RPC-CLI--
+RPC-PROF calls=6488 checkout_us=66711 send_us=32510 recv_us=413104 busy_us=28850000 busy_n=126 checkout_wait_n=11 lookup=2312/118438us getattr=0/0us create=1989/72176us setattr=12/558us readdir=150/8771us unlink=750/22933us append=8/564us report=46/82951us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    195 futex_do_wait
+     11 hrtimer_nanosleep
+      4 fuse_dev_do_read
+--python--
+24
+=== fuse-011 ===
+1479223  2.3 171376 211 efs-fuse
+RPC-PROF calls=10444 checkout_us=37375 send_us=48093 recv_us=1161700 busy_us=75200000 busy_n=279 checkout_wait_n=5 lookup=3670/303622us getattr=0/0us create=3112/126154us setattr=92/9570us readdir=254/19230us unlink=847/22414us append=15/1822us report=136/398420us getchunks=12/670us lookup_path=0/0us
+===== round 3 14:01:11 =====
+=== efsd-003 ===
+3258968  0.7 76012   79 efsd
+3258968 3259706  0.3 efsd            wait_woken
+3258968 3259481  0.2 efsd            wait_woken
+3258968 3259410  0.1 efsd            wait_woken
+3258968 3259191  0.1 efsd            wait_woken
+3258968 3258991  0.1 efsd            futex_do_wait
+3258968 3259799  0.0 efsd            wait_woken
+3258968 3259798  0.0 efsd            wait_woken
+3258968 3259797  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=2623 all_wait_us=670 all_hold_us=4866 all_shards=20984 n_calls=6390 n_wait_us=287 1_calls=11992 1_wait_us=2237 global_calls=15653 global_wait_us=95572 global_hold_us=7460 busy=463
+--RPC-SRV--
+RPC-PROF total=21298 report=370 getattr=0 lookup=4486 create=3675 create_shard=0 setattr=112 getchunks=13 lookup_path=3 readdir=787 unlink=2586 append=318
+--wchan efsd--
+     52 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  0.7 77852   76 efsd
+LOCK-PROF all_calls=1238 all_wait_us=236 all_hold_us=1487 all_shards=9904 n_calls=2394 n_wait_us=97 1_calls=4807 1_wait_us=436 global_calls=6296 global_wait_us=302811 global_hold_us=3881 busy=386
+RPC-PROF total=12096 report=171 getattr=0 lookup=2224 create=1797 create_shard=51 setattr=123 getchunks=13 lookup_path=0 readdir=135 unlink=386 append=9
+=== efsd-005 ===
+3911402  0.8 85512   82 efsd
+LOCK-PROF all_calls=2093 all_wait_us=388 all_hold_us=2139 all_shards=16744 n_calls=4378 n_wait_us=274 1_calls=9261 1_wait_us=1350 global_calls=11575 global_wait_us=749249 global_hold_us=6932 busy=538
+RPC-PROF total=17729 report=169 getattr=0 lookup=4479 create=2991 create_shard=27 setattr=145 getchunks=16 lookup_path=0 readdir=277 unlink=1213 append=14
+=== fuse-007 ===
+3872081  1.8 162828 219 efs-fuse
+3872081 3872923  0.5 efs-fuse        futex_do_wait
+3872081 3873014  0.4 efs-fuse        futex_do_wait
+3872081 3873011  0.4 efs-fuse        fuse_dev_do_read
+3872081 3872997  0.4 efs-fuse        futex_do_wait
+3872081 3873388  0.3 efs-fuse        hrtimer_nanosleep
+3872081 3873378  0.3 efs-fuse        futex_do_wait
+3872081 3872992  0.2 efs-fuse        futex_do_wait
+3872081 3873387  0.1 efs-fuse        futex_do_wait
+--RPC-CLI--
+RPC-PROF calls=10906 checkout_us=83080 send_us=54594 recv_us=1439321 busy_us=112150000 busy_n=348 checkout_wait_n=12 lookup=3828/356168us getattr=0/0us create=3099/115548us setattr=184/20115us readdir=268/29787us unlink=935/37398us append=15/783us report=168/550696us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    202 futex_do_wait
+      9 hrtimer_nanosleep
+      8 fuse_dev_do_read
+--python--
+19
+=== fuse-011 ===
+1479223  2.5 174712 184 efs-fuse
+RPC-PROF calls=16928 checkout_us=60115 send_us=77204 recv_us=1968949 busy_us=149600000 busy_n=470 checkout_wait_n=12 lookup=5621/439838us getattr=0/0us create=3696/154035us setattr=214/26563us readdir=777/47874us unlink=2521/80376us append=320/11321us report=501/824702us getchunks=14/977us lookup_path=3/119us
+===== round 4 14:01:23 =====
+=== efsd-003 ===
+3258968  0.9 94948   93 efsd
+3258968 3260006  0.2 efsd            wait_woken
+3258968 3259706  0.1 efsd            wait_woken
+3258968 3259481  0.1 efsd            wait_woken
+3258968 3259410  0.1 efsd            wait_woken
+3258968 3259191  0.1 efsd            wait_woken
+3258968 3258991  0.1 efsd            futex_do_wait
+3258968 3260057  0.0 efsd            wait_woken
+3258968 3260056  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=3633 all_wait_us=849 all_hold_us=7255 all_shards=29064 n_calls=8891 n_wait_us=377 1_calls=16357 1_wait_us=2528 global_calls=21283 global_wait_us=107113 global_hold_us=10045 busy=573
+--RPC-SRV--
+RPC-PROF total=29017 report=427 getattr=0 lookup=6137 create=5178 create_shard=0 setattr=125 getchunks=19 lookup_path=3 readdir=941 unlink=3612 append=323
+--wchan efsd--
+     66 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  0.9 100756 101 efsd
+LOCK-PROF all_calls=1738 all_wait_us=341 all_hold_us=2021 all_shards=13904 n_calls=3531 n_wait_us=173 1_calls=7295 1_wait_us=1012 global_calls=9374 global_wait_us=516923 global_hold_us=5653 busy=560
+RPC-PROF total=15860 report=261 getattr=0 lookup=3225 create=2336 create_shard=55 setattr=221 getchunks=13 lookup_path=0 readdir=424 unlink=900 append=12
+=== efsd-005 ===
+3911402  1.0 99064   94 efsd
+LOCK-PROF all_calls=2235 all_wait_us=423 all_hold_us=2705 all_shards=17880 n_calls=5846 n_wait_us=333 1_calls=12160 1_wait_us=1506 global_calls=14696 global_wait_us=785972 global_hold_us=8236 busy=743
+RPC-PROF total=22877 report=220 getattr=0 lookup=5438 create=3309 create_shard=33 setattr=178 getchunks=19 lookup_path=0 readdir=737 unlink=2308 append=17
+=== fuse-007 ===
+3872081  1.6 158724 202 efs-fuse
+3872081 3873014  0.2 efs-fuse        futex_do_wait
+3872081 3872997  0.2 efs-fuse        futex_do_wait
+3872081 3872923  0.2 efs-fuse        futex_do_wait
+3872081 3873378  0.1 efs-fuse        futex_do_wait
+3872081 3872992  0.1 efs-fuse        futex_do_wait
+3872081 3873400  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873399  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873398  0.0 efs-fuse        futex_do_wait
+--RPC-CLI--
+RPC-PROF calls=11772 checkout_us=85932 send_us=58672 recv_us=1571699 busy_us=181450000 busy_n=481 checkout_wait_n=12 lookup=4194/383585us getattr=0/0us create=3124/116238us setattr=220/22291us readdir=304/33345us unlink=1213/46604us append=15/783us report=212/625664us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    191 futex_do_wait
+     10 fuse_dev_do_read
+      1 hrtimer_nanosleep
+--python--
+14
+=== fuse-011 ===
+1479223  2.5 169148 172 efs-fuse
+RPC-PROF calls=19633 checkout_us=68093 send_us=88922 recv_us=2048571 busy_us=223150000 busy_n=565 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3866/116124us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 5 14:01:35 =====
+=== efsd-003 ===
+3258968  1.2 119372 115 efsd
+3258968 3260311  0.2 efsd            wait_woken
+3258968 3258991  0.2 efsd            futex_do_wait
+3258968 3260006  0.1 efsd            wait_woken
+3258968 3259706  0.1 efsd            wait_woken
+3258968 3259481  0.1 efsd            wait_woken
+3258968 3259410  0.1 efsd            wait_woken
+3258968 3260630  0.0 efsd            wait_woken
+3258968 3260629  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=4509 all_wait_us=1061 all_hold_us=12862 all_shards=36072 n_calls=11735 n_wait_us=496 1_calls=21912 1_wait_us=2986 global_calls=28022 global_wait_us=198717 global_hold_us=13091 busy=667
+--RPC-SRV--
+RPC-PROF total=38781 report=531 getattr=0 lookup=7930 create=6307 create_shard=0 setattr=191 getchunks=22 lookup_path=3 readdir=1759 unlink=5331 append=330
+--wchan efsd--
+     88 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.3 129524 117 efsd
+LOCK-PROF all_calls=3199 all_wait_us=719 all_hold_us=3267 all_shards=25592 n_calls=7804 n_wait_us=372 1_calls=16148 1_wait_us=2023 global_calls=19896 global_wait_us=1318866 global_hold_us=11364 busy=1034
+RPC-PROF total=31432 report=435 getattr=0 lookup=7091 create=4483 create_shard=80 setattr=275 getchunks=22 lookup_path=0 readdir=1147 unlink=2855 append=19
+=== efsd-005 ===
+3911402  1.5 150540 124 efsd
+LOCK-PROF all_calls=3383 all_wait_us=833 all_hold_us=3718 all_shards=27064 n_calls=8373 n_wait_us=463 1_calls=17786 1_wait_us=2297 global_calls=21580 global_wait_us=1501991 global_hold_us=12650 busy=1114
+RPC-PROF total=33567 report=333 getattr=0 lookup=8152 create=4916 create_shard=39 setattr=266 getchunks=25 lookup_path=0 readdir=1091 unlink=3080 append=23
+=== fuse-007 ===
+3872081  1.7 151908 178 efs-fuse
+3872081 3872992  0.2 efs-fuse        fuse_dev_do_read
+3872081 3873387  0.1 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.1 efs-fuse        futex_do_wait
+3872081 3873014  0.1 efs-fuse        hrtimer_nanosleep
+3872081 3872976  0.1 efs-fuse        fuse_dev_do_read
+3872081 3872823  0.1 efs-fuse        futex_do_wait
+3872081 3873393  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15129 checkout_us=96403 send_us=73524 recv_us=1857792 busy_us=227150000 busy_n=581 checkout_wait_n=12 lookup=5122/415521us getattr=0/0us create=3146/116827us setattr=245/24959us readdir=1036/63587us unlink=2731/90139us append=16/818us report=260/796401us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    168 futex_do_wait
+      9 fuse_dev_do_read
+      1 hrtimer_nanosleep
+--python--
+4
+=== fuse-011 ===
+1479223  2.2 169148 172 efs-fuse
+RPC-PROF calls=19657 checkout_us=68184 send_us=89076 recv_us=2255890 busy_us=237450000 busy_n=589 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3890/323443us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 6 14:01:49 =====
+=== efsd-003 ===
+3258968  1.9 145288 130 efsd
+3258968 3260311  0.4 efsd            wait_woken
+3258968 3258991  0.4 efsd            futex_do_wait
+3258968 3260610  0.2 efsd            wait_woken
+3258968 3260830  0.1 efsd            wait_woken
+3258968 3260011  0.1 efsd            wait_woken
+3258968 3259178  0.1 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6366 all_wait_us=1638 all_hold_us=17821 all_shards=50928 n_calls=17598 n_wait_us=824 1_calls=32852 1_wait_us=4559 global_calls=42445 global_wait_us=532265 global_hold_us=21575 busy=1055
+--RPC-SRV--
+RPC-PROF total=60431 report=1255 getattr=0 lookup=11381 create=8554 create_shard=0 setattr=284 getchunks=34 lookup_path=18 readdir=3028 unlink=8412 append=985
+--wchan efsd--
+    103 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.9 152736 135 efsd
+LOCK-PROF all_calls=3781 all_wait_us=1086 all_hold_us=4120 all_shards=30248 n_calls=9762 n_wait_us=483 1_calls=20328 1_wait_us=3146 global_calls=24832 global_wait_us=1731225 global_hold_us=14706 busy=1463
+RPC-PROF total=44065 report=526 getattr=0 lookup=9025 create=5203 create_shard=92 setattr=361 getchunks=25 lookup_path=0 readdir=1438 unlink=3936 append=25
+=== efsd-005 ===
+3911402  2.1 174156 137 efsd
+LOCK-PROF all_calls=5149 all_wait_us=1570 all_hold_us=5409 all_shards=41192 n_calls=13669 n_wait_us=815 1_calls=28205 1_wait_us=4188 global_calls=35429 global_wait_us=2482431 global_hold_us=21630 busy=1840
+RPC-PROF total=54381 report=1262 getattr=0 lookup=12252 create=6777 create_shard=40 setattr=465 getchunks=34 lookup_path=0 readdir=2136 unlink=5524 append=683
+=== fuse-007 ===
+3872081  1.6 150504 173 efs-fuse
+3872081 3873014  0.1 efs-fuse        fuse_dev_do_read
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873348  0.0 efs-fuse        hrtimer_nanosleep
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15178 checkout_us=96676 send_us=73846 recv_us=1880839 busy_us=242250000 busy_n=606 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2754/91140us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+      1 hrtimer_nanosleep
+--python--
+1
+=== fuse-011 ===
+1479223  2.0 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 7 14:02:02 =====
+=== efsd-003 ===
+3258968  1.9 147604 131 efsd
+3258968 3258991  0.4 efsd            futex_do_wait
+3258968 3260311  0.2 efsd            wait_woken
+3258968 3260830  0.1 efsd            wait_woken
+3258968 3260610  0.1 efsd            wait_woken
+3258968 3259178  0.1 efsd            wait_woken
+3258968 3262078  0.0 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6485 all_wait_us=1670 all_hold_us=18743 all_shards=51880 n_calls=18121 n_wait_us=858 1_calls=34050 1_wait_us=4644 global_calls=43943 global_wait_us=563503 global_hold_us=22331 busy=1153
+--RPC-SRV--
+RPC-PROF total=62560 report=1320 getattr=0 lookup=11684 create=8621 create_shard=0 setattr=330 getchunks=34 lookup_path=18 readdir=3273 unlink=8925 append=986
+--wchan efsd--
+    104 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.8 156380 135 efsd
+LOCK-PROF all_calls=4068 all_wait_us=1130 all_hold_us=4559 all_shards=32544 n_calls=11319 n_wait_us=562 1_calls=23477 1_wait_us=3366 global_calls=28312 global_wait_us=1839780 global_hold_us=16164 busy=1552
+RPC-PROF total=48238 report=578 getattr=0 lookup=10028 create=5439 create_shard=93 setattr=398 getchunks=25 lookup_path=0 readdir=2021 unlink=5191 append=27
+=== efsd-005 ===
+3911402  2.0 171676 137 efsd
+LOCK-PROF all_calls=5213 all_wait_us=1580 all_hold_us=5774 all_shards=41704 n_calls=14423 n_wait_us=847 1_calls=29614 1_wait_us=4251 global_calls=36920 global_wait_us=2532706 global_hold_us=22235 busy=1894
+RPC-PROF total=56278 report=1284 getattr=0 lookup=12750 create=6803 create_shard=40 setattr=500 getchunks=34 lookup_path=0 readdir=2264 unlink=6232 append=684
+=== fuse-007 ===
+3872081  1.4 150032 172 efs-fuse
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873022  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873014  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15181 checkout_us=96691 send_us=73868 recv_us=1880936 busy_us=244650000 busy_n=609 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2757/91237us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+--python--
+0
+=== fuse-011 ===
+1479223  1.8 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 8 14:02:14 =====
+=== efsd-003 ===
+3258968  1.8 148072 131 efsd
+3258968 3258991  0.4 efsd            futex_do_wait
+3258968 3260311  0.2 efsd            wait_woken
+3258968 3259178  0.1 efsd            wait_woken
+3258968 3262078  0.0 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+3258968 3261355  0.0 efsd            wait_woken
+3258968 3261354  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6492 all_wait_us=1671 all_hold_us=18912 all_shards=51936 n_calls=18136 n_wait_us=863 1_calls=34169 1_wait_us=4661 global_calls=44180 global_wait_us=563526 global_hold_us=22497 busy=1260
+--RPC-SRV--
+RPC-PROF total=62802 report=1324 getattr=0 lookup=11689 create=8627 create_shard=0 setattr=330 getchunks=34 lookup_path=18 readdir=3274 unlink=9031 append=986
+--wchan efsd--
+    104 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.8 156516 135 efsd
+LOCK-PROF all_calls=4075 all_wait_us=1131 all_hold_us=4592 all_shards=32600 n_calls=11699 n_wait_us=574 1_calls=24239 1_wait_us=3387 global_calls=29078 global_wait_us=1844854 global_hold_us=16428 busy=1567
+RPC-PROF total=49095 report=580 getattr=0 lookup=10149 create=5439 create_shard=93 setattr=405 getchunks=25 lookup_path=0 readdir=2272 unlink=5569 append=27
+=== efsd-005 ===
+3911402  1.9 171684 137 efsd
+LOCK-PROF all_calls=5235 all_wait_us=1583 all_hold_us=5836 all_shards=41880 n_calls=14910 n_wait_us=895 1_calls=30587 1_wait_us=4358 global_calls=37926 global_wait_us=2532747 global_hold_us=22627 busy=1899
+RPC-PROF total=57368 report=1296 getattr=0 lookup=12943 create=6817 create_shard=44 setattr=505 getchunks=34 lookup_path=0 readdir=2556 unlink=6691 append=684
+=== fuse-007 ===
+3872081  1.3 150032 172 efs-fuse
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873022  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873014  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15181 checkout_us=96691 send_us=73868 recv_us=1880936 busy_us=244650000 busy_n=609 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2757/91237us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+--python--
+0
+=== fuse-011 ===
+1479223  1.7 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 9 14:02:26 =====
+=== efsd-003 ===
+3258968  1.8 148072 131 efsd
+3258968 3258991  0.4 efsd            futex_do_wait
+3258968 3260311  0.1 efsd            wait_woken
+3258968 3259178  0.1 efsd            wait_woken
+3258968 3262078  0.0 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+3258968 3261355  0.0 efsd            wait_woken
+3258968 3261354  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6493 all_wait_us=1672 all_hold_us=18954 all_shards=51944 n_calls=18139 n_wait_us=864 1_calls=34212 1_wait_us=4666 global_calls=44265 global_wait_us=563535 global_hold_us=22552 busy=1301
+--RPC-SRV--
+RPC-PROF total=62905 report=1325 getattr=0 lookup=11690 create=8628 create_shard=0 setattr=330 getchunks=34 lookup_path=18 readdir=3274 unlink=9072 append=986
+--wchan efsd--
+    104 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.7 154116 135 efsd
+LOCK-PROF all_calls=4075 all_wait_us=1131 all_hold_us=4592 all_shards=32600 n_calls=11699 n_wait_us=574 1_calls=24239 1_wait_us=3387 global_calls=29078 global_wait_us=1844854 global_hold_us=16428 busy=1567
+RPC-PROF total=49095 report=580 getattr=0 lookup=10149 create=5439 create_shard=93 setattr=405 getchunks=25 lookup_path=0 readdir=2272 unlink=5569 append=27
+=== efsd-005 ===
+3911402  1.8 171684 137 efsd
+LOCK-PROF all_calls=5235 all_wait_us=1583 all_hold_us=5836 all_shards=41880 n_calls=14910 n_wait_us=895 1_calls=30587 1_wait_us=4358 global_calls=37926 global_wait_us=2532747 global_hold_us=22627 busy=1899
+RPC-PROF total=57368 report=1296 getattr=0 lookup=12943 create=6817 create_shard=44 setattr=505 getchunks=34 lookup_path=0 readdir=2556 unlink=6691 append=684
+=== fuse-007 ===
+3872081  1.2 150032 172 efs-fuse
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873022  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873014  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15181 checkout_us=96691 send_us=73868 recv_us=1880936 busy_us=244650000 busy_n=609 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2757/91237us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+--python--
+0
+=== fuse-011 ===
+1479223  1.6 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 10 14:02:39 =====
+=== efsd-003 ===
+3258968  1.7 148072 131 efsd
+3258968 3258991  0.4 efsd            futex_do_wait
+3258968 3260311  0.1 efsd            wait_woken
+3258968 3259178  0.1 efsd            wait_woken
+3258968 3262078  0.0 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+3258968 3261355  0.0 efsd            wait_woken
+3258968 3261354  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6494 all_wait_us=1672 all_hold_us=18978 all_shards=51952 n_calls=18142 n_wait_us=864 1_calls=34229 1_wait_us=4671 global_calls=44298 global_wait_us=563541 global_hold_us=22574 busy=1316
+--RPC-SRV--
+RPC-PROF total=62988 report=1326 getattr=0 lookup=11691 create=8629 create_shard=0 setattr=330 getchunks=34 lookup_path=18 readdir=3274 unlink=9087 append=986
+--wchan efsd--
+    104 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.6 154824 135 efsd
+LOCK-PROF all_calls=4083 all_wait_us=1132 all_hold_us=4826 all_shards=32664 n_calls=11702 n_wait_us=574 1_calls=24251 1_wait_us=3388 global_calls=29087 global_wait_us=1844855 global_hold_us=16440 busy=1567
+RPC-PROF total=49282 report=581 getattr=0 lookup=10150 create=5440 create_shard=94 setattr=405 getchunks=25 lookup_path=0 readdir=2273 unlink=5570 append=27
+=== efsd-005 ===
+3911402  1.7 171752 137 efsd
+LOCK-PROF all_calls=5241 all_wait_us=1584 all_hold_us=5909 all_shards=41928 n_calls=14913 n_wait_us=895 1_calls=30597 1_wait_us=4359 global_calls=37935 global_wait_us=2532748 global_hold_us=22635 busy=1899
+RPC-PROF total=57491 report=1297 getattr=0 lookup=12944 create=6818 create_shard=45 setattr=505 getchunks=34 lookup_path=0 readdir=2557 unlink=6692 append=684
+=== fuse-007 ===
+3872081  1.2 150032 172 efs-fuse
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873022  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873014  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15181 checkout_us=96691 send_us=73868 recv_us=1880936 busy_us=244650000 busy_n=609 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2757/91237us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+--python--
+0
+=== fuse-011 ===
+1479223  1.5 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 11 14:02:51 =====
+=== efsd-003 ===
+3258968  1.7 148072 131 efsd
+3258968 3258991  0.4 efsd            futex_do_wait
+3258968 3260311  0.1 efsd            wait_woken
+3258968 3259178  0.1 efsd            wait_woken
+3258968 3262078  0.0 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+3258968 3261355  0.0 efsd            wait_woken
+3258968 3261354  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6495 all_wait_us=1673 all_hold_us=19019 all_shards=51960 n_calls=18145 n_wait_us=865 1_calls=34246 1_wait_us=4671 global_calls=44331 global_wait_us=563544 global_hold_us=22590 busy=1331
+--RPC-SRV--
+RPC-PROF total=63063 report=1327 getattr=0 lookup=11692 create=8630 create_shard=0 setattr=330 getchunks=34 lookup_path=18 readdir=3274 unlink=9102 append=986
+--wchan efsd--
+    104 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.6 154824 135 efsd
+LOCK-PROF all_calls=4087 all_wait_us=1133 all_hold_us=4846 all_shards=32696 n_calls=11705 n_wait_us=574 1_calls=24259 1_wait_us=3388 global_calls=29096 global_wait_us=1844856 global_hold_us=16453 busy=1567
+RPC-PROF total=49344 report=582 getattr=0 lookup=10151 create=5441 create_shard=95 setattr=405 getchunks=25 lookup_path=0 readdir=2274 unlink=5571 append=27
+=== efsd-005 ===
+3911402  1.7 171820 137 efsd
+LOCK-PROF all_calls=5241 all_wait_us=1584 all_hold_us=5909 all_shards=41928 n_calls=14913 n_wait_us=895 1_calls=30597 1_wait_us=4359 global_calls=37935 global_wait_us=2532748 global_hold_us=22635 busy=1899
+RPC-PROF total=57491 report=1297 getattr=0 lookup=12944 create=6818 create_shard=45 setattr=505 getchunks=34 lookup_path=0 readdir=2557 unlink=6692 append=684
+=== fuse-007 ===
+3872081  1.1 150032 172 efs-fuse
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873022  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873014  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15181 checkout_us=96691 send_us=73868 recv_us=1880936 busy_us=244650000 busy_n=609 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2757/91237us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+--python--
+0
+=== fuse-011 ===
+1479223  1.4 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 12 14:03:03 =====
+=== efsd-003 ===
+3258968  1.6 148072 131 efsd
+3258968 3258991  0.4 efsd            futex_do_wait
+3258968 3259178  0.1 efsd            wait_woken
+3258968 3262078  0.0 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+3258968 3261355  0.0 efsd            wait_woken
+3258968 3261354  0.0 efsd            wait_woken
+3258968 3261353  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6497 all_wait_us=1673 all_hold_us=19074 all_shards=51976 n_calls=18151 n_wait_us=865 1_calls=34279 1_wait_us=4673 global_calls=44395 global_wait_us=563551 global_hold_us=22632 busy=1360
+--RPC-SRV--
+RPC-PROF total=63222 report=1329 getattr=0 lookup=11694 create=8632 create_shard=0 setattr=330 getchunks=34 lookup_path=18 readdir=3274 unlink=9131 append=986
+--wchan efsd--
+    104 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.5 154892 135 efsd
+LOCK-PROF all_calls=4091 all_wait_us=1134 all_hold_us=4868 all_shards=32728 n_calls=11708 n_wait_us=575 1_calls=24267 1_wait_us=3389 global_calls=29105 global_wait_us=1844857 global_hold_us=16465 busy=1567
+RPC-PROF total=49409 report=583 getattr=0 lookup=10152 create=5442 create_shard=96 setattr=405 getchunks=25 lookup_path=0 readdir=2275 unlink=5572 append=27
+=== efsd-005 ===
+3911402  1.6 171888 137 efsd
+LOCK-PROF all_calls=5241 all_wait_us=1584 all_hold_us=5909 all_shards=41928 n_calls=14913 n_wait_us=895 1_calls=30597 1_wait_us=4359 global_calls=37935 global_wait_us=2532748 global_hold_us=22635 busy=1899
+RPC-PROF total=57491 report=1297 getattr=0 lookup=12944 create=6818 create_shard=45 setattr=505 getchunks=34 lookup_path=0 readdir=2557 unlink=6692 append=684
+=== fuse-007 ===
+3872081  1.0 150032 172 efs-fuse
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873022  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873014  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15181 checkout_us=96691 send_us=73868 recv_us=1880936 busy_us=244650000 busy_n=609 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2757/91237us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+--python--
+0
+=== fuse-011 ===
+1479223  1.3 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 13 14:03:16 =====
+=== efsd-003 ===
+3258968  1.6 148072 131 efsd
+3258968 3258991  0.4 efsd            futex_do_wait
+3258968 3262078  0.0 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+3258968 3261355  0.0 efsd            wait_woken
+3258968 3261354  0.0 efsd            wait_woken
+3258968 3261353  0.0 efsd            wait_woken
+3258968 3261352  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6498 all_wait_us=1673 all_hold_us=19097 all_shards=51984 n_calls=18154 n_wait_us=865 1_calls=34296 1_wait_us=4673 global_calls=44428 global_wait_us=563556 global_hold_us=22651 busy=1375
+--RPC-SRV--
+RPC-PROF total=63307 report=1330 getattr=0 lookup=11695 create=8633 create_shard=0 setattr=330 getchunks=34 lookup_path=18 readdir=3274 unlink=9146 append=986
+--wchan efsd--
+    104 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.5 154892 135 efsd
+LOCK-PROF all_calls=4091 all_wait_us=1134 all_hold_us=4868 all_shards=32728 n_calls=11708 n_wait_us=575 1_calls=24267 1_wait_us=3389 global_calls=29105 global_wait_us=1844857 global_hold_us=16465 busy=1567
+RPC-PROF total=49409 report=583 getattr=0 lookup=10152 create=5442 create_shard=96 setattr=405 getchunks=25 lookup_path=0 readdir=2275 unlink=5572 append=27
+=== efsd-005 ===
+3911402  1.6 171956 137 efsd
+LOCK-PROF all_calls=5241 all_wait_us=1584 all_hold_us=5909 all_shards=41928 n_calls=14913 n_wait_us=895 1_calls=30597 1_wait_us=4359 global_calls=37935 global_wait_us=2532748 global_hold_us=22635 busy=1899
+RPC-PROF total=57491 report=1297 getattr=0 lookup=12944 create=6818 create_shard=45 setattr=505 getchunks=34 lookup_path=0 readdir=2557 unlink=6692 append=684
+=== fuse-007 ===
+3872081  1.0 150032 172 efs-fuse
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873022  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873014  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15181 checkout_us=96691 send_us=73868 recv_us=1880936 busy_us=244650000 busy_n=609 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2757/91237us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+--python--
+0
+=== fuse-011 ===
+1479223  1.2 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 14 14:03:28 =====
+=== efsd-003 ===
+3258968  1.6 148628 132 efsd
+3258968 3258991  0.4 efsd            futex_do_wait
+3258968 3263429  0.0 efsd            wait_woken
+3258968 3262078  0.0 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+3258968 3261355  0.0 efsd            wait_woken
+3258968 3261354  0.0 efsd            wait_woken
+3258968 3261353  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6500 all_wait_us=1674 all_hold_us=19160 all_shards=52000 n_calls=18159 n_wait_us=865 1_calls=34311 1_wait_us=4673 global_calls=44455 global_wait_us=563559 global_hold_us=22674 busy=1383
+--RPC-SRV--
+RPC-PROF total=63383 report=1331 getattr=0 lookup=11697 create=8635 create_shard=0 setattr=330 getchunks=34 lookup_path=18 readdir=3275 unlink=9156 append=986
+--wchan efsd--
+    105 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.4 154960 135 efsd
+LOCK-PROF all_calls=4091 all_wait_us=1134 all_hold_us=4868 all_shards=32728 n_calls=11708 n_wait_us=575 1_calls=24267 1_wait_us=3389 global_calls=29105 global_wait_us=1844857 global_hold_us=16465 busy=1567
+RPC-PROF total=49409 report=583 getattr=0 lookup=10152 create=5442 create_shard=96 setattr=405 getchunks=25 lookup_path=0 readdir=2275 unlink=5572 append=27
+=== efsd-005 ===
+3911402  1.5 172024 137 efsd
+LOCK-PROF all_calls=5241 all_wait_us=1584 all_hold_us=5909 all_shards=41928 n_calls=14913 n_wait_us=895 1_calls=30597 1_wait_us=4359 global_calls=37935 global_wait_us=2532748 global_hold_us=22635 busy=1899
+RPC-PROF total=57491 report=1297 getattr=0 lookup=12944 create=6818 create_shard=45 setattr=505 getchunks=34 lookup_path=0 readdir=2557 unlink=6692 append=684
+=== fuse-007 ===
+3872081  0.9 150032 172 efs-fuse
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873022  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873014  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15181 checkout_us=96691 send_us=73868 recv_us=1880936 busy_us=244650000 busy_n=609 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2757/91237us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+--python--
+0
+=== fuse-011 ===
+1479223  1.2 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 15 14:03:41 =====
+=== efsd-003 ===
+3258968  1.5 148628 132 efsd
+3258968 3258991  0.5 efsd            futex_do_wait
+3258968 3263429  0.0 efsd            wait_woken
+3258968 3262078  0.0 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+3258968 3261355  0.0 efsd            wait_woken
+3258968 3261354  0.0 efsd            wait_woken
+3258968 3261353  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6500 all_wait_us=1674 all_hold_us=19160 all_shards=52000 n_calls=18159 n_wait_us=865 1_calls=34311 1_wait_us=4673 global_calls=44455 global_wait_us=563559 global_hold_us=22674 busy=1383
+--RPC-SRV--
+RPC-PROF total=63383 report=1331 getattr=0 lookup=11697 create=8635 create_shard=0 setattr=330 getchunks=34 lookup_path=18 readdir=3275 unlink=9156 append=986
+--wchan efsd--
+    105 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.4 154960 135 efsd
+LOCK-PROF all_calls=4091 all_wait_us=1134 all_hold_us=4868 all_shards=32728 n_calls=11708 n_wait_us=575 1_calls=24267 1_wait_us=3389 global_calls=29105 global_wait_us=1844857 global_hold_us=16465 busy=1567
+RPC-PROF total=49409 report=583 getattr=0 lookup=10152 create=5442 create_shard=96 setattr=405 getchunks=25 lookup_path=0 readdir=2275 unlink=5572 append=27
+=== efsd-005 ===
+3911402  1.5 172024 137 efsd
+LOCK-PROF all_calls=5241 all_wait_us=1584 all_hold_us=5909 all_shards=41928 n_calls=14913 n_wait_us=895 1_calls=30597 1_wait_us=4359 global_calls=37935 global_wait_us=2532748 global_hold_us=22635 busy=1899
+RPC-PROF total=57491 report=1297 getattr=0 lookup=12944 create=6818 create_shard=45 setattr=505 getchunks=34 lookup_path=0 readdir=2557 unlink=6692 append=684
+=== fuse-007 ===
+3872081  0.9 150032 172 efs-fuse
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873022  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873014  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15181 checkout_us=96691 send_us=73868 recv_us=1880936 busy_us=244650000 busy_n=609 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2757/91237us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+--python--
+0
+=== fuse-011 ===
+1479223  1.1 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 16 14:03:53 =====
+=== efsd-003 ===
+3258968  1.5 148628 132 efsd
+3258968 3258991  0.5 efsd            futex_do_wait
+3258968 3263429  0.0 efsd            wait_woken
+3258968 3262078  0.0 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+3258968 3261355  0.0 efsd            wait_woken
+3258968 3261354  0.0 efsd            wait_woken
+3258968 3261353  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6500 all_wait_us=1674 all_hold_us=19160 all_shards=52000 n_calls=18159 n_wait_us=865 1_calls=34311 1_wait_us=4673 global_calls=44455 global_wait_us=563559 global_hold_us=22674 busy=1383
+--RPC-SRV--
+RPC-PROF total=63383 report=1331 getattr=0 lookup=11697 create=8635 create_shard=0 setattr=330 getchunks=34 lookup_path=18 readdir=3275 unlink=9156 append=986
+--wchan efsd--
+    105 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.3 154960 135 efsd
+LOCK-PROF all_calls=4091 all_wait_us=1134 all_hold_us=4868 all_shards=32728 n_calls=11708 n_wait_us=575 1_calls=24267 1_wait_us=3389 global_calls=29105 global_wait_us=1844857 global_hold_us=16465 busy=1567
+RPC-PROF total=49409 report=583 getattr=0 lookup=10152 create=5442 create_shard=96 setattr=405 getchunks=25 lookup_path=0 readdir=2275 unlink=5572 append=27
+=== efsd-005 ===
+3911402  1.4 172024 137 efsd
+LOCK-PROF all_calls=5241 all_wait_us=1584 all_hold_us=5909 all_shards=41928 n_calls=14913 n_wait_us=895 1_calls=30597 1_wait_us=4359 global_calls=37935 global_wait_us=2532748 global_hold_us=22635 busy=1899
+RPC-PROF total=57491 report=1297 getattr=0 lookup=12944 create=6818 create_shard=45 setattr=505 getchunks=34 lookup_path=0 readdir=2557 unlink=6692 append=684
+=== fuse-007 ===
+3872081  0.8 150032 172 efs-fuse
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873022  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873014  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15181 checkout_us=96691 send_us=73868 recv_us=1880936 busy_us=244650000 busy_n=609 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2757/91237us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+--python--
+0
+=== fuse-011 ===
+1479223  1.0 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 17 14:04:05 =====
+=== efsd-003 ===
+3258968  1.5 148628 132 efsd
+3258968 3258991  0.5 efsd            futex_do_wait
+3258968 3263429  0.0 efsd            wait_woken
+3258968 3262078  0.0 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+3258968 3261355  0.0 efsd            wait_woken
+3258968 3261354  0.0 efsd            wait_woken
+3258968 3261353  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6500 all_wait_us=1674 all_hold_us=19160 all_shards=52000 n_calls=18159 n_wait_us=865 1_calls=34311 1_wait_us=4673 global_calls=44455 global_wait_us=563559 global_hold_us=22674 busy=1383
+--RPC-SRV--
+RPC-PROF total=63383 report=1331 getattr=0 lookup=11697 create=8635 create_shard=0 setattr=330 getchunks=34 lookup_path=18 readdir=3275 unlink=9156 append=986
+--wchan efsd--
+    105 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.3 154960 135 efsd
+LOCK-PROF all_calls=4091 all_wait_us=1134 all_hold_us=4868 all_shards=32728 n_calls=11708 n_wait_us=575 1_calls=24267 1_wait_us=3389 global_calls=29105 global_wait_us=1844857 global_hold_us=16465 busy=1567
+RPC-PROF total=49409 report=583 getattr=0 lookup=10152 create=5442 create_shard=96 setattr=405 getchunks=25 lookup_path=0 readdir=2275 unlink=5572 append=27
+=== efsd-005 ===
+3911402  1.4 172024 137 efsd
+LOCK-PROF all_calls=5241 all_wait_us=1584 all_hold_us=5909 all_shards=41928 n_calls=14913 n_wait_us=895 1_calls=30597 1_wait_us=4359 global_calls=37935 global_wait_us=2532748 global_hold_us=22635 busy=1899
+RPC-PROF total=57491 report=1297 getattr=0 lookup=12944 create=6818 create_shard=45 setattr=505 getchunks=34 lookup_path=0 readdir=2557 unlink=6692 append=684
+=== fuse-007 ===
+3872081  0.8 150032 172 efs-fuse
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873022  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873014  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15181 checkout_us=96691 send_us=73868 recv_us=1880936 busy_us=244650000 busy_n=609 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2757/91237us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+--python--
+0
+=== fuse-011 ===
+1479223  1.0 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 18 14:04:17 =====
+=== efsd-003 ===
+3258968  1.4 148628 132 efsd
+3258968 3258991  0.5 efsd            futex_do_wait
+3258968 3263429  0.0 efsd            wait_woken
+3258968 3262078  0.0 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+3258968 3261355  0.0 efsd            wait_woken
+3258968 3261354  0.0 efsd            wait_woken
+3258968 3261353  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6500 all_wait_us=1674 all_hold_us=19160 all_shards=52000 n_calls=18159 n_wait_us=865 1_calls=34311 1_wait_us=4673 global_calls=44455 global_wait_us=563559 global_hold_us=22674 busy=1383
+--RPC-SRV--
+RPC-PROF total=63383 report=1331 getattr=0 lookup=11697 create=8635 create_shard=0 setattr=330 getchunks=34 lookup_path=18 readdir=3275 unlink=9156 append=986
+--wchan efsd--
+    105 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.2 154960 135 efsd
+LOCK-PROF all_calls=4091 all_wait_us=1134 all_hold_us=4868 all_shards=32728 n_calls=11708 n_wait_us=575 1_calls=24267 1_wait_us=3389 global_calls=29105 global_wait_us=1844857 global_hold_us=16465 busy=1567
+RPC-PROF total=49409 report=583 getattr=0 lookup=10152 create=5442 create_shard=96 setattr=405 getchunks=25 lookup_path=0 readdir=2275 unlink=5572 append=27
+=== efsd-005 ===
+3911402  1.3 172024 137 efsd
+LOCK-PROF all_calls=5241 all_wait_us=1584 all_hold_us=5909 all_shards=41928 n_calls=14913 n_wait_us=895 1_calls=30597 1_wait_us=4359 global_calls=37935 global_wait_us=2532748 global_hold_us=22635 busy=1899
+RPC-PROF total=57491 report=1297 getattr=0 lookup=12944 create=6818 create_shard=45 setattr=505 getchunks=34 lookup_path=0 readdir=2557 unlink=6692 append=684
+=== fuse-007 ===
+3872081  0.7 150032 172 efs-fuse
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873022  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873014  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15181 checkout_us=96691 send_us=73868 recv_us=1880936 busy_us=244650000 busy_n=609 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2757/91237us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+--python--
+0
+=== fuse-011 ===
+1479223  1.0 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 19 14:04:30 =====
+=== efsd-003 ===
+3258968  1.4 148628 132 efsd
+3258968 3258991  0.5 efsd            futex_do_wait
+3258968 3263429  0.0 efsd            wait_woken
+3258968 3262078  0.0 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+3258968 3261355  0.0 efsd            wait_woken
+3258968 3261354  0.0 efsd            wait_woken
+3258968 3261353  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6500 all_wait_us=1674 all_hold_us=19160 all_shards=52000 n_calls=18159 n_wait_us=865 1_calls=34311 1_wait_us=4673 global_calls=44455 global_wait_us=563559 global_hold_us=22674 busy=1383
+--RPC-SRV--
+RPC-PROF total=63383 report=1331 getattr=0 lookup=11697 create=8635 create_shard=0 setattr=330 getchunks=34 lookup_path=18 readdir=3275 unlink=9156 append=986
+--wchan efsd--
+    105 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.2 154960 135 efsd
+LOCK-PROF all_calls=4091 all_wait_us=1134 all_hold_us=4868 all_shards=32728 n_calls=11708 n_wait_us=575 1_calls=24267 1_wait_us=3389 global_calls=29105 global_wait_us=1844857 global_hold_us=16465 busy=1567
+RPC-PROF total=49409 report=583 getattr=0 lookup=10152 create=5442 create_shard=96 setattr=405 getchunks=25 lookup_path=0 readdir=2275 unlink=5572 append=27
+=== efsd-005 ===
+3911402  1.3 172024 137 efsd
+LOCK-PROF all_calls=5241 all_wait_us=1584 all_hold_us=5909 all_shards=41928 n_calls=14913 n_wait_us=895 1_calls=30597 1_wait_us=4359 global_calls=37935 global_wait_us=2532748 global_hold_us=22635 busy=1899
+RPC-PROF total=57491 report=1297 getattr=0 lookup=12944 create=6818 create_shard=45 setattr=505 getchunks=34 lookup_path=0 readdir=2557 unlink=6692 append=684
+=== fuse-007 ===
+3872081  0.7 150032 172 efs-fuse
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873022  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873014  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15181 checkout_us=96691 send_us=73868 recv_us=1880936 busy_us=244650000 busy_n=609 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2757/91237us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+--python--
+0
+=== fuse-011 ===
+1479223  0.9 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 20 14:04:42 =====
+=== efsd-003 ===
+3258968  1.4 148628 132 efsd
+3258968 3258991  0.5 efsd            futex_do_wait
+3258968 3263429  0.0 efsd            wait_woken
+3258968 3262078  0.0 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+3258968 3261355  0.0 efsd            wait_woken
+3258968 3261354  0.0 efsd            wait_woken
+3258968 3261353  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6500 all_wait_us=1674 all_hold_us=19160 all_shards=52000 n_calls=18159 n_wait_us=865 1_calls=34311 1_wait_us=4673 global_calls=44455 global_wait_us=563559 global_hold_us=22674 busy=1383
+--RPC-SRV--
+RPC-PROF total=63383 report=1331 getattr=0 lookup=11697 create=8635 create_shard=0 setattr=330 getchunks=34 lookup_path=18 readdir=3275 unlink=9156 append=986
+--wchan efsd--
+    105 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.2 154960 135 efsd
+LOCK-PROF all_calls=4091 all_wait_us=1134 all_hold_us=4868 all_shards=32728 n_calls=11708 n_wait_us=575 1_calls=24267 1_wait_us=3389 global_calls=29105 global_wait_us=1844857 global_hold_us=16465 busy=1567
+RPC-PROF total=49409 report=583 getattr=0 lookup=10152 create=5442 create_shard=96 setattr=405 getchunks=25 lookup_path=0 readdir=2275 unlink=5572 append=27
+=== efsd-005 ===
+3911402  1.3 172024 137 efsd
+LOCK-PROF all_calls=5241 all_wait_us=1584 all_hold_us=5909 all_shards=41928 n_calls=14913 n_wait_us=895 1_calls=30597 1_wait_us=4359 global_calls=37935 global_wait_us=2532748 global_hold_us=22635 busy=1899
+RPC-PROF total=57491 report=1297 getattr=0 lookup=12944 create=6818 create_shard=45 setattr=505 getchunks=34 lookup_path=0 readdir=2557 unlink=6692 append=684
+=== fuse-007 ===
+3872081  0.7 150032 172 efs-fuse
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873022  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873014  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15181 checkout_us=96691 send_us=73868 recv_us=1880936 busy_us=244650000 busy_n=609 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2757/91237us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+--python--
+0
+=== fuse-011 ===
+1479223  0.9 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us
+===== round 21 14:04:54 =====
+=== efsd-003 ===
+3258968  1.4 148628 132 efsd
+3258968 3258991  0.5 efsd            futex_do_wait
+3258968 3263429  0.0 efsd            wait_woken
+3258968 3262078  0.0 efsd            wait_woken
+3258968 3261714  0.0 efsd            wait_woken
+3258968 3261356  0.0 efsd            wait_woken
+3258968 3261355  0.0 efsd            wait_woken
+3258968 3261354  0.0 efsd            wait_woken
+3258968 3261353  0.0 efsd            wait_woken
+--LOCK--
+LOCK-PROF all_calls=6500 all_wait_us=1674 all_hold_us=19160 all_shards=52000 n_calls=18159 n_wait_us=865 1_calls=34311 1_wait_us=4673 global_calls=44455 global_wait_us=563559 global_hold_us=22674 busy=1383
+--RPC-SRV--
+RPC-PROF total=63383 report=1331 getattr=0 lookup=11697 create=8635 create_shard=0 setattr=330 getchunks=34 lookup_path=18 readdir=3275 unlink=9156 append=986
+--wchan efsd--
+    105 wait_woken
+     22 futex_do_wait
+      4 hrtimer_nanosleep
+      1 inet_csk_accept
+=== efsd-004 ===
+3754389  1.1 154960 135 efsd
+LOCK-PROF all_calls=4091 all_wait_us=1134 all_hold_us=4868 all_shards=32728 n_calls=11708 n_wait_us=575 1_calls=24267 1_wait_us=3389 global_calls=29105 global_wait_us=1844857 global_hold_us=16465 busy=1567
+RPC-PROF total=49409 report=583 getattr=0 lookup=10152 create=5442 create_shard=96 setattr=405 getchunks=25 lookup_path=0 readdir=2275 unlink=5572 append=27
+=== efsd-005 ===
+3911402  1.2 172024 137 efsd
+LOCK-PROF all_calls=5241 all_wait_us=1584 all_hold_us=5909 all_shards=41928 n_calls=14913 n_wait_us=895 1_calls=30597 1_wait_us=4359 global_calls=37935 global_wait_us=2532748 global_hold_us=22635 busy=1899
+RPC-PROF total=57491 report=1297 getattr=0 lookup=12944 create=6818 create_shard=45 setattr=505 getchunks=34 lookup_path=0 readdir=2557 unlink=6692 append=684
+=== fuse-007 ===
+3872081  0.6 150032 172 efs-fuse
+3872081 3873387  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873386  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873371  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873357  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873354  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873061  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873022  0.0 efs-fuse        fuse_dev_do_read
+3872081 3873014  0.0 efs-fuse        fuse_dev_do_read
+--RPC-CLI--
+RPC-PROF calls=15181 checkout_us=96691 send_us=73868 recv_us=1880936 busy_us=244650000 busy_n=609 checkout_wait_n=12 lookup=5132/416152us getattr=0/0us create=3147/116858us setattr=246/24983us readdir=1036/63587us unlink=2757/91237us append=16/818us report=267/817559us getchunks=20/6228us lookup_path=0/0us
+--wchan fuse--
+    162 futex_do_wait
+     10 fuse_dev_do_read
+--python--
+0
+=== fuse-011 ===
+1479223  0.8 169148 172 efs-fuse
+RPC-PROF calls=19669 checkout_us=68229 send_us=89155 recv_us=2256377 busy_us=247050000 busy_n=601 checkout_wait_n=12 lookup=6183/455013us getattr=0/0us create=3715/154928us setattr=235/27262us readdir=1478/73365us unlink=3902/323930us append=321/11343us report=519/825169us getchunks=14/977us lookup_path=3/119us

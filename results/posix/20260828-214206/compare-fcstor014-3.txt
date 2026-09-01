@@ -1,0 +1,20 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 192
+  EFS BUGS         : 4  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  basic_ftruncate_vs_truncate      [FAIL] OSError: [Errno 5] Input/output error
+  dir_many_files                   [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor014-3-ilxmvpsx/dir_many_files/f0034'
+  trunc_grow_sparse                [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor014-3-ilxmvpsx/trunc_grow_sparse/f'
+  trunc_to_zero                    [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor014-3-ilxmvpsx/trunc_to_zero/f'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

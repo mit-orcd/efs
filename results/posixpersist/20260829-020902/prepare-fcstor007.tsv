@@ -1,0 +1,57 @@
+pass small_file                      
+pass closed_but_not_fsynced          
+FAIL fsynced_file                     OSError: [Errno 5] Input/output error
+FAIL multichunk_file                  FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-persist-fcstor007/multichunk_file/big'
+pass chunk_boundary_write            
+pass overwrite_middle                
+pass appended_file                   
+FAIL sparse_file                      FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-persist-fcstor007/sparse_file/f'
+pass truncate_shrink                 
+pass truncate_extend                 
+pass empty_file                      
+FAIL dd_written_file                  FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-persist-fcstor007/dd_written_file/src'
+FAIL many_files_in_one_dir            FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-persist-fcstor007/many_files_in_one_dir/many/f0003'
+pass deep_tree                       
+FAIL strange_names                    FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-persist-fcstor007/strange_names/nl\nchar'
+pass renamed_file                    
+pass renamed_across_dirs             
+pass unlinked_file                   
+pass removed_dir                     
+pass hardlinks                       
+pass hardlink_after_unlink           
+FAIL symlinks                         FileExistsError: [Errno 17] File exists: 'target' -> '/tmp/efs-mount/posix-persist-fcstor007/symlinks/rel'
+pass file_mode                       
+pass dir_mode                        
+pass size_and_mtime                  
+pass large_file_size_only            
+
+prepare: pass=19 fail=7 total=26 in 43.1s
+# posix-persist host=fcstor007 mnt=/tmp/efs-mount phase=prepare 2026-08-29T02:09:46Z
+test	result	detail
+small_file	PASS	
+closed_but_not_fsynced	PASS	
+fsynced_file	FAIL	OSError: [Errno 5] Input/output error
+multichunk_file	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-persist-fcstor007/multichunk_file/big'
+chunk_boundary_write	PASS	
+overwrite_middle	PASS	
+appended_file	PASS	
+sparse_file	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-persist-fcstor007/sparse_file/f'
+truncate_shrink	PASS	
+truncate_extend	PASS	
+empty_file	PASS	
+dd_written_file	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-persist-fcstor007/dd_written_file/src'
+many_files_in_one_dir	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-persist-fcstor007/many_files_in_one_dir/many/f0003'
+deep_tree	PASS	
+strange_names	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-persist-fcstor007/strange_names/nl\nchar'
+renamed_file	PASS	
+renamed_across_dirs	PASS	
+unlinked_file	PASS	
+removed_dir	PASS	
+hardlinks	PASS	
+hardlink_after_unlink	PASS	
+symlinks	FAIL	FileExistsError: [Errno 17] File exists: 'target' -> '/tmp/efs-mount/posix-persist-fcstor007/symlinks/rel'
+file_mode	PASS	
+dir_mode	PASS	
+size_and_mtime	PASS	
+large_file_size_only	PASS	
+# summary pass=19 fail=7 skip=0 total=26 dur=43.1

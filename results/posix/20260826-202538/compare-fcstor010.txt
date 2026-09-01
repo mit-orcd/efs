@@ -1,0 +1,18 @@
+================================================================
+POSIX baseline comparison: 191 tests
+  both pass        : 184
+  EFS BUGS         : 2  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  basic_terminal_cp_cat            [FAIL] cat output: got b'', want b'terminal-io'
+  hardlink_three_names             [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-fcstor010-hah2vcaj/hardlink_three_names/a'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

@@ -1,0 +1,22 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 190
+  EFS BUGS         : 6  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  concurrent_creates_same_dir      [FAIL] concurrent create errors: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-2yrc9mmc/concurrent_creates_same_dir/t0-0'
+  content_random_roundtrip         [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-2yrc9mmc/content_random_roundtrip/f8'
+  dir_deep_nesting_beyond_64       [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-2yrc9mmc/dir_deep_nesting_beyond_64/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d'
+  err_symlink_loop                 [FAIL] FileExistsError: [Errno 17] File exists: 'a' -> '/tmp/efs-mount/posix-fcstor007-2yrc9mmc/err_symlink_loop/b'
+  mmap_private_not_visible         [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-2yrc9mmc/mmap_private_not_visible/f'
+  mmap_write_read                  [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-2yrc9mmc/mmap_write_read/f'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

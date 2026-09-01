@@ -747,7 +747,7 @@ int main(void)
                 failures++;
             } else if (efs_export_serialize_dirty(&st, cache, cino, cch, 0,
                                                  &incr, &il, &iino, &ich,
-                                                 &used) != 0 ||
+                                                 &used, NULL) != 0 ||
                        !used || !incr) {
                 fprintf(stderr, "FAIL incr dirty serialize used=%d\n", used);
                 failures++;
@@ -769,7 +769,7 @@ int main(void)
                                               &fch) != 0 ||
                        efs_export_serialize_dirty(&st, cache, cino, cch, 0,
                                                   &incr, &il, &iino, &ich,
-                                                  &used) != 0 ||
+                                                  &used, NULL) != 0 ||
                        !used || fl != il || memcmp(full, incr, fl) != 0) {
                 fprintf(stderr, "FAIL incr rename serialize used=%d\n", used);
                 failures++;

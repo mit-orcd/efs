@@ -1,0 +1,31 @@
+================================================================
+POSIX baseline comparison: 191 tests
+  both pass        : 171
+  EFS BUGS         : 15  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  ctime_on_link_rename             [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-kk68gyt9/ctime_on_link_rename/f' -> '/tmp/efs/mnt/posix-kk68gyt9/ctime_on_link_rename/g'
+  dir_hidden_files                 [FAIL] ls hides dotfiles: got set(), want {'visible'}
+  dir_many_files                   [FAIL] many files listed: got 296, want 300
+  dir_readdir_listing              [FAIL] readdir returns all entries: got {'f10', 'f42', 'f15', 'f28', 'f9', 'f31', 'f19', 'f44', 'f36', 'f45', 'f32', 'f27', 'f34', 'f17', 'f12', 'f20', 'f5', 'f29', 'f47', 'f33', 'f21', 'f40', 'f37', 'f23', 'f16', 'f13', 'f25', 'f2', 'f48', 'f46', 'f43', 'f24', 'f35', 'f30', 'f41', 'f0', 'f11', 'f22', 'f49', 'f39', 'f1', 'f26', 'f18', 'f14', 'f38', 'f8'}, want {'f10', 'f42', 'f15', 'f7', 'f28', 'f9', 'f31', 'f19', 'f44', 'f36', 'f45', 'f4', 'f32', 'f27', 'f34', 'f17', 'f12', 'f20', 'f5', 'f29', 'f33', 'f47', 'f21', 'f40', 'f37', 'f23', 'f16', 'f13', 'f25', 'f2', 'f48', 'f46', 'f43', 'f24', 'f35', 'f30', 'f41', 'f0', 'f11', 'f22', 'f49', 'f3', 'f6', 'f39', 'f1', 'f26', 'f18', 'f14', 'f38', 'f8'}
+  hardlink_three_names             [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-kk68gyt9/hardlink_three_names/a' -> '/tmp/efs/mnt/posix-kk68gyt9/hardlink_three_names/b'
+  link_of_symlink                  [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-kk68gyt9/link_of_symlink/l' -> '/tmp/efs/mnt/posix-kk68gyt9/link_of_symlink/h'
+  nlink_after_unlink_open          [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-kk68gyt9/nlink_after_unlink_open/f'
+  perm_hardlink_shares_mode        [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-kk68gyt9/perm_hardlink_shares_mode/a' -> '/tmp/efs/mnt/posix-kk68gyt9/perm_hardlink_shares_mode/b'
+  perm_open_fd_survives_chmod      [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs/mnt/posix-kk68gyt9/perm_open_fd_survives_chmod/f'
+  rename_dir_same_parent           [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-kk68gyt9/rename_dir_same_parent/old' -> '/tmp/efs/mnt/posix-kk68gyt9/rename_dir_same_parent/new'
+  rename_empty_over_empty_dir      [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-kk68gyt9/rename_empty_over_empty_dir/a' -> '/tmp/efs/mnt/posix-kk68gyt9/rename_empty_over_empty_dir/b'
+  rename_file_over_symlink         [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-kk68gyt9/rename_file_over_symlink/s' -> '/tmp/efs/mnt/posix-kk68gyt9/rename_file_over_symlink/l'
+  st_ino_unique_hardlink_same      [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-kk68gyt9/st_ino_unique_hardlink_same/a' -> '/tmp/efs/mnt/posix-kk68gyt9/st_ino_unique_hardlink_same/c'
+  unlink_open_file                 [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-kk68gyt9/unlink_open_file/f'
+  unlink_open_then_recreate        [FAIL] OSError: [Errno 22] Invalid argument: '/tmp/efs/mnt/posix-kk68gyt9/unlink_open_then_recreate/f'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

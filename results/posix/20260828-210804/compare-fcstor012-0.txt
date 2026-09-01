@@ -1,0 +1,18 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 194
+  EFS BUGS         : 2  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  basic_dd_rw                      [FAIL] dd size: got 0, want 32768
+  symlink_to_dir                   [FAIL] OSError: [Errno 5] Input/output error: 'realdir' -> '/tmp/efs-mount/posix-fcstor012-0-0u9iyzkd/symlink_to_dir/dirlink'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

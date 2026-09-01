@@ -1,0 +1,9 @@
+=== RPC ===
+=== fcstor003.ib ===
+RPC-PROF total=23503 report=248 getattr=0 lookup=3911 create=3847 create_shard=7 setattr=47 getchunks=0 lookup_path=0 readdir=0
+=== fcstor004.ib ===
+RPC-PROF total=23970 report=283 getattr=0 lookup=4218 create=3920 create_shard=14 setattr=62 getchunks=0 lookup_path=0 readdir=0
+=== fcstor005.ib ===
+RPC-PROF total=26700 report=404 getattr=0 lookup=4681 create=4337 create_shard=25 setattr=597 getchunks=10 lookup_path=0 readdir=0
+=== fcstor006.ib ===
+RPC-PROF total=13826 report=40 getattr=0 lookup=2082 create=1906 create_shard=19 setattr=24 getchunks=12 lookup_path=0 readdir=0

@@ -1,0 +1,409 @@
+parallel 196 tests jobs=16 (serial 5 after)
+pass basic_seek_read                 
+pass basic_empty_file                
+pass basic_write_read                
+pass basic_dup_write                 
+pass basic_chunk_boundary            
+pass basic_read_past_eof             
+pass basic_rdwr_no_reopen            
+pass basic_oappend_flag              
+pass dir_mkdir_rmdir                 
+pass basic_pread_pwrite              
+pass basic_seek_cur_past_eof_write   
+pass sparse_st_blocks                
+pass basic_seek_end_then_write       
+pass basic_append                    
+pass basic_overwrite_middle          
+pass sparse_write_huge_offset        
+pass dir_rename_file                 
+pass dir_rename_dir_over_file        
+pass dir_rename_file_over_dir        
+pass dir_rename_over_existing        
+pass dir_rename_dir_over_nonempty    
+pass dir_move_into_subdir            
+pass dir_rename_dir_with_contents    
+pass dir_rename_noreplace            
+pass dir_chmod_and_create_denied     
+pass dir_nlink                       
+pass dir_readdir_while_unlink        
+pass dir_deep_nesting                
+pass fsync_reopen_visible            
+pass basic_dd_rw                     
+pass dir_many_files                  
+pass basic_o_trunc                   
+pass hardlink_basic                  
+pass hardlink_shared_data            
+pass hardlink_unlink_one             
+pass hardlink_terminal_ln            
+pass dir_readdir_listing             
+pass dir_dot_entries                 
+pass dir_mkdir_p_terminal            
+pass hardlink_rename_one_name        
+pass basic_terminal_cp_cat           
+pass attr_chown_self                 
+pass attr_chmod                      
+pass dir_hidden_files                
+pass trunc_shrink                    
+pass attr_stat_fields                
+pass attr_access                     
+pass attr_ctime_after_chmod          
+pass perm_file_000_denied            
+pass trunc_grow_sparse               
+pass perm_file_read_only_ops         
+pass perm_owner_bits_not_other       
+pass perm_owner_bits_not_group       
+pass perm_create_mode_000_reopen     
+pass symlink_to_dir                  
+pass perm_owner_chmod_restore        
+pass symlink_dangling                
+pass perm_fchmod                     
+pass symlink_absolute                
+pass perm_access_rwx                 
+pass symlink_unlink_keeps_target     
+pass symlink_relative_after_parent_rename
+pass perm_suid_sgid_sticky_stored    
+pass perm_sticky_owner_can_unlink    
+pass perm_chown_other_uid_denied     
+pass perm_chown_other_gid_denied     
+pass perm_dir_readonly_mutate        
+pass perm_dir_no_r_list              
+pass perm_dir_wx_no_r                
+pass perm_dir_000_restore            
+pass perm_unlink_mode_000_file       
+pass perm_nested_parent_no_x         
+pass perm_rename_into_readonly_dir   
+pass attr_utimens                    
+pass perm_hardlink_shares_mode       
+pass attr_utimens_ns                 
+pass names_crazy_roundtrip           
+pass names_reserved_dots             
+pass names_too_long_component        
+pass names_near_path_max             
+pass names_near_path_max_dir         
+pass names_path_too_long             
+pass names_control_and_high_bytes    
+pass names_unicode_nfc_nfd_coexist   
+pass attr_touch_terminal             
+pass names_crazy_dirs                
+pass trunc_to_zero                   
+pass content_random_roundtrip        
+pass dir_deep_nesting_beyond_64      
+pass content_nul_and_control         
+pass content_random_overwrite_append 
+pass content_random_large_multichunk 
+pass err_mkdir_existing              
+pass err_rmdir_nonempty              
+pass err_rmdir_a_file                
+pass err_open_dir_for_write          
+pass err_read_from_dir               
+pass err_create_excl_existing        
+pass err_rename_dir_into_itself      
+pass err_hardlink_to_dir             
+pass err_hardlink_nonexistent_src    
+pass err_unlink_nonexistent          
+pass err_write_readonly_file         
+pass dir_rename_symlink              
+pass err_create_under_a_file         
+pass err_stat_nonexistent            
+pass err_unlink_a_directory          
+pass err_rmdir_dot_dotdot            
+pass symlink_create_readlink         
+pass perm_owner_utime_readonly       
+pass fsync_dir                       
+pass unlink_open_file                
+pass flock_basic                     
+pass fcntl_lock_basic                
+pass flock_shared_then_exclusive     
+FAIL symlink_chain                    OSError: [Errno 5] Input/output error: 'c' -> '/tmp/efs-mount/posix-fcstor008-5-2mnehhzo/symlink_chain/b'
+pass fcntl_byte_range_lock           
+pass basic_ftruncate_vs_truncate     
+pass fdatasync_write                 
+pass perm_file_write_only            
+pass fsync_write                     
+pass mmap_write_read                 
+pass content_all_byte_values         
+pass symlink_chmod_follows           
+pass mmap_private_not_visible        
+pass perm_open_fd_survives_chmod     
+pass virt_stats_readable             
+pass virt_find_query                 
+pass virt_find_not_a_real_dir        
+pass opt_fallocate                   
+pass opt_xattr                       
+pass opt_seek_hole_data              
+pass opt_copy_file_range             
+pass opt_openat                      
+pass flock_second_fd_exclusive       
+pass concurrent_write_and_readdir    
+pass direct_unaligned_einval         
+pass concurrent_creates_same_dir     
+FAIL fsync_then_fstat_size            timeout after 15s
+FAIL o_directory                      timeout after 15s
+FAIL concurrent_writes_disjoint       timeout after 15s
+FAIL access_f_ok_after_unlink         timeout after 15s
+FAIL zero_length_write                timeout after 15s
+FAIL perm_symlink_target_denied       timeout after 15s
+FAIL rename_empty_over_empty_dir      timeout after 15s
+FAIL flock_two_proc_exclusive         timeout after 15s
+FAIL mtime_bumps_on_write             timeout after 15s
+FAIL ctime_on_link_rename             timeout after 15s
+FAIL concurrent_create_unlink_two_proc timeout after 15s
+FAIL write_hole_pread_zeros           timeout after 15s
+FAIL fcntl_setfl_oappend              timeout after 15s
+FAIL lstat_symlink_size               timeout after 15s
+FAIL rename_dir_same_parent           timeout after 15s
+FAIL st_ino_unique_hardlink_same      timeout after 15s
+FAIL hardlink_three_names             timeout after 15s
+FAIL perm_ftruncate_after_chmod       timeout after 15s
+FAIL two_fds_size_mtime               timeout after 15s
+FAIL chmod_preserves_mtime            timeout after 15s
+FAIL link_of_symlink                  timeout after 15s
+FAIL create_excl_two_proc             timeout after 15s
+FAIL rename_file_over_symlink         timeout after 15s
+FAIL trunc_open_other_fd              timeout after 15s
+FAIL names_dash_prefix_terminal       timeout after 15s
+FAIL unlink_recreate_new_ino          timeout after 15s
+FAIL concurrent_extend_high_then_low  timeout after 15s
+FAIL direct_aligned_rdwr              timeout after 15s
+FAIL concurrent_overlap_write         timeout after 15s
+FAIL flock_unlock_on_close            timeout after 15s
+FAIL perm_exec_denied_no_x            timeout after 15s
+FAIL link_across_dirs                 timeout after 15s
+FAIL case_sensitive_names             timeout after 15s
+FAIL statfs_sane                      timeout after 15s
+FAIL mtime_monotonic_many_writes      timeout after 15s
+FAIL fstat_size_after_write           timeout after 15s
+FAIL mkdirat_unlinkat                 timeout after 15s
+FAIL perm_exec_allowed_with_x         timeout after 15s
+FAIL last_link_unlink_other_dir       timeout after 15s
+FAIL err_symlink_loop                 timeout after 15s
+FAIL o_append_pwrite_absolute         timeout after 15s
+FAIL trunc_zero_then_high_pwrite      timeout after 15s
+FAIL direct_rmw_4k_in_chunk           timeout after 15s
+FAIL trunc_shrink_same_fd             timeout after 15s
+FAIL trailing_slash_on_file           timeout after 15s
+FAIL nlink_after_unlink_open          timeout after 15s
+FAIL two_fds_independent_offset       timeout after 15s
+FAIL concurrent_appends               timeout after 15s
+FAIL write_beyond_eof_then_seek_end   timeout after 15s
+FAIL packed_then_grow_past_chunk      timeout after 15s
+FAIL unlink_open_then_recreate        timeout after 15s
+FAIL content_whitespace_and_line_endings timeout after 15s
+FAIL creat_existing_dir_eisdir        timeout after 15s
+FAIL o_nofollow                       timeout after 15s
+FAIL dir_nlink_after_rmdir_child      timeout after 15s
+FAIL concurrent_appends_two_proc      timeout after 15s
+FAIL writev_readv_chunk_straddle      timeout after 15s
+FAIL rename_to_self                   timeout after 15s
+pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 142/201 pass, 59 fail, 0 skip  (21.2s)
+wrote /tmp/posix-efs-20260828-043610-fcstor008-5.tsv
+# posix-suite host=fcstor008 mnt=/tmp/efs-mount 2026-08-28T04:36:36Z
+test	result	detail
+basic_write_read	PASS	
+basic_empty_file	PASS	
+basic_append	PASS	
+basic_oappend_flag	PASS	
+basic_seek_read	PASS	
+basic_overwrite_middle	PASS	
+basic_read_past_eof	PASS	
+basic_terminal_cp_cat	PASS	
+basic_dd_rw	PASS	
+basic_o_trunc	PASS	
+basic_pread_pwrite	PASS	
+basic_dup_write	PASS	
+basic_chunk_boundary	PASS	
+fsync_reopen_visible	PASS	
+basic_ftruncate_vs_truncate	PASS	
+basic_seek_end_then_write	PASS	
+basic_seek_cur_past_eof_write	PASS	
+basic_rdwr_no_reopen	PASS	
+trunc_shrink	PASS	
+trunc_grow_sparse	PASS	
+sparse_write_huge_offset	PASS	
+trunc_to_zero	PASS	
+sparse_st_blocks	PASS	
+dir_mkdir_rmdir	PASS	
+dir_mkdir_p_terminal	PASS	
+dir_readdir_listing	PASS	
+dir_rename_file	PASS	
+dir_rename_over_existing	PASS	
+dir_rename_dir_with_contents	PASS	
+dir_move_into_subdir	PASS	
+dir_rename_file_over_dir	PASS	
+dir_rename_dir_over_file	PASS	
+dir_rename_dir_over_nonempty	PASS	
+dir_rename_noreplace	PASS	
+dir_rename_symlink	PASS	
+dir_deep_nesting	PASS	
+dir_many_files	PASS	
+dir_dot_entries	PASS	
+dir_hidden_files	PASS	
+dir_mkdir_umask	PASS	
+dir_chmod_and_create_denied	PASS	
+dir_nlink	PASS	
+dir_readdir_while_unlink	PASS	
+symlink_create_readlink	PASS	
+symlink_to_dir	PASS	
+symlink_dangling	PASS	
+symlink_chain	FAIL	OSError: [Errno 5] Input/output error: 'c' -> '/tmp/efs-mount/posix-fcstor008-5-2mnehhzo/symlink_chain/b'
+symlink_absolute	PASS	
+hardlink_basic	PASS	
+hardlink_shared_data	PASS	
+hardlink_unlink_one	PASS	
+hardlink_terminal_ln	PASS	
+hardlink_rename_one_name	PASS	
+symlink_unlink_keeps_target	PASS	
+symlink_relative_after_parent_rename	PASS	
+symlink_chmod_follows	PASS	
+attr_chmod	PASS	
+attr_chown_self	PASS	
+attr_utimens	PASS	
+attr_utimens_ns	PASS	
+attr_touch_terminal	PASS	
+attr_stat_fields	PASS	
+attr_umask_respected	PASS	
+attr_access	PASS	
+attr_ctime_after_chmod	PASS	
+perm_file_000_denied	PASS	
+perm_file_write_only	PASS	
+perm_file_read_only_ops	PASS	
+perm_owner_bits_not_other	PASS	
+perm_owner_bits_not_group	PASS	
+perm_create_mode_000_reopen	PASS	
+perm_open_fd_survives_chmod	PASS	
+perm_owner_chmod_restore	PASS	
+perm_owner_utime_readonly	PASS	
+perm_fchmod	PASS	
+perm_ftruncate_after_chmod	FAIL	timeout after 15s
+perm_access_rwx	PASS	
+perm_exec_denied_no_x	FAIL	timeout after 15s
+perm_exec_allowed_with_x	FAIL	timeout after 15s
+perm_suid_sgid_sticky_stored	PASS	
+perm_sticky_owner_can_unlink	PASS	
+perm_chown_other_uid_denied	PASS	
+perm_chown_other_gid_denied	PASS	
+perm_dir_readonly_mutate	PASS	
+perm_dir_no_x_search	PASS	
+perm_dir_no_r_list	PASS	
+perm_dir_wx_no_r	PASS	
+perm_dir_000_restore	PASS	
+perm_unlink_mode_000_file	PASS	
+perm_nested_parent_no_x	PASS	
+perm_rename_into_readonly_dir	PASS	
+perm_symlink_target_denied	FAIL	timeout after 15s
+perm_hardlink_shares_mode	PASS	
+names_crazy_roundtrip	PASS	
+names_dash_prefix_terminal	FAIL	timeout after 15s
+names_too_long_component	PASS	
+names_reserved_dots	PASS	
+names_near_path_max	PASS	
+names_near_path_max_dir	PASS	
+names_path_too_long	PASS	
+names_control_and_high_bytes	PASS	
+names_unicode_nfc_nfd_coexist	PASS	
+names_crazy_dirs	PASS	
+dir_deep_nesting_beyond_64	PASS	
+content_random_roundtrip	PASS	
+content_all_byte_values	PASS	
+content_whitespace_and_line_endings	FAIL	timeout after 15s
+content_nul_and_control	PASS	
+content_random_overwrite_append	PASS	
+content_random_large_multichunk	PASS	
+err_mkdir_existing	PASS	
+err_rmdir_nonempty	PASS	
+err_rmdir_a_file	PASS	
+err_open_dir_for_write	PASS	
+err_read_from_dir	PASS	
+err_create_excl_existing	PASS	
+err_rename_dir_into_itself	PASS	
+err_hardlink_to_dir	PASS	
+err_unlink_nonexistent	PASS	
+err_hardlink_nonexistent_src	PASS	
+err_write_readonly_file	PASS	
+err_symlink_loop	FAIL	timeout after 15s
+err_create_under_a_file	PASS	
+err_chdir_into_file	PASS	
+err_stat_nonexistent	PASS	
+err_unlink_a_directory	PASS	
+err_rmdir_dot_dotdot	PASS	
+fsync_write	PASS	
+fdatasync_write	PASS	
+fsync_dir	PASS	
+unlink_open_file	PASS	
+flock_basic	PASS	
+fcntl_lock_basic	PASS	
+flock_shared_then_exclusive	PASS	
+flock_two_proc_exclusive	FAIL	timeout after 15s
+fcntl_byte_range_lock	PASS	
+mmap_write_read	PASS	
+mmap_private_not_visible	PASS	
+statfs_sane	FAIL	timeout after 15s
+concurrent_creates_same_dir	PASS	
+concurrent_appends	FAIL	timeout after 15s
+concurrent_appends_two_proc	FAIL	timeout after 15s
+concurrent_writes_disjoint	FAIL	timeout after 15s
+concurrent_create_unlink_two_proc	FAIL	timeout after 15s
+concurrent_write_and_readdir	PASS	
+virt_stats_readable	PASS	
+virt_find_query	PASS	
+virt_find_not_a_real_dir	PASS	
+opt_fallocate	PASS	
+opt_xattr	PASS	
+opt_seek_hole_data	PASS	
+opt_copy_file_range	PASS	
+opt_openat	PASS	
+flock_second_fd_exclusive	PASS	
+direct_aligned_rdwr	FAIL	timeout after 15s
+direct_unaligned_einval	PASS	
+direct_rmw_4k_in_chunk	FAIL	timeout after 15s
+packed_then_grow_past_chunk	FAIL	timeout after 15s
+writev_readv_chunk_straddle	FAIL	timeout after 15s
+zero_length_write	FAIL	timeout after 15s
+fcntl_setfl_oappend	FAIL	timeout after 15s
+two_fds_size_mtime	FAIL	timeout after 15s
+trunc_open_other_fd	FAIL	timeout after 15s
+link_across_dirs	FAIL	timeout after 15s
+last_link_unlink_other_dir	FAIL	timeout after 15s
+nlink_after_unlink_open	FAIL	timeout after 15s
+o_nofollow	FAIL	timeout after 15s
+o_directory	FAIL	timeout after 15s
+ctime_on_link_rename	FAIL	timeout after 15s
+st_ino_unique_hardlink_same	FAIL	timeout after 15s
+create_excl_two_proc	FAIL	timeout after 15s
+concurrent_overlap_write	FAIL	timeout after 15s
+fstat_size_after_write	FAIL	timeout after 15s
+trunc_shrink_same_fd	FAIL	timeout after 15s
+unlink_open_then_recreate	FAIL	timeout after 15s
+rename_to_self	FAIL	timeout after 15s
+rename_empty_over_empty_dir	FAIL	timeout after 15s
+lstat_symlink_size	FAIL	timeout after 15s
+chmod_preserves_mtime	FAIL	timeout after 15s
+unlink_recreate_new_ino	FAIL	timeout after 15s
+case_sensitive_names	FAIL	timeout after 15s
+o_append_pwrite_absolute	FAIL	timeout after 15s
+two_fds_independent_offset	FAIL	timeout after 15s
+dir_nlink_after_rmdir_child	FAIL	timeout after 15s
+access_f_ok_after_unlink	FAIL	timeout after 15s
+write_hole_pread_zeros	FAIL	timeout after 15s
+hardlink_three_names	FAIL	timeout after 15s
+rename_file_over_symlink	FAIL	timeout after 15s
+flock_unlock_on_close	FAIL	timeout after 15s
+mkdirat_unlinkat	FAIL	timeout after 15s
+trailing_slash_on_file	FAIL	timeout after 15s
+creat_existing_dir_eisdir	FAIL	timeout after 15s
+fsync_then_fstat_size	FAIL	timeout after 15s
+chdir_dotdot_after_mkdir	PASS	
+mtime_bumps_on_write	FAIL	timeout after 15s
+rename_dir_same_parent	FAIL	timeout after 15s
+link_of_symlink	FAIL	timeout after 15s
+concurrent_extend_high_then_low	FAIL	timeout after 15s
+mtime_monotonic_many_writes	FAIL	timeout after 15s
+trunc_zero_then_high_pwrite	FAIL	timeout after 15s
+write_beyond_eof_then_seek_end	FAIL	timeout after 15s
+# summary pass=142 fail=59 skip=0 total=201 dur=21.2

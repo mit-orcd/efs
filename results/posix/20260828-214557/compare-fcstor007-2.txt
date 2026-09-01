@@ -1,0 +1,20 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 192
+  EFS BUGS         : 4  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  concurrent_appends               [FAIL] timeout after 15s
+  concurrent_appends_two_proc      [FAIL] timeout after 15s
+  dir_many_files                   [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-2-53w5laat/dir_many_files/f0094'
+  symlink_chain                    [FAIL] FileExistsError: [Errno 17] File exists: 'c' -> '/tmp/efs-mount/posix-fcstor007-2-53w5laat/symlink_chain/b'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

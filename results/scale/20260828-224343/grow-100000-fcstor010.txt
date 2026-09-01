@@ -1,0 +1,8 @@
+  ... 11111 in 5s (2219/s)
+ERR /tmp/efs-mount/scale/fcstor010/d000002/f000002947: [Errno 5] Input/output error: '/tmp/efs-mount/scale/fcstor010/d000002/f000002947'
+ERR /tmp/efs-mount/scale/fcstor010/d000003/f000003035: [Errno 5] Input/output error: '/tmp/efs-mount/scale/fcstor010/d000003/f000003035'
+ERR /tmp/efs-mount/scale/fcstor010/d000002/f000002975: [Errno 5] Input/output error: '/tmp/efs-mount/scale/fcstor010/d000002/f000002975'
+ERR /tmp/efs-mount/scale/fcstor010/d000003/f000003993: [Errno 5] Input/output error: '/tmp/efs-mount/scale/fcstor010/d000003/f000003993'
+ERR /tmp/efs-mount/scale/fcstor010/d000002/f000002951: [Errno 5] Input/output error: '/tmp/efs-mount/scale/fcstor010/d000002/f000002951'
+ERRORS 7551
+RATE 11111 5.01 2219.2

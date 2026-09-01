@@ -1,0 +1,49 @@
+ecopy_pid=3498391
+=== TOP FUSE ===
+top - 21:18:30 up 12 days,  6:31,  0 users,  load average: 0.72, 0.20, 0.06
+Threads:  41 total,   0 running,  41 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  0.0 us,  0.5 sy,  0.0 ni, 99.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st
+MiB Mem : 257146.7 total,  76101.1 free,  11879.0 used, 173903.7 buff/cache
+MiB Swap:  31983.0 total,  31982.5 free,      0.5 used. 245267.7 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+3498170 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.00 efs-fuse
+3498174 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.00 efs-fuse
+3498765 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.35 efs-fuse
+3498792 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.35 efs-fuse
+3498807 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.25 efs-fuse
+3498811 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.33 efs-fuse
+3498823 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.23 efs-fuse
+3498825 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.12 efs-fuse
+3498827 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.20 efs-fuse
+3498833 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.21 efs-fuse
+3498839 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.22 efs-fuse
+3498844 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.10 efs-fuse
+3498845 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.17 efs-fuse
+3498847 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.20 efs-fuse
+3498848 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.22 efs-fuse
+3498916 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.14 efs-fuse
+3498917 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.18 efs-fuse
+3498918 erbmi1    20   0 3393940 189904   2596 S   0.0   0.1   0:00.11 efs-fuse
+=== TOP ECOPY ===
+top - 21:18:30 up 12 days,  6:31,  0 users,  load average: 0.72, 0.20, 0.06
+Threads: 266 total,   0 running, 266 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  0.0 us,  0.5 sy,  0.0 ni, 99.2 id,  0.0 wa,  0.3 hi,  0.0 si,  0.0 st
+MiB Mem : 257146.7 total,  76100.1 free,  11879.8 used, 173903.9 buff/cache
+MiB Swap:  31983.0 total,  31982.5 free,      0.5 used. 245266.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+3498391 erbmi1    20   0   12.3g   3.1g   1968 S   0.0   1.3   0:00.01 ecopy
+3498396 erbmi1    20   0   12.3g   3.1g   1968 S   0.0   1.3   0:00.00 ecopy
+3498397 erbmi1    20   0   12.3g   3.1g   1968 S   0.0   1.3   0:00.00 ecopy
+3498398 erbmi1    20   0   12.3g   3.1g   1968 S   0.0   1.3   0:00.00 ecopy
+3498399 erbmi1    20   0   12.3g   3.1g   1968 S   0.0   1.3   0:00.00 ecopy
+3498400 erbmi1    20   0   12.3g   3.1g   1968 S   0.0   1.3   0:00.00 ecopy
+3498401 erbmi1    20   0   12.3g   3.1g   1968 S   0.0   1.3   0:00.00 ecopy
+3498402 erbmi1    20   0   12.3g   3.1g   1968 S   0.0   1.3   0:00.00 ecopy
+3498403 erbmi1    20   0   12.3g   3.1g   1968 S   0.0   1.3   0:00.00 ecopy
+3498404 erbmi1    20   0   12.3g   3.1g   1968 S   0.0   1.3   0:00.00 ecopy
+3498405 erbmi1    20   0   12.3g   3.1g   1968 S   0.0   1.3   0:00.00 ecopy
+3498406 erbmi1    20   0   12.3g   3.1g   1968 S   0.0   1.3   0:00.00 ecopy
+3498407 erbmi1    20   0   12.3g   3.1g   1968 S   0.0   1.3   0:00.00 ecopy
+efs-ssh: TIMEOUT after 100s host=fcstor007.ib

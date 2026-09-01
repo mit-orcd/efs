@@ -409,12 +409,20 @@ void efs_export_trim_ino_ram(struct efs_export *ex)
 {
     uint64_t cap, bytes;
     uint32_t si, best, hops;
+    uint32_t evicted = 0;
     /* Something has to be able to bring a slab back: either the serialize
      * cache or a page source over the committed fragments. */
-    if (!ex || !ex->ino_slabs || ex->flush_full)
+    if (!ex || !ex->ino_slabs || ex->flush_full) {
+        if (ex && getenv("EFS_FLUSH_PROF"))
+            fprintf(stderr, "TRIM-PROF skip full=%d slabs=%d\n",
+                    ex->flush_full, ex->ino_slabs ? 1 : 0);
         return;
-    if (!ex->flush_blob && !ex->page_src)
+    }
+    if (!ex->flush_blob && !ex->page_src) {
+        if (getenv("EFS_FLUSH_PROF"))
+            fprintf(stderr, "TRIM-PROF skip no-source\n");
         return;
+    }
     cap = (uint64_t)ino_ram_cap_mb() << 20;
     bytes = ino_ram_bytes(ex);
     hops = 0;
@@ -436,9 +444,21 @@ void efs_export_trim_ino_ram(struct efs_export *ex)
         }
         if (best == (uint32_t)-1)
             break;
+        evicted++;
         inode_slab_free_one(ex, best);
         bytes = ino_ram_bytes(ex);
     }
+    if (getenv("EFS_FLUSH_PROF"))
+        fprintf(stderr,
+                "TRIM-PROF cap_mb=%llu bytes_mb=%llu blob_mb=%llu "
+                "resident=%u slab_n=%u evicted=%u hops=%u\n",
+                (unsigned long long)(cap >> 20),
+                (unsigned long long)(bytes >> 20),
+                (unsigned long long)(ex->flush_blob
+                    ? ((uint64_t)ex->flush_blob_ino_len +
+                       ex->flush_blob_chunk_len) >> 20
+                    : 0),
+                ex->ino_slabs_resident, ex->ino_slab_n, evicted, hops);
 }
 
 static uint64_t inode_slot_of(const struct efs_export *ex,
@@ -4569,10 +4589,12 @@ int efs_export_serialize_dirty(struct efs_export *ex,
                                uint32_t cache_chunk_len, int omit_chunks,
                                char **buf, size_t *len,
                                uint32_t *ino_blob_len, uint32_t *chunk_blob_len,
-                               int *used_incr)
+                               int *used_incr, uint8_t **page_absent)
 {
     if (used_incr)
         *used_incr = 0;
+    if (page_absent)
+        *page_absent = NULL;
     if (!ex || !buf || !len)
         return EFS_ERR_INVAL;
     efs_export_ensure_rollups(ex);
@@ -4602,13 +4624,48 @@ int efs_export_serialize_dirty(struct efs_export *ex,
     if (!b)
         return EFS_ERR_NOMEM;
 
-    memcpy(b, cache, new_ino);
-    efs_export_pack_header(ex, b);
-
     uint32_t ino_pc = efs_meta_page_count_for_blob((uint32_t)new_ino);
     flush_mark_page(ex, 0);
     for (uint64_t s = old_ic; s < ex->inode_count; s++)
         efs_export_flush_mark_ino_slot(ex, s);
+
+    /* An inode page whose slab is not resident is provably unchanged since the
+     * flush that produced the committed root: trim_ino_ram only ever evicts a
+     * clean slab, and any mutation faults the slab back in and re-dirties it.
+     * So we neither can nor need to produce those bytes — leave the page
+     * zeroed and tell the caller to reuse the committed ci. Dirty pages are
+     * excluded here by construction, so the repack loop below never lands on
+     * an absent page. */
+    uint8_t *absent = NULL;
+    if (page_absent) {
+        absent = calloc(ino_pc ? ino_pc : 1, 1);
+        if (!absent) {
+            free(b);
+            return EFS_ERR_NOMEM;
+        }
+        for (uint32_t pi = 1; pi < ino_pc; pi++) {
+            uint32_t si = pi - 1;
+            if (efs_export_flush_page_is_dirty(ex, pi))
+                continue;
+            if (!ex->ino_slabs || si >= ex->ino_slab_n ||
+                !ex->ino_slabs[si].rows)
+                absent[pi] = 1;
+        }
+    }
+
+    for (uint32_t pi = 0; pi < ino_pc; pi++) {
+        size_t off = (size_t)pi * EFS_META_PAGE_SIZE;
+        size_t n = EFS_META_PAGE_SIZE;
+        if (off >= new_ino)
+            break;
+        if (off + n > new_ino)
+            n = new_ino - off;
+        if (absent && absent[pi])
+            continue;
+        memcpy(b + off, cache + off, n);
+    }
+    efs_export_pack_header(ex, b);
+
     /* v8: inode page pi (pi >= 1) is exactly slab pi-1, so a dirty page
      * rewrites its own rows and touches nothing else. */
     for (uint32_t pi = 1; pi < ino_pc; pi++) {
@@ -4658,6 +4715,8 @@ int efs_export_serialize_dirty(struct efs_export *ex,
     if (chunk_blob_len)
         *chunk_blob_len = omit_chunks ? cache_chunk_len
                                       : (uint32_t)chunk_bytes;
+    if (page_absent)
+        *page_absent = absent;
     if (used_incr)
         *used_incr = 1;
     return EFS_OK;

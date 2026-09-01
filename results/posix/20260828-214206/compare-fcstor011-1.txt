@@ -1,0 +1,23 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 189
+  EFS BUGS         : 7  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  dir_deep_nesting_beyond_64       [FAIL] stat at depth: got 0, want 4
+  dir_many_files                   [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor011-1-dn1a1eth/dir_many_files/f0192'
+  dir_move_into_subdir             [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor011-1-dn1a1eth/dir_move_into_subdir/a/f'
+  dir_readdir_listing              [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor011-1-dn1a1eth/dir_readdir_listing/f11'
+  dir_readdir_while_unlink         [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor011-1-dn1a1eth/dir_readdir_while_unlink/f00'
+  dir_rename_symlink               [FAIL] FileExistsError: [Errno 17] File exists: 't' -> '/tmp/efs-mount/posix-fcstor011-1-dn1a1eth/dir_rename_symlink/sl'
+  symlink_to_dir                   [FAIL] OSError: [Errno 5] Input/output error: 'realdir' -> '/tmp/efs-mount/posix-fcstor011-1-dn1a1eth/symlink_to_dir/dirlink'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

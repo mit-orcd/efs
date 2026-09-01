@@ -1,0 +1,184 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 28
+  EFS BUGS         : 168  (baseline PASS, target FAIL)
+  both fail (match): 5
+  target better    : 0
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  access_f_ok_after_unlink         [FAIL] timeout after 15s
+  attr_access                      [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/attr_access/f'
+  attr_chmod                       [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/attr_chmod/f'
+  attr_chown_self                  [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/attr_chown_self/f'
+  attr_ctime_after_chmod           [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/attr_ctime_after_chmod/f'
+  attr_stat_fields                 [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/attr_stat_fields/f'
+  attr_touch_terminal              [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/attr_touch_terminal/f'
+  attr_umask_respected             [None] 
+  attr_utimens                     [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/attr_utimens/f'
+  attr_utimens_ns                  [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/attr_utimens_ns/f'
+  basic_ftruncate_vs_truncate      [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/basic_ftruncate_vs_truncate/f'
+  basic_o_trunc                    [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/basic_o_trunc/f'
+  basic_terminal_cp_cat            [FAIL] cmd ['cp', 'src', 'dst'] failed rc=1: cp: cannot stat 'src': No such file or directory 
+  case_sensitive_names             [FAIL] timeout after 15s
+  chdir_dotdot_after_mkdir         [None] 
+  chmod_preserves_mtime            [FAIL] timeout after 15s
+  concurrent_appends               [FAIL] timeout after 15s
+  concurrent_appends_two_proc      [FAIL] timeout after 15s
+  concurrent_create_unlink_two_proc [FAIL] timeout after 15s
+  concurrent_creates_same_dir      [FAIL] timeout after 15s
+  concurrent_extend_high_then_low  [FAIL] timeout after 15s
+  concurrent_overlap_write         [FAIL] timeout after 15s
+  concurrent_write_and_readdir     [FAIL] timeout after 15s
+  concurrent_writes_disjoint       [FAIL] timeout after 15s
+  content_all_byte_values          [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/content_all_byte_values/allbytes'
+  content_nul_and_control          [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/content_nul_and_control/bin'
+  content_random_large_multichunk  [FAIL] timeout after 15s
+  content_random_overwrite_append  [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/content_random_overwrite_append/f'
+  content_random_roundtrip         [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/content_random_roundtrip/f0'
+  content_whitespace_and_line_endings [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/content_whitespace_and_line_endings/ws'
+  creat_existing_dir_eisdir        [FAIL] timeout after 15s
+  create_excl_two_proc             [FAIL] timeout after 15s
+  ctime_on_link_rename             [FAIL] timeout after 15s
+  dir_chmod_and_create_denied      [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/dir_chmod_and_create_denied/sub'
+  dir_deep_nesting                 [FAIL] timeout after 15s
+  dir_deep_nesting_beyond_64       [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/dir_deep_nesting_beyond_64/d'
+  dir_dot_entries                  [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/dir_dot_entries/sub'
+  dir_hidden_files                 [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/dir_hidden_files/.hidden'
+  dir_many_files                   [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/dir_many_files/f0001'
+  dir_mkdir_p_terminal             [FAIL] cmd 'mkdir -p a/b/c/d/e' failed rc=1: mkdir: cannot create directory ‘a’: No such file or directory 
+  dir_nlink                        [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/dir_nlink/sub'
+  dir_nlink_after_rmdir_child      [FAIL] timeout after 15s
+  dir_readdir_listing              [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/dir_readdir_listing/f3'
+  dir_readdir_while_unlink         [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/dir_readdir_while_unlink/f00'
+  dir_rename_noreplace             [FAIL] RENAME_NOREPLACE errno 2, want EEXIST
+  dir_rename_symlink               [FAIL] FileNotFoundError: [Errno 2] No such file or directory: 't' -> '/tmp/efs-mount/posix-fcstor007-s2je45xj/dir_rename_symlink/sl'
+  direct_aligned_rdwr              [FAIL] timeout after 15s
+  direct_rmw_4k_in_chunk           [FAIL] timeout after 15s
+  direct_unaligned_einval          [FAIL] timeout after 15s
+  err_chdir_into_file              [None] 
+  err_create_excl_existing         [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/err_create_excl_existing/f'
+  err_create_under_a_file          [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/err_create_under_a_file/f'
+  err_hardlink_to_dir              [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/err_hardlink_to_dir/sub'
+  err_mkdir_existing               [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/err_mkdir_existing/sub'
+  err_open_dir_for_write           [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/err_open_dir_for_write/sub'
+  err_read_from_dir                [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/err_read_from_dir/sub'
+  err_rename_dir_into_itself       [FAIL] timeout after 15s
+  err_rmdir_a_file                 [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/err_rmdir_a_file/f'
+  err_rmdir_dot_dotdot             [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/err_rmdir_dot_dotdot/sub'
+  err_rmdir_nonempty               [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/err_rmdir_nonempty/sub'
+  err_symlink_loop                 [FAIL] FileNotFoundError: [Errno 2] No such file or directory: 'b' -> '/tmp/efs-mount/posix-fcstor007-s2je45xj/err_symlink_loop/a'
+  err_unlink_a_directory           [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/err_unlink_a_directory/sub'
+  err_write_readonly_file          [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/err_write_readonly_file/f'
+  fcntl_lock_basic                 [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/fcntl_lock_basic/f'
+  fcntl_setfl_oappend              [FAIL] timeout after 15s
+  fdatasync_write                  [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/fdatasync_write/f'
+  flock_basic                      [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/flock_basic/f'
+  flock_second_fd_exclusive        [FAIL] timeout after 15s
+  flock_shared_then_exclusive      [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/flock_shared_then_exclusive/f'
+  flock_two_proc_exclusive         [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/flock_two_proc_exclusive/f'
+  flock_unlock_on_close            [FAIL] timeout after 15s
+  fstat_size_after_write           [FAIL] timeout after 15s
+  fsync_dir                        [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/fsync_dir/sub'
+  fsync_then_fstat_size            [FAIL] timeout after 15s
+  fsync_write                      [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/fsync_write/f'
+  hardlink_basic                   [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/hardlink_basic/orig'
+  hardlink_rename_one_name         [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/hardlink_rename_one_name/orig'
+  hardlink_shared_data             [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/hardlink_shared_data/orig'
+  hardlink_terminal_ln             [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/hardlink_terminal_ln/orig'
+  hardlink_three_names             [FAIL] timeout after 15s
+  hardlink_unlink_one              [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/hardlink_unlink_one/orig'
+  last_link_unlink_other_dir       [FAIL] timeout after 15s
+  link_across_dirs                 [FAIL] timeout after 15s
+  link_of_symlink                  [FAIL] timeout after 15s
+  lstat_symlink_size               [FAIL] timeout after 15s
+  mkdirat_unlinkat                 [FAIL] timeout after 15s
+  mmap_private_not_visible         [FAIL] timeout after 15s
+  mmap_write_read                  [FAIL] timeout after 15s
+  mtime_bumps_on_write             [FAIL] timeout after 15s
+  mtime_monotonic_many_writes      [FAIL] timeout after 15s
+  names_control_and_high_bytes     [FAIL] FileNotFoundError: [Errno 2] No such file or directory: b'/tmp/efs-mount/posix-fcstor007-s2je45xj/names_control_and_high_bytes/ctrl-\x01\x02\x1f'
+  names_crazy_dirs                 [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/names_crazy_dirs/with space'
+  names_crazy_roundtrip            [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/names_crazy_roundtrip/with space'
+  names_dash_prefix_terminal       [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/names_dash_prefix_terminal/-rf'
+  names_near_path_max              [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/names_near_path_max/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  names_near_path_max_dir          [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/names_near_path_max_dir/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  names_path_too_long              [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/names_path_too_long/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  names_reserved_dots              [FAIL] wrong errno: got 2 (No such file or directory), want one of (17,)
+  names_too_long_component         [FAIL] wrong errno: got 2 (No such file or directory), want one of (36,)
+  names_unicode_nfc_nfd_coexist    [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/names_unicode_nfc_nfd_coexist/cafeé'
+  nlink_after_unlink_open          [FAIL] timeout after 15s
+  o_append_pwrite_absolute         [FAIL] timeout after 15s
+  o_directory                      [FAIL] timeout after 15s
+  o_nofollow                       [FAIL] timeout after 15s
+  opt_copy_file_range              [FAIL] timeout after 15s
+  opt_fallocate                    [FAIL] timeout after 15s
+  opt_openat                       [FAIL] timeout after 15s
+  opt_seek_hole_data               [FAIL] timeout after 15s
+  opt_xattr                        [FAIL] timeout after 15s
+  packed_then_grow_past_chunk      [FAIL] timeout after 15s
+  perm_access_rwx                  [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_access_rwx/f'
+  perm_chown_other_gid_denied      [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_chown_other_gid_denied/f'
+  perm_chown_other_uid_denied      [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_chown_other_uid_denied/f'
+  perm_create_mode_000_reopen      [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_create_mode_000_reopen/f'
+  perm_dir_000_restore             [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_dir_000_restore/sub'
+  perm_dir_no_r_list               [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_dir_no_r_list/sub'
+  perm_dir_no_x_search             [None] 
+  perm_dir_readonly_mutate         [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_dir_readonly_mutate/sub'
+  perm_dir_wx_no_r                 [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_dir_wx_no_r/sub'
+  perm_exec_allowed_with_x         [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_exec_allowed_with_x/s'
+  perm_exec_denied_no_x            [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_exec_denied_no_x/s'
+  perm_fchmod                      [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_fchmod/f'
+  perm_file_000_denied             [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_file_000_denied/f'
+  perm_file_read_only_ops          [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_file_read_only_ops/f'
+  perm_file_write_only             [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_file_write_only/f'
+  perm_ftruncate_after_chmod       [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_ftruncate_after_chmod/f'
+  perm_hardlink_shares_mode        [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_hardlink_shares_mode/a'
+  perm_nested_parent_no_x          [FAIL] timeout after 15s
+  perm_open_fd_survives_chmod      [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_open_fd_survives_chmod/f'
+  perm_owner_bits_not_group        [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_owner_bits_not_group/f'
+  perm_owner_bits_not_other        [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_owner_bits_not_other/f'
+  perm_owner_chmod_restore         [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_owner_chmod_restore/f'
+  perm_owner_utime_readonly        [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_owner_utime_readonly/f'
+  perm_rename_into_readonly_dir    [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_rename_into_readonly_dir/src'
+  perm_sticky_owner_can_unlink     [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_sticky_owner_can_unlink/sub'
+  perm_suid_sgid_sticky_stored     [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_suid_sgid_sticky_stored/f'
+  perm_symlink_target_denied       [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_symlink_target_denied/t'
+  perm_unlink_mode_000_file        [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/perm_unlink_mode_000_file/f'
+  rename_dir_same_parent           [FAIL] timeout after 15s
+  rename_empty_over_empty_dir      [FAIL] timeout after 15s
+  rename_file_over_symlink         [FAIL] timeout after 15s
+  rename_to_self                   [FAIL] timeout after 15s
+  st_ino_unique_hardlink_same      [FAIL] timeout after 15s
+  statfs_sane                      [FAIL] timeout after 15s
+  symlink_absolute                 [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/symlink_absolute/t'
+  symlink_chain                    [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/symlink_chain/c'
+  symlink_chmod_follows            [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/symlink_chmod_follows/t'
+  symlink_create_readlink          [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/symlink_create_readlink/target'
+  symlink_dangling                 [FAIL] FileNotFoundError: [Errno 2] No such file or directory: 'nonexistent' -> '/tmp/efs-mount/posix-fcstor007-s2je45xj/symlink_dangling/dangle'
+  symlink_relative_after_parent_rename [FAIL] timeout after 15s
+  symlink_to_dir                   [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/symlink_to_dir/realdir'
+  symlink_unlink_keeps_target      [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/symlink_unlink_keeps_target/t'
+  trailing_slash_on_file           [FAIL] timeout after 15s
+  trunc_grow_sparse                [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/trunc_grow_sparse/f'
+  trunc_open_other_fd              [FAIL] timeout after 15s
+  trunc_shrink                     [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/trunc_shrink/f'
+  trunc_shrink_same_fd             [FAIL] timeout after 15s
+  trunc_to_zero                    [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/trunc_to_zero/f'
+  trunc_zero_then_high_pwrite      [FAIL] timeout after 15s
+  two_fds_independent_offset       [FAIL] timeout after 15s
+  two_fds_size_mtime               [FAIL] timeout after 15s
+  unlink_open_file                 [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor007-s2je45xj/unlink_open_file/f'
+  unlink_open_then_recreate        [FAIL] timeout after 15s
+  unlink_recreate_new_ino          [FAIL] timeout after 15s
+  write_beyond_eof_then_seek_end   [FAIL] timeout after 15s
+  write_hole_pread_zeros           [FAIL] timeout after 15s
+  writev_readv_chunk_straddle      [FAIL] timeout after 15s
+  zero_length_write                [FAIL] timeout after 15s
+
+--- both fail (behaviour matches baseline) ---
+  dir_mkdir_umask                  base=FAIL target=None
+  fcntl_byte_range_lock            base=FAIL target=FAIL
+  virt_find_not_a_real_dir         base=SKIP target=FAIL
+  virt_find_query                  base=SKIP target=FAIL
+  virt_stats_readable              base=SKIP target=FAIL

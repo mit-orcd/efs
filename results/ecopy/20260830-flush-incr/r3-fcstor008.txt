@@ -1,0 +1,1 @@
+bash: line 4: 1367785 Killed                  /home/erbmi1/bin/ecopy '/orcd/scratch/orcd/001/erbmi1/imagenet/images_complete/ilsvrc/train'/$c '/tmp/efs-mount/ecopy-fcstor008/r3'/$c >> /tmp/ecopy-round.log 2>&1

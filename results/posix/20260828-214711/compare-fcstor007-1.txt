@@ -1,0 +1,19 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 193
+  EFS BUGS         : 3  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  basic_append                     [FAIL] OSError: [Errno 5] Input/output error
+  dir_many_files                   [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-1-hspet0_u/dir_many_files/f0025'
+  dir_readdir_listing              [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-1-hspet0_u/dir_readdir_listing/f19'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

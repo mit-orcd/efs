@@ -1,0 +1,17 @@
+  ... 47100 in 5s (9409/s)
+  ... 92500 in 10s (9240/s)
+  ... 132800 in 15s (8844/s)
+  ... 173000 in 20s (8641/s)
+  ... 212500 in 25s (8491/s)
+  ... 249200 in 30s (8298/s)
+  ... 285400 in 35s (8146/s)
+  ... 316399 in 40s (7902/s)
+  ... 325099 in 45s (7217/s)
+  ... 333333 in 50s (6660/s)
+ERR /tmp/efs-mount/scale-fcstor009/d000529/f000529180: [Errno 2] No such file or directory: '/tmp/efs-mount/scale-fcstor009/d000529/f000529180'
+ERR /tmp/efs-mount/scale-fcstor009/d000509/f000509088: [Errno 5] Input/output error: '/tmp/efs-mount/scale-fcstor009/d000509/f000509088'
+ERR /tmp/efs-mount/scale-fcstor009/d000509/f000509104: [Errno 5] Input/output error: '/tmp/efs-mount/scale-fcstor009/d000509/f000509104'
+ERR /tmp/efs-mount/scale-fcstor009/d000509/f000509120: [Errno 5] Input/output error: '/tmp/efs-mount/scale-fcstor009/d000509/f000509120'
+ERR /tmp/efs-mount/scale-fcstor009/d000509/f000509136: [Errno 5] Input/output error: '/tmp/efs-mount/scale-fcstor009/d000509/f000509136'
+ERRORS 9090
+RATE 333333 50.05 6659.8

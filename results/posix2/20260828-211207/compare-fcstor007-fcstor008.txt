@@ -1,0 +1,20 @@
+================================================================
+POSIX baseline comparison: 63 tests
+  both pass        : 54
+  EFS BUGS         : 8  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 1
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  peer_append_while_truncate       [FAIL] no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+  peer_concurrent_append           [FAIL] no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+  peer_fcntl_range_conflict        [FAIL] B acquired overlapping lockf
+  peer_overlap_pwrite_chunk_straddle [FAIL] no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+  peer_overlap_pwrite_partial      [FAIL] no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+  peer_overlap_pwrite_same_range   [FAIL] no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+  peer_rename_across_dirs_chase    [FAIL] x at ['d2/x', 'd3/x'] (want exactly one)
+  peer_unlink_while_b_has_fd       [FAIL] no RESULT from b step 3: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor008.ib\n ssh timeout after 15s'
+
+--- target passes where baseline fails ---
+  peer_fcntl_range_adjacent       

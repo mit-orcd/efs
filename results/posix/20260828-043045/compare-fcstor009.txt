@@ -1,0 +1,17 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 195
+  EFS BUGS         : 1  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  basic_seek_cur_past_eof_write    [FAIL] implicit hole size: got 0, want 11
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

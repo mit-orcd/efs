@@ -26,13 +26,16 @@ the kernel. Remounting the SAME binary with `EFS_TRANSPORT=tcp` makes the
 identical warmup pass in <1s, so the break is RDMA-only, on the first inode
 RPC after mount — i.e. the Aug 30 "AUTO RDMA FIRST INODE GATED" property has
 regressed and nobody saw it because **every gate since then ran on TCP**.
-**Harness gap that hides it:** `run_tests.sh setup` does NOT forward
-`EFS_TRANSPORT` to the client mount (only `clean_cluster.sh` forwards it, and
-only to the servers), so `EFS_TRANSPORT=tcp bash tests/run_tests.sh setup`
-silently still mounts on auto/RDMA. To gate on TCP you must mount by hand:
-`killall -9 efs-fuse; timeout 5 fusermount3 -uz /tmp/efs-mount; rm -f fuse.log;
-EFS_TRANSPORT=tcp setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount`
-then confirm `grep -c "RDMA transport up" fuse.log` is **0**.
+**Harness gotcha that hides it:** `run_tests.sh` DOES forward `EFS_TRANSPORT`
+to the client mount (`fuse_client_env`, used by both `ensure_mounted` and
+`remount_client`) — but `ensure_mounted` returns early when the host is
+already mounted, so `EFS_TRANSPORT=tcp bash tests/run_tests.sh setup` on a
+cluster whose clients are already up on auto **silently keeps the RDMA
+mount** and the variable appears to do nothing. Kill the clients first:
+`killall -9 efs-fuse` on every host, THEN
+`EFS_TRANSPORT=tcp bash tests/run_tests.sh setup`. Verify per host with
+`grep -c "RDMA transport up" /tmp/efs/fuse.log` == **0**; do not trust the
+env var alone.
 
 **Prereq 1 of Cut C landed + gated (Sep 1, working tree).**
 `slab_page_persisted` is now authoritative from the committed root
@@ -47,6 +50,44 @@ looks like a fault) becomes a hard failure = the "jammed at exactly 256 rows"
 bug. Gate: `test_meta_v6` / `test_dir_stats` / `test_ino_path` /
 `test_meta_slot` OK; fresh bits=3 wipe + solo posix on a TCP mount
 `results/posix/20260901-171838` **196/201, 0 EFS bugs**.
+
+**THE REAL CUT-C BLOCKER IS THE *FULL* SERIALIZE, NOT THE BLOB SIZE (Sep 1,
+measured with new TRIM-PROF / `absent=` counters, fresh bits=3 TCP,
+`EFS_INO_RAM_MB=64`, scale_grow to 500k).** Trim works, and it is still
+futile. Do not build the spill until this is fixed — it would spill pages that
+are immediately faulted back.
+- **`incr=0` on 100% of flushes** (63/63 across primary + a joiner) for the
+ whole 500k grow. `efs_export_serialize_dirty` bails whenever the inode
+ region grows (`new_ino != cache_ino_len`), and during growth it grows
+ constantly, so **every** flush takes `efs_export_serialize_ex`.
+- `serialize_ex` repacks **every** row, so it **faults every evicted slab back
+ in**. Measured on fcstor005: `evicted=241 resident=194 slab_n=512`, and the
+ next flush is back to a full table. Eviction accomplishes nothing.
+- Therefore `page_absent` (prereq 2) **never fires during growth** — it is
+ only produced on the incremental path. Measured `absent=0` on 1762 flushes
+ at 10M and 63/63 here. It is correct and it is the right groundwork, but it
+ buys nothing until the full path stops faulting.
+- The blob dominates the cap it is counted inside: `bytes_mb=63 blob_mb=54`
+ (**86%**), so trim thrashes toward a floor it cannot evict.
+- The primary is worse: **79 of 116** trim calls are `TRIM-PROF skip
+ no-source` (`!flush_blob && !page_src`), 0 evictions.
+**So the ordering is: make `efs_export_serialize_ex` able to emit a page for a
+non-resident slab without faulting it (reuse-by-ci, same argument as
+`page_absent`), THEN bound the blob, THEN spill.** At 10M the same run showed
+`ser=350ms` + `snap=175ms` per flush, so this is also the flush-cost lever.
+Instrumentation for all of the above is in tree and env-gated behind
+`EFS_FLUSH_PROF`: `TRIM-PROF` (cap/bytes/blob/resident/slab_n/evicted/hops,
+plus skip reasons) and `absent=` on the `FLUSH-PROF` line.
+`clean_cluster.sh` now forwards `EFS_INO_RAM_MB`.
+
+**10M SCALE RUN, errors=0 (Sep 1, `results/scale/20260901-181133`, bits=3 TCP,
+9 clients x16, EFS_INO_RAM_MB=64).** total | creates/s | errors | rss_max MB |
+B/inode: 100k 9999 0 101 3408 | 500k 26666 0 597 3358 | 1M 33333 0 968 2852 |
+2M 33333 0 1532 2506 | 5M 27272 0 3333 2159 | 10M 15873 0 5587 1918. **errors=0
+at every step incl. 10M** (Aug 31 bits=3 had 46/176 at 5M/10M, and the Sep 1
+Cut-3 10M attempt wedged). Latency flat: stat p50 0.454, create 0.552, unlink
+0.422, readdir 6.9 ms. `rss_max 5587 MB` ~= the 10M x 512 B `flush_blob` ino
+region (5.1 GB) — the blob IS the RSS, which is the quantified case for Cut C.
 
 **SPILL DESIGN CORRECTION — a full rewrite per flush is impossible.** The
 plan said "write the committed region bytes to local NVMe at flush". At 2M

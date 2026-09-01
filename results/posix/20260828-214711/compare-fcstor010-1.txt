@@ -1,0 +1,20 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 192
+  EFS BUGS         : 4  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  basic_o_trunc                    [FAIL] O_TRUNC size: got 0, want 1
+  dir_many_files                   [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor010-1-v4wyyu0x/dir_many_files/f0037'
+  dir_rename_file_over_dir         [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor010-1-v4wyyu0x/dir_rename_file_over_dir/f'
+  unlink_open_then_recreate        [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor010-1-v4wyyu0x/unlink_open_then_recreate/f'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

@@ -1,0 +1,20 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 194
+  EFS BUGS         : 2  (baseline PASS, target FAIL)
+  both fail (match): 1
+  target better    : 4
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  names_crazy_dirs                 [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-2-qzeza9dv/names_crazy_dirs/dot.mid.name'
+  names_crazy_roundtrip            [FAIL] all crazy names listed: got {'..dots..', 'dot.mid.name', 'semi;colon', 'with space', '.efshole.12717', '-rf', 'bang!char', 'dash-prefix', '.efshole.12613', 'dollar$sign', 'brack[et]', 'brace{curly}', 'paren(thesis)', 'tilde~char', 'unicode-café-ümlaut-中文-🚀', 'caret^char', "quote'single", 'comma,colon:char', 'quest?char', 'trailingdot.', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'pipe|char', 'plus+equals=', '...', '--help', 'star*char', 'quote"double', 'amp&ersand', 'back\\slash', 'percent%char'}, want {'..dots..', 'with\nnewline', 'dot.mid.name', 'semi;colon', 'with space', '-rf', 'bang!char', 'dash-prefix', 'dollar$sign', 'brace{curly}', 'brack[et]', 'paren(thesis)', 'tilde~char', 'unicode-café-ümlaut-中文-🚀', 'caret^char', "quote'single", 'comma,colon:char', 'quest?char', 'trailingdot.', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'pipe|char', 'plus+equals=', '...', '--help', 'star*char', 'with\ttab', 'quote"double', 'amp&ersand', 'back\\slash', 'percent%char'}
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_stats_readable             
+
+--- both fail (behaviour matches baseline) ---
+  virt_find_query                  base=SKIP target=FAIL

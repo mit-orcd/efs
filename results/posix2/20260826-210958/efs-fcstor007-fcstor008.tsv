@@ -1,0 +1,66 @@
+# posix-2client host_a=fcstor007.ib host_b=fcstor008.ib mnt=/tmp/efs/mnt 2026-08-26T21:17:17Z
+test	result	detail
+peer_mkdir_visible	PASS	
+peer_create_visible	PASS	
+peer_write_read	PASS	
+peer_listdir_siblings	PASS	
+peer_shared_creat	PASS	
+peer_open_existing	PASS	
+peer_creat_excl_eexist	PASS	
+peer_stat_size	PASS	
+peer_rename_visible	PASS	
+peer_mkdir_then_create	PASS	
+peer_shared_pwrite	PASS	
+peer_unlink_gone	PASS	
+peer_chmod_visible	PASS	
+peer_utimens_visible	PASS	
+peer_truncate_visible	PASS	
+peer_hardlink_visible	PASS	
+peer_symlink_visible	PASS	
+peer_negative_dentry	PASS	
+peer_fsync_then_read	PASS	
+peer_mkdir_rmdir_recreate	PASS	
+peer_oappend	PASS	
+peer_rename_over	PASS	
+peer_flock_exclusive	FAIL	no RESULT from a step 2: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_unlink_while_b_has_fd	FAIL	no RESULT from b step 3: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor008.ib\n ssh timeout after 15s'
+peer_rmdir_gone	PASS	
+peer_nlink_after_link	FAIL	B read via g: got b'', want b'x'
+peer_hardlink_write	FAIL	B via f: got b'', want b'aaabbb'
+peer_rename_dir	FAIL	B child after dir rename: got b'', want b'keep'
+peer_o_trunc_visible	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_unlink_recreate	FAIL	B sees recreated file: got b'', want b'new'
+peer_lstat_symlink_size	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_listdir_after_unlink	PASS	
+peer_chmod_via_hardlink	PASS	
+peer_sparse_size	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_overlap_pwrite_same_range	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_overlap_pwrite_partial	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_overlap_pwrite_chunk_straddle	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_concurrent_append	FAIL	OSError: [Errno 5] Input/output error
+peer_append_while_truncate	FAIL	OSError: [Errno 5] Input/output error
+peer_disjoint_extend	FAIL	no RESULT from ab-a step 1: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_disjoint_extend_reverse_completion	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_extend_and_truncate	FAIL	OSError: [Errno 5] Input/output error
+peer_stat_during_extend	FAIL	no RESULT from ab-a step 1: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_trunc_then_pwrite_old_fd	PASS	
+peer_trunc_zero_then_high_pwrite	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_pwrite_then_peer_truncate	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_rename_same_src_two_dst	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_rename_vs_unlink_src	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_rename_vs_unlink_dst	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_rename_across_dirs_chase	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_creat_excl_race	PASS	
+peer_create_unlink_stat_churn	PASS	
+peer_negative_after_unlink	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_rename_negative	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_unlink_recreate_stale_ino	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_open_unlink_nlink	FAIL	OSError: [Errno 5] Input/output error
+peer_open_rename_fd	FAIL	no RESULT from a step 3: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_unlink_recreate_old_fd	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_concurrent_hardlink	FAIL	nlink after two links: got 2, want 3
+peer_concurrent_unlink_hardlinks	FAIL	OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-2c-fcstor007-fcstor008/peer_concurrent_unlink_hardlinks/b'
+peer_fcntl_range_conflict	FAIL	B acquired overlapping lockf
+peer_fcntl_range_adjacent	FAIL	no RESULT from a step 2: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+peer_mtime_no_regress	FAIL	no RESULT from a step 0: rc=124 out='' err='efs-ssh: TIMEOUT after 15s host=fcstor007.ib\n ssh timeout after 15s'
+# summary pass=28 fail=35 skip=0 total=63 dur=435.2

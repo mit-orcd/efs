@@ -1,0 +1,20 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 192
+  EFS BUGS         : 4  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  dir_hidden_files                 [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor010-3-83he08iq/dir_hidden_files/visible'
+  dir_many_files                   [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor010-3-83he08iq/dir_many_files/f0093'
+  dir_readdir_while_unlink         [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor010-3-83he08iq/dir_readdir_while_unlink/f17'
+  symlink_create_readlink          [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor010-3-83he08iq/symlink_create_readlink/target'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

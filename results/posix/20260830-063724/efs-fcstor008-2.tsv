@@ -1,0 +1,10 @@
+# TIMEOUT no TSV
+test\tresult\tdetail
+# summary pass=0 fail=0 skip=0 total=0 dur=0
+[run_tests] TIMEOUT 180s: fcstor008.ib rm -f '/tmp/posix-efs-20260830-063724-fcstor008-2.tsv'
+            PYTHONUNBUFFERED=1 timeout -k 5 165             python3 /tmp/efs/tests/posix/posix_suite.py '/tmp/efs-mount'              --tag 2 --timeout-s 15 --jobs 16             --results '/tmp/posix-efs-20260830-063724-fcstor008-2.tsv'
+            if [ ! -s '/tmp/posix-efs-20260830-063724-fcstor008-2.tsv' ]; then
+                printf '%s\n' '# TIMEOUT no TSV' 'test\tresult\tdetail'                     '# summary pass=0 fail=0 skip=0 total=0 dur=0'
+                exit 124
+            fi
+            cat '/tmp/posix-efs-20260830-063724-fcstor008-2.tsv'

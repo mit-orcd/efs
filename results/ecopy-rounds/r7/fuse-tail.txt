@@ -1,0 +1,6 @@
+0
+meta: adopted cache blob 131075B ino_len=131075 ch_len=0 inodes=1 chunks=0
+export id=1 name=efs-test
+meta ready gen=1 ver=8 inodes=1 chunks=0 root_get=0 mode=40755 ino0=0 ino1=1
+efs-fuse daemon pid=3511310
+fuse serving

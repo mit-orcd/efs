@@ -1852,6 +1852,10 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
      * for the next flush. */
     char *blob = NULL;
     size_t blob_len = 0;
+    /* Inode pages the incremental serialize produced no bytes for because
+     * their slab is not resident. Such a page is provably identical to the
+     * committed root's, so it is reused by ci without a byte compare. */
+    uint8_t *ino_page_absent = NULL;
     uint64_t new_gen = 1;
     uint64_t old_gen = 0;
     uint32_t old_ino_pc = 0, old_ch_pc = 0;
@@ -1923,7 +1927,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
                                              ex->flush_blob_chunk_len,
                                              omit_chunks, &blob, &blob_len,
                                              &ino_blob_len, &chunk_blob_len,
-                                             &used_incr);
+                                             &used_incr, &ino_page_absent);
         t_ser = heal_mono_us() - t_ser0;
         if (drc != EFS_OK) {
             rebuild_shards_unlock(s, fidx, ex, table_ino, fsc);
@@ -1979,6 +1983,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
 
     if (blob_len > (size_t)EFS_META_MAX_PAGES * EFS_META_PAGE_SIZE) {
         free(blob);
+        free(ino_page_absent);
         return -1;
     }
 
@@ -1994,6 +1999,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     pthread_mutex_unlock(&s->lock);
     if (prc != EFS_OK) {
         free(blob);
+        free(ino_page_absent);
         return -1;
     }
 
@@ -2023,6 +2029,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
         free(page);
         free(frag_buf);
         free(blob);
+        free(ino_page_absent);
         efs_export_root_free(&root);
         return -1;
     }
@@ -2074,6 +2081,16 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     }
     pthread_mutex_unlock(&s->lock);
     uint32_t pages_reused = 0;
+    /* Pages reused with no bytes at all because their slab was evicted. This
+     * is the term the spill/page-cache work exists to grow, so it is worth
+     * being able to see it rather than infer it. */
+    uint32_t pages_absent = 0;
+    /* Length of ino_page_absent[], taken from the blob it describes rather
+     * than from root.ino_page_count, so a future divergence between the two
+     * cannot turn into an out-of-bounds read here. */
+    uint32_t absent_pc = ino_page_absent
+                             ? efs_meta_page_count_for_blob(ino_blob_len)
+                             : 0;
     uint64_t t_pages0 = heal_mono_us();
 
     for (uint32_t packed = 0; packed < root.page_count; packed++) {
@@ -2109,9 +2126,22 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
         uint32_t rlen = (region == EFS_META_REGION_INO) ? ino_blob_len
                                                        : chunk_blob_len;
 
+        /* Slab was not resident at serialize time, so `blob` holds nothing for
+         * this page. It could not have changed since the committed root (a
+         * mutation would have faulted it back in and marked it dirty), so the
+         * committed ci is still correct — but that is the ONLY safe outcome:
+         * encoding this page would encode zeros over live inodes. */
+        int absent_page = (region == EFS_META_REGION_INO && ino_page_absent &&
+                           pi < absent_pc && ino_page_absent[pi]);
+
         int reuse = 0;
         if (have_old) {
-            if (region == EFS_META_REGION_CHUNK && omit_chunks &&
+            if (absent_page) {
+                /* Same argument as the omit_chunks case below: no bytes to
+                 * compare, but provably identical to what the root holds. */
+                reuse = 1;
+                pages_absent++;
+            } else if (region == EFS_META_REGION_CHUNK && omit_chunks &&
                 chunk_blob_len == skip_ch_len) {
                 /* chunk_epoch unchanged, so the region was not serialized
                  * into blob at all — there are no bytes to compare, but it is
@@ -2144,10 +2174,45 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
             pages_reused++;
             continue;
         }
+        /* Absent and NOT reusable — a legacy non-CoW root, or the skip_sums /
+         * skip_cis capture failed. `blob` holds zeros for this page, so we
+         * cannot encode it. The previous blob still carries the page, and the
+         * slab has not changed since, so copy those bytes back and encode
+         * normally (this is what the code did for every evicted slab before
+         * pages could be reused by ci). */
+        if (absent_page && cache_blob) {
+            size_t off = (size_t)pi * EFS_META_PAGE_SIZE;
+            size_t n = EFS_META_PAGE_SIZE;
+            if (off < cache_ino_len && off < rlen) {
+                if (off + n > cache_ino_len)
+                    n = cache_ino_len - off;
+                if (off + n > rlen)
+                    n = rlen - off;
+                memcpy(blob + off, cache_blob + off, n);
+                absent_page = 0;
+            }
+        }
+        if (absent_page) {
+            fprintf(stderr,
+                    "meta-flush: export=%s page %u absent, not reusable and "
+                    "not in the cache (have_old=%d cow_ok=%d skip_pc=%u) — "
+                    "refusing to encode an empty inode page\n",
+                    ex->name, packed, have_old, cow_ok, skip_pc);
+            free(page);
+            free(frag_buf);
+            free(blob);
+            free(ino_page_absent);
+            free(cache_blob);
+            free(skip_sums);
+            free(skip_cis);
+            efs_export_root_free(&root);
+            return -1;
+        }
         if (efs_meta_extract_page(rbase, rlen, pi, page) != EFS_OK) {
             free(page);
             free(frag_buf);
             free(blob);
+            free(ino_page_absent);
             free(cache_blob);
             free(skip_sums);
             free(skip_cis);
@@ -2183,6 +2248,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
             free(page);
             free(frag_buf);
             free(blob);
+            free(ino_page_absent);
             free(cache_blob);
             free(skip_sums);
             free(skip_cis);
@@ -2266,6 +2332,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
             free(page);
             free(frag_buf);
             free(blob);
+            free(ino_page_absent);
             free(cache_blob);
             free(skip_sums);
             free(skip_cis);
@@ -2314,6 +2381,8 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     }
     free(blob);
     blob = NULL;
+    free(ino_page_absent);
+    ino_page_absent = NULL;
     free(cache_blob);
     cache_blob = NULL;
     pthread_mutex_lock(&s->lock);
@@ -2327,11 +2396,12 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     t_pages = heal_mono_us() - t_pages0;
     if (getenv("EFS_FLUSH_PROF"))
         fprintf(stderr,
-                "FLUSH-PROF shard=%u pages=%u written=%u reused=%u incr=%d "
-                "lockwait=%lluus snap=%lluus ser=%lluus pages=%lluus "
+                "FLUSH-PROF shard=%u pages=%u written=%u reused=%u absent=%u "
+                "incr=%d lockwait=%lluus snap=%lluus ser=%lluus pages=%lluus "
                 "total=%lluus\n",
                 shard_idx, root.page_count, root.page_count - pages_reused,
-                pages_reused, used_incr, (unsigned long long)t_lockwait,
+                pages_reused, pages_absent, used_incr,
+                (unsigned long long)t_lockwait,
                 (unsigned long long)t_snap, (unsigned long long)t_ser,
                 (unsigned long long)t_pages,
                 (unsigned long long)(heal_mono_us() - t_begin));

@@ -1,0 +1,18 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 194
+  EFS BUGS         : 2  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  dir_readdir_listing              [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor011-2-avi4cpza/dir_readdir_listing/f43'
+  unlink_open_then_recreate        [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor011-2-avi4cpza/unlink_open_then_recreate/f'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

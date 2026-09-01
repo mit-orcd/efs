@@ -1,0 +1,17 @@
+================================================================
+POSIX baseline comparison: 191 tests
+  both pass        : 185
+  EFS BUGS         : 1  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  unlink_open_then_recreate        [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/posix-fcstor015-68csiymo/unlink_open_then_recreate/f'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

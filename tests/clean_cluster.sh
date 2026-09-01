@@ -30,6 +30,9 @@ start_efsd() { # host node-id addr [join]
     [ -n "${EFS_LOCK_PROF:-}" ] && prof="$prof EFS_LOCK_PROF=$EFS_LOCK_PROF"
     [ -n "${EFS_INO_PROF:-}" ] && prof="$prof EFS_INO_PROF=$EFS_INO_PROF"
     [ -n "${EFS_TRANSPORT:-}" ] && prof="$prof EFS_TRANSPORT=$EFS_TRANSPORT"
+    # Inode RAM cap: needed to make trim_ino_ram evict on a table small enough
+    # to gate quickly (the 1024 MB default needs millions of inodes first).
+    [ -n "${EFS_INO_RAM_MB:-}" ] && prof="$prof EFS_INO_RAM_MB=$EFS_INO_RAM_MB"
     ssh_to 15 "$h" "cd /tmp/efs && $prof \
         setsid ./efsd --node-id $nid --addr $addr \
         --port 19810 --storage $STORAGE --quota 36T --direct-io $j \

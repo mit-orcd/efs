@@ -1,0 +1,19 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 193
+  EFS BUGS         : 3  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  dir_rename_file                  [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs/mnt/posix-fcstor007-i6cp0z8z/dir_rename_file/a'
+  opt_fallocate                    [FAIL] fallocate size 2560, want >= 4096
+  two_fds_size_mtime               [FAIL] other-fd fstat size: got 0, want 6
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

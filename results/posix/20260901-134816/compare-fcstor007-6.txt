@@ -1,0 +1,21 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 193
+  EFS BUGS         : 2  (baseline PASS, target FAIL)
+  both fail (match): 1
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  content_random_overwrite_append  [FAIL] size after overwrite+append: got 0, want 70536
+  dir_deep_nesting_beyond_64       [FAIL] timeout after 15s
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  sparse_st_blocks                
+  virt_find_not_a_real_dir        
+  virt_stats_readable             
+
+--- both fail (behaviour matches baseline) ---
+  virt_find_query                  base=SKIP target=FAIL

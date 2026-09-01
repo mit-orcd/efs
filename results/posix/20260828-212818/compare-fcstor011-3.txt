@@ -1,0 +1,22 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 190
+  EFS BUGS         : 6  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  content_random_roundtrip         [FAIL] size n=131073: got 0, want 131073
+  dir_many_files                   [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor011-3-13mgzh85/dir_many_files/f0005'
+  dir_readdir_listing              [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor011-3-13mgzh85/dir_readdir_listing/f22'
+  dir_readdir_while_unlink         [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor011-3-13mgzh85/dir_readdir_while_unlink/f31'
+  symlink_chain                    [FAIL] FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/posix-fcstor011-3-13mgzh85/symlink_chain/a'
+  symlink_create_readlink          [FAIL] OSError: [Errno 5] Input/output error: 'target' -> '/tmp/efs-mount/posix-fcstor011-3-13mgzh85/symlink_create_readlink/sl'
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

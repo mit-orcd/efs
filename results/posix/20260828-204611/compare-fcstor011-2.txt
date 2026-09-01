@@ -1,0 +1,34 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 178
+  EFS BUGS         : 18  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  concurrent_appends               [FAIL] timeout after 15s
+  concurrent_appends_two_proc      [FAIL] timeout after 15s
+  concurrent_create_unlink_two_proc [FAIL] timeout after 15s
+  content_whitespace_and_line_endings [FAIL] timeout after 15s
+  create_excl_two_proc             [FAIL] timeout after 15s
+  dir_readdir_listing              [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor011-2-6w4rdtz2/dir_readdir_listing/f11'
+  err_symlink_loop                 [FAIL] timeout after 15s
+  fsync_then_fstat_size            [FAIL] timeout after 15s
+  hardlink_three_names             [FAIL] timeout after 15s
+  link_of_symlink                  [FAIL] timeout after 15s
+  mtime_bumps_on_write             [FAIL] timeout after 15s
+  mtime_monotonic_many_writes      [FAIL] timeout after 15s
+  packed_then_grow_past_chunk      [FAIL] timeout after 15s
+  perm_symlink_target_denied       [FAIL] timeout after 15s
+  rename_file_over_symlink         [FAIL] timeout after 15s
+  symlink_dangling                 [FAIL] timeout after 15s
+  trunc_zero_then_high_pwrite      [FAIL] timeout after 15s
+  write_beyond_eof_then_seek_end   [FAIL] timeout after 15s
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

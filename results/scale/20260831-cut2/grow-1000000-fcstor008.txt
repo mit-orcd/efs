@@ -1,0 +1,8 @@
+  ... 1300 in 5s (260/s)
+  ... 1300 in 10s (130/s)
+  ... 35773 in 15s (2382/s)
+  ... 55556 in 20s (2775/s)
+ERR /tmp/efs-mount/scale-fcstor008/d000057/f000057125: [Errno 2] No such file or directory: '/tmp/efs-mount/scale-fcstor008/d000057/f000057125'
+ERR /tmp/efs-mount/scale-fcstor008/d000061/f000061331: [Errno 2] No such file or directory: '/tmp/efs-mount/scale-fcstor008/d000061/f000061331'
+ERRORS 2
+RATE 55556 20.02 2774.8

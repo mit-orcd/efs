@@ -577,13 +577,23 @@ int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
  * *buf is the new blob. If the cache layout cannot be reused (flush_full,
  * dent_off change, missing cache) *used_incr=0 and *buf is unchanged —
  * caller must efs_export_serialize_ex. omit_chunks skips the chunk region
- * (*chunk_blob_len = cache_chunk_len). */
+ * (*chunk_blob_len = cache_chunk_len).
+ *
+ * *page_absent (optional) returns a caller-freed byte array of *ino_blob_len's
+ * page count, where 1 means "this inode page holds no meaningful bytes in
+ * *buf, and is provably identical to the committed root's page at the same
+ * index". That happens when the page's slab is not resident: trim_ino_ram
+ * only evicts clean slabs, and any mutation faults the slab back in and
+ * re-dirties it, so a non-resident slab cannot have changed since the flush
+ * that produced the committed root. The caller must reuse the committed ci
+ * for those pages rather than encoding them — which is what lets the byte
+ * source shrink below one full copy of the table. */
 int efs_export_serialize_dirty(struct efs_export *ex,
                                const char *cache, uint32_t cache_ino_len,
                                uint32_t cache_chunk_len, int omit_chunks,
                                char **buf, size_t *len,
                                uint32_t *ino_blob_len, uint32_t *chunk_blob_len,
-                               int *used_incr);
+                               int *used_incr, uint8_t **page_absent);
 void efs_export_flush_mark_full(struct efs_export *ex);
 void efs_export_flush_mark_ino_slot(struct efs_export *ex, uint64_t slot);
 void efs_export_flush_mark_chunk_slot(struct efs_export *ex, uint64_t slot);
