@@ -1061,6 +1061,22 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
         return rc;
     }
 
+    /* snap was deep-copied from ex->root before the (unlocked) page fetch, and
+     * the guard above only re-checks the GENERATION. Extra-shard commits are
+     * deliberately same-gen (server_commit_cluster_extras keeps the main gen
+     * so peers can tell an extras-only refresh from a real root advance), so a
+     * descriptor that landed during the fetch window is invisible to that
+     * guard. Installing snap wholesale then drops it, and a shard whose tab
+     * was not kept below gets lazily recreated with no descriptor at all:
+     * shard_tab_get_or_create leaves meta_needs_rebuild = 0, so the empty
+     * table reports READY, LOOKUP answers NOT_FOUND for every row it used to
+     * hold, and CREATE silently repopulates it. Same failure as the Aug 23
+     * root clobber; the maxmerge was applied to the other adopt paths but not
+     * to this one. Extras are monotonic per shard (higher gen wins, missing
+     * carried forward), so merging here can only add information. Done before
+     * the keep/free scan so its descriptor comparison also sees the merge. */
+    (void)efs_export_root_maxmerge_extras(&snap, &ex->root);
+
     /* Commit: free the old table's contents and move the staged pointers in.
      * efs_export_free zeroes ex (including root.page_checksums); the staged
      * root is empty (EFSM carries no EFSR), then root_move reinstalls snap.
@@ -1153,13 +1169,6 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
         free(keep_tabs);
     }
 
-    /* Blocker 2: a main-table rebuild freed every clean shard table above.
-     * Pre-create them all so later op/read paths find an existing table and
-     * never do the per-export lazy-create mutation under a single shard lock.
-     * Holds s->lock + all the export's shard locks (blocker 1). */
-    if (table_ino == EFS_META_TABLE_INO)
-        (void)efs_export_precreate_shards(ex);
-
     /* Success: keep the assembled blob (plus this generation's page
      * checksums) as the incremental-rebuild cache so the next rebuild only
      * fetches pages whose checksums changed. Shard tables use their
@@ -1224,6 +1233,48 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
     /* Features are root-owned; the EFSM blob does not carry them, so restore
      * the export's working copy from the (server-preserved) root. */
     ex->features = ex->root.features;
+
+    /* Blocker 2: a main-table rebuild freed every clean shard table above.
+     * Pre-create them all so later op/read paths find an existing table and
+     * never do the per-export lazy-create mutation under a single shard lock.
+     * Holds s->lock + all the export's shard locks (blocker 1).
+     *
+     * This MUST run after the root_move above. It used to sit before it, where
+     * ex->root was still the staged root — which carries no EFSR at all, so
+     * shard_bits was 0 and precreate_shards returned immediately without
+     * creating anything. The invariant was silently not held, and every table
+     * was built by the lazy path instead. */
+    if (table_ino == EFS_META_TABLE_INO) {
+        (void)efs_export_precreate_shards(ex);
+        /* A tab that is empty AND not marked for rebuild is reported READY by
+         * server_ensure_shard_ready, so its rows are gone with no error
+         * anywhere. That is only legitimate for a shard nothing has flushed
+         * yet; if the root carries descriptors for OTHER shards but not this
+         * one, we just lost a table. Loud on purpose — this was invisible. */
+        uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+        if (sc > EFS_META_MAX_SHARDS)
+            sc = EFS_META_MAX_SHARDS;
+        for (uint32_t sh = 1; ex->root.extra_shard_count && sh < sc; sh++) {
+            struct efs_export *t = efs_export_shard_tab(ex, sh);
+            if (!t || t == ex || t->inode_count || t->meta_needs_rebuild)
+                continue;
+            int has_desc = 0;
+            for (uint32_t i = 0; i < ex->root.extra_shard_count; i++)
+                if (ex->root.extra_shard_ids &&
+                    ex->root.extra_shard_ids[i] == sh) {
+                    has_desc = 1;
+                    break;
+                }
+            if (!has_desc)
+                fprintf(stderr,
+                        "meta-rebuild: WARNING shard=%u has no descriptor in "
+                        "gen=%llu (%u extras present); table is empty and will "
+                        "report ready -- rows for this shard are lost\n",
+                        sh, (unsigned long long)ex->root.generation,
+                        ex->root.extra_shard_count);
+        }
+    }
+
     rebuild_shards_unlock(s, shard_eidx, ex, table_ino, shard_sc);
     pthread_mutex_unlock(&s->lock);
     heal_prog_end(s);

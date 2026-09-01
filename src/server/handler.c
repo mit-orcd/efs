@@ -3631,10 +3631,20 @@ send_reply:
             uint32_t rlen = sizeof(rep);
             efs_rdma_server_accept(conn, payload, payload_len, &rep, &rlen);
             efs_conn_send_msg(conn, EFS_MSG_RDMA_SETUP_REPLY, &rep, rlen);
-            if (getenv("EFS_RDMA_FIRST"))
+            if (getenv("EFS_RDMA_FIRST")) {
+                /* Tag the peer's port: a QP and the TCP socket that carried
+                 * its handshake must belong to the same connection, and that
+                 * is exactly what a crossed SETUP reply would break. */
+                struct sockaddr_in pa;
+                socklen_t pl = sizeof(pa);
+                unsigned pport = 0;
+                if (getpeername(conn->fd, (struct sockaddr *)&pa, &pl) == 0)
+                    pport = ntohs(pa.sin_port);
                 fprintf(stderr,
-                        "rdma-first: SETUP done qpn=%u status=%u, back to wait\n",
-                        rep.qpn, rep.status);
+                        "rdma-first: SETUP done qpn=%u status=%u peer_port=%u "
+                        "fd=%d, back to wait\n",
+                        rep.qpn, rep.status, pport, conn->fd);
+            }
             break;
         }
         default:

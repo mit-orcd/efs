@@ -12,36 +12,69 @@ Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 `required_permissions: ["all"]` to escape the sandbox; that is pre-authorized.
 See efs-fcstor-deploy.**
 
-**AUTO-RDMA FIRST INODE IS BROKEN AGAIN (Sep 1, NOT yet root-caused, NOT from
-today's change).** On a fresh mkfs + auto-transport mount, the first `mkdir`
-D-states forever. Measured, not guessed: servers all healthy (fresh gen=1,
-`meta-catchup: rebuilt export` clean on all 3 joiners, no BUSY, no rebuild
-errors); client FUSE connection `waiting=1` (ONE outstanding request, so this
-is not a queue/saturation problem); efs-fuse itself **S-state, not wedged**;
-`fuse.log` repeats `efs: RDMA send type=43 WAIT TIMEOUT`. **43 =
-`EFS_MSG_INODE_LOOKUP`** (plain LOOKUP — NOT `LOOKUP_PATH`, whose wire struct
-changed in b518003, so do not assume that is the cause). The D-state
-`filename_create` procs are just queued behind the one unanswered LOOKUP in
-the kernel. Remounting the SAME binary with `EFS_TRANSPORT=tcp` makes the
-identical warmup pass in <1s, so the break is RDMA-only, on the first inode
-RPC after mount — i.e. the Aug 30 "AUTO RDMA FIRST INODE GATED" property has
-regressed and nobody saw it because **every gate since then ran on TCP**.
-**SCOPE CORRECTION (Sep 1 PM, from a user load run):** it is NOT "RDMA is
-broken". A node9901 client mounted on auto/RDMA (`mlx5_0`) against an
-ALREADY-POPULATED table (`meta ready gen=13 inodes=55621`) drove millions of
-creates through RDMA with 0 network errors on that mount. So the repro needs a
-**freshly mkfs'd / effectively empty** table — look at the empty-table first
-LOOKUP, not at the RDMA data path in general.
-**Harness gotcha that hides it:** `run_tests.sh` DOES forward `EFS_TRANSPORT`
-to the client mount (`fuse_client_env`, used by both `ensure_mounted` and
-`remount_client`) — but `ensure_mounted` returns early when the host is
-already mounted, so `EFS_TRANSPORT=tcp bash tests/run_tests.sh setup` on a
-cluster whose clients are already up on auto **silently keeps the RDMA
-mount** and the variable appears to do nothing. Kill the clients first:
-`killall -9 efs-fuse` on every host, THEN
-`EFS_TRANSPORT=tcp bash tests/run_tests.sh setup`. Verify per host with
-`grep -c "RDMA transport up" /tmp/efs/fuse.log` == **0**; do not trust the
-env var alone.
+**AUTO-RDMA FIRST INODE — ROOT-CAUSED, FIX PARKED (Sep 1). The server
+DESTROYS the QP the client is sending to, because the client closed that
+connection's TCP side-channel while leaving the conn object in its pool.**
+Symptom: on a fresh mkfs + auto-transport mount the first `mkdir` D-states
+forever; `fuse.log` repeats `efs: RDMA send type=43 WAIT TIMEOUT` (43 =
+`EFS_MSG_INODE_LOOKUP`, plain LOOKUP — **not** `LOOKUP_PATH`, so b518003's
+wire change is innocent). Servers healthy (fresh gen=1, clean catchup, no
+BUSY); FUSE `waiting=1` (ONE outstanding request, not saturation); efs-fuse
+S-state; the D-state `filename_create` procs are just queued behind the one
+unanswered LOOKUP. `EFS_TRANSPORT=tcp` on the SAME binary passes in <1s.
+**The plan's hypothesis (RNR NAK from too few recv buffers + infinite
+`rnr_retry`) is DISPROVEN — do not re-chase it.** `rnr_retry` was made
+configurable and set finite: failure identical. Requester-side HCA counters
+`rnr_nak_retry_err` / `req_cqe_error` / `local_ack_timeout_err` /
+`packet_seq_err` / `out_of_buffer` all stayed **0**; only the SERVER's
+`resp_cqe_error` + `resp_cqe_flush_error` incremented.
+**How it was proven (measurement, not code reading):**
+- `rdma resource show qp` on the server during the hang: the client's
+ `dest_qpn` is **missing** from an otherwise contiguous live QPN sequence
+ (61571, [61572 absent], 61573) — the server had already destroyed it.
+- Port correlation nails the pair: client `fd=14 qpn=86621 local_port=58152`
+ ↔ server `qpn=61662 peer_port=58152 fd=24`. The server then logged
+ `tcp EOF (peer FIN) fd=24` → `conn teardown reason=tcp_has_request failed
+ (blocking) qpn=61662`, and the client's later send to `dest_qpn=61662`
+ timed out. So the server tears down the whole conn (QP included) when the
+ RDMA conn's TCP side-channel sees a FIN.
+- The failing conn's OWN socket was never closed: the client records
+ `/proc/self/fd/N` (`socket:[inode]`) at upgrade and re-reads it at failure
+ — `(same socket)` every time. `ss -tanp` on the client showed the failing
+ conns `ESTAB` but **5 other conns in TIME-WAIT**, i.e. the client sent the
+ first FIN on those.
+- **The smoking gun:** client `fd=6` upgraded for `qpn=86619`, then LATER a
+ *different* connection upgraded on the **same `fd=6`** for `qpn=86622`.
+ fd 6 was closed and recycled while the conn object holding `qpn=86619`
+ was still reachable from the pool; the next RPC that checked that object
+ out sent into a QP the server had already reaped.
+- `efs_conn_destroy` backtraces resolve to `efs_client_conn_drop` — that is
+ an error handler reacting to the breakage, **not** the origin. The origin
+ (which bootstrap path closes a pooled conn's fd without evicting the conn)
+ is the remaining unknown.
+**Status: PARKED by user decision; gating stays on TCP.** The diagnostics are
+in tree and env-gated behind `EFS_RDMA_FIRST` (client: QP state + `rnr_retry`
++ `retry_cnt` + `timeout` + posted/reaped counters + `port_xmit_packets`
+delta + extended late-CQE poll + async-event drain + socket-identity compare;
+server: `SETUP done` logs `peer_port`+`fd`, `conn teardown` logs a reason
+string, `tcp_has_request` distinguishes peer-FIN from socket error;
+`efs_conn_destroy` logs fd/QPN + backtrace). `clean_cluster.sh` forwards
+`EFS_RDMA_FIRST`. **Whoever resumes this: the fix is on the CLIENT pool
+lifecycle (do not let a conn outlive its fd), not in `rdma.c` tuning.**
+**SCOPE: it is NOT "RDMA is broken".** A node9901 client on auto/RDMA
+(`mlx5_0`) against an ALREADY-POPULATED table (`meta ready gen=13
+inodes=55621`) drove millions of creates with 0 network errors. The repro
+needs a **freshly mkfs'd / effectively empty** table.
+**Harness gotcha — FIXED (Sep 1).** `ensure_mounted` returned early when the
+host was already mounted, so `EFS_TRANSPORT=tcp bash tests/run_tests.sh
+setup` on a cluster whose clients were already up on auto **silently kept the
+RDMA mount** and the variable appeared to do nothing (this is why "every gate
+since Aug 30 ran on TCP" was itself unverified). It now checks
+`grep -c "RDMA transport up" /tmp/efs/fuse.log` on a reused mount and
+remounts on a mismatch. Only `tcp` is enforced — the RDMA upgrade is lazy
+(first pool checkout), so a fresh auto mount legitimately has no such line
+yet and must not be remounted. Verifying that count is **0** per host is
+still the right way to confirm a TCP run; do not trust the env var alone.
 
 **Prereq 1 of Cut C landed + gated (Sep 1, working tree).**
 `slab_page_persisted` is now authoritative from the committed root
@@ -160,7 +193,25 @@ serialization point, incl. many writers to ONE file. Decisions locked:
   independent linearizability/history checker). It becomes the correctness
   gate; the 13-node cluster becomes a perf harness.
 - **Targets:** ≥ 2³² live objects; 3–64 nodes; reference 2³² on 4 nodes;
-  survive 1 node; immediate cross-client visibility.
+  immediate cross-client visibility. **Failure tolerance is CONFIGURABLE
+  (user, Sep 1 PM):** f = max simultaneous PERMANENT node losses with no data
+  loss, capped at 3, bounded by N. The math (do not re-derive): data EC k+f
+  needs N ≥ f+2; metadata Raft needs quorum Q > f → **N ≥ 2f**, and full
+  write availability through f losses needs N ≥ 2f+1. Rule: **RF = min(N,
+  2f+1)**, config invalid unless N ≥ 2f. Table: 3 nodes → f=1 (RF=3, 2+1);
+  4 → f=2 (RF=4, 2+2; durable through 2, available through 1); 5 → f=2 full
+  (RF=5); 6 → f=3 (RF=6, 2+3; durable through 3, available through 2);
+  ≥7 → f=3 full (RF=7). **f=3 needs 6 nodes, NOT 5** (RF=5 gives Q=3 ≯ 3 —
+  the 3 dead nodes could be the whole quorum that acked the last writes).
+  At N = 2f the system pauses rather than loses (CAP-consistent); recovery
+  from a lost quorum is node-returns or an explicit operator
+  `force-reconfigure`. Changing f is an online control-plane op (add/remove
+  replicas + re-stripe parities), not a reformat. **Also fixed in the same
+  pass: the write commit rule now requires ALL k+f fragment ACKs before
+  publication** (D − f ≥ k ⟺ D = k+f); the old "≥ 2 of 3 ACKs" rule had a
+  real durability hole at f=1 (publish with 2 durable fragments, lose 1 →
+  1 fragment < k=2 → acknowledged data lost). I10/I11 parameterized to the
+  configured f.
 - Data path mechanism (client-direct RDMA 2+1 EC) UNCHANGED, but commit
   semantics now specified (immutable chunk generations + atomic metadata
   publication + target-side generation fencing).
@@ -231,6 +282,87 @@ secondary indexes/aggregates are a separate derived-index design. (16)
 Migration renumbered: step 10 = dir-spread epochs + locking; delete-2PC =
 step 11; FUSE cache opts = step 12. Sections: locking §5.12, FUSE/data cache
 §5.13, modularity §5.14.
+**FOURTH REVIEW ROUND IN (Sep 1 PM) — the hot-path implementation contract.
+Do not re-litigate:** the reviewer's verdict was "topology is right for
+linear scaling; the hot-path contract is not complete enough to guarantee
+hardware efficiency". All 19 points are now IN the spec (md §5.7/§5.13/§5.15
++ HTML §3a/§3c/§5): (1) **EC publication: healthy = ALL k+f fragments durable
+before publish** (already landed with the f-parameterization); NEW is the
+**degraded rule** — with u domains already unavailable, publish with
+≥ k+(f−u) durable fragments, mark degraded, re-stripe on repair (I11
+rewritten; never for slow targets, only unavailable ones). (2) **FUSE is an
+architectural serializer risk:** `FOPEN_DIRECT_IO` +
+`PARALLEL_DIRECT_WRITES` + `FUSE_CAP_ASYNC_DIO` + `FUSE_CAP_PARALLEL_DIROPS`
++ large max_write/max_pages/max_background are REQUIREMENTS (without
+parallel_direct_writes Linux re-serializes same-file direct writes ABOVE
+efs). (3) **Direct-I/O disables kernel readahead → the client owns an async
+prefetch pipeline** (adaptive queue depth), or sequential reads lockstep.
+(4) **Size lanes REBOUNDED:** the round-3 `size_lane = chunk_meta_shard`
+(hash over 4096 shards) would give a big file up to 4096 lanes → stat() =
+4096-way fanout. Now: `lane = hash(ino,chunk) % L`,
+`chunk_meta_shard = hash(ino,lane) & 0xFFF`, **L derived** (required hot-file
+pub rate ÷ per-shard commit rate, capped at tens); per-file spread is L
+leaders, global spread still 4096. (5) **mtime contradiction FIXED:**
+write-mtime lives in the lanes (`lane.max_mtime` on the publication entry);
+explicit utimens/chmod update the inode row's `base_mtime` + bump
+`mtime_gen`; stat = MAX(base_mtime, current-gen lane mtimes) under the
+content-epoch check. (6) **Multi-Raft runtime is an architectural
+requirement** (§5.4): reactors per NUMA domain, messages batched by
+destination, heartbeats coalesced, WAL group-committed across groups, KV
+apply batched — 4096 logical groups, NOT 4096 physical WALs/threads.
+(7) **Publication batching:** many chunk publications per Raft proposal (at
+128KiB, 100 GB/s = ~800k pubs/s; one txn per chunk would cap metadata).
+(8) **Small-write envelope DECLARED:** 4K-in-128K = ~80x amplification +
+same-chunk CAS contention; efs is HPC-aligned-I/O optimized; immutable delta
+objects + background consolidation are the designed escape hatch, NOT built
+until benchmarks demand. (9) **Dir spread triggers on entry count OR op
+pressure** (100-entry dir with 100k clients melts its leader without ever
+crossing the size threshold); spread is one-way. (10) `EFS_DIR_SPREAD_MIN` is
+a **scalability bound** (caps pre-spread stranded co-located inode rows).
+(11) **P4 added** (hot path never crosses cores/NUMA/locks unnecessarily) +
+§5.15 contract: NUMA-local async execution, no cross-core locks on ordinary
+PUT/GET. (12) **Ceiling is protection-adjusted:** logical write BW ≤
+min(client egress, storage ingress, NVMe) × k/(k+f), EC CPU/mem BW, pub rate
+× chunk size; the bar is 85–95% of THAT. (13) **Near-linear defined per
+workload class** (table in §7/HTML §5; semantically-serial ops excluded
+explicitly). (14) **write()=durable is a documented latency-for-durability
+trade**, benchmarked against the strict-POSIX alternative before final.
+(15) **ReadIndex amortized** (one quorum round serves a batch). (16) **QoS
+isolation:** Raft/membership/txn/small-meta get own RDMA queues/traffic
+class/credits; NVMe WAL/KV/bulk/rebuild queues separate. (17) **Rebuild
+distributed + rate-limited:** deterministic repair owner, priority foreground
+> metadata > rebuild. (18) **O_APPEND respecified:** reserve (inode shard) →
+parallel data → per-reservation commit; the reservation watermark is NOT the
+visible EOF; a dead appender's range is **committed as a zero hole by
+recovery** (stale incarnation); the glib "POSIX-legal hole" claim is gone —
+holes arise only from never-returned writes, read as zeros, no returned write
+lost. (19) **Multi-chunk write atomicity DECIDED:** default = per-chunk
+visibility (a concurrent reader can see a mix — same as Linux O_DIRECT,
+documented in the POSIX contract; after write() returns, all chunks visible
+to everyone); strong path = the §5.6 transaction machinery (write txid +
+intents + one decision) when atomic multi-chunk publication is required.
+Scaling goal in §1 rewritten measurably: "no software serialization point may
+become the limiting resource before a physical resource does — if a benchmark
+stops at a mutex/one leader/one thread/FUSE serialization/one WAL/one
+coordinator, that is by definition an EFS bug."
+**HTML IS THE PLAIN-LANGUAGE RENDITION (Sep 1 PM, user-directed).**
+`docs/architecture.html` was rewritten end-to-end in simple wording: short
+sentences, everyday words, and a "few words we use" glossary table up front
+(shard / Raft / leader / majority / term / committed / KV / EC / generation /
+idempotent / linearizable read / serialization point — each defined in one
+plain sentence). Jargon is kept only as *names* (Raft, NVMe, RDMA, FUSE) and
+explained once at first use. The md stays the precise spec; the HTML is the
+readable version — keep both in sync when editing. Structure, SVGs, and
+content are unchanged; only the voice changed.
+**HARDWARE ENVELOPE (Sep 1 PM, user-confirmed): efs is flash/NVMe-ONLY — no
+HDD support, ever.** Now in the spec (md §1 hardware-envelope block + §8
+rejection; HTML §1 + §10). The architecture actively spends the assumption:
+random I/O is first-class (no seek-aware layouts; KV pager faults and random
+chunk reads are cheap by assumption), deep hardware queues are assumed (the
+P4 model can't run on disk at all), µs-scale device latency is what makes
+write()=durable affordable, and SMR/rotational/track-alignment problem
+classes are deleted, not engineered around. Scaling claims do not transfer
+to HDDs.
 **IDENTITY / positioning (from the 2nd review — do not overclaim):** every
 primitive (Raft, dist. metadata, RDMA, EC, immutable gens, KV, dir sharding,
 deterministic sim) has existed; WEKA/DAOS/VAST/CephFS get close to parts.
@@ -247,7 +379,17 @@ roadmap does it FIRST.** `docs/architecture.md` §5.14: a module must be
 understandable/changeable/testable from its own source + interface header
 alone; no file over ~1000 lines; state machines pure (no globals, I/O behind
 transport/storage interfaces — the SAME property that lets the simulator
-reuse the compiled SM). Honest current state: 4 files hold ~45% of the
+reuse the compiled SM). **The bar, user-directed (Sep 1 PM): a LESS ADVANCED
+AI model must be able to contribute a correct change** — not the best model
+with the whole tree in context. Consequences now in the spec: (1) local
+correctness must be locally decidable (module + header + tests, never global
+reasoning — else the project scales with model quality, not contributor
+count); (2) the blast radius of a mistake is one module and fails fast/locally
+(unit test / simulator assertion / interface check — the quality bar is
+enforced by the boundaries, not the contributor's sophistication); (3)
+interfaces carry the contract (invariants/ownership/threading in the header);
+(4) conventions are machine-checkable (lint/build/test gate, not reviewer
+vigilance). Honest current state: 4 files hold ~45% of the
 36.5k-line tree (`metadata.c` 6042, `efs_fuse.c` 3720, `meta_server.c` 3654,
 `handler.c` 3648). **Roadmap "Phase M — carve the monolith FIRST"** (added to
 `docs/scaling-roadmap.md`, ahead of all other forward work): carve into

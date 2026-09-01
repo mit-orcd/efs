@@ -63,6 +63,18 @@
 #define SEND_WRID_POOL   0x1000
 #define SEND_WRID_INLINE 0x2000
 
+/* What a file descriptor currently points at, e.g. "socket:[12345]". */
+static void fd_link_now(int fd, char *out, size_t n)
+{
+    out[0] = '\0';
+    if (fd < 0)
+        return;
+    char p[64];
+    snprintf(p, sizeof(p), "/proc/self/fd/%d", fd);
+    ssize_t r = readlink(p, out, n - 1);
+    out[r > 0 ? r : 0] = '\0';
+}
+
 static int64_t now_ms(void)
 {
     struct timespec ts;
@@ -82,6 +94,24 @@ static int rdma_first_log(void)
     static int v = -1;
     if (v < 0)
         v = getenv("EFS_RDMA_FIRST") ? 1 : 0;
+    return v;
+}
+
+/* RNR retry count for the send QP. 7 means retry forever; see qp_rts.
+ * The default keeps the shipped behaviour; the knob exists so a hang can be
+ * turned into a loud error completion. Setting it finite is what disproved
+ * the "first inode LOOKUP is stuck in an RNR retry loop" hypothesis. */
+static int rdma_rnr_retry(void)
+{
+    static int v = -1;
+    if (v < 0) {
+        const char *e = getenv("EFS_RDMA_RNR_RETRY");
+        v = (e && *e) ? atoi(e) : 7;
+        if (v < 0)
+            v = 0;
+        if (v > 7)
+            v = 7;
+    }
     return v;
 }
 
@@ -378,9 +408,16 @@ struct efs_rdma_conn {
     uint8_t **recv_bufs;
     uint8_t **send_bufs;
     int send_busy[EFS_RDMA_NSEND];
+    uint64_t n_posted; /* sends posted / send CQEs reaped on this conn; a */
+    uint64_t n_reaped; /* reaped==posted at a "no CQE" timeout means the   */
+                       /* completion arrived and the flag was missed.      */
     int send_rr;
     int reserved; /* send buf held by efs_rdma_send_buf, -1 when none */
     int broken;
+    /* /proc/self/fd link of tcp_fd at upgrade time. The peer tears down its
+     * QP when this socket hits EOF, so if the link changed (or vanished) the
+     * socket was closed behind this conn's back and the fd number reused. */
+    char tcp_link[64];
     int reg_idx;  /* conn registry slot ((wr_id >> 8) & 0xFFFFFF), -1 until registered */
     uint32_t reg_gen; /* registry slot generation (wr_id >> 32) */
     int efd;      /* eventfd: poller signals when the pend ring empties->fills */
@@ -463,6 +500,18 @@ static void harvest_recv_wcs(struct ibv_wc *wcs, int n)
             rc = NULL; /* stale completion from a destroyed QP */
         if (rc) {
             if (wcs[i].status != IBV_WC_SUCCESS) {
+                /* A failed RECV takes the whole RC QP to ERR, which also
+                 * kills any send in flight on it. Silent before: the sender
+                 * then looked like an unexplained hang. */
+                static int nrerr;
+                int k = __sync_fetch_and_add(&nrerr, 1);
+                if (k < 10 || (k % 100) == 0)
+                    fprintf(stderr,
+                            "efs: RDMA recv CQE error status=%d (%s) qpn=%u "
+                            "byte_len=%u\n",
+                            (int)wcs[i].status,
+                            ibv_wc_status_str(wcs[i].status),
+                            rc->qp ? rc->qp->qp_num : 0, wcs[i].byte_len);
                 rc->broken = 1;
                 uint64_t one = 1;
                 if (write(rc->efd, &one, sizeof(one)) < 0 && errno != EAGAIN)
@@ -695,7 +744,12 @@ static int qp_rts(struct efs_rdma_conn *rc)
     attr.qp_state = IBV_QPS_RTS;
     attr.timeout = 14;
     attr.retry_cnt = 7;
-    attr.rnr_retry = 7;
+    /* rnr_retry 7 means retry FOREVER. With a bounded RQ that turns
+     * "responder momentarily out of recv buffers" into a send that never
+     * completes and never errors -- the wedge this exists to prevent. A
+     * finite count yields IBV_WC_RNR_RETRY_EXC_ERR, a real CQE the send
+     * path already handles. */
+    attr.rnr_retry = (uint8_t)rdma_rnr_retry();
     attr.sq_psn = rc->psn;
     attr.max_rd_atomic = 1;
     return ibv_modify_qp(rc->qp, &attr,
@@ -756,6 +810,7 @@ int efs_rdma_client_upgrade(struct efs_conn *c)
     c->kind = EFS_CONN_RDMA;
     rc->tcp_fd = c->fd;
     rc->counted = 1;
+    fd_link_now(rc->tcp_fd, rc->tcp_link, sizeof(rc->tcp_link));
     __sync_fetch_and_add(&g_live_conns, 1);
     static int logged;
     if (!__sync_lock_test_and_set(&logged, 1))
@@ -763,9 +818,18 @@ int efs_rdma_client_upgrade(struct efs_conn *c)
                 "(lid %u, %u x %u KiB bufs/conn)\n",
                 dev->name, dev->port, dev->lid, rc->nrecv + EFS_RDMA_NSEND,
                 rc->bufsz / 1024);
-    if (rdma_first_log())
-        fprintf(stderr, "rdma-first: upgrade ok fd=%d qpn=%u lid=%u max_frame=%u\n",
-                c->fd, rc->qp->qp_num, dev->lid, rc->max_frame);
+    if (rdma_first_log()) {
+        struct sockaddr_in la;
+        socklen_t ll = sizeof(la);
+        unsigned lport = 0;
+        if (getsockname(c->fd, (struct sockaddr *)&la, &ll) == 0)
+            lport = ntohs(la.sin_port);
+        fprintf(stderr,
+                "rdma-first: upgrade ok fd=%d qpn=%u dest_qpn=%u local_port=%u "
+                "lid=%u max_frame=%u\n",
+                c->fd, rc->qp->qp_num, rep->qpn, lport, dev->lid,
+                rc->max_frame);
+    }
     return 0;
 }
 
@@ -856,6 +920,11 @@ uint32_t efs_rdma_max_frame(struct efs_rdma_conn *rc)
     return rc->max_frame;
 }
 
+uint32_t efs_rdma_qpn(struct efs_rdma_conn *rc)
+{
+    return (rc && rc->qp) ? rc->qp->qp_num : 0;
+}
+
 /* ---------------- send path ---------------- */
 
 static int reap_sends(struct efs_rdma_conn *rc)
@@ -869,9 +938,18 @@ static int reap_sends(struct efs_rdma_conn *rc)
         }
         for (int i = 0; i < n; i++) {
             if (wc[i].status != IBV_WC_SUCCESS) {
+                static int nerr;
+                int e = __sync_fetch_and_add(&nerr, 1);
+                if (e < 10 || (e % 100) == 0)
+                    fprintf(stderr,
+                            "efs: RDMA send CQE error status=%d (%s) qpn=%u\n",
+                            (int)wc[i].status,
+                            ibv_wc_status_str(wc[i].status),
+                            rc->qp ? rc->qp->qp_num : 0);
                 rc->broken = 1;
                 return EFS_ERR_NET;
             }
+            rc->n_reaped++;
             if ((wc[i].wr_id & 0xF000u) == SEND_WRID_POOL)
                 rc->send_busy[wc[i].wr_id & 0xFF] = 0;
         }
@@ -907,6 +985,164 @@ static int send_buf_pick(struct efs_rdma_conn *rc)
     return idx;
 }
 
+/* Describe a send failure. A send that neither completes nor errors leaves
+ * the QP perfectly healthy with the WR parked in the SQ (an RNR NAK being
+ * retried forever), which is indistinguishable from every other failure
+ * without this. Three of the four failure paths below used to return
+ * EFS_ERR_NET silently, so a looping client printed nothing at all. */
+static int qp_state_now(struct efs_rdma_conn *rc)
+{
+    struct ibv_qp_attr a;
+    struct ibv_qp_init_attr ia;
+    memset(&a, 0, sizeof(a));
+    memset(&ia, 0, sizeof(ia));
+    if (!rc->qp || ibv_query_qp(rc->qp, &a, IBV_QP_STATE, &ia) != 0)
+        return -1;
+    return (int)a.qp_state;
+}
+
+/* Read one IB port counter. Used to attribute a send failure to "the HCA
+ * transmitted and got no ack" vs "the WR never went out at all", which no
+ * amount of CQ inspection can distinguish. */
+static uint64_t ib_port_counter(const char *dev, unsigned port,
+                                const char *name)
+{
+    char p[256];
+    snprintf(p, sizeof(p), "/sys/class/infiniband/%s/ports/%u/counters/%s",
+             dev, port, name);
+    FILE *f = fopen(p, "r");
+    if (!f)
+        return 0;
+    unsigned long long v = 0;
+    if (fscanf(f, "%llu", &v) != 1)
+        v = 0;
+    fclose(f);
+    return (uint64_t)v;
+}
+
+/* Identity of the conn at post time. If any of this differs at failure time,
+ * the conn was torn down (and its slot reused) under an active sender, and
+ * the completion we are waiting for died with the per-conn send CQ. */
+struct send_ident {
+    struct ibv_qp *qp;
+    struct ibv_cq *cq;
+    uint32_t qpn;
+    uint32_t gen;
+    int st;
+    uint64_t xmit_pkts;
+};
+
+static void send_ident_take(struct efs_rdma_conn *rc, struct send_ident *id)
+{
+    id->qp = rc->qp;
+    id->cq = rc->send_cq;
+    id->qpn = rc->qp ? rc->qp->qp_num : 0;
+    id->gen = rc->reg_gen;
+    id->st = -2;
+    id->xmit_pkts = rc->dev ? ib_port_counter(rc->dev->name, rc->dev->port,
+                                              "port_xmit_packets")
+                            : 0;
+}
+
+static void send_fail_dump2(struct efs_rdma_conn *rc, uint8_t type,
+                            const char *why, const struct send_ident *id);
+
+static void send_fail_dump(struct efs_rdma_conn *rc, uint8_t type,
+                           const char *why)
+{
+    send_fail_dump2(rc, type, why, NULL);
+}
+
+static void send_fail_dump2(struct efs_rdma_conn *rc, uint8_t type,
+                            const char *why, const struct send_ident *id)
+{
+    int st_pre = id ? id->st : -2;
+    static int n;
+    int i = __sync_fetch_and_add(&n, 1);
+    if (i >= 10 && (i % 100) != 0)
+        return;
+    struct ibv_qp_attr a;
+    struct ibv_qp_init_attr ia;
+    memset(&a, 0, sizeof(a));
+    memset(&ia, 0, sizeof(ia));
+    int qrc = -1;
+    if (rc->qp)
+        qrc = ibv_query_qp(rc->qp, &a,
+                           IBV_QP_STATE | IBV_QP_AV | IBV_QP_DEST_QPN |
+                           IBV_QP_RNR_RETRY | IBV_QP_TIMEOUT |
+                           IBV_QP_RETRY_CNT, &ia);
+    int busy = 0;
+    for (int i = 0; i < EFS_RDMA_NSEND; i++)
+        busy += rc->send_busy[i] ? 1 : 0;
+    fprintf(stderr,
+            "efs: RDMA send type=%u FAILED (%s) qpn=%u state=%d st_pre=%d "
+            "dest_qpn=%u dlid=%u rnr_retry=%u retry_cnt=%u timeout=%u "
+            "busy=%d broken=%d qrc=%d\n",
+            type, why, rc->qp ? rc->qp->qp_num : 0,
+            qrc == 0 ? (int)a.qp_state : -1, st_pre, qrc == 0 ? a.dest_qp_num : 0,
+            qrc == 0 ? a.ah_attr.dlid : 0, qrc == 0 ? a.rnr_retry : 0,
+            qrc == 0 ? a.retry_cnt : 0, qrc == 0 ? a.timeout : 0,
+            busy, rc->broken, qrc);
+    if (rc->qp)
+        fprintf(stderr,
+                "efs: RDMA qp obj: state=%d qp->send_cq=%p rc->send_cq=%p %s "
+                "qp->recv_cq=%p dev->recv_cq=%p handle=%u\n",
+                (int)rc->qp->state, (void *)rc->qp->send_cq,
+                (void *)rc->send_cq,
+                rc->qp->send_cq == rc->send_cq ? "(match)"
+                                               : "*** CQ MISMATCH ***",
+                (void *)rc->qp->recv_cq,
+                (void *)(rc->dev ? rc->dev->recv_cq : NULL), rc->qp->handle);
+    if (id)
+        fprintf(stderr,
+                "efs: RDMA send identity now/at-post: qp=%p/%p cq=%p/%p "
+                "qpn=%u/%u reg_gen=%u/%u %s\n",
+                (void *)rc->qp, (void *)id->qp, (void *)rc->send_cq,
+                (void *)id->cq, rc->qp ? rc->qp->qp_num : 0, id->qpn,
+                rc->reg_gen, id->gen,
+                (rc->qp != id->qp || rc->send_cq != id->cq ||
+                 rc->reg_gen != id->gen)
+                    ? "*** CONN REPLACED UNDER SENDER ***"
+                    : "(same conn)");
+    char now_link[64];
+    fd_link_now(rc->tcp_fd, now_link, sizeof(now_link));
+    fprintf(stderr, "efs: RDMA tcp_fd=%d link now=\"%s\" at-upgrade=\"%s\" %s\n",
+            rc->tcp_fd, now_link, rc->tcp_link,
+            strcmp(now_link, rc->tcp_link) == 0
+                ? "(same socket)"
+                : "*** SOCKET CLOSED/REUSED BEHIND THIS CONN ***");
+    fprintf(stderr, "efs: RDMA conn sends posted=%llu reaped=%llu %s\n",
+            (unsigned long long)rc->n_posted, (unsigned long long)rc->n_reaped,
+            rc->n_reaped >= rc->n_posted
+                ? "*** ALL COMPLETIONS ARRIVED: flag was missed ***"
+                : "(a completion is genuinely outstanding)");
+    if (id && rc->dev)
+        fprintf(stderr,
+                "efs: RDMA port_xmit_packets delta over the send window = "
+                "%llu\n",
+                (unsigned long long)(ib_port_counter(rc->dev->name,
+                                                     rc->dev->port,
+                                                     "port_xmit_packets") -
+                                     id->xmit_pkts));
+    /* Nothing else in the process reads the async queue, so whatever took the
+     * QP out of RTS is still sitting in it. Non-blocking drain. */
+    if (rc->dev && rc->dev->ctx) {
+        int afd = rc->dev->ctx->async_fd;
+        int fl = fcntl(afd, F_GETFL);
+        if (fl >= 0)
+            fcntl(afd, F_SETFL, fl | O_NONBLOCK);
+        struct ibv_async_event ev;
+        int k = 0;
+        while (k++ < 8 && ibv_get_async_event(rc->dev->ctx, &ev) == 0) {
+            fprintf(stderr, "efs: RDMA async event=%d (%s)\n",
+                    (int)ev.event_type, ibv_event_type_str(ev.event_type));
+            ibv_ack_async_event(&ev);
+        }
+        if (fl >= 0)
+            fcntl(afd, F_SETFL, fl);
+    }
+}
+
 static int post_send(struct efs_rdma_conn *rc, uint64_t wr_id,
                      const void *buf, uint32_t len, int inline_ok)
 {
@@ -929,6 +1165,7 @@ static int post_send(struct efs_rdma_conn *rc, uint64_t wr_id,
         rc->broken = 1;
         return EFS_ERR_NET;
     }
+    rc->n_posted++;
     return EFS_OK;
 }
 
@@ -936,8 +1173,10 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
                         const void *p1, uint32_t l1,
                         const void *p2, uint32_t l2)
 {
-    if (rc->broken)
+    if (rc->broken) {
+        send_fail_dump(rc, type, "conn already broken");
         return EFS_ERR_NET;
+    }
     uint32_t payload = l1 + l2;
     uint32_t frame = 5 + payload;
     if (frame > rc->max_frame)
@@ -947,8 +1186,10 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
      * temporary is rejected on some mlx5 FW; INLINE from the MR is
      * fine when the frame fits the QP's actual cap. */
     int idx = send_buf_pick(rc);
-    if (idx < 0)
+    if (idx < 0) {
+        send_fail_dump(rc, type, "send_buf_pick: prior send never completed");
         return EFS_ERR_NET;
+    }
     uint8_t *b = rc->send_bufs[idx];
     uint32_t nl = htonl(1 + payload);
     memcpy(b, &nl, 4);
@@ -965,8 +1206,13 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
             fprintf(stderr, "rdma-first: send_frame post type=%u frame=%u inline=%d\n",
                     type, frame, inline_ok);
     }
-    if (post_send(rc, SEND_WRID_POOL | (uint64_t)idx, b, frame, inline_ok) != 0)
+    struct send_ident ident;
+    send_ident_take(rc, &ident);
+    ident.st = qp_state_now(rc);
+    if (post_send(rc, SEND_WRID_POOL | (uint64_t)idx, b, frame, inline_ok) != 0) {
+        send_fail_dump2(rc, type, "ibv_post_send", &ident);
         return EFS_ERR_NET;
+    }
     rc->send_busy[idx] = 1;
     /* Wait for the send CQE. Skipping this for non-INLINE left CREATE
      * (name[256] is already > INLINE_MAX) fire-and-forget: a failed first
@@ -974,14 +1220,40 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
     int64_t end = now_us() + EFS_RDMA_SEND_WAIT_US;
     while (rc->send_busy[idx]) {
         if (reap_sends(rc) != 0) {
-            fprintf(stderr, "efs: RDMA send type=%u reap NET\n", type);
+            send_fail_dump2(rc, type, "reap: send CQE reported error", &ident);
             return EFS_ERR_NET;
         }
         if (!rc->send_busy[idx])
             break;
         if (now_us() > end) {
             rc->broken = 1;
-            fprintf(stderr, "efs: RDMA send type=%u WAIT TIMEOUT\n", type);
+            send_fail_dump2(rc, type, "WAIT TIMEOUT: no send CQE",
+                            &ident);
+            if (rdma_first_log()) {
+                /* Keep polling past the deadline: whether the CQE is merely
+                 * LATE (and with what status) or never arrives at all is the
+                 * difference between "budget too short" and "completion
+                 * lost", and picks the fix. */
+                int64_t e2 = now_us() + 8000000;
+                struct ibv_wc w;
+                while (now_us() < e2) {
+                    int n = ibv_poll_cq(rc->send_cq, 1, &w);
+                    if (n > 0) {
+                        fprintf(stderr,
+                                "rdma-first: LATE send CQE after %lldus "
+                                "status=%d (%s) wr_id=0x%llx\n",
+                                (long long)(now_us() - end +
+                                            EFS_RDMA_SEND_WAIT_US),
+                                (int)w.status, ibv_wc_status_str(w.status),
+                                (unsigned long long)w.wr_id);
+                        break;
+                    }
+                    usleep(2000);
+                }
+                if (now_us() >= e2)
+                    fprintf(stderr, "rdma-first: NO send CQE after +8s "
+                                    "qp_state=%d\n", qp_state_now(rc));
+            }
             return EFS_ERR_NET;
         }
         sched_yield();

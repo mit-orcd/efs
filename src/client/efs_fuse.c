@@ -2602,9 +2602,8 @@ static int efs_fuse_chown(const char *path, uid_t uid, gid_t gid,
     rc = check_chown_perm(&ino, uid, gid);
     if (rc != 0)
         return rc;
-    if (efs_client_chown(ino.ino, uid, gid) != 0)
-        return -EIO;
-    return 0;
+    rc = efs_client_chown(ino.ino, uid, gid);
+    return efs_rc_to_errno(rc);
 }
 
 static int split_parent_name(const char *path, char *name, size_t name_len,
@@ -2773,15 +2772,25 @@ static int efs_fuse_utimens(const char *path, const struct timespec tv[2],
                 nsec = 0;
         }
     }
+    /* Map the real status. Collapsing every rc to EIO turned a missing
+     * inode row into "Input/output error" on rsync's set-times, which is
+     * both wrong and undiagnosable — chmod hits the same SETATTR handler
+     * and reported the ENOENT correctly. */
+    int rc;
     if (set_a && set_m) {
-        if (efs_client_utimens_both(ino, msec, nsec, asec) != 0)
-            return -EIO;
-        return 0;
+        rc = efs_client_utimens_both(ino, msec, nsec, asec);
+        return efs_rc_to_errno(rc);
     }
-    if (set_a && efs_client_set_atime(ino, asec) != 0)
-        return -EIO;
-    if (set_m && efs_client_utimens(ino, msec, nsec) != 0)
-        return -EIO;
+    if (set_a) {
+        rc = efs_client_set_atime(ino, asec);
+        if (rc != EFS_OK)
+            return efs_rc_to_errno(rc);
+    }
+    if (set_m) {
+        rc = efs_client_utimens(ino, msec, nsec);
+        if (rc != EFS_OK)
+            return efs_rc_to_errno(rc);
+    }
     return 0;
 }
 
@@ -2814,9 +2823,7 @@ static int efs_fuse_truncate(const char *path, off_t size,
      * on-server length and drops/keeps whole chunks deterministically. */
     (void)efs_dcache_flush_ino(ino.ino);
 
-    if (efs_client_truncate(ino.ino, (uint64_t)size) != 0)
-        return -EIO;
-    return 0;
+    return efs_rc_to_errno(efs_client_truncate(ino.ino, (uint64_t)size));
 }
 
 static int efs_fuse_release(const char *path, struct fuse_file_info *fi)

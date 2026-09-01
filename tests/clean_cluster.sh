@@ -29,6 +29,8 @@ start_efsd() { # host node-id addr [join]
     [ -n "${EFS_FLUSH_PROF:-}" ] && prof="EFS_FLUSH_PROF=$EFS_FLUSH_PROF"
     [ -n "${EFS_LOCK_PROF:-}" ] && prof="$prof EFS_LOCK_PROF=$EFS_LOCK_PROF"
     [ -n "${EFS_INO_PROF:-}" ] && prof="$prof EFS_INO_PROF=$EFS_INO_PROF"
+    # RDMA handshake / first-frame trace (rdma-first: lines on both sides).
+    [ -n "${EFS_RDMA_FIRST:-}" ] && prof="$prof EFS_RDMA_FIRST=$EFS_RDMA_FIRST"
     [ -n "${EFS_TRANSPORT:-}" ] && prof="$prof EFS_TRANSPORT=$EFS_TRANSPORT"
     # Inode RAM cap: needed to make trim_ino_ram evict on a table small enough
     # to gate quickly (the 1024 MB default needs millions of inodes first).

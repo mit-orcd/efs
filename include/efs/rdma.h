@@ -78,6 +78,11 @@ int efs_rdma_reply_fd(struct efs_rdma_conn *rc);
 /* Largest frame this conn carries over RDMA (min of both ends' buffers). */
 uint32_t efs_rdma_max_frame(struct efs_rdma_conn *rc);
 
+/* Local QP number, for diagnostics: a peer that keeps sending to a QP this
+ * side already destroyed gets no error anywhere, so teardown logs must name
+ * the QP to be correlatable with the sender's dest_qpn. */
+uint32_t efs_rdma_qpn(struct efs_rdma_conn *rc);
+
 /* Number of live RDMA conns in this process (tests/validation). */
 int efs_rdma_live_conns(void);
 

@@ -115,6 +115,25 @@ ensure_mounted() { # host
     local env
     env=$(fuse_client_env)
     if ssh_to "$PROBE_SSH_SEC" "$h" 'grep -q "efs-fuse /tmp/efs-mount " /proc/mounts && timeout 2 stat /tmp/efs-mount >/dev/null' 2>/dev/null; then
+        # EFS_TRANSPORT is only read by the daemon at mount time, so reusing
+        # an existing mount silently ignores it: asking for tcp on a cluster
+        # whose clients are already up on auto keeps the RDMA mount, and the
+        # run gets labelled with a transport it never used. Verify against
+        # what the daemon actually reported and remount on a mismatch.
+        # Only tcp is checked: the RDMA upgrade is lazy (it happens on the
+        # first connection-pool checkout), so a fresh auto mount legitimately
+        # has no "RDMA transport up" line yet and must not be remounted.
+        if [ "${EFS_TRANSPORT:-}" = tcp ]; then
+            local rdma_up
+            rdma_up=$(ssh_to "$PROBE_SSH_SEC" "$h" \
+                'grep -c "RDMA transport up" /tmp/efs/fuse.log 2>/dev/null || echo 0' \
+                2>/dev/null | tr -dc '0-9')
+            if [ "${rdma_up:-0}" != "0" ]; then
+                say "  $h: mounted on RDMA but EFS_TRANSPORT=tcp — remounting"
+                remount_client "$h"
+                return $?
+            fi
+        fi
         return 0
     fi
     say "  $h: mounting efs-fuse"

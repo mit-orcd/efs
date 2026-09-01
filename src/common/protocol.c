@@ -204,10 +204,31 @@ static int tcp_has_request(int fd)
     ssize_t n = recv(fd, &peek, 1, MSG_PEEK | MSG_DONTWAIT);
     if (n > 0)
         return 1;
-    if (n == 0)
+    /* EOF and a socket error both tear the conn (and its QP) down, but they
+     * have completely different causes: distinguish them. */
+    if (n == 0) {
+        if (getenv("EFS_RDMA_FIRST"))
+            fprintf(stderr, "rdma-first: tcp EOF (peer FIN) fd=%d\n", fd);
         return -1;
+    }
     if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
         return 0;
+    if (getenv("EFS_RDMA_FIRST"))
+        fprintf(stderr, "rdma-first: tcp recv error fd=%d errno=%d (%s)\n", fd,
+                errno, strerror(errno));
+    return -1;
+}
+
+/* Name why a conn is being torn down. Destroying the conn also destroys its
+ * QP, and a peer still holding that QP gets NO error of any kind -- its
+ * packets land on a QPN that no longer exists and are silently dropped, so
+ * it retries until its own QP errors out with no completion. Without this
+ * log the teardown is invisible from both ends. */
+static int wait_teardown(struct efs_conn *c, const char *why)
+{
+    if (getenv("EFS_RDMA_FIRST"))
+        fprintf(stderr, "rdma-first: conn teardown fd=%d qpn=%u reason=%s\n",
+                c->fd, c->rc ? efs_rdma_qpn(c->rc) : 0, why);
     return -1;
 }
 
@@ -225,18 +246,18 @@ int efs_conn_wait_request(struct efs_conn *c)
          * the adaptive spin. */
         int r = efs_rdma_reply_ready_quick(rc);
         if (r < 0)
-            return -1;
+            return wait_teardown(c, "rdma conn broken (quick check)");
         if (r > 0)
             return EFS_CONN_RDMA;
         struct pollfd p = { .fd = c->fd, .events = POLLIN };
         if (poll(&p, 1, 0) < 0)
-            return -1;
+            return wait_teardown(c, "poll(0) failed");
         if (p.revents & (POLLERR | POLLHUP | POLLNVAL))
-            return -1;
+            return wait_teardown(c, "tcp POLLERR/HUP (non-blocking check)");
         if (p.revents & POLLIN) {
             int t = tcp_has_request(c->fd);
             if (t < 0)
-                return -1;
+                return wait_teardown(c, "tcp_has_request failed (quick)");
             if (t > 0)
                 return EFS_CONN_TCP;
         }
@@ -249,10 +270,10 @@ int efs_conn_wait_request(struct efs_conn *c)
         if (br < 0) {
             if (errno == EINTR)
                 continue;
-            return -1;
+            return wait_teardown(c, "poll(-1) failed");
         }
         if (pf[0].revents & (POLLERR | POLLHUP | POLLNVAL))
-            return -1;
+            return wait_teardown(c, "tcp POLLERR/HUP (blocking poll)");
         /* RDMA first when both are ready: inode ops ride RDMA, GET_META
          * stays TCP. Preferring TCP here blocked recv_all forever. */
         if (pf[1].revents & POLLIN) {
@@ -262,18 +283,18 @@ int efs_conn_wait_request(struct efs_conn *c)
              * and treats a later TCP request as peer death. */
             int r2 = efs_rdma_reply_ready_quick(rc);
             if (r2 < 0)
-                return -1;
+                return wait_teardown(c, "rdma conn broken (after efd wake)");
             if (r2 > 0)
                 return EFS_CONN_RDMA;
             uint64_t tmp;
             if (read(efs_rdma_reply_fd(rc), &tmp, sizeof(tmp)) < 0 &&
                 errno != EAGAIN)
-                return -1;
+                return wait_teardown(c, "efd read failed");
         }
         if (pf[0].revents & POLLIN) {
             int t = tcp_has_request(c->fd);
             if (t < 0)
-                return -1;
+                return wait_teardown(c, "tcp_has_request failed (blocking)");
             if (t > 0)
                 return EFS_CONN_TCP;
         }

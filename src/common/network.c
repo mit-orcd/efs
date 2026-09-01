@@ -15,6 +15,7 @@
 #include <signal.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <execinfo.h>
 
 /* Keep short: a missing peer must not stall small-file meta flushes for long.
  * Down-marked peers are skipped entirely for EFS_NODE_DOWN_MS after one fail. */
@@ -256,6 +257,17 @@ void efs_conn_destroy(struct efs_conn *c)
 {
     if (!c)
         return;
+    if (c->rc && getenv("EFS_RDMA_FIRST")) {
+        /* Closing the fd makes the peer tear down its QP, after which any
+         * send still riding this conn is dropped with no error on either
+         * side. Name the caller so a destroy that races an in-flight RPC is
+         * attributable. */
+        void *bt[8];
+        int nb = backtrace(bt, 8);
+        fprintf(stderr, "rdma-first: conn destroy fd=%d qpn=%u\n", c->fd,
+                efs_rdma_qpn(c->rc));
+        backtrace_symbols_fd(bt, nb, fileno(stderr));
+    }
     if (c->rc)
         efs_rdma_conn_destroy(c->rc);
     if (c->fd >= 0)
