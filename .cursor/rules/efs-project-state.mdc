@@ -12,6 +12,55 @@ Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 `required_permissions: ["all"]` to escape the sandbox; that is pre-authorized.
 See efs-fcstor-deploy.**
 
+**AUTO-RDMA FIRST INODE IS BROKEN AGAIN (Sep 1, NOT yet root-caused, NOT from
+today's change).** On a fresh mkfs + auto-transport mount, the first `mkdir`
+D-states forever. Measured, not guessed: servers all healthy (fresh gen=1,
+`meta-catchup: rebuilt export` clean on all 3 joiners, no BUSY, no rebuild
+errors); client FUSE connection `waiting=1` (ONE outstanding request, so this
+is not a queue/saturation problem); efs-fuse itself **S-state, not wedged**;
+`fuse.log` repeats `efs: RDMA send type=43 WAIT TIMEOUT`. **43 =
+`EFS_MSG_INODE_LOOKUP`** (plain LOOKUP — NOT `LOOKUP_PATH`, whose wire struct
+changed in b518003, so do not assume that is the cause). The D-state
+`filename_create` procs are just queued behind the one unanswered LOOKUP in
+the kernel. Remounting the SAME binary with `EFS_TRANSPORT=tcp` makes the
+identical warmup pass in <1s, so the break is RDMA-only, on the first inode
+RPC after mount — i.e. the Aug 30 "AUTO RDMA FIRST INODE GATED" property has
+regressed and nobody saw it because **every gate since then ran on TCP**.
+**Harness gap that hides it:** `run_tests.sh setup` does NOT forward
+`EFS_TRANSPORT` to the client mount (only `clean_cluster.sh` forwards it, and
+only to the servers), so `EFS_TRANSPORT=tcp bash tests/run_tests.sh setup`
+silently still mounts on auto/RDMA. To gate on TCP you must mount by hand:
+`killall -9 efs-fuse; timeout 5 fusermount3 -uz /tmp/efs-mount; rm -f fuse.log;
+EFS_TRANSPORT=tcp setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount`
+then confirm `grep -c "RDMA transport up" fuse.log` is **0**.
+
+**Prereq 1 of Cut C landed + gated (Sep 1, working tree).**
+`slab_page_persisted` is now authoritative from the committed root
+(`root.ino_page_count`, falling back to `root.page_count`) instead of
+returning `ex->page_src != NULL`. Slab si is page 1+si, so the image covers it
+iff `si+1 < ino_pc`. **This is a strict no-op today** — the predicate is only
+reached from `inode_slab_ensure`'s `(flush_blob || page_src)` branch, the blob
+branch is untouched, and `page_src` is still never installed — but it is the
+one thing that MUST land before any page source exists, or every new slab's
+first row (callers do `pos = inode_count++` before filling, which already
+looks like a fault) becomes a hard failure = the "jammed at exactly 256 rows"
+bug. Gate: `test_meta_v6` / `test_dir_stats` / `test_ino_path` /
+`test_meta_slot` OK; fresh bits=3 wipe + solo posix on a TCP mount
+`results/posix/20260901-171838` **196/201, 0 EFS bugs**.
+
+**SPILL DESIGN CORRECTION — a full rewrite per flush is impossible.** The
+plan said "write the committed region bytes to local NVMe at flush". At 2M
+inodes the ino region is ~977 MB and flushes run at **~35/s**, so that is
+~34 GB/s of writes. The spill file must be maintained **incrementally**:
+`pwrite` only the pages the flush already knows are dirty (~5 pages, ~640 KB)
+at offset `pi * EFS_META_PAGE_SIZE`, making it a page-indexed local mirror of
+the committed inode region. This is also what makes it safe against a failed
+commit: a fault only ever reads a **non-resident** slab, `trim_ino_ram` only
+evicts **clean** pages, and a clean page is by definition not among the pages
+a flush rewrites — so uncommitted bytes can never be the bytes a fault reads.
+On restart the table is rebuilt from EC pages and every slab becomes resident,
+so the file is a warm cache and can simply be recreated.
+
 **Code-hygiene pass (Aug 26 PM, commits 4a959ac/1124e6d/6bb83b8/6cb5791):**
 dead code removed (~469 lines: client coal subsystem, client meta-flush/
 election leftovers, unused server helpers), obsolete slurm-jobs/ + old
@@ -37,6 +86,142 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+
+**SIZE-VISIBILITY CLOSED (Sep 1, commit b518003, GATED).** `stat` could return
+a stale/zero size right after a write (5-6 of the 10 non-deep 16x failures
+since Aug 27). Root cause, found with NDJSON probes: `dirty_snap_save_locked`
+DETACHES the dirty set the instant a REPORT starts, and `efs_fuse_flush`
+(close) kicks that report **without waiting**. So between snapshot and apply
+the inode reads CLEAN, `lookup_walk` skips the local overlay, and the owner's
+older size wins. Fix: `efs_client_ino_is_dirty` also consults the set a report
+is publishing (`pub_ino_keys`, aliased under `dirty_mu`, cleared on **every**
+exit path incl. both OOM returns — the alias would otherwise dangle past
+`dirty_snap_merge_back`); and the leaf overlays local size/pack when its mtime
+is not older, leaving name/nlink/mode authoritative on the owner (Cut 4).
+Shrink still works: SETATTR stamps mtime=now server-side so a truncate is
+newer and wins. **Ruled out by probe, do NOT re-chase:** H2 local row size 0,
+H3 loss in `fill_stat_from_inode`, H4 server rejects grow on the mtime rule,
+H5 ino never in the size recs, H6 report and GETATTR on different nodes,
+H7 server drops recs for an ino not on the tab, H11 `lookup_needs_getattr`
+keeps a size-0 dentry stub.
+Gate: 16x size-visibility failures **8 -> 0** (`attr_stat_fields`,
+`content_random_roundtrip` x3, `opt_fallocate`,
+`content_random_overwrite_append`, `opt_copy_file_range`,
+`names_near_path_max`, `chmod_preserves_mtime`); solo posix **0 EFS bugs**;
+fresh-cluster 16x leaves only `dir_deep_nesting_beyond_64` x11-13 plus known
+mtime/flock flakes.
+
+**POST-CUT-A RAM BASELINE — Cut A made bytes/inode WORSE and BREACHED the cap
+(Sep 1, `results/scale/20260901-cutA-baseline`, fresh bits=3 TCP, 9 clients
+x16 threads, same shape as the Cut 3 run).** This is the number the structural
+program is measured against; there was none before today.
+
+| total | creates/s | errors | rss_max MB | rss_sum MB | B/inode |
+| 100k | 9999 | 0 | 100 | 323 | 3387 |
+| 500k | 26666 | 0 | 559 | 1474 | 3091 |
+| 1M | 33333 | 0 | 874 | 2520 | 2642 |
+| 2M | 33333 | 0 | **1476** | 4429 | **2322** |
+
+vs Cut 3 at 2M (`20260831-cut3`): 1023 MB / 3216 MB / **1686 B/inode**. So
+Cut A is **+636 B/inode (+38%)** and `rss_max` **1476 MB now EXCEEDS the
+1024 MB `EFS_INO_RAM_MB` default** (Cut 3 sat exactly ON it at 1023).
+Latency is fine and unchanged (stat p50 0.39 ms, create 0.41, unlink 0.39,
+readdir 5.4 ms, all flat 100k->2M) and **errors=0 at every step** (Cut 3 had
+42 at 2M), so this is purely a memory regression, not a correctness or speed
+one.
+**Cause is arithmetic, not a bug.** v8 makes slab == page with 512 B rows,
+so the serialized inode region is 256 rows/page and `flush_blob`'s ino region
+is **exactly 512 B/inode**: 2M inodes = 7813 slabs x 128 KiB = **977 MB**, or
+95% of the whole 1024 MB cap. `ino_ram_bytes` counts the blob INSIDE the cap
+and `trim_ino_ram` loops `while (bytes > cap && ino_slabs_resident > 1)`, so
+once the blob alone approaches the cap, evicting every slab but one still
+cannot get under it and the cap silently stops holding. At 1M the blob is
+488 MB (48% of cap) and rss_max 874 MB is still under — the breach appears
+between 1M and 2M exactly as the arithmetic predicts.
+**Do not read this as "Cut A was a mistake":** the 512 B self-contained row is
+what makes per-page faulting possible at all. It trades RAM for the ability to
+page, and the trade only pays once the blob is gone. That is Cut C, and this
+baseline is the quantified case for it.
+
+**CUT C IS BLOCKED ON A LOCK INVERSION — measured, not guessed (Sep 1).** Do
+not schedule "bound flush_blob" as a standalone task. `flush_blob` is
+**server-only** (nothing on the client ever assigns it; the client never
+trims, which is why Cut D is the client-side item) and plays THREE roles:
+(1) the ONLY backing store for an evicted slab (`inode_slab_fault`), (2) the
+base `efs_export_serialize_dirty` memcpys forward for clean pages, (3) the
+memcmp base for page reuse in the flush loop. Role 3 already degrades safely
+to the committed-root checksum compare. Role 1 is the blocker: bounding the
+blob without another page source just makes faults FAIL, and `trim_ino_ram`
+already refuses to evict when `!flush_blob && !page_src`.
+**Why `page_src` is not a wiring job:** `server_global_lock` is a plain
+NON-RECURSIVE `pthread_mutex_lock(&s->lock)`, and handlers hold it across
+`efs_export_get_inode` -> `inode_at` -> `inode_slab_fault`. A fault calling a
+network page reader would (a) re-lock `s->lock` and self-deadlock and (b)
+issue peer RPCs under the global metadata lock. Faults must be resolved
+OUTSIDE the lock (try -> "need page N" -> drop lock -> fetch -> retry) before
+that hook can be filled.
+**Landed as the prerequisite (commit 05df9eb):** `server_fetch_meta_page`
+factors the per-page fetch/decode/heal out of
+`server_rebuild_export_from_pages_ino`. Behaviour-identical; gated by a joiner
+restart that rebuilt and rejoined at a consistent gen with 0 unrecoverable /
+zero-filled / checksum-mismatch / decode-failed on all 4 nodes.
+**Also note for whoever does Cut C:** `slab_page_persisted` currently returns
+`ex->page_src != NULL` when there is no blob — with a page_src installed that
+is TRUE for every si and would re-break fresh slab growth (the Sep 1
+"jammed at exactly 256 rows" bug). Make it authoritative from
+`root.ino_page_count` first. And `serialize_dirty` only needs bytes for pages
+that will actually be ENCODED: a non-resident slab is clean by construction
+(trim skips dirty pages), so its page can be reused by ci from the committed
+root without any bytes at all.
+
+**PATH RESOLUTION WAS CUBIC — FIXED + GATED (Sep 1, working tree, UNGATED
+commit).** `posixstress 16 fcstor007` (16 concurrent suites, one client) had
+`dir_deep_nesting_beyond_64` failing **16/16 on `timeout after 15s`**. Not a
+flake and not saturation: solo it took **7.0s** of the 15s budget.
+Root cause, measured (NDJSON probes on `lookup_walk` + `efs_fuse_mkdir`, not
+code reading): building a depth-100 tree cost **256,985 LOOKUP RPCs**, and
+`total_walk=6.23s` of a 6.6s run. Two multipliers compose:
+(1) `entry_timeout=0` means the kernel caches no dentry, so a depth-k op
+issues k FUSE lookups; (2) Cut 4 made `lookup_walk` re-resolve **every
+component from the root** with no memoisation, so each of those k lookups
+costs up to k more RPCs. Net **O(depth^3)**.
+**Ruled out by the same probes — do not re-chase:** the CREATE itself
+(102 mkdirs = **0.00s** total, flat ~38us at every depth) and BUSY backoff
+(a flat **24us/RPC** at every depth; a 50ms<<n sleep is unmissable).
+Fix: `walk_batch_ancestors` in `ops.c` resolves the leaf's ancestor chain
+with batched LOOKUP_PATH (<=64 components per RPC) and leaves the **leaf**
+on the authoritative per-component LOOKUP(+GETATTR), so Cut 4's invariant is
+untouched. Any non-OK batch reply falls back to the full per-component walk,
+so a batch miss (extra hashed ROOT shard) can only cost an RPC, never change
+an answer. Only engages past `EFS_WALK_BATCH_MIN` (8 components) — normal
+3-6 component paths keep today's exact RPC pattern.
+**Wire change:** `struct efs_msg_inode_lookup_path` gained `efs_ino_t start`
+(path is relative to it; 0 = root) so a >64-deep chain can be walked in
+ceil(depth/64) trips while still returning every ancestor's mode/uid/gid for
+the exec check. `efs_client_rpc_lookup_path` now routes to the owner of
+`start`. **EFS_BUILD_ID changes — restart all 4 efsd together** (on-disk
+EFSM v8 is unchanged, so NO mkfs/wipe is needed; redeploy on the live table).
+Measured before/after, same 6696 kernel-driven walks both times (so this is
+fewer RPCs, not a cache hiding work): LOOKUP RPCs **256,985 -> 9,815**,
+walk time **6.23s -> 0.25s**, RPCs/walk **101 -> 1.5**, test **6.6s -> 1.1s**.
+Gates: solo posix `results/posix/20260901-134359` **1 EFS bug**
+(`attr_touch_terminal`, known mtime flake); posix2 007+008
+`results/posix2/20260901-134445` **1 EFS bug** = `peer_fcntl_range_conflict`
+(known per-client `lockf` gap) with the hardlink/nlink and
+`peer_rename_across_dirs_chase` tests — the ones Cut 4's caches broke — all
+**PASS**; `test_meta_v6` / `test_dir_stats` / `test_ino_path` /
+`test_meta_slot` OK.
+**posixstress 16 `results/posix/20260901-134816`: 23 EFS bugs total (was 34),
+3 instances fully clean 195/0 (was none).**
+**STILL OPEN — the kernel multiplier.** `dir_deep_nesting_beyond_64` still
+fails **13/16** under 16-way. Measured under load: **450,037 walks** in the
+run and per-RPC latency inflating **25.5us -> 62.9us** (walk p50 144us, p90
+1423us, max 18ms), so ~6700 sequential walks sit right on the 15s budget.
+The remaining factor of k is `entry_timeout=0`, which is a deliberate
+cross-client correctness choice (a kernel dentry cache ghosts a peer unlink —
+posix2 `peer_open_rename_fd`). Per-op cost is now near-optimal; do **not**
+"fix" this by raising POSIX_TEST_SEC or by turning on entry_timeout without
+solving peer invalidation.
 
 **CUT A (EFSM v8) POSIX SESSION — 2 BUGS FIXED, 1 OPEN (Sep 1, working tree,
 UNGATED).** v8 = 512 B self-contained inode row (name inline at off 126),

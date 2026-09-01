@@ -326,9 +326,19 @@ static void slab_rows_tag(struct efs_export *ex, uint32_t si)
 static int slab_page_persisted(const struct efs_export *ex, uint32_t si)
 {
     size_t off = (size_t)(si + 1) * EFS_META_PAGE_SIZE;
+    uint32_t ino_pc;
     if (ex->flush_blob)
         return off + EFS_META_PAGE_SIZE <= ex->flush_blob_ino_len;
-    return ex->page_src != NULL;
+    /* No blob: the committed root is the authority on which pages the image
+     * covers, and slab si is exactly page 1+si. This must NOT be answered
+     * with "a page source exists" — that is true for every si the moment one
+     * is installed, so the first row of each new slab (callers do
+     * pos = inode_count++ before filling it, which already makes it look like
+     * a fault) would become a hard failure instead of fresh growth. That is
+     * the "table jammed at exactly 256 rows" bug. */
+    ino_pc = ex->root.ino_page_count ? ex->root.ino_page_count
+                                     : ex->root.page_count;
+    return ino_pc && (uint64_t)si + 1 < (uint64_t)ino_pc;
 }
 
 static int inode_slab_ensure(struct efs_export *ex, uint32_t si)
