@@ -560,7 +560,111 @@ for every migration step after.</div>
 </ul>
 
 <!-- ============ MIGRATION ============ -->
-<h2>8 · Migration — gated, never a big bang</h2>
+<h2>8 · The gap map — what's built, what's missing</h2>
+<p>Every component of the target architecture, colored by its status <b>in the tree today</b>.
+This is the honest distance between the spec and the code.</p>
+
+<style>
+  .stB{stroke:#3fb950;stroke-width:1.6}
+  .stP{stroke:#d29922;stroke-width:1.6}
+  .stM{stroke:#f85149;stroke-width:1.6}
+  .stD{stroke:#6e7681;stroke-width:1.4;stroke-dasharray:4 3}
+  .chip{display:inline-block;font-family:var(--mono);font-size:.7rem;font-weight:700;
+        padding:.1em .6em;border-radius:20px;margin-right:.5em;border:1px solid}
+  .cB{color:var(--good);border-color:var(--good)}
+  .cP{color:var(--warn);border-color:var(--warn)}
+  .cM{color:var(--bad);border-color:var(--bad)}
+  .cD{color:var(--dim);border-color:var(--dim)}
+</style>
+
+<p>
+  <span class="chip cB">BUILT</span> in the tree and gated
+  <span class="chip cP">PARTIAL</span> exists, not the target form
+  <span class="chip cM">MISSING</span> not started
+  <span class="chip cD">DELETE</span> exists today, removed at step 10
+</p>
+
+<div class="flow">
+<svg viewBox="0 0 920 560" width="920" height="560">
+  <!-- DATA PLANE -->
+  <text class="lbl" x="20" y="24">DATA PLANE</text>
+  <rect class="box stB" x="20"  y="34" width="205" height="42" rx="7"/><text class="boxT" x="122" y="52" text-anchor="middle">client-direct RDMA</text><text class="boxS" x="122" y="67" text-anchor="middle">built · gated</text>
+  <rect class="box stB" x="245" y="34" width="205" height="42" rx="7"/><text class="boxT" x="347" y="52" text-anchor="middle">2+1 EC</text><text class="boxS" x="347" y="67" text-anchor="middle">built · failover tested</text>
+  <rect class="box stM" x="470" y="34" width="205" height="42" rx="7"/><text class="boxT" x="572" y="52" text-anchor="middle">immutable chunk gens</text><text class="boxS" x="572" y="67" text-anchor="middle">no generations on wire</text>
+  <rect class="box stM" x="695" y="34" width="205" height="42" rx="7"/><text class="boxT" x="797" y="52" text-anchor="middle">target-side fencing</text><text class="boxS" x="797" y="67" text-anchor="middle">missing</text>
+
+  <!-- METADATA PLANE -->
+  <text class="lbl" x="20" y="106">METADATA PLANE</text>
+  <rect class="box stB" x="20"  y="116" width="205" height="42" rx="7"/><text class="boxT" x="122" y="134" text-anchor="middle">sharding (bits=3)</text><text class="boxS" x="122" y="149" text-anchor="middle">built · 8 shards</text>
+  <rect class="box stD" x="245" y="116" width="205" height="42" rx="7"/><text class="boxT" x="347" y="134" text-anchor="middle" fill="#9aa7b8">in-RAM table + 2PC</text><text class="boxS" x="347" y="149" text-anchor="middle">today's flush · deleted §10</text>
+  <rect class="box stM" x="470" y="116" width="205" height="42" rx="7"/><text class="boxT" x="572" y="134" text-anchor="middle">Raft per shard, RF=3</text><text class="boxS" x="572" y="149" text-anchor="middle">missing</text>
+  <rect class="box stM" x="695" y="116" width="205" height="42" rx="7"/><text class="boxT" x="797" y="134" text-anchor="middle">ordered KV on NVMe</text><text class="boxS" x="797" y="149" text-anchor="middle">missing</text>
+  <rect class="box stP" x="20"  y="164" width="205" height="42" rx="7"/><text class="boxT" x="122" y="182" text-anchor="middle">cross-shard txns</text><text class="boxS" x="122" y="197" text-anchor="middle">fan-out skeleton only</text>
+  <rect class="box stM" x="245" y="164" width="205" height="42" rx="7"/><text class="boxT" x="347" y="182" text-anchor="middle">hot-file path</text><text class="boxS" x="347" y="197" text-anchor="middle">chunk_meta shards · size lanes</text>
+  <rect class="box stM" x="470" y="164" width="205" height="42" rx="7"/><text class="boxT" x="572" y="182" text-anchor="middle">request idempotency</text><text class="boxS" x="572" y="197" text-anchor="middle">no op-IDs today</text>
+  <rect class="box stP" x="695" y="164" width="205" height="42" rx="7"/><text class="boxT" x="797" y="182" text-anchor="middle">open-unlinked lifecycle</text><text class="boxS" x="797" y="197" text-anchor="middle">keep_last+HOLD, no orphan GC</text>
+
+  <!-- CONTROL PLANE -->
+  <text class="lbl" x="20" y="238">CONTROL PLANE</text>
+  <rect class="box stP" x="20"  y="248" width="205" height="42" rx="7"/><text class="boxT" x="122" y="266" text-anchor="middle">membership + join</text><text class="boxS" x="122" y="281" text-anchor="middle">exists · not Raft-backed</text>
+  <rect class="box stM" x="245" y="248" width="205" height="42" rx="7"/><text class="boxT" x="347" y="266" text-anchor="middle">Raft control group</text><text class="boxS" x="347" y="281" text-anchor="middle">missing</text>
+  <rect class="box stM" x="470" y="248" width="205" height="42" rx="7"/><text class="boxT" x="572" y="266" text-anchor="middle">joint reconfiguration</text><text class="boxS" x="572" y="281" text-anchor="middle">missing</text>
+  <rect class="box stM" x="695" y="248" width="205" height="42" rx="7"/><text class="boxT" x="797" y="266" text-anchor="middle">node incarnation</text><text class="boxS" x="797" y="281" text-anchor="middle">missing</text>
+
+  <!-- CLIENT -->
+  <text class="lbl" x="20" y="322">CLIENT</text>
+  <rect class="box stB" x="20"  y="332" width="205" height="42" rx="7"/><text class="boxT" x="122" y="350" text-anchor="middle">FUSE daemon</text><text class="boxS" x="122" y="365" text-anchor="middle">built · high-level API</text>
+  <rect class="box stB" x="245" y="332" width="205" height="42" rx="7"/><text class="boxT" x="347" y="350" text-anchor="middle">no-TTL kernel caches</text><text class="boxS" x="347" y="365" text-anchor="middle">entry/attr/negative = 0</text>
+  <rect class="box stM" x="470" y="332" width="205" height="42" rx="7"/><text class="boxT" x="572" y="350" text-anchor="middle">active invalidation</text><text class="boxS" x="572" y="365" text-anchor="middle">needs low-level FUSE API</text>
+  <rect class="box stM" x="695" y="332" width="205" height="42" rx="7"/><text class="boxT" x="797" y="350" text-anchor="middle">namespace = database</text><text class="boxS" x="797" y="365" text-anchor="middle">du/find as KV queries</text>
+
+  <!-- CORRECTNESS -->
+  <text class="lbl" x="20" y="406">CORRECTNESS &amp; DEV CYCLE</text>
+  <rect class="box stB" x="20"  y="416" width="205" height="42" rx="7"/><text class="boxT" x="122" y="434" text-anchor="middle">unit tests</text><text class="boxS" x="122" y="449" text-anchor="middle">make test</text>
+  <rect class="box stB" x="245" y="416" width="205" height="42" rx="7"/><text class="boxT" x="347" y="434" text-anchor="middle">posix + posix2</text><text class="boxS" x="347" y="449" text-anchor="middle">201 + 63 vs XFS</text>
+  <rect class="box stB" x="470" y="416" width="205" height="42" rx="7"/><text class="boxT" x="572" y="434" text-anchor="middle">perf harnesses</text><text class="boxS" x="572" y="449" text-anchor="middle">fio honest · ecopy · scale</text>
+  <rect class="box stM" x="695" y="416" width="205" height="42" rx="7"/><text class="boxT" x="797" y="434" text-anchor="middle">deterministic simulator</text><text class="boxS" x="797" y="449" text-anchor="middle">missing · build first</text>
+  <rect class="box stM" x="245" y="464" width="205" height="42" rx="7"/><text class="boxT" x="347" y="482" text-anchor="middle">linearizability checker</text><text class="boxS" x="347" y="497" text-anchor="middle">missing</text>
+
+  <!-- summary strip -->
+  <text class="lbl" x="20" y="540">BUILT: data path · sharding · client · test harnesses      MISSING: everything that makes metadata durable, parallel, and provable</text>
+</svg>
+</div>
+
+<h3>Goals vs measured reality</h3>
+<table>
+  <tr><th>Goal</th><th>Where we are today (measured)</th><th>The gap</th></tr>
+  <tr><td><b>≥ 2<sup>32</sup> objects</b></td><td>10M (2<sup>23</sup>) tested, 0 errors; ~1.7 KB/inode RAM is the wall</td><td>paged KV + Raft — steps 3–5</td></tr>
+  <tr><td><b>3 → 64 nodes</b></td><td>4 servers, static shard placement</td><td>control-plane Raft + joint reconfiguration — step 6</td></tr>
+  <tr><td><b>survive 1 node</b></td><td>data path proven (kill −9 a shard owner → failover reads OK)</td><td>metadata writes need Raft RF=3 — steps 4–6</td></tr>
+  <tr><td><b>immediate visibility</b></td><td><span class="chip cB">BUILT</span> no-TTL kernel caches + always-RPC lookup</td><td>keep; active invalidation via low-level FUSE — step 11</td></tr>
+  <tr><td><b>scale with hardware</b></td><td>reads scale 6.3–8.6× to 9 clients; writes share a ~3.6–5.3 GiB/s ceiling; metadata is single-primary</td><td>chunk_meta sharding + size lanes + Raft-per-shard — steps 4, 9</td></tr>
+</table>
+
+<h3>Migration steps, with real status</h3>
+<table>
+  <tr><th>#</th><th>Step</th><th>Status</th></tr>
+  <tr><td>0</td><td>Freeze the placement model (shard fns, ino IDs + generations)</td><td><span class="chip cB">DONE</span> this spec, Sep 1</td></tr>
+  <tr><td>1</td><td>Simulator interfaces + the <i>current</i> state machine</td><td><span class="chip cM">MISSING</span></td></tr>
+  <tr><td>2</td><td>RPC operation IDs + idempotency model</td><td><span class="chip cM">MISSING</span></td></tr>
+  <tr><td>3</td><td>Ordered KV applied state (atomic batches)</td><td><span class="chip cM">MISSING</span></td></tr>
+  <tr><td>4</td><td>Single-shard Raft (elect · replicate · apply · ReadIndex · snapshots)</td><td><span class="chip cM">MISSING</span></td></tr>
+  <tr><td>5</td><td>Simulator proves the single-shard invariants</td><td><span class="chip cM">MISSING</span></td></tr>
+  <tr><td>6</td><td>Safe reconfiguration + control-plane desired placement</td><td><span class="chip cM">MISSING</span></td></tr>
+  <tr><td>7</td><td>Cross-shard transaction protocol</td><td><span class="chip cP">PARTIAL</span> fan-out skeleton, no txid/intents/decision</td></tr>
+  <tr><td>8</td><td>Open-unlinked inode lifecycle</td><td><span class="chip cP">PARTIAL</span> keep_last + HOLD; no orphan state/reclaim</td></tr>
+  <tr><td>9</td><td>Data-generation publication / fencing</td><td><span class="chip cM">MISSING</span> no chunk generations on the wire today</td></tr>
+  <tr><td>10</td><td>Delete the snapshot / root-2PC machinery</td><td><span class="chip cD">DELETE</span> it is today's flush path</td></tr>
+  <tr><td>11</td><td>FUSE cache-coherence optimization</td><td><span class="chip cM">MISSING</span> blocked on the low-level API</td></tr>
+</table>
+
+<div class="why">Read the map bottom-up: the <b>data path and the test harnesses are the strong
+foundation</b> — RDMA, EC, FUSE, and the posix/perf suites are built and gated. The <b>entire
+missing mass is in the metadata plane</b>: nothing today makes metadata durable without a whole-table
+flush, parallel across leaders, or provable under failure. That is exactly why the simulator (step 1)
+and single-shard Raft (step 4) come first — everything else hangs off them.</div>
+
+<h2>9 · Migration — gated, never a big bang</h2>
 <div class="flow">
 <svg viewBox="0 0 920 170" width="920" height="170">
   <text class="lbl" x="20" y="22">DO NOT GO STRAIGHT KV → RAFT → DONE</text>
@@ -582,7 +686,7 @@ and becomes the regression gate for every step after. Each step is gated; the sy
 throughout. Detailed steps live in the <a href="scaling-roadmap.md">scaling roadmap</a>.</p>
 
 <!-- ============ REJECTED ============ -->
-<h2>9 · Deliberately rejected</h2>
+<h2>10 · Deliberately rejected</h2>
 <table>
   <tr><th>Idea</th><th>Why not</th></tr>
   <tr><td>Millions of tiny consensus groups beyond the shard count</td><td>4096 groups is the ceiling; more re-creates the catchup-storm class.</td></tr>
