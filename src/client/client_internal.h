@@ -153,8 +153,8 @@ void efs_client_mark_chunk_dirty(efs_ino_t ino, uint32_t chunk_index);
 int efs_client_ensure_meta_room(uint64_t extra_inodes, uint64_t extra_chunks);
 int efs_client_rpc_lookup(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, struct efs_inode *out);
-int efs_client_rpc_lookup_path(efs_export_id_t export_id, const char *path,
-                               uint32_t flags,
+int efs_client_rpc_lookup_path(efs_export_id_t export_id, efs_ino_t start,
+                               const char *path, uint32_t flags,
                                struct efs_msg_inode_lookup_path_reply *out);
 int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, uint32_t mode, uid_t uid, gid_t gid,

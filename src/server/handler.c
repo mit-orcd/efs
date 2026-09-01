@@ -3079,15 +3079,16 @@ send_reply:
                 r.status = EFS_INODE_RPC_INVAL;
             } else {
                 uint32_t bits = ex->root.shard_bits;
+                efs_ino_t start_ino = req->start ? req->start : EFS_ROOT_INO;
                 server_global_unlock(g_server);
                 uint32_t held[3];
                 int nheld = 0;
-                uint32_t psh0 = efs_export_shard_of(EFS_ROOT_INO, bits);
+                uint32_t psh0 = efs_export_shard_of(start_ino, bits);
                 inode_lock3(g_server, eidx, psh0, psh0, psh0, held, &nheld);
                 if (main_fence_blocks_shard_read(ex, psh0)) {
                     r.status = EFS_INODE_RPC_BUSY;
                 } else if (req->path[1] == '\0') {
-                    if (efs_export_get_inode(ex, EFS_ROOT_INO, &r.inode) == 0)
+                    if (efs_export_get_inode(ex, start_ino, &r.inode) == 0)
                         r.status = EFS_INODE_RPC_OK;
                     else
                         r.status = EFS_INODE_RPC_NOT_FOUND;
@@ -3097,7 +3098,7 @@ send_reply:
                     pbuf[sizeof(pbuf) - 1] = '\0';
                     char *save = NULL;
                     char *part = strtok_r(pbuf, "/", &save);
-                    efs_ino_t parent = EFS_ROOT_INO;
+                    efs_ino_t parent = start_ino;
                     r.status = EFS_INODE_RPC_NOT_FOUND;
                     while (part) {
                         uint32_t psh = efs_export_shard_of(parent, bits);
@@ -3345,8 +3346,9 @@ send_reply:
                     }
                     struct efs_export *tab = table_for_ino(ex, irecs[k].ino);
                     struct efs_inode cur;
-                    if (efs_export_get_inode(tab, irecs[k].ino, &cur) != 0)
+                    if (efs_export_get_inode(tab, irecs[k].ino, &cur) != 0) {
                         continue; /* inode not (yet) on the server; skip */
+                    }
                     /* Grow-only: a lagging report must not shrink an
                      * O_APPEND reserve (size advances server-side ahead
                      * of the data report). Shrinks only arrive via
@@ -3369,6 +3371,7 @@ send_reply:
                                                      irecs[k].size) == 0) {
                         applied++;
                         tab->shard_dirty = 1;
+                    } else if (irecs[k].size > cur.size) {
                     }
                     if (force_times ||
                         irecs[k].mtime > cur.mtime ||

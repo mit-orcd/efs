@@ -260,18 +260,19 @@ static int rpc_send_recv_owner(efs_ino_t ino, uint8_t type, const void *req,
                                req_len, expect, reply, reply_len);
 }
 
-int efs_client_rpc_lookup_path(efs_export_id_t export_id, const char *path,
-                               uint32_t flags,
+int efs_client_rpc_lookup_path(efs_export_id_t export_id, efs_ino_t start,
+                               const char *path, uint32_t flags,
                                struct efs_msg_inode_lookup_path_reply *out)
 {
     struct efs_msg_inode_lookup_path req;
     memset(&req, 0, sizeof(req));
     req.export_id = export_id;
     req.flags = flags;
+    req.start = start ? start : EFS_ROOT_INO;
     if (path)
         strncpy(req.path, path, sizeof(req.path) - 1);
     struct efs_msg_inode_lookup_path_reply r;
-    int rc = rpc_send_recv_owner(EFS_ROOT_INO, EFS_MSG_INODE_LOOKUP_PATH, &req,
+    int rc = rpc_send_recv_owner(req.start, EFS_MSG_INODE_LOOKUP_PATH, &req,
                                  sizeof(req), EFS_MSG_INODE_LOOKUP_PATH_REPLY,
                                  &r, sizeof(r));
     if (rc != EFS_OK)

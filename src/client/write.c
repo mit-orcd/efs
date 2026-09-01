@@ -130,26 +130,48 @@ static void dirty_sets_clear(void)
     g_client.dirty_chunk_count = 0;
 }
 
+static int dirty_set_has(const uint64_t *keys, uint64_t mask, efs_ino_t ino)
+{
+    if (!keys || !mask)
+        return 0;
+    uint64_t i = (uint64_t)ino & mask;
+    for (uint64_t n = 0; n <= mask; n++) {
+        if (keys[i] == 0)
+            return 0;
+        if (keys[i] == (uint64_t)ino)
+            return 1;
+        i = (i + 1) & mask;
+    }
+    return 0;
+}
+
+/* The dirty set a REPORT is currently publishing. dirty_snap_save_locked
+ * detaches the live set the moment a report starts, so without this an inode
+ * looks clean from snapshot until the owner has actually applied the size --
+ * and lookup_walk would then serve the owner's older size while this client
+ * still holds the newer one. report_mu serializes reports, so there is at
+ * most one of these at a time. Guarded by g_client.dirty_mu. */
+static uint64_t *pub_ino_keys;
+static uint64_t pub_ino_mask;
+
+/* Drop the alias. Must run before the snapshot array is freed or merged back
+ * on every exit path, or ino_is_dirty reads freed memory. */
+static void pub_ino_clear(void)
+{
+    pthread_mutex_lock(&g_client.dirty_mu);
+    pub_ino_keys = NULL;
+    pub_ino_mask = 0;
+    pthread_mutex_unlock(&g_client.dirty_mu);
+}
+
 int efs_client_ino_is_dirty(efs_ino_t ino)
 {
-    if (!ino || !g_client.dirty_ino_keys || !g_client.dirty_ino_mask)
+    if (!ino)
         return 0;
     pthread_mutex_lock(&g_client.dirty_mu);
-    uint64_t mask = g_client.dirty_ino_mask;
-    uint64_t *keys = g_client.dirty_ino_keys;
-    int hit = 0;
-    if (keys && mask) {
-        uint64_t i = (uint64_t)ino & mask;
-        for (uint64_t n = 0; n <= mask; n++) {
-            if (keys[i] == 0)
-                break;
-            if (keys[i] == (uint64_t)ino) {
-                hit = 1;
-                break;
-            }
-            i = (i + 1) & mask;
-        }
-    }
+    int hit = dirty_set_has(g_client.dirty_ino_keys, g_client.dirty_ino_mask,
+                            ino) ||
+              dirty_set_has(pub_ino_keys, pub_ino_mask, ino);
     pthread_mutex_unlock(&g_client.dirty_mu);
     return hit;
 }
@@ -545,6 +567,9 @@ int efs_client_report_dirty(int sync)
         return EFS_OK;
     }
     dirty_snap_save_locked(&ds);
+    /* Keep these inodes reading as dirty until the owner has the size. */
+    pub_ino_keys = ds.ino_keys;
+    pub_ino_mask = ds.ino_mask;
     pthread_mutex_unlock(&g_client.dirty_mu);
 
     /* Build chunk + inode size/mtime recs from the live table (still holding
@@ -560,6 +585,7 @@ int efs_client_report_dirty(int sync)
     if ((ds.chunk_count && !crecs) || (ds.ino_count && !irecs)) {
         free(crecs);
         free(irecs);
+        pub_ino_clear();
         /* table lock held (not dirty_mu — merge_back takes it internally). */
         dirty_snap_merge_back_locked(&ds);
         efs_client_table_unlock();
@@ -628,6 +654,7 @@ int efs_client_report_dirty(int sync)
             free(ibuf);
             free(crecs);
             free(irecs);
+            pub_ino_clear();
             efs_client_table_lock();
             dirty_snap_merge_back_locked(&ds);
             efs_client_table_unlock();
@@ -674,6 +701,9 @@ int efs_client_report_dirty(int sync)
     }
     free(crecs);
     free(irecs);
+    /* The owner now has these sizes (or the snapshot is about to be merged
+     * back into the live set), so stop reporting them as in-flight. */
+    pub_ino_clear();
     if (rc == EFS_OK) {
         dirty_snap_free(&ds);
     } else {

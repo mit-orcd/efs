@@ -433,9 +433,14 @@ struct efs_msg_inode_lookup {
 
 #define EFS_LOOKUP_PATH_MAX_DEPTH 64
 #define EFS_LOOKUP_PATH_F_ANCESTORS (1u << 0)
+/* `start` is the directory the path is relative to; 0 means the export root.
+ * Resolving relative to an arbitrary ancestor lets the client walk a path
+ * deeper than EFS_LOOKUP_PATH_MAX_DEPTH in ceil(depth/64) round trips while
+ * still collecting every ancestor for the exec-permission check. */
 struct efs_msg_inode_lookup_path {
     efs_export_id_t export_id;
     uint32_t flags;
+    efs_ino_t start;
     char path[4096];
 };
 struct efs_lookup_path_anc {

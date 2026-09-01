@@ -460,6 +460,15 @@ int efs_client_stat_ino(efs_ino_t ino, struct efs_inode *out)
     return EFS_OK;
 }
 
+/* Is a's mtime strictly older than b's? */
+static int inode_mtime_older(const struct efs_inode *a,
+                             const struct efs_inode *b)
+{
+    if (a->mtime != b->mtime)
+        return a->mtime < b->mtime;
+    return a->mtime_nsec < b->mtime_nsec;
+}
+
 static int lookup_access_ok(const struct efs_inode *ino, uid_t uid, gid_t gid,
                             const gid_t *groups, int ngroups, int mask)
 {
@@ -505,6 +514,81 @@ static int lookup_needs_getattr(const struct efs_inode *child, efs_ino_t parent)
            efs_export_shard_of(parent, bits);
 }
 
+/* A path can hold at most one component per two bytes ("/x"). */
+#define EFS_WALK_MAX_COMPS 2048
+/* Below this depth a path costs so few round trips that the extra RPC on a
+ * batch miss would not pay for itself. */
+#define EFS_WALK_BATCH_MIN 8
+
+/* Resolve comp[0 .. ncomp-2] -- the leaf's ancestor chain -- with batched
+ * LOOKUP_PATH calls of up to 64 components each. On EFS_OK *parent is the
+ * leaf's parent and *idx is ncomp-1. EFS_ERR_ACCES/EFS_ERR_INVAL fail the
+ * whole lookup; any other return means "could not batch" and the caller
+ * does the per-component walk, so a batch miss can never change an answer.
+ */
+static int walk_batch_ancestors(char *const *comp, size_t ncomp, int do_x,
+                                uid_t uid, gid_t gid, const gid_t *groups,
+                                int ngroups, efs_ino_t *parent, size_t *idx)
+{
+    efs_ino_t cur = EFS_ROOT_INO;
+    size_t done = 0;
+
+    while (done < ncomp - 1) {
+        struct efs_msg_inode_lookup_path_reply r;
+        char cbuf[4096];
+        size_t n = 0, len = 0;
+
+        while (done + n < ncomp - 1 && n < EFS_LOOKUP_PATH_MAX_DEPTH) {
+            size_t cl = strlen(comp[done + n]);
+            if (len + cl + 2 > sizeof(cbuf))
+                break;
+            cbuf[len++] = '/';
+            memcpy(cbuf + len, comp[done + n], cl);
+            len += cl;
+            n++;
+        }
+        if (n == 0)
+            return EFS_ERR_NOT_FOUND;
+        cbuf[len] = '\0';
+
+        if (efs_client_rpc_lookup_path(g_client.export_id, cur, cbuf,
+                                       EFS_LOOKUP_PATH_F_ANCESTORS,
+                                       &r) != EFS_OK)
+            return EFS_ERR_NOT_FOUND;
+        /* The server records an ancestor for every component but the last of
+         * the path it was given; anything else means it truncated and the
+         * exec chain would have a hole. */
+        if (r.ancestor_count != n - 1)
+            return EFS_ERR_NOT_FOUND;
+
+        if (do_x) {
+            for (uint32_t a = 0; a <= r.ancestor_count; a++) {
+                struct efs_inode t;
+                memset(&t, 0, sizeof(t));
+                if (a < r.ancestor_count) {
+                    t.ino = r.ancestors[a].ino;
+                    t.mode = r.ancestors[a].mode;
+                    t.uid = r.ancestors[a].uid;
+                    t.gid = r.ancestors[a].gid;
+                } else {
+                    t = r.inode; /* this chunk's terminal dir */
+                }
+                if (!efs_mode_is_dir(t.mode))
+                    return EFS_ERR_INVAL;
+                if (t.ino != EFS_ROOT_INO &&
+                    lookup_access_ok(&t, uid, gid, groups, ngroups, 1) != 0)
+                    return EFS_ERR_ACCES;
+            }
+        }
+        cur = r.inode.ino;
+        done += n;
+    }
+
+    *parent = cur;
+    *idx = ncomp - 1;
+    return EFS_OK;
+}
+
 static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
                        uid_t uid, gid_t gid, const gid_t *groups, int ngroups)
 {
@@ -530,20 +614,47 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
     if (plen >= sizeof(pbuf))
         return EFS_ERR_INVAL;
     memcpy(pbuf, path + 1, plen + 1);
-    char *save = NULL;
-    char *part = strtok_r(pbuf, "/", &save);
+
+    char *comp[EFS_WALK_MAX_COMPS];
+    size_t ncomp = 0, i;
+    {
+        char *save = NULL;
+        char *part = strtok_r(pbuf, "/", &save);
+        while (part) {
+            if (ncomp == EFS_WALK_MAX_COMPS)
+                return EFS_ERR_INVAL;
+            comp[ncomp++] = part;
+            part = strtok_r(NULL, "/", &save);
+        }
+    }
+    if (ncomp == 0)
+        return EFS_ERR_INVAL;
 
     efs_client_ensure_dir_locks();
 
-    /* Cut 4: per-component LOOKUP(+GETATTR). LOOKUP_PATH is served by the
-     * primary and misses nested names on extra shards (hashed ROOT dest). */
+    /* Cut 4: per-component LOOKUP(+GETATTR) for the leaf -- names/nlink
+     * always come from the owner. The ancestor chain above it carries no
+     * such requirement, so deep paths batch it (see walk_batch_ancestors);
+     * LOOKUP_PATH misses nested names on extra shards (hashed ROOT dest),
+     * which falls back to walking every component from the root. */
 
     efs_ino_t parent = EFS_ROOT_INO;
     int rc = EFS_ERR_NOT_FOUND;
-    while (part) {
-        int more = (save && *save);
+    i = 0;
+    if (ncomp > EFS_WALK_BATCH_MIN) {
+        int brc = walk_batch_ancestors(comp, ncomp, do_x, uid, gid, groups,
+                                       ngroups, &parent, &i);
+        if (brc == EFS_ERR_ACCES || brc == EFS_ERR_INVAL)
+            return brc;
+        if (brc != EFS_OK) {
+            parent = EFS_ROOT_INO;
+            i = 0;
+        }
+    }
+    for (; i < ncomp; i++) {
+        int more = (i + 1 < ncomp);
         struct efs_inode child;
-        int lrc = efs_client_rpc_lookup(g_client.export_id, parent, part,
+        int lrc = efs_client_rpc_lookup(g_client.export_id, parent, comp[i],
                                         &child);
         if (lrc != EFS_OK) {
             rc = (lrc == EFS_ERR_NOT_FOUND) ? EFS_ERR_NOT_FOUND : lrc;
@@ -569,25 +680,49 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
         adopt_rpc_inode(&child);
         /* Writer: local size/pack is newer than the owner until REPORT.
          * Peer remount stubs must not clobber GETATTR. */
-        if (efs_client_ino_is_dirty(child.ino)) {
-            /* Unlock the stripe we locked: the local row can carry a
-             * different parent, and recomputing the key after child is
-             * overwritten leaked the held stripe (the mount then wedged
-             * behind the flush thread's lock_all_dirs). */
-            efs_ino_t lk = child.parent ? child.parent : child.ino;
-            efs_client_lock_dir(lk);
-            pthread_mutex_lock(&g_client.idx_mu);
-            struct efs_inode local;
-            if (efs_export_get_inode(&g_client.export, child.ino,
-                                     &local) == 0)
-                child = local;
-            pthread_mutex_unlock(&g_client.idx_mu);
-            efs_client_unlock_dir(lk);
+        {
+            int dirty = efs_client_ino_is_dirty(child.ino);
+            /* Intermediates are directories and carry no size worth
+             * overlaying, so only the leaf pays for the table read. */
+            int want_local = dirty ||
+                             (!more && !efs_mode_is_dir(child.mode));
+            if (want_local) {
+                /* Unlock the stripe we locked: the local row can carry a
+                 * different parent, and recomputing the key after child is
+                 * overwritten leaked the held stripe (the mount then wedged
+                 * behind the flush thread's lock_all_dirs). */
+                efs_ino_t lk = child.parent ? child.parent : child.ino;
+                struct efs_inode local;
+                int have;
+                efs_client_lock_dir(lk);
+                pthread_mutex_lock(&g_client.idx_mu);
+                have = (efs_export_get_inode(&g_client.export, child.ino,
+                                             &local) == 0);
+                pthread_mutex_unlock(&g_client.idx_mu);
+                efs_client_unlock_dir(lk);
+                if (have && dirty) {
+                    child = local;
+                } else if (have && local.size > child.size &&
+                           !inode_mtime_older(&local, &child)) {
+                    /* close() kicks REPORT without waiting for it, so the
+                     * owner's size is routinely behind this client's for a
+                     * file we just wrote -- and once the report completes
+                     * the inode is no longer dirty, so nothing above puts
+                     * the real size back. Take size/pack from the local row
+                     * but leave name/nlink/mode to the owner (Cut 4).
+                     * Gated on mtime so a peer still wins: SETATTR stamps
+                     * mtime=now, so a genuine truncate or extend is newer
+                     * here and the file is still allowed to shrink. */
+                    child.size = local.size;
+                    child.pack_ino = local.pack_ino;
+                    child.pack_off = local.pack_off;
+                    child.pack_len = local.pack_len;
+                }
+            }
         }
         parent = child.ino;
         *out = child;
         rc = EFS_OK;
-        part = strtok_r(NULL, "/", &save);
     }
 
     return rc;
