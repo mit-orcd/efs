@@ -89,7 +89,9 @@
  * Raise this only after the flush is shard-lock-aware (snapshot under the
  * shard lock, pack small tables per page); the per-op CREATE/APPEND path
  * does benefit from more shards. bits=0 is not a product mode. */
+#ifndef EFS_DEFAULT_SHARD_BITS
 #define EFS_DEFAULT_SHARD_BITS  3
+#endif
 /* Max pages for a fragmented metadata blob (each page = EFS_META_PAGE_SIZE).
  * 32768 × 128 KiB = 4 GiB — two-region EFSR v5 (16k ino + 16k chunk pages). */
 #define EFS_META_MAX_PAGES   32768

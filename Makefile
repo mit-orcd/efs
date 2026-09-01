@@ -10,7 +10,7 @@ endif
 CFLAGS = -O3 -g -fno-omit-frame-pointer -march=native -mtune=native \
          -std=c99 -Wall -Wextra -D_GNU_SOURCE \
          -Wno-stringop-truncation -Wno-format-truncation \
-         -DEFS_BUILD_ID='"$(EFS_GIT_ID)"'
+         -DEFS_BUILD_ID='"$(EFS_GIT_ID)"' $(EXTRA_DEFS)
 INCLUDES = -Iinclude -Isrc/common -Ideps/blake3
 
 LDFLAGS = -lpthread -lm -ldl -libverbs

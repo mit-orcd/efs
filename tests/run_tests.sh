@@ -481,7 +481,7 @@ cmd_posix2() { # [host-a] [host-b]  |  multi
         local pids=() rc=0
         for pair in "${pairs[@]}"; do
             local ha=${pair%% *} hb=${pair#* }
-            local parent="posix-2c-${ha%.ib}-${hb%.ib}"
+            local parent="posix-2c-${ha%.ib}-${hb%.ib}-${RUN_ID}"
             posix2_one_pair "$ha" "$hb" "$pdir" "$parent" &
             pids+=($!)
         done
@@ -494,7 +494,7 @@ cmd_posix2() { # [host-a] [host-b]  |  multi
 
     local host_a=${1:-fcstor007.ib}
     local host_b=${2:-fcstor008.ib}
-    local parent="posix-2c-${host_a%.ib}-${host_b%.ib}"
+    local parent="posix-2c-${host_a%.ib}-${host_b%.ib}-${RUN_ID}"
     posix2_one_pair "$host_a" "$host_b" "$pdir" "$parent"
     local rc=$?
     say "posix2 results in $pdir"
@@ -673,8 +673,8 @@ cmd_meta() { # [host]
     for w in 1 4 16; do
         out="$pdir/meta-${host%.ib}-w${w}.txt"
         say "  workers=$w"
-        ssh_to 120 "$host" "timeout -k 5 110 \
-            cd /tmp/efs && ./efs-bench 172.16.223.57:19810 --meta \
+        ssh_to 120 "$host" "$(fuse_client_env) cd /tmp/efs && timeout -k 5 110 \
+            ./efs-bench 172.16.223.57:19810 --meta \
             --export efs-test --files 5000 --dirs 64 --workers $w" \
             | tee "$out"
         awk -v rid="$RUN_ID" -v host="${host%.ib}" -v w="$w" '

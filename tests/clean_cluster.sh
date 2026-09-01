@@ -40,12 +40,14 @@ say "1/4 wipe"
 bash "$(dirname "$0")/wipe_cluster.sh" || exit 1
 
 if [ "$DEPLOY" = 1 ]; then
-    say "2/4 rsync+build efsd on 4 servers (parallel)"
+    extra_defs=""
+    [ -n "${EFS_MKFS_SHARD_BITS:-}" ] && extra_defs="-DEFS_DEFAULT_SHARD_BITS=$EFS_MKFS_SHARD_BITS"
+    say "2/4 rsync+build efsd on 4 servers (parallel)${extra_defs:+ bits=$EFS_MKFS_SHARD_BITS}"
     for h in "${SERVERS[@]}"; do
-        ( ssh_to 120 "$h" 'rsync -a --delete --exclude="/mnt/" --exclude="*.log" \
-              "$HOME/git/efs/" /tmp/efs/ >/dev/null 2>&1 && \
+        ( ssh_to 120 "$h" "rsync -a --delete --exclude='/mnt/' --exclude='*.log' \
+              \"\$HOME/git/efs/\" /tmp/efs/ >/dev/null 2>&1 && \
               cd /tmp/efs && make clean >/dev/null 2>&1 && \
-              make -j"$(nproc)" efsd efs-mgmt >/dev/null 2>&1' \
+              make -j\"\$(nproc)\" EXTRA_DEFS='$extra_defs' efsd efs-mgmt >/dev/null 2>&1" \
               && echo "  ${h%.ib} build OK" || echo "  ${h%.ib} BUILD FAIL" ) &
     done
     wait

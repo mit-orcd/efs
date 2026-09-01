@@ -579,7 +579,7 @@ static void *worker_main(void *arg)
 /* ---------- metadata bench (--meta) ---------- */
 
 #define META_PATH_LEN  256
-#define META_NAME_LEN  32
+#define META_NAME_LEN  64
 #define META_PHASE_MKDIR    (1u << 0)
 #define META_PHASE_CREATE   (1u << 1)
 #define META_PHASE_STAT     (1u << 2)
@@ -708,7 +708,7 @@ static void *meta_worker(void *arg)
     switch (a->phase) {
     case MP_MKDIR:
         for (uint32_t i = (uint32_t)w; i < st->ndirs; i += (uint32_t)nw) {
-            efs_ino_t ino = efs_client_create(st->root_ino, st->dirs[i].name,
+            efs_ino_t ino = efs_client_create(EFS_ROOT_INO, st->dirs[i].name,
                                               S_IFDIR | 0755, 0, 0);
             if (ino == 0) {
                 a->fail++;
@@ -820,12 +820,16 @@ static void *meta_worker(void *arg)
             }
             if (efs_client_rename(ino, st->dirs[di].ino, tmp) != 0) {
                 a->fail++;
+                if (!a->first_rc)
+                    a->first_rc = g_client.last_err ? g_client.last_err : -1;
                 continue;
             }
             a->ops++;
-            if (efs_client_rename(ino, st->dirs[di].ino, st->files[i].name) != 0)
+            if (efs_client_rename(ino, st->dirs[di].ino, st->files[i].name) != 0) {
                 a->fail++;
-            else
+                if (!a->first_rc)
+                    a->first_rc = g_client.last_err ? g_client.last_err : -1;
+            } else
                 a->ops++;
         }
         break;
@@ -902,8 +906,10 @@ static int run_meta_phase(struct meta_state *st, enum meta_phase phase,
 static int meta_preformat(struct meta_state *st)
 {
     for (uint32_t i = 0; i < st->ndirs; i++) {
-        st->dirs[i].name[0] = 'd';
-        if (u64_dec(st->dirs[i].name + 1, sizeof(st->dirs[i].name) - 1, i) < 0)
+        /* Hashed under ROOT so 64 dirs spread across shards (nested dirs
+         * stay on one hashed parent and serialize create on one owner). */
+        if (snprintf(st->dirs[i].name, sizeof(st->dirs[i].name), "%s-d%u",
+                     st->root_name, i) >= (int)sizeof(st->dirs[i].name))
             return -1;
         st->dirs[i].ino = 0;
     }
@@ -914,11 +920,9 @@ static int meta_preformat(struct meta_state *st)
         st->files[i].name[0] = 'f';
         if (u64_dec(st->files[i].name + 1, sizeof(st->files[i].name) - 1, i) < 0)
             return -1;
-        char mid[META_PATH_LEN];
-        if (cat3(mid, sizeof(mid), st->root_path, "/", st->dirs[di].name) != 0)
-            return -1;
-        if (cat3(st->files[i].path, sizeof(st->files[i].path), mid, "/",
-                 st->files[i].name) != 0)
+        if (snprintf(st->files[i].path, sizeof(st->files[i].path), "/%s/%s",
+                     st->dirs[di].name, st->files[i].name) >=
+            (int)sizeof(st->files[i].path))
             return -1;
     }
     return 0;
@@ -1050,20 +1054,8 @@ static int run_meta_bench(const char *seed, const char *export_name,
     fflush(stdout);
 
     int any_fail = 0;
-    if (need_tree) {
-        st.root_ino = efs_client_create(EFS_ROOT_INO, st.root_name,
-                                        S_IFDIR | 0755, 0, 0);
-        if (st.root_ino == 0) {
-            fprintf(stderr, "meta: failed to create bench root %s\n",
-                    st.root_name);
-            stop_perf_recorder();
-            free(st.write_buf);
-            free(st.dirs);
-            free(st.files);
-            efs_client_shutdown();
-            return 1;
-        }
-    }
+    if (need_tree)
+        st.root_ino = EFS_ROOT_INO;
 
     if (need_tree)
         any_fail |= run_meta_phase(&st, MP_MKDIR, "mkdir", "write", nworkers,
@@ -1106,10 +1098,8 @@ static int run_meta_bench(const char *seed, const char *export_name,
                                        nworkers, st.nfiles);
         for (uint32_t i = 0; i < st.ndirs; i++) {
             if (st.dirs[i].ino)
-                (void)efs_client_unlink(st.root_ino, st.dirs[i].name, true);
+                (void)efs_client_unlink(EFS_ROOT_INO, st.dirs[i].name, true);
         }
-        if (st.root_ino)
-            (void)efs_client_unlink(EFS_ROOT_INO, st.root_name, true);
     }
 
     stop_perf_recorder();

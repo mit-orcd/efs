@@ -29,15 +29,16 @@ static char *build_v6_blob(struct efs_export *ex, size_t *out_len)
     efs_export_pack_header_ver(ex, b, EFS_META_EFSM_V6);
     uint8_t *p = b + hdr;
     for (uint64_t i = 0; i < ex->inode_count; i++) {
-        efs_export_pack_inode_compact(&ex->inodes[i], p);
+        efs_export_pack_inode_compact(efs_export_inode_at(ex, i), p);
         p += EFS_INODE_COMPACT_SIZE;
     }
     for (uint64_t i = 0; i < ex->inode_count; i++) {
-        uint16_t ln = (uint16_t)strnlen(ex->inodes[i].name, EFS_MAX_NAME - 1);
+        uint16_t ln = (uint16_t)strnlen(efs_export_inode_name(ex, i),
+                                        EFS_MAX_NAME - 1);
         memcpy(p, &ln, 2);
         p += 2;
         if (ln) {
-            memcpy(p, ex->inodes[i].name, ln);
+            memcpy(p, efs_export_inode_name(ex, i), ln);
             p += ln;
         }
     }
@@ -490,11 +491,13 @@ int main(void)
             if (!efs_export_create(&sh, EFS_ROOT_INO, S_IFREG | 0644, 0, 0, n))
                 failures++;
         }
-        for (uint64_t i = 0; i < sh.inode_count; i++)
-            if (sh.inodes[i].parent == EFS_ROOT_INO &&
-                sh.inodes[i].ino != EFS_ROOT_INO &&
-                sh.inodes[i].name[0] == 'p')
+        for (uint64_t i = 0; i < sh.inode_count; i++) {
+            const struct efs_inode_mem *row = efs_export_inode_at(&sh, i);
+            if (row && row->parent == EFS_ROOT_INO &&
+                row->ino != EFS_ROOT_INO &&
+                efs_export_inode_name(&sh, i)[0] == 'p')
                 on_parent++;
+        }
         if (on_parent != 8) {
             fprintf(stderr, "FAIL parent dentries %u want 8\n", on_parent);
             failures++;
@@ -592,7 +595,7 @@ int main(void)
                 fprintf(stderr, "FAIL incr tail create\n");
                 failures++;
             }
-            efs_export_set_size(&st, st.inodes[1].ino, 999);
+            efs_export_set_size(&st, efs_export_inode_at(&st, 1)->ino, 999);
             if (efs_export_serialize_ex(&st, &full, &fl, &fino, &fch) != 0) {
                 fprintf(stderr, "FAIL incr full serialize\n");
                 failures++;
@@ -612,7 +615,7 @@ int main(void)
             free(incr);
             full = incr = NULL;
             efs_export_flush_clear_dirty(&st);
-            if (efs_export_rename(&st, st.inodes[1].ino, EFS_ROOT_INO,
+            if (efs_export_rename(&st, efs_export_inode_at(&st, 1)->ino, EFS_ROOT_INO,
                                   "renamed") != 0) {
                 fprintf(stderr, "FAIL incr rename\n");
                 failures++;

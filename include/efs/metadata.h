@@ -49,6 +49,37 @@ struct efs_inode {
     uint32_t pack_len;
 };
 
+/* Live table row: same attrs as efs_inode but the 256 B name lives in the
+ * per-tab name arena (EFSM v7 already packs names separately on the wire).
+ * RPC replies still fill a stack efs_inode via efs_export_inode_to_rpc. */
+struct efs_inode_mem {
+    efs_ino_t ino;
+    efs_ino_t parent;
+    uint32_t mode;
+    uid_t uid;
+    gid_t gid;
+    uint64_t size;
+    uint64_t mtime;
+    uint32_t mtime_nsec;
+    uint64_t ctime;
+    uint64_t atime;
+    uint32_t nlink;
+    uint32_t name_off;
+    uint16_t name_len;
+    uint16_t name_pad;
+    uint64_t imm_files, imm_dirs, tree_files, tree_dirs;
+    uint64_t imm_bytes, tree_bytes;
+    uint64_t imm_tmin, imm_tmax, tree_tmin, tree_tmax;
+    efs_ino_t pack_ino;
+    uint32_t pack_off;
+    uint32_t pack_len;
+};
+
+struct efs_ino_slab {
+    struct efs_inode_mem *rows; /* NULL = evicted */
+    uint64_t tick;
+};
+
 /* In-memory parent → child slot list (not serialized). */
 struct efs_child_vec {
     uint64_t *slots;
@@ -126,9 +157,19 @@ struct efs_export {
     uint32_t chunk_size; /* data EC unit; default EFS_DEFAULT_CHUNK_SIZE */
     uint32_t features;   /* EFS_FEATURE_* bitmask; mirrors root.features */
     uint64_t next_ino;
-    struct efs_inode *inodes;
+    struct efs_inode_mem *inodes; /* NULL when using ino_slabs */
+    struct efs_ino_slab *ino_slabs;
+    uint32_t ino_slab_n;
+    uint32_t ino_slabs_resident;
+    uint64_t ino_slab_tick;
     uint64_t inode_count;
     uint64_t inode_capacity;
+    /* Packed names for live rows (authoritative). name_off/name_len on each
+     * efs_inode_mem index this blob. Append-mostly; rename may overwrite in
+     * place when the new name fits. Freed with the table. */
+    char *name_arena;
+    uint32_t name_arena_used;
+    uint32_t name_arena_cap;
     /* Packed v6 dentry tail: sum of (2 + namelen) over live inode rows.
      * Maintained on create/link/unlink/rename; recomputed on deserialize. */
     uint64_t dentry_bytes;
@@ -253,6 +294,8 @@ struct efs_export {
  * dentry tail in the same inode-region blob. */
 #define EFS_INODE_COMPACT_SIZE 124
 #define EFS_CHUNK_WIRE_SIZE   120
+/* Compact-page-aligned live-row slabs (Cut 3). */
+#define EFS_INO_SLAB_ROWS (EFS_META_PAGE_SIZE / EFS_INODE_COMPACT_SIZE)
 #define EFS_ROLLUP_TOUCH      1
 #define EFS_ROLLUP_CREATE     2
 #define EFS_META_EFSM_V5      5
@@ -516,8 +559,16 @@ void efs_export_pack_header(const struct efs_export *ex, uint8_t out[EFS_META_HD
 void efs_export_pack_header_ver(const struct efs_export *ex,
                                 uint8_t out[EFS_META_HDR_SIZE], uint32_t ver);
 void efs_export_pack_inode(const struct efs_inode *ino, uint8_t out[EFS_INODE_WIRE_SIZE]);
-void efs_export_pack_inode_compact(const struct efs_inode *ino,
+void efs_export_pack_inode_compact(const struct efs_inode_mem *ino,
                                    uint8_t out[EFS_INODE_COMPACT_SIZE]);
+/* Live-row name (empty string if slot is unused). */
+const char *efs_export_inode_name(const struct efs_export *ex, uint64_t slot);
+/* Live row for slot; faults an evicted slab from flush_blob when needed. */
+struct efs_inode_mem *efs_export_inode_at(struct efs_export *ex, uint64_t slot);
+void efs_export_trim_ino_ram(struct efs_export *ex);
+/* Fill an RPC/stack efs_inode including name[256] from a live slot. */
+void efs_export_inode_to_rpc(const struct efs_export *ex, uint64_t slot,
+                             struct efs_inode *out);
 void efs_export_pack_chunk(const struct efs_chunk_entry *ce,
                            uint8_t out[EFS_CHUNK_WIRE_SIZE]);
 int efs_export_inode_slot(struct efs_export *ex, efs_ino_t ino, uint64_t *slot);

@@ -1654,6 +1654,15 @@ def testdir(mnt, name):
 def do_prepare(mnt):
     base = os.path.join(mnt, PARENT)
     shutil.rmtree(base, ignore_errors=True)
+    try:
+        st = os.lstat(base)
+    except OSError:
+        st = None
+    if st is not None and not stat_isdir(st):
+        try:
+            os.unlink(base)
+        except OSError:
+            pass
     if os.path.isdir(base):
         for n in os.listdir(base):
             p = os.path.join(base, n)
@@ -1662,7 +1671,12 @@ def do_prepare(mnt):
                 os.unlink(p)
             except OSError:
                 pass
-    os.makedirs(base, exist_ok=True)
+    try:
+        os.makedirs(base, exist_ok=True)
+    except FileExistsError:
+        # Server still has the name (rmtree missed a leftover) but a
+        # post-remount getattr did not see a directory. Reuse it.
+        pass
     for name, _steps, _doc in TESTS:
         os.makedirs(os.path.join(base, name), exist_ok=True)
     # Commit so a remounted peer adopts these inos (GET_META is last

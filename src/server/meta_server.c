@@ -533,8 +533,9 @@ static void server_rebuild_owned_extras(struct efsd_server *s,
 int server_ensure_shard_ready(struct efsd_server *s, struct efs_export *ex,
                               uint32_t shard)
 {
-    if (!s || !ex)
+    if (!s || !ex) {
         return -1;
+    }
     /* Caller holds s->lock. */
     uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
     if (ex->root.shard_bits == 0 || sc <= 1 || shard == 0) {
@@ -561,15 +562,19 @@ int server_ensure_shard_ready(struct efsd_server *s, struct efs_export *ex,
         pthread_mutex_unlock(&s->lock);
         int rc = server_rebuild_export_from_pages(s, ex);
         pthread_mutex_lock(&s->lock);
-        return (rc == EFS_OK && !ex->meta_needs_rebuild) ? 0 : -1;
+        if (!(rc == EFS_OK && !ex->meta_needs_rebuild))
+            return -1;
+        return 0;
     }
     efs_node_id_t live[EFS_MAX_NODES];
     uint32_t nlive = server_live_ids_locked(s, live);
-    if (efs_shard_owner_of(shard, sc, live, nlive) != s->id)
+    if (efs_shard_owner_of(shard, sc, live, nlive) != s->id) {
         return -1;
+    }
     struct efs_export *tab = efs_export_table(ex, shard);
-    if (!tab)
+    if (!tab) {
         return -1;
+    }
     /* Never flushed: an empty extra is the truth, first create is fine. */
     if (tab->root.page_count == 0)
         return 0;
@@ -588,7 +593,9 @@ int server_ensure_shard_ready(struct efsd_server *s, struct efs_export *ex,
     if (rc == EFS_OK)
         fprintf(stderr, "meta-ensure: rebuilt export=%s shard=%u (on-demand)\n",
                 ex->name, shard);
-    return (rc == EFS_OK && tab && !tab->meta_needs_rebuild) ? 0 : -1;
+    if (!(rc == EFS_OK && tab && !tab->meta_needs_rebuild))
+        return -1;
+    return 0;
 }
 
 int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *ex)
@@ -1047,21 +1054,52 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
      * ~2s). Wiping one lets its alloc_ino re-hand-out those inos, and the
      * next create's parent-dentry write then collides with the orphaned
      * dentry on the dentry shard -> spurious EEXIST under parallel creates.
-     * Detach dirty shard tables before the free, reattach them after the
-     * staging swap. Clean shard tables are dropped and rebuilt from the new
-     * root's pages by server_rebuild_owned_extras (they match committed
-     * state, so rebuilding is both safe and refreshes them). */
-    struct efs_export **dirty_tabs = NULL;
-    uint32_t dirty_cap = 0;
+     *
+     * Also keep live+clean extras whose published descriptor is unchanged
+     * (same gen + page checksums). Dropping them forced
+     * server_rebuild_owned_extras after every main catchup — bits=5
+     * multiplied that into a joiner GC storm. Descriptor-advanced extras
+     * still fall through to a page rebuild. */
+    struct efs_export **keep_tabs = NULL;
+    uint32_t keep_cap = 0;
     if (table_ino == EFS_META_TABLE_INO && ex->shard_tabs) {
-        dirty_cap = ex->shard_tab_cap;
-        dirty_tabs = calloc(dirty_cap, sizeof(*dirty_tabs));
-        if (dirty_tabs) {
-            for (uint32_t i = 0; i < dirty_cap; i++) {
+        keep_cap = ex->shard_tab_cap;
+        keep_tabs = calloc(keep_cap, sizeof(*keep_tabs));
+        if (keep_tabs) {
+            for (uint32_t i = 0; i < keep_cap; i++) {
                 struct efs_export *t = ex->shard_tabs[i];
-                if (t && t->shard_dirty) {
-                    dirty_tabs[i] = t;        /* keep */
-                    ex->shard_tabs[i] = NULL; /* efs_export_free skips NULL */
+                if (!t)
+                    continue;
+                int keep = 0;
+                if (t->shard_dirty) {
+                    keep = 1;
+                } else if (!t->meta_needs_rebuild && t->inode_count > 0) {
+                    const struct efs_export_root *desc = NULL;
+                    uint32_t sh = t->shard_id;
+                    for (uint32_t ei = 0; ei < snap.extra_shard_count; ei++) {
+                        uint32_t id = snap.extra_shard_ids
+                                          ? snap.extra_shard_ids[ei]
+                                          : 0;
+                        if (id == sh) {
+                            desc = &snap.extra_roots[ei];
+                            break;
+                        }
+                    }
+                    if (!desc || t->root.generation > desc->generation)
+                        keep = 1;
+                    else if (t->root.generation == desc->generation &&
+                             efs_export_root_same_pages(&t->root, desc))
+                        keep = 1;
+                }
+                if (keep) {
+                    keep_tabs[i] = t;
+                    ex->shard_tabs[i] = NULL;
+                    if (!t->shard_dirty)
+                        fprintf(stderr,
+                                "meta-rebuild: kept extra shard=%u gen=%llu "
+                                "(descriptor unchanged)\n",
+                                t->shard_id,
+                                (unsigned long long)t->root.generation);
                 }
             }
         }
@@ -1070,24 +1108,24 @@ static int server_rebuild_export_from_pages_ino(struct efsd_server *s,
     *ex = staging;
     ex->shard_id = saved_shard_id;
     memset(&staging, 0, sizeof(staging));
-    if (dirty_tabs) {
+    if (keep_tabs) {
         uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
-        uint32_t cap = dirty_cap > sc ? dirty_cap : sc;
+        uint32_t cap = keep_cap > sc ? keep_cap : sc;
         struct efs_export **arr = calloc(cap, sizeof(*arr));
         if (arr) {
             ex->shard_tabs = arr;
             ex->shard_tab_cap = cap;
-            for (uint32_t i = 0; i < dirty_cap && i < cap; i++)
-                if (dirty_tabs[i])
-                    arr[i] = dirty_tabs[i];
+            for (uint32_t i = 0; i < keep_cap && i < cap; i++)
+                if (keep_tabs[i])
+                    arr[i] = keep_tabs[i];
         } else {
-            for (uint32_t i = 0; i < dirty_cap; i++)
-                if (dirty_tabs[i]) {
-                    efs_export_free(dirty_tabs[i]);
-                    free(dirty_tabs[i]);
+            for (uint32_t i = 0; i < keep_cap; i++)
+                if (keep_tabs[i]) {
+                    efs_export_free(keep_tabs[i]);
+                    free(keep_tabs[i]);
                 }
         }
-        free(dirty_tabs);
+        free(keep_tabs);
     }
 
     /* Blocker 2: a main-table rebuild freed every clean shard table above.
@@ -2353,6 +2391,7 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
             ex->shard_dirty = 0;
             efs_export_flush_clear_dirty(ex);
         }
+        efs_export_trim_ino_ram(ex);
         pthread_mutex_unlock(&s->lock);
         if (old_cis && new_cis)
             server_gc_meta_cow_pages(s, ex, table_ino, old_cis, old_cis_count,
@@ -2511,6 +2550,14 @@ static int server_flush_fragmented_meta_locked(struct efsd_server *s,
     if (ex->inode_count == snap_icount && ex->layout_epoch == snap_lepoch) {
         ex->shard_dirty = 0;
         efs_export_flush_clear_dirty(ex);
+    }
+    efs_export_trim_ino_ram(ex);
+    if (ex->shard_tabs) {
+        uint32_t si;
+        for (si = 1; si < ex->shard_tab_cap; si++) {
+            if (ex->shard_tabs[si])
+                efs_export_trim_ino_ram(ex->shard_tabs[si]);
+        }
     }
     s->export_meta_dirty = 1;
     server_save_export(s, ex);
@@ -3168,9 +3215,11 @@ static void *meta_catchup_thread(void *arg)
                  * next_ino only ever moves forward; rollups are derived
                  * state and always safe to recompute. */
                 uint64_t maxino = 0;
-                for (uint64_t ri = 0; ri < ex->inode_count; ri++)
-                    if (ex->inodes[ri].ino > maxino)
-                        maxino = ex->inodes[ri].ino;
+                for (uint64_t ri = 0; ri < ex->inode_count; ri++) {
+                    struct efs_inode_mem *row = efs_export_inode_at(ex, ri);
+                    if (row && row->ino > maxino)
+                        maxino = row->ino;
+                }
                 if (ex->next_ino <= maxino) {
                     fprintf(stderr,
                             "meta-repair: export=%s next_ino %llu -> %llu\n",

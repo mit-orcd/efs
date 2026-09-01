@@ -2982,10 +2982,10 @@ int efs_client_pack_seal(efs_ino_t ino)
     pthread_mutex_lock(&g_client.idx_mu);
     struct efs_inode cur;
     if (efs_export_get_inode(&g_client.export, ino, &cur) == 0) {
-        struct efs_inode *ip = NULL;
+        struct efs_inode_mem *ip = NULL;
         uint64_t slot = 0;
         if (efs_export_inode_slot(&g_client.export, ino, &slot) == 0)
-            ip = &g_client.export.inodes[slot];
+            ip = efs_export_inode_at(&g_client.export, slot);
         if (ip) {
             ip->pack_ino = pack_ino;
             ip->pack_off = off;
@@ -3161,10 +3161,13 @@ int efs_client_write_no_replicate(efs_ino_t ino, uint64_t offset, size_t size, c
         pthread_mutex_lock(&g_client.idx_mu);
         uint64_t slot = 0;
         if (efs_export_inode_slot(&g_client.export, ino, &slot) == 0) {
-            g_client.export.inodes[slot].pack_ino = 0;
-            g_client.export.inodes[slot].pack_off = 0;
-            g_client.export.inodes[slot].pack_len = 0;
-            efs_client_mark_ino_dirty(ino);
+            struct efs_inode_mem *ip = efs_export_inode_at(&g_client.export, slot);
+            if (ip) {
+                ip->pack_ino = 0;
+                ip->pack_off = 0;
+                ip->pack_len = 0;
+                efs_client_mark_ino_dirty(ino);
+            }
         }
         pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_unlock_dir(ino);

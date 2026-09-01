@@ -37,7 +37,9 @@ Auto first inode RPC after mount **gated** (`mkdir` + solo posix 196/201
 correctness: cross-client byte-range locks (`peer_fcntl_range_conflict`),
 load-dependent posix2 flakes. Open client rewrite: low-level FUSE API.
 Open product feature: **expiry dates** (export sunset + per-inode scratch
-TTL) — see that section; not started. Open test harnesses: Layer 4 fault
+TTL) — see that section; not started. Open product feature: **server-side
+`.stats` / `.find` refresh** (not user `cat`; lag + time thresholds) —
+see that section; not started. Open test harnesses: Layer 4 fault
 injection, fsck, hot-dir 300k. Each step below is annotated
 **DONE / PARTIAL / NOT DONE**.
 
@@ -552,7 +554,9 @@ and 80 B of directory rollups.
 1. **NOT DONE.** Move `name` out of the inline struct into a separate **dentry store** (the
    v6 wire format already packs dentries separately — mirror that in memory).
 2. **NOT DONE.** Make the 80 B of rollups **optional/lazy**: maintain only where the
-   `.stats`/`.find` features are on, or compute on demand.
+   `.stats`/`.find` features are on. Do **not** compute them on a user `cat`
+   of `.stats`/`.find` — that trigger is rejected; see **Server-side
+   `.stats` / `.find` refresh** below.
 3. **NOT DONE.** Re-audit field widths (`pack_off`/`pack_len` already 32-bit).
 
 **Target:** ~96–128 B/inode in memory → 2³² × 128 B ≈ 512 GiB total, ~128 MB
@@ -563,6 +567,75 @@ sharding bounds how much any node holds).
 
 **Milestone:** bytes/inode measured on a large export drops ~3×; per-shard
 memory and serialize time drop accordingly.
+
+---
+
+## Server-side `.stats` / `.find` refresh
+
+**NOT DONE.** Today both virtual files are **user-triggered**. `cat dir/.stats`
+runs `efs_export_ensure_rollups` on the FUSE client (TTL-cached ~1 s).
+`cat dir/.find/<term>` memcpy's the whole client inode table and rebuilds
+`g_find_idx` on every result-cache miss (5 s). Create/unlink/flush never
+touch the index. That is the wrong trigger: a monitoring loop stalls the
+write path, a quiet tree never refreshes, and two clients disagree.
+
+**Goal:** the **server** owns rollups and the `.find` name index. `cat` only
+reads the last committed snapshot. No FUSE client rebuilds the index because
+someone opened the magic path.
+
+**Visibility in `.stats`.** `cat dir/.stats` must report how stale **both**
+the rollups (`.stats` itself) and the `.find` name index are — not only
+`as_of=` for the last rollup compute (today). Readers need the lag against
+the two refresh thresholds, not a wall-clock that they have to interpret.
+Required fields (names flexible):
+
+- when each snapshot was last built (`stats_as_of=`, `find_index_as_of=`;
+  `never` if that side has never run)
+- object lag vs the live watermark (`stats_behind_inos=`,
+  `find_behind_inos=` — current `max(ino)` minus the watermark baked into
+  that snapshot)
+- age (`stats_age_s=`, `find_age_s=`) so a rename-only tree that does not
+  bump `next_ino` is still obviously stale
+- the configured thresholds **N** and **T**, so a monitor can tell “behind
+  but within budget” from “refresh overdue”
+
+`.find` query output stays a path list; staleness lives on `.stats`.
+
+**Watermark.** The server always knows how many objects exist, or a cheap
+upper bound that moves when objects are created. Candidate: per-export
+`next_ino` / `max(ino)` (holes from unlink mean this is not a live count —
+if a true live count is needed, maintain it on create/unlink, do not scan).
+The index/rollup generation records the watermark it was built at.
+
+**Triggers (either fires a refresh; both are required):**
+
+1. **Object lag.** Last built watermark is more than **N** behind current
+   `max(ino)` (or live object count). A create burst must catch the index
+   up without waiting for a timer. N is tunable; start large enough that a
+   quiet tree is not constantly hashing, small enough that `.find` is not
+   tens of thousands of names behind.
+2. **Time lag.** Last successful refresh is older than **T** seconds even
+   if the watermark has not moved (renames, unlinks, and setattr do not
+   bump `next_ino`). A tree that only churns names still converges.
+
+Refresh is a **server** thread (owner of the table / shard, not the FUSE
+client, not under `g_server->lock` for the whole walk). Same yield/batch
+discipline as `REPORT_CHUNKS` / the expiry sweeper. Clients learn the new
+snapshot the same way they learn any other metadata (commit/catchup), not
+by local table walk on `cat`.
+
+**Rejected:** rebuild-on-`cat`; client-local index as the source of truth;
+full-table rebuild on every create (threshold 1 exists so we batch).
+
+**Depends on:** Phase 3 sharding (per-shard owner can refresh its own
+names; do not funnel a cluster-wide index through shard 0). Phase 4 dentry
+store, if landed first, is what the index should scan.
+
+**Gates:** posix `virt_stats_readable` / `virt_find_query` still pass with
+no client-side rebuild in the `cat` path; `.stats` includes build time,
+object lag, and age for **both** rollups and the `.find` index; a create
+storm of >N files updates without any `.find` read; a rename-only idle
+tree updates within T.
 
 ---
 

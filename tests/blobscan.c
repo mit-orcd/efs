@@ -32,8 +32,12 @@ static int read_full(int fd, void *buf, size_t len)
 static struct efs_export *g_scan_ex;
 static int cmp_row_size_desc(const void *a, const void *b)
 {
-    uint64_t sa = g_scan_ex->inodes[*(const uint64_t *)a].size;
-    uint64_t sb = g_scan_ex->inodes[*(const uint64_t *)b].size;
+    const struct efs_inode_mem *ia =
+        efs_export_inode_at(g_scan_ex, *(const uint64_t *)a);
+    const struct efs_inode_mem *ib =
+        efs_export_inode_at(g_scan_ex, *(const uint64_t *)b);
+    uint64_t sa = ia ? ia->size : 0;
+    uint64_t sb = ib ? ib->size : 0;
     return sa < sb ? 1 : sa > sb ? -1 : 0;
 }
 
@@ -133,7 +137,9 @@ int main(int argc, char **argv)
     uint64_t zero_ino = 0, huge_size = 0, sum_all = 0, max_ino = 0;
     uint64_t dirs = 0, regs = 0;
     for (uint64_t i = 0; i < ex.inode_count; i++) {
-        struct efs_inode *in = &ex.inodes[i];
+        struct efs_inode_mem *in = efs_export_inode_at(&ex, i);
+        if (!in)
+            continue;
         if (in->ino == 0) {
             zero_ino++;
             continue;
@@ -168,7 +174,7 @@ int main(int argc, char **argv)
     uint64_t *keys = calloc(cap, sizeof(uint64_t));
     uint64_t *vals = malloc(cap * sizeof(uint64_t));
     for (uint64_t i = 0; i < n; i++) {
-        uint64_t ino = ex.inodes[i].ino;
+        uint64_t ino = (*efs_export_inode_at(&ex, i)).ino;
         if (!ino)
             continue;
         uint64_t h = (ino * 0x9E3779B97F4A7C15ull) & (cap - 1);
@@ -196,7 +202,7 @@ int main(int argc, char **argv)
     q[qt++] = root_pos;
     while (qh < qt) {
         uint64_t pi = q[qh++];
-        uint64_t pino = ex.inodes[pi].ino;
+        uint64_t pino = (*efs_export_inode_at(&ex, pi)).ino;
         /* scan for children (O(n) per dir is too slow for 9M rows; instead
          * do one pass grouping below) — placeholder replaced below */
         (void)pino;
@@ -209,9 +215,9 @@ int main(int argc, char **argv)
     while (progress) {
         progress = 0;
         for (uint64_t i = 0; i < n; i++) {
-            if (reach[i] || ex.inodes[i].ino == 0)
+            if (reach[i] || (*efs_export_inode_at(&ex, i)).ino == 0)
                 continue;
-            uint64_t par = ex.inodes[i].parent;
+            uint64_t par = (*efs_export_inode_at(&ex, i)).parent;
             uint64_t h = (par * 0x9E3779B97F4A7C15ull) & (cap - 1);
             while (keys[h] && keys[h] != par)
                 h = (h + 1) & (cap - 1);
@@ -224,24 +230,25 @@ int main(int argc, char **argv)
     }
     uint64_t unreach = 0, unreach_bytes = 0, reach_bytes = 0;
     for (uint64_t i = 0; i < n; i++) {
-        if (ex.inodes[i].ino == 0 || efs_mode_is_dir(ex.inodes[i].mode))
+        if ((*efs_export_inode_at(&ex, i)).ino == 0 || efs_mode_is_dir((*efs_export_inode_at(&ex, i)).mode))
             continue;
         if (reach[i])
-            reach_bytes += ex.inodes[i].size;
+            reach_bytes += (*efs_export_inode_at(&ex, i)).size;
         else {
             unreach++;
-            unreach_bytes += ex.inodes[i].size;
+            unreach_bytes += (*efs_export_inode_at(&ex, i)).size;
         }
     }
     /* Dump root's immediate children with name sanity flags. */
     printf("\nroot children (parent==1):\n");
     for (uint64_t i = 0; i < n; i++) {
-        struct efs_inode *in = &ex.inodes[i];
+        struct efs_inode_mem *in = efs_export_inode_at(&ex, i);
         if (!in->ino || in->parent != 1)
             continue;
-        int empty = in->name[0] == 0;
+        const char *nm = efs_export_inode_name(&ex, i);
+        int empty = nm[0] == 0;
         int slash = 0, ctrl = 0;
-        for (const char *p = in->name; *p; p++) {
+        for (const char *p = nm; *p; p++) {
             if (*p == '/')
                 slash = 1;
             if ((unsigned char)*p < 0x20)
@@ -249,9 +256,9 @@ int main(int argc, char **argv)
         }
         printf("  ino=%llu mode=%o size=%llu name_len=%zu%s%s%s name='%s'\n",
                (unsigned long long)in->ino, in->mode,
-               (unsigned long long)in->size, strlen(in->name),
+               (unsigned long long)in->size, strlen(nm),
                empty ? " EMPTY" : "", slash ? " HAS_SLASH" : "",
-               ctrl ? " HAS_CTRL" : "", empty ? "" : in->name);
+               ctrl ? " HAS_CTRL" : "", empty ? "" : nm);
     }
 
     printf("reachable rows: %llu (%.2f TiB file data)\n",
@@ -263,7 +270,7 @@ int main(int argc, char **argv)
     uint64_t *ord = malloc(n * sizeof(uint64_t));
     uint64_t no = 0;
     for (uint64_t i = 0; i < n; i++)
-        if (reach[i] && ex.inodes[i].ino && !efs_mode_is_dir(ex.inodes[i].mode))
+        if (reach[i] && (*efs_export_inode_at(&ex, i)).ino && !efs_mode_is_dir((*efs_export_inode_at(&ex, i)).mode))
             ord[no++] = i;
     /* sort row indices by descending size */
     g_scan_ex = &ex;
@@ -271,14 +278,14 @@ int main(int argc, char **argv)
     int nt = no < 20 ? (int)no : 20;
     printf("\ntop reachable files by size:\n");
     for (int i = 0; i < nt; i++) {
-        struct efs_inode *in = &ex.inodes[ord[i]];
+        struct efs_inode_mem *in = efs_export_inode_at(&ex, ord[i)];
         /* walk up parents for the path (depth-capped) */
         char path[1024];
         path[0] = 0;
         uint64_t cur = in->ino;
         int depth = 0;
         char comp[300];
-        snprintf(comp, sizeof(comp), "/%s", in->name);
+        snprintf(comp, sizeof(comp), "/%s", efs_export_inode_name(&ex, ord[i]));
         strncat(path, comp, sizeof(path) - strlen(path) - 1);
         while (depth++ < 6) {
             uint64_t h = (cur * 0x9E3779B97F4A7C15ull) & (cap - 1);
@@ -286,7 +293,7 @@ int main(int argc, char **argv)
                 h = (h + 1) & (cap - 1);
             if (!keys[h])
                 break;
-            struct efs_inode *par = &ex.inodes[vals[h]];
+            struct efs_inode_mem *par = efs_export_inode_at(&ex, vals[h)];
             if (par->parent == par->ino || par->parent == 0)
                 break;
             uint64_t pin = par->parent;
@@ -295,9 +302,10 @@ int main(int argc, char **argv)
                 h = (h + 1) & (cap - 1);
             if (!keys[h])
                 break;
-            struct efs_inode *pp = &ex.inodes[vals[h]];
+            struct efs_inode_mem *pp = efs_export_inode_at(&ex, vals[h)];
             char tmp[1100];
-            snprintf(tmp, sizeof(tmp), "/%s%s", pp->name, path);
+            snprintf(tmp, sizeof(tmp), "/%s%s",
+                     efs_export_inode_name(&ex, vals[h]), path);
             strncpy(path, tmp, sizeof(path) - 1);
             cur = pin;
         }

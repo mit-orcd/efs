@@ -37,6 +37,115 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+**METADATA STRUCTURAL PROGRAM (Sep 1, working tree, UNGATED):** Four cuts in
+tree. Do not treat posixstress flakes / LINK `lock_all` / BUSY backoff as
+the next lever.
+
+**Cut 1 — extra writes do not inherit MAIN fence.**
+`main_fence_blocks_shard` BUSY only if `!shard_bits` or shard 0 is in the
+lock set. CREATE with parent dentry on shard 0 still fences (`20260831-182724`
+EIO). LOOKUP of hashed ROOT names ensures/locks the hash shard, not shard 0.
+After main rebuild: keep live+clean extra tabs whose descriptor gen+checksum
+is unchanged (`meta-rebuild: kept extra shard=N`). Joiner restart then hashed
+ROOT mkdir: **OK** (10.3s BUSY then create, not EIO); fcstor005 logged
+`kept extra shard=6`. TCP solo posix `results/posix/20260831-232435`:
+**193/201** (3 EFS bugs: `concurrent_write_and_readdir` 39/40 flake,
+`dir_deep_nesting_beyond_64` same-name `/d/d/…` ENOENT ~depth 31 isolated,
+`names_crazy_dirs` isolated PASS). posixstress 2×4 `20260831-233935`: **0
+FUSE create EIO**; 008 warmup 70s miss + 007 4-way 15s timeouts (Cut 4 RPC
+tax, not the fence EIO). bits=5 ecopy_rounds 3r `results/ecopy/20260831-bits5-cut1`
+vs `20260831-bits5`: joiner **005 rebuild_work 313→34, GC 62→0**; 006
+rebuild_work 5 / GC 1; 004 129 / 17; primary 0. Kept-extra lines
+151–285/joiner. files/s 63 | 172 | 58 (Cut 4 LOOKUP tax; host FAILs remain
+CREATE-EIO family). `EFS_MKFS_SHARD_BITS=5` on `clean_cluster.sh` +
+`EXTRA_DEFS` / `#ifndef EFS_DEFAULT_SHARD_BITS`. Sep 1 re-wipe is **bits=3**.
+
+**Cut 2 — name arena, slim live inode.** `efs_inode_mem` has `name_off`/
+`name_len`; RPC `struct efs_inode` still has `name[256]`. No EFSM bump.
+Empty-name SETATTR/REPORT upsert must not intern `""` (O_TRUNC ENOENT).
+`test_meta_v6: OK`. scale_grow 1M `results/scale/20260831-cut2`: RSS
+**1897 B/inode** (1809 MB / 1M); unlink p50 **0.386 ms** flat; creates 19k/s
+at the 1M step. Residual errors 10–29/step (catchup, <5%).
+
+**Cut 3 — inode slabs + RAM cap.** `EFS_INO_RAM_MB` default 1024; trim
+clean slabs after flush. scale 2M `results/scale/20260831-cut3`: rss max
+**1023 MB** (cap) sum 3216 MB = **1686 B/inode**; unlink p50 0.375 ms.
+5M/10M continuation wedged (007 `makedirs` FileExistsError on existing
+hashed ROOT `scale-fcstor007` after LOOKUP miss — Cut 4 remount path).
+Do not quote 5M/10M.
+
+**Cut 4 — lookup_walk always RPC names/nlink.** No dir short-circuit /
+`created_recent` / `lookup_cache`. No LOOKUP_PATH (primary misses extra
+hashed ROOT dest). Dirty size/pack overlay + CREATE dual-apply kept.
+Client LOOKUP tries hash(1,name) first for ROOT. posix2 007+008
+`results/posix2/20260831-234915`: hardlink/nlink tests **PASS**
+(`peer_nlink_after_link`, `peer_hardlink_*`); 50+ tests PASS then
+`peer_rename_across_dirs_chase` 45s SSH hang and the rest 124. ecopy
+sample bits=5 TCP: **FUSE_OK**, 1299/1300 files, **75 files/s** (create
+RTT, not cache).
+
+**Re-gate Sep 1 (bits=3 TCP, after LOOKUP skip-ensure):** Parent owner
+LOOKUP of hashed ROOT no longer `ensure`s an extra shard it does not own
+(that BUSY'd remount LOOKUP while CREATE saw the shard-0 dentry). Isolated
+same-name nest `d/d/…` **100/100 OK**. TCP solo posix
+`results/posix/20260901-010229`: **194/201**, 2 EFS bugs
+(`concurrent_create_unlink_two_proc` flake; `dir_deep_nesting_beyond_64`
+ENOENT ~56 under 16-way — isolated PASS). posix2 `20260901-010348`: **49/63**
+both-pass; hardlink/nlink (`peer_hardlink_visible`, `peer_nlink_after_link`,
+`peer_hardlink_write`, `peer_chmod_via_hardlink`) **PASS**; then
+`peer_rename_across_dirs_chase` 45s D-state and the rest 124. posixstress
+2×4 `20260901-011809`: **0 EIO** in any TSV; 007-0 **141** both-pass before
+385s kill; others empty-TSV/FileNotFound (Cut 4 RPC tax, not CREATE-EIO).
+scale 10M `20260901-cut3-10m` wedged (011/013 create count frozen, FUSE
+D-state); **do not quote**. Cut 3 RSS gate remains 2M
+`20260831-cut3` **1023 MB cap**. `test_meta_v6: OK` on fcstor003.
+
+**Empty-name upsert (Cut 2, gated with posix):** `inode_from_rpc` skips
+interning `""` when the live row has a name; upsert rebind only if
+`rec->name[0]`.
+
+**POSIXSTRESS 2×4 LOOKUP FENCE (Aug 31, bits=3 TCP):** `posixstress 4`
+fcstor007+008. Baseline `results/posix/20260831-184519`: 007 near-clean
+(196/194/192/194), 008 saturated (120/192/127/119, ~70 timeouts). Servers
+idle (~2 cores); client **busy_us** 124s/273s. Debug: 87/112 `main_fence`
+BUSYs were LOOKUP on extra shards 1/2/3/5 (Heal idle) — client
+`usleep(50ms<<n)`. Skipping the main fence for **all** extra ops caused
+CREATE EIO (`20260831-182724`). Fix: `main_fence_blocks_shard_read` only
+for LOOKUP/GETATTR/READDIR/GETCHUNKS/LOOKUP_PATH when shard≠0; CREATE/
+UNLINK/SETATTR/REPORT/APPEND still fence. Gate `20260831-185301`: **196/0
+×2, 195/1 ×5, 194/2**; **0 timeouts**; **0 FUSE create EIO**. LOOKUP
+extra `main_fence` 87→0. 008 `busy_n` 940→68. Residual: `ctime_on_link_rename`
+ENOENT (known flake) ×5; one `fsync_then_fstat_size`; one rename-over-nonempty.
+Do not skip extra CREATE fence.
+
+**POSIX2 MULTI (Aug 31, bits=3 TCP):** `results/posix2/20260831-195716`
+4 pairs **61/63**, 0 timeouts. `peer_concurrent_hardlink` /
+`peer_concurrent_unlink_hardlinks` were 4/4 `nlink got 2 want 3/1`:
+`lookup_walk` served the local dual-apply row (created_recent /
+lookup_cache) while the peer's link/unlink had already landed on the
+owner. Fix: those shortcuts only apply when `nlink<=1`; `adopt_rpc_inode`
+merges owner nlink. Gate: both tests 4/4 PASS. Remaining (unchanged):
+`peer_fcntl_range_conflict` = per-client `lockf` (feature, adjacent-range
+is target-better); `peer_rename_across_dirs_chase` = known dual-apply
+stale-dentry flake (`x` at d2 and d3). Harness parents now include
+`RUN_ID` so leftover `posix-2c-*` cannot FileExistsError prepare.
+
+**META BENCH HOT PATHS (Aug 31, bits=3 TCP, `efs-bench --meta`):**
+`results/meta/20260831-153805` after three server-side cuts (working tree).
+Workers 1/4/16 × 5000 files × 64 hashed ROOT dirs. Rename was 5000/5000
+NOT_FOUND (`efs_export_rename` used `inode_ptr` on the main table; files
+live on extra tabs — FUSE uses `rename_at`, bench used `efs_export_rename`).
+Hashed-ROOT rmdir mapped `ensure_shard_ready` not_owner → BUSY → 50ms<<n.
+CREATE_SHARD/UNLINK_SHARD inherited the MAIN `meta_needs_rebuild` fence
+(joiners catching up after extras+main flush) → w4 mkdir **82 ops/s**.
+Fixes: shard-route rename; skip ensure on shards this node does not own;
+CREATE_SHARD/UNLINK_SHARD do not BUSY on the main fence (extra readiness
+is `ensure_shard_ready(target)`). Bench dirs are hashed names under ROOT.
+Post-H6 mkdir w4 **11831 ops/s** (`busy_n=0`; was 82 / `busy_n=16` / 3s
+sleep). Rename 10k ops 0 fail. Create 25k / 78k / 111k ops/s. Cluster
+Heal idle gen=2 all 4. 2PC/CoW unchanged. Next: CREATE RTT (~40 µs), not
+more false BUSY.
+
 **POSIXSTRESS 9×4 HOT PATH SPLIT (Aug 31):** Fresh bits=3 TCP
 `results/posix/20260831-140025` + `EFS_RPC_PROF` (client checkout/send/recv/
 BUSY). 28/36 tsv (009/010 warmup lost). **99.3% of fails are `timeout after

@@ -21,6 +21,7 @@ static unsigned long long efs_rpc_busy_n;
 static unsigned long long efs_rpc_checkout_wait_n;
 static unsigned long long efs_rpc_n_op[256];
 static unsigned long long efs_rpc_recv_us_op[256];
+static unsigned long long efs_rpc_busy_n_op[256];
 static unsigned long long efs_rpc_last_dump_us;
 
 static unsigned long long rpc_prof_now_us(void)
@@ -49,8 +50,11 @@ static void rpc_prof_add(uint8_t type, unsigned long long checkout_us,
     __atomic_add_fetch(&efs_rpc_send_us, send_us, __ATOMIC_RELAXED);
     __atomic_add_fetch(&efs_rpc_recv_us, recv_us, __ATOMIC_RELAXED);
     __atomic_add_fetch(&efs_rpc_busy_us, busy_us, __ATOMIC_RELAXED);
-    if (busy_us)
+    if (busy_us) {
         __atomic_add_fetch(&efs_rpc_busy_n, 1, __ATOMIC_RELAXED);
+        if (type < 256)
+            __atomic_add_fetch(&efs_rpc_busy_n_op[type], 1, __ATOMIC_RELAXED);
+    }
     if (checkout_us >= 100ull)
         __atomic_add_fetch(&efs_rpc_checkout_wait_n, 1, __ATOMIC_RELAXED);
     if (type < 256) {
@@ -299,9 +303,12 @@ int efs_client_rpc_lookup(efs_export_id_t export_id, efs_ino_t parent,
             spread = efs_inode_dir_is_spread(&par);
         pthread_mutex_unlock(&g_client.idx_mu);
     }
-    /* Spread: hash shard first; parent shard covers the threshold
-     * window. Never ENOENT from one shard alone. */
-    if (spread && name) {
+    /* Hashed ROOT dirs (posix testdir, ecopy dest) and spread dentries live
+     * on hash(parent, name). Cut 4 LOOKUP cannot use the local replica. */
+    int hash_first = spread || (parent == EFS_ROOT_INO && bits && sc > 1);
+    /* Hash shard first; parent shard covers the threshold window and
+     * ROOT files that did not hash. Never ENOENT from one shard alone. */
+    if (hash_first && name) {
         uint32_t dsh = efs_export_dentry_shard_of(parent, name, bits);
         int rc = rpc_send_recv_shard(dsh, EFS_MSG_INODE_LOOKUP, &req,
                                      sizeof(req), EFS_MSG_INODE_LOOKUP_REPLY,

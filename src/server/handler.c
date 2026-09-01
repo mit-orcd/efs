@@ -45,27 +45,31 @@ static struct efs_export *table_for_ino(struct efs_export *ex, efs_ino_t ino)
     return tab ? tab : ex;
 }
 
-/* qsort comparator for readdir candidate rows: ascending ino. */
-static int readdir_row_cmp(const void *a, const void *b)
+/* qsort comparator for readdir candidate slots: ascending ino.
+ * g_readdir_sort_tab is set by the READDIR handler around qsort. */
+static struct efs_export *g_readdir_sort_tab;
+static int readdir_slot_cmp(const void *a, const void *b)
 {
-    const struct efs_inode *ia = *(const struct efs_inode *const *)a;
-    const struct efs_inode *ib = *(const struct efs_inode *const *)b;
-    if (ia->ino < ib->ino)
+    uint64_t sa = *(const uint64_t *)a;
+    uint64_t sb = *(const uint64_t *)b;
+    const struct efs_inode_mem *ia = efs_export_inode_at(g_readdir_sort_tab, sa);
+    const struct efs_inode_mem *ib = efs_export_inode_at(g_readdir_sort_tab, sb);
+    efs_ino_t ina = ia ? ia->ino : 0;
+    efs_ino_t inb = ib ? ib->ino : 0;
+    if (ina < inb)
         return -1;
-    if (ia->ino > ib->ino)
+    if (ina > inb)
         return 1;
     return 0;
 }
 
 /* Collects a directory's child rows for one readdir page.
  *
- * Rows are gathered as pointers under the shard locks (the table cannot move
- * mid-page), then sorted by ino by the caller. The `after` cursor is an ino
- * rather than a position because remove_inode_slot swap-compacts the table:
- * an unlink in an unrelated directory on the same shard shifts this
- * directory's rows across a page boundary, which used to skip entries. */
+ * Slots (not row pointers) because the live table is slab-backed: a pointer
+ * into a slab is not a stable offset from tab->inodes. The `after` cursor is
+ * an ino rather than a position because remove_inode_slot swap-compacts. */
 struct readdir_collect {
-    const struct efs_inode **cand;
+    uint64_t *cand;
     uint64_t n;
     uint64_t cap;
     uint64_t after;
@@ -75,12 +79,12 @@ struct readdir_collect {
 static int readdir_collect_cb(struct efs_export *ex, uint64_t slot, void *arg)
 {
     struct readdir_collect *c = arg;
-    const struct efs_inode *in = &ex->inodes[slot];
-    if (in->ino <= c->after)
+    const struct efs_inode_mem *in = efs_export_inode_at(ex, slot);
+    if (!in || in->ino <= c->after)
         return 0;
     if (c->n == c->cap) {
         uint64_t ncap = c->cap ? c->cap * 2 : 64;
-        const struct efs_inode **nc = realloc(c->cand, ncap * sizeof(*nc));
+        uint64_t *nc = realloc(c->cand, ncap * sizeof(*nc));
         if (!nc) {
             c->rc = EFS_ERR_NOMEM;
             return 1; /* stop the walk */
@@ -88,7 +92,7 @@ static int readdir_collect_cb(struct efs_export *ex, uint64_t slot, void *arg)
         c->cand = nc;
         c->cap = ncap;
     }
-    c->cand[c->n++] = in;
+    c->cand[c->n++] = slot;
     return 0;
 }
 
@@ -281,6 +285,23 @@ static int server_owns_req_locked(struct efsd_server *s, struct efs_export *ex,
     return owner != 0 && owner == s->id;
 }
 
+static __thread const char *dbg_busy_why;
+static __thread uint32_t dbg_busy_sh;
+
+static void dbg_inode_busy(uint8_t type, uint8_t status, struct efs_export *ex)
+{
+    lock_prof_note_busy(status);
+    if (status != EFS_INODE_RPC_BUSY)
+        return;
+    const char *why = dbg_busy_why;
+    dbg_busy_why = NULL;
+    if (!why)
+        why = (ex && ex->meta_needs_rebuild) ? "main_fence" : "other";
+    (void)type;
+    (void)why;
+    (void)ex;
+}
+
 /* Caller holds g_server->lock. May drop and reacquire it while rebuilding
  * a hollow extra. Sets r->status = BUSY and returns 1 when the table is
  * not yet safe to mutate (client retries). */
@@ -292,8 +313,82 @@ static int reply_if_shard_busy(struct efs_export *ex, efs_ino_t ino,
         sh = efs_export_shard_of(ino, ex->root.shard_bits);
     if (server_ensure_shard_ready(g_server, ex, sh) != 0) {
         r->status = EFS_INODE_RPC_BUSY;
+        dbg_busy_why = "ensure";
         return 1;
     }
+    return 0;
+}
+
+/* Writes: the MAIN catchup fence only serializes shard 0 (ROOT / unspread
+ * dentries). Extra tabs are single-writer; ensure_shard_ready / the tab's
+ * own meta_needs_rebuild already covers them. Skipping extras for ALL
+ * writes (including parent dentry on shard 0) CREATEd into a hollow main
+ * table (posixstress EIO 20260831-182724). Skipping extras when the
+ * lock set does not include 0 is the cut: hashed-ROOT CREATE proceeds
+ * while joiners catch up shard 0. */
+static int main_fence_blocks_shard(struct efs_export *ex, uint32_t shard)
+{
+    if (!ex || !ex->meta_needs_rebuild)
+        return 0;
+    if (!ex->root.shard_bits || shard == 0) {
+        dbg_busy_why = "main_fence";
+        dbg_busy_sh = shard;
+        return 1;
+    }
+    return 0;
+}
+
+static int main_fence_blocks_shards(struct efs_export *ex, const uint32_t *sh,
+                                    int n)
+{
+    if (!ex || !ex->meta_needs_rebuild)
+        return 0;
+    if (!ex->root.shard_bits) {
+        dbg_busy_why = "main_fence";
+        dbg_busy_sh = 0;
+        return 1;
+    }
+    for (int i = 0; i < n; i++)
+        if (sh[i] == 0) {
+            dbg_busy_why = "main_fence";
+            dbg_busy_sh = 0;
+            return 1;
+        }
+    return 0;
+}
+
+/* Reads (LOOKUP/GETATTR/READDIR/GETCHUNKS/LOOKUP_PATH): extra tabs are
+ * single-writer and already ensured. 2x4 posixstress: 87/112 main_fence
+ * BUSYs were LOOKUP on shards 1/2/3/5 while Heal was idle — client
+ * slept 50ms<<n. Shard 0 still waits on the main fence. */
+static int main_fence_blocks_shard_read(struct efs_export *ex, uint32_t shard)
+{
+    if (!ex || !ex->meta_needs_rebuild)
+        return 0;
+    if (!ex->root.shard_bits || shard == 0) {
+        dbg_busy_why = "main_fence";
+        dbg_busy_sh = shard;
+        return 1;
+    }
+    return 0;
+}
+
+static int main_fence_blocks_shards_read(struct efs_export *ex,
+                                        const uint32_t *sh, int n)
+{
+    if (!ex || !ex->meta_needs_rebuild)
+        return 0;
+    if (!ex->root.shard_bits) {
+        dbg_busy_why = "main_fence";
+        dbg_busy_sh = 0;
+        return 1;
+    }
+    for (int i = 0; i < n; i++)
+        if (sh[i] == 0) {
+            dbg_busy_why = "main_fence";
+            dbg_busy_sh = 0;
+            return 1;
+        }
     return 0;
 }
 
@@ -1753,7 +1848,9 @@ send_reply:
             for (uint32_t e = 0; e < g_server->export_count; e++) {
                 struct efs_export *ex = &g_server->exports[e];
                 for (uint64_t i = 0; i < ex->inode_count; i++) {
-                    struct efs_inode *ino = &ex->inodes[i];
+                    struct efs_inode_mem *ino = efs_export_inode_at(ex, i);
+                    if (!ino)
+                        continue;
                     if (efs_mode_is_dir(ino->mode))
                         continue;
                     reply.total_files++;
@@ -1869,32 +1966,87 @@ send_reply:
                 struct efs_msg_inode_lookup *req = payload;
                 uint32_t bits = ex->root.shard_bits;
                 uint32_t psh = efs_export_shard_of(req->parent, bits);
+                /* Hashed ROOT names live on hash(1, name). Ensure that
+                 * extra tab — not shard 0 — so a joiner LOOKUP does not
+                 * inherit the MAIN catchup fence (Cut 1). */
+                uint32_t dsh0 = psh;
+                if (req->parent == EFS_ROOT_INO && bits)
+                    dsh0 = efs_export_dentry_shard_of(req->parent,
+                                                      req->name, bits);
                 /* Parent inode + unspread dentries live on psh. Spread
                  * dentries add dsh; take both after dropping the global
                  * lock so LOOKUP does not queue behind CREATE/REPORT. */
+                /* Hashed ROOT: the extra owner ensures dsh0. The parent
+                 * owner (shard 0) must not ensure a shard it does not own
+                 * — that BUSY'd every remount LOOKUP and CREATE then saw
+                 * the shard-0 dentry (FileExistsError / isdir miss). */
+                int skip_ensure = 0;
+                if (bits && dsh0 != 0) {
+                    efs_node_id_t live[EFS_MAX_NODES];
+                    uint32_t sc = ex->root.shard_count
+                                      ? ex->root.shard_count : 1;
+                    uint32_t nlive = server_nlive_locked(g_server, live);
+                    if (efs_shard_owner_of(dsh0, sc, live, nlive) !=
+                        g_server->id)
+                        skip_ensure = 1;
+                }
+                if (!skip_ensure &&
+                    server_ensure_shard_ready(g_server, ex, dsh0) != 0) {
+                    r.status = EFS_INODE_RPC_BUSY;
+                    dbg_busy_why = "ensure";
+                    dbg_busy_sh = dsh0;
+                } else {
                 server_global_unlock(g_server);
                 global_held = 0;
                 server_shard_lock(g_server, eidx, psh);
-                if (ex->meta_needs_rebuild) {
+                if (main_fence_blocks_shard_read(ex, psh) &&
+                    (dsh0 == 0 || dsh0 == psh || skip_ensure)) {
                     server_shard_unlock(g_server, eidx, psh);
                     r.status = EFS_INODE_RPC_BUSY;
                 } else {
                     uint32_t dsh = psh;
-                    if (efs_export_dir_is_spread(ex, req->parent))
+                    if (req->parent == EFS_ROOT_INO ||
+                        efs_export_dir_is_spread(ex, req->parent))
                         dsh = efs_export_dentry_shard_of(req->parent,
                                                          req->name, bits);
                     if (dsh != psh) {
-                        server_shard_unlock(g_server, eidx, psh);
-                        uint32_t shs[2] = { psh, dsh };
-                        server_shard_lockn(g_server, eidx, shs, 2);
-                        if (ex->meta_needs_rebuild)
-                            r.status = EFS_INODE_RPC_BUSY;
-                        else if (efs_export_lookup(ex, req->parent, req->name,
+                        /* Hashed ROOT: extra owner locks dsh only (Cut 1
+                         * fence). Parent owner keeps psh — CREATE also
+                         * wrote the ROOT dentry on shard 0. */
+                        if (req->parent == EFS_ROOT_INO && skip_ensure) {
+                            if (efs_export_lookup(ex, req->parent,
+                                                   req->name,
                                                    &r.inode) == 0)
-                            r.status = EFS_INODE_RPC_OK;
-                        else
-                            r.status = EFS_INODE_RPC_NOT_FOUND;
-                        server_shard_unlockn(g_server, eidx, shs, 2);
+                                r.status = EFS_INODE_RPC_OK;
+                            else
+                                r.status = EFS_INODE_RPC_NOT_FOUND;
+                            server_shard_unlock(g_server, eidx, psh);
+                        } else if (req->parent == EFS_ROOT_INO) {
+                            server_shard_unlock(g_server, eidx, psh);
+                            server_shard_lock(g_server, eidx, dsh);
+                            if (main_fence_blocks_shard_read(ex, dsh))
+                                r.status = EFS_INODE_RPC_BUSY;
+                            else if (efs_export_lookup(ex, req->parent,
+                                                       req->name,
+                                                       &r.inode) == 0)
+                                r.status = EFS_INODE_RPC_OK;
+                            else
+                                r.status = EFS_INODE_RPC_NOT_FOUND;
+                            server_shard_unlock(g_server, eidx, dsh);
+                        } else {
+                            server_shard_unlock(g_server, eidx, psh);
+                            uint32_t shs[2] = { psh, dsh };
+                            server_shard_lockn(g_server, eidx, shs, 2);
+                            if (main_fence_blocks_shards_read(ex, shs, 2))
+                                r.status = EFS_INODE_RPC_BUSY;
+                            else if (efs_export_lookup(ex, req->parent,
+                                                       req->name,
+                                                       &r.inode) == 0)
+                                r.status = EFS_INODE_RPC_OK;
+                            else
+                                r.status = EFS_INODE_RPC_NOT_FOUND;
+                            server_shard_unlockn(g_server, eidx, shs, 2);
+                        }
                     } else {
                         if (efs_export_lookup(ex, req->parent, req->name,
                                               &r.inode) == 0)
@@ -1903,6 +2055,7 @@ send_reply:
                             r.status = EFS_INODE_RPC_NOT_FOUND;
                         server_shard_unlock(g_server, eidx, psh);
                     }
+                }
                 }
             } else if (type == EFS_MSG_INODE_GETATTR) {
                 struct efs_msg_inode_getattr *req = payload;
@@ -1918,7 +2071,7 @@ send_reply:
                     server_global_unlock(g_server);
                     global_held = 0;
                     server_shard_lock(g_server, eidx, gsh);
-                    if (ex->meta_needs_rebuild) {
+                    if (main_fence_blocks_shard_read(ex, gsh)) {
                         r.status = EFS_INODE_RPC_BUSY;
                     } else {
                         struct efs_export *tab = table_for_ino(ex, req->ino);
@@ -1970,7 +2123,7 @@ send_reply:
                     server_global_unlock(g_server);
                     global_held = 0;
                     server_shard_lock(g_server, eidx, psh);
-                    if (ex->meta_needs_rebuild) {
+                    if (main_fence_blocks_shard(ex, psh)) {
                         server_shard_unlock(g_server, eidx, psh);
                         r.status = EFS_INODE_RPC_BUSY;
                     } else {
@@ -1983,7 +2136,7 @@ send_reply:
                                                                 nlive);
                         uint32_t eshs[2] = { psh, dsh };
                         server_shard_lockn(g_server, eidx, eshs, 2);
-                        if (ex->meta_needs_rebuild) {
+                        if (main_fence_blocks_shards(ex, eshs, 2)) {
                             server_shard_unlockn(g_server, eidx, eshs, 2);
                             r.status = EFS_INODE_RPC_BUSY;
                         } else if (efs_export_lookup(ex, req->parent, req->name,
@@ -2020,7 +2173,8 @@ send_reply:
                             } else if (down == 0 || down == g_server->id) {
                                 uint32_t dshs[2] = { psh, dsh };
                                 server_shard_lockn(g_server, eidx, dshs, 2);
-                                struct efs_export *dtab = ex->meta_needs_rebuild
+                                struct efs_export *dtab =
+                                    main_fence_blocks_shard(ex, dsh)
                                     ? NULL : efs_export_table(ex, dsh);
                                 if (!dtab) {
                                     server_shard_unlockn(g_server, eidx, dshs,
@@ -2091,7 +2245,7 @@ send_reply:
                     server_global_unlock(g_server);
                     global_held = 0;
                     server_shard_lock(g_server, eidx, psh);
-                    if (ex->meta_needs_rebuild) {
+                    if (main_fence_blocks_shard(ex, psh)) {
                         server_shard_unlock(g_server, eidx, psh);
                         r.status = EFS_INODE_RPC_BUSY;
                     } else {
@@ -2102,7 +2256,7 @@ send_reply:
                         server_shard_unlock(g_server, eidx, psh);
                         uint32_t shs[3] = { psh, dsh, target };
                         server_shard_lockn(g_server, eidx, shs, 3);
-                        if (ex->meta_needs_rebuild) {
+                        if (main_fence_blocks_shards(ex, shs, 3)) {
                             r.status = EFS_INODE_RPC_BUSY;
                         } else {
                             efs_ino_t ino = efs_export_create(ex, req->parent,
@@ -2139,11 +2293,12 @@ send_reply:
                     server_global_unlock(g_server);
                     global_held = 0;
                     server_shard_lock(g_server, eidx, req->target_shard);
-                    if (ex->meta_needs_rebuild) {
-                        r.status = EFS_INODE_RPC_BUSY;
-                    } else {
                     struct efs_export *ctab =
                         efs_export_table(ex, req->target_shard);
+                    /* Live extra tab is the single writer. Do not inherit
+                     * the MAIN table's catchup fence (that BUSY'd hashed
+                     * mkdir after extras+main flush; client slept 50ms<<n).
+                     * Extra readiness is ensure_shard_ready on target. */
                     if (!ctab || !efs_export_fits_page_cap(ctab, 1, 0)) {
                         r.status = EFS_INODE_RPC_QUOTA;
                     } else {
@@ -2168,7 +2323,6 @@ send_reply:
                             server_meta_mark_rpc_dirty_locked(g_server, eidx);
                         }
                     }
-                    }
                     server_shard_unlock(g_server, eidx, req->target_shard);
                 }
             } else if (type == EFS_MSG_INODE_UNLINK) {
@@ -2191,7 +2345,7 @@ send_reply:
                     server_global_unlock(g_server);
                     global_held = 0;
                     server_shard_lock(g_server, eidx, psh);
-                    if (ex->meta_needs_rebuild) {
+                    if (main_fence_blocks_shard(ex, psh)) {
                         server_shard_unlock(g_server, eidx, psh);
                         r.status = EFS_INODE_RPC_BUSY;
                     } else {
@@ -2209,10 +2363,20 @@ send_reply:
                         server_shard_unlock(g_server, eidx, psh);
                         int cbusy = 0;
                         if (csh != psh) {
-                            server_global_lock(g_server);
-                            cbusy = server_ensure_shard_ready(g_server, ex,
-                                                              csh) != 0;
-                            server_global_unlock(g_server);
+                            /* ensure_shard_ready returns -1 for not_owner.
+                             * Mapping that to BUSY made the client sleep
+                             * 50ms<<n (~10s) on rmdir of a hashed ROOT dir
+                             * whose inode lives on another shard. Only
+                             * ensure shards this node owns; the fan below
+                             * talks to the child owner. */
+                            efs_node_id_t cowner =
+                                efs_shard_owner_of(csh, sc, live, nlive);
+                            if (cowner == 0 || cowner == g_server->id) {
+                                server_global_lock(g_server);
+                                cbusy = server_ensure_shard_ready(
+                                            g_server, ex, csh) != 0;
+                                server_global_unlock(g_server);
+                            }
                         }
                         if (cbusy) {
                             r.status = EFS_INODE_RPC_BUSY;
@@ -2226,7 +2390,8 @@ send_reply:
                             efs_ino_t drop_ino = 0;
                             int nlink_left = 1;
                             int remote_nlink = 0;
-                            if (ex->meta_needs_rebuild) {
+                            uint32_t ush[3] = { psh, dsh, csh };
+                            if (main_fence_blocks_shards(ex, ush, 3)) {
                                 r.status = EFS_INODE_RPC_BUSY;
                             } else {
                                 memset(&victim, 0, sizeof(victim));
@@ -2320,9 +2485,9 @@ send_reply:
                     global_held = 0;
                     server_shard_lock(g_server, eidx, csh);
                     int do_fan = 0;
-                    if (ex->meta_needs_rebuild) {
-                        r.status = EFS_INODE_RPC_BUSY;
-                    } else {
+                    /* Extra-shard nlink: do not inherit the MAIN table
+                     * catchup fence (same CREATE_SHARD coupling). */
+                    {
                         int keep = hold_refs(ex->id, req->src_ino) > 0;
                         int urc = efs_export_nlink_dec_ex(ex, req->src_ino,
                                                           &r.inode, keep);
@@ -2413,7 +2578,7 @@ send_reply:
                     server_global_unlock(g_server);
                     global_held = 0;
                     server_shard_lock(g_server, eidx, ssh);
-                    if (ex->meta_needs_rebuild) {
+                    if (main_fence_blocks_shard(ex, ssh)) {
                         r.status = EFS_INODE_RPC_BUSY;
                     } else {
                         struct efs_export *tab = table_for_ino(ex, req->ino);
@@ -2449,7 +2614,7 @@ send_reply:
                     server_global_unlock(g_server);
                     global_held = 0;
                     server_shard_lock(g_server, eidx, ssh);
-                    if (ex->meta_needs_rebuild) {
+                    if (main_fence_blocks_shard(ex, ssh)) {
                         r.status = EFS_INODE_RPC_BUSY;
                     } else {
                     struct efs_export *tab = table_for_ino(ex, req->ino);
@@ -2515,7 +2680,7 @@ send_reply:
                 server_global_unlock(g_server);
                 global_held = 0;
                 server_shard_lock(g_server, eidx, ash);
-                if (ex->meta_needs_rebuild) {
+                if (main_fence_blocks_shard(ex, ash)) {
                     r.status = EFS_INODE_RPC_BUSY;
                 } else {
                 struct efs_export *tab = table_for_ino(ex, req->ino);
@@ -2791,7 +2956,7 @@ send_reply:
                     global_held = 0;
                     if (nowned > 0)
                         server_shard_lockn(g_server, eidx, owned, nowned);
-                    if (ex->meta_needs_rebuild) {
+                    if (main_fence_blocks_shards(ex, owned, nowned)) {
                         r.status = EFS_INODE_RPC_BUSY;
                     } else {
                         for (int i = 0; i < nowned; i++) {
@@ -2824,7 +2989,7 @@ send_reply:
                           : (type == EFS_MSG_INODE_FLOCK) ? EFS_MSG_INODE_FLOCK_REPLY
                           : (type == EFS_MSG_INODE_DROP_CHUNKS) ? EFS_MSG_INODE_DROP_CHUNKS_REPLY
                           : EFS_MSG_INODE_UNLINK_REPLY;
-            lock_prof_note_busy(r.status);
+            dbg_inode_busy(type, r.status, ex);
             efs_conn_send_msg(conn, rtype, &r, sizeof(r));
             break;
         }
@@ -2863,7 +3028,7 @@ send_reply:
                 int nheld = 0;
                 uint32_t psh0 = efs_export_shard_of(EFS_ROOT_INO, bits);
                 inode_lock3(g_server, eidx, psh0, psh0, psh0, held, &nheld);
-                if (ex->meta_needs_rebuild) {
+                if (main_fence_blocks_shard_read(ex, psh0)) {
                     r.status = EFS_INODE_RPC_BUSY;
                 } else if (req->path[1] == '\0') {
                     if (efs_export_get_inode(ex, EFS_ROOT_INO, &r.inode) == 0)
@@ -2879,16 +3044,16 @@ send_reply:
                     efs_ino_t parent = EFS_ROOT_INO;
                     r.status = EFS_INODE_RPC_NOT_FOUND;
                     while (part) {
-                        if (ex->meta_needs_rebuild) {
+                        uint32_t psh = efs_export_shard_of(parent, bits);
+                        uint32_t dsh = psh;
+                        if (main_fence_blocks_shard_read(ex, psh)) {
                             r.status = EFS_INODE_RPC_BUSY;
                             break;
                         }
-                        uint32_t psh = efs_export_shard_of(parent, bits);
-                        uint32_t dsh = psh;
                         server_shard_unlockn(g_server, eidx, held, nheld);
                         inode_lock3(g_server, eidx, psh, psh, psh, held,
                                     &nheld);
-                        if (ex->meta_needs_rebuild) {
+                        if (main_fence_blocks_shard_read(ex, psh)) {
                             r.status = EFS_INODE_RPC_BUSY;
                             break;
                         }
@@ -2900,7 +3065,8 @@ send_reply:
                                                      nheld);
                                 inode_lock3(g_server, eidx, psh, dsh, dsh,
                                             held, &nheld);
-                                if (ex->meta_needs_rebuild) {
+                                uint32_t lsh[2] = { psh, dsh };
+                                if (main_fence_blocks_shards_read(ex, lsh, 2)) {
                                     r.status = EFS_INODE_RPC_BUSY;
                                     break;
                                 }
@@ -2933,13 +3099,13 @@ send_reply:
                 }
                 if (nheld)
                     server_shard_unlockn(g_server, eidx, held, nheld);
-                lock_prof_note_busy(r.status);
+                dbg_inode_busy(EFS_MSG_INODE_LOOKUP_PATH, r.status, ex);
                 efs_conn_send_msg(conn, EFS_MSG_INODE_LOOKUP_PATH_REPLY, &r,
                                   sizeof(r));
                 break;
             }
             server_global_unlock(g_server);
-            lock_prof_note_busy(r.status);
+            dbg_inode_busy(EFS_MSG_INODE_LOOKUP_PATH, r.status, ex);
             efs_conn_send_msg(conn, EFS_MSG_INODE_LOOKUP_PATH_REPLY, &r,
                               sizeof(r));
             break;
@@ -3066,7 +3232,7 @@ send_reply:
                 report_gheld = 0;
                 if (nsh)
                     server_shard_lockn(g_server, eidx, shs, nsh);
-                if (ex->meta_needs_rebuild) {
+                if (main_fence_blocks_shards(ex, shs, nsh)) {
                     r.status = EFS_INODE_RPC_BUSY;
                 } else {
                 /* Apply under only the shards this report touches — not
@@ -3079,7 +3245,7 @@ send_reply:
                         sched_yield();
                         if (nsh)
                             server_shard_lockn(g_server, eidx, shs, nsh);
-                        if (ex->meta_needs_rebuild)
+                        if (main_fence_blocks_shards(ex, shs, nsh))
                             break;
                     }
                     if (bits && sc > 1) {
@@ -3208,11 +3374,13 @@ send_reply:
                      * BUSY so the client retries — ERROR used to become
                      * fsync EIO on the first attempt (9-way 007). The
                      * in-memory mutation stays dirty. */
-                    if (r.status == EFS_INODE_RPC_OK)
+                    if (r.status == EFS_INODE_RPC_OK) {
+                        dbg_busy_why = "flush";
                         r.status = EFS_INODE_RPC_BUSY;
+                    }
                 }
             }
-            lock_prof_note_busy(r.status);
+            dbg_inode_busy(EFS_MSG_REPORT_CHUNKS, r.status, ex);
             efs_conn_send_msg(conn, EFS_MSG_REPORT_CHUNKS_REPLY, &r, sizeof(r));
             break;
         }
@@ -3220,10 +3388,10 @@ send_reply:
             struct efs_msg_inode_readdir_reply r;
             memset(&r, 0, sizeof(r));
             r.status = EFS_INODE_RPC_ERROR;
+            struct efs_export *ex = NULL;
             if (payload_len >= sizeof(struct efs_msg_inode_readdir)) {
                 struct efs_msg_inode_readdir *req = payload;
                 server_global_lock(g_server);
-                struct efs_export *ex = NULL;
                 uint32_t eidx = 0;
                 for (uint32_t i = 0; i < g_server->export_count; i++) {
                     if (g_server->exports[i].id == req->export_id ||
@@ -3250,7 +3418,7 @@ send_reply:
                         (void)server_ensure_shard_ready(g_server, ex, rsh);
                     server_global_unlock(g_server);
                     server_shard_lock(g_server, eidx, rsh);
-                    if (ex->meta_needs_rebuild) {
+                    if (main_fence_blocks_shard_read(ex, rsh)) {
                         r.status = EFS_INODE_RPC_BUSY;
                     } else {
                     struct efs_export *tab = table_for_ino(ex, req->parent);
@@ -3270,19 +3438,23 @@ send_reply:
                     };
                     (void)efs_export_foreach_child(tab, req->parent,
                                                    readdir_collect_cb, &col);
-                    const struct efs_inode **cand = col.cand;
+                    uint64_t *cand = col.cand;
                     uint64_t ncand = col.n;
-                    if (ncand > 1)
-                        qsort(cand, ncand, sizeof(*cand), readdir_row_cmp);
+                    if (ncand > 1) {
+                        g_readdir_sort_tab = tab;
+                        qsort(cand, ncand, sizeof(*cand), readdir_slot_cmp);
+                        g_readdir_sort_tab = NULL;
+                    }
                     for (uint64_t k = 0; k < ncand && r.count < max; k++)
-                        r.ents[r.count++] = *cand[k];
+                        efs_export_inode_to_rpc(tab, cand[k],
+                                               &r.ents[r.count++]);
                     free(cand);
                     r.status = EFS_INODE_RPC_OK;
                     }
                     server_shard_unlock(g_server, eidx, rsh);
                 }
             }
-            lock_prof_note_busy(r.status);
+            dbg_inode_busy(EFS_MSG_INODE_READDIR, r.status, ex);
             efs_conn_send_msg(conn, EFS_MSG_INODE_READDIR_REPLY, &r, sizeof(r));
             break;
         }
@@ -3290,10 +3462,10 @@ send_reply:
             struct efs_msg_inode_getchunks_reply r;
             memset(&r, 0, sizeof(r));
             r.status = EFS_INODE_RPC_ERROR;
+            struct efs_export *ex = NULL;
             if (payload_len >= sizeof(struct efs_msg_inode_getchunks)) {
                 struct efs_msg_inode_getchunks *req = payload;
                 server_global_lock(g_server);
-                struct efs_export *ex = NULL;
                 uint32_t eidx = 0;
                 for (uint32_t i = 0; i < g_server->export_count; i++) {
                     if (g_server->exports[i].id == req->export_id ||
@@ -3322,6 +3494,7 @@ send_reply:
                             r.primary_id = own;
                         } else if (server_ensure_shard_ready(g_server, ex,
                                                              gsh) != 0) {
+                            dbg_busy_why = "ensure";
                             r.status = EFS_INODE_RPC_BUSY;
                         }
                     }
@@ -3329,7 +3502,7 @@ send_reply:
                     if (r.status != EFS_INODE_RPC_NOT_PRIMARY &&
                         r.status != EFS_INODE_RPC_BUSY) {
                     server_shard_lock(g_server, eidx, gsh);
-                    if (ex->meta_needs_rebuild) {
+                    if (main_fence_blocks_shard_read(ex, gsh)) {
                         r.status = EFS_INODE_RPC_BUSY;
                     } else {
                     uint32_t max = req->max;
@@ -3356,7 +3529,7 @@ send_reply:
                     }
                 }
             }
-            lock_prof_note_busy(r.status);
+            dbg_inode_busy(EFS_MSG_INODE_GETCHUNKS, r.status, ex);
             efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS_REPLY, &r, sizeof(r));
             break;
         }

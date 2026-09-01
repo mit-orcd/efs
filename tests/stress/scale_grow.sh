@@ -133,7 +133,7 @@ server_rss() {
   echo "$((max / 1024)) $((sum / 1024))"
 }
 
-prev=0
+prev=${PREV:-0}
 for target in $STEPS; do
   per_client=$((target / nh))
   prev_per=$((prev / nh))

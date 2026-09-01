@@ -524,7 +524,8 @@ static int find_index_build_locked(void)
         pthread_mutex_unlock(&g_client.lock);
         return EFS_ERR_NOMEM;
     }
-    memcpy(snap, g_client.export.inodes, n * sizeof(*snap));
+    for (uint64_t i = 0; i < n; i++)
+        efs_export_inode_to_rpc(&g_client.export, i, &snap[i]);
     pthread_mutex_unlock(&g_client.lock);
 
     struct find_ent *ents = malloc((n ? n : 1) * sizeof(*ents));
@@ -2403,7 +2404,9 @@ static int efs_fuse_statfs(const char *path, struct statvfs *stbuf)
     uint64_t used_logical = (phys * 2) / 3;
     if (used_logical == 0) {
         for (uint64_t i = 0; i < g_client.export.inode_count; i++) {
-            struct efs_inode *ino = &g_client.export.inodes[i];
+            struct efs_inode_mem *ino = efs_export_inode_at(&g_client.export, i);
+            if (!ino)
+                continue;
             if (!efs_mode_is_dir(ino->mode))
                 used_logical += ino->size;
         }
@@ -3464,7 +3467,9 @@ int main(int argc, char **argv)
         int rrc = efs_export_get_inode(&g_client.export, EFS_ROOT_INO, &root);
         uint64_t z = 0, ones = 0;
         for (uint64_t i = 0; i < g_client.export.inode_count; i++) {
-            efs_ino_t n = g_client.export.inodes[i].ino;
+            const struct efs_inode_mem *row =
+                efs_export_inode_at(&g_client.export, i);
+            efs_ino_t n = row ? row->ino : 0;
             if (n == 0)
                 z++;
             else if (n == EFS_ROOT_INO)
