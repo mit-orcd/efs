@@ -99,7 +99,7 @@ raise the cap. Phases 2–4 do.
 **This is the next work, ahead of every other forward-looking item in this
 document.** The architecture migration ([architecture.md](architecture.md)
 §10) lands the simulator, the ordered KV, and Raft as new components. They
-must be **born modular** ([architecture.md](architecture.md) §5.13). But the
+must be **born modular** ([architecture.md](architecture.md) §5.14). But the
 carve-up is also the dev-cycle lever in its own right: it is
 **behavior-preserving refactor, gated by the existing suites**, and it pays
 off on the *current* code before a single Raft line is written.
@@ -115,7 +115,7 @@ file. The carve-up needs no new design and no new test infrastructure, so it
 is the only forward work that is both immediately useful and a hard
 prerequisite for everything after it.
 
-**Target boundaries** (architecture.md §5.13): `raft/ kv/ meta/ wire/ data/
+**Target boundaries** (architecture.md §5.14): `raft/ kv/ meta/ wire/ data/
 client/`. Depend on interface **headers**, never another module's `.c`. State
 machines are pure: no globals, no inline I/O — all I/O behind the
 transport/storage interfaces.

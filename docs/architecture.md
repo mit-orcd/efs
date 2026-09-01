@@ -31,6 +31,32 @@ RDMA, 2+1 EC) but its commit semantics are now specified precisely (§5.7).
 
 ---
 
+## 0. Governing principles
+
+Three principles decide every hard case below. When a design question has no
+obvious answer, the answer is whichever option these three point to.
+
+- **P1 · Never serialize work that the semantics and the hardware allow to
+  happen in parallel.** A component is wrong if it serializes work the
+  hardware could have done concurrently. The filesystem must not invent a
+  conflict merely because two operations share an inode, a file, or a
+  directory. Serialization is accepted only where the *semantics* demand it
+  (O_APPEND EOF allocation, overlapping byte ranges, truncate, rename).
+- **P2 · Co-locate what must commit atomically on the common path; distribute
+  what can evolve independently.** Before reaching for a distributed
+  transaction, first ask whether the two pieces of state can be placed so the
+  common operation is one Raft entry on one shard. This is the answer to the
+  extending-write problem (§5.7): chunk publication and its size lane share a
+  shard, so they commit atomically with no cross-shard protocol.
+- **P3 · Make stale work harmless instead of trying to prevent stale work
+  from happening.** Inode generations, content epochs, immutable chunk
+  generations, orphan candidate writes, Raft terms, and node incarnations are
+  all the same move: a stale actor may *do* work, but it cannot make that
+  work *visible*. This is cheaper and more robust than fencing every stale
+  actor at every boundary.
+
+---
+
 ## 1. Goal
 
 A high-performance parallel POSIX file system.
@@ -83,6 +109,25 @@ writers to the **same** file.
 - **Data:** a `write()` that has returned success is durable and visible (see
   the precise commit state machine in §5.7). Un-`fsync`ed data can be lost on
   client crash only where POSIX permits it.
+
+**Readdir concurrency contract (explicitly weak, by design).** POSIX leaves
+readdir-under-concurrency loose, and efs takes that room rather than
+promising distributed snapshot isolation. A `readdir` scan guarantees:
+
+- every returned name **existed at some point during the scan**;
+- **no name is returned twice** within one scan (the ordered-KV cursor is
+  monotonic per shard; a spread-directory merge dedups by name);
+- a `telldir` **cookie remains valid** for resuming the scan (it encodes the
+  per-shard cursor position; a leader change does not invalidate it, since
+  the KV state — not the leader — is what is scanned);
+- a name that existed for the *entire* scan **may** be missed only if it was
+  concurrently renamed/moved across the cursor boundary — the same allowance
+  local POSIX filesystems make.
+
+It does **not** promise a point-in-time snapshot: a concurrent create may or
+may not appear, a concurrent unlink may or may not disappear. If a future
+feature needs snapshot readdir, that is an MVCC read (§8) introduced
+deliberately, not an accident of the scan.
 
 **CAP-accurate availability.** With any one storage/server node crashed or
 unreachable, every shard retains a quorum and operations remain available to
@@ -157,6 +202,14 @@ I6/I7.
   never published may be reclaimed without changing any committed state.
 - **I20 · stale-writer fencing.** A stale client/node cannot overwrite or
   publish data over a newer committed chunk generation.
+- **I21 · publish+size atomicity.** An extending write never commits its
+  chunk publication without the corresponding size-lane update, nor the
+  reverse — they are one Raft entry on one shard (§5.7). A reader never sees
+  a size that covers unpublished bytes, nor published bytes that no committed
+  size exposes.
+- **I22 · epoch fencing.** A read or stat considers only the inode's current
+  content epoch; a publication tagged with a superseded epoch is never
+  visible (§5.7).
 
 **Liveness (testable bounded forms)**
 
@@ -247,12 +300,71 @@ shard) then an inode get (inode shard) — two point-gets, possibly two shards.
 That is the price of not duplicating mutable state, and it is paid only on
 the attribute path, not the name-exists path.
 
-**Hot-directory spread (threshold).** When a directory's entry count crosses
-`EFS_DIR_SPREAD_MIN`, its *dentries* spread by `hash(parent_ino, name) &
-0xFFF` across shards; readdir becomes a scatter/merge. This is the existing
-Phase-3b Item-2 mechanism carried into the new model. It is the escape valve
-that keeps a 500M-entry directory from pinning one leader, at the cost of
-multi-shard readdir for exactly those rare huge dirs.
+**The CREATE co-location rule (load-bearing).** Parent-shard dentries only
+make CREATE single-shard if the new inode lands on the *same* shard as the
+dentry. So inode allocation is constrained by placement (P2):
+
+```text
+normal directory:  inode_shard(new_ino) = inode_shard(parent_ino)
+spread directory:  inode_shard(new_ino) = hash(parent_ino, name) & 0xFFF
+```
+
+The allocator picks an ino whose low 12 bits equal the required shard (inos
+are allocated per-shard, §5.1, so this is free — the shard's allocator simply
+hands out its own inos). CREATE then writes the dentry *and* the inode row in
+**one Raft entry on one shard**. Without this rule every CREATE would be a
+distributed transaction; with it the dominant namespace op stays a single
+log append. UNLINK of a last link is likewise single-shard (dentry + inode
+row on the same shard). This rule has enormous performance consequences and
+is not negotiable in the implementation.
+
+**Operation → participant matrix (authoritative).** The earlier claim that
+"only rename/hardlink/unlink-open touch two shards" was wrong under this
+placement. The real matrix, given the co-location rule:
+
+| Op | State touched | Shard(s) | Protocol |
+|---|---|---|---|
+| CREATE / MKDIR | dentry + inode row | **1** (co-located) | single Raft entry |
+| UNLINK (last link) | dentry + inode row | **1** (co-located) | single Raft entry |
+| UNLINK (nlink>1) | dentry on parent shard, nlink on inode shard | 2 | transaction (§5.6) |
+| LOOKUP (name only) | dentry | 1 | single read |
+| GETATTR / SETATTR | inode row | 1 | single Raft entry |
+| LINK (hardlink) | new dentry on its parent shard, nlink on inode shard | 2 | transaction (§5.6) |
+| RENAME same-dir | two dentries on parent shard | **1** | single Raft entry |
+| RENAME cross-dir | src dentry, dst dentry, ino row, parent nlinks | ≥2 | transaction (§5.6) |
+| WRITE non-extending | chunk-map entry | 1 (`chunk_meta_shard`) | single Raft entry |
+| WRITE extending | chunk-map entry + size lane | **1** (co-located, §5.7) | single Raft entry |
+| O_APPEND | EOF reserve + chunk + size | inode shard + chunk shard | reserve (§5.7) then write |
+| TRUNCATE | content epoch on inode row | 1 | single Raft entry (§5.7) |
+| READDIR | dentries | 1 (normal) / many (spread) | range scan / scatter-merge |
+| CHMOD / CHOWN | inode row | 1 | single Raft entry |
+
+**Hot-directory spread is a layout-epoch protocol, not a flag.** Crossing
+`EFS_DIR_SPREAD_MIN` does not flip a bit — a 100M-entry directory cannot be
+re-partitioned atomically, and lookups/creates/unlinks/readdir must keep
+working *during* the move. The directory carries a **layout epoch**:
+
+```text
+dir.layout = LOCAL            all dentries on the parent shard
+    |
+    v  (threshold crossed; owner Raft-commits SPLITTING)
+dir.layout = SPLITTING(e)     new writes go to hash(parent,name) shards;
+                              a migrator moves existing dentries
+                              idempotently, in batches
+    |
+    v  (all dentries moved; owner Raft-commits HASHED)
+dir.layout = HASHED(e)        all dentries on hash shards; old local
+                              range is GC'd
+```
+
+Read/write rules during `SPLITTING`: **writes go only to the hashed
+location**; **reads check the hashed location first, then the not-yet-moved
+local range**; the migrator's moves are idempotent (a dentry already moved is
+a no-op), so a crash mid-split resumes cleanly; readdir merges both. The
+layout epoch `e` lets a client cache the layout and detect a stale decision.
+This is one of the hardest namespace problems in the design and is specified
+as a protocol precisely because "threshold spread" alone is an intention, not
+a solution.
 
 ### 5.4 One Raft group per shard
 
@@ -295,10 +407,11 @@ on NVMe. RAM is a bounded cache, not the store.
 
 ### 5.6 Cross-shard transactions
 
-Only rename-across-dirs, hardlink, and unlink-while-open touch two shards.
-They need **atomic visibility**, which a reconcile rule alone does not
-provide. efs uses a **Raft-backed distributed transaction** — decentralized,
-no global transaction server:
+The operations that genuinely touch more than one shard (see the matrix in
+§5.3: cross-dir rename, hardlink, unlink with nlink>1) need **atomic
+visibility**, which a reconcile rule alone does not provide. efs uses a
+**Raft-backed distributed transaction** — decentralized, no global
+transaction server:
 
 ```text
 txid (stable across all participants)
@@ -310,8 +423,28 @@ DECISION -> coordinator Raft-commits COMMIT | ABORT (durable)
 RESOLVE  -> participants apply/abandon per the decision
 ```
 
+Atomic *commitment* is only half the problem. The other half is
+**concurrency control** — without it, two concurrent transactions over the
+same keys (`rename(a,b)` vs `unlink(a)`; `rename(a,b)` vs `rename(a,c)`) have
+no serializable history even though each commits atomically.
+
+- **Conflict detection at PREPARE.** A prepare is conditional:
+  `prepare(T, key, expected_version)`. It fails if another live transaction
+  holds a conflicting intent on `key`, or if `key`'s current version no
+  longer equals `expected_version` (the key changed since the transaction
+  read it). An intent on a key is that key's lock: at most one live
+  transaction holds it.
+- **Deadlock freedom by deterministic ordering.** Participants and keys are
+  prepared in a **canonical global order** (by shard id, then key). Because
+  every transaction acquires intents in the same order, the wait-for graph is
+  acyclic and deadlock cannot form. This is the minimalist choice — no
+  wound-wait / wait-die machinery. (If a prepare finds a key already
+  intended by another transaction, the later transaction aborts and retries:
+  no-wait + retry, which is safe *because* ordering already makes true
+  deadlock impossible; the retry bound is a liveness tuning knob, not a
+  correctness mechanism.)
 - **Visibility rule.** An intent is never externally visible as a committed
-  effect; readers that encounter an intent must resolve it against the
+  effect; readers that encounter an intent resolve it against the
   coordinator's decision (or block/EBUSY), so clients never observe an
   illegal intermediate (I17).
 - **Idempotency / retry.** The whole transaction carries one `txid`;
@@ -320,6 +453,10 @@ RESOLVE  -> participants apply/abandon per the decision
   intent queries the coordinator's durable decision and drives the
   transaction to completion (L5).
 - **GC.** Resolved intents are reclaimed (L7-class).
+
+With conditional prepare + canonical ordering, the protocol yields strict
+serializability for multi-shard ops: conflicting transactions are ordered by
+intent acquisition, non-conflicting ones run concurrently.
 
 **Terminology fix.** What is being *deleted* is the old **global
 root-snapshot 2PC durability mechanism** — the one whose commit point was an
@@ -390,32 +527,57 @@ writes share an inode.
   on the shard that owns that chunk's metadata — not on the inode's shard.
   The data is distributed *and* the metadata publication is distributed. This
   is what makes the hot-file claim structurally true rather than a slogan.
-- **Size is a monotonic high-water mark — and it is sharded too.**
-  Commutativity of `MAX()` removes the *ordering* dependency between writers,
-  but by itself it does not remove the *physical* serialization point: if the
-  authoritative `size` lived in the single inode row, every `MAX` would still
-  pass through that row's one leader. So size is kept as a small number of
-  **distributed size lanes**:
+- **Size is a monotonic high-water mark, sharded — and co-located with the
+  chunk it extends (P2).** Two problems must be solved at once. (a) If the
+  authoritative `size` lived in the single inode row, every `MAX` would
+  serialize on that row's leader. (b) If the size update lived on a
+  *different* shard than the chunk publication, an extending write would be a
+  cross-shard transaction — and a crash between "chunk published" and "size
+  advanced" would leave acknowledged bytes invisible (or worse, a visible
+  hole). Both are solved by one placement decision:
 
   ```text
-  file (ino)
-     size-lane 0 -> max endpoint   \
-     size-lane 1 -> max endpoint    |  each lane on its own shard,
-     ...                            |  updated as an idempotent MAX
-     size-lane L-1 -> max endpoint /
-
-  logical size = MAX over the current content-epoch's lanes
+  size_lane(chunk_index) = chunk_meta_shard(ino, chunk_index)
   ```
 
-  An extending writer updates one lane (chosen by `chunk_index` or writer id)
-  with a commute-safe `MAX`; `stat()` computes the maximum across the current
-  epoch's lanes (a bounded fan-out of `L` point-gets, cacheable as a
-  non-authoritative hint). Truncate advances the file's **content epoch**,
-  which invalidates all old-epoch lanes at once. Lane count `L` is a tunable:
-  large enough to spread leader load, small enough that `stat` stays cheap.
-  The write side is fully parallel; the only cost is a small merge on read.
-- **mtime is coalesced / lazily advanced** where POSIX-visible semantics
-  permit, so it is not a per-write Raft mutation.
+  The size lane for a chunk lives on the **same shard as that chunk's
+  metadata**. An extending write then commits **one Raft entry on one shard**
+  carrying both effects:
+
+  ```text
+  { publish (ino, epoch, chunk_index, gen) ; MAX(size_lane, end_offset) }
+  ```
+
+  atomically — no distributed transaction on the hot write path. This is P2
+  applied: state that must commit atomically on the common path is co-located
+  by construction. The logical size is the MAX over the current
+  content-epoch's lanes; the number of distinct lanes a file uses grows with
+  its extent count, so the write side is exactly as parallel as the chunk
+  metadata itself.
+- **stat() has a linearization point despite the distributed reduction.**
+  Reading `MAX` over several independently-linearizable shards is not
+  automatically an atomic snapshot — a truncate could interleave between the
+  lane reads. The content epoch closes it:
+
+  ```text
+  1. read inode row -> content_epoch E
+  2. read only size lanes tagged E, take MAX
+  3. re-read inode row -> content_epoch still E?
+       yes -> the MAX is the linearizable size
+       no  -> retry (a truncate is in flight)
+  ```
+
+  The epoch double-check gives stat() a well-defined linearization point
+  without any cross-shard locking.
+- **mtime has exact semantics.** A `write()` that has returned success has
+  committed its mtime update as part of the same metadata publication (the
+  shard leader stamps `max(mtime, now)` on the publication entry — cheap,
+  because it rides the chunk publication, not a separate inode-row write). So
+  a `stat()` after a returned `write()` — from any client — sees an mtime at
+  least as new as that write. mtime is *not* lazily advanced in a way that
+  could regress or lag a committed write; "coalescing" only means multiple
+  writes published in one Raft entry share one timestamp. This is a defined
+  efs behavior, not "where POSIX permits."
 - **Sub-chunk read-modify-write** uses generation CAS: a writer builds
   candidate generation `G+1` from committed base `G`, publishes with
   `CAS(expected_generation = G)`; on conflict it refetches the committed
@@ -424,17 +586,67 @@ writes share an inode.
   no whole-file lock. The invariant is "every returned chunk is a valid
   serialization of committed byte-range writes," not "old whole chunk or one
   writer's whole chunk."
-- **O_APPEND** necessarily serializes EOF allocation; that hotspot is
-  semantic and unavoidable, and it is the *only* same-file serialization the
-  design accepts.
+- **Truncate is a content-epoch bump, with a stated linearization rule.**
+  Truncate (or any wholesale content replacement) advances the inode's
+  `content_epoch` on the inode row — a single-shard Raft entry. Every chunk
+  publication and every size lane is tagged `(ino, content_epoch, …)`, and
+  readers consider only the inode's current epoch. The rule:
 
-**Stale-target fencing.** Because clients write directly to data targets,
-Raft terms on the metadata path are not sufficient to fence the data path.
-Fragment identity therefore carries `(chunk_generation, placement_epoch,
-fragment_role, target_node_incarnation)`, and a storage target rejects a PUT
-whose generation/epoch is older than what it has already accepted for that
-chunk. Immutable generations + atomic metadata publication + target-side
-generation checks together give I20.
+  ```text
+  a write publishing under epoch E linearizes BEFORE the operation that
+  advances the file from E to E+1;
+
+  a write that begins after truncate has returned uses epoch E+1.
+  ```
+
+  A writer that read epoch 17 and publishes after the file moved to epoch 18
+  produces an epoch-17 publication that no reader will ever consider — P3:
+  the stale write is harmless, not prevented. Old-epoch chunks and lanes are
+  GC'd (L7).
+- **O_APPEND is a two-step: a serialized reserve, then a parallel write.**
+  EOF allocation is the one same-file serialization the semantics truly
+  require, and it lives on `inode_shard(ino)`:
+
+  ```text
+  append authority = inode_shard(ino)
+  reserve_append(len):  old = append_eof; append_eof += len; return old
+  ```
+
+  `reserve_append` is one Raft mutation on the inode shard (this is the
+  accepted hotspot). The client then writes its reserved `[old, old+len)`
+  range through the **ordinary distributed chunk path** — chunk publications
+  and size lanes spread across shards as for any write, so concurrent
+  appenders serialize only on the *reservation*, not on the data movement.
+  **Crash semantics:** a client that dies after reserving but before
+  publishing leaves a reserved hole (a zero-filled byte range) — this is
+  POSIX-legal for O_APPEND (the reservation is the linearization point, and a
+  crashed appender's bytes simply never appear), and it is never rolled back,
+  because later appenders already received offsets past it. The hole is
+  indistinguishable from a sparse write and is safe.
+
+**Stale-target fencing — targets are dumb, metadata decides.** Because
+clients write directly to data targets, Raft terms on the metadata path do
+not fence the data path. But the fencing is *not* "target rejects an older
+generation" — generations are immutable candidate objects, and two concurrent
+clients may legitimately produce different candidate generations for the same
+chunk with no global ordering between them. The correct model:
+
+- A fragment object `(ino, content_epoch, chunk_index, generation,
+  fragment_index)` is **immutable and its PUT is idempotent**. A target
+  stores it; storing the same object twice is a no-op. A target may hold
+  several candidate generations of one chunk at once — that is fine, because
+  they are distinct immutable objects.
+- The target verifies only **placement epoch, target incarnation, and object
+  identity** — i.e. "am I the current, legitimate home for this object?" It
+  does **not** decide which candidate generation is logically newer.
+- **The metadata authority alone decides which generation is committed**
+  (via the publication CAS). Unpublished candidates are orphans, reclaimed
+  without touching committed state (I15).
+
+This keeps the data nodes dumb — which fits the minimalist design — and it is
+what makes I20 precise: a stale writer cannot make its generation *visible*,
+because visibility is granted only by the metadata publication protocol, not
+by anything a data target does.
 
 ### 5.8 Control plane, membership, and reconfiguration
 
@@ -493,23 +705,62 @@ hot path. Open references are tracked with fencing so a dead client's
 reference is safely retired (recovery) and a stale client's reference cannot
 keep an inode alive or be reused (I19). Reclaim is L6.
 
-### 5.12 FUSE / kernel cache coherence
+### 5.12 Distributed POSIX locking
+
+`fcntl()` byte-range locks and `flock()` must have **one global lock state**
+across clients — a lock taken on client A must conflict with a lock requested
+on client B. POSIX advisory locks do not fence ordinary reads/writes (an
+application that ignores locks is allowed to), so the data path is untouched;
+but every participating lock request must see the same authoritative state.
+
+- **One lock authority per inode.** Lock state for a file lives on
+  `inode_shard(ino)`, as `(ino, start, end, owner)` records with overlap
+  conflict checking, mutated through that shard's Raft log. This deliberately
+  serializes lock *management* for one file — acceptable, because an
+  application using record locks has explicitly asked for coordination; it is
+  a semantic serialization (P1), not an accidental one. Splitting arbitrary
+  overlapping ranges across shards is rejected: range overlap is not
+  partitionable, and the common case (whole-file `flock`, small-range
+  `fcntl`) is cheap on one authority.
+- **Owner identity and death.** A lock owner is `(client_incarnation,
+  process_id)`. Locks are released on close/process exit as usual; a *dead
+  client* is detected via its incarnation going stale (§5.8), and its locks
+  are reclaimed by the authority. Blocked waiters are woken in order.
+- **flock vs fcntl** are kept as separate namespaces (POSIX semantics), both
+  on the same per-inode authority.
+
+### 5.13 FUSE / kernel cache coherence — including file data
 
 "No TTL caches" is not sufficient, because Linux/FUSE itself maintains a
-dentry cache, negative dentry cache, attribute cache, and page cache above
-the efs-fuse daemon. Immediate cross-client visibility must include that
-kernel cache.
+dentry cache, negative dentry cache, attribute cache, and **page cache**
+above the efs-fuse daemon. Immediate cross-client visibility must include
+that kernel cache — a perfectly linearizable metadata layer is defeated if
+client B's kernel serves a stale *data* page after client A committed a
+write.
 
-- Default: `entry_timeout = 0`, `negative_timeout = 0`, `attr_timeout = 0`.
-- The low-level (inode-based) FUSE API gives explicit inode/dentry
-  invalidation notifications; efs uses server-driven invalidation to keep the
-  kernel cache honest without TTLs.
-- Writeback page caching, if ever enabled, makes invalidation correctness
-  even more important (invalidating an inode can trigger dirty-page
-  writeback). It stays off until zero/stale-cache semantics are demonstrably
-  correct.
+- **Metadata caches.** Default `entry_timeout = 0`, `negative_timeout = 0`,
+  `attr_timeout = 0`; the low-level (inode-based) FUSE API gives explicit
+  inode/dentry invalidation notifications, and efs uses server-driven
+  invalidation to keep the kernel metadata cache honest without TTLs.
+- **Data cache: direct-I/O semantics, correctness first (decided).** The
+  kernel page cache is **not authoritative and is bypassed** for file data:
+  reads and writes go through to the efs client, which serves them from the
+  current committed chunk generations. This is the minimalist
+  correctness-first answer — it makes cross-client data visibility exactly as
+  strong as metadata visibility, with no coherence protocol to get wrong.
+  Distributed range invalidation or a lease/cache-coherence protocol may be
+  introduced **later**, only if it materially improves performance, and only
+  after zero/stale-cache semantics are demonstrably correct without it.
+- **mmap.** A genuinely coherent cross-client `MAP_SHARED` mapping is not a
+  side effect of this architecture — if A maps a page and B writes the chunk
+  directly, what A observes and when is a hard coherence problem.
+  **Decision: full cross-client coherent `MAP_SHARED` is unsupported in the
+  first implementation** (mmap'd writes are either rejected or given
+  write-through, same-client-only visibility semantics, documented in the
+  POSIX contract). It is documented as a limitation rather than implicitly
+  promised. `MAP_PRIVATE` (copy-on-write, never shared) is unaffected.
 
-### 5.13 Modularity as an architectural constraint
+### 5.14 Modularity as an architectural constraint
 
 Modularity is not a style preference here — it is what makes the two things
 this project depends on possible at all: **fast isolated testing** (§9, §9a)
@@ -662,21 +913,26 @@ POSIX namespace
   + small-cluster simplicity
 ```
 
-And the principle that ties it together — the thing that, if we execute it,
-is the actual contribution:
+And the principles that tie it together — the things that, if we execute
+them, are the actual contribution (§0):
 
-> **Never serialize work that the semantics and the hardware allow to happen
-> in parallel.**
+> **P1 · Never serialize work that the semantics and the hardware allow to
+> happen in parallel.**
+> **P2 · Co-locate what must commit atomically on the common path; distribute
+> what can evolve independently.**
+> **P3 · Make stale work harmless instead of trying to prevent it.**
 
 Traditional PFS architectures handle `1000 clients → 1000 different files`
 well. The hard problem is `1000 clients → ONE file → different byte/chunk
 ranges`. efs's answer is that if writes do not conflict, the filesystem must
 not invent a conflict merely because they share an inode: disjoint chunks
 publish to different metadata shards (§5.7), size is a sharded high-water
-mark, sub-chunk RMW is generation CAS, and only the operations whose
-*semantics* require serialization (O_APPEND EOF allocation, overlapping byte
-ranges, truncate, rename) are serialized — because the semantics demand it,
-not because the filesystem happens to have one inode lock.
+mark co-located with the chunk it extends (P2), sub-chunk RMW is generation
+CAS, stale publications are fenced by content epochs rather than prevented
+(P3), and only the operations whose *semantics* require serialization
+(O_APPEND EOF allocation, overlapping byte ranges, truncate, rename) are
+serialized — because the semantics demand it, not because the filesystem
+happens to have one inode lock.
 
 That is a thesis strong enough to build a filesystem identity around. It is
 also falsifiable: if a workload that the hardware could parallelize is found
@@ -703,6 +959,23 @@ The namespace metadata *is* the database; there is no separate catalog bolted
 on and derived from periodic snapshots. This is a natural consequence of the
 metadata design, not an extra subsystem — and it is part of what "minimalist"
 means operationally (below).
+
+**Stated honestly, this is a thesis the architecture makes *possible*, not a
+mechanism it already specifies.** The base keys — `(parent,name)` and `(ino)`
+— efficiently answer lookup, getattr, and readdir. They do not by themselves
+answer "all files owned by uid 1000", "everything older than 30 days", or
+"all .bam files > 1 TiB" without scanning billions of inode rows; and
+`du /project/foo` is genuinely hard because subtree membership is
+hierarchical. Making `find`/`du`/TTL real queries requires one of:
+**secondary indexes** (which must stay consistent with inode mutation —
+another same-shard co-location or transactional-indexing decision, P2),
+**distributed materialized aggregates** (per-subtree size/count maintained
+incrementally), or **query-time parallel shard scans** (the KV is ordered and
+sharded, so a full scan at least parallelizes across all 4096 shards instead
+of walking a tree serially). The architecture's commitment is narrower and
+real: namespace-wide questions are answered **without walking the POSIX
+namespace**, because the data is already in a queryable distributed store.
+The derived-index design is a separate, explicitly-scoped follow-on.
 
 ### Minimalism as a design constraint
 
@@ -736,7 +1009,8 @@ namespace-as-database minimalism — is where the design earns an identity.
   loss (§3 for the precise availability claim).
 - **Immediate visibility:** ops are applied on the leader in log order and
   acknowledged only when committed; kernel caches are actively invalidated
-  (§5.12). There is no cache to go stale.
+  and file data bypasses the page cache (§5.13). There is no cache to go
+  stale.
 - **Scale with raw hardware:** the data path is client-direct RDMA + EC, and
   the hot-file metadata path publishes independent chunk keys rather than
   serializing on an inode row (§5.7). Metadata op cost is one leader RTT + a
@@ -755,7 +1029,7 @@ namespace-as-database minimalism — is where the design earns an identity.
   same log + KV. (Two-paths-diverge has bitten twice.)
 - **Client-side metadata caching for correctness.** Caches may exist for
   performance but are never authoritative (and the kernel cache is actively
-  invalidated, §5.12).
+  invalidated, §5.13).
 - **Kernel module.** Stay on FUSE; the low-level (inode-based) FUSE API
   migration is a separate, orthogonal client rewrite.
 - **Clock-based leader leases on the authoritative read path.** Clocks are
@@ -815,8 +1089,25 @@ methodology: deterministic whole-cluster single-process simulation, seeded
 replay, network/disk/machine fault injection, and the goal of finding
 correctness issues in simulation rather than production.)
 
-**Scope.** It models the metadata layer. It does not model the RDMA data
-path — that is covered by the existing perf harnesses.
+**Scope — it models the *logical* data protocol, not the wire.** The
+simulator does not model RDMA mechanics (verbs, packetization, bandwidth, NIC
+behavior) — that is the perf harnesses' job. But it **must** model the
+logical data-commit protocol and its interaction with metadata, or it cannot
+check I11–I15 and I20. So the simulated world includes abstract data-plane
+events:
+
+```text
+PUT fragment · durable ACK · dropped ACK · target crash · fragment lost
+client crash mid-write · metadata publication · stale generation arrives
+rebuild from fragments
+```
+
+A "fragment" in the simulator is an abstract durable object with an identity
+and a home, not bytes on an RNIC. With those events the checker can verify
+that no committed read ever reconstructs from mixed generations (I13), that
+nothing is published before durability (I14), that orphans never become
+visible (I15/I20), and that a one-node loss never loses a published chunk
+(I11) — under every crash/interleaving the generator can produce.
 
 ## 9a. Shortening the code → signal cycle
 
@@ -858,7 +1149,7 @@ Deliberate moves that shorten the loop:
 - **Live attach over rebuild-and-reprobe.** ptrace is open on all 15 hosts —
   `gdb -p` on a wedged `efsd` answers in seconds what an NDJSON-probe redeploy
   answers in tens of minutes.
-- **Bounded-context change.** Modularity (§5.13) keeps the unit of work small:
+- **Bounded-context change.** Modularity (§5.14) keeps the unit of work small:
   a change loads one module + its interface header, not the whole tree. This
   is what makes both fast isolated tests and model-assisted editing tractable.
 - **Invariants as executable checks** (simulator assertions + `fsck`), not
@@ -872,7 +1163,8 @@ stays runnable. **Do not** go straight `KV → Raft → done`.
 ```text
 0. Freeze the exact metadata placement model:
    inode_shard() · dentry_shard() · authoritative row ownership ·
-   inode IDs + generations.
+   inode IDs + generations · the CREATE co-location rule (§5.3) ·
+   size_lane = chunk_meta_shard (§5.7).
 1. Simulator interfaces + the CURRENT state machine.
 2. Define RPC operation IDs + the idempotency model.
 3. Ordered KV applied state, incl. atomic batch semantics.
@@ -880,19 +1172,21 @@ stays runnable. **Do not** go straight `KV → Raft → done`.
    ReadIndex/linearizable reads · snapshots.
 5. Simulator proves the single-shard invariants.
 6. Safe Raft-group reconfiguration + control-plane desired placement.
-7. Cross-shard transaction protocol.
+7. Cross-shard transaction protocol, incl. concurrency control (§5.6).
 8. Open-unlinked inode lifecycle.
-9. Data-generation publication / fencing integration.
-10. Delete the old snapshot / root-2PC machinery.
-11. FUSE cache-coherence optimization only after zero/stale-cache semantics
-    are demonstrably correct.
+9. Data-generation publication / fencing integration (§5.7), with the
+   simulator checking the logical data protocol (§9).
+10. Directory layout-epoch spread (§5.3) + distributed locking (§5.12).
+11. Delete the old snapshot / root-2PC machinery.
+12. FUSE cache-coherence optimization only after zero/stale-cache semantics
+    are demonstrably correct (data path starts as direct-I/O, §5.13).
 ```
 
 **Step 1 has a hard prerequisite: the carve-up.** A pure state machine behind
 transport/storage interfaces does not exist today — four files hold ~45% of
 the tree and the state machine is fused with its I/O. So the *concrete* first
 move is **Phase M** in the roadmap: carve the monolith into `raft/ kv/ meta/
-wire/ data/ client/` behind interfaces (§5.13), as behavior-preserving
+wire/ data/ client/` behind interfaces (§5.14), as behavior-preserving
 refactor gated by the existing suites. It is the dev-cycle lever in its own
 right *and* the thing that makes step 1 possible — the simulator can only
 reuse a state machine that is already pure. Build nothing in steps 2–11 as

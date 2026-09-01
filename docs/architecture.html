@@ -76,6 +76,26 @@ The bar is that efs earns the name <b>extremfs</b>: throughput tracks the aggreg
 (NVMe + NIC), not a software serialization point. Every decision below is checked against that bar —
 a component is wrong if it serializes work the hardware could have done in parallel.</div>
 
+<h2 style="margin-top:34px">0 · Governing principles</h2>
+<p>Three principles decide every hard case below. When a design question has no obvious answer,
+the answer is whichever option these three point to.</p>
+<table>
+  <tr><th style="width:220px">Principle</th><th>What it decides</th></tr>
+  <tr><td><b>P1 · Never serialize what may run in parallel</b></td>
+      <td>Serialization is accepted only where the <i>semantics</i> demand it
+      (O_APPEND EOF allocation, overlapping byte ranges, truncate, rename) — never because two
+      operations happen to share an inode, file, or directory.</td></tr>
+  <tr><td><b>P2 · Co-locate what must commit atomically; distribute the rest</b></td>
+      <td>Before reaching for a distributed transaction, first place the state so the common
+      operation is <b>one Raft entry on one shard</b>. This is the answer to the extending-write
+      problem: chunk publication and its size lane share a shard, so they commit atomically
+      with no cross-shard protocol.</td></tr>
+  <tr><td><b>P3 · Make stale work harmless, not impossible</b></td>
+      <td>Inode generations, content epochs, immutable chunk generations, orphan candidate
+      writes, Raft terms, node incarnations — all the same move: a stale actor may <i>do</i>
+      work, but it cannot make that work <i>visible</i>.</td></tr>
+</table>
+
 <!-- ============ GOAL ============ -->
 <h2>1 · The target</h2>
 <table>
@@ -215,9 +235,39 @@ One authoritative inode row; many dentries may point at it (hardlinks).</p>
 (ino)              -&gt; authoritative inode_row      // the ONLY mutable copy</pre>
 <div class="why">Dentries live on the <b>parent's shard</b>, so create/unlink/readdir in a directory
 are single-shard and readdir is one range scan. Mutable attributes live only in the inode row, so
-chmod/chown/mtime/nlink can never diverge between two indexes. A huge directory past a threshold
-spreads its dentries by <code>hash(parent,name)</code> — the escape valve that keeps a 500M-entry
-dir off one leader, at the cost of a scatter/merge readdir for exactly those rare dirs.</div>
+chmod/chown/mtime/nlink can never diverge between two indexes.</div>
+
+<div class="why" style="border-color:var(--acc)"><b style="color:var(--acc)">The CREATE co-location rule (P2, load-bearing).</b>
+Parent-shard dentries only make CREATE single-shard if the new inode lands on the <i>same</i> shard.
+So allocation is constrained by placement: <code>inode_shard(new_ino) = inode_shard(parent)</code>
+for a normal directory, <code>= hash(parent,name) &amp; 0xFFF</code> for a spread one. Inos are
+allocated per-shard, so this is free — CREATE writes dentry + inode row in <b>one Raft entry</b>.
+Without this rule every CREATE would be a distributed transaction.</div>
+
+<h3>Which shards does each op touch? — the authoritative matrix</h3>
+<table>
+  <tr><th>Op</th><th>Shards</th><th>Protocol</th></tr>
+  <tr><td>CREATE / MKDIR</td><td><b>1</b> (dentry+inode co-located)</td><td>single Raft entry</td></tr>
+  <tr><td>UNLINK last link / RENAME same-dir</td><td><b>1</b></td><td>single Raft entry</td></tr>
+  <tr><td>UNLINK nlink&gt;1 / LINK</td><td>2</td><td>transaction (below)</td></tr>
+  <tr><td>RENAME cross-dir</td><td>≥2</td><td>transaction (below)</td></tr>
+  <tr><td>WRITE non-extending</td><td>1 (chunk shard)</td><td>single Raft entry</td></tr>
+  <tr><td>WRITE extending</td><td><b>1</b> (chunk shard + its size lane, co-located)</td><td>single Raft entry</td></tr>
+  <tr><td>TRUNCATE</td><td>1 (inode shard)</td><td>content-epoch bump</td></tr>
+  <tr><td>O_APPEND</td><td>reserve on inode shard, then ordinary write</td><td>2-step (below)</td></tr>
+  <tr><td>READDIR</td><td>1 (normal) / many (spread)</td><td>range scan / scatter-merge</td></tr>
+</table>
+
+<div class="why"><b>Hot-directory spread is a layout-epoch protocol, not a flag.</b>
+A 100M-entry directory cannot be re-partitioned atomically, and lookups/creates must keep working
+<i>during</i> the move:
+<pre>LOCAL → SPLITTING(epoch e) → HASHED(epoch e)
+SPLITTING: new writes → hash(parent,name) shards
+           reads → check hashed, then not-yet-moved local range
+           migrator moves dentries idempotently, in batches
+HASHED:    owner Raft-commits the new layout; old local range is GC'd</pre>
+The layout epoch lets a client cache the layout and detect a stale decision. A crash mid-split
+resumes cleanly because every move is idempotent.</div>
 
 <h3>Shards spread; leaders spread</h3>
 <div class="flow">
@@ -274,7 +324,7 @@ through one shard leader while the data path sat idle. The design avoids that.</
   <path class="arrowG" d="M140,151 C 220,150 240,150 300,149"/>
   <path class="arrowG" d="M140,163 C 200,200 240,200 300,197"/>
   <path class="arrow" d="M630,120 H690"/>
-  <text class="lbl" x="20" y="232">SIZE = sharded high-water lanes (MAX on read) · MTIME coalesced · sub-chunk RMW = generation CAS</text>
+  <text class="lbl" x="20" y="232">SIZE LANE = co-located with chunk shard (one Raft entry) · MTIME rides the publication · sub-chunk RMW = generation CAS</text>
 </svg>
 </div>
 
@@ -284,19 +334,83 @@ through one shard leader while the data path sat idle. The design avoids that.</
     funnel through <b>one Raft leader</b> (Raft serializes the group's log). So
     <code>chunk_meta_shard = hash(ino, chunk_index) &amp; 0xFFF</code> — one file's chunk
     publications spread across many leaders. Data <i>and</i> metadata both distribute.</div>
-  <div class="card"><h4>Size = sharded high-water lanes</h4>
-    <code>MAX()</code> commuting removes the <i>ordering</i> dependency but not the <i>physical</i>
-    serialization point. So size lives in <b>L distributed lanes</b>, each an idempotent MAX on its
-    own shard; <code>stat()</code> takes the max over the current epoch's lanes. Truncate bumps the
-    content epoch, invalidating all old lanes at once.</div>
+  <div class="card"><h4>Size lane co-located with its chunk <span class="tag t-good">P2</span></h4>
+    <code>size_lane(chunk) = chunk_meta_shard(ino, chunk)</code> — the lane lives on the
+    <b>same shard</b> as the chunk it extends. An extending write commits <b>one Raft entry</b>:
+    <code>{ publish chunk G ; MAX(lane, end) }</code> — atomic, no cross-shard transaction, and a
+    crash can never leave published bytes invisible or a visible hole (I21).</div>
+  <div class="card"><h4>stat() still has a linearization point</h4>
+    Reading MAX over many shards is not automatically a snapshot. The content epoch closes it:
+    read inode epoch E → read only lanes tagged E → re-read epoch → if still E, the MAX is
+    linearizable; else retry. No cross-shard locking.</div>
   <div class="card"><h4>Sub-chunk RMW = generation CAS</h4>
     Build candidate <code>G+1</code> from committed base <code>G</code>, publish with
     <code>CAS(expected=G)</code>; on conflict refetch, reapply the byte-range, retry. Disjoint
     byte-ranges both land. No whole-file lock.</div>
-  <div class="card"><h4>O_APPEND — the only accepted hotspot</h4>
-    EOF allocation must serialize; that is semantic and unavoidable. It is the <i>only</i>
-    same-file serialization the design accepts.</div>
+  <div class="card"><h4>O_APPEND = serialized reserve, parallel write</h4>
+    <code>reserve_append(len)</code> is one Raft mutation on the inode shard (the accepted
+    hotspot); the client then writes its reserved range through the <b>ordinary distributed chunk
+    path</b>. A crash after reserving leaves a POSIX-legal hole — never rolled back, because later
+    appenders already hold later offsets.</div>
 </div>
+
+<!-- ============ COMPOSITION PROTOCOLS ============ -->
+<h2>3b · POSIX composition — protocols, not intentions</h2>
+<p>The replicated-metadata core is protocol-grade. These are the boundary problems between
+subsystems — each now has a specified mechanism, not an intention.</p>
+
+<div class="grid g2">
+  <div class="card"><h4>Cross-shard transactions: concurrency control, not just atomic commit</h4>
+    PREPARE is conditional: <code>prepare(T, key, expected_version)</code> — it fails if another
+    live transaction holds a conflicting intent or the key changed since T read it. An intent is
+    the key's lock. Participants/keys are prepared in <b>canonical global order</b> (shard, then
+    key), so the wait-for graph is acyclic and deadlock cannot form; a conflicting prepare aborts
+    and retries (no-wait, safe <i>because</i> ordering already excludes deadlock). Result: strict
+    serializability for multi-shard ops — conflicting transactions are ordered by intent
+    acquisition, non-conflicting ones run concurrently.</div>
+  <div class="card"><h4>Distributed POSIX locking</h4>
+    <code>fcntl</code> ranges and <code>flock</code> need one global lock state. Lock records
+    <code>(ino, start, end, owner)</code> live on <code>inode_shard(ino)</code> — one lock
+    authority per file, mutated through its Raft log. Serializing lock <i>management</i> per file
+    is accepted: the application explicitly asked for coordination (P1). Dead clients are detected
+    by stale incarnation and their locks reclaimed; blocked waiters wake in order. Advisory locks
+    never fence the data path.</div>
+  <div class="card"><h4>File-data cache coherence: direct-I/O, correctness first</h4>
+    A linearizable metadata layer is defeated if client B's kernel page cache serves a stale data
+    page after A's committed write. <b>Decision: the kernel page cache is bypassed for file
+    data</b> (direct-I/O semantics) — cross-client data visibility is then exactly as strong as
+    metadata visibility, with no coherence protocol to get wrong. Distributed range invalidation /
+    leases may come later, only if they measurably pay.</div>
+  <div class="card"><h4>mmap: decided, not implied</h4>
+    Coherent cross-client <code>MAP_SHARED</code> is a hard coherence problem and is
+    <b>unsupported in the first implementation</b> (mmap'd writes rejected or write-through,
+    same-client-only visibility, documented in the POSIX contract).
+    <code>MAP_PRIVATE</code> is unaffected.</div>
+  <div class="card"><h4>readdir concurrency contract — explicitly weak</h4>
+    POSIX leaves this loose and efs takes the room: every returned name existed at some point
+    during the scan; no name twice (monotonic KV cursor, spread-merge dedups by name);
+    <code>telldir</code> cookies survive leader change (the KV state is scanned, not the leader).
+    No point-in-time snapshot: a concurrent create may or may not appear. Snapshot readdir would
+    be a deliberate MVCC read, not an accident of the scan.</div>
+  <div class="card"><h4>mtime: exact semantics</h4>
+    A returned <code>write()</code> has committed its mtime update as part of the same publication
+    entry (the shard leader stamps <code>max(mtime, now)</code> — it rides the chunk publication,
+    not a separate inode-row write). A <code>stat()</code> after a returned write, from any client,
+    sees an mtime at least as new. Never lazily regressed.</div>
+</div>
+
+<div class="why"><b>Truncate is a content-epoch bump with a stated linearization rule.</b>
+Every chunk publication and size lane is tagged <code>(ino, content_epoch, …)</code>; readers
+consider only the current epoch (I22). A write publishing under epoch E linearizes <i>before</i>
+the bump to E+1; a write starting after truncate returns uses E+1. A stale epoch-E publication is
+harmless (P3) — no reader will ever consider it — and old-epoch state is GC'd.</div>
+
+<div class="why"><b>Data targets are dumb; metadata decides.</b> A fragment object
+<code>(ino, epoch, chunk, generation, fragment)</code> is immutable and its PUT idempotent; a
+target verifies only placement epoch, its own incarnation, and object identity — it does <b>not</b>
+order generations (concurrent candidates are both fine to store). The metadata authority alone
+decides which generation is committed (publication CAS); unpublished candidates are orphans (I15).
+That is what makes I20 precise: a stale writer cannot make its generation <i>visible</i>.</div>
 
 <!-- ============ WHY ============ -->
 <h2>4 · Why the theory holds up</h2>
@@ -424,7 +538,7 @@ check. This document uses “efs” as a working name only.</div>
   <tr><td>2<sup>32</sup> on 4 nodes</td><td>Metadata paged from NVMe by the KV; RAM is a bounded cache. Capacity modeled honestly, not assumed.</td></tr>
   <tr><td>3 → 64 nodes</td><td>Shards re-balance through safe (joint-consensus) reconfiguration; leaders spread; adding a node moves shard replicas onto it.</td></tr>
   <tr><td>1-node tolerance</td><td>RF=3 per shard + 2+1 EC on data both survive one loss (CAP-accurate wording, §3).</td></tr>
-  <tr><td>Immediate visibility</td><td>Ops apply on the leader in log order, acked when committed; kernel caches actively invalidated. No cache to go stale.</td></tr>
+  <tr><td>Immediate visibility</td><td>Ops apply on the leader in log order, acked when committed; kernel metadata caches actively invalidated; file data bypasses the page cache (direct-I/O). No cache to go stale.</td></tr>
   <tr><td>Scale with hardware</td><td>Client-direct RDMA + EC data; hot-file metadata publishes independent chunk keys instead of serializing on an inode row.</td></tr>
 </table>
 
@@ -459,6 +573,8 @@ cross-shard <i>intents</i> are internal and governed by I17/I18.</p>
 <div class="inv"><b>I14 · publish-after-durability</b> — metadata cannot publish G before G satisfies EC durability.</div>
 <div class="inv"><b>I15 · orphan-generation safety</b> — unpublished generations are reclaimable without changing committed state.</div>
 <div class="inv"><b>I20 · stale-writer fencing</b> — a stale client/node cannot overwrite or publish over a newer committed chunk generation.</div>
+<div class="inv"><b>I21 · publish+size atomicity</b> — an extending write never commits its chunk publication without its size-lane update, nor the reverse; they are one Raft entry on one shard.</div>
+<div class="inv"><b>I22 · epoch fencing</b> — a read or stat considers only the inode's current content epoch; a publication tagged with a superseded epoch is never visible.</div>
 
 <h3>Liveness (bounded, testable)</h3>
 <div class="inv"><b>L1–L8</b> — shards eventually elect leaders; committed ops eventually apply everywhere; intact and empty replicas eventually catch up; prepared transactions eventually COMMIT/ABORT; orphans and unpublished generations eventually reclaim; reconfiguration eventually converges once failures stop.</div>
@@ -504,8 +620,11 @@ snapshot creation during writes, interrupted snapshot transfer, membership-trans
 every step, coordinator/participant crash in every transaction phase, client crash between fragment
 PUT and metadata publish, and stale placement-map / stale chunk-generation clients. Complete operation
 histories are recorded and checked by an <b>independent linearizability / transaction-history
-checker</b>, not only handwritten invariants (the FoundationDB methodology). Scope: metadata layer
-only; the RDMA data path stays with the perf harnesses.</p>
+checker</b>, not only handwritten invariants (the FoundationDB methodology). Scope: the simulator
+models the <b>logical data-commit protocol and its interaction with metadata</b> — abstract events
+(PUT fragment, durable/dropped ACK, target crash, fragment lost, client crash mid-write,
+publication, stale generation, rebuild) — because otherwise it cannot check I11–I15 / I20–I22. It
+does <b>not</b> model RDMA/NVMe performance mechanics; those stay with the perf harnesses.</p>
 
 <!-- ============ DEV CYCLE ============ -->
 <h2>7a · Shortening the code → signal cycle</h2>
@@ -682,7 +801,7 @@ This is the honest distance between the spec and the code.</p>
 <h3>Migration steps, with real status</h3>
 <table>
   <tr><th>#</th><th>Step</th><th>Status</th></tr>
-  <tr><td>0</td><td>Freeze the placement model (shard fns, ino IDs + generations)</td><td><span class="chip cB">DONE</span> this spec, Sep 1</td></tr>
+  <tr><td>0</td><td>Freeze the placement model (shard fns, ino IDs + generations, CREATE co-location, size-lane placement)</td><td><span class="chip cB">DONE</span> this spec, Sep 1</td></tr>
   <tr><td>M</td><td><b>Carve the monolith into <code>raft/ kv/ meta/ wire/ data/ client/</code> behind interfaces</b> — the dev-cycle lever; behavior-preserving, gated by existing suites. Hard prerequisite for step 1.</td><td><span class="chip cP">PARTIAL</span> dirs exist · 4 files = 45% of code</td></tr>
   <tr><td>1</td><td>Simulator interfaces + the <i>current</i> state machine</td><td><span class="chip cM">MISSING</span> blocked on Phase M</td></tr>
   <tr><td>2</td><td>RPC operation IDs + idempotency model</td><td><span class="chip cM">MISSING</span></td></tr>
@@ -690,11 +809,12 @@ This is the honest distance between the spec and the code.</p>
   <tr><td>4</td><td>Single-shard Raft (elect · replicate · apply · ReadIndex · snapshots)</td><td><span class="chip cM">MISSING</span></td></tr>
   <tr><td>5</td><td>Simulator proves the single-shard invariants</td><td><span class="chip cM">MISSING</span></td></tr>
   <tr><td>6</td><td>Safe reconfiguration + control-plane desired placement</td><td><span class="chip cM">MISSING</span></td></tr>
-  <tr><td>7</td><td>Cross-shard transaction protocol</td><td><span class="chip cP">PARTIAL</span> fan-out skeleton, no txid/intents/decision</td></tr>
+  <tr><td>7</td><td>Cross-shard transaction protocol, incl. concurrency control</td><td><span class="chip cP">PARTIAL</span> fan-out skeleton, no txid/intents/decision</td></tr>
   <tr><td>8</td><td>Open-unlinked inode lifecycle</td><td><span class="chip cP">PARTIAL</span> keep_last + HOLD; no orphan state/reclaim</td></tr>
-  <tr><td>9</td><td>Data-generation publication / fencing</td><td><span class="chip cM">MISSING</span> no chunk generations on the wire today</td></tr>
-  <tr><td>10</td><td>Delete the snapshot / root-2PC machinery</td><td><span class="chip cD">DELETE</span> it is today's flush path</td></tr>
-  <tr><td>11</td><td>FUSE cache-coherence optimization</td><td><span class="chip cM">MISSING</span> blocked on the low-level API</td></tr>
+  <tr><td>9</td><td>Data-generation publication / fencing, sim-checked</td><td><span class="chip cM">MISSING</span> no chunk generations on the wire today</td></tr>
+  <tr><td>10</td><td>Directory layout-epoch spread + distributed locking</td><td><span class="chip cM">MISSING</span> threshold flag only; locks per-client today</td></tr>
+  <tr><td>11</td><td>Delete the snapshot / root-2PC machinery</td><td><span class="chip cD">DELETE</span> it is today's flush path</td></tr>
+  <tr><td>12</td><td>FUSE cache-coherence optimization (data path starts direct-I/O)</td><td><span class="chip cM">MISSING</span> blocked on the low-level API</td></tr>
 </table>
 
 <div class="why">Read the map bottom-up: the <b>data path and the test harnesses are the strong
@@ -725,7 +845,7 @@ monolith code; every new component lands inside the carved boundaries.</p>
   <rect class="box" x="680" y="100" width="220" height="44" rx="8"/><text class="boxT" x="790" y="118" text-anchor="middle">7 · cross-shard txns</text><text class="boxS" x="790" y="134" text-anchor="middle">Raft-backed 2PC</text>
   </g>
   <path class="arrow" d="M120,84 V100"/><path class="arrowG" d="M120,144 V156"/>
-  <text class="lbl" x="240" y="196">… 8 open-unlinked lifecycle · 9 data-gen publication/fencing · 10 delete snapshot/2PC · 11 FUSE cache opts last</text>
+  <text class="lbl" x="240" y="196">… 8 open-unlinked lifecycle · 9 data-gen publication/fencing · 10 dir-spread epochs + locking · 11 delete snapshot/2PC · 12 FUSE cache opts last</text>
 </svg>
 </div>
 <p class="note">Phase M comes first because it is both the dev-cycle lever and the only way the

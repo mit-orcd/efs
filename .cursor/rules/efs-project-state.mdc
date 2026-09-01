@@ -189,6 +189,48 @@ but not the physical serialization point, so size lives in L distributed lanes
 lanes; truncate bumps the content epoch to invalidate all lanes at once.
 mtime coalesced; sub-chunk RMW = generation CAS; O_APPEND EOF allocation is
 the ONLY accepted same-file hotspot.
+**THIRD REVIEW ROUND IN (Sep 1 PM) — the POSIX composition layer is now
+protocols, not intentions. Do not re-litigate:** (1) **Three governing
+principles** now head the spec (§0): P1 never-serialize-parallel-able-work;
+P2 **co-locate what must commit atomically on the common path, distribute the
+rest**; P3 **make stale work harmless, not impossible**. (2) **CREATE
+co-location rule (load-bearing):** `inode_shard(new_ino) = inode_shard(parent)`
+(normal dir) / `= hash(parent,name)&0xFFF` (spread dir) — inos allocated
+per-shard so CREATE = dentry+inode row in ONE Raft entry; without it every
+CREATE is a distributed txn. (3) **Authoritative op→shard matrix** in §5.3
+(the old "only rename/hardlink touch two shards" claim was WRONG: UNLINK
+nlink>1 and LINK are 2-shard txns). (4) **Hot-dir spread = layout-epoch
+protocol** LOCAL→SPLITTING(e)→HASHED(e): writes go hashed during SPLITTING,
+reads check hashed-then-local, migrator moves idempotently. (5) **Size lane
+co-located with its chunk shard** (`size_lane = chunk_meta_shard`) so an
+extending write is ONE Raft entry `{publish chunk G; MAX(lane,end)}` — kills
+the publish-without-size / size-without-publish hole (new invariant **I21**).
+(6) **stat() linearization via epoch double-check:** read epoch E → read only
+E-lanes → re-read epoch → retry if changed. (7) **Truncate = content-epoch
+bump with stated linearization rule** (epoch-E write linearizes before the
+bump; new invariant **I22** epoch fencing). (8) **O_APPEND = serialized
+`reserve_append(len)` on the inode shard, then ordinary distributed write**;
+crash-after-reserve leaves a POSIX-legal hole, never rolled back. (9)
+**Distributed locking:** one lock authority per inode on `inode_shard(ino)`,
+`(ino,start,end,owner)` via Raft; dead-client reclaim via stale incarnation;
+advisory locks never fence the data path. (10) **File-data coherence =
+direct-I/O, decided** (kernel page cache bypassed; coherent caching later
+only if it pays); **cross-client coherent MAP_SHARED unsupported initially**
+(documented, not implied). (11) **Simulator models the LOGICAL data protocol**
+(PUT/ACK/crash/publish/stale-gen events), not RDMA mechanics — else I11–I15/
+I20–I22 are uncheckable. (12) **Data targets are dumb:** fragment PUT is
+immutable+idempotent; target verifies placement epoch/incarnation/identity
+only; the metadata authority alone decides which generation is committed (NO
+target-side generation ordering). (13) **readdir contract explicitly weak**
+(name existed sometime during scan; no dups; cookies survive leader change;
+NO snapshot). (14) **mtime exact:** rides the chunk publication entry
+(`max(mtime,now)` stamped by the shard leader); a stat after a returned write
+sees it, any client. (15) **namespace-as-database reworded honestly:** the
+architecture makes namespace-wide queries possible WITHOUT POSIX walks;
+secondary indexes/aggregates are a separate derived-index design. (16)
+Migration renumbered: step 10 = dir-spread epochs + locking; delete-2PC =
+step 11; FUSE cache opts = step 12. Sections: locking §5.12, FUSE/data cache
+§5.13, modularity §5.14.
 **IDENTITY / positioning (from the 2nd review — do not overclaim):** every
 primitive (Raft, dist. metadata, RDMA, EC, immutable gens, KV, dir sharding,
 deterministic sim) has existed; WEKA/DAOS/VAST/CephFS get close to parts.
@@ -201,7 +243,7 @@ init → mount → done; no MDS tier, no special node types). **NAMING WARNING:*
 — pick a distinctive, searchable public name later; "efs" is a working name
 only. Do a trademark/search check before any public naming.
 **MODULARITY IS AN ARCHITECTURAL CONSTRAINT (Sep 1, user-directed) — and the
-roadmap does it FIRST.** `docs/architecture.md` §5.13: a module must be
+roadmap does it FIRST.** `docs/architecture.md` §5.14: a module must be
 understandable/changeable/testable from its own source + interface header
 alone; no file over ~1000 lines; state machines pure (no globals, I/O behind
 transport/storage interfaces — the SAME property that lets the simulator
