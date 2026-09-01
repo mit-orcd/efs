@@ -26,6 +26,12 @@ the kernel. Remounting the SAME binary with `EFS_TRANSPORT=tcp` makes the
 identical warmup pass in <1s, so the break is RDMA-only, on the first inode
 RPC after mount — i.e. the Aug 30 "AUTO RDMA FIRST INODE GATED" property has
 regressed and nobody saw it because **every gate since then ran on TCP**.
+**SCOPE CORRECTION (Sep 1 PM, from a user load run):** it is NOT "RDMA is
+broken". A node9901 client mounted on auto/RDMA (`mlx5_0`) against an
+ALREADY-POPULATED table (`meta ready gen=13 inodes=55621`) drove millions of
+creates through RDMA with 0 network errors on that mount. So the repro needs a
+**freshly mkfs'd / effectively empty** table — look at the empty-table first
+LOOKUP, not at the RDMA data path in general.
 **Harness gotcha that hides it:** `run_tests.sh` DOES forward `EFS_TRANSPORT`
 to the client mount (`fuse_client_env`, used by both `ensure_mounted` and
 `remount_client`) — but `ensure_mounted` returns early when the host is

@@ -3007,10 +3007,18 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
      * readdir of the parent then misses every file whose inode shard
      * is instantiated on this node (1/8 of creates on bits=3). */
     if (lookup_on_tab(ex, parent, name, NULL) == EFS_OK) {
-        fprintf(stderr, "cwi-fail: name_dup parent=%llu name=%s ino=%llu "
-                "shard=%u cnt=%llu\n", (unsigned long long)parent, name,
-                (unsigned long long)ino_num, ex->shard_id,
-                (unsigned long long)ex->inode_count);
+        /* Skipping the dual-apply here is not a correctness event: the name is
+         * already on this table, and since lookup_walk resolves every name
+         * against the owning server the local row is not authoritative anyway.
+         * Left behind unconditional by the fresh-mkfs hunt, where it was a
+         * useful signal; under real load it is just noise, so it is now gated
+         * like its sibling cwi: trace. ino_dup below stays loud — a reissued
+         * live ino corrupts a file. */
+        if (getenv("EFS_CWI_TRACE"))
+            fprintf(stderr, "cwi-fail: name_dup parent=%llu name=%s ino=%llu "
+                    "shard=%u cnt=%llu\n", (unsigned long long)parent, name,
+                    (unsigned long long)ino_num, ex->shard_id,
+                    (unsigned long long)ex->inode_count);
         return 0;
     }
 
