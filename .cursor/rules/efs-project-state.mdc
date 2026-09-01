@@ -345,6 +345,71 @@ Scaling goal in §1 rewritten measurably: "no software serialization point may
 become the limiting resource before a physical resource does — if a benchmark
 stops at a mutex/one leader/one thread/FUSE serialization/one WAL/one
 coordinator, that is by definition an EFS bug."
+**FIFTH REVIEW ROUND IN (Sep 1 PM) — six architectural fixes, all now IN the
+spec (md + HTML). Do not re-litigate:** (1) **CREATE co-location split by
+kind:** the old `inode_shard(new)=inode_shard(parent)` rule co-located whole
+subtrees on one shard until each dir spread — "many independent dirs →
+near-linear" was false. Now: **files** co-locate with the parent dir (one
+Raft entry, unchanged); **every MKDIR scatters** —
+`inode_shard(new_dir)=hash(parent,name,export_salt)&0xFFF` — paying one
+2-shard transaction per mkdir to buy an independently scalable subtree for
+its lifetime (this generalizes today's ROOT-only dir hashing; nested-dir
+hashing is now safe because §5.6 transactions exist — the Aug 30 revert was
+a pre-transaction limitation). (2) **stat() is a double collect:** the
+content-epoch check only covered truncate-vs-stat; concurrent extending
+writes across lanes could assemble a size the file never had (A=100,B=100 →
+reads A=100, commits land, reads B=500 → returns 500). Every lane now
+carries a monotonic `lane_seq`; stat = read inode epoch/gen → collect L
+lanes (seq,size,mtime) → collect seqs again → re-check epoch; all-unchanged
+⇒ the vector existed simultaneously ⇒ MAX linearizable. Bounded retries,
+then a read-only multi-shard txn over the L lanes as the escape hatch. Same
+collect validates distributed mtime. (3) **Multi-chunk write atomicity
+FLIPPED:** default is now syscall-level ATOMIC publication (POSIX read/write
+atomicity) — parallel data movement, per-lane publication intents, ONE
+durable write-txid decision; per-chunk visibility is an explicit relaxed
+mount mode (MPI-IO-style), never the default. Atomicity unit = one FUSE
+write request; `max_write` sized so the writes that matter arrive as one
+request; recovering the exact syscall boundary under FUSE async-DIO
+splitting is an explicitly OPEN investigation. New invariant I24. (4)
+**Failure rule simplified: the automatic guarantee requires N ≥ max(2f+1,
+k+f)** (3→f1, 5→f2, 7→f3; 4 and 6 nodes run the next-lower f). The user's
+ratified 4→2 / 6→3 numbers survive ONLY as an explicitly labeled
+**durability-only mode** (N=2f): no data loss (every committed entry keeps
+≥1 survivor, Q+f>N), but a minority survives and plain Raft CANNOT safely
+continue — recovery is a specified operator-gated DR protocol (freeze shard
+→ collect ALL surviving logs → merge per index, highest term wins — leader
+completeness proves a committed entry is never shadowed, and op-ID
+idempotency makes uncommitted survivors harmless → force new config →
+re-add replicas). Changing f has an explicit transition state:
+`effective_f`→`target_f` only after replicas added + ALL generations
+re-striped + verified. (5) **O_APPEND: data movement parallel, but
+allocation order AND the visible commit frontier are serialized** — B's
+bytes at offset 100 only mean anything because A reserved first, so the
+visible EOF advances over contiguous RESOLVED reservations; a fenced
+appender's range resolves as a committed zero hole, unblocking the frontier.
+The old "never serializes one appender's visibility on another's speed"
+claim was wrong and is gone. (6) **Client sessions are a real protocol
+(§5.12a):** `session={client_uuid, session_epoch, state}` on a SHARDED
+session authority (hash(uuid)&0xFFF), mutated via Raft; heartbeats only
+decide WHEN to attempt replacement, consensus decides WHICH session is
+authoritative; once epoch+1 commits, the old session is fenced everywhere
+(locks reclaimed, open-unlinked refs dropped, append reservations resolved,
+dedup records retained). Fencing a partitioned-but-alive client is an
+availability sacrifice, never a safety one (the epoch IS the fencing token).
+New invariant I23. §5.11 open-unlinked and §5.12 locking now sit on it;
+migration step 8 = sessions first, then open-unlinked. **Small corrections
+landed:** op matrix — MKDIR/RMDIR = 2-shard txns, UNLINK-last-link is
+single-shard ONLY if dentry_shard==inode_shard (hardlink corner: after
+link+unlink the surviving dentry can be on a different shard), GETATTR =
+inode row + L lanes; replica math at 64 nodes = 192/node at RF=3, 448/node
+at RF=7, leaders ~64/node at any RF; appendix "Raft group = RF replicas";
+§6 "survive f nodes" wording; §5.15 gained **per-lane batched/range
+chunk-map fetch** (lane i holds chunks i,i+L,i+2L… so one range request per
+lane covers a contiguous window; metadata window runs ahead of the data
+window — else 800k metadata RPCs/s at 100 GB/s caps sequential reads);
+**"durable ACK" defined** = target completed the persistent-NVMe operation
+(NVMe flush/FUA or PLP media), NOT RDMA WRITE completion — same for Raft
+follower ACKs (WAL at the defined persistence level, not volatile cache).
 **HTML IS THE PLAIN-LANGUAGE RENDITION (Sep 1 PM, user-directed).**
 `docs/architecture.html` was rewritten end-to-end in simple wording: short
 sentences, everyday words, and a "few words we use" glossary table up front

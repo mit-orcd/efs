@@ -67,33 +67,48 @@
 
 <div class="kicker">efs · master architecture · target: extremfs</div>
 <h1>A parallel filesystem that scales with the raw hardware</h1>
-<p class="sub">The specification the system is built against. Goal, failure model, consistency model,
-invariants, and the target design — with the current design drawn next to it.
-<a href="architecture.md">markdown source</a> · <a href="scaling-roadmap.md">increment plan</a></p>
+<p class="sub">The plan the system is built against: what we build, what may break, what must always
+be true, and how we get there. <a href="architecture.md">markdown source</a> ·
+<a href="scaling-roadmap.md">increment plan</a></p>
 
-<div class="why" style="border-color:var(--acc)"><b style="color:var(--acc)">Naming intent.</b>
-The bar is that efs earns the name <b>extremfs</b>: throughput tracks the aggregate hardware
-(NVMe + NIC), not a software serialization point. Every decision below is checked against that bar —
-a component is wrong if it serializes work the hardware could have done in parallel.</div>
+<div class="why" style="border-color:var(--acc)"><b style="color:var(--acc)">The bar.</b>
+efs earns the name <b>extremfs</b> only if speed tracks the hardware you add — never a software
+bottleneck. Every decision below is checked against that bar.</div>
+
+<h3>The few words we use</h3>
+<table>
+  <tr><th style="width:200px">Word</th><th>Plain meaning</th></tr>
+  <tr><td><b>shard</b></td><td>One slice of the metadata. The inode space is cut into 4096 slices, each managed on its own.</td></tr>
+  <tr><td><b>Raft</b></td><td>A proven protocol that lets a small group of machines keep one identical, ordered log — even when some crash.</td></tr>
+  <tr><td><b>leader</b></td><td>The one machine in charge of a shard at a time, elected by majority. Only it accepts writes.</td></tr>
+  <tr><td><b>majority</b></td><td>More than half of a group. An operation counts only after a majority has saved it — so it survives any minority of losses.</td></tr>
+  <tr><td><b>term</b></td><td>A leadership generation number. A higher term fences off an old leader.</td></tr>
+  <tr><td><b>committed</b></td><td>Saved by a majority. Never lost, never undone.</td></tr>
+  <tr><td><b>KV</b></td><td>An ordered key-value store on local NVMe — a shard's on-disk home. RAM is just a cache in front of it.</td></tr>
+  <tr><td><b>EC</b></td><td>Erasure coding: data split into k pieces + f parity pieces; any k rebuild it. 2+1 = 2 data + 1 parity.</td></tr>
+  <tr><td><b>generation / epoch</b></td><td>A version number. Old work carries an old number, so it is ignored instead of prevented.</td></tr>
+  <tr><td><b>idempotent</b></td><td>Safe to retry: twice has the same effect as once.</td></tr>
+  <tr><td><b>linearizable read</b></td><td>A read that always sees the latest committed state — never stale.</td></tr>
+  <tr><td><b>session</b></td><td>A client's membership ticket, with a version number. A newer committed version fences off the old one — so "is this client dead?" is decided by agreement, not by a timer.</td></tr>
+  <tr><td><b>serialization point</b></td><td>One thing everything must wait in line for — a lock, one leader, one thread. The enemy.</td></tr>
+</table>
 
 <h2 style="margin-top:34px">0 · Governing principles</h2>
-<p>Three principles decide every hard case below. When a design question has no obvious answer,
-the answer is whichever option these three point to.</p>
+<p>Four principles decide every hard case below.</p>
 <table>
   <tr><th style="width:220px">Principle</th><th>What it decides</th></tr>
   <tr><td><b>P1 · Never serialize what may run in parallel</b></td>
-      <td>Serialization is accepted only where the <i>semantics</i> demand it
-      (O_APPEND EOF allocation, overlapping byte ranges, truncate, rename) — never because two
-      operations happen to share an inode, file, or directory.</td></tr>
-  <tr><td><b>P2 · Co-locate what must commit atomically; distribute the rest</b></td>
-      <td>Before reaching for a distributed transaction, first place the state so the common
-      operation is <b>one Raft entry on one shard</b>. This is the answer to the extending-write
-      problem: chunk publication and its size lane share a shard, so they commit atomically
-      with no cross-shard protocol.</td></tr>
+      <td>Operations wait for each other only where POSIX semantics demand it (append-EOF, same
+      bytes, truncate, rename) — never because two ops share a file or directory.</td></tr>
+  <tr><td><b>P2 · Keep together what must be saved together; spread the rest</b></td>
+      <td>Place data so the common operation is <b>one entry on one shard</b> — before reaching
+      for any multi-shard protocol.</td></tr>
   <tr><td><b>P3 · Make stale work harmless, not impossible</b></td>
-      <td>Inode generations, content epochs, immutable chunk generations, orphan candidate
-      writes, Raft terms, node incarnations — all the same move: a stale actor may <i>do</i>
-      work, but it cannot make that work <i>visible</i>.</td></tr>
+      <td>Version numbers everywhere. A stale actor may still <i>do</i> work; it can never make
+      that work <i>visible</i>.</td></tr>
+  <tr><td><b>P4 · The fast path never crosses cores, memory domains, or locks it doesn't need</b></td>
+      <td>Paper scaling fails if each node leaves half its hardware idle. Ordinary operations run
+      on the local core, asynchronous, deep-queued, no cross-core lock (§3c).</td></tr>
 </table>
 
 <!-- ============ GOAL ============ -->
@@ -103,20 +118,54 @@ the answer is whichever option these three point to.</p>
   <tr><td>Objects (files + dirs)</td><td><b>≥ 2<sup>32</sup> live</b> (4.29 billion)</td></tr>
   <tr><td>Cluster size</td><td><b>3</b> nodes (min) → <b>64</b> nodes</td></tr>
   <tr><td>Reference deployment</td><td>2<sup>32</sup> objects on <b>4</b> nodes</td></tr>
-  <tr><td>Failure tolerance</td><td>any <b>1 node</b> down → full read + write</td></tr>
-  <tr><td>Consistency</td><td>immediate cross-client visibility (no TTL caches)</td></tr>
-  <tr><td>Scaling bar</td><td><b>throughput tracks aggregate hardware</b>, incl. many writers to one file</td></tr>
-  <tr><td>Data path</td><td>client-direct, RDMA, 2+1 EC</td></tr>
+  <tr><td>Failure tolerance</td><td><b>configurable f = 1…3</b> machines lost for good at once; <b>no data loss</b> at the configured f</td></tr>
+  <tr><td>Consistency</td><td>a write visible to one client is immediately visible to every client</td></tr>
+  <tr><td>Scaling bar</td><td><b>throughput grows with the hardware you add</b>; no software bottleneck may limit before a physical one does</td></tr>
+  <tr><td>Data path</td><td>clients write straight to storage over RDMA; k+f EC (k=2 default)</td></tr>
+  <tr><td>Hardware envelope</td><td><b>modern flash only</b> — NVMe SSDs + RDMA NICs; hard disks out of scope</td></tr>
 </table>
-<p>Two binding constraints. <b>2<sup>32</sup> on 4 nodes</b> forces metadata out of RAM and onto NVMe,
-paged rather than serialized whole. The <b>scaling bar</b> forces the write path — not just reads —
-to parallelize across nodes and clients, <i>including many writers to the same file</i>.</p>
+<div class="why"><b>Flash-only is a decision, not an omission — and the design spends it.</b>
+Random access is cheap (no seek), queues are deep, latency is microseconds. That is what makes
+<code>write()</code> = durable affordable, and what the P4 execution model stands on — a spinning
+disk could not run it at all. No SMR, no rotational tricks, no track alignment: entire problem
+classes deleted. The scaling claims do not transfer to disks.</div>
+<p>Two constraints bind everything. <b>2<sup>32</sup> on 4 nodes</b> forces metadata out of RAM onto
+NVMe, paged. The <b>scaling bar</b> forces writes — not just reads — to spread, <i>including many
+writers to the same file</i>.</p>
+<div class="why"><b>The scaling bar, measurable.</b> When operations don't semantically conflict,
+throughput must grow with the cluster's total NIC, NVMe, CPU, and memory bandwidth (adjusted for
+protection). If a benchmark stops early and the answer is software — a lock, one leader, one
+thread, one log — that is <b>by definition an EFS bug</b>.</div>
+
+<h3>Failure tolerance is a configured promise, not a constant</h3>
+<p><b>f</b> = how many machines may die <i>permanently</i> at once with <b>no data loss</b> (max 3).
+The headline rule is wonderfully simple: <b>the promise needs N ≥ max(2f+1, k+f)</b> — then losing
+any f machines leaves a metadata majority <i>and</i> ≥k data fragments, so the system stays
+authoritative <b>automatically</b>. No quorum override, no disaster mode:</p>
+<table>
+  <tr><th>N nodes</th><th>max f (automatic)</th><th>metadata copies</th><th>data EC</th><th>promise</th></tr>
+  <tr><td>3</td><td>1</td><td>3</td><td>2+1</td><td>lose 1: no loss, stays authoritative</td></tr>
+  <tr><td>4</td><td>1</td><td>3</td><td>2+1</td><td>lose 1: no loss, stays authoritative</td></tr>
+  <tr><td>5</td><td>2</td><td>5</td><td>2+2</td><td>lose 2: no loss, stays authoritative</td></tr>
+  <tr><td>6</td><td>2</td><td>5</td><td>2+2</td><td>lose 2: no loss, stays authoritative</td></tr>
+  <tr><td>≥ 7</td><td>3</td><td>7</td><td>2+3 (or wider k: 4+3 = 1.75×)</td><td>lose 3: no loss, stays authoritative</td></tr>
+</table>
+<div class="why"><b>f=3 needs 7 nodes, not 5 or 6.</b> On 5 nodes the majority is 3 — and the 3 dead
+machines could be exactly that majority. <b>N = 2f exists only as a labeled durability-only mode</b>
+(4 nodes at f=2, 6 at f=3): nothing is lost, but a minority survives, and plain Raft cannot safely
+continue without a majority — so recovery is an explicit operator-gated disaster procedure (freeze
+the shard, merge <i>all</i> surviving logs — highest term wins per slot, which provably keeps every
+acknowledged write — then force a new configuration and re-add replicas). It is the one operation
+that requires a human. Changing f is an online operation with an explicit transition state:
+<code>effective_f</code> only becomes <code>target_f</code> after replicas are added, every data
+stripe is re-striped, and the result is verified — the promise changes at that commit, not when the
+operator asks.</div>
 
 <!-- ============ TODAY ============ -->
 <h2>2 · What we have today</h2>
-<p>One monolithic in-RAM table. Every flush serializes <i>the whole table</i> to find what changed,
-erasure-codes it into pages, and commits a root with two-phase commit. Leadership is
-“lowest live node id from each node's own local view.”</p>
+<p>One big table in RAM. Every save copies <i>the whole table</i> to find what changed. The primary
+is "the lowest live node id" — by each node's <i>own</i> guess. No vote, no agreement: two primaries
+are possible.</p>
 
 <div class="flow">
 <svg viewBox="0 0 920 300" width="920" height="300">
@@ -136,70 +185,70 @@ erasure-codes it into pages, and commits a root with two-phase commit. Leadershi
   <text class="boxT" x="275" y="72" text-anchor="middle">in-RAM table</text>
   <text class="boxS" x="275" y="90" text-anchor="middle">whole export in RAM</text>
   <rect class="box bad" x="400" y="50" width="200" height="52" rx="8"/>
-  <text class="boxT" x="500" y="72" text-anchor="middle">serialize WHOLE table</text>
-  <text class="boxS" x="500" y="90" text-anchor="middle">O(table) every flush</text>
+  <text class="boxT" x="500" y="72" text-anchor="middle">copy WHOLE table</text>
+  <text class="boxS" x="500" y="90" text-anchor="middle">every save, all of it</text>
   <rect class="box" x="650" y="50" width="120" height="52" rx="8"/>
   <text class="boxT" x="710" y="72" text-anchor="middle">2+1 EC pages</text>
-  <text class="boxS" x="710" y="90" text-anchor="middle">CoW page write</text>
+  <text class="boxS" x="710" y="90" text-anchor="middle">copy-on-write</text>
   <rect class="box bad" x="800" y="50" width="100" height="52" rx="8"/>
   <text class="boxT" x="850" y="72" text-anchor="middle">2PC root</text>
   <text class="boxS" x="850" y="90" text-anchor="middle">prepare+commit</text>
   <path class="arrow" d="M150,76 H200"/><path class="arrow" d="M350,76 H400"/>
   <path class="arrow" d="M600,76 H650"/><path class="arrow" d="M770,76 H800"/>
 
-  <text class="lbl" x="20" y="150">TODAY — WHO IS PRIMARY</text>
+  <text class="lbl" x="20" y="150">TODAY — WHO IS IN CHARGE</text>
   <rect class="box" x="20" y="168" width="200" height="46" rx="8"/>
   <text class="boxT" x="120" y="188" text-anchor="middle">node 1</text>
-  <text class="boxS" x="120" y="204" text-anchor="middle">local liveness view</text>
+  <text class="boxS" x="120" y="204" text-anchor="middle">its own guess</text>
   <rect class="box" x="260" y="168" width="200" height="46" rx="8"/>
   <text class="boxT" x="360" y="188" text-anchor="middle">node 2</text>
-  <text class="boxS" x="360" y="204" text-anchor="middle">local liveness view</text>
+  <text class="boxS" x="360" y="204" text-anchor="middle">its own guess</text>
   <rect class="box bad" x="540" y="168" width="360" height="46" rx="8"/>
   <text class="boxT" x="720" y="188" text-anchor="middle">primary = lowest id each node <i>thinks</i> is alive</text>
-  <text class="boxS" x="720" y="204" text-anchor="middle">no term · no vote · no fence → split-brain</text>
+  <text class="boxS" x="720" y="204" text-anchor="middle">no vote · no agreement · no fence → two primaries possible</text>
   <path class="arrowR" d="M220,191 H260"/>
   <path class="arrowR" d="M460,191 H540"/>
 
   <text class="lbl" x="20" y="252">EVERY BUG BELOW IS A FAILURE MODE OF THIS MODEL</text>
-  <text class="boxS" x="20" y="276">dual-writer root · extras-loss-on-adopt · catchup-vs-GC · peers pinned at old gen · rebuild drops unflushed ops</text>
+  <text class="boxS" x="20" y="276">two writers on one root · lost shard maps · catchup racing GC · peers stuck at old versions · rebuild drops unsaved ops</text>
 </svg>
 </div>
 
 <div class="grid g2">
   <div class="card"><h4>RAM is the wall <span class="tag t-bad">blocks 2³²</span></h4>
-    The whole table lives in RAM on every server. Measured <b>1.9–3.4 KB/inode</b>; the inode region
-    alone at 2<sup>32</sup> is ~2 TB before overhead.</div>
-  <div class="card"><h4>Flush degrades with size <span class="tag t-bad">O(table)</span></h4>
-    <code>incr=0</code> on 100% of growth flushes; <code>ser=350ms</code>/flush at 10M. Eviction
-    faults slabs straight back in — it accomplishes nothing.</div>
-  <div class="card"><h4>No consensus <span class="tag t-bad">split-brain</span></h4>
-    Primary is a pure function of unreplicated local liveness. Two primaries are possible. The old
-    root-2PC's commit point was an under-replicated coordinator.</div>
-  <div class="card"><h4>Absent ≠ unavailable <span class="tag t-bad">data loss</span></h4>
-    A failed slab fault returned <code>ENOENT</code>, so CREATE minted a second inode for a live
-    object. The system cannot tell “not there” from “couldn't read it.”</div>
+    The whole table lives in RAM on every server: measured <b>1.9–3.4 KB per inode</b> → ~2 TB at
+    2<sup>32</sup>. Does not fit.</div>
+  <div class="card"><h4>Saving degrades as the table grows <span class="tag t-bad">O(table)</span></h4>
+    Every save repacks every row — ~350 ms at 10M inodes. Evicting cold data is futile: the next
+    save faults it straight back in.</div>
+  <div class="card"><h4>No agreement protocol <span class="tag t-bad">split-brain</span></h4>
+    Primary by local guess → two primaries possible. The old 2PC's decision point was one
+    under-replicated node.</div>
+  <div class="card"><h4>"Not there" ≠ "couldn't read it" <span class="tag t-bad">data loss</span></h4>
+    A failed disk read answered <code>ENOENT</code> — so CREATE minted a second inode for a live
+    object.</div>
 </div>
 
 <!-- ============ TARGET ============ -->
 <h2>3 · Where we're taking it</h2>
-<p>Three planes. <b>Data</b>: client-direct RDMA, 2+1 EC, immutable chunk generations.
-<b>Metadata</b>: 4096 virtual shards, one Raft group per shard, applied to an on-disk ordered KV.
-<b>Control</b>: membership + placement + safe reconfiguration.</p>
+<p>Three planes. <b>Data</b>: client-direct RDMA, k+f EC, versioned chunks. <b>Metadata</b>: 4096
+shards, one Raft group each, applied to an ordered KV on NVMe. <b>Control</b>: membership,
+placement, safe re-shuffling.</p>
 
 <div class="flow">
 <svg viewBox="0 0 920 250" width="920" height="250">
   <text class="lbl" x="20" y="24">THREE PLANES</text>
   <rect class="box" x="20" y="46" width="880" height="56" rx="8"/>
   <text class="boxT" x="460" y="68" text-anchor="middle">DATA PLANE</text>
-  <text class="boxS" x="460" y="86" text-anchor="middle">client-direct RDMA · 2+1 EC · immutable chunk generations</text>
+  <text class="boxS" x="460" y="86" text-anchor="middle">client-direct RDMA · k+f EC · versioned chunks</text>
 
   <rect class="box good" x="20" y="118" width="880" height="56" rx="8"/>
   <text class="boxT" x="460" y="140" text-anchor="middle">METADATA PLANE</text>
-  <text class="boxS" x="460" y="158" text-anchor="middle">4096 shards · RF=3 Raft / shard · ordered applied KV on NVMe</text>
+  <text class="boxS" x="460" y="158" text-anchor="middle">4096 shards · one Raft group per shard · ordered KV on NVMe</text>
 
   <rect class="box" x="20" y="190" width="880" height="46" rx="8"/>
   <text class="boxT" x="460" y="210" text-anchor="middle">CONTROL PLANE</text>
-  <text class="boxS" x="460" y="226" text-anchor="middle">membership Raft · desired placement · safe reconfiguration · node incarnation</text>
+  <text class="boxS" x="460" y="226" text-anchor="middle">membership Raft · placement · safe reconfiguration · node incarnation</text>
 
   <path class="arrow" d="M460,102 V118"/><path class="arrow" d="M460,174 V190"/>
 </svg>
@@ -213,10 +262,10 @@ erasure-codes it into pages, and commits a root with two-phase commit. Leadershi
   <text class="boxS" x="80" y="79" text-anchor="middle">to shard leader</text>
   <rect class="box good" x="190" y="40" width="150" height="50" rx="8"/>
   <text class="boxT" x="265" y="62" text-anchor="middle">leader appends</text>
-  <text class="boxS" x="265" y="79" text-anchor="middle">log (term, index)</text>
+  <text class="boxS" x="265" y="79" text-anchor="middle">to its ordered log</text>
   <rect class="box" x="390" y="40" width="170" height="50" rx="8"/>
-  <text class="boxT" x="475" y="62" text-anchor="middle">replicate to 2 followers</text>
-  <text class="boxS" x="475" y="79" text-anchor="middle">RF=3 · majority ack</text>
+  <text class="boxT" x="475" y="62" text-anchor="middle">copies to followers</text>
+  <text class="boxS" x="475" y="79" text-anchor="middle">majority must save it</text>
   <rect class="box good" x="610" y="40" width="130" height="50" rx="8"/>
   <text class="boxT" x="675" y="62" text-anchor="middle">commit</text>
   <text class="boxS" x="675" y="79" text-anchor="middle">majority reached</text>
@@ -228,46 +277,61 @@ erasure-codes it into pages, and commits a root with two-phase commit. Leadershi
 </svg>
 </div>
 
-<h3>Metadata placement — the decisive decision</h3>
-<p>The dentry index stores a small <b>projection</b>, not a second copy of the mutable inode.
-One authoritative inode row; many dentries may point at it (hardlinks).</p>
-<pre>(parent_ino, name) -&gt; (ino, generation, type)     // dentry: routing + handle check
-(ino)              -&gt; authoritative inode_row      // the ONLY mutable copy</pre>
-<div class="why">Dentries live on the <b>parent's shard</b>, so create/unlink/readdir in a directory
-are single-shard and readdir is one range scan. Mutable attributes live only in the inode row, so
-chmod/chown/mtime/nlink can never diverge between two indexes.</div>
+<h3>Where each piece of metadata lives — the decisive decision</h3>
+<p>The name index stores a small <b>pointer</b>, not a second copy of the inode. One authoritative
+inode row; many names may point at it (hardlinks).</p>
+<pre>(directory, name) -&gt; (ino, generation, type)     // small pointer: routing + staleness check
+(ino)             -&gt; the full inode row           // the ONLY changeable copy</pre>
+<div class="why">Names live on the <b>parent directory's shard</b>: create/unlink/readdir in a
+directory touch one shard, and readdir is one ordered scan. Mutable attributes live only in the
+inode row — chmod/mtime/nlink can never disagree between two copies. Two deliberate exceptions:
+write-generated size and mtime live in the file's write lanes (§3a).</div>
 
-<div class="why" style="border-color:var(--acc)"><b style="color:var(--acc)">The CREATE co-location rule (P2, load-bearing).</b>
-Parent-shard dentries only make CREATE single-shard if the new inode lands on the <i>same</i> shard.
-So allocation is constrained by placement: <code>inode_shard(new_ino) = inode_shard(parent)</code>
-for a normal directory, <code>= hash(parent,name) &amp; 0xFFF</code> for a spread one. Inos are
-allocated per-shard, so this is free — CREATE writes dentry + inode row in <b>one Raft entry</b>.
-Without this rule every CREATE would be a distributed transaction.</div>
+<div class="why" style="border-color:var(--acc)"><b style="color:var(--acc)">The CREATE co-location rule (P2, load-bearing) — files stay local, directories scatter.</b>
+Names on the parent's shard only make CREATE cheap if the new inode lands on the <i>same</i> shard.
+But "child inherits the parent's shard" has a fatal consequence: a whole directory <i>tree</i> would
+funnel into one Raft leader until each directory grew hot enough to spread. So the rule splits by
+kind: <b>a new file</b> shares its directory's shard — name + inode row in <b>one Raft entry</b>
+(inode numbers are handed out per shard, so this is free). <b>A new directory</b> is placed on its
+own hash shard: <code>inode_shard(new dir) = hash(parent, name, salt) &amp; 0xFFF</code>. MKDIR pays
+one two-shard transaction and buys <b>an independently scalable subtree for its whole lifetime</b> —
+<code>/projectA/*</code> and <code>/projectB/*</code> live on different shards from birth. Directory
+creation is rare; the parallelism it buys is permanent. Bounded side effect: a normal directory's
+<i>files</i> stay on its shard forever (the inode number encodes the shard), so the spread threshold
+caps that stranded set at thousands of rows, never millions.</div>
 
-<h3>Which shards does each op touch? — the authoritative matrix</h3>
+<div class="why"><b>Spreading triggers on pressure, not just size.</b> A normal directory
+deliberately serializes creates on one leader — together is the right common case. The trigger is
+<code>entries &gt; threshold</code> <b>or</b> sustained op pressure: a 100-entry directory with
+100k clients never crosses the size threshold but still melts its leader. Spread is one-way.</div>
+
+<h3>Which shards does each operation touch?</h3>
 <table>
-  <tr><th>Op</th><th>Shards</th><th>Protocol</th></tr>
-  <tr><td>CREATE / MKDIR</td><td><b>1</b> (dentry+inode co-located)</td><td>single Raft entry</td></tr>
-  <tr><td>UNLINK last link / RENAME same-dir</td><td><b>1</b></td><td>single Raft entry</td></tr>
+  <tr><th>Operation</th><th>Shards</th><th>How it commits</th></tr>
+  <tr><td>CREATE (file)</td><td><b>1</b> (name + inode co-located)</td><td>one Raft entry</td></tr>
+  <tr><td>MKDIR / RMDIR</td><td>2 (name on parent's shard, dir inode on its own hash shard)</td><td>transaction (below)</td></tr>
+  <tr><td>UNLINK last link</td><td><b>1</b> if name and inode share a shard, else 2 (hardlink corner)</td><td>one Raft entry / transaction</td></tr>
+  <tr><td>RENAME same-dir</td><td><b>1</b></td><td>one Raft entry</td></tr>
   <tr><td>UNLINK nlink&gt;1 / LINK</td><td>2</td><td>transaction (below)</td></tr>
   <tr><td>RENAME cross-dir</td><td>≥2</td><td>transaction (below)</td></tr>
-  <tr><td>WRITE non-extending</td><td>1 (chunk shard)</td><td>single Raft entry</td></tr>
-  <tr><td>WRITE extending</td><td><b>1</b> (chunk shard + its size lane, co-located)</td><td>single Raft entry</td></tr>
-  <tr><td>TRUNCATE</td><td>1 (inode shard)</td><td>content-epoch bump</td></tr>
-  <tr><td>O_APPEND</td><td>reserve on inode shard, then ordinary write</td><td>2-step (below)</td></tr>
+  <tr><td>stat() / GETATTR</td><td>inode row <b>+ L write lanes</b></td><td>double-collect read (§3a)</td></tr>
+  <tr><td>WRITE not extending</td><td>1 (chunk's shard)</td><td>one Raft entry</td></tr>
+  <tr><td>WRITE extending</td><td><b>1</b> (chunk's shard + its size lane, co-located)</td><td>one Raft entry</td></tr>
+  <tr><td>TRUNCATE</td><td>1 (inode's shard)</td><td>content-epoch bump</td></tr>
+  <tr><td>O_APPEND</td><td>reserve on inode's shard, then ordinary write</td><td>2-step (below)</td></tr>
   <tr><td>READDIR</td><td>1 (normal) / many (spread)</td><td>range scan / scatter-merge</td></tr>
 </table>
 
-<div class="why"><b>Hot-directory spread is a layout-epoch protocol, not a flag.</b>
-A 100M-entry directory cannot be re-partitioned atomically, and lookups/creates must keep working
-<i>during</i> the move:
+<div class="why"><b>Spreading a hot directory is a versioned layout change, not a flag.</b>
+A 100M-entry directory cannot be re-partitioned atomically, and lookups must work <i>during</i> the
+move:
 <pre>LOCAL → SPLITTING(epoch e) → HASHED(epoch e)
 SPLITTING: new writes → hash(parent,name) shards
-           reads → check hashed, then not-yet-moved local range
-           migrator moves dentries idempotently, in batches
-HASHED:    owner Raft-commits the new layout; old local range is GC'd</pre>
-The layout epoch lets a client cache the layout and detect a stale decision. A crash mid-split
-resumes cleanly because every move is idempotent.</div>
+           reads → check hashed, then the not-yet-moved local range
+           a migrator moves names idempotently, in batches
+HASHED:    the owner Raft-commits the new layout; the old local range is GC'd</pre>
+The epoch lets clients cache the layout and detect staleness; idempotent moves make a crash
+mid-split harmless.</div>
 
 <h3>Shards spread; leaders spread</h3>
 <div class="flow">
@@ -291,214 +355,301 @@ resumes cleanly because every move is idempotent.</div>
   <rect class="box"      x="720" y="154" width="140" height="26" rx="5"/><text class="boxS" x="790" y="171" text-anchor="middle">shard 1 · follower</text>
 </svg>
 </div>
-<div class="why">One Raft group per shard, RF=3. A majority of 3 is any 2, so one node can die and
-the group keeps writing. Leaders spread across nodes, so metadata write throughput <b>scales with
-node count</b> — no single metadata primary to saturate. Leadership is real: elected by majority
-vote in a term, fenced by term — I1–I4 by construction.</div>
+<div class="why">One Raft group per shard, copies = min(N, 2f+1), always on distinct machines. A
+majority keeps writing through any minority of losses, and is sized so committed entries survive f
+permanent losses. Leaders land on different machines, so metadata write throughput <b>grows with
+node count</b>. Leadership is real: elected by vote, fenced by term — rules I1–I4 hold by
+construction.</div>
 
 <!-- ============ HOT FILE ============ -->
 <h2>3a · The extremfs property — a hot file does not serialize</h2>
-<p>The make-or-break case for “scale with raw hardware”: <b>many parallel writers to the same
-file.</b> If every pwrite Raft-mutated one inode row for size/mtime, a million writers would funnel
-through one shard leader while the data path sat idle. The design avoids that.</p>
+<p>The make-or-break case: <b>many parallel writers to the same file.</b> If every write updated one
+inode row through one Raft group, a million writers would wait in one line while the data path sat
+idle.</p>
 
 <div class="flow">
 <svg viewBox="0 0 920 240" width="920" height="240">
-  <text class="lbl" x="20" y="24">100k WRITERS · ONE FILE · DISJOINT CHUNKS — METADATA PUBLICATION SPREADS ACROSS LEADERS</text>
+  <text class="lbl" x="20" y="24">100k WRITERS · ONE FILE · DISJOINT CHUNKS — PUBLICATION SPREADS ACROSS L BOUNDED WRITE LANES</text>
   <!-- writers -->
   <rect class="box" x="20" y="50" width="120" height="34" rx="6"/><text class="boxS" x="80" y="71" text-anchor="middle">writer 1</text>
   <rect class="box" x="20" y="92" width="120" height="34" rx="6"/><text class="boxS" x="80" y="113" text-anchor="middle">writer 2</text>
   <rect class="box" x="20" y="134" width="120" height="34" rx="6"/><text class="boxS" x="80" y="155" text-anchor="middle">… writer N</text>
-  <!-- chunk meta on DIFFERENT shards -->
-  <rect class="box good" x="300" y="36" width="330" height="34" rx="6"/><text class="boxS" x="465" y="57" text-anchor="middle">publish (ino, chunk 0) → shard 81 leader</text>
-  <rect class="box good" x="300" y="84" width="330" height="34" rx="6"/><text class="boxS" x="465" y="105" text-anchor="middle">publish (ino, chunk 1) → shard 2117 leader</text>
-  <rect class="box good" x="300" y="132" width="330" height="34" rx="6"/><text class="boxS" x="465" y="153" text-anchor="middle">publish (ino, chunk 2) → shard 994 leader</text>
-  <rect class="box good" x="300" y="180" width="330" height="34" rx="6"/><text class="boxS" x="465" y="201" text-anchor="middle">publish (ino, chunk 3) → shard 3301 leader</text>
+  <!-- chunk meta on DIFFERENT lane shards -->
+  <rect class="box good" x="300" y="36" width="330" height="34" rx="6"/><text class="boxS" x="465" y="57" text-anchor="middle">publish (ino, chunk 0) → lane 0 · shard 81</text>
+  <rect class="box good" x="300" y="84" width="330" height="34" rx="6"/><text class="boxS" x="465" y="105" text-anchor="middle">publish (ino, chunk 1) → lane 1 · shard 2117</text>
+  <rect class="box good" x="300" y="132" width="330" height="34" rx="6"/><text class="boxS" x="465" y="153" text-anchor="middle">publish (ino, chunk 2) → lane 2 · shard 994</text>
+  <rect class="box good" x="300" y="180" width="330" height="34" rx="6"/><text class="boxS" x="465" y="201" text-anchor="middle">publish (ino, chunk 3) → lane 3 · shard 3301</text>
   <!-- note -->
-  <rect class="box" x="690" y="84" width="210" height="72" rx="8"/>
-  <text class="boxT" x="795" y="106" text-anchor="middle">chunk_meta_shard</text>
-  <text class="boxS" x="795" y="122" text-anchor="middle">hash(ino, chunk) &amp; 0xFFF</text>
-  <text class="boxS" x="795" y="138" text-anchor="middle">→ many Raft leaders</text>
+  <rect class="box" x="690" y="76" width="210" height="88" rx="8"/>
+  <text class="boxT" x="795" y="96" text-anchor="middle">bounded lanes</text>
+  <text class="boxS" x="795" y="112" text-anchor="middle">lane = hash(ino,chunk) % L</text>
+  <text class="boxS" x="795" y="128" text-anchor="middle">shard = hash(ino,lane) &amp; 0xFFF</text>
+  <text class="boxS" x="795" y="144" text-anchor="middle">L = tens, derived — not 4096</text>
   <path class="arrowG" d="M140,67 C 220,50 240,50 300,53"/>
   <path class="arrowG" d="M140,109 C 220,100 240,100 300,101"/>
   <path class="arrowG" d="M140,151 C 220,150 240,150 300,149"/>
   <path class="arrowG" d="M140,163 C 200,200 240,200 300,197"/>
   <path class="arrow" d="M630,120 H690"/>
-  <text class="lbl" x="20" y="232">SIZE LANE = co-located with chunk shard (one Raft entry) · MTIME rides the publication · sub-chunk RMW = generation CAS</text>
+  <text class="lbl" x="20" y="232">ONE RAFT ENTRY PER LANE: { publish G ; MAX(size) ; MAX(mtime) } · stat() = 2L+2 reads · pubs batched</text>
 </svg>
 </div>
 
 <div class="grid g2">
-  <div class="card"><h4>Chunk metadata is sharded too <span class="tag t-good">the load-bearing fix</span></h4>
-    If all chunk-map keys lived on <code>inode_shard(ino)</code>, a million writers would still
-    funnel through <b>one Raft leader</b> (Raft serializes the group's log). So
-    <code>chunk_meta_shard = hash(ino, chunk_index) &amp; 0xFFF</code> — one file's chunk
-    publications spread across many leaders. Data <i>and</i> metadata both distribute.</div>
-  <div class="card"><h4>Size lane co-located with its chunk <span class="tag t-good">P2</span></h4>
-    <code>size_lane(chunk) = chunk_meta_shard(ino, chunk)</code> — the lane lives on the
-    <b>same shard</b> as the chunk it extends. An extending write commits <b>one Raft entry</b>:
-    <code>{ publish chunk G ; MAX(lane, end) }</code> — atomic, no cross-shard transaction, and a
-    crash can never leave published bytes invisible or a visible hole (I21).</div>
-  <div class="card"><h4>stat() still has a linearization point</h4>
-    Reading MAX over many shards is not automatically a snapshot. The content epoch closes it:
-    read inode epoch E → read only lanes tagged E → re-read epoch → if still E, the MAX is
-    linearizable; else retry. No cross-shard locking.</div>
-  <div class="card"><h4>Sub-chunk RMW = generation CAS</h4>
-    Build candidate <code>G+1</code> from committed base <code>G</code>, publish with
-    <code>CAS(expected=G)</code>; on conflict refetch, reapply the byte-range, retry. Disjoint
-    byte-ranges both land. No whole-file lock.</div>
-  <div class="card"><h4>O_APPEND = serialized reserve, parallel write</h4>
-    <code>reserve_append(len)</code> is one Raft mutation on the inode shard (the accepted
-    hotspot); the client then writes its reserved range through the <b>ordinary distributed chunk
-    path</b>. A crash after reserving leaves a POSIX-legal hole — never rolled back, because later
-    appenders already hold later offsets.</div>
+  <div class="card"><h4>Chunk metadata is sharded — into L bounded lanes <span class="tag t-good">the load-bearing fix</span></h4>
+    One file's chunk records on one shard = one leader's line. But 4096 lanes per file would make
+    <code>stat()</code> ask the whole cluster. So <code>lane = hash(ino,chunk) % L</code>,
+    <code>chunk_meta_shard = hash(ino,lane) &amp; 0xFFF</code> — <b>L derived</b> from the needed
+    publication rate, capped at tens. Different files still scatter over all 4096 shards. Spread
+    enough to remove the bottleneck, not more.</div>
+  <div class="card"><h4>Size + write-mtime live with the lane <span class="tag t-good">P2</span></h4>
+    A lane's shard carries the chunk record <b>plus</b> the lane's size high-water and write-mtime.
+    An extending write commits <b>one Raft entry</b>:
+    <code>{ publish G ; MAX(size) ; MAX(mtime) }</code> — atomic; a crash can never leave published
+    bytes invisible or a visible hole (I21). A million writers never touch the inode row.</div>
+  <div class="card"><h4>stat() = a distributed snapshot (double collect)</h4>
+    The epoch check alone only covers truncate-vs-stat — concurrent extending writers on different
+    lanes could still assemble a size the file never had. So every lane carries a counter
+    (<code>lane_seq</code>): read the inode's epoch → collect all L lanes
+    <code>(seq, size, mtime)</code> → collect the seqs <i>again</i> → re-check the epoch. If nothing
+    moved, the lane vector provably existed at one instant and the MAX is a correct answer; else
+    retry. Bounded retries, then a rare read-only transaction over the L lanes as the escape hatch.
+    2L+2 point reads — tens, never thousands. An explicit <code>utimens</code> bumps
+    <code>mtime_gen</code>, so an old lane mtime can never resurrect.</div>
+  <div class="card"><h4>Sub-chunk writes = versioned compare-and-swap — with an honest envelope</h4>
+    Build candidate <code>G+1</code> from committed <code>G</code>; publish only-if-G-still-current;
+    on conflict, re-read and retry. Disjoint byte ranges both land. <b>Declared envelope:</b> a 4K
+    write in a 128K chunk pays ~80× amplification; same-chunk 4K writes contend. efs targets
+    HPC-sized I/O; immutable <b>delta objects</b> are the designed escape hatch, built only if
+    benchmarks demand it.</div>
+  <div class="card"><h4>O_APPEND = parallel data, serialized order <i>and</i> visible frontier</h4>
+    <code>reserve_append(len)</code> is one Raft entry on the inode's shard — append order is serial
+    <i>by meaning</i>. The reserved range is then written through the ordinary parallel path. But
+    visibility must follow reservation order: B's bytes at offset 100 only mean anything because A's
+    reservation came first, so the visible EOF is a <b>frontier that advances over contiguous
+    resolved reservations</b> — B waits for A's <i>resolution</i>, never for its data rate. A dead
+    appender's range is <b>committed as a zero hole by recovery</b> (which unblocks the frontier);
+    no returned write is ever lost.</div>
+  <div class="card"><h4>Publications are batched at the Raft layer</h4>
+    128 KiB chunks at 100 GB/s = ~800k publications a second — one transaction per chunk would make
+    metadata the ceiling. Meaning stays per-chunk; saving is batched: <b>many publications per Raft
+    proposal</b>, one group commit covers the batch.</div>
 </div>
+
+<div class="why"><b>One write call publishes atomically; the data movement does not serialize.</b>
+POSIX makes regular-file reads and writes atomic against each other, so a concurrent reader may
+never see a mix of old and new chunks from one in-flight <code>pwrite(fd, 4 MiB)</code>. The design:
+all 32 chunks are written <b>in parallel</b> as immutable candidates, per-lane publication
+<i>intents</i> are prepared, and <b>one durable commit decision</b> makes them all visible together
+— physical work parallel (P1), only the final visibility decision atomic. Many writers to disjoint
+chunks still run fully in parallel (their transactions touch disjoint keys). An explicit
+<b>relaxed mode</b> (mount option, MPI-IO-style apps that synchronize themselves) publishes chunk by
+chunk; it is documented as weaker than POSIX and is never the default. <b>Honest FUSE note:</b> with
+async direct-I/O the kernel may split one large syscall into several FUSE requests with no syscall
+tag, so the atomic unit is defined as one FUSE write request and <code>max_write</code> is sized so
+the writes that matter arrive as one request; recovering the exact syscall boundary under splitting
+is an open investigation.</div>
 
 <!-- ============ COMPOSITION PROTOCOLS ============ -->
 <h2>3b · POSIX composition — protocols, not intentions</h2>
-<p>The replicated-metadata core is protocol-grade. These are the boundary problems between
-subsystems — each now has a specified mechanism, not an intention.</p>
+<p>The boundary problems between subsystems — each with a specified mechanism, not an intention.</p>
 
 <div class="grid g2">
   <div class="card"><h4>Cross-shard transactions: concurrency control, not just atomic commit</h4>
-    PREPARE is conditional: <code>prepare(T, key, expected_version)</code> — it fails if another
-    live transaction holds a conflicting intent or the key changed since T read it. An intent is
-    the key's lock. Participants/keys are prepared in <b>canonical global order</b> (shard, then
-    key), so the wait-for graph is acyclic and deadlock cannot form; a conflicting prepare aborts
-    and retries (no-wait, safe <i>because</i> ordering already excludes deadlock). Result: strict
-    serializability for multi-shard ops — conflicting transactions are ordered by intent
-    acquisition, non-conflicting ones run concurrently.</div>
+    PREPARE is conditional: it fails if another live transaction holds a conflicting intent or the
+    key changed since read. An intent is the key's lock. Keys are prepared in <b>one fixed global
+    order</b>, so deadlock cannot form; a conflict aborts and retries. Conflicting transactions are
+    ordered; non-conflicting ones run concurrently.</div>
+  <div class="card"><h4>Client sessions: who is dead is decided by consensus, not by a timer</h4>
+    Locks, open-unlinked files, append reservations, and duplicate suppression all hinge on "the
+    client died" — but a network partition looks exactly like a death. So every client runs under a
+    <b>session</b> <code>(client_uuid, session_epoch)</code>, committed via Raft on a <b>sharded</b>
+    session authority. Heartbeat loss only decides <i>when to try</i> replacing a session;
+    <b>consensus decides which session is authoritative</b>. Once a new epoch commits, the old one
+    is fenced everywhere: its locks drop, its open references retire, its pending append
+    reservations resolve as committed zero holes, and its retries are still recognized as
+    duplicates. A partitioned-but-alive client can lose its session — an availability sacrifice,
+    never a safety one.</div>
   <div class="card"><h4>Distributed POSIX locking</h4>
-    <code>fcntl</code> ranges and <code>flock</code> need one global lock state. Lock records
-    <code>(ino, start, end, owner)</code> live on <code>inode_shard(ino)</code> — one lock
-    authority per file, mutated through its Raft log. Serializing lock <i>management</i> per file
-    is accepted: the application explicitly asked for coordination (P1). Dead clients are detected
-    by stale incarnation and their locks reclaimed; blocked waiters wake in order. Advisory locks
-    never fence the data path.</div>
+    <code>fcntl</code>/<code>flock</code> records <code>(ino, start, end, owner)</code> live on the
+    inode's shard — one lock authority per file, mutated through Raft. Serializing lock
+    <i>management</i> is accepted: the application asked for coordination. Dead clients' locks are
+    reclaimed through the session protocol. Advisory locks never fence the data path.</div>
   <div class="card"><h4>File-data cache coherence: direct-I/O, correctness first</h4>
-    A linearizable metadata layer is defeated if client B's kernel page cache serves a stale data
-    page after A's committed write. <b>Decision: the kernel page cache is bypassed for file
-    data</b> (direct-I/O semantics) — cross-client data visibility is then exactly as strong as
-    metadata visibility, with no coherence protocol to get wrong. Distributed range invalidation /
-    leases may come later, only if they measurably pay.</div>
+    Fresh metadata is defeated if B's kernel cache serves stale data after A's committed write.
+    <b>Decision: bypass the kernel page cache for file data</b> (direct-I/O) — data visibility is
+    then exactly as strong as metadata visibility, with no coherence protocol to get wrong. Leases
+    may come later, only if they measurably pay.</div>
   <div class="card"><h4>mmap: decided, not implied</h4>
-    Coherent cross-client <code>MAP_SHARED</code> is a hard coherence problem and is
-    <b>unsupported in the first implementation</b> (mmap'd writes rejected or write-through,
-    same-client-only visibility, documented in the POSIX contract).
+    Coherent cross-client <code>MAP_SHARED</code> is a hard coherence problem: <b>unsupported
+    initially</b> (mmap'd writes rejected or write-through, same-client visibility, documented).
     <code>MAP_PRIVATE</code> is unaffected.</div>
   <div class="card"><h4>readdir concurrency contract — explicitly weak</h4>
-    POSIX leaves this loose and efs takes the room: every returned name existed at some point
-    during the scan; no name twice (monotonic KV cursor, spread-merge dedups by name);
-    <code>telldir</code> cookies survive leader change (the KV state is scanned, not the leader).
-    No point-in-time snapshot: a concurrent create may or may not appear. Snapshot readdir would
-    be a deliberate MVCC read, not an accident of the scan.</div>
-  <div class="card"><h4>mtime: exact semantics</h4>
-    A returned <code>write()</code> has committed its mtime update as part of the same publication
-    entry (the shard leader stamps <code>max(mtime, now)</code> — it rides the chunk publication,
-    not a separate inode-row write). A <code>stat()</code> after a returned write, from any client,
-    sees an mtime at least as new. Never lazily regressed.</div>
+    As POSIX allows: every returned name existed sometime during the scan; no name twice;
+    <code>telldir</code> cookies survive a leader change (the KV state is scanned, not the leader).
+    No point-in-time snapshot — a concurrent create may or may not appear.</div>
+  <div class="card"><h4>mtime: exact semantics, no inode bottleneck</h4>
+    Write-mtime lives <b>in the lanes</b> (<code>lane.max_mtime</code>), not the inode row — else
+    every write queues on the inode's shard. Explicit <code>utimens</code>/<code>chmod</code> set
+    the inode row's <code>base_mtime</code> and bump <code>mtime_gen</code>; <code>stat()</code> =
+    <code>MAX(base_mtime, current-gen lane mtimes)</code> under the epoch check. A stat after a
+    returned write, from any client, sees it.</div>
 </div>
 
-<div class="why"><b>Truncate is a content-epoch bump with a stated linearization rule.</b>
-Every chunk publication and size lane is tagged <code>(ino, content_epoch, …)</code>; readers
-consider only the current epoch (I22). A write publishing under epoch E linearizes <i>before</i>
-the bump to E+1; a write starting after truncate returns uses E+1. A stale epoch-E publication is
-harmless (P3) — no reader will ever consider it — and old-epoch state is GC'd.</div>
+<div class="why"><b>Truncate is a content-epoch bump with a stated ordering rule.</b>
+Every publication and lane is tagged <code>(ino, content_epoch)</code>; readers consider only the
+current epoch (I22). A write under epoch E is ordered <i>before</i> the bump to E+1. A stale
+epoch-E publication is harmless (P3) — never considered — and old-epoch state is GC'd.</div>
 
-<div class="why"><b>Data targets are dumb; metadata decides.</b> A fragment object
-<code>(ino, epoch, chunk, generation, fragment)</code> is immutable and its PUT idempotent; a
-target verifies only placement epoch, its own incarnation, and object identity — it does <b>not</b>
-order generations (concurrent candidates are both fine to store). The metadata authority alone
-decides which generation is committed (publication CAS); unpublished candidates are orphans (I15).
-That is what makes I20 precise: a stale writer cannot make its generation <i>visible</i>.</div>
+<div class="why"><b>Storage targets are dumb; metadata decides.</b> A fragment
+<code>(ino, epoch, chunk, generation, fragment)</code> is immutable; writing it is idempotent. A
+target checks placement epoch, its own incarnation, and object identity — it does <b>not</b> order
+generations. Metadata alone decides which generation is committed; unpublished candidates are
+orphans (I15). A stale writer cannot make its generation <i>visible</i> (I20).</div>
+
+<div class="why" style="border-color:var(--bad)"><b style="color:var(--bad)">The EC publication rule — the durability floor.</b>
+2+1 can rebuild from any 2 fragments — but publishing after 2 <i>durable</i> ACKs loses the write
+if one of those 2 machines dies. Healthy rule: <b>all k+f fragments durable before
+publication</b>; latency tracks the slowest target, hidden by queue depth — never by weakening the
+guarantee. Exception: with <code>u</code> domains <i>already</i> down, publish with
+<code>≥ k+(f−u)</code>, mark <b>degraded</b>, re-stripe on repair. Degraded is for unavailable
+targets, never slow ones.</div>
+
+<div class="why"><b><code>write()</code> = durable is a deliberate latency-for-durability trade.</b>
+POSIX requires durability only at <code>fsync()</code>; efs makes every returned write durable.
+Small-write latency pays; throughput is recovered through parallelism and batching — not by
+weakening the guarantee. Benchmarked against the strict-POSIX alternative before final.
+<b>"Durable ACK" is defined precisely:</b> it means the target completed the required
+<b>persistent-NVMe operation</b> (NVMe flush / FUA, or power-loss-protected media) — <i>not</i> that
+the RDMA WRITE completed; RDMA completion says nothing about the NVMe durability boundary. The same
+holds for a Raft follower's ACK (log entry at the defined persistence level, not a volatile write
+cache). "Returned write == durable" is only as strong as this definition.</div>
+
+<!-- ============ HOT-PATH CONTRACT ============ -->
+<h2>3c · The hot-path implementation contract</h2>
+<p>§3–§3b make linear scaling <b>possible</b>. This contract makes it <b>actual</b>. Each item is a
+requirement, not a tuning suggestion.</p>
+
+<div class="grid g2">
+  <div class="card"><h4>FUSE must not re-serialize what efs parallelized <span class="tag t-bad">hidden serializer</span></h4>
+    Without <code>parallel_direct_writes</code>, Linux serializes same-file direct writes <i>above</i>
+    efs — P1 violated before we see the request. Required, not tuning:
+    <code>FOPEN_DIRECT_IO</code>, <code>FOPEN_PARALLEL_DIRECT_WRITES</code>,
+    <code>FUSE_CAP_ASYNC_DIO</code>, <code>FUSE_CAP_PARALLEL_DIROPS</code>, large
+    <code>max_write</code>/<code>max_pages</code>/<code>max_background</code>.</div>
+  <div class="card"><h4>Direct-I/O kills kernel readahead → the client owns prefetch</h4>
+    FUSE direct-I/O bypasses the page cache <b>and does no read-ahead</b> — a naive client reads in
+    lockstep and never fills the hardware queues. The client runs an <b>async prefetch
+    pipeline</b> (read N → prefetch N+1, N+2, …, adaptive depth). A requirement of the direct-I/O
+    decision, not an extra.</div>
+  <div class="card"><h4>Multi-Raft runtime — 4096 logical groups ≠ 4096 mini-databases</h4>
+    No per-group timers, logs, syncs, sockets, or threads (~1365 leaders per node on a 3-node
+    cluster would do bookkeeping instead of work). A few reactor threads drive many shard state
+    machines; messages batched by destination, heartbeats coalesced, <b>WAL group-committed across
+    groups</b>, KV applies batched. Each shard keeps its own logical order.</div>
+  <div class="card"><h4>NUMA-local, queue-depth-driven execution <span class="tag t-good">P4</span></h4>
+    NIC queue → reactor core on its memory domain → local NVMe queue; buffers stay memory-local.
+    Ordinary PUT/GET and commits take <b>no cross-core lock</b>, no thread handoff. SPDK or
+    io_uring is an implementation choice; the absence of cross-core coordination on the common path
+    is the requirement.</div>
+  <div class="card"><h4>Traffic isolation between planes</h4>
+    Saturation and responsive metadata fight without isolation. Raft / membership / transactions /
+    small RPCs get their own RDMA queues and credits — <b>latency</b> isolation from bulk data. On
+    NVMe: log, KV, fragments, and rebuild have separate queues and backpressure.</div>
+  <div class="card"><h4>Rebuild is distributed and rate-limited</h4>
+    Repair is deterministically assigned, reads k surviving fragments from distributed peers,
+    writes the replacement — spread, never centralized. Priority: <b>foreground I/O &gt; metadata
+    &gt; rebuild</b>. Rebuild consumes <i>unused</i> bandwidth only.</div>
+  <div class="card"><h4>Read freshness is amortized, not per-request</h4>
+    No client caches + a majority check per lookup would flood leaders. The leader batches: <b>one</b>
+    majority-backed freshness check serves every request it covers. Consistency unchanged;
+    redundant synchronization removed.</div>
+  <div class="card"><h4>Sequential reads fetch chunk maps in windows, not per chunk</h4>
+    100 GB/s = ~800k chunks/s — one metadata lookup per chunk would make metadata the ceiling even
+    with a perfect data path. The lanes make the fix cheap: lane i holds chunks i, i+L, i+2L, …, so
+    <b>one range request per lane</b> covers a contiguous file window, and the prefetch pipeline runs
+    the <b>metadata window ahead of the data window</b>. Per-chunk lookups remain only for true
+    random I/O.</div>
+  <div class="card"><h4>No physical sync per logical operation</h4>
+    Batching is binding on every hot path: many publications per Raft proposal, WAL group commit
+    across groups, batched KV applies, amortized read freshness. One NVMe sync per chunk or per
+    lookup is a contract violation, not a slowdown.</div>
+</div>
 
 <!-- ============ WHY ============ -->
 <h2>4 · Why the theory holds up</h2>
 <p><b>Raft-per-shard over an embedded KV is not a new mechanism.</b> The claim is stronger than
-novelty: the design is a <i>consequence of the constraints</i>, and the argument is a derivation,
-not an analogy. A copy-cat cites a working system and imitates it; a derivation starts from what
-must be true and shows which shapes survive.</p>
+novelty: the design follows from the constraints — a derivation, not an analogy. A copy-cat imitates
+a working system; a derivation starts from what must be true.</p>
 
 <h3>The constraints are forces, not preferences</h3>
 <table>
   <tr><th>Constraint</th><th>Force it exerts</th><th>Design it eliminates</th></tr>
   <tr><td>2<sup>32</sup> objects on 4 nodes</td><td>~512 GiB+ of metadata cannot live in RAM</td><td>any fully-in-RAM table (today's)</td></tr>
   <tr><td>immediate cross-client visibility</td><td>no authoritative cache may go stale</td><td>TTL / negative / attr caches as truth</td></tr>
-  <tr><td>survive 1 node down, read <i>and</i> write</td><td>a write must commit without the dead node</td><td>single-coordinator 2PC, primary-backup w/o failover</td></tr>
+  <tr><td>survive f nodes down without data loss (f = 1…3)</td><td>a committed write must keep ≥1 copy after any f losses → majority &gt; f; staying authoritative automatically → N ≥ 2f+1</td><td>single-coordinator 2PC, primary-backup w/o failover</td></tr>
   <tr><td>3 → 64 nodes</td><td>work must spread, not funnel to one writer</td><td>a single cluster-wide metadata primary</td></tr>
-  <tr><td><b>scale with raw hardware</b></td><td>parallel work must not hit a software serializer</td><td>whole-table flush; per-write inode-row mutation</td></tr>
+  <tr><td><b>scale with raw hardware</b></td><td>parallel work must not hit a software bottleneck</td><td>whole-table flush; per-write inode-row mutation</td></tr>
 </table>
 
-<div class="why">The constraints do not <i>mathematically</i> force “Raft + ordered KV” — Multi-Paxos,
-Viewstamped Replication, B-tree/LSM/custom page stores satisfy the same forces. The honest statement:
-the constraints strongly favor a <b>partitioned replicated state machine with persistent, paged
-applied state</b>; efs chooses Raft and an ordered embedded KV because they satisfy that with proven,
-understandable primitives and minimal new protocol invention. That Ceph and CockroachDB landed in the
-same place is <b>convergent evolution</b> — the same forces act on any strongly-consistent,
-horizontally-scaled, fault-tolerant store, so independent systems solve the same equations.
-Convergence is evidence the derivation is correct, not that it was copied.</div>
+<div class="why">The constraints do not <i>mathematically</i> force "Raft + ordered KV" — Multi-Paxos,
+Viewstamped Replication, B-tree/LSM stores satisfy the same forces. The honest statement: the
+constraints strongly favor a <b>partitioned, replicated state machine with persistent, paged
+state</b>; efs chooses Raft and an ordered embedded KV because they satisfy that with proven,
+understandable primitives. That Ceph and CockroachDB landed in the same place is <b>convergent
+evolution</b> — evidence the derivation is right, not that it was copied.</div>
 
 <h3>Safety = inherited theorems + explicit composition obligations</h3>
 <ul>
-  <li><b>Core shard-replication safety is inherited from Raft</b> when implemented to its
-      assumptions (election restriction, log matching, commit rules, safe reconfiguration). Leader
-      completeness (I2) is Raft's theorem — not majority intersection alone.</li>
-  <li><b>Quorum durability</b> (I10/I11): a majority-acked write survives any failure that leaves a
-      majority; with RF=3 that is exactly one node. The old root/snapshot 2PC did not provide this —
-      its commit point was an under-replicated coordinator — and the bug history is the system
-      repeatedly discovering that.</li>
-  <li><b>EFS-specific composition is not covered by Raft's proof.</b> RPC dedup, KV persistence
-      ordering, cross-shard transactions, FUSE cache coherence, EC generation publication, chunk
-      RMW, reconfiguration, and the orphan lifecycle remain explicit proof / model / simulation
-      obligations — exactly what the simulator is for.</li>
+  <li><b>Core shard-replication safety is inherited from Raft</b>, implemented to its assumptions.
+      Leader completeness (I2) is Raft's theorem — not majority intersection alone.</li>
+  <li><b>Quorum durability</b> (I10/I11): a majority-acked write survives any f permanent losses
+      because the majority is sized to outlive f. The old root-2PC never had this — its decision
+      point was one under-replicated node — and the bug history is the system repeatedly discovering
+      that.</li>
+  <li><b>The composition is not covered by Raft's proof.</b> RPC dedup, KV persistence ordering,
+      cross-shard transactions, FUSE cache coherence, EC generation publication, chunk
+      read-modify-write, reconfiguration, orphan lifecycle — explicit simulation obligations.
+      That is what the simulator is for.</li>
 </ul>
 
 <h3>What is genuinely ours — stated precisely</h3>
 <p><b>Every primitive here has existed</b> — Raft, distributed metadata, RDMA, EC, immutable
-generations, ordered KV, directory sharding, deterministic simulation. Several systems get close to
-individual parts: <b>WEKA</b> (fully distributed data+metadata, no MDS tier, hash placement),
-<b>DAOS</b> (NVMe-native, distributed transactions, EC, versioned writes — but its POSIX layer still
-lacks hardlinks and distributed flock), <b>VAST</b> (transactional metadata + EC, but shared-everything
-DASE, not shared-nothing Raft shards), <b>CephFS</b> (client-direct data, but authority in a distinct
-MDS tier). IndexFS/GIGA+ precede threshold-spread dirs; FoundationDB is the canonical simulator. We
-claim none of these as inventions.</p>
+generations, ordered KV, directory sharding, deterministic simulation. <b>WEKA</b>, <b>DAOS</b>,
+<b>VAST</b>, <b>CephFS</b> each get close to parts. IndexFS/GIGA+ precede threshold-spread dirs;
+FoundationDB is the canonical simulator. We claim none of these as inventions.</p>
 
 <div class="why" style="border-color:var(--acc)"><b style="color:var(--acc)">The claim is the
-composition and the governing principle.</b> We have not found a public system presenting this exact
-architecture as one open POSIX filesystem: POSIX + no MDS tier + metadata authority on ordinary
-storage nodes + Raft only for small metadata + client-direct RDMA + immutable EC generations + no
-invented serialization + simulation-first + small-cluster simplicity. And the principle that ties it
-together: <b>never serialize work that the semantics and the hardware allow to happen in
-parallel.</b></div>
+composition and the principle.</b> We know of no public system presenting this as one open POSIX
+filesystem: POSIX + no MDS tier + metadata authority on ordinary storage nodes + Raft only for small
+metadata + client-direct RDMA + immutable EC generations + no invented serialization +
+simulation-first + small-cluster simplicity. The principle: <b>never serialize work that semantics
+and hardware allow in parallel.</b></div>
 
 <div class="grid g2">
-  <div class="card"><h4>Metadata on a log, data on immutable-generation EC</h4>
-    Strong consensus where correctness is cheap (small metadata), EC where bandwidth matters (bulk
-    data). Most systems pick one consistency substrate for both; efs uses the one that fits each
-    cost model.</div>
+  <div class="card"><h4>Metadata on a log, data on versioned EC</h4>
+    Strong consensus where correctness is cheap (small metadata); EC where bandwidth matters (bulk
+    data). Most systems pick one substrate for both.</div>
   <div class="card"><h4>A hot-file path that does not serialize</h4>
-    Disjoint chunks publish to <i>different metadata shards</i>; size is sharded high-water lanes;
-    sub-chunk RMW is generation CAS. A million writers to one file parallelize. Only semantically-
-    required serialization (O_APPEND EOF, overlapping ranges, truncate, rename) is serialized.</div>
+    Disjoint chunks publish to <i>different metadata shards</i> via bounded lanes; size and mtime
+    are sharded high-waters; sub-chunk writes are versioned compare-and-swap. Only
+    semantically-required serialization is serialized.</div>
   <div class="card"><h4>The namespace is the database</h4>
     Metadata is already a distributed ordered KV, so <code>du</code>/<code>find</code>/lifecycle are
-    <b>queries</b>, not traversals — no crawler, no catalog bolted on, no cron forest.</div>
+    <b>queries</b>, not traversals — no crawler, no catalog, no cron forest.</div>
   <div class="card"><h4>Minimalist operations</h4>
     <code>3 nodes → efs init → efs mount → done</code>; 64 nodes, same architecture. No MDS tier, no
-    special node types, no kernel module, no twenty-component deployment.</div>
+    special node types, no kernel module.</div>
 </div>
 
 <div class="why"><b>Thesis in one line:</b> the constraints force the family, Raft + KV are the
-proven primitives within it, and the part that is ours — the composition, the
-never-serialize-what-can-run-parallel principle, and the namespace-as-database minimalism — is where
-the design earns an identity. The principle is falsifiable: if a workload the hardware could
-parallelize is found to serialize in efs, that is a bug against it.</div>
+proven primitives in it, and the composition — plus the never-serialize principle — is ours. The
+principle is falsifiable: if hardware could parallelize a workload and efs serializes it, that is a
+bug.</div>
 
 <div class="why" style="border-color:var(--warn)"><b style="color:var(--warn)">On the name.</b>
-“extremfs” collides phonetically with <b>XtreemFS</b> (existing open-source DFS; trademark registered
-by Quobyte), and “EFS” is overwhelmingly Amazon Elastic File System. The <i>idea</i> is the identity;
-the public name should be distinctive and searchable, and is left open pending a trademark/search
-check. This document uses “efs” as a working name only.</div>
+"extremfs" collides phonetically with <b>XtreemFS</b> (trademark, Quobyte); "EFS" is overwhelmingly
+Amazon Elastic File System. The <i>idea</i> is the identity; the public name is left open pending a
+trademark/search check. This document uses "efs" as a working name only.</div>
 
 <!-- ============ SCALING ============ -->
 <h2>5 · Why it reaches the target</h2>
@@ -506,7 +657,7 @@ check. This document uses “efs” as a working name only.</div>
 <h3>The RAM wall, drawn to scale</h3>
 <div class="flow">
 <svg viewBox="0 0 920 190" width="920" height="190">
-  <text class="lbl" x="20" y="24">METADATA RESIDENCY AT 2³² OBJECTS</text>
+  <text class="lbl" x="20" y="24">WHERE METADATA LIVES AT 2³² OBJECTS</text>
   <text class="boxS" x="20" y="60">TODAY — all in RAM</text>
   <rect x="20" y="70" width="880" height="30" rx="4" fill="#f85149" opacity="0.85"/>
   <text class="boxT" x="460" y="90" text-anchor="middle" fill="#fff">~2 TB+ in RAM per node — does not fit</text>
@@ -514,11 +665,11 @@ check. This document uses “efs” as a working name only.</div>
   <rect x="20" y="140" width="880" height="30" rx="4" fill="#3fb950" opacity="0.25"/>
   <rect x="20" y="140" width="120" height="30" rx="4" fill="#3fb950"/>
   <text class="boxS" x="80" y="159" text-anchor="middle" fill="#0d1117">hot set in RAM</text>
-  <text class="boxS" x="560" y="159" text-anchor="middle">inode data lives on NVMe (honest capacity model, §5.5)</text>
+  <text class="boxS" x="560" y="159" text-anchor="middle">inode data lives on NVMe (honest capacity model)</text>
 </svg>
 </div>
 
-<h3>Cost of persisting a change as the table grows</h3>
+<h3>Cost of saving a change as the table grows</h3>
 <div class="flow">
 <svg viewBox="0 0 920 200" width="920" height="200">
   <text class="lbl" x="20" y="24">COST vs TABLE SIZE</text>
@@ -527,47 +678,80 @@ check. This document uses “efs” as a working name only.</div>
   <text class="legend" x="880" y="180" text-anchor="end">table size →</text>
   <text class="legend" x="30" y="100">cost</text>
   <path d="M70,150 C 300,140 600,80 880,30" stroke="#f85149" stroke-width="2.5" fill="none"/>
-  <text class="legend" x="880" y="24" text-anchor="end" fill="#f85149">today: O(table) serialize</text>
+  <text class="legend" x="880" y="24" text-anchor="end" fill="#f85149">today: copy the whole table</text>
   <path d="M70,152 C 300,150 600,149 880,148" stroke="#3fb950" stroke-width="2.5" fill="none"/>
-  <text class="legend" x="880" y="142" text-anchor="end" fill="#3fb950">target: O(change) log append</text>
+  <text class="legend" x="880" y="142" text-anchor="end" fill="#3fb950">target: append the change to a log</text>
 </svg>
 </div>
 
 <table>
   <tr><th>Goal</th><th>How the target design meets it</th></tr>
   <tr><td>2<sup>32</sup> on 4 nodes</td><td>Metadata paged from NVMe by the KV; RAM is a bounded cache. Capacity modeled honestly, not assumed.</td></tr>
-  <tr><td>3 → 64 nodes</td><td>Shards re-balance through safe (joint-consensus) reconfiguration; leaders spread; adding a node moves shard replicas onto it.</td></tr>
-  <tr><td>1-node tolerance</td><td>RF=3 per shard + 2+1 EC on data both survive one loss (CAP-accurate wording, §3).</td></tr>
-  <tr><td>Immediate visibility</td><td>Ops apply on the leader in log order, acked when committed; kernel metadata caches actively invalidated; file data bypasses the page cache (direct-I/O). No cache to go stale.</td></tr>
-  <tr><td>Scale with hardware</td><td>Client-direct RDMA + EC data; hot-file metadata publishes independent chunk keys instead of serializing on an inode row.</td></tr>
+  <tr><td>3 → 64 nodes</td><td>Shards re-balance through safe (two-step, overlapping) reconfiguration; leaders spread; adding a node moves shard copies onto it.</td></tr>
+  <tr><td>Configurable f-node tolerance</td><td>Metadata copies = min(N, 2f+1) per shard + k+f EC on data; no data loss at the configured f (the majority math is §1's table).</td></tr>
+  <tr><td>Immediate visibility</td><td>Ops apply on the leader in log order, acked when committed; kernel metadata caches actively invalidated; file data bypasses the page cache. No cache to go stale.</td></tr>
+  <tr><td>Scale with hardware</td><td>Client-direct RDMA + EC data; hot-file metadata publishes on bounded per-file lanes instead of serializing on an inode row; the §3c contract removes the software terms from the ceiling.</td></tr>
 </table>
 
+<h3>The ceiling is protection-adjusted — and the bar is a fraction of it</h3>
+<p>Protection consumes hardware: k+f EC writes <code>(k+f)/k × C</code> physically (1.5× at 2+1).
+The ideal ceiling:</p>
+<pre>logical write speed ≤ min( total client egress          × k/(k+f),
+                           total storage-node ingress    × k/(k+f),
+                           total NVMe write bandwidth    × k/(k+f),
+                           EC encode CPU / memory bandwidth,
+                           metadata publication rate × chunk size )</pre>
+<p>The bar is a <b>high fraction of that ceiling</b> — 85–95% of it on 64 nodes would be
+extraordinary. The §3c contract exists to remove every software term from that min().</p>
+
+<h3>"Near-linear" is defined per workload class</h3>
+<p>Several POSIX operations are serial <i>by meaning</i>; the claim excludes them openly.</p>
+<table>
+  <tr><th>Workload</th><th>Expected scaling</th></tr>
+  <tr><td>Many files, large aligned I/O</td><td><b>near-linear with nodes</b></td></tr>
+  <tr><td>One file, disjoint full chunks (many writers)</td><td><b>near-linear up to the file's lane count / cluster size</b></td></tr>
+  <tr><td>One giant <code>write()</code> call</td><td>data moves in parallel; one atomic visibility decision per call</td></tr>
+  <tr><td>Many independent directories</td><td><b>near-linear</b> — every directory gets its own shard at birth</td></tr>
+  <tr><td>One spread hot directory</td><td><b>near-linear across its hash shards</b></td></tr>
+  <tr><td>One normal small directory</td><td>single-shard until size/pressure spreads it</td></tr>
+  <tr><td>Large sequential reads</td><td>near-linear <b>if userspace prefetch keeps the queues deep</b> and chunk maps are fetched in per-lane windows</td></tr>
+  <tr><td><code>O_APPEND</code> on one file</td><td>reservation order + visible frontier serialized by meaning; data moves in parallel</td></tr>
+  <tr><td>Overlapping same-range writes</td><td>serialized by meaning (version-check retry)</td></tr>
+  <tr><td><code>truncate</code> on one file</td><td>content-epoch serialization</td></tr>
+  <tr><td>Cross-directory rename storm</td><td>transaction-throughput limited</td></tr>
+  <tr><td>Same-file <code>fcntl</code> lock storm</td><td>inode lock-authority limited</td></tr>
+  <tr><td>4K random updates in 128K chunks</td><td>read-modify-write limited — declared envelope</td></tr>
+</table>
+<div class="why">A scaling benchmark is a scientific question — <i>where did it stop: NIC, NVMe,
+memory bandwidth, EC compute, network fabric?</i> An answer that is a lock, one leader, one thread,
+FUSE serialization, one log, or one coordinator is by definition an EFS bug.</div>
+
 <!-- ============ INVARIANTS ============ -->
-<h2>6 · Invariants — the test oracle</h2>
-<p>A bug is a violation of one of these. The simulator checks them after every step; <code>fsck</code>
-checks them on disk. Invariants are stated over the <b>committed, externally-visible projection</b>;
-cross-shard <i>intents</i> are internal and governed by I17/I18.</p>
+<h2>6 · Invariants — the rules that define "bug"</h2>
+<p>A bug is a violation of one of these rules. The simulator checks them after every step;
+<code>fsck</code> checks them on disk. Rules are stated over the <b>committed, externally
+visible</b> state; transaction <i>intents</i> are internal (I17/I18).</p>
 
 <h3>Replication &amp; leadership (Raft's actual safety properties)</h3>
 <div class="inv"><b>I1 · election uniqueness</b> — at most one server is elected leader for a shard in a given term.</div>
 <div class="inv"><b>I2 · leader completeness</b> — every later elected leader contains every previously committed entry (Raft's theorem, not majority-intersection alone).</div>
-<div class="inv"><b>I3 · term fencing</b> — a node observing a higher term immediately stops exercising old-term leader authority.</div>
-<div class="inv"><b>I4 · quorum acknowledgement</b> — no mutation is acknowledged unless committed under the shard's current authoritative config. “No dual owner” = commit authority, not local belief.</div>
+<div class="inv"><b>I3 · term fencing</b> — a node that sees a higher term immediately stops exercising old-term leader authority.</div>
+<div class="inv"><b>I4 · majority acknowledgement</b> — no mutation is acknowledged unless committed under the shard's current authoritative config. "No dual owner" = commit authority, not local belief.</div>
 
 <h3>Metadata state</h3>
 <div class="inv"><b>I5 · name uniqueness</b> — one visible name maps to at most one inode.</div>
-<div class="inv"><b>I6 · no visible dangling dentry</b> — every committed visible dentry resolves to a valid inode.</div>
+<div class="inv"><b>I6 · no visible dangling name</b> — every committed visible name resolves to a valid inode.</div>
 <div class="inv"><b>I7 · nlink</b> — <code>nlink</code> equals the number of committed visible links.</div>
 <div class="inv"><b>I8 · no resurrection</b> — a committed removal is never reverted by replay/recovery/rebuild/stale clients.</div>
-<div class="inv"><b>I9 · absent ≠ unavailable</b> — failure to establish authoritative read state never returns ENOENT. <span style="color:var(--bad)">(the Sep 1 dangling-dentry class)</span></div>
+<div class="inv"><b>I9 · absent ≠ unavailable</b> — failing to establish authoritative read state never returns ENOENT. <span style="color:var(--bad)">(the Sep 1 dangling-dentry class)</span></div>
 <div class="inv"><b>I10 · metadata durability</b> — an acknowledged committed op survives any single-node failure.</div>
 <div class="inv"><b>I16 · request idempotency</b> — replaying a mutation with the same op-ID cannot apply its effect twice.</div>
 <div class="inv"><b>I17 · transaction atomic visibility</b> — a cross-shard transaction is visible as committed everywhere or nowhere.</div>
-<div class="inv"><b>I18 · safe reconfiguration</b> — no config transition permits two disjoint authoritative quorums for the same history.</div>
+<div class="inv"><b>I18 · safe reconfiguration</b> — no config transition permits two disjoint authoritative majorities for the same history.</div>
 <div class="inv"><b>I19 · open-unlinked lifetime</b> — an nlink=0 inode stays valid for pre-existing authorized open handles; never reclaimed/reused while valid.</div>
 
 <h3>Data</h3>
-<div class="inv"><b>I11 · EC durability</b> — a published chunk generation has ≥ 2 reconstructable fragments on distinct failure domains.</div>
+<div class="inv"><b>I11 · EC durability</b> — a generation published in a <b>healthy</b> cluster has all k+f fragments durable on distinct failure domains (any f losses leave ≥ k to rebuild from). A generation published while u domains are <b>already unavailable</b> has ≥ k+(f−u) durable fragments, is marked degraded, and is repaired when capacity returns.</div>
 <div class="inv"><b>I12 · chunk consistency</b> — every returned chunk is one valid committed generation and a legal serialization of committed byte-range writes.</div>
 <div class="inv"><b>I13 · generation coherence</b> — reconstruction never mixes fragment generations.</div>
 <div class="inv"><b>I14 · publish-after-durability</b> — metadata cannot publish G before G satisfies EC durability.</div>
@@ -575,22 +759,24 @@ cross-shard <i>intents</i> are internal and governed by I17/I18.</p>
 <div class="inv"><b>I20 · stale-writer fencing</b> — a stale client/node cannot overwrite or publish over a newer committed chunk generation.</div>
 <div class="inv"><b>I21 · publish+size atomicity</b> — an extending write never commits its chunk publication without its size-lane update, nor the reverse; they are one Raft entry on one shard.</div>
 <div class="inv"><b>I22 · epoch fencing</b> — a read or stat considers only the inode's current content epoch; a publication tagged with a superseded epoch is never visible.</div>
+<div class="inv"><b>I23 · session fencing</b> — no mutation from a fenced client session is ever applied by any shard or target; no lock, open reference, or append reservation of a fenced session survives it.</div>
+<div class="inv"><b>I24 · atomic write publication</b> — a returned write is visible in its entirety to every later read; a concurrent read sees all or none of an in-flight call's chunks (default mode).</div>
 
 <h3>Liveness (bounded, testable)</h3>
 <div class="inv"><b>L1–L8</b> — shards eventually elect leaders; committed ops eventually apply everywhere; intact and empty replicas eventually catch up; prepared transactions eventually COMMIT/ABORT; orphans and unpublished generations eventually reclaim; reconfiguration eventually converges once failures stop.</div>
 
 <!-- ============ SIMULATOR ============ -->
 <h2>7 · The simulator — build first, architecture-independent</h2>
-<p>A deterministic discrete-event simulator: N servers + M clients in <b>one process</b>. A seeded
-PRNG drives message order, drops, delays, duplicates, partitions, crashes, and clock steps. The
-<i>real</i> metadata state machine runs inside it against a simulated network and disk.</p>
+<p>N servers + M clients in <b>one process</b>. A seeded random generator drives message order,
+drops, delays, duplicates, partitions, crashes. The <i>real</i> metadata state machine runs inside
+it, against a simulated network and disk.</p>
 
 <div class="flow">
 <svg viewBox="0 0 920 250" width="920" height="250">
   <text class="lbl" x="20" y="24">SAME STATE MACHINE · TWO BACKENDS</text>
   <rect class="box" x="300" y="40" width="320" height="54" rx="8"/>
   <text class="boxT" x="460" y="62" text-anchor="middle">metadata state machine</text>
-  <text class="boxS" x="460" y="80" text-anchor="middle">Raft groups · KV apply · op handlers · transactions</text>
+  <text class="boxS" x="460" y="80" text-anchor="middle">Raft groups · KV apply · op handlers · txns</text>
   <rect class="box" x="300" y="120" width="320" height="40" rx="8"/>
   <text class="boxS" x="460" y="144" text-anchor="middle">transport + storage interfaces</text>
   <rect class="box good" x="60" y="190" width="340" height="46" rx="8"/>
@@ -603,35 +789,30 @@ PRNG drives message order, drops, delays, duplicates, partitions, crashes, and c
   <path class="arrowG" d="M380,160 L 250,190"/>
   <path class="arrow" d="M540,160 L 670,190"/>
   <rect class="box" x="60" y="40" width="180" height="54" rx="8"/>
-  <text class="boxT" x="150" y="62" text-anchor="middle">seeded PRNG</text>
+  <text class="boxT" x="150" y="62" text-anchor="middle">seeded randomness</text>
   <text class="boxS" x="150" y="80" text-anchor="middle">order·drop·crash·partition</text>
   <path class="arrow" d="M240,67 H300"/>
 </svg>
 </div>
 
-<div class="why">A cluster scenario runs in <b>milliseconds</b>; a failure <b>replays exactly</b> from
-its seed; you explore <b>millions of interleavings overnight</b>, each step checked against the
-invariants — so a bug is a seed + a named violated invariant, not a log line on a live cluster. The
-hardware cluster stops being the correctness oracle and becomes the performance harness.</div>
+<div class="why">A scenario runs in <b>milliseconds</b>. A failure <b>replays exactly</b> from its
+seed. <b>Millions of interleavings overnight</b>, each step checked against the rules — a bug is a
+seed + a named violated rule, not a log line on a live cluster. The hardware cluster stops being
+the correctness oracle and becomes the performance harness.</div>
 
-<p class="note">The generator must produce: lost/duplicated client RPCs, restart with same vs empty
-disk, delayed packets from a prior incarnation, leader crash at every point around commit/apply/reply,
-snapshot creation during writes, interrupted snapshot transfer, membership-transition interruption at
-every step, coordinator/participant crash in every transaction phase, client crash between fragment
-PUT and metadata publish, and stale placement-map / stale chunk-generation clients. Complete operation
-histories are recorded and checked by an <b>independent linearizability / transaction-history
-checker</b>, not only handwritten invariants (the FoundationDB methodology). Scope: the simulator
-models the <b>logical data-commit protocol and its interaction with metadata</b> — abstract events
-(PUT fragment, durable/dropped ACK, target crash, fragment lost, client crash mid-write,
-publication, stale generation, rebuild) — because otherwise it cannot check I11–I15 / I20–I22. It
-does <b>not</b> model RDMA/NVMe performance mechanics; those stay with the perf harnesses.</p>
+<p class="note">The generator must produce: lost/duplicated RPCs; restarts with same or empty disk;
+delayed packets from a prior incarnation; leader crash at every point around commit/apply/reply;
+interrupted snapshots and membership changes; coordinator/participant crash in every transaction
+phase; client crash between fragment PUT and publish; stale placement maps and chunk generations.
+Complete histories are checked by an <b>independent linearizability checker</b>, not only
+handwritten rules (the FoundationDB method). Scope: the <b>logical</b> data-commit protocol and its
+interaction with metadata — else I11–I15 / I20–I22 are uncheckable. Not RDMA/NVMe mechanics; those
+stay with the perf harnesses.</p>
 
 <!-- ============ DEV CYCLE ============ -->
 <h2>7a · Shortening the code → signal cycle</h2>
-<p>The bottleneck is not writing code — it is <b>how long a change takes to prove itself</b>. Today
-that proof is a 13-node wipe + rsync + rebuild + ssh orchestration, and the signal is poor. The
-strategy: push each class of bug to the <b>cheapest layer that can catch it</b>, and fill the
-deterministic gap the simulator occupies.</p>
+<p>The bottleneck is not writing code — it is <b>how long a change takes to prove itself</b>.
+Strategy: push each bug class to the <b>cheapest layer that can catch it</b>.</p>
 
 <div class="flow">
 <svg viewBox="0 0 920 240" width="920" height="240">
@@ -661,37 +842,35 @@ deterministic gap the simulator occupies.</p>
 </table>
 
 <div class="why">The simulator is the only missing layer that is both <b>fast</b> and
-<b>deterministic</b>. Unit tests can't see a message race; the cluster can't reproduce one. Building
-it first converts the slowest, noisiest, least reproducible part of the cycle (distributed
-correctness on hardware) into the fastest and most repeatable — and it becomes the regression gate
-for every migration step after.</div>
+<b>deterministic</b>. Unit tests can't see a message race; the cluster can't reproduce one. It
+converts the slowest, noisiest part of the cycle into the fastest and most repeatable — and becomes
+the regression gate for every migration step after.</div>
 
 <ul>
-  <li><b>Correctness moves down, performance stays up.</b> The cluster stops being the correctness
-      oracle; posix/posix2 confirm semantics; the cluster confirms speed.</li>
-  <li><b>Deterministic over flaky.</b> Forced collisions (<code>threading.Barrier</code>) instead of
-      fork-and-pray — no more “passes isolated, fails under load.”</li>
-  <li><b>Fail fast, not timeout.</b> A violated invariant aborts at the step; saturation (timeout) is
-      reported separately from correctness (assertion).</li>
-  <li><b>Live attach over rebuild-and-reprobe.</b> ptrace is open on all 15 hosts — <code>gdb -p</code>
-      on a wedged <code>efsd</code> answers in seconds.</li>
-  <li><b>Bounded-context change.</b> Modularity keeps the unit of work small: load one module + its
-      interface header, not the whole tree. This is what makes fast isolated tests and model-assisted
-      editing tractable.</li>
-  <li><b>Invariants as executable checks</b> (simulator assertions + <code>fsck</code>), not prose.</li>
+  <li><b>Correctness moves down, performance stays up.</b> The cluster confirms speed, not correctness.</li>
+  <li><b>Deterministic over flaky.</b> Forced collisions, not fork-and-pray — no more "passes isolated, fails under load."</li>
+  <li><b>Fail fast, not timeout.</b> A violated rule aborts at the step; saturation is reported separately from correctness.</li>
+  <li><b>Live attach over rebuild-and-reprobe.</b> <code>gdb -p</code> on a wedged <code>efsd</code> answers in seconds.</li>
+  <li><b>Bounded-context change.</b> Load one module + its header, not the whole tree.</li>
+  <li><b>Rules as executable checks</b> (simulator assertions + <code>fsck</code>), not prose.</li>
 </ul>
 
 <h3>Modularity is an architectural constraint, not a style preference</h3>
-<p>Two things this project depends on are impossible without it: <b>fast isolated testing</b> and
-<b>bounded-context change</b> (a human or a model editing one component without ingesting the whole
-codebase). The rule: <b>a module must be understandable, changeable, and testable from its own source
-plus its interface header alone.</b> If you have to read the rest of the tree to change one component
+<p>The rule: <b>a module must be understandable, changeable, and testable from its own source plus
+its interface header alone.</b> If you have to read the rest of the tree to change one component
 safely, the modularity has failed.</p>
 
-<p>Today it has failed: four files hold ~45% of the 36.5k-line tree —
-<code>metadata.c</code> (6042), <code>efs_fuse.c</code> (3720), <code>meta_server.c</code> (3654),
-<code>handler.c</code> (3648). The target boundaries align with the planes, so the architecture and
-the code structure are the same map:</p>
+<div class="why"><b>The bar, stated plainly: a <i>less advanced</i> AI model must be able to
+contribute a correct change.</b> <b>(1)</b> Local correctness must be <i>locally decidable</i> —
+module + header + tests, never global reasoning; else the project scales with <i>model quality</i>,
+not <i>contributor count</i>. <b>(2)</b> A mistake's blast radius is one module, failing <i>fast and
+locally</i> — a unit test, a simulator assertion, an interface check. <b>(3)</b> Interfaces carry
+the contract: invariants, ownership, threading rules live in the header. <b>(4)</b> Conventions are
+machine-checkable — enforced by tooling, not reviewer vigilance.</div>
+
+<p>Today it has failed: four files hold ~45% of the 36.5k-line tree — <code>metadata.c</code> (6042),
+<code>efs_fuse.c</code> (3720), <code>meta_server.c</code> (3654), <code>handler.c</code> (3648).
+The target boundaries align with the planes:</p>
 
 <div class="flow">
 <svg viewBox="0 0 920 190" width="920" height="190">
@@ -708,17 +887,13 @@ the code structure are the same map:</p>
 </svg>
 </div>
 
-<div class="why">Purity (no globals, I/O behind interfaces) is the same property that lets the same
-compiled state machine run under the simulator — so modularity buys <b>testability and
-simulatability at once</b>. And the context budget (module + header fits in a few hundred lines) is
-what lets a model or a new contributor make a correct change without the whole tree in scope. The
-migration builds Raft, KV, and the transaction protocol as new components — building them to these
-boundaries from the start keeps the dev cycle fast as the system grows.</div>
+<div class="why">Purity (no globals, I/O behind interfaces) is the same property that lets the state
+machine run under the simulator — modularity buys <b>testability and simulatability at once</b>.</div>
 
 <!-- ============ MIGRATION ============ -->
 <h2>8 · The gap map — what's built, what's missing</h2>
-<p>Every component of the target architecture, colored by its status <b>in the tree today</b>.
-This is the honest distance between the spec and the code.</p>
+<p>Every component of the target, colored by its status <b>in the tree today</b>. The honest
+distance between spec and code.</p>
 
 <style>
   .stB{stroke:#3fb950;stroke-width:1.6}
@@ -746,14 +921,14 @@ This is the honest distance between the spec and the code.</p>
   <text class="lbl" x="20" y="24">DATA PLANE</text>
   <rect class="box stB" x="20"  y="34" width="205" height="42" rx="7"/><text class="boxT" x="122" y="52" text-anchor="middle">client-direct RDMA</text><text class="boxS" x="122" y="67" text-anchor="middle">built · gated</text>
   <rect class="box stB" x="245" y="34" width="205" height="42" rx="7"/><text class="boxT" x="347" y="52" text-anchor="middle">2+1 EC</text><text class="boxS" x="347" y="67" text-anchor="middle">built · failover tested</text>
-  <rect class="box stM" x="470" y="34" width="205" height="42" rx="7"/><text class="boxT" x="572" y="52" text-anchor="middle">immutable chunk gens</text><text class="boxS" x="572" y="67" text-anchor="middle">no generations on wire</text>
+  <rect class="box stM" x="470" y="34" width="205" height="42" rx="7"/><text class="boxT" x="572" y="52" text-anchor="middle">versioned chunks</text><text class="boxS" x="572" y="67" text-anchor="middle">no generations on wire</text>
   <rect class="box stM" x="695" y="34" width="205" height="42" rx="7"/><text class="boxT" x="797" y="52" text-anchor="middle">target-side fencing</text><text class="boxS" x="797" y="67" text-anchor="middle">missing</text>
 
   <!-- METADATA PLANE -->
   <text class="lbl" x="20" y="106">METADATA PLANE</text>
   <rect class="box stB" x="20"  y="116" width="205" height="42" rx="7"/><text class="boxT" x="122" y="134" text-anchor="middle">sharding (bits=3)</text><text class="boxS" x="122" y="149" text-anchor="middle">built · 8 shards</text>
   <rect class="box stD" x="245" y="116" width="205" height="42" rx="7"/><text class="boxT" x="347" y="134" text-anchor="middle" fill="#9aa7b8">in-RAM table + 2PC</text><text class="boxS" x="347" y="149" text-anchor="middle">today's flush · deleted §10</text>
-  <rect class="box stM" x="470" y="116" width="205" height="42" rx="7"/><text class="boxT" x="572" y="134" text-anchor="middle">Raft per shard, RF=3</text><text class="boxS" x="572" y="149" text-anchor="middle">missing</text>
+  <rect class="box stM" x="470" y="116" width="205" height="42" rx="7"/><text class="boxT" x="572" y="134" text-anchor="middle">Raft per shard · RF≤2f+1</text><text class="boxS" x="572" y="149" text-anchor="middle">missing · f configurable 1–3</text>
   <rect class="box stM" x="695" y="116" width="205" height="42" rx="7"/><text class="boxT" x="797" y="134" text-anchor="middle">ordered KV on NVMe</text><text class="boxS" x="797" y="149" text-anchor="middle">missing</text>
   <rect class="box stP" x="20"  y="164" width="205" height="42" rx="7"/><text class="boxT" x="122" y="182" text-anchor="middle">cross-shard txns</text><text class="boxS" x="122" y="197" text-anchor="middle">fan-out skeleton only</text>
   <rect class="box stM" x="245" y="164" width="205" height="42" rx="7"/><text class="boxT" x="347" y="182" text-anchor="middle">hot-file path</text><text class="boxS" x="347" y="197" text-anchor="middle">chunk_meta shards · size lanes</text>
@@ -781,10 +956,11 @@ This is the honest distance between the spec and the code.</p>
   <rect class="box stB" x="470" y="416" width="205" height="42" rx="7"/><text class="boxT" x="572" y="434" text-anchor="middle">perf harnesses</text><text class="boxS" x="572" y="449" text-anchor="middle">fio honest · ecopy · scale</text>
   <rect class="box stM" x="695" y="416" width="205" height="42" rx="7"/><text class="boxT" x="797" y="434" text-anchor="middle">deterministic simulator</text><text class="boxS" x="797" y="449" text-anchor="middle">missing · build first</text>
   <rect class="box stM" x="20"  y="464" width="205" height="42" rx="7"/><text class="boxT" x="122" y="482" text-anchor="middle">linearizability checker</text><text class="boxS" x="122" y="497" text-anchor="middle">missing</text>
-  <rect class="box stP" x="245" y="464" width="205" height="42" rx="7"/><text class="boxT" x="347" y="482" text-anchor="middle">modular boundaries</text><text class="boxS" x="347" y="497" text-anchor="middle">dirs exist · 4 files = 45% of code</text>
+  <rect class="box stP" x="245" y="464" width="205" height="42" rx="7"/><text class="boxT" x="347" y="482" text-anchor="middle">modular boundaries</text><text class="boxS" x="347" y="497" text-anchor="middle">4 files = 45% of code</text>
 
   <!-- summary strip -->
-  <text class="lbl" x="20" y="540">BUILT: data path · sharding · client · test harnesses      MISSING: everything that makes metadata durable, parallel, and provable</text>
+  <text class="lbl" x="20" y="532">BUILT: data path · sharding · client · test harnesses</text>
+  <text class="lbl" x="20" y="548">MISSING: everything that makes metadata durable, parallel, and provable</text>
 </svg>
 </div>
 
@@ -793,7 +969,7 @@ This is the honest distance between the spec and the code.</p>
   <tr><th>Goal</th><th>Where we are today (measured)</th><th>The gap</th></tr>
   <tr><td><b>≥ 2<sup>32</sup> objects</b></td><td>10M (2<sup>23</sup>) tested, 0 errors; ~1.7 KB/inode RAM is the wall</td><td>paged KV + Raft — steps 3–5</td></tr>
   <tr><td><b>3 → 64 nodes</b></td><td>4 servers, static shard placement</td><td>control-plane Raft + joint reconfiguration — step 6</td></tr>
-  <tr><td><b>survive 1 node</b></td><td>data path proven (kill −9 a shard owner → failover reads OK)</td><td>metadata writes need Raft RF=3 — steps 4–6</td></tr>
+  <tr><td><b>survive f nodes (configured, 1–3)</b></td><td>data path proven at f=1 (kill −9 a shard owner → failover reads OK); today is fixed 2+1 / no metadata RF</td><td>metadata Raft at min(N,2f+1) copies + k+f EC stripes — steps 4–6, 9</td></tr>
   <tr><td><b>immediate visibility</b></td><td><span class="chip cB">BUILT</span> no-TTL kernel caches + always-RPC lookup</td><td>keep; active invalidation via low-level FUSE — step 11</td></tr>
   <tr><td><b>scale with hardware</b></td><td>reads scale 6.3–8.6× to 9 clients; writes share a ~3.6–5.3 GiB/s ceiling; metadata is single-primary</td><td>chunk_meta sharding + size lanes + Raft-per-shard — steps 4, 9</td></tr>
 </table>
@@ -810,26 +986,23 @@ This is the honest distance between the spec and the code.</p>
   <tr><td>5</td><td>Simulator proves the single-shard invariants</td><td><span class="chip cM">MISSING</span></td></tr>
   <tr><td>6</td><td>Safe reconfiguration + control-plane desired placement</td><td><span class="chip cM">MISSING</span></td></tr>
   <tr><td>7</td><td>Cross-shard transaction protocol, incl. concurrency control</td><td><span class="chip cP">PARTIAL</span> fan-out skeleton, no txid/intents/decision</td></tr>
-  <tr><td>8</td><td>Open-unlinked inode lifecycle</td><td><span class="chip cP">PARTIAL</span> keep_last + HOLD; no orphan state/reclaim</td></tr>
+  <tr><td>8</td><td>Client sessions + fencing, then the open-unlinked inode lifecycle on top</td><td><span class="chip cP">PARTIAL</span> keep_last + HOLD; no sessions, no orphan state/reclaim</td></tr>
   <tr><td>9</td><td>Data-generation publication / fencing, sim-checked</td><td><span class="chip cM">MISSING</span> no chunk generations on the wire today</td></tr>
   <tr><td>10</td><td>Directory layout-epoch spread + distributed locking</td><td><span class="chip cM">MISSING</span> threshold flag only; locks per-client today</td></tr>
   <tr><td>11</td><td>Delete the snapshot / root-2PC machinery</td><td><span class="chip cD">DELETE</span> it is today's flush path</td></tr>
   <tr><td>12</td><td>FUSE cache-coherence optimization (data path starts direct-I/O)</td><td><span class="chip cM">MISSING</span> blocked on the low-level API</td></tr>
 </table>
 
-<div class="why">Read the map bottom-up: the <b>data path and the test harnesses are the strong
-foundation</b> — RDMA, EC, FUSE, and the posix/perf suites are built and gated. The <b>entire
-missing mass is in the metadata plane</b>: nothing today makes metadata durable without a whole-table
-flush, parallel across leaders, or provable under failure. That is exactly why the simulator (step 1)
-and single-shard Raft (step 4) come first — everything else hangs off them.</div>
+<div class="why">Read the map bottom-up: the <b>data path and test harnesses are the strong
+foundation</b>. The <b>entire missing mass is metadata</b> — nothing today makes metadata durable
+without a whole-table flush, parallel across leaders, or provable under failure. Hence simulator
+first, single-shard Raft second: everything else hangs off them.</div>
 
 <h2>9 · Migration — gated, never a big bang</h2>
-<p><b>Step 1 has a hard prerequisite: the carve-up (Phase M).</b> A pure state machine behind
-transport/storage interfaces does not exist today — four files hold ~45% of the tree and the state
-machine is fused with its I/O. The simulator can only reuse a state machine that is already pure, so
-the concrete first move is carving the monolith into modules — behavior-preserving, gated by the
-existing suites, and the dev-cycle lever in its own right. Nothing in steps 2–11 is built as new
-monolith code; every new component lands inside the carved boundaries.</p>
+<p><b>Step 1 has a hard prerequisite: the carve-up (Phase M).</b> The simulator can only reuse a
+state machine that is already pure — and today the state machine is fused with its I/O. So the first
+move is carving the monolith into modules: behavior-preserving, gated by the existing suites.
+Nothing in steps 2–11 is built as new monolith code.</p>
 <div class="flow">
 <svg viewBox="0 0 920 210" width="920" height="210">
   <text class="lbl" x="20" y="22">PHASE M FIRST — THEN THE MIGRATION STEPS</text>
@@ -845,23 +1018,24 @@ monolith code; every new component lands inside the carved boundaries.</p>
   <rect class="box" x="680" y="100" width="220" height="44" rx="8"/><text class="boxT" x="790" y="118" text-anchor="middle">7 · cross-shard txns</text><text class="boxS" x="790" y="134" text-anchor="middle">Raft-backed 2PC</text>
   </g>
   <path class="arrow" d="M120,84 V100"/><path class="arrowG" d="M120,144 V156"/>
-  <text class="lbl" x="240" y="196">… 8 open-unlinked lifecycle · 9 data-gen publication/fencing · 10 dir-spread epochs + locking · 11 delete snapshot/2PC · 12 FUSE cache opts last</text>
+  <text class="lbl" x="240" y="188">… 8 open-unlinked lifecycle · 9 data-gen publication/fencing · 10 dir-spread + locking</text>
+  <text class="lbl" x="240" y="204">11 delete snapshot/2PC · 12 FUSE cache opts last</text>
 </svg>
 </div>
-<p class="note">Phase M comes first because it is both the dev-cycle lever and the only way the
-simulator (step 1) can reuse the real state machine. Each step is gated; the system stays runnable
-throughout. Detailed steps live in the <a href="scaling-roadmap.md">scaling roadmap</a>.</p>
+<p class="note">Each step is gated; the system stays runnable throughout. Details live in the
+<a href="scaling-roadmap.md">scaling roadmap</a>.</p>
 
 <!-- ============ REJECTED ============ -->
 <h2>10 · Deliberately rejected</h2>
 <table>
   <tr><th>Idea</th><th>Why not</th></tr>
   <tr><td>Millions of tiny consensus groups beyond the shard count</td><td>4096 groups is the ceiling; more re-creates the catchup-storm class.</td></tr>
-  <tr><td>MVCC / multi-version metadata</td><td>Not required by current semantics; the Raft log gives mutation <i>order</i>, not versioned reads. Add only if future snapshot/scan/txn semantics require it.</td></tr>
+  <tr><td>MVCC / multi-version metadata</td><td>Not required by current semantics; the Raft log gives mutation <i>order</i>, not versioned reads. Add only if future semantics require it.</td></tr>
   <tr><td>A second storage path for metadata pages</td><td>Everything goes through the same log + KV. Two-paths-diverge has bitten twice.</td></tr>
   <tr><td>Client-side metadata caching for correctness</td><td>Caches may exist for performance but are never authoritative; the kernel cache is actively invalidated.</td></tr>
   <tr><td>Clock-based leader leases on the authoritative read path</td><td>Clocks are not correctness inputs.</td></tr>
   <tr><td>Kernel module</td><td>Stay on FUSE; the low-level (inode-based) FUSE API migration is a separate, orthogonal client rewrite.</td></tr>
+  <tr><td>Hard-disk support</td><td>Flash/NVMe-only (§1). The design spends what flash makes true — cheap random I/O, deep queues, µs latency — instead of defending against disk.</td></tr>
 </table>
 
 <p class="note" style="margin-top:3em">Ratified Sep 1 2026; revised Sep 1 2026 after external protocol
