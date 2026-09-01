@@ -9,8 +9,15 @@ that satisfies them. The [scaling roadmap](scaling-roadmap.md) is the
 When a design question comes up, the answer is decided here first, then
 reflected in the roadmap.
 
-**Status: ratified Sep 1 2026.** The metadata layer described here replaces
-the current whole-table snapshot + 2PC design. The data path is unchanged.
+**Status: ratified Sep 1 2026; revised Sep 1 2026 after external protocol
+review.** The metadata layer described here replaces the current whole-table
+snapshot + 2PC design. The data path is unchanged in mechanism (client-direct
+RDMA, 2+1 EC) but its commit semantics are now specified precisely (§5.7).
+
+> **Naming intent.** The bar for this design is that efs earns the name
+> **extremfs**: it scales as close as possible to the raw hardware. Every
+> design decision below is checked against that bar — a component is wrong if
+> it serializes work the hardware could have done in parallel.
 
 ---
 
@@ -20,281 +27,555 @@ A high-performance parallel POSIX file system.
 
 | Property | Target |
 |---|---|
-| Objects (files + dirs) | ≥ 2³² (4.29 billion) |
+| Objects (files + dirs) | ≥ 2³² (4.29 billion) **live** |
 | Cluster size | 3 nodes (smallest) to 64 nodes |
 | Reference size | 2³² objects on 4 nodes |
 | Failure tolerance | survive any 1 node down with full read+write |
 | Consistency | immediate cross-client visibility (no TTL caches) |
-| Data path | client-direct, RDMA, 2+1 EC (unchanged) |
+| Data path | client-direct, RDMA, 2+1 EC |
+| **Scaling bar** | throughput tracks aggregate hardware (NVMe + NIC), not a software serialization point |
 
-The 2³²-on-4-nodes number is the binding constraint. It is what forces
-metadata out of RAM and onto local NVMe, and it is what forces the metadata
-store to be paged rather than serialized whole.
+The 2³²-on-4-nodes number is the binding constraint. It forces metadata out
+of RAM and onto local NVMe, and forces the metadata store to be paged rather
+than serialized whole. The scaling bar forces the *write path* — not just the
+read path — to parallelize across nodes and across clients, including many
+writers to the **same** file.
 
 ## 2. Failure model
 
 - Nodes fail by crashing (stop, restart, rejoin). No Byzantine behavior.
-- The network can drop, delay, reorder, and partition messages. Partitions
-  heal.
-- Up to **1 node** may be down at once and the system stays fully available.
-  (2+1 EC on data; Raft on metadata — both tolerate exactly one failure.)
-- Clocks are loosely synchronized (NTP). Used for expiry/TTL and cache
-  hints only — **never** for correctness of replication or fencing.
+- The network can drop, delay, reorder, duplicate, and partition messages.
+  Partitions heal.
+- Up to **1 node** may be down at once and the system stays available (see
+  §3 for the precise CAP-accurate meaning). RF=3 on metadata and 2+1 EC on
+  data both tolerate exactly one failure.
+- Clocks are loosely synchronized (NTP). Used for expiry/TTL and cache hints
+  only — **never** for correctness of replication, fencing, or reads. In
+  particular there are **no clock-based leader leases** on the authoritative
+  read path.
 - A node that loses its local storage rejoins empty and rebuilds from peers.
-- Clients are untrusted and may crash or be killed at any point.
+- Clients are **fail-stop / non-Byzantine**: they may crash, disconnect,
+  retry, duplicate, or hold stale state, but they are not adversarial.
+  Authorization/fencing at storage targets is therefore about *stale*
+  clients, not malicious ones (see §5.7). If efs is ever exposed to hostile
+  clients, capability-based data authorization becomes a requirement, not an
+  option.
 
 ## 3. Consistency model
 
-- **Metadata: strict serializability per shard.** Every metadata operation
-  is applied on exactly one shard's Raft group, in log order. A client that
-  receives success for op *O* sees *O*'s effects in every subsequent op, from
-  any client, immediately. There are no stale reads and no TTL caches.
-- **Cross-shard operations** (rename across dirs, hardlink, unlink-with-open)
-  are the only multi-shard cases. They are rare and are handled by a
-  documented two-phase pattern with a reconcile rule, not by a global lock.
-- **Data: read-your-writes within a client; quorum durability across
-  clients.** A write returns after 2-of-3 fragment acks. A subsequent read
-  from any client that has seen the metadata commit reconstructs the data.
-  Un-fsynced data can be lost on client crash (POSIX).
+- **Single-shard metadata operations are linearizable** within the
+  authoritative shard's Raft group.
+- **Multi-shard metadata operations are atomic** across their participant
+  shards according to the cross-shard transaction protocol (§5.6). The
+  intended property for those is strict serializability of transactions.
+- There is **no global ordering** between two independent operations on
+  unrelated shards, and none is needed.
+- **Data:** a `write()` that has returned success is durable and visible (see
+  the precise commit state machine in §5.7). Un-`fsync`ed data can be lost on
+  client crash only where POSIX permits it.
+
+**CAP-accurate availability.** With any one storage/server node crashed or
+unreachable, every shard retains a quorum and operations remain available to
+clients that can reach that quorum. A minority partition never serves
+authoritative writes or stale authoritative reads. Brief unavailability
+during leader election is expected. "Survive one node" means safety plus
+continued operation with the remaining quorum — not literally zero
+interruption for every client.
 
 ## 4. Invariants
 
-These are the properties that must hold under every interleaving, including
-the failure model. They are the test oracle for the simulator (§9) and for
-`fsck`. A bug is a violation of one of these.
+These are the test oracle for the simulator (§9) and for `fsck`. A bug is a
+violation of one of these. Invariants are stated over the **committed,
+externally-visible projection** of state; cross-shard transaction *intents*
+(§5.6) are internal and are governed by I17/I18, not by the naïve forms of
+I6/I7.
 
-**Replication / leadership**
+**Replication / leadership (Raft's actual safety properties)**
 
-- **I1 (single leader).** At most one node believes it is the leader of a
-  shard group at a given term, and only a node with a majority of votes in
-  that term can become leader.
-- **I2 (leader completeness).** A committed log entry is present in the log
-  of every subsequent leader.
-- **I3 (fencing).** A node that has lost its leadership (higher term seen)
-  rejects client writes and does not apply new entries.
-- **I4 (no dual owner).** At most one node serves writes for a shard at a
-  time. (Follows from I1 + I3.)
+- **I1 · election uniqueness.** At most one server is elected leader for a
+  shard in a given term.
+- **I2 · leader completeness.** Every subsequently elected leader contains
+  every previously committed entry. (This follows from Raft's election
+  restriction + log-matching + commit rules together — not from majority
+  intersection alone.)
+- **I3 · term fencing.** A node that observes a higher term immediately stops
+  exercising old-term leader authority.
+- **I4 · quorum acknowledgement.** No metadata mutation is acknowledged unless
+  committed according to the shard's *currently authoritative* Raft
+  configuration. ("No dual owner" refers to commit authority, not a node's
+  subjective belief — a partitioned old leader may still believe it leads but
+  cannot commit.)
 
 **Metadata state**
 
-- **I5 (name uniqueness).** Within a directory, a name maps to at most one
-  inode.
-- **I6 (no dangling dentry).** Every dentry points to an existing inode row.
-- **I7 (nlink).** An inode's `nlink` equals the number of dentries naming it.
-- **I8 (no resurrection).** A committed unlink is never undone by a later
-  flush, report, rebuild, or leader change.
-- **I9 (absent ≠ unavailable).** A lookup that cannot reach the authoritative
-  store returns an error (EIO/BUSY), never `ENOENT`. `ENOENT` is only ever
-  returned for a name that is genuinely absent. (This is the Sep 1
-  dangling-dentry bug class.)
-- **I10 (durability).** An operation acknowledged to a client survives the
-  failure of any single node.
+- **I5 · name uniqueness.** Within a directory, one visible name maps to at
+  most one inode.
+- **I6 · no visible dangling dentry.** Every committed visible dentry resolves
+  to a valid inode.
+- **I7 · nlink.** `nlink` equals the number of committed visible namespace
+  links.
+- **I8 · no resurrection.** A committed namespace removal is never reverted by
+  replay, recovery, rebuild, or a stale client.
+- **I9 · absent ≠ unavailable.** A failure to establish authoritative read
+  state never returns `ENOENT`. `ENOENT` is only ever returned for a name
+  that is genuinely absent. (The Sep 1 dangling-dentry class.)
+- **I10 · metadata durability.** An acknowledged committed metadata op
+  survives any single-node failure.
+- **I16 · request idempotency.** Replaying a mutation with the same operation
+  ID cannot apply its logical effect more than once and returns a response
+  compatible with the original completed operation.
+- **I17 · transaction atomic visibility.** A cross-shard transaction is
+  externally visible as committed everywhere or not committed anywhere.
+- **I18 · safe reconfiguration.** No shard configuration transition permits
+  two disjoint authoritative quorums for the same logical history.
+- **I19 · open-unlinked lifetime.** An inode with `nlink=0` remains valid for
+  pre-existing authorized open handles until those references are safely
+  retired; it is never reclaimed or reused while such access is valid.
 
 **Data**
 
-- **I11 (chunk durability).** An acknowledged chunk has ≥ 2 of its 3
-  fragments on distinct nodes.
-- **I12 (no torn chunk).** A read returns either the old chunk or the new
-  chunk, never a mix.
+- **I11 · EC durability.** A published chunk generation has at least two
+  reconstructable fragments on distinct nodes / failure domains.
+- **I12 · chunk consistency.** Every returned chunk corresponds to one valid
+  committed generation and a legal serialization of the committed byte-range
+  mutations.
+- **I13 · generation coherence.** A reconstruction never mixes fragments from
+  different generations.
+- **I14 · publish-after-durability.** Metadata cannot publish generation G
+  before G satisfies the EC durability requirement.
+- **I15 · orphan-generation safety.** Fragments from a generation that was
+  never published may be reclaimed without changing any committed state.
+- **I20 · stale-writer fencing.** A stale client/node cannot overwrite or
+  publish data over a newer committed chunk generation.
+
+**Liveness (testable bounded forms)**
+
+- **L1.** With a stable quorum and eventually-delivered messages, each shard
+  eventually elects a leader.
+- **L2.** Every committed op is eventually applied by every healthy replica.
+- **L3.** A restarting replica with intact storage eventually catches up.
+- **L4.** An empty replacement replica eventually catches up and can safely
+  join.
+- **L5.** Every prepared cross-shard transaction eventually reaches COMMIT or
+  ABORT while the required quorums remain reachable.
+- **L6.** Zero-link orphan inodes eventually reclaim after references
+  disappear.
+- **L7.** Unpublished EC generations eventually reclaim.
+- **L8.** Reconfiguration eventually converges desired placement to actual
+  placement once failures stop.
 
 ## 5. Architecture
 
-### 5.1 The split
+### 5.0 Three planes, not two
 
-Two layers, cleanly separated:
+- **Data plane** — chunk PUT/GET, 2+1 EC, client-direct over RDMA.
+- **Metadata plane** — virtual shards, RF=3 Raft per shard, ordered applied
+  KV on NVMe.
+- **Control plane** — cluster membership, desired placement, shard
+  reconfiguration, node incarnation, drain/rebuild. This is its own Raft
+  group and is *not* an implicit authority for operations it does not itself
+  make safe (see §5.8 on reconfiguration).
 
-- **Data path** — chunk PUT/GET, 2+1 EC, client-direct over RDMA. **Unchanged.**
-  It already scales and meets the performance targets.
-- **Metadata path** — a sharded, replicated, logged, on-disk store. **This is
-  the rebuild.** It replaces the in-RAM table + whole-table serialize + CoW
-  page flush + 2PC root commit.
+### 5.1 Identity and addressing
 
-### 5.2 Metadata: one Raft group per shard
+- **`efs_ino_t` is 64-bit.** The target is ≥ 2³² *live* objects, so the ID
+  space must exceed that to cover deleted/recreated objects, avoid dangerous
+  immediate reuse, tolerate stale client handles, and leave headroom.
+- **Inode generation / incarnation.** Each inode carries a generation that
+  changes on reuse, so a stale handle for a deleted `ino` never silently
+  becomes a handle for a new object (ABA protection). A handle is
+  `(ino, generation)`.
+- **Allocation.** Inos are allocated in per-shard (or per-allocation-domain)
+  ranges so allocation is shard-local and globally unique by construction.
+  The exact scheme (range handout vs. `[domain | counter]`) is an
+  implementation detail; the invariant is global uniqueness + ABA protection.
 
-The inode space is sharded (today: `shard = ino & ((1<<shard_bits)-1)`).
-**Each shard is an independent Raft group.** This is the Ceph PG / CockroachDB
-range model.
+### 5.2 Sharding
 
-- **Shard count.** Sized so a shard holds ~1M inodes. 2³² / 2²⁰ ⇒
-  `shard_bits = 20` ⇒ up to 4096 shards. Shards are cheap; a node hosts many.
-- **Replication.** Each shard's log is replicated to **3 nodes** (RF=3), so
-  one node loss leaves a majority (2 of 3). On a 3-node cluster every shard
-  is on all 3 nodes. On 4–64 nodes, shards are spread by placement.
-- **Leadership.** Each group elects its own leader. Leaders are spread across
-  nodes, so metadata write throughput scales with node count — there is no
-  single metadata primary.
-- **Log.** Every mutation (create, unlink, setattr, rename-step, report) is a
-  log entry with `(term, index)`. An op is committed when a majority of the
-  group's replicas have it durably. This is what makes I1–I4 and I10 true by
-  construction.
+- **4096 metadata shards.** `shard = ino & 0xFFF` (`shard_bits = 12`).
+  Low-bit masking yields **interleaved buckets**, not contiguous ranges —
+  which is what we want, because sequentially-allocated inos then balance
+  across shards naturally. (The earlier `shard_bits = 20` was an arithmetic
+  error: 2³² objects / 2²⁰ objects-per-shard = 2¹² = 4096 shards.)
+- **Shard ≈ 1M inodes** at the 2³² target. Shards are cheap; a node hosts
+  many.
 
-### 5.3 Applied state: an on-disk ordered KV per shard
+### 5.3 Metadata placement — the decisive design decision
+
+This is the choice everything else hangs off, so it is made explicitly.
+
+- **`inode_shard(ino) = ino & 0xFFF`.** The authoritative inode row lives
+  here.
+- **`dentry_shard(parent_ino, name)`** is the open question the review
+  flagged. efs chooses **dentry lives on the parent's shard**
+  (`dentry_shard = inode_shard(parent_ino)`), with a **threshold-based
+  spread** for huge directories (below).
+
+**Why parent-shard dentries.** It makes the two dominant namespace ops
+single-shard: `create`/`unlink` inside a directory touch only
+`inode_shard(parent)` for the dentry. readdir is one ordered range scan on
+one shard. The cost — a hot directory funnels to one leader — is real but
+bounded, and it is the *right* trade because directory-locality is the common
+case and the rsync/ecopy wins came from exactly that locality.
+
+**The two-index problem, resolved.** We do **not** store the full mutable
+inode row in both indexes. The dentry index stores a **projection**:
+
+```text
+(parent_ino, name) -> (ino, generation, type)        // dentry: small, lookup hint
+(ino)              -> authoritative inode_row        // inode: single source of truth
+```
+
+The dentry value carries only what LOOKUP needs to route and to validate a
+handle (`ino`, `generation`, `type`). All mutable attributes (mode, uid, gid,
+size, mtime, nlink, …) live **only** in the inode row. This eliminates the
+chmod/chown/mtime/size/nlink divergence the review warned about, and it makes
+hardlinks clean: many `(parent,name)` keys point at one authoritative inode.
+
+**Cost we accept:** a LOOKUP that needs attributes does a dentry get (parent
+shard) then an inode get (inode shard) — two point-gets, possibly two shards.
+That is the price of not duplicating mutable state, and it is paid only on
+the attribute path, not the name-exists path.
+
+**Hot-directory spread (threshold).** When a directory's entry count crosses
+`EFS_DIR_SPREAD_MIN`, its *dentries* spread by `hash(parent_ino, name) &
+0xFFF` across shards; readdir becomes a scatter/merge. This is the existing
+Phase-3b Item-2 mechanism carried into the new model. It is the escape valve
+that keeps a 500M-entry directory from pinning one leader, at the cost of
+multi-shard readdir for exactly those rare huge dirs.
+
+### 5.4 One Raft group per shard
+
+Each shard is an independent Raft group, replicated to **3 nodes** (RF=3).
+One node loss leaves a majority. On a 3-node cluster every shard is on all
+three; on 4–64 nodes shards spread by placement. Each group elects its own
+leader; leaders spread across nodes, so metadata write throughput scales with
+node count — there is no single metadata primary.
+
+Every mutation is a log entry `(term, index)`. It is committed when a
+majority of the group's replicas hold it durably. This is what makes I1–I4
+and I10 true.
+
+### 5.5 Applied state: a logical ordered KV per shard
 
 Each replica applies its log to a **local, embedded, ordered key-value store**
-on NVMe. RAM is a bounded cache in front of it, not the store.
+on NVMe. RAM is a bounded cache, not the store.
 
-- **Keys.** Two key spaces per shard:
-  - `(parent_ino, name) → inode_row` — the dentry index; serves LOOKUP and
-    readdir (ordered, so readdir is a range scan).
-  - `(ino) → inode_row` — the inode index; serves GETATTR/setattr.
-- **Values.** The slim inode row (Phase 4: name moved out, ~96–128 B).
+- **Logical, not one DB instance per shard.** Each shard has an isolated
+  ordered applied-state *namespace*. At 64 nodes a node hosts ~192 shard
+  replicas (4096×3/64); hundreds of independent storage-engine instances
+  would waste threads, memtables, block caches, WALs, and file descriptors.
+  Implementation multiplexes many shard namespaces into one local storage
+  engine using a shard-prefix key. Raft logs remain independently ordered per
+  group.
+- **Keys.** `(parent_ino, name) -> (ino, gen, type)` and `(ino) -> inode_row`
+  (see §5.3). Ordered, so readdir is a range scan.
 - **Why a log + KV, not a snapshot.** The current design serializes the whole
-  table to discover what changed; the Sep 1 measurement is `incr=0` on 100%
-  of flushes during growth and `ser=350ms` per flush at 10M. A log only ever
-  writes what changed. Snapshots exist only for **log truncation** (a lagging
-  replica catches up from a snapshot + recent log), not as the durability
-  mechanism.
-- **RAM.** A bounded block cache + the leader's in-flight state. 2³² × ~128 B
-  ≈ 512 GiB of *data*, but it lives on NVMe; RAM holds only the working set.
-  This is what removes the 1.9–3.4 KB/inode RAM wall.
+  table to discover what changed (`ser=350ms`/flush at 10M, `incr=0` on 100%
+  of growth flushes). A log only ever writes what changed. Snapshots exist
+  only for **log truncation** (a lagging replica catches up from a snapshot +
+  recent log), never as the durability mechanism.
+- **Capacity model (honest).** The naive "2³² × 128 B ≈ 512 GiB" is only one
+  logical inode-row copy. Real persistent consumption = `(N_inodes ×
+  inode_value_size + N_dentries × dentry_value_size + names) ×
+  KV_amplification × RF`, plus Raft log, snapshots, tombstones, transaction
+  and dedup state, and compaction headroom. Note `N_dentries ≥ N_inodes`
+  (hardlinks). NVMe capacity is designed around this explicitly; it is not a
+  512 GiB fits-and-done claim.
 
-### 5.4 The commit path
-
-1. Client sends the op to the shard's leader (owner routing already exists).
-2. Leader appends to its log, replicates to the group's followers.
-3. On majority ack, the entry is committed; the leader applies it to its KV
-   and replies to the client.
-4. Followers apply in log order.
-
-There is no whole-table flush, no CoW page placement, no GC of referenced
-pages, no extras-merge, no 2PC, no catchup-vs-GC race. Those subsystems are
-**deleted**, not patched. Most of the bug surface in the project history
-(dual-writer root gen, extras-loss-on-adopt, catchup-vs-GC, peers pinned at
-an old gen, adopt-before-pages-local, rebuild-discards-unflushed-ops) is the
-failure-mode enumeration of the snapshot model; the log model does not admit
-them.
-
-### 5.5 Cross-shard operations
+### 5.6 Cross-shard transactions
 
 Only rename-across-dirs, hardlink, and unlink-while-open touch two shards.
-They use a two-phase pattern (prepare on the child shard, commit on the
-parent shard) with a documented reconcile rule on crash (e.g. "hash-shard
-row wins, parent-shard row loses"). These are rare and already have the
-fan-out skeleton (`CREATE_SHARD` / `UNLINK_SHARD`). They are *not* a reason
-for a global lock or a global consensus group.
+They need **atomic visibility**, which a reconcile rule alone does not
+provide. efs uses a **Raft-backed distributed transaction** — decentralized,
+no global transaction server:
 
-### 5.6 Membership
+```text
+txid (stable across all participants)
+coordinator = a deterministic participant shard
+participant set
 
-Cluster membership (which nodes exist, which are live) is itself a small
-Raft group (the "control group"), separate from the data shards. This removes
-the current "primary = lowest live node id from a local liveness view" —
-which is a pure function of unreplicated state and admits split-brain.
-Shard→node placement is derived from the committed membership, so every node
-computes the same owner for a shard.
+PREPARE  -> each participant writes a durable intent
+DECISION -> coordinator Raft-commits COMMIT | ABORT (durable)
+RESOLVE  -> participants apply/abandon per the decision
+```
+
+- **Visibility rule.** An intent is never externally visible as a committed
+  effect; readers that encounter an intent must resolve it against the
+  coordinator's decision (or block/EBUSY), so clients never observe an
+  illegal intermediate (I17).
+- **Idempotency / retry.** The whole transaction carries one `txid`;
+  re-prepare and re-resolve are idempotent (I16).
+- **Crash recovery.** A recovering participant or a reader that finds an
+  intent queries the coordinator's durable decision and drives the
+  transaction to completion (L5).
+- **GC.** Resolved intents are reclaimed (L7-class).
+
+**Terminology fix.** What is being *deleted* is the old **global
+root-snapshot 2PC durability mechanism** — the one whose commit point was an
+insufficiently-replicated coordinator/root-generation. A per-operation
+Raft-backed 2PC-like protocol for cross-shard transactions is a different
+thing and is exactly what's needed here. Raft (replicated ordering within a
+shard) and 2PC (atomic commitment across shards) solve different problems;
+efs uses each where it fits.
+
+### 5.7 The data plane, specified precisely
+
+This is where "scales with raw hardware" is won or lost. The mechanism
+(client-direct RDMA, 2+1 EC) is unchanged; what is new is a precise commit
+and concurrency protocol.
+
+**Immutable chunk generations.** Each logical chunk's fragments are keyed by
+`(ino, chunk_index, generation, fragment_index)`. A generation is immutable
+once written. Reconstruction never mixes generations (I13). Metadata
+publishes generation G only after G satisfies EC durability (I14); an
+unpublished generation's fragments are orphans, reclaimable without touching
+committed state (I15). This is what makes stale-client writes safe: a stale
+client may write an orphan generation, but it cannot make it visible without
+winning the metadata publication protocol (I20).
+
+**The write commit state machine (direct write).**
+
+```text
+1. allocate chunk generation G
+2. encode + store fragments of G (client-direct RDMA to 3 nodes)
+3. obtain >= 2 durable fragment ACKs            (EC durability)
+4. Raft-commit the metadata publication of G    (size/chunk-map/mtime)
+5. apply the publication
+6. return write success
+```
+
+So a `write()` that has returned success **is** durable and visible — stronger
+than POSIX, and deliberately so. `fsync()` then only has to cover whatever
+client-side batching efs intentionally permits plus namespace ordering. There
+is no ambiguous gap between "write succeeded" and "metadata committed."
+
+**Partial-chunk and concurrent writers (same file).** This is the hot-file
+problem (review P0.14) and it gets a real answer:
+
+- **Disjoint full-chunk writes need no inode mutation.** With deterministic
+  chunk placement, a write that covers whole chunks publishes chunk-map
+  entries for *those* chunks, keyed by `(ino, chunk_index, gen)` — these are
+  independent keys, so 100k writers to disjoint chunks of one file do **not**
+  serialize on the inode row. The data is distributed *and* the metadata is
+  distributed. This is the extremfs property.
+- **Size is a monotonic high-water mark.** For extending writes,
+  `size = max(committed write-end offsets)` is a commutative, idempotent
+  operation — it does not need to serialize writers against each other.
+  Truncate creates a new content epoch that resets the interpretation.
+- **mtime is coalesced / lazily advanced** where POSIX-visible semantics
+  permit, so it is not a per-write Raft mutation.
+- **Sub-chunk read-modify-write** uses generation CAS: a writer builds
+  candidate generation `G+1` from committed base `G`, publishes with
+  `CAS(expected_generation = G)`; on conflict it refetches the committed
+  generation, reapplies its byte-range patch, and retries. Concurrent
+  *disjoint* byte-range writes to the same chunk thus both land (I12), with
+  no whole-file lock. The invariant is "every returned chunk is a valid
+  serialization of committed byte-range writes," not "old whole chunk or one
+  writer's whole chunk."
+- **O_APPEND** necessarily serializes EOF allocation; that hotspot is
+  semantic and unavoidable, and it is the *only* same-file serialization the
+  design accepts.
+
+**Stale-target fencing.** Because clients write directly to data targets,
+Raft terms on the metadata path are not sufficient to fence the data path.
+Fragment identity therefore carries `(chunk_generation, placement_epoch,
+fragment_role, target_node_incarnation)`, and a storage target rejects a PUT
+whose generation/epoch is older than what it has already accepted for that
+chunk. Immutable generations + atomic metadata publication + target-side
+generation checks together give I20.
+
+### 5.8 Control plane, membership, and reconfiguration
+
+- **Node incarnation.** Every process/storage incarnation has an identity
+  that changes across a destructive restart: `(node_uuid,
+  storage_incarnation, process_boot_id)`. Delayed packets from an old
+  incarnation must not be confused with current state — Raft protects the
+  metadata protocol; the control and data planes carry incarnation info for
+  stale-incarnation rejection.
+- **Desired placement ≠ authoritative configuration.** The control group
+  chooses *desired* shard→node placement. It does **not** atomically
+  reconfigure a live Raft group — that would be unsafe (the old replica set
+  `{A,B,C}` and new `{D,E,F}` have zero majority intersection and could both
+  make progress).
+- **Safe reconfiguration.** A shard's own Raft group transitions its actual
+  membership through an overlapping-quorum (joint-consensus) path, e.g.
+  `{A,B,C} → joint{A,B,C,D,E} → {B,D,E} → …`. A replacement replica catches
+  up sufficiently before becoming a voting member. This is I18; an incorrect
+  rebalancer would invalidate every Raft safety argument, so it is specified,
+  not left to the implementation.
+
+### 5.9 Reads: the linearizable read protocol
+
+"Committed" does not make an arbitrary replica safe to read. Authoritative
+metadata reads (LOOKUP/GETATTR/readdir) go to the **shard leader**, which
+establishes current read authority through Raft (a quorum-backed
+ReadIndex-style mechanism) and **waits until its applied index ≥ the read
+index** before reading the KV. Because clocks are never correctness inputs
+(§2), there are **no clock-based leader leases** on the authoritative read
+path. Followers either forward to the leader or use an explicitly specified,
+proven linearizable follower-read mechanism.
+
+### 5.10 Client request deduplication
+
+The failure model allows duplicated messages and dying clients, and Raft does
+not give application RPCs exactly-once semantics by itself. Every mutating
+request carries a stable logical identity — `(client/session UUID, request
+sequence)` or an operation UUID. The replicated state machine records enough
+completed-request state to make ambiguous retries idempotent (I16). This is
+critical for O_APPEND, create, link, unlink, rename, truncate, mkdir. The
+same `txid`/op-ID threads through all participants of a cross-shard
+transaction.
+
+### 5.11 Open-unlinked inode lifetime
+
+I6/I7 allow `nlink = 0` while a file is open. The lifecycle:
+
+```text
+nlink -> 0            => inode enters ORPHAN state
+valid open references => still readable/writable (I19)
+reclaim only when     nlink == 0 AND no valid open reference can exist
+```
+
+Open/close must **not** become heavyweight durable metadata mutations on the
+hot path. Open references are tracked with fencing so a dead client's
+reference is safely retired (recovery) and a stale client's reference cannot
+keep an inode alive or be reused (I19). Reclaim is L6.
+
+### 5.12 FUSE / kernel cache coherence
+
+"No TTL caches" is not sufficient, because Linux/FUSE itself maintains a
+dentry cache, negative dentry cache, attribute cache, and page cache above
+the efs-fuse daemon. Immediate cross-client visibility must include that
+kernel cache.
+
+- Default: `entry_timeout = 0`, `negative_timeout = 0`, `attr_timeout = 0`.
+- The low-level (inode-based) FUSE API gives explicit inode/dentry
+  invalidation notifications; efs uses server-driven invalidation to keep the
+  kernel cache honest without TTLs.
+- Writeback page caching, if ever enabled, makes invalidation correctness
+  even more important (invalidating an inode can trigger dirty-page
+  writeback). It stays off until zero/stale-cache semantics are demonstrably
+  correct.
 
 ## 6. Why the theory holds up
 
 Let's be precise about what is and isn't claimed. **Raft-per-shard over an
-embedded KV is not a new mechanism** — and §5 says so. The claim is stronger
-than novelty: **the design is a consequence of the constraints, and the
-argument for it is a derivation, not an analogy.** A copy-cat cites a system
-that works and imitates it. A derivation starts from what must be true and
-shows only one shape survives.
+embedded KV is not a new mechanism.** The claim is stronger than novelty: the
+design is a *consequence of the constraints*, and the argument is a
+derivation, not an analogy. A copy-cat cites a working system and imitates
+it. A derivation starts from what must be true and shows which shapes
+survive.
 
 ### The constraints are forces, not preferences
 
-Four facts about the goal act as forces that eliminate designs. None is a
-taste choice.
-
 | Constraint | Force it exerts | Design it eliminates |
 |---|---|---|
-| 2³² objects on 4 nodes | ~512 GiB of inode data cannot live in RAM | any fully-in-RAM table (today's) |
+| 2³² objects on 4 nodes | ~512 GiB+ of metadata cannot live in RAM | any fully-in-RAM table (today's) |
 | immediate cross-client visibility | no authoritative cache may go stale | TTL / negative / attr caches as truth |
-| survive 1 node down, read *and* write | a write must commit without the dead node | 2PC, primary-backup without failover |
+| survive 1 node down, read *and* write | a write must commit without the dead node | single-coordinator 2PC, primary-backup without failover |
 | 3 → 64 nodes | work must spread, not funnel to one writer | a single cluster-wide metadata primary |
+| **scale with raw hardware** | parallel work must not hit a software serializer | whole-table flush; per-write inode-row mutation |
 
-### Each force admits exactly one answer
+### The constraints strongly favor one family; efs picks proven primitives within it
 
-- Must page from disk → **an ordered KV on NVMe**, RAM a bounded cache.
-- Commit without the dead node → **majority consensus (quorum)**, 2 of 3.
-- No single writer → **shard the keyspace** into independent units.
-- Spread the writers → **a leader per shard**, leaders spread across nodes.
+The constraints do not *mathematically* force "Raft + ordered KV"
+specifically — Multi-Paxos or Viewstamped Replication, and a B-tree or LSM or
+custom page store, satisfy the same forces. The honest statement:
 
-The four answers compose into one shape: **one Raft group per shard, a
-replicated log applied to an on-disk KV.**
+> The constraints strongly favor a **partitioned replicated state machine
+> with persistent, paged applied state**. efs chooses **Raft** and an
+> **ordered embedded KV** because they satisfy those requirements with
+> proven, understandable primitives and minimal new protocol invention.
 
-This is why it is not a copy of Ceph or CockroachDB. Those systems arrived at
-the *same* shape because the *same four forces* act on any strongly-consistent,
-horizontally-scaled, fault-tolerant store. We are not imitating their
-solution — we are solving the same equations, and the equations have one
-solution. Convergent evolution is evidence of a correct derivation, not of
-imitation.
+That this is also where Ceph and CockroachDB landed is not imitation — it is
+convergent evolution. The same forces act on any strongly-consistent,
+horizontally-scaled, fault-tolerant store, so independent systems solve the
+same equations and arrive at the same shape. Convergence is evidence the
+derivation is correct, not that it was copied.
 
-### The safety properties are theorems, not testing goals
+### The safety properties are inherited theorems plus explicit composition obligations
 
-The current system produces the same bug family forever because its safety
-rests on *careful coding* — and careful coding does not compose under message
-reordering. The target rests on two results that are **proven**, not tested:
-
-- **Majority intersection.** Any two majorities of a fixed set share a member.
-  An election (needs a majority) and a committed write (needs a majority)
-  always overlap on at least one node — which is what guarantees a new leader
-  learns every committed entry. This is I1, I2, I4, and it is arithmetic.
-- **Quorum durability.** A write acknowledged by a majority survives any
-  failure that leaves a majority, because at least one survivor holds it. With
-  RF=3 that is exactly one node. This is I10, and it is why "survive 1 node
-  down" is a theorem here and a hope in 2PC.
-
-2PC fails the second theorem by construction: its commit point is the
-coordinator, a single node, so coordinator loss mid-commit blocks or diverges.
-That is not a bug in our 2PC — it is what 2PC *is*. The bug history
-(dual-writer root, peers pinned at an old gen, adopt-before-pages-local) is
-the system repeatedly discovering that its commit protocol does not satisfy
-quorum durability. A design whose safety is a theorem does not carry a bug
-budget for that class — the class is excluded by the proof.
+- **Core shard-replication safety is inherited from Raft** when implemented
+  according to its assumptions (election restriction, log matching, commit
+  rules, safe reconfiguration). Leader completeness (I2) is Raft's theorem,
+  not majority intersection alone.
+- **Quorum durability** (I10/I11): a majority-acknowledged write survives any
+  failure that leaves a majority. With RF=3 that is exactly one node. This is
+  why "survive 1 node down" is a theorem here. The old design's root/snapshot
+  2PC did not provide this — its commit point was an under-replicated
+  coordinator — and the bug history (dual-writer root, peers pinned at an old
+  gen, adopt-before-pages-local) is the system repeatedly discovering that.
+- **EFS-specific composition is *not* covered by Raft's proof.** RPC dedup,
+  KV persistence ordering, cross-shard transaction logic, FUSE cache
+  coherence, EC generation publication, chunk RMW, reconfiguration, and the
+  orphan lifecycle remain **explicit proof / model / simulation
+  obligations**. That is exactly what the simulator (§9) is for.
 
 ### What is genuinely ours
 
-The mechanism is proven and shared. What is specific to efs — where the real
-design work lives — is the **composition**:
+The mechanism is proven and shared. The design work specific to efs is the
+**composition**:
 
-- **Metadata on a log, data on EC — decoupled.** Strong consensus where
-  correctness is cheap (small metadata), erasure coding where bandwidth
-  matters (bulk data). Most systems pick one consistency substrate for both;
-  efs puts each on the substrate that fits its cost model.
-- **POSIX on sharded consensus.** rename / hardlink / unlink-while-open are
-  cross-shard. The two-phase + reconcile rule that keeps POSIX atomicity
-  *without* a global lock or a global consensus group is not in any textbook.
-- **The inode record shaped for the KV.** The 512 B self-contained row and the
-  (parent, name) + (ino) key split are designed around the store, so readdir
-  is a range scan and lookup is a point get — not bolted on after.
+- **Metadata on a log, data on immutable-generation EC — decoupled.** Strong
+  consensus where correctness is cheap (small metadata), erasure coding where
+  bandwidth matters (bulk data). Most systems pick one consistency substrate
+  for both; efs puts each on the substrate that fits its cost model.
+- **A hot-file path that does not serialize.** Disjoint full-chunk writes
+  publish independent chunk-map keys; size is a monotonic high-water mark;
+  sub-chunk RMW is generation CAS. A million writers to one file parallelize
+  instead of funneling through one inode's Raft leader. This is the extremfs
+  property and it is not in any textbook.
+- **POSIX on sharded consensus.** rename / hardlink / unlink-while-open stay
+  atomic across shards via a Raft-backed transaction with no global lock and
+  no global consensus group.
+- **The inode record shaped for the KV.** The 512 B self-contained row and
+  the dentry-projection / authoritative-inode split are designed around the
+  store, so readdir is a range scan and lookup is at most two point-gets.
 - **Deterministic simulation as the gate.** Making the whole thing testable
   in-process from a seed turns "the theory holds" from an argument into a
   checkable artifact.
 
-**The thesis in one line:** the constraints force the shape, the shape's
-safety is a theorem, and the part that is ours — the composition with EC data
-and POSIX semantics — is where the design earns its keep. That is a stronger
-position than novelty: a novel-but-unproven design is a risk; a
-derived-from-first-principles design on proven primitives is a foundation.
+**The thesis in one line:** the constraints force the family, Raft + KV are
+the proven primitives within it, and the part that is ours — the composition
+with immutable-generation EC data and a non-serializing hot-file path — is
+where the design earns the name extremfs.
 
 ## 7. Why this satisfies the goal
 
-- **2³² on 4 nodes:** metadata is on NVMe, paged by the KV, RAM is a bounded
-  cache. The 512 GiB of inode data fits on the 4 nodes' NVMe; RAM holds only
-  the hot set.
-- **3 → 64 nodes:** shards re-balance across nodes; leaders spread; adding a
-  node moves some shard replicas onto it. Smallest cluster (3) runs every
-  shard at RF=3 on all three.
+- **2³² on 4 nodes:** metadata is paged from NVMe by the KV; RAM is a bounded
+  cache. Capacity is modeled honestly (§5.5), not assumed to fit.
+- **3 → 64 nodes:** shards re-balance through safe reconfiguration (§5.8);
+  leaders spread; adding a node moves some shard replicas onto it. Smallest
+  cluster (3) runs every shard at RF=3 on all three.
 - **1-node tolerance:** RF=3 per shard + 2+1 EC on data both survive one
-  loss.
+  loss (§3 for the precise availability claim).
 - **Immediate visibility:** ops are applied on the leader in log order and
-  acknowledged only when committed; there is no cache to be stale.
-- **Performance:** the data path is untouched. Metadata op cost becomes one
-  leader RTT + a majority replication, which is the floor for any consistent
-  system; the win is that it no longer degrades with table size.
+  acknowledged only when committed; kernel caches are actively invalidated
+  (§5.12). There is no cache to go stale.
+- **Scale with raw hardware:** the data path is client-direct RDMA + EC, and
+  the hot-file metadata path publishes independent chunk keys rather than
+  serializing on an inode row (§5.7). Metadata op cost is one leader RTT + a
+  majority replication — the floor for any consistent system — and it no
+  longer degrades with table size or with same-file concurrency.
 
 ## 8. What is deliberately rejected
 
 - **Millions of tiny consensus groups beyond the shard count.** 4096 groups
   is the ceiling; more re-creates the catchup-storm class.
-- **MVCC / multi-version metadata.** The Raft log is the single time axis.
+- **MVCC / multi-version metadata.** Not required by the current filesystem
+  semantics and intentionally omitted. The Raft log gives mutation *order*;
+  it is not a substitute for MVCC. Introduce MVCC only if future snapshot,
+  scan, or cross-shard transaction semantics require versioned reads.
 - **A second storage path for metadata pages.** Everything goes through the
   same log + KV. (Two-paths-diverge has bitten twice.)
 - **Client-side metadata caching for correctness.** Caches may exist for
-  performance but are never authoritative.
+  performance but are never authoritative (and the kernel cache is actively
+  invalidated, §5.12).
 - **Kernel module.** Stay on FUSE; the low-level (inode-based) FUSE API
   migration is a separate, orthogonal client rewrite.
+- **Clock-based leader leases on the authoritative read path.** Clocks are
+  not correctness inputs (§2, §5.9).
 
 ## 9. The simulator (build first, architecture-independent)
 
@@ -302,40 +583,56 @@ The single highest-leverage tool, and it pays for itself regardless of the
 metadata design.
 
 **What it is.** A deterministic discrete-event simulator that runs N logical
-servers + M clients **in one process**. A seeded PRNG drives: message order,
-drops, delays, duplicates, network partitions, node crashes/restarts, and
-clock steps. The real metadata state machine (the Raft groups, the KV apply,
-the op handlers) runs inside it against a **simulated network and simulated
-disk**, not sockets and NVMe.
+servers + M clients **in one process**. A seeded PRNG drives message order,
+drops, delays, duplicates, partitions, node crashes/restarts, and clock
+steps. The real metadata state machine (Raft groups, KV apply, op handlers,
+cross-shard transactions, membership) runs inside it against a **simulated
+network and simulated disk**, not sockets and NVMe.
 
 **Why it changes the dev cycle.** Today every correctness gate is a 13-node
 wipe + rsync + rebuild + ssh orchestration, and the signal is poor (99% of
 posixstress "failures" are 15s timeouts = saturation, not correctness).
 Distributed bugs are only findable end-to-end on physical hardware — the
-slowest, least reproducible place possible. In the simulator:
+slowest, least reproducible place possible. In the simulator a full cluster
+scenario runs in milliseconds, a failure replays exactly from its seed, and
+you explore millions of interleavings overnight. The invariants of §4 are
+checked after every simulated step, so a bug is a seed + a violated
+invariant, not a log line on a live cluster.
 
-- A full cluster scenario runs in **milliseconds**.
-- A failure **replays exactly** from its seed.
-- You explore **millions of interleavings** overnight.
-- The invariants of §4 are checked after every simulated step, so a bug is a
-  seed + a violated invariant, not a log line on a live cluster.
+**How it is built.** The metadata core is written to be **transport- and
+storage-agnostic**: it sends messages and reads/writes disk through
+interfaces. Two backends implement those interfaces: the real one (sockets +
+NVMe, what ships) and the simulated one (a message queue + a fault-injecting
+in-memory disk, what the simulator drives). The same compiled state machine
+runs in both, so "passes in simulation" is meaningful.
 
-Nearly every bug in the project history is a message-ordering or
-failure-timing bug that a simulator finds in minutes and that never needed
-NVMe or 13 nodes to reproduce. This is the FoundationDB / TigerBeetle central
-thesis: make the distributed logic deterministic and testable in-process, and
-the hardware cluster becomes a performance harness, not a correctness oracle.
+**Fault-injection events the generator must produce:**
 
-**How it is built.** The metadata core is written (or refactored) to be
-**transport- and storage-agnostic**: it sends messages and reads/writes disk
-through interfaces. Two backends implement those interfaces: the real one
-(sockets + NVMe, what ships) and the simulated one (a message queue + a
-fault-injecting in-memory disk, what the simulator drives). The same compiled
-state machine runs in both, so "passes in simulation" is meaningful.
+```text
+lost client replies · duplicated client RPCs
+node restart with same disk · node restart empty / new incarnation
+delayed packets from a previous incarnation
+leader crash after local append but before follower send
+leader crash after quorum commit but before reply
+leader crash after commit but before local apply
+snapshot creation during writes · snapshot transfer interruption/restart
+membership-transition interruption at every step
+cross-shard coordinator crash in every transaction phase
+participant crash in every transaction phase
+client crash after fragment PUT before metadata publish
+client crash after metadata commit before reply
+stale client placement map · stale client chunk generation
+```
 
-**Scope.** It models the metadata layer (Raft, KV apply, op handlers,
-cross-shard 2PC, membership). It does not model the RDMA data path — that is
-covered by the existing perf harnesses.
+**Independent checking.** Record complete operation histories and run an
+independent linearizability / transaction-history checker, rather than
+relying exclusively on handwritten invariants. (This is the FoundationDB
+methodology: deterministic whole-cluster single-process simulation, seeded
+replay, network/disk/machine fault injection, and the goal of finding
+correctness issues in simulation rather than production.)
+
+**Scope.** It models the metadata layer. It does not model the RDMA data
+path — that is covered by the existing perf harnesses.
 
 ## 9a. Shortening the code → signal cycle
 
@@ -382,19 +679,27 @@ Deliberate moves that shorten the loop:
 
 ## 10. Migration shape (high level)
 
-This is not a big-bang rewrite. The order is chosen so each step is gated and
-the system stays runnable:
+Not a big-bang rewrite. Order chosen so each step is gated and the system
+stays runnable. **Do not** go straight `KV → Raft → done`.
 
-1. **Simulator first.** Stand up the deterministic harness against the
-   *current* metadata state machine. It immediately starts finding the
-   existing bug class and becomes the regression gate for everything after.
-2. **Embed the KV.** Introduce the on-disk ordered KV as the applied state
-   for one shard, behind the existing op handlers. RAM becomes a cache.
-3. **Introduce Raft per shard.** Replace the whole-table flush / 2PC / CoW
-   page commit with the replicated log, one shard group at a time.
-4. **Membership as a Raft group.** Replace local-liveness primary election.
-5. **Delete the snapshot machinery.** flush_blob, CoW page placement, GC,
-   extras-merge, catchup-vs-GC — removed once no path depends on them.
+```text
+0. Freeze the exact metadata placement model:
+   inode_shard() · dentry_shard() · authoritative row ownership ·
+   inode IDs + generations.
+1. Simulator interfaces + the CURRENT state machine.
+2. Define RPC operation IDs + the idempotency model.
+3. Ordered KV applied state, incl. atomic batch semantics.
+4. Single-shard Raft: persistence · election · replication · apply ·
+   ReadIndex/linearizable reads · snapshots.
+5. Simulator proves the single-shard invariants.
+6. Safe Raft-group reconfiguration + control-plane desired placement.
+7. Cross-shard transaction protocol.
+8. Open-unlinked inode lifecycle.
+9. Data-generation publication / fencing integration.
+10. Delete the old snapshot / root-2PC machinery.
+11. FUSE cache-coherence optimization only after zero/stale-cache semantics
+    are demonstrably correct.
+```
 
 The detailed, gated steps live in the [scaling roadmap](scaling-roadmap.md);
 this document is the invariant they are measured against.
@@ -403,11 +708,18 @@ this document is the invariant they are measured against.
 
 ## Appendix: terms
 
-- **Shard** — a contiguous slice of the inode space; the unit of replication
-  and leadership.
+- **Shard** — an interleaved bucket of the inode space (`ino & 0xFFF`); the
+  unit of replication and leadership.
 - **Raft group** — the 3 replicas + log for one shard.
 - **Leader** — the single writer for a shard in a given term.
 - **Term** — a monotonically increasing leadership epoch; used for fencing.
-- **Committed** — present on a majority of the group's replicas.
-- **KV** — the embedded on-disk ordered key-value store holding applied state.
-- **Control group** — the small Raft group that owns cluster membership.
+- **Committed** — present on a majority of the group's current authoritative
+  configuration.
+- **KV** — the embedded on-disk ordered key-value store holding applied state
+  (one logical namespace per shard, multiplexed into a shared local engine).
+- **Control plane** — the small Raft group that owns cluster membership and
+  desired placement.
+- **Chunk generation** — the immutable version of a logical chunk's fragment
+  set; publication is atomic via metadata commit.
+- **Intent** — a durable prepared record written by a participant in a
+  cross-shard transaction; never externally visible as a committed effect.

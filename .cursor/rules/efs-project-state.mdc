@@ -147,23 +147,41 @@ unreadable) — `perf record -p` / `perf stat -p` same-uid are fine.
 
 ## Where we are
 
-**ARCHITECTURE DECISION (Sep 1 2026, user-ratified).** The project now has a
-master spec: **`docs/architecture.md`**. Decisions locked by the user:
-- **Metadata becomes a real replicated log over an on-disk store** — one Raft
-  group per shard (Ceph PG / Cockroach range model), applied to an embedded
-  ordered KV on NVMe; RAM is a bounded cache, not the store. This REPLACES
-  whole-table snapshot + CoW page flush + 2PC root commit (those get DELETED,
-  not patched — most of the bug history is their failure-mode enumeration).
-- **Build a deterministic simulator FIRST, architecture-independent.** N
-  servers + M clients in one process, seeded PRNG driving message order /
-  drops / partitions / crashes; the metadata state machine runs against a
-  simulated net+disk through transport/storage interfaces; invariants
-  (docs/architecture.md §4) checked every step; failures replay from a seed.
-  This becomes the correctness gate; the 13-node cluster becomes a perf
-  harness, not the correctness oracle.
-- **Targets locked:** ≥ 2³² objects; 3 nodes (min) to 64 nodes; reference =
-  2³² on 4 nodes; survive 1 node down; immediate cross-client visibility.
-- Data path (client-direct RDMA 2+1 EC) is UNCHANGED.
+**ARCHITECTURE DECISION (Sep 1 2026, user-ratified; REVISED after external
+protocol review).** The project now has a master spec: **`docs/architecture.md`**
+(+ browsable `docs/architecture.html`). User's bar: efs must earn the name
+**extremfs** — throughput tracks aggregate hardware (NVMe+NIC), no software
+serialization point, incl. many writers to ONE file. Decisions locked:
+- **Metadata = one Raft group per shard over an on-disk ordered KV**; RAM is a
+  bounded cache. Replaces whole-table snapshot + CoW page flush + 2PC root
+  commit (those get DELETED, not patched).
+- **Build a deterministic simulator FIRST** (seeded PRNG drives net/disk/
+  crashes; invariants checked every step; failures replay from seed; plus an
+  independent linearizability/history checker). It becomes the correctness
+  gate; the 13-node cluster becomes a perf harness.
+- **Targets:** ≥ 2³² live objects; 3–64 nodes; reference 2³² on 4 nodes;
+  survive 1 node; immediate cross-client visibility.
+- Data path mechanism (client-direct RDMA 2+1 EC) UNCHANGED, but commit
+  semantics now specified (immutable chunk generations + atomic metadata
+  publication + target-side generation fencing).
+**Review corrections now IN the spec (the reviewer was right; do not re-litigate):**
+shard_bits=**12** (not 20) for 4096 shards; ino is **64-bit + generation**
+(ABA-safe); dentry index stores a small **projection** `(ino,gen,type)`, the
+inode row is the ONLY mutable copy (dentries on parent's shard, threshold
+spread for huge dirs); cross-shard rename/hardlink/unlink-open use a
+**Raft-backed transaction** (txid/coordinator/intents/durable decision) — the
+"no 2PC" is only about the OLD root-snapshot 2PC, not per-op cross-shard 2PC;
+I1–I4 restated as Raft's real properties (election uniqueness / leader
+completeness / term fencing / quorum-ack, NOT "at most one believes leader");
+reads are **leader + ReadIndex** (no clock leases — clocks never correctness);
+safe reconfiguration via **joint consensus** (desired placement ≠ authoritative
+config); request **idempotency** via op-IDs; open-unlinked lifecycle; FUSE
+kernel-cache invalidation (entry/attr/negative_timeout=0 + active invalidate);
+3 planes (data / metadata / control). **The extremfs-critical design (review
+P0.14):** a hot file must NOT serialize — disjoint full-chunk writes publish
+independent chunk-map keys (no shared inode-row write), size = monotonic
+high-water mark, mtime coalesced, sub-chunk RMW = generation CAS; O_APPEND EOF
+allocation is the ONLY accepted same-file hotspot.
 Read `docs/architecture.md` before any metadata work. The scaling roadmap is
 now the increment plan toward that spec, not the spec itself.
 
