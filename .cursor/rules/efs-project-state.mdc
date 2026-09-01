@@ -73,8 +73,40 @@ consecutive: **200/201 each**, only `fcntl_byte_range_lock` (known
 per-client `lockf` gap). Compare gate `results/posix/20260901-044258`
 190/201 was on a client whose table still held pre-fix corruption.
 
-**OPEN — fresh-mkfs cluster is catastrophic (~15-30/201, reproduced 6+
-times).** 173/181 failures are one shape: a test dir is created OK
+**CLOSED (Sep 1) — the fresh-mkfs catastrophe was TWO bugs, both fixed and
+gated.** Fresh bits=3 TCP, solo posix on fcstor007, **4 consecutive runs
+196/201, 0 EFS bugs** (`results/posix/20260901-13*`); unit
+`test_meta_v6` / `test_dir_stats` / `test_meta_slot` / `test_ino_path` OK.
+Found by NDJSON probes, not by reading code — both hide on a settled
+cluster, which is why HEAD looked fine there and died on a fresh wipe.
+1. **A catching-up joiner answered LOOKUP as if the export were not
+ sharded.** `export_is_sharded_root` required a resident ROOT inode row —
+ true of the main table in steady state, false on a joiner that has not
+ caught up. `efs_export_lookup` then took the flat single-table path and
+ never consulted a shard tab, so every name on an extra shard came back
+ ENOENT. Evidence: 2171 events, all from fcstor006, all reporting
+ `shard_id=0 shard_bits=3 shard_count=8` (configured sharded, unsharded
+ path). Extra tabs carry the same `shard_bits` — that is what the ROOT-row
+ term was really guarding. Fix: test `ex->shard_id == 0`; shard 0 always
+ resolves to `ex` itself and never gets a tab.
+2. **Tables jammed permanently at exactly 256 rows (one v8 slab).**
+ `inode_slab_ensure` split "fault from disk" from "fresh slab" on
+ `s0 < inode_count`, but callers do `pos = ex->inode_count++` BEFORE
+ filling the row, so the first row of a new slab always looks like a
+ fault; its page was never persisted, the fault failed, `inode_at`
+ returned NULL, and the table stopped growing. Evidence: 173 identical
+ events `s0=256 inode_count=257 blob_ino_len=262144 page_needed=2
+ page_bytes=262144`, plus 1248/1520 misses on a table stuck at 256. Fix:
+ `slab_page_persisted()` — a failed fault is fatal only when the image
+ actually covers that page, otherwise it is fresh growth and gets a
+ zeroed slab.
+Post-fix deltas: unsharded fallthrough 2171 -> 0; tables at 256
+1248 -> 0 (now 900+); successful creates 262 -> 1446; rows present at a
+lookup miss 0/1520 (every remaining miss is an ordinary pre-create
+negative). Do NOT re-chase the list below — it stays only as the record of
+what was ruled out.
+
+**Historical (the symptom list while it was open):** 173/181 failures are one shape: a test dir is created OK
 (`cwi:` trace shows correct sharded inos, e.g. root ino 5 -> children 13,
 21, 29 all on tab_shard=5) and the very next open of `<testdir>/f` gets
 ENOENT. **Ruled out by direct instrumentation, do NOT re-chase:**
@@ -96,7 +128,8 @@ worth a look. Next probe: log successful CREATE on the REMOTE/CREATE_SHARD
 branches (only the local branch is logged today, 78 of ~200 creates) and
 pair it with the miss by name.
 
-**Debug scaffolding left in the tree (remove before committing):**
+**Debug scaffolding still in the tree from that hunt (safe to remove now
+that the bug is closed; all env-gated, off by default):**
 `EFS_INO_PROF` (server: ino-alloc restart/REGRESS, create-exist,
 create-tab/create-shard MISMATCH, create-owner, create-bits, create-ok,
 lookup-miss; forwarded by `clean_cluster.sh`), `EFS_CWI_TRACE` (client:

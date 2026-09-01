@@ -320,6 +320,17 @@ static void slab_rows_tag(struct efs_export *ex, uint32_t si)
         ex->ino_slabs[si].rows[k].slab_idx = (uint16_t)si;
 }
 
+/* Does the persisted image actually carry this slab's page? A slab past the
+ * end of it was never written, so a failed fault there means "new growth",
+ * not "the rows were evicted and are gone". */
+static int slab_page_persisted(const struct efs_export *ex, uint32_t si)
+{
+    size_t off = (size_t)(si + 1) * EFS_META_PAGE_SIZE;
+    if (ex->flush_blob)
+        return off + EFS_META_PAGE_SIZE <= ex->flush_blob_ino_len;
+    return ex->page_src != NULL;
+}
+
 static int inode_slab_ensure(struct efs_export *ex, uint32_t si)
 {
     uint64_t s0;
@@ -334,8 +345,12 @@ static int inode_slab_ensure(struct efs_export *ex, uint32_t si)
     if (s0 < ex->inode_count && (ex->flush_blob || ex->page_src)) {
         if (inode_slab_fault(ex, si) == 0)
             return 0;
-        /* Live rows were evicted and no page source can restore them. */
-        return -1;
+        /* Live rows were evicted and no page source can restore them. A
+         * slab the image never covered is instead the first row of fresh
+         * growth: callers do pos = inode_count++ before filling the row, so
+         * s0 < inode_count is already true for it. Fall through to calloc. */
+        if (slab_page_persisted(ex, si))
+            return -1;
     }
     ex->ino_slabs[si].rows = calloc(EFS_INO_SLAB_ROWS,
                                     sizeof(struct efs_inode_mem));
@@ -2572,10 +2587,16 @@ void efs_export_merge_extra_roots(struct efs_export *ex,
     (void)efs_export_root_maxmerge_extras(&ex->root, incoming);
 }
 
+/* Extra tabs carry the same shard_bits/shard_count, so the main table has to
+ * be told apart by shard_id -- shard 0 is always `ex` itself, a tab is never
+ * created for it. This used to test for a resident ROOT row, which is also
+ * true of the main table in steady state but NOT on a joiner that has not
+ * caught up yet: lookup then fell through to the flat single-table path and
+ * answered ENOENT for every name living on an extra shard. */
 static int export_is_sharded_root(struct efs_export *ex)
 {
     return ex && ex->root.shard_bits && ex->root.shard_count > 1 &&
-           inode_ptr(ex, EFS_ROOT_INO) != NULL;
+           ex->shard_id == 0;
 }
 
 int efs_export_load_shard(struct efs_export *ex, uint32_t shard)
