@@ -556,8 +556,45 @@ for every migration step after.</div>
       reported separately from correctness (assertion).</li>
   <li><b>Live attach over rebuild-and-reprobe.</b> ptrace is open on all 15 hosts — <code>gdb -p</code>
       on a wedged <code>efsd</code> answers in seconds.</li>
+  <li><b>Bounded-context change.</b> Modularity keeps the unit of work small: load one module + its
+      interface header, not the whole tree. This is what makes fast isolated tests and model-assisted
+      editing tractable.</li>
   <li><b>Invariants as executable checks</b> (simulator assertions + <code>fsck</code>), not prose.</li>
 </ul>
+
+<h3>Modularity is an architectural constraint, not a style preference</h3>
+<p>Two things this project depends on are impossible without it: <b>fast isolated testing</b> and
+<b>bounded-context change</b> (a human or a model editing one component without ingesting the whole
+codebase). The rule: <b>a module must be understandable, changeable, and testable from its own source
+plus its interface header alone.</b> If you have to read the rest of the tree to change one component
+safely, the modularity has failed.</p>
+
+<p>Today it has failed: four files hold ~45% of the 36.5k-line tree —
+<code>metadata.c</code> (6042), <code>efs_fuse.c</code> (3720), <code>meta_server.c</code> (3654),
+<code>handler.c</code> (3648). The target boundaries align with the planes, so the architecture and
+the code structure are the same map:</p>
+
+<div class="flow">
+<svg viewBox="0 0 920 190" width="920" height="190">
+  <text class="lbl" x="20" y="22">TARGET MODULES — DEPEND ON THE INTERFACE, NEVER THE IMPLEMENTATION</text>
+  <rect class="box good" x="20"  y="40" width="130" height="52" rx="8"/><text class="boxT" x="85" y="60" text-anchor="middle">raft/</text><text class="boxS" x="85" y="76" text-anchor="middle">pure state machine</text>
+  <rect class="box good" x="170" y="40" width="130" height="52" rx="8"/><text class="boxT" x="235" y="60" text-anchor="middle">kv/</text><text class="boxS" x="235" y="76" text-anchor="middle">storage interface</text>
+  <rect class="box"      x="320" y="40" width="130" height="52" rx="8"/><text class="boxT" x="385" y="60" text-anchor="middle">meta/</text><text class="boxS" x="385" y="76" text-anchor="middle">POSIX op handlers</text>
+  <rect class="box"      x="470" y="40" width="130" height="52" rx="8"/><text class="boxT" x="535" y="60" text-anchor="middle">wire/</text><text class="boxS" x="535" y="76" text-anchor="middle">versioned enc/dec</text>
+  <rect class="box"      x="620" y="40" width="130" height="52" rx="8"/><text class="boxT" x="685" y="60" text-anchor="middle">data/</text><text class="boxS" x="685" y="76" text-anchor="middle">EC · RDMA · fencing</text>
+  <rect class="box"      x="770" y="40" width="130" height="52" rx="8"/><text class="boxT" x="835" y="60" text-anchor="middle">client/</text><text class="boxS" x="835" y="76" text-anchor="middle">thin FUSE adapter</text>
+  <path class="arrow" d="M85,92 V120 H835 V92" opacity="0.4"/>
+  <text class="lbl" x="20" y="150">RULES: interface headers only · pure state machines (no globals / no inline I/O) · unit test links</text>
+  <text class="lbl" x="20" y="168">only real deps, runs in ms · no file over ~1000 lines — split by responsibility</text>
+</svg>
+</div>
+
+<div class="why">Purity (no globals, I/O behind interfaces) is the same property that lets the same
+compiled state machine run under the simulator — so modularity buys <b>testability and
+simulatability at once</b>. And the context budget (module + header fits in a few hundred lines) is
+what lets a model or a new contributor make a correct change without the whole tree in scope. The
+migration builds Raft, KV, and the transaction protocol as new components — building them to these
+boundaries from the start keeps the dev cycle fast as the system grows.</div>
 
 <!-- ============ MIGRATION ============ -->
 <h2>8 · The gap map — what's built, what's missing</h2>
@@ -624,7 +661,8 @@ This is the honest distance between the spec and the code.</p>
   <rect class="box stB" x="245" y="416" width="205" height="42" rx="7"/><text class="boxT" x="347" y="434" text-anchor="middle">posix + posix2</text><text class="boxS" x="347" y="449" text-anchor="middle">201 + 63 vs XFS</text>
   <rect class="box stB" x="470" y="416" width="205" height="42" rx="7"/><text class="boxT" x="572" y="434" text-anchor="middle">perf harnesses</text><text class="boxS" x="572" y="449" text-anchor="middle">fio honest · ecopy · scale</text>
   <rect class="box stM" x="695" y="416" width="205" height="42" rx="7"/><text class="boxT" x="797" y="434" text-anchor="middle">deterministic simulator</text><text class="boxS" x="797" y="449" text-anchor="middle">missing · build first</text>
-  <rect class="box stM" x="245" y="464" width="205" height="42" rx="7"/><text class="boxT" x="347" y="482" text-anchor="middle">linearizability checker</text><text class="boxS" x="347" y="497" text-anchor="middle">missing</text>
+  <rect class="box stM" x="20"  y="464" width="205" height="42" rx="7"/><text class="boxT" x="122" y="482" text-anchor="middle">linearizability checker</text><text class="boxS" x="122" y="497" text-anchor="middle">missing</text>
+  <rect class="box stP" x="245" y="464" width="205" height="42" rx="7"/><text class="boxT" x="347" y="482" text-anchor="middle">modular boundaries</text><text class="boxS" x="347" y="497" text-anchor="middle">dirs exist · 4 files = 45% of code</text>
 
   <!-- summary strip -->
   <text class="lbl" x="20" y="540">BUILT: data path · sharding · client · test harnesses      MISSING: everything that makes metadata durable, parallel, and provable</text>

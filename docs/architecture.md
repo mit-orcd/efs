@@ -509,6 +509,69 @@ kernel cache.
   writeback). It stays off until zero/stale-cache semantics are demonstrably
   correct.
 
+### 5.13 Modularity as an architectural constraint
+
+Modularity is not a style preference here — it is what makes the two things
+this project depends on possible at all: **fast isolated testing** (§9, §9a)
+and **bounded-context change** (a human or a model editing one component
+without ingesting the whole codebase). A system this subtle cannot afford
+either to be slow to test or to require global knowledge to change safely.
+
+**The rule.** A module must be understandable, changeable, and testable from
+**its own source plus its interface header alone**. If you have to read the
+rest of the tree to change one component safely, the modularity has failed —
+regardless of how the directories are named.
+
+**Where we are today (honest).** The code is *not* there. Four files hold
+~45% of the 36.5k-line tree — `metadata.c` (6042 lines), `efs_fuse.c` (3720),
+`meta_server.c` (3654), `handler.c` (3648). That is why every change is slow,
+every test pulls in the world, and every review needs the whole file in
+context. The target module boundaries below are drawn to fix exactly this.
+
+**Target boundaries** (aligned with the planes, so the architecture and the
+code structure are the same map):
+
+```text
+raft/       the consensus core — a pure state machine, transport- and
+            storage-agnostic; no I/O inline, no globals. Testable in the
+            simulator and in a unit harness alike.
+kv/         the ordered applied state — behind a storage interface
+            (real NVMe engine / simulated fault-injecting disk).
+meta/       the POSIX op handlers — pure-ish functions over the kv/ and
+            raft/ interfaces; no socket or FUSE calls inline.
+wire/       the protocol — versioned encode/decode, nothing else.
+data/       the data plane — EC encode/decode, RDMA PUT/GET, generation
+            fencing.
+client/     the FUSE adapter — thin; translates FUSE ops to meta/data calls.
+```
+
+**Rules that enforce it:**
+
+- **Depend on the interface, not the implementation.** Modules include each
+  other's *headers*, never reach into another module's `.c` internals. The
+  current `g_server->lock` / shared-global pattern is the anti-example — it
+  is what forced whole-subsystem context for every change.
+- **State machines are pure.** No hidden globals, no I/O inline; all I/O goes
+  through the transport/storage interfaces. This is *also* the property that
+  lets the same compiled state machine run under the simulator (§9) — purity
+  buys testability and simulatability at once.
+- **Every module has a unit test that links only its real dependencies** (or
+  interface fakes) and runs in milliseconds. A change to `raft/` must not
+  require a `client/` rebuild — mentally or literally.
+- **Context budget.** A module plus its interface should fit in a few hundred
+  lines, so a change can be made and reviewed with bounded context. Working
+  target: **no source file over ~1000 lines**; split by responsibility when
+  one crosses it. This is the property that lets a model (or a new
+  contributor) load one module and make a correct change without the whole
+  tree in scope.
+
+**Why it is in the architecture doc and not a style guide:** the migration
+(§10) lands Raft, KV, and the transaction protocol as *new* components. If
+they are built to these boundaries from the start, the simulator and the unit
+harness get them for free, and the dev cycle (§9a) stays fast as the system
+grows. If they are built as another 6000-line `metadata.c`, no amount of
+testing infrastructure will save the cycle time.
+
 ## 6. Why the theory holds up
 
 Let's be precise about what is and isn't claimed. **Raft-per-shard over an
@@ -795,6 +858,9 @@ Deliberate moves that shorten the loop:
 - **Live attach over rebuild-and-reprobe.** ptrace is open on all 15 hosts —
   `gdb -p` on a wedged `efsd` answers in seconds what an NDJSON-probe redeploy
   answers in tens of minutes.
+- **Bounded-context change.** Modularity (§5.13) keeps the unit of work small:
+  a change loads one module + its interface header, not the whole tree. This
+  is what makes both fast isolated tests and model-assisted editing tractable.
 - **Invariants as executable checks** (simulator assertions + `fsck`), not
   prose — so "is this a bug" is decidable without a human reading a log.
 
