@@ -56,11 +56,18 @@ NVMe ceiling is 16.7–21.4 GB/s **per host** — this is software, not media.
 50g one-job is slower than 9×2g on 1 client (less parallelism), same
 ceiling at 4/9.
 
-## Profile a single write (not strace)
+## Profile a single write
 
-`kernel.yama.ptrace_scope=2` → `strace` / `PTRACE_TRACEME` denied even as
-parent. `perf trace` needs tracefs. Do not restart daemons under strace
-(last attempt wrote 353 MiB/s to **local md0**). Same-uid:
+**ptrace is OPEN (verified Sep 1 2026 by live attach on all 15 hosts):**
+`kernel.yama.ptrace_scope=0` on node9901, fstor007 and fcstor003–015, so
+`strace -p`, `gdb -p`, `vgdb` and LSan all work same-uid. It is **runtime
+only** (`sysctl -w`); `/etc/sysctl.d/99-ptrace.conf` still says 2, so it
+reverts on reboot — ask the USER to re-apply, do not edit the conf.
+`perf trace` is still out (`perf_event_paranoid=2` and
+`/sys/kernel/tracing/events` unreadable); `perf record -p` is fine.
+Still do NOT restart daemons under strace — the 353 MiB/s
+`Disk stats: md0` run was local RAID after the daemons were killed, not a
+tracing overhead measurement. Attach to a RUNNING daemon instead. Same-uid:
 
 ```
 perf record -e cpu-clock -g --call-graph fp -p $(pgrep -x efsd) -o /tmp/perf-efsd.data sleep 20

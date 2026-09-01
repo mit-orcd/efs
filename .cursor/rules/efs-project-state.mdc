@@ -129,10 +129,169 @@ false-positives by design). RDMA exercised via eager upgrade on connect +
 metadata/packed + chunk PUT/GET ops. Verified PASS
 on fcstor003: 0 definite / 0 indirect everywhere.
 NOTE: valgrind on efsd needs a clean exit for full leak stacks (SIGTERM gives
-summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
-2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
+summary only). **vgdb / LSan / `strace -p` / `gdb -p` all WORK — do not ask
+the user to enable ptrace.** Verified Sep 1 2026 by live attach (`strace -p`
++ `gdb -p`) on **all 15** hosts: `kernel.yama.ptrace_scope=0` on node9901,
+fstor007 and fcstor003–015. Every "ptrace/Yama blocked" note elsewhere in
+this file is HISTORICAL and no longer true.
+**BUT IT IS RUNTIME-ONLY AND REVERTS ON REBOOT.** All 15 still ship
+`/etc/sysctl.d/99-ptrace.conf` with `kernel.yama.ptrace_scope = 2` (an
+ssh-keysign fd-stealing mitigation); the 0 was applied with `sysctl -w` and
+never persisted. If a host comes back from maintenance at 2, that is
+expected — just re-apply `sudo sysctl -w kernel.yama.ptrace_scope=0` (sudo
+needs a password, so the USER must run it). Do not "fix" it by editing the
+conf file without asking — that weakens a deliberate mitigation fleet-wide.
+Still unavailable:
+`perf trace` (`perf_event_paranoid=2`, `/sys/kernel/tracing/events`
+unreadable) — `perf record -p` / `perf stat -p` same-uid are fine.
 
 ## Where we are
+
+**ARCHITECTURE DECISION (Sep 1 2026, user-ratified).** The project now has a
+master spec: **`docs/architecture.md`**. Decisions locked by the user:
+- **Metadata becomes a real replicated log over an on-disk store** — one Raft
+  group per shard (Ceph PG / Cockroach range model), applied to an embedded
+  ordered KV on NVMe; RAM is a bounded cache, not the store. This REPLACES
+  whole-table snapshot + CoW page flush + 2PC root commit (those get DELETED,
+  not patched — most of the bug history is their failure-mode enumeration).
+- **Build a deterministic simulator FIRST, architecture-independent.** N
+  servers + M clients in one process, seeded PRNG driving message order /
+  drops / partitions / crashes; the metadata state machine runs against a
+  simulated net+disk through transport/storage interfaces; invariants
+  (docs/architecture.md §4) checked every step; failures replay from a seed.
+  This becomes the correctness gate; the 13-node cluster becomes a perf
+  harness, not the correctness oracle.
+- **Targets locked:** ≥ 2³² objects; 3 nodes (min) to 64 nodes; reference =
+  2³² on 4 nodes; survive 1 node down; immediate cross-client visibility.
+- Data path (client-direct RDMA 2+1 EC) is UNCHANGED.
+Read `docs/architecture.md` before any metadata work. The scaling roadmap is
+now the increment plan toward that spec, not the spec itself.
+
+
+**"DANGLING DENTRIES" ROOT-CAUSED + RECOVERED (Sep 1 PM) — IT WAS THE INODE RAM
+CAP, NOT A DESCRIPTOR CLOBBER, AND NO DATA WAS EVER LOST.** Trigger: shard 7's
+inode region is 2.82M rows x 512 B = **~1.44 GB**, which EXCEEDS the 1024 MB
+`EFS_INO_RAM_MB` default, so it is the ONE table big enough to make
+`trim_ino_ram` evict. An evicted slab's only fault source is `flush_blob`; when
+the fault fails `inode_at` returns NULL and the handler answers **NOT_FOUND** —
+so a live row reads as a missing inode. Proof (decisive, one variable): restart
+all 4 efsd with `EFS_INO_RAM_MB=32768`, change nothing else — **all 12 dangling
+ROOT entries went to 0**, `synth-test-data` nlink 2 -> **11** and children 0 ->
+**13**, `imagenet2` children 0 -> 3, every `setattr` OK. Shards 1/3/5 (132-232
+pages) on the SAME owner as shard 7 were always healthy, and shard 6 (511 pages)
+self-repaired on a plain restart while shard 7 did not — exactly the size
+ordering the cap predicts. This is the known Cut-C blocker ("bounding the blob
+without another page source just makes faults FAIL") **confirmed to be silently
+returning wrong answers on a live cluster**, not a theoretical constraint; Cut A
+(512 B rows) is what made it reachable at this table size.
+**TWO HARDENING ITEMS THIS EXPOSES:** (1) a failed slab fault must NEVER be
+reported as NOT_FOUND — it is a resource failure and must surface as EIO/BUSY,
+because answering "no such inode" lets CREATE repopulate the name and mint a
+second ino for a live object (this is the likely source of the ever-higher-ino
+`name_dup` retries seen in the user's rsync); (2) the cap silently stops holding
+instead of failing loudly. **MITIGATION IS ENV-ONLY AND NOT PERSISTED** — the
+cluster currently runs `EFS_INO_RAM_MB=32768`; any efsd restarted without it
+reverts to 1024 MB and the symptom returns.
+**Superseded analysis kept only as the record of what was ruled out:** `rsync` into `/tmp/efs-mount/synth-test-data`
+failed `failed to set times on "."` = EIO. Two separate things:
+1. **Client bug, FIXED (working tree):** `efs_fuse_utimens` collapsed EVERY rc
+ to `-EIO`, so a server `NOT_FOUND` read as "Input/output error". `chmod`
+ hits the SAME SETATTR handler and correctly reported ENOENT via
+ `efs_rc_to_errno` — that mismatch is what identified the real status.
+ utimens/chown/truncate now all route through `efs_rc_to_errno`. Builds
+ clean on fcstor007. **NOT yet gated with posix.**
+2. **Real condition:** a set of directories have a ROOT dentry but NO inode
+ row on the owning shard. Every one reports `nlink=2` (the dentry-stub
+ default) while having real children; every one fails SETATTR NOT_FOUND;
+ creating INSIDE them fails ENOENT (`mkstemp ... No such file or
+ directory`), and each rsync retry re-mkdirs the same names with ever
+ higher inos (deep_skinny_chain 18851023 -> 18855407 -> 18856063).
+**The split is exactly by shard, and it is OLD rows only:**
+ - broken (shard 6 or 7): `imagenet1` 893014, `imagenet2` 2603039,
+ `scale-fcstor007` 52022, `scale-fcstor008` 16671, `scale-fcstor014` 6,
+ `scale-fcstor015` 7, `synth-test-data` 889799.
+ - fine (shards 0-5): `imagenet3` 444904, `imagenet4` 9,
+ `scale-fcstor009`-`013` inos 8,2,3,4,5.
+ - shard 6 owner = fcstor005 (also owns 2, healthy); shard 7 owner =
+ fcstor006 (also owns 3, healthy) — so it is per-SHARD, not per-node.
+**NOT spreading — do not treat as an active regression.** 64 fresh ROOT dirs
+created on fcstor007, evenly spread over all 8 shards incl. 6+7, probed from a
+DIFFERENT client (fcstor008): 64/64 SETATTR OK, and still 64/64 several
+hundred rebuilds later. So new rows on 6/7 are fine; only pre-existing ones
+were lost.
+**RULED OUT by measurement — do NOT re-chase:** client-side artifact (same
+inos + same EIO from a clean second client); ongoing/spreading loss (64 fresh
+dirs over all 8 shards still 64/64 after hundreds of rebuilds); whole-shard or
+whole-node outage (shards 6/7 accept NEW rows fine, and their sibling shards
+2/3 on the SAME owners are healthy); `efs_export_evict_cold_shards` (defined
+in metadata.c + declared in the header, but called ONLY from
+`tests/test_meta_v6.c` — it is dead code in the server, so LRU eviction cannot
+be the way a tab goes non-resident).
+**ESTABLISHED by code read.** The only way an extra tab goes non-resident is
+the keep/free block in `server_rebuild_export_from_pages_ino` (meta_server.c
+~1088-1132): `keep=0` falls through to `efs_export_free(ex)`, which frees it.
+It is then recreated LAZILY by `shard_tab_get_or_create` (metadata.c ~2473),
+which sets `meta_needs_rebuild = (tab->root.page_count > 0)` **only if the
+installed root carries a descriptor for that shard**. No descriptor (or
+page_count 0) leaves an EMPTY table with `meta_needs_rebuild = 0`, which
+`server_ensure_shard_ready` reports READY — so LOOKUP answers NOT_FOUND and
+CREATE happily repopulates it. That is exactly the observed signature
+(dentry survives on another table, inode row gone, new rows fine).
+**SUPERSEDED SUSPECT (was wrong — the cap was the cause; kept because the fix
+below is still correct hardening and is now IN TREE):** the rebuild installs its
+root with a WHOLESALE
+`efs_export_root_move(&ex->root, &snap)` at meta_server.c:1202 — **no
+`efs_export_root_maxmerge_extras`**, unlike the paths at 2516 and 2996-2997
+which merge first. A root_move that drops extra-shard descriptors is precisely
+the Aug 23 "efs-s3 root clobber" bug, whose documented symptom was "shard
+tables permanently lost"; that fix was applied to primary-commit capture,
+PUT_META full-adopt and catchup install, but meta_server.c:1202 (and 2474,
+2637, 2817) still move wholesale. Proving it needs a descriptor dump at
+recreate time = an efsd restart on all 4 (build-id gate), which was deferred
+because the user was running load.
+**THREE SERVER FIXES LANDED IN TREE (Sep 1 PM, built + unit-gated + deployed;
+NOT posix-gated, NOT committed).** None of these was the cause of the symptom
+above (the diagnostic below fired **0** times, which is itself the evidence that
+the descriptor path was innocent) — they are correct hardening found by reading
+that path, and they ship with the redeploy:
+- **A. rebuild root install now maxmerges extras.** `snap` is deep-copied from
+ `ex->root` BEFORE the long unlocked page fetch, and the re-check at the swap
+ compares only `generation`. Extra-shard commits are deliberately SAME-gen
+ (`server_commit_cluster_extras` keeps the main gen so peers can tell an
+ extras-only refresh from a real advance), so a descriptor landing during the
+ fetch window is invisible to that guard and `efs_export_root_move` would drop
+ it. Now `efs_export_root_maxmerge_extras(&snap, &ex->root)` runs under the
+ lock before the keep/free scan (so the scan's descriptor comparison sees it
+ too). Same class as the Aug 23 root clobber; this was the one call site the
+ Aug 23 fix never reached.
+- **B. `efs_export_precreate_shards` was a silent no-op (the "definite bug").**
+ It ran BEFORE `efs_export_root_move` installed the real root, so `ex->root`
+ was still the staged root — which the code's own comment says carries no EFSR
+ — hence `shard_bits == 0` and it returned immediately, creating NOTHING after
+ every main rebuild. Blocker 2's invariant ("op/read paths never do the
+ per-export lazy-create mutation under a single shard lock") was silently not
+ held. Moved after the root install (and after chunk_size/features restore,
+ which new tabs inherit), still inside the held shard locks.
+- **C. diagnostic:** loud warning when an extra tab comes back empty AND not
+ marked for rebuild AND has no descriptor while the root carries descriptors
+ for OTHER shards — i.e. the exact state that reports READY with no rows.
+ Fired 0 times across the redeploy.
+Context: all 3 joiners rebuild constantly (2287-2355 `meta-catchup:
+rebuilding` each), every rebuild loads a root at `next_ino` ~594368 while the
+live allocator is at 2603040 (the cad1083 `meta-repair` floor fires 1294-1496
+times per joiner), and fcstor005 logged 233 `page N unrecoverable ... raced
+with GC` (fcstor004 24, fcstor006 1).
+**Two measurement traps that cost time here — do not repeat:**
+ - `efs_client_chmod` returns EFS_OK WITHOUT an RPC when the mode is
+ unchanged, and utimens/chmod/chown all short-circuit locally when
+ `efs_client_ino_is_dirty(ino)`. Probing with an unchanged mode, or from
+ the client that just created the row, gives a false PASS (that is why
+ `imagenet1` first looked healthy). Probe from a SECOND client with
+ `os.utime(p, (current atime, current mtime))`.
+ - node9901's `efs-fuse` died mid-session with no log line; `/tmp/efs-mount`
+ reverts to a plain empty dir and EVERYTHING reads ENOENT, which looks
+ exactly like mass data loss. Check `findmnt -o FSTYPE` before believing
+ a disappearance (same class as the fio `NOT_FUSE` rule).
 
 **SIZE-VISIBILITY CLOSED (Sep 1, commit b518003, GATED).** `stat` could return
 a stale/zero size right after a write (5-6 of the 10 non-deep 16x failures
@@ -1842,7 +2001,8 @@ posix|posix2|perf|setup|all`. `setup` rsyncs+builds+mounts the 9 pure clients.
   ~33% inclusive, dcache_flush_slot_inner ~41%, writer
   `maybe_reclaim` inline GET+PUT when dirty_bytes > 2×512 MiB cap
   (working set 2 GiB). `have_base=0` on published chunks forces a full
-  chunk GET before PUT. strace of efs-fuse blocked (Yama).
+  chunk GET before PUT. strace of efs-fuse blocked (Yama) — **historical;
+  ptrace_scope is 0 since at least Sep 1 2026, strace -p works.**
   **rw-4k ROOT-CAUSED + FIXED (working tree, Aug 20)**: two changes.
   (1) `dcache_load_and_patch` now reads the published chunk base ONCE at
   patch time (have_base=1) instead of zero-fill + a GET on EVERY flush —

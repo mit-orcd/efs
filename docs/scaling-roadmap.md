@@ -1,6 +1,13 @@
 # Scaling roadmap: toward ≥ 2³² files/folders
 
-[Design](design.md) · [Failure tolerance](failure-tolerance.md) · [Operations](operations.md)
+[Architecture](architecture.md) · [Design](design.md) · [Failure tolerance](failure-tolerance.md) · [Operations](operations.md)
+
+> **Read [architecture.md](architecture.md) first.** It is the specification
+> (goal, failure model, consistency model, invariants, and the target
+> metadata design: one Raft group per shard over an on-disk KV). This roadmap
+> is the increment plan for the *current* implementation. Where the two
+> disagree, the architecture document is the target and this document is the
+> path.
 
 This is the plan for raising the inode ceiling from the current ~14M to at
 least 2³² (4.29 billion) files/folders. It is a **multi-phase** effort. Phase 1
