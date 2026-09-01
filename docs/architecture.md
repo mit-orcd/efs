@@ -14,10 +14,20 @@ review.** The metadata layer described here replaces the current whole-table
 snapshot + 2PC design. The data path is unchanged in mechanism (client-direct
 RDMA, 2+1 EC) but its commit semantics are now specified precisely (§5.7).
 
-> **Naming intent.** The bar for this design is that efs earns the name
-> **extremfs**: it scales as close as possible to the raw hardware. Every
-> design decision below is checked against that bar — a component is wrong if
-> it serializes work the hardware could have done in parallel.
+> **Naming intent.** The bar for this design is that it earns the *idea* of an
+> "extreme filesystem": it scales as close as possible to the raw hardware.
+> Every design decision below is checked against that bar — a component is
+> wrong if it serializes work the hardware could have done in parallel.
+>
+> **On the name itself.** "extremfs" collides phonetically with **XtreemFS**
+> (an existing open-source distributed FS; the XtreemFS® trademark is
+> registered by Quobyte), and "EFS" is overwhelmingly associated with Amazon
+> Elastic File System. Neither is a good public identity for a project meant
+> to be found and attributed. The *idea* — never serialize what the hardware
+> allows in parallel — is the identity; the public **name should be chosen to
+> be distinctive and searchable**, and is deliberately left open here pending
+> a proper trademark/search check. This document uses "efs" as the working
+> name only.
 
 ---
 
@@ -351,18 +361,59 @@ client-side batching efs intentionally permits plus namespace ordering. There
 is no ambiguous gap between "write succeeded" and "metadata committed."
 
 **Partial-chunk and concurrent writers (same file).** This is the hot-file
-problem (review P0.14) and it gets a real answer:
+problem (review P0.14) and it gets a real answer. The governing rule:
+**never serialize work that the semantics and the hardware allow to run in
+parallel** — the filesystem must not invent a conflict merely because two
+writes share an inode.
 
-- **Disjoint full-chunk writes need no inode mutation.** With deterministic
-  chunk placement, a write that covers whole chunks publishes chunk-map
-  entries for *those* chunks, keyed by `(ino, chunk_index, gen)` — these are
-  independent keys, so 100k writers to disjoint chunks of one file do **not**
-  serialize on the inode row. The data is distributed *and* the metadata is
-  distributed. This is the extremfs property.
-- **Size is a monotonic high-water mark.** For extending writes,
-  `size = max(committed write-end offsets)` is a commutative, idempotent
-  operation — it does not need to serialize writers against each other.
-  Truncate creates a new content epoch that resets the interpretation.
+- **Chunk metadata is itself sharded.** This is the load-bearing detail. If
+  every chunk-map key for a file lived on `inode_shard(ino)`, then a million
+  writers to disjoint chunks would still funnel through **one Raft group /
+  one leader**, because Raft serializes the group's log — independent *keys*
+  do not help when they share one *log*. So chunk metadata is placed by
+
+  ```text
+  chunk_meta_shard(ino, chunk_index) = hash(ino, chunk_index) & 0xFFF
+  ```
+
+  One file's chunk publications now spread across many Raft leaders:
+
+  ```text
+  same file
+     ├── chunk 0    -> metadata shard 81
+     ├── chunk 1    -> metadata shard 2117
+     ├── chunk 2    -> metadata shard 994
+     └── chunk 3    -> metadata shard 3301
+  ```
+
+  A disjoint full-chunk write publishes its `(ino, chunk_index, gen)` entry
+  on the shard that owns that chunk's metadata — not on the inode's shard.
+  The data is distributed *and* the metadata publication is distributed. This
+  is what makes the hot-file claim structurally true rather than a slogan.
+- **Size is a monotonic high-water mark — and it is sharded too.**
+  Commutativity of `MAX()` removes the *ordering* dependency between writers,
+  but by itself it does not remove the *physical* serialization point: if the
+  authoritative `size` lived in the single inode row, every `MAX` would still
+  pass through that row's one leader. So size is kept as a small number of
+  **distributed size lanes**:
+
+  ```text
+  file (ino)
+     size-lane 0 -> max endpoint   \
+     size-lane 1 -> max endpoint    |  each lane on its own shard,
+     ...                            |  updated as an idempotent MAX
+     size-lane L-1 -> max endpoint /
+
+  logical size = MAX over the current content-epoch's lanes
+  ```
+
+  An extending writer updates one lane (chosen by `chunk_index` or writer id)
+  with a commute-safe `MAX`; `stat()` computes the maximum across the current
+  epoch's lanes (a bounded fan-out of `L` point-gets, cacheable as a
+  non-authoritative hint). Truncate advances the file's **content epoch**,
+  which invalidates all old-epoch lanes at once. Lane count `L` is a tunable:
+  large enough to spread leader load, small enough that `stat` stays cheap.
+  The write side is fully parallel; the only cost is a small merge on read.
 - **mtime is coalesced / lazily advanced** where POSIX-visible semantics
   permit, so it is not a per-write Raft mutation.
 - **Sub-chunk read-modify-write** uses generation CAS: a writer builds
@@ -512,34 +563,104 @@ derivation is correct, not that it was copied.
   orphan lifecycle remain **explicit proof / model / simulation
   obligations**. That is exactly what the simulator (§9) is for.
 
-### What is genuinely ours
+### What is genuinely ours — stated precisely
 
-The mechanism is proven and shared. The design work specific to efs is the
-**composition**:
+Let us be exact about the claim, because overclaiming here would be both
+wrong and unsupportable. **Every primitive in this design has existed:**
+Raft, distributed metadata, RDMA, erasure coding, immutable generations,
+ordered KV stores, directory sharding, deterministic simulation. Several
+systems get close to individual parts — WEKA (fully distributed data +
+metadata, no dedicated MDS tier, hash placement, strong POSIX, NVMe), DAOS
+(NVMe-native, low-latency fabric, distributed transactions, EC, versioned
+writes — though its POSIX layer still lacks hardlinks and distributed flock),
+VAST (distributed transactional metadata + EC + flash, but a shared-everything
+DASE model, not shared-nothing Raft shards), CephFS (client-direct data +
+dynamic metadata, but authority in a distinct MDS tier). IndexFS/GIGA+
+precede the threshold-spread huge-directory idea. FoundationDB is the
+canonical deterministic-simulation example. We are not claiming to have
+invented any of these.
 
-- **Metadata on a log, data on immutable-generation EC — decoupled.** Strong
-  consensus where correctness is cheap (small metadata), erasure coding where
-  bandwidth matters (bulk data). Most systems pick one consistency substrate
-  for both; efs puts each on the substrate that fits its cost model.
-- **A hot-file path that does not serialize.** Disjoint full-chunk writes
-  publish independent chunk-map keys; size is a monotonic high-water mark;
-  sub-chunk RMW is generation CAS. A million writers to one file parallelize
-  instead of funneling through one inode's Raft leader. This is the extremfs
-  property and it is not in any textbook.
-- **POSIX on sharded consensus.** rename / hardlink / unlink-while-open stay
-  atomic across shards via a Raft-backed transaction with no global lock and
-  no global consensus group.
-- **The inode record shaped for the KV.** The 512 B self-contained row and
-  the dentry-projection / authoritative-inode split are designed around the
-  store, so readdir is a range scan and lookup is at most two point-gets.
-- **Deterministic simulation as the gate.** Making the whole thing testable
-  in-process from a seed turns "the theory holds" from an argument into a
-  checkable artifact.
+**The claim is the composition and the governing principle.** What we have
+not found in a public system is this exact architecture presented as one open
+POSIX filesystem:
+
+```text
+POSIX namespace
+  + no dedicated MDS tier
+  + metadata authority distributed across ordinary storage nodes
+  + Raft only for small authoritative metadata state
+  + client-direct RDMA data path
+  + 2+1 EC immutable chunk generations
+  + no whole-file serialization for parallel writers
+  + no inode serialization where independent chunks can proceed
+  + directory locality until it becomes a bottleneck
+  + failure correctness designed before performance tuning
+  + deterministic protocol simulation
+  + small-cluster simplicity
+```
+
+And the principle that ties it together — the thing that, if we execute it,
+is the actual contribution:
+
+> **Never serialize work that the semantics and the hardware allow to happen
+> in parallel.**
+
+Traditional PFS architectures handle `1000 clients → 1000 different files`
+well. The hard problem is `1000 clients → ONE file → different byte/chunk
+ranges`. efs's answer is that if writes do not conflict, the filesystem must
+not invent a conflict merely because they share an inode: disjoint chunks
+publish to different metadata shards (§5.7), size is a sharded high-water
+mark, sub-chunk RMW is generation CAS, and only the operations whose
+*semantics* require serialization (O_APPEND EOF allocation, overlapping byte
+ranges, truncate, rename) are serialized — because the semantics demand it,
+not because the filesystem happens to have one inode lock.
+
+That is a thesis strong enough to build a filesystem identity around. It is
+also falsifiable: if a workload that the hardware could parallelize is found
+to serialize in efs, that is a bug against this principle, and it is the
+simulator's and the benchmarks' job to find it.
+
+### The namespace is the database
+
+A second, quieter part of the identity. Traditional filesystems hand you a
+namespace and leave you to build `find`, `du`, crawlers, inode scanners, cron
+lifecycle jobs, and external catalogs around it. But efs metadata is already
+a distributed ordered database. So the questions operations actually asks —
+largest files, files owned by X, files older than Y, everything under project
+Z, storage consumed by a directory, data whose TTL expired — should be
+**metadata queries, not filesystem traversals**:
+
+```text
+du         = a query over the ordered KV, not a namespace walk
+find       = a range scan / index lookup, not a crawl
+expiration = an indexed metadata operation, not a cron forest
+```
+
+The namespace metadata *is* the database; there is no separate catalog bolted
+on and derived from periodic snapshots. This is a natural consequence of the
+metadata design, not an extra subsystem — and it is part of what "minimalist"
+means operationally (below).
+
+### Minimalism as a design constraint
+
+What may distinguish efs as much as any algorithm is operational simplicity:
+
+```text
+3 servers  ->  install  ->  efs init  ->  efs mount  ->  done
+64 servers ->  the same architecture
+```
+
+No metadata servers to provision, no metadata-target sizing exercise, no
+hierarchy of special node types, no weekly `du`, no crawler database, no
+lifecycle cron forest, no kernel module, no twenty-component deployment.
+Delivering that *and* serious performance *and* strong POSIX semantics is the
+goal. The architecture serves it: ordinary storage nodes are the metadata
+consensus participants, so there is nothing extra to operate.
 
 **The thesis in one line:** the constraints force the family, Raft + KV are
-the proven primitives within it, and the part that is ours — the composition
-with immutable-generation EC data and a non-serializing hot-file path — is
-where the design earns the name extremfs.
+the proven primitives within it, and the part that is ours — the composition,
+the never-serialize-what-can-run-parallel principle, and the
+namespace-as-database minimalism — is where the design earns an identity.
 
 ## 7. Why this satisfies the goal
 

@@ -177,11 +177,29 @@ reads are **leader + ReadIndex** (no clock leases — clocks never correctness);
 safe reconfiguration via **joint consensus** (desired placement ≠ authoritative
 config); request **idempotency** via op-IDs; open-unlinked lifecycle; FUSE
 kernel-cache invalidation (entry/attr/negative_timeout=0 + active invalidate);
-3 planes (data / metadata / control). **The extremfs-critical design (review
-P0.14):** a hot file must NOT serialize — disjoint full-chunk writes publish
-independent chunk-map keys (no shared inode-row write), size = monotonic
-high-water mark, mtime coalesced, sub-chunk RMW = generation CAS; O_APPEND EOF
-allocation is the ONLY accepted same-file hotspot.
+3 planes (data / metadata / control). **The extremfs-critical design (review P0.14 + follow-up):** a hot file must
+NOT serialize. Two load-bearing details, both now specified: (1) **chunk
+metadata is itself sharded** — `chunk_meta_shard = hash(ino, chunk_index) &
+0xFFF` — because independent chunk-map KEYS on one Raft group still serialize
+on that group's ONE log/leader; spreading chunk publication across many shard
+leaders is what makes the hot-file claim structurally true. (2) **size is
+sharded high-water LANES** — MAX() commuting removes the ordering dependency
+but not the physical serialization point, so size lives in L distributed lanes
+(each an idempotent MAX on its own shard); stat() = max over current-epoch
+lanes; truncate bumps the content epoch to invalidate all lanes at once.
+mtime coalesced; sub-chunk RMW = generation CAS; O_APPEND EOF allocation is
+the ONLY accepted same-file hotspot.
+**IDENTITY / positioning (from the 2nd review — do not overclaim):** every
+primitive (Raft, dist. metadata, RDMA, EC, immutable gens, KV, dir sharding,
+deterministic sim) has existed; WEKA/DAOS/VAST/CephFS get close to parts.
+The defensible claim is the COMPOSITION + the principle "never serialize work
+that semantics and hardware allow in parallel", NOT "novel" / "nobody has done
+this". Also part of the identity: **the namespace IS the database** (du/find/
+lifecycle = KV queries, not traversals) and **minimalist ops** (3 nodes → efs
+init → mount → done; no MDS tier, no special node types). **NAMING WARNING:**
+"extremfs" collides with XtreemFS (trademark, Quobyte) and "EFS" = Amazon EFS
+— pick a distinctive, searchable public name later; "efs" is a working name
+only. Do a trademark/search check before any public naming.
 Read `docs/architecture.md` before any metadata work. The scaling roadmap is
 now the increment plan toward that spec, not the spec itself.
 

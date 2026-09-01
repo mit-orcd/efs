@@ -253,35 +253,42 @@ file.</b> If every pwrite Raft-mutated one inode row for size/mtime, a million w
 through one shard leader while the data path sat idle. The design avoids that.</p>
 
 <div class="flow">
-<svg viewBox="0 0 920 210" width="920" height="210">
-  <text class="lbl" x="20" y="24">100k WRITERS · ONE FILE · DISJOINT CHUNKS</text>
+<svg viewBox="0 0 920 240" width="920" height="240">
+  <text class="lbl" x="20" y="24">100k WRITERS · ONE FILE · DISJOINT CHUNKS — METADATA PUBLICATION SPREADS ACROSS LEADERS</text>
   <!-- writers -->
   <rect class="box" x="20" y="50" width="120" height="34" rx="6"/><text class="boxS" x="80" y="71" text-anchor="middle">writer 1</text>
   <rect class="box" x="20" y="92" width="120" height="34" rx="6"/><text class="boxS" x="80" y="113" text-anchor="middle">writer 2</text>
   <rect class="box" x="20" y="134" width="120" height="34" rx="6"/><text class="boxS" x="80" y="155" text-anchor="middle">… writer N</text>
-  <!-- independent chunk keys -->
-  <rect class="box good" x="300" y="40" width="320" height="34" rx="6"/><text class="boxS" x="460" y="61" text-anchor="middle">publish (ino, chunk 12, gen 5)</text>
-  <rect class="box good" x="300" y="88" width="320" height="34" rx="6"/><text class="boxS" x="460" y="109" text-anchor="middle">publish (ino, chunk 87, gen 3)</text>
-  <rect class="box good" x="300" y="136" width="320" height="34" rx="6"/><text class="boxS" x="460" y="157" text-anchor="middle">publish (ino, chunk 401, gen 9)</text>
+  <!-- chunk meta on DIFFERENT shards -->
+  <rect class="box good" x="300" y="36" width="330" height="34" rx="6"/><text class="boxS" x="465" y="57" text-anchor="middle">publish (ino, chunk 0) → shard 81 leader</text>
+  <rect class="box good" x="300" y="84" width="330" height="34" rx="6"/><text class="boxS" x="465" y="105" text-anchor="middle">publish (ino, chunk 1) → shard 2117 leader</text>
+  <rect class="box good" x="300" y="132" width="330" height="34" rx="6"/><text class="boxS" x="465" y="153" text-anchor="middle">publish (ino, chunk 2) → shard 994 leader</text>
+  <rect class="box good" x="300" y="180" width="330" height="34" rx="6"/><text class="boxS" x="465" y="201" text-anchor="middle">publish (ino, chunk 3) → shard 3301 leader</text>
   <!-- note -->
-  <rect class="box" x="680" y="88" width="220" height="60" rx="8"/>
-  <text class="boxT" x="790" y="110" text-anchor="middle">independent keys</text>
-  <text class="boxS" x="790" y="126" text-anchor="middle">no shared inode-row write</text>
-  <path class="arrowG" d="M140,67 C 220,55 240,55 300,57"/>
-  <path class="arrowG" d="M140,109 H300"/>
-  <path class="arrowG" d="M140,151 C 220,163 240,160 300,153"/>
-  <path class="arrow" d="M620,105 H680"/>
-  <text class="lbl" x="20" y="200">SIZE = monotonic high-water mark (commutative) · MTIME coalesced · sub-chunk RMW = generation CAS</text>
+  <rect class="box" x="690" y="84" width="210" height="72" rx="8"/>
+  <text class="boxT" x="795" y="106" text-anchor="middle">chunk_meta_shard</text>
+  <text class="boxS" x="795" y="122" text-anchor="middle">hash(ino, chunk) &amp; 0xFFF</text>
+  <text class="boxS" x="795" y="138" text-anchor="middle">→ many Raft leaders</text>
+  <path class="arrowG" d="M140,67 C 220,50 240,50 300,53"/>
+  <path class="arrowG" d="M140,109 C 220,100 240,100 300,101"/>
+  <path class="arrowG" d="M140,151 C 220,150 240,150 300,149"/>
+  <path class="arrowG" d="M140,163 C 200,200 240,200 300,197"/>
+  <path class="arrow" d="M630,120 H690"/>
+  <text class="lbl" x="20" y="232">SIZE = sharded high-water lanes (MAX on read) · MTIME coalesced · sub-chunk RMW = generation CAS</text>
 </svg>
 </div>
 
 <div class="grid g2">
-  <div class="card"><h4>Disjoint full-chunk writes</h4>
-    Publish chunk-map keys <code>(ino, chunk_index, gen)</code> — independent keys, so writers
-    don't touch the shared inode row. Data <i>and</i> metadata both distribute.</div>
-  <div class="card"><h4>Size = high-water mark</h4>
-    <code>size = max(committed write-end)</code> is commutative + idempotent — no cross-writer
-    serialization. Truncate starts a new content epoch.</div>
+  <div class="card"><h4>Chunk metadata is sharded too <span class="tag t-good">the load-bearing fix</span></h4>
+    If all chunk-map keys lived on <code>inode_shard(ino)</code>, a million writers would still
+    funnel through <b>one Raft leader</b> (Raft serializes the group's log). So
+    <code>chunk_meta_shard = hash(ino, chunk_index) &amp; 0xFFF</code> — one file's chunk
+    publications spread across many leaders. Data <i>and</i> metadata both distribute.</div>
+  <div class="card"><h4>Size = sharded high-water lanes</h4>
+    <code>MAX()</code> commuting removes the <i>ordering</i> dependency but not the <i>physical</i>
+    serialization point. So size lives in <b>L distributed lanes</b>, each an idempotent MAX on its
+    own shard; <code>stat()</code> takes the max over the current epoch's lanes. Truncate bumps the
+    content epoch, invalidating all old lanes at once.</div>
   <div class="card"><h4>Sub-chunk RMW = generation CAS</h4>
     Build candidate <code>G+1</code> from committed base <code>G</code>, publish with
     <code>CAS(expected=G)</code>; on conflict refetch, reapply the byte-range, retry. Disjoint
@@ -332,26 +339,52 @@ Convergence is evidence the derivation is correct, not that it was copied.</div>
       obligations — exactly what the simulator is for.</li>
 </ul>
 
-<h3>What is genuinely ours</h3>
+<h3>What is genuinely ours — stated precisely</h3>
+<p><b>Every primitive here has existed</b> — Raft, distributed metadata, RDMA, EC, immutable
+generations, ordered KV, directory sharding, deterministic simulation. Several systems get close to
+individual parts: <b>WEKA</b> (fully distributed data+metadata, no MDS tier, hash placement),
+<b>DAOS</b> (NVMe-native, distributed transactions, EC, versioned writes — but its POSIX layer still
+lacks hardlinks and distributed flock), <b>VAST</b> (transactional metadata + EC, but shared-everything
+DASE, not shared-nothing Raft shards), <b>CephFS</b> (client-direct data, but authority in a distinct
+MDS tier). IndexFS/GIGA+ precede threshold-spread dirs; FoundationDB is the canonical simulator. We
+claim none of these as inventions.</p>
+
+<div class="why" style="border-color:var(--acc)"><b style="color:var(--acc)">The claim is the
+composition and the governing principle.</b> We have not found a public system presenting this exact
+architecture as one open POSIX filesystem: POSIX + no MDS tier + metadata authority on ordinary
+storage nodes + Raft only for small metadata + client-direct RDMA + immutable EC generations + no
+invented serialization + simulation-first + small-cluster simplicity. And the principle that ties it
+together: <b>never serialize work that the semantics and the hardware allow to happen in
+parallel.</b></div>
+
 <div class="grid g2">
   <div class="card"><h4>Metadata on a log, data on immutable-generation EC</h4>
-    Strong consensus where correctness is cheap (small metadata), erasure coding where bandwidth
-    matters (bulk data). Most systems pick one consistency substrate for both; efs uses the one that
-    fits each cost model.</div>
+    Strong consensus where correctness is cheap (small metadata), EC where bandwidth matters (bulk
+    data). Most systems pick one consistency substrate for both; efs uses the one that fits each
+    cost model.</div>
   <div class="card"><h4>A hot-file path that does not serialize</h4>
-    Disjoint chunk writes publish independent keys; size is a high-water mark; sub-chunk RMW is
-    generation CAS. A million writers to one file parallelize. Not in any textbook.</div>
-  <div class="card"><h4>POSIX on sharded consensus</h4>
-    rename / hardlink / unlink-while-open stay atomic across shards via a Raft-backed transaction —
-    no global lock, no global consensus group.</div>
-  <div class="card"><h4>Deterministic simulation as the gate</h4>
-    The whole thing testable in-process from a seed turns “the theory holds” from an argument into a
-    checkable artifact.</div>
+    Disjoint chunks publish to <i>different metadata shards</i>; size is sharded high-water lanes;
+    sub-chunk RMW is generation CAS. A million writers to one file parallelize. Only semantically-
+    required serialization (O_APPEND EOF, overlapping ranges, truncate, rename) is serialized.</div>
+  <div class="card"><h4>The namespace is the database</h4>
+    Metadata is already a distributed ordered KV, so <code>du</code>/<code>find</code>/lifecycle are
+    <b>queries</b>, not traversals — no crawler, no catalog bolted on, no cron forest.</div>
+  <div class="card"><h4>Minimalist operations</h4>
+    <code>3 nodes → efs init → efs mount → done</code>; 64 nodes, same architecture. No MDS tier, no
+    special node types, no kernel module, no twenty-component deployment.</div>
 </div>
 
 <div class="why"><b>Thesis in one line:</b> the constraints force the family, Raft + KV are the
-proven primitives within it, and the part that is ours — the composition with immutable-generation
-EC data and a non-serializing hot-file path — is where the design earns the name extremfs.</div>
+proven primitives within it, and the part that is ours — the composition, the
+never-serialize-what-can-run-parallel principle, and the namespace-as-database minimalism — is where
+the design earns an identity. The principle is falsifiable: if a workload the hardware could
+parallelize is found to serialize in efs, that is a bug against it.</div>
+
+<div class="why" style="border-color:var(--warn)"><b style="color:var(--warn)">On the name.</b>
+“extremfs” collides phonetically with <b>XtreemFS</b> (existing open-source DFS; trademark registered
+by Quobyte), and “EFS” is overwhelmingly Amazon Elastic File System. The <i>idea</i> is the identity;
+the public name should be distinctive and searchable, and is left open pending a trademark/search
+check. This document uses “efs” as a working name only.</div>
 
 <!-- ============ SCALING ============ -->
 <h2>5 · Why it reaches the target</h2>
