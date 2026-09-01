@@ -24,6 +24,9 @@
 #include <limits.h>
 #include <signal.h>
 #include <execinfo.h>
+#include <dirent.h>
+#include <sys/syscall.h>
+#include <sched.h>
 
 /* Async-signal-safe crash breadcrumb. Uses an alternate signal stack so a
  * stack-overflow SIGSEGV can still report instead of dying silently. */
@@ -58,6 +61,71 @@ static void efs_fuse_fatal_signal(int sig)
     raise(sig);
 }
 
+/* Live-hang debugging. ptrace is admin-only on the test nodes (yama
+ * ptrace_scope=2), so gdb/gstack/gcore cannot attach to a wedged mount.
+ * SIGUSR1 to the process makes the receiving thread tgkill SIGUSR2 to every
+ * other thread; each dumps its own stack to stderr (fuse.log). Resolve the
+ * addresses with addr2line against the binary. Debug-only: opendir/backtrace
+ * in a handler are not async-signal-safe, but the process is already stuck. */
+static volatile int g_efs_fuse_dump_lock;
+
+static void efs_fuse_stack_signal(int sig)
+{
+    (void)sig;
+    void *frames[64];
+    int nf = backtrace(frames, 64);
+    char hdr[80];
+    int n = snprintf(hdr, sizeof(hdr), "STACKDUMP tid=%ld frames=%d\n",
+                     (long)syscall(SYS_gettid), nf);
+    /* Every thread writes the same fd; without this the stacks interleave
+     * line by line and none of them can be read. */
+    while (__atomic_test_and_set(&g_efs_fuse_dump_lock, __ATOMIC_ACQUIRE))
+        sched_yield();
+    if (n > 0)
+        (void)write(STDERR_FILENO, hdr, (size_t)n);
+    backtrace_symbols_fd(frames, nf, STDERR_FILENO);
+    __atomic_clear(&g_efs_fuse_dump_lock, __ATOMIC_RELEASE);
+}
+
+static void efs_fuse_stack_broadcast(int sig)
+{
+    (void)sig;
+    pid_t me = (pid_t)syscall(SYS_gettid);
+    char hdr[128];
+    int n = snprintf(hdr, sizeof(hdr),
+                     "STACKDUMP begin idx_mu owner=%d lock=%d nusers=%u\n",
+                     g_client.idx_mu.__data.__owner,
+                     g_client.idx_mu.__data.__lock,
+                     g_client.idx_mu.__data.__nusers);
+    if (n > 0)
+        (void)write(STDERR_FILENO, hdr, (size_t)n);
+    for (int i = 0; i < EFS_DIR_LOCKS; i++) {
+        if (!g_client.dir_lock[i].__data.__lock &&
+            !g_client.dir_lock[i].__data.__owner)
+            continue;
+        n = snprintf(hdr, sizeof(hdr),
+                     "STACKDUMP dir_lock[%d] owner=%d lock=%d\n", i,
+                     g_client.dir_lock[i].__data.__owner,
+                     g_client.dir_lock[i].__data.__lock);
+        if (n > 0)
+            (void)write(STDERR_FILENO, hdr, (size_t)n);
+    }
+    DIR *d = opendir("/proc/self/task");
+    if (d) {
+        struct dirent *de;
+        while ((de = readdir(d)) != NULL) {
+            if (de->d_name[0] < '0' || de->d_name[0] > '9')
+                continue;
+            pid_t tid = (pid_t)strtol(de->d_name, NULL, 10);
+            if (tid != me)
+                (void)syscall(SYS_tgkill, getpid(), tid, SIGUSR2);
+        }
+        closedir(d);
+    }
+    efs_fuse_stack_signal(SIGUSR2);
+    (void)write(STDERR_FILENO, "STACKDUMP end\n", 14);
+}
+
 static void efs_fuse_install_crash_handlers(void)
 {
     stack_t ss;
@@ -79,6 +147,14 @@ static void efs_fuse_install_crash_handlers(void)
     sigaction(SIGABRT, &sa, NULL);
     sigaction(SIGILL, &sa, NULL);
     sigaction(SIGFPE, &sa, NULL);
+
+    struct sigaction sd;
+    memset(&sd, 0, sizeof(sd));
+    sd.sa_handler = efs_fuse_stack_broadcast;
+    sigemptyset(&sd.sa_mask);
+    sigaction(SIGUSR1, &sd, NULL);
+    sd.sa_handler = efs_fuse_stack_signal;
+    sigaction(SIGUSR2, &sd, NULL);
 }
 
 /* Generate a per-mount inode namespace so concurrent clients never assign the
@@ -2439,7 +2515,7 @@ static int efs_fuse_statfs(const char *path, struct statvfs *stbuf)
     if (ino_pg < EFS_META_INO_PAGE_MAX) {
         uint64_t bytes_left = (uint64_t)(EFS_META_INO_PAGE_MAX - ino_pg) *
                               EFS_META_PAGE_SIZE;
-        ino_room = bytes_left / EFS_INODE_COMPACT_SIZE;
+        ino_room = bytes_left / EFS_INODE_ROW_SIZE;
     }
     stbuf->f_files = g_client.export.inode_count + ino_room;
     stbuf->f_ffree = ino_room;

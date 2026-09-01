@@ -210,27 +210,20 @@ int main(void)
             fprintf(stderr, "FAIL ghost create/serialize\n");
             failures++;
         } else {
+            /* v8 keeps the name in the row, so zero just the ino field and
+             * leave the name behind. */
             int found = 0;
-            size_t compact_off = EFS_META_HDR_SIZE;
-            size_t dent_base = efs_meta_dent_off(EFS_META_VERSION, ex.inode_count);
-            if (dent_base < blen) {
-                const char *dents = blob + dent_base;
-                size_t dent_off = 0;
-                size_t dent_lim = blen - dent_base;
-                for (uint64_t i = 0; i < ex.inode_count && dent_off + 2 <= dent_lim;
-                     i++) {
-                    uint16_t ln = 0;
-                    memcpy(&ln, dents + dent_off, 2);
-                    dent_off += 2;
-                    if (dent_off + ln > dent_lim)
-                        break;
-                    if (ln == 9 && memcmp(dents + dent_off, "ghost.jpg", 9) == 0) {
-                        memset(blob + compact_off + i * EFS_INODE_COMPACT_SIZE,
-                               0, 8);
-                        found = 1;
-                        break;
-                    }
-                    dent_off += ln;
+            for (uint64_t i = 0; i < ex.inode_count; i++) {
+                size_t off = efs_meta_row_off(i);
+                uint16_t ln = 0;
+                if (off + EFS_INODE_ROW_SIZE > blen)
+                    break;
+                memcpy(&ln, blob + off + EFS_INODE_ROW_NAME_OFF - 2, 2);
+                if (ln == 9 && memcmp(blob + off + EFS_INODE_ROW_NAME_OFF,
+                                      "ghost.jpg", 9) == 0) {
+                    memset(blob + off, 0, 8);
+                    found = 1;
+                    break;
                 }
             }
             struct efs_export loaded;

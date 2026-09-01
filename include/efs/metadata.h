@@ -64,9 +64,11 @@ struct efs_inode_mem {
     uint64_t ctime;
     uint64_t atime;
     uint32_t nlink;
-    uint32_t name_off;
+    uint32_t name_off; /* byte offset into the owning slab's name arena */
     uint16_t name_len;
-    uint16_t name_pad;
+    /* Owning slab, so a row pointer resolves to its arena and its slot in
+     * O(1). Bounded by EFS_META_INO_PAGE_MAX slabs, which fits u16. */
+    uint16_t slab_idx;
     uint64_t imm_files, imm_dirs, tree_files, tree_dirs;
     uint64_t imm_bytes, tree_bytes;
     uint64_t imm_tmin, imm_tmax, tree_tmin, tree_tmax;
@@ -75,8 +77,15 @@ struct efs_inode_mem {
     uint32_t pack_len;
 };
 
+/* One slab == one serialized inode page. names is the slab's private name
+ * arena: a shared append-only arena could never give bytes back, so every
+ * evict/refault cycle re-appended the whole slab's names and grew RAM
+ * monotonically. Owning them per slab makes eviction actually reclaim. */
 struct efs_ino_slab {
     struct efs_inode_mem *rows; /* NULL = evicted */
+    char *names;
+    uint32_t names_used;
+    uint32_t names_cap;
     uint64_t tick;
 };
 
@@ -164,15 +173,16 @@ struct efs_export {
     uint64_t ino_slab_tick;
     uint64_t inode_count;
     uint64_t inode_capacity;
-    /* Packed names for live rows (authoritative). name_off/name_len on each
-     * efs_inode_mem index this blob. Append-mostly; rename may overwrite in
-     * place when the new name fits. Freed with the table. */
-    char *name_arena;
-    uint32_t name_arena_used;
-    uint32_t name_arena_cap;
-    /* Packed v6 dentry tail: sum of (2 + namelen) over live inode rows.
-     * Maintained on create/link/unlink/rename; recomputed on deserialize. */
-    uint64_t dentry_bytes;
+    /* Names live in per-slab arenas (struct efs_ino_slab), not one table-wide
+     * blob: a shared arena cannot return bytes when a slab is evicted. */
+    uint64_t dentry_bytes; /* legacy v6/v7 accounting; unused by v8 */
+    /* On-demand page source for an evicted slab. The server installs a
+     * reader that pulls page pi from the committed root's CoW fragments, so
+     * a trimmed slab is genuinely on NVMe rather than in a second RAM copy.
+     * NULL (client, unit tests) means faults can only come from flush_blob. */
+    int (*page_src)(void *ctx, struct efs_export *ex, uint32_t page_index,
+                    uint8_t page_out[EFS_META_PAGE_SIZE]);
+    void *page_src_ctx;
     struct efs_chunk_entry *chunks;
     uint64_t chunk_count;
     uint64_t chunk_capacity;
@@ -294,15 +304,53 @@ struct efs_export {
  * dentry tail in the same inode-region blob. */
 #define EFS_INODE_COMPACT_SIZE 124
 #define EFS_CHUNK_WIRE_SIZE   120
-/* Compact-page-aligned live-row slabs (Cut 3). */
-#define EFS_INO_SLAB_ROWS (EFS_META_PAGE_SIZE / EFS_INODE_COMPACT_SIZE)
 #define EFS_ROLLUP_TOUCH      1
 #define EFS_ROLLUP_CREATE     2
 #define EFS_META_EFSM_V5      5
 #define EFS_META_EFSM_V6      6
 #define EFS_META_EFSM_V7      7
-/* Current serialize (wire) version. v7 page-aligns the dentry region. */
-#define EFS_META_VERSION      EFS_META_EFSM_V7
+#define EFS_META_EFSM_V8      8
+/* Current serialize (wire) version. v8 makes every inode page self-contained
+ * so one page can be faulted from the CoW fragments on demand. */
+#define EFS_META_VERSION      EFS_META_EFSM_V8
+
+/* EFSM v8 inode row: the v6/v7 compact payload followed by the name inline.
+ * v6/v7 kept names in a packed tail whose Nth entry could only be found by
+ * walking the N-1 before it, so a fault could not read one page without the
+ * whole region, and any name-length change shifted every later byte (a rename
+ * re-dirtied the entire dentry area). Inlining costs disk and buys a page that
+ * decodes standalone. 512 divides the 128 KiB page exactly, so slab si is
+ * page 1+si with no drift, and 512-126 leaves room for a full EFS_MAX_NAME. */
+#define EFS_INODE_ROW_SIZE     512
+#define EFS_INODE_ROW_NAME_OFF 126 /* 124 payload + 2 name_len */
+#define EFS_INODE_ROW_NAME_MAX (EFS_INODE_ROW_SIZE - EFS_INODE_ROW_NAME_OFF)
+#define EFS_INO_SLAB_ROWS      (EFS_META_PAGE_SIZE / EFS_INODE_ROW_SIZE)
+
+static inline uint32_t efs_meta_slab_count(uint64_t inode_count)
+{
+    return (uint32_t)((inode_count + EFS_INO_SLAB_ROWS - 1) /
+                      EFS_INO_SLAB_ROWS);
+}
+
+/* v8 inode region: page 0 is the header, page 1+si holds slab si's rows.
+ * Page 0 carries only 284 header bytes; spending the rest of it keeps
+ * slot->page arithmetic exact, which is what makes on-demand faulting
+ * possible. */
+static inline uint32_t efs_meta_slot_page(uint64_t slot)
+{
+    return (uint32_t)(1 + slot / EFS_INO_SLAB_ROWS);
+}
+
+static inline size_t efs_meta_row_off(uint64_t slot)
+{
+    return (size_t)efs_meta_slot_page(slot) * EFS_META_PAGE_SIZE +
+           (size_t)(slot % EFS_INO_SLAB_ROWS) * EFS_INODE_ROW_SIZE;
+}
+
+static inline size_t efs_meta_ino_region_bytes(uint64_t inode_count)
+{
+    return (size_t)(1 + efs_meta_slab_count(inode_count)) * EFS_META_PAGE_SIZE;
+}
 
 /* Inode-region dentry byte offset. v6 packs dentries immediately after the
  * compact inode rows, so appending one row memmoves the whole dentry tail and
@@ -561,10 +609,16 @@ void efs_export_pack_header_ver(const struct efs_export *ex,
 void efs_export_pack_inode(const struct efs_inode *ino, uint8_t out[EFS_INODE_WIRE_SIZE]);
 void efs_export_pack_inode_compact(const struct efs_inode_mem *ino,
                                    uint8_t out[EFS_INODE_COMPACT_SIZE]);
+/* EFSM v8 fixed-size row (compact payload + inline name) for one slot. */
+void efs_export_pack_row(const struct efs_export *ex, uint64_t slot,
+                         uint8_t out[EFS_INODE_ROW_SIZE]);
 /* Live-row name (empty string if slot is unused). */
 const char *efs_export_inode_name(const struct efs_export *ex, uint64_t slot);
-/* Live row for slot; faults an evicted slab from flush_blob when needed. */
+/* Live row for slot; faults an evicted slab (flush_blob, else page_src). */
 struct efs_inode_mem *efs_export_inode_at(struct efs_export *ex, uint64_t slot);
+/* Decode one EFSM v8 row image into a live row (name included). */
+void efs_export_unpack_row(struct efs_export *ex, struct efs_inode_mem *row,
+                           const uint8_t *p);
 void efs_export_trim_ino_ram(struct efs_export *ex);
 /* Fill an RPC/stack efs_inode including name[256] from a live slot. */
 void efs_export_inode_to_rpc(const struct efs_export *ex, uint64_t slot,

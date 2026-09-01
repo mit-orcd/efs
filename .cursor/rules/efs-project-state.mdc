@@ -37,6 +37,80 @@ summary only); vgdb and LSan both need kernel.yama.ptrace_scope=0 (currently
 2 on the nodes) — ask user to set it if deeper on-demand analysis is needed.
 
 ## Where we are
+
+**CUT A (EFSM v8) POSIX SESSION — 2 BUGS FIXED, 1 OPEN (Sep 1, working tree,
+UNGATED).** v8 = 512 B self-contained inode row (name inline at off 126),
+slab si == page 1+si, per-slab name arenas, `slab_idx` in the row, `page_src`
+hook (unwired). **Not wire-compatible with v7 — fresh mkfs required.**
+
+**Fixed 1 — moving an inode row must re-intern its name.** `name_off` is an
+offset into the OWNING SLAB's arena, so any raw `*dst = *src` row copy across
+slots aliased or lost names (false EEXIST on fresh names, ENOENT on real
+ones). Added `inode_row_move`; used by `export_drop_zero_inodes` (compaction)
+and `remove_inode_slot` (swap-remove). `efs_export_link` clears
+`name_off`/`name_len` and re-stamps `slab_idx` before `inode_set_name`.
+`inode_set_name` no longer takes the in-place path when the row does not own
+`name_off` (`name_len == 0`), and interning `""` is a no-op.
+Regression tests in `test_meta_v6`: row-move churn + never-used-name
+aliasing, sharded ino uniqueness, and a v8 serialize/deserialize round trip
+over 5 slabs of mixed 1-char/long names. `test_meta_v6: OK`.
+
+**Fixed 2 — `lookup_walk` leaked a dir-lock stripe.** It locked
+`child.parent ? child.parent : child.ino`, then OVERWROTE `child` with the
+local row and recomputed the same expression to unlock — a different stripe
+when the local row's parent differed. The stripe stayed held, and the client
+flush thread's `lock_all_dirs` then deadlocked against FUSE workers (mount
+D-state, `/sys/fs/fuse/connections/*/waiting` climbing, `idx_mu` free).
+Now the key is captured once in `lk`. `efs_client_lock_dir` /
+`unlock_dir` carry a thread-local `t_dir_held[]` that reports
+`DIRLOCK-RECURSE` / `-NEST` / `-UNDERFLOW` with a backtrace; after the fix
+those are silent. **This is why HEAD (1d7d582, without the fix) HANGS the
+16-way suite while the v8 tree completes in seconds** — do not read HEAD's
+hang as a v8 regression, and do not use HEAD as the fresh-cluster baseline.
+
+**Gate reached:** long-lived cluster, remounted client, `--jobs 16` ×3
+consecutive: **200/201 each**, only `fcntl_byte_range_lock` (known
+per-client `lockf` gap). Compare gate `results/posix/20260901-044258`
+190/201 was on a client whose table still held pre-fix corruption.
+
+**OPEN — fresh-mkfs cluster is catastrophic (~15-30/201, reproduced 6+
+times).** 173/181 failures are one shape: a test dir is created OK
+(`cwi:` trace shows correct sharded inos, e.g. root ino 5 -> children 13,
+21, 29 all on tab_shard=5) and the very next open of `<testdir>/f` gets
+ENOENT. **Ruled out by direct instrumentation, do NOT re-chase:**
+`efs_export_alloc_ino` never restarts a class or regresses (`ino-alloc:
+restart/REGRESS` = 0 on all 4 nodes); `create_sharded` and CREATE_SHARD
+always allocate from a table whose `shard_id == target` (`create-tab` /
+`create-shard: MISMATCH` = 0); no ownerless create (`create-owner: NO
+OWNER` = 0); the root is never transiently unsharded (`create-bits:
+UNSHARDED` = 0); no server-side EXIST (`create-exist` = 0); CREATE replies
+always carry the requested parent+name (`rpc-create: REPLY MISMATCH` = 0);
+`nlive=4` and `owner_psh` agrees with the answering node. The `lookup-miss`
+flood (2822 on one node) is ordinary negative lookups from `makedirs` —
+not evidence. The secondary `cwi-fail: ino_dup parent=8 name=a ino=8`
+family (client-side, child handed its parent's ino, always the 8/16/24…
+shard-0 sequence) appears only in SOME fresh runs and is still unexplained;
+`held_by` shows the ino belongs to a dir the server gave a different ino.
+LOOKUP is answered purely from local tables and never returns NOT_PRIMARY —
+worth a look. Next probe: log successful CREATE on the REMOTE/CREATE_SHARD
+branches (only the local branch is logged today, 78 of ~200 creates) and
+pair it with the miss by name.
+
+**Debug scaffolding left in the tree (remove before committing):**
+`EFS_INO_PROF` (server: ino-alloc restart/REGRESS, create-exist,
+create-tab/create-shard MISMATCH, create-owner, create-bits, create-ok,
+lookup-miss; forwarded by `clean_cluster.sh`), `EFS_CWI_TRACE` (client:
+every `create_with_ino` with ino < 256), the unconditional `rpc-create:
+REPLY MISMATCH` check in `efs_client_rpc_create`, the `held_by` fields on
+`cwi-fail: ino_dup`, and the SIGUSR1/SIGUSR2 all-thread stack dumper in
+`efs_fuse.c` (spinlock-serialized) + `tests/debug/resolve_stacks.sh`.
+Patch snapshot of the pre-instrumentation cut: `/tmp/v8-work.patch`.
+
+**INFRA: the shell exec env died at the end of this session** (same trap as
+Aug 29) right after a `clean_cluster.sh` + `setup`; the cluster may be
+mid-deploy. Verify `efs-mgmt status` and remount clients before trusting
+any measurement.
+
 **METADATA STRUCTURAL PROGRAM (Sep 1, working tree, UNGATED):** Four cuts in
 tree. Do not treat posixstress flakes / LINK `lock_all` / BUSY backoff as
 the next lever.
@@ -73,6 +147,33 @@ clean slabs after flush. scale 2M `results/scale/20260831-cut3`: rss max
 5M/10M continuation wedged (007 `makedirs` FileExistsError on existing
 hashed ROOT `scale-fcstor007` after LOOKUP miss — Cut 4 remount path).
 Do not quote 5M/10M.
+
+**WHY META IS STILL RAM (Sep 1, code-read, no code changed).** Cut 3 is a
+RAM↔RAM pager, not RAM↔disk — do not read the 1023 MB cap as "cold inodes
+live on NVMe". `inode_slab_fault` restores a slab from **`ex->flush_blob`**,
+the last serialize of the WHOLE inode region, also in RAM; `trim_ino_ram`
+returns early `if (!ex->flush_blob)`, and `ino_ram_bytes` counts the blob
+INSIDE the cap, so trimming slabs fights a term it can never evict. If the
+blob cannot restore a slab, `inode_at` returns NULL and the op fails —
+there is **no** "fetch `page_cis[i]` from the 2+1 fragments" path on a
+LOOKUP/CREATE miss. `page_cis` is read only by
+`server_rebuild_export_from_pages_ino`, which loops **all** `page_count`
+pages into one `calloc(page_count, 128 KiB)` and deserializes the full
+table. `evict_cold_shards` frees whole extra tabs (shard>=1, clean), never
+cold pages inside a live tab. `name_arena` + `chunks[]` stay one contiguous
+alloc per tab. Third full copy: every client still `efs_export_deserialize`s
+the GET_META blob into `g_client.export` at mount (read.c comment: "over a
+GiB at multi-million-inode scale"); Cut 4 stopped *serving names* from it,
+not *loading* it. Hence ~1.7 KB/inode cluster-wide and 2^32 ≈ multi-TB.
+**Two defects found while verifying (unfixed):** (1) `name_arena` is
+append-only with no free list and a refaulted slab has `name_len=0`, so
+`inode_set_name` takes the grow path — every evict→refault cycle re-appends
+every name and permanently grows `name_arena_cap`, which is itself inside
+the cap. (2) `inode_slot_of` is a linear scan over `ino_slab_n` when
+`ex->inodes` is NULL (~9.5k slabs at 10M, `EFS_INO_SLAB_ROWS`=1057) on the
+rename/mark-dirty paths. Real fix is the pager: page-granular fault from
+`page_cis`, `flush_blob` shrunk to dirty pages, bounded client inode cache.
+Not more shard bits, not 9x4 posixstress.
 
 **Cut 4 — lookup_walk always RPC names/nlink.** No dir short-circuit /
 `created_recent` / `lookup_cache`. No LOOKUP_PATH (primary misses extra

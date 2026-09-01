@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <execinfo.h>
 
 static uint32_t data_chunk_size(void)
 {
@@ -50,15 +51,57 @@ static int dir_stripe(efs_ino_t parent)
     return (int)((uint64_t)parent % EFS_DIR_LOCKS);
 }
 
+/* The dir locks are plain (non-recursive) mutexes and the client flush thread
+ * takes every stripe at once, so a stripe taken twice on one thread — or one
+ * left held when an op returns — wedges the whole mount. Stripes are shared
+ * by ino modulo, so nesting two *different* inodes can collide too. Track what
+ * this thread holds and say so loudly instead of deadlocking silently. */
+static __thread unsigned char t_dir_held[EFS_DIR_LOCKS];
+
+int efs_client_dir_locks_held(void);
+
+static void dir_lock_report(const char *what, int stripe, efs_ino_t parent)
+{
+    static int reported;
+    fprintf(stderr, "DIRLOCK-%s stripe=%d ino=%llu\n", what, stripe,
+            (unsigned long long)parent);
+    if (__atomic_fetch_add(&reported, 1, __ATOMIC_RELAXED) < 8) {
+        void *frames[32];
+        int nf = backtrace(frames, 32);
+        backtrace_symbols_fd(frames, nf, STDERR_FILENO);
+    }
+}
+
 void efs_client_lock_dir(efs_ino_t parent)
 {
+    int s = dir_stripe(parent);
     efs_client_ensure_dir_locks();
-    pthread_mutex_lock(&g_client.dir_lock[dir_stripe(parent)]);
+    if (t_dir_held[s])
+        dir_lock_report("RECURSE", s, parent);
+    else if (efs_client_dir_locks_held())
+        dir_lock_report("NEST", s, parent);
+    pthread_mutex_lock(&g_client.dir_lock[s]);
+    t_dir_held[s]++;
 }
 
 void efs_client_unlock_dir(efs_ino_t parent)
 {
-    pthread_mutex_unlock(&g_client.dir_lock[dir_stripe(parent)]);
+    int s = dir_stripe(parent);
+    if (!t_dir_held[s])
+        dir_lock_report("UNDERFLOW", s, parent);
+    else
+        t_dir_held[s]--;
+    pthread_mutex_unlock(&g_client.dir_lock[s]);
+}
+
+/* Non-zero when this thread still holds a stripe; a FUSE op that returns
+ * with one held has leaked it. */
+int efs_client_dir_locks_held(void)
+{
+    int n = 0;
+    for (int i = 0; i < EFS_DIR_LOCKS; i++)
+        n += t_dir_held[i];
+    return n;
 }
 
 void efs_client_lock_dirs2(efs_ino_t a, efs_ino_t b)
@@ -67,6 +110,7 @@ void efs_client_lock_dirs2(efs_ino_t a, efs_ino_t b)
     int ia = dir_stripe(a), ib = dir_stripe(b);
     if (ia == ib) {
         pthread_mutex_lock(&g_client.dir_lock[ia]);
+        t_dir_held[ia]++;
         return;
     }
     if (ia < ib) {
@@ -76,15 +120,20 @@ void efs_client_lock_dirs2(efs_ino_t a, efs_ino_t b)
         pthread_mutex_lock(&g_client.dir_lock[ib]);
         pthread_mutex_lock(&g_client.dir_lock[ia]);
     }
+    t_dir_held[ia]++;
+    t_dir_held[ib]++;
 }
 
 void efs_client_unlock_dirs2(efs_ino_t a, efs_ino_t b)
 {
     int ia = dir_stripe(a), ib = dir_stripe(b);
     if (ia == ib) {
+        t_dir_held[ia]--;
         pthread_mutex_unlock(&g_client.dir_lock[ia]);
         return;
     }
+    t_dir_held[ia]--;
+    t_dir_held[ib]--;
     pthread_mutex_unlock(&g_client.dir_lock[ia]);
     pthread_mutex_unlock(&g_client.dir_lock[ib]);
 }
@@ -92,14 +141,18 @@ void efs_client_unlock_dirs2(efs_ino_t a, efs_ino_t b)
 void efs_client_lock_all_dirs(void)
 {
     efs_client_ensure_dir_locks();
-    for (int i = 0; i < EFS_DIR_LOCKS; i++)
+    for (int i = 0; i < EFS_DIR_LOCKS; i++) {
         pthread_mutex_lock(&g_client.dir_lock[i]);
+        t_dir_held[i]++;
+    }
 }
 
 void efs_client_unlock_all_dirs(void)
 {
-    for (int i = EFS_DIR_LOCKS - 1; i >= 0; i--)
+    for (int i = EFS_DIR_LOCKS - 1; i >= 0; i--) {
+        t_dir_held[i]--;
         pthread_mutex_unlock(&g_client.dir_lock[i]);
+    }
 }
 
 void efs_client_table_lock(void)
@@ -517,14 +570,19 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
         /* Writer: local size/pack is newer than the owner until REPORT.
          * Peer remount stubs must not clobber GETATTR. */
         if (efs_client_ino_is_dirty(child.ino)) {
-            efs_client_lock_dir(child.parent ? child.parent : child.ino);
+            /* Unlock the stripe we locked: the local row can carry a
+             * different parent, and recomputing the key after child is
+             * overwritten leaked the held stripe (the mount then wedged
+             * behind the flush thread's lock_all_dirs). */
+            efs_ino_t lk = child.parent ? child.parent : child.ino;
+            efs_client_lock_dir(lk);
             pthread_mutex_lock(&g_client.idx_mu);
             struct efs_inode local;
             if (efs_export_get_inode(&g_client.export, child.ino,
                                      &local) == 0)
                 child = local;
             pthread_mutex_unlock(&g_client.idx_mu);
-            efs_client_unlock_dir(child.parent ? child.parent : child.ino);
+            efs_client_unlock_dir(lk);
         }
         parent = child.ino;
         *out = child;

@@ -2056,6 +2056,25 @@ send_reply:
                         server_shard_unlock(g_server, eidx, psh);
                     }
                 }
+                if (r.status == EFS_INODE_RPC_NOT_FOUND &&
+                    getenv("EFS_INO_PROF")) {
+                    struct efs_export *lt = efs_export_shard_tab(ex, psh);
+                    efs_node_id_t mlive[EFS_MAX_NODES];
+                    uint32_t msc = ex->root.shard_count
+                                       ? ex->root.shard_count : 1;
+                    uint32_t mnl;
+                    server_global_lock(g_server);
+                    mnl = server_nlive_locked(g_server, mlive);
+                    server_global_unlock(g_server);
+                    fprintf(stderr,
+                            "lookup-miss: node=%u parent=%llu name=%s psh=%u "
+                            "dsh0=%u skip_ensure=%d psh_tab_inodes=%llu "
+                            "owner_psh=%u nlive=%u\n",
+                            g_server->id, (unsigned long long)req->parent,
+                            req->name, psh, dsh0, skip_ensure,
+                            lt ? (unsigned long long)lt->inode_count : 0ULL,
+                            efs_shard_owner_of(psh, msc, mlive, mnl), mnl);
+                }
                 }
             } else if (type == EFS_MSG_INODE_GETATTR) {
                 struct efs_msg_inode_getattr *req = payload;
@@ -2094,6 +2113,13 @@ send_reply:
                 uint32_t nlive = server_nlive_locked(g_server, live);
                 uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
                 uint32_t bits = ex->root.shard_bits;
+                if ((bits == 0 || sc <= 1) && getenv("EFS_INO_PROF"))
+                    fprintf(stderr,
+                            "create-bits: UNSHARDED bits=%u sc=%u gen=%llu "
+                            "parent=%llu name=%s\n",
+                            bits, sc,
+                            (unsigned long long)ex->root.generation,
+                            (unsigned long long)req->parent, req->name);
                 uint32_t target = efs_export_create_target(ex, req->parent,
                                                            req->mode,
                                                            req->name);
@@ -2104,6 +2130,12 @@ send_reply:
                 uint32_t psh = efs_export_shard_of(req->parent, bits);
                 int remote = (bits && sc > 1 && owner != 0 &&
                               owner != g_server->id);
+                if (bits && sc > 1 && owner == 0 && getenv("EFS_INO_PROF"))
+                    fprintf(stderr,
+                            "create-owner: NO OWNER target=%u nlive=%u sc=%u "
+                            "parent=%llu name=%s (allocating locally)\n",
+                            target, nlive, sc,
+                            (unsigned long long)req->parent, req->name);
                 char host[64];
                 uint16_t port = 0;
                 int have_addr = 0;
@@ -2267,6 +2299,20 @@ send_reply:
                             if (ino) {
                                 efs_export_get_inode(ex, ino, &r.inode);
                                 r.status = EFS_INODE_RPC_OK;
+                                if (getenv("EFS_INO_PROF")) {
+                                    struct efs_export *ct =
+                                        efs_export_shard_tab(ex, target);
+                                    fprintf(stderr,
+                                            "create-ok: node=%u parent=%llu "
+                                            "name=%s ino=%llu target=%u "
+                                            "tab_inodes=%llu\n",
+                                            g_server->id,
+                                            (unsigned long long)req->parent,
+                                            req->name,
+                                            (unsigned long long)ino, target,
+                                            ct ? (unsigned long long)
+                                                     ct->inode_count : 0ULL);
+                                }
                                 if (cflags & EFS_CREATE_F_HOLD)
                                     hold_inc(ex->id, ino);
                                 server_meta_mark_rpc_dirty_locked(g_server,
@@ -2295,6 +2341,16 @@ send_reply:
                     server_shard_lock(g_server, eidx, req->target_shard);
                     struct efs_export *ctab =
                         efs_export_table(ex, req->target_shard);
+                    if (ctab && ctab->shard_id != req->target_shard &&
+                        getenv("EFS_INO_PROF"))
+                        fprintf(stderr,
+                                "create-shard: MISMATCH target=%u "
+                                "ctab_shard=%u bits=%u sc=%u parent=%llu "
+                                "name=%s given=%llu\n",
+                                req->target_shard, ctab->shard_id,
+                                ex->root.shard_bits, ex->root.shard_count,
+                                (unsigned long long)req->parent, req->name,
+                                (unsigned long long)req->ino);
                     /* Live extra tab is the single writer. Do not inherit
                      * the MAIN table's catchup fence (that BUSY'd hashed
                      * mkdir after extras+main flush; client slept 50ms<<n).

@@ -356,6 +356,15 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
         return rpc_status_to_efs(r.status);
+    if (r.inode.parent != parent ||
+        (name && strncmp(r.inode.name, name, EFS_MAX_NAME - 1) != 0))
+        fprintf(stderr,
+                "rpc-create: REPLY MISMATCH req parent=%llu name=%s -> "
+                "got ino=%llu parent=%llu name=%s mode=%o\n",
+                (unsigned long long)parent, name ? name : "",
+                (unsigned long long)r.inode.ino,
+                (unsigned long long)r.inode.parent, r.inode.name,
+                r.inode.mode);
     if (out_ino)
         *out_ino = r.inode.ino;
     if (out)

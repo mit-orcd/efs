@@ -737,7 +737,9 @@ int efs_client_meta_cache_adopt(char *blob, size_t blob_len)
     memcpy(&ver, blob + 4, 4);
     uint32_t ino_len;
     uint32_t ch_len = (uint32_t)(cc * EFS_CHUNK_WIRE_SIZE);
-    if (ver >= EFS_META_EFSM_V6) {
+    if (ver >= EFS_META_EFSM_V8) {
+        ino_len = (uint32_t)efs_meta_ino_region_bytes(ic);
+    } else if (ver >= EFS_META_EFSM_V6) {
         size_t dent = (size_t)g_client.export.dentry_bytes;
         ino_len = (uint32_t)(efs_meta_dent_off(ver, ic) + dent);
     } else {

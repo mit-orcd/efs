@@ -56,6 +56,8 @@ static int inode_slab_ensure(struct efs_export *ex, uint32_t si);
 static int inode_ensure_cap(struct efs_export *ex, uint64_t need);
 static int inode_set_name(struct efs_export *ex, struct efs_inode_mem *p,
                           const char *name);
+static uint32_t slab_of_row(const struct efs_export *ex,
+                            const struct efs_inode_mem *p);
 
 static uint32_t ino_ram_cap_mb(void)
 {
@@ -76,13 +78,15 @@ static uint32_t ino_ram_cap_mb(void)
 static uint64_t ino_ram_bytes(const struct efs_export *ex)
 {
     uint64_t n = 0;
+    uint32_t si;
     if (!ex)
         return 0;
     if (ex->inodes)
         n += ex->inode_capacity * sizeof(struct efs_inode_mem);
     n += (uint64_t)ex->ino_slabs_resident * EFS_INO_SLAB_ROWS *
          sizeof(struct efs_inode_mem);
-    n += ex->name_arena_cap;
+    for (si = 0; si < ex->ino_slab_n; si++)
+        n += ex->ino_slabs ? ex->ino_slabs[si].names_cap : 0;
     if (ex->flush_blob)
         n += (uint64_t)ex->flush_blob_ino_len + ex->flush_blob_chunk_len;
     return n;
@@ -98,7 +102,71 @@ static void inode_slab_free_one(struct efs_export *ex, uint32_t si)
         if (ex->ino_slabs_resident)
             ex->ino_slabs_resident--;
     }
+    free(ex->ino_slabs[si].names);
+    ex->ino_slabs[si].names = NULL;
+    ex->ino_slabs[si].names_used = 0;
+    ex->ino_slabs[si].names_cap = 0;
     ex->ino_slabs[si].tick = 0;
+}
+
+static int slab_names_grow(struct efs_ino_slab *sl, uint32_t need)
+{
+    uint32_t ncap;
+    char *na;
+    if (!sl)
+        return -1;
+    if (sl->names_used + need <= sl->names_cap)
+        return 0;
+    ncap = sl->names_cap ? sl->names_cap : 1024;
+    while (ncap < sl->names_used + need) {
+        if (ncap > UINT32_MAX / 2)
+            return -1;
+        ncap *= 2;
+    }
+    na = realloc(sl->names, ncap);
+    if (!na)
+        return -1;
+    sl->names = na;
+    sl->names_cap = ncap;
+    return 0;
+}
+
+/* Rewrite the slab's arena keeping only live names. inode_set_name appends
+ * whenever a new name is longer than the old one, so a rename-heavy slab
+ * would otherwise grow without bound. A slab is EFS_INO_SLAB_ROWS rows, so
+ * this is cheap and strictly local. */
+static void slab_names_compact(struct efs_export *ex, uint32_t si)
+{
+    struct efs_ino_slab *sl;
+    char *fresh;
+    uint32_t used = 0, k;
+    if (!ex || !ex->ino_slabs || si >= ex->ino_slab_n)
+        return;
+    sl = &ex->ino_slabs[si];
+    if (!sl->rows || !sl->names || !sl->names_cap)
+        return;
+    fresh = malloc(sl->names_cap);
+    if (!fresh)
+        return;
+    for (k = 0; k < EFS_INO_SLAB_ROWS; k++) {
+        struct efs_inode_mem *row = &sl->rows[k];
+        uint32_t ln = row->name_len;
+        if (!ln)
+            continue;
+        if ((uint64_t)row->name_off + ln > sl->names_used ||
+            (uint64_t)used + ln + 1 > sl->names_cap) {
+            row->name_len = 0;
+            row->name_off = 0;
+            continue;
+        }
+        memcpy(fresh + used, sl->names + row->name_off, ln);
+        fresh[used + ln] = '\0';
+        row->name_off = used;
+        used += ln + 1;
+    }
+    free(sl->names);
+    sl->names = fresh;
+    sl->names_used = used;
 }
 
 static int inode_ensure_cap(struct efs_export *ex, uint64_t need)
@@ -141,96 +209,115 @@ static int inode_ensure_cap(struct efs_export *ex, uint64_t need)
     return EFS_OK;
 }
 
-static int inode_slab_fault(struct efs_export *ex, uint32_t si)
+/* Decode one EFSM v8 row (124 B payload, u16 name_len, inline name). */
+void efs_export_unpack_row(struct efs_export *ex, struct efs_inode_mem *row,
+                           const uint8_t *p)
+{
+    uint16_t ln = 0;
+    char nbuf[EFS_MAX_NAME];
+    uint16_t slab = row->slab_idx;
+    memset(row, 0, sizeof(*row));
+    row->slab_idx = slab;
+    memcpy(&row->ino, p, 8); p += 8;
+    memcpy(&row->parent, p, 8); p += 8;
+    memcpy(&row->mode, p, 4); p += 4;
+    {
+        uint32_t uid, gid;
+        memcpy(&uid, p, 4); p += 4;
+        memcpy(&gid, p, 4); p += 4;
+        row->uid = (uid_t)uid;
+        row->gid = (gid_t)gid;
+    }
+    memcpy(&row->size, p, 8); p += 8;
+    memcpy(&row->mtime, p, 8); p += 8;
+    memcpy(&row->mtime_nsec, p, 4); p += 4;
+    memcpy(&row->ctime, p, 8); p += 8;
+    memcpy(&row->atime, p, 8); p += 8;
+    memcpy(&row->nlink, p, 4); p += 4;
+    memcpy(&row->imm_files, p, 8); p += 8;
+    memcpy(&row->imm_dirs, p, 8); p += 8;
+    memcpy(&row->imm_bytes, p, 8); p += 8;
+    memcpy(&row->imm_tmin, p, 8); p += 8;
+    memcpy(&row->imm_tmax, p, 8); p += 8;
+    memcpy(&row->pack_ino, p, 8); p += 8;
+    memcpy(&row->pack_off, p, 4); p += 4;
+    memcpy(&row->pack_len, p, 4); p += 4;
+    memcpy(&ln, p, 2); p += 2;
+    if (ln >= EFS_MAX_NAME)
+        ln = EFS_MAX_NAME - 1;
+    if (!ln)
+        return;
+    memset(nbuf, 0, sizeof(nbuf));
+    memcpy(nbuf, p, ln);
+    inode_set_name(ex, row, nbuf);
+}
+
+/* Restore slab si from a serialized image of its page. v8 pins slab si to
+ * page 1+si and carries each row's name inline, so this reads one page and
+ * needs nothing else -- that is what lets a fault come from the CoW
+ * fragments instead of a full in-RAM copy of the table. */
+static int inode_slab_fault_from_page(struct efs_export *ex, uint32_t si,
+                                      const uint8_t *page)
 {
     uint64_t s0, s1, slot;
-    const char *blob;
-    size_t dent_off;
-    const uint8_t *dp, *dend;
-    uint64_t skip;
-    if (!ex || si >= ex->ino_slab_n)
+    if (!ex || si >= ex->ino_slab_n || !page)
         return -1;
-    if (ex->ino_slabs[si].rows)
-        return 0;
-    if (!ex->flush_blob || ex->flush_blob_ino_len < EFS_META_HDR_SIZE)
-        return -1;
-    ex->ino_slabs[si].rows = calloc(EFS_INO_SLAB_ROWS,
-                                    sizeof(struct efs_inode_mem));
-    if (!ex->ino_slabs[si].rows)
-        return -1;
-    ex->ino_slabs_resident++;
+    if (!ex->ino_slabs[si].rows) {
+        ex->ino_slabs[si].rows = calloc(EFS_INO_SLAB_ROWS,
+                                        sizeof(struct efs_inode_mem));
+        if (!ex->ino_slabs[si].rows)
+            return -1;
+        ex->ino_slabs_resident++;
+    }
     s0 = (uint64_t)si * EFS_INO_SLAB_ROWS;
     s1 = s0 + EFS_INO_SLAB_ROWS;
     if (s1 > ex->inode_count)
         s1 = ex->inode_count;
-    blob = ex->flush_blob;
-    dent_off = efs_meta_dent_off(EFS_META_VERSION, ex->inode_count);
     for (slot = s0; slot < s1; slot++) {
-        uint64_t off = (uint64_t)EFS_META_HDR_SIZE +
-                       slot * (uint64_t)EFS_INODE_COMPACT_SIZE;
         struct efs_inode_mem *row = &ex->ino_slabs[si].rows[slot - s0];
-        const uint8_t *p;
-        if (off + EFS_INODE_COMPACT_SIZE > dent_off ||
-            off + EFS_INODE_COMPACT_SIZE > ex->flush_blob_ino_len)
-            break;
-        p = (const uint8_t *)blob + off;
-        memcpy(&row->ino, p, 8); p += 8;
-        memcpy(&row->parent, p, 8); p += 8;
-        memcpy(&row->mode, p, 4); p += 4;
-        {
-            uint32_t uid, gid;
-            memcpy(&uid, p, 4); p += 4;
-            memcpy(&gid, p, 4); p += 4;
-            row->uid = (uid_t)uid;
-            row->gid = (gid_t)gid;
-        }
-        memcpy(&row->size, p, 8); p += 8;
-        memcpy(&row->mtime, p, 8); p += 8;
-        memcpy(&row->mtime_nsec, p, 4); p += 4;
-        memcpy(&row->ctime, p, 8); p += 8;
-        memcpy(&row->atime, p, 8); p += 8;
-        memcpy(&row->nlink, p, 4); p += 4;
-        memcpy(&row->imm_files, p, 8); p += 8;
-        memcpy(&row->imm_dirs, p, 8); p += 8;
-        memcpy(&row->imm_bytes, p, 8); p += 8;
-        memcpy(&row->imm_tmin, p, 8); p += 8;
-        memcpy(&row->imm_tmax, p, 8); p += 8;
-        memcpy(&row->pack_ino, p, 8); p += 8;
-        memcpy(&row->pack_off, p, 4); p += 4;
-        memcpy(&row->pack_len, p, 4);
+        row->slab_idx = (uint16_t)si;
+        efs_export_unpack_row(ex, row,
+                              page + (slot - s0) * EFS_INODE_ROW_SIZE);
     }
-    if (dent_off >= ex->flush_blob_ino_len)
-        goto done;
-    dp = (const uint8_t *)blob + dent_off;
-    dend = (const uint8_t *)blob + ex->flush_blob_ino_len;
-    skip = 0;
-    while (skip < s0 && dp + 2 <= dend) {
-        uint16_t ln = 0;
-        memcpy(&ln, dp, 2);
-        dp += 2;
-        if (dp + ln > dend)
-            break;
-        dp += ln;
-        skip++;
-    }
-    for (slot = s0; slot < s1 && dp + 2 <= dend; slot++) {
-        uint16_t ln = 0;
-        char nbuf[EFS_MAX_NAME];
-        memcpy(&ln, dp, 2);
-        dp += 2;
-        if (ln >= EFS_MAX_NAME)
-            ln = EFS_MAX_NAME - 1;
-        if (dp + ln > dend)
-            break;
-        memset(nbuf, 0, sizeof(nbuf));
-        if (ln)
-            memcpy(nbuf, dp, ln);
-        dp += ln;
-        inode_set_name(ex, &ex->ino_slabs[si].rows[slot - s0], nbuf);
-    }
-done:
     ex->ino_slabs[si].tick = ++ex->ino_slab_tick;
     return 0;
+}
+
+static int inode_slab_fault(struct efs_export *ex, uint32_t si)
+{
+    uint32_t pi;
+    size_t off;
+    if (!ex || si >= ex->ino_slab_n)
+        return -1;
+    if (ex->ino_slabs[si].rows)
+        return 0;
+    pi = si + 1; /* page 0 is the header */
+    off = (size_t)pi * EFS_META_PAGE_SIZE;
+    if (ex->flush_blob &&
+        off + EFS_META_PAGE_SIZE <= ex->flush_blob_ino_len)
+        return inode_slab_fault_from_page(
+            ex, si, (const uint8_t *)ex->flush_blob + off);
+    if (ex->page_src) {
+        uint8_t *page = malloc(EFS_META_PAGE_SIZE);
+        int rc;
+        if (!page)
+            return -1;
+        rc = ex->page_src(ex->page_src_ctx, ex, pi, page);
+        if (rc == EFS_OK)
+            rc = inode_slab_fault_from_page(ex, si, page);
+        else
+            rc = -1;
+        free(page);
+        return rc;
+    }
+    return -1;
+}
+
+static void slab_rows_tag(struct efs_export *ex, uint32_t si)
+{
+    uint32_t k;
+    for (k = 0; k < EFS_INO_SLAB_ROWS; k++)
+        ex->ino_slabs[si].rows[k].slab_idx = (uint16_t)si;
 }
 
 static int inode_slab_ensure(struct efs_export *ex, uint32_t si)
@@ -241,20 +328,21 @@ static int inode_slab_ensure(struct efs_export *ex, uint32_t si)
     if (ex->ino_slabs[si].rows)
         return 0;
     s0 = (uint64_t)si * EFS_INO_SLAB_ROWS;
-    if (s0 < ex->inode_count && ex->flush_blob &&
-        ex->flush_blob_ino_len >= EFS_META_HDR_SIZE) {
+    /* Only treat this as a fault when something can actually restore the
+     * rows. A snapshot target sets inode_count up front and then fills the
+     * rows itself, so it must get a fresh zeroed slab, not a failure. */
+    if (s0 < ex->inode_count && (ex->flush_blob || ex->page_src)) {
         if (inode_slab_fault(ex, si) == 0)
             return 0;
-        /* Evicted live rows and the serialize cache cannot restore them. */
+        /* Live rows were evicted and no page source can restore them. */
         return -1;
     }
-    if (ex->ino_slabs[si].rows)
-        return 0;
     ex->ino_slabs[si].rows = calloc(EFS_INO_SLAB_ROWS,
                                     sizeof(struct efs_inode_mem));
     if (!ex->ino_slabs[si].rows)
         return -1;
     ex->ino_slabs_resident++;
+    slab_rows_tag(ex, si);
     ex->ino_slabs[si].tick = ++ex->ino_slab_tick;
     return 0;
 }
@@ -280,6 +368,10 @@ static struct efs_inode_mem *inode_at(struct efs_export *ex, uint64_t slot)
     if (!ex->ino_slabs[si].rows)
         return NULL;
     ex->ino_slabs[si].tick = ++ex->ino_slab_tick;
+    /* Stamp on every access: callers memset rows before filling them, and a
+     * row whose slab_idx is stale would resolve its name against the wrong
+     * arena. One store is cheaper than auditing every memset. */
+    ex->ino_slabs[si].rows[off].slab_idx = (uint16_t)si;
     return &ex->ino_slabs[si].rows[off];
 }
 
@@ -292,7 +384,11 @@ void efs_export_trim_ino_ram(struct efs_export *ex)
 {
     uint64_t cap, bytes;
     uint32_t si, best, hops;
-    if (!ex || !ex->ino_slabs || !ex->flush_blob || ex->flush_full)
+    /* Something has to be able to bring a slab back: either the serialize
+     * cache or a page source over the committed fragments. */
+    if (!ex || !ex->ino_slabs || ex->flush_full)
+        return;
+    if (!ex->flush_blob && !ex->page_src)
         return;
     cap = (uint64_t)ino_ram_cap_mb() << 20;
     bytes = ino_ram_bytes(ex);
@@ -301,24 +397,12 @@ void efs_export_trim_ino_ram(struct efs_export *ex)
         uint64_t oldest = UINT64_MAX;
         best = (uint32_t)-1;
         for (si = 0; si < ex->ino_slab_n; si++) {
-            uint64_t s0, s1, slot;
-            int dirty = 0;
             if (!ex->ino_slabs[si].rows)
                 continue;
-            s0 = (uint64_t)si * EFS_INO_SLAB_ROWS;
-            s1 = s0 + EFS_INO_SLAB_ROWS;
-            if (s1 > ex->inode_count)
-                s1 = ex->inode_count;
-            for (slot = s0; slot < s1; slot++) {
-                uint64_t off = (uint64_t)EFS_META_HDR_SIZE +
-                               slot * (uint64_t)EFS_INODE_COMPACT_SIZE;
-                uint32_t pg = (uint32_t)(off / EFS_META_PAGE_SIZE);
-                if (efs_export_flush_page_is_dirty(ex, pg)) {
-                    dirty = 1;
-                    break;
-                }
-            }
-            if (dirty)
+            /* v8: slab si is exactly page 1+si, so "does this slab hold
+             * unflushed rows" is one dirty bit, not a scan. A dirty slab is
+             * ahead of the committed pages and must not be dropped. */
+            if (efs_export_flush_page_is_dirty(ex, si + 1))
                 continue;
             if (ex->ino_slabs[si].tick < oldest) {
                 oldest = ex->ino_slabs[si].tick;
@@ -343,38 +427,53 @@ static uint64_t inode_slot_of(const struct efs_export *ex,
             return (uint64_t)-1;
         return (uint64_t)(p - ex->inodes);
     }
-    for (si = 0; si < ex->ino_slab_n; si++) {
+    si = slab_of_row(ex, p);
+    if (si != (uint32_t)-1) {
         struct efs_inode_mem *r = ex->ino_slabs[si].rows;
-        if (!r)
-            continue;
-        if (p >= r && p < r + EFS_INO_SLAB_ROWS)
-            return (uint64_t)si * EFS_INO_SLAB_ROWS + (uint64_t)(p - r);
+        return (uint64_t)si * EFS_INO_SLAB_ROWS + (uint64_t)(p - r);
     }
     return (uint64_t)-1;
 }
 
-static int name_arena_grow(struct efs_export *ex, uint32_t need)
+/* Resolve a row to its slab. slab_idx is the O(1) answer, but callers zero
+ * rows before filling them (memset clears the stamp), and a wrong slab would
+ * silently read another slab's arena. Verify the pointer really lies in that
+ * slab and fall back to a scan that repairs the stamp. */
+static uint32_t slab_of_row(const struct efs_export *ex,
+                            const struct efs_inode_mem *p)
 {
-    if (ex->name_arena_used + need <= ex->name_arena_cap)
-        return 0;
-    uint32_t ncap = ex->name_arena_cap ? ex->name_arena_cap : 4096;
-    while (ncap < ex->name_arena_used + need)
-        ncap *= 2;
-    char *na = realloc(ex->name_arena, ncap);
-    if (!na)
-        return -1;
-    ex->name_arena = na;
-    ex->name_arena_cap = ncap;
-    return 0;
+    uint32_t si;
+    if (!ex || !p || !ex->ino_slabs)
+        return (uint32_t)-1;
+    si = p->slab_idx;
+    if (si < ex->ino_slab_n) {
+        struct efs_inode_mem *r = ex->ino_slabs[si].rows;
+        if (r && p >= r && p < r + EFS_INO_SLAB_ROWS)
+            return si;
+    }
+    for (si = 0; si < ex->ino_slab_n; si++) {
+        struct efs_inode_mem *r = ex->ino_slabs[si].rows;
+        if (r && p >= r && p < r + EFS_INO_SLAB_ROWS) {
+            ((struct efs_inode_mem *)p)->slab_idx = (uint16_t)si;
+            return si;
+        }
+    }
+    return (uint32_t)-1;
 }
 
 static const char *inamep(const struct efs_export *ex, const struct efs_inode_mem *p)
 {
-    if (!ex || !p || !p->name_len || !ex->name_arena)
+    const struct efs_ino_slab *sl;
+    uint32_t si;
+    if (!ex || !p || !p->name_len)
         return "";
-    if ((uint64_t)p->name_off + p->name_len > ex->name_arena_used)
+    si = slab_of_row(ex, p);
+    if (si == (uint32_t)-1)
         return "";
-    return ex->name_arena + p->name_off;
+    sl = &ex->ino_slabs[si];
+    if (!sl->names || (uint64_t)p->name_off + p->name_len > sl->names_used)
+        return "";
+    return sl->names + p->name_off;
 }
 
 const char *efs_export_inode_name(const struct efs_export *ex, uint64_t slot)
@@ -476,23 +575,73 @@ static int inode_set_name(struct efs_export *ex, struct efs_inode_mem *p,
                           const char *name)
 {
     size_t ln = name ? strnlen(name, EFS_MAX_NAME - 1) : 0;
-    if (p->name_len >= ln && ex->name_arena &&
-        (uint64_t)p->name_off + p->name_len <= ex->name_arena_used) {
+    struct efs_ino_slab *sl;
+    uint32_t si;
+    if (!ex || !p)
+        return -1;
+    si = slab_of_row(ex, p);
+    if (si == (uint32_t)-1)
+        return -1;
+    sl = &ex->ino_slabs[si];
+    /* name_off only means something once the row owns arena bytes. A row with
+     * name_len 0 (fresh, or just moved between slots) owns none, so reusing
+     * its offset would truncate whatever name lives there. */
+    if (!ln && !p->name_len) {
+        p->name_off = 0;
+        return 0;
+    }
+    if (p->name_len && p->name_len >= ln && sl->names &&
+        (uint64_t)p->name_off + p->name_len <= sl->names_used) {
         if (ln)
-            memcpy(ex->name_arena + p->name_off, name, ln);
-        ex->name_arena[p->name_off + ln] = '\0';
+            memcpy(sl->names + p->name_off, name, ln);
+        sl->names[p->name_off + ln] = '\0';
         p->name_len = (uint16_t)ln;
         return 0;
     }
-    if (name_arena_grow(ex, (uint32_t)ln + 1) != 0)
+    /* Appending past a few times the slab's live name bytes means renames
+     * have orphaned most of the arena; reclaim before growing again. */
+    if (sl->names_used > 64 * 1024 &&
+        sl->names_used > 4 * EFS_INO_SLAB_ROWS * 32)
+        slab_names_compact(ex, si);
+    if (slab_names_grow(sl, (uint32_t)ln + 1) != 0)
         return -1;
-    p->name_off = ex->name_arena_used;
+    p->name_off = sl->names_used;
     p->name_len = (uint16_t)ln;
     if (ln)
-        memcpy(ex->name_arena + ex->name_arena_used, name, ln);
-    ex->name_arena[ex->name_arena_used + ln] = '\0';
-    ex->name_arena_used += (uint32_t)ln + 1;
+        memcpy(sl->names + sl->names_used, name, ln);
+    sl->names[sl->names_used + ln] = '\0';
+    sl->names_used += (uint32_t)ln + 1;
     return 0;
+}
+
+/* Move a row to another slot. name_off is an offset into the OWNING slab's
+ * name arena and slots 256 apart live in different slabs, so a raw struct
+ * copy leaves the destination reading — and, on the next rename, overwriting
+ * — an unrelated slab's bytes. Re-intern the name into the destination's own
+ * arena. Callers must refresh the indexes; this only moves the row. */
+static int inode_row_move(struct efs_export *ex, uint64_t dst_slot,
+                          uint64_t src_slot)
+{
+    struct efs_inode_mem tmp;
+    struct efs_inode_mem *p;
+    char nm[EFS_MAX_NAME];
+
+    p = inode_at(ex, src_slot);
+    if (!p)
+        return -1;
+    tmp = *p;
+    strncpy(nm, inamep(ex, p), sizeof(nm) - 1);
+    nm[sizeof(nm) - 1] = '\0';
+
+    /* Fetch dst after reading src: inode_at can fault a slab in. */
+    p = inode_at(ex, dst_slot);
+    if (!p)
+        return -1;
+    *p = tmp;
+    p->slab_idx = (uint16_t)(dst_slot / EFS_INO_SLAB_ROWS);
+    p->name_off = 0;
+    p->name_len = 0;
+    return inode_set_name(ex, p, nm);
 }
 
 static int inode_from_rpc(struct efs_export *ex, struct efs_inode_mem *d,
@@ -997,7 +1146,7 @@ static void export_drop_zero_inodes(struct efs_export *ex)
         if (inode_at(ex, i)->ino == 0)
             continue;
         if (w != i)
-            (*inode_at(ex, w)) = (*inode_at(ex, i));
+            (void)inode_row_move(ex, w, i);
         w++;
     }
     if (w != ex->inode_count) {
@@ -1143,11 +1292,8 @@ void efs_export_flush_mark_ino_slot(struct efs_export *ex, uint64_t slot)
 {
     if (!ex || ex->flush_full)
         return;
-    uint64_t off = (uint64_t)EFS_META_HDR_SIZE +
-                   slot * (uint64_t)EFS_INODE_COMPACT_SIZE;
-    uint64_t end = off + (uint64_t)EFS_INODE_COMPACT_SIZE - 1;
-    flush_mark_page(ex, (uint32_t)(off / EFS_META_PAGE_SIZE));
-    flush_mark_page(ex, (uint32_t)(end / EFS_META_PAGE_SIZE));
+    /* v8: a row never straddles a page, so this is exactly one page. */
+    flush_mark_page(ex, efs_meta_slot_page(slot));
 }
 
 void efs_export_flush_mark_chunk_slot(struct efs_export *ex, uint64_t slot)
@@ -1163,35 +1309,22 @@ void efs_export_flush_mark_chunk_slot(struct efs_export *ex, uint64_t slot)
     flush_mark_page(ex, 0); /* header chunk_count */
 }
 
+/* v8 has no separate dentry region: a name lives in its row, so marking the
+ * row's page already covers it. These stay as no-ops rather than being
+ * deleted at every call site, and marking page 0 keeps the header's
+ * inode_count fresh. */
 void efs_export_flush_mark_dentry_tail(struct efs_export *ex)
 {
     if (!ex || ex->flush_full)
         return;
-    size_t dent_off = efs_meta_dent_off(EFS_META_VERSION, ex->inode_count);
-    size_t dent_end = dent_off + (size_t)ex->dentry_bytes;
-    if (dent_end <= dent_off) {
-        flush_mark_page(ex, (uint32_t)(dent_off / EFS_META_PAGE_SIZE));
-        return;
-    }
-    uint32_t last = (uint32_t)((dent_end - 1) / EFS_META_PAGE_SIZE);
-    flush_mark_page(ex, last);
-    if (last > 0)
-        flush_mark_page(ex, last - 1);
-    flush_mark_page(ex, 0); /* header inode_count */
+    flush_mark_page(ex, 0);
 }
 
 void efs_export_flush_mark_dentry_all(struct efs_export *ex)
 {
     if (!ex || ex->flush_full)
         return;
-    size_t dent_off = efs_meta_dent_off(EFS_META_VERSION, ex->inode_count);
-    size_t dent_end = dent_off + (size_t)ex->dentry_bytes;
-    if (dent_end <= dent_off)
-        dent_end = dent_off + 1;
-    uint32_t p0 = (uint32_t)(dent_off / EFS_META_PAGE_SIZE);
-    uint32_t p1 = (uint32_t)((dent_end - 1) / EFS_META_PAGE_SIZE);
-    for (uint32_t p = p0; p <= p1; p++)
-        flush_mark_page(ex, p);
+    flush_mark_page(ex, 0);
 }
 
 static void flush_mark_ptr(struct efs_export *ex, const struct efs_inode_mem *p)
@@ -1956,7 +2089,7 @@ static void sync_hardlink_attrs(struct efs_export *ex, efs_ino_t ino,
         efs_ino_t parent = inode_at(ex, i)->parent;
         uint32_t noff = inode_at(ex, i)->name_off;
         uint16_t nlen = inode_at(ex, i)->name_len;
-        uint16_t npad = inode_at(ex, i)->name_pad;
+        uint16_t nslab = inode_at(ex, i)->slab_idx;
         /* Preserve per-dent identity; shared attrs include atime/size/times.
          * Rollups stay zero on file dents. */
         uint64_t imm_files = inode_at(ex, i)->imm_files;
@@ -1973,7 +2106,7 @@ static void sync_hardlink_attrs(struct efs_export *ex, efs_ino_t ino,
         inode_at(ex, i)->parent = parent;
         inode_at(ex, i)->name_off = noff;
         inode_at(ex, i)->name_len = nlen;
-        inode_at(ex, i)->name_pad = npad;
+        inode_at(ex, i)->slab_idx = nslab;
         inode_at(ex, i)->imm_files = imm_files;
         inode_at(ex, i)->imm_dirs = imm_dirs;
         inode_at(ex, i)->tree_files = tree_files;
@@ -2136,7 +2269,7 @@ static void remove_inode_slot(struct efs_export *ex, uint64_t i, int expect_surv
         efs_ino_t moved_parent = inode_at(ex, last)->parent;
         idx_del(ex->ino_keys, ex->ino_vals, ex->ino_mask, inode_at(ex, last)->ino);
         name_idx_del(ex, inode_at(ex, last)->parent, efs_export_inode_name(ex, last));
-        (*inode_at(ex, i)) = (*inode_at(ex, last));
+        (void)inode_row_move(ex, i, last);
         ex->inode_count--;
         idx_put(ex->ino_keys, ex->ino_vals, ex->ino_mask, inode_at(ex, i)->ino, i);
         name_idx_put(ex, inode_at(ex, i)->parent, efs_export_inode_name(ex, i), i);
@@ -2224,12 +2357,13 @@ void efs_export_free(struct efs_export *ex)
     free(ex->inodes);
     if (ex->ino_slabs) {
         uint32_t i;
-        for (i = 0; i < ex->ino_slab_n; i++)
+        for (i = 0; i < ex->ino_slab_n; i++) {
             free(ex->ino_slabs[i].rows);
+            free(ex->ino_slabs[i].names);
+        }
         free(ex->ino_slabs);
         ex->ino_slabs = NULL;
     }
-    free(ex->name_arena);
     free(ex->chunks);
     free(ex->pending_rollup_inos);
     free(ex->pending_rollup_deltas);
@@ -2641,6 +2775,12 @@ static efs_ino_t create_sharded(struct efs_export *ex, efs_ino_t parent,
     struct efs_export *ctab = efs_export_table(ex, target);
     if (!ctab)
         return 0;
+    if (ctab->shard_id != target && getenv("EFS_INO_PROF"))
+        fprintf(stderr,
+                "create-tab: MISMATCH parent=%llu name=%s bits=%u sc=%u "
+                "psh=%u target=%u ctab_shard=%u\n",
+                (unsigned long long)parent, name, bits,
+                ex->root.shard_count, psh, target, ctab->shard_id);
     struct efs_export *ptab = efs_export_table(ex, psh);
     if (!ptab)
         return 0;
@@ -2652,8 +2792,19 @@ static efs_ino_t create_sharded(struct efs_export *ex, efs_ino_t parent,
     struct efs_export *dtab = efs_export_table(ex, dsh);
     if (!dtab)
         return 0;
-    if (lookup_on_tab(dtab, parent, name, NULL) == EFS_OK)
-        return 0;
+    {
+        struct efs_inode prev;
+        if (lookup_on_tab(dtab, parent, name, &prev) == EFS_OK) {
+            if (getenv("EFS_INO_PROF"))
+                fprintf(stderr,
+                        "create-exist: tab=%s dsh=%u parent=%llu name=%s "
+                        "found_ino=%llu found_mode=%o found_parent=%llu\n",
+                        ex->name, dsh, (unsigned long long)parent, name,
+                        (unsigned long long)prev.ino, prev.mode,
+                        (unsigned long long)prev.parent);
+            return 0;
+        }
+    }
     if (dtab != ptab && lookup_on_tab(ptab, parent, name, NULL) == EFS_OK)
         return 0;
     if (target != dsh) {
@@ -2794,6 +2945,11 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
 
     efs_export_ensure_rollups(ex);
 
+    if (ino_num < 256 && getenv("EFS_CWI_TRACE"))
+        fprintf(stderr, "cwi: ino=%llu parent=%llu name=%s tab_shard=%u\n",
+                (unsigned long long)ino_num, (unsigned long long)parent, name,
+                ex->shard_id);
+
     /* This insert is table-local. efs_export_lookup on a sharded root
      * walks every loaded extra tab, so the child-row we just wrote on
      * ctab makes the parent-dentry create_with_ino look like EEXIST —
@@ -2807,12 +2963,18 @@ efs_ino_t efs_export_create_with_ino(struct efs_export *ex, efs_ino_t ino_num,
         return 0;
     }
 
-    if (inode_ptr(ex, ino_num)) {
+    {
+    struct efs_inode_mem *dupp = inode_ptr(ex, ino_num);
+    if (dupp) {
         fprintf(stderr, "cwi-fail: ino_dup parent=%llu name=%s ino=%llu "
-                "shard=%u cnt=%llu\n", (unsigned long long)parent, name,
+                "shard=%u cnt=%llu held_by parent=%llu name=%s mode=%o\n",
+                (unsigned long long)parent, name,
                 (unsigned long long)ino_num, ex->shard_id,
-                (unsigned long long)ex->inode_count);
+                (unsigned long long)ex->inode_count,
+                (unsigned long long)dupp->parent,
+                inamep(ex, dupp), dupp->mode);
         return 0; /* ino already in use on this table */
+    }
     }
 
     if (ex->inode_count >= ex->inode_capacity) {
@@ -3308,6 +3470,11 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
     uint64_t pos = ex->inode_count++;
     struct efs_inode_mem *dst = inode_at(ex, pos);
     *dst = *src;
+    /* The copy carried src's arena offset; the new row owns no name bytes
+     * yet, so clear them before interning new_name into dst's own slab. */
+    dst->slab_idx = (uint16_t)(pos / EFS_INO_SLAB_ROWS);
+    dst->name_off = 0;
+    dst->name_len = 0;
     dst->parent = new_parent;
     dst->nlink = nlink;
     inode_clear_rollups(dst);
@@ -4072,6 +4239,26 @@ void efs_export_pack_inode_compact(const struct efs_inode_mem *ino,
     (void)p;
 }
 
+/* EFSM v8 row: the compact payload, then u16 name_len and the name inline.
+ * Zero-fills the rest so a page image is deterministic (the flush reuses a
+ * page by byte-comparing it against the last serialize). */
+void efs_export_pack_row(const struct efs_export *ex, uint64_t slot,
+                         uint8_t out[EFS_INODE_ROW_SIZE])
+{
+    const char *nm;
+    uint16_t ln;
+    memset(out, 0, EFS_INODE_ROW_SIZE);
+    efs_export_pack_inode_compact(
+        efs_export_inode_at((struct efs_export *)ex, slot), out);
+    nm = efs_export_inode_name(ex, slot);
+    ln = (uint16_t)strnlen(nm ? nm : "", EFS_MAX_NAME - 1);
+    if (ln > EFS_INODE_ROW_NAME_MAX)
+        ln = EFS_INODE_ROW_NAME_MAX;
+    memcpy(out + EFS_INODE_ROW_NAME_OFF - 2, &ln, 2);
+    if (ln)
+        memcpy(out + EFS_INODE_ROW_NAME_OFF, nm, ln);
+}
+
 void efs_export_pack_chunk(const struct efs_chunk_entry *ce,
                            uint8_t out[EFS_CHUNK_WIRE_SIZE])
 {
@@ -4196,25 +4383,28 @@ int efs_export_table_snapshot_ex(const struct efs_export *ex,
         uint64_t i;
         if (inode_ensure_cap(snap, ex->inode_count) != EFS_OK)
             return EFS_ERR_NOMEM;
+        uint32_t si, nslabs = efs_meta_slab_count(ex->inode_count);
         for (i = 0; i < ex->inode_count; i++) {
             struct efs_inode_mem *s = inode_at((struct efs_export *)ex, i);
             struct efs_inode_mem *d = inode_at(snap, i);
             if (s && d)
                 *d = *s;
         }
-        snap->inode_count = ex->inode_count;
-        snap->inode_capacity = snap->inode_capacity;
-    }
-    if (ex->name_arena_used) {
-        snap->name_arena = malloc(ex->name_arena_used);
-        if (!snap->name_arena) {
-            free(snap->inodes);
-            snap->inodes = NULL;
-            return EFS_ERR_NOMEM;
+        /* Rows carry name_off into their slab's arena, so the arenas have to
+         * come with them; slab si means the same slots in both tables. */
+        for (si = 0; si < nslabs && si < snap->ino_slab_n; si++) {
+            const struct efs_ino_slab *ss = &ex->ino_slabs[si];
+            struct efs_ino_slab *ds = &snap->ino_slabs[si];
+            if (!ss->names || !ss->names_used)
+                continue;
+            ds->names = malloc(ss->names_used);
+            if (!ds->names)
+                return EFS_ERR_NOMEM;
+            memcpy(ds->names, ss->names, ss->names_used);
+            ds->names_used = ss->names_used;
+            ds->names_cap = ss->names_used;
         }
-        memcpy(snap->name_arena, ex->name_arena, ex->name_arena_used);
-        snap->name_arena_used = ex->name_arena_used;
-        snap->name_arena_cap = ex->name_arena_used;
+        snap->inode_count = ex->inode_count;
     }
     if (ex->chunk_count && !omit_chunks) {
         size_t n = (size_t)ex->chunk_count * sizeof(*snap->chunks);
@@ -4222,8 +4412,6 @@ int efs_export_table_snapshot_ex(const struct efs_export *ex,
         if (!snap->chunks) {
             free(snap->inodes);
             snap->inodes = NULL;
-            free(snap->name_arena);
-            snap->name_arena = NULL;
             return EFS_ERR_NOMEM;
         }
         memcpy(snap->chunks, ex->chunks, n);
@@ -4245,11 +4433,12 @@ void efs_export_table_snapshot_free(struct efs_export *snap)
     free(snap->inodes);
     if (snap->ino_slabs) {
         uint32_t i;
-        for (i = 0; i < snap->ino_slab_n; i++)
+        for (i = 0; i < snap->ino_slab_n; i++) {
             free(snap->ino_slabs[i].rows);
+            free(snap->ino_slabs[i].names);
+        }
         free(snap->ino_slabs);
     }
-    free(snap->name_arena);
     free(snap->chunks);
     memset(snap, 0, sizeof(*snap));
 }
@@ -4261,11 +4450,12 @@ void efs_export_adopt_tables(struct efs_export *dst, struct efs_export *src)
     free(dst->inodes);
     if (dst->ino_slabs) {
         uint32_t i;
-        for (i = 0; i < dst->ino_slab_n; i++)
+        for (i = 0; i < dst->ino_slab_n; i++) {
             free(dst->ino_slabs[i].rows);
+            free(dst->ino_slabs[i].names);
+        }
         free(dst->ino_slabs);
     }
-    free(dst->name_arena);
     free(dst->chunks);
     free(dst->pending_rollup_inos);
     free(dst->pending_rollup_deltas);
@@ -4283,9 +4473,6 @@ void efs_export_adopt_tables(struct efs_export *dst, struct efs_export *src)
     dst->ino_slab_tick = src->ino_slab_tick;
     dst->inode_count = src->inode_count;
     dst->inode_capacity = src->inode_capacity;
-    dst->name_arena = src->name_arena;
-    dst->name_arena_used = src->name_arena_used;
-    dst->name_arena_cap = src->name_arena_cap;
     dst->dentry_bytes = src->dentry_bytes;
     dst->chunks = src->chunks;
     dst->chunk_count = src->chunk_count;
@@ -4325,8 +4512,6 @@ void efs_export_adopt_tables(struct efs_export *dst, struct efs_export *src)
     src->ino_slabs = NULL;
     src->ino_slab_n = 0;
     src->ino_slabs_resident = 0;
-    src->name_arena = NULL;
-    src->name_arena_used = src->name_arena_cap = 0;
     src->chunks = NULL;
     src->pending_rollup_inos = NULL;
     src->pending_rollup_deltas = NULL;
@@ -4360,7 +4545,6 @@ int efs_export_serialize_dirty(struct efs_export *ex,
     if (!ex || !buf || !len)
         return EFS_ERR_INVAL;
     efs_export_ensure_rollups(ex);
-    dentry_bytes_recompute(ex);
 
     if (!cache || ex->flush_full || cache_ino_len < EFS_META_HDR_SIZE)
         return EFS_OK;
@@ -4371,16 +4555,11 @@ int efs_export_serialize_dirty(struct efs_export *ex,
     if (ver != EFS_META_VERSION || ex->inode_count < old_ic)
         return EFS_OK;
 
-    size_t dent_off = efs_meta_dent_off(EFS_META_VERSION, ex->inode_count);
-    size_t old_dent_off = efs_meta_dent_off(EFS_META_VERSION, old_ic);
-    if (dent_off != old_dent_off || cache_ino_len < old_dent_off)
-        return EFS_OK;
-
-    size_t dent_bytes = dentry_bytes_for(ex, 0);
-    size_t new_ino = dent_off + dent_bytes;
-    size_t old_dent_bytes = (size_t)cache_ino_len - old_dent_off;
-    if (efs_meta_page_count_for_blob((uint32_t)new_ino) !=
-        efs_meta_page_count_for_blob(cache_ino_len))
+    /* The inode region grows a whole page at a time (once per slab). When it
+     * does, every chunk page shifts index and none of the cached images line
+     * up any more — fall back to a full serialize for that one flush. */
+    size_t new_ino = efs_meta_ino_region_bytes(ex->inode_count);
+    if (new_ino != (size_t)cache_ino_len)
         return EFS_OK;
     if (new_ino > (size_t)UINT32_MAX)
         return EFS_ERR_INVAL;
@@ -4392,93 +4571,25 @@ int efs_export_serialize_dirty(struct efs_export *ex,
     if (!b)
         return EFS_ERR_NOMEM;
 
-    size_t copy_ino = cache_ino_len < (uint32_t)new_ino ? cache_ino_len
-                                                       : (size_t)new_ino;
-    memcpy(b, cache, copy_ino);
+    memcpy(b, cache, new_ino);
     efs_export_pack_header(ex, b);
 
     uint32_t ino_pc = efs_meta_page_count_for_blob((uint32_t)new_ino);
     flush_mark_page(ex, 0);
     for (uint64_t s = old_ic; s < ex->inode_count; s++)
         efs_export_flush_mark_ino_slot(ex, s);
-    for (uint32_t pi = 0; pi < ino_pc; pi++) {
-        uint64_t start = (uint64_t)pi * EFS_META_PAGE_SIZE;
-        uint64_t end = start + EFS_META_PAGE_SIZE;
-        if (end > cache_ino_len && start < new_ino)
-            flush_mark_page(ex, pi);
-        if (start >= dent_off)
-            continue;
+    /* v8: inode page pi (pi >= 1) is exactly slab pi-1, so a dirty page
+     * rewrites its own rows and touches nothing else. */
+    for (uint32_t pi = 1; pi < ino_pc; pi++) {
+        uint64_t s0, s1, slot;
         if (!efs_export_flush_page_is_dirty(ex, pi))
             continue;
-        if (end <= EFS_META_HDR_SIZE)
-            continue;
-        uint64_t s0 = start > EFS_META_HDR_SIZE
-            ? (start - EFS_META_HDR_SIZE) / EFS_INODE_COMPACT_SIZE : 0;
-        uint64_t s1 = (end - EFS_META_HDR_SIZE - 1) / EFS_INODE_COMPACT_SIZE + 1;
+        s0 = (uint64_t)(pi - 1) * EFS_INO_SLAB_ROWS;
+        s1 = s0 + EFS_INO_SLAB_ROWS;
         if (s1 > ex->inode_count)
             s1 = ex->inode_count;
-        for (uint64_t slot = s0; slot < s1; slot++) {
-            uint64_t off = (uint64_t)EFS_META_HDR_SIZE +
-                           slot * (uint64_t)EFS_INODE_COMPACT_SIZE;
-            if (off >= dent_off)
-                break;
-            efs_export_pack_inode_compact(inode_at(ex, slot), b + off);
-        }
-    }
-
-    int rewrite_dents = (dent_bytes != old_dent_bytes);
-    if (!rewrite_dents) {
-        uint32_t d0 = (uint32_t)(dent_off / EFS_META_PAGE_SIZE);
-        for (uint32_t pi = d0; pi < ino_pc; pi++) {
-            if (efs_export_flush_page_is_dirty(ex, pi)) {
-                rewrite_dents = 1;
-                break;
-            }
-        }
-    }
-    if (rewrite_dents) {
-        uint8_t *p = b + dent_off;
-        uint8_t *end = b + new_ino;
-        for (uint64_t slot = 0; slot < ex->inode_count; slot++) {
-            uint16_t ln = (uint16_t)strnlen(efs_export_inode_name(ex, slot),
-                                            EFS_MAX_NAME - 1);
-            if (p + 2u + (size_t)ln > end) {
-                free(b);
-                return EFS_OK;
-            }
-            memcpy(p, &ln, 2);
-            p += 2;
-            if (ln) {
-                memcpy(p, efs_export_inode_name(ex, slot), ln);
-                p += ln;
-            }
-        }
-        if (p != end) {
-            free(b);
-            return EFS_OK;
-        }
-        efs_export_flush_mark_dentry_all(ex);
-    } else if (ex->inode_count > old_ic) {
-        uint8_t *p = b + cache_ino_len;
-        uint8_t *end = b + new_ino;
-        for (uint64_t slot = old_ic; slot < ex->inode_count; slot++) {
-            uint16_t ln = (uint16_t)strnlen(efs_export_inode_name(ex, slot),
-                                            EFS_MAX_NAME - 1);
-            if (p + 2u + (size_t)ln > end) {
-                free(b);
-                return EFS_OK;
-            }
-            memcpy(p, &ln, 2);
-            p += 2;
-            if (ln) {
-                memcpy(p, efs_export_inode_name(ex, slot), ln);
-                p += ln;
-            }
-        }
-        if (p != end) {
-            free(b);
-            return EFS_OK;
-        }
+        for (slot = s0; slot < s1; slot++)
+            efs_export_pack_row(ex, slot, b + efs_meta_row_off(slot));
     }
 
     if (!omit_chunks) {
@@ -4528,95 +4639,125 @@ int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
         return EFS_ERR_INVAL;
     efs_export_ensure_rollups(ex);
 
-    /* v7: compact inode rows, zero pad to the page-aligned dentry offset,
-     * packed dentries, then the chunk region. The pad keeps the dentry region
-     * stable as inode_count grows within a compact page (see
-     * efs_meta_dent_off).
-     * Size from the names we will write — a stale-low dentry_bytes made
-     * malloc short and the dentry loop smashed the next heap chunk
-     * (SIGABRT "corrupted size vs. prev_size" in snapshot_free). */
-    dentry_bytes_recompute(ex);
-    size_t dent_bytes = dentry_bytes_for(ex, 0);
+    /* v8: page 0 is the header, page 1+si holds slab si's fixed-size rows
+     * (name inline), then the chunk region. Every inode page decodes on its
+     * own, which is what makes on-demand faulting possible; the cost is the
+     * padding at the tail of each page and the unused rest of page 0. */
+    size_t ino_bytes = efs_meta_ino_region_bytes(ex->inode_count);
     size_t chunk_bytes = (size_t)ex->chunk_count * EFS_CHUNK_WIRE_SIZE;
-    size_t dent_off = efs_meta_dent_off(EFS_META_VERSION, ex->inode_count);
-    size_t total = dent_off + dent_bytes + chunk_bytes;
+    size_t total = ino_bytes + chunk_bytes;
 
-    uint8_t *b = malloc(total ? total : 1);
+    uint8_t *b = calloc(1, total ? total : 1);
     if (!b)
         return EFS_ERR_NOMEM;
-    uint8_t *p = b;
 
-#define NEED(n) do { \
-        if ((size_t)(p - b) + (size_t)(n) > total) { \
-            free(b); \
-            return EFS_ERR_INVAL; \
-        } \
-    } while (0)
-#define W_RAW(v, n) do { NEED(n); memcpy(p, (v), (n)); p += (n); } while (0)
-#define W_32(v) do { uint32_t v_ = (uint32_t)(v); W_RAW(&v_, 4); } while (0)
-#define W_64(v) do { uint64_t v_ = (uint64_t)(v); W_RAW(&v_, 8); } while (0)
-
-    W_RAW(EFS_META_MAGIC, 4);
-    W_32(EFS_META_VERSION);
-    W_32(ex->id);
-    {
-        char name[EFS_MAX_NAME];
-        memset(name, 0, sizeof(name));
-        strncpy(name, ex->name, EFS_MAX_NAME - 1);
-        W_RAW(name, EFS_MAX_NAME);
-    }
-    W_64(ex->next_ino);
-    W_32((uint32_t)ex->inode_count);
-    W_32((uint32_t)ex->chunk_count);
-
-    for (uint64_t i = 0; i < ex->inode_count; i++) {
-        NEED(EFS_INODE_COMPACT_SIZE);
-        efs_export_pack_inode_compact(inode_at(ex, i), p);
-        p += EFS_INODE_COMPACT_SIZE;
-    }
-    /* Zero pad to the page-aligned dentry offset (v7). */
-    if ((size_t)(p - b) < dent_off) {
-        memset(p, 0, dent_off - (size_t)(p - b));
-        p = b + dent_off;
-    }
-    for (uint64_t i = 0; i < ex->inode_count; i++) {
-        uint16_t ln = (uint16_t)strnlen(efs_export_inode_name(ex, i), EFS_MAX_NAME - 1);
-        NEED(2u + (size_t)ln);
-        memcpy(p, &ln, 2);
-        p += 2;
-        if (ln) {
-            memcpy(p, efs_export_inode_name(ex, i), ln);
-            p += ln;
-        }
-    }
-    uint32_t ino_len = (uint32_t)(p - b);
+    efs_export_pack_header(ex, b);
+    for (uint64_t i = 0; i < ex->inode_count; i++)
+        efs_export_pack_row(ex, i, b + efs_meta_row_off(i));
 
     if (ex->chunks) {
+        uint8_t *p = b + ino_bytes;
         for (uint64_t i = 0; i < ex->chunk_count; i++) {
-            struct efs_chunk_entry *ce = &ex->chunks[i];
-            W_64(ce->ino);
-            W_32(ce->chunk_index);
-            W_RAW(ce->fragment_nodes, sizeof(efs_node_id_t) * EFS_NUM_FRAGMENTS);
-            W_RAW(ce->checksums, EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+            efs_export_pack_chunk(&ex->chunks[i], p);
+            p += EFS_CHUNK_WIRE_SIZE;
         }
     }
-#undef NEED
-#undef W_RAW
-#undef W_32
-#undef W_64
 
     *buf = (char *)b;
-    *len = (size_t)(p - b);
+    *len = total;
     if (ino_blob_len)
-        *ino_blob_len = ino_len;
+        *ino_blob_len = (uint32_t)ino_bytes;
     if (chunk_blob_len)
-        *chunk_blob_len = (uint32_t)(*len - ino_len);
+        *chunk_blob_len = (uint32_t)chunk_bytes;
     return EFS_OK;
 }
 
 int efs_export_serialize(struct efs_export *ex, char **buf, size_t *len)
 {
     return efs_export_serialize_ex(ex, buf, len, NULL, NULL);
+}
+
+/* EFSM v8: fixed-size rows at computable offsets, so this is a direct walk
+ * with no stream cursor and no dentry region to keep in sync. Slabs are
+ * filled in place rather than through inode_at(), which would try to fault
+ * the half-built slab it is currently loading. */
+static int export_deserialize_v8(struct efs_export *ex, const char *buf,
+                                 size_t len)
+{
+    uint32_t id = 0, ic = 0, cc = 0, si, nslabs;
+    uint64_t next_ino = 0;
+    size_t ino_bytes;
+
+    if (len < EFS_META_HDR_SIZE)
+        return EFS_ERR_PROTO;
+    memcpy(&id, buf + 8, 4);
+    memcpy(&next_ino, buf + 12 + EFS_MAX_NAME, 8);
+    memcpy(&ic, buf + EFS_FLUSH_HDR_ICOUNT_OFF, 4);
+    memcpy(&cc, buf + EFS_FLUSH_HDR_ICOUNT_OFF + 4, 4);
+
+    ino_bytes = efs_meta_ino_region_bytes(ic);
+    if (ino_bytes > len)
+        return EFS_ERR_PROTO;
+    if ((uint64_t)cc * EFS_CHUNK_WIRE_SIZE > (uint64_t)(len - ino_bytes))
+        return EFS_ERR_PROTO;
+
+    efs_export_free(ex);
+    efs_export_init(ex, 0, "");
+    ex->meta_fragmented = 0;
+    ex->efsm_version = EFS_META_EFSM_V8;
+    ex->id = id;
+    memcpy(ex->name, buf + 12, EFS_MAX_NAME);
+    ex->name[EFS_MAX_NAME - 1] = '\0';
+    ex->next_ino = next_ino;
+
+    if (ic && inode_ensure_cap(ex, ic) != EFS_OK)
+        return EFS_ERR_NOMEM;
+    ex->inode_count = ic;
+    nslabs = efs_meta_slab_count(ic);
+    for (si = 0; si < nslabs; si++) {
+        uint64_t s0 = (uint64_t)si * EFS_INO_SLAB_ROWS;
+        uint64_t s1 = s0 + EFS_INO_SLAB_ROWS;
+        uint64_t slot;
+        if (!ex->ino_slabs[si].rows) {
+            ex->ino_slabs[si].rows = calloc(EFS_INO_SLAB_ROWS,
+                                            sizeof(struct efs_inode_mem));
+            if (!ex->ino_slabs[si].rows)
+                return EFS_ERR_NOMEM;
+            ex->ino_slabs_resident++;
+        }
+        slab_rows_tag(ex, si);
+        ex->ino_slabs[si].tick = ++ex->ino_slab_tick;
+        if (s1 > ic)
+            s1 = ic;
+        for (slot = s0; slot < s1; slot++)
+            efs_export_unpack_row(ex, &ex->ino_slabs[si].rows[slot - s0],
+                                  (const uint8_t *)buf + efs_meta_row_off(slot));
+    }
+
+    if (cc) {
+        const uint8_t *p = (const uint8_t *)buf + ino_bytes;
+        uint64_t i;
+        ex->chunks = calloc(cc, sizeof(*ex->chunks));
+        if (!ex->chunks)
+            return EFS_ERR_NOMEM;
+        ex->chunk_capacity = cc;
+        for (i = 0; i < cc; i++) {
+            struct efs_chunk_entry *ce = &ex->chunks[i];
+            memcpy(&ce->ino, p, 8); p += 8;
+            memcpy(&ce->chunk_index, p, 4); p += 4;
+            memcpy(ce->fragment_nodes, p,
+                   sizeof(efs_node_id_t) * EFS_NUM_FRAGMENTS);
+            p += sizeof(efs_node_id_t) * EFS_NUM_FRAGMENTS;
+            memcpy(ce->checksums, p, EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+            p += EFS_HASH_SIZE * EFS_NUM_FRAGMENTS;
+        }
+        ex->chunk_count = cc;
+    }
+
+    if (export_reindex(ex) != 0)
+        return EFS_ERR_NOMEM;
+    efs_export_recompute_rollups(ex);
+    return EFS_OK;
 }
 
 int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
@@ -4627,6 +4768,13 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
     /* Table swap: any cached GET_META serialize of the old table is stale. */
     free(ex->gm_blob);
     ex->gm_blob = NULL;
+
+    if (len >= 8 && memcmp(buf, EFS_META_MAGIC, 4) == 0) {
+        uint32_t v = 0;
+        memcpy(&v, buf + 4, 4);
+        if (v == EFS_META_EFSM_V8)
+            return export_deserialize_v8(ex, buf, len);
+    }
 
     FILE *f = fmemopen((void *)buf, len, "r");
     if (!f)
@@ -4675,9 +4823,6 @@ int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len)
 
     /* Replace the empty root from init with the deserialized table. */
     ex->inode_count = 0;
-    free(ex->name_arena);
-    ex->name_arena = NULL;
-    ex->name_arena_used = ex->name_arena_cap = 0;
     child_vecs_free(ex);
     for (uint32_t i = 0; i < inode_count; i++) {
         if (ex->inode_count >= ex->inode_capacity) {
@@ -4953,9 +5098,8 @@ int efs_export_fits_page_cap(const struct efs_export *ex, uint64_t extra_inodes,
     if (extra_inodes == 0)
         return 1;
     uint64_t ic = ex->inode_count + extra_inodes;
-    uint64_t ino_blob = (uint64_t)efs_meta_dent_off(EFS_META_VERSION, ic) +
-                        dentry_bytes_for(ex, extra_inodes);
-    return page_count_u64(ino_blob) <= EFS_META_INO_PAGE_MAX;
+    return page_count_u64(efs_meta_ino_region_bytes(ic)) <=
+           EFS_META_INO_PAGE_MAX;
 }
 
 void efs_export_meta_page_usage(const struct efs_export *ex,
@@ -4963,10 +5107,7 @@ void efs_export_meta_page_usage(const struct efs_export *ex,
 {
     uint32_t ip = 0, cp = 0;
     if (ex) {
-        uint64_t ino_blob = (uint64_t)efs_meta_dent_off(EFS_META_VERSION,
-                                                        ex->inode_count) +
-                            dentry_bytes_for(ex, 0);
-        ip = page_count_u64(ino_blob);
+        ip = page_count_u64(efs_meta_ino_region_bytes(ex->inode_count));
         cp = page_count_u64(ex->chunk_count * (uint64_t)EFS_CHUNK_WIRE_SIZE);
     }
     if (ino_pages)
@@ -5094,12 +5235,27 @@ efs_ino_t efs_export_alloc_ino(struct efs_export *ex, efs_ino_t parent)
     uint64_t span = 1ull << bits;
     const uint64_t limit = 1ull << 40; /* sanity bound, ~2^32 goal is 2^32 */
     uint64_t cand = ex->next_ino;
-    if (cand >= limit || (cand & (span - 1)) != shard)
+    if (cand >= limit || (cand & (span - 1)) != shard) {
+        if (getenv("EFS_INO_PROF"))
+            fprintf(stderr,
+                    "ino-alloc: restart tab=%s shard=%u next_ino=%llu "
+                    "inodes=%llu gen=%llu\n",
+                    ex->name, shard, (unsigned long long)ex->next_ino,
+                    (unsigned long long)ex->inode_count,
+                    (unsigned long long)ex->root.generation);
         cand = shard;
+    }
     while (cand <= EFS_ROOT_INO)
         cand += span; /* ino 0 is invalid; ino 1 is the root */
     while (cand < limit) {
         if (efs_export_get_inode(ex, (efs_ino_t)cand, NULL) != 0) {
+            if (cand < ex->next_ino && getenv("EFS_INO_PROF"))
+                fprintf(stderr,
+                        "ino-alloc: REGRESS tab=%s shard=%u ino=%llu < "
+                        "next_ino=%llu inodes=%llu\n",
+                        ex->name, shard, (unsigned long long)cand,
+                        (unsigned long long)ex->next_ino,
+                        (unsigned long long)ex->inode_count);
             ex->next_ino = (efs_ino_t)(cand + span);
             return (efs_ino_t)cand;
         }

@@ -28,6 +28,7 @@ start_efsd() { # host node-id addr [join]
     local prof=""
     [ -n "${EFS_FLUSH_PROF:-}" ] && prof="EFS_FLUSH_PROF=$EFS_FLUSH_PROF"
     [ -n "${EFS_LOCK_PROF:-}" ] && prof="$prof EFS_LOCK_PROF=$EFS_LOCK_PROF"
+    [ -n "${EFS_INO_PROF:-}" ] && prof="$prof EFS_INO_PROF=$EFS_INO_PROF"
     [ -n "${EFS_TRANSPORT:-}" ] && prof="$prof EFS_TRANSPORT=$EFS_TRANSPORT"
     ssh_to 15 "$h" "cd /tmp/efs && $prof \
         setsid ./efsd --node-id $nid --addr $addr \

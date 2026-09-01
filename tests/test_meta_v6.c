@@ -76,25 +76,35 @@ int main(void)
     }
     uint32_t ver = 0;
     memcpy(&ver, blob + 4, 4);
-    if (ver != EFS_META_EFSM_V7) {
-        fprintf(stderr, "FAIL efsm version %u (want v7)\n", ver);
+    if (ver != EFS_META_EFSM_V8) {
+        fprintf(stderr, "FAIL efsm version %u (want v8)\n", ver);
         failures++;
     }
-    /* v7 page-aligns the dentry region: dentries start at the first page
-     * boundary at/after HDR + inode_count*124. */
-    size_t want_dent_off = efs_meta_dent_off(EFS_META_EFSM_V7, ex.inode_count);
-    if (want_dent_off % EFS_META_PAGE_SIZE != 0) {
-        fprintf(stderr, "FAIL dent_off %zu not page-aligned\n", want_dent_off);
+    /* v8: page 0 is the header and page 1+si holds slab si, so the inode
+     * region is a whole number of pages and a row never straddles one. */
+    size_t want_ino_bytes = efs_meta_ino_region_bytes(ex.inode_count);
+    if (want_ino_bytes % EFS_META_PAGE_SIZE != 0) {
+        fprintf(stderr, "FAIL ino region %zu not page-aligned\n",
+                want_ino_bytes);
         failures++;
     }
-    if (blen != want_dent_off + ex.dentry_bytes +
-                  ex.chunk_count * EFS_CHUNK_WIRE_SIZE) {
-        fprintf(stderr, "FAIL v7 blob len %zu\n", blen);
+    if (blen != want_ino_bytes + ex.chunk_count * EFS_CHUNK_WIRE_SIZE) {
+        fprintf(stderr, "FAIL v8 blob len %zu want %zu\n", blen,
+                want_ino_bytes + ex.chunk_count * EFS_CHUNK_WIRE_SIZE);
         failures++;
     }
-    /* v7 trades a <1-page dentry pad for O(1) creates, so a tiny table is
-     * larger than v5's dense 420 B/inode blob; at scale the pad is noise.
-     * Just assert the compact rows still beat v5 here (dentries excluded). */
+    for (uint64_t s = 0; s < ex.inode_count; s++) {
+        if (efs_meta_row_off(s) / EFS_META_PAGE_SIZE !=
+            (efs_meta_row_off(s) + EFS_INODE_ROW_SIZE - 1) /
+                EFS_META_PAGE_SIZE) {
+            fprintf(stderr, "FAIL row %llu straddles a page\n",
+                    (unsigned long long)s);
+            failures++;
+            break;
+        }
+    }
+    /* v8 trades a bigger on-disk row for a self-contained page; the compact
+     * payload is still what makes it beat the v5 dense row. */
     size_t v5 = (size_t)EFS_META_HDR_SIZE +
                 ex.inode_count * EFS_INODE_WIRE_SIZE +
                 ex.chunk_count * EFS_CHUNK_WIRE_SIZE;
@@ -115,7 +125,7 @@ int main(void)
     } else {
         struct efs_inode out;
         if (efs_export_lookup(&ex2, d, "short.jpg", &out) != 0) {
-            fprintf(stderr, "FAIL lookup after v7 round-trip\n");
+            fprintf(stderr, "FAIL lookup after v8 round-trip\n");
             failures++;
         } else {
             expect_str("name", out.name, "short.jpg");
@@ -125,14 +135,8 @@ int main(void)
                 failures++;
             }
         }
-        if (ex2.efsm_version != EFS_META_EFSM_V7) {
-            fprintf(stderr, "FAIL efsm_version %u (want v7)\n", ex2.efsm_version);
-            failures++;
-        }
-        if (ex2.dentry_bytes != want_dent) {
-            fprintf(stderr, "FAIL dentry_bytes after load %llu want %llu\n",
-                    (unsigned long long)ex2.dentry_bytes,
-                    (unsigned long long)want_dent);
+        if (ex2.efsm_version != EFS_META_EFSM_V8) {
+            fprintf(stderr, "FAIL efsm_version %u (want v8)\n", ex2.efsm_version);
             failures++;
         }
     }
@@ -476,6 +480,148 @@ int main(void)
         efs_export_free(&sh);
     }
     {
+        /* v8 puts the name inside the 512 B row and pages are whole slabs.
+         * A round trip must return every name to the exact row that owned
+         * it: posix saw EEXIST on fresh names, i.e. a row wearing some
+         * other row's name after a flush. */
+        struct efs_export rt;
+        char nm[EFS_MAX_NAME];
+        uint64_t i, n = 5 * EFS_INO_SLAB_ROWS + 13;
+        int bad = 0;
+        efs_ino_t rd;
+        efs_export_init(&rt, 12, "rtrip");
+        rd = efs_export_create(&rt, EFS_ROOT_INO, S_IFDIR | 0755, 0, 0, "d");
+        for (i = 0; i < n; i++) {
+            /* Mix 1-char and long names so a stale offset lands inside
+             * another string instead of past the arena. */
+            if (i % 3 == 0)
+                snprintf(nm, sizeof(nm), "%c", (char)('a' + (i % 26)));
+            else
+                snprintf(nm, sizeof(nm), "name-%04llu-%s",
+                         (unsigned long long)i,
+                         (i % 2) ? "aaaaaaaaaaaaaaaaaaaa" : "b");
+            if (i % 3 == 0) {
+                char sub[EFS_MAX_NAME];
+                efs_ino_t s;
+                snprintf(sub, sizeof(sub), "s%04llu",
+                         (unsigned long long)i);
+                s = efs_export_create(&rt, rd, S_IFDIR | 0755, 0, 0, sub);
+                if (!s || !efs_export_create(&rt, s, S_IFREG | 0644, 0, 0, nm))
+                    bad++;
+            } else if (!efs_export_create(&rt, rd, S_IFREG | 0644, 0, 0, nm)) {
+                bad++;
+            }
+        }
+        {
+            char *blob = NULL;
+            size_t len = 0;
+            struct efs_export re;
+            if (efs_export_serialize(&rt, &blob, &len) != 0) {
+                fprintf(stderr, "FAIL rtrip serialize\n");
+                failures++;
+            } else {
+                efs_export_init(&re, 12, "rtrip");
+                if (efs_export_deserialize(&re, blob, len) != 0) {
+                    fprintf(stderr, "FAIL rtrip deserialize\n");
+                    failures++;
+                } else if (re.inode_count != rt.inode_count) {
+                    fprintf(stderr, "FAIL rtrip count %llu want %llu\n",
+                            (unsigned long long)re.inode_count,
+                            (unsigned long long)rt.inode_count);
+                    failures++;
+                } else {
+                    for (i = 0; i < rt.inode_count; i++) {
+                        const struct efs_inode_mem *a =
+                            efs_export_inode_at(&rt, i);
+                        const struct efs_inode_mem *b =
+                            efs_export_inode_at(&re, i);
+                        if (!a || !b || a->ino != b->ino ||
+                            a->parent != b->parent ||
+                            strcmp(efs_export_inode_name(&rt, i),
+                                   efs_export_inode_name(&re, i)) != 0)
+                            bad++;
+                    }
+                    /* Every name must still resolve to its own ino, and a
+                     * name that was never used must not resolve at all. */
+                    for (i = 0; i < n; i++) {
+                        struct efs_inode ga, gb;
+                        int fa, fb;
+                        snprintf(nm, sizeof(nm), "never-%04llu",
+                                 (unsigned long long)i);
+                        if (efs_export_lookup(&re, rd, nm, &gb) == 0)
+                            bad++;
+                        if (i % 3 == 0)
+                            continue;
+                        if (i % 2)
+                            snprintf(nm, sizeof(nm), "name-%04llu-%s",
+                                     (unsigned long long)i,
+                                     "aaaaaaaaaaaaaaaaaaaa");
+                        else
+                            snprintf(nm, sizeof(nm), "name-%04llu-b",
+                                     (unsigned long long)i);
+                        fa = efs_export_lookup(&rt, rd, nm, &ga) == 0;
+                        fb = efs_export_lookup(&re, rd, nm, &gb) == 0;
+                        if (!fa || !fb || ga.ino != gb.ino)
+                            bad++;
+                    }
+                    efs_export_free(&re);
+                }
+                free(blob);
+            }
+        }
+        if (bad) {
+            fprintf(stderr, "FAIL v8 round trip bad=%d\n", bad);
+            failures++;
+        }
+        efs_export_free(&rt);
+    }
+    {
+        /* Nested creates on a sharded root must never hand out an ino that
+         * is already live: posix saw "ino_dup parent=8 name=a ino=8", a
+         * child allocated its own parent's number. */
+        struct efs_export sh;
+        efs_ino_t seen[512];
+        int ns = 0, dup = 0, t, k, i;
+        char nm[32];
+        efs_export_init(&sh, 11, "alloc");
+        sh.root.shard_bits = 3;
+        sh.root.shard_count = 8;
+        for (t = 0; t < 24 && ns < 480; t++) {
+            efs_ino_t p;
+            snprintf(nm, sizeof(nm), "t%02d", t);
+            p = efs_export_create(&sh, EFS_ROOT_INO, S_IFDIR | 0755, 0, 0, nm);
+            if (!p) {
+                dup++;
+                continue;
+            }
+            for (i = 0; i < ns; i++)
+                if (seen[i] == p)
+                    dup++;
+            seen[ns++] = p;
+            for (k = 0; k < 6; k++) {
+                efs_ino_t c = efs_export_create(&sh, p,
+                                                (k & 1) ? (S_IFDIR | 0755)
+                                                        : (S_IFREG | 0644),
+                                                0, 0, (k & 1) ? "a" : "b");
+                if (!c) {
+                    dup++;
+                    break;
+                }
+                for (i = 0; i < ns; i++)
+                    if (seen[i] == c)
+                        dup++;
+                seen[ns++] = c;
+                if (k & 1)
+                    p = c;
+            }
+        }
+        if (dup) {
+            fprintf(stderr, "FAIL sharded ino dup=%d over %d inos\n", dup, ns);
+            failures++;
+        }
+        efs_export_free(&sh);
+    }
+    {
         /* Parent-shard dentries must exist for off-shard file inodes.
          * create_with_ino used to efs_export_lookup the sharded root and
          * see the child-tab row, skipping the parent copy. */
@@ -633,6 +779,77 @@ int main(void)
         free(full);
         free(incr);
         efs_export_free(&st);
+    }
+
+    /* A row moved between slots (unlink swap-remove, hardlink, hole
+     * compaction) used to keep the source slab's name_off, so it resolved
+     * its name against a different slab's arena: surviving names went
+     * missing and fresh names collided with the alias. Span several slabs
+     * so the moves really are cross-slab. */
+    {
+        struct efs_export sr;
+        char nm[32];
+        int bad = 0;
+        uint64_t i, n = 4 * EFS_INO_SLAB_ROWS + 7;
+        efs_export_init(&sr, 9, "rowmove");
+        efs_ino_t rd = efs_export_create(&sr, EFS_ROOT_INO, S_IFDIR | 0755,
+                                         0, 0, "d");
+        for (i = 0; i < n; i++) {
+            snprintf(nm, sizeof(nm), "f%06llu", (unsigned long long)i);
+            if (!efs_export_create(&sr, rd, S_IFREG | 0644, 0, 0, nm))
+                bad++;
+        }
+        for (i = 0; i < n; i += 3) {
+            snprintf(nm, sizeof(nm), "f%06llu", (unsigned long long)i);
+            if (efs_export_unlink_name(&sr, rd, nm) != 0)
+                bad++;
+        }
+        for (i = 0; i < n; i++) {
+            struct efs_inode got;
+            int found;
+            snprintf(nm, sizeof(nm), "f%06llu", (unsigned long long)i);
+            found = efs_export_lookup(&sr, rd, nm, &got) == 0;
+            if (found != (i % 3 != 0))
+                bad++;
+        }
+        /* A never-used name must not alias a moved row. */
+        for (i = 0; i < n; i++) {
+            struct efs_inode got;
+            snprintf(nm, sizeof(nm), "n%06llu", (unsigned long long)i);
+            if (efs_export_lookup(&sr, rd, nm, &got) == 0)
+                bad++;
+        }
+        /* Re-creating an unlinked name, and creating a brand-new one, must
+         * not hit a stale index entry (the false EEXIST posix saw). */
+        for (i = 0; i < n; i += 3) {
+            snprintf(nm, sizeof(nm), "f%06llu", (unsigned long long)i);
+            if (!efs_export_create(&sr, rd, S_IFREG | 0644, 0, 0, nm))
+                bad++;
+        }
+        for (i = 0; i < 64; i++) {
+            snprintf(nm, sizeof(nm), "n%06llu", (unsigned long long)i);
+            if (!efs_export_create(&sr, rd, S_IFREG | 0644, 0, 0, nm))
+                bad++;
+        }
+        /* Same name at every level: the index is keyed (parent,name), so a
+         * row whose parent went stale would collide across depths. */
+        {
+            efs_ino_t p = rd;
+            for (i = 0; i < 40; i++) {
+                efs_ino_t c = efs_export_create(&sr, p, S_IFDIR | 0755, 0, 0,
+                                                "d");
+                if (!c) {
+                    bad++;
+                    break;
+                }
+                p = c;
+            }
+        }
+        if (bad) {
+            fprintf(stderr, "FAIL row move names bad=%d\n", bad);
+            failures++;
+        }
+        efs_export_free(&sr);
     }
 
     efs_export_free(&ex);
