@@ -86,3 +86,41 @@ substitute one for another.
   boundaries ([development.md](development.md)).
 - Weaken an invariant to make a test pass.
 - Widen a timeout instead of removing the work that made it slow.
+
+---
+
+## 5. If you are an AI agent — or briefing one
+
+This page exists so that a **less advanced model can produce a correct
+change**. That works only if the task arrives pre-chewed: the model's job is
+execution inside hard edges, not exploration. The briefer (human or
+orchestrator) owns: picking the step (§1), decomposing it until every
+instruction is mechanical, naming the exact files to read (§2 — the Read
+column and nothing else), and reviewing the diff. The agent owns: staying
+inside the named files, and the checklist in §3 — all of it.
+
+A briefing that works, paste-able:
+
+```text
+You are making ONE behavior-preserving change to the efs repo.
+Read first, in order, and read nothing else:
+  docs/arch/START-HERE.md, then only the files your routing row names.
+Task: <one step, decomposed until mechanical: what moves, what does
+not, what is forbidden>
+Hard rules: no logic changes outside the task; no renames; no new
+dependencies; no files outside the ones named; if anything seems to
+need a design decision the spec does not contain, STOP and report —
+do not decide.
+Done means: builds on a test node (never in $HOME), make test passes,
+the routing row's gate passes via tests/run_tests.sh, and you record
+the result directory. A timeout is a failure. Verify the mount with
+findmnt before trusting any suite result.
+```
+
+Two traps a pasted briefing must name because an outside agent cannot
+rediscover them (the other recurring ones are already in §3):
+
+- **EEXIST on a unique, never-used name is a bug, never benign.** Do not
+  swallow it as a race and move on.
+- **`pgrep -x`, never `pgrep -f`** on this project's processes — the `-f`
+  pattern matches your own ssh command line and kills your own session.

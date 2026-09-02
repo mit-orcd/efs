@@ -621,7 +621,12 @@ answer to "what do I work on and what governs it". §1 the current task
 proves it); §3 what "done" means (build on a node, unit tests, the row's
 gate, a timeout is a FAIL, honest measurement); §4 never-without-asking
 (invent a decision the spec lacks, restate a normative table, new monolith
-code, weaken an invariant, widen a timeout). Linked from `architecture.md`
+code, weaken an invariant, widen a timeout). **§5 added (Sep 2):** how to
+brief a LOW-END AI agent — the briefer owns task pick/decomposition/reading
+whitelist/diff review, the agent owns staying inside the named files + the
+§3 checklist; includes a paste-able briefing skeleton and the two traps an
+outside agent cannot rediscover (EEXIST-on-unique-name is never benign;
+`pgrep -x` never `-f`). Linked from `architecture.md`
 line 3, `arch/development.md` and the HTML; included in the generated
 one-file version. It is navigation, not normative — it links to the single
 homes of the §4/§5/§6 tables rather than restating them.
