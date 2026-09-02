@@ -13,22 +13,17 @@ sends you to — not the whole spec.
 
 ## 1. The task right now
 
-> **Architecture migration §10, step 1:** the deterministic simulator.
+> **Architecture migration §10, step 2:** RPC operation IDs + the idempotency
+> model (I16 / [architecture.md §7.9](../architecture.md)).
 > [architecture.md §10](../architecture.md) · [verification.md](verification.md)
 
-Phase M (carve the monolith) is done: `wire/` `data/` `kv/` `meta/` `server/`
-store-dispatch, and the existing `client/` split. The simulator can now be
-born against `efs/transport.h` + `efs/store.h` + `efs/kv.h` rather than as
-new monolith code. If that step needs a design decision the spec lacks, stop
-and ask.
+Step 1 (the deterministic simulator) is in `src/sim/` + `tests/test_sim`: it
+drives the current `efs_export_*` table against mem store / mem kv / loop
+transport. Do not build Raft. Do not change the production wire until the
+op-ID layout is the one §7.9 already specifies — if a field is missing from
+the spec, stop and ask.
 
-Nothing in the architecture migration ([architecture.md](../architecture.md)
-§10) may start before Phase M finishes, because migration step 1 needs a
-pure state machine behind transport/storage interfaces and today there isn't
-one. Phase M is behavior-preserving refactor gated by the *existing* suites
-— no new design and no new test infrastructure required.
-
-**Rule for picking the next one after that:** Phase M is done. The order is
+**Rule for picking the next one after that:** the order is
 [architecture.md](../architecture.md) §10, step by step. If a step looks like
 it needs a design decision that is not already in the spec, that is a signal
 to stop and ask — not to invent one.
@@ -50,7 +45,8 @@ is what your change must not break; the **Gate** column is what proves it.
 | The read path, or read prefetch/caching | [protocols/data.md](protocols/data.md) "validated collect" | I24, I13 | posix, posix2 (cross-client visibility) |
 | Client reconnect, leases, locks, open-unlinked | [protocols/sessions.md](protocols/sessions.md) | I19, I23, I16 | posix2, posixstress |
 | Cross-shard anything | [protocols/transactions.md](protocols/transactions.md) | I16, I17, I9 | posix2, posixstress |
-| Raft, KV, replication, membership | [architecture.md §7.1/§7.8](../architecture.md), [failure-tolerance.md](failure-tolerance.md) | I1–I4, I10, I18 | simulator (once it exists), leaks |
+| Raft, KV, replication, membership | [architecture.md §7.1/§7.8](../architecture.md), [failure-tolerance.md](failure-tolerance.md) | I1–I4, I10, I18 | `tests/test_sim`, leaks |
+| Simulator / current table SM | [verification.md](verification.md), `include/efs/sim.h` | table uniqueness; I14, I15, I25 | `tests/test_sim` |
 | A hot path, for speed | [performance.md](performance.md) | P1–P4, §8 contract | fio honest matrix — **never** the stock `perf` write column |
 | FUSE client behavior | [architecture.md §7.7](../architecture.md) | I24, kernel-cache rules | posix, posix2 |
 | Module structure / file layout | [development.md](development.md) | ~1000-line file cap; header-only deps | `make test` + the suite for whatever moved |

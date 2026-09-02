@@ -166,11 +166,11 @@ transport/storage interfaces.
    3720-line file, not a new design. No behavior change this step. Gate:
    step-4 posix `results/posix/20260902-114722` **196/201, 0 EFS bugs**.
 
-**Phase M complete.** Next is architecture.md §10 step 1 (the simulator),
-against `efs/transport.h` + `efs/store.h` + `efs/kv.h`. Do not build Raft/KV
-as new monolith code. Follow-on (not blocking the simulator): split
-`src/meta/metadata.c` (~6k) by responsibility; wire `meta_server.c` flush
-through `efs/kv.h`; thin remaining `efs_fuse.c` inlines.
+**Phase M complete.** §10 step 1 (simulator) is in `src/sim/` +
+`tests/test_sim` (current `efs_export_*` SM, mem store/kv, loop transport).
+Next is step 2 (RPC op-IDs / I16). Do not build Raft as new monolith code.
+Follow-on: split `src/meta/metadata.c` (~6k) by responsibility; wire
+`meta_server.c` flush through `efs/kv.h`; thin remaining `efs_fuse.c` inlines.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

@@ -34,6 +34,14 @@ runs in both, so "passes in simulation" is meaningful. (This is also why
 [development.md](development.md) makes state-machine purity an architectural
 rule.)
 
+**Harness (Sep 2).** `include/efs/sim.h` + `src/sim/sim.c` + `tests/test_sim`
+drive today's `efs_export_*` table against mem store, mem kv, and loop
+transport. Same seed replays the same history hash. Faults that gate today:
+message drop, partition, crash+restart with the same disk, PUT-then-crash
+before publish (unpublished must not be readable), publish without all k+f
+fragments, silent fragment corruption (skipped, never decoded). Raft, txn,
+and session events stay generator hooks until those SMs exist.
+
 **Fault-injection events the generator must produce:**
 
 ```text

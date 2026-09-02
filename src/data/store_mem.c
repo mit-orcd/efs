@@ -11,7 +11,10 @@ struct mem_rec {
     struct mem_rec *next;
 };
 
+#define MEM_STORE_MAGIC 0x4d454d31u /* 'MEM1' */
+
 struct mem_store {
+    uint32_t magic;
     struct mem_rec *head;
     uint32_t nrec;
 };
@@ -159,6 +162,7 @@ struct efs_store *efs_store_mem_create(void)
         free(s);
         return NULL;
     }
+    m->magic = MEM_STORE_MAGIC;
     s->ops = &mem_ops;
     s->ctx = m;
     return s;
@@ -170,4 +174,21 @@ void efs_store_mem_free(struct efs_store *s)
         return;
     efs_store_destroy(s);
     free(s);
+}
+
+int efs_store_mem_corrupt(struct efs_store *s, const struct efs_frag_id *id)
+{
+    struct mem_store *m;
+    struct mem_rec **pp;
+
+    if (!s || !s->ctx || !id)
+        return EFS_ERR_INVAL;
+    m = s->ctx;
+    if (m->magic != MEM_STORE_MAGIC)
+        return EFS_ERR_INVAL;
+    pp = find_slot(m, id);
+    if (!*pp || !(*pp)->data || (*pp)->len == 0)
+        return EFS_ERR_NOT_FOUND;
+    (*pp)->data[0] ^= 0x5a;
+    return EFS_OK;
 }

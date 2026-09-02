@@ -77,5 +77,7 @@ static inline void efs_store_destroy(struct efs_store *s)
 /* In-memory backend (simulator / unit tests). No sockets, no NVMe. */
 struct efs_store *efs_store_mem_create(void);
 void efs_store_mem_free(struct efs_store *s);
+/* Flip one payload byte; leave the sidecar checksum unchanged (I25). */
+int efs_store_mem_corrupt(struct efs_store *s, const struct efs_frag_id *id);
 
 #endif
