@@ -1,76 +1,13 @@
-/* Deterministic discrete-event simulator. Metadata apply is the §5 KV SM
- * (src/meta/meta_apply.c). Data plane is mem store + loop transport. */
-#include "efs/sim.h"
-#include "efs/meta_apply.h"
-#include "efs/kv.h"
-#include "efs/transport.h"
+/* Deterministic discrete-event simulator. Metadata is RF=3 Raft + KV apply.
+ * Data plane is mem store + loop transport. */
+#include "sim_internal.h"
 #include "efs/erasure.h"
 #include "efs/checksum.h"
 #include "efs/placement.h"
 #include "efs/protocol.h"
-#include "efs/opid.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-
-#define SIM_MAX_EV 128
-
-enum {
-    EV_CREATE = 1,
-    EV_LOOKUP,
-    EV_UNLINK,
-    EV_PUT_FRAG,
-    EV_PUBLISH
-};
-
-struct sim_ev {
-    uint64_t tick;
-    uint32_t seq;
-    uint8_t kind;
-    uint8_t client;
-    efs_ino_t parent;
-    efs_ino_t ino;
-    uint32_t mode;
-    uint32_t chunk_index;
-    uint32_t frag_index;
-    uint32_t plen;
-    uint64_t new_size;
-    char name[EFS_MAX_NAME];
-    uint8_t *payload;
-    uint8_t has_op;
-    struct efs_opid op;
-};
-
-struct sim_server {
-    int alive;
-    int partitioned;
-    struct efs_store *store;
-    struct efs_kv *disk;
-    struct efs_transport *rx[EFS_SIM_MAX_CLIENTS];
-};
-
-struct sim_client {
-    struct efs_transport *tx[EFS_SIM_MAX_SERVERS];
-    struct efs_opid_window win;
-};
-
-struct efs_sim {
-    uint64_t rng;
-    uint64_t now;
-    uint64_t history;
-    uint32_t seq;
-    uint32_t delay_max;
-    uint32_t drop_per_mille;
-    int nservers;
-    int nclients;
-    int hold;
-    int last_rc;
-    efs_ino_t last_ino;
-    uint32_t nev;
-    struct sim_ev ev[SIM_MAX_EV];
-    struct sim_server srv[EFS_SIM_MAX_SERVERS];
-    struct sim_client cli[EFS_SIM_MAX_CLIENTS];
-};
 
 static uint64_t splitmix64(uint64_t *s)
 {
@@ -110,13 +47,6 @@ static void frag_sum(const struct efs_frag_id *id, const uint8_t *data,
     free(tmp);
 }
 
-static struct efs_kv *meta_kv(struct efs_sim *sim)
-{
-    if (!sim->srv[EFS_SIM_META].alive || sim->srv[EFS_SIM_META].partitioned)
-        return NULL;
-    return sim->srv[EFS_SIM_META].disk;
-}
-
 static int ev_cmp(const struct sim_ev *a, const struct sim_ev *b)
 {
     if (a->tick < b->tick)
@@ -130,7 +60,7 @@ static int ev_cmp(const struct sim_ev *a, const struct sim_ev *b)
     return 0;
 }
 
-static int schedule(struct efs_sim *sim, struct sim_ev *in)
+int sim_enqueue(struct efs_sim *sim, struct sim_ev *in)
 {
     uint32_t i, j;
     uint64_t delay;
@@ -140,16 +70,6 @@ static int schedule(struct efs_sim *sim, struct sim_ev *in)
     delay = 0;
     if (sim->delay_max)
         delay = efs_sim_rng(sim) % (sim->delay_max + 1);
-    if (sim->drop_per_mille) {
-        uint64_t r = efs_sim_rng(sim) % 1000;
-        if (r < sim->drop_per_mille) {
-            hist(sim, 0xff, in->kind, in->ino);
-            free(in->payload);
-            in->payload = NULL;
-            sim->last_rc = EFS_ERR_AGAIN;
-            return EFS_OK;
-        }
-    }
     in->tick = sim->now + delay;
     in->seq = sim->seq++;
     i = sim->nev;
@@ -161,6 +81,21 @@ static int schedule(struct efs_sim *sim, struct sim_ev *in)
     sim->nev++;
     in->payload = NULL;
     return EFS_OK;
+}
+
+static int schedule(struct efs_sim *sim, struct sim_ev *in)
+{
+    if (sim->drop_per_mille) {
+        uint64_t r = efs_sim_rng(sim) % 1000;
+        if (r < sim->drop_per_mille) {
+            hist(sim, 0xff, in->kind, in->ino);
+            free(in->payload);
+            in->payload = NULL;
+            sim->last_rc = EFS_ERR_AGAIN;
+            return EFS_OK;
+        }
+    }
+    return sim_enqueue(sim, in);
 }
 
 static int maybe_drain(struct efs_sim *sim)
@@ -236,17 +171,11 @@ static int durable_count(struct efs_sim *sim, efs_ino_t ino, uint32_t ci,
 
 static int apply_create(struct efs_sim *sim, struct sim_ev *e)
 {
-    struct efs_kv *kv = meta_kv(sim);
     efs_ino_t ino = 0;
     int rc;
 
-    if (!kv)
-        return EFS_ERR_BUSY;
-    if (e->has_op)
-        rc = efs_meta_apply_create_file_op(kv, &e->op, e->parent, e->mode,
-                                           e->name, &ino);
-    else
-        rc = efs_meta_apply_create_file(kv, e->parent, e->mode, e->name, &ino);
+    rc = sim_raft_create(sim, e->has_op, e->has_op ? &e->op : NULL, e->parent,
+                         e->mode, e->name, &ino);
     if (rc != EFS_OK)
         return rc;
     e->ino = ino;
@@ -256,13 +185,10 @@ static int apply_create(struct efs_sim *sim, struct sim_ev *e)
 
 static int apply_lookup(struct efs_sim *sim, struct sim_ev *e)
 {
-    struct efs_kv *kv = meta_kv(sim);
     struct efs_meta_dentry dent;
     int rc;
 
-    if (!kv)
-        return EFS_ERR_BUSY;
-    rc = efs_meta_apply_lookup(kv, e->parent, e->name, &dent);
+    rc = sim_raft_lookup(sim, e->parent, e->name, &dent);
     if (rc != EFS_OK)
         return rc;
     e->ino = dent.ino;
@@ -272,12 +198,9 @@ static int apply_lookup(struct efs_sim *sim, struct sim_ev *e)
 
 static int apply_unlink(struct efs_sim *sim, struct sim_ev *e)
 {
-    struct efs_kv *kv = meta_kv(sim);
     int rc;
 
-    if (!kv)
-        return EFS_ERR_BUSY;
-    rc = efs_meta_apply_unlink(kv, e->parent, e->name);
+    rc = sim_raft_unlink(sim, e->parent, e->name);
     if (rc != EFS_OK)
         return rc;
     hist(sim, EV_UNLINK, e->parent, 0);
@@ -325,7 +248,6 @@ static int apply_put(struct efs_sim *sim, struct sim_ev *e)
 
 static int apply_publish(struct efs_sim *sim, struct sim_ev *e)
 {
-    struct efs_kv *kv = meta_kv(sim);
     uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     efs_node_id_t ranks[EFS_NUM_FRAGMENTS];
     struct efs_meta_chunk ch;
@@ -333,8 +255,6 @@ static int apply_publish(struct efs_sim *sim, struct sim_ev *e)
     int rc;
     int i;
 
-    if (!kv)
-        return EFS_ERR_BUSY;
     n = durable_count(sim, e->ino, e->chunk_index, sums, ranks);
     if (n < 0)
         return EFS_ERR_NOMEM;
@@ -346,7 +266,7 @@ static int apply_publish(struct efs_sim *sim, struct sim_ev *e)
         ch.nodes[i] = ranks[i];
         memcpy(ch.checksums[i], sums[i], EFS_HASH_SIZE);
     }
-    rc = efs_meta_apply_publish(kv, e->ino, e->chunk_index, e->new_size, &ch);
+    rc = sim_raft_publish(sim, e->ino, e->chunk_index, e->new_size, &ch);
     if (rc != EFS_OK)
         return rc;
     hist(sim, EV_PUBLISH, e->ino, e->chunk_index);
@@ -374,6 +294,9 @@ static int apply_one(struct efs_sim *sim, struct sim_ev *e)
     case EV_PUBLISH:
         rc = apply_publish(sim, e);
         break;
+    case EV_RAFT:
+        rc = sim_raft_deliver(sim, e);
+        break;
     default:
         rc = EFS_ERR_INVAL;
         break;
@@ -381,23 +304,16 @@ static int apply_one(struct efs_sim *sim, struct sim_ev *e)
     free(e->payload);
     e->payload = NULL;
     sim->last_rc = rc;
-    if (rc == EFS_OK)
+    if (rc == EFS_OK && e->kind != EV_RAFT)
         sim->last_ino = e->ino;
     return rc;
 }
 
 int efs_sim_check(struct efs_sim *sim)
 {
-    struct efs_kv *kv;
-
     if (!sim)
         return EFS_ERR_INVAL;
-    if (!sim->srv[EFS_SIM_META].alive)
-        return EFS_OK;
-    kv = sim->srv[EFS_SIM_META].disk;
-    if (!kv)
-        return EFS_ERR_INVAL;
-    return efs_meta_apply_check(kv);
+    return sim_raft_check(sim);
 }
 
 int efs_sim_drain(struct efs_sim *sim)
@@ -476,7 +392,7 @@ struct efs_sim *efs_sim_new(const struct efs_sim_cfg *cfg)
             }
         }
     }
-    if (efs_meta_apply_init(sim->srv[EFS_SIM_META].disk) != EFS_OK) {
+    if (sim_raft_boot(sim) != EFS_OK) {
         efs_sim_free(sim);
         return NULL;
     }
@@ -498,6 +414,7 @@ void efs_sim_free(struct efs_sim *sim)
         return;
     for (k = 0; k < sim->nev; k++)
         free(sim->ev[k].payload);
+    sim_raft_free_all(sim);
     for (i = 0; i < EFS_SIM_MAX_SERVERS; i++) {
         efs_store_mem_free(sim->srv[i].store);
         efs_kv_mem_free(sim->srv[i].disk);
@@ -742,7 +659,6 @@ int efs_sim_publish(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
 int efs_sim_read_chunk(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
                        uint8_t *out, uint32_t chunk_len)
 {
-    struct efs_kv *kv;
     struct efs_meta_chunk ch;
     uint8_t *block = NULL;
     uint8_t *frags[EFS_NUM_FRAGMENTS];
@@ -754,10 +670,7 @@ int efs_sim_read_chunk(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
 
     if (!sim || !out || chunk_len > EFS_SIM_CHUNK)
         return EFS_ERR_INVAL;
-    kv = meta_kv(sim);
-    if (!kv)
-        return EFS_ERR_BUSY;
-    if (efs_meta_apply_get_chunk(kv, ino, chunk_index, &ch) != EFS_OK)
+    if (sim_raft_get_chunk(sim, ino, chunk_index, &ch) != EFS_OK)
         return EFS_ERR_NOT_FOUND; /* unpublished: I15, not served */
     block = calloc(EFS_NUM_FRAGMENTS, fl);
     full = malloc(EFS_SIM_CHUNK);
@@ -838,6 +751,7 @@ int efs_sim_crash(struct efs_sim *sim, int server)
         return EFS_ERR_INVAL;
     s = &sim->srv[server];
     s->alive = 0;
+    sim_raft_halt(sim, server);
     hist(sim, 0x10, (uint64_t)server, 0);
     return EFS_OK;
 }
@@ -845,6 +759,7 @@ int efs_sim_crash(struct efs_sim *sim, int server)
 int efs_sim_restart(struct efs_sim *sim, int server)
 {
     struct sim_server *s;
+    int rc;
 
     if (!sim || server < 0 || server >= sim->nservers)
         return EFS_ERR_INVAL;
@@ -852,6 +767,9 @@ int efs_sim_restart(struct efs_sim *sim, int server)
     s->alive = 1;
     s->partitioned = 0;
     hist(sim, 0x11, (uint64_t)server, 0);
+    rc = sim_raft_restart(sim, server);
+    if (rc != EFS_OK)
+        return rc;
     return efs_sim_check(sim);
 }
 
@@ -885,9 +803,16 @@ int efs_sim_partition(struct efs_sim *sim, int server, int on)
 
 int efs_sim_clock_step(struct efs_sim *sim, uint64_t delta)
 {
+    uint64_t i, n;
+
     if (!sim)
         return EFS_ERR_INVAL;
     sim->now += delta;
+    n = delta > 32 ? 32 : delta;
+    for (i = 0; i < n; i++) {
+        if (sim_raft_tick_reachable(sim) != EFS_OK)
+            break;
+    }
     hist(sim, 0x14, delta, 0);
     return EFS_OK;
 }

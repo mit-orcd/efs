@@ -1203,13 +1203,13 @@ sends you to — not the whole spec.
 
 ### 1. The task right now
 
-> **Architecture migration §10, step 5:** simulator proves the single-shard
-> Raft invariants (I1–I4, I10, ReadIndex).
-> [architecture.md §10](#architecture) · [verification.md](verification.md)
+> **Architecture migration §10, step 6:** safe Raft-group reconfiguration +
+> control-plane desired placement (I18).
+> [architecture.md §10](#architecture) · [failure-tolerance.md](failure-tolerance.md)
 >
-> Step 4 is in: `include/efs/raft.h` + `src/raft/` (persistence, election,
-> replication, apply, ReadIndex, log-truncation snapshots). Production `efsd`
-> still uses the in-memory table. Do not skip to reconfiguration or
+> Step 5 is in: the simulator's metadata path is a fixed RF=3 Raft group
+> applying the §5 KV SM. `tests/test_sim` gates I1–I4, I10, and ReadIndex.
+> Production `efsd` still uses the in-memory table. Do not skip to
 > cross-shard txns. If a decision is missing, stop and ask.
 
 **Rule for picking the next one after that:** the order is
@@ -3767,18 +3767,22 @@ runs in both, so "passes in simulation" is meaningful. (This is also why
 [development.md](development.md) makes state-machine purity an architectural
 rule.)
 
-**Harness (Sep 2).** `include/efs/sim.h` + `src/sim/sim.c` + `tests/test_sim`
-drive the §5 ordered-KV apply SM (`src/meta/meta_apply.c`) against mem store
-and loop transport. Same seed replays the same history hash. Faults that
-gate today: message drop, partition, crash+restart with the same KV disk,
-PUT-then-crash before publish (unpublished must not be readable), publish
-without all k+f fragments, silent fragment corruption (skipped, never
-decoded). Op-IDs (I16) persist in the CREATE batch. Production RPCs do not
-carry op-IDs yet. **Single-shard Raft** (`include/efs/raft.h`, `src/raft/`, `tests/test_raft`)
-is a pure SM: persistence, election, replication, apply, ReadIndex, and
-log-truncation snapshots. The simulator still uses a single metadata primary
-until step 5 wires the group. Raft, txn, and session *fault events* in the
-generator stay hooks until those SMs are driven from `efs_sim`.
+**Harness (Sep 2).** `include/efs/sim.h` + `src/sim/` + `tests/test_sim`
+drive a **fixed RF=3 Raft group** (servers 0..2) applying the §5 ordered-KV
+SM (`src/meta/meta_apply.c`) against mem store and loop transport. Same seed
+replays the same history hash. Metadata mutations are Raft log commands;
+reads are leader + ReadIndex (no clock leases). Crash keeps KV + Raft persist
+and restarts the SM from them. Faults that gate today: message drop,
+partition (including minority leader / lost quorum), crash+restart with the
+same disk, PUT-then-crash before publish (unpublished must not be readable),
+publish without all k+f fragments, silent fragment corruption (skipped, never
+decoded). Raft invariants gated in-sim: I1 (one leader per term), I2/I10
+(acknowledged create survives f=1 replica crash), I3 (higher term fences the
+old leader), I4 (partitioned leader cannot advance commitIndex). Op-IDs (I16)
+persist in the CREATE batch. Production RPCs do not carry op-IDs yet, and
+production `efsd` still uses the in-memory table. Txn and session *fault
+events* in the generator stay hooks until those SMs are driven from
+`efs_sim`. Reconfiguration (I18) is step 6.
 
 **Fault-injection events the generator must produce:**
 

@@ -157,7 +157,9 @@ static int send_ae(struct efs_raft *r, int to)
     uint64_t last_i = 0, last_t = 0, prev_t = 0;
     uint64_t ni;
     uint32_t clen = 0;
-    uint8_t buf[256];
+    uint8_t small[256];
+    uint8_t *cmdbuf = small;
+    int need_free = 0;
     int rc;
 
     memset(&m, 0, sizeof(m));
@@ -177,18 +179,29 @@ static int send_ae(struct efs_raft *r, int to)
     m.leader_commit = r->commit_index;
     if (ni <= last_i) {
         uint64_t eterm = 0;
-        clen = sizeof(buf);
-        rc = r->store->get(r->store_ctx, ni, &eterm, buf, &clen);
-        if (rc == EFS_ERR_INVAL)
-            return EFS_ERR_NOMEM; /* test cmds fit in 256 */
-        if (rc != EFS_OK)
+        clen = sizeof(small);
+        rc = r->store->get(r->store_ctx, ni, &eterm, small, &clen);
+        if (rc == EFS_ERR_INVAL) {
+            cmdbuf = malloc(clen);
+            if (!cmdbuf)
+                return EFS_ERR_NOMEM;
+            need_free = 1;
+            rc = r->store->get(r->store_ctx, ni, &eterm, cmdbuf, &clen);
+        }
+        if (rc != EFS_OK) {
+            if (need_free)
+                free(cmdbuf);
             return rc;
+        }
         m.nentries = 1;
         m.entries[0].term = eterm;
         m.entries[0].clen = clen;
-        m.entries[0].cmd = buf;
+        m.entries[0].cmd = cmdbuf;
     }
-    return send_msg(r, &m);
+    rc = send_msg(r, &m);
+    if (need_free)
+        free(cmdbuf);
+    return rc;
 }
 
 static int broadcast_ae(struct efs_raft *r)

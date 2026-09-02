@@ -1,4 +1,4 @@
-/* Deterministic simulator: KV apply SM + mem store/loop.
+/* Deterministic simulator: RF=3 Raft + KV apply SM + mem store/loop.
  * Same seed must replay the same history. */
 #include "efs/sim.h"
 #include "efs/opid.h"
@@ -69,13 +69,20 @@ static void test_restart(void)
 {
     struct efs_sim *s = mk(9);
     efs_ino_t a = 0, g = 0;
+    int lid;
 
     CHECK(s, "mk");
     CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "keep", &a) == EFS_OK,
           "create");
-    CHECK(efs_sim_crash(s, EFS_SIM_META) == EFS_OK, "crash");
-    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "keep", &g) == EFS_ERR_BUSY, "down");
-    CHECK(efs_sim_restart(s, EFS_SIM_META) == EFS_OK, "restart");
+    lid = efs_sim_meta_leader(s);
+    CHECK(lid >= 0, "leader");
+    CHECK(efs_sim_crash(s, lid) == EFS_OK, "crash leader");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "keep", &g) == EFS_OK && g == a,
+          "I2/I10 majority");
+    CHECK(efs_sim_crash(s, (lid + 1) % 3) == EFS_OK, "crash second");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "keep", &g) == EFS_ERR_BUSY,
+          "no quorum");
+    CHECK(efs_sim_restart(s, lid) == EFS_OK, "restart");
     CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "keep", &g) == EFS_OK && g == a,
           "reloaded");
     efs_sim_free(s);
@@ -188,10 +195,12 @@ static void test_faults(void)
 
     p = mk(29);
     CHECK(p, "part");
-    CHECK(efs_sim_partition(p, EFS_SIM_META, 1) == EFS_OK, "part on");
+    CHECK(efs_sim_partition(p, 0, 1) == EFS_OK, "part 0");
+    CHECK(efs_sim_partition(p, 1, 1) == EFS_OK, "part 1");
     CHECK(efs_sim_create(p, 0, EFS_ROOT_INO, S_IFREG | 0644, "y", &g) == EFS_ERR_BUSY,
-          "partitioned");
-    CHECK(efs_sim_partition(p, EFS_SIM_META, 0) == EFS_OK, "part off");
+          "no quorum");
+    CHECK(efs_sim_partition(p, 0, 0) == EFS_OK, "part 0 off");
+    CHECK(efs_sim_partition(p, 1, 0) == EFS_OK, "part 1 off");
     CHECK(efs_sim_clock_step(p, 100) == EFS_OK, "clock");
     CHECK(efs_sim_now(p) >= 100, "now");
     CHECK(efs_sim_create(p, 0, EFS_ROOT_INO, S_IFREG | 0644, "y", &g) == EFS_OK,
@@ -266,6 +275,108 @@ static void test_i16(void)
     efs_sim_free(s);
 }
 
+static void test_i1_one_leader(void)
+{
+    struct efs_sim *s = mk(41);
+    efs_ino_t a = 0;
+    int i, n = 0, lid;
+    uint64_t term;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "i1", &a) == EFS_OK,
+          "create");
+    lid = efs_sim_meta_leader(s);
+    CHECK(lid >= 0, "leader");
+    term = efs_sim_meta_term(s, lid);
+    for (i = 0; i < EFS_SIM_RAFT_N; i++) {
+        if (efs_sim_meta_role(s, i) == 2) /* EFS_RAFT_LEADER */
+            n++;
+    }
+    CHECK(n == 1, "I1 one leader");
+    CHECK(term >= 1, "term");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
+static void test_i3_term_fence(void)
+{
+    struct efs_sim *s = mk(43);
+    efs_ino_t a = 0, g = 0;
+    int i, lid, nlid;
+    uint64_t old_term;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "i3", &a) == EFS_OK,
+          "create");
+    lid = efs_sim_meta_leader(s);
+    CHECK(lid >= 0, "leader");
+    old_term = efs_sim_meta_term(s, lid);
+    CHECK(efs_sim_partition(s, lid, 1) == EFS_OK, "isolate leader");
+    nlid = -1;
+    for (i = 0; i < 40; i++) {
+        efs_sim_meta_tick(s, -1);
+        nlid = efs_sim_meta_leader(s);
+        if (nlid >= 0 && nlid != lid)
+            break;
+    }
+    CHECK(nlid >= 0 && nlid != lid, "new leader");
+    CHECK(efs_sim_meta_term(s, nlid) > old_term, "higher term");
+    CHECK(efs_sim_partition(s, lid, 0) == EFS_OK, "heal");
+    for (i = 0; i < 20; i++)
+        efs_sim_meta_tick(s, -1);
+    CHECK(efs_sim_meta_role(s, lid) != 2, "I3 old leader stepped down");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "i3", &g) == EFS_OK && g == a,
+          "still there");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
+static void test_i4_no_quorum_commit(void)
+{
+    struct efs_sim *s = mk(47);
+    efs_ino_t a = 0, g = 0;
+    int lid, i;
+    uint64_t c0;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "i4", &a) == EFS_OK,
+          "create");
+    lid = efs_sim_meta_leader(s);
+    CHECK(lid >= 0, "leader");
+    c0 = efs_sim_meta_commit(s, lid);
+    for (i = 0; i < EFS_SIM_RAFT_N; i++) {
+        if (i != lid)
+            CHECK(efs_sim_partition(s, i, 1) == EFS_OK, "part follower");
+    }
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "stuck", &g) ==
+              EFS_ERR_BUSY,
+          "I4 unacked");
+    CHECK(g == 0, "no ino");
+    CHECK(efs_sim_meta_commit(s, lid) == c0, "commit frozen");
+    for (i = 0; i < EFS_SIM_RAFT_N; i++) {
+        if (i != lid)
+            efs_sim_partition(s, i, 0);
+    }
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "after", &g) ==
+              EFS_OK,
+          "after quorum");
+    CHECK(efs_sim_meta_commit(s, lid) > c0, "commit moved");
+    efs_sim_free(s);
+}
+
+static void test_readindex(void)
+{
+    struct efs_sim *s = mk(53);
+    efs_ino_t a = 0, g = 0;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "ri", &a) == EFS_OK,
+          "create");
+    CHECK(efs_sim_lookup(s, 1, EFS_ROOT_INO, "ri", &g) == EFS_OK && g == a,
+          "ReadIndex other client");
+    efs_sim_free(s);
+}
+
 int main(void)
 {
     test_replay();
@@ -278,6 +389,10 @@ int main(void)
     test_faults();
     test_opid_window();
     test_i16();
+    test_i1_one_leader();
+    test_i3_term_fence();
+    test_i4_no_quorum_commit();
+    test_readindex();
     if (failures) {
         fprintf(stderr, "test_sim: %d failure(s)\n", failures);
         return 1;

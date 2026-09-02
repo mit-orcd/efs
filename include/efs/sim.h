@@ -5,19 +5,19 @@
 #include "efs/store.h"
 #include "efs/opid.h"
 
-/* Deterministic simulator (architecture.md §10 steps 1–3).
+/* Deterministic simulator (architecture.md §10 steps 1–5).
  * N logical servers + M clients in one process. Seeded PRNG drives
  * message order, drops, delays, crashes, and clock steps. Metadata is
- * the §5 ordered-KV apply SM (src/meta/meta_apply.c). Data plane is mem
- * store + loop transport — not sockets or NVMe. Raft / txn / session
- * faults are generator hooks for later steps.
+ * a fixed RF=3 Raft group (servers 0..2) applying the §5 KV SM. Data
+ * plane is mem store + loop transport — not sockets or NVMe.
  *
  * Logical chunk size is EFS_SIM_CHUNK (encode takes chunk_size). */
 
 #define EFS_SIM_MAX_SERVERS 8
 #define EFS_SIM_MAX_CLIENTS 4
 #define EFS_SIM_CHUNK       EFS_MIN_CHUNK_SIZE /* encode floor */
-#define EFS_SIM_META        0 /* server 0 is the current single metadata primary */
+#define EFS_SIM_RAFT_N      3 /* RF = 2f+1, f=1 */
+#define EFS_SIM_META        0 /* replica 0 of the metadata Raft group */
 
 struct efs_sim;
 
@@ -41,7 +41,7 @@ void efs_sim_hold(struct efs_sim *sim, int hold);
 int efs_sim_drain(struct efs_sim *sim);
 int efs_sim_check(struct efs_sim *sim);
 
-/* Applied KV SM on the metadata primary. */
+/* Namespace ops: propose to the metadata Raft leader, apply on each replica. */
 int efs_sim_create(struct efs_sim *sim, int client, efs_ino_t parent,
                    uint32_t mode, const char *name, efs_ino_t *out);
 /* I16: same op identity does not mint a second inode. */
@@ -76,5 +76,13 @@ int efs_sim_restart(struct efs_sim *sim, int server);
 int efs_sim_corrupt(struct efs_sim *sim, int server, const struct efs_frag_id *id);
 int efs_sim_partition(struct efs_sim *sim, int server, int on);
 int efs_sim_clock_step(struct efs_sim *sim, uint64_t delta);
+
+/* Observability for I1–I4. Leader is -1 if none among reachable replicas.
+ * tick: server >= 0 ticks that replica; -1 ticks every reachable replica. */
+int efs_sim_meta_leader(const struct efs_sim *sim);
+int efs_sim_meta_role(const struct efs_sim *sim, int server);
+uint64_t efs_sim_meta_term(const struct efs_sim *sim, int server);
+uint64_t efs_sim_meta_commit(const struct efs_sim *sim, int server);
+int efs_sim_meta_tick(struct efs_sim *sim, int server);
 
 #endif
