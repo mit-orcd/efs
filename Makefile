@@ -25,7 +25,8 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
               src/data/store_mem.c \
               src/data/transport_loop.c \
               src/data/transport_conn.c \
-              $(COMMON_DIR)/metadata.c \
+              src/kv/kv_mem.c \
+              src/meta/metadata.c \
               $(COMMON_DIR)/placement.c \
               $(COMMON_DIR)/checksum.c \
               $(COMMON_DIR)/network.c \
@@ -48,8 +49,8 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
-TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c tests/test_dir_stats.c tests/test_ino_path.c tests/test_meta_slot.c tests/test_add_storage.c tests/test_meta_cap.c tests/test_meta_v6.c tests/test_rdma_xprt.c tests/test_drop_chunks.c tests/test_wire.c tests/test_data.c
-TEST_BINS = tests/test_erasure tests/test_placement tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports tests/test_dir_stats tests/test_ino_path tests/test_meta_slot tests/test_add_storage tests/test_meta_cap tests/test_meta_v6 tests/test_rdma_xprt tests/test_drop_chunks tests/test_wire tests/test_data
+TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c tests/test_dir_stats.c tests/test_ino_path.c tests/test_meta_slot.c tests/test_add_storage.c tests/test_meta_cap.c tests/test_meta_v6.c tests/test_rdma_xprt.c tests/test_drop_chunks.c tests/test_wire.c tests/test_data.c tests/test_kv.c
+TEST_BINS = tests/test_erasure tests/test_placement tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports tests/test_dir_stats tests/test_ino_path tests/test_meta_slot tests/test_add_storage tests/test_meta_cap tests/test_meta_v6 tests/test_rdma_xprt tests/test_drop_chunks tests/test_wire tests/test_data tests/test_kv
 
 SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/handler.c \
               src/server/cluster.c src/server/meta_server.c src/server/migrate.c \
@@ -91,6 +92,7 @@ FORCE:
 test: all
 	./tests/test_wire
 	./tests/test_data
+	./tests/test_kv
 	./tests/test_erasure
 	./tests/test_placement
 	./tests/test_integration
@@ -120,6 +122,7 @@ test: all
 $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(MGMT_OBJ) $(QUERY_OBJ): \
 	include/efs/common.h include/efs/metadata.h include/efs/protocol.h \
 	include/efs/wire.h include/efs/store.h include/efs/transport.h \
+	include/efs/kv.h \
 	.build_id.stamp
 
 $(LIB): $(COMMON_OBJS)

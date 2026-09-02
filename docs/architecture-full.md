@@ -1203,14 +1203,15 @@ sends you to — not the whole spec.
 
 ### 1. The task right now
 
-> **Phase M — carve the monolith**, step 3: `meta/` — the pure state machine.
+> **Phase M — carve the monolith**, step 4: `server/` — thin dispatch.
 > [roadmap Phase M](../scaling-roadmap.md#phase-m--carve-the-monolith-first-the-dev-cycle-lever)
 
-Step 2 (`data/` + store/transport interfaces) is done: `src/data/` holds EC,
-the in-memory store, the loopback transport, and the `efs_conn` adapter.
-On-node gate: `test_data` / `test_erasure` / `test_meta_v6` / `test_integration`
-OK (pre-existing `test_quota` / `test_migrate` flakes unchanged). Production
-NVMe I/O is still `server_*_fragment*`; this step only adds the seam.
+Step 3 (`meta/` + `kv/` seam) is done: table implementation moved to
+`src/meta/metadata.c`; `include/efs/kv.h` + `src/kv/kv_mem.c` is the persist
+interface the simulator will implement. File still oversized (~6k) — split
+by responsibility is follow-on, not a blocker for step 4. Gate: `test_kv` /
+`test_meta_v6` OK; solo posix `results/posix/20260902-082735` **196/201,
+0 EFS bugs**.
 
 Nothing in the architecture migration ([architecture.md](#architecture)
 §10) may start before Phase M finishes, because migration step 1 needs a
@@ -3657,8 +3658,12 @@ raft/       the consensus core — a pure state machine, transport- and
             simulator and in a unit harness alike.
 kv/         the ordered applied state — behind a storage interface
             (real NVMe engine / simulated fault-injecting disk).
+            `include/efs/kv.h` + `src/kv/kv_mem.c` are the seam; production
+            still serializes to the EFSM blob until step 4 wires flush.
 meta/       the POSIX op handlers — pure-ish functions over the kv/ and
             raft/ interfaces; no socket or FUSE calls inline.
+            Table implementation lives in `src/meta/metadata.c` (moved from
+            `src/common/`; still oversized — split by responsibility next).
 wire/       the protocol — versioned encode/decode, nothing else.
 data/       the data plane — EC encode/decode, RDMA PUT/GET, generation
             fencing. Store + transport vtables live here (`efs/store.h`,

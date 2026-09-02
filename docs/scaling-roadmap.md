@@ -139,13 +139,18 @@ transport/storage interfaces.
    (mem CRUD, loop send/recv, EC through the store, socketpair conn adapter).
    Gate: on-node `test_data` + `test_erasure` + `test_meta_v6` +
    `test_integration` / `test_directio` / `test_rejoin` / `test_drop_chunks`
-   OK. Pre-existing flakes: `test_quota`, `test_migrate`. No wipe. Production
-   fragment I/O is still `server_*_fragment*` (handler dispatch is step 4).
-3. **`meta/` — the pure state machine.** Split `metadata.c`: table ops
-   (create/unlink/setattr/rename/link over an abstracted store) into `meta/`,
-   pure (no sockets, no FUSE, no global locks it does not own); persistence
-   (serialize/flush/pages) moves behind the `kv/` interface seam. Unit tests
-   then drive table ops directly, in milliseconds, no cluster.
+   OK. Solo posix `results/posix/20260902-082249` **196/201, 0 EFS bugs**
+   (TCP remount; efsd not restarted — production fragment I/O unchanged).
+   Pre-existing flakes: `test_quota`, `test_migrate`. No wipe.
+3. **DONE (`meta/` + `kv/` seam).** Table implementation moved
+   `src/common/metadata.c` → `src/meta/metadata.c` (same code, no sockets/
+   FUSE in the file). `include/efs/kv.h` + `src/kv/kv_mem.c`: ordered
+   put/get/del/scan — the persist interface serialize/flush will call once
+   step 4 wires it; production still uses the EFSM blob. Unit tests:
+   `tests/test_kv` (ordered mem KV) + existing `test_meta_v6` (table ops,
+   no cluster). File still ~6k lines — split by responsibility is follow-on.
+   Gate: on-node `test_kv` + `test_meta_v6` OK; solo posix
+   `results/posix/20260902-082735` **196/201, 0 EFS bugs**. No wipe.
 4. **`server/` — thin dispatch.** `handler.c` becomes opcode → `meta/` call →
    reply; `meta_server.c`'s flush/rebuild/catchup becomes a driver behind the
    `kv/` interface. No handler reaches into `meta/` internals.

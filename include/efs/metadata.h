@@ -1,6 +1,9 @@
 #ifndef EFS_METADATA_H
 #define EFS_METADATA_H
 
+/* Table implementation: src/meta/metadata.c (Phase M step 3). Persistence
+ * goes through efs/kv.h once serialize is wired (step 4). */
+
 #include "efs/common.h"
 #include <stdint.h>
 #include <stdio.h>

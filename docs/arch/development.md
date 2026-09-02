@@ -56,8 +56,12 @@ raft/       the consensus core — a pure state machine, transport- and
             simulator and in a unit harness alike.
 kv/         the ordered applied state — behind a storage interface
             (real NVMe engine / simulated fault-injecting disk).
+            `include/efs/kv.h` + `src/kv/kv_mem.c` are the seam; production
+            still serializes to the EFSM blob until step 4 wires flush.
 meta/       the POSIX op handlers — pure-ish functions over the kv/ and
             raft/ interfaces; no socket or FUSE calls inline.
+            Table implementation lives in `src/meta/metadata.c` (moved from
+            `src/common/`; still oversized — split by responsibility next).
 wire/       the protocol — versioned encode/decode, nothing else.
 data/       the data plane — EC encode/decode, RDMA PUT/GET, generation
             fencing. Store + transport vtables live here (`efs/store.h`,
