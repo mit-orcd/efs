@@ -410,6 +410,166 @@ window — else 800k metadata RPCs/s at 100 GB/s caps sequential reads);
 **"durable ACK" defined** = target completed the persistent-NVMe operation
 (NVMe flush/FUA or PLP media), NOT RDMA WRITE completion — same for Raft
 follower ACKs (WAL at the defined persistence level, not volatile cache).
+**SIXTH REVIEW ROUND IN (Sep 1 PM) — ten fixes + the normative/detail SPLIT.
+Do not re-litigate:** (1) **N=2f durability-only mode DELETED — the
+survivor-log merge was unsound.** The reviewer proved "highest-term entry
+wins per index" can synthesize a log that never existed (A: idx5/term10 X
+uncommitted branch; B: idx5/term9 Y + idx6/term11 Z legitimately; merge =
+X,Z — a command sequence no leader authorized; op-ID idempotency does not
+fix it). The earlier "user-ratified 4→2 / 6→3" is GONE. Only rule:
+**N ≥ max(2f+1, k+f), RF = 2f+1** (3→f1, 5→f2, 7→f3; 4 and 6 run the
+next-lower f). Permanent majority loss = operator DR territory, not an efs
+mode. (2) Stale "default: per-chunk atomicity" section deleted (contradicted
+the atomic-publication default). (3) **FUSE syscall boundary = explicit
+UNRESOLVED CONTRACT**: POSIX requires syscall-granularity atomicity, FUSE
+ASYNC_DIO splits syscalls with no originating ID, so EFS MUST NOT claim full
+POSIX write atomicity above the max_write/FUSE-request boundary until solved
+(kernel op grouping / deliberate short-write / syscall txid / strict mode /
+documented compat-vs-strict). I24 + §3 scoped to one FUSE write request.
+(4) **Txn hot path:** coordinator = `participant[hash(txid) % n]` (was a
+deterministic participant = same-file serializer); write-publication PREPAREs
+run in PARALLEL with no-wait semantics (canonical order only for namespace
+txns). (5) **Dir-spread dominating tombstone:** during SPLITTING a mutation
+of an unmigrated name writes `HASHED(name)=TOMBSTONE(epoch)`; hashed side
+always wins → migrator can't resurrect an unlinked name (I8). (6) **I23
+narrowed:** fencing = no AUTHORITATIVE mutation; metadata leaders check the
+epoch, **data targets do NOT** (orphan immutable PUT is harmless, P3).
+(7) **Open-unlinked mechanism:** one session-scoped open lease per
+(session, inode) on the inode shard — first open commits it, last close
+removes it, fenced sessions' leases lazily dropped; reclaim iff nlink==0 AND
+open_sessions empty. (8) **coding_profile_id** {k,f,stripe/coding epoch,
+placement epoch} is part of chunk identity; online f/k change re-stripes to
+NEW immutable generations under the new profile, never mutates in place.
+(9) **Lane formula fixed:** `lane = (chunk_index + hash(ino)) % L` (was
+hash(ino,ci)%L, which contradicted "lane i holds chunks i,i+L,…");
+chunk_meta_shard = hash(ino,lane) & 0xFFF unchanged. (10) Small: "four
+principles" header, I16 (not I9) for idempotency refs, flock/fcntl
+non-interaction is LINUX behavior (flock isn't POSIX; OFD fcntl IS
+POSIX.1-2024 and is in target), MKDIR row includes parent nlink, same-dir
+rename widens when replacing a cross-shard destination.
+**THE SPLIT (same round, user-directed): `architecture.md` is now the
+NORMATIVE INDEX (1840 → 790 lines); all rationale/derivation/protocol detail
+moved to satellites — `docs/arch/{naming,design,design-history,
+failure-tolerance,performance,development,verification}.md` +
+`docs/arch/protocols/{transactions,data,directory,sessions}.md`. If the
+index and a satellite disagree, the index wins.** New section numbering (old
+§5.x refs in this file are historical): §0 principles · §1 goal · §2 failure
+guarantees · §3 consistency contract · §4 invariants · §5 state placement
+(incl. the single authoritative **state-placement table**: state / authority
+/ key / replication) · §6 op→participant matrix · §7 protocol summaries
+(7.1 Raft+reads, 7.2 txns, 7.3 data, 7.4 dirs, 7.5 sessions, 7.6
+open-unlinked+locking, 7.7 FUSE, 7.8 control plane, 7.9 idempotency) ·
+§8 hot-path contract · §9 scaling envelope · §10 implementation order.
+Historical review language ("the earlier claim was wrong…") lives in
+`arch/design-history.md`, not the spec. HTML synced to all of the above.
+**SEVENTH REVIEW ROUND IN (Sep 1 PM) — protocol closure. Reviewer accepted the
+structure and asked only for remaining protocol holes; 10 of 11 points merged
+as given, 1 merged CORRECTED. Do not re-litigate:** (1) **Session fencing was
+not a protocol.** "Leaders cache the session table and re-validate on doubt"
+fences nothing — a shard that hasn't heard of `epoch+1` can still commit for
+the dead client (I23 violation) and nothing tells it to doubt. Replaced with a
+**revocation barrier**: the session record carries a 4096-bit `touched_shards`
+bitmap; a shard registers ONCE per session before accepting its epoch; then
+`ACTIVE(E) -> FENCING(E+1)` (freeze the set) `-> FENCE` every touched shard
+`-> ACTIVE(E+1)` only after ALL ACK. No lock reclaim / lease drop / reservation
+resolution before that commit. Unreachable shard ⇒ the NEW session waits (not a
+real availability loss — a shard that can't establish authority can't commit for
+the old client either). No session lookup on the I/O path. (2) **ABA protection
+didn't reach the data plane:** handles were `(ino,gen)` but chunk objects were
+keyed by bare `ino`. Every data key is now scoped by **`FileID = (ino,
+inode_generation)`** — fragment objects, chunk map, lanes, append reservations,
+publication intents. (3) **`G+1` generation numbering was unsound** — two
+writers reading committed G both mint "G+1" for DIFFERENT bytes and PUT
+different content under one immutable object name. Generations are now
+**globally unique candidate identities** (`H(client_uuid, session_epoch, op_id,
+chunk_index, retry)` or UUID); ordering comes from `CAS(expected = base)`, the
+loser's object is an orphan. (4) **CORRECTED, and the spec had the bug already:**
+the reviewer also wanted `content_epoch` in the chunk key. It WAS there, and it
+is wrong — with the epoch in the object identity, `truncate()` to a smaller
+non-zero size strands the surviving prefix under an epoch no reader consults
+(and the text said those pages were GC'd), while re-tagging instead makes one
+truncate an O(file-size) rewrite (8M entries for 1 TiB). POSIX requires the
+prefix to survive. **content_epoch is now strictly a fence** over lane state +
+in-flight publications; committed chunk data survives a bump. That exposed a
+second gap: with lanes epoch-invalidated, `stat()` had nothing to read after a
+truncate — the inode row gained **`base_size`** next to `base_mtime`. (5)
+**Derived `L` could never change** (`lane = f(ci) % L` relocates every chunk-map
+key). Replaced by **64 fixed lanes activated on use**: `lane = ci % 64`,
+`lane_shard = (inode_shard(ino) + lane*stride(ino)) & 0xFFF` with
+`stride = 2*(hash(ino)&0x7FF)+1` (odd ⇒ permutation over 2^12 ⇒ **64 guaranteed
+DISTINCT shards**; independent `hash(ino,lane)` collides). **Lane 0 = the inode's
+own shard** (small files have zero fan-out). Monotonic 64-bit `active_lanes`
+bitmap on the inode row, set on a lane's first use — ≤64 inode touches per file
+LIFETIME, batched into the write's existing txn; `stat()` collects only active
+lanes. (6) **The lane was about to become the next hotspot:** if a txn's `MAX` on
+lane size/times were an exclusive intent key, two writers publishing DIFFERENT
+chunks sharing a lane would conflict on nothing. Transactions now split
+**exclusive CAS keys** (chunk map, dentry, inode row) from **commutative
+reductions** (lane `MAX`es, dir-lane `MAX`es) carried as payload, applied by the
+reducer, never blocking a prepare. Intent resolution gained its 4th outcome:
+**cannot-establish-authority ⇒ retryable error, NEVER "absent"** (I9). (7)
+**Timestamps had two hidden serializers.** A write updates ctime too, so
+**write-ctime moved into the lanes** (`lane.max_ctime`) — routing it to the inode
+row sends every hot-file writer back to the inode leader. Worse: POSIX updates
+the CONTAINING DIRECTORY's mtime/ctime on every entry create/remove, so a spread
+dir would still funnel every create through its home shard — **hashed dirs now
+keep a `dir_lane` (max_mtime/max_ctime) on EACH dentry shard**, `stat(dir)`
+reduces over used shards. POSIX distinction kept exactly: **chmod sets ctime,
+NOT mtime**. **atime decided: `noatime` default**, `relatime` a coalesced mount
+option, strict per-read atime deliberately not offered. (8) **Two namespace
+cases were hiding behind "2 shards":** `rmdir` must prove emptiness, which is
+distributed on a HASHED dir — now a **transactional read set** over its dentry
+shards (an exact distributed entry counter is REJECTED: it rebuilds the
+per-directory hotspot the spread removed); and **same-dir `rename` is 2-shard on
+a HASHED dir** because `hash(parent,old)` and `hash(parent,new)` are independent.
+(9) **Directory-rename cycle prevention was missing and is unsound if you just
+walk the tree:** two concurrent renames each validate a legal tree and together
+create an unreachable cycle (`mv /a /b/a` ‖ `mv /b /a/b`). Every dir row now
+carries `parent_dir` + `parent_version`; a dir rename collects the destination's
+WHOLE ancestry chain at those versions into its conditional PREPARE, so any
+concurrent reparent in the chain aborts it. O(depth), rare. (10) **Dedup state
+is now a bounded window** — per `(client_uuid, session_epoch)`:
+`highest_contiguous_seq` + a small completion bitmap for the out-of-order edge +
+a bounded reply cache; GC'd once fenced + ambiguity resolved + window passed.
+Transaction **decision records** got the matching participant-ACK GC condition.
+(11) **Publication validates durability evidence** — since targets are
+deliberately dumb, the publication entry carries `coding_profile_id`,
+`placement_epoch` and the per-fragment ACK set (target incarnation, role, object
+identity, checksum), and the lane leader REJECTS evidence that doesn't match the
+current profile/placement/k+f roles/distinct failure domains. A stale client can
+durably write a full stripe to an obsolete placement and still not publish it.
+(12) **NEW INVARIANT I25 · end-to-end integrity** — every durable fragment is
+checksummed over **identity + payload**; a failing fragment is treated as
+UNAVAILABLE and repaired, never fed to the EC decoder. Media corruption is not
+Byzantine, and EC without integrity checking reconstructs confidently wrong data.
+Simulator gained a silent-corruption fault (that is the only way I25 is ever
+tested). (13) **Performance contract was too strong:** "no physical NVMe sync per
+logical operation on any hot path" contradicts `write()`=durable. Now: **"no
+persistence boundary is paid per chunk, per metadata record or per Raft group
+when several operations can safely share one; boundaries are amortized to the
+largest batch the externally visible semantics allow."** (14) **Doc CI gate**
+added to `arch/development.md`: regenerate `architecture-full.md` and fail on
+diff, validate internal links, validate every `I1..I25` reference, validate §6
+matrix protocol refs, and **reject a normative table defined in more than one
+place** (duplicated tables are how the index and a satellite come to disagree).
+Round-7 rationale lives in `arch/design-history.md`; the index, all satellites,
+the HTML and `architecture-full.md` are in sync (links + invariant refs
+verified).
+**CONTRIBUTOR ENTRY POINT (Sep 1 PM):** `docs/arch/START-HERE.md` — the
+answer to "what do I work on and what governs it". §1 the current task
+(Phase M step 1 `wire/`) + the rule for picking the next; §2 a routing table
+(changing X -> read exactly these pages / these invariants govern / this gate
+proves it); §3 what "done" means (build on a node, unit tests, the row's
+gate, a timeout is a FAIL, honest measurement); §4 never-without-asking
+(invent a decision the spec lacks, restate a normative table, new monolith
+code, weaken an invariant, widen a timeout). Linked from `architecture.md`
+line 3, `arch/development.md` and the HTML; included in the generated
+one-file version. It is navigation, not normative — it links to the single
+homes of the §4/§5/§6 tables rather than restating them.
+**One-file paste version (user, Sep 1 PM):** `docs/architecture-full.md` =
+index + all satellites inlined, GENERATED by `docs/gen-architecture-full.py`
+— never edit it directly; regenerate after any doc edit (for pasting the
+whole architecture to another agent).
 **HTML IS THE PLAIN-LANGUAGE RENDITION (Sep 1 PM, user-directed).**
 `docs/architecture.html` was rewritten end-to-end in simple wording: short
 sentences, everyday words, and a "few words we use" glossary table up front

@@ -1,0 +1,142 @@
+# Verification — the deterministic simulator and the code→signal cycle
+
+[Architecture](../architecture.md) · [Development](development.md) ·
+[Performance](performance.md)
+
+## The simulator (build first, architecture-independent)
+
+The single highest-leverage tool, and it pays for itself regardless of the
+metadata design.
+
+**What it is.** A deterministic discrete-event simulator that runs N logical
+servers + M clients **in one process**. A seeded PRNG drives message order,
+drops, delays, duplicates, partitions, node crashes/restarts, and clock
+steps. The real metadata state machine (Raft groups, KV apply, op handlers,
+cross-shard transactions, membership) runs inside it against a **simulated
+network and simulated disk**, not sockets and NVMe.
+
+**Why it changes the dev cycle.** Today every correctness gate is a 13-node
+wipe + rsync + rebuild + ssh orchestration, and the signal is poor (99% of
+posixstress "failures" are 15s timeouts = saturation, not correctness).
+Distributed bugs are only findable end-to-end on physical hardware — the
+slowest, least reproducible place possible. In the simulator a full cluster
+scenario runs in milliseconds, a failure replays exactly from its seed, and
+you explore millions of interleavings overnight. The invariants of §4 of the
+spec are checked after every simulated step, so a bug is a seed + a violated
+invariant, not a log line on a live cluster.
+
+**How it is built.** The metadata core is written to be **transport- and
+storage-agnostic**: it sends messages and reads/writes disk through
+interfaces. Two backends implement those interfaces: the real one (sockets +
+NVMe, what ships) and the simulated one (a message queue + a fault-injecting
+in-memory disk, what the simulator drives). The same compiled state machine
+runs in both, so "passes in simulation" is meaningful. (This is also why
+[development.md](development.md) makes state-machine purity an architectural
+rule.)
+
+**Fault-injection events the generator must produce:**
+
+```text
+lost client replies · duplicated client RPCs
+node restart with same disk · node restart empty / new incarnation
+delayed packets from a previous incarnation
+leader crash after local append but before follower send
+leader crash after quorum commit but before reply
+leader crash after commit but before local apply
+snapshot creation during writes · snapshot transfer interruption/restart
+membership-transition interruption at every step
+cross-shard coordinator crash in every transaction phase
+participant crash in every transaction phase
+client crash after fragment PUT before metadata publish
+client crash after metadata commit before reply
+stale client placement map · stale client chunk generation
+session fence at every point of a client's outstanding work
+fence ACK lost / touched shard unreachable mid-revocation
+ino reuse: delayed PUT from the previous inode incarnation
+concurrent directory renames validating overlapping ancestries
+create racing an rmdir emptiness check on a hashed directory
+silent fragment corruption (payload and identity)
+```
+
+**Independent checking.** Record complete operation histories and run an
+independent linearizability / transaction-history checker, rather than
+relying exclusively on handwritten invariants. (This is the FoundationDB
+methodology: deterministic whole-cluster single-process simulation, seeded
+replay, network/disk/machine fault injection, and the goal of finding
+correctness issues in simulation rather than production.)
+
+**Scope — it models the *logical* data protocol, not the wire.** The
+simulator does not model RDMA mechanics (verbs, packetization, bandwidth, NIC
+behavior) — that is the perf harnesses' job. But it **must** model the
+logical data-commit protocol and its interaction with metadata, or it cannot
+check I11–I15 and I20. So the simulated world includes abstract data-plane
+events:
+
+```text
+PUT fragment · durable ACK · dropped ACK · target crash · fragment lost
+client crash mid-write · metadata publication · stale generation arrives
+rebuild from fragments · fragment silently corrupted
+publication with evidence from an obsolete placement/coding profile
+```
+
+A "fragment" in the simulator is an abstract durable object with an identity,
+a checksum and a home, not bytes on an RNIC. With those events the checker can
+verify that no committed read ever reconstructs from mixed generations (I13),
+that nothing is published before durability (I14), that orphans never become
+visible (I15/I20), that a corrupt fragment is never accepted as
+reconstruction input (I25), that a publication whose durability evidence does
+not match the current placement is rejected (§7.3), and that f simultaneous
+losses never lose a published chunk (I11) — under every crash/interleaving
+the generator can produce.
+
+The corruption fault is the reason I25 exists as an invariant rather than an
+implementation habit: it is only ever *tested* if the simulator can flip bits
+in a durable object, and an EC decoder without integrity checking fails that
+test by producing confidently wrong data rather than an error.
+
+## Shortening the code → signal cycle
+
+The bottleneck is not writing code — it is **how long a change takes to prove
+itself**. Today that proof is a 13-node wipe + rsync + rebuild + ssh
+orchestration, and the signal is poor: 99% of posixstress "failures" are 15s
+timeouts (saturation, not correctness), and a single run is noise that needs
+≥3 fresh-wipe repeats. The strategy is to **push each class of bug to the
+cheapest layer that can catch it** — and to fill the deterministic gap the
+simulator occupies.
+
+The layers, cheapest first:
+
+| Layer | Answers | Cost | Catches |
+|---|---|---|---|
+| **unit** (`make test`) | is this function right | ms | logic, encode/decode, pack/unpack |
+| **simulator** | is the *protocol* right under any interleaving / failure | ms | message-ordering, leader/fencing, recovery, the §4 invariants |
+| **synthetic bench** (`efs-bench --meta`) | is it fast, did it regress | seconds | throughput/latency regressions, op-storm cost |
+| **posix / posix2** | is it a correct filesystem (vs XFS) | minutes | semantic / peer-visibility gaps |
+| **13-node cluster** | does it perform on real hardware | slowest | perf ceilings, RDMA, NVMe — **not** correctness |
+
+A bug should be caught at the **lowest** layer that can see it. Today
+correctness bugs fall all the way to the top because nothing in the middle is
+deterministic. **The simulator is the next step because it is the only missing
+layer that is both fast and deterministic** — unit tests can't see a message
+race, the cluster can't reproduce one.
+
+Deliberate moves that shorten the loop:
+
+- **Correctness moves down, performance stays up.** The cluster stops being
+  the correctness oracle; posix/posix2 confirm semantics; the cluster confirms
+  speed. A correctness bug should never need a 13-node wipe to find.
+- **Deterministic over flaky.** Replace fork-and-pray races with forced
+  collisions (`threading.Barrier`) so a test either always collides or never
+  runs — no more "passes isolated, fails under load."
+- **Fail fast, not timeout.** A violated invariant aborts at the step, not
+  after a 15s `POSIX_TEST_SEC`. Saturation (a timeout) is reported separately
+  from correctness (an assertion) so the two are never conflated again.
+- **Live attach over rebuild-and-reprobe.** ptrace is open on all 15 hosts —
+  `gdb -p` on a wedged `efsd` answers in seconds what an NDJSON-probe redeploy
+  answers in tens of minutes.
+- **Bounded-context change.** Modularity
+  ([development.md](development.md)) keeps the unit of work small: a change
+  loads one module + its interface header, not the whole tree. This is what
+  makes both fast isolated tests and model-assisted editing tractable.
+- **Invariants as executable checks** (simulator assertions + `fsck`), not
+  prose — so "is this a bug" is decidable without a human reading a log.
