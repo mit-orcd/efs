@@ -1,4 +1,5 @@
 #include "efs/protocol.h"
+#include "efs/wire.h"
 #include "efs/network.h"
 #include "efs/rdma.h"
 #include <arpa/inet.h>
@@ -40,22 +41,27 @@ int efs_send_msg_parts(int fd, uint8_t type,
                        const void *part1, uint32_t part1_len,
                        const void *part2, uint32_t part2_len)
 {
-    uint32_t payload_len = part1_len + part2_len;
-    uint32_t len = htonl(1 + payload_len);
-    struct iovec iov[4];
-    int niov = 2;
-    iov[0].iov_base = &len;
-    iov[0].iov_len = sizeof(len);
-    iov[1].iov_base = &type;
-    iov[1].iov_len = 1;
-    if (part1_len > 0 && part1) {
+    uint32_t n1 = (part1_len > 0 && part1) ? part1_len : 0;
+    uint32_t n2 = (part2_len > 0 && part2) ? part2_len : 0;
+    uint8_t hdr[5];
+    struct iovec iov[3];
+    int niov = 1;
+    int rc;
+    if (n1 > UINT32_MAX - n2)
+        return EFS_ERR_PROTO;
+    rc = efs_wire_frame_header(type, n1 + n2, hdr);
+    if (rc != EFS_OK)
+        return rc;
+    iov[0].iov_base = hdr;
+    iov[0].iov_len = 5;
+    if (n1) {
         iov[niov].iov_base = (void *)part1;
-        iov[niov].iov_len = part1_len;
+        iov[niov].iov_len = n1;
         niov++;
     }
-    if (part2_len > 0 && part2) {
+    if (n2) {
         iov[niov].iov_base = (void *)part2;
-        iov[niov].iov_len = part2_len;
+        iov[niov].iov_len = n2;
         niov++;
     }
     return send_iov(fd, iov, niov);
@@ -68,13 +74,14 @@ int efs_send_msg(int fd, uint8_t type, const void *payload, uint32_t payload_len
 
 int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status)
 {
-    uint32_t len;
-    if (efs_recv_all(fd, &len, sizeof(len)) != 0)
-        return EFS_ERR_NET;
-    len = ntohl(len);
-    if (len != 2)
-        return EFS_ERR_PROTO;
+    uint32_t be;
+    uint32_t nlen;
     uint8_t buf[2];
+    if (efs_recv_all(fd, &be, sizeof(be)) != 0)
+        return EFS_ERR_NET;
+    nlen = ntohl(be);
+    if (efs_wire_frame_check_nlen(nlen) != EFS_OK || nlen != 2)
+        return EFS_ERR_PROTO;
     if (efs_recv_all(fd, buf, 2) != 0)
         return EFS_ERR_NET;
     if (type)
@@ -86,19 +93,21 @@ int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status)
 
 int efs_recv_msg(int fd, uint8_t *type, void **payload, uint32_t *payload_len)
 {
-    uint32_t len;
-    if (efs_recv_all(fd, &len, sizeof(len)) != 0)
+    uint32_t be;
+    uint32_t nlen;
+    uint8_t t;
+    uint32_t plen;
+    if (efs_recv_all(fd, &be, sizeof(be)) != 0)
         return EFS_ERR_NET;
-    len = ntohl(len);
-    if (len == 0 || len > EFS_MSG_MAX_LEN)
+    nlen = ntohl(be);
+    if (efs_wire_frame_check_nlen(nlen) != EFS_OK)
         return EFS_ERR_PROTO;
 
-    uint8_t t;
     if (efs_recv_all(fd, &t, 1) != 0)
         return EFS_ERR_NET;
     *type = t;
 
-    uint32_t plen = len - 1;
+    plen = nlen - 1;
     if (payload_len)
         *payload_len = plen;
 
@@ -136,19 +145,21 @@ int efs_recv_msg(int fd, uint8_t *type, void **payload, uint32_t *payload_len)
 int efs_recv_msg_into(int fd, uint8_t *type, uint8_t *status,
                       void *hdr, uint32_t hdr_len, void *body, uint32_t body_len)
 {
-    uint32_t len;
-    if (efs_recv_all(fd, &len, sizeof(len)) != 0)
+    uint32_t be;
+    uint32_t nlen;
+    uint8_t t;
+    uint32_t plen;
+    if (efs_recv_all(fd, &be, sizeof(be)) != 0)
         return EFS_ERR_NET;
-    len = ntohl(len);
-    if (len == 0 || len > EFS_MSG_MAX_LEN)
+    nlen = ntohl(be);
+    if (efs_wire_frame_check_nlen(nlen) != EFS_OK)
         return EFS_ERR_PROTO;
 
-    uint8_t t;
     if (efs_recv_all(fd, &t, 1) != 0)
         return EFS_ERR_NET;
     *type = t;
 
-    uint32_t plen = len - 1;
+    plen = nlen - 1;
     /* Read the status byte first. A status-only (error) reply is plen==1;
      * a full reply is plen == 1 + hdr_len + body_len. Anything else is a
      * protocol error. */
@@ -305,12 +316,18 @@ int efs_conn_send_msg_parts(struct efs_conn *c, uint8_t type,
                             const void *part1, uint32_t part1_len,
                             const void *part2, uint32_t part2_len)
 {
-    uint32_t frame_len = 5 + part1_len + part2_len;
+    uint32_t n1 = (part1_len > 0 && part1) ? part1_len : 0;
+    uint32_t n2 = (part2_len > 0 && part2) ? part2_len : 0;
+    uint32_t frame_len;
+    if (n1 > UINT32_MAX - n2)
+        return EFS_ERR_PROTO;
+    if (efs_wire_frame_size(n1 + n2, &frame_len) != EFS_OK)
+        return EFS_ERR_PROTO;
     if (conn_pick_send_chan(c, type, frame_len) == EFS_CONN_RDMA) {
         /* No silent TCP fallback on send error: the QP is broken; the pool
          * drops and reconnects the conn. */
-        if (efs_rdma_send_frame(c->rc, type, part1, part1_len,
-                                part2, part2_len) != 0)
+        if (efs_rdma_send_frame(c->rc, type, part1, n1,
+                                part2, n2) != 0)
             return EFS_ERR_NET;
         c->recv_chan = EFS_CONN_RDMA;
         return EFS_OK;
@@ -339,16 +356,16 @@ static int conn_rdma_frame(struct efs_conn *c, uint8_t *type,
         efs_rdma_recv_repost(c->rc);
         return EFS_ERR_PROTO;
     }
-    uint32_t nlen;
-    memcpy(&nlen, frame, 4);
-    nlen = ntohl(nlen);
-    if (nlen == 0 || nlen > 16 * 1024 * 1024 || flen != 4 + nlen) {
+    int rc = efs_wire_frame_decode(frame, flen, type, payload, payload_len);
+    if (rc != EFS_OK) {
+        efs_rdma_recv_repost(c->rc);
+        return rc;
+    }
+    /* RDMA pool frames cannot be GET_META-sized; keep the historic cap. */
+    if (*payload_len + 1u > 16u * 1024 * 1024) {
         efs_rdma_recv_repost(c->rc);
         return EFS_ERR_PROTO;
     }
-    *type = frame[4];
-    *payload = frame + 5;
-    *payload_len = nlen - 1;
     return EFS_OK;
 }
 

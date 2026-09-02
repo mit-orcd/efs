@@ -20,6 +20,7 @@ BLAKE3_DIR = deps/blake3
 
 COMMON_SRCS = $(COMMON_DIR)/common.c \
               $(COMMON_DIR)/protocol.c \
+              src/wire/wire.c \
               $(COMMON_DIR)/metadata.c \
               $(COMMON_DIR)/placement.c \
               $(COMMON_DIR)/erasure.c \
@@ -44,8 +45,8 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
-TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c tests/test_dir_stats.c tests/test_ino_path.c tests/test_meta_slot.c tests/test_add_storage.c tests/test_meta_cap.c tests/test_meta_v6.c tests/test_rdma_xprt.c tests/test_drop_chunks.c
-TEST_BINS = tests/test_erasure tests/test_placement tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports tests/test_dir_stats tests/test_ino_path tests/test_meta_slot tests/test_add_storage tests/test_meta_cap tests/test_meta_v6 tests/test_rdma_xprt tests/test_drop_chunks
+TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c tests/test_dir_stats.c tests/test_ino_path.c tests/test_meta_slot.c tests/test_add_storage.c tests/test_meta_cap.c tests/test_meta_v6.c tests/test_rdma_xprt.c tests/test_drop_chunks.c tests/test_wire.c
+TEST_BINS = tests/test_erasure tests/test_placement tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports tests/test_dir_stats tests/test_ino_path tests/test_meta_slot tests/test_add_storage tests/test_meta_cap tests/test_meta_v6 tests/test_rdma_xprt tests/test_drop_chunks tests/test_wire
 
 SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/handler.c \
               src/server/cluster.c src/server/meta_server.c src/server/migrate.c \
@@ -85,6 +86,7 @@ all: $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query tests
 FORCE:
 
 test: all
+	./tests/test_wire
 	./tests/test_erasure
 	./tests/test_placement
 	./tests/test_integration
@@ -113,6 +115,7 @@ test: all
 
 $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(MGMT_OBJ) $(QUERY_OBJ): \
 	include/efs/common.h include/efs/metadata.h include/efs/protocol.h \
+	include/efs/wire.h \
 	.build_id.stamp
 
 $(LIB): $(COMMON_OBJS)

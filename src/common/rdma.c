@@ -18,6 +18,7 @@
 #include "efs/rdma.h"
 #include "efs/network.h"
 #include "efs/protocol.h"
+#include "efs/wire.h"
 #include "efs/common.h"
 
 #include <infiniband/verbs.h>
@@ -1191,13 +1192,12 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
         return EFS_ERR_NET;
     }
     uint8_t *b = rc->send_bufs[idx];
-    uint32_t nl = htonl(1 + payload);
-    memcpy(b, &nl, 4);
-    b[4] = type;
-    if (l1)
-        memcpy(b + 5, p1, l1);
-    if (l2)
-        memcpy(b + 5 + l1, p2, l2);
+    uint32_t encoded = 0;
+    if (efs_wire_frame_encode(type, p1, l1, p2, l2, b, rc->max_frame,
+                              &encoded) != EFS_OK)
+        return EFS_ERR_NET;
+    if (encoded != frame)
+        return EFS_ERR_NET;
     int inline_ok = (frame <= rc->max_inline);
     if (rdma_first_log()) {
         static int nsend;

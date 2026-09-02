@@ -616,7 +616,8 @@ the HTML and `architecture-full.md` are in sync (links + invariant refs
 verified).
 **CONTRIBUTOR ENTRY POINT (Sep 1 PM):** `docs/arch/START-HERE.md` — the
 answer to "what do I work on and what governs it". §1 the current task
-(Phase M step 1 `wire/`) + the rule for picking the next; §2 a routing table
+(Phase M step 2 `data/` + transport/store interfaces; step 1 `wire/`
+landed Sep 2) + the rule for picking the next; §2 a routing table
 (changing X -> read exactly these pages / these invariants govern / this gate
 proves it); §3 what "done" means (build on a node, unit tests, the row's
 gate, a timeout is a FAIL, honest measurement); §4 never-without-asking

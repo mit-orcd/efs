@@ -122,9 +122,13 @@ transport/storage interfaces.
 
 **Steps — each behavior-preserving, each gated, in order:**
 
-1. **`wire/` — the protocol boundary.** `protocol.c/.h` become a clean module:
-   versioned encode/decode only, no logic. Unit test: pack/unpack round-trips
-   for every message type, in isolation. Small, safe, immediate.
+1. **DONE (`wire/` — the protocol boundary).** `src/wire/wire.c` +
+   `include/efs/wire.h`: versioned encode/decode only (length-prefixed frame
+   + identity memcpy of the existing C structs — that *is* the current
+   encoding; no new serializer). I/O stays in `src/common/protocol.c`.
+   Unit test: `tests/test_wire` (frame round-trips + pack/unpack of every
+   `struct efs_msg_*`). Gate: on-node `make` + `test_wire` + solo posix
+   `results/posix/20260902-050828` **196/201, 0 EFS bugs**. No wipe.
 2. **`data/` + the two interfaces.** EC encode/decode and the RDMA/TCP
    transport go behind a `transport` interface; chunk storage behind a
    `store` interface. These are the **same two interfaces** the simulator

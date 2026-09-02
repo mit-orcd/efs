@@ -6,7 +6,8 @@
 #include <stdint.h>
 
 /* Length-prefixed TCP frames: 4 bytes length (network order), 1 byte type,
- * length-1 bytes payload. */
+ * length-1 bytes payload. Encode/decode lives in efs/wire.h; this header
+ * is the type catalog plus the I/O send/recv declarations. */
 
 /* Sanity bound on one frame's payload. GET_META_REPLY carries the full EFSM
  * blob: ~315 B per file (inode + chunk entry + name), so a 1.33M-file
