@@ -6,7 +6,7 @@
 #include "efs/opid.h"
 #include "efs/txn.h"
 
-/* Deterministic simulator (architecture.md §10 steps 1–7).
+/* Deterministic simulator (architecture.md §10 steps 1–8).
  * N logical servers + M clients in one process. Seeded PRNG drives
  * message order, drops, delays, crashes, and clock steps. Metadata is
  * a Raft group (servers 0..2 vote initially; membership changes through
@@ -23,6 +23,10 @@
 #define EFS_SIM_TXN_PREPARE  1
 #define EFS_SIM_TXN_DECISION 2
 #define EFS_SIM_TXN_RESOLVE  3
+#define EFS_SIM_FENCE_BEGIN  1
+#define EFS_SIM_FENCE_LOCAL  2
+#define EFS_SIM_FENCE_ACK    3
+#define EFS_SIM_FENCE_ACTIVE 4
 
 struct efs_sim;
 
@@ -78,11 +82,21 @@ int efs_sim_txn_finish(struct efs_sim *sim, const struct efs_txid *t, int commit
 int efs_sim_put_stripe(struct efs_sim *sim, int client, efs_ino_t ino,
                        uint32_t chunk_index, const uint8_t *chunk,
                        uint32_t chunk_len, int skip_frag);
-int efs_sim_publish(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
-                    uint64_t new_size);
+int efs_sim_publish(struct efs_sim *sim, int client, efs_ino_t ino,
+                    uint32_t chunk_index, uint64_t new_size);
 int efs_sim_read_chunk(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
                        uint8_t *out, uint32_t chunk_len);
 int efs_sim_frag_present(struct efs_sim *sim, const struct efs_frag_id *id);
+
+/* I23 revocation barrier. until: BEGIN/LOCAL/ACK/ACTIVE. Fence is
+ * explicit — no timeout. Open-unlinked: one lease per (FileID, session). */
+int efs_sim_session_fence(struct efs_sim *sim, int client);
+int efs_sim_session_fence_until(struct efs_sim *sim, int client, int until);
+int efs_sim_open(struct efs_sim *sim, int client, efs_ino_t ino);
+int efs_sim_close(struct efs_sim *sim, int client, efs_ino_t ino);
+int efs_sim_reclaim(struct efs_sim *sim, efs_ino_t ino);
+int efs_sim_inode_nlink(struct efs_sim *sim, efs_ino_t ino, uint32_t *nlink,
+                        uint64_t *gen);
 
 int efs_sim_crash(struct efs_sim *sim, int server); /* RAM gone, disk kept */
 int efs_sim_restart(struct efs_sim *sim, int server);

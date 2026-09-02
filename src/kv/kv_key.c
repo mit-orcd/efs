@@ -268,6 +268,72 @@ int efs_kv_key_dseq(uint32_t shard, efs_ino_t dir, uint8_t lane, uint8_t *out,
     return EFS_OK;
 }
 
+int efs_kv_key_session(uint32_t shard, const uint8_t uuid[EFS_OPID_UUID_LEN],
+                       uint8_t *out, uint32_t *len)
+{
+    int rc;
+
+    if (!uuid)
+        return EFS_ERR_INVAL;
+    rc = start(out, len, shard, EFS_KV_KIND_SESSION, EFS_OPID_UUID_LEN,
+               EFS_KV_KEY_MAX);
+    if (rc != EFS_OK)
+        return rc;
+    memcpy(out + 3, uuid, EFS_OPID_UUID_LEN);
+    return EFS_OK;
+}
+
+int efs_kv_key_sess_local(uint32_t shard, const uint8_t uuid[EFS_OPID_UUID_LEN],
+                          uint8_t *out, uint32_t *len)
+{
+    int rc;
+
+    if (!uuid)
+        return EFS_ERR_INVAL;
+    rc = start(out, len, shard, EFS_KV_KIND_SESS_LOCAL, EFS_OPID_UUID_LEN,
+               EFS_KV_KEY_MAX);
+    if (rc != EFS_OK)
+        return rc;
+    memcpy(out + 3, uuid, EFS_OPID_UUID_LEN);
+    return EFS_OK;
+}
+
+int efs_kv_key_lease(uint32_t shard, efs_ino_t ino, uint64_t gen,
+                     const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
+                     uint8_t *out, uint32_t *len)
+{
+    int rc;
+
+    if (!uuid)
+        return EFS_ERR_INVAL;
+    rc = start(out, len, shard, EFS_KV_KIND_LEASE,
+               8 + 8 + EFS_OPID_UUID_LEN + 4, EFS_KV_KEY_MAX);
+    if (rc != EFS_OK)
+        return rc;
+    be64(out + 3, ino);
+    be64(out + 11, gen);
+    memcpy(out + 19, uuid, EFS_OPID_UUID_LEN);
+    be32(out + 19 + EFS_OPID_UUID_LEN, epoch);
+    return EFS_OK;
+}
+
+int efs_kv_key_lease_prefix(uint32_t shard, efs_ino_t ino, uint64_t gen,
+                            uint8_t *out, uint32_t *len)
+{
+    int rc = start(out, len, shard, EFS_KV_KIND_LEASE, 8 + 8, EFS_KV_KEY_MAX);
+
+    if (rc != EFS_OK)
+        return rc;
+    be64(out + 3, ino);
+    be64(out + 11, gen);
+    return EFS_OK;
+}
+
+int efs_kv_key_lease_shard_prefix(uint32_t shard, uint8_t *out, uint32_t *len)
+{
+    return start(out, len, shard, EFS_KV_KIND_LEASE, 0, EFS_KV_KEY_MAX);
+}
+
 int efs_kv_key_unwrap(const uint8_t *wrapk, uint32_t wlen, uint8_t *orig,
                       uint32_t *olen)
 {

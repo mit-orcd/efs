@@ -110,7 +110,7 @@ static void test_publish_roundtrip(void)
           "create");
     CHECK(efs_sim_put_stripe(s, 0, ino, 0, src, sizeof(src), -1) == EFS_OK,
           "put");
-    CHECK(efs_sim_publish(s, ino, 0, sizeof(src)) == EFS_OK, "publish");
+    CHECK(efs_sim_publish(s, 0, ino, 0, sizeof(src)) == EFS_OK, "publish");
     CHECK(efs_sim_read_chunk(s, ino, 0, got, sizeof(got)) == EFS_OK, "read");
     CHECK(memcmp(src, got, sizeof(src)) == 0, "bytes");
     efs_sim_free(s);
@@ -154,7 +154,7 @@ static void test_i14(void)
           "create");
     CHECK(efs_sim_put_stripe(s, 0, ino, 0, src, sizeof(src), 1) == EFS_OK,
           "put skip 1");
-    CHECK(efs_sim_publish(s, ino, 0, sizeof(src)) == EFS_ERR_IO, "I14");
+    CHECK(efs_sim_publish(s, 0, ino, 0, sizeof(src)) == EFS_ERR_IO, "I14");
     efs_sim_free(s);
 }
 
@@ -174,7 +174,7 @@ static void test_i25(void)
     id.ino = ino;
     CHECK(efs_sim_put_stripe(s, 0, ino, 0, src, sizeof(src), -1) == EFS_OK,
           "put");
-    CHECK(efs_sim_publish(s, ino, 0, sizeof(src)) == EFS_OK, "publish");
+    CHECK(efs_sim_publish(s, 0, ino, 0, sizeof(src)) == EFS_OK, "publish");
     CHECK(efs_sim_corrupt(s, 0, &id) == EFS_OK, "corrupt P");
     CHECK(efs_sim_read_chunk(s, ino, 0, got, sizeof(got)) == EFS_OK, "read");
     CHECK(memcmp(src, got, sizeof(src)) == 0, "I25 skipped corrupt");
@@ -244,6 +244,8 @@ static void test_opid_window(void)
     id.seq = 1;
     hit = efs_opid_lookup(&w, &id, &got);
     CHECK(hit == 1 && got.rc == EFS_OK, "acked stub");
+    efs_opid_window_init(&w, w.client_uuid, 2);
+    CHECK(w.client_uuid[0] == 9 && w.session_epoch == 2, "reinit alias");
 }
 
 static void test_i16(void)
@@ -492,6 +494,86 @@ static void test_mkdir_visible_at_decision(void)
     efs_sim_free(s);
 }
 
+static void test_i23_session_fence(void)
+{
+    struct efs_sim *s = mk(21);
+    efs_ino_t ino = 0, b = 0;
+    uint8_t src[32], got[32];
+    uint32_t i;
+
+    CHECK(s, "mk");
+    for (i = 0; i < sizeof(src); i++)
+        src[i] = (uint8_t)(0x40 + i);
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "a", &ino) == EFS_OK,
+          "create");
+    CHECK(efs_sim_session_fence_until(s, 0, EFS_SIM_FENCE_LOCAL) == EFS_OK,
+          "local");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "b", &b) ==
+              EFS_ERR_STALE,
+          "old epoch create");
+    CHECK(efs_sim_put_stripe(s, 0, ino, 0, src, sizeof(src), -1) == EFS_OK,
+          "PUT after fence");
+    CHECK(efs_sim_publish(s, 0, ino, 0, sizeof(src)) == EFS_ERR_STALE,
+          "publish fenced");
+    CHECK(efs_sim_session_fence_until(s, 0, EFS_SIM_FENCE_ACTIVE) == EFS_OK,
+          "active");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "c", &b) == EFS_OK &&
+              b,
+          "new epoch");
+    CHECK(efs_sim_publish(s, 0, ino, 0, sizeof(src)) == EFS_OK, "publish new");
+    memset(got, 0, sizeof(got));
+    CHECK(efs_sim_read_chunk(s, ino, 0, got, sizeof(got)) == EFS_OK, "read");
+    CHECK(memcmp(src, got, sizeof(src)) == 0, "bytes");
+    efs_sim_free(s);
+}
+
+static void test_i19_open_unlinked(void)
+{
+    struct efs_sim *s = mk(22);
+    efs_ino_t ino = 0, g = 0;
+    uint32_t nlink = 99;
+    uint64_t gen = 0;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "o", &ino) == EFS_OK,
+          "create");
+    CHECK(efs_sim_open(s, 0, ino) == EFS_OK, "open");
+    CHECK(efs_sim_unlink(s, 0, EFS_ROOT_INO, "o") == EFS_OK, "unlink");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "o", &g) == EFS_ERR_NOT_FOUND,
+          "name gone");
+    CHECK(efs_sim_inode_nlink(s, ino, &nlink, &gen) == EFS_OK && nlink == 0,
+          "orphan");
+    CHECK(efs_sim_reclaim(s, ino) == EFS_ERR_BUSY, "lease holds");
+    CHECK(efs_sim_close(s, 0, ino) == EFS_OK, "close");
+    CHECK(efs_sim_reclaim(s, ino) == EFS_OK, "reclaim");
+    CHECK(efs_sim_inode_nlink(s, ino, &nlink, &gen) == EFS_ERR_NOT_FOUND,
+          "reclaimed");
+    efs_sim_free(s);
+}
+
+static void test_i23_barrier_holds_leases(void)
+{
+    struct efs_sim *s = mk(23);
+    efs_ino_t ino = 0;
+    uint32_t nlink = 99;
+    uint64_t gen = 0;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "p", &ino) == EFS_OK,
+          "create");
+    CHECK(efs_sim_open(s, 0, ino) == EFS_OK, "open");
+    CHECK(efs_sim_unlink(s, 0, EFS_ROOT_INO, "p") == EFS_OK, "unlink");
+    CHECK(efs_sim_session_fence_until(s, 0, EFS_SIM_FENCE_ACK) == EFS_OK, "ack");
+    CHECK(efs_sim_reclaim(s, ino) == EFS_ERR_BUSY, "before ACTIVE");
+    CHECK(efs_sim_close(s, 0, ino) == EFS_ERR_STALE, "close old epoch");
+    CHECK(efs_sim_session_fence_until(s, 0, EFS_SIM_FENCE_ACTIVE) == EFS_OK,
+          "active drops");
+    CHECK(efs_sim_reclaim(s, ino) == EFS_OK, "reclaim after barrier");
+    CHECK(efs_sim_inode_nlink(s, ino, &nlink, &gen) == EFS_ERR_NOT_FOUND,
+          "gone");
+    efs_sim_free(s);
+}
+
 int main(void)
 {
     test_replay();
@@ -512,6 +594,9 @@ int main(void)
     test_mkdir_i17();
     test_mkdir_crash_after_prepare();
     test_mkdir_visible_at_decision();
+    test_i23_session_fence();
+    test_i19_open_unlinked();
+    test_i23_barrier_holds_leases();
     if (failures) {
         fprintf(stderr, "test_sim: %d failure(s)\n", failures);
         return 1;

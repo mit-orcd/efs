@@ -38,11 +38,16 @@ void efs_opid_window_init(struct efs_opid_window *w,
                           const uint8_t uuid[EFS_OPID_UUID_LEN],
                           uint32_t epoch)
 {
+    uint8_t tmp[EFS_OPID_UUID_LEN];
+
     if (!w)
         return;
-    memset(w, 0, sizeof(*w));
+    /* uuid may alias w->client_uuid (re-init / fence bump). */
+    memset(tmp, 0, sizeof(tmp));
     if (uuid)
-        memcpy(w->client_uuid, uuid, EFS_OPID_UUID_LEN);
+        memcpy(tmp, uuid, EFS_OPID_UUID_LEN);
+    memset(w, 0, sizeof(*w));
+    memcpy(w->client_uuid, tmp, EFS_OPID_UUID_LEN);
     w->session_epoch = epoch;
     w->inited = 1;
 }

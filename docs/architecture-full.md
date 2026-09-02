@@ -1203,13 +1203,15 @@ sends you to — not the whole spec.
 
 ### 1. The task right now
 
-> **Architecture migration §10, step 8:** client sessions + fencing (§7.5),
-> then the open-unlinked inode lifecycle (§7.6) on top of them.
-> [architecture.md §10](#architecture) · [protocols/sessions.md](protocols/sessions.md)
+> **Architecture migration §10, step 9:** data-generation publication / fencing
+> integration (§7.3), with the simulator checking the logical data protocol
+> ([verification.md](verification.md)).
+> [architecture.md §10](#architecture) · [protocols/data.md](protocols/data.md)
 >
-> Step 7 is in: a pure txn SM (`include/efs/txn.h`) plus a 2-shard MKDIR in
-> the simulator (I17 / I9 / I16 / L5). Production `efsd` still uses the
-> in-memory table. Do not skip ahead. If a decision is missing, stop and ask.
+> Step 8 is in: a pure session SM (`include/efs/session.h`) plus the I23
+> revocation barrier and I19 open-unlinked leases in the simulator. Production
+> `efsd` still uses the in-memory table. Do not skip ahead. If a decision is
+> missing, stop and ask.
 
 **Rule for picking the next one after that:** the order is
 [architecture.md](#architecture) §10, step by step. If a step looks like
@@ -3779,8 +3781,13 @@ decoded). Raft invariants gated in-sim: I1 (one leader per term), I2/I10
 (acknowledged create survives f=1 replica crash), I3 (higher term fences the
 old leader), I4 (partitioned leader cannot advance commitIndex). Op-IDs (I16)
 persist in the CREATE batch. Production RPCs do not carry op-IDs yet, and
-production `efsd` still uses the in-memory table. Session *fault events* in
-the generator stay hooks until that SM is driven from `efs_sim`. Cross-shard
+production `efsd` still uses the in-memory table. Sessions (I23) and
+open-unlinked leases (I19) are driven: `efs_session` is a pure SM over one
+KV, and the simulator runs the three-phase revocation barrier
+(`ACTIVE(E) → FENCING → FENCE/ACK → ACTIVE(E+1)`) plus last-link keep /
+reclaim. A fence-ACK withheld mid-barrier is a real event in `tests/test_sim`.
+Data-target PUTs are not fenced. Production `efsd` still uses the in-memory
+table. Cross-shard
 transactions (I17) are driven: `efs_txn` is a pure SM over one KV per
 participant, and the simulator runs MKDIR as a 2-shard PREPARE / DECISION /
 RESOLVE (visibility at the coordinator's durable decision; L5 abort after

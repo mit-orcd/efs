@@ -48,6 +48,8 @@ static int raft2_apply(void *app, uint64_t index, uint64_t term,
                        const uint8_t *cmd, uint32_t clen)
 {
     (void)term;
+    if (cmd && clen && cmd[0] == SIM_CMD_SESSION)
+        return sim_sess_apply(app, EFS_RAFT_GROUP_SHARD2, cmd, clen, index);
     return sim_txn_apply(app, EFS_RAFT_GROUP_SHARD2, cmd, clen, index);
 }
 
@@ -573,17 +575,30 @@ fail:
     return rc;
 }
 
-int sim_txn_mkdir_until(struct efs_sim *sim, efs_ino_t parent, const char *name,
-                        struct efs_txid *txid, efs_ino_t *out, int until)
+int sim_txn_mkdir_until(struct efs_sim *sim, int client, efs_ino_t parent,
+                        const char *name, struct efs_txid *txid, efs_ino_t *out,
+                        int until)
 {
     struct efs_txid t;
     struct efs_txn_parts p;
     efs_ino_t ino = 0;
-    uint32_t coord;
+    uint32_t coord, psh, csh;
     int rc, i;
 
     if (!sim || !name || parent == 0)
         return EFS_ERR_INVAL;
+    if (client < 0 || client >= sim->nclients)
+        client = 0;
+    psh = efs_kv_inode_shard(parent);
+    csh = efs_kv_mkdir_shard(parent, name, 0);
+    rc = sim_sess_ensure(sim, client, psh);
+    if (rc != EFS_OK)
+        return rc;
+    if (csh != psh) {
+        rc = sim_sess_ensure(sim, client, csh);
+        if (rc != EFS_OK)
+            return rc;
+    }
     rc = mkdir_build(sim, parent, name, &t, &p, &ino);
     if (rc != EFS_OK)
         return rc;
@@ -642,8 +657,7 @@ int efs_sim_mkdir(struct efs_sim *sim, int client, efs_ino_t parent,
 {
     int rc;
 
-    (void)client;
-    rc = sim_txn_mkdir_until(sim, parent, name, NULL, out, TXN_RESOLVE);
+    rc = sim_txn_mkdir_until(sim, client, parent, name, NULL, out, TXN_RESOLVE);
     if (out && rc != EFS_OK)
         *out = 0;
     return rc;
@@ -652,7 +666,7 @@ int efs_sim_mkdir(struct efs_sim *sim, int client, efs_ino_t parent,
 int efs_sim_mkdir_until(struct efs_sim *sim, efs_ino_t parent, const char *name,
                         struct efs_txid *txid, efs_ino_t *out, int until)
 {
-    return sim_txn_mkdir_until(sim, parent, name, txid, out, until);
+    return sim_txn_mkdir_until(sim, 0, parent, name, txid, out, until);
 }
 
 int efs_sim_txn_finish(struct efs_sim *sim, const struct efs_txid *t, int commit)

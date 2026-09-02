@@ -24,6 +24,9 @@
 #define EFS_KV_KIND_REDUCE   10 /* pending commutative reduction + txid */
 #define EFS_KV_KIND_DECISION 11 /* coordinator decision record (txid) */
 #define EFS_KV_KIND_DSEQ     12 /* per-(dir, dentry-shard) emptiness witness */
+#define EFS_KV_KIND_SESSION  13 /* session record on hash(uuid) shard */
+#define EFS_KV_KIND_SESS_LOCAL 14 /* per-shard established epoch + fence */
+#define EFS_KV_KIND_LEASE    15 /* open lease (FileID, session) on inode shard */
 
 static inline uint32_t efs_kv_inode_shard(efs_ino_t ino)
 {
@@ -62,6 +65,16 @@ int efs_kv_key_decision(uint32_t shard, const uint8_t txid[16], uint8_t *out,
                         uint32_t *len);
 int efs_kv_key_dseq(uint32_t shard, efs_ino_t dir, uint8_t lane, uint8_t *out,
                     uint32_t *len);
+int efs_kv_key_session(uint32_t shard, const uint8_t uuid[EFS_OPID_UUID_LEN],
+                       uint8_t *out, uint32_t *len);
+int efs_kv_key_sess_local(uint32_t shard, const uint8_t uuid[EFS_OPID_UUID_LEN],
+                          uint8_t *out, uint32_t *len);
+int efs_kv_key_lease(uint32_t shard, efs_ino_t ino, uint64_t gen,
+                     const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
+                     uint8_t *out, uint32_t *len);
+int efs_kv_key_lease_prefix(uint32_t shard, efs_ino_t ino, uint64_t gen,
+                            uint8_t *out, uint32_t *len);
+int efs_kv_key_lease_shard_prefix(uint32_t shard, uint8_t *out, uint32_t *len);
 int efs_kv_key_unwrap(const uint8_t *wrap, uint32_t wlen, uint8_t *orig,
                       uint32_t *olen);
 

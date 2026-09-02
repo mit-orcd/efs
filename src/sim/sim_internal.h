@@ -8,10 +8,12 @@
 #include "efs/transport.h"
 #include "efs/opid.h"
 #include "efs/txn.h"
+#include "efs/session.h"
 
 /* Shared sim layout. Not a public header. */
 
 #define SIM_MAX_EV 128
+#define SIM_CMD_SESSION 9
 
 enum {
     EV_CREATE = 1,
@@ -102,12 +104,14 @@ int sim_raft_boot(struct efs_sim *sim);
 void sim_raft_free_all(struct efs_sim *sim);
 void sim_raft_halt(struct efs_sim *sim, int server);
 int sim_raft_restart(struct efs_sim *sim, int server);
-int sim_raft_create(struct efs_sim *sim, int has_op, const struct efs_opid *op,
-                    efs_ino_t parent, uint32_t mode, const char *name,
-                    efs_ino_t *out);
-int sim_raft_unlink(struct efs_sim *sim, efs_ino_t parent, const char *name);
-int sim_raft_publish(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
-                     uint64_t new_size, const struct efs_meta_chunk *ch);
+int sim_raft_create(struct efs_sim *sim, int client, int has_op,
+                    const struct efs_opid *op, efs_ino_t parent, uint32_t mode,
+                    const char *name, efs_ino_t *out);
+int sim_raft_unlink(struct efs_sim *sim, int client, efs_ino_t parent,
+                    const char *name);
+int sim_raft_publish(struct efs_sim *sim, int client, efs_ino_t ino,
+                     uint32_t chunk_index, uint64_t new_size,
+                     const struct efs_meta_chunk *ch);
 int sim_raft_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,
                     struct efs_meta_dentry *out);
 int sim_raft_get_chunk(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
@@ -125,13 +129,20 @@ int sim_ctrl_on_tick(struct efs_sim *sim, int server);
 
 int sim_txn_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
                   uint32_t clen, uint64_t index);
+int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
+                   uint32_t clen, uint64_t index);
+int sim_sess_boot(struct efs_sim *sim);
+int sim_sess_ensure_id(struct efs_sim *sim, const uint8_t *uuid, uint32_t epoch,
+                       uint32_t shard);
+int sim_sess_ensure(struct efs_sim *sim, int client, uint32_t shard);
 int sim_txn_boot(struct efs_sim *sim);
 void sim_txn_halt(struct efs_sim *sim, int server);
 int sim_txn_restart(struct efs_sim *sim, int server);
 void sim_txn_free_all(struct efs_sim *sim);
 int sim_txn_tick(struct efs_sim *sim, int server);
-int sim_txn_mkdir_until(struct efs_sim *sim, efs_ino_t parent, const char *name,
-                        struct efs_txid *txid, efs_ino_t *out, int until);
+int sim_txn_mkdir_until(struct efs_sim *sim, int client, efs_ino_t parent,
+                        const char *name, struct efs_txid *txid, efs_ino_t *out,
+                        int until);
 int sim_txn_finish(struct efs_sim *sim, const struct efs_txid *t, int commit);
 int sim_txn_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,
                    struct efs_meta_dentry *out);

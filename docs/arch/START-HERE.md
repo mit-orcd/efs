@@ -13,13 +13,15 @@ sends you to — not the whole spec.
 
 ## 1. The task right now
 
-> **Architecture migration §10, step 8:** client sessions + fencing (§7.5),
-> then the open-unlinked inode lifecycle (§7.6) on top of them.
-> [architecture.md §10](../architecture.md) · [protocols/sessions.md](protocols/sessions.md)
+> **Architecture migration §10, step 9:** data-generation publication / fencing
+> integration (§7.3), with the simulator checking the logical data protocol
+> ([verification.md](verification.md)).
+> [architecture.md §10](../architecture.md) · [protocols/data.md](protocols/data.md)
 >
-> Step 7 is in: a pure txn SM (`include/efs/txn.h`) plus a 2-shard MKDIR in
-> the simulator (I17 / I9 / I16 / L5). Production `efsd` still uses the
-> in-memory table. Do not skip ahead. If a decision is missing, stop and ask.
+> Step 8 is in: a pure session SM (`include/efs/session.h`) plus the I23
+> revocation barrier and I19 open-unlinked leases in the simulator. Production
+> `efsd` still uses the in-memory table. Do not skip ahead. If a decision is
+> missing, stop and ask.
 
 **Rule for picking the next one after that:** the order is
 [architecture.md](../architecture.md) §10, step by step. If a step looks like

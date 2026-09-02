@@ -1289,7 +1289,7 @@ distance between spec and code.</p>
   <tr><td>5</td><td>Simulator proves the single-shard invariants</td><td><span class="chip cB">DONE</span> I1–I4 / I10 / ReadIndex in <code>test_sim</code></td></tr>
   <tr><td>6</td><td>Safe reconfiguration + control-plane desired placement</td><td><span class="chip cB">DONE</span> joint consensus + learners · desired ≠ actual · I18/L8 in-sim</td></tr>
   <tr><td>7</td><td>Cross-shard transaction protocol, incl. concurrency control</td><td><span class="chip cB">DONE</span> <code>efs_txn</code> · 2-shard MKDIR in-sim · I17</td></tr>
-  <tr><td>8</td><td>Client sessions + fencing, then the open-unlinked inode lifecycle on top</td><td><span class="chip cP">PARTIAL</span> keep_last + HOLD; no sessions, no orphan state/reclaim</td></tr>
+  <tr><td>8</td><td>Client sessions + fencing, then the open-unlinked inode lifecycle on top</td><td><span class="chip cB">DONE</span> in-sim <code>efs_session</code> · I23 barrier · I19 leases; not in efsd</td></tr>
   <tr><td>9</td><td>Data-generation publication / fencing, sim-checked</td><td><span class="chip cM">MISSING</span> no chunk generations on the wire today</td></tr>
   <tr><td>10</td><td>Directory layout-epoch spread + distributed locking</td><td><span class="chip cM">MISSING</span> threshold flag only; locks per-client today</td></tr>
   <tr><td>11</td><td>Delete the snapshot / root-2PC machinery</td><td><span class="chip cD">DELETE</span> it is today's flush path</td></tr>
@@ -1321,7 +1321,7 @@ Nothing in steps 2–11 is built as new monolith code.</p>
   <rect class="box good" x="680" y="100" width="220" height="44" rx="8"/><text class="boxT" x="790" y="118" text-anchor="middle">7 · cross-shard txns</text><text class="boxS" x="790" y="134" text-anchor="middle">PREPARE · DECISION · RESOLVE</text>
   </g>
   <path class="arrow" d="M120,84 V100"/><path class="arrowG" d="M120,144 V156"/>
-  <text class="lbl" x="240" y="188">… 8 open-unlinked lifecycle · 9 data-gen publication/fencing · 10 dir-spread + locking</text>
+  <text class="lbl" x="240" y="188">8 sessions+fencing+open-unlinked in-sim · 9 data-gen publication/fencing · 10 dir-spread + locking</text>
   <text class="lbl" x="240" y="204">11 delete snapshot/2PC · 12 FUSE cache opts last</text>
 </svg>
 </div>

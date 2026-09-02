@@ -174,8 +174,9 @@ static int apply_create(struct efs_sim *sim, struct sim_ev *e)
     efs_ino_t ino = 0;
     int rc;
 
-    rc = sim_raft_create(sim, e->has_op, e->has_op ? &e->op : NULL, e->parent,
-                         e->mode, e->name, &ino);
+    rc = sim_raft_create(sim, (int)e->client, e->has_op,
+                         e->has_op ? &e->op : NULL, e->parent, e->mode, e->name,
+                         &ino);
     if (rc != EFS_OK)
         return rc;
     e->ino = ino;
@@ -200,7 +201,7 @@ static int apply_unlink(struct efs_sim *sim, struct sim_ev *e)
 {
     int rc;
 
-    rc = sim_raft_unlink(sim, e->parent, e->name);
+    rc = sim_raft_unlink(sim, (int)e->client, e->parent, e->name);
     if (rc != EFS_OK)
         return rc;
     hist(sim, EV_UNLINK, e->parent, 0);
@@ -266,7 +267,8 @@ static int apply_publish(struct efs_sim *sim, struct sim_ev *e)
         ch.nodes[i] = ranks[i];
         memcpy(ch.checksums[i], sums[i], EFS_HASH_SIZE);
     }
-    rc = sim_raft_publish(sim, e->ino, e->chunk_index, e->new_size, &ch);
+    rc = sim_raft_publish(sim, (int)e->client, e->ino, e->chunk_index,
+                          e->new_size, &ch);
     if (rc != EFS_OK)
         return rc;
     hist(sim, EV_PUBLISH, e->ino, e->chunk_index);
@@ -401,6 +403,10 @@ struct efs_sim *efs_sim_new(const struct efs_sim_cfg *cfg)
         memset(uuid, 0, sizeof(uuid));
         uuid[15] = (uint8_t)(c + 1);
         efs_opid_window_init(&sim->cli[c].win, uuid, 1);
+    }
+    if (sim_sess_boot(sim) != EFS_OK) {
+        efs_sim_free(sim);
+        return NULL;
     }
     return sim;
 }
@@ -633,16 +639,17 @@ int efs_sim_put_stripe(struct efs_sim *sim, int client, efs_ino_t ino,
     return sim->last_rc;
 }
 
-int efs_sim_publish(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
-                    uint64_t new_size)
+int efs_sim_publish(struct efs_sim *sim, int client, efs_ino_t ino,
+                    uint32_t chunk_index, uint64_t new_size)
 {
     struct sim_ev e;
     int rc;
 
-    if (!sim)
+    if (!sim || client < 0 || client >= sim->nclients)
         return EFS_ERR_INVAL;
     memset(&e, 0, sizeof(e));
     e.kind = EV_PUBLISH;
+    e.client = (uint8_t)client;
     e.ino = ino;
     e.chunk_index = chunk_index;
     e.new_size = new_size;

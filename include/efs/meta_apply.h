@@ -51,6 +51,8 @@ int efs_meta_apply_create_file_op(struct efs_kv *kv, const struct efs_opid *op,
                                   efs_ino_t parent, uint32_t mode, const char *name,
                                   efs_ino_t *out);
 int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name);
+/* Last-link reclaim: nlink==0 AND no open leases (I19, L6). Else BUSY. */
+int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino);
 int efs_meta_apply_publish(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_index,
                            uint64_t new_size, const struct efs_meta_chunk *ch);
 int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_index,

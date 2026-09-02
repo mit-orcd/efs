@@ -1,5 +1,6 @@
 #include "efs/meta_apply.h"
 #include "efs/kv_key.h"
+#include "efs/session.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -426,11 +427,11 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name)
 {
     struct efs_meta_dentry dent;
     struct efs_meta_row row;
-    uint8_t k_dent[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
+    uint8_t k_dent[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX], v_ino[INO_VAL];
     uint32_t kd = 0, ki = 0, shard;
     struct efs_kv_item it[2];
     uint32_t n = 0;
-    int rc;
+    int rc, held = 0;
 
     rc = efs_meta_apply_resolve(kv, parent, name, &dent, &row);
     if (rc != EFS_OK)
@@ -447,15 +448,55 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name)
     it[n].klen = kd;
     n++;
     if (row.nlink <= 1) {
+        held = efs_lease_any(kv, row.ino, row.generation);
+        if (held < 0)
+            return held;
         rc = efs_kv_key_inode(efs_kv_inode_shard(row.ino), row.ino, k_ino, &ki);
         if (rc != EFS_OK)
             return rc;
-        it[n].op = EFS_KV_DEL;
-        it[n].key = k_ino;
-        it[n].klen = ki;
-        n++;
+        if (held) {
+            /* I19: last link with a live open lease keeps the inode at nlink=0. */
+            row.nlink = 0;
+            pack_inode(v_ino, &row);
+            it[n].op = EFS_KV_PUT;
+            it[n].key = k_ino;
+            it[n].klen = ki;
+            it[n].val = v_ino;
+            it[n].vlen = INO_VAL;
+            n++;
+        } else {
+            it[n].op = EFS_KV_DEL;
+            it[n].key = k_ino;
+            it[n].klen = ki;
+            n++;
+        }
     }
     return efs_kv_batch(kv, it, n);
+}
+
+int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino)
+{
+    struct efs_meta_row row;
+    uint8_t k_ino[EFS_KV_KEY_MAX];
+    uint32_t ki = 0;
+    int rc, held;
+
+    if (!kv || ino == 0)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    if (row.nlink != 0)
+        return EFS_ERR_BUSY;
+    held = efs_lease_any(kv, ino, row.generation);
+    if (held < 0)
+        return held;
+    if (held)
+        return EFS_ERR_BUSY;
+    rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, k_ino, &ki);
+    if (rc != EFS_OK)
+        return rc;
+    return efs_kv_del(kv, k_ino, ki);
 }
 
 static void pack_chunk(uint8_t *p, const struct efs_meta_chunk *ch)
