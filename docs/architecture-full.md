@@ -1203,12 +1203,14 @@ sends you to — not the whole spec.
 
 ### 1. The task right now
 
-> **Phase M — carve the monolith**, step 2: `data/` + the two interfaces.
+> **Phase M — carve the monolith**, step 3: `meta/` — the pure state machine.
 > [roadmap Phase M](../scaling-roadmap.md#phase-m--carve-the-monolith-first-the-dev-cycle-lever)
 
-Step 1 (`wire/`) is done: `src/wire/` is a pure frame + identity-pack module,
-gated by `tests/test_wire` and solo posix `results/posix/20260902-050828`
-(196/201, 0 EFS bugs).
+Step 2 (`data/` + store/transport interfaces) is done: `src/data/` holds EC,
+the in-memory store, the loopback transport, and the `efs_conn` adapter.
+On-node gate: `test_data` / `test_erasure` / `test_meta_v6` / `test_integration`
+OK (pre-existing `test_quota` / `test_migrate` flakes unchanged). Production
+NVMe I/O is still `server_*_fragment*`; this step only adds the seam.
 
 Nothing in the architecture migration ([architecture.md](#architecture)
 §10) may start before Phase M finishes, because migration step 1 needs a
@@ -3659,7 +3661,9 @@ meta/       the POSIX op handlers — pure-ish functions over the kv/ and
             raft/ interfaces; no socket or FUSE calls inline.
 wire/       the protocol — versioned encode/decode, nothing else.
 data/       the data plane — EC encode/decode, RDMA PUT/GET, generation
-            fencing.
+            fencing. Store + transport vtables live here (`efs/store.h`,
+            `efs/transport.h`); production NVMe I/O is still `server/store.c`
+            until handler dispatch is carved (Phase M step 4).
 client/     the FUSE adapter — thin; translates FUSE ops to meta/data calls.
 ```
 

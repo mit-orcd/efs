@@ -60,7 +60,9 @@ meta/       the POSIX op handlers — pure-ish functions over the kv/ and
             raft/ interfaces; no socket or FUSE calls inline.
 wire/       the protocol — versioned encode/decode, nothing else.
 data/       the data plane — EC encode/decode, RDMA PUT/GET, generation
-            fencing.
+            fencing. Store + transport vtables live here (`efs/store.h`,
+            `efs/transport.h`); production NVMe I/O is still `server/store.c`
+            until handler dispatch is carved (Phase M step 4).
 client/     the FUSE adapter — thin; translates FUSE ops to meta/data calls.
 ```
 

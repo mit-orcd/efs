@@ -129,11 +129,18 @@ transport/storage interfaces.
    Unit test: `tests/test_wire` (frame round-trips + pack/unpack of every
    `struct efs_msg_*`). Gate: on-node `make` + `test_wire` + solo posix
    `results/posix/20260902-050828` **196/201, 0 EFS bugs**. No wipe.
-2. **`data/` + the two interfaces.** EC encode/decode and the RDMA/TCP
-   transport go behind a `transport` interface; chunk storage behind a
-   `store` interface. These are the **same two interfaces** the simulator
-   implements with a message queue + fault-injecting in-memory disk — so this
-   step is literally migration step 1's prerequisite.
+2. **DONE (`data/` + the two interfaces).** `include/efs/store.h` +
+   `include/efs/transport.h` are the vtables the simulator will implement
+   (mem disk + message queue). `src/data/`: EC moved from `src/common/erasure.c`;
+   `store_mem.c` (in-memory fragment store); `transport_loop.c` (paired queues);
+   `transport_conn.c` (adapter over existing `efs_conn_send/recv`, symbols
+   stay in `protocol.c`). NVMe `server_*_fragment*` is unchanged — handler
+   dispatch through the store vtable is step 4. Unit test: `tests/test_data`
+   (mem CRUD, loop send/recv, EC through the store, socketpair conn adapter).
+   Gate: on-node `test_data` + `test_erasure` + `test_meta_v6` +
+   `test_integration` / `test_directio` / `test_rejoin` / `test_drop_chunks`
+   OK. Pre-existing flakes: `test_quota`, `test_migrate`. No wipe. Production
+   fragment I/O is still `server_*_fragment*` (handler dispatch is step 4).
 3. **`meta/` — the pure state machine.** Split `metadata.c`: table ops
    (create/unlink/setattr/rename/link over an abstracted store) into `meta/`,
    pure (no sockets, no FUSE, no global locks it does not own); persistence
