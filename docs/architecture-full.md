@@ -548,6 +548,7 @@ Derived from the placement rules (§5) and the CREATE co-location rule
 | READ spanning several chunks | chunk maps on the covering lanes | lanes covering the range | validated collect (§7.3) — I24 has a read side |
 | READDIR | dentries | 1 (normal) / used dir lanes (spread, ≤64) | range scan / scatter-merge |
 | CHMOD / CHOWN | inode row (ctime, **not** mtime) | 1 | single Raft entry |
+| LOCK (`fcntl` / `flock` / `F_GETLK`) | lock records | 1 (inode shard) | single Raft entry per grant/release; blocking waits held at the authority (§7.6) |
 
 (The UNLINK-last-link row is conditional because of a hardlink corner case:
 after `create /a/foo; link /a/foo /b/foo; unlink /a/foo`, the surviving dentry
@@ -885,6 +886,23 @@ by the process (`client_uuid, session_epoch, process_id`), while OFD `fcntl`
 (`client_uuid, session_epoch, open_description_id`) and are therefore shared
 by duplicated and inherited descriptors. Fenced sessions' locks are
 reclaimed in both domains. Advisory locks never fence the data path.
+
+**Blocking waits are held at the authority, granted in FIFO order.** A
+blocking request (`F_SETLKW`, blocking `flock`) is a long-lived RPC the
+leader answers only on grant or failure — the grant is the reply; no
+polling, no timers, and the wait queue is leader memory, not Raft state (a
+wait has no durability value; the client can always re-ask). Leader
+failover fails the held request and the client re-issues it under the same
+op-id, which idempotency (I16) resolves against a grant the old leader may
+have committed first; a session fenced while waiting is dequeued by the
+revocation barrier and never granted. The authority implements the full
+POSIX range algebra (partial-unlock split, adjacent merge, in-place type
+conversion, `F_GETLK` as a leader read) and caps records per inode
+(`ENOLCK`). **Deadlock detection is same-inode only:** the authority holds
+the complete wait-for graph for its inode, so those cycles fail `EDEADLK`;
+cross-inode cycles are not detected — POSIX makes `EDEADLK` a *may*, Linux
+checks only classic `fcntl` even locally, and no blocked wait is ever
+stuck, because signals interrupt it and fencing tears it down.
 
 **Inode-scoped ephemeral state is keyed by `FileID`, not `ino`** — leases,
 locks and append reservations alike — so a delayed CLOSE or UNLOCK naming a
@@ -3369,6 +3387,93 @@ but every participating lock request must see the same authoritative state.
   in both domains. When a session is fenced, every lock owned under that
   epoch is reclaimed, in both domains.
 
+#### Blocking waits: the wait lives on the authority
+
+`F_SETLKW` and blocking `flock` are where "distributed" stops being a
+placement detail. The protocol:
+
+```text
+client -> lock authority (the inode's shard leader):
+          LOCKW(FileID, range, type, owner, op_id)
+    conflicting -> the request stays OPEN at the leader; the waiter enters
+                   an in-memory queue in arrival order
+    grantable   -> the lock record commits via Raft; the held RPC replies
+release/unlock -> the leader scans the queue in FIFO order and grants every
+                  waiter whose request no longer conflicts; a waiter that
+                  still conflicts stays queued
+```
+
+- **The grant is the reply.** A blocking lock request is a long-lived RPC
+  the leader answers only when the lock is granted or the wait fails. No
+  polling, no client-side retry loop, no timer. The wait queue is leader
+  memory, not Raft state: a wait has no durability value (the client can
+  always re-ask), and replicating it would put lock *contention* on the
+  WAL.
+- **Fairness rule.** Grants are made in arrival order; a still-conflicting
+  waiter does not block non-conflicting requests behind it — except that a
+  queued *exclusive* request stops later overlapping *shared* requests from
+  being granted ahead of it, so an exclusive waiter cannot be starved by a
+  shared-lock stream. POSIX requires no fairness at all; this is the
+  cheapest rule that makes starvation impossible rather than merely
+  unlikely.
+- **Failover: the client re-issues, and the op-id makes it safe.** If the
+  lock authority's leader changes while a wait is outstanding, the held
+  request fails with it; the client re-issues the *same* `(op_id)` request
+  to the new leader. Idempotency (I16) covers the case where the old leader
+  committed the grant just before failing — the re-issued request finds the
+  recorded grant and returns it instead of queueing again. FIFO order is
+  not preserved across a failover; failover is rare, and fairness is
+  policy, not correctness.
+- **A fenced waiter is dequeued and never granted.** The revocation barrier
+  already requires every touched shard to "resolve or abort that session's
+  undecided work"; a queued lock wait is exactly that. The fence drops the
+  queue entry and fails the held RPC, so a dead client's blocked syscall
+  cannot wedge behind a lock it will never release, and a session fenced
+  while waiting is never granted the lock.
+- **Interruption cancels by op-id.** A signal (`EINTR`) aborts the wait
+  locally; the client sends a cancel naming the wait's op-id. The cancel is
+  idempotent: if the grant raced the cancel, the client owns the lock and
+  simply unlocks it.
+
+#### Range algebra is POSIX's, unchanged, on one authority
+
+Because every record for one inode lives on one shard, the authority runs
+exactly the local algorithm:
+
+- a record covers `[start, end]`; `flock` is the whole-file range in its
+  own domain;
+- a partial unlock **splits** a record; adjacent same-owner, same-type
+  records **merge**;
+- a type change (`F_RDLCK`→`F_WRLCK`, `LOCK_SH`→`LOCK_EX`) converts in
+  place, or queues like any other request while a conflict remains;
+- `F_GETLK` is a leader read (no Raft entry) reporting the first
+  conflicting record — the owner mapped back to a client-local pid for
+  classic `fcntl` — or `F_UNLCK`.
+
+**Resource bound.** Splitting makes the per-inode record count adversarial
+— a process can lock and unlock alternating bytes and grow the table
+without bound. The authority caps records per inode and returns `ENOLCK`
+past the cap; that is the POSIX error for exactly this condition.
+
+#### Deadlock detection: same-inode only — and that is conformant
+
+POSIX lists `EDEADLK` under errors `F_SETLKW` **may** fail with, not shall,
+and Linux itself detects deadlock cycles only for classic `fcntl` locks
+(OFD `fcntl` and `flock` waits are never checked). efs matches that
+exactly:
+
+- **Same-inode cycles are detected.** The lock authority holds the complete
+  wait-for graph for its inode — the holder set plus its wait queue — so a
+  cycle among byte ranges of one file is caught and the incoming request
+  fails `EDEADLK`.
+- **Cross-inode cycles are not detected.** A cycle spanning two files can
+  span two shards and two clients, and no single authority ever sees the
+  whole cycle; a distributed wait-for protocol is rejected as cost and
+  complexity on a path that is rare and self-inflicted. This is conformant
+  because detection is a MAY — and no wait is ever *stuck*: every blocked
+  wait is interruptible by signal and is torn down by session fencing, so a
+  deadlocked application can always be killed out of it.
+
 
 ## Appendix 9 — Performance — multi-Raft runtime & hot-path contract
 
@@ -3656,6 +3761,14 @@ degraded generation, then the "returned" node dies before repair
 clock step backwards between two implicit timestamp updates
 out-of-order reply arrival at the dedup ack watermark
 first use of a directory lane racing another first use
+lock waiter outstanding across lock-authority leader failover
+session fenced while its lock request is queued
+grant racing an op-id cancel from an interrupted waiter
+partial unlock splitting a record, then a conflicting F_SETLKW
+two queued waiters granted in FIFO order on one release
+queued exclusive request vs. a stream of later shared requests
+same-inode fcntl deadlock cycle (must fail EDEADLK)
+per-inode lock record cap exceeded (must fail ENOLCK)
 ```
 
 **Independent checking.** Record complete operation histories and run an
@@ -3697,6 +3810,10 @@ a profile the cutover barrier has retired, and that f simultaneous
 losses never lose a published chunk (I11) — counting a degraded generation's
 unrepaired fragments as **protection debt** rather than as budget restored by
 a returning node — under every crash/interleaving the generator can produce.
+The lock events add three checker properties: no two conflicting records are
+ever simultaneously granted; a queued request is never granted to a session
+that was fenced while waiting; and every wait eventually resolves — grant,
+error, cancel, or fence — so no waiter wedges forever.
 
 The corruption fault is the reason I25 exists as an invariant rather than an
 implementation habit: it is only ever *tested* if the simulator can flip bits

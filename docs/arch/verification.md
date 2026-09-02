@@ -75,6 +75,14 @@ degraded generation, then the "returned" node dies before repair
 clock step backwards between two implicit timestamp updates
 out-of-order reply arrival at the dedup ack watermark
 first use of a directory lane racing another first use
+lock waiter outstanding across lock-authority leader failover
+session fenced while its lock request is queued
+grant racing an op-id cancel from an interrupted waiter
+partial unlock splitting a record, then a conflicting F_SETLKW
+two queued waiters granted in FIFO order on one release
+queued exclusive request vs. a stream of later shared requests
+same-inode fcntl deadlock cycle (must fail EDEADLK)
+per-inode lock record cap exceeded (must fail ENOLCK)
 ```
 
 **Independent checking.** Record complete operation histories and run an
@@ -116,6 +124,10 @@ a profile the cutover barrier has retired, and that f simultaneous
 losses never lose a published chunk (I11) — counting a degraded generation's
 unrepaired fragments as **protection debt** rather than as budget restored by
 a returning node — under every crash/interleaving the generator can produce.
+The lock events add three checker properties: no two conflicting records are
+ever simultaneously granted; a queued request is never granted to a session
+that was fenced while waiting; and every wait eventually resolves — grant,
+error, cancel, or fence — so no waiter wedges forever.
 
 The corruption fault is the reason I25 exists as an invariant rather than an
 implementation habit: it is only ever *tested* if the simulator can flip bits

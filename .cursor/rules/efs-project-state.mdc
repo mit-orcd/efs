@@ -462,6 +462,65 @@ open-unlinked+locking, 7.7 FUSE, 7.8 control plane, 7.9 idempotency) ·
 §8 hot-path contract · §9 scaling envelope · §10 implementation order.
 Historical review language ("the earlier claim was wrong…") lives in
 `arch/design-history.md`, not the spec. HTML synced to all of the above.
+**REVIEW ROUNDS 7–9 LANDED (Sep 1–2, by another agent; reviewed + verified by
+kimi-k3 Sep 2 — verdict: correct, keep).** Three more external review rounds,
+all in tree (md + HTML + regenerated `architecture-full.md`, 4155 lines);
+full narratives in `arch/design-history.md`. Do not re-litigate:
+(7) **protocol closure** — fencing became a real 3-phase revocation BARRIER
+(session record carries a 4096-bit touched-shard bitmap; ACTIVE→FENCING→FENCE-
+to-every-touched-shard→ACTIVE; registration once per (session,shard), never on
+the I/O path); every data-plane key AND every inode-scoped ephemeral record
+(leases/locks/reservations) is `FileID=(ino,inode_generation)`-scoped;
+`chunk_generation` is a globally unique CANDIDATE identity, never G+1
+(ordering from the publication CAS); content_epoch is a fence ONLY, never in
+an object key (else truncate strands the surviving prefix); lanes are a FIXED
+64 per file, `lane=ci%64`, `lane_shard=(inode_shard+lane*odd_stride)&0xFFF`
+(permutation ⇒ 64 distinct shards, lane 0 = inode shard), `active_lanes`
+64-bit bitmap bounds stat(); txn effects split exclusive-CAS vs COMMUTATIVE
+REDUCTIONS (MAX = payload, never blocks prepare; pending committed reductions
+are discoverable under the lane prefix and fold into authoritative reads);
+write-ctime moved to lanes; dir mtime/ctime spread as `dir_lane` per dentry
+shard; noatime default (strict atime not offered, documented deviation);
+dedup = bounded window (highest_contiguous_seq + bitmap + reply cache),
+reclaimed by client contiguous-ack watermark, never by time.
+(8) **composition edge cases** — I24 gained a READ side (multi-chunk read =
+validated collect: versions + re-resolve undecided txids after the fetch;
+prefetch is not a cache); truncate = bounded inode fence (row + active lanes,
+≤65) carrying per-lane RANGE DELETE (stops RMW resurrecting truncated bytes)
++ the straddling tail chunk CAS-published INSIDE the truncate txn;
+`base_size` on the inode row; O_APPEND validates against the active-lane EOF
+vector (a private counter is a correctness bug) + an EOF BARRIER on the lanes
+while reservations are unresolved; resolutions COMPLETED/ABORTED_HOLE/
+FENCED_HOLE; only `utimens` bumps `mtime_gen` (only op that moves time
+backwards), ctime unguarded, implicit times MAX-clamped (CLOCK_REALTIME can
+step back); profile cutover is a pushed+ACKed barrier BEFORE the re-stripe
+scan; lowering f advertises the weaker guarantee FIRST; FileID keying for
+ephemeral state; OFD/flock owned by open-file-description.
+(9) **protocol completion + kernel reality** — read/predicate GUARDS are the
+third txn primitive (durable, shared, held through the decision); RMDIR
+phantom fixed by per-(dir,dentry-shard) `dentry_seq` witnesses; directory
+rename puts the whole ancestry chain's `parent_version` in its read set
+(cycle prevention); publication VALIDATES durability evidence
+(coding_profile_id, placement_epoch, per-fragment ACK set w/ incarnations +
+checksums, distinct domains) — dumb targets check nothing; I25 end-to-end
+fragment checksums (identity+payload; corrupt = unavailable, never decoded);
+`u` is PROTECTION DEBT not headcount (a returning node restores capacity, not
+fragments); spread dirs use the same fixed 64-shard permutation as file lanes
+(dir stat bounded, used-shard bitmap on the dir row, `dir_mtime_gen` fence);
+Linux lock domains corrected: classic+OFD fcntl CONFLICT in one record-lock
+domain, flock separate; **second open kernel-interface item: upstream Linux
+serializes per mount** (extending direct write takes exclusive inode lock
+even with PARALLEL_DIRECT_WRITES; IOCB_APPEND forces it; O_CREAT takes the
+parent dir exclusively — PARALLEL_DIROPS covers lookup/readdir only), §9
+bounds intra-mount scaling for those three, pre-sizing avoids the first.
+**New file `docs/arch/START-HERE.md`** — task routing (current task = Phase M
+`wire/`), "I am changing X" → read/governs/gate table, done-means,
+never-without-asking. Generator updated; full.md verified current.
+**ONE GAP FOUND IN REVIEW: the doc machine-gate specified in
+`arch/development.md` (regen-diff check, link/invariant-ref validation,
+single-home normative tables) has NO implementing script yet** — only
+`docs/gen-architecture-full.py` exists and is run by hand. Build the gate
+before relying on it.
 **SEVENTH REVIEW ROUND IN (Sep 1 PM) — protocol closure. Reviewer accepted the
 structure and asked only for remaining protocol holes; 10 of 11 points merged
 as given, 1 merged CORRECTED. Do not re-litigate:** (1) **Session fencing was
@@ -726,6 +785,27 @@ once-published-now-unreachable generations (truncate range-deletes,
 re-striped old-profile copies). verification.md gained 12 more fault events
 and 4 checker properties. Round-9 rationale in `arch/design-history.md`.
 **ROUNDS 8 AND 9 ARE BOTH UNCOMMITTED** (HEAD = 492bfed, round 7).
+**BYTE-RANGE LOCKING PROTOCOL GAP CLOSED (Sep 2, kimi-k3, user-reported gap).**
+The spec had lock PLACEMENT/ownership/conflict domains (state table row,
+§7.6, sessions.md) but not the distributed PROTOCOL. Added: blocking waits
+(`F_SETLKW`/blocking flock) are long-lived RPCs held at the lock authority,
+granted FIFO from an in-memory leader queue (grant = the reply; no polling,
+no timers, queue is NOT Raft state); queued exclusive blocks later shared
+grants (no starvation); leader failover → client re-issues under the same
+op-id (I16 resolves a pre-failover grant); a session fenced mid-wait is
+dequeued by the revocation barrier and never granted; EINTR cancels by
+op-id. Full POSIX range algebra on the single authority (partial-unlock
+split, adjacent merge, in-place type conversion, F_GETLK = leader read),
+per-inode record cap → ENOLCK. Deadlock detection is SAME-INODE ONLY (the
+authority holds the whole wait-for graph for its inode); cross-inode cycles
+not detected — POSIX makes EDEADLK a MAY, Linux checks only classic fcntl
+even locally, and no wait is ever stuck (signal + fencing). Touched:
+sessions.md (3 new subsections), architecture.md (§7.6 paragraph + §6 LOCK
+matrix row), architecture.html (locking card, plain language),
+verification.md (8 lock fault events + 3 checker properties: no conflicting
+pair granted, fenced waiter never granted, every wait resolves).
+architecture-full.md regenerated (4272 lines); links + invariant refs
+verified. UNCOMMITTED with rounds 8-9.
 
 **One-file paste version (user, Sep 1 PM):** `docs/architecture-full.md` =
 index + all satellites inlined, GENERATED by `docs/gen-architecture-full.py`

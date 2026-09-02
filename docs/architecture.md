@@ -531,6 +531,7 @@ Derived from the placement rules (§5) and the CREATE co-location rule
 | READ spanning several chunks | chunk maps on the covering lanes | lanes covering the range | validated collect (§7.3) — I24 has a read side |
 | READDIR | dentries | 1 (normal) / used dir lanes (spread, ≤64) | range scan / scatter-merge |
 | CHMOD / CHOWN | inode row (ctime, **not** mtime) | 1 | single Raft entry |
+| LOCK (`fcntl` / `flock` / `F_GETLK`) | lock records | 1 (inode shard) | single Raft entry per grant/release; blocking waits held at the authority (§7.6) |
 
 (The UNLINK-last-link row is conditional because of a hardlink corner case:
 after `create /a/foo; link /a/foo /b/foo; unlink /a/foo`, the surviving dentry
@@ -868,6 +869,23 @@ by the process (`client_uuid, session_epoch, process_id`), while OFD `fcntl`
 (`client_uuid, session_epoch, open_description_id`) and are therefore shared
 by duplicated and inherited descriptors. Fenced sessions' locks are
 reclaimed in both domains. Advisory locks never fence the data path.
+
+**Blocking waits are held at the authority, granted in FIFO order.** A
+blocking request (`F_SETLKW`, blocking `flock`) is a long-lived RPC the
+leader answers only on grant or failure — the grant is the reply; no
+polling, no timers, and the wait queue is leader memory, not Raft state (a
+wait has no durability value; the client can always re-ask). Leader
+failover fails the held request and the client re-issues it under the same
+op-id, which idempotency (I16) resolves against a grant the old leader may
+have committed first; a session fenced while waiting is dequeued by the
+revocation barrier and never granted. The authority implements the full
+POSIX range algebra (partial-unlock split, adjacent merge, in-place type
+conversion, `F_GETLK` as a leader read) and caps records per inode
+(`ENOLCK`). **Deadlock detection is same-inode only:** the authority holds
+the complete wait-for graph for its inode, so those cycles fail `EDEADLK`;
+cross-inode cycles are not detected — POSIX makes `EDEADLK` a *may*, Linux
+checks only classic `fcntl` even locally, and no blocked wait is ever
+stuck, because signals interrupt it and fencing tears it down.
 
 **Inode-scoped ephemeral state is keyed by `FileID`, not `ino`** — leases,
 locks and append reservations alike — so a delayed CLOSE or UNLOCK naming a
