@@ -35,13 +35,14 @@ runs in both, so "passes in simulation" is meaningful. (This is also why
 rule.)
 
 **Harness (Sep 2).** `include/efs/sim.h` + `src/sim/sim.c` + `tests/test_sim`
-drive today's `efs_export_*` table against mem store, mem kv, and loop
-transport. Same seed replays the same history hash. Faults that gate today:
-message drop, partition, crash+restart with the same disk, PUT-then-crash
-before publish (unpublished must not be readable), publish without all k+f
-fragments, silent fragment corruption (skipped, never decoded). `include/efs/opid.h`
-is the §7.9 bounded dedup window (I16); production RPCs do not carry op-IDs
-yet. Raft, txn, and session events stay generator hooks until those SMs exist.
+drive the §5 ordered-KV apply SM (`src/meta/meta_apply.c`) against mem store
+and loop transport. Same seed replays the same history hash. Faults that
+gate today: message drop, partition, crash+restart with the same KV disk,
+PUT-then-crash before publish (unpublished must not be readable), publish
+without all k+f fragments, silent fragment corruption (skipped, never
+decoded). Op-IDs (I16) persist in the CREATE batch. Production RPCs do not
+carry op-IDs yet. Raft, txn, and session events stay generator hooks until
+those SMs exist.
 
 **Fault-injection events the generator must produce:**
 

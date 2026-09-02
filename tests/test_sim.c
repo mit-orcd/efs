@@ -1,4 +1,4 @@
-/* Deterministic simulator: current efs_export SM + mem store/kv/loop.
+/* Deterministic simulator: KV apply SM + mem store/loop.
  * Same seed must replay the same history. */
 #include "efs/sim.h"
 #include "efs/opid.h"
@@ -258,6 +258,11 @@ static void test_i16(void)
     CHECK(efs_sim_create_op(s, 0, &op, EFS_ROOT_INO, S_IFREG | 0644, "two", &b)
               == EFS_OK && b && b != a,
           "new seq");
+    CHECK(efs_sim_opid_forget(s, 0) == EFS_OK, "forget");
+    efs_sim_opid_for(s, 0, 1, &op);
+    CHECK(efs_sim_create_op(s, 0, &op, EFS_ROOT_INO, S_IFREG | 0644, "once", &c)
+              == EFS_OK && c == a,
+          "durable after forget");
     efs_sim_free(s);
 }
 

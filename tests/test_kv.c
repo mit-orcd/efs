@@ -81,9 +81,74 @@ static void test_mem_kv(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_batch_and_prefix(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    uint8_t buf[32];
+    uint32_t len;
+    struct scan_acc acc = { 0 };
+    struct efs_kv_item it[3];
+    const uint8_t *k_a = (const uint8_t *)"a";
+    const uint8_t *k_aa = (const uint8_t *)"aa";
+    const uint8_t *k_b = (const uint8_t *)"b";
+    const uint8_t *k_z = (const uint8_t *)"z";
+
+    CHECK(kv != NULL, "create");
+    memset(it, 0, sizeof(it));
+    it[0].op = EFS_KV_PUT;
+    it[0].key = k_a;
+    it[0].klen = 1;
+    it[0].val = (const uint8_t *)"1";
+    it[0].vlen = 1;
+    it[1].op = EFS_KV_PUT;
+    it[1].key = k_aa;
+    it[1].klen = 2;
+    it[1].val = (const uint8_t *)"2";
+    it[1].vlen = 1;
+    it[2].op = EFS_KV_PUT;
+    it[2].key = k_b;
+    it[2].klen = 1;
+    it[2].val = (const uint8_t *)"3";
+    it[2].vlen = 1;
+    CHECK(efs_kv_batch(kv, it, 3) == EFS_OK, "batch put");
+
+    len = 0;
+    CHECK(efs_kv_get(kv, k_a, 1, NULL, &len) == EFS_ERR_INVAL && len == 1,
+          "size probe");
+
+    CHECK(efs_kv_scan_prefix(kv, k_a, 1, acc_cb, &acc) == EFS_OK, "prefix");
+    CHECK(acc.n == 2, "prefix n");
+    CHECK(strcmp(acc.keys[0], "a") == 0 && strcmp(acc.keys[1], "aa") == 0,
+          "prefix order");
+
+    CHECK(efs_kv_mem_fail_next_batch(kv) == EFS_OK, "arm fail");
+    it[0].key = k_z;
+    it[0].val = (const uint8_t *)"9";
+    CHECK(efs_kv_batch(kv, it, 1) == EFS_ERR_IO, "fail next");
+    len = sizeof(buf);
+    CHECK(efs_kv_get(kv, k_z, 1, buf, &len) == EFS_ERR_NOT_FOUND, "atomic");
+
+    it[0].op = EFS_KV_DEL;
+    it[0].key = k_a;
+    it[0].klen = 1;
+    it[0].val = NULL;
+    it[0].vlen = 0;
+    it[1].op = EFS_KV_DEL;
+    it[1].key = k_aa;
+    it[1].klen = 2;
+    CHECK(efs_kv_batch(kv, it, 2) == EFS_OK, "batch del");
+    len = sizeof(buf);
+    CHECK(efs_kv_get(kv, k_a, 1, buf, &len) == EFS_ERR_NOT_FOUND, "a gone");
+    len = sizeof(buf);
+    CHECK(efs_kv_get(kv, k_b, 1, buf, &len) == EFS_OK, "b kept");
+
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     test_mem_kv();
+    test_batch_and_prefix();
     if (failures) {
         fprintf(stderr, "test_kv: %d failure(s)\n", failures);
         return 1;

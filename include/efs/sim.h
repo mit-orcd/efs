@@ -5,12 +5,12 @@
 #include "efs/store.h"
 #include "efs/opid.h"
 
-/* Deterministic simulator (architecture.md §10 step 1).
+/* Deterministic simulator (architecture.md §10 steps 1–3).
  * N logical servers + M clients in one process. Seeded PRNG drives
- * message order, drops, delays, crashes, and clock steps. The CURRENT
- * metadata SM (efs_export_*) runs against mem store + mem kv + loop
- * transport — not sockets or NVMe. Raft / txn / session faults are
- * generator hooks for later steps; do not invent those SMs here.
+ * message order, drops, delays, crashes, and clock steps. Metadata is
+ * the §5 ordered-KV apply SM (src/meta/meta_apply.c). Data plane is mem
+ * store + loop transport — not sockets or NVMe. Raft / txn / session
+ * faults are generator hooks for later steps.
  *
  * Logical chunk size is EFS_SIM_CHUNK (encode takes chunk_size). */
 
@@ -41,7 +41,7 @@ void efs_sim_hold(struct efs_sim *sim, int hold);
 int efs_sim_drain(struct efs_sim *sim);
 int efs_sim_check(struct efs_sim *sim);
 
-/* CURRENT table SM on the metadata primary. */
+/* Applied KV SM on the metadata primary. */
 int efs_sim_create(struct efs_sim *sim, int client, efs_ino_t parent,
                    uint32_t mode, const char *name, efs_ino_t *out);
 /* I16: same op identity does not mint a second inode. */
@@ -51,6 +51,8 @@ int efs_sim_create_op(struct efs_sim *sim, int client, const struct efs_opid *op
 void efs_sim_opid_for(struct efs_sim *sim, int client, uint64_t seq,
                       struct efs_opid *out);
 int efs_sim_opid_ack(struct efs_sim *sim, int client, uint64_t contiguous_ack);
+/* Drop the client's RAM window; durable KV is the source of truth (I16). */
+int efs_sim_opid_forget(struct efs_sim *sim, int client);
 int efs_sim_lookup(struct efs_sim *sim, int client, efs_ino_t parent,
                    const char *name, efs_ino_t *out);
 int efs_sim_unlink(struct efs_sim *sim, int client, efs_ino_t parent,

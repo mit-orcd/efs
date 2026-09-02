@@ -51,4 +51,8 @@ int efs_opid_complete(struct efs_opid_window *w, const struct efs_opid *id,
  * be released. Never driven by a timer. */
 int efs_opid_ack(struct efs_opid_window *w, uint64_t contiguous_ack);
 
+#define EFS_OPID_VAL_MAX 512
+int efs_opid_window_pack(const struct efs_opid_window *w, uint8_t *out, uint32_t *len);
+int efs_opid_window_unpack(struct efs_opid_window *w, const uint8_t *in, uint32_t len);
+
 #endif
