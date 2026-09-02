@@ -52,7 +52,8 @@ LIB = libefs.a
 TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c tests/test_dir_stats.c tests/test_ino_path.c tests/test_meta_slot.c tests/test_add_storage.c tests/test_meta_cap.c tests/test_meta_v6.c tests/test_rdma_xprt.c tests/test_drop_chunks.c tests/test_wire.c tests/test_data.c tests/test_kv.c
 TEST_BINS = tests/test_erasure tests/test_placement tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports tests/test_dir_stats tests/test_ino_path tests/test_meta_slot tests/test_add_storage tests/test_meta_cap tests/test_meta_v6 tests/test_rdma_xprt tests/test_drop_chunks tests/test_wire tests/test_data tests/test_kv
 
-SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/handler.c \
+SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/store_nvme.c \
+              src/server/handler.c \
               src/server/cluster.c src/server/meta_server.c src/server/migrate.c \
               src/server/peer_pool.c src/server/writer.c src/server/verify.c \
               src/server/bench_local.c

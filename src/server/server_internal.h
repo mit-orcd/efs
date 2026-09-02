@@ -495,6 +495,15 @@ void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index);
 
+/* NVMe adapter for efs/store.h. Bind to an already-acquired export. */
+struct efs_nvme_store {
+    struct efsd_server *s;
+    struct efs_export *ex;
+};
+struct efs_store;
+void efs_store_nvme_bind(struct efs_store *st, struct efs_nvme_store *ctx,
+                         struct efsd_server *s, struct efs_export *ex);
+
 /* Read a fragment from disk. */
 int server_read_fragment(struct efsd_server *s, struct efs_export *ex,
                          efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,

@@ -151,9 +151,14 @@ transport/storage interfaces.
    no cluster). File still ~6k lines — split by responsibility is follow-on.
    Gate: on-node `test_kv` + `test_meta_v6` OK; solo posix
    `results/posix/20260902-082735` **196/201, 0 EFS bugs**. No wipe.
-4. **`server/` — thin dispatch.** `handler.c` becomes opcode → `meta/` call →
-   reply; `meta_server.c`'s flush/rebuild/catchup becomes a driver behind the
-   `kv/` interface. No handler reaches into `meta/` internals.
+4. **DONE (`server/` — store dispatch on GET/PUT).** `src/server/store_nvme.c`
+   binds the existing `server_*_fragment*` I/O to `efs/store.h`; handler
+   GET_CHUNK / PUT_CHUNK go through `efs_store_get` / `efs_store_put` (1:1,
+   already-acquired export). Opcode switch and metadata RPCs stay in
+   `handler.c`; `meta_server.c` flush/rebuild is not yet a kv driver
+   (follow-on — do not invent a second persist path). Gate: `test_integration`
+   OK; solo posix `results/posix/20260902-114722` **196/201, 0 EFS bugs**;
+   cluster 4 up Heal idle gen=27. No wipe.
 5. **`client/` — thin adapter.** `efs_fuse.c` translates FUSE ops to
    meta/data calls only; path resolution and the dcache stay behind client
    interfaces.

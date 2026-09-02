@@ -3,6 +3,7 @@
 #include "efs/network.h"
 #include "efs/rdma.h"
 #include "efs/checksum.h"
+#include "efs/store.h"
 #include "server_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -831,10 +832,18 @@ void server_handle_conn(struct efs_conn *conn)
                     uint32_t data_len = 0;
                     uint8_t *dptr = reply + 1 + EFS_HASH_SIZE;
                     int sum_ok = 0;
-                    rc = server_read_fragment_with_sum(
-                        g_server, ex, req->ino, req->chunk_index,
-                        req->fragment_index, dptr, &data_len,
-                        reply + 1, &sum_ok);
+                    struct efs_store st;
+                    struct efs_nvme_store nctx;
+                    struct efs_frag_id fid = {
+                        .export_id = ex->id,
+                        .ino = req->ino,
+                        .chunk_index = req->chunk_index,
+                        .fragment_index = req->fragment_index,
+                    };
+                    data_len = server_frag_len(ex, req->ino);
+                    efs_store_nvme_bind(&st, &nctx, g_server, ex);
+                    rc = efs_store_get(&st, &fid, dptr, &data_len,
+                                       reply + 1, &sum_ok);
                     if (rc != 0) {
                         reply[0] = EFS_GET_CHUNK_NOT_FOUND;
                     } else {
@@ -932,9 +941,17 @@ send_reply:
                         efs_hash_zero_fragment_len(expect, zero_ck);
                         int is_zero = (memcmp(req->checksum, zero_ck,
                                               EFS_HASH_SIZE) == 0);
-                        rc = server_write_fragment_with_sum(
-                            g_server, ex, req->ino, req->chunk_index,
-                            req->fragment_index, data, expect, req->checksum);
+                        struct efs_store st;
+                        struct efs_nvme_store nctx;
+                        struct efs_frag_id fid = {
+                            .export_id = ex->id,
+                            .ino = req->ino,
+                            .chunk_index = req->chunk_index,
+                            .fragment_index = req->fragment_index,
+                        };
+                        efs_store_nvme_bind(&st, &nctx, g_server, ex);
+                        rc = efs_store_put(&st, &fid, data, expect,
+                                           req->checksum);
                         if (rc == 0) {
                             reply = EFS_PUT_CHUNK_OK;
                             if (!is_zero)

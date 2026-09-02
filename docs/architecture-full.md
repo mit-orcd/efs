@@ -1203,15 +1203,15 @@ sends you to — not the whole spec.
 
 ### 1. The task right now
 
-> **Phase M — carve the monolith**, step 4: `server/` — thin dispatch.
+> **Phase M — carve the monolith**, step 5: `client/` — thin FUSE adapter.
 > [roadmap Phase M](../scaling-roadmap.md#phase-m--carve-the-monolith-first-the-dev-cycle-lever)
 
-Step 3 (`meta/` + `kv/` seam) is done: table implementation moved to
-`src/meta/metadata.c`; `include/efs/kv.h` + `src/kv/kv_mem.c` is the persist
-interface the simulator will implement. File still oversized (~6k) — split
-by responsibility is follow-on, not a blocker for step 4. Gate: `test_kv` /
-`test_meta_v6` OK; solo posix `results/posix/20260902-082735` **196/201,
-0 EFS bugs**.
+Step 4 (`server/` thin dispatch) is done: GET/PUT_CHUNK go through the
+`efs/store.h` vtable (`src/server/store_nvme.c` binds the existing NVMe
+fragment I/O). Handler still owns opcode switch + metadata RPCs;
+meta_server flush is not yet a kv driver (follow-on). Gate: `test_integration`
+OK; solo posix `results/posix/20260902-114722` **196/201, 0 EFS bugs**;
+cluster Heal idle gen=27.
 
 Nothing in the architecture migration ([architecture.md](#architecture)
 §10) may start before Phase M finishes, because migration step 1 needs a
