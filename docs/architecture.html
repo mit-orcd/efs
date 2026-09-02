@@ -666,7 +666,17 @@ rmdir : commits on what it saw earlier → a directory deleted with a file in it
     <p style="margin:8px 0 0"><b>All of this is filed under the file's incarnation number, not its
     inode number.</b> Inode numbers get reused; a late-arriving "close" or "unlock" for the file
     that <i>used</i> to have that number must not release something belonging to the file that has
-    it now.</p></div>
+    it now.</p>
+    <p style="margin:8px 0 0"><b>A blocking lock request just waits at the file's lock authority and
+    is answered when it is granted</b> — first come, first served, no polling, no timers. If that
+    authority's leader fails over, the client re-asks under the same request id, so a grant that
+    landed just before the failover is found, not double-granted. If the <i>waiting</i> client dies
+    instead, the fencing barrier cancels its wait. Unlocking part of a range splits the record,
+    adjacent pieces merge back, and a per-file record cap turns abuse into <code>ENOLCK</code>.
+    <b>Deadlock detection covers cycles inside one file</b> — that authority sees all of those.
+    Cycles spanning several files are not detected: POSIX allows that (it says a deadlock error is
+    optional), even Linux only checks classic <code>fcntl</code>, and no wait is ever stuck — a
+    signal interrupts it and fencing tears it down.</p></div>
   <div class="card"><h4>File-data cache coherence: direct-I/O, correctness first</h4>
     Fresh metadata is defeated if B's kernel cache serves stale data after A's committed write.
     <b>Decision: bypass the kernel page cache for file data</b> (direct-I/O) — data visibility is
@@ -1108,20 +1118,20 @@ stay with the perf harnesses.</p>
 Strategy: push each bug class to the <b>cheapest layer that can catch it</b>.</p>
 
 <div class="flow">
-<svg viewBox="0 0 920 240" width="920" height="240">
-  <text class="lbl" x="20" y="24">THE TEST PYRAMID — COST PER BUG FOUND (CHEAPEST/WIDEST AT BOTTOM)</text>
-  <rect x="150" y="180" width="620" height="34" rx="4" fill="#3fb950" opacity="0.9"/>
-  <text class="boxT" x="460" y="202" text-anchor="middle" fill="#0d1117">unit · make test — ms</text>
-  <rect x="200" y="138" width="520" height="34" rx="4" fill="#58a6ff" opacity="0.9"/>
-  <text class="boxT" x="460" y="160" text-anchor="middle" fill="#0d1117">simulator — ms · millions of interleavings · THE GAP</text>
-  <rect x="250" y="96" width="420" height="34" rx="4" fill="#d29922" opacity="0.9"/>
-  <text class="boxT" x="460" y="118" text-anchor="middle" fill="#0d1117">synthetic bench · efs-bench/meta — seconds</text>
-  <rect x="300" y="54" width="320" height="34" rx="4" fill="#d29922" opacity="0.6"/>
-  <text class="boxT" x="460" y="76" text-anchor="middle" fill="#0d1117">posix / posix2 — minutes</text>
-  <rect x="350" y="12" width="220" height="34" rx="4" fill="#f85149" opacity="0.85"/>
-  <text class="boxT" x="460" y="34" text-anchor="middle" fill="#fff">13-node wipe — slowest</text>
-  <text class="legend" x="20" y="200">fast · deterministic · every commit</text>
-  <text class="legend" x="20" y="34">slow · noisy · perf only</text>
+<svg viewBox="0 0 920 282" width="920" height="282">
+  <text class="lbl" x="20" y="20">THE TEST PYRAMID — COST PER BUG FOUND (CHEAPEST/WIDEST AT BOTTOM)</text>
+  <rect x="150" y="212" width="620" height="34" rx="4" fill="#3fb950" opacity="0.9"/>
+  <text class="boxT" x="460" y="234" text-anchor="middle" fill="#0d1117">unit · make test — ms</text>
+  <rect x="200" y="170" width="520" height="34" rx="4" fill="#58a6ff" opacity="0.9"/>
+  <text class="boxT" x="460" y="192" text-anchor="middle" fill="#0d1117">simulator — ms · millions of interleavings · THE GAP</text>
+  <rect x="250" y="128" width="420" height="34" rx="4" fill="#d29922" opacity="0.9"/>
+  <text class="boxT" x="460" y="150" text-anchor="middle" fill="#0d1117">synthetic bench · efs-bench/meta — seconds</text>
+  <rect x="300" y="86" width="320" height="34" rx="4" fill="#d29922" opacity="0.6"/>
+  <text class="boxT" x="460" y="108" text-anchor="middle" fill="#0d1117">posix / posix2 — minutes</text>
+  <rect x="350" y="44" width="220" height="34" rx="4" fill="#f85149" opacity="0.85"/>
+  <text class="boxT" x="460" y="66" text-anchor="middle" fill="#fff">13-node wipe — slowest</text>
+  <text class="legend" x="20" y="66">slow · noisy · perf only</text>
+  <text class="legend" x="20" y="270">fast · deterministic · every commit</text>
 </svg>
 </div>
 
