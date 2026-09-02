@@ -13,14 +13,14 @@ sends you to — not the whole spec.
 
 ## 1. The task right now
 
-> **Architecture migration §10, step 6:** safe Raft-group reconfiguration +
-> control-plane desired placement (I18).
-> [architecture.md §10](../architecture.md) · [failure-tolerance.md](failure-tolerance.md)
+> **Architecture migration §10, step 7:** cross-shard transaction protocol,
+> including concurrency control (§7.2).
+> [architecture.md §10](../architecture.md) · [protocols/transactions.md](protocols/transactions.md)
 >
-> Step 5 is in: the simulator's metadata path is a fixed RF=3 Raft group
-> applying the §5 KV SM. `tests/test_sim` gates I1–I4, I10, and ReadIndex.
-> Production `efsd` still uses the in-memory table. Do not skip to
-> cross-shard txns. If a decision is missing, stop and ask.
+> Step 6 is in: Raft joint consensus + learners, a control-plane group for
+> desired placement, and incarnation-fenced messages. `tests/test_raft` /
+> `tests/test_sim` gate I18 and L8. Production `efsd` still uses the
+> in-memory table. Do not skip ahead. If a decision is missing, stop and ask.
 
 **Rule for picking the next one after that:** the order is
 [architecture.md](../architecture.md) §10, step by step. If a step looks like

@@ -5,11 +5,12 @@
 #include "efs/store.h"
 #include "efs/opid.h"
 
-/* Deterministic simulator (architecture.md §10 steps 1–5).
+/* Deterministic simulator (architecture.md §10 steps 1–6).
  * N logical servers + M clients in one process. Seeded PRNG drives
  * message order, drops, delays, crashes, and clock steps. Metadata is
- * a fixed RF=3 Raft group (servers 0..2) applying the §5 KV SM. Data
- * plane is mem store + loop transport — not sockets or NVMe.
+ * a Raft group (servers 0..2 vote initially; membership changes through
+ * joint consensus). A separate control-plane group owns desired placement.
+ * Data plane is mem store + loop transport — not sockets or NVMe.
  *
  * Logical chunk size is EFS_SIM_CHUNK (encode takes chunk_size). */
 
@@ -84,5 +85,12 @@ int efs_sim_meta_role(const struct efs_sim *sim, int server);
 uint64_t efs_sim_meta_term(const struct efs_sim *sim, int server);
 uint64_t efs_sim_meta_commit(const struct efs_sim *sim, int server);
 int efs_sim_meta_tick(struct efs_sim *sim, int server);
+uint32_t efs_sim_meta_voters(const struct efs_sim *sim, int server);
+int efs_sim_meta_joint(const struct efs_sim *sim, int server);
+
+/* Control plane: desired placement. Actual membership follows via joint
+ * consensus on the metadata group (I18, L8). */
+int efs_sim_ctrl_set_desired(struct efs_sim *sim, uint32_t voters);
+uint32_t efs_sim_ctrl_desired(const struct efs_sim *sim);
 
 #endif

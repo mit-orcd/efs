@@ -14,6 +14,9 @@ struct raft_mem_box {
     int32_t voted_for;
     uint64_t snap_idx;
     uint64_t snap_term;
+    uint32_t cfg_old;
+    uint32_t cfg_new;
+    int have_cfg;
     struct log_ent *log;
     uint32_t n;
     uint32_t cap;
@@ -201,6 +204,29 @@ static int mem_load_snap(void *ctx, uint64_t *last_index, uint64_t *last_term)
     return EFS_OK;
 }
 
+static int mem_save_cfg(void *ctx, uint32_t cfg_old, uint32_t cfg_new)
+{
+    struct raft_mem_box *m = box_of(ctx);
+    if (!m)
+        return EFS_ERR_INVAL;
+    m->cfg_old = cfg_old;
+    m->cfg_new = cfg_new;
+    m->have_cfg = 1;
+    return EFS_OK;
+}
+
+static int mem_load_cfg(void *ctx, uint32_t *cfg_old, uint32_t *cfg_new)
+{
+    struct raft_mem_box *m = box_of(ctx);
+    if (!m || !cfg_old || !cfg_new)
+        return EFS_ERR_INVAL;
+    if (!m->have_cfg)
+        return EFS_ERR_NOT_FOUND;
+    *cfg_old = m->cfg_old;
+    *cfg_new = m->cfg_new;
+    return EFS_OK;
+}
+
 static void mem_destroy(void *ctx)
 {
     struct raft_mem_box *m = box_of(ctx);
@@ -223,6 +249,8 @@ static const struct efs_raft_store mem_ops = {
     .last = mem_last,
     .save_snap = mem_save_snap,
     .load_snap = mem_load_snap,
+    .save_cfg = mem_save_cfg,
+    .load_cfg = mem_load_cfg,
     .destroy = mem_destroy,
 };
 

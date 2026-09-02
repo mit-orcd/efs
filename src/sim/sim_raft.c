@@ -13,6 +13,7 @@
 #define CMD_PUBLISH 3
 #define CMD_MAX     512
 #define WAIT_TICKS  80
+#define RAFT_HDR    98
 
 static void wr64(uint8_t *p, uint64_t v)
 {
@@ -265,29 +266,31 @@ static int unpack_raft_ev(const uint8_t *p, uint32_t n, struct efs_raft_msg *m,
 {
     uint32_t clen;
 
-    if (n < 1 + 4 + 4 + 8 * 7 + 4 + 4 + 4 + 8 + 4)
+    if (n < RAFT_HDR)
         return EFS_ERR_PROTO;
     memset(m, 0, sizeof(*m));
     m->type = p[0];
-    m->from = (int)rd32(p + 1);
-    m->to = (int)rd32(p + 5);
-    m->term = rd64(p + 9);
-    m->last_log_index = rd64(p + 17);
-    m->last_log_term = rd64(p + 25);
-    m->vote_granted = (int)rd32(p + 33);
-    m->prev_index = rd64(p + 37);
-    m->prev_term = rd64(p + 45);
-    m->leader_commit = rd64(p + 53);
-    m->match_index = rd64(p + 61);
-    m->success = (int)rd32(p + 69);
-    m->nentries = rd32(p + 73);
-    m->entries[0].term = rd64(p + 77);
-    clen = rd32(p + 85);
+    m->group = p[1];
+    m->boot_id = rd64(p + 2);
+    m->from = (int)rd32(p + 10);
+    m->to = (int)rd32(p + 14);
+    m->term = rd64(p + 18);
+    m->last_log_index = rd64(p + 26);
+    m->last_log_term = rd64(p + 34);
+    m->vote_granted = (int)rd32(p + 42);
+    m->prev_index = rd64(p + 46);
+    m->prev_term = rd64(p + 54);
+    m->leader_commit = rd64(p + 62);
+    m->match_index = rd64(p + 70);
+    m->success = (int)rd32(p + 78);
+    m->nentries = rd32(p + 82);
+    m->entries[0].term = rd64(p + 86);
+    clen = rd32(p + 94);
     m->entries[0].clen = clen;
     if (m->nentries && clen) {
-        if (n < 89 + clen)
+        if (n < RAFT_HDR + clen)
             return EFS_ERR_PROTO;
-        *cmd_out = (uint8_t *)p + 89;
+        *cmd_out = (uint8_t *)p + RAFT_HDR;
         m->entries[0].cmd = *cmd_out;
     } else {
         *cmd_out = NULL;
@@ -301,35 +304,37 @@ static int pack_raft_ev(const struct efs_raft_msg *msg, uint8_t **out,
 {
     uint32_t clen = (msg->nentries && msg->entries[0].clen) ?
                     msg->entries[0].clen : 0;
-    uint32_t n = 89 + clen;
+    uint32_t n = RAFT_HDR + clen;
     uint8_t *p = malloc(n);
 
     if (!p)
         return EFS_ERR_NOMEM;
     memset(p, 0, n);
     p[0] = msg->type;
-    wr32(p + 1, (uint32_t)msg->from);
-    wr32(p + 5, (uint32_t)msg->to);
-    wr64(p + 9, msg->term);
-    wr64(p + 17, msg->last_log_index);
-    wr64(p + 25, msg->last_log_term);
-    wr32(p + 33, (uint32_t)msg->vote_granted);
-    wr64(p + 37, msg->prev_index);
-    wr64(p + 45, msg->prev_term);
-    wr64(p + 53, msg->leader_commit);
-    wr64(p + 61, msg->match_index);
-    wr32(p + 69, (uint32_t)msg->success);
-    wr32(p + 73, msg->nentries);
-    wr64(p + 77, msg->entries[0].term);
-    wr32(p + 85, clen);
+    p[1] = msg->group;
+    wr64(p + 2, msg->boot_id);
+    wr32(p + 10, (uint32_t)msg->from);
+    wr32(p + 14, (uint32_t)msg->to);
+    wr64(p + 18, msg->term);
+    wr64(p + 26, msg->last_log_index);
+    wr64(p + 34, msg->last_log_term);
+    wr32(p + 42, (uint32_t)msg->vote_granted);
+    wr64(p + 46, msg->prev_index);
+    wr64(p + 54, msg->prev_term);
+    wr64(p + 62, msg->leader_commit);
+    wr64(p + 70, msg->match_index);
+    wr32(p + 78, (uint32_t)msg->success);
+    wr32(p + 82, msg->nentries);
+    wr64(p + 86, msg->entries[0].term);
+    wr32(p + 94, clen);
     if (clen)
-        memcpy(p + 89, msg->entries[0].cmd, clen);
+        memcpy(p + RAFT_HDR, msg->entries[0].cmd, clen);
     *out = p;
     *plen = n;
     return EFS_OK;
 }
 
-static int raft_send(void *net, const struct efs_raft_msg *msg)
+int sim_raft_send(void *net, const struct efs_raft_msg *msg)
 {
     struct efs_sim *sim = net;
     uint8_t *copy = NULL;
@@ -340,8 +345,8 @@ static int raft_send(void *net, const struct efs_raft_msg *msg)
 
     if (!sim || !msg)
         return EFS_ERR_INVAL;
-    if (msg->to < 0 || msg->to >= sim->nraft ||
-        msg->from < 0 || msg->from >= sim->nraft)
+    if (msg->to < 0 || msg->to >= sim->nservers ||
+        msg->from < 0 || msg->from >= sim->nservers)
         return EFS_ERR_INVAL;
     if (!sim->srv[msg->from].alive || sim->srv[msg->from].partitioned)
         return EFS_OK;
@@ -360,9 +365,9 @@ static int raft_send(void *net, const struct efs_raft_msg *msg)
         m.entries[0].cmd = copy;
     }
     if (sim->delay_max == 0 && !sim->hold) {
-        rc = EFS_OK;
-        if (sim->srv[msg->to].raft)
-            rc = efs_raft_recv(sim->srv[msg->to].raft, &m);
+        struct efs_raft *dst = (m.group == EFS_RAFT_GROUP_CTRL) ?
+                               sim->srv[msg->to].ctrl : sim->srv[msg->to].raft;
+        rc = dst ? efs_raft_recv(dst, &m) : EFS_OK;
         free(copy);
         return rc;
     }
@@ -390,11 +395,17 @@ int sim_raft_deliver(struct efs_sim *sim, struct sim_ev *e)
     rc = unpack_raft_ev(e->payload, e->plen, &m, &cmd);
     if (rc != EFS_OK)
         return rc;
-    if (m.to < 0 || m.to >= sim->nraft || !sim->srv[m.to].raft)
+    if (m.to < 0 || m.to >= sim->nservers)
         return EFS_OK;
     if (!sim->srv[m.to].alive || sim->srv[m.to].partitioned)
         return EFS_OK;
-    return efs_raft_recv(sim->srv[m.to].raft, &m);
+    {
+        struct efs_raft *dst = (m.group == EFS_RAFT_GROUP_CTRL) ?
+                               sim->srv[m.to].ctrl : sim->srv[m.to].raft;
+        if (!dst)
+            return EFS_OK;
+        return efs_raft_recv(dst, &m);
+    }
 }
 
 static int drain_raft_due(struct efs_sim *sim)
@@ -429,6 +440,9 @@ static int tick_one(struct efs_sim *sim, int i)
     rc = efs_raft_tick(sim->srv[i].raft);
     if (rc != EFS_OK)
         return rc;
+    rc = sim_ctrl_on_tick(sim, i);
+    if (rc != EFS_OK)
+        return rc;
     return drain_raft_due(sim);
 }
 
@@ -460,16 +474,6 @@ static int wait_leader(struct efs_sim *sim)
     return -1;
 }
 
-static void snap_all(struct efs_sim *sim)
-{
-    int i;
-
-    for (i = 0; i < sim->nraft; i++) {
-        if (sim->srv[i].raft)
-            efs_raft_snapshot(sim->srv[i].raft);
-    }
-}
-
 static int mutate(struct efs_sim *sim, const uint8_t *cmd, uint32_t clen)
 {
     int lid, t, rc;
@@ -496,7 +500,9 @@ static int mutate(struct efs_sim *sim, const uint8_t *cmd, uint32_t clen)
     }
     if (efs_raft_applied(sim->srv[lid].raft) < idx)
         return EFS_ERR_BUSY;
-    snap_all(sim);
+    /* Do not compact the log here. A snapshot would drop prefix the
+     * leader still needs to catch up a new learner (L4). InstallSnapshot
+     * is a later cut; until then catch-up is log replication. */
     if (sim->srv[lid].applied_idx != idx)
         return EFS_ERR_BUSY;
     sim->last_ino = sim->srv[lid].applied_ino;
@@ -540,12 +546,15 @@ static int attach(struct efs_sim *sim, int i)
 
     memset(&cfg, 0, sizeof(cfg));
     cfg.id = i;
-    cfg.n = sim->nraft;
+    cfg.n = EFS_SIM_RAFT_N;
+    cfg.voters = (1u << EFS_SIM_RAFT_N) - 1;
+    cfg.boot_id = sim->srv[i].boot_id ? sim->srv[i].boot_id : 1;
+    cfg.group = EFS_RAFT_GROUP_SHARD;
     cfg.election_ticks = (uint32_t)(4 + i * 4);
     cfg.heartbeat_ticks = 1;
     cfg.store = sim->srv[i].raft_store;
     cfg.store_ctx = sim->srv[i].raft_store;
-    cfg.send = raft_send;
+    cfg.send = sim_raft_send;
     cfg.net = sim;
     cfg.apply = raft_apply;
     cfg.app = &sim->srv[i];
@@ -558,12 +567,14 @@ int sim_raft_boot(struct efs_sim *sim)
 {
     int i, rc;
 
-    sim->nraft = EFS_SIM_RAFT_N;
-    if (sim->nservers < sim->nraft)
+    sim->nraft = sim->nservers;
+    if (sim->nservers < EFS_SIM_RAFT_N)
         return EFS_ERR_INVAL;
+    sim->desired_voters = (1u << EFS_SIM_RAFT_N) - 1;
     for (i = 0; i < sim->nraft; i++) {
         if (efs_meta_apply_init(sim->srv[i].disk) != EFS_OK)
             return EFS_ERR_IO;
+        sim->srv[i].boot_id = 1;
         sim->srv[i].raft_store = efs_raft_mem_create();
         if (!sim->srv[i].raft_store)
             return EFS_ERR_NOMEM;
@@ -571,6 +582,9 @@ int sim_raft_boot(struct efs_sim *sim)
         if (rc != EFS_OK)
             return rc;
     }
+    rc = sim_ctrl_boot(sim);
+    if (rc != EFS_OK)
+        return rc;
     (void)wait_leader(sim);
     return EFS_OK;
 }
@@ -581,17 +595,24 @@ void sim_raft_halt(struct efs_sim *sim, int server)
         return;
     efs_raft_free(sim->srv[server].raft);
     sim->srv[server].raft = NULL;
+    sim_ctrl_halt(sim, server);
 }
 
 int sim_raft_restart(struct efs_sim *sim, int server)
 {
+    int rc;
+
     if (!sim || server < 0 || server >= sim->nraft)
         return EFS_ERR_INVAL;
     if (sim->srv[server].raft)
         return EFS_OK;
     if (!sim->srv[server].raft_store)
         return EFS_ERR_INVAL;
-    return attach(sim, server);
+    sim->srv[server].boot_id++;
+    rc = attach(sim, server);
+    if (rc != EFS_OK)
+        return rc;
+    return sim_ctrl_restart(sim, server);
 }
 
 void sim_raft_free_all(struct efs_sim *sim)
@@ -606,6 +627,7 @@ void sim_raft_free_all(struct efs_sim *sim)
         efs_raft_mem_free(sim->srv[i].raft_store);
         sim->srv[i].raft_store = NULL;
     }
+    sim_ctrl_free_all(sim);
 }
 
 int sim_raft_create(struct efs_sim *sim, int has_op, const struct efs_opid *op,
@@ -748,4 +770,18 @@ int efs_sim_meta_tick(struct efs_sim *sim, int server)
     if (server < 0)
         return sim_raft_tick_reachable(sim);
     return tick_one(sim, server);
+}
+
+uint32_t efs_sim_meta_voters(const struct efs_sim *sim, int server)
+{
+    if (!sim || server < 0 || server >= sim->nraft || !sim->srv[server].raft)
+        return 0;
+    return efs_raft_voters(sim->srv[server].raft);
+}
+
+int efs_sim_meta_joint(const struct efs_sim *sim, int server)
+{
+    if (!sim || server < 0 || server >= sim->nraft || !sim->srv[server].raft)
+        return 0;
+    return efs_raft_joint(sim->srv[server].raft);
 }

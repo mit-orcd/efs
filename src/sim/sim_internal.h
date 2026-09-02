@@ -47,7 +47,10 @@ struct sim_server {
     struct efs_transport *rx[EFS_SIM_MAX_CLIENTS];
     struct efs_raft *raft;
     struct efs_raft_store *raft_store;
+    struct efs_raft *ctrl;
+    struct efs_raft_store *ctrl_store;
     struct efs_sim *sim;
+    uint64_t boot_id;
     uint64_t applied_idx;
     int applied_rc;
     efs_ino_t applied_ino;
@@ -68,6 +71,7 @@ struct efs_sim {
     int nservers;
     int nclients;
     int nraft;
+    uint32_t desired_voters;
     int hold;
     int last_rc;
     efs_ino_t last_ino;
@@ -96,5 +100,12 @@ int sim_raft_get_chunk(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
 int sim_raft_check(struct efs_sim *sim);
 int sim_raft_deliver(struct efs_sim *sim, struct sim_ev *e);
 int sim_raft_tick_reachable(struct efs_sim *sim);
+int sim_raft_send(void *net, const struct efs_raft_msg *msg);
+
+int sim_ctrl_boot(struct efs_sim *sim);
+void sim_ctrl_halt(struct efs_sim *sim, int server);
+int sim_ctrl_restart(struct efs_sim *sim, int server);
+void sim_ctrl_free_all(struct efs_sim *sim);
+int sim_ctrl_on_tick(struct efs_sim *sim, int server);
 
 #endif

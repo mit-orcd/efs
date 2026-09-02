@@ -3,14 +3,16 @@
 
 #include "efs/common.h"
 
-/* Single-shard Raft SM (architecture.md §7.1 / §10 step 4).
+/* Single-shard Raft SM (architecture.md §7.1 / §10 steps 4–6).
  * Pure: no sockets, no threads. The caller delivers messages and ticks.
  * Persistent state is behind efs_raft_store. Apply is a callback into the
- * KV SM. Membership is fixed (I18 is step 6). Clocks are never a
+ * KV SM. Membership changes through joint consensus (I18); a replacement
+ * replica is a learner until it has caught up. Clocks are never a
  * correctness input — election timeouts are tick counts the caller sets.
  *
  * I1 election uniqueness · I2 leader completeness · I3 term fencing ·
- * I4 quorum ack (a partitioned leader cannot advance commitIndex). */
+ * I4 quorum ack (a partitioned leader cannot advance commitIndex) ·
+ * I18 overlapping-quorum reconfiguration (desired placement ≠ actual). */
 
 #define EFS_RAFT_FOLLOWER  0
 #define EFS_RAFT_CANDIDATE 1
@@ -23,6 +25,13 @@
 #define EFS_RAFT_MSG_AE_REQ   3
 #define EFS_RAFT_MSG_AE_REP   4
 
+#define EFS_RAFT_GROUP_SHARD 0
+#define EFS_RAFT_GROUP_CTRL  1
+
+/* Internal log commands; never passed to the user apply callback. */
+#define EFS_RAFT_CMD_JOINT 0xC1 /* old:u32 BE, new:u32 BE */
+#define EFS_RAFT_CMD_COLD  0xC2 /* cfg:u32 BE */
+
 struct efs_raft_entry {
     uint64_t term;
     uint32_t clen;
@@ -31,9 +40,11 @@ struct efs_raft_entry {
 
 struct efs_raft_msg {
     uint8_t type;
+    uint8_t group;
     int from;
     int to;
     uint64_t term;
+    uint64_t boot_id; /* process incarnation; stale packets drop */
     uint64_t last_log_index;
     uint64_t last_log_term;
     int vote_granted;
@@ -57,6 +68,10 @@ struct efs_raft_store {
     int (*last)(void *ctx, uint64_t *index, uint64_t *term);
     int (*save_snap)(void *ctx, uint64_t last_index, uint64_t last_term);
     int (*load_snap)(void *ctx, uint64_t *last_index, uint64_t *last_term);
+    /* Optional. Snapshot drops the log prefix, so the applied config must
+     * live here. Missing load is treated as "never saved". */
+    int (*save_cfg)(void *ctx, uint32_t cfg_old, uint32_t cfg_new);
+    int (*load_cfg)(void *ctx, uint32_t *cfg_old, uint32_t *cfg_new);
     void (*destroy)(void *ctx);
 };
 
@@ -65,10 +80,13 @@ typedef int (*efs_raft_apply_fn)(void *app, uint64_t index, uint64_t term,
                                  const uint8_t *cmd, uint32_t clen);
 
 struct efs_raft_cfg {
-    int id;
-    int n; /* replica count, odd, 1..EFS_RAFT_MAX_PEERS */
+    int id; /* 0 .. EFS_RAFT_MAX_PEERS-1; may be outside voters (learner) */
+    int n;  /* bootstrap replica count; voters=0 → (1u<<n)-1 */
+    uint32_t voters; /* committed voting set; 0 = default from n */
     uint32_t election_ticks; /* > heartbeat_ticks */
     uint32_t heartbeat_ticks;
+    uint64_t boot_id; /* 0 → 1 */
+    uint8_t group;
     struct efs_raft_store *store;
     void *store_ctx;
     efs_raft_send_fn send;
@@ -96,6 +114,16 @@ uint64_t efs_raft_term(const struct efs_raft *r);
 uint64_t efs_raft_commit(const struct efs_raft *r);
 uint64_t efs_raft_applied(const struct efs_raft *r);
 int efs_raft_leader(const struct efs_raft *r); /* -1 if unknown */
+
+/* Committed voting set (C_old). During joint this is still C_old. */
+uint32_t efs_raft_voters(const struct efs_raft *r);
+/* 1 if a joint config is committed (C_new not yet COLD-committed). */
+int efs_raft_joint(const struct efs_raft *r);
+/* Leader-only. new_voters must be odd, 1..MAX bits. Ids not in C_old are
+ * added as learners; returns BUSY until each has match_index >= commit.
+ * Always goes through joint consensus — there is no skip-joint path. */
+int efs_raft_change(struct efs_raft *r, uint32_t new_voters);
+int efs_raft_learner_ready(const struct efs_raft *r, int id);
 
 /* ReadIndex: leader records commitIndex, waits for a majority heartbeat
  * in the current term, then applied >= that index. No clock leases. */

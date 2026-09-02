@@ -49,7 +49,12 @@ old leader), I4 (partitioned leader cannot advance commitIndex). Op-IDs (I16)
 persist in the CREATE batch. Production RPCs do not carry op-IDs yet, and
 production `efsd` still uses the in-memory table. Txn and session *fault
 events* in the generator stay hooks until those SMs are driven from
-`efs_sim`. Reconfiguration (I18) is step 6.
+`efs_sim`. Reconfiguration (I18) is driven: the simulator owns a control-plane
+Raft group for **desired** placement, and each metadata group moves **actual**
+membership through joint consensus (learners catch up before they vote). A
+membership-transition interrupt (drop the new majority mid-joint) is a real
+generator event in `tests/test_raft`. Production `efsd` still uses the
+in-memory table.
 
 **Fault-injection events the generator must produce:**
 

@@ -166,10 +166,11 @@ transport/storage interfaces.
    3720-line file, not a new design. No behavior change this step. Gate:
    step-4 posix `results/posix/20260902-114722` **196/201, 0 EFS bugs**.
 
-**Phase M complete.** §10 steps 1–5 are in: simulator, op-ID / I16 window,
-ordered KV applied state, single-shard Raft SM (`src/raft/`), and the
-simulator proving I1–I4 / I10 / ReadIndex on a fixed RF=3 group. Production
-`efsd` still uses the in-memory table. Next is step 6 (safe reconfiguration).
+**Phase M complete.** §10 steps 1–6 are in: simulator, op-ID / I16 window,
+ordered KV applied state, single-shard Raft SM (`src/raft/`), the simulator
+proving I1–I4 / I10 / ReadIndex, and joint-consensus reconfiguration plus a
+control-plane desired-placement group (I18, L8). Production `efsd` still uses
+the in-memory table. Next is step 7 (cross-shard transactions).
 Do not build Raft as new monolith code.
 
 **Rules while carving:** no behavior change within a step; no new features

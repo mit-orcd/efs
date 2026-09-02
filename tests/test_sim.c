@@ -377,6 +377,31 @@ static void test_readindex(void)
     efs_sim_free(s);
 }
 
+static void test_l8_desired_placement(void)
+{
+    struct efs_sim_cfg cfg = { .seed = 61, .nservers = 5, .nclients = 1 };
+    struct efs_sim *s = efs_sim_new(&cfg);
+    efs_ino_t a = 0, g = 0;
+    int lid;
+
+    CHECK(s, "mk5");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "l8", &a) == EFS_OK,
+          "create");
+    lid = efs_sim_meta_leader(s);
+    CHECK(lid >= 0, "leader");
+    CHECK(efs_sim_meta_voters(s, lid) == 0x7, "initial RF=3");
+    CHECK(efs_sim_ctrl_desired(s) == 0x7, "desired starts 0x7");
+    CHECK(efs_sim_ctrl_set_desired(s, 0x1f) == EFS_OK, "L8 set 0x1f");
+    lid = efs_sim_meta_leader(s);
+    CHECK(lid >= 0, "leader after grow");
+    CHECK(efs_sim_meta_voters(s, lid) == 0x1f, "actual caught up");
+    CHECK(!efs_sim_meta_joint(s, lid), "not joint");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "l8", &g) == EFS_OK && g == a,
+          "lookup after grow");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
 int main(void)
 {
     test_replay();
@@ -393,6 +418,7 @@ int main(void)
     test_i3_term_fence();
     test_i4_no_quorum_commit();
     test_readindex();
+    test_l8_desired_placement();
     if (failures) {
         fprintf(stderr, "test_sim: %d failure(s)\n", failures);
         return 1;

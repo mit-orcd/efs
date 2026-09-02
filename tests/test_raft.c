@@ -63,12 +63,16 @@ static int elect(struct net *n, int ticks)
 
     for (t = 0; t < ticks; t++) {
         for (i = 0; i < n->n; i++) {
+            if (!n->r[i] || n->drop[i])
+                continue;
             if (efs_raft_tick(n->r[i]) != EFS_OK)
                 return -1;
         }
     }
     leaders = 0;
     for (i = 0; i < n->n; i++) {
+        if (!n->r[i] || n->drop[i])
+            continue;
         if (efs_raft_role(n->r[i]) == EFS_RAFT_LEADER)
             leaders++;
     }
@@ -79,6 +83,8 @@ static int leader_id(struct net *n)
 {
     int i;
     for (i = 0; i < n->n; i++) {
+        if (!n->r[i] || n->drop[i])
+            continue;
         if (efs_raft_role(n->r[i]) == EFS_RAFT_LEADER)
             return i;
     }
@@ -290,12 +296,192 @@ static void test_snapshot(void)
     efs_raft_mem_free(st);
 }
 
+static void boot_n(struct net *n, struct efs_raft_store **st, struct app *app,
+                  struct efs_raft_cfg *cfg, int npeers, uint32_t voters)
+{
+    int i;
+
+    memset(n, 0, sizeof(*n));
+    n->n = npeers;
+    memset(app, 0, sizeof(struct app) * npeers);
+    memset(cfg, 0, sizeof(*cfg));
+    cfg->n = 3;
+    cfg->voters = voters;
+    cfg->send = send_now;
+    cfg->net = n;
+    cfg->apply = apply_cmd;
+    cfg->boot_id = 1;
+    for (i = 0; i < npeers; i++) {
+        st[i] = efs_raft_mem_create();
+        cfg->id = i;
+        cfg->store = st[i];
+        cfg->store_ctx = st[i];
+        cfg->election_ticks = (uint32_t)(4 + i * 4);
+        cfg->heartbeat_ticks = 1;
+        cfg->app = &app[i];
+        n->r[i] = efs_raft_new(cfg);
+        CHECK(n->r[i] != NULL, "raft new");
+    }
+}
+
+static void free_n(struct net *n, struct efs_raft_store **st, int npeers)
+{
+    int i;
+    for (i = 0; i < npeers; i++) {
+        efs_raft_free(n->r[i]);
+        n->r[i] = NULL;
+        efs_raft_mem_free(st[i]);
+        st[i] = NULL;
+    }
+}
+
+static int wait_voters(struct net *n, uint32_t want, int ticks)
+{
+    int t, lid;
+
+    for (t = 0; t < ticks; t++) {
+        lid = leader_id(n);
+        if (lid >= 0) {
+            efs_raft_change(n->r[lid], want);
+            if (efs_raft_voters(n->r[lid]) == want && !efs_raft_joint(n->r[lid]))
+                return lid;
+        }
+        if (elect(n, 1) < 0)
+            return -1;
+    }
+    return -1;
+}
+
+static void test_grow_3_to_5(void)
+{
+    struct net n;
+    struct efs_raft_store *st[5];
+    struct app app[5];
+    struct efs_raft_cfg cfg;
+    int lid;
+    uint8_t cmd = 'G';
+    uint64_t idx = 0;
+
+    boot_n(&n, st, app, &cfg, 5, 0x7);
+    CHECK(elect(&n, 20) == 1, "elect 3 of 5");
+    lid = wait_voters(&n, 0x1f, 80);
+    CHECK(lid >= 0, "grew to 5");
+    CHECK(efs_raft_voters(n.r[lid]) == 0x1f, "voters 0x1f");
+    CHECK(!efs_raft_joint(n.r[lid]), "cold");
+    CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK, "propose 5");
+    elect(&n, 8);
+    CHECK(efs_raft_commit(n.r[lid]) >= idx, "commit after grow");
+    CHECK(efs_raft_snapshot(n.r[3]) == EFS_OK, "snap joiner");
+    efs_raft_free(n.r[3]);
+    cfg.id = 3;
+    cfg.store = st[3];
+    cfg.store_ctx = st[3];
+    cfg.app = &app[3];
+    cfg.voters = 0x7;
+    cfg.n = 3;
+    n.r[3] = efs_raft_new(&cfg);
+    CHECK(n.r[3] && efs_raft_voters(n.r[3]) == 0x1f, "cfg survives snap");
+    free_n(&n, st, 5);
+}
+
+static void test_i18_joint_quorum(void)
+{
+    struct net n;
+    struct efs_raft_store *st[5];
+    struct app app[5];
+    struct efs_raft_cfg cfg;
+    int lid, i;
+    uint64_t before;
+    uint8_t cmd = 'X';
+    uint64_t idx = 0;
+
+    boot_n(&n, st, app, &cfg, 5, 0x7);
+    CHECK(elect(&n, 20) == 1, "elect");
+    lid = wait_voters(&n, 0x1f, 80);
+    CHECK(lid >= 0, "grow first");
+    n.drop[3] = 1;
+    n.drop[4] = 1;
+    if (elect(&n, 20) != 1) {
+        CHECK(0, "re-elect among 0-2");
+        free_n(&n, st, 5);
+        return;
+    }
+    lid = leader_id(&n);
+    CHECK(lid >= 0 && lid <= 2, "leader in reachable set");
+    before = efs_raft_commit(n.r[lid]);
+    CHECK(efs_raft_change(n.r[lid], 0x1c) == EFS_OK ||
+              efs_raft_change(n.r[lid], 0x1c) == EFS_ERR_BUSY,
+          "change started");
+    for (i = 0; i < 8; i++)
+        CHECK(efs_raft_tick(n.r[lid]) == EFS_OK, "leader tick");
+    CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK ||
+              efs_raft_role(n.r[lid]) != EFS_RAFT_LEADER,
+          "propose or stepped");
+    for (i = 0; i < 8; i++) {
+        if (efs_raft_role(n.r[lid]) == EFS_RAFT_LEADER)
+            efs_raft_tick(n.r[lid]);
+    }
+    if (efs_raft_role(n.r[lid]) == EFS_RAFT_LEADER)
+        CHECK(efs_raft_commit(n.r[lid]) == before, "I18 no disjoint commit");
+    n.drop[3] = 0;
+    n.drop[4] = 0;
+    lid = wait_voters(&n, 0x1c, 80);
+    CHECK(lid >= 0, "heal completes shrink");
+    if (lid >= 0)
+        CHECK(efs_raft_voters(n.r[lid]) == 0x1c, "actual {2,3,4}");
+    free_n(&n, st, 5);
+}
+
+static void test_stale_boot_id(void)
+{
+    struct net n;
+    struct efs_raft_store *st[3];
+    struct app app[3];
+    struct efs_raft_cfg cfg;
+    struct efs_raft_msg stale;
+    int lid;
+    uint64_t term;
+
+    boot_n(&n, st, app, &cfg, 3, 0x7);
+    CHECK(elect(&n, 20) == 1, "elect");
+    lid = leader_id(&n);
+    term = efs_raft_term(n.r[lid]);
+    efs_raft_free(n.r[1]);
+    cfg.id = 1;
+    cfg.store = st[1];
+    cfg.store_ctx = st[1];
+    cfg.app = &app[1];
+    cfg.boot_id = 2;
+    cfg.n = 3;
+    cfg.voters = 0x7;
+    n.r[1] = efs_raft_new(&cfg);
+    CHECK(n.r[1], "restart boot 2");
+    elect(&n, 6);
+    lid = leader_id(&n);
+    CHECK(lid >= 0, "leader after restart");
+    memset(&stale, 0, sizeof(stale));
+    stale.type = EFS_RAFT_MSG_VOTE_REQ;
+    stale.from = 1;
+    stale.to = lid;
+    stale.term = term + 9;
+    stale.boot_id = 1;
+    stale.last_log_index = 10;
+    stale.last_log_term = term + 9;
+    CHECK(efs_raft_recv(n.r[lid], &stale) == EFS_OK, "stale recv");
+    CHECK(efs_raft_role(n.r[lid]) == EFS_RAFT_LEADER, "stale incarnation dropped");
+    CHECK(efs_raft_term(n.r[lid]) < term + 9, "term not fenced by stale");
+    free_n(&n, st, 3);
+}
+
 int main(void)
 {
     test_election_i1();
     test_replicate_and_readindex();
     test_i3_i4_and_restart();
     test_snapshot();
+    test_grow_3_to_5();
+    test_i18_joint_quorum();
+    test_stale_boot_id();
     if (failures) {
         fprintf(stderr, "test_raft: %d failure(s)\n", failures);
         return 1;
