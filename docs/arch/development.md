@@ -68,6 +68,8 @@ data/       the data plane — EC encode/decode, RDMA PUT/GET, generation
             `efs/transport.h`); production NVMe I/O is still `server/store.c`
             until handler dispatch is carved (Phase M step 4).
 client/     the FUSE adapter — thin; translates FUSE ops to meta/data calls.
+            Path/RPC/data already live in `src/client/{ops,read,write,inode_rpc}.c`;
+            `efs_fuse.c` is the translation layer (still oversized — follow-on).
 ```
 
 **Rules that enforce it:**

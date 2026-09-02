@@ -13,15 +13,14 @@ sends you to — not the whole spec.
 
 ## 1. The task right now
 
-> **Phase M — carve the monolith**, step 5: `client/` — thin FUSE adapter.
-> [roadmap Phase M](../scaling-roadmap.md#phase-m--carve-the-monolith-first-the-dev-cycle-lever)
+> **Architecture migration §10, step 1:** the deterministic simulator.
+> [architecture.md §10](../architecture.md) · [verification.md](verification.md)
 
-Step 4 (`server/` thin dispatch) is done: GET/PUT_CHUNK go through the
-`efs/store.h` vtable (`src/server/store_nvme.c` binds the existing NVMe
-fragment I/O). Handler still owns opcode switch + metadata RPCs;
-meta_server flush is not yet a kv driver (follow-on). Gate: `test_integration`
-OK; solo posix `results/posix/20260902-114722` **196/201, 0 EFS bugs**;
-cluster Heal idle gen=27.
+Phase M (carve the monolith) is done: `wire/` `data/` `kv/` `meta/` `server/`
+store-dispatch, and the existing `client/` split. The simulator can now be
+born against `efs/transport.h` + `efs/store.h` + `efs/kv.h` rather than as
+new monolith code. If that step needs a design decision the spec lacks, stop
+and ask.
 
 Nothing in the architecture migration ([architecture.md](../architecture.md)
 §10) may start before Phase M finishes, because migration step 1 needs a
@@ -29,8 +28,7 @@ pure state machine behind transport/storage interfaces and today there isn't
 one. Phase M is behavior-preserving refactor gated by the *existing* suites
 — no new design and no new test infrastructure required.
 
-**Rule for picking the next one after that:** Phase M steps are ordered and
-each is gated; do them in order. When Phase M is done, the order is
+**Rule for picking the next one after that:** Phase M is done. The order is
 [architecture.md](../architecture.md) §10, step by step. If a step looks like
 it needs a design decision that is not already in the spec, that is a signal
 to stop and ask — not to invent one.

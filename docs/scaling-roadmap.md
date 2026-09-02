@@ -159,9 +159,18 @@ transport/storage interfaces.
    (follow-on — do not invent a second persist path). Gate: `test_integration`
    OK; solo posix `results/posix/20260902-114722` **196/201, 0 EFS bugs**;
    cluster 4 up Heal idle gen=27. No wipe.
-5. **`client/` — thin adapter.** `efs_fuse.c` translates FUSE ops to
-   meta/data calls only; path resolution and the dcache stay behind client
-   interfaces.
+5. **DONE (`client/` — existing adapter).** `src/client/` already splits
+   path ops (`ops.c`), data (`read.c`/`write.c`), and RPCs (`inode_rpc.c`);
+   `efs_fuse.c` is the FUSE translation layer. Remaining inlines (dcache
+   checks in getattr, rpc_readdir in readdir) are follow-on splits of the
+   3720-line file, not a new design. No behavior change this step. Gate:
+   step-4 posix `results/posix/20260902-114722` **196/201, 0 EFS bugs**.
+
+**Phase M complete.** Next is architecture.md §10 step 1 (the simulator),
+against `efs/transport.h` + `efs/store.h` + `efs/kv.h`. Do not build Raft/KV
+as new monolith code. Follow-on (not blocking the simulator): split
+`src/meta/metadata.c` (~6k) by responsibility; wire `meta_server.c` flush
+through `efs/kv.h`; thin remaining `efs_fuse.c` inlines.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every
