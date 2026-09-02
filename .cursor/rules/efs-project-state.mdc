@@ -566,6 +566,167 @@ code, weaken an invariant, widen a timeout). Linked from `architecture.md`
 line 3, `arch/development.md` and the HTML; included in the generated
 one-file version. It is navigation, not normative — it links to the single
 homes of the §4/§5/§6 tables rather than restating them.
+**EIGHTH REVIEW ROUND IN (Sep 1 PM) — composition edge cases. Reviewer's
+verdict: architecture STABLE, no redesign; 8 of 10 merged as given, 2 merged
+CORRECTED (better mechanism). Do not re-litigate:** (1) **I24 had only a
+write side.** Publishing every chunk of a call under one decision does not
+stop a slow READER: fetch A, writer's `{A,B}` commits, fetch B → old A + new
+B, a state no serialization produced, and POSIX makes read/write atomic *with
+respect to each other*. Multi-chunk reads are now a **validated collect**
+(collect chunk-map versions → parallel fetch → revalidate → bounded retry →
+read-only txn), same shape as `stat()`. Consequence: per-lane chunk-map
+prefetch windows are **prefetch, not a cache** — usable without revalidation
+only inside the read whose linearization interval covers them. (2)
+**Committed reductions could briefly vanish.** Round 7 made lane `MAX`es
+commutative payload but said they apply "at resolve time" while a txn is
+visible at its *decision* — so between a durable COMMIT and the reducer
+running, `stat()` could return a size older than a returned write. Pending
+reduction intents are now **discoverable under the lane's key prefix**;
+authoritative lane read = MAX(materialized, committed-pending);
+materialization is background compaction. Also fixed the Appendix-6 sentence
+`aborted/unknown → absent` (contradicted §7.2 + I9). (3) **Truncate had two
+holes; the second was data resurrection.** (a) Nothing distributed the new
+`content_epoch` to the lane leaders that must reject stale publications, and
+writes must never touch the inode shard → **truncate pays: a bounded fence
+over the inode row + active lanes (≤65 authorities)**. (b) "chunks beyond the
+new size become unreferenced, reclaimed lazily" left the chunk-map entries
+live, so a later sub-chunk RMW takes the pre-truncate generation as its base
+and brings back truncated bytes; `base_size` alone cannot fix it (across
+shrink→extend→shrink, survival depends on the SMALLEST size any *newer*
+truncate imposed, not the latest). **MERGED CORRECTED:** reviewer proposed
+logical range tombstones; the fix is a **per-lane RANGE DELETE** carried by
+the same fence — the KV is ordered and lane i holds chunks i,i+64,i+128…, so
+the entries beyond S are a contiguous key suffix = **64 range deletes, not 8M
+key removals**. O(1)-ish shrink survives AND nothing resurrects, with no
+per-chunk epoch bookkeeping and no unbounded truncate history. (4)
+**`O_APPEND` was correct only against other appenders.** `append_eof` was an
+independent counter on the inode shard, but an ordinary extending `pwrite`
+publishes on a LANE and never advances it → after a write to 1 GiB the next
+append reserved offset **0** and overwrote the file. Reservation now
+validates against the **active-lane EOF vector using the `stat()` read set**;
+an extending publication bumps `lane_seq` and aborts a racing reservation.
+Ordinary writers pay NOTHING; the appender absorbs the retry. (5) **Online
+f/k change could not prove its own result** (scanner races a live writer
+republishing X on the old profile). The **profile cutover now commits BEFORE
+the scan**, and round-7 publication validation enforces the current profile
+from that moment, so the old-profile set can only shrink and the scan covers
+a set that cannot grow. (6) **MERGED CORRECTED — timestamps.** Reviewer
+showed one `mtime_gen` guarding both times makes mtime move BACKWARDS (write
+stamps gen 7 → chmod bumps to 8 → the write's mtime is filtered out) and
+proposed splitting `mtime_gen`/`ctime_gen`. Better fix, adopted: a generation
+guard is only ever needed for a time that can be set **backwards**, and only
+`utimens` can do that. So **only `utimens` bumps `mtime_gen`, only lane
+mtimes are guarded, and ctime needs NO generation** — every other time source
+is a monotone "now" and plain MAX is correct; guarding ctime would CREATE a
+backwards ctime. The same fence as truncate distributes `mtime_gen`. (7)
+**ABA reached data objects but not ephemeral inode state:** open leases,
+byte-range locks and append reservations were keyed by bare `ino` → all now
+**`FileID`-keyed**, and any op acting through an inode handle validates the
+generation first (mismatch = stale-handle error, never a silent no-op). (8)
+**Dedup GC was gated on a "retention window"** — the failure model allows
+unbounded delay, so a timer asserts what the network never promised. Now a
+client **response-ack watermark**. Sharpened: a retried `O_APPEND` reservation
+must recover **the same offset** from the reply cache; "something completed"
+would let it allocate a second range and leave a permanent hole. (9) **Lock
+ownership is per namespace:** classic `fcntl` = process token; `flock` AND
+OFD `fcntl` = **open-file-description token** (shared by dup'd/inherited
+fds) — a single process token modeled only classic fcntl. (10) Textual:
+"six review rounds"→eight; direct-write step 4 `size/chunk-map/mtime`→
+`+ctime`; directory two-index "size and mtime"→`+ctime`; **I9 now says
+non-`ENOENT`**, not necessarily *retryable* (an unrepairable integrity
+failure is legitimately terminal EIO — the substitution is forbidden, not the
+finality); `noatime` reworded to Linux's actual meaning (reads do not update
+atime; it does NOT "track mtime/ctime"). **Positioning (§3):** efs is a
+"high-performance parallel filesystem targeting Linux/POSIX semantics **with
+explicitly documented deviations**", not "a POSIX filesystem" — §3 now lists
+the two known deviations (no strict per-read atime; no syscall-level write
+atomicity above the FUSE request boundary). New glossary terms: **inode
+fence**, **validated collect**. Round-8 rationale in `arch/design-history.md`;
+verification.md gained 8 fault-injection events (multi-chunk read vs write
+decision, stat between COMMIT and resolve, truncate vs in-flight lane
+publications, sub-chunk write into a truncated range, append vs extending
+pwrite, lost reservation reply + same-op-ID retry, utimens vs in-flight
+write, profile cutover vs live writer) and 3 new checker properties.
+**NINTH REVIEW ROUND IN (Sep 1 PM) — protocol completion + kernel-interface
+reality. Reviewer: architecture STABLE, "no reason to change the fundamental
+architecture"; what remains is protocol completion, not redesign. All 10
+merged. Do not re-litigate:** (1) **The normative §6 matrix had gone stale
+against round 8 and §6 wins ties** — it still said `TRUNCATE / 1 shard /
+single Raft entry` while §7.3 said inode+active lanes, so the SUPERSEDED
+design was binding. Fixed; `SETATTR` split by class (mode/owner = 1 shard;
+`utimens` = inode fence; `SETATTR(size)` IS truncate); added multi-chunk
+`READ` row. §5 gained `mtime_gen`, the dir used-shard bitmap, `dentry_seq`,
+append reservations, and the coding-profile authority. This is the failure
+mode the "never restate a normative table" CI rule exists for. (2)
+**Read/predicate guards are §7.2's THIRD primitive** — round 8 leaned on read
+sets (O_APPEND lane_seq, RMDIR emptiness, rename ancestry, stat/read
+fallbacks) that were never defined. Guards are durable, SHARED, and held
+**through the decision**, not until the last check. **RMDIR forced the
+phantom case:** emptiness is a claim about keys that DO NOT EXIST, so an
+insert into an observed-empty shard has no version to check — each directory
+now carries a per-dentry-shard **`dentry_seq`** bumped by every mutation
+incl. inserts, and RMDIR guards those. Predicate isolation without MVCC and
+without the rejected distributed entry counter. (3) **Validated collects were
+validating the wrong thing.** Intents exist from PREPARE, so a read spanning
+a *decision* can take old-A (undecided) then new-B (committed) with EVERY key
+version unchanged. Collects now carry the set of txids they resolved as
+**UNDECIDED** and re-check those; decisions are final, so anything already
+decided needs no re-check (cost ∝ in-flight txns actually touched, usually
+0). Applies to `stat()` and multi-chunk reads alike. (4) **O_APPEND was fixed
+only up to the reservation.** An ordinary extending pwrite could publish EOF
+400 while an append's [100,200) was unresolved — no legal serialization. An
+**append barrier** now sits on the active lanes while reservations are
+outstanding (same bounded fence, once per append BURST), constraining only
+publications that would push EOF past the reservation watermark; ordinary and
+within-watermark writes untouched. Plus: reserved length = the length the
+client will attempt (it holds the whole FUSE buffer before reserving), so a
+short append comes only from failure; and **ABORTED_HOLE** — a LIVE client
+whose append fails commits the resolution itself (previously only a fenced
+client could resolve, so a live failure blocked the frontier until someone
+killed it). (5) **Truncate's tail chunk is now IN the transaction:** the
+zero-filled tail candidate is written first and CAS-published inside the
+truncate txn (losing the CAS retries the whole truncate) — publishing it
+after would leave a window where the file is nominally short while the old
+bytes past the new end are readable. (6) **Profile cutover repeated the
+pre-round-7 fencing mistake:** a control-plane commit does not change what
+4096 lane leaders believe. It is now a **barrier pushed to every publication
+authority and durably ACKed** before the scan. **Lowering f is NOT the raise
+sequence reversed** — drop the advertised guarantee FIRST, else weaker data
+is written while the stronger promise stands. **`u` is protection DEBT, not
+a headcount:** a returning node restores capacity, not the fragments it never
+held (f=1: A down → G on B,C → A returns → B dies → 1 fragment, data lost
+after ONE failure), so a degraded generation consumes budget until REPAIR
+completes; "unavailable" is a committed control-plane state, never a client
+timeout. (7) **Factual Linux error fixed (verified against fcntl(2) +
+POSIX.1-2024):** classic and OFD `fcntl` are NOT non-interacting namespaces —
+they differ in ownership/release but share ONE record-lock conflict domain
+and conflict by byte range even within one process on one fd. `flock` is the
+separate domain. Model = **2 conflict domains, 3 ownership kinds**. (8)
+**Linux/FUSE is itself a serializer, per mount:** extending direct writes
+still take the inode lock exclusively even with `FOPEN_PARALLEL_DIRECT_WRITES`,
+`IOCB_APPEND` forces it, and `O_CREAT` takes the parent dir inode
+(`FUSE_CAP_PARALLEL_DIROPS` = lookup/readdir ONLY). Not cluster-wide (64
+nodes fine) but 64 ranks on ONE mount serialize before efs is called. Now an
+explicit second unresolved kernel-interface item + a §9 caveat; pre-sizing
+fixes only the first case. A benchmark stopping there must be reported as
+that, not as "efs scaled". (9) **Hashed-dir fanout was NOT bounded** — dentries
+hashed over all 4096, so `stat(dir)` could be a 4096-way collect while the
+text claimed "bounded like a file's lanes". A spread dir now uses the **same
+fixed 64-shard permutation** as file lanes (used set = 64-bit bitmap); first
+use of a dir lane registers on the parent shard (≤64/dir ever — the exception
+to "parent not involved"); dir `utimens` gets its own `dir_mtime_gen` fence.
+(10) Smaller: implicit mtime/ctime are **MAX-clamped** because CLOCK_REALTIME
+can step backwards (stated as a deliberate HPC choice, not assumed);
+re-stripe/repair must NOT touch user-visible size/mtime/ctime; dedup ack
+watermark must be highest **CONTIGUOUS** reply (out-of-order arrival would let
+100 authorize discarding 99) and a **fenced** session's state is dropped
+wholesale after the revocation barrier (it can never advance a watermark —
+old-epoch requests are rejected by epoch, not by lookup); **L7 broadened** to
+once-published-now-unreachable generations (truncate range-deletes,
+re-striped old-profile copies). verification.md gained 12 more fault events
+and 4 checker properties. Round-9 rationale in `arch/design-history.md`.
+**ROUNDS 8 AND 9 ARE BOTH UNCOMMITTED** (HEAD = 492bfed, round 7).
+
 **One-file paste version (user, Sep 1 PM):** `docs/architecture-full.md` =
 index + all satellites inlined, GENERATED by `docs/gen-architecture-full.py`
 — never edit it directly; regenerate after any doc edit (for pasting the

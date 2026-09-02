@@ -29,7 +29,7 @@ implementation; this is the *specification*. When a design question comes
 up, the answer is decided here first, then reflected in the roadmap.
 
 **Status: ratified Sep 1 2026; revised Sep 1 2026 after external protocol
-review (seven rounds — see [design history](arch/design-history.md)).** The
+review (nine rounds — see [design history](arch/design-history.md)).** The
 metadata layer described here replaces the current whole-table snapshot +
 2PC design. The data path is unchanged in mechanism (client-direct RDMA,
 k+f EC) but its commit semantics are specified precisely (§7.3). The bar
@@ -198,6 +198,16 @@ detail: [failure-tolerance.md](arch/failure-tolerance.md).
 
 ## 3. Consistency contract
 
+**How to describe efs, precisely.** It is a *high-performance parallel
+filesystem targeting Linux/POSIX semantics, with explicitly documented
+deviations* — not "a POSIX filesystem" full stop. Two deviations are known
+and deliberate, and both are stated in this section rather than discovered
+by a user: strictly-conforming per-read `atime` is **not offered** (§7.3),
+and full syscall-level write atomicity **above the FUSE request boundary**
+is an unresolved kernel-interface problem that efs does not claim (below).
+Everything else in this section is a promise. If a deviation is ever added,
+it belongs here, in this list, before it ships.
+
 - **Single-shard metadata operations are linearizable** within the
   authoritative shard's Raft group.
 - **Multi-shard metadata operations are atomic** across their participant
@@ -213,6 +223,10 @@ detail: [failure-tolerance.md](arch/failure-tolerance.md).
   concurrent reader never observes a mix of old and new chunks from a single
   in-flight write: publication is one atomic decision covering every chunk
   the call touched (§7.3), while the *data movement* stays fully parallel.
+  The requirement is symmetric — POSIX makes those effects atomic with
+  respect to *each other* — so a multi-chunk **read** validates the
+  chunk-map versions it used and retries if they moved under it, rather than
+  returning a splice of old and new (§7.3).
   The atomicity unit is **one FUSE write request**; `max_write` is sized so
   the writes that matter arrive as one request. Full syscall-level atomicity
   *above* that boundary is an open kernel-interface problem — FUSE
@@ -292,8 +306,11 @@ I6/I7.
 - **I9 · absent ≠ unavailable.** A failure to establish authoritative read
   state never returns `ENOENT`. `ENOENT` is only ever returned for a name
   that is genuinely absent; every resource, availability, or integrity
-  failure surfaces as a distinct retryable error instead. **This is a safety
-  invariant, not an error-reporting nicety:** a false "absent" answer to a
+  failure surfaces as a **distinct non-`ENOENT` error** instead — usually
+  retryable, though some (a fragment that fails its integrity check with no
+  repair source) are legitimately terminal `EIO`. What is forbidden is the
+  substitution, not the finality. **This is a safety invariant, not an
+  error-reporting nicety:** a false "absent" answer to a
   LOOKUP lets the next CREATE mint a *second* inode for an object that is
   still live, which violates I5, I6, and I7 and leaves no evidence that it
   happened. A read path that can fail is therefore required to fail
@@ -358,12 +375,16 @@ I6/I7.
   reclaim, lease drop, reservation resolution) may take effect until every
   shard that could act on the old epoch has durably acknowledged the fence
   (§7.5).
-- **I24 · atomic write publication.** Within the atomicity unit (one FUSE
-  write request, ≤ `max_write`; the syscall-boundary problem above that
-  size is explicitly open, §7.3): a returned `write()`/`pwrite()` is
-  visible in its entirety to every subsequent read, and a concurrent read
-  during the call sees either all or none of that call's chunks (default
-  mode; §7.3).
+- **I24 · atomic write publication *and* atomic observation.** Within the
+  atomicity unit (one FUSE request, ≤ `max_write`; the syscall-boundary
+  problem above that size is explicitly open, §7.3): a returned
+  `write()`/`pwrite()` is visible in its entirety to every subsequent read,
+  and a concurrent read sees either all or none of that call's chunks
+  (default mode; §7.3). **The obligation is symmetric** — a multi-chunk read
+  must also return a state some serialization of the concurrent writes
+  actually produced, so it validates the chunk-map versions it read; an
+  atomic publication decision alone does not prevent a slow reader from
+  splicing old and new chunks.
 
 **Liveness (testable bounded forms)**
 
@@ -377,7 +398,12 @@ I6/I7.
   ABORT while the required quorums remain reachable.
 - **L6.** Zero-link orphan inodes eventually reclaim after references
   disappear.
-- **L7.** Unpublished EC generations eventually reclaim.
+- **L7.** EC generations that no chunk map references eventually reclaim —
+  not only the never-published ones (a losing CAS candidate, a fenced
+  client's orphan), but also generations that *were* published and are no
+  longer reachable: everything a `truncate` range-deleted, and every
+  old-profile generation superseded by a re-stripe (§7.3, failure
+  tolerance).
 - **L8.** Reconfiguration eventually converges desired placement to actual
   placement once failures stop.
 
@@ -431,14 +457,18 @@ node hosts many.
 |---|---|---|---|
 | inode row | `inode_shard(ino) = ino & 0xFFF` | `(ino)` | shard Raft group (RF = 2f+1) |
 | dentry, LOCAL layout | parent's shard | `(parent_ino, name)` → `(ino, gen, type)` | shard Raft |
-| dentry, HASHED layout | `hash(parent_ino, name) & 0xFFF` | `(parent_ino, name)` → `(ino, gen, type)` | shard Raft |
+| dentry, HASHED layout | the directory's 64-shard permutation, `dir_lane = hash(name) % 64` (§7.4) | `(parent_ino, name)` → `(ino, gen, type)` | shard Raft |
 | chunk map | lane shard (§7.3 permutation) | `(FileID, lane, chunk_index)` | shard Raft |
 | size / write mtime / write ctime | write lane, co-located with the chunk's lane shard | `(FileID, lane)` | shard Raft |
-| active-lane bitmap, `base_size`/`base_mtime`/`base_ctime`, `content_epoch` | `inode_shard(ino)` (inode row) | `(ino)` | shard Raft |
-| directory mtime / ctime, HASHED layout | each of the directory's dentry hash shards | `(dir_ino, shard)` | shard Raft |
+| active-lane bitmap, `base_size`/`base_mtime`/`base_ctime`, `content_epoch`, `mtime_gen` | `inode_shard(ino)` (inode row) | `(ino)` | shard Raft |
+| directory mtime / ctime, HASHED layout | each of the directory's dentry shards | `(dir_ino, dir_lane)` | shard Raft |
+| directory used-shard bitmap, `dir_mtime_gen` | `inode_shard(dir_ino)` (dir inode row) | `(dir_ino)` | shard Raft |
+| `dentry_seq` (per directory, per dentry shard — the predicate guard key for emptiness, §7.2) | that dentry shard | `(dir_ino, dir_lane)` | shard Raft |
+| current coding profile + `profile_epoch`, per-node availability state | control-plane group, **installed into every publication authority** (§7.3) | — | control Raft + per-shard installed config |
 | client session, touched-shard set | `hash(client_uuid) & 0xFFF` | `(client_uuid)` | shard Raft |
-| open lease | `inode_shard(ino)` | `(ino, session_id)` | shard Raft |
-| POSIX locks | `inode_shard(ino)` | `(ino, start, end, owner)` | shard Raft |
+| open lease | `inode_shard(ino)` | `(FileID, session_id)` | shard Raft |
+| POSIX locks | `inode_shard(ino)` | `(FileID, start, end, owner)` | shard Raft |
+| append reservations, `reservation_watermark` | `inode_shard(ino)` | `(FileID)` | shard Raft |
 | transaction decision | `participant[hash(txid) % participant_count]` | `(txid)` | shard Raft |
 | membership / desired placement | control-plane group | — | control Raft (RF = 2f+1) |
 | file data | k+f distinct failure domains by placement | `(FileID, chunk_index, candidate_generation, fragment_index, coding_profile_id)` | k+f EC fragments |
@@ -479,13 +509,15 @@ Derived from the placement rules (§5) and the CREATE co-location rule
 | CREATE (file) | dentry + inode row | **1** (co-located) | single Raft entry |
 | MKDIR | dentry + parent `nlink` on parent shard + dir inode on its home shard | 2 | transaction (§7.2) |
 | RMDIR (LOCAL dir) | dentry + parent `nlink` + dir inode row; emptiness is one range check | 2 | transaction (§7.2) |
-| RMDIR (HASHED dir) | as above **+ emptiness across the directory's dentry shards** | 2 + used hash shards | transaction with the emptiness check in its read set (§7.4) |
+| RMDIR (HASHED dir) | as above **+ emptiness across the directory's dentry shards** | 2 + used dir lanes (≤64) | transaction with the emptiness check in its read set (§7.4) |
 | UNLINK (last link) | dentry + inode row | **1** if `dentry_shard == inode_shard` (and nlink==1), else 2 | single Raft entry / transaction |
 | UNLINK (nlink>1) | dentry on parent shard, nlink on inode shard | 2 | transaction (§7.2) |
 | LOOKUP (name only) | dentry | 1 | single read |
 | GETATTR (stat) | inode row **+ the file's active write lanes** (size/mtime/ctime merge, §7.3) | 1 + active lanes (1 for a small file, ≤64) | double-collect (§7.3) |
-| GETATTR (stat) on a HASHED directory | dir inode row + the directory's used dentry shards (mtime/ctime merge, §7.4) | 1 + used hash shards | double-collect (§7.4) |
-| SETATTR | inode row | 1 | single Raft entry |
+| GETATTR (stat) on a HASHED directory | dir inode row + the directory's used dentry shards (mtime/ctime merge, §7.4) | 1 + used dir lanes (≤64) | double-collect (§7.4) |
+| SETATTR (mode/owner) | inode row (ctime) | 1 | single Raft entry |
+| SETATTR (`utimens`) | inode row `base_*`/`mtime_gen` + the file's active lanes | 1 + active lanes (≤65) | **inode fence** (§7.3) — it can set mtime *backwards* |
+| SETATTR (size) | — | — | this is TRUNCATE; see that row |
 | LINK (hardlink) | new dentry on its parent shard, nlink on inode shard | 2 | transaction (§7.2) |
 | RENAME same-dir (LOCAL dir) | two dentries on parent shard | **1** in the simple no-replacement case; replacing a destination whose inode lives on another shard widens the participant set | single Raft entry / transaction (§7.2) |
 | RENAME same-dir (HASHED dir) | two dentries on `hash(parent, old)` and `hash(parent, new)` — independent shards | ≥2 | transaction (§7.2) |
@@ -494,9 +526,10 @@ Derived from the placement rules (§5) and the CREATE co-location rule
 | WRITE non-extending | chunk-map entry | 1 (lane shard) | single Raft entry |
 | WRITE extending | chunk-map entry + that lane's size/mtime/ctime marks | **1** (co-located, §7.3) | single Raft entry |
 | WRITE first use of a lane | as above + `active_lanes` bit on the inode row | 2 | transaction (§7.2); ≤64 times per file, ever |
-| O_APPEND | EOF reserve + chunk + size | inode shard + lane shards | reserve (§7.3) then write |
-| TRUNCATE | `content_epoch` + `base_size` + times on inode row | 1 | single Raft entry (§7.3) |
-| READDIR | dentries | 1 (normal) / many (spread) | range scan / scatter-merge |
+| O_APPEND | EOF reserve (validated against the active-lane EOF vector, and holding an **EOF barrier** on those lanes until the reservation resolves) + chunk + size | inode shard + active lanes, then lane shards | reserve (§7.3) then ordinary write |
+| TRUNCATE | `content_epoch` + `base_size` + times on inode row, **+ each active lane's fence and range delete, + the tail chunk's publication when `size` is not chunk-aligned** | 1 + active lanes (≤65) | **inode fence**: one transaction (§7.2, §7.3) |
+| READ spanning several chunks | chunk maps on the covering lanes | lanes covering the range | validated collect (§7.3) — I24 has a read side |
+| READDIR | dentries | 1 (normal) / used dir lanes (spread, ≤64) | range scan / scatter-merge |
 | CHMOD / CHOWN | inode row (ctime, **not** mtime) | 1 | single Raft entry |
 
 (The UNLINK-last-link row is conditional because of a hardlink corner case:
@@ -548,16 +581,39 @@ transactions never funnel into one shard.
 **Only exclusive keys take intents.** A transaction's effects are either
 **exclusive/CAS keys** (chunk-map entry, dentry, inode row — one holder,
 version-checked) or **commutative reductions** (`MAX` on a lane's size and
-times, or a hashed directory's times). Reductions are transaction *payload*,
-applied by the reducer at resolve time, and never block a prepare —
-otherwise two writers publishing different chunks that share a lane would
-conflict on nothing, and the per-file hotspot the lanes exist to remove
-would reappear one level down (P1).
+times, or a hashed directory's times). Reductions are transaction *payload*
+and never block a prepare — otherwise two writers publishing different
+chunks that share a lane would conflict on nothing, and the per-file hotspot
+the lanes exist to remove would reappear one level down (P1). But **"not a
+lock" must not mean "not visible":** a reduction is effective at its
+transaction's *decision*, which can precede the reducer materializing it, so
+pending reduction intents are stored discoverably under the lane's own key
+prefix and an authoritative lane read is `MAX(materialized marks, committed
+pending reductions)`. Materialization is background compaction of
+already-visible state.
+
+**Read/predicate guards are the third primitive**, and several protocols are
+unsound without them: an observation a transaction depends on must stay true
+*through its decision*, not merely until its last check. A guard is durable,
+**shared** (guards coexist), and conflicts with any mutation that would
+change the guarded state. `O_APPEND` guards the active lanes' `lane_seq`;
+directory rename guards each ancestor's `parent_version`; `stat()`/read
+fallbacks guard the versions they collected. `RMDIR` is the case that proves
+guards cannot be replaced by version checks: emptiness is a statement about
+keys that **do not exist**, so an insert into an observed-empty shard is a
+**phantom** no version check can see. Each directory therefore carries a
+`dentry_seq` per dentry shard, bumped by every dentry mutation including
+inserts, and `RMDIR` guards those — predicate isolation without MVCC.
 
 A transaction is visible **at its decision**, not when cleanup runs; a
 reader meeting an intent resolves COMMIT → new value, ABORT → old value,
 NO-DECISION → old value (the read linearizes before the eventual decision),
 and **cannot-establish-authority → a retryable error, never "absent"** (I9).
+**A reader that resolved an intent as NO-DECISION must re-check that
+decision before returning** — intents exist from PREPARE, so a read spanning
+a commit can mix two states of one transaction while every key version it
+checks is unchanged. Decisions are final, so only the undecided ones need
+re-checking (§7.3).
 Recovery drives every prepared transaction to COMMIT or ABORT (L5); resolved
 intents are GC'd, while decision records are retained until every
 participant has acknowledged them.
@@ -576,7 +632,12 @@ Raft-commit the publication (chunk map + lane marks) → apply → return.
 durable and visible — stronger than POSIX, a deliberate latency-for-
 durability trade. Degraded publication (with `u` domains already
 unavailable) needs ≥ `k+(f−u)` fragments, is marked degraded, and is
-re-striped on repair — never for a merely *slow* target (I11).
+re-striped on repair — never for a merely *slow* target, and only against
+domains the **control plane has committed as unavailable**, since a client
+cannot distinguish slow from failed (I11). `u` is **protection debt, not a
+headcount**: a degraded generation consumes budget until its missing
+fragments are actually reconstructed, because a returning node restores
+capacity, not the fragments it never held.
 
 **Identity.** Every data-plane key is scoped by
 `FileID = (ino, inode_generation)`, so a delayed PUT from a previous occupant
@@ -610,25 +671,65 @@ MAX(lane.max_ctime)}` (I21).
 
 **Times.** Write-generated mtime *and ctime* both live in the lanes; routing
 write ctime to the inode row would send every hot-file writer back to the
-inode leader. Explicit changes update the inode row's `base_*` under
-`mtime_gen`, keeping POSIX's distinction exactly (`chmod` sets ctime, not
-mtime). **atime is `noatime` by default**, `relatime` a coalesced mount
-option; strict per-read atime is deliberately not offered.
+inode leader. Explicit changes update the inode row's `base_*`, keeping
+POSIX's distinction exactly (`chmod` sets ctime, not mtime). Only `utimens`
+can move a timestamp **backwards**, so only `utimens` bumps `mtime_gen` and
+only lane *mtimes* are generation-guarded; every other time source is a
+monotone "now" and plain `MAX` is correct for it — guarding ctime would
+create a backwards-moving ctime rather than prevent one. That monotonicity
+is **enforced, not assumed**: `CLOCK_REALTIME` can step backwards, so
+implicit time updates are clamped by `MAX` — a documented HPC-suited choice,
+not bit-exact wall-clock POSIX. **atime is
+`noatime` by default** (reads do not update atime at all), `relatime` a
+coalesced mount option; strict per-read atime is deliberately not offered.
 
-**Truncate** bumps the content epoch and stamps the inode's `base_size`: it
-invalidates lane state and rejects in-flight publications of the old epoch,
-but **does not invalidate committed chunk data** — the surviving prefix stays
-readable, as POSIX requires (I22). **O_APPEND** serializes only the EOF
-reservation and the visible frontier (which advances over contiguous
-*resolved* reservations; a fenced appender's range resolves as a committed
-zero hole); data movement is parallel. **Sub-chunk writes** use generation
+**Truncate** bumps the content epoch and stamps `base_size` — and because
+lane leaders must reject stale-epoch publications while ordinary writes
+never consult the inode shard, the epoch is **pushed by a bounded fence over
+the inode row plus the active lanes** (≤65 authorities; rare ops pay, P2).
+The same fence carries a **per-lane range delete of the chunk-map entries
+beyond the new size**: retaining them would let a later sub-chunk RMW take a
+pre-truncate generation as its base and resurrect truncated bytes. Because
+the KV is ordered and a lane holds `i, i+64, i+128, …`, that is one range
+delete per lane, not one per chunk. It **does not invalidate committed chunk
+data below the new size** — the surviving prefix stays readable, as POSIX
+requires (I22). When the new size falls **inside** a chunk, that tail chunk's
+zero-filled rewrite is prepared first and **CAS-published inside the same
+transaction**: a size without its matching tail would leave the file
+nominally shorter while the old bytes past the new end remain readable, and
+re-extending must read as zeros. The same fence distributes `mtime_gen`.
+
+**O_APPEND** reserves EOF on the inode shard, but the reservation is
+validated against the file's **real** EOF — the active-lane vector under the
+`stat()` read-set — never against a private counter, which an ordinary
+extending `pwrite` would never advance. Validating once is not enough
+either: POSIX makes "determine EOF" and "write" one atomic step, so while
+reservations are unresolved an **append barrier** on the active lanes (the
+same bounded fence, taken once per append *burst*) requires any publication
+that would push EOF past the reservation watermark to order against them.
+Non-extending and within-watermark publications — including the appenders'
+own data — are untouched, so ordinary writers pay nothing. The reserved
+length is the length the client will attempt (it holds the whole request
+buffer before reserving), so a short append arises only from failure. Every
+reservation resolves: COMPLETED, ABORTED_HOLE (a live client's failed
+append, which it commits itself), or FENCED_HOLE (session fencing, the
+backstop). The visible frontier advances over contiguous *resolved*
+reservations; data movement is parallel. **Sub-chunk writes** use generation
 CAS; disjoint ranges both land (I12), and pay RMW amplification by design.
 
-**One write syscall publishes atomically** via a §7.2 transaction (I24). The
-atomicity unit is **one FUSE write request**, and **EFS MUST NOT claim full
-POSIX write atomicity above the `max_write` boundary** until FUSE async-DIO
-syscall splitting is solved — an explicit unresolved contract. A documented
-relaxed mount mode publishes per-chunk (§3).
+**One write syscall publishes atomically** via a §7.2 transaction (I24) —
+and I24 has a **read side too**: an atomic write decision does not stop a
+reader that fetches chunk A, waits, then fetches chunk B from splicing old
+and new. A multi-chunk read is a **validated collect** (collect chunk-map
+versions → fetch in parallel → revalidate versions **and any undecided
+transaction decisions it resolved** → retry, bounded, then a read-only
+transaction), the same shape as `stat()`. Read prefetch is therefore
+prefetch and not a cache: a prefetched chunk map is usable without
+revalidation only inside the read whose linearization interval covers it.
+The atomicity unit is **one FUSE write request**, and **EFS MUST NOT claim
+full POSIX write atomicity above the `max_write` boundary** until FUSE
+async-DIO syscall splitting is solved — an explicit unresolved contract. A
+documented relaxed mount mode publishes per-chunk (§3).
 
 **Data targets are dumb — so publication is the validator.** A fragment PUT
 is immutable and idempotent; the target verifies only placement epoch, target
@@ -674,15 +775,26 @@ its home shard would funnel every create in a spread directory through one
 leader and silently defeat the spread. A HASHED directory therefore keeps a
 `dir_lane` (`max_mtime`, `max_ctime`) **on each of its dentry shards** — one
 Raft entry per mutation, parent uninvolved — reduced by `stat()` under the
-same double-collect protocol as file stat.
+same double-collect protocol as file stat. For that reduction to be bounded,
+**a spread directory uses a fixed 64-shard permutation**, the same
+construction as file lanes (`dir_lane = hash(name) % 64`, odd stride from
+the home shard ⇒ 64 distinct shards): hashing over all 4096 would make
+`stat(dir)` a 4096-way collect. First use of a lane registers it in the
+directory's 64-bit used-shard bitmap — the one time the parent shard *is*
+involved, ≤64 times per directory ever. Directory `utimens` carries
+`dir_mtime_gen` through the same bounded fence a file's does, for the same
+backwards-time reason.
 
 **Two operations are not uniformly cheap once a directory is HASHED.**
-`rmdir` must prove emptiness, which is distributed: the emptiness check over
-the dentry shards is part of the transaction's **read set**, so a concurrent
-create invalidates it (an exact distributed entry counter is rejected — it
-rebuilds the hotspot the spread removed). Same-directory `rename` is a
-two-shard transaction, since `hash(parent, old)` and `hash(parent, new)` are
-independent.
+`rmdir` must prove emptiness, which is distributed *and* is a statement
+about entries that do not exist — so it takes **read/predicate guards**
+(§7.2) on each dentry shard's `dentry_seq`, not version checks on the keys
+it read: an insert into an observed-empty shard creates a key that was never
+there to check (the phantom), and only a witness that every mutation bumps
+can conflict with it. An exact distributed entry counter is rejected — it
+rebuilds the hotspot the spread removed. Same-directory `rename` is a
+two-shard transaction, since the old and new names hash to independent
+lanes.
 
 **Directory rename carries an ancestry read set.** POSIX forbids moving a
 directory beneath itself, and checking that by walking the tree is unsound:
@@ -735,7 +847,7 @@ Full protocol: [protocols/sessions.md](arch/protocols/sessions.md)
 
 ### 7.6 Open-unlinked files and POSIX locking
 
-Open lifetime is **one session-scoped open lease per (session, inode)** on
+Open lifetime is **one session-scoped open lease per (FileID, session)** on
 the inode shard: committed at the session's first open of the inode, removed
 at its last close, lazily dropped when the session is fenced. Reclaim
 requires `nlink == 0 AND open_sessions == empty` (I19, L6). Cost: one Raft
@@ -743,14 +855,25 @@ entry at each end of a session's use of a file — not per descriptor, not
 per I/O.
 
 Locks: **one lock authority per inode** on `inode_shard(ino)`, records
-`(ino, start, end, owner)` mutated via Raft — a semantic serialization (P1),
-accepted because a locking application asked for coordination. Owners are
-`(client_uuid, session_epoch, process_id)`; fenced sessions' locks are
-reclaimed. efs reproduces the **Linux** contract: classic `fcntl`,
-**OFD `fcntl`** (POSIX.1-2024, included), and `flock` are three
-non-interacting namespaces on the same authority (`flock` is not POSIX; the
-non-interaction is Linux behavior). Advisory locks never fence the data
-path.
+`(FileID, start, end, owner)` mutated via Raft — a semantic serialization
+(P1), accepted because a locking application asked for coordination. efs
+reproduces the **Linux** contract, which is **two conflict domains, not
+three lock namespaces**: classic `fcntl` and **OFD `fcntl`**
+(POSIX.1-2024, included) share one byte-range record-lock domain and
+**do conflict with each other**, even within one process on one descriptor;
+`flock` is a separate domain (not POSIX; its independence is Linux
+behavior). Ownership is the orthogonal axis: classic `fcntl` locks are owned
+by the process (`client_uuid, session_epoch, process_id`), while OFD `fcntl`
+*and* `flock` locks are owned by the **open file description**
+(`client_uuid, session_epoch, open_description_id`) and are therefore shared
+by duplicated and inherited descriptors. Fenced sessions' locks are
+reclaimed in both domains. Advisory locks never fence the data path.
+
+**Inode-scoped ephemeral state is keyed by `FileID`, not `ino`** — leases,
+locks and append reservations alike — so a delayed CLOSE or UNLOCK naming a
+previous occupant of a reused ino cannot release a live file's state. Any
+operation acting through an inode handle validates the inode generation
+before mutating; a mismatch is a stale-handle error, never a silent no-op.
 
 Full protocol: [protocols/sessions.md](arch/protocols/sessions.md)
 
@@ -774,6 +897,27 @@ in §7.3. Direct-I/O disables kernel readahead, so **the client owns an
 adaptive asynchronous prefetch pipeline** — a performance requirement of
 the direct-I/O decision (§9). FUSE-over-io_uring is evaluated as the
 interface matures.
+
+**Second unresolved kernel-interface item: upstream Linux serializes some
+operations above efs, per mount.** These are not efs serialization points
+and they are not cluster-wide — 64 clients on 64 nodes are unaffected — but
+64 ranks *on one node sharing one mount* can serialize in their own kernel
+before a single request reaches efs:
+
+| Kernel behavior | Consequence for one mount |
+|---|---|
+| A direct write that **extends `i_size`** still takes the inode lock exclusively, even with `FOPEN_PARALLEL_DIRECT_WRITES` | concurrent extending writers to one file serialize |
+| `IOCB_APPEND` forces the exclusive inode lock | `O_APPEND` writers to one file serialize |
+| `O_CREAT` takes the parent directory inode exclusively; `FUSE_CAP_PARALLEL_DIROPS` covers **lookup/readdir only** | same-directory creates serialize |
+
+Honesty about this belongs in the scaling envelope, not in a footnote: a
+shared-file workload that **pre-sizes** the file turns extending writes into
+non-extending ones and avoids the first row entirely, which is already the
+recommended HPC pattern — but that is a workaround, and the other two rows
+have none today. Either efs eventually carries a kernel/FUSE change, or §9
+states plainly that current upstream FUSE bounds *intra-mount* scaling for
+these three cases. It is tracked as an open interface problem alongside the
+syscall-splitting one, not silently absorbed into "efs scales".
 
 ### 7.8 Control plane, membership, and reconfiguration
 
@@ -800,10 +944,21 @@ record per operation, kept forever" is an unbounded table on every shard, so
 what is retained per `(client_uuid, session_epoch)` is a
 `highest_contiguous_seq` watermark, a small completion bitmap for the ragged
 out-of-order edge above it, and a bounded reply cache for operations that
-could still be retried. Records are reclaimable once the session is fenced,
-its outstanding ambiguity is resolved (§7.5), and the retention window has
-passed; transaction decision records have the matching participant-ACK
-condition (§7.2).
+could still be retried. **Reclamation is driven by acknowledgement, not by
+elapsed time** — the failure model allows unbounded delay, so no timer can
+prove a straggler will not arrive; the client reports the **highest
+*contiguous* acknowledged reply** and records at or below it may be
+released, with later duplicates answered as already-completed. Contiguity is
+required because replies arrive out of order — "highest reply received"
+would let reply 100 authorize discarding 99's result while 99 is still being
+retried. The retained *reply* matters, not just a completion bit: a retried
+`O_APPEND` reservation must recover **the same offset**, or a lost reply
+becomes a permanent hole. A **live** session's records are reclaimed at or
+below its watermark; a **fenced** session's are dropped wholesale once the
+revocation barrier completes (§7.5) — a dead client can never advance a
+watermark, and after the barrier its old-epoch requests are rejected by
+epoch alone, so no per-request state is needed to reject them. Transaction
+decision records have the matching participant-ACK condition (§7.2).
 
 ## 8. The hot-path performance contract
 
@@ -879,10 +1034,22 @@ silently failing them:
 | Same-file `fcntl` lock storm | inode lock-authority limited (§7.6) |
 | 4K random updates in 128K chunks | RMW limited — declared envelope (§7.3) |
 
+Every row above scales **per client node**. Three of them are additionally
+bounded *within a single mount* by upstream Linux, not by efs: concurrent
+extending direct writes to one file, `O_APPEND` on one file, and
+same-directory `O_CREAT` all take an exclusive kernel lock before efs is
+called (§7.7). Many ranks on many nodes are unaffected; many ranks on **one**
+node sharing one mount are not. Pre-sizing a shared file removes the first
+case. This is a stated limit of the current kernel interface, not a claim
+efs makes and then quietly misses.
+
 A scaling benchmark is then a scientific question — *where did it stop: NIC,
 NVMe, memory bandwidth, EC compute, fabric bisection?* — and any answer that
-is a mutex, one leader, one thread, FUSE serialization, one WAL, or one
-coordinator is by definition an EFS bug (§1).
+is a mutex, one leader, one thread, one WAL, or one coordinator is by
+definition an EFS bug (§1). FUSE/VFS serialization is the one exception, and
+only for the three cases named above: it is a known kernel-interface limit
+with its own open item, so a benchmark that stops there must be reported as
+that, never as "efs scaled".
 
 ## 10. Implementation order
 
@@ -892,7 +1059,8 @@ stays runnable. **Do not** go straight `KV → Raft → done`.
 ```text
 0. Freeze the exact metadata placement model:
    inode_shard() · dentry_shard() · authoritative row ownership ·
-   inode IDs + generations · FileID scoping of every data key (§7.3) ·
+   inode IDs + generations · FileID scoping of every data key AND every
+   inode-scoped ephemeral record — leases, locks, reservations (§7.3, §7.6) ·
    the CREATE co-location rule (§7.4) ·
    the 64-lane permutation + active-lane bitmap (§7.3).
 1. Simulator interfaces + the CURRENT state machine.
@@ -961,10 +1129,19 @@ this document is the invariant they are measured against.
   lanes a file has ever used; it bounds what `stat()` must collect.
 - **Commutative reduction** — transaction payload applied by a reducer
   (`MAX` on a lane's size/times), as opposed to an exclusive CAS key; it
-  never blocks a prepare.
+  never blocks a prepare, but it *is* visible from its transaction's
+  decision, not from its materialization.
 - **Content epoch** — the inode's content generation; bumped by truncate to
   invalidate lane state and reject in-flight stale publications. It is a
   fence, not part of any object's identity.
+- **Inode fence** — the bounded transaction over the inode row plus a file's
+  active lanes (≤65 authorities) that distributes a new `content_epoch` or
+  `mtime_gen` and carries truncate's per-lane range delete. Used only by rare
+  operations; the write path never touches the inode shard.
+- **Validated collect** — the read pattern shared by `stat()` and multi-chunk
+  reads: collect versioned state, do the expensive work, re-read the
+  versions, retry if they moved, with a read-only transaction as the bounded
+  escape hatch.
 - **Session** — a client's `{client_uuid, session_epoch, state, touched
   shards}` record on its session shard; the epoch is the fencing token, and
   the touched-shard set is what the revocation barrier fences.

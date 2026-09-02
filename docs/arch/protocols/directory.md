@@ -34,8 +34,9 @@ stored in both indexes. The dentry index stores a **projection**:
 The dentry value carries only what LOOKUP needs to route and to validate a
 handle (`ino`, `generation`, `type`). All mutable attributes (mode, uid, gid,
 nlink, …) live **only** in the inode row — with two deliberate exceptions
-defined in [the data protocol](data.md): *write-generated* size and mtime
-live in the file's bounded write lanes (otherwise every write would serialize
+defined in [the data protocol](data.md): *write-generated* size, mtime and
+ctime live in the file's bounded write lanes (otherwise every write would
+serialize
 on the inode shard), and `stat()` merges them under the double-collect
 snapshot protocol. Explicit attribute changes (`utimens`, `chmod`, `chown`,
 truncate) always update the inode row. This eliminates any
@@ -61,7 +62,8 @@ the rule distinguishes files from directories:
 ```text
 CREATE regular file:
     normal directory:  inode_shard(new_ino) = inode_shard(parent_ino)
-    spread directory:  inode_shard(new_ino) = hash(parent_ino, name) & 0xFFF
+    spread directory:  inode_shard(new_ino) = dentry_shard(parent_ino, name)
+                                              (the 64-shard permutation below)
 
 MKDIR (any directory, always):
     inode_shard(new_dir)  = hash(parent_ino, name, export_salt) & 0xFFF
@@ -118,13 +120,13 @@ directory carries a **layout epoch**:
 dir.layout = LOCAL            all dentries on the parent shard
     |
     v  (threshold crossed; owner Raft-commits SPLITTING)
-dir.layout = SPLITTING(e)     new writes go to hash(parent,name) shards;
-                              a migrator moves existing dentries
+dir.layout = SPLITTING(e)     new writes go to the directory's 64 dentry
+                              shards; a migrator moves existing dentries
                               idempotently, in batches
     |
     v  (all dentries moved; owner Raft-commits HASHED)
-dir.layout = HASHED(e)        all dentries on hash shards; old local
-                              range is GC'd
+dir.layout = HASHED(e)        all dentries on the 64 dentry shards; old
+                              local range is GC'd
 ```
 
 Read/write rules during `SPLITTING`: **writes go only to the hashed
@@ -192,10 +194,45 @@ HASHED directory:
         ctime = MAX( inode.base_ctime, dir_lanes' max_ctime )
 ```
 
-The lane set of a hashed directory is bounded the same way a file's is: the
-directory's inode row carries the set of hash shards that have actually been
-used, so `stat()` on a directory is a bounded collect and not a 4096-way
-fanout. The reduction is validated by the same double-collect protocol as
+**For that to be bounded, the directory's shard set must be bounded — so a
+spread directory uses a fixed 64-shard permutation, exactly like file
+lanes.** Hashing names freely over all 4096 shards would let one directory's
+used set grow to 4096, and `stat(dir)` with it; "bounded like a file's
+lanes" would be wishful. A directory therefore has at most 64 dentry shards,
+chosen by the same construction data.md uses for lanes:
+
+```text
+dir_lane     = hash(name) % 64
+dentry_shard = (inode_shard(dir_ino) + dir_lane * stride(dir_ino)) & 0xFFF
+stride       = 2*(hash(dir_ino) & 0x7FF) + 1        <- odd => permutation
+                                                       => 64 DISTINCT shards
+dir_lane 0   = the directory's own inode shard
+```
+
+64 independent Raft leaders is the same throughput budget deemed sufficient
+for the hottest single file, and it makes the used-shard set a **64-bit
+bitmap on the directory's inode row** — a bounded `stat()` collect, by
+construction rather than by hope. Global spread is unchanged: different
+directories get different strides and different home shards, so a million
+directories still cover all 4096 shards.
+
+**First use of a dir lane touches the parent shard — the one exception.**
+"The parent shard is not involved" holds for steady state, not for the first
+mutation to land on a given lane: that one registers the lane in the
+directory's used-shard bitmap, carried inside the transaction it is already
+part of, exactly like `active_lanes` activation for files. It happens at
+most 64 times in a directory's lifetime, so it is not a rate-proportional
+cost. Without it `stat(dir)` could miss a shard that holds a newer mtime.
+
+**Directory `utimens` needs the same generation fence as a file's.** An
+explicit backwards mtime on a directory cannot stick while older
+`dir_lane.max_mtime` values are still visible to the reduction, so the
+directory inode row carries `dir_mtime_gen`, only `utimens` bumps it, and
+the bump is distributed to the used lanes by the same bounded fence
+(≤65 authorities) — the directory analogue of the inode fence in
+[data.md](data.md). As with files, ctime needs no generation.
+
+The reduction is validated by the same double-collect protocol as
 file `stat()`, and the reductions are transaction payload rather than
 exclusive keys ([transactions.md](transactions.md)) — two creates on
 different hash shards must not conflict merely because both touch the

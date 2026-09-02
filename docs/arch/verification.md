@@ -53,9 +53,28 @@ stale client placement map · stale client chunk generation
 session fence at every point of a client's outstanding work
 fence ACK lost / touched shard unreachable mid-revocation
 ino reuse: delayed PUT from the previous inode incarnation
+ino reuse: delayed CLOSE / UNLOCK naming the previous incarnation
 concurrent directory renames validating overlapping ancestries
 create racing an rmdir emptiness check on a hashed directory
+multi-chunk read interleaved with a multi-chunk write's decision
+stat/read between a transaction's COMMIT decision and its resolution
+truncate concurrent with in-flight publications on every active lane
+sub-chunk write into a chunk whose range a truncate removed
+O_APPEND reservation racing an ordinary extending pwrite
+lost O_APPEND reservation reply, then retry of the same op ID
+utimens racing an in-flight write on a lane
+coding-profile cutover racing a live writer on the scanned chunk
 silent fragment corruption (payload and identity)
+transaction decision flipping between a collect and its revalidation
+insert into a shard an rmdir already observed empty (phantom)
+extending pwrite while an append reservation is unresolved
+live client abandoning an append without being fenced
+truncate crash between tail-generation PUT and the truncate decision
+publication authority that has not yet ACKed a profile cutover
+degraded generation, then the "returned" node dies before repair
+clock step backwards between two implicit timestamp updates
+out-of-order reply arrival at the dedup ack watermark
+first use of a directory lane racing another first use
 ```
 
 **Independent checking.** Record complete operation histories and run an
@@ -85,9 +104,18 @@ verify that no committed read ever reconstructs from mixed generations (I13),
 that nothing is published before durability (I14), that orphans never become
 visible (I15/I20), that a corrupt fragment is never accepted as
 reconstruction input (I25), that a publication whose durability evidence does
-not match the current placement is rejected (§7.3), and that f simultaneous
-losses never lose a published chunk (I11) — under every crash/interleaving
-the generator can produce.
+not match the current placement is rejected (§7.3), that no read ever returns
+a mix of chunks from different write calls (I24, which needs the read-side
+validation and is invisible to a write-only checker), that a `stat` never
+reports a size older than a returned write while its transaction is still
+unresolved (I21), that truncated ranges never reappear through a later
+sub-chunk write (I22), that a file's visible size never regresses across an
+append reservation's lifetime (the EOF barrier, §7.3), that a truncate is
+never observable without its zero-filled tail, that no chunk is published on
+a profile the cutover barrier has retired, and that f simultaneous
+losses never lose a published chunk (I11) — counting a degraded generation's
+unrepaired fragments as **protection debt** rather than as budget restored by
+a returning node — under every crash/interleaving the generator can produce.
 
 The corruption fault is the reason I25 exists as an invariant rather than an
 implementation habit: it is only ever *tested* if the simulator can flip bits

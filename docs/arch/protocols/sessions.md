@@ -151,12 +151,46 @@ and needs no per-op record. Only the ragged edge — operations completed out
 of order above the watermark — costs a bit each, and the window is bounded
 by the client's allowed in-flight depth.
 
-Records are reclaimable once **all three** hold: the session is fenced, all
-of its outstanding ambiguity is resolved (the barrier above has completed),
-and the retention window has passed. Transaction decision records
-([transactions.md](transactions.md)) have the matching condition: reclaimable
-once every participant has acknowledged the decision and no recovering
-participant can still ask for it.
+**Reclamation is driven by acknowledgement, not by elapsed time.** The
+failure model allows a message to be delayed arbitrarily and duplicated
+([the spec §2](../../architecture.md)), so no timer can *prove* that a
+straggler will not arrive — a "retention window" would be an assumption the
+network never agreed to. The client instead carries a **response-ack
+watermark**: the **highest *contiguous*** sequence number whose reply it has
+received, and the shard may release result state at or below it. Contiguity
+is not pedantry — replies arrive out of order, so a watermark defined as
+"the highest sequence whose reply arrived" would let reply 100 arriving
+before 99 authorize discarding 99's result while 99's retry is still in
+flight. A later duplicate at or below the watermark is then answered as
+already-completed — cheaply, and without re-executing.
+
+The reply cache matters more than it first appears, because for some
+operations "it already happened" is not a sufficient answer. If an
+`O_APPEND` reservation reply is lost, the retry of that same op-ID must
+recover **the same offset** — a fresh reservation would allocate a second
+range and leave a permanent hole. The retained reply, not merely a
+completion bit, is what makes the retry idempotent.
+
+For a **live** session, records are reclaimable once the client's ack
+watermark has passed them. For a **fenced** one, requiring the watermark too
+would leak forever: a dead client never sends another acknowledgement, so
+its reply state could never be released. The revocation barrier is what
+makes that unnecessary — once `epoch+1` is committed and every touched shard
+has been fenced, a request carrying the **old epoch** is rejected on the
+epoch alone, without consulting any per-request state. So the rule is:
+
+```text
+live session      release at or below the ack watermark
+fenced session    once the revocation barrier has completed and the
+                  outstanding ambiguity is resolved, drop the whole
+                  epoch's dedup state — old-epoch requests are rejected
+                  by epoch, not by lookup
+```
+
+Transaction decision records
+([transactions.md](transactions.md)) have the matching condition:
+reclaimable once every participant has acknowledged the decision and no
+recovering participant can still ask for it.
 
 ## Open-unlinked inode lifetime
 
@@ -168,9 +202,20 @@ valid open references => still readable/writable (I19)
 reclaim only when     nlink == 0 AND no valid open reference can exist
 ```
 
+**All of this state is keyed by `FileID = (ino, inode_generation)`, not by
+`ino`.** The data plane already scopes every object by the file's
+incarnation ([data.md](data.md)); inode-scoped *ephemeral* state needs the
+same protection, and for the same reason. An ino is reclaimed and reissued;
+a delayed CLOSE, UNLOCK, or reservation-resolution naming `(ino=100, gen=7)`
+must not touch `(ino=100, gen=8)`, or one file's straggler silently releases
+another file's lock or drops its open reference. The rule is general: **an
+operation acting through an inode handle validates the inode generation
+before it changes anything**, and a generation mismatch is a stale-handle
+error, never a successful no-op.
+
 Open/close must **not** become heavyweight durable metadata mutations on the
 hot path. The mechanism is **one session-scoped open lease per
-(session, inode)** — not one mutation per file descriptor:
+(FileID, session)** — not one mutation per file descriptor:
 
 ```text
 session's FIRST open of an inode:
@@ -203,7 +248,7 @@ application that ignores locks is allowed to), so the data path is untouched;
 but every participating lock request must see the same authoritative state.
 
 - **One lock authority per inode.** Lock state for a file lives on
-  `inode_shard(ino)`, as `(ino, start, end, owner)` records with overlap
+  `inode_shard(ino)`, as `(FileID, start, end, owner)` records with overlap
   conflict checking, mutated through that shard's Raft log. This deliberately
   serializes lock *management* for one file — acceptable, because an
   application using record locks has explicitly asked for coordination; it is
@@ -211,17 +256,52 @@ but every participating lock request must see the same authoritative state.
   overlapping ranges across shards is rejected: range overlap is not
   partitionable, and the common case (whole-file `flock`, small-range
   `fcntl`) is cheap on one authority.
-- **Owner identity and death.** A lock owner is `(client_uuid,
-  session_epoch, process_id)`. Locks are released on close/process exit as
-  usual; a *dead client* is handled by the session protocol above: once its
-  session is fenced, the lock authority reclaims its locks. Blocked waiters
-  are woken in order.
-- **Lock namespaces (Linux target, stated precisely).** `flock()` is not
-  POSIX at all, and the non-interaction between `flock()` and `fcntl()`
-  namespaces is **Linux behavior**, not a POSIX guarantee — efs targets
-  Linux/POSIX, so it reproduces the Linux contract: classic `fcntl()`
-  (process-associated) locks, POSIX.1-2024 **OFD `fcntl()` locks**
-  (open-file-description-associated — included in the target), and `flock()`
-  are three separate namespaces, all on the same per-inode authority, and
-  (as on Linux) locks from different namespaces do not conflict with each
-  other.
+- **Owner identity is per namespace, because Linux ownership is.** A single
+  process-based owner token would model only classic `fcntl()`. Both
+  `flock()` locks and OFD `fcntl()` locks are associated with the **open
+  file description**, so duplicated descriptors (and descriptors inherited
+  across `fork`) *share* them, while classic `fcntl()` locks are owned by
+  the process and are dropped by closing any descriptor for the file. The
+  owner token therefore differs by namespace:
+
+  ```text
+  classic fcntl  -> (client_uuid, session_epoch, process_id)
+  OFD fcntl      -> (client_uuid, session_epoch, open_description_id)
+  flock          -> (client_uuid, session_epoch, open_description_id)
+  ```
+
+  The client assigns a stable `open_description_id` per open file
+  description and reuses it across `dup`/`fork`, which is what makes shared
+  ownership work across a cluster. Locks are released on close/process exit
+  as usual; a *dead client* is handled by the session protocol above — once
+  its session is fenced, the lock authority reclaims every lock owned under
+  that epoch, whichever namespace. Blocked waiters are woken in order.
+- **Lock conflict domains (Linux target, stated precisely).** There are
+  **two conflict domains, not three namespaces** — a distinction that is
+  easy to get wrong, because the three lock *kinds* do not map one-to-one
+  onto them:
+
+  ```text
+  record-lock domain (one domain, two ownership kinds)
+      classic fcntl   owner = (client_uuid, session_epoch, process_id)
+      OFD fcntl       owner = (client_uuid, session_epoch, open_description_id)
+      -> the two kinds CONFLICT with each other by byte range, even
+         within one process on one file descriptor
+
+  flock domain
+      flock           owner = (client_uuid, session_epoch, open_description_id)
+      -> independent of the record-lock domain
+  ```
+
+  Ownership and conflict are separate questions. Classic and OFD `fcntl`
+  locks differ in *who owns them* and in when they are released (any close
+  vs. last close of the description), but they are the same kind of record
+  lock and a conflicting pair blocks — POSIX.1-2024 specifies this for OFD
+  locks, and Linux has behaved this way since 3.15. So the authority
+  evaluates both kinds against one another in a single byte-range domain,
+  keyed only by owner token. `flock()` is the genuinely separate one: it is
+  not POSIX, and its independence from record locks is **Linux behavior**
+  that efs reproduces because it targets Linux. Locks owned by an
+  open file description are shared by duplicated and inherited descriptors
+  in both domains. When a session is fenced, every lock owned under that
+  epoch is reclaimed, in both domains.

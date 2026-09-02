@@ -42,7 +42,7 @@ no serializable history even though each commits atomically.
   live transaction holds it.
 - **Not all transaction state is an exclusive key — and getting this wrong
   silently re-creates the hotspot one level down.** A transaction's effects
-  split into two kinds, and only the first kind takes a lock:
+  split into kinds, and only the first kind takes an exclusive lock:
 
   ```text
   exclusive / CAS keys        the chunk-map entry, a dentry, an inode row
@@ -53,6 +53,12 @@ no serializable history even though each commits atomically.
                               MAX(lane.max_ctime, ...)
                               MAX(dir_lane.mtime, ...)
                               -> transaction PAYLOAD, not a lock
+
+  read / predicate guards     lane_seq · dentry_seq · parent_version ·
+                              content_epoch · mtime_gen
+                              -> SHARED: many guards coexist; a guard
+                                 conflicts with anything that would change
+                                 the guarded state, through the decision
   ```
 
   Consider two writers publishing chunk 10 and chunk 74 of one file, which
@@ -67,6 +73,78 @@ no serializable history even though each commits atomically.
   hold reduction payloads on the same lane concurrently, provided their
   exclusive keys are disjoint. This is P1 applied to the transaction layer
   itself.
+
+  **"Not a lock" must not mean "not visible."** A reduction still becomes
+  effective at its transaction's *decision*, and the decision can precede
+  the reducer materializing it into `lane.max_end`:
+
+  ```text
+  lane.max_end = 1 GiB
+  T publishes at 2 GiB; T's COMMIT decision is durable
+  T's intent has not been resolved yet; lane.max_end is still 1 GiB
+  stat() reads lane.max_end -> 1 GiB          -- WRONG: T already returned
+  ```
+
+  So a lane's reduction state is not just its materialized marks. Pending
+  reduction intents are stored **discoverably under the lane's own key
+  prefix**, and the authoritative read of a lane is
+
+  ```text
+  effective(lane.max_X) = MAX( materialized lane.max_X,
+                               reduction payloads of pending intents on this
+                               lane whose decision resolves to COMMIT )
+  ```
+
+  resolved by the same four-state rule below. Materialization by the reducer
+  is therefore a background *compaction* of already-visible state, never the
+  event that makes a committed reduction observable. Because the pending set
+  is bounded by the in-flight transactions on that lane, this is a short
+  scan, and it is what makes I21 hold end to end rather than only at the
+  moment of commit.
+- **Read/predicate guards: the third primitive, and several protocols are
+  unsound without it.** A transaction frequently needs an *observation* to
+  stay true until it decides — not a value it intends to write. Checking a
+  version at prepare time is not enough on its own, because the gap between
+  the final check and the decision is exactly where the observation can be
+  invalidated. So a guard is a real, durable, *shared* participant record:
+
+  ```text
+  guard(T, key, observed_version)
+      -> succeeds alongside other guards on the same key
+      -> conflicts with any mutation that would change that key's state
+      -> is held until T decides, not until T finishes reading
+  ```
+
+  Guards are what make these protocols correct, and they are the same
+  mechanism in every case, which is the point of naming it once:
+
+  ```text
+  O_APPEND reservation   guards the active lanes' lane_seq  (§7.3)
+  RMDIR on a HASHED dir  guards each dentry shard's dentry_seq
+  directory rename       guards every ancestor's parent_version (§7.4)
+  stat() / read fallback guards the collected lane / chunk-map versions
+  ```
+
+  **The RMDIR case also needs the guard to cover things that do not exist
+  yet — the classic phantom.** Emptiness is a statement about a *range*, and
+  an empty range contains no key whose version could be checked:
+
+  ```text
+  RMDIR: shard 17 holds no entries of this directory   -> "empty"
+  CREATE: inserts `foo` into shard 17
+  RMDIR: commits on its earlier observation
+  -> a directory removed while an entry existed
+  ```
+
+  A version check over the existing keys cannot see this, because the
+  conflicting write created a key that was not there to be checked. The fix
+  is to give the predicate a **materialized witness**: every directory
+  carries a `dentry_seq` per dentry shard, bumped by *every* dentry mutation
+  on that shard including inserts. `RMDIR` guards those sequence keys, so the
+  `CREATE` above conflicts with the guard and one of the two aborts. This
+  gives predicate-level isolation without MVCC and without a distributed
+  entry counter (rejected in [directory.md](directory.md) — a counter
+  rebuilds the per-directory hotspot that spreading exists to remove).
 - **No-wait, and what that buys.** A prepare that finds a conflicting
   intent **fails immediately** — nobody ever waits while holding an intent,
   so no wait-for cycle can form and deadlock is impossible by construction.

@@ -168,7 +168,31 @@ Permanent majority loss is disaster territory (an operator procedure over surviv
 efs operating mode. Changing f is an online operation with an explicit transition state:
 <code>effective_f</code> only becomes <code>target_f</code> after replicas are added, every data
 stripe is re-striped as <b>new immutable generations under the new coding profile</b>, and the
-result is verified — the promise changes at that commit, not when the operator asks.</div>
+result is verified — the promise changes at that commit, not when the operator asks.
+<b>The order of those steps matters.</b> Switch the required profile <i>first</i>, before the
+re-striping sweep starts: otherwise a live writer can publish a fresh copy of a chunk in the old,
+weaker layout just behind the sweep, and the cluster ends up promising a level of protection its
+newest data doesn't have. Switching first means anything written from then on is already in the new
+layout, so the sweep is chasing a list that can only get shorter.
+<p style="margin:8px 0 0"><b>And "switched" has to mean every place that enforces it has been
+told.</b> Deciding centrally that the new layout is in force changes nothing at the thousands of
+places that actually approve writes; one that hasn't heard yet will keep approving the old layout,
+and the sweep is back to chasing a growing list. So the switch is a <b>barrier</b>: push the new
+layout everywhere, wait for every one of them to confirm it durably, and only then start sweeping.
+This is the same mistake as assuming a dead client is fenced everywhere just because the decision
+was recorded somewhere.</p>
+<p style="margin:8px 0 0"><b>Going the other way is not the same steps in reverse.</b> Raising the
+protection level works because the weaker promise stays in force while stronger copies pile up —
+every moment along the way is at least as safe as advertised. Lowering it has to <i>drop the
+promise first</i>; writing weaker copies while still advertising the stronger promise would make
+the promise false for the length of the migration.</p>
+<p style="margin:8px 0 0"><b>A node coming back does not repay what was lost.</b> If a copy was
+written while one machine was down, that machine returning doesn't give it the copy it missed —
+only rebuilding does. So a stripe written short counts <b>against the protection budget until it
+has actually been rebuilt</b>, not until the machine is back. Otherwise a second failure can take
+out a file after what looks like only one failure. And "that machine is down" is a decision the
+cluster makes and records, never a guess a client makes from a slow reply — you cannot tell slow
+from dead by waiting.</p></div>
 
 <!-- ============ TODAY ============ -->
 <h2>2 · What we have today</h2>
@@ -331,13 +355,15 @@ deliberately serializes creates on one leader — together is the right common c
   <tr><td>RENAME cross-dir, file</td><td>≥2</td><td>transaction (below)</td></tr>
   <tr><td>RENAME cross-dir, directory</td><td>≥2 + the destination's whole chain of parents (loop check)</td><td>transaction (below)</td></tr>
   <tr><td>stat() / GETATTR, file</td><td>inode row <b>+ the file's active write lanes</b> (1 for a small file, ≤64)</td><td>double-collect read (§3a)</td></tr>
-  <tr><td>stat() / GETATTR, spread directory</td><td>dir inode row + the shards holding its entries</td><td>double-collect read</td></tr>
+  <tr><td>stat() / GETATTR, spread directory</td><td>dir inode row + the shards holding its entries (≤64)</td><td>double-collect read</td></tr>
   <tr><td>WRITE not extending</td><td>1 (chunk's shard)</td><td>one Raft entry</td></tr>
   <tr><td>WRITE extending</td><td><b>1</b> (chunk's shard + its size lane, co-located)</td><td>one Raft entry</td></tr>
   <tr><td>WRITE, first use of a lane</td><td>2 (also flips one bit on the inode row) — ≤64 times per file, ever</td><td>transaction (below)</td></tr>
-  <tr><td>TRUNCATE</td><td>1 (inode's shard)</td><td>content-epoch bump + new size</td></tr>
-  <tr><td>O_APPEND</td><td>reserve on inode's shard, then ordinary write</td><td>2-step (below)</td></tr>
-  <tr><td>READDIR</td><td>1 (normal) / many (spread)</td><td>range scan / scatter-merge</td></tr>
+  <tr><td>TRUNCATE / SETATTR(size)</td><td>inode's shard + the file's active lanes (≤65)</td><td>one transaction: epoch bump + new size + per-lane range delete + the zero-filled tail chunk</td></tr>
+  <tr><td><code>utimens</code> (can set a time backwards)</td><td>inode's shard + the file's active lanes (≤65)</td><td>same fence, to hand out the new version number</td></tr>
+  <tr><td>O_APPEND</td><td>reserve on inode's shard, checked against the active lanes, which also hold an EOF barrier until it resolves</td><td>2-step (below)</td></tr>
+  <tr><td>READ spanning several chunks</td><td>the lanes holding those chunks</td><td>validated collect (below)</td></tr>
+  <tr><td>READDIR</td><td>1 (normal) / the directory's used lanes, ≤64 (spread)</td><td>range scan / scatter-merge</td></tr>
 </table>
 
 <div class="why"><b>Spreading a hot directory is a versioned layout change, not a flag.</b>
@@ -462,7 +488,21 @@ idle.</p>
     nothing moved, the lane vector provably existed at one instant and the MAX is a correct answer;
     else retry. Bounded retries, then a rare read-only transaction over the active lanes as the
     escape hatch. One read for a small file, at most 130 for the hottest. An explicit
-    <code>utimens</code> bumps <code>mtime_gen</code>, so an old lane time can never resurrect.</div>
+    <code>utimens</code> bumps <code>mtime_gen</code>, so an old lane time can never resurrect.
+    <b>The same shape does double duty:</b> a read that spans several chunks collects the chunk-map
+    versions, fetches the data, and re-checks the versions — otherwise a slow reader could pick up
+    chunk A before someone's write lands and chunk B after it, and hand back a mix that never
+    existed. That is also why the read-ahead windows are <i>prefetch</i> and not a cache: a
+    prefetched map is only good inside the one read that fetched it.
+    <p style="margin:8px 0 0"><b>Checking version numbers is not quite enough, and the gap is
+    subtle.</b> A writer's changes are staged on every shard it touches <i>before</i> the deciding
+    moment, so those shards look the same immediately before and immediately after the decision.
+    A reader can therefore ask lane A "is this change final yet?", hear "not yet" and use the old
+    value, and — after the change becomes final — ask lane B, hear "yes" and use the new value.
+    Half of one indivisible write. So a collect also remembers every change it was told was
+    <i>undecided</i> and asks again at the end; if any of them became final while it was reading,
+    it starts over. A decision only ever happens once and never reverses, so anything it already
+    saw as decided is safe to trust.</p></div>
   <div class="card"><h4>Sub-chunk writes = versioned compare-and-swap — with an honest envelope</h4>
     Build a <b>fresh, uniquely named</b> candidate from the committed version; publish
     only-if-that-version-is-still-current; on conflict, re-read and retry. <b>Why unique names
@@ -473,13 +513,33 @@ idle.</p>
     amplification; same-chunk 4K writes contend. efs targets HPC-sized I/O; immutable <b>delta
     objects</b> are the designed escape hatch, built only if benchmarks demand it.</div>
   <div class="card"><h4>O_APPEND = parallel data, serialized order <i>and</i> visible frontier</h4>
-    <code>reserve_append(len)</code> is one Raft entry on the inode's shard — append order is serial
-    <i>by meaning</i>. The reserved range is then written through the ordinary parallel path. But
+    Reserving the end of the file is one Raft entry on the inode's shard — append order is serial
+    <i>by meaning</i>. <b>But the reservation must look at the real end of the file.</b> A private
+    "next append offset" counter would never notice an ordinary write to offset 1 GiB, which lands
+    on a <i>lane</i>, and the next append would happily return offset 0 and overwrite the file. So
+    the reservation reads the active lanes' end-of-file the same way <code>stat()</code> does and
+    only commits if none of them moved meanwhile; an extending write bumps its lane's counter and
+    makes a racing reservation retry. Ordinary writers pay nothing.
+    The reserved range is then written through the ordinary parallel path. But
     visibility must follow reservation order: B's bytes at offset 100 only mean anything because A's
     reservation came first, so the visible EOF is a <b>frontier that advances over contiguous
-    resolved reservations</b> — B waits for A's <i>resolution</i>, never for its data rate. A dead
-    appender's range is <b>committed as a zero hole by recovery</b> (which unblocks the frontier);
-    no returned write is ever lost.</div>
+    resolved reservations</b> — B waits for A's <i>resolution</i>, never for its data rate.
+    <p style="margin:8px 0 0"><b>The protection has to last until the append is done, not just
+    until it picks an offset.</b> If an append has claimed bytes 100–200 and is still writing them,
+    an ordinary write that pushes the end of the file out to 400 leaves a picture no ordering of
+    the two can explain. So while any append is still outstanding, the lanes hold a
+    <b>barrier</b>: a write that would push the end of the file past what the appends have claimed
+    has to get in line behind them. Writes that stay inside the file, or inside the claimed
+    region — which includes the appends' own data — are untouched, so this costs ordinary writers
+    nothing. It is set up once when appends start and taken down once when they finish, not per
+    append.</p>
+    <p style="margin:8px 0 0">A client claims exactly the number of bytes it is about to write (it
+    already has the whole buffer in hand), so a short append can only come from a failure. Every
+    claim ends one of three ways: it completes; the client is alive and its write failed, so it
+    <b>says so itself</b> and the range becomes committed zeros; or the client is gone and the
+    session protocol does that on its behalf. The middle case matters — otherwise one live client's
+    failed append would stall everyone behind it until somebody killed the client. No returned
+    write is ever lost.</p></div>
   <div class="card"><h4>Publications are batched at the Raft layer</h4>
     128 KiB chunks at 100 GB/s = ~800k publications a second — one transaction per chunk would make
     metadata the ceiling. Meaning stays per-chunk; saving is batched: <b>many publications per Raft
@@ -522,10 +582,35 @@ kernel-interface limitation, not a protocol gap.</div>
     — and the queue we just removed from the inode would reappear on the lane. So a transaction
     separates <b>keys it owns exclusively</b> (the chunk record, a name, an inode row) from
     <b>running maxima it merely contributes to</b> (lane size and times). Maxima are carried along
-    and folded in at the end; they never block anyone. And when a reader meets an in-flight
-    transaction it must find out the answer: committed → new value, aborted → old value, undecided →
-    old value — but <i>"I couldn't reach anyone to ask"</i> is an error to retry, never
-    "it isn't there".</p></div>
+    and folded in at the end; they never block anyone. <b>But "not a lock" must not mean "not
+    visible".</b> A maximum counts from the moment its transaction is decided, which can be well
+    before the tidy-up that folds it into the stored value — otherwise a <code>stat()</code> could
+    report a size older than a write that has already returned to the application. So pending
+    contributions are kept where a reader will find them, and reading a lane means "the stored
+    value, plus anything already committed but not yet folded in". And when a reader meets an
+    in-flight transaction it must find out the answer: committed → new value, aborted → old value,
+    undecided → old value — but <i>"I couldn't reach anyone to ask"</i> is an error, never
+    "it isn't there".</p>
+    <p style="margin:8px 0 0"><b>A third kind: things a transaction needs to stay true while it
+    finishes.</b> Several operations depend on something they <i>looked at</i> rather than
+    something they change — an append needs the end of the file to hold still, a directory rename
+    needs the chain of parent directories not to be re-parented under it, a <code>rmdir</code>
+    needs the directory to stay empty. Re-checking a version at the last second is not enough,
+    because the change can land in the gap between that check and the decision. So a transaction
+    can place a <b>guard</b>: a note that says "this must not change until I am done". Guards are
+    shared — any number of readers can guard the same thing — and only a change to the guarded
+    state conflicts with them.</p>
+    <p style="margin:8px 0 0"><b><code>rmdir</code> shows why a version check could never have
+    worked.</b> "This directory is empty" is a claim about entries that <i>do not exist</i>, and
+    a file created in the meantime has no version to compare against — it simply appears:</p>
+    <pre>rmdir : shard 17 holds nothing        → "empty"
+create: puts foo on shard 17
+rmdir : commits on what it saw earlier → a directory deleted with a file in it</pre>
+    <p style="margin:8px 0 0">So each shard keeps a small counter that ticks on <i>every</i> change to that directory's
+    entries, including new ones, and <code>rmdir</code> guards those counters. Now the create and
+    the rmdir genuinely collide, and one of them loses. The alternative — an exact running count of
+    entries — would put every create in the directory back through one place, which is the whole
+    thing spreading exists to avoid.</p></div>
   <div class="card"><h4>Client sessions: who is dead is decided by consensus, not by a timer</h4>
     Locks, open-unlinked files, append reservations, and duplicate suppression all hinge on "the
     client died" — but a network partition looks exactly like a death. So every client runs under a
@@ -547,24 +632,54 @@ kernel-interface limitation, not a protocol gap.</div>
     fenced everywhere: its locks drop, its open references retire, its pending append
     reservations resolve as committed zero holes, and its retries are still recognized as
     duplicates — from a <b>bounded</b> record (a watermark plus a small window), not a permanent row
-    per operation. A partitioned-but-alive client can lose its session — an availability sacrifice,
+    per operation. <b>That record is thrown away when the client says it got the answer, not after a
+    timer.</b> Nothing in the failure model puts a limit on how late a message can arrive, so a
+    clock can never prove a straggler is gone; the client reports how far its replies have got, and
+    anything below that line is safe to forget — <b>and that line has to be unbroken</b>, since
+    replies arrive out of order and "the highest reply I've seen" would let reply 100 authorize
+    throwing away reply 99 while 99 is still being retried. Keeping the actual <i>answer</i>
+    matters, not just "this finished": if an append's reply is lost, the retry has to get back
+    <b>the same offset</b>, or it grabs a second piece of the file and leaves a permanent gap.
+    A client that has been fenced can never report anything again, so waiting for its line to move
+    would keep its records forever; instead, once the fencing barrier is done, everything from that
+    old session is dropped at once and any straggling request is turned away on its session number
+    alone.
+    A partitioned-but-alive client can lose its session — an availability sacrifice,
     never a safety one. Storage targets never check sessions: an orphan fragment written by a fenced
     client is harmless, because only metadata can make it visible (P3). Open files are tracked as
-    <b>one open lease per (session, file)</b> on the inode's shard — committed at the session's
+    <b>one open lease per (file, session)</b> on the inode's shard — committed at the session's
     first open, dropped at its last close or on fencing — so an unlinked file is reclaimed exactly
     when no name <i>and</i> no open lease remain (I19), once per session per file, never per I/O.</div>
   <div class="card"><h4>Distributed POSIX locking</h4>
-    <code>fcntl</code>/<code>flock</code> records <code>(ino, start, end, owner)</code> live on the
-    inode's shard — one lock authority per file, mutated through Raft. Serializing lock
-    <i>management</i> is accepted: the application asked for coordination. Dead clients' locks are
-    reclaimed through the session protocol. Linux's three lock families — classic
-    <code>fcntl</code>, OFD <code>fcntl</code>, and <code>flock</code> — are three non-interacting
-    namespaces on the same authority. Advisory locks never fence the data path.</div>
+    <code>fcntl</code>/<code>flock</code> records live on the inode's shard — one lock authority per
+    file, mutated through Raft. Serializing lock <i>management</i> is accepted: the application asked
+    for coordination. Dead clients' locks are reclaimed through the session protocol. Linux has
+    three lock families but only <b>two groups that can block each other</b>, and it is easy to get
+    this backwards: classic <code>fcntl</code> and OFD <code>fcntl</code> locks are the same kind of
+    byte-range lock and <i>do</i> block each other — even inside one process using one handle —
+    while <code>flock</code> is off on its own and never blocks either of them.
+    <b>Who owns a lock is a separate question from what it blocks,</b> and getting it wrong breaks
+    ordinary programs: a classic <code>fcntl</code> lock belongs to the <i>process</i>, while
+    <code>flock</code> and OFD locks belong to the <i>open file</i> itself — so copies of that
+    handle, including ones a child process inherits, share the lock rather than fighting over it.
+    Advisory locks never fence the data path.
+    <p style="margin:8px 0 0"><b>All of this is filed under the file's incarnation number, not its
+    inode number.</b> Inode numbers get reused; a late-arriving "close" or "unlock" for the file
+    that <i>used</i> to have that number must not release something belonging to the file that has
+    it now.</p></div>
   <div class="card"><h4>File-data cache coherence: direct-I/O, correctness first</h4>
     Fresh metadata is defeated if B's kernel cache serves stale data after A's committed write.
     <b>Decision: bypass the kernel page cache for file data</b> (direct-I/O) — data visibility is
     then exactly as strong as metadata visibility, with no coherence protocol to get wrong. Leases
     may come later, only if they measurably pay.</div>
+  <div class="card"><h4>Times only move forward — because we make them <span class="tag t-good">easy to miss</span></h4>
+    Saying "only an explicit request can set a time backwards" quietly assumes the machine's clock
+    only moves forward, and it doesn't — clocks get corrected, sometimes backwards. Everywhere else
+    this design refuses to trust clocks, so it can't start here. Implicit updates (writes, chmod,
+    and so on) therefore take <b>whichever is later</b>, the stored time or now, so a clock
+    correction can't drag a file's timestamps back. The trade is that just after a backwards
+    correction a file's time can read slightly ahead of the wall clock until it catches up: a
+    deliberate choice suited to HPC, not bit-exact clock behaviour.</div>
   <div class="card"><h4>mmap: decided, not implied</h4>
     Coherent cross-client <code>MAP_SHARED</code> is a hard coherence problem: <b>unsupported
     initially</b> (mmap'd writes rejected or write-through, same-client visibility, documented).
@@ -576,30 +691,63 @@ kernel-interface limitation, not a protocol gap.</div>
   <div class="card"><h4>Timestamps: exact semantics, no inode bottleneck</h4>
     A write updates <i>two</i> of POSIX's three times — mtime and ctime — so <b>both</b> live in the
     lanes, not the inode row; else every write would queue on the inode's shard for the sake of one
-    field. Explicit changes set the inode row's <code>base_mtime</code>/<code>base_ctime</code> and
-    bump <code>mtime_gen</code>; <code>stat()</code> takes the MAX of the base and the current-gen
-    lane values under the epoch check. POSIX's distinction is kept exactly:
-    <code>chmod</code> changes <b>ctime, not mtime</b>. <b>atime</b> is a decision, not an omission:
-    a true access time would turn every read into a write, so <b>noatime is the default</b>,
-    <code>relatime</code> is a mount option paid for off the read path, and strict per-read atime is
-    deliberately not offered.</div>
+    field. Explicit changes set the inode row's <code>base_mtime</code>/<code>base_ctime</code>;
+    <code>stat()</code> takes the MAX of the base and the lane values under the epoch check. POSIX's
+    distinction is kept exactly: <code>chmod</code> changes <b>ctime, not mtime</b>.
+    <b>Only one operation needs a version guard, and it is not <code>chmod</code>.</b> A guard is
+    only ever needed for a time that can be set <i>backwards</i>, and only <code>utimens</code> can
+    do that. Everything else — writes, chmod, chown, link, truncate — only ever moves a time
+    forward, so taking the MAX is already right. Guard ctime as well and you create the bug you were
+    trying to avoid: a chmod would bump the version, the last write's mtime would be filtered out as
+    stale, and mtime would jump <i>backwards</i>. So <code>utimens</code> bumps
+    <code>mtime_gen</code>, only lane mtimes are filtered, and ctime is a plain MAX.
+    <b>atime</b> is a decision, not an omission: a true access time would turn every read into a
+    write, so <b>noatime is the default</b> — reads do not touch atime at all, exactly as Linux
+    <code>noatime</code> means — <code>relatime</code> is a mount option paid for off the read path,
+    and strict per-read atime is deliberately not offered.</div>
   <div class="card"><h4>A directory's times must spread with it <span class="tag t-good">easy to miss</span></h4>
     POSIX updates the <i>containing directory's</i> mtime/ctime every time an entry is created or
     removed. So a spread-out directory whose creates land on 60 shards, but whose timestamp lives on
     its home shard, still sends <b>every create</b> back to that one shard — the spread would be
     defeated by a timestamp. Fix: a hashed directory keeps its own running mtime/ctime <b>on each
     shard that holds its entries</b>, so a create is one entry on one shard, and
-    <code>stat()</code> on the directory takes the MAX over the shards actually used.</div>
+    <code>stat()</code> on the directory takes the MAX over the shards actually used.
+    <p style="margin:8px 0 0"><b>That only works if "the shards actually used" is a small
+    number.</b> If a directory's entries could scatter over all 4096 shards, then reading its
+    timestamp would mean asking 4096 places. So a spread directory uses <b>64 shards</b>, picked
+    the same way a file's 64 lanes are, and remembers which of them it has used in a 64-bit
+    marker on the directory itself. Different directories get different sets, so a million
+    directories still cover the whole cluster. Two details follow from that: the very first entry
+    to land on a new shard has to note it on the directory (at most 64 times in the directory's
+    life — the one case where a create does touch the directory's own shard), and setting a
+    directory's time <i>backwards</i> needs the same version-number trick a file's does.</p></div>
 </div>
 
-<div class="why"><b>Truncate is a content-epoch bump with a stated ordering rule.</b>
+<div class="why"><b>Truncate is a content-epoch bump — and the bump has to be delivered.</b>
 Bumping the epoch invalidates the lanes' size and time marks in one stroke and causes any write
 still in flight under the old epoch to be refused at commit (I22). A write under epoch E is ordered
-<i>before</i> the bump to E+1, and a stale epoch-E publication is harmless (P3). <b>What the bump
-does not do is throw away data:</b> shortening a file to 100 bytes must keep the first 100 bytes, so
-the chunk records survive the bump untouched and the inode row simply records the new size. Making
-the epoch part of a chunk's name instead would have either hidden the surviving data or forced a
-truncate to rewrite millions of records.</div>
+<i>before</i> the bump to E+1, and a stale epoch-E publication is harmless (P3). But the lane
+leaders are the ones who have to refuse those writes, and ordinary writes must never talk to the
+inode's shard — so writing the new epoch on the inode row alone would fence nobody. <b>Truncate
+pays instead:</b> it fences the inode row plus the file's active lanes — at most 65 places, for an
+operation that stops the whole file anyway.
+<b>And it must delete the records past the new end, not just ignore them.</b> Shorten a file to
+zero, leave the old chunk records lying around, then write 4K into one of those chunks: the write
+picks up the old chunk as its starting point and 124K of supposedly-deleted data comes back. So the
+same fence deletes them — cheaply, because the store is sorted and a lane holds every 64th chunk in
+order, so it is <b>one range delete per lane</b>, not one per chunk: 64 operations to shorten a
+1 TiB file. <b>What it does not do is throw away data below the new size:</b> shortening a file to
+100 bytes must keep the first 100 bytes, and those records survive untouched. Making the epoch part
+of a chunk's name instead would have either hidden the surviving data or forced a truncate to
+rewrite millions of records.
+<p style="margin:8px 0 0"><b>The chunk the new end lands in the middle of is part of the same
+step.</b> Shorten a file to 100K when chunks are 128K and the leftover 28K has to be gone for good
+— if the file grows again those bytes must read as zeros, not as whatever used to be there. So
+that one chunk is rewritten with its tail zeroed and stored <i>first</i>, and then the new length,
+the epoch bump, the deletions and that rewritten chunk all become real in a single step. Doing the
+rewrite afterwards would leave a moment where the file claims to be 100K long while the old bytes
+past 100K are still readable. If another writer changes that chunk in the meantime, the truncate
+starts over.</p></div>
 
 <div class="why"><b>Storage targets are dumb; metadata decides — and metadata checks the receipts.</b>
 A fragment <code>(file id, chunk, version, fragment, coding profile)</code> is immutable; writing it
@@ -648,7 +796,17 @@ requirement, not a tuning suggestion.</p>
     efs — P1 violated before we see the request. Required, not tuning:
     <code>FOPEN_DIRECT_IO</code>, <code>FOPEN_PARALLEL_DIRECT_WRITES</code>,
     <code>FUSE_CAP_ASYNC_DIO</code>, <code>FUSE_CAP_PARALLEL_DIROPS</code>, large
-    <code>max_write</code>/<code>max_pages</code>/<code>max_background</code>.</div>
+    <code>max_write</code>/<code>max_pages</code>/<code>max_background</code>.
+    <p style="margin:8px 0 0"><b>And some of it we cannot fix from here.</b> Today's Linux still
+    takes an exclusive lock on a file when a direct write <i>makes the file longer</i>, even with
+    <code>parallel_direct_writes</code> on; it does the same for <code>O_APPEND</code>; and it
+    locks the parent directory for every file creation (the "parallel directory operations" flag
+    only covers lookups and listings). These locks are <b>per mount</b>, so a job spread over 64
+    machines never meets them — but 64 processes on <i>one</i> machine sharing one mount can queue
+    up in their own kernel before efs is even asked. Creating the file at its final size turns
+    lengthening writes into ordinary ones and avoids the first case; the other two have no
+    workaround today. This is written down as a known limit of the current kernel interface, not
+    quietly folded into "efs scales".</p></div>
   <div class="card"><h4>Direct-I/O kills kernel readahead → the client owns prefetch</h4>
     FUSE direct-I/O bypasses the page cache <b>and does no read-ahead</b> — a naive client reads in
     lockstep and never fills the hardware queues. The client runs an <b>async prefetch
@@ -847,9 +1005,17 @@ extraordinary. The §3c contract exists to remove every software term from that 
   <tr><td>Same-file <code>fcntl</code> lock storm</td><td>inode lock-authority limited</td></tr>
   <tr><td>4K random updates in 128K chunks</td><td>read-modify-write limited — declared envelope</td></tr>
 </table>
+<p>Every row above scales <b>per client machine</b>. Three of them are additionally limited
+<i>within a single mount</i> by Linux itself, not by efs: concurrent writes that lengthen one file,
+<code>O_APPEND</code> on one file, and creating files in one directory all take an exclusive kernel
+lock before efs is asked (§3c). Many processes on many machines are unaffected; many processes on
+<b>one</b> machine sharing one mount are not. Creating a shared file at its final size removes the
+first case.</p>
 <div class="why">A scaling benchmark is a scientific question — <i>where did it stop: NIC, NVMe,
 memory bandwidth, EC compute, network fabric?</i> An answer that is a lock, one leader, one thread,
-FUSE serialization, one log, or one coordinator is by definition an EFS bug.</div>
+one log, or one coordinator is by definition an EFS bug. The kernel locks just named are the one
+exception — a known limit of today's FUSE, which a benchmark must report as such rather than as
+"efs scaled".</div>
 
 <!-- ============ INVARIANTS ============ -->
 <h2>6 · Invariants — the rules that define "bug"</h2>
@@ -868,7 +1034,7 @@ visible</b> state; transaction <i>intents</i> are internal (I17/I18).</p>
 <div class="inv"><b>I6 · no visible dangling name</b> — every committed visible name resolves to a valid inode.</div>
 <div class="inv"><b>I7 · nlink</b> — <code>nlink</code> equals the number of committed visible links.</div>
 <div class="inv"><b>I8 · no resurrection</b> — a committed removal is never reverted by replay/recovery/rebuild/stale clients.</div>
-<div class="inv"><b>I9 · absent ≠ unavailable</b> — failing to establish authoritative read state never returns ENOENT; it returns a retryable error saying "I could not find out", not "it is not there". This is a <b>safety</b> rule, not a nicety about error codes: if a lookup wrongly says a name is absent, the next create makes a <i>second</i> inode for an object that is still alive — which breaks I5, I6 and I7 and leaves no trace that it happened. <span style="color:var(--bad)">(the Sep 1 dangling-dentry class)</span></div>
+<div class="inv"><b>I9 · absent ≠ unavailable</b> — failing to establish authoritative read state never returns ENOENT; it returns an error saying "I could not find out", not "it is not there" — usually one worth retrying, occasionally a final one (a corrupt copy with nothing left to repair from), but never "absent". This is a <b>safety</b> rule, not a nicety about error codes: if a lookup wrongly says a name is absent, the next create makes a <i>second</i> inode for an object that is still alive — which breaks I5, I6 and I7 and leaves no trace that it happened. <span style="color:var(--bad)">(the Sep 1 dangling-dentry class)</span></div>
 <div class="inv"><b>I10 · metadata durability</b> — an acknowledged committed op survives any f simultaneous permanent node losses, for the configured f (quorum is always bigger than f, so a survivor always holds it).</div>
 <div class="inv"><b>I16 · request idempotency</b> — replaying a mutation with the same op-ID cannot apply its effect twice.</div>
 <div class="inv"><b>I17 · transaction atomic visibility</b> — a cross-shard transaction is visible as committed everywhere or nowhere.</div>
@@ -881,11 +1047,12 @@ visible</b> state; transaction <i>intents</i> are internal (I17/I18).</p>
 <div class="inv"><b>I13 · generation coherence</b> — reconstruction never mixes fragment generations. Version names are globally unique and carry the file's incarnation, so no two writers and no two lives of one inode number can ever put different data under one name.</div>
 <div class="inv"><b>I14 · publish-after-durability</b> — metadata cannot publish G before G satisfies EC durability.</div>
 <div class="inv"><b>I15 · orphan-generation safety</b> — unpublished generations are reclaimable without changing committed state.</div>
+<div class="inv"><b>L7 · reclamation</b> — any generation no chunk record still points at is eventually reclaimed: the ones never published (a lost race, an abandoned write) <i>and</i> the ones that were published and are no longer reachable — everything a truncate cut away, and every old-layout copy a re-stripe replaced.</div>
 <div class="inv"><b>I20 · stale-writer fencing</b> — a stale client/node cannot overwrite or publish over a newer committed chunk generation.</div>
 <div class="inv"><b>I21 · publish+size atomicity</b> — an extending write never commits its chunk publication without its size-lane update, nor the reverse; they are one Raft entry on one shard.</div>
 <div class="inv"><b>I22 · epoch fencing</b> — a write still in flight under a superseded content epoch is never committed, and stale-epoch lane values are never read. The epoch fences <i>work in progress</i>; it does <b>not</b> discard data already stored, so shortening a file keeps the part that survives.</div>
 <div class="inv"><b>I23 · session fencing</b> — a fenced session can perform no <b>authoritative</b> mutation: no metadata commit, no data publication; no lock, open reference, or append reservation of a fenced session survives it. Metadata leaders enforce the epoch; storage targets need not. Fencing is a <b>barrier</b>: nothing that assumes the old session is gone may happen until every shard that ever acted for it has confirmed it will not do so again.</div>
-<div class="inv"><b>I24 · atomic write publication</b> — a returned write is visible in its entirety to every later read; a concurrent read sees all or none of an in-flight call's chunks (default mode).</div>
+<div class="inv"><b>I24 · atomic write publication <i>and</i> atomic observation</b> — a returned write is visible in its entirety to every later read; a concurrent read sees all or none of an in-flight call's chunks (default mode). The duty runs both ways: a read spanning several chunks must also come back with a picture that really existed, so it re-checks the chunk versions it used. Committing a write in one stroke does not stop a <i>slow reader</i> from stitching an old chunk to a new one.</div>
 <div class="inv"><b>I25 · end-to-end integrity</b> — every stored fragment carries a checksum over its contents <i>and</i> its name. A fragment that fails the check is never used to rebuild anything; it counts as missing and is repaired.</div>
 
 <h3>Liveness (bounded, testable)</h3>
