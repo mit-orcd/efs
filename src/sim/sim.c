@@ -27,24 +27,62 @@ static void hist(struct efs_sim *sim, uint32_t kind, uint64_t a, uint64_t b)
 static void frag_sum(const struct efs_frag_id *id, const uint8_t *data,
                      uint32_t len, uint8_t out[EFS_HASH_SIZE])
 {
-    uint8_t hdr[32];
+    uint8_t hdr[64];
     uint8_t *tmp;
 
     memset(hdr, 0, sizeof(hdr));
-    memcpy(hdr, &id->export_id, sizeof(id->export_id));
-    memcpy(hdr + 4, &id->ino, sizeof(id->ino));
-    memcpy(hdr + 12, &id->chunk_index, sizeof(id->chunk_index));
-    memcpy(hdr + 16, &id->fragment_index, sizeof(id->fragment_index));
-    tmp = malloc(32 + (size_t)len);
+    memcpy(hdr + 0, &id->export_id, sizeof(id->export_id));
+    memcpy(hdr + 8, &id->ino, sizeof(id->ino));
+    memcpy(hdr + 16, &id->inode_generation, sizeof(id->inode_generation));
+    memcpy(hdr + 24, &id->chunk_generation, sizeof(id->chunk_generation));
+    memcpy(hdr + 32, &id->chunk_index, sizeof(id->chunk_index));
+    memcpy(hdr + 36, &id->fragment_index, sizeof(id->fragment_index));
+    memcpy(hdr + 40, &id->coding_profile_id, sizeof(id->coding_profile_id));
+    tmp = malloc(64 + (size_t)len);
     if (!tmp) {
         efs_hash(hdr, sizeof(hdr), out);
         return;
     }
-    memcpy(tmp, hdr, 32);
+    memcpy(tmp, hdr, 64);
     if (len)
-        memcpy(tmp + 32, data, len);
-    efs_hash(tmp, 32 + (size_t)len, out);
+        memcpy(tmp + 64, data, len);
+    efs_hash(tmp, 64 + (size_t)len, out);
     free(tmp);
+}
+
+static void fill_frag(struct efs_frag_id *id, efs_ino_t ino, uint64_t igen,
+                      uint64_t cgen, uint32_t ci, uint32_t fi)
+{
+    memset(id, 0, sizeof(*id));
+    id->export_id = 1;
+    id->ino = ino;
+    id->inode_generation = igen;
+    id->chunk_generation = cgen;
+    id->chunk_index = ci;
+    id->fragment_index = fi;
+    id->coding_profile_id = EFS_META_PROFILE_K2F1;
+}
+
+static uint64_t mint_cand(struct efs_sim *sim, int client, uint32_t ci,
+                          uint32_t retry)
+{
+    return efs_meta_candidate_gen(sim->cli[client].win.client_uuid,
+                                  sim->cli[client].win.session_epoch, 0, ci,
+                                  retry);
+}
+
+static int load_row(struct efs_sim *sim, efs_ino_t ino, struct efs_meta_row *row)
+{
+    struct efs_kv *kv;
+    int rc;
+
+    rc = sim_raft_read_group(sim, EFS_RAFT_GROUP_SHARD);
+    if (rc != EFS_OK)
+        return rc;
+    kv = sim_raft_kv_group(sim, EFS_RAFT_GROUP_SHARD);
+    if (!kv)
+        return EFS_ERR_BUSY;
+    return efs_meta_apply_get_inode(kv, ino, row);
 }
 
 static int ev_cmp(const struct sim_ev *a, const struct sim_ev *b)
@@ -144,7 +182,7 @@ static int frag_ok(struct efs_sim *sim, const struct efs_frag_id *id,
     return EFS_OK;
 }
 
-static int durable_count(struct efs_sim *sim, efs_ino_t ino, uint32_t ci,
+static int durable_count(struct efs_sim *sim, const struct efs_frag_id *base,
                          uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
                          efs_node_id_t ranks[EFS_NUM_FRAGMENTS])
 {
@@ -156,11 +194,10 @@ static int durable_count(struct efs_sim *sim, efs_ino_t ino, uint32_t ci,
 
     if (!buf)
         return -1;
-    place_rank(sim, ino, ci, ranks);
+    place_rank(sim, base->ino, base->chunk_index, ranks);
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        struct efs_frag_id id = { .export_id = 1, .ino = ino,
-                                  .chunk_index = ci,
-                                  .fragment_index = (uint32_t)i };
+        struct efs_frag_id id = *base;
+        id.fragment_index = (uint32_t)i;
         flen = flen_cap;
         if (frag_ok(sim, &id, NULL, buf, &flen, sums[i]) == EFS_OK)
             n++;
@@ -210,9 +247,7 @@ static int apply_unlink(struct efs_sim *sim, struct sim_ev *e)
 
 static int apply_put(struct efs_sim *sim, struct sim_ev *e)
 {
-    struct efs_frag_id id = { .export_id = 1, .ino = e->ino,
-                              .chunk_index = e->chunk_index,
-                              .fragment_index = e->frag_index };
+    struct efs_frag_id id;
     efs_node_id_t ranks[EFS_NUM_FRAGMENTS];
     int si;
     uint8_t sum[EFS_HASH_SIZE];
@@ -221,6 +256,8 @@ static int apply_put(struct efs_sim *sim, struct sim_ev *e)
     uint32_t plen = 0;
     int rc;
 
+    fill_frag(&id, e->ino, e->inode_generation, e->chunk_generation,
+              e->chunk_index, e->frag_index);
     place_rank(sim, e->ino, e->chunk_index, ranks);
     si = (int)ranks[e->frag_index] - 1;
     if (si < 0 || si >= sim->nservers)
@@ -251,24 +288,49 @@ static int apply_publish(struct efs_sim *sim, struct sim_ev *e)
 {
     uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     efs_node_id_t ranks[EFS_NUM_FRAGMENTS];
-    struct efs_meta_chunk ch;
+    struct efs_meta_pub p;
+    struct efs_meta_row row;
+    struct efs_meta_chunk have;
+    struct efs_frag_id id;
+    uint64_t igen, cgen, expected, epoch;
     int n;
     int rc;
     int i;
 
-    n = durable_count(sim, e->ino, e->chunk_index, sums, ranks);
+    rc = load_row(sim, e->ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    igen = row.generation;
+    cgen = mint_cand(sim, (int)e->client, e->chunk_index, e->retry);
+    if (e->cas_explicit) {
+        expected = e->expected_gen;
+        epoch = e->content_epoch;
+    } else {
+        epoch = row.content_epoch;
+        expected = 0;
+        if (sim_raft_get_chunk(sim, e->ino, e->chunk_index, &have) == EFS_OK)
+            expected = have.generation;
+    }
+    fill_frag(&id, e->ino, igen, cgen, e->chunk_index, 0);
+    n = durable_count(sim, &id, sums, ranks);
     if (n < 0)
         return EFS_ERR_NOMEM;
     /* I14: healthy publish needs all k+f = 3 fragments durable. */
     if (n < EFS_NUM_FRAGMENTS)
         return EFS_ERR_IO;
-    memset(&ch, 0, sizeof(ch));
+    memset(&p, 0, sizeof(p));
+    p.ino = e->ino;
+    p.chunk_index = e->chunk_index;
+    p.new_size = e->new_size;
+    p.expected_gen = expected;
+    p.candidate_gen = cgen;
+    p.content_epoch = epoch;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        ch.nodes[i] = ranks[i];
-        memcpy(ch.checksums[i], sums[i], EFS_HASH_SIZE);
+        p.ch.nodes[i] = ranks[i];
+        memcpy(p.ch.checksums[i], sums[i], EFS_HASH_SIZE);
     }
-    rc = sim_raft_publish(sim, (int)e->client, e->ino, e->chunk_index,
-                          e->new_size, &ch);
+    rc = sim_raft_publish(sim, (int)e->client, &p);
     if (rc != EFS_OK)
         return rc;
     hist(sim, EV_PUBLISH, e->ino, e->chunk_index);
@@ -584,19 +646,30 @@ int efs_sim_unlink(struct efs_sim *sim, int client, efs_ino_t parent,
     return sim->last_rc;
 }
 
-int efs_sim_put_stripe(struct efs_sim *sim, int client, efs_ino_t ino,
-                       uint32_t chunk_index, const uint8_t *chunk,
-                       uint32_t chunk_len, int skip_frag)
+int efs_sim_put_stripe_as(struct efs_sim *sim, int client, efs_ino_t ino,
+                          uint32_t chunk_index, const uint8_t *chunk,
+                          uint32_t chunk_len, int skip_frag,
+                          uint64_t inode_generation, uint32_t retry)
 {
     uint8_t *frags[EFS_NUM_FRAGMENTS];
     uint8_t *block = NULL;
     size_t fl = (size_t)EFS_SIM_CHUNK / 2;
+    uint64_t igen, cgen;
     int i, rc = EFS_OK;
 
     if (!sim || !chunk || client < 0 || client >= sim->nclients)
         return EFS_ERR_INVAL;
     if (chunk_len > EFS_SIM_CHUNK)
         return EFS_ERR_INVAL;
+    if (inode_generation) {
+        igen = inode_generation;
+    } else {
+        uint32_t nlink = 0;
+        rc = efs_sim_inode_nlink(sim, ino, &nlink, &igen);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    cgen = mint_cand(sim, client, chunk_index, retry);
     block = calloc(EFS_NUM_FRAGMENTS, fl);
     if (!block)
         return EFS_ERR_NOMEM;
@@ -618,6 +691,9 @@ int efs_sim_put_stripe(struct efs_sim *sim, int client, efs_ino_t ino,
         e.ino = ino;
         e.chunk_index = chunk_index;
         e.frag_index = (uint32_t)i;
+        e.inode_generation = igen;
+        e.chunk_generation = cgen;
+        e.retry = retry;
         e.plen = (uint32_t)fl;
         e.payload = malloc(fl);
         if (!e.payload) {
@@ -633,6 +709,44 @@ int efs_sim_put_stripe(struct efs_sim *sim, int client, efs_ino_t ino,
         }
     }
     free(block);
+    rc = maybe_drain(sim);
+    if (rc != EFS_OK)
+        return rc;
+    return sim->last_rc;
+}
+
+int efs_sim_put_stripe(struct efs_sim *sim, int client, efs_ino_t ino,
+                       uint32_t chunk_index, const uint8_t *chunk,
+                       uint32_t chunk_len, int skip_frag)
+{
+    return efs_sim_put_stripe_as(sim, client, ino, chunk_index, chunk,
+                                 chunk_len, skip_frag, 0, 0);
+}
+
+int efs_sim_publish_cas(struct efs_sim *sim, int client, efs_ino_t ino,
+                        uint32_t chunk_index, uint64_t new_size,
+                        uint64_t expected_gen, uint32_t retry,
+                        uint64_t content_epoch)
+{
+    struct sim_ev e;
+    int rc;
+
+    if (!sim || client < 0 || client >= sim->nclients)
+        return EFS_ERR_INVAL;
+    memset(&e, 0, sizeof(e));
+    e.kind = EV_PUBLISH;
+    e.client = (uint8_t)client;
+    e.ino = ino;
+    e.chunk_index = chunk_index;
+    e.new_size = new_size;
+    e.expected_gen = expected_gen;
+    e.retry = retry;
+    e.content_epoch = content_epoch;
+    e.cas_explicit = 1;
+    sim->last_rc = EFS_OK;
+    rc = schedule(sim, &e);
+    if (rc != EFS_OK)
+        return rc;
     rc = maybe_drain(sim);
     if (rc != EFS_OK)
         return rc;
@@ -663,6 +777,36 @@ int efs_sim_publish(struct efs_sim *sim, int client, efs_ino_t ino,
     return sim->last_rc;
 }
 
+int efs_sim_epoch_fence(struct efs_sim *sim, efs_ino_t ino)
+{
+    if (!sim || ino == 0)
+        return EFS_ERR_INVAL;
+    return sim_raft_epoch_fence(sim, ino);
+}
+
+int efs_sim_frag_id(struct efs_sim *sim, int client, efs_ino_t ino,
+                    uint32_t chunk_index, uint32_t fragment_index,
+                    uint64_t inode_generation, uint32_t retry,
+                    struct efs_frag_id *out)
+{
+    uint64_t igen, cgen;
+    uint32_t nlink = 0;
+    int rc;
+
+    if (!sim || !out || client < 0 || client >= sim->nclients)
+        return EFS_ERR_INVAL;
+    if (inode_generation) {
+        igen = inode_generation;
+    } else {
+        rc = efs_sim_inode_nlink(sim, ino, &nlink, &igen);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    cgen = mint_cand(sim, client, chunk_index, retry);
+    fill_frag(out, ino, igen, cgen, chunk_index, fragment_index);
+    return EFS_OK;
+}
+
 int efs_sim_read_chunk(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
                        uint8_t *out, uint32_t chunk_len)
 {
@@ -674,11 +818,15 @@ int efs_sim_read_chunk(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
     uint8_t *full;
     int i, a = -1, b = -1, miss = -1, n = 0;
     int rc;
+    uint64_t igen = 0;
 
     if (!sim || !out || chunk_len > EFS_SIM_CHUNK)
         return EFS_ERR_INVAL;
     if (sim_raft_get_chunk(sim, ino, chunk_index, &ch) != EFS_OK)
         return EFS_ERR_NOT_FOUND; /* unpublished: I15, not served */
+    rc = efs_sim_inode_nlink(sim, ino, NULL, &igen);
+    if (rc != EFS_OK)
+        return rc;
     block = calloc(EFS_NUM_FRAGMENTS, fl);
     full = malloc(EFS_SIM_CHUNK);
     if (!block || !full) {
@@ -687,10 +835,9 @@ int efs_sim_read_chunk(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
         return EFS_ERR_NOMEM;
     }
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        struct efs_frag_id id = { .export_id = 1, .ino = ino,
-                                  .chunk_index = chunk_index,
-                                  .fragment_index = (uint32_t)i };
+        struct efs_frag_id id;
         uint32_t len = (uint32_t)fl;
+        fill_frag(&id, ino, igen, ch.generation, chunk_index, (uint32_t)i);
         frags[i] = block + (size_t)i * fl;
         present[i] = 0;
         if (frag_ok(sim, &id, NULL, frags[i], &len, NULL) == EFS_OK) {

@@ -164,6 +164,16 @@ implementation habit: it is only ever *tested* if the simulator can flip bits
 in a durable object, and an EC decoder without integrity checking fails that
 test by producing confidently wrong data rather than an error.
 
+**Step 9 in-sim (gated).** Fragments are FileID-scoped and named by a unique
+candidate generation (never G+1). Publication is `CAS(expected = committed
+base)` of that candidate plus a lane MAX in one KV batch; a CAS miss does
+not apply the MAX (I21). A publication naming a superseded `content_epoch`
+is rejected; data-target PUT is not (I22/I23). `test_sim` and
+`test_meta_apply` gate I13, I14, I15, I20, I21, I22 (epoch fence on lane-0
+files), and I25, plus rejection of duplicate-node / wrong-profile evidence.
+Not in this step: multi-chunk I24, truncate range-delete, O_APPEND, degraded
+`u` / profile-cutover barriers. Production `efsd` is unchanged.
+
 ## Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove

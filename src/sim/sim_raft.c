@@ -13,6 +13,7 @@
 #define CMD_CREATE  1
 #define CMD_UNLINK  2
 #define CMD_PUBLISH 3
+#define CMD_EPOCH   SIM_CMD_EPOCH
 #define CMD_MAX     512
 #define WAIT_TICKS  80
 #define RAFT_HDR    98
@@ -159,30 +160,34 @@ static int pack_unlink(uint8_t *out, uint32_t *len, const uint8_t *uuid,
 }
 
 static int pack_publish(uint8_t *out, uint32_t *len, const uint8_t *uuid,
-                        uint32_t epoch, efs_ino_t ino, uint32_t chunk_index,
-                        uint64_t new_size, const struct efs_meta_chunk *ch)
+                        uint32_t epoch, const struct efs_meta_pub *p)
 {
     uint32_t n = 1 + 8 + 4 + 8 +
                  (uint32_t)EFS_NUM_FRAGMENTS * (4 + EFS_HASH_SIZE) +
-                 EFS_OPID_UUID_LEN + 4;
+                 EFS_OPID_UUID_LEN + 4 + 8 + 8 + 8 + 4;
     int i;
-    uint8_t *p;
+    uint8_t *q;
 
-    if (n > CMD_MAX)
+    if (!p || n > CMD_MAX)
         return EFS_ERR_INVAL;
     out[0] = CMD_PUBLISH;
-    wr64(out + 1, ino);
-    wr32(out + 9, chunk_index);
-    wr64(out + 13, new_size);
-    p = out + 21;
+    wr64(out + 1, p->ino);
+    wr32(out + 9, p->chunk_index);
+    wr64(out + 13, p->new_size);
+    q = out + 21;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        wr32(p, ch->nodes[i]);
-        p += 4;
-        memcpy(p, ch->checksums[i], EFS_HASH_SIZE);
-        p += EFS_HASH_SIZE;
+        wr32(q, p->ch.nodes[i]);
+        q += 4;
+        memcpy(q, p->ch.checksums[i], EFS_HASH_SIZE);
+        q += EFS_HASH_SIZE;
     }
-    memcpy(p, uuid, EFS_OPID_UUID_LEN);
-    wr32(p + EFS_OPID_UUID_LEN, epoch);
+    memcpy(q, uuid, EFS_OPID_UUID_LEN);
+    wr32(q + EFS_OPID_UUID_LEN, epoch);
+    q += EFS_OPID_UUID_LEN + 4;
+    wr64(q, p->candidate_gen);
+    wr64(q + 8, p->expected_gen);
+    wr64(q + 16, p->content_epoch);
+    wr32(q + 24, p->coding_profile_id);
     *len = n;
     return EFS_OK;
 }
@@ -270,39 +275,56 @@ static int apply_unlink_cmd(struct sim_server *s, const uint8_t *cmd,
 static int apply_publish_cmd(struct sim_server *s, const uint8_t *cmd,
                              uint32_t clen, uint64_t index)
 {
-    efs_ino_t ino;
-    uint32_t ci, need, epoch;
-    uint64_t sz;
-    struct efs_meta_chunk ch;
-    const uint8_t *p;
+    struct efs_meta_pub p;
+    uint32_t need, epoch;
+    const uint8_t *q;
     uint8_t uuid[EFS_OPID_UUID_LEN];
     uint8_t lane;
     int i, rc;
 
     need = 21 + (uint32_t)EFS_NUM_FRAGMENTS * (4 + EFS_HASH_SIZE) +
-           EFS_OPID_UUID_LEN + 4;
+           EFS_OPID_UUID_LEN + 4 + 8 + 8 + 8 + 4;
     if (clen < need)
         return EFS_ERR_PROTO;
-    ino = rd64(cmd + 1);
-    ci = rd32(cmd + 9);
-    sz = rd64(cmd + 13);
-    memset(&ch, 0, sizeof(ch));
-    p = cmd + 21;
+    memset(&p, 0, sizeof(p));
+    p.ino = rd64(cmd + 1);
+    p.chunk_index = rd32(cmd + 9);
+    p.new_size = rd64(cmd + 13);
+    q = cmd + 21;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        ch.nodes[i] = rd32(p);
-        p += 4;
-        memcpy(ch.checksums[i], p, EFS_HASH_SIZE);
-        p += EFS_HASH_SIZE;
+        p.ch.nodes[i] = rd32(q);
+        q += 4;
+        memcpy(p.ch.checksums[i], q, EFS_HASH_SIZE);
+        q += EFS_HASH_SIZE;
     }
-    memcpy(uuid, p, EFS_OPID_UUID_LEN);
-    epoch = rd32(p + EFS_OPID_UUID_LEN);
-    lane = (uint8_t)(ci % EFS_META_LANES);
-    rc = efs_session_accept(s->disk, efs_kv_lane_shard(ino, lane), uuid, epoch);
+    memcpy(uuid, q, EFS_OPID_UUID_LEN);
+    epoch = rd32(q + EFS_OPID_UUID_LEN);
+    q += EFS_OPID_UUID_LEN + 4;
+    p.candidate_gen = rd64(q);
+    p.expected_gen = rd64(q + 8);
+    p.content_epoch = rd64(q + 16);
+    p.coding_profile_id = rd32(q + 24);
+    lane = (uint8_t)(p.chunk_index % EFS_META_LANES);
+    rc = efs_session_accept(s->disk, efs_kv_lane_shard(p.ino, lane), uuid, epoch);
     if (rc != EFS_OK) {
-        sim_note_apply(s, EFS_RAFT_GROUP_SHARD, index, rc, ino);
+        sim_note_apply(s, EFS_RAFT_GROUP_SHARD, index, rc, p.ino);
         return EFS_OK;
     }
-    rc = efs_meta_apply_publish(s->disk, ino, ci, sz, &ch);
+    rc = efs_meta_apply_publish(s->disk, &p);
+    sim_note_apply(s, EFS_RAFT_GROUP_SHARD, index, rc, p.ino);
+    return EFS_OK;
+}
+
+static int apply_epoch_cmd(struct sim_server *s, const uint8_t *cmd,
+                           uint32_t clen, uint64_t index)
+{
+    efs_ino_t ino;
+    int rc;
+
+    if (clen < 9)
+        return EFS_ERR_PROTO;
+    ino = rd64(cmd + 1);
+    rc = efs_meta_apply_epoch_fence(s->disk, ino);
     sim_note_apply(s, EFS_RAFT_GROUP_SHARD, index, rc, ino);
     return EFS_OK;
 }
@@ -322,6 +344,8 @@ static int raft_apply(void *app, uint64_t index, uint64_t term,
         return apply_unlink_cmd(s, cmd, clen, index);
     case CMD_PUBLISH:
         return apply_publish_cmd(s, cmd, clen, index);
+    case CMD_EPOCH:
+        return apply_epoch_cmd(s, cmd, clen, index);
     case SIM_CMD_SESSION:
         return sim_sess_apply(s, EFS_RAFT_GROUP_SHARD, cmd, clen, index);
     default:
@@ -801,9 +825,7 @@ int sim_raft_unlink(struct efs_sim *sim, int client, efs_ino_t parent,
     return mutate(sim, cmd, clen);
 }
 
-int sim_raft_publish(struct efs_sim *sim, int client, efs_ino_t ino,
-                     uint32_t chunk_index, uint64_t new_size,
-                     const struct efs_meta_chunk *ch)
+int sim_raft_publish(struct efs_sim *sim, int client, const struct efs_meta_pub *p)
 {
     uint8_t cmd[CMD_MAX];
     uint32_t clen = 0, epoch, lsh;
@@ -811,19 +833,30 @@ int sim_raft_publish(struct efs_sim *sim, int client, efs_ino_t ino,
     uint8_t lane;
     int rc;
 
-    if (!sim || client < 0 || client >= sim->nclients)
+    if (!sim || !p || client < 0 || client >= sim->nclients)
         return EFS_ERR_INVAL;
     uuid = sim->cli[client].win.client_uuid;
     epoch = sim->cli[client].win.session_epoch;
-    lane = (uint8_t)(chunk_index % EFS_META_LANES);
-    lsh = efs_kv_lane_shard(ino, lane);
+    lane = (uint8_t)(p->chunk_index % EFS_META_LANES);
+    lsh = efs_kv_lane_shard(p->ino, lane);
     rc = sim_sess_ensure_id(sim, uuid, epoch, lsh);
     if (rc != EFS_OK)
         return rc;
-    rc = pack_publish(cmd, &clen, uuid, epoch, ino, chunk_index, new_size, ch);
+    rc = pack_publish(cmd, &clen, uuid, epoch, p);
     if (rc != EFS_OK)
         return rc;
     return mutate(sim, cmd, clen);
+}
+
+int sim_raft_epoch_fence(struct efs_sim *sim, efs_ino_t ino)
+{
+    uint8_t cmd[9];
+
+    if (!sim || ino == 0)
+        return EFS_ERR_INVAL;
+    cmd[0] = CMD_EPOCH;
+    wr64(cmd + 1, ino);
+    return mutate(sim, cmd, 9);
 }
 
 int sim_raft_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,

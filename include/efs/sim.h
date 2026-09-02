@@ -6,7 +6,7 @@
 #include "efs/opid.h"
 #include "efs/txn.h"
 
-/* Deterministic simulator (architecture.md §10 steps 1–8).
+/* Deterministic simulator (architecture.md §10 steps 1–9).
  * N logical servers + M clients in one process. Seeded PRNG drives
  * message order, drops, delays, crashes, and clock steps. Metadata is
  * a Raft group (servers 0..2 vote initially; membership changes through
@@ -76,16 +76,32 @@ int efs_sim_mkdir_until(struct efs_sim *sim, efs_ino_t parent, const char *name,
 int efs_sim_txn_finish(struct efs_sim *sim, const struct efs_txid *t, int commit);
 
 /* Logical data protocol. skip_frag -1 = PUT all k+f; else omit that index.
- * publish is one event (chunk map + size) and refuses unless I14 holds.
- * read_chunk reconstructs only a *published* generation; skips corrupt
- * fragments (I25) and never serves unpublished orphans (I15). */
+ * Fragments are FileID + unique candidate generation. publish is CAS
+ * against the committed base (expected 0 if none) plus a lane MAX, and
+ * refuses unless I14 holds. read_chunk reconstructs only the *published*
+ * candidate; skips corrupt fragments (I25) and never serves unpublished
+ * or losing-CAS orphans (I15/I20). inode_generation 0 on put_as / frag_id
+ * means the live FileID. */
 int efs_sim_put_stripe(struct efs_sim *sim, int client, efs_ino_t ino,
                        uint32_t chunk_index, const uint8_t *chunk,
                        uint32_t chunk_len, int skip_frag);
+int efs_sim_put_stripe_as(struct efs_sim *sim, int client, efs_ino_t ino,
+                          uint32_t chunk_index, const uint8_t *chunk,
+                          uint32_t chunk_len, int skip_frag,
+                          uint64_t inode_generation, uint32_t retry);
 int efs_sim_publish(struct efs_sim *sim, int client, efs_ino_t ino,
                     uint32_t chunk_index, uint64_t new_size);
+int efs_sim_publish_cas(struct efs_sim *sim, int client, efs_ino_t ino,
+                        uint32_t chunk_index, uint64_t new_size,
+                        uint64_t expected_gen, uint32_t retry,
+                        uint64_t content_epoch);
+int efs_sim_epoch_fence(struct efs_sim *sim, efs_ino_t ino);
 int efs_sim_read_chunk(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
                        uint8_t *out, uint32_t chunk_len);
+int efs_sim_frag_id(struct efs_sim *sim, int client, efs_ino_t ino,
+                    uint32_t chunk_index, uint32_t fragment_index,
+                    uint64_t inode_generation, uint32_t retry,
+                    struct efs_frag_id *out);
 int efs_sim_frag_present(struct efs_sim *sim, const struct efs_frag_id *id);
 
 /* I23 revocation barrier. until: BEGIN/LOCAL/ACK/ACTIVE. Fence is

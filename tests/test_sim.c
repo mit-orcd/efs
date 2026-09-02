@@ -121,16 +121,15 @@ static void test_orphan(void)
     struct efs_sim *s = mk(13);
     efs_ino_t ino = 0;
     uint8_t src[32], got[32];
-    struct efs_frag_id id = { .export_id = 1, .chunk_index = 0,
-                              .fragment_index = 0 };
+    struct efs_frag_id id;
 
     CHECK(s, "mk");
     fill(src, sizeof(src));
     CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "o", &ino) == EFS_OK,
           "create");
-    id.ino = ino;
     CHECK(efs_sim_put_stripe(s, 0, ino, 0, src, sizeof(src), -1) == EFS_OK,
           "put");
+    CHECK(efs_sim_frag_id(s, 0, ino, 0, 0, 0, 0, &id) == EFS_OK, "id");
     CHECK(efs_sim_frag_present(s, &id) == 1, "orphan on disk");
     CHECK(efs_sim_read_chunk(s, ino, 0, got, sizeof(got)) == EFS_ERR_NOT_FOUND,
           "unpublished");
@@ -163,18 +162,17 @@ static void test_i25(void)
     struct efs_sim *s = mk(19);
     efs_ino_t ino = 0;
     uint8_t src[48], got[48];
-    struct efs_frag_id id = { .export_id = 1, .chunk_index = 0,
-                              .fragment_index = 2 };
+    struct efs_frag_id id;
 
     CHECK(s, "mk");
     fill(src, sizeof(src));
     memset(got, 0, sizeof(got));
     CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "c", &ino) == EFS_OK,
           "create");
-    id.ino = ino;
     CHECK(efs_sim_put_stripe(s, 0, ino, 0, src, sizeof(src), -1) == EFS_OK,
           "put");
     CHECK(efs_sim_publish(s, 0, ino, 0, sizeof(src)) == EFS_OK, "publish");
+    CHECK(efs_sim_frag_id(s, 0, ino, 0, 2, 0, 0, &id) == EFS_OK, "id");
     CHECK(efs_sim_corrupt(s, 0, &id) == EFS_OK, "corrupt P");
     CHECK(efs_sim_read_chunk(s, ino, 0, got, sizeof(got)) == EFS_OK, "read");
     CHECK(memcmp(src, got, sizeof(src)) == 0, "I25 skipped corrupt");
@@ -520,6 +518,8 @@ static void test_i23_session_fence(void)
     CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "c", &b) == EFS_OK &&
               b,
           "new epoch");
+    CHECK(efs_sim_put_stripe(s, 0, ino, 0, src, sizeof(src), -1) == EFS_OK,
+          "re-PUT new epoch");
     CHECK(efs_sim_publish(s, 0, ino, 0, sizeof(src)) == EFS_OK, "publish new");
     memset(got, 0, sizeof(got));
     CHECK(efs_sim_read_chunk(s, ino, 0, got, sizeof(got)) == EFS_OK, "read");
@@ -574,6 +574,82 @@ static void test_i23_barrier_holds_leases(void)
     efs_sim_free(s);
 }
 
+static void test_i20_cas(void)
+{
+    struct efs_sim *s = mk(31);
+    efs_ino_t ino = 0;
+    uint8_t a[32], b[32], got[32];
+    struct efs_frag_id loser;
+    uint32_t i;
+
+    CHECK(s, "mk");
+    for (i = 0; i < sizeof(a); i++) {
+        a[i] = (uint8_t)(0x10 + i);
+        b[i] = (uint8_t)(0x80 + i);
+    }
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "w", &ino) == EFS_OK,
+          "create");
+    CHECK(efs_sim_put_stripe(s, 0, ino, 0, a, sizeof(a), -1) == EFS_OK, "put A");
+    CHECK(efs_sim_put_stripe(s, 1, ino, 0, b, sizeof(b), -1) == EFS_OK, "put B");
+    CHECK(efs_sim_publish_cas(s, 0, ino, 0, sizeof(a), 0, 0, 0) == EFS_OK,
+          "A wins");
+    CHECK(efs_sim_publish_cas(s, 1, ino, 0, sizeof(b), 0, 0, 0) == EFS_ERR_STALE,
+          "I20 B loses");
+    memset(got, 0, sizeof(got));
+    CHECK(efs_sim_read_chunk(s, ino, 0, got, sizeof(got)) == EFS_OK, "read");
+    CHECK(memcmp(got, a, sizeof(a)) == 0, "winner bytes");
+    CHECK(efs_sim_frag_id(s, 1, ino, 0, 0, 0, 0, &loser) == EFS_OK, "loser id");
+    CHECK(efs_sim_frag_present(s, &loser) == 1, "orphan remains");
+    efs_sim_free(s);
+}
+
+static void test_i13_fileid(void)
+{
+    struct efs_sim *s = mk(37);
+    efs_ino_t ino = 0;
+    uint8_t src[16], got[16];
+    struct efs_frag_id stale, live;
+
+    CHECK(s, "mk");
+    fill(src, sizeof(src));
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "g", &ino) == EFS_OK,
+          "create");
+    CHECK(efs_sim_put_stripe_as(s, 0, ino, 0, src, sizeof(src), -1, 99, 0) ==
+              EFS_OK,
+          "PUT stale gen");
+    CHECK(efs_sim_frag_id(s, 0, ino, 0, 0, 99, 0, &stale) == EFS_OK, "stale id");
+    CHECK(efs_sim_frag_present(s, &stale) == 1, "on disk");
+    CHECK(efs_sim_frag_id(s, 0, ino, 0, 0, 0, 0, &live) == EFS_OK, "live id");
+    CHECK(efs_sim_frag_present(s, &live) == 0, "not live FileID");
+    CHECK(efs_sim_publish(s, 0, ino, 0, sizeof(src)) == EFS_ERR_IO, "no live frags");
+    CHECK(efs_sim_read_chunk(s, ino, 0, got, sizeof(got)) == EFS_ERR_NOT_FOUND,
+          "unpublished");
+    efs_sim_free(s);
+}
+
+static void test_i22_epoch(void)
+{
+    struct efs_sim *s = mk(41);
+    efs_ino_t ino = 0;
+    uint8_t src[24], got[24];
+
+    CHECK(s, "mk");
+    fill(src, sizeof(src));
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "t", &ino) == EFS_OK,
+          "create");
+    CHECK(efs_sim_epoch_fence(s, ino) == EFS_OK, "fence");
+    CHECK(efs_sim_put_stripe(s, 0, ino, 0, src, sizeof(src), -1) == EFS_OK,
+          "PUT after fence");
+    CHECK(efs_sim_publish_cas(s, 0, ino, 0, sizeof(src), 0, 0, 0) ==
+              EFS_ERR_STALE,
+          "old epoch");
+    CHECK(efs_sim_publish(s, 0, ino, 0, sizeof(src)) == EFS_OK, "live epoch");
+    memset(got, 0, sizeof(got));
+    CHECK(efs_sim_read_chunk(s, ino, 0, got, sizeof(got)) == EFS_OK, "read");
+    CHECK(memcmp(src, got, sizeof(src)) == 0, "bytes");
+    efs_sim_free(s);
+}
+
 int main(void)
 {
     test_replay();
@@ -597,6 +673,9 @@ int main(void)
     test_i23_session_fence();
     test_i19_open_unlinked();
     test_i23_barrier_holds_leases();
+    test_i20_cas();
+    test_i13_fileid();
+    test_i22_epoch();
     if (failures) {
         fprintf(stderr, "test_sim: %d failure(s)\n", failures);
         return 1;

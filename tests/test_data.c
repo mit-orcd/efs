@@ -204,12 +204,42 @@ static void test_conn_adapter(void)
     efs_transport_conn_free(tb);
 }
 
+static void test_fileid_isolation(void)
+{
+    struct efs_store *s = efs_store_mem_create();
+    struct efs_frag_id a = { .export_id = 1, .ino = 7, .inode_generation = 1,
+                             .chunk_generation = 11, .chunk_index = 0,
+                             .fragment_index = 0, .coding_profile_id = 1 };
+    struct efs_frag_id b = a;
+    uint8_t pa[4] = { 1, 2, 3, 4 };
+    uint8_t pb[4] = { 9, 8, 7, 6 };
+    uint8_t got[4];
+    uint32_t len;
+
+    CHECK(s != NULL, "mem");
+    b.inode_generation = 2;
+    CHECK(efs_store_put(s, &a, pa, 4, NULL) == EFS_OK, "put a");
+    CHECK(efs_store_put(s, &b, pb, 4, NULL) == EFS_OK, "put b");
+    len = sizeof(got);
+    CHECK(efs_store_get(s, &a, got, &len, NULL, NULL) == EFS_OK && got[0] == 1,
+          "a bytes");
+    len = sizeof(got);
+    CHECK(efs_store_get(s, &b, got, &len, NULL, NULL) == EFS_OK && got[0] == 9,
+          "b bytes");
+    b.chunk_generation = 99;
+    len = sizeof(got);
+    CHECK(efs_store_get(s, &b, got, &len, NULL, NULL) == EFS_ERR_NOT_FOUND,
+          "other cand");
+    efs_store_mem_free(s);
+}
+
 int main(void)
 {
     test_mem_store();
     test_loop_transport();
     test_ec_through_store();
     test_conn_adapter();
+    test_fileid_isolation();
     if (failures) {
         fprintf(stderr, "test_data: %d failure(s)\n", failures);
         return 1;

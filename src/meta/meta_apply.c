@@ -1,6 +1,7 @@
 #include "efs/meta_apply.h"
 #include "efs/kv_key.h"
 #include "efs/session.h"
+#include "efs/checksum.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -8,8 +9,10 @@
 #define INO_VAL  80
 #define DENT_VAL 20
 #define ALLOC_VAL 8
-#define LANE_VAL 32
-#define CHUNK_VAL (4 * EFS_NUM_FRAGMENTS + EFS_HASH_SIZE * EFS_NUM_FRAGMENTS)
+#define LANE_VAL 40
+#define CHUNK_HDR 20
+#define CHUNK_VAL (CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS + \
+                   EFS_HASH_SIZE * EFS_NUM_FRAGMENTS)
 
 static void be32(uint8_t *p, uint32_t v)
 {
@@ -45,7 +48,7 @@ static void pack_inode(uint8_t *p, const struct efs_meta_row *r)
     be64(p + 24, r->parent);
     be64(p + 32, r->base_size);
     be64(p + 40, r->active_lanes);
-    be64(p + 48, 0); /* content_epoch */
+    be64(p + 48, r->content_epoch);
     be64(p + 56, 0); /* mtime_gen */
     be64(p + 64, 0); /* base_mtime */
     be64(p + 72, 0); /* base_ctime */
@@ -63,6 +66,7 @@ static int unpack_inode(const uint8_t *p, uint32_t n, struct efs_meta_row *r)
     r->parent = rd64(p + 24);
     r->base_size = rd64(p + 32);
     r->active_lanes = rd64(p + 40);
+    r->content_epoch = rd64(p + 48);
     return EFS_OK;
 }
 
@@ -503,9 +507,12 @@ static void pack_chunk(uint8_t *p, const struct efs_meta_chunk *ch)
 {
     int i;
 
+    be64(p + 0, ch->generation);
+    be32(p + 8, ch->coding_profile_id);
+    be64(p + 12, ch->content_epoch);
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        be32(p + (uint32_t)i * 4u, ch->nodes[i]);
-    memcpy(p + 4 * EFS_NUM_FRAGMENTS, ch->checksums,
+        be32(p + CHUNK_HDR + (uint32_t)i * 4u, ch->nodes[i]);
+    memcpy(p + CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS, ch->checksums,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
 }
 
@@ -516,61 +523,132 @@ static int unpack_chunk(const uint8_t *p, uint32_t n, struct efs_meta_chunk *ch)
     if (!p || !ch || n < CHUNK_VAL)
         return EFS_ERR_PROTO;
     memset(ch, 0, sizeof(*ch));
+    ch->generation = rd64(p + 0);
+    ch->coding_profile_id = rd32(p + 8);
+    ch->content_epoch = rd64(p + 12);
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        ch->nodes[i] = rd32(p + (uint32_t)i * 4u);
-    memcpy(ch->checksums, p + 4 * EFS_NUM_FRAGMENTS,
+        ch->nodes[i] = rd32(p + CHUNK_HDR + (uint32_t)i * 4u);
+    memcpy(ch->checksums, p + CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
     return EFS_OK;
 }
 
-int efs_meta_apply_publish(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_index,
-                           uint64_t new_size, const struct efs_meta_chunk *ch)
+uint64_t efs_meta_candidate_gen(const uint8_t uuid[16], uint32_t session_epoch,
+                                uint64_t seq, uint32_t chunk_index,
+                                uint32_t retry)
+{
+    uint8_t in[16 + 4 + 8 + 4 + 4];
+    uint8_t out[EFS_HASH_SIZE];
+    uint64_t g;
+
+    if (!uuid)
+        return 1;
+    memcpy(in, uuid, 16);
+    be32(in + 16, session_epoch);
+    be64(in + 20, seq);
+    be32(in + 28, chunk_index);
+    be32(in + 32, retry);
+    efs_hash(in, sizeof(in), out);
+    g = rd64(out);
+    return g ? g : 1;
+}
+
+static int evidence_ok(const struct efs_meta_pub *p)
+{
+    int i, j;
+
+    if (!p || p->candidate_gen == 0)
+        return EFS_ERR_INVAL;
+    if (p->coding_profile_id != EFS_META_PROFILE_K2F1)
+        return EFS_ERR_STALE;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (p->ch.nodes[i] == 0)
+            return EFS_ERR_INVAL;
+        for (j = 0; j < i; j++) {
+            if (p->ch.nodes[i] == p->ch.nodes[j])
+                return EFS_ERR_INVAL;
+        }
+    }
+    return EFS_OK;
+}
+
+int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
 {
     struct efs_meta_row row;
+    struct efs_meta_chunk stored, got;
     uint8_t lane;
     uint32_t lsh, ish;
     uint8_t k_ch[EFS_KV_KEY_MAX], k_ln[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
     uint8_t v_ch[CHUNK_VAL], v_ln[LANE_VAL], v_ino[INO_VAL];
-    uint8_t old_ln[LANE_VAL];
+    uint8_t old_ln[LANE_VAL], old_ch[CHUNK_VAL];
     uint32_t kc = 0, kl = 0, ki = 0, vn;
-    uint64_t sz, mt = 0, ct = 0, seq = 1;
+    uint64_t sz, mt = 0, ct = 0, seq = 1, fenced = 0, committed = 0;
     struct efs_kv_item it[3];
     uint32_t n = 0;
     int rc;
 
-    if (!kv || !ch || ino == 0)
+    if (!kv || !p || p->ino == 0)
         return EFS_ERR_INVAL;
-    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    rc = evidence_ok(p);
     if (rc != EFS_OK)
         return rc;
-    lane = (uint8_t)(chunk_index % EFS_META_LANES);
-    lsh = efs_kv_lane_shard(ino, lane);
-    ish = efs_kv_inode_shard(ino);
-    rc = efs_kv_key_chunk(lsh, ino, row.generation, lane, chunk_index, k_ch, &kc);
+    rc = efs_meta_apply_get_inode(kv, p->ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    if (p->content_epoch < row.content_epoch)
+        return EFS_ERR_STALE;
+    lane = (uint8_t)(p->chunk_index % EFS_META_LANES);
+    lsh = efs_kv_lane_shard(p->ino, lane);
+    ish = efs_kv_inode_shard(p->ino);
+    rc = efs_kv_key_chunk(lsh, p->ino, row.generation, lane, p->chunk_index,
+                          k_ch, &kc);
     if (rc == EFS_OK)
-        rc = efs_kv_key_lane(lsh, ino, row.generation, lane, k_ln, &kl);
+        rc = efs_kv_key_lane(lsh, p->ino, row.generation, lane, k_ln, &kl);
     if (rc != EFS_OK)
         return rc;
-    pack_chunk(v_ch, ch);
+    vn = sizeof(old_ch);
+    rc = efs_kv_get(kv, k_ch, kc, old_ch, &vn);
+    if (rc == EFS_OK) {
+        rc = unpack_chunk(old_ch, vn, &got);
+        if (rc != EFS_OK)
+            return rc;
+        committed = got.generation;
+    } else if (rc != EFS_ERR_NOT_FOUND) {
+        return rc;
+    }
+    if (committed == p->candidate_gen)
+        return EFS_OK;
+    if (p->expected_gen != committed)
+        return EFS_ERR_STALE;
     vn = sizeof(old_ln);
     rc = efs_kv_get(kv, k_ln, kl, old_ln, &vn);
-    if (rc == EFS_OK && vn >= LANE_VAL) {
+    if (rc == EFS_OK && vn >= 32) {
         uint64_t old = rd64(old_ln);
-        sz = old > new_size ? old : new_size;
+        sz = old > p->new_size ? old : p->new_size;
         mt = rd64(old_ln + 8);
         ct = rd64(old_ln + 16);
         seq = rd64(old_ln + 24) + 1;
+        if (vn >= LANE_VAL)
+            fenced = rd64(old_ln + 32);
     } else if (rc == EFS_ERR_NOT_FOUND) {
-        sz = new_size;
+        sz = p->new_size;
     } else if (rc != EFS_OK) {
         return rc;
     } else {
-        sz = new_size;
+        sz = p->new_size;
     }
+    if (p->content_epoch < fenced)
+        return EFS_ERR_STALE;
+    stored = p->ch;
+    stored.generation = p->candidate_gen;
+    stored.coding_profile_id = p->coding_profile_id;
+    stored.content_epoch = p->content_epoch;
+    pack_chunk(v_ch, &stored);
     be64(v_ln + 0, sz);
     be64(v_ln + 8, mt);
     be64(v_ln + 16, ct);
     be64(v_ln + 24, seq);
+    be64(v_ln + 32, fenced);
 
     memset(it, 0, sizeof(it));
     it[n].op = EFS_KV_PUT;
@@ -587,10 +665,10 @@ int efs_meta_apply_publish(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_inde
     n++;
     if (lsh == ish) {
         row.active_lanes |= 1ULL << lane;
-        if (new_size > row.base_size)
-            row.base_size = new_size;
+        if (p->new_size > row.base_size)
+            row.base_size = p->new_size;
         pack_inode(v_ino, &row);
-        rc = efs_kv_key_inode(ish, ino, k_ino, &ki);
+        rc = efs_kv_key_inode(ish, p->ino, k_ino, &ki);
         if (rc != EFS_OK)
             return rc;
         it[n].op = EFS_KV_PUT;
@@ -599,6 +677,63 @@ int efs_meta_apply_publish(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_inde
         it[n].val = v_ino;
         it[n].vlen = INO_VAL;
         n++;
+    }
+    return efs_kv_batch(kv, it, n);
+}
+
+int efs_meta_apply_epoch_fence(struct efs_kv *kv, efs_ino_t ino)
+{
+    struct efs_meta_row row;
+    uint8_t k_ino[EFS_KV_KEY_MAX], k_ln[EFS_KV_KEY_MAX];
+    uint8_t v_ino[INO_VAL], v_ln[LANE_VAL], old_ln[LANE_VAL];
+    uint32_t ki = 0, kl = 0, vn, lsh, ish;
+    struct efs_kv_item it[2];
+    uint32_t n = 0;
+    uint64_t sz = 0, mt = 0, ct = 0, seq = 0;
+    int rc;
+
+    if (!kv || ino == 0)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    row.content_epoch++;
+    pack_inode(v_ino, &row);
+    ish = efs_kv_inode_shard(ino);
+    rc = efs_kv_key_inode(ish, ino, k_ino, &ki);
+    if (rc != EFS_OK)
+        return rc;
+    memset(it, 0, sizeof(it));
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_ino;
+    it[n].klen = ki;
+    it[n].val = v_ino;
+    it[n].vlen = INO_VAL;
+    n++;
+    lsh = efs_kv_lane_shard(ino, 0);
+    rc = efs_kv_key_lane(lsh, ino, row.generation, 0, k_ln, &kl);
+    if (rc != EFS_OK)
+        return rc;
+    vn = sizeof(old_ln);
+    rc = efs_kv_get(kv, k_ln, kl, old_ln, &vn);
+    if (rc == EFS_OK && vn >= 32) {
+        sz = rd64(old_ln);
+        mt = rd64(old_ln + 8);
+        ct = rd64(old_ln + 16);
+        seq = rd64(old_ln + 24);
+        be64(v_ln + 0, sz);
+        be64(v_ln + 8, mt);
+        be64(v_ln + 16, ct);
+        be64(v_ln + 24, seq);
+        be64(v_ln + 32, row.content_epoch);
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_ln;
+        it[n].klen = kl;
+        it[n].val = v_ln;
+        it[n].vlen = LANE_VAL;
+        n++;
+    } else if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) {
+        return rc;
     }
     return efs_kv_batch(kv, it, n);
 }

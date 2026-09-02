@@ -1290,7 +1290,7 @@ distance between spec and code.</p>
   <tr><td>6</td><td>Safe reconfiguration + control-plane desired placement</td><td><span class="chip cB">DONE</span> joint consensus + learners · desired ≠ actual · I18/L8 in-sim</td></tr>
   <tr><td>7</td><td>Cross-shard transaction protocol, incl. concurrency control</td><td><span class="chip cB">DONE</span> <code>efs_txn</code> · 2-shard MKDIR in-sim · I17</td></tr>
   <tr><td>8</td><td>Client sessions + fencing, then the open-unlinked inode lifecycle on top</td><td><span class="chip cB">DONE</span> in-sim <code>efs_session</code> · I23 barrier · I19 leases; not in efsd</td></tr>
-  <tr><td>9</td><td>Data-generation publication / fencing, sim-checked</td><td><span class="chip cM">MISSING</span> no chunk generations on the wire today</td></tr>
+  <tr><td>9</td><td>Data-generation publication / fencing, sim-checked</td><td><span class="chip cB">DONE</span> FileID + unique cand CAS · I13/I20/I22/I25 in-sim; not in efsd</td></tr>
   <tr><td>10</td><td>Directory layout-epoch spread + distributed locking</td><td><span class="chip cM">MISSING</span> threshold flag only; locks per-client today</td></tr>
   <tr><td>11</td><td>Delete the snapshot / root-2PC machinery</td><td><span class="chip cD">DELETE</span> it is today's flush path</td></tr>
   <tr><td>12</td><td>FUSE cache-coherence optimization (data path starts direct-I/O)</td><td><span class="chip cM">MISSING</span> blocked on the low-level API</td></tr>

@@ -1203,15 +1203,16 @@ sends you to — not the whole spec.
 
 ### 1. The task right now
 
-> **Architecture migration §10, step 9:** data-generation publication / fencing
-> integration (§7.3), with the simulator checking the logical data protocol
-> ([verification.md](verification.md)).
-> [architecture.md §10](#architecture) · [protocols/data.md](protocols/data.md)
+> **Architecture migration §10, step 10:** directory layout-epoch spread
+> (§7.4) + distributed locking (§7.6).
+> [architecture.md §10](#architecture) · [protocols/directory.md](protocols/directory.md) ·
+> [protocols/sessions.md](protocols/sessions.md)
 >
-> Step 8 is in: a pure session SM (`include/efs/session.h`) plus the I23
-> revocation barrier and I19 open-unlinked leases in the simulator. Production
-> `efsd` still uses the in-memory table. Do not skip ahead. If a decision is
-> missing, stop and ask.
+> Step 9 is in: FileID-scoped unique candidate generations, CAS publication
+> (chunk map + lane MAX in one batch), durability-evidence checks, and
+> content-epoch fencing in the simulator (`test_sim` / `test_meta_apply`).
+> Production `efsd` still uses the in-memory table. Do not skip ahead. If a
+> decision is missing, stop and ask.
 
 **Rule for picking the next one after that:** the order is
 [architecture.md](#architecture) §10, step by step. If a step looks like
@@ -1236,7 +1237,7 @@ is what your change must not break; the **Gate** column is what proves it.
 | Client reconnect, leases, locks, open-unlinked | [protocols/sessions.md](protocols/sessions.md) | I19, I23, I16 | posix2, posixstress |
 | Cross-shard anything | [protocols/transactions.md](protocols/transactions.md) | I16, I17, I9 | posix2, posixstress |
 | Raft, KV, replication, membership | [architecture.md §7.1/§7.8](#architecture), [failure-tolerance.md](failure-tolerance.md) | I1–I4, I10, I18 | `tests/test_sim`, leaks |
-| Simulator / applied KV SM | [verification.md](verification.md), `include/efs/sim.h`, `include/efs/meta_apply.h`, `include/efs/raft.h` | I1–I4, I9, I10, I14, I15, I16, I21, I25 | `tests/test_sim`, `tests/test_meta_apply`, `tests/test_raft` |
+| Simulator / applied KV SM | [verification.md](verification.md), `include/efs/sim.h`, `include/efs/meta_apply.h`, `include/efs/raft.h` | I1–I4, I9, I10, I13–I16, I20–I23, I25 | `tests/test_sim`, `tests/test_meta_apply`, `tests/test_raft` |
 | Op-ID / idempotency window | [architecture.md §7.9](#architecture), `include/efs/opid.h` | I16 | `tests/test_sim` |
 | A hot path, for speed | [performance.md](performance.md) | P1–P4, §8 contract | fio honest matrix — **never** the stock `perf` write column |
 | FUSE client behavior | [architecture.md §7.7](#architecture) | I24, kernel-cache rules | posix, posix2 |
@@ -3897,6 +3898,16 @@ The corruption fault is the reason I25 exists as an invariant rather than an
 implementation habit: it is only ever *tested* if the simulator can flip bits
 in a durable object, and an EC decoder without integrity checking fails that
 test by producing confidently wrong data rather than an error.
+
+**Step 9 in-sim (gated).** Fragments are FileID-scoped and named by a unique
+candidate generation (never G+1). Publication is `CAS(expected = committed
+base)` of that candidate plus a lane MAX in one KV batch; a CAS miss does
+not apply the MAX (I21). A publication naming a superseded `content_epoch`
+is rejected; data-target PUT is not (I22/I23). `test_sim` and
+`test_meta_apply` gate I13, I14, I15, I20, I21, I22 (epoch fence on lane-0
+files), and I25, plus rejection of duplicate-node / wrong-profile evidence.
+Not in this step: multi-chunk I24, truncate range-delete, O_APPEND, degraded
+`u` / profile-cutover barriers. Production `efsd` is unchanged.
 
 ### Shortening the code → signal cycle
 

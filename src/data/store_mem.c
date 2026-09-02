@@ -22,8 +22,11 @@ struct mem_store {
 static int id_eq(const struct efs_frag_id *a, const struct efs_frag_id *b)
 {
     return a->export_id == b->export_id && a->ino == b->ino &&
+           a->inode_generation == b->inode_generation &&
+           a->chunk_generation == b->chunk_generation &&
            a->chunk_index == b->chunk_index &&
-           a->fragment_index == b->fragment_index;
+           a->fragment_index == b->fragment_index &&
+           a->coding_profile_id == b->coding_profile_id;
 }
 
 static struct mem_rec **find_slot(struct mem_store *m, const struct efs_frag_id *id)

@@ -9,15 +9,20 @@
  * seam the simulator implements with a fault-injecting in-memory disk,
  * and that later handler dispatch will call without knowing the backend.
  *
- * Identity matches today's on-disk fragment key: (export, ino, chunk,
- * fragment). FileID / generation fencing is a later metadata concern
- * and is not invented here. */
+ * Simulator identity is FileID-scoped (architecture.md §7.3):
+ * (export, ino, inode_generation, chunk_index, chunk_generation,
+ * fragment_index, coding_profile_id). Production NVMe still keys
+ * (ino, chunk_index, fragment_index) until efsd migrates; extra fields
+ * zero-init and are ignored there. */
 
 struct efs_frag_id {
     efs_export_id_t export_id;
     efs_ino_t ino;
+    uint64_t inode_generation;
+    uint64_t chunk_generation;
     uint32_t chunk_index;
     uint32_t fragment_index;
+    uint32_t coding_profile_id;
 };
 
 struct efs_store_ops {

@@ -14,6 +14,7 @@
 
 #define SIM_MAX_EV 128
 #define SIM_CMD_SESSION 9
+#define SIM_CMD_EPOCH   10
 
 enum {
     EV_CREATE = 1,
@@ -40,6 +41,12 @@ struct sim_ev {
     uint8_t *payload;
     uint8_t has_op;
     struct efs_opid op;
+    uint64_t inode_generation;
+    uint64_t chunk_generation;
+    uint64_t expected_gen;
+    uint64_t content_epoch;
+    uint32_t retry;
+    uint8_t cas_explicit;
 };
 
 struct sim_server {
@@ -109,9 +116,8 @@ int sim_raft_create(struct efs_sim *sim, int client, int has_op,
                     const char *name, efs_ino_t *out);
 int sim_raft_unlink(struct efs_sim *sim, int client, efs_ino_t parent,
                     const char *name);
-int sim_raft_publish(struct efs_sim *sim, int client, efs_ino_t ino,
-                     uint32_t chunk_index, uint64_t new_size,
-                     const struct efs_meta_chunk *ch);
+int sim_raft_publish(struct efs_sim *sim, int client, const struct efs_meta_pub *p);
+int sim_raft_epoch_fence(struct efs_sim *sim, efs_ino_t ino);
 int sim_raft_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,
                     struct efs_meta_dentry *out);
 int sim_raft_get_chunk(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
