@@ -47,9 +47,12 @@ decoded). Raft invariants gated in-sim: I1 (one leader per term), I2/I10
 (acknowledged create survives f=1 replica crash), I3 (higher term fences the
 old leader), I4 (partitioned leader cannot advance commitIndex). Op-IDs (I16)
 persist in the CREATE batch. Production RPCs do not carry op-IDs yet, and
-production `efsd` still uses the in-memory table. Txn and session *fault
-events* in the generator stay hooks until those SMs are driven from
-`efs_sim`. Reconfiguration (I18) is driven: the simulator owns a control-plane
+production `efsd` still uses the in-memory table. Session *fault events* in
+the generator stay hooks until that SM is driven from `efs_sim`. Cross-shard
+transactions (I17) are driven: `efs_txn` is a pure SM over one KV per
+participant, and the simulator runs MKDIR as a 2-shard PREPARE / DECISION /
+RESOLVE (visibility at the coordinator's durable decision; L5 abort after
+crash-during-prepare). Reconfiguration (I18) is driven: the simulator owns a control-plane
 Raft group for **desired** placement, and each metadata group moves **actual**
 membership through joint consensus (learners catch up before they vote). A
 membership-transition interrupt (drop the new majority mid-joint) is a real

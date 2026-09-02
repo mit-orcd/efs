@@ -144,3 +144,139 @@ int efs_kv_key_opid(uint32_t shard, const uint8_t uuid[EFS_OPID_UUID_LEN],
     be32(out + 3 + EFS_OPID_UUID_LEN, epoch);
     return EFS_OK;
 }
+
+uint32_t efs_kv_mkdir_shard(efs_ino_t parent, const char *name, uint64_t salt)
+{
+    uint32_t h = 2166136261u;
+    uint8_t b[8];
+    size_t i, n;
+
+    b[0] = (uint8_t)(parent >> 56);
+    b[1] = (uint8_t)(parent >> 48);
+    b[2] = (uint8_t)(parent >> 40);
+    b[3] = (uint8_t)(parent >> 32);
+    b[4] = (uint8_t)(parent >> 24);
+    b[5] = (uint8_t)(parent >> 16);
+    b[6] = (uint8_t)(parent >> 8);
+    b[7] = (uint8_t)parent;
+    for (i = 0; i < 8; i++) {
+        h ^= b[i];
+        h *= 16777619u;
+    }
+    n = name ? strlen(name) : 0;
+    for (i = 0; i < n; i++) {
+        h ^= (uint8_t)name[i];
+        h *= 16777619u;
+    }
+    for (i = 0; i < 8; i++) {
+        h ^= (uint8_t)(salt >> (8 * (7 - i)));
+        h *= 16777619u;
+    }
+    return h & EFS_KV_SHARD_MASK;
+}
+
+static int wrap(uint8_t kind, const uint8_t *orig, uint32_t olen, uint8_t *out,
+                uint32_t *len)
+{
+    if (!orig || !out || !len || olen < 3 || olen + 1 > EFS_KV_KEY_MAX)
+        return EFS_ERR_INVAL;
+    out[0] = orig[0];
+    out[1] = orig[1];
+    out[2] = kind;
+    out[3] = orig[2];
+    memcpy(out + 4, orig + 3, olen - 3);
+    *len = olen + 1;
+    return EFS_OK;
+}
+
+static int wrap_txid(uint8_t kind, const uint8_t *orig, uint32_t olen,
+                     const uint8_t txid[16], uint8_t *out, uint32_t *len)
+{
+    uint32_t n;
+    int rc;
+
+    if (!txid)
+        return EFS_ERR_INVAL;
+    rc = wrap(kind, orig, olen, out, &n);
+    if (rc != EFS_OK)
+        return rc;
+    if (n + 16 > EFS_KV_KEY_MAX)
+        return EFS_ERR_INVAL;
+    memcpy(out + n, txid, 16);
+    *len = n + 16;
+    return EFS_OK;
+}
+
+int efs_kv_key_ver(const uint8_t *orig, uint32_t olen, uint8_t *out, uint32_t *len)
+{
+    return wrap(EFS_KV_KIND_VER, orig, olen, out, len);
+}
+
+int efs_kv_key_intent(const uint8_t *orig, uint32_t olen, uint8_t *out,
+                      uint32_t *len)
+{
+    return wrap(EFS_KV_KIND_INTENT, orig, olen, out, len);
+}
+
+int efs_kv_key_guard(const uint8_t *orig, uint32_t olen, const uint8_t txid[16],
+                     uint8_t *out, uint32_t *len)
+{
+    return wrap_txid(EFS_KV_KIND_GUARD, orig, olen, txid, out, len);
+}
+
+int efs_kv_key_guard_prefix(const uint8_t *orig, uint32_t olen, uint8_t *out,
+                            uint32_t *len)
+{
+    return wrap(EFS_KV_KIND_GUARD, orig, olen, out, len);
+}
+
+int efs_kv_key_reduce(const uint8_t *orig, uint32_t olen, const uint8_t txid[16],
+                      uint8_t *out, uint32_t *len)
+{
+    return wrap_txid(EFS_KV_KIND_REDUCE, orig, olen, txid, out, len);
+}
+
+int efs_kv_key_reduce_prefix(const uint8_t *orig, uint32_t olen, uint8_t *out,
+                             uint32_t *len)
+{
+    return wrap(EFS_KV_KIND_REDUCE, orig, olen, out, len);
+}
+
+int efs_kv_key_decision(uint32_t shard, const uint8_t txid[16], uint8_t *out,
+                        uint32_t *len)
+{
+    int rc;
+
+    if (!txid)
+        return EFS_ERR_INVAL;
+    rc = start(out, len, shard, EFS_KV_KIND_DECISION, 16, EFS_KV_KEY_MAX);
+    if (rc != EFS_OK)
+        return rc;
+    memcpy(out + 3, txid, 16);
+    return EFS_OK;
+}
+
+int efs_kv_key_dseq(uint32_t shard, efs_ino_t dir, uint8_t lane, uint8_t *out,
+                    uint32_t *len)
+{
+    int rc = start(out, len, shard, EFS_KV_KIND_DSEQ, 8 + 1, EFS_KV_KEY_MAX);
+
+    if (rc != EFS_OK)
+        return rc;
+    be64(out + 3, dir);
+    out[11] = lane;
+    return EFS_OK;
+}
+
+int efs_kv_key_unwrap(const uint8_t *wrapk, uint32_t wlen, uint8_t *orig,
+                      uint32_t *olen)
+{
+    if (!wrapk || !orig || !olen || wlen < 4)
+        return EFS_ERR_INVAL;
+    orig[0] = wrapk[0];
+    orig[1] = wrapk[1];
+    orig[2] = wrapk[3];
+    memcpy(orig + 3, wrapk + 4, wlen - 4);
+    *olen = wlen - 1;
+    return EFS_OK;
+}

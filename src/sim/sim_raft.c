@@ -54,19 +54,52 @@ static int reachable(const struct efs_sim *sim, int i)
            sim->srv[i].raft != NULL;
 }
 
-static int leader_id(const struct efs_sim *sim)
+struct efs_raft *sim_raft_of(struct efs_sim *sim, int server, uint8_t group)
 {
-    int i, lid = -1, n = 0;
+    if (!sim || server < 0 || server >= sim->nservers)
+        return NULL;
+    if (group == EFS_RAFT_GROUP_CTRL)
+        return sim->srv[server].ctrl;
+    if (group == EFS_RAFT_GROUP_SHARD2)
+        return sim->srv[server].raft2;
+    return sim->srv[server].raft;
+}
 
-    for (i = 0; i < sim->nraft; i++) {
-        if (!reachable(sim, i))
+static int reachable_g(const struct efs_sim *sim, int i, uint8_t group)
+{
+    struct efs_raft *r;
+
+    if (!sim || i < 0 || i >= sim->nservers)
+        return 0;
+    if (!sim->srv[i].alive || sim->srv[i].partitioned)
+        return 0;
+    r = sim_raft_of((struct efs_sim *)sim, i, group);
+    return r != NULL;
+}
+
+static int leader_id_g(const struct efs_sim *sim, uint8_t group)
+{
+    int i, lid = -1, n = 0, lim;
+    struct efs_raft *r;
+
+    lim = (group == EFS_RAFT_GROUP_SHARD2) ? EFS_SIM_RAFT_N : sim->nraft;
+    if (group == EFS_RAFT_GROUP_CTRL)
+        lim = EFS_SIM_RAFT_N;
+    for (i = 0; i < lim; i++) {
+        if (!reachable_g(sim, i, group))
             continue;
-        if (efs_raft_role(sim->srv[i].raft) == EFS_RAFT_LEADER) {
+        r = sim_raft_of((struct efs_sim *)sim, i, group);
+        if (r && efs_raft_role(r) == EFS_RAFT_LEADER) {
             lid = i;
             n++;
         }
     }
     return n == 1 ? lid : -1;
+}
+
+static int leader_id(const struct efs_sim *sim)
+{
+    return leader_id_g(sim, EFS_RAFT_GROUP_SHARD);
 }
 
 static int pack_create(uint8_t *out, uint32_t *len, int has_op,
@@ -181,9 +214,7 @@ static int apply_create_cmd(struct sim_server *s, const uint8_t *cmd,
     if (rc == EFS_ERR_EXIST &&
         efs_meta_apply_lookup(s->disk, parent, name, &dent) == EFS_OK)
         ino = dent.ino;
-    s->applied_idx = index;
-    s->applied_rc = rc;
-    s->applied_ino = ino;
+    sim_note_apply(s, EFS_RAFT_GROUP_SHARD, index, rc, ino);
     return EFS_OK;
 }
 
@@ -204,9 +235,7 @@ static int apply_unlink_cmd(struct sim_server *s, const uint8_t *cmd,
     memset(name, 0, sizeof(name));
     memcpy(name, cmd + 10, nl);
     rc = efs_meta_apply_unlink(s->disk, parent, name);
-    s->applied_idx = index;
-    s->applied_rc = rc;
-    s->applied_ino = 0;
+    sim_note_apply(s, EFS_RAFT_GROUP_SHARD, index, rc, 0);
     return EFS_OK;
 }
 
@@ -235,9 +264,7 @@ static int apply_publish_cmd(struct sim_server *s, const uint8_t *cmd,
         p += EFS_HASH_SIZE;
     }
     rc = efs_meta_apply_publish(s->disk, ino, ci, sz, &ch);
-    s->applied_idx = index;
-    s->applied_rc = rc;
-    s->applied_ino = ino;
+    sim_note_apply(s, EFS_RAFT_GROUP_SHARD, index, rc, ino);
     return EFS_OK;
 }
 
@@ -257,7 +284,7 @@ static int raft_apply(void *app, uint64_t index, uint64_t term,
     case CMD_PUBLISH:
         return apply_publish_cmd(s, cmd, clen, index);
     default:
-        return EFS_ERR_PROTO;
+        return sim_txn_apply(s, EFS_RAFT_GROUP_SHARD, cmd, clen, index);
     }
 }
 
@@ -365,8 +392,7 @@ int sim_raft_send(void *net, const struct efs_raft_msg *msg)
         m.entries[0].cmd = copy;
     }
     if (sim->delay_max == 0 && !sim->hold) {
-        struct efs_raft *dst = (m.group == EFS_RAFT_GROUP_CTRL) ?
-                               sim->srv[msg->to].ctrl : sim->srv[msg->to].raft;
+        struct efs_raft *dst = sim_raft_of(sim, msg->to, m.group);
         rc = dst ? efs_raft_recv(dst, &m) : EFS_OK;
         free(copy);
         return rc;
@@ -400,8 +426,7 @@ int sim_raft_deliver(struct efs_sim *sim, struct sim_ev *e)
     if (!sim->srv[m.to].alive || sim->srv[m.to].partitioned)
         return EFS_OK;
     {
-        struct efs_raft *dst = (m.group == EFS_RAFT_GROUP_CTRL) ?
-                               sim->srv[m.to].ctrl : sim->srv[m.to].raft;
+        struct efs_raft *dst = sim_raft_of(sim, m.to, m.group);
         if (!dst)
             return EFS_OK;
         return efs_raft_recv(dst, &m);
@@ -440,6 +465,9 @@ static int tick_one(struct efs_sim *sim, int i)
     rc = efs_raft_tick(sim->srv[i].raft);
     if (rc != EFS_OK)
         return rc;
+    rc = sim_txn_tick(sim, i);
+    if (rc != EFS_OK)
+        return rc;
     rc = sim_ctrl_on_tick(sim, i);
     if (rc != EFS_OK)
         return rc;
@@ -460,12 +488,12 @@ int sim_raft_tick_reachable(struct efs_sim *sim)
     return drain_raft_due(sim);
 }
 
-static int wait_leader(struct efs_sim *sim)
+static int wait_leader_g(struct efs_sim *sim, uint8_t group)
 {
     int t, lid;
 
     for (t = 0; t < WAIT_TICKS; t++) {
-        lid = leader_id(sim);
+        lid = leader_id_g(sim, group);
         if (lid >= 0)
             return lid;
         if (sim_raft_tick_reachable(sim) != EFS_OK)
@@ -474,22 +502,31 @@ static int wait_leader(struct efs_sim *sim)
     return -1;
 }
 
-static int mutate(struct efs_sim *sim, const uint8_t *cmd, uint32_t clen)
+static int wait_leader(struct efs_sim *sim)
+{
+    return wait_leader_g(sim, EFS_RAFT_GROUP_SHARD);
+}
+
+static int mutate_g(struct efs_sim *sim, uint8_t group, const uint8_t *cmd,
+                    uint32_t clen)
 {
     int lid, t, rc;
     uint64_t idx = 0;
+    struct efs_raft *r;
 
-    lid = wait_leader(sim);
+    lid = wait_leader_g(sim, group);
     if (lid < 0)
         return EFS_ERR_BUSY;
-    rc = efs_raft_propose(sim->srv[lid].raft, cmd, clen, &idx);
+    r = sim_raft_of(sim, lid, group);
+    if (!r)
+        return EFS_ERR_BUSY;
+    rc = efs_raft_propose(r, cmd, clen, &idx);
     if (rc != EFS_OK)
         return rc;
     for (t = 0; t < WAIT_TICKS; t++) {
-        if (efs_raft_role(sim->srv[lid].raft) != EFS_RAFT_LEADER)
+        if (efs_raft_role(r) != EFS_RAFT_LEADER)
             return EFS_ERR_BUSY;
-        if (efs_raft_commit(sim->srv[lid].raft) >= idx &&
-            efs_raft_applied(sim->srv[lid].raft) >= idx)
+        if (efs_raft_commit(r) >= idx && efs_raft_applied(r) >= idx)
             break;
         rc = tick_one(sim, lid);
         if (rc != EFS_OK)
@@ -498,46 +535,79 @@ static int mutate(struct efs_sim *sim, const uint8_t *cmd, uint32_t clen)
         if (rc != EFS_OK)
             return rc;
     }
-    if (efs_raft_applied(sim->srv[lid].raft) < idx)
+    if (efs_raft_applied(r) < idx)
         return EFS_ERR_BUSY;
-    /* Do not compact the log here. A snapshot would drop prefix the
-     * leader still needs to catch up a new learner (L4). InstallSnapshot
-     * is a later cut; until then catch-up is log replication. */
-    if (sim->srv[lid].applied_idx != idx)
+    if (group > 2 || sim->srv[lid].applied_idx_g[group] != idx)
         return EFS_ERR_BUSY;
-    sim->last_ino = sim->srv[lid].applied_ino;
-    return sim->srv[lid].applied_rc;
+    if (sim->srv[lid].applied_ino_g[group])
+        sim->last_ino = sim->srv[lid].applied_ino_g[group];
+    return sim->srv[lid].applied_rc_g[group];
 }
 
-static int read_begin(struct efs_sim *sim)
+static int mutate(struct efs_sim *sim, const uint8_t *cmd, uint32_t clen)
+{
+    return mutate_g(sim, EFS_RAFT_GROUP_SHARD, cmd, clen);
+}
+
+int sim_raft_propose_group(struct efs_sim *sim, uint8_t group,
+                           const uint8_t *cmd, uint32_t clen)
+{
+    return mutate_g(sim, group, cmd, clen);
+}
+
+static int read_begin_g(struct efs_sim *sim, uint8_t group)
 {
     int lid, t, rc;
+    struct efs_raft *r;
 
-    lid = wait_leader(sim);
+    lid = wait_leader_g(sim, group);
     if (lid < 0)
         return EFS_ERR_BUSY;
-    rc = efs_raft_read_begin(sim->srv[lid].raft);
+    r = sim_raft_of(sim, lid, group);
+    if (!r)
+        return EFS_ERR_BUSY;
+    rc = efs_raft_read_begin(r);
     if (rc != EFS_OK)
         return rc;
     for (t = 0; t < WAIT_TICKS; t++) {
-        if (efs_raft_read_ready(sim->srv[lid].raft))
+        if (efs_raft_read_ready(r))
             return EFS_OK;
-        if (efs_raft_role(sim->srv[lid].raft) != EFS_RAFT_LEADER)
+        if (efs_raft_role(r) != EFS_RAFT_LEADER)
             return EFS_ERR_BUSY;
         rc = sim_raft_tick_reachable(sim);
         if (rc != EFS_OK)
             return rc;
     }
-    return efs_raft_read_ready(sim->srv[lid].raft) ? EFS_OK : EFS_ERR_BUSY;
+    return efs_raft_read_ready(r) ? EFS_OK : EFS_ERR_BUSY;
 }
 
-static struct efs_kv *leader_kv(struct efs_sim *sim)
+static int read_begin(struct efs_sim *sim)
 {
-    int lid = leader_id(sim);
+    return read_begin_g(sim, EFS_RAFT_GROUP_SHARD);
+}
+
+int sim_raft_read_group(struct efs_sim *sim, uint8_t group)
+{
+    return read_begin_g(sim, group);
+}
+
+static struct efs_kv *leader_kv_g(struct efs_sim *sim, uint8_t group)
+{
+    int lid = leader_id_g(sim, group);
 
     if (lid < 0)
         return NULL;
     return sim->srv[lid].disk;
+}
+
+static struct efs_kv *leader_kv(struct efs_sim *sim)
+{
+    return leader_kv_g(sim, EFS_RAFT_GROUP_SHARD);
+}
+
+struct efs_kv *sim_raft_kv_group(struct efs_sim *sim, uint8_t group)
+{
+    return leader_kv_g(sim, group);
 }
 
 static int attach(struct efs_sim *sim, int i)
@@ -585,6 +655,9 @@ int sim_raft_boot(struct efs_sim *sim)
     rc = sim_ctrl_boot(sim);
     if (rc != EFS_OK)
         return rc;
+    rc = sim_txn_boot(sim);
+    if (rc != EFS_OK)
+        return rc;
     (void)wait_leader(sim);
     return EFS_OK;
 }
@@ -595,6 +668,7 @@ void sim_raft_halt(struct efs_sim *sim, int server)
         return;
     efs_raft_free(sim->srv[server].raft);
     sim->srv[server].raft = NULL;
+    sim_txn_halt(sim, server);
     sim_ctrl_halt(sim, server);
 }
 
@@ -612,6 +686,9 @@ int sim_raft_restart(struct efs_sim *sim, int server)
     rc = attach(sim, server);
     if (rc != EFS_OK)
         return rc;
+    rc = sim_txn_restart(sim, server);
+    if (rc != EFS_OK)
+        return rc;
     return sim_ctrl_restart(sim, server);
 }
 
@@ -627,6 +704,7 @@ void sim_raft_free_all(struct efs_sim *sim)
         efs_raft_mem_free(sim->srv[i].raft_store);
         sim->srv[i].raft_store = NULL;
     }
+    sim_txn_free_all(sim);
     sim_ctrl_free_all(sim);
 }
 
@@ -675,16 +753,7 @@ int sim_raft_publish(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
 int sim_raft_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,
                     struct efs_meta_dentry *out)
 {
-    struct efs_kv *kv;
-    int rc;
-
-    rc = read_begin(sim);
-    if (rc != EFS_OK)
-        return rc;
-    kv = leader_kv(sim);
-    if (!kv)
-        return EFS_ERR_BUSY;
-    return efs_meta_apply_lookup(kv, parent, name, out);
+    return sim_txn_lookup(sim, parent, name, out);
 }
 
 int sim_raft_get_chunk(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,

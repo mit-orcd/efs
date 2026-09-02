@@ -1233,7 +1233,7 @@ distance between spec and code.</p>
   <rect class="box stD" x="245" y="116" width="205" height="42" rx="7"/><text class="boxT" x="347" y="134" text-anchor="middle" fill="#9aa7b8">in-RAM table + 2PC</text><text class="boxS" x="347" y="149" text-anchor="middle">today's flush · deleted §10</text>
   <rect class="box stM" x="470" y="116" width="205" height="42" rx="7"/><text class="boxT" x="572" y="134" text-anchor="middle">Raft per shard · RF=2f+1</text><text class="boxS" x="572" y="149" text-anchor="middle">missing · f configurable 1–3</text>
   <rect class="box stM" x="695" y="116" width="205" height="42" rx="7"/><text class="boxT" x="797" y="134" text-anchor="middle">ordered KV on NVMe</text><text class="boxS" x="797" y="149" text-anchor="middle">missing</text>
-  <rect class="box stP" x="20"  y="164" width="205" height="42" rx="7"/><text class="boxT" x="122" y="182" text-anchor="middle">cross-shard txns</text><text class="boxS" x="122" y="197" text-anchor="middle">fan-out skeleton only</text>
+  <rect class="box stP" x="20"  y="164" width="205" height="42" rx="7"/><text class="boxT" x="122" y="182" text-anchor="middle">cross-shard txns</text><text class="boxS" x="122" y="197" text-anchor="middle">in-sim MKDIR · not in efsd</text>
   <rect class="box stM" x="245" y="164" width="205" height="42" rx="7"/><text class="boxT" x="347" y="182" text-anchor="middle">hot-file path</text><text class="boxS" x="347" y="197" text-anchor="middle">chunk_meta shards · size lanes</text>
   <rect class="box stM" x="470" y="164" width="205" height="42" rx="7"/><text class="boxT" x="572" y="182" text-anchor="middle">request idempotency</text><text class="boxS" x="572" y="197" text-anchor="middle">no op-IDs today</text>
   <rect class="box stP" x="695" y="164" width="205" height="42" rx="7"/><text class="boxT" x="797" y="182" text-anchor="middle">open-unlinked lifecycle</text><text class="boxS" x="797" y="197" text-anchor="middle">keep_last+HOLD, no orphan GC</text>
@@ -1288,7 +1288,7 @@ distance between spec and code.</p>
   <tr><td>4</td><td>Single-shard Raft (elect · replicate · apply · ReadIndex · snapshots)</td><td><span class="chip cB">DONE</span> <code>src/raft/</code></td></tr>
   <tr><td>5</td><td>Simulator proves the single-shard invariants</td><td><span class="chip cB">DONE</span> I1–I4 / I10 / ReadIndex in <code>test_sim</code></td></tr>
   <tr><td>6</td><td>Safe reconfiguration + control-plane desired placement</td><td><span class="chip cB">DONE</span> joint consensus + learners · desired ≠ actual · I18/L8 in-sim</td></tr>
-  <tr><td>7</td><td>Cross-shard transaction protocol, incl. concurrency control</td><td><span class="chip cP">PARTIAL</span> fan-out skeleton, no txid/intents/decision</td></tr>
+  <tr><td>7</td><td>Cross-shard transaction protocol, incl. concurrency control</td><td><span class="chip cB">DONE</span> <code>efs_txn</code> · 2-shard MKDIR in-sim · I17</td></tr>
   <tr><td>8</td><td>Client sessions + fencing, then the open-unlinked inode lifecycle on top</td><td><span class="chip cP">PARTIAL</span> keep_last + HOLD; no sessions, no orphan state/reclaim</td></tr>
   <tr><td>9</td><td>Data-generation publication / fencing, sim-checked</td><td><span class="chip cM">MISSING</span> no chunk generations on the wire today</td></tr>
   <tr><td>10</td><td>Directory layout-epoch spread + distributed locking</td><td><span class="chip cM">MISSING</span> threshold flag only; locks per-client today</td></tr>
@@ -1318,7 +1318,7 @@ Nothing in steps 2–11 is built as new monolith code.</p>
   <rect class="box good" x="460" y="40" width="200" height="44" rx="8"/><text class="boxT" x="560" y="58" text-anchor="middle">4 · single-shard Raft</text><text class="boxS" x="560" y="74" text-anchor="middle">elect·repl·apply·ReadIndex</text>
   <rect class="box good" x="460" y="100" width="200" height="44" rx="8"/><text class="boxT" x="560" y="118" text-anchor="middle">5 · sim proves 1-shard</text><text class="boxS" x="560" y="134" text-anchor="middle">invariants green</text>
   <rect class="box good" x="680" y="40" width="220" height="44" rx="8"/><text class="boxT" x="790" y="58" text-anchor="middle">6 · safe reconfiguration</text><text class="boxS" x="790" y="74" text-anchor="middle">joint consensus</text>
-  <rect class="box" x="680" y="100" width="220" height="44" rx="8"/><text class="boxT" x="790" y="118" text-anchor="middle">7 · cross-shard txns</text><text class="boxS" x="790" y="134" text-anchor="middle">Raft-backed 2PC</text>
+  <rect class="box good" x="680" y="100" width="220" height="44" rx="8"/><text class="boxT" x="790" y="118" text-anchor="middle">7 · cross-shard txns</text><text class="boxS" x="790" y="134" text-anchor="middle">PREPARE · DECISION · RESOLVE</text>
   </g>
   <path class="arrow" d="M120,84 V100"/><path class="arrowG" d="M120,144 V156"/>
   <text class="lbl" x="240" y="188">… 8 open-unlinked lifecycle · 9 data-gen publication/fencing · 10 dir-spread + locking</text>

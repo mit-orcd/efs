@@ -4,8 +4,9 @@
 #include "efs/common.h"
 #include "efs/store.h"
 #include "efs/opid.h"
+#include "efs/txn.h"
 
-/* Deterministic simulator (architecture.md §10 steps 1–6).
+/* Deterministic simulator (architecture.md §10 steps 1–7).
  * N logical servers + M clients in one process. Seeded PRNG drives
  * message order, drops, delays, crashes, and clock steps. Metadata is
  * a Raft group (servers 0..2 vote initially; membership changes through
@@ -19,6 +20,9 @@
 #define EFS_SIM_CHUNK       EFS_MIN_CHUNK_SIZE /* encode floor */
 #define EFS_SIM_RAFT_N      3 /* RF = 2f+1, f=1 */
 #define EFS_SIM_META        0 /* replica 0 of the metadata Raft group */
+#define EFS_SIM_TXN_PREPARE  1
+#define EFS_SIM_TXN_DECISION 2
+#define EFS_SIM_TXN_RESOLVE  3
 
 struct efs_sim;
 
@@ -58,6 +62,14 @@ int efs_sim_lookup(struct efs_sim *sim, int client, efs_ino_t parent,
                    const char *name, efs_ino_t *out);
 int efs_sim_unlink(struct efs_sim *sim, int client, efs_ino_t parent,
                    const char *name);
+
+/* MKDIR is a 2-shard txn (dentry+parent nlink on parent shard, dir row
+ * on hash(parent,name,salt)). until: 1=PREPARE 2=DECISION 3=RESOLVE. */
+int efs_sim_mkdir(struct efs_sim *sim, int client, efs_ino_t parent,
+                  const char *name, efs_ino_t *out);
+int efs_sim_mkdir_until(struct efs_sim *sim, efs_ino_t parent, const char *name,
+                        struct efs_txid *txid, efs_ino_t *out, int until);
+int efs_sim_txn_finish(struct efs_sim *sim, const struct efs_txid *t, int commit);
 
 /* Logical data protocol. skip_frag -1 = PUT all k+f; else omit that index.
  * publish is one event (chunk map + size) and refuses unless I14 holds.

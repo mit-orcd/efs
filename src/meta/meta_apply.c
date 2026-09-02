@@ -251,6 +251,30 @@ int efs_meta_apply_init(struct efs_kv *kv)
     return efs_kv_batch(kv, it, 2);
 }
 
+int efs_meta_pack_inode(const struct efs_meta_row *r, uint8_t *out, uint32_t cap)
+{
+    if (!r || !out || cap < INO_VAL)
+        return EFS_ERR_INVAL;
+    pack_inode(out, r);
+    return EFS_OK;
+}
+
+int efs_meta_pack_dentry(const struct efs_meta_dentry *d, uint8_t *out,
+                         uint32_t cap)
+{
+    if (!d || !out || cap < DENT_VAL)
+        return EFS_ERR_INVAL;
+    pack_dentry(out, d);
+    return EFS_OK;
+}
+
+int efs_meta_apply_peek_alloc(struct efs_kv *kv, uint32_t shard, efs_ino_t *next)
+{
+    if (!kv || !next)
+        return EFS_ERR_INVAL;
+    return load_alloc(kv, shard, next);
+}
+
 static int create_file_batch(struct efs_kv *kv, efs_ino_t parent, uint32_t mode,
                              const char *name, const struct efs_opid *op,
                              efs_ino_t *out)

@@ -13,13 +13,12 @@ sends you to — not the whole spec.
 
 ## 1. The task right now
 
-> **Architecture migration §10, step 7:** cross-shard transaction protocol,
-> including concurrency control (§7.2).
-> [architecture.md §10](../architecture.md) · [protocols/transactions.md](protocols/transactions.md)
+> **Architecture migration §10, step 8:** client sessions + fencing (§7.5),
+> then the open-unlinked inode lifecycle (§7.6) on top of them.
+> [architecture.md §10](../architecture.md) · [protocols/sessions.md](protocols/sessions.md)
 >
-> Step 6 is in: Raft joint consensus + learners, a control-plane group for
-> desired placement, and incarnation-fenced messages. `tests/test_raft` /
-> `tests/test_sim` gate I18 and L8. Production `efsd` still uses the
+> Step 7 is in: a pure txn SM (`include/efs/txn.h`) plus a 2-shard MKDIR in
+> the simulator (I17 / I9 / I16 / L5). Production `efsd` still uses the
 > in-memory table. Do not skip ahead. If a decision is missing, stop and ask.
 
 **Rule for picking the next one after that:** the order is

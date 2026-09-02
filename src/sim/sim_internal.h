@@ -7,6 +7,7 @@
 #include "efs/kv.h"
 #include "efs/transport.h"
 #include "efs/opid.h"
+#include "efs/txn.h"
 
 /* Shared sim layout. Not a public header. */
 
@@ -47,6 +48,8 @@ struct sim_server {
     struct efs_transport *rx[EFS_SIM_MAX_CLIENTS];
     struct efs_raft *raft;
     struct efs_raft_store *raft_store;
+    struct efs_raft *raft2;
+    struct efs_raft_store *raft2_store;
     struct efs_raft *ctrl;
     struct efs_raft_store *ctrl_store;
     struct efs_sim *sim;
@@ -54,6 +57,9 @@ struct sim_server {
     uint64_t applied_idx;
     int applied_rc;
     efs_ino_t applied_ino;
+    uint64_t applied_idx_g[3];
+    int applied_rc_g[3];
+    efs_ino_t applied_ino_g[3];
 };
 
 struct sim_client {
@@ -79,9 +85,18 @@ struct efs_sim {
     struct sim_ev ev[SIM_MAX_EV];
     struct sim_server srv[EFS_SIM_MAX_SERVERS];
     struct sim_client cli[EFS_SIM_MAX_CLIENTS];
+    struct efs_txid txn_id;
+    struct efs_txn_parts txn_parts;
+    int txn_live;
 };
 
 int sim_enqueue(struct efs_sim *sim, struct sim_ev *in);
+
+struct efs_raft *sim_raft_of(struct efs_sim *sim, int server, uint8_t group);
+int sim_raft_propose_group(struct efs_sim *sim, uint8_t group,
+                           const uint8_t *cmd, uint32_t clen);
+int sim_raft_read_group(struct efs_sim *sim, uint8_t group);
+struct efs_kv *sim_raft_kv_group(struct efs_sim *sim, uint8_t group);
 
 int sim_raft_boot(struct efs_sim *sim);
 void sim_raft_free_all(struct efs_sim *sim);
@@ -107,5 +122,36 @@ void sim_ctrl_halt(struct efs_sim *sim, int server);
 int sim_ctrl_restart(struct efs_sim *sim, int server);
 void sim_ctrl_free_all(struct efs_sim *sim);
 int sim_ctrl_on_tick(struct efs_sim *sim, int server);
+
+int sim_txn_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
+                  uint32_t clen, uint64_t index);
+int sim_txn_boot(struct efs_sim *sim);
+void sim_txn_halt(struct efs_sim *sim, int server);
+int sim_txn_restart(struct efs_sim *sim, int server);
+void sim_txn_free_all(struct efs_sim *sim);
+int sim_txn_tick(struct efs_sim *sim, int server);
+int sim_txn_mkdir_until(struct efs_sim *sim, efs_ino_t parent, const char *name,
+                        struct efs_txid *txid, efs_ino_t *out, int until);
+int sim_txn_finish(struct efs_sim *sim, const struct efs_txid *t, int commit);
+int sim_txn_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,
+                   struct efs_meta_dentry *out);
+
+static inline uint8_t sim_shard_group(uint32_t shard)
+{
+    return (shard & 1u) ? EFS_RAFT_GROUP_SHARD : EFS_RAFT_GROUP_SHARD2;
+}
+
+static inline void sim_note_apply(struct sim_server *s, uint8_t group,
+                                  uint64_t index, int rc, efs_ino_t ino)
+{
+    s->applied_idx = index;
+    s->applied_rc = rc;
+    s->applied_ino = ino;
+    if (group <= 2) {
+        s->applied_idx_g[group] = index;
+        s->applied_rc_g[group] = rc;
+        s->applied_ino_g[group] = ino;
+    }
+}
 
 #endif

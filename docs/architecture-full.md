@@ -1203,13 +1203,12 @@ sends you to — not the whole spec.
 
 ### 1. The task right now
 
-> **Architecture migration §10, step 7:** cross-shard transaction protocol,
-> including concurrency control (§7.2).
-> [architecture.md §10](#architecture) · [protocols/transactions.md](protocols/transactions.md)
+> **Architecture migration §10, step 8:** client sessions + fencing (§7.5),
+> then the open-unlinked inode lifecycle (§7.6) on top of them.
+> [architecture.md §10](#architecture) · [protocols/sessions.md](protocols/sessions.md)
 >
-> Step 6 is in: Raft joint consensus + learners, a control-plane group for
-> desired placement, and incarnation-fenced messages. `tests/test_raft` /
-> `tests/test_sim` gate I18 and L8. Production `efsd` still uses the
+> Step 7 is in: a pure txn SM (`include/efs/txn.h`) plus a 2-shard MKDIR in
+> the simulator (I17 / I9 / I16 / L5). Production `efsd` still uses the
 > in-memory table. Do not skip ahead. If a decision is missing, stop and ask.
 
 **Rule for picking the next one after that:** the order is
@@ -3780,9 +3779,12 @@ decoded). Raft invariants gated in-sim: I1 (one leader per term), I2/I10
 (acknowledged create survives f=1 replica crash), I3 (higher term fences the
 old leader), I4 (partitioned leader cannot advance commitIndex). Op-IDs (I16)
 persist in the CREATE batch. Production RPCs do not carry op-IDs yet, and
-production `efsd` still uses the in-memory table. Txn and session *fault
-events* in the generator stay hooks until those SMs are driven from
-`efs_sim`. Reconfiguration (I18) is driven: the simulator owns a control-plane
+production `efsd` still uses the in-memory table. Session *fault events* in
+the generator stay hooks until that SM is driven from `efs_sim`. Cross-shard
+transactions (I17) are driven: `efs_txn` is a pure SM over one KV per
+participant, and the simulator runs MKDIR as a 2-shard PREPARE / DECISION /
+RESOLVE (visibility at the coordinator's durable decision; L5 abort after
+crash-during-prepare). Reconfiguration (I18) is driven: the simulator owns a control-plane
 Raft group for **desired** placement, and each metadata group moves **actual**
 membership through joint consensus (learners catch up before they vote). A
 membership-transition interrupt (drop the new majority mid-joint) is a real

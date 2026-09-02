@@ -25,8 +25,9 @@
 #define EFS_RAFT_MSG_AE_REQ   3
 #define EFS_RAFT_MSG_AE_REP   4
 
-#define EFS_RAFT_GROUP_SHARD 0
-#define EFS_RAFT_GROUP_CTRL  1
+#define EFS_RAFT_GROUP_SHARD  0
+#define EFS_RAFT_GROUP_CTRL   1
+#define EFS_RAFT_GROUP_SHARD2 2 /* even-shard metadata group (sim step 7) */
 
 /* Internal log commands; never passed to the user apply callback. */
 #define EFS_RAFT_CMD_JOINT 0xC1 /* old:u32 BE, new:u32 BE */

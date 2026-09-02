@@ -12,12 +12,18 @@
 #define EFS_KV_SHARD_MASK 0xFFFu
 #define EFS_KV_KEY_MAX    320
 
-#define EFS_KV_KIND_ALLOC  1
-#define EFS_KV_KIND_INODE  2
-#define EFS_KV_KIND_DENTRY 3
-#define EFS_KV_KIND_CHUNK  4
-#define EFS_KV_KIND_LANE   5
-#define EFS_KV_KIND_OPID   6
+#define EFS_KV_KIND_ALLOC    1
+#define EFS_KV_KIND_INODE    2
+#define EFS_KV_KIND_DENTRY   3
+#define EFS_KV_KIND_CHUNK    4
+#define EFS_KV_KIND_LANE     5
+#define EFS_KV_KIND_OPID     6
+#define EFS_KV_KIND_VER      7  /* sidecar version of an exclusive key */
+#define EFS_KV_KIND_INTENT   8  /* exclusive intent, keyed by the data key */
+#define EFS_KV_KIND_GUARD    9  /* shared predicate guard + txid suffix */
+#define EFS_KV_KIND_REDUCE   10 /* pending commutative reduction + txid */
+#define EFS_KV_KIND_DECISION 11 /* coordinator decision record (txid) */
+#define EFS_KV_KIND_DSEQ     12 /* per-(dir, dentry-shard) emptiness witness */
 
 static inline uint32_t efs_kv_inode_shard(efs_ino_t ino)
 {
@@ -40,5 +46,23 @@ int efs_kv_key_lane(uint32_t shard, efs_ino_t ino, uint64_t gen, uint8_t lane,
                     uint8_t *out, uint32_t *len);
 int efs_kv_key_opid(uint32_t shard, const uint8_t uuid[EFS_OPID_UUID_LEN],
                     uint32_t epoch, uint8_t *out, uint32_t *len);
+/* MKDIR scatter: hash(parent, name, export_salt) & 0xFFF (§7.4). */
+uint32_t efs_kv_mkdir_shard(efs_ino_t parent, const char *name, uint64_t salt);
+int efs_kv_key_ver(const uint8_t *orig, uint32_t olen, uint8_t *out, uint32_t *len);
+int efs_kv_key_intent(const uint8_t *orig, uint32_t olen, uint8_t *out, uint32_t *len);
+int efs_kv_key_guard(const uint8_t *orig, uint32_t olen, const uint8_t txid[16],
+                     uint8_t *out, uint32_t *len);
+int efs_kv_key_guard_prefix(const uint8_t *orig, uint32_t olen, uint8_t *out,
+                            uint32_t *len);
+int efs_kv_key_reduce(const uint8_t *orig, uint32_t olen, const uint8_t txid[16],
+                      uint8_t *out, uint32_t *len);
+int efs_kv_key_reduce_prefix(const uint8_t *orig, uint32_t olen, uint8_t *out,
+                             uint32_t *len);
+int efs_kv_key_decision(uint32_t shard, const uint8_t txid[16], uint8_t *out,
+                        uint32_t *len);
+int efs_kv_key_dseq(uint32_t shard, efs_ino_t dir, uint8_t lane, uint8_t *out,
+                    uint32_t *len);
+int efs_kv_key_unwrap(const uint8_t *wrap, uint32_t wlen, uint8_t *orig,
+                      uint32_t *olen);
 
 #endif

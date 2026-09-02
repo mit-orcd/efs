@@ -3,6 +3,8 @@
 #include "efs/sim.h"
 #include "efs/opid.h"
 #include "efs/common.h"
+#include "efs/kv_key.h"
+#include "efs/txn.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -402,6 +404,94 @@ static void test_l8_desired_placement(void)
     efs_sim_free(s);
 }
 
+static const char *scatter(efs_ino_t parent)
+{
+    static char buf[16];
+    int i;
+
+    for (i = 0; i < 4096; i++) {
+        snprintf(buf, sizeof(buf), "d%d", i);
+        if (efs_kv_mkdir_shard(parent, buf, 0) != efs_kv_inode_shard(parent))
+            return buf;
+    }
+    return "d0";
+}
+
+static void test_mkdir_i17(void)
+{
+    struct efs_sim *s = mk(71);
+    efs_ino_t ino = 0, g = 0;
+    struct efs_txid t;
+    const char *nm;
+
+    CHECK(s, "mk");
+    nm = scatter(EFS_ROOT_INO);
+    CHECK(efs_kv_mkdir_shard(EFS_ROOT_INO, nm, 0) !=
+              efs_kv_inode_shard(EFS_ROOT_INO),
+          "two shards");
+    CHECK(efs_sim_mkdir_until(s, EFS_ROOT_INO, nm, &t, &ino,
+                              EFS_SIM_TXN_PREPARE) == EFS_OK &&
+              ino,
+          "prepare");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, nm, &g) == EFS_ERR_NOT_FOUND,
+          "I17 no half-apply");
+    CHECK(efs_sim_txn_finish(s, &t, 0) == EFS_OK, "L5 abort");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, nm, &g) == EFS_ERR_NOT_FOUND,
+          "aborted");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, nm, &ino) == EFS_OK && ino,
+          "mkdir");
+    CHECK(efs_sim_lookup(s, 1, EFS_ROOT_INO, nm, &g) == EFS_OK && g == ino,
+          "visible");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
+static void test_mkdir_crash_after_prepare(void)
+{
+    struct efs_sim *s = mk(73);
+    efs_ino_t ino = 0, g = 0;
+    struct efs_txid t;
+    const char *nm;
+    int lid;
+
+    CHECK(s, "mk");
+    nm = scatter(EFS_ROOT_INO);
+    CHECK(efs_sim_mkdir_until(s, EFS_ROOT_INO, nm, &t, &ino,
+                              EFS_SIM_TXN_PREPARE) == EFS_OK,
+          "prepare");
+    lid = efs_sim_meta_leader(s);
+    CHECK(lid >= 0, "leader");
+    CHECK(efs_sim_crash(s, lid) == EFS_OK, "crash");
+    CHECK(efs_sim_restart(s, lid) == EFS_OK, "restart");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, nm, &g) == EFS_ERR_NOT_FOUND,
+          "still old");
+    CHECK(efs_sim_txn_finish(s, &t, 0) == EFS_OK, "recover abort");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, nm, &g) == EFS_ERR_NOT_FOUND,
+          "aborted");
+    efs_sim_free(s);
+}
+
+static void test_mkdir_visible_at_decision(void)
+{
+    struct efs_sim *s = mk(79);
+    efs_ino_t ino = 0, g = 0;
+    struct efs_txid t;
+    const char *nm;
+
+    CHECK(s, "mk");
+    nm = scatter(EFS_ROOT_INO);
+    CHECK(efs_sim_mkdir_until(s, EFS_ROOT_INO, nm, &t, &ino,
+                              EFS_SIM_TXN_DECISION) == EFS_OK &&
+              ino,
+          "decide");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, nm, &g) == EFS_OK && g == ino,
+          "visible at decision");
+    CHECK(efs_sim_txn_finish(s, &t, 1) == EFS_OK, "resolve");
+    CHECK(efs_sim_lookup(s, 1, EFS_ROOT_INO, nm, &g) == EFS_OK && g == ino,
+          "after resolve");
+    efs_sim_free(s);
+}
+
 int main(void)
 {
     test_replay();
@@ -419,6 +509,9 @@ int main(void)
     test_i4_no_quorum_commit();
     test_readindex();
     test_l8_desired_placement();
+    test_mkdir_i17();
+    test_mkdir_crash_after_prepare();
+    test_mkdir_visible_at_decision();
     if (failures) {
         fprintf(stderr, "test_sim: %d failure(s)\n", failures);
         return 1;

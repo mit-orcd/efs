@@ -12,6 +12,9 @@
  * (EFS_ERR_IO), never a fake absence. */
 
 #define EFS_META_LANES 64
+#define EFS_META_INO_BYTES   80
+#define EFS_META_DENT_BYTES  20
+#define EFS_META_ALLOC_BYTES 8
 
 struct efs_meta_row {
     efs_ino_t ino;
@@ -53,5 +56,9 @@ int efs_meta_apply_publish(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_inde
 int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_index,
                              struct efs_meta_chunk *out);
 int efs_meta_apply_check(struct efs_kv *kv);
+int efs_meta_pack_inode(const struct efs_meta_row *r, uint8_t *out, uint32_t cap);
+int efs_meta_pack_dentry(const struct efs_meta_dentry *d, uint8_t *out,
+                         uint32_t cap);
+int efs_meta_apply_peek_alloc(struct efs_kv *kv, uint32_t shard, efs_ino_t *next);
 
 #endif
