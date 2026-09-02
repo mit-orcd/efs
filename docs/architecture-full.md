@@ -1203,15 +1203,14 @@ sends you to — not the whole spec.
 
 ### 1. The task right now
 
-> **Architecture migration §10, step 4:** single-shard Raft (persistence,
-> election, replication, apply, ReadIndex, snapshots).
+> **Architecture migration §10, step 5:** simulator proves the single-shard
+> Raft invariants (I1–I4, I10, ReadIndex).
 > [architecture.md §10](#architecture) · [verification.md](verification.md)
 >
-> Step 3 (ordered KV applied state + atomic batch) is in: `include/efs/kv.h`
-> batch/prefix, `include/efs/kv_key.h`, `src/meta/meta_apply.c`. The
-> simulator's metadata path is that SM; production `efsd` still mutates the
-> in-memory table until Raft apply (this step) writes the KV. Do not skip
-> to cross-shard txns. If a decision is missing, stop and ask.
+> Step 4 is in: `include/efs/raft.h` + `src/raft/` (persistence, election,
+> replication, apply, ReadIndex, log-truncation snapshots). Production `efsd`
+> still uses the in-memory table. Do not skip to reconfiguration or
+> cross-shard txns. If a decision is missing, stop and ask.
 
 **Rule for picking the next one after that:** the order is
 [architecture.md](#architecture) §10, step by step. If a step looks like
@@ -3775,8 +3774,11 @@ gate today: message drop, partition, crash+restart with the same KV disk,
 PUT-then-crash before publish (unpublished must not be readable), publish
 without all k+f fragments, silent fragment corruption (skipped, never
 decoded). Op-IDs (I16) persist in the CREATE batch. Production RPCs do not
-carry op-IDs yet. Raft, txn, and session events stay generator hooks until
-those SMs exist.
+carry op-IDs yet. **Single-shard Raft** (`include/efs/raft.h`, `src/raft/`, `tests/test_raft`)
+is a pure SM: persistence, election, replication, apply, ReadIndex, and
+log-truncation snapshots. The simulator still uses a single metadata primary
+until step 5 wires the group. Raft, txn, and session *fault events* in the
+generator stay hooks until those SMs are driven from `efs_sim`.
 
 **Fault-injection events the generator must produce:**
 

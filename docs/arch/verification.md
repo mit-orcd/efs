@@ -41,8 +41,11 @@ gate today: message drop, partition, crash+restart with the same KV disk,
 PUT-then-crash before publish (unpublished must not be readable), publish
 without all k+f fragments, silent fragment corruption (skipped, never
 decoded). Op-IDs (I16) persist in the CREATE batch. Production RPCs do not
-carry op-IDs yet. Raft, txn, and session events stay generator hooks until
-those SMs exist.
+carry op-IDs yet. **Single-shard Raft** (`include/efs/raft.h`, `src/raft/`, `tests/test_raft`)
+is a pure SM: persistence, election, replication, apply, ReadIndex, and
+log-truncation snapshots. The simulator still uses a single metadata primary
+until step 5 wires the group. Raft, txn, and session *fault events* in the
+generator stay hooks until those SMs are driven from `efs_sim`.
 
 **Fault-injection events the generator must produce:**
 

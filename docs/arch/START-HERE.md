@@ -13,15 +13,14 @@ sends you to — not the whole spec.
 
 ## 1. The task right now
 
-> **Architecture migration §10, step 4:** single-shard Raft (persistence,
-> election, replication, apply, ReadIndex, snapshots).
+> **Architecture migration §10, step 5:** simulator proves the single-shard
+> Raft invariants (I1–I4, I10, ReadIndex).
 > [architecture.md §10](../architecture.md) · [verification.md](verification.md)
 >
-> Step 3 (ordered KV applied state + atomic batch) is in: `include/efs/kv.h`
-> batch/prefix, `include/efs/kv_key.h`, `src/meta/meta_apply.c`. The
-> simulator's metadata path is that SM; production `efsd` still mutates the
-> in-memory table until Raft apply (this step) writes the KV. Do not skip
-> to cross-shard txns. If a decision is missing, stop and ask.
+> Step 4 is in: `include/efs/raft.h` + `src/raft/` (persistence, election,
+> replication, apply, ReadIndex, log-truncation snapshots). Production `efsd`
+> still uses the in-memory table. Do not skip to reconfiguration or
+> cross-shard txns. If a decision is missing, stop and ask.
 
 **Rule for picking the next one after that:** the order is
 [architecture.md](../architecture.md) §10, step by step. If a step looks like

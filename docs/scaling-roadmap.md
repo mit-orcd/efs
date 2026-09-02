@@ -166,11 +166,11 @@ transport/storage interfaces.
    3720-line file, not a new design. No behavior change this step. Gate:
    step-4 posix `results/posix/20260902-114722` **196/201, 0 EFS bugs**.
 
-**Phase M complete.** §10 steps 1–3 are in: simulator, op-ID / I16 window,
-ordered KV applied state (`kv_key` + `meta_apply` + atomic `efs_kv_batch`).
-The simulator metadata path is the KV SM; production `efsd` still uses the
-in-memory table until step 4 (Raft apply). Next is step 4. Do not build
-Raft as new monolith code.
+**Phase M complete.** §10 steps 1–4 are in: simulator, op-ID / I16 window,
+ordered KV applied state, and the single-shard Raft SM (`src/raft/`). The
+simulator metadata path is still a single primary over the KV; production
+`efsd` still uses the in-memory table. Next is step 5 (sim proves I1–I4).
+Do not build Raft as new monolith code.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every
