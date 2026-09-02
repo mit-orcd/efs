@@ -1203,15 +1203,15 @@ sends you to — not the whole spec.
 
 ### 1. The task right now
 
-> **Architecture migration §10, step 2:** RPC operation IDs + the idempotency
-> model (I16 / [architecture.md §7.9](#architecture)).
+> **Architecture migration §10, step 3:** ordered KV applied state, including
+> atomic batch semantics.
 > [architecture.md §10](#architecture) · [verification.md](verification.md)
 
-Step 1 (the deterministic simulator) is in `src/sim/` + `tests/test_sim`: it
-drives the current `efs_export_*` table against mem store / mem kv / loop
-transport. Do not build Raft. Do not change the production wire until the
-op-ID layout is the one §7.9 already specifies — if a field is missing from
-the spec, stop and ask.
+Step 1 is `src/sim/` + `tests/test_sim`. Step 2 is `include/efs/opid.h` +
+`src/sim/opid.c` (I16 window; production wire unchanged). Do not replace the
+live EFSM blob with a new on-disk format in this step unless the batch
+semantics are the ones already specified — if a decision is missing, stop
+and ask.
 
 **Rule for picking the next one after that:** the order is
 [architecture.md](#architecture) §10, step by step. If a step looks like
@@ -1237,6 +1237,7 @@ is what your change must not break; the **Gate** column is what proves it.
 | Cross-shard anything | [protocols/transactions.md](protocols/transactions.md) | I16, I17, I9 | posix2, posixstress |
 | Raft, KV, replication, membership | [architecture.md §7.1/§7.8](#architecture), [failure-tolerance.md](failure-tolerance.md) | I1–I4, I10, I18 | `tests/test_sim`, leaks |
 | Simulator / current table SM | [verification.md](verification.md), `include/efs/sim.h` | table uniqueness; I14, I15, I25 | `tests/test_sim` |
+| Op-ID / idempotency window | [architecture.md §7.9](#architecture), `include/efs/opid.h` | I16 | `tests/test_sim` |
 | A hot path, for speed | [performance.md](performance.md) | P1–P4, §8 contract | fio honest matrix — **never** the stock `perf` write column |
 | FUSE client behavior | [architecture.md §7.7](#architecture) | I24, kernel-cache rules | posix, posix2 |
 | Module structure / file layout | [development.md](development.md) | ~1000-line file cap; header-only deps | `make test` + the suite for whatever moved |
@@ -3772,8 +3773,9 @@ drive today's `efs_export_*` table against mem store, mem kv, and loop
 transport. Same seed replays the same history hash. Faults that gate today:
 message drop, partition, crash+restart with the same disk, PUT-then-crash
 before publish (unpublished must not be readable), publish without all k+f
-fragments, silent fragment corruption (skipped, never decoded). Raft, txn,
-and session events stay generator hooks until those SMs exist.
+fragments, silent fragment corruption (skipped, never decoded). `include/efs/opid.h`
+is the §7.9 bounded dedup window (I16); production RPCs do not carry op-IDs
+yet. Raft, txn, and session events stay generator hooks until those SMs exist.
 
 **Fault-injection events the generator must produce:**
 

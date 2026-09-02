@@ -8,6 +8,7 @@
 #include "efs/checksum.h"
 #include "efs/placement.h"
 #include "efs/protocol.h"
+#include "efs/opid.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,6 +53,7 @@ struct sim_server {
 
 struct sim_client {
     struct efs_transport *tx[EFS_SIM_MAX_SERVERS];
+    struct efs_opid_window win;
 };
 
 struct efs_sim {
@@ -526,6 +528,12 @@ struct efs_sim *efs_sim_new(const struct efs_sim_cfg *cfg)
         efs_sim_free(sim);
         return NULL;
     }
+    for (c = 0; c < sim->nclients; c++) {
+        uint8_t uuid[EFS_OPID_UUID_LEN];
+        memset(uuid, 0, sizeof(uuid));
+        uuid[15] = (uint8_t)(c + 1);
+        efs_opid_window_init(&sim->cli[c].win, uuid, 1);
+    }
     return sim;
 }
 
@@ -582,6 +590,51 @@ int efs_sim_create(struct efs_sim *sim, int client, efs_ino_t parent,
             *out = rec.ino;
     }
     return sim->last_rc;
+}
+
+void efs_sim_opid_for(struct efs_sim *sim, int client, uint64_t seq,
+                      struct efs_opid *out)
+{
+    if (!sim || !out || client < 0 || client >= sim->nclients)
+        return;
+    memset(out, 0, sizeof(*out));
+    memcpy(out->client_uuid, sim->cli[client].win.client_uuid,
+           EFS_OPID_UUID_LEN);
+    out->session_epoch = sim->cli[client].win.session_epoch;
+    out->seq = seq;
+}
+
+int efs_sim_opid_ack(struct efs_sim *sim, int client, uint64_t contiguous_ack)
+{
+    if (!sim || client < 0 || client >= sim->nclients)
+        return EFS_ERR_INVAL;
+    return efs_opid_ack(&sim->cli[client].win, contiguous_ack);
+}
+
+int efs_sim_create_op(struct efs_sim *sim, int client, const struct efs_opid *op,
+                      efs_ino_t parent, uint32_t mode, const char *name,
+                      efs_ino_t *out)
+{
+    struct efs_opid_reply rep;
+    int hit;
+
+    if (!sim || !op || !name || client < 0 || client >= sim->nclients)
+        return EFS_ERR_INVAL;
+    memset(&rep, 0, sizeof(rep));
+    hit = efs_opid_lookup(&sim->cli[client].win, op, &rep);
+    if (hit < 0)
+        return hit;
+    if (hit) {
+        if (out)
+            *out = rep.ino;
+        hist(sim, EV_CREATE, rep.ino, 0x16);
+        return rep.rc;
+    }
+    hit = efs_sim_create(sim, client, parent, mode, name, out);
+    rep.rc = hit;
+    rep.ino = out ? *out : 0;
+    efs_opid_complete(&sim->cli[client].win, op, &rep);
+    return hit;
 }
 
 int efs_sim_lookup(struct efs_sim *sim, int client, efs_ino_t parent,

@@ -1,6 +1,7 @@
 /* Deterministic simulator: current efs_export SM + mem store/kv/loop.
  * Same seed must replay the same history. */
 #include "efs/sim.h"
+#include "efs/opid.h"
 #include "efs/common.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -198,6 +199,68 @@ static void test_faults(void)
     efs_sim_free(p);
 }
 
+static void test_opid_window(void)
+{
+    struct efs_opid_window w;
+    uint8_t uuid[EFS_OPID_UUID_LEN];
+    struct efs_opid id;
+    struct efs_opid_reply r, got;
+    int hit;
+
+    memset(uuid, 0, sizeof(uuid));
+    uuid[0] = 9;
+    efs_opid_window_init(&w, uuid, 1);
+    memset(&id, 0, sizeof(id));
+    memcpy(id.client_uuid, uuid, EFS_OPID_UUID_LEN);
+    id.session_epoch = 1;
+    id.seq = 1;
+    CHECK(efs_opid_lookup(&w, &id, &got) == 0, "new");
+    r.rc = EFS_OK;
+    r.ino = 7;
+    r.extra = 0;
+    CHECK(efs_opid_complete(&w, &id, &r) == EFS_OK, "complete 1");
+    hit = efs_opid_lookup(&w, &id, &got);
+    CHECK(hit == 1 && got.ino == 7, "replay 1");
+    id.seq = 3;
+    CHECK(efs_opid_complete(&w, &id, &r) == EFS_OK, "complete 3");
+    CHECK(w.highest_contiguous_seq == 1, "gap");
+    id.seq = 2;
+    r.ino = 8;
+    CHECK(efs_opid_complete(&w, &id, &r) == EFS_OK, "complete 2");
+    CHECK(w.highest_contiguous_seq == 3, "folded");
+    CHECK(efs_opid_ack(&w, 3) == EFS_OK, "ack");
+    CHECK(w.ncache == 0, "reclaimed");
+    id.seq = 1;
+    hit = efs_opid_lookup(&w, &id, &got);
+    CHECK(hit == 1 && got.rc == EFS_OK, "acked stub");
+}
+
+static void test_i16(void)
+{
+    struct efs_sim *s = mk(31);
+    struct efs_opid op;
+    efs_ino_t a = 0, b = 0, c = 0, g = 0;
+
+    CHECK(s, "mk");
+    efs_sim_opid_for(s, 0, 1, &op);
+    CHECK(efs_sim_create_op(s, 0, &op, EFS_ROOT_INO, S_IFREG | 0644, "once", &a)
+              == EFS_OK && a,
+          "first");
+    CHECK(efs_sim_create_op(s, 0, &op, EFS_ROOT_INO, S_IFREG | 0644, "once", &b)
+              == EFS_OK && b == a,
+          "replay same name");
+    CHECK(efs_sim_create_op(s, 0, &op, EFS_ROOT_INO, S_IFREG | 0644, "other", &c)
+              == EFS_OK && c == a,
+          "replay other name");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "other", &g) == EFS_ERR_NOT_FOUND,
+          "no second inode");
+    efs_sim_opid_for(s, 0, 2, &op);
+    CHECK(efs_sim_create_op(s, 0, &op, EFS_ROOT_INO, S_IFREG | 0644, "two", &b)
+              == EFS_OK && b && b != a,
+          "new seq");
+    efs_sim_free(s);
+}
+
 int main(void)
 {
     test_replay();
@@ -208,6 +271,8 @@ int main(void)
     test_i14();
     test_i25();
     test_faults();
+    test_opid_window();
+    test_i16();
     if (failures) {
         fprintf(stderr, "test_sim: %d failure(s)\n", failures);
         return 1;

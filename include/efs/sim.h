@@ -3,6 +3,7 @@
 
 #include "efs/common.h"
 #include "efs/store.h"
+#include "efs/opid.h"
 
 /* Deterministic simulator (architecture.md §10 step 1).
  * N logical servers + M clients in one process. Seeded PRNG drives
@@ -43,6 +44,13 @@ int efs_sim_check(struct efs_sim *sim);
 /* CURRENT table SM on the metadata primary. */
 int efs_sim_create(struct efs_sim *sim, int client, efs_ino_t parent,
                    uint32_t mode, const char *name, efs_ino_t *out);
+/* I16: same op identity does not mint a second inode. */
+int efs_sim_create_op(struct efs_sim *sim, int client, const struct efs_opid *op,
+                      efs_ino_t parent, uint32_t mode, const char *name,
+                      efs_ino_t *out);
+void efs_sim_opid_for(struct efs_sim *sim, int client, uint64_t seq,
+                      struct efs_opid *out);
+int efs_sim_opid_ack(struct efs_sim *sim, int client, uint64_t contiguous_ack);
 int efs_sim_lookup(struct efs_sim *sim, int client, efs_ino_t parent,
                    const char *name, efs_ino_t *out);
 int efs_sim_unlink(struct efs_sim *sim, int client, efs_ino_t parent,
