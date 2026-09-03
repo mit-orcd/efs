@@ -1094,10 +1094,40 @@ stays runnable. **Do not** go straight `KV → Raft → done`.
 9. Data-generation publication / fencing integration (§7.3), with the
    simulator checking the logical data protocol (arch/verification.md).
 10. Directory layout-epoch spread (§7.4) + distributed locking (§7.6).
+10.5 Durable backends, then a new export: an on-disk ordered KV and an
+    on-disk Raft log behind the step 3/4 interfaces, then the applied SM
+    gated in-sim, then a new export proposing through Raft and reading
+    via ReadIndex (not a cutover of the live table).
 11. Delete the old snapshot / root-2PC machinery.
 12. FUSE cache-coherence optimization only after zero/stale-cache semantics
     are demonstrably correct (data path starts as direct-I/O, §7.7).
 ```
+
+**Why 10.5 exists.** Steps 3–5 built the KV and Raft as *interfaces with
+in-memory implementations*, which is all the simulator needs. Production
+`efsd` still keeps metadata in the in-memory table and makes it durable with
+the snapshot / root-2PC flush that step 11 deletes. Deleting that path before
+a durable replacement is wired would drop metadata durability, so 10.5 is
+ordered ahead of it: durable backends first (gated by re-running the whole
+simulator against them, `efsd` untouched), then the applied SM in-sim, then
+a new export on that engine. The KV engine is
+a WAL plus immutable sorted segments with compaction, and there is **one
+engine and one group-committed WAL per node** — the shard prefix in every key
+multiplexes all groups into it, which is the same "logical groups, not
+physical WALs" rule as [performance.md](arch/performance.md) §5.4. The Raft
+log follows the same shape for the same reason — **one multiplexed record log
+per node**, every group appending to it, concurrent appends sharing one fsync.
+
+**The Raft log is the durability boundary; the applied KV is a replayable
+view.** A committed entry is one a majority holds in its log, and the KV is
+rebuilt by replaying forward from the snapshot point, so a metadata write pays
+one persistence boundary rather than two and the KV owes nothing on the
+critical path. This is not a new decision — it is what the step 4 state
+machine already assumes, since it starts at `last_applied = snap_idx` and
+re-applies everything above it (which is also why apply must stay idempotent,
+I16). It costs exactly one ordering rule: a snapshot drops the log prefix, so
+**no snapshot may advance past what the applied KV has durably stored**. The
+KV's own sync mode is therefore a performance choice, not a correctness one.
 
 **Step 1 has a hard prerequisite: the carve-up.** A pure state machine behind
 transport/storage interfaces does not exist today — four files hold ~45% of

@@ -18,6 +18,10 @@ static int failures = 0;
         }                                                                     \
     } while (0)
 
+#define T0 1000000000000000000ull
+
+static const struct efs_meta_attrs g_at = { 1000, 1000, T0 };
+
 static void uuid_of(uint8_t u[EFS_OPID_UUID_LEN], uint8_t n)
 {
     memset(u, 0, EFS_OPID_UUID_LEN);
@@ -72,9 +76,9 @@ static void test_i19_lease(void)
 
     uuid_of(u, 2);
     CHECK(kv != NULL, "kv");
-    CHECK(efs_meta_apply_init(kv) == EFS_OK, "init");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
     CHECK(efs_session_create(kv, u, 1) == EFS_OK, "sess");
-    CHECK(efs_meta_apply_create_file(kv, EFS_ROOT_INO, S_IFREG | 0644, "f", &ino)
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "f", &ino)
               == EFS_OK && ino,
           "create");
     CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "row");
@@ -82,7 +86,7 @@ static void test_i19_lease(void)
     CHECK(efs_lease_open(kv, ino, row.generation + 1, u, 1) == EFS_ERR_STALE,
           "bad gen");
     CHECK(efs_lease_any(kv, ino, row.generation) == 1, "held");
-    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "f") == EFS_OK, "unlink");
+    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "f", T0) == EFS_OK, "unlink");
     CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "f", &d) == EFS_ERR_NOT_FOUND,
           "dentry gone");
     CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK && row.nlink == 0,
@@ -108,11 +112,11 @@ static void test_unlink_no_lease(void)
     struct efs_meta_row row;
 
     CHECK(kv != NULL, "kv");
-    CHECK(efs_meta_apply_init(kv) == EFS_OK, "init");
-    CHECK(efs_meta_apply_create_file(kv, EFS_ROOT_INO, S_IFREG | 0644, "g", &ino)
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "g", &ino)
               == EFS_OK,
           "create");
-    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "g") == EFS_OK, "unlink");
+    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "g", T0) == EFS_OK, "unlink");
     CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_ERR_NOT_FOUND,
           "deleted");
     efs_kv_mem_free(kv);

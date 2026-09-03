@@ -85,7 +85,8 @@ int sim_txn_boot(struct efs_sim *sim)
     if (!sim)
         return EFS_ERR_INVAL;
     for (i = 0; i < EFS_SIM_RAFT_N; i++) {
-        sim->srv[i].raft2_store = efs_raft_mem_create();
+        sim->srv[i].raft2_store =
+            sim_raft_store_new(sim, i, EFS_RAFT_GROUP_SHARD2);
         if (!sim->srv[i].raft2_store)
             return EFS_ERR_NOMEM;
         rc = attach2_real(sim, i);
@@ -139,7 +140,7 @@ void sim_txn_free_all(struct efs_sim *sim)
     for (i = 0; i < EFS_SIM_MAX_SERVERS; i++) {
         efs_raft_free(sim->srv[i].raft2);
         sim->srv[i].raft2 = NULL;
-        efs_raft_mem_free(sim->srv[i].raft2_store);
+        sim_raft_store_del(sim, sim->srv[i].raft2_store);
         sim->srv[i].raft2_store = NULL;
     }
 }
@@ -340,21 +341,17 @@ static int propose_drop(struct efs_sim *sim, uint32_t shard, const struct efs_tx
     return sim_raft_propose_group(sim, sim_shard_group(shard), cmd, 21);
 }
 
-struct coord_ctx {
-    struct efs_sim *sim;
-};
-
-static int sim_coord(void *user, const struct efs_txid *t, uint32_t coord_shard,
-                     int *dec)
+int sim_txn_coord(void *user, const struct efs_txid *t, uint32_t coord_shard,
+                  int *dec)
 {
-    struct coord_ctx *c = user;
+    struct efs_sim *sim = user;
     struct efs_kv *kv;
     int rc;
 
-    rc = sim_raft_read_group(c->sim, sim_shard_group(coord_shard));
+    rc = sim_raft_read_group(sim, sim_shard_group(coord_shard));
     if (rc != EFS_OK)
         return EFS_ERR_IO;
-    kv = sim_raft_kv_group(c->sim, sim_shard_group(coord_shard));
+    kv = sim_raft_kv_group(sim, sim_shard_group(coord_shard));
     if (!kv)
         return EFS_ERR_IO;
     return efs_txn_decision_get(kv, coord_shard, t, dec);
@@ -368,7 +365,6 @@ int sim_txn_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,
     uint32_t psh, hsh;
     struct efs_kv *kv;
     struct efs_meta_row prow;
-    struct coord_ctx ctx;
     int rc;
 
     if (!sim || !name || !out || parent == 0)
@@ -383,13 +379,12 @@ int sim_txn_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,
     rc = efs_meta_apply_get_inode(kv, parent, &prow);
     if (rc != EFS_OK)
         return rc;
-    ctx.sim = sim;
     if (prow.layout == EFS_META_LAYOUT_LOCAL) {
         rc = efs_kv_key_dentry(psh, parent, name, key, &klen);
         if (rc != EFS_OK)
             return rc;
         vlen = EFS_META_DENT_BYTES;
-        rc = efs_txn_read(kv, key, klen, sim_coord, &ctx, val, &vlen);
+        rc = efs_txn_read(kv, key, klen, sim_txn_coord, sim, val, &vlen);
         if (rc != EFS_OK)
             return rc;
         goto unpack;
@@ -405,7 +400,7 @@ int sim_txn_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,
     if (rc != EFS_OK)
         return rc;
     vlen = EFS_META_DENT_BYTES;
-    rc = efs_txn_read(kv, key, klen, sim_coord, &ctx, val, &vlen);
+    rc = efs_txn_read(kv, key, klen, sim_txn_coord, sim, val, &vlen);
     if (rc == EFS_OK) {
         rc = efs_meta_unpack_dentry(val, vlen, out);
         if (rc != EFS_OK)
@@ -428,7 +423,7 @@ int sim_txn_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,
     if (rc != EFS_OK)
         return rc;
     vlen = EFS_META_DENT_BYTES;
-    rc = efs_txn_read(kv, key, klen, sim_coord, &ctx, val, &vlen);
+    rc = efs_txn_read(kv, key, klen, sim_txn_coord, sim, val, &vlen);
     if (rc != EFS_OK)
         return rc;
 unpack:
@@ -490,11 +485,10 @@ static int mkdir_build(struct efs_sim *sim, efs_ino_t parent, const char *name,
     if (rc != EFS_OK)
         return rc;
     {
-        struct coord_ctx ctx = { .sim = sim };
         uint8_t tmp[EFS_META_DENT_BYTES];
         uint32_t tn = sizeof(tmp);
 
-        rc = efs_txn_read(pkv, k_dent, kd, sim_coord, &ctx, tmp, &tn);
+        rc = efs_txn_read(pkv, k_dent, kd, sim_txn_coord, sim, tmp, &tn);
         if (rc == EFS_OK)
             return EFS_ERR_EXIST;
         if (rc != EFS_ERR_NOT_FOUND)
@@ -518,11 +512,22 @@ static int mkdir_build(struct efs_sim *sim, efs_ino_t parent, const char *name,
     crow.mode = S_IFDIR | 0755;
     crow.nlink = 2;
     crow.parent = parent;
+    crow.uid = 1000;
+    crow.gid = 1000;
+    crow.base_mtime = sim->now;
+    crow.base_atime = sim->now;
+    crow.base_ctime = sim->now;
     memset(&dent, 0, sizeof(dent));
     dent.ino = ino;
     dent.generation = 1;
     dent.type = S_IFDIR;
     prow.nlink++;
+    /* MKDIR adds an entry to the parent, so the parent's times move too.
+     * The parent row is already in this transaction's write set. */
+    if (prow.base_mtime < sim->now)
+        prow.base_mtime = sim->now;
+    if (prow.base_ctime < sim->now)
+        prow.base_ctime = sim->now;
     rc = efs_meta_pack_dentry(&dent, v_dent, sizeof(v_dent));
     if (rc == EFS_OK)
         rc = efs_meta_pack_inode(&prow, v_pino, sizeof(v_pino));

@@ -13,15 +13,51 @@ sends you to — not the whole spec.
 
 ## 1. The task right now
 
-> **Architecture migration §10, step 11:** delete the old snapshot / root-2PC machinery.
+> **Architecture migration §10, step 10.5c:** finish the applied-state SM
+> in-sim, then adopt via a **new export** on Raft + the applied KV.
 > [architecture.md §10](../architecture.md)
 >
-> Step 10 is in: directory layout-epoch spread (LOCAL→SPLITTING→HASHED, I8
-> tombstone) and distributed POSIX locking (fcntl/flock domains, wait FIFO,
-> fence reclaim, same-inode EDEADLK, ENOLCK) in the simulator
-> (`test_sim` / `test_lock` / `test_meta_apply`). Production `efsd` still
-> uses the in-memory table. Do not skip ahead. If a decision is missing,
-> stop and ask.
+> **10.5c-1 is in (gated):** the first single-shard op batch over the
+> applied KV — READDIR (LOCAL / SPLITTING / HASHED, including lane-0
+> aliasing), SETATTR mode/owner (ctime not mtime, MAX-clamped, stale-handle
+> reject), GETATTR as the validated double collect (file write lanes **and**
+> HASHED-dir `used_shards` dir lanes; pending committed reductions; epoch /
+> `mtime_gen` / `lane_seq` recheck; I9 on an unreachable coordinator),
+> LOOKUP_PATH as a batched ancestor walk (resume from the terminal, I9,
+> intermediate not-a-directory). The simulator proposes SETATTR through
+> Raft, serves GETATTR/READDIR via ReadIndex, and walks LOOKUP_PATH
+> hop-by-hop with a ReadIndex per shard; a leader crash mid-read does not
+> change the answer. Gate: `test_meta_apply`, `test_sim`
+> (`test_single_shard_ops`, `test_hashed_dir_stat`).
+>
+> **10.5c-2 is in (gated):** the `utimens` inode fence. Only utimens can
+> set a time backwards, so it is the only op that bumps `mtime_gen` and
+> pushes that generation onto every active write lane (file) or used dir
+> lane (HASHED/SPLITTING directory). getattr then ignores older lane
+> mtimes; a later write re-stamps at the new generation. atime-only does
+> not fence. chmod after utimens does not hide the explicit mtime. The
+> simulator proposes the fence through Raft; a leader crash does not
+> resurrect a stale lane mtime. Gate: `test_meta_apply`
+> (`test_utimens_fence`, `test_stat_fence_and_gen`, `test_stat_dir_hashed`),
+> `test_sim` (`test_utimens_fence`, `test_hashed_dir_stat`).
+>
+> Both durable backends are in (10.5a KV, 10.5b Raft log). 10.5c is not
+> new storage work. Remaining in 10.5c: the rest of the applied SM
+> (truncate range-delete, O_APPEND, cross-shard
+> rename/link/rmdir) still in-sim, **then** a new export on the new
+> engine. Do not wire the live `efs-test` export. Do not skip to step 11.
+>
+> **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
+> the durability boundary and the applied KV is a replayable view, so never
+> call `efs_raft_snapshot()` until the KV is durable through `last_applied`
+> (`efs_kv_lsm_flush()`). The snapshot drops the log prefix that would
+> otherwise replay those commands. `efs_raft_new()` already starts at
+> `last_applied = snap_idx` and re-applies forward, which is why apply must
+> stay idempotent.
+>
+> Production `efsd` still uses the in-memory table and the snapshot /
+> root-2PC flush; only after 10.5c does step 11 delete that flush. If a
+> decision is missing, stop and ask.
 
 **Rule for picking the next one after that:** the order is
 [architecture.md](../architecture.md) §10, step by step. If a step looks like

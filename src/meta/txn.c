@@ -538,8 +538,55 @@ struct red_acc {
     efs_txn_coord_fn coord;
     void *ctx;
     struct efs_txn_reduce *out;
+    struct efs_txn_pending *pend;
     int rc;
 };
+
+static void pend_add(struct efs_txn_pending *p, const struct efs_txid *t,
+                     const struct efs_txn_parts *parts)
+{
+    uint8_t i;
+
+    if (!p)
+        return;
+    for (i = 0; i < p->n; i++)
+        if (memcmp(p->txid[i].bytes, t->bytes, EFS_TXN_ID_LEN) == 0)
+            return; /* one transaction can hold intents on several lanes */
+    if (p->n >= EFS_TXN_MAX_PENDING) {
+        p->overflow = 1;
+        return;
+    }
+    p->txid[p->n] = *t;
+    p->parts[p->n] = *parts;
+    p->n++;
+}
+
+int efs_txn_pending_recheck(const struct efs_txn_pending *pend,
+                            efs_txn_coord_fn coord, void *ctx, int *moved)
+{
+    uint8_t i;
+    int dec, rc;
+
+    if (!coord || !moved)
+        return EFS_ERR_INVAL;
+    *moved = 0;
+    if (!pend)
+        return EFS_OK;
+    if (pend->overflow) {
+        *moved = 1;
+        return EFS_OK;
+    }
+    for (i = 0; i < pend->n; i++) {
+        rc = ask_coord(coord, ctx, &pend->txid[i], &pend->parts[i], &dec);
+        if (rc != EFS_OK)
+            return rc; /* unreachable authority is never "absent" (I9) */
+        if (dec != EFS_TXN_UNDECIDED) {
+            *moved = 1;
+            return EFS_OK;
+        }
+    }
+    return EFS_OK;
+}
 
 static int red_cb(void *user, const uint8_t *key, uint32_t klen,
                   const uint8_t *val, uint32_t vlen)
@@ -563,6 +610,8 @@ static int red_cb(void *user, const uint8_t *key, uint32_t klen,
         a->rc = rc;
         return 1;
     }
+    if (dec == EFS_TXN_UNDECIDED)
+        pend_add(a->pend, &t, &p);
     if (dec != EFS_TXN_COMMIT)
         return 0;
     pay = val + 16 + used;
@@ -579,14 +628,27 @@ int efs_txn_reduce_read(struct efs_kv *kv, const uint8_t *lane_key, uint32_t kle
                         efs_txn_coord_fn coord, void *ctx,
                         struct efs_txn_reduce *out)
 {
-    uint8_t pref[KEY_MAX], buf[32];
-    uint32_t pl = 0, n = 32;
+    return efs_txn_reduce_read_ex(kv, lane_key, klen, coord, ctx, out, NULL);
+}
+
+int efs_txn_reduce_read_ex(struct efs_kv *kv, const uint8_t *lane_key,
+                           uint32_t klen, efs_txn_coord_fn coord, void *ctx,
+                           struct efs_txn_reduce *out,
+                           struct efs_txn_pending *pend)
+{
+    uint8_t pref[KEY_MAX], buf[VAL_MAX];
+    uint32_t pl = 0, n = sizeof(buf);
     struct red_acc a;
     int rc;
 
     if (!kv || !lane_key || !coord || !out)
         return EFS_ERR_INVAL;
     memset(out, 0, sizeof(*out));
+    /* Only the leading reduce triple is this layer's business; the lane's
+     * owner keeps its own fields after it. The buffer has to fit the WHOLE
+     * record even so, because a short buffer is a hard error rather than a
+     * truncated read — sizing it to the triple would make every materialized
+     * lane unreadable. */
     rc = efs_kv_get(kv, lane_key, klen, buf, &n);
     if (rc == EFS_OK && n >= 24) {
         out->max_end = rd64(buf);
@@ -602,6 +664,7 @@ int efs_txn_reduce_read(struct efs_kv *kv, const uint8_t *lane_key, uint32_t kle
     a.coord = coord;
     a.ctx = ctx;
     a.out = out;
+    a.pend = pend;
     rc = efs_kv_scan_prefix(kv, pref, pl, red_cb, &a);
     if (a.rc != EFS_OK)
         return a.rc;

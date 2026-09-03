@@ -6,6 +6,7 @@
 #include "efs/opid.h"
 #include "efs/txn.h"
 #include "efs/lock.h"
+#include "efs/meta_apply.h"
 
 /* Deterministic simulator (architecture.md §10 steps 1–10).
  * N logical servers + M clients in one process. Seeded PRNG drives
@@ -65,6 +66,16 @@ int efs_sim_opid_ack(struct efs_sim *sim, int client, uint64_t contiguous_ack);
 int efs_sim_opid_forget(struct efs_sim *sim, int client);
 int efs_sim_lookup(struct efs_sim *sim, int client, efs_ino_t parent,
                    const char *name, efs_ino_t *out);
+int efs_sim_lookup_path(struct efs_sim *sim, efs_ino_t start, const char *path,
+                        struct efs_meta_path_hop *hops, uint32_t cap, uint32_t *n);
+int efs_sim_getattr(struct efs_sim *sim, efs_ino_t ino, struct efs_meta_stat *out);
+int efs_sim_setattr(struct efs_sim *sim, int client, efs_ino_t ino,
+                    const struct efs_meta_setattr *sa);
+int efs_sim_utimens(struct efs_sim *sim, int client, efs_ino_t ino,
+                    const struct efs_meta_utimens *u);
+int efs_sim_readdir(struct efs_sim *sim, efs_ino_t dir,
+                    struct efs_meta_dir_cursor *cur, struct efs_meta_dir_ent *out,
+                    uint32_t max, uint32_t *n);
 int efs_sim_unlink(struct efs_sim *sim, int client, efs_ino_t parent,
                    const char *name);
 

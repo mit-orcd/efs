@@ -12,6 +12,8 @@
 #define CMD_UNLINK  2
 #define CMD_PUBLISH 3
 #define CMD_EPOCH   SIM_CMD_EPOCH
+#define CMD_SETATTR SIM_CMD_SETATTR
+#define CMD_UTIMENS SIM_CMD_UTIMENS
 #define CMD_MAX     512
 #define WAIT_TICKS  80
 #define RAFT_HDR    98
@@ -103,10 +105,15 @@ static int leader_id(const struct efs_sim *sim)
     return leader_id_g(sim, EFS_RAFT_GROUP_SHARD);
 }
 
+/* The proposing leader stamps uid/gid/now INTO the command, because apply
+ * has to be a pure function of it: a replica that read its own clock would
+ * derive a different inode row from the same committed entry. */
+#define CREATE_NAME_OFF 31
+
 static int pack_create(uint8_t *out, uint32_t *len, int has_op,
                        const struct efs_opid *op, const uint8_t *uuid,
                        uint32_t epoch, efs_ino_t parent, uint32_t mode,
-                       const char *name)
+                       const char *name, const struct efs_meta_attrs *at)
 {
     size_t nl = strlen(name);
     uint32_t n;
@@ -114,7 +121,7 @@ static int pack_create(uint8_t *out, uint32_t *len, int has_op,
 
     if (nl >= EFS_MAX_NAME)
         return EFS_ERR_NAMETOOLONG;
-    n = 1 + 1 + 8 + 4 + 1 + (uint32_t)nl + EFS_OPID_UUID_LEN + 4;
+    n = CREATE_NAME_OFF + (uint32_t)nl + EFS_OPID_UUID_LEN + 4;
     if (has_op)
         n += 8;
     if (n > CMD_MAX)
@@ -123,9 +130,12 @@ static int pack_create(uint8_t *out, uint32_t *len, int has_op,
     out[1] = has_op ? 1 : 0;
     wr64(out + 2, parent);
     wr32(out + 10, mode);
-    out[14] = (uint8_t)nl;
-    memcpy(out + 15, name, nl);
-    p = out + 15 + nl;
+    wr32(out + 14, at->uid);
+    wr32(out + 18, at->gid);
+    wr64(out + 22, at->now);
+    out[30] = (uint8_t)nl;
+    memcpy(out + CREATE_NAME_OFF, name, nl);
+    p = out + CREATE_NAME_OFF + nl;
     memcpy(p, uuid, EFS_OPID_UUID_LEN);
     wr32(p + EFS_OPID_UUID_LEN, epoch);
     if (has_op)
@@ -135,7 +145,8 @@ static int pack_create(uint8_t *out, uint32_t *len, int has_op,
 }
 
 static int pack_unlink(uint8_t *out, uint32_t *len, const uint8_t *uuid,
-                       uint32_t epoch, efs_ino_t parent, const char *name)
+                       uint32_t epoch, efs_ino_t parent, uint64_t now,
+                       const char *name)
 {
     size_t nl = strlen(name);
     uint32_t n;
@@ -143,14 +154,15 @@ static int pack_unlink(uint8_t *out, uint32_t *len, const uint8_t *uuid,
 
     if (nl >= EFS_MAX_NAME)
         return EFS_ERR_NAMETOOLONG;
-    n = 1 + 8 + 1 + (uint32_t)nl + EFS_OPID_UUID_LEN + 4;
+    n = 1 + 8 + 8 + 1 + (uint32_t)nl + EFS_OPID_UUID_LEN + 4;
     if (n > CMD_MAX)
         return EFS_ERR_INVAL;
     out[0] = CMD_UNLINK;
     wr64(out + 1, parent);
-    out[9] = (uint8_t)nl;
-    memcpy(out + 10, name, nl);
-    p = out + 10 + nl;
+    wr64(out + 9, now);
+    out[17] = (uint8_t)nl;
+    memcpy(out + 18, name, nl);
+    p = out + 18 + nl;
     memcpy(p, uuid, EFS_OPID_UUID_LEN);
     wr32(p + EFS_OPID_UUID_LEN, epoch);
     *len = n;
@@ -160,7 +172,7 @@ static int pack_unlink(uint8_t *out, uint32_t *len, const uint8_t *uuid,
 static int pack_publish(uint8_t *out, uint32_t *len, const uint8_t *uuid,
                         uint32_t epoch, const struct efs_meta_pub *p)
 {
-    uint32_t n = 1 + 8 + 4 + 8 +
+    uint32_t n = 1 + 8 + 4 + 8 + 8 +
                  (uint32_t)EFS_NUM_FRAGMENTS * (4 + EFS_HASH_SIZE) +
                  EFS_OPID_UUID_LEN + 4 + 8 + 8 + 8 + 4;
     int i;
@@ -172,7 +184,8 @@ static int pack_publish(uint8_t *out, uint32_t *len, const uint8_t *uuid,
     wr64(out + 1, p->ino);
     wr32(out + 9, p->chunk_index);
     wr64(out + 13, p->new_size);
-    q = out + 21;
+    wr64(out + 21, p->now);
+    q = out + 29;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         wr32(q, p->ch.nodes[i]);
         q += 4;
@@ -199,21 +212,26 @@ static int apply_create_cmd(struct sim_server *s, const uint8_t *cmd,
     uint8_t nl, has_op, uuid[EFS_OPID_UUID_LEN];
     int rc;
     struct efs_opid op;
+    struct efs_meta_attrs at;
     struct efs_meta_dentry dent;
     struct efs_meta_row prow;
     const uint8_t *p;
 
-    if (clen < 15)
+    if (clen < CREATE_NAME_OFF)
         return EFS_ERR_PROTO;
     has_op = cmd[1];
     parent = rd64(cmd + 2);
     mode = rd32(cmd + 10);
-    nl = cmd[14];
-    if ((uint32_t)15 + nl + EFS_OPID_UUID_LEN + 4 > clen)
+    memset(&at, 0, sizeof(at));
+    at.uid = rd32(cmd + 14);
+    at.gid = rd32(cmd + 18);
+    at.now = rd64(cmd + 22);
+    nl = cmd[30];
+    if ((uint32_t)CREATE_NAME_OFF + nl + EFS_OPID_UUID_LEN + 4 > clen)
         return EFS_ERR_PROTO;
     memset(name, 0, sizeof(name));
-    memcpy(name, cmd + 15, nl);
-    p = cmd + 15 + nl;
+    memcpy(name, cmd + CREATE_NAME_OFF, nl);
+    p = cmd + CREATE_NAME_OFF + nl;
     memcpy(uuid, p, EFS_OPID_UUID_LEN);
     epoch = rd32(p + EFS_OPID_UUID_LEN);
     memset(&op, 0, sizeof(op));
@@ -231,10 +249,10 @@ static int apply_create_cmd(struct sim_server *s, const uint8_t *cmd,
         memcpy(op.client_uuid, uuid, EFS_OPID_UUID_LEN);
         op.session_epoch = epoch;
         op.seq = rd64(p + EFS_OPID_UUID_LEN + 4);
-        rc = efs_meta_apply_create_file_op(s->disk, &op, parent, mode, name,
-                                           &ino);
+        rc = efs_meta_apply_create_file_op(s->disk, &op, &at, parent, mode,
+                                           name, &ino);
     } else {
-        rc = efs_meta_apply_create_file(s->disk, parent, mode, name, &ino);
+        rc = efs_meta_apply_create_file(s->disk, &at, parent, mode, name, &ino);
     }
     if (rc == EFS_ERR_EXIST &&
         efs_meta_apply_lookup(s->disk, parent, name, &dent) == EFS_OK)
@@ -250,18 +268,20 @@ static int apply_unlink_cmd(struct sim_server *s, const uint8_t *cmd,
     char name[EFS_MAX_NAME];
     uint8_t nl, uuid[EFS_OPID_UUID_LEN];
     uint32_t epoch;
+    uint64_t now;
     const uint8_t *p;
     int rc;
 
-    if (clen < 10)
+    if (clen < 18)
         return EFS_ERR_PROTO;
     parent = rd64(cmd + 1);
-    nl = cmd[9];
-    if ((uint32_t)10 + nl + EFS_OPID_UUID_LEN + 4 > clen)
+    now = rd64(cmd + 9);
+    nl = cmd[17];
+    if ((uint32_t)18 + nl + EFS_OPID_UUID_LEN + 4 > clen)
         return EFS_ERR_PROTO;
     memset(name, 0, sizeof(name));
-    memcpy(name, cmd + 10, nl);
-    p = cmd + 10 + nl;
+    memcpy(name, cmd + 18, nl);
+    p = cmd + 18 + nl;
     memcpy(uuid, p, EFS_OPID_UUID_LEN);
     epoch = rd32(p + EFS_OPID_UUID_LEN);
     rc = efs_session_accept(s->disk, efs_kv_inode_shard(parent), uuid, epoch);
@@ -269,7 +289,7 @@ static int apply_unlink_cmd(struct sim_server *s, const uint8_t *cmd,
         sim_note_apply(s, group, index, rc, 0);
         return EFS_OK;
     }
-    rc = efs_meta_apply_unlink(s->disk, parent, name);
+    rc = efs_meta_apply_unlink(s->disk, parent, name, now);
     sim_note_apply(s, group, index, rc, 0);
     return EFS_OK;
 }
@@ -284,7 +304,7 @@ static int apply_publish_cmd(struct sim_server *s, const uint8_t *cmd,
     uint8_t lane;
     int i, rc;
 
-    need = 21 + (uint32_t)EFS_NUM_FRAGMENTS * (4 + EFS_HASH_SIZE) +
+    need = 29 + (uint32_t)EFS_NUM_FRAGMENTS * (4 + EFS_HASH_SIZE) +
            EFS_OPID_UUID_LEN + 4 + 8 + 8 + 8 + 4;
     if (clen < need)
         return EFS_ERR_PROTO;
@@ -292,7 +312,8 @@ static int apply_publish_cmd(struct sim_server *s, const uint8_t *cmd,
     p.ino = rd64(cmd + 1);
     p.chunk_index = rd32(cmd + 9);
     p.new_size = rd64(cmd + 13);
-    q = cmd + 21;
+    p.now = rd64(cmd + 21);
+    q = cmd + 29;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         p.ch.nodes[i] = rd32(q);
         q += 4;
@@ -331,6 +352,70 @@ static int apply_epoch_cmd(struct sim_server *s, const uint8_t *cmd,
     return EFS_OK;
 }
 
+static int apply_setattr_cmd(struct sim_server *s, const uint8_t *cmd,
+                             uint32_t clen, uint64_t index, uint8_t group)
+{
+    struct efs_meta_setattr sa;
+    efs_ino_t ino;
+    uint64_t now;
+    uint8_t uuid[EFS_OPID_UUID_LEN];
+    uint32_t epoch;
+    int rc;
+
+    if (clen < 61)
+        return EFS_ERR_PROTO;
+    ino = rd64(cmd + 1);
+    now = rd64(cmd + 9);
+    memset(&sa, 0, sizeof(sa));
+    sa.expect_gen = rd64(cmd + 17);
+    sa.mask = rd32(cmd + 25);
+    sa.mode = rd32(cmd + 29);
+    sa.uid = rd32(cmd + 33);
+    sa.gid = rd32(cmd + 37);
+    memcpy(uuid, cmd + 41, EFS_OPID_UUID_LEN);
+    epoch = rd32(cmd + 41 + EFS_OPID_UUID_LEN);
+    rc = efs_session_accept(s->disk, efs_kv_inode_shard(ino), uuid, epoch);
+    if (rc != EFS_OK) {
+        sim_note_apply(s, group, index, rc, ino);
+        return EFS_OK;
+    }
+    rc = efs_meta_apply_setattr(s->disk, ino, now, &sa);
+    sim_note_apply(s, group, index, rc, ino);
+    return EFS_OK;
+}
+
+static int apply_utimens_cmd(struct sim_server *s, const uint8_t *cmd,
+                             uint32_t clen, uint64_t index, uint8_t group)
+{
+    struct efs_meta_utimens u;
+    efs_ino_t ino;
+    uint64_t now;
+    uint8_t uuid[EFS_OPID_UUID_LEN];
+    uint32_t epoch;
+    int rc;
+
+    if (clen < 73)
+        return EFS_ERR_PROTO;
+    ino = rd64(cmd + 1);
+    now = rd64(cmd + 9);
+    memset(&u, 0, sizeof(u));
+    u.expect_gen = rd64(cmd + 17);
+    u.mask = rd32(cmd + 25);
+    u.mtime = rd64(cmd + 29);
+    u.atime = rd64(cmd + 37);
+    u.mtime_gen = rd64(cmd + 45);
+    memcpy(uuid, cmd + 53, EFS_OPID_UUID_LEN);
+    epoch = rd32(cmd + 53 + EFS_OPID_UUID_LEN);
+    rc = efs_session_accept(s->disk, efs_kv_inode_shard(ino), uuid, epoch);
+    if (rc != EFS_OK) {
+        sim_note_apply(s, group, index, rc, ino);
+        return EFS_OK;
+    }
+    rc = efs_meta_apply_utimens(s->disk, ino, now, &u);
+    sim_note_apply(s, group, index, rc, ino);
+    return EFS_OK;
+}
+
 int sim_ns_try(struct sim_server *s, uint8_t group, const uint8_t *cmd,
                uint32_t clen, uint64_t index)
 {
@@ -348,6 +433,12 @@ int sim_ns_try(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         return 1;
     case CMD_EPOCH:
         apply_epoch_cmd(s, cmd, clen, index, group);
+        return 1;
+    case CMD_SETATTR:
+        apply_setattr_cmd(s, cmd, clen, index, group);
+        return 1;
+    case CMD_UTIMENS:
+        apply_utimens_cmd(s, cmd, clen, index, group);
         return 1;
     case SIM_CMD_DIR:
         sim_dir_apply(s, group, cmd, clen, index);
@@ -709,10 +800,11 @@ int sim_raft_boot(struct efs_sim *sim)
         return EFS_ERR_INVAL;
     sim->desired_voters = (1u << EFS_SIM_RAFT_N) - 1;
     for (i = 0; i < sim->nraft; i++) {
-        if (efs_meta_apply_init(sim->srv[i].disk) != EFS_OK)
+        if (efs_meta_apply_init(sim->srv[i].disk, sim->now) != EFS_OK)
             return EFS_ERR_IO;
         sim->srv[i].boot_id = 1;
-        sim->srv[i].raft_store = efs_raft_mem_create();
+        sim->srv[i].raft_store =
+            sim_raft_store_new(sim, i, EFS_RAFT_GROUP_SHARD);
         if (!sim->srv[i].raft_store)
             return EFS_ERR_NOMEM;
         rc = attach(sim, i);
@@ -749,6 +841,22 @@ int sim_raft_restart(struct efs_sim *sim, int server)
         return EFS_OK;
     if (!sim->srv[server].raft_store)
         return EFS_ERR_INVAL;
+    /* On the durable store, a restart really reopens the log, so every crash
+     * the sim injects becomes a replay of what was on disk. halt() already
+     * freed all three groups' raft instances, so nothing points at the old
+     * store objects. */
+    if (sim->raft_dir) {
+        sim_raft_disk_close(sim, server);
+        sim->srv[server].raft_store =
+            sim_raft_store_new(sim, server, EFS_RAFT_GROUP_SHARD);
+        sim->srv[server].raft2_store =
+            sim_raft_store_new(sim, server, EFS_RAFT_GROUP_SHARD2);
+        sim->srv[server].ctrl_store =
+            sim_raft_store_new(sim, server, EFS_RAFT_GROUP_CTRL);
+        if (!sim->srv[server].raft_store || !sim->srv[server].raft2_store ||
+            !sim->srv[server].ctrl_store)
+            return EFS_ERR_IO;
+    }
     sim->srv[server].boot_id++;
     rc = attach(sim, server);
     if (rc != EFS_OK)
@@ -768,11 +876,15 @@ void sim_raft_free_all(struct efs_sim *sim)
     for (i = 0; i < EFS_SIM_MAX_SERVERS; i++) {
         efs_raft_free(sim->srv[i].raft);
         sim->srv[i].raft = NULL;
-        efs_raft_mem_free(sim->srv[i].raft_store);
+        sim_raft_store_del(sim, sim->srv[i].raft_store);
         sim->srv[i].raft_store = NULL;
     }
     sim_txn_free_all(sim);
     sim_ctrl_free_all(sim);
+    /* Last: every group's store lives in this log, so it closes only after
+     * all three groups have let go of theirs. */
+    for (i = 0; i < EFS_SIM_MAX_SERVERS; i++)
+        sim_raft_disk_close(sim, i);
 }
 
 static int parent_dsh(struct efs_sim *sim, efs_ino_t parent, const char *name,
@@ -803,6 +915,7 @@ int sim_raft_create(struct efs_sim *sim, int client, int has_op,
 {
     uint8_t cmd[CMD_MAX];
     uint32_t clen = 0, epoch, dsh;
+    struct efs_meta_attrs at;
     const uint8_t *uuid;
     int rc;
 
@@ -821,7 +934,12 @@ int sim_raft_create(struct efs_sim *sim, int client, int has_op,
     rc = sim_sess_ensure_id(sim, uuid, epoch, dsh);
     if (rc != EFS_OK)
         return rc;
-    rc = pack_create(cmd, &clen, has_op, op, uuid, epoch, parent, mode, name);
+    memset(&at, 0, sizeof(at));
+    at.uid = 1000;
+    at.gid = 1000;
+    at.now = sim->now; /* simulated clock: the leader stamps, apply obeys */
+    rc = pack_create(cmd, &clen, has_op, op, uuid, epoch, parent, mode, name,
+                     &at);
     if (rc != EFS_OK)
         return rc;
     rc = sim_raft_propose_group(sim, sim_shard_group(dsh), cmd, clen);
@@ -849,7 +967,7 @@ int sim_raft_unlink(struct efs_sim *sim, int client, efs_ino_t parent,
     rc = sim_sess_ensure_id(sim, uuid, epoch, dsh);
     if (rc != EFS_OK)
         return rc;
-    rc = pack_unlink(cmd, &clen, uuid, epoch, parent, name);
+    rc = pack_unlink(cmd, &clen, uuid, epoch, parent, sim->now, name);
     if (rc != EFS_OK)
         return rc;
     return sim_raft_propose_group(sim, sim_shard_group(dsh), cmd, clen);
@@ -872,7 +990,14 @@ int sim_raft_publish(struct efs_sim *sim, int client, const struct efs_meta_pub 
     rc = sim_sess_ensure_id(sim, uuid, epoch, lsh);
     if (rc != EFS_OK)
         return rc;
-    rc = pack_publish(cmd, &clen, uuid, epoch, p);
+    {
+        struct efs_meta_pub stamped = *p;
+
+        /* Leader-stamped: apply is a function of the entry, not of whoever
+         * happens to be applying it. Same contract as CREATE/SETATTR. */
+        stamped.now = sim->now;
+        rc = pack_publish(cmd, &clen, uuid, epoch, &stamped);
+    }
     if (rc != EFS_OK)
         return rc;
     return sim_raft_propose_group(sim, sim_shard_group(lsh), cmd, clen);
@@ -895,6 +1020,233 @@ int sim_raft_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,
                     struct efs_meta_dentry *out)
 {
     return sim_txn_lookup(sim, parent, name, out);
+}
+
+static int read_inode(struct efs_sim *sim, efs_ino_t ino, struct efs_meta_row *row)
+{
+    uint32_t sh = efs_kv_inode_shard(ino);
+    struct efs_kv *kv;
+    int rc;
+
+    rc = sim_raft_read_group(sim, sim_shard_group(sh));
+    if (rc != EFS_OK)
+        return rc;
+    kv = sim_raft_kv_group(sim, sim_shard_group(sh));
+    if (!kv)
+        return EFS_ERR_BUSY;
+    return efs_meta_apply_get_inode(kv, ino, row);
+}
+
+int sim_raft_setattr(struct efs_sim *sim, int client, efs_ino_t ino,
+                     const struct efs_meta_setattr *sa)
+{
+    uint8_t cmd[61];
+    uint32_t sh, epoch;
+    const uint8_t *uuid;
+    int rc;
+
+    if (!sim || !sa || ino == 0 || client < 0 || client >= sim->nclients)
+        return EFS_ERR_INVAL;
+    sh = efs_kv_inode_shard(ino);
+    rc = sim_sess_ensure(sim, client, sh);
+    if (rc != EFS_OK)
+        return rc;
+    uuid = sim->cli[client].win.client_uuid;
+    epoch = sim->cli[client].win.session_epoch;
+    cmd[0] = CMD_SETATTR;
+    wr64(cmd + 1, ino);
+    wr64(cmd + 9, sim->now);
+    wr64(cmd + 17, sa->expect_gen);
+    wr32(cmd + 25, sa->mask);
+    wr32(cmd + 29, sa->mode);
+    wr32(cmd + 33, sa->uid);
+    wr32(cmd + 37, sa->gid);
+    memcpy(cmd + 41, uuid, EFS_OPID_UUID_LEN);
+    wr32(cmd + 41 + EFS_OPID_UUID_LEN, epoch);
+    return sim_raft_propose_group(sim, sim_shard_group(sh), cmd, 61);
+}
+
+int sim_raft_utimens(struct efs_sim *sim, int client, efs_ino_t ino,
+                     const struct efs_meta_utimens *u)
+{
+    struct efs_meta_row row;
+    struct efs_meta_utimens cmd_u;
+    uint8_t cmd[73];
+    uint32_t sh, epoch;
+    const uint8_t *uuid;
+    int rc;
+
+    if (!sim || !u || ino == 0 || client < 0 || client >= sim->nclients)
+        return EFS_ERR_INVAL;
+    sh = efs_kv_inode_shard(ino);
+    rc = sim_sess_ensure(sim, client, sh);
+    if (rc != EFS_OK)
+        return rc;
+    rc = read_inode(sim, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    if (u->expect_gen != 0 && u->expect_gen != row.generation)
+        return EFS_ERR_STALE;
+    cmd_u = *u;
+    if (cmd_u.mask & EFS_META_SET_MTIME) {
+        if (cmd_u.mtime_gen == 0)
+            cmd_u.mtime_gen = row.mtime_gen + 1;
+    } else {
+        cmd_u.mtime_gen = 0;
+    }
+    uuid = sim->cli[client].win.client_uuid;
+    epoch = sim->cli[client].win.session_epoch;
+    cmd[0] = CMD_UTIMENS;
+    wr64(cmd + 1, ino);
+    wr64(cmd + 9, sim->now);
+    wr64(cmd + 17, cmd_u.expect_gen);
+    wr32(cmd + 25, cmd_u.mask);
+    wr64(cmd + 29, cmd_u.mtime);
+    wr64(cmd + 37, cmd_u.atime);
+    wr64(cmd + 45, cmd_u.mtime_gen);
+    memcpy(cmd + 53, uuid, EFS_OPID_UUID_LEN);
+    wr32(cmd + 53 + EFS_OPID_UUID_LEN, epoch);
+    return sim_raft_propose_group(sim, sim_shard_group(sh), cmd, 73);
+}
+
+int sim_raft_getattr(struct efs_sim *sim, efs_ino_t ino, struct efs_meta_stat *out)
+{
+    struct efs_meta_row row;
+    struct efs_kv *kv;
+    uint32_t ish, i;
+    uint64_t bits;
+    int rc;
+
+    if (!sim || !out || ino == 0)
+        return EFS_ERR_INVAL;
+    rc = read_inode(sim, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    ish = efs_kv_inode_shard(ino);
+    bits = S_ISDIR(row.mode) && row.layout != EFS_META_LAYOUT_LOCAL
+               ? row.used_shards
+               : row.active_lanes;
+    for (i = 0; i < EFS_META_LANES; i++) {
+        uint32_t lsh;
+
+        if ((bits & (1ULL << i)) == 0)
+            continue;
+        lsh = efs_kv_lane_shard(ino, (uint8_t)i);
+        if (lsh == ish)
+            continue;
+        rc = sim_raft_read_group(sim, sim_shard_group(lsh));
+        if (rc != EFS_OK)
+            return rc;
+    }
+    kv = sim_raft_kv_group(sim, sim_shard_group(ish));
+    if (!kv)
+        return EFS_ERR_BUSY;
+    return efs_meta_apply_getattr(kv, ino, sim_txn_coord, sim, out);
+}
+
+int sim_raft_readdir(struct efs_sim *sim, efs_ino_t dir,
+                     struct efs_meta_dir_cursor *cur, struct efs_meta_dir_ent *out,
+                     uint32_t max, uint32_t *n)
+{
+    struct efs_meta_row row;
+    struct efs_kv *kv;
+    uint32_t ish, i;
+    int rc;
+
+    if (!sim || !cur || !out || !n || dir == 0)
+        return EFS_ERR_INVAL;
+    rc = read_inode(sim, dir, &row);
+    if (rc != EFS_OK)
+        return rc;
+    ish = efs_kv_inode_shard(dir);
+    if (row.layout != EFS_META_LAYOUT_LOCAL) {
+        for (i = 0; i < 64; i++) {
+            uint32_t dsh;
+
+            if ((row.used_shards & (1ULL << i)) == 0)
+                continue;
+            dsh = efs_kv_lane_shard(dir, (uint8_t)i);
+            rc = sim_raft_read_group(sim, sim_shard_group(dsh));
+            if (rc != EFS_OK)
+                return rc;
+        }
+    }
+    kv = sim_raft_kv_group(sim, sim_shard_group(ish));
+    if (!kv)
+        return EFS_ERR_BUSY;
+    return efs_meta_apply_readdir(kv, dir, cur, out, max, n);
+}
+
+int sim_raft_lookup_path(struct efs_sim *sim, efs_ino_t start, const char *path,
+                         struct efs_meta_path_hop *hops, uint32_t cap, uint32_t *n)
+{
+    efs_ino_t cur;
+    const char *p;
+    uint32_t nh = 0;
+    int rc;
+
+    if (!sim || !path || !hops || !n || cap == 0)
+        return EFS_ERR_INVAL;
+    if (cap > EFS_META_PATH_MAX)
+        cap = EFS_META_PATH_MAX;
+    cur = start ? start : EFS_ROOT_INO;
+    p = path;
+    while (*p == '/')
+        p++;
+    if (*p == '\0') {
+        struct efs_meta_row row;
+
+        rc = read_inode(sim, cur, &row);
+        if (rc != EFS_OK)
+            return rc;
+        hops[0].ino = row.ino;
+        hops[0].generation = row.generation;
+        hops[0].mode = row.mode;
+        hops[0].uid = row.uid;
+        hops[0].gid = row.gid;
+        *n = 1;
+        return EFS_OK;
+    }
+    while (*p && nh < cap) {
+        char name[EFS_MAX_NAME];
+        size_t nlen;
+        const char *s = p;
+        struct efs_meta_dentry dent;
+        struct efs_meta_row row;
+        int more;
+
+        while (*p && *p != '/')
+            p++;
+        nlen = (size_t)(p - s);
+        if (nlen == 0)
+            break;
+        if (nlen >= EFS_MAX_NAME)
+            return EFS_ERR_NAMETOOLONG;
+        memcpy(name, s, nlen);
+        name[nlen] = '\0';
+        while (*p == '/')
+            p++;
+        rc = sim_txn_lookup(sim, cur, name, &dent);
+        if (rc != EFS_OK)
+            return rc;
+        rc = read_inode(sim, dent.ino, &row);
+        if (rc == EFS_ERR_NOT_FOUND)
+            return EFS_ERR_IO;
+        if (rc != EFS_OK)
+            return rc;
+        more = (*p != '\0');
+        if (more && !S_ISDIR(row.mode))
+            return EFS_ERR_INVAL;
+        hops[nh].ino = row.ino;
+        hops[nh].generation = row.generation;
+        hops[nh].mode = row.mode;
+        hops[nh].uid = row.uid;
+        hops[nh].gid = row.gid;
+        nh++;
+        cur = row.ino;
+    }
+    *n = nh;
+    return nh ? EFS_OK : EFS_ERR_INVAL;
 }
 
 int sim_raft_get_chunk(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,

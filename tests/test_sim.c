@@ -705,6 +705,94 @@ static void test_i8_spread(void)
     efs_sim_free(s);
 }
 
+static int hashed_pair(efs_ino_t parent, char *a, char *b)
+{
+    uint8_t la = 0xff;
+    int i;
+
+    a[0] = b[0] = 0;
+    for (i = 0; i < 8192; i++) {
+        char buf[16];
+        uint8_t lane;
+        uint32_t sh;
+
+        snprintf(buf, sizeof(buf), "p%d", i);
+        lane = efs_kv_dir_lane(buf);
+        sh = efs_kv_dentry_shard(parent, buf, EFS_META_LAYOUT_HASHED);
+        if (lane == 0 || sh == efs_kv_inode_shard(parent))
+            continue;
+        if (la == 0xff) {
+            snprintf(a, 16, "%s", buf);
+            la = lane;
+        } else if (lane != la) {
+            snprintf(b, 16, "%s", buf);
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static void test_hashed_dir_stat(void)
+{
+    struct efs_sim *s = mk(113);
+    efs_ino_t fa = 0, fb = 0;
+    struct efs_meta_stat st;
+    struct efs_meta_setattr sa;
+    struct efs_meta_utimens u;
+    uint8_t layout = 99;
+    char na[16], nb[16];
+    uint64_t born, t1, t2;
+    int rc;
+
+    CHECK(s, "mk");
+    CHECK(hashed_pair(EFS_ROOT_INO, na, nb) == 0, "two lanes");
+    CHECK(efs_sim_dir_begin_split(s, EFS_ROOT_INO) == EFS_OK, "split");
+    while ((rc = efs_sim_dir_migrate(s, EFS_ROOT_INO)) == EFS_OK)
+        ;
+    CHECK(rc == EFS_ERR_NOT_FOUND, "empty migrate");
+    CHECK(efs_sim_dir_finish_hashed(s, EFS_ROOT_INO) == EFS_OK, "HASHED");
+    CHECK(efs_sim_dir_layout(s, EFS_ROOT_INO, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_HASHED,
+          "layout");
+    CHECK(efs_sim_getattr(s, EFS_ROOT_INO, &st) == EFS_OK, "stat empty");
+    born = st.mtime;
+
+    CHECK(efs_sim_clock_step(s, 10) == EFS_OK, "tick");
+    t1 = efs_sim_now(s);
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, na, &fa) == EFS_OK,
+          "create a");
+    CHECK(efs_sim_clock_step(s, 10) == EFS_OK, "tick");
+    t2 = efs_sim_now(s);
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, nb, &fb) == EFS_OK,
+          "create b");
+    CHECK(efs_sim_getattr(s, EFS_ROOT_INO, &st) == EFS_OK, "stat");
+    CHECK(st.mtime == t2 && st.ctime == t2, "MAX over dir lanes");
+    CHECK(st.lanes >= 2, "both lanes");
+    CHECK(t2 > t1 && t1 > born, "creates used the simulated clock");
+
+    memset(&sa, 0, sizeof(sa));
+    sa.mask = EFS_META_SET_MODE;
+    sa.mode = 0700;
+    CHECK(efs_sim_clock_step(s, 5) == EFS_OK, "tick");
+    CHECK(efs_sim_setattr(s, 0, EFS_ROOT_INO, &sa) == EFS_OK, "chmod dir");
+    CHECK(efs_sim_getattr(s, EFS_ROOT_INO, &st) == EFS_OK, "stat");
+    CHECK((st.mode & 07777u) == 0700, "mode");
+    CHECK(st.mtime == t2, "chmod left mtime on the lanes");
+
+    memset(&u, 0, sizeof(u));
+    u.mask = EFS_META_SET_MTIME;
+    u.mtime = born;
+    CHECK(efs_sim_utimens(s, 0, EFS_ROOT_INO, &u) == EFS_OK, "utimens dir");
+    CHECK(efs_sim_getattr(s, EFS_ROOT_INO, &st) == EFS_OK && st.mtime == born,
+          "dir utimens wins over lanes");
+
+    CHECK(efs_sim_crash(s, EFS_SIM_META) == EFS_OK, "crash");
+    CHECK(efs_sim_getattr(s, EFS_ROOT_INO, &st) == EFS_OK && st.mtime == born,
+          "stat after crash");
+    CHECK((st.mode & 07777u) == 0700, "mode after crash");
+    efs_sim_free(s);
+}
+
 static void test_lock_conflict_fence(void)
 {
     struct efs_sim *s = mk(93);
@@ -733,6 +821,147 @@ static void test_lock_conflict_fence(void)
     CHECK(efs_sim_lock(s, 0, ino, EFS_LOCK_FCNTL, EFS_LOCK_EX, 0, 10,
                        EFS_LOCK_PROC, 1) == EFS_OK,
           "A regrant; fenced waiter never granted");
+    efs_sim_free(s);
+}
+
+static int dir_has(struct efs_sim *s, efs_ino_t dir, const char *name)
+{
+    struct efs_meta_dir_cursor cur;
+    struct efs_meta_dir_ent ents[16];
+    uint32_t n = 0, i;
+
+    memset(&cur, 0, sizeof(cur));
+    do {
+        n = 0;
+        if (efs_sim_readdir(s, dir, &cur, ents, 16, &n) != EFS_OK)
+            return 0;
+        for (i = 0; i < n; i++)
+            if (strcmp(ents[i].name, name) == 0)
+                return 1;
+    } while (!cur.done);
+    return 0;
+}
+
+static void test_single_shard_ops(void)
+{
+    struct efs_sim *s = mk(101);
+    efs_ino_t f = 0, d = 0, nested = 0, leaf = 0;
+    struct efs_meta_stat st;
+    struct efs_meta_setattr sa;
+    struct efs_meta_path_hop hops[8];
+    uint32_t n = 0;
+    uint8_t src[64];
+    uint64_t mt;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "f", &f) == EFS_OK,
+          "create");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK && st.size == 0 && st.nlink == 1,
+          "stat empty");
+    CHECK((st.mode & 07777u) == 0644 && st.uid == 1000, "create attrs");
+
+    fill(src, sizeof(src));
+    CHECK(efs_sim_put_stripe(s, 0, f, 0, src, sizeof(src), -1) == EFS_OK, "put");
+    CHECK(efs_sim_publish(s, 0, f, 0, sizeof(src)) == EFS_OK, "publish");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK && st.size == sizeof(src), "size");
+    mt = st.mtime;
+
+    memset(&sa, 0, sizeof(sa));
+    sa.mask = EFS_META_SET_MODE;
+    sa.mode = 0600;
+    CHECK(efs_sim_setattr(s, 0, f, &sa) == EFS_OK, "chmod");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK, "stat");
+    CHECK((st.mode & 07777u) == 0600 && S_ISREG(st.mode), "mode, type held");
+    CHECK(st.mtime == mt, "chmod does not move mtime");
+    CHECK(st.size == sizeof(src), "size held");
+
+    CHECK(dir_has(s, EFS_ROOT_INO, "f"), "readdir sees f");
+
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, "d", &d) == EFS_OK && d, "mkdir");
+    CHECK(efs_sim_mkdir(s, 0, d, "n", &nested) == EFS_OK && nested, "nested");
+    CHECK(efs_sim_create(s, 0, nested, S_IFREG | 0644, "leaf", &leaf) == EFS_OK,
+          "leaf");
+    CHECK(dir_has(s, EFS_ROOT_INO, "d"), "readdir sees d");
+    CHECK(efs_sim_lookup_path(s, 0, "/d/n/leaf", hops, 8, &n) == EFS_OK && n == 3,
+          "path");
+    CHECK(hops[0].ino == d && S_ISDIR(hops[0].mode), "hop a");
+    CHECK(hops[1].ino == nested && S_ISDIR(hops[1].mode), "hop n");
+    CHECK(hops[2].ino == leaf && S_ISREG(hops[2].mode), "hop leaf");
+
+    /* A lost leader must not change a linearizable read: the remaining
+     * majority still has the committed setattr and the nested mkdir. */
+    CHECK(efs_sim_crash(s, EFS_SIM_META) == EFS_OK, "crash leader");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK && (st.mode & 07777u) == 0600,
+          "stat after crash");
+    CHECK(efs_sim_lookup_path(s, 0, "/d/n/leaf", hops, 8, &n) == EFS_OK &&
+              n == 3 && hops[2].ino == leaf,
+          "path after crash");
+    CHECK(efs_sim_restart(s, EFS_SIM_META) == EFS_OK, "restart");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK && st.size == sizeof(src),
+          "stat after restart");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
+static void test_utimens_fence(void)
+{
+    struct efs_sim *s = mk(103);
+    efs_ino_t f = 0;
+    struct efs_meta_stat st;
+    struct efs_meta_utimens u;
+    struct efs_meta_setattr sa;
+    uint8_t src[64];
+    uint64_t write_mt, after;
+
+    CHECK(s, "mk");
+    fill(src, sizeof(src));
+    CHECK(efs_sim_clock_step(s, 50) == EFS_OK, "tick");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "f", &f) == EFS_OK,
+          "create");
+    CHECK(efs_sim_put_stripe(s, 0, f, 0, src, sizeof(src), -1) == EFS_OK, "put0");
+    CHECK(efs_sim_publish(s, 0, f, 0, sizeof(src)) == EFS_OK, "pub0");
+    CHECK(efs_sim_put_stripe(s, 0, f, 1, src, sizeof(src), -1) == EFS_OK, "put1");
+    CHECK(efs_sim_publish(s, 0, f, 1, (uint64_t)EFS_SIM_CHUNK + sizeof(src)) ==
+              EFS_OK,
+          "pub1");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK, "stat");
+    write_mt = st.mtime;
+    CHECK(write_mt > 1, "writes stamped a real time");
+
+    memset(&u, 0, sizeof(u));
+    u.mask = EFS_META_SET_MTIME | EFS_META_SET_ATIME;
+    u.mtime = 1;
+    u.atime = 2;
+    CHECK(efs_sim_utimens(s, 0, f, &u) == EFS_OK, "utimens");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK, "stat");
+    CHECK(st.mtime == 1 && st.atime == 2, "backwards honored");
+
+    memset(&sa, 0, sizeof(sa));
+    sa.mask = EFS_META_SET_MODE;
+    sa.mode = 0600;
+    CHECK(efs_sim_setattr(s, 0, f, &sa) == EFS_OK, "chmod");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK && st.mtime == 1,
+          "chmod left utimens mtime");
+
+    u.expect_gen = st.generation + 1;
+    CHECK(efs_sim_utimens(s, 0, f, &u) == EFS_ERR_STALE, "stale handle");
+
+    CHECK(efs_sim_crash(s, EFS_SIM_META) == EFS_OK, "crash");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK && st.mtime == 1, "after crash");
+    CHECK(efs_sim_restart(s, EFS_SIM_META) == EFS_OK, "restart");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK && st.mtime == 1, "after restart");
+
+    CHECK(efs_sim_clock_step(s, 10) == EFS_OK, "tick");
+    after = efs_sim_now(s);
+    CHECK(efs_sim_put_stripe(s, 0, f, 64, src, sizeof(src), -1) == EFS_OK,
+          "put after");
+    CHECK(efs_sim_publish(s, 0, f, 64,
+                          64ull * (uint64_t)EFS_SIM_CHUNK + sizeof(src)) ==
+              EFS_OK,
+          "pub after");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK, "stat");
+    CHECK(st.mtime >= after, "write after fence is visible");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
     efs_sim_free(s);
 }
 
@@ -787,6 +1016,9 @@ int main(void)
     test_i13_fileid();
     test_i22_epoch();
     test_i8_spread();
+    test_hashed_dir_stat();
+    test_single_shard_ops();
+    test_utimens_fence();
     test_lock_conflict_fence();
     test_lock_deadlock();
     if (failures) {

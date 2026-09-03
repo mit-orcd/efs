@@ -82,7 +82,8 @@ int sim_ctrl_boot(struct efs_sim *sim)
     if (!sim)
         return EFS_ERR_INVAL;
     for (i = 0; i < EFS_SIM_RAFT_N; i++) {
-        sim->srv[i].ctrl_store = efs_raft_mem_create();
+        sim->srv[i].ctrl_store =
+            sim_raft_store_new(sim, i, EFS_RAFT_GROUP_CTRL);
         if (!sim->srv[i].ctrl_store)
             return EFS_ERR_NOMEM;
         rc = attach_ctrl(sim, i);
@@ -130,7 +131,7 @@ void sim_ctrl_free_all(struct efs_sim *sim)
     for (i = 0; i < EFS_SIM_MAX_SERVERS; i++) {
         efs_raft_free(sim->srv[i].ctrl);
         sim->srv[i].ctrl = NULL;
-        efs_raft_mem_free(sim->srv[i].ctrl_store);
+        sim_raft_store_del(sim, sim->srv[i].ctrl_store);
         sim->srv[i].ctrl_store = NULL;
     }
 }

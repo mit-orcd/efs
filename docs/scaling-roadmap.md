@@ -176,8 +176,59 @@ open-unlinked leases, data-generation publication / fencing (FileID +
 unique candidate CAS, I13/I20/I21/I22/I25 in-sim), and directory
 layout-epoch spread + distributed POSIX locking (I8, lock
 conflict/fence/deadlock in-sim). Production `efsd` still uses the in-memory
-table. Next is step 11 (delete the old snapshot / root-2PC machinery). Do
-not build Raft as new monolith code.
+table. Do not build Raft as new monolith code.
+
+**Step 10.5 — durable backends before the delete.** Steps 3–5 implemented the
+KV and Raft interfaces in memory only, which is all the simulator needs, so
+step 11 cannot delete today's snapshot / root-2PC flush without first wiring a
+durable replacement. Ordered: **10.5a** on-disk ordered KV behind
+`struct efs_kv_ops` — **DONE** (`src/kv/kv_lsm.c` + `kv_wal.c` + `kv_seg.c`,
+`efs_kv_lsm_open`): WAL with group commit and ordered apply, immutable sorted
+segments carrying a sparse one-key-per-block index so resident RAM does not
+track key count, leveled compaction over the overlapping range, a
+MANIFEST rename as the only commit point, and crash recovery that discards a
+torn tail. Engine granularity is **one per node with one group-committed
+WAL**, the shard prefix multiplexing every group into it. Gate:
+`test_kv_lsm` (semantics parity with `kv_mem`, real `fork`+`_exit` crash
+durability, torn tail, tombstones across levels, bulk auto-compaction through
+a reopen) plus **every simulator suite re-run against the durable store**
+(`EFS_SIM_KV_DIR`, `test_sim` / `test_txn` / `test_session` / `test_lock` /
+`test_meta_apply` all OK, 51 L0 + 81 L1 segments produced so the invariants
+were checked against segment-resident and compacted state, not just a
+memtable). **10.5b** on-disk Raft log/state behind `struct efs_raft_store` —
+**DONE** (`src/raft/raft_disk.c` + `raft_log.c`, `efs_raft_disk_open`):
+**one multiplexed record log per node**, every group appending to it and
+concurrent appends across groups sharing one fsync; hard state, entries,
+truncations, snapshots and configuration as typed CRC-framed records; replay
+folds each group's own records back into its state; a torn tail is discarded
+and truncated away so the next append lands on a clean boundary, while a
+CRC-valid record that cannot apply refuses the open rather than silently
+starting short; rotation rewrites the log with only live records so snapshots
+do not leak file growth. Every mutation logs **before** it installs into RAM,
+with memory reserved first so the install cannot fail — RAM must never hold a
+mutation the log does not, or `last()` reports an entry a crash would lose.
+**The durability decision that shapes 10.5c:** the Raft log is the only
+durability boundary, the applied KV is a replayable view, and the single rule
+that buys is *no snapshot until the KV is durable through `last_applied`*
+(`include/efs/raft_disk.h`). Gate: `test_raft_store` (answer-for-answer parity
+with `raft_mem` including gap rejection, in-place overwrite and short-buffer
+reporting; truncation and snapshots surviving a reopen; torn tail; real
+`fork`+`_exit` crash durability; rotation preserving live state; the real
+state machine driven on the durable store across a restart) plus **every
+simulator suite re-run against it** (`EFS_SIM_RAFT_DIR`, alone and together
+with `EFS_SIM_KV_DIR`), where a simulated restart really closes and reopens
+the log, so every crash the simulator injects becomes a log replay. Verified
+non-vacuous by negative control: dropping ENTRY records during replay fails
+`test_raft_store` (16) and `test_sim` (3, in transaction recovery).
+
+**10.5c** finish the applied-state SM in-sim, then adopt via a **new
+export** on Raft + the applied KV (not a cutover of the live table).
+**10.5c-1 is in:** READDIR, SETATTR (mode/owner), GETATTR (validated lane
+collect, including HASHED-dir dir lanes), LOOKUP_PATH — gated by
+`test_meta_apply` and `test_sim`.
+**10.5c-2 is in:** `utimens` inode fence (`mtime_gen` pushed to active /
+used lanes; backwards mtime sticks; chmod does not hide it) — gated by
+`test_meta_apply` and `test_sim`. Then step 11 deletes the old flush.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

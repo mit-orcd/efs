@@ -200,20 +200,23 @@ static int mem_scan(void *ctx,
     return EFS_OK;
 }
 
-static int mem_scan_prefix(void *ctx, const uint8_t *prefix, uint32_t plen,
-                           int (*cb)(void *user, const uint8_t *key, uint32_t klen,
-                                     const uint8_t *val, uint32_t vlen),
-                           void *user)
+static int mem_scan_from(void *ctx, const uint8_t *prefix, uint32_t plen,
+                         const uint8_t *start, uint32_t slen,
+                         int (*cb)(void *user, const uint8_t *key, uint32_t klen,
+                                   const uint8_t *val, uint32_t vlen),
+                         void *user)
 {
     struct kv_mem *m = ctx;
     struct kv_rec *r;
 
-    if (!m || !cb || (plen > 0 && !prefix))
+    if (!m || !cb || (plen > 0 && !prefix) || (slen > 0 && !start))
         return EFS_ERR_INVAL;
     for (r = m->head; r; r = r->next) {
         int past;
         int rc;
 
+        if (slen && key_cmp(r->key, r->klen, start, slen) < 0)
+            continue;
         if (plen == 0 || (r->klen >= plen && memcmp(r->key, prefix, plen) == 0)) {
             rc = cb(user, r->key, r->klen, r->val, r->vlen);
             if (rc != 0)
@@ -225,6 +228,14 @@ static int mem_scan_prefix(void *ctx, const uint8_t *prefix, uint32_t plen,
             break;
     }
     return EFS_OK;
+}
+
+static int mem_scan_prefix(void *ctx, const uint8_t *prefix, uint32_t plen,
+                           int (*cb)(void *user, const uint8_t *key, uint32_t klen,
+                                     const uint8_t *val, uint32_t vlen),
+                           void *user)
+{
+    return mem_scan_from(ctx, prefix, plen, NULL, 0, cb, user);
 }
 
 static int mem_batch(void *ctx, const struct efs_kv_item *items, uint32_t n)
@@ -288,6 +299,7 @@ static const struct efs_kv_ops mem_ops = {
     .del = mem_del,
     .scan = mem_scan,
     .scan_prefix = mem_scan_prefix,
+    .scan_from = mem_scan_from,
     .batch = mem_batch,
     .destroy = mem_destroy,
 };

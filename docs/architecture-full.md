@@ -1111,10 +1111,40 @@ stays runnable. **Do not** go straight `KV → Raft → done`.
 9. Data-generation publication / fencing integration (§7.3), with the
    simulator checking the logical data protocol (arch/verification.md).
 10. Directory layout-epoch spread (§7.4) + distributed locking (§7.6).
+10.5 Durable backends, then a new export: an on-disk ordered KV and an
+    on-disk Raft log behind the step 3/4 interfaces, then the applied SM
+    gated in-sim, then a new export proposing through Raft and reading
+    via ReadIndex (not a cutover of the live table).
 11. Delete the old snapshot / root-2PC machinery.
 12. FUSE cache-coherence optimization only after zero/stale-cache semantics
     are demonstrably correct (data path starts as direct-I/O, §7.7).
 ```
+
+**Why 10.5 exists.** Steps 3–5 built the KV and Raft as *interfaces with
+in-memory implementations*, which is all the simulator needs. Production
+`efsd` still keeps metadata in the in-memory table and makes it durable with
+the snapshot / root-2PC flush that step 11 deletes. Deleting that path before
+a durable replacement is wired would drop metadata durability, so 10.5 is
+ordered ahead of it: durable backends first (gated by re-running the whole
+simulator against them, `efsd` untouched), then the applied SM in-sim, then
+a new export on that engine. The KV engine is
+a WAL plus immutable sorted segments with compaction, and there is **one
+engine and one group-committed WAL per node** — the shard prefix in every key
+multiplexes all groups into it, which is the same "logical groups, not
+physical WALs" rule as [performance.md](arch/performance.md) §5.4. The Raft
+log follows the same shape for the same reason — **one multiplexed record log
+per node**, every group appending to it, concurrent appends sharing one fsync.
+
+**The Raft log is the durability boundary; the applied KV is a replayable
+view.** A committed entry is one a majority holds in its log, and the KV is
+rebuilt by replaying forward from the snapshot point, so a metadata write pays
+one persistence boundary rather than two and the KV owes nothing on the
+critical path. This is not a new decision — it is what the step 4 state
+machine already assumes, since it starts at `last_applied = snap_idx` and
+re-applies everything above it (which is also why apply must stay idempotent,
+I16). It costs exactly one ordering rule: a snapshot drops the log prefix, so
+**no snapshot may advance past what the applied KV has durably stored**. The
+KV's own sync mode is therefore a performance choice, not a correctness one.
 
 **Step 1 has a hard prerequisite: the carve-up.** A pure state machine behind
 transport/storage interfaces does not exist today — four files hold ~45% of
@@ -1203,15 +1233,51 @@ sends you to — not the whole spec.
 
 ### 1. The task right now
 
-> **Architecture migration §10, step 11:** delete the old snapshot / root-2PC machinery.
+> **Architecture migration §10, step 10.5c:** finish the applied-state SM
+> in-sim, then adopt via a **new export** on Raft + the applied KV.
 > [architecture.md §10](#architecture)
 >
-> Step 10 is in: directory layout-epoch spread (LOCAL→SPLITTING→HASHED, I8
-> tombstone) and distributed POSIX locking (fcntl/flock domains, wait FIFO,
-> fence reclaim, same-inode EDEADLK, ENOLCK) in the simulator
-> (`test_sim` / `test_lock` / `test_meta_apply`). Production `efsd` still
-> uses the in-memory table. Do not skip ahead. If a decision is missing,
-> stop and ask.
+> **10.5c-1 is in (gated):** the first single-shard op batch over the
+> applied KV — READDIR (LOCAL / SPLITTING / HASHED, including lane-0
+> aliasing), SETATTR mode/owner (ctime not mtime, MAX-clamped, stale-handle
+> reject), GETATTR as the validated double collect (file write lanes **and**
+> HASHED-dir `used_shards` dir lanes; pending committed reductions; epoch /
+> `mtime_gen` / `lane_seq` recheck; I9 on an unreachable coordinator),
+> LOOKUP_PATH as a batched ancestor walk (resume from the terminal, I9,
+> intermediate not-a-directory). The simulator proposes SETATTR through
+> Raft, serves GETATTR/READDIR via ReadIndex, and walks LOOKUP_PATH
+> hop-by-hop with a ReadIndex per shard; a leader crash mid-read does not
+> change the answer. Gate: `test_meta_apply`, `test_sim`
+> (`test_single_shard_ops`, `test_hashed_dir_stat`).
+>
+> **10.5c-2 is in (gated):** the `utimens` inode fence. Only utimens can
+> set a time backwards, so it is the only op that bumps `mtime_gen` and
+> pushes that generation onto every active write lane (file) or used dir
+> lane (HASHED/SPLITTING directory). getattr then ignores older lane
+> mtimes; a later write re-stamps at the new generation. atime-only does
+> not fence. chmod after utimens does not hide the explicit mtime. The
+> simulator proposes the fence through Raft; a leader crash does not
+> resurrect a stale lane mtime. Gate: `test_meta_apply`
+> (`test_utimens_fence`, `test_stat_fence_and_gen`, `test_stat_dir_hashed`),
+> `test_sim` (`test_utimens_fence`, `test_hashed_dir_stat`).
+>
+> Both durable backends are in (10.5a KV, 10.5b Raft log). 10.5c is not
+> new storage work. Remaining in 10.5c: the rest of the applied SM
+> (truncate range-delete, O_APPEND, cross-shard
+> rename/link/rmdir) still in-sim, **then** a new export on the new
+> engine. Do not wire the live `efs-test` export. Do not skip to step 11.
+>
+> **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
+> the durability boundary and the applied KV is a replayable view, so never
+> call `efs_raft_snapshot()` until the KV is durable through `last_applied`
+> (`efs_kv_lsm_flush()`). The snapshot drops the log prefix that would
+> otherwise replay those commands. `efs_raft_new()` already starts at
+> `last_applied = snap_idx` and re-applies forward, which is why apply must
+> stay idempotent.
+>
+> Production `efsd` still uses the in-memory table and the snapshot /
+> root-2PC flush; only after 10.5c does step 11 delete that flush. If a
+> decision is missing, stop and ask.
 
 **Rule for picking the next one after that:** the order is
 [architecture.md](#architecture) §10, step by step. If a step looks like
@@ -3918,6 +3984,92 @@ waiters as STALE and never grants them. `test_sim`, `test_lock`, and
 `test_meta_apply` gate I8 and those lock properties. Not in this step:
 hashed RMDIR/`dentry_seq`, directory-rename ancestry, `utimens` dir fence,
 pressure-based spread, partial-unlock split, production `efsd` wiring.
+
+**Step 10.5a in-sim (gated): the simulator runs on the durable KV.** Set
+`EFS_SIM_KV_DIR=<dir>` and every server's applied state lives in
+`efs_kv_lsm_open` instead of `kv_mem`, with no test changes — each sim
+instance gets its own store under that directory, because `kv_mem` hands
+every instance an empty one and reusing a directory would carry state across
+cases. The sim's memtable threshold is deliberately tiny (512 B) so the runs
+cross it: a threshold the sim never reaches would check every invariant
+against a memtable and never against a segment or a compaction result. The
+gate is all five sim suites OK with segments actually produced (51 L0 + 81
+L1 on the recorded run). This is the substitution that makes the durable
+store's correctness a property the existing invariant checkers prove, rather
+than a separate claim.
+
+`test_kv_lsm` covers what the sim cannot: semantics parity with `kv_mem`
+(including the short-buffer probe and batch atomicity), a **real** crash —
+the child `_exit`s without unwinding after a batch returned, so only an
+fsync that already happened can make the parent's reopen see the write — a
+torn WAL tail that must be discarded while its prefix survives, tombstones
+shadowing values across levels, and 4000 keys with a third deleted verified
+through auto-compaction and a reopen. One bug it caught: the compaction merge
+advanced the winning source before comparing the others against its key, so
+older duplicates survived their own tombstone. A scan-only test cannot see
+that — it needs the compacted output read back.
+
+**Step 10.5b in-sim (gated): the simulator runs on the durable Raft log.**
+Set `EFS_SIM_RAFT_DIR=<dir>` and every server's Raft persistent state lives
+in `efs_raft_disk_open` instead of `raft_mem`, with no test changes; set both
+variables and both backends are durable at once. Two things make this a real
+substitution rather than a link-time one. First, **all three of a server's
+groups share one log**, which is the production shape (thousands of groups
+per node multiplexing one fsync stream) and puts that sharing under test —
+a group whose records leaked into another's state would show up as a
+cross-group hard-state or log failure. Second, **a simulated restart really
+closes and reopens the log**, so every crash the simulator injects becomes a
+replay of what was on disk, under all the existing fault injection, rather
+than a store object that quietly kept its RAM.
+
+The gate is all five sim suites OK on the durable Raft store alone and on
+both durable stores together. It was verified **non-vacuous by negative
+control**: making replay silently drop ENTRY records fails `test_raft_store`
+(16 checks) and `test_sim` (3, in transaction recovery). A gate that cannot
+fail is not a gate, and for a store whose whole job is "what survives a
+restart" that is the only way to know the sim depends on it.
+
+`test_raft_store` covers what the sim cannot: answer-for-answer parity with
+`raft_mem` driven through one shared script (gap rejection, in-place slot
+overwrite, the short-buffer required-length report, snapshot-index term
+lookup, `NOT_FOUND` vs never-saved config), a **real** crash via
+`fork`+`_exit`, a torn tail that must be discarded *without* losing the good
+records behind it and must leave the file appendable, truncation surviving a
+reopen (a follower that loses a truncation gets conflicting entries back and
+diverges), and rotation preserving live state through a reopen. One bug it
+caught: replaying a *rotated* log applies the snapshot record before any
+entries exist, which the validation inherited from `raft_mem` rejected —
+correct for a live caller, wrong for replay, so the prefix drop is clamped on
+the replay path and strict on the callback.
+
+**Step 10.5c-1 in-sim (gated): single-shard reads and SETATTR over the
+applied KV.** READDIR walks LOCAL / SPLITTING / HASHED including the
+lane-0 alias (a hashed name that lives on the inode's own shard is not a
+second copy). SETATTR mode/owner is one Raft entry on the inode shard:
+ctime MAX-clamps, mtime does not move, a stale `expect_gen` is STALE.
+GETATTR is the §7.3 / §7.4 validated double collect — MAX over the inode
+row and the active write lanes (a file) or the `used_shards` dir lanes (a
+HASHED directory), including committed-but-unmaterialized reductions, then
+a recheck of `lane_seq` / pending txids / `content_epoch` / `mtime_gen` /
+`used_shards`; an unreachable coordinator is I9, not absence. A hashed
+create or unlink stamps its dir lane on the dentry shard and does not
+move the directory inode row's times. LOOKUP_PATH is a batched
+ancestor walk (resume from the terminal, I9 on a dangling dentry,
+INVAL through a non-directory). The simulator proposes SETATTR through
+Raft, serves GETATTR/READDIR via ReadIndex (file lanes or dir lanes), and hops LOOKUP_PATH with a
+ReadIndex per shard; a leader crash does not change a linearizable read.
+Gate: `test_meta_apply`, `test_sim`.
+
+**Step 10.5c-2 in-sim (gated): `utimens` inode fence.** Only utimens can
+set a time backwards, so it is the only op that bumps `mtime_gen` and
+pushes that generation onto every active write lane (file) or used dir
+lane (HASHED/SPLITTING directory). getattr ignores lane mtimes stamped
+under an older generation; a later write re-stamps at the new generation
+and is visible again. atime-only does not fence. chmod after utimens
+does not hide the explicit mtime (it does not bump `mtime_gen`). The
+simulator proposes the fence through Raft; a leader crash / restart does
+not resurrect a stale lane mtime. Gate: `test_meta_apply`, `test_sim`.
+Not in this step: truncate range-delete, O_APPEND, production `efsd`.
 
 ### Shortening the code → signal cycle
 

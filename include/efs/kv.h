@@ -41,6 +41,14 @@ struct efs_kv_ops {
                        int (*cb)(void *user, const uint8_t *key, uint32_t klen,
                                  const uint8_t *val, uint32_t vlen),
                        void *user);
+    /* Same, but begins at the first key >= start. Resuming a paged scan has
+     * to cost the page, not the range: a readdir that rescans from the front
+     * of the directory each time is O(entries) per page. */
+    int (*scan_from)(void *ctx, const uint8_t *prefix, uint32_t plen,
+                     const uint8_t *start, uint32_t slen,
+                     int (*cb)(void *user, const uint8_t *key, uint32_t klen,
+                               const uint8_t *val, uint32_t vlen),
+                     void *user);
     int (*batch)(void *ctx, const struct efs_kv_item *items, uint32_t n);
     void (*destroy)(void *ctx);
 };
@@ -92,6 +100,18 @@ static inline int efs_kv_scan_prefix(struct efs_kv *kv,
     if (!kv || !kv->ops || !kv->ops->scan_prefix)
         return EFS_ERR_INVAL;
     return kv->ops->scan_prefix(kv->ctx, prefix, plen, cb, user);
+}
+
+static inline int efs_kv_scan_from(struct efs_kv *kv,
+                                   const uint8_t *prefix, uint32_t plen,
+                                   const uint8_t *start, uint32_t slen,
+                                   int (*cb)(void *user, const uint8_t *key, uint32_t klen,
+                                             const uint8_t *val, uint32_t vlen),
+                                   void *user)
+{
+    if (!kv || !kv->ops || !kv->ops->scan_from)
+        return EFS_ERR_INVAL;
+    return kv->ops->scan_from(kv->ctx, prefix, plen, start, slen, cb, user);
 }
 
 static inline int efs_kv_batch(struct efs_kv *kv, const struct efs_kv_item *items,

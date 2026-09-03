@@ -78,6 +78,45 @@ int efs_txn_reduce_read(struct efs_kv *kv, const uint8_t *lane_key,
                         uint32_t klen, efs_txn_coord_fn coord, void *ctx,
                         struct efs_txn_reduce *out);
 
+/* The transactions a read resolved as UNDECIDED.
+ *
+ * A validated collect cannot rely on version checks alone. Intents are
+ * written at PREPARE, so they are already present in the keys the reader
+ * inspects; what moves afterwards is the DECISION, which lives at the
+ * coordinator. A reader that resolved lane A's intent as undecided (and
+ * excluded it) and then, after the commit, resolved lane B's as committed
+ * (and included it) has mixed two states of one atomic transaction — and
+ * every version it checks is unchanged, because no intent changed. Only
+ * decisions moved.
+ *
+ * A decision is final, so re-checking just the undecided ones closes it;
+ * anything already decided is stable by construction. That keeps the cost
+ * proportional to the transactions the read actually met, usually none. */
+#define EFS_TXN_MAX_PENDING 16
+
+struct efs_txn_pending {
+    uint8_t n;
+    /* More undecided transactions than can be tracked. The read cannot be
+     * validated, so the caller must retry rather than trust it. */
+    uint8_t overflow;
+    struct efs_txid txid[EFS_TXN_MAX_PENDING];
+    struct efs_txn_parts parts[EFS_TXN_MAX_PENDING];
+};
+
+/* As efs_txn_reduce_read, and records the undecided set. `pend` accumulates
+ * across calls so one collect over many lanes builds a single set; zero it
+ * before the collect, not between lanes. */
+int efs_txn_reduce_read_ex(struct efs_kv *kv, const uint8_t *lane_key,
+                           uint32_t klen, efs_txn_coord_fn coord, void *ctx,
+                           struct efs_txn_reduce *out,
+                           struct efs_txn_pending *pend);
+
+/* *moved = 0 iff every recorded txid is STILL undecided, which is what lets
+ * a collect claim the values it assembled belong to one instant. Overflow
+ * reports moved, because it cannot report otherwise. */
+int efs_txn_pending_recheck(const struct efs_txn_pending *pend,
+                            efs_txn_coord_fn coord, void *ctx, int *moved);
+
 int efs_txn_resolve(struct efs_kv *kv, const struct efs_txid *t, uint32_t shard,
                     int decision);
 

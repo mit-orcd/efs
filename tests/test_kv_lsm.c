@@ -1,0 +1,515 @@
+/* Durable ordered-KV tests. No sockets, no cluster. Uses a temp directory:
+ * every case that claims durability reopens the store, and the crash case
+ * really exits the process so an unfsynced page cache cannot pass for it. */
+#include "efs/common.h"
+#include "efs/kv.h"
+#include "efs/kv_lsm.h"
+
+#include <dirent.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+static int failures = 0;
+
+#define CHECK(cond, msg)                                                      \
+    do {                                                                      \
+        if (!(cond)) {                                                        \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, msg);     \
+            failures++;                                                       \
+        }                                                                     \
+    } while (0)
+
+static char g_dir[512];
+
+static void rmtree(const char *dir)
+{
+    DIR *d = opendir(dir);
+    struct dirent *de;
+    char p[1024];
+
+    if (!d)
+        return;
+    while ((de = readdir(d))) {
+        if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0)
+            continue;
+        snprintf(p, sizeof(p), "%s/%s", dir, de->d_name);
+        unlink(p);
+    }
+    closedir(d);
+    rmdir(dir);
+}
+
+static struct efs_kv *open_store(int sync_mode, uint32_t memtable_max)
+{
+    struct efs_kv_lsm_cfg cfg;
+
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.sync_mode = sync_mode;
+    cfg.memtable_max = memtable_max;
+    cfg.l0_max = 3;
+    return efs_kv_lsm_open(g_dir, &cfg);
+}
+
+static int put_s(struct efs_kv *kv, const char *k, const char *v)
+{
+    return efs_kv_put(kv, (const uint8_t *)k, (uint32_t)strlen(k),
+                      (const uint8_t *)v, (uint32_t)strlen(v));
+}
+
+/* EFS_OK and v matches, or the rc otherwise. */
+static int get_is(struct efs_kv *kv, const char *k, const char *v)
+{
+    uint8_t buf[256];
+    uint32_t len = sizeof(buf);
+    int rc = efs_kv_get(kv, (const uint8_t *)k, (uint32_t)strlen(k), buf, &len);
+
+    if (rc != EFS_OK)
+        return rc;
+    if (len != strlen(v) || memcmp(buf, v, len) != 0)
+        return EFS_ERR_PROTO;
+    return EFS_OK;
+}
+
+struct acc {
+    char buf[4096];
+    int n;
+};
+
+static int acc_cb(void *user, const uint8_t *key, uint32_t klen,
+                  const uint8_t *val, uint32_t vlen)
+{
+    struct acc *a = user;
+
+    (void)val;
+    (void)vlen;
+    if (a->n + (int)klen + 2 >= (int)sizeof(a->buf))
+        return EFS_ERR_INVAL;
+    memcpy(a->buf + a->n, key, klen);
+    a->n += (int)klen;
+    a->buf[a->n++] = ',';
+    a->buf[a->n] = 0;
+    return 0;
+}
+
+static void test_semantics(void)
+{
+    struct efs_kv *kv = open_store(EFS_KV_LSM_NOSYNC, 0);
+    struct efs_kv_item it[3];
+    struct acc a;
+    uint8_t buf[8];
+    uint32_t len;
+
+    CHECK(kv != NULL, "open");
+    if (!kv)
+        return;
+    CHECK(put_s(kv, "b", "2") == EFS_OK, "put b");
+    CHECK(put_s(kv, "a", "1") == EFS_OK, "put a");
+    CHECK(put_s(kv, "c", "3") == EFS_OK, "put c");
+    CHECK(get_is(kv, "a", "1") == EFS_OK, "get a");
+    CHECK(get_is(kv, "zz", "") == EFS_ERR_NOT_FOUND, "get absent");
+    CHECK(put_s(kv, "a", "11") == EFS_OK, "overwrite a");
+    CHECK(get_is(kv, "a", "11") == EFS_OK, "get overwritten");
+
+    /* Short buffer reports the size and does not truncate (kv.h probe). */
+    len = 0;
+    CHECK(efs_kv_get(kv, (const uint8_t *)"a", 1, NULL, &len) == EFS_ERR_INVAL,
+          "probe rc");
+    CHECK(len == 2, "probe size");
+    len = 1;
+    CHECK(efs_kv_get(kv, (const uint8_t *)"a", 1, buf, &len) == EFS_ERR_INVAL,
+          "short rc");
+
+    CHECK(efs_kv_del(kv, (const uint8_t *)"a", 1) == EFS_OK, "del a");
+    CHECK(get_is(kv, "a", "") == EFS_ERR_NOT_FOUND, "a gone");
+    CHECK(efs_kv_del(kv, (const uint8_t *)"a", 1) == EFS_ERR_NOT_FOUND,
+          "del twice");
+
+    memset(&a, 0, sizeof(a));
+    CHECK(efs_kv_scan(kv, acc_cb, &a) == EFS_OK, "scan");
+    CHECK(strcmp(a.buf, "b,c,") == 0, "scan order");
+
+    /* A DEL of an absent key inside a batch is not an error. */
+    it[0].op = EFS_KV_PUT;
+    it[0].key = (const uint8_t *)"d";
+    it[0].klen = 1;
+    it[0].val = (const uint8_t *)"4";
+    it[0].vlen = 1;
+    it[1].op = EFS_KV_DEL;
+    it[1].key = (const uint8_t *)"nope";
+    it[1].klen = 4;
+    it[1].val = NULL;
+    it[1].vlen = 0;
+    CHECK(efs_kv_batch(kv, it, 2) == EFS_OK, "batch del absent");
+    CHECK(get_is(kv, "d", "4") == EFS_OK, "batch put");
+
+    /* A rejected batch applies nothing. */
+    it[2].op = 99;
+    it[2].key = (const uint8_t *)"e";
+    it[2].klen = 1;
+    it[2].val = (const uint8_t *)"5";
+    it[2].vlen = 1;
+    it[0].key = (const uint8_t *)"e2";
+    it[0].klen = 2;
+    CHECK(efs_kv_batch(kv, it, 3) == EFS_ERR_INVAL, "bad op rejected");
+    CHECK(get_is(kv, "e2", "4") == EFS_ERR_NOT_FOUND, "batch atomic");
+    CHECK(efs_kv_batch(kv, it, 0) == EFS_OK, "empty batch");
+
+    efs_kv_lsm_close(kv);
+}
+
+static void test_reopen_wal(void)
+{
+    struct efs_kv *kv;
+
+    rmtree(g_dir);
+    kv = open_store(EFS_KV_LSM_NOSYNC, 0);
+    CHECK(kv != NULL, "open");
+    if (!kv)
+        return;
+    CHECK(put_s(kv, "k1", "v1") == EFS_OK, "put");
+    CHECK(put_s(kv, "k2", "v2") == EFS_OK, "put");
+    CHECK(efs_kv_del(kv, (const uint8_t *)"k1", 2) == EFS_OK, "del");
+    efs_kv_lsm_close(kv);
+
+    kv = open_store(EFS_KV_LSM_NOSYNC, 0);
+    CHECK(kv != NULL, "reopen");
+    if (!kv)
+        return;
+    CHECK(get_is(kv, "k2", "v2") == EFS_OK, "replayed put");
+    CHECK(get_is(kv, "k1", "") == EFS_ERR_NOT_FOUND, "replayed del");
+    efs_kv_lsm_close(kv);
+}
+
+static void test_flush_and_levels(void)
+{
+    struct efs_kv *kv;
+    uint32_t l0 = 0, l1 = 0;
+    char k[32], v[32];
+    int i;
+
+    rmtree(g_dir);
+    kv = open_store(EFS_KV_LSM_NOSYNC, 0);
+    CHECK(kv != NULL, "open");
+    if (!kv)
+        return;
+    for (i = 0; i < 200; i++) {
+        snprintf(k, sizeof(k), "key%04d", i);
+        snprintf(v, sizeof(v), "val%04d", i);
+        CHECK(put_s(kv, k, v) == EFS_OK, "put");
+    }
+    CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "flush");
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK, "count");
+    CHECK(l0 == 1 && l1 == 0, "one L0 after flush");
+
+    /* Reads must now come out of the segment, and a tombstone written after
+     * the flush has to shadow the value inside it. */
+    CHECK(get_is(kv, "key0000", "val0000") == EFS_OK, "read from L0");
+    CHECK(get_is(kv, "key0199", "val0199") == EFS_OK, "read from L0 last");
+    CHECK(efs_kv_del(kv, (const uint8_t *)"key0100", 7) == EFS_OK, "del");
+    CHECK(get_is(kv, "key0100", "") == EFS_ERR_NOT_FOUND, "tombstone shadows");
+    CHECK(put_s(kv, "key0101", "new") == EFS_OK, "overwrite over L0");
+    CHECK(get_is(kv, "key0101", "new") == EFS_OK, "memtable wins");
+
+    CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "flush 2");
+    CHECK(efs_kv_lsm_compact(kv) == EFS_OK, "compact");
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK, "count 2");
+    CHECK(l0 == 0 && l1 == 1, "compacted into L1");
+    CHECK(get_is(kv, "key0100", "") == EFS_ERR_NOT_FOUND, "tombstone applied");
+    CHECK(get_is(kv, "key0101", "new") == EFS_OK, "newest kept");
+    CHECK(get_is(kv, "key0000", "val0000") == EFS_OK, "old kept");
+
+    efs_kv_lsm_close(kv);
+    kv = open_store(EFS_KV_LSM_NOSYNC, 0);
+    CHECK(kv != NULL, "reopen after compact");
+    if (!kv)
+        return;
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK, "count 3");
+    CHECK(l0 == 0 && l1 == 1, "manifest survived");
+    CHECK(get_is(kv, "key0101", "new") == EFS_OK, "value survived");
+    CHECK(get_is(kv, "key0100", "") == EFS_ERR_NOT_FOUND, "delete survived");
+    efs_kv_lsm_close(kv);
+}
+
+/* One ordered scan must cross memtable, L0 and L1 with newest-wins. */
+static void test_scan_across_levels(void)
+{
+    struct efs_kv *kv;
+    struct acc a;
+
+    rmtree(g_dir);
+    kv = open_store(EFS_KV_LSM_NOSYNC, 0);
+    CHECK(kv != NULL, "open");
+    if (!kv)
+        return;
+    CHECK(put_s(kv, "p/a", "1") == EFS_OK, "put");
+    CHECK(put_s(kv, "p/c", "1") == EFS_OK, "put");
+    CHECK(put_s(kv, "q/z", "1") == EFS_OK, "put");
+    CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "flush");
+    CHECK(efs_kv_lsm_compact(kv) == EFS_OK, "compact to L1");
+    CHECK(put_s(kv, "p/b", "1") == EFS_OK, "put");
+    CHECK(efs_kv_del(kv, (const uint8_t *)"p/c", 3) == EFS_OK, "del");
+    CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "flush to L0");
+    CHECK(put_s(kv, "p/d", "1") == EFS_OK, "put in memtable");
+
+    memset(&a, 0, sizeof(a));
+    CHECK(efs_kv_scan(kv, acc_cb, &a) == EFS_OK, "scan");
+    CHECK(strcmp(a.buf, "p/a,p/b,p/d,q/z,") == 0, "merged order");
+
+    memset(&a, 0, sizeof(a));
+    CHECK(efs_kv_scan_prefix(kv, (const uint8_t *)"p/", 2, acc_cb, &a) == EFS_OK,
+          "scan_prefix");
+    CHECK(strcmp(a.buf, "p/a,p/b,p/d,") == 0, "prefix bounded");
+    efs_kv_lsm_close(kv);
+}
+
+/* scan_from is what makes a paged readdir cost the page instead of the
+ * directory, so it has to resume correctly from a key that exists, from one
+ * that does not, and from a tombstone — with the same answers as the
+ * in-memory store, across all three source kinds (L1, L0, memtable). */
+static void test_scan_from(void)
+{
+    struct efs_kv *kv, *mem;
+    struct acc a, b;
+    int i;
+    static const char *const keys[] = {"p/a", "p/b", "p/c", "p/d", "p/e"};
+
+    rmtree(g_dir);
+    kv = open_store(EFS_KV_LSM_NOSYNC, 0);
+    mem = efs_kv_mem_create();
+    CHECK(kv != NULL && mem != NULL, "open");
+    if (!kv || !mem)
+        return;
+    /* Spread the range over L1, L0 and the memtable. */
+    CHECK(put_s(kv, "p/a", "1") == EFS_OK, "put");
+    CHECK(put_s(kv, "p/c", "1") == EFS_OK, "put");
+    CHECK(put_s(kv, "q/z", "1") == EFS_OK, "put");
+    CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "flush");
+    CHECK(efs_kv_lsm_compact(kv) == EFS_OK, "compact to L1");
+    CHECK(put_s(kv, "p/b", "1") == EFS_OK, "put");
+    CHECK(put_s(kv, "p/x", "1") == EFS_OK, "put");
+    CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "flush to L0");
+    CHECK(put_s(kv, "p/d", "1") == EFS_OK, "put in memtable");
+    CHECK(put_s(kv, "p/e", "1") == EFS_OK, "put in memtable");
+    CHECK(efs_kv_del(kv, (const uint8_t *)"p/x", 3) == EFS_OK, "del");
+    for (i = 0; i < (int)(sizeof(keys) / sizeof(keys[0])); i++)
+        CHECK(put_s(mem, keys[i], "1") == EFS_OK, "mem put");
+    CHECK(put_s(mem, "q/z", "1") == EFS_OK, "mem put");
+
+    /* No start is exactly scan_prefix. */
+    memset(&a, 0, sizeof(a));
+    CHECK(efs_kv_scan_from(kv, (const uint8_t *)"p/", 2, NULL, 0, acc_cb, &a) ==
+              EFS_OK, "scan_from all");
+    CHECK(strcmp(a.buf, "p/a,p/b,p/c,p/d,p/e,") == 0, "full range");
+
+    /* Resume at a key that exists: inclusive. */
+    memset(&a, 0, sizeof(a));
+    memset(&b, 0, sizeof(b));
+    CHECK(efs_kv_scan_from(kv, (const uint8_t *)"p/", 2, (const uint8_t *)"p/c",
+                           3, acc_cb, &a) == EFS_OK, "scan_from existing");
+    CHECK(efs_kv_scan_from(mem, (const uint8_t *)"p/", 2, (const uint8_t *)"p/c",
+                           3, acc_cb, &b) == EFS_OK, "mem scan_from");
+    CHECK(strcmp(a.buf, "p/c,p/d,p/e,") == 0, "resume inclusive");
+    CHECK(strcmp(a.buf, b.buf) == 0, "lsm and mem agree");
+
+    /* Resume between keys, and past a tombstone. */
+    memset(&a, 0, sizeof(a));
+    CHECK(efs_kv_scan_from(kv, (const uint8_t *)"p/", 2, (const uint8_t *)"p/bb",
+                           4, acc_cb, &a) == EFS_OK, "scan_from gap");
+    CHECK(strcmp(a.buf, "p/c,p/d,p/e,") == 0, "resume at absent key");
+    memset(&a, 0, sizeof(a));
+    CHECK(efs_kv_scan_from(kv, (const uint8_t *)"p/", 2, (const uint8_t *)"p/x",
+                           3, acc_cb, &a) == EFS_OK, "scan_from tombstone");
+    CHECK(a.n == 0, "tombstone not emitted on resume");
+
+    /* Start outside the prefix: before yields everything, after yields none.
+     * The prefix still bounds the answer, so q/z never appears. */
+    memset(&a, 0, sizeof(a));
+    CHECK(efs_kv_scan_from(kv, (const uint8_t *)"p/", 2, (const uint8_t *)"a", 1,
+                           acc_cb, &a) == EFS_OK, "scan_from before");
+    CHECK(strcmp(a.buf, "p/a,p/b,p/c,p/d,p/e,") == 0, "start before prefix");
+    memset(&a, 0, sizeof(a));
+    CHECK(efs_kv_scan_from(kv, (const uint8_t *)"p/", 2, (const uint8_t *)"z", 1,
+                           acc_cb, &a) == EFS_OK, "scan_from after");
+    CHECK(a.n == 0, "start past prefix");
+
+    /* Paging one entry at a time must visit each key exactly once. Resuming
+     * strictly after key K means starting at K with a 0 byte appended: that
+     * is the immediate successor of K and precedes anything longer that
+     * begins with K, so no entry can be skipped or repeated. */
+    {
+        uint8_t next[64];
+        uint32_t nlen = 0;
+        char seen[256];
+        int n = 0, guard;
+
+        seen[0] = 0;
+        for (guard = 0; guard < 16; guard++) {
+            uint32_t klen;
+
+            memset(&a, 0, sizeof(a));
+            CHECK(efs_kv_scan_from(kv, (const uint8_t *)"p/", 2,
+                                   nlen ? next : NULL, nlen, acc_cb, &a) ==
+                      EFS_OK, "page");
+            if (a.n == 0)
+                break;
+            klen = (uint32_t)strcspn(a.buf, ",");
+            a.buf[klen] = 0; /* first key of this page */
+            strcat(seen, a.buf);
+            strcat(seen, ",");
+            n++;
+            memcpy(next, a.buf, klen);
+            next[klen] = 0;
+            nlen = klen + 1;
+        }
+        CHECK(n == 5, "paged the whole range");
+        CHECK(strcmp(seen, "p/a,p/b,p/c,p/d,p/e,") == 0, "each key once");
+    }
+
+    efs_kv_mem_free(mem);
+    efs_kv_lsm_close(kv);
+}
+
+/* A torn trailing record was never ACKed, so it must be discarded while
+ * everything before it survives. */
+static void test_torn_tail(void)
+{
+    struct efs_kv *kv;
+    char path[600];
+    FILE *f;
+
+    rmtree(g_dir);
+    kv = open_store(EFS_KV_LSM_NOSYNC, 0);
+    CHECK(kv != NULL, "open");
+    if (!kv)
+        return;
+    CHECK(put_s(kv, "good", "yes") == EFS_OK, "put");
+    efs_kv_lsm_close(kv);
+
+    snprintf(path, sizeof(path), "%s/wal", g_dir);
+    f = fopen(path, "ab");
+    CHECK(f != NULL, "open wal");
+    if (f) {
+        static const uint8_t junk[13] = { 0xAA, 0xBB, 0xCC, 0xDD, 9, 0, 0, 0,
+                                          1, 2, 3, 4, 5 };
+        fwrite(junk, 1, sizeof(junk), f);
+        fclose(f);
+    }
+    kv = open_store(EFS_KV_LSM_NOSYNC, 0);
+    CHECK(kv != NULL, "reopen with torn tail");
+    if (!kv)
+        return;
+    CHECK(get_is(kv, "good", "yes") == EFS_OK, "prefix survived");
+    efs_kv_lsm_close(kv);
+}
+
+/* Real durability: the child exits without unwinding after batch returned,
+ * so only an fsync that already happened can make the parent see the write. */
+static void test_crash_durability(void)
+{
+    pid_t pid;
+    int status = 0;
+    struct efs_kv *kv;
+
+    rmtree(g_dir);
+    pid = fork();
+    CHECK(pid >= 0, "fork");
+    if (pid < 0)
+        return;
+    if (pid == 0) {
+        struct efs_kv *c = open_store(EFS_KV_LSM_SYNC, 0);
+        if (!c)
+            _exit(2);
+        if (put_s(c, "durable", "1") != EFS_OK)
+            _exit(3);
+        if (put_s(c, "durable2", "2") != EFS_OK)
+            _exit(4);
+        _exit(0);
+    }
+    CHECK(waitpid(pid, &status, 0) == pid, "wait");
+    CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 0, "child ok");
+    kv = open_store(EFS_KV_LSM_SYNC, 0);
+    CHECK(kv != NULL, "reopen after crash");
+    if (!kv)
+        return;
+    CHECK(get_is(kv, "durable", "1") == EFS_OK, "survived crash");
+    CHECK(get_is(kv, "durable2", "2") == EFS_OK, "survived crash 2");
+    efs_kv_lsm_close(kv);
+}
+
+/* Enough volume to force several flushes and a compaction on its own, then
+ * verify every key through a reopen. */
+static void test_bulk_auto_compact(void)
+{
+    struct efs_kv *kv;
+    uint32_t l0 = 0, l1 = 0;
+    char k[32], v[64];
+    int i;
+    int bad = 0;
+
+    rmtree(g_dir);
+    kv = open_store(EFS_KV_LSM_NOSYNC, 32 * 1024);
+    CHECK(kv != NULL, "open");
+    if (!kv)
+        return;
+    for (i = 0; i < 4000; i++) {
+        snprintf(k, sizeof(k), "bulk/%06d", i);
+        snprintf(v, sizeof(v), "value-for-%06d-padding-padding", i);
+        if (put_s(kv, k, v) != EFS_OK)
+            bad++;
+    }
+    CHECK(bad == 0, "bulk puts");
+    for (i = 0; i < 4000; i += 3) {
+        snprintf(k, sizeof(k), "bulk/%06d", i);
+        if (efs_kv_del(kv, (const uint8_t *)k, (uint32_t)strlen(k)) != EFS_OK)
+            bad++;
+    }
+    CHECK(bad == 0, "bulk deletes");
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK, "count");
+    CHECK(l1 > 0, "auto compaction ran");
+    efs_kv_lsm_close(kv);
+
+    kv = open_store(EFS_KV_LSM_NOSYNC, 32 * 1024);
+    CHECK(kv != NULL, "reopen");
+    if (!kv)
+        return;
+    for (i = 0; i < 4000; i++) {
+        snprintf(k, sizeof(k), "bulk/%06d", i);
+        snprintf(v, sizeof(v), "value-for-%06d-padding-padding", i);
+        if (i % 3 == 0) {
+            if (get_is(kv, k, v) != EFS_ERR_NOT_FOUND)
+                bad++;
+        } else if (get_is(kv, k, v) != EFS_OK) {
+            bad++;
+        }
+    }
+    CHECK(bad == 0, "all keys correct after reopen");
+    efs_kv_lsm_close(kv);
+}
+
+int main(void)
+{
+    snprintf(g_dir, sizeof(g_dir), "/tmp/efs-kvlsm-%d", (int)getpid());
+    rmtree(g_dir);
+
+    test_semantics();
+    test_reopen_wal();
+    test_flush_and_levels();
+    test_scan_across_levels();
+    test_scan_from();
+    test_torn_tail();
+    test_crash_durability();
+    test_bulk_auto_compact();
+
+    rmtree(g_dir);
+    if (failures) {
+        fprintf(stderr, "test_kv_lsm: %d failure(s)\n", failures);
+        return 1;
+    }
+    printf("test_kv_lsm: OK\n");
+    return 0;
+}

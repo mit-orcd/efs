@@ -13,6 +13,33 @@ void efs_hash(const void *data, size_t len, uint8_t out[EFS_HASH_SIZE])
     blake3_hasher_finalize(&hasher, out, EFS_HASH_SIZE);
 }
 
+static uint32_t crc_tab[256];
+static pthread_once_t crc_once = PTHREAD_ONCE_INIT;
+
+static void crc_init(void)
+{
+    uint32_t i, j, c;
+
+    for (i = 0; i < 256; i++) {
+        c = i;
+        for (j = 0; j < 8; j++)
+            c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+        crc_tab[i] = c;
+    }
+}
+
+uint32_t efs_crc32(const void *data, size_t len)
+{
+    const uint8_t *p = data;
+    uint32_t c = 0xFFFFFFFFu;
+    size_t i;
+
+    pthread_once(&crc_once, crc_init);
+    for (i = 0; i < len; i++)
+        c = crc_tab[(c ^ p[i]) & 0xFF] ^ (c >> 8);
+    return c ^ 0xFFFFFFFFu;
+}
+
 /* pthread_once target for the cached 64 KiB zero-fragment digest. */
 static uint8_t g_zero_frag_digest[EFS_HASH_SIZE];
 static void efs_zero_frag_digest_init(void)

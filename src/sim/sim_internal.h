@@ -5,6 +5,8 @@
 #include "efs/raft.h"
 #include "efs/meta_apply.h"
 #include "efs/kv.h"
+#include "efs/kv_lsm.h"
+#include "efs/raft_disk.h"
 #include "efs/transport.h"
 #include "efs/opid.h"
 #include "efs/txn.h"
@@ -18,6 +20,8 @@
 #define SIM_CMD_EPOCH   10
 #define SIM_CMD_DIR     11
 #define SIM_CMD_LOCK    12
+#define SIM_CMD_SETATTR 13
+#define SIM_CMD_UTIMENS 14
 #define SIM_LOCKQ       16
 
 enum {
@@ -73,6 +77,9 @@ struct sim_server {
     struct efs_raft_store *raft2_store;
     struct efs_raft *ctrl;
     struct efs_raft_store *ctrl_store;
+    /* Non-NULL when the groups' persistent state is the durable on-disk log
+     * (EFS_SIM_RAFT_DIR); all groups on this server share it. */
+    struct efs_raft_disk *raft_disk;
     struct efs_sim *sim;
     uint64_t boot_id;
     uint64_t applied_idx;
@@ -99,6 +106,12 @@ struct efs_sim {
     int nclients;
     int nraft;
     uint32_t desired_voters;
+    /* Non-NULL when the servers' persistent state lives in the durable
+     * implementations (EFS_SIM_KV_DIR / EFS_SIM_RAFT_DIR) rather than the
+     * in-memory ones; inst keeps each sim instance on its own subtree. */
+    const char *kv_dir;
+    const char *raft_dir;
+    uint32_t inst;
     int hold;
     int last_rc;
     efs_ino_t last_ino;
@@ -121,6 +134,19 @@ int sim_raft_propose_group(struct efs_sim *sim, uint8_t group,
 int sim_raft_read_group(struct efs_sim *sim, uint8_t group);
 struct efs_kv *sim_raft_kv_group(struct efs_sim *sim, uint8_t group);
 
+/* sim_disk.c: picks the in-memory or the durable implementation of a
+ * server's applied KV and of its Raft persistent state. */
+void sim_disk_select(struct efs_sim *sim);
+struct efs_kv *sim_disk_open(struct efs_sim *sim, int server);
+void sim_disk_free(struct efs_sim *sim, struct efs_kv *kv);
+struct efs_raft_store *sim_raft_store_new(struct efs_sim *sim, int server,
+                                          uint8_t group);
+void sim_raft_store_del(struct efs_sim *sim, struct efs_raft_store *st);
+void sim_raft_disk_close(struct efs_sim *sim, int server);
+/* Makes the applied KV durable through what has been applied, which is what
+ * a Raft snapshot must not run ahead of. */
+int sim_disk_checkpoint(struct efs_sim *sim, int server);
+
 int sim_raft_boot(struct efs_sim *sim);
 void sim_raft_free_all(struct efs_sim *sim);
 void sim_raft_halt(struct efs_sim *sim, int server);
@@ -134,6 +160,16 @@ int sim_raft_publish(struct efs_sim *sim, int client, const struct efs_meta_pub 
 int sim_raft_epoch_fence(struct efs_sim *sim, efs_ino_t ino);
 int sim_raft_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,
                     struct efs_meta_dentry *out);
+int sim_raft_setattr(struct efs_sim *sim, int client, efs_ino_t ino,
+                     const struct efs_meta_setattr *sa);
+int sim_raft_utimens(struct efs_sim *sim, int client, efs_ino_t ino,
+                     const struct efs_meta_utimens *u);
+int sim_raft_getattr(struct efs_sim *sim, efs_ino_t ino, struct efs_meta_stat *out);
+int sim_raft_readdir(struct efs_sim *sim, efs_ino_t dir,
+                     struct efs_meta_dir_cursor *cur, struct efs_meta_dir_ent *out,
+                     uint32_t max, uint32_t *n);
+int sim_raft_lookup_path(struct efs_sim *sim, efs_ino_t start, const char *path,
+                         struct efs_meta_path_hop *hops, uint32_t cap, uint32_t *n);
 int sim_raft_get_chunk(struct efs_sim *sim, efs_ino_t ino, uint32_t chunk_index,
                        struct efs_meta_chunk *out);
 int sim_raft_check(struct efs_sim *sim);
@@ -166,6 +202,8 @@ int sim_txn_mkdir_until(struct efs_sim *sim, int client, efs_ino_t parent,
 int sim_txn_finish(struct efs_sim *sim, const struct efs_txid *t, int commit);
 int sim_txn_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,
                    struct efs_meta_dentry *out);
+int sim_txn_coord(void *user, const struct efs_txid *t, uint32_t coord_shard,
+                  int *dec);
 
 int sim_ns_try(struct sim_server *s, uint8_t group, const uint8_t *cmd,
                uint32_t clen, uint64_t index);

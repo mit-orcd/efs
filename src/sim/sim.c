@@ -7,7 +7,6 @@
 #include "efs/protocol.h"
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 
 static uint64_t splitmix64(uint64_t *s)
 {
@@ -322,6 +321,7 @@ static int apply_publish(struct efs_sim *sim, struct sim_ev *e)
     p.ino = e->ino;
     p.chunk_index = e->chunk_index;
     p.new_size = e->new_size;
+    p.now = sim->now;
     p.expected_gen = expected;
     p.candidate_gen = cgen;
     p.content_epoch = epoch;
@@ -440,10 +440,11 @@ struct efs_sim *efs_sim_new(const struct efs_sim_cfg *cfg)
     sim->nclients = cfg->nclients;
     sim->delay_max = cfg->delay_max;
     sim->drop_per_mille = cfg->drop_per_mille;
+    sim_disk_select(sim);
     for (i = 0; i < sim->nservers; i++) {
         sim->srv[i].alive = 1;
         sim->srv[i].store = efs_store_mem_create();
-        sim->srv[i].disk = efs_kv_mem_create();
+        sim->srv[i].disk = sim_disk_open(sim, i);
         if (!sim->srv[i].store || !sim->srv[i].disk) {
             efs_sim_free(sim);
             return NULL;
@@ -485,7 +486,7 @@ void efs_sim_free(struct efs_sim *sim)
     sim_raft_free_all(sim);
     for (i = 0; i < EFS_SIM_MAX_SERVERS; i++) {
         efs_store_mem_free(sim->srv[i].store);
-        efs_kv_mem_free(sim->srv[i].disk);
+        sim_disk_free(sim, sim->srv[i].disk);
         for (c = 0; c < EFS_SIM_MAX_CLIENTS; c++) {
             efs_transport_loop_free(sim->srv[i].rx[c]);
             efs_transport_loop_free(sim->cli[c].tx[i]);
@@ -621,6 +622,36 @@ int efs_sim_lookup(struct efs_sim *sim, int client, efs_ino_t parent,
     if (out)
         *out = (sim->last_rc == EFS_OK) ? sim->last_ino : 0;
     return sim->last_rc;
+}
+
+int efs_sim_lookup_path(struct efs_sim *sim, efs_ino_t start, const char *path,
+                        struct efs_meta_path_hop *hops, uint32_t cap, uint32_t *n)
+{
+    return sim_raft_lookup_path(sim, start, path, hops, cap, n);
+}
+
+int efs_sim_getattr(struct efs_sim *sim, efs_ino_t ino, struct efs_meta_stat *out)
+{
+    return sim_raft_getattr(sim, ino, out);
+}
+
+int efs_sim_setattr(struct efs_sim *sim, int client, efs_ino_t ino,
+                    const struct efs_meta_setattr *sa)
+{
+    return sim_raft_setattr(sim, client, ino, sa);
+}
+
+int efs_sim_utimens(struct efs_sim *sim, int client, efs_ino_t ino,
+                    const struct efs_meta_utimens *u)
+{
+    return sim_raft_utimens(sim, client, ino, u);
+}
+
+int efs_sim_readdir(struct efs_sim *sim, efs_ino_t dir,
+                    struct efs_meta_dir_cursor *cur, struct efs_meta_dir_ent *out,
+                    uint32_t max, uint32_t *n)
+{
+    return sim_raft_readdir(sim, dir, cur, out, max, n);
 }
 
 int efs_sim_unlink(struct efs_sim *sim, int client, efs_ino_t parent,

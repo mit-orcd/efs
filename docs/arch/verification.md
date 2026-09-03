@@ -185,6 +185,92 @@ waiters as STALE and never grants them. `test_sim`, `test_lock`, and
 hashed RMDIR/`dentry_seq`, directory-rename ancestry, `utimens` dir fence,
 pressure-based spread, partial-unlock split, production `efsd` wiring.
 
+**Step 10.5a in-sim (gated): the simulator runs on the durable KV.** Set
+`EFS_SIM_KV_DIR=<dir>` and every server's applied state lives in
+`efs_kv_lsm_open` instead of `kv_mem`, with no test changes — each sim
+instance gets its own store under that directory, because `kv_mem` hands
+every instance an empty one and reusing a directory would carry state across
+cases. The sim's memtable threshold is deliberately tiny (512 B) so the runs
+cross it: a threshold the sim never reaches would check every invariant
+against a memtable and never against a segment or a compaction result. The
+gate is all five sim suites OK with segments actually produced (51 L0 + 81
+L1 on the recorded run). This is the substitution that makes the durable
+store's correctness a property the existing invariant checkers prove, rather
+than a separate claim.
+
+`test_kv_lsm` covers what the sim cannot: semantics parity with `kv_mem`
+(including the short-buffer probe and batch atomicity), a **real** crash —
+the child `_exit`s without unwinding after a batch returned, so only an
+fsync that already happened can make the parent's reopen see the write — a
+torn WAL tail that must be discarded while its prefix survives, tombstones
+shadowing values across levels, and 4000 keys with a third deleted verified
+through auto-compaction and a reopen. One bug it caught: the compaction merge
+advanced the winning source before comparing the others against its key, so
+older duplicates survived their own tombstone. A scan-only test cannot see
+that — it needs the compacted output read back.
+
+**Step 10.5b in-sim (gated): the simulator runs on the durable Raft log.**
+Set `EFS_SIM_RAFT_DIR=<dir>` and every server's Raft persistent state lives
+in `efs_raft_disk_open` instead of `raft_mem`, with no test changes; set both
+variables and both backends are durable at once. Two things make this a real
+substitution rather than a link-time one. First, **all three of a server's
+groups share one log**, which is the production shape (thousands of groups
+per node multiplexing one fsync stream) and puts that sharing under test —
+a group whose records leaked into another's state would show up as a
+cross-group hard-state or log failure. Second, **a simulated restart really
+closes and reopens the log**, so every crash the simulator injects becomes a
+replay of what was on disk, under all the existing fault injection, rather
+than a store object that quietly kept its RAM.
+
+The gate is all five sim suites OK on the durable Raft store alone and on
+both durable stores together. It was verified **non-vacuous by negative
+control**: making replay silently drop ENTRY records fails `test_raft_store`
+(16 checks) and `test_sim` (3, in transaction recovery). A gate that cannot
+fail is not a gate, and for a store whose whole job is "what survives a
+restart" that is the only way to know the sim depends on it.
+
+`test_raft_store` covers what the sim cannot: answer-for-answer parity with
+`raft_mem` driven through one shared script (gap rejection, in-place slot
+overwrite, the short-buffer required-length report, snapshot-index term
+lookup, `NOT_FOUND` vs never-saved config), a **real** crash via
+`fork`+`_exit`, a torn tail that must be discarded *without* losing the good
+records behind it and must leave the file appendable, truncation surviving a
+reopen (a follower that loses a truncation gets conflicting entries back and
+diverges), and rotation preserving live state through a reopen. One bug it
+caught: replaying a *rotated* log applies the snapshot record before any
+entries exist, which the validation inherited from `raft_mem` rejected —
+correct for a live caller, wrong for replay, so the prefix drop is clamped on
+the replay path and strict on the callback.
+
+**Step 10.5c-1 in-sim (gated): single-shard reads and SETATTR over the
+applied KV.** READDIR walks LOCAL / SPLITTING / HASHED including the
+lane-0 alias (a hashed name that lives on the inode's own shard is not a
+second copy). SETATTR mode/owner is one Raft entry on the inode shard:
+ctime MAX-clamps, mtime does not move, a stale `expect_gen` is STALE.
+GETATTR is the §7.3 / §7.4 validated double collect — MAX over the inode
+row and the active write lanes (a file) or the `used_shards` dir lanes (a
+HASHED directory), including committed-but-unmaterialized reductions, then
+a recheck of `lane_seq` / pending txids / `content_epoch` / `mtime_gen` /
+`used_shards`; an unreachable coordinator is I9, not absence. A hashed
+create or unlink stamps its dir lane on the dentry shard and does not
+move the directory inode row's times. LOOKUP_PATH is a batched
+ancestor walk (resume from the terminal, I9 on a dangling dentry,
+INVAL through a non-directory). The simulator proposes SETATTR through
+Raft, serves GETATTR/READDIR via ReadIndex (file lanes or dir lanes), and hops LOOKUP_PATH with a
+ReadIndex per shard; a leader crash does not change a linearizable read.
+Gate: `test_meta_apply`, `test_sim`.
+
+**Step 10.5c-2 in-sim (gated): `utimens` inode fence.** Only utimens can
+set a time backwards, so it is the only op that bumps `mtime_gen` and
+pushes that generation onto every active write lane (file) or used dir
+lane (HASHED/SPLITTING directory). getattr ignores lane mtimes stamped
+under an older generation; a later write re-stamps at the new generation
+and is visible again. atime-only does not fence. chmod after utimens
+does not hide the explicit mtime (it does not bump `mtime_gen`). The
+simulator proposes the fence through Raft; a leader crash / restart does
+not resurrect a stale lane mtime. Gate: `test_meta_apply`, `test_sim`.
+Not in this step: truncate range-delete, O_APPEND, production `efsd`.
+
 ## Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove

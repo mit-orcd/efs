@@ -11,13 +11,21 @@ struct hit {
     uint32_t vlen;
     char name[EFS_MAX_NAME];
     int found;
+    int saw_lane0; /* a name already in its final place; not migration work */
 };
 
+/* Finds the first dentry in the pre-split local range that actually has
+ * somewhere to move. Dir lane 0 is the directory's own inode shard, so a
+ * lane-0 name's hashed key is the local key it already occupies: there is
+ * nothing to copy, and "moving" it would delete the only copy. Those names
+ * stay in the local range for the directory's lifetime, which is why
+ * "the local range is empty" is not the test for a finished migration. */
 static int first_cb(void *user, const uint8_t *key, uint32_t klen,
                     const uint8_t *val, uint32_t vlen)
 {
     struct hit *h = user;
     uint32_t nlen;
+    char name[EFS_MAX_NAME];
 
     if (h->found)
         return 1;
@@ -26,12 +34,17 @@ static int first_cb(void *user, const uint8_t *key, uint32_t klen,
     nlen = klen - 11;
     if (nlen == 0 || nlen >= EFS_MAX_NAME)
         return 0;
+    memcpy(name, key + 11, nlen);
+    name[nlen] = 0;
+    if (efs_kv_dir_lane(name) == 0) {
+        h->saw_lane0 = 1;
+        return 0;
+    }
     memcpy(h->key, key, klen);
     h->klen = klen;
     memcpy(h->val, val, EFS_META_DENT_BYTES);
     h->vlen = EFS_META_DENT_BYTES;
-    memcpy(h->name, key + 11, nlen);
-    h->name[nlen] = 0;
+    memcpy(h->name, name, nlen + 1);
     h->found = 1;
     return 1;
 }
@@ -77,10 +90,12 @@ int efs_meta_dir_migrate_one(struct efs_kv *kv, efs_ino_t dir)
     struct efs_meta_row row;
     struct efs_meta_dentry dent;
     struct hit h;
-    struct efs_kv_item it[2];
+    struct efs_kv_item it[3];
     uint8_t pref[EFS_KV_KEY_MAX], hk[EFS_KV_KEY_MAX], hv[EFS_META_DENT_BYTES];
-    uint32_t plen = 0, hklen = 0, hvlen;
+    uint8_t rk[EFS_KV_KEY_MAX], rv[EFS_META_INO_BYTES];
+    uint32_t plen = 0, hklen = 0, hvlen, rklen = 0;
     uint32_t psh, hsh, n = 0;
+    uint64_t bit;
     int rc;
 
     if (!kv || dir == 0)
@@ -98,8 +113,17 @@ int efs_meta_dir_migrate_one(struct efs_kv *kv, efs_ino_t dir)
     rc = efs_kv_scan_prefix(kv, pref, plen, first_cb, &h);
     if (rc != EFS_OK && rc != 1)
         return rc;
-    if (!h.found)
+    if (!h.found) {
+        /* Nothing left to move. Registering lane 0 is the last piece of
+         * migration work: those names never passed through the code below,
+         * so nothing else has recorded the lane they occupy, and at HASHED
+         * the bitmap is all readdir has to find them by. */
+        if (h.saw_lane0 && (row.used_shards & 1ull) == 0) {
+            row.used_shards |= 1ull;
+            return put_inode(kv, &row);
+        }
         return EFS_ERR_NOT_FOUND;
+    }
     rc = efs_meta_unpack_dentry(h.val, h.vlen, &dent);
     if (rc != EFS_OK)
         return rc;
@@ -124,6 +148,26 @@ int efs_meta_dir_migrate_one(struct efs_kv *kv, efs_ino_t dir)
     it[n].key = h.key;
     it[n].klen = h.klen;
     n++;
+    /* First use of this dir lane has to be recorded, in the same batch as the
+     * move. The bitmap is what bounds readdir and dir stat to the lanes a
+     * directory actually occupies, so a lane the migrator populated silently
+     * would be a lane those scans never visit. */
+    bit = 1ull << efs_kv_dir_lane(h.name);
+    if ((row.used_shards & bit) == 0) {
+        row.used_shards |= bit;
+        rc = efs_kv_key_inode(psh, dir, rk, &rklen);
+        if (rc != EFS_OK)
+            return rc;
+        rc = efs_meta_pack_inode(&row, rv, sizeof(rv));
+        if (rc != EFS_OK)
+            return rc;
+        it[n].op = EFS_KV_PUT;
+        it[n].key = rk;
+        it[n].klen = rklen;
+        it[n].val = rv;
+        it[n].vlen = EFS_META_INO_BYTES;
+        n++;
+    }
     return efs_kv_batch(kv, it, n);
 }
 
@@ -154,5 +198,9 @@ int efs_meta_dir_finish_hashed(struct efs_kv *kv, efs_ino_t dir)
     if (h.found)
         return EFS_ERR_BUSY;
     row.layout = EFS_META_LAYOUT_HASHED;
+    /* Idempotent with the migrator's own registration, so finishing does not
+     * depend on the migrator having been the one to run last. */
+    if (h.saw_lane0)
+        row.used_shards |= 1ull;
     return put_inode(kv, &row);
 }
