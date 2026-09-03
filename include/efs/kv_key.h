@@ -27,6 +27,7 @@
 #define EFS_KV_KIND_SESSION  13 /* session record on hash(uuid) shard */
 #define EFS_KV_KIND_SESS_LOCAL 14 /* per-shard established epoch + fence */
 #define EFS_KV_KIND_LEASE    15 /* open lease (FileID, session) on inode shard */
+#define EFS_KV_KIND_LOCK     16 /* POSIX lock record on inode shard */
 
 static inline uint32_t efs_kv_inode_shard(efs_ino_t ino)
 {
@@ -36,6 +37,9 @@ static inline uint32_t efs_kv_inode_shard(efs_ino_t ino)
 uint32_t efs_kv_session_shard(const uint8_t uuid[EFS_OPID_UUID_LEN]);
 /* lane = ci % 64; lane 0 is the inode shard (architecture.md §7.3). */
 uint32_t efs_kv_lane_shard(efs_ino_t ino, uint8_t lane);
+/* dir_lane = hash(name)%64; layout 0 = LOCAL (parent shard). */
+uint8_t efs_kv_dir_lane(const char *name);
+uint32_t efs_kv_dentry_shard(efs_ino_t parent, const char *name, uint8_t layout);
 
 int efs_kv_key_alloc(uint32_t shard, uint8_t *out, uint32_t *len);
 int efs_kv_key_inode(uint32_t shard, efs_ino_t ino, uint8_t *out, uint32_t *len);
@@ -75,6 +79,15 @@ int efs_kv_key_lease(uint32_t shard, efs_ino_t ino, uint64_t gen,
 int efs_kv_key_lease_prefix(uint32_t shard, efs_ino_t ino, uint64_t gen,
                             uint8_t *out, uint32_t *len);
 int efs_kv_key_lease_shard_prefix(uint32_t shard, uint8_t *out, uint32_t *len);
+int efs_kv_key_lock(uint32_t shard, efs_ino_t ino, uint64_t gen, uint8_t domain,
+                    uint64_t lo, uint64_t hi, uint8_t owner_kind,
+                    uint64_t owner_id, const uint8_t uuid[EFS_OPID_UUID_LEN],
+                    uint32_t epoch, uint8_t *out, uint32_t *len);
+int efs_kv_key_lock_prefix(uint32_t shard, efs_ino_t ino, uint64_t gen,
+                           uint8_t domain, uint8_t *out, uint32_t *len);
+int efs_kv_key_lock_file_prefix(uint32_t shard, efs_ino_t ino, uint64_t gen,
+                                uint8_t *out, uint32_t *len);
+int efs_kv_key_lock_shard_prefix(uint32_t shard, uint8_t *out, uint32_t *len);
 int efs_kv_key_unwrap(const uint8_t *wrap, uint32_t wlen, uint8_t *orig,
                       uint32_t *olen);
 

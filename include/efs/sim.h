@@ -5,8 +5,9 @@
 #include "efs/store.h"
 #include "efs/opid.h"
 #include "efs/txn.h"
+#include "efs/lock.h"
 
-/* Deterministic simulator (architecture.md §10 steps 1–9).
+/* Deterministic simulator (architecture.md §10 steps 1–10).
  * N logical servers + M clients in one process. Seeded PRNG drives
  * message order, drops, delays, crashes, and clock steps. Metadata is
  * a Raft group (servers 0..2 vote initially; membership changes through
@@ -113,6 +114,26 @@ int efs_sim_close(struct efs_sim *sim, int client, efs_ino_t ino);
 int efs_sim_reclaim(struct efs_sim *sim, efs_ino_t ino);
 int efs_sim_inode_nlink(struct efs_sim *sim, efs_ino_t ino, uint32_t *nlink,
                         uint64_t *gen);
+
+/* Directory layout-epoch spread (§7.4). Driver, not a pressure heuristic. */
+int efs_sim_dir_begin_split(struct efs_sim *sim, efs_ino_t dir);
+int efs_sim_dir_migrate(struct efs_sim *sim, efs_ino_t dir);
+int efs_sim_dir_finish_hashed(struct efs_sim *sim, efs_ino_t dir);
+int efs_sim_dir_layout(struct efs_sim *sim, efs_ino_t dir, uint8_t *layout,
+                       uint64_t *epoch);
+
+/* Distributed POSIX locks (§7.6). lockw enqueues (BUSY) on conflict.
+ * wake grants FIFO waiters after a release. owner_kind: 1=process, 2=OFD. */
+int efs_sim_lock(struct efs_sim *sim, int client, efs_ino_t ino, uint8_t domain,
+                 uint8_t type, uint64_t start, uint64_t end, uint8_t owner_kind,
+                 uint64_t owner_id);
+int efs_sim_lockw(struct efs_sim *sim, int client, efs_ino_t ino, uint8_t domain,
+                  uint8_t type, uint64_t start, uint64_t end, uint8_t owner_kind,
+                  uint64_t owner_id);
+int efs_sim_unlock(struct efs_sim *sim, int client, efs_ino_t ino, uint8_t domain,
+                   uint64_t start, uint64_t end, uint8_t owner_kind,
+                   uint64_t owner_id);
+int efs_sim_lock_wake(struct efs_sim *sim);
 
 int efs_sim_crash(struct efs_sim *sim, int server); /* RAM gone, disk kept */
 int efs_sim_restart(struct efs_sim *sim, int server);

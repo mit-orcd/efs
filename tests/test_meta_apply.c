@@ -1,5 +1,6 @@
 /* Isolated applied-state SM over mem KV. No sockets, no cluster. */
 #include "efs/meta_apply.h"
+#include "efs/dir_layout.h"
 #include "efs/kv.h"
 #include "efs/kv_key.h"
 #include "efs/opid.h"
@@ -260,6 +261,69 @@ static void test_evidence(void)
     efs_kv_mem_free(kv);
 }
 
+static const char *spread_name(efs_ino_t parent)
+{
+    static char buf[16];
+    int i;
+
+    for (i = 0; i < 4096; i++) {
+        snprintf(buf, sizeof(buf), "n%d", i);
+        if (efs_kv_dir_lane(buf) != 0 &&
+            efs_kv_dentry_shard(parent, buf, EFS_META_LAYOUT_HASHED) !=
+                efs_kv_inode_shard(parent))
+            return buf;
+    }
+    return "n1";
+}
+
+static void test_i8_spread(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t foo = 0, bar = 0;
+    struct efs_meta_dentry d;
+    struct efs_meta_row r;
+    const char *nm;
+    int rc;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, EFS_ROOT_INO, S_IFREG | 0644, "foo",
+                                     &foo) == EFS_OK,
+          "foo");
+    CHECK(efs_meta_dir_begin_split(kv, EFS_ROOT_INO) == EFS_OK, "split");
+    CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &r) == EFS_OK &&
+              r.layout == EFS_META_LAYOUT_SPLITTING,
+          "SPLITTING");
+    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "foo") == EFS_OK, "unlink");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "foo", &d) ==
+              EFS_ERR_NOT_FOUND,
+          "I8 hashed wins");
+    rc = efs_meta_dir_migrate_one(kv, EFS_ROOT_INO);
+    CHECK(rc == EFS_OK || rc == EFS_ERR_NOT_FOUND, "migrate");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "foo", &d) ==
+              EFS_ERR_NOT_FOUND,
+          "no resurrect");
+    nm = spread_name(EFS_ROOT_INO);
+    CHECK(efs_meta_apply_create_file(kv, EFS_ROOT_INO, S_IFREG | 0644, nm, &bar)
+              == EFS_OK &&
+              bar,
+          "hashed create");
+    CHECK((bar & 0xFFF) ==
+              efs_kv_dentry_shard(EFS_ROOT_INO, nm, EFS_META_LAYOUT_HASHED),
+          "co-located with dentry shard");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, nm, &d) == EFS_OK &&
+              d.ino == bar,
+          "lookup hashed");
+    while (efs_meta_dir_migrate_one(kv, EFS_ROOT_INO) == EFS_OK)
+        ;
+    CHECK(efs_meta_dir_finish_hashed(kv, EFS_ROOT_INO) == EFS_OK, "HASHED");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, nm, &d) == EFS_OK &&
+              d.ino == bar,
+          "still there");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     test_create_lookup_unlink();
@@ -270,6 +334,7 @@ int main(void)
     test_cas_i20_i21();
     test_epoch_i22();
     test_evidence();
+    test_i8_spread();
     if (failures) {
         fprintf(stderr, "test_meta_apply: %d failure(s)\n", failures);
         return 1;

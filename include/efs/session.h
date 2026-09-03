@@ -9,7 +9,7 @@
  * Pure: one KV, no sockets. Revocation is a barrier (I23): ACTIVE(E) →
  * FENCING(E+1) → FENCE every touched shard → ACTIVE(E+1) only after every
  * ACK. Open-unlinked lifetime is one lease per (FileID, session) (I19, L6).
- * Distributed POSIX locking is step 10 — not here. */
+ * Distributed POSIX locking lives in efs/lock.h (step 10). */
 
 #define EFS_SESSION_BITS     4096
 #define EFS_SESSION_BITMAP   512

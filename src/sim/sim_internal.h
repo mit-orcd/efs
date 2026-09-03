@@ -9,12 +9,16 @@
 #include "efs/opid.h"
 #include "efs/txn.h"
 #include "efs/session.h"
+#include "efs/lock.h"
 
 /* Shared sim layout. Not a public header. */
 
 #define SIM_MAX_EV 128
 #define SIM_CMD_SESSION 9
 #define SIM_CMD_EPOCH   10
+#define SIM_CMD_DIR     11
+#define SIM_CMD_LOCK    12
+#define SIM_LOCKQ       16
 
 enum {
     EV_CREATE = 1,
@@ -47,6 +51,14 @@ struct sim_ev {
     uint64_t content_epoch;
     uint32_t retry;
     uint8_t cas_explicit;
+};
+
+struct sim_lock_wait {
+    uint8_t used;
+    uint8_t client;
+    uint64_t seq;
+    int last_rc;
+    struct efs_lock_req req;
 };
 
 struct sim_server {
@@ -97,6 +109,8 @@ struct efs_sim {
     struct efs_txid txn_id;
     struct efs_txn_parts txn_parts;
     int txn_live;
+    uint64_t lockq_seq;
+    struct sim_lock_wait lockq[SIM_LOCKQ];
 };
 
 int sim_enqueue(struct efs_sim *sim, struct sim_ev *in);
@@ -152,6 +166,15 @@ int sim_txn_mkdir_until(struct efs_sim *sim, int client, efs_ino_t parent,
 int sim_txn_finish(struct efs_sim *sim, const struct efs_txid *t, int commit);
 int sim_txn_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,
                    struct efs_meta_dentry *out);
+
+int sim_ns_try(struct sim_server *s, uint8_t group, const uint8_t *cmd,
+               uint32_t clen, uint64_t index);
+int sim_dir_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
+                  uint32_t clen, uint64_t index);
+int sim_lock_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
+                   uint32_t clen, uint64_t index);
+int sim_lock_fence(struct efs_sim *sim, const uint8_t *uuid, uint32_t epoch);
+int sim_lock_wake(struct efs_sim *sim);
 
 static inline uint8_t sim_shard_group(uint32_t shard)
 {

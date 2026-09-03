@@ -174,6 +174,17 @@ files), and I25, plus rejection of duplicate-node / wrong-profile evidence.
 Not in this step: multi-chunk I24, truncate range-delete, O_APPEND, degraded
 `u` / profile-cutover barriers. Production `efsd` is unchanged.
 
+**Step 10 in-sim (gated).** A directory moves LOCAL → SPLITTING(e) → HASHED(e).
+During SPLITTING the hashed side wins: a tombstone is ENOENT and the
+migrator never resurrects it (I8). CREATE co-locates the file inode with
+the dentry shard. POSIX locks are a pure SM over KV: classic+OFD `fcntl`
+share one conflict domain, `flock` is independent; conflict → AGAIN, wait
+FIFO, same-inode cycle → DEADLK, cap → NOLCK. A session fence dequeues
+waiters as STALE and never grants them. `test_sim`, `test_lock`, and
+`test_meta_apply` gate I8 and those lock properties. Not in this step:
+hashed RMDIR/`dentry_seq`, directory-rename ancestry, `utimens` dir fence,
+pressure-based spread, partial-unlock split, production `efsd` wiring.
+
 ## Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove

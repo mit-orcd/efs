@@ -1203,16 +1203,15 @@ sends you to — not the whole spec.
 
 ### 1. The task right now
 
-> **Architecture migration §10, step 10:** directory layout-epoch spread
-> (§7.4) + distributed locking (§7.6).
-> [architecture.md §10](#architecture) · [protocols/directory.md](protocols/directory.md) ·
-> [protocols/sessions.md](protocols/sessions.md)
+> **Architecture migration §10, step 11:** delete the old snapshot / root-2PC machinery.
+> [architecture.md §10](#architecture)
 >
-> Step 9 is in: FileID-scoped unique candidate generations, CAS publication
-> (chunk map + lane MAX in one batch), durability-evidence checks, and
-> content-epoch fencing in the simulator (`test_sim` / `test_meta_apply`).
-> Production `efsd` still uses the in-memory table. Do not skip ahead. If a
-> decision is missing, stop and ask.
+> Step 10 is in: directory layout-epoch spread (LOCAL→SPLITTING→HASHED, I8
+> tombstone) and distributed POSIX locking (fcntl/flock domains, wait FIFO,
+> fence reclaim, same-inode EDEADLK, ENOLCK) in the simulator
+> (`test_sim` / `test_lock` / `test_meta_apply`). Production `efsd` still
+> uses the in-memory table. Do not skip ahead. If a decision is missing,
+> stop and ask.
 
 **Rule for picking the next one after that:** the order is
 [architecture.md](#architecture) §10, step by step. If a step looks like
@@ -3908,6 +3907,17 @@ is rejected; data-target PUT is not (I22/I23). `test_sim` and
 files), and I25, plus rejection of duplicate-node / wrong-profile evidence.
 Not in this step: multi-chunk I24, truncate range-delete, O_APPEND, degraded
 `u` / profile-cutover barriers. Production `efsd` is unchanged.
+
+**Step 10 in-sim (gated).** A directory moves LOCAL → SPLITTING(e) → HASHED(e).
+During SPLITTING the hashed side wins: a tombstone is ENOENT and the
+migrator never resurrects it (I8). CREATE co-locates the file inode with
+the dentry shard. POSIX locks are a pure SM over KV: classic+OFD `fcntl`
+share one conflict domain, `flock` is independent; conflict → AGAIN, wait
+FIFO, same-inode cycle → DEADLK, cap → NOLCK. A session fence dequeues
+waiters as STALE and never grants them. `test_sim`, `test_lock`, and
+`test_meta_apply` gate I8 and those lock properties. Not in this step:
+hashed RMDIR/`dentry_seq`, directory-rename ancestry, `utimens` dir fence,
+pressure-based spread, partial-unlock split, production `efsd` wiring.
 
 ### Shortening the code → signal cycle
 

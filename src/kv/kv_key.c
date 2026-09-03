@@ -45,6 +45,25 @@ uint32_t efs_kv_lane_shard(efs_ino_t ino, uint8_t lane)
     return (ish + (uint32_t)lane * stride) & EFS_KV_SHARD_MASK;
 }
 
+uint8_t efs_kv_dir_lane(const char *name)
+{
+    uint32_t h = 2166136261u;
+    size_t i, n = name ? strlen(name) : 0;
+
+    for (i = 0; i < n; i++) {
+        h ^= (uint8_t)name[i];
+        h *= 16777619u;
+    }
+    return (uint8_t)(h % 64u);
+}
+
+uint32_t efs_kv_dentry_shard(efs_ino_t parent, const char *name, uint8_t layout)
+{
+    if (layout == 0)
+        return efs_kv_inode_shard(parent);
+    return efs_kv_lane_shard(parent, efs_kv_dir_lane(name));
+}
+
 uint32_t efs_kv_session_shard(const uint8_t uuid[EFS_OPID_UUID_LEN])
 {
     uint32_t h = 2166136261u;
@@ -332,6 +351,62 @@ int efs_kv_key_lease_prefix(uint32_t shard, efs_ino_t ino, uint64_t gen,
 int efs_kv_key_lease_shard_prefix(uint32_t shard, uint8_t *out, uint32_t *len)
 {
     return start(out, len, shard, EFS_KV_KIND_LEASE, 0, EFS_KV_KEY_MAX);
+}
+
+int efs_kv_key_lock(uint32_t shard, efs_ino_t ino, uint64_t gen, uint8_t domain,
+                    uint64_t lo, uint64_t hi, uint8_t owner_kind,
+                    uint64_t owner_id, const uint8_t uuid[EFS_OPID_UUID_LEN],
+                    uint32_t epoch, uint8_t *out, uint32_t *len)
+{
+    int rc;
+
+    if (!uuid)
+        return EFS_ERR_INVAL;
+    rc = start(out, len, shard, EFS_KV_KIND_LOCK,
+               8 + 8 + 1 + 8 + 8 + 1 + 8 + EFS_OPID_UUID_LEN + 4,
+               EFS_KV_KEY_MAX);
+    if (rc != EFS_OK)
+        return rc;
+    be64(out + 3, ino);
+    be64(out + 11, gen);
+    out[19] = domain;
+    be64(out + 20, lo);
+    be64(out + 28, hi);
+    out[36] = owner_kind;
+    be64(out + 37, owner_id);
+    memcpy(out + 45, uuid, EFS_OPID_UUID_LEN);
+    be32(out + 45 + EFS_OPID_UUID_LEN, epoch);
+    return EFS_OK;
+}
+
+int efs_kv_key_lock_prefix(uint32_t shard, efs_ino_t ino, uint64_t gen,
+                           uint8_t domain, uint8_t *out, uint32_t *len)
+{
+    int rc = start(out, len, shard, EFS_KV_KIND_LOCK, 8 + 8 + 1, EFS_KV_KEY_MAX);
+
+    if (rc != EFS_OK)
+        return rc;
+    be64(out + 3, ino);
+    be64(out + 11, gen);
+    out[19] = domain;
+    return EFS_OK;
+}
+
+int efs_kv_key_lock_file_prefix(uint32_t shard, efs_ino_t ino, uint64_t gen,
+                                uint8_t *out, uint32_t *len)
+{
+    int rc = start(out, len, shard, EFS_KV_KIND_LOCK, 8 + 8, EFS_KV_KEY_MAX);
+
+    if (rc != EFS_OK)
+        return rc;
+    be64(out + 3, ino);
+    be64(out + 11, gen);
+    return EFS_OK;
+}
+
+int efs_kv_key_lock_shard_prefix(uint32_t shard, uint8_t *out, uint32_t *len)
+{
+    return start(out, len, shard, EFS_KV_KIND_LOCK, 0, EFS_KV_KEY_MAX);
 }
 
 int efs_kv_key_unwrap(const uint8_t *wrapk, uint32_t wlen, uint8_t *orig,

@@ -31,6 +31,8 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
               src/meta/meta_apply.c \
               src/meta/txn.c \
               src/meta/session.c \
+              src/meta/lock.c \
+              src/meta/dir_layout.c \
               src/sim/opid.c \
               src/raft/raft.c \
               src/raft/raft_mem.c \
@@ -56,8 +58,8 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
-TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c tests/test_dir_stats.c tests/test_ino_path.c tests/test_meta_slot.c tests/test_add_storage.c tests/test_meta_cap.c tests/test_meta_v6.c tests/test_rdma_xprt.c tests/test_drop_chunks.c tests/test_wire.c tests/test_data.c tests/test_kv.c tests/test_meta_apply.c tests/test_raft.c tests/test_sim.c tests/test_txn.c tests/test_session.c
-TEST_BINS = tests/test_erasure tests/test_placement tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports tests/test_dir_stats tests/test_ino_path tests/test_meta_slot tests/test_add_storage tests/test_meta_cap tests/test_meta_v6 tests/test_rdma_xprt tests/test_drop_chunks tests/test_wire tests/test_data tests/test_kv tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session
+TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_integration.c tests/test_quota.c tests/test_migrate.c tests/test_directio.c tests/test_rejoin.c tests/test_query.c tests/test_list_exports.c tests/test_dir_stats.c tests/test_ino_path.c tests/test_meta_slot.c tests/test_add_storage.c tests/test_meta_cap.c tests/test_meta_v6.c tests/test_rdma_xprt.c tests/test_drop_chunks.c tests/test_wire.c tests/test_data.c tests/test_kv.c tests/test_meta_apply.c tests/test_raft.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c
+TEST_BINS = tests/test_erasure tests/test_placement tests/test_integration tests/test_quota tests/test_migrate tests/test_directio tests/test_rejoin tests/test_query tests/test_list_exports tests/test_dir_stats tests/test_ino_path tests/test_meta_slot tests/test_add_storage tests/test_meta_cap tests/test_meta_v6 tests/test_rdma_xprt tests/test_drop_chunks tests/test_wire tests/test_data tests/test_kv tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session tests/test_lock
 
 SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/store_nvme.c \
               src/server/handler.c \
@@ -106,6 +108,7 @@ test: all
 	./tests/test_sim
 	./tests/test_txn
 	./tests/test_session
+	./tests/test_lock
 	./tests/test_erasure
 	./tests/test_placement
 	./tests/test_integration
@@ -178,8 +181,14 @@ src/sim/sim_txn.o: src/sim/sim_txn.c src/sim/sim_internal.h include/efs/sim.h in
 src/sim/sim_sess.o: src/sim/sim_sess.c src/sim/sim_internal.h include/efs/sim.h include/efs/session.h include/efs/kv_key.h
 	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/sim -c -o $@ $<
 
-tests/test_sim: tests/test_sim.c src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_sess.o $(LIB)
-	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ tests/test_sim.c src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_sess.o $(LIB) $(LDFLAGS)
+src/sim/sim_dir.o: src/sim/sim_dir.c src/sim/sim_internal.h include/efs/sim.h include/efs/dir_layout.h include/efs/kv_key.h
+	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/sim -c -o $@ $<
+
+src/sim/sim_lock.o: src/sim/sim_lock.c src/sim/sim_internal.h include/efs/sim.h include/efs/lock.h include/efs/kv_key.h
+	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/sim -c -o $@ $<
+
+tests/test_sim: tests/test_sim.c src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ tests/test_sim.c src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o $(LIB) $(LDFLAGS)
 
 %: %.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
@@ -190,7 +199,7 @@ blake3-bench: $(BLAKE3_OBJS) FORCE
 
 clean:
 	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(MGMT_OBJ) $(QUERY_OBJ)
-	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_sess.o src/sim/opid.o
+	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query blake3-bench
 	rm -f $(TEST_BINS)
 	rm -f .build_id.stamp

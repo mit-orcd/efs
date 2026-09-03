@@ -1,5 +1,6 @@
 /* Isolated ordered-KV tests. No sockets, no cluster. */
 #include "efs/kv.h"
+#include "efs/kv_key.h"
 #include "efs/common.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -145,10 +146,35 @@ static void test_batch_and_prefix(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_dir_lanes(void)
+{
+    uint32_t seen[64];
+    uint8_t lane;
+    efs_ino_t ino = 1;
+    int i, n = 0;
+
+    memset(seen, 0xff, sizeof(seen));
+    for (lane = 0; lane < 64; lane++) {
+        uint32_t sh = efs_kv_lane_shard(ino, lane);
+        for (i = 0; i < n; i++) {
+            if (seen[i] == sh)
+                break;
+        }
+        CHECK(i == n, "64 distinct dir/file lanes");
+        if (i == n && n < 64)
+            seen[n++] = sh;
+    }
+    CHECK(efs_kv_dentry_shard(ino, "x", 0) == efs_kv_inode_shard(ino), "LOCAL");
+    CHECK(efs_kv_dentry_shard(ino, "x", 2) ==
+              efs_kv_lane_shard(ino, efs_kv_dir_lane("x")),
+          "HASHED");
+}
+
 int main(void)
 {
     test_mem_kv();
     test_batch_and_prefix();
+    test_dir_lanes();
     if (failures) {
         fprintf(stderr, "test_kv: %d failure(s)\n", failures);
         return 1;

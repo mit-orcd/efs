@@ -6,10 +6,10 @@
 #include "efs/opid.h"
 
 /* Applied-state SM over the ordered KV (architecture.md §5 / §10 step 3).
- * CREATE file = one atomic batch {dentry, inode, alloc} on the parent shard
- * (co-location: inode_shard(new) = inode_shard(parent)). LOOKUP reads the
- * dentry projection. A dentry whose inode row cannot be resolved is I9
- * (EFS_ERR_IO), never a fake absence. */
+ * CREATE file = one atomic batch {dentry, inode, alloc} on the dentry
+ * shard (LOCAL: parent shard; SPLITTING/HASHED: hashed 64-lane shard).
+ * LOOKUP is layout-aware (hashed-then-local during SPLITTING; I8).
+ * A live dentry whose inode row cannot be resolved is I9 (EFS_ERR_IO). */
 
 #define EFS_META_LANES 64
 #define EFS_META_INO_BYTES   80
@@ -17,6 +17,11 @@
 #define EFS_META_ALLOC_BYTES 8
 
 #define EFS_META_PROFILE_K2F1 1u
+
+#define EFS_META_LAYOUT_LOCAL     0
+#define EFS_META_LAYOUT_SPLITTING 1
+#define EFS_META_LAYOUT_HASHED    2
+#define EFS_META_DENT_TOMBSTONE   0xFFFFFFFFu
 
 struct efs_meta_row {
     efs_ino_t ino;
@@ -27,6 +32,9 @@ struct efs_meta_row {
     uint64_t base_size;
     uint64_t active_lanes;
     uint64_t content_epoch;
+    uint8_t layout;
+    uint64_t layout_epoch;
+    uint64_t used_shards;
 };
 
 struct efs_meta_dentry {
@@ -83,6 +91,7 @@ int efs_meta_apply_check(struct efs_kv *kv);
 int efs_meta_pack_inode(const struct efs_meta_row *r, uint8_t *out, uint32_t cap);
 int efs_meta_pack_dentry(const struct efs_meta_dentry *d, uint8_t *out,
                          uint32_t cap);
+int efs_meta_unpack_dentry(const uint8_t *p, uint32_t n, struct efs_meta_dentry *d);
 int efs_meta_apply_peek_alloc(struct efs_kv *kv, uint32_t shard, efs_ino_t *next);
 
 #endif

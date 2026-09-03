@@ -48,6 +48,8 @@ static int raft2_apply(void *app, uint64_t index, uint64_t term,
                        const uint8_t *cmd, uint32_t clen)
 {
     (void)term;
+    if (sim_ns_try(app, EFS_RAFT_GROUP_SHARD2, cmd, clen, index))
+        return EFS_OK;
     if (cmd && clen && cmd[0] == SIM_CMD_SESSION)
         return sim_sess_apply(app, EFS_RAFT_GROUP_SHARD2, cmd, clen, index);
     return sim_txn_apply(app, EFS_RAFT_GROUP_SHARD2, cmd, clen, index);
@@ -363,41 +365,76 @@ int sim_txn_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,
 {
     uint8_t key[EFS_KV_KEY_MAX], val[EFS_META_DENT_BYTES];
     uint32_t klen = 0, vlen = EFS_META_DENT_BYTES;
-    uint32_t shard;
+    uint32_t psh, hsh;
     struct efs_kv *kv;
+    struct efs_meta_row prow;
     struct coord_ctx ctx;
     int rc;
 
     if (!sim || !name || !out || parent == 0)
         return EFS_ERR_INVAL;
-    shard = efs_kv_inode_shard(parent);
-    rc = sim_raft_read_group(sim, sim_shard_group(shard));
+    psh = efs_kv_inode_shard(parent);
+    rc = sim_raft_read_group(sim, sim_shard_group(psh));
     if (rc != EFS_OK)
         return rc;
-    kv = sim_raft_kv_group(sim, sim_shard_group(shard));
+    kv = sim_raft_kv_group(sim, sim_shard_group(psh));
     if (!kv)
         return EFS_ERR_BUSY;
-    rc = efs_kv_key_dentry(shard, parent, name, key, &klen);
+    rc = efs_meta_apply_get_inode(kv, parent, &prow);
     if (rc != EFS_OK)
         return rc;
     ctx.sim = sim;
+    if (prow.layout == EFS_META_LAYOUT_LOCAL) {
+        rc = efs_kv_key_dentry(psh, parent, name, key, &klen);
+        if (rc != EFS_OK)
+            return rc;
+        vlen = EFS_META_DENT_BYTES;
+        rc = efs_txn_read(kv, key, klen, sim_coord, &ctx, val, &vlen);
+        if (rc != EFS_OK)
+            return rc;
+        goto unpack;
+    }
+    hsh = efs_kv_dentry_shard(parent, name, EFS_META_LAYOUT_HASHED);
+    rc = sim_raft_read_group(sim, sim_shard_group(hsh));
+    if (rc != EFS_OK)
+        return rc;
+    kv = sim_raft_kv_group(sim, sim_shard_group(hsh));
+    if (!kv)
+        return EFS_ERR_BUSY;
+    rc = efs_kv_key_dentry(hsh, parent, name, key, &klen);
+    if (rc != EFS_OK)
+        return rc;
+    vlen = EFS_META_DENT_BYTES;
+    rc = efs_txn_read(kv, key, klen, sim_coord, &ctx, val, &vlen);
+    if (rc == EFS_OK) {
+        rc = efs_meta_unpack_dentry(val, vlen, out);
+        if (rc != EFS_OK)
+            return rc;
+        if (out->type == EFS_META_DENT_TOMBSTONE)
+            return EFS_ERR_NOT_FOUND;
+        return EFS_OK;
+    }
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+    if (prow.layout == EFS_META_LAYOUT_HASHED)
+        return EFS_ERR_NOT_FOUND;
+    rc = sim_raft_read_group(sim, sim_shard_group(psh));
+    if (rc != EFS_OK)
+        return rc;
+    kv = sim_raft_kv_group(sim, sim_shard_group(psh));
+    if (!kv)
+        return EFS_ERR_BUSY;
+    rc = efs_kv_key_dentry(psh, parent, name, key, &klen);
+    if (rc != EFS_OK)
+        return rc;
+    vlen = EFS_META_DENT_BYTES;
     rc = efs_txn_read(kv, key, klen, sim_coord, &ctx, val, &vlen);
     if (rc != EFS_OK)
         return rc;
+unpack:
     if (vlen < EFS_META_DENT_BYTES)
         return EFS_ERR_PROTO;
-    memset(out, 0, sizeof(*out));
-    out->ino = ((uint64_t)val[0] << 56) | ((uint64_t)val[1] << 48) |
-               ((uint64_t)val[2] << 40) | ((uint64_t)val[3] << 32) |
-               ((uint64_t)val[4] << 24) | ((uint64_t)val[5] << 16) |
-               ((uint64_t)val[6] << 8) | (uint64_t)val[7];
-    out->generation = ((uint64_t)val[8] << 56) | ((uint64_t)val[9] << 48) |
-                      ((uint64_t)val[10] << 40) | ((uint64_t)val[11] << 32) |
-                      ((uint64_t)val[12] << 24) | ((uint64_t)val[13] << 16) |
-                      ((uint64_t)val[14] << 8) | (uint64_t)val[15];
-    out->type = ((uint32_t)val[16] << 24) | ((uint32_t)val[17] << 16) |
-                ((uint32_t)val[18] << 8) | (uint32_t)val[19];
-    return EFS_OK;
+    return efs_meta_unpack_dentry(val, vlen, out);
 }
 
 static int read_kv(struct efs_sim *sim, uint32_t shard, struct efs_kv **kv)

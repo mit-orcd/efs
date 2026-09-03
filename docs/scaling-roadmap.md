@@ -166,16 +166,18 @@ transport/storage interfaces.
    3720-line file, not a new design. No behavior change this step. Gate:
    step-4 posix `results/posix/20260902-114722` **196/201, 0 EFS bugs**.
 
-**Phase M complete.** §10 steps 1–9 are in: simulator, op-ID / I16 window,
+**Phase M complete.** §10 steps 1–10 are in: simulator, op-ID / I16 window,
 ordered KV applied state, single-shard Raft SM (`src/raft/`), the simulator
 proving I1–I4 / I10 / ReadIndex, joint-consensus reconfiguration plus a
 control-plane desired-placement group (I18, L8), the cross-shard txn SM
 (`src/meta/txn.c`) with a 2-shard MKDIR in-sim (I17), client sessions +
 fencing (`src/meta/session.c`) with the I23 revocation barrier and I19
-open-unlinked leases, and data-generation publication / fencing (FileID +
-unique candidate CAS, I13/I20/I21/I22/I25 in-sim). Production `efsd` still
-uses the in-memory table. Next is step 10 (directory layout-epoch spread +
-distributed locking). Do not build Raft as new monolith code.
+open-unlinked leases, data-generation publication / fencing (FileID +
+unique candidate CAS, I13/I20/I21/I22/I25 in-sim), and directory
+layout-epoch spread + distributed POSIX locking (I8, lock
+conflict/fence/deadlock in-sim). Production `efsd` still uses the in-memory
+table. Next is step 11 (delete the old snapshot / root-2PC machinery). Do
+not build Raft as new monolith code.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

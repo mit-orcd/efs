@@ -13,16 +13,15 @@ sends you to — not the whole spec.
 
 ## 1. The task right now
 
-> **Architecture migration §10, step 10:** directory layout-epoch spread
-> (§7.4) + distributed locking (§7.6).
-> [architecture.md §10](../architecture.md) · [protocols/directory.md](protocols/directory.md) ·
-> [protocols/sessions.md](protocols/sessions.md)
+> **Architecture migration §10, step 11:** delete the old snapshot / root-2PC machinery.
+> [architecture.md §10](../architecture.md)
 >
-> Step 9 is in: FileID-scoped unique candidate generations, CAS publication
-> (chunk map + lane MAX in one batch), durability-evidence checks, and
-> content-epoch fencing in the simulator (`test_sim` / `test_meta_apply`).
-> Production `efsd` still uses the in-memory table. Do not skip ahead. If a
-> decision is missing, stop and ask.
+> Step 10 is in: directory layout-epoch spread (LOCAL→SPLITTING→HASHED, I8
+> tombstone) and distributed POSIX locking (fcntl/flock domains, wait FIFO,
+> fence reclaim, same-inode EDEADLK, ENOLCK) in the simulator
+> (`test_sim` / `test_lock` / `test_meta_apply`). Production `efsd` still
+> uses the in-memory table. Do not skip ahead. If a decision is missing,
+> stop and ask.
 
 **Rule for picking the next one after that:** the order is
 [architecture.md](../architecture.md) §10, step by step. If a step looks like

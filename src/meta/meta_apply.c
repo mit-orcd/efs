@@ -49,9 +49,10 @@ static void pack_inode(uint8_t *p, const struct efs_meta_row *r)
     be64(p + 32, r->base_size);
     be64(p + 40, r->active_lanes);
     be64(p + 48, r->content_epoch);
-    be64(p + 56, 0); /* mtime_gen */
-    be64(p + 64, 0); /* base_mtime */
-    be64(p + 72, 0); /* base_ctime */
+    p[56] = r->layout;
+    memset(p + 57, 0, 7);
+    be64(p + 64, r->layout_epoch);
+    be64(p + 72, r->used_shards);
 }
 
 static int unpack_inode(const uint8_t *p, uint32_t n, struct efs_meta_row *r)
@@ -67,6 +68,9 @@ static int unpack_inode(const uint8_t *p, uint32_t n, struct efs_meta_row *r)
     r->base_size = rd64(p + 32);
     r->active_lanes = rd64(p + 40);
     r->content_epoch = rd64(p + 48);
+    r->layout = p[56];
+    r->layout_epoch = rd64(p + 64);
+    r->used_shards = rd64(p + 72);
     return EFS_OK;
 }
 
@@ -121,17 +125,13 @@ int efs_meta_apply_get_inode(struct efs_kv *kv, efs_ino_t ino,
     return unpack_inode(val, vlen, out);
 }
 
-int efs_meta_apply_lookup(struct efs_kv *kv, efs_ino_t parent, const char *name,
-                          struct efs_meta_dentry *out)
+static int dent_get(struct efs_kv *kv, uint32_t shard, efs_ino_t parent,
+                    const char *name, struct efs_meta_dentry *out)
 {
     uint8_t key[EFS_KV_KEY_MAX], val[DENT_VAL];
     uint32_t klen = 0, vlen;
-    uint32_t shard;
     int rc;
 
-    if (!kv || !name || !out || parent == 0)
-        return EFS_ERR_INVAL;
-    shard = efs_kv_inode_shard(parent);
     rc = efs_kv_key_dentry(shard, parent, name, key, &klen);
     if (rc != EFS_OK)
         return rc;
@@ -140,6 +140,34 @@ int efs_meta_apply_lookup(struct efs_kv *kv, efs_ino_t parent, const char *name,
     if (rc != EFS_OK)
         return rc;
     return unpack_dentry(val, vlen, out);
+}
+
+int efs_meta_apply_lookup(struct efs_kv *kv, efs_ino_t parent, const char *name,
+                          struct efs_meta_dentry *out)
+{
+    struct efs_meta_row prow;
+    uint32_t hsh;
+    int rc;
+
+    if (!kv || !name || !out || parent == 0)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_inode(kv, parent, &prow);
+    if (rc != EFS_OK)
+        return rc;
+    if (prow.layout == EFS_META_LAYOUT_LOCAL)
+        return dent_get(kv, efs_kv_inode_shard(parent), parent, name, out);
+    hsh = efs_kv_dentry_shard(parent, name, EFS_META_LAYOUT_HASHED);
+    rc = dent_get(kv, hsh, parent, name, out);
+    if (rc == EFS_OK) {
+        if (out->type == EFS_META_DENT_TOMBSTONE)
+            return EFS_ERR_NOT_FOUND;
+        return EFS_OK;
+    }
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+    if (prow.layout == EFS_META_LAYOUT_HASHED)
+        return EFS_ERR_NOT_FOUND;
+    return dent_get(kv, efs_kv_inode_shard(parent), parent, name, out);
 }
 
 int efs_meta_apply_resolve(struct efs_kv *kv, efs_ino_t parent, const char *name,
@@ -273,6 +301,11 @@ int efs_meta_pack_dentry(const struct efs_meta_dentry *d, uint8_t *out,
     return EFS_OK;
 }
 
+int efs_meta_unpack_dentry(const uint8_t *p, uint32_t n, struct efs_meta_dentry *d)
+{
+    return unpack_dentry(p, n, d);
+}
+
 int efs_meta_apply_peek_alloc(struct efs_kv *kv, uint32_t shard, efs_ino_t *next)
 {
     if (!kv || !next)
@@ -293,10 +326,14 @@ static int create_file_batch(struct efs_kv *kv, efs_ino_t parent, uint32_t mode,
     uint8_t v_dent[DENT_VAL], v_ino[INO_VAL], v_alloc[ALLOC_VAL];
     uint8_t v_opid[EFS_OPID_VAL_MAX];
     uint32_t kd = 0, ki = 0, ka = 0, ko = 0, vo = sizeof(v_opid);
-    struct efs_kv_item it[4];
+    struct efs_kv_item it[5];
     uint32_t n = 0, shard;
     efs_ino_t next = 0, ino;
+    uint8_t k_par[EFS_KV_KEY_MAX], v_par[INO_VAL];
+    uint32_t kp = 0;
+    uint64_t bit;
     int rc;
+    int touch_parent = 0;
 
     if (!kv || !name || parent == 0)
         return EFS_ERR_INVAL;
@@ -330,7 +367,7 @@ static int create_file_batch(struct efs_kv *kv, efs_ino_t parent, uint32_t mode,
     if (rc != EFS_ERR_NOT_FOUND)
         return rc;
 
-    shard = efs_kv_inode_shard(parent);
+    shard = efs_kv_dentry_shard(parent, name, parent_row.layout);
     rc = load_alloc(kv, shard, &next);
     if (rc != EFS_OK)
         return rc;
@@ -361,6 +398,18 @@ static int create_file_batch(struct efs_kv *kv, efs_ino_t parent, uint32_t mode,
     if (rc != EFS_OK)
         return rc;
 
+    if (parent_row.layout != EFS_META_LAYOUT_LOCAL) {
+        bit = 1ull << efs_kv_dir_lane(name);
+        if ((parent_row.used_shards & bit) == 0) {
+            parent_row.used_shards |= bit;
+            pack_inode(v_par, &parent_row);
+            rc = efs_kv_key_inode(efs_kv_inode_shard(parent), parent, k_par, &kp);
+            if (rc != EFS_OK)
+                return rc;
+            touch_parent = 1;
+        }
+    }
+
     memset(it, 0, sizeof(it));
     it[n].op = EFS_KV_PUT;
     it[n].key = k_dent;
@@ -380,6 +429,14 @@ static int create_file_batch(struct efs_kv *kv, efs_ino_t parent, uint32_t mode,
     it[n].val = v_alloc;
     it[n].vlen = ALLOC_VAL;
     n++;
+    if (touch_parent) {
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_par;
+        it[n].klen = kp;
+        it[n].val = v_par;
+        it[n].vlen = INO_VAL;
+        n++;
+    }
 
     if (op) {
         memset(&rep, 0, sizeof(rep));
@@ -429,12 +486,13 @@ int efs_meta_apply_create_file_op(struct efs_kv *kv, const struct efs_opid *op,
 
 int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name)
 {
-    struct efs_meta_dentry dent;
-    struct efs_meta_row row;
-    uint8_t k_dent[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX], v_ino[INO_VAL];
-    uint32_t kd = 0, ki = 0, shard;
-    struct efs_kv_item it[2];
-    uint32_t n = 0;
+    struct efs_meta_dentry dent, tomb;
+    struct efs_meta_row row, prow;
+    uint8_t k_loc[EFS_KV_KEY_MAX], k_hash[EFS_KV_KEY_MAX];
+    uint8_t k_ino[EFS_KV_KEY_MAX], v_ino[INO_VAL], v_tomb[DENT_VAL];
+    uint32_t kl = 0, kh = 0, ki = 0;
+    struct efs_kv_item it[4];
+    uint32_t n = 0, psh, hsh;
     int rc, held = 0;
 
     rc = efs_meta_apply_resolve(kv, parent, name, &dent, &row);
@@ -442,15 +500,40 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name)
         return rc;
     if (S_ISDIR(row.mode))
         return EFS_ERR_INVAL;
-    shard = efs_kv_inode_shard(parent);
-    rc = efs_kv_key_dentry(shard, parent, name, k_dent, &kd);
+    rc = efs_meta_apply_get_inode(kv, parent, &prow);
+    if (rc != EFS_OK)
+        return rc;
+    psh = efs_kv_inode_shard(parent);
+    hsh = efs_kv_dentry_shard(parent, name, EFS_META_LAYOUT_HASHED);
+    rc = efs_kv_key_dentry(psh, parent, name, k_loc, &kl);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_dentry(hsh, parent, name, k_hash, &kh);
     if (rc != EFS_OK)
         return rc;
     memset(it, 0, sizeof(it));
-    it[n].op = EFS_KV_DEL;
-    it[n].key = k_dent;
-    it[n].klen = kd;
-    n++;
+    if (prow.layout != EFS_META_LAYOUT_HASHED) {
+        it[n].op = EFS_KV_DEL;
+        it[n].key = k_loc;
+        it[n].klen = kl;
+        n++;
+    }
+    if (prow.layout == EFS_META_LAYOUT_SPLITTING) {
+        memset(&tomb, 0, sizeof(tomb));
+        tomb.generation = prow.layout_epoch;
+        tomb.type = EFS_META_DENT_TOMBSTONE;
+        pack_dentry(v_tomb, &tomb);
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_hash;
+        it[n].klen = kh;
+        it[n].val = v_tomb;
+        it[n].vlen = DENT_VAL;
+        n++;
+    } else if (prow.layout == EFS_META_LAYOUT_HASHED) {
+        it[n].op = EFS_KV_DEL;
+        it[n].key = k_hash;
+        it[n].klen = kh;
+        n++;
+    }
     if (row.nlink <= 1) {
         held = efs_lease_any(kv, row.ino, row.generation);
         if (held < 0)
@@ -459,7 +542,6 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name)
         if (rc != EFS_OK)
             return rc;
         if (held) {
-            /* I19: last link with a live open lease keeps the inode at nlink=0. */
             row.nlink = 0;
             pack_inode(v_ino, &row);
             it[n].op = EFS_KV_PUT;
@@ -801,6 +883,8 @@ static int check_cb(void *user, const uint8_t *key, uint32_t klen,
         c->rc = rc;
         return 1;
     }
+    if (d.type == EFS_META_DENT_TOMBSTONE || d.ino == 0)
+        return 0;
     rc = efs_meta_apply_get_inode(c->kv, d.ino, &r);
     if (rc == EFS_ERR_NOT_FOUND) {
         c->rc = EFS_ERR_IO; /* I9 */

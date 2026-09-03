@@ -5,6 +5,8 @@
 #include "efs/common.h"
 #include "efs/kv_key.h"
 #include "efs/txn.h"
+#include "efs/lock.h"
+#include "efs/meta_apply.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -650,6 +652,114 @@ static void test_i22_epoch(void)
     efs_sim_free(s);
 }
 
+static const char *hashed_nm(efs_ino_t parent)
+{
+    static char buf[16];
+    int i;
+
+    for (i = 0; i < 4096; i++) {
+        snprintf(buf, sizeof(buf), "h%d", i);
+        if (efs_kv_dir_lane(buf) != 0 &&
+            efs_kv_dentry_shard(parent, buf, EFS_META_LAYOUT_HASHED) !=
+                efs_kv_inode_shard(parent))
+            return buf;
+    }
+    return "h1";
+}
+
+static void test_i8_spread(void)
+{
+    struct efs_sim *s = mk(91);
+    efs_ino_t foo = 0, bar = 0, g = 0;
+    uint8_t layout = 99;
+    const char *nm;
+    int rc;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "foo", &foo) ==
+              EFS_OK,
+          "foo");
+    CHECK(efs_sim_dir_begin_split(s, EFS_ROOT_INO) == EFS_OK, "split");
+    CHECK(efs_sim_dir_layout(s, EFS_ROOT_INO, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_SPLITTING,
+          "SPLITTING");
+    CHECK(efs_sim_unlink(s, 0, EFS_ROOT_INO, "foo") == EFS_OK, "unlink");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "foo", &g) == EFS_ERR_NOT_FOUND,
+          "I8");
+    nm = hashed_nm(EFS_ROOT_INO);
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, nm, &bar) ==
+              EFS_OK &&
+              bar,
+          "hashed create");
+    CHECK((bar & 0xFFF) ==
+              efs_kv_dentry_shard(EFS_ROOT_INO, nm, EFS_META_LAYOUT_HASHED),
+          "dentry shard");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, nm, &g) == EFS_OK && g == bar,
+          "lookup");
+    while ((rc = efs_sim_dir_migrate(s, EFS_ROOT_INO)) == EFS_OK)
+        ;
+    CHECK(rc == EFS_ERR_NOT_FOUND, "migrated");
+    CHECK(efs_sim_dir_finish_hashed(s, EFS_ROOT_INO) == EFS_OK, "HASHED");
+    CHECK(efs_sim_lookup(s, 1, EFS_ROOT_INO, nm, &g) == EFS_OK && g == bar,
+          "peer");
+    efs_sim_free(s);
+}
+
+static void test_lock_conflict_fence(void)
+{
+    struct efs_sim *s = mk(93);
+    efs_ino_t ino = 0;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "lk", &ino) ==
+              EFS_OK,
+          "create");
+    CHECK(efs_sim_lock(s, 0, ino, EFS_LOCK_FCNTL, EFS_LOCK_EX, 0, 10,
+                       EFS_LOCK_PROC, 1) == EFS_OK,
+          "A");
+    CHECK(efs_sim_lock(s, 1, ino, EFS_LOCK_FCNTL, EFS_LOCK_EX, 0, 10,
+                       EFS_LOCK_PROC, 2) == EFS_ERR_AGAIN,
+          "conflict");
+    CHECK(efs_sim_lock(s, 1, ino, EFS_LOCK_FLOCK, EFS_LOCK_EX, 0, ~(uint64_t)0,
+                       EFS_LOCK_OFD, 9) == EFS_OK,
+          "flock");
+    CHECK(efs_sim_lockw(s, 1, ino, EFS_LOCK_FCNTL, EFS_LOCK_EX, 0, 10,
+                        EFS_LOCK_PROC, 2) == EFS_ERR_BUSY,
+          "queued");
+    CHECK(efs_sim_session_fence(s, 1) == EFS_OK, "fence B");
+    CHECK(efs_sim_unlock(s, 0, ino, EFS_LOCK_FCNTL, 0, 10, EFS_LOCK_PROC, 1) ==
+              EFS_OK,
+          "unlock");
+    CHECK(efs_sim_lock(s, 0, ino, EFS_LOCK_FCNTL, EFS_LOCK_EX, 0, 10,
+                       EFS_LOCK_PROC, 1) == EFS_OK,
+          "A regrant; fenced waiter never granted");
+    efs_sim_free(s);
+}
+
+static void test_lock_deadlock(void)
+{
+    struct efs_sim *s = mk(97);
+    efs_ino_t ino = 0;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "dl", &ino) ==
+              EFS_OK,
+          "create");
+    CHECK(efs_sim_lock(s, 0, ino, EFS_LOCK_FCNTL, EFS_LOCK_EX, 0, 10,
+                       EFS_LOCK_PROC, 1) == EFS_OK,
+          "A");
+    CHECK(efs_sim_lock(s, 1, ino, EFS_LOCK_FCNTL, EFS_LOCK_EX, 10, 20,
+                       EFS_LOCK_PROC, 2) == EFS_OK,
+          "B");
+    CHECK(efs_sim_lockw(s, 0, ino, EFS_LOCK_FCNTL, EFS_LOCK_EX, 10, 20,
+                        EFS_LOCK_PROC, 1) == EFS_ERR_BUSY,
+          "A waits");
+    CHECK(efs_sim_lockw(s, 1, ino, EFS_LOCK_FCNTL, EFS_LOCK_EX, 0, 10,
+                        EFS_LOCK_PROC, 2) == EFS_ERR_DEADLK,
+          "EDEADLK");
+    efs_sim_free(s);
+}
+
 int main(void)
 {
     test_replay();
@@ -676,6 +786,9 @@ int main(void)
     test_i20_cas();
     test_i13_fileid();
     test_i22_epoch();
+    test_i8_spread();
+    test_lock_conflict_fence();
+    test_lock_deadlock();
     if (failures) {
         fprintf(stderr, "test_sim: %d failure(s)\n", failures);
         return 1;

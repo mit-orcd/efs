@@ -3,6 +3,7 @@
 #include "efs/session.h"
 #include "efs/kv_key.h"
 #include "efs/meta_apply.h"
+#include "efs/lock.h"
 #include <string.h>
 
 #define SESS_CREATE    1
@@ -141,6 +142,10 @@ int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         epoch = rd32(cmd + 18);
         shard = rd32(cmd + 22);
         rc = efs_lease_drop_session(s->disk, shard, uuid, epoch);
+        if (rc == EFS_OK)
+            rc = efs_lock_drop_session(s->disk, shard, uuid, epoch);
+        if (rc == EFS_OK && s->sim)
+            sim_lock_fence(s->sim, uuid, epoch);
         break;
     case SESS_RECLAIM:
         if (clen < 26)
