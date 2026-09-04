@@ -1492,6 +1492,77 @@ static void test_append_reserve(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_link_nlink(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t a = 0;
+    struct efs_meta_dentry dent;
+    struct efs_meta_row r;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "a",
+                                     &a) == EFS_OK &&
+              a,
+          "create");
+    CHECK(efs_meta_apply_link(kv, EFS_ROOT_INO, "a", EFS_ROOT_INO, "b", T0 + 1) ==
+              EFS_OK,
+          "link");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "b", &dent) == EFS_OK &&
+              dent.ino == a,
+          "alias");
+    CHECK(efs_meta_apply_get_inode(kv, a, &r) == EFS_OK && r.nlink == 2,
+          "nlink 2");
+    CHECK(efs_meta_apply_link(kv, EFS_ROOT_INO, "a", EFS_ROOT_INO, "b", T0 + 1) ==
+              EFS_ERR_EXIST,
+          "dup dest");
+    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "a", T0 + 2) == EFS_OK,
+          "unlink src");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "a", &dent) == EFS_ERR_NOT_FOUND,
+          "src gone");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "b", &dent) == EFS_OK &&
+              dent.ino == a,
+          "alias lives");
+    CHECK(efs_meta_apply_get_inode(kv, a, &r) == EFS_OK && r.nlink == 1,
+          "nlink 1");
+    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "b", T0 + 3) == EFS_OK,
+          "last link");
+    CHECK(efs_meta_apply_get_inode(kv, a, &r) == EFS_ERR_NOT_FOUND, "inode gone");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
+static void test_rmdir_rename(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t f = 0;
+    struct efs_meta_dentry dent;
+    struct efs_meta_row r;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "f",
+                                     &f) == EFS_OK,
+          "file");
+    CHECK(efs_meta_apply_rmdir(kv, EFS_ROOT_INO, "f", T0) == EFS_ERR_INVAL,
+          "rmdir file");
+    CHECK(efs_meta_apply_rename(kv, EFS_ROOT_INO, "f", EFS_ROOT_INO, "g", T0 + 1) ==
+              EFS_OK,
+          "rename");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "f", &dent) == EFS_ERR_NOT_FOUND,
+          "old gone");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "g", &dent) == EFS_OK &&
+              dent.ino == f,
+          "new name");
+    CHECK(efs_meta_apply_get_inode(kv, f, &r) == EFS_OK && r.parent == EFS_ROOT_INO,
+          "parent");
+    CHECK(efs_meta_apply_rename(kv, EFS_ROOT_INO, "g", EFS_ROOT_INO, "g", T0 + 1) ==
+              EFS_OK,
+          "self");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     test_create_lookup_unlink();
@@ -1514,6 +1585,8 @@ int main(void)
     test_utimens_fence();
     test_truncate_range_del();
     test_append_reserve();
+    test_link_nlink();
+    test_rmdir_rename();
     test_lookup_path();
     if (failures) {
         fprintf(stderr, "test_meta_apply: %d failure(s)\n", failures);

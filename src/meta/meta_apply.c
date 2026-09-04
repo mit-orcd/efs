@@ -133,6 +133,29 @@ static int dir_lane_stamp(struct efs_kv *kv, const struct efs_meta_row *dir,
     return EFS_OK;
 }
 
+/* Per-(dir, dentry-shard) emptiness witness. Every insert (and every other
+ * mutation of that shard's names) bumps it so an RMDIR that observed empty
+ * cannot commit across a concurrent create (directory.md). */
+static int dseq_bump(struct efs_kv *kv, uint32_t shard, efs_ino_t dir,
+                     uint8_t lane, uint8_t *k, uint32_t *kl, uint8_t *v)
+{
+    uint8_t buf[8];
+    uint32_t n = 8;
+    uint64_t seq = 0;
+    int rc;
+
+    rc = efs_kv_key_dseq(shard, dir, lane, k, kl);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, k, *kl, buf, &n);
+    if (rc == EFS_OK && n >= 8)
+        seq = rd64(buf);
+    else if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND)
+        return rc;
+    be64(v, seq + 1);
+    return EFS_OK;
+}
+
 static void pack_inode(uint8_t *p, const struct efs_meta_row *r)
 {
     be64(p + 0, r->ino);
@@ -507,12 +530,14 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     uint8_t v_dent[DENT_VAL], v_ino[INO_VAL], v_alloc[ALLOC_VAL];
     uint8_t v_opid[EFS_OPID_VAL_MAX];
     uint32_t kd = 0, ki = 0, ka = 0, ko = 0, vo = sizeof(v_opid);
-    struct efs_kv_item it[6];
+    struct efs_kv_item it[8];
     uint32_t n = 0, shard;
     efs_ino_t next = 0, ino;
     uint8_t k_par[EFS_KV_KEY_MAX], v_par[INO_VAL];
     uint8_t k_ln[EFS_KV_KEY_MAX], v_ln[LANE_VAL];
-    uint32_t kp = 0, kln = 0;
+    uint8_t k_dseq[EFS_KV_KEY_MAX], v_dseq[8];
+    uint32_t kp = 0, kln = 0, ks = 0;
+    uint8_t dseq_lane;
     uint64_t bit;
     int rc;
     int touch_parent = 0;
@@ -649,6 +674,18 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         it[n].vlen = LANE_VAL;
         n++;
     }
+    dseq_lane = parent_row.layout == EFS_META_LAYOUT_LOCAL
+                    ? 0
+                    : efs_kv_dir_lane(name);
+    rc = dseq_bump(kv, shard, parent, dseq_lane, k_dseq, &ks, v_dseq);
+    if (rc != EFS_OK)
+        return rc;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_dseq;
+    it[n].klen = ks;
+    it[n].val = v_dseq;
+    it[n].vlen = 8;
+    n++;
 
     if (op) {
         memset(&rep, 0, sizeof(rep));
@@ -708,11 +745,14 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
     uint8_t k_par[EFS_KV_KEY_MAX], v_par[INO_VAL];
     uint8_t k_ln[EFS_KV_KEY_MAX], v_ln[LANE_VAL];
     uint32_t kl = 0, kh = 0, ki = 0, kp = 0, kln = 0;
-    struct efs_kv_item it[6];
+    struct efs_kv_item it[8];
     uint32_t n = 0, psh, hsh;
     int rc, held = 0;
     int touch_parent = 0;
     int stamp_lane = 0;
+    uint8_t k_dseq[EFS_KV_KEY_MAX], v_dseq[8];
+    uint32_t ks = 0;
+    uint8_t dseq_lane;
 
     rc = efs_meta_apply_resolve(kv, parent, name, &dent, &row);
     if (rc != EFS_OK)
@@ -782,6 +822,20 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
             it[n].klen = ki;
             n++;
         }
+    } else {
+        /* Surviving links keep the inode; POSIX updates its ctime. */
+        row.nlink--;
+        row.base_ctime = max_u64(row.base_ctime, now);
+        rc = efs_kv_key_inode(efs_kv_inode_shard(row.ino), row.ino, k_ino, &ki);
+        if (rc != EFS_OK)
+            return rc;
+        pack_inode(v_ino, &row);
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_ino;
+        it[n].klen = ki;
+        it[n].val = v_ino;
+        it[n].vlen = INO_VAL;
+        n++;
     }
     /* Same split as create: LOCAL times ride the parent row; spread times
      * live on the dentry shard's dir lane so unlink does not re-serialize
@@ -814,6 +868,377 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
         it[n].klen = kln;
         it[n].val = v_ln;
         it[n].vlen = LANE_VAL;
+        n++;
+    }
+    dseq_lane = prow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(name);
+    rc = dseq_bump(kv, efs_kv_dentry_shard(parent, name, prow.layout), parent,
+                   dseq_lane, k_dseq, &ks, v_dseq);
+    if (rc != EFS_OK)
+        return rc;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_dseq;
+    it[n].klen = ks;
+    it[n].val = v_dseq;
+    it[n].vlen = 8;
+    n++;
+    return efs_kv_batch(kv, it, n);
+}
+
+int efs_meta_apply_link(struct efs_kv *kv, efs_ino_t src_parent, const char *src_name,
+                        efs_ino_t dst_parent, const char *dst_name, uint64_t now)
+{
+    struct efs_meta_dentry src, ndent;
+    struct efs_meta_row row, dprow;
+    uint8_t k_dent[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
+    uint8_t k_par[EFS_KV_KEY_MAX], k_ln[EFS_KV_KEY_MAX];
+    uint8_t k_dseq[EFS_KV_KEY_MAX];
+    uint8_t v_dent[DENT_VAL], v_ino[INO_VAL], v_par[INO_VAL];
+    uint8_t v_ln[LANE_VAL], v_dseq[8];
+    uint32_t kd = 0, ki = 0, kp = 0, kln = 0, ks = 0;
+    struct efs_kv_item it[8];
+    uint32_t n = 0, dsh;
+    uint64_t bit;
+    uint8_t dseq_lane;
+    int rc;
+    int touch_parent = 0;
+    int stamp_lane = 0;
+
+    if (!kv || !src_name || !dst_name || src_parent == 0 || dst_parent == 0)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_resolve(kv, src_parent, src_name, &src, &row);
+    if (rc != EFS_OK)
+        return rc;
+    if (S_ISDIR(row.mode))
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_inode(kv, dst_parent, &dprow);
+    if (rc != EFS_OK)
+        return rc;
+    if (!S_ISDIR(dprow.mode))
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_lookup(kv, dst_parent, dst_name, &ndent);
+    if (rc == EFS_OK)
+        return EFS_ERR_EXIST;
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+
+    dsh = efs_kv_dentry_shard(dst_parent, dst_name, dprow.layout);
+    memset(&ndent, 0, sizeof(ndent));
+    ndent.ino = row.ino;
+    ndent.generation = row.generation;
+    ndent.type = row.mode & S_IFMT;
+    pack_dentry(v_dent, &ndent);
+    row.nlink++;
+    row.base_ctime = max_u64(row.base_ctime, now);
+    pack_inode(v_ino, &row);
+
+    rc = efs_kv_key_dentry(dsh, dst_parent, dst_name, k_dent, &kd);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_inode(efs_kv_inode_shard(row.ino), row.ino, k_ino, &ki);
+    if (rc != EFS_OK)
+        return rc;
+
+    if (dprow.layout == EFS_META_LAYOUT_LOCAL) {
+        dprow.base_mtime = max_u64(dprow.base_mtime, now);
+        dprow.base_ctime = max_u64(dprow.base_ctime, now);
+        touch_parent = 1;
+    } else {
+        bit = 1ull << efs_kv_dir_lane(dst_name);
+        if ((dprow.used_shards & bit) == 0) {
+            dprow.used_shards |= bit;
+            touch_parent = 1;
+        }
+        rc = dir_lane_stamp(kv, &dprow, dst_name, now, k_ln, &kln, v_ln);
+        if (rc != EFS_OK)
+            return rc;
+        stamp_lane = 1;
+    }
+    if (touch_parent) {
+        pack_inode(v_par, &dprow);
+        rc = efs_kv_key_inode(efs_kv_inode_shard(dst_parent), dst_parent, k_par,
+                              &kp);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    dseq_lane = dprow.layout == EFS_META_LAYOUT_LOCAL ? 0
+                                                     : efs_kv_dir_lane(dst_name);
+    rc = dseq_bump(kv, dsh, dst_parent, dseq_lane, k_dseq, &ks, v_dseq);
+    if (rc != EFS_OK)
+        return rc;
+
+    memset(it, 0, sizeof(it));
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_dent;
+    it[n].klen = kd;
+    it[n].val = v_dent;
+    it[n].vlen = DENT_VAL;
+    n++;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_ino;
+    it[n].klen = ki;
+    it[n].val = v_ino;
+    it[n].vlen = INO_VAL;
+    n++;
+    if (touch_parent) {
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_par;
+        it[n].klen = kp;
+        it[n].val = v_par;
+        it[n].vlen = INO_VAL;
+        n++;
+    }
+    if (stamp_lane) {
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_ln;
+        it[n].klen = kln;
+        it[n].val = v_ln;
+        it[n].vlen = LANE_VAL;
+        n++;
+    }
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_dseq;
+    it[n].klen = ks;
+    it[n].val = v_dseq;
+    it[n].vlen = 8;
+    n++;
+    return efs_kv_batch(kv, it, n);
+}
+
+/* Drop one name from a directory into `it`, matching unlink's LOCAL /
+ * SPLITTING / HASHED rules. `k_loc`/`k_hash`/`v_tomb` must outlive the batch. */
+static int dentry_drop_items(struct efs_kv *kv, const struct efs_meta_row *prow,
+                             efs_ino_t parent, const char *name,
+                             uint8_t *k_loc, uint32_t *kl, uint8_t *k_hash,
+                             uint32_t *kh, uint8_t *v_tomb,
+                             struct efs_kv_item *it, uint32_t *n)
+{
+    uint32_t psh, hsh;
+    struct efs_meta_dentry tomb;
+    int rc;
+
+    (void)kv;
+    psh = efs_kv_inode_shard(parent);
+    hsh = efs_kv_dentry_shard(parent, name, EFS_META_LAYOUT_HASHED);
+    rc = efs_kv_key_dentry(psh, parent, name, k_loc, kl);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_dentry(hsh, parent, name, k_hash, kh);
+    if (rc != EFS_OK)
+        return rc;
+    if (prow->layout != EFS_META_LAYOUT_HASHED &&
+        !(prow->layout == EFS_META_LAYOUT_SPLITTING &&
+          *kl == *kh && memcmp(k_loc, k_hash, *kl) == 0)) {
+        it[*n].op = EFS_KV_DEL;
+        it[*n].key = k_loc;
+        it[*n].klen = *kl;
+        (*n)++;
+    }
+    if (prow->layout == EFS_META_LAYOUT_SPLITTING) {
+        memset(&tomb, 0, sizeof(tomb));
+        tomb.generation = prow->layout_epoch;
+        tomb.type = EFS_META_DENT_TOMBSTONE;
+        pack_dentry(v_tomb, &tomb);
+        it[*n].op = EFS_KV_PUT;
+        it[*n].key = k_hash;
+        it[*n].klen = *kh;
+        it[*n].val = v_tomb;
+        it[*n].vlen = DENT_VAL;
+        (*n)++;
+    } else if (prow->layout == EFS_META_LAYOUT_HASHED) {
+        it[*n].op = EFS_KV_DEL;
+        it[*n].key = k_hash;
+        it[*n].klen = *kh;
+        (*n)++;
+    }
+    return EFS_OK;
+}
+
+static int stamp_dir_items(struct efs_kv *kv, struct efs_meta_row *prow,
+                           efs_ino_t parent, const char *name, uint64_t now,
+                           uint8_t *k_par, uint32_t *kp, uint8_t *v_par,
+                           uint8_t *k_ln, uint32_t *kln, uint8_t *v_ln,
+                           int *touch_parent, int *stamp_lane)
+{
+    uint64_t bit;
+    int rc;
+
+    *touch_parent = 0;
+    *stamp_lane = 0;
+    if (prow->layout == EFS_META_LAYOUT_LOCAL) {
+        prow->base_mtime = max_u64(prow->base_mtime, now);
+        prow->base_ctime = max_u64(prow->base_ctime, now);
+        *touch_parent = 1;
+    } else {
+        bit = 1ull << efs_kv_dir_lane(name);
+        if ((prow->used_shards & bit) == 0) {
+            prow->used_shards |= bit;
+            *touch_parent = 1;
+        }
+        rc = dir_lane_stamp(kv, prow, name, now, k_ln, kln, v_ln);
+        if (rc != EFS_OK)
+            return rc;
+        *stamp_lane = 1;
+    }
+    if (*touch_parent) {
+        pack_inode(v_par, prow);
+        rc = efs_kv_key_inode(efs_kv_inode_shard(parent), parent, k_par, kp);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    return EFS_OK;
+}
+
+int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
+                          const char *src_name, efs_ino_t dst_parent,
+                          const char *dst_name, uint64_t now)
+{
+    struct efs_meta_dentry src, exist;
+    struct efs_meta_row row, sprow, dprow;
+    uint8_t k_sloc[EFS_KV_KEY_MAX], k_shash[EFS_KV_KEY_MAX], v_stomb[DENT_VAL];
+    uint8_t k_dent[EFS_KV_KEY_MAX], v_dent[DENT_VAL];
+    uint8_t k_ino[EFS_KV_KEY_MAX], v_ino[INO_VAL];
+    uint8_t k_spar[EFS_KV_KEY_MAX], v_spar[INO_VAL];
+    uint8_t k_dpar[EFS_KV_KEY_MAX], v_dpar[INO_VAL];
+    uint8_t k_sln[EFS_KV_KEY_MAX], v_sln[LANE_VAL];
+    uint8_t k_dln[EFS_KV_KEY_MAX], v_dln[LANE_VAL];
+    uint8_t k_sdseq[EFS_KV_KEY_MAX], v_sdseq[8];
+    uint8_t k_ddseq[EFS_KV_KEY_MAX], v_ddseq[8];
+    uint32_t ksl = 0, ksh = 0, kd = 0, ki = 0, ksp = 0, kdp = 0;
+    uint32_t ksln = 0, kdln = 0, kss = 0, kds = 0;
+    struct efs_kv_item it[12];
+    uint32_t n = 0, dsh;
+    int rc, same_dir, touch_src = 0, stamp_src = 0, touch_dst = 0, stamp_dst = 0;
+    uint8_t s_lane, d_lane;
+
+    if (!kv || !src_name || !dst_name || src_parent == 0 || dst_parent == 0)
+        return EFS_ERR_INVAL;
+    if (src_parent == dst_parent && strcmp(src_name, dst_name) == 0)
+        return EFS_OK;
+    rc = efs_meta_apply_resolve(kv, src_parent, src_name, &src, &row);
+    if (rc != EFS_OK)
+        return rc;
+    if (S_ISDIR(row.mode))
+        return EFS_ERR_INVAL; /* directory rename needs parent_version */
+    rc = efs_meta_apply_get_inode(kv, src_parent, &sprow);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_meta_apply_get_inode(kv, dst_parent, &dprow);
+    if (rc != EFS_OK)
+        return rc;
+    if (!S_ISDIR(dprow.mode))
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_lookup(kv, dst_parent, dst_name, &exist);
+    if (rc == EFS_OK)
+        return EFS_ERR_EXIST; /* replace is a wider txn; not this helper */
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+
+    same_dir = src_parent == dst_parent;
+    dsh = efs_kv_dentry_shard(dst_parent, dst_name, dprow.layout);
+    memset(&exist, 0, sizeof(exist));
+    exist.ino = row.ino;
+    exist.generation = row.generation;
+    exist.type = row.mode & S_IFMT;
+    pack_dentry(v_dent, &exist);
+    row.parent = dst_parent;
+    row.base_ctime = max_u64(row.base_ctime, now);
+    pack_inode(v_ino, &row);
+    rc = efs_kv_key_dentry(dsh, dst_parent, dst_name, k_dent, &kd);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_inode(efs_kv_inode_shard(row.ino), row.ino, k_ino, &ki);
+    if (rc != EFS_OK)
+        return rc;
+
+    memset(it, 0, sizeof(it));
+    rc = dentry_drop_items(kv, &sprow, src_parent, src_name, k_sloc, &ksl,
+                           k_shash, &ksh, v_stomb, it, &n);
+    if (rc != EFS_OK)
+        return rc;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_dent;
+    it[n].klen = kd;
+    it[n].val = v_dent;
+    it[n].vlen = DENT_VAL;
+    n++;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_ino;
+    it[n].klen = ki;
+    it[n].val = v_ino;
+    it[n].vlen = INO_VAL;
+    n++;
+
+    rc = stamp_dir_items(kv, &sprow, src_parent, src_name, now, k_spar, &ksp,
+                         v_spar, k_sln, &ksln, v_sln, &touch_src, &stamp_src);
+    if (rc != EFS_OK)
+        return rc;
+    if (!same_dir) {
+        rc = stamp_dir_items(kv, &dprow, dst_parent, dst_name, now, k_dpar, &kdp,
+                             v_dpar, k_dln, &kdln, v_dln, &touch_dst,
+                             &stamp_dst);
+        if (rc != EFS_OK)
+            return rc;
+    } else {
+        /* One parent row: times already in sprow. */
+        touch_dst = 0;
+        stamp_dst = 0;
+        if (dprow.layout != EFS_META_LAYOUT_LOCAL) {
+            rc = dir_lane_stamp(kv, &sprow, dst_name, now, k_dln, &kdln, v_dln);
+            if (rc != EFS_OK)
+                return rc;
+            stamp_dst = 1;
+        }
+    }
+    if (touch_src) {
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_spar;
+        it[n].klen = ksp;
+        it[n].val = v_spar;
+        it[n].vlen = INO_VAL;
+        n++;
+    }
+    if (stamp_src) {
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_sln;
+        it[n].klen = ksln;
+        it[n].val = v_sln;
+        it[n].vlen = LANE_VAL;
+        n++;
+    }
+    if (touch_dst) {
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_dpar;
+        it[n].klen = kdp;
+        it[n].val = v_dpar;
+        it[n].vlen = INO_VAL;
+        n++;
+    }
+    if (stamp_dst) {
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_dln;
+        it[n].klen = kdln;
+        it[n].val = v_dln;
+        it[n].vlen = LANE_VAL;
+        n++;
+    }
+    s_lane = sprow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(src_name);
+    d_lane = dprow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(dst_name);
+    rc = dseq_bump(kv, efs_kv_dentry_shard(src_parent, src_name, sprow.layout),
+                   src_parent, s_lane, k_sdseq, &kss, v_sdseq);
+    if (rc == EFS_OK)
+        rc = dseq_bump(kv, dsh, dst_parent, d_lane, k_ddseq, &kds, v_ddseq);
+    if (rc != EFS_OK)
+        return rc;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_sdseq;
+    it[n].klen = kss;
+    it[n].val = v_sdseq;
+    it[n].vlen = 8;
+    n++;
+    if (!(same_dir && sprow.layout == EFS_META_LAYOUT_LOCAL &&
+          kss == kds && memcmp(k_sdseq, k_ddseq, kss) == 0)) {
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_ddseq;
+        it[n].klen = kds;
+        it[n].val = v_ddseq;
+        it[n].vlen = 8;
         n++;
     }
     return efs_kv_batch(kv, it, n);
@@ -1075,6 +1500,137 @@ int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
         cur->done = 1;
     *n = s.n;
     return EFS_OK;
+}
+
+static int dir_has_live(struct efs_kv *kv, uint32_t shard, efs_ino_t dir)
+{
+    struct efs_meta_dir_ent one;
+    struct dir_scan s;
+    int rc;
+
+    memset(&s, 0, sizeof(s));
+    memset(&one, 0, sizeof(one));
+    s.out = &one;
+    s.max = 1;
+    rc = dir_scan_one(kv, shard, dir, NULL, &s);
+    if (rc != EFS_OK)
+        return rc;
+    if (s.rc != EFS_OK)
+        return s.rc;
+    return s.n > 0 ? EFS_ERR_NOT_EMPTY : EFS_OK;
+}
+
+static int dir_empty_now(struct efs_kv *kv, const struct efs_meta_row *row)
+{
+    uint8_t lane;
+    int rc;
+
+    if (row->nlink > 2)
+        return EFS_ERR_NOT_EMPTY;
+    if (row->layout == EFS_META_LAYOUT_SPLITTING)
+        return EFS_ERR_BUSY;
+    if (row->layout == EFS_META_LAYOUT_LOCAL)
+        return dir_has_live(kv, efs_kv_inode_shard(row->ino), row->ino);
+    if (row->used_shards == 0)
+        return EFS_OK;
+    for (lane = 0; lane < EFS_META_LANES; lane++) {
+        if ((row->used_shards & (1ull << lane)) == 0)
+            continue;
+        rc = dir_has_live(kv, efs_kv_lane_shard(row->ino, lane), row->ino);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    return EFS_OK;
+}
+
+int efs_meta_apply_rmdir(struct efs_kv *kv, efs_ino_t parent, const char *name,
+                         uint64_t now)
+{
+    struct efs_meta_dentry dent;
+    struct efs_meta_row row, prow;
+    uint8_t k_loc[EFS_KV_KEY_MAX], k_hash[EFS_KV_KEY_MAX], v_tomb[DENT_VAL];
+    uint8_t k_ino[EFS_KV_KEY_MAX], k_par[EFS_KV_KEY_MAX], v_par[INO_VAL];
+    uint8_t k_ln[EFS_KV_KEY_MAX], v_ln[LANE_VAL];
+    uint8_t k_dseq[EFS_KV_KEY_MAX], v_dseq[8];
+    uint32_t kl = 0, kh = 0, ki = 0, kp = 0, kln = 0, ks = 0;
+    struct efs_kv_item it[8];
+    uint32_t n = 0;
+    int rc, held, stamp_lane = 0;
+    uint8_t dseq_lane;
+
+    if (!kv || !name || parent == 0)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_resolve(kv, parent, name, &dent, &row);
+    if (rc != EFS_OK)
+        return rc;
+    if (!S_ISDIR(row.mode) || row.ino == EFS_ROOT_INO)
+        return EFS_ERR_INVAL;
+    rc = dir_empty_now(kv, &row);
+    if (rc != EFS_OK)
+        return rc;
+    held = efs_lease_any(kv, row.ino, row.generation);
+    if (held < 0)
+        return held;
+    if (held)
+        return EFS_ERR_BUSY;
+    rc = efs_meta_apply_get_inode(kv, parent, &prow);
+    if (rc != EFS_OK)
+        return rc;
+    if (prow.nlink < 3)
+        return EFS_ERR_PROTO;
+    prow.nlink--;
+    if (prow.layout == EFS_META_LAYOUT_LOCAL) {
+        prow.base_mtime = max_u64(prow.base_mtime, now);
+        prow.base_ctime = max_u64(prow.base_ctime, now);
+    } else {
+        rc = dir_lane_stamp(kv, &prow, name, now, k_ln, &kln, v_ln);
+        if (rc != EFS_OK)
+            return rc;
+        stamp_lane = 1;
+    }
+    pack_inode(v_par, &prow);
+    rc = efs_kv_key_inode(efs_kv_inode_shard(parent), parent, k_par, &kp);
+    if (rc != EFS_OK)
+        return rc;
+
+    memset(it, 0, sizeof(it));
+    rc = dentry_drop_items(kv, &prow, parent, name, k_loc, &kl, k_hash, &kh,
+                           v_tomb, it, &n);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_key_inode(efs_kv_inode_shard(row.ino), row.ino, k_ino, &ki);
+    if (rc != EFS_OK)
+        return rc;
+    it[n].op = EFS_KV_DEL;
+    it[n].key = k_ino;
+    it[n].klen = ki;
+    n++;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_par;
+    it[n].klen = kp;
+    it[n].val = v_par;
+    it[n].vlen = INO_VAL;
+    n++;
+    if (stamp_lane) {
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_ln;
+        it[n].klen = kln;
+        it[n].val = v_ln;
+        it[n].vlen = LANE_VAL;
+        n++;
+    }
+    dseq_lane = prow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(name);
+    rc = dseq_bump(kv, efs_kv_dentry_shard(parent, name, prow.layout), parent,
+                   dseq_lane, k_dseq, &ks, v_dseq);
+    if (rc != EFS_OK)
+        return rc;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_dseq;
+    it[n].klen = ks;
+    it[n].val = v_dseq;
+    it[n].vlen = 8;
+    n++;
+    return efs_kv_batch(kv, it, n);
 }
 
 int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino)

@@ -1282,10 +1282,22 @@ sends you to — not the whole spec.
 > `test_meta_apply` (`test_append_reserve`), `test_sim`
 > (`test_append_reserve`).
 >
+> **10.5c-5 is in (gated):** in-sim LINK, UNLINK nlink>1, RMDIR, and
+> file RENAME. LINK is dest dentry + inode `nlink++`. UNLINK last-link is
+> one shard iff `dentry_shard == inode_shard`, else a 2-shard txn (the
+> hardlink corner). RMDIR is a txn; LOCAL emptiness is one range check,
+> HASHED emptiness is `dentry_seq` guards on used lanes (≤64; never raise
+> `EFS_TXN_MAX_PART`). File RENAME is same-dir LOCAL one shard / cross-dir
+> a txn; replace is not in this slice. Directory rename is INVAL until
+> `parent_version` is on the inode row. Dest uniqueness CASes the current
+> txn version (a reused name is not ver 0). Gate: `test_meta_apply`
+> (`test_link_nlink`, `test_rmdir_rename`), `test_sim` (`test_link_i17`,
+> `test_rmdir_rename`) — mem and `EFS_SIM_KV_DIR`/`EFS_SIM_RAFT_DIR`.
+>
 > Both durable backends are in (10.5a KV, 10.5b Raft log). 10.5c is not
-> new storage work. Remaining in 10.5c: cross-shard rename/link/rmdir
-> still in-sim, **then** a new export on the new engine. Do not wire the
-> live `efs-test` export. Do not skip to step 11.
+> new storage work. Remaining in 10.5c: directory rename (`parent_version`
+> on the inode row), **then** a new export on the new engine. Do not wire
+> the live `efs-test` export. Do not skip to step 11.
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -4110,6 +4122,18 @@ recovers the same offset (`opid.extra`, I16). The simulator proposes
 reserve and resolve through Raft; crash / restart keeps the reservation.
 Gate: `test_meta_apply`, `test_sim`. Not in this step: cross-shard
 rename/link/rmdir, production `efsd`.
+
+**Step 10.5c-5 in-sim (gated): LINK, UNLINK nlink>1, RMDIR, file RENAME.**
+LINK is dest dentry + inode `nlink++`. UNLINK last-link is one shard iff
+dentry and inode co-locate, else a 2-shard txn. RMDIR is a txn: LOCAL
+emptiness is one range check; HASHED emptiness is `dentry_seq` guards on
+used lanes (the participant cap stays 8). File RENAME is same-dir LOCAL
+one shard / cross-dir a txn; replace is not in this step. Directory
+rename is INVAL until `parent_version` is on the inode row. A dest dentry
+PUT CASes the current txn version so a reused name is not stuck at
+expected 0. The simulator proposes through Raft; I17 abort leaves no
+half-apply. Gate: `test_meta_apply`, `test_sim` (mem and durable). Not
+in this step: directory rename, production `efsd`.
 
 ### Shortening the code → signal cycle
 

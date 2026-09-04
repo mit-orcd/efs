@@ -156,6 +156,19 @@ int efs_meta_apply_create_file_op(struct efs_kv *kv, const struct efs_opid *op,
  * HASHED/SPLITTING: the dentry shard's dir lane (§7.4). */
 int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
                           uint64_t now);
+/* LINK: new dentry on the dest parent shard, nlink++ on the inode shard.
+ * Hardlink of a directory is INVAL. Dest name must be absent. */
+int efs_meta_apply_link(struct efs_kv *kv, efs_ino_t src_parent, const char *src_name,
+                        efs_ino_t dst_parent, const char *dst_name, uint64_t now);
+/* File rename, no replace. Directory rename is INVAL here (needs the
+ * ancestry `parent_version` read set). Same-name is a no-op. */
+int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
+                          const char *src_name, efs_ino_t dst_parent,
+                          const char *dst_name, uint64_t now);
+/* RMDIR: dest must be a directory, empty, and not root. HASHED emptiness
+ * is a scan of used dir lanes; SPLITTING returns BUSY. */
+int efs_meta_apply_rmdir(struct efs_kv *kv, efs_ino_t parent, const char *name,
+                         uint64_t now);
 
 /* SETATTR, mode/owner class only (chmod, chown, chgrp).
  *

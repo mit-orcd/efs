@@ -234,8 +234,12 @@ chunk-map DEL past the new size + optional tail CAS) — gated by
 `test_meta_apply` and `test_sim`.
 **10.5c-4 is in:** O_APPEND reserve / barrier / resolve (real EOF, frontier
 getattr, I16 same offset, crash-durable reservation) — gated by
-`test_meta_apply` and `test_sim`. Then cross-shard ops, then a new
-export. Then step 11 deletes the old flush.
+`test_meta_apply` and `test_sim`.
+**10.5c-5 is in:** in-sim LINK, UNLINK nlink>1, RMDIR, file RENAME (I17,
+nlink, HASHED `dentry_seq` guards, dest uniqueness via txn version; dir
+rename INVAL until `parent_version`) — gated by `test_meta_apply` and
+`test_sim` (mem + durable). Then directory rename, then a new export.
+Then step 11 deletes the old flush.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

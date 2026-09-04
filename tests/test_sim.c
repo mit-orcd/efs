@@ -1064,6 +1064,93 @@ static void test_append_reserve(void)
     efs_sim_free(s);
 }
 
+static void test_link_i17(void)
+{
+    struct efs_sim *s = mk(81);
+    efs_ino_t f = 0, d = 0, g = 0;
+    struct efs_txid t;
+    const char *nm;
+    uint32_t nlink = 0;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "f", &f) == EFS_OK &&
+              f,
+          "file");
+    nm = scatter(EFS_ROOT_INO);
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, nm, &d) == EFS_OK && d, "dir");
+    CHECK(efs_kv_inode_shard(d) != efs_kv_inode_shard(f), "two shards");
+    CHECK(efs_sim_link_until(s, EFS_ROOT_INO, "f", d, "alias", &t,
+                             EFS_SIM_TXN_PREPARE) == EFS_OK,
+          "prepare");
+    CHECK(efs_sim_lookup(s, 0, d, "alias", &g) == EFS_ERR_NOT_FOUND,
+          "I17 no half-apply");
+    CHECK(efs_sim_txn_finish(s, &t, 0) == EFS_OK, "abort");
+    CHECK(efs_sim_inode_nlink(s, f, &nlink, NULL) == EFS_OK && nlink == 1,
+          "nlink unchanged");
+    CHECK(efs_sim_link(s, 0, EFS_ROOT_INO, "f", d, "alias") == EFS_OK, "link");
+    CHECK(efs_sim_lookup(s, 1, d, "alias", &g) == EFS_OK && g == f, "visible");
+    CHECK(efs_sim_inode_nlink(s, f, &nlink, NULL) == EFS_OK && nlink == 2,
+          "nlink 2");
+    CHECK(efs_sim_unlink(s, 0, EFS_ROOT_INO, "f") == EFS_OK, "unlink orig");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "f", &g) == EFS_ERR_NOT_FOUND,
+          "orig gone");
+    CHECK(efs_sim_lookup(s, 0, d, "alias", &g) == EFS_OK && g == f, "alias");
+    CHECK(efs_sim_inode_nlink(s, f, &nlink, NULL) == EFS_OK && nlink == 1,
+          "nlink 1");
+    CHECK(efs_sim_unlink(s, 0, d, "alias") == EFS_OK, "last cross-shard");
+    CHECK(efs_sim_lookup(s, 0, d, "alias", &g) == EFS_ERR_NOT_FOUND, "gone");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
+static void test_rmdir_rename(void)
+{
+    struct efs_sim *s = mk(83);
+    efs_ino_t d = 0, f = 0, g = 0, d2 = 0;
+    struct efs_txid t;
+    const char *nm;
+
+    CHECK(s, "mk");
+    nm = scatter(EFS_ROOT_INO);
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, nm, &d) == EFS_OK && d, "mkdir");
+    CHECK(efs_sim_rmdir_until(s, EFS_ROOT_INO, nm, &t, EFS_SIM_TXN_PREPARE) ==
+              EFS_OK,
+          "rmdir prepare");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, nm, &g) == EFS_OK && g == d,
+          "I17 still there");
+    CHECK(efs_sim_txn_finish(s, &t, 0) == EFS_OK, "abort");
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, "x", &f) == EFS_OK, "child");
+    CHECK(efs_sim_rmdir(s, 0, EFS_ROOT_INO, nm) == EFS_ERR_NOT_EMPTY, "not empty");
+    CHECK(efs_sim_unlink(s, 0, d, "x") == EFS_OK, "unlink child");
+    CHECK(efs_sim_rmdir(s, 0, EFS_ROOT_INO, nm) == EFS_OK, "rmdir");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, nm, &g) == EFS_ERR_NOT_FOUND,
+          "dir gone");
+
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "a", &f) == EFS_OK,
+          "a");
+    CHECK(efs_sim_rename(s, 0, EFS_ROOT_INO, "a", EFS_ROOT_INO, "b") == EFS_OK,
+          "same-dir");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "a", &g) == EFS_ERR_NOT_FOUND,
+          "old");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "b", &g) == EFS_OK && g == f,
+          "new");
+    nm = scatter(EFS_ROOT_INO);
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, nm, &d2) == EFS_OK, "dest dir");
+    CHECK(efs_sim_rename_until(s, EFS_ROOT_INO, "b", d2, "c", &t,
+                               EFS_SIM_TXN_DECISION) == EFS_OK,
+          "cross decide");
+    CHECK(efs_sim_lookup(s, 0, d2, "c", &g) == EFS_OK && g == f,
+          "visible at decision");
+    CHECK(efs_sim_txn_finish(s, &t, 1) == EFS_OK, "resolve");
+    CHECK(efs_sim_lookup(s, 1, EFS_ROOT_INO, "b", &g) == EFS_ERR_NOT_FOUND,
+          "src gone");
+    CHECK(efs_sim_rename(s, 0, EFS_ROOT_INO, nm, EFS_ROOT_INO, "moved") ==
+              EFS_ERR_INVAL,
+          "dir rename");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
 int main(void)
 {
     test_replay();
@@ -1084,6 +1171,8 @@ int main(void)
     test_mkdir_i17();
     test_mkdir_crash_after_prepare();
     test_mkdir_visible_at_decision();
+    test_link_i17();
+    test_rmdir_rename();
     test_i23_session_fence();
     test_i19_open_unlinked();
     test_i23_barrier_holds_leases();

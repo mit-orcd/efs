@@ -219,6 +219,32 @@ int sim_txn_lookup(struct efs_sim *sim, efs_ino_t parent, const char *name,
 int sim_txn_coord(void *user, const struct efs_txid *t, uint32_t coord_shard,
                   int *dec);
 
+int sim_txn_read_kv(struct efs_sim *sim, uint32_t shard, struct efs_kv **kv);
+void sim_txn_fill_txid(struct efs_sim *sim, struct efs_txid *t);
+int sim_txn_parts_add(struct efs_txn_parts *p, uint32_t shard);
+int sim_txn_propose_prep(struct efs_sim *sim, uint32_t shard, int kind,
+                         const struct efs_txid *t, const struct efs_txn_parts *p,
+                         const uint8_t *key, uint32_t klen, uint64_t expected,
+                         int op, const uint8_t *val, uint32_t vlen,
+                         const struct efs_txn_reduce *red);
+int sim_txn_propose_decide(struct efs_sim *sim, uint32_t coord,
+                           const struct efs_txid *t, int dec);
+int sim_txn_propose_resolve(struct efs_sim *sim, uint32_t shard,
+                            const struct efs_txid *t, int dec);
+int sim_txn_propose_drop(struct efs_sim *sim, uint32_t shard,
+                         const struct efs_txid *t);
+int sim_txn_run_until(struct efs_sim *sim, int client, int until);
+int sim_txn_link_until(struct efs_sim *sim, int client, efs_ino_t src_parent,
+                       const char *src_name, efs_ino_t dst_parent,
+                       const char *dst_name, struct efs_txid *txid, int until);
+int sim_txn_unlink_until(struct efs_sim *sim, int client, efs_ino_t parent,
+                         const char *name, struct efs_txid *txid, int until);
+int sim_txn_rmdir_until(struct efs_sim *sim, int client, efs_ino_t parent,
+                        const char *name, struct efs_txid *txid, int until);
+int sim_txn_rename_until(struct efs_sim *sim, int client, efs_ino_t src_parent,
+                         const char *src_name, efs_ino_t dst_parent,
+                         const char *dst_name, struct efs_txid *txid, int until);
+
 int sim_ns_try(struct sim_server *s, uint8_t group, const uint8_t *cmd,
                uint32_t clen, uint64_t index);
 int sim_dir_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,

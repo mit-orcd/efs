@@ -468,7 +468,7 @@ static int mkdir_build(struct efs_sim *sim, efs_ino_t parent, const char *name,
     uint8_t v_cino[EFS_META_INO_BYTES], v_alloc[EFS_META_ALLOC_BYTES];
     uint8_t v_dseq[8];
     uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0;
-    uint64_t pver = 0, aver = 0, sver = 0, seq = 0;
+    uint64_t pver = 0, aver = 0, sver = 0, seq = 0, dver = 0;
     int rc, i;
 
     psh = efs_kv_inode_shard(parent);
@@ -551,6 +551,8 @@ static int mkdir_build(struct efs_sim *sim, efs_ino_t parent, const char *name,
         rc = efs_txn_ver_get(ckv, k_alloc, ka, &aver);
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(pkv, k_dseq, ks, &sver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(pkv, k_dent, kd, &dver);
     if (rc != EFS_OK)
         return rc;
     {
@@ -583,7 +585,7 @@ static int mkdir_build(struct efs_sim *sim, efs_ino_t parent, const char *name,
         uint32_t sh = p->shard[i];
 
         if (sh == psh) {
-            rc = propose_prep(sim, psh, EFS_TXN_EXCL, t, p, k_dent, kd, 0,
+            rc = propose_prep(sim, psh, EFS_TXN_EXCL, t, p, k_dent, kd, dver,
                               EFS_TXN_PUT, v_dent, sizeof(v_dent), NULL);
             if (rc != EFS_OK)
                 goto fail;
@@ -714,4 +716,97 @@ int efs_sim_mkdir_until(struct efs_sim *sim, efs_ino_t parent, const char *name,
 int efs_sim_txn_finish(struct efs_sim *sim, const struct efs_txid *t, int commit)
 {
     return sim_txn_finish(sim, t, commit);
+}
+
+int sim_txn_read_kv(struct efs_sim *sim, uint32_t shard, struct efs_kv **kv)
+{
+    return read_kv(sim, shard, kv);
+}
+
+void sim_txn_fill_txid(struct efs_sim *sim, struct efs_txid *t)
+{
+    fill_txid(sim, t);
+}
+
+int sim_txn_parts_add(struct efs_txn_parts *p, uint32_t shard)
+{
+    uint8_t i, j;
+
+    if (!p)
+        return EFS_ERR_INVAL;
+    for (i = 0; i < p->n; i++) {
+        if (p->shard[i] == shard)
+            return EFS_OK;
+    }
+    if (p->n >= EFS_TXN_MAX_PART)
+        return EFS_ERR_BUSY;
+    i = 0;
+    while (i < p->n && p->shard[i] < shard)
+        i++;
+    for (j = p->n; j > i; j--)
+        p->shard[j] = p->shard[j - 1];
+    p->shard[i] = shard;
+    p->n++;
+    return EFS_OK;
+}
+
+int sim_txn_propose_prep(struct efs_sim *sim, uint32_t shard, int kind,
+                         const struct efs_txid *t, const struct efs_txn_parts *p,
+                         const uint8_t *key, uint32_t klen, uint64_t expected,
+                         int op, const uint8_t *val, uint32_t vlen,
+                         const struct efs_txn_reduce *red)
+{
+    return propose_prep(sim, shard, kind, t, p, key, klen, expected, op, val,
+                        vlen, red);
+}
+
+int sim_txn_propose_decide(struct efs_sim *sim, uint32_t coord,
+                           const struct efs_txid *t, int dec)
+{
+    return propose_decide(sim, coord, t, dec);
+}
+
+int sim_txn_propose_resolve(struct efs_sim *sim, uint32_t shard,
+                            const struct efs_txid *t, int dec)
+{
+    return propose_resolve(sim, shard, t, dec);
+}
+
+int sim_txn_propose_drop(struct efs_sim *sim, uint32_t shard,
+                         const struct efs_txid *t)
+{
+    return propose_drop(sim, shard, t);
+}
+
+int sim_txn_run_until(struct efs_sim *sim, int client, int until)
+{
+    uint32_t coord;
+    int rc, i;
+    struct efs_txn_parts p;
+
+    if (!sim || !sim->txn_live)
+        return EFS_ERR_INVAL;
+    if (client < 0 || client >= sim->nclients)
+        client = 0;
+    p = sim->txn_parts;
+    for (i = 0; i < p.n; i++) {
+        rc = sim_sess_ensure(sim, client, p.shard[i]);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    if (until <= TXN_PREPARE)
+        return EFS_OK;
+    coord = efs_txn_coordinator(&sim->txn_id, &p);
+    rc = propose_decide(sim, coord, &sim->txn_id, EFS_TXN_COMMIT);
+    if (rc != EFS_OK)
+        return rc;
+    if (until <= TXN_DECISION)
+        return EFS_OK;
+    for (i = 0; i < p.n; i++) {
+        rc = propose_resolve(sim, p.shard[i], &sim->txn_id, EFS_TXN_COMMIT);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    sim->txn_live = 0;
+    return EFS_OK;
 }

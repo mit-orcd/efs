@@ -291,6 +291,18 @@ reserve and resolve through Raft; crash / restart keeps the reservation.
 Gate: `test_meta_apply`, `test_sim`. Not in this step: cross-shard
 rename/link/rmdir, production `efsd`.
 
+**Step 10.5c-5 in-sim (gated): LINK, UNLINK nlink>1, RMDIR, file RENAME.**
+LINK is dest dentry + inode `nlink++`. UNLINK last-link is one shard iff
+dentry and inode co-locate, else a 2-shard txn. RMDIR is a txn: LOCAL
+emptiness is one range check; HASHED emptiness is `dentry_seq` guards on
+used lanes (the participant cap stays 8). File RENAME is same-dir LOCAL
+one shard / cross-dir a txn; replace is not in this step. Directory
+rename is INVAL until `parent_version` is on the inode row. A dest dentry
+PUT CASes the current txn version so a reused name is not stuck at
+expected 0. The simulator proposes through Raft; I17 abort leaves no
+half-apply. Gate: `test_meta_apply`, `test_sim` (mem and durable). Not
+in this step: directory rename, production `efsd`.
+
 ## Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove

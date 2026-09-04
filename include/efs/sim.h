@@ -96,6 +96,22 @@ int efs_sim_mkdir_until(struct efs_sim *sim, efs_ino_t parent, const char *name,
                         struct efs_txid *txid, efs_ino_t *out, int until);
 int efs_sim_txn_finish(struct efs_sim *sim, const struct efs_txid *t, int commit);
 
+int efs_sim_link(struct efs_sim *sim, int client, efs_ino_t src_parent,
+                 const char *src_name, efs_ino_t dst_parent, const char *dst_name);
+int efs_sim_link_until(struct efs_sim *sim, efs_ino_t src_parent,
+                       const char *src_name, efs_ino_t dst_parent,
+                       const char *dst_name, struct efs_txid *txid, int until);
+int efs_sim_rmdir(struct efs_sim *sim, int client, efs_ino_t parent,
+                  const char *name);
+int efs_sim_rmdir_until(struct efs_sim *sim, efs_ino_t parent, const char *name,
+                        struct efs_txid *txid, int until);
+int efs_sim_rename(struct efs_sim *sim, int client, efs_ino_t src_parent,
+                   const char *src_name, efs_ino_t dst_parent,
+                   const char *dst_name);
+int efs_sim_rename_until(struct efs_sim *sim, efs_ino_t src_parent,
+                         const char *src_name, efs_ino_t dst_parent,
+                         const char *dst_name, struct efs_txid *txid, int until);
+
 /* Logical data protocol. skip_frag -1 = PUT all k+f; else omit that index.
  * Fragments are FileID + unique candidate generation. publish is CAS
  * against the committed base (expected 0 if none) plus a lane MAX, and

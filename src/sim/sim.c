@@ -5,8 +5,10 @@
 #include "efs/checksum.h"
 #include "efs/placement.h"
 #include "efs/protocol.h"
+#include "efs/kv_key.h"
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 static uint64_t splitmix64(uint64_t *s)
 {
@@ -713,10 +715,36 @@ int efs_sim_unlink(struct efs_sim *sim, int client, efs_ino_t parent,
                    const char *name)
 {
     struct sim_ev e;
+    struct efs_meta_dentry dent;
+    struct efs_meta_row row, prow;
+    struct efs_kv *kv;
+    uint32_t dsh, ish;
     int rc;
 
     if (!sim || !name || client < 0 || client >= sim->nclients)
         return EFS_ERR_INVAL;
+    rc = sim_txn_lookup(sim, parent, name, &dent);
+    if (rc != EFS_OK)
+        return rc;
+    rc = sim_txn_read_kv(sim, efs_kv_inode_shard(dent.ino), &kv);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_meta_apply_get_inode(kv, dent.ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    if (S_ISDIR(row.mode))
+        return EFS_ERR_INVAL;
+    rc = sim_txn_read_kv(sim, efs_kv_inode_shard(parent), &kv);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_meta_apply_get_inode(kv, parent, &prow);
+    if (rc != EFS_OK)
+        return rc;
+    dsh = efs_kv_dentry_shard(parent, name, prow.layout);
+    ish = efs_kv_inode_shard(row.ino);
+    if (dsh != ish)
+        return sim_txn_unlink_until(sim, client, parent, name, NULL,
+                                    EFS_SIM_TXN_RESOLVE);
     memset(&e, 0, sizeof(e));
     e.kind = EV_UNLINK;
     e.client = (uint8_t)client;
