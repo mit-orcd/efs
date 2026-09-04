@@ -442,6 +442,7 @@ struct efs_sim *efs_sim_new(const struct efs_sim_cfg *cfg)
     sim->nclients = cfg->nclients;
     sim->delay_max = cfg->delay_max;
     sim->drop_per_mille = cfg->drop_per_mille;
+    sim->export_salt = cfg->export_salt;
     sim_disk_select(sim);
     for (i = 0; i < sim->nservers; i++) {
         sim->srv[i].alive = 1;
@@ -504,6 +505,13 @@ int efs_sim_mkfs(struct efs_sim *sim)
         return EFS_ERR_INVAL;
     sim->last_rc = sim_raft_mkfs(sim);
     return sim->last_rc;
+}
+
+int efs_sim_export_salt(struct efs_sim *sim, uint64_t *out)
+{
+    if (!sim || !out)
+        return EFS_ERR_INVAL;
+    return sim_raft_export_salt(sim, out);
 }
 
 int efs_sim_create(struct efs_sim *sim, int client, efs_ino_t parent,

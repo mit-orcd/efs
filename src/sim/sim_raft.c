@@ -347,13 +347,15 @@ static int apply_publish_cmd(struct sim_server *s, const uint8_t *cmd,
 static int apply_mkfs_cmd(struct sim_server *s, const uint8_t *cmd,
                           uint32_t clen, uint64_t index, uint8_t group)
 {
-    uint64_t now;
+    uint64_t now, salt = 0;
     int rc;
 
     if (clen < 9)
         return EFS_ERR_PROTO;
     now = rd64(cmd + 1);
-    rc = efs_meta_apply_init(s->disk, now);
+    if (clen >= 17)
+        salt = rd64(cmd + 9);
+    rc = efs_meta_apply_mkfs(s->disk, now, salt);
     sim_note_apply(s, group, index, rc, EFS_ROOT_INO);
     return EFS_OK;
 }
@@ -1057,14 +1059,32 @@ static int parent_dsh(struct efs_sim *sim, efs_ino_t parent, const char *name,
 
 int sim_raft_mkfs(struct efs_sim *sim)
 {
-    uint8_t cmd[9];
+    uint8_t cmd[17];
     uint32_t sh = efs_kv_inode_shard(EFS_ROOT_INO);
 
     if (!sim)
         return EFS_ERR_INVAL;
     cmd[0] = CMD_MKFS;
     wr64(cmd + 1, sim->now);
-    return sim_raft_propose_group(sim, sim_shard_group(sh), cmd, 9);
+    wr64(cmd + 9, sim->export_salt);
+    return sim_raft_propose_group(sim, sim_shard_group(sh), cmd, 17);
+}
+
+int sim_raft_export_salt(struct efs_sim *sim, uint64_t *out)
+{
+    uint32_t sh = efs_kv_inode_shard(EFS_ROOT_INO);
+    struct efs_kv *kv;
+    int rc;
+
+    if (!sim || !out)
+        return EFS_ERR_INVAL;
+    rc = sim_raft_read_group(sim, sim_shard_group(sh));
+    if (rc != EFS_OK)
+        return rc;
+    kv = sim_raft_kv_group(sim, sim_shard_group(sh));
+    if (!kv)
+        return EFS_ERR_BUSY;
+    return efs_meta_apply_export_salt(kv, out);
 }
 
 int sim_raft_create(struct efs_sim *sim, int client, int has_op,

@@ -130,6 +130,7 @@ struct efs_sim {
     struct efs_txid txn_id;
     struct efs_txn_parts txn_parts;
     int txn_live;
+    uint64_t export_salt;
     uint64_t lockq_seq;
     struct sim_lock_wait lockq[SIM_LOCKQ];
 };
@@ -156,6 +157,7 @@ void sim_raft_disk_close(struct efs_sim *sim, int server);
 int sim_disk_checkpoint(struct efs_sim *sim, int server);
 
 int sim_raft_mkfs(struct efs_sim *sim);
+int sim_raft_export_salt(struct efs_sim *sim, uint64_t *out);
 int sim_raft_boot(struct efs_sim *sim);
 void sim_raft_free_all(struct efs_sim *sim);
 void sim_raft_halt(struct efs_sim *sim, int server);

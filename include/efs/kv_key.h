@@ -31,6 +31,7 @@
 #define EFS_KV_KIND_APPEND_CUR 17 /* FileID append cursor (watermark/frontier) */
 #define EFS_KV_KIND_APPEND_RSV 18 /* FileID append reservation at offset */
 #define EFS_KV_KIND_PVER     19 /* directory parent_version sidecar */
+#define EFS_KV_KIND_EXPORT   20 /* per-export salt (chosen at mkfs, §7.4) */
 
 static inline uint32_t efs_kv_inode_shard(efs_ino_t ino)
 {
@@ -45,6 +46,7 @@ uint8_t efs_kv_dir_lane(const char *name);
 uint32_t efs_kv_dentry_shard(efs_ino_t parent, const char *name, uint8_t layout);
 
 int efs_kv_key_alloc(uint32_t shard, uint8_t *out, uint32_t *len);
+int efs_kv_key_export(uint32_t shard, uint8_t *out, uint32_t *len);
 int efs_kv_key_inode(uint32_t shard, efs_ino_t ino, uint8_t *out, uint32_t *len);
 int efs_kv_key_pver(uint32_t shard, efs_ino_t ino, uint8_t *out, uint32_t *len);
 int efs_kv_key_dentry(uint32_t shard, efs_ino_t parent, const char *name,

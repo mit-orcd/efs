@@ -1314,6 +1314,13 @@ sends you to — not the whole spec.
 > written after mkfs. Gate: `test_sim` (`test_export_mkfs`) — mem and
 > `EFS_SIM_KV_DIR`/`EFS_SIM_RAFT_DIR`.
 >
+> **10.5c-8 is in (gated):** per-export `salt` is chosen at mkfs and
+> stored on the ROOT shard (`EFS_KV_KIND_EXPORT`). MKDIR scatter is
+> `hash(parent, name, salt) & 0xFFF`. Idempotent mkfs does not rewrite
+> salt. Crash/restart keeps it. Gate: `test_meta_apply`
+> (`test_export_salt`), `test_sim` (`test_export_salt`) — mem and
+> `EFS_SIM_KV_DIR`/`EFS_SIM_RAFT_DIR`.
+>
 > Both durable backends are in (10.5a KV, 10.5b Raft log). 10.5c is not
 > new storage work. Remaining in 10.5c: a **named production export** on
 > Raft + the applied KV. Do not wire the live `efs-test` export. Do not
@@ -4171,6 +4178,14 @@ seeds the root with a local KV write. It elects, proposes
 getattr of ROOT is ReadIndex. 100% drop cannot create the export.
 Crash/restart keeps ROOT. Gate: `test_sim` (mem and durable). Remaining:
 a named production export. Not in this step: production `efsd`.
+
+**Step 10.5c-8 in-sim (gated): export salt at mkfs.** MKDIR scatter hashes
+with the per-export salt chosen at mkfs (`hash(parent, name, salt) &
+0xFFF`). Salt lives on the ROOT shard; a missing record reads as 0;
+idempotent mkfs does not change it. Crash/restart keeps salt and later
+mkdirs still scatter with it. Gate: `test_meta_apply`, `test_sim` (mem
+and durable). Remaining: a named production export. Not in this step:
+production `efsd`.
 
 ### Shortening the code → signal cycle
 

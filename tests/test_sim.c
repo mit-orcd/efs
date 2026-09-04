@@ -100,6 +100,55 @@ static void test_export_mkfs(void)
     efs_sim_free(s);
 }
 
+static const char *salt_differs(efs_ino_t parent, uint64_t salt)
+{
+    static char buf[16];
+    int i;
+
+    for (i = 0; i < 4096; i++) {
+        snprintf(buf, sizeof(buf), "s%d", i);
+        if (efs_kv_mkdir_shard(parent, buf, 0) !=
+            efs_kv_mkdir_shard(parent, buf, salt))
+            return buf;
+    }
+    return "s0";
+}
+
+static void test_export_salt(void)
+{
+    const uint64_t salt = 0x9e3779b97f4a7c15ULL;
+    struct efs_sim_cfg cfg = {
+        .seed = 92, .nservers = 3, .nclients = 2, .export_salt = salt
+    };
+    struct efs_sim *s = efs_sim_new(&cfg);
+    uint64_t got = 0;
+    efs_ino_t ino = 0, ino2 = 0;
+    const char *nm;
+    int lid;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_export_salt(s, &got) == EFS_OK && got == salt, "salt");
+    nm = salt_differs(EFS_ROOT_INO, salt);
+    CHECK(efs_kv_mkdir_shard(EFS_ROOT_INO, nm, 0) !=
+              efs_kv_mkdir_shard(EFS_ROOT_INO, nm, salt),
+          "scatter differs");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, nm, &ino) == EFS_OK && ino, "mkdir");
+    CHECK(efs_kv_inode_shard(ino) == efs_kv_mkdir_shard(EFS_ROOT_INO, nm, salt),
+          "placed by salt");
+    lid = efs_sim_meta_leader(s);
+    CHECK(lid >= 0, "leader");
+    CHECK(efs_sim_crash(s, lid) == EFS_OK, "crash");
+    CHECK(efs_sim_restart(s, lid) == EFS_OK, "restart");
+    CHECK(efs_sim_export_salt(s, &got) == EFS_OK && got == salt, "salt after restart");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, "t", &ino2) == EFS_OK && ino2,
+          "mkdir after restart");
+    CHECK(efs_kv_inode_shard(ino2) ==
+              efs_kv_mkdir_shard(EFS_ROOT_INO, "t", salt),
+          "still salted");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
 static void test_restart(void)
 {
     struct efs_sim *s = mk(9);
@@ -1232,6 +1281,7 @@ int main(void)
     test_replay();
     test_table();
     test_export_mkfs();
+    test_export_salt();
     test_restart();
     test_publish_roundtrip();
     test_orphan();

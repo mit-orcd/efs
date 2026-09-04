@@ -320,6 +320,14 @@ getattr of ROOT is ReadIndex. 100% drop cannot create the export.
 Crash/restart keeps ROOT. Gate: `test_sim` (mem and durable). Remaining:
 a named production export. Not in this step: production `efsd`.
 
+**Step 10.5c-8 in-sim (gated): export salt at mkfs.** MKDIR scatter hashes
+with the per-export salt chosen at mkfs (`hash(parent, name, salt) &
+0xFFF`). Salt lives on the ROOT shard; a missing record reads as 0;
+idempotent mkfs does not change it. Crash/restart keeps salt and later
+mkdirs still scatter with it. Gate: `test_meta_apply`, `test_sim` (mem
+and durable). Remaining: a named production export. Not in this step:
+production `efsd`.
+
 ## Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove

@@ -244,8 +244,11 @@ guards on dest ancestry, I17 concurrent cycle BUSY, parent nlink on
 cross-dir dir rename, cap stays 8) — gated by `test_sim` (mem + durable).
 **10.5c-7 is in:** in-sim export ROOT is a Raft mkfs (no local KV seed;
 ReadIndex getattr; idempotent; drop cannot create the export) — gated by
-`test_sim` (mem + durable). Remaining: a named production export on Raft +
-the applied KV (not `efs-test`, not step 11).
+`test_sim` (mem + durable).
+**10.5c-8 is in:** per-export salt chosen at mkfs; MKDIR scatter hashes
+with it; crash keeps salt — gated by `test_meta_apply` and `test_sim`
+(mem + durable). Remaining: a named production export on Raft + the
+applied KV (not `efs-test`, not step 11).
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

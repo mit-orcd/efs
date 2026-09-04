@@ -442,6 +442,17 @@ static int read_kv(struct efs_sim *sim, uint32_t shard, struct efs_kv **kv)
     return *kv ? EFS_OK : EFS_ERR_BUSY;
 }
 
+static int load_salt(struct efs_sim *sim, uint64_t *salt)
+{
+    struct efs_kv *kv;
+    uint32_t sh = efs_kv_inode_shard(EFS_ROOT_INO);
+    int rc = read_kv(sim, sh, &kv);
+
+    if (rc != EFS_OK)
+        return rc;
+    return efs_meta_apply_export_salt(kv, salt);
+}
+
 static void fill_txid(struct efs_sim *sim, struct efs_txid *t)
 {
     int i;
@@ -468,11 +479,14 @@ static int mkdir_build(struct efs_sim *sim, efs_ino_t parent, const char *name,
     uint8_t v_cino[EFS_META_INO_BYTES], v_alloc[EFS_META_ALLOC_BYTES];
     uint8_t v_dseq[8];
     uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0;
-    uint64_t pver = 0, aver = 0, sver = 0, seq = 0, dver = 0;
+    uint64_t pver = 0, aver = 0, sver = 0, seq = 0, dver = 0, salt = 0;
     int rc, i;
 
     psh = efs_kv_inode_shard(parent);
-    csh = efs_kv_mkdir_shard(parent, name, 0);
+    rc = load_salt(sim, &salt);
+    if (rc != EFS_OK)
+        return rc;
+    csh = efs_kv_mkdir_shard(parent, name, salt);
     rc = read_kv(sim, psh, &pkv);
     if (rc != EFS_OK)
         return rc;
@@ -627,14 +641,18 @@ int sim_txn_mkdir_until(struct efs_sim *sim, int client, efs_ino_t parent,
     struct efs_txn_parts p;
     efs_ino_t ino = 0;
     uint32_t coord, psh, csh;
+    uint64_t salt = 0;
     int rc, i;
 
     if (!sim || !name || parent == 0)
         return EFS_ERR_INVAL;
     if (client < 0 || client >= sim->nclients)
         client = 0;
+    rc = load_salt(sim, &salt);
+    if (rc != EFS_OK)
+        return rc;
     psh = efs_kv_inode_shard(parent);
-    csh = efs_kv_mkdir_shard(parent, name, 0);
+    csh = efs_kv_mkdir_shard(parent, name, salt);
     rc = sim_sess_ensure(sim, client, psh);
     if (rc != EFS_OK)
         return rc;

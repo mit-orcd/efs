@@ -1563,6 +1563,27 @@ static void test_rmdir_rename(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_export_salt(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_kv *kv2 = efs_kv_mem_create();
+    uint64_t salt = 1;
+    const uint64_t golden = 0x9e3779b97f4a7c15ULL;
+
+    CHECK(kv && kv2, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_export_salt(kv, &salt) == EFS_OK && salt == 0,
+          "init salt 0");
+    CHECK(efs_meta_apply_mkfs(kv2, T0, golden) == EFS_OK, "mkfs salt");
+    CHECK(efs_meta_apply_export_salt(kv2, &salt) == EFS_OK && salt == golden,
+          "stored");
+    CHECK(efs_meta_apply_mkfs(kv2, T0, golden ^ 1) == EFS_OK, "idempotent");
+    CHECK(efs_meta_apply_export_salt(kv2, &salt) == EFS_OK && salt == golden,
+          "salt not overwritten");
+    efs_kv_mem_free(kv);
+    efs_kv_mem_free(kv2);
+}
+
 int main(void)
 {
     test_create_lookup_unlink();
@@ -1587,6 +1608,7 @@ int main(void)
     test_append_reserve();
     test_link_nlink();
     test_rmdir_rename();
+    test_export_salt();
     test_lookup_path();
     if (failures) {
         fprintf(stderr, "test_meta_apply: %d failure(s)\n", failures);

@@ -94,6 +94,13 @@ sends you to — not the whole spec.
 > written after mkfs. Gate: `test_sim` (`test_export_mkfs`) — mem and
 > `EFS_SIM_KV_DIR`/`EFS_SIM_RAFT_DIR`.
 >
+> **10.5c-8 is in (gated):** per-export `salt` is chosen at mkfs and
+> stored on the ROOT shard (`EFS_KV_KIND_EXPORT`). MKDIR scatter is
+> `hash(parent, name, salt) & 0xFFF`. Idempotent mkfs does not rewrite
+> salt. Crash/restart keeps it. Gate: `test_meta_apply`
+> (`test_export_salt`), `test_sim` (`test_export_salt`) — mem and
+> `EFS_SIM_KV_DIR`/`EFS_SIM_RAFT_DIR`.
+>
 > Both durable backends are in (10.5a KV, 10.5b Raft log). 10.5c is not
 > new storage work. Remaining in 10.5c: a **named production export** on
 > Raft + the applied KV. Do not wire the live `efs-test` export. Do not

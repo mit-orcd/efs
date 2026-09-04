@@ -442,13 +442,14 @@ static int load_window(struct efs_kv *kv, const struct efs_opid *op,
     return efs_opid_window_unpack(w, val, vlen);
 }
 
-int efs_meta_apply_init(struct efs_kv *kv, uint64_t now)
+int efs_meta_apply_mkfs(struct efs_kv *kv, uint64_t now, uint64_t salt)
 {
     struct efs_meta_row root;
     uint8_t k_ino[EFS_KV_KEY_MAX], k_alloc[EFS_KV_KEY_MAX];
-    uint8_t v_ino[INO_VAL], v_alloc[ALLOC_VAL];
-    uint32_t lk = 0, ak = 0;
-    struct efs_kv_item it[2];
+    uint8_t k_ex[EFS_KV_KEY_MAX], v_ino[INO_VAL], v_alloc[ALLOC_VAL];
+    uint8_t v_ex[8];
+    uint32_t lk = 0, ak = 0, ek = 0;
+    struct efs_kv_item it[3];
     uint32_t shard = efs_kv_inode_shard(EFS_ROOT_INO);
     int rc;
 
@@ -470,9 +471,12 @@ int efs_meta_apply_init(struct efs_kv *kv, uint64_t now)
     root.base_ctime = now;
     pack_inode(v_ino, &root);
     be64(v_alloc, EFS_ROOT_INO + (efs_ino_t)(1u << EFS_KV_SHARD_BITS));
+    be64(v_ex, salt);
     rc = efs_kv_key_inode(shard, EFS_ROOT_INO, k_ino, &lk);
     if (rc == EFS_OK)
         rc = efs_kv_key_alloc(shard, k_alloc, &ak);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_export(shard, k_ex, &ek);
     if (rc != EFS_OK)
         return rc;
     memset(it, 0, sizeof(it));
@@ -486,7 +490,41 @@ int efs_meta_apply_init(struct efs_kv *kv, uint64_t now)
     it[1].klen = ak;
     it[1].val = v_alloc;
     it[1].vlen = ALLOC_VAL;
-    return efs_kv_batch(kv, it, 2);
+    it[2].op = EFS_KV_PUT;
+    it[2].key = k_ex;
+    it[2].klen = ek;
+    it[2].val = v_ex;
+    it[2].vlen = 8;
+    return efs_kv_batch(kv, it, 3);
+}
+
+int efs_meta_apply_init(struct efs_kv *kv, uint64_t now)
+{
+    return efs_meta_apply_mkfs(kv, now, 0);
+}
+
+int efs_meta_apply_export_salt(struct efs_kv *kv, uint64_t *out)
+{
+    uint8_t k[EFS_KV_KEY_MAX], v[8];
+    uint32_t kl = 0, vl = 8;
+    uint32_t shard = efs_kv_inode_shard(EFS_ROOT_INO);
+    int rc;
+
+    if (!kv || !out)
+        return EFS_ERR_INVAL;
+    *out = 0;
+    rc = efs_kv_key_export(shard, k, &kl);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, k, kl, v, &vl);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_OK;
+    if (rc != EFS_OK)
+        return rc;
+    if (vl < 8)
+        return EFS_ERR_PROTO;
+    *out = rd64(v);
+    return EFS_OK;
 }
 
 int efs_meta_pack_inode(const struct efs_meta_row *r, uint8_t *out, uint32_t cap)

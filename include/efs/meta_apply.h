@@ -107,8 +107,12 @@ struct efs_meta_pub {
 };
 
 /* Creates the root inode if absent. `now` is the leader-stamped time it is
- * born with, for the same reason every other mutation takes one. */
+ * born with, for the same reason every other mutation takes one.
+ * `init` is mkfs with salt 0. Salt is the per-export value MKDIR scatter
+ * hashes with (architecture.md §7.4); a missing record reads as 0. */
 int efs_meta_apply_init(struct efs_kv *kv, uint64_t now);
+int efs_meta_apply_mkfs(struct efs_kv *kv, uint64_t now, uint64_t salt);
+int efs_meta_apply_export_salt(struct efs_kv *kv, uint64_t *out);
 int efs_meta_apply_get_inode(struct efs_kv *kv, efs_ino_t ino,
                              struct efs_meta_row *out);
 int efs_meta_apply_lookup(struct efs_kv *kv, efs_ino_t parent, const char *name,
