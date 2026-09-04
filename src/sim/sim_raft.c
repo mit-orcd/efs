@@ -17,6 +17,7 @@
 #define CMD_TRUNCATE SIM_CMD_TRUNCATE
 #define CMD_APPEND_RSV SIM_CMD_APPEND_RSV
 #define CMD_APPEND_RES SIM_CMD_APPEND_RES
+#define CMD_MKFS    SIM_CMD_MKFS
 #define CMD_MAX     512
 #define TRUNC_HDR   54
 #define TRUNC_TAIL  (4 + 8 + 8 + 4 + (uint32_t)EFS_NUM_FRAGMENTS * (4 + EFS_HASH_SIZE))
@@ -343,6 +344,20 @@ static int apply_publish_cmd(struct sim_server *s, const uint8_t *cmd,
     return EFS_OK;
 }
 
+static int apply_mkfs_cmd(struct sim_server *s, const uint8_t *cmd,
+                          uint32_t clen, uint64_t index, uint8_t group)
+{
+    uint64_t now;
+    int rc;
+
+    if (clen < 9)
+        return EFS_ERR_PROTO;
+    now = rd64(cmd + 1);
+    rc = efs_meta_apply_init(s->disk, now);
+    sim_note_apply(s, group, index, rc, EFS_ROOT_INO);
+    return EFS_OK;
+}
+
 static int apply_epoch_cmd(struct sim_server *s, const uint8_t *cmd,
                            uint32_t clen, uint64_t index, uint8_t group)
 {
@@ -541,6 +556,9 @@ int sim_ns_try(struct sim_server *s, uint8_t group, const uint8_t *cmd,
     if (!cmd || clen == 0)
         return 0;
     switch (cmd[0]) {
+    case CMD_MKFS:
+        apply_mkfs_cmd(s, cmd, clen, index, group);
+        return 1;
     case CMD_CREATE:
         apply_create_cmd(s, cmd, clen, index, group);
         return 1;
@@ -929,8 +947,6 @@ int sim_raft_boot(struct efs_sim *sim)
         return EFS_ERR_INVAL;
     sim->desired_voters = (1u << EFS_SIM_RAFT_N) - 1;
     for (i = 0; i < sim->nraft; i++) {
-        if (efs_meta_apply_init(sim->srv[i].disk, sim->now) != EFS_OK)
-            return EFS_ERR_IO;
         sim->srv[i].boot_id = 1;
         sim->srv[i].raft_store =
             sim_raft_store_new(sim, i, EFS_RAFT_GROUP_SHARD);
@@ -946,8 +962,9 @@ int sim_raft_boot(struct efs_sim *sim)
     rc = sim_txn_boot(sim);
     if (rc != EFS_OK)
         return rc;
-    (void)wait_leader(sim);
-    return EFS_OK;
+    if (wait_leader(sim) < 0)
+        return EFS_ERR_BUSY;
+    return sim_raft_mkfs(sim);
 }
 
 void sim_raft_halt(struct efs_sim *sim, int server)
@@ -1036,6 +1053,18 @@ static int parent_dsh(struct efs_sim *sim, efs_ino_t parent, const char *name,
         return rc;
     *dsh = efs_kv_dentry_shard(parent, name, row.layout);
     return EFS_OK;
+}
+
+int sim_raft_mkfs(struct efs_sim *sim)
+{
+    uint8_t cmd[9];
+    uint32_t sh = efs_kv_inode_shard(EFS_ROOT_INO);
+
+    if (!sim)
+        return EFS_ERR_INVAL;
+    cmd[0] = CMD_MKFS;
+    wr64(cmd + 1, sim->now);
+    return sim_raft_propose_group(sim, sim_shard_group(sh), cmd, 9);
 }
 
 int sim_raft_create(struct efs_sim *sim, int client, int has_op,

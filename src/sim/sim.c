@@ -498,6 +498,14 @@ void efs_sim_free(struct efs_sim *sim)
     free(sim);
 }
 
+int efs_sim_mkfs(struct efs_sim *sim)
+{
+    if (!sim)
+        return EFS_ERR_INVAL;
+    sim->last_rc = sim_raft_mkfs(sim);
+    return sim->last_rc;
+}
+
 int efs_sim_create(struct efs_sim *sim, int client, efs_ino_t parent,
                    uint32_t mode, const char *name, efs_ino_t *out)
 {

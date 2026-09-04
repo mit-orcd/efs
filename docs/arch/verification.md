@@ -313,6 +313,13 @@ file rename does not. The participant cap stays 8. Replace is not in this
 step. Gate: `test_sim` (mem and durable). Not in this step: a new export,
 production `efsd`.
 
+**Step 10.5c-7 in-sim (gated): export ROOT is a Raft mkfs.** Boot no longer
+seeds the root with a local KV write. It elects, proposes
+`efs_meta_apply_init` (leader-stamped `now`), and apply is idempotent.
+getattr of ROOT is ReadIndex. 100% drop cannot create the export.
+Crash/restart keeps ROOT. Gate: `test_sim` (mem and durable). Remaining:
+a named production export. Not in this step: production `efsd`.
+
 ## Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove

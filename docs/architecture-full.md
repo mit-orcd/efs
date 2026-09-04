@@ -1306,10 +1306,18 @@ sends you to — not the whole spec.
 > Replace is still not in this slice. Gate: `test_sim` (`test_dir_rename`,
 > `test_rmdir_rename`) — mem and `EFS_SIM_KV_DIR`/`EFS_SIM_RAFT_DIR`.
 >
+> **10.5c-7 is in (gated):** the in-sim export is created by a Raft mkfs,
+> not a local KV seed. Boot elects, proposes `efs_meta_apply_init` with a
+> leader-stamped `now`, and apply is idempotent. getattr of ROOT is
+> ReadIndex. 100% message drop cannot create the export (there is no
+> locally-seeded ROOT to hide behind). Crash/restart keeps ROOT and files
+> written after mkfs. Gate: `test_sim` (`test_export_mkfs`) — mem and
+> `EFS_SIM_KV_DIR`/`EFS_SIM_RAFT_DIR`.
+>
 > Both durable backends are in (10.5a KV, 10.5b Raft log). 10.5c is not
-> new storage work. Remaining in 10.5c: a **new export** on Raft + the
-> applied KV. Do not wire the live `efs-test` export. Do not skip to
-> step 11.
+> new storage work. Remaining in 10.5c: a **named production export** on
+> Raft + the applied KV. Do not wire the live `efs-test` export. Do not
+> skip to step 11. Do not wire production `efsd` without asking.
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -4156,6 +4164,13 @@ exclusive pver PUT (I17). Cross-dir directory rename adjusts parent nlink;
 file rename does not. The participant cap stays 8. Replace is not in this
 step. Gate: `test_sim` (mem and durable). Not in this step: a new export,
 production `efsd`.
+
+**Step 10.5c-7 in-sim (gated): export ROOT is a Raft mkfs.** Boot no longer
+seeds the root with a local KV write. It elects, proposes
+`efs_meta_apply_init` (leader-stamped `now`), and apply is idempotent.
+getattr of ROOT is ReadIndex. 100% drop cannot create the export.
+Crash/restart keeps ROOT. Gate: `test_sim` (mem and durable). Remaining:
+a named production export. Not in this step: production `efsd`.
 
 ### Shortening the code → signal cycle
 

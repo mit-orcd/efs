@@ -53,6 +53,8 @@ int efs_sim_drain(struct efs_sim *sim);
 int efs_sim_check(struct efs_sim *sim);
 
 /* Namespace ops: propose to the metadata Raft leader, apply on each replica. */
+/* mkfs proposes ROOT through Raft (idempotent). Boot already does this. */
+int efs_sim_mkfs(struct efs_sim *sim);
 int efs_sim_create(struct efs_sim *sim, int client, efs_ino_t parent,
                    uint32_t mode, const char *name, efs_ino_t *out);
 /* I16: same op identity does not mint a second inode. */

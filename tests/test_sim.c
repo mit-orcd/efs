@@ -69,6 +69,37 @@ static void test_table(void)
     efs_sim_free(s);
 }
 
+static void test_export_mkfs(void)
+{
+    struct efs_sim *s = mk(91);
+    struct efs_meta_stat st;
+    efs_ino_t f = 0, g = 0;
+    int lid;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_getattr(s, EFS_ROOT_INO, &st) == EFS_OK, "root getattr");
+    CHECK(S_ISDIR(st.mode) && st.nlink == 2 && st.ino == EFS_ROOT_INO, "root");
+    CHECK(efs_sim_mkfs(s) == EFS_OK, "idempotent mkfs");
+    CHECK(efs_sim_getattr(s, EFS_ROOT_INO, &st) == EFS_OK && st.nlink == 2,
+          "root after retry");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "f", &f) == EFS_OK,
+          "create");
+    lid = efs_sim_meta_leader(s);
+    CHECK(lid >= 0, "leader");
+    CHECK(efs_sim_crash(s, lid) == EFS_OK, "crash leader");
+    CHECK(efs_sim_getattr(s, EFS_ROOT_INO, &st) == EFS_OK && S_ISDIR(st.mode),
+          "root after crash");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "f", &g) == EFS_OK && g == f,
+          "file after crash");
+    CHECK(efs_sim_restart(s, lid) == EFS_OK, "restart");
+    CHECK(efs_sim_getattr(s, EFS_ROOT_INO, &st) == EFS_OK && st.nlink == 2,
+          "root after restart");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "f", &g) == EFS_OK && g == f,
+          "file after restart");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
 static void test_restart(void)
 {
     struct efs_sim *s = mk(9);
@@ -189,11 +220,11 @@ static void test_faults(void)
     efs_ino_t g = 0;
     struct efs_sim *p;
 
-    CHECK(s, "drop sim");
-    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "x", &g) == EFS_ERR_AGAIN,
-          "always-drop");
-    CHECK(g == 0, "no ino");
-    efs_sim_free(s);
+    /* mkfs is a Raft proposal, so 100% drop cannot elect and cannot create
+     * the export. Client ops used to return AGAIN on a locally-seeded ROOT. */
+    CHECK(s == NULL, "drop cannot mkfs");
+    if (s)
+        efs_sim_free(s);
 
     p = mk(29);
     CHECK(p, "part");
@@ -1200,6 +1231,7 @@ int main(void)
 {
     test_replay();
     test_table();
+    test_export_mkfs();
     test_restart();
     test_publish_roundtrip();
     test_orphan();

@@ -25,6 +25,7 @@
 #define SIM_CMD_TRUNCATE 15
 #define SIM_CMD_APPEND_RSV 16
 #define SIM_CMD_APPEND_RES 17
+#define SIM_CMD_MKFS      18
 #define SIM_LOCKQ       16
 
 enum {
@@ -154,6 +155,7 @@ void sim_raft_disk_close(struct efs_sim *sim, int server);
  * a Raft snapshot must not run ahead of. */
 int sim_disk_checkpoint(struct efs_sim *sim, int server);
 
+int sim_raft_mkfs(struct efs_sim *sim);
 int sim_raft_boot(struct efs_sim *sim);
 void sim_raft_free_all(struct efs_sim *sim);
 void sim_raft_halt(struct efs_sim *sim, int server);
