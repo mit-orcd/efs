@@ -14,7 +14,10 @@
 #define CMD_EPOCH   SIM_CMD_EPOCH
 #define CMD_SETATTR SIM_CMD_SETATTR
 #define CMD_UTIMENS SIM_CMD_UTIMENS
+#define CMD_TRUNCATE SIM_CMD_TRUNCATE
 #define CMD_MAX     512
+#define TRUNC_HDR   54
+#define TRUNC_TAIL  (4 + 8 + 8 + 4 + (uint32_t)EFS_NUM_FRAGMENTS * (4 + EFS_HASH_SIZE))
 #define WAIT_TICKS  80
 #define RAFT_HDR    98
 
@@ -416,6 +419,61 @@ static int apply_utimens_cmd(struct sim_server *s, const uint8_t *cmd,
     return EFS_OK;
 }
 
+static int apply_truncate_cmd(struct sim_server *s, const uint8_t *cmd,
+                              uint32_t clen, uint64_t index, uint8_t group)
+{
+    struct efs_meta_truncate t;
+    struct efs_meta_pub tail;
+    efs_ino_t ino;
+    uint64_t now, expect_gen, size;
+    uint8_t has_tail, uuid[EFS_OPID_UUID_LEN];
+    uint32_t epoch;
+    const uint8_t *q;
+    int i, rc;
+
+    if (clen < TRUNC_HDR)
+        return EFS_ERR_PROTO;
+    ino = rd64(cmd + 1);
+    now = rd64(cmd + 9);
+    expect_gen = rd64(cmd + 17);
+    size = rd64(cmd + 25);
+    has_tail = cmd[33];
+    memcpy(uuid, cmd + 34, EFS_OPID_UUID_LEN);
+    epoch = rd32(cmd + 34 + EFS_OPID_UUID_LEN);
+    rc = efs_session_accept(s->disk, efs_kv_inode_shard(ino), uuid, epoch);
+    if (rc != EFS_OK) {
+        sim_note_apply(s, group, index, rc, ino);
+        return EFS_OK;
+    }
+    memset(&t, 0, sizeof(t));
+    t.expect_gen = expect_gen;
+    t.size = size;
+    if (has_tail) {
+        if (clen < TRUNC_HDR + TRUNC_TAIL)
+            return EFS_ERR_PROTO;
+        q = cmd + TRUNC_HDR;
+        memset(&tail, 0, sizeof(tail));
+        tail.ino = ino;
+        tail.chunk_index = rd32(q);
+        tail.new_size = size;
+        tail.candidate_gen = rd64(q + 4);
+        tail.expected_gen = rd64(q + 12);
+        tail.coding_profile_id = rd32(q + 20);
+        q += 24;
+        for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            tail.ch.nodes[i] = rd32(q);
+            q += 4;
+            memcpy(tail.ch.checksums[i], q, EFS_HASH_SIZE);
+            q += EFS_HASH_SIZE;
+        }
+        tail.now = now;
+        t.tail = &tail;
+    }
+    rc = efs_meta_apply_truncate(s->disk, ino, now, &t);
+    sim_note_apply(s, group, index, rc, ino);
+    return EFS_OK;
+}
+
 int sim_ns_try(struct sim_server *s, uint8_t group, const uint8_t *cmd,
                uint32_t clen, uint64_t index)
 {
@@ -439,6 +497,9 @@ int sim_ns_try(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         return 1;
     case CMD_UTIMENS:
         apply_utimens_cmd(s, cmd, clen, index, group);
+        return 1;
+    case CMD_TRUNCATE:
+        apply_truncate_cmd(s, cmd, clen, index, group);
         return 1;
     case SIM_CMD_DIR:
         sim_dir_apply(s, group, cmd, clen, index);
@@ -1107,6 +1168,58 @@ int sim_raft_utimens(struct efs_sim *sim, int client, efs_ino_t ino,
     memcpy(cmd + 53, uuid, EFS_OPID_UUID_LEN);
     wr32(cmd + 53 + EFS_OPID_UUID_LEN, epoch);
     return sim_raft_propose_group(sim, sim_shard_group(sh), cmd, 73);
+}
+
+int sim_raft_truncate(struct efs_sim *sim, int client, efs_ino_t ino,
+                      uint64_t size, const struct efs_meta_pub *tail)
+{
+    struct efs_meta_row row;
+    uint8_t cmd[TRUNC_HDR + TRUNC_TAIL];
+    uint32_t sh, epoch, n = TRUNC_HDR;
+    const uint8_t *uuid;
+    int i, rc;
+
+    if (!sim || ino == 0 || client < 0 || client >= sim->nclients)
+        return EFS_ERR_INVAL;
+    if (size > 0 && (size % EFS_MIN_CHUNK_SIZE) != 0 && !tail)
+        return EFS_ERR_INVAL;
+    sh = efs_kv_inode_shard(ino);
+    rc = sim_sess_ensure(sim, client, sh);
+    if (rc != EFS_OK)
+        return rc;
+    rc = read_inode(sim, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    uuid = sim->cli[client].win.client_uuid;
+    epoch = sim->cli[client].win.session_epoch;
+    cmd[0] = CMD_TRUNCATE;
+    wr64(cmd + 1, ino);
+    wr64(cmd + 9, sim->now);
+    wr64(cmd + 17, row.generation);
+    wr64(cmd + 25, size);
+    if (tail) {
+        if (tail->chunk_index != (uint32_t)(size / EFS_MIN_CHUNK_SIZE))
+            return EFS_ERR_INVAL;
+        cmd[33] = 1;
+        memcpy(cmd + 34, uuid, EFS_OPID_UUID_LEN);
+        wr32(cmd + 34 + EFS_OPID_UUID_LEN, epoch);
+        wr32(cmd + TRUNC_HDR, tail->chunk_index);
+        wr64(cmd + TRUNC_HDR + 4, tail->candidate_gen);
+        wr64(cmd + TRUNC_HDR + 12, tail->expected_gen);
+        wr32(cmd + TRUNC_HDR + 20, tail->coding_profile_id);
+        n = TRUNC_HDR + 24;
+        for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            wr32(cmd + n, tail->ch.nodes[i]);
+            n += 4;
+            memcpy(cmd + n, tail->ch.checksums[i], EFS_HASH_SIZE);
+            n += EFS_HASH_SIZE;
+        }
+    } else {
+        cmd[33] = 0;
+        memcpy(cmd + 34, uuid, EFS_OPID_UUID_LEN);
+        wr32(cmd + 34 + EFS_OPID_UUID_LEN, epoch);
+    }
+    return sim_raft_propose_group(sim, sim_shard_group(sh), cmd, n);
 }
 
 int sim_raft_getattr(struct efs_sim *sim, efs_ino_t ino, struct efs_meta_stat *out)

@@ -1509,6 +1509,287 @@ static int epoch_lane_upd(struct lane_rec *ln, void *arg)
     return 1;
 }
 
+struct trunc_scan {
+    struct efs_kv *kv;
+    efs_ino_t ino;
+    uint64_t gen;
+    uint64_t size;
+    uint32_t tail_ci;
+    uint8_t has_tail;
+    struct efs_kv_item *it;
+    uint8_t (*del_keys)[EFS_KV_KEY_MAX];
+    uint32_t n;
+    uint32_t del_base;
+    uint32_t cap;
+    int rc;
+};
+
+static int trunc_del_cb(void *user, const uint8_t *key, uint32_t klen,
+                        const uint8_t *val, uint32_t vlen)
+{
+    struct trunc_scan *ts = user;
+    efs_ino_t ino;
+    uint64_t gen;
+    uint32_t ci;
+
+    (void)val;
+    (void)vlen;
+    if (klen < 24 || key[2] != EFS_KV_KIND_CHUNK)
+        return 0;
+    ino = rd64(key + 3);
+    gen = rd64(key + 11);
+    ci = rd32(key + 20);
+    if (ino != ts->ino || gen != ts->gen)
+        return 0;
+    if (ts->has_tail && ci == ts->tail_ci)
+        return 0;
+    if (ts->size == 0 ||
+        (uint64_t)ci * (uint64_t)EFS_MIN_CHUNK_SIZE >= ts->size)
+        goto del;
+    return 0;
+del:
+    if (ts->n >= ts->cap) {
+        ts->rc = EFS_ERR_NOMEM;
+        return 1;
+    }
+    memcpy(ts->del_keys[ts->n - ts->del_base], key, klen);
+    ts->it[ts->n].op = EFS_KV_DEL;
+    ts->it[ts->n].key = ts->del_keys[ts->n - ts->del_base];
+    ts->it[ts->n].klen = klen;
+    ts->n++;
+    return 0;
+}
+
+static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
+                                   uint64_t gen, uint8_t lane, uint64_t size,
+                                   uint32_t tail_ci, uint8_t has_tail,
+                                   struct efs_kv_item *it,
+                                   uint8_t (*del_keys)[EFS_KV_KEY_MAX],
+                                   uint32_t *n, uint32_t cap)
+{
+    uint8_t pref[EFS_KV_KEY_MAX];
+    uint32_t plen = 0;
+    struct trunc_scan ts;
+    int rc;
+
+    rc = efs_kv_key_chunk(efs_kv_lane_shard(ino, lane), ino, gen, lane, 0,
+                          pref, &plen);
+    if (rc != EFS_OK)
+        return rc;
+    plen = 20;
+    memset(&ts, 0, sizeof(ts));
+    ts.kv = kv;
+    ts.ino = ino;
+    ts.gen = gen;
+    ts.size = size;
+    ts.tail_ci = tail_ci;
+    ts.has_tail = has_tail;
+    ts.it = it;
+    ts.del_keys = del_keys;
+    ts.n = *n;
+    ts.del_base = *n;
+    ts.cap = cap;
+    rc = efs_kv_scan_prefix(kv, pref, plen, trunc_del_cb, &ts);
+    if (ts.rc != EFS_OK)
+        return ts.rc;
+    *n = ts.n;
+    return rc;
+}
+
+static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
+                                 uint64_t now, const struct efs_meta_pub *tail,
+                                 struct efs_kv_item *it, uint32_t *n,
+                                 uint32_t cap, uint8_t *k_ch, uint8_t *v_ch,
+                                 uint8_t k_ln[][EFS_KV_KEY_MAX],
+                                 uint8_t v_ln[][LANE_VAL])
+{
+    struct efs_meta_pub p;
+    struct efs_meta_chunk got;
+    uint8_t lane;
+    uint32_t lsh;
+    uint8_t old_ch[CHUNK_VAL];
+    uint32_t kc = 0, kl = 0, vn;
+    uint64_t committed = 0;
+    struct lane_rec ln;
+    struct efs_meta_chunk stored;
+    int rc, have_ln = 0;
+
+    if (!tail)
+        return EFS_OK;
+    p = *tail;
+    p.ino = row->ino;
+    p.new_size = tail->new_size;
+    p.now = now;
+    p.content_epoch = row->content_epoch;
+    rc = evidence_ok(&p);
+    if (rc != EFS_OK)
+        return rc;
+    lane = (uint8_t)(p.chunk_index % EFS_META_LANES);
+    lsh = efs_kv_lane_shard(row->ino, lane);
+    rc = efs_kv_key_chunk(lsh, row->ino, row->generation, lane, p.chunk_index,
+                          k_ch, &kc);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_lane(lsh, row->ino, row->generation, lane, k_ln[lane],
+                             &kl);
+    if (rc != EFS_OK)
+        return rc;
+    vn = sizeof(old_ch);
+    rc = efs_kv_get(kv, k_ch, kc, old_ch, &vn);
+    if (rc == EFS_OK) {
+        rc = unpack_chunk(old_ch, vn, &got);
+        if (rc != EFS_OK)
+            return rc;
+        committed = got.generation;
+    } else if (rc != EFS_ERR_NOT_FOUND) {
+        return rc;
+    }
+    if (committed == p.candidate_gen)
+        return EFS_OK;
+    if (p.expected_gen != committed)
+        return EFS_ERR_STALE;
+    if (unpack_lane(v_ln[lane], LANE_VAL, &ln) == EFS_OK)
+        have_ln = 1;
+    if (!have_ln) {
+        uint8_t old_ln[LANE_VAL];
+
+        vn = sizeof(old_ln);
+        rc = efs_kv_get(kv, k_ln[lane], kl, old_ln, &vn);
+        if (rc == EFS_OK) {
+            rc = unpack_lane(old_ln, vn, &ln);
+            if (rc != EFS_OK)
+                return rc;
+            have_ln = 1;
+        } else if (rc != EFS_ERR_NOT_FOUND) {
+            return rc;
+        }
+    }
+    if (!have_ln)
+        memset(&ln, 0, sizeof(ln));
+    if (p.content_epoch < ln.fenced_epoch)
+        return EFS_ERR_STALE;
+    ln.max_end = max_u64(ln.max_end, p.new_size);
+    if (ln.mtime_gen < row->mtime_gen) {
+        ln.max_mtime = p.now;
+        ln.mtime_gen = row->mtime_gen;
+    } else {
+        ln.max_mtime = max_u64(ln.max_mtime, p.now);
+    }
+    ln.max_ctime = max_u64(ln.max_ctime, p.now);
+    ln.seq++;
+    stored = p.ch;
+    stored.generation = p.candidate_gen;
+    stored.coding_profile_id = p.coding_profile_id;
+    stored.content_epoch = p.content_epoch;
+    pack_chunk(v_ch, &stored);
+    pack_lane(v_ln[lane], &ln);
+    if (*n + 2 > cap)
+        return EFS_ERR_NOMEM;
+    it[*n].op = EFS_KV_PUT;
+    it[*n].key = k_ch;
+    it[*n].klen = kc;
+    it[*n].val = v_ch;
+    it[*n].vlen = CHUNK_VAL;
+    (*n)++;
+    {
+        uint32_t i;
+        int found = 0;
+
+        for (i = 0; i < *n; i++) {
+            if (it[i].op == EFS_KV_PUT && it[i].key == k_ln[lane]) {
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            it[*n].op = EFS_KV_PUT;
+            it[*n].key = k_ln[lane];
+            it[*n].klen = kl;
+            it[*n].val = v_ln[lane];
+            it[*n].vlen = LANE_VAL;
+            (*n)++;
+        }
+    }
+    if ((row->active_lanes & (1ULL << lane)) == 0)
+        row->active_lanes |= 1ULL << lane;
+    return EFS_OK;
+}
+
+int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
+                            const struct efs_meta_truncate *t)
+{
+    struct efs_meta_row row;
+    uint8_t k_ino[EFS_KV_KEY_MAX];
+    uint8_t v_ino[INO_VAL];
+    uint8_t k_ln[EFS_META_LANES][EFS_KV_KEY_MAX];
+    uint8_t v_ln[EFS_META_LANES][LANE_VAL];
+    uint8_t del_keys[EFS_META_LANES * 32][EFS_KV_KEY_MAX];
+    uint8_t k_tail[EFS_KV_KEY_MAX], v_tail[CHUNK_VAL];
+    struct efs_kv_item it[EFS_META_LANES + 1 + EFS_META_LANES * 32 + 2];
+    uint32_t ki = 0, n = 0, i, tail_ci = 0;
+    uint64_t new_epoch;
+    uint8_t has_tail = 0;
+    int touch_inode = 0;
+    int rc;
+
+    if (!kv || !t || ino == 0)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    if (!S_ISREG(row.mode))
+        return EFS_ERR_INVAL;
+    if (t->expect_gen != 0 && t->expect_gen != row.generation)
+        return EFS_ERR_STALE;
+    if (t->size > 0 && (t->size % EFS_MIN_CHUNK_SIZE) != 0) {
+        tail_ci = (uint32_t)(t->size / EFS_MIN_CHUNK_SIZE);
+        has_tail = t->tail != NULL;
+        if (!has_tail)
+            return EFS_ERR_INVAL;
+        if (t->tail->chunk_index != tail_ci)
+            return EFS_ERR_INVAL;
+    }
+    new_epoch = row.content_epoch + 1;
+    row.content_epoch = new_epoch;
+    row.base_size = t->size;
+    row.base_mtime = max_u64(row.base_mtime, now);
+    row.base_ctime = max_u64(row.base_ctime, now);
+    memset(it, 0, sizeof(it));
+    memset(k_ln, 0, sizeof(k_ln));
+    memset(v_ln, 0, sizeof(v_ln));
+    for (i = 0; i < EFS_META_LANES; i++) {
+        if ((row.active_lanes & (1ULL << i)) == 0)
+            continue;
+        rc = fence_lane_bits(kv, ino, row.generation, 1ULL << i, epoch_lane_upd,
+                             &new_epoch, it, &n, k_ln, v_ln);
+        if (rc != EFS_OK)
+            return rc;
+        rc = truncate_lane_range_del(kv, ino, row.generation, (uint8_t)i,
+                                   t->size, tail_ci, has_tail, it, del_keys,
+                                   &n, (uint32_t)(sizeof(it) / sizeof(it[0])));
+        if (rc != EFS_OK)
+            return rc;
+    }
+    rc = truncate_publish_tail(kv, &row, now, t->tail, it, &n,
+                               (uint32_t)(sizeof(it) / sizeof(it[0])),
+                               k_tail, v_tail, k_ln, v_ln);
+    if (rc != EFS_OK)
+        return rc;
+    if (t->tail)
+        touch_inode = 1;
+    pack_inode(v_ino, &row);
+    rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, k_ino, &ki);
+    if (rc != EFS_OK)
+        return rc;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_ino;
+    it[n].klen = ki;
+    it[n].val = v_ino;
+    it[n].vlen = INO_VAL;
+    n++;
+    (void)touch_inode;
+    return efs_kv_batch(kv, it, n);
+}
+
 static int utimens_lane_upd(struct lane_rec *ln, void *arg)
 {
     uint64_t gen = *(const uint64_t *)arg;

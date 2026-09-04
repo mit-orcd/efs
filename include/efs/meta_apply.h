@@ -315,6 +315,18 @@ int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
 int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino);
 int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p);
 int efs_meta_apply_epoch_fence(struct efs_kv *kv, efs_ino_t ino);
+/* SETATTR(size): content_epoch bump, base_size, per-lane epoch fence +
+ * range-delete of chunk-map entries beyond the new size, optional tail
+ * chunk CAS (§7.3). `expect_gen` is the stale-handle check (0 = skip).
+ * `tail` is NULL when the new size is chunk-aligned or zero. */
+struct efs_meta_truncate {
+    uint64_t expect_gen;
+    uint64_t size;
+    const struct efs_meta_pub *tail;
+};
+
+int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
+                            const struct efs_meta_truncate *t);
 int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_index,
                              struct efs_meta_chunk *out);
 uint64_t efs_meta_candidate_gen(const uint8_t uuid[16], uint32_t session_epoch,

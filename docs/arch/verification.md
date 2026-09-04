@@ -269,7 +269,15 @@ and is visible again. atime-only does not fence. chmod after utimens
 does not hide the explicit mtime (it does not bump `mtime_gen`). The
 simulator proposes the fence through Raft; a leader crash / restart does
 not resurrect a stale lane mtime. Gate: `test_meta_apply`, `test_sim`.
-Not in this step: truncate range-delete, O_APPEND, production `efsd`.
+
+**Step 10.5c-3 in-sim (gated): truncate range-delete.** SETATTR(size) is
+one apply batch over the inode row and active lanes: bump `content_epoch`,
+set `base_size`, fence each lane, range-delete chunk-map keys whose
+byte range starts at or past the new size, and optionally CAS-publish the
+straddling tail chunk in the same batch. A publish carrying the old epoch
+is STALE (I22). The simulator proposes truncate through Raft; crash /
+restart does not restore deleted chunks. Gate: `test_meta_apply`,
+`test_sim`. Not in this step: O_APPEND, production `efsd`.
 
 ## Shortening the code → signal cycle
 

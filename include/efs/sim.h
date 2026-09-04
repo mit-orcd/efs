@@ -73,6 +73,8 @@ int efs_sim_setattr(struct efs_sim *sim, int client, efs_ino_t ino,
                     const struct efs_meta_setattr *sa);
 int efs_sim_utimens(struct efs_sim *sim, int client, efs_ino_t ino,
                     const struct efs_meta_utimens *u);
+int efs_sim_truncate(struct efs_sim *sim, int client, efs_ino_t ino,
+                     uint64_t size, const struct efs_meta_pub *tail);
 int efs_sim_readdir(struct efs_sim *sim, efs_ino_t dir,
                     struct efs_meta_dir_cursor *cur, struct efs_meta_dir_ent *out,
                     uint32_t max, uint32_t *n);

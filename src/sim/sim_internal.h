@@ -22,6 +22,7 @@
 #define SIM_CMD_LOCK    12
 #define SIM_CMD_SETATTR 13
 #define SIM_CMD_UTIMENS 14
+#define SIM_CMD_TRUNCATE 15
 #define SIM_LOCKQ       16
 
 enum {
@@ -164,6 +165,8 @@ int sim_raft_setattr(struct efs_sim *sim, int client, efs_ino_t ino,
                      const struct efs_meta_setattr *sa);
 int sim_raft_utimens(struct efs_sim *sim, int client, efs_ino_t ino,
                      const struct efs_meta_utimens *u);
+int sim_raft_truncate(struct efs_sim *sim, int client, efs_ino_t ino,
+                      uint64_t size, const struct efs_meta_pub *tail);
 int sim_raft_getattr(struct efs_sim *sim, efs_ino_t ino, struct efs_meta_stat *out);
 int sim_raft_readdir(struct efs_sim *sim, efs_ino_t dir,
                      struct efs_meta_dir_cursor *cur, struct efs_meta_dir_ent *out,

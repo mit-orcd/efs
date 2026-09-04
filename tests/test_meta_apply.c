@@ -1282,6 +1282,91 @@ static void test_utimens_fence(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_truncate_range_del(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t ino = 0;
+    struct efs_meta_row r;
+    struct efs_meta_chunk got, ch;
+    struct efs_meta_truncate t;
+    struct efs_meta_pub tail, p;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "t", &ino)
+              == EFS_OK,
+          "create");
+    pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0xA1, 0, T0 + 1, "pub0");
+    pub(kv, ino, 64, 2ULL * EFS_MIN_CHUNK_SIZE, 0xA2, 0, T0 + 2, "pub64");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK, "chunk0");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 64, &got) == EFS_OK, "chunk64");
+
+    memset(&t, 0, sizeof(t));
+    t.size = 0;
+    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 10, &t) == EFS_OK, "to zero");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK && r.base_size == 0 &&
+              r.content_epoch == 1,
+          "epoch+size");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_ERR_NOT_FOUND,
+          "c0 deleted");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 64, &got) == EFS_ERR_NOT_FOUND,
+          "c64 deleted");
+
+    fill_ch(&ch);
+    memset(&p, 0, sizeof(p));
+    p.ino = ino;
+    p.new_size = 64;
+    p.expected_gen = 0;
+    p.candidate_gen = 0xB1;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
+    p.content_epoch = 0;
+    p.now = T0 + 11;
+    p.ch = ch;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE, "old epoch blocked");
+    p.content_epoch = 1;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "new epoch ok");
+
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "u", &ino)
+              == EFS_OK,
+          "create2");
+    pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0xC1, 0, T0 + 1, "pub0b");
+    pub(kv, ino, 64, 2ULL * EFS_MIN_CHUNK_SIZE, 0xC2, 0, T0 + 2, "pub64b");
+    memset(&t, 0, sizeof(t));
+    t.size = EFS_MIN_CHUNK_SIZE;
+    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 12, &t) == EFS_OK, "aligned");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK, "prefix kept");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 64, &got) == EFS_ERR_NOT_FOUND,
+          "suffix deleted");
+
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "v", &ino)
+              == EFS_OK,
+          "create3");
+    pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0xD1, 0, T0 + 1, "pub0c");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row");
+    fill_ch(&ch);
+    memset(&tail, 0, sizeof(tail));
+    tail.ino = ino;
+    tail.chunk_index = 0;
+    tail.new_size = 4096;
+    tail.expected_gen = 0xD1;
+    tail.candidate_gen = 0xD2;
+    tail.coding_profile_id = EFS_META_PROFILE_K2F1;
+    tail.content_epoch = r.content_epoch;
+    tail.now = T0 + 13;
+    tail.ch = ch;
+    memset(&t, 0, sizeof(t));
+    t.size = 4096;
+    t.tail = &tail;
+    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 13, &t) == EFS_OK, "partial");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
+              got.generation == 0xD2,
+          "tail cas");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK && r.base_size == 4096,
+          "partial size");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     test_create_lookup_unlink();
@@ -1302,6 +1387,7 @@ int main(void)
     test_stat_fence_and_gen();
     test_stat_dir_hashed();
     test_utimens_fence();
+    test_truncate_range_del();
     test_lookup_path();
     if (failures) {
         fprintf(stderr, "test_meta_apply: %d failure(s)\n", failures);

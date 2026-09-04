@@ -989,6 +989,42 @@ static void test_lock_deadlock(void)
     efs_sim_free(s);
 }
 
+static void test_truncate_range_del(void)
+{
+    struct efs_sim *s = mk(107);
+    efs_ino_t f = 0;
+    struct efs_meta_stat st;
+    uint8_t src[64], got[64];
+
+    CHECK(s, "mk");
+    fill(src, sizeof(src));
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "f", &f) == EFS_OK,
+          "create");
+    CHECK(efs_sim_put_stripe(s, 0, f, 0, src, sizeof(src), -1) == EFS_OK, "put0");
+    CHECK(efs_sim_publish(s, 0, f, 0, sizeof(src)) == EFS_OK, "pub0");
+    CHECK(efs_sim_put_stripe(s, 0, f, 64, src, sizeof(src), -1) == EFS_OK, "put64");
+    CHECK(efs_sim_publish(s, 0, f, 64, (uint64_t)EFS_SIM_CHUNK + sizeof(src)) ==
+              EFS_OK,
+          "pub64");
+    CHECK(efs_sim_read_chunk(s, f, 0, got, sizeof(got)) == EFS_OK, "read0");
+    CHECK(efs_sim_read_chunk(s, f, 64, got, sizeof(got)) == EFS_OK, "read64");
+
+    CHECK(efs_sim_truncate(s, 0, f, 0, NULL) == EFS_OK, "truncate zero");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK && st.size == 0, "size zero");
+    CHECK(efs_sim_read_chunk(s, f, 0, got, sizeof(got)) == EFS_ERR_NOT_FOUND,
+          "chunk0 gone");
+    CHECK(efs_sim_read_chunk(s, f, 64, got, sizeof(got)) == EFS_ERR_NOT_FOUND,
+          "chunk64 gone");
+
+    CHECK(efs_sim_crash(s, EFS_SIM_META) == EFS_OK, "crash");
+    CHECK(efs_sim_restart(s, EFS_SIM_META) == EFS_OK, "restart");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK && st.size == 0, "durable size");
+    CHECK(efs_sim_read_chunk(s, f, 64, got, sizeof(got)) == EFS_ERR_NOT_FOUND,
+          "still gone");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
 int main(void)
 {
     test_replay();
@@ -1019,6 +1055,7 @@ int main(void)
     test_hashed_dir_stat();
     test_single_shard_ops();
     test_utimens_fence();
+    test_truncate_range_del();
     test_lock_conflict_fence();
     test_lock_deadlock();
     if (failures) {

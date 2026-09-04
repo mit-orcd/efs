@@ -41,10 +41,19 @@ sends you to — not the whole spec.
 > (`test_utimens_fence`, `test_stat_fence_and_gen`, `test_stat_dir_hashed`),
 > `test_sim` (`test_utimens_fence`, `test_hashed_dir_stat`).
 >
+> **10.5c-3 is in (gated, working tree):** truncate range-delete. SETATTR(size)
+> is one apply batch: `content_epoch++`, `base_size = S`, per-active-lane
+> epoch fence, prefix scan of each lane's chunk-map with DEL of keys at or
+> past S, optional CAS of the straddling tail chunk in the same batch.
+> A later publish at the old epoch is STALE (I22); a sub-chunk RMW cannot
+> resurrect deleted keys. The simulator proposes truncate through Raft;
+> crash/restart keeps size 0 and the deleted chunks gone. Gate:
+> `test_meta_apply` (`test_truncate_range_del`), `test_sim`
+> (`test_truncate_range_del`).
+>
 > Both durable backends are in (10.5a KV, 10.5b Raft log). 10.5c is not
-> new storage work. Remaining in 10.5c: the rest of the applied SM
-> (truncate range-delete, O_APPEND, cross-shard
-> rename/link/rmdir) still in-sim, **then** a new export on the new
+> new storage work. Remaining in 10.5c: O_APPEND, then cross-shard
+> rename/link/rmdir still in-sim, **then** a new export on the new
 > engine. Do not wire the live `efs-test` export. Do not skip to step 11.
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
