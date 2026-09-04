@@ -13,7 +13,7 @@
  * A live dentry whose inode row cannot be resolved is I9 (EFS_ERR_IO). */
 
 #define EFS_META_LANES 64
-#define EFS_META_INO_BYTES   120
+#define EFS_META_INO_BYTES   128
 #define EFS_META_DENT_BYTES  20
 #define EFS_META_ALLOC_BYTES 8
 
@@ -54,6 +54,7 @@ struct efs_meta_row {
     uint64_t base_atime;
     uint64_t base_ctime;
     uint64_t mtime_gen;
+    uint64_t parent_version;
 };
 
 struct efs_meta_dentry {
@@ -160,8 +161,9 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
  * Hardlink of a directory is INVAL. Dest name must be absent. */
 int efs_meta_apply_link(struct efs_kv *kv, efs_ino_t src_parent, const char *src_name,
                         efs_ino_t dst_parent, const char *dst_name, uint64_t now);
-/* File rename, no replace. Directory rename is INVAL here (needs the
- * ancestry `parent_version` read set). Same-name is a no-op. */
+/* File or directory rename, no replace. Directory rename walks the
+ * destination ancestry and bumps `parent_version` (cycle prevention).
+ * Same-name is a no-op. */
 int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
                           const char *src_name, efs_ino_t dst_parent,
                           const char *dst_name, uint64_t now);

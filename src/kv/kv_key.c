@@ -92,6 +92,16 @@ int efs_kv_key_inode(uint32_t shard, efs_ino_t ino, uint8_t *out, uint32_t *len)
     return EFS_OK;
 }
 
+int efs_kv_key_pver(uint32_t shard, efs_ino_t ino, uint8_t *out, uint32_t *len)
+{
+    int rc = start(out, len, shard, EFS_KV_KIND_PVER, 8, EFS_KV_KEY_MAX);
+
+    if (rc != EFS_OK)
+        return rc;
+    be64(out + 3, ino);
+    return EFS_OK;
+}
+
 int efs_kv_key_dentry(uint32_t shard, efs_ino_t parent, const char *name,
                       uint8_t *out, uint32_t *len)
 {

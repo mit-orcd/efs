@@ -176,6 +176,7 @@ static void pack_inode(uint8_t *p, const struct efs_meta_row *r)
     be64(p + 96, r->base_atime);
     be64(p + 104, r->base_ctime);
     be64(p + 112, r->mtime_gen);
+    be64(p + 120, r->parent_version);
 }
 
 static int unpack_inode(const uint8_t *p, uint32_t n, struct efs_meta_row *r)
@@ -200,6 +201,7 @@ static int unpack_inode(const uint8_t *p, uint32_t n, struct efs_meta_row *r)
     r->base_atime = rd64(p + 96);
     r->base_ctime = rd64(p + 104);
     r->mtime_gen = rd64(p + 112);
+    r->parent_version = rd64(p + 120);
     return EFS_OK;
 }
 
@@ -1086,6 +1088,30 @@ static int stamp_dir_items(struct efs_kv *kv, struct efs_meta_row *prow,
     return EFS_OK;
 }
 
+/* POSIX: src must not be an ancestor of dst. Walking the live tree is
+ * unsound under concurrency; the sim txn guards parent_version. This
+ * helper is the single-KV form of the same predicate. */
+static int dir_is_under(struct efs_kv *kv, efs_ino_t ancestor, efs_ino_t start)
+{
+    efs_ino_t cur = start;
+    struct efs_meta_row r;
+    int hops, rc;
+
+    for (hops = 0; hops < 64; hops++) {
+        if (cur == ancestor)
+            return EFS_ERR_INVAL;
+        rc = efs_meta_apply_get_inode(kv, cur, &r);
+        if (rc != EFS_OK)
+            return rc;
+        if (!S_ISDIR(r.mode))
+            return EFS_ERR_INVAL;
+        if (cur == EFS_ROOT_INO || cur == r.parent)
+            return EFS_OK;
+        cur = r.parent;
+    }
+    return EFS_ERR_INVAL;
+}
+
 int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
                           const char *src_name, efs_ino_t dst_parent,
                           const char *dst_name, uint64_t now)
@@ -1101,11 +1127,13 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
     uint8_t k_dln[EFS_KV_KEY_MAX], v_dln[LANE_VAL];
     uint8_t k_sdseq[EFS_KV_KEY_MAX], v_sdseq[8];
     uint8_t k_ddseq[EFS_KV_KEY_MAX], v_ddseq[8];
+    uint8_t k_pver[EFS_KV_KEY_MAX], v_pver[8];
     uint32_t ksl = 0, ksh = 0, kd = 0, ki = 0, ksp = 0, kdp = 0;
-    uint32_t ksln = 0, kdln = 0, kss = 0, kds = 0;
-    struct efs_kv_item it[12];
+    uint32_t ksln = 0, kdln = 0, kss = 0, kds = 0, kpv = 0;
+    struct efs_kv_item it[14];
     uint32_t n = 0, dsh;
-    int rc, same_dir, touch_src = 0, stamp_src = 0, touch_dst = 0, stamp_dst = 0;
+    int rc, same_dir, is_dir, touch_src = 0, stamp_src = 0, touch_dst = 0,
+        stamp_dst = 0;
     uint8_t s_lane, d_lane;
 
     if (!kv || !src_name || !dst_name || src_parent == 0 || dst_parent == 0)
@@ -1115,8 +1143,15 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
     rc = efs_meta_apply_resolve(kv, src_parent, src_name, &src, &row);
     if (rc != EFS_OK)
         return rc;
-    if (S_ISDIR(row.mode))
-        return EFS_ERR_INVAL; /* directory rename needs parent_version */
+    is_dir = S_ISDIR(row.mode);
+    if (is_dir) {
+        if (row.ino == EFS_ROOT_INO)
+            return EFS_ERR_INVAL;
+        rc = dir_is_under(kv, row.ino, dst_parent);
+        if (rc != EFS_OK)
+            return rc;
+        row.parent_version++;
+    }
     rc = efs_meta_apply_get_inode(kv, src_parent, &sprow);
     if (rc != EFS_OK)
         return rc;
@@ -1132,6 +1167,12 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
         return rc;
 
     same_dir = src_parent == dst_parent;
+    if (is_dir && !same_dir) {
+        if (sprow.nlink < 3)
+            return EFS_ERR_PROTO;
+        sprow.nlink--;
+        dprow.nlink++;
+    }
     dsh = efs_kv_dentry_shard(dst_parent, dst_name, dprow.layout);
     memset(&exist, 0, sizeof(exist));
     exist.ino = row.ino;
@@ -1164,6 +1205,18 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
     it[n].val = v_ino;
     it[n].vlen = INO_VAL;
     n++;
+    if (is_dir) {
+        rc = efs_kv_key_pver(efs_kv_inode_shard(row.ino), row.ino, k_pver, &kpv);
+        if (rc != EFS_OK)
+            return rc;
+        be64(v_pver, row.parent_version);
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_pver;
+        it[n].klen = kpv;
+        it[n].val = v_pver;
+        it[n].vlen = 8;
+        n++;
+    }
 
     rc = stamp_dir_items(kv, &sprow, src_parent, src_name, now, k_spar, &ksp,
                          v_spar, k_sln, &ksln, v_sln, &touch_src, &stamp_src);
@@ -1184,6 +1237,24 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
             if (rc != EFS_OK)
                 return rc;
             stamp_dst = 1;
+        }
+    }
+    if (is_dir && !same_dir) {
+        if (!touch_src) {
+            pack_inode(v_spar, &sprow);
+            rc = efs_kv_key_inode(efs_kv_inode_shard(src_parent), src_parent,
+                                  k_spar, &ksp);
+            if (rc != EFS_OK)
+                return rc;
+            touch_src = 1;
+        }
+        if (!touch_dst) {
+            pack_inode(v_dpar, &dprow);
+            rc = efs_kv_key_inode(efs_kv_inode_shard(dst_parent), dst_parent,
+                                  k_dpar, &kdp);
+            if (rc != EFS_OK)
+                return rc;
+            touch_dst = 1;
         }
     }
     if (touch_src) {

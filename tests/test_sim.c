@@ -406,17 +406,25 @@ static void test_l8_desired_placement(void)
     efs_sim_free(s);
 }
 
-static const char *scatter(efs_ino_t parent)
+static const char *scatter_nth(efs_ino_t parent, int nth)
 {
     static char buf[16];
-    int i;
+    int i, found = 0;
 
     for (i = 0; i < 4096; i++) {
         snprintf(buf, sizeof(buf), "d%d", i);
-        if (efs_kv_mkdir_shard(parent, buf, 0) != efs_kv_inode_shard(parent))
-            return buf;
+        if (efs_kv_mkdir_shard(parent, buf, 0) != efs_kv_inode_shard(parent)) {
+            if (found == nth)
+                return buf;
+            found++;
+        }
     }
     return "d0";
+}
+
+static const char *scatter(efs_ino_t parent)
+{
+    return scatter_nth(parent, 0);
 }
 
 static void test_mkdir_i17(void)
@@ -1144,9 +1152,46 @@ static void test_rmdir_rename(void)
     CHECK(efs_sim_txn_finish(s, &t, 1) == EFS_OK, "resolve");
     CHECK(efs_sim_lookup(s, 1, EFS_ROOT_INO, "b", &g) == EFS_ERR_NOT_FOUND,
           "src gone");
-    CHECK(efs_sim_rename(s, 0, EFS_ROOT_INO, nm, EFS_ROOT_INO, "moved") ==
-              EFS_ERR_INVAL,
+    CHECK(efs_sim_rename(s, 0, EFS_ROOT_INO, nm, EFS_ROOT_INO, "moved") == EFS_OK,
           "dir rename");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "moved", &g) == EFS_OK && g == d2,
+          "moved");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, nm, &g) == EFS_ERR_NOT_FOUND,
+          "old dir name");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
+static void test_dir_rename(void)
+{
+    struct efs_sim *s = mk(85);
+    efs_ino_t a = 0, b = 0, g = 0;
+    struct efs_txid t, t2;
+    struct efs_meta_stat st;
+    char na[16], nb[16];
+
+    CHECK(s, "mk");
+    snprintf(na, sizeof(na), "%s", scatter_nth(EFS_ROOT_INO, 0));
+    snprintf(nb, sizeof(nb), "%s", scatter_nth(EFS_ROOT_INO, 1));
+    CHECK(strcmp(na, nb) != 0, "two names");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, na, &a) == EFS_OK && a, "mkdir a");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, nb, &b) == EFS_OK && b, "mkdir b");
+    CHECK(efs_sim_rename(s, 0, EFS_ROOT_INO, na, a, "x") == EFS_ERR_INVAL,
+          "into self");
+    CHECK(efs_sim_rename_until(s, EFS_ROOT_INO, na, b, "a", &t,
+                               EFS_SIM_TXN_PREPARE) == EFS_OK,
+          "prepare a into b");
+    CHECK(efs_sim_lookup(s, 0, b, "a", &g) == EFS_ERR_NOT_FOUND, "I17");
+    CHECK(efs_sim_rename_until(s, EFS_ROOT_INO, nb, a, "b", &t2,
+                               EFS_SIM_TXN_PREPARE) == EFS_ERR_BUSY,
+          "cycle prepare");
+    CHECK(efs_sim_txn_finish(s, &t, 1) == EFS_OK, "commit a into b");
+    CHECK(efs_sim_lookup(s, 0, b, "a", &g) == EFS_OK && g == a, "nested");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, na, &g) == EFS_ERR_NOT_FOUND,
+          "a gone");
+    CHECK(efs_sim_getattr(s, b, &st) == EFS_OK && st.nlink == 3, "b nlink");
+    CHECK(efs_sim_rename(s, 0, EFS_ROOT_INO, nb, a, "b") == EFS_ERR_INVAL,
+          "cycle committed");
     CHECK(efs_sim_check(s) == EFS_OK, "check");
     efs_sim_free(s);
 }
@@ -1173,6 +1218,7 @@ int main(void)
     test_mkdir_visible_at_decision();
     test_link_i17();
     test_rmdir_rename();
+    test_dir_rename();
     test_i23_session_fence();
     test_i19_open_unlinked();
     test_i23_barrier_holds_leases();

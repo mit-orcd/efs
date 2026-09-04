@@ -1,6 +1,5 @@
 /* Cross-shard namespace txns: LINK, UNLINK (when shards differ), RMDIR,
- * file RENAME. MKDIR stays in sim_txn.c; this file reuses its propose
- * helpers. Directory rename is INVAL until parent_version is on the row. */
+ * file and directory RENAME. MKDIR stays in sim_txn.c. */
 #include "sim_internal.h"
 #include "efs/kv_key.h"
 #include "efs/txn.h"
@@ -172,6 +171,68 @@ static int dseq_guard(struct efs_kv *kv, uint32_t shard, efs_ino_t dir,
     if (rc != EFS_OK)
         return rc;
     return prep_add(pr, n, shard, EFS_TXN_GUARD, k, kl, ver, 0, NULL, 0, NULL);
+}
+
+static int pver_guard_chain(struct efs_sim *sim, efs_ino_t dst_parent,
+                            efs_ino_t src, struct ns_prep *pr, int *n,
+                            struct efs_txn_parts *p)
+{
+    efs_ino_t cur = dst_parent;
+    int hops, rc;
+
+    for (hops = 0; hops < 64; hops++) {
+        struct efs_meta_row r;
+        struct efs_kv *kv;
+        uint8_t k[EFS_KV_KEY_MAX];
+        uint32_t kl = 0, sh;
+        uint64_t ver = 0;
+
+        if (cur == src)
+            return EFS_ERR_INVAL;
+        rc = load_row(sim, cur, &r);
+        if (rc != EFS_OK)
+            return rc;
+        sh = efs_kv_inode_shard(cur);
+        rc = sim_txn_read_kv(sim, sh, &kv);
+        if (rc != EFS_OK)
+            return rc;
+        rc = efs_kv_key_pver(sh, cur, k, &kl);
+        if (rc == EFS_OK)
+            rc = efs_txn_ver_get(kv, k, kl, &ver);
+        if (rc == EFS_OK)
+            rc = sim_txn_parts_add(p, sh);
+        if (rc == EFS_OK)
+            rc = prep_add(pr, n, sh, EFS_TXN_GUARD, k, kl, ver, 0, NULL, 0,
+                          NULL);
+        if (rc != EFS_OK)
+            return rc;
+        if (cur == EFS_ROOT_INO || cur == r.parent)
+            return EFS_OK;
+        cur = r.parent;
+    }
+    return EFS_ERR_INVAL;
+}
+
+static int pver_bump(struct efs_sim *sim, efs_ino_t ino, uint64_t new_ver,
+                     struct ns_prep *pr, int *n, struct efs_txn_parts *p)
+{
+    uint8_t k[EFS_KV_KEY_MAX], v[8];
+    uint32_t kl = 0, sh = efs_kv_inode_shard(ino);
+    uint64_t ever = 0;
+    struct efs_kv *kv;
+    int rc = sim_txn_read_kv(sim, sh, &kv);
+
+    if (rc == EFS_OK)
+        rc = efs_kv_key_pver(sh, ino, k, &kl);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(kv, k, kl, &ever);
+    if (rc == EFS_OK)
+        rc = sim_txn_parts_add(p, sh);
+    if (rc != EFS_OK)
+        return rc;
+    wr64(v, new_ver);
+    return prep_add(pr, n, sh, EFS_TXN_EXCL, k, kl, ever, EFS_TXN_PUT, v, 8,
+                    NULL);
 }
 
 static int stamp_local_parent(struct efs_sim *sim, struct efs_meta_row *prow,
@@ -688,7 +749,7 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
     uint32_t kd = 0, ki = 0, dsh, ish, ssh;
     uint64_t iver = 0, dver = 0;
     struct ns_prep pr[NS_PREP_MAX];
-    int n = 0, rc;
+    int n = 0, rc, is_dir;
     uint8_t s_lane, d_lane;
 
     memset(p, 0, sizeof(*p));
@@ -700,7 +761,8 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
     rc = load_row(sim, src.ino, &row);
     if (rc != EFS_OK)
         return rc;
-    if (S_ISDIR(row.mode))
+    is_dir = S_ISDIR(row.mode);
+    if (is_dir && row.ino == EFS_ROOT_INO)
         return EFS_ERR_INVAL;
     rc = load_row(sim, src_parent, &sprow);
     if (rc != EFS_OK)
@@ -710,6 +772,18 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
         return rc;
     if (!S_ISDIR(dprow.mode))
         return EFS_ERR_INVAL;
+    if (is_dir) {
+        rc = pver_guard_chain(sim, dst_parent, row.ino, pr, &n, p);
+        if (rc != EFS_OK)
+            return rc;
+        row.parent_version++;
+        if (src_parent != dst_parent) {
+            if (sprow.nlink < 3)
+                return EFS_ERR_PROTO;
+            sprow.nlink--;
+            dprow.nlink++;
+        }
+    }
     dsh = efs_kv_dentry_shard(dst_parent, dst_name, dprow.layout);
     ssh = efs_kv_dentry_shard(src_parent, src_name, sprow.layout);
     ish = efs_kv_inode_shard(row.ino);
@@ -763,6 +837,8 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
     if (rc == EFS_OK)
         rc = prep_add(pr, &n, ish, EFS_TXN_EXCL, k_ino, ki, iver, EFS_TXN_PUT,
                       v_ino, EFS_META_INO_BYTES, NULL);
+    if (rc == EFS_OK && is_dir)
+        rc = pver_bump(sim, row.ino, row.parent_version, pr, &n, p);
     if (rc != EFS_OK)
         return rc;
     if (sprow.layout == EFS_META_LAYOUT_LOCAL) {
@@ -773,6 +849,12 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
         rc = stamp_hashed_lane(skv, &sprow, src_name, sim->now, pr, &n, p);
         if (rc != EFS_OK)
             return rc;
+        if (is_dir && src_parent != dst_parent) {
+            rc = stamp_local_parent(sim, &sprow, src_parent, sim->now, pr, &n,
+                                    p);
+            if (rc != EFS_OK)
+                return rc;
+        }
     }
     if (src_parent != dst_parent) {
         if (dprow.layout == EFS_META_LAYOUT_LOCAL) {
@@ -780,6 +862,9 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
                                     p);
         } else {
             rc = stamp_hashed_lane(dkv, &dprow, dst_name, sim->now, pr, &n, p);
+            if (rc == EFS_OK && is_dir)
+                rc = stamp_local_parent(sim, &dprow, dst_parent, sim->now, pr,
+                                        &n, p);
         }
         if (rc != EFS_OK)
             return rc;

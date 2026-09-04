@@ -238,8 +238,12 @@ getattr, I16 same offset, crash-durable reservation) — gated by
 **10.5c-5 is in:** in-sim LINK, UNLINK nlink>1, RMDIR, file RENAME (I17,
 nlink, HASHED `dentry_seq` guards, dest uniqueness via txn version; dir
 rename INVAL until `parent_version`) — gated by `test_meta_apply` and
-`test_sim` (mem + durable). Then directory rename, then a new export.
-Then step 11 deletes the old flush.
+`test_sim` (mem + durable).
+**10.5c-6 is in:** directory rename with `parent_version` (pver sidecar
+guards on dest ancestry, I17 concurrent cycle BUSY, parent nlink on
+cross-dir dir rename, cap stays 8) — gated by `test_sim` (mem + durable).
+Then a new export on Raft + the applied KV. Then step 11 deletes the old
+flush.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

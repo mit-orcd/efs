@@ -74,10 +74,22 @@ sends you to — not the whole spec.
 > (`test_link_nlink`, `test_rmdir_rename`), `test_sim` (`test_link_i17`,
 > `test_rmdir_rename`) — mem and `EFS_SIM_KV_DIR`/`EFS_SIM_RAFT_DIR`.
 >
+> **10.5c-6 is in (gated):** directory rename with `parent_version`. The
+> inode row is 128 B and carries `parent` + `parent_version` (bumped on
+> reparent). Ancestry of `dst_parent` is a read-set of **pver sidecar**
+> guards (`EFS_KV_KIND_PVER`), not exclusive on ancestor inodes — chmod /
+> mkdir in an ancestor does not abort. src in the chain is INVAL (cannot
+> move a dir under itself). Concurrent `rename(a→b/a)` ‖ `rename(b→a/b)`:
+> the second BUSYs on the first's exclusive pver PUT (I17, no half-apply).
+> Cross-dir directory rename adjusts parent nlink; file rename does not.
+> `EFS_TXN_MAX_PART` stays 8 (deep ancestry that would exceed it is BUSY).
+> Replace is still not in this slice. Gate: `test_sim` (`test_dir_rename`,
+> `test_rmdir_rename`) — mem and `EFS_SIM_KV_DIR`/`EFS_SIM_RAFT_DIR`.
+>
 > Both durable backends are in (10.5a KV, 10.5b Raft log). 10.5c is not
-> new storage work. Remaining in 10.5c: directory rename (`parent_version`
-> on the inode row), **then** a new export on the new engine. Do not wire
-> the live `efs-test` export. Do not skip to step 11.
+> new storage work. Remaining in 10.5c: a **new export** on Raft + the
+> applied KV. Do not wire the live `efs-test` export. Do not skip to
+> step 11.
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never

@@ -303,6 +303,16 @@ expected 0. The simulator proposes through Raft; I17 abort leaves no
 half-apply. Gate: `test_meta_apply`, `test_sim` (mem and durable). Not
 in this step: directory rename, production `efsd`.
 
+**Step 10.5c-6 in-sim (gated): directory rename with `parent_version`.**
+The inode row is 128 B and carries `parent` + `parent_version` (bumped on
+reparent). Ancestry of `dst_parent` is a read-set of pver sidecar guards,
+not exclusive on ancestor inodes. src in the chain is INVAL. Concurrent
+`rename(a→b/a)` ‖ `rename(b→a/b)` BUSYs the second on the first's
+exclusive pver PUT (I17). Cross-dir directory rename adjusts parent nlink;
+file rename does not. The participant cap stays 8. Replace is not in this
+step. Gate: `test_sim` (mem and durable). Not in this step: a new export,
+production `efsd`.
+
 ## Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove
