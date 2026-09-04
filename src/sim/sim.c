@@ -466,6 +466,7 @@ struct efs_sim *efs_sim_new(const struct efs_sim_cfg *cfg)
         memset(uuid, 0, sizeof(uuid));
         uuid[15] = (uint8_t)(c + 1);
         efs_opid_window_init(&sim->cli[c].win, uuid, 1);
+        sim->cli[c].next_seq = 1;
     }
     if (sim_sess_boot(sim) != EFS_OK) {
         efs_sim_free(sim);
@@ -651,6 +652,54 @@ int efs_sim_truncate(struct efs_sim *sim, int client, efs_ino_t ino,
                      uint64_t size, const struct efs_meta_pub *tail)
 {
     return sim_raft_truncate(sim, client, ino, size, tail);
+}
+
+int efs_sim_append_reserve_op(struct efs_sim *sim, int client,
+                              const struct efs_opid *op, efs_ino_t ino,
+                              uint64_t len, uint64_t *off_out)
+{
+    struct efs_opid_reply rep;
+    uint64_t off = 0;
+    int hit, rc;
+
+    if (!sim || !op || ino == 0 || len == 0 || client < 0 ||
+        client >= sim->nclients)
+        return EFS_ERR_INVAL;
+    memset(&rep, 0, sizeof(rep));
+    hit = efs_opid_lookup(&sim->cli[client].win, op, &rep);
+    if (hit < 0)
+        return hit;
+    if (hit) {
+        if (off_out)
+            *off_out = rep.extra;
+        return rep.rc;
+    }
+    rc = sim_raft_append_reserve(sim, client, op, ino, len, &off);
+    if (off_out)
+        *off_out = (rc == EFS_OK) ? off : 0;
+    memset(&rep, 0, sizeof(rep));
+    rep.rc = rc;
+    rep.ino = ino;
+    rep.extra = off;
+    efs_opid_complete(&sim->cli[client].win, op, &rep);
+    return rc;
+}
+
+int efs_sim_append_reserve(struct efs_sim *sim, int client, efs_ino_t ino,
+                           uint64_t len, uint64_t *off_out)
+{
+    struct efs_opid op;
+
+    if (!sim || client < 0 || client >= sim->nclients)
+        return EFS_ERR_INVAL;
+    efs_sim_opid_for(sim, client, sim->cli[client].next_seq++, &op);
+    return efs_sim_append_reserve_op(sim, client, &op, ino, len, off_out);
+}
+
+int efs_sim_append_resolve(struct efs_sim *sim, int client, efs_ino_t ino,
+                           uint64_t off, int outcome)
+{
+    return sim_raft_append_resolve(sim, client, ino, off, outcome);
 }
 
 int efs_sim_readdir(struct efs_sim *sim, efs_ino_t dir,

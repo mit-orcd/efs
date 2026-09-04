@@ -327,6 +327,21 @@ struct efs_meta_truncate {
 
 int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
                             const struct efs_meta_truncate *t);
+
+/* O_APPEND: serialized EOF reservation on the inode shard, then ordinary
+ * distributed publish. `op` is required (I16: a retried reserve must recover
+ * the same offset). `coord` is the same getattr collect so pending reductions
+ * count as EOF. */
+#define EFS_META_APPEND_COMPLETED    1
+#define EFS_META_APPEND_ABORTED_HOLE 2
+#define EFS_META_APPEND_FENCED_HOLE  3
+
+int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
+                                  const struct efs_opid *op,
+                                  efs_txn_coord_fn coord, void *ctx,
+                                  uint64_t *off_out);
+int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off,
+                                  int outcome);
 int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_index,
                              struct efs_meta_chunk *out);
 uint64_t efs_meta_candidate_gen(const uint8_t uuid[16], uint32_t session_epoch,

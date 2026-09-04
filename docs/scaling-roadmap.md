@@ -231,8 +231,11 @@ used lanes; backwards mtime sticks; chmod does not hide it) — gated by
 `test_meta_apply` and `test_sim`.
 **10.5c-3 is in:** truncate range-delete (`content_epoch` fence + per-lane
 chunk-map DEL past the new size + optional tail CAS) — gated by
-`test_meta_apply` and `test_sim`. Then O_APPEND, then cross-shard ops,
-then a new export. Then step 11 deletes the old flush.
+`test_meta_apply` and `test_sim`.
+**10.5c-4 is in:** O_APPEND reserve / barrier / resolve (real EOF, frontier
+getattr, I16 same offset, crash-durable reservation) — gated by
+`test_meta_apply` and `test_sim`. Then cross-shard ops, then a new
+export. Then step 11 deletes the old flush.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

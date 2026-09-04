@@ -23,6 +23,8 @@
 #define SIM_CMD_SETATTR 13
 #define SIM_CMD_UTIMENS 14
 #define SIM_CMD_TRUNCATE 15
+#define SIM_CMD_APPEND_RSV 16
+#define SIM_CMD_APPEND_RES 17
 #define SIM_LOCKQ       16
 
 enum {
@@ -86,14 +88,17 @@ struct sim_server {
     uint64_t applied_idx;
     int applied_rc;
     efs_ino_t applied_ino;
+    uint64_t applied_extra;
     uint64_t applied_idx_g[3];
     int applied_rc_g[3];
     efs_ino_t applied_ino_g[3];
+    uint64_t applied_extra_g[3];
 };
 
 struct sim_client {
     struct efs_transport *tx[EFS_SIM_MAX_SERVERS];
     struct efs_opid_window win;
+    uint64_t next_seq;
 };
 
 struct efs_sim {
@@ -116,6 +121,7 @@ struct efs_sim {
     int hold;
     int last_rc;
     efs_ino_t last_ino;
+    uint64_t last_extra;
     uint32_t nev;
     struct sim_ev ev[SIM_MAX_EV];
     struct sim_server srv[EFS_SIM_MAX_SERVERS];
@@ -167,6 +173,11 @@ int sim_raft_utimens(struct efs_sim *sim, int client, efs_ino_t ino,
                      const struct efs_meta_utimens *u);
 int sim_raft_truncate(struct efs_sim *sim, int client, efs_ino_t ino,
                       uint64_t size, const struct efs_meta_pub *tail);
+int sim_raft_append_reserve(struct efs_sim *sim, int client,
+                            const struct efs_opid *op, efs_ino_t ino,
+                            uint64_t len, uint64_t *off_out);
+int sim_raft_append_resolve(struct efs_sim *sim, int client, efs_ino_t ino,
+                            uint64_t off, int outcome);
 int sim_raft_getattr(struct efs_sim *sim, efs_ino_t ino, struct efs_meta_stat *out);
 int sim_raft_readdir(struct efs_sim *sim, efs_ino_t dir,
                      struct efs_meta_dir_cursor *cur, struct efs_meta_dir_ent *out,
@@ -228,10 +239,12 @@ static inline void sim_note_apply(struct sim_server *s, uint8_t group,
     s->applied_idx = index;
     s->applied_rc = rc;
     s->applied_ino = ino;
+    s->applied_extra = 0;
     if (group <= 2) {
         s->applied_idx_g[group] = index;
         s->applied_rc_g[group] = rc;
         s->applied_ino_g[group] = ino;
+        s->applied_extra_g[group] = 0;
     }
 }
 

@@ -1025,6 +1025,45 @@ static void test_truncate_range_del(void)
     efs_sim_free(s);
 }
 
+static void test_append_reserve(void)
+{
+    struct efs_sim *s = mk(108);
+    struct efs_opid op;
+    struct efs_meta_stat st;
+    efs_ino_t f = 0;
+    uint64_t off = 0, off2 = 0;
+    uint8_t src[64];
+
+    CHECK(s, "mk");
+    fill(src, sizeof(src));
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "f", &f) == EFS_OK,
+          "create");
+    CHECK(efs_sim_put_stripe(s, 0, f, 0, src, sizeof(src), -1) == EFS_OK, "put");
+    CHECK(efs_sim_publish(s, 0, f, 0, sizeof(src)) == EFS_OK, "pwrite");
+    CHECK(efs_sim_append_reserve(s, 0, f, 64, &off) == EFS_OK && off == 64,
+          "reserve after pwrite");
+    CHECK(efs_sim_opid_forget(s, 0) == EFS_OK, "forget ram");
+    efs_sim_opid_for(s, 0, 1, &op);
+    CHECK(efs_sim_append_reserve_op(s, 0, &op, f, 64, &off2) == EFS_OK &&
+              off2 == 64,
+          "i16 durable");
+    CHECK(efs_sim_put_stripe(s, 0, f, 1, src, sizeof(src), -1) == EFS_OK, "put1");
+    CHECK(efs_sim_publish(s, 0, f, 1, 200) == EFS_ERR_BUSY, "past bar");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK && st.size == 64, "frontier cap");
+    CHECK(efs_sim_crash(s, EFS_SIM_META) == EFS_OK, "crash");
+    CHECK(efs_sim_restart(s, EFS_SIM_META) == EFS_OK, "restart");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK && st.size == 64, "durable cap");
+    CHECK(efs_sim_append_resolve(s, 0, f, off, EFS_META_APPEND_COMPLETED) ==
+              EFS_OK,
+          "resolve");
+    CHECK(efs_sim_getattr(s, f, &st) == EFS_OK && st.size == 128, "drained");
+    CHECK(efs_sim_append_resolve(s, 0, f, off, EFS_META_APPEND_COMPLETED) ==
+              EFS_OK,
+          "resolve replay");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
 int main(void)
 {
     test_replay();
@@ -1056,6 +1095,7 @@ int main(void)
     test_single_shard_ops();
     test_utimens_fence();
     test_truncate_range_del();
+    test_append_reserve();
     test_lock_conflict_fence();
     test_lock_deadlock();
     if (failures) {

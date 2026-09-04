@@ -28,6 +28,8 @@
 #define EFS_KV_KIND_SESS_LOCAL 14 /* per-shard established epoch + fence */
 #define EFS_KV_KIND_LEASE    15 /* open lease (FileID, session) on inode shard */
 #define EFS_KV_KIND_LOCK     16 /* POSIX lock record on inode shard */
+#define EFS_KV_KIND_APPEND_CUR 17 /* FileID append cursor (watermark/frontier) */
+#define EFS_KV_KIND_APPEND_RSV 18 /* FileID append reservation at offset */
 
 static inline uint32_t efs_kv_inode_shard(efs_ino_t ino)
 {
@@ -88,6 +90,12 @@ int efs_kv_key_lock_prefix(uint32_t shard, efs_ino_t ino, uint64_t gen,
 int efs_kv_key_lock_file_prefix(uint32_t shard, efs_ino_t ino, uint64_t gen,
                                 uint8_t *out, uint32_t *len);
 int efs_kv_key_lock_shard_prefix(uint32_t shard, uint8_t *out, uint32_t *len);
+int efs_kv_key_append_cur(uint32_t shard, efs_ino_t ino, uint64_t gen,
+                          uint8_t *out, uint32_t *len);
+int efs_kv_key_append_rsv(uint32_t shard, efs_ino_t ino, uint64_t gen,
+                          uint64_t off, uint8_t *out, uint32_t *len);
+int efs_kv_key_append_rsv_prefix(uint32_t shard, efs_ino_t ino, uint64_t gen,
+                                 uint8_t *out, uint32_t *len);
 int efs_kv_key_unwrap(const uint8_t *wrap, uint32_t wlen, uint8_t *orig,
                       uint32_t *olen);
 

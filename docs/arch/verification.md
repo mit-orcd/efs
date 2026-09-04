@@ -279,6 +279,18 @@ is STALE (I22). The simulator proposes truncate through Raft; crash /
 restart does not restore deleted chunks. Gate: `test_meta_apply`,
 `test_sim`. Not in this step: O_APPEND, production `efsd`.
 
+**Step 10.5c-4 in-sim (gated): O_APPEND.** Reservation is against the real
+EOF (`MAX` of `base_size`, active-lane ends, pending committed reductions,
+and the live watermark) — a private counter that ignores a prior pwrite
+is a correctness bug. An unresolved burst holds an append barrier:
+publish with `new_size` past the watermark is BUSY; getattr reports the
+contiguous resolved frontier, not lane `max_end`. Resolve is COMPLETED,
+ABORTED_HOLE, or FENCED_HOLE; a retried reserve of the same op-ID
+recovers the same offset (`opid.extra`, I16). The simulator proposes
+reserve and resolve through Raft; crash / restart keeps the reservation.
+Gate: `test_meta_apply`, `test_sim`. Not in this step: cross-shard
+rename/link/rmdir, production `efsd`.
+
 ## Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove

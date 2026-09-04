@@ -15,6 +15,8 @@
 #define CMD_SETATTR SIM_CMD_SETATTR
 #define CMD_UTIMENS SIM_CMD_UTIMENS
 #define CMD_TRUNCATE SIM_CMD_TRUNCATE
+#define CMD_APPEND_RSV SIM_CMD_APPEND_RSV
+#define CMD_APPEND_RES SIM_CMD_APPEND_RES
 #define CMD_MAX     512
 #define TRUNC_HDR   54
 #define TRUNC_TAIL  (4 + 8 + 8 + 4 + (uint32_t)EFS_NUM_FRAGMENTS * (4 + EFS_HASH_SIZE))
@@ -474,6 +476,65 @@ static int apply_truncate_cmd(struct sim_server *s, const uint8_t *cmd,
     return EFS_OK;
 }
 
+static int apply_append_rsv_cmd(struct sim_server *s, const uint8_t *cmd,
+                                uint32_t clen, uint64_t index, uint8_t group)
+{
+    struct efs_opid op;
+    efs_ino_t ino;
+    uint64_t len, off = 0;
+    int rc;
+
+    if (clen < 45)
+        return EFS_ERR_PROTO;
+    ino = rd64(cmd + 1);
+    len = rd64(cmd + 9);
+    memset(&op, 0, sizeof(op));
+    memcpy(op.client_uuid, cmd + 17, EFS_OPID_UUID_LEN);
+    op.session_epoch = rd32(cmd + 17 + EFS_OPID_UUID_LEN);
+    op.seq = rd64(cmd + 37);
+    rc = efs_session_accept(s->disk, efs_kv_inode_shard(ino), op.client_uuid,
+                            op.session_epoch);
+    if (rc != EFS_OK) {
+        sim_note_apply(s, group, index, rc, ino);
+        return EFS_OK;
+    }
+    rc = efs_meta_apply_append_reserve(s->disk, ino, len, &op, sim_txn_coord,
+                                       s->sim, &off);
+    sim_note_apply(s, group, index, rc, ino);
+    if (rc == EFS_OK) {
+        s->applied_extra = off;
+        if (group <= 2)
+            s->applied_extra_g[group] = off;
+    }
+    return EFS_OK;
+}
+
+static int apply_append_res_cmd(struct sim_server *s, const uint8_t *cmd,
+                                uint32_t clen, uint64_t index, uint8_t group)
+{
+    efs_ino_t ino;
+    uint64_t off;
+    uint8_t uuid[EFS_OPID_UUID_LEN];
+    uint32_t epoch;
+    int outcome, rc;
+
+    if (clen < 38)
+        return EFS_ERR_PROTO;
+    ino = rd64(cmd + 1);
+    off = rd64(cmd + 9);
+    outcome = (int)cmd[17];
+    memcpy(uuid, cmd + 18, EFS_OPID_UUID_LEN);
+    epoch = rd32(cmd + 18 + EFS_OPID_UUID_LEN);
+    rc = efs_session_accept(s->disk, efs_kv_inode_shard(ino), uuid, epoch);
+    if (rc != EFS_OK) {
+        sim_note_apply(s, group, index, rc, ino);
+        return EFS_OK;
+    }
+    rc = efs_meta_apply_append_resolve(s->disk, ino, off, outcome);
+    sim_note_apply(s, group, index, rc, ino);
+    return EFS_OK;
+}
+
 int sim_ns_try(struct sim_server *s, uint8_t group, const uint8_t *cmd,
                uint32_t clen, uint64_t index)
 {
@@ -500,6 +561,12 @@ int sim_ns_try(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         return 1;
     case CMD_TRUNCATE:
         apply_truncate_cmd(s, cmd, clen, index, group);
+        return 1;
+    case CMD_APPEND_RSV:
+        apply_append_rsv_cmd(s, cmd, clen, index, group);
+        return 1;
+    case CMD_APPEND_RES:
+        apply_append_res_cmd(s, cmd, clen, index, group);
         return 1;
     case SIM_CMD_DIR:
         sim_dir_apply(s, group, cmd, clen, index);
@@ -780,6 +847,7 @@ static int mutate_g(struct efs_sim *sim, uint8_t group, const uint8_t *cmd,
         return EFS_ERR_BUSY;
     if (sim->srv[lid].applied_ino_g[group])
         sim->last_ino = sim->srv[lid].applied_ino_g[group];
+    sim->last_extra = sim->srv[lid].applied_extra_g[group];
     return sim->srv[lid].applied_rc_g[group];
 }
 
@@ -1220,6 +1288,58 @@ int sim_raft_truncate(struct efs_sim *sim, int client, efs_ino_t ino,
         wr32(cmd + 34 + EFS_OPID_UUID_LEN, epoch);
     }
     return sim_raft_propose_group(sim, sim_shard_group(sh), cmd, n);
+}
+
+int sim_raft_append_reserve(struct efs_sim *sim, int client,
+                            const struct efs_opid *op, efs_ino_t ino,
+                            uint64_t len, uint64_t *off_out)
+{
+    uint8_t cmd[45];
+    uint32_t sh;
+    int rc;
+
+    if (!sim || !op || ino == 0 || len == 0 || client < 0 ||
+        client >= sim->nclients)
+        return EFS_ERR_INVAL;
+    sh = efs_kv_inode_shard(ino);
+    rc = sim_sess_ensure_id(sim, op->client_uuid, op->session_epoch, sh);
+    if (rc != EFS_OK)
+        return rc;
+    cmd[0] = CMD_APPEND_RSV;
+    wr64(cmd + 1, ino);
+    wr64(cmd + 9, len);
+    memcpy(cmd + 17, op->client_uuid, EFS_OPID_UUID_LEN);
+    wr32(cmd + 17 + EFS_OPID_UUID_LEN, op->session_epoch);
+    wr64(cmd + 37, op->seq);
+    rc = sim_raft_propose_group(sim, sim_shard_group(sh), cmd, 45);
+    if (off_out)
+        *off_out = (rc == EFS_OK) ? sim->last_extra : 0;
+    return rc;
+}
+
+int sim_raft_append_resolve(struct efs_sim *sim, int client, efs_ino_t ino,
+                            uint64_t off, int outcome)
+{
+    uint8_t cmd[38];
+    uint32_t sh, epoch;
+    const uint8_t *uuid;
+    int rc;
+
+    if (!sim || ino == 0 || client < 0 || client >= sim->nclients)
+        return EFS_ERR_INVAL;
+    sh = efs_kv_inode_shard(ino);
+    rc = sim_sess_ensure(sim, client, sh);
+    if (rc != EFS_OK)
+        return rc;
+    uuid = sim->cli[client].win.client_uuid;
+    epoch = sim->cli[client].win.session_epoch;
+    cmd[0] = CMD_APPEND_RES;
+    wr64(cmd + 1, ino);
+    wr64(cmd + 9, off);
+    cmd[17] = (uint8_t)outcome;
+    memcpy(cmd + 18, uuid, EFS_OPID_UUID_LEN);
+    wr32(cmd + 18 + EFS_OPID_UUID_LEN, epoch);
+    return sim_raft_propose_group(sim, sim_shard_group(sh), cmd, 38);
 }
 
 int sim_raft_getattr(struct efs_sim *sim, efs_ino_t ino, struct efs_meta_stat *out)

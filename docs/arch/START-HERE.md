@@ -41,7 +41,7 @@ sends you to — not the whole spec.
 > (`test_utimens_fence`, `test_stat_fence_and_gen`, `test_stat_dir_hashed`),
 > `test_sim` (`test_utimens_fence`, `test_hashed_dir_stat`).
 >
-> **10.5c-3 is in (gated, working tree):** truncate range-delete. SETATTR(size)
+> **10.5c-3 is in (gated):** truncate range-delete. SETATTR(size)
 > is one apply batch: `content_epoch++`, `base_size = S`, per-active-lane
 > epoch fence, prefix scan of each lane's chunk-map with DEL of keys at or
 > past S, optional CAS of the straddling tail chunk in the same batch.
@@ -51,10 +51,21 @@ sends you to — not the whole spec.
 > `test_meta_apply` (`test_truncate_range_del`), `test_sim`
 > (`test_truncate_range_del`).
 >
+> **10.5c-4 is in (gated):** O_APPEND in-sim. Reserve against
+> the real EOF (MAX of `base_size`, active-lane ends, pending reductions,
+> watermark) — a private counter is a correctness bug. While unresolved,
+> an append barrier rejects publish with `new_size > watermark`; getattr
+> reports the contiguous resolved frontier, not lane `max_end`. Resolve is
+> COMPLETED / ABORTED_HOLE / FENCED_HOLE; a retried reserve recovers the
+> same offset (I16, `opid.extra`). The simulator proposes reserve/resolve
+> through Raft; crash/restart keeps the reservation. Gate:
+> `test_meta_apply` (`test_append_reserve`), `test_sim`
+> (`test_append_reserve`).
+>
 > Both durable backends are in (10.5a KV, 10.5b Raft log). 10.5c is not
-> new storage work. Remaining in 10.5c: O_APPEND, then cross-shard
-> rename/link/rmdir still in-sim, **then** a new export on the new
-> engine. Do not wire the live `efs-test` export. Do not skip to step 11.
+> new storage work. Remaining in 10.5c: cross-shard rename/link/rmdir
+> still in-sim, **then** a new export on the new engine. Do not wire the
+> live `efs-test` export. Do not skip to step 11.
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never

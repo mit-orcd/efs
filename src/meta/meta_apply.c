@@ -9,7 +9,7 @@
 #define INO_VAL  EFS_META_INO_BYTES
 #define DENT_VAL 20
 #define ALLOC_VAL 8
-#define LANE_VAL 48
+#define LANE_VAL 56
 #define CHUNK_HDR 20
 #define CHUNK_VAL (CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS + \
                    EFS_HASH_SIZE * EFS_NUM_FRAGMENTS)
@@ -63,6 +63,7 @@ struct lane_rec {
     uint64_t seq;
     uint64_t fenced_epoch;
     uint64_t mtime_gen;
+    uint64_t append_bar; /* live reservation watermark; 0 = no barrier */
 };
 
 static void pack_lane(uint8_t *p, const struct lane_rec *l)
@@ -73,6 +74,7 @@ static void pack_lane(uint8_t *p, const struct lane_rec *l)
     be64(p + 24, l->seq);
     be64(p + 32, l->fenced_epoch);
     be64(p + 40, l->mtime_gen);
+    be64(p + 48, l->append_bar);
 }
 
 /* Tolerates a record carrying only the reduce triple: a lane whose only
@@ -91,6 +93,8 @@ static int unpack_lane(const uint8_t *p, uint32_t n, struct lane_rec *l)
         l->fenced_epoch = rd64(p + 32);
     if (n >= 48)
         l->mtime_gen = rd64(p + 40);
+    if (n >= 56)
+        l->append_bar = rd64(p + 48);
     return EFS_OK;
 }
 
@@ -1167,6 +1171,90 @@ static int evidence_ok(const struct efs_meta_pub *p)
     return EFS_OK;
 }
 
+#define APPEND_CUR_VAL 24
+#define APPEND_RSV_VAL 48
+#define APPEND_OPEN 0
+#define APPEND_DONE 1
+
+struct append_cur {
+    uint64_t watermark;
+    uint64_t frontier;
+    uint32_t nopen;
+};
+
+struct append_rsv {
+    uint64_t off;
+    uint64_t len;
+    uint8_t uuid[EFS_OPID_UUID_LEN];
+    uint32_t epoch;
+    uint64_t seq;
+    uint8_t state;
+};
+
+static void pack_append_cur(uint8_t *p, const struct append_cur *c)
+{
+    be64(p + 0, c->watermark);
+    be64(p + 8, c->frontier);
+    be32(p + 16, c->nopen);
+    memset(p + 20, 0, 4);
+}
+
+static int unpack_append_cur(const uint8_t *p, uint32_t n, struct append_cur *c)
+{
+    if (!p || !c || n < APPEND_CUR_VAL)
+        return EFS_ERR_PROTO;
+    memset(c, 0, sizeof(*c));
+    c->watermark = rd64(p + 0);
+    c->frontier = rd64(p + 8);
+    c->nopen = rd32(p + 16);
+    return EFS_OK;
+}
+
+static void pack_append_rsv(uint8_t *p, const struct append_rsv *r)
+{
+    be64(p + 0, r->off);
+    be64(p + 8, r->len);
+    memcpy(p + 16, r->uuid, EFS_OPID_UUID_LEN);
+    be32(p + 32, r->epoch);
+    be64(p + 36, r->seq);
+    p[44] = r->state;
+    memset(p + 45, 0, 3);
+}
+
+static int unpack_append_rsv(const uint8_t *p, uint32_t n, struct append_rsv *r)
+{
+    if (!p || !r || n < 45)
+        return EFS_ERR_PROTO;
+    memset(r, 0, sizeof(*r));
+    r->off = rd64(p + 0);
+    r->len = rd64(p + 8);
+    memcpy(r->uuid, p + 16, EFS_OPID_UUID_LEN);
+    r->epoch = rd32(p + 32);
+    r->seq = rd64(p + 36);
+    r->state = p[44];
+    return EFS_OK;
+}
+
+static int load_append_cur(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                           struct append_cur *c)
+{
+    uint8_t key[EFS_KV_KEY_MAX], val[APPEND_CUR_VAL];
+    uint32_t klen = 0, vlen;
+    int rc;
+
+    memset(c, 0, sizeof(*c));
+    rc = efs_kv_key_append_cur(efs_kv_inode_shard(ino), ino, gen, key, &klen);
+    if (rc != EFS_OK)
+        return rc;
+    vlen = sizeof(val);
+    rc = efs_kv_get(kv, key, klen, val, &vlen);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_OK;
+    if (rc != EFS_OK)
+        return rc;
+    return unpack_append_cur(val, vlen, c);
+}
+
 int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
 {
     struct efs_meta_row row;
@@ -1194,6 +1282,15 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
         return rc;
     if (p->content_epoch < row.content_epoch)
         return EFS_ERR_STALE;
+    {
+        struct append_cur cur;
+
+        rc = load_append_cur(kv, p->ino, row.generation, &cur);
+        if (rc != EFS_OK)
+            return rc;
+        if (cur.nopen && p->new_size > cur.watermark)
+            return EFS_ERR_BUSY;
+    }
     lane = (uint8_t)(p->chunk_index % EFS_META_LANES);
     lsh = efs_kv_lane_shard(p->ino, lane);
     ish = efs_kv_inode_shard(p->ino);
@@ -1230,6 +1327,8 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     }
     if (p->content_epoch < ln.fenced_epoch)
         return EFS_ERR_STALE;
+    if (ln.append_bar && p->new_size > ln.append_bar)
+        return EFS_ERR_BUSY;
     ln.max_end = max_u64(ln.max_end, p->new_size);
     /* A write updates mtime AND ctime, and both live here rather than on the
      * inode row so that a million writers never touch the inode's leader.
@@ -1431,6 +1530,16 @@ int efs_meta_apply_getattr(struct efs_kv *kv, efs_ino_t ino,
             stable = 0;
         if (!stable)
             continue;
+
+        if (!is_dir) {
+            struct append_cur cur;
+
+            rc = load_append_cur(kv, ino, row.generation, &cur);
+            if (rc != EFS_OK)
+                return rc;
+            if (cur.nopen)
+                size = cur.frontier;
+        }
 
         memset(out, 0, sizeof(*out));
         out->ino = row.ino;
@@ -1896,6 +2005,372 @@ int efs_meta_apply_utimens(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
         if (rc != EFS_OK)
             return rc;
     }
+    return efs_kv_batch(kv, it, n);
+}
+
+static int append_bar_set(struct lane_rec *ln, void *arg)
+{
+    uint64_t w = *(const uint64_t *)arg;
+
+    if (ln->append_bar == w)
+        return 0;
+    ln->append_bar = w;
+    return 1;
+}
+
+static int append_bar_clr(struct lane_rec *ln, void *arg)
+{
+    (void)arg;
+    if (ln->append_bar == 0)
+        return 0;
+    ln->append_bar = 0;
+    return 1;
+}
+
+static int collect_phys_eof(struct efs_kv *kv, const struct efs_meta_row *row,
+                            efs_txn_coord_fn coord, void *ctx, uint64_t *eof,
+                            uint64_t seqs[EFS_META_LANES])
+{
+    uint64_t size = row->base_size;
+    uint32_t i;
+    int rc;
+
+    memset(seqs, 0, sizeof(uint64_t) * EFS_META_LANES);
+    for (i = 0; i < EFS_META_LANES; i++) {
+        uint8_t key[EFS_KV_KEY_MAX], val[LANE_VAL];
+        uint32_t kl = 0, vn;
+        struct efs_txn_reduce red;
+        struct efs_txn_pending pend;
+        struct lane_rec ln;
+
+        if ((row->active_lanes & (1ULL << i)) == 0)
+            continue;
+        rc = efs_kv_key_lane(efs_kv_lane_shard(row->ino, (uint8_t)i), row->ino,
+                             row->generation, (uint8_t)i, key, &kl);
+        if (rc != EFS_OK)
+            return rc;
+        memset(&pend, 0, sizeof(pend));
+        memset(&red, 0, sizeof(red));
+        rc = efs_txn_reduce_read_ex(kv, key, kl, coord, ctx, &red, &pend);
+        if (rc != EFS_OK)
+            return rc;
+        vn = sizeof(val);
+        rc = efs_kv_get(kv, key, kl, val, &vn);
+        if (rc == EFS_OK) {
+            rc = unpack_lane(val, vn, &ln);
+            if (rc != EFS_OK)
+                return rc;
+        } else if (rc == EFS_ERR_NOT_FOUND) {
+            memset(&ln, 0, sizeof(ln));
+        } else {
+            return rc;
+        }
+        seqs[i] = ln.seq;
+        size = max_u64(size, red.max_end);
+        size = max_u64(size, ln.max_end);
+    }
+    *eof = size;
+    return EFS_OK;
+}
+
+struct rsv_scan {
+    struct append_rsv r[64];
+    uint32_t n;
+    int rc;
+};
+
+static int rsv_scan_cb(void *user, const uint8_t *key, uint32_t klen,
+                       const uint8_t *val, uint32_t vlen)
+{
+    struct rsv_scan *s = user;
+
+    (void)key;
+    (void)klen;
+    if (s->n >= 64) {
+        s->rc = EFS_ERR_NOMEM;
+        return 1;
+    }
+    s->rc = unpack_append_rsv(val, vlen, &s->r[s->n]);
+    if (s->rc != EFS_OK)
+        return 1;
+    s->n++;
+    return 0;
+}
+
+static int load_rsvs(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                     struct rsv_scan *s)
+{
+    uint8_t pref[EFS_KV_KEY_MAX];
+    uint32_t plen = 0;
+    int rc;
+
+    memset(s, 0, sizeof(*s));
+    rc = efs_kv_key_append_rsv_prefix(efs_kv_inode_shard(ino), ino, gen, pref,
+                                      &plen);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_scan_prefix(kv, pref, plen, rsv_scan_cb, s);
+    if (s->rc != EFS_OK)
+        return s->rc;
+    return rc;
+}
+
+int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
+                                  const struct efs_opid *op,
+                                  efs_txn_coord_fn coord, void *ctx,
+                                  uint64_t *off_out)
+{
+    struct efs_meta_row row;
+    struct efs_opid_window win;
+    struct efs_opid_reply rep;
+    struct append_cur cur;
+    struct append_rsv rsv;
+    uint64_t seqs[EFS_META_LANES], seq2, phys, eof;
+    uint8_t k_cur[EFS_KV_KEY_MAX], k_rsv[EFS_KV_KEY_MAX], k_opid[EFS_KV_KEY_MAX];
+    uint8_t v_cur[APPEND_CUR_VAL], v_rsv[APPEND_RSV_VAL];
+    uint8_t v_opid[EFS_OPID_VAL_MAX];
+    uint8_t k_ln[EFS_META_LANES][EFS_KV_KEY_MAX];
+    uint8_t v_ln[EFS_META_LANES][LANE_VAL];
+    struct efs_kv_item it[EFS_META_LANES + 4];
+    uint32_t kc = 0, kr = 0, ko = 0, vo, n = 0, i;
+    int rc, hit;
+
+    if (!kv || !op || !coord || !off_out || ino == 0 || len == 0)
+        return EFS_ERR_INVAL;
+    rc = load_window(kv, op, &win);
+    if (rc != EFS_OK)
+        return rc;
+    hit = efs_opid_lookup(&win, op, &rep);
+    if (hit < 0)
+        return hit;
+    if (hit) {
+        *off_out = rep.extra;
+        return rep.rc;
+    }
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    if (!S_ISREG(row.mode))
+        return EFS_ERR_INVAL;
+    rc = collect_phys_eof(kv, &row, coord, ctx, &phys, seqs);
+    if (rc != EFS_OK)
+        return rc;
+    for (i = 0; i < EFS_META_LANES; i++) {
+        if ((row.active_lanes & (1ULL << i)) == 0)
+            continue;
+        rc = lane_seq_get(kv, ino, row.generation, (uint8_t)i, &seq2);
+        if (rc != EFS_OK)
+            return rc;
+        if (seq2 != seqs[i])
+            return EFS_ERR_BUSY;
+    }
+    rc = load_append_cur(kv, ino, row.generation, &cur);
+    if (rc != EFS_OK)
+        return rc;
+    eof = max_u64(phys, cur.watermark);
+    if (cur.nopen == 0)
+        cur.frontier = eof;
+    cur.watermark = eof + len;
+    cur.nopen++;
+    memset(&rsv, 0, sizeof(rsv));
+    rsv.off = eof;
+    rsv.len = len;
+    memcpy(rsv.uuid, op->client_uuid, EFS_OPID_UUID_LEN);
+    rsv.epoch = op->session_epoch;
+    rsv.seq = op->seq;
+    rsv.state = APPEND_OPEN;
+    pack_append_cur(v_cur, &cur);
+    pack_append_rsv(v_rsv, &rsv);
+    rc = efs_kv_key_append_cur(efs_kv_inode_shard(ino), ino, row.generation,
+                               k_cur, &kc);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_append_rsv(efs_kv_inode_shard(ino), ino, row.generation,
+                                   eof, k_rsv, &kr);
+    if (rc != EFS_OK)
+        return rc;
+    memset(it, 0, sizeof(it));
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_cur;
+    it[n].klen = kc;
+    it[n].val = v_cur;
+    it[n].vlen = APPEND_CUR_VAL;
+    n++;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_rsv;
+    it[n].klen = kr;
+    it[n].val = v_rsv;
+    it[n].vlen = APPEND_RSV_VAL;
+    n++;
+    rc = fence_lane_bits(kv, ino, row.generation, row.active_lanes,
+                         append_bar_set, &cur.watermark, it, &n, k_ln, v_ln);
+    if (rc != EFS_OK)
+        return rc;
+    memset(&rep, 0, sizeof(rep));
+    rep.rc = EFS_OK;
+    rep.ino = ino;
+    rep.extra = eof;
+    rc = efs_opid_complete(&win, op, &rep);
+    if (rc != EFS_OK)
+        return rc;
+    vo = sizeof(v_opid);
+    rc = efs_opid_window_pack(&win, v_opid, &vo);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_key_opid(efs_kv_session_shard(op->client_uuid), op->client_uuid,
+                         op->session_epoch, k_opid, &ko);
+    if (rc != EFS_OK)
+        return rc;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_opid;
+    it[n].klen = ko;
+    it[n].val = v_opid;
+    it[n].vlen = vo;
+    n++;
+    rc = efs_kv_batch(kv, it, n);
+    if (rc != EFS_OK)
+        return rc;
+    *off_out = eof;
+    return EFS_OK;
+}
+
+int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off,
+                                  int outcome)
+{
+    struct efs_meta_row row;
+    struct append_cur cur;
+    struct append_rsv rsv;
+    struct rsv_scan scan;
+    uint8_t k_cur[EFS_KV_KEY_MAX], k_rsv[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
+    uint8_t v_cur[APPEND_CUR_VAL], v_rsv[APPEND_RSV_VAL], v_ino[INO_VAL];
+    uint8_t k_ln[EFS_META_LANES][EFS_KV_KEY_MAX];
+    uint8_t v_ln[EFS_META_LANES][LANE_VAL];
+    uint8_t del_keys[64][EFS_KV_KEY_MAX];
+    uint32_t del_kl[64];
+    struct efs_kv_item it[EFS_META_LANES + 64 + 4];
+    uint32_t kc = 0, kr = 0, ki = 0, n = 0, i;
+    uint64_t orig_off[64];
+    int rc, hole, progressed = 1;
+
+    if (!kv || ino == 0)
+        return EFS_ERR_INVAL;
+    if (outcome != EFS_META_APPEND_COMPLETED &&
+        outcome != EFS_META_APPEND_ABORTED_HOLE &&
+        outcome != EFS_META_APPEND_FENCED_HOLE)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_key_append_rsv(efs_kv_inode_shard(ino), ino, row.generation, off,
+                               k_rsv, &kr);
+    if (rc != EFS_OK)
+        return rc;
+    {
+        uint8_t old[APPEND_RSV_VAL];
+        uint32_t vn = sizeof(old);
+
+        rc = efs_kv_get(kv, k_rsv, kr, old, &vn);
+        if (rc == EFS_ERR_NOT_FOUND) {
+            rc = load_append_cur(kv, ino, row.generation, &cur);
+            if (rc != EFS_OK)
+                return rc;
+            /* Drain deletes every rsv. A retry after that is a no-op;
+             * a bogus offset while the burst is still live is not. */
+            return cur.nopen ? EFS_ERR_NOT_FOUND : EFS_OK;
+        }
+        if (rc != EFS_OK)
+            return rc;
+        rc = unpack_append_rsv(old, vn, &rsv);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    if (rsv.state == APPEND_DONE)
+        return EFS_OK;
+    hole = (outcome != EFS_META_APPEND_COMPLETED);
+    rsv.state = APPEND_DONE;
+    rc = load_append_cur(kv, ino, row.generation, &cur);
+    if (rc != EFS_OK)
+        return rc;
+    if (cur.nopen == 0)
+        return EFS_ERR_PROTO;
+    cur.nopen--;
+    if (hole)
+        row.base_size = max_u64(row.base_size, rsv.off + rsv.len);
+    rc = load_rsvs(kv, ino, row.generation, &scan);
+    if (rc != EFS_OK)
+        return rc;
+    for (i = 0; i < scan.n; i++) {
+        orig_off[i] = scan.r[i].off;
+        if (scan.r[i].off == off)
+            scan.r[i].state = APPEND_DONE;
+    }
+    while (progressed) {
+        progressed = 0;
+        for (i = 0; i < scan.n; i++) {
+            if (scan.r[i].state == APPEND_DONE && scan.r[i].off == cur.frontier) {
+                cur.frontier = scan.r[i].off + scan.r[i].len;
+                progressed = 1;
+                scan.r[i].state = 0xff;
+            }
+        }
+    }
+    memset(it, 0, sizeof(it));
+    rc = efs_kv_key_append_cur(efs_kv_inode_shard(ino), ino, row.generation,
+                               k_cur, &kc);
+    if (rc != EFS_OK)
+        return rc;
+    if (cur.nopen == 0) {
+        row.base_size = max_u64(row.base_size, cur.frontier);
+        it[n].op = EFS_KV_DEL;
+        it[n].key = k_cur;
+        it[n].klen = kc;
+        n++;
+        if (scan.n == 0) {
+            it[n].op = EFS_KV_DEL;
+            it[n].key = k_rsv;
+            it[n].klen = kr;
+            n++;
+        }
+        for (i = 0; i < scan.n; i++) {
+            rc = efs_kv_key_append_rsv(efs_kv_inode_shard(ino), ino,
+                                       row.generation, orig_off[i],
+                                       del_keys[i], &del_kl[i]);
+            if (rc != EFS_OK)
+                return rc;
+            it[n].op = EFS_KV_DEL;
+            it[n].key = del_keys[i];
+            it[n].klen = del_kl[i];
+            n++;
+        }
+        rc = fence_lane_bits(kv, ino, row.generation, row.active_lanes,
+                             append_bar_clr, NULL, it, &n, k_ln, v_ln);
+        if (rc != EFS_OK)
+            return rc;
+    } else {
+        pack_append_rsv(v_rsv, &rsv);
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_rsv;
+        it[n].klen = kr;
+        it[n].val = v_rsv;
+        it[n].vlen = APPEND_RSV_VAL;
+        n++;
+        pack_append_cur(v_cur, &cur);
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_cur;
+        it[n].klen = kc;
+        it[n].val = v_cur;
+        it[n].vlen = APPEND_CUR_VAL;
+        n++;
+    }
+    pack_inode(v_ino, &row);
+    rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, k_ino, &ki);
+    if (rc != EFS_OK)
+        return rc;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_ino;
+    it[n].klen = ki;
+    it[n].val = v_ino;
+    it[n].vlen = INO_VAL;
+    n++;
     return efs_kv_batch(kv, it, n);
 }
 

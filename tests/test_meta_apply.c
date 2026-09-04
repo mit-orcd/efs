@@ -1367,6 +1367,131 @@ static void test_truncate_range_del(void)
     efs_kv_mem_free(kv);
 }
 
+static void mkop(struct efs_opid *op, uint8_t id, uint64_t seq)
+{
+    memset(op, 0, sizeof(*op));
+    op->client_uuid[15] = id;
+    op->session_epoch = 1;
+    op->seq = seq;
+}
+
+static void test_append_reserve(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct coord_ctx cc;
+    struct efs_opid op;
+    struct efs_meta_stat st;
+    struct efs_meta_pub p;
+    struct efs_meta_chunk ch;
+    struct efs_txn_reduce red;
+    efs_ino_t ino = 0;
+    uint64_t off = 0, off2 = 0;
+
+    CHECK(kv != NULL, "kv");
+    memset(&cc, 0, sizeof(cc));
+    cc.kv = kv;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "a",
+                                     &ino) == EFS_OK,
+          "create");
+
+    mkop(&op, 7, 1);
+    CHECK(efs_meta_apply_append_reserve(kv, ino, 64, &op, coord_fn, &cc, &off) ==
+                  EFS_OK &&
+              off == 0,
+          "empty eof");
+    CHECK(efs_meta_apply_append_reserve(kv, ino, 64, &op, coord_fn, &cc, &off2) ==
+                  EFS_OK &&
+              off2 == 0,
+          "i16 replay");
+    pub(kv, ino, 0, 64, 0xA1, 0, T0 + 1, "within bar");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 0,
+          "frontier hides pub");
+    fill_ch(&ch);
+    memset(&p, 0, sizeof(p));
+    p.ino = ino;
+    p.chunk_index = 0;
+    p.new_size = 128;
+    p.expected_gen = 0xA1;
+    p.candidate_gen = 0xA2;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
+    p.now = T0 + 2;
+    p.ch = ch;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_BUSY, "past watermark");
+    CHECK(efs_meta_apply_append_resolve(kv, ino, off, EFS_META_APPEND_COMPLETED) ==
+              EFS_OK,
+          "complete");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 64,
+          "visible after resolve");
+    CHECK(efs_meta_apply_append_resolve(kv, ino, off, EFS_META_APPEND_COMPLETED) ==
+              EFS_OK,
+          "resolve replay");
+
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "b",
+                                     &ino) == EFS_OK,
+          "create b");
+    pub(kv, ino, 0, 64, 0xB1, 0, T0 + 1, "pwrite");
+    mkop(&op, 7, 2);
+    CHECK(efs_meta_apply_append_reserve(kv, ino, 64, &op, coord_fn, &cc, &off) ==
+                  EFS_OK &&
+              off == 64,
+          "pwrite then reserve");
+    mkop(&op, 7, 3);
+    CHECK(efs_meta_apply_append_reserve(kv, ino, 32, &op, coord_fn, &cc, &off2) ==
+                  EFS_OK &&
+              off2 == 128,
+          "serial offsets");
+    pub(kv, ino, 0, 96, 0xB2, 0xB1, T0 + 2, "within two");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 64,
+          "cap at frontier");
+    CHECK(efs_meta_apply_append_resolve(kv, ino, off, EFS_META_APPEND_COMPLETED) ==
+              EFS_OK,
+          "A done");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 128,
+          "B still hidden");
+    CHECK(efs_meta_apply_append_resolve(kv, ino, off2,
+                                       EFS_META_APPEND_COMPLETED) == EFS_OK,
+          "B done");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 160,
+          "burst drained");
+
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "h",
+                                     &ino) == EFS_OK,
+          "create h");
+    mkop(&op, 7, 4);
+    CHECK(efs_meta_apply_append_reserve(kv, ino, 64, &op, coord_fn, &cc, &off) ==
+              EFS_OK,
+          "hole rsv");
+    CHECK(efs_meta_apply_append_resolve(kv, ino, off,
+                                       EFS_META_APPEND_ABORTED_HOLE) == EFS_OK,
+          "aborted");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 64,
+          "hole in size");
+
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "r",
+                                     &ino) == EFS_OK,
+          "create r");
+    pub(kv, ino, 0, 64, 0xC1, 0, T0 + 1, "lane for reduce");
+    memset(&red, 0, sizeof(red));
+    red.max_end = 500;
+    red.max_mtime = T0 + 9;
+    red.max_ctime = T0 + 9;
+    commit_reduce(kv, 3, ino, 1, 0, &red, 1);
+    mkop(&op, 7, 5);
+    CHECK(efs_meta_apply_append_reserve(kv, ino, 16, &op, coord_fn, &cc, &off) ==
+                  EFS_OK &&
+              off == 500,
+          "pending reduction is eof");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     test_create_lookup_unlink();
@@ -1388,6 +1513,7 @@ int main(void)
     test_stat_dir_hashed();
     test_utimens_fence();
     test_truncate_range_del();
+    test_append_reserve();
     test_lookup_path();
     if (failures) {
         fprintf(stderr, "test_meta_apply: %d failure(s)\n", failures);
