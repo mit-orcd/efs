@@ -1264,14 +1264,14 @@ distance between spec and code.</p>
 
   <!-- summary strip -->
   <text class="lbl" x="20" y="532">BUILT: data path · sharding · client · simulator · on-disk KV + Raft log (in-sim)</text>
-  <text class="lbl" x="20" y="548">NEXT: MKDIR through Raft (2-shard txn, EFS_MD_RAFT) — then the rest of the mutations</text>
+  <text class="lbl" x="20" y="548">NEXT: cross-group propose + remaining mutations (EFS_MD_RAFT) — not a live cutover</text>
 </svg>
 </div>
 
 <h3>Goals vs measured reality</h3>
 <table>
   <tr><th>Goal</th><th>Where we are today (measured)</th><th>The gap</th></tr>
-  <tr><td><b>≥ 2<sup>32</sup> objects</b></td><td>10M (2<sup>23</sup>) tested, 0 errors; ~1.7 KB/inode RAM is the wall. On-disk KV + Raft log are gated in-sim. In-sim export ROOT is a Raft mkfs. Production Raft host + ReadIndex LOOKUP/GETATTR + file CREATE are gated in efsd (scratch cluster).</td><td>MKDIR through Raft (2-shard txn) — not steps 3–5</td></tr>
+  <tr><td><b>≥ 2<sup>32</sup> objects</b></td><td>10M (2<sup>23</sup>) tested, 0 errors; ~1.7 KB/inode RAM is the wall. On-disk KV + Raft log are gated in-sim. In-sim export ROOT is a Raft mkfs. Production Raft host + ReadIndex LOOKUP/GETATTR + file CREATE + MKDIR txn are gated in efsd (scratch cluster).</td><td>cross-group propose and the rest of the mutations — not steps 3–5</td></tr>
   <tr><td><b>3 → 64 nodes</b></td><td>4 servers, static shard placement; simulator does joint consensus + desired placement</td><td>production control-plane + per-shard joint reconfiguration — step 6 is in-sim</td></tr>
   <tr><td><b>survive f nodes (configured, 1–3)</b></td><td>data path proven at f=1 (kill −9 a shard owner → failover reads OK); today is fixed 2+1 / no metadata RF</td><td>metadata Raft at 2f+1 copies + k+f EC stripes — steps 4–6, 9</td></tr>
   <tr><td><b>immediate visibility</b></td><td><span class="chip cB">BUILT</span> no-TTL kernel caches + always-RPC lookup</td><td>keep; active invalidation via low-level FUSE — step 11</td></tr>
@@ -1293,7 +1293,7 @@ distance between spec and code.</p>
   <tr><td>8</td><td>Client sessions + fencing, then the open-unlinked inode lifecycle on top</td><td><span class="chip cB">DONE</span> in-sim <code>efs_session</code> · I23 barrier · I19 leases; not in efsd</td></tr>
   <tr><td>9</td><td>Data-generation publication / fencing, sim-checked</td><td><span class="chip cB">DONE</span> FileID + unique cand CAS · I13/I20/I22/I25 in-sim; not in efsd</td></tr>
   <tr><td>10</td><td>Directory layout-epoch spread + distributed locking</td><td><span class="chip cB">DONE</span> I8 layout-epoch + POSIX lock SM in-sim; not in efsd</td></tr>
-  <tr><td>10.5</td><td>Durable backends, then production adoption: on-disk KV · on-disk Raft log · applied SM in-sim · efsd Raft host · LOOKUP/GETATTR via ReadIndex + KV · file CREATE</td><td><span class="chip cP">PARTIAL</span> KV <span class="chip cB">DONE</span> · Raft log <span class="chip cB">DONE</span> · 10.5c-1 in-sim <span class="chip cB">DONE</span> (READDIR / SETATTR / GETATTR incl. HASHED-dir lanes / LOOKUP_PATH) · 10.5c-2 <span class="chip cB">DONE</span> (utimens inode fence) · 10.5c-3 <span class="chip cB">DONE</span> (truncate range-delete) · 10.5c-4 <span class="chip cB">DONE</span> (O_APPEND reserve/barrier/resolve) · 10.5c-5 <span class="chip cB">DONE</span> (LINK / UNLINK nlink&gt;1 / RMDIR / file RENAME) · 10.5c-6 <span class="chip cB">DONE</span> (directory rename / parent_version) · 10.5c-7 <span class="chip cB">DONE</span> (in-sim Raft mkfs) · 10.5c-8 <span class="chip cB">DONE</span> (export salt at mkfs) · 10.5c-9 <span class="chip cB">DONE</span> (efsd Raft host, <code>EFS_MD_RAFT</code>, scratch-cluster gate) · 10.5c-10 <span class="chip cB">DONE</span> (LOOKUP/GETATTR via ReadIndex + KV) · 10.5c-11 <span class="chip cB">DONE</span> (file CREATE, one Raft entry) · remaining: MKDIR through Raft</td></tr>
+  <tr><td>10.5</td><td>Durable backends, then production adoption: on-disk KV · on-disk Raft log · applied SM in-sim · efsd Raft host · LOOKUP/GETATTR via ReadIndex + KV · file CREATE · MKDIR txn</td><td><span class="chip cP">PARTIAL</span> KV <span class="chip cB">DONE</span> · Raft log <span class="chip cB">DONE</span> · 10.5c-1 in-sim <span class="chip cB">DONE</span> (READDIR / SETATTR / GETATTR incl. HASHED-dir lanes / LOOKUP_PATH) · 10.5c-2 <span class="chip cB">DONE</span> (utimens inode fence) · 10.5c-3 <span class="chip cB">DONE</span> (truncate range-delete) · 10.5c-4 <span class="chip cB">DONE</span> (O_APPEND reserve/barrier/resolve) · 10.5c-5 <span class="chip cB">DONE</span> (LINK / UNLINK nlink&gt;1 / RMDIR / file RENAME) · 10.5c-6 <span class="chip cB">DONE</span> (directory rename / parent_version) · 10.5c-7 <span class="chip cB">DONE</span> (in-sim Raft mkfs) · 10.5c-8 <span class="chip cB">DONE</span> (export salt at mkfs) · 10.5c-9 <span class="chip cB">DONE</span> (efsd Raft host, <code>EFS_MD_RAFT</code>, scratch-cluster gate) · 10.5c-10 <span class="chip cB">DONE</span> (LOOKUP/GETATTR via ReadIndex + KV) · 10.5c-11 <span class="chip cB">DONE</span> (file CREATE, one Raft entry) · 10.5c-12 <span class="chip cB">DONE</span> (MKDIR 2-shard txn) · remaining: cross-group propose + other mutations</td></tr>
   <tr><td>11</td><td>Delete the snapshot / root-2PC machinery</td><td><span class="chip cD">DELETE</span> it is today's flush path — needs 10.5 first</td></tr>
   <tr><td>12</td><td>FUSE cache-coherence optimization (data path starts direct-I/O)</td><td><span class="chip cM">MISSING</span> blocked on the low-level API</td></tr>
 </table>
@@ -1306,7 +1306,7 @@ step 11 deletes. Delete it first and the system stops being durable. So 10.5 goe
 build a real on-disk key-value store, then a real on-disk Raft log, then finish the
 applied-state machine in the simulator, then host Raft inside <code>efsd</code> behind a flag
 (that host is in; gated on a scratch cluster) and serve LOOKUP/GETATTR from ReadIndex + KV
-(also in) and file CREATE as one Raft entry (also in). MKDIR through Raft is next — not a cutover of the live table. The key-value store is done. It keeps a write-ahead log for durability and sorted,
+(also in) and file CREATE as one Raft entry (also in) and MKDIR as a 2-shard txn (also in). Cross-group propose and the rest of the mutations are next — not a cutover of the live table. The key-value store is done. It keeps a write-ahead log for durability and sorted,
 never-modified data files for the rest, merging them in the background; only one small index
 entry per data block stays in memory, so memory use does not grow with the number of files. We
 proved it by re-running the <i>entire</i> simulator on it instead of the in-memory store, so all

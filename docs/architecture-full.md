@@ -1143,8 +1143,9 @@ simulator against them, `efsd` untouched), then the applied SM in-sim, then
 production adoption for the single export. **Status (Sep 5):** 10.5a/b
 and 10.5c-1..8 are gated in-sim; 10.5c-9 (Raft host) and 10.5c-10
 (LOOKUP/GETATTR via ReadIndex + KV) and 10.5c-11 (file CREATE as one
-Raft entry) are gated on a scratch cluster behind `EFS_MD_RAFT`.
-Remaining: MKDIR (2-shard txn) behind that flag; writes after. Not a
+Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) are gated on a
+scratch cluster behind `EFS_MD_RAFT`. Remaining: cross-group propose
+and the rest of the mutations; writes after. Not a
 cutover of the live table; not step 11. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
@@ -1254,8 +1255,10 @@ sends you to — not the whole spec.
 > **Architecture migration §10, step 10.5c:** applied SM is gated in-sim
 > (10.5c-1..8), the production Raft host is gated in `efsd` (10.5c-9),
 > and LOOKUP/GETATTR go through ReadIndex + KV behind `EFS_MD_RAFT`
-> (10.5c-10), and file CREATE is a single Raft entry on the dentry
-> shard (10.5c-11). Next: MKDIR (2-shard txn) behind the same flag.
+> (10.5c-10), file CREATE is a single Raft entry on the dentry
+> shard (10.5c-11), and MKDIR is a 2-shard txn (10.5c-12). Next:
+> cross-group propose (a node that is not leader of a participant
+> group) and the rest of the mutations behind the same flag.
 > [architecture.md §10](#architecture)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -1368,8 +1371,16 @@ sends you to — not the whole spec.
 > parent = co-located with the parent). Duplicate name is EXIST; a
 > directory mode is INVAL (MKDIR is a 2-shard txn, not this helper).
 > Same scratch smoke, plus create/lookup/getattr, crash catch-up keeps
-> the name. Remaining: MKDIR behind the same flag (not a cutover of
-> `efs-test`, not step 11).
+> the name.
+>
+> **10.5c-12 is in (gated):** MKDIR is the in-sim 2-shard txn
+> (PREPARE/DECIDE/RESOLVE, same command bytes) on the production host.
+> Directory mode on `EFS_MSG_INODE_CREATE` takes that path. The receiving
+> node must lead every participant group (`NOT_PRIMARY` otherwise). Same
+> scratch smoke: mkdir under ROOT (retry names), lookup, ROOT nlink=3,
+> crash catch-up keeps the directory. Remaining: cross-group propose,
+> then the rest of the mutations (not a cutover of `efs-test`, not
+> step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -4257,8 +4268,17 @@ the sim) on the dentry-shard group, waits `last_applied`, then LOOKUP +
 GETATTR. Duplicate is EXIST; `S_IFDIR` is INVAL (MKDIR is a 2-shard
 txn). `CREATE_SHARD` is INVAL (old fan-out). Flag off is a no-op. Gate:
 `tests/stress/raft_host_smoke.sh` — create a file under ROOT, lookup +
-getattr, second create EXIST, dir mode INVAL, name survives kill -9
-catch-up. Remaining: MKDIR behind the same flag.
+getattr, second create EXIST, name survives kill -9 catch-up.
+Not in this step: MKDIR (that is 10.5c-12).
+
+**Step 10.5c-12 (gated): MKDIR through Raft.** When `EFS_MD_RAFT=1`,
+`S_IFDIR` CREATE is a 2-shard txn (`EFS_MD_CMD_PREPARE` / `DECIDE` /
+`RESOLVE`, same encoding as the sim) over parent dentry+row+dseq and
+child inode+alloc. The receiving node must lead every participant
+group; otherwise `NOT_PRIMARY`. Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — mkdir under ROOT (retry names until
+accepted), lookup, ROOT nlink=3, name survives kill -9 catch-up.
+Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
 ### Shortening the code → signal cycle
@@ -4726,7 +4746,8 @@ required, it is one engine per export side by side — **never an
 trap. This closed the last open 10.5c design question. Production Raft
 host in `efsd` (10.5c-9, env-gated `EFS_MD_RAFT`) is gated on a scratch
 cluster; LOOKUP/GETATTR through ReadIndex + KV (10.5c-10) and file
-CREATE as one Raft entry (10.5c-11) are gated on the same smoke. What
-remains is MKDIR (2-shard txn) behind that flag, then the cutover —
-not new design.
+CREATE as one Raft entry (10.5c-11) and MKDIR as a 2-shard txn
+(10.5c-12) are gated on the same smoke. What remains is cross-group
+propose and the rest of the mutations, then the cutover — not new
+design.
 

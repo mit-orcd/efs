@@ -97,6 +97,44 @@ wait_listen() {
     return 1
 }
 
+g0_applied() {
+    local idx=$1
+    local st
+    st=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
+    echo "$st" | awk '/group 0 / {for(i=1;i<=NF;i++) if($i ~ /^applied=/) {split($i,a,"="); print a[2]; exit}}'
+}
+
+g0_commit() {
+    local idx=$1
+    local st
+    st=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
+    echo "$st" | awk '/group 0 / {for(i=1;i<=NF;i++) if($i ~ /^commit=/) {split($i,a,"="); print a[2]; exit}}'
+}
+
+# Wait until idx has applied through the leader's commit (log catch-up,
+# not just ROOT in KV — CREATE/MKDIR sit after mkfs).
+wait_g0_caught_up() {
+    local idx=$1
+    local tag=$2
+    local lid want got i
+    lid=$(g0_leader)
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader for catch-up"
+        return 1
+    fi
+    want=$(g0_commit "$lid")
+    for i in $(seq 1 50); do
+        got=$(g0_applied "$idx")
+        if [ -n "$got" ] && [ -n "$want" ] && [ "$got" = "$want" ]; then
+            say "$tag caught up applied=$got"
+            return 0
+        fi
+        lid=$(g0_leader)
+        [ "$lid" != "-1" ] && want=$(g0_commit "$lid")
+    done
+    bad "$tag catch-up applied=$got want=$want"
+    return 1
+}
 # Print group-0 leader raft id (-1 if none). Tries every voter; a just-
 # restarted node may not know the leader yet even with ROOT in KV.
 g0_leader() {
@@ -121,9 +159,11 @@ root_on() {
 
 # ReadIndex GETATTR/LOOKUP against group-0. Leader must serve ROOT;
 # a follower must refuse (NOT_PRIMARY=7); a missing name is NOT_FOUND=1.
+# nlink is 2 at mkfs and 3 after a subdirectory (POSIX).
 check_reads() {
     local lid=$1
     local tag=$2
+    local nlink=${3:-2}
     local out fid rid
     if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
         bad "$tag: no leader"
@@ -132,7 +172,7 @@ check_reads() {
     out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} 1" 2>/dev/null || true)
     say "$tag getattr leader=$lid: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr not OK"
-    echo "$out" | grep -q 'nlink=2' || bad "$tag getattr nlink"
+    echo "$out" | grep -q "nlink=$nlink" || bad "$tag getattr nlink"
     echo "$out" | grep -q 'mode=040755' || bad "$tag getattr not dir"
     fid=""
     for rid in 0 1 2; do
@@ -149,7 +189,7 @@ check_reads() {
     echo "$out" | grep -q 'status=1' || bad "$tag lookup miss not NOT_FOUND"
 }
 
-# File CREATE on the group-0 leader. MKDIR (dir mode) is not this slice.
+# File CREATE on the group-0 leader.
 check_create() {
     local lid=$1
     local tag=$2
@@ -175,9 +215,38 @@ check_create() {
     out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
     say "$tag create dup: $out"
     echo "$out" | grep -q 'status=2' || bad "$tag create dup not EXIST"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-d 040755" 2>/dev/null || true)
-    say "$tag mkdir refused: $out"
-    echo "$out" | grep -q 'status=6' || bad "$tag mkdir not INVAL"
+}
+
+# MKDIR is a 2-shard txn. The receiving leader must host every participant
+# group; names that scatter onto the even group from a group-0-only leader
+# are NOT_PRIMARY. Try several names until one lands.
+check_mkdir() {
+    local lid=$1
+    local tag=$2
+    local i out name got=""
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    for i in $(seq 0 31); do
+        name="raft-smoke-d$i"
+        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 $name 040755" 2>/dev/null || true)
+        say "$tag mkdir $name: $out"
+        if echo "$out" | grep -q 'status=0'; then
+            got=$name
+            echo "$out" | grep -q 'mode=040755' || bad "$tag mkdir mode"
+            echo "$out" | grep -q 'nlink=2' || bad "$tag mkdir nlink"
+            break
+        fi
+    done
+    [ -n "$got" ] || bad "$tag mkdir none accepted"
+    if [ -n "$got" ]; then
+        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 $got" 2>/dev/null || true)
+        say "$tag lookup mkdir: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag lookup mkdir not OK"
+        echo "$out" | grep -q 'mode=040755' || bad "$tag lookup mkdir mode"
+        MKDIR_NAME=$got
+    fi
 }
 
 say "build 4 nodes (scratch, not live cluster)"
@@ -251,6 +320,9 @@ say "ReadIndex GETATTR/LOOKUP (fresh)"
 check_reads "$leader" "fresh"
 say "CREATE file through Raft (fresh)"
 check_create "$leader" "fresh"
+say "MKDIR through Raft (fresh)"
+MKDIR_NAME=""
+check_mkdir "$leader" "fresh"
 
 # Pick a group-0 follower to kill (raft ids 0,1,2 minus leader).
 follower_idx=""
@@ -278,6 +350,7 @@ for i in $(seq 1 50); do
     fi
 done
 [ "$got" = 1 ] || bad "follower catch-up missed ROOT"
+wait_g0_caught_up "$follower_idx" "follower" || true
 
 leader=$(g0_leader)
 say "kill -9 leader raft_id=$leader"
@@ -337,10 +410,17 @@ for i in $(seq 1 40); do
     fi
 done
 say "ReadIndex GETATTR/LOOKUP (after crash)"
-check_reads "$leader" "after-crash"
+root_nlink=2
+[ -n "${MKDIR_NAME:-}" ] && root_nlink=3
+check_reads "$leader" "after-crash" "$root_nlink"
 out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
 say "after-crash lookup created: $out"
 echo "$out" | grep -q 'status=0' || bad "after-crash created name missing"
+if [ -n "${MKDIR_NAME:-}" ]; then
+    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $MKDIR_NAME" 2>/dev/null || true)
+    say "after-crash lookup mkdir: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash mkdir name missing"
+fi
 
 if [ "$FAIL" -eq 0 ]; then
     say "PASS"

@@ -12,6 +12,10 @@
  * coordinator side is lifted out of src/sim (production adoption P2). */
 
 #define EFS_MD_CMD_CREATE 1 /* matches sim CMD_CREATE; see pack in raft_host.c */
+#define EFS_MD_CMD_PREPARE 5 /* matches sim CMD_PREPARE */
+#define EFS_MD_CMD_DECIDE  6
+#define EFS_MD_CMD_RESOLVE 7
+#define EFS_MD_CMD_DROP    8
 #define EFS_MD_CMD_MKFS 18 /* [now:8][salt:8] — idempotent; salt absent = 0 */
 
 #endif

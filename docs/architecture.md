@@ -1126,8 +1126,9 @@ simulator against them, `efsd` untouched), then the applied SM in-sim, then
 production adoption for the single export. **Status (Sep 5):** 10.5a/b
 and 10.5c-1..8 are gated in-sim; 10.5c-9 (Raft host) and 10.5c-10
 (LOOKUP/GETATTR via ReadIndex + KV) and 10.5c-11 (file CREATE as one
-Raft entry) are gated on a scratch cluster behind `EFS_MD_RAFT`.
-Remaining: MKDIR (2-shard txn) behind that flag; writes after. Not a
+Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) are gated on a
+scratch cluster behind `EFS_MD_RAFT`. Remaining: cross-group propose
+and the rest of the mutations; writes after. Not a
 cutover of the live table; not step 11. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key

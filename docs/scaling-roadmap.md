@@ -260,9 +260,12 @@ restart catch-up).
 behind the same flag. Gate: the same scratch smoke (ROOT getattr + miss
 lookup, including after crash).
 **10.5c-11 is in:** file CREATE as one Raft entry on the dentry shard.
-Gate: same smoke (create under ROOT, lookup/getattr, EXIST, dir mode
-INVAL, name survives crash). Remaining: MKDIR (2-shard txn) behind the
-flag; not a cutover of `efs-test`, not step 11.
+Gate: same smoke (create under ROOT, lookup/getattr, EXIST, name
+survives crash).
+**10.5c-12 is in:** MKDIR as a 2-shard txn (PREPARE/DECIDE/RESOLVE)
+behind the same flag. Gate: same smoke (mkdir under ROOT, lookup, ROOT
+nlink=3, name survives crash). Remaining: cross-group propose, then
+the rest of the mutations; not a cutover of `efs-test`, not step 11.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

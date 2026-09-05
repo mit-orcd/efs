@@ -352,8 +352,17 @@ the sim) on the dentry-shard group, waits `last_applied`, then LOOKUP +
 GETATTR. Duplicate is EXIST; `S_IFDIR` is INVAL (MKDIR is a 2-shard
 txn). `CREATE_SHARD` is INVAL (old fan-out). Flag off is a no-op. Gate:
 `tests/stress/raft_host_smoke.sh` — create a file under ROOT, lookup +
-getattr, second create EXIST, dir mode INVAL, name survives kill -9
-catch-up. Remaining: MKDIR behind the same flag.
+getattr, second create EXIST, name survives kill -9 catch-up.
+Not in this step: MKDIR (that is 10.5c-12).
+
+**Step 10.5c-12 (gated): MKDIR through Raft.** When `EFS_MD_RAFT=1`,
+`S_IFDIR` CREATE is a 2-shard txn (`EFS_MD_CMD_PREPARE` / `DECIDE` /
+`RESOLVE`, same encoding as the sim) over parent dentry+row+dseq and
+child inode+alloc. The receiving node must lead every participant
+group; otherwise `NOT_PRIMARY`. Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — mkdir under ROOT (retry names until
+accepted), lookup, ROOT nlink=3, name survives kill -9 catch-up.
+Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
 ## Shortening the code → signal cycle

@@ -96,6 +96,8 @@ static uint32_t rd32be(const uint8_t *p)
            ((uint32_t)p[2] << 8) | (uint32_t)p[3];
 }
 
+static uint64_t now_ns(void);
+
 static int env_on(const char *name)
 {
     const char *v = getenv(name);
@@ -252,8 +254,6 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     nl = cmd[30];
     if ((uint32_t)HOST_CREATE_NAME_OFF + nl + EFS_OPID_UUID_LEN + 4 > clen)
         return EFS_OK;
-    if (nl >= EFS_MAX_NAME)
-        return EFS_OK;
     memset(name, 0, sizeof(name));
     memcpy(name, cmd + HOST_CREATE_NAME_OFF, nl);
     rc = efs_meta_apply_create_file(h->kv, &at, parent, mode, name, &ino);
@@ -277,6 +277,101 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+/* Same encoding as sim_txn_apply. Apply never stalls the log. */
+static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                         uint32_t clen)
+{
+    struct efs_txid t;
+    uint32_t shard, off;
+    int rc = EFS_ERR_PROTO, dec, kind, op;
+    uint64_t expected;
+    uint8_t klen;
+    const uint8_t *key, *val;
+    uint32_t vlen;
+    struct efs_txn_parts p;
+    struct efs_txn_reduce red;
+
+    memset(&t, 0, sizeof(t));
+    memset(&p, 0, sizeof(p));
+    switch (cmd[0]) {
+    case EFS_MD_CMD_PREPARE:
+        if (clen < 1 + 1 + 16 + 1)
+            break;
+        kind = cmd[1];
+        memcpy(t.bytes, cmd + 2, 16);
+        p.n = cmd[18];
+        if (p.n == 0 || p.n > EFS_TXN_MAX_PART)
+            break;
+        off = 19;
+        if (clen < off + (uint32_t)p.n * 4u + 1u)
+            break;
+        {
+            uint8_t i;
+            for (i = 0; i < p.n; i++)
+                p.shard[i] = rd32be(cmd + off + (uint32_t)i * 4u);
+        }
+        off += (uint32_t)p.n * 4u;
+        klen = cmd[off++];
+        if (clen < off + klen)
+            break;
+        key = cmd + off;
+        off += klen;
+        if (kind == EFS_TXN_EXCL) {
+            if (clen < off + 8 + 1 + 4)
+                break;
+            expected = rd64be(cmd + off);
+            op = cmd[off + 8];
+            vlen = rd32be(cmd + off + 9);
+            off += 13;
+            if (clen < off + vlen)
+                break;
+            val = cmd + off;
+            rc = efs_txn_prepare_excl(h->kv, &t, &p, key, klen, expected, op,
+                                      val, vlen);
+        } else if (kind == EFS_TXN_GUARD) {
+            if (clen < off + 8)
+                break;
+            expected = rd64be(cmd + off);
+            rc = efs_txn_prepare_guard(h->kv, &t, &p, key, klen, expected);
+        } else if (kind == EFS_TXN_REDUCE) {
+            if (clen < off + 24)
+                break;
+            red.max_end = rd64be(cmd + off);
+            red.max_mtime = rd64be(cmd + off + 8);
+            red.max_ctime = rd64be(cmd + off + 16);
+            rc = efs_txn_prepare_reduce(h->kv, &t, &p, key, klen, &red);
+        }
+        break;
+    case EFS_MD_CMD_DECIDE:
+        if (clen < 1 + 16 + 4 + 1)
+            break;
+        memcpy(t.bytes, cmd + 1, 16);
+        shard = rd32be(cmd + 17);
+        dec = cmd[21];
+        rc = efs_txn_decide(h->kv, shard, &t, dec);
+        break;
+    case EFS_MD_CMD_RESOLVE:
+        if (clen < 1 + 16 + 4 + 1)
+            break;
+        memcpy(t.bytes, cmd + 1, 16);
+        shard = rd32be(cmd + 17);
+        dec = cmd[21];
+        rc = efs_txn_resolve(h->kv, &t, shard, dec);
+        break;
+    case EFS_MD_CMD_DROP:
+        if (clen < 1 + 16 + 4)
+            break;
+        memcpy(t.bytes, cmd + 1, 16);
+        shard = rd32be(cmd + 17);
+        rc = efs_txn_drop(h->kv, &t, shard);
+        break;
+    default:
+        return EFS_OK;
+    }
+    (void)rc;
+    return EFS_OK;
+}
+
 static int host_apply(void *app, uint64_t index, uint64_t term,
                       const uint8_t *cmd, uint32_t clen)
 {
@@ -289,6 +384,9 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         return apply_mkfs_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_CREATE)
         return apply_create_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
+        cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP)
+        return apply_txn_cmd(h, cmd, clen);
     return EFS_OK;
 }
 
@@ -400,6 +498,18 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
     return rc;
 }
 
+static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
+                             const uint8_t *cmd, uint32_t clen, int *hint)
+{
+    uint64_t idx = 0;
+    int rc;
+
+    rc = host_propose(h, group, cmd, clen, &idx, hint);
+    if (rc != EFS_OK)
+        return rc;
+    return host_wait_applied(h, group, idx, hint);
+}
+
 static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
                            uint32_t mode, const char *name,
                            const struct efs_meta_attrs *at)
@@ -426,6 +536,70 @@ static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
     memset(p, 0, EFS_OPID_UUID_LEN + 4);
     *len = n;
     return EFS_OK;
+}
+
+static uint32_t pack_prep(uint8_t *out, int kind, const struct efs_txid *t,
+                          const struct efs_txn_parts *p, const uint8_t *key,
+                          uint32_t klen, uint64_t expected, int op,
+                          const uint8_t *val, uint32_t vlen)
+{
+    uint32_t n, i;
+
+    out[0] = EFS_MD_CMD_PREPARE;
+    out[1] = (uint8_t)kind;
+    memcpy(out + 2, t->bytes, 16);
+    out[18] = p->n;
+    n = 19;
+    for (i = 0; i < p->n; i++) {
+        wr32be(out + n, p->shard[i]);
+        n += 4;
+    }
+    out[n++] = (uint8_t)klen;
+    memcpy(out + n, key, klen);
+    n += klen;
+    wr64be(out + n, expected);
+    out[n + 8] = (uint8_t)op;
+    wr32be(out + n + 9, vlen);
+    n += 13;
+    if (vlen) {
+        memcpy(out + n, val, vlen);
+        n += vlen;
+    }
+    return n;
+}
+
+static void pack_decide(uint8_t *out, const struct efs_txid *t, uint32_t coord,
+                        int dec)
+{
+    out[0] = EFS_MD_CMD_DECIDE;
+    memcpy(out + 1, t->bytes, 16);
+    wr32be(out + 17, coord);
+    out[21] = (uint8_t)dec;
+}
+
+static void pack_resolve(uint8_t *out, const struct efs_txid *t, uint32_t shard,
+                         int dec)
+{
+    out[0] = EFS_MD_CMD_RESOLVE;
+    memcpy(out + 1, t->bytes, 16);
+    wr32be(out + 17, shard);
+    out[21] = (uint8_t)dec;
+}
+
+static void pack_drop(uint8_t *out, const struct efs_txid *t, uint32_t shard)
+{
+    out[0] = EFS_MD_CMD_DROP;
+    memcpy(out + 1, t->bytes, 16);
+    wr32be(out + 17, shard);
+}
+
+static void fill_txid(struct efs_raft_host *h, struct efs_txid *t)
+{
+    uint64_t a = now_ns();
+    uint64_t b = h->boot_id ^ h->salt ^ ((uint64_t)h->raft_id << 32);
+
+    memcpy(t->bytes, &a, 8);
+    memcpy(t->bytes + 8, &b, 8);
 }
 
 static int host_txn_coord(void *user, const struct efs_txid *t,
@@ -991,7 +1165,7 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
     if ((mode & S_IFMT) == 0)
         mode |= S_IFREG;
     if (S_ISDIR(mode)) {
-        out->status = EFS_INODE_RPC_INVAL;
+        server_raft_host_mkdir(parent, name, mode, uid, gid, out);
         return;
     }
     at.uid = uid;
@@ -1034,6 +1208,222 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         rc = host_propose(h, dg, cmd, clen, &idx, &hint);
     if (rc == EFS_OK)
         rc = host_wait_applied(h, dg, idx, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
+    if (rc == EFS_OK)
+        rc = host_read_inode_lanes(h, dent.ino, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_getattr(h->kv, dent.ino, host_txn_coord, h, &st);
+    pthread_mutex_unlock(&h->read_mu);
+    set_inode_rc(out, rc, hint);
+    if (rc == EFS_OK) {
+        stat_to_inode(&st, &out->inode);
+        out->inode.parent = parent;
+        strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
+    }
+}
+
+static int host_prep(struct efs_raft_host *h, uint32_t shard, int kind,
+                     const struct efs_txid *t, const struct efs_txn_parts *p,
+                     const uint8_t *key, uint32_t klen, uint64_t expected,
+                     int op, const uint8_t *val, uint32_t vlen, int *hint)
+{
+    uint8_t cmd[HOST_CMD_MAX];
+    uint32_t n;
+
+    n = pack_prep(cmd, kind, t, p, key, klen, expected, op, val, vlen);
+    if (n > HOST_CMD_MAX)
+        return EFS_ERR_INVAL;
+    return host_propose_wait(h, efs_raft_shard_group(shard), cmd, n, hint);
+}
+
+static int host_drop_parts(struct efs_raft_host *h, const struct efs_txid *t,
+                           const struct efs_txn_parts *p, int *hint)
+{
+    uint8_t cmd[21];
+    int rc = EFS_OK, i, one;
+
+    for (i = 0; i < p->n; i++) {
+        pack_drop(cmd, t, p->shard[i]);
+        one = host_propose_wait(h, efs_raft_shard_group(p->shard[i]), cmd, 21,
+                                hint);
+        if (one != EFS_OK && rc == EFS_OK)
+            rc = one;
+    }
+    return rc;
+}
+
+void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
+                            uint32_t uid, uint32_t gid,
+                            struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_row prow, crow;
+    struct efs_meta_dentry dent;
+    struct efs_meta_stat st;
+    struct efs_txid t;
+    struct efs_txn_parts parts;
+    uint8_t k_dent[EFS_KV_KEY_MAX], k_pino[EFS_KV_KEY_MAX], k_cino[EFS_KV_KEY_MAX];
+    uint8_t k_alloc[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX];
+    uint8_t v_dent[EFS_META_DENT_BYTES], v_pino[EFS_META_INO_BYTES];
+    uint8_t v_cino[EFS_META_INO_BYTES], v_alloc[EFS_META_ALLOC_BYTES];
+    uint8_t v_dseq[8], sb[8];
+    uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0, sn = 8;
+    uint32_t psh, csh, coord;
+    uint64_t pver = 0, aver = 0, sver = 0, dver = 0, salt = 0, seq = 0;
+    uint64_t now;
+    efs_ino_t next = 0, ino = 0;
+    uint8_t cmd[22];
+    int hint = -1;
+    int rc, i, gr;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running || !name || parent == 0 || name[0] == '\0') {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if ((mode & S_IFMT) != S_IFDIR)
+        mode = S_IFDIR | (mode & 07777);
+    if ((mode & 07777) == 0)
+        mode |= 0755;
+    now = now_ns();
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_read_index(h, efs_raft_shard_group(efs_kv_inode_shard(EFS_ROOT_INO)),
+                         &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_export_salt(h->kv, &salt);
+    psh = efs_kv_inode_shard(parent);
+    csh = (rc == EFS_OK) ? efs_kv_mkdir_shard(parent, name, salt) : 0;
+    if (rc == EFS_OK)
+        rc = host_read_index(h, efs_raft_shard_group(psh), &hint);
+    if (rc == EFS_OK && efs_raft_shard_group(csh) != efs_raft_shard_group(psh))
+        rc = host_read_index(h, efs_raft_shard_group(csh), &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
+    if (rc == EFS_OK && !S_ISDIR(prow.mode))
+        rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
+    if (rc == EFS_OK) {
+        pthread_mutex_unlock(&h->read_mu);
+        set_inode_rc(out, EFS_ERR_EXIST, hint);
+        return;
+    }
+    if (rc == EFS_ERR_NOT_FOUND)
+        rc = EFS_OK;
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_peek_alloc(h->kv, csh, &next);
+    if (rc == EFS_OK) {
+        ino = next;
+        if (efs_kv_inode_shard(ino) != csh)
+            rc = EFS_ERR_PROTO;
+        next = ino + (efs_ino_t)(1u << EFS_KV_SHARD_BITS);
+    }
+    if (rc == EFS_OK) {
+        memset(&crow, 0, sizeof(crow));
+        crow.ino = ino;
+        crow.generation = 1;
+        crow.mode = mode;
+        crow.nlink = 2;
+        crow.parent = parent;
+        crow.uid = uid;
+        crow.gid = gid;
+        crow.base_mtime = now;
+        crow.base_atime = now;
+        crow.base_ctime = now;
+        memset(&dent, 0, sizeof(dent));
+        dent.ino = ino;
+        dent.generation = 1;
+        dent.type = S_IFDIR;
+        prow.nlink++;
+        if (prow.base_mtime < now)
+            prow.base_mtime = now;
+        if (prow.base_ctime < now)
+            prow.base_ctime = now;
+        rc = efs_meta_pack_dentry(&dent, v_dent, sizeof(v_dent));
+        if (rc == EFS_OK)
+            rc = efs_meta_pack_inode(&prow, v_pino, sizeof(v_pino));
+        if (rc == EFS_OK)
+            rc = efs_meta_pack_inode(&crow, v_cino, sizeof(v_cino));
+        wr64be(v_alloc, next);
+    }
+    if (rc == EFS_OK)
+        rc = efs_kv_key_dentry(psh, parent, name, k_dent, &kd);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_inode(psh, parent, k_pino, &kpi);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_inode(csh, ino, k_cino, &kci);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_alloc(csh, k_alloc, &ka);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_dseq(psh, parent, 0, k_dseq, &ks);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_pino, kpi, &pver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_alloc, ka, &aver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_dseq, ks, &sver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
+    if (rc == EFS_OK) {
+        sn = 8;
+        gr = efs_kv_get(h->kv, k_dseq, ks, sb, &sn);
+        seq = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
+        wr64be(v_dseq, seq + 1);
+        memset(&parts, 0, sizeof(parts));
+        if (psh == csh) {
+            parts.n = 1;
+            parts.shard[0] = psh;
+        } else {
+            parts.n = 2;
+            if (psh < csh) {
+                parts.shard[0] = psh;
+                parts.shard[1] = csh;
+            } else {
+                parts.shard[0] = csh;
+                parts.shard[1] = psh;
+            }
+        }
+        fill_txid(h, &t);
+        for (i = 0; i < parts.n && rc == EFS_OK; i++) {
+            uint32_t sh = parts.shard[i];
+            if (sh == psh) {
+                rc = host_prep(h, psh, EFS_TXN_EXCL, &t, &parts, k_dent, kd,
+                               dver, EFS_TXN_PUT, v_dent, sizeof(v_dent),
+                               &hint);
+                if (rc == EFS_OK)
+                    rc = host_prep(h, psh, EFS_TXN_EXCL, &t, &parts, k_pino,
+                                   kpi, pver, EFS_TXN_PUT, v_pino,
+                                   sizeof(v_pino), &hint);
+                if (rc == EFS_OK)
+                    rc = host_prep(h, psh, EFS_TXN_EXCL, &t, &parts, k_dseq,
+                                   ks, sver, EFS_TXN_PUT, v_dseq, 8, &hint);
+            }
+            if (rc == EFS_OK && sh == csh) {
+                rc = host_prep(h, csh, EFS_TXN_EXCL, &t, &parts, k_cino, kci,
+                               0, EFS_TXN_PUT, v_cino, sizeof(v_cino),
+                               &hint);
+                if (rc == EFS_OK)
+                    rc = host_prep(h, csh, EFS_TXN_EXCL, &t, &parts, k_alloc,
+                                   ka, aver, EFS_TXN_PUT, v_alloc,
+                                   sizeof(v_alloc), &hint);
+            }
+        }
+        if (rc != EFS_OK)
+            (void)host_drop_parts(h, &t, &parts, &hint);
+        else {
+            coord = efs_txn_coordinator(&t, &parts);
+            pack_decide(cmd, &t, coord, EFS_TXN_COMMIT);
+            rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, 22,
+                                   &hint);
+            for (i = 0; i < parts.n && rc == EFS_OK; i++) {
+                pack_resolve(cmd, &t, parts.shard[i], EFS_TXN_COMMIT);
+                rc = host_propose_wait(h, efs_raft_shard_group(parts.shard[i]),
+                                       cmd, 22, &hint);
+            }
+        }
+    }
     if (rc == EFS_OK)
         rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
     if (rc == EFS_OK)
