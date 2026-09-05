@@ -277,6 +277,39 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+static int apply_unlink_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                            uint32_t clen, uint64_t index)
+{
+    efs_ino_t parent;
+    char name[EFS_MAX_NAME];
+    uint8_t nl;
+    uint64_t now;
+    int rc;
+
+    if (clen < 18)
+        return EFS_OK;
+    parent = rd64be(cmd + 1);
+    now = rd64be(cmd + 9);
+    nl = cmd[17];
+    if ((uint32_t)18 + nl + EFS_OPID_UUID_LEN + 4 > clen)
+        return EFS_OK;
+    memset(name, 0, sizeof(name));
+    memcpy(name, cmd + 18, nl);
+    rc = efs_meta_apply_unlink(h->kv, parent, name, now);
+    if (rc == EFS_ERR_NOT_FOUND)
+        rc = EFS_OK; /* replay */
+    if (rc != EFS_OK) {
+        fprintf(stderr, "raft-host: apply unlink rc=%d index=%llu parent=%llu "
+                "name=%s\n",
+                rc, (unsigned long long)index, (unsigned long long)parent,
+                name);
+        return EFS_OK;
+    }
+    fprintf(stderr, "raft-host: applied unlink index=%llu parent=%llu name=%s\n",
+            (unsigned long long)index, (unsigned long long)parent, name);
+    return EFS_OK;
+}
+
 /* Same encoding as sim_txn_apply. Apply never stalls the log. */
 static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                          uint32_t clen)
@@ -384,6 +417,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         return apply_mkfs_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_CREATE)
         return apply_create_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_UNLINK)
+        return apply_unlink_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
         cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP)
         return apply_txn_cmd(h, cmd, clen);
@@ -533,6 +568,30 @@ static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
     out[30] = (uint8_t)nl;
     memcpy(out + HOST_CREATE_NAME_OFF, name, nl);
     p = out + HOST_CREATE_NAME_OFF + nl;
+    memset(p, 0, EFS_OPID_UUID_LEN + 4);
+    *len = n;
+    return EFS_OK;
+}
+
+/* Same encoding as sim pack_unlink. Session bytes are zero (not hosted). */
+static int pack_unlink_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
+                           uint64_t now, const char *name)
+{
+    size_t nl = strlen(name);
+    uint32_t n;
+    uint8_t *p;
+
+    if (nl == 0 || nl >= EFS_MAX_NAME)
+        return EFS_ERR_NAMETOOLONG;
+    n = 18 + (uint32_t)nl + EFS_OPID_UUID_LEN + 4;
+    if (n > HOST_CMD_MAX)
+        return EFS_ERR_INVAL;
+    out[0] = EFS_MD_CMD_UNLINK;
+    wr64be(out + 1, parent);
+    wr64be(out + 9, now);
+    out[17] = (uint8_t)nl;
+    memcpy(out + 18, name, nl);
+    p = out + 18 + nl;
     memset(p, 0, EFS_OPID_UUID_LEN + 4);
     *len = n;
     return EFS_OK;
@@ -1434,6 +1493,82 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
         stat_to_inode(&st, &out->inode);
+        out->inode.parent = parent;
+        strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
+    }
+}
+
+/* Last-link file UNLINK: one Raft entry on the dentry shard. Directories
+ * (RMDIR) and nlink>1 (2-shard) are INVAL here. */
+void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
+                             struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_row prow, row;
+    struct efs_meta_dentry dent;
+    uint8_t cmd[HOST_CMD_MAX];
+    uint32_t clen = 0;
+    uint64_t idx = 0;
+    uint32_t dsh = 0;
+    uint8_t pg, dg = 0, ig;
+    int hint = -1;
+    int rc;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running || !name || parent == 0) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if (is_dir) {
+        out->status = EFS_INODE_RPC_INVAL; /* RMDIR is a txn */
+        return;
+    }
+    rc = pack_unlink_cmd(cmd, &clen, parent, now_ns(), name);
+    if (rc != EFS_OK) {
+        set_inode_rc(out, rc, -1);
+        return;
+    }
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_read_index(h, efs_raft_shard_group(efs_kv_inode_shard(parent)),
+                         &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
+    if (rc == EFS_OK && !S_ISDIR(prow.mode))
+        rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK) {
+        dsh = efs_kv_dentry_shard(parent, name, prow.layout);
+        dg = efs_raft_shard_group(dsh);
+        pg = efs_raft_shard_group(efs_kv_inode_shard(parent));
+        if (dg != pg) {
+            int hh = -1;
+            rc = host_read_index(h, dg, &hh);
+            if (rc != EFS_OK)
+                hint = hh;
+        }
+    }
+    if (rc == EFS_OK) {
+        rc = efs_meta_apply_resolve(h->kv, parent, name, &dent, &row);
+        if (rc == EFS_OK) {
+            if (S_ISDIR(row.mode) || row.nlink > 1)
+                rc = EFS_ERR_INVAL;
+            else {
+                ig = efs_raft_shard_group(efs_kv_inode_shard(row.ino));
+                if (ig != dg)
+                    rc = EFS_ERR_INVAL; /* 2-shard last-link later */
+            }
+        }
+    }
+    if (rc == EFS_OK)
+        rc = host_propose(h, dg, cmd, clen, &idx, &hint);
+    if (rc == EFS_OK)
+        rc = host_wait_applied(h, dg, idx, &hint);
+    pthread_mutex_unlock(&h->read_mu);
+    set_inode_rc(out, rc, hint);
+    if (rc == EFS_OK) {
+        out->inode.ino = row.ino;
+        out->inode.mode = row.mode;
+        out->inode.nlink = row.nlink;
         out->inode.parent = parent;
         strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
     }

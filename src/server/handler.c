@@ -1908,7 +1908,9 @@ send_reply:
         case EFS_MSG_INODE_DROP_CHUNKS: {
             if ((type == EFS_MSG_INODE_LOOKUP || type == EFS_MSG_INODE_GETATTR ||
                  type == EFS_MSG_INODE_CREATE ||
-                 type == EFS_MSG_INODE_CREATE_SHARD) &&
+                 type == EFS_MSG_INODE_CREATE_SHARD ||
+                 type == EFS_MSG_INODE_UNLINK ||
+                 type == EFS_MSG_INODE_UNLINK_SHARD) &&
                 server_raft_host_active()) {
                 struct efs_msg_inode_reply r;
                 uint8_t rtype;
@@ -1935,13 +1937,26 @@ send_reply:
                      * a 2-shard txn, not this opcode. */
                     r.status = EFS_INODE_RPC_INVAL;
                     rtype = EFS_MSG_INODE_CREATE_SHARD_REPLY;
+                } else if (type == EFS_MSG_INODE_UNLINK &&
+                           payload_len >= sizeof(struct efs_msg_inode_unlink)) {
+                    struct efs_msg_inode_unlink *req = payload;
+                    server_raft_host_unlink(req->parent, req->name, req->is_dir,
+                                            &r);
+                    rtype = EFS_MSG_INODE_UNLINK_REPLY;
+                } else if (type == EFS_MSG_INODE_UNLINK_SHARD) {
+                    /* Old fan-out. Last-link file unlink is one Raft entry;
+                     * nlink>1 / RMDIR are 2-shard txns, not this opcode. */
+                    r.status = EFS_INODE_RPC_INVAL;
+                    rtype = EFS_MSG_INODE_UNLINK_SHARD_REPLY;
                 } else {
                     r.status = EFS_INODE_RPC_INVAL;
                     rtype = (type == EFS_MSG_INODE_LOOKUP)
                                 ? EFS_MSG_INODE_LOOKUP_REPLY
                                 : (type == EFS_MSG_INODE_GETATTR)
                                       ? EFS_MSG_INODE_GETATTR_REPLY
-                                      : EFS_MSG_INODE_CREATE_REPLY;
+                                      : (type == EFS_MSG_INODE_UNLINK)
+                                            ? EFS_MSG_INODE_UNLINK_REPLY
+                                            : EFS_MSG_INODE_CREATE_REPLY;
                 }
                 efs_conn_send_msg(conn, rtype, &r, sizeof(r));
                 break;

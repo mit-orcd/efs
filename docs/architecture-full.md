@@ -1143,7 +1143,8 @@ simulator against them, `efsd` untouched), then the applied SM in-sim, then
 production adoption for the single export. **Status (Sep 5):** 10.5a/b
 and 10.5c-1..8 are gated in-sim; 10.5c-9 (Raft host) and 10.5c-10
 (LOOKUP/GETATTR via ReadIndex + KV) and 10.5c-11 (file CREATE as one
-Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) are gated on a
+Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) and 10.5c-13
+(last-link file UNLINK) are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cross-group propose
 and the rest of the mutations; writes after. Not a
 cutover of the live table; not step 11. The KV engine is
@@ -1256,9 +1257,10 @@ sends you to — not the whole spec.
 > (10.5c-1..8), the production Raft host is gated in `efsd` (10.5c-9),
 > and LOOKUP/GETATTR go through ReadIndex + KV behind `EFS_MD_RAFT`
 > (10.5c-10), file CREATE is a single Raft entry on the dentry
-> shard (10.5c-11), and MKDIR is a 2-shard txn (10.5c-12). Next:
-> cross-group propose (a node that is not leader of a participant
-> group) and the rest of the mutations behind the same flag.
+> shard (10.5c-11), MKDIR is a 2-shard txn (10.5c-12), and last-link
+> file UNLINK is one Raft entry (10.5c-13). Next: cross-group propose
+> (a node that is not leader of a participant group) and the rest of
+> the mutations behind the same flag.
 > [architecture.md §10](#architecture)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -1378,7 +1380,14 @@ sends you to — not the whole spec.
 > Directory mode on `EFS_MSG_INODE_CREATE` takes that path. The receiving
 > node must lead every participant group (`NOT_PRIMARY` otherwise). Same
 > scratch smoke: mkdir under ROOT (retry names), lookup, ROOT nlink=3,
-> crash catch-up keeps the directory. Remaining: cross-group propose,
+> crash catch-up keeps the directory.
+>
+> **10.5c-13 is in (gated):** last-link file UNLINK on the production
+> host is one Raft entry on the dentry shard (`efs_meta_apply_unlink`).
+> Missing name is NOT_FOUND; a directory is INVAL (RMDIR is a txn);
+> nlink>1 is INVAL (2-shard). `UNLINK_SHARD` is INVAL (old fan-out).
+> Same scratch smoke: create+unlink a dedicated name, lookup miss,
+> crash catch-up keeps the name gone. Remaining: cross-group propose,
 > then the rest of the mutations (not a cutover of `efs-test`, not
 > step 11).
 >
@@ -4278,6 +4287,17 @@ child inode+alloc. The receiving node must lead every participant
 group; otherwise `NOT_PRIMARY`. Flag off is a no-op. Gate:
 `tests/stress/raft_host_smoke.sh` — mkdir under ROOT (retry names until
 accepted), lookup, ROOT nlink=3, name survives kill -9 catch-up.
+Not in this step: last-link UNLINK (that is 10.5c-13).
+
+**Step 10.5c-13 (gated): last-link file UNLINK through Raft.** When
+`EFS_MD_RAFT=1`, `EFS_MSG_INODE_UNLINK` proposes `EFS_MD_CMD_UNLINK`
+(same encoding as the sim) on the dentry-shard group, waits
+`last_applied`. Missing name is NOT_FOUND; `S_ISDIR` and nlink>1 are
+INVAL (RMDIR / hardlink unlink are 2-shard txns). `UNLINK_SHARD` is
+INVAL (old fan-out). Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — create+unlink a file under ROOT,
+lookup miss, second unlink NOT_FOUND, name stays gone after kill -9
+catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
@@ -4747,7 +4767,8 @@ trap. This closed the last open 10.5c design question. Production Raft
 host in `efsd` (10.5c-9, env-gated `EFS_MD_RAFT`) is gated on a scratch
 cluster; LOOKUP/GETATTR through ReadIndex + KV (10.5c-10) and file
 CREATE as one Raft entry (10.5c-11) and MKDIR as a 2-shard txn
-(10.5c-12) are gated on the same smoke. What remains is cross-group
+(10.5c-12) and last-link file UNLINK (10.5c-13) are gated on the same
+smoke. What remains is cross-group
 propose and the rest of the mutations, then the cutover — not new
 design.
 

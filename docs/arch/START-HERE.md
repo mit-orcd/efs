@@ -17,9 +17,10 @@ sends you to — not the whole spec.
 > (10.5c-1..8), the production Raft host is gated in `efsd` (10.5c-9),
 > and LOOKUP/GETATTR go through ReadIndex + KV behind `EFS_MD_RAFT`
 > (10.5c-10), file CREATE is a single Raft entry on the dentry
-> shard (10.5c-11), and MKDIR is a 2-shard txn (10.5c-12). Next:
-> cross-group propose (a node that is not leader of a participant
-> group) and the rest of the mutations behind the same flag.
+> shard (10.5c-11), MKDIR is a 2-shard txn (10.5c-12), and last-link
+> file UNLINK is one Raft entry (10.5c-13). Next: cross-group propose
+> (a node that is not leader of a participant group) and the rest of
+> the mutations behind the same flag.
 > [architecture.md §10](../architecture.md)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -139,7 +140,14 @@ sends you to — not the whole spec.
 > Directory mode on `EFS_MSG_INODE_CREATE` takes that path. The receiving
 > node must lead every participant group (`NOT_PRIMARY` otherwise). Same
 > scratch smoke: mkdir under ROOT (retry names), lookup, ROOT nlink=3,
-> crash catch-up keeps the directory. Remaining: cross-group propose,
+> crash catch-up keeps the directory.
+>
+> **10.5c-13 is in (gated):** last-link file UNLINK on the production
+> host is one Raft entry on the dentry shard (`efs_meta_apply_unlink`).
+> Missing name is NOT_FOUND; a directory is INVAL (RMDIR is a txn);
+> nlink>1 is INVAL (2-shard). `UNLINK_SHARD` is INVAL (old fan-out).
+> Same scratch smoke: create+unlink a dedicated name, lookup miss,
+> crash catch-up keeps the name gone. Remaining: cross-group propose,
 > then the rest of the mutations (not a cutover of `efs-test`, not
 > step 11).
 >

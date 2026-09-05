@@ -7,8 +7,10 @@
 # Gate: elect, raft-mkfs lands ROOT on every voter, LOOKUP/GETATTR via
 # ReadIndex + KV (leader serves ROOT, follower is NOT_PRIMARY, missing
 # name is NOT_FOUND), file CREATE through Raft (lookup+getattr, duplicate
-# is EXIST, mkdir mode is INVAL), kill -9 a follower then the leader,
-# restart catch-up keeps ROOT and the created name.
+# is EXIST), MKDIR as a 2-shard txn, last-link UNLINK of a file (lookup
+# miss, second unlink NOT_FOUND), kill -9 a follower then the leader,
+# restart catch-up keeps ROOT, the created file, the mkdir, and the
+# unlinked name stays gone.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
 PORT="${PORT:-19820}"
@@ -249,6 +251,36 @@ check_mkdir() {
     fi
 }
 
+# Last-link file UNLINK on the group-0 leader. Uses a dedicated name so
+# raft-smoke-f still exists after crash. RMDIR of the mkdir'd dir is INVAL.
+check_unlink() {
+    local lid=$1
+    local tag=$2
+    local out
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
+    say "$tag unlink-prep create: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag unlink-prep create not OK"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-unlink ${ADDRS[$lid]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
+    say "$tag unlink: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag unlink not OK"
+    echo "$out" | grep -q 'nlink=1' || bad "$tag unlink nlink"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
+    say "$tag lookup unlinked: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag lookup unlinked not NOT_FOUND"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-unlink ${ADDRS[$lid]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
+    say "$tag unlink again: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag unlink again not NOT_FOUND"
+    if [ -n "${MKDIR_NAME:-}" ]; then
+        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-unlink ${ADDRS[$lid]}:${PORT} 1 $MKDIR_NAME" 2>/dev/null || true)
+        say "$tag unlink dir: $out"
+        echo "$out" | grep -q 'status=6' || bad "$tag unlink dir not INVAL"
+    fi
+}
+
 say "build 4 nodes (scratch, not live cluster)"
 bfail=0
 bpids=()
@@ -323,6 +355,8 @@ check_create "$leader" "fresh"
 say "MKDIR through Raft (fresh)"
 MKDIR_NAME=""
 check_mkdir "$leader" "fresh"
+say "UNLINK file through Raft (fresh)"
+check_unlink "$leader" "fresh"
 
 # Pick a group-0 follower to kill (raft ids 0,1,2 minus leader).
 follower_idx=""
@@ -421,6 +455,9 @@ if [ -n "${MKDIR_NAME:-}" ]; then
     say "after-crash lookup mkdir: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash mkdir name missing"
 fi
+out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
+say "after-crash lookup unlinked: $out"
+echo "$out" | grep -q 'status=1' || bad "after-crash unlinked name came back"
 
 if [ "$FAIL" -eq 0 ]; then
     say "PASS"

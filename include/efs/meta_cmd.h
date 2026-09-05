@@ -12,6 +12,7 @@
  * coordinator side is lifted out of src/sim (production adoption P2). */
 
 #define EFS_MD_CMD_CREATE 1 /* matches sim CMD_CREATE; see pack in raft_host.c */
+#define EFS_MD_CMD_UNLINK  2 /* matches sim CMD_UNLINK */
 #define EFS_MD_CMD_PREPARE 5 /* matches sim CMD_PREPARE */
 #define EFS_MD_CMD_DECIDE  6
 #define EFS_MD_CMD_RESOLVE 7

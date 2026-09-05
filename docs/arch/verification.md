@@ -362,6 +362,17 @@ child inode+alloc. The receiving node must lead every participant
 group; otherwise `NOT_PRIMARY`. Flag off is a no-op. Gate:
 `tests/stress/raft_host_smoke.sh` — mkdir under ROOT (retry names until
 accepted), lookup, ROOT nlink=3, name survives kill -9 catch-up.
+Not in this step: last-link UNLINK (that is 10.5c-13).
+
+**Step 10.5c-13 (gated): last-link file UNLINK through Raft.** When
+`EFS_MD_RAFT=1`, `EFS_MSG_INODE_UNLINK` proposes `EFS_MD_CMD_UNLINK`
+(same encoding as the sim) on the dentry-shard group, waits
+`last_applied`. Missing name is NOT_FOUND; `S_ISDIR` and nlink>1 are
+INVAL (RMDIR / hardlink unlink are 2-shard txns). `UNLINK_SHARD` is
+INVAL (old fan-out). Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — create+unlink a file under ROOT,
+lookup miss, second unlink NOT_FOUND, name stays gone after kill -9
+catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
