@@ -258,8 +258,11 @@ idempotent `raft-mkfs`. Gate: `test_wire` + scratch-cluster
 restart catch-up).
 **10.5c-10 is in:** LOOKUP/GETATTR via leader + ReadIndex + applied KV
 behind the same flag. Gate: the same scratch smoke (ROOT getattr + miss
-lookup, including after crash). Remaining: mutations (CREATE/MKDIR)
-behind the flag; not a cutover of `efs-test`, not step 11.
+lookup, including after crash).
+**10.5c-11 is in:** file CREATE as one Raft entry on the dentry shard.
+Gate: same smoke (create under ROOT, lookup/getattr, EXIST, dir mode
+INVAL, name survives crash). Remaining: MKDIR (2-shard txn) behind the
+flag; not a cutover of `efs-test`, not step 11.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

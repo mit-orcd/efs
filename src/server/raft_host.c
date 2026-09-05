@@ -5,6 +5,7 @@
 #include "efs/kv_lsm.h"
 #include "efs/meta_apply.h"
 #include "efs/meta_cmd.h"
+#include "efs/opid.h"
 #include "efs/kv_key.h"
 #include "efs/txn.h"
 #include "efs/metadata.h"
@@ -27,6 +28,8 @@
 #define HOST_ENCODE_STACK  (64 * 1024)
 #define HOST_NGROUPS       2
 #define HOST_READ_TRIES    80 /* 80 × 5 ms = 400 ms; heartbeat is 50 ms */
+#define HOST_CREATE_NAME_OFF 31
+#define HOST_CMD_MAX       512
 
 struct host_inbox_item {
     uint8_t *buf;
@@ -77,6 +80,20 @@ static uint64_t rd64be(const uint8_t *p)
     for (i = 0; i < 8; i++)
         v = (v << 8) | p[i];
     return v;
+}
+
+static void wr32be(uint8_t *p, uint32_t v)
+{
+    p[0] = (uint8_t)(v >> 24);
+    p[1] = (uint8_t)(v >> 16);
+    p[2] = (uint8_t)(v >> 8);
+    p[3] = (uint8_t)v;
+}
+
+static uint32_t rd32be(const uint8_t *p)
+{
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
+           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
 }
 
 static int env_on(const char *name)
@@ -189,19 +206,12 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
     return EFS_OK;
 }
 
-static int host_apply(void *app, uint64_t index, uint64_t term,
-                      const uint8_t *cmd, uint32_t clen)
+static int apply_mkfs_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                          uint32_t clen, uint64_t index)
 {
-    struct efs_raft_host *h = app;
     uint64_t now, salt = 0;
     int rc;
 
-    (void)index;
-    (void)term;
-    if (!h || !h->kv || !cmd || clen == 0)
-        return EFS_OK;
-    if (cmd[0] != EFS_MD_CMD_MKFS)
-        return EFS_OK;
     if (clen < 9)
         return EFS_OK;
     now = rd64be(cmd + 1);
@@ -215,6 +225,70 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     }
     fprintf(stderr, "raft-host: applied mkfs index=%llu salt=%llu\n",
             (unsigned long long)index, (unsigned long long)salt);
+    return EFS_OK;
+}
+
+/* Same encoding as sim pack_create / apply_create_cmd. Session fencing is
+ * not hosted yet; apply is create_file only. EXIST is replay (idempotent).
+ * Apply always returns OK so a name clash cannot stall the log. */
+static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                            uint32_t clen, uint64_t index)
+{
+    efs_ino_t parent, ino = 0;
+    uint32_t mode;
+    char name[EFS_MAX_NAME];
+    uint8_t nl;
+    struct efs_meta_attrs at;
+    int rc;
+
+    if (clen < HOST_CREATE_NAME_OFF)
+        return EFS_OK;
+    parent = rd64be(cmd + 2);
+    mode = rd32be(cmd + 10);
+    memset(&at, 0, sizeof(at));
+    at.uid = rd32be(cmd + 14);
+    at.gid = rd32be(cmd + 18);
+    at.now = rd64be(cmd + 22);
+    nl = cmd[30];
+    if ((uint32_t)HOST_CREATE_NAME_OFF + nl + EFS_OPID_UUID_LEN + 4 > clen)
+        return EFS_OK;
+    if (nl >= EFS_MAX_NAME)
+        return EFS_OK;
+    memset(name, 0, sizeof(name));
+    memcpy(name, cmd + HOST_CREATE_NAME_OFF, nl);
+    rc = efs_meta_apply_create_file(h->kv, &at, parent, mode, name, &ino);
+    if (rc == EFS_ERR_EXIST) {
+        struct efs_meta_dentry dent;
+        if (efs_meta_apply_lookup(h->kv, parent, name, &dent) == EFS_OK)
+            ino = dent.ino;
+        rc = EFS_OK;
+    }
+    if (rc != EFS_OK) {
+        fprintf(stderr, "raft-host: apply create rc=%d index=%llu parent=%llu "
+                "name=%s\n",
+                rc, (unsigned long long)index, (unsigned long long)parent,
+                name);
+        return EFS_OK;
+    }
+    fprintf(stderr, "raft-host: applied create index=%llu parent=%llu name=%s "
+            "ino=%llu\n",
+            (unsigned long long)index, (unsigned long long)parent, name,
+            (unsigned long long)ino);
+    return EFS_OK;
+}
+
+static int host_apply(void *app, uint64_t index, uint64_t term,
+                      const uint8_t *cmd, uint32_t clen)
+{
+    struct efs_raft_host *h = app;
+
+    (void)term;
+    if (!h || !h->kv || !cmd || clen == 0)
+        return EFS_OK;
+    if (cmd[0] == EFS_MD_CMD_MKFS)
+        return apply_mkfs_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_CREATE)
+        return apply_create_cmd(h, cmd, clen, index);
     return EFS_OK;
 }
 
@@ -272,6 +346,88 @@ static int host_read_index(struct efs_raft_host *h, uint8_t group,
     return EFS_ERR_BUSY;
 }
 
+static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
+                             uint64_t idx, int *leader_hint)
+{
+    int t;
+
+    for (t = 0; t < HOST_READ_TRIES; t++) {
+        struct efs_raft *r;
+
+        pthread_mutex_lock(&h->mu);
+        r = group_raft(h, group);
+        if (!r) {
+            pthread_mutex_unlock(&h->mu);
+            return EFS_ERR_NOT_PRIMARY;
+        }
+        if (leader_hint)
+            *leader_hint = efs_raft_leader(r);
+        if (efs_raft_role(r) != EFS_RAFT_LEADER) {
+            pthread_mutex_unlock(&h->mu);
+            return EFS_ERR_NOT_PRIMARY;
+        }
+        if (efs_raft_applied(r) >= idx) {
+            pthread_mutex_unlock(&h->mu);
+            return EFS_OK;
+        }
+        pthread_mutex_unlock(&h->mu);
+        usleep(HOST_TICK_US);
+    }
+    return EFS_ERR_BUSY;
+}
+
+static int host_propose(struct efs_raft_host *h, uint8_t group,
+                        const uint8_t *cmd, uint32_t clen, uint64_t *idx,
+                        int *leader_hint)
+{
+    struct efs_raft *r;
+    int rc;
+
+    pthread_mutex_lock(&h->mu);
+    r = group_raft(h, group);
+    if (!r) {
+        pthread_mutex_unlock(&h->mu);
+        return EFS_ERR_NOT_PRIMARY;
+    }
+    if (leader_hint)
+        *leader_hint = efs_raft_leader(r);
+    if (efs_raft_role(r) != EFS_RAFT_LEADER) {
+        pthread_mutex_unlock(&h->mu);
+        return EFS_ERR_NOT_PRIMARY;
+    }
+    rc = efs_raft_propose(r, cmd, clen, idx);
+    pthread_mutex_unlock(&h->mu);
+    return rc;
+}
+
+static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
+                           uint32_t mode, const char *name,
+                           const struct efs_meta_attrs *at)
+{
+    size_t nl = strlen(name);
+    uint32_t n;
+    uint8_t *p;
+
+    if (nl == 0 || nl >= EFS_MAX_NAME)
+        return EFS_ERR_NAMETOOLONG;
+    n = HOST_CREATE_NAME_OFF + (uint32_t)nl + EFS_OPID_UUID_LEN + 4;
+    if (n > HOST_CMD_MAX)
+        return EFS_ERR_INVAL;
+    out[0] = EFS_MD_CMD_CREATE;
+    out[1] = 0; /* no op-id yet */
+    wr64be(out + 2, parent);
+    wr32be(out + 10, mode);
+    wr32be(out + 14, at->uid);
+    wr32be(out + 18, at->gid);
+    wr64be(out + 22, at->now);
+    out[30] = (uint8_t)nl;
+    memcpy(out + HOST_CREATE_NAME_OFF, name, nl);
+    p = out + HOST_CREATE_NAME_OFF + nl;
+    memset(p, 0, EFS_OPID_UUID_LEN + 4);
+    *len = n;
+    return EFS_OK;
+}
+
 static int host_txn_coord(void *user, const struct efs_txid *t,
                           uint32_t coord_shard, int *dec)
 {
@@ -315,6 +471,10 @@ static uint8_t rc_to_inode_status(int rc)
     if (rc == EFS_ERR_BUSY)
         return EFS_INODE_RPC_BUSY;
     if (rc == EFS_ERR_INVAL)
+        return EFS_INODE_RPC_INVAL;
+    if (rc == EFS_ERR_EXIST)
+        return EFS_INODE_RPC_EXIST;
+    if (rc == EFS_ERR_NAMETOOLONG)
         return EFS_INODE_RPC_INVAL;
     return EFS_INODE_RPC_ERROR;
 }
@@ -788,6 +948,92 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
                 hint = hh;
         }
     }
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
+    if (rc == EFS_OK)
+        rc = host_read_inode_lanes(h, dent.ino, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_getattr(h->kv, dent.ino, host_txn_coord, h, &st);
+    pthread_mutex_unlock(&h->read_mu);
+    set_inode_rc(out, rc, hint);
+    if (rc == EFS_OK) {
+        stat_to_inode(&st, &out->inode);
+        out->inode.parent = parent;
+        strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
+    }
+}
+
+/* File CREATE: one Raft entry on the dentry shard (co-located with a
+ * LOCAL parent). MKDIR is a 2-shard txn and is INVAL here. */
+void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
+                             uint32_t uid, uint32_t gid,
+                             struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_row prow;
+    struct efs_meta_dentry dent;
+    struct efs_meta_stat st;
+    struct efs_meta_attrs at;
+    uint8_t cmd[HOST_CMD_MAX];
+    uint32_t clen = 0;
+    uint64_t idx = 0;
+    uint32_t dsh = 0;
+    uint8_t pg, dg = 0;
+    int hint = -1;
+    int rc;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running || !name || parent == 0) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if ((mode & S_IFMT) == 0)
+        mode |= S_IFREG;
+    if (S_ISDIR(mode)) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    at.uid = uid;
+    at.gid = gid;
+    at.now = now_ns();
+    rc = pack_create_cmd(cmd, &clen, parent, mode, name, &at);
+    if (rc != EFS_OK) {
+        set_inode_rc(out, rc, -1);
+        return;
+    }
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_read_index(h, efs_raft_shard_group(efs_kv_inode_shard(parent)),
+                         &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
+    if (rc == EFS_OK && !S_ISDIR(prow.mode))
+        rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK) {
+        dsh = efs_kv_dentry_shard(parent, name, prow.layout);
+        dg = efs_raft_shard_group(dsh);
+        pg = efs_raft_shard_group(efs_kv_inode_shard(parent));
+        if (dg != pg) {
+            int hh = -1;
+            rc = host_read_index(h, dg, &hh);
+            if (rc != EFS_OK)
+                hint = hh;
+        }
+    }
+    if (rc == EFS_OK) {
+        rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
+        if (rc == EFS_OK) {
+            pthread_mutex_unlock(&h->read_mu);
+            set_inode_rc(out, EFS_ERR_EXIST, hint);
+            return;
+        }
+        if (rc == EFS_ERR_NOT_FOUND)
+            rc = EFS_OK;
+    }
+    if (rc == EFS_OK)
+        rc = host_propose(h, dg, cmd, clen, &idx, &hint);
+    if (rc == EFS_OK)
+        rc = host_wait_applied(h, dg, idx, &hint);
     if (rc == EFS_OK)
         rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
     if (rc == EFS_OK)

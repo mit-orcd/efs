@@ -710,6 +710,9 @@ int server_raft_host_active(void);
 void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out);
 void server_raft_host_lookup(efs_ino_t parent, const char *name,
                              struct efs_msg_inode_reply *out);
+void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
+                             uint32_t uid, uint32_t gid,
+                             struct efs_msg_inode_reply *out);
 
 /* Start the background cluster rejoin retry thread. */
 void server_start_rejoin(struct efsd_server *s);

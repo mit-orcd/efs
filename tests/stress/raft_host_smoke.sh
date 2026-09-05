@@ -1,13 +1,14 @@
 #!/bin/bash
-# Scratch-cluster gate for the production Raft host (10.5c P1).
+# Scratch-cluster gate for the production Raft host (10.5c).
 #
 # Four efsd on fcstor003-006, port 19820, storage under /tmp — NEVER the
 # live cluster (port 19810, /data1). Does not pkill -x efsd.
 #
 # Gate: elect, raft-mkfs lands ROOT on every voter, LOOKUP/GETATTR via
 # ReadIndex + KV (leader serves ROOT, follower is NOT_PRIMARY, missing
-# name is NOT_FOUND), kill -9 a follower then the leader, restart
-# catch-up keeps ROOT and the same reads.
+# name is NOT_FOUND), file CREATE through Raft (lookup+getattr, duplicate
+# is EXIST, mkdir mode is INVAL), kill -9 a follower then the leader,
+# restart catch-up keeps ROOT and the created name.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
 PORT="${PORT:-19820}"
@@ -148,6 +149,37 @@ check_reads() {
     echo "$out" | grep -q 'status=1' || bad "$tag lookup miss not NOT_FOUND"
 }
 
+# File CREATE on the group-0 leader. MKDIR (dir mode) is not this slice.
+check_create() {
+    local lid=$1
+    local tag=$2
+    local out ino
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    say "$tag create: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag create not OK"
+    echo "$out" | grep -q 'mode=0100644' || bad "$tag create mode"
+    echo "$out" | grep -q 'nlink=1' || bad "$tag create nlink"
+    ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag create ino"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    say "$tag lookup created: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag lookup created not OK"
+    echo "$out" | grep -q "ino=$ino" || bad "$tag lookup ino mismatch"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    say "$tag getattr created: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag getattr created not OK"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    say "$tag create dup: $out"
+    echo "$out" | grep -q 'status=2' || bad "$tag create dup not EXIST"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-d 040755" 2>/dev/null || true)
+    say "$tag mkdir refused: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag mkdir not INVAL"
+}
+
 say "build 4 nodes (scratch, not live cluster)"
 bfail=0
 bpids=()
@@ -217,6 +249,8 @@ done
 leader=$(g0_leader)
 say "ReadIndex GETATTR/LOOKUP (fresh)"
 check_reads "$leader" "fresh"
+say "CREATE file through Raft (fresh)"
+check_create "$leader" "fresh"
 
 # Pick a group-0 follower to kill (raft ids 0,1,2 minus leader).
 follower_idx=""
@@ -304,6 +338,9 @@ for i in $(seq 1 40); do
 done
 say "ReadIndex GETATTR/LOOKUP (after crash)"
 check_reads "$leader" "after-crash"
+out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+say "after-crash lookup created: $out"
+echo "$out" | grep -q 'status=0' || bad "after-crash created name missing"
 
 if [ "$FAIL" -eq 0 ]; then
     say "PASS"

@@ -344,7 +344,16 @@ table: leader + ReadIndex, then `efs_meta_apply_getattr` /
 NOT_PRIMARY; a missing name is NOT_FOUND. Flag off is a no-op. Gate:
 `tests/stress/raft_host_smoke.sh` — getattr of ROOT (dir, nlink=2) on
 the leader, NOT_PRIMARY on a follower, lookup miss, same after kill -9
-catch-up. Remaining: mutations (CREATE/MKDIR) behind the same flag.
+catch-up. Not in this step: CREATE (that is 10.5c-11).
+
+**Step 10.5c-11 (gated): file CREATE through Raft.** When `EFS_MD_RAFT=1`,
+`EFS_MSG_INODE_CREATE` proposes `EFS_MD_CMD_CREATE` (same encoding as
+the sim) on the dentry-shard group, waits `last_applied`, then LOOKUP +
+GETATTR. Duplicate is EXIST; `S_IFDIR` is INVAL (MKDIR is a 2-shard
+txn). `CREATE_SHARD` is INVAL (old fan-out). Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — create a file under ROOT, lookup +
+getattr, second create EXIST, dir mode INVAL, name survives kill -9
+catch-up. Remaining: MKDIR behind the same flag.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
 ## Shortening the code → signal cycle

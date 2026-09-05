@@ -16,7 +16,8 @@ sends you to — not the whole spec.
 > **Architecture migration §10, step 10.5c:** applied SM is gated in-sim
 > (10.5c-1..8), the production Raft host is gated in `efsd` (10.5c-9),
 > and LOOKUP/GETATTR go through ReadIndex + KV behind `EFS_MD_RAFT`
-> (10.5c-10). Next: mutations (CREATE/MKDIR) behind the same flag.
+> (10.5c-10), and file CREATE is a single Raft entry on the dentry
+> shard (10.5c-11). Next: MKDIR (2-shard txn) behind the same flag.
 > [architecture.md §10](../architecture.md)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -122,8 +123,15 @@ sends you to — not the whole spec.
 > table path is unchanged when the flag is off). Follower replies
 > NOT_PRIMARY; a missing name is NOT_FOUND. Same scratch smoke, plus
 > getattr of ROOT (mode 040755, nlink=2) and a miss lookup, including
-> after crash catch-up. Remaining: mutations (CREATE/MKDIR) behind the
-> same flag (not a cutover of `efs-test`, not step 11).
+> after crash catch-up.
+>
+> **10.5c-11 is in (gated):** file CREATE on the production host is one
+> Raft entry on the dentry shard (`efs_meta_apply_create_file`; LOCAL
+> parent = co-located with the parent). Duplicate name is EXIST; a
+> directory mode is INVAL (MKDIR is a 2-shard txn, not this helper).
+> Same scratch smoke, plus create/lookup/getattr, crash catch-up keeps
+> the name. Remaining: MKDIR behind the same flag (not a cutover of
+> `efs-test`, not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never

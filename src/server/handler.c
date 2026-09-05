@@ -1906,28 +1906,44 @@ send_reply:
         case EFS_MSG_INODE_HOLD:
         case EFS_MSG_INODE_FLOCK:
         case EFS_MSG_INODE_DROP_CHUNKS: {
-            if ((type == EFS_MSG_INODE_LOOKUP || type == EFS_MSG_INODE_GETATTR) &&
+            if ((type == EFS_MSG_INODE_LOOKUP || type == EFS_MSG_INODE_GETATTR ||
+                 type == EFS_MSG_INODE_CREATE ||
+                 type == EFS_MSG_INODE_CREATE_SHARD) &&
                 server_raft_host_active()) {
                 struct efs_msg_inode_reply r;
+                uint8_t rtype;
                 memset(&r, 0, sizeof(r));
                 r.status = EFS_INODE_RPC_ERROR;
                 if (type == EFS_MSG_INODE_LOOKUP &&
                     payload_len >= sizeof(struct efs_msg_inode_lookup)) {
                     struct efs_msg_inode_lookup *req = payload;
                     server_raft_host_lookup(req->parent, req->name, &r);
+                    rtype = EFS_MSG_INODE_LOOKUP_REPLY;
                 } else if (type == EFS_MSG_INODE_GETATTR &&
                            payload_len >= sizeof(struct efs_msg_inode_getattr)) {
                     struct efs_msg_inode_getattr *req = payload;
                     server_raft_host_getattr(req->ino, &r);
+                    rtype = EFS_MSG_INODE_GETATTR_REPLY;
+                } else if (type == EFS_MSG_INODE_CREATE &&
+                           payload_len >= sizeof(struct efs_msg_inode_create)) {
+                    struct efs_msg_inode_create *req = payload;
+                    server_raft_host_create(req->parent, req->name, req->mode,
+                                            req->uid, req->gid, &r);
+                    rtype = EFS_MSG_INODE_CREATE_REPLY;
+                } else if (type == EFS_MSG_INODE_CREATE_SHARD) {
+                    /* Old fan-out. File create is one Raft entry; MKDIR is
+                     * a 2-shard txn, not this opcode. */
+                    r.status = EFS_INODE_RPC_INVAL;
+                    rtype = EFS_MSG_INODE_CREATE_SHARD_REPLY;
                 } else {
                     r.status = EFS_INODE_RPC_INVAL;
+                    rtype = (type == EFS_MSG_INODE_LOOKUP)
+                                ? EFS_MSG_INODE_LOOKUP_REPLY
+                                : (type == EFS_MSG_INODE_GETATTR)
+                                      ? EFS_MSG_INODE_GETATTR_REPLY
+                                      : EFS_MSG_INODE_CREATE_REPLY;
                 }
-                {
-                    uint8_t rtype = (type == EFS_MSG_INODE_LOOKUP)
-                                        ? EFS_MSG_INODE_LOOKUP_REPLY
-                                        : EFS_MSG_INODE_GETATTR_REPLY;
-                    efs_conn_send_msg(conn, rtype, &r, sizeof(r));
-                }
+                efs_conn_send_msg(conn, rtype, &r, sizeof(r));
                 break;
             }
             if (type == EFS_MSG_INODE_CREATE && getenv("EFS_RDMA_FIRST"))

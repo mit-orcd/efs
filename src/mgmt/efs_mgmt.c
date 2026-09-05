@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static int parse_host_port(const char *str, char *host, size_t host_len, uint16_t *port)
@@ -1319,6 +1320,60 @@ static int cmd_raft_lookup(int argc, char **argv)
     return 0;
 }
 
+static int cmd_raft_create(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    int fd;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_msg_inode_create req;
+    struct efs_msg_inode_reply *r;
+    uint32_t mode = S_IFREG | 0644;
+
+    if (argc < 3) {
+        fprintf(stderr, "usage: raft-create <node:port> <parent> <name> "
+                "[mode]\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    memset(&req, 0, sizeof(req));
+    req.parent = (efs_ino_t)strtoull(argv[1], NULL, 0);
+    strncpy(req.name, argv[2], sizeof(req.name) - 1);
+    if (argc >= 4)
+        mode = (uint32_t)strtoul(argv[3], NULL, 0);
+    req.mode = mode;
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_INODE_CREATE, &req, sizeof(req), &reply_type,
+                  &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_INODE_CREATE_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to raft-create\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    printf("raft-create status=%u primary=%u parent=%llu name=%s ino=%llu "
+           "mode=0%o nlink=%u\n",
+           r->status, r->primary_id,
+           (unsigned long long)req.parent, req.name,
+           (unsigned long long)r->inode.ino, r->inode.mode, r->inode.nlink);
+    free(reply);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -1339,7 +1394,8 @@ int main(int argc, char **argv)
                     "  raft-status <node:port>\n"
                     "  raft-mkfs <node:port>\n"
                     "  raft-getattr <node:port> [ino]\n"
-                    "  raft-lookup <node:port> <parent> <name>\n",
+                    "  raft-lookup <node:port> <parent> <name>\n"
+                    "  raft-create <node:port> <parent> <name> [mode]\n",
             argv[0]);
     return 1;
 }
@@ -1377,6 +1433,8 @@ int main(int argc, char **argv)
         return cmd_raft_getattr(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-lookup") == 0)
         return cmd_raft_lookup(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-create") == 0)
+        return cmd_raft_create(argc - 2, argv + 2);
 
     fprintf(stderr, "Unknown command: %s\n", cmd);
     return 1;
