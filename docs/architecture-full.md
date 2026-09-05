@@ -1140,11 +1140,11 @@ the snapshot / root-2PC flush that step 11 deletes. Deleting that path before
 a durable replacement is wired would drop metadata durability, so 10.5 is
 ordered ahead of it: durable backends first (gated by re-running the whole
 simulator against them, `efsd` untouched), then the applied SM in-sim, then
-production adoption for the single export. **Status (Sep 4):** 10.5a/b
-and 10.5c-1..8 are gated in-sim; 10.5c-9 (Raft host in `efsd`,
-`EFS_MD_RAFT`) is gated on a scratch cluster. Remaining: LOOKUP/GETATTR
-through ReadIndex + KV behind that flag; writes after. Not a cutover of
-the live table; not step 11. The KV engine is
+production adoption for the single export. **Status (Sep 5):** 10.5a/b
+and 10.5c-1..8 are gated in-sim; 10.5c-9 (Raft host) and 10.5c-10
+(LOOKUP/GETATTR via ReadIndex + KV) are gated on a scratch cluster
+behind `EFS_MD_RAFT`. Remaining: mutations behind that flag; writes
+after. Not a cutover of the live table; not step 11. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not
@@ -1251,8 +1251,9 @@ sends you to — not the whole spec.
 ### 1. The task right now
 
 > **Architecture migration §10, step 10.5c:** applied SM is gated in-sim
-> (10.5c-1..8) and the production Raft host is gated in `efsd` (10.5c-9).
-> Next: LOOKUP/GETATTR through ReadIndex + KV behind `EFS_MD_RAFT`.
+> (10.5c-1..8), the production Raft host is gated in `efsd` (10.5c-9),
+> and LOOKUP/GETATTR go through ReadIndex + KV behind `EFS_MD_RAFT`
+> (10.5c-10). Next: mutations (CREATE/MKDIR) behind the same flag.
 > [architecture.md §10](#architecture)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -1351,9 +1352,15 @@ sends you to — not the whole spec.
 > Gate: `test_wire` (codec) + `tests/stress/raft_host_smoke.sh` on a
 > scratch 4-node cluster (port 19820, `/tmp` storage — live cluster
 > untouched): elect, mkfs ROOT on every voter, kill -9 follower then
-> leader, restart catch-up keeps ROOT. Remaining: route LOOKUP/GETATTR
-> through ReadIndex + KV behind the same flag (not a cutover of
-> `efs-test`, not step 11).
+> leader, restart catch-up keeps ROOT.
+>
+> **10.5c-10 is in (gated):** LOOKUP and GETATTR on the production host
+> are leader + ReadIndex + applied KV when `EFS_MD_RAFT=1` (the in-memory
+> table path is unchanged when the flag is off). Follower replies
+> NOT_PRIMARY; a missing name is NOT_FOUND. Same scratch smoke, plus
+> getattr of ROOT (mode 040755, nlink=2) and a miss lookup, including
+> after crash catch-up. Remaining: mutations (CREATE/MKDIR) behind the
+> same flag (not a cutover of `efs-test`, not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -4224,7 +4231,16 @@ the ROOT group. Gate: `test_wire` (codec) and
 `tests/stress/raft_host_smoke.sh` on a scratch 4-node cluster (port 19820,
 `/tmp` storage; live cluster untouched) — elect, mkfs ROOT on every
 voter, kill -9 follower then leader, restart catch-up keeps ROOT.
-Remaining: LOOKUP/GETATTR through ReadIndex + KV behind the same flag.
+Not in this step: LOOKUP/GETATTR (that is 10.5c-10).
+
+**Step 10.5c-10 (gated): LOOKUP/GETATTR through ReadIndex + KV.** When
+`EFS_MD_RAFT=1`, `EFS_MSG_INODE_LOOKUP` / `GETATTR` skip the in-memory
+table: leader + ReadIndex, then `efs_meta_apply_getattr` /
+`efs_meta_apply_lookup` on the applied KV. A follower replies
+NOT_PRIMARY; a missing name is NOT_FOUND. Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — getattr of ROOT (dir, nlink=2) on
+the leader, NOT_PRIMARY on a follower, lookup miss, same after kill -9
+catch-up. Remaining: mutations (CREATE/MKDIR) behind the same flag.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
 ### Shortening the code → signal cycle
@@ -4691,6 +4707,7 @@ required, it is one engine per export side by side — **never an
 `export_id` in keys** — so the single-export key format is not a retrofit
 trap. This closed the last open 10.5c design question. Production Raft
 host in `efsd` (10.5c-9, env-gated `EFS_MD_RAFT`) is gated on a scratch
-cluster; what remains is LOOKUP/GETATTR through ReadIndex + KV behind
-that flag, then writes — not new design.
+cluster; LOOKUP/GETATTR through ReadIndex + KV (10.5c-10) is gated on
+the same smoke. What remains is mutations behind that flag, then the
+cutover — not new design.
 

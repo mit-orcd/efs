@@ -4,8 +4,10 @@
 # Four efsd on fcstor003-006, port 19820, storage under /tmp — NEVER the
 # live cluster (port 19810, /data1). Does not pkill -x efsd.
 #
-# Gate: elect, raft-mkfs lands ROOT on every voter, kill -9 a follower
-# then the leader, restart catch-up keeps ROOT.
+# Gate: elect, raft-mkfs lands ROOT on every voter, LOOKUP/GETATTR via
+# ReadIndex + KV (leader serves ROOT, follower is NOT_PRIMARY, missing
+# name is NOT_FOUND), kill -9 a follower then the leader, restart
+# catch-up keeps ROOT and the same reads.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
 PORT="${PORT:-19820}"
@@ -94,11 +96,19 @@ wait_listen() {
     return 1
 }
 
-# Print group-0 leader raft id (-1 if none). Uses node 1's view.
+# Print group-0 leader raft id (-1 if none). Tries every voter; a just-
+# restarted node may not know the leader yet even with ROOT in KV.
 g0_leader() {
-    local st
-    st=$(ssh_to 10 fcstor003 "cd /tmp/efs && ./efs-mgmt raft-status ${SEED}" 2>/dev/null || true)
-    echo "$st" | awk '/group 0 / {print $5}' | sed 's/leader=//' | head -1
+    local idx st l
+    for idx in 0 1 2; do
+        st=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
+        l=$(echo "$st" | awk '/group 0 / {print $5}' | sed 's/leader=//' | head -1)
+        if [ -n "$l" ] && [ "$l" != "-1" ]; then
+            echo "$l"
+            return 0
+        fi
+    done
+    echo "-1"
 }
 
 root_on() {
@@ -106,6 +116,36 @@ root_on() {
     local st
     st=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
     echo "$st" | awk '/^node / {print $3}' | sed 's/root=//'
+}
+
+# ReadIndex GETATTR/LOOKUP against group-0. Leader must serve ROOT;
+# a follower must refuse (NOT_PRIMARY=7); a missing name is NOT_FOUND=1.
+check_reads() {
+    local lid=$1
+    local tag=$2
+    local out fid rid
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} 1" 2>/dev/null || true)
+    say "$tag getattr leader=$lid: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag getattr not OK"
+    echo "$out" | grep -q 'nlink=2' || bad "$tag getattr nlink"
+    echo "$out" | grep -q 'mode=040755' || bad "$tag getattr not dir"
+    fid=""
+    for rid in 0 1 2; do
+        if [ "$rid" != "$lid" ]; then
+            fid=$rid
+            break
+        fi
+    done
+    out=$(ssh_to 10 "${HOSTS[$fid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$fid]}:${PORT} 1" 2>/dev/null || true)
+    say "$tag getattr follower=$fid: $out"
+    echo "$out" | grep -q 'status=7' || bad "$tag follower not NOT_PRIMARY"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 no-such-efs-name" 2>/dev/null || true)
+    say "$tag lookup miss: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag lookup miss not NOT_FOUND"
 }
 
 say "build 4 nodes (scratch, not live cluster)"
@@ -174,6 +214,10 @@ for idx in 0 1 2; do
     [ "$got" = 1 ] || bad "no ROOT on ${HOSTS[$idx]}"
 done
 
+leader=$(g0_leader)
+say "ReadIndex GETATTR/LOOKUP (fresh)"
+check_reads "$leader" "fresh"
+
 # Pick a group-0 follower to kill (raft ids 0,1,2 minus leader).
 follower_idx=""
 for rid in 0 1 2; do
@@ -212,18 +256,20 @@ if [ -n \"\$pids\" ]; then kill -9 \$pids; fi
 say "wait new group-0 leader"
 new_leader=""
 for i in $(seq 1 50); do
-    # Query a survivor (not the dead leader).
-    qidx=0
-    [ "$leader_idx" = "0" ] && qidx=1
-    st=$(ssh_to 10 "${HOSTS[$qidx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$qidx]}:${PORT}" 2>/dev/null || true)
-    new_leader=$(echo "$st" | awk '/group 0 / {print $5}' | sed 's/leader=//' | head -1)
-    if [ -n "$new_leader" ] && [ "$new_leader" != "-1" ] && [ "$new_leader" != "$leader_idx" ]; then
-        say "new leader raft_id=$new_leader"
-        break
-    fi
+    for qidx in 0 1 2; do
+        [ "$qidx" = "$leader_idx" ] && continue
+        st=$(ssh_to 10 "${HOSTS[$qidx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$qidx]}:${PORT}" 2>/dev/null || true)
+        cand=$(echo "$st" | awk '/group 0 / {print $5}' | sed 's/leader=//' | head -1)
+        if [ -n "$cand" ] && [ "$cand" != "-1" ] && [ "$cand" != "$leader_idx" ]; then
+            new_leader=$cand
+            break 2
+        fi
+    done
 done
 if [ -z "$new_leader" ] || [ "$new_leader" = "-1" ]; then
     bad "no new leader after kill"
+else
+    say "new leader raft_id=$new_leader"
 fi
 
 surv_root=0
@@ -246,6 +292,18 @@ for i in $(seq 1 50); do
     fi
 done
 [ "$got" = 1 ] || bad "old leader catch-up missed ROOT"
+
+say "wait group-0 leader after restart"
+leader="-1"
+for i in $(seq 1 40); do
+    leader=$(g0_leader)
+    if [ "$leader" != "-1" ]; then
+        say "after-crash leader raft_id=$leader"
+        break
+    fi
+done
+say "ReadIndex GETATTR/LOOKUP (after crash)"
+check_reads "$leader" "after-crash"
 
 if [ "$FAIL" -eq 0 ]; then
     say "PASS"

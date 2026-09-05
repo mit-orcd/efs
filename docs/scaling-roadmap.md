@@ -255,8 +255,11 @@ engine per export, never `export_id` in keys (architecture.md §1).
 when off). Two groups, on-disk log+KV, peer-TCP Raft, tick thread,
 idempotent `raft-mkfs`. Gate: `test_wire` + scratch-cluster
 `tests/stress/raft_host_smoke.sh` (elect, mkfs, kill -9 follower/leader,
-restart catch-up). Remaining: LOOKUP/GETATTR via ReadIndex + KV behind
-the same flag; not a cutover of `efs-test`, not step 11.
+restart catch-up).
+**10.5c-10 is in:** LOOKUP/GETATTR via leader + ReadIndex + applied KV
+behind the same flag. Gate: the same scratch smoke (ROOT getattr + miss
+lookup, including after crash). Remaining: mutations (CREATE/MKDIR)
+behind the flag; not a cutover of `efs-test`, not step 11.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

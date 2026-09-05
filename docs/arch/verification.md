@@ -335,7 +335,16 @@ the ROOT group. Gate: `test_wire` (codec) and
 `tests/stress/raft_host_smoke.sh` on a scratch 4-node cluster (port 19820,
 `/tmp` storage; live cluster untouched) — elect, mkfs ROOT on every
 voter, kill -9 follower then leader, restart catch-up keeps ROOT.
-Remaining: LOOKUP/GETATTR through ReadIndex + KV behind the same flag.
+Not in this step: LOOKUP/GETATTR (that is 10.5c-10).
+
+**Step 10.5c-10 (gated): LOOKUP/GETATTR through ReadIndex + KV.** When
+`EFS_MD_RAFT=1`, `EFS_MSG_INODE_LOOKUP` / `GETATTR` skip the in-memory
+table: leader + ReadIndex, then `efs_meta_apply_getattr` /
+`efs_meta_apply_lookup` on the applied KV. A follower replies
+NOT_PRIMARY; a missing name is NOT_FOUND. Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — getattr of ROOT (dir, nlink=2) on
+the leader, NOT_PRIMARY on a follower, lookup miss, same after kill -9
+catch-up. Remaining: mutations (CREATE/MKDIR) behind the same flag.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
 ## Shortening the code → signal cycle

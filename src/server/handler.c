@@ -1906,6 +1906,30 @@ send_reply:
         case EFS_MSG_INODE_HOLD:
         case EFS_MSG_INODE_FLOCK:
         case EFS_MSG_INODE_DROP_CHUNKS: {
+            if ((type == EFS_MSG_INODE_LOOKUP || type == EFS_MSG_INODE_GETATTR) &&
+                server_raft_host_active()) {
+                struct efs_msg_inode_reply r;
+                memset(&r, 0, sizeof(r));
+                r.status = EFS_INODE_RPC_ERROR;
+                if (type == EFS_MSG_INODE_LOOKUP &&
+                    payload_len >= sizeof(struct efs_msg_inode_lookup)) {
+                    struct efs_msg_inode_lookup *req = payload;
+                    server_raft_host_lookup(req->parent, req->name, &r);
+                } else if (type == EFS_MSG_INODE_GETATTR &&
+                           payload_len >= sizeof(struct efs_msg_inode_getattr)) {
+                    struct efs_msg_inode_getattr *req = payload;
+                    server_raft_host_getattr(req->ino, &r);
+                } else {
+                    r.status = EFS_INODE_RPC_INVAL;
+                }
+                {
+                    uint8_t rtype = (type == EFS_MSG_INODE_LOOKUP)
+                                        ? EFS_MSG_INODE_LOOKUP_REPLY
+                                        : EFS_MSG_INODE_GETATTR_REPLY;
+                    efs_conn_send_msg(conn, rtype, &r, sizeof(r));
+                }
+                break;
+            }
             if (type == EFS_MSG_INODE_CREATE && getenv("EFS_RDMA_FIRST"))
                 fprintf(stderr, "rdma-first: CREATE entered chan=%s\n",
                         conn->recv_chan == EFS_CONN_RDMA ? "RDMA" : "TCP");

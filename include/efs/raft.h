@@ -29,6 +29,13 @@
 #define EFS_RAFT_GROUP_CTRL   1
 #define EFS_RAFT_GROUP_SHARD2 2 /* even-shard metadata group (sim step 7) */
 
+/* Odd shards (incl. ROOT ino 1) → group 0; even → group 2. Same mapping
+ * the simulator uses; production must not drift. */
+static inline uint8_t efs_raft_shard_group(uint32_t shard)
+{
+    return (shard & 1u) ? EFS_RAFT_GROUP_SHARD : EFS_RAFT_GROUP_SHARD2;
+}
+
 /* Internal log commands; never passed to the user apply callback. */
 #define EFS_RAFT_CMD_JOINT 0xC1 /* old:u32 BE, new:u32 BE */
 #define EFS_RAFT_CMD_COLD  0xC2 /* cfg:u32 BE */

@@ -414,5 +414,6 @@ required, it is one engine per export side by side — **never an
 `export_id` in keys** — so the single-export key format is not a retrofit
 trap. This closed the last open 10.5c design question. Production Raft
 host in `efsd` (10.5c-9, env-gated `EFS_MD_RAFT`) is gated on a scratch
-cluster; what remains is LOOKUP/GETATTR through ReadIndex + KV behind
-that flag, then writes — not new design.
+cluster; LOOKUP/GETATTR through ReadIndex + KV (10.5c-10) is gated on
+the same smoke. What remains is mutations behind that flag, then the
+cutover — not new design.

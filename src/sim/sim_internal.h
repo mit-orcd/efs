@@ -260,7 +260,7 @@ int sim_lock_wake(struct efs_sim *sim);
 
 static inline uint8_t sim_shard_group(uint32_t shard)
 {
-    return (shard & 1u) ? EFS_RAFT_GROUP_SHARD : EFS_RAFT_GROUP_SHARD2;
+    return efs_raft_shard_group(shard);
 }
 
 static inline void sim_note_apply(struct sim_server *s, uint8_t group,

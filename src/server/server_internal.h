@@ -703,6 +703,13 @@ void server_raft_host_stop(void);
 int server_raft_host_inbox(const uint8_t *payload, uint32_t plen);
 void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out);
 void server_raft_host_status(struct efs_msg_raft_status_reply *out);
+int server_raft_host_active(void);
+/* Leader + ReadIndex + applied KV. No s->lock. Flag off → active() is 0
+ * and these are never called. NOT_PRIMARY fills primary_id = raft leader
+ * node id. */
+void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out);
+void server_raft_host_lookup(efs_ino_t parent, const char *name,
+                             struct efs_msg_inode_reply *out);
 
 /* Start the background cluster rejoin retry thread. */
 void server_start_rejoin(struct efsd_server *s);

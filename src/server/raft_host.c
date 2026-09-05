@@ -5,6 +5,9 @@
 #include "efs/kv_lsm.h"
 #include "efs/meta_apply.h"
 #include "efs/meta_cmd.h"
+#include "efs/kv_key.h"
+#include "efs/txn.h"
+#include "efs/metadata.h"
 #include "efs/wire.h"
 #include "efs/network.h"
 #include <errno.h>
@@ -23,6 +26,7 @@
 #define HOST_INBOX_MAX     256
 #define HOST_ENCODE_STACK  (64 * 1024)
 #define HOST_NGROUPS       2
+#define HOST_READ_TRIES    80 /* 80 × 5 ms = 400 ms; heartbeat is 50 ms */
 
 struct host_inbox_item {
     uint8_t *buf;
@@ -46,6 +50,7 @@ struct efs_raft_host {
     struct efs_raft_disk *disk;
     struct host_group g[HOST_NGROUPS];
     pthread_mutex_t mu;
+    pthread_mutex_t read_mu; /* serializes ReadIndex; never held by the pump */
     pthread_t tid;
     int running;
     int started;
@@ -223,6 +228,144 @@ static struct efs_raft *group_raft(struct efs_raft_host *h, uint8_t group)
     return NULL;
 }
 
+/* Drop h->mu while waiting: the pump must tick for heartbeats to land.
+ * Caller serializes with read_mu. Sets *leader_hint to the raft id. */
+static int host_read_index(struct efs_raft_host *h, uint8_t group,
+                           int *leader_hint)
+{
+    int begun = 0;
+    int t;
+
+    if (leader_hint)
+        *leader_hint = -1;
+    for (t = 0; t < HOST_READ_TRIES; t++) {
+        struct efs_raft *r;
+        int rc;
+
+        pthread_mutex_lock(&h->mu);
+        r = group_raft(h, group);
+        if (!r) {
+            pthread_mutex_unlock(&h->mu);
+            return EFS_ERR_NOT_PRIMARY;
+        }
+        if (leader_hint)
+            *leader_hint = efs_raft_leader(r);
+        if (efs_raft_role(r) != EFS_RAFT_LEADER) {
+            pthread_mutex_unlock(&h->mu);
+            return EFS_ERR_NOT_PRIMARY;
+        }
+        if (!begun) {
+            rc = efs_raft_read_begin(r);
+            begun = 1;
+            if (rc != EFS_OK) {
+                pthread_mutex_unlock(&h->mu);
+                return rc;
+            }
+        }
+        if (efs_raft_read_ready(r)) {
+            pthread_mutex_unlock(&h->mu);
+            return EFS_OK;
+        }
+        pthread_mutex_unlock(&h->mu);
+        usleep(HOST_TICK_US);
+    }
+    return EFS_ERR_BUSY;
+}
+
+static int host_txn_coord(void *user, const struct efs_txid *t,
+                          uint32_t coord_shard, int *dec)
+{
+    struct efs_raft_host *h = user;
+    uint8_t group;
+    int hint = -1;
+    int rc;
+
+    if (!h || !h->kv || !t || !dec)
+        return EFS_ERR_IO;
+    group = efs_raft_shard_group(coord_shard);
+    rc = host_read_index(h, group, &hint);
+    if (rc != EFS_OK)
+        return EFS_ERR_IO; /* I9: cannot establish authority, never absence */
+    return efs_txn_decision_get(h->kv, coord_shard, t, dec);
+}
+
+static void stat_to_inode(const struct efs_meta_stat *st, struct efs_inode *ino)
+{
+    memset(ino, 0, sizeof(*ino));
+    ino->ino = st->ino;
+    ino->mode = st->mode;
+    ino->nlink = st->nlink;
+    ino->uid = (uid_t)st->uid;
+    ino->gid = (gid_t)st->gid;
+    ino->size = st->size;
+    ino->mtime = st->mtime / 1000000000ull;
+    ino->mtime_nsec = (uint32_t)(st->mtime % 1000000000ull);
+    ino->ctime = st->ctime / 1000000000ull;
+    ino->atime = st->atime / 1000000000ull;
+}
+
+static uint8_t rc_to_inode_status(int rc)
+{
+    if (rc == EFS_OK)
+        return EFS_INODE_RPC_OK;
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_INODE_RPC_NOT_FOUND;
+    if (rc == EFS_ERR_NOT_PRIMARY)
+        return EFS_INODE_RPC_NOT_PRIMARY;
+    if (rc == EFS_ERR_BUSY)
+        return EFS_INODE_RPC_BUSY;
+    if (rc == EFS_ERR_INVAL)
+        return EFS_INODE_RPC_INVAL;
+    return EFS_INODE_RPC_ERROR;
+}
+
+static void set_inode_rc(struct efs_msg_inode_reply *out, int rc, int leader_hint)
+{
+    out->status = rc_to_inode_status(rc);
+    out->primary_id = (leader_hint >= 0) ? (efs_node_id_t)(leader_hint + 1) : 0;
+}
+
+static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
+                                 int *leader_hint)
+{
+    struct efs_meta_row row;
+    uint32_t ish;
+    uint8_t ig;
+    uint64_t bits;
+    uint32_t i;
+    int rc;
+
+    ish = efs_kv_inode_shard(ino);
+    ig = efs_raft_shard_group(ish);
+    rc = host_read_index(h, ig, leader_hint);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    bits = S_ISDIR(row.mode) && row.layout != EFS_META_LAYOUT_LOCAL
+               ? row.used_shards
+               : row.active_lanes;
+    for (i = 0; i < EFS_META_LANES; i++) {
+        uint32_t lsh;
+        uint8_t lg;
+        int hint = -1;
+
+        if ((bits & (1ULL << i)) == 0)
+            continue;
+        lsh = efs_kv_lane_shard(ino, (uint8_t)i);
+        lg = efs_raft_shard_group(lsh);
+        if (lg == ig)
+            continue;
+        rc = host_read_index(h, lg, &hint);
+        if (rc != EFS_OK) {
+            *leader_hint = hint;
+            return rc;
+        }
+    }
+    return EFS_OK;
+}
+
 static void drain_inbox(struct efs_raft_host *h)
 {
     struct host_inbox_item local[HOST_INBOX_MAX];
@@ -382,6 +525,7 @@ int server_raft_host_start(struct efsd_server *s)
     h->boot_id = make_boot_id();
     h->salt = make_salt(h->boot_id);
     pthread_mutex_init(&h->mu, NULL);
+    pthread_mutex_init(&h->read_mu, NULL);
     pthread_mutex_init(&h->inbox_mu, NULL);
 
     snprintf(dir, sizeof(dir), "%s/mdraft", s->storage_path);
@@ -472,6 +616,7 @@ void server_raft_host_stop(void)
     efs_raft_disk_close(h->disk);
     efs_kv_lsm_close(h->kv);
     pthread_mutex_destroy(&h->mu);
+    pthread_mutex_destroy(&h->read_mu);
     pthread_mutex_destroy(&h->inbox_mu);
     g_host = NULL;
     free(h);
@@ -573,5 +718,87 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out)
             out->kv_has_root = 1;
             out->export_salt = salt;
         }
+    }
+}
+
+int server_raft_host_active(void)
+{
+    struct efs_raft_host *h = g_host;
+    return h && h->running;
+}
+
+void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_stat st;
+    int hint = -1;
+    int rc;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if (ino == 0) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_read_inode_lanes(h, ino, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
+    pthread_mutex_unlock(&h->read_mu);
+    set_inode_rc(out, rc, hint);
+    if (rc == EFS_OK)
+        stat_to_inode(&st, &out->inode);
+}
+
+void server_raft_host_lookup(efs_ino_t parent, const char *name,
+                             struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_row prow;
+    struct efs_meta_dentry dent;
+    struct efs_meta_stat st;
+    uint32_t psh;
+    uint8_t pg;
+    int hint = -1;
+    int rc;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running || !name || parent == 0) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    psh = efs_kv_inode_shard(parent);
+    pg = efs_raft_shard_group(psh);
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_read_index(h, pg, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
+    if (rc == EFS_OK && prow.layout != EFS_META_LAYOUT_LOCAL) {
+        uint32_t hsh = efs_kv_dentry_shard(parent, name, EFS_META_LAYOUT_HASHED);
+        uint8_t hg = efs_raft_shard_group(hsh);
+        int hh = -1;
+        if (hg != pg) {
+            rc = host_read_index(h, hg, &hh);
+            if (rc != EFS_OK)
+                hint = hh;
+        }
+    }
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
+    if (rc == EFS_OK)
+        rc = host_read_inode_lanes(h, dent.ino, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_getattr(h->kv, dent.ino, host_txn_coord, h, &st);
+    pthread_mutex_unlock(&h->read_mu);
+    set_inode_rc(out, rc, hint);
+    if (rc == EFS_OK) {
+        stat_to_inode(&st, &out->inode);
+        out->inode.parent = parent;
+        strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
     }
 }

@@ -14,8 +14,9 @@ sends you to — not the whole spec.
 ## 1. The task right now
 
 > **Architecture migration §10, step 10.5c:** applied SM is gated in-sim
-> (10.5c-1..8) and the production Raft host is gated in `efsd` (10.5c-9).
-> Next: LOOKUP/GETATTR through ReadIndex + KV behind `EFS_MD_RAFT`.
+> (10.5c-1..8), the production Raft host is gated in `efsd` (10.5c-9),
+> and LOOKUP/GETATTR go through ReadIndex + KV behind `EFS_MD_RAFT`
+> (10.5c-10). Next: mutations (CREATE/MKDIR) behind the same flag.
 > [architecture.md §10](../architecture.md)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -114,9 +115,15 @@ sends you to — not the whole spec.
 > Gate: `test_wire` (codec) + `tests/stress/raft_host_smoke.sh` on a
 > scratch 4-node cluster (port 19820, `/tmp` storage — live cluster
 > untouched): elect, mkfs ROOT on every voter, kill -9 follower then
-> leader, restart catch-up keeps ROOT. Remaining: route LOOKUP/GETATTR
-> through ReadIndex + KV behind the same flag (not a cutover of
-> `efs-test`, not step 11).
+> leader, restart catch-up keeps ROOT.
+>
+> **10.5c-10 is in (gated):** LOOKUP and GETATTR on the production host
+> are leader + ReadIndex + applied KV when `EFS_MD_RAFT=1` (the in-memory
+> table path is unchanged when the flag is off). Follower replies
+> NOT_PRIMARY; a missing name is NOT_FOUND. Same scratch smoke, plus
+> getattr of ROOT (mode 040755, nlink=2) and a miss lookup, including
+> after crash catch-up. Remaining: mutations (CREATE/MKDIR) behind the
+> same flag (not a cutover of `efs-test`, not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
