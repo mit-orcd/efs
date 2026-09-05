@@ -373,6 +373,16 @@ INVAL (old fan-out). Flag off is a no-op. Gate:
 `tests/stress/raft_host_smoke.sh` — create+unlink a file under ROOT,
 lookup miss, second unlink NOT_FOUND, name stays gone after kill -9
 catch-up.
+Not in this step: SETATTR (that is 10.5c-14).
+
+**Step 10.5c-14 (gated): mode/owner SETATTR through Raft.** When
+`EFS_MD_RAFT=1`, `EFS_MSG_INODE_SETATTR` proposes `EFS_MD_CMD_SETATTR`
+(same encoding as the sim) on the inode-shard group, waits
+`last_applied`. Missing ino is NOT_FOUND (no propose); SIZE/MTIME/ATIME
+are INVAL (truncate / utimens later). Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — setattr mode 0600 on the created
+file, getattr confirms, miss ino NOT_FOUND, SIZE mask INVAL, mode
+survives kill -9 catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 

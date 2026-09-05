@@ -7,10 +7,10 @@
 # Gate: elect, raft-mkfs lands ROOT on every voter, LOOKUP/GETATTR via
 # ReadIndex + KV (leader serves ROOT, follower is NOT_PRIMARY, missing
 # name is NOT_FOUND), file CREATE through Raft (lookup+getattr, duplicate
-# is EXIST), MKDIR as a 2-shard txn, last-link UNLINK of a file (lookup
-# miss, second unlink NOT_FOUND), kill -9 a follower then the leader,
-# restart catch-up keeps ROOT, the created file, the mkdir, and the
-# unlinked name stays gone.
+# is EXIST), SETATTR mode/owner, MKDIR as a 2-shard txn, last-link UNLINK
+# of a file (lookup miss, second unlink NOT_FOUND), kill -9 a follower
+# then the leader, restart catch-up keeps ROOT, the created file (new
+# mode), the mkdir, and the unlinked name stays gone.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
 PORT="${PORT:-19820}"
@@ -281,6 +281,37 @@ check_unlink() {
     fi
 }
 
+# Mode/owner SETATTR on raft-smoke-f (stays after crash). SIZE is INVAL
+# in this slice (truncate is later).
+check_setattr() {
+    local lid=$1
+    local tag=$2
+    local out ino
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    say "$tag setattr lookup: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag setattr lookup not OK"
+    ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag setattr ino"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 1 0600" 2>/dev/null || true)
+    say "$tag setattr mode: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag setattr not OK"
+    echo "$out" | grep -q 'mode=0100600' || bad "$tag setattr mode"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    say "$tag getattr setattr: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag getattr setattr not OK"
+    echo "$out" | grep -q 'mode=0100600' || bad "$tag getattr setattr mode"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} 999999 1 0600" 2>/dev/null || true)
+    say "$tag setattr miss: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag setattr miss not NOT_FOUND"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 8 0" 2>/dev/null || true)
+    say "$tag setattr size: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag setattr size not INVAL"
+}
+
 say "build 4 nodes (scratch, not live cluster)"
 bfail=0
 bpids=()
@@ -352,6 +383,8 @@ say "ReadIndex GETATTR/LOOKUP (fresh)"
 check_reads "$leader" "fresh"
 say "CREATE file through Raft (fresh)"
 check_create "$leader" "fresh"
+say "SETATTR mode through Raft (fresh)"
+check_setattr "$leader" "fresh"
 say "MKDIR through Raft (fresh)"
 MKDIR_NAME=""
 check_mkdir "$leader" "fresh"
@@ -450,6 +483,15 @@ check_reads "$leader" "after-crash" "$root_nlink"
 out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
 say "after-crash lookup created: $out"
 echo "$out" | grep -q 'status=0' || bad "after-crash created name missing"
+ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+if [ -n "$ino" ] && [ "$ino" != "0" ]; then
+    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$leader]}:${PORT} $ino" 2>/dev/null || true)
+    say "after-crash getattr created: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash created getattr missing"
+    echo "$out" | grep -q 'mode=0100600' || bad "after-crash setattr mode lost"
+else
+    bad "after-crash created ino missing"
+fi
 if [ -n "${MKDIR_NAME:-}" ]; then
     out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $MKDIR_NAME" 2>/dev/null || true)
     say "after-crash lookup mkdir: $out"

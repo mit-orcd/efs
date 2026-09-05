@@ -1910,7 +1910,8 @@ send_reply:
                  type == EFS_MSG_INODE_CREATE ||
                  type == EFS_MSG_INODE_CREATE_SHARD ||
                  type == EFS_MSG_INODE_UNLINK ||
-                 type == EFS_MSG_INODE_UNLINK_SHARD) &&
+                 type == EFS_MSG_INODE_UNLINK_SHARD ||
+                 type == EFS_MSG_INODE_SETATTR) &&
                 server_raft_host_active()) {
                 struct efs_msg_inode_reply r;
                 uint8_t rtype;
@@ -1948,6 +1949,12 @@ send_reply:
                      * nlink>1 / RMDIR are 2-shard txns, not this opcode. */
                     r.status = EFS_INODE_RPC_INVAL;
                     rtype = EFS_MSG_INODE_UNLINK_SHARD_REPLY;
+                } else if (type == EFS_MSG_INODE_SETATTR &&
+                           payload_len >= sizeof(struct efs_msg_inode_setattr)) {
+                    struct efs_msg_inode_setattr *req = payload;
+                    server_raft_host_setattr(req->ino, req->mask, req->mode,
+                                             req->uid, req->gid, &r);
+                    rtype = EFS_MSG_INODE_SETATTR_REPLY;
                 } else {
                     r.status = EFS_INODE_RPC_INVAL;
                     rtype = (type == EFS_MSG_INODE_LOOKUP)
@@ -1956,7 +1963,9 @@ send_reply:
                                       ? EFS_MSG_INODE_GETATTR_REPLY
                                       : (type == EFS_MSG_INODE_UNLINK)
                                             ? EFS_MSG_INODE_UNLINK_REPLY
-                                            : EFS_MSG_INODE_CREATE_REPLY;
+                                            : (type == EFS_MSG_INODE_SETATTR)
+                                                  ? EFS_MSG_INODE_SETATTR_REPLY
+                                                  : EFS_MSG_INODE_CREATE_REPLY;
                 }
                 efs_conn_send_msg(conn, rtype, &r, sizeof(r));
                 break;

@@ -1423,6 +1423,62 @@ static int cmd_raft_unlink(int argc, char **argv)
     return 0;
 }
 
+static int cmd_raft_setattr(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    int fd;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_msg_inode_setattr req;
+    struct efs_msg_inode_reply *r;
+
+    if (argc < 3) {
+        fprintf(stderr, "usage: raft-setattr <node:port> <ino> <mask> [mode] "
+                "[uid] [gid]\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    memset(&req, 0, sizeof(req));
+    req.ino = (efs_ino_t)strtoull(argv[1], NULL, 0);
+    req.mask = (uint32_t)strtoul(argv[2], NULL, 0);
+    if (argc >= 4)
+        req.mode = (uint32_t)strtoul(argv[3], NULL, 0);
+    if (argc >= 5)
+        req.uid = (uint32_t)strtoul(argv[4], NULL, 0);
+    if (argc >= 6)
+        req.gid = (uint32_t)strtoul(argv[5], NULL, 0);
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_INODE_SETATTR, &req, sizeof(req), &reply_type,
+                  &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_INODE_SETATTR_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to raft-setattr\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    printf("raft-setattr status=%u primary=%u ino=%llu mask=%u mode=0%o "
+           "nlink=%u\n",
+           r->status, r->primary_id,
+           (unsigned long long)r->inode.ino, req.mask, r->inode.mode,
+           r->inode.nlink);
+    free(reply);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -1445,7 +1501,8 @@ int main(int argc, char **argv)
                     "  raft-getattr <node:port> [ino]\n"
                     "  raft-lookup <node:port> <parent> <name>\n"
                     "  raft-create <node:port> <parent> <name> [mode]\n"
-                    "  raft-unlink <node:port> <parent> <name>\n",
+                    "  raft-unlink <node:port> <parent> <name>\n"
+                    "  raft-setattr <node:port> <ino> <mask> [mode] [uid] [gid]\n",
             argv[0]);
     return 1;
 }
@@ -1487,6 +1544,8 @@ int main(int argc, char **argv)
         return cmd_raft_create(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-unlink") == 0)
         return cmd_raft_unlink(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-setattr") == 0)
+        return cmd_raft_setattr(argc - 2, argv + 2);
 
     fprintf(stderr, "Unknown command: %s\n", cmd);
     return 1;

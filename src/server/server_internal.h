@@ -718,6 +718,9 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                             struct efs_msg_inode_reply *out);
 void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
                              struct efs_msg_inode_reply *out);
+void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
+                              uint32_t uid, uint32_t gid,
+                              struct efs_msg_inode_reply *out);
 
 /* Start the background cluster rejoin retry thread. */
 void server_start_rejoin(struct efsd_server *s);

@@ -267,7 +267,10 @@ behind the same flag. Gate: same smoke (mkdir under ROOT, lookup, ROOT
 nlink=3, name survives crash).
 **10.5c-13 is in:** last-link file UNLINK as one Raft entry on the
 dentry shard. Gate: same smoke (create+unlink, lookup miss, name
-stays gone after crash). Remaining: cross-group propose, then
+stays gone after crash).
+**10.5c-14 is in:** mode/owner SETATTR as one Raft entry on the inode
+shard. Gate: same smoke (chmod 0600, getattr, SIZE is INVAL, mode
+survives crash). Remaining: cross-group propose, then
 the rest of the mutations; not a cutover of `efs-test`, not step 11.
 
 **Rules while carving:** no behavior change within a step; no new features

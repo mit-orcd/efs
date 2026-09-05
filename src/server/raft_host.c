@@ -30,6 +30,7 @@
 #define HOST_READ_TRIES    80 /* 80 × 5 ms = 400 ms; heartbeat is 50 ms */
 #define HOST_CREATE_NAME_OFF 31
 #define HOST_CMD_MAX       512
+#define HOST_SETATTR_LEN   61
 
 struct host_inbox_item {
     uint8_t *buf;
@@ -310,6 +311,39 @@ static int apply_unlink_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+/* Same encoding as sim apply_setattr_cmd. Session fencing is not hosted.
+ * Apply never stalls the log. */
+static int apply_setattr_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                             uint32_t clen, uint64_t index)
+{
+    struct efs_meta_setattr sa;
+    efs_ino_t ino;
+    uint64_t now;
+    int rc;
+
+    if (clen < HOST_SETATTR_LEN)
+        return EFS_OK;
+    ino = rd64be(cmd + 1);
+    now = rd64be(cmd + 9);
+    memset(&sa, 0, sizeof(sa));
+    sa.expect_gen = rd64be(cmd + 17);
+    sa.mask = rd32be(cmd + 25);
+    sa.mode = rd32be(cmd + 29);
+    sa.uid = rd32be(cmd + 33);
+    sa.gid = rd32be(cmd + 37);
+    rc = efs_meta_apply_setattr(h->kv, ino, now, &sa);
+    if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_STALE)
+        rc = EFS_OK; /* replay / stale handle after a later unlink */
+    if (rc != EFS_OK) {
+        fprintf(stderr, "raft-host: apply setattr rc=%d index=%llu ino=%llu\n",
+                rc, (unsigned long long)index, (unsigned long long)ino);
+        return EFS_OK;
+    }
+    fprintf(stderr, "raft-host: applied setattr index=%llu ino=%llu mask=%u\n",
+            (unsigned long long)index, (unsigned long long)ino, sa.mask);
+    return EFS_OK;
+}
+
 /* Same encoding as sim_txn_apply. Apply never stalls the log. */
 static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                          uint32_t clen)
@@ -419,6 +453,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         return apply_create_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_UNLINK)
         return apply_unlink_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_SETATTR)
+        return apply_setattr_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
         cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP)
         return apply_txn_cmd(h, cmd, clen);
@@ -594,6 +630,25 @@ static int pack_unlink_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
     p = out + 18 + nl;
     memset(p, 0, EFS_OPID_UUID_LEN + 4);
     *len = n;
+    return EFS_OK;
+}
+
+/* Same encoding as sim_raft_setattr. Session bytes are zero (not hosted). */
+static int pack_setattr_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
+                            uint64_t now, const struct efs_meta_setattr *sa)
+{
+    if (!sa)
+        return EFS_ERR_INVAL;
+    out[0] = EFS_MD_CMD_SETATTR;
+    wr64be(out + 1, ino);
+    wr64be(out + 9, now);
+    wr64be(out + 17, sa->expect_gen);
+    wr32be(out + 25, sa->mask);
+    wr32be(out + 29, sa->mode);
+    wr32be(out + 33, sa->uid);
+    wr32be(out + 37, sa->gid);
+    memset(out + 41, 0, EFS_OPID_UUID_LEN + 4);
+    *len = HOST_SETATTR_LEN;
     return EFS_OK;
 }
 
@@ -1572,4 +1627,64 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
         out->inode.parent = parent;
         strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
     }
+}
+
+/* Mode/owner SETATTR: one Raft entry on the inode shard. SIZE / MTIME /
+ * ATIME are INVAL here (truncate and utimens are later slices). */
+void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
+                              uint32_t uid, uint32_t gid,
+                              struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_setattr sa;
+    struct efs_meta_stat st;
+    struct efs_meta_row row;
+    uint8_t cmd[HOST_SETATTR_LEN];
+    uint32_t clen = 0;
+    uint64_t idx = 0;
+    uint8_t g;
+    int hint = -1;
+    int rc;
+    uint32_t extra;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running || ino == 0) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    extra = mask & ~(EFS_SETATTR_MODE | EFS_SETATTR_UID | EFS_SETATTR_GID);
+    if (extra || (mask & (EFS_SETATTR_MODE | EFS_SETATTR_UID |
+                          EFS_SETATTR_GID)) == 0) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    memset(&sa, 0, sizeof(sa));
+    sa.mask = mask & (EFS_META_SET_MODE | EFS_META_SET_UID | EFS_META_SET_GID);
+    sa.mode = mode;
+    sa.uid = uid;
+    sa.gid = gid;
+    sa.expect_gen = 0;
+    rc = pack_setattr_cmd(cmd, &clen, ino, now_ns(), &sa);
+    if (rc != EFS_OK) {
+        set_inode_rc(out, rc, -1);
+        return;
+    }
+    g = efs_raft_shard_group(efs_kv_inode_shard(ino));
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_read_index(h, g, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+    if (rc == EFS_OK)
+        rc = host_propose(h, g, cmd, clen, &idx, &hint);
+    if (rc == EFS_OK)
+        rc = host_wait_applied(h, g, idx, &hint);
+    if (rc == EFS_OK)
+        rc = host_read_inode_lanes(h, ino, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
+    pthread_mutex_unlock(&h->read_mu);
+    set_inode_rc(out, rc, hint);
+    if (rc == EFS_OK)
+        stat_to_inode(&st, &out->inode);
 }
