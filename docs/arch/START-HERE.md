@@ -101,10 +101,13 @@ sends you to — not the whole spec.
 > (`test_export_salt`), `test_sim` (`test_export_salt`) — mem and
 > `EFS_SIM_KV_DIR`/`EFS_SIM_RAFT_DIR`.
 >
-> Both durable backends are in (10.5a KV, 10.5b Raft log). 10.5c is not
-> new storage work. Remaining in 10.5c: a **named production export** on
-> Raft + the applied KV. Do not wire the live `efs-test` export. Do not
-> skip to step 11. Do not wire production `efsd` without asking.
+> Both durable backends are in (10.5a KV, 10.5b Raft log). The export
+> question is **decided** (Sep 4, architecture.md §1): one export per
+> cluster, hardcoded name `efs`; no create-export operation; multi-export,
+> if ever, is one engine per export, never `export_id` in keys. Remaining
+> in 10.5c: **production adoption** — `efsd` serves the single export from
+> Raft + the applied KV, reads first behind a flag, writes after. Do not
+> cut over the live `efs-test` table. Do not skip to step 11.
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never

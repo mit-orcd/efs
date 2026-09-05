@@ -399,3 +399,18 @@ barrier, with old-epoch requests rejected by epoch rather than by lookup.
 L7 was broadened: truncate range-deletes and re-stripes create generations
 that *were* published and are no longer reachable, which the old
 "unpublished generations" wording did not cover.
+
+## Sep 4 2026 — single-export decision
+
+The old system supported multiple named exports (`efs-test` and `efs-s3`
+coexisted on one cluster) because an export there was one slot in a static
+array of in-memory tables. In the new architecture an export is a
+replicated state-machine set (4096 Raft groups + a KV), so "create a
+second export" is a real design decision, not an array index. The user
+decided: **one export per cluster, hardcoded name `efs`**; the mount
+target is `cluster:port:efs`; there is no create-export operation. The
+escape hatch is preserved by construction: if a second filesystem is ever
+required, it is one engine per export side by side — **never an
+`export_id` in keys** — so the single-export key format is not a retrofit
+trap. This closed the last open 10.5c design question; what remains is
+production adoption (reads first, then writes), not new design.

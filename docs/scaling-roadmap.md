@@ -247,8 +247,13 @@ ReadIndex getattr; idempotent; drop cannot create the export) — gated by
 `test_sim` (mem + durable).
 **10.5c-8 is in:** per-export salt chosen at mkfs; MKDIR scatter hashes
 with it; crash keeps salt — gated by `test_meta_apply` and `test_sim`
-(mem + durable). Remaining: a named production export on Raft + the
-applied KV (not `efs-test`, not step 11).
+(mem + durable).
+**Export question decided (Sep 4):** one export per cluster, hardcoded
+name `efs`; no create-export operation; multi-export, if ever, is one
+engine per export, never `export_id` in keys (architecture.md §1).
+Remaining: **production adoption** — `efsd` serves the single export from
+Raft + the applied KV, reads first behind a flag, then writes; not a
+cutover of the live `efs-test` table, not step 11.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

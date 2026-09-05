@@ -86,6 +86,7 @@ A high-performance parallel POSIX file system.
 | Data path | client-direct, RDMA, k+f EC (k=2 default) |
 | **Scaling bar** | throughput scales with the **protection-adjusted** aggregate hardware ceiling (§9); no software serialization point may become the limiter before a physical resource does |
 | **Hardware envelope** | **modern flash only** — NVMe SSDs + RDMA-capable NICs. Hard disks are explicitly out of scope (below) |
+| Exports | **one per cluster** — hardcoded name `efs` (below) |
 
 **Hardware envelope: flash/NVMe-only, by decision.** EFS does not support
 spinning disks, and no design effort is spent on them. This is not an
@@ -107,6 +108,17 @@ omission — it is a scoping decision that the architecture actively spends:
 
 If a deployment needs HDDs, that is a different filesystem; efs's scaling
 claims (§9) are made against flash and do not transfer.
+
+**One export per cluster, by decision (Sep 4 2026).** A cluster hosts
+exactly one filesystem tree, named `efs`; the mount target is
+`cluster:port:efs` and there is no create-export operation. This is a
+scoping decision in the same sense as the hardware envelope: the old
+system's multiple named exports were a testing convenience, never a
+production need. The escape hatch is preserved by construction: if a
+second filesystem is ever required, it is **one engine (KV + Raft groups)
+per export, side by side — never an `export_id` in keys** — so the
+single-export key format is not a retrofit trap. The mkfs-chosen `salt`
+(§7.4) survives as a per-cluster value.
 
 The 2³²-on-4-nodes number is the binding constraint. It forces metadata out
 of RAM and onto local NVMe, and forces the metadata store to be paged rather
@@ -1094,10 +1106,11 @@ stays runnable. **Do not** go straight `KV → Raft → done`.
 9. Data-generation publication / fencing integration (§7.3), with the
    simulator checking the logical data protocol (arch/verification.md).
 10. Directory layout-epoch spread (§7.4) + distributed locking (§7.6).
-10.5 Durable backends, then a new export: an on-disk ordered KV and an
-    on-disk Raft log behind the step 3/4 interfaces, then the applied SM
-    gated in-sim, then a new export proposing through Raft and reading
-    via ReadIndex (not a cutover of the live table).
+10.5 Durable backends, then production adoption: an on-disk ordered KV and
+    an on-disk Raft log behind the step 3/4 interfaces, then the applied SM
+    gated in-sim, then `efsd` adopts the engine for the cluster's single
+    export (`efs`, §1) — reads first behind a flag, writes after (not a
+    cutover of the live table until the new path is proven).
 11. Delete the old snapshot / root-2PC machinery.
 12. FUSE cache-coherence optimization only after zero/stale-cache semantics
     are demonstrably correct (data path starts as direct-I/O, §7.7).
@@ -1110,7 +1123,7 @@ the snapshot / root-2PC flush that step 11 deletes. Deleting that path before
 a durable replacement is wired would drop metadata durability, so 10.5 is
 ordered ahead of it: durable backends first (gated by re-running the whole
 simulator against them, `efsd` untouched), then the applied SM in-sim, then
-a new export on that engine. The KV engine is
+production adoption for the single export. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not

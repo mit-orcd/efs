@@ -325,8 +325,9 @@ with the per-export salt chosen at mkfs (`hash(parent, name, salt) &
 0xFFF`). Salt lives on the ROOT shard; a missing record reads as 0;
 idempotent mkfs does not change it. Crash/restart keeps salt and later
 mkdirs still scatter with it. Gate: `test_meta_apply`, `test_sim` (mem
-and durable). Remaining: a named production export. Not in this step:
-production `efsd`.
+and durable). Remaining: production adoption in `efsd` for the single
+hardcoded export `efs` (architecture.md §1) — reads first, then writes.
+Not in this step: cutting over the live `efs-test` table.
 
 ## Shortening the code → signal cycle
 

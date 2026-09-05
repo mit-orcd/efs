@@ -103,6 +103,7 @@ A high-performance parallel POSIX file system.
 | Data path | client-direct, RDMA, k+f EC (k=2 default) |
 | **Scaling bar** | throughput scales with the **protection-adjusted** aggregate hardware ceiling (§9); no software serialization point may become the limiter before a physical resource does |
 | **Hardware envelope** | **modern flash only** — NVMe SSDs + RDMA-capable NICs. Hard disks are explicitly out of scope (below) |
+| Exports | **one per cluster** — hardcoded name `efs` (below) |
 
 **Hardware envelope: flash/NVMe-only, by decision.** EFS does not support
 spinning disks, and no design effort is spent on them. This is not an
@@ -124,6 +125,17 @@ omission — it is a scoping decision that the architecture actively spends:
 
 If a deployment needs HDDs, that is a different filesystem; efs's scaling
 claims (§9) are made against flash and do not transfer.
+
+**One export per cluster, by decision (Sep 4 2026).** A cluster hosts
+exactly one filesystem tree, named `efs`; the mount target is
+`cluster:port:efs` and there is no create-export operation. This is a
+scoping decision in the same sense as the hardware envelope: the old
+system's multiple named exports were a testing convenience, never a
+production need. The escape hatch is preserved by construction: if a
+second filesystem is ever required, it is **one engine (KV + Raft groups)
+per export, side by side — never an `export_id` in keys** — so the
+single-export key format is not a retrofit trap. The mkfs-chosen `salt`
+(§7.4) survives as a per-cluster value.
 
 The 2³²-on-4-nodes number is the binding constraint. It forces metadata out
 of RAM and onto local NVMe, and forces the metadata store to be paged rather
@@ -1111,10 +1123,11 @@ stays runnable. **Do not** go straight `KV → Raft → done`.
 9. Data-generation publication / fencing integration (§7.3), with the
    simulator checking the logical data protocol (arch/verification.md).
 10. Directory layout-epoch spread (§7.4) + distributed locking (§7.6).
-10.5 Durable backends, then a new export: an on-disk ordered KV and an
-    on-disk Raft log behind the step 3/4 interfaces, then the applied SM
-    gated in-sim, then a new export proposing through Raft and reading
-    via ReadIndex (not a cutover of the live table).
+10.5 Durable backends, then production adoption: an on-disk ordered KV and
+    an on-disk Raft log behind the step 3/4 interfaces, then the applied SM
+    gated in-sim, then `efsd` adopts the engine for the cluster's single
+    export (`efs`, §1) — reads first behind a flag, writes after (not a
+    cutover of the live table until the new path is proven).
 11. Delete the old snapshot / root-2PC machinery.
 12. FUSE cache-coherence optimization only after zero/stale-cache semantics
     are demonstrably correct (data path starts as direct-I/O, §7.7).
@@ -1127,7 +1140,7 @@ the snapshot / root-2PC flush that step 11 deletes. Deleting that path before
 a durable replacement is wired would drop metadata durability, so 10.5 is
 ordered ahead of it: durable backends first (gated by re-running the whole
 simulator against them, `efsd` untouched), then the applied SM in-sim, then
-a new export on that engine. The KV engine is
+production adoption for the single export. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not
@@ -1321,10 +1334,13 @@ sends you to — not the whole spec.
 > (`test_export_salt`), `test_sim` (`test_export_salt`) — mem and
 > `EFS_SIM_KV_DIR`/`EFS_SIM_RAFT_DIR`.
 >
-> Both durable backends are in (10.5a KV, 10.5b Raft log). 10.5c is not
-> new storage work. Remaining in 10.5c: a **named production export** on
-> Raft + the applied KV. Do not wire the live `efs-test` export. Do not
-> skip to step 11. Do not wire production `efsd` without asking.
+> Both durable backends are in (10.5a KV, 10.5b Raft log). The export
+> question is **decided** (Sep 4, architecture.md §1): one export per
+> cluster, hardcoded name `efs`; no create-export operation; multi-export,
+> if ever, is one engine per export, never `export_id` in keys. Remaining
+> in 10.5c: **production adoption** — `efsd` serves the single export from
+> Raft + the applied KV, reads first behind a flag, writes after. Do not
+> cut over the live `efs-test` table. Do not skip to step 11.
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -4184,8 +4200,9 @@ with the per-export salt chosen at mkfs (`hash(parent, name, salt) &
 0xFFF`). Salt lives on the ROOT shard; a missing record reads as 0;
 idempotent mkfs does not change it. Crash/restart keeps salt and later
 mkdirs still scatter with it. Gate: `test_meta_apply`, `test_sim` (mem
-and durable). Remaining: a named production export. Not in this step:
-production `efsd`.
+and durable). Remaining: production adoption in `efsd` for the single
+hardcoded export `efs` (architecture.md §1) — reads first, then writes.
+Not in this step: cutting over the live `efs-test` table.
 
 ### Shortening the code → signal cycle
 
@@ -4636,4 +4653,19 @@ barrier, with old-epoch requests rejected by epoch rather than by lookup.
 L7 was broadened: truncate range-deletes and re-stripes create generations
 that *were* published and are no longer reachable, which the old
 "unpublished generations" wording did not cover.
+
+### Sep 4 2026 — single-export decision
+
+The old system supported multiple named exports (`efs-test` and `efs-s3`
+coexisted on one cluster) because an export there was one slot in a static
+array of in-memory tables. In the new architecture an export is a
+replicated state-machine set (4096 Raft groups + a KV), so "create a
+second export" is a real design decision, not an array index. The user
+decided: **one export per cluster, hardcoded name `efs`**; the mount
+target is `cluster:port:efs`; there is no create-export operation. The
+escape hatch is preserved by construction: if a second filesystem is ever
+required, it is one engine per export side by side — **never an
+`export_id` in keys** — so the single-export key format is not a retrofit
+trap. This closed the last open 10.5c design question; what remains is
+production adoption (reads first, then writes), not new design.
 
