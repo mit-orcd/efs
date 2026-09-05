@@ -251,9 +251,12 @@ with it; crash keeps salt — gated by `test_meta_apply` and `test_sim`
 **Export question decided (Sep 4):** one export per cluster, hardcoded
 name `efs`; no create-export operation; multi-export, if ever, is one
 engine per export, never `export_id` in keys (architecture.md §1).
-Remaining: **production adoption** — `efsd` serves the single export from
-Raft + the applied KV, reads first behind a flag, then writes; not a
-cutover of the live `efs-test` table, not step 11.
+**10.5c-9 is in:** production Raft host in `efsd` (`EFS_MD_RAFT=1`; inert
+when off). Two groups, on-disk log+KV, peer-TCP Raft, tick thread,
+idempotent `raft-mkfs`. Gate: `test_wire` + scratch-cluster
+`tests/stress/raft_host_smoke.sh` (elect, mkfs, kill -9 follower/leader,
+restart catch-up). Remaining: LOOKUP/GETATTR via ReadIndex + KV behind
+the same flag; not a cutover of `efs-test`, not step 11.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

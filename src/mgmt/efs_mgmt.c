@@ -1,6 +1,7 @@
 #include "efs/common.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
+#include "efs/raft.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1099,6 +1100,125 @@ static int cmd_upgrade(int argc, char **argv)
     return 0;
 }
 
+static const char *raft_role_name(uint8_t role)
+{
+    if (role == EFS_RAFT_LEADER)
+        return "LEADER";
+    if (role == EFS_RAFT_CANDIDATE)
+        return "CANDIDATE";
+    return "FOLLOWER";
+}
+
+static int cmd_raft_status(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    int fd;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_msg_raft_status_reply *r;
+    uint32_t i;
+
+    if (argc < 1) {
+        fprintf(stderr, "usage: raft-status <node:port>\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_RAFT_STATUS, NULL, 0, &reply_type, &reply,
+                  &reply_len) != 0 ||
+        reply_type != EFS_MSG_RAFT_STATUS_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to get raft-status\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    if (r->rc != EFS_OK) {
+        fprintf(stderr, "raft-status rc=%d (host off?)\n", r->rc);
+        free(reply);
+        return 1;
+    }
+    printf("node %u root=%llu salt=%llu groups=%u\n",
+           r->node_id,
+           (unsigned long long)r->kv_has_root,
+           (unsigned long long)r->export_salt,
+           r->ngroups);
+    for (i = 0; i < r->ngroups && i < EFS_RAFT_HOST_MAX_GROUPS; i++) {
+        struct efs_raft_group_status *g = &r->groups[i];
+        printf("  group %u hosted=%u role=%s leader=%d term=%llu "
+               "commit=%llu applied=%llu voters=0x%x\n",
+               g->group, g->hosted,
+               g->hosted ? raft_role_name(g->role) : "-",
+               g->leader,
+               (unsigned long long)g->term,
+               (unsigned long long)g->commit_index,
+               (unsigned long long)g->applied_index,
+               g->voters);
+    }
+    free(reply);
+    return 0;
+}
+
+static int cmd_raft_mkfs(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    int fd;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_msg_raft_mkfs_reply *r;
+
+    if (argc < 1) {
+        fprintf(stderr, "usage: raft-mkfs <node:port>\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_RAFT_MKFS, NULL, 0, &reply_type, &reply,
+                  &reply_len) != 0 ||
+        reply_type != EFS_MSG_RAFT_MKFS_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to raft-mkfs\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    printf("raft-mkfs rc=%d leader_hint=%d index=%llu salt=%llu\n",
+           r->rc, r->leader_hint,
+           (unsigned long long)r->index,
+           (unsigned long long)r->salt);
+    {
+        int rc = r->rc;
+        free(reply);
+        return rc == EFS_OK ? 0 : 1;
+    }
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -1115,7 +1235,9 @@ int main(int argc, char **argv)
                     "  shrink-quota <node:port> <amount>[T|G|M|K]\n"
                     "  add-storage <node:port> <path>[,path...]\n"
                     "  feature <node:port> <export> show|<stats|find> <on|off>\n"
-                    "  upgrade <node:port> <export> [shard-bits]\n",
+                    "  upgrade <node:port> <export> [shard-bits]\n"
+                    "  raft-status <node:port>\n"
+                    "  raft-mkfs <node:port>\n",
             argv[0]);
     return 1;
 }
@@ -1145,6 +1267,10 @@ int main(int argc, char **argv)
         return cmd_feature(argc - 2, argv + 2);
     if (strcmp(cmd, "upgrade") == 0)
         return cmd_upgrade(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-status") == 0)
+        return cmd_raft_status(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-mkfs") == 0)
+        return cmd_raft_mkfs(argc - 2, argv + 2);
 
     fprintf(stderr, "Unknown command: %s\n", cmd);
     return 1;

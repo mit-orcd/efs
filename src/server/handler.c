@@ -3664,6 +3664,23 @@ send_reply:
             }
             break;
         }
+        case EFS_MSG_RAFT: {
+            (void)server_raft_host_inbox(payload, payload_len);
+            efs_conn_send_msg(conn, EFS_MSG_RAFT_REPLY, NULL, 0);
+            break;
+        }
+        case EFS_MSG_RAFT_MKFS: {
+            struct efs_msg_raft_mkfs_reply r;
+            server_raft_host_mkfs(&r);
+            efs_conn_send_msg(conn, EFS_MSG_RAFT_MKFS_REPLY, &r, sizeof(r));
+            break;
+        }
+        case EFS_MSG_RAFT_STATUS: {
+            struct efs_msg_raft_status_reply r;
+            server_raft_host_status(&r);
+            efs_conn_send_msg(conn, EFS_MSG_RAFT_STATUS_REPLY, &r, sizeof(r));
+            break;
+        }
         default:
             break;
         }

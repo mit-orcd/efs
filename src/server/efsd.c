@@ -515,6 +515,12 @@ int main(int argc, char **argv)
     server_start_migration(&server);
     server_start_meta_catchup(&server);
     server_start_meta_flush(&server);
+    if (server_raft_host_start(&server) != 0) {
+        fprintf(stderr, "raft-host: start failed\n");
+        server_verify_stop(&server);
+        server_writer_pool_stop(&server);
+        return 1;
+    }
 
     {
         const char *stripe = (server.storage_path_count > 1) ? "leastq" : "none";
@@ -650,6 +656,7 @@ int main(int argc, char **argv)
     }
     pthread_mutex_unlock(&server.lock);
 
+    server_raft_host_stop();
     server_peer_pool_shutdown();
     pthread_mutex_destroy(&server.lock);
     pthread_mutex_destroy(&server.meta_flush_mu);

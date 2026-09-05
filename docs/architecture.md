@@ -1123,7 +1123,11 @@ the snapshot / root-2PC flush that step 11 deletes. Deleting that path before
 a durable replacement is wired would drop metadata durability, so 10.5 is
 ordered ahead of it: durable backends first (gated by re-running the whole
 simulator against them, `efsd` untouched), then the applied SM in-sim, then
-production adoption for the single export. The KV engine is
+production adoption for the single export. **Status (Sep 4):** 10.5a/b
+and 10.5c-1..8 are gated in-sim; 10.5c-9 (Raft host in `efsd`,
+`EFS_MD_RAFT`) is gated on a scratch cluster. Remaining: LOOKUP/GETATTR
+through ReadIndex + KV behind that flag; writes after. Not a cutover of
+the live table; not step 11. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not

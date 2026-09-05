@@ -2,6 +2,7 @@
 #include "efs/wire.h"
 #include "efs/protocol.h"
 #include "efs/common.h"
+#include "efs/raft.h"
 #include <arpa/inet.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -182,6 +183,68 @@ static void test_every_msg_struct(void)
     RT(struct efs_msg_upgrade_meta_reply);
     RT(struct efs_msg_rdma_setup);
     RT(struct efs_msg_rdma_setup_reply);
+    RT(struct efs_msg_raft_mkfs_reply);
+    RT(struct efs_msg_raft_status_reply);
+    RT(struct efs_raft_group_status);
+}
+
+static void test_raft_codec(void)
+{
+    struct efs_raft_msg a, b;
+    uint8_t buf[256];
+    uint8_t cmd[17];
+    uint8_t cmd_out[64];
+    uint32_t len = 0;
+    int i;
+
+    memset(&a, 0, sizeof(a));
+    a.type = EFS_RAFT_MSG_VOTE_REQ;
+    a.group = EFS_RAFT_GROUP_SHARD;
+    a.from = 1;
+    a.to = 2;
+    a.term = 7;
+    a.boot_id = 0x0102030405060708ULL;
+    a.last_log_index = 11;
+    a.last_log_term = 6;
+    CHECK(efs_wire_raft_encode(&a, buf, sizeof(buf), &len) == EFS_OK,
+          "vote encode");
+    CHECK(len == EFS_WIRE_RAFT_HDR_LEN, "vote hdr len");
+    CHECK(efs_wire_raft_decode(buf, len, &b, cmd_out, sizeof(cmd_out)) == EFS_OK,
+          "vote decode");
+    CHECK(b.type == a.type && b.group == a.group && b.from == a.from &&
+              b.to == a.to && b.term == a.term && b.boot_id == a.boot_id &&
+              b.last_log_index == a.last_log_index &&
+              b.last_log_term == a.last_log_term && b.nentries == 0,
+          "vote fields");
+
+    memset(&a, 0, sizeof(a));
+    for (i = 0; i < 17; i++)
+        cmd[i] = (uint8_t)(0xA0 + i);
+    a.type = EFS_RAFT_MSG_AE_REQ;
+    a.group = EFS_RAFT_GROUP_SHARD2;
+    a.from = 0;
+    a.to = 3;
+    a.term = 9;
+    a.prev_index = 4;
+    a.prev_term = 8;
+    a.leader_commit = 4;
+    a.nentries = 1;
+    a.entries[0].term = 9;
+    a.entries[0].clen = 17;
+    a.entries[0].cmd = cmd;
+    CHECK(efs_wire_raft_encode(&a, buf, sizeof(buf), &len) == EFS_OK,
+          "ae encode");
+    CHECK(len == EFS_WIRE_RAFT_HDR_LEN + 12u + 17u, "ae len");
+    CHECK(efs_wire_raft_decode(buf, len, &b, cmd_out, sizeof(cmd_out)) == EFS_OK,
+          "ae decode");
+    CHECK(b.nentries == 1 && b.entries[0].clen == 17 &&
+              b.entries[0].term == 9 && b.group == EFS_RAFT_GROUP_SHARD2 &&
+              memcmp(b.entries[0].cmd, cmd, 17) == 0,
+          "ae fields");
+
+    CHECK(efs_wire_raft_decode(buf, 10, &b, cmd_out, sizeof(cmd_out)) ==
+              EFS_ERR_PROTO,
+          "short decode");
 }
 
 int main(void)
@@ -190,6 +253,7 @@ int main(void)
     test_frame_reject();
     test_status_offset();
     test_every_msg_struct();
+    test_raft_codec();
     if (failures) {
         fprintf(stderr, "test_wire: %d failure(s)\n", failures);
         return 1;

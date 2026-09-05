@@ -692,6 +692,18 @@ void server_start_meta_flush(struct efsd_server *s);
  * Caller holds s->lock. */
 void server_meta_mark_rpc_dirty_locked(struct efsd_server *s, uint32_t eidx);
 
+/* Production Raft host (architecture.md §10 10.5c). Env-gated: a no-op
+ * unless EFS_MD_RAFT is set. Start fails loud on setup error so a broken
+ * host cannot look like a healthy 2PC node. Stop is safe if never started. */
+int server_raft_host_start(struct efsd_server *s);
+void server_raft_host_stop(void);
+/* Copy one encoded efs_raft_msg into the pump inbox. Delivery ack is the
+ * caller's job (EFS_MSG_RAFT_REPLY). Drops when the host is off or the
+ * inbox is full — Raft retries. */
+int server_raft_host_inbox(const uint8_t *payload, uint32_t plen);
+void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out);
+void server_raft_host_status(struct efs_msg_raft_status_reply *out);
+
 /* Start the background cluster rejoin retry thread. */
 void server_start_rejoin(struct efsd_server *s);
 

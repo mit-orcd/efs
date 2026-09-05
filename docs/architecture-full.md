@@ -1140,7 +1140,11 @@ the snapshot / root-2PC flush that step 11 deletes. Deleting that path before
 a durable replacement is wired would drop metadata durability, so 10.5 is
 ordered ahead of it: durable backends first (gated by re-running the whole
 simulator against them, `efsd` untouched), then the applied SM in-sim, then
-production adoption for the single export. The KV engine is
+production adoption for the single export. **Status (Sep 4):** 10.5a/b
+and 10.5c-1..8 are gated in-sim; 10.5c-9 (Raft host in `efsd`,
+`EFS_MD_RAFT`) is gated on a scratch cluster. Remaining: LOOKUP/GETATTR
+through ReadIndex + KV behind that flag; writes after. Not a cutover of
+the live table; not step 11. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not
@@ -1246,8 +1250,9 @@ sends you to — not the whole spec.
 
 ### 1. The task right now
 
-> **Architecture migration §10, step 10.5c:** finish the applied-state SM
-> in-sim, then adopt via a **new export** on Raft + the applied KV.
+> **Architecture migration §10, step 10.5c:** applied SM is gated in-sim
+> (10.5c-1..8) and the production Raft host is gated in `efsd` (10.5c-9).
+> Next: LOOKUP/GETATTR through ReadIndex + KV behind `EFS_MD_RAFT`.
 > [architecture.md §10](#architecture)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -1337,10 +1342,18 @@ sends you to — not the whole spec.
 > Both durable backends are in (10.5a KV, 10.5b Raft log). The export
 > question is **decided** (Sep 4, architecture.md §1): one export per
 > cluster, hardcoded name `efs`; no create-export operation; multi-export,
-> if ever, is one engine per export, never `export_id` in keys. Remaining
-> in 10.5c: **production adoption** — `efsd` serves the single export from
-> Raft + the applied KV, reads first behind a flag, writes after. Do not
-> cut over the live `efs-test` table. Do not skip to step 11.
+> if ever, is one engine per export, never `export_id` in keys.
+>
+> **10.5c-9 is in (gated):** production Raft host in `efsd`, env-gated
+> `EFS_MD_RAFT=1` (inert when off). Two groups (odd/even shard parity, same
+> mapping as the sim), `raft_disk` + one `kv_lsm` per node, Raft messages
+> on peer TCP (`EFS_MSG_RAFT`), a tick thread, idempotent `raft-mkfs`.
+> Gate: `test_wire` (codec) + `tests/stress/raft_host_smoke.sh` on a
+> scratch 4-node cluster (port 19820, `/tmp` storage — live cluster
+> untouched): elect, mkfs ROOT on every voter, kill -9 follower then
+> leader, restart catch-up keeps ROOT. Remaining: route LOOKUP/GETATTR
+> through ReadIndex + KV behind the same flag (not a cutover of
+> `efs-test`, not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -1377,6 +1390,7 @@ is what your change must not break; the **Gate** column is what proves it.
 | Client reconnect, leases, locks, open-unlinked | [protocols/sessions.md](protocols/sessions.md) | I19, I23, I16 | posix2, posixstress |
 | Cross-shard anything | [protocols/transactions.md](protocols/transactions.md) | I16, I17, I9 | posix2, posixstress |
 | Raft, KV, replication, membership | [architecture.md §7.1/§7.8](#architecture), [failure-tolerance.md](failure-tolerance.md) | I1–I4, I10, I18 | `tests/test_sim`, leaks |
+| Production Raft host (`EFS_MD_RAFT`) | `src/server/raft_host.c`, [architecture.md §10](#architecture) 10.5 | I1–I4, I16; never `efs_raft_snapshot()` until KV flush-through-applied | `tests/test_wire`, `tests/stress/raft_host_smoke.sh` (scratch cluster; not live `efs-test`) |
 | Simulator / applied KV SM | [verification.md](verification.md), `include/efs/sim.h`, `include/efs/meta_apply.h`, `include/efs/raft.h` | I1–I4, I9, I10, I13–I16, I20–I23, I25 | `tests/test_sim`, `tests/test_meta_apply`, `tests/test_raft` |
 | Op-ID / idempotency window | [architecture.md §7.9](#architecture), `include/efs/opid.h` | I16 | `tests/test_sim` |
 | A hot path, for speed | [performance.md](performance.md) | P1–P4, §8 contract | fio honest matrix — **never** the stock `perf` write column |
@@ -4192,17 +4206,26 @@ production `efsd`.
 seeds the root with a local KV write. It elects, proposes
 `efs_meta_apply_init` (leader-stamped `now`), and apply is idempotent.
 getattr of ROOT is ReadIndex. 100% drop cannot create the export.
-Crash/restart keeps ROOT. Gate: `test_sim` (mem and durable). Remaining:
-a named production export. Not in this step: production `efsd`.
+Crash/restart keeps ROOT. Gate: `test_sim` (mem and durable). Not in
+this step: production `efsd` (that is 10.5c-9).
 
 **Step 10.5c-8 in-sim (gated): export salt at mkfs.** MKDIR scatter hashes
 with the per-export salt chosen at mkfs (`hash(parent, name, salt) &
 0xFFF`). Salt lives on the ROOT shard; a missing record reads as 0;
 idempotent mkfs does not change it. Crash/restart keeps salt and later
 mkdirs still scatter with it. Gate: `test_meta_apply`, `test_sim` (mem
-and durable). Remaining: production adoption in `efsd` for the single
-hardcoded export `efs` (architecture.md §1) — reads first, then writes.
-Not in this step: cutting over the live `efs-test` table.
+and durable).
+
+**Step 10.5c-9 (gated): production Raft host in `efsd`.** Env-gated
+`EFS_MD_RAFT=1` (no-op when unset). Two groups (odd/even shard parity),
+one `raft_disk` + one `kv_lsm` per node under `<storage>/mdraft/`, Raft
+messages on existing peer TCP, a tick thread, idempotent `raft-mkfs` on
+the ROOT group. Gate: `test_wire` (codec) and
+`tests/stress/raft_host_smoke.sh` on a scratch 4-node cluster (port 19820,
+`/tmp` storage; live cluster untouched) — elect, mkfs ROOT on every
+voter, kill -9 follower then leader, restart catch-up keeps ROOT.
+Remaining: LOOKUP/GETATTR through ReadIndex + KV behind the same flag.
+Not in this step: cutting over the live `efs-test` table, step 11.
 
 ### Shortening the code → signal cycle
 
@@ -4666,6 +4689,8 @@ target is `cluster:port:efs`; there is no create-export operation. The
 escape hatch is preserved by construction: if a second filesystem is ever
 required, it is one engine per export side by side — **never an
 `export_id` in keys** — so the single-export key format is not a retrofit
-trap. This closed the last open 10.5c design question; what remains is
-production adoption (reads first, then writes), not new design.
+trap. This closed the last open 10.5c design question. Production Raft
+host in `efsd` (10.5c-9, env-gated `EFS_MD_RAFT`) is gated on a scratch
+cluster; what remains is LOOKUP/GETATTR through ReadIndex + KV behind
+that flag, then writes — not new design.
 

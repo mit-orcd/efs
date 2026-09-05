@@ -317,17 +317,26 @@ production `efsd`.
 seeds the root with a local KV write. It elects, proposes
 `efs_meta_apply_init` (leader-stamped `now`), and apply is idempotent.
 getattr of ROOT is ReadIndex. 100% drop cannot create the export.
-Crash/restart keeps ROOT. Gate: `test_sim` (mem and durable). Remaining:
-a named production export. Not in this step: production `efsd`.
+Crash/restart keeps ROOT. Gate: `test_sim` (mem and durable). Not in
+this step: production `efsd` (that is 10.5c-9).
 
 **Step 10.5c-8 in-sim (gated): export salt at mkfs.** MKDIR scatter hashes
 with the per-export salt chosen at mkfs (`hash(parent, name, salt) &
 0xFFF`). Salt lives on the ROOT shard; a missing record reads as 0;
 idempotent mkfs does not change it. Crash/restart keeps salt and later
 mkdirs still scatter with it. Gate: `test_meta_apply`, `test_sim` (mem
-and durable). Remaining: production adoption in `efsd` for the single
-hardcoded export `efs` (architecture.md §1) — reads first, then writes.
-Not in this step: cutting over the live `efs-test` table.
+and durable).
+
+**Step 10.5c-9 (gated): production Raft host in `efsd`.** Env-gated
+`EFS_MD_RAFT=1` (no-op when unset). Two groups (odd/even shard parity),
+one `raft_disk` + one `kv_lsm` per node under `<storage>/mdraft/`, Raft
+messages on existing peer TCP, a tick thread, idempotent `raft-mkfs` on
+the ROOT group. Gate: `test_wire` (codec) and
+`tests/stress/raft_host_smoke.sh` on a scratch 4-node cluster (port 19820,
+`/tmp` storage; live cluster untouched) — elect, mkfs ROOT on every
+voter, kill -9 follower then leader, restart catch-up keeps ROOT.
+Remaining: LOOKUP/GETATTR through ReadIndex + KV behind the same flag.
+Not in this step: cutting over the live `efs-test` table, step 11.
 
 ## Shortening the code → signal cycle
 

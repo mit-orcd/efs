@@ -71,7 +71,7 @@ SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/store_nvme.c \
               src/server/handler.c \
               src/server/cluster.c src/server/meta_server.c src/server/migrate.c \
               src/server/peer_pool.c src/server/writer.c src/server/verify.c \
-              src/server/bench_local.c
+              src/server/bench_local.c src/server/raft_host.c
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 
 CLIENT_SRCS = src/client/efs_fuse.c
@@ -148,6 +148,8 @@ $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(MGMT_OBJ) $(Q
 	include/efs/wire.h include/efs/store.h include/efs/transport.h \
 	include/efs/kv.h \
 	.build_id.stamp
+
+src/wire/wire.o: include/efs/raft.h
 
 $(LIB): $(COMMON_OBJS)
 	ar rcs $@ $^

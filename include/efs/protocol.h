@@ -175,6 +175,56 @@ enum efs_msg_type {
      * ever serves committed roots. */
     EFS_MSG_META_COMMIT = 91,
     EFS_MSG_META_COMMIT_REPLY = 92,
+
+    /* Production Raft host (architecture.md §10 step 10.5c, env-gated
+     * EFS_MD_RAFT on the server; INVAL reply when the host is off).
+     * EFS_MSG_RAFT carries one efs_raft_msg encoded by
+     * efs_wire_raft_encode (wire.h); the reply is a delivery ack only —
+     * Raft tolerates loss, so processing is asynchronous. */
+    EFS_MSG_RAFT = 93,
+    EFS_MSG_RAFT_REPLY = 94,
+    /* Propose an idempotent MKFS on the ROOT shard's group (scratch/mgmt
+     * smoke for the raft host; not the export mkfs path). */
+    EFS_MSG_RAFT_MKFS = 95,
+    EFS_MSG_RAFT_MKFS_REPLY = 96,
+    /* Per-group role/term/commit/applied readout for the smoke gate. */
+    EFS_MSG_RAFT_STATUS = 97,
+    EFS_MSG_RAFT_STATUS_REPLY = 98,
+};
+
+/* RAFT_MKFS reply. rc: EFS_OK (accepted at index), EFS_ERR_NOT_PRIMARY
+ * (not the leader; leader_hint is the peer id or -1), EFS_ERR_INVAL (host
+ * off). Commitment is asynchronous — poll RAFT_STATUS for applied. */
+struct efs_msg_raft_mkfs_reply {
+    int32_t rc;
+    int32_t leader_hint;
+    uint64_t index;
+    uint64_t salt; /* this process's mkfs salt candidate */
+};
+
+#define EFS_RAFT_HOST_MAX_GROUPS 4
+
+struct efs_raft_group_status {
+    uint8_t group;
+    uint8_t role;    /* EFS_RAFT_FOLLOWER/CANDIDATE/LEADER */
+    uint8_t hosted;  /* this node runs a replica of this group */
+    uint8_t pad;
+    int32_t leader;  /* peer id, -1 unknown */
+    uint32_t voters; /* committed voting-set bitmask (peer ids) */
+    uint32_t pad2;
+    uint64_t term;
+    uint64_t commit_index;
+    uint64_t applied_index;
+};
+
+struct efs_msg_raft_status_reply {
+    int32_t rc;
+    uint32_t node_id;
+    uint64_t kv_has_root; /* 1 once the mkfs command applied locally */
+    uint64_t export_salt; /* valid when kv_has_root */
+    uint32_t ngroups;
+    uint32_t pad;
+    struct efs_raft_group_status groups[EFS_RAFT_HOST_MAX_GROUPS];
 };
 
 /* META_COMMIT request: promote the pending (prepared) root for this export

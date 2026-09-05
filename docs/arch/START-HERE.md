@@ -13,8 +13,9 @@ sends you to — not the whole spec.
 
 ## 1. The task right now
 
-> **Architecture migration §10, step 10.5c:** finish the applied-state SM
-> in-sim, then adopt via a **new export** on Raft + the applied KV.
+> **Architecture migration §10, step 10.5c:** applied SM is gated in-sim
+> (10.5c-1..8) and the production Raft host is gated in `efsd` (10.5c-9).
+> Next: LOOKUP/GETATTR through ReadIndex + KV behind `EFS_MD_RAFT`.
 > [architecture.md §10](../architecture.md)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -104,10 +105,18 @@ sends you to — not the whole spec.
 > Both durable backends are in (10.5a KV, 10.5b Raft log). The export
 > question is **decided** (Sep 4, architecture.md §1): one export per
 > cluster, hardcoded name `efs`; no create-export operation; multi-export,
-> if ever, is one engine per export, never `export_id` in keys. Remaining
-> in 10.5c: **production adoption** — `efsd` serves the single export from
-> Raft + the applied KV, reads first behind a flag, writes after. Do not
-> cut over the live `efs-test` table. Do not skip to step 11.
+> if ever, is one engine per export, never `export_id` in keys.
+>
+> **10.5c-9 is in (gated):** production Raft host in `efsd`, env-gated
+> `EFS_MD_RAFT=1` (inert when off). Two groups (odd/even shard parity, same
+> mapping as the sim), `raft_disk` + one `kv_lsm` per node, Raft messages
+> on peer TCP (`EFS_MSG_RAFT`), a tick thread, idempotent `raft-mkfs`.
+> Gate: `test_wire` (codec) + `tests/stress/raft_host_smoke.sh` on a
+> scratch 4-node cluster (port 19820, `/tmp` storage — live cluster
+> untouched): elect, mkfs ROOT on every voter, kill -9 follower then
+> leader, restart catch-up keeps ROOT. Remaining: route LOOKUP/GETATTR
+> through ReadIndex + KV behind the same flag (not a cutover of
+> `efs-test`, not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -144,6 +153,7 @@ is what your change must not break; the **Gate** column is what proves it.
 | Client reconnect, leases, locks, open-unlinked | [protocols/sessions.md](protocols/sessions.md) | I19, I23, I16 | posix2, posixstress |
 | Cross-shard anything | [protocols/transactions.md](protocols/transactions.md) | I16, I17, I9 | posix2, posixstress |
 | Raft, KV, replication, membership | [architecture.md §7.1/§7.8](../architecture.md), [failure-tolerance.md](failure-tolerance.md) | I1–I4, I10, I18 | `tests/test_sim`, leaks |
+| Production Raft host (`EFS_MD_RAFT`) | `src/server/raft_host.c`, [architecture.md §10](../architecture.md) 10.5 | I1–I4, I16; never `efs_raft_snapshot()` until KV flush-through-applied | `tests/test_wire`, `tests/stress/raft_host_smoke.sh` (scratch cluster; not live `efs-test`) |
 | Simulator / applied KV SM | [verification.md](verification.md), `include/efs/sim.h`, `include/efs/meta_apply.h`, `include/efs/raft.h` | I1–I4, I9, I10, I13–I16, I20–I23, I25 | `tests/test_sim`, `tests/test_meta_apply`, `tests/test_raft` |
 | Op-ID / idempotency window | [architecture.md §7.9](../architecture.md), `include/efs/opid.h` | I16 | `tests/test_sim` |
 | A hot path, for speed | [performance.md](performance.md) | P1–P4, §8 contract | fio honest matrix — **never** the stock `perf` write column |

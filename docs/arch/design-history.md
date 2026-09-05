@@ -412,5 +412,7 @@ target is `cluster:port:efs`; there is no create-export operation. The
 escape hatch is preserved by construction: if a second filesystem is ever
 required, it is one engine per export side by side — **never an
 `export_id` in keys** — so the single-export key format is not a retrofit
-trap. This closed the last open 10.5c design question; what remains is
-production adoption (reads first, then writes), not new design.
+trap. This closed the last open 10.5c design question. Production Raft
+host in `efsd` (10.5c-9, env-gated `EFS_MD_RAFT`) is gated on a scratch
+cluster; what remains is LOOKUP/GETATTR through ReadIndex + KV behind
+that flag, then writes — not new design.

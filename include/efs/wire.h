@@ -41,4 +41,23 @@ int efs_wire_frame_decode(const uint8_t *in, uint32_t in_len,
 int efs_wire_pack(const void *msg, uint32_t len, void *out, uint32_t out_cap);
 int efs_wire_unpack(const void *in, uint32_t in_len, void *msg, uint32_t len);
 
+/* efs_raft_msg codec (the one non-C-layout encoding: the message has a
+ * variable-length entry payload). All fixed fields big-endian:
+ *   u8 type, u8 group, u8 vote_granted, u8 success,
+ *   s32 from, s32 to,
+ *   u64 term, u64 boot_id, u64 last_log_index, u64 last_log_term,
+ *   u64 prev_index, u64 prev_term, u64 leader_commit, u64 match_index,
+ *   u32 nentries (0 or 1 — raft.h allows at most one payload per RPC),
+ *   per entry: u64 term, u32 clen, u8 cmd[clen].
+ * decode points msg->entries[0].cmd into cmd_buf (caller-owned). */
+#define EFS_WIRE_RAFT_HDR_LEN 80u /* fixed part through nentries */
+#define EFS_WIRE_RAFT_MAX_CMD (4u * 1024 * 1024)
+
+struct efs_raft_msg; /* efs/raft.h */
+int efs_wire_raft_encode(const struct efs_raft_msg *msg, uint8_t *out,
+                         uint32_t out_cap, uint32_t *out_len);
+int efs_wire_raft_decode(const uint8_t *in, uint32_t in_len,
+                         struct efs_raft_msg *msg, uint8_t *cmd_buf,
+                         uint32_t cmd_cap);
+
 #endif
