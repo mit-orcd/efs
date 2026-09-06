@@ -1263,10 +1263,11 @@ static int cmd_raft_getattr(int argc, char **argv)
     close(fd);
     r = reply;
     printf("raft-getattr status=%u primary=%u ino=%llu mode=0%o nlink=%u "
-           "size=%llu\n",
+           "size=%llu mtime=%llu\n",
            r->status, r->primary_id,
            (unsigned long long)r->inode.ino, r->inode.mode, r->inode.nlink,
-           (unsigned long long)r->inode.size);
+           (unsigned long long)r->inode.size,
+           (unsigned long long)r->inode.mtime);
     free(reply);
     return 0;
 }
@@ -1535,8 +1536,8 @@ static int cmd_raft_setattr(int argc, char **argv)
     struct efs_msg_inode_reply *r;
 
     if (argc < 3) {
-        fprintf(stderr, "usage: raft-setattr <node:port> <ino> <mask> [mode] "
-                "[uid] [gid]\n");
+        fprintf(stderr, "usage: raft-setattr <node:port> <ino> <mask> [mode|mtime] "
+                "[uid|atime] [gid]\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -1546,12 +1547,19 @@ static int cmd_raft_setattr(int argc, char **argv)
     memset(&req, 0, sizeof(req));
     req.ino = (efs_ino_t)strtoull(argv[1], NULL, 0);
     req.mask = (uint32_t)strtoul(argv[2], NULL, 0);
-    if (argc >= 4)
-        req.mode = (uint32_t)strtoul(argv[3], NULL, 0);
-    if (argc >= 5)
-        req.uid = (uint32_t)strtoul(argv[4], NULL, 0);
-    if (argc >= 6)
-        req.gid = (uint32_t)strtoul(argv[5], NULL, 0);
+    if (req.mask & (EFS_SETATTR_MTIME | EFS_SETATTR_ATIME)) {
+        if (argc >= 4)
+            req.mtime = strtoull(argv[3], NULL, 0);
+        if (argc >= 5)
+            req.atime = strtoull(argv[4], NULL, 0);
+    } else {
+        if (argc >= 4)
+            req.mode = (uint32_t)strtoul(argv[3], NULL, 0);
+        if (argc >= 5)
+            req.uid = (uint32_t)strtoul(argv[4], NULL, 0);
+        if (argc >= 6)
+            req.gid = (uint32_t)strtoul(argv[5], NULL, 0);
+    }
     fd = efs_connect_tcp(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
@@ -1571,10 +1579,63 @@ static int cmd_raft_setattr(int argc, char **argv)
     close(fd);
     r = reply;
     printf("raft-setattr status=%u primary=%u ino=%llu mask=%u mode=0%o "
-           "nlink=%u\n",
+           "nlink=%u mtime=%llu\n",
            r->status, r->primary_id,
            (unsigned long long)r->inode.ino, req.mask, r->inode.mode,
-           r->inode.nlink);
+           r->inode.nlink, (unsigned long long)r->inode.mtime);
+    free(reply);
+    return 0;
+}
+
+static int cmd_raft_rename(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    int fd;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_msg_inode_rename_at req;
+    struct efs_msg_inode_reply *r;
+
+    if (argc < 5) {
+        fprintf(stderr, "usage: raft-rename <node:port> <old_parent> <old_name> "
+                "<new_parent> <new_name>\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    memset(&req, 0, sizeof(req));
+    req.old_parent = (efs_ino_t)strtoull(argv[1], NULL, 0);
+    strncpy(req.old_name, argv[2], sizeof(req.old_name) - 1);
+    req.new_parent = (efs_ino_t)strtoull(argv[3], NULL, 0);
+    strncpy(req.new_name, argv[4], sizeof(req.new_name) - 1);
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_INODE_RENAME_AT, &req, sizeof(req), &reply_type,
+                  &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_INODE_RENAME_AT_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to raft-rename\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    printf("raft-rename status=%u primary=%u old_parent=%llu old=%s "
+           "new_parent=%llu new=%s ino=%llu mode=0%o nlink=%u\n",
+           r->status, r->primary_id,
+           (unsigned long long)req.old_parent, req.old_name,
+           (unsigned long long)req.new_parent, req.new_name,
+           (unsigned long long)r->inode.ino, r->inode.mode, r->inode.nlink);
     free(reply);
     return 0;
 }
@@ -1604,7 +1665,8 @@ int main(int argc, char **argv)
                     "  raft-unlink <node:port> <parent> <name>\n"
                     "  raft-rmdir <node:port> <parent> <name>\n"
                     "  raft-link <node:port> <src_ino> <parent> <name>\n"
-                    "  raft-setattr <node:port> <ino> <mask> [mode] [uid] [gid]\n",
+                    "  raft-setattr <node:port> <ino> <mask> [mode|mtime] [uid|atime] [gid]\n"
+                    "  raft-rename <node:port> <old_parent> <old_name> <new_parent> <new_name>\n",
             argv[0]);
     return 1;
 }
@@ -1652,6 +1714,8 @@ int main(int argc, char **argv)
         return cmd_raft_link(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-setattr") == 0)
         return cmd_raft_setattr(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-rename") == 0)
+        return cmd_raft_rename(argc - 2, argv + 2);
 
     fprintf(stderr, "Unknown command: %s\n", cmd);
     return 1;

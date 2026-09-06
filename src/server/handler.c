@@ -1913,7 +1913,9 @@ send_reply:
                  type == EFS_MSG_INODE_UNLINK_SHARD ||
                  type == EFS_MSG_INODE_SETATTR ||
                  type == EFS_MSG_INODE_LINK ||
-                 type == EFS_MSG_INODE_LINK_SHARD) &&
+                 type == EFS_MSG_INODE_LINK_SHARD ||
+                 type == EFS_MSG_INODE_RENAME ||
+                 type == EFS_MSG_INODE_RENAME_AT) &&
                 server_raft_host_active()) {
                 struct efs_msg_inode_reply r;
                 uint8_t rtype;
@@ -1956,7 +1958,9 @@ send_reply:
                            payload_len >= sizeof(struct efs_msg_inode_setattr)) {
                     struct efs_msg_inode_setattr *req = payload;
                     server_raft_host_setattr(req->ino, req->mask, req->mode,
-                                             req->uid, req->gid, &r);
+                                             req->uid, req->gid, req->size,
+                                             req->mtime, req->mtime_nsec,
+                                             req->atime, &r);
                     rtype = EFS_MSG_INODE_SETATTR_REPLY;
                 } else if (type == EFS_MSG_INODE_LINK &&
                            payload_len >= sizeof(struct efs_msg_inode_link)) {
@@ -1968,6 +1972,17 @@ send_reply:
                     /* Old fan-out. LINK is a 2-shard txn, not this opcode. */
                     r.status = EFS_INODE_RPC_INVAL;
                     rtype = EFS_MSG_INODE_LINK_SHARD_REPLY;
+                } else if (type == EFS_MSG_INODE_RENAME) {
+                    /* Rename-by-ino is not hosted; RENAME_AT is. */
+                    r.status = EFS_INODE_RPC_INVAL;
+                    rtype = EFS_MSG_INODE_RENAME_REPLY;
+                } else if (type == EFS_MSG_INODE_RENAME_AT &&
+                           payload_len >= sizeof(struct efs_msg_inode_rename_at)) {
+                    struct efs_msg_inode_rename_at *req = payload;
+                    server_raft_host_rename_at(req->old_parent, req->old_name,
+                                               req->new_parent, req->new_name,
+                                               &r);
+                    rtype = EFS_MSG_INODE_RENAME_AT_REPLY;
                 } else {
                     r.status = EFS_INODE_RPC_INVAL;
                     rtype = (type == EFS_MSG_INODE_LOOKUP)

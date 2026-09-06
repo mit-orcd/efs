@@ -284,7 +284,14 @@ nlink=2, dup EXIST, extra name survives crash).
 the same txn; last-link on one shard stays one Raft entry. LOCAL
 parent only; HASHED/SPLITTING INVAL/BUSY. Gate: same smoke (extra
 link, unlink it, surviving nlink=2, extra name stays gone after
-crash). Remaining: cross-group
+crash).
+**10.5c-18 is in:** utimens inode fence (`EFS_MD_CMD_UTIMENS`) on
+SETATTR MTIME/ATIME. Mixed mode+time INVAL; SIZE INVAL; other-group
+lane fence INVAL. Gate: same smoke (mtime=1000000000 survives crash).
+**10.5c-19 is in:** same-dir LOCAL file RENAME as src DEL + dest PUT
+(same PREPARE/DECIDE/RESOLVE as LINK). Cross-dir/dir/HASHED INVAL;
+`RENAME` by ino INVAL. Restart restores `last_applied` without
+compacting. Gate: same smoke (`n`→`m`, old gone after crash). Remaining: cross-group
 propose, then the rest of the mutations; not a cutover of `efs-test`,
 not step 11.
 

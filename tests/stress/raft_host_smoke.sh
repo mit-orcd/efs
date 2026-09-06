@@ -11,11 +11,12 @@
 # of a file (lookup miss, second unlink NOT_FOUND), RMDIR as a 2-shard
 # txn (empty LOCAL dir, lookup miss), LINK as a 2-shard txn (nlink=2,
 # dest lookup, directory is INVAL), nlink>1 UNLINK of a dedicated extra
-# name (lookup miss, surviving nlink=2), kill -9 a follower
+# name (lookup miss, surviving nlink=2), utimens mtime fence, same-dir
+# LOCAL file RENAME (old name gone, new name present), kill -9 a follower
 # then the leader, restart catch-up keeps ROOT, the created file (new
-# mode, nlink=2), the mkdir, the extra link name, the unlinked name stays
-# gone, the rmdir'd name stays gone, and the nlink>1 unlinked name stays
-# gone.
+# mode, nlink=2, utimens mtime), the mkdir, the extra link name, the
+# unlinked name stays gone, the rmdir'd name stays gone, the nlink>1
+# unlinked name stays gone, and the renamed name stays.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
 PORT="${PORT:-19820}"
@@ -409,6 +410,48 @@ check_unlink_nlink() {
     echo "$out" | grep -q 'status=1' || bad "$tag unlink-nlink again not NOT_FOUND"
 }
 
+# Same-dir LOCAL file RENAME. Dedicated names so raft-smoke-f stays.
+# Dest EXIST and directory src are INVAL/EXIST. Cross-dir is INVAL.
+check_rename() {
+    local lid=$1
+    local tag=$2
+    local out
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-n" 2>/dev/null || true)
+    say "$tag rename-prep create: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag rename-prep create not OK"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-n 1 raft-smoke-m" 2>/dev/null || true)
+    say "$tag rename: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag rename not OK"
+    if echo "$out" | grep -q 'status=0'; then
+        RENAME_NAME=raft-smoke-m
+        RENAME_OLD=raft-smoke-n
+    fi
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-n" 2>/dev/null || true)
+    say "$tag lookup rename old: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag lookup rename old not NOT_FOUND"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-m" 2>/dev/null || true)
+    say "$tag lookup rename new: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag lookup rename new not OK"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-n 1 raft-smoke-m2" 2>/dev/null || true)
+    say "$tag rename miss: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag rename miss not NOT_FOUND"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f 1 raft-smoke-m" 2>/dev/null || true)
+    say "$tag rename exist: $out"
+    echo "$out" | grep -q 'status=2' || bad "$tag rename exist not EXIST"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-m 2 raft-smoke-x" 2>/dev/null || true)
+    say "$tag rename cross-dir: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag rename cross-dir not INVAL"
+    if [ -n "${MKDIR_NAME:-}" ]; then
+        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 $MKDIR_NAME 1 raft-smoke-md" 2>/dev/null || true)
+        say "$tag rename dir: $out"
+        echo "$out" | grep -q 'status=6' || bad "$tag rename dir not INVAL"
+    fi
+}
+
 # Mode/owner SETATTR on raft-smoke-f (stays after crash). SIZE is INVAL
 # in this slice (truncate is later).
 check_setattr() {
@@ -432,6 +475,13 @@ check_setattr() {
     say "$tag getattr setattr: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr setattr not OK"
     echo "$out" | grep -q 'mode=0100600' || bad "$tag getattr setattr mode"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 16 1000000000" 2>/dev/null || true)
+    say "$tag setattr utimens: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag setattr utimens not OK"
+    echo "$out" | grep -q 'mtime=1000000000' || bad "$tag setattr utimens mtime"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    say "$tag getattr utimens: $out"
+    echo "$out" | grep -q 'mtime=1000000000' || bad "$tag getattr utimens mtime"
     out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} 999999 1 0600" 2>/dev/null || true)
     say "$tag setattr miss: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag setattr miss not NOT_FOUND"
@@ -527,6 +577,10 @@ check_link "$leader" "fresh"
 say "UNLINK nlink>1 through Raft (fresh)"
 UNLINK_NLINK_NAME=""
 check_unlink_nlink "$leader" "fresh"
+say "RENAME through Raft (fresh)"
+RENAME_NAME=""
+RENAME_OLD=""
+check_rename "$leader" "fresh"
 
 # Pick a group-0 follower to kill (raft ids 0,1,2 minus leader).
 crash_leader=$leader
@@ -668,6 +722,7 @@ if [ -n "$ino" ] && [ "$ino" != "0" ]; then
     say "after-crash getattr created: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash created getattr missing"
     echo "$out" | grep -q 'mode=0100600' || bad "after-crash setattr mode lost"
+    echo "$out" | grep -q 'mtime=1000000000' || bad "after-crash utimens mtime lost"
     if [ -n "${LINK_NAME:-}" ]; then
         echo "$out" | grep -q 'nlink=2' || bad "after-crash link nlink lost"
     fi
@@ -697,6 +752,16 @@ if [ -n "${UNLINK_NLINK_NAME:-}" ]; then
     out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $UNLINK_NLINK_NAME" 2>/dev/null || true)
     say "after-crash lookup nlink-unlinked: $out"
     echo "$out" | grep -q 'status=1' || bad "after-crash nlink-unlinked name came back"
+fi
+if [ -n "${RENAME_NAME:-}" ]; then
+    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $RENAME_NAME" 2>/dev/null || true)
+    say "after-crash lookup renamed: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash renamed name missing"
+fi
+if [ -n "${RENAME_OLD:-}" ]; then
+    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $RENAME_OLD" 2>/dev/null || true)
+    say "after-crash lookup rename-old: $out"
+    echo "$out" | grep -q 'status=1' || bad "after-crash rename old name came back"
 fi
 
 if [ "$FAIL" -eq 0 ]; then

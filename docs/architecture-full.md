@@ -1146,7 +1146,9 @@ and 10.5c-1..8 are gated in-sim; 10.5c-9 (Raft host) and 10.5c-10
 Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) and 10.5c-13
 (last-link file UNLINK) and 10.5c-14 (mode/owner SETATTR) and
 10.5c-15 (empty LOCAL RMDIR as a 2-shard txn) and 10.5c-16 (LINK as a
-2-shard txn) and 10.5c-17 (nlink>1 UNLINK as a 2-shard txn) are gated on a
+2-shard txn) and 10.5c-17 (nlink>1 UNLINK as a 2-shard txn) and
+10.5c-18 (utimens inode fence) and 10.5c-19 (same-dir LOCAL file
+RENAME as a 2-shard txn) are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cross-group propose
 and the rest of the mutations; writes after. Not a
 cutover of the live table; not step 11. The KV engine is
@@ -1262,8 +1264,10 @@ sends you to — not the whole spec.
 > shard (10.5c-11), MKDIR is a 2-shard txn (10.5c-12), last-link
 > file UNLINK is one Raft entry (10.5c-13), mode/owner SETATTR is
 > one Raft entry (10.5c-14), empty LOCAL RMDIR is a 2-shard txn
-> (10.5c-15), LINK is a 2-shard txn (10.5c-16), and nlink>1 UNLINK
-> is a 2-shard txn (10.5c-17). Next: cross-group propose
+> (10.5c-15), LINK is a 2-shard txn (10.5c-16), nlink>1 UNLINK
+> is a 2-shard txn (10.5c-17), utimens is the inode fence
+> (10.5c-18), and same-dir LOCAL file RENAME is a txn
+> (10.5c-19). Next: cross-group propose
 > (a node that is not leader of a participant group) and the rest of
 > the mutations behind the same flag.
 > [architecture.md §10](#architecture)
@@ -1423,7 +1427,25 @@ sends you to — not the whole spec.
 > single Raft entry. LOCAL parent only; HASHED/SPLITTING are
 > INVAL/BUSY. Same scratch smoke: extra link name, unlink it,
 > surviving nlink=2, second unlink NOT_FOUND, crash catch-up keeps
-> the extra name gone and the remaining link. Remaining: cross-group
+> the extra name gone and the remaining link.
+>
+> **10.5c-18 is in (gated):** utimens is the inode fence on the
+> production host (`EFS_MD_CMD_UTIMENS`). SETATTR with only MTIME/ATIME
+> bumps `mtime_gen` and assigns the times; mixed mode+time is INVAL;
+> SIZE stays INVAL (truncate later). Same-group lanes only — a fenced
+> lane on another Raft group is INVAL this slice. Same scratch smoke:
+> setattr mtime=1000000000 on the created file, getattr, crash catch-up
+> keeps that mtime.
+>
+> **10.5c-19 is in (gated):** same-dir LOCAL file RENAME is src dentry
+> DEL + dest dentry PUT + inode parent/ctime as the same 2-shard txn
+> as LINK (PREPARE/DECIDE/RESOLVE). Cross-dir, directories, and
+> HASHED/SPLITTING are INVAL/BUSY; dest exists is EXIST; `RENAME`
+> (by ino) is INVAL (`RENAME_AT` is hosted). Same scratch smoke:
+> `raft-smoke-n` → `raft-smoke-m`, old gone, new stays through crash.
+> Restart persists `last_applied` without compacting the log
+> (`efs_raft_restore_applied`) so CREATE is not replayed onto a KV
+> that already renamed the name. Remaining: cross-group
 > propose, then the rest of the
 > mutations (not a cutover of `efs-test`, not step 11).
 >
@@ -1431,9 +1453,11 @@ sends you to — not the whole spec.
 > the durability boundary and the applied KV is a replayable view, so never
 > call `efs_raft_snapshot()` until the KV is durable through `last_applied`
 > (`efs_kv_lsm_flush()`). The snapshot drops the log prefix that would
-> otherwise replay those commands. `efs_raft_new()` already starts at
-> `last_applied = snap_idx` and re-applies forward, which is why apply must
-> stay idempotent.
+> otherwise replay those commands. `efs_raft_new()` starts at
+> `last_applied = snap_idx`. The host persists applied without
+> compacting and restores it on restart (`efs_raft_restore_applied`)
+> so a durable KV is not re-applied. Apply must still stay idempotent
+> in the window before that persist.
 >
 > Production `efsd` still uses the in-memory table and the snapshot /
 > root-2PC flush; only after 10.5c does step 11 delete that flush. If a
@@ -4380,6 +4404,27 @@ group; otherwise `NOT_PRIMARY`. Flag off is a no-op. Gate:
 `tests/stress/raft_host_smoke.sh` — extra link of the created file,
 unlink that name, surviving nlink=2, second unlink NOT_FOUND, extra
 name stays gone after kill -9 catch-up.
+
+**Step 10.5c-18 (gated): utimens inode fence through Raft.** When
+`EFS_MD_RAFT=1`, SETATTR with only MTIME/ATIME is `EFS_MD_CMD_UTIMENS`
+on the inode shard: bump `mtime_gen`, assign mtime/atime. Mixed
+mode+time is INVAL; SIZE is INVAL. A fenced lane whose Raft group is
+not the inode group is INVAL this slice. Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — setattr mtime=1000000000 on the
+created file, getattr, mtime survives kill -9 catch-up.
+
+**Step 10.5c-19 (gated): same-dir LOCAL file RENAME through Raft.**
+When `EFS_MD_RAFT=1`, `RENAME_AT` of a file in a LOCAL directory is a
+2-shard txn (`EFS_MD_CMD_PREPARE` / `DECIDE` / `RESOLVE`) over src
+dentry DEL + dest dentry PUT + inode parent/ctime + parent mtime/dseq.
+Cross-dir, directories, HASHED/SPLITTING are INVAL/BUSY; dest exists
+is EXIST; `RENAME` (by ino) is INVAL. The receiving node must lead
+every participant group; otherwise `NOT_PRIMARY`. Restart restores
+`last_applied` without compacting (`efs_raft_restore_applied`) so
+CREATE is not replayed onto a KV that already renamed the name.
+Flag off is a no-op. Gate: `tests/stress/raft_host_smoke.sh` —
+`raft-smoke-n` → `raft-smoke-m`, old NOT_FOUND, new OK, old stays
+gone after kill -9 catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
@@ -4851,7 +4896,8 @@ cluster; LOOKUP/GETATTR through ReadIndex + KV (10.5c-10) and file
 CREATE as one Raft entry (10.5c-11) and MKDIR as a 2-shard txn
 (10.5c-12) and last-link file UNLINK (10.5c-13) and mode/owner
 SETATTR (10.5c-14) and empty LOCAL RMDIR (10.5c-15) and LINK
-(10.5c-16) and nlink>1 UNLINK (10.5c-17) are gated on the same
+(10.5c-16) and nlink>1 UNLINK (10.5c-17) and utimens
+(10.5c-18) and same-dir LOCAL file RENAME (10.5c-19) are gated on the same
 smoke. What remains is cross-group
 propose and the rest of the mutations, then the cutover — not new
 design.

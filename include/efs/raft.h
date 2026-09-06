@@ -115,6 +115,10 @@ int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,
 /* Compact log prefix through last_applied (snapshot metadata only; KV is
  * already the applied store). */
 int efs_raft_snapshot(struct efs_raft *r);
+/* Crash restart without dropping the log: KV is already durable through
+ * idx, so do not re-apply 1..idx. Does not compact. idx is clamped to
+ * [snap_idx, last log]. */
+int efs_raft_restore_applied(struct efs_raft *r, uint64_t idx);
 
 int efs_raft_role(const struct efs_raft *r);
 int efs_raft_id(const struct efs_raft *r);

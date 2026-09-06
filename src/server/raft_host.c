@@ -13,6 +13,7 @@
 #include "efs/wire.h"
 #include "efs/network.h"
 #include <errno.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +33,7 @@
 #define HOST_CREATE_NAME_OFF 31
 #define HOST_CMD_MAX       512
 #define HOST_SETATTR_LEN   61
+#define HOST_UTIMENS_LEN   73
 
 struct host_inbox_item {
     uint8_t *buf;
@@ -42,6 +44,7 @@ struct host_group {
     uint8_t group;
     uint8_t hosted;
     uint32_t voters;
+    uint64_t applied_saved;
     struct efs_raft *r;
 };
 
@@ -345,6 +348,38 @@ static int apply_setattr_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+/* Same encoding as sim apply_utimens_cmd. Session fencing is not hosted. */
+static int apply_utimens_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                             uint32_t clen, uint64_t index)
+{
+    struct efs_meta_utimens u;
+    efs_ino_t ino;
+    uint64_t now;
+    int rc;
+
+    if (clen < HOST_UTIMENS_LEN)
+        return EFS_OK;
+    ino = rd64be(cmd + 1);
+    now = rd64be(cmd + 9);
+    memset(&u, 0, sizeof(u));
+    u.expect_gen = rd64be(cmd + 17);
+    u.mask = rd32be(cmd + 25);
+    u.mtime = rd64be(cmd + 29);
+    u.atime = rd64be(cmd + 37);
+    u.mtime_gen = rd64be(cmd + 45);
+    rc = efs_meta_apply_utimens(h->kv, ino, now, &u);
+    if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_STALE)
+        rc = EFS_OK;
+    if (rc != EFS_OK) {
+        fprintf(stderr, "raft-host: apply utimens rc=%d index=%llu ino=%llu\n",
+                rc, (unsigned long long)index, (unsigned long long)ino);
+        return EFS_OK;
+    }
+    fprintf(stderr, "raft-host: applied utimens index=%llu ino=%llu mask=%u\n",
+            (unsigned long long)index, (unsigned long long)ino, u.mask);
+    return EFS_OK;
+}
+
 /* Same encoding as sim_txn_apply. Apply never stalls the log. */
 static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                          uint32_t clen)
@@ -456,6 +491,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         return apply_unlink_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_SETATTR)
         return apply_setattr_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_UTIMENS)
+        return apply_utimens_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
         cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP)
         return apply_txn_cmd(h, cmd, clen);
@@ -650,6 +687,25 @@ static int pack_setattr_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     wr32be(out + 37, sa->gid);
     memset(out + 41, 0, EFS_OPID_UUID_LEN + 4);
     *len = HOST_SETATTR_LEN;
+    return EFS_OK;
+}
+
+/* Same encoding as sim_raft_utimens. Session bytes are zero (not hosted). */
+static int pack_utimens_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
+                            uint64_t now, const struct efs_meta_utimens *u)
+{
+    if (!u)
+        return EFS_ERR_INVAL;
+    out[0] = EFS_MD_CMD_UTIMENS;
+    wr64be(out + 1, ino);
+    wr64be(out + 9, now);
+    wr64be(out + 17, u->expect_gen);
+    wr32be(out + 25, u->mask);
+    wr64be(out + 29, u->mtime);
+    wr64be(out + 37, u->atime);
+    wr64be(out + 45, u->mtime_gen);
+    memset(out + 53, 0, EFS_OPID_UUID_LEN + 4);
+    *len = HOST_UTIMENS_LEN;
     return EFS_OK;
 }
 
@@ -858,6 +914,66 @@ static void drain_inbox(struct efs_raft_host *h)
     }
 }
 
+/* Persist last_applied without compacting the log. Restart restores it so
+ * CREATE is not re-applied onto a KV that already ran a later rename. */
+static void applied_path(struct efs_raft_host *h, uint8_t group,
+                         char *path, size_t cap)
+{
+    snprintf(path, cap, "%s/mdraft/applied.%u", h->s->storage_path, group);
+}
+
+static int persist_applied(struct efs_raft_host *h, int gi)
+{
+    uint64_t idx;
+    char path[EFS_MAX_PATH], tmp[EFS_MAX_PATH];
+    uint8_t buf[8];
+    int fd, n, rc;
+
+    if (!h->g[gi].hosted || !h->g[gi].r)
+        return EFS_OK;
+    idx = efs_raft_applied(h->g[gi].r);
+    if (idx == 0 || idx == h->g[gi].applied_saved)
+        return EFS_OK;
+    applied_path(h, h->g[gi].group, path, sizeof(path));
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    wr64be(buf, idx);
+    fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0)
+        return EFS_ERR_IO;
+    n = (int)write(fd, buf, 8);
+    rc = fsync(fd);
+    close(fd);
+    if (n != 8 || rc != 0) {
+        unlink(tmp);
+        return EFS_ERR_IO;
+    }
+    if (rename(tmp, path) != 0) {
+        unlink(tmp);
+        return EFS_ERR_IO;
+    }
+    h->g[gi].applied_saved = idx;
+    return EFS_OK;
+}
+
+static int load_applied(struct efs_raft_host *h, int gi, uint64_t *idx)
+{
+    char path[EFS_MAX_PATH];
+    uint8_t buf[8];
+    int fd, n;
+
+    *idx = 0;
+    applied_path(h, h->g[gi].group, path, sizeof(path));
+    fd = open(path, O_RDONLY);
+    if (fd < 0)
+        return EFS_OK;
+    n = (int)read(fd, buf, 8);
+    close(fd);
+    if (n != 8)
+        return EFS_OK;
+    *idx = rd64be(buf);
+    return EFS_OK;
+}
+
 static void *host_pump(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -870,6 +986,8 @@ static void *host_pump(void *arg)
             if (h->g[i].hosted && h->g[i].r)
                 (void)efs_raft_tick(h->g[i].r);
         }
+        for (i = 0; i < HOST_NGROUPS; i++)
+            (void)persist_applied(h, i);
         pthread_mutex_unlock(&h->mu);
         usleep(HOST_TICK_US);
     }
@@ -938,6 +1056,13 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
     h->g[gi].r = efs_raft_new(&cfg);
     if (!h->g[gi].r)
         return EFS_ERR_NOMEM;
+    {
+        uint64_t applied = 0;
+        if (load_applied(h, gi, &applied) == EFS_OK && applied > 0) {
+            (void)efs_raft_restore_applied(h->g[gi].r, applied);
+            h->g[gi].applied_saved = efs_raft_applied(h->g[gi].r);
+        }
+    }
     return EFS_OK;
 }
 
@@ -1975,11 +2100,88 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
     }
 }
 
-/* Mode/owner SETATTR: one Raft entry on the inode shard. SIZE / MTIME /
- * ATIME are INVAL here (truncate and utimens are later slices). */
+/* Mode/owner SETATTR: one Raft entry on the inode shard. SIZE is INVAL
+ * (truncate later). MTIME/ATIME is the utimens fence (below). Mixed
+ * mode+time classes are INVAL — the §6 matrix splits them. */
+static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
+                         uint32_t mtime_nsec, uint64_t atime,
+                         struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_utimens u;
+    struct efs_meta_stat st;
+    struct efs_meta_row row;
+    uint8_t cmd[HOST_UTIMENS_LEN];
+    uint32_t clen = 0;
+    uint64_t idx = 0, bits;
+    uint8_t g;
+    int hint = -1;
+    int rc;
+    uint32_t i;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running || ino == 0) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if ((mask & (EFS_SETATTR_MTIME | EFS_SETATTR_ATIME)) == 0 ||
+        (mask & ~(EFS_SETATTR_MTIME | EFS_SETATTR_ATIME)) != 0) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    memset(&u, 0, sizeof(u));
+    if (mask & EFS_SETATTR_MTIME) {
+        u.mask |= EFS_META_SET_MTIME;
+        u.mtime = mtime * 1000000000ull + (uint64_t)mtime_nsec;
+    }
+    if (mask & EFS_SETATTR_ATIME) {
+        u.mask |= EFS_META_SET_ATIME;
+        u.atime = atime * 1000000000ull;
+    }
+    u.expect_gen = 0;
+    g = efs_raft_shard_group(efs_kv_inode_shard(ino));
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_read_index(h, g, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+    if (rc == EFS_OK && (u.mask & EFS_META_SET_MTIME)) {
+        u.mtime_gen = row.mtime_gen + 1;
+        bits = S_ISDIR(row.mode) && row.layout != EFS_META_LAYOUT_LOCAL
+                   ? row.used_shards
+                   : row.active_lanes;
+        for (i = 0; i < EFS_META_LANES && rc == EFS_OK; i++) {
+            uint32_t lsh;
+            uint8_t lg;
+
+            if ((bits & (1ULL << i)) == 0)
+                continue;
+            lsh = efs_kv_lane_shard(ino, (uint8_t)i);
+            lg = efs_raft_shard_group(lsh);
+            if (lg != g)
+                rc = EFS_ERR_INVAL; /* cross-group lane fence later */
+        }
+    }
+    if (rc == EFS_OK)
+        rc = pack_utimens_cmd(cmd, &clen, ino, now_ns(), &u);
+    if (rc == EFS_OK)
+        rc = host_propose(h, g, cmd, clen, &idx, &hint);
+    if (rc == EFS_OK)
+        rc = host_wait_applied(h, g, idx, &hint);
+    if (rc == EFS_OK)
+        rc = host_read_inode_lanes(h, ino, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
+    pthread_mutex_unlock(&h->read_mu);
+    set_inode_rc(out, rc, hint);
+    if (rc == EFS_OK)
+        stat_to_inode(&st, &out->inode);
+}
+
 void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
-                              uint32_t uid, uint32_t gid,
-                              struct efs_msg_inode_reply *out)
+                              uint32_t uid, uint32_t gid, uint64_t size,
+                              uint64_t mtime, uint32_t mtime_nsec,
+                              uint64_t atime, struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
     struct efs_meta_setattr sa;
@@ -1991,17 +2193,31 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
     uint8_t g;
     int hint = -1;
     int rc;
-    uint32_t extra;
+    uint32_t own, times;
 
+    (void)size;
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
     if (!h || !h->running || ino == 0) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
-    extra = mask & ~(EFS_SETATTR_MODE | EFS_SETATTR_UID | EFS_SETATTR_GID);
-    if (extra || (mask & (EFS_SETATTR_MODE | EFS_SETATTR_UID |
-                          EFS_SETATTR_GID)) == 0) {
+    if (mask & EFS_SETATTR_SIZE) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    own = mask & (EFS_SETATTR_MODE | EFS_SETATTR_UID | EFS_SETATTR_GID);
+    times = mask & (EFS_SETATTR_MTIME | EFS_SETATTR_ATIME);
+    if (times && own) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if (times) {
+        host_utimens(ino, times, mtime, mtime_nsec, atime, out);
+        return;
+    }
+    if (own == 0 || (mask & ~(EFS_SETATTR_MODE | EFS_SETATTR_UID |
+                              EFS_SETATTR_GID)) != 0) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -2202,3 +2418,188 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
         strncpy(out->inode.name, new_name, EFS_MAX_NAME - 1);
     }
 }
+
+/* Same-dir LOCAL file RENAME: src dentry DEL + dest dentry PUT + inode
+ * parent/ctime as a txn (same PREPARE/DECIDE/RESOLVE as LINK). HASHED/
+ * SPLITTING, directories, and cross-dir are INVAL this slice. Replacing
+ * an existing dest is EXIST. The receiving node must lead every
+ * participant group. */
+void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
+                                efs_ino_t new_parent, const char *new_name,
+                                struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_row prow, row;
+    struct efs_meta_dentry dent, ndent;
+    struct efs_meta_stat st;
+    struct efs_txid t;
+    struct efs_txn_parts parts;
+    uint8_t k_src[EFS_KV_KEY_MAX], k_dst[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
+    uint8_t k_par[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX];
+    uint8_t v_dent[EFS_META_DENT_BYTES], v_ino[EFS_META_INO_BYTES];
+    uint8_t v_par[EFS_META_INO_BYTES], v_dseq[8], sb[8], cmd[22];
+    uint32_t ks = 0, kd = 0, ki = 0, kp = 0, kq = 0, sn = 8;
+    uint32_t ssh, dsh, ish, psh, coord;
+    uint64_t sver = 0, dver = 0, iver = 0, pver = 0, qver = 0, seq = 0, now;
+    int hint = -1;
+    int rc, i, gr;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running || !old_name || !new_name || old_parent == 0 ||
+        new_parent == 0 || old_name[0] == '\0' || new_name[0] == '\0') {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if (old_parent != new_parent) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if (strcmp(old_name, new_name) == 0) {
+        out->status = EFS_INODE_RPC_OK;
+        return;
+    }
+    now = now_ns();
+    pthread_mutex_lock(&h->read_mu);
+    psh = efs_kv_inode_shard(old_parent);
+    rc = host_read_index(h, efs_raft_shard_group(psh), &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, old_parent, &prow);
+    if (rc == EFS_OK && !S_ISDIR(prow.mode))
+        rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK && prow.layout == EFS_META_LAYOUT_SPLITTING)
+        rc = EFS_ERR_BUSY;
+    if (rc == EFS_OK && prow.layout != EFS_META_LAYOUT_LOCAL)
+        rc = EFS_ERR_INVAL;
+    ssh = (rc == EFS_OK) ? efs_kv_dentry_shard(old_parent, old_name, prow.layout)
+                         : 0;
+    dsh = (rc == EFS_OK) ? efs_kv_dentry_shard(new_parent, new_name, prow.layout)
+                         : 0;
+    if (rc == EFS_OK && efs_raft_shard_group(ssh) != efs_raft_shard_group(psh))
+        rc = host_read_index(h, efs_raft_shard_group(ssh), &hint);
+    if (rc == EFS_OK && efs_raft_shard_group(dsh) != efs_raft_shard_group(psh) &&
+        efs_raft_shard_group(dsh) != efs_raft_shard_group(ssh))
+        rc = host_read_index(h, efs_raft_shard_group(dsh), &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_resolve(h->kv, old_parent, old_name, &dent, &row);
+    if (rc == EFS_OK && S_ISDIR(row.mode))
+        rc = EFS_ERR_INVAL;
+    ish = (rc == EFS_OK) ? efs_kv_inode_shard(row.ino) : 0;
+    if (rc == EFS_OK && efs_raft_shard_group(ish) != efs_raft_shard_group(psh))
+        rc = host_read_index(h, efs_raft_shard_group(ish), &hint);
+    if (rc == EFS_OK) {
+        rc = efs_meta_apply_lookup(h->kv, new_parent, new_name, &ndent);
+        if (rc == EFS_OK) {
+            pthread_mutex_unlock(&h->read_mu);
+            set_inode_rc(out, EFS_ERR_EXIST, hint);
+            return;
+        }
+        if (rc == EFS_ERR_NOT_FOUND)
+            rc = EFS_OK;
+    }
+    if (rc == EFS_OK) {
+        memset(&ndent, 0, sizeof(ndent));
+        ndent.ino = row.ino;
+        ndent.generation = row.generation;
+        ndent.type = row.mode & S_IFMT;
+        row.parent = new_parent;
+        if (row.base_ctime < now)
+            row.base_ctime = now;
+        if (prow.base_mtime < now)
+            prow.base_mtime = now;
+        if (prow.base_ctime < now)
+            prow.base_ctime = now;
+        rc = efs_meta_pack_dentry(&ndent, v_dent, sizeof(v_dent));
+        if (rc == EFS_OK)
+            rc = efs_meta_pack_inode(&row, v_ino, sizeof(v_ino));
+        if (rc == EFS_OK)
+            rc = efs_meta_pack_inode(&prow, v_par, sizeof(v_par));
+    }
+    if (rc == EFS_OK)
+        rc = efs_kv_key_dentry(ssh, old_parent, old_name, k_src, &ks);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_dentry(dsh, new_parent, new_name, k_dst, &kd);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_inode(ish, row.ino, k_ino, &ki);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_inode(psh, old_parent, k_par, &kp);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_dseq(ssh, old_parent, 0, k_dseq, &kq);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_src, ks, &sver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_dst, kd, &dver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_ino, ki, &iver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_par, kp, &pver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_dseq, kq, &qver);
+    if (rc == EFS_OK) {
+        sn = 8;
+        gr = efs_kv_get(h->kv, k_dseq, kq, sb, &sn);
+        seq = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
+        wr64be(v_dseq, seq + 1);
+        memset(&parts, 0, sizeof(parts));
+        parts.n = 1;
+        parts.shard[0] = ssh;
+        if (dsh != ssh)
+            parts.shard[parts.n++] = dsh;
+        if (ish != ssh && ish != dsh)
+            parts.shard[parts.n++] = ish;
+        fill_txid(h, &t);
+        for (i = 0; i < parts.n && rc == EFS_OK; i++) {
+            uint32_t sh = parts.shard[i];
+            if (sh == ssh) {
+                rc = host_prep(h, ssh, EFS_TXN_EXCL, &t, &parts, k_src, ks,
+                               sver, EFS_TXN_DEL, NULL, 0, &hint);
+                if (rc == EFS_OK && dsh == ssh)
+                    rc = host_prep(h, ssh, EFS_TXN_EXCL, &t, &parts, k_dst, kd,
+                                   dver, EFS_TXN_PUT, v_dent, sizeof(v_dent),
+                                   &hint);
+                if (rc == EFS_OK)
+                    rc = host_prep(h, ssh, EFS_TXN_EXCL, &t, &parts, k_par, kp,
+                                   pver, EFS_TXN_PUT, v_par, sizeof(v_par),
+                                   &hint);
+                if (rc == EFS_OK)
+                    rc = host_prep(h, ssh, EFS_TXN_EXCL, &t, &parts, k_dseq, kq,
+                                   qver, EFS_TXN_PUT, v_dseq, 8, &hint);
+            }
+            if (rc == EFS_OK && sh == dsh && dsh != ssh) {
+                rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dst, kd,
+                               dver, EFS_TXN_PUT, v_dent, sizeof(v_dent),
+                               &hint);
+            }
+            if (rc == EFS_OK && sh == ish) {
+                rc = host_prep(h, ish, EFS_TXN_EXCL, &t, &parts, k_ino, ki,
+                               iver, EFS_TXN_PUT, v_ino, sizeof(v_ino),
+                               &hint);
+            }
+        }
+        if (rc != EFS_OK)
+            (void)host_drop_parts(h, &t, &parts, &hint);
+        else {
+            coord = efs_txn_coordinator(&t, &parts);
+            pack_decide(cmd, &t, coord, EFS_TXN_COMMIT);
+            rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, 22,
+                                   &hint);
+            for (i = 0; i < parts.n && rc == EFS_OK; i++) {
+                pack_resolve(cmd, &t, parts.shard[i], EFS_TXN_COMMIT);
+                rc = host_propose_wait(h, efs_raft_shard_group(parts.shard[i]),
+                                       cmd, 22, &hint);
+            }
+        }
+    }
+    if (rc == EFS_OK)
+        rc = host_read_inode_lanes(h, row.ino, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_getattr(h->kv, row.ino, host_txn_coord, h, &st);
+    pthread_mutex_unlock(&h->read_mu);
+    set_inode_rc(out, rc, hint);
+    if (rc == EFS_OK) {
+        stat_to_inode(&st, &out->inode);
+        out->inode.parent = new_parent;
+        strncpy(out->inode.name, new_name, EFS_MAX_NAME - 1);
+    }
+}
+

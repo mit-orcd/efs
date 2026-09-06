@@ -419,6 +419,27 @@ group; otherwise `NOT_PRIMARY`. Flag off is a no-op. Gate:
 `tests/stress/raft_host_smoke.sh` — extra link of the created file,
 unlink that name, surviving nlink=2, second unlink NOT_FOUND, extra
 name stays gone after kill -9 catch-up.
+
+**Step 10.5c-18 (gated): utimens inode fence through Raft.** When
+`EFS_MD_RAFT=1`, SETATTR with only MTIME/ATIME is `EFS_MD_CMD_UTIMENS`
+on the inode shard: bump `mtime_gen`, assign mtime/atime. Mixed
+mode+time is INVAL; SIZE is INVAL. A fenced lane whose Raft group is
+not the inode group is INVAL this slice. Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — setattr mtime=1000000000 on the
+created file, getattr, mtime survives kill -9 catch-up.
+
+**Step 10.5c-19 (gated): same-dir LOCAL file RENAME through Raft.**
+When `EFS_MD_RAFT=1`, `RENAME_AT` of a file in a LOCAL directory is a
+2-shard txn (`EFS_MD_CMD_PREPARE` / `DECIDE` / `RESOLVE`) over src
+dentry DEL + dest dentry PUT + inode parent/ctime + parent mtime/dseq.
+Cross-dir, directories, HASHED/SPLITTING are INVAL/BUSY; dest exists
+is EXIST; `RENAME` (by ino) is INVAL. The receiving node must lead
+every participant group; otherwise `NOT_PRIMARY`. Restart restores
+`last_applied` without compacting (`efs_raft_restore_applied`) so
+CREATE is not replayed onto a KV that already renamed the name.
+Flag off is a no-op. Gate: `tests/stress/raft_host_smoke.sh` —
+`raft-smoke-n` → `raft-smoke-m`, old NOT_FOUND, new OK, old stays
+gone after kill -9 catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 

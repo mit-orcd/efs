@@ -848,6 +848,28 @@ int efs_raft_change(struct efs_raft *r, uint32_t new_voters)
     return try_commit(r);
 }
 
+int efs_raft_restore_applied(struct efs_raft *r, uint64_t idx)
+{
+    uint64_t last_i = 0, last_t = 0;
+    int rc;
+
+    if (!r)
+        return EFS_ERR_INVAL;
+    if (idx == 0)
+        return EFS_OK;
+    rc = last_log(r, &last_i, &last_t);
+    if (rc != EFS_OK)
+        return rc;
+    if (idx > last_i)
+        idx = last_i;
+    if (idx < r->snap_idx)
+        idx = r->snap_idx;
+    r->last_applied = idx;
+    if (r->commit_index < idx)
+        r->commit_index = idx;
+    return EFS_OK;
+}
+
 int efs_raft_snapshot(struct efs_raft *r)
 {
     uint64_t t = 0;
