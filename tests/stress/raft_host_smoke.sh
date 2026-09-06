@@ -14,9 +14,10 @@
 # name (lookup miss, surviving nlink=2), utimens mtime fence, same-dir
 # LOCAL file RENAME (old name gone, new name present), READDIR of ROOT
 # (created/renamed/link/mkdir names present, unlinked names absent),
-# LOOKUP_PATH of those names, kill -9 a follower
+# LOOKUP_PATH of those names, chunk-aligned SETATTR SIZE (truncate),
+# kill -9 a follower
 # then the leader, restart catch-up keeps ROOT, the created file (new
-# mode, nlink=2, utimens mtime), the mkdir, the extra link name, the
+# mode, size=131072, nlink=2, utimens mtime), the mkdir, the extra link name, the
 # unlinked name stays gone, the rmdir'd name stays gone, the nlink>1
 # unlinked name stays gone, the renamed name stays, and READDIR /
 # LOOKUP_PATH still match.
@@ -502,8 +503,8 @@ check_rename() {
     fi
 }
 
-# Mode/owner SETATTR on raft-smoke-f (stays after crash). SIZE is INVAL
-# in this slice (truncate is later).
+# Mode/owner SETATTR, chunk-aligned truncate, then utimens on
+# raft-smoke-f (all stay after crash). Unaligned SIZE is INVAL (no tail).
 check_setattr() {
     local lid=$1
     local tag=$2
@@ -525,6 +526,20 @@ check_setattr() {
     say "$tag getattr setattr: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr setattr not OK"
     echo "$out" | grep -q 'mode=0100600' || bad "$tag getattr setattr mode"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 8 131072" 2>/dev/null || true)
+    say "$tag setattr size: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag setattr size not OK"
+    echo "$out" | grep -q 'size=131072' || bad "$tag setattr size"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    say "$tag getattr size: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag getattr size not OK"
+    echo "$out" | grep -q 'size=131072' || bad "$tag getattr size"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 8 1" 2>/dev/null || true)
+    say "$tag setattr unaligned: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag setattr unaligned not INVAL"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 9 0600" 2>/dev/null || true)
+    say "$tag setattr mixed size: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag setattr mixed size not INVAL"
     out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 16 1000000000" 2>/dev/null || true)
     say "$tag setattr utimens: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag setattr utimens not OK"
@@ -532,12 +547,10 @@ check_setattr() {
     out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
     say "$tag getattr utimens: $out"
     echo "$out" | grep -q 'mtime=1000000000' || bad "$tag getattr utimens mtime"
+    echo "$out" | grep -q 'size=131072' || bad "$tag getattr utimens size"
     out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} 999999 1 0600" 2>/dev/null || true)
     say "$tag setattr miss: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag setattr miss not NOT_FOUND"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 8 0" 2>/dev/null || true)
-    say "$tag setattr size: $out"
-    echo "$out" | grep -q 'status=6' || bad "$tag setattr size not INVAL"
 }
 
 # READDIR ROOT + LOOKUP_PATH. Run after rename so the listing is final.
@@ -826,6 +839,7 @@ if [ -n "$ino" ] && [ "$ino" != "0" ]; then
     say "after-crash getattr created: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash created getattr missing"
     echo "$out" | grep -q 'mode=0100600' || bad "after-crash setattr mode lost"
+    echo "$out" | grep -q 'size=131072' || bad "after-crash truncate size lost"
     echo "$out" | grep -q 'mtime=1000000000' || bad "after-crash utimens mtime lost"
     if [ -n "${LINK_NAME:-}" ]; then
         echo "$out" | grep -q 'nlink=2' || bad "after-crash link nlink lost"

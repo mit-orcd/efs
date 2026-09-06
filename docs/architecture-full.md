@@ -1149,7 +1149,8 @@ Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) and 10.5c-13
 2-shard txn) and 10.5c-17 (nlink>1 UNLINK as a 2-shard txn) and
 10.5c-18 (utimens inode fence) and 10.5c-19 (same-dir LOCAL file
 RENAME as a 2-shard txn) and 10.5c-20 (READDIR/LOOKUP_PATH via
-ReadIndex + KV) are gated on a
+ReadIndex + KV) and 10.5c-21 (SETATTR SIZE / chunk-aligned truncate)
+are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cross-group propose
 and the rest of the mutations; writes after. Not a
 cutover of the live table; not step 11. The KV engine is
@@ -1268,8 +1269,9 @@ sends you to — not the whole spec.
 > (10.5c-15), LINK is a 2-shard txn (10.5c-16), nlink>1 UNLINK
 > is a 2-shard txn (10.5c-17), utimens is the inode fence
 > (10.5c-18), same-dir LOCAL file RENAME is a txn
-> (10.5c-19), and READDIR/LOOKUP_PATH are ReadIndex + KV
-> (10.5c-20). Next: cross-group propose
+> (10.5c-19), READDIR/LOOKUP_PATH are ReadIndex + KV
+> (10.5c-20), and SETATTR SIZE (chunk-aligned truncate, no tail)
+> is one Raft entry (10.5c-21). Next: cross-group propose
 > (a node that is not leader of a participant group) and the rest of
 > the mutations behind the same flag.
 > [architecture.md §10](#architecture)
@@ -1434,7 +1436,7 @@ sends you to — not the whole spec.
 > **10.5c-18 is in (gated):** utimens is the inode fence on the
 > production host (`EFS_MD_CMD_UTIMENS`). SETATTR with only MTIME/ATIME
 > bumps `mtime_gen` and assigns the times; mixed mode+time is INVAL;
-> SIZE stays INVAL (truncate later). Same-group lanes only — a fenced
+> SIZE was INVAL until 10.5c-21. Same-group lanes only — a fenced
 > lane on another Raft group is INVAL this slice. Same scratch smoke:
 > setattr mtime=1000000000 on the created file, getattr, crash catch-up
 > keeps that mtime.
@@ -1456,7 +1458,15 @@ sends you to — not the whole spec.
 > LOOKUP_PATH is hop-by-hop (dentry shard ReadIndex if it differs,
 > then child lanes). Same scratch smoke: ROOT listing contains
 > `f`/`m`/`l`/mkdir and not `n`/`u`/`h`; `/raft-smoke-f` and
-> `/raft-smoke-m` resolve; crash keeps that. Remaining: cross-group
+> `/raft-smoke-m` resolve; crash keeps that.
+>
+> **10.5c-21 is in (gated):** SETATTR SIZE on the production host is
+> `EFS_MD_CMD_TRUNCATE` (content_epoch fence + `base_size`). Chunk-
+> aligned or zero only — unaligned sizes need a tail candidate and
+> stay INVAL this slice. Mixed SIZE+mode/time is INVAL. Same-group
+> lanes only. Same scratch smoke: setattr size=131072 on the empty
+> created file, getattr, crash catch-up keeps that size (utimens
+> after truncate still keeps mtime=1000000000). Remaining: cross-group
 > propose, then the rest of the
 > mutations (not a cutover of `efs-test`, not step 11).
 >
@@ -4450,6 +4460,18 @@ kill -9 catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
+**Step 10.5c-21 (gated): SETATTR SIZE / chunk-aligned truncate through
+Raft.** When `EFS_MD_RAFT=1`, `SETATTR` with only the SIZE bit proposes
+`EFS_MD_CMD_TRUNCATE` (`content_epoch++`, `base_size = S`). Chunk-
+aligned or zero only; unaligned sizes (need a tail candidate) and
+mixed SIZE+mode/time stay INVAL. Same-group lanes only — a fenced
+lane on another Raft group is INVAL this slice. Flag off is a no-op.
+Gate: `tests/stress/raft_host_smoke.sh` — empty `raft-smoke-f` to
+size 131072, getattr, size survives kill -9 catch-up (utimens after
+truncate still keeps mtime=1000000000).
+Remaining: cross-group propose, then the rest of the mutations.
+Not in this step: cutting over the live `efs-test` table, step 11.
+
 ### Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove
@@ -4920,7 +4942,8 @@ CREATE as one Raft entry (10.5c-11) and MKDIR as a 2-shard txn
 SETATTR (10.5c-14) and empty LOCAL RMDIR (10.5c-15) and LINK
 (10.5c-16) and nlink>1 UNLINK (10.5c-17) and utimens
 (10.5c-18) and same-dir LOCAL file RENAME (10.5c-19) and
-READDIR/LOOKUP_PATH (10.5c-20) are gated on the same
+READDIR/LOOKUP_PATH (10.5c-20) and SETATTR SIZE / chunk-aligned
+truncate (10.5c-21) are gated on the same
 smoke. What remains is cross-group
 propose and the rest of the mutations, then the cutover — not new
 design.

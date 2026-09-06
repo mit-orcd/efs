@@ -454,6 +454,18 @@ kill -9 catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
+**Step 10.5c-21 (gated): SETATTR SIZE / chunk-aligned truncate through
+Raft.** When `EFS_MD_RAFT=1`, `SETATTR` with only the SIZE bit proposes
+`EFS_MD_CMD_TRUNCATE` (`content_epoch++`, `base_size = S`). Chunk-
+aligned or zero only; unaligned sizes (need a tail candidate) and
+mixed SIZE+mode/time stay INVAL. Same-group lanes only — a fenced
+lane on another Raft group is INVAL this slice. Flag off is a no-op.
+Gate: `tests/stress/raft_host_smoke.sh` — empty `raft-smoke-f` to
+size 131072, getattr, size survives kill -9 catch-up (utimens after
+truncate still keeps mtime=1000000000).
+Remaining: cross-group propose, then the rest of the mutations.
+Not in this step: cutting over the live `efs-test` table, step 11.
+
 ## Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove

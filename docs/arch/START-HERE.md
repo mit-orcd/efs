@@ -23,8 +23,9 @@ sends you to — not the whole spec.
 > (10.5c-15), LINK is a 2-shard txn (10.5c-16), nlink>1 UNLINK
 > is a 2-shard txn (10.5c-17), utimens is the inode fence
 > (10.5c-18), same-dir LOCAL file RENAME is a txn
-> (10.5c-19), and READDIR/LOOKUP_PATH are ReadIndex + KV
-> (10.5c-20). Next: cross-group propose
+> (10.5c-19), READDIR/LOOKUP_PATH are ReadIndex + KV
+> (10.5c-20), and SETATTR SIZE (chunk-aligned truncate, no tail)
+> is one Raft entry (10.5c-21). Next: cross-group propose
 > (a node that is not leader of a participant group) and the rest of
 > the mutations behind the same flag.
 > [architecture.md §10](../architecture.md)
@@ -189,7 +190,7 @@ sends you to — not the whole spec.
 > **10.5c-18 is in (gated):** utimens is the inode fence on the
 > production host (`EFS_MD_CMD_UTIMENS`). SETATTR with only MTIME/ATIME
 > bumps `mtime_gen` and assigns the times; mixed mode+time is INVAL;
-> SIZE stays INVAL (truncate later). Same-group lanes only — a fenced
+> SIZE was INVAL until 10.5c-21. Same-group lanes only — a fenced
 > lane on another Raft group is INVAL this slice. Same scratch smoke:
 > setattr mtime=1000000000 on the created file, getattr, crash catch-up
 > keeps that mtime.
@@ -211,7 +212,15 @@ sends you to — not the whole spec.
 > LOOKUP_PATH is hop-by-hop (dentry shard ReadIndex if it differs,
 > then child lanes). Same scratch smoke: ROOT listing contains
 > `f`/`m`/`l`/mkdir and not `n`/`u`/`h`; `/raft-smoke-f` and
-> `/raft-smoke-m` resolve; crash keeps that. Remaining: cross-group
+> `/raft-smoke-m` resolve; crash keeps that.
+>
+> **10.5c-21 is in (gated):** SETATTR SIZE on the production host is
+> `EFS_MD_CMD_TRUNCATE` (content_epoch fence + `base_size`). Chunk-
+> aligned or zero only — unaligned sizes need a tail candidate and
+> stay INVAL this slice. Mixed SIZE+mode/time is INVAL. Same-group
+> lanes only. Same scratch smoke: setattr size=131072 on the empty
+> created file, getattr, crash catch-up keeps that size (utimens
+> after truncate still keeps mtime=1000000000). Remaining: cross-group
 > propose, then the rest of the
 > mutations (not a cutover of `efs-test`, not step 11).
 >

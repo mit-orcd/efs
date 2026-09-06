@@ -1536,8 +1536,8 @@ static int cmd_raft_setattr(int argc, char **argv)
     struct efs_msg_inode_reply *r;
 
     if (argc < 3) {
-        fprintf(stderr, "usage: raft-setattr <node:port> <ino> <mask> [mode|mtime] "
-                "[uid|atime] [gid]\n");
+        fprintf(stderr, "usage: raft-setattr <node:port> <ino> <mask> "
+                "[mode|mtime|size] [uid|atime] [gid]\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -1547,7 +1547,10 @@ static int cmd_raft_setattr(int argc, char **argv)
     memset(&req, 0, sizeof(req));
     req.ino = (efs_ino_t)strtoull(argv[1], NULL, 0);
     req.mask = (uint32_t)strtoul(argv[2], NULL, 0);
-    if (req.mask & (EFS_SETATTR_MTIME | EFS_SETATTR_ATIME)) {
+    if (req.mask & EFS_SETATTR_SIZE) {
+        if (argc >= 4)
+            req.size = strtoull(argv[3], NULL, 0);
+    } else if (req.mask & (EFS_SETATTR_MTIME | EFS_SETATTR_ATIME)) {
         if (argc >= 4)
             req.mtime = strtoull(argv[3], NULL, 0);
         if (argc >= 5)
@@ -1579,10 +1582,11 @@ static int cmd_raft_setattr(int argc, char **argv)
     close(fd);
     r = reply;
     printf("raft-setattr status=%u primary=%u ino=%llu mask=%u mode=0%o "
-           "nlink=%u mtime=%llu\n",
+           "nlink=%u size=%llu mtime=%llu\n",
            r->status, r->primary_id,
            (unsigned long long)r->inode.ino, req.mask, r->inode.mode,
-           r->inode.nlink, (unsigned long long)r->inode.mtime);
+           r->inode.nlink, (unsigned long long)r->inode.size,
+           (unsigned long long)r->inode.mtime);
     free(reply);
     return 0;
 }
@@ -1770,7 +1774,7 @@ int main(int argc, char **argv)
                     "  raft-unlink <node:port> <parent> <name>\n"
                     "  raft-rmdir <node:port> <parent> <name>\n"
                     "  raft-link <node:port> <src_ino> <parent> <name>\n"
-                    "  raft-setattr <node:port> <ino> <mask> [mode|mtime] [uid|atime] [gid]\n"
+                    "  raft-setattr <node:port> <ino> <mask> [mode|mtime|size] [uid|atime] [gid]\n"
                     "  raft-rename <node:port> <old_parent> <old_name> <new_parent> <new_name>\n"
                     "  raft-readdir <node:port> <parent> [after_ino]\n"
                     "  raft-lookup-path <node:port> <path> [start]\n",

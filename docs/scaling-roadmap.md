@@ -294,7 +294,10 @@ lane fence INVAL. Gate: same smoke (mtime=1000000000 survives crash).
 compacting. Gate: same smoke (`n`→`m`, old gone after crash).
 **10.5c-20 is in:** READDIR and LOOKUP_PATH via ReadIndex + KV.
 SPLITTING READDIR is BUSY. Gate: same smoke (ROOT listing +
-`/raft-smoke-f` / `/raft-smoke-m`, listing survives crash). Remaining: cross-group
+`/raft-smoke-f` / `/raft-smoke-m`, listing survives crash).
+**10.5c-21 is in:** SETATTR SIZE as `EFS_MD_CMD_TRUNCATE` (chunk-
+aligned / zero; no tail). Mixed SIZE+mode INVAL; unaligned INVAL.
+Gate: same smoke (size=131072 survives crash). Remaining: cross-group
 propose, then the rest of the mutations; not a cutover of `efs-test`,
 not step 11.
 

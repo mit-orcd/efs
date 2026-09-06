@@ -34,6 +34,7 @@
 #define HOST_CMD_MAX       512
 #define HOST_SETATTR_LEN   61
 #define HOST_UTIMENS_LEN   73
+#define HOST_TRUNC_LEN     54
 
 struct host_inbox_item {
     uint8_t *buf;
@@ -380,6 +381,39 @@ static int apply_utimens_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+/* Same encoding as sim apply_truncate_cmd. No tail this slice; session
+ * fencing is not hosted. */
+static int apply_truncate_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                              uint32_t clen, uint64_t index)
+{
+    struct efs_meta_truncate t;
+    efs_ino_t ino;
+    uint64_t now;
+    int rc;
+
+    if (clen < HOST_TRUNC_LEN)
+        return EFS_OK;
+    ino = rd64be(cmd + 1);
+    now = rd64be(cmd + 9);
+    memset(&t, 0, sizeof(t));
+    t.expect_gen = rd64be(cmd + 17);
+    t.size = rd64be(cmd + 25);
+    if (cmd[33])
+        return EFS_OK; /* tail CAS is a later slice */
+    rc = efs_meta_apply_truncate(h->kv, ino, now, &t);
+    if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_STALE)
+        rc = EFS_OK;
+    if (rc != EFS_OK) {
+        fprintf(stderr, "raft-host: apply truncate rc=%d index=%llu ino=%llu\n",
+                rc, (unsigned long long)index, (unsigned long long)ino);
+        return EFS_OK;
+    }
+    fprintf(stderr, "raft-host: applied truncate index=%llu ino=%llu size=%llu\n",
+            (unsigned long long)index, (unsigned long long)ino,
+            (unsigned long long)t.size);
+    return EFS_OK;
+}
+
 /* Same encoding as sim_txn_apply. Apply never stalls the log. */
 static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                          uint32_t clen)
@@ -493,6 +527,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         return apply_setattr_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_UTIMENS)
         return apply_utimens_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_TRUNCATE)
+        return apply_truncate_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
         cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP)
         return apply_txn_cmd(h, cmd, clen);
@@ -706,6 +742,22 @@ static int pack_utimens_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     wr64be(out + 45, u->mtime_gen);
     memset(out + 53, 0, EFS_OPID_UUID_LEN + 4);
     *len = HOST_UTIMENS_LEN;
+    return EFS_OK;
+}
+
+/* Same encoding as sim_raft_truncate with has_tail=0. Unaligned sizes
+ * that need a tail candidate are INVAL this slice. */
+static int pack_truncate_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
+                             uint64_t now, uint64_t expect_gen, uint64_t size)
+{
+    out[0] = EFS_MD_CMD_TRUNCATE;
+    wr64be(out + 1, ino);
+    wr64be(out + 9, now);
+    wr64be(out + 17, expect_gen);
+    wr64be(out + 25, size);
+    out[33] = 0;
+    memset(out + 34, 0, EFS_OPID_UUID_LEN + 4);
+    *len = HOST_TRUNC_LEN;
     return EFS_OK;
 }
 
@@ -2178,6 +2230,69 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
         stat_to_inode(&st, &out->inode);
 }
 
+/* SETATTR SIZE: content_epoch fence + base_size. No tail this slice
+ * (chunk-aligned or zero only). Same-group lanes only. */
+static void host_truncate(efs_ino_t ino, uint64_t size,
+                          struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_stat st;
+    struct efs_meta_row row;
+    uint8_t cmd[HOST_TRUNC_LEN];
+    uint32_t clen = 0;
+    uint64_t idx = 0, bits;
+    uint8_t g;
+    int hint = -1;
+    int rc;
+    uint32_t i;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running || ino == 0) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if (size > 0 && (size % EFS_MIN_CHUNK_SIZE) != 0) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    g = efs_raft_shard_group(efs_kv_inode_shard(ino));
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_read_index(h, g, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+    if (rc == EFS_OK && !S_ISREG(row.mode))
+        rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK) {
+        bits = row.active_lanes;
+        for (i = 0; i < EFS_META_LANES && rc == EFS_OK; i++) {
+            uint32_t lsh;
+            uint8_t lg;
+
+            if ((bits & (1ULL << i)) == 0)
+                continue;
+            lsh = efs_kv_lane_shard(ino, (uint8_t)i);
+            lg = efs_raft_shard_group(lsh);
+            if (lg != g)
+                rc = EFS_ERR_INVAL; /* cross-group lane fence later */
+        }
+    }
+    if (rc == EFS_OK)
+        rc = pack_truncate_cmd(cmd, &clen, ino, now_ns(), 0, size);
+    if (rc == EFS_OK)
+        rc = host_propose(h, g, cmd, clen, &idx, &hint);
+    if (rc == EFS_OK)
+        rc = host_wait_applied(h, g, idx, &hint);
+    if (rc == EFS_OK)
+        rc = host_read_inode_lanes(h, ino, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
+    pthread_mutex_unlock(&h->read_mu);
+    set_inode_rc(out, rc, hint);
+    if (rc == EFS_OK)
+        stat_to_inode(&st, &out->inode);
+}
+
 void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
                               uint32_t uid, uint32_t gid, uint64_t size,
                               uint64_t mtime, uint32_t mtime_nsec,
@@ -2193,23 +2308,27 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
     uint8_t g;
     int hint = -1;
     int rc;
-    uint32_t own, times;
+    uint32_t own, times, sz;
 
-    (void)size;
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
     if (!h || !h->running || ino == 0) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
-    if (mask & EFS_SETATTR_SIZE) {
+    own = mask & (EFS_SETATTR_MODE | EFS_SETATTR_UID | EFS_SETATTR_GID);
+    times = mask & (EFS_SETATTR_MTIME | EFS_SETATTR_ATIME);
+    sz = mask & EFS_SETATTR_SIZE;
+    if ((own && times) || (own && sz) || (times && sz)) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
-    own = mask & (EFS_SETATTR_MODE | EFS_SETATTR_UID | EFS_SETATTR_GID);
-    times = mask & (EFS_SETATTR_MTIME | EFS_SETATTR_ATIME);
-    if (times && own) {
-        out->status = EFS_INODE_RPC_INVAL;
+    if (sz) {
+        if (mask != EFS_SETATTR_SIZE) {
+            out->status = EFS_INODE_RPC_INVAL;
+            return;
+        }
+        host_truncate(ino, size, out);
         return;
     }
     if (times) {
