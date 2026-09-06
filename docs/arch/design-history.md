@@ -421,7 +421,8 @@ SETATTR (10.5c-14) and empty LOCAL RMDIR (10.5c-15) and LINK
 (10.5c-16) and nlink>1 UNLINK (10.5c-17) and utimens
 (10.5c-18) and same-dir LOCAL file RENAME (10.5c-19) and
 READDIR/LOOKUP_PATH (10.5c-20) and SETATTR SIZE / chunk-aligned
-truncate (10.5c-21) and chunk publish + GETCHUNKS (10.5c-22) are gated
+truncate (10.5c-21) and chunk publish + GETCHUNKS (10.5c-22) and
+unaligned truncate tail CAS (10.5c-23) are gated
 on the same
 smoke. What remains is cross-group
 propose and the rest of the mutations, then the cutover — not new

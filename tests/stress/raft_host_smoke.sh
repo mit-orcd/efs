@@ -15,10 +15,11 @@
 # LOCAL file RENAME (old name gone, new name present), READDIR of ROOT
 # (created/renamed/link/mkdir names present, unlinked names absent),
 # LOOKUP_PATH of those names, chunk-aligned SETATTR SIZE (truncate),
-# chunk publish + GETCHUNKS (lane 0),
+# chunk publish + GETCHUNKS (lane 0), unaligned truncate tail + trunc-0,
 # kill -9 a follower
 # then the leader, restart catch-up keeps ROOT, the created file (new
-# mode, size=131072, nlink=2, utimens mtime), the published chunk map,
+# mode, size=131072, nlink=2, utimens mtime), the published file truncated
+# to size=0 with no chunk map,
 # the mkdir, the extra link name, the
 # unlinked name stays gone, the rmdir'd name stays gone, the nlink>1
 # unlinked name stays gone, the renamed name stays, and READDIR /
@@ -506,7 +507,8 @@ check_rename() {
 }
 
 # Mode/owner SETATTR, chunk-aligned truncate, then utimens on
-# raft-smoke-f (all stay after crash). Unaligned SIZE is INVAL (no tail).
+# raft-smoke-f (all stay after crash). Mixed SIZE+mode is INVAL.
+# Unaligned SIZE (tail CAS) is on raft-smoke-p, not here.
 check_setattr() {
     local lid=$1
     local tag=$2
@@ -536,9 +538,6 @@ check_setattr() {
     say "$tag getattr size: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr size not OK"
     echo "$out" | grep -q 'size=131072' || bad "$tag getattr size"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 8 1" 2>/dev/null || true)
-    say "$tag setattr unaligned: $out"
-    echo "$out" | grep -q 'status=6' || bad "$tag setattr unaligned not INVAL"
     out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 9 0600" 2>/dev/null || true)
     say "$tag setattr mixed size: $out"
     echo "$out" | grep -q 'status=6' || bad "$tag setattr mixed size not INVAL"
@@ -587,6 +586,25 @@ check_publish() {
     say "$tag getattr publish: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr publish not OK"
     echo "$out" | grep -q 'size=131072' || bad "$tag getattr publish size"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 8 1000" 2>/dev/null || true)
+    say "$tag setattr tail: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag setattr tail not OK"
+    echo "$out" | grep -q 'size=1000' || bad "$tag setattr tail size"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    say "$tag getattr tail: $out"
+    echo "$out" | grep -q 'size=1000' || bad "$tag getattr tail size"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getchunks ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    say "$tag getchunks tail: $out"
+    echo "$out" | grep -q 'count=1' || bad "$tag getchunks tail count"
+    echo "$out" | grep -q 'cis=0' || bad "$tag getchunks tail ci"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 8 0" 2>/dev/null || true)
+    say "$tag setattr trunc0: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag setattr trunc0 not OK"
+    echo "$out" | grep -q 'size=0' || bad "$tag setattr trunc0 size"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getchunks ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    say "$tag getchunks trunc0: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag getchunks trunc0 not OK"
+    echo "$out" | grep -q 'count=0' || bad "$tag getchunks trunc0 count"
 }
 
 # READDIR ROOT + LOOKUP_PATH. Run after rename so the listing is final.
@@ -898,11 +916,10 @@ if [ -n "${PUBLISH_NAME:-}" ]; then
     out=$(g0_mgmt raft-getchunks "$pino")
     say "after-crash getchunks: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash getchunks not OK"
-    echo "$out" | grep -q 'count=1' || bad "after-crash getchunks count lost"
-    echo "$out" | grep -q 'cis=0' || bad "after-crash getchunks ci lost"
+    echo "$out" | grep -q 'count=0' || bad "after-crash getchunks count not cleared"
     out=$(g0_mgmt raft-getattr "$pino")
     say "after-crash getattr published: $out"
-    echo "$out" | grep -q 'size=131072' || bad "after-crash publish size lost"
+    echo "$out" | grep -q 'size=0' || bad "after-crash publish size not truncated"
 fi
 if [ -n "${MKDIR_NAME:-}" ]; then
     out=$(g0_mgmt raft-lookup 1 "$MKDIR_NAME")

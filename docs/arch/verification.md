@@ -471,6 +471,13 @@ of a lane whose Raft group ≠ inode group is INVAL this slice (that is
 a 2-shard txn). Flag off is a no-op. Gate: same smoke — create
 `raft-smoke-p`, empty GETCHUNKS, publish chunk 0 size=131072,
 GETCHUNKS count=1, mapping and size survive kill -9 catch-up.
+
+**10.5c-23 — unaligned truncate tail CAS (same-group / lane 0).**
+SETATTR SIZE that is not chunk-aligned mints a tail candidate and
+CAS-publishes it in the same `EFS_MD_CMD_TRUNCATE` entry. A later
+size=0 range-deletes the map. Same-group lanes only. Flag off is a
+no-op. Gate: same smoke — after publish, size=1000 keeps ci=0,
+size=0 clears GETCHUNKS, crash keeps that.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 

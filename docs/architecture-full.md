@@ -1151,6 +1151,7 @@ Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) and 10.5c-13
 RENAME as a 2-shard txn) and 10.5c-20 (READDIR/LOOKUP_PATH via
 ReadIndex + KV) and 10.5c-21 (SETATTR SIZE / chunk-aligned truncate)
 and 10.5c-22 (chunk publish + GETCHUNKS)
+and 10.5c-23 (unaligned truncate tail CAS)
 are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cross-group propose
 and the rest of the mutations. Not a
@@ -1272,8 +1273,9 @@ sends you to — not the whole spec.
 > (10.5c-18), same-dir LOCAL file RENAME is a txn
 > (10.5c-19), READDIR/LOOKUP_PATH are ReadIndex + KV
 > (10.5c-20), SETATTR SIZE (chunk-aligned truncate, no tail)
-> is one Raft entry (10.5c-21), and chunk publish + GETCHUNKS
-> (10.5c-22). Next: cross-group propose
+> is one Raft entry (10.5c-21), chunk publish + GETCHUNKS
+> (10.5c-22), and unaligned SETATTR SIZE (tail CAS in the truncate
+> entry, 10.5c-23). Next: cross-group propose
 > (a node that is not leader of a participant group) and the rest of
 > the mutations behind the same flag.
 > [architecture.md §10](#architecture)
@@ -1475,7 +1477,13 @@ sends you to — not the whole spec.
 > ReadIndex + KV. Lane 0 / same-group only — first-use of a lane on
 > another Raft group is INVAL this slice. Same scratch smoke: create
 > `raft-smoke-p`, empty GETCHUNKS, publish chunk 0 size=131072,
-> GETCHUNKS count=1, crash keeps the mapping. Remaining: cross-group
+> GETCHUNKS count=1, crash keeps the mapping.
+>
+> **10.5c-23 is in (gated):** unaligned SETATTR SIZE mints a same-group
+> tail candidate and CAS-publishes it inside `EFS_MD_CMD_TRUNCATE` (I22
+> range-delete of the rest). Mixed SIZE+mode stays INVAL. Same scratch
+> smoke: after publish, size=1000 keeps ci=0, size=0 clears the map,
+> crash keeps that. Remaining: cross-group
 > propose, then the rest of the
 > mutations (not a cutover of `efs-test`, not step 11).
 >
@@ -4486,6 +4494,13 @@ of a lane whose Raft group ≠ inode group is INVAL this slice (that is
 a 2-shard txn). Flag off is a no-op. Gate: same smoke — create
 `raft-smoke-p`, empty GETCHUNKS, publish chunk 0 size=131072,
 GETCHUNKS count=1, mapping and size survive kill -9 catch-up.
+
+**10.5c-23 — unaligned truncate tail CAS (same-group / lane 0).**
+SETATTR SIZE that is not chunk-aligned mints a tail candidate and
+CAS-publishes it in the same `EFS_MD_CMD_TRUNCATE` entry. A later
+size=0 range-deletes the map. Same-group lanes only. Flag off is a
+no-op. Gate: same smoke — after publish, size=1000 keeps ci=0,
+size=0 clears GETCHUNKS, crash keeps that.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
@@ -4960,7 +4975,8 @@ SETATTR (10.5c-14) and empty LOCAL RMDIR (10.5c-15) and LINK
 (10.5c-16) and nlink>1 UNLINK (10.5c-17) and utimens
 (10.5c-18) and same-dir LOCAL file RENAME (10.5c-19) and
 READDIR/LOOKUP_PATH (10.5c-20) and SETATTR SIZE / chunk-aligned
-truncate (10.5c-21) and chunk publish + GETCHUNKS (10.5c-22) are gated
+truncate (10.5c-21) and chunk publish + GETCHUNKS (10.5c-22) and
+unaligned truncate tail CAS (10.5c-23) are gated
 on the same
 smoke. What remains is cross-group
 propose and the rest of the mutations, then the cutover — not new

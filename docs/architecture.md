@@ -1134,6 +1134,7 @@ Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) and 10.5c-13
 RENAME as a 2-shard txn) and 10.5c-20 (READDIR/LOOKUP_PATH via
 ReadIndex + KV) and 10.5c-21 (SETATTR SIZE / chunk-aligned truncate)
 and 10.5c-22 (chunk publish + GETCHUNKS)
+and 10.5c-23 (unaligned truncate tail CAS)
 are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cross-group propose
 and the rest of the mutations. Not a

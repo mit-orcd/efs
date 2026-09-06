@@ -35,6 +35,8 @@
 #define HOST_SETATTR_LEN   61
 #define HOST_UTIMENS_LEN   73
 #define HOST_TRUNC_LEN     54
+#define HOST_TRUNC_TAIL    (4u + 8u + 8u + 4u + \
+                            (uint32_t)EFS_NUM_FRAGMENTS * (4u + EFS_HASH_SIZE))
 #define HOST_PUBLISH_LEN   (29u + (uint32_t)EFS_NUM_FRAGMENTS * (4u + EFS_HASH_SIZE) + \
                             EFS_OPID_UUID_LEN + 4u + 8u + 8u + 8u + 4u)
 
@@ -383,15 +385,16 @@ static int apply_utimens_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
-/* Same encoding as sim apply_truncate_cmd. No tail this slice; session
- * fencing is not hosted. */
+/* Same encoding as sim apply_truncate_cmd. Session fencing is not hosted. */
 static int apply_truncate_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                               uint32_t clen, uint64_t index)
 {
     struct efs_meta_truncate t;
+    struct efs_meta_pub tail;
     efs_ino_t ino;
     uint64_t now;
-    int rc;
+    const uint8_t *q;
+    int i, rc;
 
     if (clen < HOST_TRUNC_LEN)
         return EFS_OK;
@@ -400,8 +403,27 @@ static int apply_truncate_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     memset(&t, 0, sizeof(t));
     t.expect_gen = rd64be(cmd + 17);
     t.size = rd64be(cmd + 25);
-    if (cmd[33])
-        return EFS_OK; /* tail CAS is a later slice */
+    if (cmd[33]) {
+        if (clen < HOST_TRUNC_LEN + HOST_TRUNC_TAIL)
+            return EFS_OK;
+        q = cmd + HOST_TRUNC_LEN;
+        memset(&tail, 0, sizeof(tail));
+        tail.ino = ino;
+        tail.chunk_index = rd32be(q);
+        tail.new_size = t.size;
+        tail.candidate_gen = rd64be(q + 4);
+        tail.expected_gen = rd64be(q + 12);
+        tail.coding_profile_id = rd32be(q + 20);
+        q += 24;
+        for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+            tail.ch.nodes[i] = rd32be(q);
+            q += 4;
+            memcpy(tail.ch.checksums[i], q, EFS_HASH_SIZE);
+            q += EFS_HASH_SIZE;
+        }
+        tail.now = now;
+        t.tail = &tail;
+    }
     rc = efs_meta_apply_truncate(h->kv, ino, now, &t);
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_STALE)
         rc = EFS_OK;
@@ -790,19 +812,37 @@ static int pack_utimens_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     return EFS_OK;
 }
 
-/* Same encoding as sim_raft_truncate with has_tail=0. Unaligned sizes
- * that need a tail candidate are INVAL this slice. */
+/* Same encoding as sim_raft_truncate. Unaligned sizes carry a tail CAS. */
 static int pack_truncate_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
-                             uint64_t now, uint64_t expect_gen, uint64_t size)
+                             uint64_t now, uint64_t expect_gen, uint64_t size,
+                             const struct efs_meta_pub *tail)
 {
+    uint8_t *q;
+    int i;
+
     out[0] = EFS_MD_CMD_TRUNCATE;
     wr64be(out + 1, ino);
     wr64be(out + 9, now);
     wr64be(out + 17, expect_gen);
     wr64be(out + 25, size);
-    out[33] = 0;
+    out[33] = tail ? 1 : 0;
     memset(out + 34, 0, EFS_OPID_UUID_LEN + 4);
     *len = HOST_TRUNC_LEN;
+    if (!tail)
+        return EFS_OK;
+    q = out + HOST_TRUNC_LEN;
+    wr32be(q, tail->chunk_index);
+    wr64be(q + 4, tail->candidate_gen);
+    wr64be(q + 12, tail->expected_gen);
+    wr32be(q + 20, tail->coding_profile_id);
+    q += 24;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        wr32be(q, tail->ch.nodes[i]);
+        q += 4;
+        memcpy(q, tail->ch.checksums[i], EFS_HASH_SIZE);
+        q += EFS_HASH_SIZE;
+    }
+    *len = HOST_TRUNC_LEN + HOST_TRUNC_TAIL;
     return EFS_OK;
 }
 
@@ -2305,18 +2345,22 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
         stat_to_inode(&st, &out->inode);
 }
 
-/* SETATTR SIZE: content_epoch fence + base_size. No tail this slice
- * (chunk-aligned or zero only). Same-group lanes only. */
+/* SETATTR SIZE: content_epoch fence + base_size. Unaligned sizes mint a
+ * same-group tail candidate (CAS inside the truncate entry). */
 static void host_truncate(efs_ino_t ino, uint64_t size,
                           struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
     struct efs_meta_stat st;
     struct efs_meta_row row;
-    uint8_t cmd[HOST_TRUNC_LEN];
-    uint32_t clen = 0;
-    uint64_t idx = 0, bits;
-    uint8_t g;
+    struct efs_meta_pub tail;
+    struct efs_meta_chunk got;
+    const struct efs_meta_pub *tp = NULL;
+    uint8_t cmd[HOST_CMD_MAX];
+    uint8_t uuid[EFS_OPID_UUID_LEN];
+    uint32_t clen = 0, tci = 0, lsh = 0;
+    uint64_t idx = 0, bits = 0, now;
+    uint8_t g, lane = 0, lg = 0;
     int hint = -1;
     int rc;
     uint32_t i;
@@ -2324,10 +2368,6 @@ static void host_truncate(efs_ino_t ino, uint64_t size,
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
     if (!h || !h->running || ino == 0) {
-        out->status = EFS_INODE_RPC_INVAL;
-        return;
-    }
-    if (size > 0 && (size % EFS_MIN_CHUNK_SIZE) != 0) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -2341,9 +2381,6 @@ static void host_truncate(efs_ino_t ino, uint64_t size,
     if (rc == EFS_OK) {
         bits = row.active_lanes;
         for (i = 0; i < EFS_META_LANES && rc == EFS_OK; i++) {
-            uint32_t lsh;
-            uint8_t lg;
-
             if ((bits & (1ULL << i)) == 0)
                 continue;
             lsh = efs_kv_lane_shard(ino, (uint8_t)i);
@@ -2352,8 +2389,47 @@ static void host_truncate(efs_ino_t ino, uint64_t size,
                 rc = EFS_ERR_INVAL; /* cross-group lane fence later */
         }
     }
+    if (rc == EFS_OK && size > 0 && (size % EFS_MIN_CHUNK_SIZE) != 0) {
+        tci = (uint32_t)(size / EFS_MIN_CHUNK_SIZE);
+        lane = (uint8_t)(tci % EFS_META_LANES);
+        lsh = efs_kv_lane_shard(ino, lane);
+        lg = efs_raft_shard_group(lsh);
+        if (lg != g)
+            rc = EFS_ERR_INVAL; /* tail CAS is same-group this slice */
+        memset(&got, 0, sizeof(got));
+        if (rc == EFS_OK)
+            rc = efs_meta_apply_get_chunk(h->kv, ino, tci, &got);
+        if (rc == EFS_ERR_NOT_FOUND)
+            rc = EFS_OK;
+        else if (rc != EFS_OK)
+            ;
+        if (rc == EFS_OK) {
+            memset(&tail, 0, sizeof(tail));
+            memset(uuid, 0, sizeof(uuid));
+            tail.ino = ino;
+            tail.chunk_index = tci;
+            tail.new_size = size;
+            tail.expected_gen = got.generation;
+            tail.candidate_gen = efs_meta_candidate_gen(uuid, 0, 2, tci, 0);
+            if (tail.candidate_gen == 0 ||
+                tail.candidate_gen == tail.expected_gen)
+                tail.candidate_gen = tail.expected_gen + 1;
+            if (tail.candidate_gen == 0)
+                tail.candidate_gen = 1;
+            tail.coding_profile_id = EFS_META_PROFILE_K2F1;
+            for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+                tail.ch.nodes[i] = (efs_node_id_t)(i + 1);
+                memset(tail.ch.checksums[i], (uint8_t)(0xa5 + i),
+                       EFS_HASH_SIZE);
+            }
+            tp = &tail;
+        }
+    }
+    now = now_ns();
     if (rc == EFS_OK)
-        rc = pack_truncate_cmd(cmd, &clen, ino, now_ns(), 0, size);
+        rc = pack_truncate_cmd(cmd, &clen, ino, now, 0, size, tp);
+    if (rc == EFS_OK && clen > HOST_CMD_MAX)
+        rc = EFS_ERR_INVAL;
     if (rc == EFS_OK)
         rc = host_propose(h, g, cmd, clen, &idx, &hint);
     if (rc == EFS_OK)

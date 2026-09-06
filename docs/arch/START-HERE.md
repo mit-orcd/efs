@@ -25,8 +25,9 @@ sends you to — not the whole spec.
 > (10.5c-18), same-dir LOCAL file RENAME is a txn
 > (10.5c-19), READDIR/LOOKUP_PATH are ReadIndex + KV
 > (10.5c-20), SETATTR SIZE (chunk-aligned truncate, no tail)
-> is one Raft entry (10.5c-21), and chunk publish + GETCHUNKS
-> (10.5c-22). Next: cross-group propose
+> is one Raft entry (10.5c-21), chunk publish + GETCHUNKS
+> (10.5c-22), and unaligned SETATTR SIZE (tail CAS in the truncate
+> entry, 10.5c-23). Next: cross-group propose
 > (a node that is not leader of a participant group) and the rest of
 > the mutations behind the same flag.
 > [architecture.md §10](../architecture.md)
@@ -228,7 +229,13 @@ sends you to — not the whole spec.
 > ReadIndex + KV. Lane 0 / same-group only — first-use of a lane on
 > another Raft group is INVAL this slice. Same scratch smoke: create
 > `raft-smoke-p`, empty GETCHUNKS, publish chunk 0 size=131072,
-> GETCHUNKS count=1, crash keeps the mapping. Remaining: cross-group
+> GETCHUNKS count=1, crash keeps the mapping.
+>
+> **10.5c-23 is in (gated):** unaligned SETATTR SIZE mints a same-group
+> tail candidate and CAS-publishes it inside `EFS_MD_CMD_TRUNCATE` (I22
+> range-delete of the rest). Mixed SIZE+mode stays INVAL. Same scratch
+> smoke: after publish, size=1000 keeps ci=0, size=0 clears the map,
+> crash keeps that. Remaining: cross-group
 > propose, then the rest of the
 > mutations (not a cutover of `efs-test`, not step 11).
 >

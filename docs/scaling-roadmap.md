@@ -296,11 +296,14 @@ compacting. Gate: same smoke (`n`→`m`, old gone after crash).
 SPLITTING READDIR is BUSY. Gate: same smoke (ROOT listing +
 `/raft-smoke-f` / `/raft-smoke-m`, listing survives crash).
 **10.5c-21 is in:** SETATTR SIZE as `EFS_MD_CMD_TRUNCATE` (chunk-
-aligned / zero; no tail). Mixed SIZE+mode INVAL; unaligned INVAL.
-Gate: same smoke (size=131072 survives crash).
+aligned / zero). Mixed SIZE+mode INVAL. Unaligned needed a tail
+(10.5c-23). Gate: same smoke (size=131072 survives crash).
 **10.5c-22 is in:** chunk publish (`REPORT_CHUNKS` → `EFS_MD_CMD_PUBLISH`)
 and GETCHUNKS from KV. Same-group / lane 0 only. Gate: same smoke
-(`raft-smoke-p` chunk 0 survives crash). Remaining: cross-group
+(`raft-smoke-p` chunk 0 survives crash).
+**10.5c-23 is in:** unaligned SETATTR SIZE as truncate + tail CAS
+(same-group). Gate: same smoke (size=1000 keeps ci=0, size=0 clears
+it, crash keeps that). Remaining: cross-group
 propose, then the rest of the mutations; not a cutover of `efs-test`,
 not step 11.
 
