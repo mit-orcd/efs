@@ -1140,13 +1140,13 @@ the snapshot / root-2PC flush that step 11 deletes. Deleting that path before
 a durable replacement is wired would drop metadata durability, so 10.5 is
 ordered ahead of it: durable backends first (gated by re-running the whole
 simulator against them, `efsd` untouched), then the applied SM in-sim, then
-production adoption for the single export. **Status (Sep 5):** 10.5a/b
+production adoption for the single export. **Status (Sep 6):** 10.5a/b
 and 10.5c-1..8 are gated in-sim; 10.5c-9 (Raft host) and 10.5c-10
 (LOOKUP/GETATTR via ReadIndex + KV) and 10.5c-11 (file CREATE as one
 Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) and 10.5c-13
 (last-link file UNLINK) and 10.5c-14 (mode/owner SETATTR) and
 10.5c-15 (empty LOCAL RMDIR as a 2-shard txn) and 10.5c-16 (LINK as a
-2-shard txn) are gated on a
+2-shard txn) and 10.5c-17 (nlink>1 UNLINK as a 2-shard txn) are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cross-group propose
 and the rest of the mutations; writes after. Not a
 cutover of the live table; not step 11. The KV engine is
@@ -1262,7 +1262,8 @@ sends you to — not the whole spec.
 > shard (10.5c-11), MKDIR is a 2-shard txn (10.5c-12), last-link
 > file UNLINK is one Raft entry (10.5c-13), mode/owner SETATTR is
 > one Raft entry (10.5c-14), empty LOCAL RMDIR is a 2-shard txn
-> (10.5c-15), and LINK is a 2-shard txn (10.5c-16). Next: cross-group propose
+> (10.5c-15), LINK is a 2-shard txn (10.5c-16), and nlink>1 UNLINK
+> is a 2-shard txn (10.5c-17). Next: cross-group propose
 > (a node that is not leader of a participant group) and the rest of
 > the mutations behind the same flag.
 > [architecture.md §10](#architecture)
@@ -1413,7 +1414,17 @@ sends you to — not the whole spec.
 > Directory src is INVAL; `LINK_SHARD` is INVAL (old fan-out). Same
 > scratch smoke: link the created file, both names, nlink=2, duplicate
 > EXIST, miss NOT_FOUND, crash catch-up keeps the extra name and
-> nlink=2. Remaining: cross-group propose, then the rest of the
+> nlink=2.
+>
+> **10.5c-17 is in (gated):** nlink>1 file UNLINK is dest dentry DEL +
+> inode `nlink--` as the same 2-shard txn as LINK (PREPARE/DECIDE/
+> RESOLVE) on the production host. Last-link with dentry shard ≠
+> inode shard uses the same path; last-link on one shard stays a
+> single Raft entry. LOCAL parent only; HASHED/SPLITTING are
+> INVAL/BUSY. Same scratch smoke: extra link name, unlink it,
+> surviving nlink=2, second unlink NOT_FOUND, crash catch-up keeps
+> the extra name gone and the remaining link. Remaining: cross-group
+> propose, then the rest of the
 > mutations (not a cutover of `efs-test`, not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
@@ -4356,6 +4367,19 @@ receiving node must lead every participant group; otherwise
 `tests/stress/raft_host_smoke.sh` — link the created file under ROOT,
 both names, nlink=2, duplicate EXIST, miss NOT_FOUND, directory INVAL,
 extra name and nlink survive kill -9 catch-up.
+Not in this step: nlink>1 UNLINK (that is 10.5c-17).
+
+**Step 10.5c-17 (gated): nlink>1 UNLINK through Raft.** When
+`EFS_MD_RAFT=1`, file UNLINK with `nlink>1` (or last-link with
+dentry shard ≠ inode shard) is a 2-shard txn (`EFS_MD_CMD_PREPARE`
+/ `DECIDE` / `RESOLVE`) over dest dentry DEL + dest parent mtime/dseq
+and source inode `nlink--` (or inode DEL). LOCAL parent only;
+HASHED/SPLITTING are INVAL/BUSY. Last-link on one shard stays
+`EFS_MD_CMD_UNLINK`. The receiving node must lead every participant
+group; otherwise `NOT_PRIMARY`. Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — extra link of the created file,
+unlink that name, surviving nlink=2, second unlink NOT_FOUND, extra
+name stays gone after kill -9 catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
@@ -4827,7 +4851,7 @@ cluster; LOOKUP/GETATTR through ReadIndex + KV (10.5c-10) and file
 CREATE as one Raft entry (10.5c-11) and MKDIR as a 2-shard txn
 (10.5c-12) and last-link file UNLINK (10.5c-13) and mode/owner
 SETATTR (10.5c-14) and empty LOCAL RMDIR (10.5c-15) and LINK
-(10.5c-16) are gated on the same
+(10.5c-16) and nlink>1 UNLINK (10.5c-17) are gated on the same
 smoke. What remains is cross-group
 propose and the rest of the mutations, then the cutover — not new
 design.

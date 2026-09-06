@@ -10,10 +10,12 @@
 # is EXIST), SETATTR mode/owner, MKDIR as a 2-shard txn, last-link UNLINK
 # of a file (lookup miss, second unlink NOT_FOUND), RMDIR as a 2-shard
 # txn (empty LOCAL dir, lookup miss), LINK as a 2-shard txn (nlink=2,
-# dest lookup, directory is INVAL), kill -9 a follower
+# dest lookup, directory is INVAL), nlink>1 UNLINK of a dedicated extra
+# name (lookup miss, surviving nlink=2), kill -9 a follower
 # then the leader, restart catch-up keeps ROOT, the created file (new
 # mode, nlink=2), the mkdir, the extra link name, the unlinked name stays
-# gone, and the rmdir'd name stays gone.
+# gone, the rmdir'd name stays gone, and the nlink>1 unlinked name stays
+# gone.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
 PORT="${PORT:-19820}"
@@ -366,6 +368,47 @@ check_link() {
     fi
 }
 
+# nlink>1 UNLINK: dedicated dest so raft-smoke-l still exists after crash.
+# Surviving names keep nlink=2. Second unlink of the extra name is NOT_FOUND.
+check_unlink_nlink() {
+    local lid=$1
+    local tag=$2
+    local out ino
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    say "$tag unlink-nlink lookup src: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag unlink-nlink src lookup not OK"
+    ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag unlink-nlink src ino"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-link ${ADDRS[$lid]}:${PORT} $ino 1 raft-smoke-h" 2>/dev/null || true)
+    say "$tag unlink-nlink extra link: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag unlink-nlink extra link not OK"
+    echo "$out" | grep -q 'nlink=3' || bad "$tag unlink-nlink extra nlink"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-unlink ${ADDRS[$lid]}:${PORT} 1 raft-smoke-h" 2>/dev/null || true)
+    say "$tag unlink-nlink: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag unlink-nlink not OK"
+    if echo "$out" | grep -q 'status=0'; then
+        UNLINK_NLINK_NAME=raft-smoke-h
+    fi
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-h" 2>/dev/null || true)
+    say "$tag lookup unlinked extra: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag lookup unlinked extra not NOT_FOUND"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    say "$tag lookup src after nlink unlink: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag src missing after nlink unlink"
+    echo "$out" | grep -q 'nlink=2' || bad "$tag src nlink after nlink unlink"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-l" 2>/dev/null || true)
+    say "$tag lookup linked after nlink unlink: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag linked missing after nlink unlink"
+    echo "$out" | grep -q 'nlink=2' || bad "$tag linked nlink after nlink unlink"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-unlink ${ADDRS[$lid]}:${PORT} 1 raft-smoke-h" 2>/dev/null || true)
+    say "$tag unlink-nlink again: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag unlink-nlink again not NOT_FOUND"
+}
+
 # Mode/owner SETATTR on raft-smoke-f (stays after crash). SIZE is INVAL
 # in this slice (truncate is later).
 check_setattr() {
@@ -481,6 +524,9 @@ check_rmdir "$leader" "fresh"
 say "LINK through Raft (fresh)"
 LINK_NAME=""
 check_link "$leader" "fresh"
+say "UNLINK nlink>1 through Raft (fresh)"
+UNLINK_NLINK_NAME=""
+check_unlink_nlink "$leader" "fresh"
 
 # Pick a group-0 follower to kill (raft ids 0,1,2 minus leader).
 crash_leader=$leader
@@ -646,6 +692,11 @@ if [ -n "${RMDIR_NAME:-}" ]; then
     out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $RMDIR_NAME" 2>/dev/null || true)
     say "after-crash lookup rmdir: $out"
     echo "$out" | grep -q 'status=1' || bad "after-crash rmdir'd name came back"
+fi
+if [ -n "${UNLINK_NLINK_NAME:-}" ]; then
+    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $UNLINK_NLINK_NAME" 2>/dev/null || true)
+    say "after-crash lookup nlink-unlinked: $out"
+    echo "$out" | grep -q 'status=1' || bad "after-crash nlink-unlinked name came back"
 fi
 
 if [ "$FAIL" -eq 0 ]; then

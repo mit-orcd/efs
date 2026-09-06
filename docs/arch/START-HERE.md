@@ -20,7 +20,8 @@ sends you to — not the whole spec.
 > shard (10.5c-11), MKDIR is a 2-shard txn (10.5c-12), last-link
 > file UNLINK is one Raft entry (10.5c-13), mode/owner SETATTR is
 > one Raft entry (10.5c-14), empty LOCAL RMDIR is a 2-shard txn
-> (10.5c-15), and LINK is a 2-shard txn (10.5c-16). Next: cross-group propose
+> (10.5c-15), LINK is a 2-shard txn (10.5c-16), and nlink>1 UNLINK
+> is a 2-shard txn (10.5c-17). Next: cross-group propose
 > (a node that is not leader of a participant group) and the rest of
 > the mutations behind the same flag.
 > [architecture.md §10](../architecture.md)
@@ -171,7 +172,17 @@ sends you to — not the whole spec.
 > Directory src is INVAL; `LINK_SHARD` is INVAL (old fan-out). Same
 > scratch smoke: link the created file, both names, nlink=2, duplicate
 > EXIST, miss NOT_FOUND, crash catch-up keeps the extra name and
-> nlink=2. Remaining: cross-group propose, then the rest of the
+> nlink=2.
+>
+> **10.5c-17 is in (gated):** nlink>1 file UNLINK is dest dentry DEL +
+> inode `nlink--` as the same 2-shard txn as LINK (PREPARE/DECIDE/
+> RESOLVE) on the production host. Last-link with dentry shard ≠
+> inode shard uses the same path; last-link on one shard stays a
+> single Raft entry. LOCAL parent only; HASHED/SPLITTING are
+> INVAL/BUSY. Same scratch smoke: extra link name, unlink it,
+> surviving nlink=2, second unlink NOT_FOUND, crash catch-up keeps
+> the extra name gone and the remaining link. Remaining: cross-group
+> propose, then the rest of the
 > mutations (not a cutover of `efs-test`, not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is

@@ -1719,8 +1719,187 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
     }
 }
 
-/* Last-link file UNLINK: one Raft entry on the dentry shard. Directories
- * go through RMDIR. nlink>1 is INVAL (2-shard later). */
+/* nlink>1 file UNLINK, or last-link when dentry shard ≠ inode shard:
+ * dest dentry DEL + inode nlink-- (or inode DEL) as a txn (same
+ * PREPARE/DECIDE/RESOLVE as LINK). LOCAL parent only; HASHED/SPLITTING
+ * are INVAL/BUSY. Last-link on one shard stays on EFS_MD_CMD_UNLINK.
+ * The receiving node must lead every participant group. */
+static void host_unlink_txn(efs_ino_t parent, const char *name,
+                            struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_row prow, row;
+    struct efs_meta_dentry dent;
+    struct efs_meta_stat st;
+    struct efs_txid t;
+    struct efs_txn_parts parts;
+    uint8_t k_dent[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX], k_par[EFS_KV_KEY_MAX];
+    uint8_t k_dseq[EFS_KV_KEY_MAX];
+    uint8_t v_ino[EFS_META_INO_BYTES], v_par[EFS_META_INO_BYTES], v_dseq[8];
+    uint8_t sb[8], cmd[22];
+    uint32_t kd = 0, ki = 0, kp = 0, ks = 0, sn = 8;
+    uint32_t dsh, ish, psh, coord;
+    uint64_t dver = 0, iver = 0, pver = 0, sver = 0, seq = 0, now;
+    uint32_t nlink_out = 0;
+    int hint = -1;
+    int rc, i, gr, held = 0, last = 0, put_ino = 0;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running || !name || parent == 0 || name[0] == '\0') {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    now = now_ns();
+    pthread_mutex_lock(&h->read_mu);
+    psh = efs_kv_inode_shard(parent);
+    rc = host_read_index(h, efs_raft_shard_group(psh), &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
+    if (rc == EFS_OK && !S_ISDIR(prow.mode))
+        rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK && prow.layout == EFS_META_LAYOUT_SPLITTING)
+        rc = EFS_ERR_BUSY;
+    if (rc == EFS_OK && prow.layout != EFS_META_LAYOUT_LOCAL)
+        rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK) {
+        dsh = efs_kv_dentry_shard(parent, name, prow.layout);
+        if (efs_raft_shard_group(dsh) != efs_raft_shard_group(psh))
+            rc = host_read_index(h, efs_raft_shard_group(dsh), &hint);
+    } else
+        dsh = 0;
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_resolve(h->kv, parent, name, &dent, &row);
+    if (rc == EFS_OK && S_ISDIR(row.mode))
+        rc = EFS_ERR_INVAL;
+    ish = (rc == EFS_OK) ? efs_kv_inode_shard(row.ino) : 0;
+    if (rc == EFS_OK && efs_raft_shard_group(ish) != efs_raft_shard_group(dsh))
+        rc = host_read_index(h, efs_raft_shard_group(ish), &hint);
+    if (rc == EFS_OK) {
+        nlink_out = row.nlink;
+        last = row.nlink <= 1;
+        if (last) {
+            held = efs_lease_any(h->kv, row.ino, row.generation);
+            if (held < 0)
+                rc = held;
+            else if (held) {
+                row.nlink = 0;
+                if (row.base_ctime < now)
+                    row.base_ctime = now;
+                put_ino = 1;
+            }
+        } else {
+            row.nlink--;
+            if (row.base_ctime < now)
+                row.base_ctime = now;
+            put_ino = 1;
+        }
+    }
+    if (rc == EFS_OK) {
+        if (prow.base_mtime < now)
+            prow.base_mtime = now;
+        if (prow.base_ctime < now)
+            prow.base_ctime = now;
+        rc = efs_meta_pack_inode(&prow, v_par, sizeof(v_par));
+        if (rc == EFS_OK && put_ino)
+            rc = efs_meta_pack_inode(&row, v_ino, sizeof(v_ino));
+    }
+    if (rc == EFS_OK)
+        rc = efs_kv_key_dentry(dsh, parent, name, k_dent, &kd);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_inode(ish, row.ino, k_ino, &ki);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_inode(psh, parent, k_par, &kp);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_dseq(dsh, parent, 0, k_dseq, &ks);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_ino, ki, &iver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_par, kp, &pver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_dseq, ks, &sver);
+    if (rc == EFS_OK) {
+        sn = 8;
+        gr = efs_kv_get(h->kv, k_dseq, ks, sb, &sn);
+        seq = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
+        wr64be(v_dseq, seq + 1);
+        memset(&parts, 0, sizeof(parts));
+        if (dsh == ish) {
+            parts.n = 1;
+            parts.shard[0] = dsh;
+        } else {
+            parts.n = 2;
+            if (dsh < ish) {
+                parts.shard[0] = dsh;
+                parts.shard[1] = ish;
+            } else {
+                parts.shard[0] = ish;
+                parts.shard[1] = dsh;
+            }
+        }
+        fill_txid(h, &t);
+        for (i = 0; i < parts.n && rc == EFS_OK; i++) {
+            uint32_t sh = parts.shard[i];
+            if (sh == dsh) {
+                rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dent, kd,
+                               dver, EFS_TXN_DEL, NULL, 0, &hint);
+                if (rc == EFS_OK)
+                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_par, kp,
+                                   pver, EFS_TXN_PUT, v_par, sizeof(v_par),
+                                   &hint);
+                if (rc == EFS_OK)
+                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dseq, ks,
+                                   sver, EFS_TXN_PUT, v_dseq, 8, &hint);
+            }
+            if (rc == EFS_OK && sh == ish) {
+                if (put_ino)
+                    rc = host_prep(h, ish, EFS_TXN_EXCL, &t, &parts, k_ino, ki,
+                                   iver, EFS_TXN_PUT, v_ino, sizeof(v_ino),
+                                   &hint);
+                else
+                    rc = host_prep(h, ish, EFS_TXN_EXCL, &t, &parts, k_ino, ki,
+                                   iver, EFS_TXN_DEL, NULL, 0, &hint);
+            }
+        }
+        if (rc != EFS_OK)
+            (void)host_drop_parts(h, &t, &parts, &hint);
+        else {
+            coord = efs_txn_coordinator(&t, &parts);
+            pack_decide(cmd, &t, coord, EFS_TXN_COMMIT);
+            rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, 22,
+                                   &hint);
+            for (i = 0; i < parts.n && rc == EFS_OK; i++) {
+                pack_resolve(cmd, &t, parts.shard[i], EFS_TXN_COMMIT);
+                rc = host_propose_wait(h, efs_raft_shard_group(parts.shard[i]),
+                                       cmd, 22, &hint);
+            }
+        }
+    }
+    if (rc == EFS_OK && !last) {
+        rc = host_read_inode_lanes(h, row.ino, &hint);
+        if (rc == EFS_OK)
+            rc = efs_meta_apply_getattr(h->kv, row.ino, host_txn_coord, h, &st);
+    }
+    pthread_mutex_unlock(&h->read_mu);
+    set_inode_rc(out, rc, hint);
+    if (rc == EFS_OK) {
+        if (!last)
+            stat_to_inode(&st, &out->inode);
+        else {
+            out->inode.ino = row.ino;
+            out->inode.mode = row.mode;
+            out->inode.nlink = nlink_out;
+        }
+        out->inode.parent = parent;
+        strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
+    }
+}
+
+/* Last-link file UNLINK on one shard: one Raft entry on the dentry
+ * shard. nlink>1, or last-link with dsh ≠ ish, is the txn above.
+ * Directories go through RMDIR. */
 void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
                              struct efs_msg_inode_reply *out)
 {
@@ -1743,11 +1922,6 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
     }
     if (is_dir) {
         server_raft_host_rmdir(parent, name, out);
-        return;
-    }
-    rc = pack_unlink_cmd(cmd, &clen, parent, now_ns(), name);
-    if (rc != EFS_OK) {
-        set_inode_rc(out, rc, -1);
         return;
     }
     pthread_mutex_lock(&h->read_mu);
@@ -1776,15 +1950,16 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
             return;
         }
         if (rc == EFS_OK) {
-            if (row.nlink > 1)
-                rc = EFS_ERR_INVAL;
-            else {
-                ig = efs_raft_shard_group(efs_kv_inode_shard(row.ino));
-                if (ig != dg)
-                    rc = EFS_ERR_INVAL; /* 2-shard last-link later */
+            ig = efs_raft_shard_group(efs_kv_inode_shard(row.ino));
+            if (row.nlink > 1 || ig != dg) {
+                pthread_mutex_unlock(&h->read_mu);
+                host_unlink_txn(parent, name, out);
+                return;
             }
         }
     }
+    if (rc == EFS_OK)
+        rc = pack_unlink_cmd(cmd, &clen, parent, now_ns(), name);
     if (rc == EFS_OK)
         rc = host_propose(h, dg, cmd, clen, &idx, &hint);
     if (rc == EFS_OK)

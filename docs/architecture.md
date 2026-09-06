@@ -1123,13 +1123,13 @@ the snapshot / root-2PC flush that step 11 deletes. Deleting that path before
 a durable replacement is wired would drop metadata durability, so 10.5 is
 ordered ahead of it: durable backends first (gated by re-running the whole
 simulator against them, `efsd` untouched), then the applied SM in-sim, then
-production adoption for the single export. **Status (Sep 5):** 10.5a/b
+production adoption for the single export. **Status (Sep 6):** 10.5a/b
 and 10.5c-1..8 are gated in-sim; 10.5c-9 (Raft host) and 10.5c-10
 (LOOKUP/GETATTR via ReadIndex + KV) and 10.5c-11 (file CREATE as one
 Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) and 10.5c-13
 (last-link file UNLINK) and 10.5c-14 (mode/owner SETATTR) and
 10.5c-15 (empty LOCAL RMDIR as a 2-shard txn) and 10.5c-16 (LINK as a
-2-shard txn) are gated on a
+2-shard txn) and 10.5c-17 (nlink>1 UNLINK as a 2-shard txn) are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cross-group propose
 and the rest of the mutations; writes after. Not a
 cutover of the live table; not step 11. The KV engine is

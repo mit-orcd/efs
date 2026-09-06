@@ -278,7 +278,13 @@ name stays gone after crash).
 **10.5c-16 is in:** LINK as dest dentry + inode nlink++ (same
 PREPARE/DECIDE/RESOLVE as MKDIR). LOCAL dest only; HASHED/SPLITTING
 INVAL/BUSY; directory src INVAL. Gate: same smoke (link created file,
-nlink=2, dup EXIST, extra name survives crash). Remaining: cross-group
+nlink=2, dup EXIST, extra name survives crash).
+**10.5c-17 is in:** nlink>1 UNLINK as dest dentry DEL + inode nlink--
+(same PREPARE/DECIDE/RESOLVE as LINK). Last-link with dsh ≠ ish uses
+the same txn; last-link on one shard stays one Raft entry. LOCAL
+parent only; HASHED/SPLITTING INVAL/BUSY. Gate: same smoke (extra
+link, unlink it, surviving nlink=2, extra name stays gone after
+crash). Remaining: cross-group
 propose, then the rest of the mutations; not a cutover of `efs-test`,
 not step 11.
 

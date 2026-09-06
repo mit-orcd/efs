@@ -406,6 +406,19 @@ receiving node must lead every participant group; otherwise
 `tests/stress/raft_host_smoke.sh` — link the created file under ROOT,
 both names, nlink=2, duplicate EXIST, miss NOT_FOUND, directory INVAL,
 extra name and nlink survive kill -9 catch-up.
+Not in this step: nlink>1 UNLINK (that is 10.5c-17).
+
+**Step 10.5c-17 (gated): nlink>1 UNLINK through Raft.** When
+`EFS_MD_RAFT=1`, file UNLINK with `nlink>1` (or last-link with
+dentry shard ≠ inode shard) is a 2-shard txn (`EFS_MD_CMD_PREPARE`
+/ `DECIDE` / `RESOLVE`) over dest dentry DEL + dest parent mtime/dseq
+and source inode `nlink--` (or inode DEL). LOCAL parent only;
+HASHED/SPLITTING are INVAL/BUSY. Last-link on one shard stays
+`EFS_MD_CMD_UNLINK`. The receiving node must lead every participant
+group; otherwise `NOT_PRIMARY`. Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — extra link of the created file,
+unlink that name, surviving nlink=2, second unlink NOT_FOUND, extra
+name stays gone after kill -9 catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
