@@ -723,6 +723,8 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
 void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
                               uint32_t uid, uint32_t gid,
                               struct efs_msg_inode_reply *out);
+void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
+                           const char *new_name, struct efs_msg_inode_reply *out);
 
 /* Start the background cluster rejoin retry thread. */
 void server_start_rejoin(struct efsd_server *s);

@@ -9,10 +9,11 @@
 # name is NOT_FOUND), file CREATE through Raft (lookup+getattr, duplicate
 # is EXIST), SETATTR mode/owner, MKDIR as a 2-shard txn, last-link UNLINK
 # of a file (lookup miss, second unlink NOT_FOUND), RMDIR as a 2-shard
-# txn (empty LOCAL dir, lookup miss), kill -9 a follower
+# txn (empty LOCAL dir, lookup miss), LINK as a 2-shard txn (nlink=2,
+# dest lookup, directory is INVAL), kill -9 a follower
 # then the leader, restart catch-up keeps ROOT, the created file (new
-# mode), the mkdir, the unlinked name stays gone, and the rmdir'd name
-# stays gone.
+# mode, nlink=2), the mkdir, the extra link name, the unlinked name stays
+# gone, and the rmdir'd name stays gone.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
 PORT="${PORT:-19820}"
@@ -318,6 +319,53 @@ check_rmdir() {
     echo "$out" | grep -q 'status=6' || bad "$tag rmdir file not INVAL"
 }
 
+# LINK dest dentry + nlink++. Dedicated dest so raft-smoke-f stays.
+# Directory src is INVAL. Duplicate dest is EXIST.
+check_link() {
+    local lid=$1
+    local tag=$2
+    local out ino dino
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    say "$tag link lookup src: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag link src lookup not OK"
+    ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag link src ino"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-link ${ADDRS[$lid]}:${PORT} $ino 1 raft-smoke-l" 2>/dev/null || true)
+    say "$tag link: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag link not OK"
+    echo "$out" | grep -q 'nlink=2' || bad "$tag link nlink"
+    if echo "$out" | grep -q 'status=0'; then
+        LINK_NAME=raft-smoke-l
+    fi
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-l" 2>/dev/null || true)
+    say "$tag lookup linked: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag lookup linked not OK"
+    echo "$out" | grep -q "ino=$ino" || bad "$tag lookup linked ino"
+    echo "$out" | grep -q 'nlink=2' || bad "$tag lookup linked nlink"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    say "$tag lookup src nlink: $out"
+    echo "$out" | grep -q 'nlink=2' || bad "$tag src nlink after link"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-link ${ADDRS[$lid]}:${PORT} $ino 1 raft-smoke-l" 2>/dev/null || true)
+    say "$tag link dup: $out"
+    echo "$out" | grep -q 'status=2' || bad "$tag link dup not EXIST"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-link ${ADDRS[$lid]}:${PORT} 999999 1 raft-smoke-l2" 2>/dev/null || true)
+    say "$tag link miss: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag link miss not NOT_FOUND"
+    if [ -n "${MKDIR_NAME:-}" ]; then
+        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 $MKDIR_NAME" 2>/dev/null || true)
+        dino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+        if [ -n "$dino" ] && [ "$dino" != "0" ]; then
+            out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-link ${ADDRS[$lid]}:${PORT} $dino 1 raft-smoke-ld" 2>/dev/null || true)
+            say "$tag link dir: $out"
+            echo "$out" | grep -q 'status=6' || bad "$tag link dir not INVAL"
+        fi
+    fi
+}
+
 # Mode/owner SETATTR on raft-smoke-f (stays after crash). SIZE is INVAL
 # in this slice (truncate is later).
 check_setattr() {
@@ -430,6 +478,9 @@ check_unlink "$leader" "fresh"
 say "RMDIR through Raft (fresh)"
 RMDIR_NAME=""
 check_rmdir "$leader" "fresh"
+say "LINK through Raft (fresh)"
+LINK_NAME=""
+check_link "$leader" "fresh"
 
 # Pick a group-0 follower to kill (raft ids 0,1,2 minus leader).
 crash_leader=$leader
@@ -531,19 +582,33 @@ for i in $(seq 1 40); do
         break
     fi
 done
+after_lid=$leader
 # Serving LOOKUP can lag the status line by an election. Wait until a
 # miss is NOT_FOUND, not NOT_PRIMARY, before treating names as lost.
+# Never assign -1 over a known leader — HOSTS[-1] is fcstor006.
 ready=0
-for i in $(seq 1 20); do
-    leader=$(g0_leader)
-    [ -z "$leader" ] || [ "$leader" = "-1" ] && continue
-    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 no-such-efs-name" 2>/dev/null || true)
+for i in $(seq 1 40); do
+    cur=$(g0_leader)
+    if [ -z "$cur" ] || [ "$cur" = "-1" ]; then
+        cur=$after_lid
+    fi
+    if [ -z "$cur" ] || [ "$cur" = "-1" ]; then
+        continue
+    fi
+    out=$(ssh_to 10 "${HOSTS[$cur]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$cur]}:${PORT} 1 no-such-efs-name" 2>/dev/null || true)
     if echo "$out" | grep -q 'status=1'; then
+        leader=$cur
         ready=1
         break
     fi
 done
+[ "$ready" = 1 ] || leader=$after_lid
 [ "$ready" = 1 ] || bad "after-crash leader not serving LOOKUP"
+if [ -z "$leader" ] || [ "$leader" = "-1" ]; then
+    bad "after-crash no group-0 leader"
+    say "FAIL count=$FAIL"
+    exit 1
+fi
 say "ReadIndex GETATTR/LOOKUP (after crash)"
 root_nlink=2
 [ -n "${MKDIR_NAME:-}" ] && root_nlink=3
@@ -557,6 +622,9 @@ if [ -n "$ino" ] && [ "$ino" != "0" ]; then
     say "after-crash getattr created: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash created getattr missing"
     echo "$out" | grep -q 'mode=0100600' || bad "after-crash setattr mode lost"
+    if [ -n "${LINK_NAME:-}" ]; then
+        echo "$out" | grep -q 'nlink=2' || bad "after-crash link nlink lost"
+    fi
 else
     bad "after-crash created ino missing"
 fi
@@ -564,6 +632,12 @@ if [ -n "${MKDIR_NAME:-}" ]; then
     out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $MKDIR_NAME" 2>/dev/null || true)
     say "after-crash lookup mkdir: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash mkdir name missing"
+fi
+if [ -n "${LINK_NAME:-}" ]; then
+    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $LINK_NAME" 2>/dev/null || true)
+    say "after-crash lookup linked: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash linked name missing"
+    echo "$out" | grep -q 'nlink=2' || bad "after-crash linked nlink"
 fi
 out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
 say "after-crash lookup unlinked: $out"

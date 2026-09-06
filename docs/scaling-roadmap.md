@@ -274,8 +274,13 @@ survives crash).
 **10.5c-15 is in:** empty LOCAL RMDIR as a 2-shard txn (same
 PREPARE/DECIDE/RESOLVE as MKDIR). HASHED/SPLITTING are INVAL/BUSY.
 Gate: same smoke (mkdir+rmdir, lookup miss, file rmdir is INVAL,
-name stays gone after crash). Remaining: cross-group propose, then
-the rest of the mutations; not a cutover of `efs-test`, not step 11.
+name stays gone after crash).
+**10.5c-16 is in:** LINK as dest dentry + inode nlink++ (same
+PREPARE/DECIDE/RESOLVE as MKDIR). LOCAL dest only; HASHED/SPLITTING
+INVAL/BUSY; directory src INVAL. Gate: same smoke (link created file,
+nlink=2, dup EXIST, extra name survives crash). Remaining: cross-group
+propose, then the rest of the mutations; not a cutover of `efs-test`,
+not step 11.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

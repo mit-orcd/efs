@@ -1145,7 +1145,8 @@ and 10.5c-1..8 are gated in-sim; 10.5c-9 (Raft host) and 10.5c-10
 (LOOKUP/GETATTR via ReadIndex + KV) and 10.5c-11 (file CREATE as one
 Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) and 10.5c-13
 (last-link file UNLINK) and 10.5c-14 (mode/owner SETATTR) and
-10.5c-15 (empty LOCAL RMDIR as a 2-shard txn) are gated on a
+10.5c-15 (empty LOCAL RMDIR as a 2-shard txn) and 10.5c-16 (LINK as a
+2-shard txn) are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cross-group propose
 and the rest of the mutations; writes after. Not a
 cutover of the live table; not step 11. The KV engine is
@@ -1260,8 +1261,8 @@ sends you to — not the whole spec.
 > (10.5c-10), file CREATE is a single Raft entry on the dentry
 > shard (10.5c-11), MKDIR is a 2-shard txn (10.5c-12), last-link
 > file UNLINK is one Raft entry (10.5c-13), mode/owner SETATTR is
-> one Raft entry (10.5c-14), and empty LOCAL RMDIR is a 2-shard txn
-> (10.5c-15). Next: cross-group propose
+> one Raft entry (10.5c-14), empty LOCAL RMDIR is a 2-shard txn
+> (10.5c-15), and LINK is a 2-shard txn (10.5c-16). Next: cross-group propose
 > (a node that is not leader of a participant group) and the rest of
 > the mutations behind the same flag.
 > [architecture.md §10](#architecture)
@@ -1404,9 +1405,16 @@ sends you to — not the whole spec.
 > HASHED/SPLITTING are INVAL/BUSY (dseq-on-used-lanes later). The
 > receiving node must lead every participant group. Same scratch
 > smoke: mkdir a dedicated name, rmdir, lookup miss, rmdir of a file
-> is INVAL, crash catch-up keeps the name gone. Remaining:
-> cross-group propose, then the rest of the mutations (not a cutover
-> of `efs-test`, not step 11).
+> is INVAL, crash catch-up keeps the name gone.
+>
+> **10.5c-16 is in (gated):** LINK is dest dentry + inode `nlink++` as
+> the same 2-shard txn as MKDIR (PREPARE/DECIDE/RESOLVE) on the
+> production host. LOCAL dest only; HASHED/SPLITTING are INVAL/BUSY.
+> Directory src is INVAL; `LINK_SHARD` is INVAL (old fan-out). Same
+> scratch smoke: link the created file, both names, nlink=2, duplicate
+> EXIST, miss NOT_FOUND, crash catch-up keeps the extra name and
+> nlink=2. Remaining: cross-group propose, then the rest of the
+> mutations (not a cutover of `efs-test`, not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -4336,6 +4344,18 @@ The receiving node must lead every participant group; otherwise
 `tests/stress/raft_host_smoke.sh` — mkdir a dedicated name, rmdir,
 lookup miss, second rmdir NOT_FOUND, rmdir of a file INVAL, name
 stays gone after kill -9 catch-up.
+Not in this step: LINK (that is 10.5c-16).
+
+**Step 10.5c-16 (gated): LINK through Raft.** When `EFS_MD_RAFT=1`,
+`EFS_MSG_INODE_LINK` is a 2-shard txn (`EFS_MD_CMD_PREPARE` / `DECIDE`
+/ `RESOLVE`) over dest dentry + dest parent mtime/dseq and source
+inode `nlink++`. LOCAL dest only; HASHED/SPLITTING are INVAL/BUSY.
+Directory src is INVAL. `LINK_SHARD` is INVAL (old fan-out). The
+receiving node must lead every participant group; otherwise
+`NOT_PRIMARY`. Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — link the created file under ROOT,
+both names, nlink=2, duplicate EXIST, miss NOT_FOUND, directory INVAL,
+extra name and nlink survive kill -9 catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
@@ -4806,7 +4826,8 @@ host in `efsd` (10.5c-9, env-gated `EFS_MD_RAFT`) is gated on a scratch
 cluster; LOOKUP/GETATTR through ReadIndex + KV (10.5c-10) and file
 CREATE as one Raft entry (10.5c-11) and MKDIR as a 2-shard txn
 (10.5c-12) and last-link file UNLINK (10.5c-13) and mode/owner
-SETATTR (10.5c-14) and empty LOCAL RMDIR (10.5c-15) are gated on the same
+SETATTR (10.5c-14) and empty LOCAL RMDIR (10.5c-15) and LINK
+(10.5c-16) are gated on the same
 smoke. What remains is cross-group
 propose and the rest of the mutations, then the cutover — not new
 design.

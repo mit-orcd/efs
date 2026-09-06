@@ -417,7 +417,8 @@ host in `efsd` (10.5c-9, env-gated `EFS_MD_RAFT`) is gated on a scratch
 cluster; LOOKUP/GETATTR through ReadIndex + KV (10.5c-10) and file
 CREATE as one Raft entry (10.5c-11) and MKDIR as a 2-shard txn
 (10.5c-12) and last-link file UNLINK (10.5c-13) and mode/owner
-SETATTR (10.5c-14) and empty LOCAL RMDIR (10.5c-15) are gated on the same
+SETATTR (10.5c-14) and empty LOCAL RMDIR (10.5c-15) and LINK
+(10.5c-16) are gated on the same
 smoke. What remains is cross-group
 propose and the rest of the mutations, then the cutover — not new
 design.

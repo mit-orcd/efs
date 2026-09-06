@@ -394,6 +394,18 @@ The receiving node must lead every participant group; otherwise
 `tests/stress/raft_host_smoke.sh` — mkdir a dedicated name, rmdir,
 lookup miss, second rmdir NOT_FOUND, rmdir of a file INVAL, name
 stays gone after kill -9 catch-up.
+Not in this step: LINK (that is 10.5c-16).
+
+**Step 10.5c-16 (gated): LINK through Raft.** When `EFS_MD_RAFT=1`,
+`EFS_MSG_INODE_LINK` is a 2-shard txn (`EFS_MD_CMD_PREPARE` / `DECIDE`
+/ `RESOLVE`) over dest dentry + dest parent mtime/dseq and source
+inode `nlink++`. LOCAL dest only; HASHED/SPLITTING are INVAL/BUSY.
+Directory src is INVAL. `LINK_SHARD` is INVAL (old fan-out). The
+receiving node must lead every participant group; otherwise
+`NOT_PRIMARY`. Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — link the created file under ROOT,
+both names, nlink=2, duplicate EXIST, miss NOT_FOUND, directory INVAL,
+extra name and nlink survive kill -9 catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
