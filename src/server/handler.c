@@ -1946,7 +1946,8 @@ send_reply:
                     rtype = EFS_MSG_INODE_UNLINK_REPLY;
                 } else if (type == EFS_MSG_INODE_UNLINK_SHARD) {
                     /* Old fan-out. Last-link file unlink is one Raft entry;
-                     * nlink>1 / RMDIR are 2-shard txns, not this opcode. */
+                     * nlink>1 is still a 2-shard txn, not this opcode.
+                     * RMDIR is EFS_MSG_INODE_UNLINK with a directory. */
                     r.status = EFS_INODE_RPC_INVAL;
                     rtype = EFS_MSG_INODE_UNLINK_SHARD_REPLY;
                 } else if (type == EFS_MSG_INODE_SETATTR &&

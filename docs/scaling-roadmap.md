@@ -270,7 +270,11 @@ dentry shard. Gate: same smoke (create+unlink, lookup miss, name
 stays gone after crash).
 **10.5c-14 is in:** mode/owner SETATTR as one Raft entry on the inode
 shard. Gate: same smoke (chmod 0600, getattr, SIZE is INVAL, mode
-survives crash). Remaining: cross-group propose, then
+survives crash).
+**10.5c-15 is in:** empty LOCAL RMDIR as a 2-shard txn (same
+PREPARE/DECIDE/RESOLVE as MKDIR). HASHED/SPLITTING are INVAL/BUSY.
+Gate: same smoke (mkdir+rmdir, lookup miss, file rmdir is INVAL,
+name stays gone after crash). Remaining: cross-group propose, then
 the rest of the mutations; not a cutover of `efs-test`, not step 11.
 
 **Rules while carving:** no behavior change within a step; no new features

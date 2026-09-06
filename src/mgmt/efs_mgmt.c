@@ -1423,6 +1423,56 @@ static int cmd_raft_unlink(int argc, char **argv)
     return 0;
 }
 
+static int cmd_raft_rmdir(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    int fd;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_msg_inode_unlink req;
+    struct efs_msg_inode_reply *r;
+
+    if (argc < 3) {
+        fprintf(stderr, "usage: raft-rmdir <node:port> <parent> <name>\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    memset(&req, 0, sizeof(req));
+    req.parent = (efs_ino_t)strtoull(argv[1], NULL, 0);
+    strncpy(req.name, argv[2], sizeof(req.name) - 1);
+    req.is_dir = 1;
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_INODE_UNLINK, &req, sizeof(req), &reply_type,
+                  &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_INODE_UNLINK_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to raft-rmdir\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    printf("raft-rmdir status=%u primary=%u parent=%llu name=%s ino=%llu "
+           "mode=0%o nlink=%u\n",
+           r->status, r->primary_id,
+           (unsigned long long)req.parent, req.name,
+           (unsigned long long)r->inode.ino, r->inode.mode, r->inode.nlink);
+    free(reply);
+    return 0;
+}
+
 static int cmd_raft_setattr(int argc, char **argv)
 {
     char host[64];
@@ -1502,6 +1552,7 @@ int main(int argc, char **argv)
                     "  raft-lookup <node:port> <parent> <name>\n"
                     "  raft-create <node:port> <parent> <name> [mode]\n"
                     "  raft-unlink <node:port> <parent> <name>\n"
+                    "  raft-rmdir <node:port> <parent> <name>\n"
                     "  raft-setattr <node:port> <ino> <mask> [mode] [uid] [gid]\n",
             argv[0]);
     return 1;
@@ -1544,6 +1595,8 @@ int main(int argc, char **argv)
         return cmd_raft_create(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-unlink") == 0)
         return cmd_raft_unlink(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-rmdir") == 0)
+        return cmd_raft_rmdir(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-setattr") == 0)
         return cmd_raft_setattr(argc - 2, argv + 2);
 

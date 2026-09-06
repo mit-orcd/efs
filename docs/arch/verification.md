@@ -383,6 +383,17 @@ are INVAL (truncate / utimens later). Flag off is a no-op. Gate:
 `tests/stress/raft_host_smoke.sh` — setattr mode 0600 on the created
 file, getattr confirms, miss ino NOT_FOUND, SIZE mask INVAL, mode
 survives kill -9 catch-up.
+Not in this step: RMDIR (that is 10.5c-15).
+
+**Step 10.5c-15 (gated): empty LOCAL RMDIR through Raft.** When
+`EFS_MD_RAFT=1`, directory UNLINK is a 2-shard txn (`EFS_MD_CMD_PREPARE`
+/ `DECIDE` / `RESOLVE`, same encoding as MKDIR) over parent dentry +
+parent nlink/dseq and child inode. HASHED/SPLITTING are INVAL/BUSY.
+The receiving node must lead every participant group; otherwise
+`NOT_PRIMARY`. Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — mkdir a dedicated name, rmdir,
+lookup miss, second rmdir NOT_FOUND, rmdir of a file INVAL, name
+stays gone after kill -9 catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 

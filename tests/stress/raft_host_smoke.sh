@@ -8,9 +8,11 @@
 # ReadIndex + KV (leader serves ROOT, follower is NOT_PRIMARY, missing
 # name is NOT_FOUND), file CREATE through Raft (lookup+getattr, duplicate
 # is EXIST), SETATTR mode/owner, MKDIR as a 2-shard txn, last-link UNLINK
-# of a file (lookup miss, second unlink NOT_FOUND), kill -9 a follower
+# of a file (lookup miss, second unlink NOT_FOUND), RMDIR as a 2-shard
+# txn (empty LOCAL dir, lookup miss), kill -9 a follower
 # then the leader, restart catch-up keeps ROOT, the created file (new
-# mode), the mkdir, and the unlinked name stays gone.
+# mode), the mkdir, the unlinked name stays gone, and the rmdir'd name
+# stays gone.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
 PORT="${PORT:-19820}"
@@ -127,7 +129,7 @@ wait_g0_caught_up() {
     want=$(g0_commit "$lid")
     for i in $(seq 1 50); do
         got=$(g0_applied "$idx")
-        if [ -n "$got" ] && [ -n "$want" ] && [ "$got" = "$want" ]; then
+        if [ -n "$got" ] && [ -n "$want" ] && [ "$got" -ge "$want" ] 2>/dev/null; then
             say "$tag caught up applied=$got"
             return 0
         fi
@@ -137,13 +139,17 @@ wait_g0_caught_up() {
     bad "$tag catch-up applied=$got want=$want"
     return 1
 }
+
 # Print group-0 leader raft id (-1 if none). Tries every voter; a just-
 # restarted node may not know the leader yet even with ROOT in KV.
 g0_leader() {
     local idx st l
     for idx in 0 1 2; do
         st=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
-        l=$(echo "$st" | awk '/group 0 / {print $5}' | sed 's/leader=//' | head -1)
+        l=$(echo "$st" | awk '/group 0 / {
+            for (i = 1; i <= NF; i++)
+                if ($i ~ /^leader=/) { sub(/^leader=/, "", $i); print $i; exit }
+        }')
         if [ -n "$l" ] && [ "$l" != "-1" ]; then
             echo "$l"
             return 0
@@ -252,7 +258,7 @@ check_mkdir() {
 }
 
 # Last-link file UNLINK on the group-0 leader. Uses a dedicated name so
-# raft-smoke-f still exists after crash. RMDIR of the mkdir'd dir is INVAL.
+# raft-smoke-f still exists after crash.
 check_unlink() {
     local lid=$1
     local tag=$2
@@ -274,11 +280,42 @@ check_unlink() {
     out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-unlink ${ADDRS[$lid]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
     say "$tag unlink again: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag unlink again not NOT_FOUND"
-    if [ -n "${MKDIR_NAME:-}" ]; then
-        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-unlink ${ADDRS[$lid]}:${PORT} 1 $MKDIR_NAME" 2>/dev/null || true)
-        say "$tag unlink dir: $out"
-        echo "$out" | grep -q 'status=6' || bad "$tag unlink dir not INVAL"
+}
+
+# RMDIR is the same 2-shard txn as MKDIR. Dedicated name so MKDIR_NAME
+# still exists after crash. SIZE-class leftovers: rmdir of a file is INVAL.
+check_rmdir() {
+    local lid=$1
+    local tag=$2
+    local i out name got=""
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
     fi
+    for i in $(seq 0 31); do
+        name="raft-smoke-r$i"
+        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 $name 040755" 2>/dev/null || true)
+        say "$tag rmdir-prep mkdir $name: $out"
+        if echo "$out" | grep -q 'status=0'; then
+            got=$name
+            break
+        fi
+    done
+    [ -n "$got" ] || bad "$tag rmdir-prep mkdir none accepted"
+    [ -n "$got" ] || return
+    RMDIR_NAME=$got
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rmdir ${ADDRS[$lid]}:${PORT} 1 $got" 2>/dev/null || true)
+    say "$tag rmdir: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag rmdir not OK"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 $got" 2>/dev/null || true)
+    say "$tag lookup rmdir'd: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag lookup rmdir'd not NOT_FOUND"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rmdir ${ADDRS[$lid]}:${PORT} 1 $got" 2>/dev/null || true)
+    say "$tag rmdir again: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag rmdir again not NOT_FOUND"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rmdir ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    say "$tag rmdir file: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag rmdir file not INVAL"
 }
 
 # Mode/owner SETATTR on raft-smoke-f (stays after crash). SIZE is INVAL
@@ -390,8 +427,12 @@ MKDIR_NAME=""
 check_mkdir "$leader" "fresh"
 say "UNLINK file through Raft (fresh)"
 check_unlink "$leader" "fresh"
+say "RMDIR through Raft (fresh)"
+RMDIR_NAME=""
+check_rmdir "$leader" "fresh"
 
 # Pick a group-0 follower to kill (raft ids 0,1,2 minus leader).
+crash_leader=$leader
 follower_idx=""
 for rid in 0 1 2; do
     if [ "$rid" != "$leader" ]; then
@@ -419,7 +460,18 @@ done
 [ "$got" = 1 ] || bad "follower catch-up missed ROOT"
 wait_g0_caught_up "$follower_idx" "follower" || true
 
+# Kill the group-0 leader. Prefer a fresh status read; if the cluster is
+# still settling after the follower restart, fall back to who led before
+# that kill (HOSTS[-1] is fcstor006 — never a group-0 voter).
 leader=$(g0_leader)
+if [ -z "$leader" ] || [ "$leader" = "-1" ]; then
+    leader=$crash_leader
+    say "g0_leader missed after follower restart; using raft_id=$leader"
+fi
+if [ -z "$leader" ] || [ "$leader" = "-1" ]; then
+    bad "no group-0 leader before leader kill"
+    exit 1
+fi
 say "kill -9 leader raft_id=$leader"
 leader_idx=$leader
 ssh_to 10 "${HOSTS[$leader_idx]}" "
@@ -433,7 +485,10 @@ for i in $(seq 1 50); do
     for qidx in 0 1 2; do
         [ "$qidx" = "$leader_idx" ] && continue
         st=$(ssh_to 10 "${HOSTS[$qidx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$qidx]}:${PORT}" 2>/dev/null || true)
-        cand=$(echo "$st" | awk '/group 0 / {print $5}' | sed 's/leader=//' | head -1)
+        cand=$(echo "$st" | awk '/group 0 / {
+            for (i = 1; i <= NF; i++)
+                if ($i ~ /^leader=/) { sub(/^leader=/, "", $i); print $i; exit }
+        }')
         if [ -n "$cand" ] && [ "$cand" != "-1" ] && [ "$cand" != "$leader_idx" ]; then
             new_leader=$cand
             break 2
@@ -476,6 +531,19 @@ for i in $(seq 1 40); do
         break
     fi
 done
+# Serving LOOKUP can lag the status line by an election. Wait until a
+# miss is NOT_FOUND, not NOT_PRIMARY, before treating names as lost.
+ready=0
+for i in $(seq 1 20); do
+    leader=$(g0_leader)
+    [ -z "$leader" ] || [ "$leader" = "-1" ] && continue
+    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 no-such-efs-name" 2>/dev/null || true)
+    if echo "$out" | grep -q 'status=1'; then
+        ready=1
+        break
+    fi
+done
+[ "$ready" = 1 ] || bad "after-crash leader not serving LOOKUP"
 say "ReadIndex GETATTR/LOOKUP (after crash)"
 root_nlink=2
 [ -n "${MKDIR_NAME:-}" ] && root_nlink=3
@@ -500,6 +568,11 @@ fi
 out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
 say "after-crash lookup unlinked: $out"
 echo "$out" | grep -q 'status=1' || bad "after-crash unlinked name came back"
+if [ -n "${RMDIR_NAME:-}" ]; then
+    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $RMDIR_NAME" 2>/dev/null || true)
+    say "after-crash lookup rmdir: $out"
+    echo "$out" | grep -q 'status=1' || bad "after-crash rmdir'd name came back"
+fi
 
 if [ "$FAIL" -eq 0 ]; then
     say "PASS"

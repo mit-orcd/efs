@@ -18,8 +18,9 @@ sends you to — not the whole spec.
 > and LOOKUP/GETATTR go through ReadIndex + KV behind `EFS_MD_RAFT`
 > (10.5c-10), file CREATE is a single Raft entry on the dentry
 > shard (10.5c-11), MKDIR is a 2-shard txn (10.5c-12), last-link
-> file UNLINK is one Raft entry (10.5c-13), and mode/owner SETATTR is
-> one Raft entry (10.5c-14). Next: cross-group propose
+> file UNLINK is one Raft entry (10.5c-13), mode/owner SETATTR is
+> one Raft entry (10.5c-14), and empty LOCAL RMDIR is a 2-shard txn
+> (10.5c-15). Next: cross-group propose
 > (a node that is not leader of a participant group) and the rest of
 > the mutations behind the same flag.
 > [architecture.md §10](../architecture.md)
@@ -155,8 +156,16 @@ sends you to — not the whole spec.
 > Missing ino is NOT_FOUND without proposing; SIZE/MTIME/ATIME are
 > INVAL (truncate / utimens later). Same scratch smoke: chmod 0600 on
 > the created file, getattr confirms, crash catch-up keeps
-> `mode=0100600`. Remaining: cross-group propose, then the rest of
-> the mutations (not a cutover of `efs-test`, not step 11).
+> `mode=0100600`.
+>
+> **10.5c-15 is in (gated):** empty LOCAL RMDIR is the same 2-shard
+> txn as MKDIR (PREPARE/DECIDE/RESOLVE) on the production host.
+> HASHED/SPLITTING are INVAL/BUSY (dseq-on-used-lanes later). The
+> receiving node must lead every participant group. Same scratch
+> smoke: mkdir a dedicated name, rmdir, lookup miss, rmdir of a file
+> is INVAL, crash catch-up keeps the name gone. Remaining:
+> cross-group propose, then the rest of the mutations (not a cutover
+> of `efs-test`, not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
