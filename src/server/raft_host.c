@@ -2603,3 +2603,165 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     }
 }
 
+/* READDIR: ReadIndex the dir inode (and used dir-lane groups if HASHED),
+ * then scan. after_ino skips already-returned inos so the old wire cursor
+ * still works. SPLITTING is BUSY. */
+void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
+                              uint64_t after_ino,
+                              struct efs_msg_inode_readdir_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_row row;
+    struct efs_meta_dir_cursor cur;
+    struct efs_meta_dir_ent page[EFS_READDIR_MAX];
+    struct efs_meta_stat st;
+    uint32_t got = 0, i;
+    int hint = -1;
+    int rc;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running || parent == 0) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if (max_ents == 0 || max_ents > EFS_READDIR_MAX)
+        max_ents = EFS_READDIR_MAX;
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_read_inode_lanes(h, parent, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, parent, &row);
+    if (rc == EFS_OK && !S_ISDIR(row.mode))
+        rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK && row.layout == EFS_META_LAYOUT_SPLITTING)
+        rc = EFS_ERR_BUSY;
+    memset(&cur, 0, sizeof(cur));
+    while (rc == EFS_OK && !cur.done && out->count < max_ents) {
+        got = 0;
+        rc = efs_meta_apply_readdir(h->kv, parent, &cur, page, EFS_READDIR_MAX,
+                                    &got);
+        for (i = 0; i < got && rc == EFS_OK && out->count < max_ents; i++) {
+            if (page[i].d.ino <= after_ino)
+                continue;
+            rc = host_read_inode_lanes(h, page[i].d.ino, &hint);
+            if (rc != EFS_OK)
+                break;
+            rc = efs_meta_apply_getattr(h->kv, page[i].d.ino, host_txn_coord, h,
+                                        &st);
+            if (rc != EFS_OK)
+                break;
+            stat_to_inode(&st, &out->ents[out->count]);
+            out->ents[out->count].parent = parent;
+            strncpy(out->ents[out->count].name, page[i].name, EFS_MAX_NAME - 1);
+            out->count++;
+        }
+    }
+    pthread_mutex_unlock(&h->read_mu);
+    if (rc == EFS_OK)
+        out->status = EFS_INODE_RPC_OK;
+    else {
+        out->count = 0;
+        out->status = rc_to_inode_status(rc);
+    }
+}
+
+/* LOOKUP_PATH: hop-by-hop ReadIndex + lookup, same as the in-sim walk.
+ * Empty path is the start inode. Intermediate not-a-directory is INVAL. */
+void server_raft_host_lookup_path(efs_ino_t start, const char *path,
+                                  struct efs_msg_inode_lookup_path_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_row row;
+    struct efs_meta_dentry dent;
+    struct efs_meta_stat st;
+    efs_ino_t cur, last_parent = 0;
+    const char *p;
+    uint32_t nh = 0;
+    char last_name[EFS_MAX_NAME];
+    int hint = -1;
+    int rc;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    memset(last_name, 0, sizeof(last_name));
+    if (!h || !h->running) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    cur = start ? start : EFS_ROOT_INO;
+    p = path ? path : "";
+    while (*p == '/')
+        p++;
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_read_inode_lanes(h, cur, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, cur, &row);
+    if (rc == EFS_OK && *p == '\0') {
+        rc = efs_meta_apply_getattr(h->kv, cur, host_txn_coord, h, &st);
+        pthread_mutex_unlock(&h->read_mu);
+        set_inode_rc((struct efs_msg_inode_reply *)out, rc, hint);
+        if (rc == EFS_OK)
+            stat_to_inode(&st, &out->inode);
+        return;
+    }
+    while (rc == EFS_OK && *p && nh < EFS_LOOKUP_PATH_MAX_DEPTH) {
+        char name[EFS_MAX_NAME];
+        size_t nlen;
+        const char *s = p;
+        uint32_t dsh;
+        uint8_t dg, pg;
+
+        while (*p && *p != '/')
+            p++;
+        nlen = (size_t)(p - s);
+        while (*p == '/')
+            p++;
+        if (nlen == 0)
+            break;
+        if (nlen >= EFS_MAX_NAME) {
+            rc = EFS_ERR_NAMETOOLONG;
+            break;
+        }
+        memset(name, 0, sizeof(name));
+        memcpy(name, s, nlen);
+        if (!S_ISDIR(row.mode)) {
+            rc = EFS_ERR_INVAL;
+            break;
+        }
+        pg = efs_raft_shard_group(efs_kv_inode_shard(cur));
+        dsh = efs_kv_dentry_shard(cur, name, row.layout);
+        dg = efs_raft_shard_group(dsh);
+        if (dg != pg)
+            rc = host_read_index(h, dg, &hint);
+        if (rc == EFS_OK)
+            rc = efs_meta_apply_lookup(h->kv, cur, name, &dent);
+        if (rc == EFS_OK)
+            rc = host_read_inode_lanes(h, dent.ino, &hint);
+        if (rc == EFS_OK)
+            rc = efs_meta_apply_get_inode(h->kv, dent.ino, &row);
+        if (rc == EFS_OK) {
+            last_parent = cur;
+            memcpy(last_name, name, EFS_MAX_NAME);
+            out->ancestors[nh].ino = row.ino;
+            out->ancestors[nh].mode = row.mode;
+            out->ancestors[nh].uid = row.uid;
+            out->ancestors[nh].gid = row.gid;
+            cur = row.ino;
+            nh++;
+        }
+    }
+    if (rc == EFS_OK && *p)
+        rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK && nh > 0) {
+        out->ancestor_count = nh > 1 ? nh - 1 : 0;
+        rc = efs_meta_apply_getattr(h->kv, cur, host_txn_coord, h, &st);
+    }
+    pthread_mutex_unlock(&h->read_mu);
+    set_inode_rc((struct efs_msg_inode_reply *)out, rc, hint);
+    if (rc == EFS_OK) {
+        stat_to_inode(&st, &out->inode);
+        out->inode.parent = last_parent;
+        strncpy(out->inode.name, last_name, EFS_MAX_NAME - 1);
+    }
+}
+

@@ -1148,7 +1148,8 @@ Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) and 10.5c-13
 10.5c-15 (empty LOCAL RMDIR as a 2-shard txn) and 10.5c-16 (LINK as a
 2-shard txn) and 10.5c-17 (nlink>1 UNLINK as a 2-shard txn) and
 10.5c-18 (utimens inode fence) and 10.5c-19 (same-dir LOCAL file
-RENAME as a 2-shard txn) are gated on a
+RENAME as a 2-shard txn) and 10.5c-20 (READDIR/LOOKUP_PATH via
+ReadIndex + KV) are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cross-group propose
 and the rest of the mutations; writes after. Not a
 cutover of the live table; not step 11. The KV engine is
@@ -1266,8 +1267,9 @@ sends you to — not the whole spec.
 > one Raft entry (10.5c-14), empty LOCAL RMDIR is a 2-shard txn
 > (10.5c-15), LINK is a 2-shard txn (10.5c-16), nlink>1 UNLINK
 > is a 2-shard txn (10.5c-17), utimens is the inode fence
-> (10.5c-18), and same-dir LOCAL file RENAME is a txn
-> (10.5c-19). Next: cross-group propose
+> (10.5c-18), same-dir LOCAL file RENAME is a txn
+> (10.5c-19), and READDIR/LOOKUP_PATH are ReadIndex + KV
+> (10.5c-20). Next: cross-group propose
 > (a node that is not leader of a participant group) and the rest of
 > the mutations behind the same flag.
 > [architecture.md §10](#architecture)
@@ -1445,7 +1447,16 @@ sends you to — not the whole spec.
 > `raft-smoke-n` → `raft-smoke-m`, old gone, new stays through crash.
 > Restart persists `last_applied` without compacting the log
 > (`efs_raft_restore_applied`) so CREATE is not replayed onto a KV
-> that already renamed the name. Remaining: cross-group
+> that already renamed the name.
+>
+> **10.5c-20 is in (gated):** READDIR and LOOKUP_PATH on the production
+> host go through ReadIndex + applied KV (same as 10.5c-10 LOOKUP/
+> GETATTR). HASHED dir lanes are ReadIndexed via
+> `host_read_inode_lanes`; SPLITTING READDIR is BUSY this slice.
+> LOOKUP_PATH is hop-by-hop (dentry shard ReadIndex if it differs,
+> then child lanes). Same scratch smoke: ROOT listing contains
+> `f`/`m`/`l`/mkdir and not `n`/`u`/`h`; `/raft-smoke-f` and
+> `/raft-smoke-m` resolve; crash keeps that. Remaining: cross-group
 > propose, then the rest of the
 > mutations (not a cutover of `efs-test`, not step 11).
 >
@@ -4425,6 +4436,17 @@ CREATE is not replayed onto a KV that already renamed the name.
 Flag off is a no-op. Gate: `tests/stress/raft_host_smoke.sh` —
 `raft-smoke-n` → `raft-smoke-m`, old NOT_FOUND, new OK, old stays
 gone after kill -9 catch-up.
+
+**Step 10.5c-20 (gated): READDIR and LOOKUP_PATH through ReadIndex +
+KV.** When `EFS_MD_RAFT=1`, `INODE_READDIR` and `INODE_LOOKUP_PATH`
+are served from the applied KV (not the in-memory table). READDIR
+ReadIndexes the directory (and HASHED used dir-lane groups) then
+scans; SPLITTING is BUSY. LOOKUP_PATH walks hop-by-hop with a
+ReadIndex on each dentry shard. Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — ROOT listing contains the
+created/renamed/link/mkdir names and not the unlinked ones;
+`/raft-smoke-f` and `/raft-smoke-m` resolve; listing survives
+kill -9 catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
@@ -4897,7 +4919,8 @@ CREATE as one Raft entry (10.5c-11) and MKDIR as a 2-shard txn
 (10.5c-12) and last-link file UNLINK (10.5c-13) and mode/owner
 SETATTR (10.5c-14) and empty LOCAL RMDIR (10.5c-15) and LINK
 (10.5c-16) and nlink>1 UNLINK (10.5c-17) and utimens
-(10.5c-18) and same-dir LOCAL file RENAME (10.5c-19) are gated on the same
+(10.5c-18) and same-dir LOCAL file RENAME (10.5c-19) and
+READDIR/LOOKUP_PATH (10.5c-20) are gated on the same
 smoke. What remains is cross-group
 propose and the rest of the mutations, then the cutover — not new
 design.

@@ -1131,7 +1131,8 @@ Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) and 10.5c-13
 10.5c-15 (empty LOCAL RMDIR as a 2-shard txn) and 10.5c-16 (LINK as a
 2-shard txn) and 10.5c-17 (nlink>1 UNLINK as a 2-shard txn) and
 10.5c-18 (utimens inode fence) and 10.5c-19 (same-dir LOCAL file
-RENAME as a 2-shard txn) are gated on a
+RENAME as a 2-shard txn) and 10.5c-20 (READDIR/LOOKUP_PATH via
+ReadIndex + KV) are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cross-group propose
 and the rest of the mutations; writes after. Not a
 cutover of the live table; not step 11. The KV engine is

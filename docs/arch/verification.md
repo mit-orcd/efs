@@ -440,6 +440,17 @@ CREATE is not replayed onto a KV that already renamed the name.
 Flag off is a no-op. Gate: `tests/stress/raft_host_smoke.sh` —
 `raft-smoke-n` → `raft-smoke-m`, old NOT_FOUND, new OK, old stays
 gone after kill -9 catch-up.
+
+**Step 10.5c-20 (gated): READDIR and LOOKUP_PATH through ReadIndex +
+KV.** When `EFS_MD_RAFT=1`, `INODE_READDIR` and `INODE_LOOKUP_PATH`
+are served from the applied KV (not the in-memory table). READDIR
+ReadIndexes the directory (and HASHED used dir-lane groups) then
+scans; SPLITTING is BUSY. LOOKUP_PATH walks hop-by-hop with a
+ReadIndex on each dentry shard. Flag off is a no-op. Gate:
+`tests/stress/raft_host_smoke.sh` — ROOT listing contains the
+created/renamed/link/mkdir names and not the unlinked ones;
+`/raft-smoke-f` and `/raft-smoke-m` resolve; listing survives
+kill -9 catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 

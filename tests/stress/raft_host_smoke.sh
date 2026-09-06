@@ -12,11 +12,14 @@
 # txn (empty LOCAL dir, lookup miss), LINK as a 2-shard txn (nlink=2,
 # dest lookup, directory is INVAL), nlink>1 UNLINK of a dedicated extra
 # name (lookup miss, surviving nlink=2), utimens mtime fence, same-dir
-# LOCAL file RENAME (old name gone, new name present), kill -9 a follower
+# LOCAL file RENAME (old name gone, new name present), READDIR of ROOT
+# (created/renamed/link/mkdir names present, unlinked names absent),
+# LOOKUP_PATH of those names, kill -9 a follower
 # then the leader, restart catch-up keeps ROOT, the created file (new
 # mode, nlink=2, utimens mtime), the mkdir, the extra link name, the
 # unlinked name stays gone, the rmdir'd name stays gone, the nlink>1
-# unlinked name stays gone, and the renamed name stays.
+# unlinked name stays gone, the renamed name stays, and READDIR /
+# LOOKUP_PATH still match.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
 PORT="${PORT:-19820}"
@@ -162,11 +165,55 @@ g0_leader() {
     echo "-1"
 }
 
+# First group-0 voter that actually serves ROOT GETATTR (status=0).
+# raft-status leader= can lag an election; inode RPCs are the truth.
+g0_serving() {
+    local idx out
+    for idx in 0 1 2; do
+        out=$(ssh_to 5 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$idx]}:${PORT} 1" 2>/dev/null || true)
+        if echo "$out" | grep -q 'status=0'; then
+            echo "$idx"
+            return 0
+        fi
+    done
+    echo "-1"
+}
+
 root_on() {
     local idx=$1
     local st
     st=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
     echo "$st" | awk '/^node / {print $3}' | sed 's/root=//'
+}
+
+# efs-mgmt against the current group-0 leader. A restart can steal
+# leadership between two RPCs (GETATTR OK, then LOOKUP NOT_PRIMARY);
+# refresh and retry instead of treating 7 as a missing name.
+g0_mgmt() {
+    local cmd=$1
+    local i out lid
+    shift
+    lid=${leader:-}
+    for i in $(seq 1 8); do
+        if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+            lid=$(g0_serving)
+        fi
+        if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+            lid=$(g0_leader)
+        fi
+        if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+            continue
+        fi
+        out=$(ssh_to 5 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt $cmd ${ADDRS[$lid]}:${PORT} $*" 2>/dev/null || true)
+        if echo "$out" | grep -q 'status=7'; then
+            lid=$(g0_serving)
+            continue
+        fi
+        leader=$lid
+        printf '%s\n' "$out"
+        return 0
+    done
+    printf '%s\n' "${out:-}"
 }
 
 # ReadIndex GETATTR/LOOKUP against group-0. Leader must serve ROOT;
@@ -181,22 +228,25 @@ check_reads() {
         bad "$tag: no leader"
         return
     fi
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} 1" 2>/dev/null || true)
+    leader=$lid
+    out=$(g0_mgmt raft-getattr 1)
+    lid=$leader
     say "$tag getattr leader=$lid: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr not OK"
     echo "$out" | grep -q "nlink=$nlink" || bad "$tag getattr nlink"
     echo "$out" | grep -q 'mode=040755' || bad "$tag getattr not dir"
     fid=""
     for rid in 0 1 2; do
-        if [ "$rid" != "$lid" ]; then
+        [ "$rid" = "$lid" ] && continue
+        out=$(ssh_to 10 "${HOSTS[$rid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$rid]}:${PORT} 1" 2>/dev/null || true)
+        say "$tag getattr follower=$rid: $out"
+        if echo "$out" | grep -q 'status=7'; then
             fid=$rid
             break
         fi
     done
-    out=$(ssh_to 10 "${HOSTS[$fid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$fid]}:${PORT} 1" 2>/dev/null || true)
-    say "$tag getattr follower=$fid: $out"
-    echo "$out" | grep -q 'status=7' || bad "$tag follower not NOT_PRIMARY"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 no-such-efs-name" 2>/dev/null || true)
+    [ -n "$fid" ] || bad "$tag no follower NOT_PRIMARY"
+    out=$(g0_mgmt raft-lookup 1 no-such-efs-name)
     say "$tag lookup miss: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag lookup miss not NOT_FOUND"
 }
@@ -490,6 +540,57 @@ check_setattr() {
     echo "$out" | grep -q 'status=6' || bad "$tag setattr size not INVAL"
 }
 
+# READDIR ROOT + LOOKUP_PATH. Run after rename so the listing is final.
+check_readdir_path() {
+    local lid=$1
+    local tag=$2
+    local out
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    leader=$lid
+    out=$(g0_mgmt raft-readdir 1)
+    lid=$leader
+    say "$tag readdir: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag readdir not OK"
+    echo "$out" | grep -q 'raft-smoke-f' || bad "$tag readdir missing f"
+    if [ -n "${RENAME_NAME:-}" ]; then
+        echo "$out" | grep -q "$RENAME_NAME" || bad "$tag readdir missing renamed"
+    fi
+    if [ -n "${RENAME_OLD:-}" ]; then
+        echo "$out" | grep -q "$RENAME_OLD" && bad "$tag readdir still has rename-old"
+    fi
+    if [ -n "${LINK_NAME:-}" ]; then
+        echo "$out" | grep -q "$LINK_NAME" || bad "$tag readdir missing link"
+    fi
+    if [ -n "${MKDIR_NAME:-}" ]; then
+        echo "$out" | grep -q "$MKDIR_NAME" || bad "$tag readdir missing mkdir"
+    fi
+    echo "$out" | grep -q 'raft-smoke-u' && bad "$tag readdir still has unlinked"
+    if [ -n "${UNLINK_NLINK_NAME:-}" ]; then
+        echo "$out" | grep -q "$UNLINK_NLINK_NAME" && bad "$tag readdir still has nlink-unlinked"
+    fi
+    out=$(g0_mgmt raft-lookup-path /raft-smoke-f)
+    say "$tag lookup-path f: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag lookup-path f not OK"
+    echo "$out" | grep -q 'name=raft-smoke-f' || bad "$tag lookup-path f name"
+    if [ -n "${RENAME_NAME:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$RENAME_NAME")
+        say "$tag lookup-path renamed: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag lookup-path renamed not OK"
+        echo "$out" | grep -q "name=$RENAME_NAME" || bad "$tag lookup-path renamed name"
+    fi
+    if [ -n "${RENAME_OLD:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$RENAME_OLD")
+        say "$tag lookup-path rename-old: $out"
+        echo "$out" | grep -q 'status=1' || bad "$tag lookup-path rename-old not NOT_FOUND"
+    fi
+    out=$(g0_mgmt raft-lookup-path /no-such-efs-name)
+    say "$tag lookup-path miss: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag lookup-path miss not NOT_FOUND"
+}
+
 say "build 4 nodes (scratch, not live cluster)"
 bfail=0
 bpids=()
@@ -581,6 +682,8 @@ say "RENAME through Raft (fresh)"
 RENAME_NAME=""
 RENAME_OLD=""
 check_rename "$leader" "fresh"
+say "READDIR/LOOKUP_PATH through ReadIndex (fresh)"
+check_readdir_path "$leader" "fresh"
 
 # Pick a group-0 follower to kill (raft ids 0,1,2 minus leader).
 crash_leader=$leader
@@ -683,27 +786,28 @@ for i in $(seq 1 40); do
     fi
 done
 after_lid=$leader
-# Serving LOOKUP can lag the status line by an election. Wait until a
-# miss is NOT_FOUND, not NOT_PRIMARY, before treating names as lost.
-# Never assign -1 over a known leader — HOSTS[-1] is fcstor006.
+# Probe every voter for who actually serves ROOT GETATTR. The status
+# line's leader= can name a node that already stepped down.
 ready=0
 for i in $(seq 1 40); do
-    cur=$(g0_leader)
+    cur=$(g0_serving)
     if [ -z "$cur" ] || [ "$cur" = "-1" ]; then
         cur=$after_lid
     fi
     if [ -z "$cur" ] || [ "$cur" = "-1" ]; then
         continue
     fi
-    out=$(ssh_to 10 "${HOSTS[$cur]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$cur]}:${PORT} 1 no-such-efs-name" 2>/dev/null || true)
+    out=$(ssh_to 5 "${HOSTS[$cur]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$cur]}:${PORT} 1 no-such-efs-name" 2>/dev/null || true)
     if echo "$out" | grep -q 'status=1'; then
         leader=$cur
         ready=1
+        say "after-crash serving raft_id=$leader"
         break
     fi
 done
-[ "$ready" = 1 ] || leader=$after_lid
-[ "$ready" = 1 ] || bad "after-crash leader not serving LOOKUP"
+[ "$ready" = 1 ] || leader=$(g0_serving)
+[ "$ready" = 1 ] || [ "$leader" != "-1" ] || leader=$after_lid
+[ "$ready" = 1 ] || bad "after-crash leader not serving LOOKUP/GETATTR"
 if [ -z "$leader" ] || [ "$leader" = "-1" ]; then
     bad "after-crash no group-0 leader"
     say "FAIL count=$FAIL"
@@ -713,12 +817,12 @@ say "ReadIndex GETATTR/LOOKUP (after crash)"
 root_nlink=2
 [ -n "${MKDIR_NAME:-}" ] && root_nlink=3
 check_reads "$leader" "after-crash" "$root_nlink"
-out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+out=$(g0_mgmt raft-lookup 1 raft-smoke-f)
 say "after-crash lookup created: $out"
 echo "$out" | grep -q 'status=0' || bad "after-crash created name missing"
 ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
 if [ -n "$ino" ] && [ "$ino" != "0" ]; then
-    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$leader]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(g0_mgmt raft-getattr "$ino")
     say "after-crash getattr created: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash created getattr missing"
     echo "$out" | grep -q 'mode=0100600' || bad "after-crash setattr mode lost"
@@ -730,39 +834,41 @@ else
     bad "after-crash created ino missing"
 fi
 if [ -n "${MKDIR_NAME:-}" ]; then
-    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $MKDIR_NAME" 2>/dev/null || true)
+    out=$(g0_mgmt raft-lookup 1 "$MKDIR_NAME")
     say "after-crash lookup mkdir: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash mkdir name missing"
 fi
 if [ -n "${LINK_NAME:-}" ]; then
-    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $LINK_NAME" 2>/dev/null || true)
+    out=$(g0_mgmt raft-lookup 1 "$LINK_NAME")
     say "after-crash lookup linked: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash linked name missing"
     echo "$out" | grep -q 'nlink=2' || bad "after-crash linked nlink"
 fi
-out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
+out=$(g0_mgmt raft-lookup 1 raft-smoke-u)
 say "after-crash lookup unlinked: $out"
 echo "$out" | grep -q 'status=1' || bad "after-crash unlinked name came back"
 if [ -n "${RMDIR_NAME:-}" ]; then
-    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $RMDIR_NAME" 2>/dev/null || true)
+    out=$(g0_mgmt raft-lookup 1 "$RMDIR_NAME")
     say "after-crash lookup rmdir: $out"
     echo "$out" | grep -q 'status=1' || bad "after-crash rmdir'd name came back"
 fi
 if [ -n "${UNLINK_NLINK_NAME:-}" ]; then
-    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $UNLINK_NLINK_NAME" 2>/dev/null || true)
+    out=$(g0_mgmt raft-lookup 1 "$UNLINK_NLINK_NAME")
     say "after-crash lookup nlink-unlinked: $out"
     echo "$out" | grep -q 'status=1' || bad "after-crash nlink-unlinked name came back"
 fi
 if [ -n "${RENAME_NAME:-}" ]; then
-    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $RENAME_NAME" 2>/dev/null || true)
+    out=$(g0_mgmt raft-lookup 1 "$RENAME_NAME")
     say "after-crash lookup renamed: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash renamed name missing"
 fi
 if [ -n "${RENAME_OLD:-}" ]; then
-    out=$(ssh_to 10 "${HOSTS[$leader]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$leader]}:${PORT} 1 $RENAME_OLD" 2>/dev/null || true)
+    out=$(g0_mgmt raft-lookup 1 "$RENAME_OLD")
     say "after-crash lookup rename-old: $out"
     echo "$out" | grep -q 'status=1' || bad "after-crash rename old name came back"
 fi
+say "ReadIndex READDIR/LOOKUP_PATH (after crash)"
+check_readdir_path "$leader" "after-crash"
 
 if [ "$FAIL" -eq 0 ]; then
     say "PASS"

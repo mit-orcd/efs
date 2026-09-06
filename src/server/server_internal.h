@@ -729,6 +729,11 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
 void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                                 efs_ino_t new_parent, const char *new_name,
                                 struct efs_msg_inode_reply *out);
+void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
+                              uint64_t after_ino,
+                              struct efs_msg_inode_readdir_reply *out);
+void server_raft_host_lookup_path(efs_ino_t start, const char *path,
+                                  struct efs_msg_inode_lookup_path_reply *out);
 
 /* Start the background cluster rejoin retry thread. */
 void server_start_rejoin(struct efsd_server *s);

@@ -1640,6 +1640,111 @@ static int cmd_raft_rename(int argc, char **argv)
     return 0;
 }
 
+static int cmd_raft_readdir(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    int fd;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_msg_inode_readdir req;
+    struct efs_msg_inode_readdir_reply *r;
+    uint32_t i;
+
+    if (argc < 2) {
+        fprintf(stderr, "usage: raft-readdir <node:port> <parent> [after_ino]\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    memset(&req, 0, sizeof(req));
+    req.parent = (efs_ino_t)strtoull(argv[1], NULL, 0);
+    req.max_ents = EFS_READDIR_MAX;
+    if (argc >= 3)
+        req.after_ino = strtoull(argv[2], NULL, 0);
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_INODE_READDIR, &req, sizeof(req), &reply_type,
+                  &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_INODE_READDIR_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to raft-readdir\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    printf("raft-readdir status=%u count=%u names=", r->status, r->count);
+    for (i = 0; i < r->count; i++) {
+        if (i)
+            printf(",");
+        printf("%s", r->ents[i].name);
+    }
+    printf("\n");
+    free(reply);
+    return 0;
+}
+
+static int cmd_raft_lookup_path(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    int fd;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_msg_inode_lookup_path req;
+    struct efs_msg_inode_lookup_path_reply *r;
+
+    if (argc < 2) {
+        fprintf(stderr, "usage: raft-lookup-path <node:port> <path> [start]\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    memset(&req, 0, sizeof(req));
+    strncpy(req.path, argv[1], sizeof(req.path) - 1);
+    if (argc >= 3)
+        req.start = (efs_ino_t)strtoull(argv[2], NULL, 0);
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_INODE_LOOKUP_PATH, &req, sizeof(req),
+                  &reply_type, &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_INODE_LOOKUP_PATH_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to raft-lookup-path\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    printf("raft-lookup-path status=%u primary=%u path=%s start=%llu "
+           "ino=%llu name=%s mode=0%o ancestors=%u\n",
+           r->status, r->primary_id, req.path,
+           (unsigned long long)req.start,
+           (unsigned long long)r->inode.ino, r->inode.name, r->inode.mode,
+           r->ancestor_count);
+    free(reply);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -1666,7 +1771,9 @@ int main(int argc, char **argv)
                     "  raft-rmdir <node:port> <parent> <name>\n"
                     "  raft-link <node:port> <src_ino> <parent> <name>\n"
                     "  raft-setattr <node:port> <ino> <mask> [mode|mtime] [uid|atime] [gid]\n"
-                    "  raft-rename <node:port> <old_parent> <old_name> <new_parent> <new_name>\n",
+                    "  raft-rename <node:port> <old_parent> <old_name> <new_parent> <new_name>\n"
+                    "  raft-readdir <node:port> <parent> [after_ino]\n"
+                    "  raft-lookup-path <node:port> <path> [start]\n",
             argv[0]);
     return 1;
 }
@@ -1716,6 +1823,10 @@ int main(int argc, char **argv)
         return cmd_raft_setattr(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-rename") == 0)
         return cmd_raft_rename(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-readdir") == 0)
+        return cmd_raft_readdir(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-lookup-path") == 0)
+        return cmd_raft_lookup_path(argc - 2, argv + 2);
 
     fprintf(stderr, "Unknown command: %s\n", cmd);
     return 1;
