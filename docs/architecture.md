@@ -1135,9 +1135,10 @@ RENAME as a 2-shard txn) and 10.5c-20 (READDIR/LOOKUP_PATH via
 ReadIndex + KV) and 10.5c-21 (SETATTR SIZE / chunk-aligned truncate)
 and 10.5c-22 (chunk publish + GETCHUNKS)
 and 10.5c-23 (unaligned truncate tail CAS)
+and 10.5c-24 (cross-group propose: MKFS submit + inode bounce)
 are gated on a
-scratch cluster behind `EFS_MD_RAFT`. Remaining: cross-group propose
-and the rest of the mutations. Not a
+scratch cluster behind `EFS_MD_RAFT`. Remaining: O_APPEND,
+SYMLINK, directory rename, HASHED dest CREATE, HOLD. Not a
 cutover of the live table; not step 11. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key

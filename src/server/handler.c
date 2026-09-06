@@ -3799,7 +3799,10 @@ send_reply:
         }
         case EFS_MSG_RAFT_MKFS: {
             struct efs_msg_raft_mkfs_reply r;
-            server_raft_host_mkfs(&r);
+            if (payload_len >= 1)
+                server_raft_host_submit(payload, payload_len, &r);
+            else
+                server_raft_host_mkfs(&r);
             efs_conn_send_msg(conn, EFS_MSG_RAFT_MKFS_REPLY, &r, sizeof(r));
             break;
         }

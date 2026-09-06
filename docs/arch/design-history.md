@@ -422,8 +422,9 @@ SETATTR (10.5c-14) and empty LOCAL RMDIR (10.5c-15) and LINK
 (10.5c-18) and same-dir LOCAL file RENAME (10.5c-19) and
 READDIR/LOOKUP_PATH (10.5c-20) and SETATTR SIZE / chunk-aligned
 truncate (10.5c-21) and chunk publish + GETCHUNKS (10.5c-22) and
-unaligned truncate tail CAS (10.5c-23) are gated
+unaligned truncate tail CAS (10.5c-23) and cross-group propose
+(10.5c-24, MKFS submit + inode bounce, no new opcode) are gated
 on the same
-smoke. What remains is cross-group
-propose and the rest of the mutations, then the cutover — not new
+smoke. What remains is O_APPEND, SYMLINK, directory rename,
+HASHED dest CREATE, HOLD, then the cutover — not new
 design.

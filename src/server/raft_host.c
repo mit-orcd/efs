@@ -26,6 +26,10 @@
 #define HOST_HB_TICKS      10
 #define HOST_ELECT_BASE    100
 #define HOST_ELECT_SPREAD  20
+/* Pump holds h->mu across cfg.send. A dead peer must not sit on the
+ * 30s pool SO_RCVTIMEO or election cannot tick. Restore the pool
+ * timeout before release so bounce RPCs keep the long budget. */
+#define HOST_SEND_IO_MS    250
 #define HOST_INBOX_MAX     256
 #define HOST_ENCODE_STACK  (64 * 1024)
 #define HOST_NGROUPS       2
@@ -200,6 +204,10 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
         free(heap);
         return EFS_OK;
     }
+    if (pc->kind == EFS_CONN_TCP && pc->fd >= 0) {
+        efs_set_recv_timeout(pc->fd, HOST_SEND_IO_MS);
+        efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
+    }
     if (efs_conn_send_msg(pc, EFS_MSG_RAFT, buf, len) != 0) {
         server_peer_conn_drop(host, port, pc);
         free(heap);
@@ -211,6 +219,10 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
         server_peer_conn_drop(host, port, pc);
         free(heap);
         return EFS_OK;
+    }
+    if (pc->kind == EFS_CONN_TCP && pc->fd >= 0) {
+        efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+        efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
     }
     free(reply);
     server_peer_conn_release(host, port, pc);
@@ -612,16 +624,161 @@ static struct efs_raft *group_raft(struct efs_raft_host *h, uint8_t group)
     return NULL;
 }
 
+static struct host_group *group_slot(struct efs_raft_host *h, uint8_t group)
+{
+    int i;
+    for (i = 0; i < HOST_NGROUPS; i++) {
+        if (h->g[i].group == group)
+            return &h->g[i];
+    }
+    return NULL;
+}
+
+static int host_hosts(struct efs_raft_host *h, uint8_t group)
+{
+    return group_raft(h, group) != NULL;
+}
+
+/* First peer other than self (and skip) that votes in every listed group.
+ * Dual-hosts of {0,2} are raft ids 1 and 2 at n=4. Never returns self. */
+static int host_pick_peer(struct efs_raft_host *h, const uint8_t *groups, int ng,
+                          int skip)
+{
+    int rid, i;
+
+    for (rid = 0; rid < h->n; rid++) {
+        int ok = 1;
+        if (rid == h->raft_id || rid == skip)
+            continue;
+        for (i = 0; i < ng; i++) {
+            struct host_group *s = group_slot(h, groups[i]);
+            uint32_t voters = s ? s->voters : group_voters(groups[i], h->n);
+            if (!hosts_group(rid, voters)) {
+                ok = 0;
+                break;
+            }
+        }
+        if (ok)
+            return rid;
+    }
+    return -1;
+}
+
+static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
+                           const uint8_t *cmd, uint32_t clen,
+                           struct efs_msg_raft_mkfs_reply *rep)
+{
+    uint8_t payload[1 + HOST_CMD_MAX];
+    uint32_t plen;
+    char host[64];
+    uint16_t port = 0;
+    struct efs_conn *pc;
+    uint8_t rtype = 0;
+    void *reply = NULL;
+    uint32_t rlen = 0;
+
+    memset(rep, 0, sizeof(*rep));
+    if (rid < 0 || rid == h->raft_id || clen > HOST_CMD_MAX)
+        return EFS_ERR_INVAL;
+    payload[0] = group;
+    if (clen)
+        memcpy(payload + 1, cmd, clen);
+    plen = 1u + clen;
+    if (peer_addr(h, rid, host, sizeof(host), &port) != 0)
+        return EFS_ERR_NOT_PRIMARY;
+    pc = server_peer_conn_get(host, port);
+    if (!pc)
+        return EFS_ERR_BUSY;
+    if (efs_conn_send_msg(pc, EFS_MSG_RAFT_MKFS, payload, plen) != 0) {
+        server_peer_conn_drop(host, port, pc);
+        return EFS_ERR_IO;
+    }
+    if (efs_conn_recv_msg(pc, &rtype, &reply, &rlen) != 0 ||
+        rtype != EFS_MSG_RAFT_MKFS_REPLY || rlen < sizeof(*rep)) {
+        free(reply);
+        server_peer_conn_drop(host, port, pc);
+        return EFS_ERR_IO;
+    }
+    memcpy(rep, reply, sizeof(*rep));
+    free(reply);
+    server_peer_conn_release(host, port, pc);
+    return EFS_OK;
+}
+
+/* Submit cmd (or ReadIndex if clen==0) to the group's leader. Never targets
+ * self. prefer_rid is a hint; NOT_PRIMARY replies retry leader_hint. */
+static int host_remote_cmd(struct efs_raft_host *h, uint8_t group,
+                           const uint8_t *cmd, uint32_t clen,
+                           struct efs_msg_raft_mkfs_reply *rep, int prefer_rid)
+{
+    int attempt, rid, skip = -1, rc;
+
+    for (attempt = 0; attempt < h->n + 2; attempt++) {
+        rid = prefer_rid;
+        if (rid < 0 || rid == h->raft_id || rid == skip)
+            rid = host_pick_peer(h, &group, 1, skip);
+        if (rid < 0 || rid == h->raft_id)
+            return EFS_ERR_NOT_PRIMARY;
+        rc = host_rpc_submit(h, rid, group, cmd, clen, rep);
+        if (rc != EFS_OK) {
+            skip = rid;
+            prefer_rid = -1;
+            continue;
+        }
+        if (rep->rc == EFS_OK)
+            return EFS_OK;
+        if (rep->rc == EFS_ERR_NOT_PRIMARY && rep->leader_hint >= 0 &&
+            rep->leader_hint != h->raft_id && rep->leader_hint != rid) {
+            prefer_rid = rep->leader_hint;
+            skip = rid;
+            continue;
+        }
+        return rep->rc != 0 ? rep->rc : EFS_ERR_NOT_PRIMARY;
+    }
+    return EFS_ERR_NOT_PRIMARY;
+}
+
+static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
+                             uint64_t idx, int *leader_hint);
+
 /* Drop h->mu while waiting: the pump must tick for heartbeats to land.
- * Caller serializes with read_mu. Sets *leader_hint to the raft id. */
+ * Caller serializes with read_mu. A follower ReadIndexes the leader
+ * (RAFT_MKFS group-only) then waits until the local replica has applied
+ * that index. Unhosted groups stay NOT_PRIMARY — the KV is not here. */
 static int host_read_index(struct efs_raft_host *h, uint8_t group,
                            int *leader_hint)
 {
     int begun = 0;
     int t;
+    int lid = -1;
 
     if (leader_hint)
         *leader_hint = -1;
+    pthread_mutex_lock(&h->mu);
+    {
+        struct efs_raft *r = group_raft(h, group);
+        if (!r) {
+            pthread_mutex_unlock(&h->mu);
+            return EFS_ERR_NOT_PRIMARY;
+        }
+        lid = efs_raft_leader(r);
+        if (leader_hint)
+            *leader_hint = lid;
+        if (efs_raft_role(r) != EFS_RAFT_LEADER) {
+            pthread_mutex_unlock(&h->mu);
+            {
+                struct efs_msg_raft_mkfs_reply rep;
+                int rc = host_remote_cmd(h, group, NULL, 0, &rep, lid);
+                if (rc != EFS_OK)
+                    return rc;
+                if (leader_hint && rep.leader_hint >= 0)
+                    *leader_hint = rep.leader_hint;
+                return host_wait_applied(h, group, rep.index, leader_hint);
+            }
+        }
+    }
+    pthread_mutex_unlock(&h->mu);
+
     for (t = 0; t < HOST_READ_TRIES; t++) {
         struct efs_raft *r;
         int rc;
@@ -635,8 +792,19 @@ static int host_read_index(struct efs_raft_host *h, uint8_t group,
         if (leader_hint)
             *leader_hint = efs_raft_leader(r);
         if (efs_raft_role(r) != EFS_RAFT_LEADER) {
+            lid = efs_raft_leader(r);
             pthread_mutex_unlock(&h->mu);
-            return EFS_ERR_NOT_PRIMARY;
+            if (lid == h->raft_id)
+                return EFS_ERR_NOT_PRIMARY;
+            {
+                struct efs_msg_raft_mkfs_reply rep;
+                int rc2 = host_remote_cmd(h, group, NULL, 0, &rep, lid);
+                if (rc2 != EFS_OK)
+                    return rc2;
+                if (leader_hint && rep.leader_hint >= 0)
+                    *leader_hint = rep.leader_hint;
+                return host_wait_applied(h, group, rep.index, leader_hint);
+            }
         }
         if (!begun) {
             rc = efs_raft_read_begin(r);
@@ -667,15 +835,12 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
         pthread_mutex_lock(&h->mu);
         r = group_raft(h, group);
         if (!r) {
+            /* No local replica: the leader already waited in submit. */
             pthread_mutex_unlock(&h->mu);
-            return EFS_ERR_NOT_PRIMARY;
+            return EFS_OK;
         }
         if (leader_hint)
             *leader_hint = efs_raft_leader(r);
-        if (efs_raft_role(r) != EFS_RAFT_LEADER) {
-            pthread_mutex_unlock(&h->mu);
-            return EFS_ERR_NOT_PRIMARY;
-        }
         if (efs_raft_applied(r) >= idx) {
             pthread_mutex_unlock(&h->mu);
             return EFS_OK;
@@ -692,22 +857,30 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
 {
     struct efs_raft *r;
     int rc;
+    int lid = -1;
+    struct efs_msg_raft_mkfs_reply rep;
 
     pthread_mutex_lock(&h->mu);
     r = group_raft(h, group);
-    if (!r) {
-        pthread_mutex_unlock(&h->mu);
-        return EFS_ERR_NOT_PRIMARY;
+    if (r) {
+        lid = efs_raft_leader(r);
+        if (leader_hint)
+            *leader_hint = lid;
+        if (efs_raft_role(r) == EFS_RAFT_LEADER) {
+            rc = efs_raft_propose(r, cmd, clen, idx);
+            pthread_mutex_unlock(&h->mu);
+            return rc;
+        }
     }
-    if (leader_hint)
-        *leader_hint = efs_raft_leader(r);
-    if (efs_raft_role(r) != EFS_RAFT_LEADER) {
-        pthread_mutex_unlock(&h->mu);
-        return EFS_ERR_NOT_PRIMARY;
-    }
-    rc = efs_raft_propose(r, cmd, clen, idx);
     pthread_mutex_unlock(&h->mu);
-    return rc;
+    rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);
+    if (rc != EFS_OK)
+        return rc;
+    if (idx)
+        *idx = rep.index;
+    if (leader_hint && rep.leader_hint >= 0)
+        *leader_hint = rep.leader_hint;
+    return EFS_OK;
 }
 
 static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
@@ -720,6 +893,144 @@ static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
     if (rc != EFS_OK)
         return rc;
     return host_wait_applied(h, group, idx, hint);
+}
+
+static int host_inode_rpc_peer(struct efs_raft_host *h, int rid, uint8_t req_type,
+                               const void *req, uint32_t reqlen,
+                               uint8_t reply_type, struct efs_msg_inode_reply *out)
+{
+    char host[64];
+    uint16_t port = 0;
+    struct efs_conn *pc;
+    uint8_t rtype = 0;
+    void *reply = NULL;
+    uint32_t rlen = 0;
+
+    if (rid < 0 || rid == h->raft_id || !req || !out)
+        return -1;
+    if (peer_addr(h, rid, host, sizeof(host), &port) != 0)
+        return -1;
+    pc = server_peer_conn_get(host, port);
+    if (!pc)
+        return -1;
+    if (efs_conn_send_msg(pc, req_type, req, reqlen) != 0) {
+        server_peer_conn_drop(host, port, pc);
+        return -1;
+    }
+    if (efs_conn_recv_msg(pc, &rtype, &reply, &rlen) != 0) {
+        server_peer_conn_drop(host, port, pc);
+        return -1;
+    }
+    if (rtype != reply_type || rlen < sizeof(*out)) {
+        free(reply);
+        server_peer_conn_drop(host, port, pc);
+        return -1;
+    }
+    memcpy(out, reply, sizeof(*out));
+    free(reply);
+    server_peer_conn_release(host, port, pc);
+    return 0;
+}
+
+/* Bounce an inode RPC to a peer that hosts every listed group. Never
+ * targets self, so a dual-host that hosts all groups never forwards
+ * (no 1↔2 loop). Caller must not hold read_mu. */
+static void host_inode_forward(struct efs_raft_host *h, uint8_t req_type,
+                               const void *req, uint32_t reqlen,
+                               uint8_t reply_type,
+                               struct efs_msg_inode_reply *out,
+                               const uint8_t *groups, int ng)
+{
+    int tries, rid, skip = -1;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_NOT_PRIMARY;
+    for (tries = 0; tries < h->n; tries++) {
+        rid = host_pick_peer(h, groups, ng, skip);
+        if (rid < 0)
+            return;
+        if (host_inode_rpc_peer(h, rid, req_type, req, reqlen, reply_type,
+                                out) != 0) {
+            skip = rid;
+            out->status = EFS_INODE_RPC_NOT_PRIMARY;
+            continue;
+        }
+        if (out->status != EFS_INODE_RPC_NOT_PRIMARY)
+            return;
+        skip = rid;
+    }
+}
+
+static void host_fwd_create(struct efs_raft_host *h, efs_ino_t parent,
+                            const char *name, uint32_t mode, uint32_t uid,
+                            uint32_t gid, struct efs_msg_inode_reply *out,
+                            const uint8_t *groups, int ng)
+{
+    struct efs_msg_inode_create req;
+
+    memset(&req, 0, sizeof(req));
+    req.parent = parent;
+    strncpy(req.name, name, EFS_MAX_NAME - 1);
+    req.mode = mode;
+    req.uid = uid;
+    req.gid = gid;
+    host_inode_forward(h, EFS_MSG_INODE_CREATE, &req, sizeof(req),
+                       EFS_MSG_INODE_CREATE_REPLY, out, groups, ng);
+}
+
+static void host_fwd_lookup(struct efs_raft_host *h, efs_ino_t parent,
+                            const char *name, struct efs_msg_inode_reply *out,
+                            const uint8_t *groups, int ng)
+{
+    struct efs_msg_inode_lookup req;
+
+    memset(&req, 0, sizeof(req));
+    req.parent = parent;
+    strncpy(req.name, name, EFS_MAX_NAME - 1);
+    host_inode_forward(h, EFS_MSG_INODE_LOOKUP, &req, sizeof(req),
+                       EFS_MSG_INODE_LOOKUP_REPLY, out, groups, ng);
+}
+
+static void host_fwd_getattr(struct efs_raft_host *h, efs_ino_t ino,
+                             struct efs_msg_inode_reply *out,
+                             const uint8_t *groups, int ng)
+{
+    struct efs_msg_inode_getattr req;
+
+    memset(&req, 0, sizeof(req));
+    req.ino = ino;
+    host_inode_forward(h, EFS_MSG_INODE_GETATTR, &req, sizeof(req),
+                       EFS_MSG_INODE_GETATTR_REPLY, out, groups, ng);
+}
+
+static void host_fwd_unlink(struct efs_raft_host *h, efs_ino_t parent,
+                            const char *name, int is_dir,
+                            struct efs_msg_inode_reply *out,
+                            const uint8_t *groups, int ng)
+{
+    struct efs_msg_inode_unlink req;
+
+    memset(&req, 0, sizeof(req));
+    req.parent = parent;
+    strncpy(req.name, name, EFS_MAX_NAME - 1);
+    req.is_dir = is_dir ? 1 : 0;
+    host_inode_forward(h, EFS_MSG_INODE_UNLINK, &req, sizeof(req),
+                       EFS_MSG_INODE_UNLINK_REPLY, out, groups, ng);
+}
+
+static void host_fwd_link(struct efs_raft_host *h, efs_ino_t src_ino,
+                          efs_ino_t new_parent, const char *new_name,
+                          struct efs_msg_inode_reply *out,
+                          const uint8_t *groups, int ng)
+{
+    struct efs_msg_inode_link req;
+
+    memset(&req, 0, sizeof(req));
+    req.src_ino = src_ino;
+    req.new_parent = new_parent;
+    strncpy(req.new_name, new_name, EFS_MAX_NAME - 1);
+    host_inode_forward(h, EFS_MSG_INODE_LINK, &req, sizeof(req),
+                       EFS_MSG_INODE_LINK_REPLY, out, groups, ng);
 }
 
 static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
@@ -1423,6 +1734,67 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
     out->index = idx;
 }
 
+/* Leader-only. Payload: group byte, then command bytes (empty command =
+ * ReadIndex). Holds read_mu so a submit cannot interleave with a local
+ * inode handler on this node. */
+void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
+                             struct efs_msg_raft_mkfs_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_raft *r;
+    uint8_t group;
+    const uint8_t *cmd;
+    uint32_t clen;
+    uint64_t idx = 0;
+    int hint = -1;
+    int rc;
+
+    memset(out, 0, sizeof(*out));
+    out->leader_hint = -1;
+    if (!h || !h->running || !payload || plen < 1) {
+        out->rc = EFS_ERR_INVAL;
+        return;
+    }
+    group = payload[0];
+    cmd = payload + 1;
+    clen = plen - 1;
+    pthread_mutex_lock(&h->mu);
+    r = group_raft(h, group);
+    if (!r) {
+        pthread_mutex_unlock(&h->mu);
+        out->rc = EFS_ERR_NOT_PRIMARY;
+        return;
+    }
+    out->leader_hint = efs_raft_leader(r);
+    if (efs_raft_role(r) != EFS_RAFT_LEADER) {
+        pthread_mutex_unlock(&h->mu);
+        out->rc = EFS_ERR_NOT_PRIMARY;
+        return;
+    }
+    pthread_mutex_unlock(&h->mu);
+    pthread_mutex_lock(&h->read_mu);
+    if (clen == 0) {
+        rc = host_read_index(h, group, &hint);
+        pthread_mutex_lock(&h->mu);
+        r = group_raft(h, group);
+        if (r)
+            idx = efs_raft_applied(r);
+        pthread_mutex_unlock(&h->mu);
+    } else {
+        rc = host_propose_wait(h, group, cmd, clen, &hint);
+        pthread_mutex_lock(&h->mu);
+        r = group_raft(h, group);
+        if (r)
+            idx = efs_raft_applied(r);
+        pthread_mutex_unlock(&h->mu);
+    }
+    pthread_mutex_unlock(&h->read_mu);
+    out->rc = rc;
+    out->index = idx;
+    if (hint >= 0)
+        out->leader_hint = hint;
+}
+
 void server_raft_host_status(struct efs_msg_raft_status_reply *out)
 {
     struct efs_raft_host *h = g_host;
@@ -1487,6 +1859,13 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
+    {
+        uint8_t ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
+        if (!host_hosts(h, ig)) {
+            host_fwd_getattr(h, ino, out, &ig, 1);
+            return;
+        }
+    }
     pthread_mutex_lock(&h->read_mu);
     rc = host_read_inode_lanes(h, ino, &hint);
     if (rc == EFS_OK)
@@ -1517,6 +1896,13 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
     }
     psh = efs_kv_inode_shard(parent);
     pg = efs_raft_shard_group(psh);
+    if (!host_hosts(h, pg)) {
+        uint8_t need[2];
+        need[0] = pg;
+        need[1] = EFS_RAFT_GROUP_SHARD2;
+        host_fwd_lookup(h, parent, name, out, need, 2);
+        return;
+    }
     pthread_mutex_lock(&h->read_mu);
     rc = host_read_index(h, pg, &hint);
     if (rc == EFS_OK)
@@ -1526,6 +1912,14 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
         uint8_t hg = efs_raft_shard_group(hsh);
         int hh = -1;
         if (hg != pg) {
+            if (!host_hosts(h, hg)) {
+                uint8_t need[2];
+                need[0] = pg;
+                need[1] = hg;
+                pthread_mutex_unlock(&h->read_mu);
+                host_fwd_lookup(h, parent, name, out, need, 2);
+                return;
+            }
             rc = host_read_index(h, hg, &hh);
             if (rc != EFS_OK)
                 hint = hh;
@@ -1533,8 +1927,20 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
     }
     if (rc == EFS_OK)
         rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
-    if (rc == EFS_OK)
+    if (rc == EFS_OK) {
+        uint8_t cg = efs_raft_shard_group(efs_kv_inode_shard(dent.ino));
+        if (!host_hosts(h, cg)) {
+            uint8_t need[2];
+            int nn = 1;
+            need[0] = pg;
+            if (cg != pg)
+                need[nn++] = cg;
+            pthread_mutex_unlock(&h->read_mu);
+            host_fwd_lookup(h, parent, name, out, need, nn);
+            return;
+        }
         rc = host_read_inode_lanes(h, dent.ino, &hint);
+    }
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, dent.ino, host_txn_coord, h, &st);
     pthread_mutex_unlock(&h->read_mu);
@@ -1585,9 +1991,16 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         set_inode_rc(out, rc, -1);
         return;
     }
+    pg = efs_raft_shard_group(efs_kv_inode_shard(parent));
+    if (!host_hosts(h, pg)) {
+        uint8_t need[2];
+        need[0] = pg;
+        need[1] = EFS_RAFT_GROUP_SHARD2;
+        host_fwd_create(h, parent, name, mode, uid, gid, out, need, 2);
+        return;
+    }
     pthread_mutex_lock(&h->read_mu);
-    rc = host_read_index(h, efs_raft_shard_group(efs_kv_inode_shard(parent)),
-                         &hint);
+    rc = host_read_index(h, pg, &hint);
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
     if (rc == EFS_OK && !S_ISDIR(prow.mode))
@@ -1595,7 +2008,16 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
     if (rc == EFS_OK) {
         dsh = efs_kv_dentry_shard(parent, name, prow.layout);
         dg = efs_raft_shard_group(dsh);
-        pg = efs_raft_shard_group(efs_kv_inode_shard(parent));
+        if (!host_hosts(h, dg)) {
+            uint8_t need[2];
+            int nn = 1;
+            need[0] = pg;
+            if (dg != pg)
+                need[nn++] = dg;
+            pthread_mutex_unlock(&h->read_mu);
+            host_fwd_create(h, parent, name, mode, uid, gid, out, need, nn);
+            return;
+        }
         if (dg != pg) {
             int hh = -1;
             rc = host_read_index(h, dg, &hh);
@@ -1697,13 +2119,30 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     if ((mode & 07777) == 0)
         mode |= 0755;
     now = now_ns();
+    psh = efs_kv_inode_shard(parent);
+    if (!host_hosts(h, efs_raft_shard_group(psh))) {
+        uint8_t need[2];
+        need[0] = EFS_RAFT_GROUP_SHARD;
+        need[1] = EFS_RAFT_GROUP_SHARD2;
+        host_fwd_create(h, parent, name, mode, uid, gid, out, need, 2);
+        return;
+    }
     pthread_mutex_lock(&h->read_mu);
     rc = host_read_index(h, efs_raft_shard_group(efs_kv_inode_shard(EFS_ROOT_INO)),
                          &hint);
     if (rc == EFS_OK)
         rc = efs_meta_apply_export_salt(h->kv, &salt);
-    psh = efs_kv_inode_shard(parent);
     csh = (rc == EFS_OK) ? efs_kv_mkdir_shard(parent, name, salt) : 0;
+    if (rc == EFS_OK && !host_hosts(h, efs_raft_shard_group(csh))) {
+        uint8_t need[2];
+        int nn = 1;
+        need[0] = efs_raft_shard_group(psh);
+        if (efs_raft_shard_group(csh) != need[0])
+            need[nn++] = efs_raft_shard_group(csh);
+        pthread_mutex_unlock(&h->read_mu);
+        host_fwd_create(h, parent, name, mode, uid, gid, out, need, nn);
+        return;
+    }
     if (rc == EFS_OK)
         rc = host_read_index(h, efs_raft_shard_group(psh), &hint);
     if (rc == EFS_OK && efs_raft_shard_group(csh) != efs_raft_shard_group(psh))
@@ -1849,8 +2288,10 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
 }
 
 /* LOCAL empty RMDIR: 2-shard txn (parent dentry+row+dseq, child inode).
- * The receiving node must lead every participant group. HASHED/SPLITTING
- * dirs are INVAL/BUSY here (dseq-on-used-lanes is a later slice). */
+ * A node that does not host a participant group bounces the inode RPC
+ * to a dual-host; a dual-host submits to a group it does not lead.
+ * HASHED/SPLITTING dirs are INVAL/BUSY here (dseq-on-used-lanes is a
+ * later slice). */
 void server_raft_host_rmdir(efs_ino_t parent, const char *name,
                             struct efs_msg_inode_reply *out)
 {
@@ -1878,8 +2319,15 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         return;
     }
     now = now_ns();
-    pthread_mutex_lock(&h->read_mu);
     psh = efs_kv_inode_shard(parent);
+    if (!host_hosts(h, efs_raft_shard_group(psh))) {
+        uint8_t need[2];
+        need[0] = EFS_RAFT_GROUP_SHARD;
+        need[1] = EFS_RAFT_GROUP_SHARD2;
+        host_fwd_unlink(h, parent, name, 1, out, need, 2);
+        return;
+    }
+    pthread_mutex_lock(&h->read_mu);
     rc = host_read_index(h, efs_raft_shard_group(psh), &hint);
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
@@ -1887,6 +2335,25 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK && prow.layout != EFS_META_LAYOUT_LOCAL)
         rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
+    if (rc == EFS_OK && dent.ino == EFS_ROOT_INO)
+        rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK && (dent.type & S_IFMT) != S_IFDIR)
+        rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK) {
+        csh = efs_kv_inode_shard(dent.ino);
+        if (!host_hosts(h, efs_raft_shard_group(csh))) {
+            uint8_t need[2];
+            int nn = 1;
+            need[0] = efs_raft_shard_group(psh);
+            if (efs_raft_shard_group(csh) != need[0])
+                need[nn++] = efs_raft_shard_group(csh);
+            pthread_mutex_unlock(&h->read_mu);
+            host_fwd_unlink(h, parent, name, 1, out, need, nn);
+            return;
+        }
+    }
     if (rc == EFS_OK)
         rc = efs_meta_apply_resolve(h->kv, parent, name, &dent, &row);
     if (rc == EFS_OK && (!S_ISDIR(row.mode) || row.ino == EFS_ROOT_INO))
@@ -2553,9 +3020,19 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
         return;
     }
     now = now_ns();
-    pthread_mutex_lock(&h->read_mu);
     dsh = efs_kv_inode_shard(new_parent);
     ish = efs_kv_inode_shard(src_ino);
+    if (!host_hosts(h, efs_raft_shard_group(dsh)) ||
+        !host_hosts(h, efs_raft_shard_group(ish))) {
+        uint8_t need[2];
+        int nn = 1;
+        need[0] = efs_raft_shard_group(dsh);
+        if (efs_raft_shard_group(ish) != need[0])
+            need[nn++] = efs_raft_shard_group(ish);
+        host_fwd_link(h, src_ino, new_parent, new_name, out, need, nn);
+        return;
+    }
+    pthread_mutex_lock(&h->read_mu);
     rc = host_read_index(h, efs_raft_shard_group(dsh), &hint);
     if (rc == EFS_OK && efs_raft_shard_group(ish) != efs_raft_shard_group(dsh))
         rc = host_read_index(h, efs_raft_shard_group(ish), &hint);
@@ -2750,6 +3227,10 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     if (rc == EFS_OK && efs_raft_shard_group(dsh) != efs_raft_shard_group(psh) &&
         efs_raft_shard_group(dsh) != efs_raft_shard_group(ssh))
         rc = host_read_index(h, efs_raft_shard_group(dsh), &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_lookup(h->kv, old_parent, old_name, &dent);
+    if (rc == EFS_OK && (dent.type & S_IFMT) == S_IFDIR)
+        rc = EFS_ERR_INVAL;
     if (rc == EFS_OK)
         rc = efs_meta_apply_resolve(h->kv, old_parent, old_name, &dent, &row);
     if (rc == EFS_OK && S_ISDIR(row.mode))
@@ -3088,8 +3569,21 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
         rc = efs_meta_apply_readdir(h->kv, parent, &cur, page, EFS_READDIR_MAX,
                                     &got);
         for (i = 0; i < got && rc == EFS_OK && out->count < max_ents; i++) {
+            uint8_t cg;
+
             if (page[i].d.ino <= after_ino)
                 continue;
+            cg = efs_raft_shard_group(efs_kv_inode_shard(page[i].d.ino));
+            if (!host_hosts(h, cg)) {
+                memset(&out->ents[out->count], 0, sizeof(out->ents[0]));
+                out->ents[out->count].ino = page[i].d.ino;
+                out->ents[out->count].mode = page[i].d.type;
+                out->ents[out->count].parent = parent;
+                strncpy(out->ents[out->count].name, page[i].name,
+                        EFS_MAX_NAME - 1);
+                out->count++;
+                continue;
+            }
             rc = host_read_inode_lanes(h, page[i].d.ino, &hint);
             if (rc != EFS_OK)
                 break;

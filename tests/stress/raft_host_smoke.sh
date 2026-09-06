@@ -5,9 +5,11 @@
 # live cluster (port 19810, /data1). Does not pkill -x efsd.
 #
 # Gate: elect, raft-mkfs lands ROOT on every voter, LOOKUP/GETATTR via
-# ReadIndex + KV (leader serves ROOT, follower is NOT_PRIMARY, missing
-# name is NOT_FOUND), file CREATE through Raft (lookup+getattr, duplicate
-# is EXIST), SETATTR mode/owner, MKDIR as a 2-shard txn, last-link UNLINK
+# ReadIndex + KV (a group-0 leader or caught-up replica serves ROOT;
+# missing name is NOT_FOUND), file CREATE through Raft (lookup+getattr, duplicate
+# is EXIST), SETATTR mode/owner, MKDIR as a 2-shard txn (including a
+# dest whose inode shard is on group 2, submitted from raft_id 0 which
+# does not host that group), last-link UNLINK
 # of a file (lookup miss, second unlink NOT_FOUND), RMDIR as a 2-shard
 # txn (empty LOCAL dir, lookup miss), LINK as a 2-shard txn (nlink=2,
 # dest lookup, directory is INVAL), nlink>1 UNLINK of a dedicated extra
@@ -95,6 +97,7 @@ mkdir -p $SCRATCH
 rm -f /tmp/efs-raft-scratch.log
 cd /tmp/efs
 export EFS_MD_RAFT=1
+export EFS_TRANSPORT=tcp
 setsid ./efsd --node-id $nid --addr $addr --port $PORT \
     --storage $SCRATCH --quota 1G --writers 0 --no-direct-io $join \
     >/tmp/efs-raft-scratch.log 2>&1 </dev/null &
@@ -221,13 +224,13 @@ g0_mgmt() {
 }
 
 # ReadIndex GETATTR/LOOKUP against group-0. Leader must serve ROOT;
-# a follower must refuse (NOT_PRIMARY=7); a missing name is NOT_FOUND=1.
-# nlink is 2 at mkfs and 3 after a subdirectory (POSIX).
+# LOOKUP/GETATTR of ROOT on a serving replica (ReadIndex). A missing
+# name is NOT_FOUND=1. nlink is 2 at mkfs and grows with live subdirs.
 check_reads() {
     local lid=$1
     local tag=$2
     local nlink=${3:-2}
-    local out fid rid
+    local out
     if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
         bad "$tag: no leader"
         return
@@ -239,17 +242,6 @@ check_reads() {
     echo "$out" | grep -q 'status=0' || bad "$tag getattr not OK"
     echo "$out" | grep -q "nlink=$nlink" || bad "$tag getattr nlink"
     echo "$out" | grep -q 'mode=040755' || bad "$tag getattr not dir"
-    fid=""
-    for rid in 0 1 2; do
-        [ "$rid" = "$lid" ] && continue
-        out=$(ssh_to 10 "${HOSTS[$rid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$rid]}:${PORT} 1" 2>/dev/null || true)
-        say "$tag getattr follower=$rid: $out"
-        if echo "$out" | grep -q 'status=7'; then
-            fid=$rid
-            break
-        fi
-    done
-    [ -n "$fid" ] || bad "$tag no follower NOT_PRIMARY"
     out=$(g0_mgmt raft-lookup 1 no-such-efs-name)
     say "$tag lookup miss: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag lookup miss not NOT_FOUND"
@@ -312,6 +304,34 @@ check_mkdir() {
         echo "$out" | grep -q 'status=0' || bad "$tag lookup mkdir not OK"
         echo "$out" | grep -q 'mode=040755' || bad "$tag lookup mkdir mode"
         MKDIR_NAME=$got
+    fi
+}
+
+# raft_id 0 (fcstor003) never hosts group 2. MKDIR of a dest whose inode
+# shard is even must bounce the CREATE to a dual-host and still succeed.
+check_cross_group() {
+    local i out name ino got=""
+    for i in $(seq 0 31); do
+        name="raft-smoke-xg$i"
+        out=$(ssh_to 10 "${HOSTS[0]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[0]}:${PORT} 1 $name 040755" 2>/dev/null || true)
+        say "cross-group mkdir $name: $out"
+        if echo "$out" | grep -q 'status=0'; then
+            ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+            if [ -n "$ino" ] && [ "$((ino & 1))" = "0" ]; then
+                got=$name
+                break
+            fi
+            out=$(ssh_to 10 "${HOSTS[0]}" "cd /tmp/efs && ./efs-mgmt raft-rmdir ${ADDRS[0]}:${PORT} 1 $name" 2>/dev/null || true)
+            say "cross-group rmdir odd $name: $out"
+        fi
+    done
+    [ -n "$got" ] || bad "cross-group mkdir none even-shard"
+    if [ -n "$got" ]; then
+        out=$(ssh_to 10 "${HOSTS[0]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[0]}:${PORT} 1 $got" 2>/dev/null || true)
+        say "cross-group lookup: $out"
+        echo "$out" | grep -q 'status=0' || bad "cross-group lookup not OK"
+        echo "$out" | grep -q 'mode=040755' || bad "cross-group lookup mode"
+        XG_NAME=$got
     fi
 }
 
@@ -634,6 +654,9 @@ check_readdir_path() {
     if [ -n "${MKDIR_NAME:-}" ]; then
         echo "$out" | grep -q "$MKDIR_NAME" || bad "$tag readdir missing mkdir"
     fi
+    if [ -n "${XG_NAME:-}" ]; then
+        echo "$out" | grep -q "$XG_NAME" || bad "$tag readdir missing cross-group"
+    fi
     if [ -n "${PUBLISH_NAME:-}" ]; then
         echo "$out" | grep -q "$PUBLISH_NAME" || bad "$tag readdir missing published"
     fi
@@ -740,6 +763,9 @@ check_publish "$leader" "fresh"
 say "MKDIR through Raft (fresh)"
 MKDIR_NAME=""
 check_mkdir "$leader" "fresh"
+say "cross-group MKDIR from raft_id=0 (fresh)"
+XG_NAME=""
+check_cross_group
 say "UNLINK file through Raft (fresh)"
 check_unlink "$leader" "fresh"
 say "RMDIR through Raft (fresh)"
@@ -824,6 +850,10 @@ for i in $(seq 1 50); do
 done
 if [ -z "$new_leader" ] || [ "$new_leader" = "-1" ]; then
     bad "no new leader after kill"
+    for qidx in 0 1 2 3; do
+        st=$(ssh_to 10 "${HOSTS[$qidx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$qidx]}:${PORT}" 2>/dev/null || true)
+        say "status ${HOSTS[$qidx]}: $st"
+    done
 else
     say "new leader raft_id=$new_leader"
 fi
@@ -888,7 +918,8 @@ if [ -z "$leader" ] || [ "$leader" = "-1" ]; then
 fi
 say "ReadIndex GETATTR/LOOKUP (after crash)"
 root_nlink=2
-[ -n "${MKDIR_NAME:-}" ] && root_nlink=3
+[ -n "${MKDIR_NAME:-}" ] && root_nlink=$((root_nlink + 1))
+[ -n "${XG_NAME:-}" ] && root_nlink=$((root_nlink + 1))
 check_reads "$leader" "after-crash" "$root_nlink"
 out=$(g0_mgmt raft-lookup 1 raft-smoke-f)
 say "after-crash lookup created: $out"
@@ -925,6 +956,11 @@ if [ -n "${MKDIR_NAME:-}" ]; then
     out=$(g0_mgmt raft-lookup 1 "$MKDIR_NAME")
     say "after-crash lookup mkdir: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash mkdir name missing"
+fi
+if [ -n "${XG_NAME:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$XG_NAME")
+    say "after-crash lookup cross-group: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash cross-group name missing"
 fi
 if [ -n "${LINK_NAME:-}" ]; then
     out=$(g0_mgmt raft-lookup 1 "$LINK_NAME")

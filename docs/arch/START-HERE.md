@@ -26,10 +26,11 @@ sends you to — not the whole spec.
 > (10.5c-19), READDIR/LOOKUP_PATH are ReadIndex + KV
 > (10.5c-20), SETATTR SIZE (chunk-aligned truncate, no tail)
 > is one Raft entry (10.5c-21), chunk publish + GETCHUNKS
-> (10.5c-22), and unaligned SETATTR SIZE (tail CAS in the truncate
-> entry, 10.5c-23). Next: cross-group propose
-> (a node that is not leader of a participant group) and the rest of
-> the mutations behind the same flag.
+> (10.5c-22), unaligned SETATTR SIZE (tail CAS in the truncate
+> entry, 10.5c-23), and cross-group propose (10.5c-24: MKFS
+> submit + inode bounce, no new opcode). Next: remaining
+> mutations (O_APPEND, SYMLINK, directory rename, HASHED dest
+> CREATE, HOLD) behind the same flag.
 > [architecture.md §10](../architecture.md)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -235,9 +236,17 @@ sends you to — not the whole spec.
 > tail candidate and CAS-publishes it inside `EFS_MD_CMD_TRUNCATE` (I22
 > range-delete of the rest). Mixed SIZE+mode stays INVAL. Same scratch
 > smoke: after publish, size=1000 keeps ci=0, size=0 clears the map,
-> crash keeps that. Remaining: cross-group
-> propose, then the rest of the
-> mutations (not a cutover of `efs-test`, not step 11).
+> crash keeps that.
+>
+> **10.5c-24 is in (gated):** a node that does not lead (or host) a
+> participant group still serves the op. Non-empty `EFS_MSG_RAFT_MKFS`
+> is leader-submit (`group` + cmd) or ReadIndex (`group` only) — no
+> new opcode. Followers wait apply locally. Unhosted inode RPCs bounce
+> to a dual-host (never self). Same scratch smoke: mkdir of an
+> even-shard dest from raft_id 0, rmdir/link/rename/readdir of those
+> names, crash keeps the even-shard dir. Remaining: O_APPEND,
+> SYMLINK, directory rename, HASHED dest CREATE, HOLD
+> (not a cutover of `efs-test`, not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never

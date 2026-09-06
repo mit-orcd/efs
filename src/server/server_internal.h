@@ -702,6 +702,10 @@ void server_raft_host_stop(void);
  * inbox is full — Raft retries. */
 int server_raft_host_inbox(const uint8_t *payload, uint32_t plen);
 void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out);
+/* Non-empty RAFT_MKFS payload: group byte + command (or group-only =
+ * ReadIndex). Leader-only; NOT_PRIMARY otherwise. */
+void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
+                             struct efs_msg_raft_mkfs_reply *out);
 void server_raft_host_status(struct efs_msg_raft_status_reply *out);
 int server_raft_host_active(void);
 /* Leader + ReadIndex + applied KV. No s->lock. Flag off → active() is 0

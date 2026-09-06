@@ -183,8 +183,12 @@ enum efs_msg_type {
      * Raft tolerates loss, so processing is asynchronous. */
     EFS_MSG_RAFT = 93,
     EFS_MSG_RAFT_REPLY = 94,
-    /* Propose an idempotent MKFS on the ROOT shard's group (scratch/mgmt
-     * smoke for the raft host; not the export mkfs path). */
+    /* Propose on a group leader (scratch/mgmt + host cross-group submit).
+     * Empty payload: idempotent MKFS on the ROOT group's leader (not the
+     * export mkfs path). Non-empty: byte 0 is the group id; the rest is a
+     * log command (or empty = ReadIndex). Same reply shape. Not a new
+     * opcode — 10.5c-24 reuses this so a coordinator can submit to a
+     * group it does not lead without inventing EFS_MSG_RAFT_PROPOSE. */
     EFS_MSG_RAFT_MKFS = 95,
     EFS_MSG_RAFT_MKFS_REPLY = 96,
     /* Per-group role/term/commit/applied readout for the smoke gate. */
@@ -192,9 +196,11 @@ enum efs_msg_type {
     EFS_MSG_RAFT_STATUS_REPLY = 98,
 };
 
-/* RAFT_MKFS reply. rc: EFS_OK (accepted at index), EFS_ERR_NOT_PRIMARY
- * (not the leader; leader_hint is the peer id or -1), EFS_ERR_INVAL (host
- * off). Commitment is asynchronous — poll RAFT_STATUS for applied. */
+/* RAFT_MKFS reply. rc: EFS_OK (accepted at index, and applied on this
+ * leader for a non-empty submit / ReadIndex-ready for a group-only
+ * payload), EFS_ERR_NOT_PRIMARY (not the leader; leader_hint is the
+ * peer id or -1), EFS_ERR_INVAL (host off). Empty-payload MKFS is still
+ * fire-and-forget at the leader (poll RAFT_STATUS for applied). */
 struct efs_msg_raft_mkfs_reply {
     int32_t rc;
     int32_t leader_hint;

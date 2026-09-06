@@ -303,8 +303,12 @@ and GETCHUNKS from KV. Same-group / lane 0 only. Gate: same smoke
 (`raft-smoke-p` chunk 0 survives crash).
 **10.5c-23 is in:** unaligned SETATTR SIZE as truncate + tail CAS
 (same-group). Gate: same smoke (size=1000 keeps ci=0, size=0 clears
-it, crash keeps that). Remaining: cross-group
-propose, then the rest of the mutations; not a cutover of `efs-test`,
+it, crash keeps that).
+**10.5c-24 is in:** cross-group propose without a new opcode
+(non-empty `RAFT_MKFS` = leader-submit / ReadIndex; unhosted inode
+RPCs bounce to a dual-host). Gate: same smoke (even-shard mkdir from
+raft_id 0 survives crash). Remaining: O_APPEND, SYMLINK, directory
+rename, HASHED dest CREATE, HOLD; not a cutover of `efs-test`,
 not step 11.
 
 **Rules while carving:** no behavior change within a step; no new features

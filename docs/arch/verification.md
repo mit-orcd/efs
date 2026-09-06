@@ -478,7 +478,19 @@ CAS-publishes it in the same `EFS_MD_CMD_TRUNCATE` entry. A later
 size=0 range-deletes the map. Same-group lanes only. Flag off is a
 no-op. Gate: same smoke — after publish, size=1000 keeps ci=0,
 size=0 clears GETCHUNKS, crash keeps that.
-Remaining: cross-group propose, then the rest of the mutations.
+
+**10.5c-24 — cross-group propose (no new opcode).** A node that does
+not lead a participant group submits via non-empty `EFS_MSG_RAFT_MKFS`
+(`group` + cmd) or ReadIndex (`group` only). Followers wait apply.
+Unhosted CREATE/LOOKUP/GETATTR/UNLINK/LINK bounce to a dual-host
+(never self). RMDIR looks up the dentry first so an even-shard child
+bounces before resolve. READDIR emits a dentry stub for unhosted
+children. Directory RENAME is INVAL from `dent.type`. Flag off is a
+no-op. Gate: same smoke — mkdir of even-shard `raft-smoke-xg*` from
+raft_id 0, lookup/rmdir/link-dir/rename-dir/readdir, crash keeps
+that dir (ROOT nlink=4).
+Remaining: O_APPEND, SYMLINK, directory rename, HASHED dest CREATE,
+HOLD.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
 ## Shortening the code → signal cycle
