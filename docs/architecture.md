@@ -1133,9 +1133,10 @@ Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) and 10.5c-13
 10.5c-18 (utimens inode fence) and 10.5c-19 (same-dir LOCAL file
 RENAME as a 2-shard txn) and 10.5c-20 (READDIR/LOOKUP_PATH via
 ReadIndex + KV) and 10.5c-21 (SETATTR SIZE / chunk-aligned truncate)
+and 10.5c-22 (chunk publish + GETCHUNKS)
 are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cross-group propose
-and the rest of the mutations; writes after. Not a
+and the rest of the mutations. Not a
 cutover of the live table; not step 11. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key

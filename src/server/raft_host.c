@@ -35,6 +35,8 @@
 #define HOST_SETATTR_LEN   61
 #define HOST_UTIMENS_LEN   73
 #define HOST_TRUNC_LEN     54
+#define HOST_PUBLISH_LEN   (29u + (uint32_t)EFS_NUM_FRAGMENTS * (4u + EFS_HASH_SIZE) + \
+                            EFS_OPID_UUID_LEN + 4u + 8u + 8u + 8u + 4u)
 
 struct host_inbox_item {
     uint8_t *buf;
@@ -414,6 +416,47 @@ static int apply_truncate_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+/* Same encoding as sim apply_publish_cmd. Session fencing is not hosted. */
+static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                             uint32_t clen, uint64_t index)
+{
+    struct efs_meta_pub p;
+    const uint8_t *q;
+    int i, rc;
+
+    if (clen < HOST_PUBLISH_LEN)
+        return EFS_OK;
+    memset(&p, 0, sizeof(p));
+    p.ino = rd64be(cmd + 1);
+    p.chunk_index = rd32be(cmd + 9);
+    p.new_size = rd64be(cmd + 13);
+    p.now = rd64be(cmd + 21);
+    q = cmd + 29;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        p.ch.nodes[i] = rd32be(q);
+        q += 4;
+        memcpy(p.ch.checksums[i], q, EFS_HASH_SIZE);
+        q += EFS_HASH_SIZE;
+    }
+    q += EFS_OPID_UUID_LEN + 4;
+    p.candidate_gen = rd64be(q);
+    p.expected_gen = rd64be(q + 8);
+    p.content_epoch = rd64be(q + 16);
+    p.coding_profile_id = rd32be(q + 24);
+    rc = efs_meta_apply_publish(h->kv, &p);
+    if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_STALE)
+        rc = EFS_OK;
+    if (rc != EFS_OK) {
+        fprintf(stderr, "raft-host: apply publish rc=%d index=%llu ino=%llu ci=%u\n",
+                rc, (unsigned long long)index, (unsigned long long)p.ino,
+                p.chunk_index);
+        return EFS_OK;
+    }
+    fprintf(stderr, "raft-host: applied publish index=%llu ino=%llu ci=%u\n",
+            (unsigned long long)index, (unsigned long long)p.ino, p.chunk_index);
+    return EFS_OK;
+}
+
 /* Same encoding as sim_txn_apply. Apply never stalls the log. */
 static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                          uint32_t clen)
@@ -523,6 +566,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         return apply_create_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_UNLINK)
         return apply_unlink_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_PUBLISH)
+        return apply_publish_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_SETATTR)
         return apply_setattr_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_UTIMENS)
@@ -758,6 +803,36 @@ static int pack_truncate_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     out[33] = 0;
     memset(out + 34, 0, EFS_OPID_UUID_LEN + 4);
     *len = HOST_TRUNC_LEN;
+    return EFS_OK;
+}
+
+/* Same encoding as sim pack_publish. Session bytes are zero (not hosted). */
+static int pack_publish_cmd(uint8_t *out, uint32_t *len, const struct efs_meta_pub *p)
+{
+    uint8_t *q;
+    int i;
+
+    if (!p)
+        return EFS_ERR_INVAL;
+    out[0] = EFS_MD_CMD_PUBLISH;
+    wr64be(out + 1, p->ino);
+    wr32be(out + 9, p->chunk_index);
+    wr64be(out + 13, p->new_size);
+    wr64be(out + 21, p->now);
+    q = out + 29;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        wr32be(q, p->ch.nodes[i]);
+        q += 4;
+        memcpy(q, p->ch.checksums[i], EFS_HASH_SIZE);
+        q += EFS_HASH_SIZE;
+    }
+    memset(q, 0, EFS_OPID_UUID_LEN + 4);
+    q += EFS_OPID_UUID_LEN + 4;
+    wr64be(q, p->candidate_gen);
+    wr64be(q + 8, p->expected_gen);
+    wr64be(q + 16, p->content_epoch);
+    wr32be(q + 24, p->coding_profile_id);
+    *len = HOST_PUBLISH_LEN;
     return EFS_OK;
 }
 
@@ -2720,6 +2795,183 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         out->inode.parent = new_parent;
         strncpy(out->inode.name, new_name, EFS_MAX_NAME - 1);
     }
+}
+
+/* One chunk CAS + lane MAX. read_mu held. First-use of a lane whose
+ * group is not the inode's is INVAL this slice (that is a 2-shard txn).
+ * Lane 0 is the inode shard, so the smoke's first chunk is one group. */
+static int host_pub_locked(struct efs_raft_host *h, const struct efs_chunk_rec *rec,
+                           uint64_t new_size, int *hint)
+{
+    struct efs_meta_pub p;
+    struct efs_meta_row row;
+    struct efs_meta_chunk got;
+    uint8_t cmd[HOST_PUBLISH_LEN];
+    uint8_t uuid[EFS_OPID_UUID_LEN];
+    uint32_t clen = 0, lsh, ish;
+    uint64_t idx = 0;
+    uint8_t lane, lg, ig;
+    int rc, i;
+
+    if (!rec || rec->ino == 0)
+        return EFS_ERR_INVAL;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (rec->nodes[i] == 0)
+            return EFS_ERR_INVAL;
+    }
+    ish = efs_kv_inode_shard(rec->ino);
+    ig = efs_raft_shard_group(ish);
+    rc = host_read_index(h, ig, hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, rec->ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    if (!S_ISREG(row.mode))
+        return EFS_ERR_INVAL;
+    lane = (uint8_t)(rec->chunk_index % EFS_META_LANES);
+    lsh = efs_kv_lane_shard(rec->ino, lane);
+    lg = efs_raft_shard_group(lsh);
+    if ((row.active_lanes & (1ULL << lane)) == 0 && lg != ig)
+        return EFS_ERR_INVAL; /* first-use cross-group later */
+    if (lg != ig)
+        rc = host_read_index(h, lg, hint);
+    if (rc != EFS_OK)
+        return rc;
+    memset(&got, 0, sizeof(got));
+    rc = efs_meta_apply_get_chunk(h->kv, rec->ino, rec->chunk_index, &got);
+    if (rc == EFS_ERR_NOT_FOUND)
+        rc = EFS_OK;
+    else if (rc != EFS_OK)
+        return rc;
+    memset(&p, 0, sizeof(p));
+    p.ino = rec->ino;
+    p.chunk_index = rec->chunk_index;
+    p.new_size = new_size;
+    p.now = now_ns();
+    p.expected_gen = got.generation;
+    memset(uuid, 0, sizeof(uuid));
+    p.candidate_gen = efs_meta_candidate_gen(uuid, 0, 1, rec->chunk_index, 0);
+    if (p.candidate_gen == 0)
+        p.candidate_gen = 1;
+    p.content_epoch = row.content_epoch;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
+    memcpy(p.ch.nodes, rec->nodes, sizeof(p.ch.nodes));
+    memcpy(p.ch.checksums, rec->checksums, sizeof(p.ch.checksums));
+    rc = pack_publish_cmd(cmd, &clen, &p);
+    if (rc == EFS_OK)
+        rc = host_propose(h, lg, cmd, clen, &idx, hint);
+    if (rc == EFS_OK)
+        rc = host_wait_applied(h, lg, idx, hint);
+    return rc;
+}
+
+void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
+                             const struct efs_ino_size_rec *irecs,
+                             uint32_t ino_count, struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    uint32_t i, j;
+    uint64_t sz;
+    int hint = -1;
+    int rc = EFS_OK;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if (count == 0) {
+        out->status = EFS_INODE_RPC_OK;
+        return;
+    }
+    if (!recs) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    pthread_mutex_lock(&h->read_mu);
+    for (i = 0; i < count && rc == EFS_OK; i++) {
+        sz = 0;
+        for (j = 0; j < ino_count && irecs; j++) {
+            if (irecs[j].ino == recs[i].ino) {
+                sz = irecs[j].size;
+                break;
+            }
+        }
+        if (sz == 0)
+            sz = ((uint64_t)recs[i].chunk_index + 1) * EFS_MIN_CHUNK_SIZE;
+        rc = host_pub_locked(h, &recs[i], sz, &hint);
+    }
+    pthread_mutex_unlock(&h->read_mu);
+    set_inode_rc(out, rc, hint);
+}
+
+void server_raft_host_getchunks(efs_ino_t ino, uint32_t start, uint32_t max,
+                                struct efs_msg_inode_getchunks_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_row row;
+    struct efs_meta_chunk ch;
+    uint32_t ci, group_end, lsh, seen = 0;
+    uint8_t ig, lg;
+    int hint = -1;
+    int rc;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running || ino == 0) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if (max == 0 || max > EFS_GETCHUNKS_MAX)
+        max = EFS_GETCHUNKS_MAX;
+    group_end = (start | (EFS_CHUNK_GROUP_SIZE - 1u)) + 1u;
+    ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_read_index(h, ig, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+    if (rc == EFS_OK && !S_ISREG(row.mode))
+        rc = EFS_ERR_INVAL;
+    seen = (rc == EFS_OK) ? (1u << ig) : 0;
+    for (ci = start; rc == EFS_OK && ci < group_end && out->count < max; ci++) {
+        uint8_t lane = (uint8_t)(ci % EFS_META_LANES);
+
+        /* A chunk cannot exist on a lane the inode never registered.
+         * ReadIndexing unused lanes would send this RPC to groups this
+         * node does not host (fresh smoke: group-0 leader, lane 1+). */
+        if ((row.active_lanes & (1ULL << lane)) == 0)
+            continue;
+        lsh = efs_kv_lane_shard(ino, lane);
+        lg = efs_raft_shard_group(lsh);
+        if ((seen & (1u << lg)) == 0) {
+            int hh = -1;
+            rc = host_read_index(h, lg, &hh);
+            if (rc != EFS_OK)
+                hint = hh;
+            else
+                seen |= 1u << lg;
+        }
+        if (rc != EFS_OK)
+            break;
+        rc = efs_meta_apply_get_chunk(h->kv, ino, ci, &ch);
+        if (rc == EFS_ERR_NOT_FOUND) {
+            rc = EFS_OK;
+            continue;
+        }
+        if (rc != EFS_OK)
+            break;
+        out->recs[out->count].ino = ino;
+        out->recs[out->count].chunk_index = ci;
+        memcpy(out->recs[out->count].nodes, ch.nodes,
+               sizeof(out->recs[out->count].nodes));
+        memcpy(out->recs[out->count].checksums, ch.checksums,
+               sizeof(out->recs[out->count].checksums));
+        out->count++;
+    }
+    pthread_mutex_unlock(&h->read_mu);
+    out->status = rc_to_inode_status(rc);
+    out->primary_id = (hint >= 0) ? (efs_node_id_t)(hint + 1) : 0;
 }
 
 /* READDIR: ReadIndex the dir inode (and used dir-lane groups if HASHED),

@@ -297,7 +297,10 @@ SPLITTING READDIR is BUSY. Gate: same smoke (ROOT listing +
 `/raft-smoke-f` / `/raft-smoke-m`, listing survives crash).
 **10.5c-21 is in:** SETATTR SIZE as `EFS_MD_CMD_TRUNCATE` (chunk-
 aligned / zero; no tail). Mixed SIZE+mode INVAL; unaligned INVAL.
-Gate: same smoke (size=131072 survives crash). Remaining: cross-group
+Gate: same smoke (size=131072 survives crash).
+**10.5c-22 is in:** chunk publish (`REPORT_CHUNKS` → `EFS_MD_CMD_PUBLISH`)
+and GETCHUNKS from KV. Same-group / lane 0 only. Gate: same smoke
+(`raft-smoke-p` chunk 0 survives crash). Remaining: cross-group
 propose, then the rest of the mutations; not a cutover of `efs-test`,
 not step 11.
 

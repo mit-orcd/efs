@@ -463,6 +463,14 @@ lane on another Raft group is INVAL this slice. Flag off is a no-op.
 Gate: `tests/stress/raft_host_smoke.sh` — empty `raft-smoke-f` to
 size 131072, getattr, size survives kill -9 catch-up (utimens after
 truncate still keeps mtime=1000000000).
+
+**10.5c-22 — chunk publish + GETCHUNKS from KV (same-group / lane 0).**
+`REPORT_CHUNKS` packs one `EFS_MD_CMD_PUBLISH` per rec (CAS + lane
+MAX). `GETCHUNKS` is ReadIndex + `efs_meta_apply_get_chunk`. First-use
+of a lane whose Raft group ≠ inode group is INVAL this slice (that is
+a 2-shard txn). Flag off is a no-op. Gate: same smoke — create
+`raft-smoke-p`, empty GETCHUNKS, publish chunk 0 size=131072,
+GETCHUNKS count=1, mapping and size survive kill -9 catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 

@@ -3319,6 +3319,15 @@ send_reply:
             } else {
                 bad = 1;
             }
+            if (server_raft_host_active()) {
+                if (bad)
+                    r.status = EFS_INODE_RPC_INVAL;
+                else
+                    server_raft_host_report(recs, count, irecs, ino_count, &r);
+                efs_conn_send_msg(conn, EFS_MSG_REPORT_CHUNKS_REPLY, &r,
+                                  sizeof(r));
+                break;
+            }
             int do_flush = 0;
             int report_gheld = 1;
             server_global_lock(g_server);
@@ -3649,6 +3658,14 @@ send_reply:
             struct efs_msg_inode_getchunks_reply r;
             memset(&r, 0, sizeof(r));
             r.status = EFS_INODE_RPC_ERROR;
+            if (server_raft_host_active() &&
+                payload_len >= sizeof(struct efs_msg_inode_getchunks)) {
+                struct efs_msg_inode_getchunks *req = payload;
+                server_raft_host_getchunks(req->ino, req->start, req->max, &r);
+                efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS_REPLY, &r,
+                                  sizeof(r));
+                break;
+            }
             struct efs_export *ex = NULL;
             if (payload_len >= sizeof(struct efs_msg_inode_getchunks)) {
                 struct efs_msg_inode_getchunks *req = payload;

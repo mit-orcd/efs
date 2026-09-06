@@ -1749,6 +1749,131 @@ static int cmd_raft_lookup_path(int argc, char **argv)
     return 0;
 }
 
+static int cmd_raft_publish(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    int fd, i;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct {
+        struct efs_msg_report_chunks hdr;
+        struct efs_chunk_rec rec;
+        struct efs_ino_size_rec sz;
+    } req;
+    uint8_t buf[sizeof(struct efs_msg_report_chunks) + sizeof(struct efs_chunk_rec) +
+                sizeof(struct efs_ino_size_rec)];
+    uint32_t send_len;
+    struct efs_msg_inode_reply *r;
+
+    if (argc < 2) {
+        fprintf(stderr, "usage: raft-publish <node:port> <ino> [chunk] [size]\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    memset(&req, 0, sizeof(req));
+    req.hdr.count = 1;
+    req.hdr.ino_count = 1;
+    req.rec.ino = (efs_ino_t)strtoull(argv[1], NULL, 0);
+    if (argc >= 3)
+        req.rec.chunk_index = (uint32_t)strtoul(argv[2], NULL, 0);
+    req.sz.ino = req.rec.ino;
+    req.sz.size = EFS_MIN_CHUNK_SIZE;
+    if (argc >= 4)
+        req.sz.size = strtoull(argv[3], NULL, 0);
+    req.rec.nodes[0] = 1;
+    req.rec.nodes[1] = 2;
+    req.rec.nodes[2] = 3;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        memset(req.rec.checksums[i], (uint8_t)(0xa5 + i), EFS_HASH_SIZE);
+    send_len = (uint32_t)(sizeof(req.hdr) + sizeof(req.rec) + sizeof(req.sz));
+    memcpy(buf, &req.hdr, sizeof(req.hdr));
+    memcpy(buf + sizeof(req.hdr), &req.rec, sizeof(req.rec));
+    memcpy(buf + sizeof(req.hdr) + sizeof(req.rec), &req.sz, sizeof(req.sz));
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_REPORT_CHUNKS, buf, send_len, &reply_type,
+                  &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_REPORT_CHUNKS_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to raft-publish\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    printf("raft-publish status=%u primary=%u ino=%llu ci=%u size=%llu\n",
+           r->status, r->primary_id, (unsigned long long)req.rec.ino,
+           req.rec.chunk_index, (unsigned long long)req.sz.size);
+    free(reply);
+    return 0;
+}
+
+static int cmd_raft_getchunks(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    int fd;
+    uint32_t i;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_msg_inode_getchunks req;
+    struct efs_msg_inode_getchunks_reply *r;
+
+    if (argc < 2) {
+        fprintf(stderr, "usage: raft-getchunks <node:port> <ino> [start]\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    memset(&req, 0, sizeof(req));
+    req.ino = (efs_ino_t)strtoull(argv[1], NULL, 0);
+    if (argc >= 3)
+        req.start = (uint32_t)strtoul(argv[2], NULL, 0);
+    req.max = EFS_GETCHUNKS_MAX;
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_INODE_GETCHUNKS, &req, sizeof(req), &reply_type,
+                  &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_INODE_GETCHUNKS_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to raft-getchunks\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    printf("raft-getchunks status=%u primary=%u ino=%llu count=%u cis=",
+           r->status, r->primary_id, (unsigned long long)req.ino, r->count);
+    for (i = 0; i < r->count; i++) {
+        if (i)
+            printf(",");
+        printf("%u", r->recs[i].chunk_index);
+    }
+    printf("\n");
+    free(reply);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -1777,7 +1902,9 @@ int main(int argc, char **argv)
                     "  raft-setattr <node:port> <ino> <mask> [mode|mtime|size] [uid|atime] [gid]\n"
                     "  raft-rename <node:port> <old_parent> <old_name> <new_parent> <new_name>\n"
                     "  raft-readdir <node:port> <parent> [after_ino]\n"
-                    "  raft-lookup-path <node:port> <path> [start]\n",
+                    "  raft-lookup-path <node:port> <path> [start]\n"
+                    "  raft-publish <node:port> <ino> [chunk] [size]\n"
+                    "  raft-getchunks <node:port> <ino> [start]\n",
             argv[0]);
     return 1;
 }
@@ -1831,6 +1958,10 @@ int main(int argc, char **argv)
         return cmd_raft_readdir(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-lookup-path") == 0)
         return cmd_raft_lookup_path(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-publish") == 0)
+        return cmd_raft_publish(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-getchunks") == 0)
+        return cmd_raft_getchunks(argc - 2, argv + 2);
 
     fprintf(stderr, "Unknown command: %s\n", cmd);
     return 1;

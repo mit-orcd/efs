@@ -15,9 +15,11 @@
 # LOCAL file RENAME (old name gone, new name present), READDIR of ROOT
 # (created/renamed/link/mkdir names present, unlinked names absent),
 # LOOKUP_PATH of those names, chunk-aligned SETATTR SIZE (truncate),
+# chunk publish + GETCHUNKS (lane 0),
 # kill -9 a follower
 # then the leader, restart catch-up keeps ROOT, the created file (new
-# mode, size=131072, nlink=2, utimens mtime), the mkdir, the extra link name, the
+# mode, size=131072, nlink=2, utimens mtime), the published chunk map,
+# the mkdir, the extra link name, the
 # unlinked name stays gone, the rmdir'd name stays gone, the nlink>1
 # unlinked name stays gone, the renamed name stays, and READDIR /
 # LOOKUP_PATH still match.
@@ -553,6 +555,40 @@ check_setattr() {
     echo "$out" | grep -q 'status=1' || bad "$tag setattr miss not NOT_FOUND"
 }
 
+# Chunk publish (REPORT_CHUNKS → EFS_MD_CMD_PUBLISH) + GETCHUNKS. Dedicated
+# file so write-mtime does not clobber raft-smoke-f's utimens fence.
+check_publish() {
+    local lid=$1
+    local tag=$2
+    local out ino
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-p" 2>/dev/null || true)
+    say "$tag publish create: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag publish create not OK"
+    ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag publish ino"
+    PUBLISH_NAME=raft-smoke-p
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getchunks ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    say "$tag getchunks empty: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag getchunks empty not OK"
+    echo "$out" | grep -q 'count=0' || bad "$tag getchunks empty count"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-publish ${ADDRS[$lid]}:${PORT} $ino 0 131072" 2>/dev/null || true)
+    say "$tag publish: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag publish not OK"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getchunks ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    say "$tag getchunks: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag getchunks not OK"
+    echo "$out" | grep -q 'count=1' || bad "$tag getchunks count"
+    echo "$out" | grep -q 'cis=0' || bad "$tag getchunks ci"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    say "$tag getattr publish: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag getattr publish not OK"
+    echo "$out" | grep -q 'size=131072' || bad "$tag getattr publish size"
+}
+
 # READDIR ROOT + LOOKUP_PATH. Run after rename so the listing is final.
 check_readdir_path() {
     local lid=$1
@@ -579,6 +615,9 @@ check_readdir_path() {
     fi
     if [ -n "${MKDIR_NAME:-}" ]; then
         echo "$out" | grep -q "$MKDIR_NAME" || bad "$tag readdir missing mkdir"
+    fi
+    if [ -n "${PUBLISH_NAME:-}" ]; then
+        echo "$out" | grep -q "$PUBLISH_NAME" || bad "$tag readdir missing published"
     fi
     echo "$out" | grep -q 'raft-smoke-u' && bad "$tag readdir still has unlinked"
     if [ -n "${UNLINK_NLINK_NAME:-}" ]; then
@@ -677,6 +716,9 @@ say "CREATE file through Raft (fresh)"
 check_create "$leader" "fresh"
 say "SETATTR mode through Raft (fresh)"
 check_setattr "$leader" "fresh"
+say "PUBLISH/GETCHUNKS through Raft (fresh)"
+PUBLISH_NAME=""
+check_publish "$leader" "fresh"
 say "MKDIR through Raft (fresh)"
 MKDIR_NAME=""
 check_mkdir "$leader" "fresh"
@@ -846,6 +888,21 @@ if [ -n "$ino" ] && [ "$ino" != "0" ]; then
     fi
 else
     bad "after-crash created ino missing"
+fi
+if [ -n "${PUBLISH_NAME:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$PUBLISH_NAME")
+    say "after-crash lookup published: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash published name missing"
+    pino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$pino" ] && [ "$pino" != "0" ] || bad "after-crash published ino"
+    out=$(g0_mgmt raft-getchunks "$pino")
+    say "after-crash getchunks: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash getchunks not OK"
+    echo "$out" | grep -q 'count=1' || bad "after-crash getchunks count lost"
+    echo "$out" | grep -q 'cis=0' || bad "after-crash getchunks ci lost"
+    out=$(g0_mgmt raft-getattr "$pino")
+    say "after-crash getattr published: $out"
+    echo "$out" | grep -q 'size=131072' || bad "after-crash publish size lost"
 fi
 if [ -n "${MKDIR_NAME:-}" ]; then
     out=$(g0_mgmt raft-lookup 1 "$MKDIR_NAME")

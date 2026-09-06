@@ -1150,9 +1150,10 @@ Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) and 10.5c-13
 10.5c-18 (utimens inode fence) and 10.5c-19 (same-dir LOCAL file
 RENAME as a 2-shard txn) and 10.5c-20 (READDIR/LOOKUP_PATH via
 ReadIndex + KV) and 10.5c-21 (SETATTR SIZE / chunk-aligned truncate)
+and 10.5c-22 (chunk publish + GETCHUNKS)
 are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cross-group propose
-and the rest of the mutations; writes after. Not a
+and the rest of the mutations. Not a
 cutover of the live table; not step 11. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
@@ -1270,8 +1271,9 @@ sends you to — not the whole spec.
 > is a 2-shard txn (10.5c-17), utimens is the inode fence
 > (10.5c-18), same-dir LOCAL file RENAME is a txn
 > (10.5c-19), READDIR/LOOKUP_PATH are ReadIndex + KV
-> (10.5c-20), and SETATTR SIZE (chunk-aligned truncate, no tail)
-> is one Raft entry (10.5c-21). Next: cross-group propose
+> (10.5c-20), SETATTR SIZE (chunk-aligned truncate, no tail)
+> is one Raft entry (10.5c-21), and chunk publish + GETCHUNKS
+> (10.5c-22). Next: cross-group propose
 > (a node that is not leader of a participant group) and the rest of
 > the mutations behind the same flag.
 > [architecture.md §10](#architecture)
@@ -1466,7 +1468,14 @@ sends you to — not the whole spec.
 > stay INVAL this slice. Mixed SIZE+mode/time is INVAL. Same-group
 > lanes only. Same scratch smoke: setattr size=131072 on the empty
 > created file, getattr, crash catch-up keeps that size (utimens
-> after truncate still keeps mtime=1000000000). Remaining: cross-group
+> after truncate still keeps mtime=1000000000).
+>
+> **10.5c-22 is in (gated):** chunk publication on the production host
+> (`EFS_MD_CMD_PUBLISH` via `REPORT_CHUNKS`) and `GETCHUNKS` from
+> ReadIndex + KV. Lane 0 / same-group only — first-use of a lane on
+> another Raft group is INVAL this slice. Same scratch smoke: create
+> `raft-smoke-p`, empty GETCHUNKS, publish chunk 0 size=131072,
+> GETCHUNKS count=1, crash keeps the mapping. Remaining: cross-group
 > propose, then the rest of the
 > mutations (not a cutover of `efs-test`, not step 11).
 >
@@ -4469,6 +4478,14 @@ lane on another Raft group is INVAL this slice. Flag off is a no-op.
 Gate: `tests/stress/raft_host_smoke.sh` — empty `raft-smoke-f` to
 size 131072, getattr, size survives kill -9 catch-up (utimens after
 truncate still keeps mtime=1000000000).
+
+**10.5c-22 — chunk publish + GETCHUNKS from KV (same-group / lane 0).**
+`REPORT_CHUNKS` packs one `EFS_MD_CMD_PUBLISH` per rec (CAS + lane
+MAX). `GETCHUNKS` is ReadIndex + `efs_meta_apply_get_chunk`. First-use
+of a lane whose Raft group ≠ inode group is INVAL this slice (that is
+a 2-shard txn). Flag off is a no-op. Gate: same smoke — create
+`raft-smoke-p`, empty GETCHUNKS, publish chunk 0 size=131072,
+GETCHUNKS count=1, mapping and size survive kill -9 catch-up.
 Remaining: cross-group propose, then the rest of the mutations.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
@@ -4943,7 +4960,8 @@ SETATTR (10.5c-14) and empty LOCAL RMDIR (10.5c-15) and LINK
 (10.5c-16) and nlink>1 UNLINK (10.5c-17) and utimens
 (10.5c-18) and same-dir LOCAL file RENAME (10.5c-19) and
 READDIR/LOOKUP_PATH (10.5c-20) and SETATTR SIZE / chunk-aligned
-truncate (10.5c-21) are gated on the same
+truncate (10.5c-21) and chunk publish + GETCHUNKS (10.5c-22) are gated
+on the same
 smoke. What remains is cross-group
 propose and the rest of the mutations, then the cutover — not new
 design.

@@ -734,6 +734,11 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
                               struct efs_msg_inode_readdir_reply *out);
 void server_raft_host_lookup_path(efs_ino_t start, const char *path,
                                   struct efs_msg_inode_lookup_path_reply *out);
+void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
+                             const struct efs_ino_size_rec *irecs,
+                             uint32_t ino_count, struct efs_msg_inode_reply *out);
+void server_raft_host_getchunks(efs_ino_t ino, uint32_t start, uint32_t max,
+                                struct efs_msg_inode_getchunks_reply *out);
 
 /* Start the background cluster rejoin retry thread. */
 void server_start_rejoin(struct efsd_server *s);
