@@ -1154,9 +1154,10 @@ and 10.5c-22 (chunk publish + GETCHUNKS)
 and 10.5c-23 (unaligned truncate tail CAS)
 and 10.5c-24 (cross-group propose: MKFS submit + inode bounce)
 and 10.5c-25 (O_APPEND reserve + resolve-on-report)
+and 10.5c-26 (SYMLINK as CREATE S_IFLNK + publish)
 are gated on a
-scratch cluster behind `EFS_MD_RAFT`. Remaining: SYMLINK,
-directory rename, HASHED dest CREATE, HOLD. Not a
+scratch cluster behind `EFS_MD_RAFT`. Remaining: directory rename,
+HASHED dest CREATE, HOLD. Not a
 cutover of the live table; not step 11. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
@@ -1280,8 +1281,10 @@ sends you to — not the whole spec.
 > entry, 10.5c-23), cross-group propose (10.5c-24: MKFS
 > submit + inode bounce, no new opcode), and O_APPEND reserve
 > (10.5c-25: reply size=watermark, getattr stays frontier until
-> REPORT resolves). Next: remaining mutations (SYMLINK,
-> directory rename, HASHED dest CREATE, HOLD) behind the same flag.
+> REPORT resolves), and SYMLINK as CREATE S_IFLNK + publish of the
+> target bytes (10.5c-26: no SYMLINK opcode, no target column).
+> Next: remaining mutations (directory rename, HASHED dest CREATE,
+> HOLD) behind the same flag.
 > [architecture.md §10](#architecture)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -1503,7 +1506,15 @@ sends you to — not the whole spec.
 > stays the frontier until REPORT resolves OPEN reservations whose
 > range is covered. Unhosted inode groups bounce. Same scratch smoke:
 > create `raft-smoke-a`, append 131072, getattr size=0, publish,
-> getattr size=131072, crash keeps that size. Remaining: SYMLINK,
+> getattr size=131072, crash keeps that size.
+>
+> **10.5c-26 is in (gated):** SYMLINK on the production host is
+> CREATE with `S_IFLNK` plus publish of the target bytes — the same
+> shape as FUSE (`efs_fuse_symlink`). No `EFS_MSG_INODE_SYMLINK`,
+> no target column on `efs_meta_row`. Publish and GETCHUNKS accept
+> files and symlinks; directories stay INVAL. Same scratch smoke:
+> create `raft-smoke-s` mode=0120777, publish size=11, getattr and
+> GETCHUNKS, duplicate EXIST, crash keeps mode and size. Remaining:
 > directory rename, HASHED dest CREATE, HOLD
 > (not a cutover of `efs-test`, not step 11).
 >
@@ -4542,8 +4553,16 @@ COMPLETED (`EFS_MD_CMD_APPEND_RES`) so the next write past the
 watermark is not BUSY. Flag off is a no-op. Gate: same smoke —
 create `raft-smoke-a`, append 131072, getattr size=0, publish,
 getattr size=131072, crash keeps that size.
-Remaining: SYMLINK, directory rename, HASHED dest CREATE, HOLD.
 Not in this step: cutting over the live `efs-test` table, step 11.
+
+**10.5c-26 — SYMLINK as CREATE + publish.** FUSE already creates
+`S_IFLNK` and stores the target as ordinary chunk bytes. Host
+CREATE packed that mode; publish/GETCHUNKS wrongly required
+`S_ISREG`. Both now accept files and symlinks (directories stay
+INVAL). No new opcode, no target column. Flag off is a no-op.
+Gate: same smoke — create `raft-smoke-s` mode=0120777, publish
+size=11, getattr+GETCHUNKS, duplicate EXIST, crash keeps mode
+and size. Remaining: directory rename, HASHED dest CREATE, HOLD.
 
 ### Shortening the code → signal cycle
 
@@ -5019,9 +5038,10 @@ READDIR/LOOKUP_PATH (10.5c-20) and SETATTR SIZE / chunk-aligned
 truncate (10.5c-21) and chunk publish + GETCHUNKS (10.5c-22) and
 unaligned truncate tail CAS (10.5c-23) and cross-group propose
 (10.5c-24, MKFS submit + inode bounce, no new opcode) and
-O_APPEND reserve (10.5c-25, resolve-on-report) are gated
+O_APPEND reserve (10.5c-25, resolve-on-report) and SYMLINK as
+CREATE S_IFLNK + publish (10.5c-26) are gated
 on the same
-smoke. What remains is SYMLINK, directory rename,
+smoke. What remains is directory rename,
 HASHED dest CREATE, HOLD, then the cutover — not new
 design.
 

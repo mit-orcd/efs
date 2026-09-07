@@ -1961,6 +1961,10 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     rc = efs_meta_apply_get_inode(kv, p->ino, &row);
     if (rc != EFS_OK)
         return rc;
+    /* FUSE stores a symlink target as ordinary published bytes. Directories
+     * have no chunk map. */
+    if (!S_ISREG(row.mode) && !S_ISLNK(row.mode))
+        return EFS_ERR_INVAL;
     if (p->content_epoch < row.content_epoch)
         return EFS_ERR_STALE;
     {

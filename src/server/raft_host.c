@@ -3547,6 +3547,13 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
     return EFS_OK;
 }
 
+/* Files and symlinks carry a chunk map; FUSE stores a symlink target as
+ * ordinary published bytes. Directories do not. */
+static int host_holds_chunks(uint32_t mode)
+{
+    return S_ISREG(mode) || S_ISLNK(mode);
+}
+
 /* One chunk CAS + lane MAX. read_mu held. First-use of a lane whose
  * group is not the inode's is INVAL this slice (that is a 2-shard txn).
  * Lane 0 is the inode shard, so the smoke's first chunk is one group. */
@@ -3576,7 +3583,7 @@ static int host_pub_locked(struct efs_raft_host *h, const struct efs_chunk_rec *
         rc = efs_meta_apply_get_inode(h->kv, rec->ino, &row);
     if (rc != EFS_OK)
         return rc;
-    if (!S_ISREG(row.mode))
+    if (!host_holds_chunks(row.mode))
         return EFS_ERR_INVAL;
     lane = (uint8_t)(rec->chunk_index % EFS_META_LANES);
     lsh = efs_kv_lane_shard(rec->ino, lane);
@@ -3683,7 +3690,7 @@ void server_raft_host_getchunks(efs_ino_t ino, uint32_t start, uint32_t max,
     rc = host_read_index(h, ig, &hint);
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, ino, &row);
-    if (rc == EFS_OK && !S_ISREG(row.mode))
+    if (rc == EFS_OK && !host_holds_chunks(row.mode))
         rc = EFS_ERR_INVAL;
     seen = (rc == EFS_OK) ? (1u << ig) : 0;
     for (ci = start; rc == EFS_OK && ci < group_end && out->count < max; ci++) {

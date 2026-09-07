@@ -312,9 +312,12 @@ raft_id 0 survives crash).
 `EFS_MD_CMD_APPEND_RSV`) and resolve-on-report (`APPEND_RES`).
 Reply size is the watermark; getattr stays the frontier until
 publish covers the reservation. Gate: same smoke (`raft-smoke-a`
-size=131072 survives crash). Remaining: SYMLINK, directory
-rename, HASHED dest CREATE, HOLD; not a cutover of `efs-test`,
-not step 11.
+size=131072 survives crash).
+**10.5c-26 is in:** SYMLINK is CREATE `S_IFLNK` + publish of the
+target bytes (no opcode, no target column). Gate: same smoke
+(`raft-smoke-s` mode=0120777 size=11 survives crash). Remaining:
+directory rename, HASHED dest CREATE, HOLD; not a cutover of
+`efs-test`, not step 11.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

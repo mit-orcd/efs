@@ -19,10 +19,12 @@
 # LOOKUP_PATH of those names, chunk-aligned SETATTR SIZE (truncate),
 # chunk publish + GETCHUNKS (lane 0), unaligned truncate tail + trunc-0,
 # O_APPEND reserve (reply size=watermark, getattr still 0 until publish
-# resolves), kill -9 a follower
+# resolves), SYMLINK as CREATE S_IFLNK + publish of the target bytes
+# (no SYMLINK opcode, no target column), kill -9 a follower
 # then the leader, restart catch-up keeps ROOT, the created file (new
 # mode, size=131072, nlink=2, utimens mtime), the published file truncated
 # to size=0 with no chunk map, the O_APPEND file at size=131072,
+# the symlink (mode=0120777, size=11),
 # the mkdir, the extra link name, the
 # unlinked name stays gone, the rmdir'd name stays gone, the nlink>1
 # unlinked name stays gone, the renamed name stays, and READDIR /
@@ -68,13 +70,16 @@ trap cleanup EXIT
 
 build_one() {
     local h=$1
-    ssh_to 60 "$h" "
+    ssh_to 90 "$h" "
 set -e
+killall -9 gcc 2>/dev/null || true
+sleep 1
 mkdir -p /tmp/efs
-rsync -a --delete --exclude='/mnt/' --exclude='*.log' '$SRC/' /tmp/efs/
+rsync -a --delete --delete-excluded --exclude='/mnt/' --exclude='/.git/' --exclude='*.log' --exclude='*.o' --exclude='*.a' --exclude='tests/test_wire' --exclude='tests/test_meta_apply' --exclude='efsd' --exclude='efs-mgmt' --exclude='efs-fuse' '$SRC/' /tmp/efs/ || { rc=\$?; [ \"\$rc\" -eq 24 ]; }
 cd /tmp/efs
 make clean >/dev/null
 make -j\"\$(nproc)\" efsd efs-mgmt tests/test_wire tests/test_meta_apply
+chmod +x tests/test_wire tests/test_meta_apply
 ./tests/test_wire
 ./tests/test_meta_apply
 "
@@ -666,6 +671,47 @@ check_append() {
     echo "$out" | grep -q 'status=1' || bad "$tag append miss not NOT_FOUND"
 }
 
+# SYMLINK is CREATE S_IFLNK + publish of the target bytes. Dedicated
+# name so raft-smoke-f / -p / -a stay. No SYMLINK opcode; no target
+# column on the inode row. File create does not bump ROOT nlink.
+check_symlink() {
+    local lid=$1
+    local tag=$2
+    local out ino
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-s 0120777" 2>/dev/null || true)
+    say "$tag symlink create: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag symlink create not OK"
+    echo "$out" | grep -q 'mode=0120777' || bad "$tag symlink mode"
+    echo "$out" | grep -q 'nlink=1' || bad "$tag symlink nlink"
+    ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag symlink ino"
+    SYMLINK_NAME=raft-smoke-s
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    say "$tag getattr empty symlink: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag getattr empty symlink not OK"
+    echo "$out" | grep -q 'size=0' || bad "$tag getattr empty symlink size"
+    echo "$out" | grep -q 'mode=0120777' || bad "$tag getattr empty symlink mode"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-publish ${ADDRS[$lid]}:${PORT} $ino 0 11" 2>/dev/null || true)
+    say "$tag symlink publish: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag symlink publish not OK"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    say "$tag getattr symlink: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag getattr symlink not OK"
+    echo "$out" | grep -q 'size=11' || bad "$tag getattr symlink size"
+    echo "$out" | grep -q 'mode=0120777' || bad "$tag getattr symlink mode"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getchunks ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    say "$tag getchunks symlink: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag getchunks symlink not OK"
+    echo "$out" | grep -q 'count=1' || bad "$tag getchunks symlink count"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-s 0120777" 2>/dev/null || true)
+    say "$tag symlink dup: $out"
+    echo "$out" | grep -q 'status=2' || bad "$tag symlink dup not EXIST"
+}
+
 # READDIR ROOT + LOOKUP_PATH. Run after rename so the listing is final.
 check_readdir_path() {
     local lid=$1
@@ -702,6 +748,9 @@ check_readdir_path() {
     if [ -n "${APPEND_NAME:-}" ]; then
         echo "$out" | grep -q "$APPEND_NAME" || bad "$tag readdir missing append"
     fi
+    if [ -n "${SYMLINK_NAME:-}" ]; then
+        echo "$out" | grep -q "$SYMLINK_NAME" || bad "$tag readdir missing symlink"
+    fi
     echo "$out" | grep -q 'raft-smoke-u' && bad "$tag readdir still has unlinked"
     if [ -n "${UNLINK_NLINK_NAME:-}" ]; then
         echo "$out" | grep -q "$UNLINK_NLINK_NAME" && bad "$tag readdir still has nlink-unlinked"
@@ -728,13 +777,9 @@ check_readdir_path() {
 
 say "build 4 nodes (scratch, not live cluster)"
 bfail=0
-bpids=()
 for h in "${HOSTS[@]}"; do
-    build_one "$h" &
-    bpids+=($!)
-done
-for p in "${bpids[@]}"; do
-    wait "$p" || bfail=1
+    say "build $h"
+    build_one "$h" || bfail=1
 done
 [ "$bfail" = 0 ] || { bad "build"; exit 1; }
 say "build OK (test_wire gated on each node)"
@@ -805,6 +850,9 @@ check_publish "$leader" "fresh"
 say "O_APPEND through Raft (fresh)"
 APPEND_NAME=""
 check_append "$leader" "fresh"
+say "SYMLINK through Raft (fresh)"
+SYMLINK_NAME=""
+check_symlink "$leader" "fresh"
 say "MKDIR through Raft (fresh)"
 MKDIR_NAME=""
 check_mkdir "$leader" "fresh"
@@ -1007,6 +1055,18 @@ if [ -n "${APPEND_NAME:-}" ]; then
     say "after-crash getattr append: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash append getattr missing"
     echo "$out" | grep -q 'size=131072' || bad "after-crash append size lost"
+fi
+if [ -n "${SYMLINK_NAME:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$SYMLINK_NAME")
+    say "after-crash lookup symlink: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash symlink name missing"
+    sino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$sino" ] && [ "$sino" != "0" ] || bad "after-crash symlink ino"
+    out=$(g0_mgmt raft-getattr "$sino")
+    say "after-crash getattr symlink: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash symlink getattr missing"
+    echo "$out" | grep -q 'mode=0120777' || bad "after-crash symlink mode lost"
+    echo "$out" | grep -q 'size=11' || bad "after-crash symlink size lost"
 fi
 if [ -n "${MKDIR_NAME:-}" ]; then
     out=$(g0_mgmt raft-lookup 1 "$MKDIR_NAME")

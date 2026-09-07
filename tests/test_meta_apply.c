@@ -1602,6 +1602,47 @@ static void test_export_salt(void)
     efs_kv_mem_free(kv2);
 }
 
+/* SYMLINK is CREATE with S_IFLNK; the target is published bytes, not a
+ * column on the inode row. Directories still cannot take a chunk map. */
+static void test_symlink(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct coord_ctx cc;
+    struct efs_meta_dentry d;
+    struct efs_meta_stat st;
+    struct efs_meta_pub p;
+    struct efs_meta_chunk ch;
+    efs_ino_t ino = 0;
+
+    CHECK(kv != NULL, "kv");
+    memset(&cc, 0, sizeof(cc));
+    cc.kv = kv;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFLNK | 0777,
+                                     "s", &ino) == EFS_OK && ino,
+          "create");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "s", &d) == EFS_OK &&
+              d.ino == ino && (d.type & S_IFMT) == S_IFLNK,
+          "dent");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 0 && S_ISLNK(st.mode),
+          "empty");
+    pub(kv, ino, 0, 11, 0x51, 0, T0 + 1, "target");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 11 && S_ISLNK(st.mode),
+          "size");
+    fill_ch(&ch);
+    memset(&p, 0, sizeof(p));
+    p.ino = EFS_ROOT_INO;
+    p.chunk_index = 0;
+    p.new_size = 11;
+    p.candidate_gen = 0x51;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
+    p.ch = ch;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_INVAL, "dir");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     test_create_lookup_unlink();
@@ -1627,6 +1668,7 @@ int main(void)
     test_link_nlink();
     test_rmdir_rename();
     test_export_salt();
+    test_symlink();
     test_lookup_path();
     if (failures) {
         fprintf(stderr, "test_meta_apply: %d failure(s)\n", failures);

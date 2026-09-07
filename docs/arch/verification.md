@@ -499,8 +499,16 @@ COMPLETED (`EFS_MD_CMD_APPEND_RES`) so the next write past the
 watermark is not BUSY. Flag off is a no-op. Gate: same smoke —
 create `raft-smoke-a`, append 131072, getattr size=0, publish,
 getattr size=131072, crash keeps that size.
-Remaining: SYMLINK, directory rename, HASHED dest CREATE, HOLD.
 Not in this step: cutting over the live `efs-test` table, step 11.
+
+**10.5c-26 — SYMLINK as CREATE + publish.** FUSE already creates
+`S_IFLNK` and stores the target as ordinary chunk bytes. Host
+CREATE packed that mode; publish/GETCHUNKS wrongly required
+`S_ISREG`. Both now accept files and symlinks (directories stay
+INVAL). No new opcode, no target column. Flag off is a no-op.
+Gate: same smoke — create `raft-smoke-s` mode=0120777, publish
+size=11, getattr+GETCHUNKS, duplicate EXIST, crash keeps mode
+and size. Remaining: directory rename, HASHED dest CREATE, HOLD.
 
 ## Shortening the code → signal cycle
 
