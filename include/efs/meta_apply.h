@@ -16,6 +16,7 @@
 #define EFS_META_INO_BYTES   128
 #define EFS_META_DENT_BYTES  20
 #define EFS_META_ALLOC_BYTES 8
+#define EFS_META_LANE_BYTES  56
 
 #define EFS_META_PROFILE_K2F1 1u
 
@@ -380,5 +381,10 @@ int efs_meta_pack_dentry(const struct efs_meta_dentry *d, uint8_t *out,
                          uint32_t cap);
 int efs_meta_unpack_dentry(const uint8_t *p, uint32_t n, struct efs_meta_dentry *d);
 int efs_meta_apply_peek_alloc(struct efs_kv *kv, uint32_t shard, efs_ino_t *next);
+/* HASHED/SPLITTING dest CREATE: pack the dir-lane MAX stamp that lives on
+ * the dentry shard so the parent leader is not on the create path. */
+int efs_meta_stamp_dir_lane(struct efs_kv *kv, const struct efs_meta_row *dir,
+                            const char *name, uint64_t now, uint8_t *key,
+                            uint32_t *klen, uint8_t *val, uint32_t cap);
 
 #endif

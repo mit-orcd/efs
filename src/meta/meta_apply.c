@@ -133,6 +133,15 @@ static int dir_lane_stamp(struct efs_kv *kv, const struct efs_meta_row *dir,
     return EFS_OK;
 }
 
+int efs_meta_stamp_dir_lane(struct efs_kv *kv, const struct efs_meta_row *dir,
+                            const char *name, uint64_t now, uint8_t *key,
+                            uint32_t *klen, uint8_t *val, uint32_t cap)
+{
+    if (!kv || !dir || !name || !key || !klen || !val || cap < LANE_VAL)
+        return EFS_ERR_INVAL;
+    return dir_lane_stamp(kv, dir, name, now, key, klen, val);
+}
+
 /* Per-(dir, dentry-shard) emptiness witness. Every insert (and every other
  * mutation of that shard's names) bumps it so an RMDIR that observed empty
  * cannot commit across a concurrent create (directory.md). */

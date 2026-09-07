@@ -18,6 +18,10 @@
 #define EFS_MD_CMD_DECIDE  6
 #define EFS_MD_CMD_RESOLVE 7
 #define EFS_MD_CMD_DROP    8
+#define EFS_MD_CMD_DIR    11 /* matches sim SIM_CMD_DIR; layout-epoch */
+#define EFS_MD_DIR_BEGIN   1
+#define EFS_MD_DIR_MIGRATE 2
+#define EFS_MD_DIR_FINISH  3
 #define EFS_MD_CMD_SETATTR 13 /* matches sim SIM_CMD_SETATTR */
 #define EFS_MD_CMD_UTIMENS 14 /* matches sim SIM_CMD_UTIMENS */
 #define EFS_MD_CMD_TRUNCATE 15 /* matches sim SIM_CMD_TRUNCATE */

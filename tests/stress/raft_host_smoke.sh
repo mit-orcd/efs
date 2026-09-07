@@ -15,7 +15,9 @@
 # dest lookup, directory is INVAL), nlink>1 UNLINK of a dedicated extra
 # name (lookup miss, surviving nlink=2), utimens mtime fence, same-dir
 # LOCAL file RENAME (old name gone, new name present), same-dir LOCAL
-# directory RENAME (raft-smoke-rd → raft-smoke-re, pver bump), READDIR of ROOT
+# directory RENAME (raft-smoke-rd → raft-smoke-re, pver bump), HASHED dest
+# CREATE (dedicated raft-smoke-hd split empty then a file whose hashed
+# dentry shard is on the other Raft group), READDIR of ROOT
 # (created/renamed/link/mkdir names present, unlinked names absent),
 # LOOKUP_PATH of those names, chunk-aligned SETATTR SIZE (truncate),
 # chunk publish + GETCHUNKS (lane 0), unaligned truncate tail + trunc-0,
@@ -29,6 +31,7 @@
 # the mkdir, the extra link name,
 # the unlinked name stays gone, the rmdir'd name stays gone, the nlink>1
 # unlinked name stays gone, the renamed file stays, the renamed dir stays,
+# the HASHED dest file stays,
 # and READDIR / LOOKUP_PATH still match.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
@@ -569,6 +572,113 @@ check_dir_rename() {
     echo "$out" | grep -q 'status=6' || bad "$tag dir-rename cross-dir not INVAL"
 }
 
+# Empty dedicated dir → HASHED, then file CREATE whose dir lane lives on
+# the other Raft group (first-use 2-shard txn). Do not HASHED ROOT.
+# A second name on the same lane is a single CREATE (bit already set).
+hashed_spread_names() {
+    local parent=$1
+    python3 -c "
+parent=int('$parent')
+MASK=0xFFF
+def dir_lane(name):
+    h=2166136261
+    for c in name.encode():
+        h ^= c
+        h = (h * 16777619) & 0xffffffff
+    return h % 64
+def lane_shard(ino, lane):
+    h = ((ino & 0xffffffff) * 2654435761) & 0xffffffff
+    stride = 2 * (h & 0x7FF) + 1
+    return ((ino & MASK) + lane * stride) & MASK
+psh = parent & MASK
+first=second=''
+want=None
+for i in range(8192):
+    nm='n%d' % i
+    lane=dir_lane(nm)
+    dsh=lane_shard(parent, lane)
+    if lane==0 or dsh==psh or (dsh & 1)==(psh & 1):
+        continue
+    if not first:
+        first=nm
+        want=lane
+        continue
+    if lane==want:
+        second=nm
+        break
+print(first, second)
+"
+}
+
+check_hashed_create() {
+    local lid=$1
+    local tag=$2
+    local out ino hd_ino names nm nm2 psh ish
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    leader=$lid
+    out=$(g0_mgmt raft-create 1 raft-smoke-hd 040755)
+    lid=$leader
+    say "$tag hashed-dir mkdir: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-dir mkdir not OK"
+    echo "$out" | grep -q 'mode=040755' || bad "$tag hashed-dir mode"
+    hd_ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$hd_ino" ] && [ "$hd_ino" != "0" ] || { bad "$tag hashed-dir ino"; return; }
+    HASHED_DIR=raft-smoke-hd
+    HASHED_DIR_INO=$hd_ino
+    out=$(g0_mgmt raft-dir "$hd_ino" begin)
+    say "$tag hashed-dir begin: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-dir begin not OK"
+    out=$(g0_mgmt raft-dir "$hd_ino" migrate)
+    say "$tag hashed-dir migrate: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-dir migrate not OK"
+    out=$(g0_mgmt raft-dir "$hd_ino" finish)
+    say "$tag hashed-dir finish: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-dir finish not OK"
+    names=$(hashed_spread_names "$hd_ino")
+    nm=$(echo "$names" | awk '{print $1}')
+    nm2=$(echo "$names" | awk '{print $2}')
+    [ -n "$nm" ] || { bad "$tag hashed spread name"; return; }
+    out=$(g0_mgmt raft-create "$hd_ino" "$nm")
+    say "$tag hashed-create $nm: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-create not OK"
+    echo "$out" | grep -q 'mode=0100644' || bad "$tag hashed-create mode"
+    echo "$out" | grep -q 'nlink=1' || bad "$tag hashed-create nlink"
+    ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag hashed-create ino"
+    psh=$((hd_ino & 4095))
+    ish=$((ino & 4095))
+    if [ "$psh" -eq "$ish" ]; then
+        bad "$tag hashed-create ino shard=$ish still parent shard (not HASHED dest)"
+    fi
+    HASHED_FILE=$nm
+    out=$(g0_mgmt raft-lookup "$hd_ino" "$nm")
+    say "$tag hashed-lookup: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-lookup not OK"
+    echo "$out" | grep -q "ino=$ino" || bad "$tag hashed-lookup ino"
+    out=$(g0_mgmt raft-readdir "$hd_ino")
+    say "$tag hashed-readdir: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-readdir not OK"
+    echo "$out" | grep -q "$nm" || bad "$tag hashed-readdir missing file"
+    out=$(g0_mgmt raft-create "$hd_ino" "$nm")
+    say "$tag hashed-create dup: $out"
+    echo "$out" | grep -q 'status=2' || bad "$tag hashed-create dup not EXIST"
+    if [ -n "$nm2" ]; then
+        out=$(g0_mgmt raft-create "$hd_ino" "$nm2")
+        say "$tag hashed-create-lane $nm2: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag hashed-create-lane not OK"
+        HASHED_FILE2=$nm2
+        out=$(g0_mgmt raft-lookup "$hd_ino" "$nm2")
+        echo "$out" | grep -q 'status=0' || bad "$tag hashed-lookup-lane not OK"
+    fi
+    out=$(g0_mgmt raft-lookup-path "/raft-smoke-hd/$nm")
+    say "$tag hashed lookup-path: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed lookup-path not OK"
+    echo "$out" | grep -q "name=$nm" || bad "$tag hashed lookup-path name"
+}
+
 # Mode/owner SETATTR, chunk-aligned truncate, then utimens on
 # raft-smoke-f (all stay after crash). Mixed SIZE+mode is INVAL.
 # Unaligned SIZE (tail CAS) is on raft-smoke-p, not here.
@@ -748,6 +858,14 @@ check_symlink() {
     echo "$out" | grep -q 'status=2' || bad "$tag symlink dup not EXIST"
 }
 
+# Exact token in raft-readdir names=a,b,c (raft-smoke-h must not match
+# raft-smoke-hd).
+readdir_has() {
+    local names
+    names=$(echo "$1" | sed -n 's/.*names=//p')
+    echo ",$names," | grep -q ",$2,"
+}
+
 # READDIR ROOT + LOOKUP_PATH. Run after rename so the listing is final.
 check_readdir_path() {
     local lid=$1
@@ -762,40 +880,43 @@ check_readdir_path() {
     lid=$leader
     say "$tag readdir: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag readdir not OK"
-    echo "$out" | grep -q 'raft-smoke-f' || bad "$tag readdir missing f"
+    readdir_has "$out" raft-smoke-f || bad "$tag readdir missing f"
     if [ -n "${RENAME_NAME:-}" ]; then
-        echo "$out" | grep -q "$RENAME_NAME" || bad "$tag readdir missing renamed"
+        readdir_has "$out" "$RENAME_NAME" || bad "$tag readdir missing renamed"
     fi
     if [ -n "${RENAME_OLD:-}" ]; then
-        echo "$out" | grep -q "$RENAME_OLD" && bad "$tag readdir still has rename-old"
+        readdir_has "$out" "$RENAME_OLD" && bad "$tag readdir still has rename-old"
     fi
     if [ -n "${LINK_NAME:-}" ]; then
-        echo "$out" | grep -q "$LINK_NAME" || bad "$tag readdir missing link"
+        readdir_has "$out" "$LINK_NAME" || bad "$tag readdir missing link"
     fi
     if [ -n "${MKDIR_NAME:-}" ]; then
-        echo "$out" | grep -q "$MKDIR_NAME" || bad "$tag readdir missing mkdir"
+        readdir_has "$out" "$MKDIR_NAME" || bad "$tag readdir missing mkdir"
     fi
     if [ -n "${XG_NAME:-}" ]; then
-        echo "$out" | grep -q "$XG_NAME" || bad "$tag readdir missing cross-group"
+        readdir_has "$out" "$XG_NAME" || bad "$tag readdir missing cross-group"
     fi
     if [ -n "${PUBLISH_NAME:-}" ]; then
-        echo "$out" | grep -q "$PUBLISH_NAME" || bad "$tag readdir missing published"
+        readdir_has "$out" "$PUBLISH_NAME" || bad "$tag readdir missing published"
     fi
     if [ -n "${APPEND_NAME:-}" ]; then
-        echo "$out" | grep -q "$APPEND_NAME" || bad "$tag readdir missing append"
+        readdir_has "$out" "$APPEND_NAME" || bad "$tag readdir missing append"
     fi
     if [ -n "${SYMLINK_NAME:-}" ]; then
-        echo "$out" | grep -q "$SYMLINK_NAME" || bad "$tag readdir missing symlink"
+        readdir_has "$out" "$SYMLINK_NAME" || bad "$tag readdir missing symlink"
     fi
     if [ -n "${DIR_RENAME_NAME:-}" ]; then
-        echo "$out" | grep -q "$DIR_RENAME_NAME" || bad "$tag readdir missing dir-renamed"
+        readdir_has "$out" "$DIR_RENAME_NAME" || bad "$tag readdir missing dir-renamed"
     fi
     if [ -n "${DIR_RENAME_OLD:-}" ]; then
-        echo "$out" | grep -q "$DIR_RENAME_OLD" && bad "$tag readdir still has dir-rename-old"
+        readdir_has "$out" "$DIR_RENAME_OLD" && bad "$tag readdir still has dir-rename-old"
     fi
-    echo "$out" | grep -q 'raft-smoke-u' && bad "$tag readdir still has unlinked"
+    if [ -n "${HASHED_DIR:-}" ]; then
+        readdir_has "$out" "$HASHED_DIR" || bad "$tag readdir missing hashed-dir"
+    fi
+    readdir_has "$out" raft-smoke-u && bad "$tag readdir still has unlinked"
     if [ -n "${UNLINK_NLINK_NAME:-}" ]; then
-        echo "$out" | grep -q "$UNLINK_NLINK_NAME" && bad "$tag readdir still has nlink-unlinked"
+        readdir_has "$out" "$UNLINK_NLINK_NAME" && bad "$tag readdir still has nlink-unlinked"
     fi
     out=$(g0_mgmt raft-lookup-path /raft-smoke-f)
     say "$tag lookup-path f: $out"
@@ -822,6 +943,12 @@ check_readdir_path() {
         out=$(g0_mgmt raft-lookup-path "/$DIR_RENAME_OLD")
         say "$tag lookup-path dir-rename-old: $out"
         echo "$out" | grep -q 'status=1' || bad "$tag lookup-path dir-rename-old not NOT_FOUND"
+    fi
+    if [ -n "${HASHED_DIR:-}" ] && [ -n "${HASHED_FILE:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$HASHED_DIR/$HASHED_FILE")
+        say "$tag lookup-path hashed: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag lookup-path hashed not OK"
+        echo "$out" | grep -q "name=$HASHED_FILE" || bad "$tag lookup-path hashed name"
     fi
     out=$(g0_mgmt raft-lookup-path /no-such-efs-name)
     say "$tag lookup-path miss: $out"
@@ -931,6 +1058,12 @@ say "directory RENAME through Raft (fresh)"
 DIR_RENAME_NAME=""
 DIR_RENAME_OLD=""
 check_dir_rename "$leader" "fresh"
+say "HASHED dest CREATE through Raft (fresh)"
+HASHED_DIR=""
+HASHED_DIR_INO=""
+HASHED_FILE=""
+HASHED_FILE2=""
+check_hashed_create "$leader" "fresh"
 say "READDIR/LOOKUP_PATH through ReadIndex (fresh)"
 check_readdir_path "$leader" "fresh"
 
@@ -1071,6 +1204,7 @@ root_nlink=2
 [ -n "${MKDIR_NAME:-}" ] && root_nlink=$((root_nlink + 1))
 [ -n "${XG_NAME:-}" ] && root_nlink=$((root_nlink + 1))
 [ -n "${DIR_RENAME_NAME:-}" ] && root_nlink=$((root_nlink + 1))
+[ -n "${HASHED_DIR:-}" ] && root_nlink=$((root_nlink + 1))
 check_reads "$leader" "after-crash" "$root_nlink"
 out=$(g0_mgmt raft-lookup 1 raft-smoke-f)
 say "after-crash lookup created: $out"
@@ -1175,6 +1309,22 @@ if [ -n "${DIR_RENAME_OLD:-}" ]; then
     out=$(g0_mgmt raft-lookup 1 "$DIR_RENAME_OLD")
     say "after-crash lookup dir-rename-old: $out"
     echo "$out" | grep -q 'status=1' || bad "after-crash dir-rename old name came back"
+fi
+if [ -n "${HASHED_DIR:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$HASHED_DIR")
+    say "after-crash lookup hashed-dir: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash hashed-dir missing"
+    echo "$out" | grep -q 'mode=040755' || bad "after-crash hashed-dir mode lost"
+fi
+if [ -n "${HASHED_DIR_INO:-}" ] && [ -n "${HASHED_FILE:-}" ]; then
+    out=$(g0_mgmt raft-lookup "$HASHED_DIR_INO" "$HASHED_FILE")
+    say "after-crash lookup hashed-file: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash hashed-file missing"
+fi
+if [ -n "${HASHED_DIR_INO:-}" ] && [ -n "${HASHED_FILE2:-}" ]; then
+    out=$(g0_mgmt raft-lookup "$HASHED_DIR_INO" "$HASHED_FILE2")
+    say "after-crash lookup hashed-file2: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash hashed-file2 missing"
 fi
 say "ReadIndex READDIR/LOOKUP_PATH (after crash)"
 check_readdir_path "$leader" "after-crash"

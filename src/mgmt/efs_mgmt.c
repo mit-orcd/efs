@@ -2,6 +2,8 @@
 #include "efs/protocol.h"
 #include "efs/network.h"
 #include "efs/raft.h"
+#include "efs/kv_key.h"
+#include "efs/meta_cmd.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1220,6 +1222,91 @@ static int cmd_raft_mkfs(int argc, char **argv)
     }
 }
 
+static void wr64be_mgmt(uint8_t *p, uint64_t v)
+{
+    int i;
+
+    for (i = 7; i >= 0; i--) {
+        p[i] = (uint8_t)v;
+        v >>= 8;
+    }
+}
+
+/* Layout-epoch on the dir's inode group (RAFT_MKFS submit, no new opcode).
+ * status= matches inode RPCs so g0_mgmt retries NOT_PRIMARY. */
+static int cmd_raft_dir(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    int fd;
+    uint8_t reply_type, kind = 0;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_msg_raft_mkfs_reply *r;
+    efs_ino_t ino;
+    uint8_t payload[1 + 10];
+    uint32_t st;
+
+    if (argc < 3) {
+        fprintf(stderr, "usage: raft-dir <node:port> <ino> <begin|migrate|finish>\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    ino = (efs_ino_t)strtoull(argv[1], NULL, 0);
+    if (ino == 0) {
+        fprintf(stderr, "raft-dir: ino required\n");
+        return 1;
+    }
+    if (strcmp(argv[2], "begin") == 0)
+        kind = EFS_MD_DIR_BEGIN;
+    else if (strcmp(argv[2], "migrate") == 0)
+        kind = EFS_MD_DIR_MIGRATE;
+    else if (strcmp(argv[2], "finish") == 0)
+        kind = EFS_MD_DIR_FINISH;
+    else {
+        fprintf(stderr, "raft-dir: kind must be begin|migrate|finish\n");
+        return 1;
+    }
+    payload[0] = efs_raft_shard_group(efs_kv_inode_shard(ino));
+    payload[1] = EFS_MD_CMD_DIR;
+    payload[2] = kind;
+    wr64be_mgmt(payload + 3, ino);
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_RAFT_MKFS, payload, sizeof(payload), &reply_type,
+                  &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_RAFT_MKFS_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to raft-dir\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    st = 0;
+    if (r->rc == EFS_ERR_NOT_PRIMARY)
+        st = 7;
+    else if (r->rc != EFS_OK)
+        st = 3;
+    printf("raft-dir status=%u rc=%d kind=%s ino=%llu index=%llu\n",
+           st, r->rc, argv[2], (unsigned long long)ino,
+           (unsigned long long)r->index);
+    {
+        int rc = r->rc;
+        free(reply);
+        return rc == EFS_OK ? 0 : 1;
+    }
+}
+
 static int cmd_raft_getattr(int argc, char **argv)
 {
     char host[64];
@@ -1941,6 +2028,7 @@ int main(int argc, char **argv)
                     "  upgrade <node:port> <export> [shard-bits]\n"
                     "  raft-status <node:port>\n"
                     "  raft-mkfs <node:port>\n"
+                    "  raft-dir <node:port> <ino> <begin|migrate|finish>\n"
                     "  raft-getattr <node:port> [ino]\n"
                     "  raft-lookup <node:port> <parent> <name>\n"
                     "  raft-create <node:port> <parent> <name> [mode]\n"
@@ -1987,6 +2075,8 @@ int main(int argc, char **argv)
         return cmd_raft_status(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-mkfs") == 0)
         return cmd_raft_mkfs(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-dir") == 0)
+        return cmd_raft_dir(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-getattr") == 0)
         return cmd_raft_getattr(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-lookup") == 0)

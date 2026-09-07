@@ -5,6 +5,7 @@
 #include "efs/kv_lsm.h"
 #include "efs/meta_apply.h"
 #include "efs/meta_cmd.h"
+#include "efs/dir_layout.h"
 #include "efs/opid.h"
 #include "efs/kv_key.h"
 #include "efs/txn.h"
@@ -45,6 +46,7 @@
                             (uint32_t)EFS_NUM_FRAGMENTS * (4u + EFS_HASH_SIZE))
 #define HOST_PUBLISH_LEN   (29u + (uint32_t)EFS_NUM_FRAGMENTS * (4u + EFS_HASH_SIZE) + \
                             EFS_OPID_UUID_LEN + 4u + 8u + 8u + 8u + 4u)
+#define HOST_DIR_LEN       10
 
 struct host_inbox_item {
     uint8_t *buf;
@@ -521,6 +523,45 @@ static int apply_append_res_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+/* Same encoding as sim_dir_apply. Empty LOCAL → HASHED for the smoke;
+ * migrate of a non-empty dir that writes a hashed dentry on another
+ * group is not hosted (SPLITTING dest CREATE stays BUSY). */
+static int apply_dir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                         uint32_t clen, uint64_t index)
+{
+    efs_ino_t dir;
+    int rc = EFS_ERR_PROTO;
+
+    if (clen < HOST_DIR_LEN)
+        return EFS_OK;
+    dir = rd64be(cmd + 2);
+    switch (cmd[1]) {
+    case EFS_MD_DIR_BEGIN:
+        rc = efs_meta_dir_begin_split(h->kv, dir);
+        break;
+    case EFS_MD_DIR_MIGRATE:
+        rc = efs_meta_dir_migrate_one(h->kv, dir);
+        break;
+    case EFS_MD_DIR_FINISH:
+        rc = efs_meta_dir_finish_hashed(h->kv, dir);
+        break;
+    default:
+        return EFS_OK;
+    }
+    if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY)
+        rc = EFS_OK;
+    if (rc != EFS_OK) {
+        fprintf(stderr, "raft-host: apply dir rc=%d index=%llu ino=%llu kind=%u\n",
+                rc, (unsigned long long)index, (unsigned long long)dir,
+                (unsigned)cmd[1]);
+        return EFS_OK;
+    }
+    fprintf(stderr, "raft-host: applied dir index=%llu ino=%llu kind=%u\n",
+            (unsigned long long)index, (unsigned long long)dir,
+            (unsigned)cmd[1]);
+    return EFS_OK;
+}
+
 /* Same encoding as sim apply_publish_cmd. Session fencing is not hosted. */
 static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                              uint32_t clen, uint64_t index)
@@ -683,6 +724,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         return apply_append_rsv_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_APPEND_RES)
         return apply_append_res_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_DIR)
+        return apply_dir_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
         cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP)
         return apply_txn_cmd(h, cmd, clen);
@@ -737,6 +780,15 @@ static int host_pick_peer(struct efs_raft_host *h, const uint8_t *groups, int ng
             return rid;
     }
     return -1;
+}
+
+/* Both scratch groups. HASHED used_shards / file lanes can sit on the
+ * group this replica does not host; bounce to a dual-host instead of
+ * returning NOT_PRIMARY to the client. */
+static void host_need_both(uint8_t *need)
+{
+    need[0] = EFS_RAFT_GROUP_SHARD;
+    need[1] = EFS_RAFT_GROUP_SHARD2;
 }
 
 static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
@@ -1158,6 +1210,37 @@ static void host_fwd_lookup_path(struct efs_raft_host *h, efs_ino_t start,
             return;
         if (host_inode_rpc_peer(h, rid, EFS_MSG_INODE_LOOKUP_PATH, &req,
                                 sizeof(req), EFS_MSG_INODE_LOOKUP_PATH_REPLY,
+                                out, sizeof(*out)) != 0) {
+            skip = rid;
+            out->status = EFS_INODE_RPC_NOT_PRIMARY;
+            continue;
+        }
+        if (out->status != EFS_INODE_RPC_NOT_PRIMARY)
+            return;
+        skip = rid;
+    }
+}
+
+static void host_fwd_readdir(struct efs_raft_host *h, efs_ino_t parent,
+                             uint32_t max_ents, uint64_t after_ino,
+                             struct efs_msg_inode_readdir_reply *out,
+                             const uint8_t *groups, int ng)
+{
+    struct efs_msg_inode_readdir req;
+    int tries, rid, skip = -1;
+
+    memset(&req, 0, sizeof(req));
+    req.parent = parent;
+    req.max_ents = max_ents;
+    req.after_ino = after_ino;
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_NOT_PRIMARY;
+    for (tries = 0; tries < h->n; tries++) {
+        rid = host_pick_peer(h, groups, ng, skip);
+        if (rid < 0)
+            return;
+        if (host_inode_rpc_peer(h, rid, EFS_MSG_INODE_READDIR, &req,
+                                sizeof(req), EFS_MSG_INODE_READDIR_REPLY,
                                 out, sizeof(*out)) != 0) {
             skip = rid;
             out->status = EFS_INODE_RPC_NOT_PRIMARY;
@@ -1893,9 +1976,11 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
     out->index = idx;
 }
 
-/* Leader-only. Payload: group byte, then command bytes (empty command =
- * ReadIndex). Holds read_mu so a submit cannot interleave with a local
- * inode handler on this node. */
+/* Payload: group byte, then command bytes (empty command = ReadIndex).
+ * A hosted replica proposes (or ReadIndexes) even when it is not the
+ * leader; an unhosted node forwards a non-empty command to a voter.
+ * Holds read_mu so a submit cannot interleave with a local inode
+ * handler on this node. */
 void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                              struct efs_msg_raft_mkfs_reply *out)
 {
@@ -1917,20 +2002,18 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     group = payload[0];
     cmd = payload + 1;
     clen = plen - 1;
-    pthread_mutex_lock(&h->mu);
-    r = group_raft(h, group);
-    if (!r) {
-        pthread_mutex_unlock(&h->mu);
-        out->rc = EFS_ERR_NOT_PRIMARY;
+    if (!host_hosts(h, group)) {
+        /* Unhosted: bounce to a voter. ReadIndex still requires a local
+         * replica (inode handlers bounce the inode RPC instead). */
+        if (clen == 0) {
+            out->rc = EFS_ERR_NOT_PRIMARY;
+            return;
+        }
+        rc = host_remote_cmd(h, group, cmd, clen, out, -1);
+        if (rc != EFS_OK)
+            out->rc = rc;
         return;
     }
-    out->leader_hint = efs_raft_leader(r);
-    if (efs_raft_role(r) != EFS_RAFT_LEADER) {
-        pthread_mutex_unlock(&h->mu);
-        out->rc = EFS_ERR_NOT_PRIMARY;
-        return;
-    }
-    pthread_mutex_unlock(&h->mu);
     pthread_mutex_lock(&h->read_mu);
     if (clen == 0) {
         rc = host_read_index(h, group, &hint);
@@ -2027,6 +2110,14 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
     }
     pthread_mutex_lock(&h->read_mu);
     rc = host_read_inode_lanes(h, ino, &hint);
+    if (rc == EFS_ERR_NOT_PRIMARY) {
+        uint8_t need[2];
+
+        pthread_mutex_unlock(&h->read_mu);
+        host_need_both(need);
+        host_fwd_getattr(h, ino, out, need, 2);
+        return;
+    }
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
     pthread_mutex_unlock(&h->read_mu);
@@ -2093,12 +2184,20 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
             int nn = 1;
             need[0] = pg;
             if (cg != pg)
-                need[nn++] = cg;
+                    need[nn++] = cg;
             pthread_mutex_unlock(&h->read_mu);
             host_fwd_lookup(h, parent, name, out, need, nn);
             return;
         }
         rc = host_read_inode_lanes(h, dent.ino, &hint);
+        if (rc == EFS_ERR_NOT_PRIMARY) {
+            uint8_t need[2];
+
+            pthread_mutex_unlock(&h->read_mu);
+            host_need_both(need);
+            host_fwd_lookup(h, parent, name, out, need, 2);
+            return;
+        }
     }
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, dent.ino, host_txn_coord, h, &st);
@@ -2111,8 +2210,18 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
     }
 }
 
-/* File CREATE: one Raft entry on the dentry shard (co-located with a
- * LOCAL parent). MKDIR is a 2-shard txn and is INVAL here. */
+/* File CREATE: one Raft entry on the dentry shard when that shard's
+ * group already has everything the apply writes (LOCAL parent, or a
+ * HASHED dest whose used_shards bit is set, or first-use on the same
+ * Raft group as the parent). First use of a HASHED dir lane on another
+ * group is a 2-shard txn (parent used_shards + dest dentry/inode).
+ * SPLITTING dest is BUSY. MKDIR is a 2-shard txn of its own. */
+static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
+                                  const char *name, uint32_t mode,
+                                  const struct efs_meta_attrs *at,
+                                  struct efs_meta_row *prow, uint32_t dsh,
+                                  int *hint);
+
 void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
                              uint32_t uid, uint32_t gid,
                              struct efs_msg_inode_reply *out)
@@ -2164,6 +2273,8 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
     if (rc == EFS_OK && !S_ISDIR(prow.mode))
         rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK && prow.layout == EFS_META_LAYOUT_SPLITTING)
+        rc = EFS_ERR_BUSY;
     if (rc == EFS_OK) {
         dsh = efs_kv_dentry_shard(parent, name, prow.layout);
         dg = efs_raft_shard_group(dsh);
@@ -2194,10 +2305,16 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         if (rc == EFS_ERR_NOT_FOUND)
             rc = EFS_OK;
     }
-    if (rc == EFS_OK)
+    if (rc == EFS_OK && prow.layout == EFS_META_LAYOUT_HASHED &&
+        (prow.used_shards & (1ull << efs_kv_dir_lane(name))) == 0 &&
+        pg != dg)
+        rc = host_hashed_create_txn(h, parent, name, mode, &at, &prow, dsh,
+                                    &hint);
+    else if (rc == EFS_OK) {
         rc = host_propose(h, dg, cmd, clen, &idx, &hint);
-    if (rc == EFS_OK)
-        rc = host_wait_applied(h, dg, idx, &hint);
+        if (rc == EFS_OK)
+            rc = host_wait_applied(h, dg, idx, &hint);
+    }
     if (rc == EFS_OK)
         rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
     if (rc == EFS_OK)
@@ -2305,6 +2422,150 @@ static int host_drop_parts(struct efs_raft_host *h, const struct efs_txid *t,
                                 hint);
         if (one != EFS_OK && rc == EFS_OK)
             rc = one;
+    }
+    return rc;
+}
+
+/* First use of a HASHED dir lane whose dentry shard is on a different
+ * Raft group than the parent inode. Parent used_shards is exclusive;
+ * dest dentry, child inode, alloc, dseq, and dir-lane ride the dest
+ * shard. Parent mtime/ctime stay on the dir-lane (not the home row). */
+static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
+                                  const char *name, uint32_t mode,
+                                  const struct efs_meta_attrs *at,
+                                  struct efs_meta_row *prow, uint32_t dsh,
+                                  int *hint)
+{
+    struct efs_meta_row crow;
+    struct efs_meta_dentry dent;
+    struct efs_txid t;
+    struct efs_txn_parts parts;
+    uint8_t k_dent[EFS_KV_KEY_MAX], k_pino[EFS_KV_KEY_MAX], k_cino[EFS_KV_KEY_MAX];
+    uint8_t k_alloc[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX];
+    uint8_t k_ln[EFS_KV_KEY_MAX];
+    uint8_t v_dent[EFS_META_DENT_BYTES], v_pino[EFS_META_INO_BYTES];
+    uint8_t v_cino[EFS_META_INO_BYTES], v_alloc[EFS_META_ALLOC_BYTES];
+    uint8_t v_dseq[8], v_ln[EFS_META_LANE_BYTES], sb[8];
+    uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0, kln = 0, sn = 8;
+    uint32_t psh, coord;
+    uint64_t pver = 0, aver = 0, sver = 0, dver = 0, lver = 0, seq = 0;
+    uint64_t bit;
+    uint8_t lane, cmd[22];
+    efs_ino_t next = 0, ino = 0;
+    int rc, i, gr;
+
+    psh = efs_kv_inode_shard(parent);
+    lane = efs_kv_dir_lane(name);
+    bit = 1ull << lane;
+    prow->used_shards |= bit;
+    rc = efs_meta_apply_peek_alloc(h->kv, dsh, &next);
+    if (rc == EFS_OK) {
+        ino = next;
+        if (efs_kv_inode_shard(ino) != dsh)
+            rc = EFS_ERR_PROTO;
+        next = ino + (efs_ino_t)(1u << EFS_KV_SHARD_BITS);
+    }
+    if (rc == EFS_OK) {
+        memset(&crow, 0, sizeof(crow));
+        crow.ino = ino;
+        crow.generation = 1;
+        crow.mode = mode;
+        crow.nlink = 1;
+        crow.parent = parent;
+        crow.uid = at->uid;
+        crow.gid = at->gid;
+        crow.base_mtime = at->now;
+        crow.base_atime = at->now;
+        crow.base_ctime = at->now;
+        memset(&dent, 0, sizeof(dent));
+        dent.ino = ino;
+        dent.generation = 1;
+        dent.type = mode & S_IFMT;
+        rc = efs_meta_pack_dentry(&dent, v_dent, sizeof(v_dent));
+        if (rc == EFS_OK)
+            rc = efs_meta_pack_inode(prow, v_pino, sizeof(v_pino));
+        if (rc == EFS_OK)
+            rc = efs_meta_pack_inode(&crow, v_cino, sizeof(v_cino));
+        wr64be(v_alloc, next);
+    }
+    if (rc == EFS_OK)
+        rc = efs_kv_key_dentry(dsh, parent, name, k_dent, &kd);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_inode(psh, parent, k_pino, &kpi);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_inode(dsh, ino, k_cino, &kci);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_alloc(dsh, k_alloc, &ka);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_dseq(dsh, parent, lane, k_dseq, &ks);
+    if (rc == EFS_OK)
+        rc = efs_meta_stamp_dir_lane(h->kv, prow, name, at->now, k_ln, &kln,
+                                     v_ln, sizeof(v_ln));
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_pino, kpi, &pver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_alloc, ka, &aver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_dseq, ks, &sver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_ln, kln, &lver);
+    if (rc == EFS_OK) {
+        sn = 8;
+        gr = efs_kv_get(h->kv, k_dseq, ks, sb, &sn);
+        seq = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
+        wr64be(v_dseq, seq + 1);
+        memset(&parts, 0, sizeof(parts));
+        parts.n = 2;
+        if (psh < dsh) {
+            parts.shard[0] = psh;
+            parts.shard[1] = dsh;
+        } else {
+            parts.shard[0] = dsh;
+            parts.shard[1] = psh;
+        }
+        fill_txid(h, &t);
+        for (i = 0; i < parts.n && rc == EFS_OK; i++) {
+            uint32_t sh = parts.shard[i];
+            if (sh == psh)
+                rc = host_prep(h, psh, EFS_TXN_EXCL, &t, &parts, k_pino, kpi,
+                               pver, EFS_TXN_PUT, v_pino, sizeof(v_pino),
+                               hint);
+            if (rc == EFS_OK && sh == dsh) {
+                rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dent, kd,
+                               dver, EFS_TXN_PUT, v_dent, sizeof(v_dent),
+                               hint);
+                if (rc == EFS_OK)
+                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_cino,
+                                   kci, 0, EFS_TXN_PUT, v_cino, sizeof(v_cino),
+                                   hint);
+                if (rc == EFS_OK)
+                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_alloc,
+                                   ka, aver, EFS_TXN_PUT, v_alloc,
+                                   sizeof(v_alloc), hint);
+                if (rc == EFS_OK)
+                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dseq,
+                                   ks, sver, EFS_TXN_PUT, v_dseq, 8, hint);
+                if (rc == EFS_OK)
+                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_ln, kln,
+                                   lver, EFS_TXN_PUT, v_ln, sizeof(v_ln),
+                                   hint);
+            }
+        }
+        if (rc != EFS_OK)
+            (void)host_drop_parts(h, &t, &parts, hint);
+        else {
+            coord = efs_txn_coordinator(&t, &parts);
+            pack_decide(cmd, &t, coord, EFS_TXN_COMMIT);
+            rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, 22,
+                                   hint);
+            for (i = 0; i < parts.n && rc == EFS_OK; i++) {
+                pack_resolve(cmd, &t, parts.shard[i], EFS_TXN_COMMIT);
+                rc = host_propose_wait(h, efs_raft_shard_group(parts.shard[i]),
+                                       cmd, 22, hint);
+            }
+        }
     }
     return rc;
 }
@@ -3922,14 +4183,50 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
     }
     if (max_ents == 0 || max_ents > EFS_READDIR_MAX)
         max_ents = EFS_READDIR_MAX;
+    {
+        uint8_t pg = efs_raft_shard_group(efs_kv_inode_shard(parent));
+        if (!host_hosts(h, pg)) {
+            uint8_t need[2];
+            int nn = 1;
+            need[0] = pg;
+            if (pg != EFS_RAFT_GROUP_SHARD2)
+                need[nn++] = EFS_RAFT_GROUP_SHARD2;
+            else
+                need[nn++] = EFS_RAFT_GROUP_SHARD;
+            host_fwd_readdir(h, parent, max_ents, after_ino, out, need, nn);
+            return;
+        }
+    }
     pthread_mutex_lock(&h->read_mu);
-    rc = host_read_inode_lanes(h, parent, &hint);
+    rc = host_read_index(h, efs_raft_shard_group(efs_kv_inode_shard(parent)),
+                         &hint);
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, parent, &row);
     if (rc == EFS_OK && !S_ISDIR(row.mode))
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK && row.layout == EFS_META_LAYOUT_SPLITTING)
         rc = EFS_ERR_BUSY;
+    if (rc == EFS_OK && row.layout != EFS_META_LAYOUT_LOCAL) {
+        uint32_t li;
+        for (li = 0; li < EFS_META_LANES; li++) {
+            uint8_t lg;
+            if ((row.used_shards & (1ull << li)) == 0)
+                continue;
+            lg = efs_raft_shard_group(efs_kv_lane_shard(parent, (uint8_t)li));
+            if (!host_hosts(h, lg)) {
+                uint8_t need[2];
+                int nn = 1;
+                need[0] = efs_raft_shard_group(efs_kv_inode_shard(parent));
+                if (lg != need[0])
+                    need[nn++] = lg;
+                pthread_mutex_unlock(&h->read_mu);
+                host_fwd_readdir(h, parent, max_ents, after_ino, out, need, nn);
+                return;
+            }
+        }
+    }
+    if (rc == EFS_OK)
+        rc = host_read_inode_lanes(h, parent, &hint);
     memset(&cur, 0, sizeof(cur));
     while (rc == EFS_OK && !cur.done && out->count < max_ents) {
         got = 0;
@@ -3940,8 +4237,11 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
 
             if (page[i].d.ino <= after_ino)
                 continue;
+            /* HASHED child's used_shards may be unhosted; stub like an
+             * unhosted inode group instead of failing the whole listing. */
             cg = efs_raft_shard_group(efs_kv_inode_shard(page[i].d.ino));
             if (!host_hosts(h, cg)) {
+            stub_ent:
                 memset(&out->ents[out->count], 0, sizeof(out->ents[0]));
                 out->ents[out->count].ino = page[i].d.ino;
                 out->ents[out->count].mode = page[i].d.type;
@@ -3949,13 +4249,18 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
                 strncpy(out->ents[out->count].name, page[i].name,
                         EFS_MAX_NAME - 1);
                 out->count++;
+                rc = EFS_OK;
                 continue;
             }
             rc = host_read_inode_lanes(h, page[i].d.ino, &hint);
+            if (rc == EFS_ERR_NOT_PRIMARY)
+                goto stub_ent;
             if (rc != EFS_OK)
                 break;
             rc = efs_meta_apply_getattr(h->kv, page[i].d.ino, host_txn_coord, h,
                                         &st);
+            if (rc == EFS_ERR_NOT_PRIMARY)
+                goto stub_ent;
             if (rc != EFS_OK)
                 break;
             stat_to_inode(&st, &out->ents[out->count]);
@@ -3976,7 +4281,11 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
 /* LOOKUP_PATH: hop-by-hop ReadIndex + lookup, same as the in-sim walk.
  * Empty path is the start inode. Intermediate not-a-directory is INVAL.
  * A hop whose dentry or child inode lives on a group this node does not
- * host bounces, same as LOOKUP (scattered MKDIR dests). */
+ * host bounces, same as LOOKUP (scattered MKDIR dests). Intermediate
+ * hops only need the inode row (layout/mode); do not ReadIndex a HASHED
+ * ancestor's used_shards or a group-0-only replica fails the walk
+ * before the hashed-dentry bounce. Leaf getattr bounces if lanes are
+ * unhosted. */
 void server_raft_host_lookup_path(efs_ino_t start, const char *path,
                                   struct efs_msg_inode_lookup_path_reply *out)
 {
@@ -4014,6 +4323,14 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
     }
     pthread_mutex_lock(&h->read_mu);
     rc = host_read_inode_lanes(h, cur, &hint);
+    if (rc == EFS_ERR_NOT_PRIMARY) {
+        uint8_t need[2];
+
+        pthread_mutex_unlock(&h->read_mu);
+        host_need_both(need);
+        host_fwd_lookup_path(h, start, path, out, need, 2);
+        return;
+    }
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, cur, &row);
     if (rc == EFS_OK && *p == '\0') {
@@ -4076,7 +4393,6 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
                 host_fwd_lookup_path(h, start, path, out, need, nn);
                 return;
             }
-            rc = host_read_inode_lanes(h, dent.ino, &hint);
         }
         if (rc == EFS_OK)
             rc = efs_meta_apply_get_inode(h->kv, dent.ino, &row);
@@ -4095,7 +4411,17 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK && nh > 0) {
         out->ancestor_count = nh > 1 ? nh - 1 : 0;
-        rc = efs_meta_apply_getattr(h->kv, cur, host_txn_coord, h, &st);
+        rc = host_read_inode_lanes(h, cur, &hint);
+        if (rc == EFS_ERR_NOT_PRIMARY) {
+            uint8_t need[2];
+
+            pthread_mutex_unlock(&h->read_mu);
+            host_need_both(need);
+            host_fwd_lookup_path(h, start, path, out, need, 2);
+            return;
+        }
+        if (rc == EFS_OK)
+            rc = efs_meta_apply_getattr(h->kv, cur, host_txn_coord, h, &st);
     }
     pthread_mutex_unlock(&h->read_mu);
     set_inode_rc((struct efs_msg_inode_reply *)out, rc, hint);

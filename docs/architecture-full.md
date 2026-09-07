@@ -1156,9 +1156,9 @@ and 10.5c-24 (cross-group propose: MKFS submit + inode bounce)
 and 10.5c-25 (O_APPEND reserve + resolve-on-report)
 and 10.5c-26 (SYMLINK as CREATE S_IFLNK + publish)
 and 10.5c-27 (same-dir LOCAL directory rename)
+and 10.5c-28 (HASHED dest CREATE)
 are gated on a
-scratch cluster behind `EFS_MD_RAFT`. Remaining: HASHED dest CREATE,
-HOLD. Not a
+scratch cluster behind `EFS_MD_RAFT`. Remaining: HOLD. Not a
 cutover of the live table; not step 11. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
@@ -1286,8 +1286,11 @@ sends you to — not the whole spec.
 > target bytes (10.5c-26: no SYMLINK opcode, no target column),
 > and same-dir LOCAL directory rename (10.5c-27: bounce before
 > resolve so a scattered dest is not I9; pver GUARD + exclusive
-> pver PUT; LOOKUP_PATH bounces like LOOKUP).
-> Next: remaining mutations (HASHED dest CREATE, HOLD)
+> pver PUT; LOOKUP_PATH bounces like LOOKUP), and HASHED dest
+> CREATE (10.5c-28: DIR begin/migrate/finish on an empty LOCAL
+> dir; first use of a hashed dentry shard on another group is a
+> 2-shard txn; SPLITTING dest is BUSY; bounce HASHED lanes).
+> Next: remaining mutations (HOLD)
 > behind the same flag.
 > [architecture.md §10](#architecture)
 >
@@ -1529,7 +1532,19 @@ sends you to — not the whole spec.
 > as LOOKUP. Same scratch smoke: mkdir `raft-smoke-rd`, rename to
 > `raft-smoke-re`, old NOT_FOUND, new OK mode+nlink=2, miss / exist /
 > cross-dir, READDIR and LOOKUP_PATH, crash keeps the new name.
-> Remaining: HASHED dest CREATE, HOLD
+>
+> **10.5c-28 is in (gated):** HASHED dest CREATE on the production
+> host. Empty LOCAL dir → HASHED via DIR begin / migrate / finish
+> (`raft-dir` over existing `EFS_MSG_RAFT_MKFS`, no new opcode).
+> First use of a hashed dentry shard on another group is a 2-shard
+> txn (parent `used_shards` bit only; dest dentry + co-located file
+> inode + dir-lane stamp). SPLITTING dest is BUSY. LOOKUP /
+> GETATTR / LOOKUP_PATH bounce when HASHED lanes are unhosted;
+> ROOT READDIR stubs those children instead of failing the listing.
+> Same scratch smoke: dedicated `raft-smoke-hd`, a file whose hashed
+> dentry shard is the other Raft group (child ino shard ≠ parent),
+> LOOKUP_PATH, ROOT READDIR, crash keeps the dir and files.
+> Remaining: HOLD
 > (not a cutover of `efs-test`, not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
@@ -4587,7 +4602,18 @@ LOOKUP_PATH bounces unhosted child-inode hops like LOOKUP. Flag
 off is a no-op. Gate: same smoke — mkdir `raft-smoke-rd`, rename
 to `raft-smoke-re`, old gone / new present, miss NOT_FOUND, exist
 EXIST, cross-dir INVAL, READDIR+LOOKUP_PATH, crash keeps the new
-name. Remaining: HASHED dest CREATE, HOLD.
+name.
+
+**10.5c-28 — HASHED dest CREATE.** Empty LOCAL dir split via DIR
+begin / migrate / finish (`raft-dir` over existing `RAFT_MKFS`).
+First use of a hashed dentry shard on another group is a 2-shard
+txn (parent `used_shards` bit; dest dentry + co-located file inode
++ dir-lane). SPLITTING dest is BUSY. Unhosted HASHED lanes bounce
+on LOOKUP/GETATTR/LOOKUP_PATH; ROOT READDIR stubs those children.
+Flag off is a no-op. Gate: same smoke — dedicated `raft-smoke-hd`,
+hashed-dentry file whose inode shard differs from the parent,
+LOOKUP_PATH, ROOT READDIR, crash keeps the dir and files.
+Remaining: HOLD.
 
 ### Shortening the code → signal cycle
 
@@ -5065,8 +5091,8 @@ unaligned truncate tail CAS (10.5c-23) and cross-group propose
 (10.5c-24, MKFS submit + inode bounce, no new opcode) and
 O_APPEND reserve (10.5c-25, resolve-on-report) and SYMLINK as
 CREATE S_IFLNK + publish (10.5c-26) and same-dir LOCAL directory
-rename (10.5c-27) are gated
+rename (10.5c-27) and HASHED dest CREATE (10.5c-28) are gated
 on the same
-smoke. What remains is HASHED dest CREATE, HOLD, then the cutover — not new
+smoke. What remains is HOLD, then the cutover — not new
 design.
 

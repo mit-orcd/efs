@@ -318,8 +318,12 @@ target bytes (no opcode, no target column). Gate: same smoke
 (`raft-smoke-s` mode=0120777 size=11 survives crash).
 **10.5c-27 is in:** same-dir LOCAL directory rename (bounce before
 resolve; pver GUARD + exclusive PUT). Gate: same smoke
-(`raft-smoke-rd` → `raft-smoke-re` survives crash). Remaining:
-HASHED dest CREATE, HOLD; not a cutover of
+(`raft-smoke-rd` → `raft-smoke-re` survives crash).
+**10.5c-28 is in:** HASHED dest CREATE (DIR begin/migrate/finish
+on an empty LOCAL dir; first hashed-lane use on another group is
+a 2-shard txn; SPLITTING dest BUSY). Gate: same smoke
+(`raft-smoke-hd` + hashed-dentry file survives crash). Remaining:
+HOLD; not a cutover of
 `efs-test`, not step 11.
 
 **Rules while carving:** no behavior change within a step; no new features

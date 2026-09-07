@@ -3,12 +3,9 @@
 #include "efs/dir_layout.h"
 #include "efs/kv_key.h"
 #include "efs/meta_apply.h"
+#include "efs/meta_cmd.h"
 #include <string.h>
 #include <sys/stat.h>
-
-#define DIR_BEGIN  1
-#define DIR_MIGRATE 2
-#define DIR_FINISH 3
 
 static void wr64(uint8_t *p, uint64_t v)
 {
@@ -34,17 +31,17 @@ int sim_dir_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
     efs_ino_t dir = 0;
     int rc = EFS_ERR_PROTO;
 
-    if (!s || !s->disk || !cmd || clen < 10 || cmd[0] != SIM_CMD_DIR)
+    if (!s || !s->disk || !cmd || clen < 10 || cmd[0] != EFS_MD_CMD_DIR)
         goto done;
     dir = rd64(cmd + 2);
     switch (cmd[1]) {
-    case DIR_BEGIN:
+    case EFS_MD_DIR_BEGIN:
         rc = efs_meta_dir_begin_split(s->disk, dir);
         break;
-    case DIR_MIGRATE:
+    case EFS_MD_DIR_MIGRATE:
         rc = efs_meta_dir_migrate_one(s->disk, dir);
         break;
-    case DIR_FINISH:
+    case EFS_MD_DIR_FINISH:
         rc = efs_meta_dir_finish_hashed(s->disk, dir);
         break;
     default:
@@ -60,7 +57,7 @@ static int propose_dir(struct efs_sim *sim, uint8_t kind, efs_ino_t dir)
     uint8_t cmd[10];
     uint32_t shard;
 
-    cmd[0] = SIM_CMD_DIR;
+    cmd[0] = EFS_MD_CMD_DIR;
     cmd[1] = kind;
     wr64(cmd + 2, dir);
     shard = efs_kv_inode_shard(dir);
@@ -71,21 +68,21 @@ int efs_sim_dir_begin_split(struct efs_sim *sim, efs_ino_t dir)
 {
     if (!sim || dir == 0)
         return EFS_ERR_INVAL;
-    return propose_dir(sim, DIR_BEGIN, dir);
+    return propose_dir(sim, EFS_MD_DIR_BEGIN, dir);
 }
 
 int efs_sim_dir_migrate(struct efs_sim *sim, efs_ino_t dir)
 {
     if (!sim || dir == 0)
         return EFS_ERR_INVAL;
-    return propose_dir(sim, DIR_MIGRATE, dir);
+    return propose_dir(sim, EFS_MD_DIR_MIGRATE, dir);
 }
 
 int efs_sim_dir_finish_hashed(struct efs_sim *sim, efs_ino_t dir)
 {
     if (!sim || dir == 0)
         return EFS_ERR_INVAL;
-    return propose_dir(sim, DIR_FINISH, dir);
+    return propose_dir(sim, EFS_MD_DIR_FINISH, dir);
 }
 
 int efs_sim_dir_layout(struct efs_sim *sim, efs_ino_t dir, uint8_t *layout,

@@ -519,7 +519,18 @@ LOOKUP_PATH bounces unhosted child-inode hops like LOOKUP. Flag
 off is a no-op. Gate: same smoke — mkdir `raft-smoke-rd`, rename
 to `raft-smoke-re`, old gone / new present, miss NOT_FOUND, exist
 EXIST, cross-dir INVAL, READDIR+LOOKUP_PATH, crash keeps the new
-name. Remaining: HASHED dest CREATE, HOLD.
+name.
+
+**10.5c-28 — HASHED dest CREATE.** Empty LOCAL dir split via DIR
+begin / migrate / finish (`raft-dir` over existing `RAFT_MKFS`).
+First use of a hashed dentry shard on another group is a 2-shard
+txn (parent `used_shards` bit; dest dentry + co-located file inode
++ dir-lane). SPLITTING dest is BUSY. Unhosted HASHED lanes bounce
+on LOOKUP/GETATTR/LOOKUP_PATH; ROOT READDIR stubs those children.
+Flag off is a no-op. Gate: same smoke — dedicated `raft-smoke-hd`,
+hashed-dentry file whose inode shard differs from the parent,
+LOOKUP_PATH, ROOT READDIR, crash keeps the dir and files.
+Remaining: HOLD.
 
 ## Shortening the code → signal cycle
 
