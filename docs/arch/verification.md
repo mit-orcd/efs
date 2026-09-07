@@ -530,7 +530,14 @@ on LOOKUP/GETATTR/LOOKUP_PATH; ROOT READDIR stubs those children.
 Flag off is a no-op. Gate: same smoke — dedicated `raft-smoke-hd`,
 hashed-dentry file whose inode shard differs from the parent,
 LOOKUP_PATH, ROOT READDIR, crash keeps the dir and files.
-Remaining: HOLD.
+
+**10.5c-29 — HOLD open-unlinked leases.** `EFS_MSG_INODE_HOLD`
+proposes SESSION LEASE_OPEN/CLOSE on the inode shard (no new
+opcode; owner is the session stand-in). Last-link UNLINK with a
+lease keeps nlink=0 (I19); last close reclaims. Directories INVAL.
+Sessions/fencing/FLOCK are not hosted. Flag off is a no-op. Gate:
+same smoke — dedicated `raft-smoke-k`, open, unlink, getattr
+nlink=0, crash keeps the inode, close reclaims.
 
 ## Shortening the code → signal cycle
 

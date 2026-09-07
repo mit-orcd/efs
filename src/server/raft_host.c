@@ -47,6 +47,7 @@
 #define HOST_PUBLISH_LEN   (29u + (uint32_t)EFS_NUM_FRAGMENTS * (4u + EFS_HASH_SIZE) + \
                             EFS_OPID_UUID_LEN + 4u + 8u + 8u + 8u + 4u)
 #define HOST_DIR_LEN       10
+#define HOST_SESS_LEASE_LEN 38 /* tag+sub+uuid+epoch+ino+gen */
 
 struct host_inbox_item {
     uint8_t *buf;
@@ -562,6 +563,69 @@ static int apply_dir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+/* Same encoding as sim_sess_apply (LEASE_OPEN/CLOSE/RECLAIM). Session
+ * create/fence is not hosted; apply never stalls the log. Last close
+ * reclaims a nlink=0 inode (I19). */
+static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                             uint32_t clen, uint64_t index)
+{
+    uint8_t uuid[EFS_OPID_UUID_LEN];
+    uint32_t epoch = 0;
+    efs_ino_t ino = 0;
+    uint64_t gen = 0;
+    int rc = EFS_ERR_PROTO;
+
+    if (clen < 18)
+        return EFS_OK;
+    memcpy(uuid, cmd + 2, EFS_OPID_UUID_LEN);
+    switch (cmd[1]) {
+    case EFS_MD_SESS_LEASE_OPEN:
+        if (clen < HOST_SESS_LEASE_LEN)
+            return EFS_OK;
+        epoch = rd32be(cmd + 18);
+        ino = rd64be(cmd + 22);
+        gen = rd64be(cmd + 30);
+        rc = efs_lease_open(h->kv, ino, gen, uuid, epoch);
+        break;
+    case EFS_MD_SESS_LEASE_CLOSE:
+        if (clen < HOST_SESS_LEASE_LEN)
+            return EFS_OK;
+        epoch = rd32be(cmd + 18);
+        ino = rd64be(cmd + 22);
+        gen = rd64be(cmd + 30);
+        rc = efs_lease_close(h->kv, ino, gen, uuid, epoch);
+        if (rc == EFS_OK) {
+            int r2 = efs_meta_apply_reclaim(h->kv, ino);
+
+            if (r2 != EFS_OK && r2 != EFS_ERR_BUSY && r2 != EFS_ERR_NOT_FOUND)
+                rc = r2;
+        }
+        break;
+    case EFS_MD_SESS_RECLAIM:
+        if (clen < 26)
+            return EFS_OK;
+        ino = rd64be(cmd + 18);
+        rc = efs_meta_apply_reclaim(h->kv, ino);
+        break;
+    default:
+        return EFS_OK;
+    }
+    if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY ||
+        rc == EFS_ERR_STALE)
+        rc = EFS_OK;
+    if (rc != EFS_OK) {
+        fprintf(stderr,
+                "raft-host: apply session rc=%d index=%llu ino=%llu kind=%u\n",
+                rc, (unsigned long long)index, (unsigned long long)ino,
+                (unsigned)cmd[1]);
+        return EFS_OK;
+    }
+    fprintf(stderr, "raft-host: applied session index=%llu ino=%llu kind=%u\n",
+            (unsigned long long)index, (unsigned long long)ino,
+            (unsigned)cmd[1]);
+    return EFS_OK;
+}
+
 /* Same encoding as sim apply_publish_cmd. Session fencing is not hosted. */
 static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                              uint32_t clen, uint64_t index)
@@ -726,6 +790,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         return apply_append_res_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_DIR)
         return apply_dir_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_SESSION)
+        return apply_session_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
         cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP)
         return apply_txn_cmd(h, cmd, clen);
@@ -1130,6 +1196,20 @@ static void host_fwd_getattr(struct efs_raft_host *h, efs_ino_t ino,
                        EFS_MSG_INODE_GETATTR_REPLY, out, groups, ng);
 }
 
+static void host_fwd_hold(struct efs_raft_host *h, efs_ino_t ino, uint32_t flags,
+                          uint64_t owner, struct efs_msg_inode_reply *out,
+                          const uint8_t *groups, int ng)
+{
+    struct efs_msg_inode_hold req;
+
+    memset(&req, 0, sizeof(req));
+    req.ino = ino;
+    req.flags = flags;
+    req.owner = owner;
+    host_inode_forward(h, EFS_MSG_INODE_HOLD, &req, sizeof(req),
+                       EFS_MSG_INODE_HOLD_REPLY, out, groups, ng);
+}
+
 static void host_fwd_append(struct efs_raft_host *h, efs_ino_t ino, uint64_t len,
                             struct efs_msg_inode_reply *out,
                             const uint8_t *groups, int ng)
@@ -1396,6 +1476,30 @@ static int pack_append_res_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     out[17] = (uint8_t)outcome;
     memset(out + 18, 0, EFS_OPID_UUID_LEN + 4);
     *len = HOST_APPEND_RES_LEN;
+    return EFS_OK;
+}
+
+/* Same encoding as sim_sess LEASE_OPEN/CLOSE. owner is the session
+ * identity until sessions are hosted (zero UUID + epoch 1). */
+static void host_hold_uuid(uint64_t owner, uint8_t uuid[EFS_OPID_UUID_LEN])
+{
+    memset(uuid, 0, EFS_OPID_UUID_LEN);
+    wr64be(uuid, owner);
+}
+
+static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
+                          uint64_t gen, uint64_t owner)
+{
+    uint8_t uuid[EFS_OPID_UUID_LEN];
+
+    host_hold_uuid(owner, uuid);
+    out[0] = EFS_MD_CMD_SESSION;
+    out[1] = open ? EFS_MD_SESS_LEASE_OPEN : EFS_MD_SESS_LEASE_CLOSE;
+    memcpy(out + 2, uuid, EFS_OPID_UUID_LEN);
+    wr32be(out + 18, 1); /* epoch; sessions not hosted */
+    wr64be(out + 22, ino);
+    wr64be(out + 30, gen);
+    *len = HOST_SESS_LEASE_LEN;
     return EFS_OK;
 }
 
@@ -2123,6 +2227,63 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
     pthread_mutex_unlock(&h->read_mu);
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK)
+        stat_to_inode(&st, &out->inode);
+}
+
+/* Open lease (I19): one Raft entry on the inode shard. flags=1 open,
+ * flags=0 close. owner is the session stand-in. Directories INVAL.
+ * Last close reclaims a nlink=0 inode. Sessions/fencing are not hosted. */
+void server_raft_host_hold(efs_ino_t ino, uint32_t flags, uint64_t owner,
+                           struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_row row;
+    struct efs_meta_stat st;
+    uint8_t cmd[HOST_SESS_LEASE_LEN];
+    uint32_t clen = 0;
+    uint8_t ig;
+    int hint = -1;
+    int rc;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if (ino == 0 || (flags != 0 && flags != 1)) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
+    if (!host_hosts(h, ig)) {
+        host_fwd_hold(h, ino, flags, owner, out, &ig, 1);
+        return;
+    }
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_read_index(h, ig, &hint);
+    if (rc == EFS_ERR_NOT_PRIMARY) {
+        pthread_mutex_unlock(&h->read_mu);
+        host_fwd_hold(h, ino, flags, owner, out, &ig, 1);
+        return;
+    }
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+    if (rc == EFS_OK && S_ISDIR(row.mode))
+        rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK)
+        rc = pack_lease_cmd(cmd, &clen, flags ? 1 : 0, ino, row.generation,
+                            owner);
+    if (rc == EFS_OK)
+        rc = host_propose_wait(h, ig, cmd, clen, &hint);
+    if (rc == EFS_OK) {
+        rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
+        if (flags == 0 && rc == EFS_ERR_NOT_FOUND)
+            rc = EFS_OK;
+    }
+    pthread_mutex_unlock(&h->read_mu);
+    set_inode_rc(out, rc, hint);
+    if (rc == EFS_OK && flags == 1)
         stat_to_inode(&st, &out->inode);
 }
 

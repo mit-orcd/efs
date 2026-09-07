@@ -1916,7 +1916,8 @@ send_reply:
                  type == EFS_MSG_INODE_LINK ||
                  type == EFS_MSG_INODE_LINK_SHARD ||
                  type == EFS_MSG_INODE_RENAME ||
-                 type == EFS_MSG_INODE_RENAME_AT) &&
+                 type == EFS_MSG_INODE_RENAME_AT ||
+                 type == EFS_MSG_INODE_HOLD) &&
                 server_raft_host_active()) {
                 struct efs_msg_inode_reply r;
                 uint8_t rtype;
@@ -1989,6 +1990,11 @@ send_reply:
                                                req->new_parent, req->new_name,
                                                &r);
                     rtype = EFS_MSG_INODE_RENAME_AT_REPLY;
+                } else if (type == EFS_MSG_INODE_HOLD &&
+                           payload_len >= sizeof(struct efs_msg_inode_hold)) {
+                    struct efs_msg_inode_hold *req = payload;
+                    server_raft_host_hold(req->ino, req->flags, req->owner, &r);
+                    rtype = EFS_MSG_INODE_HOLD_REPLY;
                 } else {
                     r.status = EFS_INODE_RPC_INVAL;
                     rtype = (type == EFS_MSG_INODE_LOOKUP)

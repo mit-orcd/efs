@@ -16,7 +16,7 @@
 /* Shared sim layout. Not a public header. */
 
 #define SIM_MAX_EV 128
-#define SIM_CMD_SESSION 9
+#define SIM_CMD_SESSION 9 /* matches EFS_MD_CMD_SESSION */
 #define SIM_CMD_EPOCH   10
 #define SIM_CMD_DIR     11 /* matches EFS_MD_CMD_DIR */
 #define SIM_CMD_LOCK    12

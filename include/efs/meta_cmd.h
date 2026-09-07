@@ -18,6 +18,18 @@
 #define EFS_MD_CMD_DECIDE  6
 #define EFS_MD_CMD_RESOLVE 7
 #define EFS_MD_CMD_DROP    8
+#define EFS_MD_CMD_SESSION 9 /* matches sim SIM_CMD_SESSION */
+#define EFS_MD_SESS_CREATE      1
+#define EFS_MD_SESS_REGISTER    2
+#define EFS_MD_SESS_BEGIN       3
+#define EFS_MD_SESS_FENCE_LOC   4
+#define EFS_MD_SESS_ACK         5
+#define EFS_MD_SESS_FINISH      6
+#define EFS_MD_SESS_ESTABLISH   7
+#define EFS_MD_SESS_LEASE_OPEN  8
+#define EFS_MD_SESS_LEASE_CLOSE 9
+#define EFS_MD_SESS_LEASE_DROP  10
+#define EFS_MD_SESS_RECLAIM     11
 #define EFS_MD_CMD_DIR    11 /* matches sim SIM_CMD_DIR; layout-epoch */
 #define EFS_MD_DIR_BEGIN   1
 #define EFS_MD_DIR_MIGRATE 2

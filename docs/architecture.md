@@ -1140,9 +1140,11 @@ and 10.5c-25 (O_APPEND reserve + resolve-on-report)
 and 10.5c-26 (SYMLINK as CREATE S_IFLNK + publish)
 and 10.5c-27 (same-dir LOCAL directory rename)
 and 10.5c-28 (HASHED dest CREATE)
+and 10.5c-29 (HOLD open-unlinked leases)
 are gated on a
-scratch cluster behind `EFS_MD_RAFT`. Remaining: HOLD. Not a
-cutover of the live table; not step 11. The KV engine is
+scratch cluster behind `EFS_MD_RAFT`. Remaining: cutover of the
+live table is not this work (not step 11). FLOCK and session
+fencing stay later. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not

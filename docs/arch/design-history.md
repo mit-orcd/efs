@@ -426,7 +426,8 @@ unaligned truncate tail CAS (10.5c-23) and cross-group propose
 (10.5c-24, MKFS submit + inode bounce, no new opcode) and
 O_APPEND reserve (10.5c-25, resolve-on-report) and SYMLINK as
 CREATE S_IFLNK + publish (10.5c-26) and same-dir LOCAL directory
-rename (10.5c-27) and HASHED dest CREATE (10.5c-28) are gated
+rename (10.5c-27) and HASHED dest CREATE (10.5c-28) and HOLD
+open-unlinked leases (10.5c-29) are gated
 on the same
-smoke. What remains is HOLD, then the cutover — not new
-design.
+smoke. What remains is cutover of the live table — not new
+design. FLOCK and session fencing are later host items.

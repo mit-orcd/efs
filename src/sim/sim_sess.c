@@ -3,20 +3,10 @@
 #include "efs/session.h"
 #include "efs/kv_key.h"
 #include "efs/meta_apply.h"
+#include "efs/meta_cmd.h"
 #include "efs/lock.h"
 #include <string.h>
 
-#define SESS_CREATE    1
-#define SESS_REGISTER  2
-#define SESS_BEGIN     3
-#define SESS_FENCE_LOC 4
-#define SESS_ACK       5
-#define SESS_FINISH    6
-#define SESS_ESTABLISH 7
-#define SESS_LEASE_OPEN 8
-#define SESS_LEASE_CLOSE 9
-#define SESS_LEASE_DROP 10
-#define SESS_RECLAIM   11
 #define CMD_MAX        64
 
 static void wr32(uint8_t *p, uint32_t v)
@@ -46,7 +36,7 @@ static uint64_t rd64(const uint8_t *p)
 
 static int pack_hdr(uint8_t *out, uint8_t sub, const uint8_t *uuid)
 {
-    out[0] = SIM_CMD_SESSION;
+    out[0] = EFS_MD_CMD_SESSION;
     out[1] = sub;
     memcpy(out + 2, uuid, EFS_OPID_UUID_LEN);
     return 18;
@@ -77,50 +67,50 @@ int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
     uint64_t gen = 0;
     int rc = EFS_ERR_PROTO;
 
-    if (!s || !s->disk || !cmd || clen < 18 || cmd[0] != SIM_CMD_SESSION)
+    if (!s || !s->disk || !cmd || clen < 18 || cmd[0] != EFS_MD_CMD_SESSION)
         goto done;
     memcpy(uuid, cmd + 2, EFS_OPID_UUID_LEN);
     switch (cmd[1]) {
-    case SESS_CREATE:
+    case EFS_MD_SESS_CREATE:
         if (clen < 22)
             break;
         epoch = rd32(cmd + 18);
         rc = efs_session_create(s->disk, uuid, epoch);
         break;
-    case SESS_REGISTER:
+    case EFS_MD_SESS_REGISTER:
         if (clen < 26)
             break;
         epoch = rd32(cmd + 18);
         shard = rd32(cmd + 22);
         rc = efs_session_register(s->disk, uuid, epoch, shard);
         break;
-    case SESS_BEGIN:
+    case EFS_MD_SESS_BEGIN:
         rc = efs_session_begin_fence(s->disk, uuid);
         break;
-    case SESS_FENCE_LOC:
+    case EFS_MD_SESS_FENCE_LOC:
         if (clen < 26)
             break;
         epoch = rd32(cmd + 18);
         shard = rd32(cmd + 22);
         rc = efs_session_fence_local(s->disk, shard, uuid, epoch);
         break;
-    case SESS_ACK:
+    case EFS_MD_SESS_ACK:
         if (clen < 22)
             break;
         shard = rd32(cmd + 18);
         rc = efs_session_ack_fence(s->disk, uuid, shard);
         break;
-    case SESS_FINISH:
+    case EFS_MD_SESS_FINISH:
         rc = efs_session_finish_fence(s->disk, uuid);
         break;
-    case SESS_ESTABLISH:
+    case EFS_MD_SESS_ESTABLISH:
         if (clen < 26)
             break;
         epoch = rd32(cmd + 18);
         shard = rd32(cmd + 22);
         rc = efs_session_establish(s->disk, shard, uuid, epoch);
         break;
-    case SESS_LEASE_OPEN:
+    case EFS_MD_SESS_LEASE_OPEN:
         if (clen < 38)
             break;
         epoch = rd32(cmd + 18);
@@ -128,7 +118,7 @@ int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         gen = rd64(cmd + 30);
         rc = efs_lease_open(s->disk, ino, gen, uuid, epoch);
         break;
-    case SESS_LEASE_CLOSE:
+    case EFS_MD_SESS_LEASE_CLOSE:
         if (clen < 38)
             break;
         epoch = rd32(cmd + 18);
@@ -136,7 +126,7 @@ int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         gen = rd64(cmd + 30);
         rc = efs_lease_close(s->disk, ino, gen, uuid, epoch);
         break;
-    case SESS_LEASE_DROP:
+    case EFS_MD_SESS_LEASE_DROP:
         if (clen < 26)
             break;
         epoch = rd32(cmd + 18);
@@ -147,7 +137,7 @@ int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         if (rc == EFS_OK && s->sim)
             sim_lock_fence(s->sim, uuid, epoch);
         break;
-    case SESS_RECLAIM:
+    case EFS_MD_SESS_RECLAIM:
         if (clen < 26)
             break;
         ino = rd64(cmd + 18);
@@ -203,14 +193,14 @@ int sim_sess_ensure_id(struct efs_sim *sim, const uint8_t *uuid, uint32_t epoch,
     if (rc == EFS_OK || rc == EFS_ERR_STALE)
         return rc;
     ssh = efs_kv_session_shard(uuid);
-    n = (uint32_t)pack_hdr(cmd, SESS_REGISTER, uuid);
+    n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_REGISTER, uuid);
     wr32(cmd + n, epoch);
     wr32(cmd + n + 4, shard);
     n += 8;
     rc = propose_sess(sim, ssh, cmd, n);
     if (rc != EFS_OK)
         return rc;
-    n = (uint32_t)pack_hdr(cmd, SESS_ESTABLISH, uuid);
+    n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_ESTABLISH, uuid);
     wr32(cmd + n, epoch);
     wr32(cmd + n + 4, shard);
     n += 8;
@@ -257,7 +247,7 @@ int efs_sim_session_fence_until(struct efs_sim *sim, int client, int until)
     if (rc != EFS_OK)
         return rc;
     if (rec.state == EFS_SESSION_ACTIVE) {
-        n = (uint32_t)pack_hdr(cmd, SESS_BEGIN, uuid);
+        n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_BEGIN, uuid);
         rc = propose_sess(sim, ssh, cmd, n);
         if (rc != EFS_OK)
             return rc;
@@ -275,7 +265,7 @@ int efs_sim_session_fence_until(struct efs_sim *sim, int client, int until)
     for (i = 0; i < EFS_SESSION_BITS; i++) {
         if (!efs_session_bit_get(rec.touched, i))
             continue;
-        n = (uint32_t)pack_hdr(cmd, SESS_FENCE_LOC, uuid);
+        n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_FENCE_LOC, uuid);
         wr32(cmd + n, rec.epoch);
         wr32(cmd + n + 4, i);
         n += 8;
@@ -288,7 +278,7 @@ int efs_sim_session_fence_until(struct efs_sim *sim, int client, int until)
     for (i = 0; i < EFS_SESSION_BITS; i++) {
         if (!efs_session_bit_get(rec.touched, i))
             continue;
-        n = (uint32_t)pack_hdr(cmd, SESS_ACK, uuid);
+        n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_ACK, uuid);
         wr32(cmd + n, i);
         n += 4;
         rc = propose_sess(sim, ssh, cmd, n);
@@ -297,7 +287,7 @@ int efs_sim_session_fence_until(struct efs_sim *sim, int client, int until)
     }
     if (until < EFS_SIM_FENCE_ACTIVE)
         return EFS_OK;
-    n = (uint32_t)pack_hdr(cmd, SESS_FINISH, uuid);
+    n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_FINISH, uuid);
     rc = propose_sess(sim, ssh, cmd, n);
     if (rc != EFS_OK)
         return rc;
@@ -311,7 +301,7 @@ int efs_sim_session_fence_until(struct efs_sim *sim, int client, int until)
     for (i = 0; i < EFS_SESSION_BITS; i++) {
         if (!efs_session_bit_get(rec.touched, i))
             continue;
-        n = (uint32_t)pack_hdr(cmd, SESS_LEASE_DROP, uuid);
+        n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_LEASE_DROP, uuid);
         wr32(cmd + n, old_epoch);
         wr32(cmd + n + 4, i);
         n += 8;
@@ -383,7 +373,7 @@ int efs_sim_open(struct efs_sim *sim, int client, efs_ino_t ino)
     rc = live_gen(sim, ino, &gen, NULL);
     if (rc != EFS_OK)
         return rc;
-    n = (uint32_t)pack_hdr(cmd, SESS_LEASE_OPEN, uuid);
+    n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_LEASE_OPEN, uuid);
     wr32(cmd + n, epoch);
     wr64(cmd + n + 4, ino);
     wr64(cmd + n + 12, gen);
@@ -409,7 +399,7 @@ int efs_sim_close(struct efs_sim *sim, int client, efs_ino_t ino)
     rc = live_gen(sim, ino, &gen, NULL);
     if (rc != EFS_OK)
         return rc;
-    n = (uint32_t)pack_hdr(cmd, SESS_LEASE_CLOSE, uuid);
+    n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_LEASE_CLOSE, uuid);
     wr32(cmd + n, epoch);
     wr64(cmd + n + 4, ino);
     wr64(cmd + n + 12, gen);
@@ -425,7 +415,7 @@ int efs_sim_reclaim(struct efs_sim *sim, efs_ino_t ino)
     if (!sim || ino == 0)
         return EFS_ERR_INVAL;
     memset(uuid, 0, sizeof(uuid));
-    n = (uint32_t)pack_hdr(cmd, SESS_RECLAIM, uuid);
+    n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_RECLAIM, uuid);
     wr64(cmd + n, ino);
     n += 8;
     sh = efs_kv_inode_shard(ino);

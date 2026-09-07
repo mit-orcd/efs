@@ -712,6 +712,8 @@ int server_raft_host_active(void);
  * and these are never called. NOT_PRIMARY fills primary_id = raft leader
  * node id. */
 void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out);
+void server_raft_host_hold(efs_ino_t ino, uint32_t flags, uint64_t owner,
+                           struct efs_msg_inode_reply *out);
 void server_raft_host_lookup(efs_ino_t parent, const char *name,
                              struct efs_msg_inode_reply *out);
 void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,

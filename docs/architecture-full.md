@@ -1157,9 +1157,11 @@ and 10.5c-25 (O_APPEND reserve + resolve-on-report)
 and 10.5c-26 (SYMLINK as CREATE S_IFLNK + publish)
 and 10.5c-27 (same-dir LOCAL directory rename)
 and 10.5c-28 (HASHED dest CREATE)
+and 10.5c-29 (HOLD open-unlinked leases)
 are gated on a
-scratch cluster behind `EFS_MD_RAFT`. Remaining: HOLD. Not a
-cutover of the live table; not step 11. The KV engine is
+scratch cluster behind `EFS_MD_RAFT`. Remaining: cutover of the
+live table is not this work (not step 11). FLOCK and session
+fencing stay later. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not
@@ -1289,9 +1291,11 @@ sends you to — not the whole spec.
 > pver PUT; LOOKUP_PATH bounces like LOOKUP), and HASHED dest
 > CREATE (10.5c-28: DIR begin/migrate/finish on an empty LOCAL
 > dir; first use of a hashed dentry shard on another group is a
-> 2-shard txn; SPLITTING dest is BUSY; bounce HASHED lanes).
-> Next: remaining mutations (HOLD)
-> behind the same flag.
+> 2-shard txn; SPLITTING dest is BUSY; bounce HASHED lanes), and
+> HOLD open-unlinked leases (10.5c-29: `EFS_MSG_INODE_HOLD` on the
+> inode shard; owner is the session stand-in; last close reclaims).
+> Next: cutover of `efs-test` is not this work; FLOCK/locking and
+> session fencing stay later, behind the same flag.
 > [architecture.md §10](#architecture)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -1544,8 +1548,16 @@ sends you to — not the whole spec.
 > Same scratch smoke: dedicated `raft-smoke-hd`, a file whose hashed
 > dentry shard is the other Raft group (child ino shard ≠ parent),
 > LOOKUP_PATH, ROOT READDIR, crash keeps the dir and files.
-> Remaining: HOLD
-> (not a cutover of `efs-test`, not step 11).
+>
+> **10.5c-29 is in (gated):** open-unlinked HOLD leases on the
+> production host. `EFS_MSG_INODE_HOLD` proposes SESSION
+> LEASE_OPEN/CLOSE on the inode shard (existing opcode; owner bytes
+> are the session stand-in, epoch=1). Last-link UNLINK with a lease
+> keeps nlink=0 (I19); last close reclaims. Directories INVAL.
+> Sessions/fencing/FLOCK are not hosted. Same scratch smoke:
+> dedicated `raft-smoke-k`, open, unlink name, getattr nlink=0,
+> crash keeps the inode, close reclaims (getattr NOT_FOUND).
+> Cutover of `efs-test` is not next (not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -4613,7 +4625,14 @@ on LOOKUP/GETATTR/LOOKUP_PATH; ROOT READDIR stubs those children.
 Flag off is a no-op. Gate: same smoke — dedicated `raft-smoke-hd`,
 hashed-dentry file whose inode shard differs from the parent,
 LOOKUP_PATH, ROOT READDIR, crash keeps the dir and files.
-Remaining: HOLD.
+
+**10.5c-29 — HOLD open-unlinked leases.** `EFS_MSG_INODE_HOLD`
+proposes SESSION LEASE_OPEN/CLOSE on the inode shard (no new
+opcode; owner is the session stand-in). Last-link UNLINK with a
+lease keeps nlink=0 (I19); last close reclaims. Directories INVAL.
+Sessions/fencing/FLOCK are not hosted. Flag off is a no-op. Gate:
+same smoke — dedicated `raft-smoke-k`, open, unlink, getattr
+nlink=0, crash keeps the inode, close reclaims.
 
 ### Shortening the code → signal cycle
 
@@ -5091,8 +5110,9 @@ unaligned truncate tail CAS (10.5c-23) and cross-group propose
 (10.5c-24, MKFS submit + inode bounce, no new opcode) and
 O_APPEND reserve (10.5c-25, resolve-on-report) and SYMLINK as
 CREATE S_IFLNK + publish (10.5c-26) and same-dir LOCAL directory
-rename (10.5c-27) and HASHED dest CREATE (10.5c-28) are gated
+rename (10.5c-27) and HASHED dest CREATE (10.5c-28) and HOLD
+open-unlinked leases (10.5c-29) are gated
 on the same
-smoke. What remains is HOLD, then the cutover — not new
-design.
+smoke. What remains is cutover of the live table — not new
+design. FLOCK and session fencing are later host items.
 

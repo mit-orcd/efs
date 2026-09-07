@@ -322,9 +322,11 @@ resolve; pver GUARD + exclusive PUT). Gate: same smoke
 **10.5c-28 is in:** HASHED dest CREATE (DIR begin/migrate/finish
 on an empty LOCAL dir; first hashed-lane use on another group is
 a 2-shard txn; SPLITTING dest BUSY). Gate: same smoke
-(`raft-smoke-hd` + hashed-dentry file survives crash). Remaining:
-HOLD; not a cutover of
-`efs-test`, not step 11.
+(`raft-smoke-hd` + hashed-dentry file survives crash).
+**10.5c-29 is in:** HOLD open-unlinked leases (`EFS_MSG_INODE_HOLD`
+on the inode shard; last close reclaims). Gate: same smoke
+(`raft-smoke-k` nlink=0 survives crash, close reclaims). Cutover
+of `efs-test` is not this work, not step 11.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

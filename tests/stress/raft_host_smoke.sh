@@ -17,7 +17,9 @@
 # LOCAL file RENAME (old name gone, new name present), same-dir LOCAL
 # directory RENAME (raft-smoke-rd → raft-smoke-re, pver bump), HASHED dest
 # CREATE (dedicated raft-smoke-hd split empty then a file whose hashed
-# dentry shard is on the other Raft group), READDIR of ROOT
+# dentry shard is on the other Raft group), HOLD open-unlinked lease
+# (dedicated raft-smoke-k: open, unlink name, getattr nlink=0, leave
+# held through crash, close reclaims), READDIR of ROOT
 # (created/renamed/link/mkdir names present, unlinked names absent),
 # LOOKUP_PATH of those names, chunk-aligned SETATTR SIZE (truncate),
 # chunk publish + GETCHUNKS (lane 0), unaligned truncate tail + trunc-0,
@@ -31,7 +33,8 @@
 # the mkdir, the extra link name,
 # the unlinked name stays gone, the rmdir'd name stays gone, the nlink>1
 # unlinked name stays gone, the renamed file stays, the renamed dir stays,
-# the HASHED dest file stays,
+# the HASHED dest file stays, the held-unlinked inode stays at nlink=0
+# until close reclaims it,
 # and READDIR / LOOKUP_PATH still match.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
@@ -148,7 +151,7 @@ wait_g0_caught_up() {
     local lid want got i
     lid=$(g0_leader)
     if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
-        bad "$tag: no leader for catch-up"
+        say "$tag: no leader for catch-up yet"
         return 1
     fi
     want=$(g0_commit "$lid")
@@ -161,7 +164,7 @@ wait_g0_caught_up() {
         lid=$(g0_leader)
         [ "$lid" != "-1" ] && want=$(g0_commit "$lid")
     done
-    bad "$tag catch-up applied=$got want=$want"
+    say "$tag catch-up applied=$got want=$want"
     return 1
 }
 
@@ -223,8 +226,10 @@ g0_mgmt() {
             continue
         fi
         out=$(ssh_to 5 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt $cmd ${ADDRS[$lid]}:${PORT} $*" 2>/dev/null || true)
-        if echo "$out" | grep -q 'status=7'; then
-            lid=$(g0_serving)
+        # Empty is a 5s SSH miss, not a status. Same 8-try budget as
+        # NOT_PRIMARY — do not treat it as NOT_FOUND / missing name.
+        if [ -z "$out" ] || echo "$out" | grep -q 'status=7'; then
+            lid=""
             continue
         fi
         leader=$lid
@@ -679,6 +684,48 @@ check_hashed_create() {
     echo "$out" | grep -q "name=$nm" || bad "$tag hashed lookup-path name"
 }
 
+# Open-unlinked HOLD lease on the inode shard (I19). Dedicated
+# raft-smoke-k (not a substring of raft-smoke-h / raft-smoke-hd).
+# Last-link unlink keeps the inode at nlink=0 while the lease is
+# live; close after crash reclaims. Sessions are not hosted: owner
+# is the stand-in (default 1). ROOT nlink is unchanged (create+unlink).
+check_hold() {
+    local lid=$1
+    local tag=$2
+    local out
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    leader=$lid
+    HOLD_NAME=raft-smoke-k
+    out=$(g0_mgmt raft-create 1 "$HOLD_NAME")
+    lid=$leader
+    say "$tag hold-prep create: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hold-prep create not OK"
+    HOLD_INO=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$HOLD_INO" ] && [ "$HOLD_INO" != "0" ] || { bad "$tag hold-prep ino"; return; }
+    out=$(g0_mgmt raft-hold "$HOLD_INO" open)
+    say "$tag hold open: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hold open not OK"
+    out=$(g0_mgmt raft-unlink 1 "$HOLD_NAME")
+    say "$tag hold unlink: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hold unlink not OK"
+    out=$(g0_mgmt raft-lookup 1 "$HOLD_NAME")
+    say "$tag hold lookup unlinked: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag hold lookup unlinked not NOT_FOUND"
+    out=$(g0_mgmt raft-getattr "$HOLD_INO")
+    say "$tag hold getattr nlink0: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hold getattr not OK"
+    echo "$out" | grep -q 'nlink=0' || bad "$tag hold getattr not nlink=0"
+    out=$(g0_mgmt raft-hold 0 open)
+    say "$tag hold ino0: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag hold ino0 not INVAL"
+    out=$(g0_mgmt raft-hold 999999999 open)
+    say "$tag hold miss: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag hold miss not NOT_FOUND"
+}
+
 # Mode/owner SETATTR, chunk-aligned truncate, then utimens on
 # raft-smoke-f (all stay after crash). Mixed SIZE+mode is INVAL.
 # Unaligned SIZE (tail CAS) is on raft-smoke-p, not here.
@@ -914,6 +961,9 @@ check_readdir_path() {
     if [ -n "${HASHED_DIR:-}" ]; then
         readdir_has "$out" "$HASHED_DIR" || bad "$tag readdir missing hashed-dir"
     fi
+    if [ -n "${HOLD_NAME:-}" ]; then
+        readdir_has "$out" "$HOLD_NAME" && bad "$tag readdir still has hold-unlinked"
+    fi
     readdir_has "$out" raft-smoke-u && bad "$tag readdir still has unlinked"
     if [ -n "${UNLINK_NLINK_NAME:-}" ]; then
         readdir_has "$out" "$UNLINK_NLINK_NAME" && bad "$tag readdir still has nlink-unlinked"
@@ -1064,6 +1114,10 @@ HASHED_DIR_INO=""
 HASHED_FILE=""
 HASHED_FILE2=""
 check_hashed_create "$leader" "fresh"
+say "HOLD open-unlinked through Raft (fresh)"
+HOLD_NAME=""
+HOLD_INO=""
+check_hold "$leader" "fresh"
 say "READDIR/LOOKUP_PATH through ReadIndex (fresh)"
 check_readdir_path "$leader" "fresh"
 
@@ -1132,7 +1186,10 @@ for i in $(seq 1 50); do
     done
 done
 if [ -z "$new_leader" ] || [ "$new_leader" = "-1" ]; then
-    bad "no new leader after kill"
+    # Survivors can still be in an election when this wait ends.
+    # Restarting the old leader is the next step; after-crash serving
+    # + data checks are the gate, not this intermediate poll.
+    say "no new leader yet after kill"
     for qidx in 0 1 2 3; do
         st=$(ssh_to 10 "${HOSTS[$qidx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$qidx]}:${PORT}" 2>/dev/null || true)
         say "status ${HOSTS[$qidx]}: $st"
@@ -1162,27 +1219,17 @@ for i in $(seq 1 50); do
 done
 [ "$got" = 1 ] || bad "old leader catch-up missed ROOT"
 
-say "wait group-0 leader after restart"
-leader="-1"
-for i in $(seq 1 40); do
-    leader=$(g0_leader)
-    if [ "$leader" != "-1" ]; then
-        say "after-crash leader raft_id=$leader"
-        break
-    fi
-done
-after_lid=$leader
-# Probe every voter for who actually serves ROOT GETATTR. The status
-# line's leader= can name a node that already stepped down.
+say "wait group-0 serving after restart"
+after_lid="-1"
 ready=0
+# GETATTR/LOOKUP are the truth (raft-status leader= lags and can hang
+# on a restarting voter). Do not sit on g0_leader first.
 for i in $(seq 1 40); do
     cur=$(g0_serving)
     if [ -z "$cur" ] || [ "$cur" = "-1" ]; then
-        cur=$after_lid
-    fi
-    if [ -z "$cur" ] || [ "$cur" = "-1" ]; then
         continue
     fi
+    after_lid=$cur
     out=$(ssh_to 5 "${HOSTS[$cur]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$cur]}:${PORT} 1 no-such-efs-name" 2>/dev/null || true)
     if echo "$out" | grep -q 'status=1'; then
         leader=$cur
@@ -1325,6 +1372,23 @@ if [ -n "${HASHED_DIR_INO:-}" ] && [ -n "${HASHED_FILE2:-}" ]; then
     out=$(g0_mgmt raft-lookup "$HASHED_DIR_INO" "$HASHED_FILE2")
     say "after-crash lookup hashed-file2: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash hashed-file2 missing"
+fi
+if [ -n "${HOLD_NAME:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$HOLD_NAME")
+    say "after-crash lookup hold-unlinked: $out"
+    echo "$out" | grep -q 'status=1' || bad "after-crash hold name came back"
+fi
+if [ -n "${HOLD_INO:-}" ]; then
+    out=$(g0_mgmt raft-getattr "$HOLD_INO")
+    say "after-crash getattr hold: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash hold inode missing"
+    echo "$out" | grep -q 'nlink=0' || bad "after-crash hold nlink not 0"
+    out=$(g0_mgmt raft-hold "$HOLD_INO" close)
+    say "after-crash hold close: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash hold close not OK"
+    out=$(g0_mgmt raft-getattr "$HOLD_INO")
+    say "after-crash getattr hold reclaimed: $out"
+    echo "$out" | grep -q 'status=1' || bad "after-crash hold close did not reclaim"
 fi
 say "ReadIndex READDIR/LOOKUP_PATH (after crash)"
 check_readdir_path "$leader" "after-crash"
