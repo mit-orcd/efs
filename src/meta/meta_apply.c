@@ -442,6 +442,22 @@ static int load_window(struct efs_kv *kv, const struct efs_opid *op,
     return efs_opid_window_unpack(w, val, vlen);
 }
 
+/* Production host packs a zero UUID / seq 0 until sessions are hosted.
+ * That must not PUT the op-id window (zero UUID hashes off the inode
+ * group) and must not call lookup (seq 0 is an error). */
+static int opid_hosted(const struct efs_opid *op)
+{
+    uint32_t i;
+
+    if (!op || op->seq == 0)
+        return 0;
+    for (i = 0; i < EFS_OPID_UUID_LEN; i++) {
+        if (op->client_uuid[i])
+            return 1;
+    }
+    return 0;
+}
+
 int efs_meta_apply_mkfs(struct efs_kv *kv, uint64_t now, uint64_t salt)
 {
     struct efs_meta_row root;
@@ -2802,15 +2818,18 @@ int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len
 
     if (!kv || !op || !coord || !off_out || ino == 0 || len == 0)
         return EFS_ERR_INVAL;
-    rc = load_window(kv, op, &win);
-    if (rc != EFS_OK)
-        return rc;
-    hit = efs_opid_lookup(&win, op, &rep);
-    if (hit < 0)
-        return hit;
-    if (hit) {
-        *off_out = rep.extra;
-        return rep.rc;
+    hit = 0;
+    if (opid_hosted(op)) {
+        rc = load_window(kv, op, &win);
+        if (rc != EFS_OK)
+            return rc;
+        hit = efs_opid_lookup(&win, op, &rep);
+        if (hit < 0)
+            return hit;
+        if (hit) {
+            *off_out = rep.extra;
+            return rep.rc;
+        }
     }
     rc = efs_meta_apply_get_inode(kv, ino, &row);
     if (rc != EFS_OK)
@@ -2870,27 +2889,29 @@ int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len
                          append_bar_set, &cur.watermark, it, &n, k_ln, v_ln);
     if (rc != EFS_OK)
         return rc;
-    memset(&rep, 0, sizeof(rep));
-    rep.rc = EFS_OK;
-    rep.ino = ino;
-    rep.extra = eof;
-    rc = efs_opid_complete(&win, op, &rep);
-    if (rc != EFS_OK)
-        return rc;
-    vo = sizeof(v_opid);
-    rc = efs_opid_window_pack(&win, v_opid, &vo);
-    if (rc != EFS_OK)
-        return rc;
-    rc = efs_kv_key_opid(efs_kv_session_shard(op->client_uuid), op->client_uuid,
-                         op->session_epoch, k_opid, &ko);
-    if (rc != EFS_OK)
-        return rc;
-    it[n].op = EFS_KV_PUT;
-    it[n].key = k_opid;
-    it[n].klen = ko;
-    it[n].val = v_opid;
-    it[n].vlen = vo;
-    n++;
+    if (opid_hosted(op)) {
+        memset(&rep, 0, sizeof(rep));
+        rep.rc = EFS_OK;
+        rep.ino = ino;
+        rep.extra = eof;
+        rc = efs_opid_complete(&win, op, &rep);
+        if (rc != EFS_OK)
+            return rc;
+        vo = sizeof(v_opid);
+        rc = efs_opid_window_pack(&win, v_opid, &vo);
+        if (rc != EFS_OK)
+            return rc;
+        rc = efs_kv_key_opid(efs_kv_session_shard(op->client_uuid),
+                             op->client_uuid, op->session_epoch, k_opid, &ko);
+        if (rc != EFS_OK)
+            return rc;
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_opid;
+        it[n].klen = ko;
+        it[n].val = v_opid;
+        it[n].vlen = vo;
+        n++;
+    }
     rc = efs_kv_batch(kv, it, n);
     if (rc != EFS_OK)
         return rc;
@@ -3037,6 +3058,62 @@ int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off
     it[n].vlen = INO_VAL;
     n++;
     return efs_kv_batch(kv, it, n);
+}
+
+int efs_meta_apply_append_state(struct efs_kv *kv, efs_ino_t ino,
+                                uint64_t *watermark, uint64_t *frontier,
+                                uint32_t *nopen)
+{
+    struct efs_meta_row row;
+    struct append_cur cur;
+    int rc;
+
+    if (!kv || ino == 0)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    rc = load_append_cur(kv, ino, row.generation, &cur);
+    if (rc != EFS_OK)
+        return rc;
+    if (watermark)
+        *watermark = cur.watermark;
+    if (frontier)
+        *frontier = cur.frontier;
+    if (nopen)
+        *nopen = cur.nopen;
+    return EFS_OK;
+}
+
+int efs_meta_apply_append_open(struct efs_kv *kv, efs_ino_t ino, uint64_t *offs,
+                               uint64_t *lens, uint32_t *n)
+{
+    struct efs_meta_row row;
+    struct rsv_scan scan;
+    uint32_t i, cap, outn = 0;
+    int rc;
+
+    if (!kv || !n || ino == 0)
+        return EFS_ERR_INVAL;
+    cap = *n;
+    *n = 0;
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    rc = load_rsvs(kv, ino, row.generation, &scan);
+    if (rc != EFS_OK)
+        return rc;
+    for (i = 0; i < scan.n; i++) {
+        if (scan.r[i].state != APPEND_OPEN)
+            continue;
+        if (outn < cap && offs && lens) {
+            offs[outn] = scan.r[i].off;
+            lens[outn] = scan.r[i].len;
+        }
+        outn++;
+    }
+    *n = (cap && outn > cap) ? cap : outn;
+    return EFS_OK;
 }
 
 int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_index,

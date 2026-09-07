@@ -361,6 +361,14 @@ int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len
                                   uint64_t *off_out);
 int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off,
                                   int outcome);
+/* Hosted path has no op-id yet (zero UUID). After wait, the handler reads
+ * watermark rather than an apply-side extra. nopen==0 means no burst. */
+int efs_meta_apply_append_state(struct efs_kv *kv, efs_ino_t ino,
+                                uint64_t *watermark, uint64_t *frontier,
+                                uint32_t *nopen);
+/* OPEN reservations only. *n is capacity in, count out (capped). */
+int efs_meta_apply_append_open(struct efs_kv *kv, efs_ino_t ino, uint64_t *offs,
+                               uint64_t *lens, uint32_t *n);
 int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_index,
                              struct efs_meta_chunk *out);
 uint64_t efs_meta_candidate_gen(const uint8_t uuid[16], uint32_t session_epoch,

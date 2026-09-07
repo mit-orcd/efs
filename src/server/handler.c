@@ -1912,6 +1912,7 @@ send_reply:
                  type == EFS_MSG_INODE_UNLINK ||
                  type == EFS_MSG_INODE_UNLINK_SHARD ||
                  type == EFS_MSG_INODE_SETATTR ||
+                 type == EFS_MSG_INODE_APPEND ||
                  type == EFS_MSG_INODE_LINK ||
                  type == EFS_MSG_INODE_LINK_SHARD ||
                  type == EFS_MSG_INODE_RENAME ||
@@ -1958,10 +1959,15 @@ send_reply:
                            payload_len >= sizeof(struct efs_msg_inode_setattr)) {
                     struct efs_msg_inode_setattr *req = payload;
                     server_raft_host_setattr(req->ino, req->mask, req->mode,
-                                             req->uid, req->gid, req->size,
-                                             req->mtime, req->mtime_nsec,
-                                             req->atime, &r);
+                                              req->uid, req->gid, req->size,
+                                              req->mtime, req->mtime_nsec,
+                                              req->atime, &r);
                     rtype = EFS_MSG_INODE_SETATTR_REPLY;
+                } else if (type == EFS_MSG_INODE_APPEND &&
+                           payload_len >= sizeof(struct efs_msg_inode_append)) {
+                    struct efs_msg_inode_append *req = payload;
+                    server_raft_host_append(req->ino, req->len, &r);
+                    rtype = EFS_MSG_INODE_APPEND_REPLY;
                 } else if (type == EFS_MSG_INODE_LINK &&
                            payload_len >= sizeof(struct efs_msg_inode_link)) {
                     struct efs_msg_inode_link *req = payload;
@@ -1993,9 +1999,11 @@ send_reply:
                                             ? EFS_MSG_INODE_UNLINK_REPLY
                                             : (type == EFS_MSG_INODE_SETATTR)
                                                   ? EFS_MSG_INODE_SETATTR_REPLY
-                                                  : (type == EFS_MSG_INODE_LINK)
-                                                        ? EFS_MSG_INODE_LINK_REPLY
-                                                        : EFS_MSG_INODE_CREATE_REPLY;
+                                                  : (type == EFS_MSG_INODE_APPEND)
+                                                        ? EFS_MSG_INODE_APPEND_REPLY
+                                                        : (type == EFS_MSG_INODE_LINK)
+                                                              ? EFS_MSG_INODE_LINK_REPLY
+                                                              : EFS_MSG_INODE_CREATE_REPLY;
                 }
                 efs_conn_send_msg(conn, rtype, &r, sizeof(r));
                 break;

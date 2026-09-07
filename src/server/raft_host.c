@@ -39,6 +39,8 @@
 #define HOST_SETATTR_LEN   61
 #define HOST_UTIMENS_LEN   73
 #define HOST_TRUNC_LEN     54
+#define HOST_APPEND_RSV_LEN 45
+#define HOST_APPEND_RES_LEN 38
 #define HOST_TRUNC_TAIL    (4u + 8u + 8u + 4u + \
                             (uint32_t)EFS_NUM_FRAGMENTS * (4u + EFS_HASH_SIZE))
 #define HOST_PUBLISH_LEN   (29u + (uint32_t)EFS_NUM_FRAGMENTS * (4u + EFS_HASH_SIZE) + \
@@ -450,6 +452,75 @@ static int apply_truncate_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+/* Pump-safe: apply already holds the committed KV. Must not ReadIndex. */
+static int host_apply_coord(void *user, const struct efs_txid *t,
+                            uint32_t coord_shard, int *dec)
+{
+    struct efs_raft_host *h = user;
+
+    if (!h || !h->kv || !t || !dec)
+        return EFS_ERR_IO;
+    return efs_txn_decision_get(h->kv, coord_shard, t, dec);
+}
+
+/* Same layout as sim apply_append_rsv_cmd, big-endian. Session / op-id
+ * are not hosted: UUID and seq are zero. Apply never stalls the log. */
+static int apply_append_rsv_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                uint32_t clen, uint64_t index)
+{
+    struct efs_opid op;
+    efs_ino_t ino;
+    uint64_t len, off = 0;
+    int rc;
+
+    if (clen < HOST_APPEND_RSV_LEN)
+        return EFS_OK;
+    ino = rd64be(cmd + 1);
+    len = rd64be(cmd + 9);
+    memset(&op, 0, sizeof(op));
+    memcpy(op.client_uuid, cmd + 17, EFS_OPID_UUID_LEN);
+    op.session_epoch = rd32be(cmd + 33);
+    op.seq = rd64be(cmd + 37);
+    rc = efs_meta_apply_append_reserve(h->kv, ino, len, &op, host_apply_coord,
+                                       h, &off);
+    if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY)
+        rc = EFS_OK;
+    if (rc != EFS_OK) {
+        fprintf(stderr, "raft-host: apply append-rsv rc=%d index=%llu ino=%llu\n",
+                rc, (unsigned long long)index, (unsigned long long)ino);
+        return EFS_OK;
+    }
+    fprintf(stderr, "raft-host: applied append-rsv index=%llu ino=%llu\n",
+            (unsigned long long)index, (unsigned long long)ino);
+    return EFS_OK;
+}
+
+static int apply_append_res_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                uint32_t clen, uint64_t index)
+{
+    efs_ino_t ino;
+    uint64_t off;
+    int outcome, rc;
+
+    if (clen < HOST_APPEND_RES_LEN)
+        return EFS_OK;
+    ino = rd64be(cmd + 1);
+    off = rd64be(cmd + 9);
+    outcome = (int)cmd[17];
+    rc = efs_meta_apply_append_resolve(h->kv, ino, off, outcome);
+    if (rc == EFS_ERR_NOT_FOUND)
+        rc = EFS_OK;
+    if (rc != EFS_OK) {
+        fprintf(stderr, "raft-host: apply append-res rc=%d index=%llu ino=%llu\n",
+                rc, (unsigned long long)index, (unsigned long long)ino);
+        return EFS_OK;
+    }
+    fprintf(stderr, "raft-host: applied append-res index=%llu ino=%llu off=%llu\n",
+            (unsigned long long)index, (unsigned long long)ino,
+            (unsigned long long)off);
+    return EFS_OK;
+}
+
 /* Same encoding as sim apply_publish_cmd. Session fencing is not hosted. */
 static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                              uint32_t clen, uint64_t index)
@@ -608,6 +679,10 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         return apply_utimens_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_TRUNCATE)
         return apply_truncate_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_APPEND_RSV)
+        return apply_append_rsv_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_APPEND_RES)
+        return apply_append_res_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
         cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP)
         return apply_txn_cmd(h, cmd, clen);
@@ -1003,6 +1078,19 @@ static void host_fwd_getattr(struct efs_raft_host *h, efs_ino_t ino,
                        EFS_MSG_INODE_GETATTR_REPLY, out, groups, ng);
 }
 
+static void host_fwd_append(struct efs_raft_host *h, efs_ino_t ino, uint64_t len,
+                            struct efs_msg_inode_reply *out,
+                            const uint8_t *groups, int ng)
+{
+    struct efs_msg_inode_append req;
+
+    memset(&req, 0, sizeof(req));
+    req.ino = ino;
+    req.len = len;
+    host_inode_forward(h, EFS_MSG_INODE_APPEND, &req, sizeof(req),
+                       EFS_MSG_INODE_APPEND_REPLY, out, groups, ng);
+}
+
 static void host_fwd_unlink(struct efs_raft_host *h, efs_ino_t parent,
                             const char *name, int is_dir,
                             struct efs_msg_inode_reply *out,
@@ -1154,6 +1242,29 @@ static int pack_truncate_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
         q += EFS_HASH_SIZE;
     }
     *len = HOST_TRUNC_LEN + HOST_TRUNC_TAIL;
+    return EFS_OK;
+}
+
+static int pack_append_rsv_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
+                               uint64_t alen)
+{
+    out[0] = EFS_MD_CMD_APPEND_RSV;
+    wr64be(out + 1, ino);
+    wr64be(out + 9, alen);
+    memset(out + 17, 0, EFS_OPID_UUID_LEN + 4 + 8);
+    *len = HOST_APPEND_RSV_LEN;
+    return EFS_OK;
+}
+
+static int pack_append_res_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
+                               uint64_t off, int outcome)
+{
+    out[0] = EFS_MD_CMD_APPEND_RES;
+    wr64be(out + 1, ino);
+    wr64be(out + 9, off);
+    out[17] = (uint8_t)outcome;
+    memset(out + 18, 0, EFS_OPID_UUID_LEN + 4);
+    *len = HOST_APPEND_RES_LEN;
     return EFS_OK;
 }
 
@@ -2988,6 +3099,58 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
         stat_to_inode(&st, &out->inode);
 }
 
+/* O_APPEND reserve. Reply size is the watermark (off+len). Visible
+ * getattr size stays the frontier until REPORT resolves the rsv. */
+void server_raft_host_append(efs_ino_t ino, uint64_t len,
+                             struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_row row;
+    struct efs_meta_stat st;
+    uint8_t cmd[HOST_APPEND_RSV_LEN];
+    uint32_t clen = 0, nopen = 0;
+    uint64_t idx = 0, wm = 0;
+    uint8_t ig;
+    int hint = -1;
+    int rc;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running || ino == 0 || len == 0) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
+    if (!host_hosts(h, ig)) {
+        host_fwd_append(h, ino, len, out, &ig, 1);
+        return;
+    }
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_read_inode_lanes(h, ino, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+    if (rc == EFS_OK && !S_ISREG(row.mode))
+        rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK)
+        rc = pack_append_rsv_cmd(cmd, &clen, ino, len);
+    if (rc == EFS_OK)
+        rc = host_propose(h, ig, cmd, clen, &idx, &hint);
+    if (rc == EFS_OK)
+        rc = host_wait_applied(h, ig, idx, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_append_state(h->kv, ino, &wm, NULL, &nopen);
+    if (rc == EFS_OK && nopen == 0)
+        rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
+    pthread_mutex_unlock(&h->read_mu);
+    set_inode_rc(out, rc, hint);
+    if (rc == EFS_OK) {
+        stat_to_inode(&st, &out->inode);
+        out->inode.size = wm;
+    }
+}
+
 /* Hard link: dest dentry + inode nlink++ as a txn (same PREPARE/DECIDE/
  * RESOLVE as MKDIR). LOCAL dest only; HASHED/SPLITTING are INVAL/BUSY.
  * The receiving node must lead every participant group. Directories are
@@ -3354,6 +3517,36 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     }
 }
 
+/* OPEN reservations whose range is at or below the published size become
+ * COMPLETED. No new opcode: REPORT already committed the data. Catch-up
+ * with nopen==0 is a no-op (existing raft-smoke-p). read_mu held. */
+static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
+                                  uint64_t sz, int *hint)
+{
+    uint64_t offs[64], lens[64];
+    uint32_t n = 64, i, clen = 0;
+    uint8_t cmd[HOST_APPEND_RES_LEN];
+    uint8_t ig;
+    int rc;
+
+    rc = efs_meta_apply_append_open(h->kv, ino, offs, lens, &n);
+    if (rc != EFS_OK)
+        return rc;
+    ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
+    for (i = 0; i < n; i++) {
+        if (offs[i] + lens[i] > sz)
+            continue;
+        rc = pack_append_res_cmd(cmd, &clen, ino, offs[i],
+                                 EFS_META_APPEND_COMPLETED);
+        if (rc != EFS_OK)
+            return rc;
+        rc = host_propose_wait(h, ig, cmd, clen, hint);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    return EFS_OK;
+}
+
 /* One chunk CAS + lane MAX. read_mu held. First-use of a lane whose
  * group is not the inode's is INVAL this slice (that is a 2-shard txn).
  * Lane 0 is the inode shard, so the smoke's first chunk is one group. */
@@ -3458,6 +3651,8 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         if (sz == 0)
             sz = ((uint64_t)recs[i].chunk_index + 1) * EFS_MIN_CHUNK_SIZE;
         rc = host_pub_locked(h, &recs[i], sz, &hint);
+        if (rc == EFS_OK)
+            rc = host_resolve_caught_up(h, recs[i].ino, sz, &hint);
     }
     pthread_mutex_unlock(&h->read_mu);
     set_inode_rc(out, rc, hint);

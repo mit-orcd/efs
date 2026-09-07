@@ -18,10 +18,11 @@
 # (created/renamed/link/mkdir names present, unlinked names absent),
 # LOOKUP_PATH of those names, chunk-aligned SETATTR SIZE (truncate),
 # chunk publish + GETCHUNKS (lane 0), unaligned truncate tail + trunc-0,
-# kill -9 a follower
+# O_APPEND reserve (reply size=watermark, getattr still 0 until publish
+# resolves), kill -9 a follower
 # then the leader, restart catch-up keeps ROOT, the created file (new
 # mode, size=131072, nlink=2, utimens mtime), the published file truncated
-# to size=0 with no chunk map,
+# to size=0 with no chunk map, the O_APPEND file at size=131072,
 # the mkdir, the extra link name, the
 # unlinked name stays gone, the rmdir'd name stays gone, the nlink>1
 # unlinked name stays gone, the renamed name stays, and READDIR /
@@ -73,8 +74,9 @@ mkdir -p /tmp/efs
 rsync -a --delete --exclude='/mnt/' --exclude='*.log' '$SRC/' /tmp/efs/
 cd /tmp/efs
 make clean >/dev/null
-make -j\"\$(nproc)\" efsd efs-mgmt tests/test_wire
+make -j\"\$(nproc)\" efsd efs-mgmt tests/test_wire tests/test_meta_apply
 ./tests/test_wire
+./tests/test_meta_apply
 "
 }
 
@@ -627,6 +629,43 @@ check_publish() {
     echo "$out" | grep -q 'count=0' || bad "$tag getchunks trunc0 count"
 }
 
+# O_APPEND: reserve then publish. Dedicated file so raft-smoke-p's
+# trunc-0 stays as it is. Visible getattr size is the frontier (0
+# until resolve-on-report). Reply size is the watermark.
+check_append() {
+    local lid=$1
+    local tag=$2
+    local out ino
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-a" 2>/dev/null || true)
+    say "$tag append create: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag append create not OK"
+    ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag append ino"
+    APPEND_NAME=raft-smoke-a
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-append ${ADDRS[$lid]}:${PORT} $ino 131072" 2>/dev/null || true)
+    say "$tag append: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag append not OK"
+    echo "$out" | grep -q 'size=131072' || bad "$tag append watermark"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    say "$tag getattr after reserve: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag getattr after reserve not OK"
+    echo "$out" | grep -q 'size=0' || bad "$tag getattr after reserve not frontier 0"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-publish ${ADDRS[$lid]}:${PORT} $ino 0 131072" 2>/dev/null || true)
+    say "$tag append publish: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag append publish not OK"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    say "$tag getattr after append pub: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag getattr after append pub not OK"
+    echo "$out" | grep -q 'size=131072' || bad "$tag getattr after append pub size"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-append ${ADDRS[$lid]}:${PORT} 999999 4096" 2>/dev/null || true)
+    say "$tag append miss: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag append miss not NOT_FOUND"
+}
+
 # READDIR ROOT + LOOKUP_PATH. Run after rename so the listing is final.
 check_readdir_path() {
     local lid=$1
@@ -659,6 +698,9 @@ check_readdir_path() {
     fi
     if [ -n "${PUBLISH_NAME:-}" ]; then
         echo "$out" | grep -q "$PUBLISH_NAME" || bad "$tag readdir missing published"
+    fi
+    if [ -n "${APPEND_NAME:-}" ]; then
+        echo "$out" | grep -q "$APPEND_NAME" || bad "$tag readdir missing append"
     fi
     echo "$out" | grep -q 'raft-smoke-u' && bad "$tag readdir still has unlinked"
     if [ -n "${UNLINK_NLINK_NAME:-}" ]; then
@@ -760,6 +802,9 @@ check_setattr "$leader" "fresh"
 say "PUBLISH/GETCHUNKS through Raft (fresh)"
 PUBLISH_NAME=""
 check_publish "$leader" "fresh"
+say "O_APPEND through Raft (fresh)"
+APPEND_NAME=""
+check_append "$leader" "fresh"
 say "MKDIR through Raft (fresh)"
 MKDIR_NAME=""
 check_mkdir "$leader" "fresh"
@@ -951,6 +996,17 @@ if [ -n "${PUBLISH_NAME:-}" ]; then
     out=$(g0_mgmt raft-getattr "$pino")
     say "after-crash getattr published: $out"
     echo "$out" | grep -q 'size=0' || bad "after-crash publish size not truncated"
+fi
+if [ -n "${APPEND_NAME:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$APPEND_NAME")
+    say "after-crash lookup append: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash append name missing"
+    aino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$aino" ] && [ "$aino" != "0" ] || bad "after-crash append ino"
+    out=$(g0_mgmt raft-getattr "$aino")
+    say "after-crash getattr append: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash append getattr missing"
+    echo "$out" | grep -q 'size=131072' || bad "after-crash append size lost"
 fi
 if [ -n "${MKDIR_NAME:-}" ]; then
     out=$(g0_mgmt raft-lookup 1 "$MKDIR_NAME")

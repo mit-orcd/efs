@@ -1488,6 +1488,24 @@ static void test_append_reserve(void)
                   EFS_OK &&
               off == 500,
           "pending reduction is eof");
+    {
+        efs_ino_t zino = 0;
+        struct efs_opid zop;
+        uint64_t zoff = 0, wm = 0, fr = 0;
+        uint32_t nopen = 0;
+
+        CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                         "z", &zino) == EFS_OK,
+              "create z");
+        memset(&zop, 0, sizeof(zop));
+        CHECK(efs_meta_apply_append_reserve(kv, zino, 64, &zop, coord_fn, &cc,
+                                            &zoff) == EFS_OK &&
+                  zoff == 0,
+              "zero uuid reserve");
+        CHECK(efs_meta_apply_append_state(kv, zino, &wm, &fr, &nopen) == EFS_OK &&
+                  wm == 64 && nopen == 1,
+              "zero uuid watermark");
+    }
     CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
     efs_kv_mem_free(kv);
 }

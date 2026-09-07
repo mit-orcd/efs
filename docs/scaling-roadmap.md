@@ -307,7 +307,12 @@ it, crash keeps that).
 **10.5c-24 is in:** cross-group propose without a new opcode
 (non-empty `RAFT_MKFS` = leader-submit / ReadIndex; unhosted inode
 RPCs bounce to a dual-host). Gate: same smoke (even-shard mkdir from
-raft_id 0 survives crash). Remaining: O_APPEND, SYMLINK, directory
+raft_id 0 survives crash).
+**10.5c-25 is in:** O_APPEND reserve (`INODE_APPEND` →
+`EFS_MD_CMD_APPEND_RSV`) and resolve-on-report (`APPEND_RES`).
+Reply size is the watermark; getattr stays the frontier until
+publish covers the reservation. Gate: same smoke (`raft-smoke-a`
+size=131072 survives crash). Remaining: SYMLINK, directory
 rename, HASHED dest CREATE, HOLD; not a cutover of `efs-test`,
 not step 11.
 

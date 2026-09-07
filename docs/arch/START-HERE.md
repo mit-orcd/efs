@@ -27,10 +27,11 @@ sends you to — not the whole spec.
 > (10.5c-20), SETATTR SIZE (chunk-aligned truncate, no tail)
 > is one Raft entry (10.5c-21), chunk publish + GETCHUNKS
 > (10.5c-22), unaligned SETATTR SIZE (tail CAS in the truncate
-> entry, 10.5c-23), and cross-group propose (10.5c-24: MKFS
-> submit + inode bounce, no new opcode). Next: remaining
-> mutations (O_APPEND, SYMLINK, directory rename, HASHED dest
-> CREATE, HOLD) behind the same flag.
+> entry, 10.5c-23), cross-group propose (10.5c-24: MKFS
+> submit + inode bounce, no new opcode), and O_APPEND reserve
+> (10.5c-25: reply size=watermark, getattr stays frontier until
+> REPORT resolves). Next: remaining mutations (SYMLINK,
+> directory rename, HASHED dest CREATE, HOLD) behind the same flag.
 > [architecture.md §10](../architecture.md)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -244,8 +245,16 @@ sends you to — not the whole spec.
 > new opcode. Followers wait apply locally. Unhosted inode RPCs bounce
 > to a dual-host (never self). Same scratch smoke: mkdir of an
 > even-shard dest from raft_id 0, rmdir/link/rename/readdir of those
-> names, crash keeps the even-shard dir. Remaining: O_APPEND,
-> SYMLINK, directory rename, HASHED dest CREATE, HOLD
+> names, crash keeps the even-shard dir.
+>
+> **10.5c-25 is in (gated):** O_APPEND reserve on the production host
+> (`EFS_MD_CMD_APPEND_RSV` / `APPEND_RES`). Zero UUID skips the op-id
+> window (sessions not hosted). Reply size is the watermark; getattr
+> stays the frontier until REPORT resolves OPEN reservations whose
+> range is covered. Unhosted inode groups bounce. Same scratch smoke:
+> create `raft-smoke-a`, append 131072, getattr size=0, publish,
+> getattr size=131072, crash keeps that size. Remaining: SYMLINK,
+> directory rename, HASHED dest CREATE, HOLD
 > (not a cutover of `efs-test`, not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is

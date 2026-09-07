@@ -1375,6 +1375,54 @@ static int cmd_raft_create(int argc, char **argv)
     return 0;
 }
 
+static int cmd_raft_append(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    int fd;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_msg_inode_append req;
+    struct efs_msg_inode_reply *r;
+
+    if (argc < 3) {
+        fprintf(stderr, "usage: raft-append <node:port> <ino> <len>\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    memset(&req, 0, sizeof(req));
+    req.ino = (efs_ino_t)strtoull(argv[1], NULL, 0);
+    req.len = strtoull(argv[2], NULL, 0);
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_INODE_APPEND, &req, sizeof(req), &reply_type,
+                  &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_INODE_APPEND_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to raft-append\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    printf("raft-append status=%u primary=%u ino=%llu size=%llu\n",
+           r->status, r->primary_id,
+           (unsigned long long)r->inode.ino,
+           (unsigned long long)r->inode.size);
+    free(reply);
+    return 0;
+}
+
 static int cmd_raft_unlink(int argc, char **argv)
 {
     char host[64];
@@ -1904,7 +1952,8 @@ int main(int argc, char **argv)
                     "  raft-readdir <node:port> <parent> [after_ino]\n"
                     "  raft-lookup-path <node:port> <path> [start]\n"
                     "  raft-publish <node:port> <ino> [chunk] [size]\n"
-                    "  raft-getchunks <node:port> <ino> [start]\n",
+                    "  raft-getchunks <node:port> <ino> [start]\n"
+                    "  raft-append <node:port> <ino> <len>\n",
             argv[0]);
     return 1;
 }
@@ -1962,6 +2011,8 @@ int main(int argc, char **argv)
         return cmd_raft_publish(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-getchunks") == 0)
         return cmd_raft_getchunks(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-append") == 0)
+        return cmd_raft_append(argc - 2, argv + 2);
 
     fprintf(stderr, "Unknown command: %s\n", cmd);
     return 1;

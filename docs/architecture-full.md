@@ -1153,9 +1153,10 @@ ReadIndex + KV) and 10.5c-21 (SETATTR SIZE / chunk-aligned truncate)
 and 10.5c-22 (chunk publish + GETCHUNKS)
 and 10.5c-23 (unaligned truncate tail CAS)
 and 10.5c-24 (cross-group propose: MKFS submit + inode bounce)
+and 10.5c-25 (O_APPEND reserve + resolve-on-report)
 are gated on a
-scratch cluster behind `EFS_MD_RAFT`. Remaining: O_APPEND,
-SYMLINK, directory rename, HASHED dest CREATE, HOLD. Not a
+scratch cluster behind `EFS_MD_RAFT`. Remaining: SYMLINK,
+directory rename, HASHED dest CREATE, HOLD. Not a
 cutover of the live table; not step 11. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
@@ -1276,10 +1277,11 @@ sends you to — not the whole spec.
 > (10.5c-20), SETATTR SIZE (chunk-aligned truncate, no tail)
 > is one Raft entry (10.5c-21), chunk publish + GETCHUNKS
 > (10.5c-22), unaligned SETATTR SIZE (tail CAS in the truncate
-> entry, 10.5c-23), and cross-group propose (10.5c-24: MKFS
-> submit + inode bounce, no new opcode). Next: remaining
-> mutations (O_APPEND, SYMLINK, directory rename, HASHED dest
-> CREATE, HOLD) behind the same flag.
+> entry, 10.5c-23), cross-group propose (10.5c-24: MKFS
+> submit + inode bounce, no new opcode), and O_APPEND reserve
+> (10.5c-25: reply size=watermark, getattr stays frontier until
+> REPORT resolves). Next: remaining mutations (SYMLINK,
+> directory rename, HASHED dest CREATE, HOLD) behind the same flag.
 > [architecture.md §10](#architecture)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -1493,8 +1495,16 @@ sends you to — not the whole spec.
 > new opcode. Followers wait apply locally. Unhosted inode RPCs bounce
 > to a dual-host (never self). Same scratch smoke: mkdir of an
 > even-shard dest from raft_id 0, rmdir/link/rename/readdir of those
-> names, crash keeps the even-shard dir. Remaining: O_APPEND,
-> SYMLINK, directory rename, HASHED dest CREATE, HOLD
+> names, crash keeps the even-shard dir.
+>
+> **10.5c-25 is in (gated):** O_APPEND reserve on the production host
+> (`EFS_MD_CMD_APPEND_RSV` / `APPEND_RES`). Zero UUID skips the op-id
+> window (sessions not hosted). Reply size is the watermark; getattr
+> stays the frontier until REPORT resolves OPEN reservations whose
+> range is covered. Unhosted inode groups bounce. Same scratch smoke:
+> create `raft-smoke-a`, append 131072, getattr size=0, publish,
+> getattr size=131072, crash keeps that size. Remaining: SYMLINK,
+> directory rename, HASHED dest CREATE, HOLD
 > (not a cutover of `efs-test`, not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
@@ -4522,8 +4532,17 @@ children. Directory RENAME is INVAL from `dent.type`. Flag off is a
 no-op. Gate: same smoke — mkdir of even-shard `raft-smoke-xg*` from
 raft_id 0, lookup/rmdir/link-dir/rename-dir/readdir, crash keeps
 that dir (ROOT nlink=4).
-Remaining: O_APPEND, SYMLINK, directory rename, HASHED dest CREATE,
-HOLD.
+
+**10.5c-25 — O_APPEND reserve (resolve on REPORT).** `INODE_APPEND`
+proposes `EFS_MD_CMD_APPEND_RSV` on the inode group (bounce if
+unhosted). Zero UUID skips the op-id window. Reply size is the
+watermark; getattr stays the frontier while nopen>0. After a
+covering `REPORT_CHUNKS` publish, OPEN reservations resolve
+COMPLETED (`EFS_MD_CMD_APPEND_RES`) so the next write past the
+watermark is not BUSY. Flag off is a no-op. Gate: same smoke —
+create `raft-smoke-a`, append 131072, getattr size=0, publish,
+getattr size=131072, crash keeps that size.
+Remaining: SYMLINK, directory rename, HASHED dest CREATE, HOLD.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
 ### Shortening the code → signal cycle
@@ -4999,9 +5018,10 @@ SETATTR (10.5c-14) and empty LOCAL RMDIR (10.5c-15) and LINK
 READDIR/LOOKUP_PATH (10.5c-20) and SETATTR SIZE / chunk-aligned
 truncate (10.5c-21) and chunk publish + GETCHUNKS (10.5c-22) and
 unaligned truncate tail CAS (10.5c-23) and cross-group propose
-(10.5c-24, MKFS submit + inode bounce, no new opcode) are gated
+(10.5c-24, MKFS submit + inode bounce, no new opcode) and
+O_APPEND reserve (10.5c-25, resolve-on-report) are gated
 on the same
-smoke. What remains is O_APPEND, SYMLINK, directory rename,
+smoke. What remains is SYMLINK, directory rename,
 HASHED dest CREATE, HOLD, then the cutover — not new
 design.
 

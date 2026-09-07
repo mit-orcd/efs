@@ -489,8 +489,17 @@ children. Directory RENAME is INVAL from `dent.type`. Flag off is a
 no-op. Gate: same smoke — mkdir of even-shard `raft-smoke-xg*` from
 raft_id 0, lookup/rmdir/link-dir/rename-dir/readdir, crash keeps
 that dir (ROOT nlink=4).
-Remaining: O_APPEND, SYMLINK, directory rename, HASHED dest CREATE,
-HOLD.
+
+**10.5c-25 — O_APPEND reserve (resolve on REPORT).** `INODE_APPEND`
+proposes `EFS_MD_CMD_APPEND_RSV` on the inode group (bounce if
+unhosted). Zero UUID skips the op-id window. Reply size is the
+watermark; getattr stays the frontier while nopen>0. After a
+covering `REPORT_CHUNKS` publish, OPEN reservations resolve
+COMPLETED (`EFS_MD_CMD_APPEND_RES`) so the next write past the
+watermark is not BUSY. Flag off is a no-op. Gate: same smoke —
+create `raft-smoke-a`, append 131072, getattr size=0, publish,
+getattr size=131072, crash keeps that size.
+Remaining: SYMLINK, directory rename, HASHED dest CREATE, HOLD.
 Not in this step: cutting over the live `efs-test` table, step 11.
 
 ## Shortening the code → signal cycle

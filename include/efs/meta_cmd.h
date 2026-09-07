@@ -21,6 +21,8 @@
 #define EFS_MD_CMD_SETATTR 13 /* matches sim SIM_CMD_SETATTR */
 #define EFS_MD_CMD_UTIMENS 14 /* matches sim SIM_CMD_UTIMENS */
 #define EFS_MD_CMD_TRUNCATE 15 /* matches sim SIM_CMD_TRUNCATE */
+#define EFS_MD_CMD_APPEND_RSV 16 /* matches sim SIM_CMD_APPEND_RSV */
+#define EFS_MD_CMD_APPEND_RES 17 /* matches sim SIM_CMD_APPEND_RES */
 #define EFS_MD_CMD_MKFS 18 /* [now:8][salt:8] — idempotent; salt absent = 0 */
 
 #endif

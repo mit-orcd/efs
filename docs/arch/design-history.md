@@ -423,8 +423,9 @@ SETATTR (10.5c-14) and empty LOCAL RMDIR (10.5c-15) and LINK
 READDIR/LOOKUP_PATH (10.5c-20) and SETATTR SIZE / chunk-aligned
 truncate (10.5c-21) and chunk publish + GETCHUNKS (10.5c-22) and
 unaligned truncate tail CAS (10.5c-23) and cross-group propose
-(10.5c-24, MKFS submit + inode bounce, no new opcode) are gated
+(10.5c-24, MKFS submit + inode bounce, no new opcode) and
+O_APPEND reserve (10.5c-25, resolve-on-report) are gated
 on the same
-smoke. What remains is O_APPEND, SYMLINK, directory rename,
+smoke. What remains is SYMLINK, directory rename,
 HASHED dest CREATE, HOLD, then the cutover — not new
 design.
