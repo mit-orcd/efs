@@ -1155,9 +1155,10 @@ and 10.5c-23 (unaligned truncate tail CAS)
 and 10.5c-24 (cross-group propose: MKFS submit + inode bounce)
 and 10.5c-25 (O_APPEND reserve + resolve-on-report)
 and 10.5c-26 (SYMLINK as CREATE S_IFLNK + publish)
+and 10.5c-27 (same-dir LOCAL directory rename)
 are gated on a
-scratch cluster behind `EFS_MD_RAFT`. Remaining: directory rename,
-HASHED dest CREATE, HOLD. Not a
+scratch cluster behind `EFS_MD_RAFT`. Remaining: HASHED dest CREATE,
+HOLD. Not a
 cutover of the live table; not step 11. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
@@ -1281,10 +1282,13 @@ sends you to — not the whole spec.
 > entry, 10.5c-23), cross-group propose (10.5c-24: MKFS
 > submit + inode bounce, no new opcode), and O_APPEND reserve
 > (10.5c-25: reply size=watermark, getattr stays frontier until
-> REPORT resolves), and SYMLINK as CREATE S_IFLNK + publish of the
-> target bytes (10.5c-26: no SYMLINK opcode, no target column).
-> Next: remaining mutations (directory rename, HASHED dest CREATE,
-> HOLD) behind the same flag.
+> REPORT resolves), SYMLINK as CREATE S_IFLNK + publish of the
+> target bytes (10.5c-26: no SYMLINK opcode, no target column),
+> and same-dir LOCAL directory rename (10.5c-27: bounce before
+> resolve so a scattered dest is not I9; pver GUARD + exclusive
+> pver PUT; LOOKUP_PATH bounces like LOOKUP).
+> Next: remaining mutations (HASHED dest CREATE, HOLD)
+> behind the same flag.
 > [architecture.md §10](#architecture)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -1514,8 +1518,18 @@ sends you to — not the whole spec.
 > no target column on `efs_meta_row`. Publish and GETCHUNKS accept
 > files and symlinks; directories stay INVAL. Same scratch smoke:
 > create `raft-smoke-s` mode=0120777, publish size=11, getattr and
-> GETCHUNKS, duplicate EXIST, crash keeps mode and size. Remaining:
-> directory rename, HASHED dest CREATE, HOLD
+> GETCHUNKS, duplicate EXIST, crash keeps mode and size.
+>
+> **10.5c-27 is in (gated):** same-dir LOCAL directory rename on the
+> production host. MKDIR scatter puts the dir inode on another group,
+> so the host bounces from the dentry type *before* resolve (resolve
+> of a missing child row is I9). Ancestry is pver sidecar GUARDs plus
+> an exclusive pver PUT on the renamed dir. Cross-dir and HASHED stay
+> INVAL. LOOKUP_PATH bounces a hop whose child inode is unhosted, same
+> as LOOKUP. Same scratch smoke: mkdir `raft-smoke-rd`, rename to
+> `raft-smoke-re`, old NOT_FOUND, new OK mode+nlink=2, miss / exist /
+> cross-dir, READDIR and LOOKUP_PATH, crash keeps the new name.
+> Remaining: HASHED dest CREATE, HOLD
 > (not a cutover of `efs-test`, not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
@@ -4562,7 +4576,18 @@ CREATE packed that mode; publish/GETCHUNKS wrongly required
 INVAL). No new opcode, no target column. Flag off is a no-op.
 Gate: same smoke — create `raft-smoke-s` mode=0120777, publish
 size=11, getattr+GETCHUNKS, duplicate EXIST, crash keeps mode
-and size. Remaining: directory rename, HASHED dest CREATE, HOLD.
+and size.
+
+**10.5c-27 — same-dir LOCAL directory rename.** Host RENAME of a
+directory is no longer INVAL. Bounce from the dentry type before
+resolve (a scattered MKDIR dest on another group would otherwise
+be I9). pver sidecar GUARDs on dst_parent ancestry and an exclusive
+pver PUT on the renamed dir. Cross-dir and HASHED stay INVAL.
+LOOKUP_PATH bounces unhosted child-inode hops like LOOKUP. Flag
+off is a no-op. Gate: same smoke — mkdir `raft-smoke-rd`, rename
+to `raft-smoke-re`, old gone / new present, miss NOT_FOUND, exist
+EXIST, cross-dir INVAL, READDIR+LOOKUP_PATH, crash keeps the new
+name. Remaining: HASHED dest CREATE, HOLD.
 
 ### Shortening the code → signal cycle
 
@@ -5039,9 +5064,9 @@ truncate (10.5c-21) and chunk publish + GETCHUNKS (10.5c-22) and
 unaligned truncate tail CAS (10.5c-23) and cross-group propose
 (10.5c-24, MKFS submit + inode bounce, no new opcode) and
 O_APPEND reserve (10.5c-25, resolve-on-report) and SYMLINK as
-CREATE S_IFLNK + publish (10.5c-26) are gated
+CREATE S_IFLNK + publish (10.5c-26) and same-dir LOCAL directory
+rename (10.5c-27) are gated
 on the same
-smoke. What remains is directory rename,
-HASHED dest CREATE, HOLD, then the cutover — not new
+smoke. What remains is HASHED dest CREATE, HOLD, then the cutover — not new
 design.
 

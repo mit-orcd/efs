@@ -315,8 +315,11 @@ publish covers the reservation. Gate: same smoke (`raft-smoke-a`
 size=131072 survives crash).
 **10.5c-26 is in:** SYMLINK is CREATE `S_IFLNK` + publish of the
 target bytes (no opcode, no target column). Gate: same smoke
-(`raft-smoke-s` mode=0120777 size=11 survives crash). Remaining:
-directory rename, HASHED dest CREATE, HOLD; not a cutover of
+(`raft-smoke-s` mode=0120777 size=11 survives crash).
+**10.5c-27 is in:** same-dir LOCAL directory rename (bounce before
+resolve; pver GUARD + exclusive PUT). Gate: same smoke
+(`raft-smoke-rd` → `raft-smoke-re` survives crash). Remaining:
+HASHED dest CREATE, HOLD; not a cutover of
 `efs-test`, not step 11.
 
 **Rules while carving:** no behavior change within a step; no new features

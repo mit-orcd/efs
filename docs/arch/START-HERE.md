@@ -30,10 +30,13 @@ sends you to — not the whole spec.
 > entry, 10.5c-23), cross-group propose (10.5c-24: MKFS
 > submit + inode bounce, no new opcode), and O_APPEND reserve
 > (10.5c-25: reply size=watermark, getattr stays frontier until
-> REPORT resolves), and SYMLINK as CREATE S_IFLNK + publish of the
-> target bytes (10.5c-26: no SYMLINK opcode, no target column).
-> Next: remaining mutations (directory rename, HASHED dest CREATE,
-> HOLD) behind the same flag.
+> REPORT resolves), SYMLINK as CREATE S_IFLNK + publish of the
+> target bytes (10.5c-26: no SYMLINK opcode, no target column),
+> and same-dir LOCAL directory rename (10.5c-27: bounce before
+> resolve so a scattered dest is not I9; pver GUARD + exclusive
+> pver PUT; LOOKUP_PATH bounces like LOOKUP).
+> Next: remaining mutations (HASHED dest CREATE, HOLD)
+> behind the same flag.
 > [architecture.md §10](../architecture.md)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -263,8 +266,18 @@ sends you to — not the whole spec.
 > no target column on `efs_meta_row`. Publish and GETCHUNKS accept
 > files and symlinks; directories stay INVAL. Same scratch smoke:
 > create `raft-smoke-s` mode=0120777, publish size=11, getattr and
-> GETCHUNKS, duplicate EXIST, crash keeps mode and size. Remaining:
-> directory rename, HASHED dest CREATE, HOLD
+> GETCHUNKS, duplicate EXIST, crash keeps mode and size.
+>
+> **10.5c-27 is in (gated):** same-dir LOCAL directory rename on the
+> production host. MKDIR scatter puts the dir inode on another group,
+> so the host bounces from the dentry type *before* resolve (resolve
+> of a missing child row is I9). Ancestry is pver sidecar GUARDs plus
+> an exclusive pver PUT on the renamed dir. Cross-dir and HASHED stay
+> INVAL. LOOKUP_PATH bounces a hop whose child inode is unhosted, same
+> as LOOKUP. Same scratch smoke: mkdir `raft-smoke-rd`, rename to
+> `raft-smoke-re`, old NOT_FOUND, new OK mode+nlink=2, miss / exist /
+> cross-dir, READDIR and LOOKUP_PATH, crash keeps the new name.
+> Remaining: HASHED dest CREATE, HOLD
 > (not a cutover of `efs-test`, not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is

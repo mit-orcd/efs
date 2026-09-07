@@ -14,7 +14,8 @@
 # txn (empty LOCAL dir, lookup miss), LINK as a 2-shard txn (nlink=2,
 # dest lookup, directory is INVAL), nlink>1 UNLINK of a dedicated extra
 # name (lookup miss, surviving nlink=2), utimens mtime fence, same-dir
-# LOCAL file RENAME (old name gone, new name present), READDIR of ROOT
+# LOCAL file RENAME (old name gone, new name present), same-dir LOCAL
+# directory RENAME (raft-smoke-rd → raft-smoke-re, pver bump), READDIR of ROOT
 # (created/renamed/link/mkdir names present, unlinked names absent),
 # LOOKUP_PATH of those names, chunk-aligned SETATTR SIZE (truncate),
 # chunk publish + GETCHUNKS (lane 0), unaligned truncate tail + trunc-0,
@@ -25,10 +26,10 @@
 # mode, size=131072, nlink=2, utimens mtime), the published file truncated
 # to size=0 with no chunk map, the O_APPEND file at size=131072,
 # the symlink (mode=0120777, size=11),
-# the mkdir, the extra link name, the
-# unlinked name stays gone, the rmdir'd name stays gone, the nlink>1
-# unlinked name stays gone, the renamed name stays, and READDIR /
-# LOOKUP_PATH still match.
+# the mkdir, the extra link name,
+# the unlinked name stays gone, the rmdir'd name stays gone, the nlink>1
+# unlinked name stays gone, the renamed file stays, the renamed dir stays,
+# and READDIR / LOOKUP_PATH still match.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
 PORT="${PORT:-19820}"
@@ -70,10 +71,10 @@ trap cleanup EXIT
 
 build_one() {
     local h=$1
-    ssh_to 90 "$h" "
+    ssh_to 120 "$h" "
 set -e
-killall -9 gcc 2>/dev/null || true
-sleep 1
+killall -9 make gcc 2>/dev/null || true
+sleep 3
 mkdir -p /tmp/efs
 rsync -a --delete --delete-excluded --exclude='/mnt/' --exclude='/.git/' --exclude='*.log' --exclude='*.o' --exclude='*.a' --exclude='tests/test_wire' --exclude='tests/test_meta_apply' --exclude='efsd' --exclude='efs-mgmt' --exclude='efs-fuse' '$SRC/' /tmp/efs/ || { rc=\$?; [ \"\$rc\" -eq 24 ]; }
 cd /tmp/efs
@@ -492,7 +493,7 @@ check_unlink_nlink() {
 }
 
 # Same-dir LOCAL file RENAME. Dedicated names so raft-smoke-f stays.
-# Dest EXIST and directory src are INVAL/EXIST. Cross-dir is INVAL.
+# Dest EXIST. Cross-dir is INVAL. Directory src is a later check.
 check_rename() {
     local lid=$1
     local tag=$2
@@ -526,11 +527,46 @@ check_rename() {
     out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-m 2 raft-smoke-x" 2>/dev/null || true)
     say "$tag rename cross-dir: $out"
     echo "$out" | grep -q 'status=6' || bad "$tag rename cross-dir not INVAL"
-    if [ -n "${MKDIR_NAME:-}" ]; then
-        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 $MKDIR_NAME 1 raft-smoke-md" 2>/dev/null || true)
-        say "$tag rename dir: $out"
-        echo "$out" | grep -q 'status=6' || bad "$tag rename dir not INVAL"
+}
+
+# Same-dir LOCAL directory rename. Dedicated names so MKDIR_NAME stays.
+# Dest EXIST. Cross-dir is still INVAL.
+check_dir_rename() {
+    local lid=$1
+    local tag=$2
+    local out
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
     fi
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-rd 040755" 2>/dev/null || true)
+    say "$tag dir-rename-prep mkdir: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag dir-rename-prep mkdir not OK"
+    echo "$out" | grep -q 'mode=040755' || bad "$tag dir-rename-prep mode"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-rd 1 raft-smoke-re" 2>/dev/null || true)
+    say "$tag dir-rename: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag dir-rename not OK"
+    if echo "$out" | grep -q 'status=0'; then
+        DIR_RENAME_NAME=raft-smoke-re
+        DIR_RENAME_OLD=raft-smoke-rd
+    fi
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-rd" 2>/dev/null || true)
+    say "$tag lookup dir-rename old: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag lookup dir-rename old not NOT_FOUND"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-re" 2>/dev/null || true)
+    say "$tag lookup dir-rename new: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag lookup dir-rename new not OK"
+    echo "$out" | grep -q 'mode=040755' || bad "$tag lookup dir-rename mode"
+    echo "$out" | grep -q 'nlink=2' || bad "$tag lookup dir-rename nlink"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-rd 1 raft-smoke-re2" 2>/dev/null || true)
+    say "$tag dir-rename miss: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag dir-rename miss not NOT_FOUND"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-re 1 raft-smoke-f" 2>/dev/null || true)
+    say "$tag dir-rename exist: $out"
+    echo "$out" | grep -q 'status=2' || bad "$tag dir-rename exist not EXIST"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-re 2 raft-smoke-x" 2>/dev/null || true)
+    say "$tag dir-rename cross-dir: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag dir-rename cross-dir not INVAL"
 }
 
 # Mode/owner SETATTR, chunk-aligned truncate, then utimens on
@@ -751,6 +787,12 @@ check_readdir_path() {
     if [ -n "${SYMLINK_NAME:-}" ]; then
         echo "$out" | grep -q "$SYMLINK_NAME" || bad "$tag readdir missing symlink"
     fi
+    if [ -n "${DIR_RENAME_NAME:-}" ]; then
+        echo "$out" | grep -q "$DIR_RENAME_NAME" || bad "$tag readdir missing dir-renamed"
+    fi
+    if [ -n "${DIR_RENAME_OLD:-}" ]; then
+        echo "$out" | grep -q "$DIR_RENAME_OLD" && bad "$tag readdir still has dir-rename-old"
+    fi
     echo "$out" | grep -q 'raft-smoke-u' && bad "$tag readdir still has unlinked"
     if [ -n "${UNLINK_NLINK_NAME:-}" ]; then
         echo "$out" | grep -q "$UNLINK_NLINK_NAME" && bad "$tag readdir still has nlink-unlinked"
@@ -769,6 +811,17 @@ check_readdir_path() {
         out=$(g0_mgmt raft-lookup-path "/$RENAME_OLD")
         say "$tag lookup-path rename-old: $out"
         echo "$out" | grep -q 'status=1' || bad "$tag lookup-path rename-old not NOT_FOUND"
+    fi
+    if [ -n "${DIR_RENAME_NAME:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$DIR_RENAME_NAME")
+        say "$tag lookup-path dir-renamed: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag lookup-path dir-renamed not OK"
+        echo "$out" | grep -q "name=$DIR_RENAME_NAME" || bad "$tag lookup-path dir-renamed name"
+    fi
+    if [ -n "${DIR_RENAME_OLD:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$DIR_RENAME_OLD")
+        say "$tag lookup-path dir-rename-old: $out"
+        echo "$out" | grep -q 'status=1' || bad "$tag lookup-path dir-rename-old not NOT_FOUND"
     fi
     out=$(g0_mgmt raft-lookup-path /no-such-efs-name)
     say "$tag lookup-path miss: $out"
@@ -874,6 +927,10 @@ say "RENAME through Raft (fresh)"
 RENAME_NAME=""
 RENAME_OLD=""
 check_rename "$leader" "fresh"
+say "directory RENAME through Raft (fresh)"
+DIR_RENAME_NAME=""
+DIR_RENAME_OLD=""
+check_dir_rename "$leader" "fresh"
 say "READDIR/LOOKUP_PATH through ReadIndex (fresh)"
 check_readdir_path "$leader" "fresh"
 
@@ -1013,6 +1070,7 @@ say "ReadIndex GETATTR/LOOKUP (after crash)"
 root_nlink=2
 [ -n "${MKDIR_NAME:-}" ] && root_nlink=$((root_nlink + 1))
 [ -n "${XG_NAME:-}" ] && root_nlink=$((root_nlink + 1))
+[ -n "${DIR_RENAME_NAME:-}" ] && root_nlink=$((root_nlink + 1))
 check_reads "$leader" "after-crash" "$root_nlink"
 out=$(g0_mgmt raft-lookup 1 raft-smoke-f)
 say "after-crash lookup created: $out"
@@ -1106,6 +1164,17 @@ if [ -n "${RENAME_OLD:-}" ]; then
     out=$(g0_mgmt raft-lookup 1 "$RENAME_OLD")
     say "after-crash lookup rename-old: $out"
     echo "$out" | grep -q 'status=1' || bad "after-crash rename old name came back"
+fi
+if [ -n "${DIR_RENAME_NAME:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$DIR_RENAME_NAME")
+    say "after-crash lookup dir-renamed: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash dir-renamed name missing"
+    echo "$out" | grep -q 'mode=040755' || bad "after-crash dir-renamed mode lost"
+fi
+if [ -n "${DIR_RENAME_OLD:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$DIR_RENAME_OLD")
+    say "after-crash lookup dir-rename-old: $out"
+    echo "$out" | grep -q 'status=1' || bad "after-crash dir-rename old name came back"
 fi
 say "ReadIndex READDIR/LOOKUP_PATH (after crash)"
 check_readdir_path "$leader" "after-crash"

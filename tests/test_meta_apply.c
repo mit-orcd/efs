@@ -994,6 +994,36 @@ static void plant_dir(struct efs_kv *kv, efs_ino_t parent, const char *name,
     CHECK(efs_kv_put(kv, k_dent, kd, v_dent, sizeof(v_dent)) == EFS_OK, "put dent");
 }
 
+/* Same-dir directory rename bumps parent_version and keeps the inode. */
+static void test_dir_rename(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_dentry dent;
+    struct efs_meta_row r;
+    efs_ino_t d = 17;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    plant_dir(kv, EFS_ROOT_INO, "d", d, S_IFDIR | 0755);
+    CHECK(efs_meta_apply_get_inode(kv, d, &r) == EFS_OK && r.parent_version == 0,
+          "pver0");
+    CHECK(efs_meta_apply_rename(kv, EFS_ROOT_INO, "d", EFS_ROOT_INO, "e", T0 + 1) ==
+              EFS_OK,
+          "rename");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "d", &dent) == EFS_ERR_NOT_FOUND,
+          "old gone");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "e", &dent) == EFS_OK &&
+              dent.ino == d && (dent.type & S_IFMT) == S_IFDIR,
+          "new name");
+    CHECK(efs_meta_apply_get_inode(kv, d, &r) == EFS_OK && r.parent == EFS_ROOT_INO &&
+              r.parent_version == 1 && S_ISDIR(r.mode),
+          "pver");
+    CHECK(efs_meta_apply_rename(kv, EFS_ROOT_INO, "e", EFS_ROOT_INO, "e", T0 + 1) ==
+              EFS_OK,
+          "self");
+    efs_kv_mem_free(kv);
+}
+
 static void test_lookup_path(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -1669,6 +1699,7 @@ int main(void)
     test_rmdir_rename();
     test_export_salt();
     test_symlink();
+    test_dir_rename();
     test_lookup_path();
     if (failures) {
         fprintf(stderr, "test_meta_apply: %d failure(s)\n", failures);

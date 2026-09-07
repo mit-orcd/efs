@@ -972,7 +972,7 @@ static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
 
 static int host_inode_rpc_peer(struct efs_raft_host *h, int rid, uint8_t req_type,
                                const void *req, uint32_t reqlen,
-                               uint8_t reply_type, struct efs_msg_inode_reply *out)
+                               uint8_t reply_type, void *out, uint32_t outlen)
 {
     char host[64];
     uint16_t port = 0;
@@ -981,7 +981,7 @@ static int host_inode_rpc_peer(struct efs_raft_host *h, int rid, uint8_t req_typ
     void *reply = NULL;
     uint32_t rlen = 0;
 
-    if (rid < 0 || rid == h->raft_id || !req || !out)
+    if (rid < 0 || rid == h->raft_id || !req || !out || outlen == 0)
         return -1;
     if (peer_addr(h, rid, host, sizeof(host), &port) != 0)
         return -1;
@@ -996,12 +996,12 @@ static int host_inode_rpc_peer(struct efs_raft_host *h, int rid, uint8_t req_typ
         server_peer_conn_drop(host, port, pc);
         return -1;
     }
-    if (rtype != reply_type || rlen < sizeof(*out)) {
+    if (rtype != reply_type || rlen < outlen) {
         free(reply);
         server_peer_conn_drop(host, port, pc);
         return -1;
     }
-    memcpy(out, reply, sizeof(*out));
+    memcpy(out, reply, outlen);
     free(reply);
     server_peer_conn_release(host, port, pc);
     return 0;
@@ -1025,7 +1025,7 @@ static void host_inode_forward(struct efs_raft_host *h, uint8_t req_type,
         if (rid < 0)
             return;
         if (host_inode_rpc_peer(h, rid, req_type, req, reqlen, reply_type,
-                                out) != 0) {
+                                out, sizeof(*out)) != 0) {
             skip = rid;
             out->status = EFS_INODE_RPC_NOT_PRIMARY;
             continue;
@@ -1119,6 +1119,54 @@ static void host_fwd_link(struct efs_raft_host *h, efs_ino_t src_ino,
     strncpy(req.new_name, new_name, EFS_MAX_NAME - 1);
     host_inode_forward(h, EFS_MSG_INODE_LINK, &req, sizeof(req),
                        EFS_MSG_INODE_LINK_REPLY, out, groups, ng);
+}
+
+static void host_fwd_rename(struct efs_raft_host *h, efs_ino_t old_parent,
+                            const char *old_name, efs_ino_t new_parent,
+                            const char *new_name,
+                            struct efs_msg_inode_reply *out,
+                            const uint8_t *groups, int ng)
+{
+    struct efs_msg_inode_rename_at req;
+
+    memset(&req, 0, sizeof(req));
+    req.old_parent = old_parent;
+    strncpy(req.old_name, old_name, EFS_MAX_NAME - 1);
+    req.new_parent = new_parent;
+    strncpy(req.new_name, new_name, EFS_MAX_NAME - 1);
+    host_inode_forward(h, EFS_MSG_INODE_RENAME_AT, &req, sizeof(req),
+                       EFS_MSG_INODE_RENAME_AT_REPLY, out, groups, ng);
+}
+
+static void host_fwd_lookup_path(struct efs_raft_host *h, efs_ino_t start,
+                                 const char *path,
+                                 struct efs_msg_inode_lookup_path_reply *out,
+                                 const uint8_t *groups, int ng)
+{
+    struct efs_msg_inode_lookup_path req;
+    int tries, rid, skip = -1;
+
+    memset(&req, 0, sizeof(req));
+    req.start = start;
+    if (path)
+        strncpy(req.path, path, sizeof(req.path) - 1);
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_NOT_PRIMARY;
+    for (tries = 0; tries < h->n; tries++) {
+        rid = host_pick_peer(h, groups, ng, skip);
+        if (rid < 0)
+            return;
+        if (host_inode_rpc_peer(h, rid, EFS_MSG_INODE_LOOKUP_PATH, &req,
+                                sizeof(req), EFS_MSG_INODE_LOOKUP_PATH_REPLY,
+                                out, sizeof(*out)) != 0) {
+            skip = rid;
+            out->status = EFS_INODE_RPC_NOT_PRIMARY;
+            continue;
+        }
+        if (out->status != EFS_INODE_RPC_NOT_PRIMARY)
+            return;
+        skip = rid;
+    }
 }
 
 static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
@@ -2163,6 +2211,72 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         out->inode.parent = parent;
         strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
     }
+}
+
+static int host_parts_add(struct efs_txn_parts *p, uint32_t shard)
+{
+    uint8_t i;
+
+    if (!p)
+        return EFS_ERR_INVAL;
+    for (i = 0; i < p->n; i++) {
+        if (p->shard[i] == shard)
+            return EFS_OK;
+    }
+    if (p->n >= EFS_TXN_MAX_PART)
+        return EFS_ERR_BUSY;
+    p->shard[p->n++] = shard;
+    return EFS_OK;
+}
+
+struct host_pver_guard {
+    uint32_t shard;
+    uint8_t key[EFS_KV_KEY_MAX];
+    uint32_t klen;
+    uint64_t ver;
+};
+
+/* Ancestry of dst_parent as shared pver GUARDs (not exclusive on the
+ * inode row). src in the chain is INVAL. Too many distinct shards is
+ * BUSY (EFS_TXN_MAX_PART). read_mu held. */
+static int host_pver_guard_chain(struct efs_raft_host *h, efs_ino_t dst_parent,
+                                 efs_ino_t src, struct efs_txn_parts *parts,
+                                 struct host_pver_guard *g, int *ng, int *hint)
+{
+    efs_ino_t cur = dst_parent;
+    int hops, rc;
+
+    *ng = 0;
+    for (hops = 0; hops < 64; hops++) {
+        struct efs_meta_row r;
+        uint32_t sh;
+
+        if (cur == src)
+            return EFS_ERR_INVAL;
+        sh = efs_kv_inode_shard(cur);
+        rc = host_read_index(h, efs_raft_shard_group(sh), hint);
+        if (rc == EFS_OK)
+            rc = efs_meta_apply_get_inode(h->kv, cur, &r);
+        if (rc != EFS_OK)
+            return rc;
+        if (!S_ISDIR(r.mode))
+            return EFS_ERR_INVAL;
+        if (*ng >= EFS_TXN_MAX_PART)
+            return EFS_ERR_BUSY;
+        rc = efs_kv_key_pver(sh, cur, g[*ng].key, &g[*ng].klen);
+        if (rc == EFS_OK)
+            rc = efs_txn_ver_get(h->kv, g[*ng].key, g[*ng].klen, &g[*ng].ver);
+        if (rc == EFS_OK)
+            rc = host_parts_add(parts, sh);
+        if (rc != EFS_OK)
+            return rc;
+        g[*ng].shard = sh;
+        (*ng)++;
+        if (cur == EFS_ROOT_INO || cur == r.parent)
+            return EFS_OK;
+        cur = r.parent;
+    }
+    return EFS_ERR_INVAL;
 }
 
 static int host_prep(struct efs_raft_host *h, uint32_t shard, int kind,
@@ -3329,11 +3443,12 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
     }
 }
 
-/* Same-dir LOCAL file RENAME: src dentry DEL + dest dentry PUT + inode
- * parent/ctime as a txn (same PREPARE/DECIDE/RESOLVE as LINK). HASHED/
- * SPLITTING, directories, and cross-dir are INVAL this slice. Replacing
- * an existing dest is EXIST. The receiving node must lead every
- * participant group. */
+/* Same-dir LOCAL RENAME: src dentry DEL + dest dentry PUT + inode
+ * parent/ctime as a txn (same PREPARE/DECIDE/RESOLVE as LINK). A
+ * directory also GUARDs dst_parent ancestry pver sidecars and exclusive-
+ * PUTs its own pver (cycle prevention). HASHED/SPLITTING and cross-dir
+ * stay INVAL this slice. Replacing an existing dest is EXIST. Directory
+ * inodes scatter, so a node that does not host both groups bounces. */
 void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                                 efs_ino_t new_parent, const char *new_name,
                                 struct efs_msg_inode_reply *out)
@@ -3344,15 +3459,17 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     struct efs_meta_stat st;
     struct efs_txid t;
     struct efs_txn_parts parts;
+    struct host_pver_guard gv[EFS_TXN_MAX_PART];
     uint8_t k_src[EFS_KV_KEY_MAX], k_dst[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
-    uint8_t k_par[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX];
+    uint8_t k_par[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX], k_pver[EFS_KV_KEY_MAX];
     uint8_t v_dent[EFS_META_DENT_BYTES], v_ino[EFS_META_INO_BYTES];
-    uint8_t v_par[EFS_META_INO_BYTES], v_dseq[8], sb[8], cmd[22];
-    uint32_t ks = 0, kd = 0, ki = 0, kp = 0, kq = 0, sn = 8;
+    uint8_t v_par[EFS_META_INO_BYTES], v_dseq[8], v_pver[8], sb[8], cmd[22];
+    uint32_t ks = 0, kd = 0, ki = 0, kp = 0, kq = 0, kpv = 0, sn = 8;
     uint32_t ssh, dsh, ish, psh, coord;
-    uint64_t sver = 0, dver = 0, iver = 0, pver = 0, qver = 0, seq = 0, now;
+    uint64_t sver = 0, dver = 0, iver = 0, pver = 0, qver = 0, ever = 0;
+    uint64_t seq = 0, now;
     int hint = -1;
-    int rc, i, gr;
+    int rc, i, gr, is_dir = 0, ngv = 0;
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
@@ -3370,8 +3487,16 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         return;
     }
     now = now_ns();
-    pthread_mutex_lock(&h->read_mu);
     psh = efs_kv_inode_shard(old_parent);
+    if (!host_hosts(h, efs_raft_shard_group(psh))) {
+        uint8_t need[2];
+        need[0] = EFS_RAFT_GROUP_SHARD;
+        need[1] = EFS_RAFT_GROUP_SHARD2;
+        host_fwd_rename(h, old_parent, old_name, new_parent, new_name, out,
+                        need, 2);
+        return;
+    }
+    pthread_mutex_lock(&h->read_mu);
     rc = host_read_index(h, efs_raft_shard_group(psh), &hint);
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, old_parent, &prow);
@@ -3393,14 +3518,9 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     if (rc == EFS_OK)
         rc = efs_meta_apply_lookup(h->kv, old_parent, old_name, &dent);
     if (rc == EFS_OK && (dent.type & S_IFMT) == S_IFDIR)
+        is_dir = 1;
+    if (rc == EFS_OK && is_dir && dent.ino == EFS_ROOT_INO)
         rc = EFS_ERR_INVAL;
-    if (rc == EFS_OK)
-        rc = efs_meta_apply_resolve(h->kv, old_parent, old_name, &dent, &row);
-    if (rc == EFS_OK && S_ISDIR(row.mode))
-        rc = EFS_ERR_INVAL;
-    ish = (rc == EFS_OK) ? efs_kv_inode_shard(row.ino) : 0;
-    if (rc == EFS_OK && efs_raft_shard_group(ish) != efs_raft_shard_group(psh))
-        rc = host_read_index(h, efs_raft_shard_group(ish), &hint);
     if (rc == EFS_OK) {
         rc = efs_meta_apply_lookup(h->kv, new_parent, new_name, &ndent);
         if (rc == EFS_OK) {
@@ -3410,6 +3530,45 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         }
         if (rc == EFS_ERR_NOT_FOUND)
             rc = EFS_OK;
+    }
+    /* Bounce before resolve: a scattered dir inode lives on another
+     * group, and resolve maps a missing row to I9 (EFS_ERR_IO). Dest
+     * EXIST is parent-local and does not need the child row. */
+    if (rc == EFS_OK && is_dir) {
+        uint32_t csh = efs_kv_inode_shard(dent.ino);
+        if (!host_hosts(h, efs_raft_shard_group(csh))) {
+            uint8_t need[2];
+            int nn = 1;
+            need[0] = efs_raft_shard_group(psh);
+            if (efs_raft_shard_group(csh) != need[0])
+                need[nn++] = efs_raft_shard_group(csh);
+            pthread_mutex_unlock(&h->read_mu);
+            host_fwd_rename(h, old_parent, old_name, new_parent, new_name, out,
+                            need, nn);
+            return;
+        }
+    }
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_resolve(h->kv, old_parent, old_name, &dent, &row);
+    if (rc == EFS_OK && S_ISDIR(row.mode))
+        is_dir = 1;
+    if (rc == EFS_OK && is_dir && row.ino == EFS_ROOT_INO)
+        rc = EFS_ERR_INVAL;
+    ish = (rc == EFS_OK) ? efs_kv_inode_shard(row.ino) : 0;
+    if (rc == EFS_OK && efs_raft_shard_group(ish) != efs_raft_shard_group(psh))
+        rc = host_read_index(h, efs_raft_shard_group(ish), &hint);
+    memset(&parts, 0, sizeof(parts));
+    if (rc == EFS_OK)
+        rc = host_parts_add(&parts, ssh);
+    if (rc == EFS_OK && dsh != ssh)
+        rc = host_parts_add(&parts, dsh);
+    if (rc == EFS_OK)
+        rc = host_parts_add(&parts, ish);
+    if (rc == EFS_OK && is_dir) {
+        rc = host_pver_guard_chain(h, new_parent, row.ino, &parts, gv, &ngv,
+                                   &hint);
+        if (rc == EFS_OK)
+            row.parent_version++;
     }
     if (rc == EFS_OK) {
         memset(&ndent, 0, sizeof(ndent));
@@ -3439,6 +3598,13 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         rc = efs_kv_key_inode(psh, old_parent, k_par, &kp);
     if (rc == EFS_OK)
         rc = efs_kv_key_dseq(ssh, old_parent, 0, k_dseq, &kq);
+    if (rc == EFS_OK && is_dir) {
+        rc = efs_kv_key_pver(ish, row.ino, k_pver, &kpv);
+        if (rc == EFS_OK)
+            rc = efs_txn_ver_get(h->kv, k_pver, kpv, &ever);
+        if (rc == EFS_OK)
+            wr64be(v_pver, row.parent_version);
+    }
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_src, ks, &sver);
     if (rc == EFS_OK)
@@ -3454,13 +3620,6 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         gr = efs_kv_get(h->kv, k_dseq, kq, sb, &sn);
         seq = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
         wr64be(v_dseq, seq + 1);
-        memset(&parts, 0, sizeof(parts));
-        parts.n = 1;
-        parts.shard[0] = ssh;
-        if (dsh != ssh)
-            parts.shard[parts.n++] = dsh;
-        if (ish != ssh && ish != dsh)
-            parts.shard[parts.n++] = ish;
         fill_txid(h, &t);
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
@@ -3488,8 +3647,14 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                 rc = host_prep(h, ish, EFS_TXN_EXCL, &t, &parts, k_ino, ki,
                                iver, EFS_TXN_PUT, v_ino, sizeof(v_ino),
                                &hint);
+                if (rc == EFS_OK && is_dir)
+                    rc = host_prep(h, ish, EFS_TXN_EXCL, &t, &parts, k_pver,
+                                   kpv, ever, EFS_TXN_PUT, v_pver, 8, &hint);
             }
         }
+        for (i = 0; i < ngv && rc == EFS_OK; i++)
+            rc = host_prep(h, gv[i].shard, EFS_TXN_GUARD, &t, &parts, gv[i].key,
+                           gv[i].klen, gv[i].ver, 0, NULL, 0, &hint);
         if (rc != EFS_OK)
             (void)host_drop_parts(h, &t, &parts, &hint);
         else {
@@ -3809,7 +3974,9 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
 }
 
 /* LOOKUP_PATH: hop-by-hop ReadIndex + lookup, same as the in-sim walk.
- * Empty path is the start inode. Intermediate not-a-directory is INVAL. */
+ * Empty path is the start inode. Intermediate not-a-directory is INVAL.
+ * A hop whose dentry or child inode lives on a group this node does not
+ * host bounces, same as LOOKUP (scattered MKDIR dests). */
 void server_raft_host_lookup_path(efs_ino_t start, const char *path,
                                   struct efs_msg_inode_lookup_path_reply *out)
 {
@@ -3835,6 +4002,16 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
     p = path ? path : "";
     while (*p == '/')
         p++;
+    {
+        uint8_t sg = efs_raft_shard_group(efs_kv_inode_shard(cur));
+        if (!host_hosts(h, sg)) {
+            uint8_t need[2];
+            need[0] = EFS_RAFT_GROUP_SHARD;
+            need[1] = EFS_RAFT_GROUP_SHARD2;
+            host_fwd_lookup_path(h, start, path, out, need, 2);
+            return;
+        }
+    }
     pthread_mutex_lock(&h->read_mu);
     rc = host_read_inode_lanes(h, cur, &hint);
     if (rc == EFS_OK)
@@ -3874,12 +4051,33 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
         pg = efs_raft_shard_group(efs_kv_inode_shard(cur));
         dsh = efs_kv_dentry_shard(cur, name, row.layout);
         dg = efs_raft_shard_group(dsh);
+        if (dg != pg && !host_hosts(h, dg)) {
+            uint8_t need[2];
+            int nn = 1;
+            need[0] = pg;
+            need[nn++] = dg;
+            pthread_mutex_unlock(&h->read_mu);
+            host_fwd_lookup_path(h, start, path, out, need, nn);
+            return;
+        }
         if (dg != pg)
             rc = host_read_index(h, dg, &hint);
         if (rc == EFS_OK)
             rc = efs_meta_apply_lookup(h->kv, cur, name, &dent);
-        if (rc == EFS_OK)
+        if (rc == EFS_OK) {
+            uint8_t cg = efs_raft_shard_group(efs_kv_inode_shard(dent.ino));
+            if (!host_hosts(h, cg)) {
+                uint8_t need[2];
+                int nn = 1;
+                need[0] = pg;
+                if (cg != pg)
+                    need[nn++] = cg;
+                pthread_mutex_unlock(&h->read_mu);
+                host_fwd_lookup_path(h, start, path, out, need, nn);
+                return;
+            }
             rc = host_read_inode_lanes(h, dent.ino, &hint);
+        }
         if (rc == EFS_OK)
             rc = efs_meta_apply_get_inode(h->kv, dent.ino, &row);
         if (rc == EFS_OK) {

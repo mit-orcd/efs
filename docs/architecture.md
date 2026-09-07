@@ -1138,9 +1138,10 @@ and 10.5c-23 (unaligned truncate tail CAS)
 and 10.5c-24 (cross-group propose: MKFS submit + inode bounce)
 and 10.5c-25 (O_APPEND reserve + resolve-on-report)
 and 10.5c-26 (SYMLINK as CREATE S_IFLNK + publish)
+and 10.5c-27 (same-dir LOCAL directory rename)
 are gated on a
-scratch cluster behind `EFS_MD_RAFT`. Remaining: directory rename,
-HASHED dest CREATE, HOLD. Not a
+scratch cluster behind `EFS_MD_RAFT`. Remaining: HASHED dest CREATE,
+HOLD. Not a
 cutover of the live table; not step 11. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key

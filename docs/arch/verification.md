@@ -508,7 +508,18 @@ CREATE packed that mode; publish/GETCHUNKS wrongly required
 INVAL). No new opcode, no target column. Flag off is a no-op.
 Gate: same smoke — create `raft-smoke-s` mode=0120777, publish
 size=11, getattr+GETCHUNKS, duplicate EXIST, crash keeps mode
-and size. Remaining: directory rename, HASHED dest CREATE, HOLD.
+and size.
+
+**10.5c-27 — same-dir LOCAL directory rename.** Host RENAME of a
+directory is no longer INVAL. Bounce from the dentry type before
+resolve (a scattered MKDIR dest on another group would otherwise
+be I9). pver sidecar GUARDs on dst_parent ancestry and an exclusive
+pver PUT on the renamed dir. Cross-dir and HASHED stay INVAL.
+LOOKUP_PATH bounces unhosted child-inode hops like LOOKUP. Flag
+off is a no-op. Gate: same smoke — mkdir `raft-smoke-rd`, rename
+to `raft-smoke-re`, old gone / new present, miss NOT_FOUND, exist
+EXIST, cross-dir INVAL, READDIR+LOOKUP_PATH, crash keeps the new
+name. Remaining: HASHED dest CREATE, HOLD.
 
 ## Shortening the code → signal cycle
 
