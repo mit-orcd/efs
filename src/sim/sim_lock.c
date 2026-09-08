@@ -3,11 +3,12 @@
 #include "efs/lock.h"
 #include "efs/kv_key.h"
 #include "efs/meta_apply.h"
+#include "efs/meta_cmd.h"
 #include "efs/session.h"
 #include <string.h>
 
-#define LOCK_GRANT   1
-#define LOCK_RELEASE 2
+#define LOCK_GRANT   EFS_MD_LOCK_GRANT
+#define LOCK_RELEASE EFS_MD_LOCK_RELEASE
 #define CMD_MAX      80
 
 static void wr32(uint8_t *p, uint32_t v)
@@ -40,7 +41,7 @@ static int pack_lock(uint8_t *out, uint32_t *len, uint8_t kind,
 {
     uint8_t *p;
 
-    out[0] = SIM_CMD_LOCK;
+    out[0] = EFS_MD_CMD_LOCK;
     out[1] = kind;
     wr64(out + 2, r->ino);
     wr64(out + 10, r->generation);
@@ -85,7 +86,7 @@ int sim_lock_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
     int rc = EFS_ERR_PROTO;
 
     memset(&r, 0, sizeof(r));
-    if (!s || !s->disk || !cmd || clen < 2 || cmd[0] != SIM_CMD_LOCK)
+    if (!s || !s->disk || !cmd || clen < 2 || cmd[0] != EFS_MD_CMD_LOCK)
         goto done;
     rc = unpack_lock(cmd, clen, &r);
     if (rc != EFS_OK)

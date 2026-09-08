@@ -10,6 +10,7 @@
 #include "efs/kv_key.h"
 #include "efs/txn.h"
 #include "efs/session.h"
+#include "efs/lock.h"
 #include "efs/metadata.h"
 #include "efs/wire.h"
 #include "efs/network.h"
@@ -48,6 +49,7 @@
                             EFS_OPID_UUID_LEN + 4u + 8u + 8u + 8u + 4u)
 #define HOST_DIR_LEN       10
 #define HOST_SESS_LEASE_LEN 38 /* tag+sub+uuid+epoch+ino+gen */
+#define HOST_LOCK_LEN 65 /* tag+kind+ino+gen+dom+type+range+owner; sim pack_lock */
 
 struct host_inbox_item {
     uint8_t *buf;
@@ -626,6 +628,52 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+/* Same encoding as sim_lock_apply. Conflict/cap/stale never stall the
+ * log; the propose path returns BUSY to the client. Blocking wait
+ * queues stay leader memory (not hosted). */
+static int apply_lock_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                          uint32_t clen, uint64_t index)
+{
+    struct efs_lock_req r;
+    const uint8_t *p;
+    int rc = EFS_ERR_PROTO;
+
+    if (clen < HOST_LOCK_LEN)
+        return EFS_OK;
+    memset(&r, 0, sizeof(r));
+    r.ino = rd64be(cmd + 2);
+    r.generation = rd64be(cmd + 10);
+    r.domain = cmd[18];
+    r.type = cmd[19];
+    r.start = rd64be(cmd + 20);
+    r.end = rd64be(cmd + 28);
+    r.owner.kind = cmd[36];
+    r.owner.id = rd64be(cmd + 37);
+    p = cmd + 45;
+    memcpy(r.owner.uuid, p, EFS_OPID_UUID_LEN);
+    r.owner.epoch = rd32be(p + EFS_OPID_UUID_LEN);
+    if (cmd[1] == EFS_MD_LOCK_GRANT)
+        rc = efs_lock_grant(h->kv, &r);
+    else if (cmd[1] == EFS_MD_LOCK_RELEASE)
+        rc = efs_lock_release(h->kv, &r);
+    else
+        return EFS_OK;
+    if (rc == EFS_ERR_AGAIN || rc == EFS_ERR_NOLCK || rc == EFS_ERR_NOT_FOUND ||
+        rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY || rc == EFS_ERR_STALE)
+        rc = EFS_OK;
+    if (rc != EFS_OK) {
+        fprintf(stderr,
+                "raft-host: apply lock rc=%d index=%llu ino=%llu kind=%u\n",
+                rc, (unsigned long long)index, (unsigned long long)r.ino,
+                (unsigned)cmd[1]);
+        return EFS_OK;
+    }
+    fprintf(stderr, "raft-host: applied lock index=%llu ino=%llu kind=%u\n",
+            (unsigned long long)index, (unsigned long long)r.ino,
+            (unsigned)cmd[1]);
+    return EFS_OK;
+}
+
 /* Same encoding as sim apply_publish_cmd. Session fencing is not hosted. */
 static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                              uint32_t clen, uint64_t index)
@@ -792,6 +840,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         return apply_dir_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_SESSION)
         return apply_session_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_LOCK)
+        return apply_lock_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
         cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP)
         return apply_txn_cmd(h, cmd, clen);
@@ -1210,6 +1260,20 @@ static void host_fwd_hold(struct efs_raft_host *h, efs_ino_t ino, uint32_t flags
                        EFS_MSG_INODE_HOLD_REPLY, out, groups, ng);
 }
 
+static void host_fwd_flock(struct efs_raft_host *h, efs_ino_t ino, uint32_t op,
+                           uint64_t owner, struct efs_msg_inode_reply *out,
+                           const uint8_t *groups, int ng)
+{
+    struct efs_msg_inode_flock req;
+
+    memset(&req, 0, sizeof(req));
+    req.ino = ino;
+    req.op = op;
+    req.owner = owner;
+    host_inode_forward(h, EFS_MSG_INODE_FLOCK, &req, sizeof(req),
+                       EFS_MSG_INODE_FLOCK_REPLY, out, groups, ng);
+}
+
 static void host_fwd_append(struct efs_raft_host *h, efs_ino_t ino, uint64_t len,
                             struct efs_msg_inode_reply *out,
                             const uint8_t *groups, int ng)
@@ -1503,6 +1567,48 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
     return EFS_OK;
 }
 
+/* Same encoding as sim pack_lock. Owner is the session stand-in until
+ * sessions are hosted (zero UUID + epoch 1). */
+static int pack_lock_cmd(uint8_t *out, uint32_t *len, uint8_t kind,
+                         const struct efs_lock_req *r)
+{
+    uint8_t *p;
+
+    if (!r)
+        return EFS_ERR_INVAL;
+    out[0] = EFS_MD_CMD_LOCK;
+    out[1] = kind;
+    wr64be(out + 2, r->ino);
+    wr64be(out + 10, r->generation);
+    out[18] = r->domain;
+    out[19] = r->type;
+    wr64be(out + 20, r->start);
+    wr64be(out + 28, r->end);
+    out[36] = r->owner.kind;
+    wr64be(out + 37, r->owner.id);
+    p = out + 45;
+    memcpy(p, r->owner.uuid, EFS_OPID_UUID_LEN);
+    wr32be(p + EFS_OPID_UUID_LEN, r->owner.epoch);
+    *len = HOST_LOCK_LEN;
+    return EFS_OK;
+}
+
+static void fill_flock_req(struct efs_lock_req *r, efs_ino_t ino, uint64_t gen,
+                           uint8_t type, uint64_t owner)
+{
+    memset(r, 0, sizeof(*r));
+    r->ino = ino;
+    r->generation = gen;
+    r->domain = EFS_LOCK_FLOCK;
+    r->type = type;
+    r->start = 0;
+    r->end = ~(uint64_t)0;
+    r->owner.kind = EFS_LOCK_OFD;
+    r->owner.id = owner;
+    host_hold_uuid(owner, r->owner.uuid);
+    r->owner.epoch = 1;
+}
+
 /* Same encoding as sim pack_publish. Session bytes are zero (not hosted). */
 static int pack_publish_cmd(uint8_t *out, uint32_t *len, const struct efs_meta_pub *p)
 {
@@ -1638,6 +1744,10 @@ static uint8_t rc_to_inode_status(int rc)
     if (rc == EFS_ERR_NOT_PRIMARY)
         return EFS_INODE_RPC_NOT_PRIMARY;
     if (rc == EFS_ERR_BUSY)
+        return EFS_INODE_RPC_BUSY;
+    if (rc == EFS_ERR_AGAIN)
+        return EFS_INODE_RPC_BUSY;
+    if (rc == EFS_ERR_NOLCK)
         return EFS_INODE_RPC_BUSY;
     if (rc == EFS_ERR_INVAL)
         return EFS_INODE_RPC_INVAL;
@@ -2285,6 +2395,86 @@ void server_raft_host_hold(efs_ino_t ino, uint32_t flags, uint64_t owner,
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK && flags == 1)
         stat_to_inode(&st, &out->inode);
+}
+
+/* Non-blocking flock on the inode shard (§7.6). Whole-file FLOCK
+ * domain; owner is the session stand-in. Conflict → BUSY. Blocking
+ * wait queues and fcntl are not hosted. */
+void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
+                            struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_row row;
+    struct efs_lock_req req;
+    uint8_t cmd[HOST_LOCK_LEN];
+    uint32_t clen = 0;
+    uint8_t ig;
+    uint8_t kind;
+    uint8_t ltype;
+    int hint = -1;
+    int rc;
+    int blk;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if (ino == 0) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if (op & EFS_FLOCK_UN) {
+        kind = EFS_MD_LOCK_RELEASE;
+        ltype = EFS_LOCK_EX;
+    } else if (op & EFS_FLOCK_EX) {
+        kind = EFS_MD_LOCK_GRANT;
+        ltype = EFS_LOCK_EX;
+    } else if (op & EFS_FLOCK_SH) {
+        kind = EFS_MD_LOCK_GRANT;
+        ltype = EFS_LOCK_SH;
+    } else {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
+    if (!host_hosts(h, ig)) {
+        host_fwd_flock(h, ino, op, owner, out, &ig, 1);
+        return;
+    }
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_read_index(h, ig, &hint);
+    if (rc == EFS_ERR_NOT_PRIMARY) {
+        pthread_mutex_unlock(&h->read_mu);
+        host_fwd_flock(h, ino, op, owner, out, &ig, 1);
+        return;
+    }
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+    if (rc == EFS_OK) {
+        fill_flock_req(&req, ino, row.generation, ltype, owner);
+        if (kind == EFS_MD_LOCK_GRANT) {
+            blk = efs_lock_blocked(h->kv, &req, NULL);
+            if (blk < 0)
+                rc = blk;
+            else if (blk)
+                rc = EFS_ERR_AGAIN;
+        }
+    }
+    if (rc == EFS_OK)
+        rc = pack_lock_cmd(cmd, &clen, kind, &req);
+    if (rc == EFS_OK)
+        rc = host_propose_wait(h, ig, cmd, clen, &hint);
+    if (rc == EFS_OK && kind == EFS_MD_LOCK_GRANT) {
+        blk = efs_lock_blocked(h->kv, &req, NULL);
+        if (blk < 0)
+            rc = blk;
+        else if (blk)
+            rc = EFS_ERR_AGAIN;
+    }
+    pthread_mutex_unlock(&h->read_mu);
+    set_inode_rc(out, rc, hint);
 }
 
 void server_raft_host_lookup(efs_ino_t parent, const char *name,

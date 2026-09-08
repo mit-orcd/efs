@@ -1158,9 +1158,10 @@ and 10.5c-26 (SYMLINK as CREATE S_IFLNK + publish)
 and 10.5c-27 (same-dir LOCAL directory rename)
 and 10.5c-28 (HASHED dest CREATE)
 and 10.5c-29 (HOLD open-unlinked leases)
+and 10.5c-30 (non-blocking FLOCK grant/release)
 are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cutover of the
-live table is not this work (not step 11). FLOCK and session
+live table is not this work (not step 11). fcntl and session
 fencing stay later. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
@@ -1293,9 +1294,11 @@ sends you to — not the whole spec.
 > dir; first use of a hashed dentry shard on another group is a
 > 2-shard txn; SPLITTING dest is BUSY; bounce HASHED lanes), and
 > HOLD open-unlinked leases (10.5c-29: `EFS_MSG_INODE_HOLD` on the
-> inode shard; owner is the session stand-in; last close reclaims).
-> Next: cutover of `efs-test` is not this work; FLOCK/locking and
-> session fencing stay later, behind the same flag.
+> inode shard; owner is the session stand-in; last close reclaims),
+> and non-blocking FLOCK grant/release (10.5c-30: `EFS_MSG_INODE_FLOCK`
+> on the inode shard; whole-file FLOCK domain; conflict is BUSY).
+> Next: cutover of `efs-test` is not this work; fcntl and session
+> fencing stay later, behind the same flag.
 > [architecture.md §10](#architecture)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -1554,10 +1557,19 @@ sends you to — not the whole spec.
 > LEASE_OPEN/CLOSE on the inode shard (existing opcode; owner bytes
 > are the session stand-in, epoch=1). Last-link UNLINK with a lease
 > keeps nlink=0 (I19); last close reclaims. Directories INVAL.
-> Sessions/fencing/FLOCK are not hosted. Same scratch smoke:
+> Sessions/fencing are not hosted (FLOCK is 10.5c-30). Same scratch smoke:
 > dedicated `raft-smoke-k`, open, unlink name, getattr nlink=0,
 > crash keeps the inode, close reclaims (getattr NOT_FOUND).
-> Cutover of `efs-test` is not next (not step 11).
+>
+> **10.5c-30 is in (gated):** non-blocking flock grant/release on
+> the production host. `EFS_MSG_INODE_FLOCK` proposes LOCK
+> GRANT/RELEASE on the inode shard (existing opcode; whole-file
+> FLOCK domain; owner is the session stand-in, epoch=1). Conflict
+> is BUSY. Blocking wait queues and fcntl are not hosted. Flag off
+> is a no-op (old HOLD table). Same scratch smoke: dedicated
+> `raft-smoke-w`, EX owner=1, EX owner=2 BUSY, UN, EX owner=2,
+> crash keeps the lock, UN owner=2 then EX owner=1. Cutover of
+> `efs-test` is not next (not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -4630,9 +4642,16 @@ LOOKUP_PATH, ROOT READDIR, crash keeps the dir and files.
 proposes SESSION LEASE_OPEN/CLOSE on the inode shard (no new
 opcode; owner is the session stand-in). Last-link UNLINK with a
 lease keeps nlink=0 (I19); last close reclaims. Directories INVAL.
-Sessions/fencing/FLOCK are not hosted. Flag off is a no-op. Gate:
+Sessions/fencing are not hosted (FLOCK is 10.5c-30). Flag off is a no-op. Gate:
 same smoke — dedicated `raft-smoke-k`, open, unlink, getattr
 nlink=0, crash keeps the inode, close reclaims.
+
+**10.5c-30 — non-blocking FLOCK grant/release.** `EFS_MSG_INODE_FLOCK`
+proposes LOCK GRANT/RELEASE on the inode shard (no new opcode;
+whole-file FLOCK domain; owner is the session stand-in). Conflict
+is BUSY. Blocking wait queues and fcntl are not hosted. Flag off
+is a no-op. Gate: same smoke — dedicated `raft-smoke-w`, EX
+owner=1, EX owner=2 BUSY, UN, EX owner=2, crash keeps the lock.
 
 ### Shortening the code → signal cycle
 
@@ -5111,8 +5130,9 @@ unaligned truncate tail CAS (10.5c-23) and cross-group propose
 O_APPEND reserve (10.5c-25, resolve-on-report) and SYMLINK as
 CREATE S_IFLNK + publish (10.5c-26) and same-dir LOCAL directory
 rename (10.5c-27) and HASHED dest CREATE (10.5c-28) and HOLD
-open-unlinked leases (10.5c-29) are gated
+open-unlinked leases (10.5c-29) and non-blocking FLOCK
+grant/release (10.5c-30) are gated
 on the same
 smoke. What remains is cutover of the live table — not new
-design. FLOCK and session fencing are later host items.
+design. fcntl and session fencing are later host items.
 

@@ -685,6 +685,10 @@ struct efs_msg_inode_hold {
 };
 
 /* op is the flock(2) operation (LOCK_SH/EX/UN, optional LOCK_NB). */
+#define EFS_FLOCK_SH 1u
+#define EFS_FLOCK_EX 2u
+#define EFS_FLOCK_NB 4u
+#define EFS_FLOCK_UN 8u
 struct efs_msg_inode_flock {
     efs_export_id_t export_id;
     efs_ino_t ino;

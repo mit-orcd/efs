@@ -535,9 +535,16 @@ LOOKUP_PATH, ROOT READDIR, crash keeps the dir and files.
 proposes SESSION LEASE_OPEN/CLOSE on the inode shard (no new
 opcode; owner is the session stand-in). Last-link UNLINK with a
 lease keeps nlink=0 (I19); last close reclaims. Directories INVAL.
-Sessions/fencing/FLOCK are not hosted. Flag off is a no-op. Gate:
+Sessions/fencing are not hosted (FLOCK is 10.5c-30). Flag off is a no-op. Gate:
 same smoke — dedicated `raft-smoke-k`, open, unlink, getattr
 nlink=0, crash keeps the inode, close reclaims.
+
+**10.5c-30 — non-blocking FLOCK grant/release.** `EFS_MSG_INODE_FLOCK`
+proposes LOCK GRANT/RELEASE on the inode shard (no new opcode;
+whole-file FLOCK domain; owner is the session stand-in). Conflict
+is BUSY. Blocking wait queues and fcntl are not hosted. Flag off
+is a no-op. Gate: same smoke — dedicated `raft-smoke-w`, EX
+owner=1, EX owner=2 BUSY, UN, EX owner=2, crash keeps the lock.
 
 ## Shortening the code → signal cycle
 

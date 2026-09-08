@@ -131,11 +131,6 @@ static const char *put_meta_status_name(uint8_t st)
     }
 }
 
-#define EFS_FLOCK_SH 1u
-#define EFS_FLOCK_EX 2u
-#define EFS_FLOCK_NB 4u
-#define EFS_FLOCK_UN 8u
-
 /* Open-addressed buckets: rsync create+HOLD walked a single list of
  * every live hold (~10% of server cycles at 14k files). */
 #define EFS_HOLD_BUCK 4096u
@@ -1917,7 +1912,8 @@ send_reply:
                  type == EFS_MSG_INODE_LINK_SHARD ||
                  type == EFS_MSG_INODE_RENAME ||
                  type == EFS_MSG_INODE_RENAME_AT ||
-                 type == EFS_MSG_INODE_HOLD) &&
+                 type == EFS_MSG_INODE_HOLD ||
+                 type == EFS_MSG_INODE_FLOCK) &&
                 server_raft_host_active()) {
                 struct efs_msg_inode_reply r;
                 uint8_t rtype;
@@ -1995,6 +1991,11 @@ send_reply:
                     struct efs_msg_inode_hold *req = payload;
                     server_raft_host_hold(req->ino, req->flags, req->owner, &r);
                     rtype = EFS_MSG_INODE_HOLD_REPLY;
+                } else if (type == EFS_MSG_INODE_FLOCK &&
+                           payload_len >= sizeof(struct efs_msg_inode_flock)) {
+                    struct efs_msg_inode_flock *req = payload;
+                    server_raft_host_flock(req->ino, req->op, req->owner, &r);
+                    rtype = EFS_MSG_INODE_FLOCK_REPLY;
                 } else {
                     r.status = EFS_INODE_RPC_INVAL;
                     rtype = (type == EFS_MSG_INODE_LOOKUP)

@@ -19,7 +19,9 @@
 # CREATE (dedicated raft-smoke-hd split empty then a file whose hashed
 # dentry shard is on the other Raft group), HOLD open-unlinked lease
 # (dedicated raft-smoke-k: open, unlink name, getattr nlink=0, leave
-# held through crash, close reclaims), READDIR of ROOT
+# held through crash, close reclaims), FLOCK grant/release (dedicated
+# raft-smoke-w: EX owner=1, EX owner=2 BUSY, UN owner=1, EX owner=2,
+# leave owner=2 held through crash), READDIR of ROOT
 # (created/renamed/link/mkdir names present, unlinked names absent),
 # LOOKUP_PATH of those names, chunk-aligned SETATTR SIZE (truncate),
 # chunk publish + GETCHUNKS (lane 0), unaligned truncate tail + trunc-0,
@@ -34,7 +36,8 @@
 # the unlinked name stays gone, the rmdir'd name stays gone, the nlink>1
 # unlinked name stays gone, the renamed file stays, the renamed dir stays,
 # the HASHED dest file stays, the held-unlinked inode stays at nlink=0
-# until close reclaims it,
+# until close reclaims it, the flock file stays and owner=2's EX still
+# BUSYs owner=1 until UN,
 # and READDIR / LOOKUP_PATH still match.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
@@ -726,6 +729,46 @@ check_hold() {
     echo "$out" | grep -q 'status=1' || bad "$tag hold miss not NOT_FOUND"
 }
 
+# Non-blocking flock on the inode shard. Dedicated raft-smoke-w (not a
+# substring of -h / -hd / -k). Conflict is BUSY; leave owner=2 EX held
+# through crash. ROOT nlink is unchanged (file create). File stays in
+# READDIR. Blocking wait / fcntl are not hosted.
+check_flock() {
+    local lid=$1
+    local tag=$2
+    local out
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    leader=$lid
+    FLOCK_NAME=raft-smoke-w
+    out=$(g0_mgmt raft-create 1 "$FLOCK_NAME")
+    lid=$leader
+    say "$tag flock-prep create: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag flock-prep create not OK"
+    FLOCK_INO=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$FLOCK_INO" ] && [ "$FLOCK_INO" != "0" ] || { bad "$tag flock-prep ino"; return; }
+    out=$(g0_mgmt raft-flock "$FLOCK_INO" ex 1)
+    say "$tag flock ex owner1: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag flock ex owner1 not OK"
+    out=$(g0_mgmt raft-flock "$FLOCK_INO" ex 2)
+    say "$tag flock ex owner2 busy: $out"
+    echo "$out" | grep -q 'status=5' || bad "$tag flock ex owner2 not BUSY"
+    out=$(g0_mgmt raft-flock "$FLOCK_INO" un 1)
+    say "$tag flock un owner1: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag flock un owner1 not OK"
+    out=$(g0_mgmt raft-flock "$FLOCK_INO" ex 2)
+    say "$tag flock ex owner2: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag flock ex owner2 not OK"
+    out=$(g0_mgmt raft-flock 0 ex)
+    say "$tag flock ino0: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag flock ino0 not INVAL"
+    out=$(g0_mgmt raft-flock 999999999 ex)
+    say "$tag flock miss: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag flock miss not NOT_FOUND"
+}
+
 # Mode/owner SETATTR, chunk-aligned truncate, then utimens on
 # raft-smoke-f (all stay after crash). Mixed SIZE+mode is INVAL.
 # Unaligned SIZE (tail CAS) is on raft-smoke-p, not here.
@@ -964,6 +1007,9 @@ check_readdir_path() {
     if [ -n "${HOLD_NAME:-}" ]; then
         readdir_has "$out" "$HOLD_NAME" && bad "$tag readdir still has hold-unlinked"
     fi
+    if [ -n "${FLOCK_NAME:-}" ]; then
+        readdir_has "$out" "$FLOCK_NAME" || bad "$tag readdir missing flock"
+    fi
     readdir_has "$out" raft-smoke-u && bad "$tag readdir still has unlinked"
     if [ -n "${UNLINK_NLINK_NAME:-}" ]; then
         readdir_has "$out" "$UNLINK_NLINK_NAME" && bad "$tag readdir still has nlink-unlinked"
@@ -1118,6 +1164,10 @@ say "HOLD open-unlinked through Raft (fresh)"
 HOLD_NAME=""
 HOLD_INO=""
 check_hold "$leader" "fresh"
+say "FLOCK grant/release through Raft (fresh)"
+FLOCK_NAME=""
+FLOCK_INO=""
+check_flock "$leader" "fresh"
 say "READDIR/LOOKUP_PATH through ReadIndex (fresh)"
 check_readdir_path "$leader" "fresh"
 
@@ -1245,6 +1295,23 @@ if [ -z "$leader" ] || [ "$leader" = "-1" ]; then
     bad "after-crash no group-0 leader"
     say "FAIL count=$FAIL"
     exit 1
+fi
+# HASHED dest LOOKUP needs group 2. A group-0-only leader (raft_id 0)
+# answers BUSY until bounce finds a dual-host; wait rather than fail.
+if [ -n "${HASHED_DIR:-}" ]; then
+    hashed_ok=0
+    for i in $(seq 1 40); do
+        for idx in 0 1 2; do
+            out=$(ssh_to 5 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$idx]}:${PORT} 1 $HASHED_DIR" 2>/dev/null || true)
+            if echo "$out" | grep -q 'status=0'; then
+                leader=$idx
+                hashed_ok=1
+                say "after-crash hashed-dir serving raft_id=$leader"
+                break 2
+            fi
+        done
+    done
+    [ "$hashed_ok" = 1 ] || say "after-crash hashed-dir still BUSY"
 fi
 say "ReadIndex GETATTR/LOOKUP (after crash)"
 root_nlink=2
@@ -1389,6 +1456,25 @@ if [ -n "${HOLD_INO:-}" ]; then
     out=$(g0_mgmt raft-getattr "$HOLD_INO")
     say "after-crash getattr hold reclaimed: $out"
     echo "$out" | grep -q 'status=1' || bad "after-crash hold close did not reclaim"
+fi
+if [ -n "${FLOCK_NAME:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$FLOCK_NAME")
+    say "after-crash lookup flock: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash flock name missing"
+fi
+if [ -n "${FLOCK_INO:-}" ]; then
+    out=$(g0_mgmt raft-getattr "$FLOCK_INO")
+    say "after-crash getattr flock: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash flock inode missing"
+    out=$(g0_mgmt raft-flock "$FLOCK_INO" ex 1)
+    say "after-crash flock ex owner1 busy: $out"
+    echo "$out" | grep -q 'status=5' || bad "after-crash flock lock lost"
+    out=$(g0_mgmt raft-flock "$FLOCK_INO" un 2)
+    say "after-crash flock un owner2: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash flock un not OK"
+    out=$(g0_mgmt raft-flock "$FLOCK_INO" ex 1)
+    say "after-crash flock ex owner1: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash flock ex owner1 not OK"
 fi
 say "ReadIndex READDIR/LOOKUP_PATH (after crash)"
 check_readdir_path "$leader" "after-crash"

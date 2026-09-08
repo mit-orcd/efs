@@ -34,6 +34,9 @@
 #define EFS_MD_DIR_BEGIN   1
 #define EFS_MD_DIR_MIGRATE 2
 #define EFS_MD_DIR_FINISH  3
+#define EFS_MD_CMD_LOCK   12 /* matches sim SIM_CMD_LOCK; flock/fcntl */
+#define EFS_MD_LOCK_GRANT   1
+#define EFS_MD_LOCK_RELEASE 2
 #define EFS_MD_CMD_SETATTR 13 /* matches sim SIM_CMD_SETATTR */
 #define EFS_MD_CMD_UTIMENS 14 /* matches sim SIM_CMD_UTIMENS */
 #define EFS_MD_CMD_TRUNCATE 15 /* matches sim SIM_CMD_TRUNCATE */

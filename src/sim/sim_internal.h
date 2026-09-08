@@ -19,7 +19,7 @@
 #define SIM_CMD_SESSION 9 /* matches EFS_MD_CMD_SESSION */
 #define SIM_CMD_EPOCH   10
 #define SIM_CMD_DIR     11 /* matches EFS_MD_CMD_DIR */
-#define SIM_CMD_LOCK    12
+#define SIM_CMD_LOCK    12 /* matches EFS_MD_CMD_LOCK */
 #define SIM_CMD_SETATTR 13
 #define SIM_CMD_UTIMENS 14
 #define SIM_CMD_TRUNCATE 15

@@ -325,7 +325,10 @@ a 2-shard txn; SPLITTING dest BUSY). Gate: same smoke
 (`raft-smoke-hd` + hashed-dentry file survives crash).
 **10.5c-29 is in:** HOLD open-unlinked leases (`EFS_MSG_INODE_HOLD`
 on the inode shard; last close reclaims). Gate: same smoke
-(`raft-smoke-k` nlink=0 survives crash, close reclaims). Cutover
+(`raft-smoke-k` nlink=0 survives crash, close reclaims).
+**10.5c-30 is in:** non-blocking FLOCK grant/release
+(`EFS_MSG_INODE_FLOCK` on the inode shard; conflict is BUSY).
+Gate: same smoke (`raft-smoke-w` EX survives crash). Cutover
 of `efs-test` is not this work, not step 11.
 
 **Rules while carving:** no behavior change within a step; no new features

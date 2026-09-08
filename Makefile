@@ -194,7 +194,7 @@ src/sim/sim_sess.o: src/sim/sim_sess.c src/sim/sim_internal.h include/efs/sim.h 
 src/sim/sim_dir.o: src/sim/sim_dir.c src/sim/sim_internal.h include/efs/sim.h include/efs/dir_layout.h include/efs/kv_key.h
 	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/sim -c -o $@ $<
 
-src/sim/sim_lock.o: src/sim/sim_lock.c src/sim/sim_internal.h include/efs/sim.h include/efs/lock.h include/efs/kv_key.h
+src/sim/sim_lock.o: src/sim/sim_lock.c src/sim/sim_internal.h include/efs/sim.h include/efs/lock.h include/efs/kv_key.h include/efs/meta_cmd.h
 	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/sim -c -o $@ $<
 
 src/sim/sim_disk.o: src/sim/sim_disk.c src/sim/sim_internal.h include/efs/sim.h include/efs/kv.h include/efs/kv_lsm.h include/efs/raft_disk.h

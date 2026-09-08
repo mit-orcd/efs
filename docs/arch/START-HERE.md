@@ -39,9 +39,11 @@ sends you to — not the whole spec.
 > dir; first use of a hashed dentry shard on another group is a
 > 2-shard txn; SPLITTING dest is BUSY; bounce HASHED lanes), and
 > HOLD open-unlinked leases (10.5c-29: `EFS_MSG_INODE_HOLD` on the
-> inode shard; owner is the session stand-in; last close reclaims).
-> Next: cutover of `efs-test` is not this work; FLOCK/locking and
-> session fencing stay later, behind the same flag.
+> inode shard; owner is the session stand-in; last close reclaims),
+> and non-blocking FLOCK grant/release (10.5c-30: `EFS_MSG_INODE_FLOCK`
+> on the inode shard; whole-file FLOCK domain; conflict is BUSY).
+> Next: cutover of `efs-test` is not this work; fcntl and session
+> fencing stay later, behind the same flag.
 > [architecture.md §10](../architecture.md)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -300,10 +302,19 @@ sends you to — not the whole spec.
 > LEASE_OPEN/CLOSE on the inode shard (existing opcode; owner bytes
 > are the session stand-in, epoch=1). Last-link UNLINK with a lease
 > keeps nlink=0 (I19); last close reclaims. Directories INVAL.
-> Sessions/fencing/FLOCK are not hosted. Same scratch smoke:
+> Sessions/fencing are not hosted (FLOCK is 10.5c-30). Same scratch smoke:
 > dedicated `raft-smoke-k`, open, unlink name, getattr nlink=0,
 > crash keeps the inode, close reclaims (getattr NOT_FOUND).
-> Cutover of `efs-test` is not next (not step 11).
+>
+> **10.5c-30 is in (gated):** non-blocking flock grant/release on
+> the production host. `EFS_MSG_INODE_FLOCK` proposes LOCK
+> GRANT/RELEASE on the inode shard (existing opcode; whole-file
+> FLOCK domain; owner is the session stand-in, epoch=1). Conflict
+> is BUSY. Blocking wait queues and fcntl are not hosted. Flag off
+> is a no-op (old HOLD table). Same scratch smoke: dedicated
+> `raft-smoke-w`, EX owner=1, EX owner=2 BUSY, UN, EX owner=2,
+> crash keeps the lock, UN owner=2 then EX owner=1. Cutover of
+> `efs-test` is not next (not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
