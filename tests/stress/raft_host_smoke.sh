@@ -25,7 +25,8 @@
 # raft-smoke-c: EX owner=1, EX owner=2 BUSY, flock EX owner=2 OK on
 # the other domain, UN fcntl, EX owner=1 left through crash), FCNTL
 # byte ranges (dedicated raft-smoke-t: EX [0,100) owner=1, adjacent
-# [100,200) owner=2 OK, overlap [50,150) BUSY, inverted range INVAL,
+# [100,200) owner=2 OK, F_GETLK overlap reports owner=1 [0,100),
+# own-range GETLK is UNLCK, overlap [50,150) BUSY, inverted range INVAL,
 # leave [100,200) owner=2 through crash), READDIR of ROOT
 # (created/renamed/link/mkdir names present, unlinked names absent),
 # LOOKUP_PATH of those names, chunk-aligned SETATTR SIZE (truncate),
@@ -44,7 +45,7 @@
 # until close reclaims it, the flock file stays and owner=2's EX still
 # BUSYs owner=1 until UN, the fcntl file stays and owner=1's EX still
 # BUSYs owner=2 until UN, the ranged fcntl file stays and owner=2's
-# [100,200) still BUSYs that range,
+# [100,200) still BUSYs that range (F_GETLK still reports it),
 # and READDIR / LOOKUP_PATH still match.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
@@ -826,7 +827,7 @@ check_fcntl() {
 # Non-blocking fcntl byte ranges (half-open). Dedicated raft-smoke-t.
 # Adjacent ranges do not conflict; overlap is BUSY. Flock domain
 # rejects a range (INVAL). Inverted start>=end is INVAL. Leave
-# owner=2 EX [100,200) through crash. F_GETLK / blocking wait not hosted.
+# owner=2 EX [100,200) through crash. Blocking wait not hosted.
 check_fcntl_range() {
     local lid=$1
     local tag=$2
@@ -849,6 +850,27 @@ check_fcntl_range() {
     out=$(g0_mgmt raft-fcntl "$RANGE_INO" ex 2 100 200)
     say "$tag range ex [100,200) owner2: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag range adjacent owner2 not OK"
+    out=$(g0_mgmt raft-fcntl "$RANGE_INO" gex 3 50 150)
+    say "$tag range gex [50,150) owner3: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag range gex overlap not OK"
+    echo "$out" | grep -q 'type=ex' || bad "$tag range gex type"
+    echo "$out" | grep -q 'owner=1' || bad "$tag range gex owner"
+    echo "$out" | grep -q 'start=0' || bad "$tag range gex start"
+    echo "$out" | grep -q 'end=100' || bad "$tag range gex end"
+    out=$(g0_mgmt raft-fcntl "$RANGE_INO" gex 2 100 200)
+    say "$tag range gex own [100,200): $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag range gex own not OK"
+    echo "$out" | grep -q 'type=un' || bad "$tag range gex own not UNLCK"
+    out=$(g0_mgmt raft-fcntl "$RANGE_INO" gex 3 200 300)
+    say "$tag range gex [200,300) free: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag range gex free not OK"
+    echo "$out" | grep -q 'type=un' || bad "$tag range gex free not UNLCK"
+    out=$(g0_mgmt raft-fcntl 0 gex)
+    say "$tag range gex ino0: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag range gex ino0 not INVAL"
+    out=$(g0_mgmt raft-fcntl 999999999 gex)
+    say "$tag range gex miss: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag range gex miss not NOT_FOUND"
     out=$(g0_mgmt raft-fcntl "$RANGE_INO" ex 3 50 150)
     say "$tag range ex [50,150) busy: $out"
     echo "$out" | grep -q 'status=5' || bad "$tag range overlap not BUSY"
@@ -1618,6 +1640,13 @@ if [ -n "${RANGE_INO:-}" ]; then
     out=$(g0_mgmt raft-getattr "$RANGE_INO")
     say "after-crash getattr range: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash range inode missing"
+    out=$(g0_mgmt raft-fcntl "$RANGE_INO" gex 1 100 200)
+    say "after-crash range gex [100,200) owner1: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash range gex not OK"
+    echo "$out" | grep -q 'type=ex' || bad "after-crash range gex type"
+    echo "$out" | grep -q 'owner=2' || bad "after-crash range gex owner"
+    echo "$out" | grep -q 'start=100' || bad "after-crash range gex start"
+    echo "$out" | grep -q 'end=200' || bad "after-crash range gex end"
     out=$(g0_mgmt raft-fcntl "$RANGE_INO" ex 1 100 200)
     say "after-crash range ex [100,200) owner1 busy: $out"
     echo "$out" | grep -q 'status=5' || bad "after-crash range lock lost"

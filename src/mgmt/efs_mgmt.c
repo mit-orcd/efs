@@ -1,4 +1,5 @@
 #include "efs/common.h"
+#include "efs/lock.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
 #include "efs/raft.h"
@@ -1577,7 +1578,9 @@ static int cmd_raft_lock_op(int argc, char **argv, uint32_t extra, const char *n
     uint32_t slen;
     struct efs_msg_inode_reply *r;
     const char *op;
-    const char *usage = "usage: raft-%s <node:port> <ino> <ex|sh|un> [owner] [start end]\n";
+    const char *usage =
+        "usage: raft-%s <node:port> <ino> <ex|sh|un|gex|gsh> [owner] [start end]\n";
+    int is_getlk = 0;
 
     if (argc < 3 || argc == 5) {
         fprintf(stderr, usage, name);
@@ -1596,7 +1599,13 @@ static int cmd_raft_lock_op(int argc, char **argv, uint32_t extra, const char *n
         req.op = EFS_FLOCK_SH | EFS_FLOCK_NB | extra;
     else if (strcmp(op, "un") == 0)
         req.op = EFS_FLOCK_UN | extra;
-    else {
+    else if (strcmp(op, "gex") == 0) {
+        req.op = EFS_FLOCK_GETLK | EFS_FLOCK_EX | extra;
+        is_getlk = 1;
+    } else if (strcmp(op, "gsh") == 0) {
+        req.op = EFS_FLOCK_GETLK | EFS_FLOCK_SH | extra;
+        is_getlk = 1;
+    } else {
         fprintf(stderr, usage, name);
         return 1;
     }
@@ -1629,8 +1638,21 @@ static int cmd_raft_lock_op(int argc, char **argv, uint32_t extra, const char *n
     }
     close(fd);
     r = reply;
-    printf("raft-%s status=%u primary=%u ino=%llu\n",
-           name, r->status, r->primary_id, (unsigned long long)r->inode.ino);
+    if (is_getlk) {
+        const char *t = r->inode.nlink == EFS_LOCK_EX ? "ex"
+                        : r->inode.nlink == EFS_LOCK_SH ? "sh" : "un";
+
+        printf("raft-%s status=%u primary=%u type=%s owner=%llu start=%llu "
+               "end=%llu\n",
+               name, r->status, r->primary_id, t,
+               (unsigned long long)r->inode.ino,
+               (unsigned long long)r->inode.size,
+               (unsigned long long)r->inode.ctime);
+    } else {
+        printf("raft-%s status=%u primary=%u ino=%llu\n",
+               name, r->status, r->primary_id,
+               (unsigned long long)r->inode.ino);
+    }
     free(reply);
     return 0;
 }
@@ -2178,8 +2200,8 @@ int main(int argc, char **argv)
                     "  raft-getchunks <node:port> <ino> [start]\n"
                     "  raft-append <node:port> <ino> <len>\n"
                     "  raft-hold <node:port> <ino> <open|close> [owner]\n"
-                    "  raft-flock <node:port> <ino> <ex|sh|un> [owner]\n"
-                    "  raft-fcntl <node:port> <ino> <ex|sh|un> [owner] [start end]\n",
+                    "  raft-flock <node:port> <ino> <ex|sh|un|gex|gsh> [owner]\n"
+                    "  raft-fcntl <node:port> <ino> <ex|sh|un|gex|gsh> [owner] [start end]\n",
             argv[0]);
     return 1;
 }

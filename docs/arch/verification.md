@@ -560,11 +560,19 @@ UN, EX owner=1 held through crash.
 suffix (two native uint64_t start,end, half-open). Absent suffix
 is whole-file. Struct size is unchanged. FLOCK domain rejects a
 non-whole-file range (INVAL). Adjacent ranges grant; overlap is
-BUSY. F_GETLK and blocking waits are not hosted. Flag off is a
+BUSY. Blocking waits are not hosted. Flag off is a
 no-op. Gate: same smoke — dedicated `raft-smoke-t`, EX `[0,100)`
 owner=1, EX `[100,200)` owner=2 OK, EX `[50,150)` BUSY, inverted
 INVAL, flock-domain range INVAL, owner=2 `[100,200)` held through
 crash.
+
+**10.5c-33 — F_GETLK leader read.** Same `EFS_MSG_INODE_FLOCK`
+opcode with `EFS_FLOCK_GETLK` (no new opcode; no Raft entry).
+Reply packs the first conflicting record or F_UNLCK. Same-owner
+does not conflict. Flag off is INVAL. Gate: same smoke — on
+`raft-smoke-t`, GETLK `[50,150)` reports owner=1 `[0,100)`,
+own-range and free-range UNLCK, after crash GETLK `[100,200)`
+still reports owner=2.
 
 ## Shortening the code → signal cycle
 

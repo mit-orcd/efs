@@ -3091,6 +3091,9 @@ send_reply:
                     /* FLOCK state lives entirely in the HOLD table -> the whole
                      * critical section runs under hold_mu (leaf). */
                     uint32_t op = req->op;
+                    if (op & EFS_FLOCK_GETLK) {
+                        r.status = EFS_INODE_RPC_INVAL;
+                    } else {
                     pthread_mutex_lock(&hold_mu);
                     struct efs_ino_hold *h = hold_find(ex->id, req->ino, 1);
                     if (!h) {
@@ -3134,6 +3137,7 @@ send_reply:
                         r.status = EFS_INODE_RPC_INVAL;
                     }
                     pthread_mutex_unlock(&hold_mu);
+                    }
                 }
             } else if (type == EFS_MSG_INODE_DROP_CHUNKS) {
                 struct efs_msg_inode_drop_chunks *req = payload;

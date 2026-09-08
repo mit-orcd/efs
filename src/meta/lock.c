@@ -148,6 +148,30 @@ int efs_lock_blocked(struct efs_kv *kv, const struct efs_lock_req *req,
     return 0;
 }
 
+int efs_lock_getlk(struct efs_kv *kv, const struct efs_lock_req *req,
+                   struct efs_lock_req *out)
+{
+    struct scan_acc a;
+    int i, rc;
+
+    if (!kv || !req || !out)
+        return EFS_ERR_INVAL;
+    memset(out, 0, sizeof(*out));
+    rc = check_gen(kv, req);
+    if (rc != EFS_OK)
+        return rc;
+    rc = load_domain(kv, req, &a);
+    if (rc != EFS_OK)
+        return rc;
+    for (i = 0; i < a.n; i++) {
+        if (conflicts(req, &a.recs[i])) {
+            *out = a.recs[i];
+            return EFS_OK;
+        }
+    }
+    return EFS_OK;
+}
+
 int efs_lock_owner_blocks(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                           uint8_t domain, const struct efs_lock_owner *owner,
                           uint64_t start, uint64_t end, uint8_t type)

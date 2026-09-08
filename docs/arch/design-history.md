@@ -429,7 +429,8 @@ CREATE S_IFLNK + publish (10.5c-26) and same-dir LOCAL directory
 rename (10.5c-27) and HASHED dest CREATE (10.5c-28) and HOLD
 open-unlinked leases (10.5c-29) and non-blocking FLOCK
 grant/release (10.5c-30) and non-blocking whole-file fcntl
-(10.5c-31) and non-blocking fcntl byte ranges (10.5c-32) are
-gated on the same smoke. What remains is cutover of the live
-table — not new design. F_GETLK, blocking waits, and session
-fencing are later host items.
+(10.5c-31) and non-blocking fcntl byte ranges (10.5c-32) and
+F_GETLK as a leader read (10.5c-33) are gated on the same
+smoke. What remains is cutover of the live table — not new
+design. Blocking waits and session fencing are later host
+items.

@@ -690,12 +690,15 @@ struct efs_msg_inode_hold {
  * EFS_FLOCK_RANGE_LEN bytes (two native uint64_t start,end, half-open)
  * selects a byte range; absent ⇒ whole file [0, ~0]. Do not grow this
  * struct — live FUSE flock sends sizeof(struct efs_msg_inode_flock).
- * F_GETLK and blocking waits are not on this wire. */
+ * EFS_FLOCK_GETLK is F_GETLK: a leader read, no Raft entry. Reply is
+ * struct efs_msg_inode_reply: nlink=0 (F_UNLCK) or SH/EX, size=start,
+ * ctime=end, ino=blocker owner id. Blocking waits are not on this wire. */
 #define EFS_FLOCK_SH 1u
 #define EFS_FLOCK_EX 2u
 #define EFS_FLOCK_NB 4u
 #define EFS_FLOCK_UN 8u
 #define EFS_FLOCK_FCNTL 16u
+#define EFS_FLOCK_GETLK 32u
 #define EFS_FLOCK_RANGE_LEN 16u
 struct efs_msg_inode_flock {
     efs_export_id_t export_id;

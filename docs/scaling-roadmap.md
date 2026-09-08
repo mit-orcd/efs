@@ -336,8 +336,12 @@ survives crash).
 **10.5c-32 is in:** non-blocking fcntl byte ranges (optional
 16-byte start/end suffix; adjacent OK, overlap BUSY;
 flock-domain ranges INVAL). Gate: same smoke (`raft-smoke-t`
-`[100,200)` survives crash). Cutover of `efs-test` is not this
-work, not step 11.
+`[100,200)` survives crash).
+**10.5c-33 is in:** F_GETLK as a leader ReadIndex (same opcode
+with `EFS_FLOCK_GETLK`; no Raft entry; first conflict or
+F_UNLCK). Gate: same smoke (`raft-smoke-t` GETLK `[100,200)`
+survives crash). Cutover of `efs-test` is not this work, not
+step 11.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

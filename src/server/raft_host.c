@@ -2406,7 +2406,8 @@ void server_raft_host_hold(efs_ino_t ino, uint32_t flags, uint64_t owner,
 /* Non-blocking flock/fcntl on the inode shard (§7.6). EFS_FLOCK_FCNTL
  * selects the record-lock domain (byte ranges allowed); otherwise
  * FLOCK (whole-file only). Owner is the session stand-in. Conflict →
- * BUSY. F_GETLK and blocking wait queues are not hosted. */
+ * BUSY. EFS_FLOCK_GETLK is a ReadIndex (no Raft entry). Blocking wait
+ * queues are not hosted. */
 void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
                             uint64_t start, uint64_t end,
                             struct efs_msg_inode_reply *out)
@@ -2414,6 +2415,7 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
     struct efs_raft_host *h = g_host;
     struct efs_meta_row row;
     struct efs_lock_req req;
+    struct efs_lock_req hit;
     uint8_t cmd[HOST_LOCK_LEN];
     uint32_t clen = 0;
     uint8_t ig;
@@ -2423,8 +2425,10 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
     int hint = -1;
     int rc;
     int blk;
+    int is_getlk = (op & EFS_FLOCK_GETLK) ? 1 : 0;
 
     memset(out, 0, sizeof(*out));
+    memset(&hit, 0, sizeof(hit));
     out->status = EFS_INODE_RPC_ERROR;
     if (!h || !h->running) {
         out->status = EFS_INODE_RPC_INVAL;
@@ -2438,7 +2442,21 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
-    if (op & EFS_FLOCK_UN) {
+    if (is_getlk) {
+        if (op & EFS_FLOCK_UN) {
+            out->status = EFS_INODE_RPC_INVAL;
+            return;
+        }
+        kind = 0;
+        if (op & EFS_FLOCK_EX)
+            ltype = EFS_LOCK_EX;
+        else if (op & EFS_FLOCK_SH)
+            ltype = EFS_LOCK_SH;
+        else {
+            out->status = EFS_INODE_RPC_INVAL;
+            return;
+        }
+    } else if (op & EFS_FLOCK_UN) {
         kind = EFS_MD_LOCK_RELEASE;
         ltype = EFS_LOCK_EX;
     } else if (op & EFS_FLOCK_EX) {
@@ -2474,7 +2492,10 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
     if (rc == EFS_OK) {
         fill_flock_req(&req, ino, row.generation, ltype, owner, domain,
                        start, end);
-        if (kind == EFS_MD_LOCK_GRANT) {
+        if (is_getlk) {
+            memset(&hit, 0, sizeof(hit));
+            rc = efs_lock_getlk(h->kv, &req, &hit);
+        } else if (kind == EFS_MD_LOCK_GRANT) {
             blk = efs_lock_blocked(h->kv, &req, NULL);
             if (blk < 0)
                 rc = blk;
@@ -2482,19 +2503,27 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
                 rc = EFS_ERR_AGAIN;
         }
     }
-    if (rc == EFS_OK)
-        rc = pack_lock_cmd(cmd, &clen, kind, &req);
-    if (rc == EFS_OK)
-        rc = host_propose_wait(h, ig, cmd, clen, &hint);
-    if (rc == EFS_OK && kind == EFS_MD_LOCK_GRANT) {
-        blk = efs_lock_blocked(h->kv, &req, NULL);
-        if (blk < 0)
-            rc = blk;
-        else if (blk)
-            rc = EFS_ERR_AGAIN;
+    if (!is_getlk) {
+        if (rc == EFS_OK)
+            rc = pack_lock_cmd(cmd, &clen, kind, &req);
+        if (rc == EFS_OK)
+            rc = host_propose_wait(h, ig, cmd, clen, &hint);
+        if (rc == EFS_OK && kind == EFS_MD_LOCK_GRANT) {
+            blk = efs_lock_blocked(h->kv, &req, NULL);
+            if (blk < 0)
+                rc = blk;
+            else if (blk)
+                rc = EFS_ERR_AGAIN;
+        }
     }
     pthread_mutex_unlock(&h->read_mu);
     set_inode_rc(out, rc, hint);
+    if (is_getlk && rc == EFS_OK) {
+        out->inode.nlink = hit.type;
+        out->inode.size = hit.start;
+        out->inode.ctime = hit.end;
+        out->inode.ino = (efs_ino_t)hit.owner.id;
+    }
 }
 
 void server_raft_host_lookup(efs_ino_t parent, const char *name,

@@ -75,6 +75,20 @@ static void test_conflict_and_domains(void)
     fill_req(&b, ino, row.generation, EFS_LOCK_FCNTL, EFS_LOCK_EX, 0, 10,
              EFS_LOCK_OFD, 9, 2);
     CHECK(efs_lock_grant(kv, &b) == EFS_ERR_AGAIN, "OFD vs classic");
+    fill_req(&b, ino, row.generation, EFS_LOCK_FCNTL, EFS_LOCK_EX, 5, 15,
+             EFS_LOCK_PROC, 2, 2);
+    CHECK(efs_lock_getlk(kv, &b, &b) == EFS_OK, "getlk");
+    CHECK(b.type == EFS_LOCK_EX, "getlk type");
+    CHECK(b.start == 0 && b.end == 10, "getlk range");
+    CHECK(b.owner.id == 1, "getlk owner");
+    fill_req(&b, ino, row.generation, EFS_LOCK_FCNTL, EFS_LOCK_EX, 0, 10,
+             EFS_LOCK_PROC, 1, 1);
+    CHECK(efs_lock_getlk(kv, &b, &b) == EFS_OK, "getlk self");
+    CHECK(b.type == 0, "getlk self unlck");
+    fill_req(&b, ino, row.generation, EFS_LOCK_FCNTL, EFS_LOCK_EX, 40, 50,
+             EFS_LOCK_PROC, 2, 2);
+    CHECK(efs_lock_getlk(kv, &b, &b) == EFS_OK, "getlk miss");
+    CHECK(b.type == 0, "getlk miss unlck");
     a.generation = row.generation + 1;
     CHECK(efs_lock_grant(kv, &a) == EFS_ERR_STALE, "stale gen");
     efs_kv_mem_free(kv);
