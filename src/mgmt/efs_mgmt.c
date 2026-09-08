@@ -1564,7 +1564,7 @@ static int cmd_raft_hold(int argc, char **argv)
     return 0;
 }
 
-static int cmd_raft_flock(int argc, char **argv)
+static int cmd_raft_lock_op(int argc, char **argv, uint32_t extra, const char *name)
 {
     char host[64];
     uint16_t port;
@@ -1577,7 +1577,8 @@ static int cmd_raft_flock(int argc, char **argv)
     const char *op;
 
     if (argc < 3) {
-        fprintf(stderr, "usage: raft-flock <node:port> <ino> <ex|sh|un> [owner]\n");
+        fprintf(stderr, "usage: raft-%s <node:port> <ino> <ex|sh|un> [owner]\n",
+                name);
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -1588,13 +1589,14 @@ static int cmd_raft_flock(int argc, char **argv)
     memset(&req, 0, sizeof(req));
     req.ino = (efs_ino_t)strtoull(argv[1], NULL, 0);
     if (strcmp(op, "ex") == 0)
-        req.op = EFS_FLOCK_EX | EFS_FLOCK_NB;
+        req.op = EFS_FLOCK_EX | EFS_FLOCK_NB | extra;
     else if (strcmp(op, "sh") == 0)
-        req.op = EFS_FLOCK_SH | EFS_FLOCK_NB;
+        req.op = EFS_FLOCK_SH | EFS_FLOCK_NB | extra;
     else if (strcmp(op, "un") == 0)
-        req.op = EFS_FLOCK_UN;
+        req.op = EFS_FLOCK_UN | extra;
     else {
-        fprintf(stderr, "usage: raft-flock <node:port> <ino> <ex|sh|un> [owner]\n");
+        fprintf(stderr, "usage: raft-%s <node:port> <ino> <ex|sh|un> [owner]\n",
+                name);
         return 1;
     }
     req.owner = (argc >= 4) ? strtoull(argv[3], NULL, 0) : 1ull;
@@ -1609,17 +1611,27 @@ static int cmd_raft_flock(int argc, char **argv)
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_FLOCK_REPLY ||
         reply_len != sizeof(*r)) {
-        fprintf(stderr, "Failed to raft-flock\n");
+        fprintf(stderr, "Failed to raft-%s\n", name);
         free(reply);
         close(fd);
         return 1;
     }
     close(fd);
     r = reply;
-    printf("raft-flock status=%u primary=%u ino=%llu\n",
-           r->status, r->primary_id, (unsigned long long)r->inode.ino);
+    printf("raft-%s status=%u primary=%u ino=%llu\n",
+           name, r->status, r->primary_id, (unsigned long long)r->inode.ino);
     free(reply);
     return 0;
+}
+
+static int cmd_raft_flock(int argc, char **argv)
+{
+    return cmd_raft_lock_op(argc, argv, 0, "flock");
+}
+
+static int cmd_raft_fcntl(int argc, char **argv)
+{
+    return cmd_raft_lock_op(argc, argv, EFS_FLOCK_FCNTL, "fcntl");
 }
 
 static int cmd_raft_unlink(int argc, char **argv)
@@ -2155,7 +2167,8 @@ int main(int argc, char **argv)
                     "  raft-getchunks <node:port> <ino> [start]\n"
                     "  raft-append <node:port> <ino> <len>\n"
                     "  raft-hold <node:port> <ino> <open|close> [owner]\n"
-                    "  raft-flock <node:port> <ino> <ex|sh|un> [owner]\n",
+                    "  raft-flock <node:port> <ino> <ex|sh|un> [owner]\n"
+                    "  raft-fcntl <node:port> <ino> <ex|sh|un> [owner]\n",
             argv[0]);
     return 1;
 }
@@ -2221,6 +2234,8 @@ int main(int argc, char **argv)
         return cmd_raft_hold(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-flock") == 0)
         return cmd_raft_flock(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-fcntl") == 0)
+        return cmd_raft_fcntl(argc - 2, argv + 2);
 
     fprintf(stderr, "Unknown command: %s\n", cmd);
     return 1;

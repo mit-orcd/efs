@@ -21,7 +21,9 @@
 # (dedicated raft-smoke-k: open, unlink name, getattr nlink=0, leave
 # held through crash, close reclaims), FLOCK grant/release (dedicated
 # raft-smoke-w: EX owner=1, EX owner=2 BUSY, UN owner=1, EX owner=2,
-# leave owner=2 held through crash), READDIR of ROOT
+# leave owner=2 held through crash), FCNTL grant/release (dedicated
+# raft-smoke-c: EX owner=1, EX owner=2 BUSY, flock EX owner=2 OK on
+# the other domain, UN fcntl, EX owner=1 left through crash), READDIR of ROOT
 # (created/renamed/link/mkdir names present, unlinked names absent),
 # LOOKUP_PATH of those names, chunk-aligned SETATTR SIZE (truncate),
 # chunk publish + GETCHUNKS (lane 0), unaligned truncate tail + trunc-0,
@@ -37,7 +39,8 @@
 # unlinked name stays gone, the renamed file stays, the renamed dir stays,
 # the HASHED dest file stays, the held-unlinked inode stays at nlink=0
 # until close reclaims it, the flock file stays and owner=2's EX still
-# BUSYs owner=1 until UN,
+# BUSYs owner=1 until UN, the fcntl file stays and owner=1's EX still
+# BUSYs owner=2 until UN,
 # and READDIR / LOOKUP_PATH still match.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
@@ -730,9 +733,9 @@ check_hold() {
 }
 
 # Non-blocking flock on the inode shard. Dedicated raft-smoke-w (not a
-# substring of -h / -hd / -k). Conflict is BUSY; leave owner=2 EX held
-# through crash. ROOT nlink is unchanged (file create). File stays in
-# READDIR. Blocking wait / fcntl are not hosted.
+# substring of -h / -hd / -k / -c). Conflict is BUSY; leave owner=2 EX
+# held through crash. ROOT nlink is unchanged (file create). File stays
+# in READDIR. Blocking wait / ranges / F_GETLK are not hosted.
 check_flock() {
     local lid=$1
     local tag=$2
@@ -767,6 +770,53 @@ check_flock() {
     out=$(g0_mgmt raft-flock 999999999 ex)
     say "$tag flock miss: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag flock miss not NOT_FOUND"
+}
+
+# Non-blocking whole-file fcntl on the same FLOCK opcode with
+# EFS_FLOCK_FCNTL. Dedicated raft-smoke-c (not a substring of -h / -hd /
+# -k / -w). Same-domain conflict is BUSY; flock EX on the same file is
+# the other domain and must succeed. Leave owner=1 EX held through crash.
+# ROOT nlink is unchanged. Ranges / F_GETLK / blocking wait are not hosted.
+check_fcntl() {
+    local lid=$1
+    local tag=$2
+    local out
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    leader=$lid
+    FCNTL_NAME=raft-smoke-c
+    out=$(g0_mgmt raft-create 1 "$FCNTL_NAME")
+    lid=$leader
+    say "$tag fcntl-prep create: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag fcntl-prep create not OK"
+    FCNTL_INO=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$FCNTL_INO" ] && [ "$FCNTL_INO" != "0" ] || { bad "$tag fcntl-prep ino"; return; }
+    out=$(g0_mgmt raft-fcntl "$FCNTL_INO" ex 1)
+    say "$tag fcntl ex owner1: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag fcntl ex owner1 not OK"
+    out=$(g0_mgmt raft-fcntl "$FCNTL_INO" ex 2)
+    say "$tag fcntl ex owner2 busy: $out"
+    echo "$out" | grep -q 'status=5' || bad "$tag fcntl ex owner2 not BUSY"
+    out=$(g0_mgmt raft-flock "$FCNTL_INO" ex 2)
+    say "$tag fcntl cross-domain flock: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag fcntl cross-domain flock not OK"
+    out=$(g0_mgmt raft-flock "$FCNTL_INO" un 2)
+    say "$tag fcntl cross-domain flock un: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag fcntl cross-domain flock un not OK"
+    out=$(g0_mgmt raft-fcntl "$FCNTL_INO" un 1)
+    say "$tag fcntl un owner1: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag fcntl un owner1 not OK"
+    out=$(g0_mgmt raft-fcntl "$FCNTL_INO" ex 1)
+    say "$tag fcntl ex owner1 held: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag fcntl ex owner1 held not OK"
+    out=$(g0_mgmt raft-fcntl 0 ex)
+    say "$tag fcntl ino0: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag fcntl ino0 not INVAL"
+    out=$(g0_mgmt raft-fcntl 999999999 ex)
+    say "$tag fcntl miss: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag fcntl miss not NOT_FOUND"
 }
 
 # Mode/owner SETATTR, chunk-aligned truncate, then utimens on
@@ -1010,6 +1060,9 @@ check_readdir_path() {
     if [ -n "${FLOCK_NAME:-}" ]; then
         readdir_has "$out" "$FLOCK_NAME" || bad "$tag readdir missing flock"
     fi
+    if [ -n "${FCNTL_NAME:-}" ]; then
+        readdir_has "$out" "$FCNTL_NAME" || bad "$tag readdir missing fcntl"
+    fi
     readdir_has "$out" raft-smoke-u && bad "$tag readdir still has unlinked"
     if [ -n "${UNLINK_NLINK_NAME:-}" ]; then
         readdir_has "$out" "$UNLINK_NLINK_NAME" && bad "$tag readdir still has nlink-unlinked"
@@ -1168,6 +1221,10 @@ say "FLOCK grant/release through Raft (fresh)"
 FLOCK_NAME=""
 FLOCK_INO=""
 check_flock "$leader" "fresh"
+say "FCNTL grant/release through Raft (fresh)"
+FCNTL_NAME=""
+FCNTL_INO=""
+check_fcntl "$leader" "fresh"
 say "READDIR/LOOKUP_PATH through ReadIndex (fresh)"
 check_readdir_path "$leader" "fresh"
 
@@ -1475,6 +1532,25 @@ if [ -n "${FLOCK_INO:-}" ]; then
     out=$(g0_mgmt raft-flock "$FLOCK_INO" ex 1)
     say "after-crash flock ex owner1: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash flock ex owner1 not OK"
+fi
+if [ -n "${FCNTL_NAME:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$FCNTL_NAME")
+    say "after-crash lookup fcntl: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash fcntl name missing"
+fi
+if [ -n "${FCNTL_INO:-}" ]; then
+    out=$(g0_mgmt raft-getattr "$FCNTL_INO")
+    say "after-crash getattr fcntl: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash fcntl inode missing"
+    out=$(g0_mgmt raft-fcntl "$FCNTL_INO" ex 2)
+    say "after-crash fcntl ex owner2 busy: $out"
+    echo "$out" | grep -q 'status=5' || bad "after-crash fcntl lock lost"
+    out=$(g0_mgmt raft-fcntl "$FCNTL_INO" un 1)
+    say "after-crash fcntl un owner1: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash fcntl un not OK"
+    out=$(g0_mgmt raft-fcntl "$FCNTL_INO" ex 2)
+    say "after-crash fcntl ex owner2: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash fcntl ex owner2 not OK"
 fi
 say "ReadIndex READDIR/LOOKUP_PATH (after crash)"
 check_readdir_path "$leader" "after-crash"

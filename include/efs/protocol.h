@@ -684,11 +684,15 @@ struct efs_msg_inode_hold {
     uint64_t owner;
 };
 
-/* op is the flock(2) operation (LOCK_SH/EX/UN, optional LOCK_NB). */
+/* op is the flock(2) operation (LOCK_SH/EX/UN, optional LOCK_NB).
+ * EFS_FLOCK_FCNTL selects the record-lock domain (classic fcntl);
+ * without it the opcode is the flock(2) domain. Ranges / F_GETLK /
+ * blocking waits are not on this wire. */
 #define EFS_FLOCK_SH 1u
 #define EFS_FLOCK_EX 2u
 #define EFS_FLOCK_NB 4u
 #define EFS_FLOCK_UN 8u
+#define EFS_FLOCK_FCNTL 16u
 struct efs_msg_inode_flock {
     efs_export_id_t export_id;
     efs_ino_t ino;

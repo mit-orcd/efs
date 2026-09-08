@@ -1159,10 +1159,11 @@ and 10.5c-27 (same-dir LOCAL directory rename)
 and 10.5c-28 (HASHED dest CREATE)
 and 10.5c-29 (HOLD open-unlinked leases)
 and 10.5c-30 (non-blocking FLOCK grant/release)
+and 10.5c-31 (non-blocking whole-file fcntl)
 are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cutover of the
-live table is not this work (not step 11). fcntl and session
-fencing stay later. The KV engine is
+live table is not this work (not step 11). Ranges, F_GETLK,
+blocking waits, and session fencing stay later. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not
@@ -1296,9 +1297,12 @@ sends you to — not the whole spec.
 > HOLD open-unlinked leases (10.5c-29: `EFS_MSG_INODE_HOLD` on the
 > inode shard; owner is the session stand-in; last close reclaims),
 > and non-blocking FLOCK grant/release (10.5c-30: `EFS_MSG_INODE_FLOCK`
-> on the inode shard; whole-file FLOCK domain; conflict is BUSY).
-> Next: cutover of `efs-test` is not this work; fcntl and session
-> fencing stay later, behind the same flag.
+> on the inode shard; whole-file FLOCK domain; conflict is BUSY),
+> and non-blocking whole-file fcntl (10.5c-31: same opcode with
+> `EFS_FLOCK_FCNTL`; record-lock domain; flock on the same file
+> does not conflict). Next: cutover of `efs-test` is not this work;
+> ranges / F_GETLK / blocking waits and session fencing stay later,
+> behind the same flag.
 > [architecture.md §10](#architecture)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -1565,11 +1569,21 @@ sends you to — not the whole spec.
 > the production host. `EFS_MSG_INODE_FLOCK` proposes LOCK
 > GRANT/RELEASE on the inode shard (existing opcode; whole-file
 > FLOCK domain; owner is the session stand-in, epoch=1). Conflict
-> is BUSY. Blocking wait queues and fcntl are not hosted. Flag off
-> is a no-op (old HOLD table). Same scratch smoke: dedicated
+> is BUSY. Blocking wait queues, ranges, and F_GETLK are not hosted.
+> Flag off is a no-op (old HOLD table). Same scratch smoke: dedicated
 > `raft-smoke-w`, EX owner=1, EX owner=2 BUSY, UN, EX owner=2,
-> crash keeps the lock, UN owner=2 then EX owner=1. Cutover of
-> `efs-test` is not next (not step 11).
+> crash keeps the lock, UN owner=2 then EX owner=1.
+>
+> **10.5c-31 is in (gated):** non-blocking whole-file fcntl on the
+> production host. Same `EFS_MSG_INODE_FLOCK` opcode with
+> `EFS_FLOCK_FCNTL` (no new opcode; record-lock domain; classic
+> process owner kind; owner is the session stand-in, epoch=1).
+> Same-domain conflict is BUSY; flock EX on the same file is the
+> other domain and succeeds. Ranges, F_GETLK, and blocking waits
+> are not hosted. FUSE `.lock` stays local. Flag off is a no-op.
+> Same scratch smoke: dedicated `raft-smoke-c`, EX owner=1, EX
+> owner=2 BUSY, flock EX owner=2 OK, UN, EX owner=1 held through
+> crash. Cutover of `efs-test` is not next (not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -4649,9 +4663,18 @@ nlink=0, crash keeps the inode, close reclaims.
 **10.5c-30 — non-blocking FLOCK grant/release.** `EFS_MSG_INODE_FLOCK`
 proposes LOCK GRANT/RELEASE on the inode shard (no new opcode;
 whole-file FLOCK domain; owner is the session stand-in). Conflict
-is BUSY. Blocking wait queues and fcntl are not hosted. Flag off
-is a no-op. Gate: same smoke — dedicated `raft-smoke-w`, EX
+is BUSY. Blocking wait queues, ranges, and F_GETLK are not hosted.
+Flag off is a no-op. Gate: same smoke — dedicated `raft-smoke-w`, EX
 owner=1, EX owner=2 BUSY, UN, EX owner=2, crash keeps the lock.
+
+**10.5c-31 — non-blocking whole-file fcntl.** Same
+`EFS_MSG_INODE_FLOCK` opcode with `EFS_FLOCK_FCNTL` (no new opcode;
+record-lock domain; classic process owner kind). Same-domain
+conflict is BUSY; flock on the same file is the other domain and
+does not conflict. Ranges, F_GETLK, and blocking waits are not
+hosted. Flag off is a no-op. Gate: same smoke — dedicated
+`raft-smoke-c`, EX owner=1, EX owner=2 BUSY, flock EX owner=2 OK,
+UN, EX owner=1 held through crash.
 
 ### Shortening the code → signal cycle
 
@@ -5131,8 +5154,10 @@ O_APPEND reserve (10.5c-25, resolve-on-report) and SYMLINK as
 CREATE S_IFLNK + publish (10.5c-26) and same-dir LOCAL directory
 rename (10.5c-27) and HASHED dest CREATE (10.5c-28) and HOLD
 open-unlinked leases (10.5c-29) and non-blocking FLOCK
-grant/release (10.5c-30) are gated
+grant/release (10.5c-30) and non-blocking whole-file fcntl
+(10.5c-31) are gated
 on the same
 smoke. What remains is cutover of the live table — not new
-design. fcntl and session fencing are later host items.
+design. Ranges, F_GETLK, blocking waits, and session fencing
+are later host items.
 

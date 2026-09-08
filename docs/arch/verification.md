@@ -542,9 +542,18 @@ nlink=0, crash keeps the inode, close reclaims.
 **10.5c-30 — non-blocking FLOCK grant/release.** `EFS_MSG_INODE_FLOCK`
 proposes LOCK GRANT/RELEASE on the inode shard (no new opcode;
 whole-file FLOCK domain; owner is the session stand-in). Conflict
-is BUSY. Blocking wait queues and fcntl are not hosted. Flag off
-is a no-op. Gate: same smoke — dedicated `raft-smoke-w`, EX
+is BUSY. Blocking wait queues, ranges, and F_GETLK are not hosted.
+Flag off is a no-op. Gate: same smoke — dedicated `raft-smoke-w`, EX
 owner=1, EX owner=2 BUSY, UN, EX owner=2, crash keeps the lock.
+
+**10.5c-31 — non-blocking whole-file fcntl.** Same
+`EFS_MSG_INODE_FLOCK` opcode with `EFS_FLOCK_FCNTL` (no new opcode;
+record-lock domain; classic process owner kind). Same-domain
+conflict is BUSY; flock on the same file is the other domain and
+does not conflict. Ranges, F_GETLK, and blocking waits are not
+hosted. Flag off is a no-op. Gate: same smoke — dedicated
+`raft-smoke-c`, EX owner=1, EX owner=2 BUSY, flock EX owner=2 OK,
+UN, EX owner=1 held through crash.
 
 ## Shortening the code → signal cycle
 

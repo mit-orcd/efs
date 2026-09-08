@@ -328,8 +328,12 @@ on the inode shard; last close reclaims). Gate: same smoke
 (`raft-smoke-k` nlink=0 survives crash, close reclaims).
 **10.5c-30 is in:** non-blocking FLOCK grant/release
 (`EFS_MSG_INODE_FLOCK` on the inode shard; conflict is BUSY).
-Gate: same smoke (`raft-smoke-w` EX survives crash). Cutover
-of `efs-test` is not this work, not step 11.
+Gate: same smoke (`raft-smoke-w` EX survives crash).
+**10.5c-31 is in:** non-blocking whole-file fcntl (same opcode
+with `EFS_FLOCK_FCNTL`; record-lock domain; flock on the same
+file does not conflict). Gate: same smoke (`raft-smoke-c` EX
+survives crash). Cutover of `efs-test` is not this work, not
+step 11.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every
