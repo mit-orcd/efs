@@ -1573,12 +1573,14 @@ static int cmd_raft_lock_op(int argc, char **argv, uint32_t extra, const char *n
     void *reply = NULL;
     uint32_t reply_len = 0;
     struct efs_msg_inode_flock req;
+    uint8_t buf[sizeof(req) + EFS_FLOCK_RANGE_LEN];
+    uint32_t slen;
     struct efs_msg_inode_reply *r;
     const char *op;
+    const char *usage = "usage: raft-%s <node:port> <ino> <ex|sh|un> [owner] [start end]\n";
 
-    if (argc < 3) {
-        fprintf(stderr, "usage: raft-%s <node:port> <ino> <ex|sh|un> [owner]\n",
-                name);
+    if (argc < 3 || argc == 5) {
+        fprintf(stderr, usage, name);
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -1595,11 +1597,20 @@ static int cmd_raft_lock_op(int argc, char **argv, uint32_t extra, const char *n
     else if (strcmp(op, "un") == 0)
         req.op = EFS_FLOCK_UN | extra;
     else {
-        fprintf(stderr, "usage: raft-%s <node:port> <ino> <ex|sh|un> [owner]\n",
-                name);
+        fprintf(stderr, usage, name);
         return 1;
     }
     req.owner = (argc >= 4) ? strtoull(argv[3], NULL, 0) : 1ull;
+    memcpy(buf, &req, sizeof(req));
+    slen = sizeof(req);
+    if (argc >= 6) {
+        uint64_t start = strtoull(argv[4], NULL, 0);
+        uint64_t end = strtoull(argv[5], NULL, 0);
+
+        memcpy(buf + sizeof(req), &start, 8);
+        memcpy(buf + sizeof(req) + 8, &end, 8);
+        slen += EFS_FLOCK_RANGE_LEN;
+    }
     fd = efs_connect_tcp(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
@@ -1607,7 +1618,7 @@ static int cmd_raft_lock_op(int argc, char **argv, uint32_t extra, const char *n
     }
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    if (send_recv(fd, EFS_MSG_INODE_FLOCK, &req, sizeof(req), &reply_type,
+    if (send_recv(fd, EFS_MSG_INODE_FLOCK, buf, slen, &reply_type,
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_FLOCK_REPLY ||
         reply_len != sizeof(*r)) {
@@ -2168,7 +2179,7 @@ int main(int argc, char **argv)
                     "  raft-append <node:port> <ino> <len>\n"
                     "  raft-hold <node:port> <ino> <open|close> [owner]\n"
                     "  raft-flock <node:port> <ino> <ex|sh|un> [owner]\n"
-                    "  raft-fcntl <node:port> <ino> <ex|sh|un> [owner]\n",
+                    "  raft-fcntl <node:port> <ino> <ex|sh|un> [owner] [start end]\n",
             argv[0]);
     return 1;
 }

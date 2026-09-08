@@ -555,6 +555,17 @@ hosted. Flag off is a no-op. Gate: same smoke — dedicated
 `raft-smoke-c`, EX owner=1, EX owner=2 BUSY, flock EX owner=2 OK,
 UN, EX owner=1 held through crash.
 
+**10.5c-32 — non-blocking fcntl byte ranges.** Same
+`EFS_MSG_INODE_FLOCK` opcode; optional `EFS_FLOCK_RANGE_LEN`
+suffix (two native uint64_t start,end, half-open). Absent suffix
+is whole-file. Struct size is unchanged. FLOCK domain rejects a
+non-whole-file range (INVAL). Adjacent ranges grant; overlap is
+BUSY. F_GETLK and blocking waits are not hosted. Flag off is a
+no-op. Gate: same smoke — dedicated `raft-smoke-t`, EX `[0,100)`
+owner=1, EX `[100,200)` owner=2 OK, EX `[50,150)` BUSY, inverted
+INVAL, flock-domain range INVAL, owner=2 `[100,200)` held through
+crash.
+
 ## Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove

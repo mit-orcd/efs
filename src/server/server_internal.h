@@ -715,6 +715,7 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out);
 void server_raft_host_hold(efs_ino_t ino, uint32_t flags, uint64_t owner,
                            struct efs_msg_inode_reply *out);
 void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
+                            uint64_t start, uint64_t end,
                             struct efs_msg_inode_reply *out);
 void server_raft_host_lookup(efs_ino_t parent, const char *name,
                              struct efs_msg_inode_reply *out);

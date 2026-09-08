@@ -1160,10 +1160,11 @@ and 10.5c-28 (HASHED dest CREATE)
 and 10.5c-29 (HOLD open-unlinked leases)
 and 10.5c-30 (non-blocking FLOCK grant/release)
 and 10.5c-31 (non-blocking whole-file fcntl)
+and 10.5c-32 (non-blocking fcntl byte ranges)
 are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cutover of the
-live table is not this work (not step 11). Ranges, F_GETLK,
-blocking waits, and session fencing stay later. The KV engine is
+live table is not this work (not step 11). F_GETLK, blocking
+waits, and session fencing stay later. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not
@@ -1300,9 +1301,11 @@ sends you to — not the whole spec.
 > on the inode shard; whole-file FLOCK domain; conflict is BUSY),
 > and non-blocking whole-file fcntl (10.5c-31: same opcode with
 > `EFS_FLOCK_FCNTL`; record-lock domain; flock on the same file
-> does not conflict). Next: cutover of `efs-test` is not this work;
-> ranges / F_GETLK / blocking waits and session fencing stay later,
-> behind the same flag.
+> does not conflict), and non-blocking fcntl byte ranges (10.5c-32:
+> optional 16-byte start/end suffix; adjacent OK, overlap BUSY;
+> flock-domain ranges INVAL). Next: cutover of `efs-test` is not
+> this work; F_GETLK / blocking waits and session fencing stay
+> later, behind the same flag.
 > [architecture.md §10](#architecture)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -1579,11 +1582,23 @@ sends you to — not the whole spec.
 > `EFS_FLOCK_FCNTL` (no new opcode; record-lock domain; classic
 > process owner kind; owner is the session stand-in, epoch=1).
 > Same-domain conflict is BUSY; flock EX on the same file is the
-> other domain and succeeds. Ranges, F_GETLK, and blocking waits
-> are not hosted. FUSE `.lock` stays local. Flag off is a no-op.
-> Same scratch smoke: dedicated `raft-smoke-c`, EX owner=1, EX
-> owner=2 BUSY, flock EX owner=2 OK, UN, EX owner=1 held through
-> crash. Cutover of `efs-test` is not next (not step 11).
+> other domain and succeeds. FUSE `.lock` stays local. Flag off is
+> a no-op. Same scratch smoke: dedicated `raft-smoke-c`, EX
+> owner=1, EX owner=2 BUSY, flock EX owner=2 OK, UN, EX owner=1
+> held through crash.
+>
+> **10.5c-32 is in (gated):** non-blocking fcntl byte ranges on the
+> production host. Same `EFS_MSG_INODE_FLOCK` opcode; optional
+> `EFS_FLOCK_RANGE_LEN` suffix (two native uint64_t start,end,
+> half-open). Absent suffix is whole-file `[0, ~0]` (31). Struct
+> size is unchanged. FLOCK domain rejects a non-whole-file range
+> (INVAL). Adjacent ranges grant; overlap is BUSY. F_GETLK and
+> blocking waits are not hosted. Partial-unlock split / adjacent
+> merge is not this slice. Same scratch smoke: dedicated
+> `raft-smoke-t`, EX `[0,100)` owner=1, EX `[100,200)` owner=2 OK,
+> EX `[50,150)` BUSY, inverted INVAL, flock-domain range INVAL,
+> owner=2 `[100,200)` held through crash. Cutover of `efs-test` is
+> not next (not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -4676,6 +4691,17 @@ hosted. Flag off is a no-op. Gate: same smoke — dedicated
 `raft-smoke-c`, EX owner=1, EX owner=2 BUSY, flock EX owner=2 OK,
 UN, EX owner=1 held through crash.
 
+**10.5c-32 — non-blocking fcntl byte ranges.** Same
+`EFS_MSG_INODE_FLOCK` opcode; optional `EFS_FLOCK_RANGE_LEN`
+suffix (two native uint64_t start,end, half-open). Absent suffix
+is whole-file. Struct size is unchanged. FLOCK domain rejects a
+non-whole-file range (INVAL). Adjacent ranges grant; overlap is
+BUSY. F_GETLK and blocking waits are not hosted. Flag off is a
+no-op. Gate: same smoke — dedicated `raft-smoke-t`, EX `[0,100)`
+owner=1, EX `[100,200)` owner=2 OK, EX `[50,150)` BUSY, inverted
+INVAL, flock-domain range INVAL, owner=2 `[100,200)` held through
+crash.
+
 ### Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove
@@ -5155,9 +5181,8 @@ CREATE S_IFLNK + publish (10.5c-26) and same-dir LOCAL directory
 rename (10.5c-27) and HASHED dest CREATE (10.5c-28) and HOLD
 open-unlinked leases (10.5c-29) and non-blocking FLOCK
 grant/release (10.5c-30) and non-blocking whole-file fcntl
-(10.5c-31) are gated
-on the same
-smoke. What remains is cutover of the live table — not new
-design. Ranges, F_GETLK, blocking waits, and session fencing
-are later host items.
+(10.5c-31) and non-blocking fcntl byte ranges (10.5c-32) are
+gated on the same smoke. What remains is cutover of the live
+table — not new design. F_GETLK, blocking waits, and session
+fencing are later host items.
 

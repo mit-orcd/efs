@@ -686,13 +686,17 @@ struct efs_msg_inode_hold {
 
 /* op is the flock(2) operation (LOCK_SH/EX/UN, optional LOCK_NB).
  * EFS_FLOCK_FCNTL selects the record-lock domain (classic fcntl);
- * without it the opcode is the flock(2) domain. Ranges / F_GETLK /
- * blocking waits are not on this wire. */
+ * without it the opcode is the flock(2) domain. An optional suffix of
+ * EFS_FLOCK_RANGE_LEN bytes (two native uint64_t start,end, half-open)
+ * selects a byte range; absent ⇒ whole file [0, ~0]. Do not grow this
+ * struct — live FUSE flock sends sizeof(struct efs_msg_inode_flock).
+ * F_GETLK and blocking waits are not on this wire. */
 #define EFS_FLOCK_SH 1u
 #define EFS_FLOCK_EX 2u
 #define EFS_FLOCK_NB 4u
 #define EFS_FLOCK_UN 8u
 #define EFS_FLOCK_FCNTL 16u
+#define EFS_FLOCK_RANGE_LEN 16u
 struct efs_msg_inode_flock {
     efs_export_id_t export_id;
     efs_ino_t ino;

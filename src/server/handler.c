@@ -1994,8 +1994,20 @@ send_reply:
                 } else if (type == EFS_MSG_INODE_FLOCK &&
                            payload_len >= sizeof(struct efs_msg_inode_flock)) {
                     struct efs_msg_inode_flock *req = payload;
-                    server_raft_host_flock(req->ino, req->op, req->owner, &r);
+                    uint64_t lstart = 0, lend = ~(uint64_t)0;
+
                     rtype = EFS_MSG_INODE_FLOCK_REPLY;
+                    if (payload_len >= sizeof(*req) + EFS_FLOCK_RANGE_LEN) {
+                        memcpy(&lstart, (uint8_t *)req + sizeof(*req), 8);
+                        memcpy(&lend, (uint8_t *)req + sizeof(*req) + 8, 8);
+                        server_raft_host_flock(req->ino, req->op, req->owner,
+                                               lstart, lend, &r);
+                    } else if (payload_len == sizeof(*req)) {
+                        server_raft_host_flock(req->ino, req->op, req->owner,
+                                               lstart, lend, &r);
+                    } else {
+                        r.status = EFS_INODE_RPC_INVAL;
+                    }
                 } else {
                     r.status = EFS_INODE_RPC_INVAL;
                     rtype = (type == EFS_MSG_INODE_LOOKUP)

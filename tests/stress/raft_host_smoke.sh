@@ -23,7 +23,10 @@
 # raft-smoke-w: EX owner=1, EX owner=2 BUSY, UN owner=1, EX owner=2,
 # leave owner=2 held through crash), FCNTL grant/release (dedicated
 # raft-smoke-c: EX owner=1, EX owner=2 BUSY, flock EX owner=2 OK on
-# the other domain, UN fcntl, EX owner=1 left through crash), READDIR of ROOT
+# the other domain, UN fcntl, EX owner=1 left through crash), FCNTL
+# byte ranges (dedicated raft-smoke-t: EX [0,100) owner=1, adjacent
+# [100,200) owner=2 OK, overlap [50,150) BUSY, inverted range INVAL,
+# leave [100,200) owner=2 through crash), READDIR of ROOT
 # (created/renamed/link/mkdir names present, unlinked names absent),
 # LOOKUP_PATH of those names, chunk-aligned SETATTR SIZE (truncate),
 # chunk publish + GETCHUNKS (lane 0), unaligned truncate tail + trunc-0,
@@ -40,7 +43,8 @@
 # the HASHED dest file stays, the held-unlinked inode stays at nlink=0
 # until close reclaims it, the flock file stays and owner=2's EX still
 # BUSYs owner=1 until UN, the fcntl file stays and owner=1's EX still
-# BUSYs owner=2 until UN,
+# BUSYs owner=2 until UN, the ranged fcntl file stays and owner=2's
+# [100,200) still BUSYs that range,
 # and READDIR / LOOKUP_PATH still match.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
@@ -819,6 +823,52 @@ check_fcntl() {
     echo "$out" | grep -q 'status=1' || bad "$tag fcntl miss not NOT_FOUND"
 }
 
+# Non-blocking fcntl byte ranges (half-open). Dedicated raft-smoke-t.
+# Adjacent ranges do not conflict; overlap is BUSY. Flock domain
+# rejects a range (INVAL). Inverted start>=end is INVAL. Leave
+# owner=2 EX [100,200) through crash. F_GETLK / blocking wait not hosted.
+check_fcntl_range() {
+    local lid=$1
+    local tag=$2
+    local out
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    leader=$lid
+    RANGE_NAME=raft-smoke-t
+    out=$(g0_mgmt raft-create 1 "$RANGE_NAME")
+    lid=$leader
+    say "$tag range-prep create: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag range-prep create not OK"
+    RANGE_INO=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$RANGE_INO" ] && [ "$RANGE_INO" != "0" ] || { bad "$tag range-prep ino"; return; }
+    out=$(g0_mgmt raft-fcntl "$RANGE_INO" ex 1 0 100)
+    say "$tag range ex [0,100) owner1: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag range ex [0,100) owner1 not OK"
+    out=$(g0_mgmt raft-fcntl "$RANGE_INO" ex 2 100 200)
+    say "$tag range ex [100,200) owner2: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag range adjacent owner2 not OK"
+    out=$(g0_mgmt raft-fcntl "$RANGE_INO" ex 3 50 150)
+    say "$tag range ex [50,150) busy: $out"
+    echo "$out" | grep -q 'status=5' || bad "$tag range overlap not BUSY"
+    out=$(g0_mgmt raft-fcntl "$RANGE_INO" un 1 0 100)
+    say "$tag range un [0,100) owner1: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag range un owner1 not OK"
+    out=$(g0_mgmt raft-fcntl "$RANGE_INO" ex 3 0 100)
+    say "$tag range ex [0,100) owner3: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag range disjoint owner3 not OK"
+    out=$(g0_mgmt raft-fcntl "$RANGE_INO" un 3 0 100)
+    say "$tag range un [0,100) owner3: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag range un owner3 not OK"
+    out=$(g0_mgmt raft-fcntl "$RANGE_INO" ex 1 200 100)
+    say "$tag range inverted: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag range inverted not INVAL"
+    out=$(g0_mgmt raft-flock "$RANGE_INO" ex 1 0 100)
+    say "$tag range flock-domain: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag range flock-domain not INVAL"
+}
+
 # Mode/owner SETATTR, chunk-aligned truncate, then utimens on
 # raft-smoke-f (all stay after crash). Mixed SIZE+mode is INVAL.
 # Unaligned SIZE (tail CAS) is on raft-smoke-p, not here.
@@ -1063,6 +1113,9 @@ check_readdir_path() {
     if [ -n "${FCNTL_NAME:-}" ]; then
         readdir_has "$out" "$FCNTL_NAME" || bad "$tag readdir missing fcntl"
     fi
+    if [ -n "${RANGE_NAME:-}" ]; then
+        readdir_has "$out" "$RANGE_NAME" || bad "$tag readdir missing range"
+    fi
     readdir_has "$out" raft-smoke-u && bad "$tag readdir still has unlinked"
     if [ -n "${UNLINK_NLINK_NAME:-}" ]; then
         readdir_has "$out" "$UNLINK_NLINK_NAME" && bad "$tag readdir still has nlink-unlinked"
@@ -1225,6 +1278,10 @@ say "FCNTL grant/release through Raft (fresh)"
 FCNTL_NAME=""
 FCNTL_INO=""
 check_fcntl "$leader" "fresh"
+say "FCNTL byte ranges through Raft (fresh)"
+RANGE_NAME=""
+RANGE_INO=""
+check_fcntl_range "$leader" "fresh"
 say "READDIR/LOOKUP_PATH through ReadIndex (fresh)"
 check_readdir_path "$leader" "fresh"
 
@@ -1551,6 +1608,28 @@ if [ -n "${FCNTL_INO:-}" ]; then
     out=$(g0_mgmt raft-fcntl "$FCNTL_INO" ex 2)
     say "after-crash fcntl ex owner2: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash fcntl ex owner2 not OK"
+fi
+if [ -n "${RANGE_NAME:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$RANGE_NAME")
+    say "after-crash lookup range: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash range name missing"
+fi
+if [ -n "${RANGE_INO:-}" ]; then
+    out=$(g0_mgmt raft-getattr "$RANGE_INO")
+    say "after-crash getattr range: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash range inode missing"
+    out=$(g0_mgmt raft-fcntl "$RANGE_INO" ex 1 100 200)
+    say "after-crash range ex [100,200) owner1 busy: $out"
+    echo "$out" | grep -q 'status=5' || bad "after-crash range lock lost"
+    out=$(g0_mgmt raft-fcntl "$RANGE_INO" ex 1 0 100)
+    say "after-crash range ex [0,100) owner1: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash range disjoint not OK"
+    out=$(g0_mgmt raft-fcntl "$RANGE_INO" un 2 100 200)
+    say "after-crash range un [100,200) owner2: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash range un not OK"
+    out=$(g0_mgmt raft-fcntl "$RANGE_INO" ex 1 100 200)
+    say "after-crash range ex [100,200) owner1: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash range ex owner1 not OK"
 fi
 say "ReadIndex READDIR/LOOKUP_PATH (after crash)"
 check_readdir_path "$leader" "after-crash"

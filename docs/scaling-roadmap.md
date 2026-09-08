@@ -332,8 +332,12 @@ Gate: same smoke (`raft-smoke-w` EX survives crash).
 **10.5c-31 is in:** non-blocking whole-file fcntl (same opcode
 with `EFS_FLOCK_FCNTL`; record-lock domain; flock on the same
 file does not conflict). Gate: same smoke (`raft-smoke-c` EX
-survives crash). Cutover of `efs-test` is not this work, not
-step 11.
+survives crash).
+**10.5c-32 is in:** non-blocking fcntl byte ranges (optional
+16-byte start/end suffix; adjacent OK, overlap BUSY;
+flock-domain ranges INVAL). Gate: same smoke (`raft-smoke-t`
+`[100,200)` survives crash). Cutover of `efs-test` is not this
+work, not step 11.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

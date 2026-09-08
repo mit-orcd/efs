@@ -1261,16 +1261,20 @@ static void host_fwd_hold(struct efs_raft_host *h, efs_ino_t ino, uint32_t flags
 }
 
 static void host_fwd_flock(struct efs_raft_host *h, efs_ino_t ino, uint32_t op,
-                           uint64_t owner, struct efs_msg_inode_reply *out,
+                           uint64_t owner, uint64_t start, uint64_t end,
+                           struct efs_msg_inode_reply *out,
                            const uint8_t *groups, int ng)
 {
-    struct efs_msg_inode_flock req;
+    uint8_t buf[sizeof(struct efs_msg_inode_flock) + EFS_FLOCK_RANGE_LEN];
+    struct efs_msg_inode_flock *req = (struct efs_msg_inode_flock *)buf;
 
-    memset(&req, 0, sizeof(req));
-    req.ino = ino;
-    req.op = op;
-    req.owner = owner;
-    host_inode_forward(h, EFS_MSG_INODE_FLOCK, &req, sizeof(req),
+    memset(buf, 0, sizeof(buf));
+    req->ino = ino;
+    req->op = op;
+    req->owner = owner;
+    memcpy(buf + sizeof(*req), &start, 8);
+    memcpy(buf + sizeof(*req) + 8, &end, 8);
+    host_inode_forward(h, EFS_MSG_INODE_FLOCK, buf, sizeof(buf),
                        EFS_MSG_INODE_FLOCK_REPLY, out, groups, ng);
 }
 
@@ -1594,15 +1598,16 @@ static int pack_lock_cmd(uint8_t *out, uint32_t *len, uint8_t kind,
 }
 
 static void fill_flock_req(struct efs_lock_req *r, efs_ino_t ino, uint64_t gen,
-                           uint8_t type, uint64_t owner, uint8_t domain)
+                           uint8_t type, uint64_t owner, uint8_t domain,
+                           uint64_t start, uint64_t end)
 {
     memset(r, 0, sizeof(*r));
     r->ino = ino;
     r->generation = gen;
     r->domain = domain;
     r->type = type;
-    r->start = 0;
-    r->end = ~(uint64_t)0;
+    r->start = start;
+    r->end = end;
     /* Classic fcntl = process token; flock (and OFD fcntl) = OFD. */
     r->owner.kind = (domain == EFS_LOCK_FCNTL) ? EFS_LOCK_PROC : EFS_LOCK_OFD;
     r->owner.id = owner;
@@ -2398,11 +2403,12 @@ void server_raft_host_hold(efs_ino_t ino, uint32_t flags, uint64_t owner,
         stat_to_inode(&st, &out->inode);
 }
 
-/* Non-blocking flock/fcntl on the inode shard (§7.6). Whole-file
- * grant/release; EFS_FLOCK_FCNTL selects the record-lock domain,
- * otherwise FLOCK. Owner is the session stand-in. Conflict → BUSY.
- * Ranges, F_GETLK, and blocking wait queues are not hosted. */
+/* Non-blocking flock/fcntl on the inode shard (§7.6). EFS_FLOCK_FCNTL
+ * selects the record-lock domain (byte ranges allowed); otherwise
+ * FLOCK (whole-file only). Owner is the session stand-in. Conflict →
+ * BUSY. F_GETLK and blocking wait queues are not hosted. */
 void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
+                            uint64_t start, uint64_t end,
                             struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
@@ -2428,6 +2434,10 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
+    if (start >= end) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
     if (op & EFS_FLOCK_UN) {
         kind = EFS_MD_LOCK_RELEASE;
         ltype = EFS_LOCK_EX;
@@ -2442,22 +2452,28 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
         return;
     }
     domain = (op & EFS_FLOCK_FCNTL) ? EFS_LOCK_FCNTL : EFS_LOCK_FLOCK;
+    if (domain == EFS_LOCK_FLOCK &&
+        (start != 0 || end != ~(uint64_t)0)) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
     ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
     if (!host_hosts(h, ig)) {
-        host_fwd_flock(h, ino, op, owner, out, &ig, 1);
+        host_fwd_flock(h, ino, op, owner, start, end, out, &ig, 1);
         return;
     }
     pthread_mutex_lock(&h->read_mu);
     rc = host_read_index(h, ig, &hint);
     if (rc == EFS_ERR_NOT_PRIMARY) {
         pthread_mutex_unlock(&h->read_mu);
-        host_fwd_flock(h, ino, op, owner, out, &ig, 1);
+        host_fwd_flock(h, ino, op, owner, start, end, out, &ig, 1);
         return;
     }
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, ino, &row);
     if (rc == EFS_OK) {
-        fill_flock_req(&req, ino, row.generation, ltype, owner, domain);
+        fill_flock_req(&req, ino, row.generation, ltype, owner, domain,
+                       start, end);
         if (kind == EFS_MD_LOCK_GRANT) {
             blk = efs_lock_blocked(h->kv, &req, NULL);
             if (blk < 0)
