@@ -176,15 +176,11 @@ writes share an inode.
   protocol. Instead the lane space is a fixed maximum, and a file's *use* of
   it grows:
 
-  ```text
-  LMAX      = 64                                   (fixed, for every file)
-  lane(ci)  = chunk_index % LMAX
-
-  lane_shard(FileID, lane) = (inode_shard(ino) + lane * stride(ino)) & 0xFFF
-  stride(ino)              = 2 * (hash(ino) & 0x7FF) + 1        (always odd)
-  ```
-
-  Two properties fall out of that formula, and both are load-bearing:
+  The formulas themselves are defined once, in [§7.3 of the
+  spec](../../architecture.md): a fixed `LMAX = 64` for every file, the lane
+  is the chunk index modulo `LMAX`, and the lane's shard is the odd-stride
+  permutation from the inode's shard. Two properties fall out of that
+  formula, and both are load-bearing:
 
   - **The 64 lanes are guaranteed to land on 64 *distinct* shards.** Because
     the shard count is a power of two and `stride` is odd, `lane ↦ (base +

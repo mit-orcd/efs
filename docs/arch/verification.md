@@ -586,6 +586,23 @@ grants in FIFO order, and a waiter pending across the leader
 kill re-issues on the new leader and grants after the surviving
 holder's release.
 
+**10.5c-35a — session record + register + establish.** Production
+host applies `EFS_MD_SESS_CREATE` / `REGISTER` / `ESTABLISH`
+(same bytes as the sim). GET is a ReadIndex (sub=0, not a log
+command). No new opcode: mgmt `raft-session` reuses
+`EFS_MSG_RAFT_MKFS` submit. CREATE is idempotent. Gate: same
+smoke — create a uuid, register its session shard, establish,
+GET reports ACTIVE + touched, and the record survives crash.
+
+**10.5c-35b — real session identity on HOLD/FLOCK.** Optional
+`EFS_SESS_WIRE_LEN` suffix carries `(uuid, epoch)` on
+`efs_msg_inode_hold` / `efs_msg_inode_flock`; absent keeps the
+stand-in. The host runs `efs_session_accept` on the inode shard
+before proposing (wrong/not-established epoch → BUSY). mgmt
+`raft-hold` / `raft-flock` / `raft-fcntl` take `[uuid-hex epoch]`.
+Gate: same smoke — established uuid accepted, wrong epoch BUSY,
+stand-in path intact.
+
 ## Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove

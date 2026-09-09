@@ -10,8 +10,9 @@ protocol itself.
 
 ## Placement rules
 
-- **`inode_shard(ino) = ino & 0xFFF`.** The authoritative inode row lives
-  here.
+- **The inode row lives on `inode_shard(ino)`** ([§5 of the
+  spec](../../architecture.md) defines the function; this document never
+  restates placement formulas, it explains them).
 - **A dentry lives on its parent's shard**
   (`dentry_shard = inode_shard(parent_ino)`), with a **threshold-based
   spread** for huge/hot directories (below).
@@ -199,15 +200,11 @@ spread directory uses a fixed 64-shard permutation, exactly like file
 lanes.** Hashing names freely over all 4096 shards would let one directory's
 used set grow to 4096, and `stat(dir)` with it; "bounded like a file's
 lanes" would be wishful. A directory therefore has at most 64 dentry shards,
-chosen by the same construction data.md uses for lanes:
-
-```text
-dir_lane     = hash(name) % 64
-dentry_shard = (inode_shard(dir_ino) + dir_lane * stride(dir_ino)) & 0xFFF
-stride       = 2*(hash(dir_ino) & 0x7FF) + 1        <- odd => permutation
-                                                       => 64 DISTINCT shards
-dir_lane 0   = the directory's own inode shard
-```
+chosen by the same construction data.md uses for lanes — a name hashes to
+one of 64 lanes, and the lane maps to a shard by the odd-stride permutation
+defined in [§5/§7.3 of the spec](../../architecture.md) (odd stride over a
+power-of-two shard count ⇒ 64 DISTINCT shards; lane 0 is the directory's own
+inode shard):
 
 64 independent Raft leaders is the same throughput budget deemed sufficient
 for the hottest single file, and it makes the used-shard set a **64-bit

@@ -1163,10 +1163,12 @@ and 10.5c-31 (non-blocking whole-file fcntl)
 and 10.5c-32 (non-blocking fcntl byte ranges)
 and 10.5c-33 (F_GETLK leader read)
 and 10.5c-34 (blocking lock waits: FIFO leader queue)
+and 10.5c-35a (session record + register + establish)
+and 10.5c-35b (real session uuid/epoch on HOLD/FLOCK)
 are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cutover of the
 live table is not this work (not step 11). Session fencing
-stays later. The KV engine is
+continues as 35c–d. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not
@@ -1309,8 +1311,12 @@ sends you to — not the whole spec.
 > (10.5c-33: `EFS_FLOCK_GETLK`; no Raft entry; first conflicting
 > record or F_UNLCK), and blocking lock waits (10.5c-34:
 > `EFS_FLOCK_WAIT`; FIFO leader queue, grant is the reply; leader
-> loss re-issues). Next: cutover of `efs-test` is not this
-> work; session fencing stays later, behind the same flag.
+> loss re-issues), the session record (10.5c-35a:
+> CREATE/REGISTER/ESTABLISH apply; GET is a ReadIndex), and real
+> session identity on HOLD/FLOCK (10.5c-35b: optional
+> `(uuid, epoch)` wire suffix, `efs_session_accept` before
+> propose). Next: 35c (the revocation barrier). Cutover of
+> `efs-test` is not this work.
 > [architecture.md §10](#architecture)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -1631,6 +1637,26 @@ sends you to — not the whole spec.
 > leader kill re-issues on the new leader and grants after the
 > surviving holder's release. Cutover of `efs-test` is not next
 > (not step 11).
+>
+> **10.5c-35a is in (gated):** session record + register + establish
+> on the production host. `EFS_MD_SESS_CREATE` / `REGISTER` /
+> `ESTABLISH` apply the same encoding as the sim (no new opcode;
+> mgmt `raft-session` submits via `EFS_MSG_RAFT_MKFS`). GET is a
+> ReadIndex (sub=0, not a log command); salt carries epoch, ACTIVE
+> state, and the registered shard's touched bit. CREATE is
+> idempotent. Fence/reclaim is 35c. Same scratch smoke: create uuid,
+> register its session shard, establish, GET ACTIVE+touched, and
+> the record survives the leader/follower kill.
+>
+> **10.5c-35b is in (gated):** real `(uuid, epoch)` session identity
+> on HOLD/FLOCK. An optional `EFS_SESS_WIRE_LEN` (20-byte) suffix on
+> `efs_msg_inode_hold` / `efs_msg_inode_flock` carries `(uuid[16],
+> epoch)`; absent keeps the `uint64_t` stand-in (epoch 1). The host
+> runs `efs_session_accept` on the inode shard before proposing
+> (wrong/not-established epoch → BUSY). mgmt `raft-hold` /
+> `raft-flock` / `raft-fcntl` take `[uuid-hex epoch]`. Same scratch
+> smoke: a HOLD/FLOCK carrying an established uuid is accepted, a
+> wrong epoch is BUSY, and the stand-in path still works.
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -2567,15 +2593,11 @@ writes share an inode.
   protocol. Instead the lane space is a fixed maximum, and a file's *use* of
   it grows:
 
-  ```text
-  LMAX      = 64                                   (fixed, for every file)
-  lane(ci)  = chunk_index % LMAX
-
-  lane_shard(FileID, lane) = (inode_shard(ino) + lane * stride(ino)) & 0xFFF
-  stride(ino)              = 2 * (hash(ino) & 0x7FF) + 1        (always odd)
-  ```
-
-  Two properties fall out of that formula, and both are load-bearing:
+  The formulas themselves are defined once, in [§7.3 of the
+  spec](#architecture): a fixed `LMAX = 64` for every file, the lane
+  is the chunk index modulo `LMAX`, and the lane's shard is the odd-stride
+  permutation from the inode's shard. Two properties fall out of that
+  formula, and both are load-bearing:
 
   - **The 64 lanes are guaranteed to land on 64 *distinct* shards.** Because
     the shard count is a power of two and `stride` is odd, `lane ↦ (base +
@@ -3247,8 +3269,9 @@ protocol itself.
 
 ### Placement rules
 
-- **`inode_shard(ino) = ino & 0xFFF`.** The authoritative inode row lives
-  here.
+- **The inode row lives on `inode_shard(ino)`** ([§5 of the
+  spec](#architecture) defines the function; this document never
+  restates placement formulas, it explains them).
 - **A dentry lives on its parent's shard**
   (`dentry_shard = inode_shard(parent_ino)`), with a **threshold-based
   spread** for huge/hot directories (below).
@@ -3436,15 +3459,11 @@ spread directory uses a fixed 64-shard permutation, exactly like file
 lanes.** Hashing names freely over all 4096 shards would let one directory's
 used set grow to 4096, and `stat(dir)` with it; "bounded like a file's
 lanes" would be wishful. A directory therefore has at most 64 dentry shards,
-chosen by the same construction data.md uses for lanes:
-
-```text
-dir_lane     = hash(name) % 64
-dentry_shard = (inode_shard(dir_ino) + dir_lane * stride(dir_ino)) & 0xFFF
-stride       = 2*(hash(dir_ino) & 0x7FF) + 1        <- odd => permutation
-                                                       => 64 DISTINCT shards
-dir_lane 0   = the directory's own inode shard
-```
+chosen by the same construction data.md uses for lanes — a name hashes to
+one of 64 lanes, and the lane maps to a shard by the odd-stride permutation
+defined in [§5/§7.3 of the spec](#architecture) (odd stride over a
+power-of-two shard count ⇒ 64 DISTINCT shards; lane 0 is the directory's own
+inode shard):
 
 64 independent Raft leaders is the same throughput budget deemed sufficient
 for the hottest single file, and it makes the used-shard set a **64-bit
@@ -4754,6 +4773,23 @@ grants in FIFO order, and a waiter pending across the leader
 kill re-issues on the new leader and grants after the surviving
 holder's release.
 
+**10.5c-35a — session record + register + establish.** Production
+host applies `EFS_MD_SESS_CREATE` / `REGISTER` / `ESTABLISH`
+(same bytes as the sim). GET is a ReadIndex (sub=0, not a log
+command). No new opcode: mgmt `raft-session` reuses
+`EFS_MSG_RAFT_MKFS` submit. CREATE is idempotent. Gate: same
+smoke — create a uuid, register its session shard, establish,
+GET reports ACTIVE + touched, and the record survives crash.
+
+**10.5c-35b — real session identity on HOLD/FLOCK.** Optional
+`EFS_SESS_WIRE_LEN` suffix carries `(uuid, epoch)` on
+`efs_msg_inode_hold` / `efs_msg_inode_flock`; absent keeps the
+stand-in. The host runs `efs_session_accept` on the inode shard
+before proposing (wrong/not-established epoch → BUSY). mgmt
+`raft-hold` / `raft-flock` / `raft-fcntl` take `[uuid-hex epoch]`.
+Gate: same smoke — established uuid accepted, wrong epoch BUSY,
+stand-in path intact.
+
 ### Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove
@@ -5289,4 +5325,29 @@ blocked. **Unrelated pre-existing bug found while gating (not from this
 change, present on HEAD):** `test_lock` has 6 `efs_lock_getlk` (F_GETLK)
 failures — a latent bug in the committed 10.5c-33 F_GETLK path; worth its
 own fix.
+
+### Sep 9 2026 — 10.5c-35a session record hosted
+
+The session SM (`session.c`) and in-sim barrier were already done;
+the production host only applied LEASE_OPEN/CLOSE/RECLAIM and
+silently no-op'd CREATE/REGISTER/ESTABLISH. 10.5c-35a hosts those
+three applies (same bytes as the sim) and a ReadIndex GET (sub=0,
+not a log command) via the existing `EFS_MSG_RAFT_MKFS` submit.
+No new opcode. The revocation barrier is 35c.
+
+### Sep 9 2026 — 10.5c-35b real session identity on HOLD/FLOCK
+
+HOLD/FLOCK carried a `uint64_t` owner stand-in (zero UUID + epoch 1).
+10.5c-35b puts the real `(uuid, epoch)` on the wire as an optional
+`EFS_SESS_WIRE_LEN` (20-byte) suffix on `efs_msg_inode_hold` /
+`efs_msg_inode_flock` (after the struct, or after the range suffix);
+absent keeps the stand-in, so pre-35b FUSE and the existing smoke
+checks are untouched. The host runs `efs_session_accept` on the
+inode shard before proposing (not GETLK — a read); a wrong or
+not-established epoch is BUSY. mgmt `raft-hold` / `raft-flock` /
+`raft-fcntl` take `[uuid-hex epoch]`. Gate: scratch smoke — an
+established uuid is accepted, a wrong epoch is BUSY, the stand-in
+path still works, and the session record survives the leader kill.
+The revocation barrier (FENCE_LOC/ACK, lease drop, waiter dequeue)
+is 35c.
 

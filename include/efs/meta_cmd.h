@@ -21,6 +21,7 @@
 #define EFS_MD_CMD_SESSION 9 /* matches sim SIM_CMD_SESSION */
 #define EFS_MD_SESS_CREATE      1
 #define EFS_MD_SESS_REGISTER    2
+/* sub=0 is a host ReadIndex GET (not a log command; 10.5c-35a). */
 #define EFS_MD_SESS_BEGIN       3
 #define EFS_MD_SESS_FENCE_LOC   4
 #define EFS_MD_SESS_ACK         5

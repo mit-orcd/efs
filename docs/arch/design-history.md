@@ -485,3 +485,28 @@ blocked. **Unrelated pre-existing bug found while gating (not from this
 change, present on HEAD):** `test_lock` has 6 `efs_lock_getlk` (F_GETLK)
 failures — a latent bug in the committed 10.5c-33 F_GETLK path; worth its
 own fix.
+
+## Sep 9 2026 — 10.5c-35a session record hosted
+
+The session SM (`session.c`) and in-sim barrier were already done;
+the production host only applied LEASE_OPEN/CLOSE/RECLAIM and
+silently no-op'd CREATE/REGISTER/ESTABLISH. 10.5c-35a hosts those
+three applies (same bytes as the sim) and a ReadIndex GET (sub=0,
+not a log command) via the existing `EFS_MSG_RAFT_MKFS` submit.
+No new opcode. The revocation barrier is 35c.
+
+## Sep 9 2026 — 10.5c-35b real session identity on HOLD/FLOCK
+
+HOLD/FLOCK carried a `uint64_t` owner stand-in (zero UUID + epoch 1).
+10.5c-35b puts the real `(uuid, epoch)` on the wire as an optional
+`EFS_SESS_WIRE_LEN` (20-byte) suffix on `efs_msg_inode_hold` /
+`efs_msg_inode_flock` (after the struct, or after the range suffix);
+absent keeps the stand-in, so pre-35b FUSE and the existing smoke
+checks are untouched. The host runs `efs_session_accept` on the
+inode shard before proposing (not GETLK — a read); a wrong or
+not-established epoch is BUSY. mgmt `raft-hold` / `raft-flock` /
+`raft-fcntl` take `[uuid-hex epoch]`. Gate: scratch smoke — an
+established uuid is accepted, a wrong epoch is BUSY, the stand-in
+path still works, and the session record survives the leader kill.
+The revocation barrier (FENCE_LOC/ACK, lease drop, waiter dequeue)
+is 35c.

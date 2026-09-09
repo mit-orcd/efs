@@ -350,6 +350,17 @@ owner-keyed dequeue hook for the 10.5c-35 revocation barrier).
 Gate: same smoke (`raft-smoke-q` FIFO/no-barging; a waiter
 pending across the leader kill re-issues and grants after the
 surviving holder's release).
+**10.5c-35a is in:** session record + register + establish
+(`EFS_MD_SESS_CREATE`/`REGISTER`/`ESTABLISH` apply; GET is a
+ReadIndex). Gate: same smoke (uuid ACTIVE with its registered
+bit after crash).
+**10.5c-35b is in:** real `(uuid, epoch)` on HOLD/FLOCK —
+optional `EFS_SESS_WIRE_LEN` suffix on the wire,
+`efs_session_accept` on the inode shard before propose (wrong
+epoch → BUSY), mgmt `raft-hold`/`raft-flock`/`raft-fcntl` take
+`[uuid-hex epoch]`. Gate: same smoke (established uuid accepted,
+wrong epoch BUSY, stand-in path intact). The revocation
+barrier stays 35c.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

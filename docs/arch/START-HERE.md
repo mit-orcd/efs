@@ -50,8 +50,12 @@ sends you to — not the whole spec.
 > (10.5c-33: `EFS_FLOCK_GETLK`; no Raft entry; first conflicting
 > record or F_UNLCK), and blocking lock waits (10.5c-34:
 > `EFS_FLOCK_WAIT`; FIFO leader queue, grant is the reply; leader
-> loss re-issues). Next: cutover of `efs-test` is not this
-> work; session fencing stays later, behind the same flag.
+> loss re-issues), the session record (10.5c-35a:
+> CREATE/REGISTER/ESTABLISH apply; GET is a ReadIndex), and real
+> session identity on HOLD/FLOCK (10.5c-35b: optional
+> `(uuid, epoch)` wire suffix, `efs_session_accept` before
+> propose). Next: 35c (the revocation barrier). Cutover of
+> `efs-test` is not this work.
 > [architecture.md §10](../architecture.md)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -372,6 +376,26 @@ sends you to — not the whole spec.
 > leader kill re-issues on the new leader and grants after the
 > surviving holder's release. Cutover of `efs-test` is not next
 > (not step 11).
+>
+> **10.5c-35a is in (gated):** session record + register + establish
+> on the production host. `EFS_MD_SESS_CREATE` / `REGISTER` /
+> `ESTABLISH` apply the same encoding as the sim (no new opcode;
+> mgmt `raft-session` submits via `EFS_MSG_RAFT_MKFS`). GET is a
+> ReadIndex (sub=0, not a log command); salt carries epoch, ACTIVE
+> state, and the registered shard's touched bit. CREATE is
+> idempotent. Fence/reclaim is 35c. Same scratch smoke: create uuid,
+> register its session shard, establish, GET ACTIVE+touched, and
+> the record survives the leader/follower kill.
+>
+> **10.5c-35b is in (gated):** real `(uuid, epoch)` session identity
+> on HOLD/FLOCK. An optional `EFS_SESS_WIRE_LEN` (20-byte) suffix on
+> `efs_msg_inode_hold` / `efs_msg_inode_flock` carries `(uuid[16],
+> epoch)`; absent keeps the `uint64_t` stand-in (epoch 1). The host
+> runs `efs_session_accept` on the inode shard before proposing
+> (wrong/not-established epoch → BUSY). mgmt `raft-hold` /
+> `raft-flock` / `raft-fcntl` take `[uuid-hex epoch]`. Same scratch
+> smoke: a HOLD/FLOCK carrying an established uuid is accepted, a
+> wrong epoch is BUSY, and the stand-in path still works.
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never

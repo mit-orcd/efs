@@ -53,6 +53,8 @@
 # the wait file stays and owner=5's [500,600) still BUSYs owner=9
 # while the waiter that pended across the leader kill re-issues on the
 # new leader and grants after owner=5's release,
+# the session record stays ACTIVE with its registered shard bit,
+# a HOLD/FLOCK carrying that uuid is accepted and a wrong epoch is BUSY,
 # and READDIR / LOOKUP_PATH still match.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
@@ -717,6 +719,98 @@ check_hashed_create() {
     say "$tag hashed lookup-path: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag hashed lookup-path not OK"
     echo "$out" | grep -q "name=$nm" || bad "$tag hashed lookup-path name"
+}
+
+# Session record + register + establish (10.5c-35a, I23 groundwork).
+# CREATE/REGISTER live on hash(uuid); ESTABLISH on the named shard.
+# GET is a ReadIndex (not a log cmd). Survives crash as ACTIVE with
+# the registered bit. HOLD/FLOCK identity stays the uint64 stand-in.
+SESS_UUID=aa000000000000000000000000000001
+check_session() {
+    local lid=$1
+    local tag=$2
+    local out ssh
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    leader=$lid
+    out=$(g0_mgmt raft-session get "$SESS_UUID")
+    say "$tag session get-miss: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag session get-miss not NOT_FOUND"
+    out=$(g0_mgmt raft-session create "$SESS_UUID" 1)
+    say "$tag session create: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag session create not OK"
+    ssh=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ssh=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$ssh" ] || { bad "$tag session ssh"; return; }
+    SESS_SHARD=$ssh
+    out=$(g0_mgmt raft-session register "$SESS_UUID" "$ssh" 1)
+    say "$tag session register: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag session register not OK"
+    out=$(g0_mgmt raft-session establish "$SESS_UUID" "$ssh" 1)
+    say "$tag session establish: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag session establish not OK"
+    out=$(g0_mgmt raft-session get "$SESS_UUID" "$ssh")
+    say "$tag session get: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag session get not OK"
+    echo "$out" | grep -q 'epoch=1' || bad "$tag session epoch"
+    echo "$out" | grep -q 'state=1' || bad "$tag session not ACTIVE"
+    echo "$out" | grep -q 'touched=1' || bad "$tag session touched bit"
+    out=$(g0_mgmt raft-session create "$SESS_UUID" 1)
+    say "$tag session create-dup: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag session create-dup not idempotent"
+}
+
+# Real (uuid, epoch) on HOLD/FLOCK (10.5c-35b). Optional wire suffix;
+# stand-in path (no suffix) stays for the later HOLD/FLOCK checks.
+# Accept rejects a not-established epoch. Dedicated raft-smoke-u,
+# unlinked before crash so ROOT readdir stays the same.
+check_sess_ident() {
+    local lid=$1
+    local tag=$2
+    local out ino ish
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    if [ -z "${SESS_UUID:-}" ]; then
+        bad "$tag: no session uuid"
+        return
+    fi
+    leader=$lid
+    out=$(g0_mgmt raft-create 1 raft-smoke-u)
+    say "$tag sess-ident create: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-ident create not OK"
+    ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$ino" ] && [ "$ino" != "0" ] || { bad "$tag sess-ident ino"; return; }
+    ish=$((ino & 4095))
+    out=$(g0_mgmt raft-session register "$SESS_UUID" "$ish" 1)
+    say "$tag sess-ident register inode-shard: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-ident register not OK"
+    out=$(g0_mgmt raft-session establish "$SESS_UUID" "$ish" 1)
+    say "$tag sess-ident establish inode-shard: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-ident establish not OK"
+    out=$(g0_mgmt raft-hold "$ino" open 1 "$SESS_UUID" 1)
+    say "$tag sess-ident hold open: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-ident hold open not OK"
+    out=$(g0_mgmt raft-hold "$ino" open 1 "$SESS_UUID" 2)
+    say "$tag sess-ident hold wrong-epoch: $out"
+    echo "$out" | grep -q 'status=5' || bad "$tag sess-ident hold wrong-epoch not BUSY"
+    out=$(g0_mgmt raft-flock "$ino" ex 1 "$SESS_UUID" 1)
+    say "$tag sess-ident flock ex: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-ident flock ex not OK"
+    out=$(g0_mgmt raft-flock "$ino" ex 2)
+    say "$tag sess-ident flock stand-in busy: $out"
+    echo "$out" | grep -q 'status=5' || bad "$tag sess-ident flock stand-in not BUSY"
+    out=$(g0_mgmt raft-flock "$ino" un 1 "$SESS_UUID" 1)
+    say "$tag sess-ident flock un: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-ident flock un not OK"
+    out=$(g0_mgmt raft-hold "$ino" close 1 "$SESS_UUID" 1)
+    say "$tag sess-ident hold close: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-ident hold close not OK"
+    out=$(g0_mgmt raft-unlink 1 raft-smoke-u)
+    say "$tag sess-ident unlink: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-ident unlink not OK"
 }
 
 # Open-unlinked HOLD lease on the inode shard (I19). Dedicated
@@ -1406,6 +1500,11 @@ HASHED_DIR_INO=""
 HASHED_FILE=""
 HASHED_FILE2=""
 check_hashed_create "$leader" "fresh"
+say "session record through Raft (fresh)"
+SESS_SHARD=""
+check_session "$leader" "fresh"
+say "session identity on HOLD/FLOCK (fresh)"
+check_sess_ident "$leader" "fresh"
 say "HOLD open-unlinked through Raft (fresh)"
 HOLD_NAME=""
 HOLD_INO=""
@@ -1845,6 +1944,14 @@ if [ -n "${WAIT_INO:-}" ]; then
         fi
     fi
     rm -f "${WAIT2_OUT:-/dev/null}" "${WAIT3_OUT:-/dev/null}" "${WAIT8_OUT:-/dev/null}"
+fi
+if [ -n "${SESS_SHARD:-}" ]; then
+    out=$(g0_mgmt raft-session get "$SESS_UUID" "$SESS_SHARD")
+    say "after-crash session get: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash session missing"
+    echo "$out" | grep -q 'epoch=1' || bad "after-crash session epoch"
+    echo "$out" | grep -q 'state=1' || bad "after-crash session not ACTIVE"
+    echo "$out" | grep -q 'touched=1' || bad "after-crash session touched bit"
 fi
 say "ReadIndex READDIR/LOOKUP_PATH (after crash)"
 check_readdir_path "$leader" "after-crash"

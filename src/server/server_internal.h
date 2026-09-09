@@ -713,9 +713,11 @@ int server_raft_host_active(void);
  * node id. */
 void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out);
 void server_raft_host_hold(efs_ino_t ino, uint32_t flags, uint64_t owner,
+                           const uint8_t *sess_uuid, uint32_t sess_epoch,
                            struct efs_msg_inode_reply *out);
 void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
                             uint64_t start, uint64_t end,
+                            const uint8_t *sess_uuid, uint32_t sess_epoch,
                             struct efs_msg_inode_reply *out);
 /* Revocation-barrier hook for session fencing (10.5c-35): dequeue a
  * session's blocked lock waiters so a fenced waiter is never granted. */

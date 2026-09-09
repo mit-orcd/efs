@@ -1989,22 +1989,49 @@ send_reply:
                 } else if (type == EFS_MSG_INODE_HOLD &&
                            payload_len >= sizeof(struct efs_msg_inode_hold)) {
                     struct efs_msg_inode_hold *req = payload;
-                    server_raft_host_hold(req->ino, req->flags, req->owner, &r);
+                    const uint8_t *su = NULL;
+                    uint32_t se = 0;
+
                     rtype = EFS_MSG_INODE_HOLD_REPLY;
+                    if (payload_len == sizeof(*req) + EFS_SESS_WIRE_LEN) {
+                        su = (const uint8_t *)req + sizeof(*req);
+                        memcpy(&se, su + 16, 4);
+                        server_raft_host_hold(req->ino, req->flags, req->owner,
+                                              su, se, &r);
+                    } else if (payload_len == sizeof(*req)) {
+                        server_raft_host_hold(req->ino, req->flags, req->owner,
+                                              NULL, 0, &r);
+                    } else {
+                        r.status = EFS_INODE_RPC_INVAL;
+                    }
                 } else if (type == EFS_MSG_INODE_FLOCK &&
                            payload_len >= sizeof(struct efs_msg_inode_flock)) {
                     struct efs_msg_inode_flock *req = payload;
                     uint64_t lstart = 0, lend = ~(uint64_t)0;
+                    const uint8_t *su = NULL;
+                    uint32_t se = 0;
+                    uint32_t extra;
 
                     rtype = EFS_MSG_INODE_FLOCK_REPLY;
-                    if (payload_len >= sizeof(*req) + EFS_FLOCK_RANGE_LEN) {
+                    extra = payload_len - (uint32_t)sizeof(*req);
+                    if (extra == EFS_FLOCK_RANGE_LEN ||
+                        extra == EFS_FLOCK_RANGE_LEN + EFS_SESS_WIRE_LEN) {
                         memcpy(&lstart, (uint8_t *)req + sizeof(*req), 8);
                         memcpy(&lend, (uint8_t *)req + sizeof(*req) + 8, 8);
+                    }
+                    if (extra == EFS_SESS_WIRE_LEN) {
+                        su = (const uint8_t *)req + sizeof(*req);
+                        memcpy(&se, su + 16, 4);
+                    } else if (extra == EFS_FLOCK_RANGE_LEN + EFS_SESS_WIRE_LEN) {
+                        su = (const uint8_t *)req + sizeof(*req) +
+                             EFS_FLOCK_RANGE_LEN;
+                        memcpy(&se, su + 16, 4);
+                    }
+                    if (extra == 0 || extra == EFS_FLOCK_RANGE_LEN ||
+                        extra == EFS_SESS_WIRE_LEN ||
+                        extra == EFS_FLOCK_RANGE_LEN + EFS_SESS_WIRE_LEN) {
                         server_raft_host_flock(req->ino, req->op, req->owner,
-                                               lstart, lend, &r);
-                    } else if (payload_len == sizeof(*req)) {
-                        server_raft_host_flock(req->ino, req->op, req->owner,
-                                               lstart, lend, &r);
+                                               lstart, lend, su, se, &r);
                     } else {
                         r.status = EFS_INODE_RPC_INVAL;
                     }

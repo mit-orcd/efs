@@ -186,9 +186,11 @@ enum efs_msg_type {
     /* Propose on a group leader (scratch/mgmt + host cross-group submit).
      * Empty payload: idempotent MKFS on the ROOT group's leader (not the
      * export mkfs path). Non-empty: byte 0 is the group id; the rest is a
-     * log command (or empty = ReadIndex). Same reply shape. Not a new
-     * opcode — 10.5c-24 reuses this so a coordinator can submit to a
-     * group it does not lead without inventing EFS_MSG_RAFT_PROPOSE. */
+     * log command (or empty = ReadIndex). Session GET is sub=0 of
+     * EFS_MD_CMD_SESSION (not a log command); salt carries epoch/state/
+     * touched. Same reply shape. Not a new opcode — 10.5c-24 reuses this
+     * so a coordinator can submit to a group it does not lead without
+     * inventing EFS_MSG_RAFT_PROPOSE. */
     EFS_MSG_RAFT_MKFS = 95,
     EFS_MSG_RAFT_MKFS_REPLY = 96,
     /* Per-group role/term/commit/applied readout for the smoke gate. */
@@ -675,8 +677,9 @@ struct efs_msg_inode_append {
     uint64_t len;
 };
 
-/* flags: 1 = open (+1 ref), 0 = close (-1 ref). owner identifies the
- * client mount so close can drop that client's flock. */
+/* flags: 1 = open (+1 ref), 0 = close (-1 ref). owner is the process/ofd
+ * id. Optional EFS_SESS_WIRE_LEN suffix carries (uuid, epoch); absent
+ * keeps the stand-in. Do not grow this struct. */
 struct efs_msg_inode_hold {
     efs_export_id_t export_id;
     efs_ino_t ino;
@@ -695,7 +698,11 @@ struct efs_msg_inode_hold {
  * ctime=end, ino=blocker owner id. EFS_FLOCK_WAIT (with EX/SH) is a
  * blocking wait: a conflicting grant is queued at the leader (FIFO,
  * leader memory, not Raft state) and the held RPC's reply IS the grant;
- * leader loss replies NOT_PRIMARY and the client re-issues. */
+ * leader loss replies NOT_PRIMARY and the client re-issues.
+ * Optional session identity (10.5c-35b): EFS_SESS_WIRE_LEN bytes
+ * (uuid[16] + native uint32 epoch) after the struct, or after the
+ * range suffix. Absent ⇒ stand-in (owner packed into uuid, epoch 1).
+ * HOLD takes the same optional suffix after struct efs_msg_inode_hold. */
 #define EFS_FLOCK_SH 1u
 #define EFS_FLOCK_EX 2u
 #define EFS_FLOCK_NB 4u
@@ -704,6 +711,7 @@ struct efs_msg_inode_hold {
 #define EFS_FLOCK_GETLK 32u
 #define EFS_FLOCK_WAIT 64u
 #define EFS_FLOCK_RANGE_LEN 16u
+#define EFS_SESS_WIRE_LEN 20u
 struct efs_msg_inode_flock {
     efs_export_id_t export_id;
     efs_ino_t ino;

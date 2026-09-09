@@ -5,6 +5,7 @@
 #include "efs/raft.h"
 #include "efs/kv_key.h"
 #include "efs/meta_cmd.h"
+#include "efs/opid.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1223,6 +1224,14 @@ static int cmd_raft_mkfs(int argc, char **argv)
     }
 }
 
+static void wr32be_mgmt(uint8_t *p, uint32_t v)
+{
+    p[0] = (uint8_t)(v >> 24);
+    p[1] = (uint8_t)(v >> 16);
+    p[2] = (uint8_t)(v >> 8);
+    p[3] = (uint8_t)v;
+}
+
 static void wr64be_mgmt(uint8_t *p, uint64_t v)
 {
     int i;
@@ -1300,6 +1309,153 @@ static int cmd_raft_dir(int argc, char **argv)
         st = 3;
     printf("raft-dir status=%u rc=%d kind=%s ino=%llu index=%llu\n",
            st, r->rc, argv[2], (unsigned long long)ino,
+           (unsigned long long)r->index);
+    {
+        int rc = r->rc;
+        free(reply);
+        return rc == EFS_OK ? 0 : 1;
+    }
+}
+
+static int parse_uuid_hex(const char *s, uint8_t uuid[EFS_OPID_UUID_LEN])
+{
+    int i;
+
+    if (!s || strlen(s) != 2 * EFS_OPID_UUID_LEN)
+        return -1;
+    for (i = 0; i < EFS_OPID_UUID_LEN; i++) {
+        unsigned v = 0;
+        char buf[3];
+
+        buf[0] = s[2 * i];
+        buf[1] = s[2 * i + 1];
+        buf[2] = '\0';
+        if (sscanf(buf, "%2x", &v) != 1)
+            return -1;
+        uuid[i] = (uint8_t)v;
+    }
+    return 0;
+}
+
+/* Session record on hash(uuid) (10.5c-35a). CREATE/REGISTER on the
+ * session-authority group; ESTABLISH on the shard's group; GET is a
+ * ReadIndex (sub=0, not a log command). Reuses RAFT_MKFS submit. */
+static int cmd_raft_session(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    int fd;
+    uint8_t reply_type, uuid[EFS_OPID_UUID_LEN], payload[1 + 26];
+    void *reply = NULL;
+    uint32_t reply_len = 0, plen, ssh, shard = 0, epoch = 1;
+    struct efs_msg_raft_mkfs_reply *r;
+    const char *op;
+    uint8_t sub = 0;
+    uint32_t st, touched;
+
+    if (argc < 3) {
+        fprintf(stderr,
+                "usage: raft-session <node:port> <create|register|establish|get> "
+                "<uuid-hex> [epoch|shard] [shard]\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    op = argv[1];
+    if (parse_uuid_hex(argv[2], uuid) != 0) {
+        fprintf(stderr, "raft-session: uuid must be 32 hex chars\n");
+        return 1;
+    }
+    ssh = efs_kv_session_shard(uuid);
+    if (strcmp(op, "create") == 0) {
+        sub = EFS_MD_SESS_CREATE;
+        if (argc >= 4)
+            epoch = (uint32_t)strtoul(argv[3], NULL, 0);
+        shard = ssh;
+    } else if (strcmp(op, "register") == 0) {
+        sub = EFS_MD_SESS_REGISTER;
+        if (argc < 4) {
+            fprintf(stderr, "raft-session register: shard required\n");
+            return 1;
+        }
+        shard = (uint32_t)strtoul(argv[3], NULL, 0);
+        if (argc >= 5)
+            epoch = (uint32_t)strtoul(argv[4], NULL, 0);
+    } else if (strcmp(op, "establish") == 0) {
+        sub = EFS_MD_SESS_ESTABLISH;
+        if (argc < 4) {
+            fprintf(stderr, "raft-session establish: shard required\n");
+            return 1;
+        }
+        shard = (uint32_t)strtoul(argv[3], NULL, 0);
+        if (argc >= 5)
+            epoch = (uint32_t)strtoul(argv[4], NULL, 0);
+    } else if (strcmp(op, "get") == 0) {
+        sub = 0;
+        if (argc >= 4)
+            shard = (uint32_t)strtoul(argv[3], NULL, 0);
+        else
+            shard = ssh;
+    } else {
+        fprintf(stderr, "raft-session: op must be create|register|establish|get\n");
+        return 1;
+    }
+    if (shard >= 4096) {
+        fprintf(stderr, "raft-session: shard out of range\n");
+        return 1;
+    }
+    memset(payload, 0, sizeof(payload));
+    if (sub == EFS_MD_SESS_ESTABLISH)
+        payload[0] = efs_raft_shard_group(shard);
+    else
+        payload[0] = efs_raft_shard_group(ssh);
+    payload[1] = EFS_MD_CMD_SESSION;
+    payload[2] = sub;
+    memcpy(payload + 3, uuid, EFS_OPID_UUID_LEN);
+    if (sub == 0) {
+        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, shard);
+        plen = 1 + 18 + 4;
+    } else if (sub == EFS_MD_SESS_CREATE) {
+        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, epoch);
+        plen = 1 + 22;
+    } else {
+        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, epoch);
+        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN + 4, shard);
+        plen = 1 + 26;
+    }
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_RAFT_MKFS, payload, plen, &reply_type,
+                  &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_RAFT_MKFS_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to raft-session\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    st = 0;
+    if (r->rc == EFS_ERR_NOT_PRIMARY)
+        st = 7;
+    else if (r->rc == EFS_ERR_NOT_FOUND)
+        st = 1;
+    else if (r->rc != EFS_OK)
+        st = 3;
+    touched = (uint32_t)((r->salt >> 40) & 1ull);
+    printf("raft-session status=%u rc=%d primary=%d op=%s ssh=%u shard=%u "
+           "epoch=%u state=%u touched=%u index=%llu\n",
+           st, r->rc, r->leader_hint >= 0 ? r->leader_hint + 1 : 0, op, ssh,
+           shard, (uint32_t)(r->salt & 0xffffffffull),
+           (uint32_t)((r->salt >> 32) & 0xffull), touched,
            (unsigned long long)r->index);
     {
         int rc = r->rc;
@@ -1516,15 +1672,18 @@ static int cmd_raft_hold(int argc, char **argv)
     char host[64];
     uint16_t port;
     int fd;
-    uint8_t reply_type;
+    uint8_t reply_type, buf[sizeof(struct efs_msg_inode_hold) + EFS_SESS_WIRE_LEN];
+    uint8_t uuid[EFS_OPID_UUID_LEN];
     void *reply = NULL;
-    uint32_t reply_len = 0;
+    uint32_t reply_len = 0, slen, epoch;
     struct efs_msg_inode_hold req;
     struct efs_msg_inode_reply *r;
     const char *op;
+    const char *usage =
+        "usage: raft-hold <node:port> <ino> <open|close> [owner] [uuid-hex epoch]\n";
 
-    if (argc < 3) {
-        fprintf(stderr, "usage: raft-hold <node:port> <ino> <open|close> [owner]\n");
+    if (argc < 3 || argc == 5 || argc > 6) {
+        fprintf(stderr, "%s", usage);
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -1533,13 +1692,25 @@ static int cmd_raft_hold(int argc, char **argv)
     }
     op = argv[2];
     if (strcmp(op, "open") != 0 && strcmp(op, "close") != 0) {
-        fprintf(stderr, "usage: raft-hold <node:port> <ino> <open|close> [owner]\n");
+        fprintf(stderr, "%s", usage);
         return 1;
     }
     memset(&req, 0, sizeof(req));
     req.ino = (efs_ino_t)strtoull(argv[1], NULL, 0);
     req.flags = (strcmp(op, "open") == 0) ? 1u : 0u;
     req.owner = (argc >= 4) ? strtoull(argv[3], NULL, 0) : 1ull;
+    memcpy(buf, &req, sizeof(req));
+    slen = sizeof(req);
+    if (argc >= 6) {
+        if (parse_uuid_hex(argv[4], uuid) != 0) {
+            fprintf(stderr, "raft-hold: uuid must be 32 hex chars\n");
+            return 1;
+        }
+        epoch = (uint32_t)strtoul(argv[5], NULL, 0);
+        memcpy(buf + slen, uuid, EFS_OPID_UUID_LEN);
+        memcpy(buf + slen + EFS_OPID_UUID_LEN, &epoch, 4);
+        slen += EFS_SESS_WIRE_LEN;
+    }
     fd = efs_connect_tcp(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
@@ -1547,7 +1718,7 @@ static int cmd_raft_hold(int argc, char **argv)
     }
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    if (send_recv(fd, EFS_MSG_INODE_HOLD, &req, sizeof(req), &reply_type,
+    if (send_recv(fd, EFS_MSG_INODE_HOLD, buf, slen, &reply_type,
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_HOLD_REPLY ||
         reply_len != sizeof(*r)) {
@@ -1574,15 +1745,26 @@ static int cmd_raft_lock_op(int argc, char **argv, uint32_t extra, const char *n
     void *reply = NULL;
     uint32_t reply_len = 0;
     struct efs_msg_inode_flock req;
-    uint8_t buf[sizeof(req) + EFS_FLOCK_RANGE_LEN];
-    uint32_t slen;
+    uint8_t buf[sizeof(req) + EFS_FLOCK_RANGE_LEN + EFS_SESS_WIRE_LEN];
+    uint8_t uuid[EFS_OPID_UUID_LEN];
+    uint32_t slen, epoch = 1;
     struct efs_msg_inode_reply *r;
     const char *op;
     const char *usage =
-        "usage: raft-%s <node:port> <ino> <ex|sh|un|gex|gsh|wex|wsh> [owner] [start end]\n";
-    int is_getlk = 0;
+        "usage: raft-%s <node:port> <ino> <ex|sh|un|gex|gsh|wex|wsh> [owner] [start end] [uuid-hex epoch]\n";
+    int is_getlk = 0, n, sess = 0;
 
-    if (argc < 3 || argc == 5) {
+    if (argc < 3) {
+        fprintf(stderr, usage, name);
+        return 1;
+    }
+    n = argc;
+    if (n >= 5 && parse_uuid_hex(argv[n - 2], uuid) == 0) {
+        sess = 1;
+        epoch = (uint32_t)strtoul(argv[n - 1], NULL, 0);
+        n -= 2;
+    }
+    if (n < 3 || n == 5 || n > 6) {
         fprintf(stderr, usage, name);
         return 1;
     }
@@ -1614,16 +1796,21 @@ static int cmd_raft_lock_op(int argc, char **argv, uint32_t extra, const char *n
         fprintf(stderr, usage, name);
         return 1;
     }
-    req.owner = (argc >= 4) ? strtoull(argv[3], NULL, 0) : 1ull;
+    req.owner = (n >= 4) ? strtoull(argv[3], NULL, 0) : 1ull;
     memcpy(buf, &req, sizeof(req));
     slen = sizeof(req);
-    if (argc >= 6) {
+    if (n >= 6) {
         uint64_t start = strtoull(argv[4], NULL, 0);
         uint64_t end = strtoull(argv[5], NULL, 0);
 
         memcpy(buf + sizeof(req), &start, 8);
         memcpy(buf + sizeof(req) + 8, &end, 8);
         slen += EFS_FLOCK_RANGE_LEN;
+    }
+    if (sess) {
+        memcpy(buf + slen, uuid, EFS_OPID_UUID_LEN);
+        memcpy(buf + slen + EFS_OPID_UUID_LEN, &epoch, 4);
+        slen += EFS_SESS_WIRE_LEN;
     }
     fd = efs_connect_tcp(host, port);
     if (fd < 0) {
@@ -2191,6 +2378,7 @@ int main(int argc, char **argv)
                     "  raft-status <node:port>\n"
                     "  raft-mkfs <node:port>\n"
                     "  raft-dir <node:port> <ino> <begin|migrate|finish>\n"
+                    "  raft-session <node:port> <create|register|establish|get> <uuid-hex> [epoch|shard] [shard]\n"
                     "  raft-getattr <node:port> [ino]\n"
                     "  raft-lookup <node:port> <parent> <name>\n"
                     "  raft-create <node:port> <parent> <name> [mode]\n"
@@ -2204,9 +2392,9 @@ int main(int argc, char **argv)
                     "  raft-publish <node:port> <ino> [chunk] [size]\n"
                     "  raft-getchunks <node:port> <ino> [start]\n"
                     "  raft-append <node:port> <ino> <len>\n"
-                    "  raft-hold <node:port> <ino> <open|close> [owner]\n"
-                    "  raft-flock <node:port> <ino> <ex|sh|un|gex|gsh> [owner]\n"
-                    "  raft-fcntl <node:port> <ino> <ex|sh|un|gex|gsh> [owner] [start end]\n",
+                    "  raft-hold <node:port> <ino> <open|close> [owner] [uuid-hex epoch]\n"
+                    "  raft-flock <node:port> <ino> <ex|sh|un|gex|gsh> [owner] [uuid-hex epoch]\n"
+                    "  raft-fcntl <node:port> <ino> <ex|sh|un|gex|gsh> [owner] [start end] [uuid-hex epoch]\n",
             argv[0]);
     return 1;
 }
@@ -2242,6 +2430,8 @@ int main(int argc, char **argv)
         return cmd_raft_mkfs(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-dir") == 0)
         return cmd_raft_dir(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-session") == 0)
+        return cmd_raft_session(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-getattr") == 0)
         return cmd_raft_getattr(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-lookup") == 0)
