@@ -55,6 +55,8 @@
 # new leader and grants after owner=5's release,
 # the session record stays ACTIVE with its registered shard bit,
 # a HOLD/FLOCK carrying that uuid is accepted and a wrong epoch is BUSY,
+# fencing that session dequeues a waiter of the old epoch and the new
+# epoch is accepted after establish,
 # and READDIR / LOOKUP_PATH still match.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
@@ -726,6 +728,7 @@ check_hashed_create() {
 # GET is a ReadIndex (not a log cmd). Survives crash as ACTIVE with
 # the registered bit. HOLD/FLOCK identity stays the uint64 stand-in.
 SESS_UUID=aa000000000000000000000000000001
+SESS_EPOCH=1
 check_session() {
     local lid=$1
     local tag=$2
@@ -811,6 +814,82 @@ check_sess_ident() {
     out=$(g0_mgmt raft-unlink 1 raft-smoke-u)
     say "$tag sess-ident unlink: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag sess-ident unlink not OK"
+}
+
+# Revocation barrier (10.5c-35c, I23). Coordinator-driven: BEGIN →
+# FENCE_LOC+ACK every touched shard → FINISH → LEASE_DROP. A queued
+# waiter of the old epoch is dequeued (BUSY/STALE) and never granted.
+# Dedicated raft-smoke-z, unlinked before crash. Session epoch becomes 2.
+check_sess_fence() {
+    local lid=$1
+    local tag=$2
+    local out ino ish wp i ok
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    if [ -z "${SESS_UUID:-}" ]; then
+        bad "$tag: no session uuid"
+        return
+    fi
+    leader=$lid
+    out=$(g0_mgmt raft-create 1 raft-smoke-z)
+    say "$tag sess-fence create: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-fence create not OK"
+    ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$ino" ] && [ "$ino" != "0" ] || { bad "$tag sess-fence ino"; return; }
+    ish=$((ino & 4095))
+    out=$(g0_mgmt raft-session register "$SESS_UUID" "$ish" 1)
+    say "$tag sess-fence register inode-shard: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-fence register not OK"
+    out=$(g0_mgmt raft-session establish "$SESS_UUID" "$ish" 1)
+    say "$tag sess-fence establish inode-shard: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-fence establish not OK"
+    out=$(g0_mgmt raft-fcntl "$ino" ex 1 0 100 "$SESS_UUID" 1)
+    say "$tag sess-fence ex owner1: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-fence ex owner1 not OK"
+    FENCE_WAIT_OUT=/tmp/raft-smoke-fence-w-$$
+    rm -f "$FENCE_WAIT_OUT"
+    ( G0_TO=30 G0_TRIES=4 g0_mgmt raft-fcntl "$ino" wex 2 0 100 "$SESS_UUID" 1 >"$FENCE_WAIT_OUT" 2>&1 ) &
+    wp=$!
+    sleep 2
+    if kill -0 $wp 2>/dev/null; then
+        say "$tag sess-fence waiter owner2 pending"
+    else
+        bad "$tag sess-fence waiter returned while conflicted"
+        say "$tag sess-fence waiter out: $(cat "$FENCE_WAIT_OUT" 2>/dev/null)"
+    fi
+    out=$(G0_TO=30 g0_mgmt raft-session fence "$SESS_UUID")
+    say "$tag sess-fence barrier: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-fence barrier not OK"
+    echo "$out" | grep -q 'epoch=2' || bad "$tag sess-fence epoch not 2"
+    echo "$out" | grep -q 'state=1' || bad "$tag sess-fence not ACTIVE"
+    ok=0
+    for i in $(seq 1 50); do
+        if ! kill -0 $wp 2>/dev/null; then ok=1; break; fi
+        sleep 0.2
+    done
+    [ "$ok" = 1 ] || { bad "$tag sess-fence waiter stuck after fence"; kill $wp 2>/dev/null; }
+    wait $wp 2>/dev/null || true
+    say "$tag sess-fence waiter out: $(cat "$FENCE_WAIT_OUT" 2>/dev/null)"
+    grep -q 'status=5' "$FENCE_WAIT_OUT" || bad "$tag sess-fence waiter not BUSY"
+    out=$(g0_mgmt raft-fcntl "$ino" ex 3 0 100 "$SESS_UUID" 1)
+    say "$tag sess-fence old-epoch ex: $out"
+    echo "$out" | grep -q 'status=5' || bad "$tag sess-fence old-epoch not BUSY"
+    out=$(g0_mgmt raft-session establish "$SESS_UUID" "$ish" 2)
+    say "$tag sess-fence establish epoch2: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-fence establish epoch2 not OK"
+    out=$(g0_mgmt raft-fcntl "$ino" ex 3 0 100 "$SESS_UUID" 2)
+    say "$tag sess-fence new-epoch ex: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-fence new-epoch not OK"
+    out=$(g0_mgmt raft-fcntl "$ino" un 3 0 100 "$SESS_UUID" 2)
+    say "$tag sess-fence new-epoch un: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-fence new-epoch un not OK"
+    out=$(g0_mgmt raft-unlink 1 raft-smoke-z)
+    say "$tag sess-fence unlink: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-fence unlink not OK"
+    SESS_EPOCH=2
+    rm -f "$FENCE_WAIT_OUT"
 }
 
 # Open-unlinked HOLD lease on the inode shard (I19). Dedicated
@@ -1505,6 +1584,8 @@ SESS_SHARD=""
 check_session "$leader" "fresh"
 say "session identity on HOLD/FLOCK (fresh)"
 check_sess_ident "$leader" "fresh"
+say "session revocation barrier (fresh)"
+check_sess_fence "$leader" "fresh"
 say "HOLD open-unlinked through Raft (fresh)"
 HOLD_NAME=""
 HOLD_INO=""
@@ -1949,7 +2030,7 @@ if [ -n "${SESS_SHARD:-}" ]; then
     out=$(g0_mgmt raft-session get "$SESS_UUID" "$SESS_SHARD")
     say "after-crash session get: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash session missing"
-    echo "$out" | grep -q 'epoch=1' || bad "after-crash session epoch"
+    echo "$out" | grep -q "epoch=${SESS_EPOCH:-1}" || bad "after-crash session epoch"
     echo "$out" | grep -q 'state=1' || bad "after-crash session not ACTIVE"
     echo "$out" | grep -q 'touched=1' || bad "after-crash session touched bit"
 fi

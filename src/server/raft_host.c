@@ -78,12 +78,15 @@ struct host_lock_wait {
     struct host_lock_wait *next;
     efs_ino_t ino;
     uint64_t owner;
+    uint8_t uuid[EFS_OPID_UUID_LEN];
+    uint32_t epoch;
     uint8_t domain;
     uint8_t ltype;
     uint64_t start;
     uint64_t end;
     pthread_cond_t cv;
     int abort;
+    int fenced; /* revocation barrier: never grant, reply STALE */
 };
 
 struct efs_raft_host {
@@ -590,9 +593,13 @@ static int apply_dir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+static void host_lock_wait_drop_session(struct efs_raft_host *h,
+                                        const uint8_t uuid[EFS_OPID_UUID_LEN],
+                                        uint32_t epoch);
+
 /* Same encoding as sim_sess_apply. 10.5c-35a hosts CREATE / REGISTER /
- * ESTABLISH (session record + first-use registration). Fence /
- * LEASE_DROP stay 35c. Last close reclaims a nlink=0 inode (I19).
+ * ESTABLISH; 10.5c-35c hosts the revocation barrier (BEGIN / FENCE_LOC /
+ * ACK / FINISH / LEASE_DROP). Last close reclaims a nlink=0 inode (I19).
  * Apply never stalls the log. */
 static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                              uint32_t clen, uint64_t index)
@@ -627,6 +634,45 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         epoch = rd32be(cmd + 18);
         shard = rd32be(cmd + 22);
         rc = efs_session_establish(h->kv, shard, uuid, epoch);
+        break;
+    case EFS_MD_SESS_BEGIN:
+        rc = efs_session_begin_fence(h->kv, uuid);
+        break;
+    case EFS_MD_SESS_FENCE_LOC:
+        if (clen < HOST_SESS_REG_LEN)
+            return EFS_OK;
+        epoch = rd32be(cmd + 18);
+        shard = rd32be(cmd + 22);
+        rc = efs_session_fence_local(h->kv, shard, uuid, epoch);
+        /* Abort in-memory waiters of the fenced epoch now (not only at
+         * LEASE_DROP): a queued waiter must not GRANT after FENCE_LOC. */
+        if (rc == EFS_OK && epoch > 0)
+            host_lock_wait_drop_session(h, uuid, epoch - 1);
+        break;
+    case EFS_MD_SESS_ACK:
+        if (clen < HOST_SESS_CREATE_LEN)
+            return EFS_OK;
+        shard = rd32be(cmd + 18);
+        rc = efs_session_ack_fence(h->kv, uuid, shard);
+        break;
+    case EFS_MD_SESS_FINISH:
+        rc = efs_session_finish_fence(h->kv, uuid);
+        break;
+    case EFS_MD_SESS_LEASE_DROP:
+        if (clen < HOST_SESS_REG_LEN)
+            return EFS_OK;
+        epoch = rd32be(cmd + 18);
+        shard = rd32be(cmd + 22);
+        rc = efs_lease_drop_session(h->kv, shard, uuid, epoch);
+        if (rc == EFS_OK || rc == EFS_ERR_NOT_FOUND) {
+            int r2 = efs_lock_drop_session(h->kv, shard, uuid, epoch);
+
+            if (r2 != EFS_OK && r2 != EFS_ERR_NOT_FOUND)
+                rc = r2;
+            else if (rc == EFS_ERR_NOT_FOUND)
+                rc = EFS_OK;
+        }
+        host_lock_wait_drop_session(h, uuid, epoch);
         break;
     case EFS_MD_SESS_LEASE_OPEN:
         if (clen < HOST_SESS_LEASE_LEN)
@@ -2313,8 +2359,21 @@ static int host_session_get(struct efs_raft_host *h, const uint8_t *cmd,
     rc = efs_session_get(h->kv, uuid, &rec);
     if (rc != EFS_OK)
         return rc;
+    /* shard >= 4096: ReadIndex of one 64-bit word of touched[] (35c fence). */
+    if (shard >= EFS_SESSION_BITS) {
+        uint32_t word = shard - EFS_SESSION_BITS;
+        int i;
+
+        if (word >= (EFS_SESSION_BITMAP / 8u))
+            return EFS_ERR_INVAL;
+        *salt_out = 0;
+        for (i = 0; i < 8; i++)
+            *salt_out |= (uint64_t)rec.touched[word * 8u + (uint32_t)i]
+                         << (8u * (uint32_t)i);
+        return EFS_OK;
+    }
     *salt_out = (uint64_t)rec.epoch | ((uint64_t)rec.state << 32);
-    if (shard < EFS_SESSION_BITS && efs_session_bit_get(rec.touched, shard))
+    if (efs_session_bit_get(rec.touched, shard))
         *salt_out |= 1ull << 40;
     return EFS_OK;
 }
@@ -2676,6 +2735,8 @@ static int host_lock_wait(struct efs_raft_host *h, uint8_t ig,
     memset(&w, 0, sizeof(w));
     w.ino = req->ino;
     w.owner = req->owner.id;
+    memcpy(w.uuid, req->owner.uuid, EFS_OPID_UUID_LEN);
+    w.epoch = req->owner.epoch;
     w.domain = req->domain;
     w.ltype = req->type;
     w.start = req->start;
@@ -2694,6 +2755,13 @@ static int host_lock_wait(struct efs_raft_host *h, uint8_t ig,
         if (!h->running || !host_is_leader(h, ig))
             w.abort = 1;
         pthread_mutex_lock(&h->wait_mu);
+        if (w.fenced) {
+            lock_wait_unlink_locked(h, &w);
+            lock_wait_signal_locked(h, w.ino);
+            pthread_mutex_unlock(&h->wait_mu);
+            pthread_cond_destroy(&w.cv);
+            return EFS_ERR_STALE;
+        }
         if (w.abort) {
             lock_wait_unlink_locked(h, &w);
             lock_wait_signal_locked(h, w.ino);
@@ -2729,16 +2797,19 @@ static int host_lock_wait(struct efs_raft_host *h, uint8_t ig,
             }
             pthread_mutex_unlock(&h->read_mu);
             if (rc != EFS_ERR_AGAIN) {
+                int fenced;
+
                 pthread_mutex_lock(&h->wait_mu);
+                fenced = w.fenced;
                 lock_wait_unlink_locked(h, &w);
                 lock_wait_signal_locked(h, w.ino);
                 pthread_mutex_unlock(&h->wait_mu);
                 pthread_cond_destroy(&w.cv);
-                return rc;
+                return fenced ? EFS_ERR_STALE : rc;
             }
         }
         pthread_mutex_lock(&h->wait_mu);
-        if (!w.abort) {
+        if (!w.abort && !w.fenced) {
             struct timespec ts;
 
             clock_gettime(CLOCK_REALTIME, &ts);
@@ -2755,6 +2826,27 @@ static int host_lock_wait(struct efs_raft_host *h, uint8_t ig,
 
 /* Revocation-barrier hook (used by session fencing, 10.5c-35): a fenced
  * session's waiters are dequeued and never granted (§7.6). */
+static void host_lock_wait_drop_session(struct efs_raft_host *h,
+                                        const uint8_t uuid[EFS_OPID_UUID_LEN],
+                                        uint32_t epoch)
+{
+    struct host_lock_wait *w;
+
+    if (!h || !uuid)
+        return;
+    pthread_mutex_lock(&h->wait_mu);
+    for (w = h->wait_head; w; w = w->next) {
+        if (w->epoch != epoch)
+            continue;
+        if (memcmp(w->uuid, uuid, EFS_OPID_UUID_LEN) != 0)
+            continue;
+        w->fenced = 1;
+        w->abort = 1;
+        pthread_cond_broadcast(&w->cv);
+    }
+    pthread_mutex_unlock(&h->wait_mu);
+}
+
 void server_raft_host_lock_wait_drop_owner(efs_ino_t ino, uint64_t owner)
 {
     struct efs_raft_host *h = g_host;

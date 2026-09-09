@@ -603,6 +603,14 @@ before proposing (wrong/not-established epoch → BUSY). mgmt
 Gate: same smoke — established uuid accepted, wrong epoch BUSY,
 stand-in path intact.
 
+**10.5c-35c — revocation barrier.** Production host applies
+`EFS_MD_SESS_BEGIN` / `FENCE_LOC` / `ACK` / `FINISH` /
+`LEASE_DROP`. mgmt `raft-session fence` is the coordinator (GET
+shard≥4096 reads a `touched_shards` word). FENCE_LOC dequeues
+waiters of that uuid/epoch (never granted). Gate: same smoke —
+waiter of epoch 1 BUSY after fence, epoch 1 rejected, epoch 2
+accepted after establish, ACTIVE epoch 2 after crash.
+
 ## Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove

@@ -6,6 +6,7 @@
 #include "efs/kv_key.h"
 #include "efs/meta_cmd.h"
 #include "efs/opid.h"
+#include "efs/session.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1317,6 +1318,163 @@ static int cmd_raft_dir(int argc, char **argv)
     }
 }
 
+static int sess_rpc(const char *host, uint16_t port, const uint8_t *payload,
+                    uint32_t plen, struct efs_msg_raft_mkfs_reply *out)
+{
+    int fd;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_msg_raft_mkfs_reply *r;
+
+    memset(out, 0, sizeof(*out));
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0)
+        return EFS_ERR_IO;
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_RAFT_MKFS, payload, plen, &reply_type,
+                  &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_RAFT_MKFS_REPLY ||
+        reply_len != sizeof(*r)) {
+        free(reply);
+        close(fd);
+        return EFS_ERR_IO;
+    }
+    close(fd);
+    r = reply;
+    *out = *r;
+    free(reply);
+    return out->rc;
+}
+
+static void sess_pack_hdr(uint8_t *payload, uint8_t group, uint8_t sub,
+                          const uint8_t uuid[EFS_OPID_UUID_LEN])
+{
+    payload[0] = group;
+    payload[1] = EFS_MD_CMD_SESSION;
+    payload[2] = sub;
+    memcpy(payload + 3, uuid, EFS_OPID_UUID_LEN);
+}
+
+/* Coordinator-driven I23 barrier (10.5c-35c). BEGIN freezes touched[],
+ * FENCE_LOC+ACK every set bit, FINISH, then LEASE_DROP(old_epoch) on
+ * each touched shard. GET shard>=4096 reads one word of the bitmap. */
+static int cmd_raft_session_fence(const char *host, uint16_t port,
+                                  const uint8_t uuid[EFS_OPID_UUID_LEN])
+{
+    uint8_t payload[1 + 26];
+    struct efs_msg_raft_mkfs_reply r;
+    uint32_t ssh, epoch = 0, old_epoch = 0, state = 0, word, i, ntouch = 0;
+    uint32_t shards[4096];
+    int rc, st;
+
+    ssh = efs_kv_session_shard(uuid);
+    memset(payload, 0, sizeof(payload));
+    sess_pack_hdr(payload, efs_raft_shard_group(ssh), EFS_MD_SESS_BEGIN, uuid);
+    rc = sess_rpc(host, port, payload, 1 + 18, &r);
+    if (rc != EFS_OK)
+        goto out;
+    memset(payload, 0, sizeof(payload));
+    sess_pack_hdr(payload, efs_raft_shard_group(ssh), 0, uuid);
+    wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, ssh);
+    rc = sess_rpc(host, port, payload, 1 + 18 + 4, &r);
+    if (rc != EFS_OK)
+        goto out;
+    epoch = (uint32_t)(r.salt & 0xffffffffull);
+    state = (uint32_t)((r.salt >> 32) & 0xffull);
+    if (state != 2 || epoch == 0) {
+        rc = EFS_ERR_BUSY;
+        goto out;
+    }
+    old_epoch = epoch - 1;
+    for (word = 0; word < (EFS_SESSION_BITMAP / 8u); word++) {
+        uint64_t bits;
+        uint32_t b;
+
+        memset(payload, 0, sizeof(payload));
+        sess_pack_hdr(payload, efs_raft_shard_group(ssh), 0, uuid);
+        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, EFS_SESSION_BITS + word);
+        rc = sess_rpc(host, port, payload, 1 + 18 + 4, &r);
+        if (rc != EFS_OK)
+            goto out;
+        bits = r.salt;
+        for (b = 0; b < 64; b++) {
+            uint32_t sh;
+
+            if ((bits & (1ull << b)) == 0)
+                continue;
+            sh = word * 64u + b;
+            if (ntouch >= 4096) {
+                rc = EFS_ERR_INVAL;
+                goto out;
+            }
+            shards[ntouch++] = sh;
+        }
+    }
+    for (i = 0; i < ntouch; i++) {
+        uint32_t sh = shards[i];
+
+        memset(payload, 0, sizeof(payload));
+        sess_pack_hdr(payload, efs_raft_shard_group(sh), EFS_MD_SESS_FENCE_LOC,
+                      uuid);
+        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, epoch);
+        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN + 4, sh);
+        rc = sess_rpc(host, port, payload, 1 + 26, &r);
+        if (rc != EFS_OK)
+            goto out;
+        memset(payload, 0, sizeof(payload));
+        sess_pack_hdr(payload, efs_raft_shard_group(ssh), EFS_MD_SESS_ACK, uuid);
+        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, sh);
+        rc = sess_rpc(host, port, payload, 1 + 22, &r);
+        if (rc != EFS_OK)
+            goto out;
+    }
+    memset(payload, 0, sizeof(payload));
+    sess_pack_hdr(payload, efs_raft_shard_group(ssh), EFS_MD_SESS_FINISH, uuid);
+    rc = sess_rpc(host, port, payload, 1 + 18, &r);
+    if (rc != EFS_OK)
+        goto out;
+    for (i = 0; i < ntouch; i++) {
+        uint32_t sh = shards[i];
+
+        memset(payload, 0, sizeof(payload));
+        sess_pack_hdr(payload, efs_raft_shard_group(sh), EFS_MD_SESS_LEASE_DROP,
+                      uuid);
+        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, old_epoch);
+        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN + 4, sh);
+        rc = sess_rpc(host, port, payload, 1 + 26, &r);
+        if (rc != EFS_OK)
+            goto out;
+    }
+    memset(payload, 0, sizeof(payload));
+    sess_pack_hdr(payload, efs_raft_shard_group(ssh), 0, uuid);
+    wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, ssh);
+    rc = sess_rpc(host, port, payload, 1 + 18 + 4, &r);
+    if (rc != EFS_OK)
+        goto out;
+    epoch = (uint32_t)(r.salt & 0xffffffffull);
+    state = (uint32_t)((r.salt >> 32) & 0xffull);
+    if (state != 1) {
+        rc = EFS_ERR_BUSY;
+        goto out;
+    }
+out:
+    st = 0;
+    if (rc == EFS_ERR_NOT_PRIMARY)
+        st = 7;
+    else if (rc == EFS_ERR_NOT_FOUND)
+        st = 1;
+    else if (rc != EFS_OK)
+        st = 3;
+    printf("raft-session status=%u rc=%d primary=%d op=fence ssh=%u shard=%u "
+           "epoch=%u state=%u touched=%u index=%llu\n",
+           st, rc, r.leader_hint >= 0 ? r.leader_hint + 1 : 0, ssh, ntouch,
+           epoch, state, ntouch > 0 ? 1u : 0u,
+           (unsigned long long)r.index);
+    return rc == EFS_OK ? 0 : 1;
+}
+
 static int parse_uuid_hex(const char *s, uint8_t uuid[EFS_OPID_UUID_LEN])
 {
     int i;
@@ -1355,7 +1513,7 @@ static int cmd_raft_session(int argc, char **argv)
 
     if (argc < 3) {
         fprintf(stderr,
-                "usage: raft-session <node:port> <create|register|establish|get> "
+                "usage: raft-session <node:port> <create|register|establish|get|fence> "
                 "<uuid-hex> [epoch|shard] [shard]\n");
         return 1;
     }
@@ -1368,6 +1526,8 @@ static int cmd_raft_session(int argc, char **argv)
         fprintf(stderr, "raft-session: uuid must be 32 hex chars\n");
         return 1;
     }
+    if (strcmp(argv[1], "fence") == 0)
+        return cmd_raft_session_fence(host, port, uuid);
     ssh = efs_kv_session_shard(uuid);
     if (strcmp(op, "create") == 0) {
         sub = EFS_MD_SESS_CREATE;
@@ -1399,7 +1559,7 @@ static int cmd_raft_session(int argc, char **argv)
         else
             shard = ssh;
     } else {
-        fprintf(stderr, "raft-session: op must be create|register|establish|get\n");
+        fprintf(stderr, "raft-session: op must be create|register|establish|get|fence\n");
         return 1;
     }
     if (shard >= 4096) {
@@ -2378,7 +2538,7 @@ int main(int argc, char **argv)
                     "  raft-status <node:port>\n"
                     "  raft-mkfs <node:port>\n"
                     "  raft-dir <node:port> <ino> <begin|migrate|finish>\n"
-                    "  raft-session <node:port> <create|register|establish|get> <uuid-hex> [epoch|shard] [shard]\n"
+                    "  raft-session <node:port> <create|register|establish|get|fence> <uuid-hex> [epoch|shard] [shard]\n"
                     "  raft-getattr <node:port> [ino]\n"
                     "  raft-lookup <node:port> <parent> <name>\n"
                     "  raft-create <node:port> <parent> <name> [mode]\n"

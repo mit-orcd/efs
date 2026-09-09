@@ -493,7 +493,7 @@ the production host only applied LEASE_OPEN/CLOSE/RECLAIM and
 silently no-op'd CREATE/REGISTER/ESTABLISH. 10.5c-35a hosts those
 three applies (same bytes as the sim) and a ReadIndex GET (sub=0,
 not a log command) via the existing `EFS_MSG_RAFT_MKFS` submit.
-No new opcode. The revocation barrier is 35c.
+No new opcode. The revocation barrier became 35c.
 
 ## Sep 9 2026 — 10.5c-35b real session identity on HOLD/FLOCK
 
@@ -508,5 +508,19 @@ not-established epoch is BUSY. mgmt `raft-hold` / `raft-flock` /
 `raft-fcntl` take `[uuid-hex epoch]`. Gate: scratch smoke — an
 established uuid is accepted, a wrong epoch is BUSY, the stand-in
 path still works, and the session record survives the leader kill.
-The revocation barrier (FENCE_LOC/ACK, lease drop, waiter dequeue)
-is 35c.
+The revocation barrier became 35c (hosted below).
+
+## Sep 9 2026 — 10.5c-35c revocation barrier hosted
+
+The session SM already had BEGIN / FENCE_LOC / ACK / FINISH /
+LEASE_DROP; the production host no-op'd them. 10.5c-35c hosts those
+applies (same bytes as the sim) and a coordinator-driven walk:
+mgmt `raft-session fence` BEGINs, reads the frozen `touched_shards`
+bitmap (GET with shard≥4096 returns one 64-bit word), FENCE_LOCs
+every set bit, ACKs, FINISH, then LEASE_DROP of the old epoch on
+each touched shard. FENCE_LOC also dequeues in-memory lock waiters
+keyed by `(uuid, epoch)` so a fenced waiter is never granted
+(BUSY/STALE). Gate: scratch smoke — waiter of epoch 1 is BUSY after
+fence, epoch 1 HOLD/FLOCK is rejected, epoch 2 is accepted after
+establish, GET after crash is ACTIVE at epoch 2. Append-reservation
+reclaim is 35d.

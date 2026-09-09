@@ -1165,10 +1165,11 @@ and 10.5c-33 (F_GETLK leader read)
 and 10.5c-34 (blocking lock waits: FIFO leader queue)
 and 10.5c-35a (session record + register + establish)
 and 10.5c-35b (real session uuid/epoch on HOLD/FLOCK)
+and 10.5c-35c (revocation barrier: fence + waiter dequeue)
 are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cutover of the
 live table is not this work (not step 11). Session fencing
-continues as 35c–d. The KV engine is
+continues as 35d. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not
@@ -1315,7 +1316,9 @@ sends you to — not the whole spec.
 > CREATE/REGISTER/ESTABLISH apply; GET is a ReadIndex), and real
 > session identity on HOLD/FLOCK (10.5c-35b: optional
 > `(uuid, epoch)` wire suffix, `efs_session_accept` before
-> propose). Next: 35c (the revocation barrier). Cutover of
+> propose), and the revocation barrier (10.5c-35c: coordinator
+> `raft-session fence`, waiters of the old epoch never granted).
+> Next: 35d (append-reservation reclaim on fence). Cutover of
 > `efs-test` is not this work.
 > [architecture.md §10](#architecture)
 >
@@ -1644,7 +1647,7 @@ sends you to — not the whole spec.
 > mgmt `raft-session` submits via `EFS_MSG_RAFT_MKFS`). GET is a
 > ReadIndex (sub=0, not a log command); salt carries epoch, ACTIVE
 > state, and the registered shard's touched bit. CREATE is
-> idempotent. Fence/reclaim is 35c. Same scratch smoke: create uuid,
+> idempotent. Same scratch smoke: create uuid,
 > register its session shard, establish, GET ACTIVE+touched, and
 > the record survives the leader/follower kill.
 >
@@ -1657,6 +1660,17 @@ sends you to — not the whole spec.
 > `raft-flock` / `raft-fcntl` take `[uuid-hex epoch]`. Same scratch
 > smoke: a HOLD/FLOCK carrying an established uuid is accepted, a
 > wrong epoch is BUSY, and the stand-in path still works.
+>
+> **10.5c-35c is in (gated):** the revocation barrier on the production
+> host. Apply hosts BEGIN / FENCE_LOC / ACK / FINISH / LEASE_DROP
+> (same bytes as the sim). mgmt `raft-session fence` is the
+> coordinator: it reads the frozen `touched_shards` bitmap (GET
+> shard≥4096 returns one word), FENCE_LOCs every set bit, ACKs,
+> FINISH, then LEASE_DROP of the old epoch. FENCE_LOC dequeues
+> in-memory waiters of that uuid/epoch (never granted; BUSY/STALE).
+> Same scratch smoke: a waiter of epoch 1 is BUSY after fence,
+> epoch 1 is rejected, epoch 2 is accepted after establish, and
+> GET after crash is ACTIVE at epoch 2.
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -4790,6 +4804,14 @@ before proposing (wrong/not-established epoch → BUSY). mgmt
 Gate: same smoke — established uuid accepted, wrong epoch BUSY,
 stand-in path intact.
 
+**10.5c-35c — revocation barrier.** Production host applies
+`EFS_MD_SESS_BEGIN` / `FENCE_LOC` / `ACK` / `FINISH` /
+`LEASE_DROP`. mgmt `raft-session fence` is the coordinator (GET
+shard≥4096 reads a `touched_shards` word). FENCE_LOC dequeues
+waiters of that uuid/epoch (never granted). Gate: same smoke —
+waiter of epoch 1 BUSY after fence, epoch 1 rejected, epoch 2
+accepted after establish, ACTIVE epoch 2 after crash.
+
 ### Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove
@@ -5333,7 +5355,7 @@ the production host only applied LEASE_OPEN/CLOSE/RECLAIM and
 silently no-op'd CREATE/REGISTER/ESTABLISH. 10.5c-35a hosts those
 three applies (same bytes as the sim) and a ReadIndex GET (sub=0,
 not a log command) via the existing `EFS_MSG_RAFT_MKFS` submit.
-No new opcode. The revocation barrier is 35c.
+No new opcode. The revocation barrier became 35c.
 
 ### Sep 9 2026 — 10.5c-35b real session identity on HOLD/FLOCK
 
@@ -5348,6 +5370,20 @@ not-established epoch is BUSY. mgmt `raft-hold` / `raft-flock` /
 `raft-fcntl` take `[uuid-hex epoch]`. Gate: scratch smoke — an
 established uuid is accepted, a wrong epoch is BUSY, the stand-in
 path still works, and the session record survives the leader kill.
-The revocation barrier (FENCE_LOC/ACK, lease drop, waiter dequeue)
-is 35c.
+The revocation barrier became 35c (hosted below).
+
+### Sep 9 2026 — 10.5c-35c revocation barrier hosted
+
+The session SM already had BEGIN / FENCE_LOC / ACK / FINISH /
+LEASE_DROP; the production host no-op'd them. 10.5c-35c hosts those
+applies (same bytes as the sim) and a coordinator-driven walk:
+mgmt `raft-session fence` BEGINs, reads the frozen `touched_shards`
+bitmap (GET with shard≥4096 returns one 64-bit word), FENCE_LOCs
+every set bit, ACKs, FINISH, then LEASE_DROP of the old epoch on
+each touched shard. FENCE_LOC also dequeues in-memory lock waiters
+keyed by `(uuid, epoch)` so a fenced waiter is never granted
+(BUSY/STALE). Gate: scratch smoke — waiter of epoch 1 is BUSY after
+fence, epoch 1 HOLD/FLOCK is rejected, epoch 2 is accepted after
+establish, GET after crash is ACTIVE at epoch 2. Append-reservation
+reclaim is 35d.
 

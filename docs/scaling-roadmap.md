@@ -359,8 +359,15 @@ optional `EFS_SESS_WIRE_LEN` suffix on the wire,
 `efs_session_accept` on the inode shard before propose (wrong
 epoch → BUSY), mgmt `raft-hold`/`raft-flock`/`raft-fcntl` take
 `[uuid-hex epoch]`. Gate: same smoke (established uuid accepted,
-wrong epoch BUSY, stand-in path intact). The revocation
-barrier stays 35c.
+wrong epoch BUSY, stand-in path intact).
+**10.5c-35c is in:** the revocation barrier. Host apply of
+BEGIN / FENCE_LOC / ACK / FINISH / LEASE_DROP; mgmt
+`raft-session fence` walks frozen `touched_shards` (GET
+shard≥4096 reads a bitmap word). FENCE_LOC dequeues waiters
+of that uuid/epoch (never granted). Gate: same smoke (waiter
+of epoch 1 BUSY after fence, epoch 1 rejected, epoch 2
+accepted after establish, ACTIVE epoch 2 after crash).
+Append-reservation reclaim stays 35d.
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every
