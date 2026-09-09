@@ -94,6 +94,15 @@ struct efs_raft_cfg {
     uint32_t election_ticks; /* > heartbeat_ticks */
     uint32_t heartbeat_ticks;
     uint64_t boot_id; /* 0 → 1 */
+    /* Seed for the randomized election timeout. The election deadline is
+     * redrawn from [election_ticks, 2*election_ticks) on every reset so
+     * synchronized followers cannot split the vote forever (a fixed timeout
+     * lets a behind-log, shorter-timeout candidate livelock the up-to-date
+     * follower by repeatedly resetting its timer via maybe_step_down).
+     * Injected (not rand()) so the deterministic simulator stays
+     * replayable: the sim passes a seed from its own PRNG, the host passes
+     * entropy. 0 → derived from id/boot_id/group. */
+    uint64_t rng_seed;
     uint8_t group;
     struct efs_raft_store *store;
     void *store_ctx;

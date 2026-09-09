@@ -47,7 +47,7 @@ static int attach_ctrl(struct efs_sim *sim, int i)
     cfg.voters = (1u << EFS_SIM_RAFT_N) - 1;
     cfg.boot_id = sim->srv[i].boot_id ? sim->srv[i].boot_id : 1;
     cfg.group = EFS_RAFT_GROUP_CTRL;
-    cfg.election_ticks = (uint32_t)(4 + i * 4);
+    cfg.election_ticks = (uint32_t)(4 + i * 4); /* staggered; raft.c adds jitter */
     cfg.heartbeat_ticks = 1;
     cfg.store = sim->srv[i].ctrl_store;
     cfg.store_ctx = sim->srv[i].ctrl_store;

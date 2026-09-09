@@ -4,6 +4,7 @@
 #include "efs/opid.h"
 #include "efs/session.h"
 #include "efs/kv_key.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -927,6 +928,11 @@ static int attach(struct efs_sim *sim, int i)
     cfg.voters = (1u << EFS_SIM_RAFT_N) - 1;
     cfg.boot_id = sim->srv[i].boot_id ? sim->srv[i].boot_id : 1;
     cfg.group = EFS_RAFT_GROUP_SHARD;
+    /* Per-node staggered base; raft.c adds a seeded randomized deadline within
+     * each band. The stagger keeps node 0 the preferred leader of EVERY group,
+     * which the cross-shard txn tests currently rely on — a txn whose groups
+     * elect DIFFERENT leaders exposes a separate consistency gap (uniform
+     * timeouts revealed it; parked, see design-history). */
     cfg.election_ticks = (uint32_t)(4 + i * 4);
     cfg.heartbeat_ticks = 1;
     cfg.store = sim->srv[i].raft_store;

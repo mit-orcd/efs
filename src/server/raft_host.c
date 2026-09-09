@@ -26,8 +26,12 @@
 
 #define HOST_TICK_US       5000
 #define HOST_HB_TICKS      10
+/* Uniform base for all voters: de-synchronization comes from the seeded
+ * randomized deadline in raft.c (drawn per election from [base, 2*base)),
+ * not a per-node stagger. A fixed stagger lets a behind-log short-timeout
+ * node livelock an up-to-date long-timeout one by resetting its timer via
+ * maybe_step_down faster than the longer timer can ever fire. */
 #define HOST_ELECT_BASE    100
-#define HOST_ELECT_SPREAD  20
 /* Pump holds h->mu across cfg.send. A dead peer must not sit on the
  * 30s pool SO_RCVTIMEO or election cannot tick. Restore the pool
  * timeout before release so bounce RPCs keep the long budget. */
@@ -1982,10 +1986,13 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
     cfg.id = h->raft_id;
     cfg.n = h->n;
     cfg.voters = voters;
-    cfg.election_ticks = (uint32_t)(HOST_ELECT_BASE +
-                                    h->raft_id * HOST_ELECT_SPREAD);
+    cfg.election_ticks = HOST_ELECT_BASE;
     cfg.heartbeat_ticks = HOST_HB_TICKS;
     cfg.boot_id = h->boot_id;
+    /* Entropy-seeded (h->salt reads /dev/urandom) per-(node,group) so the
+     * randomized election timeout is actually de-synchronized in production. */
+    cfg.rng_seed = h->salt ^ ((uint64_t)(h->raft_id + 1) << 32) ^
+                   ((uint64_t)(group + 1) * 0x9e3779b97f4a7c15ULL);
     cfg.group = group;
     cfg.store = st;
     cfg.store_ctx = st;

@@ -20,6 +20,8 @@ struct efs_raft {
     unsigned vote_bits;
     uint32_t election_elapsed;
     uint32_t election_ticks;
+    uint32_t election_deadline; /* randomized in [election_ticks, 2*election_ticks) */
+    uint64_t rng;               /* election-timeout PRNG state (seeded via cfg) */
     uint32_t hb_elapsed;
     uint32_t heartbeat_ticks;
     uint64_t read_index;
@@ -216,6 +218,28 @@ static int send_msg(struct efs_raft *r, struct efs_raft_msg *m)
     return r->send(r->net, m);
 }
 
+static uint64_t splitmix64(uint64_t *s)
+{
+    uint64_t z = (*s += 0x9e3779b97f4a7c15ULL);
+    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+    return z ^ (z >> 31);
+}
+
+/* Reset the election timer and redraw the deadline uniformly from
+ * [election_ticks, 2*election_ticks). The randomization is what guarantees
+ * election liveness: with a fixed timeout, synchronized followers campaign at
+ * the same term, vote for themselves, and split the quorum indefinitely — and
+ * a behind-log candidate with a shorter timeout can perpetually reset an
+ * up-to-date follower's timer via maybe_step_down, starving it forever.
+ * Seeded per-instance (cfg.rng_seed) so the deterministic simulator replays. */
+static void reset_election(struct efs_raft *r)
+{
+    r->election_elapsed = 0;
+    r->election_deadline =
+        r->election_ticks + (uint32_t)(splitmix64(&r->rng) % r->election_ticks);
+}
+
 static int maybe_step_down(struct efs_raft *r, uint64_t term)
 {
     if (term <= r->current_term)
@@ -226,7 +250,7 @@ static int maybe_step_down(struct efs_raft *r, uint64_t term)
     r->leader = -1;
     r->vote_bits = 0;
     r->read_in_flight = 0;
-    r->election_elapsed = 0;
+    reset_election(r);
     save_hard(r);
     return 1;
 }
@@ -445,7 +469,7 @@ static int become_leader(struct efs_raft *r)
 
     r->role = EFS_RAFT_LEADER;
     r->leader = r->id;
-    r->election_elapsed = 0;
+    reset_election(r);
     rc = last_log(r, &last_i, &last_t);
     if (rc != EFS_OK)
         return rc;
@@ -481,7 +505,7 @@ static int start_election(struct efs_raft *r)
     int i, rc;
 
     if (!is_voter(r, r->id)) {
-        r->election_elapsed = 0;
+        reset_election(r);
         return EFS_OK;
     }
     r->current_term++;
@@ -489,7 +513,7 @@ static int start_election(struct efs_raft *r)
     r->role = EFS_RAFT_CANDIDATE;
     r->leader = -1;
     r->vote_bits = 1u << r->id;
-    r->election_elapsed = 0;
+    reset_election(r);
     rc = save_hard(r);
     if (rc != EFS_OK)
         return rc;
@@ -536,7 +560,7 @@ static int on_vote_req(struct efs_raft *r, const struct efs_raft_msg *in)
          (in->last_log_term == last_t && in->last_log_index >= last_i))) {
         grant = 1;
         r->voted_for = in->from;
-        r->election_elapsed = 0;
+        reset_election(r);
         rc = save_hard(r);
         if (rc != EFS_OK)
             return rc;
@@ -575,7 +599,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
     }
     r->role = EFS_RAFT_FOLLOWER;
     r->leader = in->from;
-    r->election_elapsed = 0;
+    reset_election(r);
     rc = last_log(r, &last_i, &last_t);
     if (rc != EFS_OK)
         return rc;
@@ -688,6 +712,12 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
     r->log_old = r->app_old = voters;
     r->election_ticks = cfg->election_ticks ? cfg->election_ticks : 10;
     r->heartbeat_ticks = cfg->heartbeat_ticks ? cfg->heartbeat_ticks : 1;
+    r->rng = cfg->rng_seed;
+    if (!r->rng)
+        r->rng = 0x9e3779b97f4a7c15ULL ^
+                 ((uint64_t)(r->id + 1) * 0x100000001b3ULL) ^
+                 r->boot_id ^ ((uint64_t)r->group << 48);
+    reset_election(r);
     r->store = cfg->store;
     r->store_ctx = cfg->store_ctx ? cfg->store_ctx : cfg->store;
     r->send = cfg->send;
@@ -734,7 +764,7 @@ int efs_raft_tick(struct efs_raft *r)
         return EFS_OK;
     }
     r->election_elapsed++;
-    if (r->election_elapsed >= r->election_ticks)
+    if (r->election_elapsed >= r->election_deadline)
         return start_election(r);
     return EFS_OK;
 }
