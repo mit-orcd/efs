@@ -430,7 +430,58 @@ rename (10.5c-27) and HASHED dest CREATE (10.5c-28) and HOLD
 open-unlinked leases (10.5c-29) and non-blocking FLOCK
 grant/release (10.5c-30) and non-blocking whole-file fcntl
 (10.5c-31) and non-blocking fcntl byte ranges (10.5c-32) and
-F_GETLK as a leader read (10.5c-33) are gated on the same
+F_GETLK as a leader read (10.5c-33) and blocking lock waits
+(10.5c-34, FIFO leader queue, grant is the reply, leader loss
+re-issues) are gated on the same
 smoke. What remains is cutover of the live table — not new
-design. Blocking waits and session fencing are later host
-items.
+design. Session fencing is a later host
+item.
+
+## Sep 8 2026 — Raft election livelock (pre-existing) fixed; a parked multi-leader finding
+
+Gating 10.5c-34 surfaced a **pre-existing Raft election livelock**: a
+3-voter group could fail to elect a leader indefinitely. Root cause was
+deterministic, not a race — every node had a **fixed** election timeout,
+and a behind-log candidate with a shorter timeout could livelock an
+up-to-date follower by repeatedly resetting that follower's timer through
+`maybe_step_down` faster than the longer timer could ever fire. The smoke
+"kill the leader, re-elect, the blocking waiter re-issues and grants"
+sequence wedged on it.
+
+The fix is the textbook one, made determinism-preserving: the election
+deadline is **redrawn at random from `[election_ticks, 2*election_ticks)`
+on every reset** (`reset_election` in `raft.c`, a splitmix64 PRNG). The
+PRNG is **injected, not `rand()`**, so the deterministic simulator stays
+replayable: `efs_raft_cfg.rng_seed` carries the seed — the host seeds it
+from entropy (`/dev/urandom` via `h->salt`, per `(node, group)`), the sim
+uses a deterministic per-`(id, boot_id, group)` fallback. Production also
+moved to a **uniform** base timeout (`HOST_ELECT_BASE`, stagger removed) —
+with randomization, a stagger is unnecessary and a non-overlapping stagger
+could not have recovered from the split-vote class anyway.
+
+**Sim config kept staggered, and why.** The simulator was switched to the
+same uniform base as production, and three cross-shard mkdir transaction
+tests failed — **not** an I1/split-brain safety violation, but a
+data-consistency failure (`efs_meta_apply_check` on the leader's KV) plus
+lost dentry visibility. The trigger is novel: the old per-group stagger
+(`4+i*4` / `5+i*3`) made **node 0 the leader of every Raft group**, so the
+cross-shard transaction tests had *never* run with the two metadata groups
+led by **different** nodes. Uniform timeouts elect different leaders and
+expose the gap. This is a **separate, high-priority investigation** (a
+cross-shard txn that is correct only when its groups share a leader is a
+real protocol concern, or a sim-driving limitation — either way it must be
+understood before the sim can run multi-leader). It is **parked**: the sim
+keeps the stagger (node 0 leads every group, existing tests green) while
+`raft.c` still exercises the randomized-deadline code path within each
+band. Do not re-litigate the stagger removal until the multi-leader txn
+consistency is root-caused.
+
+Gate: full raft-affected unit set green on a node (`test_raft`,
+`test_raft_store`, `test_meta_apply`, `test_sim`, `test_txn`,
+`test_session`, `test_kv`, `test_kv_lsm`, `test_wire`, `test_data` OK);
+`raft_host_smoke` PASS (`results/raft-smoke/34h.log`), including the
+after-crash leader-kill + blocking-waiter re-issue that the livelock had
+blocked. **Unrelated pre-existing bug found while gating (not from this
+change, present on HEAD):** `test_lock` has 6 `efs_lock_getlk` (F_GETLK)
+failures — a latent bug in the committed 10.5c-33 F_GETLK path; worth its
+own fix.

@@ -342,6 +342,14 @@ with `EFS_FLOCK_GETLK`; no Raft entry; first conflict or
 F_UNLCK). Gate: same smoke (`raft-smoke-t` GETLK `[100,200)`
 survives crash). Cutover of `efs-test` is not this work, not
 step 11.
+**10.5c-34 is in:** blocking lock waits (`EFS_FLOCK_WAIT`;
+conflicting grant queues FIFO at the leader, the held RPC's
+reply is the grant; a queued waiter blocks later conflicting
+requests; leader loss is NOT_PRIMARY and the client re-issues;
+owner-keyed dequeue hook for the 10.5c-35 revocation barrier).
+Gate: same smoke (`raft-smoke-q` FIFO/no-barging; a waiter
+pending across the leader kill re-issues and grants after the
+surviving holder's release).
 
 **Rules while carving:** no behavior change within a step; no new features
 mixed in; a file that crosses ~1000 lines splits by responsibility; every

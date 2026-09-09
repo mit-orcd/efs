@@ -1162,10 +1162,11 @@ and 10.5c-30 (non-blocking FLOCK grant/release)
 and 10.5c-31 (non-blocking whole-file fcntl)
 and 10.5c-32 (non-blocking fcntl byte ranges)
 and 10.5c-33 (F_GETLK leader read)
+and 10.5c-34 (blocking lock waits: FIFO leader queue)
 are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cutover of the
-live table is not this work (not step 11). Blocking waits and
-session fencing stay later. The KV engine is
+live table is not this work (not step 11). Session fencing
+stays later. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not
@@ -1306,9 +1307,10 @@ sends you to — not the whole spec.
 > optional 16-byte start/end suffix; adjacent OK, overlap BUSY;
 > flock-domain ranges INVAL), and F_GETLK as a leader read
 > (10.5c-33: `EFS_FLOCK_GETLK`; no Raft entry; first conflicting
-> record or F_UNLCK). Next: cutover of `efs-test` is not this
-> work; blocking waits and session fencing stay later, behind
-> the same flag.
+> record or F_UNLCK), and blocking lock waits (10.5c-34:
+> `EFS_FLOCK_WAIT`; FIFO leader queue, grant is the reply; leader
+> loss re-issues). Next: cutover of `efs-test` is not this
+> work; session fencing stays later, behind the same flag.
 > [architecture.md §10](#architecture)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -1612,6 +1614,23 @@ sends you to — not the whole spec.
 > own-range GETLK is UNLCK, free range is UNLCK, ino 0 INVAL,
 > miss NOT_FOUND; after crash GETLK `[100,200)` still reports
 > owner=2. Cutover of `efs-test` is not next (not step 11).
+>
+> **10.5c-34 is in (gated):** blocking lock waits on the production
+> host. `EFS_FLOCK_WAIT` on a conflicting grant queues the request
+> at the leader (FIFO per inode, leader memory, not Raft state) and
+> holds the RPC — the reply IS the grant, and the grant is still a
+> Raft record. A queued waiter blocks a later conflicting request
+> (no barging, no starvation). Leader loss replies NOT_PRIMARY and
+> the client re-issues; the queue rebuilds there. WAIT with UN or
+> GETLK is INVAL; flag off is INVAL. The queue has an owner-keyed
+> dequeue hook (`server_raft_host_lock_wait_drop_owner`) for the
+> session revocation barrier (10.5c-35). FUSE `.lock` stays local.
+> Same scratch smoke: dedicated `raft-smoke-q` — a waiter pends
+> behind a held EX, a queued SH does not barge past the EX waiter,
+> release grants in FIFO order, and a waiter pending across the
+> leader kill re-issues on the new leader and grants after the
+> surviving holder's release. Cutover of `efs-test` is not next
+> (not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -4723,6 +4742,18 @@ does not conflict. Flag off is INVAL. Gate: same smoke — on
 own-range and free-range UNLCK, after crash GETLK `[100,200)`
 still reports owner=2.
 
+**10.5c-34 — blocking lock waits.** Same opcode with
+`EFS_FLOCK_WAIT`: a conflicting grant queues FIFO at the leader
+(leader memory, not Raft state) and the held RPC's reply is the
+grant. A queued waiter blocks a later conflicting request (no
+barging). Leader loss replies NOT_PRIMARY and the client
+re-issues. WAIT with UN/GETLK is INVAL; flag off is INVAL. Gate:
+same smoke — dedicated `raft-smoke-q`, a waiter pends behind a
+held EX, a queued SH does not barge past the EX waiter, release
+grants in FIFO order, and a waiter pending across the leader
+kill re-issues on the new leader and grants after the surviving
+holder's release.
+
 ### Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove
@@ -5203,8 +5234,59 @@ rename (10.5c-27) and HASHED dest CREATE (10.5c-28) and HOLD
 open-unlinked leases (10.5c-29) and non-blocking FLOCK
 grant/release (10.5c-30) and non-blocking whole-file fcntl
 (10.5c-31) and non-blocking fcntl byte ranges (10.5c-32) and
-F_GETLK as a leader read (10.5c-33) are gated on the same
+F_GETLK as a leader read (10.5c-33) and blocking lock waits
+(10.5c-34, FIFO leader queue, grant is the reply, leader loss
+re-issues) are gated on the same
 smoke. What remains is cutover of the live table — not new
-design. Blocking waits and session fencing are later host
-items.
+design. Session fencing is a later host
+item.
+
+### Sep 8 2026 — Raft election livelock (pre-existing) fixed; a parked multi-leader finding
+
+Gating 10.5c-34 surfaced a **pre-existing Raft election livelock**: a
+3-voter group could fail to elect a leader indefinitely. Root cause was
+deterministic, not a race — every node had a **fixed** election timeout,
+and a behind-log candidate with a shorter timeout could livelock an
+up-to-date follower by repeatedly resetting that follower's timer through
+`maybe_step_down` faster than the longer timer could ever fire. The smoke
+"kill the leader, re-elect, the blocking waiter re-issues and grants"
+sequence wedged on it.
+
+The fix is the textbook one, made determinism-preserving: the election
+deadline is **redrawn at random from `[election_ticks, 2*election_ticks)`
+on every reset** (`reset_election` in `raft.c`, a splitmix64 PRNG). The
+PRNG is **injected, not `rand()`**, so the deterministic simulator stays
+replayable: `efs_raft_cfg.rng_seed` carries the seed — the host seeds it
+from entropy (`/dev/urandom` via `h->salt`, per `(node, group)`), the sim
+uses a deterministic per-`(id, boot_id, group)` fallback. Production also
+moved to a **uniform** base timeout (`HOST_ELECT_BASE`, stagger removed) —
+with randomization, a stagger is unnecessary and a non-overlapping stagger
+could not have recovered from the split-vote class anyway.
+
+**Sim config kept staggered, and why.** The simulator was switched to the
+same uniform base as production, and three cross-shard mkdir transaction
+tests failed — **not** an I1/split-brain safety violation, but a
+data-consistency failure (`efs_meta_apply_check` on the leader's KV) plus
+lost dentry visibility. The trigger is novel: the old per-group stagger
+(`4+i*4` / `5+i*3`) made **node 0 the leader of every Raft group**, so the
+cross-shard transaction tests had *never* run with the two metadata groups
+led by **different** nodes. Uniform timeouts elect different leaders and
+expose the gap. This is a **separate, high-priority investigation** (a
+cross-shard txn that is correct only when its groups share a leader is a
+real protocol concern, or a sim-driving limitation — either way it must be
+understood before the sim can run multi-leader). It is **parked**: the sim
+keeps the stagger (node 0 leads every group, existing tests green) while
+`raft.c` still exercises the randomized-deadline code path within each
+band. Do not re-litigate the stagger removal until the multi-leader txn
+consistency is root-caused.
+
+Gate: full raft-affected unit set green on a node (`test_raft`,
+`test_raft_store`, `test_meta_apply`, `test_sim`, `test_txn`,
+`test_session`, `test_kv`, `test_kv_lsm`, `test_wire`, `test_data` OK);
+`raft_host_smoke` PASS (`results/raft-smoke/34h.log`), including the
+after-crash leader-kill + blocking-waiter re-issue that the livelock had
+blocked. **Unrelated pre-existing bug found while gating (not from this
+change, present on HEAD):** `test_lock` has 6 `efs_lock_getlk` (F_GETLK)
+failures — a latent bug in the committed 10.5c-33 F_GETLK path; worth its
+own fix.
 

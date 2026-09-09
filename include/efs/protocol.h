@@ -692,13 +692,17 @@ struct efs_msg_inode_hold {
  * struct — live FUSE flock sends sizeof(struct efs_msg_inode_flock).
  * EFS_FLOCK_GETLK is F_GETLK: a leader read, no Raft entry. Reply is
  * struct efs_msg_inode_reply: nlink=0 (F_UNLCK) or SH/EX, size=start,
- * ctime=end, ino=blocker owner id. Blocking waits are not on this wire. */
+ * ctime=end, ino=blocker owner id. EFS_FLOCK_WAIT (with EX/SH) is a
+ * blocking wait: a conflicting grant is queued at the leader (FIFO,
+ * leader memory, not Raft state) and the held RPC's reply IS the grant;
+ * leader loss replies NOT_PRIMARY and the client re-issues. */
 #define EFS_FLOCK_SH 1u
 #define EFS_FLOCK_EX 2u
 #define EFS_FLOCK_NB 4u
 #define EFS_FLOCK_UN 8u
 #define EFS_FLOCK_FCNTL 16u
 #define EFS_FLOCK_GETLK 32u
+#define EFS_FLOCK_WAIT 64u
 #define EFS_FLOCK_RANGE_LEN 16u
 struct efs_msg_inode_flock {
     efs_export_id_t export_id;

@@ -1145,10 +1145,11 @@ and 10.5c-30 (non-blocking FLOCK grant/release)
 and 10.5c-31 (non-blocking whole-file fcntl)
 and 10.5c-32 (non-blocking fcntl byte ranges)
 and 10.5c-33 (F_GETLK leader read)
+and 10.5c-34 (blocking lock waits: FIFO leader queue)
 are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cutover of the
-live table is not this work (not step 11). Blocking waits and
-session fencing stay later. The KV engine is
+live table is not this work (not step 11). Session fencing
+stays later. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not

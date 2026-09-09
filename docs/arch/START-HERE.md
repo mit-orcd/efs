@@ -48,9 +48,10 @@ sends you to — not the whole spec.
 > optional 16-byte start/end suffix; adjacent OK, overlap BUSY;
 > flock-domain ranges INVAL), and F_GETLK as a leader read
 > (10.5c-33: `EFS_FLOCK_GETLK`; no Raft entry; first conflicting
-> record or F_UNLCK). Next: cutover of `efs-test` is not this
-> work; blocking waits and session fencing stay later, behind
-> the same flag.
+> record or F_UNLCK), and blocking lock waits (10.5c-34:
+> `EFS_FLOCK_WAIT`; FIFO leader queue, grant is the reply; leader
+> loss re-issues). Next: cutover of `efs-test` is not this
+> work; session fencing stays later, behind the same flag.
 > [architecture.md §10](../architecture.md)
 >
 > **10.5c-1 is in (gated):** the first single-shard op batch over the
@@ -354,6 +355,23 @@ sends you to — not the whole spec.
 > own-range GETLK is UNLCK, free range is UNLCK, ino 0 INVAL,
 > miss NOT_FOUND; after crash GETLK `[100,200)` still reports
 > owner=2. Cutover of `efs-test` is not next (not step 11).
+>
+> **10.5c-34 is in (gated):** blocking lock waits on the production
+> host. `EFS_FLOCK_WAIT` on a conflicting grant queues the request
+> at the leader (FIFO per inode, leader memory, not Raft state) and
+> holds the RPC — the reply IS the grant, and the grant is still a
+> Raft record. A queued waiter blocks a later conflicting request
+> (no barging, no starvation). Leader loss replies NOT_PRIMARY and
+> the client re-issues; the queue rebuilds there. WAIT with UN or
+> GETLK is INVAL; flag off is INVAL. The queue has an owner-keyed
+> dequeue hook (`server_raft_host_lock_wait_drop_owner`) for the
+> session revocation barrier (10.5c-35). FUSE `.lock` stays local.
+> Same scratch smoke: dedicated `raft-smoke-q` — a waiter pends
+> behind a held EX, a queued SH does not barge past the EX waiter,
+> release grants in FIFO order, and a waiter pending across the
+> leader kill re-issues on the new leader and grants after the
+> surviving holder's release. Cutover of `efs-test` is not next
+> (not step 11).
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never

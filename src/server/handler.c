@@ -3091,7 +3091,7 @@ send_reply:
                     /* FLOCK state lives entirely in the HOLD table -> the whole
                      * critical section runs under hold_mu (leaf). */
                     uint32_t op = req->op;
-                    if (op & EFS_FLOCK_GETLK) {
+                    if (op & (EFS_FLOCK_GETLK | EFS_FLOCK_WAIT)) {
                         r.status = EFS_INODE_RPC_INVAL;
                     } else {
                     pthread_mutex_lock(&hold_mu);

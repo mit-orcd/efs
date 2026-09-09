@@ -27,7 +27,11 @@
 # byte ranges (dedicated raft-smoke-t: EX [0,100) owner=1, adjacent
 # [100,200) owner=2 OK, F_GETLK overlap reports owner=1 [0,100),
 # own-range GETLK is UNLCK, overlap [50,150) BUSY, inverted range INVAL,
-# leave [100,200) owner=2 through crash), READDIR of ROOT
+# leave [100,200) owner=2 through crash), FCNTL blocking waits
+# (dedicated raft-smoke-q: wex owner=2 pends behind owner=1's EX,
+# wsh owner=3 queues behind the waiter, release grants owner=2 only
+# (FIFO), owner=3 grants after owner=2's release, inverted range and
+# flock-domain range INVAL, leave owner=5 EX [500,600) through crash), READDIR of ROOT
 # (created/renamed/link/mkdir names present, unlinked names absent),
 # LOOKUP_PATH of those names, chunk-aligned SETATTR SIZE (truncate),
 # chunk publish + GETCHUNKS (lane 0), unaligned truncate tail + trunc-0,
@@ -46,6 +50,9 @@
 # BUSYs owner=1 until UN, the fcntl file stays and owner=1's EX still
 # BUSYs owner=2 until UN, the ranged fcntl file stays and owner=2's
 # [100,200) still BUSYs that range (F_GETLK still reports it),
+# the wait file stays and owner=5's [500,600) still BUSYs owner=9
+# while the waiter that pended across the leader kill re-issues on the
+# new leader and grants after owner=5's release,
 # and READDIR / LOOKUP_PATH still match.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
@@ -223,10 +230,17 @@ root_on() {
 # refresh and retry instead of treating 7 as a missing name.
 g0_mgmt() {
     local cmd=$1
-    local i out lid
+    local i out lid to tries
     shift
     lid=${leader:-}
-    for i in $(seq 1 8); do
+    # G0_TO / G0_TRIES override the per-try SSH timeout / try count. Blocking
+    # lock waiters need a per-try window longer than the time they pend
+    # server-side, or the client-side timeout orphans the queued wait and the
+    # retry re-queues behind it (harmless — same owner is not a conflict —
+    # but needlessly). Discovery probes (g0_serving/g0_leader) stay short.
+    to=${G0_TO:-5}
+    tries=${G0_TRIES:-8}
+    for i in $(seq 1 $tries); do
         if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
             lid=$(g0_serving)
         fi
@@ -236,11 +250,21 @@ g0_mgmt() {
         if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
             continue
         fi
-        out=$(ssh_to 5 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt $cmd ${ADDRS[$lid]}:${PORT} $*" 2>/dev/null || true)
+        out=$(ssh_to $to "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt $cmd ${ADDRS[$lid]}:${PORT} $*" 2>/dev/null || true)
         # Empty is a 5s SSH miss, not a status. Same 8-try budget as
         # NOT_PRIMARY — do not treat it as NOT_FOUND / missing name.
-        if [ -z "$out" ] || echo "$out" | grep -q 'status=7'; then
+        if [ -z "$out" ]; then
             lid=""
+            continue
+        fi
+        if echo "$out" | grep -q 'status=7'; then
+            # NOT_PRIMARY: follow the reply's leader hint (primary= is
+            # 1-based; 0 = no hint), then the status view. Blocking
+            # waits run at the leader only, so any-serving is wrong.
+            lid=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^primary=/) {split($i,a,"="); if (a[2] >= 1) print a[2]-1}}')
+            if [ -z "$lid" ]; then
+                lid=$(g0_leader)
+            fi
             continue
         fi
         leader=$lid
@@ -891,6 +915,100 @@ check_fcntl_range() {
     echo "$out" | grep -q 'status=6' || bad "$tag range flock-domain not INVAL"
 }
 
+# Blocking lock waits (EFS_FLOCK_WAIT). Dedicated raft-smoke-q. A
+# conflicting grant pends until the holder releases; the held RPC's
+# reply IS the grant. FIFO: a queued EX blocks a later SH (no
+# starvation). WAIT with an inverted range or a flock-domain range is
+# INVAL; a missing inode is NOT_FOUND. Leaves owner=5 EX [500,600)
+# held through crash; a second waiter (owner=8) is started before the
+# leader kill and must re-issue on the new leader and grant after the
+# release.
+check_lock_wait() {
+    local lid=$1
+    local tag=$2
+    local out wp2 wp3 i ok
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    leader=$lid
+    WAIT_NAME=raft-smoke-q
+    out=$(g0_mgmt raft-create 1 "$WAIT_NAME")
+    lid=$leader
+    say "$tag wait-prep create: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag wait-prep create not OK"
+    WAIT_INO=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$WAIT_INO" ] && [ "$WAIT_INO" != "0" ] || { bad "$tag wait-prep ino"; return; }
+    WAIT2_OUT=/tmp/raft-smoke-wq2-$$
+    WAIT3_OUT=/tmp/raft-smoke-wq3-$$
+    WAIT8_OUT=/tmp/raft-smoke-wq8-$$
+    rm -f "$WAIT2_OUT" "$WAIT3_OUT" "$WAIT8_OUT"
+    out=$(g0_mgmt raft-fcntl "$WAIT_INO" ex 1 0 100)
+    say "$tag wait ex [0,100) owner1: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag wait ex owner1 not OK"
+    ( G0_TO=30 G0_TRIES=3 g0_mgmt raft-fcntl "$WAIT_INO" wex 2 50 150 >"$WAIT2_OUT" 2>&1 ) &
+    wp2=$!
+    sleep 2
+    if kill -0 $wp2 2>/dev/null; then
+        say "$tag wait wex [50,150) owner2 pending"
+    else
+        bad "$tag wait wex owner2 returned while conflicted"
+    fi
+    ( G0_TO=30 G0_TRIES=3 g0_mgmt raft-fcntl "$WAIT_INO" wsh 3 50 150 >"$WAIT3_OUT" 2>&1 ) &
+    wp3=$!
+    sleep 1
+    out=$(g0_mgmt raft-fcntl "$WAIT_INO" un 1 0 100)
+    say "$tag wait un owner1: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag wait un owner1 not OK"
+    ok=0
+    for i in $(seq 1 50); do
+        if ! kill -0 $wp2 2>/dev/null; then ok=1; break; fi
+        sleep 0.2
+    done
+    [ "$ok" = 1 ] || bad "$tag wait wex owner2 stuck after release"
+    wait $wp2 2>/dev/null || true
+    say "$tag wait wex owner2 out: $(cat "$WAIT2_OUT" 2>/dev/null)"
+    grep -q 'status=0' "$WAIT2_OUT" || bad "$tag wait wex owner2 not granted"
+    if kill -0 $wp3 2>/dev/null; then
+        say "$tag wait wsh owner3 still pending behind EX (FIFO)"
+    else
+        bad "$tag wait wsh owner3 barged past queued EX"
+    fi
+    out=$(g0_mgmt raft-fcntl "$WAIT_INO" sh 4 60 140)
+    say "$tag wait sh [60,140) owner4 busy: $out"
+    echo "$out" | grep -q 'status=5' || bad "$tag wait sh owner4 not BUSY"
+    out=$(g0_mgmt raft-fcntl "$WAIT_INO" un 2 50 150)
+    say "$tag wait un owner2: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag wait un owner2 not OK"
+    ok=0
+    for i in $(seq 1 50); do
+        if ! kill -0 $wp3 2>/dev/null; then ok=1; break; fi
+        sleep 0.2
+    done
+    [ "$ok" = 1 ] || bad "$tag wait wsh owner3 stuck after release"
+    wait $wp3 2>/dev/null || true
+    say "$tag wait wsh owner3 out: $(cat "$WAIT3_OUT" 2>/dev/null)"
+    grep -q 'status=0' "$WAIT3_OUT" || bad "$tag wait wsh owner3 not granted"
+    out=$(g0_mgmt raft-fcntl "$WAIT_INO" un 3 50 150)
+    say "$tag wait un owner3: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag wait un owner3 not OK"
+    out=$(g0_mgmt raft-fcntl "$WAIT_INO" wex 1 200 100)
+    say "$tag wait inverted: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag wait inverted not INVAL"
+    out=$(g0_mgmt raft-flock "$WAIT_INO" wex 1 0 100)
+    say "$tag wait flock-domain range: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag wait flock-domain range not INVAL"
+    out=$(g0_mgmt raft-fcntl 0 wex 1)
+    say "$tag wait ino0: $out"
+    echo "$out" | grep -q 'status=6' || bad "$tag wait ino0 not INVAL"
+    out=$(g0_mgmt raft-fcntl 999999999 wex 1)
+    say "$tag wait miss: $out"
+    echo "$out" | grep -q 'status=1' || bad "$tag wait miss not NOT_FOUND"
+    out=$(g0_mgmt raft-fcntl "$WAIT_INO" ex 5 500 600)
+    say "$tag wait ex [500,600) owner5 (held through crash): $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag wait ex owner5 not OK"
+}
+
 # Mode/owner SETATTR, chunk-aligned truncate, then utimens on
 # raft-smoke-f (all stay after crash). Mixed SIZE+mode is INVAL.
 # Unaligned SIZE (tail CAS) is on raft-smoke-p, not here.
@@ -1304,6 +1422,11 @@ say "FCNTL byte ranges through Raft (fresh)"
 RANGE_NAME=""
 RANGE_INO=""
 check_fcntl_range "$leader" "fresh"
+say "FCNTL blocking waits through Raft (fresh)"
+WAIT_NAME=""
+WAIT_INO=""
+WAIT8_PID=""
+check_lock_wait "$leader" "fresh"
 say "READDIR/LOOKUP_PATH through ReadIndex (fresh)"
 check_readdir_path "$leader" "fresh"
 
@@ -1349,6 +1472,29 @@ if [ -z "$leader" ] || [ "$leader" = "-1" ]; then
     exit 1
 fi
 say "kill -9 leader raft_id=$leader"
+# 10.5c-34: a blocking waiter pending across the leader kill must
+# re-issue on the new leader (g0_mgmt retries conn loss / NOT_PRIMARY)
+# and grant only after owner=5's surviving lock is released.
+if [ -n "${WAIT_INO:-}" ]; then
+    # The wait queue is in-memory at the leader and lost on the kill, so the
+    # waiter must re-issue on the new leader until granted — a real client
+    # retries for as long as it blocks. g0_mgmt's try COUNT is the wrong
+    # budget here: tries are fast while no leader is up (election) and slow
+    # while pending, so a count exhausts early in the window. Loop on a
+    # wall-clock deadline instead; a long per-try window (60s) keeps one live
+    # connection pending so the grant lands without orphaning a queued wait
+    # (same-owner re-issue is not a conflict, but needn't be exercised here).
+    ( deadline=$(( $(date +%s) + 400 )); o=""
+      while [ "$(date +%s)" -lt "$deadline" ]; do
+          o=$(G0_TO=60 g0_mgmt raft-fcntl "$WAIT_INO" wex 8 550 650 2>/dev/null)
+          echo "$o" | grep -q 'status=0' && break
+          sleep 1
+      done
+      printf '%s\n' "$o" ) >"$WAIT8_OUT" 2>&1 &
+    WAIT8_PID=$!
+    sleep 1
+    say "blocking waiter owner=8 pending on leader raft_id=$leader"
+fi
 leader_idx=$leader
 ssh_to 10 "${HOSTS[$leader_idx]}" "
 pids=\$(ps -eo pid,args | awk '/[e]fsd / && / --port ${PORT}( |\$)/ {print \$1}')
@@ -1659,6 +1805,46 @@ if [ -n "${RANGE_INO:-}" ]; then
     out=$(g0_mgmt raft-fcntl "$RANGE_INO" ex 1 100 200)
     say "after-crash range ex [100,200) owner1: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash range ex owner1 not OK"
+fi
+if [ -n "${WAIT_NAME:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$WAIT_NAME")
+    say "after-crash lookup wait: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash wait name missing"
+fi
+if [ -n "${WAIT_INO:-}" ]; then
+    out=$(g0_mgmt raft-getattr "$WAIT_INO")
+    say "after-crash getattr wait: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash wait inode missing"
+    out=$(g0_mgmt raft-fcntl "$WAIT_INO" ex 9 500 600)
+    say "after-crash wait ex [500,600) owner9 busy: $out"
+    echo "$out" | grep -q 'status=5' || bad "after-crash wait lock lost"
+    if [ -n "${WAIT8_PID:-}" ]; then
+        local_ok=0
+        if kill -0 $WAIT8_PID 2>/dev/null; then
+            say "after-crash waiter owner=8 re-issued and pending"
+            local_ok=1
+        else
+            bad "after-crash waiter owner=8 died (no re-issue)"
+        fi
+        out=$(g0_mgmt raft-fcntl "$WAIT_INO" un 5 500 600)
+        say "after-crash wait un owner5: $out"
+        echo "$out" | grep -q 'status=0' || bad "after-crash wait un owner5 not OK"
+        if [ "$local_ok" = 1 ]; then
+            ok=0
+            for i in $(seq 1 50); do
+                if ! kill -0 $WAIT8_PID 2>/dev/null; then ok=1; break; fi
+                sleep 0.2
+            done
+            [ "$ok" = 1 ] || { bad "after-crash waiter owner=8 stuck after release"; kill $WAIT8_PID 2>/dev/null; }
+            wait $WAIT8_PID 2>/dev/null || true
+            say "after-crash waiter owner=8 out: $(cat "$WAIT8_OUT" 2>/dev/null)"
+            grep -q 'status=0' "$WAIT8_OUT" || bad "after-crash waiter owner=8 not granted"
+            out=$(g0_mgmt raft-fcntl "$WAIT_INO" un 8 550 650)
+            say "after-crash wait un owner8: $out"
+            echo "$out" | grep -q 'status=0' || bad "after-crash wait un owner8 not OK"
+        fi
+    fi
+    rm -f "${WAIT2_OUT:-/dev/null}" "${WAIT3_OUT:-/dev/null}" "${WAIT8_OUT:-/dev/null}"
 fi
 say "ReadIndex READDIR/LOOKUP_PATH (after crash)"
 check_readdir_path "$leader" "after-crash"

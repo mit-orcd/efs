@@ -574,6 +574,18 @@ does not conflict. Flag off is INVAL. Gate: same smoke — on
 own-range and free-range UNLCK, after crash GETLK `[100,200)`
 still reports owner=2.
 
+**10.5c-34 — blocking lock waits.** Same opcode with
+`EFS_FLOCK_WAIT`: a conflicting grant queues FIFO at the leader
+(leader memory, not Raft state) and the held RPC's reply is the
+grant. A queued waiter blocks a later conflicting request (no
+barging). Leader loss replies NOT_PRIMARY and the client
+re-issues. WAIT with UN/GETLK is INVAL; flag off is INVAL. Gate:
+same smoke — dedicated `raft-smoke-q`, a waiter pends behind a
+held EX, a queued SH does not barge past the EX waiter, release
+grants in FIFO order, and a waiter pending across the leader
+kill re-issues on the new leader and grants after the surviving
+holder's release.
+
 ## Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove

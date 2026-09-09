@@ -1579,7 +1579,7 @@ static int cmd_raft_lock_op(int argc, char **argv, uint32_t extra, const char *n
     struct efs_msg_inode_reply *r;
     const char *op;
     const char *usage =
-        "usage: raft-%s <node:port> <ino> <ex|sh|un|gex|gsh> [owner] [start end]\n";
+        "usage: raft-%s <node:port> <ino> <ex|sh|un|gex|gsh|wex|wsh> [owner] [start end]\n";
     int is_getlk = 0;
 
     if (argc < 3 || argc == 5) {
@@ -1605,6 +1605,11 @@ static int cmd_raft_lock_op(int argc, char **argv, uint32_t extra, const char *n
     } else if (strcmp(op, "gsh") == 0) {
         req.op = EFS_FLOCK_GETLK | EFS_FLOCK_SH | extra;
         is_getlk = 1;
+    } else if (strcmp(op, "wex") == 0) {
+        /* Blocking wait: held at the leader until grantable. */
+        req.op = EFS_FLOCK_EX | EFS_FLOCK_WAIT | extra;
+    } else if (strcmp(op, "wsh") == 0) {
+        req.op = EFS_FLOCK_SH | EFS_FLOCK_WAIT | extra;
     } else {
         fprintf(stderr, usage, name);
         return 1;

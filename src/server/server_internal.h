@@ -717,6 +717,9 @@ void server_raft_host_hold(efs_ino_t ino, uint32_t flags, uint64_t owner,
 void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
                             uint64_t start, uint64_t end,
                             struct efs_msg_inode_reply *out);
+/* Revocation-barrier hook for session fencing (10.5c-35): dequeue a
+ * session's blocked lock waiters so a fenced waiter is never granted. */
+void server_raft_host_lock_wait_drop_owner(efs_ino_t ino, uint64_t owner);
 void server_raft_host_lookup(efs_ino_t parent, const char *name,
                              struct efs_msg_inode_reply *out);
 void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,

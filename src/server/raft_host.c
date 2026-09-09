@@ -68,6 +68,20 @@ struct host_group {
     struct efs_raft *r;
 };
 
+/* One blocked lock waiter (10.5c-34). Stack-allocated by the waiting
+ * connection thread; the queue is leader memory, never Raft state. */
+struct host_lock_wait {
+    struct host_lock_wait *next;
+    efs_ino_t ino;
+    uint64_t owner;
+    uint8_t domain;
+    uint8_t ltype;
+    uint64_t start;
+    uint64_t end;
+    pthread_cond_t cv;
+    int abort;
+};
+
 struct efs_raft_host {
     struct efsd_server *s;
     int raft_id;
@@ -79,6 +93,9 @@ struct efs_raft_host {
     struct host_group g[HOST_NGROUPS];
     pthread_mutex_t mu;
     pthread_mutex_t read_mu; /* serializes ReadIndex; never held by the pump */
+    pthread_mutex_t wait_mu; /* lock wait queue; taken after read_mu, never reverse */
+    struct host_lock_wait *wait_head;
+    struct host_lock_wait *wait_tail;
     pthread_t tid;
     int running;
     int started;
@@ -2049,6 +2066,7 @@ int server_raft_host_start(struct efsd_server *s)
     h->salt = make_salt(h->boot_id);
     pthread_mutex_init(&h->mu, NULL);
     pthread_mutex_init(&h->read_mu, NULL);
+    pthread_mutex_init(&h->wait_mu, NULL);
     pthread_mutex_init(&h->inbox_mu, NULL);
 
     snprintf(dir, sizeof(dir), "%s/mdraft", s->storage_path);
@@ -2118,11 +2136,16 @@ int server_raft_host_start(struct efsd_server *s)
 void server_raft_host_stop(void)
 {
     struct efs_raft_host *h = g_host;
+    struct host_lock_wait *w;
     int i;
 
     if (!h)
         return;
     h->running = 0;
+    pthread_mutex_lock(&h->wait_mu);
+    for (w = h->wait_head; w; w = w->next)
+        pthread_cond_broadcast(&w->cv);
+    pthread_mutex_unlock(&h->wait_mu);
     if (h->started)
         pthread_join(h->tid, NULL);
     pthread_mutex_lock(&h->mu);
@@ -2140,6 +2163,7 @@ void server_raft_host_stop(void)
     efs_kv_lsm_close(h->kv);
     pthread_mutex_destroy(&h->mu);
     pthread_mutex_destroy(&h->read_mu);
+    pthread_mutex_destroy(&h->wait_mu);
     pthread_mutex_destroy(&h->inbox_mu);
     g_host = NULL;
     free(h);
@@ -2410,11 +2434,220 @@ void server_raft_host_hold(efs_ino_t ino, uint32_t flags, uint64_t owner,
         stat_to_inode(&st, &out->inode);
 }
 
-/* Non-blocking flock/fcntl on the inode shard (§7.6). EFS_FLOCK_FCNTL
+/* Blocking lock waits (10.5c-34, §7.6). EFS_FLOCK_WAIT on a conflicting
+ * GRANT queues the request at the leader and holds the RPC: the reply
+ * IS the grant, and the grant itself is still a Raft record. The queue
+ * is leader memory (not Raft state), FIFO per inode; a queued waiter
+ * blocks later conflicting requests, so an exclusive waiter cannot be
+ * starved by shared grants. Leader loss replies NOT_PRIMARY and the
+ * client re-issues (the queue rebuilds there). read_mu is never held
+ * while sleeping; wait_mu nests inside read_mu, never the reverse. */
+
+#define HOST_LOCK_WAIT_MS 50
+
+static int host_is_leader(struct efs_raft_host *h, uint8_t group)
+{
+    struct efs_raft *r;
+    int ret = 0;
+
+    pthread_mutex_lock(&h->mu);
+    r = group_raft(h, group);
+    if (r && efs_raft_role(r) == EFS_RAFT_LEADER)
+        ret = 1;
+    pthread_mutex_unlock(&h->mu);
+    return ret;
+}
+
+/* Current leader hint for a group (-1 unknown). */
+static int host_leader_hint(struct efs_raft_host *h, uint8_t group)
+{
+    struct efs_raft *r;
+    int lid = -1;
+
+    pthread_mutex_lock(&h->mu);
+    r = group_raft(h, group);
+    if (r)
+        lid = efs_raft_leader(r);
+    pthread_mutex_unlock(&h->mu);
+    return lid;
+}
+
+/* A queued waiter blocks a later conflicting request (same inode and
+ * domain, overlapping range, different owner, one side EX). Caller
+ * holds wait_mu. */
+static int lock_wait_queued_locked(struct efs_raft_host *h,
+                                   const struct efs_lock_req *r)
+{
+    struct host_lock_wait *w;
+
+    for (w = h->wait_head; w; w = w->next) {
+        if (w->ino != r->ino || w->domain != r->domain)
+            continue;
+        if (w->owner == r->owner.id)
+            continue;
+        if (w->start >= r->end || r->start >= w->end)
+            continue;
+        if (w->ltype == EFS_LOCK_EX || r->type == EFS_LOCK_EX)
+            return 1;
+    }
+    return 0;
+}
+
+/* First queued waiter for its inode (strict FIFO). Caller holds wait_mu. */
+static int lock_wait_is_head_locked(struct efs_raft_host *h,
+                                    const struct host_lock_wait *w)
+{
+    struct host_lock_wait *q;
+
+    for (q = h->wait_head; q; q = q->next)
+        if (q->ino == w->ino)
+            return q == w;
+    return 0;
+}
+
+/* Wake every waiter on an inode (a release or grant may have changed
+ * what is grantable). Caller holds wait_mu. */
+static void lock_wait_signal_locked(struct efs_raft_host *h, efs_ino_t ino)
+{
+    struct host_lock_wait *w;
+
+    for (w = h->wait_head; w; w = w->next)
+        if (w->ino == ino)
+            pthread_cond_broadcast(&w->cv);
+}
+
+static void lock_wait_unlink_locked(struct efs_raft_host *h,
+                                    struct host_lock_wait *w)
+{
+    struct host_lock_wait **pp = &h->wait_head;
+    struct host_lock_wait *t;
+
+    while (*pp && *pp != w)
+        pp = &(*pp)->next;
+    if (*pp)
+        *pp = w->next;
+    if (h->wait_tail == w) {
+        h->wait_tail = NULL;
+        for (t = h->wait_head; t; t = t->next)
+            if (!t->next)
+                h->wait_tail = t;
+    }
+}
+
+/* Queue behind the current holders until the request is grantable, then
+ * propose the GRANT and return its result. The 50 ms tick is only a
+ * liveness recheck (leader loss / shutdown); grants are woken by signal. */
+static int host_lock_wait(struct efs_raft_host *h, uint8_t ig,
+                          const struct efs_lock_req *req, int *hint)
+{
+    struct host_lock_wait w;
+    uint8_t cmd[HOST_LOCK_LEN];
+    uint32_t clen = 0;
+    int rc, blk, head;
+
+    memset(&w, 0, sizeof(w));
+    w.ino = req->ino;
+    w.owner = req->owner.id;
+    w.domain = req->domain;
+    w.ltype = req->type;
+    w.start = req->start;
+    w.end = req->end;
+    pthread_cond_init(&w.cv, NULL);
+
+    pthread_mutex_lock(&h->wait_mu);
+    if (h->wait_tail)
+        h->wait_tail->next = &w;
+    else
+        h->wait_head = &w;
+    h->wait_tail = &w;
+    pthread_mutex_unlock(&h->wait_mu);
+
+    for (;;) {
+        if (!h->running || !host_is_leader(h, ig))
+            w.abort = 1;
+        pthread_mutex_lock(&h->wait_mu);
+        if (w.abort) {
+            lock_wait_unlink_locked(h, &w);
+            lock_wait_signal_locked(h, w.ino);
+            pthread_mutex_unlock(&h->wait_mu);
+            pthread_cond_destroy(&w.cv);
+            if (hint)
+                *hint = host_leader_hint(h, ig);
+            return EFS_ERR_NOT_PRIMARY;
+        }
+        head = lock_wait_is_head_locked(h, &w);
+        pthread_mutex_unlock(&h->wait_mu);
+        if (head) {
+            pthread_mutex_lock(&h->read_mu);
+            rc = host_read_index(h, ig, hint);
+            if (rc == EFS_OK) {
+                blk = efs_lock_blocked(h->kv, req, NULL);
+                if (blk < 0)
+                    rc = blk;
+                else if (blk)
+                    rc = EFS_ERR_AGAIN;
+            }
+            if (rc == EFS_OK) {
+                rc = pack_lock_cmd(cmd, &clen, EFS_MD_LOCK_GRANT, req);
+                if (rc == EFS_OK)
+                    rc = host_propose_wait(h, ig, cmd, clen, hint);
+                if (rc == EFS_OK) {
+                    blk = efs_lock_blocked(h->kv, req, NULL);
+                    if (blk < 0)
+                        rc = blk;
+                    else if (blk)
+                        rc = EFS_ERR_AGAIN;
+                }
+            }
+            pthread_mutex_unlock(&h->read_mu);
+            if (rc != EFS_ERR_AGAIN) {
+                pthread_mutex_lock(&h->wait_mu);
+                lock_wait_unlink_locked(h, &w);
+                lock_wait_signal_locked(h, w.ino);
+                pthread_mutex_unlock(&h->wait_mu);
+                pthread_cond_destroy(&w.cv);
+                return rc;
+            }
+        }
+        pthread_mutex_lock(&h->wait_mu);
+        if (!w.abort) {
+            struct timespec ts;
+
+            clock_gettime(CLOCK_REALTIME, &ts);
+            ts.tv_nsec += HOST_LOCK_WAIT_MS * 1000000L;
+            if (ts.tv_nsec >= 1000000000L) {
+                ts.tv_sec++;
+                ts.tv_nsec -= 1000000000L;
+            }
+            pthread_cond_timedwait(&w.cv, &h->wait_mu, &ts);
+        }
+        pthread_mutex_unlock(&h->wait_mu);
+    }
+}
+
+/* Revocation-barrier hook (used by session fencing, 10.5c-35): a fenced
+ * session's waiters are dequeued and never granted (§7.6). */
+void server_raft_host_lock_wait_drop_owner(efs_ino_t ino, uint64_t owner)
+{
+    struct efs_raft_host *h = g_host;
+    struct host_lock_wait *w;
+
+    if (!h)
+        return;
+    pthread_mutex_lock(&h->wait_mu);
+    for (w = h->wait_head; w; w = w->next)
+        if (w->ino == ino && w->owner == owner) {
+            w->abort = 1;
+            pthread_cond_broadcast(&w->cv);
+        }
+    pthread_mutex_unlock(&h->wait_mu);
+}
+
+/* flock/fcntl on the inode shard (§7.6). EFS_FLOCK_FCNTL
  * selects the record-lock domain (byte ranges allowed); otherwise
  * FLOCK (whole-file only). Owner is the session stand-in. Conflict →
- * BUSY. EFS_FLOCK_GETLK is a ReadIndex (no Raft entry). Blocking wait
- * queues are not hosted. */
+ * BUSY, or a queued blocking wait with EFS_FLOCK_WAIT.
+ * EFS_FLOCK_GETLK is a ReadIndex (no Raft entry). */
 void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
                             uint64_t start, uint64_t end,
                             struct efs_msg_inode_reply *out)
@@ -2476,6 +2709,11 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
+    if ((op & EFS_FLOCK_WAIT) && kind != EFS_MD_LOCK_GRANT) {
+        /* WAIT only modifies a grant (never UN, never GETLK). */
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
     domain = (op & EFS_FLOCK_FCNTL) ? EFS_LOCK_FCNTL : EFS_LOCK_FLOCK;
     if (domain == EFS_LOCK_FLOCK &&
         (start != 0 || end != ~(uint64_t)0)) {
@@ -2508,6 +2746,15 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
                 rc = blk;
             else if (blk)
                 rc = EFS_ERR_AGAIN;
+            else {
+                /* A queued waiter blocks a later conflicting grant
+                 * (no barging), whether or not the new request waits. */
+                pthread_mutex_lock(&h->wait_mu);
+                blk = lock_wait_queued_locked(h, &req);
+                pthread_mutex_unlock(&h->wait_mu);
+                if (blk)
+                    rc = EFS_ERR_AGAIN;
+            }
         }
     }
     if (!is_getlk) {
@@ -2522,8 +2769,17 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
             else if (blk)
                 rc = EFS_ERR_AGAIN;
         }
+        if (rc == EFS_OK && kind == EFS_MD_LOCK_RELEASE) {
+            /* A release may have freed a waiter's range. */
+            pthread_mutex_lock(&h->wait_mu);
+            lock_wait_signal_locked(h, ino);
+            pthread_mutex_unlock(&h->wait_mu);
+        }
     }
     pthread_mutex_unlock(&h->read_mu);
+    if (rc == EFS_ERR_AGAIN && kind == EFS_MD_LOCK_GRANT &&
+        (op & EFS_FLOCK_WAIT))
+        rc = host_lock_wait(h, ig, &req, &hint);
     set_inode_rc(out, rc, hint);
     if (is_getlk && rc == EFS_OK) {
         out->inode.nlink = hit.type;
