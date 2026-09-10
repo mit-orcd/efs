@@ -1963,8 +1963,19 @@ send_reply:
                 } else if (type == EFS_MSG_INODE_APPEND &&
                            payload_len >= sizeof(struct efs_msg_inode_append)) {
                     struct efs_msg_inode_append *req = payload;
-                    server_raft_host_append(req->ino, req->len, &r);
+                    const uint8_t *su = NULL;
+                    uint32_t se = 0;
+
                     rtype = EFS_MSG_INODE_APPEND_REPLY;
+                    if (payload_len == sizeof(*req) + EFS_SESS_WIRE_LEN) {
+                        su = (const uint8_t *)req + sizeof(*req);
+                        memcpy(&se, su + 16, 4);
+                        server_raft_host_append(req->ino, req->len, su, se, &r);
+                    } else if (payload_len == sizeof(*req)) {
+                        server_raft_host_append(req->ino, req->len, NULL, 0, &r);
+                    } else {
+                        r.status = EFS_INODE_RPC_INVAL;
+                    }
                 } else if (type == EFS_MSG_INODE_LINK &&
                            payload_len >= sizeof(struct efs_msg_inode_link)) {
                     struct efs_msg_inode_link *req = payload;

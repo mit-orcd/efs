@@ -496,8 +496,9 @@ static int host_apply_coord(void *user, const struct efs_txid *t,
     return efs_txn_decision_get(h->kv, coord_shard, t, dec);
 }
 
-/* Same layout as sim apply_append_rsv_cmd, big-endian. Session / op-id
- * are not hosted: UUID and seq are zero. Apply never stalls the log. */
+/* Same layout as sim apply_append_rsv_cmd, big-endian. A zero UUID/seq
+ * is the stand-in (no op-id window). A session suffix fills uuid+epoch
+ * so LEASE_DROP can FENCED_HOLE that reservation (10.5c-35d). */
 static int apply_append_rsv_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                                 uint32_t clen, uint64_t index)
 {
@@ -666,9 +667,13 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc = efs_lease_drop_session(h->kv, shard, uuid, epoch);
         if (rc == EFS_OK || rc == EFS_ERR_NOT_FOUND) {
             int r2 = efs_lock_drop_session(h->kv, shard, uuid, epoch);
+            int r3 = efs_meta_apply_append_drop_session(h->kv, shard, uuid,
+                                                        epoch);
 
             if (r2 != EFS_OK && r2 != EFS_ERR_NOT_FOUND)
                 rc = r2;
+            else if (r3 != EFS_OK && r3 != EFS_ERR_NOT_FOUND)
+                rc = r3;
             else if (rc == EFS_ERR_NOT_FOUND)
                 rc = EFS_OK;
         }
@@ -1390,15 +1395,23 @@ static void host_fwd_flock(struct efs_raft_host *h, efs_ino_t ino, uint32_t op,
 }
 
 static void host_fwd_append(struct efs_raft_host *h, efs_ino_t ino, uint64_t len,
+                            const uint8_t *sess_uuid, uint32_t sess_epoch,
                             struct efs_msg_inode_reply *out,
                             const uint8_t *groups, int ng)
 {
-    struct efs_msg_inode_append req;
+    uint8_t buf[sizeof(struct efs_msg_inode_append) + EFS_SESS_WIRE_LEN];
+    struct efs_msg_inode_append *req = (struct efs_msg_inode_append *)buf;
+    uint32_t slen = sizeof(*req);
 
-    memset(&req, 0, sizeof(req));
-    req.ino = ino;
-    req.len = len;
-    host_inode_forward(h, EFS_MSG_INODE_APPEND, &req, sizeof(req),
+    memset(buf, 0, sizeof(buf));
+    req->ino = ino;
+    req->len = len;
+    if (sess_uuid) {
+        memcpy(buf + slen, sess_uuid, EFS_OPID_UUID_LEN);
+        memcpy(buf + slen + EFS_OPID_UUID_LEN, &sess_epoch, 4);
+        slen += EFS_SESS_WIRE_LEN;
+    }
+    host_inode_forward(h, EFS_MSG_INODE_APPEND, buf, slen,
                        EFS_MSG_INODE_APPEND_REPLY, out, groups, ng);
 }
 
@@ -1636,12 +1649,18 @@ static int pack_truncate_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
 }
 
 static int pack_append_rsv_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
-                               uint64_t alen)
+                               uint64_t alen, const uint8_t *uuid,
+                               uint32_t epoch)
 {
     out[0] = EFS_MD_CMD_APPEND_RSV;
     wr64be(out + 1, ino);
     wr64be(out + 9, alen);
     memset(out + 17, 0, EFS_OPID_UUID_LEN + 4 + 8);
+    if (uuid) {
+        memcpy(out + 17, uuid, EFS_OPID_UUID_LEN);
+        wr32be(out + 33, epoch);
+        /* seq stays 0: production host has no op-id window yet. */
+    }
     *len = HOST_APPEND_RSV_LEN;
     return EFS_OK;
 }
@@ -4364,8 +4383,11 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
 }
 
 /* O_APPEND reserve. Reply size is the watermark (off+len). Visible
- * getattr size stays the frontier until REPORT resolves the rsv. */
+ * getattr size stays the frontier until REPORT resolves the rsv.
+ * Optional sess_uuid tags the reservation so a later fence resolves it
+ * as FENCED_HOLE (10.5c-35d). Absent keeps the zero-UUID stand-in. */
 void server_raft_host_append(efs_ino_t ino, uint64_t len,
+                             const uint8_t *sess_uuid, uint32_t sess_epoch,
                              struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
@@ -4386,7 +4408,7 @@ void server_raft_host_append(efs_ino_t ino, uint64_t len,
     }
     ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
     if (!host_hosts(h, ig)) {
-        host_fwd_append(h, ino, len, out, &ig, 1);
+        host_fwd_append(h, ino, len, sess_uuid, sess_epoch, out, &ig, 1);
         return;
     }
     pthread_mutex_lock(&h->read_mu);
@@ -4396,7 +4418,9 @@ void server_raft_host_append(efs_ino_t ino, uint64_t len,
     if (rc == EFS_OK && !S_ISREG(row.mode))
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK)
-        rc = pack_append_rsv_cmd(cmd, &clen, ino, len);
+        rc = host_sess_gate(h, ino, sess_uuid, sess_epoch);
+    if (rc == EFS_OK)
+        rc = pack_append_rsv_cmd(cmd, &clen, ino, len, sess_uuid, sess_epoch);
     if (rc == EFS_OK)
         rc = host_propose(h, ig, cmd, clen, &idx, &hint);
     if (rc == EFS_OK)

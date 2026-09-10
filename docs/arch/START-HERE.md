@@ -55,8 +55,9 @@ sends you to — not the whole spec.
 > session identity on HOLD/FLOCK (10.5c-35b: optional
 > `(uuid, epoch)` wire suffix, `efs_session_accept` before
 > propose), and the revocation barrier (10.5c-35c: coordinator
-> `raft-session fence`, waiters of the old epoch never granted).
-> Next: 35d (append-reservation reclaim on fence). Cutover of
+> `raft-session fence`, waiters of the old epoch never granted),
+> and append-reservation reclaim on fence (10.5c-35d: OPEN
+> reservations of epoch E resolve as FENCED_HOLE). Cutover of
 > `efs-test` is not this work.
 > [architecture.md §10](../architecture.md)
 >
@@ -409,6 +410,15 @@ sends you to — not the whole spec.
 > Same scratch smoke: a waiter of epoch 1 is BUSY after fence,
 > epoch 1 is rejected, epoch 2 is accepted after establish, and
 > GET after crash is ACTIVE at epoch 2.
+>
+> **10.5c-35d is in (gated):** append-reservation reclaim on fence.
+> `LEASE_DROP` of epoch E resolves that session's OPEN reservations
+> on the shard as `FENCED_HOLE` (committed zero hole; frontier
+> advances). Production `raft-append` takes an optional
+> `(uuid, epoch)` suffix (same as HOLD) so the reservation is
+> tagged; absent keeps the zero-UUID stand-in. Gate: same smoke —
+> reserve 128 KiB under epoch 1, getattr stays 0, fence, getattr
+> is 131072, old-epoch append is BUSY.
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never

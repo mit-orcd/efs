@@ -100,6 +100,8 @@ int efs_kv_key_append_rsv(uint32_t shard, efs_ino_t ino, uint64_t gen,
                           uint64_t off, uint8_t *out, uint32_t *len);
 int efs_kv_key_append_rsv_prefix(uint32_t shard, efs_ino_t ino, uint64_t gen,
                                  uint8_t *out, uint32_t *len);
+int efs_kv_key_append_rsv_shard_prefix(uint32_t shard, uint8_t *out,
+                                       uint32_t *len);
 int efs_kv_key_unwrap(const uint8_t *wrap, uint32_t wlen, uint8_t *orig,
                       uint32_t *olen);
 

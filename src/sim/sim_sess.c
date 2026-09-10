@@ -132,8 +132,18 @@ int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         epoch = rd32(cmd + 18);
         shard = rd32(cmd + 22);
         rc = efs_lease_drop_session(s->disk, shard, uuid, epoch);
-        if (rc == EFS_OK)
-            rc = efs_lock_drop_session(s->disk, shard, uuid, epoch);
+        if (rc == EFS_OK || rc == EFS_ERR_NOT_FOUND) {
+            int r2 = efs_lock_drop_session(s->disk, shard, uuid, epoch);
+            int r3 = efs_meta_apply_append_drop_session(s->disk, shard, uuid,
+                                                        epoch);
+
+            if (r2 != EFS_OK && r2 != EFS_ERR_NOT_FOUND)
+                rc = r2;
+            else if (r3 != EFS_OK && r3 != EFS_ERR_NOT_FOUND)
+                rc = r3;
+            else if (rc == EFS_ERR_NOT_FOUND)
+                rc = EFS_OK;
+        }
         if (rc == EFS_OK && s->sim)
             sim_lock_fence(s->sim, uuid, epoch);
         break;

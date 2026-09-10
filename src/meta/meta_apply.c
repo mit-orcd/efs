@@ -3129,6 +3129,81 @@ int efs_meta_apply_append_open(struct efs_kv *kv, efs_ino_t ino, uint64_t *offs,
     return EFS_OK;
 }
 
+#define DROP_RSV_MAX 32
+
+struct drop_rsv_acc {
+    const uint8_t *uuid;
+    uint32_t epoch;
+    efs_ino_t ino[DROP_RSV_MAX];
+    uint64_t off[DROP_RSV_MAX];
+    int n;
+    int full;
+};
+
+static int drop_rsv_cb(void *user, const uint8_t *key, uint32_t klen,
+                       const uint8_t *val, uint32_t vlen)
+{
+    struct drop_rsv_acc *a = user;
+    struct append_rsv rsv;
+    int rc;
+
+    if (klen < 27 || !val)
+        return 0;
+    rc = unpack_append_rsv(val, vlen, &rsv);
+    if (rc != EFS_OK)
+        return 0;
+    if (rsv.state != APPEND_OPEN)
+        return 0;
+    if (rsv.epoch != a->epoch)
+        return 0;
+    if (memcmp(rsv.uuid, a->uuid, EFS_OPID_UUID_LEN) != 0)
+        return 0;
+    if (a->n >= DROP_RSV_MAX) {
+        a->full = 1;
+        return 1;
+    }
+    a->ino[a->n] = rd64(key + 3);
+    a->off[a->n] = rd64(key + 19);
+    a->n++;
+    return 0;
+}
+
+int efs_meta_apply_append_drop_session(struct efs_kv *kv, uint32_t shard,
+                                       const uint8_t uuid[EFS_OPID_UUID_LEN],
+                                       uint32_t epoch)
+{
+    uint8_t pref[EFS_KV_KEY_MAX];
+    uint32_t plen = 0;
+    int rc;
+
+    if (!kv || !uuid || shard > EFS_KV_SHARD_MASK)
+        return EFS_ERR_INVAL;
+    rc = efs_kv_key_append_rsv_shard_prefix(shard, pref, &plen);
+    if (rc != EFS_OK)
+        return rc;
+    for (;;) {
+        struct drop_rsv_acc acc;
+        int i;
+
+        memset(&acc, 0, sizeof(acc));
+        acc.uuid = uuid;
+        acc.epoch = epoch;
+        rc = efs_kv_scan_prefix(kv, pref, plen, drop_rsv_cb, &acc);
+        if (rc != EFS_OK && rc != 1)
+            return rc;
+        if (acc.n == 0)
+            return EFS_OK;
+        for (i = 0; i < acc.n; i++) {
+            rc = efs_meta_apply_append_resolve(kv, acc.ino[i], acc.off[i],
+                                               EFS_META_APPEND_FENCED_HOLE);
+            if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND)
+                return rc;
+        }
+        if (!acc.full)
+            return EFS_OK;
+    }
+}
+
 int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_index,
                              struct efs_meta_chunk *out)
 {

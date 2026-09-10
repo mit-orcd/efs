@@ -1,0 +1,553 @@
+[raft-host] build 4 nodes (scratch, not live cluster)
+[raft-host] build fcstor003
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/efsd.o src/server/efsd.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store.o src/server/store.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store_nvme.o src/server/store_nvme.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/handler.o src/server/handler.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/cluster.o src/server/cluster.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/meta_server.o src/server/meta_server.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/migrate.o src/server/migrate.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/peer_pool.o src/server/peer_pool.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/writer.o src/server/writer.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/verify.o src/server/verify.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/bench_local.o src/server/bench_local.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/raft_host.o src/server/raft_host.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/common.o src/common/common.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/protocol.o src/common/protocol.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/wire/wire.o src/wire/wire.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/erasure.o src/data/erasure.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/store_mem.o src/data/store_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/transport_loop.o src/data/transport_loop.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/transport_conn.o src/data/transport_conn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_mem.o src/kv/kv_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_key.o src/kv/kv_key.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_lsm.o src/kv/kv_lsm.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_compact.o src/kv/kv_compact.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_wal.o src/kv/kv_wal.c
+src/server/handler.c: In function ‘server_handle_conn’:
+src/server/handler.c:670:38: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+  670 |         if (efs_lock_prof_on && type < 256)
+      |                                      ^
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_seg.o src/kv/kv_seg.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/metadata.o src/meta/metadata.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/meta_apply.o src/meta/meta_apply.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/txn.o src/meta/txn.c
+src/server/raft_host.c: In function ‘host_truncate’:
+src/server/raft_host.c:4266:13: warning: suggest braces around empty body in an ‘if’ statement [-Wempty-body]
+ 4266 |             ;
+      |             ^
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/session.o src/meta/session.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/lock.o src/meta/lock.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/dir_layout.o src/meta/dir_layout.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/sim/opid.o src/sim/opid.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft.o src/raft/raft.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_mem.o src/raft/raft_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_disk.o src/raft/raft_disk.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_log.o src/raft/raft_log.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/placement.o src/common/placement.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/checksum.o src/common/checksum.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/network.o src/common/network.c
+src/meta/metadata.c:5179:15: warning: ‘dentry_bytes_for’ defined but not used [-Wunused-function]
+ 5179 | static size_t dentry_bytes_for(const struct efs_export *ex, uint64_t extra_inodes)
+      |               ^~~~~~~~~~~~~~~~
+src/meta/metadata.c:3133:13: warning: ‘tab_unlink_ino’ defined but not used [-Wunused-function]
+ 3133 | static void tab_unlink_ino(struct efs_export *tab, efs_ino_t ino, uint32_t nlink)
+      |             ^~~~~~~~~~~~~~
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/rdma.o src/common/rdma.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3.o deps/blake3/blake3.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3_portable.o deps/blake3/blake3_portable.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3_dispatch.o deps/blake3/blake3_dispatch.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -msse2 -c -o deps/blake3/blake3_sse2.o deps/blake3/blake3_sse2.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -msse4.1 -c -o deps/blake3/blake3_sse41.o deps/blake3/blake3_sse41.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -mavx2 -maes -c -o deps/blake3/blake3_avx2.o deps/blake3/blake3_avx2.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -mavx512f -mavx512vl -c -o deps/blake3/blake3_avx512.o deps/blake3/blake3_avx512.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/client.o src/client/client.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/ops.o src/client/ops.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/read.o src/client/read.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/write.o src/client/write.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/bufpool.o src/client/bufpool.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/inode_rpc.o src/client/inode_rpc.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/node_cache.o src/client/node_cache.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/mgmt/efs_mgmt.o src/mgmt/efs_mgmt.c
+src/client/inode_rpc.c: In function ‘rpc_prof_add’:
+src/client/inode_rpc.c:55:18: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+   55 |         if (type < 256)
+      |                  ^
+src/client/inode_rpc.c:60:14: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+   60 |     if (type < 256) {
+      |              ^
+ar rcs libefs.a src/common/common.o src/common/protocol.o src/wire/wire.o src/data/erasure.o src/data/store_mem.o src/data/transport_loop.o src/data/transport_conn.o src/kv/kv_mem.o src/kv/kv_key.o src/kv/kv_lsm.o src/kv/kv_compact.o src/kv/kv_wal.o src/kv/kv_seg.o src/meta/metadata.o src/meta/meta_apply.o src/meta/txn.o src/meta/session.o src/meta/lock.o src/meta/dir_layout.o src/sim/opid.o src/raft/raft.o src/raft/raft_mem.o src/raft/raft_disk.o src/raft/raft_log.o src/common/placement.o src/common/checksum.o src/common/network.o src/common/rdma.o deps/blake3/blake3.o deps/blake3/blake3_portable.o deps/blake3/blake3_dispatch.o deps/blake3/blake3_sse2.o deps/blake3/blake3_sse41.o deps/blake3/blake3_avx2.o deps/blake3/blake3_avx512.o src/client/client.o src/client/ops.o src/client/read.o src/client/write.o src/client/bufpool.o src/client/inode_rpc.o src/client/node_cache.o
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -o efsd src/server/efsd.o src/server/store.o src/server/store_nvme.o src/server/handler.o src/server/cluster.o src/server/meta_server.o src/server/migrate.o src/server/peer_pool.o src/server/writer.o src/server/verify.o src/server/bench_local.o src/server/raft_host.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -o efs-mgmt src/mgmt/efs_mgmt.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_wire tests/test_wire.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_meta_apply tests/test_meta_apply.c libefs.a -lpthread -lm -ldl -libverbs
+test_wire: OK
+test_meta_apply: OK
+[raft-host] build fcstor004
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/efsd.o src/server/efsd.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store.o src/server/store.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store_nvme.o src/server/store_nvme.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/handler.o src/server/handler.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/cluster.o src/server/cluster.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/meta_server.o src/server/meta_server.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/migrate.o src/server/migrate.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/peer_pool.o src/server/peer_pool.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/writer.o src/server/writer.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/verify.o src/server/verify.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/bench_local.o src/server/bench_local.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/raft_host.o src/server/raft_host.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/common.o src/common/common.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/protocol.o src/common/protocol.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/wire/wire.o src/wire/wire.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/erasure.o src/data/erasure.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/store_mem.o src/data/store_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/transport_loop.o src/data/transport_loop.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/transport_conn.o src/data/transport_conn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_mem.o src/kv/kv_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_key.o src/kv/kv_key.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_lsm.o src/kv/kv_lsm.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_compact.o src/kv/kv_compact.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_wal.o src/kv/kv_wal.c
+src/server/handler.c: In function ‘server_handle_conn’:
+src/server/handler.c:670:38: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+  670 |         if (efs_lock_prof_on && type < 256)
+      |                                      ^
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_seg.o src/kv/kv_seg.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/metadata.o src/meta/metadata.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/meta_apply.o src/meta/meta_apply.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/txn.o src/meta/txn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/session.o src/meta/session.c
+src/server/raft_host.c: In function ‘host_truncate’:
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/lock.o src/meta/lock.c
+src/server/raft_host.c:4266:13: warning: suggest braces around empty body in an ‘if’ statement [-Wempty-body]
+ 4266 |             ;
+      |             ^
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/dir_layout.o src/meta/dir_layout.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/sim/opid.o src/sim/opid.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft.o src/raft/raft.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_mem.o src/raft/raft_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_disk.o src/raft/raft_disk.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_log.o src/raft/raft_log.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/placement.o src/common/placement.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/checksum.o src/common/checksum.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/network.o src/common/network.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/rdma.o src/common/rdma.c
+src/meta/metadata.c:5179:15: warning: ‘dentry_bytes_for’ defined but not used [-Wunused-function]
+ 5179 | static size_t dentry_bytes_for(const struct efs_export *ex, uint64_t extra_inodes)
+      |               ^~~~~~~~~~~~~~~~
+src/meta/metadata.c:3133:13: warning: ‘tab_unlink_ino’ defined but not used [-Wunused-function]
+ 3133 | static void tab_unlink_ino(struct efs_export *tab, efs_ino_t ino, uint32_t nlink)
+      |             ^~~~~~~~~~~~~~
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3.o deps/blake3/blake3.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3_portable.o deps/blake3/blake3_portable.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3_dispatch.o deps/blake3/blake3_dispatch.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -msse2 -c -o deps/blake3/blake3_sse2.o deps/blake3/blake3_sse2.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -msse4.1 -c -o deps/blake3/blake3_sse41.o deps/blake3/blake3_sse41.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -mavx2 -maes -c -o deps/blake3/blake3_avx2.o deps/blake3/blake3_avx2.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -mavx512f -mavx512vl -c -o deps/blake3/blake3_avx512.o deps/blake3/blake3_avx512.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/client.o src/client/client.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/ops.o src/client/ops.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/read.o src/client/read.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/write.o src/client/write.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/bufpool.o src/client/bufpool.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/inode_rpc.o src/client/inode_rpc.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/node_cache.o src/client/node_cache.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/mgmt/efs_mgmt.o src/mgmt/efs_mgmt.c
+src/client/inode_rpc.c: In function ‘rpc_prof_add’:
+src/client/inode_rpc.c:55:18: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+   55 |         if (type < 256)
+      |                  ^
+src/client/inode_rpc.c:60:14: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+   60 |     if (type < 256) {
+      |              ^
+ar rcs libefs.a src/common/common.o src/common/protocol.o src/wire/wire.o src/data/erasure.o src/data/store_mem.o src/data/transport_loop.o src/data/transport_conn.o src/kv/kv_mem.o src/kv/kv_key.o src/kv/kv_lsm.o src/kv/kv_compact.o src/kv/kv_wal.o src/kv/kv_seg.o src/meta/metadata.o src/meta/meta_apply.o src/meta/txn.o src/meta/session.o src/meta/lock.o src/meta/dir_layout.o src/sim/opid.o src/raft/raft.o src/raft/raft_mem.o src/raft/raft_disk.o src/raft/raft_log.o src/common/placement.o src/common/checksum.o src/common/network.o src/common/rdma.o deps/blake3/blake3.o deps/blake3/blake3_portable.o deps/blake3/blake3_dispatch.o deps/blake3/blake3_sse2.o deps/blake3/blake3_sse41.o deps/blake3/blake3_avx2.o deps/blake3/blake3_avx512.o src/client/client.o src/client/ops.o src/client/read.o src/client/write.o src/client/bufpool.o src/client/inode_rpc.o src/client/node_cache.o
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -o efsd src/server/efsd.o src/server/store.o src/server/store_nvme.o src/server/handler.o src/server/cluster.o src/server/meta_server.o src/server/migrate.o src/server/peer_pool.o src/server/writer.o src/server/verify.o src/server/bench_local.o src/server/raft_host.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -o efs-mgmt src/mgmt/efs_mgmt.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_wire tests/test_wire.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_meta_apply tests/test_meta_apply.c libefs.a -lpthread -lm -ldl -libverbs
+test_wire: OK
+test_meta_apply: OK
+[raft-host] build fcstor005
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/efsd.o src/server/efsd.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store.o src/server/store.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store_nvme.o src/server/store_nvme.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/handler.o src/server/handler.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/cluster.o src/server/cluster.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/meta_server.o src/server/meta_server.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/migrate.o src/server/migrate.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/peer_pool.o src/server/peer_pool.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/writer.o src/server/writer.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/verify.o src/server/verify.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/bench_local.o src/server/bench_local.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/raft_host.o src/server/raft_host.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/common.o src/common/common.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/protocol.o src/common/protocol.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/wire/wire.o src/wire/wire.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/erasure.o src/data/erasure.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/store_mem.o src/data/store_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/transport_loop.o src/data/transport_loop.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/transport_conn.o src/data/transport_conn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_mem.o src/kv/kv_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_key.o src/kv/kv_key.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_lsm.o src/kv/kv_lsm.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_compact.o src/kv/kv_compact.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_wal.o src/kv/kv_wal.c
+src/server/handler.c: In function ‘server_handle_conn’:
+src/server/handler.c:670:38: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+  670 |         if (efs_lock_prof_on && type < 256)
+      |                                      ^
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_seg.o src/kv/kv_seg.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/metadata.o src/meta/metadata.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/meta_apply.o src/meta/meta_apply.c
+src/server/raft_host.c: In function ‘host_truncate’:
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/txn.o src/meta/txn.c
+src/server/raft_host.c:4266:13: warning: suggest braces around empty body in an ‘if’ statement [-Wempty-body]
+ 4266 |             ;
+      |             ^
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/session.o src/meta/session.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/lock.o src/meta/lock.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/dir_layout.o src/meta/dir_layout.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/sim/opid.o src/sim/opid.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft.o src/raft/raft.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_mem.o src/raft/raft_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_disk.o src/raft/raft_disk.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_log.o src/raft/raft_log.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/placement.o src/common/placement.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/checksum.o src/common/checksum.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/network.o src/common/network.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/rdma.o src/common/rdma.c
+src/meta/metadata.c:5179:15: warning: ‘dentry_bytes_for’ defined but not used [-Wunused-function]
+ 5179 | static size_t dentry_bytes_for(const struct efs_export *ex, uint64_t extra_inodes)
+      |               ^~~~~~~~~~~~~~~~
+src/meta/metadata.c:3133:13: warning: ‘tab_unlink_ino’ defined but not used [-Wunused-function]
+ 3133 | static void tab_unlink_ino(struct efs_export *tab, efs_ino_t ino, uint32_t nlink)
+      |             ^~~~~~~~~~~~~~
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3.o deps/blake3/blake3.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3_portable.o deps/blake3/blake3_portable.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3_dispatch.o deps/blake3/blake3_dispatch.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -msse2 -c -o deps/blake3/blake3_sse2.o deps/blake3/blake3_sse2.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -msse4.1 -c -o deps/blake3/blake3_sse41.o deps/blake3/blake3_sse41.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -mavx2 -maes -c -o deps/blake3/blake3_avx2.o deps/blake3/blake3_avx2.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -mavx512f -mavx512vl -c -o deps/blake3/blake3_avx512.o deps/blake3/blake3_avx512.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/client.o src/client/client.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/ops.o src/client/ops.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/read.o src/client/read.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/write.o src/client/write.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/bufpool.o src/client/bufpool.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/inode_rpc.o src/client/inode_rpc.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/node_cache.o src/client/node_cache.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/mgmt/efs_mgmt.o src/mgmt/efs_mgmt.c
+src/client/inode_rpc.c: In function ‘rpc_prof_add’:
+src/client/inode_rpc.c:55:18: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+   55 |         if (type < 256)
+      |                  ^
+src/client/inode_rpc.c:60:14: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+   60 |     if (type < 256) {
+      |              ^
+ar rcs libefs.a src/common/common.o src/common/protocol.o src/wire/wire.o src/data/erasure.o src/data/store_mem.o src/data/transport_loop.o src/data/transport_conn.o src/kv/kv_mem.o src/kv/kv_key.o src/kv/kv_lsm.o src/kv/kv_compact.o src/kv/kv_wal.o src/kv/kv_seg.o src/meta/metadata.o src/meta/meta_apply.o src/meta/txn.o src/meta/session.o src/meta/lock.o src/meta/dir_layout.o src/sim/opid.o src/raft/raft.o src/raft/raft_mem.o src/raft/raft_disk.o src/raft/raft_log.o src/common/placement.o src/common/checksum.o src/common/network.o src/common/rdma.o deps/blake3/blake3.o deps/blake3/blake3_portable.o deps/blake3/blake3_dispatch.o deps/blake3/blake3_sse2.o deps/blake3/blake3_sse41.o deps/blake3/blake3_avx2.o deps/blake3/blake3_avx512.o src/client/client.o src/client/ops.o src/client/read.o src/client/write.o src/client/bufpool.o src/client/inode_rpc.o src/client/node_cache.o
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -o efsd src/server/efsd.o src/server/store.o src/server/store_nvme.o src/server/handler.o src/server/cluster.o src/server/meta_server.o src/server/migrate.o src/server/peer_pool.o src/server/writer.o src/server/verify.o src/server/bench_local.o src/server/raft_host.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -o efs-mgmt src/mgmt/efs_mgmt.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_wire tests/test_wire.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_meta_apply tests/test_meta_apply.c libefs.a -lpthread -lm -ldl -libverbs
+test_wire: OK
+test_meta_apply: OK
+[raft-host] build fcstor006
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/efsd.o src/server/efsd.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store.o src/server/store.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store_nvme.o src/server/store_nvme.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/handler.o src/server/handler.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/cluster.o src/server/cluster.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/meta_server.o src/server/meta_server.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/migrate.o src/server/migrate.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/peer_pool.o src/server/peer_pool.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/writer.o src/server/writer.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/verify.o src/server/verify.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/bench_local.o src/server/bench_local.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/raft_host.o src/server/raft_host.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/common.o src/common/common.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/protocol.o src/common/protocol.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/wire/wire.o src/wire/wire.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/erasure.o src/data/erasure.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/store_mem.o src/data/store_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/transport_loop.o src/data/transport_loop.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/transport_conn.o src/data/transport_conn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_mem.o src/kv/kv_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_key.o src/kv/kv_key.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_lsm.o src/kv/kv_lsm.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_compact.o src/kv/kv_compact.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_wal.o src/kv/kv_wal.c
+src/server/handler.c: In function ‘server_handle_conn’:
+src/server/handler.c:670:38: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+  670 |         if (efs_lock_prof_on && type < 256)
+      |                                      ^
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_seg.o src/kv/kv_seg.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/metadata.o src/meta/metadata.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/meta_apply.o src/meta/meta_apply.c
+src/server/raft_host.c: In function ‘host_truncate’:
+src/server/raft_host.c:4266:13: warning: suggest braces around empty body in an ‘if’ statement [-Wempty-body]
+ 4266 |             ;
+      |             ^
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/txn.o src/meta/txn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/session.o src/meta/session.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/lock.o src/meta/lock.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/dir_layout.o src/meta/dir_layout.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/sim/opid.o src/sim/opid.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft.o src/raft/raft.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_mem.o src/raft/raft_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_disk.o src/raft/raft_disk.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_log.o src/raft/raft_log.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/placement.o src/common/placement.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/checksum.o src/common/checksum.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/network.o src/common/network.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/rdma.o src/common/rdma.c
+src/meta/metadata.c:5179:15: warning: ‘dentry_bytes_for’ defined but not used [-Wunused-function]
+ 5179 | static size_t dentry_bytes_for(const struct efs_export *ex, uint64_t extra_inodes)
+      |               ^~~~~~~~~~~~~~~~
+src/meta/metadata.c:3133:13: warning: ‘tab_unlink_ino’ defined but not used [-Wunused-function]
+ 3133 | static void tab_unlink_ino(struct efs_export *tab, efs_ino_t ino, uint32_t nlink)
+      |             ^~~~~~~~~~~~~~
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3.o deps/blake3/blake3.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3_portable.o deps/blake3/blake3_portable.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3_dispatch.o deps/blake3/blake3_dispatch.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -msse2 -c -o deps/blake3/blake3_sse2.o deps/blake3/blake3_sse2.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -msse4.1 -c -o deps/blake3/blake3_sse41.o deps/blake3/blake3_sse41.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -mavx2 -maes -c -o deps/blake3/blake3_avx2.o deps/blake3/blake3_avx2.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -mavx512f -mavx512vl -c -o deps/blake3/blake3_avx512.o deps/blake3/blake3_avx512.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/client.o src/client/client.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/ops.o src/client/ops.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/read.o src/client/read.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/write.o src/client/write.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/bufpool.o src/client/bufpool.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/inode_rpc.o src/client/inode_rpc.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/node_cache.o src/client/node_cache.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/mgmt/efs_mgmt.o src/mgmt/efs_mgmt.c
+src/client/inode_rpc.c: In function ‘rpc_prof_add’:
+src/client/inode_rpc.c:55:18: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+   55 |         if (type < 256)
+      |                  ^
+src/client/inode_rpc.c:60:14: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+   60 |     if (type < 256) {
+      |              ^
+ar rcs libefs.a src/common/common.o src/common/protocol.o src/wire/wire.o src/data/erasure.o src/data/store_mem.o src/data/transport_loop.o src/data/transport_conn.o src/kv/kv_mem.o src/kv/kv_key.o src/kv/kv_lsm.o src/kv/kv_compact.o src/kv/kv_wal.o src/kv/kv_seg.o src/meta/metadata.o src/meta/meta_apply.o src/meta/txn.o src/meta/session.o src/meta/lock.o src/meta/dir_layout.o src/sim/opid.o src/raft/raft.o src/raft/raft_mem.o src/raft/raft_disk.o src/raft/raft_log.o src/common/placement.o src/common/checksum.o src/common/network.o src/common/rdma.o deps/blake3/blake3.o deps/blake3/blake3_portable.o deps/blake3/blake3_dispatch.o deps/blake3/blake3_sse2.o deps/blake3/blake3_sse41.o deps/blake3/blake3_avx2.o deps/blake3/blake3_avx512.o src/client/client.o src/client/ops.o src/client/read.o src/client/write.o src/client/bufpool.o src/client/inode_rpc.o src/client/node_cache.o
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -o efsd src/server/efsd.o src/server/store.o src/server/store_nvme.o src/server/handler.o src/server/cluster.o src/server/meta_server.o src/server/migrate.o src/server/peer_pool.o src/server/writer.o src/server/verify.o src/server/bench_local.o src/server/raft_host.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -o efs-mgmt src/mgmt/efs_mgmt.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_wire tests/test_wire.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_meta_apply tests/test_meta_apply.c libefs.a -lpthread -lm -ldl -libverbs
+test_wire: OK
+test_meta_apply: OK
+[raft-host] build OK (test_wire gated on each node)
+[raft-host] start seed
+[raft-host] start joiners
+[raft-host] wait for group-0 leader
+[raft-host] group-0 leader raft_id=0
+[raft-host] raft-mkfs (try voters until accepted)
+[raft-host] mkfs fcstor003: raft-mkfs rc=0 leader_hint=0 index=2 salt=19608800516959625
+[raft-host] wait ROOT on voters 1,2,3
+[raft-host] ReadIndex GETATTR/LOOKUP (fresh)
+[raft-host] fresh getattr leader=0: raft-getattr status=0 primary=1 ino=1 mode=040755 nlink=2 size=0 mtime=1789005976
+[raft-host] fresh lookup miss: raft-lookup status=1 primary=1 parent=1 name=no-such-efs-name ino=0 mode=00 nlink=0
+[raft-host] CREATE file through Raft (fresh)
+[raft-host] fresh create: raft-create status=0 primary=1 parent=1 name=raft-smoke-f ino=4097 mode=0100644 nlink=1
+[raft-host] fresh lookup created: raft-lookup status=0 primary=1 parent=1 name=raft-smoke-f ino=4097 mode=0100644 nlink=1
+[raft-host] fresh getattr created: raft-getattr status=0 primary=1 ino=4097 mode=0100644 nlink=1 size=0 mtime=1789005978
+[raft-host] fresh create dup: raft-create status=2 primary=1 parent=1 name=raft-smoke-f ino=0 mode=00 nlink=0
+[raft-host] SETATTR mode through Raft (fresh)
+[raft-host] fresh setattr lookup: raft-lookup status=0 primary=1 parent=1 name=raft-smoke-f ino=4097 mode=0100644 nlink=1
+[raft-host] fresh setattr mode: raft-setattr status=0 primary=1 ino=4097 mask=1 mode=0100600 nlink=1 size=0 mtime=1789005978
+[raft-host] fresh getattr setattr: raft-getattr status=0 primary=1 ino=4097 mode=0100600 nlink=1 size=0 mtime=1789005978
+[raft-host] fresh setattr size: 
+[raft-host] FAIL: fresh setattr size not OK
+[raft-host] FAIL: fresh setattr size
+[raft-host] fresh getattr size: 
+[raft-host] FAIL: fresh getattr size not OK
+[raft-host] FAIL: fresh getattr size
+[raft-host] fresh setattr mixed size: 
+[raft-host] FAIL: fresh setattr mixed size not INVAL
+[raft-host] fresh setattr utimens: 
+[raft-host] FAIL: fresh setattr utimens not OK
+[raft-host] FAIL: fresh setattr utimens mtime
+[raft-host] fresh getattr utimens: 
+[raft-host] FAIL: fresh getattr utimens mtime
+[raft-host] FAIL: fresh getattr utimens size
+[raft-host] fresh setattr miss: 
+[raft-host] FAIL: fresh setattr miss not NOT_FOUND
+[raft-host] PUBLISH/GETCHUNKS through Raft (fresh)
+[raft-host] fresh publish create: 
+[raft-host] FAIL: fresh publish create not OK
+[raft-host] FAIL: fresh publish ino
+[raft-host] fresh getchunks empty: 
+[raft-host] FAIL: fresh getchunks empty not OK
+[raft-host] FAIL: fresh getchunks empty count
+[raft-host] fresh publish: 
+[raft-host] FAIL: fresh publish not OK
+[raft-host] fresh getchunks: 
+[raft-host] FAIL: fresh getchunks not OK
+[raft-host] FAIL: fresh getchunks count
+[raft-host] FAIL: fresh getchunks ci
+[raft-host] fresh getattr publish: 
+[raft-host] FAIL: fresh getattr publish not OK
+[raft-host] FAIL: fresh getattr publish size
+[raft-host] fresh setattr tail: 
+[raft-host] FAIL: fresh setattr tail not OK
+[raft-host] FAIL: fresh setattr tail size
+[raft-host] fresh getattr tail: 
+[raft-host] FAIL: fresh getattr tail size
+[raft-host] fresh getchunks tail: 
+[raft-host] FAIL: fresh getchunks tail count
+[raft-host] FAIL: fresh getchunks tail ci
+[raft-host] fresh setattr trunc0: 
+[raft-host] FAIL: fresh setattr trunc0 not OK
+[raft-host] FAIL: fresh setattr trunc0 size
+[raft-host] fresh getchunks trunc0: 
+[raft-host] FAIL: fresh getchunks trunc0 not OK
+[raft-host] FAIL: fresh getchunks trunc0 count
+[raft-host] O_APPEND through Raft (fresh)
+[raft-host] fresh append create: 
+[raft-host] FAIL: fresh append create not OK
+[raft-host] FAIL: fresh append ino
+[raft-host] fresh append: 
+[raft-host] FAIL: fresh append not OK
+[raft-host] FAIL: fresh append watermark
+[raft-host] fresh getattr after reserve: 
+[raft-host] FAIL: fresh getattr after reserve not OK
+[raft-host] FAIL: fresh getattr after reserve not frontier 0
+[raft-host] fresh append publish: 
+[raft-host] FAIL: fresh append publish not OK
+[raft-host] fresh getattr after append pub: 
+[raft-host] FAIL: fresh getattr after append pub not OK
+[raft-host] FAIL: fresh getattr after append pub size
+[raft-host] fresh append miss: 
+[raft-host] FAIL: fresh append miss not NOT_FOUND
+[raft-host] SYMLINK through Raft (fresh)
+[raft-host] fresh symlink create: 
+[raft-host] FAIL: fresh symlink create not OK
+[raft-host] FAIL: fresh symlink mode
+[raft-host] FAIL: fresh symlink nlink
+[raft-host] FAIL: fresh symlink ino
+[raft-host] fresh getattr empty symlink: 
+[raft-host] FAIL: fresh getattr empty symlink not OK
+[raft-host] FAIL: fresh getattr empty symlink size
+[raft-host] FAIL: fresh getattr empty symlink mode
+[raft-host] fresh symlink publish: 
+[raft-host] FAIL: fresh symlink publish not OK
+[raft-host] fresh getattr symlink: 
+[raft-host] FAIL: fresh getattr symlink not OK
+[raft-host] FAIL: fresh getattr symlink size
+[raft-host] FAIL: fresh getattr symlink mode
+[raft-host] fresh getchunks symlink: 
+[raft-host] FAIL: fresh getchunks symlink not OK
+[raft-host] FAIL: fresh getchunks symlink count
+[raft-host] fresh symlink dup: 
+[raft-host] FAIL: fresh symlink dup not EXIST
+[raft-host] MKDIR through Raft (fresh)
+[raft-host] fresh mkdir raft-smoke-d0: 
+[raft-host] fresh mkdir raft-smoke-d1: 
+[raft-host] fresh mkdir raft-smoke-d2: 
+[raft-host] fresh mkdir raft-smoke-d3: 
+[raft-host] fresh mkdir raft-smoke-d4: 
+[raft-host] fresh mkdir raft-smoke-d5: 
+[raft-host] fresh mkdir raft-smoke-d6: 
+[raft-host] fresh mkdir raft-smoke-d7: 
+[raft-host] fresh mkdir raft-smoke-d8: 
+[raft-host] fresh mkdir raft-smoke-d9: 
+[raft-host] fresh mkdir raft-smoke-d10: 
+[raft-host] fresh mkdir raft-smoke-d11: 
+[raft-host] fresh mkdir raft-smoke-d12: 
+[raft-host] fresh mkdir raft-smoke-d13: 
+[raft-host] fresh mkdir raft-smoke-d14: 
+[raft-host] fresh mkdir raft-smoke-d15: 
+[raft-host] fresh mkdir raft-smoke-d16: 
+[raft-host] fresh mkdir raft-smoke-d17: 
+[raft-host] fresh mkdir raft-smoke-d18: 
+[raft-host] fresh mkdir raft-smoke-d19: 
+[raft-host] fresh mkdir raft-smoke-d20: 
+[raft-host] fresh mkdir raft-smoke-d21: 
+[raft-host] fresh mkdir raft-smoke-d22: 
+[raft-host] fresh mkdir raft-smoke-d23: 
+[raft-host] fresh mkdir raft-smoke-d24: 
+[raft-host] fresh mkdir raft-smoke-d25: 
+[raft-host] fresh mkdir raft-smoke-d26: 
+[raft-host] fresh mkdir raft-smoke-d27: 
+[raft-host] fresh mkdir raft-smoke-d28: 
+[raft-host] fresh mkdir raft-smoke-d29: 
+[raft-host] fresh mkdir raft-smoke-d30: 
+[raft-host] fresh mkdir raft-smoke-d31: 
+[raft-host] FAIL: fresh mkdir none accepted
+[raft-host] cross-group MKDIR from raft_id=0 (fresh)
+[raft-host] cross-group mkdir raft-smoke-xg0: 
+[raft-host] cross-group mkdir raft-smoke-xg1: 
+[raft-host] cross-group mkdir raft-smoke-xg2: 
+[raft-host] cross-group mkdir raft-smoke-xg3: 
+[raft-host] cross-group mkdir raft-smoke-xg4: 
+[raft-host] cross-group mkdir raft-smoke-xg5: 
+[raft-host] cross-group mkdir raft-smoke-xg6: 
+[raft-host] cross-group mkdir raft-smoke-xg7: 
+[raft-host] cross-group mkdir raft-smoke-xg8: 
+[raft-host] cross-group mkdir raft-smoke-xg9: 
+[raft-host] cross-group mkdir raft-smoke-xg10: 
+[raft-host] cross-group mkdir raft-smoke-xg11: 
+[raft-host] cross-group mkdir raft-smoke-xg12: 
+[raft-host] cross-group mkdir raft-smoke-xg13: 
+[raft-host] cross-group mkdir raft-smoke-xg14: 
+[raft-host] cross-group mkdir raft-smoke-xg15: 
+[raft-host] cross-group mkdir raft-smoke-xg16: 
+[raft-host] cross-group mkdir raft-smoke-xg17: 
+[raft-host] cross-group mkdir raft-smoke-xg18: 
+[raft-host] cross-group mkdir raft-smoke-xg19: 
+[raft-host] cross-group mkdir raft-smoke-xg20: 
+[raft-host] cross-group mkdir raft-smoke-xg21: 
+[raft-host] cross-group mkdir raft-smoke-xg22: 
+[raft-host] cross-group mkdir raft-smoke-xg23: 
+[raft-host] cross-group mkdir raft-smoke-xg24: 
+[raft-host] cross-group mkdir raft-smoke-xg25: 
+[raft-host] cross-group mkdir raft-smoke-xg26: 
+[raft-host] cross-group mkdir raft-smoke-xg27: 
+[raft-host] cross-group mkdir raft-smoke-xg28: 
+[raft-host] cross-group mkdir raft-smoke-xg29: 
+[raft-host] cross-group mkdir raft-smoke-xg30: 
+[raft-host] cross-group mkdir raft-smoke-xg31: 
+[raft-host] FAIL: cross-group mkdir none even-shard
+[raft-host] UNLINK file through Raft (fresh)
+[raft-host] fresh unlink-prep create: 
+[raft-host] FAIL: fresh unlink-prep create not OK
+[raft-host] fresh unlink: 
+[raft-host] FAIL: fresh unlink not OK
+[raft-host] FAIL: fresh unlink nlink
+[raft-host] fresh lookup unlinked: 
+[raft-host] FAIL: fresh lookup unlinked not NOT_FOUND
+[raft-host] fresh unlink again: 
+[raft-host] FAIL: fresh unlink again not NOT_FOUND
+[raft-host] RMDIR through Raft (fresh)
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r0: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r1: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r2: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r3: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r4: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r5: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r6: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r7: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r8: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r9: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r10: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r11: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r12: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r13: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r14: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r15: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r16: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r17: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r18: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r19: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r20: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r21: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r22: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r23: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r24: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r25: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r26: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r27: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r28: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r29: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r30: 
+[raft-host] fresh rmdir-prep mkdir raft-smoke-r31: 
+[raft-host] FAIL: fresh rmdir-prep mkdir none accepted

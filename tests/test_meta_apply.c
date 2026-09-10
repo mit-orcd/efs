@@ -1504,6 +1504,37 @@ static void test_append_reserve(void)
               st.size == 64,
           "hole in size");
 
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "z",
+                                     &ino) == EFS_OK,
+          "create z");
+    mkop(&op, 9, 5);
+    CHECK(efs_meta_apply_append_reserve(kv, ino, 64, &op, coord_fn, &cc, &off) ==
+              EFS_OK,
+          "fenced rsv");
+    mkop(&op, 8, 1);
+    CHECK(efs_meta_apply_append_reserve(kv, ino, 32, &op, coord_fn, &cc, &off2) ==
+              EFS_OK,
+          "other session rsv");
+    {
+        uint8_t u9[EFS_OPID_UUID_LEN];
+        uint32_t nopen = 99;
+
+        memset(u9, 0, sizeof(u9));
+        u9[15] = 9;
+        CHECK(efs_meta_apply_append_drop_session(kv, efs_kv_inode_shard(ino), u9,
+                                                 1) == EFS_OK,
+              "fenced drop");
+        CHECK(efs_meta_apply_append_state(kv, ino, NULL, NULL, &nopen) == EFS_OK &&
+                  nopen == 1,
+              "other session still open");
+        CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+                  st.size == 64,
+              "fenced hole in size");
+        CHECK(efs_meta_apply_append_drop_session(kv, efs_kv_inode_shard(ino), u9,
+                                                 1) == EFS_OK,
+              "drop replay");
+    }
+
     CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "r",
                                      &ino) == EFS_OK,
           "create r");
@@ -1525,8 +1556,8 @@ static void test_append_reserve(void)
         uint32_t nopen = 0;
 
         CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
-                                         "z", &zino) == EFS_OK,
-              "create z");
+                                         "s", &zino) == EFS_OK,
+              "create stand-in");
         memset(&zop, 0, sizeof(zop));
         CHECK(efs_meta_apply_append_reserve(kv, zino, 64, &zop, coord_fn, &cc,
                                             &zoff) == EFS_OK &&

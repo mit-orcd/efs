@@ -670,7 +670,10 @@ struct efs_msg_inode_unlink_shard {
 };
 
 /* Cross-client O_APPEND reservation; reply is struct efs_msg_inode_reply
- * with the inode AFTER the size advance (offset = inode.size - len). */
+ * with the inode AFTER the size advance (offset = inode.size - len).
+ * Optional EFS_SESS_WIRE_LEN suffix (uuid[16] + native uint32 epoch)
+ * tags the reservation for FENCED_HOLE on session fence (10.5c-35d).
+ * Absent keeps the zero-UUID stand-in. Do not grow this struct. */
 struct efs_msg_inode_append {
     efs_export_id_t export_id;
     efs_ino_t ino;

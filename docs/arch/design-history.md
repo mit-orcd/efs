@@ -523,4 +523,18 @@ keyed by `(uuid, epoch)` so a fenced waiter is never granted
 (BUSY/STALE). Gate: scratch smoke — waiter of epoch 1 is BUSY after
 fence, epoch 1 HOLD/FLOCK is rejected, epoch 2 is accepted after
 establish, GET after crash is ACTIVE at epoch 2. Append-reservation
-reclaim is 35d.
+reclaim is 35d (hosted below).
+
+## Sep 9 2026 — 10.5c-35d append-reservation reclaim on fence
+
+A fenced session's OPEN `O_APPEND` reservations must resolve as
+`FENCED_HOLE` (committed zero hole; the frontier advances) so a
+later appender is not stuck behind a dead client's watermark.
+10.5c-35d scans the shard's reservation prefix on `LEASE_DROP`
+and resolves matching `(uuid, epoch)` OPEN rows. Production
+`raft-append` takes an optional `(uuid, epoch)` wire suffix
+(same layout as HOLD); seq stays 0 so tagging does not enable
+the op-id window. Absent suffix keeps the zero-UUID stand-in.
+Gate: scratch smoke — reserve 128 KiB under epoch 1, getattr
+stays frontier 0, fence, getattr is 131072, old-epoch append
+is BUSY.

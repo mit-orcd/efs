@@ -370,6 +370,11 @@ int efs_meta_apply_append_state(struct efs_kv *kv, efs_ino_t ino,
 /* OPEN reservations only. *n is capacity in, count out (capped). */
 int efs_meta_apply_append_open(struct efs_kv *kv, efs_ino_t ino, uint64_t *offs,
                                uint64_t *lens, uint32_t *n);
+/* Resolve OPEN reservations of (uuid, epoch) on this shard as FENCED_HOLE
+ * (I23 / §7.3). Called from LEASE_DROP after the revocation barrier. */
+int efs_meta_apply_append_drop_session(struct efs_kv *kv, uint32_t shard,
+                                       const uint8_t uuid[EFS_OPID_UUID_LEN],
+                                       uint32_t epoch);
 int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_index,
                              struct efs_meta_chunk *out);
 uint64_t efs_meta_candidate_gen(const uint8_t uuid[16], uint32_t session_epoch,

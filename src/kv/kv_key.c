@@ -464,6 +464,12 @@ int efs_kv_key_append_rsv_prefix(uint32_t shard, efs_ino_t ino, uint64_t gen,
     return EFS_OK;
 }
 
+int efs_kv_key_append_rsv_shard_prefix(uint32_t shard, uint8_t *out,
+                                       uint32_t *len)
+{
+    return start(out, len, shard, EFS_KV_KIND_APPEND_RSV, 0, EFS_KV_KEY_MAX);
+}
+
 int efs_kv_key_unwrap(const uint8_t *wrapk, uint32_t wlen, uint8_t *orig,
                       uint32_t *olen)
 {

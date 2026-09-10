@@ -55,8 +55,9 @@
 # new leader and grants after owner=5's release,
 # the session record stays ACTIVE with its registered shard bit,
 # a HOLD/FLOCK carrying that uuid is accepted and a wrong epoch is BUSY,
-# fencing that session dequeues a waiter of the old epoch and the new
-# epoch is accepted after establish,
+# fencing that session dequeues a waiter of the old epoch, resolves a
+# pending O_APPEND reservation as a FENCED_HOLE, and the new epoch is
+# accepted after establish,
 # and READDIR / LOOKUP_PATH still match.
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
@@ -89,6 +90,9 @@ if [ -n \"\$pids\" ]; then kill -9 \$pids; fi
 }
 
 cleanup() {
+    # Background waiters live on this login-node process, not on the
+    # scratch hosts. A leftover 400s raft-fcntl can hit the NEXT smoke.
+    kill ${WAIT8_PID:-} ${WAIT2_PID:-} ${WAIT3_PID:-} 2>/dev/null || true
     kill_scratch
     local h
     for h in "${HOSTS[@]}"; do
@@ -816,9 +820,11 @@ check_sess_ident() {
     echo "$out" | grep -q 'status=0' || bad "$tag sess-ident unlink not OK"
 }
 
-# Revocation barrier (10.5c-35c, I23). Coordinator-driven: BEGIN →
+# Revocation barrier (10.5c-35c) + append reclaim (10.5c-35d, I23).
+# Coordinator-driven: BEGIN →
 # FENCE_LOC+ACK every touched shard → FINISH → LEASE_DROP. A queued
 # waiter of the old epoch is dequeued (BUSY/STALE) and never granted.
+# A pending O_APPEND reserve of that epoch resolves as a FENCED_HOLE.
 # Dedicated raft-smoke-z, unlinked before crash. Session epoch becomes 2.
 check_sess_fence() {
     local lid=$1
@@ -845,6 +851,14 @@ check_sess_fence() {
     out=$(g0_mgmt raft-session establish "$SESS_UUID" "$ish" 1)
     say "$tag sess-fence establish inode-shard: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag sess-fence establish not OK"
+    out=$(g0_mgmt raft-append "$ino" 131072 "$SESS_UUID" 1)
+    say "$tag sess-fence append epoch1: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-fence append not OK"
+    echo "$out" | grep -q 'size=131072' || bad "$tag sess-fence append watermark"
+    out=$(g0_mgmt raft-getattr "$ino")
+    say "$tag sess-fence getattr after reserve: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-fence getattr after reserve not OK"
+    echo "$out" | grep -q 'size=0' || bad "$tag sess-fence getattr not frontier 0"
     out=$(g0_mgmt raft-fcntl "$ino" ex 1 0 100 "$SESS_UUID" 1)
     say "$tag sess-fence ex owner1: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag sess-fence ex owner1 not OK"
@@ -864,6 +878,13 @@ check_sess_fence() {
     echo "$out" | grep -q 'status=0' || bad "$tag sess-fence barrier not OK"
     echo "$out" | grep -q 'epoch=2' || bad "$tag sess-fence epoch not 2"
     echo "$out" | grep -q 'state=1' || bad "$tag sess-fence not ACTIVE"
+    out=$(g0_mgmt raft-getattr "$ino")
+    say "$tag sess-fence getattr after fence: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag sess-fence getattr after fence not OK"
+    echo "$out" | grep -q 'size=131072' || bad "$tag sess-fence reservation not FENCED_HOLE"
+    out=$(g0_mgmt raft-append "$ino" 4096 "$SESS_UUID" 1)
+    say "$tag sess-fence old-epoch append: $out"
+    echo "$out" | grep -q 'status=5' || bad "$tag sess-fence old-epoch append not BUSY"
     ok=0
     for i in $(seq 1 50); do
         if ! kill -0 $wp 2>/dev/null; then ok=1; break; fi
@@ -1206,11 +1227,15 @@ check_setattr() {
     say "$tag getattr setattr: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr setattr not OK"
     echo "$out" | grep -q 'mode=0100600' || bad "$tag getattr setattr mode"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 8 131072" 2>/dev/null || true)
+    # Truncate can land on a restarted/bouncing leader; empty is a
+    # 10s SSH miss, not INVAL. Use g0_mgmt so NOT_PRIMARY/empty retry.
+    out=$(G0_TO=20 G0_TRIES=4 g0_mgmt raft-setattr "$ino" 8 131072)
+    lid=$leader
     say "$tag setattr size: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag setattr size not OK"
     echo "$out" | grep -q 'size=131072' || bad "$tag setattr size"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(g0_mgmt raft-getattr "$ino")
+    lid=$leader
     say "$tag getattr size: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr size not OK"
     echo "$out" | grep -q 'size=131072' || bad "$tag getattr size"
@@ -1758,18 +1783,23 @@ if [ -z "$leader" ] || [ "$leader" = "-1" ]; then
     say "FAIL count=$FAIL"
     exit 1
 fi
-# HASHED dest LOOKUP needs group 2. A group-0-only leader (raft_id 0)
-# answers BUSY until bounce finds a dual-host; wait rather than fail.
+# HASHED dest LOOKUP needs group 2. A group-0-only leader answers
+# BUSY until bounce finds a host that serves that group. Probe all
+# four voters (group 2's leader is often raft_id 3). Prefer a node
+# that also serves ROOT, so later g0_mgmt bounce works both ways.
 if [ -n "${HASHED_DIR:-}" ]; then
     hashed_ok=0
-    for i in $(seq 1 40); do
-        for idx in 0 1 2; do
+    for i in $(seq 1 80); do
+        for idx in 0 1 2 3; do
             out=$(ssh_to 5 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$idx]}:${PORT} 1 $HASHED_DIR" 2>/dev/null || true)
             if echo "$out" | grep -q 'status=0'; then
-                leader=$idx
-                hashed_ok=1
-                say "after-crash hashed-dir serving raft_id=$leader"
-                break 2
+                root=$(ssh_to 5 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$idx]}:${PORT} 1" 2>/dev/null || true)
+                if echo "$root" | grep -q 'status=0'; then
+                    leader=$idx
+                    hashed_ok=1
+                    say "after-crash hashed-dir serving raft_id=$leader"
+                    break 2
+                fi
             fi
         done
     done
@@ -2027,7 +2057,14 @@ if [ -n "${WAIT_INO:-}" ]; then
     rm -f "${WAIT2_OUT:-/dev/null}" "${WAIT3_OUT:-/dev/null}" "${WAIT8_OUT:-/dev/null}"
 fi
 if [ -n "${SESS_SHARD:-}" ]; then
-    out=$(g0_mgmt raft-session get "$SESS_UUID" "$SESS_SHARD")
+    # GET is ReadIndex on hash(uuid). BUSY (rc=-13, status=3) means
+    # that group has not finished electing; not a missing record.
+    out=""
+    for i in $(seq 1 40); do
+        out=$(g0_mgmt raft-session get "$SESS_UUID" "$SESS_SHARD")
+        echo "$out" | grep -q 'status=0' && break
+        echo "$out" | grep -qE 'status=3|status=5|status=7|rc=-13' || break
+    done
     say "after-crash session get: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash session missing"
     echo "$out" | grep -q "epoch=${SESS_EPOCH:-1}" || bad "after-crash session epoch"

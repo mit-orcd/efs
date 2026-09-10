@@ -1786,21 +1786,40 @@ static int cmd_raft_append(int argc, char **argv)
     int fd;
     uint8_t reply_type;
     void *reply = NULL;
-    uint32_t reply_len = 0;
+    uint32_t reply_len = 0, slen, epoch = 1;
     struct efs_msg_inode_append req;
+    uint8_t buf[sizeof(req) + EFS_SESS_WIRE_LEN];
+    uint8_t uuid[EFS_OPID_UUID_LEN];
     struct efs_msg_inode_reply *r;
+    int sess = 0;
 
-    if (argc < 3) {
-        fprintf(stderr, "usage: raft-append <node:port> <ino> <len>\n");
+    if (argc < 3 || (argc != 3 && argc != 5)) {
+        fprintf(stderr,
+                "usage: raft-append <node:port> <ino> <len> [uuid-hex epoch]\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
         fprintf(stderr, "Invalid address: %s\n", argv[0]);
         return 1;
     }
+    if (argc >= 5) {
+        if (parse_uuid_hex(argv[3], uuid) != 0) {
+            fprintf(stderr, "raft-append: uuid must be 32 hex chars\n");
+            return 1;
+        }
+        epoch = (uint32_t)strtoul(argv[4], NULL, 0);
+        sess = 1;
+    }
     memset(&req, 0, sizeof(req));
     req.ino = (efs_ino_t)strtoull(argv[1], NULL, 0);
     req.len = strtoull(argv[2], NULL, 0);
+    memcpy(buf, &req, sizeof(req));
+    slen = sizeof(req);
+    if (sess) {
+        memcpy(buf + slen, uuid, EFS_OPID_UUID_LEN);
+        memcpy(buf + slen + EFS_OPID_UUID_LEN, &epoch, 4);
+        slen += EFS_SESS_WIRE_LEN;
+    }
     fd = efs_connect_tcp(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
@@ -1808,7 +1827,7 @@ static int cmd_raft_append(int argc, char **argv)
     }
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    if (send_recv(fd, EFS_MSG_INODE_APPEND, &req, sizeof(req), &reply_type,
+    if (send_recv(fd, EFS_MSG_INODE_APPEND, buf, slen, &reply_type,
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_APPEND_REPLY ||
         reply_len != sizeof(*r)) {
@@ -2551,7 +2570,7 @@ int main(int argc, char **argv)
                     "  raft-lookup-path <node:port> <path> [start]\n"
                     "  raft-publish <node:port> <ino> [chunk] [size]\n"
                     "  raft-getchunks <node:port> <ino> [start]\n"
-                    "  raft-append <node:port> <ino> <len>\n"
+                    "  raft-append <node:port> <ino> <len> [uuid-hex epoch]\n"
                     "  raft-hold <node:port> <ino> <open|close> [owner] [uuid-hex epoch]\n"
                     "  raft-flock <node:port> <ino> <ex|sh|un|gex|gsh> [owner] [uuid-hex epoch]\n"
                     "  raft-fcntl <node:port> <ino> <ex|sh|un|gex|gsh> [owner] [start end] [uuid-hex epoch]\n",

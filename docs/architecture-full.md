@@ -1166,10 +1166,10 @@ and 10.5c-34 (blocking lock waits: FIFO leader queue)
 and 10.5c-35a (session record + register + establish)
 and 10.5c-35b (real session uuid/epoch on HOLD/FLOCK)
 and 10.5c-35c (revocation barrier: fence + waiter dequeue)
+and 10.5c-35d (append-reservation reclaim on fence as FENCED_HOLE)
 are gated on a
 scratch cluster behind `EFS_MD_RAFT`. Remaining: cutover of the
-live table is not this work (not step 11). Session fencing
-continues as 35d. The KV engine is
+live table is not this work (not step 11). The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not
@@ -1317,8 +1317,9 @@ sends you to — not the whole spec.
 > session identity on HOLD/FLOCK (10.5c-35b: optional
 > `(uuid, epoch)` wire suffix, `efs_session_accept` before
 > propose), and the revocation barrier (10.5c-35c: coordinator
-> `raft-session fence`, waiters of the old epoch never granted).
-> Next: 35d (append-reservation reclaim on fence). Cutover of
+> `raft-session fence`, waiters of the old epoch never granted),
+> and append-reservation reclaim on fence (10.5c-35d: OPEN
+> reservations of epoch E resolve as FENCED_HOLE). Cutover of
 > `efs-test` is not this work.
 > [architecture.md §10](#architecture)
 >
@@ -1671,6 +1672,15 @@ sends you to — not the whole spec.
 > Same scratch smoke: a waiter of epoch 1 is BUSY after fence,
 > epoch 1 is rejected, epoch 2 is accepted after establish, and
 > GET after crash is ACTIVE at epoch 2.
+>
+> **10.5c-35d is in (gated):** append-reservation reclaim on fence.
+> `LEASE_DROP` of epoch E resolves that session's OPEN reservations
+> on the shard as `FENCED_HOLE` (committed zero hole; frontier
+> advances). Production `raft-append` takes an optional
+> `(uuid, epoch)` suffix (same as HOLD) so the reservation is
+> tagged; absent keeps the zero-UUID stand-in. Gate: same smoke —
+> reserve 128 KiB under epoch 1, getattr stays 0, fence, getattr
+> is 131072, old-epoch append is BUSY.
 >
 > **The one rule 10.5c owes 10.5b** (`include/efs/raft_disk.h`): the Raft log is
 > the durability boundary and the applied KV is a replayable view, so never
@@ -4812,6 +4822,13 @@ waiters of that uuid/epoch (never granted). Gate: same smoke —
 waiter of epoch 1 BUSY after fence, epoch 1 rejected, epoch 2
 accepted after establish, ACTIVE epoch 2 after crash.
 
+**10.5c-35d — append-reservation reclaim on fence.** `LEASE_DROP`
+of epoch E resolves that session's OPEN reservations on the
+shard as `FENCED_HOLE`. Optional `(uuid, epoch)` suffix on
+`raft-append` tags the rsv; absent keeps the stand-in. Gate:
+same smoke — reserve 128 KiB under epoch 1, getattr stays 0,
+fence, getattr is 131072, old-epoch append BUSY.
+
 ### Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove
@@ -5385,5 +5402,19 @@ keyed by `(uuid, epoch)` so a fenced waiter is never granted
 (BUSY/STALE). Gate: scratch smoke — waiter of epoch 1 is BUSY after
 fence, epoch 1 HOLD/FLOCK is rejected, epoch 2 is accepted after
 establish, GET after crash is ACTIVE at epoch 2. Append-reservation
-reclaim is 35d.
+reclaim is 35d (hosted below).
+
+### Sep 9 2026 — 10.5c-35d append-reservation reclaim on fence
+
+A fenced session's OPEN `O_APPEND` reservations must resolve as
+`FENCED_HOLE` (committed zero hole; the frontier advances) so a
+later appender is not stuck behind a dead client's watermark.
+10.5c-35d scans the shard's reservation prefix on `LEASE_DROP`
+and resolves matching `(uuid, epoch)` OPEN rows. Production
+`raft-append` takes an optional `(uuid, epoch)` wire suffix
+(same layout as HOLD); seq stays 0 so tagging does not enable
+the op-id window. Absent suffix keeps the zero-UUID stand-in.
+Gate: scratch smoke — reserve 128 KiB under epoch 1, getattr
+stays frontier 0, fence, getattr is 131072, old-epoch append
+is BUSY.
 

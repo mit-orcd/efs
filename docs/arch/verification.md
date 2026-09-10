@@ -611,6 +611,13 @@ waiters of that uuid/epoch (never granted). Gate: same smoke —
 waiter of epoch 1 BUSY after fence, epoch 1 rejected, epoch 2
 accepted after establish, ACTIVE epoch 2 after crash.
 
+**10.5c-35d — append-reservation reclaim on fence.** `LEASE_DROP`
+of epoch E resolves that session's OPEN reservations on the
+shard as `FENCED_HOLE`. Optional `(uuid, epoch)` suffix on
+`raft-append` tags the rsv; absent keeps the stand-in. Gate:
+same smoke — reserve 128 KiB under epoch 1, getattr stays 0,
+fence, getattr is 131072, old-epoch append BUSY.
+
 ## Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove
