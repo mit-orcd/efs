@@ -5,6 +5,7 @@
 #include "efs/common.h"
 #include "efs/network.h"
 #include "efs/protocol.h"
+#include "efs/kv_key.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -3409,6 +3410,63 @@ static void stop_perf_recorder(void)
 static int efs_fuse_main_mt(int argc, char *argv[],
                             const struct fuse_operations *op, void *private_data);
 
+/* Raft host mode (EFS_MD_RAFT) mount bootstrap. The Raft+KV host does not
+ * serve GET_META (the full serialized table), so the usual fetch path cannot
+ * work. The client already has the shard->group->voter mapping compiled in
+ * (kv_key.h / raft.h), so all it needs from the cluster is confirmation that
+ * the Raft export exists (kv_has_root) plus a local shell export to route by.
+ * Poll RAFT_STATUS on the discovered nodes until one reports kv_has_root. */
+static int raft_bootstrap_metadata(void)
+{
+    for (int attempt = 0; attempt < 50; attempt++) {
+        for (uint32_t i = 0; i < g_client.node_count; i++) {
+            int fd = efs_connect_tcp(g_client.nodes[i].addr,
+                                     g_client.nodes[i].port);
+            if (fd < 0)
+                continue;
+            efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+            efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+            uint8_t type = 0;
+            void *payload = NULL;
+            uint32_t plen = 0;
+            if (efs_send_msg(fd, EFS_MSG_RAFT_STATUS, NULL, 0) == 0 &&
+                efs_recv_msg(fd, &type, &payload, &plen) == 0 &&
+                type == EFS_MSG_RAFT_STATUS_REPLY &&
+                plen >= sizeof(struct efs_msg_raft_status_reply)) {
+                struct efs_msg_raft_status_reply *r = payload;
+                if (r->rc == EFS_OK && r->kv_has_root) {
+                    free(payload);
+                    close(fd);
+                    goto ready;
+                }
+            }
+            free(payload);
+            close(fd);
+        }
+        usleep(100000); /* 100ms; mkfs/election may still be running */
+    }
+    fprintf(stderr,
+            "efs-fuse: EFS_MD_RAFT set but no node reports a Raft export "
+            "(raft-status kv_has_root=0). Run 'efs-mgmt raft-mkfs' first.\n");
+    return EFS_ERR_NOT_FOUND;
+
+ready:
+    efs_client_table_lock();
+    pthread_mutex_lock(&g_client.idx_mu);
+    efs_export_init(&g_client.export, g_client.export_id, g_client.export_name);
+    g_client.export.root.shard_bits = EFS_KV_SHARD_BITS;
+    g_client.export.root.shard_count = 1u << EFS_KV_SHARD_BITS;
+    g_client.export.chunk_size = EFS_DEFAULT_CHUNK_SIZE;
+    g_client.export.meta_fragmented = 0;
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_table_unlock();
+    fprintf(stderr,
+            "meta: Raft host mode (EFS_MD_RAFT); mounted export '%s' "
+            "(bits=%u, no GET_META table)\n",
+            g_client.export_name, EFS_KV_SHARD_BITS);
+    return EFS_OK;
+}
+
 int main(int argc, char **argv)
 {
     /* Line-buffer logs even when stdout is a pipe (client.sh | tee). */
@@ -3503,14 +3561,23 @@ int main(int argc, char **argv)
     printf("fetching metadata...\n");
     fflush(stdout);
     int rc = -1;
-    for (uint32_t i = 0; i < g_client.node_count; i++) {
-        printf("  try %s:%u\n", g_client.nodes[i].addr, g_client.nodes[i].port);
-        fflush(stdout);
-        rc = efs_client_fetch_metadata(g_client.nodes[i].addr, g_client.nodes[i].port);
-        if (rc == 0)
-            break;
-        printf("  fetch failed rc=%d (%s)\n", rc, efs_strerror(rc));
-        fflush(stdout);
+    if (getenv("EFS_MD_RAFT")) {
+        /* Raft host mode: the metadata engine is the Raft+KV host, which
+         * does not serve GET_META (the full serialized table). Bootstrap is
+         * a thin RAFT_STATUS poll for kv_has_root, then a local shell export
+         * — the client already has the shard->group->voter mapping compiled
+         * in (include/efs/kv_key.h, include/efs/raft.h) and routes by it. */
+        rc = raft_bootstrap_metadata();
+    } else {
+        for (uint32_t i = 0; i < g_client.node_count; i++) {
+            printf("  try %s:%u\n", g_client.nodes[i].addr, g_client.nodes[i].port);
+            fflush(stdout);
+            rc = efs_client_fetch_metadata(g_client.nodes[i].addr, g_client.nodes[i].port);
+            if (rc == 0)
+                break;
+            printf("  fetch failed rc=%d (%s)\n", rc, efs_strerror(rc));
+            fflush(stdout);
+        }
     }
     if (rc != 0) {
         if (rc == EFS_ERR_NOT_FOUND && g_client.export_name[0]) {

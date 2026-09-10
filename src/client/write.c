@@ -3178,8 +3178,12 @@ int efs_client_write_no_replicate(efs_ino_t ino, uint64_t offset, size_t size, c
     efs_client_unlock_dir(ino);
 
     /* Default: stage ImageNet-sized writes into the parent dir pack so
-     * most files add zero chunk-table rows. Seal on FUSE release. */
-    if (g_client.meta_batch && !packed && offset == 0) {
+     * most files add zero chunk-table rows. Seal on FUSE release.
+     * Raft host mode has no pack fields in the KV row and cannot publish
+     * chunks under a directory ino — small writes take the normal chunk
+     * path there. */
+    if (g_client.meta_batch && !packed && offset == 0 &&
+        !efs_client_raft_mode()) {
         uint32_t cs = data_chunk_size();
         if (size < cs) {
             efs_ino_t parent = inode.parent;

@@ -1393,6 +1393,29 @@ static void test_truncate_range_del(void)
           "tail cas");
     CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK && r.base_size == 4096,
           "partial size");
+
+    /* Multi-lane range delete: ci 0/64 are lane 0, ci 1/65 are lane 1, so a
+     * truncate to 2 chunks must delete one key from EACH lane. Regression:
+     * the delete scratch array was indexed from a per-lane base, so the
+     * second lane overwrote the first lane's keys and the wrong chunks were
+     * deleted (a same-lane pair like 0/64 cannot see it). */
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "m", &ino)
+              == EFS_OK,
+          "create4");
+    pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0xE1, 0, T0 + 1, "pub0m");
+    pub(kv, ino, 1, 2ULL * EFS_MIN_CHUNK_SIZE, 0xE2, 0, T0 + 2, "pub1m");
+    pub(kv, ino, 64, 65ULL * EFS_MIN_CHUNK_SIZE, 0xE3, 0, T0 + 3, "pub64m");
+    pub(kv, ino, 65, 66ULL * EFS_MIN_CHUNK_SIZE, 0xE4, 0, T0 + 4, "pub65m");
+    memset(&t, 0, sizeof(t));
+    t.size = 2ULL * EFS_MIN_CHUNK_SIZE;
+    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 14, &t) == EFS_OK, "multi-lane");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK, "m c0 kept");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 1, &got) == EFS_OK, "m c1 kept");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 64, &got) == EFS_ERR_NOT_FOUND,
+          "m c64 deleted");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 65, &got) == EFS_ERR_NOT_FOUND,
+          "m c65 deleted");
+
     CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
     efs_kv_mem_free(kv);
 }

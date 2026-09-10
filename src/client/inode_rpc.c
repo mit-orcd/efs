@@ -1,6 +1,8 @@
 #include "client_internal.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
+#include "efs/raft.h"
+#include "efs/kv_key.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -158,9 +160,64 @@ static struct efs_conn *rpc_primary_conn(efs_node_id_t *nid_out)
 /* Route to the owner of an explicit shard id (not an inode). Do not
  * invent an ino to fake this — crafted inos collide with ROOT and
  * mis-route GETCHUNKS/REPORT after extent sharding. */
+
+/* Raft host mode (EFS_MD_RAFT): the metadata engine is the Raft+KV host,
+ * not the in-memory table. Shards map to Raft groups by the compiled-in
+ * rule (odd shard -> group 0, even -> group 2; include/efs/raft.h), and
+ * each group's voters are a fixed node set (group 0 = nodes 1,2,3; group 2
+ * = nodes 2,3,4 for a 4-node cluster). Any voter can answer or bounce the
+ * RPC to the leader, and rpc_send_recv_shard follows the primary_id hint,
+ * so the client only needs to reach *a* live voter of the right group. */
+static int raft_mode_on(void)
+{
+    static int on = -1;
+    if (on < 0)
+        on = getenv("EFS_MD_RAFT") ? 1 : 0;
+    return on;
+}
+
+int efs_client_raft_mode(void)
+{
+    return raft_mode_on();
+}
+
+static uint32_t raft_group_voters(uint8_t group, int n)
+{
+    if (n <= 3)
+        return (1u << n) - 1u;
+    if (group == EFS_RAFT_GROUP_SHARD)
+        return 0x7u; /* nodes 1,2,3 = raft ids 0,1,2 */
+    return 0xeu;     /* nodes 2,3,4 = raft ids 1,2,3 */
+}
+
+static struct efs_conn *raft_voter_conn(uint32_t shard,
+                                        efs_node_id_t *nid_out)
+{
+    uint8_t group = efs_raft_shard_group(shard);
+    int n = (int)g_client.node_count;
+    uint32_t voters = raft_group_voters(group, n);
+    /* First live voter of the group; the host bounces to the leader and the
+     * retry loop follows primary_id, so any voter is a fine entry point. */
+    for (int rid = 0; rid < n && rid < EFS_RAFT_MAX_PEERS; rid++) {
+        if (!(voters & (1u << rid)))
+            continue;
+        efs_node_id_t id = (efs_node_id_t)(rid + 1);
+        if (efs_client_node_is_down(id))
+            continue;
+        struct efs_conn *conn = efs_client_conn_get(id);
+        if (conn) {
+            *nid_out = id;
+            return conn;
+        }
+    }
+    return rpc_primary_conn(nid_out);
+}
+
 static struct efs_conn *rpc_owner_conn_shard(uint32_t shard,
                                              efs_node_id_t *nid_out)
 {
+    if (raft_mode_on())
+        return raft_voter_conn(shard, nid_out);
     uint32_t sc = g_client.export.root.shard_count;
     uint32_t bits = g_client.export.root.shard_bits;
     if (sc <= 1 || bits == 0)
@@ -255,7 +312,10 @@ static int rpc_send_recv_owner(efs_ino_t ino, uint8_t type, const void *req,
                                uint32_t req_len, uint8_t expect, void *reply,
                                uint32_t reply_len)
 {
-    uint32_t bits = g_client.export.root.shard_bits;
+    /* Raft host mode uses the fixed 12-bit KV shard space (ino & 0xFFF);
+     * the in-memory table's shard_bits is 0 in that mode. */
+    uint32_t bits = raft_mode_on() ? EFS_KV_SHARD_BITS
+                                   : g_client.export.root.shard_bits;
     return rpc_send_recv_shard(efs_export_shard_of(ino, bits), type, req,
                                req_len, expect, reply, reply_len);
 }

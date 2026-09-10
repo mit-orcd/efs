@@ -2096,6 +2096,44 @@ static uint64_t make_boot_id(void)
            ((uint64_t)ts.tv_sec << 16) ^ (uint64_t)ts.tv_nsec;
 }
 
+/* Boot ids fence stale incarnations (raft.c peer_boot): a peer drops any
+ * message whose boot is LOWER than the last one it saw from us. pid^time is
+ * NOT monotonic across restarts, so an unfenced restart could pick a lower
+ * boot and be silently fenced forever (replies dropped, replication wedges).
+ * Persist the last used boot in <mdraft>/boot.bin and always start at
+ * max(fresh, saved+1), writing the chosen value back before use. */
+static int host_boot_bump(const char *dir, uint64_t *boot_io)
+{
+    char path[EFS_MAX_PATH];
+    uint64_t saved = 0, next;
+    ssize_t n;
+    int fd;
+
+    snprintf(path, sizeof(path), "%s/boot.bin", dir);
+    fd = open(path, O_RDWR | O_CREAT, 0644);
+    if (fd < 0)
+        return EFS_ERR_IO;
+    n = read(fd, &saved, sizeof(saved));
+    if (n < 0) {
+        close(fd);
+        return EFS_ERR_IO;
+    }
+    if (n < (ssize_t)sizeof(saved))
+        saved = 0; /* fresh file */
+    next = *boot_io;
+    if (saved >= next)
+        next = saved + 1;
+    if (lseek(fd, 0, SEEK_SET) < 0 ||
+        write(fd, &next, sizeof(next)) != (ssize_t)sizeof(next) ||
+        fsync(fd) != 0) {
+        close(fd);
+        return EFS_ERR_IO;
+    }
+    close(fd);
+    *boot_io = next;
+    return EFS_OK;
+}
+
 static uint64_t make_salt(uint64_t boot)
 {
     uint64_t s = 0;
@@ -2207,6 +2245,12 @@ int server_raft_host_start(struct efsd_server *s)
         fprintf(stderr, "raft-host: mkdir %s: %s\n", dir, strerror(errno));
         free(h);
         return EFS_ERR_IO;
+    }
+    rc = host_boot_bump(dir, &h->boot_id);
+    if (rc != EFS_OK) {
+        fprintf(stderr, "raft-host: boot persist %s failed\n", dir);
+        free(h);
+        return rc;
     }
     {
         char kvdir[EFS_MAX_PATH], logdir[EFS_MAX_PATH];
@@ -4207,8 +4251,12 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
 }
 
 /* SETATTR SIZE: content_epoch fence + base_size. Unaligned sizes mint a
- * same-group tail candidate (CAS inside the truncate entry). */
-static void host_truncate(efs_ino_t ino, uint64_t size,
+ * same-group tail candidate (CAS inside the truncate entry). mtime is the
+ * client-stamped time when the caller sent SIZE|MTIME (the client's truncate
+ * always does — it marks the truncate newer than any in-flight REPORT), or
+ * 0 to stamp now. */
+static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
+                          uint32_t mtime_nsec,
                           struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
@@ -4287,6 +4335,8 @@ static void host_truncate(efs_ino_t ino, uint64_t size,
         }
     }
     now = now_ns();
+    if (mtime)
+        now = mtime * 1000000000ull + (uint64_t)mtime_nsec;
     if (rc == EFS_OK)
         rc = pack_truncate_cmd(cmd, &clen, ino, now, 0, size, tp);
     if (rc == EFS_OK && clen > HOST_CMD_MAX)
@@ -4331,16 +4381,21 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
     own = mask & (EFS_SETATTR_MODE | EFS_SETATTR_UID | EFS_SETATTR_GID);
     times = mask & (EFS_SETATTR_MTIME | EFS_SETATTR_ATIME);
     sz = mask & EFS_SETATTR_SIZE;
-    if ((own && times) || (own && sz) || (times && sz)) {
-        out->status = EFS_INODE_RPC_INVAL;
-        return;
-    }
     if (sz) {
-        if (mask != EFS_SETATTR_SIZE) {
+        /* Truncate. The client always sends SIZE|MTIME (the mtime marks the
+         * truncate newer than any in-flight REPORT), so accept that pairing;
+         * the stamped mtime rides the truncate entry. ATIME is meaningless
+         * with SIZE. */
+        if (own || (mask & EFS_SETATTR_ATIME) ||
+            (times & ~EFS_SETATTR_MTIME) != 0) {
             out->status = EFS_INODE_RPC_INVAL;
             return;
         }
-        host_truncate(ino, size, out);
+        host_truncate(ino, size, mtime, mtime_nsec, out);
+        return;
+    }
+    if ((own && times)) {
+        out->status = EFS_INODE_RPC_INVAL;
         return;
     }
     if (times) {
@@ -4869,6 +4924,10 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
     int rc;
 
     rc = efs_meta_apply_append_open(h->kv, ino, offs, lens, &n);
+    /* Deleted inode (stale report skipped by host_pub_locked): no
+     * reservations to resolve. */
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_OK;
     if (rc != EFS_OK)
         return rc;
     ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
@@ -4912,18 +4971,39 @@ static int host_pub_locked(struct efs_raft_host *h, const struct efs_chunk_rec *
     if (!rec || rec->ino == 0)
         return EFS_ERR_INVAL;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        if (rec->nodes[i] == 0)
+        if (rec->nodes[i] == 0) {
+            if (env_on("EFS_RAFT_DBG"))
+                fprintf(stderr, "raft-host: pub ino=%llu ci=%u INVAL node0\n",
+                        (unsigned long long)rec->ino, rec->chunk_index);
             return EFS_ERR_INVAL;
+        }
     }
     ish = efs_kv_inode_shard(rec->ino);
     ig = efs_raft_shard_group(ish);
     rc = host_read_index(h, ig, hint);
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, rec->ino, &row);
-    if (rc != EFS_OK)
+    /* Stale publish for a deleted inode: skip the proposal entirely (P3).
+     * ReadIndex guarantees we see the committed create, so NOT_FOUND here
+     * means the unlink already won. */
+    if (rc == EFS_ERR_NOT_FOUND) {
+        if (env_on("EFS_RAFT_DBG"))
+            fprintf(stderr, "raft-host: pub ino=%llu ci=%u stale (deleted), skip\n",
+                    (unsigned long long)rec->ino, rec->chunk_index);
+        return EFS_OK;
+    }
+    if (rc != EFS_OK) {
+        if (env_on("EFS_RAFT_DBG"))
+            fprintf(stderr, "raft-host: pub ino=%llu ci=%u get_inode rc=%d\n",
+                    (unsigned long long)rec->ino, rec->chunk_index, rc);
         return rc;
-    if (!host_holds_chunks(row.mode))
+    }
+    if (!host_holds_chunks(row.mode)) {
+        if (env_on("EFS_RAFT_DBG"))
+            fprintf(stderr, "raft-host: pub ino=%llu ci=%u INVAL mode=%o\n",
+                    (unsigned long long)rec->ino, rec->chunk_index, row.mode);
         return EFS_ERR_INVAL;
+    }
     lane = (uint8_t)(rec->chunk_index % EFS_META_LANES);
     lsh = efs_kv_lane_shard(rec->ino, lane);
     lg = efs_raft_shard_group(lsh);
@@ -4958,6 +5038,9 @@ static int host_pub_locked(struct efs_raft_host *h, const struct efs_chunk_rec *
         rc = host_propose(h, lg, cmd, clen, &idx, hint);
     if (rc == EFS_OK)
         rc = host_wait_applied(h, lg, idx, hint);
+    if (rc != EFS_OK && env_on("EFS_RAFT_DBG"))
+        fprintf(stderr, "raft-host: pub ino=%llu ci=%u propose/apply rc=%d\n",
+                (unsigned long long)rec->ino, rec->chunk_index, rc);
     return rc;
 }
 
@@ -4985,6 +5068,9 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
+    if (env_on("EFS_RAFT_DBG"))
+        fprintf(stderr, "raft-host: report count=%u ino_count=%u\n",
+                count, ino_count);
     pthread_mutex_lock(&h->read_mu);
     for (i = 0; i < count && rc == EFS_OK; i++) {
         sz = 0;
@@ -4997,6 +5083,10 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         if (sz == 0)
             sz = ((uint64_t)recs[i].chunk_index + 1) * EFS_MIN_CHUNK_SIZE;
         rc = host_pub_locked(h, &recs[i], sz, &hint);
+        if (env_on("EFS_RAFT_DBG"))
+            fprintf(stderr, "raft-host: report pub ino=%llu ci=%u sz=%llu rc=%d\n",
+                    (unsigned long long)recs[i].ino, recs[i].chunk_index,
+                    (unsigned long long)sz, rc);
         if (rc == EFS_OK)
             rc = host_resolve_caught_up(h, recs[i].ino, sz, &hint);
     }

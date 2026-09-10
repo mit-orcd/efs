@@ -1968,6 +1968,14 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     if (rc != EFS_OK)
         return rc;
     rc = efs_meta_apply_get_inode(kv, p->ino, &row);
+    /* P3: a publish racing an unlink is stale work — make it harmless.
+     * The inode row is gone, so there is nothing to attach the chunk to;
+     * the fragments are orphans for GC (L7). A no-op OK, never an error:
+     * the client's create for this ino committed before it could dirty the
+     * chunk, so NOT_FOUND after commit ordering means deleted, not
+     * not-yet-created. */
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_OK;
     if (rc != EFS_OK)
         return rc;
     /* FUSE stores a symlink target as ordinary published bytes. Directories
@@ -2322,7 +2330,6 @@ struct trunc_scan {
     struct efs_kv_item *it;
     uint8_t (*del_keys)[EFS_KV_KEY_MAX];
     uint32_t n;
-    uint32_t del_base;
     uint32_t cap;
     int rc;
 };
@@ -2355,9 +2362,13 @@ del:
         ts->rc = EFS_ERR_NOMEM;
         return 1;
     }
-    memcpy(ts->del_keys[ts->n - ts->del_base], key, klen);
+    /* del_keys is indexed by the GLOBAL item number, never a per-lane base:
+     * the scan runs once per lane over one shared array, and a per-lane
+     * base would let lane i+1 overwrite keys that lane i's items still
+     * point at — deleting the wrong chunks on a multi-lane truncate. */
+    memcpy(ts->del_keys[ts->n], key, klen);
     ts->it[ts->n].op = EFS_KV_DEL;
-    ts->it[ts->n].key = ts->del_keys[ts->n - ts->del_base];
+    ts->it[ts->n].key = ts->del_keys[ts->n];
     ts->it[ts->n].klen = klen;
     ts->n++;
     return 0;
@@ -2390,7 +2401,6 @@ static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
     ts.it = it;
     ts.del_keys = del_keys;
     ts.n = *n;
-    ts.del_base = *n;
     ts.cap = cap;
     rc = efs_kv_scan_prefix(kv, pref, plen, trunc_del_cb, &ts);
     if (ts.rc != EFS_OK)
@@ -2517,25 +2527,29 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
     return EFS_OK;
 }
 
-int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
-                            const struct efs_meta_truncate *t)
+/* Batch capacity: one fence per lane + the inode row + up to 32
+ * range-deleted chunk keys per lane + the tail chunk/lane pair. del_keys
+ * carries the same bound and is indexed by the global item number (see
+ * trunc_del_cb), so one `n >= cap` check covers both arrays. */
+#define TRUNC_IT_CAP (EFS_META_LANES + 1 + EFS_META_LANES * 32 + 2)
+
+static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
+                          const struct efs_meta_truncate *t,
+                          struct efs_kv_item *it,
+                          uint8_t (*del_keys)[EFS_KV_KEY_MAX])
 {
     struct efs_meta_row row;
     uint8_t k_ino[EFS_KV_KEY_MAX];
     uint8_t v_ino[INO_VAL];
     uint8_t k_ln[EFS_META_LANES][EFS_KV_KEY_MAX];
     uint8_t v_ln[EFS_META_LANES][LANE_VAL];
-    uint8_t del_keys[EFS_META_LANES * 32][EFS_KV_KEY_MAX];
     uint8_t k_tail[EFS_KV_KEY_MAX], v_tail[CHUNK_VAL];
-    struct efs_kv_item it[EFS_META_LANES + 1 + EFS_META_LANES * 32 + 2];
     uint32_t ki = 0, n = 0, i, tail_ci = 0;
     uint64_t new_epoch;
     uint8_t has_tail = 0;
     int touch_inode = 0;
     int rc;
 
-    if (!kv || !t || ino == 0)
-        return EFS_ERR_INVAL;
     rc = efs_meta_apply_get_inode(kv, ino, &row);
     if (rc != EFS_OK)
         return rc;
@@ -2556,7 +2570,7 @@ int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     row.base_size = t->size;
     row.base_mtime = max_u64(row.base_mtime, now);
     row.base_ctime = max_u64(row.base_ctime, now);
-    memset(it, 0, sizeof(it));
+    memset(it, 0, TRUNC_IT_CAP * sizeof(it[0]));
     memset(k_ln, 0, sizeof(k_ln));
     memset(v_ln, 0, sizeof(v_ln));
     for (i = 0; i < EFS_META_LANES; i++) {
@@ -2568,13 +2582,12 @@ int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
             return rc;
         rc = truncate_lane_range_del(kv, ino, row.generation, (uint8_t)i,
                                    t->size, tail_ci, has_tail, it, del_keys,
-                                   &n, (uint32_t)(sizeof(it) / sizeof(it[0])));
+                                   &n, TRUNC_IT_CAP);
         if (rc != EFS_OK)
             return rc;
     }
     rc = truncate_publish_tail(kv, &row, now, t->tail, it, &n,
-                               (uint32_t)(sizeof(it) / sizeof(it[0])),
-                               k_tail, v_tail, k_ln, v_ln);
+                               TRUNC_IT_CAP, k_tail, v_tail, k_ln, v_ln);
     if (rc != EFS_OK)
         return rc;
     if (t->tail)
@@ -2591,6 +2604,31 @@ int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     n++;
     (void)touch_inode;
     return efs_kv_batch(kv, it, n);
+}
+
+int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
+                            const struct efs_meta_truncate *t)
+{
+    struct efs_kv_item *it;
+    uint8_t (*del_keys)[EFS_KV_KEY_MAX];
+    int rc;
+
+    if (!kv || !t || ino == 0)
+        return EFS_ERR_INVAL;
+    /* ~730 KiB of batch storage belongs on the heap, not the stack: efsd
+     * applies entries on a 1 MiB pump thread (efsd_pthread_create), where
+     * this as a stack frame sits one field away from the guard page. */
+    it = malloc(TRUNC_IT_CAP * sizeof(*it));
+    del_keys = malloc(TRUNC_IT_CAP * sizeof(*del_keys));
+    if (!it || !del_keys) {
+        free(it);
+        free(del_keys);
+        return EFS_ERR_NOMEM;
+    }
+    rc = truncate_apply(kv, ino, now, t, it, del_keys);
+    free(it);
+    free(del_keys);
+    return rc;
 }
 
 static int utimens_lane_upd(struct lane_rec *ln, void *arg)
