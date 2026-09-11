@@ -167,6 +167,11 @@ int efs_client_stat_ino(efs_ino_t ino, struct efs_inode *out);
 int efs_client_rpc_readdir(efs_export_id_t export_id, efs_ino_t parent,
                            struct efs_inode *ents, uint32_t *inout_count,
                            uint64_t after_ino);
+/* Raft-mode readdir with the server's (src, name) resume cookie. */
+int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
+                               struct efs_inode *ents, uint32_t *inout_count,
+                               uint32_t *src_io, char *name_io,
+                               uint32_t *done_out);
 int efs_client_rpc_readdir_ex(efs_export_id_t export_id, efs_ino_t parent,
                               struct efs_inode *ents, uint32_t *inout_count,
                               uint64_t after_ino, uint32_t flags, uint32_t shard);

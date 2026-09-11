@@ -588,8 +588,16 @@ struct efs_msg_inode_readdir {
      * ino order. A positional skip is NOT stable — remove_inode_slot
      * swap-compacts, so a concurrent unlink of ANOTHER dir on the same shard
      * shifts this dir's rows across a page boundary and an entry is skipped.
-     * inos survive compaction, so an ino cursor is stable. 0 = from start. */
+     * inos survive compaction, so an ino cursor is stable. 0 = from start.
+     *
+     * Raft host (EFS_MD_RAFT): the KV scans a directory in NAME order, so
+     * the ino cursor cannot work (name order != ino order — entries would
+     * be skipped). The raft path uses (after_src, after_name) instead: the
+     * exact resume cookie from the previous reply's next_src/next_name.
+     * 0/"" = from start. */
     uint64_t after_ino;
+    uint32_t after_src;
+    char after_name[EFS_MAX_NAME];
 };
 
 struct efs_msg_inode_unlink {
@@ -612,6 +620,11 @@ struct efs_msg_inode_readdir_reply {
     uint8_t status;
     uint32_t count;
     struct efs_inode ents[EFS_READDIR_MAX];
+    /* Raft host resume cookie: pass back verbatim as after_src/after_name.
+     * next_done=1 means the directory scan is exhausted. */
+    uint32_t next_src;
+    uint32_t next_done;
+    char next_name[EFS_MAX_NAME];
 };
 
 /* Phase 2b: rename/move an inode to a new parent + name. */

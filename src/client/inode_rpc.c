@@ -547,6 +547,78 @@ int efs_client_rpc_readdir_ex(efs_export_id_t export_id, efs_ino_t parent,
     return EFS_OK;
 }
 
+/* Raft-mode readdir: the KV scans a dir in NAME order, so pagination uses
+ * the server's (src, name) resume cookie, not an ino cursor (name order !=
+ * ino order — an ino filter skips entries). src_io/name_io are in/out:
+ * pass 0/"" for the first page, then the previous reply's cookie verbatim.
+ * done_out=1 when the scan is exhausted. */
+int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
+                               struct efs_inode *ents, uint32_t *inout_count,
+                               uint32_t *src_io, char *name_io,
+                               uint32_t *done_out)
+{
+    struct efs_msg_inode_readdir req;
+    struct efs_conn *conn;
+    efs_node_id_t nid = 0;
+    uint8_t rtype = 0;
+    void *payload = NULL;
+    uint32_t plen = 0;
+    uint32_t shard = efs_kv_inode_shard(parent);
+    int rc;
+
+    memset(&req, 0, sizeof(req));
+    req.export_id = export_id;
+    req.parent = parent;
+    req.max_ents = inout_count ? *inout_count : EFS_READDIR_MAX;
+    req.after_src = src_io ? *src_io : 0;
+    if (name_io)
+        strncpy(req.after_name, name_io, EFS_MAX_NAME - 1);
+    conn = rpc_owner_conn_shard(shard, &nid);
+    if (!conn)
+        return EFS_ERR_NET;
+    if (efs_conn_send_msg(conn, EFS_MSG_INODE_READDIR, &req, sizeof(req)) != 0) {
+        efs_client_conn_drop(nid, conn);
+        return EFS_ERR_NET;
+    }
+    rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
+    if (rc != 0) {
+        efs_client_conn_drop(nid, conn);
+        return EFS_ERR_NET;
+    }
+    efs_client_conn_release(nid, conn);
+    if (rtype != EFS_MSG_INODE_READDIR_REPLY ||
+        plen < sizeof(struct efs_msg_inode_readdir_reply)) {
+        free(payload);
+        return EFS_ERR_PROTO;
+    }
+    {
+        struct efs_msg_inode_readdir_reply *r = payload;
+        uint32_t n;
+        if (r->status != EFS_INODE_RPC_OK) {
+            int st = rpc_status_to_efs(r->status);
+            free(payload);
+            return st;
+        }
+        n = r->count;
+        if (inout_count && n > *inout_count)
+            n = *inout_count;
+        if (ents && n)
+            memcpy(ents, r->ents, n * sizeof(ents[0]));
+        if (inout_count)
+            *inout_count = n;
+        if (src_io)
+            *src_io = r->next_src;
+        if (name_io) {
+            strncpy(name_io, r->next_name, EFS_MAX_NAME - 1);
+            name_io[EFS_MAX_NAME - 1] = 0;
+        }
+        if (done_out)
+            *done_out = r->next_done;
+    }
+    free(payload);
+    return EFS_OK;
+}
+
 int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
                              uint32_t start, struct efs_chunk_rec *recs,
                              uint32_t *inout_count)

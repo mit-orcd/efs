@@ -180,6 +180,49 @@ unreadable) — `perf record -p` / `perf stat -p` same-uid are fine.
 
 ## Where we are
 
+**STEP 1 LATENCY BUCKET LANDED (Sep 11, commit aba1d3f) —
+posix jobs=1 198/201 in 34s (was 182/201 in ~14 min); jobs=16 193/201 in
+30s (was catastrophic saturation).** Three changes:
+(1) **Event-driven `host_pump`** (raft_host.c): the fixed 5ms usleep poll is
+now an **eventfd** (`pump_efd`, EFD_NONBLOCK) + `poll` with `h->mu` UNLOCKED;
+`host_pump_kick` does a lock-free write from the inbox path and the
+leader-side propose path. FIRST version used a condvar signaled under `h->mu`
+and wedged the cluster (election flapping): the pump holds `h->mu` across
+synchronous `host_send`, the peer's handler blocked on its own `h->mu` to
+signal, 3-node cycle broken only by the 250ms `HOST_SEND_IO_MS` timeout.
+**The network inbox path must NEVER take `h->mu`** — that is why the kick is
+an eventfd. `host_wait_applied`/`host_read_index` now
+`pthread_cond_timedwait` on `applied_cv` (broadcast by the pump each cycle;
+safe — no I/O under that wait) with a 400ms absolute deadline.
+(2) **Eager commit broadcast** (raft.c `on_ae_rep`): when `try_commit`
+advances `commit_index`, the leader now `broadcast_ae` immediately instead of
+letting caught-up followers learn the new commit only at the next 50ms
+heartbeat. This was the deterministic 74ms create: any op landing on a
+follower (2/3 of voters) stalled in `host_wait_applied`. Measured after:
+create 2.2ms, stat 0.7ms, unlink 1.4ms, depth-100 mkdir chain 4.2s.
+(3) **READDIR pagination cursor fix** (protocol.h, raft_host.c, handler.c,
+inode_rpc.c, efs_fuse.c): the raft host scans a dir in NAME order but the
+wire contract paginated by `after_ino` (ascending-ino assumption from the old
+table-scan server) — with ino-interleaved names and 64-entry pages, later
+pages dropped smaller-ino entries (8 threads x 20 creates: listdir saw 69 of
+160). `efs_msg_inode_readdir` gained `after_src`/`after_name[EFS_MAX_NAME]`,
+the reply gained `next_src`/`next_done`/`next_name` (resume cookie);
+`server_raft_host_readdir` takes the cookie, dropped the ino filter, and its
+internal page request is `max_ents - out->count` so the cursor never advances
+past unemitted entries. Client: `efs_client_rpc_readdir_cur` +
+`efs_fuse_readdir` uses it under `efs_client_raft_mode()` (legacy ino path
+kept for non-raft; shared `readdir_collect_page` helper does the name dedup).
+**Remaining 3 solo failures, all known debt (do not re-derive):**
+`dir_move_into_subdir` cross-dir rename EINVAL; `virt_find_query` .find
+unimplemented; `concurrent_writes_disjoint` EIO load flake (a sync report
+carries ALL dirty recs; a churning file's barrier-BUSY rec EIOs an unrelated
+close). jobs=16 adds only 15s-budget timeouts on the heavy-walk tests
+(dir_deep_nesting x2, dir_many_files) + the rename-family EIO — saturation
+latency, 0 correctness bugs. Unit: test_raft/kv_lsm/meta_apply/sim/wire/txn
+OK. **NFS GOTCHA (bit once): rsync -a quick-check (mtime+size) can skip a
+just-edited file through the NFS attr cache — if a node builds with a stale
+header after rsync, re-copy with `rsync -a --checksum`.**
+
 **STEP 1 PRODUCTION ADOPTION LANDED (Sep 10, commit 3299e89): efs-fuse mounts
 the Raft+KV engine behind `EFS_MD_RAFT` (client + server env).** Bootstrap
 polls RAFT_STATUS for `kv_has_root` (no GET_META — the host serves no

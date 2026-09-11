@@ -1222,6 +1222,42 @@ struct readdir_collect_arg {
     size_t cap;
 };
 
+/* Append one page, skipping name dups (spread dirs merge per-shard scans).
+ * Returns 0 or -ENOMEM. */
+static int readdir_collect_page(struct readdir_collect_arg *col,
+                                const struct efs_inode *ents, uint32_t n)
+{
+    if (col->count + n > col->cap) {
+        size_t ncap = col->cap ? col->cap : 16;
+        while (ncap < col->count + n)
+            ncap *= 2;
+        struct readdir_ent *ne = realloc(col->ents, ncap * sizeof(*ne));
+        if (!ne)
+            return -ENOMEM;
+        col->ents = ne;
+        col->cap = ncap;
+    }
+    for (uint32_t i = 0; i < n; i++) {
+        if (ents[i].ino == 0 || ents[i].name[0] == '\0')
+            continue;
+        int dup = 0;
+        for (size_t j = 0; j < col->count; j++) {
+            if (strcmp(col->ents[j].name, ents[i].name) == 0) {
+                dup = 1;
+                break;
+            }
+        }
+        if (dup)
+            continue;
+        struct readdir_ent *e = &col->ents[col->count++];
+        memset(e, 0, sizeof(*e));
+        strncpy(e->name, ents[i].name, EFS_MAX_NAME - 1);
+        e->st.st_ino = ents[i].ino;
+        e->st.st_mode = ents[i].mode;
+    }
+    return 0;
+}
+
 static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                             off_t offset, struct fuse_file_info *fi,
                             enum fuse_readdir_flags flags)
@@ -1265,64 +1301,64 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
      * walk shards in order and skip names already present after the
      * hash-matching shard is collected... we just skip dups). */
     struct readdir_collect_arg col = {0};
-    uint32_t bits = g_client.export.root.shard_bits;
-    uint32_t sc = g_client.export.root.shard_count;
-    int spread = efs_inode_dir_is_spread(&parent) && bits && sc > 1;
-    uint32_t nshard = spread ? sc : 1;
-    for (uint32_t s = 0; s < nshard; s++) {
-        uint64_t after = 0;
-        for (;;) {
+    if (efs_client_raft_mode()) {
+        /* Raft host: the KV scans a dir in NAME order. Paginate with the
+         * server's (src, name) resume cookie — an ino cursor would skip
+         * entries (name order != ino order). */
+        uint32_t src = 0, done = 0;
+        char name_cur[EFS_MAX_NAME] = "";
+        while (!done) {
             struct efs_inode ents[EFS_READDIR_MAX];
             uint32_t n = EFS_READDIR_MAX;
-            if (spread)
-                rc = efs_client_rpc_readdir_ex(g_client.export_id, parent.ino,
-                                               ents, &n, after,
-                                               EFS_READDIR_F_LOCAL_ONLY, s);
-            else
-                rc = efs_client_rpc_readdir(g_client.export_id, parent.ino,
-                                            ents, &n, after);
+            rc = efs_client_rpc_readdir_cur(g_client.export_id, parent.ino,
+                                            ents, &n, &src, name_cur, &done);
             if (rc != 0) {
                 free(col.ents);
                 return (rc == EFS_ERR_NOT_FOUND) ? -ENOENT : -EIO;
             }
-            if (n == 0)
-                break;
-            size_t need = col.count + n;
-            if (need > col.cap) {
-                size_t ncap = col.cap ? col.cap : 16;
-                while (ncap < need)
-                    ncap *= 2;
-                struct readdir_ent *ne = realloc(col.ents, ncap * sizeof(*ne));
-                if (!ne) {
+            if (readdir_collect_page(&col, ents, n) != 0) {
+                free(col.ents);
+                return -ENOMEM;
+            }
+            if (n == 0 && !done)
+                break; /* defensive: server must not stall mid-scan */
+        }
+    } else {
+        uint32_t bits = g_client.export.root.shard_bits;
+        uint32_t sc = g_client.export.root.shard_count;
+        int spread = efs_inode_dir_is_spread(&parent) && bits && sc > 1;
+        uint32_t nshard = spread ? sc : 1;
+        for (uint32_t s = 0; s < nshard; s++) {
+            uint64_t after = 0;
+            for (;;) {
+                struct efs_inode ents[EFS_READDIR_MAX];
+                uint32_t n = EFS_READDIR_MAX;
+                if (spread)
+                    rc = efs_client_rpc_readdir_ex(g_client.export_id,
+                                                   parent.ino, ents, &n, after,
+                                                   EFS_READDIR_F_LOCAL_ONLY, s);
+                else
+                    rc = efs_client_rpc_readdir(g_client.export_id, parent.ino,
+                                                ents, &n, after);
+                if (rc != 0) {
+                    free(col.ents);
+                    return (rc == EFS_ERR_NOT_FOUND) ? -ENOENT : -EIO;
+                }
+                if (n == 0)
+                    break;
+                uint64_t max_ino = after;
+                for (uint32_t i = 0; i < n; i++)
+                    if (ents[i].ino > max_ino)
+                        max_ino = ents[i].ino;
+                if (readdir_collect_page(&col, ents, n) != 0) {
                     free(col.ents);
                     return -ENOMEM;
                 }
-                col.ents = ne;
-                col.cap = ncap;
-            }
-            for (uint32_t i = 0; i < n; i++) {
-                if (ents[i].ino == 0 || ents[i].name[0] == '\0')
-                    continue;
                 /* Server returns ascending inos; advance the stable cursor. */
-                if (ents[i].ino > after)
-                    after = ents[i].ino;
-                int dup = 0;
-                for (size_t j = 0; j < col.count; j++) {
-                    if (strcmp(col.ents[j].name, ents[i].name) == 0) {
-                        dup = 1;
-                        break;
-                    }
-                }
-                if (dup)
-                    continue;
-                struct readdir_ent *e = &col.ents[col.count++];
-                memset(e, 0, sizeof(*e));
-                strncpy(e->name, ents[i].name, EFS_MAX_NAME - 1);
-                e->st.st_ino = ents[i].ino;
-                e->st.st_mode = ents[i].mode;
+                after = max_ino;
+                if (n < EFS_READDIR_MAX)
+                    break;
             }
-            if (n < EFS_READDIR_MAX)
-                break;
         }
     }
 

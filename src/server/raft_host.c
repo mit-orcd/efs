@@ -17,10 +17,12 @@
 #include "efs/network.h"
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/eventfd.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -125,6 +127,16 @@ struct efs_raft_host {
     pthread_mutex_t inbox_mu;
     struct host_inbox_item inbox[HOST_INBOX_MAX];
     int inbox_n;
+    /* Event-driven pump: pump_efd wakes the pump (inbox/propose/stop) between
+     * its 5 ms timer ticks. It is an eventfd, NOT a condvar on h->mu, on
+     * purpose: the pump holds h->mu across synchronous host_send I/O, so a
+     * wakeup that needs h->mu (network handler -> h->mu -> pump -> peer
+     * handler -> peer h->mu) closes a cross-node convoy that only the 250 ms
+     * send timeout breaks. eventfd write needs no lock. applied_cv is
+     * broadcast by the pump after each cycle so waiters see a fresh applied
+     * index without polling; used with h->mu (no I/O under that wait). */
+    int pump_efd;
+    pthread_cond_t applied_cv;
 };
 
 static struct efs_raft_host *g_host;
@@ -1178,6 +1190,27 @@ static int host_remote_cmd(struct efs_raft_host *h, uint8_t group,
 
 static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
                              uint64_t idx, int *leader_hint);
+static void host_pump_kick(struct efs_raft_host *h);
+
+static void host_deadline_us(struct timespec *ts, long us)
+{
+    clock_gettime(CLOCK_REALTIME, ts);
+    ts->tv_sec += us / 1000000;
+    ts->tv_nsec += (us % 1000000) * 1000;
+    if (ts->tv_nsec >= 1000000000L) {
+        ts->tv_sec++;
+        ts->tv_nsec -= 1000000000L;
+    }
+}
+
+static int host_past_deadline(const struct timespec *end)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_REALTIME, &now);
+    if (now.tv_sec != end->tv_sec)
+        return now.tv_sec > end->tv_sec;
+    return now.tv_nsec >= end->tv_nsec;
+}
 
 /* Drop h->mu while waiting: the pump must tick for heartbeats to land.
  * Caller serializes with read_mu. A follower ReadIndexes the leader
@@ -1187,7 +1220,6 @@ static int host_read_index(struct efs_raft_host *h, uint8_t group,
                            int *leader_hint)
 {
     int begun = 0;
-    int t;
     int lid = -1;
 
     if (leader_hint)
@@ -1217,61 +1249,70 @@ static int host_read_index(struct efs_raft_host *h, uint8_t group,
     }
     pthread_mutex_unlock(&h->mu);
 
-    for (t = 0; t < HOST_READ_TRIES; t++) {
-        struct efs_raft *r;
-        int rc;
-
+    {
+        struct timespec end;
+        host_deadline_us(&end, (long)HOST_READ_TRIES * HOST_TICK_US);
         pthread_mutex_lock(&h->mu);
-        r = group_raft(h, group);
-        if (!r) {
-            pthread_mutex_unlock(&h->mu);
-            return EFS_ERR_NOT_PRIMARY;
-        }
-        if (leader_hint)
-            *leader_hint = efs_raft_leader(r);
-        if (efs_raft_role(r) != EFS_RAFT_LEADER) {
-            lid = efs_raft_leader(r);
-            pthread_mutex_unlock(&h->mu);
-            if (lid == h->raft_id)
-                return EFS_ERR_NOT_PRIMARY;
-            {
-                struct efs_msg_raft_mkfs_reply rep;
-                int rc2 = host_remote_cmd(h, group, NULL, 0, &rep, lid);
-                if (rc2 != EFS_OK)
-                    return rc2;
-                if (leader_hint && rep.leader_hint >= 0)
-                    *leader_hint = rep.leader_hint;
-                return host_wait_applied(h, group, rep.index, leader_hint);
-            }
-        }
-        if (!begun) {
-            rc = efs_raft_read_begin(r);
-            begun = 1;
-            if (rc != EFS_OK) {
+        for (;;) {
+            struct efs_raft *r = group_raft(h, group);
+            int rc;
+
+            if (!r) {
                 pthread_mutex_unlock(&h->mu);
-                return rc;
+                return EFS_ERR_NOT_PRIMARY;
             }
+            if (leader_hint)
+                *leader_hint = efs_raft_leader(r);
+            if (efs_raft_role(r) != EFS_RAFT_LEADER) {
+                lid = efs_raft_leader(r);
+                pthread_mutex_unlock(&h->mu);
+                if (lid == h->raft_id)
+                    return EFS_ERR_NOT_PRIMARY;
+                {
+                    struct efs_msg_raft_mkfs_reply rep;
+                    int rc2 = host_remote_cmd(h, group, NULL, 0, &rep, lid);
+                    if (rc2 != EFS_OK)
+                        return rc2;
+                    if (leader_hint && rep.leader_hint >= 0)
+                        *leader_hint = rep.leader_hint;
+                    return host_wait_applied(h, group, rep.index, leader_hint);
+                }
+            }
+            if (!begun) {
+                rc = efs_raft_read_begin(r);
+                begun = 1;
+                if (rc != EFS_OK) {
+                    pthread_mutex_unlock(&h->mu);
+                    return rc;
+                }
+            }
+            if (efs_raft_read_ready(r)) {
+                pthread_mutex_unlock(&h->mu);
+                return EFS_OK;
+            }
+            if (host_past_deadline(&end)) {
+                pthread_mutex_unlock(&h->mu);
+                return EFS_ERR_BUSY;
+            }
+            /* read_ready lands when heartbeat replies arrive — the pump
+             * broadcasts applied_cv at the end of that cycle. */
+            pthread_cond_timedwait(&h->applied_cv, &h->mu, &end);
         }
-        if (efs_raft_read_ready(r)) {
-            pthread_mutex_unlock(&h->mu);
-            return EFS_OK;
-        }
-        pthread_mutex_unlock(&h->mu);
-        usleep(HOST_TICK_US);
     }
-    return EFS_ERR_BUSY;
 }
 
 static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
                              uint64_t idx, int *leader_hint)
 {
-    int t;
+    struct timespec end;
 
-    for (t = 0; t < HOST_READ_TRIES; t++) {
-        struct efs_raft *r;
-
-        pthread_mutex_lock(&h->mu);
-        r = group_raft(h, group);
+    /* Same overall budget as the old poll loop (HOST_READ_TRIES x
+     * HOST_TICK_US), but the pump's applied_cv broadcast wakes us the
+     * moment the index applies instead of up to 5 ms later. */
+    host_deadline_us(&end, (long)HOST_READ_TRIES * HOST_TICK_US);
+    pthread_mutex_lock(&h->mu);
+    for (;;) {
+        struct efs_raft *r = group_raft(h, group);
         if (!r) {
             /* No local replica: the leader already waited in submit. */
             pthread_mutex_unlock(&h->mu);
@@ -1283,10 +1324,12 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
             pthread_mutex_unlock(&h->mu);
             return EFS_OK;
         }
-        pthread_mutex_unlock(&h->mu);
-        usleep(HOST_TICK_US);
+        if (host_past_deadline(&end)) {
+            pthread_mutex_unlock(&h->mu);
+            return EFS_ERR_BUSY;
+        }
+        pthread_cond_timedwait(&h->applied_cv, &h->mu, &end);
     }
-    return EFS_ERR_BUSY;
 }
 
 static int host_propose(struct efs_raft_host *h, uint8_t group,
@@ -1307,6 +1350,10 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
         if (efs_raft_role(r) == EFS_RAFT_LEADER) {
             rc = efs_raft_propose(r, cmd, clen, idx);
             pthread_mutex_unlock(&h->mu);
+            /* New entry pending: pump ships AppendEntries immediately.
+             * (After the unlock: propose already broadcast under h->mu;
+             * the kick just makes the next cycle prompt.) */
+            host_pump_kick(h);
             return rc;
         }
     }
@@ -1590,7 +1637,8 @@ static void host_fwd_lookup_path(struct efs_raft_host *h, efs_ino_t start,
 }
 
 static void host_fwd_readdir(struct efs_raft_host *h, efs_ino_t parent,
-                             uint32_t max_ents, uint64_t after_ino,
+                             uint32_t max_ents, uint32_t after_src,
+                             const char *after_name,
                              struct efs_msg_inode_readdir_reply *out,
                              const uint8_t *groups, int ng)
 {
@@ -1600,7 +1648,9 @@ static void host_fwd_readdir(struct efs_raft_host *h, efs_ino_t parent,
     memset(&req, 0, sizeof(req));
     req.parent = parent;
     req.max_ents = max_ents;
-    req.after_ino = after_ino;
+    req.after_src = after_src;
+    if (after_name)
+        strncpy(req.after_name, after_name, EFS_MAX_NAME - 1);
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_NOT_PRIMARY;
     for (tries = 0; tries < h->n; tries++) {
@@ -2310,11 +2360,22 @@ static int load_applied(struct efs_raft_host *h, int gi, uint64_t *idx)
     return EFS_OK;
 }
 
+/* Wake the pump from any thread. Never blocks, never takes h->mu — safe
+ * from the network handler while the pump is inside a synchronous send. */
+static void host_pump_kick(struct efs_raft_host *h)
+{
+    uint64_t one = 1;
+    if (h->pump_efd >= 0)
+        (void)write(h->pump_efd, &one, sizeof(one)); /* EAGAIN: already lit */
+}
+
 static void *host_pump(void *arg)
 {
     struct efs_raft_host *h = arg;
 
     while (h->running) {
+        struct pollfd pfd;
+        uint64_t sink;
         int i;
         pthread_mutex_lock(&h->mu);
         drain_inbox(h);
@@ -2324,8 +2385,19 @@ static void *host_pump(void *arg)
         }
         for (i = 0; i < HOST_NGROUPS; i++)
             (void)persist_applied(h, i);
+        /* Applies above may have advanced commit/applied: wake every waiter
+         * (host_wait_applied / host_read_index) without a poll interval. */
+        pthread_cond_broadcast(&h->applied_cv);
         pthread_mutex_unlock(&h->mu);
-        usleep(HOST_TICK_US);
+        /* Sleep until the next raft timer tick OR an event (inbox message,
+         * local propose, shutdown) — whichever comes first. Timer cadence is
+         * unchanged; events just remove the up-to-5 ms wait. h->mu is NOT
+         * held here, so proposers and the inbox never queue behind it. */
+        memset(&pfd, 0, sizeof(pfd));
+        pfd.fd = h->pump_efd;
+        pfd.events = POLLIN;
+        if (poll(&pfd, 1, HOST_TICK_US / 1000) > 0 && (pfd.revents & POLLIN))
+            (void)read(h->pump_efd, &sink, sizeof(sink));
     }
     return NULL;
 }
@@ -2481,6 +2553,8 @@ int server_raft_host_start(struct efsd_server *s)
     pthread_mutex_init(&h->read_mu, NULL);
     pthread_mutex_init(&h->wait_mu, NULL);
     pthread_mutex_init(&h->inbox_mu, NULL);
+    pthread_cond_init(&h->applied_cv, NULL);
+    h->pump_efd = eventfd(0, EFD_NONBLOCK);
 
     snprintf(dir, sizeof(dir), "%s/mdraft", s->storage_path);
     if (mkdir(dir, 0755) != 0 && errno != EEXIST) {
@@ -2561,6 +2635,8 @@ void server_raft_host_stop(void)
     if (!h)
         return;
     h->running = 0;
+    /* Wake the pump so shutdown does not wait out a 5 ms tick. */
+    host_pump_kick(h);
     pthread_mutex_lock(&h->wait_mu);
     for (w = h->wait_head; w; w = w->next)
         pthread_cond_broadcast(&w->cv);
@@ -2584,6 +2660,9 @@ void server_raft_host_stop(void)
     pthread_mutex_destroy(&h->read_mu);
     pthread_mutex_destroy(&h->wait_mu);
     pthread_mutex_destroy(&h->inbox_mu);
+    pthread_cond_destroy(&h->applied_cv);
+    if (h->pump_efd >= 0)
+        close(h->pump_efd);
     g_host = NULL;
     free(h);
 }
@@ -2611,6 +2690,10 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
     h->inbox[h->inbox_n].len = plen;
     h->inbox_n++;
     pthread_mutex_unlock(&h->inbox_mu);
+    /* Wake the pump now (not at the next 5 ms tick). Lock-free on purpose:
+     * this handler must never queue on h->mu — the pump holds h->mu across
+     * synchronous sends whose ACKs come from handlers like this one. */
+    host_pump_kick(h);
     return EFS_OK;
 }
 
@@ -2642,6 +2725,7 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
     out->leader_hint = efs_raft_leader(r);
     rc = efs_raft_propose(r, cmd, 17, &idx);
     pthread_mutex_unlock(&h->mu);
+    host_pump_kick(h);
     out->rc = rc;
     out->index = idx;
 }
@@ -5811,7 +5895,7 @@ void server_raft_host_getchunks(efs_ino_t ino, uint32_t start, uint32_t max,
  * then scan. after_ino skips already-returned inos so the old wire cursor
  * still works. SPLITTING is BUSY. */
 void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
-                              uint64_t after_ino,
+                              uint32_t after_src, const char *after_name,
                               struct efs_msg_inode_readdir_reply *out)
 {
     struct efs_raft_host *h = g_host;
@@ -5841,7 +5925,8 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
                 need[nn++] = EFS_RAFT_GROUP_SHARD2;
             else
                 need[nn++] = EFS_RAFT_GROUP_SHARD;
-            host_fwd_readdir(h, parent, max_ents, after_ino, out, need, nn);
+            host_fwd_readdir(h, parent, max_ents, after_src, after_name, out,
+                             need, nn);
             return;
         }
     }
@@ -5868,23 +5953,32 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
                 if (lg != need[0])
                     need[nn++] = lg;
                 pthread_mutex_unlock(&h->read_mu);
-                host_fwd_readdir(h, parent, max_ents, after_ino, out, need, nn);
+                host_fwd_readdir(h, parent, max_ents, after_src, after_name,
+                                 out, need, nn);
                 return;
             }
         }
     }
     if (rc == EFS_OK)
         rc = host_read_inode_lanes(h, parent, &hint);
+    /* Resume from the client's cookie: (src, name) is the exact KV scan
+     * position. The scan is name-ordered, so this is stable and complete —
+     * an ino filter would skip entries (name order != ino order). */
     memset(&cur, 0, sizeof(cur));
+    if (after_name && after_name[0]) {
+        cur.src = after_src;
+        strncpy(cur.name, after_name, EFS_MAX_NAME - 1);
+    }
     while (rc == EFS_OK && !cur.done && out->count < max_ents) {
         got = 0;
-        rc = efs_meta_apply_readdir(h->kv, parent, &cur, page, EFS_READDIR_MAX,
-                                    &got);
+        /* Never scan past what fits in the reply: the cursor advances to
+         * the last SCANNED name, so an unemitted entry would be skipped on
+         * resume. */
+        rc = efs_meta_apply_readdir(h->kv, parent, &cur, page,
+                                    max_ents - out->count, &got);
         for (i = 0; i < got && rc == EFS_OK && out->count < max_ents; i++) {
             uint8_t cg;
 
-            if (page[i].d.ino <= after_ino)
-                continue;
             /* HASHED child's used_shards may be unhosted; stub like an
              * unhosted inode group instead of failing the whole listing. */
             cg = efs_raft_shard_group(efs_kv_inode_shard(page[i].d.ino));
@@ -5917,6 +6011,12 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
             out->count++;
         }
     }
+    /* Resume cookie: the cursor sits past the last emitted entry (or past
+     * the last scanned one when a filter dropped it — either way nothing is
+     * re-scanned or skipped). */
+    out->next_src = cur.src;
+    out->next_done = cur.done ? 1 : 0;
+    strncpy(out->next_name, cur.name, EFS_MAX_NAME - 1);
     pthread_mutex_unlock(&h->read_mu);
     if (rc == EFS_OK)
         out->status = EFS_INODE_RPC_OK;

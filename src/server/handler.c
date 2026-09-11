@@ -3648,7 +3648,8 @@ send_reply:
                 payload_len >= sizeof(struct efs_msg_inode_readdir)) {
                 struct efs_msg_inode_readdir *req = payload;
                 server_raft_host_readdir(req->parent, req->max_ents,
-                                         req->after_ino, &r);
+                                         req->after_src, req->after_name,
+                                         &r);
                 efs_conn_send_msg(conn, EFS_MSG_INODE_READDIR_REPLY, &r,
                                   sizeof(r));
                 break;

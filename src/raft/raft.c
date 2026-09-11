@@ -653,6 +653,7 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
     if (in->from < 0 || in->from >= EFS_RAFT_MAX_PEERS)
         return EFS_OK;
     if (in->success) {
+        uint64_t prev_commit = r->commit_index;
         if (in->match_index > r->match_index[in->from])
             r->match_index[in->from] = in->match_index;
         r->next_index[in->from] = r->match_index[in->from] + 1;
@@ -660,6 +661,14 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
             r->read_acks |= 1u << in->from;
         try_commit(r);
         apply_committed(r);
+        if (r->commit_index != prev_commit) {
+            /* Commit advanced: push the new commit index to every peer NOW.
+             * A follower's local apply (and anyone waiting on it, e.g. a
+             * client op that landed on that follower) would otherwise stall
+             * until the next scheduled heartbeat. */
+            broadcast_ae(r);
+            return EFS_OK;
+        }
         if (r->next_index[in->from] <= r->match_index[r->id])
             return send_ae(r, in->from);
         return EFS_OK;
