@@ -180,7 +180,7 @@ unreadable) — `perf record -p` / `perf stat -p` same-uid are fine.
 
 ## Where we are
 
-**STEP 1 LATENCY BUCKET LANDED (Sep 11, commit aba1d3f) —
+**STEP 1 LATENCY BUCKET LANDED (Sep 11, commit 495444d) —
 posix jobs=1 198/201 in 34s (was 182/201 in ~14 min); jobs=16 193/201 in
 30s (was catastrophic saturation).** Three changes:
 (1) **Event-driven `host_pump`** (raft_host.c): the fixed 5ms usleep poll is
