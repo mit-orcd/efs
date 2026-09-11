@@ -342,7 +342,12 @@ int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
                            struct efs_meta_dir_cursor *cur,
                            struct efs_meta_dir_ent *out, uint32_t max,
                            uint32_t *n);
-/* Last-link reclaim: nlink==0 AND no open leases (I19, L6). Else BUSY. */
+/* Last-link reclaim: nlink==0 AND no open leases (I19, L6). Else BUSY.
+ * Deletes the inode row and writes the reap marker (EFS_KV_KIND_REAP on the
+ * inode group's anchor shard) in the same batch — the marker is what the
+ * background reaper needs to sweep the dead file's lanes and GC its
+ * fragments (L7), and it must be atomic with the row delete so a crash can
+ * never strand the chunks. */
 int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino);
 int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p);
 int efs_meta_apply_epoch_fence(struct efs_kv *kv, efs_ino_t ino);
@@ -381,6 +386,60 @@ int efs_meta_apply_activate_lane(struct efs_kv *kv, efs_ino_t ino,
 int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                               uint8_t lane, uint64_t new_epoch, uint64_t size,
                               uint32_t tail_ci, uint8_t has_tail);
+
+/* Data-plane GC (spec L7). A GC record (EFS_KV_KIND_GC on the lane group's
+ * anchor shard) is written in the SAME batch as every chunk-key delete —
+ * truncate range delete, publish CAS supersede, and lane sweep — so a dead
+ * generation's fragment set (nodes + per-fragment checksums) survives the
+ * chunk key it came from. The checksums are the conditional-delete token:
+ * fragment paths do not carry the generation, so the executor deletes only
+ * when the on-disk .sum sidecar matches the dead generation (a mismatch
+ * means a newer generation occupies the slot; the dead bytes are already
+ * gone and the record may be acked). */
+#define EFS_META_GC_VAL (4 * EFS_NUM_FRAGMENTS + 4 + \
+                         EFS_HASH_SIZE * EFS_NUM_FRAGMENTS) /* 112 */
+/* Reap marker value: [inode_generation:8][active_lanes:8]. */
+#define EFS_META_REAP_VAL 16
+
+void efs_meta_pack_gc(uint8_t *p, const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
+                      uint8_t ack_bits,
+                      const uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE]);
+int efs_meta_unpack_gc(const uint8_t *p, uint32_t n,
+                       efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
+                       uint8_t *ack_bits,
+                       uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE]);
+void efs_meta_pack_reap(uint8_t *p, uint64_t generation,
+                        uint64_t active_lanes);
+int efs_meta_unpack_reap(const uint8_t *p, uint32_t n, uint64_t *generation,
+                         uint64_t *active_lanes);
+
+/* EFS_MD_CMD_LANE_SWEEP on the lane's group: delete every chunk key of
+ * (ino, gen, lane), emitting a GC record per chunk on this group's anchor
+ * shard, then delete the lane key. Idempotent: a swept lane scans empty.
+ * Loops in bounded batches internally, so one entry drains a whole lane. */
+int efs_meta_apply_lane_sweep(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                              uint8_t lane);
+/* EFS_MD_CMD_REAP_DONE on the inode's group after every active lane was
+ * swept: delete leftover append cursor/reservation records, then the reap
+ * marker. Defensively deletes the inode row too if it somehow still exists
+ * with nlink==0 and no leases; a live row (re-linked) just loses the
+ * marker. Idempotent: a missing marker is a no-op OK. */
+int efs_meta_apply_reap_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen);
+
+struct efs_gc_ack_item {
+    efs_ino_t ino;
+    uint64_t gen;
+    uint32_t ci;
+    uint8_t lane;
+    uint8_t frag; /* index into the record's nodes[]/checksums[] */
+};
+
+/* EFS_MD_CMD_GC_ACK: fragment `frag` of each item was deleted (or was
+ * already gone) on its target node. Sets the ack bit; when all
+ * EFS_NUM_FRAGMENTS bits are set the GC record is deleted. Missing records
+ * are skipped (replay after retirement). */
+int efs_meta_apply_gc_ack(struct efs_kv *kv, const struct efs_gc_ack_item *it,
+                          uint32_t n);
 
 /* O_APPEND: serialized EOF reservation on the inode shard, then ordinary
  * distributed publish. `op` is required (I16: a retried reserve must recover

@@ -136,6 +136,14 @@ void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index);
 
+/* Checksum-conditional fragment delete for the data-plane GC (L7).
+ * EFS_OK = dead fragment gone; EFS_ERR_EXIST = a mismatched live fragment
+ * occupies the slot (ackable); EFS_ERR_IO = real failure (retry). */
+int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
+                                  efs_ino_t ino, uint32_t chunk_index,
+                                  uint32_t fragment_index,
+                                  const uint8_t expect_sum[EFS_HASH_SIZE]);
+
 /* NVMe adapter for efs/store.h. Bind to an already-acquired export. */
 struct efs_nvme_store {
     struct efsd_server *s;

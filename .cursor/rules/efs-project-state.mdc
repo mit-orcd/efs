@@ -232,9 +232,9 @@ the "RDMA transport up" check moved after the workload (the upgrade is
 lazy — first pool checkout, not mount). Full gate PASS on fcstor003:
 13 unit + efsd + efs-fuse TCP + efsd/efs-fuse RDMA, all 0 definite /
 0 indirect / 0 uninit / 0 invalid.
-**Open follow-ups:** (1) data-plane GC gap — raft mode never deletes
-fragment files on unlink/truncate (spec L7); (2) client local staging
+**Open follow-ups:** (1) client local staging
 table (g_client.export) shrink is post-step-11 client-cache design.
+(Data-plane GC gap — item (1) — is CLOSED; see "GC-GAP CLOSED" below.)
 
 **RAFT-LAG CLOSED (Sep 11 PM, working tree) — three fixes in
 `src/server/raft_host.c`, gated 199/201 jobs=16 in 26.5 s with ZERO
@@ -277,6 +277,79 @@ permanent known-debt fails (`dir_move_into_subdir` EINVAL,
 4 efsd logs are startup-only (g0 term 3, g2 term 4, stable through the
 run). Unit: test_raft/kv_lsm/meta_apply/sim/wire/txn OK.
 `EFS_RAFT_OBS` stays in tree, env-gated, off by default.
+
+**GC-GAP CLOSED (Sep 11 PM, working tree on top of `0a480c9`) — raft
+mode now deletes data-plane fragment files on unlink/truncate (spec
+L7).** The old engine reclaimed fragments; the Raft+KV engine never did
+— every unlinked/truncated chunk's `<ci>.<frag>` + `.sum` files leaked
+on the storage nodes forever. This adds a metadata-driven reaper.
+**Design (all in the KV/apply layer + a host reaper thread; NO client
+change):** when the apply layer retires a chunk (publish CAS supersede,
+truncate range-delete, tail CAS, last-link unlink) it emits a **GC
+record** (KV kind 21: `[anchor:2][21][ino:8][chunk_gen:8][lane:1][ci:4]`,
+112 B value) keyed on `anchor_shard(lane_shard(ino,lane))`; a last-link
+unlink also emits a **REAP marker** (kind 22: `[anchor:2][22][ino:8]`,
+16 B value = `[inode_generation][active_lanes]`) keyed on
+`anchor_shard(inode_shard(ino))`. `efs_kv_anchor_shard(shard) =
+(shard&1) ? 1 : 2` maps any shard to its group's anchor so the record
+lands on the same group that owns the state being reclaimed. New raft
+cmds `EFS_MD_CMD_LANE_SWEEP 21` / `_REAP_DONE 22` / `_GC_ACK 23`; new
+store op `del_if_sum` (checksum-conditional delete so a reaper never
+deletes a record a fresher write replaced); new wire
+`EFS_MSG_GC_FRAGMENT 99` / `_REPLY 100`. A per-node **`host_gc_thread`**
+(raft_host.c ~3290, 1 s loop) runs, for each group this node leads,
+`host_gc_reap_pass` (REAP markers → LANE_SWEEP to enumerate live lanes →
+GC_FRAGMENT per dead fragment → REAP_DONE) then `host_gc_frag_pass`
+(GC records → GC_FRAGMENT → GC_ACK deletes the record via del_if_sum).
+Caps per pass: GC_SCAN_MAX=32, REAP_SCAN_MAX=32, GC_ACK_MAX=16.
+Followers apply the same cmds so their KV state matches; only the
+leader issues the actual fragment deletes. Files: kv_key.h/.c,
+meta_cmd.h, meta_apply.h/.c, store.h/.c, store_nvme.c, store_mem.c,
+protocol.h, handler.c, raft_host.c, server_internal.h, sim_ns.c,
+sim_sess.c, test_meta_apply.c. **Stub-tail alias fix:** a truncate that
+lands on a chunk boundary re-uses the old placement with a zero digest;
+the host aliases that case and the apply layer skips GC for it
+(regression `test_gc_tail_alias`).
+**THE END-TO-END BUG (found + fixed this session) — scan-full was
+treated as fatal.** The reaper ran, the leader check passed, but nothing
+was ever reclaimed. Cause: `reap_scan_cb`/`gc_scan_cb` return **1** when
+the batch hits SCAN_MAX (32); `merge_scan` (kv_lsm.c) propagates any
+non-zero callback return; and the pass functions did
+`if (src != EFS_OK) return;`. So once ≥32 markers/records had
+accumulated (all the prior testing while the reaper was broken), every
+pass collected 32 and **threw them away**, forever — a classic
+"full == error" confusion. Fix: bail only on a real KV error
+(`src < 0`); process the partial batch on `src == EFS_OK` (complete) OR
+`src > 0` (scan-full stop). Applied to both pass functions. Added
+`EFS_GC_DBG=1` per-marker/per-delete diagnostics (`gc reap ... sweep ok,
+reap_done rc`, `gc del ino=... ci=... frag=... node=... rc`).
+**Known robustness gap (not separately fixed):** `host_gc_export`
+returns NULL when `export_count==0` — the export is registered in
+`s->exports[]` lazily on `EFS_MSG_PUT_CHUNK` (handler.c:351), so right
+after a server restart with no client writes yet the reaper can't name
+the export for a delete. Resolves itself with any client activity (all
+fragment-holding nodes register). Worth a real registration at mount/
+bootstrap if this ever bites.
+**ENVIRONMENTAL-LATENCY RED HERRING — GC is EXONERATED from the jobs=16
+collapse.** Earlier jobs=16 runs on the GC tree collapsed; an A/B on the
+SAME env (TCP) proved it was transient environmental, not GC: pre-GC
+(`0a480c9` clean) jobs=16 = **198/201 (63.6 s)**; GC tree jobs=16 =
+**198/201 (71.2 s)**, identical 3 known-debt fails. Separately noted
+during the hunt: a pre-existing ~110 ms cross-group 2PC fan-out latency
+(unrelated to GC; cross-group txns multiply raft rounds).
+**GATES (fresh wipe + raft-mkfs, port 19820, TCP, `EFS_GC_DBG=1
+EFS_RAFT_OBS=1`):** unit 12/13 OK (`test_lock` = the 6 PRE-EXISTING
+getlk failures, tests/test_lock.c:80-90, no GC involvement).
+End-to-end on ino 4097: write 200000 B → ci0 frags on 003/004/005 + ci1
+on 004/005/006; `ftruncate(50000)`+fsync → content sha256 intact, **ci1
+fragments reclaimed** (g2 leader fcstor004 `gc del ci=1 frag=0/1/2
+rc=0`), ci0 present; `rm` → **all fragments reclaimed** (g0 leader
+fcstor003 `gc reap lanes=3 sweep ok, reap_done rc=0` + `gc del ci=0
+frag=0/1/2 rc=0`), count 0 on all 4 nodes. jobs=16 posix **199/201 in
+68.9 s**, only the 2 permanent known-debt fails (`dir_move_into_subdir`
+EINVAL, `virt_find_query` .find) — `concurrent_writes_disjoint` passed.
+`EFS_GC_DISABLE=1` turns the reaper off; `EFS_GC_DBG`/`EFS_RAFT_OBS`
+stay in tree, env-gated, off by default.
 
 **STEP 1 LATENCY BUCKET LANDED (Sep 11, commit 495444d) —
 posix jobs=1 198/201 in 34s (was 182/201 in ~14 min); jobs=16 193/201 in

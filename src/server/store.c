@@ -473,6 +473,77 @@ void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
     }
 }
 
+/* Checksum-conditional fragment delete for the data-plane GC (spec L7).
+ * Fragment paths do not carry the chunk generation — one slot per
+ * (ino, chunk, fragment), overwritten in place by a newer generation — so
+ * the reaper proves identity by the .sum sidecar before unlinking:
+ *   - sidecar == expect_sum: this slot holds the dead generation → unlink
+ *     data + sidecar;
+ *   - sidecar != expect_sum: a newer generation already overwrote the
+ *     slot → the dead bytes are gone; MUST NOT unlink (that would kill
+ *     live data); the record may be acked;
+ *   - data present but no readable sidecar: cannot prove identity →
+ *     treated as a live mismatch (leak-not-lose; raft-mode PUTs always
+ *     write the sidecar, so this is a crashed-partial-PUT corner);
+ *   - nothing present: already gone.
+ * Returns EFS_OK when no dead-generation fragment remains, EFS_ERR_EXIST
+ * when a mismatched/unidentifiable live fragment remains (also ackable),
+ * EFS_ERR_IO on a real I/O failure (the reaper retries).
+ * There is a microscopic read-sidecar→unlink window during which a new
+ * generation's PUT could land between the check and the unlink; the worst
+ * case is one fragment of one chunk unavailable, which 2+1 EC repairs.
+ * The real fix is generation-in-path data-plane keys (out of scope). */
+int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
+                                  efs_ino_t ino, uint32_t chunk_index,
+                                  uint32_t fragment_index,
+                                  const uint8_t expect_sum[EFS_HASH_SIZE])
+{
+    char path[8192];
+    char sum_path[8200];
+    uint8_t got[EFS_HASH_SIZE];
+    uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
+    int live = 0;
+
+    if (!s || !ex || !expect_sum)
+        return EFS_ERR_INVAL;
+    for (uint32_t ri = 0; ri < n; ri++) {
+        for (int legacy = 0; legacy < 2; legacy++) {
+            int fd;
+            ssize_t rn;
+
+            if (legacy)
+                fragment_path_at_legacy(s, ri, ex, ino, chunk_index,
+                                        fragment_index, path, sizeof(path));
+            else
+                fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index,
+                                 path, sizeof(path));
+            snprintf(sum_path, sizeof(sum_path), "%s.sum", path);
+            fd = open(sum_path, O_RDONLY);
+            if (fd < 0) {
+                if (access(path, F_OK) == 0)
+                    live = 1; /* data without a provable identity */
+                continue;
+            }
+            rn = read(fd, got, EFS_HASH_SIZE);
+            close(fd);
+            if (rn != (ssize_t)EFS_HASH_SIZE) {
+                if (access(path, F_OK) == 0)
+                    live = 1;
+                continue;
+            }
+            if (memcmp(got, expect_sum, EFS_HASH_SIZE) != 0) {
+                live = 1; /* a newer generation occupies the slot */
+                continue;
+            }
+            if (unlink(path) != 0 && errno != ENOENT)
+                return EFS_ERR_IO;
+            if (unlink(sum_path) != 0 && errno != ENOENT)
+                return EFS_ERR_IO;
+        }
+    }
+    return live ? EFS_ERR_EXIST : EFS_OK;
+}
+
 /* direct: caller decides per-ino — data fragments only. Metadata pages and
  * .sum sidecars stay buffered: they are small, randomly re-read (rebuild
  * sweeps, verify, catch-up), and the kernel cache is a feature there. */

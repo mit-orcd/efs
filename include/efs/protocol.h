@@ -196,6 +196,32 @@ enum efs_msg_type {
     /* Per-group role/term/commit/applied readout for the smoke gate. */
     EFS_MSG_RAFT_STATUS = 97,
     EFS_MSG_RAFT_STATUS_REPLY = 98,
+
+    /* Data-plane GC (spec L7): the reaper asks the node holding a dead
+     * generation's fragment to delete it, proven by the fragment's
+     * checksum sidecar (fragment paths do not carry the generation, so
+     * the conditional delete never removes a newer generation's bytes).
+     * Idempotent: an absent fragment is a success. */
+    EFS_MSG_GC_FRAGMENT = 99,
+    EFS_MSG_GC_FRAGMENT_REPLY = 100,
+};
+
+/* GC_FRAGMENT request: delete fragment `fragment_index` of chunk
+ * `chunk_index` of `ino` iff its stored checksum sidecar equals
+ * `checksum` (the dead generation's fragment hash from the GC record). */
+struct efs_msg_gc_fragment {
+    efs_export_id_t export_id;
+    efs_ino_t ino;
+    uint32_t chunk_index;
+    uint32_t fragment_index;
+    uint8_t checksum[EFS_HASH_SIZE];
+};
+
+/* status: 0 = the dead fragment is gone (deleted / already absent / a
+ * newer generation occupies the slot); nonzero = try again later. */
+struct efs_msg_gc_fragment_reply {
+    uint8_t status;
+    uint8_t pad[7];
 };
 
 /* RAFT_MKFS reply. rc: EFS_OK (accepted at index, and applied on this

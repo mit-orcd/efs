@@ -32,6 +32,19 @@
 #define EFS_KV_KIND_APPEND_RSV 18 /* FileID append reservation at offset */
 #define EFS_KV_KIND_PVER     19 /* directory parent_version sidecar */
 #define EFS_KV_KIND_EXPORT   20 /* per-export salt (chosen at mkfs, §7.4) */
+#define EFS_KV_KIND_GC       21 /* dead fragment set + per-fragment acks (L7) */
+#define EFS_KV_KIND_REAP     22 /* dead inode awaiting lane sweep + frag GC */
+
+/* GC and REAP records for every shard of a group live on that group's one
+ * fixed anchor shard, so the background reaper scans ONE prefix per group
+ * instead of 2048. The anchor must stay on the writer entry's own group
+ * (a group's log may only write its own shards' keys): group 0 owns the odd
+ * shards, group 2 the even ones — same parity rule as
+ * efs_raft_shard_group(), which this must never drift from. */
+static inline uint32_t efs_kv_anchor_shard(uint32_t shard)
+{
+    return (shard & 1u) ? 1u : 2u;
+}
 
 static inline uint32_t efs_kv_inode_shard(efs_ino_t ino)
 {
@@ -102,6 +115,17 @@ int efs_kv_key_append_rsv_prefix(uint32_t shard, efs_ino_t ino, uint64_t gen,
                                  uint8_t *out, uint32_t *len);
 int efs_kv_key_append_rsv_shard_prefix(uint32_t shard, uint8_t *out,
                                        uint32_t *len);
+/* GC record for one dead chunk generation: same trailing fields as the
+ * chunk key so a scan ordered by (ino, gen, lane, ci) results. `shard` is
+ * the anchor shard of the dead chunk's lane shard. */
+int efs_kv_key_gc(uint32_t shard, efs_ino_t ino, uint64_t gen, uint8_t lane,
+                  uint32_t chunk_index, uint8_t *out, uint32_t *len);
+int efs_kv_key_gc_prefix(uint32_t shard, uint8_t *out, uint32_t *len);
+/* Reap marker for one dead inode: [reap anchor shard][REAP][ino:8].
+ * `shard` is the anchor shard of the inode's shard. */
+int efs_kv_key_reap(uint32_t shard, efs_ino_t ino, uint8_t *out,
+                    uint32_t *len);
+int efs_kv_key_reap_prefix(uint32_t shard, uint8_t *out, uint32_t *len);
 int efs_kv_key_unwrap(const uint8_t *wrap, uint32_t wlen, uint8_t *orig,
                       uint32_t *olen);
 

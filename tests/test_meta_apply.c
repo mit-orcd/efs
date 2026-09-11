@@ -809,14 +809,13 @@ static void commit_reduce(struct efs_kv *kv, uint8_t idb, efs_ino_t ino,
                              EFS_TXN_COMMIT) == EFS_OK, "decide");
 }
 
-static void pub(struct efs_kv *kv, efs_ino_t ino, uint32_t ci, uint64_t end,
-                uint64_t gen, uint64_t expect, uint64_t now, const char *msg)
+static void pub_ch(struct efs_kv *kv, efs_ino_t ino, uint32_t ci, uint64_t end,
+                   uint64_t gen, uint64_t expect, uint64_t now,
+                   const struct efs_meta_chunk *ch, const char *msg)
 {
     struct efs_meta_pub p;
-    struct efs_meta_chunk ch;
     struct efs_meta_row r;
 
-    fill_ch(&ch);
     memset(&p, 0, sizeof(p));
     CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row for epoch");
     p.ino = ino;
@@ -827,8 +826,17 @@ static void pub(struct efs_kv *kv, efs_ino_t ino, uint32_t ci, uint64_t end,
     p.coding_profile_id = EFS_META_PROFILE_K2F1;
     p.content_epoch = r.content_epoch; /* a live writer knows the epoch */
     p.now = now;
-    p.ch = ch;
+    p.ch = *ch;
     CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, msg);
+}
+
+static void pub(struct efs_kv *kv, efs_ino_t ino, uint32_t ci, uint64_t end,
+                uint64_t gen, uint64_t expect, uint64_t now, const char *msg)
+{
+    struct efs_meta_chunk ch;
+
+    fill_ch(&ch);
+    pub_ch(kv, ino, ci, end, gen, expect, now, &ch, msg);
 }
 
 static int utimens_at(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
@@ -1817,6 +1825,361 @@ static void test_cross_group_lane(void)
     efs_kv_mem_free(kv);
 }
 
+/* ---- data-plane GC (L7): records, acks, lane sweep, reap ---- */
+
+static uint64_t gc_rd64(const uint8_t *p)
+{
+    uint64_t v = 0;
+    int i;
+
+    for (i = 0; i < 8; i++)
+        v = (v << 8) | p[i];
+    return v;
+}
+
+struct gc_probe {
+    int n;
+    uint64_t gen[8];   /* chunk generation from the record key */
+    uint8_t lane[8];
+    uint32_t ci[8];
+    uint8_t val[EFS_META_GC_VAL];
+};
+
+static int gc_probe_cb(void *user, const uint8_t *key, uint32_t klen,
+                       const uint8_t *val, uint32_t vlen)
+{
+    struct gc_probe *p = user;
+
+    if (klen < 24 || vlen < EFS_META_GC_VAL || p->n >= 8)
+        return 0;
+    if (p->n == 0)
+        memcpy(p->val, val, EFS_META_GC_VAL);
+    p->gen[p->n] = gc_rd64(key + 11);
+    p->lane[p->n] = key[19];
+    p->ci[p->n] = ((uint32_t)key[20] << 24) | ((uint32_t)key[21] << 16) |
+                  ((uint32_t)key[22] << 8) | (uint32_t)key[23];
+    p->n++;
+    return 0;
+}
+
+/* Every GC record lives on one of the two anchor shards (1 = odd group,
+ * 2 = even group); the single test KV holds both. */
+static int gc_probe(struct efs_kv *kv, struct gc_probe *p)
+{
+    uint8_t pre[EFS_KV_KEY_MAX];
+    uint32_t plen = 0;
+
+    memset(p, 0, sizeof(*p));
+    if (efs_kv_key_gc_prefix(1, pre, &plen) != EFS_OK)
+        return -1;
+    if (efs_kv_scan_prefix(kv, pre, plen, gc_probe_cb, p) != EFS_OK)
+        return -1;
+    if (efs_kv_key_gc_prefix(2, pre, &plen) != EFS_OK)
+        return -1;
+    if (efs_kv_scan_prefix(kv, pre, plen, gc_probe_cb, p) != EFS_OK)
+        return -1;
+    return 0;
+}
+
+static int gc_probe_find(const struct gc_probe *p, uint64_t gen, uint8_t lane,
+                         uint32_t ci)
+{
+    int i;
+
+    for (i = 0; i < p->n; i++) {
+        if (p->gen[i] == gen && p->lane[i] == lane && p->ci[i] == ci)
+            return 1;
+    }
+    return 0;
+}
+
+static void gc_ack_all(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                       uint8_t lane, uint32_t ci, const char *msg)
+{
+    struct efs_gc_ack_item items[EFS_NUM_FRAGMENTS];
+    int i;
+
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        items[i].ino = ino;
+        items[i].gen = gen;
+        items[i].lane = lane;
+        items[i].ci = ci;
+        items[i].frag = (uint8_t)i;
+    }
+    CHECK(efs_meta_apply_gc_ack(kv, items, EFS_NUM_FRAGMENTS) == EFS_OK, msg);
+}
+
+/* Raw chunk-key presence probe: after an unlink the inode row is gone, so
+ * efs_meta_apply_get_chunk (which resolves the row first) cannot speak for
+ * the orphaned chunk keys the reaper inherits. */
+static int chunk_present(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                         uint32_t ci)
+{
+    uint8_t key[EFS_KV_KEY_MAX], val[512];
+    uint32_t kl = 0, vl = sizeof(val);
+    uint8_t lane = (uint8_t)(ci % EFS_META_LANES);
+
+    if (efs_kv_key_chunk(efs_kv_lane_shard(ino, lane), ino, gen, lane, ci,
+                         key, &kl) != EFS_OK)
+        return -1;
+    return efs_kv_get(kv, key, kl, val, &vl) == EFS_OK;
+}
+
+static void test_gc_reap(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t ino = 0, ino2 = 0;
+    struct efs_meta_row r;
+    struct efs_meta_chunk got;
+    struct efs_meta_truncate t;
+    struct gc_probe pr;
+    efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+    uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+    uint8_t ack_bits = 0xff;
+    uint8_t k_reap[EFS_KV_KEY_MAX], v[EFS_META_REAP_VAL];
+    uint32_t krl = 0, vl;
+    uint64_t gen = 0, gen2 = 0;
+    int i;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "g", &ino) == EFS_OK && ino,
+          "create");
+    /* lane = ci % 64: ci 0 -> lane 0, ci 1 -> lane 1. */
+    pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0xA1, 0, T0 + 1, "pub0");
+    pub(kv, ino, 1, 2ULL * EFS_MIN_CHUNK_SIZE, 0xA2, 0, T0 + 2, "pub1");
+
+    /* Publish CAS supersede: the old generation's fragment set must
+     * survive the chunk key as a GC record. The overwrite carries NEW
+     * content (different checksums) — an identical fragment set would be
+     * an alias (the truncate tail stub), which must NOT emit a record. */
+    {
+        struct efs_meta_chunk newc;
+
+        fill_ch(&newc);
+        for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+            newc.checksums[i][0] = (uint8_t)(0x50 + i);
+        pub_ch(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0xB2, 0xA1, T0 + 3, &newc,
+               "re-pub0");
+    }
+    CHECK(gc_probe(kv, &pr) == 0 && pr.n == 1, "one GC record");
+    CHECK(gc_probe_find(&pr, 0xA1, 0, 0), "record is the superseded gen");
+    CHECK(efs_meta_unpack_gc(pr.val, EFS_META_GC_VAL, nodes, &ack_bits,
+                             sums) == EFS_OK,
+          "unpack");
+    CHECK(ack_bits == 0, "no acks yet");
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        CHECK(nodes[i] == (efs_node_id_t)(i + 1), "nodes carried");
+        CHECK(sums[i][0] == (uint8_t)(0x10 + i), "sums carried");
+    }
+    /* A partial ack keeps the record; the last ack retires it. */
+    {
+        struct efs_gc_ack_item one;
+
+        one.ino = ino;
+        one.gen = 0xA1;
+        one.lane = 0;
+        one.ci = 0;
+        one.frag = 0;
+        CHECK(efs_meta_apply_gc_ack(kv, &one, 1) == EFS_OK, "ack 1");
+        CHECK(gc_probe(kv, &pr) == 0 && pr.n == 1, "record survives 1 ack");
+    }
+    {
+        struct efs_gc_ack_item two[2];
+
+        for (i = 0; i < 2; i++) {
+            two[i].ino = ino;
+            two[i].gen = 0xA1;
+            two[i].lane = 0;
+            two[i].ci = 0;
+            two[i].frag = (uint8_t)(i + 1);
+        }
+        CHECK(efs_meta_apply_gc_ack(kv, two, 2) == EFS_OK, "ack 2+3");
+        CHECK(gc_probe(kv, &pr) == 0 && pr.n == 0, "record retired");
+    }
+
+    /* Unlink the last link: the row goes, the reap marker appears, and
+     * the chunk keys are still there (the sweep has not run yet). */
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row pre-unlink");
+    gen = r.generation;
+    CHECK(r.active_lanes == 0x3, "lanes 0+1 active");
+    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "g", T0 + 4) == EFS_OK,
+          "unlink");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_ERR_NOT_FOUND,
+          "row gone");
+    CHECK(efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(ino)), ino,
+                          k_reap, &krl) == EFS_OK,
+          "reap key");
+    vl = sizeof(v);
+    CHECK(efs_kv_get(kv, k_reap, krl, v, &vl) == EFS_OK, "marker present");
+    {
+        uint64_t mgen = 0, mlanes = 0;
+
+        CHECK(efs_meta_unpack_reap(v, vl, &mgen, &mlanes) == EFS_OK,
+              "marker unpack");
+        CHECK(mgen == gen && mlanes == 0x3, "marker carries gen+lanes");
+    }
+    CHECK(chunk_present(kv, ino, gen, 0) == 1, "c0 pre-sweep");
+    CHECK(chunk_present(kv, ino, gen, 1) == 1, "c1 pre-sweep");
+
+    /* Lane sweep: the lane's chunk keys go, one GC record per chunk. */
+    CHECK(efs_meta_apply_lane_sweep(kv, ino, gen, 0) == EFS_OK,
+          "sweep lane0");
+    CHECK(chunk_present(kv, ino, gen, 0) == 0, "c0 swept");
+    CHECK(chunk_present(kv, ino, gen, 1) == 1, "c1 intact");
+    CHECK(gc_probe(kv, &pr) == 0 && pr.n == 1 &&
+          gc_probe_find(&pr, 0xB2, 0, 0),
+          "sweep emits GC (0xB2)");
+    CHECK(efs_meta_apply_lane_sweep(kv, ino, gen, 1) == EFS_OK,
+          "sweep lane1");
+    CHECK(chunk_present(kv, ino, gen, 1) == 0, "c1 swept");
+    CHECK(gc_probe(kv, &pr) == 0 && pr.n == 2 &&
+          gc_probe_find(&pr, 0xA2, 1, 1),
+          "sweep emits GC (0xA2)");
+    /* Idempotent: a replayed sweep finds an empty lane, adds nothing. */
+    CHECK(efs_meta_apply_lane_sweep(kv, ino, gen, 0) == EFS_OK,
+          "sweep replay");
+    CHECK(gc_probe(kv, &pr) == 0 && pr.n == 2, "no new records");
+
+    /* REAP_DONE: the marker goes; a replay is a no-op. */
+    CHECK(efs_meta_apply_reap_done(kv, ino, gen) == EFS_OK, "reap done");
+    vl = sizeof(v);
+    CHECK(efs_kv_get(kv, k_reap, krl, v, &vl) == EFS_ERR_NOT_FOUND,
+          "marker gone");
+    CHECK(efs_meta_apply_reap_done(kv, ino, gen) == EFS_OK, "reap replay");
+
+    /* Acks drain the swept records. */
+    gc_ack_all(kv, ino, 0xB2, 0, 0, "ack 0xB2");
+    gc_ack_all(kv, ino, 0xA2, 1, 1, "ack 0xA2");
+    CHECK(gc_probe(kv, &pr) == 0 && pr.n == 0, "all records retired");
+
+    /* Truncate-to-zero emits one GC record per deleted chunk. */
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "t2", &ino2) == EFS_OK && ino2,
+          "create2");
+    pub(kv, ino2, 0, EFS_MIN_CHUNK_SIZE, 0xC1, 0, T0 + 5, "t2 pub0");
+    pub(kv, ino2, 1, 2ULL * EFS_MIN_CHUNK_SIZE, 0xC2, 0, T0 + 6, "t2 pub1");
+    CHECK(efs_meta_apply_get_inode(kv, ino2, &r) == EFS_OK, "row2");
+    gen2 = r.generation;
+    memset(&t, 0, sizeof(t));
+    t.size = 0;
+    t.lane_mask = ~0ULL; /* single-group test KV holds every lane */
+    CHECK(efs_meta_apply_truncate(kv, ino2, T0 + 10, &t) == EFS_OK, "trunc0");
+    CHECK(efs_meta_apply_get_chunk(kv, ino2, 0, &got) == EFS_ERR_NOT_FOUND,
+          "t2 c0 gone");
+    CHECK(efs_meta_apply_get_chunk(kv, ino2, 1, &got) == EFS_ERR_NOT_FOUND,
+          "t2 c1 gone");
+    CHECK(chunk_present(kv, ino2, gen2, 0) == 0, "t2 c0 key gone");
+    CHECK(gc_probe(kv, &pr) == 0 && pr.n == 2 &&
+          gc_probe_find(&pr, 0xC1, 0, 0) && gc_probe_find(&pr, 0xC2, 1, 1),
+          "truncate emits GC per chunk");
+
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
+/* The raft truncate tail stub writes no fragments: it aliases the
+ * superseded row's placement so reads keep finding the surviving prefix.
+ * The apply side must NOT queue a GC record for an aliased supersede (the
+ * reaper's checksum-conditional delete would match and remove the live
+ * tail data), and an unlink of the file must still reclaim the fragments
+ * through the live row's real checksums. */
+static void test_gc_tail_alias(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t ino = 0, ino2 = 0;
+    struct efs_meta_row r;
+    struct efs_meta_chunk got;
+    struct efs_meta_truncate t;
+    struct efs_meta_pub tail;
+    struct gc_probe pr;
+    efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+    uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+    uint8_t ack_bits = 0;
+    uint64_t gen = 0;
+    int i;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "ta", &ino) == EFS_OK && ino,
+          "create");
+    pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0xD1, 0, T0 + 1, "pub0");
+
+    /* Shrink into the chunk: the tail stub aliases the 0xD1 fragment set
+     * under a fresh generation. No GC record — the fragments are shared
+     * with the live row, not dead. */
+    memset(&tail, 0, sizeof(tail));
+    fill_ch(&tail.ch); /* identical to the 0xD1 row: the alias */
+    tail.chunk_index = 0;
+    tail.new_size = 4000;
+    tail.expected_gen = 0xD1;
+    tail.candidate_gen = 0xD2;
+    tail.coding_profile_id = EFS_META_PROFILE_K2F1;
+    memset(&t, 0, sizeof(t));
+    t.size = 4000;
+    t.tail = &tail;
+    t.lane_mask = ~0ULL; /* single-group test KV holds every lane */
+    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 2, &t) == EFS_OK,
+          "truncate alias tail");
+    CHECK(gc_probe(kv, &pr) == 0 && pr.n == 0, "alias emits no GC record");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK,
+          "tail row live");
+    CHECK(got.generation == 0xD2, "tail carries the new gen");
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        CHECK(got.nodes[i] == (efs_node_id_t)(i + 1), "tail nodes aliased");
+        CHECK(got.checksums[i][0] == (uint8_t)(0x10 + i),
+              "tail sums aliased");
+    }
+
+    /* Unlink still reclaims: the sweep records the LIVE aliased gen with
+     * the real checksums, so the reaper's conditional delete matches. */
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row pre-unlink");
+    gen = r.generation;
+    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "ta", T0 + 3) == EFS_OK,
+          "unlink");
+    CHECK(efs_meta_apply_lane_sweep(kv, ino, gen, 0) == EFS_OK, "sweep");
+    CHECK(gc_probe(kv, &pr) == 0 && pr.n == 1 &&
+          gc_probe_find(&pr, 0xD2, 0, 0),
+          "sweep records the aliased gen");
+    CHECK(efs_meta_unpack_gc(pr.val, EFS_META_GC_VAL, nodes, &ack_bits,
+                             sums) == EFS_OK,
+          "unpack");
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        CHECK(sums[i][0] == (uint8_t)(0x10 + i), "real sums swept");
+    gc_ack_all(kv, ino, 0xD2, 0, 0, "ack 0xD2");
+    CHECK(gc_probe(kv, &pr) == 0 && pr.n == 0, "retired");
+
+    /* Control: a tail carrying NEW content (different checksums — a real
+     * zero-fill write) supersedes for real and must emit a record. */
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "tb", &ino2) == EFS_OK && ino2,
+          "create2");
+    pub(kv, ino2, 0, EFS_MIN_CHUNK_SIZE, 0xE1, 0, T0 + 4, "pub0");
+    memset(&tail, 0, sizeof(tail));
+    fill_ch(&tail.ch);
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        tail.ch.checksums[i][0] = (uint8_t)(0x70 + i); /* new content */
+    tail.chunk_index = 0;
+    tail.new_size = 4000;
+    tail.expected_gen = 0xE1;
+    tail.candidate_gen = 0xE2;
+    tail.coding_profile_id = EFS_META_PROFILE_K2F1;
+    memset(&t, 0, sizeof(t));
+    t.size = 4000;
+    t.tail = &tail;
+    t.lane_mask = ~0ULL;
+    CHECK(efs_meta_apply_truncate(kv, ino2, T0 + 5, &t) == EFS_OK,
+          "truncate new-content tail");
+    CHECK(gc_probe(kv, &pr) == 0 && pr.n == 1 &&
+          gc_probe_find(&pr, 0xE1, 0, 0),
+          "new-content tail emits GC for the superseded gen");
+
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     test_create_lookup_unlink();
@@ -1846,6 +2209,9 @@ int main(void)
     test_symlink();
     test_dir_rename();
     test_lookup_path();
+    test_gc_reap();
+    test_gc_tail_alias();
+    test_gc_tail_alias();
     if (failures) {
         fprintf(stderr, "test_meta_apply: %d failure(s)\n", failures);
         return 1;

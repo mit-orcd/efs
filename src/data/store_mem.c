@@ -146,10 +146,37 @@ static void mem_destroy(void *ctx)
     free(m);
 }
 
+/* The mem store keys by the full FileID (chunk_generation included), so an
+ * exact-match record IS the dead generation — there is no path-aliasing
+ * like the NVMe backend. The sum check stays as the executor's contract. */
+static int mem_del_if_sum(void *ctx, const struct efs_frag_id *id,
+                          const uint8_t expect_sum[EFS_HASH_SIZE])
+{
+    struct mem_store *m = ctx;
+    struct mem_rec **pp;
+    struct mem_rec *r;
+
+    if (!m || !id || !expect_sum)
+        return EFS_ERR_INVAL;
+    pp = find_slot(m, id);
+    if (!*pp)
+        return EFS_OK;
+    if (!(*pp)->has_sum ||
+        memcmp((*pp)->sum, expect_sum, EFS_HASH_SIZE) != 0)
+        return EFS_ERR_EXIST;
+    r = *pp;
+    *pp = r->next;
+    free(r->data);
+    free(r);
+    m->nrec--;
+    return EFS_OK;
+}
+
 static const struct efs_store_ops mem_ops = {
     .get = mem_get,
     .put = mem_put,
     .del = mem_del,
+    .del_if_sum = mem_del_if_sum,
     .destroy = mem_destroy,
 };
 

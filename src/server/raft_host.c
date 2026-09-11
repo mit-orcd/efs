@@ -13,6 +13,7 @@
 #include "efs/session.h"
 #include "efs/lock.h"
 #include "efs/metadata.h"
+#include "efs/store.h"
 #include "efs/wire.h"
 #include "efs/network.h"
 #include <errno.h>
@@ -159,6 +160,9 @@ struct efs_raft_host {
     pthread_t tid;
     int running;
     int started;
+    pthread_t gc_tid;    /* background GC reaper (spec L7) */
+    int gc_running;
+    int gc_started;
     pthread_mutex_t inbox_mu;
     struct host_inbox_item inbox[HOST_INBOX_MAX];
     int inbox_n;
@@ -743,6 +747,75 @@ static int host_apply_coord(void *user, const struct efs_txid *t,
     return efs_txn_decision_get(h->kv, coord_shard, t, dec);
 }
 
+/* EFS_MD_CMD_LANE_SWEEP on the lane's group: delete the lane's chunk keys
+ * (emitting one GC record per chunk on this group's anchor shard), then the
+ * lane key. Proposed by the reaper for each active lane of a dead inode. */
+static int apply_lane_sweep_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                uint32_t clen, uint64_t index)
+{
+    efs_ino_t ino;
+    int rc;
+
+    if (clen < 18)
+        return EFS_OK;
+    ino = rd64be(cmd + 1);
+    rc = efs_meta_apply_lane_sweep(h->kv, ino, rd64be(cmd + 9), cmd[17]);
+    if (rc != EFS_OK)
+        fprintf(stderr, "raft-host: apply lane-sweep rc=%d index=%llu ino=%llu\n",
+                rc, (unsigned long long)index, (unsigned long long)ino);
+    return EFS_OK;
+}
+
+/* EFS_MD_CMD_REAP_DONE on the inode's group: every active lane of the dead
+ * inode was swept; clear leftover append state and the reap marker. */
+static int apply_reap_done_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                               uint32_t clen, uint64_t index)
+{
+    efs_ino_t ino;
+    int rc;
+
+    if (clen < 17)
+        return EFS_OK;
+    ino = rd64be(cmd + 1);
+    rc = efs_meta_apply_reap_done(h->kv, ino, rd64be(cmd + 9));
+    if (rc != EFS_OK)
+        fprintf(stderr, "raft-host: apply reap-done rc=%d index=%llu ino=%llu\n",
+                rc, (unsigned long long)index, (unsigned long long)ino);
+    return EFS_OK;
+}
+
+/* EFS_MD_CMD_GC_ACK on the group whose anchor shard holds the records:
+ * [cnt:2][(ino:8)(gen:8)(lane:1)(ci:4)(frag:1)]*cnt — one fragment of each
+ * record was deleted (or was already gone) on its target node. */
+static int apply_gc_ack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                            uint32_t clen, uint64_t index)
+{
+    struct efs_gc_ack_item items[16];
+    uint32_t cnt, i, off;
+    int rc;
+
+    (void)index;
+    if (clen < 3)
+        return EFS_OK;
+    cnt = (uint32_t)((cmd[1] << 8) | cmd[2]);
+    if (cnt > 16 || clen < 3 + cnt * 22)
+        return EFS_OK;
+    off = 3;
+    for (i = 0; i < cnt; i++) {
+        items[i].ino = rd64be(cmd + off);
+        items[i].gen = rd64be(cmd + off + 8);
+        items[i].lane = cmd[off + 16];
+        items[i].ci = rd32be(cmd + off + 17);
+        items[i].frag = cmd[off + 21];
+        off += 22;
+    }
+    rc = efs_meta_apply_gc_ack(h->kv, items, cnt);
+    if (rc != EFS_OK)
+        fprintf(stderr, "raft-host: apply gc-ack rc=%d index=%llu cnt=%u\n",
+                rc, (unsigned long long)index, cnt);
+    return EFS_OK;
+}
+
 /* Same layout as sim apply_append_rsv_cmd, big-endian. A zero UUID/seq
  * is the stand-in (no op-id window). A session suffix fills uuid+epoch
  * so LEASE_DROP can FENCED_HOLE that reservation (10.5c-35d). */
@@ -1236,6 +1309,12 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
         return apply_session_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_LOCK)
         return apply_lock_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_LANE_SWEEP)
+        return apply_lane_sweep_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_REAP_DONE)
+        return apply_reap_done_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_GC_ACK)
+        return apply_gc_ack_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
         cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP)
         return apply_txn_cmd(h, cmd, clen);
@@ -2868,6 +2947,404 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
     return EFS_OK;
 }
 
+/* ---- background GC reaper (step-11 follow-up, spec L7) ----
+ *
+ * Unlink/reclaim leave a REAP marker (kind 22) and truncate/publish-CAS
+ * leave GC records (kind 21) in the KV, all anchored on shard 1 (odd
+ * shards, group 0) or shard 2 (even shards, group 2) so ONE prefix scan
+ * per group finds every pending record. This thread runs two passes on
+ * each group this node leads:
+ *
+ *   REAP pass: per marker, propose LANE_SWEEP for every lane in the
+ *   marker's active_lanes bitmap to the lane's own group (deletes the
+ *   lane's chunk keys, emitting a GC record per chunk), then REAP_DONE
+ *   to the inode's group (clears append cursor/reservations + marker).
+ *
+ *   GC pass: per record, delete each un-acked fragment — local
+ *   del_if_sum when the record's nodes[i] is this node, else a
+ *   GC_FRAGMENT RPC to that node — then propose the acks as one GC_ACK
+ *   entry. The apply side deletes the record once all fragments ack.
+ *
+ * Everything is idempotent and re-driven every pass, so a lost proposal,
+ * a leadership change or a crash just means the next pass retries.
+ * Proposals go through host_propose_wait with read_mu HELD (its forward
+ * path drops/re-takes read_mu internally — the established handler
+ * pattern); scans and fragment I/O run outside every host lock. */
+
+#define GC_SCAN_MAX   32 /* records collected per GC pass */
+#define REAP_SCAN_MAX 32 /* markers collected per REAP pass */
+#define GC_ACK_MAX    16 /* items per GC_ACK entry (3+22*16=355 <= 512) */
+#define GC_LOOP_MS    1000
+
+#define GC_KEY_LEN   24u /* [anchor:2][GC:1][ino:8][gen:8][lane:1][ci:4] */
+#define REAP_KEY_LEN 11u /* [anchor:2][REAP:1][ino:8] */
+
+struct gc_scan_ctx {
+    int n;
+    int full;
+    uint8_t keys[GC_SCAN_MAX][GC_KEY_LEN];
+    uint8_t vals[GC_SCAN_MAX][EFS_META_GC_VAL];
+};
+
+static int gc_scan_cb(void *user, const uint8_t *key, uint32_t klen,
+                      const uint8_t *val, uint32_t vlen)
+{
+    struct gc_scan_ctx *c = user;
+
+    if (c->n >= GC_SCAN_MAX) {
+        c->full = 1;
+        return 1;
+    }
+    if (klen == GC_KEY_LEN && vlen >= EFS_META_GC_VAL) {
+        memcpy(c->keys[c->n], key, GC_KEY_LEN);
+        memcpy(c->vals[c->n], val, EFS_META_GC_VAL);
+        c->n++;
+    }
+    return 0;
+}
+
+struct reap_scan_ctx {
+    int n;
+    int full;
+    efs_ino_t ino[REAP_SCAN_MAX];
+    uint64_t gen[REAP_SCAN_MAX];
+    uint64_t lanes[REAP_SCAN_MAX];
+};
+
+static int reap_scan_cb(void *user, const uint8_t *key, uint32_t klen,
+                        const uint8_t *val, uint32_t vlen)
+{
+    struct reap_scan_ctx *c = user;
+
+    if (c->n >= REAP_SCAN_MAX) {
+        c->full = 1;
+        return 1;
+    }
+    if (klen == REAP_KEY_LEN &&
+        efs_meta_unpack_reap(val, vlen, &c->gen[c->n],
+                             &c->lanes[c->n]) == EFS_OK) {
+        c->ino[c->n] = rd64be(key + 3);
+        c->n++;
+    }
+    return 0;
+}
+
+/* The export the reaper's fragment deletes/RPCs name. Raft mode has
+ * exactly one export in practice (the mkfs shell); the GC record carries
+ * no export id, so multi-export GC would need the id in the record — a
+ * documented v1 limit. Returns with an inflight ref held (caller puts). */
+static struct efs_export *host_gc_export(struct efs_raft_host *h)
+{
+    struct efs_export *ex = NULL;
+
+    pthread_mutex_lock(&h->s->lock);
+    if (h->s->export_count > 0)
+        ex = server_export_acquire_locked(h->s, h->s->exports[0].id);
+    pthread_mutex_unlock(&h->s->lock);
+    return ex;
+}
+
+/* Delete one fragment on THIS node, checksum-conditional. EFS_OK when the
+ * dead bytes are gone afterwards (deleted / absent / slot reused). */
+static int host_gc_local_del(struct efs_raft_host *h, struct efs_export *ex,
+                             efs_ino_t ino, uint32_t ci, uint32_t fi,
+                             const uint8_t *sum)
+{
+    struct efs_store st;
+    struct efs_nvme_store nctx;
+    struct efs_frag_id fid;
+    int rc;
+
+    memset(&fid, 0, sizeof(fid));
+    fid.export_id = ex->id;
+    fid.ino = ino;
+    fid.chunk_index = ci;
+    fid.fragment_index = fi;
+    efs_store_nvme_bind(&st, &nctx, h->s, ex);
+    rc = efs_store_del_if_sum(&st, &fid, sum);
+    if (rc == EFS_ERR_EXIST)
+        rc = EFS_OK; /* slot reused: the dead generation is already gone */
+    return rc;
+}
+
+/* Ask the owning node to delete one fragment. EFS_OK = gone/ackable. */
+static int host_gc_remote_del(struct efs_raft_host *h, efs_node_id_t node,
+                              efs_export_id_t export_id, efs_ino_t ino,
+                              uint32_t ci, uint32_t fi, const uint8_t *sum)
+{
+    char host[64];
+    uint16_t port = 0;
+    struct efs_conn *pc;
+    struct efs_msg_gc_fragment req;
+    struct efs_msg_gc_fragment_reply *rep;
+    uint8_t rtype = 0;
+    void *reply = NULL;
+    uint32_t rlen = 0;
+    int rc = EFS_ERR_IO;
+
+    /* nodes[] in a chunk/GC value are 1-based server node ids; peer_addr
+     * keys off the 0-based raft id. */
+    if (node == 0 || (int)node - 1 == h->raft_id ||
+        peer_addr(h, (int)node - 1, host, sizeof(host), &port) != 0)
+        return EFS_ERR_IO;
+    pc = server_peer_conn_get(host, port);
+    if (!pc)
+        return EFS_ERR_IO;
+    /* A dead peer must not sit on the pool's long default timeout: the
+     * reaper would otherwise serialize minutes per dead node per pass. */
+    if (pc->kind == EFS_CONN_TCP && pc->fd >= 0) {
+        efs_set_recv_timeout(pc->fd, HOST_SEND_IO_MS);
+        efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
+    }
+    memset(&req, 0, sizeof(req));
+    req.export_id = export_id;
+    req.ino = ino;
+    req.chunk_index = ci;
+    req.fragment_index = fi;
+    memcpy(req.checksum, sum, EFS_HASH_SIZE);
+    if (efs_conn_send_msg(pc, EFS_MSG_GC_FRAGMENT, &req, sizeof(req)) != 0)
+        goto out;
+    if (efs_conn_recv_msg(pc, &rtype, &reply, &rlen) == 0 &&
+        rtype == EFS_MSG_GC_FRAGMENT_REPLY &&
+        rlen >= sizeof(struct efs_msg_gc_fragment_reply)) {
+        rep = reply;
+        if (rep->status == 0)
+            rc = EFS_OK;
+    }
+out:
+    free(reply);
+    if (rc == EFS_OK) {
+        if (pc->kind == EFS_CONN_TCP && pc->fd >= 0) {
+            efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+            efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+        }
+        server_peer_conn_release(host, port, pc);
+    } else {
+        server_peer_conn_drop(host, port, pc);
+    }
+    return rc;
+}
+
+/* Propose one GC command and wait for it to apply. read_mu is taken per
+ * proposal: host_propose's forward path drops/re-takes it internally, so
+ * the caller must hold it — but the slow fragment I/O runs without it. */
+static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
+                           const uint8_t *cmd, uint32_t clen)
+{
+    int rc;
+
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_propose_wait(h, group, cmd, clen, NULL);
+    pthread_mutex_unlock(&h->read_mu);
+    return rc;
+}
+
+/* One GC record: attempt every un-acked fragment, appending an ack item
+ * for each one now gone. At most GC_ACK_MAX acks are collected per pass
+ * (one entry's worth); the rest are retried next pass. */
+static void host_gc_record(struct efs_raft_host *h, struct efs_export *ex,
+                           const uint8_t *key, const uint8_t *val,
+                           struct efs_gc_ack_item *acks, int *nack)
+{
+    efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+    uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+    uint8_t ack_bits = 0;
+    efs_ino_t ino;
+    uint64_t gen;
+    uint32_t ci;
+    uint8_t lane;
+    int fi;
+
+    if (efs_meta_unpack_gc(val, EFS_META_GC_VAL, nodes, &ack_bits,
+                           sums) != EFS_OK)
+        return;
+    ino = rd64be(key + 3);
+    gen = rd64be(key + 11);
+    lane = key[19];
+    ci = rd32be(key + 20);
+    for (fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+        int rc;
+
+        if (ack_bits & (1u << fi))
+            continue;
+        if (*nack >= GC_ACK_MAX || !h->gc_running)
+            return;
+        if (nodes[fi] == h->s->id)
+            rc = host_gc_local_del(h, ex, ino, ci, (uint32_t)fi, sums[fi]);
+        else
+            rc = host_gc_remote_del(h, nodes[fi], ex->id, ino, ci,
+                                    (uint32_t)fi, sums[fi]);
+        if (env_on("EFS_GC_DBG"))
+            fprintf(stderr, "raft-host: gc del ino=%llu ci=%u frag=%u node=%u rc=%d\n",
+                    (unsigned long long)ino, ci, fi, nodes[fi], rc);
+        if (rc != EFS_OK)
+            continue; /* real failure: retry next pass */
+        acks[*nack].ino = ino;
+        acks[*nack].gen = gen;
+        acks[*nack].ci = ci;
+        acks[*nack].lane = lane;
+        acks[*nack].frag = (uint8_t)fi;
+        (*nack)++;
+    }
+}
+
+/* REAP pass over one group's anchor shard: sweep every active lane of
+ * each dead inode, then finish the reap on the inode's group. A failed
+ * proposal skips the marker — the next pass re-drives it. */
+static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
+                              uint32_t anchor)
+{
+    struct reap_scan_ctx c;
+    uint8_t prefix[3];
+    uint32_t plen = 0;
+    int i, lane;
+
+    int prc, src;
+
+    (void)group;
+    prc = efs_kv_key_reap_prefix(anchor, prefix, &plen);
+    memset(&c, 0, sizeof(c));
+    src = (prc == EFS_OK)
+          ? efs_kv_scan_prefix(h->kv, prefix, plen, reap_scan_cb, &c)
+          : -999;
+    if (env_on("EFS_GC_DBG"))
+        fprintf(stderr, "raft-host: gc reap pass group=%u anchor=%u prc=%d src=%d markers=%d kv=%p\n",
+                group, anchor, prc, src, c.n, (void *)h->kv);
+    /* src > 0 is the scan callback's "batch full, stop" signal (merge_scan
+     * propagates it), NOT an error — process the partial batch and pick up
+     * the rest next pass. Only a negative rc is a real KV failure. */
+    if (prc != EFS_OK || src < 0)
+        return;
+    for (i = 0; i < c.n && h->gc_running && h->running; i++) {
+        uint8_t cmd[18];
+        int lanes_ok = 1;
+        int lrc = 0, drc = 0;
+
+        for (lane = 0; lane < EFS_META_LANES; lane++) {
+            uint32_t lshard;
+
+            if (!(c.lanes[i] & (1ull << lane)))
+                continue;
+            lshard = efs_kv_lane_shard(c.ino[i], (uint8_t)lane);
+            cmd[0] = EFS_MD_CMD_LANE_SWEEP;
+            wr64be(cmd + 1, c.ino[i]);
+            wr64be(cmd + 9, c.gen[i]);
+            cmd[17] = (uint8_t)lane;
+            lrc = host_gc_propose(h, efs_raft_shard_group(lshard), cmd, 18);
+            if (lrc != EFS_OK) {
+                lanes_ok = 0;
+                break; /* retry the whole marker next pass */
+            }
+        }
+        if (!lanes_ok) {
+            if (env_on("EFS_GC_DBG"))
+                fprintf(stderr, "raft-host: gc reap ino=%llu lane_sweep rc=%d (retry)\n",
+                        (unsigned long long)c.ino[i], lrc);
+            continue;
+        }
+        cmd[0] = EFS_MD_CMD_REAP_DONE;
+        wr64be(cmd + 1, c.ino[i]);
+        wr64be(cmd + 9, c.gen[i]);
+        drc = host_gc_propose(h,
+                              efs_raft_shard_group(efs_kv_inode_shard(c.ino[i])),
+                              cmd, 17);
+        if (env_on("EFS_GC_DBG"))
+            fprintf(stderr, "raft-host: gc reap ino=%llu lanes=%llx sweep ok, reap_done rc=%d\n",
+                    (unsigned long long)c.ino[i],
+                    (unsigned long long)c.lanes[i], drc);
+    }
+}
+
+/* GC pass over one group's anchor shard: delete fragments for each dead
+ * chunk generation, then batch the acks into one GC_ACK entry. */
+static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
+                              uint32_t anchor)
+{
+    struct gc_scan_ctx c;
+    struct efs_gc_ack_item acks[GC_ACK_MAX];
+    struct efs_export *ex;
+    uint8_t prefix[3];
+    uint32_t plen = 0;
+    int nack = 0;
+    int i;
+
+    int prc, src;
+
+    prc = efs_kv_key_gc_prefix(anchor, prefix, &plen);
+    memset(&c, 0, sizeof(c));
+    src = (prc == EFS_OK)
+          ? efs_kv_scan_prefix(h->kv, prefix, plen, gc_scan_cb, &c)
+          : -999;
+    ex = host_gc_export(h);
+    if (env_on("EFS_GC_DBG"))
+        fprintf(stderr, "raft-host: gc frag pass group=%u anchor=%u prc=%d src=%d records=%d ex=%p\n",
+                group, anchor, prc, src, c.n, (void *)ex);
+    /* src > 0 is the scan callback's "batch full" stop, not an error. */
+    if (prc != EFS_OK || src < 0 || c.n == 0) {
+        if (ex)
+            server_export_put(h->s, ex);
+        return;
+    }
+    if (!ex)
+        return; /* no export yet (pre-mkfs): nothing to delete under */
+    for (i = 0; i < c.n && h->gc_running && h->running && nack < GC_ACK_MAX;
+         i++)
+        host_gc_record(h, ex, c.keys[i], c.vals[i], acks, &nack);
+    server_export_put(h->s, ex);
+    if (nack > 0) {
+        uint8_t cmd[3 + GC_ACK_MAX * 22];
+        int j, off = 3;
+
+        cmd[0] = EFS_MD_CMD_GC_ACK;
+        cmd[1] = (uint8_t)(nack >> 8);
+        cmd[2] = (uint8_t)nack;
+        for (j = 0; j < nack; j++) {
+            wr64be(cmd + off, acks[j].ino);
+            wr64be(cmd + off + 8, acks[j].gen);
+            cmd[off + 16] = acks[j].lane;
+            wr32be(cmd + off + 17, acks[j].ci);
+            cmd[off + 21] = acks[j].frag;
+            off += 22;
+        }
+        (void)host_gc_propose(h, group, cmd, (uint32_t)off);
+    }
+}
+
+static void *host_gc_thread(void *arg)
+{
+    struct efs_raft_host *h = arg;
+    int g;
+
+    while (h->gc_running) {
+        for (g = 0; g < HOST_NGROUPS && h->gc_running; g++) {
+            uint32_t anchor;
+            int lead = 0;
+
+            if (!h->g[g].hosted)
+                continue;
+            pthread_mutex_lock(&h->mu);
+            if (h->g[g].r && efs_raft_role(h->g[g].r) == EFS_RAFT_LEADER)
+                lead = 1;
+            pthread_mutex_unlock(&h->mu);
+            if (env_on("EFS_GC_DBG"))
+                fprintf(stderr, "raft-host: gc loop g=%d group=%u r=%p role=%d lead=%d\n",
+                        g, h->g[g].group, (void *)h->g[g].r,
+                        h->g[g].r ? efs_raft_role(h->g[g].r) : -1, lead);
+            if (!lead)
+                continue;
+            /* Group 0 owns the odd shards (anchor 1), group 2 the even
+             * ones (anchor 2) — efs_kv_anchor_shard's parity rule. */
+            anchor = (h->g[g].group == 0) ? 1u : 2u;
+            host_gc_reap_pass(h, h->g[g].group, anchor);
+            host_gc_frag_pass(h, h->g[g].group, anchor);
+        }
+        /* ~1s between passes, in 20 ms slices so shutdown is prompt. */
+        for (g = 0; g < GC_LOOP_MS / 20 && h->gc_running; g++)
+            usleep(20 * 1000);
+    }
+    return NULL;
+}
+
 int server_raft_host_start(struct efsd_server *s)
 {
     struct efs_raft_host *h;
@@ -2979,6 +3456,23 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_IO;
     }
     h->started = 1;
+    /* GC reaper after the pump: its proposals need the pump to apply. A
+     * spawn failure only leaks fragments (logged), never corrupts.
+     * EFS_GC_DISABLE is an operational escape hatch (A/B, emergencies):
+     * with it the metadata side still writes reap markers/GC records,
+     * they just are never driven to fragment deletes. */
+    h->gc_running = 1;
+    if (env_on("EFS_GC_DISABLE")) {
+        fprintf(stderr, "raft-host: GC reaper DISABLED (EFS_GC_DISABLE); "
+                "unlinked fragments will leak\n");
+        h->gc_running = 0;
+    } else if (efsd_pthread_create(&h->gc_tid, host_gc_thread, h) != 0) {
+        fprintf(stderr, "raft-host: GC reaper thread failed; "
+                "unlinked fragments will leak\n");
+        h->gc_running = 0;
+    } else {
+        h->gc_started = 1;
+    }
     fprintf(stderr,
             "raft-host: up raft_id=%d n=%d boot=%llu salt=%llu "
             "g0=%s g2=%s\n",
@@ -3016,6 +3510,11 @@ void server_raft_host_stop(void)
 
     if (!h)
         return;
+    /* Stop the GC reaper first: an in-flight host_propose_wait needs the
+     * pump alive to apply, and its peer RPCs need the conn pool. */
+    h->gc_running = 0;
+    if (h->gc_started)
+        pthread_join(h->gc_tid, NULL);
     h->running = 0;
     /* Wake the pump so shutdown does not wait out a 5 ms tick. */
     host_pump_kick(h);
@@ -4654,10 +5153,12 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
     uint8_t k_dent[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX], k_par[EFS_KV_KEY_MAX];
     uint8_t k_dseq[EFS_KV_KEY_MAX];
     uint8_t v_ino[EFS_META_INO_BYTES], v_par[EFS_META_INO_BYTES], v_dseq[8];
+    uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
     uint8_t sb[8], cmd[22];
-    uint32_t kd = 0, ki = 0, kp = 0, ks = 0, sn = 8;
-    uint32_t dsh, ish, psh, coord;
+    uint32_t kd = 0, ki = 0, kp = 0, ks = 0, sn = 8, krl = 0;
+    uint32_t dsh, ish, psh, coord, ash = 0;
     uint64_t dver = 0, iver = 0, pver = 0, sver = 0, seq = 0, now;
+    uint64_t rver = 0;
     uint32_t nlink_out = 0;
     int hint = -1;
     int rc, i, gr, held = 0, last = 0, put_ino = 0;
@@ -4730,6 +5231,16 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
         rc = efs_kv_key_inode(psh, parent, k_par, &kp);
     if (rc == EFS_OK)
         rc = efs_kv_key_dseq(dsh, parent, 0, k_dseq, &ks);
+    /* Last link with no leases retires the inode row: the reap marker
+     * (L7) rides the same txn on the inode group's anchor shard. */
+    if (rc == EFS_OK && last && !held) {
+        ash = efs_kv_anchor_shard(ish);
+        rc = efs_kv_key_reap(ash, row.ino, k_reap, &krl);
+        if (rc == EFS_OK)
+            rc = efs_txn_ver_get(h->kv, k_reap, krl, &rver);
+        if (rc == EFS_OK)
+            efs_meta_pack_reap(v_reap, row.generation, row.active_lanes);
+    }
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
     if (rc == EFS_OK)
@@ -4757,6 +5268,10 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
                 parts.shard[1] = dsh;
             }
         }
+        if (last && !held)
+            rc = host_parts_add(&parts, ash);
+        if (rc != EFS_OK)
+            goto prepped;
         fill_txid(h, &t);
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
@@ -4780,7 +5295,21 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
                     rc = host_prep(h, ish, EFS_TXN_EXCL, &t, &parts, k_ino, ki,
                                    iver, EFS_TXN_DEL, NULL, 0, &hint);
             }
+            if (rc == EFS_OK && last && !held && sh == ash && ash != dsh &&
+                ash != ish)
+                rc = host_prep(h, ash, EFS_TXN_EXCL, &t, &parts, k_reap, krl,
+                               rver, EFS_TXN_PUT, v_reap, sizeof(v_reap),
+                               &hint);
         }
+        if (rc == EFS_OK && last && !held && (ash == dsh || ash == ish))
+            /* The anchor shard is already a participant; its marker PREP
+             * still has to ride the log of ITS OWN group. When ash aliases
+             * dsh or ish the loop above skipped the dedicated branch, so
+             * issue it here against the anchor's group directly. */
+            rc = host_prep(h, ash, EFS_TXN_EXCL, &t, &parts, k_reap, krl,
+                           rver, EFS_TXN_PUT, v_reap, sizeof(v_reap),
+                           &hint);
+prepped:
         if (rc != EFS_OK)
             (void)host_drop_parts(h, &t, &parts, &hint);
         else {
@@ -5121,10 +5650,23 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
             if (tail.candidate_gen == 0)
                 tail.candidate_gen = 1;
             tail.coding_profile_id = EFS_META_PROFILE_K2F1;
-            for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-                tail.ch.nodes[i] = (efs_node_id_t)(i + 1);
-                memset(tail.ch.checksums[i], (uint8_t)(0xa5 + i),
-                       EFS_HASH_SIZE);
+            if (got.generation != 0) {
+                /* The tail stub writes no data of its own: alias the
+                 * superseded row's placement so reads keep finding the
+                 * surviving prefix's fragments. The apply side recognizes
+                 * the alias and skips the GC record — the fragments are
+                 * shared with the live row, not dead. */
+                memcpy(tail.ch.nodes, got.nodes, sizeof(tail.ch.nodes));
+                memcpy(tail.ch.checksums, got.checksums,
+                       sizeof(tail.ch.checksums));
+            } else {
+                /* Grow into a chunk that was never written: publish the
+                 * well-known zero-fragment digests so the read path
+                 * synthesizes zeros without a GET (no fragments exist). */
+                for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+                    tail.ch.nodes[i] = (efs_node_id_t)(i + 1);
+                    efs_hash_zero_fragment(tail.ch.checksums[i]);
+                }
             }
             tp = &tail;
         }
@@ -5205,10 +5747,17 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
             tail.inode_gen = row.generation;
             tail.mtime_gen = row.mtime_gen;
             tail.lane_local = 1;
-            for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-                tail.ch.nodes[i] = (efs_node_id_t)(i + 1);
-                memset(tail.ch.checksums[i], (uint8_t)(0xa5 + i),
-                       EFS_HASH_SIZE);
+            if (got.generation != 0) {
+                /* Alias the superseded row's placement (see the
+                 * same-group branch above). */
+                memcpy(tail.ch.nodes, got.nodes, sizeof(tail.ch.nodes));
+                memcpy(tail.ch.checksums, got.checksums,
+                       sizeof(tail.ch.checksums));
+            } else {
+                for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+                    tail.ch.nodes[i] = (efs_node_id_t)(i + 1);
+                    efs_hash_zero_fragment(tail.ch.checksums[i]);
+                }
             }
             rc = pack_publish_cmd(cmd, &clen, &tail);
             if (rc == EFS_OK && clen > HOST_CMD_MAX)
@@ -5578,11 +6127,12 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     uint8_t v_dent[EFS_META_DENT_BYTES], v_ino[EFS_META_INO_BYTES];
     uint8_t v_par[EFS_META_INO_BYTES], v_dseq[8], v_pver[8], sb[8], cmd[22];
     uint8_t v_nino[EFS_META_INO_BYTES];
+    uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
     uint32_t ks = 0, kd = 0, ki = 0, kp = 0, kq = 0, kpv = 0, sn = 8;
-    uint32_t kn = 0, knd = 0;
-    uint32_t ssh, dsh, ish, psh, coord, nsh = 0;
+    uint32_t kn = 0, knd = 0, krl = 0;
+    uint32_t ssh, dsh, ish, psh, coord, nsh = 0, ash = 0;
     uint64_t sver = 0, dver = 0, iver = 0, pver = 0, qver = 0, ever = 0;
-    uint64_t nver = 0, gver2 = 0;
+    uint64_t nver = 0, gver2 = 0, rver = 0;
     uint64_t seq = 0, now;
     int hint = -1;
     int rc, i, gr, is_dir = 0, ngv = 0;
@@ -5760,6 +6310,15 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     }
     if (rc == EFS_OK && xist && xput)
         rc = efs_meta_pack_inode(&nrow, v_nino, sizeof(v_nino));
+    /* A file dest retired at its last link (the DEL below) needs its reap
+     * marker (L7) in the same txn, on the dest inode group's anchor
+     * shard. */
+    if (rc == EFS_OK && xist && !xdir && !xput) {
+        ash = efs_kv_anchor_shard(nsh);
+        rc = efs_kv_key_reap(ash, nrow.ino, k_reap, &krl);
+        if (rc == EFS_OK)
+            efs_meta_pack_reap(v_reap, nrow.generation, nrow.active_lanes);
+    }
     memset(&parts, 0, sizeof(parts));
     if (rc == EFS_OK)
         rc = host_parts_add(&parts, ssh);
@@ -5769,6 +6328,8 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         rc = host_parts_add(&parts, ish);
     if (rc == EFS_OK && xist)
         rc = host_parts_add(&parts, nsh);
+    if (rc == EFS_OK && xist && !xdir && !xput)
+        rc = host_parts_add(&parts, ash);
     if (rc == EFS_OK && is_dir) {
         rc = host_pver_guard_chain(h, new_parent, row.ino, &parts, gv, &ngv,
                                    &hint);
@@ -5828,6 +6389,8 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         rc = efs_txn_ver_get(h->kv, k_nino, kn, &nver);
     if (rc == EFS_OK && xist && xdir)
         rc = efs_txn_ver_get(h->kv, k_ndseq, knd, &gver2);
+    if (rc == EFS_OK && xist && !xdir && !xput)
+        rc = efs_txn_ver_get(h->kv, k_reap, krl, &rver);
     if (rc == EFS_OK) {
         sn = 8;
         gr = efs_kv_get(h->kv, k_dseq, kq, sb, &sn);
@@ -5876,7 +6439,20 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                     rc = host_prep(h, nsh, EFS_TXN_GUARD, &t, &parts, k_ndseq,
                                    knd, gver2, 0, NULL, 0, &hint);
             }
+            if (rc == EFS_OK && xist && !xdir && !xput && sh == ash &&
+                ash != ssh && ash != dsh && ash != ish && ash != nsh)
+                rc = host_prep(h, ash, EFS_TXN_EXCL, &t, &parts, k_reap, krl,
+                               rver, EFS_TXN_PUT, v_reap, sizeof(v_reap),
+                               &hint);
         }
+        if (rc == EFS_OK && xist && !xdir && !xput &&
+            (ash == ssh || ash == dsh || ash == ish || ash == nsh))
+            /* The anchor shard aliases another participant; the loop's
+             * dedicated branch skipped it, so the marker PREP goes to the
+             * anchor's own group here. */
+            rc = host_prep(h, ash, EFS_TXN_EXCL, &t, &parts, k_reap, krl,
+                           rver, EFS_TXN_PUT, v_reap, sizeof(v_reap),
+                           &hint);
         for (i = 0; i < ngv && rc == EFS_OK; i++)
             rc = host_prep(h, gv[i].shard, EFS_TXN_GUARD, &t, &parts, gv[i].key,
                            gv[i].klen, gv[i].ver, 0, NULL, 0, &hint);

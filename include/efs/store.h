@@ -36,6 +36,16 @@ struct efs_store_ops {
                const uint8_t *buf, uint32_t len,
                const uint8_t sum[EFS_HASH_SIZE]);
     int (*del)(void *ctx, const struct efs_frag_id *id);
+    /* Checksum-conditional delete for the data-plane GC (L7): fragment
+     * paths do not carry the generation, so the reaper must not unlink a
+     * slot a NEWER generation has already overwritten. Deletes data +
+     * .sum sidecar only when the stored sidecar equals expect_sum;
+     * returns EFS_OK when the fragment is gone afterwards (deleted, or
+     * was already absent), EFS_ERR_EXIST when a mismatched live fragment
+     * remains (the dead generation's bytes are already overwritten —
+     * the record may be acked), EFS_ERR_IO on a real failure (retry). */
+    int (*del_if_sum)(void *ctx, const struct efs_frag_id *id,
+                      const uint8_t expect_sum[EFS_HASH_SIZE]);
     void (*destroy)(void *ctx);
 };
 
@@ -67,6 +77,15 @@ static inline int efs_store_del(struct efs_store *s, const struct efs_frag_id *i
     if (!s || !s->ops || !s->ops->del)
         return EFS_ERR_INVAL;
     return s->ops->del(s->ctx, id);
+}
+
+static inline int efs_store_del_if_sum(struct efs_store *s,
+                                       const struct efs_frag_id *id,
+                                       const uint8_t expect_sum[EFS_HASH_SIZE])
+{
+    if (!s || !s->ops || !s->ops->del_if_sum)
+        return EFS_ERR_INVAL;
+    return s->ops->del_if_sum(s->ctx, id, expect_sum);
 }
 
 static inline void efs_store_destroy(struct efs_store *s)

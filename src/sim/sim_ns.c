@@ -68,6 +68,33 @@ static int prep_add(struct ns_prep *pr, int *n, uint32_t shard, int kind,
     return EFS_OK;
 }
 
+/* The dead inode's REAP marker (L7) as a PREP on its inode group's anchor
+ * shard — the sim mirror of the marker the raft host adds to last-link
+ * unlink/rename txns (host_unlink_txn / server_raft_host_rename_at).
+ * `kv` must hold the anchor shard's group (same group as `ish`). */
+static int reap_prep_add(struct efs_kv *kv, struct ns_prep *pr, int *n,
+                         struct efs_txn_parts *p, uint32_t ish,
+                         const struct efs_meta_row *row)
+{
+    uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
+    uint32_t krl = 0, ash;
+    uint64_t rver = 0;
+    int rc;
+
+    ash = efs_kv_anchor_shard(ish);
+    rc = efs_kv_key_reap(ash, row->ino, k_reap, &krl);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(kv, k_reap, krl, &rver);
+    if (rc == EFS_OK)
+        efs_meta_pack_reap(v_reap, row->generation, row->active_lanes);
+    if (rc == EFS_OK)
+        rc = sim_txn_parts_add(p, ash);
+    if (rc == EFS_OK)
+        rc = prep_add(pr, n, ash, EFS_TXN_EXCL, k_reap, krl, rver,
+                      EFS_TXN_PUT, v_reap, sizeof(v_reap), NULL);
+    return rc;
+}
+
 static int prep_issue(struct efs_sim *sim, const struct efs_txid *t,
                       const struct efs_txn_parts *p, struct ns_prep *pr, int n)
 {
@@ -543,6 +570,10 @@ static int unlink_build(struct efs_sim *sim, int client, efs_ino_t parent, const
         } else {
             rc = prep_add(pr, &n, ish, EFS_TXN_EXCL, k_ino, ki, iver,
                           EFS_TXN_DEL, NULL, 0, NULL);
+            /* Last link, no lease: the reap marker (L7) rides the same
+             * txn, mirroring host_unlink_txn. */
+            if (rc == EFS_OK)
+                rc = reap_prep_add(ikv, pr, &n, p, ish, &row);
         }
     } else {
         row.nlink--;
@@ -877,6 +908,10 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
                     } else {
                         rc = prep_add(pr, &n, nsh, EFS_TXN_EXCL, k_nino, kn,
                                       nver, EFS_TXN_DEL, NULL, 0, NULL);
+                        /* Dest file retired at its last link: reap marker
+                         * (L7) in the same txn, mirroring the raft host. */
+                        if (rc == EFS_OK)
+                            rc = reap_prep_add(nkv, pr, &n, p, nsh, &nrow);
                     }
                     if (rc != EFS_OK)
                         return rc;

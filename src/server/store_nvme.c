@@ -55,6 +55,20 @@ static int nvme_del(void *ctx, const struct efs_frag_id *id)
     return EFS_OK;
 }
 
+static int nvme_del_if_sum(void *ctx, const struct efs_frag_id *id,
+                           const uint8_t expect_sum[EFS_HASH_SIZE])
+{
+    struct efs_nvme_store *n = ctx;
+
+    if (!n || !n->s || !n->ex || !id || !expect_sum)
+        return EFS_ERR_INVAL;
+    if (id->export_id != n->ex->id)
+        return EFS_ERR_INVAL;
+    return server_delete_fragment_if_sum(n->s, n->ex, id->ino,
+                                         id->chunk_index, id->fragment_index,
+                                         expect_sum);
+}
+
 static void nvme_destroy(void *ctx)
 {
     (void)ctx; /* stack-bound; caller owns s/ex */
@@ -64,6 +78,7 @@ static const struct efs_store_ops nvme_ops = {
     .get = nvme_get,
     .put = nvme_put,
     .del = nvme_del,
+    .del_if_sum = nvme_del_if_sum,
     .destroy = nvme_destroy,
 };
 

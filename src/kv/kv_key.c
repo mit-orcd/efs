@@ -470,6 +470,41 @@ int efs_kv_key_append_rsv_shard_prefix(uint32_t shard, uint8_t *out,
     return start(out, len, shard, EFS_KV_KIND_APPEND_RSV, 0, EFS_KV_KEY_MAX);
 }
 
+int efs_kv_key_gc(uint32_t shard, efs_ino_t ino, uint64_t gen, uint8_t lane,
+                  uint32_t chunk_index, uint8_t *out, uint32_t *len)
+{
+    int rc = start(out, len, shard, EFS_KV_KIND_GC, 8 + 8 + 1 + 4,
+                   EFS_KV_KEY_MAX);
+    if (rc != EFS_OK)
+        return rc;
+    be64(out + 3, ino);
+    be64(out + 11, gen);
+    out[19] = lane;
+    be32(out + 20, chunk_index);
+    return EFS_OK;
+}
+
+int efs_kv_key_gc_prefix(uint32_t shard, uint8_t *out, uint32_t *len)
+{
+    return start(out, len, shard, EFS_KV_KIND_GC, 0, EFS_KV_KEY_MAX);
+}
+
+int efs_kv_key_reap(uint32_t shard, efs_ino_t ino, uint8_t *out,
+                    uint32_t *len)
+{
+    int rc = start(out, len, shard, EFS_KV_KIND_REAP, 8, EFS_KV_KEY_MAX);
+
+    if (rc != EFS_OK)
+        return rc;
+    be64(out + 3, ino);
+    return EFS_OK;
+}
+
+int efs_kv_key_reap_prefix(uint32_t shard, uint8_t *out, uint32_t *len)
+{
+    return start(out, len, shard, EFS_KV_KIND_REAP, 0, EFS_KV_KEY_MAX);
+}
+
 int efs_kv_key_unwrap(const uint8_t *wrapk, uint32_t wlen, uint8_t *orig,
                       uint32_t *olen)
 {

@@ -58,6 +58,43 @@ static int read_sess(struct efs_sim *sim, uint32_t shard, struct efs_kv **kv)
     return *kv ? EFS_OK : EFS_ERR_BUSY;
 }
 
+/* Drive one reap marker (L7) to completion on this replica's KV. The sim
+ * has no reaper thread — the reclaim apply IS the reaper, infinitely
+ * fast: sweep every active lane (deleting the lane's chunk keys and
+ * emitting one GC record per chunk, exactly what EFS_MD_CMD_LANE_SWEEP
+ * applies in production), then REAP_DONE clears the append state and the
+ * marker. Every replica applies the same RECLAIM and drives its own KV,
+ * so the replicas stay convergent; the all-voters topology means each KV
+ * holds both groups' lanes. A missing marker = already driven = OK. */
+static int sim_reap_drive(struct efs_kv *kv, efs_ino_t ino)
+{
+    uint8_t k_reap[EFS_KV_KEY_MAX], v[EFS_META_REAP_VAL];
+    uint32_t krl = 0, vl = sizeof(v);
+    uint64_t gen = 0, lanes = 0;
+    int rc, lane;
+
+    rc = efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(ino)), ino,
+                         k_reap, &krl);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, k_reap, krl, v, &vl);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_OK;
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_meta_unpack_reap(v, vl, &gen, &lanes);
+    if (rc != EFS_OK)
+        return rc;
+    for (lane = 0; lane < EFS_META_LANES; lane++) {
+        if (!(lanes & (1ull << lane)))
+            continue;
+        rc = efs_meta_apply_lane_sweep(kv, ino, gen, (uint8_t)lane);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    return efs_meta_apply_reap_done(kv, ino, gen);
+}
+
 int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
                    uint32_t clen, uint64_t index)
 {
@@ -137,6 +174,17 @@ int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
             if (dr != EFS_OK && dr != EFS_ERR_NOT_FOUND && rc == EFS_OK)
                 rc = dr;
         }
+        /* Same mirror: every successful close also attempts the
+         * open-unlinked reclaim (BUSY while links/leases remain is
+         * tolerated), and the sim drives the reap marker inline. */
+        if (rc == EFS_OK) {
+            int r2 = efs_meta_apply_reclaim(s->disk, ino);
+
+            if (r2 == EFS_OK)
+                r2 = sim_reap_drive(s->disk, ino);
+            if (r2 != EFS_OK && r2 != EFS_ERR_BUSY && r2 != EFS_ERR_NOT_FOUND)
+                rc = r2;
+        }
         break;
     case EFS_MD_SESS_LEASE_DROP:
         if (clen < 26)
@@ -164,6 +212,16 @@ int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
             break;
         ino = rd64(cmd + 18);
         rc = efs_meta_apply_reclaim(s->disk, ino);
+        /* Mirror raft_host's session-apply catch-all: a duplicate reclaim
+         * (the last close already reclaimed) is idempotent OK, and the
+         * reaper has either finished or owns the marker. */
+        if (rc == EFS_ERR_NOT_FOUND)
+            rc = EFS_OK;
+        /* Reclaim wrote the reap marker; the sim drives it inline (it is
+         * the reaper). NOT_FOUND/BUSY carry no marker, so drive only on
+         * OK. */
+        if (rc == EFS_OK)
+            rc = sim_reap_drive(s->disk, ino);
         break;
     default:
         rc = EFS_ERR_PROTO;

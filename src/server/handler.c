@@ -399,6 +399,46 @@ send_reply:
             }
             break;
         }
+        case EFS_MSG_GC_FRAGMENT: {
+            /* Data-plane GC (spec L7): checksum-conditional fragment
+             * delete. Idempotent — absent/deleted/mismatch-gone all reply
+             * 0; only a real I/O failure asks the reaper to retry. No
+             * export auto-create: no export means no fragments, which is
+             * "already gone". */
+            if (payload_len >= sizeof(struct efs_msg_gc_fragment)) {
+                struct efs_msg_gc_fragment *req = payload;
+                struct efs_msg_gc_fragment_reply rep;
+                struct efs_store st;
+                struct efs_nvme_store nctx;
+                struct efs_frag_id fid;
+                int grc = EFS_OK;
+
+                memset(&rep, 0, sizeof(rep));
+                pthread_mutex_lock(&g_server->lock);
+                struct efs_export *ex =
+                    server_export_acquire_locked(g_server, req->export_id);
+                pthread_mutex_unlock(&g_server->lock);
+                if (ex) {
+                    fid.export_id = ex->id;
+                    fid.ino = req->ino;
+                    fid.inode_generation = 0;
+                    fid.chunk_generation = 0;
+                    fid.chunk_index = req->chunk_index;
+                    fid.fragment_index = req->fragment_index;
+                    fid.coding_profile_id = 0;
+                    efs_store_nvme_bind(&st, &nctx, g_server, ex);
+                    grc = efs_store_del_if_sum(&st, &fid, req->checksum);
+                    server_export_put(g_server, ex);
+                }
+                /* EFS_ERR_EXIST = a newer generation occupies the slot:
+                 * the dead bytes are already gone, so that is terminal
+                 * success for the reaper, not a retry. */
+                rep.status = (grc == EFS_OK || grc == EFS_ERR_EXIST) ? 0 : 1;
+                efs_conn_send_msg(conn, EFS_MSG_GC_FRAGMENT_REPLY, &rep,
+                                  sizeof(rep));
+            }
+            break;
+        }
         case EFS_MSG_BENCH_PUT: {
             /* Network bench: accept mount-shaped PUT payload, ACK, discard. */
             uint8_t reply = EFS_BENCH_PUT_ERROR;

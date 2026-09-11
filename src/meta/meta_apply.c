@@ -809,7 +809,8 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
     uint8_t k_ino[EFS_KV_KEY_MAX], v_ino[INO_VAL], v_tomb[DENT_VAL];
     uint8_t k_par[EFS_KV_KEY_MAX], v_par[INO_VAL];
     uint8_t k_ln[EFS_KV_KEY_MAX], v_ln[LANE_VAL];
-    uint32_t kl = 0, kh = 0, ki = 0, kp = 0, kln = 0;
+    uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
+    uint32_t kl = 0, kh = 0, ki = 0, kp = 0, kln = 0, kr = 0;
     struct efs_kv_item it[8];
     uint32_t n = 0, psh, hsh;
     int rc, held = 0;
@@ -885,6 +886,23 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
             it[n].op = EFS_KV_DEL;
             it[n].key = k_ino;
             it[n].klen = ki;
+            n++;
+            /* The row dies here; the reap marker is what the background
+             * reaper needs to sweep the dead file's lanes and GC its
+             * fragments (L7), and it must be atomic with the delete. The
+             * lease-held case above keeps the row, so the marker comes
+             * from efs_meta_apply_reclaim when the last lease closes. */
+            rc = efs_kv_key_reap(
+                efs_kv_anchor_shard(efs_kv_inode_shard(row.ino)), row.ino,
+                k_reap, &kr);
+            if (rc != EFS_OK)
+                return rc;
+            efs_meta_pack_reap(v_reap, row.generation, row.active_lanes);
+            it[n].op = EFS_KV_PUT;
+            it[n].key = k_reap;
+            it[n].klen = kr;
+            it[n].val = v_reap;
+            it[n].vlen = EFS_META_REAP_VAL;
             n++;
         }
     } else {
@@ -1771,7 +1789,9 @@ int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino)
 {
     struct efs_meta_row row;
     uint8_t k_ino[EFS_KV_KEY_MAX];
-    uint32_t ki = 0;
+    uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
+    uint32_t ki = 0, kr = 0;
+    struct efs_kv_item it[2];
     int rc, held;
 
     if (!kv || ino == 0)
@@ -1787,9 +1807,26 @@ int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino)
     if (held)
         return EFS_ERR_BUSY;
     rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, k_ino, &ki);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(ino)),
+                             ino, k_reap, &kr);
     if (rc != EFS_OK)
         return rc;
-    return efs_kv_del(kv, k_ino, ki);
+    /* Row delete and reap marker are one batch: the marker is the reaper's
+     * only record of the dead file's lanes (L7), so it can never be lost
+     * to a crash between the two writes. Append cursor/reservation records
+     * are cleaned by REAP_DONE, keeping this hot entry small. */
+    memset(it, 0, sizeof(it));
+    it[0].op = EFS_KV_DEL;
+    it[0].key = k_ino;
+    it[0].klen = ki;
+    efs_meta_pack_reap(v_reap, row.generation, row.active_lanes);
+    it[1].op = EFS_KV_PUT;
+    it[1].key = k_reap;
+    it[1].klen = kr;
+    it[1].val = v_reap;
+    it[1].vlen = EFS_META_REAP_VAL;
+    return efs_kv_batch(kv, it, 2);
 }
 
 static void pack_chunk(uint8_t *p, const struct efs_meta_chunk *ch)
@@ -1819,6 +1856,96 @@ static int unpack_chunk(const uint8_t *p, uint32_t n, struct efs_meta_chunk *ch)
         ch->nodes[i] = rd32(p + CHUNK_HDR + (uint32_t)i * 4u);
     memcpy(ch->checksums, p + CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+    return EFS_OK;
+}
+
+/* True when a new publication carries the exact fragment set of the row it
+ * supersedes — the raft truncate tail stub reuses the old row's placement
+ * instead of writing new fragments. The fragments are shared with the live
+ * row, not dead, so a CAS supersede between aliased rows must NOT queue a
+ * GC record (the reaper would delete the only copy of the tail data). */
+static int chunk_aliases(const struct efs_meta_chunk *a,
+                         const struct efs_meta_chunk *b)
+{
+    return memcmp(a->nodes, b->nodes, sizeof(a->nodes)) == 0 &&
+           memcmp(a->checksums, b->checksums, sizeof(a->checksums)) == 0;
+}
+
+void efs_meta_pack_gc(uint8_t *p, const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
+                      uint8_t ack_bits,
+                      const uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE])
+{
+    int i;
+
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        be32(p + (uint32_t)i * 4u, nodes[i]);
+    p[4 * EFS_NUM_FRAGMENTS] = ack_bits;
+    memset(p + 4 * EFS_NUM_FRAGMENTS + 1, 0, 3);
+    memcpy(p + 4 * EFS_NUM_FRAGMENTS + 4, sums,
+           EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+}
+
+int efs_meta_unpack_gc(const uint8_t *p, uint32_t n,
+                       efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
+                       uint8_t *ack_bits,
+                       uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE])
+{
+    int i;
+
+    if (!p || n < EFS_META_GC_VAL)
+        return EFS_ERR_PROTO;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        nodes[i] = rd32(p + (uint32_t)i * 4u);
+    *ack_bits = p[4 * EFS_NUM_FRAGMENTS];
+    memcpy(sums, p + 4 * EFS_NUM_FRAGMENTS + 4,
+           EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+    return EFS_OK;
+}
+
+void efs_meta_pack_reap(uint8_t *p, uint64_t generation,
+                        uint64_t active_lanes)
+{
+    be64(p, generation);
+    be64(p + 8, active_lanes);
+}
+
+int efs_meta_unpack_reap(const uint8_t *p, uint32_t n, uint64_t *generation,
+                         uint64_t *active_lanes)
+{
+    if (!p || n < EFS_META_REAP_VAL)
+        return EFS_ERR_PROTO;
+    *generation = rd64(p);
+    *active_lanes = rd64(p + 8);
+    return EFS_OK;
+}
+
+/* Queue one GC record for a dead chunk generation. The record lands on the
+ * anchor shard of the chunk's lane shard, so the reaper scans one prefix
+ * per group. gc_keys/gc_vals are caller storage indexed by the global item
+ * number, same discipline as trunc_scan's del_keys. */
+static int gc_queue(struct efs_kv_item *it, uint32_t *n, uint32_t cap,
+                    uint8_t (*gc_keys)[EFS_KV_KEY_MAX],
+                    uint8_t (*gc_vals)[EFS_META_GC_VAL],
+                    efs_ino_t ino, uint8_t lane, uint32_t ci,
+                    const struct efs_meta_chunk *dead)
+{
+    uint32_t kg = 0;
+    int rc;
+
+    if (*n >= cap)
+        return EFS_ERR_NOMEM;
+    rc = efs_kv_key_gc(efs_kv_anchor_shard(efs_kv_lane_shard(ino, lane)),
+                       ino, dead->generation, lane, ci,
+                       gc_keys[*n], &kg);
+    if (rc != EFS_OK)
+        return rc;
+    efs_meta_pack_gc(gc_vals[*n], dead->nodes, 0, dead->checksums);
+    it[*n].op = EFS_KV_PUT;
+    it[*n].key = gc_keys[*n];
+    it[*n].klen = kg;
+    it[*n].val = gc_vals[*n];
+    it[*n].vlen = EFS_META_GC_VAL;
+    (*n)++;
     return EFS_OK;
 }
 
@@ -1954,11 +2081,13 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     uint8_t k_ch[EFS_KV_KEY_MAX], k_ln[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
     uint8_t v_ch[CHUNK_VAL], v_ln[LANE_VAL], v_ino[INO_VAL];
     uint8_t old_ln[LANE_VAL], old_ch[CHUNK_VAL];
+    /* gc_queue indexes by the global item number, so these are cap-sized. */
+    uint8_t k_gc[5][EFS_KV_KEY_MAX], v_gc[5][EFS_META_GC_VAL];
     uint32_t kc = 0, kl = 0, ki = 0, vn;
     uint64_t committed = 0;
     uint64_t inode_gen, mtime_gen, row_base_size = 0, row_active = 0;
     struct lane_rec ln;
-    struct efs_kv_item it[3];
+    struct efs_kv_item it[5];
     uint32_t n = 0;
     int touch_inode = 0;
     int rc;
@@ -2117,6 +2246,18 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
         it[n].vlen = INO_VAL;
         n++;
     }
+    /* CAS supersede: the previous generation's value is overwritten in
+     * place (the chunk key carries the FileID generation, not the chunk
+     * generation), so its fragment set would be lost without a GC record
+     * (L7). Emit one for the superseded generation — unless the new row
+     * aliases the old fragment set (truncate tail stub), in which case the
+     * fragments are shared with the live row and nothing is dead. */
+    if (committed != 0 && !chunk_aliases(&stored, &got)) {
+        rc = gc_queue(it, &n, (uint32_t)(sizeof(it) / sizeof(it[0])),
+                      k_gc, v_gc, p->ino, lane, p->chunk_index, &got);
+        if (rc != EFS_OK)
+            return rc;
+    }
     return efs_kv_batch(kv, it, n);
 }
 
@@ -2159,14 +2300,21 @@ static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
                                    uint32_t tail_ci, uint8_t has_tail,
                                    struct efs_kv_item *it,
                                    uint8_t (*del_keys)[EFS_KV_KEY_MAX],
+                                   uint8_t (*gc_keys)[EFS_KV_KEY_MAX],
+                                   uint8_t (*gc_vals)[EFS_META_GC_VAL],
                                    uint32_t *n, uint32_t cap);
 
 int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                               uint8_t lane, uint64_t new_epoch, uint64_t size,
                               uint32_t tail_ci, uint8_t has_tail)
 {
-    struct efs_kv_item it[1 + 32];
-    uint8_t del_keys[1 + 32][EFS_KV_KEY_MAX];
+    /* One lane fence PUT + up to 32 chunk DELs, each with a GC record.
+     * gc_queue indexes by the global item number, so all arrays share the
+     * same bound. */
+    struct efs_kv_item it[1 + 32 + 32];
+    uint8_t del_keys[1 + 32 + 32][EFS_KV_KEY_MAX];
+    uint8_t gc_keys[1 + 32 + 32][EFS_KV_KEY_MAX];
+    uint8_t gc_vals[1 + 32 + 32][EFS_META_GC_VAL];
     uint8_t k_ln[EFS_META_LANES][EFS_KV_KEY_MAX];
     uint8_t v_ln[EFS_META_LANES][LANE_VAL];
     uint8_t key[EFS_KV_KEY_MAX], old[LANE_VAL];
@@ -2199,13 +2347,329 @@ int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     if (rc != EFS_OK)
         return rc;
     rc = truncate_lane_range_del(kv, ino, gen, lane, size, tail_ci, has_tail,
-                                 it, del_keys, &n,
+                                 it, del_keys, gc_keys, gc_vals, &n,
                                  (uint32_t)(sizeof(it) / sizeof(it[0])));
     if (rc != EFS_OK)
         return rc;
     if (n == 0)
         return EFS_OK;
     return efs_kv_batch(kv, it, n);
+}
+
+/* Lane sweep batch: 64 chunk keys per KV batch (each a DEL + a GC record),
+ * then the lane key. 64 keeps one entry's apply cost bounded while still
+ * draining a 1 TB file's lane (~8192 chunks) in ~128 batches inside the
+ * single LANE_SWEEP entry — tens of ms, far under the election deadline. */
+#define SWEEP_CHUNKS 64
+
+struct sweep_scan {
+    efs_ino_t ino;
+    uint64_t gen;
+    struct efs_kv_item *it;
+    uint8_t (*keys)[EFS_KV_KEY_MAX];
+    uint8_t (*gc_vals)[EFS_META_GC_VAL];
+    uint32_t n;
+    uint32_t cap;
+    uint32_t chunks;
+    int full;
+    int rc;
+};
+
+static int sweep_cb(void *user, const uint8_t *key, uint32_t klen,
+                    const uint8_t *val, uint32_t vlen)
+{
+    struct sweep_scan *ss = user;
+    struct efs_meta_chunk dead;
+    efs_ino_t ino;
+    uint64_t gen;
+    uint32_t ci;
+    uint8_t lane;
+
+    if (klen < 24 || key[2] != EFS_KV_KIND_CHUNK)
+        return 0;
+    ino = rd64(key + 3);
+    gen = rd64(key + 11);
+    lane = key[19];
+    ci = rd32(key + 20);
+    if (ino != ss->ino || gen != ss->gen)
+        return 0;
+    if (ss->n + 2 > ss->cap) {
+        ss->full = 1;
+        return 1;
+    }
+    if (unpack_chunk(val, vlen, &dead) != EFS_OK) {
+        ss->rc = EFS_ERR_PROTO;
+        return 1;
+    }
+    memcpy(ss->keys[ss->n], key, klen);
+    ss->it[ss->n].op = EFS_KV_DEL;
+    ss->it[ss->n].key = ss->keys[ss->n];
+    ss->it[ss->n].klen = klen;
+    ss->n++;
+    ss->rc = gc_queue(ss->it, &ss->n, ss->cap, ss->keys, ss->gc_vals,
+                      ino, lane, ci, &dead);
+    if (ss->rc != EFS_OK)
+        return 1;
+    ss->chunks++;
+    return 0;
+}
+
+int efs_meta_apply_lane_sweep(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                              uint8_t lane)
+{
+    struct efs_kv_item it[SWEEP_CHUNKS * 2];
+    uint8_t keys[SWEEP_CHUNKS * 2][EFS_KV_KEY_MAX];
+    uint8_t gc_vals[SWEEP_CHUNKS * 2][EFS_META_GC_VAL];
+    uint8_t pref[EFS_KV_KEY_MAX], k_ln[EFS_KV_KEY_MAX];
+    uint32_t plen = 0, kl = 0;
+    struct sweep_scan ss;
+    uint32_t lsh;
+    int rc;
+
+    if (!kv || ino == 0 || lane >= EFS_META_LANES)
+        return EFS_ERR_INVAL;
+    lsh = efs_kv_lane_shard(ino, lane);
+    rc = efs_kv_key_chunk(lsh, ino, gen, lane, 0, pref, &plen);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_lane(lsh, ino, gen, lane, k_ln, &kl);
+    if (rc != EFS_OK)
+        return rc;
+    plen = 20;
+    for (;;) {
+        memset(&ss, 0, sizeof(ss));
+        ss.ino = ino;
+        ss.gen = gen;
+        ss.it = it;
+        ss.keys = keys;
+        ss.gc_vals = gc_vals;
+        ss.cap = (uint32_t)(sizeof(it) / sizeof(it[0]));
+        rc = efs_kv_scan_prefix(kv, pref, plen, sweep_cb, &ss);
+        if (ss.rc != EFS_OK)
+            return ss.rc;
+        if (rc != EFS_OK)
+            return rc;
+        if (ss.chunks == 0)
+            break;
+        rc = efs_kv_batch(kv, it, ss.n);
+        if (rc != EFS_OK)
+            return rc;
+        if (!ss.full)
+            break;
+    }
+    /* The lane key itself is the last thing to go. A replay finds no
+     * chunks and re-deletes an absent lane key, which is a no-op. */
+    rc = efs_kv_del(kv, k_ln, kl);
+    if (rc == EFS_ERR_NOT_FOUND)
+        rc = EFS_OK;
+    return rc;
+}
+
+struct rsv_purge {
+    struct efs_kv_item *it;
+    uint8_t (*keys)[EFS_KV_KEY_MAX];
+    uint32_t n;
+    uint32_t cap;
+    uint32_t found;
+    int full;
+};
+
+static int rsv_purge_cb(void *user, const uint8_t *key, uint32_t klen,
+                        const uint8_t *val, uint32_t vlen)
+{
+    struct rsv_purge *rp = user;
+
+    (void)val;
+    (void)vlen;
+    if (rp->n >= rp->cap) {
+        rp->full = 1;
+        return 1;
+    }
+    memcpy(rp->keys[rp->n], key, klen);
+    rp->it[rp->n].op = EFS_KV_DEL;
+    rp->it[rp->n].key = rp->keys[rp->n];
+    rp->it[rp->n].klen = klen;
+    rp->n++;
+    rp->found++;
+    return 0;
+}
+
+int efs_meta_apply_reap_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
+{
+    struct efs_meta_row row;
+    struct efs_kv_item it[3];
+    uint8_t k_reap[EFS_KV_KEY_MAX], k_cur[EFS_KV_KEY_MAX];
+    uint8_t k_ino[EFS_KV_KEY_MAX];
+    uint32_t kr = 0, kc = 0, ki = 0, n = 0;
+    uint32_t ish;
+    int rc, held, drop_row = 0;
+
+    if (!kv || ino == 0)
+        return EFS_ERR_INVAL;
+    ish = efs_kv_inode_shard(ino);
+    /* Defensive: the marker and the row delete commit in one batch, so a
+     * live row here should be impossible. If one shows up anyway (a row
+     * re-created under the same ino is not a thing that exists), the
+     * marker is the stale part — drop it and keep the row. */
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc == EFS_OK) {
+        if (row.generation != gen || row.nlink != 0) {
+            rc = efs_kv_key_reap(efs_kv_anchor_shard(ish), ino, k_reap, &kr);
+            if (rc != EFS_OK)
+                return rc;
+            rc = efs_kv_del(kv, k_reap, kr);
+            if (rc == EFS_ERR_NOT_FOUND)
+                rc = EFS_OK;
+            return rc;
+        }
+        held = efs_lease_any(kv, ino, row.generation);
+        if (held < 0)
+            return held;
+        if (!held)
+            drop_row = 1;
+    } else if (rc != EFS_ERR_NOT_FOUND) {
+        return rc;
+    }
+    /* Leftover append reservations of a killed appender. Bounded batches;
+     * each batch's deletes make the next scan progress. */
+    for (;;) {
+        struct efs_kv_item rit[32];
+        uint8_t rkeys[32][EFS_KV_KEY_MAX];
+        uint8_t pref[EFS_KV_KEY_MAX];
+        uint32_t plen = 0;
+        struct rsv_purge rp;
+
+        rc = efs_kv_key_append_rsv_prefix(ish, ino, gen, pref, &plen);
+        if (rc != EFS_OK)
+            return rc;
+        memset(&rp, 0, sizeof(rp));
+        rp.it = rit;
+        rp.keys = rkeys;
+        rp.cap = 32;
+        rc = efs_kv_scan_prefix(kv, pref, plen, rsv_purge_cb, &rp);
+        if (rc != EFS_OK)
+            return rc;
+        if (rp.found == 0)
+            break;
+        rc = efs_kv_batch(kv, rit, rp.n);
+        if (rc != EFS_OK)
+            return rc;
+        if (!rp.full)
+            break;
+    }
+    rc = efs_kv_key_append_cur(ish, ino, gen, k_cur, &kc);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_reap(efs_kv_anchor_shard(ish), ino, k_reap, &kr);
+    if (rc != EFS_OK)
+        return rc;
+    memset(it, 0, sizeof(it));
+    it[n].op = EFS_KV_DEL;
+    it[n].key = k_cur;
+    it[n].klen = kc;
+    n++;
+    it[n].op = EFS_KV_DEL;
+    it[n].key = k_reap;
+    it[n].klen = kr;
+    n++;
+    if (drop_row) {
+        rc = efs_kv_key_inode(ish, ino, k_ino, &ki);
+        if (rc != EFS_OK)
+            return rc;
+        it[n].op = EFS_KV_DEL;
+        it[n].key = k_ino;
+        it[n].klen = ki;
+        n++;
+    }
+    return efs_kv_batch(kv, it, n);
+}
+
+int efs_meta_apply_gc_ack(struct efs_kv *kv, const struct efs_gc_ack_item *it,
+                          uint32_t n)
+{
+    struct efs_kv_item batch[16];
+    uint8_t keys[16][EFS_KV_KEY_MAX];
+    uint8_t vals[16][EFS_META_GC_VAL];
+    uint8_t retired[16];
+    uint32_t i, j, bn = 0;
+    int rc;
+
+    if (!kv || (!it && n))
+        return EFS_ERR_INVAL;
+    if (n > 16)
+        return EFS_ERR_INVAL;
+    memset(retired, 0, sizeof(retired));
+    for (i = 0; i < n; i++) {
+        efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+        uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+        uint8_t ack_bits;
+        uint32_t kg = 0, vn;
+        uint8_t key[EFS_KV_KEY_MAX];
+        uint8_t old[EFS_META_GC_VAL];
+
+        if (it[i].lane >= EFS_META_LANES || it[i].frag >= EFS_NUM_FRAGMENTS)
+            return EFS_ERR_INVAL;
+        rc = efs_kv_key_gc(efs_kv_anchor_shard(
+                               efs_kv_lane_shard(it[i].ino, it[i].lane)),
+                           it[i].ino, it[i].gen, it[i].lane, it[i].ci,
+                           key, &kg);
+        if (rc != EFS_OK)
+            return rc;
+        /* One batch usually carries every fragment of the same record;
+         * fold into the pending entry — a fresh KV read cannot see the
+         * bits the earlier items of this batch have not applied yet. */
+        for (j = 0; j < bn; j++) {
+            if (batch[j].klen == kg && memcmp(batch[j].key, key, kg) == 0)
+                break;
+        }
+        if (j < bn) {
+            if (retired[j])
+                continue;
+            rc = efs_meta_unpack_gc(vals[j], EFS_META_GC_VAL, nodes,
+                                    &ack_bits, sums);
+            if (rc != EFS_OK)
+                return rc;
+            ack_bits |= (uint8_t)(1u << it[i].frag);
+            if (ack_bits == (uint8_t)((1u << EFS_NUM_FRAGMENTS) - 1u)) {
+                batch[j].op = EFS_KV_DEL;
+                batch[j].val = NULL;
+                batch[j].vlen = 0;
+                retired[j] = 1;
+            } else {
+                efs_meta_pack_gc(vals[j], nodes, ack_bits,
+                                 (const uint8_t (*)[EFS_HASH_SIZE])sums);
+            }
+            continue;
+        }
+        vn = sizeof(old);
+        rc = efs_kv_get(kv, key, kg, old, &vn);
+        /* Already retired (a replay of this entry): skip. */
+        if (rc == EFS_ERR_NOT_FOUND)
+            continue;
+        if (rc != EFS_OK)
+            return rc;
+        rc = efs_meta_unpack_gc(old, vn, nodes, &ack_bits, sums);
+        if (rc != EFS_OK)
+            return rc;
+        ack_bits |= (uint8_t)(1u << it[i].frag);
+        memcpy(keys[bn], key, kg);
+        batch[bn].key = keys[bn];
+        batch[bn].klen = kg;
+        if (ack_bits == (uint8_t)((1u << EFS_NUM_FRAGMENTS) - 1u)) {
+            batch[bn].op = EFS_KV_DEL;
+            batch[bn].val = NULL;
+            batch[bn].vlen = 0;
+            retired[bn] = 1;
+        } else {
+            efs_meta_pack_gc(vals[bn], nodes, ack_bits,
+                             (const uint8_t (*)[EFS_HASH_SIZE])sums);
+            batch[bn].op = EFS_KV_PUT;
+            batch[bn].val = vals[bn];
+            batch[bn].vlen = EFS_META_GC_VAL;
+        }
+        bn++;
+    }
+    if (bn == 0)
+        return EFS_OK;
+    return efs_kv_batch(kv, batch, bn);
 }
 
 /* Reads a lane's sequence number. Absent is seq 0, which is a real value:
@@ -2441,6 +2905,8 @@ struct trunc_scan {
     uint8_t has_tail;
     struct efs_kv_item *it;
     uint8_t (*del_keys)[EFS_KV_KEY_MAX];
+    uint8_t (*gc_keys)[EFS_KV_KEY_MAX];
+    uint8_t (*gc_vals)[EFS_META_GC_VAL];
     uint32_t n;
     uint32_t cap;
     int rc;
@@ -2450,16 +2916,17 @@ static int trunc_del_cb(void *user, const uint8_t *key, uint32_t klen,
                         const uint8_t *val, uint32_t vlen)
 {
     struct trunc_scan *ts = user;
+    struct efs_meta_chunk dead;
     efs_ino_t ino;
     uint64_t gen;
     uint32_t ci;
+    uint8_t lane;
 
-    (void)val;
-    (void)vlen;
     if (klen < 24 || key[2] != EFS_KV_KIND_CHUNK)
         return 0;
     ino = rd64(key + 3);
     gen = rd64(key + 11);
+    lane = key[19];
     ci = rd32(key + 20);
     if (ino != ts->ino || gen != ts->gen)
         return 0;
@@ -2470,19 +2937,29 @@ static int trunc_del_cb(void *user, const uint8_t *key, uint32_t klen,
         goto del;
     return 0;
 del:
-    if (ts->n >= ts->cap) {
+    if (ts->n + 2 > ts->cap) {
         ts->rc = EFS_ERR_NOMEM;
         return 1;
     }
-    /* del_keys is indexed by the GLOBAL item number, never a per-lane base:
-     * the scan runs once per lane over one shared array, and a per-lane
-     * base would let lane i+1 overwrite keys that lane i's items still
-     * point at — deleting the wrong chunks on a multi-lane truncate. */
+    /* del_keys/gc_keys/gc_vals are indexed by the GLOBAL item number, never
+     * a per-lane base: the scan runs once per lane over one shared array,
+     * and a per-lane base would let lane i+1 overwrite keys that lane i's
+     * items still point at — deleting the wrong chunks on a multi-lane
+     * truncate. */
     memcpy(ts->del_keys[ts->n], key, klen);
     ts->it[ts->n].op = EFS_KV_DEL;
     ts->it[ts->n].key = ts->del_keys[ts->n];
     ts->it[ts->n].klen = klen;
     ts->n++;
+    /* The chunk key dies here; its fragment set must not (L7). */
+    if (unpack_chunk(val, vlen, &dead) != EFS_OK) {
+        ts->rc = EFS_ERR_PROTO;
+        return 1;
+    }
+    ts->rc = gc_queue(ts->it, &ts->n, ts->cap, ts->gc_keys, ts->gc_vals,
+                      ino, lane, ci, &dead);
+    if (ts->rc != EFS_OK)
+        return 1;
     return 0;
 }
 
@@ -2491,6 +2968,8 @@ static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
                                    uint32_t tail_ci, uint8_t has_tail,
                                    struct efs_kv_item *it,
                                    uint8_t (*del_keys)[EFS_KV_KEY_MAX],
+                                   uint8_t (*gc_keys)[EFS_KV_KEY_MAX],
+                                   uint8_t (*gc_vals)[EFS_META_GC_VAL],
                                    uint32_t *n, uint32_t cap)
 {
     uint8_t pref[EFS_KV_KEY_MAX];
@@ -2512,6 +2991,8 @@ static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
     ts.has_tail = has_tail;
     ts.it = it;
     ts.del_keys = del_keys;
+    ts.gc_keys = gc_keys;
+    ts.gc_vals = gc_vals;
     ts.n = *n;
     ts.cap = cap;
     rc = efs_kv_scan_prefix(kv, pref, plen, trunc_del_cb, &ts);
@@ -2525,6 +3006,8 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
                                  uint64_t now, const struct efs_meta_pub *tail,
                                  struct efs_kv_item *it, uint32_t *n,
                                  uint32_t cap, uint8_t *k_ch, uint8_t *v_ch,
+                                 uint8_t (*k_gc)[EFS_KV_KEY_MAX],
+                                 uint8_t (*v_gc)[EFS_META_GC_VAL],
                                  uint8_t k_ln[][EFS_KV_KEY_MAX],
                                  uint8_t v_ln[][LANE_VAL])
 {
@@ -2607,7 +3090,7 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
     stored.content_epoch = p.content_epoch;
     pack_chunk(v_ch, &stored);
     pack_lane(v_ln[lane], &ln);
-    if (*n + 2 > cap)
+    if (*n + 3 > cap)
         return EFS_ERR_NOMEM;
     it[*n].op = EFS_KV_PUT;
     it[*n].key = k_ch;
@@ -2615,6 +3098,16 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
     it[*n].val = v_ch;
     it[*n].vlen = CHUNK_VAL;
     (*n)++;
+    /* The straddling tail is CAS-published inside the truncate txn; the
+     * generation it replaces is dead from this commit on (L7) — unless the
+     * stub aliases the old row's fragment set, in which case the fragments
+     * are shared with the live row and nothing is dead. */
+    if (committed != 0 && !chunk_aliases(&stored, &got)) {
+        rc = gc_queue(it, n, cap, k_gc, v_gc, row->ino, lane,
+                      p.chunk_index, &got);
+        if (rc != EFS_OK)
+            return rc;
+    }
     {
         uint32_t i;
         int found = 0;
@@ -2640,15 +3133,18 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
 }
 
 /* Batch capacity: one fence per lane + the inode row + up to 32
- * range-deleted chunk keys per lane + the tail chunk/lane pair. del_keys
- * carries the same bound and is indexed by the global item number (see
- * trunc_del_cb), so one `n >= cap` check covers both arrays. */
-#define TRUNC_IT_CAP (EFS_META_LANES + 1 + EFS_META_LANES * 32 + 2)
+ * range-deleted chunk keys per lane, each paired with a GC record (L7),
+ * + the tail chunk/lane pair and its GC record. del_keys/gc_keys/gc_vals
+ * carry the same bound and are indexed by the global item number (see
+ * trunc_del_cb), so one `n + 2 > cap` check covers all arrays. */
+#define TRUNC_IT_CAP (EFS_META_LANES + 1 + EFS_META_LANES * 32 * 2 + 3)
 
 static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
                           const struct efs_meta_truncate *t,
                           struct efs_kv_item *it,
-                          uint8_t (*del_keys)[EFS_KV_KEY_MAX])
+                          uint8_t (*del_keys)[EFS_KV_KEY_MAX],
+                          uint8_t (*gc_keys)[EFS_KV_KEY_MAX],
+                          uint8_t (*gc_vals)[EFS_META_GC_VAL])
 {
     struct efs_meta_row row;
     uint8_t k_ino[EFS_KV_KEY_MAX];
@@ -2696,13 +3192,17 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
             return rc;
         rc = truncate_lane_range_del(kv, ino, row.generation, (uint8_t)i,
                                    t->size, tail_ci, has_tail, it, del_keys,
-                                   &n, TRUNC_IT_CAP);
+                                   gc_keys, gc_vals, &n, TRUNC_IT_CAP);
         if (rc != EFS_OK)
             return rc;
     }
     if (!t->tail_external) {
+        /* The tail's GC record shares the cap-sized gc arrays: gc_queue
+         * indexes them by the global item number, so single-entry stack
+         * buffers here would be scribbled on at offset *n. */
         rc = truncate_publish_tail(kv, &row, now, t->tail, it, &n,
-                                   TRUNC_IT_CAP, k_tail, v_tail, k_ln, v_ln);
+                                   TRUNC_IT_CAP, k_tail, v_tail,
+                                   gc_keys, gc_vals, k_ln, v_ln);
         if (rc != EFS_OK)
             return rc;
     }
@@ -2727,23 +3227,31 @@ int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
 {
     struct efs_kv_item *it;
     uint8_t (*del_keys)[EFS_KV_KEY_MAX];
+    uint8_t (*gc_keys)[EFS_KV_KEY_MAX];
+    uint8_t (*gc_vals)[EFS_META_GC_VAL];
     int rc;
 
     if (!kv || !t || ino == 0)
         return EFS_ERR_INVAL;
-    /* ~730 KiB of batch storage belongs on the heap, not the stack: efsd
+    /* ~1.6 MiB of batch storage belongs on the heap, not the stack: efsd
      * applies entries on a 1 MiB pump thread (efsd_pthread_create), where
      * this as a stack frame sits one field away from the guard page. */
     it = malloc(TRUNC_IT_CAP * sizeof(*it));
     del_keys = malloc(TRUNC_IT_CAP * sizeof(*del_keys));
-    if (!it || !del_keys) {
+    gc_keys = malloc(TRUNC_IT_CAP * sizeof(*gc_keys));
+    gc_vals = malloc(TRUNC_IT_CAP * sizeof(*gc_vals));
+    if (!it || !del_keys || !gc_keys || !gc_vals) {
         free(it);
         free(del_keys);
+        free(gc_keys);
+        free(gc_vals);
         return EFS_ERR_NOMEM;
     }
-    rc = truncate_apply(kv, ino, now, t, it, del_keys);
+    rc = truncate_apply(kv, ino, now, t, it, del_keys, gc_keys, gc_vals);
     free(it);
     free(del_keys);
+    free(gc_keys);
+    free(gc_vals);
     return rc;
 }
 

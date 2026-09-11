@@ -53,5 +53,16 @@
 #define EFS_MD_CMD_ACTIVATE_LANE 19 /* [ino:8][lane:1] */
 #define EFS_MD_CMD_LANE_FENCE    20 /* [ino:8][gen:8][lane:1][epoch:8][size:8]
                                      * [tail_ci:4][has_tail:1] */
+/* Data-plane GC (spec L7). LANE_SWEEP runs on the LANE's group: deletes the
+ * lane's chunk keys (emitting one GC record per chunk on the group's anchor
+ * shard), then the lane key. REAP_DONE runs on the INODE's group: clears
+ * leftover append state and deletes the reap marker after every lane of a
+ * dead inode was swept. GC_ACK runs on the group whose anchor shard holds
+ * the record: sets one fragment's ack bit, retiring the record when all
+ * EFS_NUM_FRAGMENTS bits are set. All three are idempotent replays. */
+#define EFS_MD_CMD_LANE_SWEEP  21 /* [ino:8][gen:8][lane:1] */
+#define EFS_MD_CMD_REAP_DONE   22 /* [ino:8][gen:8] */
+#define EFS_MD_CMD_GC_ACK      23 /* [cnt:2][(ino:8)(gen:8)(lane:1)(ci:4)
+                                   * (frag:1)]*cnt */
 
 #endif
