@@ -1301,10 +1301,10 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
      * walk shards in order and skip names already present after the
      * hash-matching shard is collected... we just skip dups). */
     struct readdir_collect_arg col = {0};
-    if (efs_client_raft_mode()) {
-        /* Raft host: the KV scans a dir in NAME order. Paginate with the
-         * server's (src, name) resume cookie — an ino cursor would skip
-         * entries (name order != ino order). */
+    {
+        /* The KV scans a dir in NAME order. Paginate with the server's
+         * (src, name) resume cookie — an ino cursor would skip entries
+         * (name order != ino order). */
         uint32_t src = 0, done = 0;
         char name_cur[EFS_MAX_NAME] = "";
         while (!done) {
@@ -1322,43 +1322,6 @@ static int efs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
             }
             if (n == 0 && !done)
                 break; /* defensive: server must not stall mid-scan */
-        }
-    } else {
-        uint32_t bits = g_client.export.root.shard_bits;
-        uint32_t sc = g_client.export.root.shard_count;
-        int spread = efs_inode_dir_is_spread(&parent) && bits && sc > 1;
-        uint32_t nshard = spread ? sc : 1;
-        for (uint32_t s = 0; s < nshard; s++) {
-            uint64_t after = 0;
-            for (;;) {
-                struct efs_inode ents[EFS_READDIR_MAX];
-                uint32_t n = EFS_READDIR_MAX;
-                if (spread)
-                    rc = efs_client_rpc_readdir_ex(g_client.export_id,
-                                                   parent.ino, ents, &n, after,
-                                                   EFS_READDIR_F_LOCAL_ONLY, s);
-                else
-                    rc = efs_client_rpc_readdir(g_client.export_id, parent.ino,
-                                                ents, &n, after);
-                if (rc != 0) {
-                    free(col.ents);
-                    return (rc == EFS_ERR_NOT_FOUND) ? -ENOENT : -EIO;
-                }
-                if (n == 0)
-                    break;
-                uint64_t max_ino = after;
-                for (uint32_t i = 0; i < n; i++)
-                    if (ents[i].ino > max_ino)
-                        max_ino = ents[i].ino;
-                if (readdir_collect_page(&col, ents, n) != 0) {
-                    free(col.ents);
-                    return -ENOMEM;
-                }
-                /* Server returns ascending inos; advance the stable cursor. */
-                after = max_ino;
-                if (n < EFS_READDIR_MAX)
-                    break;
-            }
         }
     }
 
@@ -2288,16 +2251,6 @@ static int efs_fuse_fsync(const char *path, int isdatasync,
         efs_fuse_log_err("fsync", rc, 0, 0, 0, path);
         return -EIO;
     }
-    if (fi && fi->fh)
-        (void)efs_client_pack_seal((efs_ino_t)fi->fh);
-    else {
-        struct efs_inode ino;
-        if (efs_client_lookup(path, &ino) == 0 && !efs_mode_is_dir(ino.mode))
-            (void)efs_client_pack_seal(ino.ino);
-    }
-    /* Packed small files may still sit in a dir-pack tail; flush those
-     * fragments so fsync data is on the servers. */
-    efs_client_pack_flush_all();
     /* Incremental publish of dirty inode/chunk rows. force=1 used to
      * memcpy the whole table (~2M inodes) on every fsync and inverted
      * the 8×1G + end_fsync job versus plain 1M write. */
@@ -2938,11 +2891,9 @@ static int efs_fuse_release(const char *path, struct fuse_file_info *fi)
 {
     /* flush() already ran data_sync on close. Doing it again here
      * stacked every last-close behind PUT+REPORT; 9-way suite exit
-     * then sat in request_wait_answer with leaked fds. Seal + hold
-     * only — durability is the flush path. */
+     * then sat in request_wait_answer with leaked fds. Hold only —
+     * durability is the flush path. */
     (void)path;
-    if (fi && fi->fh)
-        (void)efs_client_pack_seal((efs_ino_t)fi->fh);
     efs_client_note_meta_change(0);
     if (fi && fi->fh && efs_close_note((efs_ino_t)fi->fh))
         (void)efs_client_rpc_hold(g_client.export_id, (efs_ino_t)fi->fh, 0,
@@ -2958,7 +2909,6 @@ static void efs_fuse_destroy(void *userdata)
     if (wrc != EFS_OK || drc != EFS_OK)
         fprintf(stderr, "efs-fuse: unmount: data flush incomplete "
                         "(writeback=%d dcache=%d)\n", wrc, drc);
-    efs_client_pack_flush_all();
     if (g_wb.ready) {
         pthread_mutex_lock(&g_wb.mu);
         g_wb.shutdown = 1;
@@ -3667,28 +3617,14 @@ int main(int argc, char **argv)
         }
     }
 
-    /* Fetch initial metadata from one of the nodes. */
+    /* Bootstrap metadata from the Raft+KV host: a thin RAFT_STATUS poll
+     * for kv_has_root, then a local shell export — the client has the
+     * shard->group->voter mapping compiled in (include/efs/kv_key.h,
+     * include/efs/raft.h) and routes by it. There is no GET_META table
+     * fetch (step 11: the serialized-table engine is deleted). */
     printf("fetching metadata...\n");
     fflush(stdout);
-    int rc = -1;
-    if (getenv("EFS_MD_RAFT")) {
-        /* Raft host mode: the metadata engine is the Raft+KV host, which
-         * does not serve GET_META (the full serialized table). Bootstrap is
-         * a thin RAFT_STATUS poll for kv_has_root, then a local shell export
-         * — the client already has the shard->group->voter mapping compiled
-         * in (include/efs/kv_key.h, include/efs/raft.h) and routes by it. */
-        rc = raft_bootstrap_metadata();
-    } else {
-        for (uint32_t i = 0; i < g_client.node_count; i++) {
-            printf("  try %s:%u\n", g_client.nodes[i].addr, g_client.nodes[i].port);
-            fflush(stdout);
-            rc = efs_client_fetch_metadata(g_client.nodes[i].addr, g_client.nodes[i].port);
-            if (rc == 0)
-                break;
-            printf("  fetch failed rc=%d (%s)\n", rc, efs_strerror(rc));
-            fflush(stdout);
-        }
-    }
+    int rc = raft_bootstrap_metadata();
     if (rc != 0) {
         if (rc == EFS_ERR_NOT_FOUND && g_client.export_name[0]) {
             fprintf(stderr,

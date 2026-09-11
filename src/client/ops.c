@@ -494,26 +494,6 @@ static int lookup_access_ok(const struct efs_inode *ino, uid_t uid, gid_t gid,
     return 0;
 }
 
-/* Parent-shard LOOKUP is a size-0 dentry stub when the inode lives on
- * another shard (hashed directories, spread dentries). Files on the
- * parent shard already have the full row. Skipping GETATTR for dirs
- * left the stub ino unstitched and broke hardlink/futimens after nested
- * dir hashing. */
-static int lookup_needs_getattr(const struct efs_inode *child, efs_ino_t parent)
-{
-    uint32_t bits, sc;
-    if (!child)
-        return 0;
-    if (efs_client_ino_is_dirty(child->ino))
-        return 0;
-    bits = g_client.export.root.shard_bits;
-    sc = g_client.export.root.shard_count;
-    if (!bits || sc <= 1)
-        return 0;
-    return efs_export_shard_of(child->ino, bits) !=
-           efs_export_shard_of(parent, bits);
-}
-
 /* A path can hold at most one component per two bytes ("/x"). */
 #define EFS_WALK_MAX_COMPS 2048
 /* Below this depth a path costs so few round trips that the extra RPC on a
@@ -666,16 +646,6 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
             if (child.ino != EFS_ROOT_INO &&
                 lookup_access_ok(&child, uid, gid, groups, ngroups, 1) != 0)
                 return EFS_ERR_ACCES;
-        }
-        /* After cross-server create the parent owner holds only a
-         * dentry stub (size 0). getattr the child owner for the full row
-         * so adopt/pull_file_layout see the real size. Only the LEAF:
-         * intermediates are directories. */
-        if (!more && lookup_needs_getattr(&child, parent)) {
-            struct efs_inode full;
-            if (efs_client_rpc_getattr(g_client.export_id, child.ino,
-                                       &full) == EFS_OK)
-                child = full;
         }
         adopt_rpc_inode(&child);
         /* Writer: local size/pack is newer than the owner until REPORT.

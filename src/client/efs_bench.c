@@ -768,22 +768,20 @@ static void *meta_worker(void *arg)
         break;
     case MP_READDIR:
         for (uint32_t i = (uint32_t)w; i < st->ndirs; i += (uint32_t)nw) {
-            uint64_t after = 0;
-            for (;;) {
+            uint32_t src = 0, done = 0;
+            char name_cur[EFS_MAX_NAME] = "";
+            while (!done) {
                 struct efs_inode ents[EFS_READDIR_MAX];
                 uint32_t n = EFS_READDIR_MAX;
-                int rc = efs_client_rpc_readdir(g_client.export_id,
-                                                st->dirs[i].ino, ents, &n,
-                                                after);
+                int rc = efs_client_rpc_readdir_cur(g_client.export_id,
+                                                    st->dirs[i].ino, ents, &n,
+                                                    &src, name_cur, &done);
                 if (rc != EFS_OK) {
                     a->fail++;
                     break;
                 }
                 a->ops += n;
-                for (uint32_t k = 0; k < n; k++)
-                    if (ents[k].ino > after)
-                        after = ents[k].ino;
-                if (n < EFS_READDIR_MAX)
+                if (n == 0 && !done)
                     break;
             }
         }
@@ -956,18 +954,9 @@ static int run_meta_bench(const char *seed, const char *export_name,
         fprintf(stderr, "Failed to discover cluster from %s:%u\n", host, port);
         return 1;
     }
-    int rc = -1;
-    for (uint32_t i = 0; i < g_client.node_count; i++) {
-        rc = efs_client_fetch_metadata(g_client.nodes[i].addr,
-                                       g_client.nodes[i].port);
-        if (rc == 0)
-            break;
-    }
-    if (rc != 0) {
-        fprintf(stderr, "Could not fetch metadata (%s)\n", efs_strerror(rc));
-        return 1;
-    }
-    g_client.export_id = g_client.export.id ? g_client.export.id : 1;
+    /* Step 11: no GET_META table fetch — the metadata engine is the
+     * Raft+KV host and the client keeps only a shell export (id=1). */
+    int rc = 0;
 
     if (nworkers < 1)
         nworkers = g_client.conn_pool_size;

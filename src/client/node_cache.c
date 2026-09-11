@@ -446,29 +446,7 @@ void efs_client_shutdown(void)
     g_client.dirty_ino_count = 0;
     g_client.dirty_chunk_count = 0;
     g_client.dirty_chunk_cap = 0;
-    free(g_client.meta_slot_hashes[0]);
-    free(g_client.meta_slot_hashes[1]);
-    free(g_client.meta_slot_sums[0]);
-    free(g_client.meta_slot_sums[1]);
-    g_client.meta_slot_hashes[0] = NULL;
-    g_client.meta_slot_hashes[1] = NULL;
-    g_client.meta_slot_sums[0] = NULL;
-    g_client.meta_slot_sums[1] = NULL;
-    g_client.meta_slot_pages[0] = 0;
-    g_client.meta_slot_pages[1] = 0;
-    g_client.meta_slot_ino_pages[0] = 0;
-    g_client.meta_slot_ino_pages[1] = 0;
-    g_client.meta_slot_chunk_pages[0] = 0;
-    g_client.meta_slot_chunk_pages[1] = 0;
-
     efs_export_free(&g_client.export);
-    free(g_client.meta_cache_blob);
-    free(g_client.meta_cache_ch);
-    g_client.meta_cache_blob = NULL;
-    g_client.meta_cache_ch = NULL;
-    g_client.meta_cache_cap = 0;
-    g_client.meta_cache_ch_cap = 0;
-    g_client.meta_cache_len = 0;
     pthread_mutex_destroy(&g_client.lock);
     if (g_client.dir_locks_ready) {
         for (int i = 0; i < EFS_DIR_LOCKS; i++)

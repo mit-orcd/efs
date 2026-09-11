@@ -31,19 +31,6 @@ struct efs_client {
     pthread_mutex_t idx_mu;   /* inode/name/chunk index mutations */
     int dir_locks_ready;
 
-    /* Last successful EFSM blob (point 2): patch dirty rows instead of
-     * re-serializing the whole table on a batched flush. */
-    char *meta_cache_blob;      /* header + inode rows */
-    size_t meta_cache_cap;
-    char *meta_cache_ch;        /* chunk rows (separate so ino growth does not memmove) */
-    size_t meta_cache_ch_cap;
-    size_t meta_cache_len;
-    uint32_t meta_cache_ino_len;
-    uint32_t meta_cache_ch_len;
-    uint64_t meta_cache_icount;
-    uint64_t meta_cache_ccount;
-    uint64_t meta_cache_epoch;
-
     /* Inode allocation namespace. When non-zero, new inodes are allocated as
      * (ino_namespace | counter) so that concurrent clients never assign the
      * same inode number to different files (which would collide chunk
@@ -78,23 +65,6 @@ struct efs_client {
     uint32_t meta_batch_ops; /* flush threshold; 0 → default */
     uint32_t meta_dirty_ops;
     int meta_dirty;
-
-    /* Dirty-page flush: per dual-slot parity (generation & 1), the page
-     * content hashes AND fragment checksums committed by the last successful
-     * flush of that parity. A page whose content hash still matches its
-     * parity slot is already durably stored at the same chunk index (slots
-     * alternate per gen; the server GC keeps in-range fragments), so its
-     * fragment PUT is skipped and the committed fragment checksums are
-     * reused verbatim — the flush's network cost becomes O(dirty pages),
-     * not O(table). Only touched by the flush path (g_repl_mu serializes). */
-    /* Logical-page skip tables (index = inode pi, or CHUNK_PAGE_BASE+pj).
-     * Sized EFS_META_MAX_PAGES so growing the inode region cannot shift
-     * chunk-page slots. */
-    uint8_t *meta_slot_hashes[2];
-    uint8_t *meta_slot_sums[2];
-    uint32_t meta_slot_ino_pages[2];
-    uint32_t meta_slot_chunk_pages[2];
-    uint32_t meta_slot_pages[2]; /* ino+chunk; kept for cleanup/compat */
 
     /* Dirty tracking for batched meta flushes (meta_batch only).
      * Inodes: open-addressing set (key 0 = empty).
@@ -164,17 +134,11 @@ int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
                            struct efs_inode *out);
 /* RPC getattr + adopt, then prefer the local row (unflushed size). */
 int efs_client_stat_ino(efs_ino_t ino, struct efs_inode *out);
-int efs_client_rpc_readdir(efs_export_id_t export_id, efs_ino_t parent,
-                           struct efs_inode *ents, uint32_t *inout_count,
-                           uint64_t after_ino);
-/* Raft-mode readdir with the server's (src, name) resume cookie. */
+/* Readdir with the server's (src, name) resume cookie. */
 int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
                                struct efs_inode *ents, uint32_t *inout_count,
                                uint32_t *src_io, char *name_io,
                                uint32_t *done_out);
-int efs_client_rpc_readdir_ex(efs_export_id_t export_id, efs_ino_t parent,
-                              struct efs_inode *ents, uint32_t *inout_count,
-                              uint64_t after_ino, uint32_t flags, uint32_t shard);
 struct efs_chunk_rec;
 int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
                              uint32_t start, struct efs_chunk_rec *recs,
@@ -201,26 +165,12 @@ int efs_client_rpc_hold(efs_export_id_t export_id, efs_ino_t ino, int open,
                         uint64_t owner);
 int efs_client_rpc_flock(efs_export_id_t export_id, efs_ino_t ino, uint32_t op,
                          uint64_t owner);
-/* Phase 2b: report dirty metadata (chunk mappings + inode size/mtime) to the
- * shard owner of route_ino (EFS_ROOT_INO = primary). sync=1 makes that owner
- * commit before replying (the fsync durability barrier). */
+/* Report dirty metadata (chunk mappings + inode size/mtime) as ONE batch
+ * to a voter of ALL groups (a "dual-host"). A batch's recs span inode
+ * groups and lane groups, and only a node voting in every group can apply
+ * the whole batch locally. sync=1 is the fsync durability barrier. */
 struct efs_chunk_rec;
 struct efs_ino_size_rec;
-int efs_client_rpc_report_dirty(efs_export_id_t export_id,
-                                const struct efs_chunk_rec *recs,
-                                uint32_t count,
-                                const struct efs_ino_size_rec *irecs,
-                                uint32_t ino_count, int sync,
-                                efs_ino_t route_ino);
-int efs_client_rpc_report_dirty_on_shard(efs_export_id_t export_id,
-                                         const struct efs_chunk_rec *recs,
-                                         uint32_t count,
-                                         const struct efs_ino_size_rec *irecs,
-                                         uint32_t ino_count, int sync,
-                                         uint32_t shard);
-/* Raft mode: ONE batch with every rec, sent to a voter of ALL groups
- * (a "dual-host"). A batch's recs span inode groups and lane groups, and
- * only a node voting in every group can apply the whole batch locally. */
 int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
                                      const struct efs_chunk_rec *recs,
                                      uint32_t count,
@@ -244,16 +194,6 @@ void efs_client_unlock_all_dirs(void);
 void efs_client_table_lock(void);
 void efs_client_table_unlock(void);
 
-/* Seal a staged small file into its parent directory pack (FUSE release). */
-int efs_client_pack_seal(efs_ino_t ino);
-void efs_client_pack_flush_all(void);
-/* 0 = this ino is staged (out_len set); -1 = not in the pack stage. */
-int efs_client_pack_stage_read(efs_ino_t ino, uint64_t offset, size_t size,
-                               char *buf, size_t *out_len);
-/* 0 = hit the in-memory dir pack tail (not yet PUT); -1 = miss. */
-int efs_client_dir_pack_read(efs_ino_t pack_ino, uint64_t offset, size_t size,
-                             char *buf, size_t *out_len);
-
 extern struct efs_client g_client;
 
 /* Resolve a path to an inode number. Returns 0 on success. */
@@ -270,36 +210,10 @@ int efs_client_utimens_both(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec,
 /* Client inode-number namespace so concurrent writers do not collide. */
 void efs_client_setup_ino_namespace(void);
 
-/* Fetch full metadata from a server and replace local copy. */
-int efs_client_fetch_metadata(const char *host, uint16_t port);
-
-/* Result of the network-only metadata fetch phase. efsm is malloc'd and
- * owned by the caller; root is valid when have_root is set. */
-struct efs_meta_fetch {
-    struct efs_export_root root;
-    int have_root;
-    int saw_bootstrap;
-    int fetch_ok;
-    int last_rc;
-    uint32_t bootstrap_id; /* export id carried by the bootstrap root shell */
-    char *efsm;
-    size_t efsm_len;
-};
-
-/* Network-only metadata fetch: newest EFSR across nodes + assembled EFSM
- * blob when available. Takes no locks and does not touch g_client, so a
- * caller can swap tables under its own critical section (STALE resync). */
-int efs_client_fetch_meta_best(const char *host, uint16_t port,
-                               struct efs_meta_fetch *f);
-
 /* Replicate local metadata to all servers. Returns number of acks. */
 /* Must be called without g_client.lock held; it takes the lock only to
  * serialize, then releases it for the duration of the network I/O. */
 int efs_client_sync_meta(void);
-/* Take ownership of a tight EFSM blob (hdr+inodes+chunks) as the
- * incremental cache. 0 = adopted (caller must not free); -1 = too small. */
-int efs_client_meta_cache_adopt(char *blob, size_t blob_len);
-
 /* Record a local metadata mutation. With meta_batch==0 this replicates
  * immediately (test / C-API behaviour). With meta_batch!=0 it coalesces
  * until meta_batch_ops changes accumulate (or force!=0). */
