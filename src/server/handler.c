@@ -129,8 +129,6 @@ void server_handle_conn(struct efs_conn *conn)
             }
         }
 
-        if (efs_lock_prof_on && type < 256)
-            __atomic_add_fetch(&efs_rpc_count[type], 1, __ATOMIC_RELAXED);
         switch (type) {
         case EFS_MSG_HEARTBEAT: {
             efs_conn_send_msg(conn, EFS_MSG_HEARTBEAT_ACK, NULL, 0);
@@ -346,7 +344,6 @@ send_reply:
                 const uint8_t *data =
                     (const uint8_t *)payload + sizeof(struct efs_msg_put_chunk);
                 pthread_mutex_lock(&g_server->lock);
-                int put_state = g_server->state;
                 struct efs_export *ex =
                     server_export_acquire_locked(g_server, req->export_id);
                 /* Auto-create export shell so meta-page PUTs can land before
@@ -372,11 +369,7 @@ send_reply:
                 pthread_mutex_unlock(&g_server->lock);
 
                 uint8_t reply = EFS_PUT_CHUNK_ERROR;
-                if (put_state == SERVER_STATE_DRAINING ||
-                    put_state == SERVER_STATE_DRAINED ||
-                    put_state == SERVER_STATE_LEAVING) {
-                    reply = EFS_PUT_CHUNK_ERROR;
-                } else if (ex) {
+                if (ex) {
                     uint32_t expect = server_frag_len(ex, req->ino);
                     if (req->data_len != expect ||
                         payload_len < sizeof(*req) + req->data_len) {
@@ -444,7 +437,10 @@ send_reply:
             reply.quota = g_server->quota;
             struct efs_node *local = server_local_node(g_server);
             reply.used = local ? local->used : 0;
-            reply.state = (uint32_t)g_server->state;
+            /* The drain/shrink/leave state machine went away with the
+             * migration engine (step 11); the wire field stays, always
+             * EFS_NODE_STATE_ACTIVE. */
+            reply.state = 0;
             pthread_mutex_unlock(&g_server->lock);
             efs_conn_send_msg(conn, EFS_MSG_STATUS_REPLY, &reply, sizeof(reply));
             break;
@@ -457,18 +453,23 @@ send_reply:
                               sizeof(reply));
             break;
         }
+        /* Drain/undrain/remove drove the old data-migration engine, which
+         * is deleted (step 11). Node lifecycle will return as a raft
+         * control-plane op; until then these must still REPLY (a silent
+         * default: costs the sender a full recv timeout). */
+        case EFS_MSG_DRAIN_NODE: {
+            uint8_t reply = EFS_DRAIN_NODE_ERROR;
+            efs_conn_send_msg(conn, EFS_MSG_DRAIN_NODE_REPLY, &reply, 1);
+            break;
+        }
         case EFS_MSG_UNDRAIN_NODE: {
             uint8_t reply = EFS_UNDRAIN_NODE_ERROR;
-            pthread_mutex_lock(&g_server->lock);
-            if (g_server->state == SERVER_STATE_DRAINED) {
-                g_server->state = SERVER_STATE_ACTIVE;
-                printf("Undrain requested, node active\n");
-                reply = EFS_UNDRAIN_NODE_OK;
-            } else if (g_server->state == SERVER_STATE_ACTIVE) {
-                reply = EFS_UNDRAIN_NODE_OK;
-            }
-            pthread_mutex_unlock(&g_server->lock);
             efs_conn_send_msg(conn, EFS_MSG_UNDRAIN_NODE_REPLY, &reply, 1);
+            break;
+        }
+        case EFS_MSG_REMOVE_NODE: {
+            uint8_t reply = EFS_REMOVE_NODE_ERROR;
+            efs_conn_send_msg(conn, EFS_MSG_REMOVE_NODE_REPLY, &reply, 1);
             break;
         }
         case EFS_MSG_SHRINK_QUOTA: {
@@ -736,7 +737,6 @@ send_reply:
             memset(&r, 0, sizeof(r));
             r.status = EFS_INODE_RPC_ERROR;
             if (payload_len < sizeof(struct efs_msg_inode_lookup_path)) {
-                lock_prof_note_busy(r.status);
                 efs_conn_send_msg(conn, EFS_MSG_INODE_LOOKUP_PATH_REPLY, &r,
                                   sizeof(r));
                 break;

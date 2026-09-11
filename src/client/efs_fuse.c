@@ -3470,9 +3470,8 @@ static void stop_perf_recorder(void)
 static int efs_fuse_main_mt(int argc, char *argv[],
                             const struct fuse_operations *op, void *private_data);
 
-/* Raft host mode (EFS_MD_RAFT) mount bootstrap. The Raft+KV host does not
- * serve GET_META (the full serialized table), so the usual fetch path cannot
- * work. The client already has the shard->group->voter mapping compiled in
+/* Mount bootstrap. The Raft+KV host does not serve GET_META (there is no
+ * serialized table), so a fetch path cannot work. The client already has the shard->group->voter mapping compiled in
  * (kv_key.h / raft.h), so all it needs from the cluster is confirmation that
  * the Raft export exists (kv_has_root) plus a local shell export to route by.
  * Poll RAFT_STATUS on the discovered nodes until one reports kv_has_root. */
@@ -3506,7 +3505,7 @@ static int raft_bootstrap_metadata(void)
         usleep(100000); /* 100ms; mkfs/election may still be running */
     }
     fprintf(stderr,
-            "efs-fuse: EFS_MD_RAFT set but no node reports a Raft export "
+            "efs-fuse: no node reports a Raft export "
             "(raft-status kv_has_root=0). Run 'efs-mgmt raft-mkfs' first.\n");
     return EFS_ERR_NOT_FOUND;
 
@@ -3521,7 +3520,7 @@ ready:
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_table_unlock();
     fprintf(stderr,
-            "meta: Raft host mode (EFS_MD_RAFT); mounted export '%s' "
+            "meta: raft host mounted export '%s' "
             "(bits=%u, no GET_META table)\n",
             g_client.export_name, EFS_KV_SHARD_BITS);
     return EFS_OK;

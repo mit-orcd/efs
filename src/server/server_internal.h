@@ -30,18 +30,6 @@ void server_peer_conn_drop(const char *host, uint16_t port, struct efs_conn *c);
 #define EFS_DEFAULT_WRITERS          8               /* bench fallback */
 #define EFS_WRITERS_PER_PATH_DEFAULT EFS_DEFAULT_WRITERS
 
-enum efsd_server_state {
-    SERVER_STATE_ACTIVE = 0,
-    SERVER_STATE_LEAVING = 1,   /* leave cluster after successful remove (no migrate) */
-    SERVER_STATE_SHRINKING = 2, /* reducing local quota usage */
-    SERVER_STATE_DRAINING = 3,  /* migrating local fragments to peers */
-    SERVER_STATE_DRAINED = 4,   /* empty; rejects new PUTs until undrain or remove */
-};
-
-/* Max queued meta-flush contenders per export (well above expected client
- * count; overflow writers simply get BUSY and re-BEGIN, re-entering). */
-#define EFS_META_WRITER_QMAX 32
-
 /* RAM-only open-fd + flock state. Never serialized. */
 struct efs_ino_hold {
     efs_export_id_t eid;
@@ -81,18 +69,9 @@ struct efsd_server {
     uint32_t epoch;
 
     pthread_mutex_t lock;
-    /* Per-shard metadata locks: shard_locks[eidx * EFS_META_MAX_SHARDS + shard].
-     * Heap-allocated (EFS_MAX_EXPORTS * EFS_META_MAX_SHARDS mutexes) at startup
-     * so the array survives export rebuilds (which efs_export_free + struct-copy
-     * the export slot and would destroy an inline lock). Lock ordering is
-     * strictly global (s->lock) -> shard; a handler must never hold a shard
-     * lock while acquiring s->lock. Flush/rebuild take s->lock plus ALL shard
-     * locks of the export. */
-    pthread_mutex_t *shard_locks;
     int listen_fd;
     int running;
 
-    int state; /* enum efsd_server_state */
     pthread_t rejoin_tid; /* background rejoin retry thread */
     char rejoin_addr[64]; /* explicit --join target to keep retrying; empty = use persisted peers */
     uint16_t rejoin_port;
@@ -110,201 +89,6 @@ struct efsd_server {
 
 };
 
-/* Per-shard metadata lock helpers. Ordering is strictly global (s->lock)
- * -> shard, and a multi-shard op locks in ascending shard id, so concurrent
- * handlers can never deadlock. A handler must never hold a shard lock while
- * acquiring s->lock (release the shard lock first). Flush/rebuild hold
- * s->lock and take ALL shard locks of the export via server_shard_lock_all. */
-
-/* EFS_LOCK_PROF accounting. Shard-lock waits are off-CPU (futex), so
- * `perf record` cannot see any of this. Counters are relaxed atomics —
- * contention on them would itself distort the measurement. */
-extern int efs_lock_prof_on;
-extern unsigned long long efs_lock_all_calls;
-extern unsigned long long efs_lock_all_wait_us;
-extern unsigned long long efs_lock_all_shards;
-/* How long lock_all HOLDS every shard. This is the real cost of the
- * transitional handlers: while one holds all N shards, every per-op handler
- * (CREATE/APPEND, which take only their own shards) is blocked, and the hold
- * widens with shard_count. Acquire time alone hides this entirely. */
-extern unsigned long long efs_lock_all_hold_us;
-/* Per-op shard-lock wait — what a per-op handler pays queueing behind a
- * transitional lock_all. */
-extern unsigned long long efs_lockn_calls;
-extern unsigned long long efs_lockn_wait_us;
-/* Single-shard server_shard_lock (LOOKUP/GETATTR/READDIR). lockn does not
- * cover these; they were invisible in n_wait_us. */
-extern unsigned long long efs_lock1_calls;
-extern unsigned long long efs_lock1_wait_us;
-/* g_server->lock wait+hold on the inode-handler / REPORT sites. */
-extern unsigned long long efs_global_calls;
-extern unsigned long long efs_global_wait_us;
-extern unsigned long long efs_global_hold_us;
-extern unsigned long long efs_busy_replies;
-extern __thread unsigned long long efs_lock_all_t0;
-extern __thread unsigned long long efs_global_t0;
-/* Per-opcode RPC counts. Shard count changes how a client's dirty set and
- * lookups partition across owners, so it changes the RPC count for the same
- * workload — that is invisible in any server-side lock or CPU measurement. */
-extern unsigned long long efs_rpc_count[256];
-
-static inline unsigned long long server_lock_prof_us(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (unsigned long long)ts.tv_sec * 1000000ull +
-           (unsigned long long)ts.tv_nsec / 1000ull;
-}
-
-static inline pthread_mutex_t *server_shard_mu(struct efsd_server *s,
-                                               uint32_t eidx,
-                                               uint32_t shard) {
-    return &s->shard_locks[(size_t)eidx * EFS_META_MAX_SHARDS + shard];
-}
-
-static inline void server_shard_lock(struct efsd_server *s, uint32_t eidx,
-                                     uint32_t shard) {
-    if (!efs_lock_prof_on) {
-        pthread_mutex_lock(server_shard_mu(s, eidx, shard));
-        return;
-    }
-    unsigned long long t0 = server_lock_prof_us();
-    pthread_mutex_lock(server_shard_mu(s, eidx, shard));
-    __atomic_add_fetch(&efs_lock1_wait_us, server_lock_prof_us() - t0,
-                       __ATOMIC_RELAXED);
-    __atomic_add_fetch(&efs_lock1_calls, 1, __ATOMIC_RELAXED);
-}
-
-/* Timed g_server->lock for inode RPC + REPORT. Other sites (HELLO, PUT,
- * flush) stay on the raw mutex so this split is the handler queue. */
-static inline void server_global_lock(struct efsd_server *s) {
-    if (!efs_lock_prof_on) {
-        pthread_mutex_lock(&s->lock);
-        return;
-    }
-    unsigned long long t0 = server_lock_prof_us();
-    pthread_mutex_lock(&s->lock);
-    unsigned long long t1 = server_lock_prof_us();
-    __atomic_add_fetch(&efs_global_wait_us, t1 - t0, __ATOMIC_RELAXED);
-    __atomic_add_fetch(&efs_global_calls, 1, __ATOMIC_RELAXED);
-    efs_global_t0 = t1;
-}
-
-static inline void server_global_unlock(struct efsd_server *s) {
-    if (efs_lock_prof_on && efs_global_t0) {
-        __atomic_add_fetch(&efs_global_hold_us,
-                           server_lock_prof_us() - efs_global_t0,
-                           __ATOMIC_RELAXED);
-        efs_global_t0 = 0;
-    }
-    pthread_mutex_unlock(&s->lock);
-}
-
-static inline void lock_prof_note_busy(uint8_t status) {
-    if (efs_lock_prof_on && status == EFS_INODE_RPC_BUSY)
-        __atomic_add_fetch(&efs_busy_replies, 1, __ATOMIC_RELAXED);
-}
-
-static inline void server_shard_unlock(struct efsd_server *s, uint32_t eidx,
-                                       uint32_t shard) {
-    pthread_mutex_unlock(server_shard_mu(s, eidx, shard));
-}
-
-/* Lock 1..N shards of one export in ascending (deadlock-free) order. Sorts
- * sh[] in place; the caller keeps the original per-role shard ids in separate
- * variables for the op logic and passes the (now sorted) sh[] to unlockn. */
-static inline void server_shard_lockn(struct efsd_server *s, uint32_t eidx,
-                                      uint32_t *sh, int n) {
-    for (int i = 1; i < n; i++) {
-        uint32_t v = sh[i];
-        int j = i - 1;
-        while (j >= 0 && sh[j] > v) { sh[j + 1] = sh[j]; j--; }
-        sh[j + 1] = v;
-    }
-    unsigned long long t0 = efs_lock_prof_on ? server_lock_prof_us() : 0;
-    uint32_t prev = UINT32_MAX;
-    for (int i = 0; i < n; i++) {
-        if (sh[i] == prev) continue;
-        pthread_mutex_lock(server_shard_mu(s, eidx, sh[i]));
-        prev = sh[i];
-    }
-    if (efs_lock_prof_on) {
-        __atomic_add_fetch(&efs_lockn_wait_us, server_lock_prof_us() - t0,
-                           __ATOMIC_RELAXED);
-        __atomic_add_fetch(&efs_lockn_calls, 1, __ATOMIC_RELAXED);
-    }
-}
-
-static inline void server_shard_unlockn(struct efsd_server *s, uint32_t eidx,
-                                        const uint32_t *sh, int n) {
-    uint32_t prev = UINT32_MAX;
-    for (int i = n - 1; i >= 0; i--) {
-        if (sh[i] == prev) continue;
-        pthread_mutex_unlock(server_shard_mu(s, eidx, sh[i]));
-        prev = sh[i];
-    }
-}
-
-/* Flush/rebuild: lock every shard of an export (caller already holds
- * s->lock, so global -> shard order is preserved). */
-static inline void server_shard_lock_all(struct efsd_server *s, uint32_t eidx,
-                                         uint32_t sc) {
-    if (!efs_lock_prof_on) {
-        for (uint32_t i = 0; i < sc; i++)
-            pthread_mutex_lock(server_shard_mu(s, eidx, i));
-        return;
-    }
-    unsigned long long t0 = server_lock_prof_us();
-    for (uint32_t i = 0; i < sc; i++)
-        pthread_mutex_lock(server_shard_mu(s, eidx, i));
-    efs_lock_all_t0 = server_lock_prof_us();
-    __atomic_add_fetch(&efs_lock_all_wait_us, efs_lock_all_t0 - t0,
-                       __ATOMIC_RELAXED);
-    __atomic_add_fetch(&efs_lock_all_calls, 1, __ATOMIC_RELAXED);
-    __atomic_add_fetch(&efs_lock_all_shards, sc, __ATOMIC_RELAXED);
-}
-
-static inline void server_shard_unlock_all(struct efsd_server *s, uint32_t eidx,
-                                           uint32_t sc) {
-    if (efs_lock_prof_on && efs_lock_all_t0) {
-        __atomic_add_fetch(&efs_lock_all_hold_us,
-                           server_lock_prof_us() - efs_lock_all_t0,
-                           __ATOMIC_RELAXED);
-        efs_lock_all_t0 = 0;
-    }
-    for (uint32_t i = 0; i < sc; i++)
-        pthread_mutex_unlock(server_shard_mu(s, eidx, i));
-}
-
-/* A crashed writer's flush election self-clears after this long. Must
- * comfortably exceed the slowest legitimate flush (page PUTs + root),
- * including a starved client's first huge dirty-set flush. */
-#define EFS_META_WRITER_EXPIRY_MS 60000ull
-
-/* Max wall-clock time one writer may hold the flush election across re-BEGIN
- * retries while contenders are queued. Generous vs. any legitimate flush
- * (page PUTs + root commit, even a starved client's large dirty set), so a
- * healthy writer never hits it — but a wedged/slow one yields to the FIFO
- * head instead of monopolizing the election for the whole client race
- * budget. Only applies under contention (queue non-empty). */
-#define EFS_META_WRITER_MAX_HOLD_MS 30000ull
-
-/* Queued contenders keep their FIFO slot for this long without re-BEGINing.
- * Must exceed the slowest STALE resync (fetch full blob + deserialize a
- * multi-million-row table + rebase a huge dirty set) — a resyncing queue
- * head that lost its slot here was starved forever: every resync finished
- * to find the slot expired and the gen lapped again. A dead head costs one
- * window of stall; live writers re-BEGIN every <1s so false drops need the
- * full window of silence. */
-#define EFS_META_WRITER_Q_EXPIRY_MS 300000ull
-
-/* Phase 2a: server-side meta-flush batching. The flush thread commits a
- * dirty export at most every EFS_META_FLUSH_MS, or early once
- * EFS_META_FLUSH_OPS RPC mutations accumulate (whichever first).
- * 100 ms flushed on every create window and fanned extras-commit catchup
- * (9-way unlink-storm create wedged at ~4 files/s). fsync still flushes
- * synchronously. */
-#define EFS_META_FLUSH_MS 10000ull
-#define EFS_META_FLUSH_OPS 20000ull
 
 /* Global server instance used by worker threads. */
 extern struct efsd_server *g_server;
@@ -490,7 +274,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                              struct efs_msg_raft_mkfs_reply *out);
 void server_raft_host_status(struct efs_msg_raft_status_reply *out);
 int server_raft_host_active(void);
-/* Leader + ReadIndex + applied KV. No s->lock. Flag off → active() is 0
+/* Leader + ReadIndex + applied KV. No s->lock. Inactive before mkfs
  * and these are never called. NOT_PRIMARY fills primary_id = raft leader
  * node id. */
 void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out);

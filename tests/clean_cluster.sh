@@ -26,15 +26,9 @@ start_efsd() { # host node-id addr [join]
     # flush per-stage timing). Must stay UNSET when the caller did not ask for
     # it — efsd tests it with getenv(), so even an empty value turns it on.
     local prof=""
-    [ -n "${EFS_FLUSH_PROF:-}" ] && prof="EFS_FLUSH_PROF=$EFS_FLUSH_PROF"
-    [ -n "${EFS_LOCK_PROF:-}" ] && prof="$prof EFS_LOCK_PROF=$EFS_LOCK_PROF"
-    [ -n "${EFS_INO_PROF:-}" ] && prof="$prof EFS_INO_PROF=$EFS_INO_PROF"
     # RDMA handshake / first-frame trace (rdma-first: lines on both sides).
     [ -n "${EFS_RDMA_FIRST:-}" ] && prof="$prof EFS_RDMA_FIRST=$EFS_RDMA_FIRST"
     [ -n "${EFS_TRANSPORT:-}" ] && prof="$prof EFS_TRANSPORT=$EFS_TRANSPORT"
-    # Inode RAM cap: needed to make trim_ino_ram evict on a table small enough
-    # to gate quickly (the 1024 MB default needs millions of inodes first).
-    [ -n "${EFS_INO_RAM_MB:-}" ] && prof="$prof EFS_INO_RAM_MB=$EFS_INO_RAM_MB"
     ssh_to 15 "$h" "cd /tmp/efs && $prof \
         setsid ./efsd --node-id $nid --addr $addr \
         --port 19810 --storage $STORAGE --quota 36T --direct-io $j \
@@ -46,30 +40,29 @@ say "1/4 wipe"
 bash "$(dirname "$0")/wipe_cluster.sh" || exit 1
 
 if [ "$DEPLOY" = 1 ]; then
-    extra_defs=""
-    [ -n "${EFS_MKFS_SHARD_BITS:-}" ] && extra_defs="-DEFS_DEFAULT_SHARD_BITS=$EFS_MKFS_SHARD_BITS"
-    say "2/4 rsync+build efsd on 4 servers (parallel)${extra_defs:+ bits=$EFS_MKFS_SHARD_BITS}"
+    say "2/4 rsync+build efsd on 4 servers (parallel)"
     for h in "${SERVERS[@]}"; do
         ( ssh_to 120 "$h" "rsync -a --delete --exclude='/mnt/' --exclude='*.log' \
               \"\$HOME/git/efs/\" /tmp/efs/ >/dev/null 2>&1 && \
               cd /tmp/efs && make clean >/dev/null 2>&1 && \
-              make -j\"\$(nproc)\" EXTRA_DEFS='$extra_defs' efsd efs-mgmt >/dev/null 2>&1" \
+              make -j\"\$(nproc)\" efsd efs-mgmt >/dev/null 2>&1" \
               && echo "  ${h%.ib} build OK" || echo "  ${h%.ib} BUILD FAIL" ) &
     done
     wait
 fi
 
-say "3/4 start primary + mkfs"
-start_efsd fcstor003.ib 1 172.16.223.57 || { echo "primary failed to start"; exit 1; }
-ssh_to 20 fcstor003.ib 'cd /tmp/efs && ./efs-mgmt mkfs 172.16.223.57:19810 efs-test' \
-    || { echo "mkfs failed"; exit 1; }
+# Raft mkfs needs a quorum, so ALL nodes come up first, then mkfs.
+say "3/4 start node 1"
+start_efsd fcstor003.ib 1 172.16.223.57 || { echo "node 1 failed to start"; exit 1; }
 
-say "4/4 start 3 joiners (parallel)"
+say "4/4 start 3 joiners (parallel) + mkfs"
 for i in 1 2 3; do
     ( start_efsd "${SERVERS[$i]}" $((i+1)) "${ADDR[$i]}" 172.16.223.57:19810 \
         && echo "  ${SERVERS[$i]%.ib} up" || echo "  ${SERVERS[$i]%.ib} FAILED" ) &
 done
 wait
+ssh_to 20 fcstor003.ib 'cd /tmp/efs && ./efs-mgmt mkfs 172.16.223.57:19810 efs-test' \
+    || { echo "mkfs failed"; exit 1; }
 
 # Verify: poll for 4 up.
 for _ in 1 2 3 4 5; do

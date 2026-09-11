@@ -256,7 +256,8 @@ void efs_dcache_maybe_reclaim(void);
 
 /* Enable coalesced metadata replication for the FUSE client. */
 void efs_client_enable_meta_batch(uint32_t every_n_ops);
-/* EFS_MD_RAFT host mode: metadata engine is the Raft+KV host. */
+/* Metadata engine is the Raft+KV host (the only mode; the name stays
+ * for the wire/routing helpers built around it). */
 int efs_client_raft_mode(void);
 
 /* Fetch a fragment from a node. data must hold at least expected_frag_len bytes.

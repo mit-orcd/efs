@@ -176,8 +176,8 @@ enum efs_msg_type {
     EFS_MSG_META_COMMIT = 91,
     EFS_MSG_META_COMMIT_REPLY = 92,
 
-    /* Production Raft host (architecture.md §10 step 10.5c, env-gated
-     * EFS_MD_RAFT on the server; INVAL reply when the host is off).
+    /* Production Raft host (architecture.md §10 step 10.5c; the only
+     * metadata engine since roadmap step 11).
      * EFS_MSG_RAFT carries one efs_raft_msg encoded by
      * efs_wire_raft_encode (wire.h); the reply is a delivery ack only —
      * Raft tolerates loss, so processing is asynchronous. */
@@ -590,7 +590,7 @@ struct efs_msg_inode_readdir {
      * shifts this dir's rows across a page boundary and an entry is skipped.
      * inos survive compaction, so an ino cursor is stable. 0 = from start.
      *
-     * Raft host (EFS_MD_RAFT): the KV scans a directory in NAME order, so
+     * Raft host: the KV scans a directory in NAME order, so
      * the ino cursor cannot work (name order != ino order — entries would
      * be skipped). The raft path uses (after_src, after_name) instead: the
      * exact resume cookie from the previous reply's next_src/next_name.

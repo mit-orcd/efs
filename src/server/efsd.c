@@ -18,25 +18,6 @@
 
 struct efsd_server *g_server = NULL;
 
-/* EFS_LOCK_PROF counters (see server_shard_lock_all). lock_all is the
- * O(shard_count) path every transitional handler still takes; its wait is
- * off-CPU so `perf record` cannot attribute it. */
-int efs_lock_prof_on = 0;
-unsigned long long efs_lock_all_calls = 0;
-unsigned long long efs_lock_all_wait_us = 0;
-unsigned long long efs_lock_all_shards = 0;
-unsigned long long efs_lock_all_hold_us = 0;
-unsigned long long efs_lockn_calls = 0;
-unsigned long long efs_lockn_wait_us = 0;
-unsigned long long efs_lock1_calls = 0;
-unsigned long long efs_lock1_wait_us = 0;
-unsigned long long efs_global_calls = 0;
-unsigned long long efs_global_wait_us = 0;
-unsigned long long efs_global_hold_us = 0;
-unsigned long long efs_busy_replies = 0;
-__thread unsigned long long efs_lock_all_t0 = 0;
-__thread unsigned long long efs_global_t0 = 0;
-unsigned long long efs_rpc_count[256];
 
 /* Conn/writer stacks: hello_ack is heap-allocated now, so 1 MiB is ample and
  * avoids ~8 GiB of VA when 512 conn threads are live. */
@@ -305,15 +286,6 @@ int main(int argc, char **argv)
     g_server = &server;
     pthread_mutex_init(&server.lock, NULL);
     pthread_cond_init(&server.export_idle_cv, NULL);
-    server.shard_locks = malloc((size_t)EFS_MAX_EXPORTS * EFS_META_MAX_SHARDS *
-                                sizeof(pthread_mutex_t));
-    if (!server.shard_locks) {
-        fprintf(stderr, "shard_locks alloc failed\n");
-        return 1;
-    }
-    for (size_t i = 0; i < (size_t)EFS_MAX_EXPORTS * EFS_META_MAX_SHARDS; i++)
-        pthread_mutex_init(&server.shard_locks[i], NULL);
-    efs_lock_prof_on = getenv("EFS_LOCK_PROF") != NULL;
     server_peer_pool_init();
 
     char *join_peer = NULL;
