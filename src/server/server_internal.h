@@ -59,9 +59,9 @@ struct efsd_server {
     uint16_t port;
 
     /* Export lifetime: handlers/writers hold a use-count while doing I/O so
-     * server_destroy_export cannot free/compact the slot out from under them.
-     * Guarded by s->lock; destroy sets destroying then waits on export_idle_cv
-     * until export_inflight drains to 0. */
+     * an export slot cannot be freed/compacted out from under them.
+     * Guarded by s->lock; a teardown sets destroying then waits on
+     * export_idle_cv until export_inflight drains to 0. */
     uint32_t export_inflight[EFS_MAX_EXPORTS];
     uint8_t export_destroying[EFS_MAX_EXPORTS];
     pthread_cond_t export_idle_cv;
@@ -93,9 +93,6 @@ struct efsd_server {
     int running;
 
     int state; /* enum efsd_server_state */
-    uint64_t shrink_target; /* target used bytes after shrink-quota migration */
-    pthread_t migrate_tid;
-    pthread_t meta_catchup_tid; /* background meta rebuild + local heal */
     pthread_t rejoin_tid; /* background rejoin retry thread */
     char rejoin_addr[64]; /* explicit --join target to keep retrying; empty = use persisted peers */
     uint16_t rejoin_port;
@@ -105,124 +102,12 @@ struct efsd_server {
     int nwriters;
     int persist_nodes; /* persist cluster membership to disk */
     int perf; /* run under perf record when starting */
-    int export_meta_dirty; /* defer metadata.bin writes across PUT_META */
     int usage_dirty; /* local->used changed; flush meta/usage.bin soon */
     int nodes_dirty; /* membership changed; persist nodes.bin off the lock */
-
-    /* Incremental meta-rebuild cache (per export slot): the assembled EFSM
-     * blob from the last successful rebuild plus that generation's page
-     * checksums. Pages whose checksums are unchanged in a new root are
-     * memcpy'd from the cache instead of being fetched from peers, so a
-     * catch-up rebuild costs O(changed pages) of network I/O. In-memory
-     * only, guarded by s->lock; cleared on export destroy. */
-    uint8_t *meta_blob_cache[EFS_MAX_EXPORTS];
-    uint32_t meta_blob_cache_len[EFS_MAX_EXPORTS];
-    uint64_t meta_blob_cache_gen[EFS_MAX_EXPORTS];
-    uint8_t *meta_blob_sums[EFS_MAX_EXPORTS]; /* pages * 3 * EFS_HASH_SIZE */
-    uint32_t meta_blob_pages[EFS_MAX_EXPORTS];
-
-    /* Per-shard incremental rebuild cache: [export slot][shard id]. Same
-     * blob+checksums scheme as meta_blob_cache, but keyed by the shard
-     * table's own root (the extra-shard descriptor). Without it every
-     * extra-shard descriptor refresh re-fetched every page of that shard
-     * (the bits>0 multi-write catchup storm). */
-    uint8_t *shard_blob_cache[EFS_MAX_EXPORTS][EFS_META_MAX_SHARDS];
-    uint32_t shard_blob_cache_len[EFS_MAX_EXPORTS][EFS_META_MAX_SHARDS];
-    uint8_t *shard_blob_sums[EFS_MAX_EXPORTS][EFS_META_MAX_SHARDS];
-    uint32_t shard_blob_pages[EFS_MAX_EXPORTS][EFS_META_MAX_SHARDS];
-
-    /* Meta flush election (per export slot): the writer that won a
-     * META_FLUSH_BEGIN majority. While live (now < expiry), PUT_META roots
-     * from any other writer are rejected STALE, so two clients can never
-     * interleave page PUTs on the same dual-slot generation. Cleared on
-     * commit or after EFS_META_WRITER_EXPIRY_MS. Guarded by s->lock.
-     *
-     * Fairness: contenders are queued FIFO (meta_writer_q). When the
-     * election is free, only the queue head is granted it — a writer that
-     * just lost a race cannot be lapped forever by faster resyncers, which
-     * previously starved unlucky clients into ever-growing dirty sets.
-     * Queue capacity is EFS_META_WRITER_QMAX. */
-    uint64_t meta_writer_id[EFS_MAX_EXPORTS];
-    uint64_t meta_writer_gen[EFS_MAX_EXPORTS];
-    uint64_t meta_writer_expiry[EFS_MAX_EXPORTS];
-    /* When the current holder first won the election. A holder re-BEGINing
-     * (flush retry) refreshes expiry each time, so without a hold cap a slow
-     * or wedged writer can monopolize the FIFO for minutes while contenders
-     * starve on BUSY. Re-grants past EFS_META_WRITER_MAX_HOLD_MS yield to the
-     * queue head instead. 0 = no holder. Guarded by s->lock. */
-    uint64_t meta_writer_since[EFS_MAX_EXPORTS];
-    uint64_t meta_writer_q[EFS_MAX_EXPORTS][EFS_META_WRITER_QMAX];
-    uint64_t meta_writer_q_ms[EFS_MAX_EXPORTS][EFS_META_WRITER_QMAX];
-    uint32_t meta_writer_q_len[EFS_MAX_EXPORTS];
-
-    /* Phase 2a (server-owned metadata): RPC mutation handlers
-     * (INODE_CREATE/UNLINK/...) apply to the in-memory table under s->lock
-     * and bump rpc_dirty_ops[export_slot]; the meta-flush thread batches and
-     * flushes dirty exports via server_flush_fragmented_meta (primary only).
-     * rpc_dirty_cv wakes the flush thread early once EFS_META_FLUSH_OPS
-     * accumulate. Guarded by s->lock. */
-    uint64_t rpc_dirty_ops[EFS_MAX_EXPORTS];
-    pthread_cond_t rpc_dirty_cv;
-    pthread_t meta_flush_tid;
-    int meta_flush_started;
-    /* Serializes server_flush_fragmented_meta: the meta-flush thread and a
-     * synchronous REPORT_CHUNKS(fs sync) flush both call it, and without a
-     * mutex both compute the same new_gen (= root.generation+1) and race to the
-     * peers — the loser's root is rejected STALE (gen <= peer's), so the sync
-     * fsync sees 0 peer acks and returns EIO even though the data commits on
-     * the retry. Holding this for the whole flush makes each compute a fresh
-     * gen. */
-    pthread_mutex_t meta_flush_mu;
-
-    /* Group commit for the fsync flush (guarded by flush_grp_mu). Every
-     * synchronous REPORT_CHUNKS runs a full flush, so 36-way posixstress
-     * issued ~55 flushes/s of ~14 ms each against the single meta_flush_mu —
-     * ~77% duty on one serialized resource, which queued each flush ~88 ms
-     * (85% of the measured flush window was pure wait). Concurrent fsyncs
-     * share one flush instead: a caller that finds a flush already running
-     * waits for the NEXT one, which is guaranteed to snapshot after its
-     * mutation was applied. Per export slot, since a flush only covers the
-     * export it ran on. */
-    pthread_mutex_t flush_grp_mu;
-    pthread_cond_t flush_grp_cv;
-    uint64_t flush_started[EFS_MAX_EXPORTS];
-    uint64_t flush_done[EFS_MAX_EXPORTS];
-    /* Highest flush generation any queued caller still needs. The leader keeps
-     * flushing until flush_done reaches it — a waiter count cannot be used
-     * here, since waiters only decrement it after the leader drops the mutex,
-     * which would spin the leader on flushes nobody needs. */
-    uint64_t flush_target[EFS_MAX_EXPORTS];
-    int flush_running[EFS_MAX_EXPORTS];
-    int flush_last_rc[EFS_MAX_EXPORTS];
 
     /* Open-fd refs + cluster flock (guarded by s->lock). */
     struct efs_ino_hold *ino_holds;
 
-    /* 2PC pending root (per export slot): a gen-advancing root received via
-     * PUT_META (prepare) that the writer has NOT committed yet. Stashed here
-     * untouched — not installed, persisted, fenced, or GC'd — until
-     * EFS_MSG_META_COMMIT arrives for its generation. A newer prepare for the
-     * same export replaces it (same-gen retry after a failed quorum writes
-     * fresh cis; the superseded pending root's pages are unreferenced and
-     * simply overwritten). Cleared on promote or on catchup install.
-     * Guarded by s->lock. */
-    struct efs_export_root pending_root[EFS_MAX_EXPORTS];
-    uint8_t pending_valid[EFS_MAX_EXPORTS];
-    /* Raw prepare payload (serialized root) stashed alongside pending_root:
-     * META_COMMIT carries efs_hash(root bytes) so a same-gen retry with new
-     * content at the same cis can never promote a superseded prepare. */
-    uint8_t *pending_blob[EFS_MAX_EXPORTS];
-    uint32_t pending_blob_len[EFS_MAX_EXPORTS];
-
-    /* Catchup/heal progress for EFS_MSG_HEAL_STATUS (single catchup thread). */
-    int heal_active;
-    char heal_export[EFS_MAX_NAME];
-    uint32_t heal_shard;
-    uint32_t heal_pages_done;
-    uint32_t heal_pages_total;
-    uint64_t heal_gen;
-    uint64_t heal_started_us;
-    uint64_t heal_last_us;
 };
 
 /* Per-shard metadata lock helpers. Ordering is strictly global (s->lock)
@@ -424,19 +309,8 @@ static inline void server_shard_unlock_all(struct efsd_server *s, uint32_t eidx,
 /* Global server instance used by worker threads. */
 extern struct efsd_server *g_server;
 
-/* Find or create an export by name. */
-struct efs_export *server_find_export(struct efsd_server *s, const char *name);
-/* Exact-name lookup without create/placeholder-rebrand side effects. */
-struct efs_export *server_find_export_no_create(struct efsd_server *s,
-                                                const char *name);
-
 /* Get export by id. */
 struct efs_export *server_get_export(struct efsd_server *s, efs_export_id_t id);
-/* By-id find-or-create for the replication paths. Caller holds s->lock. */
-struct efs_export *server_get_export_create(struct efsd_server *s,
-                                            efs_export_id_t id,
-                                            const char *name);
-
 /* Export lifetime for unlocked I/O. Acquire returns the export (or NULL if
  * missing/being destroyed) with a use-count held; the caller MUST pair it with
  * server_export_put. Caller holds s->lock on entry to acquire (it does not
@@ -449,19 +323,6 @@ struct efs_export *server_export_acquire(struct efsd_server *s,
 void server_export_put(struct efsd_server *s, struct efs_export *ex);
 /* Index of ex within s->exports, or -1. Caller holds s->lock. */
 int server_export_index_locked(struct efsd_server *s, struct efs_export *ex);
-
-/* Destroy an export by name: wipe local data/meta and drop the in-memory row.
- * Returns EFS_OK, EFS_ERR_NOT_FOUND, or EFS_ERR_INVAL. */
-int server_destroy_export(struct efsd_server *s, const char *name);
-
-/* Migrate pre-subdirectory storage layout to data/meta/log. */
-void server_migrate_old_layout(struct efsd_server *s);
-
-/* Load all exports from storage path. */
-void server_load_exports(struct efsd_server *s);
-
-/* Save an export to disk. */
-void server_save_export(struct efsd_server *s, struct efs_export *ex);
 
 /* Fragment byte length for this inode: meta pages are fixed; data uses export. */
 static inline uint32_t server_frag_len(const struct efs_export *ex, efs_ino_t ino)

@@ -478,20 +478,20 @@ send_reply:
                 pthread_mutex_lock(&g_server->lock);
                 if (g_server->quota > 0 && g_server->quota > req->amount) {
                     uint64_t new_quota = g_server->quota - req->amount;
-                    g_server->quota = new_quota;
                     struct efs_node *local = server_local_node(g_server);
+                    uint64_t used = local ? local->used : 0;
+                    /* The data-migration engine that used to drain usage
+                     * below the new quota is deleted (step 11). Shrinking
+                     * below current usage is refused outright. */
+                    if (used > new_quota) {
+                        pthread_mutex_unlock(&g_server->lock);
+                        efs_conn_send_msg(conn, EFS_MSG_SHRINK_QUOTA_REPLY,
+                                          &reply, 1);
+                        break;
+                    }
+                    g_server->quota = new_quota;
                     if (local)
                         local->quota = new_quota;
-                    uint64_t used = local ? local->used : 0;
-                    if (used > new_quota) {
-                        g_server->shrink_target = new_quota;
-                        g_server->state = SERVER_STATE_SHRINKING;
-                        printf("Shrink-quota requested: new quota %llu, starting migration\n",
-                               (unsigned long long)new_quota);
-                    } else {
-                        printf("Shrink-quota requested: new quota %llu, already within limit\n",
-                               (unsigned long long)new_quota);
-                    }
                     reply = EFS_SHRINK_QUOTA_IN_PROGRESS;
                 }
                 pthread_mutex_unlock(&g_server->lock);

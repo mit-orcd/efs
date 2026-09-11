@@ -304,11 +304,7 @@ int main(int argc, char **argv)
     server.listen_fd = -1;
     g_server = &server;
     pthread_mutex_init(&server.lock, NULL);
-    pthread_mutex_init(&server.meta_flush_mu, NULL);
-    pthread_mutex_init(&server.flush_grp_mu, NULL);
-    pthread_cond_init(&server.flush_grp_cv, NULL);
     pthread_cond_init(&server.export_idle_cv, NULL);
-    pthread_cond_init(&server.rpc_dirty_cv, NULL);
     server.shard_locks = malloc((size_t)EFS_MAX_EXPORTS * EFS_META_MAX_SHARDS *
                                 sizeof(pthread_mutex_t));
     if (!server.shard_locks) {
@@ -425,8 +421,6 @@ int main(int argc, char **argv)
         mkdir_p(subdir);
     }
 
-    server_migrate_old_layout(&server);
-
     server.nodes[0].id = server.id;
     strncpy(server.nodes[0].addr, server.addr, sizeof(server.nodes[0].addr) - 1);
     server.nodes[0].port = server.port;
@@ -436,7 +430,6 @@ int main(int argc, char **argv)
     server.nodes[0].used = 0;
     server.node_count = 1;
 
-    server_load_exports(&server);
     server_load_nodes(&server);
 
     /* Refresh this process's row by id — never smash nodes[0], which may be a peer
@@ -606,8 +599,6 @@ int main(int argc, char **argv)
     server_raft_host_stop();
     server_peer_pool_shutdown();
     pthread_mutex_destroy(&server.lock);
-    pthread_mutex_destroy(&server.meta_flush_mu);
-    pthread_cond_destroy(&server.rpc_dirty_cv);
     for (uint32_t i = 0; i < server.export_count; i++)
         efs_export_free(&server.exports[i]);
     return 0;
