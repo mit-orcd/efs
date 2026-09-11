@@ -125,6 +125,18 @@ int sim_sess_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         ino = rd64(cmd + 22);
         gen = rd64(cmd + 30);
         rc = efs_lease_close(s->disk, ino, gen, uuid, epoch);
+        /* Mirror of raft_host apply: last close drops the inode's locks
+         * (the kernel never relays a flock UNLOCK on close) and drains
+         * orphaned append reservations as holes (§7.3 ABORTED_HOLE). */
+        if (rc == EFS_OK && efs_lease_any(s->disk, ino, gen) == 0) {
+            int lr = efs_lock_drop_file(s->disk, ino, gen);
+            int dr = efs_meta_apply_append_drain_file(s->disk, ino);
+
+            if (lr != EFS_OK && lr != EFS_ERR_NOT_FOUND)
+                rc = lr;
+            if (dr != EFS_OK && dr != EFS_ERR_NOT_FOUND && rc == EFS_OK)
+                rc = dr;
+        }
         break;
     case EFS_MD_SESS_LEASE_DROP:
         if (clen < 26)

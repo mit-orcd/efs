@@ -180,6 +180,79 @@ unreadable) — `perf record -p` / `perf stat -p` same-uid are fine.
 
 ## Where we are
 
+**STEP 1 PRODUCTION ADOPTION LANDED (Sep 10, commit 3299e89): efs-fuse mounts
+the Raft+KV engine behind `EFS_MD_RAFT` (client + server env).** Bootstrap
+polls RAFT_STATUS for `kv_has_root` (no GET_META — the host serves no
+serialized table); inode RPCs route by the compiled-in shard→group→voter map
+(odd shards→group 0 = nodes 1-3, even→group 2 = nodes 2-4) to any voter and
+follow the host's `primary_id` bounce. **Scratch cluster: port 19820, storage
+`/tmp/efs-raft-scratch`, fcstor003–006, `--quota 1G --writers 0
+--no-direct-io`; restarts MUST keep `EFS_MD_RAFT=1`. Kill ONLY via the
+cmdline-grep loop (`grep -q 19820`) — bare `pkill -x efsd` hits the LIVE
+19810 cluster on the same hosts.** Client: fcstor007 `/tmp/efs-mount` with
+`EFS_MD_RAFT=1 EFS_TRANSPORT=tcp`.
+Fixes in the same commit, all found by the first real gate: (1) **monotonic
+raft boot id via `boot.bin`** — pid^time can go backwards and the peer boot
+fence then silently drops every reply from the restarted node (replication
+wedge); (2) `efs_meta_apply_truncate` had a **765 KB stack frame** on 1 MiB
+efsd pump threads (now heap, 25 KB) and its multi-lane range delete indexed
+shared `del_keys` by a per-lane base so lane i+1 overwrote lane i's keys
+(wrong chunks deleted; regression test in test_meta_apply); (3) **REPORT
+publish for a deleted inode is a harmless no-op (P3)** at host AND apply
+layer — one unreportable rec otherwise poisons every fsync of that client
+forever (all-or-nothing report + merge-back; this was the
+`fsync_reopen_visible` EIO); (4) **pack staging disabled in raft mode** (KV
+row has no pack fields; pack chunks publish under the parent DIRECTORY ino →
+INVAL); (5) SETATTR SIZE|MTIME pairing accepted. `EFS_RAFT_DBG=1` gates
+server report/publish debug logs.
+**Gate: 12/12 unit suites incl. test_sim; posix on the Raft mount 150/201
+(`results/posix/raft-step1-20260910-2133`).** `test_lock` has 6
+PRE-EXISTING failures (tests/test_lock.c:83-90, predate this work).
+
+**STEP 1 FOLLOW-UP FIXES (Sep 10 PM, working tree on top of 3299e89) — gate
+182/201 (`results/posix/raft-step1-bug7-20260910`).** The 150→182 climb
+fixed, in order: (2) `last_link_unlink_other_dir` EIO — unlink/rename of a
+dentry whose inode row is on the OTHER group now bounces dentry-first
+(before resolving the row); (3) txn PREPARE packed dentry keys with a
+1-byte klen — names >255 bytes truncated and collided (now 2-byte, host +
+sim); (4) rename-over-existing EEXIST — the destination row is retired in
+the same txn (nlink--/DEL, empty-dir rules), host + sim; (5) ctime ns
+truncation on the wire — claimed padding as ctime_nsec/atime_nsec; (6)
+flock survived close — the kernel NEVER relays a flock UNLOCK on close, so
+the last-lease edge now drops all lock records for (ino,gen)
+(`efs_lock_drop_file`) and the client HOLD is edge-triggered on a per-ino
+open-description refcount (`efs_open_note`/`efs_close_note`); (7) **the
+11-test EIO window = `rsv_scan` 64-cap NOMEM** — a file with >64
+append-reservation records (a timeout-killed concurrent_appends leaves
+orphaned OPENs + their blocked DONEs) made `efs_meta_apply_append_open`
+fail NOMEM inside `host_resolve_caught_up`, which failed the whole report
+batch, which kept the rec dirty and poisoned EVERY later sync report
+(direct_*, two_fds, trunc_open_other_fd, fsync_then_fstat_size, the
+symlink family, last_link_unlink data loss — all one poison rec,
+ino-pinned, proven by 418 × `report FAIL ino=6590 rc=-2` on fcstor004).
+Fix: the scan is dynamic (no cap), a resolve failure no longer fails a
+report whose publish succeeded (bookkeeping, not durability — size rides
+the lane MAX), and the last-lease edge drains orphaned OPEN reservations
+as ABORTED_HOLE (`efs_meta_apply_append_drain_file`, host + sim) so a
+killed appender can no longer wedge the frontier or accumulate records
+without bound.
+**Remaining 19/201, classified (do not re-derive):** ~15 latency-bucket
+timeouts (`host_pump` ticks every 5 ms, `host_wait_applied` polls 5 ms ×
+80 → each Raft round 15–25 ms; cross-group txns multiply; depth-100 mkdir
+chains and 16-way bursts sit on the 15 s test budget — the event-driven
+pump is a post-step-1 PERFORMANCE item, not correctness); 2 load flakes
+under the killed-test barrier churn that pass isolated
+(`concurrent_writes_disjoint`, `symlink_relative_after_parent_rename` — a
+sync report carries ALL dirty recs, so a churning file's barrier-BUSY rec
+can EIO an unrelated file's close after retries exhaust; per-ino fsync
+report or per-rec BUSY skip is the step-2 refinement);
+`dir_move_into_subdir` (cross-dir rename EINVAL — slice debt);
+`virt_find_query` (.find unimplemented). jobs=16 under the same latency
+profile is saturation noise (first instance 182/182 fails all timeouts, 0
+correctness classes). Known slice debts still open: cross-group utimens
+INVAL (`host_utimens`), append_bar not pushed to cross-group lanes, sim
+blind spot (all-voters shared-disk).
+
 **ARCHITECTURE DECISION (Sep 1 2026, user-ratified; REVISED after external
 protocol review).** The project now has a master spec: **`docs/architecture.md`**
 (+ browsable `docs/architecture.html`). User's bar: efs must earn the name

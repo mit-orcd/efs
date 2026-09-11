@@ -105,6 +105,17 @@ struct efs_meta_pub {
     uint64_t content_epoch;
     uint32_t coding_profile_id;
     struct efs_meta_chunk ch;
+    /* Lane-local mode: the entry is applied on the LANE's group, whose KV
+     * does not hold the inode row (the row lives on the inode group). The
+     * proposing host read the row under ReadIndex on the inode group and
+     * carries the FileID fields here; the apply skips the inode row
+     * entirely (no active_lanes/base_size touch — those are the inode
+     * group's keys) and takes the truncate fence from the lane's own
+     * fenced_epoch. inode_gen must be the row's generation (0 is INVAL);
+     * mtime_gen is the row's mtime_gen for the lane mtime guard. */
+    uint64_t inode_gen;
+    uint64_t mtime_gen;
+    uint8_t lane_local;
 };
 
 /* Creates the root inode if absent. `now` is the leader-stamped time it is
@@ -343,10 +354,33 @@ struct efs_meta_truncate {
     uint64_t expect_gen;
     uint64_t size;
     const struct efs_meta_pub *tail;
+    /* Which active lanes THIS entry fences + range-deletes. The truncate
+     * entry runs on the inode group, whose KV holds only the lanes whose
+     * shard maps to that group; lanes on other groups are fenced by
+     * separate EFS_MD_CMD_LANE_FENCE entries proposed to their own groups
+     * BEFORE this entry (a group's log only writes its own shards' keys).
+     * ~0ULL = all lanes (single-group deployments, the simulator). */
+    uint64_t lane_mask;
+    /* The tail chunk's lane lives on another group: the tail CAS is NOT in
+     * this entry (it is lane-local-published after commit, fenced by the
+     * LANE_FENCE that already landed on that lane). tail must be NULL. */
+    uint8_t tail_external;
 };
 
 int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
                             const struct efs_meta_truncate *t);
+/* EFS_MD_CMD_ACTIVATE_LANE: set one active_lanes bit on the inode row.
+ * Idempotent and monotonic; NOT_FOUND (deleted inode) is a no-op OK (P3). */
+int efs_meta_apply_activate_lane(struct efs_kv *kv, efs_ino_t ino,
+                                 uint8_t lane);
+/* EFS_MD_CMD_LANE_FENCE: one lane's share of a truncate, applied on the
+ * LANE's group: fenced_epoch = new_epoch, max_end = 0, seq++, then the
+ * range delete of that lane's chunk entries beyond size (tail_ci kept).
+ * Idempotent via the epoch guard (a replay with the same new_epoch after
+ * the lane already fenced at >= new_epoch is a no-op OK). */
+int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                              uint8_t lane, uint64_t new_epoch, uint64_t size,
+                              uint32_t tail_ci, uint8_t has_tail);
 
 /* O_APPEND: serialized EOF reservation on the inode shard, then ordinary
  * distributed publish. `op` is required (I16: a retried reserve must recover
@@ -375,6 +409,10 @@ int efs_meta_apply_append_open(struct efs_kv *kv, efs_ino_t ino, uint64_t *offs,
 int efs_meta_apply_append_drop_session(struct efs_kv *kv, uint32_t shard,
                                        const uint8_t uuid[EFS_OPID_UUID_LEN],
                                        uint32_t epoch);
+/* Resolve every OPEN reservation on ino as ABORTED_HOLE. Called on the
+ * last-lease edge: the reserving writer is gone, so the range becomes a
+ * committed zero hole and the append frontier can settle (§7.3). */
+int efs_meta_apply_append_drain_file(struct efs_kv *kv, efs_ino_t ino);
 int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_index,
                              struct efs_meta_chunk *out);
 uint64_t efs_meta_candidate_gen(const uint8_t uuid[16], uint32_t session_epoch,

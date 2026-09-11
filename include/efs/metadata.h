@@ -35,9 +35,11 @@ struct efs_inode {
     uint64_t size;
     uint64_t mtime;
     uint32_t mtime_nsec; /* nanoseconds portion of mtime (for rsync etc.) */
+    uint32_t ctime_nsec; /* was alignment padding; offsets/size unchanged */
     uint64_t ctime;
     uint64_t atime; /* set on create / utimens; never bumped on read */
     uint32_t nlink;
+    uint32_t atime_nsec; /* was alignment padding; offsets/size unchanged */
     char name[EFS_MAX_NAME];
     /* Directory rollups (contents only; zero on files). Immediate = direct
      * children; tree = all descendants. Size sums regular-file sizes

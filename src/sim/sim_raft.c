@@ -4,6 +4,7 @@
 #include "efs/opid.h"
 #include "efs/session.h"
 #include "efs/kv_key.h"
+#include "efs/meta_cmd.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -468,6 +469,10 @@ static int apply_truncate_cmd(struct sim_server *s, const uint8_t *cmd,
     memset(&t, 0, sizeof(t));
     t.expect_gen = expect_gen;
     t.size = size;
+    /* The sim's servers all vote in all groups over one shared disk, so a
+     * truncate entry fences every lane locally (no cross-group split is
+     * modelled — see sim_raft_truncate). */
+    t.lane_mask = ~0ULL;
     if (has_tail) {
         if (clen < TRUNC_HDR + TRUNC_TAIL)
             return EFS_ERR_PROTO;
@@ -553,6 +558,47 @@ static int apply_append_res_cmd(struct sim_server *s, const uint8_t *cmd,
     return EFS_OK;
 }
 
+/* Host-generated lane maintenance commands (EFS_MD_CMD_ACTIVATE_LANE /
+ * EFS_MD_CMD_LANE_FENCE). The sim's coordinator never emits these — its
+ * servers all vote in all groups over one shared disk, so the production
+ * cross-group split never occurs — but the namespace is shared with the
+ * production host, so the applies are kept here to keep them convergent. */
+static int apply_activate_lane_cmd(struct sim_server *s, const uint8_t *cmd,
+                                   uint32_t clen, uint64_t index,
+                                   uint8_t group)
+{
+    efs_ino_t ino;
+    int rc;
+
+    if (clen < 10)
+        return EFS_ERR_PROTO;
+    ino = rd64(cmd + 1);
+    rc = efs_meta_apply_activate_lane(s->disk, ino, cmd[9]);
+    sim_note_apply(s, group, index, rc, ino);
+    return EFS_OK;
+}
+
+static int apply_lane_fence_cmd(struct sim_server *s, const uint8_t *cmd,
+                                uint32_t clen, uint64_t index, uint8_t group)
+{
+    efs_ino_t ino;
+    uint64_t gen, epoch, size;
+    uint32_t tail_ci;
+    int rc;
+
+    if (clen < 39)
+        return EFS_ERR_PROTO;
+    ino = rd64(cmd + 1);
+    gen = rd64(cmd + 9);
+    epoch = rd64(cmd + 18);
+    size = rd64(cmd + 26);
+    tail_ci = rd32(cmd + 34);
+    rc = efs_meta_apply_lane_fence(s->disk, ino, gen, cmd[17], epoch, size,
+                                   tail_ci, cmd[38]);
+    sim_note_apply(s, group, index, rc, ino);
+    return EFS_OK;
+}
+
 int sim_ns_try(struct sim_server *s, uint8_t group, const uint8_t *cmd,
                uint32_t clen, uint64_t index)
 {
@@ -594,6 +640,12 @@ int sim_ns_try(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         return 1;
     case SIM_CMD_LOCK:
         sim_lock_apply(s, group, cmd, clen, index);
+        return 1;
+    case EFS_MD_CMD_ACTIVATE_LANE:
+        apply_activate_lane_cmd(s, cmd, clen, index, group);
+        return 1;
+    case EFS_MD_CMD_LANE_FENCE:
+        apply_lane_fence_cmd(s, cmd, clen, index, group);
         return 1;
     default:
         return 0;

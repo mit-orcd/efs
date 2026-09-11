@@ -1956,6 +1956,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     uint8_t old_ln[LANE_VAL], old_ch[CHUNK_VAL];
     uint32_t kc = 0, kl = 0, ki = 0, vn;
     uint64_t committed = 0;
+    uint64_t inode_gen, mtime_gen, row_base_size = 0, row_active = 0;
     struct lane_rec ln;
     struct efs_kv_item it[3];
     uint32_t n = 0;
@@ -1967,39 +1968,58 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     rc = evidence_ok(p);
     if (rc != EFS_OK)
         return rc;
-    rc = efs_meta_apply_get_inode(kv, p->ino, &row);
-    /* P3: a publish racing an unlink is stale work — make it harmless.
-     * The inode row is gone, so there is nothing to attach the chunk to;
-     * the fragments are orphans for GC (L7). A no-op OK, never an error:
-     * the client's create for this ino committed before it could dirty the
-     * chunk, so NOT_FOUND after commit ordering means deleted, not
-     * not-yet-created. */
-    if (rc == EFS_ERR_NOT_FOUND)
-        return EFS_OK;
-    if (rc != EFS_OK)
-        return rc;
-    /* FUSE stores a symlink target as ordinary published bytes. Directories
-     * have no chunk map. */
-    if (!S_ISREG(row.mode) && !S_ISLNK(row.mode))
-        return EFS_ERR_INVAL;
-    if (p->content_epoch < row.content_epoch)
-        return EFS_ERR_STALE;
-    {
-        struct append_cur cur;
-
-        rc = load_append_cur(kv, p->ino, row.generation, &cur);
+    if (p->lane_local) {
+        /* Cross-group lane: this group's KV has no inode row. The host read
+         * the row under ReadIndex on the inode group and carries the FileID
+         * fields; the lane's own fenced_epoch is the linearizable truncate
+         * fence here. An orphan publish (the inode was unlinked between the
+         * host's read and this apply) is harmless: the chunk/lane keys are
+         * generation-scoped garbage for GC (P3/L7), never reachable because
+         * the row that would reference them is gone. */
+        if (p->inode_gen == 0)
+            return EFS_ERR_INVAL;
+        inode_gen = p->inode_gen;
+        mtime_gen = p->mtime_gen;
+        memset(&row, 0, sizeof(row));
+    } else {
+        rc = efs_meta_apply_get_inode(kv, p->ino, &row);
+        /* P3: a publish racing an unlink is stale work — make it harmless.
+         * The inode row is gone, so there is nothing to attach the chunk to;
+         * the fragments are orphans for GC (L7). A no-op OK, never an error:
+         * the client's create for this ino committed before it could dirty the
+         * chunk, so NOT_FOUND after commit ordering means deleted, not
+         * not-yet-created. */
+        if (rc == EFS_ERR_NOT_FOUND)
+            return EFS_OK;
         if (rc != EFS_OK)
             return rc;
-        if (cur.nopen && p->new_size > cur.watermark)
-            return EFS_ERR_BUSY;
+        /* FUSE stores a symlink target as ordinary published bytes.
+         * Directories have no chunk map. */
+        if (!S_ISREG(row.mode) && !S_ISLNK(row.mode))
+            return EFS_ERR_INVAL;
+        if (p->content_epoch < row.content_epoch)
+            return EFS_ERR_STALE;
+        {
+            struct append_cur cur;
+
+            rc = load_append_cur(kv, p->ino, row.generation, &cur);
+            if (rc != EFS_OK)
+                return rc;
+            if (cur.nopen && p->new_size > cur.watermark)
+                return EFS_ERR_BUSY;
+        }
+        inode_gen = row.generation;
+        mtime_gen = row.mtime_gen;
+        row_base_size = row.base_size;
+        row_active = row.active_lanes;
     }
     lane = (uint8_t)(p->chunk_index % EFS_META_LANES);
     lsh = efs_kv_lane_shard(p->ino, lane);
     ish = efs_kv_inode_shard(p->ino);
-    rc = efs_kv_key_chunk(lsh, p->ino, row.generation, lane, p->chunk_index,
+    rc = efs_kv_key_chunk(lsh, p->ino, inode_gen, lane, p->chunk_index,
                           k_ch, &kc);
     if (rc == EFS_OK)
-        rc = efs_kv_key_lane(lsh, p->ino, row.generation, lane, k_ln, &kl);
+        rc = efs_kv_key_lane(lsh, p->ino, inode_gen, lane, k_ln, &kl);
     if (rc != EFS_OK)
         return rc;
     vn = sizeof(old_ch);
@@ -2036,11 +2056,11 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
      * inode row so that a million writers never touch the inode's leader.
      * MAX-clamped: CLOCK_REALTIME can step backwards, and re-applying a
      * committed entry must not move anything. */
-    if (ln.mtime_gen < row.mtime_gen) {
+    if (ln.mtime_gen < mtime_gen) {
         /* A utimens has invalidated this lane's mtime since it was stamped,
          * so it is not a value to take a MAX against — it is stale. */
         ln.max_mtime = p->now;
-        ln.mtime_gen = row.mtime_gen;
+        ln.mtime_gen = mtime_gen;
     } else {
         ln.max_mtime = max_u64(ln.max_mtime, p->now);
     }
@@ -2069,17 +2089,21 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     /* First use of a lane has to register it in the inode row's bitmap: that
      * bitmap is the whole collect set for stat(), so a lane nobody recorded
      * is a lane stat() never reads. It happens at most 64 times in a file's
-     * life, which is why it is not a rate-proportional cost — but when the
-     * lane is not the inode's own shard it is a genuine two-shard write, and
-     * once shards are separate Raft groups it must go through §7.2 rather
-     * than ride this batch. */
-    if ((row.active_lanes & (1ULL << lane)) == 0) {
-        row.active_lanes |= 1ULL << lane;
-        touch_inode = 1;
-    }
-    if (lsh == ish && p->new_size > row.base_size) {
-        row.base_size = p->new_size;
-        touch_inode = 1;
+     * life, which is why it is not a rate-proportional cost. When the lane
+     * is not the inode's own shard it is a genuine two-shard write: the
+     * bitmap bit is set by a separate EFS_MD_CMD_ACTIVATE_LANE entry on the
+     * inode group (proposed by the host BEFORE this lane-local publish), and
+     * this entry — applied on the lane's group — must not touch the row. */
+    if (!p->lane_local) {
+        if ((row_active & (1ULL << lane)) == 0) {
+            row_active |= 1ULL << lane;
+            row.active_lanes = row_active;
+            touch_inode = 1;
+        }
+        if (lsh == ish && p->new_size > row_base_size) {
+            row.base_size = p->new_size;
+            touch_inode = 1;
+        }
     }
     if (touch_inode) {
         pack_inode(v_ino, &row);
@@ -2093,6 +2117,94 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
         it[n].vlen = INO_VAL;
         n++;
     }
+    return efs_kv_batch(kv, it, n);
+}
+
+int efs_meta_apply_activate_lane(struct efs_kv *kv, efs_ino_t ino,
+                                 uint8_t lane)
+{
+    struct efs_meta_row row;
+    uint8_t key[EFS_KV_KEY_MAX], val[INO_VAL];
+    uint32_t klen = 0;
+    int rc;
+
+    if (!kv || ino == 0 || lane >= EFS_META_LANES)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    /* P3: the inode was unlinked between the host's read and this apply —
+     * the activation is stale work, harmless to drop. */
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_OK;
+    if (rc != EFS_OK)
+        return rc;
+    if (row.active_lanes & (1ULL << lane))
+        return EFS_OK; /* idempotent replay */
+    row.active_lanes |= 1ULL << lane;
+    pack_inode(val, &row);
+    rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, key, &klen);
+    if (rc != EFS_OK)
+        return rc;
+    return efs_kv_put(kv, key, klen, val, INO_VAL);
+}
+
+static int epoch_lane_upd(struct lane_rec *ln, void *arg);
+static int fence_lane_bits(struct efs_kv *kv, efs_ino_t ino,
+                           uint64_t generation, uint64_t bits,
+                           int (*upd)(struct lane_rec *ln, void *arg),
+                           void *arg, struct efs_kv_item *it, uint32_t *n,
+                           uint8_t k_ln[][EFS_KV_KEY_MAX],
+                           uint8_t v_ln[][LANE_VAL]);
+static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
+                                   uint64_t gen, uint8_t lane, uint64_t size,
+                                   uint32_t tail_ci, uint8_t has_tail,
+                                   struct efs_kv_item *it,
+                                   uint8_t (*del_keys)[EFS_KV_KEY_MAX],
+                                   uint32_t *n, uint32_t cap);
+
+int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                              uint8_t lane, uint64_t new_epoch, uint64_t size,
+                              uint32_t tail_ci, uint8_t has_tail)
+{
+    struct efs_kv_item it[1 + 32];
+    uint8_t del_keys[1 + 32][EFS_KV_KEY_MAX];
+    uint8_t k_ln[EFS_META_LANES][EFS_KV_KEY_MAX];
+    uint8_t v_ln[EFS_META_LANES][LANE_VAL];
+    uint8_t key[EFS_KV_KEY_MAX], old[LANE_VAL];
+    uint32_t n = 0, klen = 0, vn;
+    struct lane_rec ln;
+    int rc;
+
+    if (!kv || ino == 0 || lane >= EFS_META_LANES)
+        return EFS_ERR_INVAL;
+    /* Idempotency: a replay of an already-applied fence (same or older
+     * epoch) must not zero max_end again — a publish that landed after the
+     * first apply would be silently dropped from the size collect. */
+    rc = efs_kv_key_lane(efs_kv_lane_shard(ino, lane), ino, gen, lane,
+                         key, &klen);
+    if (rc != EFS_OK)
+        return rc;
+    vn = sizeof(old);
+    rc = efs_kv_get(kv, key, klen, old, &vn);
+    if (rc == EFS_OK) {
+        rc = unpack_lane(old, vn, &ln);
+        if (rc != EFS_OK)
+            return rc;
+        if (ln.fenced_epoch >= new_epoch)
+            return EFS_OK;
+    } else if (rc != EFS_ERR_NOT_FOUND) {
+        return rc;
+    }
+    rc = fence_lane_bits(kv, ino, gen, 1ULL << lane, epoch_lane_upd,
+                         &new_epoch, it, &n, k_ln, v_ln);
+    if (rc != EFS_OK)
+        return rc;
+    rc = truncate_lane_range_del(kv, ino, gen, lane, size, tail_ci, has_tail,
+                                 it, del_keys, &n,
+                                 (uint32_t)(sizeof(it) / sizeof(it[0])));
+    if (rc != EFS_OK)
+        return rc;
+    if (n == 0)
+        return EFS_OK;
     return efs_kv_batch(kv, it, n);
 }
 
@@ -2560,9 +2672,11 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     if (t->size > 0 && (t->size % EFS_MIN_CHUNK_SIZE) != 0) {
         tail_ci = (uint32_t)(t->size / EFS_MIN_CHUNK_SIZE);
         has_tail = t->tail != NULL;
-        if (!has_tail)
+        if (!has_tail && !t->tail_external)
             return EFS_ERR_INVAL;
-        if (t->tail->chunk_index != tail_ci)
+        if (has_tail && t->tail->chunk_index != tail_ci)
+            return EFS_ERR_INVAL;
+        if (t->tail_external && t->tail != NULL)
             return EFS_ERR_INVAL;
     }
     new_epoch = row.content_epoch + 1;
@@ -2574,7 +2688,7 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     memset(k_ln, 0, sizeof(k_ln));
     memset(v_ln, 0, sizeof(v_ln));
     for (i = 0; i < EFS_META_LANES; i++) {
-        if ((row.active_lanes & (1ULL << i)) == 0)
+        if ((row.active_lanes & t->lane_mask & (1ULL << i)) == 0)
             continue;
         rc = fence_lane_bits(kv, ino, row.generation, 1ULL << i, epoch_lane_upd,
                              &new_epoch, it, &n, k_ln, v_ln);
@@ -2586,10 +2700,12 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
         if (rc != EFS_OK)
             return rc;
     }
-    rc = truncate_publish_tail(kv, &row, now, t->tail, it, &n,
-                               TRUNC_IT_CAP, k_tail, v_tail, k_ln, v_ln);
-    if (rc != EFS_OK)
-        return rc;
+    if (!t->tail_external) {
+        rc = truncate_publish_tail(kv, &row, now, t->tail, it, &n,
+                                   TRUNC_IT_CAP, k_tail, v_tail, k_ln, v_ln);
+        if (rc != EFS_OK)
+            return rc;
+    }
     if (t->tail)
         touch_inode = 1;
     pack_inode(v_ino, &row);
@@ -2805,9 +2921,15 @@ static int collect_phys_eof(struct efs_kv *kv, const struct efs_meta_row *row,
     return EFS_OK;
 }
 
+/* Reservation records accumulate while any reservation stays open (a killed
+ * appender strands its OPEN records, and DONE records behind them are kept
+ * until nopen reaches 0), so the scan grows: the old fixed 64-cap NOMEM'd
+ * every resolve/report for the inode, which failed the client's whole
+ * report batch and left the rec dirty — poisoning every later sync report
+ * (the direct-io/symlink EIO window in the posix gate). */
 struct rsv_scan {
-    struct append_rsv r[64];
-    uint32_t n;
+    struct append_rsv *r;
+    uint32_t n, cap;
     int rc;
 };
 
@@ -2818,9 +2940,16 @@ static int rsv_scan_cb(void *user, const uint8_t *key, uint32_t klen,
 
     (void)key;
     (void)klen;
-    if (s->n >= 64) {
-        s->rc = EFS_ERR_NOMEM;
-        return 1;
+    if (s->n >= s->cap) {
+        uint32_t ncap = s->cap ? s->cap * 2 : 64;
+        struct append_rsv *nr = realloc(s->r, (size_t)ncap * sizeof(*nr));
+
+        if (!nr) {
+            s->rc = EFS_ERR_NOMEM;
+            return 1;
+        }
+        s->r = nr;
+        s->cap = ncap;
     }
     s->rc = unpack_append_rsv(val, vlen, &s->r[s->n]);
     if (s->rc != EFS_OK)
@@ -2981,11 +3110,10 @@ int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off
     uint8_t v_cur[APPEND_CUR_VAL], v_rsv[APPEND_RSV_VAL], v_ino[INO_VAL];
     uint8_t k_ln[EFS_META_LANES][EFS_KV_KEY_MAX];
     uint8_t v_ln[EFS_META_LANES][LANE_VAL];
-    uint8_t del_keys[64][EFS_KV_KEY_MAX];
-    uint32_t del_kl[64];
-    struct efs_kv_item it[EFS_META_LANES + 64 + 4];
+    uint8_t (*del_keys)[EFS_KV_KEY_MAX] = NULL;
+    uint32_t *del_kl = NULL;
+    struct efs_kv_item *it = NULL;
     uint32_t kc = 0, kr = 0, ki = 0, n = 0, i;
-    uint64_t orig_off[64];
     int rc, hole, progressed = 1;
 
     if (!kv || ino == 0)
@@ -3033,28 +3161,37 @@ int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off
     if (hole)
         row.base_size = max_u64(row.base_size, rsv.off + rsv.len);
     rc = load_rsvs(kv, ino, row.generation, &scan);
-    if (rc != EFS_OK)
+    if (rc != EFS_OK) {
+        free(scan.r);
         return rc;
+    }
     for (i = 0; i < scan.n; i++) {
-        orig_off[i] = scan.r[i].off;
         if (scan.r[i].off == off)
             scan.r[i].state = APPEND_DONE;
     }
     while (progressed) {
         progressed = 0;
         for (i = 0; i < scan.n; i++) {
-            if (scan.r[i].state == APPEND_DONE && scan.r[i].off == cur.frontier) {
+            if (scan.r[i].state == APPEND_DONE &&
+                scan.r[i].off == cur.frontier) {
                 cur.frontier = scan.r[i].off + scan.r[i].len;
                 progressed = 1;
                 scan.r[i].state = 0xff;
             }
         }
     }
-    memset(it, 0, sizeof(it));
+    it = malloc(((size_t)scan.n + EFS_META_LANES + 4) * sizeof(*it));
+    del_keys = malloc((size_t)(scan.n ? scan.n : 1) * sizeof(*del_keys));
+    del_kl = malloc((size_t)(scan.n ? scan.n : 1) * sizeof(*del_kl));
+    if (!it || !del_keys || !del_kl) {
+        rc = EFS_ERR_NOMEM;
+        goto out;
+    }
+    memset(it, 0, ((size_t)scan.n + EFS_META_LANES + 4) * sizeof(*it));
     rc = efs_kv_key_append_cur(efs_kv_inode_shard(ino), ino, row.generation,
                                k_cur, &kc);
     if (rc != EFS_OK)
-        return rc;
+        goto out;
     if (cur.nopen == 0) {
         row.base_size = max_u64(row.base_size, cur.frontier);
         it[n].op = EFS_KV_DEL;
@@ -3069,10 +3206,10 @@ int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off
         }
         for (i = 0; i < scan.n; i++) {
             rc = efs_kv_key_append_rsv(efs_kv_inode_shard(ino), ino,
-                                       row.generation, orig_off[i],
+                                       row.generation, scan.r[i].off,
                                        del_keys[i], &del_kl[i]);
             if (rc != EFS_OK)
-                return rc;
+                goto out;
             it[n].op = EFS_KV_DEL;
             it[n].key = del_keys[i];
             it[n].klen = del_kl[i];
@@ -3081,7 +3218,7 @@ int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off
         rc = fence_lane_bits(kv, ino, row.generation, row.active_lanes,
                              append_bar_clr, NULL, it, &n, k_ln, v_ln);
         if (rc != EFS_OK)
-            return rc;
+            goto out;
     } else {
         pack_append_rsv(v_rsv, &rsv);
         it[n].op = EFS_KV_PUT;
@@ -3101,14 +3238,20 @@ int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off
     pack_inode(v_ino, &row);
     rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, k_ino, &ki);
     if (rc != EFS_OK)
-        return rc;
+        goto out;
     it[n].op = EFS_KV_PUT;
     it[n].key = k_ino;
     it[n].klen = ki;
     it[n].val = v_ino;
     it[n].vlen = INO_VAL;
     n++;
-    return efs_kv_batch(kv, it, n);
+    rc = efs_kv_batch(kv, it, n);
+out:
+    free(scan.r);
+    free(del_keys);
+    free(del_kl);
+    free(it);
+    return rc;
 }
 
 int efs_meta_apply_append_state(struct efs_kv *kv, efs_ino_t ino,
@@ -3152,8 +3295,10 @@ int efs_meta_apply_append_open(struct efs_kv *kv, efs_ino_t ino, uint64_t *offs,
     if (rc != EFS_OK)
         return rc;
     rc = load_rsvs(kv, ino, row.generation, &scan);
-    if (rc != EFS_OK)
+    if (rc != EFS_OK) {
+        free(scan.r);
         return rc;
+    }
     for (i = 0; i < scan.n; i++) {
         if (scan.r[i].state != APPEND_OPEN)
             continue;
@@ -3164,6 +3309,7 @@ int efs_meta_apply_append_open(struct efs_kv *kv, efs_ino_t ino, uint64_t *offs,
         outn++;
     }
     *n = (cap && outn > cap) ? cap : outn;
+    free(scan.r);
     return EFS_OK;
 }
 
@@ -3240,6 +3386,43 @@ int efs_meta_apply_append_drop_session(struct efs_kv *kv, uint32_t shard,
         if (!acc.full)
             return EFS_OK;
     }
+}
+
+/* Last-close edge: a reservation still OPEN when the inode's final lease
+ * closes can never complete (the writer that reserved it is gone — killed
+ * mid-append), so resolve them all as holes and let the append frontier and
+ * base_size settle (§7.3 ABORTED_HOLE). Without this a killed appender
+ * strands OPEN records forever: the frontier wedges and the records
+ * accumulate without bound. Published data is unaffected either way — the
+ * chunk CAS already landed; this is frontier bookkeeping. */
+int efs_meta_apply_append_drain_file(struct efs_kv *kv, efs_ino_t ino)
+{
+    struct efs_meta_row row;
+    struct rsv_scan scan;
+    uint32_t i;
+    int rc, rc2;
+
+    if (!kv || ino == 0)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    rc = load_rsvs(kv, ino, row.generation, &scan);
+    if (rc != EFS_OK) {
+        free(scan.r);
+        return rc;
+    }
+    rc = EFS_OK;
+    for (i = 0; i < scan.n; i++) {
+        if (scan.r[i].state != APPEND_OPEN)
+            continue;
+        rc2 = efs_meta_apply_append_resolve(kv, ino, scan.r[i].off,
+                                            EFS_META_APPEND_ABORTED_HOLE);
+        if (rc2 != EFS_OK && rc2 != EFS_ERR_NOT_FOUND && rc == EFS_OK)
+            rc = rc2;
+    }
+    free(scan.r);
+    return rc;
 }
 
 int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_index,

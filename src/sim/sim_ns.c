@@ -742,14 +742,16 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
                         struct efs_txn_parts *p)
 {
     struct efs_meta_dentry src, exist;
-    struct efs_meta_row row, sprow, dprow;
-    struct efs_kv *skv, *dkv, *ikv;
+    struct efs_meta_row row, sprow, dprow, nrow;
+    struct efs_kv *skv, *dkv, *ikv, *nkv;
     uint8_t k_dent[EFS_KV_KEY_MAX], v_dent[EFS_META_DENT_BYTES];
     uint8_t k_ino[EFS_KV_KEY_MAX], v_ino[EFS_META_INO_BYTES];
-    uint32_t kd = 0, ki = 0, dsh, ish, ssh;
-    uint64_t iver = 0, dver = 0;
+    uint8_t k_nino[EFS_KV_KEY_MAX], v_nino[EFS_META_INO_BYTES];
+    uint32_t kd = 0, ki = 0, dsh, ish, ssh, nsh = 0, kn = 0;
+    uint64_t iver = 0, dver = 0, nver = 0;
     struct ns_prep pr[NS_PREP_MAX];
     int n = 0, rc, is_dir;
+    int xist = 0, xdir = 0;
     uint8_t s_lane, d_lane;
 
     memset(p, 0, sizeof(*p));
@@ -793,9 +795,109 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
     rc = efs_kv_key_dentry(dsh, dst_parent, dst_name, k_dent, &kd);
     if (rc != EFS_OK)
         return rc;
-    rc = dent_absent(dkv, sim, k_dent, kd);
-    if (rc != EFS_OK)
-        return rc;
+    /* Rename-over-existing: the PUT at k_dent overwrites the dest dentry;
+     * the dest INODE ROW is retired below (nlink-- / DEL; empty-dir rules
+     * for a dir dest). Same (ino,gen) = hardlink self-rename: no dest. */
+    {
+        uint8_t xb[EFS_META_DENT_BYTES];
+        uint32_t xn = sizeof(xb);
+        int xrc = efs_txn_read(dkv, k_dent, kd, sim_txn_coord, sim, xb, &xn);
+        if (xrc == EFS_OK) {
+            struct efs_meta_dentry xdent;
+            int held;
+            if (efs_meta_unpack_dentry(xb, xn, &xdent) != EFS_OK)
+                return EFS_ERR_PROTO;
+            if (xdent.ino != row.ino || xdent.generation != row.generation) {
+                xist = 1;
+                xdir = S_ISDIR(xdent.type & S_IFMT) ? 1 : 0;
+                if (is_dir != xdir)
+                    return EFS_ERR_INVAL;
+                nsh = efs_kv_inode_shard(xdent.ino);
+                rc = load_row(sim, xdent.ino, &nrow);
+                if (rc != EFS_OK)
+                    return rc;
+                rc = sim_txn_read_kv(sim, nsh, &nkv);
+                if (rc != EFS_OK)
+                    return rc;
+                rc = efs_kv_key_inode(nsh, nrow.ino, k_nino, &kn);
+                if (rc != EFS_OK)
+                    return rc;
+                rc = efs_txn_ver_get(nkv, k_nino, kn, &nver);
+                if (rc != EFS_OK)
+                    return rc;
+                rc = sim_txn_parts_add(p, nsh);
+                if (rc != EFS_OK)
+                    return rc;
+                if (xdir) {
+                    if (nrow.layout == EFS_META_LAYOUT_SPLITTING)
+                        return EFS_ERR_BUSY;
+                    if (nrow.layout != EFS_META_LAYOUT_LOCAL)
+                        return EFS_ERR_INVAL;
+                    if (nrow.nlink > 2)
+                        return EFS_ERR_NOT_EMPTY;
+                    rc = shard_empty(nkv, nsh, nrow.ino);
+                    if (rc != EFS_OK)
+                        return rc;
+                    held = efs_lease_any(nkv, nrow.ino, nrow.generation);
+                    if (held < 0)
+                        return held;
+                    if (held)
+                        return EFS_ERR_BUSY;
+                    /* the replaced subdir's parent loses one link */
+                    if (src_parent == dst_parent) {
+                        if (sprow.nlink < 3)
+                            return EFS_ERR_PROTO;
+                        sprow.nlink--;
+                    } else {
+                        if (dprow.nlink < 3)
+                            return EFS_ERR_PROTO;
+                        dprow.nlink--;
+                    }
+                    rc = prep_add(pr, &n, nsh, EFS_TXN_EXCL, k_nino, kn, nver,
+                                  EFS_TXN_DEL, NULL, 0, NULL);
+                    if (rc == EFS_OK)
+                        rc = dseq_guard(nkv, nsh, nrow.ino, 0, pr, &n, p);
+                    if (rc != EFS_OK)
+                        return rc;
+                } else if (nrow.nlink <= 1) {
+                    held = efs_lease_any(nkv, nrow.ino, nrow.generation);
+                    if (held < 0)
+                        return held;
+                    if (held) {
+                        nrow.nlink = 0;
+                        if (nrow.base_ctime < sim->now)
+                            nrow.base_ctime = sim->now;
+                        rc = efs_meta_pack_inode(&nrow, v_nino,
+                                                 sizeof(v_nino));
+                        if (rc != EFS_OK)
+                            return rc;
+                        rc = prep_add(pr, &n, nsh, EFS_TXN_EXCL, k_nino, kn,
+                                      nver, EFS_TXN_PUT, v_nino,
+                                      EFS_META_INO_BYTES, NULL);
+                    } else {
+                        rc = prep_add(pr, &n, nsh, EFS_TXN_EXCL, k_nino, kn,
+                                      nver, EFS_TXN_DEL, NULL, 0, NULL);
+                    }
+                    if (rc != EFS_OK)
+                        return rc;
+                } else {
+                    nrow.nlink--;
+                    if (nrow.base_ctime < sim->now)
+                        nrow.base_ctime = sim->now;
+                    rc = efs_meta_pack_inode(&nrow, v_nino, sizeof(v_nino));
+                    if (rc != EFS_OK)
+                        return rc;
+                    rc = prep_add(pr, &n, nsh, EFS_TXN_EXCL, k_nino, kn, nver,
+                                  EFS_TXN_PUT, v_nino, EFS_META_INO_BYTES,
+                                  NULL);
+                    if (rc != EFS_OK)
+                        return rc;
+                }
+            }
+        } else if (xrc != EFS_ERR_NOT_FOUND) {
+            return xrc;
+        }
+    }
     rc = efs_txn_ver_get(dkv, k_dent, kd, &dver);
     if (rc != EFS_OK)
         return rc;

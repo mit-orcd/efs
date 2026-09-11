@@ -55,6 +55,8 @@ int efs_lock_owner_blocks(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
 int efs_lock_drop_session(struct efs_kv *kv, uint32_t shard,
                           const uint8_t uuid[EFS_OPID_UUID_LEN],
                           uint32_t epoch);
+/* Drop every lock record for one (ino, gen) — the last-close release. */
+int efs_lock_drop_file(struct efs_kv *kv, efs_ino_t ino, uint64_t gen);
 int efs_lock_count(struct efs_kv *kv, efs_ino_t ino, uint64_t gen);
 
 #endif

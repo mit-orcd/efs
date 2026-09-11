@@ -213,6 +213,14 @@ int efs_client_rpc_report_dirty_on_shard(efs_export_id_t export_id,
                                          const struct efs_ino_size_rec *irecs,
                                          uint32_t ino_count, int sync,
                                          uint32_t shard);
+/* Raft mode: ONE batch with every rec, sent to a voter of ALL groups
+ * (a "dual-host"). A batch's recs span inode groups and lane groups, and
+ * only a node voting in every group can apply the whole batch locally. */
+int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
+                                     const struct efs_chunk_rec *recs,
+                                     uint32_t count,
+                                     const struct efs_ino_size_rec *irecs,
+                                     uint32_t ino_count, int sync);
 /* Phase 2b: snapshot the dirty set and report it to the primary (the flush
  * mechanism that replaces the blob flush). sync=1 = fsync barrier. */
 int efs_client_report_dirty(int sync);

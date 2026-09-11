@@ -329,6 +329,65 @@ struct drop_acc {
     int full;
 };
 
+static int drop_all_cb(void *user, const uint8_t *key, uint32_t klen,
+                       const uint8_t *val, uint32_t vlen)
+{
+    struct drop_acc *a = user;
+
+    (void)val;
+    (void)vlen;
+    if (klen < LOCK_KLEN)
+        return 0;
+    if (a->n >= DROP_MAX) {
+        a->full = 1;
+        return 1;
+    }
+    memcpy(a->keys[a->n], key, klen);
+    a->klen[a->n] = klen;
+    a->n++;
+    return 0;
+}
+
+/* Every lock record for one (ino, gen), any owner, both domains. The kernel
+ * never relays a flock UNLOCK on close, so the last-close lease edge is the
+ * only release signal for close-to-release semantics (§7.6). */
+int efs_lock_drop_file(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
+{
+    uint8_t pref[EFS_KV_KEY_MAX];
+    uint32_t plen = 0;
+    int rc;
+
+    if (!kv || ino == 0)
+        return EFS_ERR_INVAL;
+    rc = efs_kv_key_lock_file_prefix(efs_kv_inode_shard(ino), ino, gen, pref,
+                                     &plen);
+    if (rc != EFS_OK)
+        return rc;
+    for (;;) {
+        struct drop_acc acc;
+        struct efs_kv_item it[DROP_MAX];
+        int i;
+
+        memset(&acc, 0, sizeof(acc));
+        rc = efs_kv_scan_prefix(kv, pref, plen, drop_all_cb, &acc);
+        if (rc != EFS_OK && rc != 1)
+            return rc;
+        if (acc.n == 0)
+            return EFS_OK;
+        memset(it, 0, sizeof(it));
+        for (i = 0; i < acc.n; i++) {
+            it[i].op = EFS_KV_DEL;
+            it[i].key = acc.keys[i];
+            it[i].klen = acc.klen[i];
+        }
+        rc = efs_kv_batch(kv, it, (uint32_t)acc.n);
+        if (rc != EFS_OK)
+            return rc;
+        if (!acc.full)
+            return EFS_OK;
+    }
+}
+
 static int drop_cb(void *user, const uint8_t *key, uint32_t klen,
                    const uint8_t *val, uint32_t vlen)
 {

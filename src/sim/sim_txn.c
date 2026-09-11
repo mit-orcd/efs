@@ -161,7 +161,7 @@ int sim_txn_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
     uint32_t shard, off;
     int rc = EFS_ERR_PROTO, dec, kind, op;
     uint64_t expected;
-    uint8_t klen;
+    uint32_t klen;
     const uint8_t *key, *val;
     uint32_t vlen;
     struct efs_txn_parts p;
@@ -181,7 +181,7 @@ int sim_txn_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         if (p.n == 0 || p.n > EFS_TXN_MAX_PART)
             break;
         off = 19;
-        if (clen < off + (uint32_t)p.n * 4u + 1u)
+        if (clen < off + (uint32_t)p.n * 4u + 2u)
             break;
         {
             uint8_t i;
@@ -189,8 +189,11 @@ int sim_txn_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
                 p.shard[i] = rd32(cmd + off + (uint32_t)i * 4u);
         }
         off += (uint32_t)p.n * 4u;
-        klen = cmd[off++];
-        if (clen < off + klen)
+        /* 2-byte klen, same as raft_host apply_txn_cmd (dentry keys with
+         * 255-char names are 266 bytes). */
+        klen = ((uint32_t)cmd[off] << 8) | cmd[off + 1];
+        off += 2;
+        if (klen > EFS_KV_KEY_MAX || clen < off + klen)
             break;
         key = cmd + off;
         off += klen;
@@ -268,6 +271,7 @@ static uint32_t pack_prep(uint8_t *out, int kind, const struct efs_txid *t,
         wr32(out + n, p->shard[i]);
         n += 4;
     }
+    out[n++] = (uint8_t)(klen >> 8);
     out[n++] = (uint8_t)klen;
     memcpy(out + n, key, klen);
     n += klen;

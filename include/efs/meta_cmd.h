@@ -44,5 +44,14 @@
 #define EFS_MD_CMD_APPEND_RSV 16 /* matches sim SIM_CMD_APPEND_RSV */
 #define EFS_MD_CMD_APPEND_RES 17 /* matches sim SIM_CMD_APPEND_RES */
 #define EFS_MD_CMD_MKFS 18 /* [now:8][salt:8] — idempotent; salt absent = 0 */
+/* Cross-group lane support (a group's log only writes its own shards' keys,
+ * so the first publish to a lane whose shard lives on ANOTHER group cannot
+ * ride the publish entry's inode-row touch — see efs_meta_apply_publish).
+ * ACTIVATE_LANE runs on the INODE group and only sets the active_lanes bit;
+ * LANE_FENCE runs on the LANE's group and carries one lane's share of a
+ * truncate (epoch fence + range delete). Both idempotent. */
+#define EFS_MD_CMD_ACTIVATE_LANE 19 /* [ino:8][lane:1] */
+#define EFS_MD_CMD_LANE_FENCE    20 /* [ino:8][gen:8][lane:1][epoch:8][size:8]
+                                     * [tail_ci:4][has_tail:1] */
 
 #endif

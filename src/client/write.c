@@ -630,7 +630,24 @@ int efs_client_report_dirty(int sync)
     int rc = EFS_OK;
     uint32_t bits = g_client.export.root.shard_bits;
     uint32_t sc = g_client.export.root.shard_count;
-    if (bits == 0 || sc <= 1) {
+    if (efs_client_raft_mode()) {
+        /* Raft mode: ONE batch to a dual-host voter. The legacy per-shard
+         * split uses efs_export_chunk_shard_of, which does NOT match the
+         * KV lane placement (efs_kv_lane_shard) — a rec routed by it can
+         * land on a node that doesn't host the lane's group and poison
+         * the whole batch (NOT_PRIMARY loop). */
+        rc = EFS_ERR_NET;
+        for (int attempt = 0; attempt < 4; attempt++) {
+            rc = efs_client_rpc_report_dirty_raft(g_client.export_id, crecs,
+                                                  cn, irecs, in, sync);
+            if (rc == EFS_OK)
+                break;
+            if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM &&
+                rc != EFS_ERR_NOT_PRIMARY && rc != EFS_ERR_BUSY)
+                break;
+            usleep(50000u << attempt);
+        }
+    } else if (bits == 0 || sc <= 1) {
         rc = EFS_ERR_NET;
         for (int attempt = 0; attempt < 4; attempt++) {
             rc = efs_client_rpc_report_dirty(g_client.export_id, crecs, cn,

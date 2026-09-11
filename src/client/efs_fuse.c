@@ -1085,9 +1085,9 @@ static void fill_stat_from_inode(struct stat *stbuf, const struct efs_inode *ino
     stbuf->st_mtim.tv_sec = (time_t)ino->mtime;
     stbuf->st_mtim.tv_nsec = (long)ino->mtime_nsec;
     stbuf->st_atim.tv_sec = (time_t)ino->atime;
-    stbuf->st_atim.tv_nsec = 0;
+    stbuf->st_atim.tv_nsec = (long)ino->atime_nsec;
     stbuf->st_ctim.tv_sec = (time_t)ino->ctime;
-    stbuf->st_ctim.tv_nsec = 0;
+    stbuf->st_ctim.tv_nsec = (long)ino->ctime_nsec;
 }
 
 static int check_chown_perm(const struct efs_inode *ino, uid_t uid, gid_t gid)
@@ -1361,6 +1361,68 @@ static int efs_fuse_access(const char *path, int mask)
 static int efs_fuse_truncate(const char *path, off_t size,
                              struct fuse_file_info *fi);
 
+/* Per-ino open-description count. The server HOLD (open lease) is an edge
+ * trigger: acquired at this client's first open of the ino, released at the
+ * last close (one lease per (session, inode)). The kernel never relays a
+ * flock UNLOCK on close, so the last-close lease edge is also what drops
+ * the inode's server-side locks. */
+static pthread_mutex_t g_open_mu = PTHREAD_MUTEX_INITIALIZER;
+struct efs_open_ref {
+    efs_ino_t ino;
+    uint64_t n;
+    struct efs_open_ref *next;
+};
+static struct efs_open_ref *g_open_refs;
+
+/* Returns 1 when this is the first open (caller must acquire the HOLD). */
+static int efs_open_note(efs_ino_t ino)
+{
+    struct efs_open_ref *r;
+    int first = 0;
+
+    pthread_mutex_lock(&g_open_mu);
+    for (r = g_open_refs; r; r = r->next)
+        if (r->ino == ino)
+            break;
+    if (!r) {
+        r = calloc(1, sizeof(*r));
+        if (r) {
+            r->ino = ino;
+            r->next = g_open_refs;
+            g_open_refs = r;
+        }
+    }
+    if (r) {
+        first = (r->n == 0);
+        r->n++;
+    }
+    pthread_mutex_unlock(&g_open_mu);
+    return first;
+}
+
+/* Returns 1 when this was the last close (caller must release the HOLD). */
+static int efs_close_note(efs_ino_t ino)
+{
+    struct efs_open_ref **pp, *r;
+    int last = 0;
+
+    pthread_mutex_lock(&g_open_mu);
+    for (pp = &g_open_refs; (r = *pp); pp = &r->next) {
+        if (r->ino == ino) {
+            if (r->n > 0)
+                r->n--;
+            if (r->n == 0) {
+                *pp = r->next;
+                free(r);
+                last = 1;
+            }
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_open_mu);
+    return last;
+}
+
 static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
 {
     struct efs_inode parent;
@@ -1428,8 +1490,9 @@ static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
          * network). */
         if (fi->flags & O_DIRECT)
             fi->direct_io = 1;
-        (void)efs_client_rpc_hold(g_client.export_id, ino.ino, 1,
-                                  g_client.flock_token);
+        if (efs_open_note(ino.ino))
+            (void)efs_client_rpc_hold(g_client.export_id, ino.ino, 1,
+                                      g_client.flock_token);
     }
     return 0;
 }
@@ -2279,6 +2342,7 @@ static int efs_fuse_create(const char *path, mode_t mode, struct fuse_file_info 
         return wx;
 
     struct fuse_context *ctx = fuse_get_context();
+    int noted = 0;
     efs_ino_t ino = efs_client_create_ex(parent.ino, name, S_IFREG | mode,
                                          ctx->uid, ctx->gid,
                                          fi ? EFS_CREATE_F_HOLD : 0);
@@ -2303,8 +2367,10 @@ static int efs_fuse_create(const char *path, mode_t mode, struct fuse_file_info 
                 ino = exist.ino;
                 if (fi->flags & O_TRUNC)
                     (void)efs_client_truncate(ino, 0);
-                (void)efs_client_rpc_hold(g_client.export_id, ino, 1,
-                                          g_client.flock_token);
+                noted = 1;
+                if (efs_open_note(ino))
+                    (void)efs_client_rpc_hold(g_client.export_id, ino, 1,
+                                              g_client.flock_token);
             } else {
                 if (e != -EEXIST)
                     fprintf(stderr, "create %s failed (%s)\n", path,
@@ -2322,6 +2388,11 @@ static int efs_fuse_create(const char *path, mode_t mode, struct fuse_file_info 
         fi->fh = ino;
         if (fi->flags & O_DIRECT)
             fi->direct_io = 1;
+        /* The HOLD rode piggyback on CREATE (EFS_CREATE_F_HOLD) for a fresh
+         * ino; the EEXIST fallback above noted + held explicitly. Register
+         * the description either way so release edge-triggers. */
+        if (!noted)
+            (void)efs_open_note(ino);
     }
     return 0;
 }
@@ -2837,7 +2908,7 @@ static int efs_fuse_release(const char *path, struct fuse_file_info *fi)
     if (fi && fi->fh)
         (void)efs_client_pack_seal((efs_ino_t)fi->fh);
     efs_client_note_meta_change(0);
-    if (fi && fi->fh)
+    if (fi && fi->fh && efs_close_note((efs_ino_t)fi->fh))
         (void)efs_client_rpc_hold(g_client.export_id, (efs_ino_t)fi->fh, 0,
                                   g_client.flock_token);
     return 0;
@@ -3174,6 +3245,9 @@ static int efs_fuse_flock(const char *path, struct fuse_file_info *fi, int op)
     uint64_t lk = fi ? fi->lock_owner : 0;
     uint64_t owner = g_client.flock_token ^
                      (lk ? lk : ((uint64_t)(uintptr_t)fi << 8));
+    if (getenv("EFS_FLOCK_DBG"))
+        fprintf(stderr, "flock: ino=%llu op=%u owner=%llu\n",
+                (unsigned long long)ino, op, (unsigned long long)owner);
     rc = efs_client_rpc_flock(g_client.export_id, ino, (uint32_t)op, owner);
     if (rc == EFS_ERR_BUSY)
         return -EAGAIN;

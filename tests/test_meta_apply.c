@@ -1333,6 +1333,7 @@ static void test_truncate_range_del(void)
 
     memset(&t, 0, sizeof(t));
     t.size = 0;
+    t.lane_mask = ~0ULL; /* single-group test KV holds every lane */
     CHECK(efs_meta_apply_truncate(kv, ino, T0 + 10, &t) == EFS_OK, "to zero");
     CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK && r.base_size == 0 &&
               r.content_epoch == 1,
@@ -1363,6 +1364,7 @@ static void test_truncate_range_del(void)
     pub(kv, ino, 64, 2ULL * EFS_MIN_CHUNK_SIZE, 0xC2, 0, T0 + 2, "pub64b");
     memset(&t, 0, sizeof(t));
     t.size = EFS_MIN_CHUNK_SIZE;
+    t.lane_mask = ~0ULL;
     CHECK(efs_meta_apply_truncate(kv, ino, T0 + 12, &t) == EFS_OK, "aligned");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK, "prefix kept");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 64, &got) == EFS_ERR_NOT_FOUND,
@@ -1387,6 +1389,7 @@ static void test_truncate_range_del(void)
     memset(&t, 0, sizeof(t));
     t.size = 4096;
     t.tail = &tail;
+    t.lane_mask = ~0ULL;
     CHECK(efs_meta_apply_truncate(kv, ino, T0 + 13, &t) == EFS_OK, "partial");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
               got.generation == 0xD2,
@@ -1408,6 +1411,7 @@ static void test_truncate_range_del(void)
     pub(kv, ino, 65, 66ULL * EFS_MIN_CHUNK_SIZE, 0xE4, 0, T0 + 4, "pub65m");
     memset(&t, 0, sizeof(t));
     t.size = 2ULL * EFS_MIN_CHUNK_SIZE;
+    t.lane_mask = ~0ULL;
     CHECK(efs_meta_apply_truncate(kv, ino, T0 + 14, &t) == EFS_OK, "multi-lane");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK, "m c0 kept");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 1, &got) == EFS_OK, "m c1 kept");
@@ -1727,6 +1731,92 @@ static void test_symlink(void)
     efs_kv_mem_free(kv);
 }
 
+/* Cross-group lane machinery (a group's log only writes its own shards'
+ * keys): ACTIVATE_LANE on the inode group, LANE_FENCE on the lane's group,
+ * and lane-local publishes that never touch the inode row. One KV here —
+ * the group split is the host's routing concern; what is tested is that the
+ * three applies compose and are idempotent. */
+static void test_cross_group_lane(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t ino = 0;
+    struct efs_meta_row r;
+    struct efs_meta_chunk got, ch;
+    struct efs_meta_pub p;
+    uint8_t lane;
+    uint32_t ci;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "x", &ino) == EFS_OK, "create");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row");
+    CHECK(r.active_lanes == 0, "no lanes yet");
+
+    /* ACTIVATE_LANE: sets the bit, idempotent, NOT_FOUND is a no-op. */
+    lane = 1;
+    ci = lane; /* first chunk on lane 1 */
+    CHECK(efs_meta_apply_activate_lane(kv, ino, lane) == EFS_OK, "activate");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK &&
+              (r.active_lanes & (1ULL << lane)) != 0,
+          "bit set");
+    CHECK(efs_meta_apply_activate_lane(kv, ino, lane) == EFS_OK, "replay");
+    CHECK(efs_meta_apply_activate_lane(kv, 999999, lane) == EFS_OK,
+          "deleted ino no-op");
+
+    /* Lane-local publish: no row read, no row touch — the bitmap bit came
+     * from ACTIVATE_LANE, and base_size must not move for a lane that is
+     * not the inode's own shard. */
+    fill_ch(&ch);
+    memset(&p, 0, sizeof(p));
+    p.ino = ino;
+    p.chunk_index = ci;
+    p.new_size = 2ULL * EFS_MIN_CHUNK_SIZE;
+    p.expected_gen = 0;
+    p.candidate_gen = 0xF1;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
+    p.content_epoch = 0;
+    p.now = T0 + 1;
+    p.ch = ch;
+    p.lane_local = 1;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_INVAL, "gen 0 inval");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row2");
+    p.inode_gen = r.generation;
+    p.mtime_gen = r.mtime_gen;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "lane-local pub");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, ci, &got) == EFS_OK &&
+              got.generation == 0xF1,
+          "chunk visible");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK &&
+              r.base_size == 0,
+          "base_size untouched");
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "lane-local replay");
+
+    /* LANE_FENCE (truncate to 0's lane-1 share): deletes the lane's chunks,
+     * fences the epoch, clamps max_end; idempotent replay keeps a later
+     * publish visible. */
+    CHECK(efs_meta_apply_lane_fence(kv, ino, r.generation, lane, 1, 0, 0, 0)
+              == EFS_OK,
+          "lane fence");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, ci, &got) == EFS_ERR_NOT_FOUND,
+          "lane chunk deleted");
+    p.candidate_gen = 0xF2;
+    p.expected_gen = 0;
+    p.content_epoch = 0; /* pre-fence epoch: must be rejected by the lane */
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE, "fence rejects");
+    p.content_epoch = 1;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "post-fence pub");
+    CHECK(efs_meta_apply_lane_fence(kv, ino, r.generation, lane, 1, 0, 0, 0)
+              == EFS_OK,
+          "fence replay");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, ci, &got) == EFS_OK &&
+              got.generation == 0xF2,
+          "replay kept newer pub");
+
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     test_create_lookup_unlink();
@@ -1748,6 +1838,7 @@ int main(void)
     test_stat_dir_hashed();
     test_utimens_fence();
     test_truncate_range_del();
+    test_cross_group_lane();
     test_append_reserve();
     test_link_nlink();
     test_rmdir_rename();

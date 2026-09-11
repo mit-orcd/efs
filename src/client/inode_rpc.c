@@ -213,6 +213,33 @@ static struct efs_conn *raft_voter_conn(uint32_t shard,
     return rpc_primary_conn(nid_out);
 }
 
+/* A voter of EVERY metadata group. Reports carry recs for many inos whose
+ * inode groups and lane groups differ, and only a dual-host can apply the
+ * whole batch locally (the server forwards otherwise — this just saves the
+ * hop). Whenever both groups are writable some dual-host is up: with the
+ * compiled-in 4-node mapping (voters {1,2,3} and {2,3,4}) two quorums
+ * always share a live node. Falls back to any group-0 voter when no
+ * dual-host is reachable — the server side forwards from there. */
+static struct efs_conn *raft_dual_voter_conn(efs_node_id_t *nid_out)
+{
+    int n = (int)g_client.node_count;
+    uint32_t dual = raft_group_voters(EFS_RAFT_GROUP_SHARD, n) &
+                    raft_group_voters(EFS_RAFT_GROUP_SHARD2, n);
+    for (int rid = 0; rid < n && rid < EFS_RAFT_MAX_PEERS; rid++) {
+        if (!(dual & (1u << rid)))
+            continue;
+        efs_node_id_t id = (efs_node_id_t)(rid + 1);
+        if (efs_client_node_is_down(id))
+            continue;
+        struct efs_conn *conn = efs_client_conn_get(id);
+        if (conn) {
+            *nid_out = id;
+            return conn;
+        }
+    }
+    return raft_voter_conn(EFS_ROOT_INO, nid_out);
+}
+
 static struct efs_conn *rpc_owner_conn_shard(uint32_t shard,
                                              efs_node_id_t *nid_out)
 {
@@ -827,6 +854,92 @@ int efs_client_rpc_report_dirty_on_shard(efs_export_id_t export_id,
     int rc = rpc_send_recv_shard(shard, EFS_MSG_REPORT_CHUNKS, buf,
                                  (uint32_t)len, EFS_MSG_REPORT_CHUNKS_REPLY,
                                  &r, sizeof(r));
+    free(buf);
+    if (rc != EFS_OK)
+        return rc;
+    return rpc_status_to_efs(r.status);
+}
+
+/* rpc_send_recv_shard with the dual-host picker (raft mode reports). Same
+ * NOT_PRIMARY hint-following; BUSY backs off and retries. */
+static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
+                              uint8_t expect, void *reply, uint32_t reply_len)
+{
+    efs_node_id_t target = 0;
+    for (int attempt = 0; attempt < 16; attempt++) {
+        efs_node_id_t nid = 0;
+        struct efs_conn *conn;
+        if (target != 0) {
+            conn = efs_client_conn_get(target);
+            nid = target;
+        } else {
+            conn = raft_dual_voter_conn(&nid);
+        }
+        if (!conn)
+            return EFS_ERR_NET;
+        if (efs_conn_send_msg(conn, type, req, req_len) != 0) {
+            efs_client_conn_drop(nid, conn);
+            return EFS_ERR_NET;
+        }
+        uint8_t rtype = 0;
+        void *payload = NULL;
+        uint32_t plen = 0;
+        int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
+        if (rc != 0) {
+            efs_client_conn_drop(nid, conn);
+            return EFS_ERR_NET;
+        }
+        efs_client_conn_release(nid, conn);
+        if (rtype != expect || plen < reply_len) {
+            free(payload);
+            return EFS_ERR_PROTO;
+        }
+        memcpy(reply, payload, reply_len);
+        free(payload);
+        struct efs_msg_inode_reply *r = reply;
+        if (r->status == EFS_INODE_RPC_BUSY) {
+            unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
+            usleep((useconds_t)(50000ull << shift));
+            continue;
+        }
+        if (r->status != EFS_INODE_RPC_NOT_PRIMARY)
+            return EFS_OK;
+        if (r->primary_id == 0 || r->primary_id == nid)
+            return EFS_ERR_NOT_PRIMARY;
+        target = r->primary_id;
+    }
+    return EFS_ERR_NOT_PRIMARY;
+}
+
+int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
+                                     const struct efs_chunk_rec *recs,
+                                     uint32_t count,
+                                     const struct efs_ino_size_rec *irecs,
+                                     uint32_t ino_count, int sync)
+{
+    if (count == 0 && ino_count == 0 && !sync)
+        return EFS_OK;
+    size_t len = sizeof(struct efs_msg_report_chunks) +
+                 (size_t)count * sizeof(struct efs_chunk_rec) +
+                 (size_t)ino_count * sizeof(struct efs_ino_size_rec);
+    uint8_t *buf = malloc(len);
+    if (!buf)
+        return EFS_ERR_NOMEM;
+    struct efs_msg_report_chunks *hdr = (struct efs_msg_report_chunks *)buf;
+    hdr->export_id = export_id;
+    hdr->count = count;
+    hdr->sync = sync ? 1u : 0u;
+    hdr->ino_count = ino_count;
+    uint8_t *p = buf + sizeof(*hdr);
+    if (count) {
+        memcpy(p, recs, (size_t)count * sizeof(*recs));
+        p += (size_t)count * sizeof(*recs);
+    }
+    if (ino_count)
+        memcpy(p, irecs, (size_t)ino_count * sizeof(*irecs));
+    struct efs_msg_inode_reply r;
+    int rc = rpc_send_recv_dual(EFS_MSG_REPORT_CHUNKS, buf, (uint32_t)len,
+                                EFS_MSG_REPORT_CHUNKS_REPLY, &r, sizeof(r));
     free(buf);
     if (rc != EFS_OK)
         return rc;
