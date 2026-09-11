@@ -2523,8 +2523,8 @@ int server_raft_host_start(struct efsd_server *s)
     int n = EFS_MAX_NODES;
     int rc;
 
-    if (!env_on("EFS_MD_RAFT"))
-        return 0;
+    /* Step 11: the Raft+KV engine is the ONLY metadata path — the host
+     * starts unconditionally (EFS_MD_RAFT is gone). */
     if (!s || g_host)
         return EFS_ERR_INVAL;
     ns = getenv("EFS_MD_RAFT_N");

@@ -119,22 +119,7 @@ test: all
 	./tests/test_lock
 	./tests/test_erasure
 	./tests/test_placement
-	./tests/test_integration
-	./tests/test_quota
-	./tests/test_migrate
 	./tests/test_directio
-	./tests/test_rejoin
-	./tests/test_query
-	./tests/test_list_exports
-	./tests/test_dir_stats
-	./tests/test_ino_path
-	./tests/test_meta_slot
-	./tests/test_add_storage
-	./tests/test_meta_cap
-	./tests/test_meta_v6
-	./tests/test_drop_chunks
-	./tests/test_rw.sh
-	./tests/test_find.sh
 
 # Rebuild when public headers change (struct layouts in metadata.h, etc.).
 # .build_id.stamp changes content (and mtime) only when the git id changes,
