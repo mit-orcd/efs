@@ -1032,6 +1032,34 @@ static void test_dir_rename(void)
     efs_kv_mem_free(kv);
 }
 
+/* Cross-dir file rename: dest parent changes, src name gone.
+ * Plant the file too: create_file's first ino on shard S is S itself, which
+ * would clobber a planted parent at 21/37. */
+static void test_rename_cross_dir(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_dentry dent;
+    struct efs_meta_row r;
+    efs_ino_t a = 21, b = 37, f = 53;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    plant_dir(kv, EFS_ROOT_INO, "a", a, S_IFDIR | 0755);
+    plant_dir(kv, EFS_ROOT_INO, "b", b, S_IFDIR | 0755);
+    plant_dir(kv, a, "f", f, S_IFREG | 0644);
+    CHECK(efs_meta_apply_rename(kv, a, "f", b, "g", T0 + 1) == EFS_OK, "cross");
+    CHECK(efs_meta_apply_lookup(kv, a, "f", &dent) == EFS_ERR_NOT_FOUND,
+          "src gone");
+    CHECK(efs_meta_apply_lookup(kv, b, "g", &dent) == EFS_OK && dent.ino == f,
+          "dest");
+    CHECK(efs_meta_apply_get_inode(kv, f, &r) == EFS_OK && r.parent == b,
+          "parent");
+    CHECK(efs_meta_apply_rename(kv, EFS_ROOT_INO, "a", a, "x", T0 + 2) ==
+              EFS_ERR_INVAL,
+          "into self");
+    efs_kv_mem_free(kv);
+}
+
 static void test_lookup_path(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -2208,6 +2236,7 @@ int main(void)
     test_export_salt();
     test_symlink();
     test_dir_rename();
+    test_rename_cross_dir();
     test_lookup_path();
     test_gc_reap();
     test_gc_tail_alias();

@@ -1346,6 +1346,16 @@ static int host_hosts(struct efs_raft_host *h, uint8_t group)
     return group_raft(h, group) != NULL;
 }
 
+static int host_hosts_all(struct efs_raft_host *h, const uint8_t *g, int n)
+{
+    int i;
+
+    for (i = 0; i < n; i++)
+        if (!host_hosts(h, g[i]))
+            return 0;
+    return 1;
+}
+
 /* First peer other than self (and skip) that votes in every listed group.
  * Dual-hosts of {0,2} are raft ids 1 and 2 at n=4. Never returns self. */
 static int host_pick_peer(struct efs_raft_host *h, const uint8_t *groups, int ng,
@@ -6104,18 +6114,19 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
     }
 }
 
-/* Same-dir LOCAL RENAME: src dentry DEL + dest dentry PUT + inode
- * parent/ctime as a txn (same PREPARE/DECIDE/RESOLVE as LINK). A
- * directory also GUARDs dst_parent ancestry pver sidecars and exclusive-
- * PUTs its own pver (cycle prevention). HASHED/SPLITTING and cross-dir
- * stay INVAL this slice. Replacing an existing dest is EXIST. Directory
- * inodes scatter, so a node that does not host both groups bounces. */
+/* LOCAL RENAME: src dentry DEL + dest dentry PUT + inode parent/ctime
+ * as a txn (same PREPARE/DECIDE/RESOLVE as LINK). Same-dir is one parent
+ * row; cross-dir stamps both parents (a directory also adjusts nlink).
+ * A directory GUARDs dst_parent ancestry pver sidecars and exclusive-PUTs
+ * its own pver (cycle prevention). HASHED/SPLITTING stay INVAL this slice.
+ * Replacing an existing dest is EXIST. Directory inodes scatter, so a
+ * node that does not host every participant group bounces. */
 void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                                 efs_ino_t new_parent, const char *new_name,
                                 struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
-    struct efs_meta_row prow, row, nrow;
+    struct efs_meta_row prow, dprow, row, nrow;
     struct efs_meta_dentry dent, ndent;
     struct efs_meta_stat st;
     struct efs_txid t;
@@ -6124,19 +6135,20 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     uint8_t k_src[EFS_KV_KEY_MAX], k_dst[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
     uint8_t k_par[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX], k_pver[EFS_KV_KEY_MAX];
     uint8_t k_nino[EFS_KV_KEY_MAX], k_ndseq[EFS_KV_KEY_MAX];
+    uint8_t k_dpar[EFS_KV_KEY_MAX], k_ddseq[EFS_KV_KEY_MAX];
     uint8_t v_dent[EFS_META_DENT_BYTES], v_ino[EFS_META_INO_BYTES];
     uint8_t v_par[EFS_META_INO_BYTES], v_dseq[8], v_pver[8], sb[8], cmd[22];
-    uint8_t v_nino[EFS_META_INO_BYTES];
+    uint8_t v_nino[EFS_META_INO_BYTES], v_dpar[EFS_META_INO_BYTES], v_ddseq[8];
     uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
     uint32_t ks = 0, kd = 0, ki = 0, kp = 0, kq = 0, kpv = 0, sn = 8;
-    uint32_t kn = 0, knd = 0, krl = 0;
-    uint32_t ssh, dsh, ish, psh, coord, nsh = 0, ash = 0;
+    uint32_t kn = 0, knd = 0, krl = 0, kdp = 0, kdsq = 0;
+    uint32_t ssh, dsh, ish, psh, dpsh, coord, nsh = 0, ash = 0;
     uint64_t sver = 0, dver = 0, iver = 0, pver = 0, qver = 0, ever = 0;
-    uint64_t nver = 0, gver2 = 0, rver = 0;
-    uint64_t seq = 0, now;
+    uint64_t nver = 0, gver2 = 0, rver = 0, dpver = 0, dsver = 0;
+    uint64_t seq = 0, dseqn = 0, now;
     int hint = -1;
     int rc, i, gr, is_dir = 0, ngv = 0;
-    int xist = 0, xdir = 0, xput = 0;
+    int xist = 0, xdir = 0, xput = 0, same = 0;
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
@@ -6145,23 +6157,25 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
-    if (old_parent != new_parent) {
-        out->status = EFS_INODE_RPC_INVAL;
-        return;
-    }
-    if (strcmp(old_name, new_name) == 0) {
+    if (old_parent == new_parent && strcmp(old_name, new_name) == 0) {
         out->status = EFS_INODE_RPC_OK;
         return;
     }
     now = now_ns();
+    same = old_parent == new_parent;
     psh = efs_kv_inode_shard(old_parent);
-    if (!host_hosts(h, efs_raft_shard_group(psh))) {
+    dpsh = efs_kv_inode_shard(new_parent);
+    {
         uint8_t need[2];
-        need[0] = EFS_RAFT_GROUP_SHARD;
-        need[1] = EFS_RAFT_GROUP_SHARD2;
-        host_fwd_rename(h, old_parent, old_name, new_parent, new_name, out,
-                        need, 2);
-        return;
+        int nn = 1;
+        need[0] = efs_raft_shard_group(psh);
+        if (efs_raft_shard_group(dpsh) != need[0])
+            need[nn++] = efs_raft_shard_group(dpsh);
+        if (!host_hosts_all(h, need, nn)) {
+            host_fwd_rename(h, old_parent, old_name, new_parent, new_name, out,
+                            need, nn);
+            return;
+        }
     }
     pthread_mutex_lock(&h->read_mu);
     rc = host_read_index(h, efs_raft_shard_group(psh), &hint);
@@ -6173,14 +6187,29 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         rc = EFS_ERR_BUSY;
     if (rc == EFS_OK && prow.layout != EFS_META_LAYOUT_LOCAL)
         rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK && !same) {
+        if (efs_raft_shard_group(dpsh) != efs_raft_shard_group(psh))
+            rc = host_read_index(h, efs_raft_shard_group(dpsh), &hint);
+        if (rc == EFS_OK)
+            rc = efs_meta_apply_get_inode(h->kv, new_parent, &dprow);
+        if (rc == EFS_OK && !S_ISDIR(dprow.mode))
+            rc = EFS_ERR_INVAL;
+        if (rc == EFS_OK && dprow.layout == EFS_META_LAYOUT_SPLITTING)
+            rc = EFS_ERR_BUSY;
+        if (rc == EFS_OK && dprow.layout != EFS_META_LAYOUT_LOCAL)
+            rc = EFS_ERR_INVAL;
+    }
     ssh = (rc == EFS_OK) ? efs_kv_dentry_shard(old_parent, old_name, prow.layout)
                          : 0;
-    dsh = (rc == EFS_OK) ? efs_kv_dentry_shard(new_parent, new_name, prow.layout)
-                         : 0;
+    dsh = (rc == EFS_OK)
+              ? efs_kv_dentry_shard(new_parent, new_name,
+                                   same ? prow.layout : dprow.layout)
+              : 0;
     if (rc == EFS_OK && efs_raft_shard_group(ssh) != efs_raft_shard_group(psh))
         rc = host_read_index(h, efs_raft_shard_group(ssh), &hint);
     if (rc == EFS_OK && efs_raft_shard_group(dsh) != efs_raft_shard_group(psh) &&
-        efs_raft_shard_group(dsh) != efs_raft_shard_group(ssh))
+        efs_raft_shard_group(dsh) != efs_raft_shard_group(ssh) &&
+        efs_raft_shard_group(dsh) != efs_raft_shard_group(dpsh))
         rc = host_read_index(h, efs_raft_shard_group(dsh), &hint);
     if (rc == EFS_OK)
         rc = efs_meta_apply_lookup(h->kv, old_parent, old_name, &dent);
@@ -6214,30 +6243,50 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     /* Bounce before resolve: the child inode row can live on another group
      * (a scattered dir inode, or a file hardlinked into a dir on a
      * different group), and resolve maps a missing row to I9 (EFS_ERR_IO).
-     * The same applies to an existing dest's inode row. */
+     * Dest parent and an existing dest's inode row are the same. */
     if (rc == EFS_OK) {
         uint32_t csh = efs_kv_inode_shard(dent.ino);
-        uint8_t need[2];
-        int nn = 0;
-        uint8_t g0 = efs_raft_shard_group(psh);
-        uint8_t g1 = efs_raft_shard_group(csh);
-        int all;
-        need[nn++] = g0;
-        if (g1 != g0)
-            need[nn++] = g1;
+        uint8_t gs[4];
+        int ngs = 0, j, all, hit;
+        gs[ngs++] = efs_raft_shard_group(psh);
+        {
+            uint8_t g = efs_raft_shard_group(dpsh);
+            hit = 0;
+            for (j = 0; j < ngs; j++)
+                if (gs[j] == g)
+                    hit = 1;
+            if (!hit)
+                gs[ngs++] = g;
+        }
+        {
+            uint8_t g = efs_raft_shard_group(csh);
+            hit = 0;
+            for (j = 0; j < ngs; j++)
+                if (gs[j] == g)
+                    hit = 1;
+            if (!hit && ngs < 4)
+                gs[ngs++] = g;
+        }
         if (xist) {
-            uint8_t g2 = efs_raft_shard_group(nsh);
-            if (g2 != g0 && g2 != g1 && nn < 2)
-                need[nn++] = g2;
+            uint8_t g = efs_raft_shard_group(nsh);
+            hit = 0;
+            for (j = 0; j < ngs; j++)
+                if (gs[j] == g)
+                    hit = 1;
+            if (!hit && ngs < 4)
+                gs[ngs++] = g;
         }
         all = 1;
-        for (i = 0; i < nn; i++)
-            if (!host_hosts(h, need[i]))
+        for (j = 0; j < ngs; j++)
+            if (!host_hosts(h, gs[j]))
                 all = 0;
         if (!all) {
+            uint8_t need[2];
+            need[0] = EFS_RAFT_GROUP_SHARD;
+            need[1] = EFS_RAFT_GROUP_SHARD2;
             pthread_mutex_unlock(&h->read_mu);
             host_fwd_rename(h, old_parent, old_name, new_parent, new_name, out,
-                            need, nn);
+                            need, 2);
             return;
         }
     }
@@ -6285,10 +6334,14 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
             else if (held)
                 rc = EFS_ERR_BUSY;
         }
-        if (rc == EFS_OK && prow.nlink < 3)
+        if (rc == EFS_OK && (same ? prow.nlink : dprow.nlink) < 3)
             rc = EFS_ERR_PROTO;
-        if (rc == EFS_OK)
-            prow.nlink--;
+        if (rc == EFS_OK) {
+            if (same)
+                prow.nlink--;
+            else
+                dprow.nlink--;
+        }
     }
     if (rc == EFS_OK && xist && !xdir) {
         if (nrow.nlink <= 1) {
@@ -6319,6 +6372,14 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         if (rc == EFS_OK)
             efs_meta_pack_reap(v_reap, nrow.generation, nrow.active_lanes);
     }
+    if (rc == EFS_OK && is_dir && !same) {
+        if (prow.nlink < 3)
+            rc = EFS_ERR_PROTO;
+        else {
+            prow.nlink--;
+            dprow.nlink++;
+        }
+    }
     memset(&parts, 0, sizeof(parts));
     if (rc == EFS_OK)
         rc = host_parts_add(&parts, ssh);
@@ -6326,6 +6387,8 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         rc = host_parts_add(&parts, dsh);
     if (rc == EFS_OK)
         rc = host_parts_add(&parts, ish);
+    if (rc == EFS_OK && !same)
+        rc = host_parts_add(&parts, dpsh);
     if (rc == EFS_OK && xist)
         rc = host_parts_add(&parts, nsh);
     if (rc == EFS_OK && xist && !xdir && !xput)
@@ -6348,11 +6411,19 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
             prow.base_mtime = now;
         if (prow.base_ctime < now)
             prow.base_ctime = now;
+        if (!same) {
+            if (dprow.base_mtime < now)
+                dprow.base_mtime = now;
+            if (dprow.base_ctime < now)
+                dprow.base_ctime = now;
+        }
         rc = efs_meta_pack_dentry(&ndent, v_dent, sizeof(v_dent));
         if (rc == EFS_OK)
             rc = efs_meta_pack_inode(&row, v_ino, sizeof(v_ino));
         if (rc == EFS_OK)
             rc = efs_meta_pack_inode(&prow, v_par, sizeof(v_par));
+        if (rc == EFS_OK && !same)
+            rc = efs_meta_pack_inode(&dprow, v_dpar, sizeof(v_dpar));
     }
     if (rc == EFS_OK)
         rc = efs_kv_key_dentry(ssh, old_parent, old_name, k_src, &ks);
@@ -6364,6 +6435,11 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         rc = efs_kv_key_inode(psh, old_parent, k_par, &kp);
     if (rc == EFS_OK)
         rc = efs_kv_key_dseq(ssh, old_parent, 0, k_dseq, &kq);
+    if (rc == EFS_OK && !same) {
+        rc = efs_kv_key_inode(dpsh, new_parent, k_dpar, &kdp);
+        if (rc == EFS_OK)
+            rc = efs_kv_key_dseq(dsh, new_parent, 0, k_ddseq, &kdsq);
+    }
     if (rc == EFS_OK && xist)
         rc = efs_kv_key_inode(nsh, nrow.ino, k_nino, &kn);
     if (rc == EFS_OK && xist && xdir)
@@ -6385,6 +6461,11 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         rc = efs_txn_ver_get(h->kv, k_par, kp, &pver);
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_dseq, kq, &qver);
+    if (rc == EFS_OK && !same) {
+        rc = efs_txn_ver_get(h->kv, k_dpar, kdp, &dpver);
+        if (rc == EFS_OK)
+            rc = efs_txn_ver_get(h->kv, k_ddseq, kdsq, &dsver);
+    }
     if (rc == EFS_OK && xist)
         rc = efs_txn_ver_get(h->kv, k_nino, kn, &nver);
     if (rc == EFS_OK && xist && xdir)
@@ -6396,6 +6477,12 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         gr = efs_kv_get(h->kv, k_dseq, kq, sb, &sn);
         seq = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
         wr64be(v_dseq, seq + 1);
+        if (!same) {
+            sn = 8;
+            gr = efs_kv_get(h->kv, k_ddseq, kdsq, sb, &sn);
+            dseqn = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
+            wr64be(v_ddseq, dseqn + 1);
+        }
         fill_txid(h, &t);
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
@@ -6413,12 +6500,34 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                 if (rc == EFS_OK)
                     rc = host_prep(h, ssh, EFS_TXN_EXCL, &t, &parts, k_dseq, kq,
                                    qver, EFS_TXN_PUT, v_dseq, 8, &hint);
+                if (rc == EFS_OK && !same && dpsh == ssh) {
+                    rc = host_prep(h, ssh, EFS_TXN_EXCL, &t, &parts, k_dpar,
+                                   kdp, dpver, EFS_TXN_PUT, v_dpar,
+                                   sizeof(v_dpar), &hint);
+                    if (rc == EFS_OK && dsh == ssh)
+                        rc = host_prep(h, ssh, EFS_TXN_EXCL, &t, &parts,
+                                       k_ddseq, kdsq, dsver, EFS_TXN_PUT,
+                                       v_ddseq, 8, &hint);
+                }
             }
             if (rc == EFS_OK && sh == dsh && dsh != ssh) {
                 rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dst, kd,
                                dver, EFS_TXN_PUT, v_dent, sizeof(v_dent),
                                &hint);
+                if (rc == EFS_OK && !same && dpsh == dsh)
+                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dpar,
+                                   kdp, dpver, EFS_TXN_PUT, v_dpar,
+                                   sizeof(v_dpar), &hint);
+                if (rc == EFS_OK && !same)
+                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_ddseq,
+                                   kdsq, dsver, EFS_TXN_PUT, v_ddseq, 8,
+                                   &hint);
             }
+            if (rc == EFS_OK && !same && sh == dpsh && dpsh != ssh &&
+                dpsh != dsh)
+                rc = host_prep(h, dpsh, EFS_TXN_EXCL, &t, &parts, k_dpar, kdp,
+                               dpver, EFS_TXN_PUT, v_dpar, sizeof(v_dpar),
+                               &hint);
             if (rc == EFS_OK && sh == ish) {
                 rc = host_prep(h, ish, EFS_TXN_EXCL, &t, &parts, k_ino, ki,
                                iver, EFS_TXN_PUT, v_ino, sizeof(v_ino),
