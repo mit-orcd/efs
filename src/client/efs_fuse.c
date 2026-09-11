@@ -464,8 +464,8 @@ static int feature_enabled(uint32_t bit)
  * query ("term", "*term", "term*", "*term*"; literal part >= EFS_FIND_MIN_TERM
  * chars) over <dir>'s subtree and returns the matching paths (one per line,
  * host-absolute: mountpoint + fs-root path, so they pipe/loop from any cwd).
- * Single-command, e.g. cat ".find/PATTERN". Backed by a lazily built name
- * index so the read/write data path is untouched. */
+ * Single-command, e.g. cat ".find/PATTERN". The walk is READDIR from the
+ * query directory (the client table is not a full snapshot in raft mode). */
 static int path_is_find(const char *path, struct efs_inode *parent_out)
 {
     if (!path)
@@ -551,172 +551,45 @@ static int name_is_reserved(const char *name)
 
 enum find_match { FIND_EXACT, FIND_PREFIX, FIND_SUFFIX, FIND_SUBSTR };
 
-/* Lazily built snapshot of the inode table for .find searches. The table is
- * memcpy'd under a brief g_client.lock; the arena + ino hash are built after
- * releasing it, so indexing never stalls the data path. Rebuilt per query so
- * results are always fresh. */
-struct find_ent {
-    efs_ino_t ino;
-    efs_ino_t parent;
-    uint32_t name_off; /* offset into names arena */
-    uint8_t is_dir;
-};
-
-static struct {
-    struct find_ent *ents;
-    uint64_t count;
-    char *names; /* packed NUL-separated names */
-    uint64_t *ino_keys; /* ino -> ents index (open addressing; key 0 = empty) */
-    uint64_t *ino_vals;
-    uint64_t ino_mask;
-} g_find_idx;
-static pthread_mutex_t g_find_idx_mu = PTHREAD_MUTEX_INITIALIZER;
-
 /* Canonical absolute mountpoint, set once in main. .find results are rendered
  * as host-absolute paths (mountpoint + fs-root path) so they can be piped or
  * looped over from any working directory. */
 static char g_mountpoint[EFS_MAX_PATH] = "/";
 
-static void find_index_free_locked(void)
+#define EFS_FIND_WALK_MAX   65536u
+#define EFS_FIND_WALK_DEPTH 128
+
+struct find_out {
+    char *buf;
+    size_t cap;
+    size_t len;
+    uint32_t nvisit;
+};
+
+static int find_out_add(struct find_out *o, const char *prefix, const char *rel)
 {
-    free(g_find_idx.ents);
-    g_find_idx.ents = NULL;
-    free(g_find_idx.names);
-    g_find_idx.names = NULL;
-    free(g_find_idx.ino_keys);
-    g_find_idx.ino_keys = NULL;
-    free(g_find_idx.ino_vals);
-    g_find_idx.ino_vals = NULL;
-    g_find_idx.count = 0;
-    g_find_idx.ino_mask = 0;
-}
+    size_t pl = strlen(prefix), rl = strlen(rel);
+    int slash = (pl > 0 && prefix[pl - 1] != '/' && rel[0] != '/');
+    size_t need = pl + (slash ? 1 : 0) + rl + 1; /* newline */
 
-/* Rebuild the index from the live table. Caller holds g_find_idx_mu. */
-static int find_index_build_locked(void)
-{
-    pthread_mutex_lock(&g_client.lock);
-    uint64_t n = g_client.export.inode_count;
-    struct efs_inode *snap = malloc((n ? n : 1) * sizeof(*snap));
-    if (!snap) {
-        pthread_mutex_unlock(&g_client.lock);
-        return EFS_ERR_NOMEM;
+    if (o->len + need + 1 > o->cap) {
+        size_t ncap = o->cap ? o->cap * 2 : 4096;
+        while (ncap < o->len + need + 1)
+            ncap *= 2;
+        char *nb = realloc(o->buf, ncap);
+        if (!nb)
+            return EFS_ERR_NOMEM;
+        o->buf = nb;
+        o->cap = ncap;
     }
-    for (uint64_t i = 0; i < n; i++)
-        efs_export_inode_to_rpc(&g_client.export, i, &snap[i]);
-    pthread_mutex_unlock(&g_client.lock);
-
-    struct find_ent *ents = malloc((n ? n : 1) * sizeof(*ents));
-    if (!ents) {
-        free(snap);
-        return EFS_ERR_NOMEM;
-    }
-    size_t arena = 0;
-    for (uint64_t i = 0; i < n; i++)
-        arena += strnlen(snap[i].name, EFS_MAX_NAME) + 1;
-    char *names = malloc(arena ? arena : 1);
-    if (!names) {
-        free(ents);
-        free(snap);
-        return EFS_ERR_NOMEM;
-    }
-
-    uint64_t count = 0;
-    size_t off = 0;
-    for (uint64_t i = 0; i < n; i++) {
-        size_t L = strnlen(snap[i].name, EFS_MAX_NAME);
-        memcpy(names + off, snap[i].name, L);
-        names[off + L] = '\0';
-        ents[count].ino = snap[i].ino;
-        ents[count].parent = snap[i].parent;
-        ents[count].is_dir = efs_mode_is_dir(snap[i].mode) ? 1 : 0;
-        ents[count].name_off = (uint32_t)off;
-        count++;
-        off += L + 1;
-    }
-    free(snap);
-
-    uint64_t mask = 16;
-    while (mask < count * 2)
-        mask <<= 1;
-    uint64_t *keys = calloc(mask, sizeof(uint64_t));
-    uint64_t *vals = malloc(mask * sizeof(uint64_t));
-    if (!keys || !vals) {
-        free(keys);
-        free(vals);
-        free(ents);
-        free(names);
-        return EFS_ERR_NOMEM;
-    }
-    for (uint64_t i = 0; i < count; i++) {
-        uint64_t k = ents[i].ino;
-        uint64_t h = (k * 0x9E3779B97F4A7C15ULL) & (mask - 1);
-        while (keys[h] != 0)
-            h = (h + 1) & (mask - 1);
-        keys[h] = k;
-        vals[h] = i;
-    }
-
-    find_index_free_locked();
-    g_find_idx.ents = ents;
-    g_find_idx.count = count;
-    g_find_idx.names = names;
-    g_find_idx.ino_keys = keys;
-    g_find_idx.ino_vals = vals;
-    g_find_idx.ino_mask = mask;
-    return EFS_OK;
-}
-
-/* Look up an entry index by ino. Caller holds g_find_idx_mu. Returns -1 if
- * absent. */
-static int64_t find_idx_lookup(efs_ino_t ino)
-{
-    if (g_find_idx.ino_mask == 0)
-        return -1;
-    uint64_t h = (ino * 0x9E3779B97F4A7C15ULL) & (g_find_idx.ino_mask - 1);
-    while (g_find_idx.ino_keys[h] != 0) {
-        if (g_find_idx.ino_keys[h] == ino)
-            return (int64_t)g_find_idx.ino_vals[h];
-        h = (h + 1) & (g_find_idx.ino_mask - 1);
-    }
-    return -1;
-}
-
-/* Build the filesystem-root-absolute path of `ino` ("/a/b/name"). Returns 0 if
- * ino lies under `dir_ino` (dir_ino is an ancestor, so the match is inside the
- * queried subtree), -1 otherwise. Caller holds g_find_idx_mu. */
-static int find_fullpath(efs_ino_t dir_ino, efs_ino_t ino, char *out, size_t out_len)
-{
-    uint32_t comps[128]; /* name offsets, leaf-first; caps depth at 128 */
-    int nc = 0;
-    efs_ino_t cur = ino;
-    int under = 0;
-    while (nc < 128) {
-        if (cur == dir_ino)
-            under = 1;
-        int64_t idx = find_idx_lookup(cur);
-        if (idx < 0)
-            break;
-        efs_ino_t p = g_find_idx.ents[idx].parent;
-        if (p == cur) /* root's parent is itself */
-            break;
-        comps[nc++] = g_find_idx.ents[idx].name_off;
-        cur = p;
-    }
-    if (!under || nc == 0)
-        return -1;
-    size_t off = 0;
-    out[off++] = '/';
-    for (int i = nc - 1; i >= 0; i--) {
-        const char *nm = g_find_idx.names + comps[i];
-        size_t L = strlen(nm);
-        if (off + L + 2 > out_len)
-            return -1;
-        memcpy(out + off, nm, L);
-        off += L;
-        if (i)
-            out[off++] = '/';
-    }
-    out[off] = '\0';
+    memcpy(o->buf + o->len, prefix, pl);
+    o->len += pl;
+    if (slash)
+        o->buf[o->len++] = '/';
+    memcpy(o->buf + o->len, rel, rl);
+    o->len += rl;
+    o->buf[o->len++] = '\n';
+    o->buf[o->len] = '\0';
     return 0;
 }
 
@@ -774,69 +647,158 @@ static int find_parse_query(const char *q, size_t qlen, enum find_match *type,
     return 0;
 }
 
-/* Run a parsed query against a freshly rebuilt index; return the matching
- * host-absolute paths (mountpoint + fs-root path, newline-separated) in a
- * malloc'd buffer. */
-static int find_run_query(efs_ino_t dir_ino, enum find_match type,
-                          const char *term, size_t term_len,
+/* FUSE path of the directory being searched, from a ".find/<term>" path. */
+static int find_query_dir_fuse(const char *query_path, char *out, size_t cap)
+{
+    const char *m;
+    size_t dlen;
+
+    if (!query_path || !out || cap < 2)
+        return -1;
+    m = strstr(query_path, "/" EFS_FIND_NAME "/");
+    if (!m)
+        return -1;
+    dlen = (size_t)(m - query_path);
+    if (dlen == 0) {
+        out[0] = '/';
+        out[1] = '\0';
+        return 0;
+    }
+    if (dlen >= cap)
+        return -1;
+    memcpy(out, query_path, dlen);
+    out[dlen] = '\0';
+    return 0;
+}
+
+/* host-absolute prefix for results: mountpoint + FUSE dir path. A "/"
+ * mountpoint is omitted so we do not emit "//...". */
+static void find_host_prefix(const char *dir_fuse, char *out, size_t cap)
+{
+    size_t mpl = strlen(g_mountpoint);
+    const char *df = (dir_fuse && dir_fuse[0]) ? dir_fuse : "/";
+
+    if (mpl <= 1) {
+        snprintf(out, cap, "%s", df);
+        return;
+    }
+    if (strcmp(df, "/") == 0)
+        snprintf(out, cap, "%s", g_mountpoint);
+    else
+        snprintf(out, cap, "%s%s", g_mountpoint, df);
+}
+
+/* READDIR-walk one directory (and recurse into children). Matches are
+ * rendered as host-absolute paths under host_prefix. A missing/invalid
+ * child is skipped; a failure of the query directory itself is fatal. */
+static int find_walk_dir(efs_ino_t dir_ino, const char *rel,
+                         const char *host_prefix,
+                         enum find_match type, const char *term, size_t term_len,
+                         int depth, struct find_out *o)
+{
+    uint32_t src = 0, done = 0;
+    char name_cur[EFS_MAX_NAME];
+    struct efs_inode *ents;
+
+    if (depth > EFS_FIND_WALK_DEPTH)
+        return 0;
+    ents = malloc(sizeof(*ents) * EFS_READDIR_MAX);
+    if (!ents)
+        return EFS_ERR_NOMEM;
+    memset(name_cur, 0, sizeof(name_cur));
+    while (!done) {
+        uint32_t n = EFS_READDIR_MAX;
+        uint32_t i;
+        int rc = efs_client_rpc_readdir_cur(g_client.export_id, dir_ino,
+                                            ents, &n, &src, name_cur, &done);
+        if (rc != 0) {
+            free(ents);
+            if (depth > 0 && (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL))
+                return 0;
+            return rc;
+        }
+        for (i = 0; i < n; i++) {
+            char child_rel[EFS_MAX_PATH];
+            int nwr;
+
+            if (ents[i].ino == 0 || ents[i].name[0] == '\0')
+                continue;
+            if (strcmp(ents[i].name, ".") == 0 || strcmp(ents[i].name, "..") == 0)
+                continue;
+            if (strncmp(ents[i].name, ".fuse_hidden", 12) == 0)
+                continue;
+            if (name_is_reserved(ents[i].name))
+                continue;
+            if (o->nvisit >= EFS_FIND_WALK_MAX) {
+                free(ents);
+                return 0;
+            }
+            o->nvisit++;
+            if (rel[0] == '\0')
+                nwr = snprintf(child_rel, sizeof(child_rel), "%s", ents[i].name);
+            else
+                nwr = snprintf(child_rel, sizeof(child_rel), "%s/%s",
+                              rel, ents[i].name);
+            if (nwr < 0 || (size_t)nwr >= sizeof(child_rel))
+                continue;
+            if (find_name_match(ents[i].name, type, term, term_len)) {
+                int arc = find_out_add(o, host_prefix, child_rel);
+                if (arc != 0) {
+                    free(ents);
+                    return arc;
+                }
+            }
+            if (efs_mode_is_dir(ents[i].mode)) {
+                int wrc = find_walk_dir(ents[i].ino, child_rel, host_prefix,
+                                          type, term, term_len, depth + 1, o);
+                if (wrc != 0) {
+                    free(ents);
+                    return wrc;
+                }
+            }
+        }
+        if (n == 0 && !done)
+            break;
+    }
+    free(ents);
+    return 0;
+}
+
+/* Walk <dir>'s subtree via READDIR and return matching host-absolute paths
+ * (newline-separated) in a malloc'd buffer. dir_fuse is the FUSE path of
+ * the query directory (getattr does not fill name/parent, so we cannot
+ * reconstruct paths from inodes). */
+static int find_run_query(efs_ino_t dir_ino, const char *dir_fuse,
+                          enum find_match type, const char *term, size_t term_len,
                           char **out_text, int *out_len)
 {
-    pthread_mutex_lock(&g_find_idx_mu);
-    if (find_index_build_locked() != EFS_OK) {
-        pthread_mutex_unlock(&g_find_idx_mu);
-        return EFS_ERR_NOMEM;
+    struct find_out o;
+    char prefix[EFS_MAX_PATH];
+    int rc;
+
+    memset(&o, 0, sizeof(o));
+    find_host_prefix(dir_fuse, prefix, sizeof(prefix));
+    rc = find_walk_dir(dir_ino, "", prefix, type, term, term_len, 0, &o);
+    if (rc != 0) {
+        free(o.buf);
+        return rc;
     }
-    size_t cap = 4096, len = 0;
-    char *buf = malloc(cap);
-    if (!buf) {
-        pthread_mutex_unlock(&g_find_idx_mu);
-        return EFS_ERR_NOMEM;
+    if (!o.buf) {
+        o.buf = malloc(1);
+        if (!o.buf)
+            return EFS_ERR_NOMEM;
+        o.buf[0] = '\0';
+        o.len = 0;
     }
-    /* Mountpoint prefix; a "/" mountpoint adds nothing (avoids "//"). */
-    size_t mpl = strlen(g_mountpoint);
-    size_t plen = (mpl > 1) ? mpl : 0;
-    for (uint64_t i = 0; i < g_find_idx.count; i++) {
-        const char *nm = g_find_idx.names + g_find_idx.ents[i].name_off;
-        if (!find_name_match(nm, type, term, term_len))
-            continue;
-        efs_ino_t ino = g_find_idx.ents[i].ino;
-        if (ino == dir_ino)
-            continue;
-        char full[EFS_MAX_PATH];
-        if (find_fullpath(dir_ino, ino, full, sizeof(full)) != 0)
-            continue;
-        size_t L = strlen(full);
-        if (len + plen + L + 2 > cap) {
-            size_t ncap = cap * 2;
-            while (ncap < len + plen + L + 2)
-                ncap *= 2;
-            char *nb = realloc(buf, ncap);
-            if (!nb) {
-                free(buf);
-                pthread_mutex_unlock(&g_find_idx_mu);
-                return EFS_ERR_NOMEM;
-            }
-            buf = nb;
-            cap = ncap;
-        }
-        if (plen) {
-            memcpy(buf + len, g_mountpoint, plen);
-            len += plen;
-        }
-        memcpy(buf + len, full, L);
-        len += L;
-        buf[len++] = '\n';
-    }
-    pthread_mutex_unlock(&g_find_idx_mu);
-    *out_text = buf;
-    *out_len = (int)len;
+    *out_text = o.buf;
+    *out_len = (int)o.len;
     return 0;
 }
 
 /* Cached .find query results, keyed by (directory, raw pattern). A read of
  * ".find/<term>" runs the glob over the directory's subtree and caches the
  * rendered path list briefly so the getattr (size) and the read (content) that
- * make up a single `cat` share one index build. Queries are user-driven and
+ * make up a single `cat` share one walk. Queries are user-driven and
  * rare, so the small cache + short TTL keep results fresh without a hot-path
  * cost. */
 #define EFS_FIND_RES_N 16
@@ -853,13 +815,18 @@ static pthread_mutex_t g_find_res_mu = PTHREAD_MUTEX_INITIALIZER;
 
 /* Ensure a fresh cached result for (dir_ino, pattern). Returns 0 on success
  * (result cached, possibly empty), -EINVAL for a bad/short term, -EIO on
- * internal error. */
-static int find_query_ensure(efs_ino_t dir_ino, const char *pattern)
+ * internal error. query_path is the FUSE ".find/<term>" path (used to
+ * render host-absolute matches). */
+static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
+                             const char *pattern)
 {
     enum find_match type;
     char term[EFS_MAX_NAME];
     size_t term_len;
+    char dir_fuse[EFS_MAX_PATH];
     if (find_parse_query(pattern, strlen(pattern), &type, term, &term_len) != 0)
+        return -EINVAL;
+    if (find_query_dir_fuse(query_path, dir_fuse, sizeof(dir_fuse)) != 0)
         return -EINVAL;
 
     uint64_t now = stats_now_ms();
@@ -874,10 +841,10 @@ static int find_query_ensure(efs_ino_t dir_ino, const char *pattern)
     }
     pthread_mutex_unlock(&g_find_res_mu);
 
-    /* Miss: run the query (takes g_find_idx_mu internally) outside our lock. */
+    /* Miss: walk the live tree outside the result-cache lock. */
     char *text = NULL;
     int len = 0;
-    if (find_run_query(dir_ino, type, term, term_len, &text, &len) != 0) {
+    if (find_run_query(dir_ino, dir_fuse, type, term, term_len, &text, &len) != 0) {
         free(text);
         return -EIO;
     }
@@ -914,9 +881,10 @@ static int find_query_ensure(efs_ino_t dir_ino, const char *pattern)
 }
 
 /* Result length for (dir, pattern), or -1 on invalid term / error. */
-static int find_query_len(efs_ino_t dir_ino, const char *pattern)
+static int find_query_len(efs_ino_t dir_ino, const char *query_path,
+                           const char *pattern)
 {
-    if (find_query_ensure(dir_ino, pattern) != 0)
+    if (find_query_ensure(dir_ino, query_path, pattern) != 0)
         return -1;
     pthread_mutex_lock(&g_find_res_mu);
     int len = -1;
@@ -933,10 +901,11 @@ static int find_query_len(efs_ino_t dir_ino, const char *pattern)
 
 /* Copy a slice of the (dir, pattern) result into buf. Returns bytes copied,
  * 0 at EOF, or a negative errno for an invalid term. */
-static int find_query_read(efs_ino_t dir_ino, const char *pattern,
+static int find_query_read(efs_ino_t dir_ino, const char *query_path,
+                           const char *pattern,
                            char *buf, size_t size, off_t offset)
 {
-    if (find_query_ensure(dir_ino, pattern) != 0)
+    if (find_query_ensure(dir_ino, query_path, pattern) != 0)
         return -EINVAL;
     pthread_mutex_lock(&g_find_res_mu);
     int n = 0;
@@ -986,10 +955,11 @@ static int find_dir_fill_stat(const struct efs_inode *parent, struct stat *stbuf
 
 /* stat for a .find/<term> query file: runs the query to report the real size
  * (so `cat` reads the full list rather than stopping at a 0 size). */
-static int find_query_fill_stat(const struct efs_inode *parent, const char *pattern,
+static int find_query_fill_stat(const struct efs_inode *parent,
+                                const char *query_path, const char *pattern,
                                 struct stat *stbuf)
 {
-    int len = find_query_len(parent->ino, pattern);
+    int len = find_query_len(parent->ino, query_path, pattern);
     if (len < 0)
         return -ENOENT;
     memset(stbuf, 0, sizeof(*stbuf));
@@ -1181,7 +1151,7 @@ static int efs_fuse_getattr(const char *path, struct stat *stbuf,
     if (path_find_query(path, &fqpar, fqterm, sizeof(fqterm)) == 0) {
         if (!feature_enabled(EFS_FEATURE_FIND))
             return -ENOENT;
-        return find_query_fill_stat(&fqpar, fqterm, stbuf);
+        return find_query_fill_stat(&fqpar, path, fqterm, stbuf);
     }
     if (path_is_find(path, &parent) == 0) {
         if (!feature_enabled(EFS_FEATURE_FIND))
@@ -1439,7 +1409,7 @@ static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
             return -ENOENT;
         if ((fi->flags & O_ACCMODE) != O_RDONLY)
             return -EACCES; /* query files are read-only */
-        if (find_query_len(fqpar.ino, fqterm) < 0)
+        if (find_query_len(fqpar.ino, path, fqterm) < 0)
             return -ENOENT; /* invalid/short term */
         return 0;
     }
@@ -1543,7 +1513,7 @@ static int efs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
     if (path_find_query(path, &fqpar, fqterm, sizeof(fqterm)) == 0) {
         if (!feature_enabled(EFS_FEATURE_FIND))
             return -ENOENT;
-        return find_query_read(fqpar.ino, fqterm, buf, size, offset);
+        return find_query_read(fqpar.ino, path, fqterm, buf, size, offset);
     }
     if (path_is_find(path, &parent) == 0) {
         if (!feature_enabled(EFS_FEATURE_FIND))
@@ -2952,10 +2922,7 @@ static void efs_fuse_destroy(void *userdata)
                             "still failing (rc=%d) after %lds; writes that "
                             "were never reported are gone\n", mrc, drain_s);
     }
-    /* Free the .find index and cached query results. */
-    pthread_mutex_lock(&g_find_idx_mu);
-    find_index_free_locked();
-    pthread_mutex_unlock(&g_find_idx_mu);
+    /* Free cached .find query results. */
     pthread_mutex_lock(&g_find_res_mu);
     for (int i = 0; i < EFS_FIND_RES_N; i++) {
         free(g_find_res[i].text);

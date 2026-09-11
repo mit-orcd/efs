@@ -233,8 +233,49 @@ lazy — first pool checkout, not mount). Full gate PASS on fcstor003:
 13 unit + efsd + efs-fuse TCP + efsd/efs-fuse RDMA, all 0 definite /
 0 indirect / 0 uninit / 0 invalid.
 **Open follow-ups:** (1) client local staging
-table (g_client.export) shrink is post-step-11 client-cache design.
-(Data-plane GC gap — item (1) — is CLOSED; see "GC-GAP CLOSED" below.)
+table (g_client.export) shrink is post-step-11 client-cache design /
+spec step 12. (Data-plane GC gap, cross-dir LOCAL rename, and `.find`
+READDIR walk are CLOSED; see below.) HASHED/SPLITTING rename stays INVAL
+(10.5c). Do not start step 12 until asked.
+
+**`.FIND` READDIR WALK CLOSED (Sep 11 night, working tree).** POSIX
+`virt_find_query` returned empty because `find_index_build_locked`
+memcpy'd `g_client.export`, which has no GET_META snapshot after step 11.
+Fix is client-only in `efs_fuse.c`: drop the whole-table index; walk the
+query directory's subtree with `efs_client_rpc_readdir_cur` (name-order
+cookies, depth 128, 65536-visit cap, skip `.fuse_hidden*` and reserved
+`.find`/`.stats`). Paths are host-absolute from `g_mountpoint` + the
+FUSE dir prefix of the `.find/<term>` path (getattr does not fill
+name/parent). Result cache (16 slots, 5 s TTL) unchanged. Not a
+server-side name index (derived-index design / roadmap "Server-side
+`.stats`/`.find` refresh" stays NOT DONE).
+**Gates (19820 scratch, TCP, remount efs-fuse only):** isolated
+`virt_find_query` + `virt_find_not_a_real_dir` **2/2 in 0.1 s**. posix
+jobs=1 **199/201 in 75 s** (`results/posix/20260911-find/suite-jobs1.tsv`)
+— `virt_find_query` PASS. The 2 fails are same-parent dir-rename EIO
+(`dir_rename_dir_with_contents`, `rename_dir_same_parent`) on this
+long-lived scratch; both pass **5/5 isolated** (0.1 s) and were PASS on
+the wipe+mkfs cross-dir jobs=1. Do not start step 12 until asked.
+
+**CROSS-DIR RENAME CLOSED (Sep 11 night, working tree on top of
+`e486ec4`).** POSIX `dir_move_into_subdir` was EINVAL because
+`server_raft_host_rename_at` rejected `old_parent != new_parent`.
+That test is a **file** rename `a/f` → `b/f`, not a directory-into-subdir
+cycle. Apply + sim already implemented cross-dir; the host now runs a
+LOCAL 2-parent txn (src dentry DEL, dest dentry PUT, inode parent=,
+both parent stamps + dseq, bounce if this replica does not host both
+parent groups). Directory cross-dir also moves nlink (src--, dest++)
+and still GUARDs dest ancestry `parent_version` (`err_rename_dir_into_itself`
+stays EINVAL). HASHED/SPLITTING still INVAL / BUSY.
+**Gates (19820 scratch, TCP, wipe+raft-mkfs):** `test_meta_apply` /
+`test_sim` OK (plant the file — `create_file`'s first ino on shard S is
+S itself and would clobber a planted parent at 21/37). Isolated
+`dir_move_into_subdir` + `err_rename_dir_into_itself` PASS. posix
+jobs=1 **200/201 in 104 s** (`results/posix/20260911-crossdir/suite-jobs1.tsv`)
+— only `virt_find_query` (closed above). jobs=16 still saturation-timeouts
+on this scratch (186 then collapse on stacked runs); not a rename
+correctness fail (`dir_move_into_subdir` passed in the parallel batch).
+Do not start step 12 until asked.
 
 **RAFT-LAG CLOSED (Sep 11 PM, working tree) — three fixes in
 `src/server/raft_host.c`, gated 199/201 jobs=16 in 26.5 s with ZERO

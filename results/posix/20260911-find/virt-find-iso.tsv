@@ -1,0 +1,5 @@
+# posix-suite host=fcstor007 mnt=/tmp/efs-mount 2026-09-11T22:48:37Z
+test	result	detail
+virt_find_query	PASS	
+virt_find_not_a_real_dir	PASS	
+# summary pass=2 fail=0 skip=0 total=2 dur=0.1
