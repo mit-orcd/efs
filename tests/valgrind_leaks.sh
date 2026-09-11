@@ -6,11 +6,18 @@
 # NEVER touches the live cluster. Repeatable: wipe scratch, build, run, gate.
 #
 # Phases:
-#   1. unit tests (metadata lifecycle)              — full gate
-#   2. efsd over TCP (efs-bench workload)           — full gate
-#   3. efs-fuse over TCP (mini-POSIX mount)         — full gate
-#   4. efsd + efs-fuse over RDMA (mount + meta/packed ops) — leaks-only gate
-#      (ibverbs/DMA uninit false-positives; see gate_leaks)
+#   1. unit tests (current suite)                   — full gate
+#   2. efsd over TCP (3-node localhost raft group, node 1 valgrind'd as a
+#      follower; efs-bench workload on the leader)  — full gate
+#   3. efs-fuse over TCP (3 plain nodes + valgrind'd client, mini-POSIX)
+#                                                   — full gate
+#   4. efsd + efs-fuse over RDMA (3-node group on the RDMA IP) — leaks-only
+#      gate (ibverbs/DMA uninit false-positives; see gate_leaks)
+#
+# Step 11 port: the metadata engine is the raft host, so a single-node efsd
+# can no longer serve an export (no quorum). Every wire phase runs a 3-node
+# localhost raft group (EFS_MD_RAFT_N=3, node-ids 1..3 on ports PORT..PORT+2,
+# one storage dir per node) and `efs-mgmt raft-mkfs`.
 #
 # Gate criteria (hard fail unless all hold):
 #   1. definitely lost  = 0 bytes   } the two real-leak kinds
@@ -53,8 +60,12 @@ STORAGE="$WORK/storage"
 MNT="$WORK/mnt"
 EXPORT="vgtest"
 VG="valgrind --leak-check=full --show-leak-kinds=definite,indirect,possible"
-UNIT_TESTS="test_meta_v6 test_erasure test_placement test_meta_slot \
-            test_dir_stats test_ino_path test_add_storage"
+# Current unit suite (the old-engine tests were deleted in step 11 inc 2).
+# test_lock is included for coverage: its 6 pre-existing getlk failures are
+# functional, not leaks, and this gate only parses valgrind logs.
+UNIT_TESTS="test_kv test_kv_lsm test_raft test_raft_store test_meta_apply \
+            test_txn test_session test_sim test_wire test_data \
+            test_erasure test_placement test_lock"
 
 # RDMA phase needs an RDMA-capable local IP (loopback has no ibdev, so the
 # upgrade would silently fall back to TCP and exercise nothing). Auto-detect
@@ -94,7 +105,7 @@ suspicious_possibly_lost() { # logfile
         /possibly lost in loss record/ { inblk=1; hdr=$0; seen=0; next }
         inblk && / at 0x/ { seen=1; next }                 # allocator frame
         inblk && seen && / by 0x/ {                        # direct caller
-            if ($0 ~ /\.c:[0-9]+/ && $0 ~ /efsd\.c|efs_fuse\.c|read\.c|write\.c|ops\.c|inode_rpc\.c|protocol\.c|metadata\.c|dcache\.c|handler\.c|meta_server\.c|store\.c|writer\.c|network\.c|rdma\.c|erasure\.c|placement\.c|cluster\.c/)
+            if ($0 ~ /\.c:[0-9]+/ && $0 ~ /efsd\.c|efs_fuse\.c|efs_bench\.c|read\.c|write\.c|ops\.c|inode_rpc\.c|protocol\.c|metadata\.c|handler\.c|store\.c|store_nvme\.c|writer\.c|network\.c|rdma\.c|erasure\.c|placement\.c|cluster\.c|peer_pool\.c|client\.c|bufpool\.c|node_cache\.c|raft_host\.c|raft\.c|raft_disk\.c|raft_log\.c|raft_mem\.c|kv_[a-z]+\.c|meta_apply\.c|txn\.c|session\.c|lock\.c|dir_layout\.c|wire\.c|transport_[a-z]+\.c|store_mem\.c|checksum\.c|common\.c|sim_[a-z]+\.c|opid\.c|bench_local\.c/)
                 print hdr
             inblk=0; seen=0; next
         }
@@ -149,16 +160,71 @@ gate_leaks() { # logfile label
 }
 
 # Kill OUR daemons (plain or valgrind-wrapped) whose cmdline references our
-# private port. Match by exact comm (efsd / efs-fuse / memcheck-amd64-) so we
-# never self-match this script's own ssh command line, and never touch the
-# live cluster (which is on a different port).
+# private workdir (storage / mount paths). Match by exact comm
+# (efsd / efs-fuse / memcheck-amd64-) so we never self-match this script's
+# own ssh command line, and never touch the live cluster.
 kill_ours() { # signal (TERM or 9)
     local sig=${1:-9} p
     for p in $(pgrep -x efsd; pgrep -x efs-fuse; pgrep -x memcheck-amd64-); do
-        if tr '\0' ' ' <"/proc/$p/cmdline" 2>/dev/null | grep -q "$PORT"; then
+        if tr '\0' ' ' <"/proc/$p/cmdline" 2>/dev/null | grep -q "$WORK"; then
             kill -"$sig" "$p" 2>/dev/null
         fi
     done
+}
+
+# Start a 3-node raft group on $ADDR ports $PORT..$PORT+2 with node 1 under
+# valgrind (log "$WORK"-group1.vg). Plain nodes 2+3 come up first and hold
+# quorum/leadership; the slow valgrind'd node 1 joins last as a follower and
+# still applies every committed entry (that is the server-side coverage).
+# $1 = EFS_TRANSPORT for the servers. NOTE: tcp makes efs_rdma_available()
+# return 0 process-wide (rdma.c), which disables the server's RDMA_SETUP
+# accept — so the RDMA phase must NOT pass tcp here or every client upgrade
+# is refused.
+start_group_vg_server() {
+    local xport=$1
+    local id port join out i
+    rm -rf "$STORAGE"; mkdir -p "$STORAGE"
+    for id in 2 3; do
+        port=$((PORT + id - 1))
+        join="--join $ADDR:$((PORT + 1))"
+        [ "$id" = 2 ] && join=""                            # node 2 seeds
+        out="$WORK-group$id.out"
+        EFS_MD_RAFT_N=3 EFS_TRANSPORT=$xport setsid ./efsd --node-id "$id" \
+            --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" \
+            --quota 1G --writers 0 --no-direct-io $join \
+            >"$out" 2>&1 </dev/null &
+        for i in $(seq 1 40); do
+            grep -q listening "$out" 2>/dev/null && break; sleep 0.5
+        done
+        grep -q listening "$out" || { echo "[leaks] node $id did not start"; cat "$out"; exit 2; }
+    done
+    ./efs-mgmt raft-mkfs "$ADDR:$((PORT + 1))" "$EXPORT" >/dev/null 2>&1
+    # valgrind'd node 1 joins last; do not wait for it (slow under memcheck)
+    EFS_MD_RAFT_N=3 EFS_TRANSPORT=$xport $VG --log-file="$WORK-group1.vg" \
+        ./efsd --node-id 1 --addr "$ADDR" --port "$PORT" \
+        --storage "$STORAGE/s1" --quota 1G --writers 0 --no-direct-io \
+        --join "$ADDR:$((PORT + 1))" >"$WORK-group1.out" 2>&1 &
+}
+
+# Start a plain 3-node group with node 1 as seed (used by the fuse phases).
+start_group_plain() {
+    local id port join out i
+    rm -rf "$STORAGE"; mkdir -p "$STORAGE"
+    for id in 1 2 3; do
+        port=$((PORT + id - 1))
+        join="--join $ADDR:$PORT"
+        [ "$id" = 1 ] && join=""
+        out="$WORK-group$id.out"
+        EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp setsid ./efsd --node-id "$id" \
+            --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" \
+            --quota 1G --writers 0 --no-direct-io $join \
+            >"$out" 2>&1 </dev/null &
+        for i in $(seq 1 40); do
+            grep -q listening "$out" 2>/dev/null && break; sleep 0.5
+        done
+        grep -q listening "$out" || { echo "[leaks] node $id did not start"; cat "$out"; exit 2; }
+    done
+    ./efs-mgmt raft-mkfs "$ADDR:$PORT" "$EXPORT" >/dev/null 2>&1
 }
 
 cleanup() {
@@ -187,36 +253,36 @@ for t in $UNIT_TESTS; do
 done
 
 # ---------------------------------------------------------------- efsd ---
-note "phase 2: efsd under valgrind (efs-bench workload, SIGTERM summary)"
-rm -rf "$STORAGE"; mkdir -p "$STORAGE"
-$VG --log-file="$WORK-efsd.vg" ./efsd --node-id 1 --addr 127.0.0.1 \
-    --port "$PORT" --storage "$STORAGE" --quota 1G >"$WORK-efsd.out" 2>&1 &
-for i in $(seq 1 40); do grep -q listening "$WORK-efsd.out" 2>/dev/null && break; sleep 0.5; done
-grep -q listening "$WORK-efsd.out" || { echo "[leaks] efsd did not start"; cat "$WORK-efsd.out"; exit 2; }
-./efs-mgmt mkfs "$SEED" "$EXPORT" >/dev/null 2>&1
+note "phase 2: efsd under valgrind (3-node raft group, efs-bench workload)"
+ADDR=127.0.0.1
+start_group_vg_server tcp
 # Workload generators only — a driver abort under the ~30x valgrind slowdown
 # (e.g. a PUT-timeout assert in efs-bench) is not a leak-gate failure. The
 # --meta phase (2400+ ops) is the core metadata coverage; store/read add the
-# data path.
-EFS_TRANSPORT=tcp ./efs-bench "$SEED" --meta --export "$EXPORT" \
+# data path. Target node 2 (plain, fast); any node bounces to the raft
+# leader, and the valgrind'd follower applies every committed entry.
+LEAD="127.0.0.1:$((PORT + 1))"
+EFS_TRANSPORT=tcp ./efs-bench "$LEAD" --meta --export "$EXPORT" \
     --files 300 --dirs 4 --workers 4 >/dev/null 2>&1 || true
-EFS_TRANSPORT=tcp ./efs-bench "$SEED" --store --time 5 >/dev/null 2>&1 || true
-EFS_TRANSPORT=tcp ./efs-bench "$SEED" --read  --time 3 >/dev/null 2>&1 || true
+EFS_TRANSPORT=tcp ./efs-bench "$LEAD" --store --time 5 >/dev/null 2>&1 || true
+EFS_TRANSPORT=tcp ./efs-bench "$LEAD" --read  --time 3 >/dev/null 2>&1 || true
 # SIGTERM -> valgrind prints the summary (no stacks on abnormal exit; expected)
 kill_ours TERM
-for i in $(seq 1 20); do grep -q "LEAK SUMMARY" "$WORK-efsd.vg" 2>/dev/null && break; sleep 1; done
-gate "$WORK-efsd.vg" "efsd"
+for i in $(seq 1 20); do grep -q "LEAK SUMMARY" "$WORK-group1.vg" 2>/dev/null && break; sleep 1; done
+gate "$WORK-group1.vg" "efsd"
 
 # ---------------------------------------------------------------- fuse ---
-# Plain (fast) efsd so FUSE reads succeed; only the client is under valgrind.
+# Plain (fast) 3-node group so FUSE reads succeed; only the client is under
+# valgrind.
 note "phase 3: efs-fuse under valgrind (mini-POSIX through the mount)"
 kill_ours 9; sleep 2
-rm -rf "$STORAGE" "$MNT"; mkdir -p "$STORAGE" "$MNT"
-EFS_TRANSPORT=tcp setsid ./efsd --node-id 1 --addr 127.0.0.1 --port "$PORT" \
-    --storage "$STORAGE" --quota 1G >"$WORK-efsd-plain.out" 2>&1 </dev/null &
-for i in $(seq 1 40); do grep -q listening "$WORK-efsd-plain.out" 2>/dev/null && break; sleep 0.5; done
-./efs-mgmt mkfs "$SEED" "$EXPORT" >/dev/null 2>&1
-EFS_TRANSPORT=tcp $VG --log-file="$WORK-fuse.vg" ./efs-fuse "$SEED" "$EXPORT" "$MNT" \
+ADDR=127.0.0.1
+start_group_plain
+mkdir -p "$MNT"
+# -f (foreground): no daemonize fork, so valgrind instruments the real
+# daemon (a forked parent would _exit without shutdown and leak the
+# pre-fork bootstrap table into the log).
+EFS_TRANSPORT=tcp $VG --log-file="$WORK-fuse.vg" ./efs-fuse "$SEED" "$EXPORT" "$MNT" -f \
     >"$WORK-fuse.out" 2>&1 &
 for i in $(seq 1 60); do grep -q "efs-fuse $MNT " /proc/mounts 2>/dev/null && break; sleep 0.5; done
 grep -q "efs-fuse $MNT " /proc/mounts || { echo "[leaks] fuse mount failed"; cat "$WORK-fuse.out"; exit 2; }
@@ -224,7 +290,11 @@ grep -q "efs-fuse $MNT " /proc/mounts || { echo "[leaks] fuse mount failed"; cat
 mkdir -p "$MNT/d1" "$MNT/d2"
 for i in $(seq 1 30); do echo "data-$i" >"$MNT/d1/f$i"; done
 for i in $(seq 1 30); do cat "$MNT/d1/f$i" >/dev/null 2>&1; done
-for i in $(seq 1 15); do mv "$MNT/d1/f$i" "$MNT/d2/g$i"; ln "$MNT/d2/g$i" "$MNT/d2/h$i" 2>/dev/null; done
+# Same-dir rename + hardlink. Cross-dir rename is the known cross-group
+# EINVAL debt (posix dir_move_into_subdir) — attempted for coverage but
+# allowed to fail until that debt is paid.
+for i in $(seq 1 15); do mv "$MNT/d1/f$i" "$MNT/d1/g$i"; ln "$MNT/d1/g$i" "$MNT/d2/h$i" 2>/dev/null; done
+mv "$MNT/d1/g1" "$MNT/d2/g1" 2>/dev/null || true
 dd if=/dev/zero of="$MNT/big" bs=1M count=4 conv=fsync >/dev/null 2>&1
 dd if="$MNT/big" of=/dev/null bs=4k >/dev/null 2>&1
 for i in $(seq 16 30); do : >"$MNT/d1/f$i"; done   # O_TRUNC -> report path (uninit regression)
@@ -245,23 +315,26 @@ if [ -z "$RDMA_IP" ]; then
 else
     note "phase 4: efsd + efs-fuse over RDMA ($RDMA_IP)"
     kill_ours 9; sleep 2
-    rm -rf "$STORAGE" "$MNT"; mkdir -p "$STORAGE" "$MNT"
-    # server under valgrind, default transport (RDMA listener up)
-    $VG --log-file="$WORK-efsd-rdma.vg" ./efsd --node-id 1 --addr "$RDMA_IP" \
-        --port "$PORT" --storage "$STORAGE" --quota 1G >"$WORK-efsd-rdma.out" 2>&1 &
-    for i in $(seq 1 40); do grep -q listening "$WORK-efsd-rdma.out" 2>/dev/null && break; sleep 0.5; done
-    ./efs-mgmt mkfs "$RDMA_IP:$PORT" "$EXPORT" >/dev/null 2>&1
-    # client under valgrind, default transport (RDMA upgrade on connect)
-    $VG --log-file="$WORK-fuse-rdma.vg" ./efs-fuse "$RDMA_IP:$PORT" "$EXPORT" "$MNT" \
+    mkdir -p "$MNT"
+    # 3-node group on the RDMA IP, node 1 valgrind'd (follower). The client
+    # mounts via node 2 (plain, fast); the RDMA upgrade runs on that conn.
+    # Servers run auto transport — tcp would disable their RDMA accept.
+    ADDR=$RDMA_IP
+    start_group_vg_server auto
+    # client under valgrind, STRICT RDMA (EFS_TRANSPORT=rdma): the phase
+    # exists to exercise the RDMA path, and auto mode falls back to TCP
+    # SILENTLY if the upgrade fails, making the phase vacuous. Foreground
+    # so valgrind instruments the real daemon (see phase 3).
+    EFS_TRANSPORT=rdma $VG --log-file="$WORK-fuse-rdma.vg" \
+        ./efs-fuse "$RDMA_IP:$((PORT + 1))" "$EXPORT" "$MNT" -f \
         >"$WORK-fuse-rdma.out" 2>&1 &
     for i in $(seq 1 60); do grep -q "efs-fuse $MNT " /proc/mounts 2>/dev/null && break; sleep 0.5; done
     if ! grep -q "efs-fuse $MNT " /proc/mounts; then
         note "phase 4: fuse mount failed (RDMA may be unavailable) — skipping"
         cat "$WORK-fuse-rdma.out"
     else
-        grep -q "RDMA transport up" "$WORK-fuse-rdma.out" \
-            && note "  RDMA transport up (upgrade exercised)" \
-            || note "  WARN: no 'RDMA transport up' line — upgrade may not have run"
+        # The upgrade can land well after the mount under memcheck (~30x
+        # slowdown), so check it AFTER the workload, not here.
         # metadata + packed-file ops (no chunk PUT -> no broken-data-path hang)
         mkdir -p "$MNT/r1"
         for i in $(seq 1 20); do echo "rdma-$i" >"$MNT/r1/f$i"; done
@@ -273,13 +346,16 @@ else
         ls "$MNT/r1" >/dev/null 2>&1
         for i in $(seq 11 20); do rm -f "$MNT/r1/f$i"; done
         sync
+        grep -q "RDMA transport up" "$WORK-fuse-rdma.out" \
+            && note "  RDMA transport up (upgrade exercised)" \
+            || note "  WARN: no 'RDMA transport up' line — phase ran on TCP"
         fusermount3 -u "$MNT" 2>/dev/null   # clean exit -> full stacks
         for i in $(seq 1 20); do grep -q "LEAK SUMMARY" "$WORK-fuse-rdma.vg" 2>/dev/null && break; sleep 1; done
         gate_leaks "$WORK-fuse-rdma.vg" "efs-fuse/rdma"
     fi
     kill_ours TERM   # SIGTERM efsd -> leak summary
-    for i in $(seq 1 20); do grep -q "LEAK SUMMARY" "$WORK-efsd-rdma.vg" 2>/dev/null && break; sleep 1; done
-    gate_leaks "$WORK-efsd-rdma.vg" "efsd/rdma"
+    for i in $(seq 1 20); do grep -q "LEAK SUMMARY" "$WORK-group1.vg" 2>/dev/null && break; sleep 1; done
+    gate_leaks "$WORK-group1.vg" "efsd/rdma"
 fi
 
 # ---------------------------------------------------------------- done ---

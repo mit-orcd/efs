@@ -180,6 +180,65 @@ unreadable) — `perf record -p` / `perf stat -p` same-uid are fine.
 
 ## Where we are
 
+**STEP 11 (delete the old snapshot/root-2PC metadata engine) COMPLETE
+(Sep 11 2026, commits 94c4c15 Inc1 → d7baa38 Inc2 → db023c7 Inc3 →
+c878a88 Inc4 → f5c4390 Inc5).** The Raft+KV engine is the ONLY metadata
+path. Deleted: meta_server.c / migrate.c / verify.c, the old inode-RPC
+handler branches, the server's metadata-table ownership (exports[] is a
+shell {id,name,chunk_size}), the client's old lookup/report/bootstrap/
+pack paths (client is raft-only; raft LOOKUP replies carry the full
+resolved row; entry at parent shard, host walks lanes), the old efs-mgmt
+control plane (mkfs now aliases raft-mkfs; list-exports/destroy/drain/
+undrain/remove-node/feature/upgrade gone), 58 dead metadata.c functions
+(serialize/snapshot/root_*/pack_*/flush-dirty/trim/evict/rehash/load/
+save/merge/adopt — metadata.c 6042→4335 lines; it STAYS linked because
+the client keeps `g_client.export` as its local staging/dirty table),
+13 old tests + test_directio + 7 old-engine scripts, and the
+EFS_MD_RAFT / EFS_MKFS_SHARD_BITS / EFS_FLUSH_PROF / EFS_LOCK_PROF /
+EFS_INO_PROF / EFS_INO_RAM_MB / EFS_CWI_TRACE env knobs. **Everything in
+this file below about the old engine (2PC root commit, CoW page flush,
+GC races, meta-rebuild, shard tabs, extras catchup, EFS_INO_RAM_MB, the
+dangling-dentry saga, flush group commit, bits=3/5 tuning) describes
+DELETED code — historical reference only, do not re-apply.**
+**Gates (all on the 19820 scratch raft cluster, TCP):** every increment
+posix 196/201 with the exact known signature (dir_move_into_subdir
+EINVAL debt, virt_find_query .find unimplemented, deep-nesting/many-files
+15s timeouts, occasional concurrent_writes_disjoint EIO flake); unit
+green except the 6 PRE-EXISTING test_lock getlk failures
+(tests/test_lock.c:80-90). Inc 5 final: posix 196/201 in 28s.
+**`tests/valgrind_leaks.sh` PORTED to raft + GATE GREEN** (same commit as
+this note): single-node efsd can't reach quorum, so every wire phase now
+runs a 3-node localhost raft group (EFS_MD_RAFT_N=3, ports PORT..PORT+2,
+per-node storage) + `raft-mkfs`; the valgrind'd server joins LAST as a
+follower (plain nodes hold quorum/leadership; the follower still applies
+every committed entry); UNIT_TESTS updated to the current suite;
+kill_ours matches $WORK not $PORT; suspicious-possibly-lost frame list
+updated to the current sources (raft/kv/meta/wire/data/sim). The port
+surfaced TWO REAL CLIENT LEAKS, both fixed and gated: (1) main() ran
+`efs_export_init(&g_client.export)` and `raft_bootstrap_metadata` then
+re-inited the SAME struct without freeing (init memsets it) — the whole
+first table leaked (~14 KB); now `efs_export_free` before the re-init.
+(2) `decode_frag_scratch` (read.c) was a `static __thread` heap buffer
+never freed — 786 KB definite (4 pool workers x 192 KiB); now a pthread
+key destructor frees it at thread exit, and a new
+`efs_client_read_pools_stop()` (called from `efs_client_shutdown` AFTER
+the flush, which can read) joins the get/frag pool workers so the
+destructor actually runs. Phase-4 RDMA traps fixed: the servers were
+started with EFS_TRANSPORT=tcp, but `efs_rdma_available()` returns 0
+process-wide under tcp, so the server REFUSED every upgrade (phase was
+vacuously TCP) — servers now run auto; the client runs STRICT
+EFS_TRANSPORT=rdma so a failed upgrade can no longer fall back silently;
+the "RDMA transport up" check moved after the workload (the upgrade is
+lazy — first pool checkout, not mount). Full gate PASS on fcstor003:
+13 unit + efsd + efs-fuse TCP + efsd/efs-fuse RDMA, all 0 definite /
+0 indirect / 0 uninit / 0 invalid.
+**Open follow-ups:** (1) data-plane GC gap — raft mode never deletes
+fragment files on unlink/truncate (spec L7); (2) raft-lag: leader pump
+holds h->mu across synchronous host_send (up to 250ms HOST_SEND_IO_MS)
+→ delayed heartbeats → election churn under load (term 46 observed);
+(3) client local staging table (g_client.export) shrink is post-step-11
+client-cache design.
+
 **STEP 1 LATENCY BUCKET LANDED (Sep 11, commit 495444d) —
 posix jobs=1 198/201 in 34s (was 182/201 in ~14 min); jobs=16 193/201 in
 30s (was catastrophic saturation).** Three changes:

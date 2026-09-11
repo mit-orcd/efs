@@ -171,7 +171,19 @@ static int frag_pool_run(struct frag_get_job *jobs, int n)
     return 0;
 }
 
-/* Reuse the fragment scratch across decodes on the same worker thread. */
+/* Reuse the fragment scratch across decodes on the same worker thread.
+ * The buffer is heap + thread-local, so without a destructor it leaks
+ * (~3 fragments per decoding thread) when the thread exits. A pthread
+ * key frees it at thread exit for pool workers and libfuse threads
+ * alike; pool workers only exit via efs_client_read_pools_stop(). */
+static pthread_key_t decode_scratch_key;
+static pthread_once_t decode_scratch_once = PTHREAD_ONCE_INIT;
+static void decode_scratch_free(void *p) { free(p); }
+static void decode_scratch_key_make(void)
+{
+    (void)pthread_key_create(&decode_scratch_key, decode_scratch_free);
+}
+
 static uint8_t *decode_frag_scratch(uint32_t need)
 {
     static __thread uint8_t *buf;
@@ -182,6 +194,8 @@ static uint8_t *decode_frag_scratch(uint32_t need)
             return NULL;
         buf = nbuf;
         cap = need;
+        pthread_once(&decode_scratch_once, decode_scratch_key_make);
+        (void)pthread_setspecific(decode_scratch_key, buf);
     }
     return buf;
 }
@@ -706,6 +720,34 @@ static int get_pool_ensure(void)
     }
     pthread_mutex_unlock(&g_get_pool.mu);
     return 0;
+}
+
+/* Stop both persistent read pools and join their workers. Thread exit is
+ * what runs the TLS destructor that frees each worker's decode scratch
+ * (decode_frag_scratch), so skipping the join leaks ~192 KiB per worker.
+ * Call only when no reads can be in flight (client shutdown). */
+void efs_client_read_pools_stop(void)
+{
+    if (g_get_pool.ready) {
+        pthread_mutex_lock(&g_get_pool.mu);
+        g_get_pool.shutdown = 1;
+        pthread_cond_broadcast(&g_get_pool.not_empty);
+        pthread_mutex_unlock(&g_get_pool.mu);
+        for (int i = 0; i < g_get_pool.nworkers; i++)
+            pthread_join(g_get_pool.tids[i], NULL);
+        g_get_pool.ready = 0;
+        g_get_pool.shutdown = 0;
+    }
+    if (g_frag_pool.ready) {
+        pthread_mutex_lock(&g_frag_pool.mu);
+        g_frag_pool.shutdown = 1;
+        pthread_cond_broadcast(&g_frag_pool.not_empty);
+        pthread_mutex_unlock(&g_frag_pool.mu);
+        for (int i = 0; i < g_frag_pool.nworkers; i++)
+            pthread_join(g_frag_pool.tids[i], NULL);
+        g_frag_pool.ready = 0;
+        g_frag_pool.shutdown = 0;
+    }
 }
 
 static int get_pool_run(struct chunk_get_job *jobs, uint32_t batch)

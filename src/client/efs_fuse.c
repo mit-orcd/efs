@@ -3512,6 +3512,10 @@ static int raft_bootstrap_metadata(void)
 ready:
     efs_client_table_lock();
     pthread_mutex_lock(&g_client.idx_mu);
+    /* main() already ran efs_export_init on this struct; re-initialising
+     * without freeing would orphan the whole first table (it memsets the
+     * struct, so every init-time allocation leaks). */
+    efs_export_free(&g_client.export);
     efs_export_init(&g_client.export, g_client.export_id, g_client.export_name);
     g_client.export.root.shard_bits = EFS_KV_SHARD_BITS;
     g_client.export.root.shard_count = 1u << EFS_KV_SHARD_BITS;
@@ -3779,7 +3783,10 @@ static int efs_fuse_main_mt(int argc, char *argv[],
                 fprintf(stderr,
                         "ERROR: efs-fuse did not start serving within 30s\n");
             /* Do not return through efs_client_shutdown: that would close the
-             * child's dup'd server sockets. */
+             * child's dup'd server sockets. Freeing the bootstrap metadata
+             * table is heap-only and safe — and keeps the parent's exit
+             * leak-clean under valgrind. */
+            efs_export_free(&g_client.export);
             fflush(stderr);
             _exit(ok == 0 ? 0 : 1);
         }

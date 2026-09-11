@@ -5,6 +5,30 @@ alwaysApply: true
 
 # efs deployment on the fcstor test cluster
 
+**STEP 11 (Sep 11 2026): the Raft+KV engine is the ONLY metadata engine.**
+The old whole-table snapshot / CoW page flush / 2PC root commit machinery is
+DELETED from the tree (commits 94c4c15..f5c4390). Operationally:
+- `efs-mgmt mkfs` is now an alias for `raft-mkfs` and needs a **quorum of
+  raft voters already running** — start ALL server nodes FIRST, then mkfs.
+  The old "start primary, mkfs, then joiners" order does not exist anymore.
+- There is no `EFS_MD_RAFT` env var (the host starts unconditionally), no
+  `EFS_MKFS_SHARD_BITS`, no build-id-gated rolling restart of metadata
+  state (the KV/raft state lives under `<storage>/mdraft/` per node; a
+  node rejoins by catching up from the group).
+- Old-engine operational lore below (2PC commit, CoW pages, GC races,
+  `meta-rebuild`, shard tabs, `EFS_INO_RAM_MB`, extras catchup) describes
+  DELETED code — kept for history only.
+- Current scratch raft cluster: **port 19820**, fcstor003–006 (node ids
+  1–4 = 172.16.223.57/.58/.59/.60), storage `/tmp/efs-raft-scratch`,
+  `--quota 1G --writers 0 --no-direct-io`. Kill ONLY via the
+  cmdline-grep loop (`grep -q 19820`) — bare `pkill -x efsd` hits any
+  other efsd on the same host. Start order: all 4 up, THEN
+  `./efs-mgmt raft-mkfs 172.16.223.57:19820 efs-test`. Client: fcstor007
+  `/tmp/efs-mount`, `EFS_TRANSPORT=tcp`.
+- The 19810 topology below is the OLD-engine cluster layout, kept for
+  reference; a redeploy of the current tree there follows the same raft
+  rules (all nodes up, then raft-mkfs).
+
 **Never use Slurm for efs.** Build/test runs on the dedicated fcstor test
 environment, reached via the `efs-test-ssh` wrapper:
 `~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh <host> '<cmd>'`

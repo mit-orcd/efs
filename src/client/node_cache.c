@@ -416,6 +416,10 @@ void efs_client_shutdown(void)
      * blocks until any in-flight flush completes. */
     efs_client_stop_meta_flush();
 
+    /* Join the read pools after the flush: a flush can read (merge-base
+     * GET), and worker exit is what frees the per-thread decode scratch. */
+    efs_client_read_pools_stop();
+
     if (conn_pool_inited) {
         for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
             pthread_mutex_lock(&g_client.conn_lock[i]);

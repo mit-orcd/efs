@@ -270,6 +270,7 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
 /* Store a fragment on a node. Returns 0 on success. */
 /* Read bytes from a file. Returns 0 on success. */
 int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size_t *out_len);
+void efs_client_read_pools_stop(void);
 
 /* Write bytes to a file and replicate metadata. Returns 0 on success. */
 int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *buf);
