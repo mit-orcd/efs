@@ -16,8 +16,9 @@
 # name (lookup miss, surviving nlink=2), utimens mtime fence, same-dir
 # LOCAL file RENAME (old name gone, new name present), same-dir LOCAL
 # directory RENAME (raft-smoke-rd → raft-smoke-re, pver bump), HASHED dest
-# CREATE (dedicated raft-smoke-hd split empty then a file whose hashed
-# dentry shard is on the other Raft group), HOLD open-unlinked lease
+# CREATE + same-dir HASHED file RENAME (dedicated raft-smoke-hd split empty
+# then a file whose hashed dentry shard is on the other Raft group, then
+# renamed onto a second hashed name), HOLD open-unlinked lease
 # (dedicated raft-smoke-k: open, unlink name, getattr nlink=0, leave
 # held through crash, close reclaims), FLOCK grant/release (dedicated
 # raft-smoke-w: EX owner=1, EX owner=2 BUSY, UN owner=1, EX owner=2,
@@ -45,7 +46,8 @@
 # the mkdir, the extra link name,
 # the unlinked name stays gone, the rmdir'd name stays gone, the nlink>1
 # unlinked name stays gone, the renamed file stays, the renamed dir stays,
-# the HASHED dest file stays, the held-unlinked inode stays at nlink=0
+# the HASHED dest file stays under its post-rename name (old hashed name
+# stays gone), the held-unlinked inode stays at nlink=0
 # until close reclaims it, the flock file stays and owner=2's EX still
 # BUSYs owner=1 until UN, the fcntl file stays and owner=1's EX still
 # BUSYs owner=2 until UN, the ranged fcntl file stays and owner=2's
@@ -725,6 +727,45 @@ check_hashed_create() {
     say "$tag hashed lookup-path: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag hashed lookup-path not OK"
     echo "$out" | grep -q "name=$nm" || bad "$tag hashed lookup-path name"
+    rnm=$(python3 -c "
+parent=int('$hd_ino')
+MASK=0xFFF
+skip=set('$nm $nm2'.split())
+def dir_lane(name):
+    h=2166136261
+    for c in name.encode():
+        h ^= c
+        h = (h * 16777619) & 0xffffffff
+    return h % 64
+def lane_shard(ino, lane):
+    h = ((ino & 0xffffffff) * 2654435761) & 0xffffffff
+    stride = 2 * (h & 0x7FF) + 1
+    return ((ino & MASK) + lane * stride) & MASK
+psh = parent & MASK
+for i in range(8192):
+    n='r%d' % i
+    lane=dir_lane(n)
+    dsh=lane_shard(parent, lane)
+    if lane==0 or dsh==psh or n in skip:
+        continue
+    print(n)
+    break
+")
+    if [ -n "$rnm" ]; then
+        out=$(g0_mgmt raft-rename "$hd_ino" "$nm" "$hd_ino" "$rnm")
+        say "$tag hashed-rename $nm -> $rnm: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag hashed-rename not OK"
+        if echo "$out" | grep -q 'status=0'; then
+            HASHED_FILE_OLD=$nm
+            HASHED_FILE=$rnm
+        fi
+        out=$(g0_mgmt raft-lookup "$hd_ino" "$nm")
+        echo "$out" | grep -q 'status=1' || bad "$tag hashed-rename old not NOT_FOUND"
+        out=$(g0_mgmt raft-lookup "$hd_ino" "$rnm")
+        echo "$out" | grep -q 'status=0' || bad "$tag hashed-rename new not OK"
+    else
+        bad "$tag hashed-rename dest name"
+    fi
 }
 
 # Session record + register + establish (10.5c-35a, I23 groundwork).
@@ -1603,6 +1644,7 @@ HASHED_DIR=""
 HASHED_DIR_INO=""
 HASHED_FILE=""
 HASHED_FILE2=""
+HASHED_FILE_OLD=""
 check_hashed_create "$leader" "fresh"
 say "session record through Raft (fresh)"
 SESS_SHARD=""
@@ -1926,6 +1968,11 @@ if [ -n "${HASHED_DIR_INO:-}" ] && [ -n "${HASHED_FILE:-}" ]; then
     out=$(g0_mgmt raft-lookup "$HASHED_DIR_INO" "$HASHED_FILE")
     say "after-crash lookup hashed-file: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash hashed-file missing"
+fi
+if [ -n "${HASHED_DIR_INO:-}" ] && [ -n "${HASHED_FILE_OLD:-}" ]; then
+    out=$(g0_mgmt raft-lookup "$HASHED_DIR_INO" "$HASHED_FILE_OLD")
+    say "after-crash lookup hashed-rename-old: $out"
+    echo "$out" | grep -q 'status=1' || bad "after-crash hashed-rename old name came back"
 fi
 if [ -n "${HASHED_DIR_INO:-}" ] && [ -n "${HASHED_FILE2:-}" ]; then
     out=$(g0_mgmt raft-lookup "$HASHED_DIR_INO" "$HASHED_FILE2")

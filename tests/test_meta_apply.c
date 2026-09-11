@@ -1060,6 +1060,53 @@ static void test_rename_cross_dir(void)
     efs_kv_mem_free(kv);
 }
 
+/* HASHED same-dir file rename: dest name on a distinct off-home lane,
+ * src gone, parent row times stay on dir-lanes. */
+static void test_rename_hashed(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_dentry dent;
+    struct efs_meta_row r;
+    struct efs_meta_attrs at;
+    efs_ino_t f = 0;
+    char na[16], nb[16];
+    uint64_t born;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(hashed_pair(EFS_ROOT_INO, na, nb) == 0, "two lanes");
+    CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &r) == EFS_OK, "root");
+    born = r.base_mtime;
+    CHECK(efs_meta_dir_begin_split(kv, EFS_ROOT_INO) == EFS_OK, "split");
+    while (efs_meta_dir_migrate_one(kv, EFS_ROOT_INO) == EFS_OK)
+        ;
+    CHECK(efs_meta_dir_finish_hashed(kv, EFS_ROOT_INO) == EFS_OK, "HASHED");
+    memset(&at, 0, sizeof(at));
+    at.uid = 1000;
+    at.gid = 1000;
+    at.now = T0 + 1;
+    CHECK(efs_meta_apply_create_file(kv, &at, EFS_ROOT_INO, S_IFREG | 0644, na,
+                                     &f) == EFS_OK &&
+              f,
+          "create");
+    CHECK(efs_meta_apply_rename(kv, EFS_ROOT_INO, na, EFS_ROOT_INO, nb, T0 + 2) ==
+              EFS_OK,
+          "hashed rename");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, na, &dent) ==
+              EFS_ERR_NOT_FOUND,
+          "old gone");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, nb, &dent) == EFS_OK &&
+              dent.ino == f,
+          "new name");
+    CHECK(efs_meta_apply_get_inode(kv, f, &r) == EFS_OK &&
+              r.parent == EFS_ROOT_INO,
+          "parent");
+    CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &r) == EFS_OK &&
+              r.layout == EFS_META_LAYOUT_HASHED && r.base_mtime == born,
+          "hashed rename did not stamp the inode row's times");
+    efs_kv_mem_free(kv);
+}
+
 static void test_lookup_path(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -2237,6 +2284,7 @@ int main(void)
     test_symlink();
     test_dir_rename();
     test_rename_cross_dir();
+    test_rename_hashed();
     test_lookup_path();
     test_gc_reap();
     test_gc_tail_alias();

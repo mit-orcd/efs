@@ -234,9 +234,11 @@ lazy — first pool checkout, not mount). Full gate PASS on fcstor003:
 0 indirect / 0 uninit / 0 invalid.
 **Open follow-ups:** (1) client local staging
 table (g_client.export) shrink is post-step-11 client-cache design /
-spec step 12. (Data-plane GC gap, cross-dir LOCAL rename, and `.find`
-READDIR walk are CLOSED; see below.) HASHED/SPLITTING rename stays INVAL
-(10.5c). Do not start step 12 until asked.
+spec step 12. (Data-plane GC, cross-dir LOCAL rename, `.find` READDIR
+walk, and HASHED rename are CLOSED; see below.) HASHED RMDIR, HASHED
+LINK dest, and HASHED txn-unlink (nlink>1 or last-link with dsh≠ish)
+stay INVAL; SPLITTING stays BUSY; dest-HASHED-dir overwrite stays INVAL
+(distributed emptiness). Do not start step 12 until asked.
 
 **`.FIND` READDIR WALK CLOSED (Sep 11 night, working tree).** POSIX
 `virt_find_query` returned empty because `find_index_build_locked`
@@ -255,7 +257,7 @@ jobs=1 **199/201 in 75 s** (`results/posix/20260911-find/suite-jobs1.tsv`)
 — `virt_find_query` PASS. The 2 fails are same-parent dir-rename EIO
 (`dir_rename_dir_with_contents`, `rename_dir_same_parent`) on this
 long-lived scratch; both pass **5/5 isolated** (0.1 s) and were PASS on
-the wipe+mkfs cross-dir jobs=1. Do not start step 12 until asked.
+the wipe+mkfs cross-dir jobs=1. Committed `986ca45`. Do not start step 12.
 
 **CROSS-DIR RENAME CLOSED (Sep 11 night, working tree on top of
 `e486ec4`).** POSIX `dir_move_into_subdir` was EINVAL because
@@ -266,7 +268,7 @@ LOCAL 2-parent txn (src dentry DEL, dest dentry PUT, inode parent=,
 both parent stamps + dseq, bounce if this replica does not host both
 parent groups). Directory cross-dir also moves nlink (src--, dest++)
 and still GUARDs dest ancestry `parent_version` (`err_rename_dir_into_itself`
-stays EINVAL). HASHED/SPLITTING still INVAL / BUSY.
+stays EINVAL). HASHED rename closed below; SPLITTING stays BUSY.
 **Gates (19820 scratch, TCP, wipe+raft-mkfs):** `test_meta_apply` /
 `test_sim` OK (plant the file — `create_file`'s first ino on shard S is
 S itself and would clobber a planted parent at 21/37). Isolated
@@ -275,7 +277,23 @@ jobs=1 **200/201 in 104 s** (`results/posix/20260911-crossdir/suite-jobs1.tsv`)
 — only `virt_find_query` (closed above). jobs=16 still saturation-timeouts
 on this scratch (186 then collapse on stacked runs); not a rename
 correctness fail (`dir_move_into_subdir` passed in the parallel batch).
-Do not start step 12 until asked.
+Committed `4d47038`. Do not start step 12.
+
+**HASHED RENAME CLOSED (Sep 11 night, working tree on top of `986ca45`).**
+Same pattern as LOCAL cross-dir: apply + sim already implemented HASHED
+rename; the host INVALed non-LOCAL parents. HASHED is now a txn that
+stamps dir-lanes (parent row only for `used_shards` / nlink), dseq on
+the name's dir-lane, and bounces when a hashed dentry shard is on
+another Raft group. Same-dir dest first-use sets the dest lane
+`used_shards` bit. SPLITTING stays BUSY. Dest **dir** overwrite that is
+HASHED stays INVAL (distributed emptiness).
+**Gates (19820 scratch, TCP, wipe+raft-mkfs):** `test_meta_apply` /
+`test_sim` OK. efs-mgmt: LOCAL same-dir, HASHED same-dir (`n0`→`r0`
+status=0), LOCAL cross-dir all status=0. Isolated posix rename/find
+PASS. posix jobs=1 **201/201 in 30.4 s**
+(`results/posix/20260911-hashed/suite-jobs1.tsv`). FUSE HASHED dir
+`hr-fuse`: `mv n0 r0` OK; `rm -rf` then EIO on the HASHED dir itself
+(HASHED RMDIR still INVAL — next slice). Do not start step 12.
 
 **RAFT-LAG CLOSED (Sep 11 PM, working tree) — three fixes in
 `src/server/raft_host.c`, gated 199/201 jobs=16 in 26.5 s with ZERO

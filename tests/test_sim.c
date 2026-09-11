@@ -881,6 +881,55 @@ static void test_hashed_dir_stat(void)
     efs_sim_free(s);
 }
 
+/* HASHED same-dir file rename (apply already covers this; the sim txn
+ * must match: dest dentry on the dest dir-lane shard, src gone). */
+static void test_rename_hashed(void)
+{
+    struct efs_sim *s = mk(131);
+    efs_ino_t f = 0, g = 0, d = 0;
+    uint8_t layout = 99;
+    char na[16], nb[16], nd[16];
+    int rc, i;
+
+    CHECK(s, "mk");
+    CHECK(hashed_pair(EFS_ROOT_INO, na, nb) == 0, "pair");
+    nd[0] = 0;
+    for (i = 0; i < 8192; i++) {
+        snprintf(nd, sizeof(nd), "q%d", i);
+        if (efs_kv_dir_lane(nd) != 0 &&
+            efs_kv_dentry_shard(EFS_ROOT_INO, nd, EFS_META_LAYOUT_HASHED) !=
+                efs_kv_inode_shard(EFS_ROOT_INO) &&
+            strcmp(nd, na) != 0 && strcmp(nd, nb) != 0)
+            break;
+    }
+    CHECK(nd[0] != 0, "third name");
+    CHECK(efs_sim_dir_begin_split(s, EFS_ROOT_INO) == EFS_OK, "split");
+    while ((rc = efs_sim_dir_migrate(s, EFS_ROOT_INO)) == EFS_OK)
+        ;
+    CHECK(rc == EFS_ERR_NOT_FOUND, "migrated");
+    CHECK(efs_sim_dir_finish_hashed(s, EFS_ROOT_INO) == EFS_OK, "HASHED");
+    CHECK(efs_sim_dir_layout(s, EFS_ROOT_INO, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_HASHED,
+          "layout");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, na, &f) == EFS_OK &&
+              f,
+          "create");
+    CHECK(efs_sim_rename(s, 0, EFS_ROOT_INO, na, EFS_ROOT_INO, nb) == EFS_OK,
+          "same-dir hashed");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, na, &g) == EFS_ERR_NOT_FOUND,
+          "old gone");
+    CHECK(efs_sim_lookup(s, 1, EFS_ROOT_INO, nb, &g) == EFS_OK && g == f,
+          "new name");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, nd, &d) == EFS_OK && d, "dest dir");
+    CHECK(efs_sim_rename(s, 0, EFS_ROOT_INO, nb, d, na) == EFS_OK,
+          "cross hashed");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, nb, &g) == EFS_ERR_NOT_FOUND,
+          "src gone");
+    CHECK(efs_sim_lookup(s, 0, d, na, &g) == EFS_OK && g == f, "in dest");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
 static void test_lock_conflict_fence(void)
 {
     struct efs_sim *s = mk(93);
@@ -1309,6 +1358,7 @@ int main(void)
     test_i22_epoch();
     test_i8_spread();
     test_hashed_dir_stat();
+    test_rename_hashed();
     test_single_shard_ops();
     test_utimens_fence();
     test_truncate_range_del();

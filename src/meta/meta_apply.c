@@ -1310,10 +1310,22 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
         if (rc != EFS_OK)
             return rc;
     } else {
-        /* One parent row: times already in sprow. */
+        /* One parent row: times already in sprow. Dest name may land on
+         * a dir lane this directory has never used — that is first use,
+         * so the used_shards bit belongs on the same PUT as src. */
         touch_dst = 0;
         stamp_dst = 0;
         if (dprow.layout != EFS_META_LAYOUT_LOCAL) {
+            uint64_t bit = 1ull << efs_kv_dir_lane(dst_name);
+            if ((sprow.used_shards & bit) == 0) {
+                sprow.used_shards |= bit;
+                pack_inode(v_spar, &sprow);
+                rc = efs_kv_key_inode(efs_kv_inode_shard(src_parent), src_parent,
+                                      k_spar, &ksp);
+                if (rc != EFS_OK)
+                    return rc;
+                touch_src = 1;
+            }
             rc = dir_lane_stamp(kv, &sprow, dst_name, now, k_dln, &kdln, v_dln);
             if (rc != EFS_OK)
                 return rc;
