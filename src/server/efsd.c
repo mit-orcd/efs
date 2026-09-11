@@ -506,18 +506,9 @@ int main(int argc, char **argv)
                 server.nwriters, server.storage_path_count);
         return 1;
     }
-    if (server_verify_start(&server) != 0) {
-        fprintf(stderr, "Failed to start fragment verify thread\n");
-        server_writer_pool_stop(&server);
-        return 1;
-    }
     server_start_heartbeat(&server);
-    server_start_migration(&server);
-    server_start_meta_catchup(&server);
-    server_start_meta_flush(&server);
     if (server_raft_host_start(&server) != 0) {
         fprintf(stderr, "raft-host: start failed\n");
-        server_verify_stop(&server);
         server_writer_pool_stop(&server);
         return 1;
     }
@@ -606,56 +597,12 @@ int main(int argc, char **argv)
         fprintf(stderr, "shutdown: %d conn threads still live after drain "
                 "timeout; forcing teardown\n", g_live_conns);
 
-    server_verify_stop(&server);
     server_writer_pool_stop(&server);
     server_usage_flush_dirty(&server);
 
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_sec += 10;
-    pthread_timedjoin_np(server.migrate_tid, NULL, &ts);
-    clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_sec += 10;
-    pthread_timedjoin_np(server.meta_catchup_tid, NULL, &ts);
-    /* Phase 2a: wake + join the meta-flush thread, then commit any RPC-dirty
-     * exports so a graceful restart doesn't lose acknowledged mutations. */
-    if (server.meta_flush_started) {
-        pthread_mutex_lock(&server.lock);
-        pthread_cond_signal(&server.rpc_dirty_cv);
-        pthread_mutex_unlock(&server.lock);
-        clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec += 10;
-        pthread_timedjoin_np(server.meta_flush_tid, NULL, &ts);
-    }
-    {
-        pthread_mutex_lock(&server.lock);
-        int primary = server_is_meta_primary_locked(&server);
-        uint32_t dirty[EFS_MAX_EXPORTS];
-        uint32_t ndirty = 0;
-        if (primary) {
-            for (uint32_t e = 0; e < server.export_count &&
-                 e < EFS_MAX_EXPORTS; e++) {
-                if (__atomic_load_n(&server.rpc_dirty_ops[e],
-                                    __ATOMIC_RELAXED) > 0) {
-                    dirty[ndirty++] = e;
-                    __atomic_store_n(&server.rpc_dirty_ops[e], 0,
-                                     __ATOMIC_RELAXED);
-                }
-            }
-        }
-        pthread_mutex_unlock(&server.lock);
-        for (uint32_t i = 0; i < ndirty; i++)
-            server_flush_fragmented_meta(&server, &server.exports[dirty[i]]);
-    }
-
-    pthread_mutex_lock(&server.lock);
-    if (server.export_meta_dirty) {
-        for (uint32_t i = 0; i < server.export_count; i++)
-            server_save_export(&server, &server.exports[i]);
-        server.export_meta_dirty = 0;
-    }
-    pthread_mutex_unlock(&server.lock);
-
+    /* Step 11: no flush/catchup/migration/verify threads to join — the
+     * Raft log is the durability boundary; the host stop replays nothing
+     * here (recovery is WAL replay at next start). */
     server_raft_host_stop();
     server_peer_pool_shutdown();
     pthread_mutex_destroy(&server.lock);

@@ -2016,7 +2016,6 @@ int server_rejoin_cluster(struct efsd_server *s)
                nodes[i].addr, nodes[i].port, nodes[i].id);
         if (server_join_cluster(s, nodes[i].addr, nodes[i].port) == 0) {
             printf("Rejoined cluster via %s:%u\n", nodes[i].addr, nodes[i].port);
-            server_fetch_metadata_from(s, nodes[i].addr, nodes[i].port);
             return 0;
         }
         printf("Failed to rejoin via %s:%u\n", nodes[i].addr, nodes[i].port);

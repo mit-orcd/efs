@@ -390,10 +390,6 @@ static inline void server_shard_unlock_all(struct efsd_server *s, uint32_t eidx,
         pthread_mutex_unlock(server_shard_mu(s, eidx, i));
 }
 
-struct efs_msg_heal_status_reply;
-void server_fill_heal_status(struct efsd_server *s,
-                             struct efs_msg_heal_status_reply *r);
-
 /* A crashed writer's flush election self-clears after this long. Must
  * comfortably exceed the slowest legitimate flush (page PUTs + root),
  * including a starved client's first huge dirty-set flush. */
@@ -561,14 +557,6 @@ void server_writer_set_npaths(uint32_t n);
 int server_add_storage_paths(struct efsd_server *s, const char *csv,
                              uint32_t *count_out);
 
-/* Async Blake3 of a stored fragment vs the client sidecar; heal from peers. */
-int server_verify_start(struct efsd_server *s);
-void server_verify_stop(struct efsd_server *s);
-void server_verify_enqueue(struct efsd_server *s, efs_export_id_t export_id,
-                           efs_ino_t ino, uint32_t chunk_index,
-                           uint32_t fragment_index, uint32_t data_len,
-                           const uint8_t checksum[EFS_HASH_SIZE]);
-
 /* pthread_create with a larger stack (hello_ack / node snapshots are ~16KiB). */
 int efsd_pthread_create(pthread_t *tid, void *(*fn)(void *), void *arg);
 
@@ -618,79 +606,12 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
 struct efs_msg_hello;
 void server_gossip_membership(struct efsd_server *s, const struct efs_msg_hello *h);
 
-/* Persist export as 2+1 meta pages + EFSR root; push root to peers. */
-int server_flush_fragmented_meta(struct efsd_server *s, struct efs_export *ex);
-/* Group-commit wrapper: concurrent fsync flushes of the same export share one
- * flush instead of each running a full serialized one. Use this on the fsync
- * path; the flush thread and migrate call the plain version. */
-int server_flush_meta_grouped(struct efsd_server *s, struct efs_export *ex);
-
-/* Best-effort unlink local meta page fragments for a retired generation slot.
- * Non-fatal; space leak only if unlink fails. With dirty-page flushing the
- * live generation may still reference (skip re-PUTting) unchanged pages whose
- * fragments were written by an earlier same-parity generation, so only pages
- * BEYOND the new live generation's page count are truly dead and unlinked;
- * in-range fragments are left in place for reuse (they are overwritten by
- * the next same-parity flush that actually changes them). */
-void server_gc_meta_slot_pages(struct efsd_server *s, struct efs_export *ex,
-                               uint64_t dead_generation,
-                               uint32_t old_ino_pages, uint32_t old_chunk_pages,
-                               uint32_t live_ino_pages, uint32_t live_chunk_pages);
-/* CoW (EFSR v7) GC: reclaim cis in old_cis[] no longer referenced by
- * new_cis[] (the new committed root's page_cis[]). Both arrays are caller-
- * owned copies captured under the server lock (the GC runs lock-free). */
-void server_gc_meta_cow_pages(struct efsd_server *s, struct efs_export *ex,
-                              efs_ino_t table_ino,
-                              const uint32_t *old_cis, uint32_t old_count,
-                              const uint32_t *new_cis, uint32_t new_count);
-
-/* Rebuild in-memory export tables from meta pages referenced by ex->root. */
-int server_rebuild_export_from_pages(struct efsd_server *s, struct efs_export *ex);
-
-/* Caller holds s->lock. If this node owns `shard` and the table is still
- * hollow (descriptor present, pages not assembled), drop the lock, rebuild
- * from pages, and reacquire. Returns 0 when the table is safe to mutate,
- * -1 if it is still hollow (caller should reply BUSY). */
-int server_ensure_shard_ready(struct efsd_server *s, struct efs_export *ex,
-                              uint32_t shard);
-
-/* After membership is known, rebuild any EFSR exports from meta pages. */
-/* Send metadata to all peers. Returns number of acks. */
-int server_replicate_metadata(struct efsd_server *s, struct efs_export *ex);
-
-/* Fetch metadata from a peer. */
-int server_fetch_metadata_from(struct efsd_server *s, const char *host, uint16_t port);
-
 /* Start the background heartbeat thread. */
 void server_start_heartbeat(struct efsd_server *s);
 
 /* Non-zero when a node is heartbeat-marked-down (exclude from placement).
  * Caller holds s->lock. */
 int server_node_is_down_locked(struct efsd_server *s, efs_node_id_t id);
-
-/* Start the background data migration thread. */
-void server_start_migration(struct efsd_server *s);
-
-/* Start background meta catch-up (rebuild dirty roots + heal local pages). */
-void server_start_meta_catchup(struct efsd_server *s);
-
-/* Phase 2a: non-zero when this server is the metadata primary (lowest-id
- * live node) — the single writer that flushes RPC-driven dirty exports.
- * Caller holds s->lock. */
-int server_is_meta_primary_locked(struct efsd_server *s);
-
-/* Phase 2b: the metadata primary's node id (lowest-id live node). Caller
- * holds s->lock. */
-efs_node_id_t server_meta_primary_id_locked(struct efsd_server *s);
-
-/* Phase 2a: start the background meta-flush thread (batched server-side
- * flush of RPC-driven dirty exports). */
-void server_start_meta_flush(struct efsd_server *s);
-
-/* Phase 2a: note an RPC mutation on export slot `eidx` (bumps the dirty-ops
- * counter; signals the flush thread once EFS_META_FLUSH_OPS accumulate).
- * Caller holds s->lock. */
-void server_meta_mark_rpc_dirty_locked(struct efsd_server *s, uint32_t eidx);
 
 /* Production Raft host (architecture.md §10 10.5c). Env-gated: a no-op
  * unless EFS_MD_RAFT is set. Start fails loud on setup error so a broken
@@ -762,24 +683,6 @@ void server_start_rejoin(struct efsd_server *s);
 
 /* Remove a node from the local cluster list. */
 void server_remove_node_from_cluster(struct efsd_server *s, efs_node_id_t node_id);
-
-/* Broadcast a node-left notification to all peers. */
-void server_notify_node_left(struct efsd_server *s, efs_node_id_t node_id);
-
-/* Re-place fragments orphaned by a departed node and flush the EFSR. */
-void server_heal_orphan_fragments(struct efsd_server *s, efs_node_id_t node_id);
-int server_rebuild_orphan_fragment(struct efsd_server *s, struct efs_export *ex,
-                                   struct efs_chunk_entry *chunk,
-                                   int fragment_index, efs_node_id_t dead_id);
-
-/* True if any chunk still places a fragment on this node's id. Caller holds lock. */
-int server_has_local_fragments_locked(struct efsd_server *s);
-
-/* Rebuild meta maps + refresh used; return 1 if no local fragments and used==0. */
-int server_node_is_empty(struct efsd_server *s);
-
-/* Begin leave: notify peers and stop accepting connections. Caller holds lock. */
-void server_begin_leave_locked(struct efsd_server *s);
 
 /* Persist / load a fragment's blake3 checksum sidecar (written once at PUT). */
 int server_write_fragment_sum_sync(struct efsd_server *s, struct efs_export *ex,
