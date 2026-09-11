@@ -1151,8 +1151,16 @@ and 10.5c-35b (real session uuid/epoch on HOLD/FLOCK)
 and 10.5c-35c (revocation barrier: fence + waiter dequeue)
 and 10.5c-35d (append-reservation reclaim on fence as FENCED_HOLE)
 are gated on a
-scratch cluster behind `EFS_MD_RAFT`. Remaining: cutover of the
-live table is not this work (not step 11). The KV engine is
+scratch cluster behind `EFS_MD_RAFT`. **Status (Sep 11): production
+adoption has landed** — `efsd` + `efs-fuse` serve the single export from
+the Raft+KV engine behind `EFS_MD_RAFT`, reads AND writes (every FUSE
+metadata op is a Raft proposal; chunk publish/GETCHUNKS included), gated
+at 198/201 posix solo in 34 s and 193/201 under jobs=16 (commits 3299e89,
+807327a, 495444d; the last is the event-driven pump + eager commit
+broadcast + name-ordered readdir cursor). Remaining: three known-debt
+posix failures (cross-dir rename EINVAL, `.find` unimplemented, the
+report-poisoning EIO flake), then step 11 — cutover of the live table is
+not this work. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not
