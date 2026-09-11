@@ -233,11 +233,50 @@ lazy — first pool checkout, not mount). Full gate PASS on fcstor003:
 13 unit + efsd + efs-fuse TCP + efsd/efs-fuse RDMA, all 0 definite /
 0 indirect / 0 uninit / 0 invalid.
 **Open follow-ups:** (1) data-plane GC gap — raft mode never deletes
-fragment files on unlink/truncate (spec L7); (2) raft-lag: leader pump
-holds h->mu across synchronous host_send (up to 250ms HOST_SEND_IO_MS)
-→ delayed heartbeats → election churn under load (term 46 observed);
-(3) client local staging table (g_client.export) shrink is post-step-11
-client-cache design.
+fragment files on unlink/truncate (spec L7); (2) client local staging
+table (g_client.export) shrink is post-step-11 client-cache design.
+
+**RAFT-LAG CLOSED (Sep 11 PM, working tree) — three fixes in
+`src/server/raft_host.c`, gated 199/201 jobs=16 in 26.5 s with ZERO
+post-startup term changes (was: term +8 in 75 ms storms, terms 113/328
+cumulative).** (1) **Per-peer outbox:** `host_send` no longer does the
+synchronous send+empty-ACK round trip under `h->mu`; it encodes and
+queues to `h->tx[peer]` (cap 256, drop-newest) and one `host_sender`
+thread per peer does FIFO pop → conn get → 250 ms timeouts → send →
+wait ACK → release. Pump `h->mu` holds dropped from up to 250 ms to
+~0.5–2 ms worst (drain ~200–480 µs = raft_log_append fsyncs; apply
+~200 µs = KV WAL fsync; persist ~250 µs — all measured with the new
+`EFS_RAFT_OBS=1` instrumentation: term/role-change logs, per-outbox
+counters, 5 s pump-phase maxima dump). (2) **Cross-node read_mu
+deadlock fixed:** `host_read_index`'s follower branches and
+`host_propose`'s forward branch blocked in `host_remote_cmd` (30 s
+`EFS_IO_TIMEOUT_MS` recv + retries) while holding `read_mu`; a
+post-restart leader-confusion cycle (003→004→005→003) wedged ALL
+metadata ops for minutes (suite hung at startup, FUSE
+request_wait_answer). All three sites now drop `read_mu` around the
+network wait and relock after (safe: the apply layer re-validates, the
+command is fully formed before propose, the raft log orders mutations).
+(3) **THE ELECTION-STORM ROOT CAUSE — ticks were iteration-counted,
+not wall-clocked:** the event-driven pump (495444d) wakes on every
+inbox message/propose, so under load the loop spins as fast as the
+drain runs (µs/iteration on a leader), and one `efs_raft_tick` per
+iteration fired the 100–200-tick election deadline in **milliseconds**
+— any busy node campaigned constantly, its higher-term vote requests
+forced the leader to step down (`maybe_step_down`), and the leader
+itself re-campaigned instantly (3 re-campaigns in 35 ms observed).
+Leaders also broadcast AEs every 10 spinning ticks (~50 µs), flooding
+the outbox (hi=91). Fix: `host_pump` gates `efs_raft_tick` on
+`now - last_tick_us >= HOST_TICK_US` (never catches up missed ticks —
+late is safe, early is not); drain/apply/persist stay event-driven, so
+the 495444d latency win is untouched. raft.c is unchanged (the
+simulator drives ticks as logical time). **Gate:** fresh wipe +
+raft-mkfs, posix jobs=16 **199/201 in 26.5 s**
+(`results/posix/20260911-outbox/suite-tickfix-jobs16.tsv`), only the 2
+permanent known-debt fails (`dir_move_into_subdir` EINVAL,
+`virt_find_query`) — zero timeouts, zero EIO flakes; term lines in all
+4 efsd logs are startup-only (g0 term 3, g2 term 4, stable through the
+run). Unit: test_raft/kv_lsm/meta_apply/sim/wire/txn OK.
+`EFS_RAFT_OBS` stays in tree, env-gated, off by default.
 
 **STEP 1 LATENCY BUCKET LANDED (Sep 11, commit 495444d) —
 posix jobs=1 198/201 in 34s (was 182/201 in ~14 min); jobs=16 193/201 in

@@ -35,11 +35,15 @@
  * node livelock an up-to-date long-timeout one by resetting its timer via
  * maybe_step_down faster than the longer timer can ever fire. */
 #define HOST_ELECT_BASE    100
-/* Pump holds h->mu across cfg.send. A dead peer must not sit on the
- * 30s pool SO_RCVTIMEO or election cannot tick. Restore the pool
- * timeout before release so bounce RPCs keep the long budget. */
+/* Per-peer sender threads do the blocking send+ACK for cfg.send messages.
+ * A dead peer must not sit on the 30s pool SO_RCVTIMEO or its outbox
+ * becomes a 30s/message drip. Restore the pool timeout before release so
+ * bounce RPCs keep the long budget. */
 #define HOST_SEND_IO_MS    250
 #define HOST_INBOX_MAX     256
+/* Per-peer outbound queue cap. Full -> drop newest: a dropped packet is
+ * indistinguishable from loss, which Raft retries through. */
+#define HOST_OUTBOX_MAX    256
 #define HOST_ENCODE_STACK  (64 * 1024)
 #define HOST_NGROUPS       2
 #define HOST_READ_TRIES    80 /* 80 × 5 ms = 400 ms; heartbeat is 50 ms */
@@ -82,12 +86,43 @@ struct host_inbox_item {
     uint32_t len;
 };
 
+/* One queued outbound raft message (encoded wire bytes, heap-owned). */
+struct host_outbox_item {
+    uint8_t *buf;
+    uint32_t len;
+};
+
+/* Per-peer send queue + its lazily-spawned sender thread. All fields are
+ * guarded by the host's outbox_mu; the thread arg is &h->tx[i] itself. */
+struct host_outbox {
+    struct efs_raft_host *h; /* back-pointer, set at start */
+    int peer;                /* raft_id this outbox serves */
+    pthread_t tid;
+    int started;
+    int n;
+    struct host_outbox_item q[HOST_OUTBOX_MAX];
+    /* EFS_RAFT_OBS counters (guarded by outbox_mu; stats are diagnostic
+     * only, so the sender updates rtt/getwait without the lock — worst
+     * case is a torn read in the dump). */
+    uint64_t st_enq;      /* queued messages */
+    uint64_t st_drop;     /* dropped (queue full / shutting down) */
+    uint64_t st_sent;     /* delivered + ACKed */
+    uint64_t st_fail;     /* send/ACK failures (conn dropped) */
+    uint32_t st_hi;       /* high-water queue depth */
+    uint64_t st_rtt_us;   /* cumulative send->ACK latency */
+    uint64_t st_get_us;   /* cumulative peer_conn_get wait */
+    uint64_t st_get_max_us;
+};
+
 struct host_group {
     uint8_t group;
     uint8_t hosted;
     uint32_t voters;
     uint64_t applied_saved;
     struct efs_raft *r;
+    /* EFS_RAFT_OBS: last logged term/role, for election-churn timing. */
+    uint64_t obs_term;
+    int obs_role;
 };
 
 /* One blocked lock waiter (10.5c-34). Stack-allocated by the waiting
@@ -129,14 +164,43 @@ struct efs_raft_host {
     int inbox_n;
     /* Event-driven pump: pump_efd wakes the pump (inbox/propose/stop) between
      * its 5 ms timer ticks. It is an eventfd, NOT a condvar on h->mu, on
-     * purpose: the pump holds h->mu across synchronous host_send I/O, so a
-     * wakeup that needs h->mu (network handler -> h->mu -> pump -> peer
-     * handler -> peer h->mu) closes a cross-node convoy that only the 250 ms
-     * send timeout breaks. eventfd write needs no lock. applied_cv is
-     * broadcast by the pump after each cycle so waiters see a fresh applied
-     * index without polling; used with h->mu (no I/O under that wait). */
+     * purpose: h->mu serializes ALL raft core work (tick/propose/recv, incl.
+     * WAL fsync), so a network-handler wakeup that needed h->mu would queue
+     * behind whatever the core is doing. eventfd write needs no lock.
+     * applied_cv is broadcast by the pump after each cycle so waiters see a
+     * fresh applied index without polling; used with h->mu (no I/O under
+     * that wait). */
     int pump_efd;
     pthread_cond_t applied_cv;
+    /* Per-peer send outboxes. host_send runs under h->mu (pump ticks and
+     * proposer threads) and must NEVER do network I/O there: a dead peer's
+     * synchronous send+ACK (up to HOST_SEND_IO_MS) under h->mu stalled
+     * every election tick and proposal on BOTH groups — that was the
+     * election churn under load (term 46 observed). host_send now only
+     * encodes and queues; one lazily-spawned sender thread per peer does
+     * the blocking send + empty-ACK wait, preserving per-peer FIFO order,
+     * dead-conn detection and per-peer backpressure. A dead peer stalls
+     * only its own sender. outbox_mu/outbox_cv guard all tx[] state;
+     * tx_running=0 tells senders to drop-and-exit and host_send to drop. */
+    pthread_mutex_t outbox_mu;
+    pthread_cond_t outbox_cv;
+    int tx_running;
+    struct host_outbox tx[EFS_RAFT_MAX_PEERS];
+    /* EFS_RAFT_OBS: wait_applied timeouts, pump h->mu hold high-water, and
+     * the last stats-dump timestamp (ms). */
+    uint64_t obs_wait_timeouts;
+    uint64_t obs_pump_hold_max_us;
+    uint64_t obs_last_dump_ms;
+    /* EFS_RAFT_OBS: per-cycle phase maxima (us) + applies in the worst
+     * cycle, so a hold spike says WHERE the time went. */
+    uint64_t obs_wait_max_us;   /* max h->mu lock WAIT in the pump */
+    uint64_t obs_drain_max_us;
+    uint64_t obs_tick_max_us;
+    uint64_t obs_persist_max_us;
+    uint64_t obs_apply_max_us;
+    uint64_t obs_apply_cycle_us; /* cumulative apply time, current cycle */
+    uint64_t obs_apply_cnt;      /* applies in the current cycle */
+    uint64_t obs_apply_max_cnt;  /* most applies in one cycle */
 };
 
 static struct efs_raft_host *g_host;
@@ -174,6 +238,7 @@ static uint32_t rd32be(const uint8_t *p)
 }
 
 static uint64_t now_ns(void);
+static void host_stop_senders(struct efs_raft_host *h);
 
 static int env_on(const char *name)
 {
@@ -181,6 +246,21 @@ static int env_on(const char *name)
     if (!v || !v[0] || strcmp(v, "0") == 0)
         return 0;
     return 1;
+}
+
+static uint64_t now_us_(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000ull;
+}
+
+static int raft_obs_on(void)
+{
+    static int v = -1;
+    if (v < 0)
+        v = env_on("EFS_RAFT_OBS");
+    return v;
 }
 
 static uint32_t group_voters(uint8_t group, int n)
@@ -222,8 +302,106 @@ static int peer_addr(struct efs_raft_host *h, int raft_id,
     return -1;
 }
 
+/* Per-peer sender: pops encoded messages FIFO and does the blocking
+ * send + empty-ACK wait (dead-conn detection + backpressure) that used to
+ * run under h->mu. Never touches h->mu; outbox_mu is never held across
+ * I/O. On stop (tx_running=0) it drops whatever is queued and exits — the
+ * server is going away and Raft retries from the next incarnation. */
+static void *host_sender(void *arg)
+{
+    struct host_outbox *tx = arg;
+    struct efs_raft_host *h = tx->h;
+
+    for (;;) {
+        uint8_t *buf;
+        uint32_t len;
+        char host[64];
+        uint16_t port = 0;
+        struct efs_conn *pc;
+        uint8_t rtype = 0;
+        void *reply = NULL;
+        uint32_t rlen = 0;
+        int i;
+
+        pthread_mutex_lock(&h->outbox_mu);
+        while (tx->n == 0 && h->tx_running)
+            pthread_cond_wait(&h->outbox_cv, &h->outbox_mu);
+        if (!h->tx_running) {
+            for (i = 0; i < tx->n; i++)
+                free(tx->q[i].buf);
+            tx->n = 0;
+            pthread_mutex_unlock(&h->outbox_mu);
+            return NULL;
+        }
+        buf = tx->q[0].buf;
+        len = tx->q[0].len;
+        memmove(&tx->q[0], &tx->q[1], (size_t)(tx->n - 1) * sizeof(tx->q[0]));
+        tx->n--;
+        pthread_mutex_unlock(&h->outbox_mu);
+
+        {
+            uint64_t t0 = 0, t1 = 0;
+            int obs = raft_obs_on();
+            if (obs)
+                t0 = now_us_();
+            if (peer_addr(h, tx->peer, host, sizeof(host), &port) != 0) {
+                free(buf);
+                continue;
+            }
+            pc = server_peer_conn_get(host, port);
+            if (!pc) {
+                free(buf);
+                continue;
+            }
+            if (obs) {
+                uint64_t gw;
+                t1 = now_us_();
+                gw = t1 - t0;
+                tx->st_get_us += gw;
+                if (gw > tx->st_get_max_us)
+                    tx->st_get_max_us = gw;
+            }
+            if (pc->kind == EFS_CONN_TCP && pc->fd >= 0) {
+                efs_set_recv_timeout(pc->fd, HOST_SEND_IO_MS);
+                efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
+            }
+            if (efs_conn_send_msg(pc, EFS_MSG_RAFT, buf, len) != 0) {
+                tx->st_fail++;
+                server_peer_conn_drop(host, port, pc);
+                free(buf);
+                continue;
+            }
+            if (efs_conn_recv_msg(pc, &rtype, &reply, &rlen) != 0 ||
+                rtype != EFS_MSG_RAFT_REPLY) {
+                tx->st_fail++;
+                free(reply);
+                server_peer_conn_drop(host, port, pc);
+                free(buf);
+                continue;
+            }
+            if (pc->kind == EFS_CONN_TCP && pc->fd >= 0) {
+                efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+                efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+            }
+            free(reply);
+            server_peer_conn_release(host, port, pc);
+            free(buf);
+            if (obs) {
+                tx->st_sent++;
+                tx->st_rtt_us += now_us_() - t1;
+            }
+        }
+    }
+}
+
 /* Best-effort: a send failure is a dropped packet. Returning an error from
- * tick/recv aborts the remaining broadcasts and stalls elections. */
+ * tick/recv aborts the remaining broadcasts and stalls elections.
+ *
+ * Called under h->mu from the pump (tick) and from proposer threads
+ * (efs_raft_propose), so it must NEVER do network I/O: it only encodes and
+ * queues to the destination peer's outbox; the per-peer sender thread does
+ * the blocking send. Queue full -> drop the newest message (Raft retries
+ * whatever mattered). */
 static int host_send(void *net, const struct efs_raft_msg *msg)
 {
     struct efs_raft_host *h = net;
@@ -232,17 +410,12 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
     uint32_t cap = sizeof(stack);
     uint32_t len = 0;
     uint8_t *heap = NULL;
-    char host[64];
-    uint16_t port = 0;
-    struct efs_conn *pc;
-    uint8_t rtype = 0;
-    void *reply = NULL;
-    uint32_t rlen = 0;
+    struct host_outbox *tx;
     int rc;
 
     if (!h || !msg)
         return EFS_OK;
-    if (msg->to == h->raft_id)
+    if (msg->to == h->raft_id || msg->to < 0 || msg->to >= EFS_RAFT_MAX_PEERS)
         return EFS_OK;
     rc = efs_wire_raft_encode(msg, buf, cap, &len);
     if (rc == EFS_ERR_NOMEM) {
@@ -258,38 +431,34 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
         free(heap);
         return EFS_OK;
     }
-    if (peer_addr(h, msg->to, host, sizeof(host), &port) != 0) {
+    if (!heap) {
+        heap = malloc(len);
+        if (!heap)
+            return EFS_OK;
+        memcpy(heap, buf, len);
+    }
+    tx = &h->tx[msg->to];
+    pthread_mutex_lock(&h->outbox_mu);
+    if (!h->tx_running || tx->n >= HOST_OUTBOX_MAX) {
+        tx->st_drop++;
+        pthread_mutex_unlock(&h->outbox_mu);
         free(heap);
         return EFS_OK;
     }
-    pc = server_peer_conn_get(host, port);
-    if (!pc) {
-        free(heap);
-        return EFS_OK;
+    tx->q[tx->n].buf = heap;
+    tx->q[tx->n].len = len;
+    tx->n++;
+    tx->st_enq++;
+    if ((uint32_t)tx->n > tx->st_hi)
+        tx->st_hi = (uint32_t)tx->n;
+    if (!tx->started) {
+        if (efsd_pthread_create(&tx->tid, host_sender, tx) == 0)
+            tx->started = 1;
+        else
+            tx->n--; /* no sender: drop rather than queue forever */
     }
-    if (pc->kind == EFS_CONN_TCP && pc->fd >= 0) {
-        efs_set_recv_timeout(pc->fd, HOST_SEND_IO_MS);
-        efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
-    }
-    if (efs_conn_send_msg(pc, EFS_MSG_RAFT, buf, len) != 0) {
-        server_peer_conn_drop(host, port, pc);
-        free(heap);
-        return EFS_OK;
-    }
-    if (efs_conn_recv_msg(pc, &rtype, &reply, &rlen) != 0 ||
-        rtype != EFS_MSG_RAFT_REPLY) {
-        free(reply);
-        server_peer_conn_drop(host, port, pc);
-        free(heap);
-        return EFS_OK;
-    }
-    if (pc->kind == EFS_CONN_TCP && pc->fd >= 0) {
-        efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
-        efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
-    }
-    free(reply);
-    server_peer_conn_release(host, port, pc);
-    free(heap);
+    pthread_cond_signal(&h->outbox_cv);
+    pthread_mutex_unlock(&h->outbox_mu);
     return EFS_OK;
 }
 
@@ -1013,14 +1182,32 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
+                               const uint8_t *cmd, uint32_t clen);
+
 static int host_apply(void *app, uint64_t index, uint64_t term,
                       const uint8_t *cmd, uint32_t clen)
 {
     struct efs_raft_host *h = app;
+    uint64_t a0 = 0;
+    int rc;
 
     (void)term;
     if (!h || !h->kv || !cmd || clen == 0)
         return EFS_OK;
+    if (raft_obs_on())
+        a0 = now_us_();
+    rc = host_apply_dispatch(h, index, cmd, clen);
+    if (a0) {
+        h->obs_apply_cnt++;
+        h->obs_apply_cycle_us += now_us_() - a0;
+    }
+    return rc;
+}
+
+static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
+                               const uint8_t *cmd, uint32_t clen)
+{
     if (cmd[0] == EFS_MD_CMD_MKFS)
         return apply_mkfs_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_CREATE)
@@ -1213,9 +1400,14 @@ static int host_past_deadline(const struct timespec *end)
 }
 
 /* Drop h->mu while waiting: the pump must tick for heartbeats to land.
- * Caller serializes with read_mu. A follower ReadIndexes the leader
- * (RAFT_MKFS group-only) then waits until the local replica has applied
- * that index. Unhosted groups stay NOT_PRIMARY — the KV is not here. */
+ * Caller serializes with read_mu — but read_mu is NEVER held across the
+ * synchronous follower forward (host_remote_cmd is a blocking peer RPC):
+ * the peer's submit handler needs its own read_mu, so holding ours while
+ * waiting on a peer that waits on a third node's read_mu closes a
+ * cross-node deadlock cycle (observed: 003->004->005->003, all lookups
+ * wedged for minutes). The forward touches no local read-round state, so
+ * dropping read_mu for it is safe; the leader-side read_begin/read_ready
+ * round below stays serialized by the caller's read_mu. */
 static int host_read_index(struct efs_raft_host *h, uint8_t group,
                            int *leader_hint)
 {
@@ -1238,12 +1430,17 @@ static int host_read_index(struct efs_raft_host *h, uint8_t group,
             pthread_mutex_unlock(&h->mu);
             {
                 struct efs_msg_raft_mkfs_reply rep;
-                int rc = host_remote_cmd(h, group, NULL, 0, &rep, lid);
+                int rc;
+                pthread_mutex_unlock(&h->read_mu);
+                rc = host_remote_cmd(h, group, NULL, 0, &rep, lid);
+                if (rc == EFS_OK)
+                    rc = host_wait_applied(h, group, rep.index, leader_hint);
+                pthread_mutex_lock(&h->read_mu);
                 if (rc != EFS_OK)
                     return rc;
                 if (leader_hint && rep.leader_hint >= 0)
                     *leader_hint = rep.leader_hint;
-                return host_wait_applied(h, group, rep.index, leader_hint);
+                return EFS_OK;
             }
         }
     }
@@ -1270,12 +1467,20 @@ static int host_read_index(struct efs_raft_host *h, uint8_t group,
                     return EFS_ERR_NOT_PRIMARY;
                 {
                     struct efs_msg_raft_mkfs_reply rep;
-                    int rc2 = host_remote_cmd(h, group, NULL, 0, &rep, lid);
+                    int rc2;
+                    /* Demoted mid-wait: forward without read_mu (see the
+                     * function-header comment). */
+                    pthread_mutex_unlock(&h->read_mu);
+                    rc2 = host_remote_cmd(h, group, NULL, 0, &rep, lid);
+                    if (rc2 == EFS_OK)
+                        rc2 = host_wait_applied(h, group, rep.index,
+                                                leader_hint);
+                    pthread_mutex_lock(&h->read_mu);
                     if (rc2 != EFS_OK)
                         return rc2;
                     if (leader_hint && rep.leader_hint >= 0)
                         *leader_hint = rep.leader_hint;
-                    return host_wait_applied(h, group, rep.index, leader_hint);
+                    return EFS_OK;
                 }
             }
             if (!begun) {
@@ -1325,6 +1530,7 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
             return EFS_OK;
         }
         if (host_past_deadline(&end)) {
+            h->obs_wait_timeouts++;
             pthread_mutex_unlock(&h->mu);
             return EFS_ERR_BUSY;
         }
@@ -1358,7 +1564,15 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
         }
     }
     pthread_mutex_unlock(&h->mu);
+    /* Not the leader: forward to it. host_remote_cmd is a blocking peer
+     * RPC, and the peer's submit handler needs its own read_mu — holding
+     * our read_mu across this wait closes a cross-node deadlock cycle
+     * (same rule as host_read_index). The command is already fully formed
+     * and the Raft log + apply-side validation order it against any op
+     * that slips in here, so dropping read_mu is safe. */
+    pthread_mutex_unlock(&h->read_mu);
     rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);
+    pthread_mutex_lock(&h->read_mu);
     if (rc != EFS_OK)
         return rc;
     if (idx)
@@ -2361,7 +2575,8 @@ static int load_applied(struct efs_raft_host *h, int gi, uint64_t *idx)
 }
 
 /* Wake the pump from any thread. Never blocks, never takes h->mu — safe
- * from the network handler while the pump is inside a synchronous send. */
+ * from the network handler no matter what raft core work the pump (or a
+ * proposer) is doing under h->mu. */
 static void host_pump_kick(struct efs_raft_host *h)
 {
     uint64_t one = 1;
@@ -2369,25 +2584,163 @@ static void host_pump_kick(struct efs_raft_host *h)
         (void)write(h->pump_efd, &one, sizeof(one)); /* EAGAIN: already lit */
 }
 
+/* EFS_RAFT_OBS: log every term/role change (election churn has no other
+ * footprint) and dump outbox/pump stats every ~5 s when anything moved. */
+static void host_obs_dump(struct efs_raft_host *h, int force)
+{
+    uint64_t now_ms = now_us_() / 1000ull;
+    int i, any = 0;
+    static const char *roles[] = { "FOLLOWER", "CANDIDATE", "LEADER", "?" };
+
+    for (i = 0; i < HOST_NGROUPS; i++) {
+        struct host_group *g = &h->g[i];
+        uint64_t t;
+        int ro;
+        if (!g->hosted || !g->r)
+            continue;
+        t = efs_raft_term(g->r);
+        ro = efs_raft_role(g->r);
+        if (ro < 0 || ro > 2)
+            ro = 3;
+        if (t != g->obs_term || ro != g->obs_role) {
+            fprintf(stderr,
+                    "raft-obs: g%u term %llu->%llu role %s->%s leader=%d "
+                    "commit=%llu applied=%llu t=%llums\n",
+                    g->group,
+                    (unsigned long long)g->obs_term, (unsigned long long)t,
+                    roles[g->obs_role >= 0 && g->obs_role <= 2 ? g->obs_role : 3],
+                    roles[ro], efs_raft_leader(g->r),
+                    (unsigned long long)efs_raft_commit(g->r),
+                    (unsigned long long)efs_raft_applied(g->r),
+                    (unsigned long long)now_ms);
+            g->obs_term = t;
+            g->obs_role = ro;
+        }
+    }
+    if (!force && now_ms - h->obs_last_dump_ms < 5000)
+        return;
+    for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
+        struct host_outbox *tx = &h->tx[i];
+        if (!tx->st_enq && !tx->st_drop)
+            continue;
+        any = 1;
+        fprintf(stderr,
+                "raft-obs: tx->%d enq=%llu drop=%llu sent=%llu fail=%llu "
+                "hi=%u rtt_avg=%lluus get_avg=%lluus get_max=%llums\n",
+                tx->peer,
+                (unsigned long long)tx->st_enq,
+                (unsigned long long)tx->st_drop,
+                (unsigned long long)tx->st_sent,
+                (unsigned long long)tx->st_fail,
+                tx->st_hi,
+                tx->st_sent ? (unsigned long long)(tx->st_rtt_us / tx->st_sent)
+                            : 0ull,
+                tx->st_sent + tx->st_fail
+                    ? (unsigned long long)(tx->st_get_us /
+                                           (tx->st_sent + tx->st_fail))
+                    : 0ull,
+                (unsigned long long)(tx->st_get_max_us / 1000ull));
+    }
+    if (any || h->obs_wait_timeouts || h->obs_pump_hold_max_us) {
+        fprintf(stderr,
+                "raft-obs: wait_timeouts=%llu pump_hold_max=%lluus "
+                "lock_wait_max=%lluus drain_max=%lluus tick_max=%lluus "
+                "apply_max=%lluus persist_max=%lluus applies_in_worst=%llu\n",
+                (unsigned long long)h->obs_wait_timeouts,
+                (unsigned long long)h->obs_pump_hold_max_us,
+                (unsigned long long)h->obs_wait_max_us,
+                (unsigned long long)h->obs_drain_max_us,
+                (unsigned long long)h->obs_tick_max_us,
+                (unsigned long long)h->obs_apply_max_us,
+                (unsigned long long)h->obs_persist_max_us,
+                (unsigned long long)h->obs_apply_max_cnt);
+        h->obs_pump_hold_max_us = 0;
+        h->obs_wait_max_us = 0;
+        h->obs_drain_max_us = 0;
+        h->obs_tick_max_us = 0;
+        h->obs_apply_max_us = 0;
+        h->obs_persist_max_us = 0;
+        h->obs_apply_max_cnt = 0;
+    }
+    if (any)
+        h->obs_last_dump_ms = now_ms;
+}
+
 static void *host_pump(void *arg)
 {
     struct efs_raft_host *h = arg;
+    uint64_t last_tick_us = 0;
 
     while (h->running) {
         struct pollfd pfd;
         uint64_t sink;
+        uint64_t c0 = 0;
         int i;
+        int obs = raft_obs_on();
+        uint64_t t_drain = 0, t_tick = 0, t_persist = 0, t_wait = 0;
+        if (obs) {
+            c0 = now_us_();
+            h->obs_apply_cnt = 0;
+            h->obs_apply_cycle_us = 0;
+        }
         pthread_mutex_lock(&h->mu);
+        if (obs) {
+            t_wait = now_us_() - c0;
+            c0 = now_us_();
+        }
         drain_inbox(h);
-        for (i = 0; i < HOST_NGROUPS; i++) {
-            if (h->g[i].hosted && h->g[i].r)
-                (void)efs_raft_tick(h->g[i].r);
+        if (obs) {
+            t_drain = now_us_() - c0;
+            c0 = now_us_();
+        }
+        /* Tick on WALL time, never per loop iteration: the eventfd below
+         * wakes the loop on every inbox message/propose, so under load the
+         * loop spins as fast as the drain runs. raft.c counts one tick as
+         * HOST_TICK_US of election/heartbeat time; a tick per spinning
+         * iteration fires the 100-200-tick election deadline in
+         * milliseconds and storms the term (observed: 3 re-campaigns in
+         * 35 ms, term +8 in 75 ms). Late ticks are safe (they only delay
+         * timeouts); early ones are not, so never catch up missed ticks. */
+        {
+            uint64_t now = now_us_();
+            if (now - last_tick_us >= HOST_TICK_US) {
+                for (i = 0; i < HOST_NGROUPS; i++) {
+                    if (h->g[i].hosted && h->g[i].r)
+                        (void)efs_raft_tick(h->g[i].r);
+                }
+                last_tick_us = now;
+            }
+        }
+        if (obs) {
+            t_tick = now_us_() - c0;
+            c0 = now_us_();
         }
         for (i = 0; i < HOST_NGROUPS; i++)
             (void)persist_applied(h, i);
+        if (obs)
+            t_persist = now_us_() - c0;
         /* Applies above may have advanced commit/applied: wake every waiter
          * (host_wait_applied / host_read_index) without a poll interval. */
         pthread_cond_broadcast(&h->applied_cv);
+        if (obs) {
+            uint64_t held;
+            if (t_wait > h->obs_wait_max_us)
+                h->obs_wait_max_us = t_wait;
+            if (t_drain > h->obs_drain_max_us)
+                h->obs_drain_max_us = t_drain;
+            if (t_tick > h->obs_tick_max_us)
+                h->obs_tick_max_us = t_tick;
+            if (t_persist > h->obs_persist_max_us)
+                h->obs_persist_max_us = t_persist;
+            if (h->obs_apply_cycle_us > h->obs_apply_max_us)
+                h->obs_apply_max_us = h->obs_apply_cycle_us;
+            if (h->obs_apply_cnt > h->obs_apply_max_cnt)
+                h->obs_apply_max_cnt = h->obs_apply_cnt;
+            held = t_drain + t_tick + t_persist;
+            if (held > h->obs_pump_hold_max_us)
+                h->obs_pump_hold_max_us = held;
+            host_obs_dump(h, 0);
+        }
         pthread_mutex_unlock(&h->mu);
         /* Sleep until the next raft timer tick OR an event (inbox message,
          * local propose, shutdown) — whichever comes first. Timer cadence is
@@ -2553,7 +2906,16 @@ int server_raft_host_start(struct efsd_server *s)
     pthread_mutex_init(&h->read_mu, NULL);
     pthread_mutex_init(&h->wait_mu, NULL);
     pthread_mutex_init(&h->inbox_mu, NULL);
+    pthread_mutex_init(&h->outbox_mu, NULL);
     pthread_cond_init(&h->applied_cv, NULL);
+    pthread_cond_init(&h->outbox_cv, NULL);
+    {
+        int i;
+        for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
+            h->tx[i].h = h;
+            h->tx[i].peer = i;
+        }
+    }
     h->pump_efd = eventfd(0, EFD_NONBLOCK);
 
     snprintf(dir, sizeof(dir), "%s/mdraft", s->storage_path);
@@ -2601,12 +2963,14 @@ int server_raft_host_start(struct efsd_server *s)
         free(h);
         return rc;
     }
+    h->tx_running = 1;
     h->running = 1;
     g_host = h;
     if (efsd_pthread_create(&h->tid, host_pump, h) != 0) {
         fprintf(stderr, "raft-host: pump thread failed\n");
         g_host = NULL;
         h->running = 0;
+        host_stop_senders(h);
         efs_raft_free(h->g[0].r);
         efs_raft_free(h->g[1].r);
         efs_raft_disk_close(h->disk);
@@ -2626,6 +2990,24 @@ int server_raft_host_start(struct efsd_server *s)
     return 0;
 }
 
+/* Stop every sender thread: tx_running=0 makes host_send drop and each
+ * sender drop its queue and exit; join whoever was spawned. Callers must
+ * have stopped the producers first (pump joined, connection threads gone)
+ * or the remaining sends are simply dropped — safe either way. */
+static void host_stop_senders(struct efs_raft_host *h)
+{
+    int i;
+
+    pthread_mutex_lock(&h->outbox_mu);
+    h->tx_running = 0;
+    pthread_cond_broadcast(&h->outbox_cv);
+    pthread_mutex_unlock(&h->outbox_mu);
+    for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
+        if (h->tx[i].started)
+            pthread_join(h->tx[i].tid, NULL);
+    }
+}
+
 void server_raft_host_stop(void)
 {
     struct efs_raft_host *h = g_host;
@@ -2643,6 +3025,9 @@ void server_raft_host_stop(void)
     pthread_mutex_unlock(&h->wait_mu);
     if (h->started)
         pthread_join(h->tid, NULL);
+    /* After the pump join (no new tick sends) and before the raft cores are
+     * freed. A sender blocked on a dead peer exits within HOST_SEND_IO_MS. */
+    host_stop_senders(h);
     pthread_mutex_lock(&h->mu);
     for (i = 0; i < HOST_NGROUPS; i++) {
         efs_raft_free(h->g[i].r);
@@ -2660,7 +3045,9 @@ void server_raft_host_stop(void)
     pthread_mutex_destroy(&h->read_mu);
     pthread_mutex_destroy(&h->wait_mu);
     pthread_mutex_destroy(&h->inbox_mu);
+    pthread_mutex_destroy(&h->outbox_mu);
     pthread_cond_destroy(&h->applied_cv);
+    pthread_cond_destroy(&h->outbox_cv);
     if (h->pump_efd >= 0)
         close(h->pump_efd);
     g_host = NULL;
@@ -2691,8 +3078,9 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
     h->inbox_n++;
     pthread_mutex_unlock(&h->inbox_mu);
     /* Wake the pump now (not at the next 5 ms tick). Lock-free on purpose:
-     * this handler must never queue on h->mu — the pump holds h->mu across
-     * synchronous sends whose ACKs come from handlers like this one. */
+     * this handler must never queue on h->mu — h->mu serializes all raft
+     * core work, and a handler that blocked on it would delay the
+     * RAFT_REPLY a peer's sender thread is waiting on. */
     host_pump_kick(h);
     return EFS_OK;
 }
