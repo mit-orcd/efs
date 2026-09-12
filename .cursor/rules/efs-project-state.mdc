@@ -235,10 +235,10 @@ lazy — first pool checkout, not mount). Full gate PASS on fcstor003:
 **Open follow-ups:** (1) client local staging
 table (g_client.export) shrink is post-step-11 client-cache design /
 spec step 12. (Data-plane GC, cross-dir LOCAL rename, `.find` READDIR
-walk, and HASHED rename are CLOSED; see below.) HASHED RMDIR, HASHED
-LINK dest, and HASHED txn-unlink (nlink>1 or last-link with dsh≠ish)
-stay INVAL; SPLITTING stays BUSY; dest-HASHED-dir overwrite stays INVAL
-(distributed emptiness). Do not start step 12 until asked.
+walk, HASHED rename, and HASHED unlink/rmdir are CLOSED; see below.)
+HASHED LINK dest stays INVAL; SPLITTING stays BUSY; dest-HASHED-dir
+overwrite stays INVAL (distributed emptiness). Do not start step 12
+until asked.
 
 **`.FIND` READDIR WALK CLOSED (Sep 11 night, working tree).** POSIX
 `virt_find_query` returned empty because `find_index_build_locked`
@@ -292,8 +292,31 @@ HASHED stays INVAL (distributed emptiness).
 status=0), LOCAL cross-dir all status=0. Isolated posix rename/find
 PASS. posix jobs=1 **201/201 in 30.4 s**
 (`results/posix/20260911-hashed/suite-jobs1.tsv`). FUSE HASHED dir
-`hr-fuse`: `mv n0 r0` OK; `rm -rf` then EIO on the HASHED dir itself
-(HASHED RMDIR still INVAL — next slice). Do not start step 12.
+`hr-fuse`: `mv n0 r0` OK. HASHED unlink/rmdir closed below. Do not start
+step 12.
+
+**HASHED UNLINK/RMDIR CLOSED (Sep 11 night, working tree on top of
+`0ce6167`).** Apply + sim already implemented HASHED unlink/rmdir; the
+host INVALed HASHED parents (and HASHED child rmdir). FUSE `rm -rf` of a
+HASHED dir then EIO'd on the directory itself. Host now allows HASHED:
+LOCAL stamps parent-row times; HASHED stamps dir-lanes + dseq on
+`efs_kv_dir_lane(name)`; bounce if this replica does not host the dentry
+shard. HASHED empty-dir rmdir GUARDs used-lane dseqs (cap
+`EFS_TXN_MAX_PART` → BUSY). Last-link same-shard still uses
+`EFS_MD_CMD_UNLINK` (HASHED file create places the inode on the dentry
+shard). Sim `apply_unlink_cmd` accepts the session on the dentry shard
+(HASHED create is `dsh==ish` but the cmd previously accepted on `psh`).
+SPLITTING stays BUSY. HASHED LINK dest stays INVAL.
+**Gates (19820 scratch, TCP, wipe+raft-mkfs):** `test_meta_apply` /
+`test_sim` / `test_txn` / `test_wire` / `test_kv_lsm` OK. efs-mgmt:
+HASHED last-link unlink (`u0` status=0, lookup NOT_FOUND) + HASHED
+empty-dir rmdir (`raft-smoke-he` status=0). FUSE HASHED dir `hr-rm`:
+`rm -rf` OK. posix jobs=1 **196/201 in 163 s**
+(`results/posix/20260911-hashed-unlink/suite-jobs1.tsv`) — 4× 15s
+timeouts (`dir_deep_nesting` ×2, `dir_many_files`, `names_crazy_dirs`)
+from ~100 ms ReadIndex (pre-existing ~110 ms cross-group note), plus
+`concurrent_writes_disjoint` zeros flake. Unlink/rmdir/find/rename
+tests PASS. Do not start step 12.
 
 **RAFT-LAG CLOSED (Sep 11 PM, working tree) — three fixes in
 `src/server/raft_host.c`, gated 199/201 jobs=16 in 26.5 s with ZERO

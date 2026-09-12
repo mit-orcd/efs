@@ -275,9 +275,10 @@ static int apply_unlink_cmd(struct sim_server *s, const uint8_t *cmd,
     efs_ino_t parent;
     char name[EFS_MAX_NAME];
     uint8_t nl, uuid[EFS_OPID_UUID_LEN];
-    uint32_t epoch;
+    uint32_t epoch, dsh;
     uint64_t now;
     const uint8_t *p;
+    struct efs_meta_row prow;
     int rc;
 
     if (clen < 18)
@@ -292,7 +293,10 @@ static int apply_unlink_cmd(struct sim_server *s, const uint8_t *cmd,
     p = cmd + 18 + nl;
     memcpy(uuid, p, EFS_OPID_UUID_LEN);
     epoch = rd32(p + EFS_OPID_UUID_LEN);
-    rc = efs_session_accept(s->disk, efs_kv_inode_shard(parent), uuid, epoch);
+    dsh = efs_kv_inode_shard(parent);
+    if (efs_meta_apply_get_inode(s->disk, parent, &prow) == EFS_OK)
+        dsh = efs_kv_dentry_shard(parent, name, prow.layout);
+    rc = efs_session_accept(s->disk, dsh, uuid, epoch);
     if (rc != EFS_OK) {
         sim_note_apply(s, group, index, rc, 0);
         return EFS_OK;

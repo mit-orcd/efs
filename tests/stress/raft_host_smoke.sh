@@ -18,7 +18,8 @@
 # directory RENAME (raft-smoke-rd → raft-smoke-re, pver bump), HASHED dest
 # CREATE + same-dir HASHED file RENAME (dedicated raft-smoke-hd split empty
 # then a file whose hashed dentry shard is on the other Raft group, then
-# renamed onto a second hashed name), HOLD open-unlinked lease
+# renamed onto a second hashed name) + HASHED last-link UNLINK of a
+# dedicated extra name and HASHED empty-dir RMDIR (raft-smoke-he), HOLD open-unlinked lease
 # (dedicated raft-smoke-k: open, unlink name, getattr nlink=0, leave
 # held through crash, close reclaims), FLOCK grant/release (dedicated
 # raft-smoke-w: EX owner=1, EX owner=2 BUSY, UN owner=1, EX owner=2,
@@ -47,7 +48,8 @@
 # the unlinked name stays gone, the rmdir'd name stays gone, the nlink>1
 # unlinked name stays gone, the renamed file stays, the renamed dir stays,
 # the HASHED dest file stays under its post-rename name (old hashed name
-# stays gone), the held-unlinked inode stays at nlink=0
+# stays gone), the HASHED unlinked extra name stays gone, the HASHED
+# empty dir stays gone, the held-unlinked inode stays at nlink=0
 # until close reclaims it, the flock file stays and owner=2's EX still
 # BUSYs owner=1 until UN, the fcntl file stays and owner=1's EX still
 # BUSYs owner=2 until UN, the ranged fcntl file stays and owner=2's
@@ -766,6 +768,64 @@ for i in range(8192):
     else
         bad "$tag hashed-rename dest name"
     fi
+    unm=$(python3 -c "
+parent=int('$hd_ino')
+MASK=0xFFF
+skip=set('$nm $nm2 ${rnm:-} ${HASHED_FILE:-}'.split())
+def dir_lane(name):
+    h=2166136261
+    for c in name.encode():
+        h ^= c
+        h = (h * 16777619) & 0xffffffff
+    return h % 64
+def lane_shard(ino, lane):
+    h = ((ino & 0xffffffff) * 2654435761) & 0xffffffff
+    stride = 2 * (h & 0x7FF) + 1
+    return ((ino & MASK) + lane * stride) & MASK
+psh = parent & MASK
+for i in range(8192):
+    n='u%d' % i
+    lane=dir_lane(n)
+    dsh=lane_shard(parent, lane)
+    if lane==0 or dsh==psh or n in skip:
+        continue
+    print(n)
+    break
+")
+    if [ -n "$unm" ]; then
+        out=$(g0_mgmt raft-create "$hd_ino" "$unm")
+        say "$tag hashed-unlink-prep $unm: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag hashed-unlink-prep not OK"
+        out=$(g0_mgmt raft-unlink "$hd_ino" "$unm")
+        say "$tag hashed-unlink $unm: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag hashed-unlink not OK"
+        if echo "$out" | grep -q 'status=0'; then
+            HASHED_UNLINK_OLD=$unm
+        fi
+        out=$(g0_mgmt raft-lookup "$hd_ino" "$unm")
+        echo "$out" | grep -q 'status=1' || bad "$tag hashed-unlink not NOT_FOUND"
+    else
+        bad "$tag hashed-unlink dest name"
+    fi
+    out=$(g0_mgmt raft-create 1 raft-smoke-he 040755)
+    say "$tag hashed-rmdir-prep mkdir: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-rmdir-prep mkdir not OK"
+    he_ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$he_ino" ] && [ "$he_ino" != "0" ] || bad "$tag hashed-rmdir-prep ino"
+    out=$(g0_mgmt raft-dir "$he_ino" begin)
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-rmdir begin not OK"
+    out=$(g0_mgmt raft-dir "$he_ino" migrate)
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-rmdir migrate not OK"
+    out=$(g0_mgmt raft-dir "$he_ino" finish)
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-rmdir finish not OK"
+    out=$(g0_mgmt raft-rmdir 1 raft-smoke-he)
+    say "$tag hashed-rmdir: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-rmdir not OK"
+    if echo "$out" | grep -q 'status=0'; then
+        HASHED_RMDIR_OLD=raft-smoke-he
+    fi
+    out=$(g0_mgmt raft-lookup 1 raft-smoke-he)
+    echo "$out" | grep -q 'status=1' || bad "$tag hashed-rmdir not NOT_FOUND"
 }
 
 # Session record + register + establish (10.5c-35a, I23 groundwork).
@@ -1645,6 +1705,8 @@ HASHED_DIR_INO=""
 HASHED_FILE=""
 HASHED_FILE2=""
 HASHED_FILE_OLD=""
+HASHED_UNLINK_OLD=""
+HASHED_RMDIR_OLD=""
 check_hashed_create "$leader" "fresh"
 say "session record through Raft (fresh)"
 SESS_SHARD=""
@@ -1978,6 +2040,16 @@ if [ -n "${HASHED_DIR_INO:-}" ] && [ -n "${HASHED_FILE2:-}" ]; then
     out=$(g0_mgmt raft-lookup "$HASHED_DIR_INO" "$HASHED_FILE2")
     say "after-crash lookup hashed-file2: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash hashed-file2 missing"
+fi
+if [ -n "${HASHED_DIR_INO:-}" ] && [ -n "${HASHED_UNLINK_OLD:-}" ]; then
+    out=$(g0_mgmt raft-lookup "$HASHED_DIR_INO" "$HASHED_UNLINK_OLD")
+    say "after-crash lookup hashed-unlink: $out"
+    echo "$out" | grep -q 'status=1' || bad "after-crash hashed-unlink name came back"
+fi
+if [ -n "${HASHED_RMDIR_OLD:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$HASHED_RMDIR_OLD")
+    say "after-crash lookup hashed-rmdir: $out"
+    echo "$out" | grep -q 'status=1' || bad "after-crash hashed-rmdir name came back"
 fi
 if [ -n "${HOLD_NAME:-}" ]; then
     out=$(g0_mgmt raft-lookup 1 "$HOLD_NAME")

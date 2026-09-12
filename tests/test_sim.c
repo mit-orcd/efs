@@ -930,6 +930,55 @@ static void test_rename_hashed(void)
     efs_sim_free(s);
 }
 
+/* HASHED last-link unlink + HASHED empty-dir rmdir.
+ * RMDIR of a HASHED child is from a LOCAL parent (sim mkdir still writes
+ * the parent-home dentry; HASHED-parent mkdir is a later slice). File
+ * unlink after HASHED is same-shard (inode allocated on the dentry
+ * shard) and uses the single-group UNLINK cmd. */
+static void test_unlink_rmdir_hashed(void)
+{
+    struct efs_sim *s = mk(133);
+    efs_ino_t f = 0, g = 0, d = 0;
+    uint8_t layout = 99;
+    char na[16], nb[16];
+    int rc;
+
+    CHECK(s, "mk");
+    CHECK(hashed_pair(EFS_ROOT_INO, na, nb) == 0, "pair");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, nb, &d) == EFS_OK && d, "mkdir");
+    CHECK(efs_sim_dir_begin_split(s, d) == EFS_OK, "split child");
+    while ((rc = efs_sim_dir_migrate(s, d)) == EFS_OK)
+        ;
+    CHECK(rc == EFS_ERR_NOT_FOUND, "child migrated");
+    CHECK(efs_sim_dir_finish_hashed(s, d) == EFS_OK, "HASHED child");
+    CHECK(efs_sim_dir_layout(s, d, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_HASHED,
+          "child layout");
+    CHECK(efs_sim_rmdir(s, 0, EFS_ROOT_INO, nb) == EFS_OK, "rmdir hashed");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, nb, &g) == EFS_ERR_NOT_FOUND,
+          "dir gone");
+
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, na, &f) == EFS_OK &&
+              f,
+          "create local");
+    CHECK(efs_sim_dir_begin_split(s, EFS_ROOT_INO) == EFS_OK, "split");
+    while ((rc = efs_sim_dir_migrate(s, EFS_ROOT_INO)) == EFS_OK)
+        ;
+    CHECK(rc == EFS_ERR_NOT_FOUND, "migrated");
+    CHECK(efs_sim_dir_finish_hashed(s, EFS_ROOT_INO) == EFS_OK, "HASHED");
+    CHECK(efs_sim_unlink(s, 0, EFS_ROOT_INO, na) == EFS_OK, "migrated unlink");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, na, &g) == EFS_ERR_NOT_FOUND,
+          "migrated gone");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, na, &f) == EFS_OK &&
+              f,
+          "create");
+    CHECK(efs_sim_unlink(s, 0, EFS_ROOT_INO, na) == EFS_OK, "hashed unlink");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, na, &g) == EFS_ERR_NOT_FOUND,
+          "file gone");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
 static void test_lock_conflict_fence(void)
 {
     struct efs_sim *s = mk(93);
@@ -1359,6 +1408,7 @@ int main(void)
     test_i8_spread();
     test_hashed_dir_stat();
     test_rename_hashed();
+    test_unlink_rmdir_hashed();
     test_single_shard_ops();
     test_utimens_fence();
     test_truncate_range_del();
