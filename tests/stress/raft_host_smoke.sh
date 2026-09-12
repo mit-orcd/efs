@@ -20,7 +20,14 @@
 # then a file whose hashed dentry shard is on the other Raft group, then
 # renamed onto a second hashed name) + HASHED last-link UNLINK of a
 # dedicated extra name, HASHED dest LINK onto a third hashed name
-# (nlink=2), and HASHED empty-dir RMDIR (raft-smoke-he), HOLD open-unlinked lease
+# (nlink=2), HASHED empty-dir RMDIR (raft-smoke-he), HASHED dest-dir
+# overwrite (raft-smoke-hs → emptied HASHED raft-smoke-hx; nonempty dest
+# is NOT_EMPTY), SPLITTING dest CREATE + READDIR + UNLINK/RMDIR + LINK
+# + RENAME (raft-smoke-sp stays SPLITTING: local `pre` plus leftover `q`
+# plus a hashed-name file plus empty child `e`; unlink/rmdir write
+# hashed tombstones (I8); dest LINK writes hashed; dest RENAME writes
+# hashed, leftover dest is POSIX replace, src drop is I8; migrate of a
+# populated local range is not this slice), HOLD open-unlinked lease
 # (dedicated raft-smoke-k: open, unlink name, getattr nlink=0, leave
 # held through crash, close reclaims), FLOCK grant/release (dedicated
 # raft-smoke-w: EX owner=1, EX owner=2 BUSY, UN owner=1, EX owner=2,
@@ -51,7 +58,9 @@
 # the HASHED dest file stays under its post-rename name (old hashed name
 # stays gone), the HASHED dest link name stays with nlink=2, the HASHED
 # unlinked extra name stays gone, the HASHED
-# empty dir stays gone, the held-unlinked inode stays at nlink=0
+# empty dir stays gone, the HASHED dest-dir overwrite keeps hx (src ino)
+# and hs stays gone, the SPLITTING dir keeps local `pre` and the hashed
+# dest file (dir stays SPLITTING), the held-unlinked inode stays at nlink=0
 # until close reclaims it, the flock file stays and owner=2's EX still
 # BUSYs owner=1 until UN, the fcntl file stays and owner=1's EX still
 # BUSYs owner=2 until UN, the ranged fcntl file stays and owner=2's
@@ -686,7 +695,7 @@ print(first, second)
 check_hashed_create() {
     local lid=$1
     local tag=$2
-    local out ino hd_ino names nm nm2 psh ish
+    local out ino hd_ino names nm nm2 lnm psh ish hs_ino hx_ino sp_ino
     if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
         bad "$tag: no leader"
         return
@@ -896,6 +905,234 @@ for i in range(8192):
     fi
     out=$(g0_mgmt raft-lookup 1 raft-smoke-he)
     echo "$out" | grep -q 'status=1' || bad "$tag hashed-rmdir not NOT_FOUND"
+
+    out=$(g0_mgmt raft-create 1 raft-smoke-hs 040755)
+    say "$tag hashed-dow-src mkdir: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-dow-src mkdir not OK"
+    hs_ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$hs_ino" ] && [ "$hs_ino" != "0" ] || bad "$tag hashed-dow-src ino"
+    out=$(g0_mgmt raft-create 1 raft-smoke-hx 040755)
+    say "$tag hashed-dow-dst mkdir: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-dow-dst mkdir not OK"
+    hx_ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$hx_ino" ] && [ "$hx_ino" != "0" ] || bad "$tag hashed-dow-dst ino"
+    out=$(g0_mgmt raft-dir "$hx_ino" begin)
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-dow begin not OK"
+    out=$(g0_mgmt raft-dir "$hx_ino" migrate)
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-dow migrate not OK"
+    out=$(g0_mgmt raft-dir "$hx_ino" finish)
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-dow finish not OK"
+    out=$(g0_mgmt raft-create "$hx_ino" f)
+    say "$tag hashed-dow child: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-dow child not OK"
+    out=$(g0_mgmt raft-rename 1 raft-smoke-hs 1 raft-smoke-hx)
+    say "$tag hashed-dow nonempty: $out"
+    echo "$out" | grep -q 'status=8' || bad "$tag hashed-dow nonempty not NOT_EMPTY"
+    out=$(g0_mgmt raft-unlink "$hx_ino" f)
+    say "$tag hashed-dow unlink child: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-dow unlink child not OK"
+    out=$(g0_mgmt raft-rename 1 raft-smoke-hs 1 raft-smoke-hx)
+    say "$tag hashed-dow: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-dow not OK"
+    if echo "$out" | grep -q 'status=0'; then
+        HASHED_DOW=raft-smoke-hx
+        HASHED_DOW_OLD=raft-smoke-hs
+        HASHED_DOW_INO=$hs_ino
+    fi
+    out=$(g0_mgmt raft-lookup 1 raft-smoke-hs)
+    echo "$out" | grep -q 'status=1' || bad "$tag hashed-dow src not NOT_FOUND"
+    out=$(g0_mgmt raft-lookup 1 raft-smoke-hx)
+    echo "$out" | grep -q 'status=0' || bad "$tag hashed-dow dest not OK"
+    echo "$out" | grep -q "ino=$hs_ino" || bad "$tag hashed-dow dest ino"
+
+    out=$(g0_mgmt raft-create 1 raft-smoke-sp 040755)
+    say "$tag split-dir mkdir: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag split-dir mkdir not OK"
+    sp_ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$sp_ino" ] && [ "$sp_ino" != "0" ] || bad "$tag split-dir ino"
+    SPLIT_DIR=raft-smoke-sp
+    SPLIT_DIR_INO=$sp_ino
+    out=$(g0_mgmt raft-create "$sp_ino" pre)
+    say "$tag split-pre: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag split-pre not OK"
+    SPLIT_PRE=pre
+    out=$(g0_mgmt raft-create "$sp_ino" q)
+    say "$tag split-q: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag split-q not OK"
+    out=$(g0_mgmt raft-create "$sp_ino" e 040755)
+    say "$tag split-empty mkdir: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag split-empty mkdir not OK"
+    SPLIT_EMPTY=e
+    out=$(g0_mgmt raft-dir "$sp_ino" begin)
+    say "$tag split-dir begin: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag split-dir begin not OK"
+    names=$(hashed_spread_names "$sp_ino")
+    nm=$(echo "$names" | awk '{print $1}')
+    nm2=$(echo "$names" | awk '{print $2}')
+    [ -n "$nm" ] || { bad "$tag split spread name"; return; }
+    [ -n "$nm2" ] || { bad "$tag split spread dest name"; return; }
+    out=$(g0_mgmt raft-create "$sp_ino" "$nm")
+    say "$tag split-create $nm: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag split-create not OK"
+    ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag split-create ino"
+    psh=$((sp_ino & 4095))
+    ish=$((ino & 4095))
+    if [ "$psh" -eq "$ish" ]; then
+        bad "$tag split-create ino shard=$ish still parent shard (not hashed dest)"
+    fi
+    SPLIT_FILE=$nm
+    out=$(g0_mgmt raft-lookup "$sp_ino" pre)
+    echo "$out" | grep -q 'status=0' || bad "$tag split-lookup pre not OK"
+    out=$(g0_mgmt raft-lookup "$sp_ino" "$nm")
+    echo "$out" | grep -q 'status=0' || bad "$tag split-lookup hashed not OK"
+    echo "$out" | grep -q "ino=$ino" || bad "$tag split-lookup hashed ino"
+    out=$(g0_mgmt raft-readdir "$sp_ino")
+    say "$tag split-readdir: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag split-readdir not OK"
+    readdir_has "$out" pre || bad "$tag split-readdir missing pre"
+    readdir_has "$out" "$nm" || bad "$tag split-readdir missing hashed"
+    readdir_has "$out" e || bad "$tag split-readdir missing empty child"
+    out=$(g0_mgmt raft-create "$sp_ino" "$nm")
+    say "$tag split-create dup: $out"
+    echo "$out" | grep -q 'status=2' || bad "$tag split-create dup not EXIST"
+    out=$(g0_mgmt raft-lookup-path "/raft-smoke-sp/pre")
+    echo "$out" | grep -q 'status=0' || bad "$tag split lookup-path pre not OK"
+    out=$(g0_mgmt raft-lookup-path "/raft-smoke-sp/$nm")
+    echo "$out" | grep -q 'status=0' || bad "$tag split lookup-path hashed not OK"
+    echo "$out" | grep -q "name=$nm" || bad "$tag split lookup-path hashed name"
+    out=$(g0_mgmt raft-rename "$sp_ino" "$nm" "$sp_ino" "$nm2")
+    say "$tag split-rename hashed dest $nm -> $nm2: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag split-rename hashed dest not OK"
+    out=$(g0_mgmt raft-lookup "$sp_ino" "$nm")
+    echo "$out" | grep -q 'status=1' || bad "$tag split-rename hashed src not NOT_FOUND"
+    out=$(g0_mgmt raft-lookup "$sp_ino" "$nm2")
+    echo "$out" | grep -q 'status=0' || bad "$tag split-rename hashed dest lookup"
+    echo "$out" | grep -q "ino=$ino" || bad "$tag split-rename hashed dest ino"
+    out=$(g0_mgmt raft-rename "$sp_ino" "$nm2" "$sp_ino" q)
+    say "$tag split-rename leftover dest: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag split-rename leftover dest not OK"
+    out=$(g0_mgmt raft-lookup "$sp_ino" "$nm2")
+    echo "$out" | grep -q 'status=1' || bad "$tag split-rename leftover dest src not NOT_FOUND"
+    out=$(g0_mgmt raft-lookup "$sp_ino" q)
+    echo "$out" | grep -q 'status=0' || bad "$tag split-rename leftover dest lookup"
+    echo "$out" | grep -q "ino=$ino" || bad "$tag split-rename leftover dest ino"
+    out=$(g0_mgmt raft-rename "$sp_ino" q "$sp_ino" "$nm")
+    say "$tag split-rename tombstone dest: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag split-rename tombstone dest not OK"
+    out=$(g0_mgmt raft-lookup "$sp_ino" q)
+    echo "$out" | grep -q 'status=1' || bad "$tag split-rename q not NOT_FOUND"
+    out=$(g0_mgmt raft-lookup "$sp_ino" "$nm")
+    echo "$out" | grep -q 'status=0' || bad "$tag split-rename restored hashed lookup"
+    echo "$out" | grep -q "ino=$ino" || bad "$tag split-rename restored hashed ino"
+    out=$(g0_mgmt raft-lookup "$sp_ino" pre)
+    echo "$out" | grep -q 'status=0' || bad "$tag split-rename leftover pre still"
+    lnm=$(python3 -c "
+parent=int('$sp_ino')
+MASK=0xFFF
+skip=set('pre e q $nm $nm2'.split())
+def dir_lane(name):
+    h=2166136261
+    for c in name.encode():
+        h ^= c
+        h = (h * 16777619) & 0xffffffff
+    return h % 64
+def lane_shard(ino, lane):
+    h = ((ino & 0xffffffff) * 2654435761) & 0xffffffff
+    stride = 2 * (h & 0x7FF) + 1
+    return ((ino & MASK) + lane * stride) & MASK
+psh = parent & MASK
+for i in range(8192):
+    n='l%d' % i
+    lane=dir_lane(n)
+    dsh=lane_shard(parent, lane)
+    if lane==0 or dsh==psh or (dsh & 1)==(psh & 1) or n in skip:
+        continue
+    print(n)
+    break
+")
+    if [ -n "$lnm" ] && [ -n "$ino" ] && [ "$ino" != "0" ]; then
+        out=$(g0_mgmt raft-link "$ino" "$sp_ino" "$lnm")
+        say "$tag split-link $lnm: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag split-link not OK"
+        echo "$out" | grep -q 'nlink=2' || bad "$tag split-link nlink"
+        if echo "$out" | grep -q 'status=0'; then
+            SPLIT_LINK_NAME=$lnm
+        fi
+        out=$(g0_mgmt raft-lookup "$sp_ino" "$lnm")
+        echo "$out" | grep -q 'status=0' || bad "$tag split-link lookup not OK"
+        echo "$out" | grep -q "ino=$ino" || bad "$tag split-link lookup ino"
+        echo "$out" | grep -q 'nlink=2' || bad "$tag split-link lookup nlink"
+        out=$(g0_mgmt raft-lookup "$sp_ino" "$nm")
+        echo "$out" | grep -q 'nlink=2' || bad "$tag split-link src nlink"
+        out=$(g0_mgmt raft-link "$ino" "$sp_ino" "$lnm")
+        say "$tag split-link dup: $out"
+        echo "$out" | grep -q 'status=2' || bad "$tag split-link dup not EXIST"
+        out=$(g0_mgmt raft-link "$ino" "$sp_ino" pre)
+        say "$tag split-link leftover dest: $out"
+        echo "$out" | grep -q 'status=2' || bad "$tag split-link leftover dest not EXIST"
+        out=$(g0_mgmt raft-readdir "$sp_ino")
+        readdir_has "$out" "$lnm" || bad "$tag split-link readdir missing"
+        out=$(g0_mgmt raft-lookup-path "/raft-smoke-sp/$lnm")
+        echo "$out" | grep -q 'status=0' || bad "$tag split-link lookup-path not OK"
+        echo "$out" | grep -q "name=$lnm" || bad "$tag split-link lookup-path name"
+    else
+        bad "$tag split-link dest name"
+    fi
+    out=$(g0_mgmt raft-unlink "$sp_ino" "$nm")
+    say "$tag split-unlink hashed: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag split-unlink hashed not OK"
+    out=$(g0_mgmt raft-lookup "$sp_ino" "$nm")
+    echo "$out" | grep -q 'status=1' || bad "$tag split-unlink hashed not NOT_FOUND"
+    out=$(g0_mgmt raft-readdir "$sp_ino")
+    readdir_has "$out" pre || bad "$tag split-readdir lost pre after hashed unlink"
+    if readdir_has "$out" "$nm"; then
+        bad "$tag split-readdir hashed survived unlink"
+    fi
+    if [ -n "$lnm" ] && [ -n "$ino" ] && [ "$ino" != "0" ]; then
+        out=$(g0_mgmt raft-link "$ino" "$sp_ino" "$nm")
+        say "$tag split-link tombstone dest: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag split-link tombstone dest not OK"
+        echo "$out" | grep -q 'nlink=2' || bad "$tag split-link tombstone dest nlink"
+        out=$(g0_mgmt raft-lookup "$sp_ino" "$nm")
+        echo "$out" | grep -q 'status=0' || bad "$tag split-link tombstone dest lookup"
+        echo "$out" | grep -q "ino=$ino" || bad "$tag split-link tombstone dest ino"
+        out=$(g0_mgmt raft-unlink "$sp_ino" "$nm")
+        echo "$out" | grep -q 'status=0' || bad "$tag split-unlink after tombstone dest not OK"
+        out=$(g0_mgmt raft-lookup "$sp_ino" "$nm")
+        echo "$out" | grep -q 'status=1' || bad "$tag split-unlink after tombstone dest not NOT_FOUND"
+    fi
+    out=$(g0_mgmt raft-create "$sp_ino" "$nm")
+    say "$tag split-recreate hashed: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag split-recreate hashed not OK"
+    out=$(g0_mgmt raft-unlink "$sp_ino" "$nm")
+    echo "$out" | grep -q 'status=0' || bad "$tag split-unlink hashed again not OK"
+    out=$(g0_mgmt raft-unlink "$sp_ino" pre)
+    say "$tag split-unlink pre: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag split-unlink pre not OK"
+    out=$(g0_mgmt raft-lookup "$sp_ino" pre)
+    echo "$out" | grep -q 'status=1' || bad "$tag split-unlink pre not NOT_FOUND"
+    out=$(g0_mgmt raft-rmdir "$sp_ino" e)
+    say "$tag split-rmdir e: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag split-rmdir e not OK"
+    out=$(g0_mgmt raft-lookup "$sp_ino" e)
+    echo "$out" | grep -q 'status=1' || bad "$tag split-rmdir e not NOT_FOUND"
+    out=$(g0_mgmt raft-readdir "$sp_ino")
+    if readdir_has "$out" pre || readdir_has "$out" "$nm" || readdir_has "$out" e; then
+        bad "$tag split-readdir leftover after I8"
+    fi
+    if [ -n "${SPLIT_LINK_NAME:-}" ]; then
+        readdir_has "$out" "$SPLIT_LINK_NAME" || bad "$tag split-readdir lost dest link"
+    fi
+    out=$(g0_mgmt raft-rmdir 1 raft-smoke-sp)
+    say "$tag split-rmdir self: $out"
+    echo "$out" | grep -q 'status=5' || bad "$tag split-rmdir self not BUSY"
+    SPLIT_PRE_GONE=$SPLIT_PRE
+    SPLIT_FILE_GONE=$nm
+    SPLIT_EMPTY_GONE=$SPLIT_EMPTY
+    SPLIT_PRE=""
+    SPLIT_FILE=""
+    SPLIT_EMPTY=""
 }
 
 # Session record + register + establish (10.5c-35a, I23 groundwork).
@@ -1613,6 +1850,15 @@ check_readdir_path() {
     if [ -n "${HASHED_DIR:-}" ]; then
         readdir_has "$out" "$HASHED_DIR" || bad "$tag readdir missing hashed-dir"
     fi
+    if [ -n "${HASHED_DOW:-}" ]; then
+        readdir_has "$out" "$HASHED_DOW" || bad "$tag readdir missing hashed-dow"
+    fi
+    if [ -n "${HASHED_DOW_OLD:-}" ]; then
+        readdir_has "$out" "$HASHED_DOW_OLD" && bad "$tag readdir still has hashed-dow-old"
+    fi
+    if [ -n "${SPLIT_DIR:-}" ]; then
+        readdir_has "$out" "$SPLIT_DIR" || bad "$tag readdir missing split-dir"
+    fi
     if [ -n "${HOLD_NAME:-}" ]; then
         readdir_has "$out" "$HOLD_NAME" && bad "$tag readdir still has hold-unlinked"
     fi
@@ -1666,6 +1912,56 @@ check_readdir_path() {
         say "$tag lookup-path hashed-link: $out"
         echo "$out" | grep -q 'status=0' || bad "$tag lookup-path hashed-link not OK"
         echo "$out" | grep -q "name=$HASHED_LINK_NAME" || bad "$tag lookup-path hashed-link name"
+    fi
+    if [ -n "${HASHED_DOW:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$HASHED_DOW")
+        say "$tag lookup-path hashed-dow: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag lookup-path hashed-dow not OK"
+        echo "$out" | grep -q "name=$HASHED_DOW" || bad "$tag lookup-path hashed-dow name"
+    fi
+    if [ -n "${HASHED_DOW_OLD:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$HASHED_DOW_OLD")
+        say "$tag lookup-path hashed-dow-old: $out"
+        echo "$out" | grep -q 'status=1' || bad "$tag lookup-path hashed-dow-old not NOT_FOUND"
+    fi
+    if [ -n "${SPLIT_DIR:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$SPLIT_DIR")
+        say "$tag lookup-path split-dir: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag lookup-path split-dir not OK"
+        echo "$out" | grep -q "name=$SPLIT_DIR" || bad "$tag lookup-path split-dir name"
+    fi
+    if [ -n "${SPLIT_DIR:-}" ] && [ -n "${SPLIT_PRE:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$SPLIT_DIR/$SPLIT_PRE")
+        say "$tag lookup-path split-pre: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag lookup-path split-pre not OK"
+        echo "$out" | grep -q "name=$SPLIT_PRE" || bad "$tag lookup-path split-pre name"
+    fi
+    if [ -n "${SPLIT_DIR:-}" ] && [ -n "${SPLIT_PRE_GONE:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$SPLIT_DIR/$SPLIT_PRE_GONE")
+        say "$tag lookup-path split-pre-gone: $out"
+        echo "$out" | grep -q 'status=1' || bad "$tag lookup-path split-pre-gone not NOT_FOUND"
+    fi
+    if [ -n "${SPLIT_DIR:-}" ] && [ -n "${SPLIT_FILE:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$SPLIT_DIR/$SPLIT_FILE")
+        say "$tag lookup-path split-file: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag lookup-path split-file not OK"
+        echo "$out" | grep -q "name=$SPLIT_FILE" || bad "$tag lookup-path split-file name"
+    fi
+    if [ -n "${SPLIT_DIR:-}" ] && [ -n "${SPLIT_FILE_GONE:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$SPLIT_DIR/$SPLIT_FILE_GONE")
+        say "$tag lookup-path split-file-gone: $out"
+        echo "$out" | grep -q 'status=1' || bad "$tag lookup-path split-file-gone not NOT_FOUND"
+    fi
+    if [ -n "${SPLIT_DIR:-}" ] && [ -n "${SPLIT_EMPTY_GONE:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$SPLIT_DIR/$SPLIT_EMPTY_GONE")
+        say "$tag lookup-path split-empty-gone: $out"
+        echo "$out" | grep -q 'status=1' || bad "$tag lookup-path split-empty-gone not NOT_FOUND"
+    fi
+    if [ -n "${SPLIT_DIR:-}" ] && [ -n "${SPLIT_LINK_NAME:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$SPLIT_DIR/$SPLIT_LINK_NAME")
+        say "$tag lookup-path split-link: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag lookup-path split-link not OK"
+        echo "$out" | grep -q "name=$SPLIT_LINK_NAME" || bad "$tag lookup-path split-link name"
     fi
     out=$(g0_mgmt raft-lookup-path /no-such-efs-name)
     say "$tag lookup-path miss: $out"
@@ -1784,6 +2080,18 @@ HASHED_FILE_OLD=""
 HASHED_UNLINK_OLD=""
 HASHED_RMDIR_OLD=""
 HASHED_LINK_NAME=""
+HASHED_DOW=""
+HASHED_DOW_OLD=""
+HASHED_DOW_INO=""
+SPLIT_DIR=""
+SPLIT_DIR_INO=""
+SPLIT_FILE=""
+SPLIT_PRE=""
+SPLIT_EMPTY=""
+SPLIT_PRE_GONE=""
+SPLIT_FILE_GONE=""
+SPLIT_EMPTY_GONE=""
+SPLIT_LINK_NAME=""
 check_hashed_create "$leader" "fresh"
 say "session record through Raft (fresh)"
 SESS_SHARD=""
@@ -1992,6 +2300,8 @@ root_nlink=2
 [ -n "${XG_NAME:-}" ] && root_nlink=$((root_nlink + 1))
 [ -n "${DIR_RENAME_NAME:-}" ] && root_nlink=$((root_nlink + 1))
 [ -n "${HASHED_DIR:-}" ] && root_nlink=$((root_nlink + 1))
+[ -n "${HASHED_DOW:-}" ] && root_nlink=$((root_nlink + 1))
+[ -n "${SPLIT_DIR:-}" ] && root_nlink=$((root_nlink + 1))
 check_reads "$leader" "after-crash" "$root_nlink"
 out=$(g0_mgmt raft-lookup 1 raft-smoke-f)
 say "after-crash lookup created: $out"
@@ -2136,6 +2446,56 @@ if [ -n "${HASHED_RMDIR_OLD:-}" ]; then
     out=$(g0_mgmt raft-lookup 1 "$HASHED_RMDIR_OLD")
     say "after-crash lookup hashed-rmdir: $out"
     echo "$out" | grep -q 'status=1' || bad "after-crash hashed-rmdir name came back"
+fi
+if [ -n "${HASHED_DOW:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$HASHED_DOW")
+    say "after-crash lookup hashed-dow: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash hashed-dow missing"
+    if [ -n "${HASHED_DOW_INO:-}" ]; then
+        echo "$out" | grep -q "ino=$HASHED_DOW_INO" || bad "after-crash hashed-dow ino"
+    fi
+fi
+if [ -n "${HASHED_DOW_OLD:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$HASHED_DOW_OLD")
+    say "after-crash lookup hashed-dow-old: $out"
+    echo "$out" | grep -q 'status=1' || bad "after-crash hashed-dow old name came back"
+fi
+if [ -n "${SPLIT_DIR:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$SPLIT_DIR")
+    say "after-crash lookup split-dir: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash split-dir missing"
+    echo "$out" | grep -q 'mode=040755' || bad "after-crash split-dir mode lost"
+fi
+if [ -n "${SPLIT_DIR_INO:-}" ] && [ -n "${SPLIT_PRE:-}" ]; then
+    out=$(g0_mgmt raft-lookup "$SPLIT_DIR_INO" "$SPLIT_PRE")
+    say "after-crash lookup split-pre: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash split-pre missing"
+fi
+if [ -n "${SPLIT_DIR_INO:-}" ] && [ -n "${SPLIT_PRE_GONE:-}" ]; then
+    out=$(g0_mgmt raft-lookup "$SPLIT_DIR_INO" "$SPLIT_PRE_GONE")
+    say "after-crash lookup split-pre-gone: $out"
+    echo "$out" | grep -q 'status=1' || bad "after-crash split-pre came back"
+fi
+if [ -n "${SPLIT_DIR_INO:-}" ] && [ -n "${SPLIT_FILE:-}" ]; then
+    out=$(g0_mgmt raft-lookup "$SPLIT_DIR_INO" "$SPLIT_FILE")
+    say "after-crash lookup split-file: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash split-file missing"
+fi
+if [ -n "${SPLIT_DIR_INO:-}" ] && [ -n "${SPLIT_FILE_GONE:-}" ]; then
+    out=$(g0_mgmt raft-lookup "$SPLIT_DIR_INO" "$SPLIT_FILE_GONE")
+    say "after-crash lookup split-file-gone: $out"
+    echo "$out" | grep -q 'status=1' || bad "after-crash split-file came back"
+fi
+if [ -n "${SPLIT_DIR_INO:-}" ] && [ -n "${SPLIT_EMPTY_GONE:-}" ]; then
+    out=$(g0_mgmt raft-lookup "$SPLIT_DIR_INO" "$SPLIT_EMPTY_GONE")
+    say "after-crash lookup split-empty-gone: $out"
+    echo "$out" | grep -q 'status=1' || bad "after-crash split-empty came back"
+fi
+if [ -n "${SPLIT_DIR_INO:-}" ] && [ -n "${SPLIT_LINK_NAME:-}" ]; then
+    out=$(g0_mgmt raft-lookup "$SPLIT_DIR_INO" "$SPLIT_LINK_NAME")
+    say "after-crash lookup split-link: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash split-link missing"
+    echo "$out" | grep -q 'nlink=1' || bad "after-crash split-link nlink"
 fi
 if [ -n "${HOLD_NAME:-}" ]; then
     out=$(g0_mgmt raft-lookup 1 "$HOLD_NAME")

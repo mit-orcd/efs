@@ -875,9 +875,11 @@ static int apply_append_res_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
-/* Same encoding as sim_dir_apply. Empty LOCAL → HASHED for the smoke;
- * migrate of a non-empty dir that writes a hashed dentry on another
- * group is not hosted (SPLITTING dest CREATE stays BUSY). */
+/* Same encoding as sim_dir_apply. Empty LOCAL → HASHED for the smoke.
+ * migrate of a non-empty dir that PUTs a hashed dentry on another group
+ * is still a single-group apply (not a txn) — do not migrate a populated
+ * local range across groups here. SPLITTING dest CREATE writes the
+ * hashed location on the dentry shard's own group. */
 static int apply_dir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                          uint32_t clen, uint64_t index)
 {
@@ -4399,10 +4401,11 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
 
 /* File CREATE: one Raft entry on the dentry shard when that shard's
  * group already has everything the apply writes (LOCAL parent, or a
- * HASHED dest whose used_shards bit is set, or first-use on the same
- * Raft group as the parent). First use of a HASHED dir lane on another
- * group is a 2-shard txn (parent used_shards + dest dentry/inode).
- * SPLITTING dest is BUSY. MKDIR is a 2-shard txn of its own. */
+ * HASHED/SPLITTING dest whose used_shards bit is set, or first-use on
+ * the same Raft group as the parent). First use of a hashed dir lane
+ * on another group is a 2-shard txn (parent used_shards + dest
+ * dentry/inode). SPLITTING dest writes hashed (spec: writes go hashed;
+ * reads hashed-then-local). MKDIR is a 2-shard txn of its own. */
 static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                   const char *name, uint32_t mode,
                                   const struct efs_meta_attrs *at,
@@ -4460,8 +4463,6 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
     if (rc == EFS_OK && !S_ISDIR(prow.mode))
         rc = EFS_ERR_INVAL;
-    if (rc == EFS_OK && prow.layout == EFS_META_LAYOUT_SPLITTING)
-        rc = EFS_ERR_BUSY;
     if (rc == EFS_OK) {
         dsh = efs_kv_dentry_shard(parent, name, prow.layout);
         dg = efs_raft_shard_group(dsh);
@@ -4492,7 +4493,9 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         if (rc == EFS_ERR_NOT_FOUND)
             rc = EFS_OK;
     }
-    if (rc == EFS_OK && prow.layout == EFS_META_LAYOUT_HASHED &&
+    if (rc == EFS_OK &&
+        (prow.layout == EFS_META_LAYOUT_HASHED ||
+         prow.layout == EFS_META_LAYOUT_SPLITTING) &&
         (prow.used_shards & (1ull << efs_kv_dir_lane(name))) == 0 &&
         pg != dg)
         rc = host_hashed_create_txn(h, parent, name, mode, &at, &prow, dsh,
@@ -4613,10 +4616,84 @@ static int host_drop_parts(struct efs_raft_host *h, const struct efs_txid *t,
     return rc;
 }
 
-/* First use of a HASHED dir lane whose dentry shard is on a different
- * Raft group than the parent inode. Parent used_shards is exclusive;
- * dest dentry, child inode, alloc, dseq, and dir-lane ride the dest
- * shard. Parent mtime/ctime stay on the dir-lane (not the home row). */
+/* LOCAL / HASHED / SPLITTING name drop matching apply dentry_drop_items
+ * and sim drop_dentry_prep. SPLITTING writes HASHED=TOMBSTONE(epoch)
+ * (I8) and DELs the local leftover unless the keys alias (lane 0). */
+struct host_dent_drop {
+    uint32_t psh, hsh;
+    uint8_t k_loc[EFS_KV_KEY_MAX];
+    uint8_t k_hash[EFS_KV_KEY_MAX];
+    uint8_t v_tomb[EFS_META_DENT_BYTES];
+    uint32_t kl, kh;
+    uint64_t loc_ver, hash_ver;
+    int del_loc, put_tomb, del_hash;
+};
+
+static int host_dent_drop_fill(struct efs_kv *kv, const struct efs_meta_row *prow,
+                               efs_ino_t parent, const char *name,
+                               struct host_dent_drop *d)
+{
+    struct efs_meta_dentry tomb;
+    int rc;
+
+    memset(d, 0, sizeof(*d));
+    d->psh = efs_kv_inode_shard(parent);
+    d->hsh = efs_kv_dentry_shard(parent, name, EFS_META_LAYOUT_HASHED);
+    rc = efs_kv_key_dentry(d->psh, parent, name, d->k_loc, &d->kl);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_dentry(d->hsh, parent, name, d->k_hash, &d->kh);
+    if (rc != EFS_OK)
+        return rc;
+    if (prow->layout != EFS_META_LAYOUT_HASHED &&
+        !(prow->layout == EFS_META_LAYOUT_SPLITTING && d->kl == d->kh &&
+          memcmp(d->k_loc, d->k_hash, d->kl) == 0)) {
+        d->del_loc = 1;
+        rc = efs_txn_ver_get(kv, d->k_loc, d->kl, &d->loc_ver);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    if (prow->layout == EFS_META_LAYOUT_SPLITTING) {
+        memset(&tomb, 0, sizeof(tomb));
+        tomb.generation = prow->layout_epoch;
+        tomb.type = EFS_META_DENT_TOMBSTONE;
+        rc = efs_meta_pack_dentry(&tomb, d->v_tomb, sizeof(d->v_tomb));
+        if (rc != EFS_OK)
+            return rc;
+        d->put_tomb = 1;
+        return efs_txn_ver_get(kv, d->k_hash, d->kh, &d->hash_ver);
+    }
+    if (prow->layout == EFS_META_LAYOUT_HASHED) {
+        d->del_hash = 1;
+        return efs_txn_ver_get(kv, d->k_hash, d->kh, &d->hash_ver);
+    }
+    return EFS_OK;
+}
+
+static int host_dent_drop_prep(struct efs_raft_host *h, uint32_t sh,
+                               const struct host_dent_drop *d,
+                               const struct efs_txid *t,
+                               const struct efs_txn_parts *parts, int *hint)
+{
+    int rc = EFS_OK;
+
+    if (d->put_tomb && sh == d->hsh)
+        rc = host_prep(h, d->hsh, EFS_TXN_EXCL, t, parts, d->k_hash, d->kh,
+                        d->hash_ver, EFS_TXN_PUT, d->v_tomb,
+                        sizeof(d->v_tomb), hint);
+    else if (d->del_hash && sh == d->hsh)
+        rc = host_prep(h, d->hsh, EFS_TXN_EXCL, t, parts, d->k_hash, d->kh,
+                        d->hash_ver, EFS_TXN_DEL, NULL, 0, hint);
+    if (rc == EFS_OK && d->del_loc && sh == d->psh)
+        rc = host_prep(h, d->psh, EFS_TXN_EXCL, t, parts, d->k_loc, d->kl,
+                       d->loc_ver, EFS_TXN_DEL, NULL, 0, hint);
+    return rc;
+}
+
+/* First use of a HASHED/SPLITTING dir lane whose dentry shard is on a
+ * different Raft group than the parent inode. Parent used_shards is
+ * exclusive; dest dentry, child inode, alloc, dseq, and dir-lane ride
+ * the dest shard. Parent mtime/ctime stay on the dir-lane (not the
+ * home row). */
 static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                   const char *name, uint32_t mode,
                                   const struct efs_meta_attrs *at,
@@ -4967,10 +5044,12 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     }
 }
 
-/* Empty RMDIR: parent dentry DEL + parent nlink-- + child inode DEL.
- * LOCAL parent stamps the parent row; HASHED stamps the dir-lane.
- * HASHED child GUARDs used-lane dseqs (phantom insert). SPLITTING is
- * BUSY. A node that does not host a participant group bounces. */
+/* Empty RMDIR: parent dentry drop + parent nlink-- + child inode DEL.
+ * LOCAL parent stamps the parent row; HASHED/SPLITTING stamp the
+ * dir-lane. SPLITTING parent writes HASHED=TOMBSTONE (I8). HASHED
+ * child GUARDs used-lane dseqs. A child that is itself SPLITTING stays
+ * BUSY (distributed emptiness). A node that does not host a
+ * participant group bounces. */
 void server_raft_host_rmdir(efs_ino_t parent, const char *name,
                             struct efs_msg_inode_reply *out)
 {
@@ -4982,18 +5061,21 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
     struct efs_txid t;
     struct efs_txn_parts parts;
     struct host_pver_guard gv[EFS_TXN_MAX_PART];
-    uint8_t k_dent[EFS_KV_KEY_MAX], k_pino[EFS_KV_KEY_MAX], k_cino[EFS_KV_KEY_MAX];
+    struct host_dent_drop drop;
+    uint8_t k_pino[EFS_KV_KEY_MAX], k_cino[EFS_KV_KEY_MAX];
     uint8_t k_pdseq[EFS_KV_KEY_MAX], k_cdseq[EFS_KV_KEY_MAX];
     uint8_t k_ln[EFS_KV_KEY_MAX], v_ln[EFS_META_LANE_BYTES];
     uint8_t v_pino[EFS_META_INO_BYTES], v_pdseq[8], sb[8];
-    uint32_t kd = 0, kpi = 0, kci = 0, kps = 0, kcs = 0, kln = 0, sn = 8, nent = 0;
+    uint32_t kpi = 0, kci = 0, kps = 0, kcs = 0, kln = 0, sn = 8, nent = 0;
     uint32_t psh, csh, dsh, coord;
-    uint64_t pver = 0, dver = 0, sver = 0, cver = 0, gver = 0, lnver = 0, seq = 0, now;
+    uint64_t pver = 0, sver = 0, cver = 0, gver = 0, lnver = 0, seq = 0, now;
     uint8_t cmd[22], p_lane = 0;
     int hint = -1;
     int rc, i, gr, held, stamp_lane = 0, ngv = 0, hashed_child = 0;
 
     memset(out, 0, sizeof(*out));
+    memset(&drop, 0, sizeof(drop));
+    memset(&drop, 0, sizeof(drop));
     out->status = EFS_INODE_RPC_ERROR;
     if (!h || !h->running || !name || parent == 0 || name[0] == '\0') {
         out->status = EFS_INODE_RPC_INVAL;
@@ -5014,10 +5096,9 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
     if (rc == EFS_OK && !S_ISDIR(prow.mode))
         rc = EFS_ERR_INVAL;
-    if (rc == EFS_OK && prow.layout == EFS_META_LAYOUT_SPLITTING)
-        rc = EFS_ERR_BUSY;
-    else if (rc == EFS_OK && prow.layout != EFS_META_LAYOUT_LOCAL &&
-             prow.layout != EFS_META_LAYOUT_HASHED)
+    if (rc == EFS_OK && prow.layout != EFS_META_LAYOUT_LOCAL &&
+        prow.layout != EFS_META_LAYOUT_HASHED &&
+        prow.layout != EFS_META_LAYOUT_SPLITTING)
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK) {
         dsh = efs_kv_dentry_shard(parent, name, prow.layout);
@@ -5139,7 +5220,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         rc = efs_meta_pack_inode(&prow, v_pino, sizeof(v_pino));
     }
     if (rc == EFS_OK)
-        rc = efs_kv_key_dentry(dsh, parent, name, k_dent, &kd);
+        rc = host_dent_drop_fill(h->kv, &prow, parent, name, &drop);
     if (rc == EFS_OK)
         rc = efs_kv_key_inode(psh, parent, k_pino, &kpi);
     if (rc == EFS_OK)
@@ -5153,8 +5234,6 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
                                      sizeof(v_ln));
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_pino, kpi, &pver);
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_pdseq, kps, &sver);
     if (rc == EFS_OK)
@@ -5172,6 +5251,10 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         rc = host_parts_add(&parts, dsh);
         if (rc == EFS_OK)
             rc = host_parts_add(&parts, psh);
+        if (rc == EFS_OK && drop.del_loc)
+            rc = host_parts_add(&parts, drop.psh);
+        if (rc == EFS_OK && (drop.put_tomb || drop.del_hash))
+            rc = host_parts_add(&parts, drop.hsh);
         if (rc == EFS_OK)
             rc = host_parts_add(&parts, csh);
         for (i = 0; i < ngv && rc == EFS_OK; i++)
@@ -5182,11 +5265,9 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
             int g;
-            if (sh == dsh) {
-                rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dent, kd,
-                               dver, EFS_TXN_DEL, NULL, 0, &hint);
-                if (rc == EFS_OK)
-                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_pdseq,
+            rc = host_dent_drop_prep(h, sh, &drop, &t, &parts, &hint);
+            if (rc == EFS_OK && sh == dsh) {
+                rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_pdseq,
                                    kps, sver, EFS_TXN_PUT, v_pdseq, 8, &hint);
                 if (rc == EFS_OK && stamp_lane)
                     rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_ln, kln,
@@ -5239,11 +5320,13 @@ rmdir_prepped:
 }
 
 /* nlink>1 file UNLINK, or last-link when dentry shard ≠ inode shard:
- * dest dentry DEL + inode nlink-- (or inode DEL) as a txn (same
- * PREPARE/DECIDE/RESOLVE as LINK). LOCAL stamps the parent row; HASHED
- * stamps the dir-lane (parent nlink unchanged). SPLITTING is BUSY.
- * Last-link on one shard stays on EFS_MD_CMD_UNLINK. The receiving node
- * must lead every participant group. */
+ * dest dentry drop + inode nlink-- (or inode DEL) as a txn (same
+ * PREPARE/DECIDE/RESOLVE as LINK). LOCAL stamps the parent row;
+ * HASHED/SPLITTING stamp the dir-lane (parent nlink unchanged).
+ * SPLITTING writes HASHED=TOMBSTONE (I8) and DELs the local leftover.
+ * Last-link on one group stays on EFS_MD_CMD_UNLINK unless a SPLITTING
+ * leftover lives on another group. The receiving node must lead every
+ * participant group. */
 static void host_unlink_txn(efs_ino_t parent, const char *name,
                             struct efs_msg_inode_reply *out)
 {
@@ -5253,14 +5336,15 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
     struct efs_meta_stat st;
     struct efs_txid t;
     struct efs_txn_parts parts;
-    uint8_t k_dent[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX], k_par[EFS_KV_KEY_MAX];
+    struct host_dent_drop drop;
+    uint8_t k_ino[EFS_KV_KEY_MAX], k_par[EFS_KV_KEY_MAX];
     uint8_t k_dseq[EFS_KV_KEY_MAX], k_ln[EFS_KV_KEY_MAX], v_ln[EFS_META_LANE_BYTES];
     uint8_t v_ino[EFS_META_INO_BYTES], v_par[EFS_META_INO_BYTES], v_dseq[8];
     uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
     uint8_t sb[8], cmd[22];
-    uint32_t kd = 0, ki = 0, kp = 0, ks = 0, kln = 0, sn = 8, krl = 0;
+    uint32_t ki = 0, kp = 0, ks = 0, kln = 0, sn = 8, krl = 0;
     uint32_t dsh, ish, psh, coord, ash = 0;
-    uint64_t dver = 0, iver = 0, pver = 0, sver = 0, lnver = 0, seq = 0, now;
+    uint64_t iver = 0, pver = 0, sver = 0, lnver = 0, seq = 0, now;
     uint64_t rver = 0;
     uint32_t nlink_out = 0;
     int hint = -1;
@@ -5269,6 +5353,8 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
     uint8_t d_lane = 0;
 
     memset(out, 0, sizeof(*out));
+    memset(&drop, 0, sizeof(drop));
+    memset(&drop, 0, sizeof(drop));
     out->status = EFS_INODE_RPC_ERROR;
     if (!h || !h->running || !name || parent == 0 || name[0] == '\0') {
         out->status = EFS_INODE_RPC_INVAL;
@@ -5282,10 +5368,9 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
         rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
     if (rc == EFS_OK && !S_ISDIR(prow.mode))
         rc = EFS_ERR_INVAL;
-    if (rc == EFS_OK && prow.layout == EFS_META_LAYOUT_SPLITTING)
-        rc = EFS_ERR_BUSY;
-    else if (rc == EFS_OK && prow.layout != EFS_META_LAYOUT_LOCAL &&
-             prow.layout != EFS_META_LAYOUT_HASHED)
+    if (rc == EFS_OK && prow.layout != EFS_META_LAYOUT_LOCAL &&
+        prow.layout != EFS_META_LAYOUT_HASHED &&
+        prow.layout != EFS_META_LAYOUT_SPLITTING)
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK) {
         dsh = efs_kv_dentry_shard(parent, name, prow.layout);
@@ -5336,7 +5421,7 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
             rc = efs_meta_pack_inode(&row, v_ino, sizeof(v_ino));
     }
     if (rc == EFS_OK)
-        rc = efs_kv_key_dentry(dsh, parent, name, k_dent, &kd);
+        rc = host_dent_drop_fill(h->kv, &prow, parent, name, &drop);
     if (rc == EFS_OK)
         rc = efs_kv_key_inode(ish, row.ino, k_ino, &ki);
     if (rc == EFS_OK && touch_parent)
@@ -5357,8 +5442,6 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
             efs_meta_pack_reap(v_reap, row.generation, row.active_lanes);
     }
     if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
-    if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_ino, ki, &iver);
     if (rc == EFS_OK && touch_parent)
         rc = efs_txn_ver_get(h->kv, k_par, kp, &pver);
@@ -5377,6 +5460,10 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
             rc = host_parts_add(&parts, ish);
         if (rc == EFS_OK && touch_parent)
             rc = host_parts_add(&parts, psh);
+        if (rc == EFS_OK && drop.del_loc)
+            rc = host_parts_add(&parts, drop.psh);
+        if (rc == EFS_OK && (drop.put_tomb || drop.del_hash))
+            rc = host_parts_add(&parts, drop.hsh);
         if (rc == EFS_OK && last && !held)
             rc = host_parts_add(&parts, ash);
         if (rc != EFS_OK)
@@ -5384,12 +5471,10 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
         fill_txid(h, &t);
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
-            if (sh == dsh) {
-                rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dent, kd,
-                               dver, EFS_TXN_DEL, NULL, 0, &hint);
-                if (rc == EFS_OK)
-                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dseq, ks,
-                                   sver, EFS_TXN_PUT, v_dseq, 8, &hint);
+            rc = host_dent_drop_prep(h, sh, &drop, &t, &parts, &hint);
+            if (rc == EFS_OK && sh == dsh) {
+                rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dseq, ks,
+                               sver, EFS_TXN_PUT, v_dseq, 8, &hint);
                 if (rc == EFS_OK && stamp_lane)
                     rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_ln, kln,
                                    lnver, EFS_TXN_PUT, v_ln, sizeof(v_ln),
@@ -5408,13 +5493,15 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
                                    iver, EFS_TXN_DEL, NULL, 0, &hint);
             }
             if (rc == EFS_OK && last && !held && sh == ash && ash != dsh &&
-                ash != ish && (!touch_parent || ash != psh))
+                ash != ish && (!touch_parent || ash != psh) &&
+                (!drop.del_loc || ash != drop.psh))
                 rc = host_prep(h, ash, EFS_TXN_EXCL, &t, &parts, k_reap, krl,
                                rver, EFS_TXN_PUT, v_reap, sizeof(v_reap),
                                &hint);
         }
         if (rc == EFS_OK && last && !held &&
-            (ash == dsh || ash == ish || (touch_parent && ash == psh)))
+            (ash == dsh || ash == ish || (touch_parent && ash == psh) ||
+             (drop.del_loc && ash == drop.psh)))
             /* The anchor shard is already a participant; its marker PREP
              * still has to ride the log of ITS OWN group. When ash aliases
              * another participant the loop above skipped the dedicated
@@ -5463,8 +5550,9 @@ prepped:
     }
 }
 
-/* Last-link file UNLINK on one shard: one Raft entry on the dentry
- * shard. nlink>1, or last-link with dsh ≠ ish, is the txn above.
+/* Last-link file UNLINK on one group: one Raft entry on the dentry
+ * group. nlink>1, last-link with dsh ≠ ish, or SPLITTING unlink whose
+ * local leftover is on another group, is the txn above.
  * Directories go through RMDIR. */
 void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
                              struct efs_msg_inode_reply *out)
@@ -5555,7 +5643,8 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
         if (rc == EFS_OK)
             rc = efs_meta_apply_resolve(h->kv, parent, name, &dent, &row);
         if (rc == EFS_OK) {
-            if (row.nlink > 1 || ig != dg) {
+            if (row.nlink > 1 || ig != dg ||
+                (prow.layout == EFS_META_LAYOUT_SPLITTING && pg != dg)) {
                 pthread_mutex_unlock(&h->read_mu);
                 host_unlink_txn(parent, name, out);
                 return;
@@ -6040,10 +6129,11 @@ void server_raft_host_append(efs_ino_t ino, uint64_t len,
 }
 
 /* Hard link: dest dentry + inode nlink++ as a txn (same PREPARE/DECIDE/
- * RESOLVE as MKDIR). LOCAL dest stamps the parent row; HASHED stamps the
- * dir-lane (parent row only for used_shards first-use). SPLITTING is
- * BUSY. HASHED dest dentries bounce if this replica does not host the
- * dentry shard. Directories are INVAL. LINK_SHARD is not this path. */
+ * RESOLVE as MKDIR). LOCAL dest stamps the parent row; HASHED/SPLITTING
+ * stamp the dir-lane (parent row only for used_shards first-use).
+ * SPLITTING dest writes hashed (same as CREATE). HASHED/SPLITTING dest
+ * dentries bounce if this replica does not host the dentry shard.
+ * Directories are INVAL. LINK_SHARD is not this path. */
 void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
                            const char *new_name, struct efs_msg_inode_reply *out)
 {
@@ -6092,10 +6182,9 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
         rc = efs_meta_apply_get_inode(h->kv, new_parent, &dprow);
     if (rc == EFS_OK && !S_ISDIR(dprow.mode))
         rc = EFS_ERR_INVAL;
-    if (rc == EFS_OK && dprow.layout == EFS_META_LAYOUT_SPLITTING)
-        rc = EFS_ERR_BUSY;
-    else if (rc == EFS_OK && dprow.layout != EFS_META_LAYOUT_LOCAL &&
-             dprow.layout != EFS_META_LAYOUT_HASHED)
+    if (rc == EFS_OK && dprow.layout != EFS_META_LAYOUT_LOCAL &&
+        dprow.layout != EFS_META_LAYOUT_HASHED &&
+        dprow.layout != EFS_META_LAYOUT_SPLITTING)
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, src_ino, &row);
@@ -6251,14 +6340,20 @@ link_prepped:
     }
 }
 
-/* RENAME: src dentry DEL + dest dentry PUT + inode parent/ctime as a
+/* RENAME: src dentry drop + dest dentry PUT + inode parent/ctime as a
  * txn (same PREPARE/DECIDE/RESOLVE as LINK). LOCAL stamps the parent
- * row; HASHED stamps dir-lanes on the dentry shards (parent row only
- * for used_shards / nlink). Same-dir is one parent; cross-dir stamps
- * both. A directory GUARDs dst_parent ancestry pver sidecars and
- * exclusive-PUTs its own pver (cycle prevention). SPLITTING is BUSY.
- * Replacing an existing dest is EXIST. HASHED dentries and scattered
- * dir inodes bounce if this replica does not host every participant. */
+ * row; HASHED/SPLITTING stamp dir-lanes (parent row only for
+ * used_shards / nlink). SPLITTING dest writes hashed; src drop is I8
+ * (HASHED=TOMBSTONE + DEL local leftover). Leftover dest is POSIX
+ * replace: PUT hashed dest + DEL the local leftover. Same-dir is one
+ * parent; cross-dir stamps both. A directory GUARDs dst_parent
+ * ancestry pver sidecars and exclusive-PUTs its own pver (cycle
+ * prevention). A dest dir that is itself SPLITTING stays BUSY.
+ * Replacing an existing dest file is POSIX replace (nlink-- / DEL).
+ * Replacing an empty dest dir is dest rmdir (LOCAL or HASHED; HASHED
+ * GUARDs used-lane dseqs, cap EFS_TXN_MAX_PART → BUSY). HASHED dentries
+ * and scattered dir inodes bounce if this replica does not host every
+ * participant. */
 void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                                 efs_ino_t new_parent, const char *new_name,
                                 struct efs_msg_inode_reply *out)
@@ -6270,7 +6365,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     struct efs_txid t;
     struct efs_txn_parts parts;
     struct host_pver_guard gv[EFS_TXN_MAX_PART];
-    uint8_t k_src[EFS_KV_KEY_MAX], k_dst[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
+    uint8_t k_dst[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
     uint8_t k_par[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX], k_pver[EFS_KV_KEY_MAX];
     uint8_t k_nino[EFS_KV_KEY_MAX], k_ndseq[EFS_KV_KEY_MAX];
     uint8_t k_dpar[EFS_KV_KEY_MAX], k_ddseq[EFS_KV_KEY_MAX];
@@ -6280,20 +6375,27 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
     uint8_t k_sln[EFS_KV_KEY_MAX], v_sln[EFS_META_LANE_BYTES];
     uint8_t k_dln[EFS_KV_KEY_MAX], v_dln[EFS_META_LANE_BYTES];
-    uint32_t ks = 0, kd = 0, ki = 0, kp = 0, kq = 0, kpv = 0, sn = 8;
+    uint32_t kd = 0, ki = 0, kp = 0, kq = 0, kpv = 0, sn = 8;
     uint32_t kn = 0, knd = 0, krl = 0, kdp = 0, kdsq = 0, ksln = 0, kdln = 0;
     uint32_t ssh, dsh, ish, psh, dpsh, coord, nsh = 0, ash = 0;
-    uint64_t sver = 0, dver = 0, iver = 0, pver = 0, qver = 0, ever = 0;
+    uint64_t dver = 0, iver = 0, pver = 0, qver = 0, ever = 0;
     uint64_t nver = 0, gver2 = 0, rver = 0, dpver = 0, dsver = 0;
     uint64_t slver = 0, dlver = 0;
     uint64_t seq = 0, dseqn = 0, now;
     int hint = -1;
-    int rc, i, gr, is_dir = 0, ngv = 0;
+    int rc, i, gr, is_dir = 0, ngv = 0, nxd = 0, hashed_xdir = 0;
     int xist = 0, xdir = 0, xput = 0, same = 0;
     int touch_src = 0, stamp_src = 0, touch_dst = 0, stamp_dst = 0, two_dseq = 0;
     uint8_t s_lane = 0, d_lane = 0;
+    struct host_pver_guard xdseq[EFS_TXN_MAX_PART];
+    struct host_dent_drop drop;
+    uint8_t k_dloc[EFS_KV_KEY_MAX];
+    uint32_t kdl = 0;
+    uint64_t dloc_ver = 0;
+    int dest_del_loc = 0;
 
     memset(out, 0, sizeof(*out));
+    memset(&drop, 0, sizeof(drop));
     out->status = EFS_INODE_RPC_ERROR;
     if (!h || !h->running || !old_name || !new_name || old_parent == 0 ||
         new_parent == 0 || old_name[0] == '\0' || new_name[0] == '\0') {
@@ -6326,10 +6428,9 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         rc = efs_meta_apply_get_inode(h->kv, old_parent, &prow);
     if (rc == EFS_OK && !S_ISDIR(prow.mode))
         rc = EFS_ERR_INVAL;
-    if (rc == EFS_OK && prow.layout == EFS_META_LAYOUT_SPLITTING)
-        rc = EFS_ERR_BUSY;
-    else if (rc == EFS_OK && prow.layout != EFS_META_LAYOUT_LOCAL &&
-             prow.layout != EFS_META_LAYOUT_HASHED)
+    if (rc == EFS_OK && prow.layout != EFS_META_LAYOUT_LOCAL &&
+        prow.layout != EFS_META_LAYOUT_HASHED &&
+        prow.layout != EFS_META_LAYOUT_SPLITTING)
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK && !same) {
         if (efs_raft_shard_group(dpsh) != efs_raft_shard_group(psh))
@@ -6338,10 +6439,9 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
             rc = efs_meta_apply_get_inode(h->kv, new_parent, &dprow);
         if (rc == EFS_OK && !S_ISDIR(dprow.mode))
             rc = EFS_ERR_INVAL;
-        if (rc == EFS_OK && dprow.layout == EFS_META_LAYOUT_SPLITTING)
-            rc = EFS_ERR_BUSY;
-        else if (rc == EFS_OK && dprow.layout != EFS_META_LAYOUT_LOCAL &&
-                 dprow.layout != EFS_META_LAYOUT_HASHED)
+        if (rc == EFS_OK && dprow.layout != EFS_META_LAYOUT_LOCAL &&
+            dprow.layout != EFS_META_LAYOUT_HASHED &&
+            dprow.layout != EFS_META_LAYOUT_SPLITTING)
             rc = EFS_ERR_INVAL;
     }
     ssh = (rc == EFS_OK) ? efs_kv_dentry_shard(old_parent, old_name, prow.layout)
@@ -6442,10 +6542,11 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     ish = (rc == EFS_OK) ? efs_kv_inode_shard(row.ino) : 0;
     if (rc == EFS_OK && efs_raft_shard_group(ish) != efs_raft_shard_group(psh))
         rc = host_read_index(h, efs_raft_shard_group(ish), &hint);
-    /* Existing dest's inode row. Dir dest: rmdir rules (LOCAL, empty by
-     * nlink + readdir, no open leases; parent loses a subdir). File dest:
-     * unlink rules (nlink--, or DEL on last link; a leased last link keeps
-     * an nlink=0 row for open fds). */
+    /* Existing dest's inode row. Dir dest: rmdir rules (LOCAL empty by
+     * nlink + readdir, HASHED empty by readdir + used-lane dseq GUARDs,
+     * no open leases; parent loses a subdir). File dest: unlink rules
+     * (nlink--, or DEL on last link; a leased last link keeps an nlink=0
+     * row for open fds). */
     if (rc == EFS_OK && xist)
         rc = efs_meta_apply_get_inode(h->kv, ndent.ino, &nrow);
     if (rc == EFS_OK && xist && efs_raft_shard_group(nsh) !=
@@ -6459,10 +6560,40 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         int held;
         if (nrow.layout == EFS_META_LAYOUT_SPLITTING)
             rc = EFS_ERR_BUSY;
-        else if (nrow.layout != EFS_META_LAYOUT_LOCAL)
+        else if (nrow.layout != EFS_META_LAYOUT_LOCAL &&
+                 nrow.layout != EFS_META_LAYOUT_HASHED)
             rc = EFS_ERR_INVAL;
         else if (nrow.nlink > 2)
             rc = EFS_ERR_NOT_EMPTY;
+        if (rc == EFS_OK && nrow.layout == EFS_META_LAYOUT_HASHED) {
+            uint8_t gs[8];
+            int ngs = 0, lane;
+
+            hashed_xdir = 1;
+            bounce_add(gs, &ngs, 8, efs_raft_shard_group(psh));
+            bounce_add(gs, &ngs, 8, efs_raft_shard_group(dpsh));
+            bounce_add(gs, &ngs, 8, efs_raft_shard_group(ssh));
+            bounce_add(gs, &ngs, 8, efs_raft_shard_group(dsh));
+            bounce_add(gs, &ngs, 8, efs_raft_shard_group(ish));
+            bounce_add(gs, &ngs, 8, efs_raft_shard_group(nsh));
+            for (lane = 0; lane < EFS_META_LANES; lane++) {
+                if ((nrow.used_shards & (1ull << lane)) == 0)
+                    continue;
+                bounce_add(gs, &ngs, 8,
+                           efs_raft_shard_group(efs_kv_lane_shard(nrow.ino,
+                                                                (uint8_t)lane)));
+            }
+            if (!host_hosts_all(h, gs, ngs)) {
+                uint8_t need[2];
+
+                host_need_both(need);
+                pthread_mutex_unlock(&h->read_mu);
+                host_fwd_rename(h, old_parent, old_name, new_parent, new_name,
+                                out, need, 2);
+                return;
+            }
+            rc = host_read_inode_lanes(h, nrow.ino, &hint);
+        }
         if (rc == EFS_OK) {
             memset(&cur, 0, sizeof(cur));
             memset(&one, 0, sizeof(one));
@@ -6476,6 +6607,30 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                 rc = held;
             else if (held)
                 rc = EFS_ERR_BUSY;
+        }
+        if (rc == EFS_OK && hashed_xdir) {
+            uint8_t lane;
+
+            for (lane = 0; lane < EFS_META_LANES && rc == EFS_OK; lane++) {
+                uint32_t lsh;
+
+                if ((nrow.used_shards & (1ull << lane)) == 0)
+                    continue;
+                if (nxd >= EFS_TXN_MAX_PART) {
+                    rc = EFS_ERR_BUSY;
+                    break;
+                }
+                lsh = efs_kv_lane_shard(nrow.ino, (uint8_t)lane);
+                xdseq[nxd].shard = lsh;
+                xdseq[nxd].klen = 0;
+                rc = efs_kv_key_dseq(lsh, nrow.ino, (uint8_t)lane, xdseq[nxd].key,
+                                      &xdseq[nxd].klen);
+                if (rc == EFS_OK)
+                    rc = efs_txn_ver_get(h->kv, xdseq[nxd].key, xdseq[nxd].klen,
+                                         &xdseq[nxd].ver);
+                if (rc == EFS_OK)
+                    nxd++;
+            }
         }
         if (rc == EFS_OK && (same ? prow.nlink : dprow.nlink) < 3)
             rc = EFS_ERR_PROTO;
@@ -6597,6 +6752,8 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         rc = host_parts_add(&parts, nsh);
     if (rc == EFS_OK && xist && !xdir && !xput)
         rc = host_parts_add(&parts, ash);
+    for (i = 0; i < nxd && rc == EFS_OK; i++)
+        rc = host_parts_add(&parts, xdseq[i].shard);
     if (rc == EFS_OK && is_dir) {
         rc = host_pver_guard_chain(h, new_parent, row.ino, &parts, gv, &ngv,
                                    &hint);
@@ -6620,7 +6777,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
             rc = efs_meta_pack_inode(&dprow, v_dpar, sizeof(v_dpar));
     }
     if (rc == EFS_OK)
-        rc = efs_kv_key_dentry(ssh, old_parent, old_name, k_src, &ks);
+        rc = host_dent_drop_fill(h->kv, &prow, old_parent, old_name, &drop);
     if (rc == EFS_OK)
         rc = efs_kv_key_dentry(dsh, new_parent, new_name, k_dst, &kd);
     if (rc == EFS_OK)
@@ -6641,7 +6798,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                                      k_dln, &kdln, v_dln, sizeof(v_dln));
     if (rc == EFS_OK && xist)
         rc = efs_kv_key_inode(nsh, nrow.ino, k_nino, &kn);
-    if (rc == EFS_OK && xist && xdir)
+    if (rc == EFS_OK && xist && xdir && !hashed_xdir)
         rc = efs_kv_key_dseq(nsh, nrow.ino, 0, k_ndseq, &knd);
     if (rc == EFS_OK && is_dir) {
         rc = efs_kv_key_pver(ish, row.ino, k_pver, &kpv);
@@ -6650,8 +6807,17 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         if (rc == EFS_OK)
             wr64be(v_pver, row.parent_version);
     }
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_src, ks, &sver);
+    if (rc == EFS_OK && xist) {
+        uint8_t dl = same ? prow.layout : dprow.layout;
+        if (dl == EFS_META_LAYOUT_SPLITTING) {
+            rc = efs_kv_key_dentry(dpsh, new_parent, new_name, k_dloc, &kdl);
+            if (rc == EFS_OK &&
+                !(kdl == kd && memcmp(k_dloc, k_dst, kdl) == 0)) {
+                dest_del_loc = 1;
+                rc = efs_txn_ver_get(h->kv, k_dloc, kdl, &dloc_ver);
+            }
+        }
+    }
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_dst, kd, &dver);
     if (rc == EFS_OK)
@@ -6670,7 +6836,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         rc = efs_txn_ver_get(h->kv, k_dln, kdln, &dlver);
     if (rc == EFS_OK && xist)
         rc = efs_txn_ver_get(h->kv, k_nino, kn, &nver);
-    if (rc == EFS_OK && xist && xdir)
+    if (rc == EFS_OK && xist && xdir && !hashed_xdir)
         rc = efs_txn_ver_get(h->kv, k_ndseq, knd, &gver2);
     if (rc == EFS_OK && xist && !xdir && !xput)
         rc = efs_txn_ver_get(h->kv, k_reap, krl, &rver);
@@ -6685,13 +6851,21 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
             dseqn = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
             wr64be(v_ddseq, dseqn + 1);
         }
+        if (rc == EFS_OK && drop.del_loc)
+            rc = host_parts_add(&parts, drop.psh);
+        if (rc == EFS_OK && (drop.put_tomb || drop.del_hash))
+            rc = host_parts_add(&parts, drop.hsh);
+        if (rc == EFS_OK && dest_del_loc)
+            rc = host_parts_add(&parts, dpsh);
         fill_txid(h, &t);
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
-            if (sh == ssh) {
-                rc = host_prep(h, ssh, EFS_TXN_EXCL, &t, &parts, k_src, ks,
-                               sver, EFS_TXN_DEL, NULL, 0, &hint);
-                if (rc == EFS_OK && dsh == ssh)
+            rc = host_dent_drop_prep(h, sh, &drop, &t, &parts, &hint);
+            if (rc == EFS_OK && dest_del_loc && sh == dpsh)
+                rc = host_prep(h, dpsh, EFS_TXN_EXCL, &t, &parts, k_dloc, kdl,
+                               dloc_ver, EFS_TXN_DEL, NULL, 0, &hint);
+            if (rc == EFS_OK && sh == ssh) {
+                if (dsh == ssh)
                     rc = host_prep(h, ssh, EFS_TXN_EXCL, &t, &parts, k_dst, kd,
                                    dver, EFS_TXN_PUT, v_dent, sizeof(v_dent),
                                    &hint);
@@ -6747,7 +6921,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                 else
                     rc = host_prep(h, nsh, EFS_TXN_EXCL, &t, &parts, k_nino,
                                    kn, nver, EFS_TXN_DEL, NULL, 0, &hint);
-                if (rc == EFS_OK && xdir)
+                if (rc == EFS_OK && xdir && !hashed_xdir)
                     rc = host_prep(h, nsh, EFS_TXN_GUARD, &t, &parts, k_ndseq,
                                    knd, gver2, 0, NULL, 0, &hint);
             }
@@ -6770,6 +6944,10 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         for (i = 0; i < ngv && rc == EFS_OK; i++)
             rc = host_prep(h, gv[i].shard, EFS_TXN_GUARD, &t, &parts, gv[i].key,
                            gv[i].klen, gv[i].ver, 0, NULL, 0, &hint);
+        for (i = 0; i < nxd && rc == EFS_OK; i++)
+            rc = host_prep(h, xdseq[i].shard, EFS_TXN_GUARD, &t, &parts,
+                           xdseq[i].key, xdseq[i].klen, xdseq[i].ver, 0, NULL, 0,
+                           &hint);
         if (rc != EFS_OK)
             (void)host_drop_parts(h, &t, &parts, &hint);
         else {
@@ -7169,9 +7347,10 @@ void server_raft_host_getchunks(efs_ino_t ino, uint32_t start, uint32_t max,
     out->primary_id = (hint >= 0) ? (efs_node_id_t)(hint + 1) : 0;
 }
 
-/* READDIR: ReadIndex the dir inode (and used dir-lane groups if HASHED),
- * then scan. after_ino skips already-returned inos so the old wire cursor
- * still works. SPLITTING is BUSY. */
+/* READDIR: ReadIndex the dir inode (and used dir-lane groups if HASHED
+ * or SPLITTING), then scan. Apply merges LOCAL leftovers with hashed
+ * lanes during SPLITTING (hashed side wins, I8). after_ino skips
+ * already-returned inos so the old wire cursor still works. */
 void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
                               uint32_t after_src, const char *after_name,
                               struct efs_msg_inode_readdir_reply *out)
@@ -7215,8 +7394,6 @@ void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
         rc = efs_meta_apply_get_inode(h->kv, parent, &row);
     if (rc == EFS_OK && !S_ISDIR(row.mode))
         rc = EFS_ERR_INVAL;
-    if (rc == EFS_OK && row.layout == EFS_META_LAYOUT_SPLITTING)
-        rc = EFS_ERR_BUSY;
     if (rc == EFS_OK && row.layout != EFS_META_LAYOUT_LOCAL) {
         uint32_t li;
         for (li = 0; li < EFS_META_LANES; li++) {

@@ -793,6 +793,53 @@ static void test_i8_spread(void)
     efs_sim_free(s);
 }
 
+/* Unlink of a local leftover and of a hashed-during-split name, plus
+ * rmdir of an empty LOCAL child, while the parent stays SPLITTING.
+ * I8: hashed tombstone wins; migrate must not resurrect. RMDIR of the
+ * SPLITTING directory itself stays BUSY. */
+static void test_i8_unlink_rmdir(void)
+{
+    struct efs_sim *s = mk(94);
+    efs_ino_t d = 0, e = 0, f = 0, g = 0, bar = 0;
+    uint8_t layout = 99;
+    const char *nm;
+    int rc;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, "d", &d) == EFS_OK && d, "d");
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, "pre", &f) == EFS_OK && f,
+          "pre");
+    CHECK(efs_sim_mkdir(s, 0, d, "e", &e) == EFS_OK && e, "e");
+    CHECK(efs_sim_dir_begin_split(s, d) == EFS_OK, "split");
+    CHECK(efs_sim_dir_layout(s, d, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_SPLITTING,
+          "SPLITTING");
+    nm = hashed_nm(d);
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, nm, &bar) == EFS_OK && bar,
+          "hashed create");
+    CHECK(efs_sim_unlink(s, 0, d, nm) == EFS_OK, "unlink hashed");
+    CHECK(efs_sim_lookup(s, 0, d, nm, &g) == EFS_ERR_NOT_FOUND, "hashed gone");
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, nm, &bar) == EFS_OK,
+          "recreate after tombstone");
+    CHECK(efs_sim_unlink(s, 0, d, nm) == EFS_OK, "unlink hashed again");
+    CHECK(efs_sim_unlink(s, 0, d, "pre") == EFS_OK, "unlink pre");
+    CHECK(efs_sim_lookup(s, 0, d, "pre", &g) == EFS_ERR_NOT_FOUND, "I8 pre");
+    CHECK(efs_sim_rmdir(s, 0, d, "e") == EFS_OK, "rmdir e");
+    CHECK(efs_sim_lookup(s, 0, d, "e", &g) == EFS_ERR_NOT_FOUND, "e gone");
+    while ((rc = efs_sim_dir_migrate(s, d)) == EFS_OK)
+        ;
+    CHECK(rc == EFS_ERR_NOT_FOUND, "migrated");
+    CHECK(efs_sim_lookup(s, 0, d, "pre", &g) == EFS_ERR_NOT_FOUND,
+          "no resurrect pre");
+    CHECK(efs_sim_lookup(s, 0, d, "e", &g) == EFS_ERR_NOT_FOUND,
+          "no resurrect e");
+    CHECK(efs_sim_lookup(s, 0, d, nm, &g) == EFS_ERR_NOT_FOUND,
+          "no resurrect hashed");
+    CHECK(efs_sim_rmdir(s, 0, EFS_ROOT_INO, "d") == EFS_ERR_BUSY,
+          "SPLITTING child rmdir BUSY");
+    efs_sim_free(s);
+}
+
 static int hashed_pair(efs_ino_t parent, char *a, char *b)
 {
     uint8_t la = 0xff;
@@ -1018,6 +1065,142 @@ static void test_link_hashed(void)
           "alias lives");
     CHECK(efs_sim_inode_nlink(s, f, &nlink, NULL) == EFS_OK && nlink == 1,
           "nlink 1");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
+/* SPLITTING dest LINK writes hashed (same as CREATE). Dest tombstone
+ * is absent, not EXIST. Local leftover dest is EXIST. */
+static void test_link_splitting(void)
+{
+    struct efs_sim *s = mk(136);
+    efs_ino_t d = 0, f = 0, g = 0, pre = 0;
+    uint8_t layout = 99;
+    char na[16], nb[16];
+    uint32_t nlink = 0;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, "d", &d) == EFS_OK && d, "d");
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, "pre", &pre) == EFS_OK &&
+              pre,
+          "pre");
+    CHECK(efs_sim_dir_begin_split(s, d) == EFS_OK, "split");
+    CHECK(efs_sim_dir_layout(s, d, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_SPLITTING,
+          "SPLITTING");
+    CHECK(hashed_pair(d, na, nb) == 0, "pair");
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, na, &f) == EFS_OK && f,
+          "hashed create");
+    CHECK(efs_sim_link(s, 0, d, na, d, nb) == EFS_OK, "splitting dest link");
+    CHECK(efs_sim_lookup(s, 0, d, nb, &g) == EFS_OK && g == f, "alias");
+    CHECK(efs_sim_inode_nlink(s, f, &nlink, NULL) == EFS_OK && nlink == 2,
+          "nlink 2");
+    CHECK(efs_sim_link(s, 0, d, na, d, nb) == EFS_ERR_EXIST, "dup dest");
+    CHECK(efs_sim_link(s, 0, d, na, d, "pre") == EFS_ERR_EXIST,
+          "local leftover dest");
+    CHECK(efs_sim_unlink(s, 0, d, na) == EFS_OK, "unlink hashed src");
+    CHECK(efs_sim_lookup(s, 0, d, na, &g) == EFS_ERR_NOT_FOUND, "src gone");
+    CHECK(efs_sim_link(s, 0, d, nb, d, na) == EFS_OK, "link onto tombstone");
+    CHECK(efs_sim_lookup(s, 0, d, na, &g) == EFS_OK && g == f,
+          "tombstone dest");
+    CHECK(efs_sim_inode_nlink(s, f, &nlink, NULL) == EFS_OK && nlink == 2,
+          "nlink 2 after tombstone dest");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
+/* SPLITTING dest RENAME writes hashed. Src drop is I8. Leftover dest
+ * is POSIX replace. Tombstone dest is absent so a leftover can move
+ * onto the old hashed name. */
+static void test_rename_splitting(void)
+{
+    struct efs_sim *s = mk(137);
+    efs_ino_t d = 0, f = 0, q = 0, pre = 0, g = 0;
+    uint8_t layout = 99;
+    char na[16], nb[16];
+    uint32_t nlink = 0;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, "d", &d) == EFS_OK && d, "d");
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, "pre", &pre) == EFS_OK &&
+              pre,
+          "pre");
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, "q", &q) == EFS_OK && q,
+          "q");
+    CHECK(efs_sim_dir_begin_split(s, d) == EFS_OK, "split");
+    CHECK(efs_sim_dir_layout(s, d, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_SPLITTING,
+          "SPLITTING");
+    CHECK(hashed_pair(d, na, nb) == 0, "pair");
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, na, &f) == EFS_OK && f,
+          "hashed create");
+    CHECK(efs_sim_rename(s, 0, d, na, d, nb) == EFS_OK, "hashed dest");
+    CHECK(efs_sim_lookup(s, 0, d, na, &g) == EFS_ERR_NOT_FOUND, "src gone");
+    CHECK(efs_sim_lookup(s, 0, d, nb, &g) == EFS_OK && g == f, "hashed dest");
+    CHECK(efs_sim_rename(s, 0, d, nb, d, "q") == EFS_OK,
+          "leftover dest replace");
+    CHECK(efs_sim_lookup(s, 0, d, nb, &g) == EFS_ERR_NOT_FOUND, "nb gone");
+    CHECK(efs_sim_lookup(s, 0, d, "q", &g) == EFS_OK && g == f,
+          "q is hashed src");
+    CHECK(efs_sim_inode_nlink(s, q, &nlink, NULL) == EFS_ERR_NOT_FOUND,
+          "leftover dest inode retired");
+    CHECK(efs_sim_rename(s, 0, d, "q", d, na) == EFS_OK, "onto tombstone dest");
+    CHECK(efs_sim_lookup(s, 0, d, "q", &g) == EFS_ERR_NOT_FOUND, "q gone");
+    CHECK(efs_sim_lookup(s, 0, d, na, &g) == EFS_OK && g == f, "na restored");
+    CHECK(efs_sim_rename(s, 0, d, "pre", d, nb) == EFS_OK, "leftover src");
+    CHECK(efs_sim_lookup(s, 0, d, "pre", &g) == EFS_ERR_NOT_FOUND, "pre gone");
+    CHECK(efs_sim_lookup(s, 0, d, nb, &g) == EFS_OK && g == pre,
+          "leftover at hashed dest");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
+/* Rename over an empty HASHED dest dir (never-used, then emptied with
+ * used_shards set). Nonempty HASHED dest is NOT_EMPTY, not INVAL. */
+static void test_rename_hashed_dir_overwrite(void)
+{
+    struct efs_sim *s = mk(135);
+    efs_ino_t hs = 0, hx = 0, ha = 0, hb = 0, f = 0, g = 0;
+    uint8_t layout = 99;
+    int rc;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, "hs", &hs) == EFS_OK && hs, "mkdir hs");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, "hx", &hx) == EFS_OK && hx, "mkdir hx");
+    CHECK(efs_sim_dir_begin_split(s, hx) == EFS_OK, "split hx");
+    while ((rc = efs_sim_dir_migrate(s, hx)) == EFS_OK)
+        ;
+    CHECK(rc == EFS_ERR_NOT_FOUND, "hx migrated");
+    CHECK(efs_sim_dir_finish_hashed(s, hx) == EFS_OK, "HASHED hx");
+    CHECK(efs_sim_dir_layout(s, hx, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_HASHED,
+          "hx HASHED");
+    CHECK(efs_sim_rename(s, 0, EFS_ROOT_INO, "hs", EFS_ROOT_INO, "hx") == EFS_OK,
+          "overwrite empty HASHED");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "hs", &g) == EFS_ERR_NOT_FOUND,
+          "hs gone");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "hx", &g) == EFS_OK && g == hs,
+          "hx is src");
+
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, "ha", &ha) == EFS_OK && ha, "mkdir ha");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, "hb", &hb) == EFS_OK && hb, "mkdir hb");
+    CHECK(efs_sim_dir_begin_split(s, hb) == EFS_OK, "split hb");
+    while ((rc = efs_sim_dir_migrate(s, hb)) == EFS_OK)
+        ;
+    CHECK(rc == EFS_ERR_NOT_FOUND, "hb migrated");
+    CHECK(efs_sim_dir_finish_hashed(s, hb) == EFS_OK, "HASHED hb");
+    CHECK(efs_sim_create(s, 0, hb, S_IFREG | 0644, "c", &f) == EFS_OK && f,
+          "child");
+    CHECK(efs_sim_rename(s, 0, EFS_ROOT_INO, "ha", EFS_ROOT_INO, "hb") ==
+              EFS_ERR_NOT_EMPTY,
+          "nonempty HASHED dest");
+    CHECK(efs_sim_unlink(s, 0, hb, "c") == EFS_OK, "unlink child");
+    CHECK(efs_sim_rename(s, 0, EFS_ROOT_INO, "ha", EFS_ROOT_INO, "hb") == EFS_OK,
+          "overwrite emptied HASHED");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "ha", &g) == EFS_ERR_NOT_FOUND,
+          "ha gone");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "hb", &g) == EFS_OK && g == ha,
+          "hb is src");
     CHECK(efs_sim_check(s) == EFS_OK, "check");
     efs_sim_free(s);
 }
@@ -1449,10 +1632,14 @@ int main(void)
     test_i13_fileid();
     test_i22_epoch();
     test_i8_spread();
+    test_i8_unlink_rmdir();
     test_hashed_dir_stat();
     test_rename_hashed();
     test_unlink_rmdir_hashed();
     test_link_hashed();
+    test_link_splitting();
+    test_rename_splitting();
+    test_rename_hashed_dir_overwrite();
     test_single_shard_ops();
     test_utimens_fence();
     test_truncate_range_del();

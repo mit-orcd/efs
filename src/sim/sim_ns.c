@@ -136,21 +136,6 @@ static int load_row(struct efs_sim *sim, efs_ino_t ino, struct efs_meta_row *row
     return efs_meta_apply_get_inode(kv, ino, row);
 }
 
-static int dent_absent(struct efs_kv *kv, struct efs_sim *sim, const uint8_t *key,
-                       uint32_t klen)
-{
-    uint8_t tmp[EFS_META_DENT_BYTES];
-    uint32_t tn = sizeof(tmp);
-    int rc;
-
-    rc = efs_txn_read(kv, key, klen, sim_txn_coord, sim, tmp, &tn);
-    if (rc == EFS_OK)
-        return EFS_ERR_EXIST;
-    if (rc != EFS_ERR_NOT_FOUND)
-        return rc;
-    return EFS_OK;
-}
-
 static int dseq_prep(struct efs_kv *kv, uint32_t shard, efs_ino_t dir,
                      uint8_t lane, struct ns_prep *pr, int *n,
                      struct efs_txn_parts *p)
@@ -320,16 +305,16 @@ static int stamp_hashed_lane(struct efs_kv *kv, const struct efs_meta_row *dir,
     return prep_add(pr, n, lsh, EFS_TXN_REDUCE, k, kl, 0, 0, NULL, 0, &red);
 }
 
-static int drop_dentry_prep(struct efs_kv *kv, const struct efs_meta_row *prow,
+static int drop_dentry_prep(struct efs_sim *sim, const struct efs_meta_row *prow,
                             efs_ino_t parent, const char *name,
                             struct ns_prep *pr, int *n, struct efs_txn_parts *p)
 {
     uint32_t psh = efs_kv_inode_shard(parent);
     uint32_t hsh = efs_kv_dentry_shard(parent, name, EFS_META_LAYOUT_HASHED);
-    uint32_t dsh = efs_kv_dentry_shard(parent, name, prow->layout);
     uint8_t k_loc[EFS_KV_KEY_MAX], k_hash[EFS_KV_KEY_MAX], v_tomb[EFS_META_DENT_BYTES];
     uint32_t kl = 0, kh = 0;
     uint64_t ver = 0;
+    struct efs_kv *kv;
     struct efs_meta_dentry tomb;
     int rc;
 
@@ -341,6 +326,9 @@ static int drop_dentry_prep(struct efs_kv *kv, const struct efs_meta_row *prow,
     if (prow->layout != EFS_META_LAYOUT_HASHED &&
         !(prow->layout == EFS_META_LAYOUT_SPLITTING && kl == kh &&
           memcmp(k_loc, k_hash, kl) == 0)) {
+        rc = sim_txn_read_kv(sim, psh, &kv);
+        if (rc != EFS_OK)
+            return rc;
         rc = efs_txn_ver_get(kv, k_loc, kl, &ver);
         if (rc != EFS_OK)
             return rc;
@@ -359,6 +347,9 @@ static int drop_dentry_prep(struct efs_kv *kv, const struct efs_meta_row *prow,
         rc = efs_meta_pack_dentry(&tomb, v_tomb, sizeof(v_tomb));
         if (rc != EFS_OK)
             return rc;
+        rc = sim_txn_read_kv(sim, hsh, &kv);
+        if (rc != EFS_OK)
+            return rc;
         rc = efs_txn_ver_get(kv, k_hash, kh, &ver);
         if (rc != EFS_OK)
             return rc;
@@ -369,6 +360,9 @@ static int drop_dentry_prep(struct efs_kv *kv, const struct efs_meta_row *prow,
                         v_tomb, EFS_META_DENT_BYTES, NULL);
     }
     if (prow->layout == EFS_META_LAYOUT_HASHED) {
+        rc = sim_txn_read_kv(sim, hsh, &kv);
+        if (rc != EFS_OK)
+            return rc;
         rc = efs_txn_ver_get(kv, k_hash, kh, &ver);
         if (rc != EFS_OK)
             return rc;
@@ -378,7 +372,6 @@ static int drop_dentry_prep(struct efs_kv *kv, const struct efs_meta_row *prow,
         return prep_add(pr, n, hsh, EFS_TXN_EXCL, k_hash, kh, ver, EFS_TXN_DEL,
                         NULL, 0, NULL);
     }
-    (void)dsh;
     return EFS_OK;
 }
 
@@ -411,7 +404,7 @@ static int link_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
                       const char *dst_name, struct efs_txid *t,
                       struct efs_txn_parts *p)
 {
-    struct efs_meta_dentry src, ndent;
+    struct efs_meta_dentry src, ndent, dst;
     struct efs_meta_row row, dprow;
     struct efs_kv *dkv, *ikv;
     uint8_t k_dent[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
@@ -436,15 +429,17 @@ static int link_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
         return rc;
     if (!S_ISDIR(dprow.mode))
         return EFS_ERR_INVAL;
+    rc = sim_txn_lookup(sim, dst_parent, dst_name, &dst);
+    if (rc == EFS_OK)
+        return EFS_ERR_EXIST;
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
     dsh = efs_kv_dentry_shard(dst_parent, dst_name, dprow.layout);
     ish = efs_kv_inode_shard(row.ino);
     rc = sim_txn_read_kv(sim, dsh, &dkv);
     if (rc != EFS_OK)
         return rc;
     rc = efs_kv_key_dentry(dsh, dst_parent, dst_name, k_dent, &kd);
-    if (rc != EFS_OK)
-        return rc;
-    rc = dent_absent(dkv, sim, k_dent, kd);
     if (rc != EFS_OK)
         return rc;
     rc = efs_txn_ver_get(dkv, k_dent, kd, &dver);
@@ -539,7 +534,7 @@ static int unlink_build(struct efs_sim *sim, int client, efs_ino_t parent, const
     rc = sim_txn_read_kv(sim, dsh, &pkv);
     if (rc != EFS_OK)
         return rc;
-    rc = drop_dentry_prep(pkv, &prow, parent, name, pr, &n, p);
+    rc = drop_dentry_prep(sim, &prow, parent, name, pr, &n, p);
     if (rc != EFS_OK)
         return rc;
     rc = sim_txn_read_kv(sim, ish, &ikv);
@@ -726,7 +721,7 @@ static int rmdir_build(struct efs_sim *sim, int client, efs_ino_t parent, const 
         rc = efs_txn_ver_get(ckv, k_ino, ki, &cver);
     if (rc != EFS_OK)
         return rc;
-    rc = drop_dentry_prep(pkv, &prow, parent, name, pr, &n, p);
+    rc = drop_dentry_prep(sim, &prow, parent, name, pr, &n, p);
     if (rc != EFS_OK)
         return rc;
     rc = sim_txn_parts_add(p, psh);
@@ -826,18 +821,15 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
     rc = efs_kv_key_dentry(dsh, dst_parent, dst_name, k_dent, &kd);
     if (rc != EFS_OK)
         return rc;
-    /* Rename-over-existing: the PUT at k_dent overwrites the dest dentry;
-     * the dest INODE ROW is retired below (nlink-- / DEL; empty-dir rules
-     * for a dir dest). Same (ino,gen) = hardlink self-rename: no dest. */
+    /* Rename-over-existing: hashed-then-local lookup (tombstone =
+     * NOT_FOUND). Leftover dest is POSIX replace, not absent. The PUT
+     * at k_dent overwrites the hashed dest; leftover local dest is
+     * DELed below. Same (ino,gen) = hardlink self-rename: no dest. */
     {
-        uint8_t xb[EFS_META_DENT_BYTES];
-        uint32_t xn = sizeof(xb);
-        int xrc = efs_txn_read(dkv, k_dent, kd, sim_txn_coord, sim, xb, &xn);
+        struct efs_meta_dentry xdent;
+        int xrc = sim_txn_lookup(sim, dst_parent, dst_name, &xdent);
         if (xrc == EFS_OK) {
-            struct efs_meta_dentry xdent;
             int held;
-            if (efs_meta_unpack_dentry(xb, xn, &xdent) != EFS_OK)
-                return EFS_ERR_PROTO;
             if (xdent.ino != row.ino || xdent.generation != row.generation) {
                 xist = 1;
                 xdir = S_ISDIR(xdent.type & S_IFMT) ? 1 : 0;
@@ -860,15 +852,38 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
                 if (rc != EFS_OK)
                     return rc;
                 if (xdir) {
+                    uint8_t lane;
+
                     if (nrow.layout == EFS_META_LAYOUT_SPLITTING)
                         return EFS_ERR_BUSY;
-                    if (nrow.layout != EFS_META_LAYOUT_LOCAL)
+                    if (nrow.layout != EFS_META_LAYOUT_LOCAL &&
+                        nrow.layout != EFS_META_LAYOUT_HASHED)
                         return EFS_ERR_INVAL;
                     if (nrow.nlink > 2)
                         return EFS_ERR_NOT_EMPTY;
-                    rc = shard_empty(nkv, nsh, nrow.ino);
-                    if (rc != EFS_OK)
-                        return rc;
+                    if (nrow.layout == EFS_META_LAYOUT_HASHED) {
+                        for (lane = 0; lane < EFS_META_LANES; lane++) {
+                            uint32_t lsh;
+                            struct efs_kv *lkv;
+
+                            if ((nrow.used_shards & (1ull << lane)) == 0)
+                                continue;
+                            lsh = efs_kv_lane_shard(nrow.ino, lane);
+                            rc = sim_txn_read_kv(sim, lsh, &lkv);
+                            if (rc != EFS_OK)
+                                return rc;
+                            rc = shard_empty(lkv, lsh, nrow.ino);
+                            if (rc != EFS_OK)
+                                return rc;
+                            rc = dseq_guard(lkv, lsh, nrow.ino, lane, pr, &n, p);
+                            if (rc != EFS_OK)
+                                return rc;
+                        }
+                    } else {
+                        rc = shard_empty(nkv, nsh, nrow.ino);
+                        if (rc != EFS_OK)
+                            return rc;
+                    }
                     held = efs_lease_any(nkv, nrow.ino, nrow.generation);
                     if (held < 0)
                         return held;
@@ -886,7 +901,7 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
                     }
                     rc = prep_add(pr, &n, nsh, EFS_TXN_EXCL, k_nino, kn, nver,
                                   EFS_TXN_DEL, NULL, 0, NULL);
-                    if (rc == EFS_OK)
+                    if (rc == EFS_OK && nrow.layout == EFS_META_LAYOUT_LOCAL)
                         rc = dseq_guard(nkv, nsh, nrow.ino, 0, pr, &n, p);
                     if (rc != EFS_OK)
                         return rc;
@@ -961,9 +976,37 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
     if (rc != EFS_OK)
         return rc;
 
-    rc = drop_dentry_prep(skv, &sprow, src_parent, src_name, pr, &n, p);
+    rc = drop_dentry_prep(sim, &sprow, src_parent, src_name, pr, &n, p);
     if (rc != EFS_OK)
         return rc;
+    /* SPLITTING dest overwrite: hashed PUT does not remove a leftover
+     * local dest. DEL it unless the keys alias (lane 0). */
+    if (xist && dprow.layout == EFS_META_LAYOUT_SPLITTING) {
+        uint32_t dpsh = efs_kv_inode_shard(dst_parent);
+        uint8_t k_dloc[EFS_KV_KEY_MAX];
+        uint32_t kdl = 0;
+        uint64_t locver = 0;
+        struct efs_kv *lkv;
+
+        rc = efs_kv_key_dentry(dpsh, dst_parent, dst_name, k_dloc, &kdl);
+        if (rc != EFS_OK)
+            return rc;
+        if (!(kdl == kd && memcmp(k_dloc, k_dent, kdl) == 0)) {
+            rc = sim_txn_read_kv(sim, dpsh, &lkv);
+            if (rc != EFS_OK)
+                return rc;
+            rc = efs_txn_ver_get(lkv, k_dloc, kdl, &locver);
+            if (rc != EFS_OK)
+                return rc;
+            rc = sim_txn_parts_add(p, dpsh);
+            if (rc != EFS_OK)
+                return rc;
+            rc = prep_add(pr, &n, dpsh, EFS_TXN_EXCL, k_dloc, kdl, locver,
+                          EFS_TXN_DEL, NULL, 0, NULL);
+            if (rc != EFS_OK)
+                return rc;
+        }
+    }
     rc = sim_txn_parts_add(p, dsh);
     if (rc == EFS_OK)
         rc = sim_txn_parts_add(p, ish);

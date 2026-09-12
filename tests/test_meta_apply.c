@@ -1193,6 +1193,129 @@ static void test_link_hashed(void)
     efs_kv_mem_free(kv);
 }
 
+/* SPLITTING dest LINK writes hashed. Tombstone dest is not EXIST. */
+static void test_link_splitting(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_dentry dent;
+    struct efs_meta_row r;
+    struct efs_meta_attrs at;
+    efs_ino_t f = 0, pre = 0;
+    char na[16], nb[16];
+    uint64_t born;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    memset(&at, 0, sizeof(at));
+    at.uid = 1000;
+    at.gid = 1000;
+    at.now = T0 + 1;
+    CHECK(efs_meta_apply_create_file(kv, &at, EFS_ROOT_INO, S_IFREG | 0644, "pre",
+                                     &pre) == EFS_OK &&
+              pre,
+          "pre");
+    CHECK(efs_meta_dir_begin_split(kv, EFS_ROOT_INO) == EFS_OK, "split");
+    CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &r) == EFS_OK &&
+              r.layout == EFS_META_LAYOUT_SPLITTING,
+          "SPLITTING");
+    born = r.base_mtime;
+    CHECK(hashed_pair(EFS_ROOT_INO, na, nb) == 0, "two lanes");
+    CHECK(efs_meta_apply_create_file(kv, &at, EFS_ROOT_INO, S_IFREG | 0644, na,
+                                     &f) == EFS_OK &&
+              f,
+          "create hashed");
+    CHECK(efs_meta_apply_link(kv, EFS_ROOT_INO, na, EFS_ROOT_INO, nb, T0 + 2) ==
+              EFS_OK,
+          "splitting dest link");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, nb, &dent) == EFS_OK &&
+              dent.ino == f,
+          "alias");
+    CHECK(efs_meta_apply_get_inode(kv, f, &r) == EFS_OK && r.nlink == 2,
+          "nlink 2");
+    CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &r) == EFS_OK &&
+              r.layout == EFS_META_LAYOUT_SPLITTING && r.base_mtime == born,
+          "splitting dest link did not stamp the inode row's times");
+    CHECK(efs_meta_apply_link(kv, EFS_ROOT_INO, na, EFS_ROOT_INO, nb, T0 + 2) ==
+              EFS_ERR_EXIST,
+          "dup dest");
+    CHECK(efs_meta_apply_link(kv, EFS_ROOT_INO, na, EFS_ROOT_INO, "pre",
+                              T0 + 2) == EFS_ERR_EXIST,
+          "local leftover dest");
+    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, na, T0 + 3) == EFS_OK,
+          "unlink src");
+    CHECK(efs_meta_apply_link(kv, EFS_ROOT_INO, nb, EFS_ROOT_INO, na, T0 + 4) ==
+              EFS_OK,
+          "link onto tombstone");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, na, &dent) == EFS_OK &&
+              dent.ino == f,
+          "tombstone dest");
+    CHECK(efs_meta_apply_get_inode(kv, f, &r) == EFS_OK && r.nlink == 2,
+          "nlink 2 after tombstone dest");
+    efs_kv_mem_free(kv);
+}
+
+/* SPLITTING dest RENAME writes hashed. Src drop is I8. Apply helper
+ * does not replace (EXIST); leftover dest stays. Leftover src can
+ * move onto a tombstone dest. */
+static void test_rename_splitting(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_dentry dent;
+    struct efs_meta_row r;
+    struct efs_meta_attrs at;
+    efs_ino_t f = 0, pre = 0, q = 0;
+    char na[16], nb[16];
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    memset(&at, 0, sizeof(at));
+    at.uid = 1000;
+    at.gid = 1000;
+    at.now = T0 + 1;
+    CHECK(efs_meta_apply_create_file(kv, &at, EFS_ROOT_INO, S_IFREG | 0644, "pre",
+                                     &pre) == EFS_OK &&
+              pre,
+          "pre");
+    CHECK(efs_meta_apply_create_file(kv, &at, EFS_ROOT_INO, S_IFREG | 0644, "q",
+                                     &q) == EFS_OK &&
+              q,
+          "q");
+    CHECK(efs_meta_dir_begin_split(kv, EFS_ROOT_INO) == EFS_OK, "split");
+    CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &r) == EFS_OK &&
+              r.layout == EFS_META_LAYOUT_SPLITTING,
+          "SPLITTING");
+    CHECK(hashed_pair(EFS_ROOT_INO, na, nb) == 0, "two lanes");
+    CHECK(efs_meta_apply_create_file(kv, &at, EFS_ROOT_INO, S_IFREG | 0644, na,
+                                     &f) == EFS_OK &&
+              f,
+          "create hashed");
+    CHECK(efs_meta_apply_rename(kv, EFS_ROOT_INO, na, EFS_ROOT_INO, nb, T0 + 2) ==
+              EFS_OK,
+          "hashed dest");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, na, &dent) ==
+              EFS_ERR_NOT_FOUND,
+          "src gone");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, nb, &dent) == EFS_OK &&
+              dent.ino == f,
+          "hashed dest");
+    CHECK(efs_meta_apply_rename(kv, EFS_ROOT_INO, nb, EFS_ROOT_INO, "q",
+                                T0 + 3) == EFS_ERR_EXIST,
+          "leftover dest EXIST");
+    CHECK(efs_meta_apply_rename(kv, EFS_ROOT_INO, "pre", EFS_ROOT_INO, na,
+                                T0 + 4) == EFS_OK,
+          "leftover src onto tombstone");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "pre", &dent) ==
+              EFS_ERR_NOT_FOUND,
+          "pre gone");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, na, &dent) == EFS_OK &&
+              dent.ino == pre,
+          "tombstone dest");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "q", &dent) == EFS_OK &&
+              dent.ino == q,
+          "leftover dest still");
+    efs_kv_mem_free(kv);
+}
+
 /* HASHED empty child rmdir from a LOCAL parent. */
 static void test_rmdir_hashed(void)
 {
@@ -2400,6 +2523,8 @@ int main(void)
     test_unlink_hashed();
     test_rmdir_hashed();
     test_link_hashed();
+    test_link_splitting();
+    test_rename_splitting();
     test_lookup_path();
     test_gc_reap();
     test_gc_tail_alias();

@@ -235,9 +235,11 @@ lazy — first pool checkout, not mount). Full gate PASS on fcstor003:
 **Open follow-ups:** (1) client local staging
 table (g_client.export) shrink is post-step-11 client-cache design /
 spec step 12. (Data-plane GC, cross-dir LOCAL rename, `.find` READDIR
-walk, HASHED rename, HASHED unlink/rmdir, and HASHED dest LINK are
-CLOSED; see below.) SPLITTING stays BUSY; dest-HASHED-dir overwrite
-stays INVAL (distributed emptiness). Do not start step 12 until asked.
+walk, HASHED rename, HASHED unlink/rmdir, HASHED dest LINK, HASHED
+dest-dir overwrite, SPLITTING dest CREATE+READDIR, SPLITTING dest
+UNLINK/RMDIR, SPLITTING dest LINK, and SPLITTING dest RENAME are
+CLOSED; see below.) HASHED/SPLITTING dest MKDIR still
+writes the dentry on the parent shard. Do not start step 12 until asked.
 
 **`.FIND` READDIR WALK CLOSED (Sep 11 night, working tree).** POSIX
 `virt_find_query` returned empty because `find_index_build_locked`
@@ -284,8 +286,8 @@ rename; the host INVALed non-LOCAL parents. HASHED is now a txn that
 stamps dir-lanes (parent row only for `used_shards` / nlink), dseq on
 the name's dir-lane, and bounces when a hashed dentry shard is on
 another Raft group. Same-dir dest first-use sets the dest lane
-`used_shards` bit. SPLITTING stays BUSY. Dest **dir** overwrite that is
-HASHED stays INVAL (distributed emptiness).
+`used_shards` bit. SPLITTING stays BUSY. HASHED dest-dir overwrite
+closed below.
 **Gates (19820 scratch, TCP, wipe+raft-mkfs):** `test_meta_apply` /
 `test_sim` OK. efs-mgmt: LOCAL same-dir, HASHED same-dir (`n0`→`r0`
 status=0), LOCAL cross-dir all status=0. Isolated posix rename/find
@@ -325,9 +327,9 @@ times or HASHED `used_shards` first-use). The host INVALed
 `host_fwd_link` when this replica does not host dsh/ish/psh; LOCAL
 stamps parent-row times on psh; HASHED stamps the dir-lane on dsh and
 dseq on that lane. First-use sets the dest lane `used_shards` bit.
-SPLITTING stays BUSY. Dest **dir** overwrite that is HASHED stays INVAL
-(distributed emptiness). HASHED file create still places the inode on
-the dentry shard, so last-link same-shard unlink is unchanged.
+SPLITTING stays BUSY. HASHED dest-dir overwrite closed below. HASHED
+file create still places the inode on the dentry shard, so last-link
+same-shard unlink is unchanged.
 **Gates (19820 scratch, TCP):** `test_meta_apply` / `test_sim` OK.
 efs-mgmt: HASHED dest link (`n0`→`l0` status=0, nlink=2, dup EXIST).
 FUSE HASHED dir `hl-fuse`: `os.link(a, l0)` OK (nlink 2). posix jobs=1
@@ -336,6 +338,130 @@ FUSE HASHED dir `hl-fuse`: `os.link(a, l0)` OK (nlink 2). posix jobs=1
 PASS. Smoke `raft_host_smoke.sh` HASHED dest LINK check added (rename
 hygiene: dedicated names so POSIX file-over-file replace is not scored
 as EXIST). Do not start step 12.
+
+**HASHED DEST-DIR OVERWRITE CLOSED (Sep 11 night, working tree on top of
+`fc057cd`).** Apply does not replace (EXIST); production path is the
+host txn. Sim and host both INVALed HASHED dest dirs. HASHED empty-dir
+rmdir already proved distributed emptiness (per-lane `shard_empty` +
+dseq GUARDs). Rename-over-empty-HASHED-dir reuses that, then DEL dest
+inode (same as LOCAL dest dir overwrite). File-over-file replace
+already works; file-over-dir / dir-over-file stay INVAL. SPLITTING dest
+stays BUSY. Nonempty HASHED dest stays NOT_EMPTY (RPC status 8), not
+INVAL. Host: bounce used-lane groups + GUARD used-lane dseqs (`gv[]`
+stays pver ancestry; dest dseqs in `xdseq[]`); `EFS_TXN_MAX_PART` →
+BUSY. Dest HASHED-dir overwrite only when source is also a dir.
+**Gates (19820 scratch, TCP, wipe+raft-mkfs):** `test_meta_apply` /
+`test_sim` OK (new `test_rename_hashed_dir_overwrite`). efs-mgmt:
+nonempty `hs`→HASHED `hx` status=8, unlink child, overwrite status=0,
+`hx` ino = src. FUSE `hd-fuse`: nonempty `mv` ENOTEMPTY, emptied `mv`
+OK (dst ino = src). posix jobs=1 **200/201 in 44.9 s**
+(`results/posix/20260911-hashed-dow/suite-jobs1.tsv`) — only the
+`concurrent_writes_disjoint` zeros flake; rename/find/unlink/hardlink
+PASS. Smoke `raft_host_smoke.sh` HASHED dest-dir overwrite check added
+(fresh path passed; after-crash hung on an environmental no-leader
+wedge, not this slice). Do not start step 12.
+
+**SPLITTING DEST CREATE + READDIR CLOSED (Sep 12, working tree on top of
+HASHED dest-dir overwrite).** Apply + sim already wrote hashed during
+SPLITTING and merged READDIR (hashed side wins, I8). The host BUSY'd
+SPLITTING dest CREATE and READDIR. File CREATE now reuses the HASHED
+first-use txn when the dest lane's group differs from the parent
+(`used_shards` bit + dest dentry/inode); same-group first-use stays a
+single propose. READDIR drops the BUSY; apply already merges LOCAL
+leftovers with hashed lanes. LOOKUP / LOOKUP_PATH were already
+hashed-then-local. Smoke `raft-smoke-sp` stays SPLITTING: local `pre`
+plus a hashed-name file; do not migrate a populated local range (still
+a single-group apply, not a txn). SPLITTING dest UNLINK/RMDIR/LINK/
+RENAME stay BUSY (tombstone I8 on the host later). HASHED/SPLITTING
+dest MKDIR still writes the dentry on `psh`.
+**Gates (19820 scratch, TCP):** `test_sim` / `test_meta_apply` /
+`test_wire` OK. efs-mgmt: mkdir `raft-smoke-sp`, local `pre`, begin
+(no migrate), hashed `n0` create status=0 (ino shard ≠ parent),
+readdir `n0,pre`, dup EXIST, lookup-path both. FUSE `sp-fuse`: `pre`
+then begin, hashed `n0`, `ls` sees both. posix jobs=1 **200/201 in
+112 s** (`results/posix/20260912-splitting/suite-jobs1.tsv`) — only
+the `concurrent_writes_disjoint` zeros flake. Do not start step 12.
+
+**SPLITTING DEST UNLINK/RMDIR CLOSED (Sep 12, working tree on top of
+SPLITTING dest CREATE+READDIR).** Apply + sim already wrote
+`HASHED(name)=TOMBSTONE(layout_epoch)` on unmigrated names (I8) and
+skipped the redundant local DEL when keys alias. The host BUSY'd
+SPLITTING dest UNLINK/RMDIR. Host now uses `host_dent_drop_*` matching
+apply: EXCL DEL local leftover unless HASHED or (SPLITTING && keys
+alias); SPLITTING PUT tombstone on the hashed key; HASHED DEL hashed.
+Bounce if this replica does not host psh/dsh/ish. Last-link
+`EFS_MD_CMD_UNLINK` is forced onto the txn when SPLITTING && parent
+group ≠ hashed group (the hashed-group UNLINK cmd cannot DEL a local
+leftover on the other group). A child that is itself SPLITTING stays
+BUSY. SPLITTING dest LINK closed below; RENAME stays BUSY.
+HASHED/SPLITTING dest MKDIR still writes the dentry on `psh`.
+**Gates (19820 scratch, TCP):** `test_sim` / `test_meta_apply` /
+`test_wire` OK. efs-mgmt: hashed unlink NOT_FOUND, recreate OK
+(tombstone ≠ EXIST), unlink local `pre`, rmdir empty `e`, readdir
+empty of all three, rmdir of the SPLITTING dir itself status=5 BUSY.
+FUSE `sp-rm`: `pre` + begin + hashed `n0`, `rm` both + empty child,
+`ls` empty, `rmdir` self EIO (BUSY). posix jobs=1 **199/201 in 31 s**
+(`results/posix/20260912-splitting-unlink/suite-jobs1.tsv`) —
+`concurrent_writes_disjoint` zeros flake +
+`symlink_relative_after_parent_rename` EIO (isolated PASS 0.1 s, known
+load flake). Smoke `raft_host_smoke.sh` I8 checks already in tree; full
+script not re-run (its EXIT trap kills 19820). Do not start step 12.
+
+**SPLITTING DEST LINK CLOSED (Sep 12, working tree on top of
+SPLITTING dest UNLINK/RMDIR).** Apply already wrote hashed dest LINK
+during SPLITTING (dir-lane stamp, parent row only for `used_shards`
+first-use). The host BUSY'd SPLITTING dest. Host now allows
+LOCAL/HASHED/SPLITTING dest: hashed dest during SPLITTING, bounce if
+this replica does not host psh/ish/dsh. Sim `link_build` used
+hashed-key-only `dent_absent`, so a local leftover looked absent, the
+link succeeded, and nlink went to 3. Now `sim_txn_lookup`
+(hashed-then-local; tombstone = NOT_FOUND): leftover dest is EXIST;
+tombstone dest is absent so nlink stays 2. SPLITTING dest RENAME
+stays BUSY. HASHED/SPLITTING dest MKDIR still writes the dentry on
+`psh`.
+**Gates (19820 scratch, TCP):** `test_sim` / `test_meta_apply` /
+`test_wire` OK. efs-mgmt: mkdir `raft-smoke-sp`, local `pre`, mkdir
+`e`, begin (no migrate), hashed `n0` create (ino shard ≠ parent),
+raft-link hashed `l0` nlink=2, dup EXIST, leftover dest `pre` EXIST,
+unlink hashed, link onto tombstone dest nlink=2, unlink, recreate OK,
+unlink hashed, unlink `pre`, rmdir `e`, dest link still present
+nlink=1, rmdir self BUSY status=5. FUSE `sp-ln`: `pre` + begin +
+hashed `n0`, `os.link` hashed `l0` nlink=2. posix jobs=1 **201/201 in
+83.9 s** (`results/posix/20260912-splitting-link/suite-jobs1.tsv`).
+Smoke `raft_host_smoke.sh` not re-run (EXIT trap kills 19820). Do not
+start step 12.
+
+**SPLITTING DEST RENAME CLOSED (Sep 12, working tree on top of
+SPLITTING dest LINK).** Apply + sim already implemented SPLITTING
+rename (hashed dest PUT, `dentry_drop_items` I8 src drop); the host
+BUSY'd SPLITTING src/dest parents. Host now allows LOCAL/HASHED/
+SPLITTING for both parents: dest PUT goes hashed, src drop reuses
+`host_dent_drop_fill`/`host_dent_drop_prep` (EXCL DEL local leftover
+unless HASHED or keys alias; SPLITTING PUTs HASHED=TOMBSTONE), and a
+leftover dest under a SPLITTING parent is POSIX replace (EXCL DEL the
+local dest key `dest_del_loc` + PUT hashed dest + retire the dest inode
+nlink--/DEL with reap marker), not EXIST. Sim `drop_dentry_prep` now
+reads the psh/hsh KVs it mutates (was the caller's group KV — a
+leftover on the other group could CAS-fail); dest existence uses
+`sim_txn_lookup` (hashed-then-local, tombstone = NOT_FOUND). A dest
+dir that is itself SPLITTING stays BUSY (distributed emptiness).
+HASHED/SPLITTING dest MKDIR still writes the dentry on `psh`.
+Migrating a populated local range is still a single-group apply, not
+a txn — not this slice.
+**Gates (19820 scratch, TCP, wipe+raft-mkfs):** `test_sim` (new
+`test_rename_splitting` seed 137: hashed dest, leftover dest replace,
+tombstone dest restore, leftover src) / `test_meta_apply` /
+`test_wire` / `test_txn` OK. efs-mgmt: `raft-smoke-sp` begin (no
+migrate), hashed `n0`→`n28` status=0, `n28`→leftover `q` replace OK
+(q = src ino, old q retired), `q`→`n0` onto tombstone OK, leftover
+`pre` still present, rmdir self status=5 BUSY. FUSE `sp-rn`: same
+sequence through `os.rename` with content + ino identity checks, 5
+repeat reads stable. posix jobs=1 **200/201 in 42.9 s**
+(`results/posix/20260912-splitting-rename/suite-jobs1.tsv`) — only
+the `concurrent_writes_disjoint` zeros flake. Smoke
+`raft_host_smoke.sh` SPLITTING rename checks in tree (hashed dest,
+leftover dest replace, tombstone restore); full script not re-run
+(EXIT trap kills 19820). Do not start step 12.
 
 **RAFT-LAG CLOSED (Sep 11 PM, working tree) — three fixes in
 `src/server/raft_host.c`, gated 199/201 jobs=16 in 26.5 s with ZERO
