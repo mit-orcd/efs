@@ -1147,6 +1147,52 @@ static void test_unlink_hashed(void)
     efs_kv_mem_free(kv);
 }
 
+/* HASHED dest LINK: alias on a distinct off-home lane, nlink=2, parent
+ * row times stay on dir-lanes. */
+static void test_link_hashed(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_dentry dent;
+    struct efs_meta_row r;
+    struct efs_meta_attrs at;
+    efs_ino_t f = 0;
+    char na[16], nb[16];
+    uint64_t born;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(hashed_pair(EFS_ROOT_INO, na, nb) == 0, "two lanes");
+    CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &r) == EFS_OK, "root");
+    born = r.base_mtime;
+    CHECK(efs_meta_dir_begin_split(kv, EFS_ROOT_INO) == EFS_OK, "split");
+    while (efs_meta_dir_migrate_one(kv, EFS_ROOT_INO) == EFS_OK)
+        ;
+    CHECK(efs_meta_dir_finish_hashed(kv, EFS_ROOT_INO) == EFS_OK, "HASHED");
+    memset(&at, 0, sizeof(at));
+    at.uid = 1000;
+    at.gid = 1000;
+    at.now = T0 + 1;
+    CHECK(efs_meta_apply_create_file(kv, &at, EFS_ROOT_INO, S_IFREG | 0644, na,
+                                     &f) == EFS_OK &&
+              f,
+          "create");
+    CHECK(efs_meta_apply_link(kv, EFS_ROOT_INO, na, EFS_ROOT_INO, nb, T0 + 2) ==
+              EFS_OK,
+          "hashed link");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, nb, &dent) == EFS_OK &&
+              dent.ino == f,
+          "alias");
+    CHECK(efs_meta_apply_get_inode(kv, f, &r) == EFS_OK && r.nlink == 2,
+          "nlink 2");
+    CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &r) == EFS_OK &&
+              r.layout == EFS_META_LAYOUT_HASHED && r.base_mtime == born,
+          "hashed link did not stamp the inode row's times");
+    CHECK(efs_meta_apply_link(kv, EFS_ROOT_INO, na, EFS_ROOT_INO, nb, T0 + 2) ==
+              EFS_ERR_EXIST,
+          "dup dest");
+    efs_kv_mem_free(kv);
+}
+
 /* HASHED empty child rmdir from a LOCAL parent. */
 static void test_rmdir_hashed(void)
 {
@@ -2353,6 +2399,7 @@ int main(void)
     test_rename_hashed();
     test_unlink_hashed();
     test_rmdir_hashed();
+    test_link_hashed();
     test_lookup_path();
     test_gc_reap();
     test_gc_tail_alias();

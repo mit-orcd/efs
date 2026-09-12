@@ -6040,9 +6040,10 @@ void server_raft_host_append(efs_ino_t ino, uint64_t len,
 }
 
 /* Hard link: dest dentry + inode nlink++ as a txn (same PREPARE/DECIDE/
- * RESOLVE as MKDIR). LOCAL dest only; HASHED/SPLITTING are INVAL/BUSY.
- * The receiving node must lead every participant group. Directories are
- * INVAL. LINK_SHARD is not this path. */
+ * RESOLVE as MKDIR). LOCAL dest stamps the parent row; HASHED stamps the
+ * dir-lane (parent row only for used_shards first-use). SPLITTING is
+ * BUSY. HASHED dest dentries bounce if this replica does not host the
+ * dentry shard. Directories are INVAL. LINK_SHARD is not this path. */
 void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
                            const char *new_name, struct efs_msg_inode_reply *out)
 {
@@ -6053,15 +6054,15 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
     struct efs_txid t;
     struct efs_txn_parts parts;
     uint8_t k_dent[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX], k_par[EFS_KV_KEY_MAX];
-    uint8_t k_dseq[EFS_KV_KEY_MAX];
+    uint8_t k_dseq[EFS_KV_KEY_MAX], k_ln[EFS_KV_KEY_MAX], v_ln[EFS_META_LANE_BYTES];
     uint8_t v_dent[EFS_META_DENT_BYTES], v_ino[EFS_META_INO_BYTES];
-    uint8_t v_par[EFS_META_INO_BYTES], v_dseq[8], sb[8];
-    uint32_t kd = 0, ki = 0, kp = 0, ks = 0, sn = 8;
-    uint32_t dsh, ish, coord;
-    uint64_t dver = 0, iver = 0, pver = 0, sver = 0, seq = 0, now;
-    uint8_t cmd[22];
+    uint8_t v_par[EFS_META_INO_BYTES], v_dseq[8], sb[8], cmd[22];
+    uint32_t kd = 0, ki = 0, kp = 0, ks = 0, kln = 0, sn = 8;
+    uint32_t dsh, ish, psh, coord;
+    uint64_t dver = 0, iver = 0, pver = 0, sver = 0, lnver = 0, seq = 0, now;
     int hint = -1;
-    int rc, i, gr;
+    int rc, i, gr, touch_parent = 0, stamp_lane = 0;
+    uint8_t d_lane = 0;
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
@@ -6071,21 +6072,21 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
         return;
     }
     now = now_ns();
-    dsh = efs_kv_inode_shard(new_parent);
+    psh = efs_kv_inode_shard(new_parent);
     ish = efs_kv_inode_shard(src_ino);
-    if (!host_hosts(h, efs_raft_shard_group(dsh)) ||
+    if (!host_hosts(h, efs_raft_shard_group(psh)) ||
         !host_hosts(h, efs_raft_shard_group(ish))) {
         uint8_t need[2];
         int nn = 1;
-        need[0] = efs_raft_shard_group(dsh);
+        need[0] = efs_raft_shard_group(psh);
         if (efs_raft_shard_group(ish) != need[0])
             need[nn++] = efs_raft_shard_group(ish);
         host_fwd_link(h, src_ino, new_parent, new_name, out, need, nn);
         return;
     }
     pthread_mutex_lock(&h->read_mu);
-    rc = host_read_index(h, efs_raft_shard_group(dsh), &hint);
-    if (rc == EFS_OK && efs_raft_shard_group(ish) != efs_raft_shard_group(dsh))
+    rc = host_read_index(h, efs_raft_shard_group(psh), &hint);
+    if (rc == EFS_OK && efs_raft_shard_group(ish) != efs_raft_shard_group(psh))
         rc = host_read_index(h, efs_raft_shard_group(ish), &hint);
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, new_parent, &dprow);
@@ -6093,16 +6094,32 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK && dprow.layout == EFS_META_LAYOUT_SPLITTING)
         rc = EFS_ERR_BUSY;
-    if (rc == EFS_OK && dprow.layout != EFS_META_LAYOUT_LOCAL)
+    else if (rc == EFS_OK && dprow.layout != EFS_META_LAYOUT_LOCAL &&
+             dprow.layout != EFS_META_LAYOUT_HASHED)
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, src_ino, &row);
     if (rc == EFS_OK && S_ISDIR(row.mode))
         rc = EFS_ERR_INVAL;
+    dsh = (rc == EFS_OK)
+              ? efs_kv_dentry_shard(new_parent, new_name, dprow.layout)
+              : psh;
     if (rc == EFS_OK) {
-        dsh = efs_kv_dentry_shard(new_parent, new_name, dprow.layout);
-        if (efs_raft_shard_group(dsh) !=
-            efs_raft_shard_group(efs_kv_inode_shard(new_parent)))
+        uint8_t gs[8];
+        int ngs = 0;
+
+        bounce_add(gs, &ngs, 8, efs_raft_shard_group(psh));
+        bounce_add(gs, &ngs, 8, efs_raft_shard_group(ish));
+        bounce_add(gs, &ngs, 8, efs_raft_shard_group(dsh));
+        if (!host_hosts_all(h, gs, ngs)) {
+            uint8_t need[2];
+
+            host_need_both(need);
+            pthread_mutex_unlock(&h->read_mu);
+            host_fwd_link(h, src_ino, new_parent, new_name, out, need, 2);
+            return;
+        }
+        if (efs_raft_shard_group(dsh) != efs_raft_shard_group(psh))
             rc = host_read_index(h, efs_raft_shard_group(dsh), &hint);
     }
     if (rc == EFS_OK) {
@@ -6116,6 +6133,8 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
             rc = EFS_OK;
     }
     if (rc == EFS_OK) {
+        uint64_t bit;
+
         memset(&ndent, 0, sizeof(ndent));
         ndent.ino = row.ino;
         ndent.generation = row.generation;
@@ -6123,52 +6142,63 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
         row.nlink++;
         if (row.base_ctime < now)
             row.base_ctime = now;
-        if (dprow.base_mtime < now)
-            dprow.base_mtime = now;
-        if (dprow.base_ctime < now)
-            dprow.base_ctime = now;
+        d_lane = dprow.layout == EFS_META_LAYOUT_LOCAL
+                     ? 0
+                     : efs_kv_dir_lane(new_name);
+        if (dprow.layout == EFS_META_LAYOUT_LOCAL) {
+            if (dprow.base_mtime < now)
+                dprow.base_mtime = now;
+            if (dprow.base_ctime < now)
+                dprow.base_ctime = now;
+            touch_parent = 1;
+        } else {
+            bit = 1ull << d_lane;
+            if ((dprow.used_shards & bit) == 0) {
+                dprow.used_shards |= bit;
+                touch_parent = 1;
+            }
+            stamp_lane = 1;
+        }
         rc = efs_meta_pack_dentry(&ndent, v_dent, sizeof(v_dent));
         if (rc == EFS_OK)
             rc = efs_meta_pack_inode(&row, v_ino, sizeof(v_ino));
-        if (rc == EFS_OK)
+        if (rc == EFS_OK && touch_parent)
             rc = efs_meta_pack_inode(&dprow, v_par, sizeof(v_par));
     }
     if (rc == EFS_OK)
         rc = efs_kv_key_dentry(dsh, new_parent, new_name, k_dent, &kd);
     if (rc == EFS_OK)
         rc = efs_kv_key_inode(ish, src_ino, k_ino, &ki);
+    if (rc == EFS_OK && touch_parent)
+        rc = efs_kv_key_inode(psh, new_parent, k_par, &kp);
     if (rc == EFS_OK)
-        rc = efs_kv_key_inode(efs_kv_inode_shard(new_parent), new_parent, k_par,
-                              &kp);
-    if (rc == EFS_OK)
-        rc = efs_kv_key_dseq(dsh, new_parent, 0, k_dseq, &ks);
+        rc = efs_kv_key_dseq(dsh, new_parent, d_lane, k_dseq, &ks);
+    if (rc == EFS_OK && stamp_lane)
+        rc = efs_meta_stamp_dir_lane(h->kv, &dprow, new_name, now, k_ln, &kln,
+                                     v_ln, sizeof(v_ln));
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_ino, ki, &iver);
-    if (rc == EFS_OK)
+    if (rc == EFS_OK && touch_parent)
         rc = efs_txn_ver_get(h->kv, k_par, kp, &pver);
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_dseq, ks, &sver);
+    if (rc == EFS_OK && stamp_lane)
+        rc = efs_txn_ver_get(h->kv, k_ln, kln, &lnver);
     if (rc == EFS_OK) {
         sn = 8;
         gr = efs_kv_get(h->kv, k_dseq, ks, sb, &sn);
         seq = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
         wr64be(v_dseq, seq + 1);
         memset(&parts, 0, sizeof(parts));
-        if (dsh == ish) {
-            parts.n = 1;
-            parts.shard[0] = dsh;
-        } else {
-            parts.n = 2;
-            if (dsh < ish) {
-                parts.shard[0] = dsh;
-                parts.shard[1] = ish;
-            } else {
-                parts.shard[0] = ish;
-                parts.shard[1] = dsh;
-            }
-        }
+        rc = host_parts_add(&parts, dsh);
+        if (rc == EFS_OK)
+            rc = host_parts_add(&parts, ish);
+        if (rc == EFS_OK && touch_parent)
+            rc = host_parts_add(&parts, psh);
+        if (rc != EFS_OK)
+            goto link_prepped;
         fill_txid(h, &t);
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
@@ -6177,19 +6207,23 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
                                dver, EFS_TXN_PUT, v_dent, sizeof(v_dent),
                                &hint);
                 if (rc == EFS_OK)
-                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_par, kp,
-                                   pver, EFS_TXN_PUT, v_par, sizeof(v_par),
-                                   &hint);
-                if (rc == EFS_OK)
                     rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dseq, ks,
                                    sver, EFS_TXN_PUT, v_dseq, 8, &hint);
+                if (rc == EFS_OK && stamp_lane)
+                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_ln, kln,
+                                   lnver, EFS_TXN_PUT, v_ln, sizeof(v_ln),
+                                   &hint);
             }
+            if (rc == EFS_OK && touch_parent && sh == psh)
+                rc = host_prep(h, psh, EFS_TXN_EXCL, &t, &parts, k_par, kp,
+                               pver, EFS_TXN_PUT, v_par, sizeof(v_par), &hint);
             if (rc == EFS_OK && sh == ish) {
                 rc = host_prep(h, ish, EFS_TXN_EXCL, &t, &parts, k_ino, ki,
                                iver, EFS_TXN_PUT, v_ino, sizeof(v_ino),
                                &hint);
             }
         }
+link_prepped:
         if (rc != EFS_OK)
             (void)host_drop_parts(h, &t, &parts, &hint);
         else {

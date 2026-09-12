@@ -979,6 +979,49 @@ static void test_unlink_rmdir_hashed(void)
     efs_sim_free(s);
 }
 
+/* HASHED dest LINK: alias on a distinct off-home lane. */
+static void test_link_hashed(void)
+{
+    struct efs_sim *s = mk(134);
+    efs_ino_t f = 0, g = 0;
+    uint8_t layout = 99;
+    char na[16], nb[16];
+    uint32_t nlink = 0;
+    int rc;
+
+    CHECK(s, "mk");
+    CHECK(hashed_pair(EFS_ROOT_INO, na, nb) == 0, "pair");
+    CHECK(efs_sim_dir_begin_split(s, EFS_ROOT_INO) == EFS_OK, "split");
+    while ((rc = efs_sim_dir_migrate(s, EFS_ROOT_INO)) == EFS_OK)
+        ;
+    CHECK(rc == EFS_ERR_NOT_FOUND, "migrated");
+    CHECK(efs_sim_dir_finish_hashed(s, EFS_ROOT_INO) == EFS_OK, "HASHED");
+    CHECK(efs_sim_dir_layout(s, EFS_ROOT_INO, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_HASHED,
+          "layout");
+    CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, na, &f) == EFS_OK &&
+              f,
+          "create hashed");
+    CHECK(efs_sim_link(s, 0, EFS_ROOT_INO, na, EFS_ROOT_INO, nb) == EFS_OK,
+          "hashed link");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, nb, &g) == EFS_OK && g == f,
+          "alias");
+    CHECK(efs_sim_inode_nlink(s, f, &nlink, NULL) == EFS_OK && nlink == 2,
+          "nlink 2");
+    CHECK(efs_sim_link(s, 0, EFS_ROOT_INO, na, EFS_ROOT_INO, nb) ==
+              EFS_ERR_EXIST,
+          "dup dest");
+    CHECK(efs_sim_unlink(s, 0, EFS_ROOT_INO, na) == EFS_OK, "unlink src");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, na, &g) == EFS_ERR_NOT_FOUND,
+          "src gone");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, nb, &g) == EFS_OK && g == f,
+          "alias lives");
+    CHECK(efs_sim_inode_nlink(s, f, &nlink, NULL) == EFS_OK && nlink == 1,
+          "nlink 1");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
 static void test_lock_conflict_fence(void)
 {
     struct efs_sim *s = mk(93);
@@ -1409,6 +1452,7 @@ int main(void)
     test_hashed_dir_stat();
     test_rename_hashed();
     test_unlink_rmdir_hashed();
+    test_link_hashed();
     test_single_shard_ops();
     test_utimens_fence();
     test_truncate_range_del();

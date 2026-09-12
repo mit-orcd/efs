@@ -235,10 +235,9 @@ lazy — first pool checkout, not mount). Full gate PASS on fcstor003:
 **Open follow-ups:** (1) client local staging
 table (g_client.export) shrink is post-step-11 client-cache design /
 spec step 12. (Data-plane GC, cross-dir LOCAL rename, `.find` READDIR
-walk, HASHED rename, and HASHED unlink/rmdir are CLOSED; see below.)
-HASHED LINK dest stays INVAL; SPLITTING stays BUSY; dest-HASHED-dir
-overwrite stays INVAL (distributed emptiness). Do not start step 12
-until asked.
+walk, HASHED rename, HASHED unlink/rmdir, and HASHED dest LINK are
+CLOSED; see below.) SPLITTING stays BUSY; dest-HASHED-dir overwrite
+stays INVAL (distributed emptiness). Do not start step 12 until asked.
 
 **`.FIND` READDIR WALK CLOSED (Sep 11 night, working tree).** POSIX
 `virt_find_query` returned empty because `find_index_build_locked`
@@ -306,7 +305,7 @@ shard. HASHED empty-dir rmdir GUARDs used-lane dseqs (cap
 `EFS_MD_CMD_UNLINK` (HASHED file create places the inode on the dentry
 shard). Sim `apply_unlink_cmd` accepts the session on the dentry shard
 (HASHED create is `dsh==ish` but the cmd previously accepted on `psh`).
-SPLITTING stays BUSY. HASHED LINK dest stays INVAL.
+SPLITTING stays BUSY. HASHED dest LINK closed below.
 **Gates (19820 scratch, TCP, wipe+raft-mkfs):** `test_meta_apply` /
 `test_sim` / `test_txn` / `test_wire` / `test_kv_lsm` OK. efs-mgmt:
 HASHED last-link unlink (`u0` status=0, lookup NOT_FOUND) + HASHED
@@ -317,6 +316,26 @@ timeouts (`dir_deep_nesting` ×2, `dir_many_files`, `names_crazy_dirs`)
 from ~100 ms ReadIndex (pre-existing ~110 ms cross-group note), plus
 `concurrent_writes_disjoint` zeros flake. Unlink/rmdir/find/rename
 tests PASS. Do not start step 12.
+
+**HASHED LINK DEST CLOSED (Sep 11 night, working tree on top of
+`91838aa`).** Apply + sim already implemented HASHED dest LINK (dir-lane
+stamp, dseq on `efs_kv_dir_lane(dst_name)`, parent row only for LOCAL
+times or HASHED `used_shards` first-use). The host INVALed
+`dprow.layout != LOCAL`. Host now allows HASHED: bounce via
+`host_fwd_link` when this replica does not host dsh/ish/psh; LOCAL
+stamps parent-row times on psh; HASHED stamps the dir-lane on dsh and
+dseq on that lane. First-use sets the dest lane `used_shards` bit.
+SPLITTING stays BUSY. Dest **dir** overwrite that is HASHED stays INVAL
+(distributed emptiness). HASHED file create still places the inode on
+the dentry shard, so last-link same-shard unlink is unchanged.
+**Gates (19820 scratch, TCP):** `test_meta_apply` / `test_sim` OK.
+efs-mgmt: HASHED dest link (`n0`→`l0` status=0, nlink=2, dup EXIST).
+FUSE HASHED dir `hl-fuse`: `os.link(a, l0)` OK (nlink 2). posix jobs=1
+**200/201 in 36.8 s** (`results/posix/20260911-hashed-link/suite-jobs1.tsv`)
+— only the `concurrent_writes_disjoint` zeros flake; all hardlink tests
+PASS. Smoke `raft_host_smoke.sh` HASHED dest LINK check added (rename
+hygiene: dedicated names so POSIX file-over-file replace is not scored
+as EXIST). Do not start step 12.
 
 **RAFT-LAG CLOSED (Sep 11 PM, working tree) — three fixes in
 `src/server/raft_host.c`, gated 199/201 jobs=16 in 26.5 s with ZERO

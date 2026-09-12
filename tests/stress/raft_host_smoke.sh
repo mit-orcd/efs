@@ -19,7 +19,8 @@
 # CREATE + same-dir HASHED file RENAME (dedicated raft-smoke-hd split empty
 # then a file whose hashed dentry shard is on the other Raft group, then
 # renamed onto a second hashed name) + HASHED last-link UNLINK of a
-# dedicated extra name and HASHED empty-dir RMDIR (raft-smoke-he), HOLD open-unlinked lease
+# dedicated extra name, HASHED dest LINK onto a third hashed name
+# (nlink=2), and HASHED empty-dir RMDIR (raft-smoke-he), HOLD open-unlinked lease
 # (dedicated raft-smoke-k: open, unlink name, getattr nlink=0, leave
 # held through crash, close reclaims), FLOCK grant/release (dedicated
 # raft-smoke-w: EX owner=1, EX owner=2 BUSY, UN owner=1, EX owner=2,
@@ -48,7 +49,8 @@
 # the unlinked name stays gone, the rmdir'd name stays gone, the nlink>1
 # unlinked name stays gone, the renamed file stays, the renamed dir stays,
 # the HASHED dest file stays under its post-rename name (old hashed name
-# stays gone), the HASHED unlinked extra name stays gone, the HASHED
+# stays gone), the HASHED dest link name stays with nlink=2, the HASHED
+# unlinked extra name stays gone, the HASHED
 # empty dir stays gone, the held-unlinked inode stays at nlink=0
 # until close reclaims it, the flock file stays and owner=2's EX still
 # BUSYs owner=1 until UN, the fcntl file stays and owner=1's EX still
@@ -112,7 +114,7 @@ set -e
 killall -9 make gcc 2>/dev/null || true
 sleep 3
 mkdir -p /tmp/efs
-rsync -a --delete --delete-excluded --exclude='/mnt/' --exclude='/.git/' --exclude='*.log' --exclude='*.o' --exclude='*.a' --exclude='tests/test_wire' --exclude='tests/test_meta_apply' --exclude='efsd' --exclude='efs-mgmt' --exclude='efs-fuse' '$SRC/' /tmp/efs/ || { rc=\$?; [ \"\$rc\" -eq 24 ]; }
+rsync -a --checksum --delete --delete-excluded --exclude='/mnt/' --exclude='/.git/' --exclude='*.log' --exclude='*.o' --exclude='*.a' --exclude='tests/test_wire' --exclude='tests/test_meta_apply' --exclude='efsd' --exclude='efs-mgmt' --exclude='efs-fuse' '$SRC/' /tmp/efs/ || { rc=\$?; [ \"\$rc\" -eq 24 ]; }
 cd /tmp/efs
 make clean >/dev/null
 make -j\"\$(nproc)\" efsd efs-mgmt tests/test_wire tests/test_meta_apply
@@ -576,16 +578,28 @@ check_rename() {
     out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-n 1 raft-smoke-m2" 2>/dev/null || true)
     say "$tag rename miss: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag rename miss not NOT_FOUND"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f 1 raft-smoke-m" 2>/dev/null || true)
+    # Dedicated names so raft-smoke-f / raft-smoke-m stay put.
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-ne" 2>/dev/null || true)
+    echo "$out" | grep -q 'status=0' || bad "$tag rename-exist dest create"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-ns" 2>/dev/null || true)
+    echo "$out" | grep -q 'status=0' || bad "$tag rename-exist src create"
+    ns_ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-ns 1 raft-smoke-ne" 2>/dev/null || true)
     say "$tag rename exist: $out"
-    echo "$out" | grep -q 'status=2' || bad "$tag rename exist not EXIST"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-m 2 raft-smoke-x" 2>/dev/null || true)
+    echo "$out" | grep -q 'status=0' || bad "$tag rename exist not OK"
+    echo "$out" | grep -q "ino=$ns_ino" || bad "$tag rename exist ino"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-xd 040755" 2>/dev/null || true)
+    echo "$out" | grep -q 'status=0' || bad "$tag rename cross-dir dest mkdir"
+    xd_ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-xc" 2>/dev/null || true)
+    echo "$out" | grep -q 'status=0' || bad "$tag rename cross-dir src create"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-xc $xd_ino raft-smoke-x" 2>/dev/null || true)
     say "$tag rename cross-dir: $out"
-    echo "$out" | grep -q 'status=6' || bad "$tag rename cross-dir not INVAL"
+    echo "$out" | grep -q 'status=0' || bad "$tag rename cross-dir not OK"
 }
 
 # Same-dir LOCAL directory rename. Dedicated names so MKDIR_NAME stays.
-# Dest EXIST. Cross-dir is still INVAL.
+# Dest file overwrite is INVAL (ENOTDIR). Cross-dir into a dest dir is OK.
 check_dir_rename() {
     local lid=$1
     local tag=$2
@@ -616,12 +630,19 @@ check_dir_rename() {
     out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-rd 1 raft-smoke-re2" 2>/dev/null || true)
     say "$tag dir-rename miss: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag dir-rename miss not NOT_FOUND"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-re 1 raft-smoke-f" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-df" 2>/dev/null || true)
+    echo "$out" | grep -q 'status=0' || bad "$tag dir-rename exist dest create"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-re 1 raft-smoke-df" 2>/dev/null || true)
     say "$tag dir-rename exist: $out"
-    echo "$out" | grep -q 'status=2' || bad "$tag dir-rename exist not EXIST"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-re 2 raft-smoke-x" 2>/dev/null || true)
+    echo "$out" | grep -qE 'status=2|status=6' || bad "$tag dir-rename exist not EXIST/INVAL"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-dd 040755" 2>/dev/null || true)
+    echo "$out" | grep -q 'status=0' || bad "$tag dir-rename cross-dir dest mkdir"
+    dd_ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-dc 040755" 2>/dev/null || true)
+    echo "$out" | grep -q 'status=0' || bad "$tag dir-rename cross-dir src mkdir"
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-dc $dd_ino raft-smoke-dx" 2>/dev/null || true)
     say "$tag dir-rename cross-dir: $out"
-    echo "$out" | grep -q 'status=6' || bad "$tag dir-rename cross-dir not INVAL"
+    echo "$out" | grep -q 'status=0' || bad "$tag dir-rename cross-dir not OK"
 }
 
 # Empty dedicated dir → HASHED, then file CREATE whose dir lane lives on
@@ -806,6 +827,55 @@ for i in range(8192):
         echo "$out" | grep -q 'status=1' || bad "$tag hashed-unlink not NOT_FOUND"
     else
         bad "$tag hashed-unlink dest name"
+    fi
+    lnm=$(python3 -c "
+parent=int('$hd_ino')
+MASK=0xFFF
+skip=set('$nm $nm2 ${rnm:-} ${HASHED_FILE:-} ${unm:-}'.split())
+def dir_lane(name):
+    h=2166136261
+    for c in name.encode():
+        h ^= c
+        h = (h * 16777619) & 0xffffffff
+    return h % 64
+def lane_shard(ino, lane):
+    h = ((ino & 0xffffffff) * 2654435761) & 0xffffffff
+    stride = 2 * (h & 0x7FF) + 1
+    return ((ino & MASK) + lane * stride) & MASK
+psh = parent & MASK
+for i in range(8192):
+    n='l%d' % i
+    lane=dir_lane(n)
+    dsh=lane_shard(parent, lane)
+    if lane==0 or dsh==psh or (dsh & 1)==(psh & 1) or n in skip:
+        continue
+    print(n)
+    break
+")
+    if [ -n "$lnm" ] && [ -n "$ino" ] && [ "$ino" != "0" ]; then
+        out=$(g0_mgmt raft-link "$ino" "$hd_ino" "$lnm")
+        say "$tag hashed-link $lnm: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag hashed-link not OK"
+        echo "$out" | grep -q 'nlink=2' || bad "$tag hashed-link nlink"
+        if echo "$out" | grep -q 'status=0'; then
+            HASHED_LINK_NAME=$lnm
+        fi
+        out=$(g0_mgmt raft-lookup "$hd_ino" "$lnm")
+        echo "$out" | grep -q 'status=0' || bad "$tag hashed-link lookup not OK"
+        echo "$out" | grep -q "ino=$ino" || bad "$tag hashed-link lookup ino"
+        echo "$out" | grep -q 'nlink=2' || bad "$tag hashed-link lookup nlink"
+        out=$(g0_mgmt raft-lookup "$hd_ino" "$HASHED_FILE")
+        echo "$out" | grep -q 'nlink=2' || bad "$tag hashed-link src nlink"
+        out=$(g0_mgmt raft-link "$ino" "$hd_ino" "$lnm")
+        say "$tag hashed-link dup: $out"
+        echo "$out" | grep -q 'status=2' || bad "$tag hashed-link dup not EXIST"
+        out=$(g0_mgmt raft-readdir "$hd_ino")
+        echo "$out" | grep -q "$lnm" || bad "$tag hashed-link readdir missing"
+        out=$(g0_mgmt raft-lookup-path "/raft-smoke-hd/$lnm")
+        echo "$out" | grep -q 'status=0' || bad "$tag hashed-link lookup-path not OK"
+        echo "$out" | grep -q "name=$lnm" || bad "$tag hashed-link lookup-path name"
+    else
+        bad "$tag hashed-link dest name"
     fi
     out=$(g0_mgmt raft-create 1 raft-smoke-he 040755)
     say "$tag hashed-rmdir-prep mkdir: $out"
@@ -1591,6 +1661,12 @@ check_readdir_path() {
         echo "$out" | grep -q 'status=0' || bad "$tag lookup-path hashed not OK"
         echo "$out" | grep -q "name=$HASHED_FILE" || bad "$tag lookup-path hashed name"
     fi
+    if [ -n "${HASHED_DIR:-}" ] && [ -n "${HASHED_LINK_NAME:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$HASHED_DIR/$HASHED_LINK_NAME")
+        say "$tag lookup-path hashed-link: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag lookup-path hashed-link not OK"
+        echo "$out" | grep -q "name=$HASHED_LINK_NAME" || bad "$tag lookup-path hashed-link name"
+    fi
     out=$(g0_mgmt raft-lookup-path /no-such-efs-name)
     say "$tag lookup-path miss: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag lookup-path miss not NOT_FOUND"
@@ -1707,6 +1783,7 @@ HASHED_FILE2=""
 HASHED_FILE_OLD=""
 HASHED_UNLINK_OLD=""
 HASHED_RMDIR_OLD=""
+HASHED_LINK_NAME=""
 check_hashed_create "$leader" "fresh"
 say "session record through Raft (fresh)"
 SESS_SHARD=""
@@ -2030,6 +2107,9 @@ if [ -n "${HASHED_DIR_INO:-}" ] && [ -n "${HASHED_FILE:-}" ]; then
     out=$(g0_mgmt raft-lookup "$HASHED_DIR_INO" "$HASHED_FILE")
     say "after-crash lookup hashed-file: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash hashed-file missing"
+    if [ -n "${HASHED_LINK_NAME:-}" ]; then
+        echo "$out" | grep -q 'nlink=2' || bad "after-crash hashed-file nlink"
+    fi
 fi
 if [ -n "${HASHED_DIR_INO:-}" ] && [ -n "${HASHED_FILE_OLD:-}" ]; then
     out=$(g0_mgmt raft-lookup "$HASHED_DIR_INO" "$HASHED_FILE_OLD")
@@ -2045,6 +2125,12 @@ if [ -n "${HASHED_DIR_INO:-}" ] && [ -n "${HASHED_UNLINK_OLD:-}" ]; then
     out=$(g0_mgmt raft-lookup "$HASHED_DIR_INO" "$HASHED_UNLINK_OLD")
     say "after-crash lookup hashed-unlink: $out"
     echo "$out" | grep -q 'status=1' || bad "after-crash hashed-unlink name came back"
+fi
+if [ -n "${HASHED_DIR_INO:-}" ] && [ -n "${HASHED_LINK_NAME:-}" ]; then
+    out=$(g0_mgmt raft-lookup "$HASHED_DIR_INO" "$HASHED_LINK_NAME")
+    say "after-crash lookup hashed-link: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash hashed-link missing"
+    echo "$out" | grep -q 'nlink=2' || bad "after-crash hashed-link nlink"
 fi
 if [ -n "${HASHED_RMDIR_OLD:-}" ]; then
     out=$(g0_mgmt raft-lookup 1 "$HASHED_RMDIR_OLD")
