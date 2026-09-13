@@ -1155,6 +1155,59 @@ static void test_rename_splitting(void)
     efs_sim_free(s);
 }
 
+/* SPLITTING/HASHED dest MKDIR writes the dentry on the hashed lane shard
+ * (not the parent home shard): lookup is hashed-then-local, readdir merges
+ * the local leftover, a dup is EXIST, rmdir drops it (I8 tombstone), a
+ * recreate over the tombstone succeeds, and the dentry survives the
+ * migration to HASHED. */
+static int dir_has(struct efs_sim *s, efs_ino_t dir, const char *name);
+
+static void test_mkdir_splitting(void)
+{
+    struct efs_sim *s = mk(138);
+    efs_ino_t d = 0, m = 0, m2 = 0, pre = 0, g = 0;
+    uint8_t layout = 99;
+    char na[16], nb[16];
+    uint32_t nlink = 0;
+    int rc;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, "d", &d) == EFS_OK && d, "d");
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, "pre", &pre) == EFS_OK &&
+              pre,
+          "pre");
+    CHECK(efs_sim_dir_begin_split(s, d) == EFS_OK, "split");
+    CHECK(efs_sim_dir_layout(s, d, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_SPLITTING,
+          "SPLITTING");
+    CHECK(hashed_pair(d, na, nb) == 0, "pair");
+    CHECK(efs_sim_mkdir(s, 0, d, na, &m) == EFS_OK && m, "hashed mkdir");
+    CHECK(efs_sim_lookup(s, 0, d, na, &g) == EFS_OK && g == m, "lookup");
+    CHECK(efs_sim_inode_nlink(s, d, &nlink, NULL) == EFS_OK && nlink == 3,
+          "parent nlink");
+    CHECK(dir_has(s, d, na) && dir_has(s, d, "pre"), "readdir merge");
+    CHECK(efs_sim_mkdir(s, 0, d, na, &m2) == EFS_ERR_EXIST, "dup EXIST");
+    CHECK(efs_sim_rmdir(s, 0, d, na) == EFS_OK, "rmdir hashed");
+    CHECK(efs_sim_lookup(s, 0, d, na, &g) == EFS_ERR_NOT_FOUND, "gone");
+    CHECK(efs_sim_mkdir(s, 0, d, na, &m2) == EFS_OK && m2 && m2 != m,
+          "recreate over tombstone");
+    CHECK(efs_sim_lookup(s, 0, d, na, &g) == EFS_OK && g == m2,
+          "lookup recreated");
+    while ((rc = efs_sim_dir_migrate(s, d)) == EFS_OK)
+        ;
+    CHECK(rc == EFS_ERR_NOT_FOUND, "migrated");
+    CHECK(efs_sim_dir_finish_hashed(s, d) == EFS_OK, "HASHED");
+    CHECK(efs_sim_lookup(s, 1, d, na, &g) == EFS_OK && g == m2,
+          "lookup after HASHED");
+    CHECK(efs_sim_mkdir(s, 1, d, nb, &m) == EFS_OK && m, "HASHED mkdir");
+    CHECK(efs_sim_lookup(s, 0, d, nb, &g) == EFS_OK && g == m,
+          "lookup HASHED");
+    CHECK(dir_has(s, d, nb) && dir_has(s, d, na) && dir_has(s, d, "pre"),
+          "readdir HASHED");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
 /* Rename over an empty HASHED dest dir (never-used, then emptied with
  * used_shards set). Nonempty HASHED dest is NOT_EMPTY, not INVAL. */
 static void test_rename_hashed_dir_overwrite(void)
@@ -1639,6 +1692,7 @@ int main(void)
     test_link_hashed();
     test_link_splitting();
     test_rename_splitting();
+    test_mkdir_splitting();
     test_rename_hashed_dir_overwrite();
     test_single_shard_ops();
     test_utimens_fence();

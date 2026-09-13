@@ -467,23 +467,27 @@ static void fill_txid(struct efs_sim *sim, struct efs_txid *t)
     }
 }
 
-static int mkdir_build(struct efs_sim *sim, efs_ino_t parent, const char *name,
-                       struct efs_txid *t, struct efs_txn_parts *p,
-                       efs_ino_t *ino_out)
+static int mkdir_build(struct efs_sim *sim, int client, efs_ino_t parent,
+                       const char *name, struct efs_txid *t,
+                       struct efs_txn_parts *p, efs_ino_t *ino_out)
 {
-    uint32_t psh, csh;
-    struct efs_kv *pkv, *ckv;
+    uint32_t psh, csh, dsh;
+    struct efs_kv *pkv, *ckv, *dkv;
     struct efs_meta_row prow, crow;
     struct efs_meta_dentry dent;
     struct efs_meta_dentry exist;
     efs_ino_t next = 0, ino;
     uint8_t k_dent[EFS_KV_KEY_MAX], k_pino[EFS_KV_KEY_MAX], k_cino[EFS_KV_KEY_MAX];
     uint8_t k_alloc[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX];
+    uint8_t k_ln[EFS_KV_KEY_MAX], v_ln[EFS_META_LANE_BYTES];
     uint8_t v_dent[EFS_META_DENT_BYTES], v_pino[EFS_META_INO_BYTES];
     uint8_t v_cino[EFS_META_INO_BYTES], v_alloc[EFS_META_ALLOC_BYTES];
     uint8_t v_dseq[8];
-    uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0;
-    uint64_t pver = 0, aver = 0, sver = 0, seq = 0, dver = 0, salt = 0;
+    uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0, kln = 0;
+    uint64_t pver = 0, aver = 0, sver = 0, seq = 0, dver = 0, lnver = 0;
+    uint64_t salt = 0;
+    uint8_t p_lane = 0;
+    int stamp_lane = 0;
     int rc, i;
 
     psh = efs_kv_inode_shard(parent);
@@ -499,20 +503,23 @@ static int mkdir_build(struct efs_sim *sim, efs_ino_t parent, const char *name,
         return rc;
     if (!S_ISDIR(prow.mode))
         return EFS_ERR_INVAL;
-    rc = efs_kv_key_dentry(psh, parent, name, k_dent, &kd);
+    if (prow.layout != EFS_META_LAYOUT_LOCAL &&
+        prow.layout != EFS_META_LAYOUT_HASHED &&
+        prow.layout != EFS_META_LAYOUT_SPLITTING)
+        return EFS_ERR_INVAL;
+    /* The dentry goes to dsh: the parent's home shard for LOCAL, the
+     * hashed lane shard for HASHED/SPLITTING (matches the host). */
+    dsh = efs_kv_dentry_shard(parent, name, prow.layout);
+    p_lane = prow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(name);
+    rc = read_kv(sim, dsh, &dkv);
     if (rc != EFS_OK)
         return rc;
-    {
-        uint8_t tmp[EFS_META_DENT_BYTES];
-        uint32_t tn = sizeof(tmp);
-
-        rc = efs_txn_read(pkv, k_dent, kd, sim_txn_coord, sim, tmp, &tn);
-        if (rc == EFS_OK)
-            return EFS_ERR_EXIST;
-        if (rc != EFS_ERR_NOT_FOUND)
-            return rc;
-    }
-    (void)exist;
+    /* EXIST check is hashed-then-local across groups. */
+    rc = sim_txn_lookup(sim, parent, name, &exist);
+    if (rc == EFS_OK)
+        return EFS_ERR_EXIST;
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
     rc = read_kv(sim, csh, &ckv);
     if (rc != EFS_OK)
         return rc;
@@ -541,11 +548,20 @@ static int mkdir_build(struct efs_sim *sim, efs_ino_t parent, const char *name,
     dent.type = S_IFDIR;
     prow.nlink++;
     /* MKDIR adds an entry to the parent, so the parent's times move too.
-     * The parent row is already in this transaction's write set. */
-    if (prow.base_mtime < sim->now)
-        prow.base_mtime = sim->now;
-    if (prow.base_ctime < sim->now)
-        prow.base_ctime = sim->now;
+     * LOCAL: the parent row is in this transaction's write set and carries
+     * the times. HASHED/SPLITTING: times live on the dir-lane stamp; the
+     * home row carries nlink and the first-use used_shards bit only. */
+    if (prow.layout == EFS_META_LAYOUT_LOCAL) {
+        if (prow.base_mtime < sim->now)
+            prow.base_mtime = sim->now;
+        if (prow.base_ctime < sim->now)
+            prow.base_ctime = sim->now;
+    } else {
+        uint64_t bit = 1ull << efs_kv_dir_lane(name);
+        if ((prow.used_shards & bit) == 0)
+            prow.used_shards |= bit;
+        stamp_lane = 1;
+    }
     rc = efs_meta_pack_dentry(&dent, v_dent, sizeof(v_dent));
     if (rc == EFS_OK)
         rc = efs_meta_pack_inode(&prow, v_pino, sizeof(v_pino));
@@ -555,64 +571,78 @@ static int mkdir_build(struct efs_sim *sim, efs_ino_t parent, const char *name,
         return rc;
     wr64(v_alloc, next);
 
-    rc = efs_kv_key_inode(psh, parent, k_pino, &kpi);
+    rc = efs_kv_key_dentry(dsh, parent, name, k_dent, &kd);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_inode(psh, parent, k_pino, &kpi);
     if (rc == EFS_OK)
         rc = efs_kv_key_inode(csh, ino, k_cino, &kci);
     if (rc == EFS_OK)
         rc = efs_kv_key_alloc(csh, k_alloc, &ka);
     if (rc == EFS_OK)
-        rc = efs_kv_key_dseq(psh, parent, 0, k_dseq, &ks);
+        rc = efs_kv_key_dseq(dsh, parent, p_lane, k_dseq, &ks);
+    if (rc == EFS_OK && stamp_lane)
+        rc = efs_meta_stamp_dir_lane(dkv, &prow, name, sim->now, k_ln, &kln,
+                                     v_ln, sizeof(v_ln));
     if (rc != EFS_OK)
         return rc;
     rc = efs_txn_ver_get(pkv, k_pino, kpi, &pver);
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(ckv, k_alloc, ka, &aver);
     if (rc == EFS_OK)
-        rc = efs_txn_ver_get(pkv, k_dseq, ks, &sver);
+        rc = efs_txn_ver_get(dkv, k_dseq, ks, &sver);
     if (rc == EFS_OK)
-        rc = efs_txn_ver_get(pkv, k_dent, kd, &dver);
+        rc = efs_txn_ver_get(dkv, k_dent, kd, &dver);
+    if (rc == EFS_OK && stamp_lane)
+        rc = efs_txn_ver_get(dkv, k_ln, kln, &lnver);
     if (rc != EFS_OK)
         return rc;
     {
         uint8_t sb[8];
         uint32_t sn = 8;
-        int gr = efs_kv_get(pkv, k_dseq, ks, sb, &sn);
+        int gr = efs_kv_get(dkv, k_dseq, ks, sb, &sn);
 
         seq = (gr == EFS_OK && sn >= 8) ? rd64(sb) : 0;
     }
     wr64(v_dseq, seq + 1);
 
     memset(p, 0, sizeof(*p));
-    if (psh == csh) {
-        p->n = 1;
-        p->shard[0] = psh;
-    } else {
-        p->n = 2;
-        if (psh < csh) {
-            p->shard[0] = psh;
-            p->shard[1] = csh;
-        } else {
-            p->shard[0] = csh;
-            p->shard[1] = psh;
-        }
+    rc = sim_txn_parts_add(p, psh);
+    if (rc == EFS_OK)
+        rc = sim_txn_parts_add(p, csh);
+    if (rc == EFS_OK)
+        rc = sim_txn_parts_add(p, dsh);
+    if (rc != EFS_OK)
+        return rc;
+    for (i = 0; i < p->n; i++) {
+        rc = sim_sess_ensure(sim, client, p->shard[i]);
+        if (rc != EFS_OK)
+            return rc;
     }
     fill_txid(sim, t);
 
-    /* Namespace txn: canonical shard then key order. */
     for (i = 0; i < p->n; i++) {
         uint32_t sh = p->shard[i];
 
-        if (sh == psh) {
-            rc = propose_prep(sim, psh, EFS_TXN_EXCL, t, p, k_dent, kd, dver,
+        if (sh == dsh) {
+            rc = propose_prep(sim, dsh, EFS_TXN_EXCL, t, p, k_dent, kd, dver,
                               EFS_TXN_PUT, v_dent, sizeof(v_dent), NULL);
             if (rc != EFS_OK)
                 goto fail;
-            rc = propose_prep(sim, psh, EFS_TXN_EXCL, t, p, k_pino, kpi, pver,
-                              EFS_TXN_PUT, v_pino, sizeof(v_pino), NULL);
+            rc = propose_prep(sim, dsh, EFS_TXN_EXCL, t, p, k_dseq, ks, sver,
+                              EFS_TXN_PUT, v_dseq, 8, NULL);
             if (rc != EFS_OK)
                 goto fail;
-            rc = propose_prep(sim, psh, EFS_TXN_EXCL, t, p, k_dseq, ks, sver,
-                              EFS_TXN_PUT, v_dseq, 8, NULL);
+            if (stamp_lane) {
+                rc = propose_prep(sim, dsh, EFS_TXN_EXCL, t, p, k_ln, kln,
+                                  lnver, EFS_TXN_PUT, v_ln, sizeof(v_ln),
+                                  NULL);
+                if (rc != EFS_OK)
+                    goto fail;
+            }
+        }
+        if (sh == psh) {
+            rc = propose_prep(sim, psh, EFS_TXN_EXCL, t, p, k_pino, kpi, pver,
+                              EFS_TXN_PUT, v_pino, sizeof(v_pino), NULL);
             if (rc != EFS_OK)
                 goto fail;
         }
@@ -631,9 +661,8 @@ static int mkdir_build(struct efs_sim *sim, efs_ino_t parent, const char *name,
         *ino_out = ino;
     return EFS_OK;
 fail:
-    (void)propose_drop(sim, psh, t);
-    if (csh != psh)
-        (void)propose_drop(sim, csh, t);
+    for (i = 0; i < p->n; i++)
+        (void)propose_drop(sim, p->shard[i], t);
     return rc;
 }
 
@@ -644,28 +673,14 @@ int sim_txn_mkdir_until(struct efs_sim *sim, int client, efs_ino_t parent,
     struct efs_txid t;
     struct efs_txn_parts p;
     efs_ino_t ino = 0;
-    uint32_t coord, psh, csh;
-    uint64_t salt = 0;
+    uint32_t coord;
     int rc, i;
 
     if (!sim || !name || parent == 0)
         return EFS_ERR_INVAL;
     if (client < 0 || client >= sim->nclients)
         client = 0;
-    rc = load_salt(sim, &salt);
-    if (rc != EFS_OK)
-        return rc;
-    psh = efs_kv_inode_shard(parent);
-    csh = efs_kv_mkdir_shard(parent, name, salt);
-    rc = sim_sess_ensure(sim, client, psh);
-    if (rc != EFS_OK)
-        return rc;
-    if (csh != psh) {
-        rc = sim_sess_ensure(sim, client, csh);
-        if (rc != EFS_OK)
-            return rc;
-    }
-    rc = mkdir_build(sim, parent, name, &t, &p, &ino);
+    rc = mkdir_build(sim, client, parent, name, &t, &p, &ino);
     if (rc != EFS_OK)
         return rc;
     sim->txn_id = t;

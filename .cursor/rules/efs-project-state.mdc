@@ -237,9 +237,12 @@ table (g_client.export) shrink is post-step-11 client-cache design /
 spec step 12. (Data-plane GC, cross-dir LOCAL rename, `.find` READDIR
 walk, HASHED rename, HASHED unlink/rmdir, HASHED dest LINK, HASHED
 dest-dir overwrite, SPLITTING dest CREATE+READDIR, SPLITTING dest
-UNLINK/RMDIR, SPLITTING dest LINK, and SPLITTING dest RENAME are
-CLOSED; see below.) HASHED/SPLITTING dest MKDIR still
-writes the dentry on the parent shard. Do not start step 12 until asked.
+UNLINK/RMDIR, SPLITTING dest LINK, SPLITTING dest RENAME, and
+HASHED/SPLITTING dest MKDIR are CLOSED; see below.) The
+SPLITTING/HASHED dest series is COMPLETE — every dest op (CREATE,
+READDIR, UNLINK/RMDIR, LINK, RENAME, MKDIR) writes hashed. Migrating
+a populated local range is still a single-group apply, not a txn.
+Do not start step 12 until asked.
 
 **`.FIND` READDIR WALK CLOSED (Sep 11 night, working tree).** POSIX
 `virt_find_query` returned empty because `find_index_build_locked`
@@ -462,6 +465,42 @@ the `concurrent_writes_disjoint` zeros flake. Smoke
 `raft_host_smoke.sh` SPLITTING rename checks in tree (hashed dest,
 leftover dest replace, tombstone restore); full script not re-run
 (EXIT trap kills 19820). Do not start step 12.
+
+**HASHED/SPLITTING DEST MKDIR CLOSED (Sep 12-13, working tree on top
+of SPLITTING dest RENAME) — the last slice of the dest series.** Apply
++ sim already implemented hashed MKDIR (dentry on the hashed lane
+shard, child inode scattered via `mkdir_shard`); the host always wrote
+the dentry on `psh`. Host `server_raft_host_mkdir` now mirrors the
+HASHED/SPLITTING create path: dentry + dseq + first-use dir-lane stamp
+on `dsh = efs_kv_dentry_shard(parent, name, layout)` (`p_lane =
+dir_lane(name)` unless LOCAL), parent row on `psh` gets nlink++
+always but times ONLY when LOCAL (else the `used_shards` bit), child
+inode + alloc stay on `csh = efs_kv_mkdir_shard(parent, name, salt)`.
+Parts = {psh, csh, dsh} dedup'd; bounce via `host_fwd_create` when
+this replica does not host dsh; ReadIndex on dsh's group when
+distinct. EXIST check was already layout-aware. Sim `mkdir_build`
+gained the same shape (takes the client id, per-part `sim_sess_ensure`,
+`sim_txn_lookup` for EXIST). This completes the op matrix for
+HASHED/SPLITTING dests: CREATE, READDIR, UNLINK/RMDIR, LINK, RENAME,
+MKDIR all write hashed. Still NOT done (by design): migrating a
+populated local range is a single-group apply, not a txn.
+**Gates (19820 scratch, TCP, wipe+raft-mkfs):** `test_sim` (new
+`test_mkdir_splitting` seed 138: SPLITTING hashed mkdir, readdir merge
+with the local leftover, dup EXIST, rmdir, recreate over the tombstone
+with a fresh ino, migrate to HASHED, lookup from a second client,
+HASHED mkdir) / `test_meta_apply` / `test_wire` / `test_txn` OK.
+efs-mgmt: `raft-smoke-sp` begin (no migrate), hashed `d0` mkdir
+status=0 (served by primary=2 — the dentry lane is on the other
+group), lookup ino/mode match, readdir merges `d0,pre`, dup EXIST,
+rmdir OK, lookup NOT_FOUND, recreate OK with a new ino, rmdir of the
+SPLITTING dir itself status=5 BUSY. FUSE `sp-mk`: same sequence
+through `os.mkdir`/`os.listdir`/`os.rmdir` with ino identity checks.
+posix jobs=1 **200/201 in 112.1 s**
+(`results/posix/20260912-splitting-mkdir/suite-jobs1.tsv`) — only the
+`concurrent_writes_disjoint` zeros flake. Smoke `raft_host_smoke.sh`
+SPLITTING mkdir block in tree (hashed mkdir, lookup/readdir/dup/
+rmdir/recreate); full script not re-run (EXIT trap kills 19820).
+Do not start step 12.
 
 **RAFT-LAG CLOSED (Sep 11 PM, working tree) — three fixes in
 `src/server/raft_host.c`, gated 199/201 jobs=16 in 26.5 s with ZERO

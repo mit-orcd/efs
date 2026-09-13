@@ -25,6 +25,22 @@ DELETED from the tree (commits 94c4c15..f5c4390). Operationally:
   other efsd on the same host. Start order: all 4 up, THEN
   `./efs-mgmt raft-mkfs 172.16.223.57:19820 efs-test`. Client: fcstor007
   `/tmp/efs-mount`, `EFS_TRANSPORT=tcp`.
+  **Two traps bit Sep 13 (both cost an election-less CANDIDATE spin):**
+  (1) **wiping `/tmp/efs-raft-scratch` also wipes cluster membership** —
+  a fresh efsd's `s->nodes[]` contains only itself (`efsd.c` seeds
+  `node_count=1`), and raft `peer_addr` reads that table, so with no
+  `--join` every node campaigns alone forever (terms climb, no leader,
+  mkfs rc=-15 NOT_PRIMARY). After a scratch wipe, start nodes 2–4 with
+  `--join 172.16.223.57:19820` (node 1 stays seed). Restarts on
+  UNwiped storage need no `--join` (membership is persisted).
+  (2) **excluding `/.git/` from the deploy rsync breaks the build-id
+  gate** — the Makefile ids builds via `git rev-parse`, so a node
+  without `.git` builds `build=unknown` and the HELLO gate splits the
+  cluster. Rsync `.git/` too (51 MB) or pass `make EFS_GIT_ID=...`.
+  Also: start efsd as `(setsid ./efsd ... >efsd.log 2>&1 </dev/null &)`
+  — the parens keep the backgrounded `cd && rm && setsid` list from
+  holding the ssh channel open (else every start eats the 15 s
+  wrapper timeout; harmless but slow).
 - The 19810 topology below is the OLD-engine cluster layout, kept for
   reference; a redeploy of the current tree there follows the same raft
   rules (all nodes up, then raft-mkfs).

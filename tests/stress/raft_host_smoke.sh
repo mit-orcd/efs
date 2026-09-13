@@ -1079,6 +1079,59 @@ for i in range(8192):
     else
         bad "$tag split-link dest name"
     fi
+    dnm=$(python3 -c "
+parent=int('$sp_ino')
+MASK=0xFFF
+skip=set('pre e q $nm $nm2 ${lnm:-}'.split())
+def dir_lane(name):
+    h=2166136261
+    for c in name.encode():
+        h ^= c
+        h = (h * 16777619) & 0xffffffff
+    return h % 64
+def lane_shard(ino, lane):
+    h = ((ino & 0xffffffff) * 2654435761) & 0xffffffff
+    stride = 2 * (h & 0x7FF) + 1
+    return ((ino & MASK) + lane * stride) & MASK
+psh = parent & MASK
+for i in range(8192):
+    n='d%d' % i
+    lane=dir_lane(n)
+    dsh=lane_shard(parent, lane)
+    if lane==0 or dsh==psh or (dsh & 1)==(psh & 1) or n in skip:
+        continue
+    print(n)
+    break
+")
+    if [ -n "$dnm" ]; then
+        out=$(g0_mgmt raft-create "$sp_ino" "$dnm" 040755)
+        say "$tag split-mkdir $dnm: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag split-mkdir not OK"
+        dino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+        [ -n "$dino" ] && [ "$dino" != "0" ] || bad "$tag split-mkdir ino"
+        out=$(g0_mgmt raft-lookup "$sp_ino" "$dnm")
+        echo "$out" | grep -q 'status=0' || bad "$tag split-mkdir lookup not OK"
+        echo "$out" | grep -q "ino=$dino" || bad "$tag split-mkdir lookup ino"
+        out=$(g0_mgmt raft-readdir "$sp_ino")
+        readdir_has "$out" "$dnm" || bad "$tag split-mkdir readdir missing"
+        out=$(g0_mgmt raft-create "$sp_ino" "$dnm" 040755)
+        say "$tag split-mkdir dup: $out"
+        echo "$out" | grep -q 'status=2' || bad "$tag split-mkdir dup not EXIST"
+        out=$(g0_mgmt raft-rmdir "$sp_ino" "$dnm")
+        say "$tag split-mkdir rmdir: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag split-mkdir rmdir not OK"
+        out=$(g0_mgmt raft-lookup "$sp_ino" "$dnm")
+        echo "$out" | grep -q 'status=1' || bad "$tag split-mkdir rmdir not NOT_FOUND"
+        out=$(g0_mgmt raft-create "$sp_ino" "$dnm" 040755)
+        say "$tag split-mkdir recreate: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag split-mkdir recreate not OK"
+        dino2=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+        { [ -n "$dino2" ] && [ "$dino2" != "0" ] && [ "$dino2" != "$dino" ]; } || bad "$tag split-mkdir recreate ino"
+        out=$(g0_mgmt raft-rmdir "$sp_ino" "$dnm")
+        echo "$out" | grep -q 'status=0' || bad "$tag split-mkdir rmdir2 not OK"
+    else
+        bad "$tag split-mkdir dest name"
+    fi
     out=$(g0_mgmt raft-unlink "$sp_ino" "$nm")
     say "$tag split-unlink hashed: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag split-unlink hashed not OK"
