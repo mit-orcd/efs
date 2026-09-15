@@ -466,6 +466,17 @@ int efs_client_stat_ino(efs_ino_t ino, struct efs_inode *out)
     return EFS_OK;
 }
 
+int efs_client_stat_refresh(efs_ino_t ino, struct efs_inode *out)
+{
+    if (!out || !ino)
+        return EFS_ERR_INVAL;
+    struct efs_inode rpc;
+    if (efs_client_rpc_getattr(g_client.export_id, ino, &rpc) != EFS_OK)
+        return EFS_ERR_NOT_FOUND;
+    efs_client_adopt_lookup(&rpc, out);
+    return EFS_OK;
+}
+
 /* Is a's mtime strictly older than b's? */
 static int inode_mtime_older(const struct efs_inode *a,
                              const struct efs_inode *b)
@@ -473,6 +484,56 @@ static int inode_mtime_older(const struct efs_inode *a,
     if (a->mtime != b->mtime)
         return a->mtime < b->mtime;
     return a->mtime_nsec < b->mtime_nsec;
+}
+
+int efs_client_stat_local(efs_ino_t ino, struct efs_inode *out)
+{
+    if (!out || !ino)
+        return EFS_ERR_INVAL;
+    efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
+    int rc = efs_export_get_inode(&g_client.export, ino, out);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(ino);
+    return rc == 0 ? EFS_OK : EFS_ERR_NOT_FOUND;
+}
+
+/* Writer: local size/pack is newer than the owner until REPORT.
+ * Peer remount stubs must not clobber GETATTR. more=1 for a walk
+ * intermediate (directories; no size overlay). */
+static void overlay_local_size(struct efs_inode *child, int more)
+{
+    int dirty = efs_client_ino_is_dirty(child->ino);
+    int want_local = dirty ||
+                     (!more && !efs_mode_is_dir(child->mode));
+    if (!want_local)
+        return;
+    efs_ino_t lk = child->parent ? child->parent : child->ino;
+    struct efs_inode local;
+    int have;
+    efs_client_lock_dir(lk);
+    pthread_mutex_lock(&g_client.idx_mu);
+    have = (efs_export_get_inode(&g_client.export, child->ino, &local) == 0);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(lk);
+    if (have && dirty) {
+        *child = local;
+    } else if (have && local.size > child->size &&
+               !inode_mtime_older(&local, child)) {
+        child->size = local.size;
+        child->pack_ino = local.pack_ino;
+        child->pack_off = local.pack_off;
+        child->pack_len = local.pack_len;
+    }
+}
+
+void efs_client_adopt_lookup(const struct efs_inode *rpc, struct efs_inode *out)
+{
+    if (!rpc || !out || rpc->ino == 0)
+        return;
+    *out = *rpc;
+    adopt_rpc_inode(rpc);
+    overlay_local_size(out, 0);
 }
 
 static int lookup_access_ok(const struct efs_inode *ino, uid_t uid, gid_t gid,
@@ -654,48 +715,7 @@ static int lookup_walk(const char *path, struct efs_inode *out, int do_x,
                 return EFS_ERR_ACCES;
         }
         adopt_rpc_inode(&child);
-        /* Writer: local size/pack is newer than the owner until REPORT.
-         * Peer remount stubs must not clobber GETATTR. */
-        {
-            int dirty = efs_client_ino_is_dirty(child.ino);
-            /* Intermediates are directories and carry no size worth
-             * overlaying, so only the leaf pays for the table read. */
-            int want_local = dirty ||
-                             (!more && !efs_mode_is_dir(child.mode));
-            if (want_local) {
-                /* Unlock the stripe we locked: the local row can carry a
-                 * different parent, and recomputing the key after child is
-                 * overwritten leaked the held stripe (the mount then wedged
-                 * behind the flush thread's lock_all_dirs). */
-                efs_ino_t lk = child.parent ? child.parent : child.ino;
-                struct efs_inode local;
-                int have;
-                efs_client_lock_dir(lk);
-                pthread_mutex_lock(&g_client.idx_mu);
-                have = (efs_export_get_inode(&g_client.export, child.ino,
-                                             &local) == 0);
-                pthread_mutex_unlock(&g_client.idx_mu);
-                efs_client_unlock_dir(lk);
-                if (have && dirty) {
-                    child = local;
-                } else if (have && local.size > child.size &&
-                           !inode_mtime_older(&local, &child)) {
-                    /* close() kicks REPORT without waiting for it, so the
-                     * owner's size is routinely behind this client's for a
-                     * file we just wrote -- and once the report completes
-                     * the inode is no longer dirty, so nothing above puts
-                     * the real size back. Take size/pack from the local row
-                     * but leave name/nlink/mode to the owner (Cut 4).
-                     * Gated on mtime so a peer still wins: SETATTR stamps
-                     * mtime=now, so a genuine truncate or extend is newer
-                     * here and the file is still allowed to shrink. */
-                    child.size = local.size;
-                    child.pack_ino = local.pack_ino;
-                    child.pack_off = local.pack_off;
-                    child.pack_len = local.pack_len;
-                }
-            }
-        }
+        overlay_local_size(&child, more);
         parent = child.ino;
         *out = child;
         rc = EFS_OK;
@@ -1100,12 +1120,13 @@ int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
         return rc;
     efs_client_lock_dir(parent);
     pthread_mutex_lock(&g_client.idx_mu);
-    /* Keep a nlink=0 ghost so an already-open fd can still get_inode. */
+    /* Keep a nlink=0 ghost so an already-open fd can still get_inode.
+     * Sharded unlink_name_ex now honors keep_last when the dentry slot is
+     * the canonical row (co-located file create). */ 
     efs_export_unlink_name_ex(&g_client.export, parent, name, is_dir ? 0 : 1);
-    /* Sharded unlink_name is dentry-only (no lock_all). Remaining hardlink
-     * rows keep the old nlink unless we nlink_dec the same way the server
-     * does — getattr is local after dual-apply (entry_timeout=0 still hits
-     * the snapshot). */
+    /* Remaining hardlink rows keep the old nlink unless we nlink_dec the
+     * same way the server does — getattr is local after dual-apply
+     * (entry_timeout=0 still hits the snapshot). */
     if (!is_dir && victim_ino)
         (void)efs_export_nlink_dec_ex(&g_client.export, victim_ino, NULL, 1);
     pthread_mutex_unlock(&g_client.idx_mu);

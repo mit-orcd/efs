@@ -151,8 +151,14 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
                           struct efs_inode *out);
 int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
                            struct efs_inode *out);
-/* RPC getattr + adopt, then prefer the local row (unflushed size). */
+/* Local-first getattr (open fd). RPC only on a table miss. */
 int efs_client_stat_ino(efs_ino_t ino, struct efs_inode *out);
+/* Path getattr: GETATTR RPC + adopt + overlay. Peer size/nlink growth. */
+int efs_client_stat_refresh(efs_ino_t ino, struct efs_inode *out);
+/* Local table only — no RPC. For parent-dir checks on a known nodeid. */
+int efs_client_stat_local(efs_ino_t ino, struct efs_inode *out);
+/* Adopt a LOOKUP/GETATTR reply and overlay this client's unflushed size. */
+void efs_client_adopt_lookup(const struct efs_inode *rpc, struct efs_inode *out);
 /* Readdir with the server's (src, name) resume cookie. */
 int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
                                struct efs_inode *ents, uint32_t *inout_count,

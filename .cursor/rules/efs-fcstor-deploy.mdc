@@ -20,9 +20,9 @@ DELETED from the tree (commits 94c4c15..f5c4390). Operationally:
   DELETED code — kept for history only.
 - Current scratch raft cluster: **port 19820**, fcstor003–006 (node ids
   1–4 = 172.16.223.57/.58/.59/.60), storage `/tmp/efs-raft-scratch`,
-  `--quota 1G --writers 0 --no-direct-io`. Kill ONLY via the
-  cmdline-grep loop (`grep -q 19820`) — bare `pkill -x efsd` hits any
-  other efsd on the same host. Start order: all 4 up, THEN
+  `--quota 1G --writers 0 --no-direct-io`. Kill by port
+  (`grep -q 19820` on the cmdline) — `pkill -x efsd` would also hit a
+  19810 instance if one is running. Start order: all 4 up, THEN
   `./efs-mgmt raft-mkfs 172.16.223.57:19820 efs-test`. Client: fcstor007
   `/tmp/efs-mount`, `EFS_TRANSPORT=tcp`.
   **Two traps bit Sep 13 (both cost an election-less CANDIDATE spin):**
@@ -41,9 +41,12 @@ DELETED from the tree (commits 94c4c15..f5c4390). Operationally:
   — the parens keep the backgrounded `cd && rm && setsid` list from
   holding the ssh channel open (else every start eats the 15 s
   wrapper timeout; harmless but slow).
-- The 19810 topology below is the OLD-engine cluster layout, kept for
-  reference; a redeploy of the current tree there follows the same raft
-  rules (all nodes up, then raft-mkfs).
+- **Old-engine 19810 cluster is gone (Sep 15 2026).** No on-disk
+  compatibility with the pre-step-11 snapshot/2PC table. NVMe
+  `/data1/01–06/efs` may be wiped and the current tree `raft-mkfs`'d
+  there (port 19810, `--quota 36T --direct-io`, same raft start order:
+  all 4 up, then mkfs). Do not try to load leftover `meta/` from the
+  old engine.
 
 **Never use Slurm for efs.** Build/test runs on the dedicated fcstor test
 environment, reached via the `efs-test-ssh` wrapper:
@@ -79,11 +82,17 @@ Use `tests/wipe_cluster.sh` from the login node, or do this by hand:
    then `mkdir -p` the dirs again (edelete removes the start dir too).
    Same for any big test-tree cleanup on these nodes.
 
+**Do not run `wipe_cluster.sh` / `clean_cluster.sh` while the 19820 scratch
+cluster is the live gate.** Those scripts `pkill -9 -x efsd` (every efsd)
+then wipe `/data1`. Kill 19820 only by port (`grep -q 19820` on the
+cmdline). The `/data1` wipe of Sep 15 already emptied the old-engine
+trees; a 19810 NVMe raft cluster is a later `raft-mkfs`, not automatic.
+
 Do not start `efs-fuse` until `mkfs` has finished. `rm -f /tmp/efs/fuse.log`
 before each mount — `rsync --exclude='*.log'` leaves the old log, and a
 1-second `cat` of it looks like another 232MB adopt.
 
-## Topology (current)
+## Topology (NVMe / port 19810 — current engine, after wipe+raft-mkfs)
 
 - 4 servers (`efsd`), port 19810, 6 NVMe paths each
   (`/data1/01/efs` … `/data1/06/efs`), `--quota 36T --direct-io`:
@@ -121,15 +130,31 @@ build dir / `make clean` immediately after. (Bit us Aug 27 2026.)
    (`./efs-mgmt status 172.16.223.57:19810`) before the next.
 
 ### Restart one efsd (server)
-`pkill -x efsd` — exact name; NEVER `pkill -f "efsd --node-id N"` (the pattern
-matches the ssh remote command and kills your own shell). Then:
-`cd /tmp/efs && setsid ./efsd --node-id N --addr 172.16.223.5X --port 19810 --storage /data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs --quota 36T --direct-io [--join 172.16.223.57:19810] >efsd.log 2>&1 </dev/null &`
+
+Kill **by port**. `pkill -x efsd` hits every efsd on the host (19820 scratch
+and a 19810 NVMe instance). NEVER `pkill -f "efsd --node-id N"` (matches
+the ssh remote command and kills your own shell).
+
+Scratch (current live gate):
+```
+ps -eo pid,args | awk '/[e]fsd / && / --port 19820( |$)/ {print $1}' | xargs -r kill -9
+cd /tmp/efs && setsid ./efsd --node-id N --addr 172.16.223.5X --port 19820 --storage /tmp/efs-raft-scratch --quota 1G --writers 0 --no-direct-io [--join 172.16.223.57:19820] >efsd.log 2>&1 </dev/null &
+```
+Nodes 2–4 need `--join` after a scratch wipe (membership lives under
+`/tmp/efs-raft-scratch`); restarts on unwiped storage do not.
+
+NVMe (port 19810, only after an explicit `raft-mkfs` on `/data1`):
+```
+ps -eo pid,args | awk '/[e]fsd / && / --port 19810( |$)/ {print $1}' | xargs -r kill -9
+cd /tmp/efs && setsid ./efsd --node-id N --addr 172.16.223.5X --port 19810 --storage /data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs --quota 36T --direct-io [--join 172.16.223.57:19810] >efsd.log 2>&1 </dev/null &
+```
 Use `setsid … </dev/null &` to detach; a bare `nohup … &` can hang the ssh session.
 
 ### Restart one efs-fuse (client)
 `killall -9 efs-fuse` first, then `timeout 3 fusermount3 -uz /tmp/efs-mount`,
-then `rm -f fuse.log` and:
-`cd /tmp/efs && setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &`
+then `rm -f fuse.log` and (scratch):
+`cd /tmp/efs && setsid ./efs-fuse 172.16.223.57:19820 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &`
+NVMe 19810: same, with `172.16.223.57:19810`.
 
 ## Build-ID gate
 

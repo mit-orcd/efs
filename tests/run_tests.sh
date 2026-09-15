@@ -137,9 +137,10 @@ ensure_mounted() { # host
         return 0
     fi
     say "  $h: mounting efs-fuse"
+    local seed=${EFS_SEED:-172.16.223.57:19810}
     ssh_to "$BUILD_SSH_SEC" "$h" "cd /tmp/efs && [ -x ./efs-fuse ] || make efs-fuse >/dev/null 2>&1; \
         mkdir -p /tmp/efs-mount; \
-        ($env setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &); \
+        ($env setsid ./efs-fuse $seed efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &); \
         for i in \$(seq 1 100); do sleep 0.15; \
             grep -q \"efs-fuse /tmp/efs-mount \" /proc/mounts || continue; \
             timeout 1 stat /tmp/efs-mount >/dev/null 2>&1 && exit 0; \
@@ -153,10 +154,11 @@ remount_client() { # host
     local env
     env=$(fuse_client_env)
     say "  $h: remount efs-fuse"
+    local seed=${EFS_SEED:-172.16.223.57:19810}
     ssh_to 15 "$h" "killall -9 efs-fuse 2>/dev/null || pkill -9 -x efs-fuse 2>/dev/null || true
         timeout 3 fusermount3 -uz /tmp/efs-mount 2>/dev/null || true
         cd /tmp/efs && mkdir -p /tmp/efs-mount && rm -f fuse.log
-        $env setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &
+        $env setsid ./efs-fuse $seed efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &
         for i in \$(seq 1 100); do
             sleep 0.15
             grep -q \"efs-fuse /tmp/efs-mount \" /proc/mounts || continue

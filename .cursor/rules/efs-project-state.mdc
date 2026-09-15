@@ -232,13 +232,13 @@ the "RDMA transport up" check moved after the workload (the upgrade is
 lazy — first pool checkout, not mount). Full gate PASS on fcstor003:
 13 unit + efsd + efs-fuse TCP + efsd/efs-fuse RDMA, all 0 definite /
 0 indirect / 0 uninit / 0 invalid.
-**Open follow-ups:** Step 12 Part A is CLOSED (`4437302`, bound
-`g_client.export` LRU, `EFS_CLIENT_META_MB=256`). Batched
-AppendEntries + outbox growth is CLOSED (this slice). Next is
-Step 12 Part B (low-level FUSE) when asked — then C (self-inval,
-timeouts stay 0), then D (direct-I/O + prefetch). Relaxed-coherence
-stays out of scope. Migrating a populated local range is still a
-single-group apply, not a txn.
+**Open follow-ups:** Step 12 Part A is CLOSED (`4437302`). Batched
+AppendEntries + outbox is CLOSED (`5f0a9ad`). Part B (low-level FUSE)
+is in tree (this slice) — remaining gates: unlink-storm 9×4000 +
+hardlink storm. Next is C (exact self-inval, timeouts stay 0), then D
+(direct-I/O + prefetch). Relaxed-coherence stays out of scope.
+Migrating a populated local range is still a single-group apply, not
+a txn.
 
 **BATCHED APPENDENTRIES + OUTBOX CLOSED (Sep 15).** Catch-up was
 one entry per AE. `send_ae` now packs up to `EFS_RAFT_AE_MAX=128`
@@ -255,7 +255,44 @@ posix jobs=1 **196/201** (`results/posix/20260915-ae/`): 4 walk
 15s timeouts (`dir_deep_nesting`, `dir_many_files`,
 `names_crazy_dirs`, `dir_deep_nesting_beyond_64`) +
 `concurrent_writes_disjoint` zeros flake. Isolated
-`dir_readdir_listing` PASS 2.6s. Do not start Part B until asked.
+`dir_readdir_listing` PASS 2.6s.
+
+**STEP 12 PART B — LOW-LEVEL FUSE (Sep 15, working tree).**
+`efs-fuse` uses `fuse_lowlevel_ops` / `fuse_session_loop_mt`
+(libfuse 3.10.2, `FUSE_USE_VERSION 32`). nodeid ↔ efs ino 1:1;
+timeouts stay **0**. Two correctness holes closed in the same
+cut: (1) sharded `unlink_name_ex` now honors `keep_last` (ghost
+nameless nlink=0 row) so unlink-open getattr does not adopt owner
+size 0 and `fuse_file_read_iter` empty-read; (2) path LOOKUP
+adopts the RPC row (`efs_client_adopt_lookup`); path getattr
+`efs_client_stat_refresh` (GETATTR+adopt+overlay); open-fd
+getattr stays local-first so a peer REPORT cannot invalidate an
+in-flight dcache. `run_tests.sh` remount/ensure_mounted honor
+`EFS_SEED` (default still `:19810`).
+**Gates (19820 scratch, TCP):** posix jobs=1 **196/201**
+(`results/posix/20260915-partb/suite-jobs1-refresh.tsv`) — 5×
+15s walk timeouts (`dir_deep_nesting` ×2, `dir_many_files`,
+`names_crazy_dirs`, `concurrent_write_and_readdir`); unlink-open
+3/3 isolated. posix2 **59/63**
+(`results/posix2/20260915-partb-refresh/`) — known
+`peer_concurrent_append` + `peer_fcntl_range_conflict`; two
+overlap-pwrite load flakes that pass isolated. Isolated
+`peer_shared_pwrite` / `peer_creat_excl_race` PASS. leaks
+**PASS** (`results/leaks/20260915-partb/`, 0 definite / 0
+indirect, 19820 pid unchanged). Unlink-storm + hardlink storm
+still owed. Do not start Part C until those two run. Do not
+`wipe_cluster.sh` / `pkill -x efsd` while 19820 is up.
+
+**OLD-ENGINE 19810 CLUSTER DESTROYED (Sep 15).** No snapshot/2PC
+on-disk compat. `/data1/01–06/efs` on fcstor003–006 renamed-aside +
+`edelete` (empty dirs left). Removed: Aug 19 crash binaries under
+`logs/`, `~/efs-bin-travel/` (Aug 18–19), `/tmp/efs-495` on
+003–006 (Sep 11 leftover tree still linking `meta_server.c`).
+19820 scratch (`/tmp/efs-raft-scratch`) was left running; clients
+007/008 stay mounted on `:19820`. Do **not** `wipe_cluster.sh` /
+`pkill -x efsd` while 19820 is up. Do **not** auto `raft-mkfs` a
+36T 19810 cluster until asked. `/tmp/efs` on the nodes is the
+current tree — keep it.
 
 **`.FIND` READDIR WALK CLOSED (Sep 11 night, working tree).** POSIX
 `virt_find_query` returned empty because `find_index_build_locked`
@@ -680,10 +717,10 @@ serialized table); inode RPCs route by the compiled-in shard→group→voter map
 (odd shards→group 0 = nodes 1-3, even→group 2 = nodes 2-4) to any voter and
 follow the host's `primary_id` bounce. **Scratch cluster: port 19820, storage
 `/tmp/efs-raft-scratch`, fcstor003–006, `--quota 1G --writers 0
---no-direct-io`; restarts MUST keep `EFS_MD_RAFT=1`. Kill ONLY via the
-cmdline-grep loop (`grep -q 19820`) — bare `pkill -x efsd` hits the LIVE
-19810 cluster on the same hosts.** Client: fcstor007 `/tmp/efs-mount` with
-`EFS_MD_RAFT=1 EFS_TRANSPORT=tcp`.
+--no-direct-io`.** Kill by port (`grep -q 19820`). The old-engine 19810
+NVMe cluster is gone (Sep 15 2026) — no snapshot/2PC on-disk compat;
+19810 is free for a current-tree `raft-mkfs` on `/data1`. Client:
+fcstor007 `/tmp/efs-mount`, `EFS_TRANSPORT=tcp`.
 Fixes in the same commit, all found by the first real gate: (1) **monotonic
 raft boot id via `boot.bin`** — pid^time can go backwards and the peer boot
 fence then silently drops every reply from the restarted node (replication

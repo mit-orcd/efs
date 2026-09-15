@@ -13,6 +13,13 @@
 #      returns in ms instead of blocking on edelete of millions of chunks
 #   4. a detached background edelete reclaims the _delete dirs (never rm -rf)
 #
+# WARNING: step 2 is `pkill -9 -x efsd` — that kills EVERY efsd on
+# fcstor003–006, including the 19820 scratch cluster
+# (`/tmp/efs-raft-scratch`). Do not run this while 19820 is the live
+# gate unless you intend to take it down. A /data1-only wipe (old-engine
+# leftovers) is a rename-aside + edelete of /data1/$d/efs without
+# touching efsd.
+#
 # Run from the login node. Does not mkfs or restart — do that after.
 set -eu
 SSH="${EFS_SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"

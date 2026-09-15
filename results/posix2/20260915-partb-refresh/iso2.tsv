@@ -1,0 +1,7 @@
+# posix-2client isolated host_a=fcstor007.ib host_b=fcstor008.ib parent=posix-2c-partb-iso2-1789489178 2026-09-15T17:37:53Z
+test	result	detail
+peer_shared_pwrite	PASS	
+peer_overlap_pwrite_partial	PASS	
+peer_overlap_pwrite_chunk_straddle	PASS	
+peer_creat_excl_race	PASS	
+# summary pass=4 fail=0 skip=0 total=4

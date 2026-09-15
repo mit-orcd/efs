@@ -2710,14 +2710,41 @@ int efs_export_unlink_name_ex(struct efs_export *ex, efs_ino_t parent,
         rollup_sub_under(ptab, parent, &removed);
         child_idx_del(dtab, parent, pos);
         parent_touch(ptab, parent);
+        /* Last-link + keep_last: if this dentry slot is the canonical inode
+         * row (file create co-locates them), converting it to a nameless
+         * ghost keeps size/chunks for an already-open fd. Removing it made
+         * getattr miss locally, RPC-adopt the owner's still-0 size, and
+         * fuse_file_read_iter (attr_timeout=0) zero kernel i_size → EOF.
+         * A hardlink dentry on a different table is dropped here; the
+         * caller's nlink_dec_ex ghosts the child table. */
+        if (nlink == 0 && keep_last) {
+            struct efs_export *ctab = efs_export_table_for_ino(ex, ino);
+            if (!ctab || ctab == dtab) {
+                char nm[EFS_MAX_NAME];
+                struct efs_inode_mem *row = inode_at(dtab, pos);
+                memset(nm, 0, sizeof(nm));
+                if (row)
+                    strncpy(nm, inamep(dtab, row), EFS_MAX_NAME - 1);
+                name_idx_del(dtab, parent, nm);
+                dentry_bytes_sub(dtab, nm);
+                if (row) {
+                    row->nlink = 0;
+                    inode_set_name(dtab, row, "");
+                    row->parent = 0;
+                }
+                dtab->shard_dirty = 1;
+                if (ptab != dtab)
+                    ptab->shard_dirty = 1;
+                return EFS_OK;
+            }
+        }
         remove_inode_slot(dtab, pos, nlink > 0);
         dtab->shard_dirty = 1;
         if (ptab != dtab)
             ptab->shard_dirty = 1;
 
-        /* Parent dentry only. Child nlink / last-link drop is the handler's
-         * UNLINK_SHARD (or local nlink_dec) — walking every loaded tab here
-         * requires lock_all. */
+        /* Parent dentry only when the canonical row lives elsewhere.
+         * Child nlink / last-link drop is the caller's nlink_dec_ex. */
         return EFS_OK;
     }
     if (strcmp(name, EFS_STATS_NAME) == 0)
