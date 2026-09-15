@@ -1392,6 +1392,23 @@ static int efs_close_note(efs_ino_t ino)
     return last;
 }
 
+/* Client-cache design Part A, pin rule 2: a ghost (nlink=0) row is
+ * evictable only once no fd has it open. */
+int efs_client_ino_is_open(efs_ino_t ino)
+{
+    struct efs_open_ref *r;
+    int open = 0;
+
+    pthread_mutex_lock(&g_open_mu);
+    for (r = g_open_refs; r; r = r->next)
+        if (r->ino == ino) {
+            open = 1;
+            break;
+        }
+    pthread_mutex_unlock(&g_open_mu);
+    return open;
+}
+
 static int efs_fuse_open(const char *path, struct fuse_file_info *fi)
 {
     struct efs_inode parent;
@@ -2500,24 +2517,16 @@ static int efs_fuse_statfs(const char *path, struct statvfs *stbuf)
     pthread_mutex_lock(&g_client.lock);
 
     /* Report physical truth: sum server-reported per-node disk usage and
-     * divide out the 2+1 amplification. Summing inode size fields is wrong
-     * here twice over: sparse files under-report, and torn meta pages left
-     * reachable rows with inflated sizes (a 75 TiB phantom on a 2 TiB
-     * cluster). node.used is refreshed at discovery; slightly stale is
-     * still truthful. */
+     * divide out the 2+1 amplification. node.used is refreshed at
+     * discovery; slightly stale is still truthful. There is deliberately
+     * NO fallback that sums the staging table's size fields: post
+     * client-cache Part A the table is a bounded cache, so a scan is both
+     * O(cache) on a statfs hot path and wrong (evicted rows are invisible).
+     * No servers reported yet => used reads 0, which is truthful. */
     uint64_t phys = 0;
     for (uint32_t i = 0; i < g_client.node_count; i++)
         phys += g_client.nodes[i].used;
     uint64_t used_logical = (phys * 2) / 3;
-    if (used_logical == 0) {
-        for (uint64_t i = 0; i < g_client.export.inode_count; i++) {
-            struct efs_inode_mem *ino = efs_export_inode_at(&g_client.export, i);
-            if (!ino)
-                continue;
-            if (!efs_mode_is_dir(ino->mode))
-                used_logical += ino->size;
-        }
-    }
 
     uint64_t min_quota = 0;
     for (uint32_t i = 0; i < g_client.node_count; i++) {
@@ -2540,19 +2549,16 @@ static int efs_fuse_statfs(const char *path, struct statvfs *stbuf)
     stbuf->f_blocks = total_logical / 512;
     stbuf->f_bfree = avail / 512;
     stbuf->f_bavail = avail / 512;
-    uint32_t ino_pg = 0, ch_pg = 0;
-    efs_export_meta_page_usage(&g_client.export, &ino_pg, &ch_pg);
-    uint64_t ino_room = 0;
-    if (ino_pg < EFS_META_INO_PAGE_MAX) {
-        uint64_t bytes_left = (uint64_t)(EFS_META_INO_PAGE_MAX - ino_pg) *
-                              EFS_META_PAGE_SIZE;
-        ino_room = bytes_left / EFS_INODE_ROW_SIZE;
-    }
-    stbuf->f_files = g_client.export.inode_count + ino_room;
-    stbuf->f_ffree = ino_room;
-    stbuf->f_favail = ino_room;
+    /* Inode counts: the old engine derived these from the local table and
+     * the EFSM page cap — both are gone (the local table is now a bounded
+     * cache, and the Raft+KV engine has no page cap). QUERY_STATS carries
+     * no file count post-step-11, so report the architecture's 2^32-object
+     * design target as a constant rather than a misleading cache-derived
+     * number. */
+    stbuf->f_files = 1ULL << 32;
+    stbuf->f_ffree = 1ULL << 32;
+    stbuf->f_favail = 1ULL << 32;
     stbuf->f_namemax = 255; /* NAME_MAX; EFS_MAX_NAME is 256 with NUL */
-    (void)ch_pg;
 
     pthread_mutex_unlock(&g_client.lock);
     return 0;
@@ -2865,9 +2871,15 @@ static int efs_fuse_release(const char *path, struct fuse_file_info *fi)
      * durability is the flush path. */
     (void)path;
     efs_client_note_meta_change(0);
-    if (fi && fi->fh && efs_close_note((efs_ino_t)fi->fh))
+    if (fi && fi->fh && efs_close_note((efs_ino_t)fi->fh)) {
         (void)efs_client_rpc_hold(g_client.export_id, (efs_ino_t)fi->fh, 0,
                                   g_client.flock_token);
+        /* Last close: if the staged row is a ghost (unlinked while open),
+         * it can never be re-fetched by name — reclaim it now instead of
+         * waiting for LRU pressure (client-cache design Part A). No-op for
+         * a live row. */
+        efs_client_stage_evict_ino((efs_ino_t)fi->fh);
+    }
     return 0;
 }
 
@@ -3072,6 +3084,22 @@ struct efs_plock {
 
 static pthread_mutex_t g_plock_mu = PTHREAD_MUTEX_INITIALIZER;
 static struct efs_plock *g_plocks;
+
+/* Client-cache design Part A, pin rule 3: a row with live byte-range lock
+ * records is unevictable (a lock owner's later unlock must find the row). */
+int efs_client_ino_has_plock(efs_ino_t ino)
+{
+    int has = 0;
+
+    pthread_mutex_lock(&g_plock_mu);
+    for (struct efs_plock *p = g_plocks; p; p = p->next)
+        if (p->ino == ino) {
+            has = 1;
+            break;
+        }
+    pthread_mutex_unlock(&g_plock_mu);
+    return has;
+}
 
 static off_t plock_end(const struct flock *fl)
 {
@@ -3319,6 +3347,10 @@ static void *efs_fuse_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
         if (v > 0 && v < 1000000)
             batch = (uint32_t)v;
     }
+    /* The evictor thread starts inside efs_client_enable_meta_batch; give it
+     * the FUSE-layer pin providers first (open fd / byte-range lock). */
+    efs_client_stage_set_pin_hooks(efs_client_ino_is_open,
+                                   efs_client_ino_has_plock);
     efs_client_enable_meta_batch(batch);
     efs_fuse_note_serving();
     return NULL;
@@ -3629,26 +3661,19 @@ int main(int argc, char **argv)
     printf("export id=%u name=%s\n", g_client.export_id,
            g_client.export.name[0] ? g_client.export.name : g_client.export_name);
     {
+        /* Post-step-11 there is no bootstrap table fetch: the staging table
+         * starts empty and fills on demand (client-cache Part A bounds it
+         * to EFS_CLIENT_META_MB). Print cache occupancy, not a table scan. */
         struct efs_inode root;
         int rrc = efs_export_get_inode(&g_client.export, EFS_ROOT_INO, &root);
-        uint64_t z = 0, ones = 0;
-        for (uint64_t i = 0; i < g_client.export.inode_count; i++) {
-            const struct efs_inode_mem *row =
-                efs_export_inode_at(&g_client.export, i);
-            efs_ino_t n = row ? row->ino : 0;
-            if (n == 0)
-                z++;
-            else if (n == EFS_ROOT_INO)
-                ones++;
-        }
-        printf("meta ready gen=%llu ver=%u inodes=%llu chunks=%llu "
-               "root_get=%d mode=%o ino0=%llu ino1=%llu\n",
+        printf("meta ready gen=%llu ver=%u staged_rows=%llu staged_chunks=%llu "
+               "staged_bytes=%llu root_get=%d mode=%o\n",
                (unsigned long long)g_client.export.root.generation,
                g_client.export.root.version,
                (unsigned long long)g_client.export.inode_count,
-               (unsigned long long)g_client.export.chunk_count, rrc,
-               rrc == 0 ? root.mode : 0,
-               (unsigned long long)z, (unsigned long long)ones);
+               (unsigned long long)g_client.export.chunk_count,
+               (unsigned long long)efs_export_staged_bytes(&g_client.export),
+               rrc, rrc == 0 ? root.mode : 0);
     }
     fflush(stdout);
     /* The server is the sole metadata writer: no client write lease, no

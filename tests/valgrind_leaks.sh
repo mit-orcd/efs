@@ -65,7 +65,7 @@ VG="valgrind --leak-check=full --show-leak-kinds=definite,indirect,possible"
 # functional, not leaks, and this gate only parses valgrind logs.
 UNIT_TESTS="test_kv test_kv_lsm test_raft test_raft_store test_meta_apply \
             test_txn test_session test_sim test_wire test_data \
-            test_erasure test_placement test_lock"
+            test_erasure test_placement test_lock test_stage_evict"
 
 # RDMA phase needs an RDMA-capable local IP (loopback has no ibdev, so the
 # upgrade would silently fall back to TCP and exercise nothing). Auto-detect

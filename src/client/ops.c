@@ -169,14 +169,17 @@ void efs_client_table_unlock(void)
 
 int efs_client_ensure_meta_room(uint64_t extra_inodes, uint64_t extra_chunks)
 {
+    (void)extra_inodes;
+    (void)extra_chunks;
     if (g_client.write_readonly) {
         g_client.last_err = EFS_ERR_BUSY;
         return EFS_ERR_BUSY;
     }
-    if (!efs_export_fits_page_cap(&g_client.export, extra_inodes, extra_chunks)) {
-        g_client.last_err = EFS_ERR_QUOTA;
-        return EFS_ERR_QUOTA;
-    }
+    /* The staging table is a bounded cache, not the capacity limit: quota
+     * is enforced server-side. If the last evictor pass saw the table over
+     * EFS_CLIENT_META_MB this nudges it to run now instead of at the next
+     * 1 s tick; it is a no-op when the table is under the cap. */
+    efs_client_stage_evict_kick();
     return EFS_OK;
 }
 
@@ -186,10 +189,12 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
 {
     efs_client_lock_dir(lock_ino);
     pthread_mutex_lock(&g_client.idx_mu);
-    for (uint32_t i = 0; i < n; i++)
+    for (uint32_t i = 0; i < n; i++) {
         (void)efs_export_set_chunk(&g_client.export, recs[i].ino,
                                    recs[i].chunk_index, recs[i].nodes,
                                    recs[i].checksums);
+        efs_client_stage_touch(recs[i].ino);
+    }
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(lock_ino);
 }
@@ -329,6 +334,7 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
 {
     if (!rpc || rpc->ino == 0)
         return;
+    efs_client_stage_touch(rpc->ino);
     int is_new = 0;
     int take_remote = 0;
     efs_ino_t lock = rpc->parent ? rpc->parent : rpc->ino;
@@ -755,13 +761,16 @@ efs_ino_t efs_client_create_ex(efs_ino_t parent, const char *name, uint32_t mode
             efs_export_upsert_inode(ptab, &out);
     }
     efs_export_set_mtime(&g_client.export, parent, now());
-    pthread_mutex_unlock(&g_client.idx_mu);
-    efs_client_unlock_dir(parent);
-    /* So same-client dest-stat (rsync -c) serves the just-created row
-     * instead of LOOKUP_PATH. Peers never mark this ino dirty. */
+    efs_client_stage_touch(out.ino);
+    /* Mark dirty BEFORE dropping the locks: the staging-table evictor runs
+     * under the same table lock, so staging + dirty-mark must be one atomic
+     * hold — otherwise the row could be evicted in the gap and the later
+     * REPORT would skip the missing row (its size/chunk recs never reach
+     * the server). Peers never mark this ino dirty. */
     efs_client_mark_ino_dirty(out.ino);
     efs_client_mark_ino_dirty(parent);
-    efs_client_note_created(out.ino);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(parent);
     return out.ino;
 }
 
@@ -821,6 +830,7 @@ static int setattr_rpc_dual_apply(efs_ino_t ino, uint32_t mask, uint32_t mode,
     }
     if (mask & EFS_SETATTR_ATIME)
         efs_export_set_atime(&g_client.export, ino, atime);
+    efs_client_stage_touch(ino);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
     return EFS_OK;
@@ -989,6 +999,7 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
         efs_export_drop_chunks_from(&g_client.export, ino, drop);
     }
     efs_export_upsert_inode(&g_client.export, &out);
+    efs_client_stage_touch(ino);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
     return EFS_OK;
@@ -1024,6 +1035,7 @@ int efs_client_rename(efs_ino_t ino, efs_ino_t new_parent, const char *new_name)
      * table lacks the inode (created elsewhere). */
     if (efs_export_rename(&g_client.export, ino, new_parent, new_name) != EFS_OK)
         efs_export_upsert_inode(&g_client.export, &out);
+    efs_client_stage_touch(ino);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dirs2(ino, new_parent);
     efs_client_mark_ino_dirty(ino);
@@ -1046,6 +1058,7 @@ int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_na
                              new_parent, new_name) != EFS_OK &&
         efs_export_rename(&g_client.export, ino, new_parent, new_name) != EFS_OK)
         efs_export_upsert_inode(&g_client.export, &out);
+    efs_client_stage_touch(ino);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dirs2(ino, new_parent);
     efs_client_mark_ino_dirty(ino);
@@ -1119,6 +1132,7 @@ int efs_client_link(efs_ino_t src_ino, efs_ino_t new_parent, const char *new_nam
      * Fall back to upsert only if the local table lacks the inode. */
     if (efs_export_link(&g_client.export, src_ino, new_parent, new_name) != EFS_OK)
         efs_export_upsert_inode(&g_client.export, &out);
+    efs_client_stage_touch(src_ino);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dirs2(src_ino, new_parent);
     return EFS_OK;

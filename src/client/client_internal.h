@@ -110,10 +110,6 @@ struct efs_client {
  * No-ops when meta_batch is disabled. Takes dirty_mu internally. */
 void efs_client_mark_ino_dirty(efs_ino_t ino);
 int efs_client_ino_is_dirty(efs_ino_t ino);
-void efs_client_note_created(efs_ino_t ino);
-int efs_client_ino_is_created(efs_ino_t ino);
-/* 1 if this client created `ino` within the last max_ns (monotonic). */
-int efs_client_ino_created_recent(efs_ino_t ino, uint64_t max_ns);
 /* Explicit utimens: data-path mtime bumps and REPORT echoes must not
  * put "now" back over a user-set (possibly older) mtime. */
 void efs_client_mtime_pin(efs_ino_t ino);
@@ -121,6 +117,29 @@ void efs_client_mtime_unpin(efs_ino_t ino);
 int efs_client_mtime_is_pinned(efs_ino_t ino);
 void efs_client_mark_chunk_dirty(efs_ino_t ino, uint32_t chunk_index);
 int efs_client_ensure_meta_room(uint64_t extra_inodes, uint64_t extra_chunks);
+
+/* Staging-table eviction (client-cache design Part A): the evictor thread
+ * bounds g_client.export to EFS_CLIENT_META_MB (default 256) by dropping
+ * clean, closed, unreported rows + chunk recs (LRU by last touch). */
+void efs_client_stage_evict_start(void);
+void efs_client_stage_evict_stop(void);
+/* Register the FUSE-layer pin providers (open fd, byte-range lock) before
+ * the evictor thread starts. stage_evict.c is linked into non-FUSE binaries,
+ * so it must not reference efs_fuse.c symbols directly. */
+void efs_client_stage_set_pin_hooks(int (*is_open)(efs_ino_t),
+                                    int (*has_plock)(efs_ino_t));
+void efs_client_stage_evict_kick(void);
+/* Targeted drop of one ino (ghost reclaim at last close). Takes the table
+ * locks itself; safe to call from any FUSE handler. */
+void efs_client_stage_evict_ino(efs_ino_t ino);
+/* LRU touch — takes the leaf LRU lock internally (safe under the table
+ * locks). Call when a row is staged or used. */
+void efs_client_stage_touch(efs_ino_t ino);
+/* Pin queries used by the evictor (also usable elsewhere). */
+int efs_client_ino_is_dirty_locked(efs_ino_t ino); /* caller holds dirty_mu */
+int efs_client_ino_is_open(efs_ino_t ino);
+int efs_client_ino_has_plock(efs_ino_t ino);
+int efs_dcache_ino_pinned(efs_ino_t ino);
 int efs_client_rpc_lookup(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, struct efs_inode *out);
 int efs_client_rpc_lookup_path(efs_export_id_t export_id, efs_ino_t start,

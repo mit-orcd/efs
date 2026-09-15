@@ -811,17 +811,23 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
     efs_client_lock_dir(ino);
     pthread_mutex_lock(&g_client.idx_mu);
     struct efs_inode inode;
-    if (efs_export_get_inode(&g_client.export, ino, &inode) != 0) {
-        pthread_mutex_unlock(&g_client.idx_mu);
-        efs_client_unlock_dir(ino);
-        /* Missing row (unlink-open ghost, bits>0 stub): dcache already
-         * tried for a single-chunk request. Do not EIO an open fd. */
-        *out_len = 0;
-        return EFS_OK;
-    }
-    uint64_t file_size = inode.size;
+    int have_row = (efs_export_get_inode(&g_client.export, ino, &inode) == 0);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
+    if (!have_row) {
+        /* Row miss on an open fd: the staging-table evictor (client-cache
+         * design Part A) may have dropped a clean row — refetch from the
+         * owner before concluding anything (stat_ino does the getattr RPC
+         * + adopt + copy-out). A genuine unlink-open ghost fails the RPC
+         * and falls through to the old EOF behavior: dcache already tried
+         * for a single-chunk request; do not EIO an open fd. */
+        if (efs_client_stat_ino(ino, &inode) != EFS_OK) {
+            *out_len = 0;
+            return EFS_OK;
+        }
+    }
+    efs_client_stage_touch(ino);
+    uint64_t file_size = inode.size;
 
     if (offset >= file_size) {
         /* Size not yet reflected (dentry stub / unlink-open ghost): still

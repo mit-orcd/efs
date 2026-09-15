@@ -169,134 +169,18 @@ int efs_client_ino_is_dirty(efs_ino_t ino)
     if (!ino)
         return 0;
     pthread_mutex_lock(&g_client.dirty_mu);
-    int hit = dirty_set_has(g_client.dirty_ino_keys, g_client.dirty_ino_mask,
-                            ino) ||
-              dirty_set_has(pub_ino_keys, pub_ino_mask, ino);
+    int hit = efs_client_ino_is_dirty_locked(ino);
     pthread_mutex_unlock(&g_client.dirty_mu);
     return hit;
 }
 
-/* Inodes this client created (mkdir/create). REPORT does not clear this —
- * dest-stat ENOENT under our mkdir tree stays local for the whole rsync. */
-static uint64_t *created_keys;
-static uint64_t *created_at; /* CLOCK_MONOTONIC ns, parallel to keys */
-static uint64_t created_mask;
-static uint64_t created_count;
-
-static uint64_t created_mono_ns(void)
+/* Caller holds g_client.dirty_mu. Used by the staging-table evictor, whose
+ * eviction commit already holds dirty_mu (client-cache design Part A). */
+int efs_client_ino_is_dirty_locked(efs_ino_t ino)
 {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
-}
-
-static int created_set_ensure(uint64_t count)
-{
-    if (created_keys && count * 2 <= created_mask + 1)
-        return 0;
-    uint64_t old_mask = created_mask;
-    uint64_t *old_keys = created_keys;
-    uint64_t *old_at = created_at;
-    uint64_t cap = 16;
-    while (cap < (count ? count * 4 : 16))
-        cap *= 2;
-    uint64_t *nk = calloc(cap, sizeof(uint64_t));
-    uint64_t *na = calloc(cap, sizeof(uint64_t));
-    if (!nk || !na) {
-        free(nk);
-        free(na);
-        return -1;
-    }
-    created_keys = nk;
-    created_at = na;
-    created_mask = cap - 1;
-    if (old_keys) {
-        for (uint64_t i = 0; i <= old_mask; i++) {
-            uint64_t k = old_keys[i];
-            if (!k)
-                continue;
-            uint64_t j = k & created_mask;
-            while (created_keys[j] != 0)
-                j = (j + 1) & created_mask;
-            created_keys[j] = k;
-            created_at[j] = old_at ? old_at[i] : 0;
-        }
-        free(old_keys);
-        free(old_at);
-    }
-    return 0;
-}
-
-void efs_client_note_created(efs_ino_t ino)
-{
-    if (!ino)
-        return;
-    uint64_t now = created_mono_ns();
-    pthread_mutex_lock(&g_client.dirty_mu);
-    if (created_set_ensure(created_count + 1) == 0 && created_keys) {
-        uint64_t key = (uint64_t)ino;
-        uint64_t i = key & created_mask;
-        for (uint64_t n = 0; n <= created_mask; n++) {
-            if (created_keys[i] == 0) {
-                created_keys[i] = key;
-                created_at[i] = now;
-                created_count++;
-                break;
-            }
-            if (created_keys[i] == key) {
-                created_at[i] = now;
-                break;
-            }
-            i = (i + 1) & created_mask;
-        }
-    }
-    pthread_mutex_unlock(&g_client.dirty_mu);
-}
-
-int efs_client_ino_is_created(efs_ino_t ino)
-{
-    if (!ino || !created_keys || !created_mask)
-        return 0;
-    pthread_mutex_lock(&g_client.dirty_mu);
-    uint64_t mask = created_mask;
-    uint64_t *keys = created_keys;
-    int hit = 0;
-    if (keys && mask) {
-        uint64_t i = (uint64_t)ino & mask;
-        for (uint64_t n = 0; n <= mask; n++) {
-            if (keys[i] == 0)
-                break;
-            if (keys[i] == (uint64_t)ino) {
-                hit = 1;
-                break;
-            }
-            i = (i + 1) & mask;
-        }
-    }
-    pthread_mutex_unlock(&g_client.dirty_mu);
-    return hit;
-}
-
-int efs_client_ino_created_recent(efs_ino_t ino, uint64_t max_ns)
-{
-    if (!ino || !created_keys || !created_mask || !created_at || !max_ns)
-        return 0;
-    uint64_t now = created_mono_ns();
-    pthread_mutex_lock(&g_client.dirty_mu);
-    uint64_t i = (uint64_t)ino & created_mask;
-    int hit = 0;
-    for (uint64_t n = 0; n <= created_mask; n++) {
-        if (created_keys[i] == 0)
-            break;
-        if (created_keys[i] == (uint64_t)ino) {
-            uint64_t at = created_at[i];
-            hit = (now >= at && (now - at) < max_ns);
-            break;
-        }
-        i = (i + 1) & created_mask;
-    }
-    pthread_mutex_unlock(&g_client.dirty_mu);
-    return hit;
+    return dirty_set_has(g_client.dirty_ino_keys, g_client.dirty_ino_mask,
+                         ino) ||
+           dirty_set_has(pub_ino_keys, pub_ino_mask, ino);
 }
 
 #define MTIME_PIN_MAX 256
@@ -736,6 +620,9 @@ void efs_client_enable_meta_batch(uint32_t every_n_ops)
                            NULL) == 0)
             g_client.meta_flush_started = 1;
     }
+
+    /* Bound the staging table (client-cache design Part A). */
+    efs_client_stage_evict_start();
 }
 
 
@@ -1437,11 +1324,162 @@ struct dcache_ent {
     uint32_t len;
     int dirty;
     int have_base; /* 1 = data[] is a complete chunk; 0 = sparse patches */
+    /* 1 = this slot holds a pin on its ino in g_dcache_pins (set at the
+     * clean→dirty transition, cleared when the slot's data is published
+     * or dropped). Guards against double-count on re-dirty. */
+    int pin_held;
     uint8_t nrange;
     uint32_t roff[DCACHE_NR];
     uint32_t rlen[DCACHE_NR];
     struct dcache_ent *next;
 };
+
+/* Per-ino count of dcache slots holding unreported data — the "unreported
+ * data" eviction pin (client-cache design Part A, pin rule 1's dcache
+ * half). A slot pins from its clean→dirty transition until its PUT lands
+ * (dcache_put_now then marks the ino dirty, so the dirty-set pin takes
+ * over until the REPORT) or the slot is dropped. Without this, a same-size
+ * overwrite (dirty dcache data, ino NOT in the dirty set) left the staged
+ * row evictable: the row's loss then lost the flush's set_chunk/size
+ * update and mis-truncated efs_dcache_flush_ino to ci=0.
+ * Open-addressing, power-of-two, 0 = empty, backward-shift delete.
+ * ALL table accesses hold g_dcache_pin_mu; add/release are called with
+ * the slot's dcache_mu already held (lock order: dcache_mu → pin_mu;
+ * nothing takes them in reverse). */
+static uint64_t *g_dcache_pin_keys;   /* ino */
+static uint32_t *g_dcache_pin_counts; /* live slots */
+static uint64_t g_dcache_pin_mask;
+static uint64_t g_dcache_pin_count;
+static pthread_mutex_t g_dcache_pin_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static int dcache_pin_ensure(uint64_t need)
+{
+    if (g_dcache_pin_keys && need * 2 <= g_dcache_pin_mask + 1)
+        return 0;
+    uint64_t old_mask = g_dcache_pin_mask;
+    uint64_t *old_keys = g_dcache_pin_keys;
+    uint32_t *old_counts = g_dcache_pin_counts;
+    uint64_t cap = g_dcache_pin_mask ? g_dcache_pin_mask + 1 : 1024;
+    while (cap < need * 4)
+        cap *= 2;
+    uint64_t *nk = calloc(cap, sizeof(*nk));
+    uint32_t *nc = calloc(cap, sizeof(*nc));
+    if (!nk || !nc) {
+        free(nk);
+        free(nc);
+        return -1;
+    }
+    g_dcache_pin_keys = nk;
+    g_dcache_pin_counts = nc;
+    g_dcache_pin_mask = cap - 1;
+    if (old_keys) {
+        for (uint64_t i = 0; i <= old_mask; i++) {
+            uint64_t k = old_keys[i];
+            if (!k)
+                continue;
+            uint64_t j = k & g_dcache_pin_mask;
+            while (g_dcache_pin_keys[j])
+                j = (j + 1) & g_dcache_pin_mask;
+            g_dcache_pin_keys[j] = k;
+            g_dcache_pin_counts[j] = old_counts[i];
+        }
+        free(old_keys);
+        free(old_counts);
+    }
+    return 0;
+}
+
+/* Caller holds the slot's dcache_mu; takes pin_mu internally. Best-effort:
+ * a failed grow drops the pin (the row may then be evicted under a dirty
+ * dcache slot — a bounded-cache miss, never corruption of data already on
+ * the servers). */
+static void dcache_pin_add(struct dcache_ent *e)
+{
+    if (e->pin_held || !e->ino)
+        return;
+    pthread_mutex_lock(&g_dcache_pin_mu);
+    if (dcache_pin_ensure(g_dcache_pin_count + 1) == 0) {
+        uint64_t i = (uint64_t)e->ino & g_dcache_pin_mask;
+        while (g_dcache_pin_keys[i] && g_dcache_pin_keys[i] != (uint64_t)e->ino)
+            i = (i + 1) & g_dcache_pin_mask;
+        if (!g_dcache_pin_keys[i]) {
+            g_dcache_pin_keys[i] = (uint64_t)e->ino;
+            g_dcache_pin_count++;
+        }
+        g_dcache_pin_counts[i]++;
+        e->pin_held = 1;
+    }
+    pthread_mutex_unlock(&g_dcache_pin_mu);
+}
+
+/* Caller holds the slot's dcache_mu; takes pin_mu internally. */
+static void dcache_pin_release(struct dcache_ent *e)
+{
+    if (!e->pin_held)
+        return;
+    e->pin_held = 0;
+    pthread_mutex_lock(&g_dcache_pin_mu);
+    if (!g_dcache_pin_keys)
+        goto out;
+    uint64_t i = (uint64_t)e->ino & g_dcache_pin_mask;
+    for (uint64_t n = 0; n <= g_dcache_pin_mask; n++) {
+        uint64_t k = g_dcache_pin_keys[i];
+        if (!k)
+            goto out;
+        if (k != (uint64_t)e->ino) {
+            i = (i + 1) & g_dcache_pin_mask;
+            continue;
+        }
+        if (--g_dcache_pin_counts[i] == 0) {
+            /* Backward-shift delete: clear slot i, then rehome any key in
+             * the following run whose ideal slot is not in (i, j]. */
+            g_dcache_pin_keys[i] = 0;
+            g_dcache_pin_count--;
+            uint64_t j = (i + 1) & g_dcache_pin_mask;
+            while (g_dcache_pin_keys[j]) {
+                uint64_t h = g_dcache_pin_keys[j] & g_dcache_pin_mask;
+                /* h is in the cyclic interval (i, j] iff moving j's key
+                 * into i would cross its home — then it must stay. */
+                int in_gap = (i < j) ? (h > i && h <= j)
+                                     : (h > i || h <= j);
+                if (!in_gap) {
+                    g_dcache_pin_keys[i] = g_dcache_pin_keys[j];
+                    g_dcache_pin_counts[i] = g_dcache_pin_counts[j];
+                    g_dcache_pin_keys[j] = 0;
+                    i = j;
+                }
+                j = (j + 1) & g_dcache_pin_mask;
+            }
+        }
+        goto out;
+    }
+out:
+    pthread_mutex_unlock(&g_dcache_pin_mu);
+}
+
+/* Evictor query: 1 if any dcache slot pins this ino. */
+int efs_dcache_ino_pinned(efs_ino_t ino)
+{
+    if (!ino)
+        return 0;
+    pthread_mutex_lock(&g_dcache_pin_mu);
+    int pinned = 0;
+    if (g_dcache_pin_keys) {
+        uint64_t i = (uint64_t)ino & g_dcache_pin_mask;
+        for (uint64_t n = 0; n <= g_dcache_pin_mask; n++) {
+            uint64_t k = g_dcache_pin_keys[i];
+            if (!k)
+                break;
+            if (k == (uint64_t)ino) {
+                pinned = g_dcache_pin_counts[i] > 0;
+                break;
+            }
+            i = (i + 1) & g_dcache_pin_mask;
+        }
+    }
+    pthread_mutex_unlock(&g_dcache_pin_mu);
+    return pinned;
+}
 static struct {
     pthread_mutex_t shard[DCACHE_SHARDS];
     /* Serializes the network base-read + PUT phase of a flush per shard.
@@ -1671,9 +1709,12 @@ static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)
         }
         if (head->dirty && head->len)
             dcache_note_dirty_bytes(-(int64_t)head->len);
+        dcache_pin_release(head);
         efs_buf_free(head->data, head->len);
         if (head->next) {
             struct dcache_ent *n = head->next;
+            /* n's pin (if any) travels with the copy into the head slot;
+             * head's own pin was released above. */
             *head = *n;
             free(n);
         } else {
@@ -1689,6 +1730,7 @@ static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)
                 break;
             if (e->dirty && e->len)
                 dcache_note_dirty_bytes(-(int64_t)e->len);
+            dcache_pin_release(e);
             prev->next = e->next;
             efs_buf_free(e->data, e->len);
             free(e);
@@ -1761,6 +1803,7 @@ static int dcache_patch(efs_ino_t ino, uint32_t ci, uint32_t off, const uint8_t 
              * (the in-flight PUT has not set the mapping), and builds a zeroed
              * have_base=1 entry that overwrites the in-flight data. */
             e->dirty = 1;
+            dcache_pin_add(e); /* already held mid-flush; keeps dirty ⟹ pinned */
             dcache_note_dirty_bytes((int64_t)e->len);
         }
         dcache_add_range(e, off, len);
@@ -1941,6 +1984,7 @@ static int dcache_fill(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
     e->dirty = 1;
     e->have_base = 1;
     e->nrange = 0;
+    dcache_pin_add(e);
     if (!was_dirty)
         dcache_note_dirty_bytes((int64_t)chunk_size);
     return 0;
@@ -1961,6 +2005,7 @@ static int dcache_take(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
     e->dirty = 1;
     e->have_base = 1;
     e->nrange = 0;
+    dcache_pin_add(e);
     if (!was_dirty)
         dcache_note_dirty_bytes((int64_t)chunk_size);
     return 0;
@@ -2158,6 +2203,10 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             continue;
         }
         if (!e->dirty && e->ino == ino && e->ci == ci) {
+            /* Published: dcache_put_now marked the ino dirty, so the
+             * dirty-set pin covers the row until the REPORT. Release the
+             * dcache pin, then free the slot. */
+            dcache_pin_release(e);
             efs_buf_free(e->data, e->len);
             e->data = NULL;
             e->len = 0;

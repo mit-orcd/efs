@@ -57,6 +57,8 @@ static int inode_set_name(struct efs_export *ex, struct efs_inode_mem *p,
                           const char *name);
 static uint32_t slab_of_row(const struct efs_export *ex,
                             const struct efs_inode_mem *p);
+static void remove_inode_slot(struct efs_export *ex, uint64_t i,
+                              int expect_survivor);
 
 static int slab_names_grow(struct efs_ino_slab *sl, uint32_t need)
 {
@@ -2106,6 +2108,49 @@ static void remove_chunks_for_ino(struct efs_export *ex, efs_ino_t ino)
     efs_export_drop_chunks_from(ex, ino, 0);
 }
 
+/* Remove every row for ino from ONE table (no rollup/nlink bookkeeping —
+ * this is cache eviction, not an unlink). A create dual-apply stages a
+ * dentry stub on the parent's tab plus the full row on the ino's tab, and
+ * hardlinks add one row per link, so loop until the ino index no longer
+ * maps the ino here. */
+static void forget_ino_on_tab(struct efs_export *ex, efs_ino_t ino)
+{
+    if (!ex || !ex->ino_keys)
+        return;
+    for (;;) {
+        uint64_t pos = 0;
+        if (efs_export_inode_slot(ex, ino, &pos) != EFS_OK)
+            break;
+        if (pos >= ex->inode_count)
+            break;
+        struct efs_inode_mem *row = inode_at(ex, pos);
+        if (!row || row->ino != ino)
+            break;
+        /* nlink > 1 hints another link row may share this ino on this tab;
+         * remove_inode_slot then re-indexes a survivor (or drops the key).
+         * nlink <= 1 takes the O(1) idx_del path. */
+        int expect_survivor = row->nlink > 1;
+        child_idx_del(ex, row->parent, pos);
+        remove_inode_slot(ex, pos, expect_survivor);
+    }
+}
+
+void efs_export_forget_ino(struct efs_export *ex, efs_ino_t ino)
+{
+    if (!ex || !ino)
+        return;
+    /* Chunk recs first: drop_chunks_scan fans across the main table and
+     * every loaded shard tab with an icnt fast-path miss. */
+    efs_export_drop_chunks_from(ex, ino, 0);
+    forget_ino_on_tab(ex, ino);
+    if (export_is_sharded_root(ex) && ex->shard_tabs) {
+        for (uint32_t s = 1; s < ex->shard_tab_cap; s++) {
+            if (ex->shard_tabs[s])
+                forget_ino_on_tab(ex->shard_tabs[s], ino);
+        }
+    }
+}
+
 void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
                                  uint32_t first_chunk)
 {
@@ -3927,20 +3972,122 @@ static void dentry_bytes_recompute(struct efs_export *ex)
     ex->dentry_bytes = n;
 }
 
-int efs_export_fits_page_cap(const struct efs_export *ex, uint64_t extra_inodes,
-                             uint64_t extra_chunks)
+/* Approximate resident bytes of ONE table's cache structures (slab rows,
+ * per-slab name arenas, chunk array, open-addressing indexes, child vecs).
+ * Used by the client staging-table cap — an occupancy estimate, not a
+ * serialization number. Caller holds the relevant locks. */
+static uint64_t export_staged_bytes_one(const struct efs_export *ex)
 {
     if (!ex)
         return 0;
-    uint64_t cc = ex->chunk_count + extra_chunks;
-    if (page_count_u64(cc * (uint64_t)EFS_CHUNK_WIRE_SIZE) > EFS_META_CHUNK_PAGE_MAX)
-        return 0;
-    /* Adding chunks does not grow the inode region — skip name accounting. */
-    if (extra_inodes == 0)
-        return 1;
-    uint64_t ic = ex->inode_count + extra_inodes;
-    return page_count_u64(efs_meta_ino_region_bytes(ic)) <=
-           EFS_META_INO_PAGE_MAX;
+    uint64_t b = 0;
+    if (ex->ino_slabs) {
+        for (uint32_t i = 0; i < ex->ino_slab_n; i++) {
+            const struct efs_ino_slab *sl = &ex->ino_slabs[i];
+            if (sl->rows)
+                b += (uint64_t)EFS_INO_SLAB_ROWS * EFS_INODE_ROW_SIZE;
+            b += sl->names_cap;
+        }
+        b += (uint64_t)ex->ino_slab_n * sizeof(struct efs_ino_slab);
+    } else if (ex->inodes) {
+        b += ex->inode_capacity * sizeof(struct efs_inode_mem);
+    }
+    b += ex->chunk_capacity * sizeof(struct efs_chunk_entry);
+    if (ex->ino_keys)
+        b += (ex->ino_mask + 1) * 2 * sizeof(uint64_t);
+    if (ex->name_keys)
+        b += (ex->name_mask + 1) * 2 * sizeof(uint64_t);
+    if (ex->chunk_keys)
+        b += (ex->chunk_mask + 1) * 2 * sizeof(uint64_t);
+    if (ex->icnt_keys)
+        b += (ex->icnt_mask + 1) * (sizeof(uint64_t) + sizeof(uint32_t));
+    if (ex->child_keys)
+        b += (ex->child_mask + 1) * 2 * sizeof(uint64_t);
+    b += ex->child_vec_cap * sizeof(struct efs_child_vec);
+    for (uint64_t i = 0; i < ex->child_vec_count; i++)
+        b += ex->child_vecs[i].cap * sizeof(uint64_t);
+    return b;
+}
+
+/* Total staged bytes over the main table and every loaded shard tab. */
+uint64_t efs_export_staged_bytes(const struct efs_export *ex)
+{
+    uint64_t b = export_staged_bytes_one(ex);
+    if (ex && ex->shard_tabs) {
+        for (uint32_t s = 1; s < ex->shard_tab_cap; s++)
+            if (ex->shard_tabs[s])
+                b += export_staged_bytes_one(ex->shard_tabs[s]);
+    }
+    return b;
+}
+
+/* Reclaim one tab's over-capacity after mass removal (client staging-cache
+ * evictor). Live rows are a dense prefix [0, inode_count) (remove_inode_slot
+ * swap-removes), so slabs at/above ceil(count/ROWS) hold only stale bytes.
+ * Hash indexes and the chunk array only ever GROW otherwise — without this
+ * the RSS floor is the walk's high-water mark, not the cap. */
+static void compact_one_tab(struct efs_export *ex)
+{
+    if (!ex)
+        return;
+    /* 1. Free tail slabs above the live prefix. */
+    if (ex->ino_slabs) {
+        uint64_t need = (ex->inode_count + EFS_INO_SLAB_ROWS - 1) /
+                        EFS_INO_SLAB_ROWS;
+        if (ex->ino_slab_n > need) {
+            for (uint64_t si = need; si < ex->ino_slab_n; si++) {
+                free(ex->ino_slabs[si].rows);
+                free(ex->ino_slabs[si].names);
+            }
+            if (need == 0) {
+                free(ex->ino_slabs);
+                ex->ino_slabs = NULL;
+                ex->ino_slab_n = 0;
+            } else {
+                /* Shrink the slab array; on realloc failure keep the old
+                 * (larger) block — ino_slab_n bounds every access. */
+                struct efs_ino_slab *ns =
+                    realloc(ex->ino_slabs, need * sizeof(*ns));
+                if (ns)
+                    ex->ino_slabs = ns;
+                ex->ino_slab_n = (uint32_t)need;
+            }
+            ex->inode_capacity = (uint64_t)ex->ino_slab_n * EFS_INO_SLAB_ROWS;
+        }
+    }
+    /* 2. Shrink the chunk array when less than 1/4 full. */
+    if (ex->chunks && ex->chunk_capacity > 64 &&
+        ex->chunk_count * 4 < ex->chunk_capacity) {
+        uint64_t nc = ex->chunk_count * 2;
+        if (nc < 64)
+            nc = 64;
+        struct efs_chunk_entry *ncv =
+            realloc(ex->chunks, nc * sizeof(*ncv));
+        if (ncv) {
+            ex->chunks = ncv;
+            ex->chunk_capacity = nc;
+        }
+    }
+    /* 3. Rebuild hash indexes whose load factor dropped under 25%.
+     * export_reindex_inodes rebuilds ino + name; export_reindex_chunks
+     * rebuilds chunk + icnt. Hints key off count/capacity, both already
+     * shrunk above. */
+    if (ex->ino_keys && ex->inode_count * 4 < ex->ino_mask + 1)
+        (void)export_reindex_inodes(ex);
+    if (ex->chunk_keys && ex->chunk_count * 4 < ex->chunk_mask + 1)
+        (void)export_reindex_chunks(ex);
+}
+
+void efs_export_compact(struct efs_export *ex)
+{
+    if (!ex)
+        return;
+    compact_one_tab(ex);
+    if (ex->shard_tabs) {
+        for (uint32_t s = 1; s < ex->shard_tab_cap; s++)
+            if (ex->shard_tabs[s])
+                compact_one_tab(ex->shard_tabs[s]);
+    }
 }
 
 void efs_export_meta_page_usage(const struct efs_export *ex,

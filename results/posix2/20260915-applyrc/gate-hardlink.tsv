@@ -1,0 +1,10 @@
+# gate-only 2026-09-15 apply-rc
+# posix-2client host_a=fcstor007.ib host_b=fcstor008.ib mnt=/tmp/efs-mount 2026-09-15T11:00:36Z
+test	result	detail
+peer_concurrent_hardlink	FAIL	FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-2c-007-008-applyrc15/peer_concurrent_hardlink/f' -> '/tmp/efs-mount/posix-2c-007-008-applyrc15/peer_concurrent_hardlink/a'
+# summary pass=0 fail=1 skip=0 total=1 dur=0.8
+
+# posix-2client host_a=fcstor007.ib host_b=fcstor008.ib mnt=/tmp/efs-mount 2026-09-15T11:00:38Z
+test	result	detail
+peer_concurrent_unlink_hardlinks	FAIL	OSError: [Errno 5] Input/output error
+# summary pass=0 fail=1 skip=0 total=1 dur=1.9

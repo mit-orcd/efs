@@ -374,9 +374,6 @@ static inline size_t efs_meta_dent_off(uint32_t efsm_version, uint64_t inode_cou
     return off;
 }
 
-/* True if adding extra inode/chunk rows would exceed the v5 page caps. */
-int efs_export_fits_page_cap(const struct efs_export *ex, uint64_t extra_inodes,
-                             uint64_t extra_chunks);
 /* Inode/chunk page counts for the current table (v6 compact accounting). */
 void efs_export_meta_page_usage(const struct efs_export *ex,
                                 uint32_t *ino_pages, uint32_t *chunk_pages);
@@ -419,9 +416,6 @@ struct efs_export *efs_export_table_for_ino(struct efs_export *ex, efs_ino_t ino
 struct efs_export *efs_export_table(struct efs_export *ex, uint32_t shard);
 /* Existing shard table only — does not allocate. shard 0 / bits=0 → ex. */
 struct efs_export *efs_export_shard_tab(struct efs_export *ex, uint32_t shard);
-/* Blocker 2: pre-create every shard table so op/read paths never lazy-create
- * under a single shard lock. Caller holds the global lock or all shard locks. */
-int efs_export_precreate_shards(struct efs_export *ex);
 /* Kept for callers; does not instantiate extra-shard tables (descriptors
  * stay on the v8 root; the owner catchup loads a shard on demand). */
 void efs_export_install_extra_roots(struct efs_export *ex);
@@ -511,6 +505,26 @@ void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
 /* Same scan on one already-locked table (not every loaded shard tab). */
 void efs_export_drop_chunks_table(struct efs_export *tab, efs_ino_t ino,
                                   uint32_t first_chunk);
+
+/* Cache eviction (client staging table): drop every staged trace of ino —
+ * chunk recs across all loaded tabs, then the inode row(s). A create
+ * dual-apply stages a dentry stub on the parent's tab plus the full row on
+ * the ino's tab, and hardlinks add one row per link, so every loaded tab is
+ * probed. No rollup/nlink bookkeeping: this is a cache drop, not an unlink
+ * (staged .stats rollups are approximate by design). Everything evicted is
+ * re-fetchable from the server (getattr/GETCHUNKS/LOOKUP). Caller holds the
+ * table locks. */
+void efs_export_forget_ino(struct efs_export *ex, efs_ino_t ino);
+
+/* Approximate resident bytes of the staging cache: slab rows, name arenas,
+ * chunk array, indexes, child vectors — main table + loaded shard tabs.
+ * Client-cap accounting (EFS_CLIENT_META_MB); not a serialization number. */
+uint64_t efs_export_staged_bytes(const struct efs_export *ex);
+
+/* Reclaim index/array/slab over-capacity after mass eviction (client staging
+ * cache). Frees empty tail slabs, shrinks the chunk array, rebuilds sparse
+ * hash indexes. Caller holds the table locks; not a hot-path op. */
+void efs_export_compact(struct efs_export *ex);
 
 /* Set inode mode bits, preserving the file type. */
 int efs_export_set_mode(struct efs_export *ex, efs_ino_t ino, uint32_t mode);
