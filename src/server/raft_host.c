@@ -115,12 +115,29 @@ struct host_outbox {
     uint64_t st_get_max_us;
 };
 
+/* Apply-result ring slots per group. Power of 2. Must exceed the most
+ * applies that can land inside one host_propose_wait window (the wait
+ * deadline is ~400 ms and each apply is a KV WAL fsync, ~200 us, so the
+ * real ceiling is ~2000; 8192 is 4x that). 96 KB per group. */
+#define HOST_APPLY_RC_RING 8192
+#define HOST_APPLY_RC_MASK (HOST_APPLY_RC_RING - 1)
+
 struct host_group {
     uint8_t group;
     uint8_t hosted;
     uint32_t voters;
     uint64_t applied_saved;
     struct efs_raft *r;
+    struct efs_raft_host *host; /* back-pointer, set in attach_group */
+    /* Apply-result ring: (index, rc) of the last HOST_APPLY_RC_RING applied
+     * entries, written by host_apply under h->mu BEFORE the raft core bumps
+     * last_applied. Lets host_propose_wait return the apply layer's verdict
+     * (a rejected txn PREP: intent-conflict BUSY / version STALE) instead of
+     * only "the index applied". Without it a lost conflict looked like
+     * success and a cross-shard txn committed with a partial intent set —
+     * the peer_concurrent_hardlink nlink lost-update. */
+    uint64_t arc_idx[HOST_APPLY_RC_RING];
+    int32_t arc_rc[HOST_APPLY_RC_RING];
     /* EFS_RAFT_OBS: last logged term/role, for election-churn timing. */
     uint64_t obs_term;
     int obs_role;
@@ -205,6 +222,11 @@ struct efs_raft_host {
     uint64_t obs_apply_cycle_us; /* cumulative apply time, current cycle */
     uint64_t obs_apply_cnt;      /* applies in the current cycle */
     uint64_t obs_apply_max_cnt;  /* most applies in one cycle */
+    /* Apply-result ring reads that found the slot overwritten/never written
+     * (noop/cfg entry, or >HOST_APPLY_RC_RING applies in one wait window).
+     * The waiter then returns EFS_OK — the pre-fix behavior — so a nonzero
+     * sustained value means the ring is too small, not a correctness bug. */
+    uint64_t obs_arc_miss;
 };
 
 static struct efs_raft_host *g_host;
@@ -1161,7 +1183,10 @@ static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
-/* Same encoding as sim_txn_apply. Apply never stalls the log. */
+/* Same encoding as sim_txn_apply. Returns the apply layer's real verdict
+ * (a rejected PREP is intent-conflict BUSY / version STALE); host_apply
+ * records it in the group ring and is what keeps txn apply from stalling
+ * the log. */
 static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                          uint32_t clen)
 {
@@ -1253,8 +1278,7 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     default:
         return EFS_OK;
     }
-    (void)rc;
-    return EFS_OK;
+    return rc;
 }
 
 static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
@@ -1263,9 +1287,10 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
 static int host_apply(void *app, uint64_t index, uint64_t term,
                       const uint8_t *cmd, uint32_t clen)
 {
-    struct efs_raft_host *h = app;
+    struct host_group *g = app;
+    struct efs_raft_host *h = g->host;
     uint64_t a0 = 0;
-    int rc;
+    int rc, ret;
 
     (void)term;
     if (!h || !h->kv || !cmd || clen == 0)
@@ -1273,11 +1298,24 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     if (raft_obs_on())
         a0 = now_us_();
     rc = host_apply_dispatch(h, index, cmd, clen);
+    /* Record the apply verdict BEFORE the raft core bumps last_applied, so a
+     * waiter that observes applied >= index always finds the slot. The pump
+     * holds h->mu across apply_committed, and host_propose_wait reads the
+     * ring under h->mu, so this is race-free. */
+    g->arc_idx[index & HOST_APPLY_RC_MASK] = index;
+    g->arc_rc[index & HOST_APPLY_RC_MASK] = rc;
+    /* Txn apply never stalls the log: a conflict verdict rides the ring to
+     * the proposer, it is not a raft-core error. Other cmds keep their
+     * historic return (halt-on-error for the few that can fail). */
+    ret = (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
+           cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP)
+              ? EFS_OK
+              : rc;
     if (a0) {
         h->obs_apply_cnt++;
         h->obs_apply_cycle_us += now_us_() - a0;
     }
-    return rc;
+    return ret;
 }
 
 static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
@@ -1685,6 +1723,26 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
     return EFS_OK;
 }
 
+/* h->mu held. The apply layer's verdict for log index idx, read from the
+ * group's apply-result ring. EFS_OK when the slot was never written or was
+ * already overwritten (a noop/cfg entry, or more than HOST_APPLY_RC_RING
+ * applies inside one wait window — counted in obs_arc_miss). */
+static int host_apply_rc_locked(struct efs_raft_host *h, uint8_t group,
+                                uint64_t idx)
+{
+    struct host_group *g = group_slot(h, group);
+    uint64_t s;
+
+    if (!g)
+        return EFS_OK; /* not hosted: the leader's submit reply carried it */
+    s = idx & HOST_APPLY_RC_MASK;
+    if (g->arc_idx[s] != idx) {
+        h->obs_arc_miss++;
+        return EFS_OK;
+    }
+    return g->arc_rc[s];
+}
+
 static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
                              const uint8_t *cmd, uint32_t clen, int *hint)
 {
@@ -1694,7 +1752,20 @@ static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
     rc = host_propose(h, group, cmd, clen, &idx, hint);
     if (rc != EFS_OK)
         return rc;
-    return host_wait_applied(h, group, idx, hint);
+    rc = host_wait_applied(h, group, idx, hint);
+    if (rc != EFS_OK)
+        return rc;
+    /* The index applied; the apply layer's verdict rides the per-group ring.
+     * A rejected txn PREP (intent-conflict BUSY / version STALE) must reach
+     * the proposer — before this, host_wait_applied only proved the index
+     * applied, so a lost conflict looked like success and a cross-shard txn
+     * committed with a partial intent set (the nlink lost-update). A
+     * forwarded command never reaches here with a conflict: host_propose's
+     * forward branch returns the leader's submit reply rc directly. */
+    pthread_mutex_lock(&h->mu);
+    rc = host_apply_rc_locked(h, group, idx);
+    pthread_mutex_unlock(&h->mu);
+    return rc;
 }
 
 static int host_inode_rpc_peer(struct efs_raft_host *h, int rid, uint8_t req_type,
@@ -2744,11 +2815,13 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
                     : 0ull,
                 (unsigned long long)(tx->st_get_max_us / 1000ull));
     }
-    if (any || h->obs_wait_timeouts || h->obs_pump_hold_max_us) {
+    if (any || h->obs_wait_timeouts || h->obs_pump_hold_max_us ||
+        h->obs_arc_miss) {
         fprintf(stderr,
                 "raft-obs: wait_timeouts=%llu pump_hold_max=%lluus "
                 "lock_wait_max=%lluus drain_max=%lluus tick_max=%lluus "
-                "apply_max=%lluus persist_max=%lluus applies_in_worst=%llu\n",
+                "apply_max=%lluus persist_max=%lluus applies_in_worst=%llu "
+                "arc_miss=%llu\n",
                 (unsigned long long)h->obs_wait_timeouts,
                 (unsigned long long)h->obs_pump_hold_max_us,
                 (unsigned long long)h->obs_wait_max_us,
@@ -2756,7 +2829,8 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
                 (unsigned long long)h->obs_tick_max_us,
                 (unsigned long long)h->obs_apply_max_us,
                 (unsigned long long)h->obs_persist_max_us,
-                (unsigned long long)h->obs_apply_max_cnt);
+                (unsigned long long)h->obs_apply_max_cnt,
+                (unsigned long long)h->obs_arc_miss);
         h->obs_pump_hold_max_us = 0;
         h->obs_wait_max_us = 0;
         h->obs_drain_max_us = 0;
@@ -2933,8 +3007,11 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
 
     h->g[gi].group = group;
     h->g[gi].voters = voters;
+    h->g[gi].host = h;
     h->g[gi].hosted = (uint8_t)hosts_group(h->raft_id, voters);
     h->g[gi].r = NULL;
+    memset(h->g[gi].arc_idx, 0, sizeof(h->g[gi].arc_idx));
+    memset(h->g[gi].arc_rc, 0, sizeof(h->g[gi].arc_rc));
     if (!h->g[gi].hosted)
         return EFS_OK;
     st = efs_raft_disk_group(h->disk, group);
@@ -2957,7 +3034,7 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
     cfg.send = host_send;
     cfg.net = h;
     cfg.apply = host_apply;
-    cfg.app = h;
+    cfg.app = &h->g[gi]; /* per-group: host_apply records into g->arc_* */
     h->g[gi].r = efs_raft_new(&cfg);
     if (!h->g[gi].r)
         return EFS_ERR_NOMEM;
