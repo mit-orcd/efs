@@ -29,20 +29,15 @@ struct app {
 static int send_now(void *net, const struct efs_raft_msg *msg)
 {
     struct net *n = net;
-    uint8_t copy[256];
-    struct efs_raft_msg m = *msg;
 
     if (n->drop[msg->to])
         return EFS_OK;
     if (msg->to < 0 || msg->to >= n->n || !n->r[msg->to])
         return EFS_ERR_INVAL;
-    if (m.nentries && m.entries[0].clen) {
-        if (m.entries[0].clen > sizeof(copy))
-            return EFS_ERR_NOMEM;
-        memcpy(copy, m.entries[0].cmd, m.entries[0].clen);
-        m.entries[0].cmd = copy;
-    }
-    return efs_raft_recv(n->r[msg->to], &m);
+    /* Synchronous delivery: the sender's entry buffers stay valid for the
+     * whole recv and recv copies each entry into the log store, so no
+     * detach copy is needed (this also covers batched multi-entry AEs). */
+    return efs_raft_recv(n->r[msg->to], msg);
 }
 
 static int apply_cmd(void *app, uint64_t index, uint64_t term, const uint8_t *cmd,
@@ -473,6 +468,61 @@ static void test_stale_boot_id(void)
     free_n(&n, st, 3);
 }
 
+/* A partitioned follower falls 200 entries behind; after it is reachable
+ * again a handful of leader ticks must close the gap. That only happens
+ * if send_ae batches (one-entry-per-AE would need 200 RTTs). */
+static void test_ae_batch_catchup(void)
+{
+    struct net n = { .n = 3 };
+    struct efs_raft_store *st[3];
+    struct app app[3];
+    struct efs_raft_cfg cfg;
+    int i, lid, fol, other;
+    uint64_t last = 0;
+
+    memset(app, 0, sizeof(app));
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.n = 3;
+    cfg.send = send_now;
+    cfg.net = &n;
+    cfg.apply = apply_cmd;
+    for (i = 0; i < 3; i++) {
+        st[i] = efs_raft_mem_create();
+        cfg.id = i;
+        cfg.store = st[i];
+        cfg.store_ctx = st[i];
+        cfg.election_ticks = (uint32_t)(4 + i * 4);
+        cfg.heartbeat_ticks = 1;
+        cfg.app = &app[i];
+        n.r[i] = efs_raft_new(&cfg);
+    }
+    CHECK(elect(&n, 20) == 1, "elect");
+    lid = leader_id(&n);
+    CHECK(lid >= 0, "leader");
+    fol = (lid + 1) % 3;
+    other = (lid + 2) % 3;
+    n.drop[fol] = 1;
+    for (i = 0; i < 200; i++) {
+        uint8_t cmd = (uint8_t)i;
+        uint64_t idx = 0;
+        CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK, "propose");
+        last = idx;
+        CHECK(efs_raft_tick(n.r[lid]) == EFS_OK, "ltick");
+        CHECK(efs_raft_tick(n.r[other]) == EFS_OK, "otick");
+    }
+    CHECK(efs_raft_commit(n.r[lid]) >= last, "quorum committed 200");
+    CHECK(efs_raft_applied(n.r[fol]) + 50 < last, "follower is behind");
+    n.drop[fol] = 0;
+    /* Leader heartbeats only: send_now delivers the AE batch (and the
+     * success path immediately sends the next batch) without the
+     * follower needing to tick. */
+    for (i = 0; i < 4; i++)
+        CHECK(efs_raft_tick(n.r[lid]) == EFS_OK, "catch tick");
+    CHECK(efs_raft_applied(n.r[fol]) >= last, "batched AE caught up");
+    CHECK(efs_raft_commit(n.r[fol]) >= last, "follower commit");
+    free_n(&n, st, 3);
+}
+
 int main(void)
 {
     test_election_i1();
@@ -482,6 +532,7 @@ int main(void)
     test_grow_3_to_5();
     test_i18_joint_quorum();
     test_stale_boot_id();
+    test_ae_batch_catchup();
     if (failures) {
         fprintf(stderr, "test_raft: %d failure(s)\n", failures);
         return 1;

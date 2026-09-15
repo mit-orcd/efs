@@ -46,6 +46,17 @@ struct efs_raft_entry {
     const uint8_t *cmd;
 };
 
+/* AppendEntries batching: a leader catching up a behind follower used to
+ * send ONE log entry per AE, so recovery from a multi-thousand-entry lag
+ * needed that many synchronous round-trips (~9 entries/s observed when the
+ * follower was busy) — the follower never caught up under load and the
+ * steady heartbeat/commit/ReadIndex broadcasts then filled its outbox and
+ * dropped, trapping it. send_ae now batches up to EFS_RAFT_AE_MAX entries
+ * (byte-capped at EFS_RAFT_AE_BYTES) per AE so a lagging follower recovers
+ * in a few round-trips. */
+#define EFS_RAFT_AE_MAX   128u             /* max entries per AppendEntries */
+#define EFS_RAFT_AE_BYTES (1024u * 1024u)  /* max cmd bytes per AE batch */
+
 struct efs_raft_msg {
     uint8_t type;
     uint8_t group;
@@ -62,7 +73,7 @@ struct efs_raft_msg {
     uint64_t match_index;
     int success;
     uint32_t nentries;
-    struct efs_raft_entry entries[1]; /* at most one payload per RPC */
+    struct efs_raft_entry entries[EFS_RAFT_AE_MAX]; /* batched AE payloads */
 };
 
 struct efs_raft_store {

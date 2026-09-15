@@ -232,17 +232,30 @@ the "RDMA transport up" check moved after the workload (the upgrade is
 lazy — first pool checkout, not mount). Full gate PASS on fcstor003:
 13 unit + efsd + efs-fuse TCP + efsd/efs-fuse RDMA, all 0 definite /
 0 indirect / 0 uninit / 0 invalid.
-**Open follow-ups:** (1) client local staging
-table (g_client.export) shrink is post-step-11 client-cache design /
-spec step 12. (Data-plane GC, cross-dir LOCAL rename, `.find` READDIR
-walk, HASHED rename, HASHED unlink/rmdir, HASHED dest LINK, HASHED
-dest-dir overwrite, SPLITTING dest CREATE+READDIR, SPLITTING dest
-UNLINK/RMDIR, SPLITTING dest LINK, SPLITTING dest RENAME, and
-HASHED/SPLITTING dest MKDIR are CLOSED; see below.) The
-SPLITTING/HASHED dest series is COMPLETE — every dest op (CREATE,
-READDIR, UNLINK/RMDIR, LINK, RENAME, MKDIR) writes hashed. Migrating
-a populated local range is still a single-group apply, not a txn.
-Do not start step 12 until asked.
+**Open follow-ups:** Step 12 Part A is CLOSED (`4437302`, bound
+`g_client.export` LRU, `EFS_CLIENT_META_MB=256`). Batched
+AppendEntries + outbox growth is CLOSED (this slice). Next is
+Step 12 Part B (low-level FUSE) when asked — then C (self-inval,
+timeouts stay 0), then D (direct-I/O + prefetch). Relaxed-coherence
+stays out of scope. Migrating a populated local range is still a
+single-group apply, not a txn.
+
+**BATCHED APPENDENTRIES + OUTBOX CLOSED (Sep 15).** Catch-up was
+one entry per AE. `send_ae` now packs up to `EFS_RAFT_AE_MAX=128`
+entries / `EFS_RAFT_AE_BYTES=1MiB`; `on_ae_req` appends the batch;
+a reject jumps `next_index = match_index+1`. Host outbox
+`HOST_OUTBOX_MAX` 256→2048; `host_send` heap-encodes when the
+stack buffer is too small. Wire nentries 0..AE_MAX; decode packs
+cmds into `cmd_buf`. Sim pack/unpack matches. Unit
+`test_ae_batch_catchup` (drop follower, 200 proposes, 4 ticks).
+**Gates (19820 scratch, TCP, keep storage):** `test_raft` / `test_wire`
+/ `test_sim` / `test_txn` OK. Live: kill fcstor005, create while
+down, restart — applied 22123→22241 in one poll (CATCHUP_OK).
+posix jobs=1 **196/201** (`results/posix/20260915-ae/`): 4 walk
+15s timeouts (`dir_deep_nesting`, `dir_many_files`,
+`names_crazy_dirs`, `dir_deep_nesting_beyond_64`) +
+`concurrent_writes_disjoint` zeros flake. Isolated
+`dir_readdir_listing` PASS 2.6s. Do not start Part B until asked.
 
 **`.FIND` READDIR WALK CLOSED (Sep 11 night, working tree).** POSIX
 `virt_find_query` returned empty because `find_index_build_locked`

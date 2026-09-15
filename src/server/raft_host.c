@@ -43,8 +43,14 @@
 #define HOST_SEND_IO_MS    250
 #define HOST_INBOX_MAX     256
 /* Per-peer outbound queue cap. Full -> drop newest: a dropped packet is
- * indistinguishable from loss, which Raft retries through. */
-#define HOST_OUTBOX_MAX    256
+ * indistinguishable from loss, which Raft retries through. Bumped 256 ->
+ * 2048: the synchronous sender drains at the raft-message RTT (~1-4 ms),
+ * so a slow peer backs the queue up and 256 dropped under the steady
+ * heartbeat/commit/ReadIndex broadcast (observed hi=256 + drops, which
+ * put fcstor005 thousands of entries behind). Batched catch-up
+ * (EFS_RAFT_AE_MAX) is the real fix; this is headroom so a transient slow
+ * phase doesn't drop. */
+#define HOST_OUTBOX_MAX    2048
 #define HOST_ENCODE_STACK  (64 * 1024)
 #define HOST_NGROUPS       2
 #define HOST_READ_TRIES    80 /* 80 × 5 ms = 400 ms; heartbeat is 50 ms */
@@ -445,8 +451,10 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
         return EFS_OK;
     rc = efs_wire_raft_encode(msg, buf, cap, &len);
     if (rc == EFS_ERR_NOMEM) {
-        cap = EFS_WIRE_RAFT_HDR_LEN + 12u +
-              (msg->nentries ? msg->entries[0].clen : 0);
+        uint32_t i;
+        cap = EFS_WIRE_RAFT_HDR_LEN;
+        for (i = 0; i < msg->nentries; i++)
+            cap += 12u + msg->entries[i].clen;
         heap = malloc(cap);
         if (!heap)
             return EFS_OK;
@@ -2665,8 +2673,10 @@ static void drain_inbox(struct efs_raft_host *h)
         struct efs_raft *r;
         int rc;
 
-        if (local[i].len > EFS_WIRE_RAFT_HDR_LEN + 12u)
-            cmd_cap = local[i].len - EFS_WIRE_RAFT_HDR_LEN - 12u;
+        /* Batched AE: total cmd bytes = len - HDR - 12*nentries <= len - HDR.
+         * Allocate the upper bound (the per-entry headers are slack). */
+        if (local[i].len > EFS_WIRE_RAFT_HDR_LEN)
+            cmd_cap = local[i].len - EFS_WIRE_RAFT_HDR_LEN;
         if (cmd_cap) {
             cmd = malloc(cmd_cap);
             if (!cmd) {

@@ -1,4 +1,5 @@
 #include "efs/raft.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -340,10 +341,7 @@ static int send_ae(struct efs_raft *r, int to)
     struct efs_raft_msg m;
     uint64_t last_i = 0, last_t = 0, prev_t = 0;
     uint64_t ni;
-    uint32_t clen = 0;
-    uint8_t small[256];
-    uint8_t *cmdbuf = small;
-    int need_free = 0;
+    uint8_t *arena = NULL;
     int rc;
 
     memset(&m, 0, sizeof(m));
@@ -368,29 +366,64 @@ static int send_ae(struct efs_raft *r, int to)
     m.prev_term = prev_t;
     m.leader_commit = r->commit_index;
     if (ni <= last_i) {
-        uint64_t eterm = 0;
-        clen = sizeof(small);
-        rc = r->store->get(r->store_ctx, ni, &eterm, small, &clen);
-        if (rc == EFS_ERR_INVAL) {
-            cmdbuf = malloc(clen);
-            if (!cmdbuf)
-                return EFS_ERR_NOMEM;
-            need_free = 1;
-            rc = r->store->get(r->store_ctx, ni, &eterm, cmdbuf, &clen);
+        /* Batch the catch-up: read up to EFS_RAFT_AE_MAX entries (byte-
+         * capped at EFS_RAFT_AE_BYTES) into one arena so a behind follower
+         * recovers in one round-trip instead of one-entry-per-AE. Only
+         * reached when this follower is behind (ni <= last_i); a caught-up
+         * follower gets a bare heartbeat (nentries=0) and no arena. */
+        uint32_t off = 0;
+        arena = malloc(EFS_RAFT_AE_BYTES);
+        if (!arena)
+            return EFS_ERR_NOMEM;
+        while (m.nentries < EFS_RAFT_AE_MAX && ni + m.nentries <= last_i &&
+               off < EFS_RAFT_AE_BYTES) {
+            uint64_t eterm = 0;
+            uint32_t ec = EFS_RAFT_AE_BYTES - off;
+            rc = r->store->get(r->store_ctx, ni + m.nentries, &eterm,
+                               arena + off, &ec);
+            if (rc == EFS_ERR_INVAL) {
+                /* Entry larger than the remaining arena. */
+                if (m.nentries == 0) {
+                    /* Single oversized entry: its own dedicated buffer. */
+                    uint8_t *big = malloc(ec);
+                    if (!big) {
+                        free(arena);
+                        return EFS_ERR_NOMEM;
+                    }
+                    rc = r->store->get(r->store_ctx, ni, &eterm, big, &ec);
+                    if (rc != EFS_OK) {
+                        free(big);
+                        free(arena);
+                        return rc;
+                    }
+                    free(arena);
+                    arena = big;
+                    m.entries[0].term = eterm;
+                    m.entries[0].clen = ec;
+                    m.entries[0].cmd = big;
+                    m.nentries = 1;
+                }
+                break; /* send the batch accumulated so far */
+            }
+            if (rc != EFS_OK) {
+                free(arena);
+                return rc;
+            }
+            m.entries[m.nentries].term = eterm;
+            m.entries[m.nentries].clen = ec;
+            m.entries[m.nentries].cmd = arena + off;
+            off += ec;
+            m.nentries++;
         }
-        if (rc != EFS_OK) {
-            if (need_free)
-                free(cmdbuf);
-            return rc;
+        if (m.nentries == 0) {
+            /* ni <= last_i but nothing read; don't send an empty batch that
+             * would look like a heartbeat with a stale prev_index. */
+            free(arena);
+            return EFS_ERR_PROTO;
         }
-        m.nentries = 1;
-        m.entries[0].term = eterm;
-        m.entries[0].clen = clen;
-        m.entries[0].cmd = cmdbuf;
     }
     rc = send_msg(r, &m);
-    if (need_free)
-        free(cmdbuf);
+    free(arena);
     return rc;
 }
 
@@ -603,13 +636,31 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
     rc = last_log(r, &last_i, &last_t);
     if (rc != EFS_OK)
         return rc;
+    {
+        static int ae_dbg[EFS_RAFT_MAX_PEERS];
+        int *ctr = &ae_dbg[in->from >= 0 && in->from < EFS_RAFT_MAX_PEERS ? in->from : 0];
+        (*ctr)++;
+        if (getenv("EFS_RAFT_AE_DBG") && (*ctr <= 5 || *ctr % 1000 == 0))
+            fprintf(stderr, "AE_REQ from=%d prev_idx=%llu prev_term=%llu nent=%u my_last=%llu my_term=%llu in_term=%llu\n",
+                    in->from, (unsigned long long)in->prev_index,
+                    (unsigned long long)in->prev_term, in->nentries,
+                    (unsigned long long)last_i, (unsigned long long)r->current_term,
+                    (unsigned long long)in->term);
+    }
     if (in->prev_index > last_i) {
+        if (getenv("EFS_RAFT_AE_DBG"))
+            fprintf(stderr, "AE_REQ REJECT prev_idx=%llu > last_i=%llu\n",
+                    (unsigned long long)in->prev_index, (unsigned long long)last_i);
         m.success = 0;
         m.match_index = last_i;
         return send_msg(r, &m);
     }
     rc = log_term(r, in->prev_index, &pt);
     if ((in->prev_index > 0 && rc != EFS_OK) || pt != in->prev_term) {
+        if (getenv("EFS_RAFT_AE_DBG"))
+            fprintf(stderr, "AE_REQ REJECT prev_term: pt=%llu in_prev_term=%llu rc=%d prev_idx=%llu\n",
+                    (unsigned long long)pt, (unsigned long long)in->prev_term, rc,
+                    (unsigned long long)in->prev_index);
         if (in->prev_index > r->snap_idx) {
             r->store->truncate_from(r->store_ctx, in->prev_index);
             reload_cfg_from_log(r);
@@ -621,18 +672,31 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
     }
     if (in->nentries) {
         uint64_t idx = in->prev_index + 1;
-        uint64_t et = 0;
-        rc = log_term(r, idx, &et);
-        if (rc == EFS_OK && et != in->entries[0].term) {
-            r->store->truncate_from(r->store_ctx, idx);
-            reload_cfg_from_log(r);
+        uint32_t i;
+        for (i = 0; i < in->nentries; i++, idx++) {
+            uint64_t et = 0;
+            rc = log_term(r, idx, &et);
+            if (rc == EFS_OK && et != in->entries[i].term) {
+                /* Conflict at idx: drop it and everything after, then take
+                 * the leader's entry. (Same rule as the single-entry path,
+                 * applied per batched entry.) */
+                r->store->truncate_from(r->store_ctx, idx);
+                reload_cfg_from_log(r);
+            }
+            rc = r->store->append(r->store_ctx, idx, in->entries[i].term,
+                                  in->entries[i].cmd, in->entries[i].clen);
+            if (rc != EFS_OK) {
+                if (getenv("EFS_RAFT_AE_DBG"))
+                    fprintf(stderr, "AE_REQ APPEND FAIL idx=%llu i=%u rc=%d\n",
+                            (unsigned long long)idx, i, rc);
+                return rc;
+            }
+            install_log_cfg(r, in->entries[i].cmd, in->entries[i].clen, idx);
         }
-        rc = r->store->append(r->store_ctx, idx, in->entries[0].term,
-                              in->entries[0].cmd, in->entries[0].clen);
-        if (rc != EFS_OK)
-            return rc;
-        install_log_cfg(r, in->entries[0].cmd, in->entries[0].clen, idx);
         last_log(r, &last_i, &last_t);
+        if (getenv("EFS_RAFT_AE_DBG"))
+            fprintf(stderr, "AE_REQ ACCEPT nent=%u new_last=%llu\n",
+                    in->nentries, (unsigned long long)last_i);
     }
     if (in->leader_commit > r->commit_index) {
         uint64_t cap = last_i;
@@ -673,8 +737,22 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
             return send_ae(r, in->from);
         return EFS_OK;
     }
-    if (r->next_index[in->from] > 1)
-        r->next_index[in->from]--;
+    /* Rejection: the follower's reply carries match_index = its last log
+     * index (after any conflict truncation). Jump straight there instead of
+     * decrementing one index per round trip — a fresh/rejoined follower
+     * catching up a long log would otherwise need one RTT per index, and at
+     * the heartbeat-gated rate that is minutes of the follower being
+     * unusable for quorum reads. match_index is 0 for a term rejection,
+     * which safely restarts from index 1. */
+    {
+        uint64_t ni = in->match_index + 1, last_i = 0, last_t = 0;
+        last_log(r, &last_i, &last_t);
+        if (ni > last_i + 1)
+            ni = last_i + 1;
+        if (ni < 1)
+            ni = 1;
+        r->next_index[in->from] = ni;
+    }
     return send_ae(r, in->from);
 }
 

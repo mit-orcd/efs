@@ -143,22 +143,23 @@ static uint64_t rd64be(const uint8_t *p)
 int efs_wire_raft_encode(const struct efs_raft_msg *msg, uint8_t *out,
                          uint32_t out_cap, uint32_t *out_len)
 {
-    uint32_t clen = 0;
     uint32_t total;
     uint8_t *p;
+    uint32_t i;
 
     if (!msg || !out)
         return EFS_ERR_INVAL;
-    if (msg->nentries > 1)
+    if (msg->nentries > EFS_RAFT_AE_MAX)
         return EFS_ERR_PROTO;
-    if (msg->nentries == 1) {
-        clen = msg->entries[0].clen;
+    total = EFS_WIRE_RAFT_HDR_LEN;
+    for (i = 0; i < msg->nentries; i++) {
+        uint32_t clen = msg->entries[i].clen;
         if (clen > EFS_WIRE_RAFT_MAX_CMD)
             return EFS_ERR_PROTO;
-        if (clen && !msg->entries[0].cmd)
+        if (clen && !msg->entries[i].cmd)
             return EFS_ERR_INVAL;
+        total += 12u + clen;
     }
-    total = EFS_WIRE_RAFT_HDR_LEN + (msg->nentries ? 12u + clen : 0);
     if (out_cap < total)
         return EFS_ERR_NOMEM;
 
@@ -179,12 +180,14 @@ int efs_wire_raft_encode(const struct efs_raft_msg *msg, uint8_t *out,
     wr64be(p, msg->leader_commit); p += 8;
     wr64be(p, msg->match_index); p += 8;
     wr32be(p, msg->nentries); p += 4;
-    if (msg->nentries) {
-        wr64be(p, msg->entries[0].term); p += 8;
+    for (i = 0; i < msg->nentries; i++) {
+        uint32_t clen = msg->entries[i].clen;
+        wr64be(p, msg->entries[i].term); p += 8;
         wr32be(p, clen); p += 4;
-        if (clen)
-            memcpy(p, msg->entries[0].cmd, clen);
-        p += clen;
+        if (clen) {
+            memcpy(p, msg->entries[i].cmd, clen);
+            p += clen;
+        }
     }
     if (out_len)
         *out_len = (uint32_t)(p - out);
@@ -221,29 +224,37 @@ int efs_wire_raft_decode(const uint8_t *in, uint32_t in_len,
     msg->leader_commit = rd64be(p); p += 8;
     msg->match_index = rd64be(p); p += 8;
     nentries = rd32be(p); p += 4;
-    if (nentries > 1)
+    if (nentries > EFS_RAFT_AE_MAX)
         return EFS_ERR_PROTO;
     msg->nentries = nentries;
     if (nentries) {
-        uint64_t eterm;
-        uint32_t clen;
-        if (in_len < EFS_WIRE_RAFT_HDR_LEN + 12u)
-            return EFS_ERR_PROTO;
-        eterm = rd64be(p); p += 8;
-        clen = rd32be(p); p += 4;
-        if (clen > EFS_WIRE_RAFT_MAX_CMD)
-            return EFS_ERR_PROTO;
-        if (in_len != EFS_WIRE_RAFT_HDR_LEN + 12u + clen)
-            return EFS_ERR_PROTO;
-        if (clen && !cmd_buf)
+        uint32_t off = 0; /* running offset into cmd_buf */
+        uint32_t i;
+        if (!cmd_buf)
             return EFS_ERR_INVAL;
-        if (clen > cmd_cap)
-            return EFS_ERR_NOMEM;
-        if (clen)
-            memcpy(cmd_buf, p, clen);
-        msg->entries[0].term = eterm;
-        msg->entries[0].clen = clen;
-        msg->entries[0].cmd = clen ? cmd_buf : NULL;
+        for (i = 0; i < nentries; i++) {
+            uint64_t eterm;
+            uint32_t clen;
+            if ((uint32_t)(p - in) + 12u > in_len)
+                return EFS_ERR_PROTO;
+            eterm = rd64be(p); p += 8;
+            clen = rd32be(p); p += 4;
+            if (clen > EFS_WIRE_RAFT_MAX_CMD)
+                return EFS_ERR_PROTO;
+            if ((uint32_t)(p - in) + clen > in_len)
+                return EFS_ERR_PROTO;
+            if (off + clen > cmd_cap)
+                return EFS_ERR_NOMEM;
+            if (clen)
+                memcpy(cmd_buf + off, p, clen);
+            p += clen;
+            msg->entries[i].term = eterm;
+            msg->entries[i].clen = clen;
+            msg->entries[i].cmd = clen ? cmd_buf + off : NULL;
+            off += clen;
+        }
+        if ((uint32_t)(p - in) != in_len)
+            return EFS_ERR_PROTO; /* trailing bytes */
     } else if (in_len != EFS_WIRE_RAFT_HDR_LEN) {
         return EFS_ERR_PROTO;
     }

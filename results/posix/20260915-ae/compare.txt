@@ -1,0 +1,14 @@
+POSIX baseline comparison (AE/outbox gate, jobs=1, --tag ae + rest13)
+  pass=196 fail=5 skip=0 total=201
+  vs Part A (20260915-s12a): 199/201 (dir_many_files + dir_deep_nesting_beyond_64 timeouts)
+
+EFS fails:
+  dir_deep_nesting  [FAIL] timeout after 15s
+  dir_many_files  [FAIL] timeout after 15s
+  names_crazy_dirs  [FAIL] timeout after 15s
+  dir_deep_nesting_beyond_64  [FAIL] timeout after 15s
+  concurrent_writes_disjoint  [FAIL] low range: got b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0
+
+dir_readdir_listing isolated PASS 2.6s. Remaining 13 after wall-cut all PASS isolated.
+4 walk timeouts = same latency family as Part A (this scratch log is ~32k). 
+concurrent_writes_disjoint zeros flake is pre-existing.

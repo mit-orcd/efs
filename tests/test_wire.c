@@ -242,6 +242,40 @@ static void test_raft_codec(void)
               memcmp(b.entries[0].cmd, cmd, 17) == 0,
           "ae fields");
 
+    /* Batched AppendEntries: a 3-entry round-trip (catch-up batching). */
+    {
+        static const uint8_t c0[3] = {0x01, 0x02, 0x03};
+        static const uint8_t c1[5] = {0x04, 0x05, 0x06, 0x07, 0x08};
+        static const uint8_t c2[1] = {0x09};
+        memset(&a, 0, sizeof(a));
+        a.type = EFS_RAFT_MSG_AE_REQ;
+        a.group = EFS_RAFT_GROUP_SHARD;
+        a.from = 0;
+        a.to = 1;
+        a.term = 5;
+        a.prev_index = 10;
+        a.prev_term = 5;
+        a.leader_commit = 10;
+        a.nentries = 3;
+        a.entries[0].term = 5; a.entries[0].clen = 3; a.entries[0].cmd = c0;
+        a.entries[1].term = 5; a.entries[1].clen = 5; a.entries[1].cmd = c1;
+        a.entries[2].term = 6; a.entries[2].clen = 1; a.entries[2].cmd = c2;
+        CHECK(efs_wire_raft_encode(&a, buf, sizeof(buf), &len) == EFS_OK,
+              "ae3 encode");
+        CHECK(len == EFS_WIRE_RAFT_HDR_LEN + 3u * 12u + 3u + 5u + 1u,
+              "ae3 len");
+        CHECK(efs_wire_raft_decode(buf, len, &b, cmd_out, sizeof(cmd_out)) ==
+                  EFS_OK,
+              "ae3 decode");
+        CHECK(b.nentries == 3 && b.entries[0].term == 5 &&
+                  b.entries[0].clen == 3 && b.entries[1].clen == 5 &&
+                  b.entries[2].term == 6 && b.entries[2].clen == 1 &&
+                  memcmp(b.entries[0].cmd, c0, 3) == 0 &&
+                  memcmp(b.entries[1].cmd, c1, 5) == 0 &&
+                  memcmp(b.entries[2].cmd, c2, 1) == 0,
+              "ae3 fields");
+    }
+
     CHECK(efs_wire_raft_decode(buf, 10, &b, cmd_out, sizeof(cmd_out)) ==
               EFS_ERR_PROTO,
           "short decode");

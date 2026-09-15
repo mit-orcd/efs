@@ -24,7 +24,7 @@
 #define TRUNC_HDR   54
 #define TRUNC_TAIL  (4 + 8 + 8 + 4 + (uint32_t)EFS_NUM_FRAGMENTS * (4 + EFS_HASH_SIZE))
 #define WAIT_TICKS  80
-#define RAFT_HDR    98
+#define RAFT_HDR    86 /* fixed part through nentries; entries follow (12+cmd each) */
 
 static void wr64(uint8_t *p, uint64_t v)
 {
@@ -674,8 +674,6 @@ static int raft_apply(void *app, uint64_t index, uint64_t term,
 static int unpack_raft_ev(const uint8_t *p, uint32_t n, struct efs_raft_msg *m,
                           uint8_t **cmd_out)
 {
-    uint32_t clen;
-
     if (n < RAFT_HDR)
         return EFS_ERR_PROTO;
     memset(m, 0, sizeof(*m));
@@ -694,29 +692,40 @@ static int unpack_raft_ev(const uint8_t *p, uint32_t n, struct efs_raft_msg *m,
     m->match_index = rd64(p + 70);
     m->success = (int)rd32(p + 78);
     m->nentries = rd32(p + 82);
-    m->entries[0].term = rd64(p + 86);
-    clen = rd32(p + 94);
-    m->entries[0].clen = clen;
-    if (m->nentries && clen) {
-        if (n < RAFT_HDR + clen)
-            return EFS_ERR_PROTO;
-        *cmd_out = (uint8_t *)p + RAFT_HDR;
-        m->entries[0].cmd = *cmd_out;
-    } else {
-        *cmd_out = NULL;
-        m->entries[0].cmd = NULL;
+    if (m->nentries > EFS_RAFT_AE_MAX)
+        return EFS_ERR_PROTO;
+    {
+        const uint8_t *q = p + RAFT_HDR;
+        uint32_t i;
+        for (i = 0; i < m->nentries; i++) {
+            uint32_t ec;
+            if ((uint32_t)(q - p) + 12u > n)
+                return EFS_ERR_PROTO;
+            m->entries[i].term = rd64(q); q += 8;
+            ec = rd32(q); q += 4;
+            m->entries[i].clen = ec;
+            if ((uint32_t)(q - p) + ec > n)
+                return EFS_ERR_PROTO;
+            /* Entry cmd points into the event payload (freed by the
+             * caller after deliver); nothing separately owned. */
+            m->entries[i].cmd = ec ? q : NULL;
+            q += ec;
+        }
     }
+    *cmd_out = NULL;
     return EFS_OK;
 }
 
 static int pack_raft_ev(const struct efs_raft_msg *msg, uint8_t **out,
                         uint32_t *plen)
 {
-    uint32_t clen = (msg->nentries && msg->entries[0].clen) ?
-                    msg->entries[0].clen : 0;
-    uint32_t n = RAFT_HDR + clen;
-    uint8_t *p = malloc(n);
+    uint32_t n = RAFT_HDR;
+    uint32_t i;
+    uint8_t *p, *q;
 
+    for (i = 0; i < msg->nentries; i++)
+        n += 12u + msg->entries[i].clen;
+    p = malloc(n);
     if (!p)
         return EFS_ERR_NOMEM;
     memset(p, 0, n);
@@ -735,10 +744,15 @@ static int pack_raft_ev(const struct efs_raft_msg *msg, uint8_t **out,
     wr64(p + 70, msg->match_index);
     wr32(p + 78, (uint32_t)msg->success);
     wr32(p + 82, msg->nentries);
-    wr64(p + 86, msg->entries[0].term);
-    wr32(p + 94, clen);
-    if (clen)
-        memcpy(p + RAFT_HDR, msg->entries[0].cmd, clen);
+    q = p + RAFT_HDR;
+    for (i = 0; i < msg->nentries; i++) {
+        wr64(q, msg->entries[i].term); q += 8;
+        wr32(q, msg->entries[i].clen); q += 4;
+        if (msg->entries[i].clen) {
+            memcpy(q, msg->entries[i].cmd, msg->entries[i].clen);
+            q += msg->entries[i].clen;
+        }
+    }
     *out = p;
     *plen = n;
     return EFS_OK;
@@ -747,8 +761,6 @@ static int pack_raft_ev(const struct efs_raft_msg *msg, uint8_t **out,
 int sim_raft_send(void *net, const struct efs_raft_msg *msg)
 {
     struct efs_sim *sim = net;
-    uint8_t *copy = NULL;
-    struct efs_raft_msg m;
     struct sim_ev e;
     uint32_t plen = 0;
     int rc;
@@ -766,24 +778,17 @@ int sim_raft_send(void *net, const struct efs_raft_msg *msg)
         if (efs_sim_rng(sim) % 1000 < sim->drop_per_mille)
             return EFS_OK;
     }
-    m = *msg;
-    if (m.nentries && m.entries[0].clen) {
-        copy = malloc(m.entries[0].clen);
-        if (!copy)
-            return EFS_ERR_NOMEM;
-        memcpy(copy, m.entries[0].cmd, m.entries[0].clen);
-        m.entries[0].cmd = copy;
-    }
     if (sim->delay_max == 0 && !sim->hold) {
-        struct efs_raft *dst = sim_raft_of(sim, msg->to, m.group);
-        rc = dst ? efs_raft_recv(dst, &m) : EFS_OK;
-        free(copy);
-        return rc;
+        /* Synchronous delivery: the sender's entry buffers stay valid for
+         * the whole recv (the caller frees them only after send returns)
+         * and recv copies each entry into the log store, so no detach copy
+         * is needed. */
+        struct efs_raft *dst = sim_raft_of(sim, msg->to, msg->group);
+        return dst ? efs_raft_recv(dst, msg) : EFS_OK;
     }
     memset(&e, 0, sizeof(e));
     e.kind = EV_RAFT;
-    rc = pack_raft_ev(&m, &e.payload, &plen);
-    free(copy);
+    rc = pack_raft_ev(msg, &e.payload, &plen); /* deep-copies all entries */
     if (rc != EFS_OK)
         return rc;
     e.plen = plen;
