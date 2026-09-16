@@ -85,6 +85,49 @@ int efs_meta_dir_begin_split(struct efs_kv *kv, efs_ino_t dir)
     return put_inode(kv, &row);
 }
 
+int efs_meta_dir_migrate_peek(struct efs_kv *kv, efs_ino_t dir, char *name,
+                              uint32_t nmax, uint32_t *hsh, int *saw_lane0)
+{
+    struct efs_meta_row row;
+    struct hit h;
+    uint8_t pref[EFS_KV_KEY_MAX];
+    uint32_t plen = 0, psh;
+    int rc;
+
+    if (saw_lane0)
+        *saw_lane0 = 0;
+    if (hsh)
+        *hsh = 0;
+    if (!kv || dir == 0)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_inode(kv, dir, &row);
+    if (rc != EFS_OK)
+        return rc;
+    if (row.layout != EFS_META_LAYOUT_SPLITTING)
+        return EFS_ERR_INVAL;
+    psh = efs_kv_inode_shard(dir);
+    rc = efs_kv_key_dentry_prefix(psh, dir, pref, &plen);
+    if (rc != EFS_OK)
+        return rc;
+    memset(&h, 0, sizeof(h));
+    rc = efs_kv_scan_prefix(kv, pref, plen, first_cb, &h);
+    if (rc != EFS_OK && rc != 1)
+        return rc;
+    if (saw_lane0)
+        *saw_lane0 = h.saw_lane0;
+    if (!h.found)
+        return EFS_ERR_NOT_FOUND;
+    if (name) {
+        if (nmax == 0)
+            return EFS_ERR_INVAL;
+        strncpy(name, h.name, nmax - 1);
+        name[nmax - 1] = 0;
+    }
+    if (hsh)
+        *hsh = efs_kv_dentry_shard(dir, h.name, EFS_META_LAYOUT_HASHED);
+    return EFS_OK;
+}
+
 int efs_meta_dir_migrate_one(struct efs_kv *kv, efs_ino_t dir)
 {
     struct efs_meta_row row;
@@ -134,6 +177,10 @@ int efs_meta_dir_migrate_one(struct efs_kv *kv, efs_ino_t dir)
     hvlen = sizeof(hv);
     rc = efs_kv_get(kv, hk, hklen, hv, &hvlen);
     memset(it, 0, sizeof(it));
+    /* I8: hashed live/tombstone already at this key wins; skip the PUT.
+     * Cross-group leftovers are moved by the host/sim txn so the PUT
+     * lands in the dest group's log. This single-KV batch is for the
+     * same-group leftover and for tests that share one KV. */
     if (rc == EFS_ERR_NOT_FOUND) {
         it[n].op = EFS_KV_PUT;
         it[n].key = hk;

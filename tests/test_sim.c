@@ -1208,6 +1208,72 @@ static void test_mkdir_splitting(void)
     efs_sim_free(s);
 }
 
+/* Populated LOCAL leftovers whose HASHED shard is on the other Raft
+ * group migrate as a 2-shard txn (hashed PUT in that group's log).
+ * Same-group leftovers stay DIR_MIGRATE. I8: a tombstoned leftover is
+ * not resurrected. */
+static int cross_group_nm(efs_ino_t parent, char *out)
+{
+    int i;
+    uint32_t psh = efs_kv_inode_shard(parent);
+
+    for (i = 0; i < 8192; i++) {
+        snprintf(out, 16, "x%d", i);
+        if (efs_kv_dir_lane(out) == 0)
+            continue;
+        if ((efs_kv_dentry_shard(parent, out, EFS_META_LAYOUT_HASHED) & 1u) !=
+            (psh & 1u))
+            return 0;
+    }
+    return -1;
+}
+
+static void test_migrate_populated(void)
+{
+    struct efs_sim *s = mk(139);
+    efs_ino_t d = 0, pre = 0, x = 0, bar = 0, g = 0;
+    uint8_t layout = 99;
+    char xn[16];
+    const char *nm;
+    int rc;
+
+    CHECK(s, "mk");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, "d", &d) == EFS_OK && d, "d");
+    CHECK(cross_group_nm(d, xn) == 0, "cross-group name");
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, "pre", &pre) == EFS_OK &&
+              pre,
+          "pre");
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, xn, &x) == EFS_OK && x,
+          "leftover");
+    CHECK(efs_sim_dir_begin_split(s, d) == EFS_OK, "split");
+    CHECK(efs_sim_dir_layout(s, d, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_SPLITTING,
+          "SPLITTING");
+    nm = hashed_nm(d);
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, nm, &bar) == EFS_OK && bar,
+          "hashed create");
+    CHECK(efs_sim_unlink(s, 0, d, "pre") == EFS_OK, "unlink leftover");
+    CHECK(efs_sim_lookup(s, 0, d, "pre", &g) == EFS_ERR_NOT_FOUND, "I8 pre");
+    while ((rc = efs_sim_dir_migrate(s, d)) == EFS_OK)
+        ;
+    CHECK(rc == EFS_ERR_NOT_FOUND, "migrated");
+    CHECK(efs_sim_lookup(s, 0, d, "pre", &g) == EFS_ERR_NOT_FOUND,
+          "no resurrect pre");
+    CHECK(efs_sim_lookup(s, 0, d, xn, &g) == EFS_OK && g == x, "moved leftover");
+    CHECK(efs_sim_lookup(s, 1, d, xn, &g) == EFS_OK && g == x, "peer leftover");
+    CHECK(efs_sim_lookup(s, 0, d, nm, &g) == EFS_OK && g == bar, "hashed stays");
+    CHECK(dir_has(s, d, xn) && dir_has(s, d, nm) && !dir_has(s, d, "pre"),
+          "readdir after migrate");
+    CHECK(efs_sim_dir_finish_hashed(s, d) == EFS_OK, "HASHED");
+    CHECK(efs_sim_dir_layout(s, d, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_HASHED,
+          "layout HASHED");
+    CHECK(efs_sim_lookup(s, 1, d, xn, &g) == EFS_OK && g == x,
+          "leftover after HASHED");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+}
+
 /* Rename over an empty HASHED dest dir (never-used, then emptied with
  * used_shards set). Nonempty HASHED dest is NOT_EMPTY, not INVAL. */
 static void test_rename_hashed_dir_overwrite(void)
@@ -1693,6 +1759,7 @@ int main(void)
     test_link_splitting();
     test_rename_splitting();
     test_mkdir_splitting();
+    test_migrate_populated();
     test_rename_hashed_dir_overwrite();
     test_single_shard_ops();
     test_utimens_fence();

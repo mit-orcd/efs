@@ -706,6 +706,8 @@ static int cmd_raft_dir(int argc, char **argv)
     st = 0;
     if (r->rc == EFS_ERR_NOT_PRIMARY)
         st = 7;
+    else if (r->rc == EFS_ERR_NOT_FOUND)
+        st = 1;
     else if (r->rc != EFS_OK)
         st = 3;
     printf("raft-dir status=%u rc=%d kind=%s ino=%llu index=%llu\n",

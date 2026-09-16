@@ -232,11 +232,11 @@ the "RDMA transport up" check moved after the workload (the upgrade is
 lazy — first pool checkout, not mount). Full gate PASS on fcstor003:
 13 unit + efsd + efs-fuse TCP + efsd/efs-fuse RDMA, all 0 definite /
 0 indirect / 0 uninit / 0 invalid.
-**Open follow-ups:** Step 12 A–D landed (Part B `0df94e4`; C+D this
-commit). Honest fio matrix (Part D perf contract) is **not** run on
-the 1G 19820 scratch. Relaxed-coherence stays out of scope.
-Next: migrating a populated local range is still a single-group
-apply, not a txn.
+**Open follow-ups:** Step 12 A–D landed (Part B `0df94e4`; C+D `ec3ec5b`).
+Populated LOCAL-range migrate is a cross-group txn (this commit). Honest
+fio matrix (Part D perf contract) is **not** run on the 1G 19820 scratch.
+Relaxed-coherence stays out of scope. Do not `wipe_cluster.sh` /
+`pkill -x efsd` while 19820 is up.
 
 **BATCHED APPENDENTRIES + OUTBOX CLOSED (Sep 15).** Catch-up was
 one entry per AE. `send_ae` now packs up to `EFS_RAFT_AE_MAX=128`
@@ -327,6 +327,26 @@ verify, not a silent loss. Honest fio not run here (1G quota).
 `ensure_mounted` TCP check no longer treats grep -c 0 as RDMA
 (`|| echo 0` concatenated to `00`). Do not `wipe_cluster.sh` /
 `pkill -x efsd` while 19820 is up.
+
+**POPULATED LOCAL MIGRATE AS TXN (Sep 16).** A leftover whose HASHED
+dentry shard is on the other Raft group is a 2-shard txn (local DEL +
+hashed PUT + dseq, optional parent `used_shards`); same-group leftovers
+and I8 (hashed live/tombstone already there) stay single-group
+`DIR_MIGRATE`. Lane-0 names stay local; migrate-done is NOT_FOUND (mgmt
+status=1) once bit 0 is set so apply cannot swallow it into status=0
+forever. Host bounces to a dual-host when this replica does not host
+the dest group. `migrate_one` still PUTs for same-KV unit tests.
+**Gates (19820 scratch, TCP, keep storage):** `test_sim` (new
+`test_migrate_populated` seed 139) / `test_meta_apply` / `test_txn` /
+`test_wire` OK. Targeted efs-mgmt `raft-smoke-mg`: leftover `x0` (psh
+odd, dsh even) begin → two migrate steps → status=1 → finish; lookup +
+readdir keep `pre` and `x0`. posix jobs=1 `--tag migrate --keep`
+**195/201 in 247s** (`results/posix/20260916-migrate/`) — 15s walk
+timeouts (`dir_deep_nesting` ×2, `dir_many_files`, `names_crazy_dirs`)
++ known `symlink_relative_after_parent_rename` EIO flake + expected
+`mmap_write_read` SKIP ENODEV. Full `raft_host_smoke.sh` not re-run
+(EXIT trap kills 19820). Do not `wipe_cluster.sh` / `pkill -x efsd`
+while 19820 is up.
 
 **OLD-ENGINE 19810 CLUSTER DESTROYED (Sep 15).** No snapshot/2PC
 on-disk compat. `/data1/01–06/efs` on fcstor003–006 renamed-aside +
@@ -468,8 +488,8 @@ first-use txn when the dest lane's group differs from the parent
 single propose. READDIR drops the BUSY; apply already merges LOCAL
 leftovers with hashed lanes. LOOKUP / LOOKUP_PATH were already
 hashed-then-local. Smoke `raft-smoke-sp` stays SPLITTING: local `pre`
-plus a hashed-name file; do not migrate a populated local range (still
-a single-group apply, not a txn). SPLITTING dest UNLINK/RMDIR/LINK/
+plus a hashed-name file. Populated-range migrate as a txn closed Sep
+16 (below). SPLITTING dest UNLINK/RMDIR/LINK/
 RENAME stay BUSY (tombstone I8 on the host later). HASHED/SPLITTING
 dest MKDIR still writes the dentry on `psh`.
 **Gates (19820 scratch, TCP):** `test_sim` / `test_meta_apply` /
@@ -544,8 +564,7 @@ leftover on the other group could CAS-fail); dest existence uses
 `sim_txn_lookup` (hashed-then-local, tombstone = NOT_FOUND). A dest
 dir that is itself SPLITTING stays BUSY (distributed emptiness).
 HASHED/SPLITTING dest MKDIR still writes the dentry on `psh`.
-Migrating a populated local range is still a single-group apply, not
-a txn — not this slice.
+Populated-range migrate as a txn closed Sep 16 (below).
 **Gates (19820 scratch, TCP, wipe+raft-mkfs):** `test_sim` (new
 `test_rename_splitting` seed 137: hashed dest, leftover dest replace,
 tombstone dest restore, leftover src) / `test_meta_apply` /
@@ -577,8 +596,8 @@ distinct. EXIST check was already layout-aware. Sim `mkdir_build`
 gained the same shape (takes the client id, per-part `sim_sess_ensure`,
 `sim_txn_lookup` for EXIST). This completes the op matrix for
 HASHED/SPLITTING dests: CREATE, READDIR, UNLINK/RMDIR, LINK, RENAME,
-MKDIR all write hashed. Still NOT done (by design): migrating a
-populated local range is a single-group apply, not a txn.
+MKDIR all write hashed. Populated-range migrate as a txn closed Sep 16
+(below).
 **Gates (19820 scratch, TCP, wipe+raft-mkfs):** `test_sim` (new
 `test_mkdir_splitting` seed 138: SPLITTING hashed mkdir, readdir merge
 with the local leftover, dup EXIST, rmdir, recreate over the tombstone

@@ -27,7 +27,8 @@
 # plus a hashed-name file plus empty child `e`; unlink/rmdir write
 # hashed tombstones (I8); dest LINK writes hashed; dest RENAME writes
 # hashed, leftover dest is POSIX replace, src drop is I8; migrate of a
-# populated local range is not this slice), HOLD open-unlinked lease
+# populated local range is a 2-shard txn when the leftover hashes onto
+# the other Raft group), HOLD open-unlinked lease
 # (dedicated raft-smoke-k: open, unlink name, getattr nlink=0, leave
 # held through crash, close reclaims), FLOCK grant/release (dedicated
 # raft-smoke-w: EX owner=1, EX owner=2 BUSY, UN owner=1, EX owner=2,
@@ -715,7 +716,7 @@ check_hashed_create() {
     echo "$out" | grep -q 'status=0' || bad "$tag hashed-dir begin not OK"
     out=$(g0_mgmt raft-dir "$hd_ino" migrate)
     say "$tag hashed-dir migrate: $out"
-    echo "$out" | grep -q 'status=0' || bad "$tag hashed-dir migrate not OK"
+    echo "$out" | grep -qE 'status=0|status=1' || bad "$tag hashed-dir migrate not OK"
     out=$(g0_mgmt raft-dir "$hd_ino" finish)
     say "$tag hashed-dir finish: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag hashed-dir finish not OK"
@@ -894,7 +895,7 @@ for i in range(8192):
     out=$(g0_mgmt raft-dir "$he_ino" begin)
     echo "$out" | grep -q 'status=0' || bad "$tag hashed-rmdir begin not OK"
     out=$(g0_mgmt raft-dir "$he_ino" migrate)
-    echo "$out" | grep -q 'status=0' || bad "$tag hashed-rmdir migrate not OK"
+    echo "$out" | grep -qE 'status=0|status=1' || bad "$tag hashed-rmdir migrate not OK"
     out=$(g0_mgmt raft-dir "$he_ino" finish)
     echo "$out" | grep -q 'status=0' || bad "$tag hashed-rmdir finish not OK"
     out=$(g0_mgmt raft-rmdir 1 raft-smoke-he)
@@ -919,7 +920,7 @@ for i in range(8192):
     out=$(g0_mgmt raft-dir "$hx_ino" begin)
     echo "$out" | grep -q 'status=0' || bad "$tag hashed-dow begin not OK"
     out=$(g0_mgmt raft-dir "$hx_ino" migrate)
-    echo "$out" | grep -q 'status=0' || bad "$tag hashed-dow migrate not OK"
+    echo "$out" | grep -qE 'status=0|status=1' || bad "$tag hashed-dow migrate not OK"
     out=$(g0_mgmt raft-dir "$hx_ino" finish)
     echo "$out" | grep -q 'status=0' || bad "$tag hashed-dow finish not OK"
     out=$(g0_mgmt raft-create "$hx_ino" f)
@@ -1186,6 +1187,82 @@ for i in range(8192):
     SPLIT_PRE=""
     SPLIT_FILE=""
     SPLIT_EMPTY=""
+}
+
+# Populated LOCAL leftovers whose HASHED shard is on the other group
+# migrate as a 2-shard txn. Same-group leftovers stay DIR_MIGRATE.
+# Dedicated raft-smoke-mg so raft-smoke-sp can stay SPLITTING.
+check_migrate_populated() {
+    local lid=$1
+    local tag=$2
+    local out mg_ino xn i st
+    if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
+        bad "$tag: no leader"
+        return
+    fi
+    leader=$lid
+    out=$(g0_mgmt raft-create 1 raft-smoke-mg 040755)
+    say "$tag migrate-dir mkdir: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag migrate-dir mkdir not OK"
+    mg_ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
+    [ -n "$mg_ino" ] && [ "$mg_ino" != "0" ] || { bad "$tag migrate-dir ino"; return; }
+    MIGRATE_DIR=raft-smoke-mg
+    MIGRATE_DIR_INO=$mg_ino
+    out=$(g0_mgmt raft-create "$mg_ino" pre)
+    echo "$out" | grep -q 'status=0' || bad "$tag migrate pre not OK"
+    xn=$(python3 -c "
+parent=int('$mg_ino')
+MASK=0xFFF
+def dir_lane(name):
+    h=2166136261
+    for c in name.encode():
+        h ^= c
+        h = (h * 16777619) & 0xffffffff
+    return h % 64
+def lane_shard(ino, lane):
+    h = ((ino & 0xffffffff) * 2654435761) & 0xffffffff
+    stride = 2 * (h & 0x7FF) + 1
+    return ((ino & MASK) + lane * stride) & MASK
+psh = parent & MASK
+for i in range(8192):
+    n='x%d' % i
+    lane=dir_lane(n)
+    dsh=lane_shard(parent, lane)
+    if lane==0 or (dsh & 1)==(psh & 1):
+        continue
+    print(n)
+    break
+")
+    [ -n "$xn" ] || { bad "$tag migrate cross-group name"; return; }
+    out=$(g0_mgmt raft-create "$mg_ino" "$xn")
+    say "$tag migrate leftover $xn: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag migrate leftover not OK"
+    MIGRATE_FILE=$xn
+    out=$(g0_mgmt raft-dir "$mg_ino" begin)
+    say "$tag migrate begin: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag migrate begin not OK"
+    st=0
+    for i in $(seq 1 32); do
+        out=$(g0_mgmt raft-dir "$mg_ino" migrate)
+        say "$tag migrate step $i: $out"
+        if echo "$out" | grep -q 'status=0'; then
+            continue
+        fi
+        st=1
+        break
+    done
+    [ "$st" = 1 ] || bad "$tag migrate did not finish"
+    echo "$out" | grep -q 'status=1' || bad "$tag migrate end not NOT_FOUND"
+    out=$(g0_mgmt raft-dir "$mg_ino" finish)
+    say "$tag migrate finish: $out"
+    echo "$out" | grep -q 'status=0' || bad "$tag migrate finish not OK"
+    out=$(g0_mgmt raft-lookup "$mg_ino" pre)
+    echo "$out" | grep -q 'status=0' || bad "$tag migrate lookup pre not OK"
+    out=$(g0_mgmt raft-lookup "$mg_ino" "$xn")
+    echo "$out" | grep -q 'status=0' || bad "$tag migrate lookup leftover not OK"
+    out=$(g0_mgmt raft-readdir "$mg_ino")
+    readdir_has "$out" pre || bad "$tag migrate readdir missing pre"
+    readdir_has "$out" "$xn" || bad "$tag migrate readdir missing leftover"
 }
 
 # Session record + register + establish (10.5c-35a, I23 groundwork).
@@ -1912,6 +1989,9 @@ check_readdir_path() {
     if [ -n "${SPLIT_DIR:-}" ]; then
         readdir_has "$out" "$SPLIT_DIR" || bad "$tag readdir missing split-dir"
     fi
+    if [ -n "${MIGRATE_DIR:-}" ]; then
+        readdir_has "$out" "$MIGRATE_DIR" || bad "$tag readdir missing migrate-dir"
+    fi
     if [ -n "${HOLD_NAME:-}" ]; then
         readdir_has "$out" "$HOLD_NAME" && bad "$tag readdir still has hold-unlinked"
     fi
@@ -2015,6 +2095,18 @@ check_readdir_path() {
         say "$tag lookup-path split-link: $out"
         echo "$out" | grep -q 'status=0' || bad "$tag lookup-path split-link not OK"
         echo "$out" | grep -q "name=$SPLIT_LINK_NAME" || bad "$tag lookup-path split-link name"
+    fi
+    if [ -n "${MIGRATE_DIR:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$MIGRATE_DIR")
+        say "$tag lookup-path migrate-dir: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag lookup-path migrate-dir not OK"
+        echo "$out" | grep -q "name=$MIGRATE_DIR" || bad "$tag lookup-path migrate-dir name"
+    fi
+    if [ -n "${MIGRATE_DIR:-}" ] && [ -n "${MIGRATE_FILE:-}" ]; then
+        out=$(g0_mgmt raft-lookup-path "/$MIGRATE_DIR/$MIGRATE_FILE")
+        say "$tag lookup-path migrate leftover: $out"
+        echo "$out" | grep -q 'status=0' || bad "$tag lookup-path migrate leftover not OK"
+        echo "$out" | grep -q "name=$MIGRATE_FILE" || bad "$tag lookup-path migrate leftover name"
     fi
     out=$(g0_mgmt raft-lookup-path /no-such-efs-name)
     say "$tag lookup-path miss: $out"
@@ -2145,7 +2237,11 @@ SPLIT_PRE_GONE=""
 SPLIT_FILE_GONE=""
 SPLIT_EMPTY_GONE=""
 SPLIT_LINK_NAME=""
+MIGRATE_DIR=""
+MIGRATE_DIR_INO=""
+MIGRATE_FILE=""
 check_hashed_create "$leader" "fresh"
+check_migrate_populated "$leader" "fresh"
 say "session record through Raft (fresh)"
 SESS_SHARD=""
 check_session "$leader" "fresh"
@@ -2355,6 +2451,7 @@ root_nlink=2
 [ -n "${HASHED_DIR:-}" ] && root_nlink=$((root_nlink + 1))
 [ -n "${HASHED_DOW:-}" ] && root_nlink=$((root_nlink + 1))
 [ -n "${SPLIT_DIR:-}" ] && root_nlink=$((root_nlink + 1))
+[ -n "${MIGRATE_DIR:-}" ] && root_nlink=$((root_nlink + 1))
 check_reads "$leader" "after-crash" "$root_nlink"
 out=$(g0_mgmt raft-lookup 1 raft-smoke-f)
 say "after-crash lookup created: $out"
@@ -2549,6 +2646,22 @@ if [ -n "${SPLIT_DIR_INO:-}" ] && [ -n "${SPLIT_LINK_NAME:-}" ]; then
     say "after-crash lookup split-link: $out"
     echo "$out" | grep -q 'status=0' || bad "after-crash split-link missing"
     echo "$out" | grep -q 'nlink=1' || bad "after-crash split-link nlink"
+fi
+if [ -n "${MIGRATE_DIR:-}" ]; then
+    out=$(g0_mgmt raft-lookup 1 "$MIGRATE_DIR")
+    say "after-crash lookup migrate-dir: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash migrate-dir missing"
+    echo "$out" | grep -q 'mode=040755' || bad "after-crash migrate-dir mode lost"
+fi
+if [ -n "${MIGRATE_DIR_INO:-}" ]; then
+    out=$(g0_mgmt raft-lookup "$MIGRATE_DIR_INO" pre)
+    say "after-crash lookup migrate-pre: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash migrate-pre missing"
+fi
+if [ -n "${MIGRATE_DIR_INO:-}" ] && [ -n "${MIGRATE_FILE:-}" ]; then
+    out=$(g0_mgmt raft-lookup "$MIGRATE_DIR_INO" "$MIGRATE_FILE")
+    say "after-crash lookup migrate leftover: $out"
+    echo "$out" | grep -q 'status=0' || bad "after-crash migrate leftover missing"
 fi
 if [ -n "${HOLD_NAME:-}" ]; then
     out=$(g0_mgmt raft-lookup 1 "$HOLD_NAME")

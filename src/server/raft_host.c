@@ -906,10 +906,9 @@ static int apply_append_res_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 }
 
 /* Same encoding as sim_dir_apply. Empty LOCAL → HASHED for the smoke.
- * migrate of a non-empty dir that PUTs a hashed dentry on another group
- * is still a single-group apply (not a txn) — do not migrate a populated
- * local range across groups here. SPLITTING dest CREATE writes the
- * hashed location on the dentry shard's own group. */
+ * Same-group leftover migrate stays this apply. A leftover whose HASHED
+ * shard is on the other group is a txn from host_dir_migrate (hashed PUT
+ * in the dest log). I8: hashed live/tombstone skips the PUT. */
 static int apply_dir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                          uint32_t clen, uint64_t index)
 {
@@ -3765,6 +3764,9 @@ static int host_session_get(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
+                            const uint8_t *cmd, uint32_t clen, int *hint);
+
 /* Payload: group byte, then command bytes (empty command = ReadIndex).
  * A hosted replica proposes (or ReadIndexes) even when it is not the
  * leader; an unhosted node forwards a non-empty command to a voter.
@@ -3835,6 +3837,14 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     pthread_mutex_lock(&h->read_mu);
     if (clen == 0) {
         rc = host_read_index(h, group, &hint);
+        pthread_mutex_lock(&h->mu);
+        r = group_raft(h, group);
+        if (r)
+            idx = efs_raft_applied(r);
+        pthread_mutex_unlock(&h->mu);
+    } else if (clen >= HOST_DIR_LEN && cmd[0] == EFS_MD_CMD_DIR &&
+               cmd[1] == EFS_MD_DIR_MIGRATE) {
+        rc = host_dir_migrate(h, rd64be(cmd + 2), cmd, clen, &hint);
         pthread_mutex_lock(&h->mu);
         r = group_raft(h, group);
         if (r)
@@ -4701,6 +4711,179 @@ static int host_drop_parts(struct efs_raft_host *h, const struct efs_txid *t,
             rc = one;
     }
     return rc;
+}
+
+/* Cross-group leftover migrate: hashed PUT + local DEL + used_shards
+ * as a txn so group-2-only replicas see the hashed dentry. Same-group
+ * leftovers (or hashed already present) stay a single DIR_MIGRATE apply.
+ * read_mu held. Bounces to a dual-host when this replica does not host
+ * the dest group. */
+static int host_dir_migrate_txn(struct efs_raft_host *h, efs_ino_t dir,
+                                const char *name, uint32_t hsh, int *hint)
+{
+    struct efs_meta_row row;
+    struct efs_meta_dentry dent;
+    struct efs_txid t;
+    struct efs_txn_parts parts;
+    uint8_t k_loc[EFS_KV_KEY_MAX], k_hash[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
+    uint8_t k_dseq[EFS_KV_KEY_MAX];
+    uint8_t v_dent[EFS_META_DENT_BYTES], v_ino[EFS_META_INO_BYTES], v_dseq[8];
+    uint8_t loc_buf[EFS_META_DENT_BYTES], sb[8], cmd[22];
+    uint32_t kl = 0, kh = 0, ki = 0, ks = 0, locn, sn = 8;
+    uint32_t psh, coord;
+    uint64_t loc_ver = 0, hash_ver = 0, ino_ver = 0, sver = 0, seq = 0, bit;
+    uint8_t lane;
+    int rc, i, gr, stamp_ino = 0;
+
+    psh = efs_kv_inode_shard(dir);
+    lane = efs_kv_dir_lane(name);
+    bit = 1ull << lane;
+    rc = efs_meta_apply_get_inode(h->kv, dir, &row);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_key_dentry(psh, dir, name, k_loc, &kl);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_dentry(hsh, dir, name, k_hash, &kh);
+    if (rc != EFS_OK)
+        return rc;
+    locn = sizeof(loc_buf);
+    rc = efs_kv_get(h->kv, k_loc, kl, loc_buf, &locn);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_meta_unpack_dentry(loc_buf, locn, &dent);
+    if (rc == EFS_OK)
+        rc = efs_meta_pack_dentry(&dent, v_dent, sizeof(v_dent));
+    if (rc != EFS_OK)
+        return rc;
+    if ((row.used_shards & bit) == 0) {
+        row.used_shards |= bit;
+        stamp_ino = 1;
+        rc = efs_kv_key_inode(psh, dir, k_ino, &ki);
+        if (rc == EFS_OK)
+            rc = efs_meta_pack_inode(&row, v_ino, sizeof(v_ino));
+        if (rc != EFS_OK)
+            return rc;
+    }
+    rc = efs_kv_key_dseq(hsh, dir, lane, k_dseq, &ks);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_txn_ver_get(h->kv, k_loc, kl, &loc_ver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_hash, kh, &hash_ver);
+    if (rc == EFS_OK && stamp_ino)
+        rc = efs_txn_ver_get(h->kv, k_ino, ki, &ino_ver);
+    if (rc == EFS_OK)
+        rc = efs_txn_ver_get(h->kv, k_dseq, ks, &sver);
+    if (rc != EFS_OK)
+        return rc;
+    sn = 8;
+    gr = efs_kv_get(h->kv, k_dseq, ks, sb, &sn);
+    seq = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
+    wr64be(v_dseq, seq + 1);
+    memset(&parts, 0, sizeof(parts));
+    rc = host_parts_add(&parts, psh);
+    if (rc == EFS_OK)
+        rc = host_parts_add(&parts, hsh);
+    if (rc != EFS_OK)
+        return rc;
+    fill_txid(h, &t);
+    for (i = 0; i < parts.n && rc == EFS_OK; i++) {
+        uint32_t sh = parts.shard[i];
+
+        if (sh == psh) {
+            rc = host_prep(h, psh, EFS_TXN_EXCL, &t, &parts, k_loc, kl, loc_ver,
+                           EFS_TXN_DEL, NULL, 0, hint);
+            if (rc == EFS_OK && stamp_ino)
+                rc = host_prep(h, psh, EFS_TXN_EXCL, &t, &parts, k_ino, ki,
+                               ino_ver, EFS_TXN_PUT, v_ino, sizeof(v_ino),
+                               hint);
+        }
+        if (rc == EFS_OK && sh == hsh) {
+            rc = host_prep(h, hsh, EFS_TXN_EXCL, &t, &parts, k_hash, kh,
+                           hash_ver, EFS_TXN_PUT, v_dent, sizeof(v_dent),
+                           hint);
+            if (rc == EFS_OK)
+                rc = host_prep(h, hsh, EFS_TXN_EXCL, &t, &parts, k_dseq, ks,
+                               sver, EFS_TXN_PUT, v_dseq, 8, hint);
+        }
+    }
+    if (rc != EFS_OK)
+        (void)host_drop_parts(h, &t, &parts, hint);
+    else {
+        coord = efs_txn_coordinator(&t, &parts);
+        pack_decide(cmd, &t, coord, EFS_TXN_COMMIT);
+        rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, 22, hint);
+        for (i = 0; i < parts.n && rc == EFS_OK; i++) {
+            pack_resolve(cmd, &t, parts.shard[i], EFS_TXN_COMMIT);
+            rc = host_propose_wait(h, efs_raft_shard_group(parts.shard[i]), cmd,
+                                   22, hint);
+        }
+    }
+    return rc;
+}
+
+static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
+                            const uint8_t *cmd, uint32_t clen, int *hint)
+{
+    char name[EFS_MAX_NAME];
+    uint8_t hk[EFS_KV_KEY_MAX], hv[EFS_META_DENT_BYTES], need[2];
+    uint32_t hsh = 0, hklen = 0, hvlen, psh;
+    uint8_t pg, hg;
+    struct efs_msg_raft_mkfs_reply rep;
+    int rc, saw = 0, rid;
+
+    psh = efs_kv_inode_shard(dir);
+    pg = efs_raft_shard_group(psh);
+    rc = host_read_index(h, pg, hint);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_meta_dir_migrate_peek(h->kv, dir, name, sizeof(name), &hsh, &saw);
+    if (rc == EFS_ERR_INVAL)
+        return host_propose_wait(h, pg, cmd, clen, hint);
+    if (rc == EFS_ERR_NOT_FOUND) {
+        struct efs_meta_row row;
+
+        if (saw && efs_meta_apply_get_inode(h->kv, dir, &row) == EFS_OK &&
+            (row.used_shards & 1ull) == 0)
+            return host_propose_wait(h, pg, cmd, clen, hint);
+        return EFS_ERR_NOT_FOUND;
+    }
+    if (rc != EFS_OK)
+        return rc;
+    hg = efs_raft_shard_group(hsh);
+    if (hg != pg && !host_hosts(h, hg)) {
+        need[0] = pg;
+        need[1] = hg;
+        pthread_mutex_unlock(&h->read_mu);
+        rid = host_pick_peer(h, need, 2, -1);
+        if (rid < 0)
+            rc = EFS_ERR_NOT_PRIMARY;
+        else
+            rc = host_rpc_submit(h, rid, pg, cmd, clen, &rep);
+        pthread_mutex_lock(&h->read_mu);
+        if (rc != EFS_OK)
+            return rc;
+        if (hint && rep.leader_hint >= 0)
+            *hint = (int)rep.leader_hint;
+        return rep.rc;
+    }
+    if (hg != pg) {
+        rc = host_read_index(h, hg, hint);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    if (hg == pg)
+        return host_propose_wait(h, pg, cmd, clen, hint);
+    rc = efs_kv_key_dentry(hsh, dir, name, hk, &hklen);
+    if (rc != EFS_OK)
+        return rc;
+    hvlen = sizeof(hv);
+    rc = efs_kv_get(h->kv, hk, hklen, hv, &hvlen);
+    if (rc == EFS_OK)
+        return host_propose_wait(h, pg, cmd, clen, hint);
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+    return host_dir_migrate_txn(h, dir, name, hsh, hint);
 }
 
 /* LOCAL / HASHED / SPLITTING name drop matching apply dentry_drop_items
