@@ -13,7 +13,23 @@ sends you to — not the whole spec.
 
 ## 1. The task right now
 
-> **Architecture migration §10, step 10.5c:** applied SM is gated in-sim
+> **§10 steps 0–12 are in** (simulator, KV, Raft, txns, sessions, dir
+> spread ops including populated leftover migrate as a 2-shard txn,
+> delete-2PC, FUSE A–D). LOCAL dirs auto-begin SPLITTING when `nents >
+> EFS_DIR_SPREAD_MIN`. Remaining specified leftovers, in order:
+> (1) **background migrator** that drains SPLITTING leftovers to HASHED
+> without `raft-dir migrate` (do not grow `raft_host.c`); pressure-triggered
+> spread has no numeric bound — do not invent one;
+> (2) **production joint-consensus reconfiguration** (§7.8 / step 6) —
+> in `raft.c` + sim, not in `raft_host`;
+> (3) **honest fio** on a 19810 NVMe cluster (do not auto `raft-mkfs`);
+> C1 relaxed-coherence is out of scope. Doc machine-gate:
+> `make docs-check`. Cutover of a 36T `efs-test` is not this work.
+> [architecture.md §10](../architecture.md)
+
+The 10.5c increment list below is landed history, not the current task.
+
+> **Architecture migration §10, step 10.5c (landed):** applied SM is gated in-sim
 > (10.5c-1..8), the production Raft host is gated in `efsd` (10.5c-9),
 > and LOOKUP/GETATTR go through ReadIndex + KV behind `EFS_MD_RAFT`
 > (10.5c-10), file CREATE is a single Raft entry on the dentry

@@ -99,14 +99,20 @@ BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
               $(BLAKE3_DIR)/blake3_avx2.o \
               $(BLAKE3_DIR)/blake3_avx512.o
 
-.PHONY: all clean tests test blake3-bench FORCE
+.PHONY: all clean tests test docs-check blake3-bench FORCE
 
 all: $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query tests
 
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
 
+# Architecture doc machine-gate (docs/arch/development.md). Python only;
+# safe on the login node. `make test` on a build node runs it too.
+docs-check:
+	python3 docs/check-architecture.py
+
 test: all
+	python3 docs/check-architecture.py
 	./tests/test_wire
 	./tests/test_data
 	./tests/test_kv

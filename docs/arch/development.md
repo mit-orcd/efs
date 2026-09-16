@@ -128,6 +128,11 @@ how the index and a satellite come to disagree, and the rule "if they
 disagree, the index wins" is a fallback, not a substitute for the tables
 being single-sourced.
 
+The gate is `docs/check-architecture.py` (stdlib only). Run it with
+`make docs-check` (login-node safe) or as part of `make test` on a build
+node. It regenerates `architecture-full.md` into a temp file and diffs;
+it never clobbers the checked-in copy.
+
 **Why it is in the architecture and not a style guide:** the migration
 (§10 of the spec) lands Raft, KV, and the transaction protocol as *new*
 components. If they are built to these boundaries from the start, the

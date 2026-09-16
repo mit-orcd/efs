@@ -1,8 +1,39 @@
 #include "efs/dir_layout.h"
 #include "efs/meta_apply.h"
 #include "efs/kv_key.h"
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+
+uint32_t efs_dir_spread_min(void)
+{
+    const char *e = getenv("EFS_DIR_SPREAD_MIN");
+    unsigned long v;
+    char *end = NULL;
+
+    if (e && *e) {
+        v = strtoul(e, &end, 10);
+        if (end != e && v > 0 && v <= UINT32_MAX)
+            return (uint32_t)v;
+    }
+    return EFS_DIR_SPREAD_MIN;
+}
+
+void efs_meta_dir_note_entry(struct efs_meta_row *row, int delta)
+{
+    if (!row || row->layout != EFS_META_LAYOUT_LOCAL)
+        return;
+    if (delta > 0) {
+        if (row->nents < UINT32_MAX)
+            row->nents++;
+    } else if (delta < 0 && row->nents > 0) {
+        row->nents--;
+    }
+    if (delta > 0 && row->nents > efs_dir_spread_min()) {
+        row->layout = EFS_META_LAYOUT_SPLITTING;
+        row->layout_epoch++;
+    }
+}
 
 struct hit {
     uint8_t key[EFS_KV_KEY_MAX];

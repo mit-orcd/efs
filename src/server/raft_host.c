@@ -5241,6 +5241,7 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                 prow.base_mtime = now;
             if (prow.base_ctime < now)
                 prow.base_ctime = now;
+            efs_meta_dir_note_entry(&prow, 1);
         } else {
             /* Times live on the dir-lane (§7.4); the home row carries
              * nlink++ and the first-use used_shards bit only. */
@@ -5528,6 +5529,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
                 prow.base_mtime = now;
             if (prow.base_ctime < now)
                 prow.base_ctime = now;
+            efs_meta_dir_note_entry(&prow, -1);
         } else
             stamp_lane = 1;
         rc = efs_meta_pack_inode(&prow, v_pino, sizeof(v_pino));
@@ -5725,6 +5727,7 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
                 prow.base_mtime = now;
             if (prow.base_ctime < now)
                 prow.base_ctime = now;
+            efs_meta_dir_note_entry(&prow, -1);
             touch_parent = 1;
         } else
             stamp_lane = 1;
@@ -6552,6 +6555,7 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
                 dprow.base_mtime = now;
             if (dprow.base_ctime < now)
                 dprow.base_ctime = now;
+            efs_meta_dir_note_entry(&dprow, 1);
             touch_parent = 1;
         } else {
             bit = 1ull << d_lane;
@@ -7004,6 +7008,8 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                 prow.base_mtime = now;
             if (prow.base_ctime < now)
                 prow.base_ctime = now;
+            if (!(same && !xist))
+                efs_meta_dir_note_entry(&prow, -1);
             touch_src = 1;
         } else {
             bit = 1ull << s_lane;
@@ -7019,6 +7025,8 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                     dprow.base_mtime = now;
                 if (dprow.base_ctime < now)
                     dprow.base_ctime = now;
+                if (!xist)
+                    efs_meta_dir_note_entry(&dprow, 1);
                 touch_dst = 1;
             } else {
                 bit = 1ull << d_lane;

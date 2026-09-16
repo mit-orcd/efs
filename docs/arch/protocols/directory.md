@@ -109,6 +109,16 @@ spread when:  entries > EFS_DIR_SPREAD_MIN
               directory's shard crosses a pressure threshold
 ```
 
+The LOCAL inode row carries `nents`, a count of immediate children
+(create/mkdir/link dest increment it; unlink/rmdir/a name leaving a directory
+decrement it). Crossing `nents > EFS_DIR_SPREAD_MIN` commits `SPLITTING` on
+that same parent-row PUT — one Raft entry, no extra round. After spread the
+count is frozen; HASHED emptiness is the per-lane `dentry_seq` read set, not
+a distributed counter (the spec rejected that). Runtime override:
+`EFS_DIR_SPREAD_MIN` (tests). Pressure-triggered spread is specified; the
+bound is not a number in the spec and is not invented here. Draining
+SPLITTING leftovers is still `raft-dir migrate` (now a txn) plus finish.
+
 (a 100-entry directory with 100,000 clients creating and unlinking never
 crosses the size threshold but melts its leader — pressure-triggered spread
 catches it). Spread is one-way initially: once HASHED, a directory does not

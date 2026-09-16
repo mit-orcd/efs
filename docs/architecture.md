@@ -474,7 +474,7 @@ node hosts many.
 | size / write mtime / write ctime | write lane, co-located with the chunk's lane shard | `(FileID, lane)` | shard Raft |
 | active-lane bitmap, `base_size`/`base_mtime`/`base_ctime`, `content_epoch`, `mtime_gen` | `inode_shard(ino)` (inode row) | `(ino)` | shard Raft |
 | directory mtime / ctime, HASHED layout | each of the directory's dentry shards | `(dir_ino, dir_lane)` | shard Raft |
-| directory used-shard bitmap, `dir_mtime_gen` | `inode_shard(dir_ino)` (dir inode row) | `(dir_ino)` | shard Raft |
+| directory used-shard bitmap, `dir_mtime_gen`, LOCAL `nents` | `inode_shard(dir_ino)` (dir inode row) | `(dir_ino)` | shard Raft |
 | `dentry_seq` (per directory, per dentry shard — the predicate guard key for emptiness, §7.2) | that dentry shard | `(dir_ino, dir_lane)` | shard Raft |
 | current coding profile + `profile_epoch`, per-node availability state | control-plane group, **installed into every publication authority** (§7.3) | — | control Raft + per-shard installed config |
 | client session, touched-shard set | `hash(client_uuid) & 0xFFF` | `(client_uuid)` | shard Raft |

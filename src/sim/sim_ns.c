@@ -4,6 +4,7 @@
 #include "efs/kv_key.h"
 #include "efs/txn.h"
 #include "efs/session.h"
+#include "efs/dir_layout.h"
 #include <string.h>
 #include <sys/stat.h>
 
@@ -249,7 +250,7 @@ static int pver_bump(struct efs_sim *sim, efs_ino_t ino, uint64_t new_ver,
 
 static int stamp_local_parent(struct efs_sim *sim, struct efs_meta_row *prow,
                               efs_ino_t parent, uint64_t now, struct ns_prep *pr,
-                              int *n, struct efs_txn_parts *p)
+                              int *n, struct efs_txn_parts *p, int nents_delta)
 {
     uint8_t k[EFS_KV_KEY_MAX], v[EFS_META_INO_BYTES];
     uint32_t kl = 0;
@@ -265,6 +266,7 @@ static int stamp_local_parent(struct efs_sim *sim, struct efs_meta_row *prow,
         prow->base_mtime = now;
     if (prow->base_ctime < now)
         prow->base_ctime = now;
+    efs_meta_dir_note_entry(prow, nents_delta);
     rc = efs_meta_pack_inode(prow, v, sizeof(v));
     if (rc != EFS_OK)
         return rc;
@@ -436,6 +438,8 @@ static int link_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
         return rc;
     dsh = efs_kv_dentry_shard(dst_parent, dst_name, dprow.layout);
     ish = efs_kv_inode_shard(row.ino);
+    dseq_lane = dprow.layout == EFS_META_LAYOUT_LOCAL ? 0
+                                                     : efs_kv_dir_lane(dst_name);
     rc = sim_txn_read_kv(sim, dsh, &dkv);
     if (rc != EFS_OK)
         return rc;
@@ -480,7 +484,7 @@ static int link_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
     if (rc != EFS_OK)
         return rc;
     if (dprow.layout == EFS_META_LAYOUT_LOCAL) {
-        rc = stamp_local_parent(sim, &dprow, dst_parent, sim->now, pr, &n, p);
+        rc = stamp_local_parent(sim, &dprow, dst_parent, sim->now, pr, &n, p, 1);
         if (rc != EFS_OK)
             return rc;
     } else {
@@ -490,13 +494,11 @@ static int link_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
         if ((dprow.used_shards & (1ull << efs_kv_dir_lane(dst_name))) == 0) {
             dprow.used_shards |= 1ull << efs_kv_dir_lane(dst_name);
             rc = stamp_local_parent(sim, &dprow, dst_parent, sim->now, pr, &n,
-                                    p);
+                                    p, 0);
             if (rc != EFS_OK)
                 return rc;
         }
     }
-    dseq_lane = dprow.layout == EFS_META_LAYOUT_LOCAL ? 0
-                                                     : efs_kv_dir_lane(dst_name);
     rc = dseq_prep(dkv, dsh, dst_parent, dseq_lane, pr, &n, p);
     if (rc != EFS_OK)
         return rc;
@@ -586,7 +588,7 @@ static int unlink_build(struct efs_sim *sim, int client, efs_ino_t parent, const
         rc = sim_txn_read_kv(sim, psh, &pkv);
         if (rc != EFS_OK)
             return rc;
-        rc = stamp_local_parent(sim, &prow, parent, sim->now, pr, &n, p);
+        rc = stamp_local_parent(sim, &prow, parent, sim->now, pr, &n, p, -1);
     } else {
         rc = stamp_hashed_lane(pkv, &prow, name, sim->now, pr, &n, p);
     }
@@ -705,6 +707,7 @@ static int rmdir_build(struct efs_sim *sim, int client, efs_ino_t parent, const 
             prow.base_mtime = sim->now;
         if (prow.base_ctime < sim->now)
             prow.base_ctime = sim->now;
+        efs_meta_dir_note_entry(&prow, -1);
     }
     rc = efs_meta_pack_inode(&prow, v_par, sizeof(v_par));
     if (rc == EFS_OK)
@@ -815,6 +818,8 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
     dsh = efs_kv_dentry_shard(dst_parent, dst_name, dprow.layout);
     ssh = efs_kv_dentry_shard(src_parent, src_name, sprow.layout);
     ish = efs_kv_inode_shard(row.ino);
+    s_lane = sprow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(src_name);
+    d_lane = dprow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(dst_name);
     rc = sim_txn_read_kv(sim, dsh, &dkv);
     if (rc != EFS_OK)
         return rc;
@@ -1022,7 +1027,8 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
     if (rc != EFS_OK)
         return rc;
     if (sprow.layout == EFS_META_LAYOUT_LOCAL) {
-        rc = stamp_local_parent(sim, &sprow, src_parent, sim->now, pr, &n, p);
+        rc = stamp_local_parent(sim, &sprow, src_parent, sim->now, pr, &n, p,
+                                (src_parent == dst_parent && !xist) ? 0 : -1);
         if (rc != EFS_OK)
             return rc;
     } else {
@@ -1031,7 +1037,7 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
             return rc;
         if (is_dir && src_parent != dst_parent) {
             rc = stamp_local_parent(sim, &sprow, src_parent, sim->now, pr, &n,
-                                    p);
+                                    p, 0);
             if (rc != EFS_OK)
                 return rc;
         }
@@ -1039,12 +1045,12 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
     if (src_parent != dst_parent) {
         if (dprow.layout == EFS_META_LAYOUT_LOCAL) {
             rc = stamp_local_parent(sim, &dprow, dst_parent, sim->now, pr, &n,
-                                    p);
+                                    p, xist ? 0 : 1);
         } else {
             rc = stamp_hashed_lane(dkv, &dprow, dst_name, sim->now, pr, &n, p);
             if (rc == EFS_OK && is_dir)
                 rc = stamp_local_parent(sim, &dprow, dst_parent, sim->now, pr,
-                                        &n, p);
+                                        &n, p, 0);
         }
         if (rc != EFS_OK)
             return rc;
@@ -1053,8 +1059,6 @@ static int rename_build(struct efs_sim *sim, int client, efs_ino_t src_parent,
         if (rc != EFS_OK)
             return rc;
     }
-    s_lane = sprow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(src_name);
-    d_lane = dprow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(dst_name);
     rc = dseq_prep(skv, ssh, src_parent, s_lane, pr, &n, p);
     if (rc == EFS_OK && !(ssh == dsh && s_lane == d_lane))
         rc = dseq_prep(dkv, dsh, dst_parent, d_lane, pr, &n, p);

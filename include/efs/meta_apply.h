@@ -47,6 +47,7 @@ struct efs_meta_row {
     uint64_t active_lanes;
     uint64_t content_epoch;
     uint8_t layout;
+    uint32_t nents; /* LOCAL immediate children; frozen after spread */
     uint64_t layout_epoch;
     uint64_t used_shards;
     uint32_t uid;

@@ -491,7 +491,7 @@ node hosts many.
 | size / write mtime / write ctime | write lane, co-located with the chunk's lane shard | `(FileID, lane)` | shard Raft |
 | active-lane bitmap, `base_size`/`base_mtime`/`base_ctime`, `content_epoch`, `mtime_gen` | `inode_shard(ino)` (inode row) | `(ino)` | shard Raft |
 | directory mtime / ctime, HASHED layout | each of the directory's dentry shards | `(dir_ino, dir_lane)` | shard Raft |
-| directory used-shard bitmap, `dir_mtime_gen` | `inode_shard(dir_ino)` (dir inode row) | `(dir_ino)` | shard Raft |
+| directory used-shard bitmap, `dir_mtime_gen`, LOCAL `nents` | `inode_shard(dir_ino)` (dir inode row) | `(dir_ino)` | shard Raft |
 | `dentry_seq` (per directory, per dentry shard — the predicate guard key for emptiness, §7.2) | that dentry shard | `(dir_ino, dir_lane)` | shard Raft |
 | current coding profile + `profile_epoch`, per-node availability state | control-plane group, **installed into every publication authority** (§7.3) | — | control Raft + per-shard installed config |
 | client session, touched-shard set | `hash(client_uuid) & 0xFFF` | `(client_uuid)` | shard Raft |
@@ -1283,7 +1283,23 @@ sends you to — not the whole spec.
 
 ### 1. The task right now
 
-> **Architecture migration §10, step 10.5c:** applied SM is gated in-sim
+> **§10 steps 0–12 are in** (simulator, KV, Raft, txns, sessions, dir
+> spread ops including populated leftover migrate as a 2-shard txn,
+> delete-2PC, FUSE A–D). LOCAL dirs auto-begin SPLITTING when `nents >
+> EFS_DIR_SPREAD_MIN`. Remaining specified leftovers, in order:
+> (1) **background migrator** that drains SPLITTING leftovers to HASHED
+> without `raft-dir migrate` (do not grow `raft_host.c`); pressure-triggered
+> spread has no numeric bound — do not invent one;
+> (2) **production joint-consensus reconfiguration** (§7.8 / step 6) —
+> in `raft.c` + sim, not in `raft_host`;
+> (3) **honest fio** on a 19810 NVMe cluster (do not auto `raft-mkfs`);
+> C1 relaxed-coherence is out of scope. Doc machine-gate:
+> `make docs-check`. Cutover of a 36T `efs-test` is not this work.
+> [architecture.md §10](#architecture)
+
+The 10.5c increment list below is landed history, not the current task.
+
+> **Architecture migration §10, step 10.5c (landed):** applied SM is gated in-sim
 > (10.5c-1..8), the production Raft host is gated in `efsd` (10.5c-9),
 > and LOOKUP/GETATTR go through ReadIndex + KV behind `EFS_MD_RAFT`
 > (10.5c-10), file CREATE is a single Raft entry on the dentry
@@ -3400,6 +3416,16 @@ spread when:  entries > EFS_DIR_SPREAD_MIN
               directory's shard crosses a pressure threshold
 ```
 
+The LOCAL inode row carries `nents`, a count of immediate children
+(create/mkdir/link dest increment it; unlink/rmdir/a name leaving a directory
+decrement it). Crossing `nents > EFS_DIR_SPREAD_MIN` commits `SPLITTING` on
+that same parent-row PUT — one Raft entry, no extra round. After spread the
+count is frozen; HASHED emptiness is the per-lane `dentry_seq` read set, not
+a distributed counter (the spec rejected that). Runtime override:
+`EFS_DIR_SPREAD_MIN` (tests). Pressure-triggered spread is specified; the
+bound is not a number in the spec and is not invented here. Draining
+SPLITTING leftovers is still `raft-dir migrate` (now a txn) plus finish.
+
 (a 100-entry directory with 100,000 clients creating and unlinking never
 crosses the size threshold but melts its leader — pressure-triggered spread
 catches it). Spread is one-way initially: once HASHED, a directory does not
@@ -4209,6 +4235,11 @@ The last check is the one that matters most: duplicated normative tables are
 how the index and a satellite come to disagree, and the rule "if they
 disagree, the index wins" is a fallback, not a substitute for the tables
 being single-sourced.
+
+The gate is `docs/check-architecture.py` (stdlib only). Run it with
+`make docs-check` (login-node safe) or as part of `make test` on a build
+node. It regenerates `architecture-full.md` into a temp file and diffs;
+it never clobbers the checked-in copy.
 
 **Why it is in the architecture and not a style guide:** the migration
 (§10 of the spec) lands Raft, KV, and the transaction protocol as *new*

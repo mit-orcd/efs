@@ -1274,6 +1274,62 @@ static void test_migrate_populated(void)
     efs_sim_free(s);
 }
 
+/* Size trigger: LOCAL nents > EFS_DIR_SPREAD_MIN commits SPLITTING on
+ * the parent-row PUT of the crossing create. Unlink decrements so a
+ * dir that dips back under the bound does not spread. */
+static void test_auto_spread(void)
+{
+    struct efs_sim *s;
+    efs_ino_t d = 0, f[5], g = 0;
+    uint8_t layout = 99;
+    char nm[8];
+    int i, rc;
+    const char *hashed;
+
+    CHECK(setenv("EFS_DIR_SPREAD_MIN", "3", 1) == 0, "setenv");
+    s = mk(140);
+    CHECK(s, "mk");
+    CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, "d", &d) == EFS_OK && d, "d");
+    for (i = 0; i < 3; i++) {
+        snprintf(nm, sizeof(nm), "f%d", i);
+        CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, nm, &f[i]) == EFS_OK &&
+                  f[i],
+              "create below min");
+    }
+    CHECK(efs_sim_dir_layout(s, d, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_LOCAL,
+          "still LOCAL at 3");
+    CHECK(efs_sim_unlink(s, 0, d, "f2") == EFS_OK, "unlink");
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, "f2", &f[2]) == EFS_OK,
+          "recreate still LOCAL");
+    CHECK(efs_sim_dir_layout(s, d, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_LOCAL,
+          "LOCAL after recreate");
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, "f3", &f[3]) == EFS_OK &&
+              f[3],
+          "crossing create");
+    CHECK(efs_sim_dir_layout(s, d, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_SPLITTING,
+          "auto SPLITTING");
+    hashed = hashed_nm(d);
+    CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, hashed, &f[4]) == EFS_OK &&
+              f[4],
+          "hashed create after auto-begin");
+    while ((rc = efs_sim_dir_migrate(s, d)) == EFS_OK)
+        ;
+    CHECK(rc == EFS_ERR_NOT_FOUND, "migrated");
+    CHECK(efs_sim_dir_finish_hashed(s, d) == EFS_OK, "finish");
+    CHECK(efs_sim_dir_layout(s, d, &layout, NULL) == EFS_OK &&
+              layout == EFS_META_LAYOUT_HASHED,
+          "HASHED");
+    CHECK(efs_sim_lookup(s, 1, d, "f0", &g) == EFS_OK && g == f[0], "peer f0");
+    CHECK(efs_sim_lookup(s, 1, d, hashed, &g) == EFS_OK && g == f[4],
+          "peer hashed");
+    CHECK(efs_sim_check(s) == EFS_OK, "check");
+    efs_sim_free(s);
+    unsetenv("EFS_DIR_SPREAD_MIN");
+}
+
 /* Rename over an empty HASHED dest dir (never-used, then emptied with
  * used_shards set). Nonempty HASHED dest is NOT_EMPTY, not INVAL. */
 static void test_rename_hashed_dir_overwrite(void)
@@ -1760,6 +1816,7 @@ int main(void)
     test_rename_splitting();
     test_mkdir_splitting();
     test_migrate_populated();
+    test_auto_spread();
     test_rename_hashed_dir_overwrite();
     test_single_shard_ops();
     test_utimens_fence();

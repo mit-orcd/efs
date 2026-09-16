@@ -2,6 +2,7 @@
 #include "efs/kv_key.h"
 #include "efs/session.h"
 #include "efs/checksum.h"
+#include "efs/dir_layout.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -176,7 +177,8 @@ static void pack_inode(uint8_t *p, const struct efs_meta_row *r)
     be64(p + 40, r->active_lanes);
     be64(p + 48, r->content_epoch);
     p[56] = r->layout;
-    memset(p + 57, 0, 7);
+    memset(p + 57, 0, 3);
+    be32(p + 60, r->nents);
     be64(p + 64, r->layout_epoch);
     be64(p + 72, r->used_shards);
     be32(p + 80, r->uid);
@@ -202,6 +204,7 @@ static int unpack_inode(const uint8_t *p, uint32_t n, struct efs_meta_row *r)
     r->active_lanes = rd64(p + 40);
     r->content_epoch = rd64(p + 48);
     r->layout = p[56];
+    r->nents = rd32(p + 60);
     r->layout_epoch = rd64(p + 64);
     r->used_shards = rd64(p + 72);
     r->uid = rd32(p + 80);
@@ -641,6 +644,9 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         return rc;
 
     shard = efs_kv_dentry_shard(parent, name, parent_row.layout);
+    dseq_lane = parent_row.layout == EFS_META_LAYOUT_LOCAL
+                    ? 0
+                    : efs_kv_dir_lane(name);
     rc = load_alloc(kv, shard, &next);
     if (rc != EFS_OK)
         return rc;
@@ -685,6 +691,7 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     if (parent_row.layout == EFS_META_LAYOUT_LOCAL) {
         parent_row.base_mtime = max_u64(parent_row.base_mtime, at->now);
         parent_row.base_ctime = max_u64(parent_row.base_ctime, at->now);
+        efs_meta_dir_note_entry(&parent_row, 1);
         touch_parent = 1;
     } else {
         bit = 1ull << efs_kv_dir_lane(name);
@@ -739,9 +746,6 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         it[n].vlen = LANE_VAL;
         n++;
     }
-    dseq_lane = parent_row.layout == EFS_META_LAYOUT_LOCAL
-                    ? 0
-                    : efs_kv_dir_lane(name);
     rc = dseq_bump(kv, shard, parent, dseq_lane, k_dseq, &ks, v_dseq);
     if (rc != EFS_OK)
         return rc;
@@ -926,6 +930,7 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
     if (prow.layout == EFS_META_LAYOUT_LOCAL) {
         prow.base_mtime = max_u64(prow.base_mtime, now);
         prow.base_ctime = max_u64(prow.base_ctime, now);
+        efs_meta_dir_note_entry(&prow, -1);
         touch_parent = 1;
     } else {
         rc = dir_lane_stamp(kv, &prow, name, now, k_ln, &kln, v_ln);
@@ -1005,6 +1010,8 @@ int efs_meta_apply_link(struct efs_kv *kv, efs_ino_t src_parent, const char *src
         return rc;
 
     dsh = efs_kv_dentry_shard(dst_parent, dst_name, dprow.layout);
+    dseq_lane = dprow.layout == EFS_META_LAYOUT_LOCAL ? 0
+                                                     : efs_kv_dir_lane(dst_name);
     memset(&ndent, 0, sizeof(ndent));
     ndent.ino = row.ino;
     ndent.generation = row.generation;
@@ -1023,6 +1030,7 @@ int efs_meta_apply_link(struct efs_kv *kv, efs_ino_t src_parent, const char *src
     if (dprow.layout == EFS_META_LAYOUT_LOCAL) {
         dprow.base_mtime = max_u64(dprow.base_mtime, now);
         dprow.base_ctime = max_u64(dprow.base_ctime, now);
+        efs_meta_dir_note_entry(&dprow, 1);
         touch_parent = 1;
     } else {
         bit = 1ull << efs_kv_dir_lane(dst_name);
@@ -1042,8 +1050,6 @@ int efs_meta_apply_link(struct efs_kv *kv, efs_ino_t src_parent, const char *src
         if (rc != EFS_OK)
             return rc;
     }
-    dseq_lane = dprow.layout == EFS_META_LAYOUT_LOCAL ? 0
-                                                     : efs_kv_dir_lane(dst_name);
     rc = dseq_bump(kv, dsh, dst_parent, dseq_lane, k_dseq, &ks, v_dseq);
     if (rc != EFS_OK)
         return rc;
@@ -1149,6 +1155,7 @@ static int stamp_dir_items(struct efs_kv *kv, struct efs_meta_row *prow,
         prow->base_mtime = max_u64(prow->base_mtime, now);
         prow->base_ctime = max_u64(prow->base_ctime, now);
         *touch_parent = 1;
+        /* Caller sets nents via efs_meta_dir_note_entry before stamp. */
     } else {
         bit = 1ull << efs_kv_dir_lane(name);
         if ((prow->used_shards & bit) == 0) {
@@ -1255,6 +1262,8 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
         dprow.nlink++;
     }
     dsh = efs_kv_dentry_shard(dst_parent, dst_name, dprow.layout);
+    s_lane = sprow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(src_name);
+    d_lane = dprow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(dst_name);
     memset(&exist, 0, sizeof(exist));
     exist.ino = row.ino;
     exist.generation = row.generation;
@@ -1299,11 +1308,15 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
         n++;
     }
 
+    /* Apply rename does not replace (EXIST). same-dir is net-zero nents. */
+    if (!same_dir)
+        efs_meta_dir_note_entry(&sprow, -1);
     rc = stamp_dir_items(kv, &sprow, src_parent, src_name, now, k_spar, &ksp,
                          v_spar, k_sln, &ksln, v_sln, &touch_src, &stamp_src);
     if (rc != EFS_OK)
         return rc;
     if (!same_dir) {
+        efs_meta_dir_note_entry(&dprow, 1);
         rc = stamp_dir_items(kv, &dprow, dst_parent, dst_name, now, k_dpar, &kdp,
                              v_dpar, k_dln, &kdln, v_dln, &touch_dst,
                              &stamp_dst);
@@ -1382,8 +1395,6 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
         it[n].vlen = LANE_VAL;
         n++;
     }
-    s_lane = sprow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(src_name);
-    d_lane = dprow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(dst_name);
     rc = dseq_bump(kv, efs_kv_dentry_shard(src_parent, src_name, sprow.layout),
                    src_parent, s_lane, k_sdseq, &kss, v_sdseq);
     if (rc == EFS_OK)
@@ -1746,6 +1757,7 @@ int efs_meta_apply_rmdir(struct efs_kv *kv, efs_ino_t parent, const char *name,
     if (prow.layout == EFS_META_LAYOUT_LOCAL) {
         prow.base_mtime = max_u64(prow.base_mtime, now);
         prow.base_ctime = max_u64(prow.base_ctime, now);
+        efs_meta_dir_note_entry(&prow, -1);
     } else {
         rc = dir_lane_stamp(kv, &prow, name, now, k_ln, &kln, v_ln);
         if (rc != EFS_OK)

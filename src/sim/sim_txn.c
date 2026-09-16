@@ -4,6 +4,7 @@
 #include "sim_internal.h"
 #include "efs/kv_key.h"
 #include "efs/txn.h"
+#include "efs/dir_layout.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -556,6 +557,7 @@ static int mkdir_build(struct efs_sim *sim, int client, efs_ino_t parent,
             prow.base_mtime = sim->now;
         if (prow.base_ctime < sim->now)
             prow.base_ctime = sim->now;
+        efs_meta_dir_note_entry(&prow, 1);
     } else {
         uint64_t bit = 1ull << efs_kv_dir_lane(name);
         if ((prow.used_shards & bit) == 0)
