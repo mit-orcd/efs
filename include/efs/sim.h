@@ -156,7 +156,8 @@ int efs_sim_inode_nlink(struct efs_sim *sim, efs_ino_t ino, uint32_t *nlink,
                         uint64_t *gen);
 
 /* Directory layout-epoch spread (§7.4). Size trigger lives in apply
- * (`nents > EFS_DIR_SPREAD_MIN`); these are the operator/migrator steps. */
+ * (`nents > EFS_DIR_SPREAD_MIN`); a LOCAL→SPLITTING flip auto-drains
+ * leftovers and FINISHes. These remain the operator/idempotent steps. */
 int efs_sim_dir_begin_split(struct efs_sim *sim, efs_ino_t dir);
 int efs_sim_dir_migrate(struct efs_sim *sim, efs_ino_t dir);
 int efs_sim_dir_finish_hashed(struct efs_sim *sim, efs_ino_t dir);

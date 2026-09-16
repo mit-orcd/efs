@@ -253,6 +253,8 @@ int sim_ns_try(struct sim_server *s, uint8_t group, const uint8_t *cmd,
                uint32_t clen, uint64_t index);
 int sim_dir_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
                   uint32_t clen, uint64_t index);
+/* Drain leftovers + FINISH if `before` was LOCAL and dir is now SPLITTING. */
+void sim_dir_maybe_drain(struct efs_sim *sim, efs_ino_t dir, uint8_t before);
 int sim_lock_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
                    uint32_t clen, uint64_t index);
 int sim_lock_fence(struct efs_sim *sim, const uint8_t *uuid, uint32_t epoch);

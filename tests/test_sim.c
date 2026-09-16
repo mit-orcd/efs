@@ -1275,15 +1275,16 @@ static void test_migrate_populated(void)
 }
 
 /* Size trigger: LOCAL nents > EFS_DIR_SPREAD_MIN commits SPLITTING on
- * the parent-row PUT of the crossing create. Unlink decrements so a
- * dir that dips back under the bound does not spread. */
+ * the parent-row PUT of the crossing create. The background migrator
+ * then drains leftovers and FINISHes — no operator migrate. Unlink
+ * decrements so a dir that dips back under the bound does not spread. */
 static void test_auto_spread(void)
 {
     struct efs_sim *s;
     efs_ino_t d = 0, f[5], g = 0;
     uint8_t layout = 99;
     char nm[8];
-    int i, rc;
+    int i;
     const char *hashed;
 
     CHECK(setenv("EFS_DIR_SPREAD_MIN", "3", 1) == 0, "setenv");
@@ -1309,19 +1310,12 @@ static void test_auto_spread(void)
               f[3],
           "crossing create");
     CHECK(efs_sim_dir_layout(s, d, &layout, NULL) == EFS_OK &&
-              layout == EFS_META_LAYOUT_SPLITTING,
-          "auto SPLITTING");
+              layout == EFS_META_LAYOUT_HASHED,
+          "auto drain to HASHED");
     hashed = hashed_nm(d);
     CHECK(efs_sim_create(s, 0, d, S_IFREG | 0644, hashed, &f[4]) == EFS_OK &&
               f[4],
-          "hashed create after auto-begin");
-    while ((rc = efs_sim_dir_migrate(s, d)) == EFS_OK)
-        ;
-    CHECK(rc == EFS_ERR_NOT_FOUND, "migrated");
-    CHECK(efs_sim_dir_finish_hashed(s, d) == EFS_OK, "finish");
-    CHECK(efs_sim_dir_layout(s, d, &layout, NULL) == EFS_OK &&
-              layout == EFS_META_LAYOUT_HASHED,
-          "HASHED");
+          "hashed create after auto-drain");
     CHECK(efs_sim_lookup(s, 1, d, "f0", &g) == EFS_OK && g == f[0], "peer f0");
     CHECK(efs_sim_lookup(s, 1, d, hashed, &g) == EFS_OK && g == f[4],
           "peer hashed");

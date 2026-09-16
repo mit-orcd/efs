@@ -1,4 +1,5 @@
 #include "efs/dir_layout.h"
+#include "efs/dir_spread.h"
 #include "efs/meta_apply.h"
 #include "efs/kv_key.h"
 #include <stdlib.h>
@@ -32,6 +33,7 @@ void efs_meta_dir_note_entry(struct efs_meta_row *row, int delta)
     if (delta > 0 && row->nents > efs_dir_spread_min()) {
         row->layout = EFS_META_LAYOUT_SPLITTING;
         row->layout_epoch++;
+        efs_dir_spread_note(row->ino);
     }
 }
 
@@ -107,13 +109,18 @@ int efs_meta_dir_begin_split(struct efs_kv *kv, efs_ino_t dir)
         return rc;
     if ((row.mode & S_IFMT) != S_IFDIR)
         return EFS_ERR_INVAL;
-    if (row.layout == EFS_META_LAYOUT_SPLITTING)
+    if (row.layout == EFS_META_LAYOUT_SPLITTING) {
+        efs_dir_spread_note(dir);
         return EFS_OK;
+    }
     if (row.layout != EFS_META_LAYOUT_LOCAL)
         return EFS_ERR_INVAL;
     row.layout = EFS_META_LAYOUT_SPLITTING;
     row.layout_epoch++;
-    return put_inode(kv, &row);
+    rc = put_inode(kv, &row);
+    if (rc == EFS_OK)
+        efs_dir_spread_note(dir);
+    return rc;
 }
 
 int efs_meta_dir_migrate_peek(struct efs_kv *kv, efs_ino_t dir, char *name,

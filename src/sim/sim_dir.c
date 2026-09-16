@@ -1,6 +1,7 @@
 /* Directory layout-epoch Raft cmds (§10 step 10 / I8). */
 #include "sim_internal.h"
 #include "efs/dir_layout.h"
+#include "efs/dir_spread.h"
 #include "efs/kv_key.h"
 #include "efs/meta_apply.h"
 #include "efs/meta_cmd.h"
@@ -262,6 +263,31 @@ int efs_sim_dir_finish_hashed(struct efs_sim *sim, efs_ino_t dir)
     if (!sim || dir == 0)
         return EFS_ERR_INVAL;
     return propose_dir(sim, EFS_MD_DIR_FINISH, dir);
+}
+
+void sim_dir_maybe_drain(struct efs_sim *sim, efs_ino_t dir, uint8_t before)
+{
+    uint8_t after = 0;
+    int rc, n;
+
+    if (!sim || dir == 0)
+        return;
+    if (efs_sim_dir_layout(sim, dir, &after, NULL) != EFS_OK)
+        return;
+    if (after == EFS_META_LAYOUT_SPLITTING)
+        efs_dir_spread_note(dir);
+    if (before != EFS_META_LAYOUT_LOCAL || after != EFS_META_LAYOUT_SPLITTING)
+        return;
+    for (n = 0; n < 4096; n++) {
+        rc = efs_sim_dir_migrate(sim, dir);
+        if (rc == EFS_OK)
+            continue;
+        if (rc == EFS_ERR_NOT_FOUND) {
+            (void)efs_sim_dir_finish_hashed(sim, dir);
+            return;
+        }
+        return;
+    }
 }
 
 int efs_sim_dir_layout(struct efs_sim *sim, efs_ino_t dir, uint8_t *layout,

@@ -1286,13 +1286,13 @@ sends you to — not the whole spec.
 > **§10 steps 0–12 are in** (simulator, KV, Raft, txns, sessions, dir
 > spread ops including populated leftover migrate as a 2-shard txn,
 > delete-2PC, FUSE A–D). LOCAL dirs auto-begin SPLITTING when `nents >
-> EFS_DIR_SPREAD_MIN`. Remaining specified leftovers, in order:
-> (1) **background migrator** that drains SPLITTING leftovers to HASHED
-> without `raft-dir migrate` (do not grow `raft_host.c`); pressure-triggered
-> spread has no numeric bound — do not invent one;
-> (2) **production joint-consensus reconfiguration** (§7.8 / step 6) —
-> in `raft.c` + sim, not in `raft_host`;
-> (3) **honest fio** on a 19810 NVMe cluster (do not auto `raft-mkfs`);
+> EFS_DIR_SPREAD_MIN`, and the background migrator drains leftovers to
+> HASHED (`src/meta/dir_spread.c`; host hook is one GC-thread pass).
+> Remaining specified leftovers, in order:
+> (1) **production joint-consensus reconfiguration** (§7.8 / step 6) —
+> `efs_raft_change` is in `raft.c` + sim, not wired in `raft_host`;
+> (2) **honest fio** on a 19810 NVMe cluster (do not auto `raft-mkfs`);
+> pressure-triggered spread has no numeric bound — do not invent one.
 > C1 relaxed-coherence is out of scope. Doc machine-gate:
 > `make docs-check`. Cutover of a 36T `efs-test` is not this work.
 > [architecture.md §10](#architecture)
@@ -3424,7 +3424,10 @@ count is frozen; HASHED emptiness is the per-lane `dentry_seq` read set, not
 a distributed counter (the spec rejected that). Runtime override:
 `EFS_DIR_SPREAD_MIN` (tests). Pressure-triggered spread is specified; the
 bound is not a number in the spec and is not invented here. Draining
-SPLITTING leftovers is still `raft-dir migrate` (now a txn) plus finish.
+SPLITTING leftovers is the background migrator (in-memory queue, GC-thread
+pass on the host, opportunistic drain in the sim after a size-trigger
+flip). `raft-dir migrate` plus finish stay as the idempotent operator
+path.
 
 (a 100-entry directory with 100,000 clients creating and unlinking never
 crosses the size threshold but melts its leader — pressure-triggered spread

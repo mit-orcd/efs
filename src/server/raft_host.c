@@ -7,6 +7,7 @@
 #include "efs/meta_apply.h"
 #include "efs/meta_cmd.h"
 #include "efs/dir_layout.h"
+#include "efs/dir_spread.h"
 #include "efs/opid.h"
 #include "efs/kv_key.h"
 #include "efs/txn.h"
@@ -81,6 +82,7 @@
                                    * epoch:8 + size:8 + tail_ci:4 +
                                    * has_tail:1 — matches meta_cmd.h */
 #define HOST_DIR_LEN       10
+#define HOST_SPREAD_MAX    8 /* leftovers per GC tick; batch, not a scan */
 #define HOST_SESS_HDR_LEN  18 /* tag+sub+uuid; same as sim pack_hdr */
 #define HOST_SESS_CREATE_LEN 22 /* hdr+epoch */
 #define HOST_SESS_REG_LEN  26 /* hdr+epoch+shard */
@@ -3420,6 +3422,8 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
     }
 }
 
+static void host_dir_spread_pass(struct efs_raft_host *h);
+
 static void *host_gc_thread(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -3448,6 +3452,7 @@ static void *host_gc_thread(void *arg)
             host_gc_reap_pass(h, h->g[g].group, anchor);
             host_gc_frag_pass(h, h->g[g].group, anchor);
         }
+        host_dir_spread_pass(h);
         /* ~1s between passes, in 20 ms slices so shutdown is prompt. */
         for (g = 0; g < GC_LOOP_MS / 20 && h->gc_running; g++)
             usleep(20 * 1000);
@@ -4884,6 +4889,66 @@ static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
     if (rc != EFS_ERR_NOT_FOUND)
         return rc;
     return host_dir_migrate_txn(h, dir, name, hsh, hint);
+}
+
+/* One leftover (or FINISH) per queued SPLITTING dir. Reuses host_dir_migrate
+ * so cross-group leftovers stay a txn. No new thread — GC wakes us. */
+static void host_dir_spread_pass(struct efs_raft_host *h)
+{
+    efs_ino_t dir;
+    uint8_t cmd[HOST_DIR_LEN];
+    uint8_t pg;
+    struct efs_raft *r;
+    int hint, lead, n, rc;
+
+    for (n = 0; n < HOST_SPREAD_MAX; n++) {
+        if (!efs_dir_spread_pop(&dir))
+            return;
+        pg = efs_raft_shard_group(efs_kv_inode_shard(dir));
+        if (!host_hosts(h, pg))
+            continue;
+        pthread_mutex_lock(&h->mu);
+        r = group_raft(h, pg);
+        lead = r && efs_raft_role(r) == EFS_RAFT_LEADER;
+        pthread_mutex_unlock(&h->mu);
+        if (!lead) {
+            efs_dir_spread_note(dir);
+            continue;
+        }
+        memset(cmd, 0, sizeof(cmd));
+        cmd[0] = EFS_MD_CMD_DIR;
+        cmd[1] = EFS_MD_DIR_MIGRATE;
+        wr64be(cmd + 2, dir);
+        hint = -1;
+        pthread_mutex_lock(&h->read_mu);
+        rc = host_read_index(h, pg, &hint);
+        if (rc == EFS_OK) {
+            struct efs_meta_row row;
+
+            rc = efs_meta_apply_get_inode(h->kv, dir, &row);
+            if (rc != EFS_OK || row.layout != EFS_META_LAYOUT_SPLITTING) {
+                pthread_mutex_unlock(&h->read_mu);
+                continue;
+            }
+            rc = host_dir_migrate(h, dir, cmd, HOST_DIR_LEN, &hint);
+        } else {
+            pthread_mutex_unlock(&h->read_mu);
+            efs_dir_spread_note(dir);
+            return;
+        }
+        if (rc == EFS_ERR_NOT_FOUND) {
+            cmd[1] = EFS_MD_DIR_FINISH;
+            rc = host_propose_wait(h, pg, cmd, HOST_DIR_LEN, &hint);
+            pthread_mutex_unlock(&h->read_mu);
+            if (rc != EFS_OK)
+                efs_dir_spread_note(dir);
+            continue;
+        }
+        pthread_mutex_unlock(&h->read_mu);
+        efs_dir_spread_note(dir);
+        if (rc != EFS_OK)
+            return;
+    }
 }
 
 /* LOCAL / HASHED / SPLITTING name drop matching apply dentry_drop_items

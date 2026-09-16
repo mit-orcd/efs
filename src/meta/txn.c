@@ -1,5 +1,7 @@
 #include "efs/txn.h"
 #include "efs/kv_key.h"
+#include "efs/dir_spread.h"
+#include "efs/meta_apply.h"
 #include <string.h>
 
 #define VAL_MAX EFS_KV_KEY_MAX
@@ -706,6 +708,9 @@ static int res_add_put(struct res_acc *a, const uint8_t *key, uint32_t klen,
     }
     memcpy(a->keys[a->n], key, klen);
     memcpy(a->vals[a->n], val, vlen);
+    if (klen >= 3 && key[2] == EFS_KV_KIND_INODE &&
+        vlen >= EFS_META_INO_BYTES && val[56] == EFS_META_LAYOUT_SPLITTING)
+        efs_dir_spread_note(rd64(val));
     a->it[a->n].op = EFS_KV_PUT;
     a->it[a->n].key = a->keys[a->n];
     a->it[a->n].klen = klen;

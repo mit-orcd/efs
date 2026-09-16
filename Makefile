@@ -37,6 +37,7 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
               src/meta/session.c \
               src/meta/lock.c \
               src/meta/dir_layout.c \
+              src/meta/dir_spread.c \
               src/sim/opid.c \
               src/raft/raft.c \
               src/raft/raft_mem.c \

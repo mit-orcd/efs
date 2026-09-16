@@ -1145,8 +1145,15 @@ int sim_txn_rename_until(struct efs_sim *sim, int client, efs_ino_t src_parent,
 int efs_sim_link(struct efs_sim *sim, int client, efs_ino_t src_parent,
                  const char *src_name, efs_ino_t dst_parent, const char *dst_name)
 {
-    return sim_txn_link_until(sim, client, src_parent, src_name, dst_parent,
-                              dst_name, NULL, EFS_SIM_TXN_RESOLVE);
+    uint8_t before = 0;
+    int rc;
+
+    (void)efs_sim_dir_layout(sim, dst_parent, &before, NULL);
+    rc = sim_txn_link_until(sim, client, src_parent, src_name, dst_parent,
+                            dst_name, NULL, EFS_SIM_TXN_RESOLVE);
+    if (rc == EFS_OK)
+        sim_dir_maybe_drain(sim, dst_parent, before);
+    return rc;
 }
 
 int efs_sim_link_until(struct efs_sim *sim, efs_ino_t src_parent,
@@ -1174,8 +1181,15 @@ int efs_sim_rename(struct efs_sim *sim, int client, efs_ino_t src_parent,
                    const char *src_name, efs_ino_t dst_parent,
                    const char *dst_name)
 {
-    return sim_txn_rename_until(sim, client, src_parent, src_name, dst_parent,
-                                dst_name, NULL, EFS_SIM_TXN_RESOLVE);
+    uint8_t before = 0;
+    int rc;
+
+    (void)efs_sim_dir_layout(sim, dst_parent, &before, NULL);
+    rc = sim_txn_rename_until(sim, client, src_parent, src_name, dst_parent,
+                              dst_name, NULL, EFS_SIM_TXN_RESOLVE);
+    if (rc == EFS_OK)
+        sim_dir_maybe_drain(sim, dst_parent, before);
+    return rc;
 }
 
 int efs_sim_rename_until(struct efs_sim *sim, efs_ino_t src_parent,

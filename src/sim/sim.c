@@ -518,10 +518,12 @@ int efs_sim_create(struct efs_sim *sim, int client, efs_ino_t parent,
                    uint32_t mode, const char *name, efs_ino_t *out)
 {
     struct sim_ev e;
+    uint8_t before = 0;
     int rc;
 
     if (!sim || !name || client < 0 || client >= sim->nclients)
         return EFS_ERR_INVAL;
+    (void)efs_sim_dir_layout(sim, parent, &before, NULL);
     memset(&e, 0, sizeof(e));
     e.kind = EV_CREATE;
     e.client = (uint8_t)client;
@@ -536,6 +538,8 @@ int efs_sim_create(struct efs_sim *sim, int client, efs_ino_t parent,
     rc = maybe_drain(sim);
     if (rc != EFS_OK)
         return rc;
+    if (sim->last_rc == EFS_OK)
+        sim_dir_maybe_drain(sim, parent, before);
     if (out)
         *out = (sim->last_rc == EFS_OK) ? sim->last_ino : 0;
     return sim->last_rc;
@@ -566,6 +570,7 @@ int efs_sim_create_op(struct efs_sim *sim, int client, const struct efs_opid *op
 {
     struct efs_opid_reply rep;
     struct sim_ev e;
+    uint8_t before = 0;
     int hit, rc;
 
     if (!sim || !op || !name || client < 0 || client >= sim->nclients)
@@ -590,12 +595,15 @@ int efs_sim_create_op(struct efs_sim *sim, int client, const struct efs_opid *op
     e.op = *op;
     sim->last_rc = EFS_OK;
     sim->last_ino = 0;
+    (void)efs_sim_dir_layout(sim, parent, &before, NULL);
     rc = schedule(sim, &e);
     if (rc != EFS_OK)
         return rc;
     rc = maybe_drain(sim);
     if (rc != EFS_OK)
         return rc;
+    if (sim->last_rc == EFS_OK)
+        sim_dir_maybe_drain(sim, parent, before);
     rep.rc = sim->last_rc;
     rep.ino = (sim->last_rc == EFS_OK) ? sim->last_ino : 0;
     if (out)

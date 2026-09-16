@@ -3,6 +3,7 @@
 #include "efs/session.h"
 #include "efs/checksum.h"
 #include "efs/dir_layout.h"
+#include "efs/dir_spread.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -694,6 +695,7 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         efs_meta_dir_note_entry(&parent_row, 1);
         touch_parent = 1;
     } else {
+        efs_dir_spread_seen(&parent_row);
         bit = 1ull << efs_kv_dir_lane(name);
         if ((parent_row.used_shards & bit) == 0) {
             parent_row.used_shards |= bit;
@@ -933,6 +935,7 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
         efs_meta_dir_note_entry(&prow, -1);
         touch_parent = 1;
     } else {
+        efs_dir_spread_seen(&prow);
         rc = dir_lane_stamp(kv, &prow, name, now, k_ln, &kln, v_ln);
         if (rc != EFS_OK)
             return rc;
@@ -1033,6 +1036,7 @@ int efs_meta_apply_link(struct efs_kv *kv, efs_ino_t src_parent, const char *src
         efs_meta_dir_note_entry(&dprow, 1);
         touch_parent = 1;
     } else {
+        efs_dir_spread_seen(&dprow);
         bit = 1ull << efs_kv_dir_lane(dst_name);
         if ((dprow.used_shards & bit) == 0) {
             dprow.used_shards |= bit;
@@ -1311,12 +1315,14 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
     /* Apply rename does not replace (EXIST). same-dir is net-zero nents. */
     if (!same_dir)
         efs_meta_dir_note_entry(&sprow, -1);
+    efs_dir_spread_seen(&sprow);
     rc = stamp_dir_items(kv, &sprow, src_parent, src_name, now, k_spar, &ksp,
                          v_spar, k_sln, &ksln, v_sln, &touch_src, &stamp_src);
     if (rc != EFS_OK)
         return rc;
     if (!same_dir) {
         efs_meta_dir_note_entry(&dprow, 1);
+        efs_dir_spread_seen(&dprow);
         rc = stamp_dir_items(kv, &dprow, dst_parent, dst_name, now, k_dpar, &kdp,
                              v_dpar, k_dln, &kdln, v_dln, &touch_dst,
                              &stamp_dst);
@@ -1759,6 +1765,7 @@ int efs_meta_apply_rmdir(struct efs_kv *kv, efs_ino_t parent, const char *name,
         prow.base_ctime = max_u64(prow.base_ctime, now);
         efs_meta_dir_note_entry(&prow, -1);
     } else {
+        efs_dir_spread_seen(&prow);
         rc = dir_lane_stamp(kv, &prow, name, now, k_ln, &kln, v_ln);
         if (rc != EFS_OK)
             return rc;

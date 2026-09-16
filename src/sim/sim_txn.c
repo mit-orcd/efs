@@ -738,9 +738,13 @@ int sim_txn_finish(struct efs_sim *sim, const struct efs_txid *t, int commit)
 int efs_sim_mkdir(struct efs_sim *sim, int client, efs_ino_t parent,
                   const char *name, efs_ino_t *out)
 {
+    uint8_t before = 0;
     int rc;
 
+    (void)efs_sim_dir_layout(sim, parent, &before, NULL);
     rc = sim_txn_mkdir_until(sim, client, parent, name, NULL, out, TXN_RESOLVE);
+    if (rc == EFS_OK)
+        sim_dir_maybe_drain(sim, parent, before);
     if (out && rc != EFS_OK)
         *out = 0;
     return rc;

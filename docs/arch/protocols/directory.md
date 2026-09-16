@@ -117,7 +117,10 @@ count is frozen; HASHED emptiness is the per-lane `dentry_seq` read set, not
 a distributed counter (the spec rejected that). Runtime override:
 `EFS_DIR_SPREAD_MIN` (tests). Pressure-triggered spread is specified; the
 bound is not a number in the spec and is not invented here. Draining
-SPLITTING leftovers is still `raft-dir migrate` (now a txn) plus finish.
+SPLITTING leftovers is the background migrator (in-memory queue, GC-thread
+pass on the host, opportunistic drain in the sim after a size-trigger
+flip). `raft-dir migrate` plus finish stay as the idempotent operator
+path.
 
 (a 100-entry directory with 100,000 clients creating and unlinking never
 crosses the size threshold but melts its leader — pressure-triggered spread
