@@ -1,0 +1,2 @@
+HLSTORM_OK n=200 peak=201 after_half=101 peer_008=101 wall=7.0s
+2000-link attempt timed out (~390ms/link on 19820 scratch); 200-link gate used instead.

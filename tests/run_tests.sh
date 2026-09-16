@@ -71,8 +71,10 @@ wait_cluster_idle() {
         idle=$(printf '%s\n' "$st" | grep -c 'idle' || true)
         gens=$(printf '%s\n' "$st" | sed -n 's/.*gen=\([0-9][0-9]*\).*/\1/p' | sort -u)
         ng=$(printf '%s\n' "$gens" | grep -c . || true)
-        if [ "$idle" -ge 4 ] && [ "$ng" = 1 ]; then
-            say "  idle gen=$(printf '%s' "$gens" | head -1) (${i}s)"
+        # Old CoW engine: matching gen= on every node. Raft status has no
+        # gen= line; four idle nodes is the idle signal.
+        if [ "$idle" -ge 4 ] && { [ "$ng" = 1 ] || [ "$ng" = 0 ]; }; then
+            say "  idle gen=$(printf '%s' "${gens:--}") (${i}s)"
             return 0
         fi
         sleep 2
@@ -125,8 +127,11 @@ ensure_mounted() { # host
         # has no "RDMA transport up" line yet and must not be remounted.
         if [ "${EFS_TRANSPORT:-}" = tcp ]; then
             local rdma_up
+            # grep -c prints 0 and exits 1 on no match. `|| echo 0` then
+            # concatenates to "00", which this check treats as RDMA and
+            # remounts every TCP mount.
             rdma_up=$(ssh_to "$PROBE_SSH_SEC" "$h" \
-                'grep -c "RDMA transport up" /tmp/efs/fuse.log 2>/dev/null || echo 0' \
+                'grep -c "RDMA transport up" /tmp/efs/fuse.log 2>/dev/null || true' \
                 2>/dev/null | tr -dc '0-9')
             if [ "${rdma_up:-0}" != "0" ]; then
                 say "  $h: mounted on RDMA but EFS_TRANSPORT=tcp — remounting"

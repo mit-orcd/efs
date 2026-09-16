@@ -232,13 +232,11 @@ the "RDMA transport up" check moved after the workload (the upgrade is
 lazy — first pool checkout, not mount). Full gate PASS on fcstor003:
 13 unit + efsd + efs-fuse TCP + efsd/efs-fuse RDMA, all 0 definite /
 0 indirect / 0 uninit / 0 invalid.
-**Open follow-ups:** Step 12 Part A is CLOSED (`4437302`). Batched
-AppendEntries + outbox is CLOSED (`5f0a9ad`). Part B (low-level FUSE)
-is in tree (this slice) — remaining gates: unlink-storm 9×4000 +
-hardlink storm. Next is C (exact self-inval, timeouts stay 0), then D
-(direct-I/O + prefetch). Relaxed-coherence stays out of scope.
-Migrating a populated local range is still a single-group apply, not
-a txn.
+**Open follow-ups:** Step 12 A–D landed (Part B `0df94e4`; C+D this
+commit). Honest fio matrix (Part D perf contract) is **not** run on
+the 1G 19820 scratch. Relaxed-coherence stays out of scope.
+Next: migrating a populated local range is still a single-group
+apply, not a txn.
 
 **BATCHED APPENDENTRIES + OUTBOX CLOSED (Sep 15).** Catch-up was
 one entry per AE. `send_ae` now packs up to `EFS_RAFT_AE_MAX=128`
@@ -279,9 +277,56 @@ in-flight dcache. `run_tests.sh` remount/ensure_mounted honor
 overlap-pwrite load flakes that pass isolated. Isolated
 `peer_shared_pwrite` / `peer_creat_excl_race` PASS. leaks
 **PASS** (`results/leaks/20260915-partb/`, 0 definite / 0
-indirect, 19820 pid unchanged). Unlink-storm + hardlink storm
-still owed. Do not start Part C until those two run. Do not
-`wipe_cluster.sh` / `pkill -x efsd` while 19820 is up.
+indirect, 19820 pid unchanged). Unlink-storm 9×500 empty
+**PASS** (`results/stress/unlink-storm-20260915-partb-n500b/`);
+9×4000 is quota/latency on the 1G scratch, not a FUSE hang.
+Hardlink storm `HLSTORM_OK` n=200 (`results/stress/hlstorm-partb.txt`).
+Do not `wipe_cluster.sh` / `pkill -x efsd` while 19820 is up.
+
+**STEP 12 PART C — EXACT SELF-INVAL (Sep 16).**
+Timeouts stay **0**. `notify_inval_*` from a request handler
+deadlocks (kernel holds the parent); queue after `fuse_reply_*`
+on a dedicated thread. Do **not** `inval_entry` on create/unlink
+(redundant at timeout=0; races create-then-pwrite). Only a
+**shrinking** SETATTR SIZE notifies, and only pages at/after the
+new EOF (`(0,0)` = whole mapping only for truncate-to-zero).
+`clone_fd` stays libfuse default. GC `del_if_sum` now uncharges
+`local->used` (`store.c`) — 1G scratch was ENOSPC because
+unlink never returned quota. `wait_cluster_idle` treats raft
+status (no `gen=` line) as idle when all 4 nodes are Heal idle.
+**Gates (19820 scratch, TCP):** posix jobs=1 **194/201**
+(`results/posix/20260915-partc/suite-jobs1.tsv`) then
+**190/201** (`results/posix/20260915-partc3/suite-jobs1.tsv`,
+453s, `--tag partc3 --keep`) — 15s walk/concurrent timeouts +
+`symlink_relative_after_parent_rename` EIO load flake (known).
+posix2 **58/63** (`results/posix2/20260915-partc/`). Isolated
+overlap currently **FAIL** on HEAD Part B fuse too (same exclusive-
+range zeros) — not a Part C regression; sub-chunk RMW, not page
+cache. Do not `wipe_cluster.sh` / `pkill -x efsd` while 19820 is up.
+
+**STEP 12 PART D — FOPEN_DIRECT_IO + PREFETCH (Sep 16).**
+`fi->direct_io = 1` on every regular open/create. 4 KiB EINVAL only
+when the **application** set `O_DIRECT` (FOPEN_DIRECT_IO still
+accepts unaligned FUSE I/O). Kernel writeback cap is cleared.
+libfuse **3.10.2** cannot emit `FOPEN_PARALLEL_DIRECT_WRITES` or
+negotiate `FUSE_MAX_PAGES` (kernel default 32 pages = 128 KiB per
+request) — do not set `conn->max_read` without `-o max_read=`
+(libfuse aborts: `init() and fuse_session_new() requested different
+maximum read size`). Sequential reads prefetch up to 16 published
+chunks into rdcache (`EFS_READ_PREFETCH`, drop if the GET pool is
+half full). `MAP_SHARED` mmap is ENODEV (spec: unsupported);
+`MAP_PRIVATE` still works.
+**Gates (19820 scratch, TCP):** posix jobs=1 **193/201**
+(`results/posix/20260916-partd/suite-jobs1-clean.tsv`, 387s) —
+walk/concurrent 15s timeouts + known symlink EIO flake + expected
+`mmap_write_read` SKIP ENODEV. Isolated overlap still **1/3**
+(same as HEAD Part B: exclusive-range zeros = chunk RMW, not
+cache). posixpersist **25/26** (`results/posixpersist/20260916-042337/`);
+the 1 is `many_files_in_one_dir` 60s timeout on prepare **and**
+verify, not a silent loss. Honest fio not run here (1G quota).
+`ensure_mounted` TCP check no longer treats grep -c 0 as RDMA
+(`|| echo 0` concatenated to `00`). Do not `wipe_cluster.sh` /
+`pkill -x efsd` while 19820 is up.
 
 **OLD-ENGINE 19810 CLUSTER DESTROYED (Sep 15).** No snapshot/2PC
 on-disk compat. `/data1/01–06/efs` on fcstor003–006 renamed-aside +

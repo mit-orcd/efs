@@ -1,0 +1,17 @@
+POSIX baseline comparison: 201 tests
+  both pass        : 189
+  EFS BUGS         : 7  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+
+EFS BUGS:
+  dir_deep_nesting                 timeout after 15s
+  dir_deep_nesting_beyond_64       timeout after 15s
+  dir_many_files                   timeout after 15s
+  names_crazy_dirs                 timeout after 15s
+  concurrent_writes_disjoint       zeros flake (known)
+  concurrent_create_unlink_two_proc timeout after 15s
+  mtime_monotonic_many_writes      timeout after 15s
+
+target better: dir_mkdir_umask, fcntl_byte_range_lock, virt_find_not_a_real_dir,
+  virt_find_query, virt_stats_readable

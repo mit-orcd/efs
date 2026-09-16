@@ -25,8 +25,10 @@ def main():
     t0 = time.time()
     for i in range(nfiles):
         p = os.path.join(base, str(i % ndirs), str(i))
-        with open(p, "w") as f:
-            f.write("x")
+        # Empty create: a 1-byte write publishes a 128 KiB chunk (raft
+        # pack staging is off), so 9×4000 "x" files blow the 1G scratch
+        # quota. The storm measures rmtree of names, not data.
+        os.close(os.open(p, os.O_CREAT | os.O_WRONLY, 0o644))
         if (i + 1) % 500 == 0:
             print("CREATE_PROG n=%d %.2fs" % (i + 1, time.time() - t0), flush=True)
     print("CREATE_OK n=%d %.2fs" % (nfiles, time.time() - t0), flush=True)
@@ -58,6 +60,8 @@ def main():
                 shutil.rmtree(base, onerror=_onerr)
                 last = None
                 break
+            except TimeoutError:
+                raise
             except OSError as e:
                 last = e
                 if getattr(e, "errno", None) not in (errno.ENOTEMPTY,
@@ -76,8 +80,10 @@ def main():
     except OSError as e:
         print("RM_ERR %s" % e, flush=True)
         return 4
-    with open(os.path.join(mnt, "ustorm-alive-" + host), "w") as f:
-        f.write("ok\n")
+    # Empty marker: a 1-byte write publishes a 128 KiB chunk and ENOSPCs
+    # the 1G scratch quota (seen after RM_OK on the n500 run).
+    os.close(os.open(os.path.join(mnt, "ustorm-alive-" + host),
+                     os.O_CREAT | os.O_WRONLY, 0o644))
     print("ALIVE", flush=True)
     return 0
 

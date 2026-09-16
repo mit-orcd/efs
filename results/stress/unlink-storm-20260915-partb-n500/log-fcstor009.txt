@@ -1,0 +1,9 @@
+CREATE_PROG n=500 17.67s
+CREATE_OK n=500 17.67s
+RM_OK 18.77s
+Traceback (most recent call last):
+  File "/tmp/efs/tests/stress/unlink_storm_worker.py", line 90, in <module>
+    sys.exit(main())
+  File "/tmp/efs/tests/stress/unlink_storm_worker.py", line 84, in main
+    f.write("ok\n")
+OSError: [Errno 28] No space left on device

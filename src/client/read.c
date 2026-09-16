@@ -454,9 +454,9 @@ struct get_batch {
     int remaining;
 };
 
-/* 4096 x 2 x 128 KiB = 1 GiB worst case (was 16 GiB at 65536 slots). The
- * kernel page cache already covers buffered reads; this only serves direct
- * I/O re-reads and dcache RMW bases, which have small working sets. */
+/* 4096 x 2 x 128 KiB = 1 GiB. Part D bypasses the kernel page cache
+ * (FOPEN_DIRECT_IO); this is the client read cache for demand + prefetch.
+ * Writes invalidate per-ci after PUT. */
 #define RDCACHE_SLOTS  4096
 #define RDCACHE_WAYS   2
 #define RDCACHE_STRIPES 64
@@ -608,8 +608,9 @@ struct chunk_get_job {
     uint32_t ci;
     int have_ce;
     int cacheable;
+    int owned; /* prefetch: get_pool_thread frees chunk + this struct */
     int rc;
-    uint8_t *chunk; /* data_chunk_size() bytes, owned by caller */
+    uint8_t *chunk; /* data_chunk_size() bytes, owned by caller unless owned */
     struct get_batch *bp;
 };
 
@@ -685,6 +686,13 @@ static void *get_pool_thread(void *arg)
         pthread_mutex_unlock(&g_get_pool.mu);
 
         chunk_get_worker(job);
+
+        if (job->owned) {
+            uint32_t cs = data_chunk_size();
+            efs_buf_free(job->chunk, cs);
+            free(job);
+            continue;
+        }
 
         struct get_batch *bp = job->bp;
         if (bp) {
@@ -785,8 +793,127 @@ static int get_pool_run(struct chunk_get_job *jobs, uint32_t batch)
     return 0;
 }
 
+/* Non-blocking submit for prefetch. Skip if the demand queue is already
+ * half full so sequential ahead-GET cannot stall a FUSE worker. */
+static int get_pool_try_submit(struct chunk_get_job *job)
+{
+    if (get_pool_ensure() != 0)
+        return -1;
+    pthread_mutex_lock(&g_get_pool.mu);
+    if (g_get_pool.shutdown || g_get_pool.count >= GET_POOL_QDEPTH / 2) {
+        pthread_mutex_unlock(&g_get_pool.mu);
+        return -1;
+    }
+    g_get_pool.q[g_get_pool.tail] = job;
+    g_get_pool.tail = (g_get_pool.tail + 1) % GET_POOL_QDEPTH;
+    g_get_pool.count++;
+    pthread_cond_signal(&g_get_pool.not_empty);
+    pthread_mutex_unlock(&g_get_pool.mu);
+    return 0;
+}
+
+static int rdcache_hit(efs_ino_t ino, uint32_t ci)
+{
+    uint32_t s = rdcache_slot(ino, ci);
+    pthread_mutex_t *mu = rdcache_mu(s);
+    int hit;
+    pthread_mutex_lock(mu);
+    hit = rdcache_find(s, ino, ci) != NULL;
+    pthread_mutex_unlock(mu);
+    return hit;
+}
+
+/* Chunks ahead of the demand window. 0 disables. libfuse 3.10.2 does not
+ * negotiate FUSE_MAX_PAGES, so DIO sequential reads arrive as 128 KiB
+ * FUSE requests; this is what keeps queue depth off the kernel. */
+#define EFS_READ_PREFETCH_DEFAULT 16
+static uint32_t prefetch_depth(void)
+{
+    static uint32_t n;
+    static int once;
+    if (!once) {
+        const char *e = getenv("EFS_READ_PREFETCH");
+        unsigned long v;
+        n = EFS_READ_PREFETCH_DEFAULT;
+        if (e && *e) {
+            v = strtoul(e, NULL, 10);
+            if (v <= (unsigned long)EFS_WRITE_PIPELINE)
+                n = (uint32_t)v;
+            else
+                n = EFS_WRITE_PIPELINE;
+        }
+        once = 1;
+    }
+    return n;
+}
+
+static void prefetch_ahead(efs_ino_t ino, uint32_t from_ci, uint64_t file_size)
+{
+    uint32_t cs = data_chunk_size();
+    uint32_t depth = prefetch_depth();
+    uint32_t max_ci;
+    uint32_t i;
+
+    if (!cs || !depth || file_size == 0)
+        return;
+    max_ci = (uint32_t)((file_size + cs - 1) / cs);
+    for (i = 0; i < depth; i++) {
+        uint32_t ci = from_ci + i;
+        struct chunk_get_job *job;
+        int have_ce;
+
+        if (ci >= max_ci)
+            break;
+        if (rdcache_hit(ino, ci) || efs_dcache_has(ino, ci))
+            continue;
+        pthread_mutex_lock(&g_client.idx_mu);
+        have_ce = (efs_export_get_chunk(&g_client.export, ino, ci,
+                                        NULL) == EFS_OK);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        if (!have_ce)
+            continue;
+        job = calloc(1, sizeof(*job));
+        if (!job)
+            return;
+        job->chunk = efs_buf_alloc(cs);
+        if (!job->chunk) {
+            free(job);
+            return;
+        }
+        job->ino = ino;
+        job->ci = ci;
+        job->have_ce = 1;
+        job->cacheable = 1;
+        job->owned = 1;
+        job->rc = EFS_ERR_IO;
+        if (get_pool_try_submit(job) != 0) {
+            efs_buf_free(job->chunk, cs);
+            free(job);
+            return;
+        }
+    }
+}
+
+static void maybe_prefetch(int want, efs_ino_t ino, uint64_t end_off,
+                           uint64_t file_size)
+{
+    uint32_t cs = data_chunk_size();
+    uint32_t next_ci;
+
+    if (!want || !cs)
+        return;
+    next_ci = (uint32_t)((end_off + cs - 1) / cs);
+    prefetch_ahead(ino, next_ci, file_size);
+}
+
 int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size_t *out_len)
 {
+    static __thread efs_ino_t t_seq_ino;
+    static __thread uint64_t t_seq_next;
+    static __thread int t_seq_run;
+    int want_pf;
+    uint32_t chunk_size;
+
     if (size == 0) {
         *out_len = 0;
         return EFS_OK;
@@ -849,9 +976,17 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
         size = (size_t)(file_size - offset);
     }
 
+    if (t_seq_ino == ino && offset == t_seq_next)
+        t_seq_run++;
+    else
+        t_seq_run = 1;
+    t_seq_ino = ino;
+    t_seq_next = offset + size;
+    chunk_size = data_chunk_size();
+    want_pf = (t_seq_run >= 2) || (size >= chunk_size);
+
     size_t total = 0;
     uint64_t end = offset + size;
-    uint32_t chunk_size = data_chunk_size();
     /* Sub-chunk read: dirty dcache first (newer than rdcache), then
      * decoded cache — no malloc(128k) on the 4k path. */
     if (chunk_size && size < chunk_size &&
@@ -860,10 +995,12 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
         uint32_t off = (uint32_t)(offset % chunk_size);
         if (efs_dcache_copy(ino, ci, off, (uint8_t *)buf, (uint32_t)size) == 0) {
             *out_len = size;
+            maybe_prefetch(want_pf, ino, end, file_size);
             return EFS_OK;
         }
         if (efs_rdcache_copy(ino, ci, off, (uint8_t *)buf, (uint32_t)size) == 0) {
             *out_len = size;
+            maybe_prefetch(want_pf, ino, end, file_size);
             return EFS_OK;
         }
     }
@@ -890,7 +1027,7 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
                 return EFS_ERR_NOMEM;
             }
             jobs[batch].rc = EFS_ERR_IO;
-            jobs[batch].cacheable = (size < chunk_size);
+            jobs[batch].cacheable = 1;
             batch_pos = ((uint64_t)ci + 1) * chunk_size;
             batch++;
         }
@@ -951,5 +1088,6 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
     }
 
     *out_len = total;
+    maybe_prefetch(want_pf, ino, offset + total, file_size);
     return EFS_OK;
 }

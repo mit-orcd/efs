@@ -535,8 +535,34 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
                 live = 1; /* a newer generation occupies the slot */
                 continue;
             }
-            if (unlink(path) != 0 && errno != ENOENT)
-                return EFS_ERR_IO;
+            {
+                struct stat st;
+                uint64_t nbytes = 0;
+                int unlinked = 0;
+
+                if (stat(path, &st) == 0 && st.st_size > 0)
+                    nbytes = (uint64_t)st.st_size;
+                if (unlink(path) == 0) {
+                    unlinked = 1;
+                } else if (errno != ENOENT) {
+                    return EFS_ERR_IO;
+                }
+                /* PUT charges data_len into local->used. GC must uncharge
+                 * or usage.bin latches at quota while the tree is empty
+                 * (node1 1.00 GiB used vs 233M du). */
+                if (unlinked && nbytes) {
+                    pthread_mutex_lock(&s->lock);
+                    struct efs_node *ln = server_local_node(s);
+                    if (ln) {
+                        if (ln->used >= nbytes)
+                            ln->used -= nbytes;
+                        else
+                            ln->used = 0;
+                    }
+                    pthread_mutex_unlock(&s->lock);
+                    server_usage_mark_dirty(s);
+                }
+            }
             if (unlink(sum_path) != 0 && errno != ENOENT)
                 return EFS_ERR_IO;
         }

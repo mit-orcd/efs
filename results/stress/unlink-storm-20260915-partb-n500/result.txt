@@ -1,0 +1,4 @@
+FAIL 9/9 after RM_OK (alive probe ENOSPC)
+CREATE_OK 16–18s, RM_OK 15–20s — 9-way rmtree of 500 empty files is fine.
+Alive marker used f.write("ok\n") → 128 KiB chunk → ENOSPC on 1G scratch.
+Worker now creates an empty alive file. Re-run expected PASS.

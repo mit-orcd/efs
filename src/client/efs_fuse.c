@@ -466,6 +466,40 @@ static char g_mountpoint[EFS_MAX_PATH] = "/";
 static __thread fuse_req_t t_req;
 static struct fuse_session *g_fuse_se;
 
+/* Part C: notify_inval_* deadlocks if it runs while the kernel still
+ * holds the parent/inode lock for the in-flight request. Queue from the
+ * ll_* wrapper AFTER fuse_reply_*. Timeouts stay 0, so create/lookup
+ * replies already install dentries — do not broadcast inval_entry.
+ * Only a shrinking SETATTR SIZE notifies, and only pages at/after the
+ * new EOF (truncate-to-zero is (0,0) = all). clone_fd stays the
+ * libfuse default — it was required when every unlink queued
+ * inval_entry and the notify write starved /dev/fuse reads. Drop-newest
+ * if the queue is full (a missed self-inval is safe at timeout=0). */
+#define LL_INVAL_Q 256
+enum { LL_INVAL_ENTRY = 1, LL_INVAL_INODE = 2 };
+struct ll_inval_item {
+    uint8_t kind;
+    fuse_ino_t parent;
+    fuse_ino_t ino;
+    off_t off;
+    off_t len;
+    char name[EFS_MAX_NAME];
+};
+static struct {
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    pthread_t th;
+    int run;
+    int started;
+    int head;
+    int tail;
+    int n;
+    struct ll_inval_item q[LL_INVAL_Q];
+} g_inval = {
+    .mu = PTHREAD_MUTEX_INITIALIZER,
+    .cv = PTHREAD_COND_INITIALIZER,
+};
+
 #define EFS_VIRT_STATS (1ULL << 62)
 #define EFS_VIRT_FIND  (1ULL << 61)
 #define EFS_VIRT_QUERY (1ULL << 60)
@@ -596,20 +630,107 @@ static const struct fuse_ctx *ll_ctx(void)
     return t_req ? fuse_req_ctx(t_req) : NULL;
 }
 
-/* Part C: exact self-invalidation via notify_inval_entry/inode. Calling
- * fuse_lowlevel_notify_* from a request handler deadlocks — the kernel
- * already holds the parent inode for mkdir/rmdir/rename, and the notify
- * waits for that same lock while the handler has not yet replied.
- * Timeouts stay 0, so the kernel does not cache these updates anyway. */
-static void ll_inval_entry(fuse_ino_t parent, const char *name)
+static void ll_inval_push(struct ll_inval_item it)
 {
-    (void)parent;
-    (void)name;
+    if (!g_fuse_se || virt_kind(it.parent) || virt_kind(it.ino))
+        return;
+    pthread_mutex_lock(&g_inval.mu);
+    if (!g_inval.run) {
+        pthread_mutex_unlock(&g_inval.mu);
+        return;
+    }
+    if (g_inval.n >= LL_INVAL_Q) {
+        pthread_mutex_unlock(&g_inval.mu);
+        return;
+    }
+    g_inval.q[g_inval.tail] = it;
+    g_inval.tail = (g_inval.tail + 1) % LL_INVAL_Q;
+    g_inval.n++;
+    pthread_cond_signal(&g_inval.cv);
+    pthread_mutex_unlock(&g_inval.mu);
 }
 
-static void ll_inval_inode(fuse_ino_t ino)
+static void ll_inval_entry(fuse_ino_t parent, const char *name)
+    __attribute__((unused));
+static void ll_inval_entry(fuse_ino_t parent, const char *name)
 {
-    (void)ino;
+    struct ll_inval_item it;
+
+    if (!name || !name[0] || virt_kind(parent))
+        return;
+    memset(&it, 0, sizeof(it));
+    it.kind = LL_INVAL_ENTRY;
+    it.parent = parent;
+    strncpy(it.name, name, EFS_MAX_NAME - 1);
+    ll_inval_push(it);
+}
+
+static void ll_inval_inode(fuse_ino_t ino, off_t off, off_t len)
+{
+    struct ll_inval_item it;
+
+    if (!ino || virt_kind(ino))
+        return;
+    memset(&it, 0, sizeof(it));
+    it.kind = LL_INVAL_INODE;
+    it.ino = ino;
+    it.off = off;
+    it.len = len;
+    ll_inval_push(it);
+}
+
+static void *ll_inval_thread(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        struct ll_inval_item it;
+        pthread_mutex_lock(&g_inval.mu);
+        while (g_inval.run && g_inval.n == 0)
+            pthread_cond_wait(&g_inval.cv, &g_inval.mu);
+        if (g_inval.n == 0) {
+            pthread_mutex_unlock(&g_inval.mu);
+            break;
+        }
+        it = g_inval.q[g_inval.head];
+        g_inval.head = (g_inval.head + 1) % LL_INVAL_Q;
+        g_inval.n--;
+        pthread_mutex_unlock(&g_inval.mu);
+        if (!g_fuse_se)
+            continue;
+        if (it.kind == LL_INVAL_ENTRY)
+            (void)fuse_lowlevel_notify_inval_entry(g_fuse_se, it.parent,
+                                                   it.name, strlen(it.name));
+        else if (it.kind == LL_INVAL_INODE)
+            (void)fuse_lowlevel_notify_inval_inode(g_fuse_se, it.ino,
+                                                   it.off, it.len);
+    }
+    return NULL;
+}
+
+static int ll_inval_start(void)
+{
+    g_inval.run = 1;
+    g_inval.head = g_inval.tail = g_inval.n = 0;
+    if (pthread_create(&g_inval.th, NULL, ll_inval_thread, NULL) != 0) {
+        g_inval.run = 0;
+        fprintf(stderr, "efs-fuse: self-inval thread failed to start\n");
+        fflush(stderr);
+        return -1;
+    }
+    g_inval.started = 1;
+    return 0;
+}
+
+static void ll_inval_stop(void)
+{
+    if (!g_inval.started)
+        return;
+    pthread_mutex_lock(&g_inval.mu);
+    g_inval.run = 0;
+    pthread_cond_signal(&g_inval.cv);
+    pthread_mutex_unlock(&g_inval.mu);
+    pthread_join(g_inval.th, NULL);
+    g_inval.started = 0;
 }
 
 static int ino_to_fuse_path(efs_ino_t ino, char *out, size_t cap)
@@ -1471,6 +1592,27 @@ int efs_client_ino_is_open(efs_ino_t ino)
     return open;
 }
 
+/* Part D: kernel page cache is the coherence hole. FOPEN_DIRECT_IO on
+ * every regular open (not just O_DIRECT). Application O_DIRECT still
+ * requires 4 KiB alignment; FOPEN_DIRECT_IO does not — the kernel
+ * sends ordinary unaligned FUSE reads/writes once cache is bypassed.
+ * libfuse 3.10.2 fuse_reply_open cannot set FOPEN_PARALLEL_DIRECT_WRITES
+ * or INIT max_pages (kernel default 32 pages = 128 KiB/request). */
+static void fuse_fi_direct_io(struct fuse_file_info *fi)
+{
+    if (!fi)
+        return;
+    fi->direct_io = 1;
+    fi->keep_cache = 0;
+}
+
+static int fuse_odirect_unaligned(const struct fuse_file_info *fi,
+                                  off_t offset, size_t size)
+{
+    return fi && (fi->flags & O_DIRECT) &&
+           ((offset & 4095) || (size & 4095));
+}
+
 static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
 {
     int vk = virt_kind(ino);
@@ -1479,8 +1621,10 @@ static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
             return -ENOENT;
         if ((fi->flags & O_ACCMODE) != O_RDONLY)
             return -EACCES;
-        if (fi)
+        if (fi) {
             fi->fh = ino;
+            fuse_fi_direct_io(fi);
+        }
         return 0;
     }
     if (vk == 3) {
@@ -1504,8 +1648,10 @@ static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
                      dir_fuse, EFS_FIND_NAME, term);
         if (find_query_len(dir_ino, query_path, term) < 0)
             return -ENOENT;
-        if (fi)
+        if (fi) {
             fi->fh = ino;
+            fuse_fi_direct_io(fi);
+        }
         return 0;
     }
     if (vk == 2)
@@ -1528,8 +1674,7 @@ static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
     }
     if (fi) {
         fi->fh = row.ino;
-        if (fi->flags & O_DIRECT)
-            fi->direct_io = 1;
+        fuse_fi_direct_io(fi);
     }
     if (fi && (fi->flags & O_TRUNC) && (fi->flags & O_ACCMODE) != O_RDONLY) {
         if (efs_mode_is_dir(row.mode))
@@ -1611,8 +1756,7 @@ static int efs_fuse_read_ino(fuse_ino_t ino, char *buf, size_t size, off_t offse
         return -EISDIR;
 
     efs_ino_t file = (fi && fi->fh) ? (efs_ino_t)fi->fh : (efs_ino_t)ino;
-    if (fi && ((fi->flags & O_DIRECT) || fi->direct_io) &&
-        ((offset & 4095) || (size & 4095)))
+    if (fuse_odirect_unaligned(fi, offset, size))
         return -EINVAL;
 
     size_t got = 0;
@@ -2174,8 +2318,7 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
     int rc = 0;
     if (size == 0)
         return 0;
-    if (fi && ((fi->flags & O_DIRECT) || fi->direct_io) &&
-        ((offset & 4095) || (size & 4095)))
+    if (fuse_odirect_unaligned(fi, offset, size))
         return -EINVAL;
     int append = fi && (fi->flags & O_APPEND);
     if (append) {
@@ -2234,8 +2377,7 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
     size_t size = fuse_buf_size(buf);
     if (size == 0)
         return 0;
-    if (fi && ((fi->flags & O_DIRECT) || fi->direct_io) &&
-        ((offset & 4095) || (size & 4095)))
+    if (fuse_odirect_unaligned(fi, offset, size))
         return -EINVAL;
     size_t copy_cap = 0;
     char *copy = bounce_alloc(size, &copy_cap);
@@ -2400,8 +2542,7 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
     }
     if (fi) {
         fi->fh = ino;
-        if (fi->flags & O_DIRECT)
-            fi->direct_io = 1;
+        fuse_fi_direct_io(fi);
         /* CREATE_F_HOLD is not applied by the raft host; the open lease
          * (I19) is a separate HOLD RPC. Without it, last-link unlink
          * deletes the inode while this fd is still open. */
@@ -2435,7 +2576,6 @@ static int efs_fuse_mkdir_at(fuse_ino_t parent_ino, const char *name, mode_t mod
     efs_ino_t ino = efs_client_create(parent.ino, name, S_IFDIR | mode, uid, gid);
     if (ino == 0)
         return fuse_create_errno(parent.ino, name);
-    ll_inval_entry(parent.ino, name);
     if (out_ino)
         *out_ino = ino;
     return 0;
@@ -2453,7 +2593,9 @@ static int efs_fuse_unlink_at(fuse_ino_t parent_ino, const char *name)
     int wx = check_dir_wx(&parent);
     if (wx != 0)
         return wx;
-    return efs_client_unlink(parent.ino, name, false) == 0 ? 0 : -EIO;
+    if (efs_client_unlink(parent.ino, name, false) != 0)
+        return -EIO;
+    return 0;
 }
 
 static int efs_fuse_rmdir_at(fuse_ino_t parent_ino, const char *name)
@@ -2475,10 +2617,8 @@ static int efs_fuse_rmdir_at(fuse_ino_t parent_ino, const char *name)
             nanosleep(&ts, NULL);
         }
     }
-    if (urc == 0) {
-        ll_inval_entry(parent.ino, name);
+    if (urc == 0)
         return 0;
-    }
     if (urc == EFS_ERR_NOT_EMPTY)
         return -ENOTEMPTY;
     if (urc == EFS_ERR_NOT_FOUND)
@@ -2631,7 +2771,6 @@ static int efs_fuse_chmod_ino(fuse_ino_t ino, mode_t mode)
         fflush(stderr);
         return efs_rc_to_errno(rc);
     }
-    ll_inval_inode(ino);
     return 0;
 }
 
@@ -2810,7 +2949,10 @@ static int efs_fuse_truncate_ino(fuse_ino_t ino, off_t size,
             return -EACCES;
     }
     (void)efs_dcache_flush_ino((efs_ino_t)ino);
-    return efs_rc_to_errno(efs_client_truncate((efs_ino_t)ino, (uint64_t)size));
+    {
+        int trc = efs_client_truncate((efs_ino_t)ino, (uint64_t)size);
+        return efs_rc_to_errno(trc);
+    }
 }
 
 static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)
@@ -2889,7 +3031,7 @@ static void efs_fuse_destroy(void *userdata)
 
 static int efs_fuse_rename_at(fuse_ino_t parent, const char *name,
                               fuse_ino_t newparent, const char *newname,
-                              unsigned int flags)
+                              unsigned int flags, efs_ino_t *out_src)
 {
     struct efs_inode src, src_parent, dst_parent;
     int rc;
@@ -2917,10 +3059,8 @@ static int efs_fuse_rename_at(fuse_ino_t parent, const char *name,
                               dst_parent.ino, newname);
     if (rc != 0)
         return efs_rc_to_errno(rc);
-    if (efs_mode_is_dir(src.mode)) {
-        ll_inval_entry(parent, name);
-        ll_inval_entry(newparent, newname);
-    }
+    if (out_src)
+        *out_src = src.ino;
     return 0;
 }
 
@@ -3235,6 +3375,11 @@ static void efs_fuse_init(void *userdata, struct fuse_conn_info *conn)
         if (conn->capable & FUSE_CAP_ASYNC_DIO)
             conn->want |= FUSE_CAP_ASYNC_DIO;
 #endif
+#ifdef FUSE_CAP_WRITEBACK_CACHE
+        /* Direct-I/O is the coherence contract; do not let libfuse turn
+         * kernel writeback back on. */
+        conn->want &= ~FUSE_CAP_WRITEBACK_CACHE;
+#endif
         if (conn->congestion_threshold < 96)
             conn->congestion_threshold = 96;
     }
@@ -3457,16 +3602,35 @@ static void ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
                        int to_set, struct fuse_file_info *fi)
 {
     struct stat st;
+    off_t old_size = -1;
     int rc;
     t_req = req;
+    if (to_set & FUSE_SET_ATTR_SIZE) {
+        if (efs_fuse_getattr_ino(ino, &st, fi) == 0)
+            old_size = st.st_size;
+    }
     rc = efs_fuse_setattr_ino(ino, attr, to_set, fi);
     if (rc == 0)
         rc = efs_fuse_getattr_ino(ino, &st, fi);
     t_req = NULL;
     if (rc)
         fuse_reply_err(req, -rc);
-    else
+    else {
         fuse_reply_attr(req, &st, 0.0);
+        /* Shrink only. notify_inval_inode looks the inode up and can
+         * pin pages that close would have forgotten — a grow after
+         * create then races posix2 overlap. Truncate-to-zero wipes
+         * all; otherwise drop pages at/after the new EOF. */
+        if ((to_set & FUSE_SET_ATTR_SIZE) && old_size >= 0 &&
+            attr->st_size < old_size) {
+            if (attr->st_size <= 0)
+                ll_inval_inode(ino, 0, 0);
+            else
+                ll_inval_inode(ino, attr->st_size,
+                               (off_t)(((uint64_t)1 << 62) -
+                                       (uint64_t)attr->st_size));
+        }
+    }
 }
 
 static void ll_readlink(fuse_req_t req, fuse_ino_t ino)
@@ -3539,9 +3703,11 @@ static void ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
                       unsigned int flags)
 {
     int rc;
+    efs_ino_t src_ino = 0;
     t_req = req;
-    rc = efs_fuse_rename_at(parent, name, newparent, newname, flags);
+    rc = efs_fuse_rename_at(parent, name, newparent, newname, flags, &src_ino);
     t_req = NULL;
+    (void)src_ino;
     fuse_reply_err(req, rc ? -rc : 0);
 }
 
@@ -4310,12 +4476,17 @@ static int efs_fuse_main_mt(int argc, char *argv[])
     }
 
     memset(&config, 0, sizeof(config));
+    /* Default clone_fd (0). Forcing 1 was for inval_entry-on-every-unlink
+     * starving /dev/fuse reads; shrink-only inode inval after reply does
+     * not need it. Pass -o clone_fd if notify starts blocking again. */
     config.clone_fd = opts.clone_fd;
     config.max_idle_threads = opts.max_idle_threads;
     if (config.max_idle_threads == 0)
         config.max_idle_threads = 64;
 
+    (void)ll_inval_start();
     ret = fuse_session_loop_mt(g_fuse_se, &config);
+    ll_inval_stop();
 
     fuse_remove_signal_handlers(g_fuse_se);
     fuse_session_unmount(g_fuse_se);
