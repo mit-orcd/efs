@@ -276,6 +276,46 @@ static void test_raft_codec(void)
               "ae3 fields");
     }
 
+    /* InstallSnapshot rides the AE entry layout (nentries=1 = blob). */
+    memset(&a, 0, sizeof(a));
+    a.type = EFS_RAFT_MSG_SNAP_REQ;
+    a.group = EFS_RAFT_GROUP_SHARD;
+    a.from = 0;
+    a.to = 3;
+    a.term = 4;
+    a.last_log_index = 20;
+    a.last_log_term = 3;
+    a.leader_commit = 20;
+    a.nentries = 1;
+    a.entries[0].term = 3;
+    a.entries[0].clen = 17;
+    a.entries[0].cmd = cmd;
+    CHECK(efs_wire_raft_encode(&a, buf, sizeof(buf), &len) == EFS_OK,
+          "snap encode");
+    CHECK(efs_wire_raft_decode(buf, len, &b, cmd_out, sizeof(cmd_out)) ==
+              EFS_OK,
+          "snap decode");
+    CHECK(b.type == EFS_RAFT_MSG_SNAP_REQ && b.last_log_index == 20 &&
+              b.last_log_term == 3 && b.nentries == 1 &&
+              b.entries[0].clen == 17 &&
+              memcmp(b.entries[0].cmd, cmd, 17) == 0,
+          "snap fields");
+    memset(&a, 0, sizeof(a));
+    a.type = EFS_RAFT_MSG_SNAP_REP;
+    a.from = 3;
+    a.to = 0;
+    a.term = 4;
+    a.success = 1;
+    a.match_index = 20;
+    CHECK(efs_wire_raft_encode(&a, buf, sizeof(buf), &len) == EFS_OK,
+          "snap-rep encode");
+    CHECK(efs_wire_raft_decode(buf, len, &b, cmd_out, sizeof(cmd_out)) ==
+              EFS_OK,
+          "snap-rep decode");
+    CHECK(b.type == EFS_RAFT_MSG_SNAP_REP && b.success == 1 &&
+              b.match_index == 20 && b.nentries == 0,
+          "snap-rep fields");
+
     CHECK(efs_wire_raft_decode(buf, 10, &b, cmd_out, sizeof(cmd_out)) ==
               EFS_ERR_PROTO,
           "short decode");

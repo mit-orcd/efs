@@ -182,8 +182,10 @@ static int mem_save_snap(void *ctx, uint64_t last_index, uint64_t last_term)
     first = m->snap_idx + 1;
     if (last_index >= first) {
         drop = (uint32_t)(last_index - first + 1);
+        /* Empty / behind learner: InstallSnapshot jumps snap_idx past a
+         * log that never held 1..last_included. Same clamp as raft_disk. */
         if (drop > m->n)
-            return EFS_ERR_INVAL;
+            drop = m->n;
         for (i = 0; i < drop; i++)
             free(m->log[i].cmd);
         memmove(m->log, m->log + drop, (size_t)(m->n - drop) * sizeof(*m->log));

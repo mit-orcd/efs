@@ -119,9 +119,9 @@ int raft_group_snap(struct raft_disk_group *g, uint64_t last_index,
     if (last_index >= first) {
         drop = (uint32_t)(last_index - first + 1);
         /* Clamped, not rejected: a rotated log writes the snapshot record
-         * without the entries it already compacted away, so replay legitimately
-         * sees a snapshot ahead of an empty log. The store callback still
-         * enforces the strict raft_mem rule against a live caller. */
+         * without the entries it already compacted away, so replay
+         * legitimately sees a snapshot ahead of an empty log. Same
+         * clamp as raft_mem (InstallSnapshot onto a fresh replica). */
         if (drop > g->n)
             drop = g->n;
         for (i = 0; i < drop; i++)

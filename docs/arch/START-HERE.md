@@ -19,12 +19,17 @@ sends you to — not the whole spec.
 > EFS_DIR_SPREAD_MIN`, and the background migrator drains leftovers to
 > HASHED. Production `raft-change` wires `efs_raft_change` in `raft_host`
 > (operator desired file + learner attach with C_old, then joint/COLD).
-> A live 3-for-3 swap on a long-lived group waits on InstallSnapshot
-> (learner apply of the full log holds `h->mu`). The dedicated
-> control-plane desired Raft group is still sim-only.
+> InstallSnapshot is in the Raft SM (`SNAP_REQ`/`SNAP_REP`, blob frozen
+> at `efs_raft_snapshot`). Production `raft_host` still does not
+> compact — no KV dump format (do not invent one). A live 3-for-3 on a
+> long log still applies every entry under `h->mu` until the host
+> snapshots. The dedicated control-plane desired Raft group is still
+> sim-only.
 > Remaining specified leftovers, in order:
 > (1) **honest fio** on a 19810 NVMe cluster (do not auto `raft-mkfs`);
-> pressure-triggered spread has no numeric bound — do not invent one.
+> (2) host snapshot of the applied KV (so a compacted prefix can ride
+> InstallSnapshot). Pressure-triggered spread has no numeric bound —
+> do not invent one.
 > C1 relaxed-coherence is out of scope. Doc machine-gate:
 > `make docs-check`. Cutover of a 36T `efs-test` is not this work.
 > [architecture.md §10](../architecture.md)

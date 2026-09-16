@@ -241,9 +241,10 @@ Relaxed-coherence stays out of scope. Production `raft-change` is in this
 tree (operator desired file + learner attach with C_old). The control-plane
 desired Raft group is still sim-only. Next specified leftover: honest fio
 on 19810 (do not auto `raft-mkfs`). Pressure-spread bound is unspecified
-(do not invent). A long-lived group cannot finish a live 3-for-3 swap
-until InstallSnapshot exists (`raft.c` send_ae already refuses a compacted
-prefix). Do not `wipe_cluster.sh` / `pkill -x efsd` while 19820 is up.
+(do not invent). InstallSnapshot is in the Raft SM (`SNAP_REQ`/`SNAP_REP`);
+production `raft_host` still does not compact (no KV dump). A live 3-for-3
+on a long log still applies every entry. Do not `wipe_cluster.sh` /
+`pkill -x efsd` while 19820 is up.
 
 **BATCHED APPENDENTRIES + OUTBOX CLOSED (Sep 15).** Catch-up was
 one entry per AE. `send_ae` now packs up to `EFS_RAFT_AE_MAX=128`
@@ -379,6 +380,21 @@ Pressure numbers are still unspecified.
 explicit migrate loop. Do not `wipe_cluster.sh` / `pkill -x efsd` while
 19820 is up.
 
+**INSTALLSNAPSHOT IN THE RAFT SM (Sep 16).** `EFS_RAFT_MSG_SNAP_REQ=5` /
+`SNAP_REP=6`. `last_log_*` = lastIncluded; `nentries=1` is
+`[app_old:4][app_new:4][user blob]` so wire/sim/host codecs stay AE-
+shaped. `efs_raft_snapshot` freezes `snap_get` before compacting.
+`send_ae` sends SNAP when `next_index <= snap_idx` (no more skip).
+`on_snap_req` rejects a skip-ahead unless `snap_put` installs that
+exact prefix — empty metadata-only SNAP cannot jump `last_applied`.
+`raft_mem` save_snap clamps like disk (empty learner). Production host
+does not set snap_get/put and never calls `efs_raft_snapshot`
+(`snap_idx=0`). Do not invent a KV dump.
+**Gates:** `test_install_snapshot` (compact 40, grow `0x7→0x1f`,
+learners install) + `test_install_snapshot_needs_blob` (metadata-only
+snap stays BUSY) + `test_wire` SNAP codec. Do not `wipe_cluster.sh` /
+`pkill -x efsd` while 19820 is up.
+
 **PRODUCTION RAFT-CHANGE (Sep 16).** `raft_host` wires `efs_raft_change`
 (I18). Operator `efs-mgmt raft-change <node:port> <group> <voters>` reuses
 `EFS_MSG_RAFT_MKFS` with host-only `EFS_MD_CMD_CFG` (NOTE then CHANGE — not
@@ -395,8 +411,9 @@ catch-up on fcstor006 (applied ~26k of 283k, ~800/s) and wedged that
 node's `h->mu` on `xlog_wait_on_iclog`; JOINT did not commit (g0 stayed
 `0x7 joint=0`). Restored `0x7`, dropped `desired.0`, restarted 006+005;
 `raft-create` `.raft-chg-smoke` ino=851969 status=0. Full live swap on
-this log needs InstallSnapshot (not in this cut). Do not `wipe_cluster.sh`
-/ `pkill -x efsd` while 19820 is up.
+this log still needs a host KV snapshot (SM InstallSnapshot is in; the
+host never compact). Do not `wipe_cluster.sh` / `pkill -x efsd` while
+19820 is up.
 
 **OLD-ENGINE 19810 CLUSTER DESTROYED (Sep 15).** No snapshot/2PC
 on-disk compat. `/data1/01–06/efs` on fcstor003–006 renamed-aside +

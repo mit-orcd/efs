@@ -24,7 +24,50 @@ struct net {
 struct app {
     int n;
     uint8_t last;
+    uint64_t snap_at;
 };
+
+static void wr32_t(uint8_t *p, uint32_t v)
+{
+    p[0] = (uint8_t)(v >> 24);
+    p[1] = (uint8_t)(v >> 16);
+    p[2] = (uint8_t)(v >> 8);
+    p[3] = (uint8_t)v;
+}
+
+static uint32_t rd32_t(const uint8_t *p)
+{
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
+           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+}
+
+static int snap_get(void *app, uint64_t last_index, uint8_t **data, uint32_t *len)
+{
+    struct app *a = app;
+    uint8_t *p = malloc(5);
+
+    if (!p)
+        return EFS_ERR_NOMEM;
+    p[0] = a->last;
+    wr32_t(p + 1, (uint32_t)a->n);
+    *data = p;
+    *len = 5;
+    a->snap_at = last_index;
+    return EFS_OK;
+}
+
+static int snap_put(void *app, uint64_t last_index, const uint8_t *data,
+                    uint32_t len)
+{
+    struct app *a = app;
+
+    if (len < 5 || !data)
+        return EFS_ERR_INVAL;
+    a->last = data[0];
+    a->n = (int)rd32_t(data + 1);
+    a->snap_at = last_index;
+    return EFS_OK;
+}
 
 static int send_now(void *net, const struct efs_raft_msg *msg)
 {
@@ -523,6 +566,90 @@ static void test_ae_batch_catchup(void)
     free_n(&n, st, 3);
 }
 
+/* Leader compacts 40 entries, then grows 0x7 → 0x1f. Learners 3/4 have
+ * an empty log, so AE cannot start at index 1. InstallSnapshot must
+ * carry the frozen SM (snap_get at compact time). */
+static void test_install_snapshot(void)
+{
+    struct net n;
+    struct efs_raft_store *st[5];
+    struct app app[5];
+    struct efs_raft_cfg cfg;
+    int i, lid;
+    uint64_t snap_at = 0;
+
+    boot_n(&n, st, app, &cfg, 5, 0x7);
+    cfg.snap_get = snap_get;
+    cfg.snap_put = snap_put;
+    for (i = 0; i < 5; i++) {
+        efs_raft_free(n.r[i]);
+        cfg.id = i;
+        cfg.store = st[i];
+        cfg.store_ctx = st[i];
+        cfg.app = &app[i];
+        cfg.election_ticks = (uint32_t)(4 + i * 4);
+        cfg.heartbeat_ticks = 1;
+        n.r[i] = efs_raft_new(&cfg);
+        CHECK(n.r[i] != NULL, "raft with snap hooks");
+    }
+    CHECK(elect(&n, 20) == 1, "elect");
+    lid = leader_id(&n);
+    CHECK(lid >= 0, "leader");
+    for (i = 0; i < 40; i++) {
+        uint8_t cmd = (uint8_t)('A' + (i % 26));
+        uint64_t idx = 0;
+
+        CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK, "propose");
+        if (elect(&n, 2) < 0)
+            CHECK(0, "elect during propose");
+        lid = leader_id(&n);
+        CHECK(lid >= 0, "leader still");
+    }
+    CHECK(efs_raft_applied(n.r[lid]) >= 40, "leader applied 40");
+    CHECK(efs_raft_snapshot(n.r[lid]) == EFS_OK, "leader snap");
+    snap_at = app[lid].snap_at;
+    CHECK(snap_at >= 40, "snap captured SM");
+    lid = wait_voters(&n, 0x1f, 80);
+    CHECK(lid >= 0, "grew via InstallSnapshot");
+    CHECK(app[3].snap_at == snap_at, "learner 3 installed snap");
+    CHECK(app[4].snap_at == snap_at, "learner 4 installed snap");
+    CHECK(efs_raft_applied(n.r[3]) >= snap_at, "learner 3 applied");
+    CHECK(efs_raft_applied(n.r[4]) >= snap_at, "learner 4 applied");
+    CHECK(app[3].n >= 40 && app[3].last == app[lid].last, "learner 3 SM");
+    free_n(&n, st, 5);
+}
+
+/* Compacting without a snap_get blob must not skip a learner ahead.
+ * wait_voters stays BUSY — match never reaches commit. */
+static void test_install_snapshot_needs_blob(void)
+{
+    struct net n;
+    struct efs_raft_store *st[5];
+    struct app app[5];
+    struct efs_raft_cfg cfg;
+    int i, lid;
+
+    boot_n(&n, st, app, &cfg, 5, 0x7);
+    CHECK(elect(&n, 20) == 1, "elect");
+    lid = leader_id(&n);
+    CHECK(lid >= 0, "leader");
+    for (i = 0; i < 20; i++) {
+        uint8_t cmd = (uint8_t)i;
+        uint64_t idx = 0;
+
+        CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK, "propose");
+        if (elect(&n, 2) < 0)
+            CHECK(0, "elect during propose");
+        lid = leader_id(&n);
+        CHECK(lid >= 0, "leader still");
+    }
+    CHECK(efs_raft_snapshot(n.r[lid]) == EFS_OK, "metadata-only snap");
+    CHECK(wait_voters(&n, 0x1f, 40) < 0, "empty snap cannot skip apply");
+    CHECK(efs_raft_applied(n.r[3]) == 0, "learner 3 still empty");
+    CHECK(app[3].snap_at == 0, "learner 3 no snap_put");
+    free_n(&n, st, 5);
+}
+
 int main(void)
 {
     test_election_i1();
@@ -533,6 +660,8 @@ int main(void)
     test_i18_joint_quorum();
     test_stale_boot_id();
     test_ae_batch_catchup();
+    test_install_snapshot();
+    test_install_snapshot_needs_blob();
     if (failures) {
         fprintf(stderr, "test_raft: %d failure(s)\n", failures);
         return 1;

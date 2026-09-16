@@ -24,6 +24,8 @@
 #define EFS_RAFT_MSG_VOTE_REP 2
 #define EFS_RAFT_MSG_AE_REQ   3
 #define EFS_RAFT_MSG_AE_REP   4
+#define EFS_RAFT_MSG_SNAP_REQ 5 /* last_log_* = lastIncluded; entries[0] = blob */
+#define EFS_RAFT_MSG_SNAP_REP 6
 
 #define EFS_RAFT_GROUP_SHARD  0
 #define EFS_RAFT_GROUP_CTRL   1
@@ -97,6 +99,13 @@ struct efs_raft_store {
 typedef int (*efs_raft_send_fn)(void *net, const struct efs_raft_msg *msg);
 typedef int (*efs_raft_apply_fn)(void *app, uint64_t index, uint64_t term,
                                  const uint8_t *cmd, uint32_t clen);
+/* Snapshot blob as of last_included. get mallocs *data (raft frees it).
+ * put installs that exact prefix — current SM may be ahead of snap_idx.
+ * NULL get → metadata-only SNAP_REQ; NULL put rejects a skip-ahead. */
+typedef int (*efs_raft_snap_get_fn)(void *app, uint64_t last_index,
+                                    uint8_t **data, uint32_t *len);
+typedef int (*efs_raft_snap_put_fn)(void *app, uint64_t last_index,
+                                    const uint8_t *data, uint32_t len);
 
 struct efs_raft_cfg {
     int id; /* 0 .. EFS_RAFT_MAX_PEERS-1; may be outside voters (learner) */
@@ -121,6 +130,8 @@ struct efs_raft_cfg {
     void *net;
     efs_raft_apply_fn apply;
     void *app;
+    efs_raft_snap_get_fn snap_get;
+    efs_raft_snap_put_fn snap_put;
 };
 
 struct efs_raft;
@@ -132,8 +143,9 @@ int efs_raft_tick(struct efs_raft *r);
 int efs_raft_recv(struct efs_raft *r, const struct efs_raft_msg *msg);
 int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,
                      uint64_t *index_out);
-/* Compact log prefix through last_applied (snapshot metadata only; KV is
- * already the applied store). */
+/* Compact log prefix through last_applied. Captures snap_get (if set) so
+ * InstallSnapshot can rebuild a learner that never applied 1..snap_idx.
+ * KV already durable through last_applied — no snapshot past that (step 4). */
 int efs_raft_snapshot(struct efs_raft *r);
 /* Crash restart without dropping the log: KV is already durable through
  * idx, so do not re-apply 1..idx. Does not compact. idx is clamped to
