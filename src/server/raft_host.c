@@ -82,6 +82,7 @@
                                    * epoch:8 + size:8 + tail_ci:4 +
                                    * has_tail:1 — matches meta_cmd.h */
 #define HOST_DIR_LEN       10
+#define HOST_CFG_LEN       6 /* tag + sub + voters:4 */
 #define HOST_SPREAD_MAX    8 /* leftovers per GC tick; batch, not a scan */
 #define HOST_SESS_HDR_LEN  18 /* tag+sub+uuid; same as sim pack_hdr */
 #define HOST_SESS_CREATE_LEN 22 /* hdr+epoch */
@@ -134,6 +135,7 @@ struct host_group {
     uint8_t group;
     uint8_t hosted;
     uint32_t voters;
+    uint32_t desired; /* operator target; actual follows via joint (I18) */
     uint64_t applied_saved;
     struct efs_raft *r;
     struct efs_raft_host *host; /* back-pointer, set in attach_group */
@@ -176,6 +178,7 @@ struct efs_raft_host {
     uint64_t salt;
     struct efs_kv *kv;
     struct efs_raft_disk *disk;
+    char mdraft[EFS_MAX_PATH];
     struct host_group g[HOST_NGROUPS];
     pthread_mutex_t mu;
     pthread_mutex_t read_mu; /* serializes ReadIndex; never held by the pump */
@@ -304,6 +307,20 @@ static uint32_t group_voters(uint8_t group, int n)
     if (group == EFS_RAFT_GROUP_SHARD)
         return 0x7u; /* nodes 1,2,3 = raft ids 0,1,2 */
     return 0xeu;     /* nodes 2,3,4 = raft ids 1,2,3 */
+}
+
+/* Same rule as raft.c valid_voters: RF = 2f+1, so the popcount is odd. */
+static int cfg_voters_ok(uint32_t v)
+{
+    int n = 0, i;
+
+    if (v == 0 || (v >> EFS_RAFT_MAX_PEERS))
+        return 0;
+    for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
+        if (v & (1u << i))
+            n++;
+    }
+    return n >= 1 && (n % 2) == 1;
 }
 
 static int hosts_group(int raft_id, uint32_t voters)
@@ -1392,7 +1409,13 @@ static struct host_group *group_slot(struct efs_raft_host *h, uint8_t group)
 
 static int host_hosts(struct efs_raft_host *h, uint8_t group)
 {
-    return group_raft(h, group) != NULL;
+    struct host_group *s = group_slot(h, group);
+
+    /* A learner replica exists so it can catch up; it must not serve
+     * inode RPCs until COLD puts this id in app_old. */
+    if (!s || !s->r)
+        return 0;
+    return hosts_group(h->raft_id, efs_raft_voters(s->r));
 }
 
 static int host_hosts_all(struct efs_raft_host *h, const uint8_t *g, int n)
@@ -1430,7 +1453,9 @@ static int host_pick_peer(struct efs_raft_host *h, const uint8_t *groups, int ng
             continue;
         for (i = 0; i < ng; i++) {
             struct host_group *s = group_slot(h, groups[i]);
-            uint32_t voters = s ? s->voters : group_voters(groups[i], h->n);
+            uint32_t voters = (s && s->r) ? efs_raft_voters(s->r)
+                              : (s ? s->voters
+                                 : group_voters(groups[i], h->n));
             if (!hosts_group(rid, voters)) {
                 ok = 0;
                 break;
@@ -1453,7 +1478,7 @@ static void host_need_both(uint8_t *need)
 
 static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
                            const uint8_t *cmd, uint32_t clen,
-                           struct efs_msg_raft_mkfs_reply *rep)
+                           struct efs_msg_raft_mkfs_reply *rep, int io_ms)
 {
     uint8_t payload[1 + HOST_CMD_MAX];
     uint32_t plen;
@@ -1476,6 +1501,10 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
     pc = server_peer_conn_get(host, port);
     if (!pc)
         return EFS_ERR_BUSY;
+    if (pc->kind == EFS_CONN_TCP && pc->fd >= 0 && io_ms > 0) {
+        efs_set_recv_timeout(pc->fd, io_ms);
+        efs_set_send_timeout(pc->fd, io_ms);
+    }
     if (efs_conn_send_msg(pc, EFS_MSG_RAFT_MKFS, payload, plen) != 0) {
         server_peer_conn_drop(host, port, pc);
         return EFS_ERR_IO;
@@ -1488,6 +1517,10 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
     }
     memcpy(rep, reply, sizeof(*rep));
     free(reply);
+    if (pc->kind == EFS_CONN_TCP && pc->fd >= 0) {
+        efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+        efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+    }
     server_peer_conn_release(host, port, pc);
     return EFS_OK;
 }
@@ -1506,7 +1539,7 @@ static int host_remote_cmd(struct efs_raft_host *h, uint8_t group,
             rid = host_pick_peer(h, &group, 1, skip);
         if (rid < 0 || rid == h->raft_id)
             return EFS_ERR_NOT_PRIMARY;
-        rc = host_rpc_submit(h, rid, group, cmd, clen, rep);
+        rc = host_rpc_submit(h, rid, group, cmd, clen, rep, EFS_IO_TIMEOUT_MS);
         if (rc != EFS_OK) {
             skip = rid;
             prefer_rid = -1;
@@ -2903,8 +2936,11 @@ static void *host_pump(void *arg)
             t_tick = now_us_() - c0;
             c0 = now_us_();
         }
-        for (i = 0; i < HOST_NGROUPS; i++)
+        for (i = 0; i < HOST_NGROUPS; i++) {
             (void)persist_applied(h, i);
+            if (h->g[i].r)
+                h->g[i].voters = efs_raft_voters(h->g[i].r);
+        }
         if (obs)
             t_persist = now_us_() - c0;
         /* Applies above may have advanced commit/applied: wake every waiter
@@ -3010,28 +3046,74 @@ static uint64_t now_ns(void)
     return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
 }
 
-static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
+static void desired_path(const struct efs_raft_host *h, uint8_t group,
+                         char *out, size_t n)
+{
+    snprintf(out, n, "%s/desired.%u", h->mdraft, (unsigned)group);
+}
+
+static uint32_t load_desired(struct efs_raft_host *h, uint8_t group,
+                             uint32_t fallback)
+{
+    char path[EFS_MAX_PATH];
+    uint8_t buf[4];
+    int fd;
+    uint32_t v;
+
+    desired_path(h, group, path, sizeof(path));
+    fd = open(path, O_RDONLY);
+    if (fd < 0)
+        return fallback;
+    if (read(fd, buf, 4) != 4) {
+        close(fd);
+        return fallback;
+    }
+    close(fd);
+    v = rd32be(buf);
+    return cfg_voters_ok(v) ? v : fallback;
+}
+
+static int save_desired(struct efs_raft_host *h, uint8_t group, uint32_t voters)
+{
+    char path[EFS_MAX_PATH], tmp[EFS_MAX_PATH];
+    uint8_t buf[4];
+    int fd;
+
+    desired_path(h, group, path, sizeof(path));
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    wr32be(buf, voters);
+    fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0)
+        return EFS_ERR_IO;
+    if (write(fd, buf, 4) != 4 || fsync(fd) != 0) {
+        close(fd);
+        unlink(tmp);
+        return EFS_ERR_IO;
+    }
+    close(fd);
+    if (rename(tmp, path) != 0) {
+        unlink(tmp);
+        return EFS_ERR_IO;
+    }
+    return EFS_OK;
+}
+
+/* cfg_voters is C_old (bootstrap map). efs_raft_new overlays persisted
+ * membership, so a restart after COLD sees C_new. A first-time learner
+ * MUST start with C_old — attaching with C_new would skip joint (I18). */
+static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
 {
     struct efs_raft_cfg cfg;
     struct efs_raft_store *st;
-    uint32_t voters = group_voters(group, h->n);
+    uint8_t group = h->g[gi].group;
 
-    h->g[gi].group = group;
-    h->g[gi].voters = voters;
-    h->g[gi].host = h;
-    h->g[gi].hosted = (uint8_t)hosts_group(h->raft_id, voters);
-    h->g[gi].r = NULL;
-    memset(h->g[gi].arc_idx, 0, sizeof(h->g[gi].arc_idx));
-    memset(h->g[gi].arc_rc, 0, sizeof(h->g[gi].arc_rc));
-    if (!h->g[gi].hosted)
-        return EFS_OK;
     st = efs_raft_disk_group(h->disk, group);
     if (!st)
         return EFS_ERR_IO;
     memset(&cfg, 0, sizeof(cfg));
     cfg.id = h->raft_id;
     cfg.n = h->n;
-    cfg.voters = voters;
+    cfg.voters = cfg_voters;
     cfg.election_ticks = HOST_ELECT_BASE;
     cfg.heartbeat_ticks = HOST_HB_TICKS;
     cfg.boot_id = h->boot_id;
@@ -3049,6 +3131,8 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
     h->g[gi].r = efs_raft_new(&cfg);
     if (!h->g[gi].r)
         return EFS_ERR_NOMEM;
+    h->g[gi].hosted = 1;
+    h->g[gi].voters = efs_raft_voters(h->g[gi].r);
     {
         uint64_t applied = 0;
         if (load_applied(h, gi, &applied) == EFS_OK && applied > 0) {
@@ -3057,6 +3141,104 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
         }
     }
     return EFS_OK;
+}
+
+static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
+{
+    uint32_t boot = group_voters(group, h->n);
+    uint32_t want;
+
+    h->g[gi].group = group;
+    h->g[gi].voters = boot;
+    h->g[gi].host = h;
+    h->g[gi].hosted = 0;
+    h->g[gi].r = NULL;
+    memset(h->g[gi].arc_idx, 0, sizeof(h->g[gi].arc_idx));
+    memset(h->g[gi].arc_rc, 0, sizeof(h->g[gi].arc_rc));
+    want = load_desired(h, group, boot);
+    h->g[gi].desired = want;
+    if (!hosts_group(h->raft_id, boot) && !hosts_group(h->raft_id, want))
+        return EFS_OK;
+    return attach_replica(h, gi, boot);
+}
+
+static void host_cfg_fan_note(struct efs_raft_host *h, uint8_t group,
+                              uint32_t voters)
+{
+    uint8_t cmd[HOST_CFG_LEN];
+    struct efs_msg_raft_mkfs_reply rep;
+    int rid;
+
+    cmd[0] = EFS_MD_CMD_CFG;
+    cmd[1] = EFS_MD_CFG_NOTE;
+    wr32be(cmd + 2, voters);
+    for (rid = 0; rid < h->n; rid++) {
+        if (rid == h->raft_id)
+            continue;
+        memset(&rep, 0, sizeof(rep));
+        (void)host_rpc_submit(h, rid, group, cmd, HOST_CFG_LEN, &rep,
+                              HOST_SEND_IO_MS);
+    }
+}
+
+/* Operator desired ≠ actual (I18). Persist + attach a learner with C_old,
+ * then the current leader calls efs_raft_change. Not a control-plane Raft
+ * group — that stays sim-only until step 6's remainder is specified. */
+static int host_cfg(struct efs_raft_host *h, uint8_t group,
+                    const uint8_t *cmd, uint32_t clen, int *hint)
+{
+    uint32_t voters;
+    uint8_t sub;
+    struct host_group *s;
+    struct efs_raft *r;
+    struct efs_msg_raft_mkfs_reply rep;
+    int rc, lid = -1;
+
+    if (clen < HOST_CFG_LEN ||
+        (group != EFS_RAFT_GROUP_SHARD && group != EFS_RAFT_GROUP_SHARD2))
+        return EFS_ERR_INVAL;
+    sub = cmd[1];
+    voters = rd32be(cmd + 2);
+    if (!cfg_voters_ok(voters))
+        return EFS_ERR_INVAL;
+    if (sub != EFS_MD_CFG_NOTE && sub != EFS_MD_CFG_CHANGE)
+        return EFS_ERR_INVAL;
+    rc = save_desired(h, group, voters);
+    if (rc != EFS_OK)
+        return rc;
+    pthread_mutex_lock(&h->mu);
+    s = group_slot(h, group);
+    if (s)
+        s->desired = voters;
+    if (s && !s->r && hosts_group(h->raft_id, voters))
+        rc = attach_replica(h, (int)(s - h->g), group_voters(group, h->n));
+    pthread_mutex_unlock(&h->mu);
+    if (rc != EFS_OK)
+        return rc;
+    if (sub == EFS_MD_CFG_NOTE)
+        return EFS_OK;
+    host_cfg_fan_note(h, group, voters);
+    pthread_mutex_lock(&h->mu);
+    s = group_slot(h, group);
+    r = (s && s->r) ? s->r : NULL;
+    if (r) {
+        lid = efs_raft_leader(r);
+        if (hint)
+            *hint = lid;
+        if (efs_raft_role(r) == EFS_RAFT_LEADER) {
+            rc = efs_raft_change(r, voters);
+            s->voters = efs_raft_voters(r);
+            pthread_mutex_unlock(&h->mu);
+            host_pump_kick(h);
+            return rc;
+        }
+    }
+    pthread_mutex_unlock(&h->mu);
+    memset(&rep, 0, sizeof(rep));
+    rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);
+    if (hint && rep.leader_hint >= 0)
+        *hint = rep.leader_hint;
+    return rc;
 }
 
 /* ---- background GC reaper (step-11 follow-up, spec L7) ----
@@ -3511,6 +3693,7 @@ int server_raft_host_start(struct efsd_server *s)
     h->pump_efd = eventfd(0, EFD_NONBLOCK);
 
     snprintf(dir, sizeof(dir), "%s/mdraft", s->storage_path);
+    snprintf(h->mdraft, sizeof(h->mdraft), "%s", dir);
     if (mkdir(dir, 0755) != 0 && errno != EEXIST) {
         fprintf(stderr, "raft-host: mkdir %s: %s\n", dir, strerror(errno));
         free(h);
@@ -3800,6 +3983,19 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     group = payload[0];
     cmd = payload + 1;
     clen = plen - 1;
+    if (clen >= HOST_CFG_LEN && cmd[0] == EFS_MD_CMD_CFG) {
+        rc = host_cfg(h, group, cmd, clen, &hint);
+        pthread_mutex_lock(&h->mu);
+        r = group_raft(h, group);
+        if (r)
+            idx = efs_raft_applied(r);
+        pthread_mutex_unlock(&h->mu);
+        out->rc = rc;
+        out->index = idx;
+        if (hint >= 0)
+            out->leader_hint = hint;
+        return;
+    }
     if (clen >= HOST_SESS_HDR_LEN && cmd[0] == EFS_MD_CMD_SESSION &&
         cmd[1] == HOST_SESS_GET) {
         if (!host_hosts(h, group)) {
@@ -3892,12 +4088,15 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out)
         gs->hosted = h->g[i].hosted;
         gs->voters = h->g[i].voters;
         gs->leader = -1;
+        gs->joint = 0;
         if (h->g[i].hosted && h->g[i].r) {
             gs->role = (uint8_t)efs_raft_role(h->g[i].r);
             gs->leader = efs_raft_leader(h->g[i].r);
             gs->term = efs_raft_term(h->g[i].r);
             gs->commit_index = efs_raft_commit(h->g[i].r);
             gs->applied_index = efs_raft_applied(h->g[i].r);
+            gs->voters = efs_raft_voters(h->g[i].r);
+            gs->joint = efs_raft_joint(h->g[i].r) ? 1 : 0;
         }
     }
     pthread_mutex_unlock(&h->mu);
@@ -4864,7 +5063,7 @@ static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
         if (rid < 0)
             rc = EFS_ERR_NOT_PRIMARY;
         else
-            rc = host_rpc_submit(h, rid, pg, cmd, clen, &rep);
+            rc = host_rpc_submit(h, rid, pg, cmd, clen, &rep, EFS_IO_TIMEOUT_MS);
         pthread_mutex_lock(&h->read_mu);
         if (rc != EFS_OK)
             return rc;

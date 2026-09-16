@@ -565,17 +565,161 @@ static int cmd_raft_status(int argc, char **argv)
     for (i = 0; i < r->ngroups && i < EFS_RAFT_HOST_MAX_GROUPS; i++) {
         struct efs_raft_group_status *g = &r->groups[i];
         printf("  group %u hosted=%u role=%s leader=%d term=%llu "
-               "commit=%llu applied=%llu voters=0x%x\n",
+               "commit=%llu applied=%llu voters=0x%x joint=%u\n",
                g->group, g->hosted,
                g->hosted ? raft_role_name(g->role) : "-",
                g->leader,
                (unsigned long long)g->term,
                (unsigned long long)g->commit_index,
                (unsigned long long)g->applied_index,
-               g->voters);
+               g->voters, g->joint);
     }
     free(reply);
     return 0;
+}
+
+static int raft_cfg_submit(const char *host, uint16_t port, uint8_t group,
+                           uint8_t sub, uint32_t voters,
+                           struct efs_msg_raft_mkfs_reply *out, int io_ms)
+{
+    int fd;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    uint8_t payload[1 + 6];
+
+    payload[0] = group;
+    payload[1] = EFS_MD_CMD_CFG;
+    payload[2] = sub;
+    payload[3] = (uint8_t)(voters >> 24);
+    payload[4] = (uint8_t)(voters >> 16);
+    payload[5] = (uint8_t)(voters >> 8);
+    payload[6] = (uint8_t)voters;
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0)
+        return -1;
+    efs_set_recv_timeout(fd, io_ms);
+    efs_set_send_timeout(fd, io_ms);
+    if (send_recv(fd, EFS_MSG_RAFT_MKFS, payload, sizeof(payload), &reply_type,
+                  &reply, &reply_len) != 0 ||
+        reply_type != EFS_MSG_RAFT_MKFS_REPLY ||
+        reply_len != sizeof(*out)) {
+        free(reply);
+        close(fd);
+        return -1;
+    }
+    close(fd);
+    memcpy(out, reply, sizeof(*out));
+    free(reply);
+    return 0;
+}
+
+static int raft_change_converged(const char *host, uint16_t port, uint8_t group,
+                                 uint32_t voters)
+{
+    int fd;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_msg_raft_status_reply *r;
+    uint32_t i;
+    int ok = 0;
+
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0)
+        return 0;
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_RAFT_STATUS, NULL, 0, &reply_type, &reply,
+                  &reply_len) != 0 ||
+        reply_type != EFS_MSG_RAFT_STATUS_REPLY ||
+        reply_len != sizeof(*r)) {
+        free(reply);
+        close(fd);
+        return 0;
+    }
+    close(fd);
+    r = reply;
+    if (r->rc == EFS_OK) {
+        for (i = 0; i < r->ngroups && i < EFS_RAFT_HOST_MAX_GROUPS; i++) {
+            if (r->groups[i].group == group && r->groups[i].hosted &&
+                r->groups[i].voters == voters && !r->groups[i].joint)
+                ok = 1;
+        }
+    }
+    free(reply);
+    return ok;
+}
+
+static int cmd_raft_change(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    uint8_t group;
+    uint32_t voters;
+    struct efs_msg_raft_mkfs_reply r;
+    int i, rc = EFS_ERR_BUSY;
+
+    if (argc < 3) {
+        fprintf(stderr, "usage: raft-change <node:port> <group> <voters>\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    group = (uint8_t)strtoul(argv[1], NULL, 0);
+    voters = (uint32_t)strtoul(argv[2], NULL, 0);
+    if (group != EFS_RAFT_GROUP_SHARD && group != EFS_RAFT_GROUP_SHARD2) {
+        fprintf(stderr, "raft-change: group must be 0 or 2\n");
+        return 1;
+    }
+    memset(&r, 0, sizeof(r));
+    {
+        int lfd = efs_connect_tcp(host, port);
+        uint8_t ltype = 0;
+        void *lrep = NULL;
+        uint32_t llen = 0;
+
+        if (lfd >= 0) {
+            efs_set_recv_timeout(lfd, 2000);
+            efs_set_send_timeout(lfd, 2000);
+            if (send_recv(lfd, EFS_MSG_LIST_NODES, NULL, 0, &ltype, &lrep,
+                          &llen) == 0 &&
+                ltype == EFS_MSG_LIST_NODES_REPLY &&
+                llen == sizeof(struct efs_msg_list_nodes_reply)) {
+                struct efs_msg_list_nodes_reply *list = lrep;
+                uint32_t n;
+
+                for (n = 0; n < list->node_count; n++)
+                    (void)raft_cfg_submit(list->nodes[n].addr,
+                                          list->nodes[n].port, group,
+                                          EFS_MD_CFG_NOTE, voters, &r, 2000);
+            }
+            free(lrep);
+            close(lfd);
+        }
+    }
+    /* Learner catch-up is BUSY until match_index >= commit (I18). */
+    for (i = 0; i < 80; i++) {
+        if (raft_cfg_submit(host, port, group, EFS_MD_CFG_CHANGE, voters, &r,
+                            EFS_IO_TIMEOUT_MS) != 0) {
+            fprintf(stderr, "Failed to raft-change\n");
+            return 1;
+        }
+        rc = r.rc;
+        if (rc != EFS_ERR_BUSY)
+            break;
+        usleep(100000);
+    }
+    if (rc == EFS_OK) {
+        for (i = 0; i < 80 && !raft_change_converged(host, port, group, voters);
+             i++)
+            usleep(100000);
+    }
+    printf("raft-change rc=%d group=%u voters=0x%x index=%llu hint=%d\n",
+           rc, group, voters, (unsigned long long)r.index, r.leader_hint);
+    return rc == EFS_OK ? 0 : 1;
 }
 
 static int cmd_raft_mkfs(int argc, char **argv)
@@ -1951,6 +2095,7 @@ int main(int argc, char **argv)
                     "  add-storage <node:port> <path>[,path...]\n"
                     "  raft-status <node:port>\n"
                     "  raft-mkfs <node:port>\n"
+                    "  raft-change <node:port> <group> <voters>\n"
                     "  raft-dir <node:port> <ino> <begin|migrate|finish>\n"
                     "  raft-session <node:port> <create|register|establish|get|fence> <uuid-hex> [epoch|shard] [shard]\n"
                     "  raft-getattr <node:port> [ino]\n"
@@ -1989,6 +2134,8 @@ int main(int argc, char **argv)
         return cmd_raft_status(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-mkfs") == 0)
         return cmd_raft_mkfs(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-change") == 0)
+        return cmd_raft_change(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-dir") == 0)
         return cmd_raft_dir(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-session") == 0)

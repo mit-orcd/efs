@@ -64,5 +64,10 @@
 #define EFS_MD_CMD_REAP_DONE   22 /* [ino:8][gen:8] */
 #define EFS_MD_CMD_GC_ACK      23 /* [cnt:2][(ino:8)(gen:8)(lane:1)(ci:4)
                                    * (frag:1)]*cnt */
+/* Host-only membership (I18). Not a log command — the leader calls
+ * efs_raft_change, which appends JOINT/COLD itself. Byte 1 is the sub. */
+#define EFS_MD_CMD_CFG 24
+#define EFS_MD_CFG_NOTE   1 /* persist desired + attach learner (C_old) */
+#define EFS_MD_CFG_CHANGE 2 /* NOTE every peer, then efs_raft_change */
 
 #endif

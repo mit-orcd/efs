@@ -17,11 +17,13 @@ sends you to — not the whole spec.
 > spread ops including populated leftover migrate as a 2-shard txn,
 > delete-2PC, FUSE A–D). LOCAL dirs auto-begin SPLITTING when `nents >
 > EFS_DIR_SPREAD_MIN`, and the background migrator drains leftovers to
-> HASHED (`src/meta/dir_spread.c`; host hook is one GC-thread pass).
+> HASHED. Production `raft-change` wires `efs_raft_change` in `raft_host`
+> (operator desired file + learner attach with C_old, then joint/COLD).
+> A live 3-for-3 swap on a long-lived group waits on InstallSnapshot
+> (learner apply of the full log holds `h->mu`). The dedicated
+> control-plane desired Raft group is still sim-only.
 > Remaining specified leftovers, in order:
-> (1) **production joint-consensus reconfiguration** (§7.8 / step 6) —
-> `efs_raft_change` is in `raft.c` + sim, not wired in `raft_host`;
-> (2) **honest fio** on a 19810 NVMe cluster (do not auto `raft-mkfs`);
+> (1) **honest fio** on a 19810 NVMe cluster (do not auto `raft-mkfs`);
 > pressure-triggered spread has no numeric bound — do not invent one.
 > C1 relaxed-coherence is out of scope. Doc machine-gate:
 > `make docs-check`. Cutover of a 36T `efs-test` is not this work.

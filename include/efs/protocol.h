@@ -188,7 +188,9 @@ enum efs_msg_type {
      * export mkfs path). Non-empty: byte 0 is the group id; the rest is a
      * log command (or empty = ReadIndex). Session GET is sub=0 of
      * EFS_MD_CMD_SESSION (not a log command); salt carries epoch/state/
-     * touched. Same reply shape. Not a new opcode — 10.5c-24 reuses this
+     * touched. EFS_MD_CMD_CFG is host-only (I18): persist desired, attach
+     * a learner with C_old, then efs_raft_change — not a log command.
+     * Same reply shape. Not a new opcode — 10.5c-24 reuses this
      * so a coordinator can submit to a group it does not lead without
      * inventing EFS_MSG_RAFT_PROPOSE. */
     EFS_MSG_RAFT_MKFS = 95,
@@ -242,9 +244,9 @@ struct efs_raft_group_status {
     uint8_t group;
     uint8_t role;    /* EFS_RAFT_FOLLOWER/CANDIDATE/LEADER */
     uint8_t hosted;  /* this node runs a replica of this group */
-    uint8_t pad;
+    uint8_t joint;   /* 1 while C_old,C_new overlapping (I18) */
     int32_t leader;  /* peer id, -1 unknown */
-    uint32_t voters; /* committed voting-set bitmask (peer ids) */
+    uint32_t voters; /* committed voting-set bitmask (app_old) */
     uint32_t pad2;
     uint64_t term;
     uint64_t commit_index;

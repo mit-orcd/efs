@@ -237,10 +237,13 @@ Populated LOCAL-range migrate is a cross-group txn (`5a8219e`). LOCAL dirs
 auto-begin SPLITTING when `nents > EFS_DIR_SPREAD_MIN` (`efb2ca9`). Background
 leftover drain is in this tree (`dir_spread.c` + GC-thread pass). Honest
 fio matrix (Part D perf contract) is **not** run on the 1G 19820 scratch.
-Relaxed-coherence stays out of scope. Next specified leftovers: production
-joint-consensus reconfig (`raft_host` still lacks `efs_raft_change`);
-pressure-spread bound is unspecified (do not invent). Do not
-`wipe_cluster.sh` / `pkill -x efsd` while 19820 is up.
+Relaxed-coherence stays out of scope. Production `raft-change` is in this
+tree (operator desired file + learner attach with C_old). The control-plane
+desired Raft group is still sim-only. Next specified leftover: honest fio
+on 19810 (do not auto `raft-mkfs`). Pressure-spread bound is unspecified
+(do not invent). A long-lived group cannot finish a live 3-for-3 swap
+until InstallSnapshot exists (`raft.c` send_ae already refuses a compacted
+prefix). Do not `wipe_cluster.sh` / `pkill -x efsd` while 19820 is up.
 
 **BATCHED APPENDENTRIES + OUTBOX CLOSED (Sep 15).** Catch-up was
 one entry per AE. `send_ae` now packs up to `EFS_RAFT_AE_MAX=128`
@@ -375,6 +378,25 @@ Pressure numbers are still unspecified.
 **Gates:** `test_sim` `test_auto_spread` seed 140 reaches HASHED without an
 explicit migrate loop. Do not `wipe_cluster.sh` / `pkill -x efsd` while
 19820 is up.
+
+**PRODUCTION RAFT-CHANGE (Sep 16).** `raft_host` wires `efs_raft_change`
+(I18). Operator `efs-mgmt raft-change <node:port> <group> <voters>` reuses
+`EFS_MSG_RAFT_MKFS` with host-only `EFS_MD_CMD_CFG` (NOTE then CHANGE — not
+a log command). Desired mask is a per-group file under `mdraft/`; every
+peer attaches a learner replica with **C_old** as `cfg.voters` before the
+leader appends JOINT. Status reports live `efs_raft_voters` + `joint`.
+`host_hosts` is the committed voting set, so a learner does not serve inode
+RPCs until COLD. Fan NOTE uses `HOST_SEND_IO_MS` (a 30 s peer submit was
+the first 0xb hang). Control-plane desired group stays sim-only.
+**Gates (19820 scratch, TCP, keep storage):** `test_raft` / `test_sim` /
+`test_wire` / `test_txn` OK on fcstor003. Live no-op `raft-change 0 0x7`
+**OK** (`rc=0`, index=283372). Live 3-for-3 `0x7→0xb` started learner
+catch-up on fcstor006 (applied ~26k of 283k, ~800/s) and wedged that
+node's `h->mu` on `xlog_wait_on_iclog`; JOINT did not commit (g0 stayed
+`0x7 joint=0`). Restored `0x7`, dropped `desired.0`, restarted 006+005;
+`raft-create` `.raft-chg-smoke` ino=851969 status=0. Full live swap on
+this log needs InstallSnapshot (not in this cut). Do not `wipe_cluster.sh`
+/ `pkill -x efsd` while 19820 is up.
 
 **OLD-ENGINE 19810 CLUSTER DESTROYED (Sep 15).** No snapshot/2PC
 on-disk compat. `/data1/01–06/efs` on fcstor003–006 renamed-aside +
