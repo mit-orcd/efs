@@ -192,19 +192,23 @@ Do not stand up 19820 again. POSIX/perf/leaks gates run on **19810**
 or localhost. Orphan old-engine sources deleted (`test_meta_batch`,
 `test_rpc_create`, `blobscan`, `dump_root`, `txprobe`, `kv_compact_dir`).
 
-**POSIX 192/201 + HOLD + ReadIndex-on-commit (Sep 17 night).** Same
-19810 (keep storage). Same-group mkdir/rmdir already one Raft entry.
-CREATE_F_HOLD now carries `owner` on `efs_msg_inode_create`; apply
-LEASE_OPENs in that entry (hashed first-use still a follow-up lease).
-Client skips the extra HOLD RPC. Commit quorum now stamps ReadIndex
-(`read_index=commit`, `test_raft` covers the second propose). Idle
-create/unlink **4.4 / 2.2 ms** (was ~100 ms). POSIX jobs=1 TCP
-`results/posix/20260917-183418`: **193 both-pass / 3 EFS** (efs TSV
-198/2/1 in 124 s; `POSIX_SSH_SEC` default 400). Leftover: `dir_many_files`
-was 15 s (isolated PASS **27.4 s** — suite now `@budget(45)`);
-`symlink_relative_after_parent_rename` EIO load flake (known);
-`mmap_write_read` SKIP ENODEV expected. Do not invent REPORT split
-or chunked SNAP. 005 gossip-DOWN for ~30 s after bounce is STATUS
+**POSIX 1+2 gated on 19810 after 983bfb8 (Sep 17).** Same storage, TCP,
+jobs=1. Harness: `concurrent_appends` / `concurrent_create_unlink_two_proc`
+`@budget(30)` (isolated 22 / 20 s vs 15 s default); `dir_many_files`
+`@budget(75)`; `POSIX2_STEP_SEC` default 45 (400+400 append SSH was 15 s).
+One-node `results/posix/20260917-190719`: **194 both-pass / 2 EFS** (efs
+TSV 199/1/1 in 241 s) — leftover `dir_many_files` 45 s (isolated PASS
+12 s; mmap SKIP ENODEV). 4-node `--parallel` 007–010 under 5-way load
+`20260917-190014`: 186–188 both-pass (008 164 / incomplete 175 tests).
+9-node `20260917-191430`: every host hit the 385 s python cap at
+131–144/201 (5–7 real walk/name timeouts; the rest `[None]` never-ran —
+same class as the old 165 s cap, not 60 bugs). posix2 one pair
+`20260917-191150` **58 both-pass / 4 EFS**; posix2 multi
+`20260917-192141` **56–58 / 4–6**. Shared posix2 set: `peer_concurrent_append`
+got 400 want 800 on every pair (one side's O_APPEND records never land);
+overlap-pwrite RMW; `peer_fcntl_range_conflict` per-client lockf.
+`peer_rename_dir` EIO is load-only (isolated PASS). Do not invent REPORT
+split or chunked SNAP. 005 gossip-DOWN ~30 s after bounce is STATUS
 probe, not a dead process.
 
 **FRESH-19810 POSIX + DD (same day).** 8 GiB non-zero `dd` on the

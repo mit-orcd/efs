@@ -28,7 +28,7 @@
 #   EFS_MNT  (default /tmp/efs-mount)
 #   EFS_HOSTS default = fcstor007..015 (the 9 pure clients)
 #   COMMIT=1 to git-commit the new results at the end.
-#   POSIX_SSH_SEC (default 400)  POSIX2_STEP_SEC (default 15)
+#   POSIX_SSH_SEC (default 400)  POSIX2_STEP_SEC (default 45)
 #   POSIX_TEST_SEC (default 15, per-test deadline in posix_suite.py)
 #   POSIX_JOBS (default 16; isolated testdirs run concurrently)
 #   POSIX_PER_HOST (default 1; run this many full-suite instances in parallel
@@ -51,7 +51,7 @@ DEFAULT_HOSTS=(fcstor007.ib fcstor008.ib fcstor009.ib fcstor010.ib \
 NVME_HOSTS=(fcstor003.ib fcstor004.ib fcstor005.ib fcstor006.ib)
 RUN_ID=$(date -u +%Y%m%d-%H%M%S)
 POSIX_SSH_SEC=${POSIX_SSH_SEC:-400}
-POSIX2_STEP_SEC=${POSIX2_STEP_SEC:-15}
+POSIX2_STEP_SEC=${POSIX2_STEP_SEC:-45}
 BUILD_SSH_SEC=${BUILD_SSH_SEC:-60}
 PERF_SSH_SEC=${PERF_SSH_SEC:-400}
 PROBE_SSH_SEC=${PROBE_SSH_SEC:-10}

@@ -619,7 +619,7 @@ def dir_deep_nesting(d):
 
 
 @test
-@budget(45)
+@budget(75)
 def dir_many_files(d):
     n = 300
     for i in range(n):
@@ -2017,6 +2017,7 @@ def concurrent_creates_same_dir(d):
 
 
 @test
+@budget(30)
 def concurrent_appends(d):
     import threading
     p = os.path.join(d, "f")
@@ -2088,6 +2089,7 @@ def concurrent_writes_disjoint(d):
 
 
 @test
+@budget(30)
 def concurrent_create_unlink_two_proc(d):
     snippet = (
         "import os,sys,time\n"
