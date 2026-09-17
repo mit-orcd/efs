@@ -2292,16 +2292,18 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     return efs_kv_batch(kv, it, n);
 }
 
-int efs_meta_apply_activate_lane(struct efs_kv *kv, efs_ino_t ino,
-                                 uint8_t lane)
+int efs_meta_apply_activate_lanes(struct efs_kv *kv, efs_ino_t ino,
+                                  uint64_t mask)
 {
     struct efs_meta_row row;
     uint8_t key[EFS_KV_KEY_MAX], val[INO_VAL];
     uint32_t klen = 0;
     int rc;
 
-    if (!kv || ino == 0 || lane >= EFS_META_LANES)
+    if (!kv || ino == 0)
         return EFS_ERR_INVAL;
+    if (mask == 0)
+        return EFS_OK;
     rc = efs_meta_apply_get_inode(kv, ino, &row);
     /* P3: the inode was unlinked between the host's read and this apply —
      * the activation is stale work, harmless to drop. */
@@ -2309,14 +2311,22 @@ int efs_meta_apply_activate_lane(struct efs_kv *kv, efs_ino_t ino,
         return EFS_OK;
     if (rc != EFS_OK)
         return rc;
-    if (row.active_lanes & (1ULL << lane))
+    if ((row.active_lanes & mask) == mask)
         return EFS_OK; /* idempotent replay */
-    row.active_lanes |= 1ULL << lane;
+    row.active_lanes |= mask;
     pack_inode(val, &row);
     rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, key, &klen);
     if (rc != EFS_OK)
         return rc;
     return efs_kv_put(kv, key, klen, val, INO_VAL);
+}
+
+int efs_meta_apply_activate_lane(struct efs_kv *kv, efs_ino_t ino,
+                                 uint8_t lane)
+{
+    if (lane >= EFS_META_LANES)
+        return EFS_ERR_INVAL;
+    return efs_meta_apply_activate_lanes(kv, ino, 1ULL << lane);
 }
 
 static int epoch_lane_upd(struct lane_rec *ln, void *arg);

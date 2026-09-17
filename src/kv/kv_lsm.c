@@ -494,8 +494,9 @@ static int lsm_batch(void *ctx, const struct efs_kv_item *items, uint32_t n)
     pthread_mutex_unlock(&l->mu);
     if (n == 0)
         return EFS_OK;
-    /* Durable first: a batch is invisible until its record is fsynced, so a
-     * failure leaves no trace. Concurrent batches share that fsync. */
+    /* Durable first unless a sync-hold is open: then the record is written
+     * and applied, and kv_wal_hold(0) fsyncs the group. Concurrent batches
+     * still share one fsync when hold is off. */
     arc = kv_wal_append(l->wal, items, n, &seq);
     if (arc != EFS_OK && seq == 0)
         return arc;
@@ -747,12 +748,25 @@ void efs_kv_lsm_close(struct efs_kv *kv)
 int efs_kv_lsm_flush(struct efs_kv *kv)
 {
     struct kv_lsm *l;
+    uint32_t l0max;
     int rc;
 
     if (!kv || !kv->ctx)
         return EFS_ERR_INVAL;
     l = kv->ctx;
     pthread_mutex_lock(&l->mu);
+    /* Host snapshot flush used to only append L0. After MAX_SEGS the
+     * next write compact-crashed (fcstor004 SIGSEGV in compact_emit).
+     * Compact first when L0 is at the engine cap or the configured
+     * trigger, so a snapshot cannot pin the store at 64 L0 files. */
+    l0max = l->cfg.l0_max ? l->cfg.l0_max : KV_LSM_L0_DEFAULT;
+    if (l->n_l0 >= KV_LSM_MAX_SEGS || l->n_l0 >= l0max) {
+        rc = kv_compact_locked(l);
+        if (rc != EFS_OK) {
+            pthread_mutex_unlock(&l->mu);
+            return rc;
+        }
+    }
     rc = kv_flush_locked(l);
     pthread_mutex_unlock(&l->mu);
     return rc;
@@ -786,4 +800,28 @@ int efs_kv_lsm_seg_count(struct efs_kv *kv, uint32_t *l0, uint32_t *l1)
         *l1 = l->n_l1;
     pthread_mutex_unlock(&l->mu);
     return EFS_OK;
+}
+
+int efs_kv_lsm_sync_hold(struct efs_kv *kv)
+{
+    struct kv_lsm *l;
+
+    if (!kv || kv->ops != &lsm_ops || !kv->ctx)
+        return EFS_OK;
+    l = kv->ctx;
+    if (l->magic != KV_LSM_MAGIC || !l->wal)
+        return EFS_OK;
+    return kv_wal_hold(l->wal, 1);
+}
+
+int efs_kv_lsm_sync_release(struct efs_kv *kv)
+{
+    struct kv_lsm *l;
+
+    if (!kv || kv->ops != &lsm_ops || !kv->ctx)
+        return EFS_OK;
+    l = kv->ctx;
+    if (l->magic != KV_LSM_MAGIC || !l->wal)
+        return EFS_OK;
+    return kv_wal_hold(l->wal, 0);
 }

@@ -57,7 +57,7 @@
 #define HOST_NGROUPS       2
 #define HOST_READ_TRIES    80 /* 80 × 5 ms = 400 ms; heartbeat is 50 ms */
 #define HOST_CREATE_NAME_OFF 31
-#define HOST_CMD_MAX       512
+#define HOST_CMD_MAX       512 /* stack size for small cmds, not a wire cap */
 #define HOST_SETATTR_LEN   61
 #define HOST_UTIMENS_LEN   73
 /* TRUNCATE: +8 lane_mask (which active lanes THIS entry fences — the ones
@@ -76,9 +76,14 @@
 #define HOST_PUBLISH_LEN   (29u + (uint32_t)EFS_NUM_FRAGMENTS * (4u + EFS_HASH_SIZE) + \
                             EFS_OPID_UUID_LEN + 4u + 8u + 8u + 8u + 4u + \
                             8u + 8u + 1u)
+/* Many publications per Raft proposal (data.md §7.3). Cap so one apply
+ * stays under the 400 ms host_wait_applied budget and the cmd fits one
+ * AE without the oversized-entry path. 256 × HOST_PUBLISH_LEN ≈ 51 KiB. */
+#define HOST_PUB_BATCH_N   256u
 #define HOST_PUB_F_LANE_LOCAL 1
 #define HOST_PUB_TAIL_TRIES  4 /* cross-group truncate tail CAS retries */
 #define HOST_ACTIVATE_LANE_LEN 10 /* tag + ino:8 + lane:1 */
+#define HOST_ACTIVATE_MASK_LEN 17 /* tag + ino:8 + mask:8 */
 #define HOST_LANE_FENCE_LEN    39 /* tag + ino:8 + gen:8 + lane:1 +
                                    * epoch:8 + size:8 + tail_ci:4 +
                                    * has_tail:1 — matches meta_cmd.h */
@@ -753,15 +758,18 @@ static int apply_activate_lane_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (clen < HOST_ACTIVATE_LANE_LEN)
         return EFS_OK;
     ino = rd64be(cmd + 1);
-    rc = efs_meta_apply_activate_lane(h->kv, ino, cmd[9]);
+    if (clen >= HOST_ACTIVATE_MASK_LEN)
+        rc = efs_meta_apply_activate_lanes(h->kv, ino, rd64be(cmd + 9));
+    else
+        rc = efs_meta_apply_activate_lane(h->kv, ino, cmd[9]);
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply activate-lane rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
         return EFS_OK;
     }
-    fprintf(stderr, "raft-host: applied activate-lane index=%llu ino=%llu lane=%u\n",
-            (unsigned long long)index, (unsigned long long)ino,
-            (unsigned)cmd[9]);
+    if (env_on("EFS_RAFT_DBG"))
+        fprintf(stderr, "raft-host: applied activate-lane index=%llu ino=%llu\n",
+                (unsigned long long)index, (unsigned long long)ino);
     return EFS_OK;
 }
 
@@ -1169,16 +1177,15 @@ static int apply_lock_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
-/* Same encoding as sim apply_publish_cmd. Session fencing is not hosted. */
-static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
-                             uint32_t clen, uint64_t index)
+/* Same encoding as sim apply_publish_cmd (plus the host FileID/lane_local
+ * tail). clen may be N * HOST_PUBLISH_LEN — one Raft entry, many pubs. */
+static int apply_one_publish(struct efs_raft_host *h, const uint8_t *cmd,
+                             uint64_t index)
 {
     struct efs_meta_pub p;
     const uint8_t *q;
     int i, rc;
 
-    if (clen < HOST_PUBLISH_LEN)
-        return EFS_OK;
     memset(&p, 0, sizeof(p));
     p.ino = rd64be(cmd + 1);
     p.chunk_index = rd32be(cmd + 9);
@@ -1203,14 +1210,41 @@ static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     rc = efs_meta_apply_publish(h->kv, &p);
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_STALE)
         rc = EFS_OK;
-    if (rc != EFS_OK) {
+    if (rc != EFS_OK)
         fprintf(stderr, "raft-host: apply publish rc=%d index=%llu ino=%llu ci=%u\n",
                 rc, (unsigned long long)index, (unsigned long long)p.ino,
                 p.chunk_index);
+    else if (env_on("EFS_RAFT_DBG"))
+        fprintf(stderr, "raft-host: applied publish index=%llu ino=%llu ci=%u\n",
+                (unsigned long long)index, (unsigned long long)p.ino,
+                p.chunk_index);
+    return EFS_OK;
+}
+
+static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                             uint32_t clen, uint64_t index)
+{
+    uint32_t off = 0, n = 0;
+    int held = 0;
+
+    if (clen < HOST_PUBLISH_LEN)
         return EFS_OK;
+    /* One WAL fsync for the whole Raft entry. Sequential efs_kv_batch
+     * otherwise fsyncs per pub; group-commit only helps concurrent callers. */
+    if (clen >= 2u * HOST_PUBLISH_LEN) {
+        (void)efs_kv_lsm_sync_hold(h->kv);
+        held = 1;
     }
-    fprintf(stderr, "raft-host: applied publish index=%llu ino=%llu ci=%u\n",
-            (unsigned long long)index, (unsigned long long)p.ino, p.chunk_index);
+    while (off + HOST_PUBLISH_LEN <= clen) {
+        (void)apply_one_publish(h, cmd + off, index);
+        off += HOST_PUBLISH_LEN;
+        n++;
+    }
+    if (held)
+        (void)efs_kv_lsm_sync_release(h->kv);
+    if (n > 1 && env_on("EFS_RAFT_DBG"))
+        fprintf(stderr, "raft-host: applied publish-batch index=%llu n=%u\n",
+                (unsigned long long)index, n);
     return EFS_OK;
 }
 
@@ -1538,7 +1572,8 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
                            const uint8_t *cmd, uint32_t clen,
                            struct efs_msg_raft_mkfs_reply *rep, int io_ms)
 {
-    uint8_t payload[1 + HOST_CMD_MAX];
+    uint8_t stack[1 + HOST_CMD_MAX];
+    uint8_t *payload = stack;
     uint32_t plen;
     char host[64];
     uint16_t port = 0;
@@ -1546,32 +1581,48 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
     uint8_t rtype = 0;
     void *reply = NULL;
     uint32_t rlen = 0;
+    int rc = EFS_OK;
 
     memset(rep, 0, sizeof(*rep));
-    if (rid < 0 || rid == h->raft_id || clen > HOST_CMD_MAX)
+    /* HOST_CMD_MAX is the stack buffer, not a protocol max. A publication
+     * batch is HOST_PUB_BATCH_N × HOST_PUBLISH_LEN ≈ 51 KiB; rejecting it
+     * here made every g2-follower forward return INVAL, and host_remote_cmd
+     * remapped the exhausted-peer walk to NOT_PRIMARY (fio end_fsync -15). */
+    if (rid < 0 || rid == h->raft_id || clen > EFS_WIRE_RAFT_MAX_CMD)
         return EFS_ERR_INVAL;
+    plen = 1u + clen;
+    if (clen > HOST_CMD_MAX) {
+        payload = malloc(plen);
+        if (!payload)
+            return EFS_ERR_NOMEM;
+    }
     payload[0] = group;
     if (clen)
         memcpy(payload + 1, cmd, clen);
-    plen = 1u + clen;
-    if (peer_addr(h, rid, host, sizeof(host), &port) != 0)
-        return EFS_ERR_NOT_PRIMARY;
+    if (peer_addr(h, rid, host, sizeof(host), &port) != 0) {
+        rc = EFS_ERR_NOT_PRIMARY;
+        goto out;
+    }
     pc = server_peer_conn_get(host, port);
-    if (!pc)
-        return EFS_ERR_BUSY;
+    if (!pc) {
+        rc = EFS_ERR_BUSY;
+        goto out;
+    }
     if (pc->kind == EFS_CONN_TCP && pc->fd >= 0 && io_ms > 0) {
         efs_set_recv_timeout(pc->fd, io_ms);
         efs_set_send_timeout(pc->fd, io_ms);
     }
     if (efs_conn_send_msg(pc, EFS_MSG_RAFT_MKFS, payload, plen) != 0) {
         server_peer_conn_drop(host, port, pc);
-        return EFS_ERR_IO;
+        rc = EFS_ERR_IO;
+        goto out;
     }
     if (efs_conn_recv_msg(pc, &rtype, &reply, &rlen) != 0 ||
         rtype != EFS_MSG_RAFT_MKFS_REPLY || rlen < sizeof(*rep)) {
         free(reply);
         server_peer_conn_drop(host, port, pc);
-        return EFS_ERR_IO;
+        rc = EFS_ERR_IO;
+        goto out;
     }
     memcpy(rep, reply, sizeof(*rep));
     free(reply);
@@ -1580,7 +1631,10 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
         efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
     }
     server_peer_conn_release(host, port, pc);
-    return EFS_OK;
+out:
+    if (payload != stack)
+        free(payload);
+    return rc;
 }
 
 /* Submit cmd (or ReadIndex if clen==0) to the group's leader. Never targets
@@ -2549,6 +2603,16 @@ static int pack_activate_lane_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     wr64be(out + 1, ino);
     out[9] = lane;
     *len = HOST_ACTIVATE_LANE_LEN;
+    return EFS_OK;
+}
+
+static int pack_activate_mask_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
+                                  uint64_t mask)
+{
+    out[0] = EFS_MD_CMD_ACTIVATE_LANE;
+    wr64be(out + 1, ino);
+    wr64be(out + 9, mask);
+    *len = HOST_ACTIVATE_MASK_LEN;
     return EFS_OK;
 }
 
@@ -7635,7 +7699,7 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
     int rc;
 
     rc = efs_meta_apply_append_open(h->kv, ino, offs, lens, &n);
-    /* Deleted inode (stale report skipped by host_pub_locked): no
+    /* Deleted inode (stale report skipped by host_pub_pack): no
      * reservations to resolve. */
     if (rc == EFS_ERR_NOT_FOUND)
         return EFS_OK;
@@ -7685,18 +7749,23 @@ static uint64_t host_pub_candidate_gen(const struct efs_chunk_rec *rec,
     return efs_meta_candidate_gen(h, 0, 1, chunk_index, 0);
 }
 
-static int host_pub_locked(struct efs_raft_host *h, const struct efs_chunk_rec *rec,
-                           uint64_t new_size, int *hint)
+/* Pack one PUBLISH. *clen=0 means skip (identical mapping or deleted).
+ * *lg is the raft group that must host the entry. skip_ri is for the
+ * REPORT batch path (ReadIndex already done per group). cached is the
+ * inode row from the report's one get_inode; NULL falls back to a get. */
+static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *rec,
+                         uint64_t new_size, int *hint, int skip_ri,
+                         struct efs_meta_row *cached,
+                         uint8_t *cmd, uint32_t *clen, uint8_t *lg_out)
 {
     struct efs_meta_pub p;
     struct efs_meta_row row;
     struct efs_meta_chunk got;
-    uint8_t cmd[HOST_PUBLISH_LEN];
-    uint32_t clen = 0, lsh, ish;
-    uint64_t idx = 0;
+    uint32_t lsh, ish;
     uint8_t lane, lg, ig;
     int rc, i;
 
+    *clen = 0;
     if (!rec || rec->ino == 0)
         return EFS_ERR_INVAL;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
@@ -7709,9 +7778,15 @@ static int host_pub_locked(struct efs_raft_host *h, const struct efs_chunk_rec *
     }
     ish = efs_kv_inode_shard(rec->ino);
     ig = efs_raft_shard_group(ish);
-    rc = host_read_index(h, ig, hint);
-    if (rc == EFS_OK)
+    rc = skip_ri ? EFS_OK : host_read_index(h, ig, hint);
+    if (rc != EFS_OK)
+        return rc;
+    if (cached) {
+        row = *cached;
+        rc = EFS_OK;
+    } else {
         rc = efs_meta_apply_get_inode(h->kv, rec->ino, &row);
+    }
     /* Stale publish for a deleted inode: skip the proposal entirely (P3).
      * ReadIndex guarantees we see the committed create, so NOT_FOUND here
      * means the unlink already won. */
@@ -7736,6 +7811,8 @@ static int host_pub_locked(struct efs_raft_host *h, const struct efs_chunk_rec *
     lane = (uint8_t)(rec->chunk_index % EFS_META_LANES);
     lsh = efs_kv_lane_shard(rec->ino, lane);
     lg = efs_raft_shard_group(lsh);
+    if (lg_out)
+        *lg_out = lg;
     if (lg != ig && (row.active_lanes & (1ULL << lane)) == 0) {
         /* First use of a cross-group lane: register it in the inode row's
          * active_lanes bitmap on the INODE group first (that bitmap is
@@ -7750,8 +7827,10 @@ static int host_pub_locked(struct efs_raft_host *h, const struct efs_chunk_rec *
             rc = host_propose_wait(h, ig, acmd, alen, hint);
         if (rc != EFS_OK)
             return rc;
+        if (cached)
+            cached->active_lanes |= 1ULL << lane;
     }
-    if (lg != ig)
+    if (lg != ig && !skip_ri)
         rc = host_read_index(h, lg, hint);
     if (rc != EFS_OK)
         return rc;
@@ -7761,6 +7840,10 @@ static int host_pub_locked(struct efs_raft_host *h, const struct efs_chunk_rec *
         rc = EFS_OK;
     else if (rc != EFS_OK)
         return rc;
+    if (got.generation != 0 &&
+        memcmp(got.nodes, rec->nodes, sizeof(got.nodes)) == 0 &&
+        memcmp(got.checksums, rec->checksums, sizeof(got.checksums)) == 0)
+        return EFS_OK;
     memset(&p, 0, sizeof(p));
     p.ino = rec->ino;
     p.chunk_index = rec->chunk_index;
@@ -7782,14 +7865,73 @@ static int host_pub_locked(struct efs_raft_host *h, const struct efs_chunk_rec *
         p.mtime_gen = row.mtime_gen;
         p.lane_local = 1;
     }
-    rc = pack_publish_cmd(cmd, &clen, &p);
-    if (rc == EFS_OK)
-        rc = host_propose(h, lg, cmd, clen, &idx, hint);
-    if (rc == EFS_OK)
-        rc = host_wait_applied(h, lg, idx, hint);
-    if (rc != EFS_OK && env_on("EFS_RAFT_DBG"))
-        fprintf(stderr, "raft-host: pub ino=%llu ci=%u propose/apply rc=%d\n",
-                (unsigned long long)rec->ino, rec->chunk_index, rc);
+    return pack_publish_cmd(cmd, clen, &p);
+}
+
+struct host_pub_batch {
+    uint8_t group;
+    uint32_t len;
+    uint8_t *buf;
+    uint64_t last_idx;
+};
+
+static int host_pub_batch_propose(struct efs_raft_host *h, struct host_pub_batch *b,
+                                  int *hint)
+{
+    uint64_t idx = 0;
+    int rc;
+
+    if (!b->buf || !b->len)
+        return EFS_OK;
+    rc = host_propose(h, b->group, b->buf, b->len, &idx, hint);
+    b->len = 0;
+    if (rc != EFS_OK)
+        return rc;
+    b->last_idx = idx;
+    return EFS_OK;
+}
+
+static int host_pub_batch_push(struct efs_raft_host *h, struct host_pub_batch *b,
+                               uint8_t group, const uint8_t *cmd, uint32_t clen,
+                               int *hint)
+{
+    int rc;
+
+    if (clen == 0)
+        return EFS_OK;
+    if (!b->buf) {
+        b->buf = malloc((size_t)HOST_PUBLISH_LEN * HOST_PUB_BATCH_N);
+        if (!b->buf)
+            return EFS_ERR_NOMEM;
+        b->len = 0;
+        b->group = group;
+        b->last_idx = 0;
+    }
+    if (b->len && b->group != group)
+        return EFS_ERR_INVAL;
+    if (b->len + clen > HOST_PUBLISH_LEN * HOST_PUB_BATCH_N) {
+        rc = host_pub_batch_propose(h, b, hint);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    b->group = group;
+    memcpy(b->buf + b->len, cmd, clen);
+    b->len += clen;
+    return EFS_OK;
+}
+
+static int host_pub_batch_finish(struct efs_raft_host *h, struct host_pub_batch *b,
+                                 int *hint)
+{
+    int rc;
+
+    rc = host_pub_batch_propose(h, b, hint);
+    if (rc == EFS_OK && b->last_idx)
+        rc = host_wait_applied(h, b->group, b->last_idx, hint);
+    free(b->buf);
+    b->buf = NULL;
+    b->len = 0;
+    b->last_idx = 0;
     return rc;
 }
 
@@ -7825,83 +7967,194 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
      * this node doesn't vote in could not be waited on, and its apply on
      * a voter lacking the inode row would diverge. Bounce the whole batch
      * to a dual-host (never self, so no forward loop). */
-    {
-        uint8_t need[HOST_NGROUPS];
-        int nn = 0;
+    uint8_t need[HOST_NGROUPS];
+    int nn = 0;
 
-        for (i = 0; i < count; i++) {
-            uint8_t gs[2];
-            int k, f;
+    for (i = 0; i < count; i++) {
+        uint8_t gs[2];
+        int k, f;
 
-            gs[0] = efs_raft_shard_group(efs_kv_inode_shard(recs[i].ino));
-            gs[1] = efs_raft_shard_group(
-                efs_kv_lane_shard(recs[i].ino,
-                                  (uint8_t)(recs[i].chunk_index %
-                                            EFS_META_LANES)));
-            for (k = 0; k < 2; k++) {
-                for (f = 0; f < nn; f++)
-                    if (need[f] == gs[k])
-                        break;
-                if (f == nn && nn < HOST_NGROUPS)
-                    need[nn++] = gs[k];
-            }
+        gs[0] = efs_raft_shard_group(efs_kv_inode_shard(recs[i].ino));
+        gs[1] = efs_raft_shard_group(
+            efs_kv_lane_shard(recs[i].ino,
+                              (uint8_t)(recs[i].chunk_index %
+                                        EFS_META_LANES)));
+        for (k = 0; k < 2; k++) {
+            for (f = 0; f < nn; f++)
+                if (need[f] == gs[k])
+                    break;
+            if (f == nn && nn < HOST_NGROUPS)
+                need[nn++] = gs[k];
         }
-        for (i = 0; i < (uint32_t)nn; i++) {
-            if (!host_hosts(h, need[i])) {
-                host_fwd_report(h, recs, count, irecs, ino_count, out,
-                                need, nn);
-                return;
-            }
+    }
+    for (i = 0; i < (uint32_t)nn; i++) {
+        if (!host_hosts(h, need[i])) {
+            host_fwd_report(h, recs, count, irecs, ino_count, out,
+                            need, nn);
+            return;
         }
     }
     pthread_mutex_lock(&h->read_mu);
-    for (i = 0; i < count && rc == EFS_OK; i++) {
-        sz = 0;
-        for (j = 0; j < ino_count && irecs; j++) {
-            if (irecs[j].ino == recs[i].ino) {
-                sz = irecs[j].size;
-                break;
+    /* One ReadIndex per touched group for the whole batch (§8 amortize).
+     * A per-rec ReadIndex is a quorum round each and times out a 2g
+     * end_fsync (16k chunks) as EFS_ERR_NET. */
+    for (i = 0; i < (uint32_t)nn && rc == EFS_OK; i++)
+        rc = host_read_index(h, need[i], &hint);
+    {
+        efs_ino_t uino[32];
+        uint64_t usz[32];
+        uint32_t nu = 0, k;
+        struct host_pub_batch bat[HOST_NGROUPS];
+        uint8_t cmd[HOST_PUBLISH_LEN];
+        uint32_t clen;
+        uint8_t lg;
+        int bi;
+        struct {
+            efs_ino_t ino;
+            struct efs_meta_row row;
+            uint64_t need_act;
+            int have;
+        } ic[32];
+        uint32_t nic = 0;
+
+        memset(bat, 0, sizeof(bat));
+        memset(ic, 0, sizeof(ic));
+        /* One get_inode per ino, then one ACTIVATE_LANE mask per ino
+         * (was up to 64 propose_wait rounds on a new file). */
+        for (i = 0; i < count && rc == EFS_OK; i++) {
+            uint8_t lane, ig, lgg;
+            uint32_t ish, lsh;
+
+            for (k = 0; k < nic; k++)
+                if (ic[k].ino == recs[i].ino)
+                    break;
+            if (k == nic) {
+                if (nic >= 32)
+                    continue;
+                ic[k].ino = recs[i].ino;
+                rc = efs_meta_apply_get_inode(h->kv, recs[i].ino, &ic[k].row);
+                if (rc == EFS_ERR_NOT_FOUND) {
+                    rc = EFS_OK;
+                    continue;
+                }
+                if (rc != EFS_OK)
+                    break;
+                ic[k].have = 1;
+                nic++;
+            }
+            if (!ic[k].have)
+                continue;
+            lane = (uint8_t)(recs[i].chunk_index % EFS_META_LANES);
+            ish = efs_kv_inode_shard(recs[i].ino);
+            lsh = efs_kv_lane_shard(recs[i].ino, lane);
+            ig = efs_raft_shard_group(ish);
+            lgg = efs_raft_shard_group(lsh);
+            if (lgg != ig && (ic[k].row.active_lanes & (1ULL << lane)) == 0) {
+                ic[k].need_act |= 1ULL << lane;
+                ic[k].row.active_lanes |= 1ULL << lane;
             }
         }
-        if (sz == 0)
-            sz = ((uint64_t)recs[i].chunk_index + 1) * EFS_MIN_CHUNK_SIZE;
-        rc = host_pub_locked(h, &recs[i], sz, &hint);
-        if (env_on("EFS_RAFT_DBG"))
-            fprintf(stderr, "raft-host: report pub ino=%llu ci=%u sz=%llu rc=%d\n",
-                    (unsigned long long)recs[i].ino, recs[i].chunk_index,
-                    (unsigned long long)sz, rc);
-        /* INVAL is a permanent property of the rec (bad mode, zero node) —
-         * it can never succeed, so skip it and keep publishing the rest of
-         * the batch. One poison rec must not stall every rec behind it
-         * (the client re-reports the skipped ino, so a misdiagnosed cause
-         * resurfaces instead of being lost). Transient errors (NOT_PRIMARY,
-         * NO_QUORUM, NET, BUSY, STALE) fail the batch for a client retry. */
-        if (rc == EFS_ERR_INVAL) {
-            fprintf(stderr,
-                    "raft-host: report pub ino=%llu ci=%u INVAL, skipping rec\n",
-                    (unsigned long long)recs[i].ino, recs[i].chunk_index);
-            rc = EFS_OK;
-            continue;
-        }
-        if (rc == EFS_OK) {
-            int rrc = host_resolve_caught_up(h, recs[i].ino, sz, &hint);
+        for (k = 0; k < nic && rc == EFS_OK; k++) {
+            uint8_t acmd[HOST_ACTIVATE_MASK_LEN];
+            uint32_t alen = 0;
+            uint8_t ig;
 
-            /* Reservation bookkeeping, not durability: the pub above
-             * already made the data durable and visible (size rides the
-             * lane MAX). A resolve failure defers cleanup to the next
-             * report or the lease-close drain; failing the report here
-             * would keep the rec dirty and poison every later sync
-             * report. */
+            if (!ic[k].need_act)
+                continue;
+            ig = efs_raft_shard_group(efs_kv_inode_shard(ic[k].ino));
+            rc = pack_activate_mask_cmd(acmd, &alen, ic[k].ino, ic[k].need_act);
+            if (rc == EFS_OK)
+                rc = host_propose_wait(h, ig, acmd, alen, &hint);
+        }
+        for (i = 0; i < count && rc == EFS_OK; i++) {
+            struct efs_meta_row *cached = NULL;
+
+            sz = 0;
+            clen = 0;
+            lg = 0;
+            for (j = 0; j < ino_count && irecs; j++) {
+                if (irecs[j].ino == recs[i].ino) {
+                    sz = irecs[j].size;
+                    break;
+                }
+            }
+            if (sz == 0)
+                sz = ((uint64_t)recs[i].chunk_index + 1) * EFS_MIN_CHUNK_SIZE;
+            for (k = 0; k < nic; k++) {
+                if (ic[k].have && ic[k].ino == recs[i].ino) {
+                    cached = &ic[k].row;
+                    break;
+                }
+            }
+            rc = host_pub_pack(h, &recs[i], sz, &hint, 1, cached, cmd, &clen,
+                               &lg);
+            if (env_on("EFS_RAFT_DBG"))
+                fprintf(stderr,
+                        "raft-host: report pub ino=%llu ci=%u sz=%llu rc=%d clen=%u\n",
+                        (unsigned long long)recs[i].ino, recs[i].chunk_index,
+                        (unsigned long long)sz, rc, clen);
+            /* INVAL is a permanent property of the rec (bad mode, zero node) —
+             * it can never succeed, so skip it and keep publishing the rest of
+             * the batch. One poison rec must not stall every rec behind it
+             * (the client re-reports the skipped ino, so a misdiagnosed cause
+             * resurfaces instead of being lost). Transient errors (NOT_PRIMARY,
+             * NO_QUORUM, NET, BUSY, STALE) fail the batch for a client retry. */
+            if (rc == EFS_ERR_INVAL) {
+                fprintf(stderr,
+                        "raft-host: report pub ino=%llu ci=%u INVAL, skipping rec\n",
+                        (unsigned long long)recs[i].ino, recs[i].chunk_index);
+                rc = EFS_OK;
+                continue;
+            }
+            if (rc == EFS_OK && clen > 0) {
+                for (bi = 0; bi < HOST_NGROUPS; bi++) {
+                    if (!bat[bi].buf || bat[bi].group == lg)
+                        break;
+                }
+                if (bi == HOST_NGROUPS) {
+                    rc = EFS_ERR_INVAL;
+                } else {
+                    rc = host_pub_batch_push(h, &bat[bi], lg, cmd, clen, &hint);
+                }
+            }
+            if (rc == EFS_OK) {
+                for (k = 0; k < nu; k++)
+                    if (uino[k] == recs[i].ino)
+                        break;
+                if (k == nu && nu < 32) {
+                    uino[nu] = recs[i].ino;
+                    usz[nu] = sz;
+                    nu++;
+                } else if (k < nu && sz > usz[k]) {
+                    usz[k] = sz;
+                }
+            }
+            if (rc != EFS_OK)
+                fprintf(stderr,
+                        "raft-host: report FAIL ino=%llu ci=%u rc=%d (phase=%s)\n",
+                        (unsigned long long)recs[i].ino, recs[i].chunk_index, rc,
+                        "pub");
+        }
+        for (bi = 0; bi < HOST_NGROUPS; bi++) {
+            int frc = host_pub_batch_finish(h, &bat[bi], &hint);
+
+            if (rc == EFS_OK)
+                rc = frc;
+            else {
+                free(bat[bi].buf);
+                bat[bi].buf = NULL;
+            }
+        }
+        /* Once per inode, not per chunk: append_open is a KV scan, and a 2g
+         * file is 16k recs. Doing it per rec times out the client as NET. */
+        for (k = 0; k < nu && rc == EFS_OK; k++) {
+            int rrc = host_resolve_caught_up(h, uino[k], usz[k], &hint);
+
             if (rrc != EFS_OK)
                 fprintf(stderr,
                         "raft-host: report resolve ino=%llu rc=%d (deferred)\n",
-                        (unsigned long long)recs[i].ino, rrc);
+                        (unsigned long long)uino[k], rrc);
         }
-        if (rc != EFS_OK)
-            fprintf(stderr,
-                    "raft-host: report FAIL ino=%llu ci=%u rc=%d (phase=%s)\n",
-                    (unsigned long long)recs[i].ino, recs[i].chunk_index, rc,
-                    "pub");
     }
     pthread_mutex_unlock(&h->read_mu);
     set_inode_rc(out, rc, hint);

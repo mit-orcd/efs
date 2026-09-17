@@ -553,11 +553,161 @@ static void test_kv_group_snap(void)
     CHECK(get_ino(dst, 1, 99, NULL) == EFS_ERR_NOT_FOUND, "stale deleted");
     CHECK(get_ino(dst, 1, 1, "odd") == EFS_OK, "live kept");
     free(blob);
+    blob = NULL;
+    /* Enough dest-only keys that the collect arena reallocs. Pointers into
+     * the old arena used to reach efs_kv_batch and smash the LSM heap. */
+    {
+        uint32_t i;
+
+        for (i = 3; i < 2000; i += 2)
+            CHECK(put_ino(dst, 1, (efs_ino_t)i, "stale") == EFS_OK, "arena stale");
+        CHECK(efs_kv_group_export(src, EFS_RAFT_GROUP_SHARD, 65536, &blob,
+                                  &blen) == EFS_OK,
+              "export arena");
+        CHECK(efs_kv_group_import(dst, EFS_RAFT_GROUP_SHARD, blob, blen) ==
+                  EFS_OK,
+              "import arena");
+        CHECK(get_ino(dst, 1, 1, "odd") == EFS_OK, "live after arena");
+        CHECK(get_ino(dst, 1, 3, NULL) == EFS_ERR_NOT_FOUND, "first stale gone");
+        CHECK(get_ino(dst, 1, 1999, NULL) == EFS_ERR_NOT_FOUND, "last stale gone");
+        free(blob);
+        blob = NULL;
+    }
+    {
+        struct efs_kv *lsm;
+        char saved[512];
+        uint32_t i;
+
+        memcpy(saved, g_dir, sizeof(saved));
+        snprintf(g_dir, sizeof(g_dir), "/tmp/efs-kvlsm-snap-%d", (int)getpid());
+        rmtree(g_dir);
+        lsm = open_store(EFS_KV_LSM_NOSYNC, 0);
+        CHECK(lsm != NULL, "lsm snap");
+        if (lsm) {
+            for (i = 3; i < 2000; i += 2)
+                CHECK(put_ino(lsm, 1, (efs_ino_t)i, "stale") == EFS_OK,
+                      "lsm stale");
+            CHECK(efs_kv_group_export(src, EFS_RAFT_GROUP_SHARD, 65536, &blob,
+                                      &blen) == EFS_OK,
+                  "export lsm");
+            CHECK(efs_kv_group_import(lsm, EFS_RAFT_GROUP_SHARD, blob, blen) ==
+                      EFS_OK,
+                  "import lsm");
+            CHECK(get_ino(lsm, 1, 1, "odd") == EFS_OK, "lsm live");
+            CHECK(get_ino(lsm, 1, 3, NULL) == EFS_ERR_NOT_FOUND, "lsm stale gone");
+            efs_kv_lsm_close(lsm);
+        }
+        rmtree(g_dir);
+        memcpy(g_dir, saved, sizeof(g_dir));
+        free(blob);
+        blob = NULL;
+    }
     CHECK(efs_kv_group_export(src, EFS_RAFT_GROUP_SHARD, 8, &blob, &blen) ==
               EFS_ERR_BUSY,
           "oversize is BUSY");
     efs_kv_mem_free(src);
     efs_kv_mem_free(dst);
+}
+
+/* Host snapshot calls efs_kv_lsm_flush, which used to only append L0.
+ * At KV_LSM_MAX_SEGS the next write compact-crashes (fcstor004 SIGSEGV
+ * in compact_emit / kv_seg_w_bytes). The smash is 64 L0 + 1 overlapping
+ * L1 written into drop[64]. */
+static void test_compact_full_l0(void)
+{
+    struct efs_kv_lsm_cfg cfg;
+    struct efs_kv *kv;
+    uint32_t l0 = 0, l1 = 0;
+    char k[16], v[16];
+    int i, bad = 0;
+
+    rmtree(g_dir);
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.sync_mode = EFS_KV_LSM_NOSYNC;
+    cfg.memtable_max = 4u * 1024u * 1024u;
+    cfg.l0_max = 64;
+    kv = efs_kv_lsm_open(g_dir, &cfg);
+    CHECK(kv != NULL, "open full-l0");
+    if (!kv)
+        return;
+    for (i = 0; i < 64; i++) {
+        snprintf(k, sizeof(k), "f%02d", i);
+        snprintf(v, sizeof(v), "v%02d", i);
+        if (put_s(kv, k, v) != EFS_OK || efs_kv_lsm_flush(kv) != EFS_OK)
+            bad++;
+    }
+    CHECK(bad == 0, "64 explicit flushes");
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK, "count at cap");
+    CHECK(l0 == 64, "L0 at MAX_SEGS");
+    CHECK(efs_kv_lsm_compact(kv) == EFS_OK, "compact 64 L0");
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK, "count after compact");
+    CHECK(l0 == 0 && l1 >= 1, "64 L0 became L1");
+    bad = 0;
+    for (i = 0; i < 64; i++) {
+        snprintf(k, sizeof(k), "f%02d", i);
+        snprintf(v, sizeof(v), "w%02d", i);
+        if (put_s(kv, k, v) != EFS_OK || efs_kv_lsm_flush(kv) != EFS_OK)
+            bad++;
+    }
+    CHECK(bad == 0, "second 64 L0 over L1");
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK, "count at 64+L1");
+    CHECK(l0 == 64 && l1 >= 1, "full L0 plus overlapping L1");
+    CHECK(efs_kv_lsm_compact(kv) == EFS_OK, "compact 64 L0 + L1");
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK, "count after 2nd");
+    CHECK(l0 == 0 && l1 >= 1, "second compact emptied L0");
+    bad = 0;
+    for (i = 0; i < 64; i++) {
+        snprintf(k, sizeof(k), "f%02d", i);
+        snprintf(v, sizeof(v), "w%02d", i);
+        if (get_is(kv, k, v) != EFS_OK)
+            bad++;
+    }
+    CHECK(bad == 0, "keys survived 64-L0 + L1 compact");
+    efs_kv_lsm_close(kv);
+}
+
+/* Hold writes 32 records then one fsync; reopen must see them all. */
+static void test_sync_hold(void)
+{
+    struct efs_kv *kv;
+    char k[16], v[16];
+    int i, bad = 0;
+
+    rmtree(g_dir);
+    kv = open_store(EFS_KV_LSM_SYNC, 0);
+    CHECK(kv != NULL, "open hold");
+    if (!kv)
+        return;
+    CHECK(efs_kv_lsm_sync_hold(kv) == EFS_OK, "hold");
+    for (i = 0; i < 32; i++) {
+        snprintf(k, sizeof(k), "h%02d", i);
+        snprintf(v, sizeof(v), "v%02d", i);
+        if (put_s(kv, k, v) != EFS_OK)
+            bad++;
+        /* A later put in the same hold must see the earlier one. */
+        if (i > 0) {
+            snprintf(k, sizeof(k), "h%02d", i - 1);
+            snprintf(v, sizeof(v), "v%02d", i - 1);
+            if (get_is(kv, k, v) != EFS_OK)
+                bad++;
+        }
+    }
+    CHECK(bad == 0, "32 puts under hold");
+    CHECK(efs_kv_lsm_sync_release(kv) == EFS_OK, "release");
+    efs_kv_lsm_close(kv);
+    kv = open_store(EFS_KV_LSM_SYNC, 0);
+    CHECK(kv != NULL, "reopen hold");
+    if (!kv)
+        return;
+    bad = 0;
+    for (i = 0; i < 32; i++) {
+        snprintf(k, sizeof(k), "h%02d", i);
+        snprintf(v, sizeof(v), "v%02d", i);
+        if (get_is(kv, k, v) != EFS_OK)
+            bad++;
+    }
+    CHECK(bad == 0, "hold fsync survived reopen");
+    efs_kv_lsm_close(kv);
 }
 
 int main(void)
@@ -574,6 +724,8 @@ int main(void)
     test_crash_durability();
     test_bulk_auto_compact();
     test_kv_group_snap();
+    test_compact_full_l0();
+    test_sync_hold();
 
     rmtree(g_dir);
     if (failures) {

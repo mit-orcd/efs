@@ -2081,6 +2081,13 @@ static void test_cross_group_lane(void)
     CHECK(efs_meta_apply_activate_lane(kv, ino, lane) == EFS_OK, "replay");
     CHECK(efs_meta_apply_activate_lane(kv, 999999, lane) == EFS_OK,
           "deleted ino no-op");
+    CHECK(efs_meta_apply_activate_lanes(kv, ino, (1ULL << 3) | (1ULL << 5))
+              == EFS_OK,
+          "mask");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK &&
+              (r.active_lanes & ((1ULL << 1) | (1ULL << 3) | (1ULL << 5)))
+                  == ((1ULL << 1) | (1ULL << 3) | (1ULL << 5)),
+          "mask bits");
 
     /* Lane-local publish: no row read, no row touch — the bitmap bit came
      * from ACTIVATE_LANE, and base_size must not move for a lane that is

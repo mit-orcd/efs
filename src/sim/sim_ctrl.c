@@ -7,7 +7,7 @@
 
 #define CMD_DESIRED 4
 #define CTRL_WAIT   200
-#define CONV_WAIT   400
+#define CONV_WAIT   800
 
 static void wr32(uint8_t *p, uint32_t v)
 {
@@ -136,6 +136,22 @@ void sim_ctrl_free_all(struct efs_sim *sim)
     }
 }
 
+static int drive_desired(struct efs_raft *r, uint32_t desired)
+{
+    int rc;
+
+    if (!r || efs_raft_role(r) != EFS_RAFT_LEADER)
+        return EFS_OK;
+    if (efs_raft_joint(r))
+        return EFS_OK;
+    if (efs_raft_voters(r) == desired)
+        return EFS_OK;
+    rc = efs_raft_change(r, desired);
+    if (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOT_PRIMARY)
+        return EFS_OK;
+    return rc;
+}
+
 int sim_ctrl_on_tick(struct efs_sim *sim, int server)
 {
     int rc;
@@ -147,17 +163,10 @@ int sim_ctrl_on_tick(struct efs_sim *sim, int server)
         if (rc != EFS_OK)
             return rc;
     }
-    if (!sim->srv[server].raft ||
-        efs_raft_role(sim->srv[server].raft) != EFS_RAFT_LEADER)
-        return EFS_OK;
-    if (efs_raft_joint(sim->srv[server].raft))
-        return EFS_OK;
-    if (efs_raft_voters(sim->srv[server].raft) == sim->desired_voters)
-        return EFS_OK;
-    rc = efs_raft_change(sim->srv[server].raft, sim->desired_voters);
-    if (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOT_PRIMARY)
-        return EFS_OK;
-    return rc;
+    rc = drive_desired(sim->srv[server].raft, sim->desired_voters);
+    if (rc != EFS_OK)
+        return rc;
+    return drive_desired(sim->srv[server].raft2, sim->desired_voters);
 }
 
 uint32_t efs_sim_ctrl_desired(const struct efs_sim *sim)
@@ -202,8 +211,11 @@ int efs_sim_ctrl_set_desired(struct efs_sim *sim, uint32_t voters)
         return EFS_ERR_BUSY;
     for (t = 0; t < CONV_WAIT; t++) {
         int ml = efs_sim_meta_leader(sim);
+        int ml2 = efs_sim_meta2_leader(sim);
         if (ml >= 0 && !efs_sim_meta_joint(sim, ml) &&
-            efs_sim_meta_voters(sim, ml) == sim->desired_voters)
+            efs_sim_meta_voters(sim, ml) == sim->desired_voters &&
+            ml2 >= 0 && !efs_sim_meta2_joint(sim, ml2) &&
+            efs_sim_meta2_voters(sim, ml2) == sim->desired_voters)
             return EFS_OK;
         rc = sim_raft_tick_reachable(sim);
         if (rc != EFS_OK)

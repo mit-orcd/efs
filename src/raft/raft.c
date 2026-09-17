@@ -844,15 +844,19 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
             m.match_index = last_i;
             return send_msg(r, &m);
         }
+        rc = r->store->save_snap(r->store_ctx, incl, incl_t);
+        if (rc != EFS_OK)
+            return rc;
         cfg_old = rd32(pay);
         cfg_new = rd32(pay + 4);
         r->last_applied = incl;
         r->app_old = r->log_old = cfg_old;
         r->app_new = r->log_new = cfg_new;
+    } else {
+        rc = r->store->save_snap(r->store_ctx, incl, incl_t);
+        if (rc != EFS_OK)
+            return rc;
     }
-    rc = r->store->save_snap(r->store_ctx, incl, incl_t);
-    if (rc != EFS_OK)
-        return rc;
     r->snap_idx = incl;
     r->snap_term = incl_t;
     if (r->commit_index < r->last_applied)

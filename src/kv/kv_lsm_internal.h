@@ -83,6 +83,8 @@ void kv_wal_close(struct kv_wal *w);
  * fails, so the caller can still release its place in the apply order. */
 int kv_wal_append(struct kv_wal *w, const struct efs_kv_item *items, uint32_t n,
                   uint64_t *out_seq);
+/* on=1 defers the next appends' fsync; on=0 (last nest) fsyncs them. */
+int kv_wal_hold(struct kv_wal *w, int on);
 /* Empties the log; call only after the memtable is a durable segment. */
 int kv_wal_reset(struct kv_wal *w);
 int kv_wal_replay(const char *path,

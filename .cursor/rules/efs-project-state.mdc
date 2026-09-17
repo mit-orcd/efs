@@ -239,10 +239,14 @@ leftover drain is in this tree (`dir_spread.c` + GC-thread pass). Honest
 fio matrix (Part D perf contract) is **not** run on the 1G 19820 scratch.
 Relaxed-coherence stays out of scope. Production `raft-change` is in this
 tree (operator desired file + learner attach with C_old). The control-plane
-desired Raft group is still sim-only. Next specified leftover: honest fio
-on 19810 (do not auto `raft-mkfs`). Pressure-spread bound is unspecified
-(do not invent). Host KV snapshot uses the existing WAL item payload
-(`kv_snap.c`); a group over the 4 MiB SNAP cap is left uncompacted.
+desired Raft group is still sim-only. Leftover 1 honest fio on 19810 is
+**1-client gated** (`results/perf/20260917-honest/`; see Sep 17 note).
+First-matrix sw-1m 209; after WAL hold / activate-mask / pipelined
+propose, honest 9×2g sw-1m **924**. 4/9-client not run. sw-50g
+`end_fsync` NET (400k-pub REPORT vs 30 s).
+Pressure-spread bound is unspecified (do not invent). Host KV snapshot uses the existing
+WAL item payload (`kv_snap.c`); import dest-key collect stores **offsets**
+(arena realloc UAF). A group over the 4 MiB SNAP cap is left uncompacted.
 Chunked InstallSnapshot is unspecified. Do not `wipe_cluster.sh` /
 `pkill -x efsd` while 19820 is up.
 
@@ -404,6 +408,80 @@ Do not invent chunking. Do not restart 19820 for this cut.
 **Gates:** `test_kv_lsm` `test_kv_group_snap` + `test_raft` /
 `test_wire` / `test_sim` / `test_txn`. Do not `wipe_cluster.sh` /
 `pkill -x efsd` while 19820 is up.
+
+**19810 NVMe + HONEST FIO 1-CLIENT (Sep 17).** Same 19810 storage (no
+`raft-mkfs`). 19820 left up; 007 remounted back to `:19820` after the
+run. Unblocked 2g `end_fsync` with publication batching (`HOST_PUB_BATCH_N`
+256 pubs / Raft entry) plus `host_rpc_submit` heap-encode when `clen >
+HOST_CMD_MAX` (512 was the stack buffer; a 51 KiB follower-forward
+returned INVAL and `host_remote_cmd` remapped that to NOT_PRIMARY
+`efs_rc=-15`). Earlier in the same leftover: LSM compact `drop[]`
+sized to `KV_LSM_MAX_SEGS*2` (004 SIGSEGV at 64 L0 + overlapping L1;
+compact-first flush; `test_compact_full_l0`); dest-key offsets in
+`kv_snap.c`; one ReadIndex per group; skip identical pub; per-ino
+fsync report (not a new REPORT wire). Units on 003:
+`test_raft` / `test_kv_lsm` / `test_sim` / `test_wire` /
+`test_meta_apply` OK. Honest 007 TCP `results/perf/20260917-honest/`
+FUSE_OK, no `md0`, err=0 except 50g:
+
+| test | 1-client MiB/s |
+| sw-1m | 209 |
+| ow-1m | 196 |
+| rw-1m | 196 |
+| rw-128k | 194 |
+| rw-4k | 89 |
+| sr-1m | 3141 |
+| rr-1m | 2276 |
+| rr-128k | 1492 |
+| rr-4k | 144 |
+| sw-50g | FAIL `end_fsync` NET |
+
+Write walls include fsync (intra-job write samples several GiB/s — do
+not quote those as the number). 50g laid down 50 GiB then one REPORT
+of ~400k pubs missed `EFS_IO_TIMEOUT_MS`. 4/9 not run. 005 19810 still
+lagged (oversized SNAP). Do not invent chunked SNAP or REPORT split.
+Do not `wipe_cluster.sh` / `pkill -x efsd` while 19820 is up. Do not
+auto `raft-mkfs` again.
+
+**HOT-PATH AFTER HONEST FIO (Sep 17).** Same leftover-1 19810 (no
+`raft-mkfs`, 19820 left up). Profile of 1-client sw (attach to a
+RUNNING daemon; do not restart under strace): client on-CPU is blake3
+in `hash_write_fragments` / `dcache_flush_slot_inner` plus futex on
+REPORT; server fsync counts 2223 / 4466 / 2112 on 003 / 004 / 006 —
+one WAL fsync per sequential `apply_one_publish`. Group-commit does
+not share a fsync among a single-threaded apply loop. Fixes in this
+tree: `kv_wal_hold` / `efs_kv_lsm_sync_hold` across a batched
+PUBLISH apply (`test_kv_lsm` `test_sync_hold`); `EFS_MD_CMD_ACTIVATE_LANE`
+17 B mask via `efs_meta_apply_activate_lanes` (one inode PUT); inode
+row cache on REPORT; `host_pub_batch_propose` then
+`host_wait_applied` of the last idx. Honest remasure (007 TCP,
+FUSE_OK, no `md0`, err=0): 512m 1-job **247** MiB/s
+(`hot-sw-512m-fcstor007.txt`); 9×2g sw-1m **924** MiB/s, 18 GiB /
+20 s (`hot-sw-1m-9job-fcstor007.txt`). A 255 figure was 9 jobs on
+one 2g file (`$jobnum` not unique). Intra-job write samples stay
+several GiB/s — do not quote those. 50g / 4/9 not re-run. 007
+remounted back to `:19820`. Units earlier on 003: `test_raft` /
+`test_kv_lsm` / `test_meta_apply` / `test_sim` / `test_wire` OK.
+Do not invent chunked SNAP or REPORT split. Do not `wipe_cluster.sh`
+/ `pkill -x efsd` while 19820 is up.
+
+**19810 NVMe + HONEST FIO ATTEMPT (Sep 16).** Port 19810 `raft-mkfs`'d
+on `/data1` (36T, `--direct-io`, seed 003, join 004–006). 19820 scratch
+left up. First sw-1m: fcstor005 19810 SIGABRT
+`malloc(): mismatching next->prev_size` in `kv_mtab_set` ←
+`efs_kv_group_import` (`kv_snap.c`) ← `on_snap_req`. Cause: collect
+arena `realloc` left `key_ref` pointers dangling into `efs_kv_batch`.
+Fix: store offsets. Gate: `test_kv_lsm` arena + LSM dest replace (2k
+stale keys). Redeployed 19810 only (no `--join`). Honest
+`results/perf/20260916-honest5` 007 TCP sw-1m **FAIL** 400s: data
+moved (usable 13.5→27 GiB, g0 applied ~17k→33k) then `end_fsync`
+`fsync-meta efs_rc=-6` (`EFS_ERR_NET`) on inos 18326/22422; fio EIO
+on f.5/f.6 last 1m sync. 005 stays g0 `commit=751` /
+`applied=18688` (applied≫commit) and `raft-create` to :19810 on 005
+is status=5 BUSY. Kill 005 19810 to dodge BUSY **breaks 2+1 PUT**
+(needs all fragment ACKs). Do not invent chunked SNAP or REPORT
+split. Do not `wipe_cluster.sh` / `pkill -x efsd` while 19820 is up.
+Do not auto `raft-mkfs` again.
 
 **PRODUCTION RAFT-CHANGE (Sep 16).** `raft_host` wires `efs_raft_change`
 (I18). Operator `efs-mgmt raft-change <node:port> <group> <voters>` reuses

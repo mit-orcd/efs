@@ -40,5 +40,10 @@ void efs_kv_lsm_close(struct efs_kv *kv);
 int efs_kv_lsm_flush(struct efs_kv *kv);
 int efs_kv_lsm_compact(struct efs_kv *kv);
 int efs_kv_lsm_seg_count(struct efs_kv *kv, uint32_t *l0, uint32_t *l1);
+/* Nested. Hold: WAL write + memtable apply, no fsync. Release (last nest):
+ * one fsync. No-op on a non-LSM store. Raft apply of a batched PUBLISH
+ * holds across the entry so 256 pubs share one durable boundary. */
+int efs_kv_lsm_sync_hold(struct efs_kv *kv);
+int efs_kv_lsm_sync_release(struct efs_kv *kv);
 
 #endif

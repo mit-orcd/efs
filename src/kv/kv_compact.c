@@ -114,7 +114,9 @@ int kv_compact_locked(struct kv_lsm *l)
 {
     struct msrc src[KV_LSM_MAX_SEGS * 2];
     struct seg_slot keep[KV_LSM_MAX_SEGS];
-    struct seg_slot drop[KV_LSM_MAX_SEGS];
+    /* All L0 plus every overlapping L1 — 64+64 when a prior compact
+     * produced one wide L1 and L0 then fills again (fcstor004 smash). */
+    struct seg_slot drop[KV_LSM_MAX_SEGS * 2];
     struct compact_ctx c;
     const uint8_t *lo = NULL, *hi = NULL;
     uint32_t lol = 0, hil = 0;
@@ -149,6 +151,10 @@ int kv_compact_locked(struct kv_lsm *l)
     if (!have_range)
         return EFS_OK;
     for (i = 0; i < l->n_l0; i++) {
+        if (nsrc >= KV_LSM_MAX_SEGS * 2 || n_drop >= KV_LSM_MAX_SEGS * 2) {
+            rc = EFS_ERR_BUSY;
+            goto out;
+        }
         rc = kv_seg_iter_open(l->l0[i].seg, &src[nsrc].it);
         if (rc != EFS_OK)
             goto out;
@@ -157,8 +163,16 @@ int kv_compact_locked(struct kv_lsm *l)
     }
     for (i = 0; i < l->n_l1; i++) {
         if (!overlaps(l->l1[i].seg, lo, lol, hi, hil)) {
+            if (n_keep >= KV_LSM_MAX_SEGS) {
+                rc = EFS_ERR_BUSY;
+                goto out;
+            }
             keep[n_keep++] = l->l1[i];
             continue;
+        }
+        if (nsrc >= KV_LSM_MAX_SEGS * 2 || n_drop >= KV_LSM_MAX_SEGS * 2) {
+            rc = EFS_ERR_BUSY;
+            goto out;
         }
         rc = kv_seg_iter_open(l->l1[i].seg, &src[nsrc].it);
         if (rc != EFS_OK)

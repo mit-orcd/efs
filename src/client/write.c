@@ -432,6 +432,14 @@ static void dirty_snap_merge_back_locked(struct dirty_snap *ds)
  * only the flush mechanism (blob PUT -> targeted RPC) differs. */
 int efs_client_report_dirty(int sync)
 {
+    return efs_client_report_dirty_ino(0, sync);
+}
+
+/* only_ino=0 reports the whole dirty set. A per-file fsync passes the ino
+ * so 9 concurrent 2g jobs do not build one 147k-rec REPORT (that times
+ * out as NET). Other inodes stay dirty. */
+int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
+{
     static pthread_mutex_t report_mu = PTHREAD_MUTEX_INITIALIZER;
     struct dirty_snap ds;
     memset(&ds, 0, sizeof(ds));
@@ -476,8 +484,28 @@ int efs_client_report_dirty(int sync)
         pthread_mutex_unlock(&report_mu);
         return EFS_ERR_NOMEM;
     }
+    if (only_ino) {
+        for (uint64_t i = 0; i <= ds.ino_mask; i++) {
+            if (ds.ino_keys && ds.ino_keys[i] && ds.ino_keys[i] != only_ino) {
+                efs_client_mark_ino_dirty(ds.ino_keys[i]);
+                ds.ino_keys[i] = 0;
+                if (ds.ino_count)
+                    ds.ino_count--;
+            }
+        }
+        for (uint64_t i = 0; i < ds.chunk_count; i++) {
+            if (ds.chunk_inos[i] && ds.chunk_inos[i] != only_ino) {
+                efs_client_mark_chunk_dirty(ds.chunk_inos[i], ds.chunk_idxs[i]);
+                ds.chunk_inos[i] = 0;
+            }
+        }
+    }
     for (uint64_t i = 0; i < ds.chunk_count; i++) {
         struct efs_chunk_entry ce;
+        if (!ds.chunk_inos[i])
+            continue;
+        if (only_ino && ds.chunk_inos[i] != only_ino)
+            continue;
         if (efs_export_get_chunk(&g_client.export, ds.chunk_inos[i],
                                  ds.chunk_idxs[i], &ce) != 0)
             continue; /* truncated away before the report; skip */
@@ -489,6 +517,8 @@ int efs_client_report_dirty(int sync)
     }
     for (uint64_t i = 0; i <= ds.ino_mask; i++) {
         if (!ds.ino_keys || !ds.ino_keys[i])
+            continue;
+        if (only_ino && ds.ino_keys[i] != only_ino)
             continue;
         struct efs_inode inode;
         if (efs_export_get_inode(&g_client.export, ds.ino_keys[i], &inode) != 0)

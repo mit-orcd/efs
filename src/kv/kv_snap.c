@@ -124,8 +124,9 @@ int efs_kv_group_export(struct efs_kv *kv, uint8_t group, uint32_t max_bytes,
     return EFS_OK;
 }
 
+/* Offsets, not pointers: col_grow_a reallocs the arena. */
 struct key_ref {
-    const uint8_t *key;
+    uint32_t off;
     uint32_t klen;
 };
 
@@ -191,7 +192,7 @@ static int col_cb(void *user, const uint8_t *key, uint32_t klen,
         return EFS_ERR_NOMEM;
     }
     memcpy(c->arena + c->alen, key, klen);
-    c->k[c->n].key = c->arena + c->alen;
+    c->k[c->n].off = c->alen;
     c->k[c->n].klen = klen;
     c->alen += klen;
     c->n++;
@@ -223,6 +224,8 @@ int efs_kv_group_import(struct efs_kv *kv, uint8_t group, const uint8_t *data,
     if (len < 4)
         return EFS_ERR_PROTO;
     n = get_u32(data);
+    if (n > (len - 4) / 9)
+        return EFS_ERR_PROTO;
     off = 4;
     items = calloc(n, sizeof(*items));
     if (n && !items)
@@ -243,7 +246,8 @@ int efs_kv_group_import(struct efs_kv *kv, uint8_t group, const uint8_t *data,
         off += 4;
         vlen = get_u32(data + off);
         off += 4;
-        if (off + klen + vlen > len || !key_in_group(data + off, klen, group)) {
+        if (klen > len - off || vlen > len - off - klen ||
+            !key_in_group(data + off, klen, group)) {
             free(items);
             return EFS_ERR_PROTO;
         }
@@ -274,7 +278,7 @@ int efs_kv_group_import(struct efs_kv *kv, uint8_t group, const uint8_t *data,
 
     total = n;
     for (i = 0; i < c.n; i++) {
-        if (!incoming_has(items, n, c.k[i].key, c.k[i].klen))
+        if (!incoming_has(items, n, c.arena + c.k[i].off, c.k[i].klen))
             total++;
     }
     if (total > n) {
@@ -289,10 +293,10 @@ int efs_kv_group_import(struct efs_kv *kv, uint8_t group, const uint8_t *data,
     }
     ni = n;
     for (i = 0; i < c.n; i++) {
-        if (incoming_has(items, n, c.k[i].key, c.k[i].klen))
+        if (incoming_has(items, n, c.arena + c.k[i].off, c.k[i].klen))
             continue;
         items[ni].op = EFS_KV_DEL;
-        items[ni].key = c.k[i].key;
+        items[ni].key = c.arena + c.k[i].off;
         items[ni].klen = c.k[i].klen;
         items[ni].val = NULL;
         items[ni].vlen = 0;

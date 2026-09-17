@@ -93,7 +93,7 @@ static int leader_id_g(const struct efs_sim *sim, uint8_t group)
     int i, lid = -1, n = 0, lim;
     struct efs_raft *r;
 
-    lim = (group == EFS_RAFT_GROUP_SHARD2) ? EFS_SIM_RAFT_N : sim->nraft;
+    lim = sim->nraft;
     if (group == EFS_RAFT_GROUP_CTRL)
         lim = EFS_SIM_RAFT_N;
     for (i = 0; i < lim; i++) {
@@ -577,7 +577,10 @@ static int apply_activate_lane_cmd(struct sim_server *s, const uint8_t *cmd,
     if (clen < 10)
         return EFS_ERR_PROTO;
     ino = rd64(cmd + 1);
-    rc = efs_meta_apply_activate_lane(s->disk, ino, cmd[9]);
+    if (clen >= 17)
+        rc = efs_meta_apply_activate_lanes(s->disk, ino, rd64(cmd + 9));
+    else
+        rc = efs_meta_apply_activate_lane(s->disk, ino, cmd[9]);
     sim_note_apply(s, group, index, rc, ino);
     return EFS_OK;
 }
@@ -1698,4 +1701,23 @@ int efs_sim_meta_joint(const struct efs_sim *sim, int server)
     if (!sim || server < 0 || server >= sim->nraft || !sim->srv[server].raft)
         return 0;
     return efs_raft_joint(sim->srv[server].raft);
+}
+
+int efs_sim_meta2_leader(const struct efs_sim *sim)
+{
+    return sim ? leader_id_g(sim, EFS_RAFT_GROUP_SHARD2) : -1;
+}
+
+uint32_t efs_sim_meta2_voters(const struct efs_sim *sim, int server)
+{
+    if (!sim || server < 0 || server >= sim->nraft || !sim->srv[server].raft2)
+        return 0;
+    return efs_raft_voters(sim->srv[server].raft2);
+}
+
+int efs_sim_meta2_joint(const struct efs_sim *sim, int server)
+{
+    if (!sim || server < 0 || server >= sim->nraft || !sim->srv[server].raft2)
+        return 0;
+    return efs_raft_joint(sim->srv[server].raft2);
 }

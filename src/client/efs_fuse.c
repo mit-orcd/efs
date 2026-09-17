@@ -2440,7 +2440,7 @@ static int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
         efs_fuse_log_err("fsync", rc, ino, 0, 0, NULL);
         return -EIO;
     }
-    rc = efs_client_sync_meta();
+    rc = efs_client_report_dirty_ino((efs_ino_t)ino, 1);
     if (rc == EFS_ERR_QUOTA) {
         efs_fuse_log_err("fsync-meta", rc, ino, 0, 0, NULL);
         return -ENOSPC;

@@ -461,27 +461,55 @@ static void test_readindex(void)
     efs_sim_free(s);
 }
 
+static const char *scatter_nth(efs_ino_t parent, int nth);
+
 static void test_l8_desired_placement(void)
 {
     struct efs_sim_cfg cfg = { .seed = 61, .nservers = 5, .nclients = 1 };
     struct efs_sim *s = efs_sim_new(&cfg);
-    efs_ino_t a = 0, g = 0;
-    int lid;
+    efs_ino_t a = 0, g = 0, d = 0;
+    int lid, lid2;
+    const char *sc;
 
     CHECK(s, "mk5");
     CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "l8", &a) == EFS_OK,
           "create");
     lid = efs_sim_meta_leader(s);
+    lid2 = efs_sim_meta2_leader(s);
     CHECK(lid >= 0, "leader");
+    CHECK(lid2 >= 0, "g2 leader");
     CHECK(efs_sim_meta_voters(s, lid) == 0x7, "initial RF=3");
+    CHECK(efs_sim_meta2_voters(s, lid2) == 0x7, "g2 initial RF=3");
     CHECK(efs_sim_ctrl_desired(s) == 0x7, "desired starts 0x7");
     CHECK(efs_sim_ctrl_set_desired(s, 0x1f) == EFS_OK, "L8 set 0x1f");
     lid = efs_sim_meta_leader(s);
+    lid2 = efs_sim_meta2_leader(s);
     CHECK(lid >= 0, "leader after grow");
-    CHECK(efs_sim_meta_voters(s, lid) == 0x1f, "actual caught up");
-    CHECK(!efs_sim_meta_joint(s, lid), "not joint");
+    CHECK(lid2 >= 0, "g2 leader after grow");
+    CHECK(efs_sim_meta_voters(s, lid) == 0x1f, "g0 caught up");
+    CHECK(efs_sim_meta2_voters(s, lid2) == 0x1f, "g2 caught up");
+    CHECK(!efs_sim_meta_joint(s, lid) && !efs_sim_meta2_joint(s, lid2),
+          "not joint");
     CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "l8", &g) == EFS_OK && g == a,
           "lookup after grow");
+    sc = scatter_nth(EFS_ROOT_INO, 0);
+    CHECK(sc && efs_sim_mkdir(s, 0, EFS_ROOT_INO, sc, &d) == EFS_OK,
+          "mkdir other group after grow");
+    CHECK(efs_sim_crash(s, 3) == EFS_OK, "crash new voter");
+    CHECK(efs_sim_restart(s, 3) == EFS_OK, "restart new voter");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, sc, &g) == EFS_OK && g == d,
+          "lookup after voter restart");
+    CHECK(efs_sim_crash(s, 1) == EFS_OK, "crash ctrl replica");
+    CHECK(efs_sim_restart(s, 1) == EFS_OK, "restart ctrl replica");
+    CHECK(efs_sim_ctrl_desired(s) == 0x1f, "desired survives ctrl restart");
+    CHECK(efs_sim_ctrl_set_desired(s, 0x7) == EFS_OK, "L8 shrink 0x7");
+    lid = efs_sim_meta_leader(s);
+    lid2 = efs_sim_meta2_leader(s);
+    CHECK(lid >= 0 && lid2 >= 0, "leaders after shrink");
+    CHECK(efs_sim_meta_voters(s, lid) == 0x7, "g0 shrunk");
+    CHECK(efs_sim_meta2_voters(s, lid2) == 0x7, "g2 shrunk");
+    CHECK(efs_sim_lookup(s, 0, EFS_ROOT_INO, "l8", &g) == EFS_OK && g == a,
+          "lookup after shrink");
     CHECK(efs_sim_check(s) == EFS_OK, "check");
     efs_sim_free(s);
 }

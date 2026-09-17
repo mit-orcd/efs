@@ -24,12 +24,39 @@ sends you to — not the whole spec.
 > the existing WAL item payload for that group's shards (`kv_snap.c`),
 > not a new dump format. A group that does not fit
 > `EFS_WIRE_RAFT_MAX_CMD` stays uncompacted (no chunked SNAP). The
-> dedicated control-plane desired Raft group is still sim-only.
-> Remaining specified leftovers, in order:
-> (1) **honest fio** on a 19810 NVMe cluster (do not auto `raft-mkfs`);
-> chunked InstallSnapshot is unspecified — do not invent one.
-> Pressure-triggered spread has no numeric bound — do not invent one.
-> C1 relaxed-coherence is out of scope. Doc machine-gate:
+> dedicated control-plane desired Raft group is sim-only and now
+> drives **both** metadata groups from desired (grow 0x7→0x1f, shrink
+> back, new-voter + ctrl-replica restart). Gate: `test_sim`
+> `test_l8_desired_placement`. Production stays file-based `raft-change`.
+> Specified leftovers that do not invent a missing decision are in.
+> Leftover 2 (sim-only control-plane desired groups driving both
+> metadata groups) is gated: `test_sim` `test_l8_desired_placement`.
+> Leftover 1 (honest fio on the existing 19810 NVMe cluster, keep
+> storage, 19820 left up) is **1-client gated** TCP on 007:
+> `results/perf/20260917-honest/` (FUSE_OK, no `md0`). Writes include
+> `--end_fsync=1`; reads after remount. First matrix 1-client MiB/s:
+> sw-1m 209, ow-1m 196, rw-1m 196, rw-128k 194, rw-4k 89, sr-1m 3141,
+> rr-1m 2276, rr-128k 1492, rr-4k 144. Profile of that write wall:
+> client blake3 on dcache flush + REPORT wait; server sequential WAL
+> fsync per PUBLISH apply. After `kv_wal_hold` across a batched
+> PUBLISH apply, one ACTIVATE_LANE mask per ino, inode-row cache, and
+> pipeline propose + wait last idx: honest 9×2g sw-1m **924 MiB/s**
+> (18 GiB / 20 s, `hot-sw-1m-9job-fcstor007.txt`; a 255 figure was
+> one shared 2g file). 512m 1-job 247. Intra-job write samples are
+> still several GiB/s — do not quote those. sw-50g still FAIL
+> `end_fsync` NET (~400k pubs vs `EFS_IO_TIMEOUT_MS`). 4/9-client
+> not run. 007 remounted back to `:19820`. Fixes that unblocked the
+> 2g jobs: LSM compact `drop[]` overflow (64 L0 + overlapping L1),
+> dest-key **offsets** in `kv_snap.c`, one ReadIndex per group, skip
+> identical pub, per-ino fsync report, many PUBLISH cmds per Raft
+> proposal (`HOST_PUB_BATCH_N=256`), and `host_rpc_submit`
+> heap-encodes when `clen > HOST_CMD_MAX` (a 51 KiB g2/g0 follower
+> forward used to return INVAL → remapped NOT_PRIMARY). fcstor005
+> 19810 stays far behind (oversized SNAP). Do not invent chunked
+> SNAP, REPORT split, or a pressure-spread bound. Do not auto
+> `raft-mkfs` again. Do not
+> `wipe_cluster.sh` / `pkill -x efsd` while 19820 is up. C1
+> relaxed-coherence is out of scope. Doc machine-gate:
 > `make docs-check`. Cutover of a 36T `efs-test` is not this work.
 > [architecture.md §10](../architecture.md)
 

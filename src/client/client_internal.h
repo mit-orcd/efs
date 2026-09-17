@@ -204,6 +204,7 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
 /* Phase 2b: snapshot the dirty set and report it to the primary (the flush
  * mechanism that replaces the blob flush). sync=1 = fsync barrier. */
 int efs_client_report_dirty(int sync);
+int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync);
 /* Read-miss self-heal: pull chunk mappings for [ci0, ci1) from the owner,
  * rate-limited per ino. Returns 1 when a pull ran (re-check the table). */
 int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1);

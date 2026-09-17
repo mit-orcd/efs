@@ -192,9 +192,12 @@ uint64_t efs_sim_meta_commit(const struct efs_sim *sim, int server);
 int efs_sim_meta_tick(struct efs_sim *sim, int server);
 uint32_t efs_sim_meta_voters(const struct efs_sim *sim, int server);
 int efs_sim_meta_joint(const struct efs_sim *sim, int server);
+int efs_sim_meta2_leader(const struct efs_sim *sim);
+uint32_t efs_sim_meta2_voters(const struct efs_sim *sim, int server);
+int efs_sim_meta2_joint(const struct efs_sim *sim, int server);
 
 /* Control plane: desired placement. Actual membership follows via joint
- * consensus on the metadata group (I18, L8). */
+ * consensus on each metadata group (I18, L8). */
 int efs_sim_ctrl_set_desired(struct efs_sim *sim, uint32_t voters);
 uint32_t efs_sim_ctrl_desired(const struct efs_sim *sim);
 

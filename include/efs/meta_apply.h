@@ -379,6 +379,9 @@ int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
  * Idempotent and monotonic; NOT_FOUND (deleted inode) is a no-op OK (P3). */
 int efs_meta_apply_activate_lane(struct efs_kv *kv, efs_ino_t ino,
                                  uint8_t lane);
+/* Same, OR a mask of lanes in one inode PUT. */
+int efs_meta_apply_activate_lanes(struct efs_kv *kv, efs_ino_t ino,
+                                  uint64_t mask);
 /* EFS_MD_CMD_LANE_FENCE: one lane's share of a truncate, applied on the
  * LANE's group: fenced_epoch = new_epoch, max_end = 0, seq++, then the
  * range delete of that lane's chunk entries beyond size (tail_ci kept).

@@ -81,11 +81,12 @@ static int attach2_real(struct efs_sim *sim, int i)
 
 int sim_txn_boot(struct efs_sim *sim)
 {
-    int i, t, rc;
+    int i, t, rc, n;
 
     if (!sim)
         return EFS_ERR_INVAL;
-    for (i = 0; i < EFS_SIM_RAFT_N; i++) {
+    n = sim->nraft > 0 ? sim->nraft : EFS_SIM_RAFT_N;
+    for (i = 0; i < n; i++) {
         sim->srv[i].raft2_store =
             sim_raft_store_new(sim, i, EFS_RAFT_GROUP_SHARD2);
         if (!sim->srv[i].raft2_store)
@@ -95,15 +96,15 @@ int sim_txn_boot(struct efs_sim *sim)
             return rc;
     }
     for (t = 0; t < WAIT_BOOT; t++) {
-        int n = 0;
-        for (i = 0; i < EFS_SIM_RAFT_N; i++) {
+        int leaders = 0;
+        for (i = 0; i < n; i++) {
             if (sim->srv[i].raft2 &&
                 efs_raft_role(sim->srv[i].raft2) == EFS_RAFT_LEADER)
-                n++;
+                leaders++;
         }
-        if (n == 1)
+        if (leaders == 1)
             return EFS_OK;
-        for (i = 0; i < EFS_SIM_RAFT_N; i++) {
+        for (i = 0; i < n; i++) {
             if (sim->srv[i].raft2)
                 efs_raft_tick(sim->srv[i].raft2);
         }
@@ -113,7 +114,7 @@ int sim_txn_boot(struct efs_sim *sim)
 
 void sim_txn_halt(struct efs_sim *sim, int server)
 {
-    if (!sim || server < 0 || server >= EFS_SIM_RAFT_N)
+    if (!sim || server < 0 || server >= EFS_SIM_MAX_SERVERS)
         return;
     efs_raft_free(sim->srv[server].raft2);
     sim->srv[server].raft2 = NULL;
@@ -123,7 +124,7 @@ int sim_txn_restart(struct efs_sim *sim, int server)
 {
     if (!sim || server < 0)
         return EFS_ERR_INVAL;
-    if (server >= EFS_SIM_RAFT_N)
+    if (server >= EFS_SIM_MAX_SERVERS)
         return EFS_OK;
     if (sim->srv[server].raft2)
         return EFS_OK;
@@ -148,7 +149,7 @@ void sim_txn_free_all(struct efs_sim *sim)
 
 int sim_txn_tick(struct efs_sim *sim, int server)
 {
-    if (!sim || server < 0 || server >= EFS_SIM_RAFT_N)
+    if (!sim || server < 0 || server >= EFS_SIM_MAX_SERVERS)
         return EFS_OK;
     if (!sim->srv[server].raft2)
         return EFS_OK;

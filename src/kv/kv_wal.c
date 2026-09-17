@@ -42,6 +42,9 @@ struct kv_wal {
     uint64_t appended;
     uint64_t synced;
     int syncing;
+    /* Nested: apply of one Raft entry writes many WAL records then one
+     * fsync (arch §8: amortize the persistence boundary). */
+    int hold;
     uint8_t *rec;
     uint32_t rec_cap;
 };
@@ -181,6 +184,33 @@ static int wal_encode(struct kv_wal *w, const struct efs_kv_item *items,
     return EFS_OK;
 }
 
+/* Caller holds w->mu. */
+static int kv_wal_fsync_to_locked(struct kv_wal *w, uint64_t mine)
+{
+    for (;;) {
+        uint64_t target;
+        int rc;
+
+        if (w->synced >= mine)
+            return EFS_OK;
+        if (w->syncing) {
+            pthread_cond_wait(&w->cv, &w->mu);
+            continue;
+        }
+        w->syncing = 1;
+        target = w->appended;
+        pthread_mutex_unlock(&w->mu);
+        rc = fsync(w->fd) == 0 ? EFS_OK : EFS_ERR_IO;
+        pthread_mutex_lock(&w->mu);
+        w->syncing = 0;
+        if (rc == EFS_OK && w->synced < target)
+            w->synced = target;
+        pthread_cond_broadcast(&w->cv);
+        if (rc != EFS_OK)
+            return rc;
+    }
+}
+
 int kv_wal_append(struct kv_wal *w, const struct efs_kv_item *items, uint32_t n,
                   uint64_t *out_seq)
 {
@@ -204,37 +234,35 @@ int kv_wal_append(struct kv_wal *w, const struct efs_kv_item *items, uint32_t n,
     }
     mine = ++w->appended;
     *out_seq = mine;
-    if (w->sync_mode == EFS_KV_LSM_NOSYNC) {
-        if (w->synced < mine)
+    /* Hold defers fsync to kv_wal_hold(0). Memtable apply still happens
+     * in log order so a later put in the same Raft entry sees this one. */
+    if (w->sync_mode == EFS_KV_LSM_NOSYNC || w->hold > 0) {
+        if (w->sync_mode == EFS_KV_LSM_NOSYNC && w->synced < mine)
             w->synced = mine;
         pthread_mutex_unlock(&w->mu);
         return EFS_OK;
     }
-    for (;;) {
-        uint64_t target;
+    rc = kv_wal_fsync_to_locked(w, mine);
+    pthread_mutex_unlock(&w->mu);
+    return rc;
+}
 
-        if (w->synced >= mine) {
-            pthread_mutex_unlock(&w->mu);
-            return EFS_OK;
-        }
-        if (w->syncing) {
-            pthread_cond_wait(&w->cv, &w->mu);
-            continue;
-        }
-        w->syncing = 1;
-        target = w->appended;
-        pthread_mutex_unlock(&w->mu);
-        rc = fsync(w->fd) == 0 ? EFS_OK : EFS_ERR_IO;
-        pthread_mutex_lock(&w->mu);
-        w->syncing = 0;
-        if (rc == EFS_OK && w->synced < target)
-            w->synced = target;
-        pthread_cond_broadcast(&w->cv);
-        if (rc != EFS_OK) {
-            pthread_mutex_unlock(&w->mu);
-            return rc;
-        }
+int kv_wal_hold(struct kv_wal *w, int on)
+{
+    int rc = EFS_OK;
+
+    if (!w)
+        return EFS_ERR_INVAL;
+    pthread_mutex_lock(&w->mu);
+    if (on) {
+        w->hold++;
+    } else if (w->hold > 0) {
+        w->hold--;
+        if (w->hold == 0 && w->sync_mode != EFS_KV_LSM_NOSYNC)
+            rc = kv_wal_fsync_to_locked(w, w->appended);
     }
+    pthread_mutex_unlock(&w->mu);
+    return rc;
 }
 
 int kv_wal_reset(struct kv_wal *w)
