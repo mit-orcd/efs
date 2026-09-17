@@ -324,6 +324,10 @@ int efs_conn_send_msg_parts(struct efs_conn *c, uint8_t type,
     if (efs_wire_frame_size(n1 + n2, &frame_len) != EFS_OK)
         return EFS_ERR_PROTO;
     if (conn_pick_send_chan(c, type, frame_len) == EFS_CONN_RDMA) {
+        /* Recycled fd: this object still has dest_qpn for a QP the peer
+         * already destroyed when the old TCP got FIN. */
+        if (!efs_conn_fd_matches(c))
+            return EFS_ERR_NET;
         /* No silent TCP fallback on send error: the QP is broken; the pool
          * drops and reconnects the conn. */
         if (efs_rdma_send_frame(c->rc, type, part1, n1,

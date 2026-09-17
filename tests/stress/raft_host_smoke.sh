@@ -1,8 +1,10 @@
 #!/bin/bash
 # Scratch-cluster gate for the production Raft host (10.5c).
 #
-# Four efsd on fcstor003-006, port 19820, storage under /tmp — NEVER the
-# live cluster (port 19810, /data1). Does not pkill -x efsd.
+# The standing 19820 /tmp scratch is RETIRED (Sep 17). Live gates run on
+# 19810 /data1. This script still *can* spin a disposable 19820, but it
+# refuses if 19810 efsd is up so it cannot split the cluster. Does not
+# pkill -x efsd.
 #
 # Gate: elect, raft-mkfs lands ROOT on every voter, LOOKUP/GETATTR via
 # ReadIndex + KV (a group-0 leader or caught-up replica serves ROOT;
@@ -93,6 +95,22 @@ ssh_to() {
 
 say() { echo "[raft-host] $*"; }
 bad() { echo "[raft-host] FAIL: $*"; FAIL=$((FAIL + 1)); }
+
+# Refuse to stand up 19820 while the live 19810 cluster is running.
+live_19810() {
+    local h
+    for h in "${HOSTS[@]}"; do
+        if ssh_to 8 "$h" "ps -eo args | awk '/[e]fsd / && / --port 19810( |\$)/ {found=1} END{exit !found}'"; then
+            return 0
+        fi
+    done
+    return 1
+}
+if live_19810; then
+    echo "[raft-host] REFUSE: 19810 efsd is up. 19820 scratch is retired." >&2
+    echo "[raft-host] Gates now run on 19810. Do not start a second cluster." >&2
+    exit 2
+fi
 
 # Kill only the scratch daemons (port 19820). Never pkill -x efsd.
 kill_scratch() {

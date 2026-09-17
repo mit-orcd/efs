@@ -12,9 +12,10 @@ Pre-alpha. **Goal: scale to >= 2^32 files/dirs** (see docs/scaling-roadmap.md).
 `required_permissions: ["all"]` to escape the sandbox; that is pre-authorized.
 See efs-fcstor-deploy.**
 
-**AUTO-RDMA FIRST INODE — ROOT-CAUSED, FIX PARKED (Sep 1). The server
-DESTROYS the QP the client is sending to, because the client closed that
-connection's TCP side-channel while leaving the conn object in its pool.**
+**AUTO-RDMA FIRST INODE — ROOT-CAUSED (Sep 1), CLIENT POOL FIX IN TREE
+(Sep 17). The server DESTROYS the QP the client is sending to, because
+the client closed that connection's TCP side-channel while leaving the
+conn object in its pool.**
 Symptom: on a fresh mkfs + auto-transport mount the first `mkdir` D-states
 forever; `fuse.log` repeats `efs: RDMA send type=43 WAIT TIMEOUT` (43 =
 `EFS_MSG_INODE_LOOKUP`, plain LOOKUP — **not** `LOOKUP_PATH`, so b518003's
@@ -52,19 +53,22 @@ configurable and set finite: failure identical. Requester-side HCA counters
  an error handler reacting to the breakage, **not** the origin. The origin
  (which bootstrap path closes a pooled conn's fd without evicting the conn)
  is the remaining unknown.
-**Status: PARKED by user decision; gating stays on TCP.** The diagnostics are
-in tree and env-gated behind `EFS_RDMA_FIRST` (client: QP state + `rnr_retry`
-+ `retry_cnt` + `timeout` + posted/reaped counters + `port_xmit_packets`
-delta + extended late-CQE poll + async-event drain + socket-identity compare;
-server: `SETUP done` logs `peer_port`+`fd`, `conn teardown` logs a reason
-string, `tcp_has_request` distinguishes peer-FIN from socket error;
-`efs_conn_destroy` logs fd/QPN + backtrace). `clean_cluster.sh` forwards
-`EFS_RDMA_FIRST`. **Whoever resumes this: the fix is on the CLIENT pool
-lifecycle (do not let a conn outlive its fd), not in `rdma.c` tuning.**
-**SCOPE: it is NOT "RDMA is broken".** A node9901 client on auto/RDMA
-(`mlx5_0`) against an ALREADY-POPULATED table (`meta ready gen=13
-inodes=55621`) drove millions of creates with 0 network errors. The repro
-needs a **freshly mkfs'd / effectively empty** table.
+**Status: CLIENT POOL LIFECYCLE FIX IN TREE (Sep 17).** Not `rdma.c` tuning
+(RNR/poller already landed). A pooled `efs_conn` now records sockfs
+`st_dev`/`st_ino` at wrap; checkout treats a mismatch as dead; destroy
+closes the fd only when that identity still matches (a recycled number is
+someone else's TCP — closing it FINs the new owner and the peer reaps the
+QP). `conn_init` skips busy slots (it used to destroy a checked-out conn
+and clear busy). Post-mount GET_FEATURES / STATUS use the pool (no raw
+`close(fd)` next to live QPs). New sockets are `SOCK_CLOEXEC`. Gate:
+`test_conn_fd`. Live empty-table auto/RDMA first `mkdir` is still the
+repro; 19820 is populated so do not treat a remount there as that gate.
+Diagnostics stay behind `EFS_RDMA_FIRST`. Default leftover-1 gates stay
+TCP until that empty-table mkdir is run. **SCOPE: it is NOT "RDMA is
+broken".** A node9901 client on auto/RDMA (`mlx5_0`) against an
+ALREADY-POPULATED table (`meta ready gen=13 inodes=55621`) drove millions
+of creates with 0 network errors. The repro needs a **freshly mkfs'd /
+effectively empty** table.
 **Harness gotcha — FIXED (Sep 1).** `ensure_mounted` returned early when the
 host was already mounted, so `EFS_TRANSPORT=tcp bash tests/run_tests.sh
 setup` on a cluster whose clients were already up on auto **silently kept the
@@ -179,6 +183,42 @@ Still unavailable:
 unreadable) — `perf record -p` / `perf stat -p` same-uid are fine.
 
 ## Where we are
+
+**19820 RETIRED; 19810 IS THE ONLY CLUSTER (Sep 17).** User-directed:
+wipe 19820 `/tmp/efs-raft-scratch` and the leftover-1 19810 table, then
+`raft-mkfs` 19810 on `/data1` (36T, TCP, seed 003, join 004–006).
+`wipe_cluster.sh` now removes scratch dirs; `pkill -x efsd` is safe.
+Do not stand up 19820 again. POSIX/perf/leaks gates run on **19810**
+or localhost. Orphan old-engine sources deleted (`test_meta_batch`,
+`test_rpc_create`, `blobscan`, `dump_root`, `txprobe`, `kv_compact_dir`).
+
+**POSIX 192/201 + HOLD + ReadIndex-on-commit (Sep 17 night).** Same
+19810 (keep storage). Same-group mkdir/rmdir already one Raft entry.
+CREATE_F_HOLD now carries `owner` on `efs_msg_inode_create`; apply
+LEASE_OPENs in that entry (hashed first-use still a follow-up lease).
+Client skips the extra HOLD RPC. Commit quorum now stamps ReadIndex
+(`read_index=commit`, `test_raft` covers the second propose). Idle
+create/unlink **4.4 / 2.2 ms** (was ~100 ms). POSIX jobs=1 TCP
+`results/posix/20260917-183418`: **193 both-pass / 3 EFS** (efs TSV
+198/2/1 in 124 s; `POSIX_SSH_SEC` default 400). Leftover: `dir_many_files`
+was 15 s (isolated PASS **27.4 s** — suite now `@budget(45)`);
+`symlink_relative_after_parent_rename` EIO load flake (known);
+`mmap_write_read` SKIP ENODEV expected. Do not invent REPORT split
+or chunked SNAP. 005 gossip-DOWN for ~30 s after bounce is STATUS
+probe, not a dead process.
+
+**FRESH-19810 POSIX + DD (same day).** 8 GiB non-zero `dd` on the
+*previous* 19810 (FUSE_OK, not zeros): stream **731–825 MB/s**,
+`conv=fsync` **391 MB/s** (22 s) — short of ~2 GiB/s. Client on-CPU is
+blake3 in `hash_write_fragments`; do not quote the idle-heavy 2 h
+`perf stat`. Fresh-cluster posix jobs=1
+`results/posix/20260917-161117`: **94 PASS / 3 timeout / 104 never
+ran** — suite hit the 165 s SSH cap. Idle ops were **100–370 ms**
+(stat/mkdir/listdir). Cause: unconditional `applied *` stderr on the
+pump + a ReadIndex quorum per op. Fix in tree: gate success apply
+logs on `EFS_RAFT_DBG`; skip ReadIndex when `efs_raft_read_current`.
+lane-sweep `rc=-5` on empty files treated as OK. **Need efsd bounce
+(keep storage) + re-gate.** Do not invent REPORT split / chunked SNAP.
 
 **STEP 11 (delete the old snapshot/root-2PC metadata engine) COMPLETE
 (Sep 11 2026, commits 94c4c15 Inc1 → d7baa38 Inc2 → db023c7 Inc3 →
@@ -464,6 +504,15 @@ remounted back to `:19820`. Units earlier on 003: `test_raft` /
 `test_kv_lsm` / `test_meta_apply` / `test_sim` / `test_wire` OK.
 Do not invent chunked SNAP or REPORT split. Do not `wipe_cluster.sh`
 / `pkill -x efsd` while 19820 is up.
+
+**RDMA FIRST-INODE POOL FIX (Sep 17).** Not all RDMA items were fixed:
+poller re-arm, finite `rnr_retry`, and leaks RDMA phase already landed;
+the parked empty-table first-`mkdir` hang did not. Client pool now
+pins sockfs identity at wrap, evicts on mismatch, refuses to `close`
+a recycled fd, and `conn_init` skips busy slots. Post-mount
+GET_FEATURES/STATUS use the pool. Gate: `test_conn_fd`. Do not call
+a 19820 remount the empty-table repro. Do not `wipe_cluster.sh` /
+`pkill -x efsd` while 19820 is up.
 
 **19810 NVMe + HONEST FIO ATTEMPT (Sep 16).** Port 19810 `raft-mkfs`'d
 on `/data1` (36T, `--direct-io`, seed 003, join 004–006). 19820 scratch

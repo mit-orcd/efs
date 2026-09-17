@@ -239,6 +239,9 @@ static struct efs_conn *rpc_owner_conn_shard(uint32_t shard,
     return raft_voter_conn(shard, nid_out);
 }
 
+static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
+                              uint8_t expect, void *reply, uint32_t reply_len);
+
 /* Send to the owner of `shard`. Retry NOT_PRIMARY. */
 static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
                                uint32_t req_len, uint8_t expect, void *reply,
@@ -380,13 +383,21 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
     req.uid = (uint32_t)uid;
     req.gid = (uint32_t)gid;
     req.flags = flags;
+    if ((flags & EFS_CREATE_F_HOLD) && !g_client.flock_token)
+        g_client.flock_token = 1;
+    req.owner = g_client.flock_token;
     struct efs_msg_inode_reply r;
-    /* Name uniqueness lives on the parent directory's shard. Independent
-     * directories hash to different shards, so this is that directory's
-     * owner — not a cluster-wide metadata primary. Same-name conflict
-     * serializes there; disjoint names in other dirs do not. */
-    int rc = rpc_send_recv_owner(parent, EFS_MSG_INODE_CREATE, &req, sizeof(req),
-                                 EFS_MSG_INODE_CREATE_REPLY, &r, sizeof(r));
+    /* Files co-locate with the parent (one group). MKDIR scatters the
+     * child inode, so a parent-group-only voter has to bounce the whole
+     * RPC to a dual-host — an extra RTT on ~half of mkdirs. Send dirs
+     * to a dual-host so both groups are local. */
+    int rc = S_ISDIR(mode)
+                 ? rpc_send_recv_dual(EFS_MSG_INODE_CREATE, &req, sizeof(req),
+                                      EFS_MSG_INODE_CREATE_REPLY, &r,
+                                      sizeof(r))
+                 : rpc_send_recv_owner(parent, EFS_MSG_INODE_CREATE, &req,
+                                       sizeof(req), EFS_MSG_INODE_CREATE_REPLY,
+                                       &r, sizeof(r));
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)

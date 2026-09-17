@@ -170,6 +170,13 @@ int efs_meta_apply_create_file_op(struct efs_kv *kv, const struct efs_opid *op,
                                   const struct efs_meta_attrs *at,
                                   efs_ino_t parent, uint32_t mode, const char *name,
                                   efs_ino_t *out);
+/* MKDIR. Child inode is scattered (mkdir_shard); dentry follows the
+ * parent's layout. One atomic batch — the host only proposes this when
+ * parent, dentry, and child shards share a Raft group (same log). Cross-
+ * group mkdir stays a txn. Parent nlink++ (the child's `..`). */
+int efs_meta_apply_mkdir(struct efs_kv *kv, const struct efs_meta_attrs *at,
+                         efs_ino_t parent, uint32_t mode, const char *name,
+                         efs_ino_t *out);
 /* `now` is the leader-stamped directory mtime/ctime. LOCAL: parent row.
  * HASHED/SPLITTING: the dentry shard's dir lane (§7.4). */
 int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,

@@ -628,7 +628,8 @@ send_reply:
                            payload_len >= sizeof(struct efs_msg_inode_create)) {
                     struct efs_msg_inode_create *req = payload;
                     server_raft_host_create(req->parent, req->name, req->mode,
-                                            req->uid, req->gid, &r);
+                                            req->uid, req->gid, req->flags,
+                                            req->owner, &r);
                     rtype = EFS_MSG_INODE_CREATE_REPLY;
                 } else if (type == EFS_MSG_INODE_CREATE_SHARD) {
                     /* Old fan-out. File create is one Raft entry; MKDIR is

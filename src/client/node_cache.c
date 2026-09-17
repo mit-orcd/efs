@@ -98,6 +98,11 @@ void efs_client_conn_init(void)
 
     for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
         for (int s = 0; s < EFS_CLIENT_CONNS_PER_NODE; s++) {
+            /* A checkout owns this slot. Destroying it here frees the
+             * object while the owner still sends, then a new wrap can
+             * recycle the same fd number under a live dest_qpn. */
+            if (conn_pool_inited && g_client.conn_busy[i][s])
+                continue;
             /* First init: BSS zeros are NULL — do not destroy. */
             if (conn_pool_inited && g_client.conn[i][s])
                 efs_conn_destroy(g_client.conn[i][s]);
@@ -191,10 +196,14 @@ void efs_client_node_note_fail(efs_node_id_t node_id)
 /* Pool slots can sit in CLOSE-WAIT after the peer FINs (EMFILE, restart,
  * idle timeout). Reusing them looks like a live checkout, then every PUT
  * gets POLLHUP / recv 0 and we report no quorum while the servers are up. */
-static int conn_fd_is_dead(int fd)
+static int conn_fd_is_dead(struct efs_conn *c)
 {
-    if (fd < 0)
+    if (!c || c->fd < 0)
         return 1;
+    /* Recycled fd number: the new socket can be ESTABLISHED. */
+    if (!efs_conn_fd_matches(c))
+        return 1;
+    int fd = c->fd;
 #ifdef TCP_INFO
     {
         struct tcp_info ti;
@@ -311,13 +320,10 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
             }
 
             pthread_mutex_lock(&g_client.conn_lock[idx]);
-            if (g_client.conn[idx][free_slot]) {
-                /* Slot reused while we connected — keep the existing conn. */
-                efs_conn_destroy(nc);
-                nc = g_client.conn[idx][free_slot];
-            } else {
-                g_client.conn[idx][free_slot] = nc;
-            }
+            /* We reserved this empty slot (busy=1, conn=NULL). Install
+             * ours. Stealing a pointer another thread already returned
+             * would double-checkout one QP (the old "keep existing" path). */
+            g_client.conn[idx][free_slot] = nc;
             g_client.node_fail_streak[idx] = 0;
             g_client.node_down_until_ms[idx] = 0;
             /* busy already set */
@@ -326,7 +332,7 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
         }
 
         struct efs_conn *c = g_client.conn[idx][free_slot];
-        if (conn_fd_is_dead(c->fd)) {
+        if (conn_fd_is_dead(c)) {
             efs_conn_destroy(c);
             g_client.conn[idx][free_slot] = NULL;
             continue;

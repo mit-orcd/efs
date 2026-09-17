@@ -55,6 +55,47 @@ static void test_create_lookup_unlink(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_mkdir(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t d = 0;
+    struct efs_meta_dentry dent;
+    struct efs_meta_row r, root;
+    uint64_t salt = 0;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &root) == EFS_OK, "root");
+    CHECK(root.nlink == 2, "root nlink 2");
+    CHECK(efs_meta_apply_mkdir(kv, &g_at, EFS_ROOT_INO, S_IFDIR | 0755, "d", &d)
+              == EFS_OK && d,
+          "mkdir");
+    CHECK(efs_meta_apply_export_salt(kv, &salt) == EFS_OK, "salt");
+    CHECK(efs_kv_inode_shard(d) == efs_kv_mkdir_shard(EFS_ROOT_INO, "d", salt),
+          "scattered");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "d", &dent) == EFS_OK &&
+              dent.ino == d && dent.type == S_IFDIR,
+          "lookup");
+    CHECK(efs_meta_apply_get_inode(kv, d, &r) == EFS_OK && S_ISDIR(r.mode) &&
+              r.nlink == 2 && r.parent == EFS_ROOT_INO,
+          "child row");
+    CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &root) == EFS_OK &&
+              root.nlink == 3,
+          "parent nlink++");
+    CHECK(efs_meta_apply_mkdir(kv, &g_at, EFS_ROOT_INO, S_IFDIR | 0755, "d", &d)
+              == EFS_ERR_EXIST,
+          "dup");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFDIR | 0755, "x",
+                                     &d) == EFS_ERR_INVAL,
+          "create_file rejects dir");
+    CHECK(efs_meta_apply_rmdir(kv, EFS_ROOT_INO, "d", T0 + 1) == EFS_OK, "rmdir");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "d", &dent) ==
+              EFS_ERR_NOT_FOUND,
+          "gone");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 static void test_i9(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -2500,6 +2541,7 @@ static void test_gc_tail_alias(void)
 int main(void)
 {
     test_create_lookup_unlink();
+    test_mkdir();
     test_i9();
     test_batch_fail();
     test_i16_durable();

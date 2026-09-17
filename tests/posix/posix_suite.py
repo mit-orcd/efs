@@ -52,6 +52,14 @@ def serial(fn):
     return fn
 
 
+def budget(sec):
+    """Per-test wall, when 300 create+unlink cannot fit the default 15 s."""
+    def deco(fn):
+        fn._posix_timeout = int(sec)
+        return fn
+    return deco
+
+
 class Fail(Exception):
     """Raise to fail a test with a message. soft=True marks it SKIP (feature
     unsupported) rather than a hard failure."""
@@ -611,6 +619,7 @@ def dir_deep_nesting(d):
 
 
 @test
+@budget(45)
 def dir_many_files(d):
     n = 300
     for i in range(n):
@@ -3107,22 +3116,15 @@ def main():
     leave_fuse_cwd()
     host = subprocess.run(["hostname", "-s"], stdout=subprocess.PIPE
                           ).stdout.decode().strip()
-    # Drop this host's leftover trees from earlier --keep / crashed runs. The
-    # base prefix is PER-HOST (and per --tag instance): with several clients
-    # sharing one mount, a client must never rmtree another concurrently-running
-    # client's active base. (A shared "posix-" sweep did exactly that — a
-    # later-starting client's startup sweep removed an earlier client's live
-    # tree, orphaning its per-test dirs and failing its rename/hardlink/unlink
-    # with EINVAL/EIO. That was the 4-way parallel flake.) The --tag suffix
-    # extends this so several suite instances on the SAME host (POSIX_PER_HOST
-    # stress) each sweep only their own leftovers, never a sibling's live tree.
+    # Unique per-run base (mkdtemp). Do NOT sweep leftover posix-<host>-*
+    # trees: rmtree of a 4x/9-way leftover is tens of thousands of unlinks
+    # and ate the 180s SSH budget (empty TSV), and a same-dir rename of
+    # those trees EIO'd on the long-lived scratch. Collision is impossible
+    # because the suffix is random. The --tag suffix still isolates
+    # POSIX_PER_HOST siblings (each mkdtemp prefix is host+tag).
+    # Testdirs under the base are created lazily in invoke() — 201
+    # sequential mkdirs at ~0.3s each was another 60s before any test ran.
     me = "posix-%s-" % host if not tag else "posix-%s-%s-" % (host, tag)
-    try:
-        for name in os.listdir(mnt):
-            if name.startswith(me):
-                shutil.rmtree(os.path.join(mnt, name), ignore_errors=True)
-    except OSError:
-        pass
     base = tempfile.mkdtemp(prefix=me, dir=mnt)
     npass = nfail = nskip = 0
     t0 = time.time()
@@ -3131,7 +3133,6 @@ def main():
         if filt and filt not in name:
             continue
         tdir = os.path.join(base, name)
-        os.makedirs(tdir, exist_ok=True)
         selected.append((name, fn, tdir))
 
     tsv_mu = threading.Lock()
@@ -3175,6 +3176,7 @@ def main():
             flush_tsv()
 
     def invoke(fn, tdir):
+        os.makedirs(tdir, exist_ok=True)
         try:
             fn(tdir)
         except Fail as e:
@@ -3186,15 +3188,16 @@ def main():
         return "PASS", ""
 
     def run_serial_one(name, fn, tdir):
-        if test_timeout > 0:
+        to = getattr(fn, "_posix_timeout", test_timeout)
+        if to > 0:
             def _on_alarm(_signum, _frame):
-                raise TestTimeout(test_timeout)
+                raise TestTimeout(to)
             signal.signal(signal.SIGALRM, _on_alarm)
-            signal.alarm(test_timeout)
+            signal.alarm(to)
         try:
             return invoke(fn, tdir)
         finally:
-            if test_timeout > 0:
+            if to > 0:
                 signal.alarm(0)
 
     try:
@@ -3249,11 +3252,17 @@ def main():
                     if test_timeout <= 0:
                         continue
                     for fut in list(pending):
-                        if now - start[fut] < test_timeout:
-                            continue
                         name = futs[fut]
+                        fn_to = test_timeout
+                        for n, fn, _td in parallel:
+                            if n == name:
+                                fn_to = getattr(fn, "_posix_timeout",
+                                                test_timeout)
+                                break
+                        if now - start[fut] < fn_to:
+                            continue
                         by_name[name] = (
-                            "FAIL", "timeout after %ss" % test_timeout)
+                            "FAIL", "timeout after %ss" % fn_to)
                         record(name, *by_name[name])
                         pending.discard(fut)
                 try:

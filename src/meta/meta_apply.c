@@ -806,6 +806,155 @@ int efs_meta_apply_create_file_op(struct efs_kv *kv, const struct efs_opid *op,
     return create_file_batch(kv, at, parent, mode, name, op, out);
 }
 
+int efs_meta_apply_mkdir(struct efs_kv *kv, const struct efs_meta_attrs *at,
+                         efs_ino_t parent, uint32_t mode, const char *name,
+                         efs_ino_t *out)
+{
+    struct efs_meta_dentry dent;
+    struct efs_meta_row row, parent_row;
+    uint8_t k_dent[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
+    uint8_t k_alloc[EFS_KV_KEY_MAX], k_par[EFS_KV_KEY_MAX];
+    uint8_t k_ln[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX];
+    uint8_t v_dent[DENT_VAL], v_ino[INO_VAL], v_alloc[ALLOC_VAL];
+    uint8_t v_par[INO_VAL], v_ln[LANE_VAL], v_dseq[8];
+    uint32_t kd = 0, ki = 0, ka = 0, kp = 0, kln = 0, ks = 0;
+    struct efs_kv_item it[8];
+    uint32_t n = 0, psh, csh, dsh;
+    efs_ino_t next = 0, ino;
+    uint64_t salt = 0, bit;
+    uint8_t dseq_lane;
+    int rc;
+    int stamp_lane = 0;
+
+    if (!kv || !name || !at || parent == 0 || name[0] == '\0')
+        return EFS_ERR_INVAL;
+    if ((mode & S_IFMT) != S_IFDIR)
+        return EFS_ERR_INVAL;
+    if ((mode & 07777) == 0)
+        mode |= 0755;
+    rc = efs_meta_apply_get_inode(kv, parent, &parent_row);
+    if (rc != EFS_OK)
+        return rc;
+    if (!S_ISDIR(parent_row.mode))
+        return EFS_ERR_INVAL;
+    if (parent_row.layout != EFS_META_LAYOUT_LOCAL &&
+        parent_row.layout != EFS_META_LAYOUT_HASHED &&
+        parent_row.layout != EFS_META_LAYOUT_SPLITTING)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_lookup(kv, parent, name, &dent);
+    if (rc == EFS_OK)
+        return EFS_ERR_EXIST;
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+    rc = efs_meta_apply_export_salt(kv, &salt);
+    if (rc != EFS_OK)
+        return rc;
+    psh = efs_kv_inode_shard(parent);
+    csh = efs_kv_mkdir_shard(parent, name, salt);
+    dsh = efs_kv_dentry_shard(parent, name, parent_row.layout);
+    dseq_lane = parent_row.layout == EFS_META_LAYOUT_LOCAL
+                    ? 0
+                    : efs_kv_dir_lane(name);
+    rc = load_alloc(kv, csh, &next);
+    if (rc != EFS_OK)
+        return rc;
+    ino = next;
+    if (efs_kv_inode_shard(ino) != csh)
+        return EFS_ERR_PROTO;
+    next = ino + (efs_ino_t)(1u << EFS_KV_SHARD_BITS);
+
+    memset(&row, 0, sizeof(row));
+    row.ino = ino;
+    row.generation = 1;
+    row.mode = mode;
+    row.nlink = 2;
+    row.parent = parent;
+    row.uid = at->uid;
+    row.gid = at->gid;
+    row.base_mtime = at->now;
+    row.base_atime = at->now;
+    row.base_ctime = at->now;
+    memset(&dent, 0, sizeof(dent));
+    dent.ino = ino;
+    dent.generation = 1;
+    dent.type = S_IFDIR;
+    parent_row.nlink++;
+    if (parent_row.layout == EFS_META_LAYOUT_LOCAL) {
+        parent_row.base_mtime = max_u64(parent_row.base_mtime, at->now);
+        parent_row.base_ctime = max_u64(parent_row.base_ctime, at->now);
+        efs_meta_dir_note_entry(&parent_row, 1);
+    } else {
+        bit = 1ull << efs_kv_dir_lane(name);
+        if ((parent_row.used_shards & bit) == 0)
+            parent_row.used_shards |= bit;
+        rc = dir_lane_stamp(kv, &parent_row, name, at->now, k_ln, &kln, v_ln);
+        if (rc != EFS_OK)
+            return rc;
+        stamp_lane = 1;
+    }
+    pack_inode(v_ino, &row);
+    pack_dentry(v_dent, &dent);
+    pack_inode(v_par, &parent_row);
+    be64(v_alloc, next);
+    rc = efs_kv_key_dentry(dsh, parent, name, k_dent, &kd);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_inode(csh, ino, k_ino, &ki);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_alloc(csh, k_alloc, &ka);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_inode(psh, parent, k_par, &kp);
+    if (rc != EFS_OK)
+        return rc;
+    memset(it, 0, sizeof(it));
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_dent;
+    it[n].klen = kd;
+    it[n].val = v_dent;
+    it[n].vlen = DENT_VAL;
+    n++;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_ino;
+    it[n].klen = ki;
+    it[n].val = v_ino;
+    it[n].vlen = INO_VAL;
+    n++;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_alloc;
+    it[n].klen = ka;
+    it[n].val = v_alloc;
+    it[n].vlen = ALLOC_VAL;
+    n++;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_par;
+    it[n].klen = kp;
+    it[n].val = v_par;
+    it[n].vlen = INO_VAL;
+    n++;
+    if (stamp_lane) {
+        it[n].op = EFS_KV_PUT;
+        it[n].key = k_ln;
+        it[n].klen = kln;
+        it[n].val = v_ln;
+        it[n].vlen = LANE_VAL;
+        n++;
+    }
+    rc = dseq_bump(kv, dsh, parent, dseq_lane, k_dseq, &ks, v_dseq);
+    if (rc != EFS_OK)
+        return rc;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_dseq;
+    it[n].klen = ks;
+    it[n].val = v_dseq;
+    it[n].vlen = 8;
+    n++;
+    rc = efs_kv_batch(kv, it, n);
+    if (rc != EFS_OK)
+        return rc;
+    if (out)
+        *out = ino;
+    return EFS_OK;
+}
+
 int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
                           uint64_t now)
 {
@@ -2486,7 +2635,9 @@ int efs_meta_apply_lane_sweep(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
         ss.cap = (uint32_t)(sizeof(it) / sizeof(it[0]));
         rc = efs_kv_scan_prefix(kv, pref, plen, sweep_cb, &ss);
         if (ss.rc != EFS_OK)
-            return ss.rc;
+            return ss.rc == EFS_ERR_INVAL ? EFS_OK : ss.rc;
+        if (rc == EFS_ERR_INVAL)
+            return EFS_OK;
         if (rc != EFS_OK)
             return rc;
         if (ss.chunks == 0)

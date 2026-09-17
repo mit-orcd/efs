@@ -578,6 +578,9 @@ struct efs_msg_inode_create {
     uint32_t uid;
     uint32_t gid;
     uint32_t flags;
+    /* flock_token; CREATE_F_HOLD writes this into the Raft CREATE uuid so
+     * apply can LEASE_OPEN in the same entry. Close still uses HOLD. */
+    uint64_t owner;
 };
 
 /* Nested create on the target shard owner (parent owner already decided

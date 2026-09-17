@@ -520,6 +520,13 @@ static int try_commit(struct efs_raft *r)
         }
         if (quorum_ok(r, bits)) {
             r->commit_index = n;
+            /* Commit quorum in this term is a ReadIndex majority for n.
+             * Without this, every propose invalidates read_current and the
+             * next LOOKUP/CREATE pays another heartbeat RTT (~50 ms). */
+            r->read_index = n;
+            r->read_acks = bits;
+            if (!r->read_in_flight)
+                r->read_in_flight = 1;
             break;
         }
     }
@@ -538,6 +545,9 @@ static int become_leader(struct efs_raft *r)
 
     r->role = EFS_RAFT_LEADER;
     r->leader = r->id;
+    r->read_in_flight = 0;
+    r->read_index = 0;
+    r->read_acks = 0;
     reset_election(r);
     rc = last_log(r, &last_i, &last_t);
     if (rc != EFS_OK)
@@ -1248,4 +1258,13 @@ int efs_raft_read_ready(const struct efs_raft *r)
     if (!r)
         return 0;
     return r->read_in_flight == 2 && r->last_applied >= r->read_index;
+}
+
+int efs_raft_read_current(const struct efs_raft *r)
+{
+    if (!r || r->role != EFS_RAFT_LEADER)
+        return 0;
+    return r->read_in_flight == 2 &&
+           r->last_applied >= r->commit_index &&
+           r->read_index >= r->commit_index;
 }

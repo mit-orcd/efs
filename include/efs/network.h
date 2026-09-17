@@ -39,12 +39,23 @@ struct efs_conn {
     int recv_chan; /* client: channel the in-flight reply arrives on;
                       server: channel the current request arrived on */
     struct efs_rdma_conn *rc;
+    /* Kernel sockfs identity of `fd` at wrap. A pooled conn whose number
+     * was close()'d and recycled still has dest_qpn for the old QP; the
+     * new socket looks ESTABLISHED so a liveness poll cannot see it.
+     * Destroy must not close `fd` when this no longer matches — that
+     * would FIN the new owner's TCP and tear the peer QP down. */
+    uint64_t fd_dev;
+    uint64_t fd_ino;
+    int fd_id_ok;
 };
 
 /* Take ownership of fd. */
 struct efs_conn *efs_conn_wrap_tcp(int fd, int is_server);
 
-/* Destroy the QP (if any), close the fd, free the handle. */
+/* 1 if fstat(fd) still matches wrap-time sockfs identity. */
+int efs_conn_fd_matches(const struct efs_conn *c);
+
+/* Destroy the QP (if any), close the fd when we still own it, free. */
 void efs_conn_destroy(struct efs_conn *c);
 
 #endif

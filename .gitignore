@@ -12,20 +12,22 @@ build.log
 libefs.a
 
 # tests (built binaries; keep sources and scripts)
-tests/test_directio
-tests/test_dir_stats
 tests/test_erasure
-tests/test_integration
-tests/test_list_exports
-tests/test_meta_batch
-tests/test_migrate
 tests/test_placement
-tests/test_query
-tests/test_quota
-tests/test_rejoin
-tests/test_meta_slot
-tests/test_meta_cap
-tests/test_meta_v6
+tests/test_rdma_xprt
+tests/test_wire
+tests/test_data
+tests/test_kv
+tests/test_kv_lsm
+tests/test_raft_store
+tests/test_meta_apply
+tests/test_raft
+tests/test_sim
+tests/test_txn
+tests/test_session
+tests/test_lock
+tests/test_stage_evict
+tests/test_conn_fd
 
 # profiling / job runtime output
 /logs/

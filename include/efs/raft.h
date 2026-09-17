@@ -174,6 +174,8 @@ int efs_raft_learner_ready(const struct efs_raft *r, int id);
  * in the current term, then applied >= that index. No clock leases. */
 int efs_raft_read_begin(struct efs_raft *r);
 int efs_raft_read_ready(const struct efs_raft *r);
+/* 1 if a prior ReadIndex still covers commit_index (skip a new quorum). */
+int efs_raft_read_current(const struct efs_raft *r);
 
 struct efs_raft_store *efs_raft_mem_create(void);
 void efs_raft_mem_free(struct efs_raft_store *st);

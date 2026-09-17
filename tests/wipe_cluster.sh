@@ -13,12 +13,9 @@
 #      returns in ms instead of blocking on edelete of millions of chunks
 #   4. a detached background edelete reclaims the _delete dirs (never rm -rf)
 #
-# WARNING: step 2 is `pkill -9 -x efsd` — that kills EVERY efsd on
-# fcstor003–006, including the 19820 scratch cluster
-# (`/tmp/efs-raft-scratch`). Do not run this while 19820 is the live
-# gate unless you intend to take it down. A /data1-only wipe (old-engine
-# leftovers) is a rename-aside + edelete of /data1/$d/efs without
-# touching efsd.
+# WARNING: step 2 is `pkill -9 -x efsd` — every efsd on fcstor003–006.
+# The only cluster is 19810 on /data1. Also removes leftover
+# /tmp/efs-raft-scratch (retired 19820 scratch).
 #
 # Run from the login node. Does not mkfs or restart — do that after.
 set -eu
@@ -105,13 +102,19 @@ if [ "$left" -ne 0 ]; then
     exit 1
 fi
 
-say "2/4 kill efsd on 4 servers (parallel)"
+say "2/5 kill efsd on 4 servers (parallel)"
 for h in "${SERVERS[@]}"; do
     ( echo "  ${h%.ib} $(kill_efsd "$h" || echo TIMEOUT)" ) &
 done
 wait
 
-say "3/4 move storage aside (instant rename) + recreate empty dirs"
+say "2b/5 remove retired 19820 scratch dirs"
+for h in "${SERVERS[@]}"; do
+    ( ssh_to 10 "$h" 'rm -rf /tmp/efs-raft-scratch /tmp/efs-raft-scratch.log; echo SCRATCH_GONE' ) &
+done
+wait
+
+say "3/5 move storage aside (instant rename) + recreate empty dirs"
 # Rename /data1/$d/efs to /data1/$d/_delete/efs.<unique> (instant on the same
 # filesystem) and recreate the empty dir. efsd is already dead (step 2), so no
 # open fds point into the moved tree. The actual reclaim is deferred to a
@@ -128,7 +131,7 @@ for h in "${SERVERS[@]}"; do
 done
 wait
 
-say "4/4 background edelete of _delete dirs (detached, survives ssh)"
+say "4/5 background edelete of _delete dirs (detached, survives ssh)"
 # setsid + </dev/null + & detaches so the ssh session returns immediately and
 # the edelete keeps running after we disconnect. Globs all 6 data dirs at once.
 for h in "${SERVERS[@]}"; do

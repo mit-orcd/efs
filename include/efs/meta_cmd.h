@@ -70,5 +70,8 @@
 #define EFS_MD_CMD_CFG 24
 #define EFS_MD_CFG_NOTE   1 /* persist desired + attach learner (C_old) */
 #define EFS_MD_CFG_CHANGE 2 /* NOTE every peer, then efs_raft_change */
+/* Same-group RMDIR: one apply of efs_meta_apply_rmdir when parent, dentry,
+ * and child shards share a Raft group. Encoding matches UNLINK. */
+#define EFS_MD_CMD_RMDIR 25
 
 #endif

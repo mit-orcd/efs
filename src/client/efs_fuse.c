@@ -361,19 +361,19 @@ static int features_poll(uint32_t *out)
     pthread_mutex_unlock(&g_client.lock);
 
     for (uint32_t i = 0; i < g_client.node_count; i++) {
-        int fd = efs_connect_tcp(g_client.nodes[i].addr, g_client.nodes[i].port);
-        if (fd < 0)
+        efs_node_id_t nid = g_client.nodes[i].id;
+        struct efs_conn *conn = efs_client_conn_get(nid);
+        if (!conn)
             continue;
-        efs_set_recv_timeout(fd, 2000);
-        efs_set_send_timeout(fd, 2000);
         struct efs_msg_get_features req;
         memset(&req, 0, sizeof(req));
         strncpy(req.export_name, name, EFS_MAX_NAME - 1);
         uint8_t type = 0;
         void *reply = NULL;
         uint32_t rlen = 0;
-        int ok = (efs_send_msg(fd, EFS_MSG_GET_FEATURES, &req, sizeof(req)) == 0 &&
-                  efs_recv_msg(fd, &type, &reply, &rlen) == 0 &&
+        int ok = (efs_conn_send_msg(conn, EFS_MSG_GET_FEATURES, &req,
+                                    sizeof(req)) == 0 &&
+                  efs_conn_recv_msg(conn, &type, &reply, &rlen) == 0 &&
                   type == EFS_MSG_GET_FEATURES_REPLY &&
                   rlen >= sizeof(struct efs_msg_features_reply));
         uint32_t feat = 0;
@@ -382,9 +382,11 @@ static int features_poll(uint32_t *out)
             struct efs_msg_features_reply *r = reply;
             feat = r->features;
             status = r->status;
+            efs_client_conn_release(nid, conn);
+        } else {
+            efs_client_conn_drop(nid, conn);
         }
         free(reply);
-        close(fd);
         if (ok && status == EFS_FEATURES_OK) {
             *out = feat;
             return 1;
@@ -938,6 +940,8 @@ static int find_walk_dir(efs_ino_t dir_ino, const char *rel,
                 continue;
             if (strncmp(ents[i].name, ".fuse_hidden", 12) == 0)
                 continue;
+            if (strncmp(ents[i].name, ".parked-", 8) == 0)
+                continue;
             if (name_is_reserved(ents[i].name))
                 continue;
             if (o->nvisit >= EFS_FIND_WALK_MAX) {
@@ -1433,6 +1437,8 @@ static int readdir_collect_page(struct readdir_collect_arg *col,
         if (ents[i].ino == 0 || ents[i].name[0] == '\0')
             continue;
         if (strncmp(ents[i].name, ".fuse_hidden", 12) == 0)
+            continue;
+        if (strncmp(ents[i].name, ".parked-", 8) == 0)
             continue;
         int dup = 0;
         for (size_t j = 0; j < col->count; j++) {
@@ -2543,12 +2549,10 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
     if (fi) {
         fi->fh = ino;
         fuse_fi_direct_io(fi);
-        /* CREATE_F_HOLD is not applied by the raft host; the open lease
-         * (I19) is a separate HOLD RPC. Without it, last-link unlink
-         * deletes the inode while this fd is still open. */
-        if (!noted && efs_open_note(ino))
-            (void)efs_client_rpc_hold(g_client.export_id, ino, 1,
-                                      g_client.flock_token);
+        /* Same-group CREATE applies LEASE_OPEN from CREATE_F_HOLD + owner.
+         * Still count the open so last close issues HOLD close. */
+        if (!noted)
+            (void)efs_open_note(ino);
     }
     return 0;
 }
@@ -2648,24 +2652,18 @@ static void statfs_refresh_usage(void)
     if (n > EFS_MAX_NODES)
         n = EFS_MAX_NODES;
     for (uint32_t i = 0; i < n; i++) {
-        char addr[64];
-        uint16_t port;
         efs_node_id_t nid;
         pthread_mutex_lock(&g_client.lock);
-        memcpy(addr, g_client.nodes[i].addr, sizeof(addr));
-        port = g_client.nodes[i].port;
         nid = g_client.nodes[i].id;
         pthread_mutex_unlock(&g_client.lock);
-        int fd = efs_connect_tcp(addr, port);
-        if (fd < 0)
+        struct efs_conn *conn = efs_client_conn_get(nid);
+        if (!conn)
             continue;
-        efs_set_recv_timeout(fd, 2000);
-        efs_set_send_timeout(fd, 2000);
         uint8_t type;
         void *payload = NULL;
         uint32_t plen = 0;
-        if (efs_send_msg(fd, EFS_MSG_STATUS, NULL, 0) == 0 &&
-            efs_recv_msg(fd, &type, &payload, &plen) == 0 &&
+        if (efs_conn_send_msg(conn, EFS_MSG_STATUS, NULL, 0) == 0 &&
+            efs_conn_recv_msg(conn, &type, &payload, &plen) == 0 &&
             type == EFS_MSG_STATUS_REPLY &&
             plen >= sizeof(struct efs_msg_status_reply)) {
             struct efs_msg_status_reply r;
@@ -2679,9 +2677,11 @@ static void statfs_refresh_usage(void)
                     break;
                 }
             pthread_mutex_unlock(&g_client.lock);
+            efs_client_conn_release(nid, conn);
+        } else {
+            efs_client_conn_drop(nid, conn);
         }
         free(payload);
-        close(fd);
     }
 }
 

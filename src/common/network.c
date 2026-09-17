@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <execinfo.h>
+#include <sys/stat.h>
 
 /* Keep short: a missing peer must not stall small-file meta flushes for long.
  * Down-marked peers are skipped entirely for EFS_NODE_DOWN_MS after one fail. */
@@ -36,7 +37,7 @@ static void efs_net_init(void)
 
 static int connect_sockaddr(const struct sockaddr *addr, socklen_t addrlen)
 {
-    int fd = socket(addr->sa_family, SOCK_STREAM, 0);
+    int fd = socket(addr->sa_family, SOCK_STREAM | SOCK_CLOEXEC, 0);
     if (fd < 0)
         return -1;
 
@@ -146,7 +147,7 @@ int efs_listen_tcp(const char *host, uint16_t port, int backlog)
         return -1;
     }
 
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
     if (fd < 0)
         return -1;
 
@@ -240,6 +241,35 @@ int efs_recv_all(int fd, void *buf, size_t len)
     return 0;
 }
 
+static void conn_capture_fd(struct efs_conn *c)
+{
+    c->fd_id_ok = 0;
+    c->fd_dev = 0;
+    c->fd_ino = 0;
+    if (!c || c->fd < 0)
+        return;
+    int fl = fcntl(c->fd, F_GETFD, 0);
+    if (fl >= 0)
+        (void)fcntl(c->fd, F_SETFD, fl | FD_CLOEXEC);
+    struct stat st;
+    if (fstat(c->fd, &st) != 0)
+        return;
+    c->fd_dev = (uint64_t)st.st_dev;
+    c->fd_ino = (uint64_t)st.st_ino;
+    c->fd_id_ok = 1;
+}
+
+int efs_conn_fd_matches(const struct efs_conn *c)
+{
+    if (!c || c->fd < 0 || !c->fd_id_ok)
+        return 0;
+    struct stat st;
+    if (fstat(c->fd, &st) != 0)
+        return 0;
+    return (uint64_t)st.st_dev == c->fd_dev &&
+           (uint64_t)st.st_ino == c->fd_ino;
+}
+
 struct efs_conn *efs_conn_wrap_tcp(int fd, int is_server)
 {
     struct efs_conn *c = calloc(1, sizeof(*c));
@@ -250,6 +280,7 @@ struct efs_conn *efs_conn_wrap_tcp(int fd, int is_server)
     c->fd = fd;
     c->recv_chan = EFS_CONN_TCP;
     c->rc = NULL;
+    conn_capture_fd(c);
     return c;
 }
 
@@ -264,13 +295,17 @@ void efs_conn_destroy(struct efs_conn *c)
          * attributable. */
         void *bt[8];
         int nb = backtrace(bt, 8);
-        fprintf(stderr, "rdma-first: conn destroy fd=%d qpn=%u\n", c->fd,
-                efs_rdma_qpn(c->rc));
+        fprintf(stderr, "rdma-first: conn destroy fd=%d qpn=%u match=%d\n",
+                c->fd, efs_rdma_qpn(c->rc), efs_conn_fd_matches(c));
         backtrace_symbols_fd(bt, nb, fileno(stderr));
     }
     if (c->rc)
         efs_rdma_conn_destroy(c->rc);
-    if (c->fd >= 0)
+    /* Only close if this handle still owns the descriptor. A recycled
+     * number belongs to someone else — closing it FINs their TCP and the
+     * peer destroys the QP our next checkout will send into. */
+    if (c->fd >= 0 && efs_conn_fd_matches(c))
         close(c->fd);
+    c->fd = -1;
     free(c);
 }

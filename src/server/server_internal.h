@@ -266,9 +266,9 @@ void server_start_heartbeat(struct efsd_server *s);
  * Caller holds s->lock. */
 int server_node_is_down_locked(struct efsd_server *s, efs_node_id_t id);
 
-/* Production Raft host (architecture.md §10 10.5c). Env-gated: a no-op
- * unless EFS_MD_RAFT is set. Start fails loud on setup error so a broken
- * host cannot look like a healthy 2PC node. Stop is safe if never started. */
+/* Production Raft host (architecture.md §10 10.5c). Starts unconditionally
+ * (the old 2PC engine is gone). Start fails loud on setup error. Stop is
+ * safe if never started. */
 int server_raft_host_start(struct efsd_server *s);
 void server_raft_host_stop(void);
 /* Copy one encoded efs_raft_msg into the pump inbox. Delivery ack is the
@@ -299,8 +299,8 @@ void server_raft_host_lock_wait_drop_owner(efs_ino_t ino, uint64_t owner);
 void server_raft_host_lookup(efs_ino_t parent, const char *name,
                              struct efs_msg_inode_reply *out);
 void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
-                             uint32_t uid, uint32_t gid,
-                             struct efs_msg_inode_reply *out);
+                             uint32_t uid, uint32_t gid, uint32_t flags,
+                             uint64_t owner, struct efs_msg_inode_reply *out);
 void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                             uint32_t uid, uint32_t gid,
                             struct efs_msg_inode_reply *out);

@@ -203,6 +203,12 @@ static void test_replicate_and_readindex(void)
     CHECK(efs_raft_read_begin(n.r[lid]) == EFS_OK, "read begin");
     elect(&n, 4);
     CHECK(efs_raft_read_ready(n.r[lid]), "ReadIndex");
+    CHECK(efs_raft_read_current(n.r[lid]), "ReadIndex still current");
+    cmd = 'B';
+    CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK, "propose 2");
+    elect(&n, 8);
+    CHECK(efs_raft_read_current(n.r[lid]),
+          "commit quorum keeps ReadIndex current");
     for (i = 0; i < 3; i++) {
         efs_raft_free(n.r[i]);
         efs_raft_mem_free(st[i]);
