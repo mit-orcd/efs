@@ -3,7 +3,10 @@
  * really exits the process so an unfsynced page cache cannot pass for it. */
 #include "efs/common.h"
 #include "efs/kv.h"
+#include "efs/kv_key.h"
 #include "efs/kv_lsm.h"
+#include "efs/kv_snap.h"
+#include "efs/raft.h"
 
 #include <dirent.h>
 #include <stdio.h>
@@ -491,6 +494,72 @@ static void test_bulk_auto_compact(void)
     efs_kv_lsm_close(kv);
 }
 
+static int put_ino(struct efs_kv *kv, uint32_t shard, efs_ino_t ino,
+                   const char *v)
+{
+    uint8_t key[EFS_KV_KEY_MAX];
+    uint32_t klen = 0;
+
+    CHECK(efs_kv_key_inode(shard, ino, key, &klen) == EFS_OK, "key");
+    return efs_kv_put(kv, key, klen, (const uint8_t *)v, (uint32_t)strlen(v));
+}
+
+static int get_ino(struct efs_kv *kv, uint32_t shard, efs_ino_t ino,
+                   const char *v)
+{
+    uint8_t key[EFS_KV_KEY_MAX], buf[64];
+    uint32_t klen = 0, vlen = sizeof(buf);
+    int rc;
+
+    CHECK(efs_kv_key_inode(shard, ino, key, &klen) == EFS_OK, "key");
+    rc = efs_kv_get(kv, key, klen, buf, &vlen);
+    if (!v)
+        return rc;
+    if (rc != EFS_OK)
+        return rc;
+    if (vlen != strlen(v) || memcmp(buf, v, vlen) != 0)
+        return EFS_ERR_PROTO;
+    return EFS_OK;
+}
+
+/* Group export is the existing WAL item payload, filtered by shard→group.
+ * Import replaces that group's namespace and leaves the other group alone. */
+static void test_kv_group_snap(void)
+{
+    struct efs_kv *src = efs_kv_mem_create();
+    struct efs_kv *dst = efs_kv_mem_create();
+    uint8_t *blob = NULL;
+    uint32_t blen = 0;
+
+    CHECK(src && dst, "mem kv");
+    CHECK(put_ino(src, 1, 1, "odd") == EFS_OK, "put g0");
+    CHECK(put_ino(src, 2, 2, "even") == EFS_OK, "put g2");
+    CHECK(efs_kv_group_export(src, EFS_RAFT_GROUP_SHARD, 4096, &blob, &blen) ==
+              EFS_OK,
+          "export g0");
+    CHECK(blen >= 4 && blob, "blob");
+    CHECK(efs_kv_group_import(dst, EFS_RAFT_GROUP_SHARD, blob, blen) == EFS_OK,
+          "import g0");
+    CHECK(get_ino(dst, 1, 1, "odd") == EFS_OK, "g0 landed");
+    CHECK(get_ino(dst, 2, 2, NULL) == EFS_ERR_NOT_FOUND, "g2 not in g0 snap");
+    free(blob);
+    blob = NULL;
+    CHECK(put_ino(dst, 1, 99, "stale") == EFS_OK, "stale");
+    CHECK(efs_kv_group_export(src, EFS_RAFT_GROUP_SHARD, 4096, &blob, &blen) ==
+              EFS_OK,
+          "export g0 again");
+    CHECK(efs_kv_group_import(dst, EFS_RAFT_GROUP_SHARD, blob, blen) == EFS_OK,
+          "replace");
+    CHECK(get_ino(dst, 1, 99, NULL) == EFS_ERR_NOT_FOUND, "stale deleted");
+    CHECK(get_ino(dst, 1, 1, "odd") == EFS_OK, "live kept");
+    free(blob);
+    CHECK(efs_kv_group_export(src, EFS_RAFT_GROUP_SHARD, 8, &blob, &blen) ==
+              EFS_ERR_BUSY,
+          "oversize is BUSY");
+    efs_kv_mem_free(src);
+    efs_kv_mem_free(dst);
+}
+
 int main(void)
 {
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-kvlsm-%d", (int)getpid());
@@ -504,6 +573,7 @@ int main(void)
     test_torn_tail();
     test_crash_durability();
     test_bulk_auto_compact();
+    test_kv_group_snap();
 
     rmtree(g_dir);
     if (failures) {

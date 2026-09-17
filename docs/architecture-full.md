@@ -1289,17 +1289,16 @@ sends you to — not the whole spec.
 > EFS_DIR_SPREAD_MIN`, and the background migrator drains leftovers to
 > HASHED. Production `raft-change` wires `efs_raft_change` in `raft_host`
 > (operator desired file + learner attach with C_old, then joint/COLD).
-> InstallSnapshot is in the Raft SM (`SNAP_REQ`/`SNAP_REP`, blob frozen
-> at `efs_raft_snapshot`). Production `raft_host` still does not
-> compact — no KV dump format (do not invent one). A live 3-for-3 on a
-> long log still applies every entry under `h->mu` until the host
-> snapshots. The dedicated control-plane desired Raft group is still
-> sim-only.
+> InstallSnapshot is in the Raft SM. Production `raft_host` snapshots
+> after `efs_kv_lsm_flush` when `applied - snap_idx ≥ 256`: the blob is
+> the existing WAL item payload for that group's shards (`kv_snap.c`),
+> not a new dump format. A group that does not fit
+> `EFS_WIRE_RAFT_MAX_CMD` stays uncompacted (no chunked SNAP). The
+> dedicated control-plane desired Raft group is still sim-only.
 > Remaining specified leftovers, in order:
 > (1) **honest fio** on a 19810 NVMe cluster (do not auto `raft-mkfs`);
-> (2) host snapshot of the applied KV (so a compacted prefix can ride
-> InstallSnapshot). Pressure-triggered spread has no numeric bound —
-> do not invent one.
+> chunked InstallSnapshot is unspecified — do not invent one.
+> Pressure-triggered spread has no numeric bound — do not invent one.
 > C1 relaxed-coherence is out of scope. Doc machine-gate:
 > `make docs-check`. Cutover of a 36T `efs-test` is not this work.
 > [architecture.md §10](#architecture)
@@ -1718,10 +1717,11 @@ The 10.5c increment list below is landed history, not the current task.
 > call `efs_raft_snapshot()` until the KV is durable through `last_applied`
 > (`efs_kv_lsm_flush()`). The snapshot drops the log prefix that would
 > otherwise replay those commands. `efs_raft_new()` starts at
-> `last_applied = snap_idx`. The host persists applied without
-> compacting and restores it on restart (`efs_raft_restore_applied`)
-> so a durable KV is not re-applied. Apply must still stay idempotent
-> in the window before that persist.
+> `last_applied = snap_idx`. The host persists applied, flushes the KV,
+> then snapshots when the group export fits the existing SNAP cmd cap.
+> Restart restores applied (`efs_raft_restore_applied`) so a durable KV
+> is not re-applied. Apply must still stay idempotent in the window
+> before that persist.
 >
 > Production `efsd` still uses the in-memory table and the snapshot /
 > root-2PC flush; only after 10.5c does step 11 delete that flush. If a
@@ -1750,7 +1750,7 @@ is what your change must not break; the **Gate** column is what proves it.
 | Client reconnect, leases, locks, open-unlinked | [protocols/sessions.md](protocols/sessions.md) | I19, I23, I16 | posix2, posixstress |
 | Cross-shard anything | [protocols/transactions.md](protocols/transactions.md) | I16, I17, I9 | posix2, posixstress |
 | Raft, KV, replication, membership | [architecture.md §7.1/§7.8](#architecture), [failure-tolerance.md](failure-tolerance.md) | I1–I4, I10, I18 | `tests/test_sim`, leaks |
-| Production Raft host (`EFS_MD_RAFT`) | `src/server/raft_host.c`, [architecture.md §10](#architecture) 10.5 | I1–I4, I16; never `efs_raft_snapshot()` until KV flush-through-applied | `tests/test_wire`, `tests/stress/raft_host_smoke.sh` (scratch cluster; not live `efs-test`) |
+| Production Raft host (`EFS_MD_RAFT`) | `src/server/raft_host.c`, [architecture.md §10](#architecture) 10.5 | I1–I4, I16; never `efs_raft_snapshot()` until KV flush-through-applied; SNAP blob is the existing WAL item payload | `tests/test_kv_lsm`, `tests/test_wire`, `tests/stress/raft_host_smoke.sh` (scratch cluster; not live `efs-test`) |
 | Simulator / applied KV SM | [verification.md](verification.md), `include/efs/sim.h`, `include/efs/meta_apply.h`, `include/efs/raft.h` | I1–I4, I9, I10, I13–I16, I20–I23, I25 | `tests/test_sim`, `tests/test_meta_apply`, `tests/test_raft` |
 | Op-ID / idempotency window | [architecture.md §7.9](#architecture), `include/efs/opid.h` | I16 | `tests/test_sim` |
 | A hot path, for speed | [performance.md](performance.md) | P1–P4, §8 contract | fio honest matrix — **never** the stock `perf` write column |

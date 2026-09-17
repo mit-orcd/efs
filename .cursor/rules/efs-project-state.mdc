@@ -241,9 +241,9 @@ Relaxed-coherence stays out of scope. Production `raft-change` is in this
 tree (operator desired file + learner attach with C_old). The control-plane
 desired Raft group is still sim-only. Next specified leftover: honest fio
 on 19810 (do not auto `raft-mkfs`). Pressure-spread bound is unspecified
-(do not invent). InstallSnapshot is in the Raft SM (`SNAP_REQ`/`SNAP_REP`);
-production `raft_host` still does not compact (no KV dump). A live 3-for-3
-on a long log still applies every entry. Do not `wipe_cluster.sh` /
+(do not invent). Host KV snapshot uses the existing WAL item payload
+(`kv_snap.c`); a group over the 4 MiB SNAP cap is left uncompacted.
+Chunked InstallSnapshot is unspecified. Do not `wipe_cluster.sh` /
 `pkill -x efsd` while 19820 is up.
 
 **BATCHED APPENDENTRIES + OUTBOX CLOSED (Sep 15).** Catch-up was
@@ -387,12 +387,22 @@ shaped. `efs_raft_snapshot` freezes `snap_get` before compacting.
 `send_ae` sends SNAP when `next_index <= snap_idx` (no more skip).
 `on_snap_req` rejects a skip-ahead unless `snap_put` installs that
 exact prefix — empty metadata-only SNAP cannot jump `last_applied`.
-`raft_mem` save_snap clamps like disk (empty learner). Production host
-does not set snap_get/put and never calls `efs_raft_snapshot`
-(`snap_idx=0`). Do not invent a KV dump.
+`raft_mem` save_snap clamps like disk (empty learner).
 **Gates:** `test_install_snapshot` (compact 40, grow `0x7→0x1f`,
 learners install) + `test_install_snapshot_needs_blob` (metadata-only
 snap stays BUSY) + `test_wire` SNAP codec. Do not `wipe_cluster.sh` /
+`pkill -x efsd` while 19820 is up.
+
+**HOST KV SNAPSHOT (Sep 16).** After persist_applied, if
+`applied - snap_idx ≥ HOST_SNAP_MIN` (256), the pump flushes the LSM
+then `efs_raft_snapshot`. `snap_get`/`snap_put` are
+`efs_kv_group_export`/`import`: WAL item payload, keys whose shard
+maps to that Raft group, import replaces that namespace only. Oversize
+→ `EFS_ERR_BUSY`, `snap_oversized` latches, log stays uncompacted
+(the live 283k scratch will hitch here until chunked SNAP exists).
+Do not invent chunking. Do not restart 19820 for this cut.
+**Gates:** `test_kv_lsm` `test_kv_group_snap` + `test_raft` /
+`test_wire` / `test_sim` / `test_txn`. Do not `wipe_cluster.sh` /
 `pkill -x efsd` while 19820 is up.
 
 **PRODUCTION RAFT-CHANGE (Sep 16).** `raft_host` wires `efs_raft_change`

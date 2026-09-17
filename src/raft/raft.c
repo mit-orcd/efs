@@ -1192,6 +1192,11 @@ uint64_t efs_raft_applied(const struct efs_raft *r)
     return r ? r->last_applied : 0;
 }
 
+uint64_t efs_raft_snap_index(const struct efs_raft *r)
+{
+    return r ? r->snap_idx : 0;
+}
+
 int efs_raft_leader(const struct efs_raft *r)
 {
     return r ? r->leader : -1;

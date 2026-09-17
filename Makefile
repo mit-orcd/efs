@@ -31,6 +31,7 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
               src/kv/kv_compact.c \
               src/kv/kv_wal.c \
               src/kv/kv_seg.c \
+              src/kv/kv_snap.c \
               src/meta/metadata.c \
               src/meta/meta_apply.c \
               src/meta/txn.c \

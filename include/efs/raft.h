@@ -157,6 +157,7 @@ int efs_raft_id(const struct efs_raft *r);
 uint64_t efs_raft_term(const struct efs_raft *r);
 uint64_t efs_raft_commit(const struct efs_raft *r);
 uint64_t efs_raft_applied(const struct efs_raft *r);
+uint64_t efs_raft_snap_index(const struct efs_raft *r);
 int efs_raft_leader(const struct efs_raft *r); /* -1 if unknown */
 
 /* Committed voting set (C_old). During joint this is still C_old. */

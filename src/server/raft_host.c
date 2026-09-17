@@ -4,6 +4,7 @@
 #include "efs/raft_disk.h"
 #include "efs/kv.h"
 #include "efs/kv_lsm.h"
+#include "efs/kv_snap.h"
 #include "efs/meta_apply.h"
 #include "efs/meta_cmd.h"
 #include "efs/dir_layout.h"
@@ -84,6 +85,9 @@
 #define HOST_DIR_LEN       10
 #define HOST_CFG_LEN       6 /* tag + sub + voters:4 */
 #define HOST_SPREAD_MAX    8 /* leftovers per GC tick; batch, not a scan */
+/* Log-truncation batch (same class as AE_MAX). A group whose KV export
+ * exceeds EFS_WIRE_RAFT_MAX_CMD is left uncompacted — no chunked SNAP. */
+#define HOST_SNAP_MIN      256
 #define HOST_SESS_HDR_LEN  18 /* tag+sub+uuid; same as sim pack_hdr */
 #define HOST_SESS_CREATE_LEN 22 /* hdr+epoch */
 #define HOST_SESS_REG_LEN  26 /* hdr+epoch+shard */
@@ -137,6 +141,7 @@ struct host_group {
     uint32_t voters;
     uint32_t desired; /* operator target; actual follows via joint (I18) */
     uint64_t applied_saved;
+    int snap_oversized; /* export exceeded SNAP cmd cap; do not retry */
     struct efs_raft *r;
     struct efs_raft_host *host; /* back-pointer, set in attach_group */
     /* Apply-result ring: (index, rc) of the last HOST_APPLY_RC_RING applied
@@ -1342,6 +1347,59 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         h->obs_apply_cycle_us += now_us_() - a0;
     }
     return ret;
+}
+
+/* SNAP blob = existing KV records for this group's shards. Flush first
+ * (raft_disk.h): compacting past a non-durable KV drops the replay prefix. */
+static int host_snap_get(void *app, uint64_t last_index, uint8_t **data,
+                         uint32_t *len)
+{
+    struct host_group *g = app;
+    struct efs_raft_host *h = g->host;
+
+    (void)last_index;
+    if (!h || !h->kv)
+        return EFS_ERR_INVAL;
+    return efs_kv_group_export(h->kv, g->group, EFS_WIRE_RAFT_MAX_CMD - 16u,
+                               data, len);
+}
+
+static int host_snap_put(void *app, uint64_t last_index, const uint8_t *data,
+                         uint32_t len)
+{
+    struct host_group *g = app;
+    struct efs_raft_host *h = g->host;
+
+    (void)last_index;
+    if (!h || !h->kv)
+        return EFS_ERR_INVAL;
+    return efs_kv_group_import(h->kv, g->group, data, len);
+}
+
+static int host_maybe_snapshot(struct efs_raft_host *h, int gi)
+{
+    uint64_t applied, snap;
+    int rc;
+
+    if (!h->g[gi].hosted || !h->g[gi].r || h->g[gi].snap_oversized)
+        return EFS_OK;
+    applied = efs_raft_applied(h->g[gi].r);
+    snap = efs_raft_snap_index(h->g[gi].r);
+    if (applied < snap + HOST_SNAP_MIN)
+        return EFS_OK;
+    rc = efs_kv_lsm_flush(h->kv);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_raft_snapshot(h->g[gi].r);
+    if (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOMEM) {
+        h->g[gi].snap_oversized = 1;
+        fprintf(stderr,
+                "raft-host: snapshot skipped group=%u applied=%llu "
+                "(KV export exceeds SNAP cap; log stays uncompacted)\n",
+                h->g[gi].group, (unsigned long long)applied);
+        return EFS_OK;
+    }
+    return rc;
 }
 
 static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
@@ -2938,6 +2996,7 @@ static void *host_pump(void *arg)
         }
         for (i = 0; i < HOST_NGROUPS; i++) {
             (void)persist_applied(h, i);
+            (void)host_maybe_snapshot(h, i);
             if (h->g[i].r)
                 h->g[i].voters = efs_raft_voters(h->g[i].r);
         }
@@ -3128,6 +3187,8 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     cfg.net = h;
     cfg.apply = host_apply;
     cfg.app = &h->g[gi]; /* per-group: host_apply records into g->arc_* */
+    cfg.snap_get = host_snap_get;
+    cfg.snap_put = host_snap_put;
     h->g[gi].r = efs_raft_new(&cfg);
     if (!h->g[gi].r)
         return EFS_ERR_NOMEM;
@@ -3152,6 +3213,7 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
     h->g[gi].voters = boot;
     h->g[gi].host = h;
     h->g[gi].hosted = 0;
+    h->g[gi].snap_oversized = 0;
     h->g[gi].r = NULL;
     memset(h->g[gi].arc_idx, 0, sizeof(h->g[gi].arc_idx));
     memset(h->g[gi].arc_rc, 0, sizeof(h->g[gi].arc_rc));
