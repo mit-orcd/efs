@@ -1412,29 +1412,71 @@ the window continuously.
    pattern. I12 says **0**. Record the count in `results/stress/<id>-n1/`.
    This becomes the gate and stays in `tests/posix/posix_2client.py` as a
    real concurrent test (replace `peer_shared_pwrite`'s sequential shape).
-2. **Carry the base generation on the wire.** Add `uint64_t base_gen` to
-   `struct efs_chunk_rec`; the client fills it from the generation of the
-   chunk it fetched as its RMW base (it already learns placement +
-   generation on that fetch — find where `write.c` obtains the base and keep
-   the gen next to the dirty ranges in the dcache slot). A first write to an
-   empty chunk uses 0, which the apply layer already treats as "slot empty".
-   A whole-chunk aligned overwrite has no base; use the current committed
-   generation the client last saw (last-writer-wins is legal for a full
-   overwrite). This changes `EFS_BUILD_ID` — restart all four `efsd`
-   together, then remount clients.
-3. **Use it.** `p.expected_gen = rec->base_gen` in `server_raft_host_report`
-   (and the same in the batched path `host_pub_pack` if it fills `p`
-   separately). `EFS_ERR_STALE` must reach the client as a per-record status,
-   not fail the whole report — check how the report reply carries per-rec
-   results today and extend rather than invent.
-4. **Retry on the client.** On STALE for a chunk: refetch the committed
-   chunk, re-apply the dcache slot's dirty ranges onto it (the slot keeps
-   them — this is what `have_base`/dirty-range tracking exists for), PUT a
-   fresh candidate (`host_pub_candidate_gen` is content-hashed, so new bytes
-   mean a new candidate automatically), report again. Bound the retries;
-   exhaustion is `EIO`, never silent.
-5. Run the step-1 repro again: **0** lost blocks under 500×2 concurrent
-   writes. Then suite 2 one pair and 4 pairs.
+   Two facts that shape the fix (verified in the tree, do not re-derive):
+   **(a) the client never learns a chunk generation today** — the
+   `GETCHUNKS` reply is the same `struct efs_chunk_rec recs[]`, so one
+   field added to that one struct carries the generation in *both*
+   directions; **(b) the server drops per-record apply results on the
+   floor** — the batched publish loop in `raft_host.c` (`apply_publish_cmd`,
+   ~1339) does `(void)apply_one_publish(...)` and returns `EFS_OK` no matter
+   what, so an apply-time `EFS_ERR_STALE` is invisible to
+   `host_wait_applied` and the report replies OK. If you only do step 3
+   without step 4 the CAS will fire and the test will still fail.
+
+2. **Carry the generation on the wire.** Add `uint64_t base_gen` to
+   `struct efs_chunk_rec` (`include/efs/protocol.h` ~575; `test_wire.c`
+   round-trips it via `RT(struct efs_chunk_rec)` — keep it green). Then:
+   - server `GETCHUNKS` fill, `server_raft_host_getchunks`
+     (`raft_host.c` ~8818, right after `efs_meta_apply_get_chunk(... &ch)`):
+     `out->recs[out->count].base_gen = ch.generation;`
+   - client staging entry `struct efs_chunk_entry` (`include/efs/metadata.h`
+     ~22): add `uint64_t generation`; `apply_chunk_recs` (`src/client/ops.c`,
+     called from the `GETCHUNKS` loop ~226) stores it.
+   - client dcache slot `struct dcache_ent` (`src/client/write.c` ~1300): add
+     `uint64_t base_gen`. Set it where the RMW base is read
+     (`write.c` ~1187: after `export_chunk_copy(ino, ci, &ce)` succeeds it is
+     `ce.generation`; the `*from_zero_out = 1` branch is `0`). A **full
+     chunk-aligned overwrite** (the `aligned` path in `efs_fuse.c` ~2022 reads
+     no base) sets `UINT64_MAX` = "unconditional, last-writer-wins", which is
+     legal for a whole-chunk write. Never use the sentinel for an RMW.
+   - the slot must **keep its dirty ranges after the merge**: today
+     `write.c` ~1891 does `e->nrange = 0; if (!have_base) dcache_add_range`.
+     Track ranges for `have_base=1` too (if `DCACHE_NR` overflows, collapse
+     to one range covering the whole chunk — then the retry is a full
+     overwrite and needs no base). Without this the client cannot re-apply
+     *its own bytes* onto a fresh base in step 5.
+   - carry the slot's `base_gen` into the staging entry when the PUT lands
+     (`dcache_put_now` → `efs_export_set_chunk`), and copy it into the report
+     record where `crecs[cn]` is built (`write.c` ~505).
+   `EFS_BUILD_ID` changes — restart all four `efsd` together, then remount.
+3. **Check it on the leader, before proposing.** In `host_pub_pack`
+   (`raft_host.c` ~8336; it fills `struct efs_meta_publish p` around ~8432):
+   keep the existing idempotency short-circuit (identical `nodes`+`checksums`
+   → `EFS_OK`) *first*, then
+   `if (rec->base_gen != UINT64_MAX && rec->base_gen != got.generation) return EFS_ERR_STALE;`
+   and `p.expected_gen = (rec->base_gen == UINT64_MAX) ? got.generation : rec->base_gen;`.
+   This is a ReadIndex'd read, so the check is linearizable; the apply-time
+   CAS remains the safety net for the propose→apply race.
+4. **Make the safety net audible.** `apply_publish_cmd` returns the first
+   non-OK `rc` from `apply_one_publish` instead of `EFS_OK` (that value is
+   what lands in `arc_rc[]` and what `host_wait_applied` hands back).
+   `server_raft_host_report` maps `EFS_ERR_STALE` to a new
+   `#define EFS_INODE_RPC_STALE 11` reply status. The reply is a single
+   status for the whole report (`struct efs_msg_inode_reply`) — **do not add
+   per-record results to the wire**; a whole-report STALE is correct and
+   cheap because the client can find the stale records itself in step 5.
+5. **Retry on the client.** `efs_client_report_dirty` (`write.c` ~495)
+   already merges the dirty set back on any failure. On `EFS_INODE_RPC_STALE`:
+   for every ino in the failed report, re-run the `GETCHUNKS` pull (it now
+   returns generations); for every dirty dcache slot whose `base_gen` is not
+   `UINT64_MAX` and differs from the fresh generation, refetch the committed
+   chunk, overlay the slot's kept ranges, PUT a new candidate
+   (`host_pub_candidate_gen` is content-hashed, so new bytes mean a new
+   candidate automatically), update `base_gen`, and report again. Bound it
+   (8 tries); exhaustion is `EIO` on the `fsync`, never silent.
+6. Run the step-1 repro again: **0** lost blocks under 500×2 concurrent
+   writes. Then suite 2 one pair and 4 pairs, then `fio_honest_matrix.sh`
+   1-client (the aligned sentinel path must not cost throughput).
 
 - **Read:** [protocols/data.md](protocols/data.md) (sub-chunk RMW, candidate
   generations), [architecture.md §7.3](#architecture) and I12,
@@ -1445,9 +1487,10 @@ the window continuously.
 - **Forbidden:** "fixing" it by locking the chunk across clients (a
   distributed lock on the hot-file path is the serialization point §0 P1
   forbids, and it is not what the spec says). Documenting it as a deviation
-  — the spec already decided the opposite. Removing the server-side
-  `got.generation` fallback for records that carry no `base_gen` before
-  every client is upgraded.
+  — the spec already decided the opposite. Sending the `UINT64_MAX`
+  sentinel from any path that read a base (it turns the CAS off and
+  recreates the bug). Adding per-record status arrays to the report reply
+  (a whole-report STALE + client-side refetch is the decided shape).
 
 ##### W2 — `write()` is specified as durable-and-visible; the code buffers — ASK
 

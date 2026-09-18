@@ -98,8 +98,13 @@ refetch-and-retry on conflict, so that disjoint ranges from different clients
 both land. The implementation cannot fail that CAS: `struct efs_chunk_rec`
 carries no base generation, and the server fills `expected_gen` from the
 generation it reads immediately before proposing (`server_raft_host_report`).
-Cross-client exclusion is process-local only (`efs_wb_ino_lock`). The result is
-a silent lost update, and the write that was lost returned success.
+Two further facts make it silent end to end: the client never learns a chunk
+generation at all (`GETCHUNKS` returns the same generation-less record), and
+the batched publish apply discards per-record results (`(void)
+apply_one_publish`, returns `EFS_OK`), so even a CAS that did fire would not
+reach the report reply. Cross-client exclusion is process-local only
+(`efs_wb_ino_lock`). The result is a silent lost update, and the write that
+was lost returned success.
 
 This is the N-1 shared-file pattern — IOR-hard, MPI-IO, one HDF5 file per
 job — i.e. the workload an HPC parallel filesystem exists for. The suite-2
