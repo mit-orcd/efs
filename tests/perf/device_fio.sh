@@ -1,24 +1,28 @@
 #!/bin/bash
-# efs performance node suite: dd + fio against a mounted efs (or any dir).
-# Runs ON a single node. Appends result rows to $OUT (TSV).
+# dd + fio against a LOCAL block device / filesystem. Runs ON a single node
+# and appends result rows to $OUT (TSV). Used by perf_local_nvme.sh to
+# measure the /data1/01-06 NVMe ceiling.
 #
-# Usage: perf_node.sh <mnt> <out-tsv> [quick|full]
-#   mnt  : mounted filesystem dir to test (e.g. /tmp/efs-mount)
+# NOT for efs: the fio jobs are time_based with no end_fsync, which on efs
+# measures the client's userspace dcache, not the filesystem. Use
+# tests/stress/fio_honest_matrix.sh for efs.
+#
+# Usage: device_fio.sh <dir> <out-tsv> [quick|full]
+#   dir  : local filesystem dir to test (e.g. /data1/01/fio-ceil)
 #   out  : results TSV path
 #   mode : quick (small sizes, short runtimes) | full (default)
 #
 # Env overrides: DD_SIZE_MIB, FIO_SIZE, FIO_SIZE4K, FIO_RUNTIME, FIO_JOBS.
 set -u
-MNT=${1:?usage: perf_node.sh <mnt> <out-tsv> [quick|full]}
-OUT=${2:?usage: perf_node.sh <mnt> <out-tsv> [quick|full]}
+MNT=${1:?usage: device_fio.sh <dir> <out-tsv> [quick|full]}
+OUT=${2:?usage: device_fio.sh <dir> <out-tsv> [quick|full]}
 MODE=${3:-full}
 
 HOST=$(hostname -s)
 DIR="$MNT/perf/$HOST"
-# Logs go to a LOCAL dir (not the efs mount): the harness must not depend on
-# the very read-after-write path it is benchmarking. Only fio/dd DATA files
-# live under $DIR (on efs).
-LOGDIR=$(mktemp -d "/tmp/efs-perf-logs-$HOST.XXXXXX")
+# Logs go to /tmp, never under $DIR: the harness must not depend on the very
+# path it is benchmarking.
+LOGDIR=$(mktemp -d "/tmp/efs-dev-fio-$HOST.XXXXXX")
 trap 'rm -rf "$LOGDIR"' EXIT
 mkdir -p "$DIR" "$(dirname "$OUT")"
 

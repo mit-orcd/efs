@@ -46,7 +46,7 @@ int efs_lock_blocked(struct efs_kv *kv, const struct efs_lock_req *req,
                      struct efs_lock_owner *by);
 /* F_GETLK: no KV write. On OK, out->type is 0 (F_UNLCK) or the first
  * conflicting record (type/start/end/owner). Same-owner does not
- * conflict. */
+ * conflict. out is cleared first, so it must not alias req. */
 int efs_lock_getlk(struct efs_kv *kv, const struct efs_lock_req *req,
                    struct efs_lock_req *out);
 int efs_lock_owner_blocks(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,

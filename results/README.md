@@ -9,34 +9,21 @@ This tree records correctness + performance runs so regressions are visible in
 results/
   posix/<run_id>/
     xfs-baseline.tsv        # posix_suite on XFS (node9901:/data1/efs) — the reference
-    efs-<host>.tsv          # posix_suite on efs (<host>:/tmp/efs/mnt)
+    efs-<host>.tsv          # posix_suite on efs (<host>:/tmp/efs-mount)
     compare-<host>.txt      # compare.py: efs bugs = PASS on XFS, FAIL on efs
-  perf/
-    history.tsv             # one line per (run_id, suite, test): summed bw + #hosts
-    <run_id>/
-      perf-<host>.tsv       # per-node dd + fio rows
-      summary.tsv           # all nodes merged
-  nfs/
-    history.tsv             # Engaging scratch NFS baseline (not mixed into perf/)
-    <run_id>/
-      perf-<host>.tsv
-      summary.tsv
+  posix2/<run_id>/          # two-client visibility, same three files per pair
+  perf/<run_id>/            # honest fio matrix: raw.tsv + per-host job logs
   nvme/
     history.tsv             # local /data1/01-06 NVMe ceiling (fcstor003-006)
     <run_id>/
       nvme-<host>.tsv       # per-server, per-drive, serial + parallel
       summary.tsv
-  ewrite/
-    history.tsv             # ewrite.sh runs (30s efs sweep + full NFS 1 2)
-    <run_id>/
-      ewrite-<host>.tsv     # per-host rows + script chatter
-      summary.tsv           # ts host jobs wall_s bytes mib_s rc [dest]
-      notes.txt             # optional: dest, compare to efs
   meta/
     history.tsv             # efs-bench --meta ops/s (read+write phases)
     <run_id>/
       meta-<host>-wN.txt    # raw bench output per worker count
       summary.tsv           # run_id host workers phase rw ops wall_s ops_s
+  leaks/<run_id>/           # valgrind memcheck gate output
 ```
 
 ## Running
@@ -45,17 +32,21 @@ From the login node (needs ssh access to the test nodes):
 
 ```bash
 tests/run_tests.sh posix  fcstor007.ib            # POSIX vs XFS baseline
-tests/run_tests.sh perf   single fcstor007.ib quick
-tests/run_tests.sh perf   multi  quick            # all 9 pure clients
-tests/run_tests.sh all                            # posix + perf multi
-COMMIT=1 tests/run_tests.sh perf multi full       # + git-commit the results
+tests/run_tests.sh posix2 fcstor007.ib fcstor008.ib
 tests/run_tests.sh nvme full both                 # 4-server /data1/01-06 NVMe ceiling
-tests/run_tests.sh ewrite fcstor007.ib            # 30s ewrite.sh 1 2/4/8/16
 tests/run_tests.sh meta fcstor007.ib              # efs-bench --meta 1/4/16 workers
+tests/run_tests.sh leaks fcstor003.ib             # valgrind gate
+COMMIT=1 tests/run_tests.sh posix                 # + git-commit the results
+
+bash tests/stress/fio_honest_matrix.sh results/perf/<run_id>-honest
 ```
 
-`tests/posix/posix_suite.py <dir>` and `tests/perf/perf_node.sh <mnt> <out>`
-are self-contained and can also run standalone on any node.
+efs throughput comes from `fio_honest_matrix.sh` only. A `--direct=1` fio
+skips the kernel page cache but **not** the client's userspace dcache, so a
+`time_based` run without `end_fsync` measures memory bandwidth, not efs.
+
+`tests/posix/posix_suite.py <dir>` is self-contained and can also run
+standalone on any node.
 
 ## Baseline semantics (POSIX)
 
@@ -67,4 +58,4 @@ The XFS run is the source of truth for "correct" behaviour:
 ## TSV formats
 
 posix: `test \t result(PASS|FAIL|SKIP) \t detail`
-perf:  `ts \t host \t suite(dd|fio) \t test \t bw_mib_s \t iops \t rc`
+nvme:  `ts \t host \t suite(dd|fio) \t test \t bw_mib_s \t iops \t rc`

@@ -129,7 +129,7 @@ int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
                          efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                          char *path, size_t path_len);
 
-/* Unlink fragment + .sum at sharded and legacy flat-{ino} locations. */
+/* Unlink a fragment's data + .sum sidecar from every storage root. */
 void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index);
@@ -166,7 +166,7 @@ void server_handler_tls_cleanup(void);
 extern __thread int efs_tls_write_known_zero;
 
 /* Writer-thread: storage root index for the in-flight fragment write
- * (-1 = unset; store path helpers fall back to probing / legacy RR). */
+ * (-1 = unset; store path helpers fall back to probing / round-robin). */
 extern __thread int efs_tls_write_root;
 
 /* Which local --storage root already holds this fragment, or -1. */

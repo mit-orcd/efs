@@ -1511,12 +1511,16 @@ are unratified — bring them to the user before implementing.
 
 ##### W10 — Repo hygiene
 
-`results/` holds many untracked run directories and `tests/test_meta_batch` is
-an untracked stale binary. Decide per directory whether a run is a gate worth
-committing (the ones cited in this file are) or noise, and add a `.gitignore`
-entry for built test binaries. Run `make docs-check` after any doc edit —
-it regenerates `architecture-full.md` and validates links plus every
-`I1..I25` reference.
+`results/` holds ~45 untracked run directories. Decide per directory whether a
+run is a gate worth committing (the ones cited in this file are) or noise. The
+tracked `results/` history also still carries several hundred run directories
+that measured the deleted snapshot/2PC engine — they benchmark code that no
+longer exists and are recoverable from `git log`, so removing them is safe if
+you want the tree small.
+
+Run `make docs-check` after any doc edit: it regenerates
+`architecture-full.md` and validates links plus every `I1..I25` reference.
+`make test` must be fully green — there is no accepted-failure list.
 
 ---
 
@@ -5211,10 +5215,12 @@ Gate: full raft-affected unit set green on a node (`test_raft`,
 `test_session`, `test_kv`, `test_kv_lsm`, `test_wire`, `test_data` OK);
 `raft_host_smoke` PASS (`results/raft-smoke/34h.log`), including the
 after-crash leader-kill + blocking-waiter re-issue that the livelock had
-blocked. **Unrelated pre-existing bug found while gating (not from this
-change, present on HEAD):** `test_lock` has 6 `efs_lock_getlk` (F_GETLK)
-failures — a latent bug in the committed 10.5c-33 F_GETLK path; worth its
-own fix.
+blocked. **Unrelated bug found while gating (not from this change, present on
+HEAD):** `test_lock` had 6 `efs_lock_getlk` (F_GETLK) failures. Closed
+Sep 18: the test passed one `efs_lock_req` as both `req` and `out`, and
+`efs_lock_getlk` clears `out` before reading `req`, so the request zeroed
+itself. The production caller always passed distinct structs, so the
+F_GETLK path was correct all along.
 
 ### Sep 9 2026 — 10.5c-35a session record hosted
 

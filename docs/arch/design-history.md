@@ -481,10 +481,12 @@ Gate: full raft-affected unit set green on a node (`test_raft`,
 `test_session`, `test_kv`, `test_kv_lsm`, `test_wire`, `test_data` OK);
 `raft_host_smoke` PASS (`results/raft-smoke/34h.log`), including the
 after-crash leader-kill + blocking-waiter re-issue that the livelock had
-blocked. **Unrelated pre-existing bug found while gating (not from this
-change, present on HEAD):** `test_lock` has 6 `efs_lock_getlk` (F_GETLK)
-failures — a latent bug in the committed 10.5c-33 F_GETLK path; worth its
-own fix.
+blocked. **Unrelated bug found while gating (not from this change, present on
+HEAD):** `test_lock` had 6 `efs_lock_getlk` (F_GETLK) failures. Closed
+Sep 18: the test passed one `efs_lock_req` as both `req` and `out`, and
+`efs_lock_getlk` clears `out` before reading `req`, so the request zeroed
+itself. The production caller always passed distinct structs, so the
+F_GETLK path was correct all along.
 
 ## Sep 9 2026 — 10.5c-35a session record hosted
 

@@ -248,8 +248,9 @@ DELETED code — historical reference only, do not re-apply.**
 posix 196/201 with the exact known signature (dir_move_into_subdir
 EINVAL debt, virt_find_query .find unimplemented, deep-nesting/many-files
 15s timeouts, occasional concurrent_writes_disjoint EIO flake); unit
-green except the 6 PRE-EXISTING test_lock getlk failures
-(tests/test_lock.c:80-90). Inc 5 final: posix 196/201 in 28s.
+green (the 6 test_lock getlk failures were a test bug, closed Sep 18 —
+the test aliased req/out and `efs_lock_getlk` clears out first).
+Inc 5 final: posix 196/201 in 28s.
 **`tests/valgrind_leaks.sh` PORTED to raft + GATE GREEN** (same commit as
 this note): single-node efsd can't reach quorum, so every wire phase now
 runs a 3-node localhost raft group (EFS_MD_RAFT_N=3, ports PORT..PORT+2,
@@ -926,8 +927,8 @@ SAME env (TCP) proved it was transient environmental, not GC: pre-GC
 during the hunt: a pre-existing ~110 ms cross-group 2PC fan-out latency
 (unrelated to GC; cross-group txns multiply raft rounds).
 **GATES (fresh wipe + raft-mkfs, port 19820, TCP, `EFS_GC_DBG=1
-EFS_RAFT_OBS=1`):** unit 12/13 OK (`test_lock` = the 6 PRE-EXISTING
-getlk failures, tests/test_lock.c:80-90, no GC involvement).
+EFS_RAFT_OBS=1`):** unit 12/13 OK (`test_lock` getlk,
+since closed as a test bug).
 End-to-end on ino 4097: write 200000 B → ci0 frags on 003/004/005 + ci1
 on 004/005/006; `ftruncate(50000)`+fsync → content sha256 intact, **ci1
 fragments reclaimed** (g2 leader fcstor004 `gc del ci=1 frag=0/1/2
@@ -1008,8 +1009,8 @@ row has no pack fields; pack chunks publish under the parent DIRECTORY ino →
 INVAL); (5) SETATTR SIZE|MTIME pairing accepted. `EFS_RAFT_DBG=1` gates
 server report/publish debug logs.
 **Gate: 12/12 unit suites incl. test_sim; posix on the Raft mount 150/201
-(`results/posix/raft-step1-20260910-2133`).** `test_lock` has 6
-PRE-EXISTING failures (tests/test_lock.c:83-90, predate this work).
+(`results/posix/raft-step1-20260910-2133`).** `test_lock` had 6
+failures (a test bug, closed Sep 18).
 
 **STEP 1 FOLLOW-UP FIXES (Sep 10 PM, working tree on top of 3299e89) — gate
 182/201 (`results/posix/raft-step1-bug7-20260910`).** The 150→182 climb

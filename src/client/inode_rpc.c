@@ -159,8 +159,8 @@ static struct efs_conn *rpc_primary_conn(efs_node_id_t *nid_out)
  * invent an ino to fake this — crafted inos collide with ROOT and
  * mis-route GETCHUNKS/REPORT after extent sharding. */
 
-/* Raft host mode is the ONLY mode (step 11): the metadata engine is the
- * Raft+KV host, not the in-memory table. Shards map to Raft groups by the
+/* The metadata engine is the Raft+KV host, never the in-memory table.
+ * Shards map to Raft groups by the
  * compiled-in rule (odd shard -> group 0, even -> group 2;
  * include/efs/raft.h), and each group's voters are a fixed node set
  * (group 0 = nodes 1,2,3; group 2 = nodes 2,3,4 for a 4-node cluster).

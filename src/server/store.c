@@ -289,15 +289,6 @@ static inline char *path_append_frag(char *p, uint32_t chunk_index,
     return p;
 }
 
-/* Pre-sharding layout: .../exports/{id}/{ino}/{chunk>>10} */
-static int format_ino_chunk_dir_legacy(char *path, size_t path_len,
-                                       const char *root, efs_export_id_t export_id,
-                                       efs_ino_t ino, uint32_t chunk_index)
-{
-    return snprintf(path, path_len, "%s/data/exports/%u/%llu/%u",
-                    root, export_id, (unsigned long long)ino, chunk_index >> 10);
-}
-
 /* Legacy RR (chunk_index % N). Kept only as a create-path fallback when the
  * writer has not set efs_tls_write_root (e.g. inline sync without pool). */
 static uint32_t stripe_root_index(const struct efsd_server *s, uint32_t chunk_index)
@@ -321,32 +312,12 @@ static uint32_t write_root_index(const struct efsd_server *s, uint32_t chunk_ind
 static void fragment_path_at(struct efsd_server *s, uint32_t root_idx,
                              struct efs_export *ex, efs_ino_t ino,
                              uint32_t chunk_index, uint32_t fragment_index,
-                             char *path, size_t path_len);
-static void fragment_path_at_legacy(struct efsd_server *s, uint32_t root_idx,
-                                    struct efs_export *ex, efs_ino_t ino,
-                                    uint32_t chunk_index, uint32_t fragment_index,
-                                    char *path, size_t path_len);
-
-static void fragment_path_at(struct efsd_server *s, uint32_t root_idx,
-                             struct efs_export *ex, efs_ino_t ino,
-                             uint32_t chunk_index, uint32_t fragment_index,
                              char *path, size_t path_len)
 {
     int n = format_ino_chunk_dir(path, path_len, s->storage_paths[root_idx],
                                  ex->id, ino, chunk_index);
     if (n > 0 && (size_t)n + 32 <= path_len)
         path_append_frag(path + n, chunk_index, fragment_index);
-}
-
-static void fragment_path_at_legacy(struct efsd_server *s, uint32_t root_idx,
-                                    struct efs_export *ex, efs_ino_t ino,
-                                    uint32_t chunk_index, uint32_t fragment_index,
-                                    char *path, size_t path_len)
-{
-    char dir[8192];
-    format_ino_chunk_dir_legacy(dir, sizeof(dir), s->storage_paths[root_idx],
-                                ex->id, ino, chunk_index);
-    snprintf(path, path_len, "%s/%u.%u", dir, chunk_index, fragment_index);
 }
 
 int server_find_fragment_root(struct efsd_server *s, struct efs_export *ex,
@@ -360,37 +331,8 @@ int server_find_fragment_root(struct efsd_server *s, struct efs_export *ex,
                          sizeof(path));
         if (access(path, F_OK) == 0)
             return (int)ri;
-        fragment_path_at_legacy(s, ri, ex, ino, chunk_index, fragment_index,
-                                path, sizeof(path));
-        if (access(path, F_OK) == 0)
-            return (int)ri;
     }
     return -1;
-}
-
-/* Legacy local-EC shard names (removed); only unlinked for cleanup. */
-static void legacy_ec_shard_path(struct efsd_server *s, uint32_t root_idx,
-                                 struct efs_export *ex, efs_ino_t ino,
-                                 uint32_t chunk_index, uint32_t fragment_index,
-                                 char *path, size_t path_len)
-{
-    char dir[8192];
-    format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[root_idx], ex->id,
-                         ino, chunk_index);
-    snprintf(path, path_len, "%s/%u.%u.s%u", dir, chunk_index, fragment_index,
-             root_idx);
-}
-
-static void legacy_ec_shard_path_flat(struct efsd_server *s, uint32_t root_idx,
-                                      struct efs_export *ex, efs_ino_t ino,
-                                      uint32_t chunk_index, uint32_t fragment_index,
-                                      char *path, size_t path_len)
-{
-    char dir[8192];
-    format_ino_chunk_dir_legacy(dir, sizeof(dir), s->storage_paths[root_idx],
-                                ex->id, ino, chunk_index);
-    snprintf(path, path_len, "%s/%u.%u.s%u", dir, chunk_index, fragment_index,
-             root_idx);
 }
 
 int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
@@ -402,7 +344,7 @@ int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
     return 0;
 }
 
-/* Unlink fragment data + checksum sidecars (stripe + legacy + old EC shards). */
+/* Unlink a fragment's data + checksum sidecar from every storage root. */
 void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index)
@@ -417,19 +359,6 @@ void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
         unlink(path);
         snprintf(sum_path, sizeof(sum_path), "%s.sum", path);
         unlink(sum_path);
-
-        fragment_path_at_legacy(s, ri, ex, ino, chunk_index, fragment_index, path,
-                                sizeof(path));
-        unlink(path);
-        snprintf(sum_path, sizeof(sum_path), "%s.sum", path);
-        unlink(sum_path);
-
-        legacy_ec_shard_path(s, ri, ex, ino, chunk_index, fragment_index, path,
-                             sizeof(path));
-        unlink(path);
-        legacy_ec_shard_path_flat(s, ri, ex, ino, chunk_index, fragment_index, path,
-                                  sizeof(path));
-        unlink(path);
     }
 }
 
@@ -467,16 +396,12 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
     if (!s || !ex || !expect_sum)
         return EFS_ERR_INVAL;
     for (uint32_t ri = 0; ri < n; ri++) {
-        for (int legacy = 0; legacy < 2; legacy++) {
+        {
             int fd;
             ssize_t rn;
 
-            if (legacy)
-                fragment_path_at_legacy(s, ri, ex, ino, chunk_index,
-                                        fragment_index, path, sizeof(path));
-            else
-                fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index,
-                                 path, sizeof(path));
+            fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index,
+                             path, sizeof(path));
             snprintf(sum_path, sizeof(sum_path), "%s.sum", path);
             fd = open(sum_path, O_RDONLY);
             if (fd < 0) {
@@ -726,7 +651,6 @@ struct frag_loc {
     uint32_t chunk_index;
     uint32_t fragment_index;
     uint8_t root;
-    uint8_t legacy;
     uint8_t valid;
 };
 static __thread struct frag_loc frag_loc_cache[FRAG_LOC_CACHE_SIZE];
@@ -745,10 +669,10 @@ static uint32_t frag_loc_slot(efs_export_id_t export_id, efs_ino_t ino,
 /* Combined fragment+checksum read. Single probe pass per GET: the data
  * open() itself is the probe (no access()+open() doubling), and the .sum
  * sidecar rides the same resolved path instead of running a second
- * all-roots probe loop. Probe order matches server_find_fragment_root
- * (roots low to high, new layout before legacy) so duplicate-shadowing
- * semantics are unchanged. *sum_ok is set when the sidecar supplied the
- * sum (caller hashes otherwise). */
+ * all-roots probe loop. Roots are probed low to high, same as
+ * server_find_fragment_root, so duplicate-shadowing semantics match.
+ * *sum_ok is set when the sidecar supplied the sum (caller hashes
+ * otherwise). */
 int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index, uint8_t *data,
@@ -772,14 +696,9 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
             loc->chunk_index == chunk_index &&
             loc->fragment_index == fragment_index &&
             loc->root < n) {
-            if (loc->legacy)
-                format_ino_chunk_dir_legacy(dir, sizeof(dir),
-                                            s->storage_paths[loc->root],
-                                            ex->id, ino, chunk_index);
-            else
-                format_ino_chunk_dir(dir, sizeof(dir),
-                                     s->storage_paths[loc->root], ex->id,
-                                     ino, chunk_index);
+            format_ino_chunk_dir(dir, sizeof(dir),
+                                 s->storage_paths[loc->root], ex->id,
+                                 ino, chunk_index);
             plen = snprintf(path, sizeof(path), "%s/%u.%u", dir, chunk_index,
                             fragment_index);
             rc = read_file_bytes(path, data, want, &got, direct);
@@ -797,29 +716,12 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                 plen = snprintf(path, sizeof(path), "%s/%u.%u", dir,
                                 chunk_index, fragment_index);
                 rc = read_file_bytes(path, data, want, &got, direct);
-                if (rc == EFS_ERR_NOT_FOUND) {
-                    format_ino_chunk_dir_legacy(dir, sizeof(dir),
-                                                s->storage_paths[ri], ex->id,
-                                                ino, chunk_index);
-                    plen = snprintf(path, sizeof(path), "%s/%u.%u", dir,
-                                    chunk_index, fragment_index);
-                    rc = read_file_bytes(path, data, want, &got, direct);
-                    if (rc == EFS_OK) {
-                        loc->export_id = ex->id;
-                        loc->ino = ino;
-                        loc->chunk_index = chunk_index;
-                        loc->fragment_index = fragment_index;
-                        loc->root = (uint8_t)ri;
-                        loc->legacy = 1;
-                        loc->valid = 1;
-                    }
-                } else if (rc == EFS_OK) {
+                if (rc == EFS_OK) {
                     loc->export_id = ex->id;
                     loc->ino = ino;
                     loc->chunk_index = chunk_index;
                     loc->fragment_index = fragment_index;
                     loc->root = (uint8_t)ri;
-                    loc->legacy = 0;
                     loc->valid = 1;
                 }
                 if (rc != EFS_ERR_NOT_FOUND)
@@ -852,13 +754,6 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                         fragment_index);
     uint32_t got = 0;
     int rc = read_file_bytes(path, data, want, &got, direct);
-    if (rc == EFS_ERR_NOT_FOUND) {
-        format_ino_chunk_dir_legacy(dir, sizeof(dir), s->storage_paths[0],
-                                    ex->id, ino, chunk_index);
-        plen = snprintf(path, sizeof(path), "%s/%u.%u", dir, chunk_index,
-                        fragment_index);
-        rc = read_file_bytes(path, data, want, &got, direct);
-    }
     if (rc != EFS_OK)
         return rc;
     *data_len = got;

@@ -2748,12 +2748,10 @@ static int efs_fuse_statfs(const char *path, struct statvfs *stbuf)
     stbuf->f_blocks = total_logical / 512;
     stbuf->f_bfree = avail / 512;
     stbuf->f_bavail = avail / 512;
-    /* Inode counts: the old engine derived these from the local table and
-     * the EFSM page cap — both are gone (the local table is now a bounded
-     * cache, and the Raft+KV engine has no page cap). QUERY_STATS carries
-     * no file count post-step-11, so report the architecture's 2^32-object
-     * design target as a constant rather than a misleading cache-derived
-     * number. */
+    /* Inode counts: the local table is a bounded cache and QUERY_STATS
+     * carries no cluster file count, so report the architecture's
+     * 2^32-object design target rather than a cache-derived number that
+     * would only mislead. */
     stbuf->f_files = 1ULL << 32;
     stbuf->f_ffree = 1ULL << 32;
     stbuf->f_favail = 1ULL << 32;
@@ -4303,7 +4301,6 @@ ready:
     g_client.export.root.shard_bits = EFS_KV_SHARD_BITS;
     g_client.export.root.shard_count = 1u << EFS_KV_SHARD_BITS;
     g_client.export.chunk_size = EFS_DEFAULT_CHUNK_SIZE;
-    g_client.export.meta_fragmented = 0;
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_table_unlock();
     fprintf(stderr,
@@ -4406,8 +4403,7 @@ int main(int argc, char **argv)
     /* Bootstrap metadata from the Raft+KV host: a thin RAFT_STATUS poll
      * for kv_has_root, then a local shell export — the client has the
      * shard->group->voter mapping compiled in (include/efs/kv_key.h,
-     * include/efs/raft.h) and routes by it. There is no GET_META table
-     * fetch (step 11: the serialized-table engine is deleted). */
+     * include/efs/raft.h) and routes by it. No table is fetched. */
     printf("fetching metadata...\n");
     fflush(stdout);
     int rc = raft_bootstrap_metadata();
@@ -4450,10 +4446,8 @@ int main(int argc, char **argv)
          * to EFS_CLIENT_META_MB). Print cache occupancy, not a table scan. */
         struct efs_inode root;
         int rrc = efs_export_get_inode(&g_client.export, EFS_ROOT_INO, &root);
-        printf("meta ready gen=%llu ver=%u staged_rows=%llu staged_chunks=%llu "
+        printf("meta ready staged_rows=%llu staged_chunks=%llu "
                "staged_bytes=%llu root_get=%d mode=%o\n",
-               (unsigned long long)g_client.export.root.generation,
-               g_client.export.root.version,
                (unsigned long long)g_client.export.inode_count,
                (unsigned long long)g_client.export.chunk_count,
                (unsigned long long)efs_export_staged_bytes(&g_client.export),

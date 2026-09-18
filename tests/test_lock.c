@@ -50,7 +50,7 @@ static void test_conflict_and_domains(void)
     struct efs_kv *kv = efs_kv_mem_create();
     efs_ino_t ino = 0;
     struct efs_meta_row row;
-    struct efs_lock_req a, b;
+    struct efs_lock_req a, b, hit;
 
     CHECK(kv != NULL, "kv");
     CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
@@ -77,18 +77,18 @@ static void test_conflict_and_domains(void)
     CHECK(efs_lock_grant(kv, &b) == EFS_ERR_AGAIN, "OFD vs classic");
     fill_req(&b, ino, row.generation, EFS_LOCK_FCNTL, EFS_LOCK_EX, 5, 15,
              EFS_LOCK_PROC, 2, 2);
-    CHECK(efs_lock_getlk(kv, &b, &b) == EFS_OK, "getlk");
-    CHECK(b.type == EFS_LOCK_EX, "getlk type");
-    CHECK(b.start == 0 && b.end == 10, "getlk range");
-    CHECK(b.owner.id == 1, "getlk owner");
+    CHECK(efs_lock_getlk(kv, &b, &hit) == EFS_OK, "getlk");
+    CHECK(hit.type == EFS_LOCK_EX, "getlk type");
+    CHECK(hit.start == 0 && hit.end == 10, "getlk range");
+    CHECK(hit.owner.id == 1, "getlk owner");
     fill_req(&b, ino, row.generation, EFS_LOCK_FCNTL, EFS_LOCK_EX, 0, 10,
              EFS_LOCK_PROC, 1, 1);
-    CHECK(efs_lock_getlk(kv, &b, &b) == EFS_OK, "getlk self");
-    CHECK(b.type == 0, "getlk self unlck");
+    CHECK(efs_lock_getlk(kv, &b, &hit) == EFS_OK, "getlk self");
+    CHECK(hit.type == 0, "getlk self unlck");
     fill_req(&b, ino, row.generation, EFS_LOCK_FCNTL, EFS_LOCK_EX, 40, 50,
              EFS_LOCK_PROC, 2, 2);
-    CHECK(efs_lock_getlk(kv, &b, &b) == EFS_OK, "getlk miss");
-    CHECK(b.type == 0, "getlk miss unlck");
+    CHECK(efs_lock_getlk(kv, &b, &hit) == EFS_OK, "getlk miss");
+    CHECK(hit.type == 0, "getlk miss unlck");
     a.generation = row.generation + 1;
     CHECK(efs_lock_grant(kv, &a) == EFS_ERR_STALE, "stale gen");
     efs_kv_mem_free(kv);

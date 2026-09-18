@@ -565,9 +565,8 @@ int main(int argc, char **argv)
     server_writer_pool_stop(&server);
     server_usage_flush_dirty(&server);
 
-    /* Step 11: no flush/catchup/migration/verify threads to join — the
-     * Raft log is the durability boundary; the host stop replays nothing
-     * here (recovery is WAL replay at next start). */
+    /* Nothing to replay on the way down: the Raft log is the durability
+     * boundary and recovery is WAL replay at next start. */
     server_raft_host_stop();
     server_peer_pool_shutdown();
     pthread_mutex_destroy(&server.lock);

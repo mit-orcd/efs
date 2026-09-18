@@ -523,7 +523,7 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
         if (efs_client_mtime_is_pinned(ds.ino_keys[i]))
             irecs[in].flags = EFS_INO_REC_F_TIMES;
         irecs[in].atime = inode.atime;
-        /* pack fields stay zero: packing is gone with the old engine. */
+        /* pack fields stay zero: there is no packing. */
         in++;
     }
     efs_client_table_unlock();
@@ -2905,9 +2905,9 @@ int efs_client_write_no_replicate(efs_ino_t ino, uint64_t offset, size_t size, c
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
 
-    /* Pack staging is gone with the old engine (step 11): the KV row has
-     * no pack fields and chunks cannot publish under a directory ino, so
-     * small writes take the normal chunk path. */
+    /* No pack staging: the KV row has no pack fields and chunks cannot
+     * publish under a directory ino, so small writes take the chunk path
+     * like everything else. */
     return write_chunks_no_replicate(ino, offset, size, buf, old_size);
 }
 

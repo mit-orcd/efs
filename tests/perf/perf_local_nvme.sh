@@ -10,7 +10,6 @@
 #   parallel all 6 drives at once (host aggregate ceiling)
 #   both     serial then parallel (default)
 #
-# Reuses tests/perf/perf_node.sh so the job list matches the efs/NFS suites.
 # Output TSV columns:
 #   ts  host  path  layout  suite  test  bw_mib_s  iops  rc
 set -u
@@ -31,7 +30,7 @@ run_one() { # layout path
     local raw="/tmp/perf-nvme-$HOST-${p##*/}-$layout.tsv"
     mkdir -p "$mnt"
     rm -f "$raw"
-    bash "$HERE/perf_node.sh" "$mnt" "$raw" "$MODE"
+    bash "$HERE/device_fio.sh" "$mnt" "$raw" "$MODE"
     awk -v h="$HOST" -v p="$p" -v L="$layout" -F'\t' '
         NR==1 { next }
         $1 ~ /^PERF_NODE_DONE/ { next }

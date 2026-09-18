@@ -101,69 +101,13 @@ struct efs_child_vec {
     uint64_t cap;
 };
 
-/* EFSR (root) wire versions. v1 = no chunk_size; v2 = chunk_size after
- * page_count; v3 = features; v4 = two-region ino/chunk page counts; v5 = wider
- * page window; v6 = per-page fragment checksums; v7 = copy-on-write page
- * placement (page_cis[] + next_ci). */
-#define EFS_META_ROOT_VERSION_V1 1
-#define EFS_META_ROOT_VERSION_V2 2
-#define EFS_META_ROOT_VERSION_V3 3
-#define EFS_META_ROOT_VERSION_V4 4
-#define EFS_META_ROOT_VERSION_V5 5
-#define EFS_META_ROOT_VERSION_V6 6
-#define EFS_META_ROOT_VERSION_V7 7
-#define EFS_META_ROOT_VERSION_V8 8
-#define EFS_META_ROOT_VERSION EFS_META_ROOT_VERSION_V8
-
-/* Tiny fully-replicated export root. Bulk inode/chunk tables live in
- * 2+1 metadata pages under EFS_META_TABLE_INO (see efs_meta_page_*).
- * page_checksums is heap-allocated: page_count * EFS_NUM_FRAGMENTS * HASH. */
+/* What is left of the old fully-replicated export root: the shard geometry
+ * the staging table needs to route by shard. Nothing serializes, fetches or
+ * commits a root since the Raft+KV engine replaced the page flush. */
 struct efs_export_root {
-    uint32_t version;
-    efs_export_id_t id;
-    char name[EFS_MAX_NAME];
-    uint64_t next_ino;
-    uint64_t generation;
-    uint32_t blob_len;   /* ino_blob_len + chunk_blob_len */
-    uint32_t page_count; /* ino_page_count + chunk_page_count */
-    uint32_t chunk_size; /* data chunk size for this export */
-    uint32_t features;   /* EFS_FEATURE_* bitmask (EFSR v3+) */
-    /* EFSR v4: two-region page counts. v1–v3 leave chunk_* at 0 and treat
-     * the whole blob as the inode region (legacy single-space). */
-    uint32_t ino_blob_len;
-    uint32_t chunk_blob_len;
-    uint32_t ino_page_count;
-    uint32_t chunk_page_count;
-    uint8_t *page_checksums;
-    /* EFSR v6: inode-range shards + exclusive write lease.
-     * shard = ino & ((1 << shard_bits) - 1); root stays on shard 0.
-     * mkfs uses EFS_DEFAULT_SHARD_BITS (not 0). */
     uint32_t shard_count;
     uint32_t shard_bits;
-    uint64_t write_lease_id;
-    uint64_t write_lease_until_ms;
-    /* EFSR v7: copy-on-write page placement. page_cis[i] is the chunk_index
-     * (under EFS_META_TABLE_INO) holding page i's fragments; the flush writes
-     * each dirty page to a fresh ci = next_ci++ and records it here, so an
-     * interrupted flush never overwrites a chunk the committed root still
-     * references. next_ci is the next never-used chunk_index. Heap-allocated:
-     * page_count * sizeof(uint32_t). NULL for v6 and earlier (dual-slot). */
-    uint32_t *page_cis;
-    uint32_t next_ci;
-    /* EFSR v8: extra shards (shard > 0). Each has its own pages under
-     * efs_meta_shard_table_ino(id). v7 loads as extra_shard_count=0. */
-    uint32_t extra_shard_count;
-    uint32_t *extra_shard_ids;
-    struct efs_export_root *extra_roots;
 };
-
-/* Copy-on-write placement (EFSR v7): the root carries an explicit page_cis[]
- * so a flush writes each dirty page to a fresh chunk_index and commits the
- * root atomically. Returns nonzero if this root uses CoW placement. */
-static inline int efs_export_root_is_cow(const struct efs_export_root *r)
-{
-    return r->version >= EFS_META_ROOT_VERSION_V7 && r->page_cis != NULL;
-}
 
 struct efs_export {
     efs_export_id_t id;
@@ -180,14 +124,6 @@ struct efs_export {
     uint64_t inode_capacity;
     /* Names live in per-slab arenas (struct efs_ino_slab), not one table-wide
      * blob: a shared arena cannot return bytes when a slab is evicted. */
-    uint64_t dentry_bytes; /* legacy v6/v7 accounting; unused by v8 */
-    /* On-demand page source for an evicted slab. The server installs a
-     * reader that pulls page pi from the committed root's CoW fragments, so
-     * a trimmed slab is genuinely on NVMe rather than in a second RAM copy.
-     * NULL (client, unit tests) means faults can only come from flush_blob. */
-    int (*page_src)(void *ctx, struct efs_export *ex, uint32_t page_index,
-                    uint8_t page_out[EFS_META_PAGE_SIZE]);
-    void *page_src_ctx;
     struct efs_chunk_entry *chunks;
     uint64_t chunk_count;
     uint64_t chunk_capacity;
@@ -219,23 +155,6 @@ struct efs_export {
     uint64_t child_vec_count;
     uint64_t child_vec_cap;
 
-    /* When set, metadata.bin stores efs_export_root (EFSR); bulk tables are
-     * reconstructed from 2+1 pages. The in-memory inode/chunk arrays remain
-     * the working cache after rebuild. */
-    int meta_fragmented;
-    /* Set when root advanced but inode/chunk tables not yet rebuilt from pages.
-     * Cleared by server_rebuild_export_from_pages. */
-    int meta_needs_rebuild;
-    /* Server-only GET_META serialize cache (never on the wire, never in
-     * metadata.bin): serializing a multi-GiB table costs seconds under the
-     * server lock (9M+ strnlens) and resync storms otherwise pin the server
-     * at 100% CPU re-serializing the same generation. Valid while
-     * (gm_gen, gm_epoch) match the current root generation + server epoch;
-     * the handler hands out a memcpy under the lock (~0.1 s) instead. */
-    char *gm_blob;
-    size_t gm_blob_len;
-    uint64_t gm_gen;
-    uint64_t gm_epoch;
     /* Size/mtime updated via *_norollup; parent dir tree stats/times need
      * efs_export_ensure_rollups before serialize or incremental rollups. */
     int rollups_stale;
@@ -246,47 +165,16 @@ struct efs_export {
     uint8_t *pending_rollup_touch;
     uint64_t pending_rollup_count;
     uint64_t pending_rollup_cap;
-    /* Bumped when inode/chunk rows are swap-removed so incremental meta
-     * serialize knows the cached blob layout is stale. */
+    /* Bumped when rows are swap-removed, so a dirty-set snapshot can tell
+     * that slot indexes it captured no longer mean the same rows. */
     uint64_t layout_epoch;
     struct efs_export_root root;
-    /* EFSM blob version last serialized (5 = 420 B inodes, 6 = compact +
-     * variable dentries). Deserialize accepts both. */
-    uint32_t efsm_version;
-    /* Phase 3: on-demand tables for shard > 0. shard 0 is this export.
+    /* On-demand tables for shard > 0. shard 0 is this export;
      * shard_tabs[i] is NULL until first create/lookup in that shard. */
     struct efs_export **shard_tabs;
     uint32_t shard_tab_cap;
-    uint32_t create_rr;     /* spread-create cursor */
-    uint32_t create_stride; /* keep creates on the same owner (nlive) */
     uint32_t shard_id;
     uint64_t shard_tick;
-    int shard_dirty;
-    /* Bumped when the chunk table changes. Flush skips the O(chunks)
-     * snapshot/serialize when this matches flushed_chunk_epoch. */
-    uint64_t chunk_epoch;
-    uint64_t flushed_chunk_epoch;
-    /* Flush page-reuse cache: the exact region bytes the last successful
-     * flush of THIS table committed, tagged with the generation it committed
-     * at. The flush byte-compares each page against these instead of
-     * EC-encoding + blake3-hashing all of them just to discover ~97% are
-     * unchanged (that hashing was ~1 GB/s on the single flush thread and grew
-     * linearly with the table). Valid only while flush_blob_gen ==
-     * root.generation; any adopt/rebuild moves the root and retires it.
-     * flush_blob_gen == 0 means "written but the commit did not land". */
-    char *flush_blob;
-    uint32_t flush_blob_ino_len;
-    uint32_t flush_blob_chunk_len;
-    uint64_t flush_blob_gen;
-    /* Per-page dirty bits against flush_blob. flush_full=1 means every page
-     * is dirty (unlink swap, adopt, or a packing shuffle). Same-count rename
-     * marks the compact slot + all dentry pages so ecopy temp→final can stay
-     * incremental. A missed mark would commit stale CoW pages, so unlink
-     * and layout shuffles set flush_full rather than guessing. Create /
-     * set_chunk / setattr mark individual pages. */
-#define EFS_FLUSH_DIRTY_BYTES ((EFS_META_MAX_PAGES + 7) / 8)
-    uint8_t flush_page_dirty[EFS_FLUSH_DIRTY_BYTES];
-    int flush_full;
     /* Cross-client O_APPEND barrier (in-memory only, never serialized):
      * outstanding reserved-but-unflushed append end, open-addressed by ino.
      * The handler refuses a second reserve (BUSY) while one is unflushed.
@@ -300,100 +188,32 @@ struct efs_export {
     } append_rsv[EFS_APPEND_RSV_SLOTS];
 };
 
-#define EFS_SHARD_LRU_KEEP 64
-
-/* EFSM v5 wire sizes (fixed-width; keep in sync with metadata.c). */
-#define EFS_META_HDR_SIZE     284
-#define EFS_INODE_WIRE_SIZE   420
-/* EFSM v6: inode row without name / tree rollups. Names live in a packed
- * dentry tail in the same inode-region blob. */
-#define EFS_INODE_COMPACT_SIZE 124
-#define EFS_CHUNK_WIRE_SIZE   120
+/* Rollup bookkeeping flags for the deferred *_norollup paths. */
 #define EFS_ROLLUP_TOUCH      1
 #define EFS_ROLLUP_CREATE     2
-#define EFS_META_EFSM_V5      5
-#define EFS_META_EFSM_V6      6
-#define EFS_META_EFSM_V7      7
-#define EFS_META_EFSM_V8      8
-/* Current serialize (wire) version. v8 makes every inode page self-contained
- * so one page can be faulted from the CoW fragments on demand. */
-#define EFS_META_VERSION      EFS_META_EFSM_V8
 
-/* EFSM v8 inode row: the v6/v7 compact payload followed by the name inline.
- * v6/v7 kept names in a packed tail whose Nth entry could only be found by
- * walking the N-1 before it, so a fault could not read one page without the
- * whole region, and any name-length change shifted every later byte (a rename
- * re-dirtied the entire dentry area). Inlining costs disk and buys a page that
- * decodes standalone. 512 divides the 128 KiB page exactly, so slab si is
- * page 1+si with no drift, and 512-126 leaves room for a full EFS_MAX_NAME. */
+/* Inode row: the compact payload followed by the name inline. 512 divides the
+ * 128 KiB slab exactly, and 512-126 leaves room for a full EFS_MAX_NAME. */
 #define EFS_INODE_ROW_SIZE     512
-#define EFS_INODE_ROW_NAME_OFF 126 /* 124 payload + 2 name_len */
-#define EFS_INODE_ROW_NAME_MAX (EFS_INODE_ROW_SIZE - EFS_INODE_ROW_NAME_OFF)
 #define EFS_INO_SLAB_ROWS      (EFS_META_PAGE_SIZE / EFS_INODE_ROW_SIZE)
 
-static inline uint32_t efs_meta_slab_count(uint64_t inode_count)
-{
-    return (uint32_t)((inode_count + EFS_INO_SLAB_ROWS - 1) /
-                      EFS_INO_SLAB_ROWS);
-}
-
-/* v8 inode region: page 0 is the header, page 1+si holds slab si's rows.
- * Page 0 carries only 284 header bytes; spending the rest of it keeps
- * slot->page arithmetic exact, which is what makes on-demand faulting
- * possible. */
-static inline uint32_t efs_meta_slot_page(uint64_t slot)
-{
-    return (uint32_t)(1 + slot / EFS_INO_SLAB_ROWS);
-}
-
-static inline size_t efs_meta_row_off(uint64_t slot)
-{
-    return (size_t)efs_meta_slot_page(slot) * EFS_META_PAGE_SIZE +
-           (size_t)(slot % EFS_INO_SLAB_ROWS) * EFS_INODE_ROW_SIZE;
-}
-
-static inline size_t efs_meta_ino_region_bytes(uint64_t inode_count)
-{
-    return (size_t)(1 + efs_meta_slab_count(inode_count)) * EFS_META_PAGE_SIZE;
-}
-
-/* Inode-region dentry byte offset. v6 packs dentries immediately after the
- * compact inode rows, so appending one row memmoves the whole dentry tail and
- * re-dirties every page it spans (O(table) flush per create). v7 page-aligns
- * the dentry region: its offset depends only on inode_count, so a create that
- * does not cross a compact-page boundary leaves the dentry pages untouched
- * (O(1) flush). Deserialize recomputes the offset from the header's
- * inode_count, so no extra header field is needed. */
-static inline size_t efs_meta_dent_off(uint32_t efsm_version, uint64_t inode_count)
-{
-    size_t off = (size_t)EFS_META_HDR_SIZE +
-                 (size_t)inode_count * EFS_INODE_COMPACT_SIZE;
-    if (efsm_version >= EFS_META_EFSM_V7)
-        off = (off + (size_t)EFS_META_PAGE_SIZE - 1) &
-              ~((size_t)EFS_META_PAGE_SIZE - 1);
-    return off;
-}
-
-/* Inode/chunk page counts for the current table (v6 compact accounting). */
-void efs_export_meta_page_usage(const struct efs_export *ex,
-                                uint32_t *ino_pages, uint32_t *chunk_pages);
 uint32_t efs_export_shard_of(efs_ino_t ino, uint32_t shard_bits);
-/* Phase 3b: shard that stores the chunk mapping for (ino, chunk_index).
- * bits==0 → 0. Independent of inode-row placement (shard_of(ino)). */
+/* Shard that stores the chunk mapping for (ino, chunk_index). bits==0 → 0.
+ * Independent of inode-row placement (shard_of(ino)). */
 uint32_t efs_export_chunk_shard_of(efs_ino_t ino, uint32_t chunk_index,
                                    uint32_t shard_bits);
 /* Table that stores the chunk mapping (loads the shard on demand). */
 struct efs_export *efs_export_table_for_chunk(struct efs_export *ex,
                                               efs_ino_t ino,
                                               uint32_t chunk_index);
-/* Phase 3b: dentry shard for a spread directory. bits==0 → 0. */
+/* Dentry shard for a spread directory. bits==0 → 0. */
 uint32_t efs_export_dentry_shard_of(efs_ino_t parent, const char *name,
                                     uint32_t shard_bits);
 /* Derived from rollups: imm_files + imm_dirs >= EFS_DIR_SPREAD_MIN. */
 int efs_inode_dir_is_spread(const struct efs_inode *dir);
 int efs_export_dir_is_spread(struct efs_export *ex, efs_ino_t dir);
-/* Owner among live node ids (sorted or not). shard_count<=1 → lowest id
- * (today's meta primary). Else live[shard % nlive]. */
+/* Owner among live node ids (sorted or not). shard_count<=1 → lowest id;
+ * else live[shard % nlive]. */
 efs_node_id_t efs_shard_owner_of(uint32_t shard, uint32_t shard_count,
                                  const efs_node_id_t *live, uint32_t nlive);
 /* Table that owns `ino` (or parent for name ops). bits==0 → `ex`. */
@@ -539,16 +359,8 @@ int efs_export_foreach_child(struct efs_export *ex, efs_ino_t parent,
 /* Return 1 if the directory has no children, 0 otherwise. */
 int efs_export_dir_empty(struct efs_export *ex, efs_ino_t ino);
 
-void efs_export_flush_mark_full(struct efs_export *ex);
-void efs_export_flush_mark_ino_slot(struct efs_export *ex, uint64_t slot);
-void efs_export_flush_mark_chunk_slot(struct efs_export *ex, uint64_t slot);
-void efs_export_flush_mark_dentry_tail(struct efs_export *ex);
-void efs_export_flush_mark_dentry_all(struct efs_export *ex);
 /* Live-row name (empty string if slot is unused). */
 const char *efs_export_inode_name(const struct efs_export *ex, uint64_t slot);
-/* Decode one EFSM v8 row image into a live row (name included). */
-void efs_export_unpack_row(struct efs_export *ex, struct efs_inode_mem *row,
-                           const uint8_t *p);
 /* Fill an RPC/stack efs_inode including name[256] from a live slot. */
 void efs_export_inode_to_rpc(const struct efs_export *ex, uint64_t slot,
                              struct efs_inode *out);
@@ -557,17 +369,5 @@ int efs_export_chunk_slot(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_i
                           uint64_t *slot);
 int efs_export_needs_chunk_grow(const struct efs_export *ex);
 int efs_export_reserve_chunks(struct efs_export *ex, uint64_t extra);
-
-/* --- EFSR root leftovers: the client staging table still embeds a
- *     struct efs_export_root, but nothing serializes, fetches or commits
- *     one since the Raft+KV engine replaced the page flush. --- */
-
-uint32_t efs_meta_page_count_for_blob(uint32_t blob_len);
-
-/* Free page_checksums; safe on zeroed roots. */
-void efs_export_root_free(struct efs_export_root *root);
-
-/* Deep-copy root (including checksums). */
-int efs_export_root_copy(struct efs_export_root *dst, const struct efs_export_root *src);
 
 #endif

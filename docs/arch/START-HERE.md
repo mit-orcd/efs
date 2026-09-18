@@ -241,12 +241,16 @@ are unratified — bring them to the user before implementing.
 
 #### W10 — Repo hygiene
 
-`results/` holds many untracked run directories and `tests/test_meta_batch` is
-an untracked stale binary. Decide per directory whether a run is a gate worth
-committing (the ones cited in this file are) or noise, and add a `.gitignore`
-entry for built test binaries. Run `make docs-check` after any doc edit —
-it regenerates `architecture-full.md` and validates links plus every
-`I1..I25` reference.
+`results/` holds ~45 untracked run directories. Decide per directory whether a
+run is a gate worth committing (the ones cited in this file are) or noise. The
+tracked `results/` history also still carries several hundred run directories
+that measured the deleted snapshot/2PC engine — they benchmark code that no
+longer exists and are recoverable from `git log`, so removing them is safe if
+you want the tree small.
+
+Run `make docs-check` after any doc edit: it regenerates
+`architecture-full.md` and validates links plus every `I1..I25` reference.
+`make test` must be fully green — there is no accepted-failure list.
 
 ---
 

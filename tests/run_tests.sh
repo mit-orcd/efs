@@ -1,7 +1,11 @@
 #!/bin/bash
-# efs test orchestrator — runs the POSIX + perf suites on the fcstor test
-# nodes from the login node, collects results into the git-tracked results/
-# tree, and appends to results/perf/history.tsv for trend tracking.
+# efs test orchestrator — runs the POSIX suites and the local-device
+# benchmarks on the fcstor test nodes from the login node, collecting
+# results into the git-tracked results/ tree.
+#
+# For efs write/read throughput use tests/stress/fio_honest_matrix.sh,
+# NOT a time_based fio: --direct=1 skips only the kernel page cache, so a
+# time_based run with no end_fsync measures the client's userspace dcache.
 #
 # Usage:
 #   run_tests.sh posix [--keep] [--parallel] [efs-host ...]
@@ -12,10 +16,7 @@
 #                                                (default N=4, all 9 clients)
 #   run_tests.sh posixpersist [--crash] [host ...] write, unmount, remount, verify
 #                                                (durability across a remount)
-#   run_tests.sh perf single <host> [quick|full] perf on one client
-#   run_tests.sh perf multi [host ...] [quick|full]
-#                                                perf across clients (parallel)
-#   run_tests.sh all [efs-host ...]              posix + perf multi
+#   run_tests.sh all [efs-host ...]              posix + nvme ceiling
 #   run_tests.sh nvme [quick|full] [serial|parallel|both]
 #                                                local NVMe ceiling on efsd servers
 #   run_tests.sh meta [host]                     efs-bench --meta (1/4/16 workers)
@@ -528,60 +529,6 @@ cmd_posix2() { # [host-a] [host-b]  |  multi
     return $rc
 }
 
-# ----------------------------------------------------------------- perf ---
-perf_one() { # host mode outdir  (runs on the node, collects TSV back)
-    local h=$1 mode=$2 outdir=$3
-    push_tests "$h"
-    ssh_to "$PERF_SSH_SEC" "$h" "timeout -k 10 $((PERF_SSH_SEC - 20)) \
-        bash /tmp/efs/tests/perf/perf_node.sh '$EFS_MNT' \
-        /tmp/perf-$RUN_ID.tsv '$mode' >/dev/null 2>&1; cat /tmp/perf-$RUN_ID.tsv"
-}
-
-cmd_perf() { # single|multi [host ...] [quick|full]
-    local sub=$1; shift
-    local hosts=() mode=full
-    if [ "$sub" = single ]; then
-        hosts=("${1:?perf single needs a host}")
-        shift
-        [ $# -gt 0 ] && mode=$1
-    else # multi
-        for a in "$@"; do
-            case "$a" in quick|full) mode=$a ;; *) hosts+=("$a") ;; esac
-        done
-        [ ${#hosts[@]} -eq 0 ] && hosts=("${DEFAULT_HOSTS[@]}")
-    fi
-    local pdir="$RESULTS/perf/$RUN_ID"
-    mkdir -p "$pdir"
-    say "perf ($sub, $mode) on: ${hosts[*]}"
-
-    # make sure every client is mounted before benchmarking
-    for h in "${hosts[@]}"; do ensure_mounted "$h" || say "  WARN: $h not mounted"; done
-
-    # run all hosts in parallel, one TSV each
-    local pids=()
-    for h in "${hosts[@]}"; do
-        perf_one "$h" "$mode" "$pdir" > "$pdir/perf-${h%.ib}.tsv" 2>&1 &
-        pids+=($!)
-    done
-    for p in "${pids[@]}"; do wait "$p"; done
-
-    # aggregate into a run summary + append to history
-    local summary="$pdir/summary.tsv"
-    {
-        echo -e "run_id\thost\tsuite\ttest\tbw_mib_s\tiops\trc"
-        for h in "${hosts[@]}"; do
-            grep -vE '^(ts|===|PERF_NODE_DONE)' "$pdir/perf-${h%.ib}.tsv" 2>/dev/null | \
-                awk -v rid="$RUN_ID" -F'\t' 'NF>=7{print rid"\t"$2"\t"$3"\t"$4"\t"$5"\t"$6"\t"$7}'
-        done
-    } > "$summary"
-    # history: one line per (run, suite, test) summed across hosts
-    awk -F'\t' 'NR>1 && NF>=7 { k=$3"\t"$4; bw[k]+=$5; n[k]++ }
-        END { for (k in bw) printf "%s\t%s\t%.1f\t%d\n", "'"$RUN_ID"'", k, bw[k], n[k] }' \
-        "$summary" >> "$RESULTS/perf/history.tsv"
-    say "perf results in $pdir ; history appended"
-    column -t -s$'\t' "$summary" | head -40
-}
-
 # ----------------------------------------------------------- local nvme ---
 # Ceiling of the 4 efsd servers' /data1/01..06 NVMe mounts. Data lands in
 # <path>/fio-ceil only (never <path>/efs). efsd stays up; idle metadata
@@ -733,13 +680,12 @@ cmd_all() { # [efs-host ...]
     local hosts=("$@")
     [ ${#hosts[@]} -eq 0 ] && hosts=("${DEFAULT_HOSTS[@]}")
     cmd_posix "${hosts[@]}"
-    cmd_perf multi "${hosts[@]}"
+    cmd_nvme
 }
 
 main() {
     mkdir -p "$RESULTS/posix" "$RESULTS/posix2" "$RESULTS/perf" "$RESULTS/nvme" \
              "$RESULTS/meta" "$RESULTS/leaks"
-    touch "$RESULTS/perf/history.tsv"
     local cmd=${1:-}
     shift || true
     case "$cmd" in
@@ -747,7 +693,6 @@ main() {
         posixstress) cmd_posixstress "$@" ;;
         posixpersist) cmd_posixpersist "$@" ;;
         posix2) cmd_posix2 "$@" ;;
-        perf)  cmd_perf "$@" ;;
         nvme)  cmd_nvme "$@" ;;
         meta) cmd_meta "$@" ;;
         leaks) cmd_leaks "$@" ;;

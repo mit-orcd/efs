@@ -477,16 +477,14 @@ send_reply:
             reply.quota = g_server->quota;
             struct efs_node *local = server_local_node(g_server);
             reply.used = local ? local->used : 0;
-            /* The drain/shrink/leave state machine went away with the
-             * migration engine (step 11); the wire field stays, always
-             * EFS_NODE_STATE_ACTIVE. */
+            /* No drain/leave state machine; always ACTIVE. */
             reply.state = 0;
             pthread_mutex_unlock(&g_server->lock);
             efs_conn_send_msg(conn, EFS_MSG_STATUS_REPLY, &reply, sizeof(reply));
             break;
         }
         case EFS_MSG_HEAL_STATUS: {
-            /* Step 11: no table rebuilds — the KV has no heal state. */
+            /* The KV has no heal state: nothing rebuilds a table. */
             struct efs_msg_heal_status_reply reply;
             memset(&reply, 0, sizeof(reply));
             efs_conn_send_msg(conn, EFS_MSG_HEAL_STATUS_REPLY, &reply,
@@ -502,9 +500,8 @@ send_reply:
                     uint64_t new_quota = g_server->quota - req->amount;
                     struct efs_node *local = server_local_node(g_server);
                     uint64_t used = local ? local->used : 0;
-                    /* The data-migration engine that used to drain usage
-                     * below the new quota is deleted (step 11). Shrinking
-                     * below current usage is refused outright. */
+                    /* Nothing drains usage down to a new quota, so a
+                     * shrink below current usage is refused outright. */
                     if (used > new_quota) {
                         pthread_mutex_unlock(&g_server->lock);
                         efs_conn_send_msg(conn, EFS_MSG_SHRINK_QUOTA_REPLY,
@@ -845,11 +842,10 @@ send_reply:
             efs_conn_send_msg(conn, EFS_MSG_RAFT_STATUS_REPLY, &r, sizeof(r));
             break;
         }
-        /* --- Old-engine control plane, deleted with the snapshot/2PC
-         * metadata engine (roadmap step 11). A deleted handler must still
-         * REPLY — silence costs the sender a full recv timeout (the client
-         * GET_FEATURES poll is 2 s x node_count and wedged every
-         * .stats/.find stat for ~16 s until this was added). */
+        /* --- Retired control plane. These opcodes carry no state any
+         * more, but they MUST still REPLY: silence costs the sender a full
+         * recv timeout (the client GET_FEATURES poll is 2 s x node_count,
+         * which wedged every .stats/.find stat for ~16 s). */
         case EFS_MSG_GET_FEATURES: {
             /* No per-export feature state in the KV yet; defaults apply. */
             struct efs_msg_features_reply r;
