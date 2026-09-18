@@ -4,10 +4,11 @@ Scripts only — they do **not** start `efsd` or mount FUSE. The 4-node cluster
 (`fcstor003`–`006`) and 9 client mounts (`fcstor007`–`015` at `/tmp/efs-mount`)
 must already be up.
 
-This drives **IOR easy + IOR hard** through the official
-[IO-500 C driver](https://github.com/IO500/io500). mdtest and find are off.
-These runs are **not** valid IO-500 list submissions (stonewall &lt; 300s and
-incomplete phase set).
+This drives **IOR easy + IOR hard + mdtest** through the official
+[IO-500 C driver](https://github.com/IO500/io500). find and
+`ior-rnd4K-easy-read` are off. These runs are **not** valid IO-500
+list submissions (stonewall &lt; 300s and incomplete phase set).
+First 9×1 debug: `results/io500/20260918-debug-9x1/`.
 
 ## Do you need Slurm? OpenMPI?
 

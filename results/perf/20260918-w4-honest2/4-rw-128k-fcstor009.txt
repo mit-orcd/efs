@@ -1,0 +1,6 @@
+FUSE_CHECK fstype=fuse.efs-fuse mnt=/tmp/efs-mount
+FUSE_OK
+rw-128k: (g=0): rw=randwrite, bs=(R) 128KiB-128KiB, (W) 128KiB-128KiB, (T) 128KiB-128KiB, ioengine=psync, iodepth=1
+...
+fio-3.35
+Starting 9 processes

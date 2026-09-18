@@ -3007,6 +3007,25 @@ int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
     return EFS_OK;
 }
 
+int efs_export_set_chunk_gen(struct efs_export *ex, efs_ino_t ino,
+                             uint32_t chunk_index, uint64_t generation)
+{
+    if (!ex)
+        return EFS_ERR_INVAL;
+    if (export_is_sharded_root(ex)) {
+        struct efs_export *tab = efs_export_table_for_chunk(ex, ino,
+                                                           chunk_index);
+        if (tab && tab != ex)
+            return efs_export_set_chunk_gen(tab, ino, chunk_index, generation);
+    }
+
+    uint64_t pos = 0;
+    if (chunk_idx_get(ex, ino, chunk_index, &pos) != 0)
+        return EFS_ERR_NOT_FOUND;
+    ex->chunks[pos].generation = generation;
+    return EFS_OK;
+}
+
 int efs_export_get_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index,
                          struct efs_chunk_entry *out)
 {

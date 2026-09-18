@@ -319,9 +319,15 @@ static int disk_save_snap(void *ctx, uint64_t last_index, uint64_t last_term)
     if (!g)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&g->d->mu);
-    if (last_index < g->snap_idx ||
-        (last_index > g->snap_idx &&
-         last_index - g->snap_idx > (uint64_t)g->n)) {
+    /* Only a backwards snapshot is invalid. A snapshot AHEAD of the log end
+     * is the whole point of InstallSnapshot onto a behind/fresh follower:
+     * raft_group_snap clamps the drop to what the log actually holds (same
+     * as raft_mem), and replay of this record applies the same clamp. The
+     * old "last_index - snap_idx > n" guard rejected exactly that case,
+     * which wedged any follower whose log never held the snapshotted
+     * prefix (on_snap_req got INVAL after a successful snap_put and
+     * returned without replying — the leader retried forever). */
+    if (last_index < g->snap_idx) {
         pthread_mutex_unlock(&g->d->mu);
         return EFS_ERR_INVAL;
     }

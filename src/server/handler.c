@@ -250,7 +250,8 @@ void server_handle_conn(struct efs_conn *conn)
                 struct efs_msg_get_chunk *req = payload;
                 pthread_mutex_lock(&g_server->lock);
                 struct efs_export *ex =
-                    server_export_acquire_locked(g_server, req->export_id);
+                    server_export_acquire_or_create_locked(g_server,
+                                                          req->export_id);
                 pthread_mutex_unlock(&g_server->lock);
 
                 uint32_t frag_len = server_frag_len(ex, req->ino);
@@ -294,6 +295,7 @@ void server_handle_conn(struct efs_conn *conn)
                         .ino = req->ino,
                         .chunk_index = req->chunk_index,
                         .fragment_index = req->fragment_index,
+                        .chunk_generation = req->chunk_generation,
                     };
                     data_len = server_frag_len(ex, req->ino);
                     efs_store_nvme_bind(&st, &nctx, g_server, ex);
@@ -344,18 +346,11 @@ send_reply:
                 const uint8_t *data =
                     (const uint8_t *)payload + sizeof(struct efs_msg_put_chunk);
                 pthread_mutex_lock(&g_server->lock);
+                /* Auto-create so GET after restart (no PUT yet) and
+                 * meta-page PUTs before the EFSR root both work. */
                 struct efs_export *ex =
-                    server_export_acquire_locked(g_server, req->export_id);
-                /* Auto-create export shell so meta-page PUTs can land before
-                 * the EFSR root arrives (mkfs / first flush race). */
-                if (!ex && g_server->export_count < EFS_MAX_EXPORTS) {
-                    ex = &g_server->exports[g_server->export_count++];
-                    efs_export_init(ex, req->export_id, "pending");
-                    ex->id = req->export_id;
-                    int nidx = server_export_index_locked(g_server, ex);
-                    if (nidx >= 0)
-                        g_server->export_inflight[nidx]++;
-                }
+                    server_export_acquire_or_create_locked(g_server,
+                                                          req->export_id);
                 /* Learn data chunk_size from first non-meta PUT when still
                  * default (peer may not have applied EFSR yet). */
                 if (ex && !efs_ino_is_meta_table(req->ino) &&
@@ -383,6 +378,7 @@ send_reply:
                             .ino = req->ino,
                             .chunk_index = req->chunk_index,
                             .fragment_index = req->fragment_index,
+                            .chunk_generation = req->chunk_generation,
                         };
                         efs_store_nvme_bind(&st, &nctx, g_server, ex);
                         rc = efs_store_put(&st, &fid, data, expect,
@@ -422,7 +418,7 @@ send_reply:
                     fid.export_id = ex->id;
                     fid.ino = req->ino;
                     fid.inode_generation = 0;
-                    fid.chunk_generation = 0;
+                    fid.chunk_generation = req->chunk_generation;
                     fid.chunk_index = req->chunk_index;
                     fid.fragment_index = req->fragment_index;
                     fid.coding_profile_id = 0;

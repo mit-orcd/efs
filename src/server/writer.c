@@ -21,6 +21,7 @@ struct writer_job {
     uint32_t chunk_index;
     uint32_t fragment_index;
     uint32_t path_index; /* local --storage root chosen for this job */
+    uint64_t chunk_generation; /* 0 = legacy `{ci}.{fi}` */
     const uint8_t *data;
     uint32_t data_len;
     const uint8_t *checksum;
@@ -126,6 +127,7 @@ static int run_job(struct writer_job *job)
     int rc = EFS_OK;
     int saved_zero = efs_tls_write_known_zero;
     int saved_root = efs_tls_write_root;
+    uint64_t saved_gen = efs_tls_chunk_gen;
     if (job->op == WRITER_OP_FRAGMENT_WITH_SUM && job->checksum &&
         job->data_len > 0) {
         uint8_t zero_ck[EFS_HASH_SIZE];
@@ -137,6 +139,7 @@ static int run_job(struct writer_job *job)
     }
     if (efs_tls_write_root < 0)
         efs_tls_write_root = (int)pick_write_path(job);
+    efs_tls_chunk_gen = job->chunk_generation;
 
     switch (job->op) {
     case WRITER_OP_FRAGMENT_WITH_SUM:
@@ -157,6 +160,7 @@ static int run_job(struct writer_job *job)
     }
     efs_tls_write_known_zero = saved_zero;
     efs_tls_write_root = saved_root;
+    efs_tls_chunk_gen = saved_gen;
     return rc;
 }
 
@@ -352,6 +356,7 @@ int server_write_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
     job.ino = ino;
     job.chunk_index = chunk_index;
     job.fragment_index = fragment_index;
+    job.chunk_generation = efs_tls_chunk_gen;
     job.data = data;
     job.data_len = data_len;
     job.checksum = checksum;

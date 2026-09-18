@@ -15,12 +15,17 @@ static int nvme_get(void *ctx, const struct efs_frag_id *id,
     int *ok = sum_ok ? sum_ok : &dummy_ok;
     uint8_t *ck = sum ? sum : dummy_sum;
 
+    int rc;
+
     if (!n || !n->s || !n->ex || !id || !len)
         return EFS_ERR_INVAL;
     if (id->export_id != n->ex->id)
         return EFS_ERR_INVAL;
-    return server_read_fragment_with_sum(n->s, n->ex, id->ino, id->chunk_index,
-                                         id->fragment_index, buf, len, ck, ok);
+    efs_tls_chunk_gen = id->chunk_generation;
+    rc = server_read_fragment_with_sum(n->s, n->ex, id->ino, id->chunk_index,
+                                       id->fragment_index, buf, len, ck, ok);
+    efs_tls_chunk_gen = 0;
+    return rc;
 }
 
 static int nvme_put(void *ctx, const struct efs_frag_id *id,
@@ -28,18 +33,23 @@ static int nvme_put(void *ctx, const struct efs_frag_id *id,
                     const uint8_t sum[EFS_HASH_SIZE])
 {
     struct efs_nvme_store *n = ctx;
+    int rc;
 
     if (!n || !n->s || !n->ex || !id || (len > 0 && !buf))
         return EFS_ERR_INVAL;
     if (id->export_id != n->ex->id)
         return EFS_ERR_INVAL;
+    efs_tls_chunk_gen = id->chunk_generation;
     if (sum)
-        return server_write_fragment_with_sum(n->s, n->ex, id->ino,
-                                              id->chunk_index,
-                                              id->fragment_index, buf, len,
-                                              sum);
-    return server_write_fragment_sync(n->s, n->ex, id->ino, id->chunk_index,
-                                      id->fragment_index, buf, len);
+        rc = server_write_fragment_with_sum(n->s, n->ex, id->ino,
+                                            id->chunk_index,
+                                            id->fragment_index, buf, len,
+                                            sum);
+    else
+        rc = server_write_fragment_sync(n->s, n->ex, id->ino, id->chunk_index,
+                                        id->fragment_index, buf, len);
+    efs_tls_chunk_gen = 0;
+    return rc;
 }
 
 static int nvme_del(void *ctx, const struct efs_frag_id *id)
@@ -50,8 +60,10 @@ static int nvme_del(void *ctx, const struct efs_frag_id *id)
         return EFS_ERR_INVAL;
     if (id->export_id != n->ex->id)
         return EFS_ERR_INVAL;
+    efs_tls_chunk_gen = id->chunk_generation;
     server_unlink_fragment_files(n->s, n->ex, id->ino, id->chunk_index,
                                  id->fragment_index);
+    efs_tls_chunk_gen = 0;
     return EFS_OK;
 }
 
@@ -59,14 +71,18 @@ static int nvme_del_if_sum(void *ctx, const struct efs_frag_id *id,
                            const uint8_t expect_sum[EFS_HASH_SIZE])
 {
     struct efs_nvme_store *n = ctx;
+    int rc;
 
     if (!n || !n->s || !n->ex || !id || !expect_sum)
         return EFS_ERR_INVAL;
     if (id->export_id != n->ex->id)
         return EFS_ERR_INVAL;
-    return server_delete_fragment_if_sum(n->s, n->ex, id->ino,
-                                         id->chunk_index, id->fragment_index,
-                                         expect_sum);
+    efs_tls_chunk_gen = id->chunk_generation;
+    rc = server_delete_fragment_if_sum(n->s, n->ex, id->ino,
+                                       id->chunk_index, id->fragment_index,
+                                       expect_sum);
+    efs_tls_chunk_gen = 0;
+    return rc;
 }
 
 static void nvme_destroy(void *ctx)

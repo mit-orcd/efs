@@ -1,0 +1,12 @@
+IO-500 ior (stonewall 30 s) 9×1. FUSE_OK TCP at start.
+Aborted in ior-easy-write close/fsync after 545 s.
+IOR: fsync(fd) failed then close() failed; rank 3 (fcstor010) MPI_ABORT.
+No RESULT line. result_summary empty.
+
+efsd on fcstor004: report-split nrec=125000 rc=-13 (EFS_ERR_BUSY)
+then apply publish rc=-14 (STALE) for ino=33068 / 28972, 88% CPU.
+Same class as loaded 50g end_fsync EIO — do not raise EFS_IO_TIMEOUT_MS.
+1 s easy-write (14 GiB) fsyncs; 30 s (~125k pubs) does not.
+
+Clients remount-stat hung while apply was catching up (waiting=2).
+Do not bounce efsd unless heartbeats die. Do not wipe.

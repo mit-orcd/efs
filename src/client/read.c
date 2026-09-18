@@ -44,6 +44,7 @@ struct frag_get_job {
     uint8_t *out;
     uint32_t len;
     int rc;
+    uint64_t chunk_generation;
     struct frag_batch *bp;
 };
 
@@ -52,7 +53,8 @@ static void *frag_get_thread(void *arg)
     struct frag_get_job *j = arg;
     uint8_t sum[EFS_HASH_SIZE];
     j->rc = efs_client_get_fragment(j->node, j->ino, j->chunk_index, j->fi,
-                                    j->frag_len, j->out, &j->len, sum);
+                                    j->frag_len, j->out, &j->len, sum,
+                                    j->chunk_generation);
     return NULL;
 }
 
@@ -209,6 +211,11 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
                                                    int treat_zero_cksum_as_hole)
 {
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+    uint8_t *frag_buf;
+    uint8_t *frags[EFS_NUM_FRAGMENTS];
+    struct efs_chunk_entry ce;
+    int have_ce;
+
     efs_place_fragments(g_client.nodes, g_client.node_count, ino, chunk_index,
                         nodes);
 
@@ -217,34 +224,31 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
 
     /* Heap / TLS: three fragments on a FUSE/main stack overflows easily and
      * SIGSEGV handlers without an alt stack cannot even log. */
-    uint8_t *frag_buf = decode_frag_scratch(EFS_NUM_FRAGMENTS * frag_len);
+    frag_buf = decode_frag_scratch(EFS_NUM_FRAGMENTS * frag_len);
     if (!frag_buf)
         return EFS_ERR_NOMEM;
-    uint8_t *frags[EFS_NUM_FRAGMENTS];
     frag_ptrs(frag_buf, frag_len, frags);
 
-    {
-        struct efs_chunk_entry ce;
-        pthread_mutex_lock(&g_client.idx_mu);
-        int have_ce = (efs_export_get_chunk(&g_client.export, ino, chunk_index,
-                                           &ce) == 0);
-        pthread_mutex_unlock(&g_client.idx_mu);
-        if (have_ce) {
-            uint8_t zck[EFS_HASH_SIZE];
-            efs_hash_zero_fragment_len(frag_len, zck);
-            if (treat_zero_cksum_as_hole &&
-                memcmp(ce.checksums[0], zck, EFS_HASH_SIZE) == 0 &&
-                memcmp(ce.checksums[1], zck, EFS_HASH_SIZE) == 0 &&
-                memcmp(ce.checksums[2], zck, EFS_HASH_SIZE) == 0) {
-                memset(chunk_out, 0, chunk_size);
-                return EFS_OK;
-            }
-            /* Writes may have steered a fragment onto a spare when a stripe
-             * member was down. The chunk table is the source of truth. */
-            if (ce.fragment_nodes[0] || ce.fragment_nodes[1] ||
-                ce.fragment_nodes[2])
-                memcpy(nodes, ce.fragment_nodes, sizeof(nodes));
+    memset(&ce, 0, sizeof(ce));
+    pthread_mutex_lock(&g_client.idx_mu);
+    have_ce = (efs_export_get_chunk(&g_client.export, ino, chunk_index,
+                                    &ce) == 0);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    if (have_ce) {
+        uint8_t zck[EFS_HASH_SIZE];
+        efs_hash_zero_fragment_len(frag_len, zck);
+        if (treat_zero_cksum_as_hole &&
+            memcmp(ce.checksums[0], zck, EFS_HASH_SIZE) == 0 &&
+            memcmp(ce.checksums[1], zck, EFS_HASH_SIZE) == 0 &&
+            memcmp(ce.checksums[2], zck, EFS_HASH_SIZE) == 0) {
+            memset(chunk_out, 0, chunk_size);
+            return EFS_OK;
         }
+        /* Writes may have steered a fragment onto a spare when a stripe
+         * member was down. The chunk table is the source of truth. */
+        if (ce.fragment_nodes[0] || ce.fragment_nodes[1] ||
+            ce.fragment_nodes[2])
+            memcpy(nodes, ce.fragment_nodes, sizeof(nodes));
     }
 
     int order[EFS_NUM_FRAGMENTS] = {0, 1, 2};
@@ -285,6 +289,7 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
             jobs[i].out = frags[fi];
             jobs[i].len = 0;
             jobs[i].rc = EFS_ERR_NET;
+            jobs[i].chunk_generation = have_ce ? ce.generation : 0;
         }
         frag_pool_run(jobs, 2);
         for (int i = 0; i < 2; i++) {
@@ -305,6 +310,7 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
             jobs[2].out = frags[fi];
             jobs[2].len = 0;
             jobs[2].rc = EFS_ERR_NET;
+            jobs[2].chunk_generation = have_ce ? ce.generation : 0;
             frag_get_thread(&jobs[2]); /* single fetch: run inline */
             if (jobs[2].rc == 0 && jobs[2].len == frag_len && !have[fi]) {
                 have[fi] = 1;
@@ -361,28 +367,50 @@ int efs_client_fetch_published_chunk(efs_ino_t ino, uint32_t ci,
     if (!buf || !cs || len != cs)
         return EFS_ERR_INVAL;
     int published = 0;
+    int stub = 0;
+    struct efs_chunk_entry ce;
+    uint32_t frag_len = data_frag_size();
+    uint8_t zck[EFS_HASH_SIZE];
+
     pthread_mutex_lock(&g_client.idx_mu);
-    published = (efs_export_get_chunk(&g_client.export, ino, ci, NULL) == 0);
+    published = (efs_export_get_chunk(&g_client.export, ino, ci, &ce) == 0);
     pthread_mutex_unlock(&g_client.idx_mu);
-    /* Always GET. A local mapping miss (adopt drop / evict) used to
-     * zero-fill and the next PUT wiped sibling append lines. An all-zero
-     * checksum stub is a read hole, not a safe merge base. */
-    int rc = efs_client_decode_placed_chunk_attempts(ino, ci, buf, cs,
-                                                     data_frag_size(), 2, 0);
-    if (rc == EFS_OK)
-        return EFS_OK;
-    if (!published) {
+    /* Hole, not a GET. Reasons a GET here is DECODE:
+     *  - truncate stubs (zero digest / all-zero checksums, no objects)
+     *  - size grown with no chunk map (ftruncate)
+     *  - recycled ino leftover `{ci}.{fi}` (store keys ignore inode gen)
+     * A published non-stub mapping is a real object; fail loud. */
+    if (published) {
+        efs_hash_zero_fragment_len(frag_len, zck);
+        if ((memcmp(ce.checksums[0], zck, EFS_HASH_SIZE) == 0 &&
+             memcmp(ce.checksums[1], zck, EFS_HASH_SIZE) == 0 &&
+             memcmp(ce.checksums[2], zck, EFS_HASH_SIZE) == 0) ||
+            (efs_bytes_are_zero(ce.checksums[0], EFS_HASH_SIZE) &&
+             efs_bytes_are_zero(ce.checksums[1], EFS_HASH_SIZE) &&
+             efs_bytes_are_zero(ce.checksums[2], EFS_HASH_SIZE)))
+            stub = 1;
+        else {
+            efs_hash_zero_fragment(zck);
+            if (memcmp(ce.checksums[0], zck, EFS_HASH_SIZE) == 0 &&
+                memcmp(ce.checksums[1], zck, EFS_HASH_SIZE) == 0 &&
+                memcmp(ce.checksums[2], zck, EFS_HASH_SIZE) == 0)
+                stub = 1;
+        }
+    }
+    if (stub || !published) {
         memset(buf, 0, len);
         return EFS_OK;
     }
-    return rc;
+    return efs_client_decode_placed_chunk_attempts(ino, ci, buf, cs,
+                                                   frag_len, 2, 0);
 }
 
 
 int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk_index,
                             uint32_t fragment_index, uint32_t expected_frag_len,
                             uint8_t *data, uint32_t *data_len,
-                            uint8_t checksum[EFS_HASH_SIZE])
+                            uint8_t checksum[EFS_HASH_SIZE],
+                            uint64_t chunk_generation)
 {
     if (node_id == 0 || expected_frag_len == 0)
         return EFS_ERR_INVAL;
@@ -409,6 +437,17 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
         req.ino = ino;
         req.chunk_index = chunk_index;
         req.fragment_index = fragment_index;
+        if (chunk_generation && chunk_generation != EFS_CHUNK_BASE_UNCOND)
+            req.chunk_generation = chunk_generation;
+        else {
+            struct efs_chunk_entry ce;
+            pthread_mutex_lock(&g_client.idx_mu);
+            if (efs_export_get_chunk(&g_client.export, ino, chunk_index,
+                                     &ce) == 0 &&
+                ce.generation != EFS_CHUNK_BASE_UNCOND)
+                req.chunk_generation = ce.generation;
+            pthread_mutex_unlock(&g_client.idx_mu);
+        }
 
         /* Zero-copy receive: status + checksum + fragment land directly in the
          * caller's buffers — no malloc + 64 KiB memcpy per GET. */

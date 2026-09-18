@@ -1,0 +1,29 @@
+FUSE_CHECK fstype=fuse.efs-fuse mnt=/tmp/efs-mount
+FUSE_OK
+sr-50g: (g=0): rw=read, bs=(R) 1024KiB-1024KiB, (W) 1024KiB-1024KiB, (T) 1024KiB-1024KiB, ioengine=psync, iodepth=1
+fio-3.35
+Starting 1 process
+
+sr-50g: (groupid=0, jobs=1): err= 0: pid=363564: Fri Sep 18 10:34:53 2026
+  read: IOPS=2202, BW=2203MiB/s (2310MB/s)(50.0GiB/23246msec)
+    clat (usec): min=338, max=28293, avg=451.95, stdev=152.01
+     lat (usec): min=338, max=28293, avg=452.03, stdev=152.01
+    clat percentiles (usec):
+     |  1.00th=[  388],  5.00th=[  400], 10.00th=[  408], 20.00th=[  420],
+     | 30.00th=[  429], 40.00th=[  437], 50.00th=[  445], 60.00th=[  453],
+     | 70.00th=[  465], 80.00th=[  478], 90.00th=[  498], 95.00th=[  519],
+     | 99.00th=[  570], 99.50th=[  611], 99.90th=[  914], 99.95th=[ 1336],
+     | 99.99th=[ 5735]
+   bw (  MiB/s): min= 1656, max= 2260, per=99.98%, avg=2202.13, stdev=88.82, samples=46
+   iops        : min= 1656, max= 2260, avg=2202.13, stdev=88.82, samples=46
+  lat (usec)   : 500=91.36%, 750=8.44%, 1000=0.11%
+  lat (msec)   : 2=0.06%, 4=0.01%, 10=0.02%, 50=0.01%
+  cpu          : usr=0.38%, sys=3.12%, ctx=51523, majf=0, minf=267
+  IO depths    : 1=100.0%, 2=0.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=0.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     issued rwts: total=51200,0,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=1
+
+Run status group 0 (all jobs):
+   READ: bw=2203MiB/s (2310MB/s), 2203MiB/s-2203MiB/s (2310MB/s-2310MB/s), io=50.0GiB (53.7GB), run=23246-23246msec

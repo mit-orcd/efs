@@ -9,7 +9,7 @@ against the source on Sep 18 2026 — not against comments or spec prose. A
 function that exists but is only reachable from tests counts as absent.
 
 It is deliberately separate from [START-HERE §1a](arch/START-HERE.md), which is
-the *near-term work queue* (W1–W12: two correctness items, then measured performance and harness gaps).
+the *near-term work queue* (W1–W12: W1/W2 correctness done, then measured performance and harness gaps).
 Everything here is larger than a queue item and most of it needs a design
 decision first. Nothing on this page is scheduled. Do not start an item here
 without asking.
@@ -90,37 +90,21 @@ client-side verification is off unless `EFS_READ_VERIFY` is set, PUT writes the
 "never decoded, always repaired" cannot hold while §1.1 is open — a corrupt
 fragment is detected and then nothing repairs it.
 
-### 1.5 Two clients writing disjoint ranges of one chunk lose one of them
+### 1.5 Two clients writing disjoint ranges of one chunk — CLOSED
 
-**I12** and [protocols/data.md](arch/protocols/data.md) specify sub-chunk
-read-modify-write as a generation CAS against the base the *writer* read, with
-refetch-and-retry on conflict, so that disjoint ranges from different clients
-both land. The implementation cannot fail that CAS: `struct efs_chunk_rec`
-carries no base generation, and the server fills `expected_gen` from the
-generation it reads immediately before proposing (`server_raft_host_report`).
-Two further facts make it silent end to end: the client never learns a chunk
-generation at all (`GETCHUNKS` returns the same generation-less record), and
-the batched publish apply discards per-record results (`(void)
-apply_one_publish`, returns `EFS_OK`), so even a CAS that did fire would not
-reach the report reply. Cross-client exclusion is process-local only
-(`efs_wb_ino_lock`). The result is a silent lost update, and the write that
-was lost returned success.
+**I12** CAS is live (Sep 18 2026, leftover-1 19810). `efs_chunk_rec` carries
+`base_gen` + `chunk_generation`; the leader CASes the writer's base; apply
+STALE is audible and the client refetch+overlay+PUTs. Gate:
+`results/stress/20260918-n1-w1/` lost=0; `peer_shared_pwrite` 5/5 concurrent.
+Do not reopen with a distributed chunk lock. Details in START-HERE **W1**.
 
-This is the N-1 shared-file pattern — IOR-hard, MPI-IO, one HDF5 file per
-job — i.e. the workload an HPC parallel filesystem exists for. The suite-2
-test named "IOR-hard write" runs the two writers sequentially and cannot see
-it. Scheduled as START-HERE **W1**, with the deterministic repro and the fix
-shape written out there.
+### 1.6 `write()` is specified as durable-and-visible; the client buffers — CLOSED
 
-### 1.6 `write()` is specified as durable-and-visible; the client buffers
-
-[§3](architecture.md) states that a returned `write()` is durable and visible
-to every client. `efs-fuse` patches the write into its dcache and publishes at
-`fsync`, `close`, or reclaim. Consequences: an acknowledged write is lost if the
-client node dies first, and a peer reads stale bytes until the writer syncs —
-close-to-open coherence, which is not what §3 promises. Buffering is probably
-the right choice for HPC; the contradiction is what has to go, one way or the
-other. START-HERE **W2** (ASK).
+**Done Sep 18 2026**, option (i): the spec moved. [§3](architecture.md) now
+says a returned `write()` is client-buffered; durable + cross-client
+visible at `fsync` / last `close` / `O_SYNC`. Measured
+`results/stress/20260918-w2/`: peer 0/10, kill -9 loses 64 MiB.
+`O_SYNC` is specified, not wired. START-HERE **W2**.
 
 ---
 
@@ -131,12 +115,12 @@ parallel filesystem has and efs does not.
 
 | ask | state | note |
 | --- | --- | --- |
-| IOR / mdtest / IO-500 numbers | **never run** | `tests/perf/io500/` exists since Aug 20 with no result; mdtest disabled in its ini. There is no metadata-rate number on this engine at all. START-HERE W6. |
-| N-1 shared-file writes that are correct | **broken** | §1.5 above. |
+| IOR / mdtest / IO-500 numbers | **9×1 debug** | `results/io500/20260918-debug-9x1/`: easy-write 0.26 GiB/s, hard-write 0.025 GiB/s, mdtest-easy-write 0.053 kIOPS. IOR-hard `-W` 4244 errors (`20260918-hard-w/`). 30s ior aborted on fsync (`20260918-ior-30s-abort/`, nrec=125000 BUSY). 9×4 still open. START-HERE W6. |
+| N-1 shared-file writes that are correct | **gated** | §1.5; `peer_shared_pwrite` concurrent 5/5. |
 | per-file / per-directory layout (`lfs setstripe`-style chunk size, EC profile) | absent | export-wide only; the declared 32× small-write amplification has no opt-out. |
 | a client other than FUSE (kernel module, user-space library, MPI-IO ADIO driver) | absent | FUSE-only. libfuse 3.10.2: ≤128 KiB per request, no `FOPEN_PARALLEL_DIRECT_WRITES`; Linux serializes extending direct writes and `O_CREAT` per inode/dir per mount, so many ranks on one node serialize above efs. Already an open item in [§9](architecture.md). |
 | the data path on the fast interconnect | TCP over IPoIB | RDMA is implemented but not the gated default; every ceiling in START-HERE assumes it (W10). |
-| a hardware-relative throughput statement | 1.3–2.7 % of one client's 16.7 GB/s logical write ceiling; ~2 % of the cluster's; reads ~13 % | derivation in START-HERE §1a. |
+| a hardware-relative throughput statement | 3.8 % of one client's 16.7 GB/s (639 MiB/s 8g dd); 4-client 0.46 % of 44 GB/s (251); 9-client 0.37 % (202). Writes share a ceiling and more clients make it worse. | derivation in START-HERE §1a; W4 gate. |
 | MPI-IO hints, collective-buffering guidance, Darshan/instrumentation hooks | absent | — |
 | burst-buffer / tiering / HSM | absent, not designed | flash-only by decision (§1); no policy layer exists either way. |
 
@@ -182,15 +166,18 @@ repair and fencing, and repair and fencing are the things that do not exist.
 ## 4. Performance distance
 
 Not a capability gap, but it belongs in "usable product". The measured
-single-client write path is **448 MiB/s** (8 GiB `dd bs=1M conv=fsync`) and
-**924 MiB/s** (honest fio, 9×2g sw-1m). The binding ceilings are the client's
-200 Gb/s IPoIB link (≈16.7 GB/s logical write after 2+1 EC) and the four
-hosts' NVMe (≈44–57 GB/s logical) — so writes sit at roughly **2 %** of the
-hardware. Reads reach 3141 MiB/s single-client, ~13 % of the link.
+single-client write path is **639 MiB/s** (8 GiB `dd bs=1M conv=fsync`,
+best 724) after START-HERE W3 and **758 MiB/s** (honest fio, 9×2g sw-1m,
+W1). The binding ceilings are the client's 200 Gb/s IPoIB link (≈16.7 GB/s
+logical write after 2+1 EC) and the four hosts' NVMe (≈44–57 GB/s logical)
+— so writes sit at roughly **4 %** of the hardware. Reads reach 4429 MiB/s
+single-client, ~18 % of the link.
 
-4- and 9-client throughput has never been measured on this engine, so no
-scaling factor exists yet. [§1](architecture.md) is unambiguous that a
-benchmark stopping at a software serialization point is by definition an EFS
-bug, so this is a stated-goal gap, not merely tuning. It is the one item on
-this page that *is* scheduled: START-HERE W3 (split the fsync tail) and W4
-(multi-client).
+4- and 9-client writes **share a ceiling and get worse**: 8 GiB
+`dd+fsync` is 639 → 251 → 202 MiB/s at 1 / 4 / 9 clients (3.8 % /
+0.46 % / 0.37 % of the 16.7 / 44 / 44 GB/s ceilings). W4
+(`results/perf/20260918-w4-honest4/gate.txt`). [§1](architecture.md)
+is unambiguous that a benchmark stopping at a software serialization
+point is by definition an EFS bug — the leftover is REPORT pack+push
+(W3). IO-500 9×1 debug is in (`results/io500/20260918-debug-9x1/`);
+30s stonewall and 9×4 are the rest of W6.

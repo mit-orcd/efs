@@ -2072,6 +2072,15 @@ static int cmd_raft_getchunks(int argc, char **argv)
         printf("%u", r->recs[i].chunk_index);
     }
     printf("\n");
+    for (i = 0; i < r->count && i < 4; i++) {
+        printf("  ci=%u nodes=%u,%u,%u base_gen=%llu obj_gen=%llu ck0=%02x%02x%02x%02x\n",
+               r->recs[i].chunk_index,
+               r->recs[i].nodes[0], r->recs[i].nodes[1], r->recs[i].nodes[2],
+               (unsigned long long)r->recs[i].base_gen,
+               (unsigned long long)r->recs[i].chunk_generation,
+               r->recs[i].checksums[0][0], r->recs[i].checksums[0][1],
+               r->recs[i].checksums[0][2], r->recs[i].checksums[0][3]);
+    }
     free(reply);
     return 0;
 }

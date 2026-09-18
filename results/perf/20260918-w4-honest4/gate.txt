@@ -1,0 +1,36 @@
+W4 gated 2026-09-18 leftover-1 19810 TCP. Writes share a ceiling.
+
+1-client honest (FUSE_OK err=0, morning, before the table grew):
+  results/perf/20260918-w4-honest/
+  sw-1m 694  ow-1m 694  rw-1m 699  rw-128k 712  rw-4k 385
+  sr-1m 4102 rr-1m 2556 rr-128k 1577 rr-4k 154
+  sw-50g 341 sr-50g 2203   ← W5 number (completes; later loaded runs EIO on fsync)
+
+4-client fio (007–010, own trees, FUSE_OK err=0) morning:
+  sw-1m AGG 1589 (609/316/332/332) = 2.3× that 1-client 694
+  ow-1m AGG 636
+  rw-1m AGG 343
+  After bounce / grown table (honest4): sw-1m 281, ow-1m 240, then rw-1m
+  all 4 hosts efs-ssh TIMEOUT 400s (fsync/REPORT tail). Do not raise the
+  timeout. 4/9-client fio reads and 9-client fio writes were not finished
+  for that reason.
+
+8 GiB dd+fsync, src=/tmp/src8g all-0x5a, own file per client, FUSE_OK,
+remount HEAD/TAIL 0x5a OK (007 and 013):
+  1-client (W3): 13.501 s / 639 MiB/s = 3.8 % of 16.7 GB/s
+  4-client: walls 115.4–130.5 s; parallel wall 130.525 s
+            32 GiB / 130.525 s = 251 MiB/s = 0.46 % of 44 GB/s cluster
+            sum of per-client rates 264 MiB/s = 0.41× the 1-client 639
+  9-client first-write (011–015 only): walls 163–203 s; parallel wall 203.195 s
+            40 GiB / 203.195 s = 202 MiB/s = 0.37 % of 44 GB/s
+            007–010 9-client walls 13–31 s left mtime 15:21 (the 4-client
+            files) — do not quote those.
+
+Shape: writes share a ceiling and more clients make it worse, not better.
+4-client 8g is 0.41× one client; 9-client first-write is 0.32× one client.
+Reads still 4.1 GiB/s on one client after remount. The W3 leftover
+(REPORT pack+push) is the multi-client wall. A 4-client fio storm can
+lose raft heartbeats (peers NOT_PRIMARY rc=-15) and needs a keep-storage
+efsd bounce — not a wipe.
+
+Forbidden not done: REPORT RPC split, EFS_IO_TIMEOUT_MS raise, shared file.

@@ -1,0 +1,12 @@
+# IO-500 / IOR ranks: the 9 pure efs-fuse clients.
+# Storage (efsd) stays on fcstor003-006 — do not put MPI ranks there.
+# Override slots with SLOTS= in run.sh (default 1 rank per client).
+fcstor007.ib slots=1
+fcstor008.ib slots=1
+fcstor009.ib slots=1
+fcstor010.ib slots=1
+fcstor011.ib slots=1
+fcstor012.ib slots=1
+fcstor013.ib slots=1
+fcstor014.ib slots=1
+fcstor015.ib slots=1

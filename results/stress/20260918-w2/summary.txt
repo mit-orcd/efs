@@ -1,0 +1,11 @@
+W2 write() durability + visibility (leftover-1 19810, TCP, 007/008)
+
+(a) Visibility — A pwrite 4 KiB 0xAA, no fsync/close; B pread 10× over 2 s
+    VIS_HITS=0/10  all ZERO
+    Peer never sees an un-fsynced write. Close-to-open, not §3.
+
+(b) Durability — A write() 64 MiB of 'X', no fsync/close; kill -9 efs-fuse; remount
+    DUR_SIZE=0  DUR_X=0  DUR_MISSING=67108864
+    Create metadata survived; every data byte of the acknowledged write is gone.
+
+Do not implement a fix. User chooses (i) move the spec or (ii) publish on write().

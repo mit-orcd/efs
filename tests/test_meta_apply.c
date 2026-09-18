@@ -422,6 +422,42 @@ static void test_cas_i20_i21(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_publish_stale_then_retry(void)
+{
+    /* W1: a writer whose expected_gen is behind must STALE, then succeed
+     * after refreshing expected from the committed mapping. */
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t ino = 0;
+    struct efs_meta_chunk ch, got;
+    struct efs_meta_pub p;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "w1", &ino) == EFS_OK,
+          "create");
+    fill_ch(&ch);
+    memset(&p, 0, sizeof(p));
+    p.ino = ino;
+    p.new_size = 64;
+    p.candidate_gen = 0xA1;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
+    p.ch = ch;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "first");
+    p.candidate_gen = 0xB2;
+    p.new_size = 128;
+    p.expected_gen = 0;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE, "behind");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK, "get");
+    CHECK(got.generation == 0xA1, "still A");
+    p.expected_gen = got.generation;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "retry");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
+              got.generation == 0xB2,
+          "landed");
+    efs_kv_mem_free(kv);
+}
+
 static void test_epoch_i22(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -2227,6 +2263,53 @@ static void test_export_salt(void)
     efs_kv_mem_free(kv2);
 }
 
+/* The even-group salt record (EFS_MD_CMD_SALT): a node hosting only the
+ * even group never applies MKFS, so its salt must come from the anchor-2
+ * record — and the salted MKDIR placement must match the group-0 node's. */
+static void test_export_salt_anchor(void)
+{
+    struct efs_kv *g0 = efs_kv_mem_create();
+    struct efs_kv *g2 = efs_kv_mem_create();
+    uint64_t salt0 = 0, salt2 = 0;
+    const uint64_t golden = 0x9e3779b97f4a7c15ULL;
+
+    CHECK(g0 && g2, "kv");
+    /* No record anywhere: NOT_FOUND, never a guessed 0. */
+    CHECK(efs_meta_apply_export_salt(g2, &salt2) == EFS_ERR_NOT_FOUND,
+          "absent is NOT_FOUND");
+    CHECK(efs_meta_apply_mkfs(g0, T0, golden) == EFS_OK, "mkfs g0");
+    CHECK(efs_meta_apply_salt_record(g2, efs_kv_anchor_shard(2), golden) ==
+              EFS_OK,
+          "salt record g2");
+    CHECK(efs_meta_apply_export_salt(g0, &salt0) == EFS_OK && salt0 == golden,
+          "g0 salt");
+    CHECK(efs_meta_apply_export_salt(g2, &salt2) == EFS_OK && salt2 == golden,
+          "g2 salt via anchor");
+    /* Idempotent replay; mismatch is refused, never overwritten. */
+    CHECK(efs_meta_apply_salt_record(g2, efs_kv_anchor_shard(2), golden) ==
+              EFS_OK,
+          "replay ok");
+    CHECK(efs_meta_apply_salt_record(g2, efs_kv_anchor_shard(2), golden ^ 1) ==
+              EFS_ERR_PROTO,
+          "mismatch refused");
+    CHECK(efs_meta_apply_export_salt(g2, &salt2) == EFS_OK && salt2 == golden,
+          "still golden");
+    /* Placement parity across several names: the hash computed from g2's
+     * anchor record matches g0's for every name. */
+    {
+        static const char *const names[] = { "d", "mdtest-easy", "x0",
+                                             "a-much-longer-directory-name" };
+        size_t i;
+
+        for (i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+            CHECK(efs_kv_mkdir_shard(EFS_ROOT_INO, names[i], salt2) ==
+                      efs_kv_mkdir_shard(EFS_ROOT_INO, names[i], salt0),
+                  "placement parity");
+    }
+    efs_kv_mem_free(g0);
+    efs_kv_mem_free(g2);
+}
+
 /* SYMLINK is CREATE with S_IFLNK; the target is published bytes, not a
  * column on the inode row. Directories still cannot take a chunk map. */
 static void test_symlink(void)
@@ -2729,6 +2812,7 @@ int main(void)
     test_i16_durable();
     test_publish();
     test_cas_i20_i21();
+    test_publish_stale_then_retry();
     test_epoch_i22();
     test_evidence();
     test_i8_spread();
@@ -2747,6 +2831,7 @@ int main(void)
     test_link_nlink();
     test_rmdir_rename();
     test_export_salt();
+    test_export_salt_anchor();
     test_symlink();
     test_dir_rename();
     test_rename_cross_dir();

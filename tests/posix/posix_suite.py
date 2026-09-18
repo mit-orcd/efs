@@ -3194,8 +3194,13 @@ def main():
             if getattr(e, "soft", False):
                 return "SKIP", str(e)
             return "FAIL", str(e)
+        except TestTimeout as e:
+            return "FAIL", str(e)
         except Exception as e:  # noqa: BLE001
-            return "FAIL", "%s: %s" % (type(e).__name__, e)
+            try:
+                return "FAIL", "%s: %s" % (type(e).__name__, e)
+            except TestTimeout:
+                return "FAIL", "%s: %s" % (type(e).__name__, e)
         return "PASS", ""
 
     def run_serial_one(name, fn, tdir):

@@ -80,10 +80,11 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
 #define HOST_PUBLISH_LEN   (29u + (uint32_t)EFS_NUM_FRAGMENTS * (4u + EFS_HASH_SIZE) + \
                             EFS_OPID_UUID_LEN + 4u + 8u + 8u + 8u + 4u + \
                             8u + 8u + 1u)
-/* Many publications per Raft proposal (data.md §7.3). Cap so one apply
- * stays under the 400 ms host_wait_applied budget and the cmd fits one
- * AE without the oversized-entry path. 256 × HOST_PUBLISH_LEN ≈ 51 KiB. */
-#define HOST_PUB_BATCH_N   256u
+/* Many publications per Raft proposal (data.md §7.3). 2048 × ~202 B ≈
+ * 404 KiB, under one AE (1 MiB). N=4096 did not beat 2048 (entry size
+ * ate the fewer-propose win). Report fsyncs are amortized by
+ * efs_raft_disk_sync_hold around the pack/push loop. */
+#define HOST_PUB_BATCH_N   2048u
 #define HOST_PUB_F_LANE_LOCAL 1
 #define HOST_PUB_TAIL_TRIES  4 /* cross-group truncate tail CAS retries */
 #define HOST_ACTIVATE_LANE_LEN 10 /* tag + ino:8 + lane:1 */
@@ -583,6 +584,31 @@ static int apply_mkfs_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     }
     APPLY_LOG("raft-host: applied mkfs index=%llu salt=%llu\n",
             (unsigned long long)index, (unsigned long long)salt);
+    return EFS_OK;
+}
+
+/* EFS_MD_CMD_SALT: [anchor:4][salt:8]. Carries the export salt to a group
+ * that never applies MKFS (the even-shard group), so every node computes
+ * the same efs_kv_mkdir_shard placement. */
+static int apply_salt_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                          uint32_t clen, uint64_t index)
+{
+    uint32_t anchor;
+    uint64_t salt;
+    int rc;
+
+    if (clen < 13)
+        return EFS_OK;
+    anchor = rd32be(cmd + 1);
+    salt = rd64be(cmd + 5);
+    rc = efs_meta_apply_salt_record(h->kv, anchor, salt);
+    if (rc != EFS_OK) {
+        fprintf(stderr, "raft-host: apply salt rc=%d index=%llu\n",
+                rc, (unsigned long long)index);
+        return rc;
+    }
+    APPLY_LOG("raft-host: applied salt index=%llu anchor=%u salt=%llu\n",
+              (unsigned long long)index, anchor, (unsigned long long)salt);
     return EFS_OK;
 }
 
@@ -1323,7 +1349,11 @@ static int apply_one_publish(struct efs_raft_host *h, const uint8_t *cmd,
     p.mtime_gen = rd64be(q + 8);
     p.lane_local = (q[16] & HOST_PUB_F_LANE_LOCAL) ? 1 : 0;
     rc = efs_meta_apply_publish(h->kv, &p);
-    if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_STALE)
+    /* Deleted inode: P3 no-op. STALE stays on the apply-result ring so
+     * host_pub_batch_finish can fail the report (W1 / I12). host_apply
+     * must still return OK to the raft core — a losing CAS is a committed
+     * log entry, not a reason to pin last_applied. */
+    if (rc == EFS_ERR_NOT_FOUND)
         rc = EFS_OK;
     if (rc != EFS_OK)
         fprintf(stderr, "raft-host: apply publish rc=%d index=%llu ino=%llu ci=%u\n",
@@ -1333,7 +1363,7 @@ static int apply_one_publish(struct efs_raft_host *h, const uint8_t *cmd,
         APPLY_LOG("raft-host: applied publish index=%llu ino=%llu ci=%u\n",
                 (unsigned long long)index, (unsigned long long)p.ino,
                 p.chunk_index);
-    return EFS_OK;
+    return rc;
 }
 
 static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
@@ -1341,6 +1371,7 @@ static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 {
     uint32_t off = 0, n = 0;
     int held = 0;
+    int first = EFS_OK;
 
     if (clen < HOST_PUBLISH_LEN)
         return EFS_OK;
@@ -1350,8 +1381,11 @@ static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         (void)efs_kv_lsm_sync_hold(h->kv);
         held = 1;
     }
+
     while (off + HOST_PUBLISH_LEN <= clen) {
-        (void)apply_one_publish(h, cmd + off, index);
+        int prc = apply_one_publish(h, cmd + off, index);
+        if (first == EFS_OK && prc != EFS_OK)
+            first = prc;
         off += HOST_PUBLISH_LEN;
         n++;
     }
@@ -1360,7 +1394,7 @@ static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (n > 1 && env_on("EFS_RAFT_DBG"))
         APPLY_LOG("raft-host: applied publish-batch index=%llu n=%u\n",
                 (unsigned long long)index, n);
-    return EFS_OK;
+    return first;
 }
 
 /* Same encoding as sim_txn_apply. Returns the apply layer's real verdict
@@ -1529,11 +1563,13 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     /* Txn apply never stalls the log: a conflict verdict rides the ring to
      * the proposer, it is not a raft-core error. Other cmds keep their
      * historic return (halt-on-error for the few that can fail).
-     * APPEND_RSV is the same: BUSY/INVAL must not halt the log. */
+     * APPEND_RSV is the same: BUSY/INVAL must not halt the log.
+     * PUBLISH too: a lost generation CAS is audible via the ring, not a
+     * reason to retry the same index forever (W1 two-client RMW). */
     ret = (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
            cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
            cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
-           cmd[0] == EFS_MD_CMD_CREATE)
+           cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH)
               ? EFS_OK
               : rc;
     if (a0) {
@@ -1601,6 +1637,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
 {
     if (cmd[0] == EFS_MD_CMD_MKFS)
         return apply_mkfs_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_SALT)
+        return apply_salt_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_CREATE)
         return apply_create_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_UNLINK)
@@ -1747,9 +1785,9 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
 
     memset(rep, 0, sizeof(*rep));
     /* HOST_CMD_MAX is the stack buffer, not a protocol max. A publication
-     * batch is HOST_PUB_BATCH_N × HOST_PUBLISH_LEN ≈ 51 KiB; rejecting it
-     * here made every g2-follower forward return INVAL, and host_remote_cmd
-     * remapped the exhausted-peer walk to NOT_PRIMARY (fio end_fsync -15). */
+     * batch is HOST_PUB_BATCH_N × HOST_PUBLISH_LEN (2048 × ~202 B ≈ 404 KiB);
+     * rejecting it at 512 made every g2-follower forward return INVAL, and
+     * host_remote_cmd remapped that to NOT_PRIMARY (fio end_fsync -15). */
     if (rid < 0 || rid == h->raft_id || clen > EFS_WIRE_RAFT_MAX_CMD)
         return EFS_ERR_INVAL;
     plen = 1u + clen;
@@ -3029,21 +3067,31 @@ static void host_stat_from_row(const struct efs_meta_row *row,
     st->ctime = row->base_ctime;
 }
 
-/* Salt is on the ROOT shard. A node that does not host that group cannot
- * read it (NOT_FOUND → 0, which is wrong if mkfs picked a nonzero salt).
- * Dual-hosts always can; others bounce before they need scatter. */
+/* Salt lives on the ROOT shard (group 0, written by MKFS) and on the even
+ * group's anchor shard (EFS_MD_CMD_SALT at mkfs time). A node hosting only
+ * group 2 cannot ReadIndex group 0, but its local KV carries the SALT
+ * record — and the salt is immutable once mkfs returns, so a plain local
+ * read is authoritative. A missing record is NOT_FOUND (never a guessed
+ * 0: every salted placement would diverge). */
 static int host_export_salt(struct efs_raft_host *h, uint64_t *salt, int *hint)
 {
+    struct efs_raft *r;
     int rc;
 
     if (h->export_salt_valid) {
         *salt = h->export_salt;
         return EFS_OK;
     }
-    rc = host_read_index(h, efs_raft_shard_group(efs_kv_inode_shard(EFS_ROOT_INO)),
-                         hint);
-    if (rc != EFS_OK)
-        return rc;
+    pthread_mutex_lock(&h->mu);
+    r = group_raft(h, EFS_RAFT_GROUP_SHARD);
+    pthread_mutex_unlock(&h->mu);
+    if (r) {
+        rc = host_read_index(h,
+                             efs_raft_shard_group(efs_kv_inode_shard(EFS_ROOT_INO)),
+                             hint);
+        if (rc != EFS_OK)
+            return rc;
+    }
     rc = efs_meta_apply_export_salt(h->kv, salt);
     if (rc != EFS_OK)
         return rc;
@@ -3067,7 +3115,7 @@ static uint8_t rc_to_inode_status(int rc)
     if (rc == EFS_ERR_NOLCK)
         return EFS_INODE_RPC_BUSY;
     if (rc == EFS_ERR_STALE)
-        return EFS_INODE_RPC_BUSY;
+        return EFS_INODE_RPC_STALE;
     if (rc == EFS_ERR_INVAL)
         return EFS_INODE_RPC_INVAL;
     if (rc == EFS_ERR_EXIST)
@@ -3783,7 +3831,7 @@ static struct efs_export *host_gc_export(struct efs_raft_host *h)
  * dead bytes are gone afterwards (deleted / absent / slot reused). */
 static int host_gc_local_del(struct efs_raft_host *h, struct efs_export *ex,
                              efs_ino_t ino, uint32_t ci, uint32_t fi,
-                             const uint8_t *sum)
+                             uint64_t chunk_gen, const uint8_t *sum)
 {
     struct efs_store st;
     struct efs_nvme_store nctx;
@@ -3795,6 +3843,7 @@ static int host_gc_local_del(struct efs_raft_host *h, struct efs_export *ex,
     fid.ino = ino;
     fid.chunk_index = ci;
     fid.fragment_index = fi;
+    fid.chunk_generation = chunk_gen;
     efs_store_nvme_bind(&st, &nctx, h->s, ex);
     rc = efs_store_del_if_sum(&st, &fid, sum);
     if (rc == EFS_ERR_EXIST)
@@ -3805,7 +3854,8 @@ static int host_gc_local_del(struct efs_raft_host *h, struct efs_export *ex,
 /* Ask the owning node to delete one fragment. EFS_OK = gone/ackable. */
 static int host_gc_remote_del(struct efs_raft_host *h, efs_node_id_t node,
                               efs_export_id_t export_id, efs_ino_t ino,
-                              uint32_t ci, uint32_t fi, const uint8_t *sum)
+                              uint32_t ci, uint32_t fi, uint64_t chunk_gen,
+                              const uint8_t *sum)
 {
     char host[64];
     uint16_t port = 0;
@@ -3837,6 +3887,7 @@ static int host_gc_remote_del(struct efs_raft_host *h, efs_node_id_t node,
     req.chunk_index = ci;
     req.fragment_index = fi;
     memcpy(req.checksum, sum, EFS_HASH_SIZE);
+    req.chunk_generation = chunk_gen;
     if (efs_conn_send_msg(pc, EFS_MSG_GC_FRAGMENT, &req, sizeof(req)) != 0)
         goto out;
     if (efs_conn_recv_msg(pc, &rtype, &reply, &rlen) == 0 &&
@@ -3917,10 +3968,11 @@ static void host_gc_record(struct efs_raft_host *h, struct efs_export *ex,
         if (*nack >= GC_ACK_MAX || !h->gc_running)
             return;
         if (nodes[fi] == h->s->id)
-            rc = host_gc_local_del(h, ex, ino, ci, (uint32_t)fi, sums[fi]);
+            rc = host_gc_local_del(h, ex, ino, ci, (uint32_t)fi, gen,
+                                   sums[fi]);
         else
             rc = host_gc_remote_del(h, nodes[fi], ex->id, ino, ci,
-                                    (uint32_t)fi, sums[fi]);
+                                    (uint32_t)fi, gen, sums[fi]);
         if (env_on("EFS_GC_DBG"))
             fprintf(stderr, "raft-host: gc del ino=%llu ci=%u frag=%u node=%u rc=%d\n",
                     (unsigned long long)ino, ci, fi, nodes[fi], rc);
@@ -4340,7 +4392,8 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
     struct efs_raft_host *h = g_host;
     struct efs_raft *r;
     uint8_t cmd[17];
-    uint64_t idx = 0;
+    uint8_t scmd[13];
+    int hint = -1;
     int rc;
 
     memset(out, 0, sizeof(*out));
@@ -4353,19 +4406,30 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
     cmd[0] = EFS_MD_CMD_MKFS;
     wr64be(cmd + 1, now_ns());
     wr64be(cmd + 9, h->salt);
+    /* Wait for the group-0 commit, then replicate the salt to the
+     * even-shard group (EFS_MD_CMD_SALT anchored on shard 2): every MKDIR
+     * scatters via efs_kv_mkdir_shard(parent, name, salt) on EVERY group,
+     * and a node hosting only group 2 never applies MKFS — without this
+     * record its salt read returned 0 and its placement diverged (apply
+     * PROTO skip -> missing rows -> later EIO). mkfs only returns OK once
+     * both groups carry the salt. */
+    pthread_mutex_lock(&h->read_mu);
+    rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD, cmd, 17, &hint);
+    if (rc == EFS_OK) {
+        scmd[0] = EFS_MD_CMD_SALT;
+        wr32be(scmd + 1, efs_kv_anchor_shard(2));
+        wr64be(scmd + 5, h->salt);
+        rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD2, scmd, 13, &hint);
+    }
     pthread_mutex_lock(&h->mu);
     r = group_raft(h, EFS_RAFT_GROUP_SHARD);
-    if (!r) {
-        pthread_mutex_unlock(&h->mu);
-        out->rc = EFS_ERR_NOT_PRIMARY;
-        return;
-    }
-    out->leader_hint = efs_raft_leader(r);
-    rc = efs_raft_propose(r, cmd, 17, &idx);
+    if (r)
+        out->index = efs_raft_applied(r);
     pthread_mutex_unlock(&h->mu);
-    host_pump_kick(h);
+    pthread_mutex_unlock(&h->read_mu);
     out->rc = rc;
-    out->index = idx;
+    if (hint >= 0)
+        out->leader_hint = hint;
 }
 
 static int host_session_get(struct efs_raft_host *h, const uint8_t *cmd,
@@ -4504,6 +4568,12 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         if (r)
             idx = efs_raft_applied(r);
         pthread_mutex_unlock(&h->mu);
+    } else if (clen >= 1 && cmd[0] == EFS_MD_CMD_PUBLISH) {
+        /* Same as the local report path: propose, return the index, let
+         * the reporter host_wait_applied the last idx. host_propose_wait
+         * here was one Raft round per forwarded batch (~16 × ~150 ms on
+         * the group this dual-host does not lead). */
+        rc = host_propose(h, group, cmd, clen, &idx, &hint);
     } else {
         rc = host_propose_wait(h, group, cmd, clen, &hint);
         pthread_mutex_lock(&h->mu);
@@ -4556,10 +4626,12 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out)
     src = efs_meta_apply_export_salt(h->kv, &salt);
     if (src == EFS_OK) {
         struct efs_meta_row row;
-        if (efs_meta_apply_get_inode(h->kv, EFS_ROOT_INO, &row) == EFS_OK) {
+        /* Salt is reported whenever a record exists — a node hosting only
+         * the even group has the SALT record but no root row, and gating
+         * the salt on the root made such a node falsely report salt=0. */
+        out->export_salt = salt;
+        if (efs_meta_apply_get_inode(h->kv, EFS_ROOT_INO, &row) == EFS_OK)
             out->kv_has_root = 1;
-            out->export_salt = salt;
-        }
     }
 }
 
@@ -8415,22 +8487,37 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
     if (rc != EFS_OK)
         return rc;
     memset(&got, 0, sizeof(got));
-    rc = efs_meta_apply_get_chunk(h->kv, rec->ino, rec->chunk_index, &got);
-    if (rc == EFS_ERR_NOT_FOUND)
-        rc = EFS_OK;
-    else if (rc != EFS_OK)
-        return rc;
-    if (got.generation != 0 &&
-        memcmp(got.nodes, rec->nodes, sizeof(got.nodes)) == 0 &&
-        memcmp(got.checksums, rec->checksums, sizeof(got.checksums)) == 0)
-        return EFS_OK;
+    /* First publish (base_gen=0): apply CAS(expected=0) is the existence
+     * check. A per-rec lsm_get here was 65536 lookups on an 8 GiB fsync
+     * and never skipped (skip-identical needs a live mapping). */
+    if (rec->base_gen != 0) {
+        rc = efs_meta_apply_get_chunk(h->kv, rec->ino, rec->chunk_index, &got);
+        if (rc == EFS_ERR_NOT_FOUND)
+            rc = EFS_OK;
+        else if (rc != EFS_OK)
+            return rc;
+        if (got.generation != 0 &&
+            memcmp(got.nodes, rec->nodes, sizeof(got.nodes)) == 0 &&
+            memcmp(got.checksums, rec->checksums, sizeof(got.checksums)) == 0)
+            return EFS_OK;
+        if (rec->base_gen != EFS_CHUNK_BASE_UNCOND &&
+            rec->base_gen != got.generation)
+            return EFS_ERR_STALE;
+    }
     memset(&p, 0, sizeof(p));
     p.ino = rec->ino;
     p.chunk_index = rec->chunk_index;
     p.new_size = new_size;
     p.now = now_ns();
-    p.expected_gen = got.generation;
-    p.candidate_gen = host_pub_candidate_gen(rec, rec->chunk_index);
+    p.expected_gen = (rec->base_gen == EFS_CHUNK_BASE_UNCOND)
+                         ? got.generation
+                         : rec->base_gen;
+    /* Prefer the PUT object name from the client. Hashing here is only
+     * a last resort — a hash of empty checksums is a constant that was
+     * never written (remount GET DECODE). */
+    p.candidate_gen = rec->chunk_generation;
+    if (!p.candidate_gen)
+        p.candidate_gen = host_pub_candidate_gen(rec, rec->chunk_index);
     if (p.candidate_gen == 0)
         p.candidate_gen = 1;
     p.content_epoch = row.content_epoch;
@@ -8503,11 +8590,22 @@ static int host_pub_batch_push(struct efs_raft_host *h, struct host_pub_batch *b
 static int host_pub_batch_finish(struct efs_raft_host *h, struct host_pub_batch *b,
                                  int *hint)
 {
-    int rc;
+    return host_pub_batch_propose(h, b, hint);
+}
 
-    rc = host_pub_batch_propose(h, b, hint);
-    if (rc == EFS_OK && b->last_idx)
-        rc = host_wait_applied(h, b->group, b->last_idx, hint);
+static int host_pub_batch_wait(struct efs_raft_host *h, struct host_pub_batch *b,
+                               int *hint)
+{
+    int rc = EFS_OK;
+    uint64_t idx = b->last_idx;
+
+    if (idx)
+        rc = host_wait_applied(h, b->group, idx, hint);
+    if (rc == EFS_OK && idx) {
+        pthread_mutex_lock(&h->mu);
+        rc = host_apply_rc_locked(h, b->group, idx);
+        pthread_mutex_unlock(&h->mu);
+    }
     free(b->buf);
     b->buf = NULL;
     b->len = 0;
@@ -8596,6 +8694,8 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
             int have;
         } ic[32];
         uint32_t nic = 0;
+        uint64_t t_pack = 0, t_push = 0, t0, t_fin0, t_fin1;
+        int held = 0;
 
         memset(bat, 0, sizeof(bat));
         memset(ic, 0, sizeof(ic));
@@ -8646,6 +8746,8 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
             if (rc == EFS_OK)
                 rc = host_propose_wait(h, ig, acmd, alen, &hint);
         }
+        if (h->disk && efs_raft_disk_sync_hold(h->disk) == EFS_OK)
+            held = 1;
         for (i = 0; i < count && rc == EFS_OK; i++) {
             struct efs_meta_row *cached = NULL;
 
@@ -8666,8 +8768,10 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                     break;
                 }
             }
+            t0 = now_us_();
             rc = host_pub_pack(h, &recs[i], sz, &hint, 1, cached, cmd, &clen,
                                &lg);
+            t_pack += now_us_() - t0;
             if (env_on("EFS_RAFT_DBG"))
                 fprintf(stderr,
                         "raft-host: report pub ino=%llu ci=%u sz=%llu rc=%d clen=%u\n",
@@ -8694,7 +8798,9 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                 if (bi == HOST_NGROUPS) {
                     rc = EFS_ERR_INVAL;
                 } else {
+                    t0 = now_us_();
                     rc = host_pub_batch_push(h, &bat[bi], lg, cmd, clen, &hint);
+                    t_push += now_us_() - t0;
                 }
             }
             if (rc == EFS_OK) {
@@ -8715,16 +8821,33 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                         (unsigned long long)recs[i].ino, recs[i].chunk_index, rc,
                         "pub");
         }
+        t_fin0 = now_us_();
         for (bi = 0; bi < HOST_NGROUPS; bi++) {
             int frc = host_pub_batch_finish(h, &bat[bi], &hint);
 
             if (rc == EFS_OK)
                 rc = frc;
+        }
+        if (held)
+            (void)efs_raft_disk_sync_release(h->disk);
+        for (bi = 0; bi < HOST_NGROUPS; bi++) {
+            int wrc = host_pub_batch_wait(h, &bat[bi], &hint);
+
+            if (rc == EFS_OK)
+                rc = wrc;
             else {
                 free(bat[bi].buf);
                 bat[bi].buf = NULL;
             }
         }
+        t_fin1 = now_us_();
+        if (count >= 256u || (t_pack + t_push + (t_fin1 - t_fin0)) >= 100000ull)
+            fprintf(stderr,
+                    "report-split nrec=%u pack_ms=%llu push_ms=%llu finish_ms=%llu rc=%d\n",
+                    (unsigned)count,
+                    (unsigned long long)(t_pack / 1000ull),
+                    (unsigned long long)(t_push / 1000ull),
+                    (unsigned long long)((t_fin1 - t_fin0) / 1000ull), rc);
         /* Once per inode, not per chunk: append_open is a KV scan, and a 2g
          * file is 16k recs. Doing it per rec times out the client as NET. */
         for (k = 0; k < nu && rc == EFS_OK; k++) {
@@ -8820,6 +8943,8 @@ void server_raft_host_getchunks(efs_ino_t ino, uint32_t start, uint32_t max,
                sizeof(out->recs[out->count].nodes));
         memcpy(out->recs[out->count].checksums, ch.checksums,
                sizeof(out->recs[out->count].checksums));
+        out->recs[out->count].base_gen = ch.generation;
+        out->recs[out->count].chunk_generation = ch.generation;
         out->count++;
     }
     pthread_mutex_unlock(&h->read_mu);

@@ -1,0 +1,11 @@
+Suite 2 one pair 007+008 after W1 (TCP, leftover-1 19810)
+results/posix2/20260918-122419/
+
+60 both-pass / 3 EFS  (was 58/4 on 20260917-191150 — better)
+
+peer_shared_pwrite PASS (now concurrent I12)
+
+EFS bugs (known-debt class; not chased in W1):
+  peer_concurrent_append  got 401 want 800
+  peer_oappend            A sees B O_APPEND zeros
+  peer_truncate_visible   EIO

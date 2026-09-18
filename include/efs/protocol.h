@@ -151,6 +151,7 @@ struct efs_msg_gc_fragment {
     uint32_t chunk_index;
     uint32_t fragment_index;
     uint8_t checksum[EFS_HASH_SIZE];
+    uint64_t chunk_generation; /* 0 = legacy `{ci}.{fi}` */
 };
 
 /* status: 0 = the dead fragment is gone (deleted / already absent / a
@@ -239,6 +240,8 @@ struct efs_msg_get_chunk {
     efs_ino_t ino;
     uint32_t chunk_index;
     uint32_t fragment_index; /* 0 = D1, 1 = D2, 2 = P */
+    /* Candidate identity. 0 = legacy `{ci}.{fi}` object (pre-W1 files). */
+    uint64_t chunk_generation;
 };
 
 /* Reply payload: [status:1][checksum:32][fragment_data:data_len]
@@ -255,6 +258,8 @@ struct efs_msg_put_chunk {
     uint32_t fragment_index;
     uint8_t checksum[EFS_HASH_SIZE];
     uint32_t data_len;
+    /* Candidate identity. 0 = write the legacy `{ci}.{fi}` name. */
+    uint64_t chunk_generation;
     /* uint8_t data[data_len]; */
 };
 
@@ -344,6 +349,8 @@ struct efs_msg_query_stats_reply {
 #define EFS_INODE_RPC_NOT_EMPTY  8
 #define EFS_INODE_RPC_SYMLINK    9
 #define EFS_INODE_RPC_DEEP      10
+/* REPORT CAS lost: the client's RMW base is no longer committed. */
+#define EFS_INODE_RPC_STALE     11
 
 struct efs_msg_inode_lookup {
     efs_export_id_t export_id;
@@ -571,12 +578,21 @@ struct efs_msg_inode_flock {
     uint64_t owner;
 };
 
-/* Phase 2b: one written-chunk mapping record (matches efs_export_set_chunk). */
+/* Phase 2b: one written-chunk mapping record (matches efs_export_set_chunk).
+ * REPORT: base_gen is the committed generation the writer patched
+ * (0 = empty slot; EFS_CHUNK_BASE_UNCOND = aligned last-writer-wins).
+ * chunk_generation is the object name used for PUT `{ci}.{fi}.{gen}` —
+ * the host must store this as the committed generation so GET can find
+ * the fragments (recomputing a hash here drifted from the client).
+ * GETCHUNKS: both fields are the committed generation of the mapping. */
+#define EFS_CHUNK_BASE_UNCOND UINT64_MAX
 struct efs_chunk_rec {
     efs_ino_t ino;
     uint32_t chunk_index;
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+    uint64_t base_gen;
+    uint64_t chunk_generation;
 };
 
 /* Phase 2b: one inode size/mtime update (the write path grows a file and bumps

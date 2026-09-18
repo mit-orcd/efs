@@ -128,6 +128,7 @@ static int rpc_status_to_efs(uint8_t st)
     case EFS_INODE_RPC_INVAL:       return EFS_ERR_INVAL;
     case EFS_INODE_RPC_NOT_PRIMARY: return EFS_ERR_NOT_PRIMARY;
     case EFS_INODE_RPC_NOT_EMPTY:   return EFS_ERR_NOT_EMPTY;
+    case EFS_INODE_RPC_STALE:       return EFS_ERR_STALE;
     case EFS_INODE_RPC_SYMLINK:
     case EFS_INODE_RPC_DEEP:        return EFS_ERR_PROTO;
     default:                        return EFS_ERR_IO;
@@ -289,6 +290,20 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             }
             /* Extra-shard owner is still assembling pages after restart.
              * Same target — do not flip to another node. */
+            unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
+            unsigned long long sleep_us = 50000ull << shift;
+            usleep((useconds_t)sleep_us);
+            rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
+            continue;
+        }
+        if (r->status == EFS_INODE_RPC_STALE && type == EFS_MSG_INODE_CREATE) {
+            /* Cross-group mkdir/create txns CAS the parent-row and dseq
+             * versions; a concurrent create served by the other dual-host
+             * commits first and this prep lands STALE. The name is unique
+             * and the op idempotent (a landed retry reads as EEXIST, which
+             * the caller handles), so retry like BUSY. REPORT_CHUNKS owns
+             * its STALE (W1 refetch+overlay) — never retried here. */
+            saw_busy = 1;
             unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
             unsigned long long sleep_us = 50000ull << shift;
             usleep((useconds_t)sleep_us);
@@ -822,6 +837,15 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         free(payload);
         struct efs_msg_inode_reply *r = reply;
         if (r->status == EFS_INODE_RPC_BUSY) {
+            saw_busy = 1;
+            unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
+            usleep((useconds_t)(50000ull << shift));
+            continue;
+        }
+        if (r->status == EFS_INODE_RPC_STALE && type == EFS_MSG_INODE_CREATE) {
+            /* See rpc_send_recv_shard: concurrent cross-group create txns
+             * lose the parent-row/dseq version CAS; the op is idempotent,
+             * so retry. REPORT_CHUNKS owns its STALE (W1). */
             saw_busy = 1;
             unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
             usleep((useconds_t)(50000ull << shift));

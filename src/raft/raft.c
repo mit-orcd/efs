@@ -348,32 +348,68 @@ static int append_local(struct efs_raft *r, uint64_t term, const uint8_t *cmd,
 static int send_snap(struct efs_raft *r, int to)
 {
     struct efs_raft_msg m;
-    uint8_t *pay = NULL;
-    uint32_t plen;
+    uint8_t *pay = NULL, *fresh = NULL;
+    const uint8_t *blob;
+    uint64_t incl, incl_t;
+    uint32_t plen, blen;
     int rc;
 
     if (r->snap_idx == 0)
         return EFS_OK;
-    plen = 8u + r->snap_blob_len;
+    incl = r->snap_idx;
+    incl_t = r->snap_term;
+    blob = r->snap_blob;
+    blen = r->snap_blob_len;
+    if (!blob && r->snap_get) {
+        /* Post-restart serve: the store reloads snap_idx/snap_term but the
+         * blob is memory-only and is gone. Re-export the app at the CURRENT
+         * applied index and send that as a newer snapshot (the caller holds
+         * the SM lock, so the export is exactly the state at last_applied;
+         * last_applied <= commit_index, so incl stays committed). Without
+         * this a follower behind snap_idx can never catch up from a
+         * restarted leader: the metadata-only SNAP carries no state, the
+         * follower's snap_put rejects it, and the leader retries forever. */
+        incl = r->last_applied;
+        incl_t = 0;
+        rc = log_term(r, incl, &incl_t);
+        if (rc != EFS_OK)
+            return rc;
+        rc = r->snap_get(r->app, incl, &fresh, &blen);
+        if (rc != EFS_OK)
+            return rc;
+        blob = fresh;
+        if (getenv("EFS_RAFT_DBG"))
+            fprintf(stderr, "raft[%u]: send_snap regenerated blob "
+                    "incl=%llu incl_t=%llu blen=%u to=%d\n", r->group,
+                    (unsigned long long)incl, (unsigned long long)incl_t,
+                    blen, to);
+    } else if (getenv("EFS_RAFT_DBG")) {
+        fprintf(stderr, "raft[%u]: send_snap %s incl=%llu to=%d\n", r->group,
+                blob ? "cached" : "EMPTY", (unsigned long long)incl, to);
+    }
+    plen = 8u + blen;
     pay = malloc(plen);
-    if (!pay)
+    if (!pay) {
+        free(fresh);
         return EFS_ERR_NOMEM;
+    }
     wr32(pay, r->app_old);
     wr32(pay + 4, r->app_new);
-    if (r->snap_blob_len)
-        memcpy(pay + 8, r->snap_blob, r->snap_blob_len);
+    if (blen)
+        memcpy(pay + 8, blob, blen);
     memset(&m, 0, sizeof(m));
     m.type = EFS_RAFT_MSG_SNAP_REQ;
     m.to = to;
-    m.last_log_index = r->snap_idx;
-    m.last_log_term = r->snap_term;
+    m.last_log_index = incl;
+    m.last_log_term = incl_t;
     m.leader_commit = r->commit_index;
     m.nentries = 1;
-    m.entries[0].term = r->snap_term;
+    m.entries[0].term = incl_t;
     m.entries[0].clen = plen;
     m.entries[0].cmd = pay;
     rc = send_msg(r, &m);
     free(pay);
+    free(fresh);
     return rc;
 }
 
@@ -828,6 +864,14 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
     reset_election(r);
     incl = in->last_log_index;
     incl_t = in->last_log_term;
+    if (getenv("EFS_RAFT_DBG"))
+        fprintf(stderr, "raft[%u]: on_snap_req from=%d incl=%llu "
+                "incl_t=%llu plen=%u my_applied=%llu my_snap=%llu\n",
+                r->group, in->from, (unsigned long long)incl,
+                (unsigned long long)incl_t,
+                in->nentries >= 1 ? in->entries[0].clen : 0,
+                (unsigned long long)r->last_applied,
+                (unsigned long long)r->snap_idx);
     if (incl == 0 || incl < r->snap_idx) {
         m.success = 1;
         m.match_index = r->snap_idx ? r->snap_idx : last_i;
@@ -851,13 +895,22 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
         }
         rc = r->snap_put(r->app, incl, pay + 8, plen - 8);
         if (rc != EFS_OK) {
+            if (getenv("EFS_RAFT_DBG"))
+                fprintf(stderr, "raft[%u]: on_snap_req snap_put rc=%d "
+                        "incl=%llu plen=%u\n", r->group, rc,
+                        (unsigned long long)incl, plen);
             m.success = 0;
             m.match_index = last_i;
             return send_msg(r, &m);
         }
         rc = r->store->save_snap(r->store_ctx, incl, incl_t);
-        if (rc != EFS_OK)
+        if (rc != EFS_OK) {
+            if (getenv("EFS_RAFT_DBG"))
+                fprintf(stderr, "raft[%u]: on_snap_req save_snap rc=%d "
+                        "incl=%llu (no reply sent)\n", r->group, rc,
+                        (unsigned long long)incl);
             return rc;
+        }
         cfg_old = rd32(pay);
         cfg_new = rd32(pay + 4);
         r->last_applied = incl;
@@ -865,8 +918,13 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
         r->app_new = r->log_new = cfg_new;
     } else {
         rc = r->store->save_snap(r->store_ctx, incl, incl_t);
-        if (rc != EFS_OK)
+        if (rc != EFS_OK) {
+            if (getenv("EFS_RAFT_DBG"))
+                fprintf(stderr, "raft[%u]: on_snap_req save_snap rc=%d "
+                        "incl=%llu (no reply sent)\n", r->group, rc,
+                        (unsigned long long)incl);
             return rc;
+        }
     }
     r->snap_idx = incl;
     r->snap_term = incl_t;
@@ -882,6 +940,9 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
     }
     reload_cfg_from_log(r);
     save_cfg(r);
+    if (getenv("EFS_RAFT_DBG"))
+        fprintf(stderr, "raft[%u]: on_snap_req INSTALLED incl=%llu\n",
+                r->group, (unsigned long long)incl);
     m.success = 1;
     m.match_index = incl;
     return send_msg(r, &m);
@@ -906,6 +967,11 @@ static int on_snap_rep(struct efs_raft *r, const struct efs_raft_msg *in)
     }
     /* Stay in the snapshot window; the next heartbeat retries. Immediate
      * resend would recurse through send_now on a persistent reject. */
+    if (getenv("EFS_RAFT_DBG"))
+        fprintf(stderr, "raft[%u]: on_snap_rep REJECT from=%d match=%llu "
+                "snap_idx=%llu\n", r->group, in->from,
+                (unsigned long long)in->match_index,
+                (unsigned long long)r->snap_idx);
     if (r->snap_idx)
         r->next_index[in->from] = r->snap_idx;
     return EFS_OK;

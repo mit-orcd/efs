@@ -61,8 +61,28 @@ for i in 1 2 3; do
         && echo "  ${SERVERS[$i]%.ib} up" || echo "  ${SERVERS[$i]%.ib} FAILED" ) &
 done
 wait
-ssh_to 20 fcstor003.ib 'cd /tmp/efs && ./efs-mgmt mkfs 172.16.223.57:19810 efs-test' \
-    || { echo "mkfs failed"; exit 1; }
+# mkfs waits for the group-0 commit AND replicates the export salt to
+# group 2 (EFS_MD_CMD_SALT) before returning rc=0; the host forwards to the
+# current leader itself. The hint retry below is only a fallback for an
+# older efsd: a NOT_PRIMARY (rc=-15) reply carries leader_hint = the
+# leader's raw raft_id (0-based); node N has raft_id N-1 and addr
+# 172.16.223.(56+N).
+mkfs_out=$(ssh_to 20 fcstor003.ib 'cd /tmp/efs && ./efs-mgmt mkfs 172.16.223.57:19810 efs-test') || true
+echo "$mkfs_out"
+if ! echo "$mkfs_out" | grep -q "rc=0"; then
+    hint=$(echo "$mkfs_out" | sed -n 's/.*leader_hint=\([0-9-]*\).*/\1/p' | head -1)
+    case "$hint" in
+        0|1|2|3)
+            tip=$((57 + hint))
+            say "mkfs NOT_PRIMARY, retrying on leader raft_id=$hint (172.16.223.$tip)"
+            ssh_to 20 fcstor003.ib "cd /tmp/efs && ./efs-mgmt mkfs 172.16.223.$tip:19810 efs-test" \
+                || { echo "mkfs failed (via hint $hint)"; exit 1; }
+            ;;
+        *)
+            echo "mkfs failed: $mkfs_out"; exit 1
+            ;;
+    esac
+fi
 
 # Verify: poll for 4 up.
 for _ in 1 2 3 4 5; do

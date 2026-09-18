@@ -1,0 +1,22 @@
+[run]
+procs           = 9
+version         = 02091cf254d8-13
+config-hash     = C406C05A
+result-dir      = /tmp/efs-mount/io500-results/2026.09.18-15.48.12
+mode            = standard
+; START 2026-09-18 15:48:12
+; ERROR INVALID stonewall-time 1s != 300s
+
+
+[ior-easy-write]
+t_start         = 2026-09-18 15:48:13
+exe             = ./ior --dataPacketType=timestamp -g -G 1904162617 -k -e -o /tmp/efs-mount/io500/2026.09.18-15.48.12/ior-easy/ior_file_easy -C -Q 1 -O stoneWallingStatusFile=/tmp/efs-mount/io500-results/2026.09.18-15.48.12/ior-easy.stonewall -t 1m -b 16g -F -w -D 1 -O stoneWallingWearOut=1 -a POSIX -O saveRankPerformanceDetailsCSV=/tmp/efs-mount/io500-results/2026.09.18-15.48.12/ior-easy-write.csv
+throughput-stonewall = 14.53
+; ERROR INVALID Runtime is smaller than expected minimum runtime
+score           = 0.095194
+t_delta         = 182.2954
+t_end           = 2026-09-18 15:51:15
+
+[mdtest-easy-write]
+t_start         = 2026-09-18 15:51:15
+exe             = ./mdtest --dataPacketType=timestamp -n 1000000 -u -L -F -P -G -1504626885 -N 1 -d /tmp/efs-mount/io500/2026.09.18-15.48.12/mdtest-easy -x /tmp/efs-mount/io500-results/2026.09.18-15.48.12/mdtest-easy.stonewall -C -Y -W 1 --saveRankPerformanceDetails=/tmp/efs-mount/io500-results/2026.09.18-15.48.12/mdtest-easy-write.csv -a POSIX

@@ -100,9 +100,9 @@ omission — it is a scoping decision that the architecture actively spends:
   asynchronous, queue-depth-driven, one NVMe queue pair per reactor — only
   exists because the devices do. A HDD cannot run that model at all.
 - **Microsecond device latency is what the durability choice costs against.**
-  `write()` = durable (§7.3) pays a synchronous round trip to *device*
-  per write; that is affordable because the device is µs-scale flash, not
-  ms-scale disk.
+  Publication (`fsync`/`close`/`O_SYNC`, §7.3) pays a synchronous round
+  trip to *device*; that is affordable because the device is µs-scale
+  flash, not ms-scale disk. A plain `write()` does not.
 - **No SMR/shingled, no rotational-latency hiding, no track alignment** —
   entire problem classes deleted, not engineered around.
 
@@ -212,13 +212,15 @@ detail: [failure-tolerance.md](arch/failure-tolerance.md).
 
 **How to describe efs, precisely.** It is a *high-performance parallel
 filesystem targeting Linux/POSIX semantics, with explicitly documented
-deviations* — not "a POSIX filesystem" full stop. Two deviations are known
-and deliberate, and both are stated in this section rather than discovered
-by a user: strictly-conforming per-read `atime` is **not offered** (§7.3),
-and full syscall-level write atomicity **above the FUSE request boundary**
-is an unresolved kernel-interface problem that efs does not claim (below).
-Everything else in this section is a promise. If a deviation is ever added,
-it belongs here, in this list, before it ships.
+deviations* — not "a POSIX filesystem" full stop. Three deviations are known
+and deliberate, and all are stated in this section rather than discovered
+by a user: strictly-conforming per-read `atime` is **not offered** (§7.3);
+full syscall-level write atomicity **above the FUSE request boundary**
+is an unresolved kernel-interface problem that efs does not claim (below);
+and a returned `write()` is **not** durable or cross-client visible until
+`fsync`, `close`, or `O_SYNC`/`-o sync` (below). Everything else in this
+section is a promise. If a deviation is ever added, it belongs here, in
+this list, before it ships.
 
 - **Single-shard metadata operations are linearizable** within the
   authoritative shard's Raft group.
@@ -227,9 +229,15 @@ it belongs here, in this list, before it ships.
   intended property for those is strict serializability of transactions.
 - There is **no global ordering** between two independent operations on
   unrelated shards, and none is needed.
-- **Data:** a `write()` that has returned success is durable and visible (see
-  the precise commit state machine in §7.3). Un-`fsync`ed data can be lost on
-  client crash only where POSIX permits it.
+- **Data:** a returned `write()` is buffered in the client. It is
+  durable and visible to every client only after `fsync`, last `close`,
+  or an `O_SYNC`/`O_DSYNC`/`-o sync` write-through (the §7.3 publication
+  machine). Same-client read-your-writes hold via the dcache. This is
+  POSIX and every production PFS; the stronger "every `write()` publishes"
+  alternative was measured and rejected (START-HERE W2:
+  peer sees 0/10 un-`fsync`ed bytes; `kill -9` of `efs-fuse` loses a
+  64 MiB acknowledged `write()`). `O_SYNC` is specified; it is not
+  wired yet.
 - **One `write()`/`pwrite()` publishes atomically.** POSIX makes regular-file
   `read()`/`write()` effects atomic with respect to one another, so a
   concurrent reader never observes a mix of old and new chunks from a single
@@ -389,14 +397,14 @@ I6/I7.
   (§7.5).
 - **I24 · atomic write publication *and* atomic observation.** Within the
   atomicity unit (one FUSE request, ≤ `max_write`; the syscall-boundary
-  problem above that size is explicitly open, §7.3): a returned
-  `write()`/`pwrite()` is visible in its entirety to every subsequent read,
-  and a concurrent read sees either all or none of that call's chunks
-  (default mode; §7.3). **The obligation is symmetric** — a multi-chunk read
-  must also return a state some serialization of the concurrent writes
-  actually produced, so it validates the chunk-map versions it read; an
-  atomic publication decision alone does not prevent a slow reader from
-  splicing old and new chunks.
+  problem above that size is explicitly open, §7.3): once publication
+  returns (`fsync`/`close`/`O_SYNC`), that write is visible in its entirety
+  to every subsequent read, and a concurrent read sees either all or none
+  of that call's chunks (default mode; §7.3). **The obligation is symmetric**
+  — a multi-chunk read must also return a state some serialization of the
+  concurrent writes actually produced, so it validates the chunk-map
+  versions it read; an atomic publication decision alone does not prevent a
+  slow reader from splicing old and new chunks.
 
 **Liveness (testable bounded forms)**
 
@@ -641,9 +649,11 @@ A write commits through: allocate chunk generation → encode + store k+f
 fragments (client-direct RDMA) → **ALL k+f durable fragment ACKs** →
 Raft-commit the publication (chunk map + lane marks) → apply → return.
 **"Durable ACK" = the target completed the persistent-NVMe operation**
-(flush/FUA or PLP media), not an RDMA completion. A returned `write()` is
-durable and visible — stronger than POSIX, a deliberate latency-for-
-durability trade. Degraded publication (with `u` domains already
+(flush/FUA or PLP media), not an RDMA completion. That machine runs at
+`fsync`, last `close`, or `O_SYNC`/`O_DSYNC`/`-o sync` — not at a plain
+`write()`. A returned `write()` is POSIX-buffered (client dcache);
+cross-client visibility and crash durability begin at publication
+(§3). Degraded publication (with `u` domains already
 unavailable) needs ≥ `k+(f−u)` fragments, is marked degraded, and is
 re-striped on repair — never for a merely *slow* target, and only against
 domains the **control plane has committed as unavailable**, since a client
@@ -1016,7 +1026,7 @@ rationale: [performance.md](arch/performance.md).
   paid per chunk, per metadata record or per Raft group when several
   operations can safely share one.** Durability boundaries are amortized to
   the largest batch the externally visible semantics allow — they are not
-  eliminated, because a returned `write()` is durable (§7.3) and therefore
+  eliminated, because a publication (`fsync`/`close`/`O_SYNC`, §7.3)
   crosses one.
 - **FUSE capabilities and client prefetch** per §7.7.
 

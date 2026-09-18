@@ -29,25 +29,34 @@ on-disk `du` of `/data1/0*/efs` (× ~1.5 for 2+1 EC).
   (dead daemon leaves a plain dir). Same class of bug as posix-on-tmpfs.
 - **Harness (use this, do not rewrite):**
   `bash tests/stress/fio_honest_matrix.sh results/perf/<id>-honest`
-  Current: `results/perf/20260917-honest/` (raw.tsv + per-host logs) plus
-  `results/perf/20260918-dd-1c/`.
+  Current: `results/perf/20260918-w4-honest/` (1-client + morning 4-client
+  writes) and `results/perf/20260918-w4-honest4/gate.txt` (8g 4/9-client dd).
+  W3 8 GiB dd+fsync: `results/perf/20260918-w3-split/gate.txt` (639,
+  best 724). `FIO_SKIP1=1` skips the 1-client sweep; `FIO_ONLY=1` skips 4/9.
+  Prior: `results/perf/20260917-honest/` plus `results/perf/20260918-dd-1c/`.
 
 ## Current numbers (Sep 17–18, Raft+KV, 19810, TCP) — MiB/s
 
-**1 client only. 4- and 9-client have NOT been run on this engine** (that
-is START-HERE W4), so there is no scaling factor to quote yet.
+4- and 9-client **writes share a ceiling and get worse, not better.**
+8 GiB dd+fsync own-file: 1-client **639**, 4-client **251** (0.41×),
+9-client first-write **202** (0.32×). That is 3.8 % / 0.46 % / 0.37 % of
+the 16.7 / 44 / 44 GB/s ceilings. Do not quote 9-client 007–010 13–31 s
+(stale 4-client files). Full 4/9 fio reads and 9-client fio writes were
+not finished: after two 4-client 9×2g jobs the REPORT tail exceeds the
+400 s ssh budget (do not raise it). Morning 4-client sw-1m AGG **1589**
+(2.3× that run's 694) is the best 4-client fio write.
 
-| test | 1 client |
-| sw-1m | 209 |
-| ow-1m | 196 |
-| rw-1m | 196 |
-| rw-128k | 194 |
-| rw-4k | 89 |
-| sr-1m | 3141 |
-| rr-1m | 2276 |
-| rr-128k | 1492 |
-| rr-4k | 144 |
-| sw-50g | FAIL: `end_fsync` NET timeout |
+| test | 1 client | 4 client AGG |
+| sw-1m | 694 | 1589 |
+| ow-1m | 694 | 636 |
+| rw-1m | 699 | 343 |
+| rw-128k | 712 | — |
+| rw-4k | 385 | — |
+| sr-1m | 4102 | — |
+| rr-1m | 2556 | — |
+| rr-128k | 1577 | — |
+| rr-4k | 154 | — |
+| sw-50g | 341 | — |
 
 After WAL hold / activate-mask / pipelined propose, honest 9×2g sw-1m is
 **924**. Intra-job write samples run at several GiB/s — the wall is the
@@ -57,7 +66,8 @@ After WAL hold / activate-mask / pipelined propose, honest 9×2g sw-1m is
 1-client sw-1m 2355, 9-client 3599). That engine is deleted, its result
 dirs are gone, and its metadata path was a whole-table RAM snapshot with
 no per-op Raft commit — the two are not the same system. The write gap is
-work to do (START-HERE W3), not a regression to bisect.
+W4 (multi-client) plus the leftover REPORT pack+push tail, not a
+regression to bisect.
 
 **Shape that still holds:** reads scale with clients, writes share a
 ceiling. The NVMe ceiling is 16.7–21.4 GB/s **per host**, so every write

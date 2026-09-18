@@ -73,5 +73,15 @@
 /* Same-group RMDIR: one apply of efs_meta_apply_rmdir when parent, dentry,
  * and child shards share a Raft group. Encoding matches UNLINK. */
 #define EFS_MD_CMD_RMDIR 25
+/* Export-salt record for a group that did not apply MKFS. MKFS writes the
+ * salt keyed on the ROOT shard (group 0), but every MKDIR scatters via
+ * efs_kv_mkdir_shard(parent, name, salt) on EVERY group — a node hosting
+ * only group 2 must apply the same salt or its placement diverges (apply
+ * PROTO skip -> missing rows -> later EIO). mkfs proposes this to group 2
+ * after the group-0 MKFS commits; the record anchors on the group's anchor
+ * shard (efs_kv_anchor_shard) so group snapshots carry it. Idempotent: a
+ * matching existing record is OK, a mismatch is EFS_ERR_PROTO (never
+ * overwrite — placement is derived from this value). */
+#define EFS_MD_CMD_SALT 26 /* [anchor:4][salt:8] */
 
 #endif

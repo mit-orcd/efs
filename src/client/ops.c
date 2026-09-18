@@ -193,6 +193,11 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
         (void)efs_export_set_chunk(&g_client.export, recs[i].ino,
                                    recs[i].chunk_index, recs[i].nodes,
                                    recs[i].checksums);
+        (void)efs_export_set_chunk_gen(&g_client.export, recs[i].ino,
+                                       recs[i].chunk_index,
+                                       recs[i].chunk_generation
+                                           ? recs[i].chunk_generation
+                                           : recs[i].base_gen);
         efs_client_stage_touch(recs[i].ino);
     }
     pthread_mutex_unlock(&g_client.idx_mu);
@@ -233,6 +238,12 @@ static void pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci)
         }
         start = group_end;
     }
+}
+
+void efs_client_pull_chunks_range(efs_ino_t ino, uint32_t start_ci,
+                                  uint32_t end_ci)
+{
+    pull_chunks_range(ino, start_ci, end_ci);
 }
 
 static void pull_chunks_for_ino(efs_ino_t ino, uint64_t size)
@@ -963,7 +974,10 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
      * (peer_o_trunc_visible: B saw 0). Same-client now is strictly
      * after the pre-trunc write, so the stale close-REPORT stays stale
      * and the post-trunc write is newer. */
-    (void)efs_client_report_dirty(1);
+    /* Same ino as fsync: a process-wide REPORT waits on every other
+     * file's recs (and holds report_mu). Under the posix suite that
+     * stacked two 15 s truncates + a symlink EIO abort. */
+    (void)efs_client_report_dirty_ino(ino, 1);
     uint64_t sec;
     uint32_t nsec;
     now_ns(&sec, &nsec);

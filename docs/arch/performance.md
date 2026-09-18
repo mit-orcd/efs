@@ -72,9 +72,10 @@ hardware the groups were meant to exploit.
   Raft group when several operations can safely share one; durability
   boundaries are amortized to the largest batch the externally visible
   semantics allow.** The stronger-sounding claim "no NVMe sync per logical
-  operation" would be a lie: efs defines a returned `write()` as durable, so
-  *some* persistence boundary is crossed before it returns — an ordinary
-  completed write on PLP media, or an explicit FUA/flush without it
-  ([data protocol](protocols/data.md)). What batching removes is paying that
-  boundary once per operation when one boundary could have covered
-  thousands; it cannot remove the boundary itself.
+  operation" would be a lie: publication (`fsync`/`close`/`O_SYNC`)
+  crosses a persistence boundary — an ordinary completed write on PLP
+  media, or an explicit FUA/flush without it
+  ([data protocol](protocols/data.md)). A plain `write()` does not.
+  What batching removes is paying that boundary once per chunk when one
+  boundary could have covered thousands; it cannot remove the boundary
+  itself.

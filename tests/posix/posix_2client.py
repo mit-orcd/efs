@@ -331,33 +331,63 @@ def peer_mkdir_then_create():
 
 @test
 def peer_shared_pwrite():
-    """IOR-hard write: A and B pwrite distinct ranges of one file; both read."""
+    """IOR-hard: concurrent disjoint 4K pwrite+fsync; both ranges survive (I12)."""
+    n = int(os.environ.get("EFS_N1_N", "500"))
+    blk = 4096
+    stride = 8192
+    size = 64 * 1024 * 1024
+
+    def a0(d):
+        p = os.path.join(d, "n1")
+        fd = os.open(p, os.O_CREAT | os.O_RDWR | os.O_TRUNC, 0o644)
+        try:
+            os.ftruncate(fd, size)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
     def a(d):
-        fd = os.open(os.path.join(d, "file"), os.O_CREAT | os.O_RDWR, 0o644)
-        os.pwrite(fd, b"A" * 4096, 0)
-        os.close(fd)
+        fd = os.open(os.path.join(d, "n1"), os.O_RDWR)
+        buf = b"\xaa" * blk
+        try:
+            for i in range(n):
+                os.pwrite(fd, buf, i * stride)
+                os.fsync(fd)
+        finally:
+            os.close(fd)
 
     def b(d):
-        p = os.path.join(d, "file")
+        p = os.path.join(d, "n1")
         try:
-            fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+            fd = os.open(p, os.O_RDWR)
         except OSError as e:
             raise Fail("B open shared file: %s (errno %s)" %
                        (e.strerror, e.errno))
-        os.pwrite(fd, b"B" * 4096, 4096)
-        os.close(fd)
+        buf = b"\xbb" * blk
+        try:
+            for i in range(n):
+                os.pwrite(fd, buf, i * stride + blk)
+                os.fsync(fd)
+        finally:
+            os.close(fd)
 
     def a2(d):
-        p = os.path.join(d, "file")
-        with open(p, "rb") as f:
-            data = f.read(8192)
-        if data[:4096] != b"A" * 4096:
-            raise Fail("A no longer has its own 4k at offset 0")
-        if data[4096:8192] != b"B" * 4096:
-            raise Fail("A cannot read B's 4k at offset 4096 (got %r)" %
-                       data[4096:4112])
+        fd = os.open(os.path.join(d, "n1"), os.O_RDONLY)
+        lost = 0
+        try:
+            for i in range(n):
+                aa = os.pread(fd, blk, i * stride)
+                bb = os.pread(fd, blk, i * stride + blk)
+                if aa != b"\xaa" * blk:
+                    lost += 1
+                if bb != b"\xbb" * blk:
+                    lost += 1
+        finally:
+            os.close(fd)
+        if lost:
+            raise Fail("I12 N-1 lost %d of %d half-blocks" % (lost, n * 2))
 
-    return [("a", a), ("b", b), ("a", a2)]
+    return [("a", a0), ("ab", (a, b)), ("a", a2)]
 
 
 @test

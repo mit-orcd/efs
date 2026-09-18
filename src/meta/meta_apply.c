@@ -582,6 +582,12 @@ int efs_meta_apply_init(struct efs_kv *kv, uint64_t now)
     return efs_meta_apply_mkfs(kv, now, 0);
 }
 
+/* The salt record lives on the ROOT shard's export key (written by MKFS,
+ * group 0) AND on the even group's anchor shard (written by
+ * EFS_MD_CMD_SALT at mkfs time). A node hosting only the even group never
+ * applies MKFS, so without the second record its salt read returned 0 and
+ * every salted placement (MKDIR scatter) diverged — apply PROTO skips,
+ * missing rows, later EIO. Read root anchor first, even anchor second. */
 int efs_meta_apply_export_salt(struct efs_kv *kv, uint64_t *out)
 {
     uint8_t k[EFS_KV_KEY_MAX], v[8];
@@ -596,14 +602,51 @@ int efs_meta_apply_export_salt(struct efs_kv *kv, uint64_t *out)
     if (rc != EFS_OK)
         return rc;
     rc = efs_kv_get(kv, k, kl, v, &vl);
-    if (rc == EFS_ERR_NOT_FOUND)
-        return EFS_OK;
-    if (rc != EFS_OK)
+    if (rc == EFS_ERR_NOT_FOUND) {
+        uint32_t kl2 = 0, vl2 = 8;
+
+        rc = efs_kv_key_export(efs_kv_anchor_shard(2), k, &kl2);
+        if (rc != EFS_OK)
+            return rc;
+        rc = efs_kv_get(kv, k, kl2, v, &vl2);
+        if (rc == EFS_ERR_NOT_FOUND)
+            return EFS_ERR_NOT_FOUND; /* no record on either anchor */
+        if (rc != EFS_OK)
+            return rc;
+        vl = vl2;
+    } else if (rc != EFS_OK)
         return rc;
     if (vl < 8)
         return EFS_ERR_PROTO;
     *out = rd64(v);
     return EFS_OK;
+}
+
+/* EFS_MD_CMD_SALT apply: write the export-salt record on the given anchor
+ * shard. Idempotent — an existing record must MATCH (placement is derived
+ * from the salt; silently overwriting would fork the namespace). */
+int efs_meta_apply_salt_record(struct efs_kv *kv, uint32_t anchor,
+                               uint64_t salt)
+{
+    uint8_t k[EFS_KV_KEY_MAX], v[8];
+    uint32_t kl = 0, vl = 8;
+    int rc;
+
+    if (!kv)
+        return EFS_ERR_INVAL;
+    rc = efs_kv_key_export(anchor, k, &kl);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, k, kl, v, &vl);
+    if (rc == EFS_OK) {
+        if (vl >= 8 && rd64(v) == salt)
+            return EFS_OK;
+        return EFS_ERR_PROTO;
+    }
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+    be64(v, salt);
+    return efs_kv_put(kv, k, kl, v, 8);
 }
 
 int efs_meta_pack_inode(const struct efs_meta_row *r, uint8_t *out, uint32_t cap)

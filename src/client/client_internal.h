@@ -170,6 +170,9 @@ struct efs_chunk_rec;
 int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
                              uint32_t start, struct efs_chunk_rec *recs,
                              uint32_t *inout_count);
+void efs_client_pull_chunks_range(efs_ino_t ino, uint32_t start_ci,
+                                  uint32_t end_ci);
+int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci);
 int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, int is_dir);
 int efs_client_rpc_rename_at(efs_export_id_t export_id, efs_ino_t old_parent,
@@ -300,7 +303,8 @@ void efs_client_enable_meta_batch(uint32_t every_n_ops);
 int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk_index,
                             uint32_t fragment_index, uint32_t expected_frag_len,
                             uint8_t *data, uint32_t *data_len,
-                            uint8_t checksum[EFS_HASH_SIZE]);
+                            uint8_t checksum[EFS_HASH_SIZE],
+                            uint64_t chunk_generation);
 
 /* Store a fragment on a node. Returns 0 on success. */
 /* Read bytes from a file. Returns 0 on success. */

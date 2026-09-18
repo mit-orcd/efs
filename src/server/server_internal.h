@@ -102,6 +102,10 @@ struct efs_export *server_get_export(struct efsd_server *s, efs_export_id_t id);
  * valid across unlocked disk I/O. */
 struct efs_export *server_export_acquire_locked(struct efsd_server *s,
                                                 efs_export_id_t id);
+/* GET after a server restart must not wait for a PUT to mint the shell —
+ * fragments already live under data/exports/<id>/ (W1 remount decode). */
+struct efs_export *server_export_acquire_or_create_locked(struct efsd_server *s,
+                                                          efs_export_id_t id);
 void server_export_put(struct efsd_server *s, struct efs_export *ex);
 /* Index of ex within s->exports, or -1. Caller holds s->lock. */
 int server_export_index_locked(struct efsd_server *s, struct efs_export *ex);
@@ -168,6 +172,11 @@ extern __thread int efs_tls_write_known_zero;
 /* Writer-thread: storage root index for the in-flight fragment write
  * (-1 = unset; store path helpers fall back to probing / round-robin). */
 extern __thread int efs_tls_write_root;
+
+/* Candidate generation for the in-flight fragment PUT/GET (0 = legacy
+ * `{ci}.{fi}` path). Copied onto the writer job so the pool thread
+ * builds the same name the handler intended. */
+extern __thread uint64_t efs_tls_chunk_gen;
 
 /* Which local --storage root already holds this fragment, or -1. */
 int server_find_fragment_root(struct efsd_server *s, struct efs_export *ex,

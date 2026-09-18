@@ -29,10 +29,17 @@ remount() { # hosts...
             cd /tmp/efs && mkdir -p $MNT && rm -f fuse.log
             EFS_TRANSPORT="${EFS_TRANSPORT:-}" setsid ./efs-fuse 172.16.223.57:19810 efs-test $MNT >fuse.log 2>&1 </dev/null &
             for i in \$(seq 1 40); do
-                grep -q \"efs-fuse $MNT \" /proc/mounts && exit 0
+                grep -q \"efs-fuse $MNT \" /proc/mounts && break
                 sleep 0.15
             done
-            echo remount-fail; tail -5 fuse.log; exit 1" >/dev/null &
+            grep -q \"efs-fuse $MNT \" /proc/mounts || { echo remount-fail; tail -5 fuse.log; exit 1; }
+            # Mount-up is not LOOKUP-ready; mkdir -p of an already-published
+            # tree then hits EEXIST and the 4/9 sweep FAILs the other hosts.
+            for i in \$(seq 1 40); do
+                ls -d $MNT >/dev/null 2>&1 && exit 0
+                sleep 0.15
+            done
+            echo lookup-fail; tail -5 fuse.log; exit 1" >/dev/null &
         pids+=($!)
     done
     local rc=0 p
@@ -157,6 +164,14 @@ sweep() { # label hosts...
     local hosts=("$@")
     echo "=== $label clients: ${hosts[*]} ==="
     remount "${hosts[@]}" || { echo "remount failed for $label"; return 1; }
+    # One client publishes the per-host trees so the parallel mkdir -p
+    # in run_job does not race CREATE of fio-h (EEXIST → FAIL).
+    local trees="" h
+    for h in "${hosts[@]}"; do
+        trees="$trees $MNT/fio-h/$h/big $MNT/fio-h/$h/small $MNT/fio-h/$h/sw-50g"
+    done
+    ssh_to 25 "${hosts[0]}" "mkdir -p $trees && ls -d $MNT/fio-h >/dev/null" \
+        || { echo "prep-dirs failed for $label"; return 1; }
     # same files as the suite: 9x SIZE in big/, 9x SIZE4K in small/
     run_job sw-1m   big   write     1m   "$SIZE"   write "${hosts[@]}"
     run_job ow-1m   big   write     1m   "$SIZE"   write "${hosts[@]}"
@@ -174,7 +189,13 @@ sweep() { # label hosts...
 
 echo -e "test\tclients\thost\tbw_mib_s" >"$OUT/raw.tsv"
 echo "OUT=$OUT jobs=$JOBS size=$SIZE size4k=$SIZE4K"
-sweep 1 "${H1[@]}"
+if [ "${FIO_SKIP1:-}" != 1 ]; then
+    sweep 1 "${H1[@]}"
+fi
+if [ "${FIO_ONLY:-}" = 1 ]; then
+    echo DONE "$OUT"
+    exit 0
+fi
 sweep 4 "${H4[@]}"
 sweep 9 "${H9[@]}"
 echo DONE "$OUT"

@@ -123,6 +123,8 @@ static int log_sync_locked(struct efs_raft_disk *d)
 
     if (d->sync_mode != EFS_RAFT_DISK_SYNC)
         return EFS_OK;
+    if (d->sync_hold > 0)
+        return EFS_OK;
     want = ++d->sync_want;
     for (;;) {
         if (d->io_failed)
@@ -434,4 +436,29 @@ void raft_log_maybe_rotate_locked(struct efs_raft_disk *d)
     d->check_at = d->bytes * 2;
     if (d->check_at < RAFT_ROTATE_MIN_BYTES)
         d->check_at = RAFT_ROTATE_MIN_BYTES;
+}
+
+int efs_raft_disk_sync_hold(struct efs_raft_disk *d)
+{
+    if (!d)
+        return EFS_ERR_INVAL;
+    pthread_mutex_lock(&d->mu);
+    d->sync_hold++;
+    pthread_mutex_unlock(&d->mu);
+    return EFS_OK;
+}
+
+int efs_raft_disk_sync_release(struct efs_raft_disk *d)
+{
+    int rc = EFS_OK;
+
+    if (!d)
+        return EFS_ERR_INVAL;
+    pthread_mutex_lock(&d->mu);
+    if (d->sync_hold > 0)
+        d->sync_hold--;
+    if (d->sync_hold == 0)
+        rc = log_sync_locked(d);
+    pthread_mutex_unlock(&d->mu);
+    return rc;
 }

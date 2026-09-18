@@ -27,8 +27,9 @@ item payload (`kv_snap.c`), not a new dump format.
 
 **So there is no next §10 step.** What is left is the work queue in
 [§1a](#1a-the-work-queue) — measured gaps, in the order they should be taken.
-Take the lowest-numbered item that is not marked done; correctness items
-(W1–W2) come before every performance item. Each item names what to change,
+**Current item: W6** (W1–W5 are done). Take the lowest-numbered item
+that is not marked done; correctness items (W1–W2) come before every
+performance item. Each item names what to change,
 how to measure it, what proves it, and what is forbidden. If an item
 needs a decision the spec does not contain, **stop and ask** (§4); several
 items below are blocked on exactly that and say so.
@@ -59,9 +60,10 @@ NVMe each.
 | one client, logical write | **~16.7 GB/s** | 25 GB/s line rate ÷ 1.5 (2+1 EC sends 3 fragments per 2 data) |
 | one client, logical read | ~25 GB/s | line rate; a read fetches k=2 fragments |
 | cluster, logical write | **~44–57 GB/s** | 4 hosts × 16.7–21.4 GB/s NVMe (`results/nvme/`) ÷ 1.5 |
-| 1-client honest write today | 209–448 MiB/s | **1.3–2.7 %** of the client's ceiling |
-| 9-client honest write today | 924 MiB/s | **~2 %** of the cluster ceiling; 4.4× one client = 49 % scaling |
-| 1-client honest read today | 3141 MiB/s | ~13 % of the client's ceiling |
+| 1-client honest write today | 639–724 MiB/s | **3.8–4.1 %** of the client's ceiling (8 GiB dd+fsync after W3) |
+| 4-client honest write today | 251 MiB/s | **0.46 %** of 44 GB/s (8 GiB dd+fsync, 4 own files; 0.41× one client) |
+| 9-client honest write today | 202 MiB/s | **0.37 %** of 44 GB/s (8 GiB dd+fsync, 5 first-write clients; 0.32× one client) |
+| 1-client honest read today | 4102 MiB/s | ~16 % of the client's ceiling (sr-1m, W4 morning) |
 
 [architecture.md §1](../architecture.md) says: if a benchmark stops at a
 mutex, one leader, one thread, FUSE serialization, one WAL or one
@@ -75,12 +77,13 @@ verified `fuse.efs-fuse`):
 
 | measurement | value | where |
 | --- | --- | --- |
-| 1-client 8 GiB `dd bs=1M conv=fsync` | **448 MiB/s** (18.3 s) | `results/perf/20260918-dd-1c/` |
-| 1-client honest fio 9×2g sw-1m | **924 MiB/s** | `hot-sw-1m-9job-fcstor007.txt` |
-| 1-client honest fio 1-job 512m | 247 MiB/s | same |
-| first honest matrix, 1 client | sw-1m 209 · ow-1m 196 · rw-1m 196 · rw-128k 194 · rw-4k 89 · sr-1m 3141 · rr-1m 2276 · rr-128k 1492 · rr-4k 144 | `results/perf/20260917-honest/` |
+| 1-client 8 GiB `dd bs=1M conv=fsync` | **639 MiB/s** (13.5 s; best 724 / 11.86 s) | `results/perf/20260918-w3-split/gate.txt` |
+| 1-client honest fio 9×2g sw-1m | **758 MiB/s** | `results/perf/20260918-w1-honest/` |
+| 1-client honest fio 1-job 50g | **341 MiB/s** | `results/perf/20260918-w4-honest/` (W1 was 373; loaded reruns EIO on fsync) |
+| prior 1-client 9×2g sw-1m | 924 MiB/s | `hot-sw-1m-9job-fcstor007.txt` |
+| first honest matrix, 1 client | sw-1m 209 · … · sr-1m 3141 | `results/perf/20260917-honest/` |
 | per-host local NVMe ceiling | 16.7–21.4 GB/s | `results/nvme/` |
-| IO-500 IOR / mdtest | **never run** | harness exists: `tests/perf/io500/` |
+| IO-500 IOR / mdtest | 9×1 debug + hard `-W` | `results/io500/20260918-debug-9x1/` · `-W` 4244 errors; 30s / 9×4 still open |
 
 **Never quote intra-job fio write samples or `dd` progress lines** — those are
 pre-flush and read several GiB/s. The number is bytes ÷ wall with the flush
@@ -89,296 +92,213 @@ Use a non-zero source file.
 
 ---
 
-#### W1 — Shared-file (N-1) writes from two clients silently lose data
+#### W1 — Shared-file (N-1) writes from two clients silently lose data — DONE
 
-**This is the HPC pattern** — every rank writes its own region of one file
-(IOR-hard, MPI-IO, HDF5 with one file per job) — and efs gets it wrong
-without reporting an error. It violates **I12** and the protocol in
-[protocols/data.md](protocols/data.md) ("Sub-chunk read-modify-write"),
-which says: the writer reads committed base generation `B`, publishes with
-`CAS(expected_generation = B)`, and on conflict refetches, re-applies its
-byte-range patch and retries, so *disjoint ranges both land*.
+**Done Sep 18 2026** (working tree on leftover-1 19810, TCP). I12 CAS is
+live: `efs_chunk_rec.base_gen` + `chunk_generation` on the wire, leader
+checks the writer's base before propose, apply STALE is audible
+(`EFS_INODE_RPC_STALE=11` / `EFS_ERR_STALE=-14`) and does **not** stall
+`last_applied`, client refetch+overlay+PUT retries. Fragments are
+`{ci}.{fi}.{gen}`; GET uses `fragment_path_at` and mints the export shell.
+Report identity comes from the last PUT (`putid`), not a GETCHUNKS stub.
 
-What the code does instead, and why the CAS cannot fire:
+`peer_shared_pwrite` is concurrent (`("a", a0), ("ab", (a, b)), ("a", a2)`).
+STALE bound is **64** with 2–20 ms backoff — 8 loses to 16 fsyncs/chunk.
+`EFS_CHUNK_BASE_UNCOND` (`UINT64_MAX`) is only for a full-chunk overwrite.
 
-- The client builds a partial-chunk write by fetching the 128 KiB chunk,
-  patching its bytes in, and PUTting new fragments (`efs_fuse.c` writeback
-  worker, `write.c` RMW base fetch). The only mutual exclusion is
-  **process-local**: `efs_wb_ino_lock` + `wb_overlap_inflight` in
-  `efs_fuse.c` ~2000–2030 serialize two RMWs of one chunk *inside one
-  `efs-fuse`*. Two clients never see each other.
-- The report record `struct efs_chunk_rec` (`include/efs/protocol.h`) is
-  `{ino, chunk_index, nodes[], checksums[]}` — **it carries no base
-  generation.** The client has no field in which to say "I patched
-  generation B".
-- So the server fills the CAS itself: `server_raft_host_report` →
-  `p.expected_gen = got.generation` (`src/server/raft_host.c` ~8432), where
-  `got` was read *moments before proposing*. The apply layer's
-  `if (p->expected_gen != committed) return EFS_ERR_STALE` in
-  `efs_meta_apply_publish` (`src/meta/meta_apply.c` ~2519) is real, but it
-  is being handed the answer it checks against. It serializes two
-  publications; it cannot notice that the client's 128 KiB was built on a
-  chunk that has since moved on.
+- **Gate:** `results/stress/20260918-n1-w1/` — n1-w1-gate10c
+  `lost=0 decode_eio=0`; isolated `peer_shared_pwrite` **5/5**;
+  `test_meta_apply` / `test_wire` OK (`test_publish_stale_then_retry`).
+  Suite 2 one pair `results/posix2/20260918-122419/` **60/3** (was 58/4).
+  Suite 1 jobs=1 `results/posix/20260918-123250/` 186/10 — every new FAIL
+  isolated PASS except known `concurrent_appends`. Honest 1-client
+  `results/perf/20260918-w1-honest/`: sw-1m **758** (not a regression vs
+  209); sw-50g **373** (was NET). `FIO_ONLY=1` skips the 4/9 sweeps.
+- **Forbidden to reopen:** a distributed chunk lock; per-record report
+  status arrays; sending `UINT64_MAX` from any path that read a base;
+  wipe / `raft-mkfs` / inventing chunked SNAP.
 
-Timeline: A and B each hold chunk 0 at gen 5. A patches [0,4K), PUTs,
-reports — committed becomes 6 (A's 128 KiB). B patches [4K,8K) into *its*
-gen-5 copy, PUTs, reports — the host reads 6, CASes 6→7 with B's 128 KiB,
-in which [0,4K) is still the gen-5 bytes. **A's write is gone and A was told
-it succeeded.**
+#### W2 — `write()` is specified as durable-and-visible; the code buffers — DONE
 
-Why nobody has seen it as a failure: suite 2's `peer_shared_pwrite`
-(docstring: "IOR-hard write") runs A **then** B sequentially, so B's base
-already contains A. `peer_overlap_pwrite_partial` does run concurrently and
-checks exclusive ranges, but two SSH-launched 4 KiB writes almost never
-overlap in the ~ms RMW window — that is why it flips between PASS and the
-"exclusive-range zeros" failure recorded in the project state. IOR-hard hits
-the window continuously.
+**Done Sep 18 2026**, option (i): the spec moved. [architecture.md §3](../architecture.md)
+now lists three deviations; a returned `write()` is client-buffered;
+durable + cross-client visible at `fsync` / last `close` / `O_SYNC`.
+`O_SYNC`/`O_DSYNC`/`-o sync` is specified write-through and is **not
+wired**. Do not implement publish-on-every-`write()` — that is the
+rejected 10× throughput change.
 
-1. **Reproduce it deterministically first** (no MPI needed). On clients A
-   and B, concurrently and with no barrier, loop 500 times: A
-   `pwrite`s 4 KiB of `0xAA` at offset `i*8192`, B `pwrite`s 4 KiB of `0xBB`
-   at `i*8192 + 4096`, each followed by `fsync`, all inside chunk-sized
-   stretches of one pre-sized 64 MiB file. From a third client, remount,
-   read the file, and count 4 KiB blocks whose content is not the owner's
-   pattern. I12 says **0**. Record the count in `results/stress/<id>-n1/`.
-   This becomes the gate and stays in `tests/posix/posix_2client.py` as a
-   real concurrent test (replace `peer_shared_pwrite`'s sequential shape).
-   Two facts that shape the fix (verified in the tree, do not re-derive):
-   **(a) the client never learns a chunk generation today** — the
-   `GETCHUNKS` reply is the same `struct efs_chunk_rec recs[]`, so one
-   field added to that one struct carries the generation in *both*
-   directions; **(b) the server drops per-record apply results on the
-   floor** — the batched publish loop in `raft_host.c` (`apply_publish_cmd`,
-   ~1339) does `(void)apply_one_publish(...)` and returns `EFS_OK` no matter
-   what, so an apply-time `EFS_ERR_STALE` is invisible to
-   `host_wait_applied` and the report replies OK. If you only do step 3
-   without step 4 the CAS will fire and the test will still fail.
+Measured (`results/stress/20260918-w2/`): peer sees **0/10** of an
+un-`fsync`ed 4 KiB `pwrite`; `kill -9` of `efs-fuse` loses 64 MiB of an
+acknowledged `write()` (file exists, size=0).
 
-2. **Carry the generation on the wire.** Add `uint64_t base_gen` to
-   `struct efs_chunk_rec` (`include/efs/protocol.h` ~575; `test_wire.c`
-   round-trips it via `RT(struct efs_chunk_rec)` — keep it green). Then:
-   - server `GETCHUNKS` fill, `server_raft_host_getchunks`
-     (`raft_host.c` ~8818, right after `efs_meta_apply_get_chunk(... &ch)`):
-     `out->recs[out->count].base_gen = ch.generation;`
-   - client staging entry `struct efs_chunk_entry` (`include/efs/metadata.h`
-     ~22): add `uint64_t generation`; `apply_chunk_recs` (`src/client/ops.c`,
-     called from the `GETCHUNKS` loop ~226) stores it.
-   - client dcache slot `struct dcache_ent` (`src/client/write.c` ~1300): add
-     `uint64_t base_gen`. Set it where the RMW base is read
-     (`write.c` ~1187: after `export_chunk_copy(ino, ci, &ce)` succeeds it is
-     `ce.generation`; the `*from_zero_out = 1` branch is `0`). A **full
-     chunk-aligned overwrite** (the `aligned` path in `efs_fuse.c` ~2022 reads
-     no base) sets `UINT64_MAX` = "unconditional, last-writer-wins", which is
-     legal for a whole-chunk write. Never use the sentinel for an RMW.
-   - the slot must **keep its dirty ranges after the merge**: today
-     `write.c` ~1891 does `e->nrange = 0; if (!have_base) dcache_add_range`.
-     Track ranges for `have_base=1` too (if `DCACHE_NR` overflows, collapse
-     to one range covering the whole chunk — then the retry is a full
-     overwrite and needs no base). Without this the client cannot re-apply
-     *its own bytes* onto a fresh base in step 5.
-   - carry the slot's `base_gen` into the staging entry when the PUT lands
-     (`dcache_put_now` → `efs_export_set_chunk`), and copy it into the report
-     record where `crecs[cn]` is built (`write.c` ~505).
-   `EFS_BUILD_ID` changes — restart all four `efsd` together, then remount.
-3. **Check it on the leader, before proposing.** In `host_pub_pack`
-   (`raft_host.c` ~8336; it fills `struct efs_meta_publish p` around ~8432):
-   keep the existing idempotency short-circuit (identical `nodes`+`checksums`
-   → `EFS_OK`) *first*, then
-   `if (rec->base_gen != UINT64_MAX && rec->base_gen != got.generation) return EFS_ERR_STALE;`
-   and `p.expected_gen = (rec->base_gen == UINT64_MAX) ? got.generation : rec->base_gen;`.
-   This is a ReadIndex'd read, so the check is linearizable; the apply-time
-   CAS remains the safety net for the propose→apply race.
-4. **Make the safety net audible.** `apply_publish_cmd` returns the first
-   non-OK `rc` from `apply_one_publish` instead of `EFS_OK` (that value is
-   what lands in `arc_rc[]` and what `host_wait_applied` hands back).
-   `server_raft_host_report` maps `EFS_ERR_STALE` to a new
-   `#define EFS_INODE_RPC_STALE 11` reply status. The reply is a single
-   status for the whole report (`struct efs_msg_inode_reply`) — **do not add
-   per-record results to the wire**; a whole-report STALE is correct and
-   cheap because the client can find the stale records itself in step 5.
-5. **Retry on the client.** `efs_client_report_dirty` (`write.c` ~495)
-   already merges the dirty set back on any failure. On `EFS_INODE_RPC_STALE`:
-   for every ino in the failed report, re-run the `GETCHUNKS` pull (it now
-   returns generations); for every dirty dcache slot whose `base_gen` is not
-   `UINT64_MAX` and differs from the fresh generation, refetch the committed
-   chunk, overlay the slot's kept ranges, PUT a new candidate
-   (`host_pub_candidate_gen` is content-hashed, so new bytes mean a new
-   candidate automatically), update `base_gen`, and report again. Bound it
-   (8 tries); exhaustion is `EIO` on the `fsync`, never silent.
-6. Run the step-1 repro again: **0** lost blocks under 500×2 concurrent
-   writes. Then suite 2 one pair and 4 pairs, then `fio_honest_matrix.sh`
-   1-client (the aligned sentinel path must not cost throughput).
+- **Forbidden:** implementing option (ii) publish-on-write; editing §3
+  back to "`write()` is durable"; wiring `O_SYNC` as a silent side-cut
+  of a later item.
 
-- **Read:** [protocols/data.md](protocols/data.md) (sub-chunk RMW, candidate
-  generations), [architecture.md §7.3](../architecture.md) and I12,
-  [architecture.md §4](../architecture.md) I16 (retry idempotency).
-- **Gate:** step-1 repro 0 lost; the new concurrent `posix_2client.py` test
-  PASS 5/5; suite 1 jobs=1 and suite 2 unchanged; `test_meta_apply` and
-  `test_wire` green (add a STALE-then-retry case to `test_meta_apply`).
-- **Forbidden:** "fixing" it by locking the chunk across clients (a
-  distributed lock on the hot-file path is the serialization point §0 P1
-  forbids, and it is not what the spec says). Documenting it as a deviation
-  — the spec already decided the opposite. Sending the `UINT64_MAX`
-  sentinel from any path that read a base (it turns the CAS off and
-  recreates the bug). Adding per-record status arrays to the report reply
-  (a whole-report STALE + client-side refetch is the decided shape).
+#### W3 — Split the single-client fsync tail, then remove the larger half — DONE
 
-#### W2 — `write()` is specified as durable-and-visible; the code buffers — ASK
+**Done Sep 18 2026** (leftover-1 19810, TCP). Measure said REPORT owned
+73 % of the 8 GiB `fsync` (flush 5.7 s / report 15.0 s / wall 25.8 s).
+Cuts, in order: `HOST_PUB_BATCH_N=2048` + skip `get_chunk` when
+`base_gen==0`; raft-log `sync_hold` across the report's proposes;
+client flush pipeline (`dcache_steal` + put pool); PUBLISH follower
+forward is `host_propose` not `host_propose_wait`; O_APPEND fetches a
+published mapping before sparse RMW; truncate/symlink report only that
+ino; FUSE `flush` waits `report_dirty_ino(ino, 1)` (W2 close is
+durable — kick-only left `i_size` 0 so the next O_APPEND wiped the
+prefix). N=4096 did not win. AE 1 MiB is ~5168 pubs; deeper batching
+is exhausted.
 
-[architecture.md §3](../architecture.md) says four times that *a returned
-`write()` is durable and visible to every client* (§3 "Data", §7.3, and
-[performance.md](performance.md) builds its "no persistence boundary per
-op" wording on it). The client does not do that: a `write()` lands in the
-`efs-fuse` dcache (small writes are an in-place patch, larger ones go to the
-writeback pool) and is published at `fsync`, `close`, or dcache reclaim.
-That is why honest fio needs `end_fsync` at all, and why the fio rule
-warns that a `time_based` run without it "measures memory bandwidth".
+- **Gate:** `results/perf/20260918-w3-split/gate.txt`. 8 GiB
+  `dd+fsync` **13.501 s / 639 MB/s** (best cut 11.862 s / 724 MB/s);
+  remount `HEAD_OK` `TAIL_OK`. **3.8–4.1 %** of 16.7 GB/s (was 1.9 %
+  at 317 MiB/s). posix jobs=1 `results/posix/20260918-w3f/` **195/201**
+  (190 both-pass; W1 was 186/10). posix2 one pair
+  `results/posix2/20260918-w3f/` **58/63** (W1 60/3). Remaining
+  suite fails are load / known O_APPEND atomicity / 15 s walks, all
+  isolated PASS except `concurrent_appends`. Remaining tail is REPORT
+  pack+push (~6 s).
+- **Forbidden to reopen:** a REPORT split into multiple RPCs;
+  weakening `fsync`; async flush to inflate the number; raising
+  `EFS_IO_TIMEOUT_MS`.
 
-Two consequences, both currently undocumented:
+#### W4 — 4-client and 9-client honest fio and dd — DONE
 
-- **Durability:** an acknowledged `write()` is lost if the *client* node
-  dies before `fsync`/`close`. Storage-node failures are covered by §2; a
-  client crash is not a §2 event, so this is a pure §3 contradiction.
-- **Visibility:** a peer reading the range between A's `write()` and A's
-  `fsync` gets the old bytes. This is close-to-open coherence — NFS
-  semantics, not what §3 promises. MPI-IO codes that sync + barrier are
-  fine; POSIX-coherence-dependent codes are not.
+**Done Sep 18 2026.** Writes share a ceiling and more clients make it
+worse. Gate: `results/perf/20260918-w4-honest4/gate.txt`.
 
-Buffering is almost certainly the *right* engineering choice for HPC (POSIX
-does not require `write()` durability, and every production PFS buffers), so
-the likely resolution is to **move the spec**, not the code — but that
-changes a normative contract and is the user's call.
+- 1-client morning matrix `results/perf/20260918-w4-honest/`: sw-1m
+  **694**, sr-1m **4102**, sw-50g **341** (W5). All `FUSE_OK` `err=0`.
+- 4-client fio (same dir, morning): sw-1m AGG **1589** (2.3×), ow-1m
+  636, rw-1m 343. After bounce/grown table: sw-1m 281, ow-1m 240, then
+  rw-1m **400 s ssh TIMEOUT** on all 4 (REPORT tail). Do not raise it.
+  4/9-client fio reads and 9-client fio writes were not finished.
+- 8 GiB `dd+fsync` own file, remount HEAD/TAIL `0x5a` OK: 4-client
+  **251 MiB/s** (32 GiB / 130.5 s = 0.41× one client, 0.46 % of 44 GB/s);
+  9-client first-write 011–015 **202 MiB/s** (40 GiB / 203 s = 0.32× one
+  client). Do not quote 007–010's 13–31 s 9-client walls — those files
+  kept the 4-client mtime.
+- A 4-client fio storm can lose raft heartbeats (`report-split`
+  `rc=-15` NOT_PRIMARY). Recovery is keep-storage efsd bounce, not wipe.
 
-1. **Measure both halves.** (a) Visibility: A `pwrite`s 4 KiB and does *not*
-   close; B `pread`s the same range 10× over 2 s — record whether B ever
-   sees the new bytes before A's `fsync`. (b) Durability: A writes 64 MiB,
-   `kill -9` A's `efs-fuse` before close; remount; read back — record how
-   much is missing. Put both in `results/stress/<id>-w2/`.
-2. Bring the numbers and the two options to the user: **(i)** spec says
-   durable+visible at `fsync`/`close`, plus an `O_SYNC`/`-o sync` write-through
-   mode for callers who need per-write durability; or **(ii)** code publishes
-   on every `write()` (the fio numbers will drop, and W3's fsync tail becomes
-   every write's tail). Do not choose.
+W3's leftover (REPORT pack+push) is the multi-client wall. The 1-client
+limit was not per-client CPU.
 
-- **Read:** [architecture.md §3](../architecture.md) (the contract and its
-  deviation list — the one home), §7.7 FUSE, [protocols/data.md](protocols/data.md).
-- **Forbidden:** editing §3 without the decision. Making `write()` durable
-  "to match the spec" without being asked — that is a 10× throughput
-  decision made by an agent.
+- **Forbidden to reopen:** a REPORT split into multiple RPCs; quoting a
+  run where any host failed the FUSE check; one shared file (W1);
+  raising `EFS_IO_TIMEOUT_MS`.
 
-#### W3 — Split the single-client fsync tail, then remove the larger half
+#### W5 — Re-measure `sw-50g` after W3 — DONE
 
-The 8 GiB `dd+fsync` above spends ~6 s streaming at 1.3–1.4 GB/s and then
-**~12 s inside `fsync`**. That tail, not bandwidth, is why one client reports
-448 MiB/s. Both daemons are far from CPU-bound during it: `efs-fuse` ~1.1
-cores (blake3 52% in `hash_write_fragments` / `dcache_flush_slot_inner`,
-memmove 33%, `poll` 0.9%), `efsd` 0.20–0.40 CPUs (hottest is the dual-host
-node at 49% `memcmp`/`lsm_get` under `server_raft_host_report` →
-`efs_meta_apply_get_chunk`). So the tail is **off-CPU wait**, and the profile
-already says where it is not.
+**Done Sep 18 2026** as the W4 morning 50g row:
+`results/perf/20260918-w4-honest/` sw-50g **341** / sr-50g **2203**,
+`FUSE_OK` `err=0`. W1 was 373. Later loaded reruns laid 50 GiB then
+`end_fsync` EIO (the same REPORT tail). Completes when the path is
+healthy; do not treat EIO as a reason to raise `EFS_IO_TIMEOUT_MS`.
 
-`fsync` on this path is two serial phases in `efs_fuse_fsync_ino`
-(`src/client/efs_fuse.c`): `efs_file_data_sync_fh` (flush remaining dirty
-chunks: hash + EC + PUT) and then `efs_client_report_dirty_ino(ino, 1)`
-(`src/client/write.c`), which publishes every dirty chunk rec. 8 GiB ÷ 128 KiB
-= **65 536 chunk recs** in one report.
-
-1. **Measure the split first.** Instrument the two phases (or time them from
-   the client) and record milliseconds for each on an 8 GiB `dd+fsync`. Do
-   not proceed until you know which phase owns the ~12 s. Everything below is
-   conditional on that number.
-2. **If REPORT owns it:** the server side batches `HOST_PUB_BATCH_N = 256`
-   PUBLISH cmds per Raft proposal (`host_pub_batch_push` /
-   `host_pub_batch_finish`, `src/server/raft_host.c`), so 65 536 recs is
-   ~256 proposals. Check, with evidence, whether those proposals actually
-   pipeline or still serialize a round trip each (256 × ~40 ms ≈ 10 s fits the
-   observed tail exactly), and whether the per-rec `lsm_get` in
-   `host_pub_pack` / skip-identical is paid once per rec. Fix the one the
-   measurement blames: deeper batching, or removing the per-rec lookup.
-3. **If flush owns it:** the remaining dirty set is hashed and PUT at close.
-   That is the blake3/memmove path already visible in the profile — a client
-   pipelining problem (hash while PUT is in flight), not a server problem.
-
-- **Read:** [protocols/data.md](protocols/data.md) (publication, lanes),
-  [performance.md](performance.md) (batching clause: no persistence boundary
-  per chunk when one can cover many).
-- **Gate:** the 8 GiB `dd+fsync` improves and stays byte-correct — remount,
-  then verify head and tail bytes and the on-disk delta (≈ logical × 1.5 for
-  2+1 EC). Plus posix suite 1 jobs=1 and posix suite 2 one pair, unchanged.
-  Report the result as a percentage of the 16.7 GB/s client ceiling.
-- **Forbidden:** inventing a REPORT split into multiple RPCs (that is an
-  unmade wire decision — if the measurement says the batch itself is too big,
-  **stop and ask**). Weakening `fsync` durability, dropping the flush, or
-  reporting asynchronously to make the number look better.
-
-#### W4 — 4-client and 9-client honest fio and dd
-
-Leftover 1 is only ever gated at **1 client**. Nothing above 1 has been run on
-the current tree, so "efs scales with clients" is unmeasured.
-
-- **Do:** `bash tests/stress/fio_honest_matrix.sh results/perf/<id>-honest`
-  (it already runs 1 / 4 / 9 hosts: 007, 007–010, 007–015) and the same
-  8 GiB `dd+fsync` from 4 and then 9 clients, each to its **own** file.
-- **Expect and report the shape, not just the total.** Writes have
-  historically shared a ceiling (9 clients ≈ 1.5× one) while reads scaled
-  6–8×. If 4-client aggregate ≈ 1-client, the ceiling is shared and W3's
-  answer is the lever again. If it scales ~4×, then the 1-client limit was
-  per-client CPU and that changes W3's conclusion — say so. Report every
-  aggregate as a percentage of the 44–57 GB/s cluster ceiling.
-- **Read:** [performance.md](performance.md) §9 scaling envelope; the honest
-  fio method in `.cursor/rules/efs-fio-honest.mdc`.
-- **Gate:** every job logs `FUSE_OK`, no job's `Disk stats` names `md0`/`sda`
-  (that is local disk = the run did not touch efs), `err=0`, and bytes written
-  ≤ the on-disk `du` delta × EC factor.
-- **Forbidden:** one shared file across clients (that is W1's territory, not
-  throughput). Quoting a run where any host failed the FUSE check.
-
-#### W5 — `sw-50g` fails `end_fsync` with `EFS_ERR_NET`
-
-A 50 GiB single-file write lays the data down and then times out in the final
-flush: ~400 000 publications in one report versus `EFS_IO_TIMEOUT_MS`. This is
-W3's wall at 6× the recs, so **do W3 first** — it may close this outright.
-Re-run after W3 before touching anything.
-
-- **Do:** re-run only the 50g row (`FIO_50G=50g`, 1 job,
-  `--filename=big50`), and record whether it now completes.
-- **Forbidden:** raising `EFS_IO_TIMEOUT_MS` to make it pass — that is
-  widening a timeout instead of removing the work (§4). Splitting REPORT
+- **Forbidden to reopen:** raising `EFS_IO_TIMEOUT_MS`; splitting REPORT
   without asking.
 
-#### W6 — Run IO-500 (IOR easy, IOR hard, mdtest) for the first time
+#### W6 — Run IO-500 (IOR easy, IOR hard, mdtest) — IN PROGRESS
 
-`tests/perf/io500/` has existed since Aug 20 and has **never produced a
-result** (`results/` has no `io500/`). IOR and mdtest are the numbers an HPC
-site asks for first, and mdtest is the only way this engine gets a metadata
-rate at all — the 33k creates/s in old notes measured the deleted engine.
-mdtest is currently turned off in `config-debug.ini`; turn it on.
+9×1 debug (stonewall 1 s, INVALID vs 300 s) and IOR-hard `-W` are in
+`results/io500/`. Not a list submission. mdtest is on in both harness
+inis; `ior-rnd4K-easy-read` is off (blocksize==xfer abort).
+`timestamp-datadir = TRUE` (leftover names after a hung run made IOR
+O_EXCL EEXIST).
 
-Do this **after W1** (before it, IOR-hard with write-check would report the
-lost updates — which is a valid way to demonstrate W1, but not a benchmark)
-and **after W3** (before it, the write numbers only measure the fsync tail).
+**Landed 9×1 debug** `results/io500/20260918-debug-9x1/` (FUSE_OK TCP
+007–015). Writes include IOR `-e`. Reads are same-mount (dcache). Do
+not quote stonewall intra GiB/s.
 
-1. `bash tests/perf/io500/run.sh prereqs` on fcstor007; follow the README
-   for the DOCA OpenMPI prefix (`mpi-env.sh`). No Slurm, no `yum install
-   openmpi`.
-2. Run `config-debug.ini` first (short stonewall) with 9 ranks × 1 per host,
-   then 9 × 4. Enable IOR write-check (`-W`) on ior-hard for one run and
-   record the mismatch count — it must be 0 after W1.
-3. Record IOR-easy write/read, IOR-hard write/read (GiB/s), mdtest-easy and
-   mdtest-hard create/stat/delete (kIOPS) in `results/io500/<id>/` with the
-   ini and hostfile alongside. State stonewall time and rank count; these
-   are not list submissions.
-4. Compare IOR-easy write against the cluster ceiling table; compare
-   IOR-hard against IOR-easy — the ratio is the shared-file RMW cost the
-   spec accepts by design, and it should be reported as such, not hidden.
+| phase | score | wall s |
+| --- | --- | --- |
+| ior-easy-write | 0.263372 GiB/s | 70.2 |
+| mdtest-easy-write | 0.053199 kIOPS | 4.1 |
+| ior-hard-write | 0.025414 GiB/s | 329.6 |
+| mdtest-hard-write | 0.026383 kIOPS | 3.6 |
+| ior-easy-read | 0.599981 GiB/s (`-R` 512 errors) | 25.4 |
+| mdtest-easy-stat | 0.360392 kIOPS | 1.6 |
+| ior-hard-read | 1.264556 GiB/s (`-R` 15982 errors) | 5.8 |
+| mdtest-hard-stat | 0.779457 kIOPS | 1.4 |
+| mdtest-easy-delete | 0.069133 kIOPS | 3.4 |
+| mdtest-hard-read | 0.035378 kIOPS | 2.4 |
+| mdtest-hard-delete | 0.097743 kIOPS | 1.9 |
 
-- **Read:** `tests/perf/io500/README.md`; the fio rule's FUSE check applies
-  to every rank's mount (`findmnt` on all 9 before starting).
-- **Gate:** a complete run on 9 hosts with every rank on `fuse.efs-fuse`;
-  IOR-hard `-W` mismatches = 0.
-- **Forbidden:** quoting any number from a run where a rank fell back to
-  local disk; tuning IOR's transfer size to make IOR-hard look aligned
-  (47008 is the point).
+hard/easy write = **0.097**. Easy write 0.26 GiB/s vs 9-client 8g
+dd+fsync 0.20 GiB/s (same order; 0.6 % of 44 GB/s). First
+ior-hard-write hung D-state (`20260918-debug-hung-hard/`, 26k-rec
+STALE REPORT); remounted retry finished.
+
+**IOR-hard `-W`** `results/io500/20260918-hard-w/`: 13.08 MiB/s,
+583 s, **4244 incorrect-data errors**, IOR exit 40. Gate
+mismatches=0 is FAIL. Do not retune 47008. Do not invent a chunk lock.
+
+**30 s ior 9×1 aborted** `results/io500/20260918-ior-30s-abort/`:
+ior-easy-write fsync/close EIO at 545 s; `report-split nrec=125000
+rc=-13` (BUSY) on fcstor004, then apply-publish STALE (`rc=-14`) at
+88 % CPU. Same class as loaded 50g `end_fsync` EIO. Do not raise
+`EFS_IO_TIMEOUT_MS`. 1 s easy-write fsyncs; 30 s (~125k pubs) does
+not.
+
+**Cluster RESET (Sep 18 PM, user-authorized).** The 30 s abort left a
+self-draining STALE backlog (~1.2 entries/s, term flapping, hours to
+drain) and fcstor005 430k entries behind on group 2 (W11 oversized
+SNAP — can never catch up). The table was wiped and `raft-mkfs`'d
+fresh. Gotcha now fixed in `clean_cluster.sh`: mkfs proposes only to
+group 0, so it must go to group 0's CURRENT leader; `rc=-15
+leader_hint=H` means retry on node H+1 (`172.16.223.(57+H)`).
+
+**FOUND + FIXED (Sep 18 PM): same-parent concurrent mkdir EIO.**
+9×4 mdtest-easy aborted: 8/36 `mdtest_tree.N.0` mkdirs failed EIO
+(9×1 passed). Repro: 36-way same-parent mkdir across 4 clients →
+~5/36 EIO in 2.9 s (fast fail, not BUSY-retry exhaustion). Server
+`EFS_RAFT_DBG` mkdir line: `rc=-13/-14 stage=11` — the cross-group
+mkdir txn (MKDIR scatters the child, so every mkdir with an
+even-shard child is a 2-group txn) CASes the parent-row + dseq
+versions; the two dual-hosts (004/005) race, one commits, the other
+preps STALE. The client RPC loops retried BUSY/NOT_PRIMARY but NOT
+STALE → `fuse_create_errno` → EIO. Fix (client `inode_rpc.c`):
+`EFS_INODE_RPC_STALE` retried like BUSY for `EFS_MSG_INODE_CREATE`
+only (idempotent unique name; a landed retry reads as EEXIST, which
+FUSE already handles). REPORT_CHUNKS keeps its STALE (W1
+refetch+overlay). Gate: 36/36 then 90/90 same-parent mkdirs, 83
+STALE/BUSY conflicts absorbed on 004 alone, 0 errors. Same exposure
+exists for cross-group UNLINK/RENAME/LINK txns — not measured, not
+fixed. **Deeper fix (not done):** the parent-row nlink++/dseq++/
+times should be commutative txn reductions (spec §7.2), not an EXCL
+row CAS — that removes the same-parent mkdir serialization point
+entirely instead of retrying it.
+
+**Fresh-cluster 9×4 (Sep 18 PM):** ior-easy-write **1.34 GiB/s**
+(39.7 s) — 5× the poisoned-table 9×1. mdtest/reads/hard: see
+`results/io500/<new id>/` when landed.
+
+**W11 is every-run, not edge:** `snapshot skipped ... KV export
+exceeds SNAP cap` fires as soon as real data flows (ior-easy-write
+≈ 400k chunk pubs ≈ 40 MB KV > 4 MiB cap), so a data-bearing
+cluster NEVER compacts its raft log → any follower restart = full
+log replay, and a lagged follower is permanent (what killed 005).
+
+**Still open (this item):**
+1. `SLOTS=4 NP=36 bash tests/perf/io500/run.sh debug` (1 s
+   stonewall) — RUNNING on the fresh cluster. `findmnt`
+   `fuse.efs-fuse` on every rank. Copy ini+hostfile+result.txt to
+   `results/io500/<id>/`.
+2. Confirm every rank stayed FUSE (no local-disk fallback).
+   Another 30 s `run.sh ior` will hit the same fsync EIO until
+   REPORT can take 125k pubs.
+
+- **Read:** `tests/perf/io500/README.md`; the fio rule's FUSE check
+  applies to every rank.
+- **Gate:** 9×1 debug is in; 30 s + 9×4 still required. `-W`
+  mismatches are **4244**, not 0 — record that, do not hide it, do
+  not reopen W1 with a lock.
+- **Forbidden:** quoting a rank that fell back to local disk; tuning
+  IOR's transfer size (47008 is the point); `pkill -f` (matches the
+  agent). Kill hung `io500` with `pkill -9 -x io500` then remount
+  FUSE (D-state `request_wait_answer` ignores SIGKILL until
+  `efs-fuse` dies).
 
 #### W7 — Two POSIX suite-1 tests exceed the 15 s budget even in isolation
 
@@ -499,7 +419,9 @@ cheap measurement an agent can produce first, named here:
   is called. Every production PFS has a kernel client, a user-space library,
   or an MPI-IO ADIO driver. Evidence to bring: W4's per-client scaling and a
   1-node 8-rank IOR-easy vs 8-node 1-rank IOR-easy comparison from W6.
-- **Whether `write()` is durable** — W2, above.
+- **Whether `write()` is durable** — W2 closed: spec says `fsync`/`close`/
+  `O_SYNC`. Do not reopen as publish-on-write. `O_SYNC` wiring is a later
+  item, not a silent side-cut.
 - Already listed before this review: C1 relaxed coherence; a pressure-triggered
   directory-spread bound (unspecified); cutover of a 36T `efs-test`; any new
   REPORT or SNAP wire shape.

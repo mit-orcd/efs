@@ -1,0 +1,38 @@
+IOR-4.0.0: MPI Coordinated Test of Parallel I/O
+Began               : Fri Sep 18 15:58:44 2026
+Command line        : ./ior --dataPacketType=timestamp -g -G 1904162445 -k -e -o /tmp/efs-mount/io500/2026.09.18-15.51.56/ior-easy/ior_file_easy -C -Q 1 -O stoneWallingStatusFile=/tmp/efs-mount/io500-results/2026.09.18-15.51.56/ior-easy.stonewall -t 1m -b 16g -F -r -R -a POSIX -O saveRankPerformanceDetailsCSV=/tmp/efs-mount/io500-results/2026.09.18-15.51.56/ior-easy-read.csv
+Machine             : Linux fcstor007
+TestID              : 0
+StartTime           : Fri Sep 18 15:58:44 2026
+Path                : /tmp/efs-mount/io500/2026.09.18-15.51.56/ior-easy/ior_file_easy.00000000
+FS                  : 72.0 TiB   Used FS: 2.1%   Inodes: 4096.0 Mi   Used Inodes: 0.0%
+
+Options: 
+api                 : POSIX
+apiVersion          : 
+test filename       : /tmp/efs-mount/io500/2026.09.18-15.51.56/ior-easy/ior_file_easy
+access              : file-per-process
+type                : independent
+segments            : 1
+ordering in a file  : sequential
+ordering inter file : constant task offset
+task offset         : 1
+nodes               : 9
+tasks               : 9
+clients per node    : 1
+repetitions         : 1
+xfersize            : 1 MiB
+blocksize           : 16 GiB
+aggregate filesize  : 144 GiB
+
+Results: 
+
+access    bw(MiB/s)  IOPS       Latency(s)  block(KiB) xfer(KiB)  open(s)    wr/rd(s)   close(s)   total(s)   iter
+------    ---------  ----       ----------  ---------- ---------  --------   --------   --------   --------   ----
+WARNING: Incorrect data on read (512 errors found).
+
+Used Time Stamp 1904162445 (0x717f368d) for Data Signature
+WARNING: Expected aggregate file size       = 154618822656
+WARNING: Stat() of aggregate file size      = 15627976704
+WARNING: Using actual aggregate bytes moved = 15627976704
+read      614.38     11817      0.000077    16777216   1024.00    23.00      1.26       0.002033   24.26      0   

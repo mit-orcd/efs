@@ -1,0 +1,20 @@
+POSIX baseline comparison: 201 tests
+  both pass        : 190
+  EFS BUGS         : 6  (baseline PASS, target FAIL/SKIP)
+  both fail (match): 0
+  target better    : 5
+
+--- EFS BUGS ---
+  concurrent_appends               FAIL
+  concurrent_appends_two_proc      FAIL
+  dir_deep_nesting                 FAIL
+  dir_nlink                        FAIL
+  mmap_write_read                  SKIP
+  mtime_monotonic_many_writes      FAIL
+
+--- target better ---
+  dir_mkdir_umask
+  fcntl_byte_range_lock
+  virt_find_not_a_real_dir
+  virt_find_query
+  virt_stats_readable

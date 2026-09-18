@@ -136,19 +136,15 @@ re-striped and the degraded mark cleared (rebuild scheduling in
 [performance.md](../performance.md)). Degraded publication is never used
 just because a target is slow — only because it is unavailable.
 
-So a `write()` that has returned success **is** durable and visible — stronger
-than POSIX, and deliberately so (POSIX requires durability only at `fsync`).
-This is a deliberate **latency-for-durability trade**, and it is not free:
-the fast path is a small distributed synchronous commit per write (EC encode
-+ k+f durable fragment writes + a durable quorum publication), so
-single-threaded small-write latency and IOPS pay it. Peak *throughput* is
-recovered through asynchronous parallelism, queue depth, and batching — not
-by weakening the guarantee. The stronger semantic buys simpler failure
-reasoning (no ambiguous gap between "write succeeded" and "metadata
-committed") and it is benchmarked brutally against the strict-POSIX
-alternative (`write()` = visible, `fsync()` = durable) before the decision
-is considered final. `fsync()` then only has to cover whatever client-side
-batching efs intentionally permits plus namespace ordering.
+A returned `write()` is **not** durable or cross-client visible. Bytes
+land in the client dcache; same-client read-your-writes hold. Publication
+(the machine above) runs at `fsync`, last `close`, or `O_SYNC`/`O_DSYNC`/
+`-o sync`. That is POSIX and every production PFS. The stronger
+"`write()` publishes" alternative was measured (START-HERE W2) and
+rejected: a peer sees none of an un-`fsync`ed 4 KiB write, and `kill -9`
+of `efs-fuse` loses a 64 MiB acknowledged `write()`. `O_SYNC` is the
+specified write-through path; it is not wired yet. `fsync()` covers the
+client-side dirty set plus the publication quorum.
 
 ## Partial-chunk and concurrent writers (same file)
 

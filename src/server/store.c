@@ -92,6 +92,25 @@ struct efs_export *server_export_acquire_locked(struct efsd_server *s,
     return ex;
 }
 
+struct efs_export *server_export_acquire_or_create_locked(struct efsd_server *s,
+                                                          efs_export_id_t id)
+{
+    struct efs_export *ex = server_export_acquire_locked(s, id);
+    int nidx;
+
+    if (ex)
+        return ex;
+    if (!id || s->export_count >= EFS_MAX_EXPORTS)
+        return NULL;
+    ex = &s->exports[s->export_count++];
+    efs_export_init(ex, id, "pending");
+    ex->id = id;
+    nidx = server_export_index_locked(s, ex);
+    if (nidx >= 0)
+        s->export_inflight[nidx]++;
+    return ex;
+}
+
 void server_export_put(struct efsd_server *s, struct efs_export *ex)
 {
     if (!ex)
@@ -277,7 +296,11 @@ static int format_ino_chunk_dir(char *path, size_t path_len, const char *root,
     return (int)(p - path);
 }
 
-/* Append "/{ci}.{fi}" onto a dir built by format_ino_chunk_dir. */
+/* Append "/{ci}.{fi}" or "/{ci}.{fi}.{gen}" onto a dir built by
+ * format_ino_chunk_dir. gen==0 is the pre-W1 name so leftover files
+ * stay readable. */
+__thread uint64_t efs_tls_chunk_gen;
+
 static inline char *path_append_frag(char *p, uint32_t chunk_index,
                                      uint32_t fragment_index)
 {
@@ -285,6 +308,10 @@ static inline char *path_append_frag(char *p, uint32_t chunk_index,
     p = path_append_u64(p, chunk_index);
     *p++ = '.';
     p = path_append_u64(p, fragment_index);
+    if (efs_tls_chunk_gen) {
+        *p++ = '.';
+        p = path_append_u64(p, efs_tls_chunk_gen);
+    }
     *p = '\0';
     return p;
 }
@@ -316,7 +343,7 @@ static void fragment_path_at(struct efsd_server *s, uint32_t root_idx,
 {
     int n = format_ino_chunk_dir(path, path_len, s->storage_paths[root_idx],
                                  ex->id, ino, chunk_index);
-    if (n > 0 && (size_t)n + 32 <= path_len)
+    if (n > 0 && (size_t)n + 48 <= path_len)
         path_append_frag(path + n, chunk_index, fragment_index);
 }
 
@@ -326,7 +353,12 @@ int server_find_fragment_root(struct efsd_server *s, struct efs_export *ex,
 {
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
     char path[8192];
-    for (uint32_t ri = 0; ri < n; ri++) {
+    uint32_t ri;
+
+    /* Do not fall back to gen=0 when the caller asked for a candidate.
+     * A per-fragment leftover hit mixed with gen-N siblings decodes as
+     * EFS_ERR_DECODE (W1 two-client RMW). */
+    for (ri = 0; ri < n; ri++) {
         fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index, path,
                          sizeof(path));
         if (access(path, F_OK) == 0)
@@ -381,7 +413,8 @@ void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
  * There is a microscopic read-sidecar→unlink window during which a new
  * generation's PUT could land between the check and the unlink; the worst
  * case is one fragment of one chunk unavailable, which 2+1 EC repairs.
- * The real fix is generation-in-path data-plane keys (out of scope). */
+ * W1 names objects `{ci}.{fi}.{gen}` when efs_tls_chunk_gen != 0; the
+ * sidecar compare still protects a leftover un-named slot. */
 int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index,
@@ -648,6 +681,7 @@ static void *shard_io_thread(void *arg)
 struct frag_loc {
     efs_export_id_t export_id;
     efs_ino_t ino;
+    uint64_t gen;
     uint32_t chunk_index;
     uint32_t fragment_index;
     uint8_t root;
@@ -684,7 +718,6 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
     if (n != 1) {
         uint32_t want = server_frag_len(ex, ino);
         int direct = s->direct_io && !efs_ino_is_meta_table(ino);
-        char dir[8192];
         char path[8300];
         int plen = 0;
         uint32_t got = 0;
@@ -695,12 +728,11 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
         if (loc->valid && loc->export_id == ex->id && loc->ino == ino &&
             loc->chunk_index == chunk_index &&
             loc->fragment_index == fragment_index &&
+            loc->gen == efs_tls_chunk_gen &&
             loc->root < n) {
-            format_ino_chunk_dir(dir, sizeof(dir),
-                                 s->storage_paths[loc->root], ex->id,
-                                 ino, chunk_index);
-            plen = snprintf(path, sizeof(path), "%s/%u.%u", dir, chunk_index,
-                            fragment_index);
+            fragment_path_at(s, loc->root, ex, ino, chunk_index,
+                             fragment_index, path, sizeof(path));
+            plen = (int)strlen(path);
             rc = read_file_bytes(path, data, want, &got, direct);
             if (rc == EFS_ERR_NOT_FOUND) {
                 loc->valid = 0;
@@ -711,14 +743,14 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
         }
         if (rc == EFS_ERR_NOT_FOUND) {
             for (uint32_t ri = 0; ri < n; ri++) {
-                format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[ri],
-                                     ex->id, ino, chunk_index);
-                plen = snprintf(path, sizeof(path), "%s/%u.%u", dir,
-                                chunk_index, fragment_index);
+                fragment_path_at(s, ri, ex, ino, chunk_index,
+                                 fragment_index, path, sizeof(path));
+                plen = (int)strlen(path);
                 rc = read_file_bytes(path, data, want, &got, direct);
                 if (rc == EFS_OK) {
                     loc->export_id = ex->id;
                     loc->ino = ino;
+                    loc->gen = efs_tls_chunk_gen;
                     loc->chunk_index = chunk_index;
                     loc->fragment_index = fragment_index;
                     loc->root = (uint8_t)ri;
@@ -746,14 +778,14 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
 
     uint32_t want = server_frag_len(ex, ino);
     int direct = s->direct_io && !efs_ino_is_meta_table(ino);
-    char dir[8192];
     char path[8300];
-    format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[0], ex->id, ino,
-                         chunk_index);
-    int plen = snprintf(path, sizeof(path), "%s/%u.%u", dir, chunk_index,
-                        fragment_index);
+    int plen;
     uint32_t got = 0;
-    int rc = read_file_bytes(path, data, want, &got, direct);
+    int rc;
+    fragment_path_at(s, 0, ex, ino, chunk_index, fragment_index, path,
+                     sizeof(path));
+    plen = (int)strlen(path);
+    rc = read_file_bytes(path, data, want, &got, direct);
     if (rc != EFS_OK)
         return rc;
     *data_len = got;

@@ -1,0 +1,15 @@
+Suite 1 jobs=1 007 after W1 (TCP, leftover-1 19810)
+
+results/posix/20260918-123250/  186 both-pass / 10 EFS (201 tests, mmap SKIP expected)
+results/posix/20260918-122717/  incomplete (harness SIGALRM abort on o_nofollow) — ignore
+
+Isolated (007, --timeout-s 30): all suite-1 EFS bugs PASS except
+  concurrent_appends  192/200  (known O_APPEND debt, not I12)
+
+Load flakes (isolated PASS): fsync_then_fstat_size, link_of_symlink,
+  lstat_symlink_size, mtime_bumps_on_write, o_append_pwrite_absolute,
+  rename_file_over_symlink, symlink_relative_after_parent_rename,
+  trunc_zero_then_high_pwrite.
+
+Baseline 20260917-190719 was 194/2. This is the same flake + O_APPEND class,
+not an I12 regression.

@@ -184,21 +184,39 @@ unreadable) — `perf record -p` / `perf stat -p` same-uid are fine.
 
 ## Where we are
 
-**HPC REVIEW LANDED IN THE ROADMAP (Sep 18).** START-HERE §1a is
-reordered: **W1 = cross-client sub-chunk RMW loses data** (I12 violation:
-`efs_chunk_rec` has no base gen, host fills `expected_gen` from its own
-just-read committed gen, so the CAS can never fail for a stale client base;
-`peer_shared_pwrite` runs A then B sequentially and cannot see it). **W2 =
-spec says `write()` durable+visible ×4, client buffers to fsync/close —
-ASK.** W3–W5 = old W1–W3 (fsync tail, 4/9-client, 50g). **W6 = IO-500 has
-never been run** (harness since Aug 20, mdtest off, no metadata rate on
-this engine). W7–W12 = old W5,W6,W9,W7,W4,W10. Ceiling table added: client
-200 Gb IPoIB → 16.7 GB/s logical write, cluster 44–57 GB/s; measured writes
-are ~2 % of that, reads ~13 %. Three user decisions listed, not started:
-per-file layout, a non-FUSE interface / per-mount kernel serialization,
-write() durability. `product-gaps.md` §1.5/§1.6/§1b hold the same. The fio
-rule's W refs were renumbered. `architecture.html` is generated now (see
-note in the Sep 1 block).
+**W1 I12 N-1 CAS LANDED + GATED (Sep 18).** `base_gen` on the wire, leader
+CAS, audible apply STALE (no `last_applied` stall), client refetch+overlay
+(64 tries). Gen-keyed fragments. `peer_shared_pwrite` concurrent 5/5.
+n1 `results/stress/20260918-n1-w1/` lost=0. Honest 1-client
+`results/perf/20260918-w1-honest/` sw-1m **758**, sw-50g **373**. Do not
+reopen with a chunk lock. **W2 DONE option (i):** spec moved — `write()`
+is client-buffered; durable+visible at `fsync`/`close`/`O_SYNC`.
+Measured 0/10 visibility and 64 MiB lost on kill -9
+(`results/stress/20260918-w2/`). `O_SYNC` specified, not wired. Do not
+publish on every `write()`. **W3 DONE (Sep 18):** 8 GiB dd+fsync
+**639 MiB/s** (13.5 s; best 724 / 11.86 s), remount HEAD/TAIL OK,
+posix jobs=1 **195/201**, posix2 **58/63**. Cuts: N=2048, skip
+get_chunk, sync_hold, flush pipeline, propose-only PUBLISH forward,
+O_APPEND published-merge, close waits per-ino report. Remaining tail
+is REPORT pack+push. Do not invent a REPORT RPC split. **W4 DONE (Sep
+18):** writes share a ceiling and more clients make it worse. 8g
+dd+fsync 1/4/9 = 639 / **251** / **202** MiB/s (3.8 / 0.46 / 0.37 %
+of 16.7 / 44 / 44 GB/s). Morning 4-client sw-1m AGG **1589**. Loaded
+4-client rw-1m 400 s TIMEOUT; 4-client fio storm can lose raft
+heartbeats (`rc=-15`). Gate
+`results/perf/20260918-w4-honest4/gate.txt`. **W5 DONE:** sw-50g
+**341**. **Current: W6** (9×1 debug in
+`results/io500/20260918-debug-9x1/`: easy-write 0.26 GiB/s,
+hard-write 0.025 GiB/s, mdtest-easy-write 0.053 kIOPS; IOR-hard `-W`
+4244 errors. 30s ior aborted on fsync EIO /
+`nrec=125000` BUSY (`results/io500/20260918-ior-30s-abort/`). 9×4
+debug still open; wait for apply idle first).
+
+**HPC REVIEW LANDED IN THE ROADMAP (Sep 18).** START-HERE §1a queue:
+W1–W5 done. **W6 IN PROGRESS** (9×1 debug + hard `-W` 4244 errors;
+30s/9×4 open). W7–W12 = old
+W5,W6,W9,W7,W4,W10. Write 1/4/9-client 8g dd+fsync is 639 / 251 /
+202 MiB/s. `architecture.html` is generated.
 
 **19820 RETIRED; 19810 IS THE ONLY CLUSTER (Sep 17).** User-directed:
 wipe 19820 `/tmp/efs-raft-scratch` and the leftover-1 19810 table, then

@@ -1,0 +1,29 @@
+W3 8 GiB dd+fsync (fcstor007 TCP, leftover-1 19810, FUSE_OK, src=/tmp/src8g)
+HEAD/TAIL remount-verified on hold.bin, pipe.bin, fwd2.bin.
+
+baseline (pre-W3, N=256 + per-rec get_chunk):
+  WALL 25.830 s / 317.2 MiB/s   flush_ms=5663 report_ms=15034
+
+N=2048 + skip get_chunk(base_gen==0):
+  WALL 20.105 s / 407.5 MiB/s   flush_ms=5560 report_ms=8329
+  report-split nrec=65536 pack=1861 push=5582 finish=820
+
+N=4096: no win (report_ms=9045). Reverted to 2048.
+
+raft log sync_hold across report proposes (this tree):
+  WALL 16.875 s / 509 MB/s      flush_ms=5263 report_ms=5911
+  report-split pack=1889 push=3022 finish=908
+
+client flush pipeline (dcache_steal + put_pool of dcache_put_now):
+  WALL 12.905 s / 666 MB/s      flush_ms=1235 report_ms=5819
+  remount HEAD_OK TAIL_OK
+
+PUBLISH forward = host_propose (not propose_wait):
+  4-up clean: WALL 11.862 s / 724 MB/s
+  flush_ms=1188 report_ms=5606
+  report-split (004) pack=1922 push=3041 finish=527
+  one bounce-window run (005 reporter) report_ms=3785 pack=1341 push=1911 finish=437
+  — push still leadership-dependent; do not invent a REPORT RPC split.
+
+8 GiB / 11.862 s = 690 MiB/s = 4.1 % of 16.7 GB/s host NVMe.
+Stream stays ~1.4–1.7 GB/s; the remaining tail is REPORT pack+push (~5.6 s).

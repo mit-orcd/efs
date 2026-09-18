@@ -1,0 +1,34 @@
+IO-500 debug 9 ranks × 1 / host, stonewall 1 s (INVALID vs 300 s).
+Not a list submission. FUSE_OK + TCP (0 "RDMA transport up") on 007–015.
+ini: tests/perf/io500/config-debug.ini (mdtest on, find off).
+Driver: $HOME/orcd/scratch/efs-io500/io500 02091cf254d8-13.
+result-dir on mount: /tmp/efs-mount/io500-results/2026.09.18-15.51.56
+Driver aborted after mdtest-hard-delete on extra phase ior-rnd4K-easy-read
+(blocksize == transferSize); that phase is now run=FALSE in the harness inis.
+result_summary.txt empty because of the abort.
+
+Writes include IOR -e (fsync on close). Reads are same-mount (dcache possible).
+Do not quote stonewall intra GiB/s (14.24 easy / 6.19 hard) as the number.
+
+| phase | score | wall s | notes |
+| ior-easy-write | 0.263372 GiB/s | 70.2 | 97.5 MiB/s IOR line; close 84 s |
+| mdtest-easy-write | 0.053199 kIOPS | 4.1 | 53 creates/s |
+| ior-hard-write | 0.025414 GiB/s | 329.6 | 26.0 MiB/s; close 57 s; 47008 shared |
+| mdtest-hard-write | 0.026383 kIOPS | 3.6 | |
+| find | 0 | 0 | off |
+| ior-easy-read | 0.599981 GiB/s | 25.4 | INVALID: IOR -R 512 errors (driver 1024) |
+| mdtest-easy-stat | 0.360392 kIOPS | 1.6 | |
+| ior-hard-read | 1.264556 GiB/s | 5.8 | INVALID: IOR -R 15982 errors (driver 31964) |
+| mdtest-hard-stat | 0.779457 kIOPS | 1.4 | |
+| mdtest-easy-delete | 0.069133 kIOPS | 3.4 | some rmdir warnings |
+| mdtest-hard-read | 0.035378 kIOPS | 2.4 | |
+| mdtest-hard-delete | 0.097743 kIOPS | 1.9 | some unlink warnings |
+
+hard/easy write = 0.0254/0.263 = 0.097. Shared-file 47008 RMW vs file-per-proc 1 MiB.
+IOR-easy write 0.26 GiB/s vs 9-client 8g dd+fsync 0.20 GiB/s (same order).
+vs 44 GB/s 4-node NVMe ceiling: 0.6 %.
+
+W6 gate "IOR-hard -W mismatches = 0" is NOT met: official hard-read -R already
+15982 incorrect-data errors; easy-read (file-per-proc) also 512. First hung
+ior-hard-write (D-state) is in 20260918-debug-hung-hard/ — 26k-rec STALE
+REPORT, not a deadlock; this remounted retry finished in 330 s.

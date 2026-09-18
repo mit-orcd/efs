@@ -24,6 +24,7 @@ struct efs_chunk_entry {
     uint32_t chunk_index;
     efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS];
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+    uint64_t generation;
 };
 
 struct efs_inode {
@@ -340,6 +341,9 @@ int efs_export_rename_at(struct efs_export *ex, efs_ino_t old_parent,
 int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index,
                          const efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS],
                          const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE]);
+/* Stamp the staging generation after set_chunk / GETCHUNKS adopt. */
+int efs_export_set_chunk_gen(struct efs_export *ex, efs_ino_t ino,
+                             uint32_t chunk_index, uint64_t generation);
 
 /* Get a chunk entry. Returns 0 if found. */
 int efs_export_get_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index,

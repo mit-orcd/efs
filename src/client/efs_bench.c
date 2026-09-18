@@ -431,7 +431,8 @@ static int get_two_frags(efs_ino_t ino, uint32_t chunk_index,
         uint8_t ck[EFS_HASH_SIZE];
         uint32_t len = 0;
         int rc = efs_client_get_fragment(nodes[i], ino, chunk_index, (uint32_t)i,
-                                         EFS_FRAGMENT_SIZE, bufs[i], &len, ck);
+                                         EFS_FRAGMENT_SIZE, bufs[i], &len, ck,
+                                         0);
         if (rc == EFS_OK && len == EFS_FRAGMENT_SIZE) {
             ok++;
             int idx = bench_node_index(nodes[i]);
@@ -446,7 +447,7 @@ static int get_two_frags(efs_ino_t ino, uint32_t chunk_index,
     uint8_t ck[EFS_HASH_SIZE];
     uint32_t len = 0;
     int rc = efs_client_get_fragment(nodes[2], ino, chunk_index, 2,
-                                     EFS_FRAGMENT_SIZE, buf0, &len, ck);
+                                     EFS_FRAGMENT_SIZE, buf0, &len, ck, 0);
     if (rc == EFS_OK && len == EFS_FRAGMENT_SIZE && ok >= 1) {
         int idx = bench_node_index(nodes[2]);
         if (idx >= 0)

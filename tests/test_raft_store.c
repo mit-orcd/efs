@@ -151,6 +151,26 @@ static void drive_pair(struct efs_raft_store *a, struct efs_raft_store *b)
     a->load_hard(a, &ai, (int32_t *)&at);
     b->load_hard(b, &bi, (int32_t *)&bt);
     CHECK(ai == bi && ai == 11, "hard state differs");
+
+    /* InstallSnapshot past the log end (a follower whose log never held the
+     * snapshotted prefix): raft_mem clamps the drop, disk must too — the
+     * old disk guard rejected this with INVAL and wedged live catch-up. */
+    r1 = a->save_snap(a, 100, 9);
+    r2 = b->save_snap(b, 100, 9);
+    CHECK(r1 == r2 && r1 == EFS_OK, "skip-ahead save_snap rc differs");
+    a->last(a, &ai, &at);
+    b->last(b, &bi, &bt);
+    CHECK(ai == bi && ai == 100 && at == 9, "last after skip-ahead snap");
+    c1 = sizeof(b1);
+    c2 = sizeof(b2);
+    r1 = a->get(a, 3, &t1, b1, &c1);
+    r2 = b->get(b, 3, &t2, b2, &c2);
+    CHECK(r1 == r2 && r1 == EFS_ERR_NOT_FOUND,
+          "skip-ahead snap left old entries");
+    /* A backwards snapshot is still invalid on both. */
+    r1 = a->save_snap(a, 50, 9);
+    r2 = b->save_snap(b, 50, 9);
+    CHECK(r1 == r2 && r1 != EFS_OK, "backwards save_snap should fail");
 }
 
 static void test_matches_mem(void)

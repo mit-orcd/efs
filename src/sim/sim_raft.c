@@ -366,6 +366,21 @@ static int apply_mkfs_cmd(struct sim_server *s, const uint8_t *cmd,
     return EFS_OK;
 }
 
+/* EFS_MD_CMD_SALT parity with the production host. The sim's shared disk
+ * already makes the mkfs salt visible everywhere (the documented blind
+ * spot), so this only keeps the command namespace behavior identical. */
+static int apply_salt_record_cmd(struct sim_server *s, const uint8_t *cmd,
+                                 uint32_t clen, uint64_t index, uint8_t group)
+{
+    int rc;
+
+    if (clen < 13)
+        return EFS_ERR_PROTO;
+    rc = efs_meta_apply_salt_record(s->disk, rd32(cmd + 1), rd64(cmd + 5));
+    sim_note_apply(s, group, index, rc, EFS_ROOT_INO);
+    return EFS_OK;
+}
+
 static int apply_epoch_cmd(struct sim_server *s, const uint8_t *cmd,
                            uint32_t clen, uint64_t index, uint8_t group)
 {
@@ -614,6 +629,9 @@ int sim_ns_try(struct sim_server *s, uint8_t group, const uint8_t *cmd,
     switch (cmd[0]) {
     case CMD_MKFS:
         apply_mkfs_cmd(s, cmd, clen, index, group);
+        return 1;
+    case EFS_MD_CMD_SALT:
+        apply_salt_record_cmd(s, cmd, clen, index, group);
         return 1;
     case CMD_CREATE:
         apply_create_cmd(s, cmd, clen, index, group);

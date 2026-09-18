@@ -2458,8 +2458,13 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
 static int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
                               struct fuse_file_info *fi)
 {
+    uint64_t t0, t1, t2, flush_ms, report_ms;
+    int rc;
+
     (void)isdatasync;
-    int rc = efs_file_data_sync_fh(fi);
+    t0 = stats_now_ms();
+    rc = efs_file_data_sync_fh(fi);
+    t1 = stats_now_ms();
     if (rc == EFS_ERR_QUOTA) {
         efs_fuse_log_err("fsync", rc, ino, 0, 0, NULL);
         return -ENOSPC;
@@ -2469,6 +2474,15 @@ static int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
         return -EIO;
     }
     rc = efs_client_report_dirty_ino((efs_ino_t)ino, 1);
+    t2 = stats_now_ms();
+    flush_ms = t1 - t0;
+    report_ms = t2 - t1;
+    if (flush_ms + report_ms >= 100) {
+        fprintf(stderr,
+                "fsync-split ino=%llu flush_ms=%llu report_ms=%llu rc=%d\n",
+                (unsigned long long)ino, (unsigned long long)flush_ms,
+                (unsigned long long)report_ms, rc);
+    }
     if (rc == EFS_ERR_QUOTA) {
         efs_fuse_log_err("fsync-meta", rc, ino, 0, 0, NULL);
         return -ENOSPC;
@@ -2491,7 +2505,14 @@ static int efs_fuse_flush_ino(fuse_ino_t ino, struct fuse_file_info *fi)
         efs_fuse_log_err("flush", rc, ino, 0, 0, NULL);
         return -EIO;
     }
-    efs_client_kick_meta_flush();
+    /* W2: last close is durable+visible. Kick-only left size/chunk-map
+     * unpublished so the next O_APPEND used i_size 0 and wiped the
+     * prefix (fcntl_setfl_oappend, hardlink_shared_data). */
+    rc = efs_client_report_dirty_ino((efs_ino_t)ino, 1);
+    if (rc != EFS_OK) {
+        efs_fuse_log_err("flush-meta", rc, ino, 0, 0, NULL);
+        return rc == EFS_ERR_QUOTA ? -ENOSPC : -EIO;
+    }
     return 0;
 }
 
@@ -2600,8 +2621,20 @@ static int efs_fuse_mkdir_at(fuse_ino_t parent_ino, const char *name, mode_t mod
     uid_t uid = ctx ? ctx->uid : 0;
     gid_t gid = ctx ? ctx->gid : 0;
     efs_ino_t ino = efs_client_create(parent.ino, name, S_IFDIR | mode, uid, gid);
-    if (ino == 0)
+    if (ino == 0) {
+        /* Kernel LOOKUP was negative, then MKDIR. A retry or a create
+         * that landed but returned 0 looks like EEXIST even though the
+         * unique testdir name is ours (posix makedirs FileExistsError). */
+        struct efs_inode row;
+        if (efs_client_rpc_lookup(g_client.export_id, parent.ino, name,
+                                  &row) == EFS_OK &&
+            efs_mode_is_dir(row.mode)) {
+            if (out_ino)
+                *out_ino = row.ino;
+            return 0;
+        }
         return fuse_create_errno(parent.ino, name);
+    }
     if (out_ino)
         *out_ino = ino;
     return 0;
@@ -2837,7 +2870,7 @@ static int efs_fuse_symlink_at(const char *link, fuse_ino_t parent_ino,
             return -EIO;
     } else if (efs_client_truncate(ino, 0) != 0)
         return -EIO;
-    if (efs_client_report_dirty(1) != EFS_OK)
+    if (efs_client_report_dirty_ino(ino, 1) != EFS_OK)
         return -EIO;
     if (out_ino)
         *out_ino = ino;

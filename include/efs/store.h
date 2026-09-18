@@ -11,9 +11,9 @@
  *
  * Simulator identity is FileID-scoped (architecture.md §7.3):
  * (export, ino, inode_generation, chunk_index, chunk_generation,
- * fragment_index, coding_profile_id). Production NVMe still keys
- * (ino, chunk_index, fragment_index) until efsd migrates; extra fields
- * zero-init and are ignored there. */
+ * fragment_index, coding_profile_id). Production NVMe keys
+ * `{ci}.{fi}` when chunk_generation==0 (legacy) and `{ci}.{fi}.{gen}`
+ * when the PUT/GET carries a nonzero candidate (W1 / I12). */
 
 struct efs_frag_id {
     efs_export_id_t export_id;

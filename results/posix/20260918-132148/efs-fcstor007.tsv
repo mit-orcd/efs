@@ -1,0 +1,71 @@
+pass basic_write_read                
+pass basic_empty_file                
+pass basic_append                    
+pass basic_oappend_flag              
+pass basic_seek_read                 
+pass basic_overwrite_middle          
+pass basic_read_past_eof             
+FAIL basic_terminal_cp_cat            echo append: got b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00hello\n', want b'terminal-iohello\n'
+pass basic_dd_rw                     
+pass basic_o_trunc                   
+pass basic_pread_pwrite              
+pass basic_dup_write                 
+pass basic_chunk_boundary            
+pass fsync_reopen_visible            
+pass basic_ftruncate_vs_truncate     
+FAIL basic_seek_end_then_write        SEEK_END write: got b'abc\x00\x00\x00', want b'abcdef'
+pass basic_seek_cur_past_eof_write   
+pass basic_rdwr_no_reopen            
+pass trunc_shrink                    
+FAIL trunc_grow_sparse                timeout after 15s
+pass sparse_write_huge_offset        
+FAIL trunc_to_zero                    timeout after 15s
+pass sparse_st_blocks                
+pass dir_mkdir_rmdir                 
+pass dir_mkdir_p_terminal            
+pass dir_readdir_listing             
+pass dir_rename_file                 
+pass dir_rename_over_existing        
+pass dir_rename_dir_with_contents    
+FAIL dir_move_into_subdir             move across dirs: got b'', want b'x'
+pass dir_rename_file_over_dir        
+pass dir_rename_dir_over_file        
+pass dir_rename_dir_over_nonempty    
+pass dir_rename_noreplace            
+# posix-suite host=fcstor007 mnt=/tmp/efs-mount 2026-09-18T13:23:41Z
+test	result	detail
+basic_write_read	PASS	
+basic_empty_file	PASS	
+basic_append	PASS	
+basic_oappend_flag	PASS	
+basic_seek_read	PASS	
+basic_overwrite_middle	PASS	
+basic_read_past_eof	PASS	
+basic_terminal_cp_cat	FAIL	echo append: got b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00hello\n', want b'terminal-iohello\n'
+basic_dd_rw	PASS	
+basic_o_trunc	PASS	
+basic_pread_pwrite	PASS	
+basic_dup_write	PASS	
+basic_chunk_boundary	PASS	
+fsync_reopen_visible	PASS	
+basic_ftruncate_vs_truncate	PASS	
+basic_seek_end_then_write	FAIL	SEEK_END write: got b'abc\x00\x00\x00', want b'abcdef'
+basic_seek_cur_past_eof_write	PASS	
+basic_rdwr_no_reopen	PASS	
+trunc_shrink	PASS	
+trunc_grow_sparse	FAIL	timeout after 15s
+sparse_write_huge_offset	PASS	
+trunc_to_zero	FAIL	timeout after 15s
+sparse_st_blocks	PASS	
+dir_mkdir_rmdir	PASS	
+dir_mkdir_p_terminal	PASS	
+dir_readdir_listing	PASS	
+dir_rename_file	PASS	
+dir_rename_over_existing	PASS	
+dir_rename_dir_with_contents	PASS	
+dir_move_into_subdir	FAIL	move across dirs: got b'', want b'x'
+dir_rename_file_over_dir	PASS	
+dir_rename_dir_over_file	PASS	
+dir_rename_dir_over_nonempty	PASS	
+dir_rename_noreplace	PASS	
+# summary pass=29 fail=5 skip=0 total=34 dur=106.9

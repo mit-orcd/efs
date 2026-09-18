@@ -677,6 +677,83 @@ static void test_install_snapshot_needs_blob(void)
     free_n(&n, st, 5);
 }
 
+/* Leader compacts, then its PROCESS restarts before any learner has
+ * installed: the store reloads snap_idx/snap_term but the snapshot blob is
+ * memory-only and is gone. A restarted leader must still serve
+ * InstallSnapshot by re-exporting the app state at its current applied
+ * index — otherwise a follower behind snap_idx rejects the metadata-only
+ * SNAP forever and can never catch up (observed live: fcstor005 starved at
+ * applied=249 after a rolling restart of the compacted leader). */
+static void test_install_snapshot_restarted_leader(void)
+{
+    struct net n;
+    struct efs_raft_store *st[5];
+    struct app app[5];
+    struct efs_raft_cfg cfg;
+    int i, lid, t;
+    uint64_t snap_at = 0;
+
+    boot_n(&n, st, app, &cfg, 5, 0x7);
+    cfg.snap_get = snap_get;
+    cfg.snap_put = snap_put;
+    for (i = 0; i < 5; i++) {
+        efs_raft_free(n.r[i]);
+        cfg.id = i;
+        cfg.store = st[i];
+        cfg.store_ctx = st[i];
+        cfg.app = &app[i];
+        cfg.election_ticks = (uint32_t)(4 + i * 4);
+        cfg.heartbeat_ticks = 1;
+        n.r[i] = efs_raft_new(&cfg);
+        CHECK(n.r[i] != NULL, "raft with snap hooks");
+    }
+    CHECK(elect(&n, 20) == 1, "elect");
+    lid = leader_id(&n);
+    CHECK(lid >= 0, "leader");
+    for (i = 0; i < 40; i++) {
+        uint8_t cmd = (uint8_t)('A' + (i % 26));
+        uint64_t idx = 0;
+
+        CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK, "propose");
+        if (elect(&n, 2) < 0)
+            CHECK(0, "elect during propose");
+        lid = leader_id(&n);
+        CHECK(lid >= 0, "leader still");
+    }
+    CHECK(efs_raft_applied(n.r[lid]) >= 40, "leader applied 40");
+    CHECK(efs_raft_snapshot(n.r[lid]) == EFS_OK, "leader snap");
+    snap_at = app[lid].snap_at;
+    CHECK(snap_at >= 40, "snap captured SM");
+
+    /* Process restart: same store (snap_idx survives), fresh efs_raft
+     * (blob gone). Win the next election with the smallest deadline. */
+    efs_raft_free(n.r[lid]);
+    cfg.id = lid;
+    cfg.store = st[lid];
+    cfg.store_ctx = st[lid];
+    cfg.app = &app[lid];
+    cfg.election_ticks = 2;
+    cfg.heartbeat_ticks = 1;
+    cfg.voters = 0x7;
+    cfg.n = 3;
+    n.r[lid] = efs_raft_new(&cfg);
+    CHECK(n.r[lid] != NULL, "leader restarted");
+    for (t = 0; t < 60 && leader_id(&n) != lid; t++)
+        if (elect(&n, 1) < 0)
+            break;
+    CHECK(leader_id(&n) == lid, "restarted node re-elected");
+
+    lid = wait_voters(&n, 0x1f, 80);
+    CHECK(lid >= 0, "grew via InstallSnapshot from restarted leader");
+    CHECK(app[3].snap_at >= snap_at, "learner 3 installed regenerated snap");
+    CHECK(app[4].snap_at >= snap_at, "learner 4 installed regenerated snap");
+    CHECK(efs_raft_applied(n.r[3]) >= app[3].snap_at, "learner 3 applied");
+    CHECK(efs_raft_applied(n.r[4]) >= app[4].snap_at, "learner 4 applied");
+    CHECK(app[3].n == app[lid].n && app[3].last == app[lid].last,
+          "learner 3 SM matches");
+    free_n(&n, st, 5);
+}
+
 int main(void)
 {
     test_election_i1();
@@ -690,6 +767,7 @@ int main(void)
     test_ae_batch_catchup();
     test_install_snapshot();
     test_install_snapshot_needs_blob();
+    test_install_snapshot_restarted_leader();
     if (failures) {
         fprintf(stderr, "test_raft: %d failure(s)\n", failures);
         return 1;

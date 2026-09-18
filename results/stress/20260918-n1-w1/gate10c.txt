@@ -1,0 +1,15 @@
+W1 I12 N-1 gate (leftover-1 19810, TCP, no wipe)
+
+Cluster: fcstor003–006 efsd :19810 /data1/01–06/efs, Heal idle, Cluster OK.
+Clients: 007 write-a, 008 write-b, 009 remount verify.
+File: /tmp/efs-mount/n1-w1-gate10c
+Shape: 500 × 2 disjoint 4 KiB pwrite+fsync, 64 MiB pre-sized, no barrier.
+
+WRITE_RC_A=0 WRITE_RC_B=0
+VERIFY n=500 lost_a=0 lost_b=0 lost=0 decode_eio=0
+
+Notes:
+- CAS expected = client base_gen; apply STALE is audible; client refetch+overlay+PUT.
+- STALE bound is 64 with 2–20 ms backoff (8 is not enough vs 16 fsyncs/chunk).
+- Gen-keyed fragments {ci}.{fi}.{gen}; GET uses fragment_path_at; GET mints export shell.
+- Report identity from last PUT (putid), not GETCHUNKS stub checksums.
