@@ -4,7 +4,7 @@
  * the generic `make test` run on non-IB nodes. On the efs test servers it
  * exercises: handshake, a 500ms quiet gap then a CREATE-sized frame,
  * inline/small/pool-max frames both ways, the TCP side-channel for
- * oversized frames, GET_META pinning, and teardown.
+ * oversized frames, and teardown.
  *
  * Both endpoints live in this process on a socketpair; the server side
  * uses efs_conn_wait_request (same wait as handler.c).
@@ -34,7 +34,6 @@ struct server_ctx {
     struct efs_conn *conn;
     int saw_rdma;       /* requests that arrived over the QP */
     int saw_tcp_big;    /* oversized requests that arrived over TCP */
-    int saw_tcp_meta;   /* GET_META pinned to TCP */
     int n;
 };
 
@@ -60,22 +59,9 @@ static void *server_thread(void *arg)
         sc->n++;
         if (chan == EFS_CONN_RDMA)
             sc->saw_rdma++;
-        else if (type == EFS_MSG_GET_META)
-            sc->saw_tcp_meta++;
         else
             sc->saw_tcp_big++;
 
-        if (type == EFS_MSG_GET_META) {
-            /* Unbounded reply: pinned to TCP by the client; the server's
-             * reply follows (request channel was TCP). */
-            free(payload);
-            static uint8_t big[100 * 1024];
-            memset(big, 0x5a, sizeof(big));
-            if (efs_conn_send_msg(c, EFS_MSG_GET_META_REPLY, big,
-                                  sizeof(big)) != 0)
-                return NULL;
-            continue;
-        }
         int src = efs_conn_send_msg(c, type, payload, plen);
         free(payload);
         if (src != 0)
@@ -99,14 +85,6 @@ static void fill_pattern(uint8_t *buf, uint32_t len, uint8_t seed)
 {
     for (uint32_t i = 0; i < len; i++)
         buf[i] = (uint8_t)(seed + i * 131u);
-}
-
-static uint8_t xor_buf(const uint8_t *buf, uint32_t len)
-{
-    uint8_t x = 0;
-    for (uint32_t i = 0; i < len; i++)
-        x ^= buf[i];
-    return x;
 }
 
 int main(void)
@@ -248,29 +226,13 @@ int main(void)
         fill_pattern(in, len, 11);
         uint32_t olen = 0;
         uint8_t rt = 0;
-        CHECK(efs_conn_send_msg(cli, EFS_MSG_PUT_META, in, len) == 0,
+        CHECK(efs_conn_send_msg(cli, EFS_MSG_PUT_CHUNK, in, len) == 0,
               "send oversized");
         CHECK(efs_conn_recv_msg(cli, &rt, (void **)&out, &olen) == 0,
               "recv oversized echo");
-        CHECK(rt == EFS_MSG_PUT_META && olen == len, "oversized hdr");
+        CHECK(rt == EFS_MSG_PUT_CHUNK && olen == len, "oversized hdr");
         CHECK(memcmp(in, out, olen) == 0, "oversized payload");
         free(in);
-        free(out);
-    }
-
-    /* 4. GET_META: request pinned to TCP even though tiny; big reply also
-     *    TCP. */
-    {
-        uint8_t *out = NULL;
-        uint32_t olen = 0;
-        uint8_t rt = 0;
-        CHECK(efs_conn_send_msg(cli, EFS_MSG_GET_META, "x", 1) == 0,
-              "send GET_META");
-        CHECK(efs_conn_recv_msg(cli, &rt, (void **)&out, &olen) == 0,
-              "recv GET_META reply");
-        CHECK(rt == EFS_MSG_GET_META_REPLY && olen == 100 * 1024,
-              "GET_META reply len");
-        CHECK(xor_buf(out, olen) == 0, "GET_META payload pattern");
         free(out);
     }
 
@@ -282,10 +244,9 @@ int main(void)
 
     CHECK(sc.saw_rdma >= 2, "server saw RDMA frames");
     CHECK(sc.saw_tcp_big >= 1, "server saw oversized on TCP");
-    CHECK(sc.saw_tcp_meta >= 1, "server saw GET_META on TCP");
     CHECK(efs_rdma_live_conns() == 0, "live conns back to 0");
 
-    printf("PASS: rdma xprt (rdma=%d tcp_big=%d tcp_meta=%d frames=%d)\n",
-           sc.saw_rdma, sc.saw_tcp_big, sc.saw_tcp_meta, sc.n);
+    printf("PASS: rdma xprt (rdma=%d tcp_big=%d frames=%d)\n",
+           sc.saw_rdma, sc.saw_tcp_big, sc.n);
     return 0;
 }

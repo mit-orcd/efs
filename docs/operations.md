@@ -1,6 +1,8 @@
 # Operations
 
-[Quick start](../README.md#quick-start) · [Failure tolerance](failure-tolerance.md) · [Design](design.md)
+[Quick start](../README.md#quick-start) ·
+[Failure tolerance](arch/failure-tolerance.md) ·
+[Architecture](architecture.md) · [Testing](testing.md)
 
 ## Scripts
 
@@ -38,6 +40,10 @@ listing the path is not enough. Pass `-f` to stay in the foreground.
 ./efs-fuse 127.0.0.1:17432 myexport /mnt/efs
 ```
 
+`mkfs` is an alias for `raft-mkfs` and needs a **quorum of the metadata Raft
+voters already running**, so start every server first and only then create the
+export. There is no "start the primary, mkfs, then let the others join" order.
+
 Several `--storage` roots (1–24) are allowed. New writes go to the path with
 the shortest writer queue (fairness-weighted by bytes already assigned).
 Overwrites stay on the existing path.
@@ -48,8 +54,9 @@ Under each storage path:
 
 | Dir | Contents |
 |---|---|
-| `data/` | fragments (file chunks and metadata pages) |
-| `meta/` | export root (`EFSR` in `metadata.bin`), membership, `usage.bin` |
+| `data/` | fragments (file chunks) |
+| `mdraft/` | metadata: this node's Raft log, KV segments, applied index per group |
+| `meta/` | membership (`cluster_nodes.bin`) and `usage.bin` |
 | `log/` | logs, PID file, optional `perf` output |
 
 Fragment paths are sharded by inode (five base-10000 segments) so the export
@@ -92,7 +99,7 @@ Ignore a saved membership list:
 ```
 
 Suffixes: `T`, `G`, `M`, `K`. When two or more nodes are out of space, the
-client gets `ENOSPC`. See [failure tolerance](failure-tolerance.md#disk-full).
+client gets `ENOSPC`.
 
 ```bash
 ./efs-mgmt status 127.0.0.1:17432
@@ -106,21 +113,27 @@ export.
 
 ```bash
 ./efs-mgmt status 127.0.0.1:17432
-./efs-mgmt list-exports 127.0.0.1:17432
-./efs-mgmt mkfs 127.0.0.1:17432 myexport [--chunk-size 128K]
-./efs-mgmt destroy 127.0.0.1:17432 myexport
+./efs-mgmt mkfs 127.0.0.1:17432 myexport          # alias for raft-mkfs
 ./efs-mgmt add-node 127.0.0.1:17433 127.0.0.1:17432
-./efs-mgmt drain-node 127.0.0.1:17434     # move data off; stay in membership
-./efs-mgmt undrain-node 127.0.0.1:17434   # accept new writes again
-./efs-mgmt remove-node 127.0.0.1:17434    # leave (must be drained / empty)
+./efs-mgmt add-storage 127.0.0.1:17432 /tmp/efs/s1b
 ./efs-mgmt shrink-quota 127.0.0.1:17432 2G
-./efs-mgmt feature 127.0.0.1:17432 myexport show
 ```
 
-`drain-node` and `shrink-quota` return immediately; migration runs in the
-background. Watch `status` for `draining` / `drained` / `active`. A draining
-node rejects new fragment PUTs. `remove-node` fails unless the node is empty.
-`mkfs` fails if the name already exists.
+`shrink-quota` returns immediately; migration runs in the background. `mkfs`
+fails if the name already exists.
+
+Metadata plane (Raft + KV):
+
+```bash
+./efs-mgmt raft-status 127.0.0.1:17432            # per-group term/commit/applied/voters
+./efs-mgmt raft-change 127.0.0.1:17432 0 0x7      # voting set of one group
+./efs-mgmt raft-dir  127.0.0.1:17432 <ino> begin|migrate|finish
+```
+
+`efs-mgmt` also has a `raft-<op>` for every metadata operation
+(`raft-create`, `raft-lookup`, `raft-rename`, `raft-publish`, `raft-flock`, …).
+Those bypass FUSE and are the fastest way to test one operation against one
+node — that is what the smoke scripts under `tests/stress/` use.
 
 ## Writer threads and direct I/O
 

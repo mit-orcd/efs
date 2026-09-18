@@ -55,15 +55,12 @@ static void rpc_prof_add(uint8_t type, unsigned long long checkout_us,
     __atomic_add_fetch(&efs_rpc_busy_us, busy_us, __ATOMIC_RELAXED);
     if (busy_us) {
         __atomic_add_fetch(&efs_rpc_busy_n, 1, __ATOMIC_RELAXED);
-        if (type < 256)
-            __atomic_add_fetch(&efs_rpc_busy_n_op[type], 1, __ATOMIC_RELAXED);
+        __atomic_add_fetch(&efs_rpc_busy_n_op[type], 1, __ATOMIC_RELAXED);
     }
     if (checkout_us >= 100ull)
         __atomic_add_fetch(&efs_rpc_checkout_wait_n, 1, __ATOMIC_RELAXED);
-    if (type < 256) {
-        __atomic_add_fetch(&efs_rpc_n_op[type], 1, __ATOMIC_RELAXED);
-        __atomic_add_fetch(&efs_rpc_recv_us_op[type], recv_us, __ATOMIC_RELAXED);
-    }
+    __atomic_add_fetch(&efs_rpc_n_op[type], 1, __ATOMIC_RELAXED);
+    __atomic_add_fetch(&efs_rpc_recv_us_op[type], recv_us, __ATOMIC_RELAXED);
     unsigned long long now = rpc_prof_now_us();
     unsigned long long last = __atomic_load_n(&efs_rpc_last_dump_us,
                                             __ATOMIC_RELAXED);
@@ -170,11 +167,6 @@ static struct efs_conn *rpc_primary_conn(efs_node_id_t *nid_out)
  * Any voter can answer or bounce the RPC to the leader, and
  * rpc_send_recv_shard follows the primary_id hint, so the client only
  * needs to reach *a* live voter of the right group. */
-int efs_client_raft_mode(void)
-{
-    return 1;
-}
-
 static uint32_t raft_group_voters(uint8_t group, int n)
 {
     if (n <= 3)
@@ -616,29 +608,6 @@ int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
     if (rc != EFS_OK)
         return rc;
     return rpc_status_to_efs(r.status);
-}
-
-int efs_client_rpc_rename(efs_export_id_t export_id, efs_ino_t ino,
-                          efs_ino_t new_parent, const char *new_name,
-                          struct efs_inode *out)
-{
-    struct efs_msg_inode_rename req;
-    memset(&req, 0, sizeof(req));
-    req.export_id = export_id;
-    req.ino = ino;
-    req.new_parent = new_parent;
-    if (new_name)
-        strncpy(req.new_name, new_name, EFS_MAX_NAME - 1);
-    struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_RENAME, &req, sizeof(req),
-                                 EFS_MSG_INODE_RENAME_REPLY, &r, sizeof(r));
-    if (rc != EFS_OK)
-        return rc;
-    if (r.status != EFS_INODE_RPC_OK)
-        return rpc_status_to_efs(r.status);
-    if (out)
-        *out = r.inode;
-    return EFS_OK;
 }
 
 int efs_client_rpc_rename_at(efs_export_id_t export_id, efs_ino_t old_parent,

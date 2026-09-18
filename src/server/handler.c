@@ -493,25 +493,6 @@ send_reply:
                               sizeof(reply));
             break;
         }
-        /* Drain/undrain/remove drove the old data-migration engine, which
-         * is deleted (step 11). Node lifecycle will return as a raft
-         * control-plane op; until then these must still REPLY (a silent
-         * default: costs the sender a full recv timeout). */
-        case EFS_MSG_DRAIN_NODE: {
-            uint8_t reply = EFS_DRAIN_NODE_ERROR;
-            efs_conn_send_msg(conn, EFS_MSG_DRAIN_NODE_REPLY, &reply, 1);
-            break;
-        }
-        case EFS_MSG_UNDRAIN_NODE: {
-            uint8_t reply = EFS_UNDRAIN_NODE_ERROR;
-            efs_conn_send_msg(conn, EFS_MSG_UNDRAIN_NODE_REPLY, &reply, 1);
-            break;
-        }
-        case EFS_MSG_REMOVE_NODE: {
-            uint8_t reply = EFS_REMOVE_NODE_ERROR;
-            efs_conn_send_msg(conn, EFS_MSG_REMOVE_NODE_REPLY, &reply, 1);
-            break;
-        }
         case EFS_MSG_SHRINK_QUOTA: {
             uint8_t reply = EFS_SHRINK_QUOTA_ERROR;
             if (payload_len >= sizeof(struct efs_msg_shrink_quota)) {
@@ -582,34 +563,15 @@ send_reply:
         }
         case EFS_MSG_INODE_LOOKUP:
         case EFS_MSG_INODE_CREATE:
-        case EFS_MSG_INODE_CREATE_SHARD:
         case EFS_MSG_INODE_GETATTR:
         case EFS_MSG_INODE_UNLINK:
-        case EFS_MSG_INODE_RENAME:
         case EFS_MSG_INODE_RENAME_AT:
         case EFS_MSG_INODE_SETATTR:
         case EFS_MSG_INODE_APPEND:
         case EFS_MSG_INODE_LINK:
-        case EFS_MSG_INODE_LINK_SHARD:
-        case EFS_MSG_INODE_UNLINK_SHARD:
         case EFS_MSG_INODE_HOLD:
-        case EFS_MSG_INODE_FLOCK:
-        case EFS_MSG_INODE_DROP_CHUNKS: {
-            if ((type == EFS_MSG_INODE_LOOKUP || type == EFS_MSG_INODE_GETATTR ||
-                 type == EFS_MSG_INODE_CREATE ||
-                 type == EFS_MSG_INODE_CREATE_SHARD ||
-                 type == EFS_MSG_INODE_UNLINK ||
-                 type == EFS_MSG_INODE_UNLINK_SHARD ||
-                 type == EFS_MSG_INODE_SETATTR ||
-                 type == EFS_MSG_INODE_APPEND ||
-                 type == EFS_MSG_INODE_LINK ||
-                 type == EFS_MSG_INODE_LINK_SHARD ||
-                 type == EFS_MSG_INODE_RENAME ||
-                 type == EFS_MSG_INODE_RENAME_AT ||
-                 type == EFS_MSG_INODE_HOLD ||
-                 type == EFS_MSG_INODE_FLOCK ||
-                 type == EFS_MSG_INODE_DROP_CHUNKS) &&
-                server_raft_host_active()) {
+        case EFS_MSG_INODE_FLOCK: {
+            if (server_raft_host_active()) {
                 struct efs_msg_inode_reply r;
                 uint8_t rtype;
                 memset(&r, 0, sizeof(r));
@@ -631,23 +593,12 @@ send_reply:
                                             req->uid, req->gid, req->flags,
                                             req->owner, &r);
                     rtype = EFS_MSG_INODE_CREATE_REPLY;
-                } else if (type == EFS_MSG_INODE_CREATE_SHARD) {
-                    /* Old fan-out. File create is one Raft entry; MKDIR is
-                     * a 2-shard txn, not this opcode. */
-                    r.status = EFS_INODE_RPC_INVAL;
-                    rtype = EFS_MSG_INODE_CREATE_SHARD_REPLY;
                 } else if (type == EFS_MSG_INODE_UNLINK &&
                            payload_len >= sizeof(struct efs_msg_inode_unlink)) {
                     struct efs_msg_inode_unlink *req = payload;
                     server_raft_host_unlink(req->parent, req->name, req->is_dir,
                                             &r);
                     rtype = EFS_MSG_INODE_UNLINK_REPLY;
-                } else if (type == EFS_MSG_INODE_UNLINK_SHARD) {
-                    /* Old fan-out. Last-link file unlink is one Raft entry;
-                     * nlink>1 is still a 2-shard txn, not this opcode.
-                     * RMDIR is EFS_MSG_INODE_UNLINK with a directory. */
-                    r.status = EFS_INODE_RPC_INVAL;
-                    rtype = EFS_MSG_INODE_UNLINK_SHARD_REPLY;
                 } else if (type == EFS_MSG_INODE_SETATTR &&
                            payload_len >= sizeof(struct efs_msg_inode_setattr)) {
                     struct efs_msg_inode_setattr *req = payload;
@@ -685,14 +636,6 @@ send_reply:
                     server_raft_host_link(req->src_ino, req->new_parent,
                                           req->new_name, &r);
                     rtype = EFS_MSG_INODE_LINK_REPLY;
-                } else if (type == EFS_MSG_INODE_LINK_SHARD) {
-                    /* Old fan-out. LINK is a 2-shard txn, not this opcode. */
-                    r.status = EFS_INODE_RPC_INVAL;
-                    rtype = EFS_MSG_INODE_LINK_SHARD_REPLY;
-                } else if (type == EFS_MSG_INODE_RENAME) {
-                    /* Rename-by-ino is not hosted; RENAME_AT is. */
-                    r.status = EFS_INODE_RPC_INVAL;
-                    rtype = EFS_MSG_INODE_RENAME_REPLY;
                 } else if (type == EFS_MSG_INODE_RENAME_AT &&
                            payload_len >= sizeof(struct efs_msg_inode_rename_at)) {
                     struct efs_msg_inode_rename_at *req = payload;
@@ -749,12 +692,6 @@ send_reply:
                     } else {
                         r.status = EFS_INODE_RPC_INVAL;
                     }
-                } else if (type == EFS_MSG_INODE_DROP_CHUNKS) {
-                    /* Old-engine fragment GC fan-out. Chunk lifetime is
-                     * owned by the KV apply layer (spec L7); nothing sends
-                     * this in raft mode. */
-                    r.status = EFS_INODE_RPC_INVAL;
-                    rtype = EFS_MSG_INODE_DROP_CHUNKS_REPLY;
                 } else {
                     r.status = EFS_INODE_RPC_INVAL;
                     rtype = (type == EFS_MSG_INODE_LOOKUP)
@@ -923,70 +860,12 @@ send_reply:
                               sizeof(r));
             break;
         }
-        case EFS_MSG_SET_FEATURES: {
-            /* Feature toggles are not persisted in raft mode. */
-            struct efs_msg_features_reply r;
-            memset(&r, 0, sizeof(r));
-            r.features = EFS_FEATURES_DEFAULT;
-            r.status = EFS_FEATURES_NOT_FOUND;
-            efs_conn_send_msg(conn, EFS_MSG_SET_FEATURES_REPLY, &r,
-                              sizeof(r));
-            break;
-        }
         case EFS_MSG_QUERY_STATS: {
             /* Whole-table stats query went away with the table. */
             struct efs_msg_query_stats_reply r;
             memset(&r, 0, sizeof(r));
             efs_conn_send_msg(conn, EFS_MSG_QUERY_STATS_REPLY, &r,
                               sizeof(r));
-            break;
-        }
-        case EFS_MSG_LIST_EXPORTS: {
-            /* mgmt is raft-only (step 11 inc 5); until then, empty list. */
-            struct efs_msg_list_exports_reply r;
-            memset(&r, 0, sizeof(r));
-            efs_conn_send_msg(conn, EFS_MSG_LIST_EXPORTS_REPLY, &r,
-                              sizeof(r));
-            break;
-        }
-        case EFS_MSG_CREATE_EXPORT: {
-            uint8_t st = EFS_CREATE_EXPORT_REPLICATE_FAILED;
-            efs_conn_send_msg(conn, EFS_MSG_CREATE_EXPORT_REPLY, &st, 1);
-            break;
-        }
-        case EFS_MSG_DESTROY_EXPORT: {
-            uint8_t st = 1; /* != EFS_DESTROY_EXPORT_OK */
-            efs_conn_send_msg(conn, EFS_MSG_DESTROY_EXPORT_REPLY, &st, 1);
-            break;
-        }
-        case EFS_MSG_UPGRADE_META: {
-            struct efs_msg_upgrade_meta_reply r;
-            memset(&r, 0, sizeof(r));
-            r.status = 1; /* old-engine rehash is gone */
-            efs_conn_send_msg(conn, EFS_MSG_UPGRADE_META_REPLY, &r,
-                              sizeof(r));
-            break;
-        }
-        case EFS_MSG_GET_META:
-        case EFS_MSG_GET_META_ROOT:
-            /* Empty reply = "no serializable export" (client maps it to
-             * EFS_ERR_NOT_FOUND), never a hang. */
-            efs_conn_send_msg(conn,
-                              type == EFS_MSG_GET_META
-                                  ? EFS_MSG_GET_META_REPLY
-                                  : EFS_MSG_GET_META_ROOT_REPLY,
-                              NULL, 0);
-            break;
-        case EFS_MSG_PUT_META: {
-            struct efs_msg_put_meta_reply r;
-            memset(&r, 0, sizeof(r));
-            r.status = 1; /* not EFS_OK */
-            efs_conn_send_msg(conn, EFS_MSG_PUT_META_REPLY, &r, sizeof(r));
-            break;
-        }
-        case EFS_MSG_META_COMMIT: {
-            uint8_t st = 1; /* never promoted: 2PC is gone */
-            efs_conn_send_msg(conn, EFS_MSG_META_COMMIT_REPLY, &st, 1);
             break;
         }
         default:

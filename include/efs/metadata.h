@@ -396,40 +396,11 @@ int efs_export_dir_is_spread(struct efs_export *ex, efs_ino_t dir);
  * (today's meta primary). Else live[shard % nlive]. */
 efs_node_id_t efs_shard_owner_of(uint32_t shard, uint32_t shard_count,
                                  const efs_node_id_t *live, uint32_t nlive);
-/* Next inode for a create under parent. bits==0: next_ino++. bits>0:
- * allocate inside the parent's shard range. */
-efs_ino_t efs_export_alloc_ino(struct efs_export *ex, efs_ino_t parent);
-/* Allocate in `shard`'s congruence class from that shard table only.
- * The old main-table probe raced per-op CREATE (unlocked ino index while
- * shard 0 realloc'd) and is unnecessary once the child row and dentry
- * live on tables the caller has locked. */
-efs_ino_t efs_export_alloc_ino_for_shard(struct efs_export *ex, uint32_t shard);
-/* Peek the shard a create would land on. Files and directories stay on
- * the parent directory's shard so CREATE is local (no CREATE_SHARD RTT)
- * and rename of ecopy .tmp → final stays one-node. Independent trees
- * spread only when their parent inodes already live on different shards.
- * Does not advance create_rr. */
-uint32_t efs_export_create_target(struct efs_export *ex, efs_ino_t parent,
-                                  uint32_t mode, const char *name);
 /* Table that owns `ino` (or parent for name ops). bits==0 → `ex`. */
 struct efs_export *efs_export_table_for_ino(struct efs_export *ex, efs_ino_t ino);
 struct efs_export *efs_export_table(struct efs_export *ex, uint32_t shard);
 /* Existing shard table only — does not allocate. shard 0 / bits=0 → ex. */
 struct efs_export *efs_export_shard_tab(struct efs_export *ex, uint32_t shard);
-/* Kept for callers; does not instantiate extra-shard tables (descriptors
- * stay on the v8 root; the owner catchup loads a shard on demand). */
-void efs_export_install_extra_roots(struct efs_export *ex);
-/* Move inode/chunk rows into dest shards; keep dentries on the parent shard. */
-int efs_export_rehash(struct efs_export *ex, uint32_t shard_bits);
-/* Evict cold extra tables that are not dirty (reload from v8 extras). */
-void efs_export_evict_cold_shards(struct efs_export *ex, uint32_t keep);
-/* Ensure shard table exists (reinstall extra root if the cluster has one). */
-int efs_export_load_shard(struct efs_export *ex, uint32_t shard);
-static inline efs_ino_t efs_meta_shard_table_ino(uint32_t shard)
-{
-    return EFS_META_SHARD_INO_BASE + (efs_ino_t)shard;
-}
-
 /* Initialize an empty export. */
 void efs_export_init(struct efs_export *ex, efs_export_id_t id, const char *name);
 
@@ -443,11 +414,6 @@ int efs_export_lookup(struct efs_export *ex, efs_ino_t parent,
 /* Find an inode by inode number. Returns 0 if found. */
 int efs_export_get_inode(struct efs_export *ex, efs_ino_t ino,
                          struct efs_inode *out);
-
-/* Create a new inode, allocating the next sequential inode number.
- * Returns the inode number or 0 on error. */
-efs_ino_t efs_export_create(struct efs_export *ex, efs_ino_t parent,
-                              uint32_t mode, uid_t uid, gid_t gid, const char *name);
 
 /* Create a new inode with an explicit inode number (used by clients that
  * allocate from their own namespace so concurrent clients never collide).
@@ -466,13 +432,10 @@ int efs_export_upsert_inode(struct efs_export *ex, const struct efs_inode *rec);
 /* Remove an inode and all of its chunk entries. */
 int efs_export_unlink(struct efs_export *ex, efs_ino_t ino);
 
-/* Remove one directory name. If it was the last hard link, also remove chunks. */
-int efs_export_unlink_name(struct efs_export *ex, efs_ino_t parent, const char *name);
-/* keep_last: drop the name but keep inode+chunks (open fds still exist). */
+/* Remove one directory name. If it was the last hard link, also remove chunks.
+ * keep_last: drop the name but keep inode+chunks (open fds still exist). */
 int efs_export_unlink_name_ex(struct efs_export *ex, efs_ino_t parent,
                               const char *name, int keep_last);
-/* Drop a nlink=0 ghost inode + its chunks (last open fd closed). */
-int efs_export_purge_unlinked(struct efs_export *ex, efs_ino_t ino);
 
 /* Add a hard link (extra name) for an existing non-directory inode. */
 int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
@@ -483,8 +446,6 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
  * the new name on new_parent using src as the template; src.nlink is the
  * already-bumped value. */
 int efs_export_nlink_inc(struct efs_export *ex, efs_ino_t src_ino,
-                         struct efs_inode *out);
-int efs_export_nlink_dec(struct efs_export *ex, efs_ino_t src_ino,
                          struct efs_inode *out);
 int efs_export_nlink_dec_ex(struct efs_export *ex, efs_ino_t src_ino,
                             struct efs_inode *out, int keep_last);
@@ -502,9 +463,6 @@ int efs_export_set_size_norollup(struct efs_export *ex, efs_ino_t ino,
 /* Drop chunk map entries with chunk_index >= first_chunk (truncate shrink). */
 void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
                                  uint32_t first_chunk);
-/* Same scan on one already-locked table (not every loaded shard tab). */
-void efs_export_drop_chunks_table(struct efs_export *tab, efs_ino_t ino,
-                                  uint32_t first_chunk);
 
 /* Cache eviction (client staging table): drop every staged trace of ino —
  * chunk recs across all loaded tabs, then the inode row(s). A create
@@ -567,12 +525,8 @@ int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
 int efs_export_get_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index,
                          struct efs_chunk_entry *out);
 
-/* Rebuild derived directory rollups from the inode table (after load/merge). */
-void efs_export_recompute_rollups(struct efs_export *ex);
-
 /* Format directory rollup fields into .stats text. Returns bytes written
  * (excluding NUL), or -1 if buf is too small / not a directory. */
-int efs_export_format_stats(const struct efs_inode *dir, char *buf, size_t buflen);
 int efs_export_format_stats_ex(const struct efs_export *ex,
                                const struct efs_inode *dir, char *buf,
                                size_t buflen);
@@ -585,175 +539,35 @@ int efs_export_foreach_child(struct efs_export *ex, efs_ino_t parent,
 /* Return 1 if the directory has no children, 0 otherwise. */
 int efs_export_dir_empty(struct efs_export *ex, efs_ino_t ino);
 
-/* Serialize export metadata to a memory buffer. Caller must free *buf.
- * v5 layout: fixed-size inode records, then chunk records. Optional
- * *ino_blob_len / *chunk_blob_len return the two-region split (header+inodes
- * vs chunks) so a flush can page them in disjoint index spaces. */
-int efs_export_serialize(struct efs_export *ex, char **buf, size_t *len);
-int efs_export_serialize_ex(struct efs_export *ex, char **buf, size_t *len,
-                            uint32_t *ino_blob_len, uint32_t *chunk_blob_len);
-/* Copy cache and rewrite dirty pages only. On success *used_incr=1 and
- * *buf is the new blob. If the cache layout cannot be reused (flush_full,
- * dent_off change, missing cache) *used_incr=0 and *buf is unchanged —
- * caller must efs_export_serialize_ex. omit_chunks skips the chunk region
- * (*chunk_blob_len = cache_chunk_len).
- *
- * *page_absent (optional) returns a caller-freed byte array of *ino_blob_len's
- * page count, where 1 means "this inode page holds no meaningful bytes in
- * *buf, and is provably identical to the committed root's page at the same
- * index". That happens when the page's slab is not resident: trim_ino_ram
- * only evicts clean slabs, and any mutation faults the slab back in and
- * re-dirties it, so a non-resident slab cannot have changed since the flush
- * that produced the committed root. The caller must reuse the committed ci
- * for those pages rather than encoding them — which is what lets the byte
- * source shrink below one full copy of the table. */
-int efs_export_serialize_dirty(struct efs_export *ex,
-                               const char *cache, uint32_t cache_ino_len,
-                               uint32_t cache_chunk_len, int omit_chunks,
-                               char **buf, size_t *len,
-                               uint32_t *ino_blob_len, uint32_t *chunk_blob_len,
-                               int *used_incr, uint8_t **page_absent);
 void efs_export_flush_mark_full(struct efs_export *ex);
 void efs_export_flush_mark_ino_slot(struct efs_export *ex, uint64_t slot);
 void efs_export_flush_mark_chunk_slot(struct efs_export *ex, uint64_t slot);
 void efs_export_flush_mark_dentry_tail(struct efs_export *ex);
 void efs_export_flush_mark_dentry_all(struct efs_export *ex);
-void efs_export_flush_clear_dirty(struct efs_export *ex);
-int efs_export_flush_page_is_dirty(const struct efs_export *ex, uint32_t packed);
-/* Copy inode/chunk rows (and header fields serialize needs) so the
- * O(table) pack can run without holding the server lock. Does not copy
- * indexes. Caller must efs_export_table_snapshot_free(snap). */
-int efs_export_table_snapshot(const struct efs_export *ex,
-                              struct efs_export *snap);
-/* omit_chunks: keep chunk_count for the header but do not copy rows. */
-int efs_export_table_snapshot_ex(const struct efs_export *ex,
-                                 struct efs_export *snap, int omit_chunks);
-void efs_export_table_snapshot_free(struct efs_export *snap);
-/* Steal inode/chunk/index/child tables from src into dst (dst's old tables
- * are freed). Does not touch root, gm_blob, or shard_tabs. src is emptied. */
-void efs_export_adopt_tables(struct efs_export *dst, struct efs_export *src);
-void efs_export_pack_header(const struct efs_export *ex, uint8_t out[EFS_META_HDR_SIZE]);
-void efs_export_pack_header_ver(const struct efs_export *ex,
-                                uint8_t out[EFS_META_HDR_SIZE], uint32_t ver);
-void efs_export_pack_inode(const struct efs_inode *ino, uint8_t out[EFS_INODE_WIRE_SIZE]);
-void efs_export_pack_inode_compact(const struct efs_inode_mem *ino,
-                                   uint8_t out[EFS_INODE_COMPACT_SIZE]);
-/* EFSM v8 fixed-size row (compact payload + inline name) for one slot. */
-void efs_export_pack_row(const struct efs_export *ex, uint64_t slot,
-                         uint8_t out[EFS_INODE_ROW_SIZE]);
 /* Live-row name (empty string if slot is unused). */
 const char *efs_export_inode_name(const struct efs_export *ex, uint64_t slot);
-/* Live row for slot; faults an evicted slab (flush_blob, else page_src). */
-struct efs_inode_mem *efs_export_inode_at(struct efs_export *ex, uint64_t slot);
 /* Decode one EFSM v8 row image into a live row (name included). */
 void efs_export_unpack_row(struct efs_export *ex, struct efs_inode_mem *row,
                            const uint8_t *p);
-void efs_export_trim_ino_ram(struct efs_export *ex);
 /* Fill an RPC/stack efs_inode including name[256] from a live slot. */
 void efs_export_inode_to_rpc(const struct efs_export *ex, uint64_t slot,
                              struct efs_inode *out);
-void efs_export_pack_chunk(const struct efs_chunk_entry *ce,
-                           uint8_t out[EFS_CHUNK_WIRE_SIZE]);
 int efs_export_inode_slot(struct efs_export *ex, efs_ino_t ino, uint64_t *slot);
 int efs_export_chunk_slot(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index,
                           uint64_t *slot);
-int efs_export_needs_inode_grow(const struct efs_export *ex);
 int efs_export_needs_chunk_grow(const struct efs_export *ex);
-int efs_export_reserve_inodes(struct efs_export *ex, uint64_t extra);
 int efs_export_reserve_chunks(struct efs_export *ex, uint64_t extra);
 
-/* Deserialize export metadata, replacing current contents. */
-int efs_export_deserialize(struct efs_export *ex, const char *buf, size_t len);
-
-/* Merge a client's metadata update into the server's committed export.
- * For each inode and chunk entry in `inc`, the server's copy is updated when
- * the incoming entry is newer (higher mtime for inodes) or not yet present.
- * This lets concurrent clients commit without dropping each other's data. */
-int efs_export_merge(struct efs_export *ex, const struct efs_export *inc);
-
-/* Load from / save to a file. Fragmented exports save/load EFSR roots. */
-int efs_export_load(struct efs_export *ex, const char *path);
-int efs_export_save(struct efs_export *ex, const char *path);
-
-/* --- Fragmented metadata (hybrid root + 2+1 pages) --- */
-
-int efs_meta_blob_is_root(const char *buf, size_t len);
-int efs_meta_blob_is_export(const char *buf, size_t len);
+/* --- EFSR root leftovers: the client staging table still embeds a
+ *     struct efs_export_root, but nothing serializes, fetches or commits
+ *     one since the Raft+KV engine replaced the page flush. --- */
 
 uint32_t efs_meta_page_count_for_blob(uint32_t blob_len);
-
-/* Copy one zero-padded EFS_META_PAGE_SIZE page out of a serialized EFSM blob. */
-int efs_meta_extract_page(const char *blob, uint32_t blob_len, uint32_t page_index,
-                          uint8_t page_out[EFS_META_PAGE_SIZE]);
-
-/* Assemble pages back into a blob of root->blob_len bytes. */
-int efs_meta_assemble_blob(const struct efs_export_root *root,
-                           const uint8_t pages[][EFS_META_PAGE_SIZE],
-                           char **blob_out, size_t *blob_len_out);
-
-int efs_export_root_serialize(const struct efs_export_root *root,
-                              char **buf, size_t *len);
-int efs_export_root_deserialize(struct efs_export_root *root,
-                                const char *buf, size_t len);
-/* Like deserialize, and reports how many prefix bytes were the EFSR
- * (so a trailing live EFSM can follow in the same GET_META payload). */
-int efs_export_root_deserialize_used(struct efs_export_root *root,
-                                     const char *buf, size_t len, size_t *used);
-
-/* Fill root header from export (allocates page_checksums for page_count).
- * Two-region: pass the split lengths from efs_export_serialize_ex. A legacy
- * single-space flush can pass chunk_blob_len=0. */
-int efs_export_root_prepare(struct efs_export_root *root,
-                            const struct efs_export *ex,
-                            uint64_t generation,
-                            uint32_t ino_blob_len,
-                            uint32_t chunk_blob_len);
-int efs_export_root_capture_extras(struct efs_export_root *root,
-                                   const struct efs_export *ex);
-
-/* Max-merge prev's extra-shard descriptors into root: per shard id keep the
- * higher-generation descriptor and carry forward shards root lacks. Call
- * before adopting/committing any cluster root so a descriptor is never
- * dropped or regressed (an orphaned shard's tables are unrecoverable). */
-int efs_export_root_maxmerge_extras(struct efs_export_root *root,
-                                    const struct efs_export_root *prev);
-
-/* Nonzero when both roots reference the same shard-0 pages (CoW checksums).
- * Used to recognize an extras-only root refresh: the sender contributed no
- * shard-0 content, so the receiver must not fence its live shard-0 table. */
-int efs_export_root_same_pages(const struct efs_export_root *a,
-                               const struct efs_export_root *b);
-
-/* Merge incoming->extra_roots into the local shard tables without touching
- * shard-0. A descriptor is skipped when the local shard table is dirty
- * (unflushed ops would be fenced) or already holds an equal/newer generation
- * (single writer per shard => local is authoritative). Refreshes
- * ex->root.extra_roots from the merged tables. */
-void efs_export_merge_extra_roots(struct efs_export *ex,
-                                  const struct efs_export_root *incoming);
 
 /* Free page_checksums; safe on zeroed roots. */
 void efs_export_root_free(struct efs_export_root *root);
 
-/* Move root contents into dst (steals page_checksums; clears src). */
-void efs_export_root_move(struct efs_export_root *dst, struct efs_export_root *src);
-
 /* Deep-copy root (including checksums). */
 int efs_export_root_copy(struct efs_export_root *dst, const struct efs_export_root *src);
-
-/* Pointer to checksums[page][frag] inside root->page_checksums. */
-static inline uint8_t *efs_export_root_checksum(struct efs_export_root *root,
-                                                uint32_t page, int frag)
-{
-    return root->page_checksums +
-           ((size_t)page * EFS_NUM_FRAGMENTS + (size_t)frag) * EFS_HASH_SIZE;
-}
-
-static inline const uint8_t *efs_export_root_checksum_const(
-    const struct efs_export_root *root, uint32_t page, int frag)
-{
-    return root->page_checksums +
-           ((size_t)page * EFS_NUM_FRAGMENTS + (size_t)frag) * EFS_HASH_SIZE;
-}
 
 #endif

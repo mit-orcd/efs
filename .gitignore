@@ -31,14 +31,10 @@ tests/test_conn_fd
 
 # profiling / job runtime output
 /logs/
-slurm-jobs/logs/
-slurm-jobs/state/
 
 # editor / tooling
 /.codex
 /notes.txt
-/blake3-bench
-tests/test_ino_path
 /.build_id.stamp
 
 # python

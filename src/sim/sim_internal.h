@@ -152,9 +152,6 @@ struct efs_raft_store *sim_raft_store_new(struct efs_sim *sim, int server,
                                           uint8_t group);
 void sim_raft_store_del(struct efs_sim *sim, struct efs_raft_store *st);
 void sim_raft_disk_close(struct efs_sim *sim, int server);
-/* Makes the applied KV durable through what has been applied, which is what
- * a Raft snapshot must not run ahead of. */
-int sim_disk_checkpoint(struct efs_sim *sim, int server);
 
 int sim_raft_mkfs(struct efs_sim *sim);
 int sim_raft_export_salt(struct efs_sim *sim, uint64_t *out);

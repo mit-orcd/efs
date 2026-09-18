@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #define FUSE_USE_VERSION 32
 
 #include "client_internal.h"

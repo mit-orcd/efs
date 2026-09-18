@@ -18,7 +18,6 @@
 #   run_tests.sh all [efs-host ...]              posix + perf multi
 #   run_tests.sh nvme [quick|full] [serial|parallel|both]
 #                                                local NVMe ceiling on efsd servers
-#   run_tests.sh ewrite [host]                   30s ewrite.sh sweep (1 2/4/8/16)
 #   run_tests.sh meta [host]                     efs-bench --meta (1/4/16 workers)
 #   run_tests.sh leaks [host]                    valgrind memcheck gate
 #                                                (unit + efsd + efs-fuse)
@@ -647,39 +646,6 @@ cmd_nvme() { # [quick|full] [serial|parallel|both]
     return $rc
 }
 
-# --------------------------------------------------------------- ewrite ---
-# 30s ewrite.sh concurrency sweep (1 2 / 1 4 / 1 8 / 1 16) on one client.
-cmd_ewrite() { # [host]
-    local host=${1:-fcstor007.ib}
-    local pdir="$RESULTS/ewrite/$RUN_ID"
-    mkdir -p "$pdir" "$RESULTS/ewrite"
-    say "ewrite: 30s sweep (1 2/4/8/16) on $host:$EFS_MNT"
-    ensure_mounted "$host" || { say "  $host not mounted"; return 1; }
-    push_tests "$host"
-    ssh_to 150 "$host" "timeout -k 5 140 \
-        bash /tmp/efs/tests/perf/ewrite_sweep.sh '$EFS_MNT' \
-        /tmp/ewrite-$RUN_ID.tsv; cat /tmp/ewrite-$RUN_ID.tsv" \
-        | tee "$pdir/ewrite-${host%.ib}.tsv"
-    # keep a clean TSV (drop the human lines the script prints)
-    awk 'BEGIN{FS=OFS="\t"} $1=="ts" || $1 ~ /^[0-9]{4}-/' \
-        "$pdir/ewrite-${host%.ib}.tsv" > "$pdir/summary.tsv"
-    if [ -s "$RESULTS/ewrite/history.tsv" ]; then
-        :
-    else
-        echo -e "run_id\thost\tjobs\twall_s\tbytes\tmib_s\trc" \
-            > "$RESULTS/ewrite/history.tsv"
-    fi
-    awk -v rid="$RUN_ID" -F'\t' 'NR>1 && NF>=7 {
-            print rid"\t"$2"\t"$3"\t"$4"\t"$5"\t"$6"\t"$7
-        }' "$pdir/summary.tsv" >> "$RESULTS/ewrite/history.tsv"
-    say "ewrite results in $pdir"
-    echo "--- ewrite 30s sweep ---"
-    awk -F'\t' 'NR>1 {
-            printf "  jobs=%-3s  %.3fs  %.3f GiB  %8.1f MiB/s\n",
-                $3, $4, $5/1073741824.0, $6
-        }' "$pdir/summary.tsv"
-}
-
 # ----------------------------------------------------------------- meta ---
 # efs-bench --meta on one client (workers 1/4/16). Build efs-bench on the node.
 cmd_meta() { # [host]
@@ -772,7 +738,7 @@ cmd_all() { # [efs-host ...]
 
 main() {
     mkdir -p "$RESULTS/posix" "$RESULTS/posix2" "$RESULTS/perf" "$RESULTS/nvme" \
-             "$RESULTS/ewrite" "$RESULTS/meta" "$RESULTS/leaks"
+             "$RESULTS/meta" "$RESULTS/leaks"
     touch "$RESULTS/perf/history.tsv"
     local cmd=${1:-}
     shift || true
@@ -783,12 +749,11 @@ main() {
         posix2) cmd_posix2 "$@" ;;
         perf)  cmd_perf "$@" ;;
         nvme)  cmd_nvme "$@" ;;
-        ewrite) cmd_ewrite "$@" ;;
         meta) cmd_meta "$@" ;;
         leaks) cmd_leaks "$@" ;;
         setup) cmd_setup "$@" ;;
         all)   cmd_all "$@" ;;
-        *) sed -n '2,21p' "$0"; return 2 ;;
+        *) sed -n '2,23p' "$0"; return 2 ;;
     esac
     local rc=$?
     if [ "${COMMIT:-0}" = 1 ]; then

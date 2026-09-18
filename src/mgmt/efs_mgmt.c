@@ -217,20 +217,13 @@ static int cmd_status(int argc, char **argv)
     free(reply);
     reply = NULL;
 
-    /* Operational state of the contacted node (active/draining/drained/...). */
+    /* Operational state of the contacted node (always active today). */
     if (send_recv(fd, EFS_MSG_STATUS, NULL, 0, &reply_type, &reply, &reply_len) == 0 &&
         reply_type == EFS_MSG_STATUS_REPLY &&
         reply_len == sizeof(struct efs_msg_status_reply)) {
         struct efs_msg_status_reply *st = reply;
-        const char *state_name = "unknown";
-        switch (st->state) {
-        case EFS_NODE_STATE_ACTIVE:    state_name = "active"; break;
-        case EFS_NODE_STATE_LEAVING:   state_name = "leaving"; break;
-        case EFS_NODE_STATE_SHRINKING: state_name = "shrinking"; break;
-        case EFS_NODE_STATE_DRAINING:  state_name = "draining"; break;
-        case EFS_NODE_STATE_DRAINED:   state_name = "drained"; break;
-        }
-        printf("Node %s:%u state: %s\n", host, port, state_name);
+        printf("Node %s:%u state: %s\n", host, port,
+               st->state == EFS_NODE_STATE_ACTIVE ? "active" : "unknown");
     }
     free(reply);
     reply = NULL;

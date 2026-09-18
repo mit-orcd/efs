@@ -294,18 +294,6 @@ void server_start_heartbeat(struct efsd_server *s)
     pthread_attr_destroy(&attr);
 }
 
-/* Non-zero when a node is currently heartbeat-marked-down (exclude from
- * placement). Caller holds s->lock. */
-int server_node_is_down_locked(struct efsd_server *s, efs_node_id_t id)
-{
-    uint64_t now = hb_now_ms();
-    for (uint32_t i = 0; i < s->node_count; i++) {
-        if (s->nodes[i].id == id)
-            return (s->nodes[i].down_until_ms > now);
-    }
-    return 0;
-}
-
 /* Rejoin thread: periodically retry joining until this server is part of a
  * cluster with at least one other node. Uses the explicit --join target when
  * set, otherwise the persisted peer list. */

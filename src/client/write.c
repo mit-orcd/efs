@@ -307,13 +307,6 @@ out:
  * gen/next_ci and tore the CoW pages (the shard-0 "gen raced with GC"
  * wedge). */
 
-/* fsync waiters must not serialize on one flush: sync_meta shares one
- * REPORT_CHUNKS barrier across all waiters via g_sync_mu/g_sync_meta_cv. */
-static pthread_mutex_t g_sync_mu = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t g_sync_meta_cv = PTHREAD_COND_INITIALIZER;
-static int g_sync_meta_active;
-static int g_sync_meta_rc;
-
 /* Dirty state swapped out of g_client at snapshot time. Ops that race the
  * unlocked serialize populate fresh sets and stay dirty for the next flush;
  * on flush failure the saved marks are merged back so nothing is lost. */
@@ -566,48 +559,6 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
     pthread_mutex_unlock(&report_mu);
     return rc;
 }
-
-/* fsync: one incremental publish shared by all waiters. 8× end_fsync used
- * to each run a full/incremental flush (5–18s) because every caller took
- * g_repl_mu and found new dirty from the others still writing. */
-int efs_client_sync_meta(void)
-{
-    const char *skip = getenv("EFS_SKIP_META_FLUSH");
-    if (skip && *skip && strcmp(skip, "0") != 0)
-        return EFS_OK;
-    pthread_mutex_lock(&g_sync_mu);
-    int waited = 0;
-    for (;;) {
-        if (!g_sync_meta_active) {
-            if (waited) {
-                pthread_mutex_lock(&g_client.dirty_mu);
-                int clean = (g_client.dirty_ino_count == 0 &&
-                             g_client.dirty_chunk_count == 0 &&
-                             !g_client.meta_dirty);
-                pthread_mutex_unlock(&g_client.dirty_mu);
-                if (clean) {
-                    int rc = g_sync_meta_rc;
-                    pthread_mutex_unlock(&g_sync_mu);
-                    return rc;
-                }
-            }
-            g_sync_meta_active = 1;
-            pthread_mutex_unlock(&g_sync_mu);
-            /* Phase 2b fsync barrier: report dirty state and have the primary
-             * commit the export before replying. */
-            int rc = efs_client_report_dirty(1);
-            pthread_mutex_lock(&g_sync_mu);
-            g_sync_meta_rc = rc;
-            g_sync_meta_active = 0;
-            pthread_cond_broadcast(&g_sync_meta_cv);
-            pthread_mutex_unlock(&g_sync_mu);
-            return rc;
-        }
-        waited = 1;
-        pthread_cond_wait(&g_sync_meta_cv, &g_sync_mu);
-    }
-}
-
 
 
 /* Flush-thread main: waits for threshold hits and runs blocking flushes off

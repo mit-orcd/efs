@@ -652,19 +652,6 @@ static int u64_dec(char *dst, size_t cap, uint64_t v)
     return n;
 }
 
-static int cat3(char *dst, size_t cap, const char *a, const char *b, const char *c)
-{
-    size_t na = strlen(a), nb = strlen(b), nc = c ? strlen(c) : 0;
-    if (na + nb + nc + 1 > cap)
-        return -1;
-    memcpy(dst, a, na);
-    memcpy(dst + na, b, nb);
-    if (c)
-        memcpy(dst + na + nb, c, nc);
-    dst[na + nb + nc] = '\0';
-    return 0;
-}
-
 static uint32_t parse_meta_phases(const char *s)
 {
     uint32_t m = 0;
@@ -816,14 +803,18 @@ static void *meta_worker(void *arg)
                 a->fail++;
                 continue;
             }
-            if (efs_client_rename(ino, st->dirs[di].ino, tmp) != 0) {
+            if (efs_client_rename_at(ino, st->dirs[di].ino,
+                                     st->files[i].name, st->dirs[di].ino,
+                                     tmp) != 0) {
                 a->fail++;
                 if (!a->first_rc)
                     a->first_rc = g_client.last_err ? g_client.last_err : -1;
                 continue;
             }
             a->ops++;
-            if (efs_client_rename(ino, st->dirs[di].ino, st->files[i].name) != 0) {
+            if (efs_client_rename_at(ino, st->dirs[di].ino, tmp,
+                                     st->dirs[di].ino,
+                                     st->files[i].name) != 0) {
                 a->fail++;
                 if (!a->first_rc)
                     a->first_rc = g_client.last_err ? g_client.last_err : -1;
@@ -954,9 +945,6 @@ static int run_meta_bench(const char *seed, const char *export_name,
         fprintf(stderr, "Failed to discover cluster from %s:%u\n", host, port);
         return 1;
     }
-    /* Step 11: no GET_META table fetch — the metadata engine is the
-     * Raft+KV host and the client keeps only a shell export (id=1). */
-    int rc = 0;
 
     if (nworkers < 1)
         nworkers = g_client.conn_pool_size;

@@ -116,13 +116,3 @@ void sim_raft_disk_close(struct efs_sim *sim, int server)
     efs_raft_disk_close(sim->srv[server].raft_disk);
     sim->srv[server].raft_disk = NULL;
 }
-
-/* The rule efs_raft_disk.h states: the applied KV must be durable through
- * last_applied before the log prefix goes away. In the sim the KV is either
- * in RAM (nothing to do) or an LSM store, where a flush is the checkpoint. */
-int sim_disk_checkpoint(struct efs_sim *sim, int server)
-{
-    if (!sim->kv_dir)
-        return EFS_OK;
-    return efs_kv_lsm_flush(sim->srv[server].disk);
-}

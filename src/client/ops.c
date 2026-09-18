@@ -738,14 +738,6 @@ int efs_client_lookup(const char *path, struct efs_inode *out)
     return lookup_walk(path, out, 0, 0, 0, NULL, 0);
 }
 
-int efs_client_lookup_x(const char *path, uid_t uid, gid_t gid,
-                        const gid_t *groups, int ngroups, struct efs_inode *out)
-{
-    if (uid == 0)
-        return lookup_walk(path, out, 0, 0, 0, NULL, 0);
-    return lookup_walk(path, out, 1, uid, gid, groups, ngroups);
-}
-
 efs_ino_t efs_client_create(efs_ino_t parent, const char *name, uint32_t mode,
                             uid_t uid, gid_t gid)
 {
@@ -1003,43 +995,6 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
     efs_client_stage_touch(ino);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
-    return EFS_OK;
-}
-
-int efs_client_rename(efs_ino_t ino, efs_ino_t new_parent, const char *new_name)
-{
-    /* Phase 2b: rename on the primary; dual-apply the rebound inode (upsert
-     * handles the parent/name index dance). */
-    struct efs_inode oldrow;
-    memset(&oldrow, 0, sizeof(oldrow));
-    efs_client_lock_dir(ino);
-    pthread_mutex_lock(&g_client.idx_mu);
-    int have_old = (efs_export_get_inode(&g_client.export, ino, &oldrow) == 0);
-    (void)have_old;
-    pthread_mutex_unlock(&g_client.idx_mu);
-    efs_client_unlock_dir(ino);
-    struct efs_inode out;
-    int rc = efs_client_rpc_rename(g_client.export_id, ino, new_parent,
-                                   new_name, &out);
-    if (rc != EFS_OK) {
-        g_client.last_err = rc;
-        return rc;
-    }
-    efs_client_lock_dirs2(ino, new_parent);
-    pthread_mutex_lock(&g_client.idx_mu);
-    /* Dual-apply by renaming the local table too: efs_export_rename only
-     * touches name/parent/ctime, preserving the local data-path state (size,
-     * pack fields, chunk mappings) which the server may not have yet — the
-     * close's metadata flush is batched/async, so the returned inode can carry
-     * a stale size=0. Upserting that stale inode would wipe the fresher local
-     * state and lose the file's content. Fall back to upsert only if the local
-     * table lacks the inode (created elsewhere). */
-    if (efs_export_rename(&g_client.export, ino, new_parent, new_name) != EFS_OK)
-        efs_export_upsert_inode(&g_client.export, &out);
-    efs_client_stage_touch(ino);
-    pthread_mutex_unlock(&g_client.idx_mu);
-    efs_client_unlock_dirs2(ino, new_parent);
-    efs_client_mark_ino_dirty(ino);
     return EFS_OK;
 }
 

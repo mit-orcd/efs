@@ -21,7 +21,6 @@ int efs_set_send_timeout(int fd, int ms);
 int efs_tcp_keepalive(int fd);
 
 /* Send exactly len bytes. Returns 0 on success, -1 on error. */
-int efs_send_all(int fd, const void *buf, size_t len);
 
 /* Receive exactly len bytes. Returns 0 on success, -1 on error/EOF. */
 int efs_recv_all(int fd, void *buf, size_t len);

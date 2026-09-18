@@ -419,12 +419,6 @@ uint64_t efs_sim_history(const struct efs_sim *sim)
     return sim ? sim->history : 0;
 }
 
-void efs_sim_hold(struct efs_sim *sim, int hold)
-{
-    if (sim)
-        sim->hold = hold ? 1 : 0;
-}
-
 struct efs_sim *efs_sim_new(const struct efs_sim_cfg *cfg)
 {
     struct efs_sim *sim;
@@ -555,13 +549,6 @@ void efs_sim_opid_for(struct efs_sim *sim, int client, uint64_t seq,
            EFS_OPID_UUID_LEN);
     out->session_epoch = sim->cli[client].win.session_epoch;
     out->seq = seq;
-}
-
-int efs_sim_opid_ack(struct efs_sim *sim, int client, uint64_t contiguous_ack)
-{
-    if (!sim || client < 0 || client >= sim->nclients)
-        return EFS_ERR_INVAL;
-    return efs_opid_ack(&sim->cli[client].win, contiguous_ack);
 }
 
 int efs_sim_create_op(struct efs_sim *sim, int client, const struct efs_opid *op,

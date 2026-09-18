@@ -207,22 +207,6 @@ int efs_tcp_keepalive(int fd)
     return 0;
 }
 
-int efs_send_all(int fd, const void *buf, size_t len)
-{
-    const uint8_t *p = buf;
-    size_t sent = 0;
-    while (sent < len) {
-        ssize_t n = send(fd, p + sent, len - sent, 0);
-        if (n <= 0) {
-            if (n < 0 && errno == EINTR)
-                continue;
-            return -1;
-        }
-        sent += (size_t)n;
-    }
-    return 0;
-}
-
 int efs_recv_all(int fd, void *buf, size_t len)
 {
     uint8_t *p = buf;

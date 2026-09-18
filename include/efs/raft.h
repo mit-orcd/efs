@@ -153,7 +153,6 @@ int efs_raft_snapshot(struct efs_raft *r);
 int efs_raft_restore_applied(struct efs_raft *r, uint64_t idx);
 
 int efs_raft_role(const struct efs_raft *r);
-int efs_raft_id(const struct efs_raft *r);
 uint64_t efs_raft_term(const struct efs_raft *r);
 uint64_t efs_raft_commit(const struct efs_raft *r);
 uint64_t efs_raft_applied(const struct efs_raft *r);
@@ -168,7 +167,6 @@ int efs_raft_joint(const struct efs_raft *r);
  * added as learners; returns BUSY until each has match_index >= commit.
  * Always goes through joint consensus — there is no skip-joint path. */
 int efs_raft_change(struct efs_raft *r, uint32_t new_voters);
-int efs_raft_learner_ready(const struct efs_raft *r, int id);
 /* Voluntary follower. Does not bump the term. allow_campaign=0 stops
  * start_election so a replica whose apply is missing committed rows cannot
  * win again (same last_log as a complete peer). */

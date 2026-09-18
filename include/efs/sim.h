@@ -48,8 +48,6 @@ uint64_t efs_sim_rng(struct efs_sim *sim);
 uint64_t efs_sim_now(const struct efs_sim *sim);
 uint64_t efs_sim_history(const struct efs_sim *sim);
 
-/* Hold=1 queues events without applying; hold=0 drains. */
-void efs_sim_hold(struct efs_sim *sim, int hold);
 int efs_sim_drain(struct efs_sim *sim);
 int efs_sim_check(struct efs_sim *sim);
 
@@ -65,7 +63,6 @@ int efs_sim_create_op(struct efs_sim *sim, int client, const struct efs_opid *op
                       efs_ino_t *out);
 void efs_sim_opid_for(struct efs_sim *sim, int client, uint64_t seq,
                       struct efs_opid *out);
-int efs_sim_opid_ack(struct efs_sim *sim, int client, uint64_t contiguous_ack);
 /* Drop the client's RAM window; durable KV is the source of truth (I16). */
 int efs_sim_opid_forget(struct efs_sim *sim, int client);
 int efs_sim_lookup(struct efs_sim *sim, int client, efs_ino_t parent,
@@ -175,7 +172,6 @@ int efs_sim_lockw(struct efs_sim *sim, int client, efs_ino_t ino, uint8_t domain
 int efs_sim_unlock(struct efs_sim *sim, int client, efs_ino_t ino, uint8_t domain,
                    uint64_t start, uint64_t end, uint8_t owner_kind,
                    uint64_t owner_id);
-int efs_sim_lock_wake(struct efs_sim *sim);
 
 int efs_sim_crash(struct efs_sim *sim, int server); /* RAM gone, disk kept */
 int efs_sim_restart(struct efs_sim *sim, int server);

@@ -4901,22 +4901,6 @@ static void host_lock_wait_drop_session(struct efs_raft_host *h,
     pthread_mutex_unlock(&h->wait_mu);
 }
 
-void server_raft_host_lock_wait_drop_owner(efs_ino_t ino, uint64_t owner)
-{
-    struct efs_raft_host *h = g_host;
-    struct host_lock_wait *w;
-
-    if (!h)
-        return;
-    pthread_mutex_lock(&h->wait_mu);
-    for (w = h->wait_head; w; w = w->next)
-        if (w->ino == ino && w->owner == owner) {
-            w->abort = 1;
-            pthread_cond_broadcast(&w->cv);
-        }
-    pthread_mutex_unlock(&h->wait_mu);
-}
-
 /* flock/fcntl on the inode shard (§7.6). EFS_FLOCK_FCNTL
  * selects the record-lock domain (byte ranges allowed); otherwise
  * FLOCK (whole-file only). owner is the process/ofd id; optional

@@ -57,17 +57,19 @@ Stop:
 
 | If this happens | Reads | Writes |
 |---|---|---|
-| 1 of 3 servers down | yes — any 2 fragments rebuild the chunk | yes — 2 of 3 acks |
+| 1 of 3 servers down | yes — any 2 fragments rebuild the chunk | yes — degraded stripe, re-striped on repair |
 | 2 of 3 servers down | no | no |
 | 1 disk full | yes | yes, until a second node is also full (`ENOSPC`) |
 
-Worked examples (XOR math, kill-a-node, two-node outage):
-**[docs/failure-tolerance.md](docs/failure-tolerance.md)**
+How the node count sets the guarantee, and why the write commit rule needs
+every fragment when the cluster is healthy:
+**[docs/arch/failure-tolerance.md](docs/arch/failure-tolerance.md)**
 
 ## More
 
+- **[docs/architecture.md](docs/architecture.md)** — the normative spec (start at
+  [docs/arch/START-HERE.md](docs/arch/START-HERE.md) if you are going to change code)
 - **[docs/operations.md](docs/operations.md)** — start/stop, storage layout, quotas, `efs-mgmt`, rejoin
-- **[docs/design.md](docs/design.md)** — chunks, placement, metadata, protocol
-- **[docs/testing.md](docs/testing.md)** — tests, Slurm harness, `perf`
+- **[docs/testing.md](docs/testing.md)** — unit tests, POSIX suites, perf and leak gates
 
 MIT. See [LICENSE](LICENSE).

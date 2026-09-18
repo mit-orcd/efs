@@ -368,8 +368,3 @@ int efs_sim_unlock(struct efs_sim *sim, int client, efs_ino_t ino, uint8_t domai
         return rc;
     return sim_lock_wake(sim);
 }
-
-int efs_sim_lock_wake(struct efs_sim *sim)
-{
-    return sim_lock_wake(sim);
-}

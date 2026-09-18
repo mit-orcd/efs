@@ -27,39 +27,27 @@ enum efs_msg_type {
     EFS_MSG_GET_CHUNK_REPLY = 5,
     EFS_MSG_PUT_CHUNK = 6,
     EFS_MSG_PUT_CHUNK_REPLY = 7,
-    EFS_MSG_GET_META = 8,
-    EFS_MSG_GET_META_REPLY = 9,
-    EFS_MSG_PUT_META = 10,
-    EFS_MSG_PUT_META_REPLY = 11,
+    /* 8..11 retired: GET_META / PUT_META (old whole-table metadata engine). */
     EFS_MSG_LIST_NODES = 12,
     EFS_MSG_LIST_NODES_REPLY = 13,
-    EFS_MSG_CREATE_EXPORT = 14,
-    EFS_MSG_CREATE_EXPORT_REPLY = 15,
+    /* 14/15 retired: CREATE_EXPORT (mkfs is EFS_MSG_RAFT_MKFS). */
     EFS_MSG_JOIN = 16,
     EFS_MSG_JOIN_REPLY = 17,
     EFS_MSG_STATUS = 18,
     EFS_MSG_STATUS_REPLY = 19,
-    EFS_MSG_REMOVE_NODE = 20,
-    EFS_MSG_REMOVE_NODE_REPLY = 21,
+    /* 20/21 retired: REMOVE_NODE (node lifecycle is a control-plane op). */
     EFS_MSG_SHRINK_QUOTA = 22,
     EFS_MSG_SHRINK_QUOTA_REPLY = 23,
     EFS_MSG_NODE_LEFT = 24,
     EFS_MSG_QUERY_STATS = 25,
     EFS_MSG_QUERY_STATS_REPLY = 26,
-    EFS_MSG_LIST_EXPORTS = 27,
-    EFS_MSG_LIST_EXPORTS_REPLY = 28,
-    EFS_MSG_DRAIN_NODE = 29,
-    EFS_MSG_DRAIN_NODE_REPLY = 30,
-    EFS_MSG_UNDRAIN_NODE = 31,
-    EFS_MSG_UNDRAIN_NODE_REPLY = 32,
+    /* 27..32 retired: LIST_EXPORTS, DRAIN_NODE, UNDRAIN_NODE. */
     /* Network bench: same payload as PUT_CHUNK; server ACKs and discards. */
     EFS_MSG_BENCH_PUT = 33,
     EFS_MSG_BENCH_PUT_REPLY = 34,
-    EFS_MSG_DESTROY_EXPORT = 35,
-    EFS_MSG_DESTROY_EXPORT_REPLY = 36,
+    /* 35/36 retired: DESTROY_EXPORT. */
     /* Per-export feature switches (.stats/.find). Server-owned. */
-    EFS_MSG_SET_FEATURES = 37,
-    EFS_MSG_SET_FEATURES_REPLY = 38,
+    /* 37/38 retired: SET_FEATURES (features are not persisted). */
     EFS_MSG_GET_FEATURES = 39,
     EFS_MSG_GET_FEATURES_REPLY = 40,
     /* Append local --storage roots on a live node (no restart). */
@@ -76,71 +64,35 @@ enum efs_msg_type {
     EFS_MSG_INODE_READDIR_REPLY = 50,
     EFS_MSG_INODE_UNLINK = 51,
     EFS_MSG_INODE_UNLINK_REPLY = 52,
-    EFS_MSG_UPGRADE_META = 53,
-    EFS_MSG_UPGRADE_META_REPLY = 54,
+    /* 53/54 retired: UPGRADE_META (old-engine shard rehash). */
     /* RDMA QP bootstrap over the TCP conn; unknown-type/error -> stay TCP. */
     EFS_MSG_RDMA_SETUP = 55,
     EFS_MSG_RDMA_SETUP_REPLY = 56,
-    /* Meta flush election: a client must win a majority of nodes before
-     * PUTting meta pages for a new generation. Concurrent writers used to
-     * PUT the same dual-slot page CIs with different content, tearing every
-     * page they overlapped on; the election serializes flushes cluster-wide. */
-    EFS_MSG_META_FLUSH_BEGIN = 57,
-    EFS_MSG_META_FLUSH_BEGIN_REPLY = 58,
-    /* Root-only meta poll for server catchup: same payload rules as GET_META
-     * (empty = primary export, else export name) but the reply is just the
-     * EFSR root (~KiB), never the GiB-scale EFSM blob. Catchup polls this
-     * every 2 s per peer; full GET_META only fires when a peer is newer. */
-    EFS_MSG_GET_META_ROOT = 59,
-    EFS_MSG_GET_META_ROOT_REPLY = 60,
-    /* Phase 3b op class (docs/scaling-roadmap.md Item 0):
-     *   Commutative  — apply unordered; max/newer wins (REPORT size/mtime).
-     *                  Size is grow-only, and a grow whose mtime is older
-     *                  than the row is dropped (stale close-REPORT must
-     *                  not undo SETATTR/O_TRUNC).
-     *   Independent  — shard-local commit (CREATE/UNLINK inside one dir,
-     *                  disjoint-chunk writes).
-     *   Conflicting  — owner-serialized RPC + dual-apply (RENAME, HOLD,
-     *                  APPEND reserve, FLOCK). If a new op is not obviously
-     *                  the first two, it is Conflicting. */
-    /* Phase 2b: additional server-owned metadata mutations. Replies reuse
-     * struct efs_msg_inode_reply (status + resulting inode). */
-    EFS_MSG_INODE_RENAME = 61,
-    EFS_MSG_INODE_RENAME_REPLY = 62,
+    /* 57..62 retired: META_FLUSH_BEGIN, GET_META_ROOT, and rename-by-ino
+     * (the hosted rename is EFS_MSG_INODE_RENAME_AT). */
+    /* Server-owned metadata mutations. Replies reuse struct
+     * efs_msg_inode_reply (status + resulting inode). */
     EFS_MSG_INODE_SETATTR = 63,
     EFS_MSG_INODE_SETATTR_REPLY = 64,
     EFS_MSG_INODE_LINK = 65,
     EFS_MSG_INODE_LINK_REPLY = 66,
-    /* Phase 2b: client reports written-chunk mappings (ino → nodes + checksums)
-     * to the metadata primary, batched. This replaces the client blob flush for
-     * the data path: the server applies each record via efs_export_set_chunk and
-     * marks the export dirty so the meta-flush thread persists it. The reply is
-     * struct efs_msg_inode_reply (status + primary_id; inode unused). */
+    /* Client reports written-chunk mappings (ino → nodes + checksums) to the
+     * shard's Raft group, batched; the apply layer publishes them. The reply
+     * is struct efs_msg_inode_reply (status + primary_id; inode unused). */
     EFS_MSG_REPORT_CHUNKS = 67,
     EFS_MSG_REPORT_CHUNKS_REPLY = 68,
-    /* Phase 2b reads: peer pulls chunk mappings for an inode it just looked up. */
+    /* Reads: peer pulls chunk mappings for an inode it just looked up. */
     EFS_MSG_INODE_GETCHUNKS = 69,
     EFS_MSG_INODE_GETCHUNKS_REPLY = 70,
-    /* Cross-client O_APPEND: atomically reserve the next `len` bytes at the
-     * metadata owner (size advances under s->lock) and return the resulting
-     * inode; the append offset is reply.size - len. The client then writes
-     * the data there via the normal dcache/PUT/REPORT path. Without this,
-     * two clients each appended at their own stale cached end and tore or
-     * lost each other's lines (mc_stress appfile). */
+    /* Cross-client O_APPEND: reserve the next `len` bytes on the inode's
+     * shard and return the reserved offset in reply.size - len. The client
+     * then writes the data there via the normal dcache/PUT/REPORT path.
+     * Without this, two clients each appended at their own stale cached end
+     * and tore or lost each other's lines. */
     EFS_MSG_INODE_APPEND = 71,
     EFS_MSG_INODE_APPEND_REPLY = 72,
-    /* Phase 3 data-path sharding: parent owner fans a child-row create to
-     * the target shard's owner. Reply is struct efs_msg_inode_reply. */
-    EFS_MSG_INODE_CREATE_SHARD = 73,
-    EFS_MSG_INODE_CREATE_SHARD_REPLY = 74,
-    /* Parent owner fans nlink++ / nlink-- to the child-row owner. Reply is
-     * struct efs_msg_inode_reply. Without this, hardlink on a spread-created
-     * file is NOT_FOUND on the parent (EIO) and last-link unlink orphans
-     * the child row + chunks. */
-    EFS_MSG_INODE_LINK_SHARD = 75,
-    EFS_MSG_INODE_LINK_SHARD_REPLY = 76,
-    EFS_MSG_INODE_UNLINK_SHARD = 77,
-    EFS_MSG_INODE_UNLINK_SHARD_REPLY = 78,
+    /* 73..78 retired: the CREATE/LINK/UNLINK shard fan-out. A file create
+     * is one Raft entry; the multi-shard cases are transactions. */
     EFS_MSG_INODE_LOOKUP_PATH = 79,
     EFS_MSG_INODE_LOOKUP_PATH_REPLY = 80,
     EFS_MSG_HEAL_STATUS = 81,
@@ -156,28 +108,10 @@ enum efs_msg_type {
     /* Rename a specific directory name (hard links share an ino). */
     EFS_MSG_INODE_RENAME_AT = 87,
     EFS_MSG_INODE_RENAME_AT_REPLY = 88,
-    /* Phase 3b: drop chunk mappings with chunk_index >= first on the
-     * receiving node's owned shard tables. Used by truncate / last-link
-     * unlink so extent-sharded groups on peer shards are not leaked. */
-    EFS_MSG_INODE_DROP_CHUNKS = 89,
-    EFS_MSG_INODE_DROP_CHUNKS_REPLY = 90,
-    /* Two-phase metadata root commit. PUT_META is phase 1 (prepare): the
-     * receiver STASHES the root as pending and acks, but does not install,
-     * persist, fence tables, or GC — the writer may still fail quorum and
-     * discard it, and an uncommitted root must never become visible (a
-     * same-gen retry rewrites the same CoW cis with different content, so
-     * installing an uncommitted root corrupts the pages it references).
-     * Phase 2: after a prepare quorum the writer commits locally and then
-     * broadcasts META_COMMIT(export, gen); a receiver promotes its matching
-     * pending root (install + persist + fence + GC old cis — safe now: the
-     * gen's pages were 2-of-3 placed before the prepare was even sent).
-     * Stragglers that miss COMMIT catch up via GET_META_ROOT, which only
-     * ever serves committed roots. */
-    EFS_MSG_META_COMMIT = 91,
-    EFS_MSG_META_COMMIT_REPLY = 92,
+    /* 89..92 retired: DROP_CHUNKS fan-out (chunk lifetime is the KV apply
+     * layer, spec L7) and the two-phase metadata root commit. */
 
-    /* Production Raft host (architecture.md §10 step 10.5c; the only
-     * metadata engine since roadmap step 11).
+    /* Production Raft host — the only metadata engine.
      * EFS_MSG_RAFT carries one efs_raft_msg encoded by
      * efs_wire_raft_encode (wire.h); the reply is a delivery ack only —
      * Raft tolerates loss, so processing is asynchronous. */
@@ -263,33 +197,7 @@ struct efs_msg_raft_status_reply {
     struct efs_raft_group_status groups[EFS_RAFT_HOST_MAX_GROUPS];
 };
 
-/* META_COMMIT request: promote the pending (prepared) root for this export
- * whose generation matches gen AND whose stashed prepare bytes hash to
- * root_sum. The fingerprint matters because a failed flush retries the SAME
- * gen with fresh content at the SAME CoW cis: a peer that missed the retry's
- * prepare but matched on gen alone would promote a stale root whose pages
- * were already overwritten (checksum mismatch → unrecoverable wedge). On
- * mismatch the peer keeps its pending root and converges via catchup.
- * Reply is EFS_PUT_META_OK on promote, EFS_PUT_META_STALE when there is no
- * matching pending root (already committed, superseded, fingerprint
- * mismatch, or never prepared — the writer treats all as
- * success-equivalent since catchup converges stragglers). */
-struct efs_msg_meta_commit {
-    uint32_t export_id;
-    uint32_t pad;
-    uint64_t gen;
-    uint8_t root_sum[EFS_HASH_SIZE];
-};
-
-/* Set per-export features. Only bits in set_mask are changed (to the
- * corresponding bits in features); other bits are preserved. */
-struct efs_msg_set_features {
-    char export_name[EFS_MAX_NAME];
-    uint32_t features;
-    uint32_t set_mask;
-};
-
-/* Reply for both SET_FEATURES and GET_FEATURES: the export's current mask. */
+/* GET_FEATURES reply: the export's current feature mask. */
 #define EFS_FEATURES_OK        0
 #define EFS_FEATURES_NOT_FOUND 1
 struct efs_msg_features_reply {
@@ -357,37 +265,6 @@ struct efs_msg_put_chunk {
 #define EFS_BENCH_PUT_OK     0
 #define EFS_BENCH_PUT_ERROR  1
 
-struct efs_msg_put_meta {
-    uint32_t epoch;
-    efs_export_id_t export_id;
-    /* serialized metadata follows as a length-prefixed blob */
-};
-
-#define EFS_PUT_META_OK     0
-#define EFS_PUT_META_ERROR  1
-#define EFS_PUT_META_STALE  2
-#define EFS_PUT_META_BUSY   3 /* flush election held by another live writer */
-
-/* Meta flush election request/response. writer_id is the client's
- * write_lease_id (also carried in the published root, so the server can
- * check the root publisher against the election holder). */
-struct efs_msg_meta_flush_begin {
-    uint32_t export_id;
-    uint32_t pad;
-    uint64_t gen;
-    uint64_t writer_id;
-};
-struct efs_msg_meta_flush_begin_reply {
-    uint8_t status;
-    uint8_t pad[7];
-    uint64_t committed_gen; /* server's committed gen; >= req gen means stale */
-};
-
-struct efs_msg_put_meta_reply {
-    uint8_t status;
-    uint32_t new_epoch;
-};
-
 struct efs_msg_list_nodes_reply {
     uint32_t node_count;
     struct efs_node nodes[EFS_MAX_NODES];
@@ -406,18 +283,6 @@ struct efs_msg_shrink_quota {
 struct efs_msg_node_left {
     efs_node_id_t node_id;
 };
-
-#define EFS_REMOVE_NODE_OK     0
-#define EFS_REMOVE_NODE_ERROR  1
-#define EFS_REMOVE_NODE_IN_PROGRESS 2
-#define EFS_REMOVE_NODE_NOT_DRAINED 3
-
-#define EFS_DRAIN_NODE_OK           0
-#define EFS_DRAIN_NODE_ERROR        1
-#define EFS_DRAIN_NODE_IN_PROGRESS  2
-
-#define EFS_UNDRAIN_NODE_OK     0
-#define EFS_UNDRAIN_NODE_ERROR  1
 
 #define EFS_SHRINK_QUOTA_OK     0
 #define EFS_SHRINK_QUOTA_ERROR  1
@@ -438,31 +303,9 @@ struct efs_msg_add_storage_reply {
     uint32_t path_count; /* node's storage_path_count after the call */
 };
 
-/* Wire values match enum efsd_server_state in server_internal.h */
-#define EFS_NODE_STATE_ACTIVE    0
-#define EFS_NODE_STATE_LEAVING   1
-#define EFS_NODE_STATE_SHRINKING 2
-#define EFS_NODE_STATE_DRAINING  3
-#define EFS_NODE_STATE_DRAINED   4
-
-struct efs_msg_create_export {
-    char name[EFS_MAX_NAME];
-    uint32_t chunk_size; /* 0 = EFS_DEFAULT_CHUNK_SIZE */
-};
-
-#define EFS_CREATE_EXPORT_OK                0
-#define EFS_CREATE_EXPORT_ERROR             1
-#define EFS_CREATE_EXPORT_EXISTS            2
-/* Export was created/saved locally; peer meta replicate did not get quorum. */
-#define EFS_CREATE_EXPORT_REPLICATE_FAILED  3
-
-struct efs_msg_destroy_export {
-    char name[EFS_MAX_NAME];
-};
-
-#define EFS_DESTROY_EXPORT_OK         0
-#define EFS_DESTROY_EXPORT_ERROR      1
-#define EFS_DESTROY_EXPORT_NOT_FOUND  2
+/* Only value on the wire: node lifecycle states went with the migration
+ * engine. STATUS_REPLY always reports it. */
+#define EFS_NODE_STATE_ACTIVE 0
 
 struct efs_msg_join {
     char peer_host[64];
@@ -485,16 +328,6 @@ struct efs_msg_query_stats_reply {
     uint64_t total_bytes;
     uint32_t user_count;
     struct efs_user_stat users[EFS_MAX_QUERY_USERS];
-};
-
-struct efs_msg_export_entry {
-    efs_export_id_t id;
-    char name[EFS_MAX_NAME];
-};
-
-struct efs_msg_list_exports_reply {
-    uint32_t export_count;
-    struct efs_msg_export_entry exports[EFS_MAX_EXPORTS];
 };
 
 #define EFS_INODE_RPC_OK         0
@@ -583,23 +416,6 @@ struct efs_msg_inode_create {
     uint64_t owner;
 };
 
-/* Nested create on the target shard owner (parent owner already decided
- * the shard). The receiver allocates an ino from target_shard's class and
- * writes the full row; the parent owner writes only the dentry. */
-struct efs_msg_inode_create_shard {
-    efs_export_id_t export_id;
-    efs_ino_t parent;
-    char name[EFS_MAX_NAME];
-    uint32_t mode;
-    uint32_t uid;
-    uint32_t gid;
-    uint32_t target_shard;
-    uint32_t flags;
-    /* Phase 3b: 0 = allocate; else write this ino as a dentry on
-     * target_shard (spread-dir hash shard, inode already allocated). */
-    efs_ino_t ino;
-};
-
 struct efs_msg_inode_getattr {
     efs_export_id_t export_id;
     efs_ino_t ino;
@@ -658,14 +474,7 @@ struct efs_msg_inode_readdir_reply {
     char next_name[EFS_MAX_NAME];
 };
 
-/* Phase 2b: rename/move an inode to a new parent + name. */
-struct efs_msg_inode_rename {
-    efs_export_id_t export_id;
-    efs_ino_t ino;
-    efs_ino_t new_parent;
-    char new_name[EFS_MAX_NAME];
-};
-
+/* Rename/move a specific dentry to a new parent + name. */
 struct efs_msg_inode_rename_at {
     efs_export_id_t export_id;
     efs_ino_t old_parent;
@@ -703,15 +512,7 @@ struct efs_msg_inode_link {
 };
 
 /* Nested nlink mutation on the child-row owner. */
-struct efs_msg_inode_link_shard {
-    efs_export_id_t export_id;
-    efs_ino_t src_ino;
-};
 
-struct efs_msg_inode_unlink_shard {
-    efs_export_id_t export_id;
-    efs_ino_t src_ino;
-};
 
 /* Cross-client O_APPEND reservation; reply is struct efs_msg_inode_reply
  * with inode.size = THIS reservation's end (eof+len), not the live
@@ -815,11 +616,6 @@ struct efs_msg_inode_getchunks_reply {
 
 /* Phase 3b: drop mappings with chunk_index >= first_chunk. Reply is
  * struct efs_msg_inode_reply. */
-struct efs_msg_inode_drop_chunks {
-    efs_export_id_t export_id;
-    efs_ino_t ino;
-    uint32_t first_chunk;
-};
 
 /* Phase 2b: batched dirty-metadata report (replaces the client blob flush).
  * The request payload is this header, then `count` struct efs_chunk_rec, then
@@ -833,19 +629,11 @@ struct efs_msg_report_chunks {
     uint32_t ino_count; /* inode size/mtime recs (after the chunk recs) */
 };
 
-struct efs_msg_upgrade_meta {
-    char export_name[EFS_MAX_NAME];
-    uint32_t shard_bits;
-};
 
 #define EFS_UPGRADE_OK     0
 #define EFS_UPGRADE_ERROR  1
 #define EFS_UPGRADE_NOT_FOUND 2
 
-struct efs_msg_upgrade_meta_reply {
-    uint8_t status;
-    uint32_t shard_count;
-};
 
 /* RDMA QP bootstrap. Both ends create an RC QP first, then exchange the
  * addressing needed for the RTR transition. Native IB only: dlid + sl. */

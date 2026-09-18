@@ -1188,11 +1188,6 @@ int efs_raft_role(const struct efs_raft *r)
     return r ? r->role : -1;
 }
 
-int efs_raft_id(const struct efs_raft *r)
-{
-    return r ? r->id : -1;
-}
-
 uint64_t efs_raft_term(const struct efs_raft *r)
 {
     return r ? r->current_term : 0;
@@ -1246,15 +1241,6 @@ void efs_raft_allow_campaign(struct efs_raft *r, int on)
 {
     if (r)
         r->allow_campaign = on ? 1 : 0;
-}
-
-int efs_raft_learner_ready(const struct efs_raft *r, int id)
-{
-    if (!r || id < 0 || id >= EFS_RAFT_MAX_PEERS)
-        return 0;
-    if (!(r->learners & (1u << id)))
-        return 0;
-    return r->match_index[id] >= r->commit_index;
 }
 
 int efs_raft_read_begin(struct efs_raft *r)

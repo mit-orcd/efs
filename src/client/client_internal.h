@@ -172,9 +172,6 @@ int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
                              uint32_t *inout_count);
 int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, int is_dir);
-int efs_client_rpc_rename(efs_export_id_t export_id, efs_ino_t ino,
-                          efs_ino_t new_parent, const char *new_name,
-                          struct efs_inode *out);
 int efs_client_rpc_rename_at(efs_export_id_t export_id, efs_ino_t old_parent,
                              const char *old_name, efs_ino_t new_parent,
                              const char *new_name, struct efs_inode *out);
@@ -234,10 +231,6 @@ extern struct efs_client g_client;
 /* Resolve a path to an inode number. Returns 0 on success. */
 int efs_client_lookup(const char *path, struct efs_inode *out);
 
-/* Path walk + ancestor X_OK. uid==0 skips the check (same as lookup). */
-int efs_client_lookup_x(const char *path, uid_t uid, gid_t gid,
-                        const gid_t *groups, int ngroups, struct efs_inode *out);
-
 /* Set atime and mtime in one SETATTR RPC. */
 int efs_client_utimens_both(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec,
                             uint64_t atime);
@@ -245,10 +238,6 @@ int efs_client_utimens_both(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec,
 /* Client inode-number namespace so concurrent writers do not collide. */
 void efs_client_setup_ino_namespace(void);
 
-/* Replicate local metadata to all servers. Returns number of acks. */
-/* Must be called without g_client.lock held; it takes the lock only to
- * serialize, then releases it for the duration of the network I/O. */
-int efs_client_sync_meta(void);
 /* Record a local metadata mutation. With meta_batch==0 this replicates
  * immediately (test / C-API behaviour). With meta_batch!=0 it coalesces
  * until meta_batch_ops changes accumulate (or force!=0). */
@@ -305,9 +294,6 @@ void efs_dcache_maybe_reclaim(void);
 
 /* Enable coalesced metadata replication for the FUSE client. */
 void efs_client_enable_meta_batch(uint32_t every_n_ops);
-/* Metadata engine is the Raft+KV host (the only mode; the name stays
- * for the wire/routing helpers built around it). */
-int efs_client_raft_mode(void);
 
 /* Fetch a fragment from a node. data must hold at least expected_frag_len bytes.
  * Returns 0 on success. */
@@ -359,7 +345,6 @@ int efs_client_set_atime(efs_ino_t ino, uint64_t atime);
 int efs_client_truncate(efs_ino_t ino, uint64_t size);
 
 /* Rename/move an inode to a new parent and name. */
-int efs_client_rename(efs_ino_t ino, efs_ino_t new_parent, const char *new_name);
 int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_name,
                          efs_ino_t new_parent, const char *new_name);
 

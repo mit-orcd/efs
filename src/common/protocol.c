@@ -190,10 +190,8 @@ int efs_recv_msg_into(int fd, uint8_t *type, uint8_t *status,
 /* Channel rule (both ends compute it identically):
  *  - server: the reply follows the request's arrival channel, unless the
  *    reply frame exceeds the RDMA pool buffer (then TCP).
- *  - client: RDMA when the frame fits. GET_META / GET_META_ROOT stay on
- *    TCP because their replies are unbounded (full table / root blob). */
-static int conn_pick_send_chan(struct efs_conn *c, uint8_t type,
-                               uint32_t frame_len)
+ *  - client: RDMA when the frame fits. */
+static int conn_pick_send_chan(struct efs_conn *c, uint32_t frame_len)
 {
     if (!c->rc)
         return EFS_CONN_TCP;
@@ -201,8 +199,6 @@ static int conn_pick_send_chan(struct efs_conn *c, uint8_t type,
         return EFS_CONN_TCP;
     if (c->is_server)
         return c->recv_chan == EFS_CONN_RDMA ? EFS_CONN_RDMA : EFS_CONN_TCP;
-    if (type == EFS_MSG_GET_META || type == EFS_MSG_GET_META_ROOT)
-        return EFS_CONN_TCP;
     return EFS_CONN_RDMA;
 }
 
@@ -285,8 +281,8 @@ int efs_conn_wait_request(struct efs_conn *c)
         }
         if (pf[0].revents & (POLLERR | POLLHUP | POLLNVAL))
             return wait_teardown(c, "tcp POLLERR/HUP (blocking poll)");
-        /* RDMA first when both are ready: inode ops ride RDMA, GET_META
-         * stays TCP. Preferring TCP here blocked recv_all forever. */
+        /* RDMA first when both are ready: preferring TCP here blocked
+         * recv_all forever. */
         if (pf[1].revents & POLLIN) {
             /* efd is level-triggered leftovers after a consumed RDMA
              * frame or a send-side wake. Only take RDMA when a recv is
@@ -323,7 +319,7 @@ int efs_conn_send_msg_parts(struct efs_conn *c, uint8_t type,
         return EFS_ERR_PROTO;
     if (efs_wire_frame_size(n1 + n2, &frame_len) != EFS_OK)
         return EFS_ERR_PROTO;
-    if (conn_pick_send_chan(c, type, frame_len) == EFS_CONN_RDMA) {
+    if (conn_pick_send_chan(c, frame_len) == EFS_CONN_RDMA) {
         /* Recycled fd: this object still has dest_qpn for a QP the peer
          * already destroyed when the old TCP got FIN. */
         if (!efs_conn_fd_matches(c))
@@ -365,7 +361,7 @@ static int conn_rdma_frame(struct efs_conn *c, uint8_t *type,
         efs_rdma_recv_repost(c->rc);
         return rc;
     }
-    /* RDMA pool frames cannot be GET_META-sized; keep the historic cap. */
+    /* An RDMA pool frame can never be this big; keep the cap as a guard. */
     if (*payload_len + 1u > 16u * 1024 * 1024) {
         efs_rdma_recv_repost(c->rc);
         return EFS_ERR_PROTO;

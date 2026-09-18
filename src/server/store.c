@@ -62,12 +62,6 @@ static void make_dir_for_file(const char *path)
     free(tmp);
 }
 
-static int path_exists(const char *path)
-{
-    struct stat st;
-    return stat(path, &st) == 0;
-}
-
 struct efs_export *server_get_export(struct efsd_server *s, efs_export_id_t id)
 {
     for (uint32_t i = 0; i < s->export_count; i++) {
@@ -95,15 +89,6 @@ struct efs_export *server_export_acquire_locked(struct efsd_server *s,
     if (idx < 0 || s->export_destroying[idx])
         return NULL;
     s->export_inflight[idx]++;
-    return ex;
-}
-
-struct efs_export *server_export_acquire(struct efsd_server *s,
-                                         efs_export_id_t id)
-{
-    pthread_mutex_lock(&s->lock);
-    struct efs_export *ex = server_export_acquire_locked(s, id);
-    pthread_mutex_unlock(&s->lock);
     return ex;
 }
 
@@ -417,31 +402,6 @@ int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
     return 0;
 }
 
-/* Resolve on-disk fragment across all local roots (adaptive write placement
- * means chunk_index % N is no longer authoritative). */
-static int resolve_fragment_path(struct efsd_server *s, struct efs_export *ex,
-                                 efs_ino_t ino, uint32_t chunk_index,
-                                 uint32_t fragment_index,
-                                 char *path, size_t path_len)
-{
-    int found = server_find_fragment_root(s, ex, ino, chunk_index, fragment_index);
-    if (found >= 0) {
-        fragment_path_at(s, (uint32_t)found, ex, ino, chunk_index, fragment_index,
-                         path, path_len);
-        if (access(path, F_OK) == 0)
-            return 0;
-        fragment_path_at_legacy(s, (uint32_t)found, ex, ino, chunk_index,
-                                fragment_index, path, path_len);
-        if (access(path, F_OK) == 0)
-            return 0;
-    }
-    /* Create path: writer TLS root, else legacy RR. */
-    uint32_t ri = write_root_index(s, chunk_index);
-    fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index, path, path_len);
-    return -1;
-}
-
-/* True if this fragment is already on disk (overwrite must not re-charge quota). */
 /* Unlink fragment data + checksum sidecars (stripe + legacy + old EC shards). */
 void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
@@ -747,23 +707,6 @@ static void *shard_io_thread(void *arg)
     return NULL;
 }
 
-int server_read_fragment(struct efsd_server *s, struct efs_export *ex,
-                         efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
-                         uint8_t *data, uint32_t *data_len)
-{
-    char path[8192];
-    resolve_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
-                          sizeof(path));
-    uint32_t want = server_frag_len(ex, ino);
-    uint32_t got = 0;
-    int rc = read_file_bytes(path, data, want, &got,
-                             s->direct_io && !efs_ino_is_meta_table(ino));
-    if (rc != EFS_OK)
-        return rc;
-    *data_len = got;
-    return EFS_OK;
-}
-
 /* Per-thread resolved-location cache for multi-root reads. Adaptive write
  * placement makes the root non-deterministic, so without a hint every GET
  * open()-probes roots×layouts through a deep dir walk — the top server CPU
@@ -933,29 +876,6 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
     return EFS_OK;
 }
 
-static void server_fragment_sum_path_at(struct efsd_server *s, uint32_t root_idx,
-                                       struct efs_export *ex, efs_ino_t ino,
-                                       uint32_t chunk_index, uint32_t fragment_index,
-                                       char *path, size_t path_len)
-{
-    char dir[8192];
-    format_ino_chunk_dir(dir, sizeof(dir), s->storage_paths[root_idx], ex->id, ino,
-                         chunk_index);
-    snprintf(path, path_len, "%s/%u.%u.sum", dir, chunk_index, fragment_index);
-}
-
-static void server_fragment_sum_path_at_legacy(struct efsd_server *s, uint32_t root_idx,
-                                              struct efs_export *ex, efs_ino_t ino,
-                                              uint32_t chunk_index,
-                                              uint32_t fragment_index,
-                                              char *path, size_t path_len)
-{
-    char dir[8192];
-    format_ino_chunk_dir_legacy(dir, sizeof(dir), s->storage_paths[root_idx],
-                                ex->id, ino, chunk_index);
-    snprintf(path, path_len, "%s/%u.%u.sum", dir, chunk_index, fragment_index);
-}
-
 /* Write the checksum sidecar for an already-resolved fragment path. The
  * fragment write just created the parent dir, so a plain open suffices — no
  * make_dir walk (saves the per-PUT dir-resolution the .sum used to redo). */
@@ -974,52 +894,6 @@ static int write_sum_for_path(const char *frag_path,
     ssize_t n = write(fd, checksum, EFS_HASH_SIZE);
     close(fd);
     return (n == (ssize_t)EFS_HASH_SIZE) ? EFS_OK : EFS_ERR_IO;
-}
-
-int server_write_fragment_sum_sync(struct efsd_server *s, struct efs_export *ex,
-                                   efs_ino_t ino, uint32_t chunk_index,
-                                   uint32_t fragment_index,
-                                   const uint8_t checksum[EFS_HASH_SIZE])
-{
-    char path[8192];
-    uint32_t ri = write_root_index(s, chunk_index);
-    server_fragment_sum_path_at(s, ri, ex, ino, chunk_index, fragment_index,
-                                path, sizeof(path));
-    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd < 0 && errno == ENOENT) {
-        make_dir_for_file(path);
-        fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    }
-    if (fd < 0)
-        return EFS_ERR_IO;
-    ssize_t n = write(fd, checksum, EFS_HASH_SIZE);
-    close(fd);
-    return (n == (ssize_t)EFS_HASH_SIZE) ? EFS_OK : EFS_ERR_IO;
-}
-
-int server_read_fragment_sum(struct efsd_server *s, struct efs_export *ex,
-                             efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
-                             uint8_t checksum[EFS_HASH_SIZE])
-{
-    uint32_t nroots = s->storage_path_count ? s->storage_path_count : 1;
-    for (uint32_t ri = 0; ri < nroots; ri++) {
-        char path[8192];
-        server_fragment_sum_path_at(s, ri, ex, ino, chunk_index, fragment_index,
-                                    path, sizeof(path));
-        int fd = open(path, O_RDONLY);
-        if (fd < 0) {
-            server_fragment_sum_path_at_legacy(s, ri, ex, ino, chunk_index,
-                                               fragment_index, path, sizeof(path));
-            fd = open(path, O_RDONLY);
-        }
-        if (fd < 0)
-            continue;
-        ssize_t n = read(fd, checksum, EFS_HASH_SIZE);
-        close(fd);
-        if (n == (ssize_t)EFS_HASH_SIZE)
-            return EFS_OK;
-    }
-    return EFS_ERR_NOT_FOUND;
 }
 
 /* True if path contains the sharded leaf for EFS_META_TABLE_INO. */

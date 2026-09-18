@@ -102,8 +102,6 @@ struct efs_export *server_get_export(struct efsd_server *s, efs_export_id_t id);
  * valid across unlocked disk I/O. */
 struct efs_export *server_export_acquire_locked(struct efsd_server *s,
                                                 efs_export_id_t id);
-struct efs_export *server_export_acquire(struct efsd_server *s,
-                                         efs_export_id_t id);
 void server_export_put(struct efsd_server *s, struct efs_export *ex);
 /* Index of ex within s->exports, or -1. Caller holds s->lock. */
 int server_export_index_locked(struct efsd_server *s, struct efs_export *ex);
@@ -152,11 +150,6 @@ struct efs_nvme_store {
 struct efs_store;
 void efs_store_nvme_bind(struct efs_store *st, struct efs_nvme_store *ctx,
                          struct efsd_server *s, struct efs_export *ex);
-
-/* Read a fragment from disk. */
-int server_read_fragment(struct efsd_server *s, struct efs_export *ex,
-                         efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
-                         uint8_t *data, uint32_t *data_len);
 
 /* Combined fragment+checksum read (single-root fast path). *sum_ok set when
  * the sidecar supplied the checksum; caller hashes the data otherwise. */
@@ -262,9 +255,6 @@ void server_gossip_membership(struct efsd_server *s, const struct efs_msg_hello 
 /* Start the background heartbeat thread. */
 void server_start_heartbeat(struct efsd_server *s);
 
-/* Non-zero when a node is heartbeat-marked-down (exclude from placement).
- * Caller holds s->lock. */
-int server_node_is_down_locked(struct efsd_server *s, efs_node_id_t id);
 
 /* Production Raft host (architecture.md §10 10.5c). Starts unconditionally
  * (the old 2PC engine is gone). Start fails loud on setup error. Stop is
@@ -293,9 +283,6 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
                             uint64_t start, uint64_t end,
                             const uint8_t *sess_uuid, uint32_t sess_epoch,
                             struct efs_msg_inode_reply *out);
-/* Revocation-barrier hook for session fencing (10.5c-35): dequeue a
- * session's blocked lock waiters so a fenced waiter is never granted. */
-void server_raft_host_lock_wait_drop_owner(efs_ino_t ino, uint64_t owner);
 void server_raft_host_lookup(efs_ino_t parent, const char *name,
                              struct efs_msg_inode_reply *out);
 void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
@@ -336,15 +323,6 @@ void server_start_rejoin(struct efsd_server *s);
 
 /* Remove a node from the local cluster list. */
 void server_remove_node_from_cluster(struct efsd_server *s, efs_node_id_t node_id);
-
-/* Persist / load a fragment's blake3 checksum sidecar (written once at PUT). */
-int server_write_fragment_sum_sync(struct efsd_server *s, struct efs_export *ex,
-                                   efs_ino_t ino, uint32_t chunk_index,
-                                   uint32_t fragment_index,
-                                   const uint8_t checksum[EFS_HASH_SIZE]);
-int server_read_fragment_sum(struct efsd_server *s, struct efs_export *ex,
-                             efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
-                             uint8_t checksum[EFS_HASH_SIZE]);
 
 /* Persist the cluster nodes list to disk. Caller must NOT hold s->lock (does
  * disk I/O). Use server_nodes_mark_dirty under the lock instead. */

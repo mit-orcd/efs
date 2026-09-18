@@ -12,8 +12,7 @@ Usage:
           Pass -f to stay in the foreground.
   stop:   unmount mount-path (fusermount3 -u, then umount)
   env:    EFS_TRANSPORT=auto|tcp|rdma (default auto: RDMA if IB is up, else TCP)
-          rdma is strict (no TCP fallback). GET_META stays TCP either way.
-          Optional EFS_RDMA_DEV=<ibdev>.
+          rdma is strict (no TCP fallback). Optional EFS_RDMA_DEV=<ibdev>.
 EOF
     exit 1
 }
