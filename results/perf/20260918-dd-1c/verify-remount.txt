@@ -1,0 +1,6 @@
+FUSE_CHECK fuse.efs-fuse
+FUSE_OK
+-rw-r--r-- 1 erbmi1 erbmi1 8589934592 Sep 18 00:04 /tmp/efs-mount/dd-1c/8g.bin
+size 8589934592
+head 5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a ok
+tail 5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a ok

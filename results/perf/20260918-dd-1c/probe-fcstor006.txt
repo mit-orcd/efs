@@ -1,0 +1,5 @@
+HOST=fcstor006
+374956
+/usr/bin/perf
+0
+disk_before 3817139964

@@ -1,0 +1,8 @@
+HOST=007
+/usr/bin/perf
+0
+FUSE_CHECK fuse.efs-fuse
+FUSE_OK
+328630
+-rw-r--r-- 1 erbmi1 erbmi1 8589934592 Sep 18 00:03 /tmp/src8g
+src_head 5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a nonzero

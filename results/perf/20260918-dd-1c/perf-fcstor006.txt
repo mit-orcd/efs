@@ -1,0 +1,105 @@
+REC_LOG
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 0.595 MB /tmp/perf-efsd.data (5684 samples) ]
+STAT_FILE
+# started on Fri Sep 18 00:04:23 2026
+
+
+ Performance counter stats for process id '374956':
+
+          9,465.02 msec task-clock:HGu                   #    0.229 CPUs utilized             
+                 0      context-switches:HGu             #    0.000 /sec                      
+                 0      cpu-migrations:HGu               #    0.000 /sec                      
+             3,379      page-faults:HGu                  #  356.999 /sec                      
+     3,640,433,891      cycles:HGu                       #    0.385 GHz                       
+       645,712,582      stalled-cycles-frontend:HGu      #   17.74% frontend cycles idle      
+     4,925,809,604      instructions:HGu                 #    1.35  insn per cycle            
+                                                  #    0.13  stalled cycles per insn   
+       979,044,956      branches:HGu                     #  103.438 M/sec                     
+        13,943,967      branch-misses:HGu                #    1.42% of all branches           
+
+      41.276810676 seconds time elapsed
+
+-rw------- 1 erbmi1 erbmi1 653580 Sep 18 00:05 /tmp/perf-efsd.data
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 5K of event 'cpu-clock:u'
+# Event count (approx.): 1421000000
+#
+# Overhead       Samples  Command  Shared Object         Symbol                                       
+# ........  ............  .......  ....................  .............................................
+#
+    19.95%          1134  efsd     libc.so.6             [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--17.17%--lookup
+               |          lsm_get
+               |          |          
+               |          |--8.43%--efs_meta_apply_publish
+               |          |          host_apply
+               |          |          apply_committed
+               |          |          on_ae_req
+               |          |          drain_inbox
+               |          |          host_pump
+               |          |          start_thread
+               |          |          
+               |          |--6.88%--load_append_cur
+               |          |          efs_meta_apply_publish
+               |          |          host_apply
+               |          |          apply_committed
+               |          |          on_ae_req
+               |          |          drain_inbox
+               |          |          host_pump
+               |          |          start_thread
+               |          |          
+               |           --1.86%--efs_meta_apply_get_inode
+               |                     efs_meta_apply_publish
+               |                     host_apply
+               |                     apply_committed
+               |                     on_ae_req
+               |                     drain_inbox
+               |                     host_pump
+               |                     start_thread
+               |          
+               |--1.35%--lsm_get
+               |          
+                --1.13%--lsm_batch
+                          efs_meta_apply_publish
+                          host_apply
+                          apply_committed
+                          on_ae_req
+                          drain_inbox
+                          host_pump
+                          start_thread
+
+    14.76%           839  efsd     libc.so.6             [.] __memmove_avx_unaligned_erms
+            |
+            ---__memmove_avx_unaligned_erms
+               |          
+               |--11.91%--server_write_fragment_to_path.constprop.0
+               |          server_write_fragment_with_sum_sync
+               |          run_job
+               |          writer_thread
+               |          start_thread
+               |          
+                --2.39%--lsm_batch
+                          efs_meta_apply_publish
+                          host_apply
+                          apply_committed
+                          on_ae_req
+                          drain_inbox
+                          host_pump
+                          start_thread
+
+     5.30%           301  efsd     efsd                  [.] efs_crc32
+            |
+            ---efs_crc32
+               |          
+               |--3.66%--rec_encode.isra.0
+               |          log_write_locked
+DISK_AFTER
+7063826265

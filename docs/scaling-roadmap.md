@@ -24,19 +24,26 @@ next** below, alongside two Aug 24 workstreams: the **metadata op storm**
 **All data traffic goes via RDMA** (client + server↔server chunk/fragment
 payloads; auto first-inode hang **closed Aug 30** — see below).
 
-**Status at a glance (Sep 1):** Phase 1 **shipped**; Phase 2 **shipped**
-(server sole metadata writer, 2PC root commit Aug 26); Phase 3 **done**
-(bits=3 is the live default); Phase 3b Items 0–2 **done**, Item 3 optional;
-Phase 4 **not started**. **The next work is [Phase M](#phase-m--carve-the-monolith-first-the-dev-cycle-lever)
-— carve the monolith into `raft/ kv/ meta/ wire/ data/ client/` behind
-interfaces.** It is the dev-cycle lever and the hard prerequisite for the
-architecture migration's simulator step; everything else forward-looking
-queues behind it. Per-op drop of `g_server->lock` for hot inode RPCs
-**gated** (LINK/RENAME/HOLD still `lock_all`; `EFS_LOCK_PROF` shows they
-are not the 9×4 ceiling). 9×4 posixstress is still ~95% `timeout after
-15s`; LOCK-PROF split (`20260830-160943`) is **H3 client/wire RTT** —
-`1_wait` 14 ms/run, `global_hold` 59 ms/run, `busy` ≈ APPEND. **Next
-lever is client `rpc_send_recv_shard`, not more server lock drops.**
+> **THE WORK QUEUE LIVES IN [arch/START-HERE.md §1a](arch/START-HERE.md).**
+> That is the single home for "what do I do next" — this file must not
+> restate it. Everything below is either landed history or a parked idea, and
+> much of it describes the **deleted** pre-Raft engine (whole-table snapshot,
+> CoW page flush, 2PC root commit, `g_server->lock`, shard tabs,
+> `EFS_INO_RAM_MB`, extras catchup). Read those sections as history, never as
+> instructions.
+
+**Status at a glance (Sep 18 2026):** Phases 1–3 **shipped**; Phase 3b Items
+0–2 **done** (Item 3 optional); **Phase M (carve the monolith) complete**; the
+architecture migration [§10](architecture.md) steps **0–12 are all landed and
+gated**, so the Raft + on-disk-KV engine is the only metadata path and the old
+snapshot / root-2PC machinery is deleted. Phase 4 (slim in-memory inode) is
+moot as written — the in-memory table it slimmed is gone. What remains is
+measured performance and harness work, ordered in
+[START-HERE §1a](arch/START-HERE.md): the single-client `fsync`/publish tail
+(1-client 8 GiB `dd+fsync` = **448 MiB/s**, of which ~12 s of 18.3 s is
+`fsync`), then 4- and 9-client honest fio/dd, then the 50g `end_fsync`
+timeout, then the oversized-snapshot replica lag (blocked on an unmade
+chunked-InstallSnapshot decision), then POSIX latency/harness items.
 Open perf: N pollers, streaming-write barrier (ewrite),
 PUT_CHUNK still takes the global lock for `export_acquire`.
 Flush O(table) encode+blake3 **gated Aug 30/31** (last-blob memcmp +
