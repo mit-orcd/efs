@@ -45,6 +45,7 @@ struct efs_raft {
     efs_raft_snap_put_fn snap_put;
     uint8_t *snap_blob;
     uint32_t snap_blob_len;
+    int allow_campaign; /* 0 = do not start elections (hollow KV) */
 };
 
 static void wr32(uint8_t *p, uint32_t v)
@@ -583,7 +584,7 @@ static int start_election(struct efs_raft *r)
     uint64_t last_i = 0, last_t = 0;
     int i, rc;
 
-    if (!is_voter(r, r->id)) {
+    if (!is_voter(r, r->id) || !r->allow_campaign) {
         reset_election(r);
         return EFS_OK;
     }
@@ -982,6 +983,7 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
             r->app_new = r->log_new = n;
         }
     }
+    r->allow_campaign = 1;
     r->last_applied = r->snap_idx;
     r->commit_index = r->snap_idx;
     if (reload_cfg_from_log(r) != EFS_OK) {
@@ -1224,6 +1226,26 @@ uint32_t efs_raft_voters(const struct efs_raft *r)
 int efs_raft_joint(const struct efs_raft *r)
 {
     return r && r->app_new != 0;
+}
+
+int efs_raft_step_down(struct efs_raft *r)
+{
+    if (!r)
+        return EFS_ERR_INVAL;
+    if (r->role == EFS_RAFT_FOLLOWER)
+        return EFS_OK;
+    r->role = EFS_RAFT_FOLLOWER;
+    r->leader = -1;
+    r->vote_bits = 0;
+    r->read_in_flight = 0;
+    reset_election(r);
+    return EFS_OK;
+}
+
+void efs_raft_allow_campaign(struct efs_raft *r, int on)
+{
+    if (r)
+        r->allow_campaign = on ? 1 : 0;
 }
 
 int efs_raft_learner_ready(const struct efs_raft *r, int id)

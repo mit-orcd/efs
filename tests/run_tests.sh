@@ -72,8 +72,10 @@ wait_cluster_idle() {
         gens=$(printf '%s\n' "$st" | sed -n 's/.*gen=\([0-9][0-9]*\).*/\1/p' | sort -u)
         ng=$(printf '%s\n' "$gens" | grep -c . || true)
         # Old CoW engine: matching gen= on every node. Raft status has no
-        # gen= line; four idle nodes is the idle signal.
-        if [ "$idle" -ge 4 ] && { [ "$ng" = 1 ] || [ "$ng" = 0 ]; }; then
+        # gen= line. Four Heal-idle is ideal; three idle is the 005 gossip
+        # DOWN STATUS probe after a bounce (process is alive).
+        if { [ "$ng" = 1 ] && [ "$idle" -ge 4 ]; } ||
+           { [ "$ng" = 0 ] && [ "$idle" -ge 3 ]; }; then
             say "  idle gen=$(printf '%s' "${gens:--}") (${i}s)"
             return 0
         fi

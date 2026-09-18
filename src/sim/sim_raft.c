@@ -260,7 +260,7 @@ static int apply_create_cmd(struct sim_server *s, const uint8_t *cmd,
         rc = efs_meta_apply_create_file_op(s->disk, &op, &at, parent, mode,
                                            name, &ino);
     } else {
-        rc = efs_meta_apply_create_file(s->disk, &at, parent, mode, name, &ino);
+        rc = efs_meta_apply_create_file_log(s->disk, &at, parent, mode, name, &ino);
     }
     if (rc == EFS_ERR_EXIST &&
         efs_meta_apply_lookup(s->disk, parent, name, &dent) == EFS_OK)

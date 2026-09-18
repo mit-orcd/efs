@@ -309,20 +309,26 @@ int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
     return 1;
 }
 
-static void invalidate_file_layout(const struct efs_inode *rpc)
+static void invalidate_file_layout(const struct efs_inode *rpc, int drop_dcache)
 {
     uint32_t cs = data_chunk_size();
     if (rpc->pack_ino && rpc->pack_ino != rpc->ino) {
         uint32_t c0 = cs ? (uint32_t)(rpc->pack_off / cs) : 0;
         efs_rdcache_invalidate(rpc->pack_ino, c0);
-        efs_dcache_drop_if_clean(rpc->pack_ino, c0);
+        if (drop_dcache)
+            efs_dcache_drop_if_clean(rpc->pack_ino, c0);
     }
     uint32_t nci = 0;
     if (cs && rpc->size)
         nci = (uint32_t)((rpc->size + cs - 1) / cs);
     for (uint32_t ci = 0; ci < nci; ci++) {
         efs_rdcache_invalidate(rpc->ino, ci);
-        efs_dcache_drop_if_clean(rpc->ino, ci);
+        /* A size grow (O_APPEND) must not drop the published have_base=1
+         * cache. That forced every close to GET+merge and blew the
+         * mtime_monotonic 80-stat budget. Shrink or same-size remap
+         * (peer hole fill) still drops. */
+        if (drop_dcache)
+            efs_dcache_drop_if_clean(rpc->ino, ci);
     }
 }
 
@@ -337,6 +343,7 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
     efs_client_stage_touch(rpc->ino);
     int is_new = 0;
     int take_remote = 0;
+    int drop_dcache = 0;
     efs_ino_t lock = rpc->parent ? rpc->parent : rpc->ino;
     efs_client_lock_dir(lock);
     pthread_mutex_lock(&g_client.idx_mu);
@@ -408,8 +415,10 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
                 local.ctime = rpc->ctime;
             }
             (void)efs_export_upsert_inode(&g_client.export, &local);
-            if (grow || shrink || (same && take_mtime))
+            if (grow || shrink || (same && take_mtime)) {
                 take_remote = 1;
+                drop_dcache = shrink || (same && take_mtime);
+            }
         }
     }
     pthread_mutex_unlock(&g_client.idx_mu);
@@ -419,7 +428,7 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
         return;
     }
     if (take_remote) {
-        invalidate_file_layout(rpc);
+        invalidate_file_layout(rpc, drop_dcache);
         pull_file_layout(rpc);
     }
 }
@@ -800,13 +809,13 @@ static int setattr_rpc_dual_apply(efs_ino_t ino, uint32_t mask, uint32_t mode,
                                   uint64_t mtime, uint32_t mtime_nsec,
                                   uint64_t atime)
 {
-    /* wr() close kicks REPORT async. Truncate must drain first: a late
-     * grow-only rec would restore the old size. utimens does not — ecopy
-     * stamps times before close, and draining here was a second full
-     * report per file. Pin after the RPC still guards posix2 utimens
-     * against a report already in flight with "now". */
-    if (mask & EFS_SETATTR_SIZE)
-        (void)efs_client_report_dirty(1);
+    /* wr() close kicks REPORT async with mtime=now. A later SETATTR
+     * (utimens or truncate) must drain that snap first: a late newer-only
+     * rec would restore "now" over a backdated utime (posix2
+     * peer_utimens_visible: B saw now, want 1500000000). Per-ino so a
+     * chmod of one file does not wait out a 9-job write REPORT. */
+    if (mask & (EFS_SETATTR_SIZE | EFS_SETATTR_MTIME | EFS_SETATTR_ATIME))
+        (void)efs_client_report_dirty_ino(ino, 1);
     struct efs_inode out;
     int rc = efs_client_rpc_setattr(g_client.export_id, ino, mask, mode,
                                     uid, gid, size, mtime, mtime_nsec, atime,
@@ -897,30 +906,12 @@ int efs_client_chown(efs_ino_t ino, uid_t uid, gid_t gid)
 
 int efs_client_utimens(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec)
 {
-    if (efs_client_ino_is_dirty(ino)) {
-        efs_client_lock_dir(ino);
-        pthread_mutex_lock(&g_client.idx_mu);
-        efs_export_set_mtime_ns(&g_client.export, ino, mtime, mtime_nsec);
-        pthread_mutex_unlock(&g_client.idx_mu);
-        efs_client_unlock_dir(ino);
-        efs_client_mtime_pin(ino);
-        return EFS_OK;
-    }
     return setattr_rpc_dual_apply(ino, EFS_SETATTR_MTIME, 0, 0, 0, 0,
                                   mtime, mtime_nsec, 0);
 }
 
 int efs_client_set_atime(efs_ino_t ino, uint64_t atime)
 {
-    if (efs_client_ino_is_dirty(ino)) {
-        efs_client_lock_dir(ino);
-        pthread_mutex_lock(&g_client.idx_mu);
-        efs_export_set_atime(&g_client.export, ino, atime);
-        pthread_mutex_unlock(&g_client.idx_mu);
-        efs_client_unlock_dir(ino);
-        efs_client_mtime_pin(ino);
-        return EFS_OK;
-    }
     return setattr_rpc_dual_apply(ino, EFS_SETATTR_ATIME, 0, 0, 0, 0, 0, 0,
                                   atime);
 }
@@ -928,16 +919,6 @@ int efs_client_set_atime(efs_ino_t ino, uint64_t atime)
 int efs_client_utimens_both(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec,
                             uint64_t atime)
 {
-    if (efs_client_ino_is_dirty(ino)) {
-        efs_client_lock_dir(ino);
-        pthread_mutex_lock(&g_client.idx_mu);
-        efs_export_set_mtime_ns(&g_client.export, ino, mtime, mtime_nsec);
-        efs_export_set_atime(&g_client.export, ino, atime);
-        pthread_mutex_unlock(&g_client.idx_mu);
-        efs_client_unlock_dir(ino);
-        efs_client_mtime_pin(ino);
-        return EFS_OK;
-    }
     return setattr_rpc_dual_apply(ino, EFS_SETATTR_ATIME | EFS_SETATTR_MTIME,
                                   0, 0, 0, 0, mtime, mtime_nsec, atime);
 }
@@ -1066,8 +1047,17 @@ int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_na
                          efs_ino_t new_parent, const char *new_name)
 {
     struct efs_inode out;
-    int rc = efs_client_rpc_rename_at(g_client.export_id, old_parent, old_name,
+    int rc = EFS_ERR_BUSY;
+    int t;
+
+    for (t = 0; t < 8; t++) {
+        rc = efs_client_rpc_rename_at(g_client.export_id, old_parent, old_name,
                                       new_parent, new_name, &out);
+        if (rc != EFS_ERR_BUSY && rc != EFS_ERR_NET &&
+            rc != EFS_ERR_NO_QUORUM)
+            break;
+        usleep(2000u << (unsigned)(t < 4 ? t : 4));
+    }
     if (rc != EFS_OK) {
         g_client.last_err = rc;
         return rc;

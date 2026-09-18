@@ -169,6 +169,11 @@ int efs_raft_joint(const struct efs_raft *r);
  * Always goes through joint consensus — there is no skip-joint path. */
 int efs_raft_change(struct efs_raft *r, uint32_t new_voters);
 int efs_raft_learner_ready(const struct efs_raft *r, int id);
+/* Voluntary follower. Does not bump the term. allow_campaign=0 stops
+ * start_election so a replica whose apply is missing committed rows cannot
+ * win again (same last_log as a complete peer). */
+int efs_raft_step_down(struct efs_raft *r);
+void efs_raft_allow_campaign(struct efs_raft *r, int on);
 
 /* ReadIndex: leader records commitIndex, waits for a majority heartbeat
  * in the current term, then applied >= that index. No clock leases. */

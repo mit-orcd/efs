@@ -1888,17 +1888,25 @@ def flock_shared_then_exclusive(d):
 @test
 def flock_two_proc_exclusive(d):
     p = os.path.join(d, "f")
+    ready = os.path.join(d, ".flock-ready")
     wr(p, b"x")
     snippet = (
         "import fcntl,os,sys,time\n"
         "fd=os.open(sys.argv[1], os.O_RDWR)\n"
         "fcntl.flock(fd, fcntl.LOCK_EX)\n"
+        "open(sys.argv[2],'w').write('1\\n')\n"
         "time.sleep(1.2)\n"
         "fcntl.flock(fd, fcntl.LOCK_UN)\n"
         "os.close(fd)\n"
     )
-    child = subprocess.Popen([sys.executable, "-c", snippet, p])
-    time.sleep(0.2)
+    child = subprocess.Popen([sys.executable, "-c", snippet, p, ready])
+    deadline = time.time() + 5.0
+    while time.time() < deadline and not os.path.exists(ready):
+        time.sleep(0.05)
+    if not os.path.exists(ready):
+        child.kill()
+        child.wait()
+        raise Fail("child did not acquire LOCK_EX")
     fd = os.open(p, os.O_RDWR)
     try:
         try:
@@ -2038,6 +2046,7 @@ def concurrent_appends(d):
 
 
 @test
+@budget(30)
 def concurrent_appends_two_proc(d):
     p = os.path.join(d, "f")
     wr(p, b"")

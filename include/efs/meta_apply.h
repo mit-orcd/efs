@@ -170,6 +170,20 @@ int efs_meta_apply_create_file_op(struct efs_kv *kv, const struct efs_opid *op,
                                   const struct efs_meta_attrs *at,
                                   efs_ino_t parent, uint32_t mode, const char *name,
                                   efs_ino_t *out);
+/* Raft apply of a committed CREATE. Always persist the child: a dual-host
+ * LSM can see the parent row from another group, and a follower can miss
+ * the parent row, but the log already decided the name. */
+int efs_meta_apply_create_file_log(struct efs_kv *kv, const struct efs_meta_attrs *at,
+                                   efs_ino_t parent, uint32_t mode,
+                                   const char *name, efs_ino_t *out);
+/* Same, but the leader already chose `ino` and the parent's layout. A
+ * follower that cannot see the parent row must write those keys — guessing
+ * HASHED vs LOCAL from a missing parent is how dual-host and g2-only
+ * replicas diverged and APPEND then saw NOT_FOUND on one voter. */
+int efs_meta_apply_create_file_log_at(struct efs_kv *kv, const struct efs_meta_attrs *at,
+                                      efs_ino_t parent, uint32_t mode,
+                                      const char *name, efs_ino_t ino,
+                                      uint8_t layout, efs_ino_t *out);
 /* MKDIR. Child inode is scattered (mkdir_shard); dentry follows the
  * parent's layout. One atomic batch — the host only proposes this when
  * parent, dentry, and child shards share a Raft group (same log). Cross-
@@ -177,6 +191,12 @@ int efs_meta_apply_create_file_op(struct efs_kv *kv, const struct efs_opid *op,
 int efs_meta_apply_mkdir(struct efs_kv *kv, const struct efs_meta_attrs *at,
                          efs_ino_t parent, uint32_t mode, const char *name,
                          efs_ino_t *out);
+/* Same as mkdir, but the leader already chose `ino` and the parent's
+ * layout. A follower that cannot see the parent must write those keys —
+ * the same dual-host / g2-only split that broke file CREATE. */
+int efs_meta_apply_mkdir_at(struct efs_kv *kv, const struct efs_meta_attrs *at,
+                            efs_ino_t parent, uint32_t mode, const char *name,
+                            efs_ino_t ino, uint8_t layout, efs_ino_t *out);
 /* `now` is the leader-stamped directory mtime/ctime. LOCAL: parent row.
  * HASHED/SPLITTING: the dentry shard's dir lane (§7.4). */
 int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
@@ -466,11 +486,18 @@ int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len
                                   uint64_t *off_out);
 int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off,
                                   int outcome);
-/* Hosted path has no op-id yet (zero UUID). After wait, the handler reads
- * watermark rather than an apply-side extra. nopen==0 means no burst. */
+/* Hosted path has no op-id yet (zero UUID). The reserved eof rides the
+ * apply-result ring extra, not a post-wait watermark read. nopen==0
+ * means no burst. */
 int efs_meta_apply_append_state(struct efs_kv *kv, efs_ino_t ino,
                                 uint64_t *watermark, uint64_t *frontier,
                                 uint32_t *nopen);
+/* 0 = this uuid may reserve (none open, or only this uuid). 1 = another
+ * uuid holds an OPEN reservation. <0 = KV error. In-place EC fragments
+ * cannot merge two clients' GET+PUT of the same chunk, so a second
+ * appender waits until the first REPORT resolves nopen. */
+int efs_meta_apply_append_foreign(struct efs_kv *kv, efs_ino_t ino,
+                                  const uint8_t uuid[EFS_OPID_UUID_LEN]);
 /* OPEN reservations only. *n is capacity in, count out (capped). */
 int efs_meta_apply_append_open(struct efs_kv *kv, efs_ino_t ino, uint64_t *offs,
                                uint64_t *lens, uint32_t *n);

@@ -205,7 +205,8 @@ static uint8_t *decode_frag_scratch(uint32_t need)
  * full RTT; decode only needs any two, so we don't serialize on a straggler. */
 static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk_index,
                                                    uint8_t *chunk_out, uint32_t chunk_size,
-                                                   uint32_t frag_len, int max_attempts)
+                                                   uint32_t frag_len, int max_attempts,
+                                                   int treat_zero_cksum_as_hole)
 {
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     efs_place_fragments(g_client.nodes, g_client.node_count, ino, chunk_index,
@@ -231,7 +232,8 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
         if (have_ce) {
             uint8_t zck[EFS_HASH_SIZE];
             efs_hash_zero_fragment_len(frag_len, zck);
-            if (memcmp(ce.checksums[0], zck, EFS_HASH_SIZE) == 0 &&
+            if (treat_zero_cksum_as_hole &&
+                memcmp(ce.checksums[0], zck, EFS_HASH_SIZE) == 0 &&
                 memcmp(ce.checksums[1], zck, EFS_HASH_SIZE) == 0 &&
                 memcmp(ce.checksums[2], zck, EFS_HASH_SIZE) == 0) {
                 memset(chunk_out, 0, chunk_size);
@@ -348,7 +350,32 @@ static int efs_client_decode_placed_chunk(efs_ino_t ino, uint32_t chunk_index,
                                           uint8_t *chunk_out)
 {
     return efs_client_decode_placed_chunk_attempts(ino, chunk_index, chunk_out,
-                                                   data_chunk_size(), data_frag_size(), 2);
+                                                   data_chunk_size(), data_frag_size(),
+                                                   2, 1);
+}
+
+int efs_client_fetch_published_chunk(efs_ino_t ino, uint32_t ci,
+                                     uint8_t *buf, uint32_t len)
+{
+    uint32_t cs = data_chunk_size();
+    if (!buf || !cs || len != cs)
+        return EFS_ERR_INVAL;
+    int published = 0;
+    pthread_mutex_lock(&g_client.idx_mu);
+    published = (efs_export_get_chunk(&g_client.export, ino, ci, NULL) == 0);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    /* Always GET. A local mapping miss (adopt drop / evict) used to
+     * zero-fill and the next PUT wiped sibling append lines. An all-zero
+     * checksum stub is a read hole, not a safe merge base. */
+    int rc = efs_client_decode_placed_chunk_attempts(ino, ci, buf, cs,
+                                                     data_frag_size(), 2, 0);
+    if (rc == EFS_OK)
+        return EFS_OK;
+    if (!published) {
+        memset(buf, 0, len);
+        return EFS_OK;
+    }
+    return rc;
 }
 
 
@@ -919,22 +946,6 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
         return EFS_OK;
     }
 
-    /* Dirty dcache is the truth for same-fd read-your-writes. A bits>0
-     * dentry stub (size 0) or an unlink-open ghost must not hide it. */
-    {
-        uint32_t cs = data_chunk_size();
-        if (cs && size > 0 &&
-            (offset / cs) == ((offset + size - 1) / cs)) {
-            uint32_t ci = (uint32_t)(offset / cs);
-            uint32_t off = (uint32_t)(offset % cs);
-            if (efs_dcache_copy(ino, ci, off, (uint8_t *)buf,
-                                (uint32_t)size) == 0) {
-                *out_len = size;
-                return EFS_OK;
-            }
-        }
-    }
-
     efs_client_lock_dir(ino);
     pthread_mutex_lock(&g_client.idx_mu);
     struct efs_inode inode;
@@ -946,9 +957,20 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
          * design Part A) may have dropped a clean row — refetch from the
          * owner before concluding anything (stat_ino does the getattr RPC
          * + adopt + copy-out). A genuine unlink-open ghost fails the RPC
-         * and falls through to the old EOF behavior: dcache already tried
-         * for a single-chunk request; do not EIO an open fd. */
+         * and falls through: unpublished dirty ranges only. have_base=1
+         * past EOF is a shrink leftover; FOPEN_DIRECT_IO ignores i_size. */
         if (efs_client_stat_ino(ino, &inode) != EFS_OK) {
+            uint32_t cs = data_chunk_size();
+            if (cs && size > 0 &&
+                (offset / cs) == ((offset + size - 1) / cs)) {
+                uint32_t ci = (uint32_t)(offset / cs);
+                uint32_t off = (uint32_t)(offset % cs);
+                if (efs_dcache_copy_unpub(ino, ci, off, (uint8_t *)buf,
+                                          (uint32_t)size) == 0) {
+                    *out_len = size;
+                    return EFS_OK;
+                }
+            }
             *out_len = 0;
             return EFS_OK;
         }
@@ -958,14 +980,14 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
 
     if (offset >= file_size) {
         /* Size not yet reflected (dentry stub / unlink-open ghost): still
-         * serve a dirty dcache range from this same fd. */
+         * serve unpublished dirty ranges from this same fd. */
         uint32_t cs = data_chunk_size();
         if (cs && size > 0 &&
             (offset / cs) == ((offset + size - 1) / cs)) {
             uint32_t ci = (uint32_t)(offset / cs);
             uint32_t off = (uint32_t)(offset % cs);
-            if (efs_dcache_copy(ino, ci, off, (uint8_t *)buf,
-                                (uint32_t)size) == 0) {
+            if (efs_dcache_copy_unpub(ino, ci, off, (uint8_t *)buf,
+                                      (uint32_t)size) == 0) {
                 *out_len = size;
                 return EFS_OK;
             }

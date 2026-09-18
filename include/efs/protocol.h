@@ -714,10 +714,13 @@ struct efs_msg_inode_unlink_shard {
 };
 
 /* Cross-client O_APPEND reservation; reply is struct efs_msg_inode_reply
- * with the inode AFTER the size advance (offset = inode.size - len).
- * Optional EFS_SESS_WIRE_LEN suffix (uuid[16] + native uint32 epoch)
- * tags the reservation for FENCED_HOLE on session fence (10.5c-35d).
- * Absent keeps the zero-UUID stand-in. Do not grow this struct. */
+ * with inode.size = THIS reservation's end (eof+len), not the live
+ * watermark. offset = inode.size - len. Two concurrent reserves must
+ * not share an offset.
+ * Optional suffix: EFS_SESS_WIRE_LEN (uuid[16] + native uint32 epoch)
+ * or EFS_APPEND_OPID_LEN (that plus native uint64 seq). seq!=0 makes
+ * a retried reserve I16 (same offset). Absent keeps the zero stand-in.
+ * Do not grow this struct. */
 struct efs_msg_inode_append {
     efs_export_id_t export_id;
     efs_ino_t ino;
@@ -759,6 +762,7 @@ struct efs_msg_inode_hold {
 #define EFS_FLOCK_WAIT 64u
 #define EFS_FLOCK_RANGE_LEN 16u
 #define EFS_SESS_WIRE_LEN 20u
+#define EFS_APPEND_OPID_LEN (EFS_SESS_WIRE_LEN + 8u)
 struct efs_msg_inode_flock {
     efs_export_id_t export_id;
     efs_ino_t ino;

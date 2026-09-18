@@ -1,5 +1,6 @@
 /* Isolated applied-state SM over mem KV. No sockets, no cluster. */
 #include "efs/meta_apply.h"
+#include "efs/raft.h"
 #include "efs/dir_layout.h"
 #include "efs/kv.h"
 #include "efs/kv_key.h"
@@ -94,6 +95,179 @@ static void test_mkdir(void)
           "gone");
     CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
     efs_kv_mem_free(kv);
+}
+
+static void test_create_remote_parent(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t parent = 3; /* odd shard → group 0; never inserted */
+    efs_ino_t ino = 0, miss = 0;
+    struct efs_meta_dentry d;
+    struct efs_meta_row r;
+    char name[8];
+    char same[8];
+    int i, found = 0, same_g = 0;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    for (i = 0; i < 256; i++) {
+        snprintf(name, sizeof(name), "n%d", i);
+        if (efs_raft_shard_group(efs_kv_dentry_shard(parent, name,
+                                                    EFS_META_LAYOUT_HASHED)) !=
+            efs_raft_shard_group(efs_kv_inode_shard(parent))) {
+            found = 1;
+            break;
+        }
+    }
+    CHECK(found, "hashed name on other group");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, parent, S_IFREG | 0644, name,
+                                     &ino) == EFS_OK &&
+              ino,
+          "create without local parent");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK && r.parent == parent,
+          "child row");
+    CHECK(efs_meta_apply_lookup(kv, parent, name, &d) == EFS_OK && d.ino == ino,
+          "lookup without parent row");
+    for (i = 0; i < 256; i++) {
+        snprintf(same, sizeof(same), "s%d", i);
+        if (efs_raft_shard_group(efs_kv_dentry_shard(parent, same,
+                                                    EFS_META_LAYOUT_HASHED)) ==
+            efs_raft_shard_group(efs_kv_inode_shard(parent))) {
+            same_g = 1;
+            break;
+        }
+    }
+    CHECK(same_g, "same-group hashed name");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, parent, S_IFREG | 0644, same,
+                                     &miss) == EFS_ERR_NOT_FOUND,
+          "same-group missing parent is a hole");
+    miss = 0;
+    CHECK(efs_meta_apply_create_file_log(kv, &g_at, parent, S_IFREG | 0644, same,
+                                         &miss) == EFS_OK &&
+              miss,
+          "log apply writes even if parent missing");
+    CHECK(efs_meta_apply_get_inode(kv, miss, &r) == EFS_OK && r.parent == parent,
+          "log child row");
+    efs_kv_mem_free(kv);
+}
+
+/* Dual-host 004 sees a LOCAL parent; g2-only 006 does not. Guessing HASHED
+ * from the miss writes a different ino than the leader's LOCAL alloc. */
+static void test_create_log_at_matches(void)
+{
+    struct efs_kv *have = efs_kv_mem_create();
+    struct efs_kv *miss = efs_kv_mem_create();
+    efs_ino_t parent = 0, want = 0, got = 0;
+    struct efs_meta_row r;
+    uint32_t dsh;
+
+    CHECK(have && miss, "kv");
+    CHECK(efs_meta_apply_init(have, T0) == EFS_OK, "init have");
+    CHECK(efs_meta_apply_init(miss, T0) == EFS_OK, "init miss");
+    CHECK(efs_meta_apply_mkdir(have, &g_at, EFS_ROOT_INO, S_IFDIR | 0755, "p",
+                               &parent) == EFS_OK &&
+              parent,
+          "parent");
+    dsh = efs_kv_dentry_shard(parent, "f", EFS_META_LAYOUT_LOCAL);
+    CHECK(efs_meta_apply_peek_alloc(have, dsh, &want) == EFS_OK && want,
+          "peek");
+    CHECK(efs_meta_apply_create_file_log_at(have, &g_at, parent, S_IFREG | 0644,
+                                            "f", want, EFS_META_LAYOUT_LOCAL,
+                                            &got) == EFS_OK &&
+              got == want,
+          "leader write");
+    got = 0;
+    CHECK(efs_meta_apply_create_file_log_at(miss, &g_at, parent, S_IFREG | 0644,
+                                            "f", want, EFS_META_LAYOUT_LOCAL,
+                                            &got) == EFS_OK &&
+              got == want,
+          "hollow follower write");
+    CHECK(efs_meta_apply_get_inode(miss, want, &r) == EFS_OK &&
+              r.parent == parent,
+          "follower has leader ino");
+    efs_kv_mem_free(have);
+    efs_kv_mem_free(miss);
+}
+
+static void wr64_test(uint8_t *p, uint64_t v)
+{
+    p[0] = (uint8_t)(v >> 56);
+    p[1] = (uint8_t)(v >> 48);
+    p[2] = (uint8_t)(v >> 40);
+    p[3] = (uint8_t)(v >> 32);
+    p[4] = (uint8_t)(v >> 24);
+    p[5] = (uint8_t)(v >> 16);
+    p[6] = (uint8_t)(v >> 8);
+    p[7] = (uint8_t)v;
+}
+
+/* A stale alloc watermark sitting on a live row must not reuse that ino.
+ * Reuse overwrites the row and inherits leftover children (mkdir p/c EEXIST). */
+static void test_alloc_skips_live(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t a = 0, b = 0, c = 0, peek = 0;
+    uint8_t k[EFS_KV_KEY_MAX], v[8];
+    uint32_t kl = 0, shard;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "a",
+                                     &a) == EFS_OK &&
+              a,
+          "a");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "b",
+                                     &b) == EFS_OK &&
+              b && b != a,
+          "b");
+    shard = efs_kv_inode_shard(a);
+    CHECK(efs_kv_key_alloc(shard, k, &kl) == EFS_OK, "alloc key");
+    wr64_test(v, a);
+    CHECK(efs_kv_put(kv, k, kl, v, 8) == EFS_OK, "rewind");
+    CHECK(efs_meta_apply_peek_alloc(kv, shard, &peek) == EFS_OK && peek &&
+              peek != a && peek != b,
+          "peek skips live");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "c",
+                                     &c) == EFS_OK &&
+              c == peek && c != a && c != b,
+          "create skips live");
+    efs_kv_mem_free(kv);
+}
+
+static void test_mkdir_log_at_matches(void)
+{
+    struct efs_kv *have = efs_kv_mem_create();
+    struct efs_kv *miss = efs_kv_mem_create();
+    efs_ino_t parent = 0, want = 0, got = 0;
+    struct efs_meta_row r;
+    uint32_t csh;
+    uint64_t salt = 0;
+
+    CHECK(have && miss, "kv");
+    CHECK(efs_meta_apply_init(have, T0) == EFS_OK, "init have");
+    CHECK(efs_meta_apply_init(miss, T0) == EFS_OK, "init miss");
+    CHECK(efs_meta_apply_mkdir(have, &g_at, EFS_ROOT_INO, S_IFDIR | 0755, "p",
+                               &parent) == EFS_OK &&
+              parent,
+          "parent");
+    CHECK(efs_meta_apply_export_salt(have, &salt) == EFS_OK, "salt");
+    csh = efs_kv_mkdir_shard(parent, "d", salt);
+    CHECK(efs_meta_apply_peek_alloc(have, csh, &want) == EFS_OK && want,
+          "peek");
+    CHECK(efs_meta_apply_mkdir_at(have, &g_at, parent, S_IFDIR | 0755, "d", want,
+                                  EFS_META_LAYOUT_LOCAL, &got) == EFS_OK &&
+              got == want,
+          "leader write");
+    got = 0;
+    CHECK(efs_meta_apply_mkdir_at(miss, &g_at, parent, S_IFDIR | 0755, "d", want,
+                                  EFS_META_LAYOUT_LOCAL, &got) == EFS_OK &&
+              got == want,
+          "hollow follower write");
+    CHECK(efs_meta_apply_get_inode(miss, want, &r) == EFS_OK &&
+              r.parent == parent && S_ISDIR(r.mode),
+          "follower has leader ino");
+    efs_kv_mem_free(have);
+    efs_kv_mem_free(miss);
 }
 
 static void test_i9(void)
@@ -1899,8 +2073,8 @@ static void test_append_reserve(void)
           "fenced rsv");
     mkop(&op, 8, 1);
     CHECK(efs_meta_apply_append_reserve(kv, ino, 32, &op, coord_fn, &cc, &off2) ==
-              EFS_OK,
-          "other session rsv");
+              EFS_ERR_BUSY,
+          "other session rsv blocked");
     {
         uint8_t u9[EFS_OPID_UUID_LEN];
         uint32_t nopen = 99;
@@ -1911,14 +2085,18 @@ static void test_append_reserve(void)
                                                  1) == EFS_OK,
               "fenced drop");
         CHECK(efs_meta_apply_append_state(kv, ino, NULL, NULL, &nopen) == EFS_OK &&
-                  nopen == 1,
-              "other session still open");
+                  nopen == 0,
+              "dropped session cleared nopen");
         CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
                   st.size == 64,
               "fenced hole in size");
         CHECK(efs_meta_apply_append_drop_session(kv, efs_kv_inode_shard(ino), u9,
                                                  1) == EFS_OK,
               "drop replay");
+        CHECK(efs_meta_apply_append_reserve(kv, ino, 32, &op, coord_fn, &cc,
+                                            &off2) == EFS_OK &&
+                  off2 == 64,
+              "other session after drop");
     }
 
     CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "r",
@@ -2542,6 +2720,10 @@ int main(void)
 {
     test_create_lookup_unlink();
     test_mkdir();
+    test_create_remote_parent();
+    test_create_log_at_matches();
+    test_alloc_skips_live();
+    test_mkdir_log_at_matches();
     test_i9();
     test_batch_fail();
     test_i16_durable();

@@ -314,7 +314,7 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
                               uint64_t atime, struct efs_msg_inode_reply *out);
 void server_raft_host_append(efs_ino_t ino, uint64_t len,
                              const uint8_t *sess_uuid, uint32_t sess_epoch,
-                             struct efs_msg_inode_reply *out);
+                             uint64_t op_seq, struct efs_msg_inode_reply *out);
 void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
                            const char *new_name, struct efs_msg_inode_reply *out);
 void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,

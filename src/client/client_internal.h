@@ -40,6 +40,8 @@ struct efs_client {
     uint64_t ino_counter;
     /* Per-mount token for cluster flock / open-hold (not a POSIX lock owner). */
     uint64_t flock_token;
+    /* Monotonic APPEND op-id seq (never 0). Retries of one reserve reuse it. */
+    uint64_t append_opid_seq;
 
     /* Persistent connection pool to each server. The server's accept
      * loop handles multiple requests per connection; a pool of conns lets
@@ -183,13 +185,20 @@ int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
 int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
                         efs_ino_t new_parent, const char *new_name,
                         struct efs_inode *out);
-/* Cross-client O_APPEND reservation (offset = *new_size_out - len). */
+/* Cross-client O_APPEND reservation. end = reserved+len (reply size);
+ * start is reply atime when the host stamped this reservation. */
 int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
-                                  uint64_t len, uint64_t *new_size_out);
+                                  uint64_t len, uint64_t seq,
+                                  uint64_t *new_size_out, uint64_t *start_out);
 int efs_client_rpc_hold(efs_export_id_t export_id, efs_ino_t ino, int open,
                         uint64_t owner);
 int efs_client_rpc_flock(efs_export_id_t export_id, efs_ino_t ino, uint32_t op,
                          uint64_t owner);
+/* Byte-range fcntl (EFS_FLOCK_FCNTL). start/end are half-open. reply_out
+ * is filled for GETLK (nlink=type, size=start, ctime=end). */
+int efs_client_rpc_flock_range(efs_export_id_t export_id, efs_ino_t ino,
+                               uint32_t op, uint64_t owner, uint64_t start,
+                               uint64_t end, struct efs_msg_inode_reply *reply_out);
 /* Report dirty metadata (chunk mappings + inode size/mtime) as ONE batch
  * to a voter of ALL groups (a "dual-host"). A batch's recs span inode
  * groups and lane groups, and only a node voting in every group can apply
@@ -265,6 +274,15 @@ int efs_dcache_has(efs_ino_t ino, uint32_t ci);
 int efs_dcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len);
 int efs_dcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
                     uint8_t *dst, uint32_t len);
+/* Same, but only unpublished dirty ranges (not have_base=1). Unlink-open
+ * ghosts and size-0 stubs use this so a published cached chunk cannot
+ * outrun inode.size under FOPEN_DIRECT_IO. */
+int efs_dcache_copy_unpub(efs_ino_t ino, uint32_t ci, uint32_t off,
+                          uint8_t *dst, uint32_t len);
+/* Fill buf with the published chunk (fragment GET). Does not consult
+ * inode.size. Unpublished → zeros + EFS_OK. */
+int efs_client_fetch_published_chunk(efs_ino_t ino, uint32_t ci,
+                                     uint8_t *buf, uint32_t len);
 /* Overlay dirty dcache bytes onto a fetched/zero chunk (have_base=0 ranges). */
 void efs_dcache_overlay(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len);
 int efs_dcache_flush_all(void);
@@ -277,6 +295,11 @@ void efs_dcache_drop_if_clean(efs_ino_t ino, uint32_t ci);
  * 0 = cached (size updated if the write grew the file), -1 = cannot cache. */
 int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
                          const uint8_t *src);
+/* O_APPEND: range-track until the first PUT, then keep have_base=1.
+ * Flush merge-base is efs_client_fetch_published_chunk (not size-clamped
+ * efs_client_read). */
+int efs_dcache_try_patch_sparse(efs_ino_t ino, uint64_t offset, uint32_t len,
+                                const uint8_t *src);
 /* If dirty assembled chunks exceed the cap, PUT them now. */
 void efs_dcache_maybe_reclaim(void);
 

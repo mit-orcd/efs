@@ -1696,6 +1696,26 @@ int efs_dcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
     return -1;
 }
 
+int efs_dcache_copy_unpub(efs_ino_t ino, uint32_t ci, uint32_t off,
+                          uint8_t *dst, uint32_t len)
+{
+    if (!dst || !len)
+        return -1;
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(s, ino, ci);
+    if (e && e->data && !e->have_base &&
+        (uint64_t)off + len <= e->len &&
+        dcache_range_covered(e, off, len)) {
+        memcpy(dst, e->data + off, len);
+        pthread_mutex_unlock(mu);
+        return 0;
+    }
+    pthread_mutex_unlock(mu);
+    return -1;
+}
+
 void efs_dcache_overlay(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
 {
     if (!dst || !len)
@@ -1791,6 +1811,7 @@ static void dcache_add_range(struct dcache_ent *e, uint32_t off, uint32_t len)
     if (!e || e->have_base || !len)
         return;
     uint32_t end = off + len;
+    int merged = 0;
     for (uint8_t i = 0; i < e->nrange; i++) {
         uint32_t a = e->roff[i], b = a + e->rlen[i];
         if (off <= b && a <= end) {
@@ -1798,18 +1819,45 @@ static void dcache_add_range(struct dcache_ent *e, uint32_t off, uint32_t len)
             uint32_t hi = b > end ? b : end;
             e->roff[i] = lo;
             e->rlen[i] = hi - lo;
-            return;
+            merged = 1;
+            break;
         }
     }
-    if (e->nrange < DCACHE_NR) {
+    if (!merged && e->nrange < DCACHE_NR) {
         e->roff[e->nrange] = off;
         e->rlen[e->nrange] = len;
         e->nrange++;
+    } else if (!merged) {
+        /* 9th disjoint range: the flush GET+merge only replays nrange
+         * windows onto the published base. Dropping one would zero that
+         * write. Collapse to the whole chunk so every dirty byte is kept
+         * (peer bytes in true holes are the same loss as have_base=1). */
+        e->roff[0] = 0;
+        e->rlen[0] = e->len ? e->len : end;
+        e->nrange = 1;
         return;
     }
-    e->roff[0] = 0;
-    e->rlen[0] = e->len ? e->len : end;
-    e->nrange = 1;
+    /* A merge into range i can now touch a neighbour that the first
+     * pass did not ( [0,4) + [4,6) after filling the gap ). */
+    for (uint8_t i = 0; i < e->nrange; i++) {
+        uint32_t a = e->roff[i], b = a + e->rlen[i];
+        for (uint8_t j = (uint8_t)(i + 1); j < e->nrange; ) {
+            uint32_t c = e->roff[j], d = c + e->rlen[j];
+            if (a <= d && c <= b) {
+                if (c < a)
+                    a = c;
+                if (d > b)
+                    b = d;
+                e->roff[i] = a;
+                e->rlen[i] = b - a;
+                e->nrange--;
+                e->roff[j] = e->roff[e->nrange];
+                e->rlen[j] = e->rlen[e->nrange];
+                continue;
+            }
+            j++;
+        }
+    }
 }
 
 static int dcache_patch(efs_ino_t ino, uint32_t ci, uint32_t off, const uint8_t *src,
@@ -1872,16 +1920,9 @@ static int dcache_load_and_patch(efs_ino_t ino, uint32_t ci, uint32_t off,
         pthread_mutex_lock(&g_client.idx_mu);
         published = (efs_export_get_chunk(&g_client.export, ino, ci, NULL) == 0);
         pthread_mutex_unlock(&g_client.idx_mu);
-        if (published) {
-            size_t got = 0;
-            int rrc = efs_client_read(ino, (uint64_t)ci * cs, cs,
-                                      (char *)chunk, &got);
-            if (rrc == EFS_OK) {
-                if (got < cs)
-                    memset(chunk + got, 0, cs - got);
-                have_base = 1;
-            }
-        }
+        if (published &&
+            efs_client_fetch_published_chunk(ino, ci, chunk, cs) == EFS_OK)
+            have_base = 1;
         if (!have_base)
             memset(chunk, 0, cs);
     }
@@ -1986,6 +2027,90 @@ int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
         else
             rc = dcache_load_and_patch(ino, ci, off, p, n, cs);
         if (rc != 0)
+            return -1;
+        pos += n;
+        p += n;
+        remaining -= n;
+    }
+    dcache_note_size(ino, offset + len);
+    return 0;
+}
+
+static int dcache_patch_sparse(efs_ino_t ino, uint32_t ci, uint32_t off,
+                               const uint8_t *src, uint32_t len)
+{
+    if (!src || !len)
+        return -1;
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(s, ino, ci);
+    if (e && e->data && off + len <= e->len) {
+        memcpy(e->data + off, src, len);
+        if (!e->dirty) {
+            e->dirty = 1;
+            dcache_pin_add(e);
+            dcache_note_dirty_bytes((int64_t)e->len);
+        }
+        /* A published cached chunk stays have_base=1 so the next close
+         * PUTs it without GET. Forcing 0 made every append close RMW a
+         * size-lagged zero base and wipe earlier lines. */
+        if (!e->have_base)
+            dcache_add_range(e, off, len);
+        pthread_mutex_unlock(mu);
+        efs_rdcache_invalidate(ino, ci);
+        return 0;
+    }
+    pthread_mutex_unlock(mu);
+    return -1;
+}
+
+static int dcache_load_sparse(efs_ino_t ino, uint32_t ci, uint32_t off,
+                              const uint8_t *src, uint32_t len, uint32_t cs)
+{
+    if (dcache_patch_sparse(ino, ci, off, src, len) == 0)
+        return 0;
+
+    uint8_t *chunk = efs_buf_alloc(cs);
+    if (!chunk)
+        return -1;
+    memset(chunk, 0, cs);
+    memcpy(chunk + off, src, len);
+    if (dcache_merge_owned(ino, ci, off, src, len, chunk, cs) != 0) {
+        efs_buf_free(chunk, cs);
+        return -1;
+    }
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(s, ino, ci);
+    if (e) {
+        e->have_base = 0;
+        e->nrange = 0;
+        dcache_add_range(e, off, len);
+    }
+    pthread_mutex_unlock(mu);
+    return 0;
+}
+
+int efs_dcache_try_patch_sparse(efs_ino_t ino, uint64_t offset, uint32_t len,
+                                const uint8_t *src)
+{
+    if (!src || !len)
+        return -1;
+    uint32_t cs = data_chunk_size();
+    if (cs == 0)
+        return -1;
+    uint64_t remaining = len;
+    uint64_t pos = offset;
+    const uint8_t *p = src;
+    while (remaining) {
+        uint32_t ci = (uint32_t)(pos / cs);
+        uint32_t off = (uint32_t)(pos % cs);
+        uint32_t n = cs - off;
+        if ((uint64_t)n > remaining)
+            n = (uint32_t)remaining;
+        if (dcache_load_sparse(ino, ci, off, p, n, cs) != 0)
             return -1;
         pos += n;
         p += n;
@@ -2152,6 +2277,14 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             e = e->next;
             continue;
         }
+        /* Reclaim (have_only=0) must not GET+PUT an unpublished sparse
+         * append chunk. Two such flushes read the same zero base and the
+         * last PUT drops the other's ranges (concurrent_appends NULs).
+         * Close/fsync pass have_only=1. */
+        if (!have_only && !e->have_base) {
+            e = e->next;
+            continue;
+        }
         efs_ino_t ino = e->ino;
         uint32_t ci = e->ci;
         uint32_t len = e->len;
@@ -2188,14 +2321,9 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
                 pthread_mutex_unlock(mu);
                 return EFS_ERR_NOMEM;
             }
-            size_t got = 0;
-            int rrc = efs_client_read(ino, (uint64_t)ci * len, len,
-                                      (char *)base, &got);
-            if (rrc != EFS_OK) {
-                got = 0;
-                rrc = efs_client_read(ino, (uint64_t)ci * len, len,
-                                      (char *)base, &got);
-            }
+            int rrc = efs_client_fetch_published_chunk(ino, ci, base, len);
+            if (rrc != EFS_OK)
+                rrc = efs_client_fetch_published_chunk(ino, ci, base, len);
             if (rrc != EFS_OK) {
                 efs_buf_free(base, len);
                 efs_buf_free(copy, len);
@@ -2209,8 +2337,6 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
                 e = e->next;
                 continue;
             }
-            if (got < len)
-                memset(base + got, 0, len - got);
             for (uint8_t i = 0; i < nrange; i++) {
                 if (roff[i] + rlen[i] <= len)
                     memcpy(base + roff[i], copy + roff[i], rlen[i]);
@@ -2219,9 +2345,9 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             efs_buf_free(base, len);
         }
         int prc = dcache_put_now(ino, ci, copy, len);
-        efs_buf_free(copy, len);
         pthread_mutex_lock(mu);
         if (prc != EFS_OK) {
+            efs_buf_free(copy, len);
             if (rc == EFS_OK)
                 rc = prc;
             /* PUT failed: this slot is the only copy. Keep it dirty. */
@@ -2232,10 +2358,17 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             e = e->next;
             continue;
         }
-        if (!e->dirty && e->ino == ino && e->ci == ci) {
-            /* Published: dcache_put_now marked the ino dirty, so the
-             * dirty-set pin covers the row until the REPORT. Release the
-             * dcache pin, then free the slot. */
+        /* Keep the published bytes as have_base=1. Freeing the slot made
+         * the next close GET a merge base; efs_client_read treats a lagging
+         * inode.size as EOF and returns zeros, so that GET+PUT wiped
+         * earlier append lines (concurrent_appends NULs). */
+        if (e->ino == ino && e->ci == ci && e->data && e->len >= len) {
+            if (!e->dirty) {
+                memcpy(e->data, copy, len);
+                e->nrange = 0;
+            }
+            e->have_base = 1;
+        } else if (!e->dirty && e->ino == ino && e->ci == ci) {
             dcache_pin_release(e);
             efs_buf_free(e->data, e->len);
             e->data = NULL;
@@ -2243,6 +2376,7 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             e->ino = 0;
             e->ci = 0;
         }
+        efs_buf_free(copy, len);
         e = e->next;
     }
     pthread_mutex_unlock(mu);

@@ -151,17 +151,21 @@ struct host_group {
     uint32_t desired; /* operator target; actual follows via joint (I18) */
     uint64_t applied_saved;
     int snap_oversized; /* export exceeded SNAP cmd cap; do not retry */
+    int kv_incomplete;  /* apply missed a committed row; do not lead */
     struct efs_raft *r;
     struct efs_raft_host *host; /* back-pointer, set in attach_group */
-    /* Apply-result ring: (index, rc) of the last HOST_APPLY_RC_RING applied
-     * entries, written by host_apply under h->mu BEFORE the raft core bumps
-     * last_applied. Lets host_propose_wait return the apply layer's verdict
-     * (a rejected txn PREP: intent-conflict BUSY / version STALE) instead of
-     * only "the index applied". Without it a lost conflict looked like
-     * success and a cross-shard txn committed with a partial intent set —
-     * the peer_concurrent_hardlink nlink lost-update. */
+    /* Apply-result ring: (index, rc, extra) of the last HOST_APPLY_RC_RING
+     * applied entries, written by host_apply under h->mu BEFORE the raft
+     * core bumps last_applied. Lets host_propose_wait return the apply
+     * layer's verdict (a rejected txn PREP: intent-conflict BUSY / version
+     * STALE) instead of only "the index applied". Without it a lost
+     * conflict looked like success and a cross-shard txn committed with a
+     * partial intent set — the peer_concurrent_hardlink nlink lost-update.
+     * extra is the O_APPEND reserved offset for APPEND_RSV (not the live
+     * watermark — two concurrent reserves otherwise both write at wm-len). */
     uint64_t arc_idx[HOST_APPLY_RC_RING];
     int32_t arc_rc[HOST_APPLY_RC_RING];
+    uint64_t arc_extra[HOST_APPLY_RC_RING];
     /* EFS_RAFT_OBS: last logged term/role, for election-churn timing. */
     uint64_t obs_term;
     int obs_role;
@@ -258,6 +262,18 @@ struct efs_raft_host {
      * The waiter then returns EFS_OK — the pre-fix behavior — so a nonzero
      * sustained value means the ring is too small, not a correctness bug. */
     uint64_t obs_arc_miss;
+    /* Set by apply_append_rsv_cmd; host_apply copies it into the ring. */
+    uint64_t apply_extra;
+    /* In-memory I16 for APPEND: a retried RPC with the same (ino,token,seq)
+     * must not propose a second reservation (that left a 6-byte hole).
+     * Not in the Raft cmd — 400 unique seqs in the op-id window is NOMEM. */
+    struct {
+        uint64_t token;
+        uint64_t seq;
+        efs_ino_t ino;
+        uint64_t off;
+    } ap_rep[512];
+    uint32_t ap_rep_i;
 };
 
 static struct efs_raft_host *g_host;
@@ -596,10 +612,31 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         return EFS_OK;
     memset(name, 0, sizeof(name));
     memcpy(name, cmd + HOST_CREATE_NAME_OFF, nl);
-    if (S_ISDIR(mode))
-        rc = efs_meta_apply_mkdir(h->kv, &at, parent, mode, name, &ino);
-    else
-        rc = efs_meta_apply_create_file(h->kv, &at, parent, mode, name, &ino);
+    {
+        uint32_t tail = (uint32_t)HOST_CREATE_NAME_OFF + nl +
+                        EFS_OPID_UUID_LEN + 4;
+
+        if (S_ISDIR(mode)) {
+            if (clen >= tail + 9) {
+                efs_ino_t want = rd64be(cmd + tail);
+                uint8_t lay = cmd[tail + 8];
+
+                rc = efs_meta_apply_mkdir_at(h->kv, &at, parent, mode, name,
+                                             want, lay, &ino);
+            } else {
+                rc = efs_meta_apply_mkdir(h->kv, &at, parent, mode, name, &ino);
+            }
+        } else if (clen >= tail + 9) {
+            efs_ino_t want = rd64be(cmd + tail);
+            uint8_t lay = cmd[tail + 8];
+
+            rc = efs_meta_apply_create_file_log_at(h->kv, &at, parent, mode,
+                                                   name, want, lay, &ino);
+        } else {
+            rc = efs_meta_apply_create_file_log(h->kv, &at, parent, mode, name,
+                                                &ino);
+        }
+    }
     if (rc == EFS_ERR_EXIST) {
         struct efs_meta_dentry dent;
         if (efs_meta_apply_lookup(h->kv, parent, name, &dent) == EFS_OK)
@@ -627,7 +664,7 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                 "name=%s\n",
                 rc, (unsigned long long)index, (unsigned long long)parent,
                 name);
-        return EFS_OK;
+        return rc;
     }
     APPLY_LOG("raft-host: applied create index=%llu parent=%llu name=%s "
             "ino=%llu\n",
@@ -974,16 +1011,19 @@ static int apply_append_rsv_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     op.seq = rd64be(cmd + 37);
     rc = efs_meta_apply_append_reserve(h->kv, ino, len, &op, host_apply_coord,
                                        h, &off);
-    if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY)
-        rc = EFS_OK;
-    if (rc != EFS_OK) {
+    /* Verdict + reserved eof ride the apply-result ring. Swallowing BUSY
+     * as OK made host_wait_applied succeed and the handler reply the live
+     * watermark — two clients then both wrote at wm-len. */
+    h->apply_extra = (rc == EFS_OK) ? off : 0;
+    if (rc != EFS_OK && rc != EFS_ERR_INVAL && rc != EFS_ERR_BUSY) {
         fprintf(stderr, "raft-host: apply append-rsv rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
-        return EFS_OK;
+    } else if (rc == EFS_OK) {
+        APPLY_LOG("raft-host: applied append-rsv index=%llu ino=%llu off=%llu\n",
+                (unsigned long long)index, (unsigned long long)ino,
+                (unsigned long long)off);
     }
-    APPLY_LOG("raft-host: applied append-rsv index=%llu ino=%llu\n",
-            (unsigned long long)index, (unsigned long long)ino);
-    return EFS_OK;
+    return rc;
 }
 
 static int apply_append_res_cmd(struct efs_raft_host *h, const uint8_t *cmd,
@@ -1424,6 +1464,33 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
                                const uint8_t *cmd, uint32_t clen);
 
+/* This replica applied a command whose row is missing here but present on
+ * another voter (same last_log, divergent KV). Stay out of leadership so
+ * the complete replica can take APPEND/CREATE. */
+static void host_mark_incomplete(struct host_group *g)
+{
+    if (!g || !g->r)
+        return;
+    if (!g->kv_incomplete) {
+        g->kv_incomplete = 1;
+        fprintf(stderr,
+                "raft-host: group=%u KV incomplete — step down, no campaign\n",
+                g->group);
+    }
+    efs_raft_allow_campaign(g->r, 0);
+    efs_raft_step_down(g->r);
+}
+
+static void host_clear_incomplete(struct host_group *g)
+{
+    if (!g || !g->r || !g->kv_incomplete)
+        return;
+    g->kv_incomplete = 0;
+    efs_raft_allow_campaign(g->r, 1);
+    fprintf(stderr, "raft-host: group=%u KV complete — campaign allowed\n",
+            g->group);
+}
+
 static int host_apply(void *app, uint64_t index, uint64_t term,
                       const uint8_t *cmd, uint32_t clen)
 {
@@ -1437,19 +1504,36 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         return EFS_OK;
     if (raft_obs_on())
         a0 = now_us_();
+    h->apply_extra = 0;
     rc = host_apply_dispatch(h, index, cmd, clen);
+    /* A successful CREATE/APPEND means this replica's KV has the row.
+     * Re-enable campaign so one hollow apply cannot leave the group with
+     * zero candidates. */
+    if (rc == EFS_OK &&
+        (cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_APPEND_RSV))
+        host_clear_incomplete(g);
+    /* Only the LEADER steps down on a hollow APPEND apply. Followers that
+     * miss a row must stay eligible — marking every voter was how g2 lost
+     * all campaigners and APPEND timed out NET. CREATE NOT_FOUND is not
+     * hollow-leader (parent on the other group / dual-host LSM). */
+    if (rc == EFS_ERR_NOT_FOUND && cmd[0] == EFS_MD_CMD_APPEND_RSV &&
+        g->r && efs_raft_role(g->r) == EFS_RAFT_LEADER)
+        host_mark_incomplete(g);
     /* Record the apply verdict BEFORE the raft core bumps last_applied, so a
      * waiter that observes applied >= index always finds the slot. The pump
      * holds h->mu across apply_committed, and host_propose_wait reads the
      * ring under h->mu, so this is race-free. */
     g->arc_idx[index & HOST_APPLY_RC_MASK] = index;
     g->arc_rc[index & HOST_APPLY_RC_MASK] = rc;
+    g->arc_extra[index & HOST_APPLY_RC_MASK] = h->apply_extra;
     /* Txn apply never stalls the log: a conflict verdict rides the ring to
      * the proposer, it is not a raft-core error. Other cmds keep their
-     * historic return (halt-on-error for the few that can fail). */
+     * historic return (halt-on-error for the few that can fail).
+     * APPEND_RSV is the same: BUSY/INVAL must not halt the log. */
     ret = (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
            cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
-           cmd[0] == EFS_MD_CMD_RMDIR)
+           cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
+           cmd[0] == EFS_MD_CMD_CREATE)
               ? EFS_OK
               : rc;
     if (a0) {
@@ -1979,6 +2063,24 @@ static int host_apply_rc_locked(struct efs_raft_host *h, uint8_t group,
     return g->arc_rc[s];
 }
 
+static int host_apply_extra_locked(struct efs_raft_host *h, uint8_t group,
+                                   uint64_t idx, uint64_t *extra_out)
+{
+    struct host_group *g = group_slot(h, group);
+    uint64_t s;
+
+    if (!g)
+        return EFS_ERR_BUSY;
+    s = idx & HOST_APPLY_RC_MASK;
+    if (g->arc_idx[s] != idx) {
+        h->obs_arc_miss++;
+        return EFS_ERR_BUSY;
+    }
+    if (extra_out)
+        *extra_out = g->arc_extra[s];
+    return EFS_OK;
+}
+
 static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
                              const uint8_t *cmd, uint32_t clen, int *hint)
 {
@@ -2001,6 +2103,28 @@ static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
     pthread_mutex_lock(&h->mu);
     rc = host_apply_rc_locked(h, group, idx);
     pthread_mutex_unlock(&h->mu);
+    return rc;
+}
+
+static int host_propose_wait_ex(struct efs_raft_host *h, uint8_t group,
+                                const uint8_t *cmd, uint32_t clen, int *hint,
+                                uint64_t *extra_out)
+{
+    uint64_t idx = 0;
+    int rc, erc;
+
+    rc = host_propose(h, group, cmd, clen, &idx, hint);
+    if (rc != EFS_OK)
+        return rc;
+    rc = host_wait_applied(h, group, idx, hint);
+    if (rc != EFS_OK)
+        return rc;
+    pthread_mutex_lock(&h->mu);
+    rc = host_apply_rc_locked(h, group, idx);
+    erc = host_apply_extra_locked(h, group, idx, extra_out);
+    pthread_mutex_unlock(&h->mu);
+    if (rc == EFS_OK && extra_out)
+        rc = erc;
     return rc;
 }
 
@@ -2166,10 +2290,10 @@ static void host_fwd_flock(struct efs_raft_host *h, efs_ino_t ino, uint32_t op,
 
 static void host_fwd_append(struct efs_raft_host *h, efs_ino_t ino, uint64_t len,
                             const uint8_t *sess_uuid, uint32_t sess_epoch,
-                            struct efs_msg_inode_reply *out,
+                            uint64_t op_seq, struct efs_msg_inode_reply *out,
                             const uint8_t *groups, int ng)
 {
-    uint8_t buf[sizeof(struct efs_msg_inode_append) + EFS_SESS_WIRE_LEN];
+    uint8_t buf[sizeof(struct efs_msg_inode_append) + EFS_APPEND_OPID_LEN];
     struct efs_msg_inode_append *req = (struct efs_msg_inode_append *)buf;
     uint32_t slen = sizeof(*req);
 
@@ -2180,6 +2304,8 @@ static void host_fwd_append(struct efs_raft_host *h, efs_ino_t ino, uint64_t len
         memcpy(buf + slen, sess_uuid, EFS_OPID_UUID_LEN);
         memcpy(buf + slen + EFS_OPID_UUID_LEN, &sess_epoch, 4);
         slen += EFS_SESS_WIRE_LEN;
+        memcpy(buf + slen, &op_seq, 8);
+        slen += 8;
     }
     host_inode_forward(h, EFS_MSG_INODE_APPEND, buf, slen,
                        EFS_MSG_INODE_APPEND_REPLY, out, groups, ng);
@@ -2402,7 +2528,8 @@ static void host_fwd_report(struct efs_raft_host *h,
 
 static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
                            uint32_t mode, const char *name,
-                           const struct efs_meta_attrs *at, uint64_t hold_owner)
+                           const struct efs_meta_attrs *at, uint64_t hold_owner,
+                           efs_ino_t child_ino, uint8_t layout)
 {
     size_t nl = strlen(name);
     uint32_t n;
@@ -2411,6 +2538,8 @@ static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
     if (nl == 0 || nl >= EFS_MAX_NAME)
         return EFS_ERR_NAMETOOLONG;
     n = HOST_CREATE_NAME_OFF + (uint32_t)nl + EFS_OPID_UUID_LEN + 4;
+    if (child_ino)
+        n += 9;
     if (n > HOST_CMD_MAX)
         return EFS_ERR_INVAL;
     out[0] = EFS_MD_CMD_CREATE;
@@ -2426,6 +2555,11 @@ static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
     memset(p, 0, EFS_OPID_UUID_LEN + 4);
     if (hold_owner && !S_ISDIR(mode))
         host_hold_uuid(hold_owner, p);
+    if (child_ino) {
+        p += EFS_OPID_UUID_LEN + 4;
+        wr64be(p, child_ino);
+        p[8] = layout;
+    }
     *len = n;
     return EFS_OK;
 }
@@ -2541,7 +2675,7 @@ static int pack_truncate_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
 
 static int pack_append_rsv_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
                                uint64_t alen, const uint8_t *uuid,
-                               uint32_t epoch)
+                               uint32_t epoch, uint64_t seq)
 {
     out[0] = EFS_MD_CMD_APPEND_RSV;
     wr64be(out + 1, ino);
@@ -2550,10 +2684,52 @@ static int pack_append_rsv_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     if (uuid) {
         memcpy(out + 17, uuid, EFS_OPID_UUID_LEN);
         wr32be(out + 33, epoch);
-        /* seq stays 0: production host has no op-id window yet. */
+        (void)seq; /* replay cache is host-local; log seq stays 0 */
     }
     *len = HOST_APPEND_RSV_LEN;
     return EFS_OK;
+}
+
+/* read_mu held. */
+static int host_append_replay_get(struct efs_raft_host *h, efs_ino_t ino,
+                                  const uint8_t *uuid, uint64_t seq,
+                                  uint64_t *off_out)
+{
+    uint64_t token = 0;
+    uint32_t i;
+
+    if (!h || !uuid || seq == 0 || !off_out)
+        return -1;
+    memcpy(&token, uuid, sizeof(token));
+    if (!token)
+        return -1;
+    for (i = 0; i < 512; i++) {
+        if (h->ap_rep[i].seq == seq && h->ap_rep[i].ino == ino &&
+            h->ap_rep[i].token == token) {
+            *off_out = h->ap_rep[i].off;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static void host_append_replay_put(struct efs_raft_host *h, efs_ino_t ino,
+                                   const uint8_t *uuid, uint64_t seq,
+                                   uint64_t off)
+{
+    uint64_t token = 0;
+    uint32_t i;
+
+    if (!h || !uuid || seq == 0)
+        return;
+    memcpy(&token, uuid, sizeof(token));
+    if (!token)
+        return;
+    i = h->ap_rep_i++ & 511u;
+    h->ap_rep[i].token = token;
+    h->ap_rep[i].seq = seq;
+    h->ap_rep[i].ino = ino;
+    h->ap_rep[i].off = off;
 }
 
 static int pack_append_res_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
@@ -5024,7 +5200,7 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
     at.uid = uid;
     at.gid = gid;
     at.now = now_ns();
-    rc = pack_create_cmd(cmd, &clen, parent, mode, name, &at, hold);
+    rc = pack_create_cmd(cmd, &clen, parent, mode, name, &at, hold, 0, 0);
     if (rc != EFS_OK) {
         set_inode_rc(out, rc, -1);
         return;
@@ -5084,7 +5260,14 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         rc = host_hashed_create_txn(h, parent, name, mode, &at, &prow, dsh,
                                     &hint);
     } else if (rc == EFS_OK) {
-        rc = host_propose(h, dg, cmd, clen, &idx, &hint);
+        efs_ino_t next = 0;
+
+        rc = efs_meta_apply_peek_alloc(h->kv, dsh, &next);
+        if (rc == EFS_OK)
+            rc = pack_create_cmd(cmd, &clen, parent, mode, name, &at, hold,
+                                 next, prow.layout);
+        if (rc == EFS_OK)
+            rc = host_propose(h, dg, cmd, clen, &idx, &hint);
         if (rc == EFS_OK)
             rc = host_wait_applied(h, dg, idx, &hint);
     }
@@ -5842,7 +6025,14 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         at2.uid = uid;
         at2.gid = gid;
         at2.now = now;
-        rc = pack_create_cmd(mkcmd, &mklen, parent, mode, name, &at2, 0);
+        rc = efs_meta_apply_peek_alloc(h->kv, csh, &next);
+        if (rc == EFS_OK) {
+            if (efs_kv_inode_shard(next) != csh)
+                rc = EFS_ERR_PROTO;
+            else
+                rc = pack_create_cmd(mkcmd, &mklen, parent, mode, name, &at2, 0,
+                                     next, prow.layout);
+        }
         if (rc == EFS_OK)
             rc = host_propose_wait(h, efs_raft_shard_group(psh), mkcmd, mklen,
                                    &hint);
@@ -7136,20 +7326,22 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
         stat_to_inode(&st, &out->inode);
 }
 
-/* O_APPEND reserve. Reply size is the watermark (off+len). Visible
- * getattr size stays the frontier until REPORT resolves the rsv.
- * Optional sess_uuid tags the reservation so a later fence resolves it
- * as FENCED_HOLE (10.5c-35d). Absent keeps the zero-UUID stand-in. */
+/* O_APPEND reserve. Reply size is THIS reservation's end (eof+len), not
+ * the live watermark — two concurrent clients otherwise both write at
+ * wm-len. Visible getattr size stays the frontier until REPORT resolves
+ * the rsv. Optional sess_uuid tags the reservation so a later fence
+ * resolves it as FENCED_HOLE (10.5c-35d). Absent keeps the zero-UUID
+ * stand-in. */
 void server_raft_host_append(efs_ino_t ino, uint64_t len,
                              const uint8_t *sess_uuid, uint32_t sess_epoch,
-                             struct efs_msg_inode_reply *out)
+                             uint64_t op_seq, struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
     struct efs_meta_row row;
     struct efs_meta_stat st;
     uint8_t cmd[HOST_APPEND_RSV_LEN];
-    uint32_t clen = 0, nopen = 0;
-    uint64_t idx = 0, wm = 0;
+    uint32_t clen = 0;
+    uint64_t reserved = 0;
     uint8_t ig;
     int hint = -1;
     int rc;
@@ -7162,34 +7354,70 @@ void server_raft_host_append(efs_ino_t ino, uint64_t len,
     }
     ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
     if (!host_hosts(h, ig)) {
-        host_fwd_append(h, ino, len, sess_uuid, sess_epoch, out, &ig, 1);
+        host_fwd_append(h, ino, len, sess_uuid, sess_epoch, op_seq, out, &ig, 1);
         return;
     }
     pthread_mutex_lock(&h->read_mu);
+    if (sess_uuid && op_seq &&
+        host_append_replay_get(h, ino, sess_uuid, op_seq, &reserved) == 0) {
+        rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
+        pthread_mutex_unlock(&h->read_mu);
+        set_inode_rc(out, rc, hint);
+        if (rc == EFS_OK) {
+            stat_to_inode(&st, &out->inode);
+            out->inode.size = reserved + len;
+            out->inode.atime = reserved;
+        }
+        return;
+    }
     rc = host_read_inode_lanes(h, ino, &hint);
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, ino, &row);
     if (rc == EFS_OK && !S_ISREG(row.mode))
         rc = EFS_ERR_INVAL;
+    /* Do not session-accept here: leftover-1 FUSE has no session record,
+     * and accept-on-miss is BUSY. The suffix is only an appender id so a
+     * second client's reserve waits for the first REPORT. */
+    if (rc == EFS_OK) {
+        uint8_t zu[EFS_OPID_UUID_LEN];
+        const uint8_t *uuid = sess_uuid;
+        int fr;
+
+        if (!uuid) {
+            memset(zu, 0, sizeof(zu));
+            uuid = zu;
+        }
+        fr = efs_meta_apply_append_foreign(h->kv, ino, uuid);
+        if (fr > 0)
+            rc = EFS_ERR_BUSY;
+        else if (fr < 0)
+            rc = fr;
+    }
     if (rc == EFS_OK)
-        rc = host_sess_gate(h, ino, sess_uuid, sess_epoch);
+        rc = pack_append_rsv_cmd(cmd, &clen, ino, len, sess_uuid, sess_epoch,
+                                 op_seq);
     if (rc == EFS_OK)
-        rc = pack_append_rsv_cmd(cmd, &clen, ino, len, sess_uuid, sess_epoch);
-    if (rc == EFS_OK)
-        rc = host_propose(h, ig, cmd, clen, &idx, &hint);
-    if (rc == EFS_OK)
-        rc = host_wait_applied(h, ig, idx, &hint);
-    if (rc == EFS_OK)
-        rc = efs_meta_apply_append_state(h->kv, ino, &wm, NULL, &nopen);
-    if (rc == EFS_OK && nopen == 0)
-        rc = EFS_ERR_INVAL;
+        rc = host_propose_wait_ex(h, ig, cmd, clen, &hint, &reserved);
+    if (rc == EFS_OK && sess_uuid && op_seq)
+        host_append_replay_put(h, ino, sess_uuid, op_seq, reserved);
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
+    /* Hollow apply is a BUSY retry, not a campaign ban. Marking the
+     * handler replica here poisoned the dual-host voter that still had
+     * the row: it forwarded to a hollow g2 leader, then disabled itself
+     * and the group had zero campaigners. Only host_apply on the leader
+     * that actually missed the row may step down. */
+    if (rc == EFS_ERR_NOT_FOUND)
+        rc = EFS_ERR_BUSY;
     pthread_mutex_unlock(&h->read_mu);
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
         stat_to_inode(&st, &out->inode);
-        out->inode.size = wm;
+        /* This reservation's end, not getattr's frontier (0 while
+         * nopen>0) and not the live watermark. atime is the start so
+         * the client can check start+len==size. */
+        out->inode.size = reserved + len;
+        out->inode.atime = reserved;
     }
 }
 
@@ -8057,26 +8285,35 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
     uint8_t ig;
     int rc;
 
-    rc = efs_meta_apply_append_open(h->kv, ino, offs, lens, &n);
-    /* Deleted inode (stale report skipped by host_pub_pack): no
-     * reservations to resolve. */
-    if (rc == EFS_ERR_NOT_FOUND)
-        return EFS_OK;
-    if (rc != EFS_OK)
-        return rc;
     ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
-    for (i = 0; i < n; i++) {
-        if (offs[i] + lens[i] > sz)
-            continue;
-        rc = pack_append_res_cmd(cmd, &clen, ino, offs[i],
-                                 EFS_META_APPEND_COMPLETED);
+    /* append_open caps at 64. A 400-record O_APPEND burst is 400 OPEN
+     * rows; one pass left nopen>0 and the peer stayed BUSY forever. */
+    for (;;) {
+        uint32_t did = 0;
+
+        n = 64;
+        rc = efs_meta_apply_append_open(h->kv, ino, offs, lens, &n);
+        if (rc == EFS_ERR_NOT_FOUND)
+            return EFS_OK;
         if (rc != EFS_OK)
             return rc;
-        rc = host_propose_wait(h, ig, cmd, clen, hint);
-        if (rc != EFS_OK)
-            return rc;
+        if (n == 0)
+            return EFS_OK;
+        for (i = 0; i < n; i++) {
+            if (offs[i] + lens[i] > sz)
+                continue;
+            rc = pack_append_res_cmd(cmd, &clen, ino, offs[i],
+                                     EFS_META_APPEND_COMPLETED);
+            if (rc != EFS_OK)
+                return rc;
+            rc = host_propose_wait(h, ig, cmd, clen, hint);
+            if (rc != EFS_OK)
+                return rc;
+            did++;
+        }
+        if (!did)
+            return EFS_OK;
     }
-    return EFS_OK;
 }
 
 /* Files and symlinks carry a chunk map; FUSE stores a symlink target as

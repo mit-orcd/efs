@@ -379,6 +379,27 @@ static void free_n(struct net *n, struct efs_raft_store **st, int npeers)
     }
 }
 
+static void test_step_down_no_campaign(void)
+{
+    struct net n = { .n = 3 };
+    struct efs_raft_store *st[3];
+    struct app app[3];
+    struct efs_raft_cfg cfg;
+    int lid;
+
+    boot_n(&n, st, app, &cfg, 3, 0x7);
+    CHECK(elect(&n, 30) == 1, "elect");
+    lid = leader_id(&n);
+    CHECK(lid >= 0, "leader");
+    efs_raft_allow_campaign(n.r[lid], 0);
+    CHECK(efs_raft_step_down(n.r[lid]) == EFS_OK, "step down");
+    CHECK(efs_raft_role(n.r[lid]) == EFS_RAFT_FOLLOWER, "now follower");
+    CHECK(elect(&n, 40) == 1, "other leader");
+    CHECK(efs_raft_role(n.r[lid]) == EFS_RAFT_FOLLOWER, "hollow stays out");
+    CHECK(leader_id(&n) != lid, "someone else");
+    free_n(&n, st, 3);
+}
+
 static int wait_voters(struct net *n, uint32_t want, int ticks)
 {
     int t, lid;
@@ -659,6 +680,7 @@ static void test_install_snapshot_needs_blob(void)
 int main(void)
 {
     test_election_i1();
+    test_step_down_no_campaign();
     test_replicate_and_readindex();
     test_i3_i4_and_restart();
     test_snapshot();

@@ -24,6 +24,7 @@ Internal (harness / --remote):
 """
 from __future__ import print_function
 
+import ctypes
 import errno
 import fcntl
 import os
@@ -32,6 +33,35 @@ import subprocess
 import sys
 import threading
 import time
+
+
+class _Flock(ctypes.Structure):
+    """Linux struct flock (natural alignment: 4-byte pad after l_whence)."""
+    _fields_ = [
+        ("l_type", ctypes.c_int16),
+        ("l_whence", ctypes.c_int16),
+        ("l_start", ctypes.c_int64),
+        ("l_len", ctypes.c_int64),
+        ("l_pid", ctypes.c_int32),
+    ]
+
+
+def fcntl_range(fd, start, length, exclusive=True, nb=False, unlock=False):
+    """F_SETLK with an absolute range. lockf() after lseek is not used:
+    on this FUSE mount the kernel delivers l_start=0 for SEEK_CUR lockf
+    even when f_pos is 4096 (probed: explicit F_SETLK is correct)."""
+    fl = _Flock()
+    if unlock:
+        fl.l_type = fcntl.F_UNLCK
+    elif exclusive:
+        fl.l_type = fcntl.F_WRLCK
+    else:
+        fl.l_type = fcntl.F_RDLCK
+    fl.l_whence = os.SEEK_SET
+    fl.l_start = start
+    fl.l_len = length
+    op = fcntl.F_SETLK if (nb or unlock) else fcntl.F_SETLKW
+    fcntl.fcntl(fd, op, fl)
 
 PARENT = os.environ.get("EFS_POSIX2_PARENT") or "posix-2c"
 TESTS = []          # list of (name, steps)  steps = [("a"|"b", fn), ...]
@@ -1479,12 +1509,12 @@ def peer_fcntl_range_conflict():
         fd = os.open(os.path.join(d, "f"), os.O_RDWR)
         try:
             try:
-                fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB, 4096)
+                fcntl_range(fd, 0, 4096, nb=True)
             except OSError as e:
                 if e.errno not in (errno.EAGAIN, errno.EACCES, errno.EWOULDBLOCK):
                     raise Fail("B lockf errno %s" % e.errno)
             else:
-                fcntl.lockf(fd, fcntl.LOCK_UN, 4096)
+                fcntl_range(fd, 0, 4096, unlock=True)
                 raise Fail("B acquired overlapping lockf")
         finally:
             os.close(fd)
@@ -1505,9 +1535,8 @@ def peer_fcntl_range_adjacent():
     def b(d):
         fd = os.open(os.path.join(d, "f"), os.O_RDWR)
         try:
-            os.lseek(fd, 4096, os.SEEK_SET)
-            fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB, 4096)
-            fcntl.lockf(fd, fcntl.LOCK_UN, 4096)
+            fcntl_range(fd, 4096, 4096, nb=True)
+            fcntl_range(fd, 4096, 4096, unlock=True)
         except OSError as e:
             raise Fail("B adjacent lockf failed: %s" % e)
         finally:
@@ -1544,7 +1573,15 @@ def peer_mtime_no_regress():
     return [("a", a), ("b", b), ("a", a2)]
 
 
-_HOLD_SCRIPT = r"""import fcntl, os, sys, time
+_HOLD_SCRIPT = r"""import ctypes, fcntl, os, sys, time
+class _Flock(ctypes.Structure):
+    _fields_ = [
+        ("l_type", ctypes.c_int16),
+        ("l_whence", ctypes.c_int16),
+        ("l_start", ctypes.c_int64),
+        ("l_len", ctypes.c_int64),
+        ("l_pid", ctypes.c_int32),
+    ]
 mode, path, ready, go, result = sys.argv[1:6]
 fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
 data = b""
@@ -1553,7 +1590,9 @@ try:
     if mode == "flock":
         fcntl.flock(fd, fcntl.LOCK_EX)
     elif mode == "fcntl0":
-        fcntl.lockf(fd, fcntl.LOCK_EX, 4096)
+        fl = _Flock(l_type=fcntl.F_WRLCK, l_whence=os.SEEK_SET,
+                    l_start=0, l_len=4096, l_pid=0)
+        fcntl.fcntl(fd, fcntl.F_SETLKW, fl)
     with open(ready, "w") as f:
         f.write("1\n")
         f.flush()

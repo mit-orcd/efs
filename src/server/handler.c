@@ -663,12 +663,19 @@ send_reply:
                     uint32_t se = 0;
 
                     rtype = EFS_MSG_INODE_APPEND_REPLY;
-                    if (payload_len == sizeof(*req) + EFS_SESS_WIRE_LEN) {
+                    if (payload_len == sizeof(*req) + EFS_APPEND_OPID_LEN ||
+                        payload_len == sizeof(*req) + EFS_SESS_WIRE_LEN) {
+                        uint64_t seq = 0;
+
                         su = (const uint8_t *)req + sizeof(*req);
                         memcpy(&se, su + 16, 4);
-                        server_raft_host_append(req->ino, req->len, su, se, &r);
+                        if (payload_len == sizeof(*req) + EFS_APPEND_OPID_LEN)
+                            memcpy(&seq, su + EFS_SESS_WIRE_LEN, 8);
+                        server_raft_host_append(req->ino, req->len, su, se, seq,
+                                                &r);
                     } else if (payload_len == sizeof(*req)) {
-                        server_raft_host_append(req->ino, req->len, NULL, 0, &r);
+                        server_raft_host_append(req->ino, req->len, NULL, 0, 0,
+                                                &r);
                     } else {
                         r.status = EFS_INODE_RPC_INVAL;
                     }

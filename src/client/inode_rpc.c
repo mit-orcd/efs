@@ -1,4 +1,5 @@
 #include "client_internal.h"
+#include "efs/opid.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
 #include "efs/raft.h"
@@ -249,6 +250,7 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
 {
     efs_node_id_t target = 0; /* 0 = compute the owner from our view */
     int prof = rpc_prof_enabled();
+    int saw_busy = 0;
     for (int attempt = 0; attempt < 16; attempt++) {
         efs_node_id_t nid = 0;
         struct efs_conn *conn;
@@ -285,6 +287,7 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         free(payload);
         struct efs_msg_inode_reply *r = reply;
         if (r->status == EFS_INODE_RPC_BUSY) {
+            saw_busy = 1;
             /* INODE_APPEND uses BUSY as the unflushed-reservation barrier.
              * The caller must flush + report before retrying; spinning here
              * holds g_append_mu for ~10s and deadlocks concurrent O_APPEND. */
@@ -308,7 +311,9 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             return EFS_ERR_NOT_PRIMARY; /* no better info */
         target = r->primary_id;
     }
-    return EFS_ERR_NOT_PRIMARY;
+    /* Exhausted BUSY retries is not "no primary" — that mapped to EIO
+     * on dir-rename under load (isolated PASS). */
+    return saw_busy ? EFS_ERR_BUSY : EFS_ERR_NOT_PRIMARY;
 }
 
 static int rpc_send_recv_owner(efs_ino_t ino, uint8_t type, const void *req,
@@ -691,25 +696,42 @@ int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
     return EFS_OK;
 }
 
-/* Cross-client O_APPEND: reserve the next len bytes at the owner; returns
- * the post-advance size (append offset = *new_size_out - len). */
+/* Cross-client O_APPEND: reserve the next len bytes at the owner.
+ * new_size_out is this reservation's end; start_out is the reserved
+ * offset (reply atime) when the host stamped reserved+len. */
 int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
-                                  uint64_t len, uint64_t *new_size_out)
+                                  uint64_t len, uint64_t seq,
+                                  uint64_t *new_size_out, uint64_t *start_out)
 {
-    struct efs_msg_inode_append req;
-    memset(&req, 0, sizeof(req));
-    req.export_id = export_id;
-    req.ino = ino;
-    req.len = len;
+    uint8_t buf[sizeof(struct efs_msg_inode_append) + EFS_APPEND_OPID_LEN];
+    struct efs_msg_inode_append *req = (struct efs_msg_inode_append *)buf;
+    uint8_t *su = buf + sizeof(*req);
+    uint32_t epoch = 1;
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_APPEND, &req, sizeof(req),
-                                 EFS_MSG_INODE_APPEND_REPLY, &r, sizeof(r));
+    int rc;
+
+    if (!g_client.flock_token) {
+        g_client.flock_token = ((uint64_t)getpid() << 1) ^ 1ull;
+        if (!g_client.flock_token)
+            g_client.flock_token = 1;
+    }
+    memset(buf, 0, sizeof(buf));
+    req->export_id = export_id;
+    req->ino = ino;
+    req->len = len;
+    memcpy(su, &g_client.flock_token, sizeof(g_client.flock_token));
+    memcpy(su + EFS_OPID_UUID_LEN, &epoch, 4);
+    memcpy(su + EFS_SESS_WIRE_LEN, &seq, 8);
+    rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_APPEND, buf, sizeof(buf),
+                             EFS_MSG_INODE_APPEND_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
         return rpc_status_to_efs(r.status);
     if (new_size_out)
         *new_size_out = r.inode.size;
+    if (start_out)
+        *start_out = r.inode.atime;
     return EFS_OK;
 }
 
@@ -733,17 +755,39 @@ int efs_client_rpc_hold(efs_export_id_t export_id, efs_ino_t ino, int open,
 int efs_client_rpc_flock(efs_export_id_t export_id, efs_ino_t ino, uint32_t op,
                          uint64_t owner)
 {
-    struct efs_msg_inode_flock req;
-    memset(&req, 0, sizeof(req));
-    req.export_id = export_id;
-    req.ino = ino;
-    req.op = op;
-    req.owner = owner;
+    return efs_client_rpc_flock_range(export_id, ino, op, owner, 0, 0, NULL);
+}
+
+int efs_client_rpc_flock_range(efs_export_id_t export_id, efs_ino_t ino,
+                               uint32_t op, uint64_t owner, uint64_t start,
+                               uint64_t end, struct efs_msg_inode_reply *reply_out)
+{
+    uint8_t buf[sizeof(struct efs_msg_inode_flock) + EFS_FLOCK_RANGE_LEN];
+    struct efs_msg_inode_flock *req = (struct efs_msg_inode_flock *)buf;
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_FLOCK, &req, sizeof(req),
-                                 EFS_MSG_INODE_FLOCK_REPLY, &r, sizeof(r));
+    uint32_t slen = sizeof(*req);
+    int rc;
+
+    memset(buf, 0, sizeof(buf));
+    req->export_id = export_id;
+    req->ino = ino;
+    req->op = op;
+    req->owner = owner;
+    /* Always send the half-open range. [0,0] is not a lock (host
+     * rejects start>=end); treat that as whole-file. Skipping the
+     * suffix used to default [0,~0] on the server — same for flock,
+     * but a botched FCNTL [0,0] then looked like a whole-file lock. */
+    if (start == 0 && end == 0)
+        end = ~(uint64_t)0;
+    memcpy(buf + sizeof(*req), &start, 8);
+    memcpy(buf + sizeof(*req) + 8, &end, 8);
+    slen += EFS_FLOCK_RANGE_LEN;
+    rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_FLOCK, buf, slen,
+                             EFS_MSG_INODE_FLOCK_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)
         return rc;
+    if (reply_out)
+        *reply_out = r;
     return rpc_status_to_efs(r.status);
 }
 
@@ -776,6 +820,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
                               uint8_t expect, void *reply, uint32_t reply_len)
 {
     efs_node_id_t target = 0;
+    int saw_busy = 0;
     for (int attempt = 0; attempt < 16; attempt++) {
         efs_node_id_t nid = 0;
         struct efs_conn *conn;
@@ -808,6 +853,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         free(payload);
         struct efs_msg_inode_reply *r = reply;
         if (r->status == EFS_INODE_RPC_BUSY) {
+            saw_busy = 1;
             unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
             usleep((useconds_t)(50000ull << shift));
             continue;
@@ -818,7 +864,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
             return EFS_ERR_NOT_PRIMARY;
         target = r->primary_id;
     }
-    return EFS_ERR_NOT_PRIMARY;
+    return saw_busy ? EFS_ERR_BUSY : EFS_ERR_NOT_PRIMARY;
 }
 
 int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
