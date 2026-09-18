@@ -20,7 +20,7 @@ Implements the documentation gate specified in docs/arch/development.md
                          definition, and no placement-formula definition is
                          stated in more than one place. Satellites explain,
                          they never restate; arch/START-HERE.md links rather
-                         than restates; architecture.html is a rendition,
+                         than restates; architecture.html is generated,
                          not an md source.
 
 Scope: the normative index (docs/architecture.md) plus the satellites under
@@ -41,6 +41,7 @@ import tempfile
 DOCS = pathlib.Path(__file__).resolve().parent
 INDEX = DOCS / "architecture.md"
 FULL = DOCS / "architecture-full.md"
+HTML = DOCS / "architecture.html"
 GEN = DOCS / "gen-architecture-full.py"
 
 
@@ -69,42 +70,51 @@ def lines_without_fences(text):
 
 # ---------------------------------------------------------------- check 1
 def check_regen_diff():
-    """Regenerate architecture-full.md to a temp path; fail on any diff."""
-    if not FULL.exists():
-        return [f"{rel(FULL)} is missing; run: python3 {rel(GEN)}"]
+    """Regenerate architecture-full.md AND architecture.html to temp paths;
+    fail on any diff. Both are build artifacts of the markdown sources."""
+    for art in (FULL, HTML):
+        if not art.exists():
+            return [f"{rel(art)} is missing; run: python3 {rel(GEN)}"]
     spec = importlib.util.spec_from_file_location("gen_arch_full", GEN)
     gen = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(gen)
-    with tempfile.NamedTemporaryFile(
-        "w", suffix=".md", dir=DOCS, delete=False
-    ) as tmp:
-        tmp_path = pathlib.Path(tmp.name)
+    tmps = {}
+    for art in (FULL, HTML):
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=art.suffix, dir=DOCS, delete=False
+        ) as tmp:
+            tmps[art] = pathlib.Path(tmp.name)
     try:
-        gen.OUT = tmp_path  # redirect the build artifact; never clobber FULL
+        gen.OUT = tmps[FULL]  # redirect the artifacts; never clobber the real ones
+        gen.OUT_HTML = tmps[HTML]
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             rc = gen.main()
         if rc != 0:
             return [f"generator {rel(GEN)} failed (rc={rc})"]
-        regenerated = tmp_path.read_text()
+        regenerated = {art: t.read_text() for art, t in tmps.items()}
     finally:
-        try:
-            tmp_path.unlink()
-        except FileNotFoundError:
-            pass
-    current = FULL.read_text()
-    if regenerated == current:
-        return []
-    old, new = current.splitlines(), regenerated.splitlines()
-    first = next(
-        (i + 1 for i, (a, b) in enumerate(zip(old, new)) if a != b),
-        min(len(old), len(new)) + 1,
-    )
-    return [
-        f"{rel(FULL)} is stale: first differs at line {first} "
-        f"({len(old)} vs {len(new)} lines). "
-        f"Regenerate with: python3 {rel(GEN)}"
-    ]
+        for t in tmps.values():
+            try:
+                t.unlink()
+            except FileNotFoundError:
+                pass
+    problems = []
+    for art in (FULL, HTML):
+        current = art.read_text()
+        if regenerated[art] == current:
+            continue
+        old, new = current.splitlines(), regenerated[art].splitlines()
+        first = next(
+            (i + 1 for i, (a, b) in enumerate(zip(old, new)) if a != b),
+            min(len(old), len(new)) + 1,
+        )
+        problems.append(
+            f"{rel(art)} is stale: first differs at line {first} "
+            f"({len(old)} vs {len(new)} lines). "
+            f"Regenerate with: python3 {rel(GEN)}"
+        )
+    return problems
 
 
 # ---------------------------------------------------------------- check 2
@@ -333,7 +343,7 @@ def check_single_home(index_text):
 def main():
     checks = []
 
-    checks.append(("regen-diff: architecture-full.md is current", check_regen_diff()))
+    checks.append(("regen-diff: architecture-full.md + architecture.html are current", check_regen_diff()))
 
     checks.append(("links: every internal link resolves", check_links()))
 

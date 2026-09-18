@@ -35,7 +35,7 @@ on-disk `du` of `/data1/0*/efs` (× ~1.5 for 2+1 EC).
 ## Current numbers (Sep 17–18, Raft+KV, 19810, TCP) — MiB/s
 
 **1 client only. 4- and 9-client have NOT been run on this engine** (that
-is START-HERE W2), so there is no scaling factor to quote yet.
+is START-HERE W4), so there is no scaling factor to quote yet.
 
 | test | 1 client |
 | sw-1m | 209 |
@@ -57,7 +57,7 @@ After WAL hold / activate-mask / pipelined propose, honest 9×2g sw-1m is
 1-client sw-1m 2355, 9-client 3599). That engine is deleted, its result
 dirs are gone, and its metadata path was a whole-table RAM snapshot with
 no per-op Raft commit — the two are not the same system. The write gap is
-work to do (START-HERE W1), not a regression to bisect.
+work to do (START-HERE W3), not a regression to bisect.
 
 **Shape that still holds:** reads scale with clients, writes share a
 ceiling. The NVMe ceiling is 16.7–21.4 GB/s **per host**, so every write
@@ -88,4 +88,4 @@ What the profiles show (Sep 17–18, and the same on the old engine): the
 client's on-CPU time is blake3 in `hash_write_fragments` /
 `dcache_flush_slot_inner`, the server is near-idle, and the wall is
 off-CPU — `fsync`/REPORT wait, not hashing. Optimizing blake3 does not
-move the number; splitting the fsync tail is the lever (W1).
+move the number; splitting the fsync tail is the lever (W3).

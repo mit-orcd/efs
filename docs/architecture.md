@@ -3,7 +3,7 @@
 **New here, or looking for the next task? → [START-HERE](arch/START-HERE.md)**
 (what to work on now, which pages govern a given change, what "done" means).
 
-[Plain-language rendition](architecture.html) ·
+[Browser view (generated)](architecture.html) ·
 [One-file full version](architecture-full.md) ·
 [Design rationale](arch/design.md) ·
 [Failure tolerance](arch/failure-tolerance.md) ·
