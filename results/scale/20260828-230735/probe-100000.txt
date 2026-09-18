@@ -1,4 +1,0 @@
-stat           p50=     nan p99=     nan max=     nan n=0
-create         p50=   0.010 p99=   0.040 max=   0.058 n=200
-unlink         p50=   0.005 p99=   0.127 max=   0.136 n=200
-readdir        p50=     nan p99=     nan max=     nan n=0

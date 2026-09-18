@@ -57,9 +57,15 @@ Stop:
 
 | If this happens | Reads | Writes |
 |---|---|---|
-| 1 of 3 servers down | yes — any 2 fragments rebuild the chunk | yes — degraded stripe, re-striped on repair |
+| 1 of 3 servers down | yes — any 2 fragments XOR-rebuild the chunk | no — publication needs all `k+f` fragments durable |
 | 2 of 3 servers down | no | no |
 | 1 disk full | yes | yes, until a second node is also full (`ENOSPC`) |
+
+**Pre-alpha caveat, and it is a big one: nothing repairs a lost fragment yet.**
+A chunk that drops to 2 of 3 stays that way, so the cluster reads fine while
+being one failure from losing that data, and reports no degradation. The design
+for repair and degraded publication is specified; the code is not written. See
+[docs/product-gaps.md](docs/product-gaps.md) §1.
 
 How the node count sets the guarantee, and why the write commit rule needs
 every fragment when the cluster is healthy:
@@ -71,5 +77,7 @@ every fragment when the cluster is healthy:
   [docs/arch/START-HERE.md](docs/arch/START-HERE.md) if you are going to change code)
 - **[docs/operations.md](docs/operations.md)** — start/stop, storage layout, quotas, `efs-mgmt`, rejoin
 - **[docs/testing.md](docs/testing.md)** — unit tests, POSIX suites, perf and leak gates
+- **[docs/product-gaps.md](docs/product-gaps.md)** — what is missing before this is
+  a filesystem you could run: no repair, no fencing on the client, no fsck, no auth
 
 MIT. See [LICENSE](LICENSE).

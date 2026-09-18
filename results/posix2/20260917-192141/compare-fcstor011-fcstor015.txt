@@ -1,0 +1,17 @@
+================================================================
+POSIX baseline comparison: 63 tests
+  both pass        : 57
+  EFS BUGS         : 5  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 1
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  peer_concurrent_append           [FAIL] append record count: got 400, want 800
+  peer_creat_excl_race             [FAIL] O_EXCL winners a=True b=True (want exactly one)
+  peer_fcntl_range_conflict        [FAIL] B acquired overlapping lockf
+  peer_overlap_pwrite_chunk_straddle [FAIL] above-chunk exclusive range not B
+  peer_overlap_pwrite_partial      [FAIL] [0,4096) is not A's exclusive range
+
+--- target passes where baseline fails ---
+  peer_fcntl_range_adjacent       

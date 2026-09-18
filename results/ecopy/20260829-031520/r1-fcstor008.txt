@@ -1,2 +1,0 @@
-bash: line 11: b + : syntax error: operand expected (error token is "+ ")
-RESULT files=0 bytes=0 secs=84.804143989

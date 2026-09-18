@@ -1,4 +1,0 @@
-total	per_client	step_files	step_sec	creates_per_sec	errors	rss_mb_max	rss_mb_sum	bytes_per_inode
-100000	11111	99999	31	3225	10	89	322	3376
-500000	55555	399996	35	11428	29	286	913	1915
-1000000	111111	500004	26	19230	19	617	1809	1897

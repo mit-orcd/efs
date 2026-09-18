@@ -1,0 +1,5 @@
+# posix-2client host_a=fcstor007.ib host_b=fcstor008.ib mnt=/tmp/efs-mount 2026-09-18T00:14:17Z
+test	result	detail
+peer_fcntl_range_conflict	PASS	
+peer_fcntl_range_adjacent	PASS	
+# summary pass=2 fail=0 skip=0 total=2 dur=2.8

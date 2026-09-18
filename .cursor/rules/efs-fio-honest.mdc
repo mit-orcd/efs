@@ -1,17 +1,18 @@
 ---
-description: Honest efs fio method, harness, and Aug 29 baseline — do not reinvent or quote the stock perf suite
+description: Honest efs fio method and harness, current Raft-engine numbers — do not reinvent, and do not quote a time_based write column
 alwaysApply: true
 ---
 
 # Honest fio (do not reinvent)
 
 `--direct=1` only skips the **kernel** page cache. It does **not** skip efs's
-userspace dcache. Stock `run_tests.sh perf` is `time_based` + no `end_fsync`
-→ write numbers are ~3–4× memory-bandwidth fiction (single sw-1m 9538,
-9-client 108954 / 106 GiB/s). Physically impossible: 30s at that rate is
-3.2 TiB, but only ~124 GB existed on the 4 servers. **Never quote those
-or Aug-24 "multi sw-1m 9342 / rw-128k 121 GB/s".** Sanity-check: bytes
-written ≤ on-disk `du` of `/data1/0*/efs` (× ~1.5 for 2+1 EC).
+userspace dcache. A `time_based` fio with no `end_fsync` therefore reports
+memory bandwidth: the old `run_tests.sh perf` suite claimed single sw-1m
+9538 and 9-client 106 GiB/s, which is physically impossible (30 s at that
+rate is 3.2 TiB against ~124 GB of actual storage). That suite is deleted;
+if you find a write number anywhere without `end_fsync` in its command
+line, it is fiction. Sanity-check every write number: bytes written ≤
+on-disk `du` of `/data1/0*/efs` (× ~1.5 for 2+1 EC).
 
 ## Method (required)
 
@@ -28,33 +29,40 @@ written ≤ on-disk `du` of `/data1/0*/efs` (× ~1.5 for 2+1 EC).
   (dead daemon leaves a plain dir). Same class of bug as posix-on-tmpfs.
 - **Harness (use this, do not rewrite):**
   `bash tests/stress/fio_honest_matrix.sh results/perf/<id>-honest`
-  Latest: `results/perf/20260829-honest/` (raw.tsv + per-host logs).
-  Aug 29 table: remount required `efs-fuse` in `/proc/mounts`; no `md0`
-  in any job log; 50g left **333 GiB used** on the servers. **Not** in
-  the table: the later strace-wrap attempt (353 MiB/s, `Disk stats: md0`)
-  — that was local RAID after we killed the daemons. The 2199 last-run
-  `perf` samples are inside `efs-fuse` / `fuse_fs_write_buf`.
+  Current: `results/perf/20260917-honest/` (raw.tsv + per-host logs) plus
+  `results/perf/20260918-dd-1c/`.
 
-## Baseline (Aug 29, bits=3, TCP) — aggregate MiB/s
+## Current numbers (Sep 17–18, Raft+KV, 19810, TCP) — MiB/s
 
-| test | 1 | 4 | 9 | 9/1 |
-| sw-1m | 2355 | 3271 | 3599 | 1.5x |
-| ow-1m | 2463 | 4626 | 4923 | 2.0x |
-| rw-1m | 2580 | 4401 | 5064 | 2.0x |
-| rw-128k | 2538 | 4255 | 5278 | 2.1x |
-| rw-4k | 503 | 1961 | 2334 | 4.6x |
-| sr-1m | 7767 | 30526 | 48949 | 6.3x |
-| rr-1m | 7863 | 30989 | 52353 | 6.7x |
-| rr-128k | 6069 | 22368 | 42769 | 7.0x |
-| rr-4k | 434 | 1672 | 3538 | 8.2x |
-| sw-50g | 1712 | 3272 | 3726 | 2.2x |
-| sr-50g | 2356 | 9031 | 20170 | 8.6x |
+**1 client only. 4- and 9-client have NOT been run on this engine** (that
+is START-HERE W2), so there is no scaling factor to quote yet.
 
-**Shape:** writes share a ~3.6–5.3 GiB/s ceiling (1 client already ~2/3 of
-9-way sw-1m; 9-way per-client lockstep 398–402 MiB/s). Reads scale.
-NVMe ceiling is 16.7–21.4 GB/s **per host** — this is software, not media.
-50g one-job is slower than 9×2g on 1 client (less parallelism), same
-ceiling at 4/9.
+| test | 1 client |
+| sw-1m | 209 |
+| ow-1m | 196 |
+| rw-1m | 196 |
+| rw-128k | 194 |
+| rw-4k | 89 |
+| sr-1m | 3141 |
+| rr-1m | 2276 |
+| rr-128k | 1492 |
+| rr-4k | 144 |
+| sw-50g | FAIL: `end_fsync` NET timeout |
+
+After WAL hold / activate-mask / pipelined propose, honest 9×2g sw-1m is
+**924**. Intra-job write samples run at several GiB/s — the wall is the
+`fsync`, so only the end-to-end number counts.
+
+**Do not compare these against the pre-Raft engine's numbers** (Aug 2026:
+1-client sw-1m 2355, 9-client 3599). That engine is deleted, its result
+dirs are gone, and its metadata path was a whole-table RAM snapshot with
+no per-op Raft commit — the two are not the same system. The write gap is
+work to do (START-HERE W1), not a regression to bisect.
+
+**Shape that still holds:** reads scale with clients, writes share a
+ceiling. The NVMe ceiling is 16.7–21.4 GB/s **per host**, so every write
+wall measured so far is software, not media. A 50g single-job file is
+slower than 9×2g on one client (less parallelism).
 
 ## Profile a single write
 
@@ -76,7 +84,8 @@ perf stat -p $(pgrep -x efsd) sleep 20
 timeout 25 perf report --stdio --no-children -n -i /tmp/perf-efsd.data
 ```
 
-Aug 29 last sw-1m (2199 MiB/s): client **2.7 cores**, 43% blake3 in
-`hash_write_fragments` / `dcache_flush_slot_inner`. Primary **0.01 CPUs**
-in `perf stat`; on-CPU leftover is `verify_thread` blake3; workers in
-`wait_woken`. Write ceiling is off-CPU (lock/RPC wait), not primary hash.
+What the profiles show (Sep 17–18, and the same on the old engine): the
+client's on-CPU time is blake3 in `hash_write_fragments` /
+`dcache_flush_slot_inner`, the server is near-idle, and the wall is
+off-CPU — `fsync`/REPORT wait, not hashing. Optimizing blake3 does not
+move the number; splitting the fsync tail is the lever (W1).

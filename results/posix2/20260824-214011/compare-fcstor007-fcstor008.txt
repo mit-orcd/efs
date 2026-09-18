@@ -1,7 +1,0 @@
-================================================================
-POSIX baseline comparison: 24 tests
-  both pass        : 24
-  EFS BUGS         : 0  (baseline PASS, target FAIL)
-  both fail (match): 0
-  target better    : 0
-================================================================

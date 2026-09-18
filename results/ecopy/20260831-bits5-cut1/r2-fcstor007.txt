@@ -1,1 +1,0 @@
-RESULT files=2573 bytes=320557180 secs=128.611128779 erc=2

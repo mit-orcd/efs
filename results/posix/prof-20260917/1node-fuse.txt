@@ -1,0 +1,50 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cpu-clock:u'
+# Event count (approx.): 406000000
+#
+# Overhead       Samples  Command   Shared Object         Symbol                                     
+# ........  ............  ........  ....................  ...........................................
+#
+    21.31%           346  efs-fuse  efs-fuse              [.] blake3_hash_many_avx2
+            |
+            ---blake3_hash_many_avx2
+               blake3_compress_subtree_wide
+               |          
+                --21.12%--blake3_compress_subtree_wide
+                          |          
+                           --20.94%--blake3_compress_subtree_wide
+                                     |          
+                                     |--20.38%--blake3_compress_subtree_wide
+                                     |          blake3_hasher_update.part.0
+                                     |          efs_hash
+                                     |          |          
+                                     |          |--13.49%--hash_write_fragments
+                                     |          |          |          
+                                     |          |           --13.30%--dcache_flush_slot_inner
+                                     |          |                     efs_dcache_flush_ino
+                                     |          |                     |          
+                                     |          |                      --13.05%--ll_flush
+                                     |          |                                0x7f21da243361
+                                     |          |          
+                                     |           --6.83%--dcache_flush_slot_inner
+                                     |                     efs_dcache_flush_ino
+                                     |                     |          
+                                     |                      --6.77%--ll_flush
+                                     |                                0x7f21da243361
+                                     |          
+                                      --0.55%--blake3_hasher_update.part.0
+                                                efs_hash
+
+     9.48%           154  efs-fuse  efs-fuse              [.] inode_ptr
+            |
+            ---inode_ptr
+               |          
+               |--7.82%--tab_set_nlink
+               |          |          
+               |           --7.76%--efs_export_nlink_dec_ex
+               |                     efs_client_unlink
+               |                     efs_fuse_unlink_at

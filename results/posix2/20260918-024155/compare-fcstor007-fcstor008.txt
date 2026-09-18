@@ -1,0 +1,11 @@
+================================================================
+POSIX baseline comparison: 63 tests
+  both pass        : 61
+  EFS BUGS         : 2  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  peer_concurrent_append           [FAIL] no RESULT from ab-b step 1: rc=124 out='' err='efs-ssh: TIMEOUT after 45s host=fcstor008.ib\n ssh timeout after 45s'
+  peer_overlap_pwrite_chunk_straddle [FAIL] above-chunk exclusive range not B

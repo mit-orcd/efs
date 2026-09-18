@@ -1,6 +1,0 @@
-round	agg_mib_s	agg_iops	slowest_host	failed_hosts
-1	3409	3405	fcstor007@372MiB/s	-
-2	3234	3230	fcstor007@352MiB/s	-
-3	3117	3113	fcstor008@338MiB/s	-
-4	3126	3118	fcstor007@343MiB/s	-
-5	3104	3098	fcstor010@344MiB/s	-

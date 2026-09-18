@@ -1,4 +1,0 @@
-round	files	bytes	wall_sec	files_per_sec	mib_per_sec	slowest_host	failed_hosts
-1	5200	544364872	82.2	63.2	6.3	fcstor012@76.0s	 fcstor007 fcstor008 fcstor010 fcstor011 fcstor013 fcstor014 fcstor015
-2	23261	2794189295	135.0	172.3	19.7	fcstor007@128.6s	 fcstor007 fcstor008 fcstor010 fcstor011 fcstor013 fcstor014
-3	6564	1053900687	112.7	58.2	8.9	fcstor011@106.9s	 fcstor007 fcstor008 fcstor010 fcstor013 fcstor014 fcstor015

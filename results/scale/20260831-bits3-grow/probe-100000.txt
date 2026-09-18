@@ -1,9 +1,0 @@
-stat           p50=     nan p99=     nan max=     nan n=0
-Traceback (most recent call last):
-  File "/tmp/efs/tests/stress/scale_probe.py", line 105, in <module>
-    main()
-  File "/tmp/efs/tests/stress/scale_probe.py", line 66, in main
-    os.makedirs(pdir, exist_ok=True)
-  File "/usr/lib64/python3.9/os.py", line 225, in makedirs
-    mkdir(name, mode)
-FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/scale/fcstor007/probe-3812487-1788146452'

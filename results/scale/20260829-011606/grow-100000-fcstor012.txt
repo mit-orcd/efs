@@ -1,8 +1,0 @@
-  ... 11111 in 5s (2219/s)
-ERR SPURIOUS-EEXIST /tmp/efs-mount/scale/fcstor012/d000000/f000000026: [Errno 17] File exists: '/tmp/efs-mount/scale/fcstor012/d000000/f000000026'
-ERR SPURIOUS-EEXIST /tmp/efs-mount/scale/fcstor012/d000000/f000000506: [Errno 17] File exists: '/tmp/efs-mount/scale/fcstor012/d000000/f000000506'
-ERR SPURIOUS-EEXIST /tmp/efs-mount/scale/fcstor012/d000000/f000000643: [Errno 17] File exists: '/tmp/efs-mount/scale/fcstor012/d000000/f000000643'
-ERR SPURIOUS-EEXIST /tmp/efs-mount/scale/fcstor012/d000001/f000001181: [Errno 17] File exists: '/tmp/efs-mount/scale/fcstor012/d000001/f000001181'
-ERR SPURIOUS-EEXIST /tmp/efs-mount/scale/fcstor012/d000001/f000001352: [Errno 17] File exists: '/tmp/efs-mount/scale/fcstor012/d000001/f000001352'
-ERRORS 222
-RATE 11111 5.01 2219.0

@@ -1,7 +1,0 @@
-stat           p50=   0.291 p99=   1.677 max=   1.677 n=46
-Traceback (most recent call last):
-  File "/tmp/efs/tests/stress/scale_probe.py", line 105, in <module>
-    main()
-  File "/tmp/efs/tests/stress/scale_probe.py", line 71, in main
-    fd = os.open(p, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/scale/fcstor007/probe-3431875-1787957030/p3431875.1'

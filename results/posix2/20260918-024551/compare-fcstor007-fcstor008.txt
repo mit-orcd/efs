@@ -1,0 +1,11 @@
+================================================================
+POSIX baseline comparison: 63 tests
+  both pass        : 61
+  EFS BUGS         : 2  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  peer_overlap_pwrite_partial      [FAIL] [8192,12288) is not B's exclusive range
+  peer_rename_vs_unlink_src        [FAIL] OSError: [Errno 5] Input/output error

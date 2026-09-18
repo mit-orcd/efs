@@ -1,0 +1,82 @@
+# started on Thu Sep 17 09:36:30 2026
+
+
+ Performance counter stats for process id '265042':
+
+         18,929.35 msec task-clock:HGu                   #    0.002 CPUs utilized             
+                 0      context-switches:HGu             #    0.000 /sec                      
+                 0      cpu-migrations:HGu               #    0.000 /sec                      
+         2,177,110      page-faults:HGu                  #  115.012 K/sec                     
+    31,086,965,531      cycles:HGu                       #    1.642 GHz                       
+     1,042,736,988      stalled-cycles-frontend:HGu      #    3.35% frontend cycles idle      
+    42,759,168,894      instructions:HGu                 #    1.38  insn per cycle            
+                                                  #    0.02  stalled cycles per insn   
+       850,773,516      branches:HGu                     #   44.945 M/sec                     
+        13,080,014      branch-misses:HGu                #    1.54% of all branches           
+
+    7841.994302433 seconds time elapsed
+
+====REC====
+[ perf record: Woken up 12 times to write data ]
+[ perf record: Captured and wrote 4.579 MB /tmp/perf-fuse.data (39299 samples) ]
+====REPORT====
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 39K of event 'cpu-clock:u'
+# Event count (approx.): 9824750000
+#
+# Overhead       Samples  Command   Shared Object         Symbol                                     
+# ........  ............  ........  ....................  ...........................................
+#
+    53.25%         20925  efs-fuse  efs-fuse              [.] blake3_hash_many_avx2
+            |
+            ---blake3_hash_many_avx2
+               |          
+                --53.22%--blake3_compress_subtree_wide
+                          |          
+                           --52.77%--blake3_compress_subtree_wide
+                                     |          
+                                     |--51.88%--blake3_compress_subtree_wide
+                                     |          |          
+                                     |          |--50.12%--blake3_compress_subtree_wide
+                                     |          |          blake3_hasher_update.part.0
+                                     |          |          efs_hash
+                                     |          |          |          
+                                     |          |          |--33.00%--hash_write_fragments
+                                     |          |          |          dcache_flush_slot_inner
+                                     |          |          |          |          
+                                     |          |          |          |--23.62%--dcache_reclaim_main
+                                     |          |          |          |          start_thread
+                                     |          |          |          |          
+                                     |          |          |           --9.38%--efs_dcache_flush_ino
+                                     |          |          |                     ll_fsync
+                                     |          |          |                     0x7f21c55c34b5
+                                     |          |          |                     |          
+                                     |          |          |                     |--8.00%--0x8074
+                                     |          |          |                     |          0x300000000
+                                     |          |          |                     |          0x746e756f6d2d
+                                     |          |          |                     |          
+                                     |          |          |                      --1.38%--0x4048
+                                     |          |          |                                0x300000000
+                                     |          |          |                                0x746e756f6d2d
+                                     |          |          |          
+                                     |          |           --17.12%--dcache_flush_slot_inner
+                                     |          |                     |          
+                                     |          |                     |--12.08%--dcache_reclaim_main
+                                     |          |                     |          start_thread
+                                     |          |                     |          
+                                     |          |                      --5.04%--efs_dcache_flush_ino
+                                     |          |                                ll_fsync
+                                     |          |                                0x7f21c55c34b5
+                                     |          |                                |          
+                                     |          |                                |--4.02%--0x8074
+                                     |          |                                |          0x300000000
+                                     |          |                                |          0x746e756f6d2d
+                                     |          |                                |          
+                                     |          |                                 --1.02%--0x4048
+                                     |          |                                           0x300000000
+                                     |          |                                           0x746e756f6d2d
+                                     |          |          

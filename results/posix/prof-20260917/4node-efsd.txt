@@ -1,0 +1,50 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 10K of event 'cpu-clock:u'
+# Event count (approx.): 2738750000
+#
+# Overhead       Samples  Command  Shared Object         Symbol                                     
+# ........  ............  .......  ....................  ...........................................
+#
+    26.27%          2878  efsd     libc.so.6             [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--9.07%--0x4335f1
+               |          |          
+               |          |--8.55%--0x433a61
+               |          |          |          
+               |          |          |--2.68%--0x458bac
+               |          |          |          0x453123
+               |          |          |          |          
+               |          |          |           --1.96%--0x42e212
+               |          |          |                     0x40d1c8
+               |          |          |                     0x405224
+               |          |          |                     start_thread
+               |          |          |          
+               |          |          |--2.18%--0x457716
+               |          |          |          0x41a436
+               |          |          |          0x45fbd2
+               |          |          |          0x46112c
+               |          |          |          0x461a32
+               |          |          |          0x411dd8
+               |          |          |          0x417268
+               |          |          |          start_thread
+               |          |          |          
+               |          |          |--0.83%--0x459ffe
+               |          |          |          |          
+               |          |          |           --0.54%--0x41a564
+               |          |          |                     0x45fbd2
+               |          |          |                     0x46112c
+               |          |          |                     0x461a32
+               |          |          |                     0x411dd8
+               |          |          |                     0x417268
+               |          |          |                     start_thread
+               |          |          |          
+               |          |          |--0.79%--0x458cf3
+               |          |          |          0x41a114
+               |          |          |          0x45fbd2
+               |          |          |          0x46112c

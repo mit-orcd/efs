@@ -1,8 +1,0 @@
-Traceback (most recent call last):
-  File "/tmp/efs/tests/stress/scale_worker.py", line 115, in <module>
-    main()
-  File "/tmp/efs/tests/stress/scale_worker.py", line 31, in main
-    os.makedirs(root, exist_ok=True)
-  File "/usr/lib64/python3.9/os.py", line 225, in makedirs
-    mkdir(name, mode)
-FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/scale-fcstor008'

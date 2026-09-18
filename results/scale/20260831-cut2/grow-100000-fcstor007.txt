@@ -1,6 +1,0 @@
-  ... 9849 in 5s (1967/s)
-  ... 9849 in 10s (984/s)
-  ... 11111 in 15s (740/s)
-ERR /tmp/efs-mount/scale-fcstor007/d000010/f000010272: [Errno 2] No such file or directory: '/tmp/efs-mount/scale-fcstor007/d000010/f000010272'
-ERRORS 1
-RATE 11111 15.02 739.9

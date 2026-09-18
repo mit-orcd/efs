@@ -1,7 +1,0 @@
-[perf_local_nvme] fcstor004 serial /data1/01
-[perf_local_nvme] fcstor004 serial /data1/02
-[perf_local_nvme] fcstor004 serial /data1/03
-[perf_local_nvme] fcstor004 serial /data1/04
-[perf_local_nvme] fcstor004 serial /data1/05
-[perf_local_nvme] fcstor004 serial /data1/06
-[perf_local_nvme] fcstor004 parallel /data1/01 /data1/02 /data1/03 /data1/04 /data1/05 /data1/06

@@ -1,0 +1,50 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 206  of event 'cpu-clock:u'
+# Event count (approx.): 51500000
+#
+# Overhead       Samples  Command   Shared Object       Symbol                                 
+# ........  ............  ........  ..................  .......................................
+#
+    22.33%            46  efs-fuse  efs-fuse            [.] export_staged_bytes_one
+            |
+            ---export_staged_bytes_one
+               stage_evict_main
+               start_thread
+
+    16.50%            34  efs-fuse  efs-fuse            [.] blake3_hash_many_avx2
+            |
+            ---blake3_hash_many_avx2
+               blake3_compress_subtree_wide
+               blake3_compress_subtree_wide
+               |          
+               |--15.05%--blake3_compress_subtree_wide
+               |          |          
+               |          |--14.08%--blake3_compress_subtree_wide
+               |          |          blake3_hasher_update.part.0
+               |          |          efs_hash
+               |          |          |          
+               |          |          |--8.74%--hash_write_fragments
+               |          |          |          dcache_flush_slot_inner
+               |          |          |          efs_dcache_flush_ino
+               |          |          |          ll_flush
+               |          |          |          0x7f21da243361
+               |          |          |          
+               |          |           --5.34%--dcache_flush_slot_inner
+               |          |                     efs_dcache_flush_ino
+               |          |                     ll_flush
+               |          |                     0x7f21da243361
+               |          |          
+               |           --0.97%--blake3_hasher_update.part.0
+               |                     efs_hash
+               |          
+                --1.46%--blake3_hasher_update.part.0
+                          efs_hash
+                          |          
+                           --0.97%--hash_write_fragments
+                                     dcache_flush_slot_inner
+                                     efs_dcache_flush_ino
+                                     ll_flush

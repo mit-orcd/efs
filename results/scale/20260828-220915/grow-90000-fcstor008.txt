@@ -1,3 +1,0 @@
-  ... 10000 in 5s (1997/s)
-ERR /tmp/efs-mount/scale/fcstor008/d000005/f000005914: [Errno 5] Input/output error: '/tmp/efs-mount/scale/fcstor008/d000005/f000005914'
-RATE 10000 5.01 1997.2

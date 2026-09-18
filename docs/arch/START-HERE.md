@@ -1,7 +1,8 @@
 # Start here — what to work on, and what to read first
 
 [Architecture](../architecture.md) · [Roadmap](../scaling-roadmap.md) ·
-[Development](development.md) · [Verification](verification.md)
+[Development](development.md) · [Verification](verification.md) ·
+[Product gaps](../product-gaps.md)
 
 This page exists because of the bar in [development.md](development.md): **a
 less advanced model must be able to contribute a correct change.** That is
@@ -257,6 +258,13 @@ Run `make docs-check` after any doc edit: it regenerates
 **Out of scope** (do not start these; they are decisions, not tasks): C1
 relaxed coherence; a pressure-triggered directory-spread bound (the bound is
 unspecified); cutover of a 36T `efs-test`; any new REPORT or SNAP wire shape.
+
+**Bigger than this queue.** [product-gaps.md](../product-gaps.md) inventories
+what is missing before efs is a filesystem anyone could run — including three
+things that contradict a guarantee the spec already makes (no fragment repair,
+no protection-debt tracking, no session/fencing on the client). Those are not
+queue items; each needs a design decision first. Do not start one without
+asking, and do not treat the queue above as the whole distance to a product.
 
 Everything the §10 steps delivered (10.5c-1..35d, step 11's deletion of the old
 engine, step 12 parts A–D) is landed and gated; the per-increment narrative is

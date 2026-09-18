@@ -1,0 +1,36 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 178
+  EFS BUGS         : 18  (baseline PASS, target FAIL)
+  both fail (match): 1
+  target better    : 4
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  concurrent_appends               [FAIL] all appends landed (O_APPEND atomic): got 190, want 200
+  concurrent_appends_two_proc      [FAIL] two-process O_APPEND all landed: got 115, want 120
+  dir_deep_nesting                 [FAIL] timeout after 15s
+  dir_deep_nesting_beyond_64       [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-by79q6s1/dir_deep_nesting_beyond_64/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d'
+  dir_nlink_after_rmdir_child      [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-by79q6s1/dir_nlink_after_rmdir_child/p'
+  dir_rename_dir_with_contents     [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-by79q6s1/dir_rename_dir_with_contents/src' -> '/tmp/efs-mount/posix-fcstor007-by79q6s1/dir_rename_dir_with_contents/dst'
+  err_hardlink_to_dir              [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-by79q6s1/err_hardlink_to_dir/sub'
+  err_read_from_dir                [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-by79q6s1/err_read_from_dir/sub'
+  mmap_write_read                  [SKIP] mmap unsupported: [Errno 19] No such device
+  names_crazy_dirs                 [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-by79q6s1/names_crazy_dirs/with space'
+  names_near_path_max_dir          [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-by79q6s1/names_near_path_max_dir/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  names_path_too_long              [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-by79q6s1/names_path_too_long/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  perm_dir_wx_no_r                 [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-by79q6s1/perm_dir_wx_no_r/sub'
+  perm_rename_into_readonly_dir    [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-by79q6s1/perm_rename_into_readonly_dir/src'
+  rename_dir_same_parent           [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor007-by79q6s1/rename_dir_same_parent/old' -> '/tmp/efs-mount/posix-fcstor007-by79q6s1/rename_dir_same_parent/new'
+  rename_empty_over_empty_dir      [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-by79q6s1/rename_empty_over_empty_dir/a'
+  symlink_relative_after_parent_rename [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-by79q6s1/symlink_relative_after_parent_rename/a'
+  symlink_to_dir                   [FAIL] FileExistsError: [Errno 17] File exists: '/tmp/efs-mount/posix-fcstor007-by79q6s1/symlink_to_dir/realdir'
+
+--- target passes where baseline fails ---
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             
+
+--- both fail (behaviour matches baseline) ---
+  dir_mkdir_umask                  base=FAIL target=FAIL

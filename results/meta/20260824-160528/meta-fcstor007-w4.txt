@@ -1,9 +1,0 @@
-bench meta seed=172.16.223.57:19810 export=efs-test id=1 files=5000 dirs=64 workers=4 size=0 phases=0xff keep=0
-BENCH_OK kind=meta phase=mkdir rw=write ops=64 wall_s=0.003 ops_s=25229.9 workers=4 fail=0
-BENCH_OK kind=meta phase=create rw=write ops=5000 wall_s=4.090 ops_s=1222.5 workers=4 fail=0
-BENCH_OK kind=meta phase=stat rw=read ops=5000 wall_s=0.068 ops_s=74031.4 workers=4 fail=0
-BENCH_OK kind=meta phase=getattr rw=read ops=1250 wall_s=0.019 ops_s=66718.6 workers=4 fail=3750
-BENCH_OK kind=meta phase=readdir rw=read ops=5000 wall_s=0.811 ops_s=6162.5 workers=4 fail=0
-BENCH_OK kind=meta phase=setattr rw=write ops=10000 wall_s=4.132 ops_s=2420.0 workers=4 fail=0
-BENCH_OK kind=meta phase=rename rw=write ops=10000 wall_s=0.063 ops_s=159194.3 workers=4 fail=0
-BENCH_OK kind=meta phase=unlink rw=write ops=5000 wall_s=5.370 ops_s=931.2 workers=4 fail=0

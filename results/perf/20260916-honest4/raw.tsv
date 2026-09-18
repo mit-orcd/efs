@@ -1,0 +1,3 @@
+test	clients	host	bw_mib_s
+sw-1m	1	fcstor007	FAIL
+sw-1m	1	AGG	0

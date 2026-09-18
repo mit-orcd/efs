@@ -1,8 +1,0 @@
-BENCH_OK kind=meta phase=mkdir rw=write ops=64 wall_s=0.001 ops_s=50153.8 workers=1 fail=0
-BENCH_OK kind=meta phase=create rw=write ops=5000 wall_s=43.078 ops_s=116.1 workers=1 fail=0
-BENCH_OK kind=meta phase=stat rw=read ops=5000 wall_s=22.398 ops_s=223.2 workers=1 fail=0
-BENCH_OK kind=meta phase=getattr rw=read ops=5000 wall_s=0.076 ops_s=65781.1 workers=1 fail=0
-BENCH_OK kind=meta phase=readdir rw=read ops=5000 wall_s=0.011 ops_s=457464.1 workers=1 fail=0
-BENCH_OK kind=meta phase=setattr rw=write ops=10000 wall_s=2.749 ops_s=3637.8 workers=1 fail=0
-BENCH_OK kind=meta phase=rename rw=write ops=10000 wall_s=2.981 ops_s=3354.2 workers=1 fail=0
-BENCH_OK kind=meta phase=unlink rw=write ops=5000 wall_s=210.913 ops_s=23.7 workers=1 fail=0
