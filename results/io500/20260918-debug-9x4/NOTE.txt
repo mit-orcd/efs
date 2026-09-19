@@ -1,0 +1,57 @@
+IO-500 debug 9 hosts x 4 ranks (36 ranks), stonewall 1 s (INVALID vs 300 s).
+Not a list submission. FUSE_OK + TCP on 007-015. Same ini as 9x1
+(tests/perf/io500/config-debug.ini, mdtest on, find off, rnd4K off).
+Driver: $HOME/orcd/scratch/efs-io500/io500 02091cf254d8-13.
+result-dir on mount: /tmp/efs-mount/io500-results/2026.09.18-18.37.39
+Cluster: 19810 with the salt + Raft snapshot fixes (43e3e4e), apply-idle
+at start, EFS_RAFT_DBG on.
+
+OUTCOME: hard-write DID NOT COMPLETE. Killed after 2h18m in-phase.
+Completed phases (from result.txt / phase .txt on the mount):
+
+| phase | 9x4 score | 9x1 score | ratio |
+| ior-easy-write | 0.415283 GiB/s (103.2 s) | 0.263372 | 1.58x for 4x ranks |
+| mdtest-easy-write | 0.028519 kIOPS (11.8 s) | 0.053199 | 0.54x - WORSE |
+
+ior-easy-write detail: stonewall pairs min 1020 / max 1109 (~1.0 GiB/rank
+in the 1 s window = dcache absorption), actual bytes moved 41.86 GB of the
+618.5 GB full target. Per-rank 11.8 MiB/s (9x1: 29 MiB/s).
+
+ior-hard-write (shared file, 47008 B transfers, target 157.61 GiB):
+- 2h18m without finishing; file reached >= 22.6 GiB and was still growing
+  slowly when killed. 9x1 finished the same phase in 330 s (6.3 GiB).
+- Aggregate write rate ~7.5 MiB/s (9x1: 26 MiB/s) - 3.5x SLOWER with 4x
+  ranks. This is the W4 "writes share a ceiling, more clients worse"
+  finding in its most extreme form: 36-way CAS contention on the same
+  128 KiB chunks (sub-chunk RMW) + the fsync tail.
+- Client fuse.log fsync-split on the shared file: report_ms 58,735 -
+  443,713 (1-7.4 min per fsync report), all rc=0. flush_ms 0.3-8.7 s.
+  The wall is the REPORT/publication side, not the local flush.
+- One `fsync-meta: stale generation (efs_rc=-14) ino=7993` observed
+  (W1 audible STALE under fsync; retried, later fsyncs rc=0).
+- Straggler ranks sit D-state in fuse_direct_write_iter / fuse_flush
+  while finished ranks spin in PMPI_Barrier (OpenMPI busy-wait = the
+  60-90% CPU seen on done clients - not efs work).
+- efs-fuse stays nearly idle (7% CPU): the fsync thread blocks in
+  pull_chunks_range recv() (W1 refetch+overlay before report) while the
+  queued writes for the same ino wait behind it.
+
+RAFT LAYER NEVER THE BOTTLENECK: commit==applied on both groups for the
+whole run (sampled every few min), term stable (74/66), no elections, no
+snapshot traffic after the fcstor005 catch-up. Apply rate ~1 entry/s
+during the grind = the clients simply were not proposing more.
+
+HARNESS BUGS BIT THIS RUN (fix before any long rerun):
+1. run.sh launches prterun in the foreground over ssh - the wrapper's
+   EFS_SSH_TIMEOUT (1800 s here) killed the capture session at 30 min.
+   The JOB kept running (prterun survives), but driver stdout
+   (the [RESULT] lines) is lost. Detach: setsid + log to NFS, or
+   `run.sh collect`. result.txt/phase files on the mount survive, so
+   only the console log is gone (driver.log here ends at 30 min).
+2. A `timeout 8 gdb -p <rank>` whose ssh died mid-attach left the rank
+   T-stopped; a later SIGCONT let a pending fatal signal land and the
+   rank went zombie -> the phase barrier could never complete. Do NOT
+   gdb-attach an MPI rank mid-run through a timeout'd ssh.
+
+Leftover D-state io500 ranks (SIGKILL pending, in fuse_flush) exit as
+efs-fuse drains their final flushes; no efs-fuse/efsd restart needed.

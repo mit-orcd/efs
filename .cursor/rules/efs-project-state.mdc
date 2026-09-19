@@ -210,7 +210,43 @@ heartbeats (`rc=-15`). Gate
 hard-write 0.025 GiB/s, mdtest-easy-write 0.053 kIOPS; IOR-hard `-W`
 4244 errors. 30s ior aborted on fsync EIO /
 `nrec=125000` BUSY (`results/io500/20260918-ior-30s-abort/`). 9×4
-debug still open; wait for apply idle first).
+debug rerun (`results/io500/20260918-debug-9x4/`): easy-write
+**0.415 GiB/s** (1.58× 9×1), mdtest-easy-write **28.5/s** (0.54× —
+worse), **hard-write DID NOT FINISH in 2h18m** (36-way CAS contention
+on shared 128 KiB chunks; fsync report_ms 58 s–443 s, one 85-min
+report lost STALE rc=-14; ~7.5 MiB/s aggregate vs 26 at 9×1). Raft
+never the bottleneck (commit==applied, terms stable throughout).
+W6 gate "hard -W mismatches = 0" unreachable until the shared-file
+write tail is fixed. Harness bugs found: run.sh foreground prterun
+dies with the ssh timeout (detach + log to NFS instead); never
+gdb-attach an MPI rank through a timeout'd ssh (left a rank
+T-stopped, job unrecoverable).
+
+**SALT DIVERGENCE + RAFT SNAPSHOT CATCH-UP FIXED (Sep 18 PM, commit
+43e3e4e).** Three production bugs, all gated: (1) **export salt
+diverged across nodes** — `host_export_salt` was computed locally, so
+dir placement (`hash(parent,name,salt)`) disagreed between nodes and
+hashed lookups missed. `EFS_MD_CMD_SALT` now replicates the salt
+through Raft at mkfs; readers fall back to the anchor. (2) **A
+restarted Raft leader could never serve InstallSnapshot** — the
+snapshot blob is memory-only; after a restart `snap_idx`/`snap_term`
+reload from disk but the blob is gone, so the leader sent an 8-byte
+metadata-only SNAP that `efs_kv_group_import` rejects (PROTO), and the
+follower starved forever. `send_snap` now re-exports the app state at
+`last_applied` on demand (pump-serialized, so consistent; regression
+`test_install_snapshot_restarted_leader`). (3) **`disk_save_snap`
+rejected skip-ahead snapshots** — `last_index - snap_idx > n` → INVAL,
+which is exactly InstallSnapshot onto a behind follower; the in-memory
+`raft_group_snap` and the replay path already clamped that case, only
+the live save path had the stale guard. Removed (backwards snaps still
+INVAL); disk/mem parity case in `test_raft_store`. Found live:
+fcstor005 stuck at applied=249 after a rolling restart of the
+compacted leader; after the fix it installed `incl=512` and caught up
+in seconds. `on_snap_req` save_snap failures now log under
+`EFS_RAFT_DBG` (they were silent, no reply sent). Gates: test_raft /
+test_raft_store / test_wire / test_txn / test_sim OK on fcstor003;
+live 19810 restart all-4, group 0 applied=512 and group 2 applied=303
+on every voter, term stable under IO-500 load.
 
 **HPC REVIEW LANDED IN THE ROADMAP (Sep 18).** START-HERE §1a queue:
 W1–W5 done. **W6 IN PROGRESS** (9×1 debug + hard `-W` 4244 errors;
