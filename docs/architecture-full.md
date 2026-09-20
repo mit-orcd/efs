@@ -1293,7 +1293,7 @@ sends you to — not the whole spec.
 
 ### 1. The task right now
 
-**Where the project is (Sep 18 2026).** [architecture.md §10](#architecture)
+**Where the project is (Sep 20 2026).** [architecture.md §10](#architecture)
 steps 0–12 are **all landed and gated**: simulator, KV, Raft, cross-shard
 txns, sessions, directory spread (including populated leftover migrate as a
 2-shard txn), delete-2PC, and FUSE A–D. LOCAL dirs auto-begin SPLITTING when
@@ -1306,17 +1306,71 @@ item payload (`kv_snap.c`), not a new dump format.
 
 **So there is no next §10 step.** What is left is the work queue in
 [§1a](#1a-the-work-queue) — measured gaps, in the order they should be taken.
-**Current item: W6** (W1–W5 are done). Take the lowest-numbered item
-that is not marked done; correctness items (W1–W2) come before every
-performance item. Each item names what to change,
-how to measure it, what proves it, and what is forbidden. If an item
-needs a decision the spec does not contain, **stop and ask** (§4); several
-items below are blocked on exactly that and say so.
+**W1–W5 done; W6 correctness gate met Sep 20** (its three open sub-items
+are performance and each needs a user decision — see W6). Take the
+lowest-numbered item that is not marked done; correctness items come before
+every performance item. Each item names what to change, how to measure it,
+what proves it, and what is forbidden. If an item needs a decision the spec
+does not contain, **stop and ask** (§4); several items below are blocked on
+exactly that and say so.
 
 **The one live cluster is port 19810** on fcstor003–006 (`/data1/01–06/efs`,
 `--quota 36T --direct-io`, TCP), clients fcstor007–015 at `/tmp/efs-mount`.
 19820 is retired. Do not `wipe_cluster.sh`, `pkill -x efsd`, or `raft-mkfs`
-without being asked — several items below run on the existing data.
+without being asked — several items below run on the existing data. Before
+touching the cluster, run the **pre-flight** in the fcstor deploy rule
+(`.cursor/rules/efs-fcstor-deploy.mdc`).
+
+#### 1b. In flight — finish this before taking a queue item
+
+Whoever picks the project up next does **this first**; it is mechanical and
+the code is already unit-gated. Update or delete this block when done — an
+"in flight" block older than the last commit is a bug in this page.
+
+**State as of Sep 20 08:00 (verified by probe, not memory):**
+
+- Uncommitted code in the working tree (on top of `cc828d8` + the Sep 20
+  docs/rules split commit):
+  - `src/meta/meta_apply.c` — `alloc_key_claim`: a log-path CREATE / MKDIR
+    alloc is `BUSY` while a txn holds an `EXCL` intent on the shard ALLOC
+    key, and bumps that key's version so an outdated txn PREPARE is
+    `STALE`. Closes the second allocator race (log path vs cross-group
+    mkdir / hashed create; posix `names_*` `cafeé` + `aaaa…` → one ino
+    4746, `cwi-fail: ino_dup`). Gate `tests/test_meta_apply.c`
+    `test_alloc_vs_txn_intent`. `test_meta_apply` / `test_sim` /
+    `test_txn` / `test_wire` **OK on fcstor003**.
+  - `src/client/read.c`, `src/client/ops.c`, `src/client/client_internal.h`
+    — a read whose layout pull fails now **fails** instead of zero-filling;
+    `pull_chunks_range` returns the first RPC error; `pull_layout_miss` has
+    a 200 ms range cache instead of a 1/s rate limit. Built into `efs-fuse`
+    on **fcstor007 only**; 008–015 run the pre-change client. The Sep 20
+    0-error IO-500 result did NOT include this change (server fix alone).
+- `efsd` + `efs-mgmt` built at `/tmp/efs` on fcstor003–006 from this tree
+  (`cc828d8-dirty`) but **not started**; all four servers are still running
+  `a9e94a63f880-dirty`. Because the build ID changed, a rolling restart is
+  rejected by the HELLO gate — **stop all four, then start all four**
+  (unwiped storage: no `--join`).
+
+**Steps:**
+
+1. Pre-flight (deploy rule). Expect `pgrep -x efsd` = 1 on each of 003–006
+   and `build=a9e94a63f880-dirty` in `/tmp/efs/efsd.log`.
+2. `pkill -9 -x efsd` on all four; confirm 0 each. Then start all four with
+   the exact command in the deploy rule ("Restart one efsd"), node-id 1–4 =
+   fcstor003–006, no `--join`. `./efs-mgmt raft-status 172.16.223.57:19810`
+   from fcstor003 until group 0 and group 2 each show one leader and
+   `commit == applied` on every voter.
+3. On fcstor007: `EFS_TRANSPORT=tcp bash tests/run_tests.sh posix fcstor007.ib`
+   (jobs=1). Gate: no `ino_dup` line in any efsd.log, no `names_*` dangling
+   dentry, and the suite at or above **195/201** with only the known
+   signature (`dir_deep_nesting*` / `dir_many_files` / `names_crazy_dirs`
+   15 s walks, `mmap_write_read` SKIP, `concurrent_writes_disjoint` flake).
+4. Build + remount `efs-fuse` on 008–015 (deploy rule "Restart one
+   efs-fuse") so every client carries the read.c change; re-run the 9×4
+   IO-500 debug once (`SLOTS=4 NP=36 bash tests/perf/io500/run.sh debug`)
+   and confirm 0 `-R` errors still. Copy `result.txt` + ini to
+   `results/io500/<id>/`.
+5. Commit code + rules + this file with the result directories cited.
 
 ---
 
@@ -1362,7 +1416,7 @@ verified `fuse.efs-fuse`):
 | prior 1-client 9×2g sw-1m | 924 MiB/s | `hot-sw-1m-9job-fcstor007.txt` |
 | first honest matrix, 1 client | sw-1m 209 · … · sr-1m 3141 | `results/perf/20260917-honest/` |
 | per-host local NVMe ceiling | 16.7–21.4 GB/s | `results/nvme/` |
-| IO-500 IOR / mdtest | 9×1 debug + hard `-W` | `results/io500/20260918-debug-9x1/` · `-W` 4244 errors; 30s / 9×4 still open |
+| IO-500 9×4 debug | easy-write **0.814 GiB/s**, hard-write 0.044, reads 0 errors | `results/io500/20260920-debug-9x4/` (W6) |
 
 **Never quote intra-job fio write samples or `dd` progress lines** — those are
 pre-flush and read several GiB/s. The number is bytes ÷ wall with the flush
@@ -1478,106 +1532,66 @@ healthy; do not treat EIO as a reason to raise `EFS_IO_TIMEOUT_MS`.
 - **Forbidden to reopen:** raising `EFS_IO_TIMEOUT_MS`; splitting REPORT
   without asking.
 
-##### W6 — Run IO-500 (IOR easy, IOR hard, mdtest) — IN PROGRESS
+##### W6 — Run IO-500 (IOR easy, IOR hard, mdtest) — CORRECTNESS DONE, perf residuals open
 
-9×1 debug (stonewall 1 s, INVALID vs 300 s) and IOR-hard `-W` are in
-`results/io500/`. Not a list submission. mdtest is on in both harness
-inis; `ior-rnd4K-easy-read` is off (blocksize==xfer abort).
-`timestamp-datadir = TRUE` (leftover names after a hung run made IOR
-O_EXCL EEXIST).
+**Correctness gate met Sep 20 2026** (commit `cc828d8`, servers
+`708b350`+, TCP, 9 clients × 4 ranks): 9×4 debug
+`results/io500/20260920-debug-9x4/` — **every phase finished, ior-easy-read
+and ior-hard-read 0 verification errors, every unlink OK**. The path from
+the Sep 18 numbers (hard-write DNF in 2 h 18 m, `-W` 4244 errors, 76108
+easy-read errors, 27 undeletable files) to this is in
+[../project-history.md](../project-history.md) "W6"; the fixes were: client
+STALE retry cost + server partial-commit on STALE (hard-write livelock);
+`dcache_image_current` / `snap_seq` ordering / forwarded-cmd reply index
+(read coherency, `concurrent_appends`); Raft follower dedupe + leader AE
+flow control (005 catch-up); **duplicate ino on concurrent CREATE**
+(`alloc_hint_or_next` — apply is the allocator); reaper `lane-sweep`
+batch-full misread as error (no file >8 MiB/lane was ever reclaimed).
 
-**Landed 9×1 debug** `results/io500/20260918-debug-9x1/` (FUSE_OK TCP
-007–015). Writes include IOR `-e`. Reads are same-mount (dcache). Do
-not quote stonewall intra GiB/s.
-
-| phase | score | wall s |
+| phase | Sep 20 9×4 | Sep 18 9×1 |
 | --- | --- | --- |
-| ior-easy-write | 0.263372 GiB/s | 70.2 |
-| mdtest-easy-write | 0.053199 kIOPS | 4.1 |
-| ior-hard-write | 0.025414 GiB/s | 329.6 |
-| mdtest-hard-write | 0.026383 kIOPS | 3.6 |
-| ior-easy-read | 0.599981 GiB/s (`-R` 512 errors) | 25.4 |
-| mdtest-easy-stat | 0.360392 kIOPS | 1.6 |
-| ior-hard-read | 1.264556 GiB/s (`-R` 15982 errors) | 5.8 |
-| mdtest-hard-stat | 0.779457 kIOPS | 1.4 |
-| mdtest-easy-delete | 0.069133 kIOPS | 3.4 |
-| mdtest-hard-read | 0.035378 kIOPS | 2.4 |
-| mdtest-hard-delete | 0.097743 kIOPS | 1.9 |
+| ior-easy-write | **0.814 GiB/s** | 0.263 |
+| ior-hard-write | 0.044 GiB/s (495 s) | 0.025 (9×4: DNF) |
+| ior-easy-read | 1.80 GiB/s, 0 errors | 0.60 (`-R` 512 errors) |
+| ior-hard-read | 3.55 GiB/s, 0 errors | 1.26 (`-R` 15982 errors) |
+| mdtest-easy-write | 0.050 kIOPS | 0.053 |
 
-hard/easy write = **0.097**. Easy write 0.26 GiB/s vs 9-client 8g
-dd+fsync 0.20 GiB/s (same order; 0.6 % of 44 GB/s). First
-ior-hard-write hung D-state (`20260918-debug-hung-hard/`, 26k-rec
-STALE REPORT); remounted retry finished.
+Not a list submission (stonewall 1 s). Do not quote the Sep 19 easy-read
+4.0 GiB/s — it was zero-fill. Do not quote stonewall intra GiB/s.
 
-**IOR-hard `-W`** `results/io500/20260918-hard-w/`: 13.08 MiB/s,
-583 s, **4244 incorrect-data errors**, IOR exit 40. Gate
-mismatches=0 is FAIL. Do not retune 47008. Do not invent a chunk lock.
+**Open under this item (performance, not correctness):**
 
-**30 s ior 9×1 aborted** `results/io500/20260918-ior-30s-abort/`:
-ior-easy-write fsync/close EIO at 545 s; `report-split nrec=125000
-rc=-13` (BUSY) on fcstor004, then apply-publish STALE (`rc=-14`) at
-88 % CPU. Same class as loaded 50g `end_fsync` EIO. Do not raise
-`EFS_IO_TIMEOUT_MS`. 1 s easy-write fsyncs; 30 s (~125k pubs) does
-not.
+1. **ior-hard-write 45 MiB/s** — 36-way N-1 CAS on 47008 B records
+   sharing 128 KiB chunks; every fsync replays the losers. Spec answer is
+   [protocols/data.md](protocols/data.md) sub-chunk RMW = generation CAS;
+   the small-write envelope ([architecture.md §9](#architecture))
+   says immutable delta objects are the designed escape, **not built until
+   benchmarks demand** — this benchmark demands it, so bring the measured
+   number to the user before building anything.
+2. **1 GiB open costs 20 s of a 22 s easy-read** — 128 sequential
+   GETCHUNKS + a 64-lane stat per open. Spec §8 per-lane range fetch
+   ([performance.md](performance.md)) is the fix; not implemented.
+3. 7/36 mdtest `rmdir` transient ENOTEMPTY under load (clean seconds
+   later) — same-parent txn STALE family; the client retries STALE only
+   for CREATE (see history "same-parent concurrent mkdir EIO").
 
-**Cluster RESET (Sep 18 PM, user-authorized).** The 30 s abort left a
-self-draining STALE backlog (~1.2 entries/s, term flapping, hours to
-drain) and fcstor005 430k entries behind on group 2 (W11 oversized
-SNAP — can never catch up). The table was wiped and `raft-mkfs`'d
-fresh. Gotcha now fixed in `clean_cluster.sh`: mkfs proposes only to
-group 0, so it must go to group 0's CURRENT leader; `rc=-15
-leader_hint=H` means retry on node H+1 (`172.16.223.(57+H)`).
-
-**FOUND + FIXED (Sep 18 PM): same-parent concurrent mkdir EIO.**
-9×4 mdtest-easy aborted: 8/36 `mdtest_tree.N.0` mkdirs failed EIO
-(9×1 passed). Repro: 36-way same-parent mkdir across 4 clients →
-~5/36 EIO in 2.9 s (fast fail, not BUSY-retry exhaustion). Server
-`EFS_RAFT_DBG` mkdir line: `rc=-13/-14 stage=11` — the cross-group
-mkdir txn (MKDIR scatters the child, so every mkdir with an
-even-shard child is a 2-group txn) CASes the parent-row + dseq
-versions; the two dual-hosts (004/005) race, one commits, the other
-preps STALE. The client RPC loops retried BUSY/NOT_PRIMARY but NOT
-STALE → `fuse_create_errno` → EIO. Fix (client `inode_rpc.c`):
-`EFS_INODE_RPC_STALE` retried like BUSY for `EFS_MSG_INODE_CREATE`
-only (idempotent unique name; a landed retry reads as EEXIST, which
-FUSE already handles). REPORT_CHUNKS keeps its STALE (W1
-refetch+overlay). Gate: 36/36 then 90/90 same-parent mkdirs, 83
-STALE/BUSY conflicts absorbed on 004 alone, 0 errors. Same exposure
-exists for cross-group UNLINK/RENAME/LINK txns — not measured, not
-fixed. **Deeper fix (not done):** the parent-row nlink++/dseq++/
-times should be commutative txn reductions (spec §7.2), not an EXCL
-row CAS — that removes the same-parent mkdir serialization point
-entirely instead of retrying it.
-
-**Fresh-cluster 9×4 (Sep 18 PM):** ior-easy-write **1.34 GiB/s**
-(39.7 s) — 5× the poisoned-table 9×1. mdtest/reads/hard: see
-`results/io500/<new id>/` when landed.
-
-**W11 is every-run, not edge:** `snapshot skipped ... KV export
-exceeds SNAP cap` fires as soon as real data flows (ior-easy-write
-≈ 400k chunk pubs ≈ 40 MB KV > 4 MiB cap), so a data-bearing
-cluster NEVER compacts its raft log → any follower restart = full
-log replay, and a lagged follower is permanent (what killed 005).
-
-**Still open (this item):**
-1. `SLOTS=4 NP=36 bash tests/perf/io500/run.sh debug` (1 s
-   stonewall) — RUNNING on the fresh cluster. `findmnt`
-   `fuse.efs-fuse` on every rank. Copy ini+hostfile+result.txt to
-   `results/io500/<id>/`.
-2. Confirm every rank stayed FUSE (no local-disk fallback).
-   Another 30 s `run.sh ior` will hit the same fsync EIO until
-   REPORT can take 125k pubs.
+Harness (`tests/perf/io500/run.sh`): `SLOTS=4 NP=36 … debug` detaches
+`prterun` and logs to `$IO500_DIR/last-run.log` (the ssh timeout used to
+kill it); `ior-easy-write|verify <mb>` and `ior-hard-write|verify <segs>`
+run IOR directly so a cold verify is possible (the io500 driver deletes
+its data at the end of a run).
 
 - **Read:** `tests/perf/io500/README.md`; the fio rule's FUSE check
   applies to every rank.
-- **Gate:** 9×1 debug is in; 30 s + 9×4 still required. `-W`
-  mismatches are **4244**, not 0 — record that, do not hide it, do
-  not reopen W1 with a lock.
+- **Gate (met):** 9×4 debug with 0 `-R` errors on both reads. For the
+  three open sub-items the gate is the number in the table moving with
+  the same harness and 0 errors kept.
 - **Forbidden:** quoting a rank that fell back to local disk; tuning
-  IOR's transfer size (47008 is the point); `pkill -f` (matches the
-  agent). Kill hung `io500` with `pkill -9 -x io500` then remount
-  FUSE (D-state `request_wait_answer` ignores SIGKILL until
-  `efs-fuse` dies).
+  IOR's transfer size (47008 is the point); a chunk lock (W1); `pkill -f`
+  (matches the agent). Kill hung `io500` with `pkill -9 -x io500` then
+  remount FUSE (D-state `request_wait_answer` ignores SIGKILL until
+  `efs-fuse` dies). Never gdb-attach an MPI rank through a timeout'd ssh
+  (left a rank T-stopped, job unrecoverable).
 
 ##### W7 — Two POSIX suite-1 tests exceed the 15 s budget even in isolation
 

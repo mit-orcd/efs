@@ -5,6 +5,51 @@ alwaysApply: true
 
 # efs deployment on the fcstor test cluster
 
+## Pre-flight — run this BEFORE any command that touches the cluster
+
+Every step is read-only and takes seconds. Skipping one of these is how
+every "mysterious" failure in this project's history started (dead mount
+read as data loss, stale binary, mixed build IDs, agent killed its own
+ssh). Record the answers before you act.
+
+1. **Is the shell alive?** `echo alive; date`. If a `Shell` call returns
+   "no exit status", the execution environment is dead — nothing you
+   issue from then on can be trusted to have run. Stop, tell the user to
+   restart the environment, and re-probe state from scratch afterwards
+   (do NOT assume the last command ran or did not run).
+2. **Servers:** on each of fcstor003–006:
+   `pgrep -x efsd | wc -l; grep -o "build=[^ ]*" /tmp/efs/efsd.log | head -1`.
+   Expect `1` and the same build string on all four. Different strings =
+   the build-ID gate will reject a rolling restart; a `0` = that node is
+   down (check the log tail for the crash before restarting anything).
+3. **Build ID of what you are about to deploy:** `git rev-parse --short=12 HEAD`
+   + `-dirty` if `git status --short | grep -v '^??'` is non-empty. If it
+   differs from step 2 → stop all four, then start all four (no rolling).
+4. **Raft health:** from fcstor003
+   `cd /tmp/efs && ./efs-mgmt raft-status 172.16.223.57:19810` — each hosted
+   group has one leader, `commit == applied`. `efs-mgmt` lives only where it
+   was built (`make efs-mgmt`); a `rsync --delete` of the tree removes it.
+5. **Clients:** on every client you will use:
+   `findmnt -o FSTYPE /tmp/efs-mount` must print `fuse.efs-fuse` AND
+   `stat /tmp/efs-mount/ >/dev/null && echo MOUNT_OK`. `findmnt` alone
+   passes on a "Transport endpoint is not connected" corpse. Also
+   `pgrep -x efs-fuse | wc -l` = 1 and `grep -o "build=[^ ]*" /tmp/efs/fuse.log`
+   is the client build you expect.
+6. **Leftover load:** `pgrep -x io500; pgrep -x ior; pgrep -x fio;
+   pgrep -x python3 | wc -l` on the clients. A D-state rank from a killed
+   run wedges the next MPI job's wire-up and inflates every number.
+7. **Approval mechanics:** cluster-mutating commands (kill/start daemons,
+   remount, parallel builds) are pre-authorized by the user but are
+   routinely blocked by auto-review. That is expected: retry the exact same
+   `Shell` call with `request_smart_mode_approval=true` and the verbatim
+   block reason. Do not weaken or split the command to dodge the block, and
+   do not treat the block as a reason to skip the step. If the approval
+   retry itself errors ("Could not find bubble"), re-issue once; if the
+   shell then goes silent, that is step 1.
+8. **Never `pkill -f` / `pgrep -f`** on anything here — the pattern matches
+   your own ssh command line. `-x` exact names only (`efsd`, `efs-fuse`,
+   `io500`, `ior`).
+
 **STEP 11 (Sep 11 2026): the Raft+KV engine is the ONLY metadata engine.**
 The old whole-table snapshot / CoW page flush / 2PC root commit machinery is
 DELETED from the tree (commits 94c4c15..f5c4390). Operationally:
@@ -15,9 +60,9 @@ DELETED from the tree (commits 94c4c15..f5c4390). Operationally:
   `EFS_MKFS_SHARD_BITS`, no build-id-gated rolling restart of metadata
   state (the KV/raft state lives under `<storage>/mdraft/` per node; a
   node rejoins by catching up from the group).
-- Old-engine operational lore below (2PC commit, CoW pages, GC races,
-  `meta-rebuild`, shard tabs, `EFS_INO_RAM_MB`, extras catchup) describes
-  DELETED code — kept for history only.
+- Old-engine operational lore (2PC commit, CoW pages, GC races,
+  `meta-rebuild`, shard tabs, `EFS_INO_RAM_MB`, extras catchup) lives in
+  `docs/project-history.md` and describes DELETED code.
 - **The only live cluster is port 19810** on fcstor003–006
   (`/data1/01–06/efs`, `--quota 36T --direct-io`). The 19820
   `/tmp/efs-raft-scratch` cluster is retired — `wipe_cluster.sh`
