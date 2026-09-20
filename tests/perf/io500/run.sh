@@ -11,6 +11,8 @@
 #   tests/perf/io500/run.sh dry-run debug    # print io500 argv only
 #   tests/perf/io500/run.sh ior-hard-write <segs>   # raw IOR hard geometry, -k keep
 #   tests/perf/io500/run.sh ior-hard-verify <segs>  # -r -R the same file (cold-remount first)
+#   tests/perf/io500/run.sh ior-easy-write <mb>     # raw IOR easy geometry (file-per-proc), -k keep
+#   tests/perf/io500/run.sh ior-easy-verify <mb>    # -r -R -C -Q 1 (rank reads a file from 2 nodes away)
 #
 # Env:
 #   IO500_DIR   build tree (default $HOME/orcd/scratch/efs-io500)
@@ -155,9 +157,48 @@ launch_ior_hard() { # write|verify segments
         echo \"started ior-hard $mode segs=$segs; log: $IO500_DIR/last-run.log\""
 }
 
+# Same for ior-easy geometry (file-per-proc, 1 MiB transfers, -C -Q 1 so
+# rank i reads the file rank i+2*slots wrote on another node). <mb> is the
+# per-rank file size in MiB.
+IOR_EASY_DIR=${IOR_EASY_DIR:-$EFS_MNT/io500/easyv}
+launch_ior_easy() { # write|verify mb
+    local mode=$1 mb=$2 flags
+    case "$mode" in
+        write)  flags="-w" ;;
+        verify) flags="-r -R" ;;
+        *) echo "run: launch_ior_easy write|verify" >&2; return 2 ;;
+    esac
+    remote "test -x '$SRC/bin/ior' || { echo 'run: missing $SRC/bin/ior' >&2; exit 1; }"
+    remote "grep -q 'efs-fuse $EFS_MNT ' /proc/mounts || { echo 'run: $EFS_MNT not mounted on $RANK0' >&2; exit 1; }"
+    remote "mkdir -p '$IOR_EASY_DIR'"
+    gen_hostfile "$SLOTS" > "$IO500_DIR/hosts"
+    remote "export LD_LIBRARY_PATH=\"\${LD_LIBRARY_PATH:-}\"
+        if ! { [ -f /tmp/efs-io500-agent.env ] && . /tmp/efs-io500-agent.env && ssh-add -l 2>/dev/null | grep -q efs-test; }; then
+            ssh-agent -s > /tmp/efs-io500-agent.env
+            chmod 600 /tmp/efs-io500-agent.env
+            . /tmp/efs-io500-agent.env
+            DISPLAY=\"\${DISPLAY:-:0}\" SSH_ASKPASS=\"\$HOME/.cursor/secrets/efs-test/askpass.sh\" \
+                setsid -w ssh-add \"\$HOME/.cursor/secrets/efs-test/id_ed25519\" </dev/null >/dev/null
+        else
+            . /tmp/efs-io500-agent.env
+        fi
+        cd '$SRC'
+        setsid $MPIRUN --hostfile '$IO500_DIR/hosts' -np $NP \
+        --prefix \"\$(dirname \"\$(dirname \"\$(command -v mpicc)\")\")\" \
+        -x PATH -x LD_LIBRARY_PATH \
+        --mca plm_rsh_agent '$HERE/mpi-ssh.sh' \
+        --mca plm_rsh_no_tree_spawn 1 \
+        ./bin/ior -a POSIX -F -C -Q 1 -g -G=271828 -k -e -t 1m -b ${mb}m \
+            $flags -o '$IOR_EASY_DIR/ior_file_easy' >'$IO500_DIR/last-run.log' 2>&1 </dev/null &
+        echo \"started ior-easy $mode mb=$mb; log: $IO500_DIR/last-run.log\""
+}
+
 case "$cmd" in
     ior-hard-write|ior-hard-verify)
         launch_ior_hard "${cmd#ior-hard-}" "${1:?segments}"
+        ;;
+    ior-easy-write|ior-easy-verify)
+        launch_ior_easy "${cmd#ior-easy-}" "${1:?mb}"
         ;;
     prereqs)
         remote "bash -s" <"$HERE/check-prereqs.sh"

@@ -234,6 +234,104 @@ static void test_alloc_skips_live(void)
     efs_kv_mem_free(kv);
 }
 
+/* Two proposers peek the same alloc watermark before either applies and
+ * both carry ino=want. The apply must not let the second overwrite the
+ * first's row (IO-500 ior-easy: 36 files, 10 distinct inos). Same log on
+ * two replicas must pick the same fallback ino. */
+static void test_create_log_at_dup_hint(void)
+{
+    struct efs_kv *a = efs_kv_mem_create();
+    struct efs_kv *b = efs_kv_mem_create();
+    efs_ino_t parent = 0, want = 0, f1 = 0, f2 = 0, g1 = 0, g2 = 0, d1 = 0,
+              d2 = 0;
+    struct efs_meta_row r;
+    struct efs_meta_dentry de;
+    uint32_t dsh, csh;
+    uint64_t salt = 0;
+
+    CHECK(a && b, "kv");
+    CHECK(efs_meta_apply_init(a, T0) == EFS_OK, "init a");
+    CHECK(efs_meta_apply_init(b, T0) == EFS_OK, "init b");
+    CHECK(efs_meta_apply_mkdir(a, &g_at, EFS_ROOT_INO, S_IFDIR | 0755, "p",
+                               &parent) == EFS_OK &&
+              parent,
+          "parent a");
+    CHECK(efs_meta_apply_mkdir(b, &g_at, EFS_ROOT_INO, S_IFDIR | 0755, "p",
+                               &g1) == EFS_OK &&
+              g1 == parent,
+          "parent b");
+    dsh = efs_kv_dentry_shard(parent, "f1", EFS_META_LAYOUT_LOCAL);
+    CHECK(efs_kv_dentry_shard(parent, "f2", EFS_META_LAYOUT_LOCAL) == dsh,
+          "same shard (LOCAL dir)");
+    CHECK(efs_meta_apply_peek_alloc(a, dsh, &want) == EFS_OK && want, "peek");
+    CHECK(efs_meta_apply_create_file_log_at(a, &g_at, parent, S_IFREG | 0644,
+                                            "f1", want, EFS_META_LAYOUT_LOCAL,
+                                            &f1) == EFS_OK &&
+              f1 == want,
+          "f1 takes hint");
+    CHECK(efs_meta_apply_create_file_log_at(a, &g_at, parent, S_IFREG | 0644,
+                                            "f2", want, EFS_META_LAYOUT_LOCAL,
+                                            &f2) == EFS_OK &&
+              f2 && f2 != f1,
+          "f2 dup hint gets a fresh ino");
+    CHECK(efs_meta_apply_lookup(a, parent, "f1", &de) == EFS_OK && de.ino == f1,
+          "f1 dentry intact");
+    CHECK(efs_meta_apply_get_inode(a, f1, &r) == EFS_OK && r.nlink == 1,
+          "f1 row intact");
+    CHECK(efs_meta_apply_lookup(a, parent, "f2", &de) == EFS_OK && de.ino == f2,
+          "f2 dentry");
+    /* replica parity */
+    g1 = g2 = 0;
+    CHECK(efs_meta_apply_create_file_log_at(b, &g_at, parent, S_IFREG | 0644,
+                                            "f1", want, EFS_META_LAYOUT_LOCAL,
+                                            &g1) == EFS_OK &&
+              g1 == f1,
+          "replica f1");
+    CHECK(efs_meta_apply_create_file_log_at(b, &g_at, parent, S_IFREG | 0644,
+                                            "f2", want, EFS_META_LAYOUT_LOCAL,
+                                            &g2) == EFS_OK &&
+              g2 == f2,
+          "replica f2 same fallback");
+    /* a stale hint BELOW the watermark (row already unlinked) must not be
+     * reused either — (ino, gen=1) would alias the dead file's GC/lease
+     * records */
+    CHECK(efs_meta_apply_unlink(a, parent, "f1", T0) == EFS_OK, "unlink f1");
+    CHECK(efs_meta_apply_create_file_log_at(a, &g_at, parent, S_IFREG | 0644,
+                                            "f3", f1, EFS_META_LAYOUT_LOCAL,
+                                            &g1) == EFS_OK &&
+              g1 && g1 != f1 && g1 != f2,
+          "stale hint below watermark not reused");
+    /* mkdir same-group fast path: same rule */
+    CHECK(efs_meta_apply_export_salt(a, &salt) == EFS_OK, "salt");
+    csh = efs_kv_mkdir_shard(parent, "d1", salt);
+    CHECK(efs_meta_apply_peek_alloc(a, csh, &want) == EFS_OK && want, "peek d");
+    CHECK(efs_meta_apply_mkdir_at(a, &g_at, parent, S_IFDIR | 0755, "d1", want,
+                                  EFS_META_LAYOUT_LOCAL, &d1) == EFS_OK &&
+              d1 == want,
+          "d1 takes hint");
+    {
+        /* mkdir scatters the child by name; find a sibling on d1's shard */
+        char dn[16];
+        int i;
+
+        for (i = 2; i < 100000; i++) {
+            snprintf(dn, sizeof(dn), "d%d", i);
+            if (efs_kv_mkdir_shard(parent, dn, salt) == csh)
+                break;
+        }
+        CHECK(i < 100000, "sibling on same child shard");
+        CHECK(efs_meta_apply_mkdir_at(a, &g_at, parent, S_IFDIR | 0755, dn,
+                                      want, EFS_META_LAYOUT_LOCAL,
+                                      &d2) == EFS_OK &&
+                  d2 && d2 != d1,
+              "d2 dup hint gets a fresh ino");
+    }
+    CHECK(efs_meta_apply_get_inode(a, d1, &r) == EFS_OK && S_ISDIR(r.mode),
+          "d1 row intact");
+    efs_kv_mem_free(a);
+    efs_kv_mem_free(b);
+}
+
 static void test_mkdir_log_at_matches(void)
 {
     struct efs_kv *have = efs_kv_mem_create();
@@ -2807,6 +2905,7 @@ int main(void)
     test_create_log_at_matches();
     test_alloc_skips_live();
     test_mkdir_log_at_matches();
+    test_create_log_at_dup_hint();
     test_i9();
     test_batch_fail();
     test_i16_durable();

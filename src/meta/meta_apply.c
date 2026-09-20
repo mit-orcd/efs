@@ -482,6 +482,46 @@ static int alloc_next_free(struct efs_kv *kv, uint32_t shard, efs_ino_t *ino,
     return EFS_ERR_NOMEM;
 }
 
+/* Log-path allocation with a proposer-chosen HINT. The host picks `want`
+ * on the proposing node from its APPLIED alloc watermark
+ * (efs_meta_apply_peek_alloc) and packs it into the CREATE command; two
+ * creates on one shard that peek before either applies (different voters,
+ * or a forwarded create racing the leader's own) carry the SAME ino. The
+ * old apply took `want` unconditionally, so the second PUT overwrote the
+ * first file's inode row under the same key: two names → one row, both
+ * writers publishing onto one ino (IO-500 ior-easy: 36 files, 10 distinct
+ * inos, 76108 read-verify errors), and the first unlink left the other
+ * name dangling NOT_FOUND. The apply is the allocator: honor the hint only
+ * if it is still unallocated (>= watermark AND no row — the row check
+ * covers a SNAP-lag rewound watermark), else take the next free ino.
+ * Deterministic on every replica of the group (same log, same shard
+ * state). Callers read the ino back from the dentry, never from the hint. */
+static int alloc_hint_or_next(struct efs_kv *kv, uint32_t shard,
+                              efs_ino_t want, efs_ino_t *ino,
+                              efs_ino_t *next_out)
+{
+    struct efs_meta_row row;
+    efs_ino_t next;
+    int rc;
+
+    if (efs_kv_inode_shard(want) != shard)
+        return EFS_ERR_PROTO;
+    rc = load_alloc(kv, shard, &next);
+    if (rc != EFS_OK)
+        return rc;
+    if (want >= next) {
+        rc = efs_meta_apply_get_inode(kv, want, &row);
+        if (rc == EFS_ERR_NOT_FOUND) {
+            *ino = want;
+            *next_out = want + (efs_ino_t)(1u << EFS_KV_SHARD_BITS);
+            return EFS_OK;
+        }
+        if (rc != EFS_OK)
+            return rc;
+    }
+    return alloc_next_free(kv, shard, ino, next_out);
+}
+
 static int load_window(struct efs_kv *kv, const struct efs_opid *op,
                        struct efs_opid_window *w)
 {
@@ -785,14 +825,9 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         dseq_lane = lay == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(name);
     }
     if (want_ino) {
-        rc = load_alloc(kv, shard, &next);
+        rc = alloc_hint_or_next(kv, shard, want_ino, &ino, &next);
         if (rc != EFS_OK)
             return rc;
-        ino = want_ino;
-        if (efs_kv_inode_shard(ino) != shard)
-            return EFS_ERR_PROTO;
-        if (next <= ino)
-            next = ino + (efs_ino_t)(1u << EFS_KV_SHARD_BITS);
     } else {
         rc = alloc_next_free(kv, shard, &ino, &next);
         if (rc != EFS_OK)
@@ -1039,14 +1074,9 @@ static int mkdir_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     dsh = efs_kv_dentry_shard(parent, name, lay);
     dseq_lane = lay == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(name);
     if (want_ino) {
-        rc = load_alloc(kv, csh, &next);
+        rc = alloc_hint_or_next(kv, csh, want_ino, &ino, &next);
         if (rc != EFS_OK)
             return rc;
-        ino = want_ino;
-        if (efs_kv_inode_shard(ino) != csh)
-            return EFS_ERR_PROTO;
-        if (next <= ino)
-            next = ino + (efs_ino_t)(1u << EFS_KV_SHARD_BITS);
     } else {
         rc = alloc_next_free(kv, csh, &ino, &next);
         if (rc != EFS_OK)
@@ -2854,7 +2884,14 @@ int efs_meta_apply_lane_sweep(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
             return ss.rc == EFS_ERR_INVAL ? EFS_OK : ss.rc;
         if (rc == EFS_ERR_INVAL)
             return EFS_OK;
-        if (rc != EFS_OK)
+        /* rc > 0 is sweep_cb's "batch full, stop" (merge_scan propagates
+         * the callback's return), not an error. Treating it as one made
+         * every lane with more than SWEEP_CHUNKS chunks unsweepable: the
+         * reaper re-proposed LANE_SWEEP once a second forever and no
+         * fragment of any file over ~8 MiB per lane was ever reclaimed
+         * (IO-500 ior-easy 1.2 GiB files: `apply lane-sweep rc=1` every
+         * 33 entries). */
+        if (rc < 0)
             return rc;
         if (ss.chunks == 0)
             break;
@@ -2954,7 +2991,7 @@ int efs_meta_apply_reap_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
         rp.keys = rkeys;
         rp.cap = 32;
         rc = efs_kv_scan_prefix(kv, pref, plen, rsv_purge_cb, &rp);
-        if (rc != EFS_OK)
+        if (rc < 0) /* rc > 0 = callback's batch-full stop, not an error */
             return rc;
         if (rp.found == 0)
             break;
