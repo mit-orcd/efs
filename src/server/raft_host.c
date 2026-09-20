@@ -2119,8 +2119,9 @@ static int host_apply_extra_locked(struct efs_raft_host *h, uint8_t group,
     return EFS_OK;
 }
 
-static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
-                             const uint8_t *cmd, uint32_t clen, int *hint)
+static int host_propose_wait_idx(struct efs_raft_host *h, uint8_t group,
+                                 const uint8_t *cmd, uint32_t clen, int *hint,
+                                 uint64_t *idx_out)
 {
     uint64_t idx = 0;
     int rc;
@@ -2128,6 +2129,8 @@ static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
     rc = host_propose(h, group, cmd, clen, &idx, hint);
     if (rc != EFS_OK)
         return rc;
+    if (idx_out)
+        *idx_out = idx;
     rc = host_wait_applied(h, group, idx, hint);
     if (rc != EFS_OK)
         return rc;
@@ -2142,6 +2145,12 @@ static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
     rc = host_apply_rc_locked(h, group, idx);
     pthread_mutex_unlock(&h->mu);
     return rc;
+}
+
+static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
+                             const uint8_t *cmd, uint32_t clen, int *hint)
+{
+    return host_propose_wait_idx(h, group, cmd, clen, hint, NULL);
 }
 
 static int host_propose_wait_ex(struct efs_raft_host *h, uint8_t group,
@@ -4575,12 +4584,18 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
          * the group this dual-host does not lead). */
         rc = host_propose(h, group, cmd, clen, &idx, &hint);
     } else {
-        rc = host_propose_wait(h, group, cmd, clen, &hint);
-        pthread_mutex_lock(&h->mu);
-        r = group_raft(h, group);
-        if (r)
-            idx = efs_raft_applied(r);
-        pthread_mutex_unlock(&h->mu);
+        /* Return THIS command's index, never the live applied index. The
+         * forwarding follower waits for out->index and reads its own
+         * apply-result ring at that slot (host_propose_wait_ex → arc_rc /
+         * arc_extra). Under concurrent traffic applied had already moved
+         * past the command by the time it was read here, so the follower
+         * read a stranger's slot: rc OK, extra 0. For APPEND_RSV that
+         * replied start=0/size=len while the reservation itself landed at
+         * the real EOF — the O_APPEND write went to offset 0 and left a
+         * len-byte hole at EOF (concurrent_appends 190–198/200 lines, one
+         * 2-byte gap per forwarded reserve). It also let a forwarded txn
+         * PREP's BUSY/STALE verdict read as OK. */
+        rc = host_propose_wait_idx(h, group, cmd, clen, &hint, &idx);
     }
     pthread_mutex_unlock(&h->read_mu);
     out->rc = rc;
@@ -8696,6 +8711,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         uint32_t nic = 0;
         uint64_t t_pack = 0, t_push = 0, t0, t_fin0, t_fin1;
         int held = 0;
+        int had_stale = 0;
 
         memset(bat, 0, sizeof(bat));
         memset(ic, 0, sizeof(ic));
@@ -8782,11 +8798,32 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
              * the batch. One poison rec must not stall every rec behind it
              * (the client re-reports the skipped ino, so a misdiagnosed cause
              * resurfaces instead of being lost). Transient errors (NOT_PRIMARY,
-             * NO_QUORUM, NET, BUSY, STALE) fail the batch for a client retry. */
+             * NO_QUORUM, NET, BUSY) fail the batch for a client retry. */
             if (rc == EFS_ERR_INVAL) {
                 fprintf(stderr,
                         "raft-host: report pub ino=%llu ci=%u INVAL, skipping rec\n",
                         (unsigned long long)recs[i].ino, recs[i].chunk_index);
+                rc = EFS_OK;
+                continue;
+            }
+            /* STALE is different again: a losing CAS on ONE rec must not
+             * abort the whole batch. The prefix-before-the-first-STALE
+             * already committed (the batch finish/wait below runs on any
+             * rc), so aborting here threw away nothing but forced the
+             * client to resend everything after the loser too — and at
+             * 36 ranks on one shared file the multi-minute batch window
+             * made a fresh conflict per round near-certain (livelock:
+             * 2h18m without a clean pass). Skip the loser, publish the
+             * rest, and return STALE at the end so the client retries
+             * only the residual (its re-pull now replays just the moved
+             * chunks). */
+            if (rc == EFS_ERR_STALE) {
+                if (env_on("EFS_RAFT_DBG"))
+                    fprintf(stderr,
+                            "raft-host: report pub ino=%llu ci=%u STALE, skipping rec\n",
+                            (unsigned long long)recs[i].ino,
+                            recs[i].chunk_index);
+                had_stale = 1;
                 rc = EFS_OK;
                 continue;
             }
@@ -8841,6 +8878,12 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
             }
         }
         t_fin1 = now_us_();
+        /* Committed everything committable; tell the client to retry the
+         * skipped losers (its residual report re-pulls and replays just
+         * those). The resolve pass below stays gated on a fully clean
+         * round, matching the old whole-batch STALE behavior. */
+        if (rc == EFS_OK && had_stale)
+            rc = EFS_ERR_STALE;
         if (count >= 256u || (t_pack + t_push + (t_fin1 - t_fin0)) >= 100000ull)
             fprintf(stderr,
                     "report-split nrec=%u pack_ms=%llu push_ms=%llu finish_ms=%llu rc=%d\n",

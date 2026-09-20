@@ -1,0 +1,7 @@
+fcstor007
+0
+0
+fcstor008
+37
+     37 report-stale: chunks=1 runs=1 committed=0 replayed=1
+0

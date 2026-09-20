@@ -9,6 +9,8 @@
 #   tests/perf/io500/run.sh debug            # 1s stonewall IOR smoke
 #   tests/perf/io500/run.sh ior              # 30s stonewall IOR easy+hard
 #   tests/perf/io500/run.sh dry-run debug    # print io500 argv only
+#   tests/perf/io500/run.sh ior-hard-write <segs>   # raw IOR hard geometry, -k keep
+#   tests/perf/io500/run.sh ior-hard-verify <segs>  # -r -R the same file (cold-remount first)
 #
 # Env:
 #   IO500_DIR   build tree (default $HOME/orcd/scratch/efs-io500)
@@ -81,6 +83,12 @@ launch() { # extra-args...  ini-path
     remote "grep -q 'efs-fuse $EFS_MNT ' /proc/mounts || { echo 'run: $EFS_MNT not mounted on $RANK0' >&2; exit 1; }"
     # OpenMPI: same binary path on all ranks (NFS tree). SSH between clients.
     # --prefix + -x so remote ranks find libmpi/libpmix (same DOCA-OFED tree).
+    # Detach real runs: a foreground prterun dies with the wrapper's
+    # EFS_SSH_TIMEOUT and the driver stdout is lost (the job itself
+    # survives). The log lands on the NFS tree — tail it from the login
+    # node: tail -f $IO500_DIR/last-run.log. dry-run stays foreground.
+    local detach=1
+    case " ${extra[*]+"${extra[*]}"} " in *" --dry-run "*) detach=0 ;; esac
     remote "export LD_LIBRARY_PATH=\"\${LD_LIBRARY_PATH:-}\"
         if ! { [ -f /tmp/efs-io500-agent.env ] && . /tmp/efs-io500-agent.env && ssh-add -l 2>/dev/null | grep -q efs-test; }; then
             ssh-agent -s > /tmp/efs-io500-agent.env
@@ -91,15 +99,66 @@ launch() { # extra-args...  ini-path
         else
             . /tmp/efs-io500-agent.env
         fi
-        cd '$SRC' && $MPIRUN --hostfile '$IO500_DIR/hosts' -np $NP \
+        cd '$SRC'
+        if [ $detach = 1 ]; then
+            setsid $MPIRUN --hostfile '$IO500_DIR/hosts' -np $NP \
+            --prefix \"\$(dirname \"\$(dirname \"\$(command -v mpicc)\")\")\" \
+            -x PATH -x LD_LIBRARY_PATH \
+            --mca plm_rsh_agent '$HERE/mpi-ssh.sh' \
+            --mca plm_rsh_no_tree_spawn 1 \
+            ./io500 '$ini' ${extra[*]+"${extra[*]}"} >'$IO500_DIR/last-run.log' 2>&1 </dev/null &
+            echo \"started; log: $IO500_DIR/last-run.log\"
+        else
+            $MPIRUN --hostfile '$IO500_DIR/hosts' -np $NP \
+            --prefix \"\$(dirname \"\$(dirname \"\$(command -v mpicc)\")\")\" \
+            -x PATH -x LD_LIBRARY_PATH \
+            --mca plm_rsh_agent '$HERE/mpi-ssh.sh' \
+            --mca plm_rsh_no_tree_spawn 1 \
+            ./io500 '$ini' ${extra[*]+"${extra[*]}"}
+        fi"
+}
+
+# Drive IOR hard-mode geometry directly (io500's bin/ior), bypassing the
+# driver's unconditional end-of-run purge so the same file can be verified
+# from cold-remounted clients. Fixed -G signature makes a separate read
+# invocation's -R check meaningful. Detached like launch().
+IOR_HARD_FILE=${IOR_HARD_FILE:-$EFS_MNT/io500/hardv/file}
+launch_ior_hard() { # write|verify segments
+    local mode=$1 segs=$2 flags
+    case "$mode" in
+        write)  flags="-w" ;;
+        verify) flags="-r -R" ;;
+        *) echo "run: launch_ior_hard write|verify" >&2; return 2 ;;
+    esac
+    remote "test -x '$SRC/bin/ior' || { echo 'run: missing $SRC/bin/ior' >&2; exit 1; }"
+    remote "grep -q 'efs-fuse $EFS_MNT ' /proc/mounts || { echo 'run: $EFS_MNT not mounted on $RANK0' >&2; exit 1; }"
+    remote "mkdir -p '$(dirname "$IOR_HARD_FILE")'"
+    gen_hostfile "$SLOTS" > "$IO500_DIR/hosts"
+    remote "export LD_LIBRARY_PATH=\"\${LD_LIBRARY_PATH:-}\"
+        if ! { [ -f /tmp/efs-io500-agent.env ] && . /tmp/efs-io500-agent.env && ssh-add -l 2>/dev/null | grep -q efs-test; }; then
+            ssh-agent -s > /tmp/efs-io500-agent.env
+            chmod 600 /tmp/efs-io500-agent.env
+            . /tmp/efs-io500-agent.env
+            DISPLAY=\"\${DISPLAY:-:0}\" SSH_ASKPASS=\"\$HOME/.cursor/secrets/efs-test/askpass.sh\" \
+                setsid -w ssh-add \"\$HOME/.cursor/secrets/efs-test/id_ed25519\" </dev/null >/dev/null
+        else
+            . /tmp/efs-io500-agent.env
+        fi
+        cd '$SRC'
+        setsid $MPIRUN --hostfile '$IO500_DIR/hosts' -np $NP \
         --prefix \"\$(dirname \"\$(dirname \"\$(command -v mpicc)\")\")\" \
         -x PATH -x LD_LIBRARY_PATH \
         --mca plm_rsh_agent '$HERE/mpi-ssh.sh' \
         --mca plm_rsh_no_tree_spawn 1 \
-        ./io500 ${extra[*]+"${extra[*]}"} '$ini'"
+        ./bin/ior -a POSIX -C -Q 1 -g -G=271828 -k -e -t 47008 -b 47008 -s $segs \
+            $flags -o '$IOR_HARD_FILE' >'$IO500_DIR/last-run.log' 2>&1 </dev/null &
+        echo \"started ior-hard $mode segs=$segs; log: $IO500_DIR/last-run.log\""
 }
 
 case "$cmd" in
+    ior-hard-write|ior-hard-verify)
+        launch_ior_hard "${cmd#ior-hard-}" "${1:?segments}"
+        ;;
     prereqs)
         remote "bash -s" <"$HERE/check-prereqs.sh"
         ;;

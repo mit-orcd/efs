@@ -428,7 +428,20 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
             (void)efs_export_upsert_inode(&g_client.export, &local);
             if (grow || shrink || (same && take_mtime)) {
                 take_remote = 1;
-                drop_dcache = shrink || (same && take_mtime);
+                /* Only a shrink drops clean dcache slots. Same-size +
+                 * newer mtime used to drop too (peer hole-fill visibility,
+                 * mc_stress rwfile), but that also fired on our OWN report
+                 * echo (server-stamped mtime) during O_APPEND getattr and
+                 * discarded a clean-but-unreported slot — the only replay
+                 * source for its in-flight object. The next append rebuilt
+                 * the slot from the committed map gen with just its own
+                 * range; when the in-flight report lost its CAS the replay
+                 * overlaid only that range and the earlier bytes were gone
+                 * (concurrent_appends 190→22/200 lines). Reads no longer
+                 * need the drop: efs_dcache_copy serves a whole image only
+                 * when the chunk map still names it (dcache_image_current),
+                 * and take_remote re-pulls the map. */
+                drop_dcache = shrink;
             }
         }
     }
@@ -1000,15 +1013,24 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
     }
     efs_client_lock_dir(ino);
     pthread_mutex_lock(&g_client.idx_mu);
+    uint32_t drop = 0, old_nci = 0;
     if (size < old_size) {
         uint32_t cs = data_chunk_size();
-        uint32_t drop = (size == 0) ? 0 : (uint32_t)((size + cs - 1) / cs);
+        drop = (size == 0) ? 0 : (uint32_t)((size + cs - 1) / cs);
+        old_nci = cs ? (uint32_t)((old_size + cs - 1) / cs) : 0;
         efs_export_drop_chunks_from(&g_client.export, ino, drop);
     }
     efs_export_upsert_inode(&g_client.export, &out);
     efs_client_stage_touch(ino);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
+    /* The dropped chunks' cached images are the pre-truncate bytes; a
+     * later extend must read them as a hole, not resurrect them. Dirty
+     * dcache slots stay (a racing write past the new EOF is newer). */
+    for (uint32_t ci = drop; ci < old_nci; ci++) {
+        efs_rdcache_invalidate(ino, ci);
+        efs_dcache_drop_if_clean(ino, ci);
+    }
     return EFS_OK;
 }
 

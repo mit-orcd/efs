@@ -17,6 +17,20 @@ struct efs_raft {
     uint64_t snap_term;
     uint64_t next_index[EFS_RAFT_MAX_PEERS];
     uint64_t match_index[EFS_RAFT_MAX_PEERS];
+    /* Catch-up flow control: first index of the entry batch last sent to
+     * this peer and not yet answered (0 = none outstanding). While set,
+     * propose/commit-driven broadcasts send this peer NOTHING — the batch
+     * already carries every index it can take, and a duplicate 128-entry
+     * batch per propose was what buried a behind follower (fcstor005 Sep 19:
+     * the same 128-entry window rewritten + fsynced ~30×/s, 128 entries of
+     * real progress per ~10 s). A batch older than heartbeat_ticks is
+     * retransmitted by the next send (tick heartbeat or propose), so a lost
+     * batch or reply still recovers within one heartbeat interval —
+     * broadcast_ae resets hb_elapsed, so under load the tick heartbeat
+     * itself never fires and cannot be the only retransmit path. */
+    uint64_t ae_inflight[EFS_RAFT_MAX_PEERS];
+    uint64_t ae_inflight_tick[EFS_RAFT_MAX_PEERS];
+    uint64_t ticks; /* efs_raft_tick count, for ae_inflight aging */
     uint64_t peer_boot[EFS_RAFT_MAX_PEERS];
     unsigned vote_bits;
     uint32_t election_elapsed;
@@ -413,6 +427,21 @@ static int send_snap(struct efs_raft *r, int to)
     return rc;
 }
 
+/* 1 if a catch-up send starting at ni to `to` is still outstanding and
+ * younger than one heartbeat interval — skip; the reply or the age will
+ * trigger the next send. */
+static int ae_inflight_fresh(const struct efs_raft *r, int to, uint64_t ni)
+{
+    return r->ae_inflight[to] == ni &&
+           r->ticks - r->ae_inflight_tick[to] < (uint64_t)r->heartbeat_ticks;
+}
+
+static void ae_inflight_set(struct efs_raft *r, int to, uint64_t ni)
+{
+    r->ae_inflight[to] = ni;
+    r->ae_inflight_tick[to] = r->ticks;
+}
+
 static int send_ae(struct efs_raft *r, int to)
 {
     struct efs_raft_msg m;
@@ -430,8 +459,17 @@ static int send_ae(struct efs_raft *r, int to)
     ni = r->next_index[to];
     if (ni == 0)
         ni = 1;
-    if (ni <= r->snap_idx)
-        return send_snap(r, to);
+    if (ni <= r->snap_idx) {
+        /* Same one-outstanding rule as the entry batch below: a snapshot
+         * per propose to a peer in the snap window is a multi-MiB blob per
+         * propose. on_snap_rep clears it; the heartbeat retransmits. */
+        if (ae_inflight_fresh(r, to, ni))
+            return EFS_OK;
+        rc = send_snap(r, to);
+        if (rc == EFS_OK)
+            ae_inflight_set(r, to, ni);
+        return rc;
+    }
     m.prev_index = ni - 1;
     rc = log_term(r, m.prev_index, &prev_t);
     if (rc != EFS_OK && m.prev_index != 0)
@@ -445,6 +483,12 @@ static int send_ae(struct efs_raft *r, int to)
          * reached when this follower is behind (ni <= last_i); a caught-up
          * follower gets a bare heartbeat (nentries=0) and no arena. */
         uint32_t off = 0;
+
+        /* One outstanding batch per behind peer. A reply (on_ae_rep) clears
+         * ae_inflight and sends the next window; an unanswered batch is
+         * resent once it is a heartbeat interval old. */
+        if (ae_inflight_fresh(r, to, ni))
+            return EFS_OK;
         arena = malloc(EFS_RAFT_AE_BYTES);
         if (!arena)
             return EFS_ERR_NOMEM;
@@ -496,6 +540,8 @@ static int send_ae(struct efs_raft *r, int to)
         }
     }
     rc = send_msg(r, &m);
+    if (rc == EFS_OK)
+        ae_inflight_set(r, to, m.nentries ? ni : 0);
     free(arena);
     return rc;
 }
@@ -596,6 +642,7 @@ static int become_leader(struct efs_raft *r)
         r->next_index[i] = last_i + 1;
         r->match_index[i] = (i == r->id) ? last_i : 0;
     }
+    memset(r->ae_inflight, 0, sizeof(r->ae_inflight));
     rc = append_local(r, r->current_term, NULL, 0, NULL);
     if (rc != EFS_OK)
         return rc;
@@ -759,7 +806,14 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
         for (i = 0; i < in->nentries; i++, idx++) {
             uint64_t et = 0;
             rc = log_term(r, idx, &et);
-            if (rc == EFS_OK && et != in->entries[i].term) {
+            if (rc == EFS_OK && et == in->entries[i].term)
+                /* Already have this entry (duplicate / overlapping batch):
+                 * same index + same term ⇒ same command (Log Matching).
+                 * Rewriting it costs a pwrite + fsync per entry — a
+                 * duplicated 128-entry batch was ~30 ms of pump time under
+                 * h->mu, which is how a behind follower fell over. */
+                continue;
+            if (rc == EFS_OK) {
                 /* Conflict at idx: drop it and everything after, then take
                  * the leader's entry. (Same rule as the single-entry path,
                  * applied per batched entry.) */
@@ -799,6 +853,7 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
         return EFS_OK;
     if (in->from < 0 || in->from >= EFS_RAFT_MAX_PEERS)
         return EFS_OK;
+    r->ae_inflight[in->from] = 0;
     if (in->success) {
         uint64_t prev_commit = r->commit_index;
         if (in->match_index > r->match_index[in->from])
@@ -955,6 +1010,7 @@ static int on_snap_rep(struct efs_raft *r, const struct efs_raft_msg *in)
         return EFS_OK;
     if (in->from < 0 || in->from >= EFS_RAFT_MAX_PEERS)
         return EFS_OK;
+    r->ae_inflight[in->from] = 0;
     if (in->success) {
         if (in->match_index > r->match_index[in->from])
             r->match_index[in->from] = in->match_index;
@@ -1071,6 +1127,7 @@ int efs_raft_tick(struct efs_raft *r)
 {
     if (!r)
         return EFS_ERR_INVAL;
+    r->ticks++;
     if (r->role == EFS_RAFT_LEADER) {
         r->hb_elapsed++;
         if (r->hb_elapsed >= r->heartbeat_ticks)

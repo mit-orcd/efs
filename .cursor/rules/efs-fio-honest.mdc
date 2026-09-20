@@ -81,8 +81,13 @@ slower than 9×2g on one client (less parallelism).
 `strace -p`, `gdb -p`, `vgdb` and LSan all work same-uid. It is **runtime
 only** (`sysctl -w`); `/etc/sysctl.d/99-ptrace.conf` still says 2, so it
 reverts on reboot — ask the USER to re-apply, do not edit the conf.
-`perf trace` is still out (`perf_event_paranoid=2` and
-`/sys/kernel/tracing/events` unreadable); `perf record -p` is fine.
+**Kernel-side profiling is OPEN as of Sep 19 2026 (user ran
+`sysctl -w kernel.perf_event_paranoid=1 kernel.kptr_restrict=0` via clush on
+fcstor003–015, node9901, fstor007):** `perf record -a`/`-g` with kernel
+symbols, `perf trace`, `perf sched`, `perf top` all work same-uid. Runtime
+only (`sysctl -w`) like ptrace_scope — reverts on reboot; ask the USER to
+re-apply, do not edit `/etc/sysctl.d`. `/sys/kernel/tracing/events` may
+still be unreadable (that is tracefs perms, not paranoid).
 Still do NOT restart daemons under strace — the 353 MiB/s
 `Disk stats: md0` run was local RAID after the daemons were killed, not a
 tracing overhead measurement. Attach to a RUNNING daemon instead. Same-uid:

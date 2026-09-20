@@ -1,0 +1,17 @@
+[RESULT]       ior-easy-write        1.020208 GiB/s : time 81.358 seconds [INVALID]
+[RESULT]    mdtest-easy-write        0.022287 kIOPS : time 14.322 seconds [INVALID]
+[RESULT]       ior-hard-write        0.056573 GiB/s : time 536.534 seconds
+[RESULT]    mdtest-hard-write        0.017425 kIOPS : time 5.822 seconds [INVALID]
+ERROR INVALID (src/main.c:486) Resulting score shouldn't be 0.0
+[RESULT]                 find        0.000000 kIOPS : time 0.000 seconds [INVALID]
+[RESULT]        ior-easy-read        1.813835 GiB/s : time 24.600 seconds
+[RESULT]     mdtest-easy-stat        0.260713 kIOPS : time 1.887 seconds
+ERROR INVALID (src/phase_ior.c:43) Errors (93286) occured during phase in IOR. This invalidates your run.
+[RESULT]        ior-hard-read        3.793460 GiB/s : time 7.052 seconds [INVALID]
+[RESULT]     mdtest-hard-stat        0.314621 kIOPS : time 1.525 seconds
+[RESULT]   mdtest-easy-delete        0.041550 kIOPS : time 9.517 seconds
+[RESULT]     mdtest-hard-read        0.016083 kIOPS : time 5.973 seconds
+WARNING: [RANK 013]: unlink() of file "/tmp/efs-mount/io500/2026.09.19-00.44.52/mdtest-hard/test-dir.0-0/mdtest_tree.0/file.mdtest.25.1" failed
+[RESULT]   mdtest-hard-delete        0.031004 kIOPS : time 4.174 seconds
+ERROR INVALID (src/main.c:486) Resulting score shouldn't be 0.0
+[SCORE ] Bandwidth 0.793841 GiB/s : IOPS 0.048810 kiops : TOTAL 0.196843 [INVALID]

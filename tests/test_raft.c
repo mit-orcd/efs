@@ -19,7 +19,39 @@ struct net {
     struct efs_raft *r[EFS_RAFT_MAX_PEERS];
     int n;
     int drop[EFS_RAFT_MAX_PEERS];
+    int batches[EFS_RAFT_MAX_PEERS]; /* AE_REQ with entries delivered/dropped per peer */
+    struct efs_raft_msg *keep;       /* deep copy of the last AE_REQ to keep_to */
+    int keep_to;
+    int keep_on;
 };
+
+static void msg_free_deep(struct efs_raft_msg *m)
+{
+    uint32_t i;
+
+    if (!m)
+        return;
+    for (i = 0; i < m->nentries; i++)
+        free((void *)m->entries[i].cmd);
+    free(m);
+}
+
+static struct efs_raft_msg *msg_copy_deep(const struct efs_raft_msg *src)
+{
+    struct efs_raft_msg *m = malloc(sizeof(*m));
+    uint32_t i;
+
+    if (!m)
+        return NULL;
+    *m = *src;
+    for (i = 0; i < m->nentries; i++) {
+        uint8_t *c = malloc(src->entries[i].clen ? src->entries[i].clen : 1);
+        if (c && src->entries[i].clen)
+            memcpy(c, src->entries[i].cmd, src->entries[i].clen);
+        m->entries[i].cmd = c;
+    }
+    return m;
+}
 
 struct app {
     int n;
@@ -73,6 +105,14 @@ static int send_now(void *net, const struct efs_raft_msg *msg)
 {
     struct net *n = net;
 
+    if (msg->to >= 0 && msg->to < EFS_RAFT_MAX_PEERS &&
+        msg->type == EFS_RAFT_MSG_AE_REQ && msg->nentries > 0) {
+        n->batches[msg->to]++;
+        if (n->keep_on && msg->to == n->keep_to) {
+            msg_free_deep(n->keep);
+            n->keep = msg_copy_deep(msg);
+        }
+    }
     if (n->drop[msg->to])
         return EFS_OK;
     if (msg->to < 0 || msg->to >= n->n || !n->r[msg->to])
@@ -593,6 +633,111 @@ static void test_ae_batch_catchup(void)
     free_n(&n, st, 3);
 }
 
+/* Counting wrapper around the mem store's append (follower dedupe test). */
+static int (*g_orig_append)(void *, uint64_t, uint64_t, const uint8_t *, uint32_t);
+static int g_append_calls;
+
+static int counting_append(void *ctx, uint64_t index, uint64_t term,
+                           const uint8_t *cmd, uint32_t clen)
+{
+    g_append_calls++;
+    return g_orig_append(ctx, index, term, cmd, clen);
+}
+
+/* Catch-up flow control (fcstor005, Sep 19 2026). (1) Leader: while a
+ * behind follower has an unanswered entry batch, proposes must not resend
+ * that window — one batch per heartbeat interval, not one per propose.
+ * (2) Follower: an AE whose entries it already holds (same index+term)
+ * must not rewrite them to the store (that was a pwrite+fsync per entry,
+ * ~30 ms of pump time per duplicated 128-entry batch). */
+static void test_ae_catchup_flow_control(void)
+{
+    struct net n = { .n = 3 };
+    struct efs_raft_store *st[3];
+    struct efs_raft_store wrap;
+    struct app app[3];
+    struct efs_raft_cfg cfg;
+    int i, lid, fol, other, before, calls;
+    uint64_t last = 0;
+
+    memset(app, 0, sizeof(app));
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.n = 3;
+    cfg.send = send_now;
+    cfg.net = &n;
+    cfg.apply = apply_cmd;
+    for (i = 0; i < 3; i++) {
+        st[i] = efs_raft_mem_create();
+        cfg.id = i;
+        cfg.store = st[i];
+        cfg.store_ctx = st[i];
+        cfg.election_ticks = (uint32_t)(4 + i * 4);
+        cfg.heartbeat_ticks = 1;
+        cfg.app = &app[i];
+        n.r[i] = efs_raft_new(&cfg);
+    }
+    CHECK(elect(&n, 20) == 1, "elect");
+    lid = leader_id(&n);
+    CHECK(lid >= 0, "leader");
+    fol = (lid + 1) % 3;
+    other = (lid + 2) % 3;
+
+    /* Follower store: count appends. Rebuild fol on a wrapped store so its
+     * SM calls counting_append (the SM caches the store pointer). */
+    wrap = *st[fol];
+    g_orig_append = wrap.append;
+    wrap.append = counting_append;
+    efs_raft_free(n.r[fol]);
+    cfg.id = fol;
+    cfg.store = &wrap;
+    cfg.store_ctx = st[fol];
+    cfg.election_ticks = 100; /* never campaigns during the test */
+    cfg.app = &app[fol];
+    n.r[fol] = efs_raft_new(&cfg);
+    CHECK(n.r[fol] != NULL, "fol re-new");
+
+    /* (1) Drop fol, propose 200 WITHOUT ticking: exactly one batch may be
+     * sent to fol (the first propose's), the rest are gated on its reply. */
+    n.drop[fol] = 1;
+    before = n.batches[fol];
+    for (i = 0; i < 200; i++) {
+        uint8_t cmd = (uint8_t)i;
+        uint64_t idx = 0;
+        CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK, "propose");
+        last = idx;
+    }
+    CHECK(n.batches[fol] - before <= 2, "at most one catch-up batch per window while unanswered");
+    CHECK(efs_raft_commit(n.r[lid]) >= last, "quorum committed without fol");
+    /* One tick ages the outstanding batch past heartbeat_ticks=1 → the
+     * next send (tick heartbeat) retransmits. */
+    before = n.batches[fol];
+    CHECK(efs_raft_tick(n.r[lid]) == EFS_OK, "tick");
+    CHECK(n.batches[fol] - before >= 1, "aged batch is retransmitted on heartbeat");
+
+    /* Undrop: catch-up proceeds one batch per reply, record the last batch. */
+    n.drop[fol] = 0;
+    n.keep_on = 1;
+    n.keep_to = fol;
+    for (i = 0; i < 4; i++)
+        CHECK(efs_raft_tick(n.r[lid]) == EFS_OK, "catch tick");
+    CHECK(efs_raft_applied(n.r[fol]) >= last, "fol caught up");
+    CHECK(n.keep != NULL, "recorded a batch");
+    (void)other;
+
+    /* (2) Re-deliver the recorded batch: fol already holds every entry at
+     * the same term → zero store appends, reply still success. */
+    if (n.keep) {
+        calls = g_append_calls;
+        CHECK(efs_raft_recv(n.r[fol], n.keep) == EFS_OK, "dup AE recv");
+        CHECK(g_append_calls == calls, "duplicate batch rewrote nothing");
+        CHECK(efs_raft_applied(n.r[fol]) >= last, "fol still caught up");
+    }
+    n.keep_on = 0;
+    msg_free_deep(n.keep);
+    n.keep = NULL;
+    free_n(&n, st, 3);
+}
+
 /* Leader compacts 40 entries, then grows 0x7 → 0x1f. Learners 3/4 have
  * an empty log, so AE cannot start at index 1. InstallSnapshot must
  * carry the frozen SM (snap_get at compact time). */
@@ -765,6 +910,7 @@ int main(void)
     test_i18_joint_quorum();
     test_stale_boot_id();
     test_ae_batch_catchup();
+    test_ae_catchup_flow_control();
     test_install_snapshot();
     test_install_snapshot_needs_blob();
     test_install_snapshot_restarted_leader();
