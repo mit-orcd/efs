@@ -222,6 +222,42 @@ dies with the ssh timeout (detach + log to NFS instead); never
 gdb-attach an MPI rank through a timeout'd ssh (left a rank
 T-stopped, job unrecoverable).
 
+**W6 CORRECTNESS GATE MET (Sep 20, commit 708b350 on top of a9e94a6).**
+9×4 IO-500 debug `results/io500/20260920-debug-9x4/`: **every phase
+finished, ior-easy-read AND ior-hard-read 0 verification errors, every
+unlink OK.** easy-write **0.814 GiB/s**, hard-write 0.044 (495 s, was
+DNF), easy-read 1.80, hard-read 3.55, mdtest-easy-write 50/s. **Root
+cause of the Sep 19 76108/4314 read errors + 27 undeletable easy files
+was DUPLICATE INO ALLOCATION on concurrent CREATE**
+(`results/io500/20260920-easy-dupino/`): `server_raft_host_create`
+peeks the alloc watermark on the PROPOSER (applied state) and packs the
+ino into the CREATE cmd; `create_file_batch(want_ino)` took it
+unconditionally, so two creates on one shard that peeked before either
+applied (other voters / forwarded) wrote two names onto ONE inode row
+(36 IOR easy files → 10 distinct inos, 8 names on ino 4460); both
+writers published onto one ino (mixed content), the first unlink deleted
+the row and the siblings dangled (resolve → I9 EIO, `rm` ENOENT, `rmdir`
+ENOTEMPTY). Fix `alloc_hint_or_next` in meta_apply: the apply IS the
+allocator — hint honored only if ≥ watermark and unoccupied, else
+`alloc_next_free`; deterministic per replica; host already reads the
+ino back from the dentry. Same for the mkdir same-group fast path. The
+hashed-create / mkdir txn paths CAS the alloc key and were never
+affected. Gate `test_meta_apply` `test_create_log_at_dup_hint`. Raw IOR
+repro: `SLOTS=4 run.sh ior-easy-write 1024` then `ior-easy-verify 1024`
+(36/36 distinct, 0 mismatches, write 463→902 MiB/s). Same commit: the
+reaper's `LANE_SWEEP` / `rsv_purge` misread `efs_kv_scan_prefix` rc>0
+(batch-full) as an error → no lane with >64 chunks was ever swept (every
+deleted file >8 MiB/lane leaked its fragments; `apply lane-sweep rc=1`
+every 33 raft entries). **Do not quote the Sep 19 easy-read 4.0 GiB/s —
+it was zero-fill.** Leftover dangling dentries on 19810: `/io500/easyv`
+(26) and `/io500/2026.09.19-22.52.15/ior-easy` (27) — inert, cannot be
+unlinked by design. **W6 residuals (perf, not correctness):** hard-write
+45 MiB/s (36-way N-1 CAS on 47008 B records); easy-read open phase 20 s
+of 22 s (1 GiB open = 128 sequential GETCHUNKS + 64-lane stat, 0.2–0.8 s
+unloaded — spec §8 per-lane range fetch); 7/36 mdtest rmdir transient
+ENOTEMPTY under load (clean seconds later). Client `efs-fuse` on
+007–015 is a9e94a6 (read.c/ops.c pull fixes included); servers 708b350.
+
 **SALT DIVERGENCE + RAFT SNAPSHOT CATCH-UP FIXED (Sep 18 PM, commit
 43e3e4e).** Three production bugs, all gated: (1) **export salt
 diverged across nodes** — `host_export_salt` was computed locally, so

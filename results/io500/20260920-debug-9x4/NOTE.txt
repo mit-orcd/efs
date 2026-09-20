@@ -1,0 +1,42 @@
+W6 IO-500 debug (1 s stonewall), 9 clients x 4 ranks = 36, 19810 TCP,
+efsd 708b350 (dup-ino fix + lane-sweep scan-full fix), efs-fuse a9e94a6.
+Run id 2026.09.20-00.10.42; driver log in driver.log; per-phase IOR/mdtest
+output alongside.
+
+FIRST 9x4 RUN WITH EVERY PHASE VALID FOR CORRECTNESS: ior-easy-read and
+ior-hard-read both 0 verification errors (Sep 19 -fixed run: 76108 / 4314,
+both phases [INVALID]); every unlink succeeded (Sep 19: 27 of 36 easy files
+undeletable). Root cause of both was duplicate ino allocation on concurrent
+CREATE — see ../20260920-easy-dupino/NOTE.txt.
+
+                        Sep 18 9x4      Sep 19 -fixed   THIS RUN
+ior-easy-write GiB/s    0.415           0.567           0.814
+mdtest-easy-write kIOPS 0.0285          0.0577          0.0504
+ior-hard-write GiB/s    DNF (2h18m)     0.055 / 420 s   0.044 / 495 s
+mdtest-hard-write kIOPS -               0.018           0.0178
+ior-easy-read GiB/s     -               4.01 [INVALID]  1.80  (0 errors)
+ior-hard-read GiB/s     -               3.50 [INVALID]  3.55  (0 errors)
+mdtest-easy-stat        -               0.182           0.241
+mdtest-hard-stat        -               0.218           0.785
+mdtest-easy-delete      -               0.077           0.076
+mdtest-hard-read        -               0.026           0.033
+mdtest-hard-delete      -               0.065           0.048
+SCORE (invalid: 1 s sw) -               0.2317          0.2352
+
+The Sep 19 ior-easy-read 4.0 GiB/s was zero-fill of missing chunk maps,
+not a read — do not quote it.
+
+Residuals (not chased in this run):
+- ior-hard-write 45 MiB/s: 36-way N-1 CAS on shared 47008 B records into
+  128 KiB chunks; stonewall wear-out makes the phase 411 s of writes. The
+  W6 "hard -W mismatches = 0" gate is now met (hard-read 0 errors); the
+  rate is the W6 perf item.
+- ior-easy-read open phase 20 s of 22 s: open of a 1 GiB file adopts the
+  8192-row chunk map with 128 sequential GETCHUNKS + a 64-lane stat
+  (0.2-0.8 s unloaded, 36 concurrent -> ~20 s). Spec §8 per-lane range
+  fetch. Raw read is 18.7 GB/s.
+- mdtest-easy-delete: 7 of 36 mdtest_tree.N.0 rmdirs got a transient
+  ENOTEMPTY under load; all rmdir'd cleanly by hand seconds later
+  (server lookup NOT_FOUND after). Same family as posix
+  rmdir_rideout_sillyrename.
+- find is disabled in config-debug.ini (0.000 [INVALID]) — not a result.
