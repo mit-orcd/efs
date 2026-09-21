@@ -1,0 +1,4 @@
+Last 64 KiB of each server's raft.log, just after the interleaved mkdirs.
+Group 0 (fcstor003): PREPARE 58, RESOLVE 22, DECIDE 10, CREATE 10, RMDIR 10,
+GC_ACK 143. Group 2 (fcstor006): PREPARE 52, DECIDE 12, CREATE 42, RMDIR 10,
+GC_ACK 135. PREPARE outnumbers DECIDE about 5–6 to 1.

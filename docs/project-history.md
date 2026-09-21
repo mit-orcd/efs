@@ -45,6 +45,13 @@ directory they just made. The same nine in a fresh subdirectory finish
 in 0.2 s (`results/measure/20260921-194332-w8-root`). Root nlink is
 406 and `.stats` rollups are zero, under the 65536 spread threshold.
 
+Later the same afternoon: the root has 410 names and lists in 10 ms.
+One-at-a-time, a root mkdir is 2 ms or 1.03–1.08 s (one `recvfrom`),
+and a fresh directory in the same second is ≤15 ms except two creates
+that return `EBUSY` after the 10.4 s BUSY backoff. Raft PREPARE
+outnumbers DECIDE about 6:1 in that window. The 9-host warmup dies
+inside that backoff.
+
 ## Sep 21 2026 morning — parent-row lost update → §7.2 commutative reductions
 
 **Symptom (found 23:10 Sep 20 in the 9×4 IO-500 debug run

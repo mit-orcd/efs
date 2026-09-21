@@ -98,27 +98,26 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  on the §7.2 build). Open perf: 1 GiB cold open is 0.23 s idle (128 GETCHUNKS × 1.6 ms);
  14.6 ms/GETCHUNKS under 32 openers — the IOR 20 s is that serialization.
  Same-parent rate is a flat ~140–160 ops/s from 1 to 36 procs
- (`results/measure/20260921-161931-samedir-rate`), not the BUSY backoff. Cluster + 9 clients run
- `b2184a5c7faf-dirty` = byte-identical source to the §7.2 commit (`git log -1 --grep="commutative reductions"`)
- (the §7.2 commit), so the next server restart is a build-ID change →
- `tests/roll_efsd.sh --all` (stop all, start all); plain rolling refuses.
+ (`results/measure/20260921-161931-samedir-rate`), not the BUSY backoff.
+ Cluster runs `b2184a5c7faf-dirty`. Next server restart is a build-ID
+ change → `tests/roll_efsd.sh --all`.
 - Honest write numbers (MiB/s, flush in clock): Sep 18, 1-client 8 GiB
   dd+fsync **639** (best 724); 4-client **251**; 9-client **202**.
   Sep 21 remeasure (`results/measure/20260921-163033-dd-wall`): 1-client
   **499**, 4-client **176**; the 9-client row is INVALID (400 s timeout,
-  mkdir/fsync EIO — do not quote it). Reads scale with clients, writes
-  share a ceiling that gets worse with clients. Every write wall measured
-  so far is software. Do not compare against the deleted pre-Raft
-  engine's numbers (Aug: 2355 / 3599) — different system.
+  mkdir/fsync EIO — do not quote it). Do not compare against the deleted
+  pre-Raft engine's numbers (Aug: 2355 / 3599) — different system.
 - posix suite 1 jobs=1 known signature (since the outbox fix): **200/201**
  in ~60 s, `mmap_write_read` SKIP (`MAP_SHARED` ENODEV by spec). The old
  15 s walk timeouts (`dir_deep_nesting*`, `names_crazy_dirs`,
  `mtime_monotonic_many_writes`) were the 100 ms floor — if they return,
  the cluster is not idle or a wakeup regressed (W7, isolated 1–6 s in
- `results/measure/20260921-133437-posix-isolated`). A 9-host suite does not start. Concurrent `mkdtemp` in the mount root
- is 1–6 s and sometimes ENOENT on the creator's own rmdir; the same
- burst in a fresh directory is 9/9 in 0.2 s
- (`results/measure/20260921-194332-w8-root`). posix2 one pair **58–60/63**:
+ `results/measure/20260921-133437-posix-isolated`). A 9-host suite does not start.
+ One root mkdir is 2 ms or 1.03–1.08 s (one server reply, not client
+ backoff); a fresh directory in the same second is ≤15 ms, except
+ `EBUSY` after the full 10.4 s BUSY budget
+ (`results/measure/20260921-200108-w8-root-interleave`). Root has 410
+ names. posix2 one pair **58–60/63**:
   `peer_concurrent_append` (one side's O_APPEND records missing),
   `peer_fcntl_range_conflict` (per-client lockf), overlap-pwrite RMW flakes.
   Anything else is new.

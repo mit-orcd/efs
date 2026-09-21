@@ -1,0 +1,9 @@
+16 pairs, root mkdir+rmdir then fresh-directory mkdir+rmdir, same second.
+build=b2184a5c7faf-dirty.
+
+root: 6/16 mkdir at 1.026–1.078 s, matching rmdir. The rest 0.002–0.053 s.
+sub: 14 succeeded at 0.002–0.053 s, including the call right after a 1 s
+root op. 2 returned EBUSY after 10.377 s and 10.381 s. That is the
+16-attempt BUSY backoff (50 ms, 100, 200, 400, then 800 ms × 12 = 10.35 s)
+plus the replies. The name was not created (mkdir_at only returns EBUSY
+when last_err is BUSY and a lookup of the name misses).

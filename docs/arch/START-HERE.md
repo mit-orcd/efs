@@ -52,18 +52,38 @@ Whoever picks the project up next does **this first**. Update or delete
 this block when done — an "in flight" block older than the last commit
 is a bug in this page.
 
-**Next mechanical item:** W8's harness change is proven (201 rows, 200
-`NOTRUN`, compare `EFS BUGS : 0`). The 9-host gate is blocked by the
-mount root: nine concurrent `mkdtemp` there take 1–6 s and sometimes
-ENOENT the creator's own `rmdir`; the same burst in a fresh directory
-is 9/9 in 0.2 s (`results/measure/20260921-194332-w8-root`). Root
-`nlink` is 406 and `.stats` rollups are zero
-(`results/measure/20260921-194815-w8-root-stats`), so this is not the
-65536-entry spread. Do not raise the warmup or suite timeout, and do
-not change the txn protocol from a guess.
+**Next mechanical item:** W8's harness is proven. The 9-host gate is
+blocked by mkdir latency, and it is not directory size. The mount root
+has 410 names (`results/measure/20260921-195541-w8-root-trace`, counted
+in 10 ms). One-at-a-time, a root `mkdir` is **2 ms or 1.03–1.08 s**, and
+the slow one is a single server reply (`recvfrom`), with the following
+`rmdir` the same speed. Interleaved with a fresh directory
+(`results/measure/20260921-200108-w8-root-interleave`): the fresh
+directory stays ≤15 ms in the same second, except two calls that return
+`EBUSY` after **10.38 s** — the 16-attempt BUSY backoff in
+`rpc_send_recv_dual` (50 ms, doubling, capped at 800 ms). Those names
+were not created. The recent raft tail has ~6 PREPARE entries per
+DECIDE (`results/measure/20260921-200251-w8-root-log`). Next: which key
+those extra PREPAREs touch. Do not raise the warmup or suite timeout,
+and do not change the txn protocol from a guess.
 
 **Progress log (newest first — read this before the state below):**
 
+- **20:02 (Sep 21)** — **Root mkdir is 2 ms or 1.05 s; BUSY burns 10.4 s.**
+  Root has **410** names, listed in 10 ms
+  (`results/measure/20260921-195541-w8-root-trace`). Not the 65536
+  spread. A strace of `efs-fuse` shows the 1.12 s call is one
+  `recvfrom`; there is no client sleep on that path. Twenty sequential
+  root mkdir+rmdir pairs
+  (`results/measure/20260921-195829-w8-root-lat`): 13 at 2 ms, 7 at
+  1.03–1.09 s, and the rmdir matches the mkdir. Interleaved with a
+  fresh directory
+  (`results/measure/20260921-200108-w8-root-interleave`): 6/16 root
+  calls still ~1.03 s while the fresh-directory call in the same
+  second is 2–15 ms. Two fresh-directory creates returned `EBUSY`
+  after 10.38 s, which is all 16 BUSY retries. Raft tail, last 64 KiB
+  (`results/measure/20260921-200251-w8-root-log`): group 0 PREPARE 58
+  vs DECIDE 10. The 9-host warmup dies inside that backoff.
 - **19:44 (Sep 21)** — **W8 root burst vs a fresh parent.**
   `results/measure/20260921-194332-w8-root`. One root `mkdtemp` 1.192 s.
   Nine at once: six `MKDIR_OK` in 1.19–5.96 s, three still out at 8 s
@@ -747,7 +767,12 @@ created. The same nine-way burst in a fresh subdirectory is 9/9 in
 0.008–0.197 s with every `rmdir` succeeding. Group 0 stayed
 `commit == applied` (+55 entries in ~9 s). An earlier burst right after
 the cut suite returned 0/9 inside 12 s
-(`results/measure/w8-mkdir-fcstor0*.txt`). Do not raise the 70 s warmup
+(`results/measure/w8-mkdir-fcstor0*.txt`). One at a time the root is
+bimodal, 2 ms or 1.03–1.08 s, and the slow call is one server reply.
+A fresh directory in the same second stays ≤15 ms, except `EBUSY`
+after the 10.4 s BUSY backoff
+(`results/measure/20260921-200108-w8-root-interleave`). Root has 410
+names. Do not raise the 70 s warmup
 or the 400 s suite timeout, and do not point the suite at a
 subdirectory to hide this.
 
