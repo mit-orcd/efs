@@ -117,6 +117,32 @@ catch-up wait). The deploy rule's `ps|awk` kill-by-port was replaced by
 `pkill -9 -x efsd` after it killed the agent's own remote shell (003 and
 005 down together, group 0 without quorum for 4 min, Sep 20 morning).
 
+**9×4 IO-500 after the fix (23:00).** `results/io500/20260921-debug-9x4-outbox/`:
+both `-R` reads 0 errors, all ior files unlinked; mdtest-easy-write 0.238
+kIOPS (morning 0.050), mdtest-hard-write 0.201 (0.018), easy/hard stat 0.88
+/ 2.76 (0.24 / 0.79); bandwidth phases unchanged (easy-write 0.78 GiB/s,
+hard-write 0.046, hard-read 3.89) — those walls are W4 and the 36-way
+sub-chunk CAS, not metadata latency. posix jobs=1 200/201 + mmap SKIP in
+60 s (was 191 in 6 min).
+
+**Wedged directory (found in the same run, open).** mdtest printed seven
+`Unable to remove directory …/test-dir.0-0/mdtest_tree.N.0`; four rmdir
+fine afterwards, three return EIO forever. `raft-rmdir` → status 3 =
+`EFS_ERR_PROTO` from `prow.nlink < 3`: the parent (ino 824) has nlink 2 with
+three live subdirectories. Mechanism: a child with an even ino is removed
+on the same-group log path (`efs_meta_apply_rmdir` PUTs the parent row
+without probing intents or bumping its version); an odd-ino child goes the
+txn path (EXCL on the parent row at the version it read, PUT of a full
+image with nlink−1). A txn that read before a log-path apply still
+PREPAREs at the old version, wins, and overwrites the log-path change — a
+lost update on nlink (and on dseq/mtime), identical in shape to the
+`alloc_key_claim` bug of the same morning, just on a different key. It
+also explains the long-standing "transient mdtest rmdir ENOTEMPTY". Two
+ways out are written up in START-HERE §1b step E: generalize the ALLOC
+rule to the parent row (BUSY under intent, bump version, client retries
+STALE for the directory ops) or the §7.2 reductions (nlink as a signed
+REDUCE delta). Waiting on the user.
+
 ## W6 narrative as it stood in START-HERE before Sep 20 (superseded)
 
 hard/easy write = **0.097**. Easy write 0.26 GiB/s vs 9-client 8g

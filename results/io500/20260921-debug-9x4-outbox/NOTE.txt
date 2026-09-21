@@ -1,0 +1,29 @@
+W6 IO-500 debug (1 s stonewall), 9 clients x 4 ranks = 36, 19810 TCP,
+efsd + efs-fuse d0fd0448adb6-dirty = source of commit 30c41ee (per-peer
+outbox condvar, pub-batch verdicts, alloc_key_claim, reaper fixes, dcache
+img_seq). Run id 2026.09.20-22.45.42, launched from node9901 via efs-bg.sh;
+driver.log is the mpirun stdout, per-phase IOR/mdtest output alongside.
+
+Correctness: ior-easy-read and ior-hard-read 0 verification errors (last
+column of the read rows), every ior file unlinked. mdtest: 7 "Unable to
+remove directory" warnings; 3 of those directories are permanently
+un-rmdir-able (EIO) because the parent's nlink drifted low (lost update
+between log-path and txn-path parent-row writes) -- see START-HERE 1b
+step E and project-history "Wedged directory".
+
+                        Sep 20 AM 9x4   THIS RUN
+ior-easy-write GiB/s    0.814           0.776
+mdtest-easy-write kIOPS 0.0504          0.2379   (4.7x)
+ior-hard-write GiB/s    0.044 / 495 s   0.046 / 513 s
+mdtest-hard-write kIOPS 0.0178          0.2006   (11x)
+ior-easy-read GiB/s     1.80            1.16     (25 s of 37 s is open())
+mdtest-easy-stat kIOPS  0.241           0.882
+ior-hard-read GiB/s     3.55            3.89
+mdtest-hard-stat kIOPS  0.785           2.759
+mdtest-easy-delete      -               0.289
+mdtest-hard-read        -               0.261
+mdtest-hard-delete      -               0.607
+
+The metadata phases moved because the ~100 ms Raft commit floor is gone
+(results/perf/20260921-md-latency.txt); the bandwidth phases did not, they
+are the W4 multi-client write wall and the 36-way sub-chunk CAS.

@@ -1,0 +1,39 @@
+IOR-4.0.0: MPI Coordinated Test of Parallel I/O
+Began               : Sun Sep 20 22:45:43 2026
+Command line        : ./ior --dataPacketType=timestamp -g -G 1903117957 -k -e -o /tmp/efs-mount/io500/2026.09.20-22.45.42/ior-easy/ior_file_easy -C -Q 1 -O stoneWallingStatusFile=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/ior-easy.stonewall -t 1m -b 16g -F -w -D 1 -O stoneWallingWearOut=1 -a POSIX -O saveRankPerformanceDetailsCSV=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/ior-easy-write.csv
+Machine             : Linux fcstor007
+TestID              : 0
+StartTime           : Sun Sep 20 22:45:43 2026
+Path                : /tmp/efs-mount/io500/2026.09.20-22.45.42/ior-easy/ior_file_easy.00000000
+FS                  : 72.0 TiB   Used FS: 1.1%   Inodes: 4096.0 Mi   Used Inodes: 0.0%
+
+Options: 
+api                 : POSIX
+apiVersion          : 
+test filename       : /tmp/efs-mount/io500/2026.09.20-22.45.42/ior-easy/ior_file_easy
+access              : file-per-process
+type                : independent
+segments            : 1
+ordering in a file  : sequential
+ordering inter file : constant task offset
+task offset         : 1
+nodes               : 9
+tasks               : 36
+clients per node    : 4
+repetitions         : 1
+xfersize            : 1 MiB
+blocksize           : 16 GiB
+aggregate filesize  : 576 GiB
+stonewallingTime    : 1
+stoneWallingWearOut : 1
+
+Results: 
+
+access    bw(MiB/s)  IOPS       Latency(s)  block(KiB) xfer(KiB)  open(s)    wr/rd(s)   close(s)   total(s)   iter
+------    ---------  ----       ----------  ---------- ---------  --------   --------   --------   --------   ----
+stonewalling pairs accessed min: 1017 max: 1162 -- min data: 1.0 GiB mean data: 1.0 GiB time: 1.0s
+WARNING: Expected aggregate file size       = 618475290624
+WARNING: Stat() of aggregate file size      = 43864031232
+WARNING: Using actual aggregate bytes moved = 43864031232
+WARNING: Maybe caused by deadlineForStonewalling
+write     794.22     796.13     0.001458    16777216   1024.00    0.120095   52.54      0.006955   52.67      0   

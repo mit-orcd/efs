@@ -1,0 +1,120 @@
+[run]
+procs           = 36
+version         = 02091cf254d8-13
+config-hash     = C42A5972
+result-dir      = /tmp/efs-mount/io500-results/2026.09.20-22.45.42
+mode            = standard
+; START 2026-09-20 22:45:42
+; ERROR INVALID stonewall-time 1s != 300s
+
+
+[ior-easy-write]
+t_start         = 2026-09-20 22:45:43
+exe             = ./ior --dataPacketType=timestamp -g -G 1903117957 -k -e -o /tmp/efs-mount/io500/2026.09.20-22.45.42/ior-easy/ior_file_easy -C -Q 1 -O stoneWallingStatusFile=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/ior-easy.stonewall -t 1m -b 16g -F -w -D 1 -O stoneWallingWearOut=1 -a POSIX -O saveRankPerformanceDetailsCSV=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/ior-easy-write.csv
+throughput-stonewall = 37.13
+; ERROR INVALID Runtime is smaller than expected minimum runtime
+score           = 0.775606
+t_delta         = 85.2624
+t_end           = 2026-09-20 22:47:08
+
+[mdtest-easy-write]
+t_start         = 2026-09-20 22:47:08
+exe             = ./mdtest --dataPacketType=timestamp -n 1000000 -u -L -F -P -G -1505671545 -N 1 -d /tmp/efs-mount/io500/2026.09.20-22.45.42/mdtest-easy -x /tmp/efs-mount/io500-results/2026.09.20-22.45.42/mdtest-easy.stonewall -C -Y -W 1 --saveRankPerformanceDetails=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/mdtest-easy-write.csv -a POSIX
+rate-stonewall  = 0.241099
+; ERROR INVALID Runtime is smaller than expected minimum runtime
+score           = 0.237862
+t_delta         = 7.1042
+t_end           = 2026-09-20 22:47:15
+
+[timestamp]
+t_start         = 2026-09-20 22:47:15
+t_delta         = 0.0049
+t_end           = 2026-09-20 22:47:15
+
+[ior-hard-write]
+t_start         = 2026-09-20 22:47:15
+exe             = ./ior --dataPacketType=timestamp -C -Q 1 -g -G=1903128645 -k -e -o /tmp/efs-mount/io500/2026.09.20-22.45.42/ior-hard/file -O stoneWallingStatusFile=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/ior-hard.stonewall -t 47008 -b 47008 -s 100000 -w -D 1 -a POSIX -O saveRankPerformanceDetailsCSV=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/ior-hard-write.csv -O stoneWallingWearOut=1
+throughput-stonewall = 7.29
+score           = 0.046245
+t_delta         = 513.4390
+t_end           = 2026-09-20 22:55:48
+
+[mdtest-hard-write]
+t_start         = 2026-09-20 22:55:48
+exe             = ./mdtest --dataPacketType=timestamp -n 1000000 -t -w 3901 -e 3901 -P -G=-1505660857 -N 1 -F -d /tmp/efs-mount/io500/2026.09.20-22.45.42/mdtest-hard -x /tmp/efs-mount/io500-results/2026.09.20-22.45.42/mdtest-hard.stonewall -C -Y -W 1 --saveRankPerformanceDetails=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/mdtest-hard-write.csv -a POSIX
+rate-stonewall  = 0.244293
+; ERROR INVALID Runtime is smaller than expected minimum runtime
+score           = 0.200607
+t_delta         = 2.5974
+t_end           = 2026-09-20 22:55:51
+
+[find]
+t_start         = 2026-09-20 22:55:51
+; ERROR INVALID Resulting score shouldn't be 0.0
+score           = 0.000000
+t_delta         = 0.0000
+t_end           = 2026-09-20 22:55:51
+
+[ior-easy-read]
+t_start         = 2026-09-20 22:55:51
+exe             = ./ior --dataPacketType=timestamp -g -G 1903117957 -k -e -o /tmp/efs-mount/io500/2026.09.20-22.45.42/ior-easy/ior_file_easy -C -Q 1 -O stoneWallingStatusFile=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/ior-easy.stonewall -t 1m -b 16g -F -r -R -a POSIX -O saveRankPerformanceDetailsCSV=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/ior-easy-read.csv
+score           = 1.159252
+t_delta         = 37.0868
+t_end           = 2026-09-20 22:56:28
+
+[mdtest-easy-stat]
+t_start         = 2026-09-20 22:56:28
+exe             = ./mdtest --dataPacketType=timestamp -n 1000000 -u -L -F -P -G -1505671545 -N 1 -d /tmp/efs-mount/io500/2026.09.20-22.45.42/mdtest-easy -x /tmp/efs-mount/io500-results/2026.09.20-22.45.42/mdtest-easy.stonewall -T --saveRankPerformanceDetails=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/mdtest-easy-stat.csv -a POSIX
+score           = 0.881559
+t_delta         = 1.3643
+t_end           = 2026-09-20 22:56:30
+
+[ior-hard-read]
+t_start         = 2026-09-20 22:56:30
+exe             = ./ior --dataPacketType=timestamp -C -Q 1 -g -G=1903128645 -k -e -o /tmp/efs-mount/io500/2026.09.20-22.45.42/ior-hard/file -O stoneWallingStatusFile=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/ior-hard.stonewall -t 47008 -b 47008 -s 100000 -r -R -a POSIX -O saveRankPerformanceDetailsCSV=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/ior-hard-read.csv
+score           = 3.890287
+t_delta         = 5.5757
+t_end           = 2026-09-20 22:56:35
+
+[mdtest-hard-stat]
+t_start         = 2026-09-20 22:56:35
+exe             = ./mdtest --dataPacketType=timestamp -n 1000000 -t -w 3901 -e 3901 -P -G=-1505660857 -N 1 -F -d /tmp/efs-mount/io500/2026.09.20-22.45.42/mdtest-hard -x /tmp/efs-mount/io500-results/2026.09.20-22.45.42/mdtest-hard.stonewall -T --saveRankPerformanceDetails=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/mdtest-hard-stat.csv -a POSIX
+score           = 2.758541
+t_delta         = 1.2427
+t_end           = 2026-09-20 22:56:36
+
+[mdtest-easy-delete]
+t_start         = 2026-09-20 22:56:36
+exe             = ./mdtest --dataPacketType=timestamp -n 1000000 -u -L -F -P -G -1505671545 -N 1 -d /tmp/efs-mount/io500/2026.09.20-22.45.42/mdtest-easy -x /tmp/efs-mount/io500-results/2026.09.20-22.45.42/mdtest-easy.stonewall -r --saveRankPerformanceDetails=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/mdtest-easy-delete.csv -a POSIX
+score           = 0.289335
+t_delta         = 4.1643
+t_end           = 2026-09-20 22:56:41
+
+[mdtest-hard-read]
+t_start         = 2026-09-20 22:56:41
+exe             = ./mdtest --dataPacketType=timestamp -n 1000000 -t -w 3901 -e 3901 -P -G=-1505660857 -N 1 -F -d /tmp/efs-mount/io500/2026.09.20-22.45.42/mdtest-hard -x /tmp/efs-mount/io500-results/2026.09.20-22.45.42/mdtest-hard.stonewall -E -X --saveRankPerformanceDetails=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/mdtest-hard-read.csv -a POSIX
+score           = 0.261006
+t_delta         = 2.1938
+t_end           = 2026-09-20 22:56:43
+
+[mdtest-hard-delete]
+t_start         = 2026-09-20 22:56:43
+exe             = ./mdtest --dataPacketType=timestamp -n 1000000 -t -w 3901 -e 3901 -P -G=-1505660857 -N 1 -F -d /tmp/efs-mount/io500/2026.09.20-22.45.42/mdtest-hard -x /tmp/efs-mount/io500-results/2026.09.20-22.45.42/mdtest-hard.stonewall -r --saveRankPerformanceDetails=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/mdtest-hard-delete.csv -a POSIX
+score           = 0.606759
+t_delta         = 1.6707
+t_end           = 2026-09-20 22:56:44
+
+[ior-rnd4K-easy-read]
+t_start         = 2026-09-20 22:56:44
+exe             = ./ior --dataPacketType=timestamp -g -G 1903117957 -k -e -o /tmp/efs-mount/io500/2026.09.20-22.45.42/ior-easy/ior_file_easy -F -r -D 1 -z -z -a POSIX -O saveRankPerformanceDetailsCSV=/tmp/efs-mount/io500-results/2026.09.20-22.45.42/ior-rnd4K-easy-read.csv -t=4096 -b=4096 -s=10000000 -O stoneWallingWearOut=1 -C -Q 2
+; ERROR INVALID Resulting score shouldn't be 0.0
+score           = 0.000000
+t_delta         = 0.0000
+t_end           = 2026-09-20 22:56:44
+
+[SCORE]
+MD              = 0.473256
+BW              = 0.634187
+SCORE           = 0.547844 [INVALID]
+hash            = 422F9280
+; END 2026-09-20 22:56:46

@@ -86,36 +86,28 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - Step 11 Raft+KV engine + Step 12 FUSE A–D landed and gated (Sep 11–16).
 - W1 N-1 CAS, W2 spec (`write()` client-buffered), W3 fsync tail, W4
   multi-client measurement, W5 50g: done Sep 18.
-- **W6 IO-500 correctness gate REOPENED Sep 20 PM.** The morning gate
-  (`results/io500/20260920-debug-9x4/`, commit `cc828d8`: all phases, 0
-  `-R` errors, every unlink OK; easy-write 0.814 GiB/s, hard-write 0.044,
-  easy-read 1.80, hard-read 3.55) does not hold under a second run: the
-  rerun had 2 ior-hard-read `-R` errors and a raw IOR hard 36×3000 lost
-  **6707/108000 records** in a COLD verify — real data loss, not cache.
-  Root cause: `host_pub_batch_wait` checked the apply verdict of the LAST
-  Raft entry of a multi-entry REPORT only, so a `STALE` CAS loser in an
-  earlier entry was reported OK and the client dropped those dirty ranges.
-  Fix in tree (every entry's verdict; ring miss = STALE); **not yet gated,
-  servers half-rolled** — START-HERE §1b has the exact state and steps.
-  Perf residuals unchanged: hard-write 36-way sub-chunk CAS; 1 GiB open =
-  20 s (per-lane range fetch not implemented); transient mdtest rmdir
-  ENOTEMPTY.
-- **In flight (uncommitted; see START-HERE §1b):** `host_pub_batch` fix
-  (above), `alloc_key_claim` (log-path alloc vs txn intent), reaper
-  `EFS_KV_DEL` `vlen` init + `wal_encode` PUT-only `vlen` check (reaper was
-  stuck `lane-sweep rc=-5`), client fail-instead-of-zero-fill on
-  layout-pull error. `efsd` from this tree runs on fcstor004 only;
-  003/005/006 still run the previous process (same build ID — rolling OK).
+- **W6 IO-500 gate: data path CLEAN, one metadata bug open (Sep 20 23:10).**
+  Commit `30c41ee` (pub-batch every-entry verdicts, `alloc_key_claim`,
+  reaper vlen + cross-group lane sweep, dcache img_seq, per-peer outbox
+  condvar). 9×4 debug `results/io500/20260921-debug-9x4-outbox/`: both
+  `-R` reads 0 errors, every unlink OK; mdtest-easy-write **0.238 kIOPS**
+  (4.7× the morning), mdtest-hard-write 0.201 (11×), easy-read 1.16 GiB/s,
+  hard-read 3.89, easy-write 0.78, hard-write 0.046 (36-way sub-chunk CAS).
+  posix jobs=1 **200/201 + mmap SKIP in 60 s**. Open: parent-row lost
+  update (below, user decision), 1 GiB open = 20 s (per-lane range fetch
+  not implemented). The cluster runs `d0fd0448adb6-dirty` = same source as
+  `30c41ee`; next server restart is stop-all/start-all (build ID changed).
 - Honest write numbers (MiB/s, flush in clock): 1-client 8 GiB dd+fsync
   **639** (best 724); 4-client **251**; 9-client **202** — 3.8 / 0.46 /
   0.37 % of the 16.7 / 44 / 44 GB/s ceilings. Reads scale with clients,
   writes share a ceiling that gets WORSE with clients. Every write wall
   measured so far is software. Do not compare against the deleted pre-Raft
   engine's numbers (Aug: 2355 / 3599) — different system.
-- posix suite 1 jobs=1 known signature: **195/201** ± — 15 s walk timeouts
-  (`dir_deep_nesting*`, `dir_many_files`, `names_crazy_dirs`),
-  `mmap_write_read` SKIP (`MAP_SHARED` ENODEV by spec),
-  `concurrent_writes_disjoint` load flake. posix2 one pair **58–60/63**:
+- posix suite 1 jobs=1 known signature (since the outbox fix): **200/201**
+ in ~60 s, `mmap_write_read` SKIP (`MAP_SHARED` ENODEV by spec). The old
+ 15 s walk timeouts (`dir_deep_nesting*`, `names_crazy_dirs`,
+ `mtime_monotonic_many_writes`) were the 100 ms floor — if they return,
+ the cluster is not idle or a wakeup regressed. posix2 one pair **58–60/63**:
   `peer_concurrent_append` (one side's O_APPEND records missing),
   `peer_fcntl_range_conflict` (per-client lockf), overlap-pwrite RMW flakes.
   Anything else is new.
@@ -129,8 +121,18 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   are BUSY under a pending intent and bump the key version
   (`alloc_key_claim`). Callers read the ino back from the dentry.
 - Same-parent concurrent mkdir: two dual-hosts race the parent-row CAS →
-  one preps STALE. Client retries STALE for `INODE_CREATE` only. Deeper fix
-  (not done): parent nlink/dseq/times as commutative txn reductions (§7.2).
+ one preps STALE. Client retries STALE for `INODE_CREATE` only. Deeper fix
+ (not done): parent nlink/dseq/times as commutative txn reductions (§7.2).
+- **Parent-row lost update (open, Sep 20 23:10, user decision pending):**
+ log-path applies (`create_file_batch`, `mkdir_batch`,
+ `efs_meta_apply_unlink/link/rename/rmdir`) PUT the parent inode row
+ unversioned and without probing intents; the txn path EXCL-CASes the same
+ row with a full image from its read snapshot. Concurrent same-parent
+ mkdir/rmdir from 36 ranks left `test-dir.0-0` (ino 824) at nlink=2 with
+ 3 children → every further rmdir is `EFS_ERR_PROTO` → EIO forever (the
+ "transient mdtest rmdir" residual is not transient). Same class as
+ `alloc_key_claim`; options in START-HERE §1b step E. A dir whose
+ `raft-getattr` nlink ≠ 2 + `raft-readdir` count is this bug.
 - `efs_kv_scan_prefix` callback returning **>0 means batch-full**, not
  error. The reaper (`lane-sweep`, `rsv_purge`) misread it for weeks —
  no lane with >64 chunks was ever swept. Check this in any new scan user.

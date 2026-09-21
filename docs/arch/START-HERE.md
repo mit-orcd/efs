@@ -50,6 +50,51 @@ the code is already unit-gated. Update or delete this block when done — an
 
 **Progress log (newest first — read this before the state below):**
 
+- **23:10 (Sep 20)** — **Step D (9×4 IO-500 debug) DONE and correct:**
+  `results/io500/20260921-debug-9x4-outbox/` (run id 2026.09.20-22.45.42,
+  cluster on the outbox-fix build). Both `-R` reads **0 errors**, every
+  ior file unlinked. vs the morning gate (`20260920-debug-9x4`):
+  mdtest-easy-write **0.238 kIOPS (was 0.050, 4.7×)**, mdtest-hard-write
+  0.201 (was 0.018, 11×), mdtest-easy-stat 0.88 (0.24), mdtest-hard-stat
+  2.76 (0.79), mdtest-easy-delete 0.29, mdtest-hard-delete 0.61;
+  ior-easy-write 0.776 GiB/s (0.814, unchanged — W4 wall), ior-hard-write
+  0.046 (0.044, unchanged — 36-way sub-chunk CAS), ior-easy-read 1.16
+  (1.80; 25 s of the 37 s is the 1 GiB `open`, see residuals),
+  ior-hard-read 3.89 (3.55).
+  **New correctness finding — wedged directory, needs a user decision
+  (§4):** 7 mdtest `WARNING: Unable to remove directory
+  …/mdtest-easy/test-dir.0-0/mdtest_tree.N.0`. Afterwards 4 of them rmdir
+  fine (transient STALE), **3 return EIO forever**: `raft-rmdir` →
+  `status=3` (ERROR) because `server_raft_host_rmdir` /
+  `efs_meta_apply_rmdir` hit `prow.nlink < 3 → EFS_ERR_PROTO`. The parent
+  `test-dir.0-0` (ino 824) has **nlink=2 with 3 live subdirectories**
+  (true value 5): 36 ranks did `mkdir` then `rmdir` of one child each in
+  the same parent; children with an even ino go the same-group **log
+  path** (`efs_meta_apply_rmdir`: PUT of the parent row, no intent probe,
+  no version bump) and odd-ino children go the **txn path** (EXCL on the
+  parent row at `pver`, PUT of a full row image with `nlink-1` from its
+  read snapshot). A txn that read the row before a log-path apply still
+  PREPAREs at the old version, wins, and overwrites the log-path
+  decrement/increment — the exact class `alloc_key_claim` fixed for the
+  ALLOC key on Sep 20 (`meta_apply.c` comment above it), now on the parent
+  inode row. Every log-path parent-row PUT is exposed: `create_file_batch`,
+  `mkdir_batch`, `efs_meta_apply_unlink/link/rename/rmdir`. Consequence:
+  parent `nlink` drifts low → the last children can never be rmdir'ed
+  (EIO), `rm -rf` of an mdtest tree fails; drifts high → a directory
+  claims children it does not have. This is the "transient mdtest rmdir
+  ENOTEMPTY" residual — it is not transient.
+  Leftovers on 19810: `/io500/2026.09.20-22.45.42/mdtest-easy/test-dir.0-0/
+  mdtest_tree.{3,18,27}.0` (parent 824 nlink=2). Ignore or wipe.
+  Options for the user: **(a)** generalize `alloc_key_claim` to the parent
+  row: log-path PUT is BUSY under a pending intent and bumps the row's
+  version so the txn's EXCL goes STALE — same rule as ALLOC, mechanical,
+  plus the client must retry STALE for MKDIR/RMDIR/UNLINK/LINK/RENAME (today
+  only `INODE_CREATE`, `inode_rpc.c:299`), and the 50 ms × 2ⁿ BUSY backoff
+  becomes the same-parent latency; **(b)** the spec'd §7.2 end state:
+  parent nlink / dseq / mtime as commutative REDUCE parts (the existing
+  `efs_txn_reduce` carries only max_end/max_mtime/max_ctime; needs a
+  signed nlink delta and a REDUCE resolve onto an inode row), which makes
+  same-parent ops conflict-free instead of retried. Not started either.
 - **22:45 (Sep 20)** — **The 100 ms metadata floor is gone: mkdir med
   103 → 7.2 ms, create+1B+close 60–107 → 6.7, append+close 160–180 → 9.0**
   (`results/perf/20260921-md-latency.txt`). Step C below is DONE; the
@@ -214,23 +259,28 @@ shell died mid-rolling-restart, which is why this block exists):**
 
 **Steps (as of 22:45 Sep 20 — steps 1–4, B and C are DONE; what is left):**
 
-- **A. Commit what is in the tree now** (code + rules + skill scripts +
-  this file + `results/posix/20260921-012432` +
-  `results/perf/20260921-md-latency.txt` + the `posix3` result dir once it
-  finishes). Message: W6 correctness batch — pub-batch verdicts,
-  alloc_key_claim, reaper DEL vlen + cross-group lane sweep, dcache
-  img_seq/global seq/keep-unreported, dir-rename dual-host bounce, read
-  fail-not-zero-fill, per-peer outbox condvar (100 ms commit floor),
-  node9901 runner tooling.
+- **A. DONE — commit `30c41ee`** (W6 correctness batch + the 100 ms
+  floor). posix jobs=1 after the outbox fix: **200/201 both-pass + mmap
+  SKIP in 60 s** (`results/posix/20260921-024204`; the four 15 s walk
+  timeouts are gone). **The cluster still runs `d0fd0448adb6-dirty`**
+  (byte-identical source to `30c41ee`, built before the commit); the next
+  server restart must be stop-all-four / start-all-four, `roll_efsd.sh`
+  will refuse. Clients likewise run the dirty build — fine until the next
+  `deploy_fuse_clients.sh`.
 - **B. DONE** — reaper drained, both groups flat; `raft_log_tail.py` on 004
   no longer dominated by `LANE_SWEEP`. Keep the check as a habit before
   any measurement.
 - **C. DONE** — `results/perf/20260921-md-latency.txt`: medians 6–9 ms.
   The pump's per-apply KV WAL fsync is NOT a serialization point at this
   load (0.3 ms per fsync on NVMe); no `sync_mode` question for the user.
-- **D. Step 5** (9×4 IO-500 debug) via
-  `efs-bg.sh start io500 'SLOTS=4 NP=36 bash tests/perf/io500/run.sh debug'`
-  — gate unchanged below. Then step 6.
+- **D. DONE** — `results/io500/20260921-debug-9x4-outbox/`, 0 read errors,
+  all unlinks OK, mdtest 4.7–11× (see the 23:10 entry). Then step 6.
+- **E. Parent-row lost update (23:10 entry) — ask the user (a) or (b)
+  before coding.** Repro without IO-500: from 4 clients, 36 processes each
+  `mkdir P/dN; rmdir P/dN` 20× in one shared parent P; afterwards
+  `raft-getattr P` nlink must equal 2 + `raft-readdir P` count. Unit gate
+  for (a): `tests/test_meta_apply.c` — a log-path rmdir under a pending
+  EXCL intent on the parent row returns BUSY and bumps `ver(parent)`.
 
 Original steps (1–4 done twice, kept for the commands):
 
