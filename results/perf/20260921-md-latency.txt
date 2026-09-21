@@ -1,0 +1,23 @@
+Metadata op latency, fcstor007 -> 19810, idle cluster (commit flat both groups),
+20 ops each, python os.* on /tmp/efs-mount, EFS_TRANSPORT=tcp client, TCP peers.
+
+BEFORE (Sep 20 ~21:55, reaper quiet, backlog drained):
+  mkdir              med ~103 ms (min 5.5)
+  create+1B+close    60-107 ms
+  append+close       160-180 ms
+  client report_ms=104 on every 1-rec REPORT; leader report-split finish_ms=103
+
+Root cause: raft_host.c outbox — one shared outbox_cv for all per-peer sender
+threads + pthread_cond_signal. A message queued for peer A woke peer B's
+sender (queue empty, back to sleep); A's sender ran at the next signal for
+anyone = the next 50 ms heartbeat. Every AE and every AE reply lost 0-50 ms
+per hop -> ~100 ms per commit. strace on a follower: replies to only every
+other heartbeat, two 85-byte writev back to back.
+
+AFTER (Sep 21 02:43 UTC, per-peer tx[].cv, all four rolled):
+  mkdir              min    2.1 med    7.2 max  287.2 ms   (max = first op)
+  create+1B+close    min    5.8 med    6.7 max   52.6 ms
+  append+close       min    8.8 med    9.0 max   11.4 ms
+  stat               min    0.4 med    0.4 max    3.5 ms
+  unlink             min    1.8 med    1.8 max    2.1 ms
+  rmdir              min    2.0 med    6.4 max   11.3 ms

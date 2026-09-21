@@ -25,6 +25,98 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 20 2026 evening — reaper cross-group lane bug, the 100 ms commit floor, node9901 runner
+
+**Symptom chain.** Posix jobs=1 on the full in-flight tree gave 191/201 +
+mmap SKIP twice (`results/posix/20260921-011518`, `-012432`), with
+`mtime_monotonic_many_writes` timing out deterministically: 80 × (open
+`O_APPEND`, write 1 B, close) at ~200 ms each. Isolated probe on fcstor007
+against an "idle" cluster: mkdir median 103 ms (min 5.5), create+1B+close
+60–107, append+close 160–180; the client log said `report_ms=104` on every
+one-record REPORT, and the leader's `report-split nrec=1 pack_ms=0
+push_ms=0 finish_ms=103` — pack and push free, the wait for the apply
+verdict ~100 ms.
+
+**Finding.** `efs-mgmt raft-status` showed both groups committing ~33
+entries/s with no client process anywhere. A 3 MB tail of fcstor004's
+`raft.log` (new `tests/tools/raft_log_tail.py`, framing from
+`raft_log.c`) was **92 % `LANE_SWEEP`** in both groups: the same 64
+inodes, lane 0 only, 362 times each in the window — one sweep per inode
+per GC pass, forever. `host_gc_propose` was leader-only ("the reaper only
+walks groups this node leads"), but `efs_kv_lane_shard` is
+`ish + lane × (2·(h & 0x7ff)+1)`: an odd stride, so lane 1, 3, 5 … of every
+inode are in the *other* group. The anchor-group leader swept lane 0
+(landed), got `NOT_PRIMARY` for lane 1, `break` → "retry the whole marker
+next pass". No inode with an active odd lane could ever be reaped unless
+one node happened to lead both groups (which is why it sometimes worked in
+the past). The earlier `rc=-5` (`vlen`) and `rc=1` (batch-full) reaper
+bugs masked this one: they failed lane 0 first.
+
+**Fix.** `host_gc_propose` proposes locally when leader, otherwise
+forwards to that group's leader with `host_remote_cmd` (the same path a
+client op takes through `server_raft_host_submit` → `host_propose_wait_idx`)
+and then `host_wait_applied` on the local replica if it hosts the group.
+No `read_mu` (GC thread never holds it). Deployed with
+`tests/roll_efsd.sh 1 2 3 4` (01:48–01:50 UTC, each node caught up in
+< 10 s, build `d0fd0448adb6-dirty` unchanged). After the roll `REAP_DONE`
+went from 0.3 % to 40 % of entries: the backlog of dead inodes (IO-500 /
+mdtest / posix leftovers, thousands) drains at ~15 inodes/s per group. The
+pass is serial (one propose+wait per lane, then REAP_DONE); batching the
+32 markers' proposals before waiting is an obvious speed-up, not done.
+
+**Why it cost clients 100 ms — first (wrong) theory.** The pump is one
+thread per node: tick + apply, and every apply fsyncs the KV WAL
+(`EFS_KV_LSM_SYNC`), so the 33 entries/s reaper stream was assumed to keep
+the pump ~90 % busy and queue every client entry. After the reaper drained
+(both groups flat) the median did NOT move: mkdir still ~100 ms, min 5.5.
+The general shape still holds — **any background stream of small commits
+adds latency to every client op**, so measure only on a flat-`commit`
+cluster and check `raft_log_tail.py` first — but it was not the floor.
+
+**The real 100 ms floor: outbox wakeup (fixed, 22:40).** `strace -f -tt` on
+the leader (004) during a create loop: client request in, raft-log
+`pwrite`+`fsync` 0.3 ms, KV WAL fsync 0.3 ms — and the AppendEntries to one
+peer left the outbox **47 ms** after the propose. On a follower (003) the
+picture was unmistakable: heartbeats arrive every 50 ms, but the follower's
+outbox writes its 85-byte AE replies only on every OTHER heartbeat, two
+back to back — every reply waited for the next incoming message. Code:
+`raft_host.c` had ONE `h->outbox_cv` shared by all per-peer sender threads
+and `host_send` used `pthread_cond_signal`, which wakes one arbitrary
+waiter. A message for peer A woke B's sender (its queue empty, back to
+sleep) and A's sender ran at the next signal for anyone — the next
+heartbeat. Each hop lost 0–50 ms; AE + reply ≈ 100 ms per commit,
+independent of fsync speed. Fix: `pthread_cond_t cv` per `struct
+host_outbox`, `host_send` signals `tx->cv`, `host_stop_senders` broadcasts
+all. Rolled all four (TCP peers). Result, idle cluster, 20 ops each
+(`results/perf/20260921-md-latency.txt`): mkdir med 103 → **7.2 ms**,
+create+1B+close 60–107 → **6.7**, append+close 160–180 → **9.0**, stat 0.4,
+unlink 1.8. Lesson: when a median sits at a multiple of the heartbeat
+interval while every syscall is sub-millisecond, it is a wakeup/scheduling
+bug — strace the follower, not the leader, and look for replies bunching.
+
+**Rolling-restart election storm (observed, not fixed).** Group 2 went
+term 199 → 264 during and ~5 min after the roll. All three voters' logs
+are full of `RDMA send CQE error status=12 (transport retry counter
+exceeded)` and `*** SOCKET CLOSED/REUSED BEHIND THIS CONN ***`: server
+peer connections (raft AE included, `raft_host.c` outbox →
+`server_peer_conn_get`) are upgraded to RDMA by `peer_pool.c`; a restarted
+node's QPs vanish and each peer's pooled conn blocks for the retry budget
+before it is dropped, missing heartbeats. Same lines exist in every
+`efsd.log.prev` from earlier restarts; it converges by itself. Same class
+as the client pool identity bug (`test_conn_fd`, W10).
+
+**Runner.** The login-node Cursor shell died five times today, twice
+mid-measurement. From now on anything over ~60 s runs detached on node9901
+(`~/.cursor/skills/efs-test-ssh/scripts/efs-bg.sh start|status|wait|kill`,
+per-host ssh-agent in the wrapper since `$HOME` is NFS-shared; log
+`~/efs-runs/<name>.log`), and the login node only probes. New scripts:
+`tests/deploy_fuse_clients.sh` + `tests/fuse_client_remount.sh` (8 clients
+rebuilt and remounted in 5 s wall, one status line each),
+`tests/roll_efsd.sh` (rolling restart with build-ID refusal and per-group
+catch-up wait). The deploy rule's `ps|awk` kill-by-port was replaced by
+`pkill -9 -x efsd` after it killed the agent's own remote shell (003 and
+005 down together, group 0 without quorum for 4 min, Sep 20 morning).
+
 ## W6 narrative as it stood in START-HERE before Sep 20 (superseded)
 
 hard/easy write = **0.097**. Easy write 0.26 GiB/s vs 9-client 8g

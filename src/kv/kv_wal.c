@@ -148,10 +148,19 @@ static int wal_encode(struct kv_wal *w, const struct efs_kv_item *items,
             return EFS_ERR_INVAL;
         if (items[i].klen == 0 || items[i].klen > KV_LSM_KLEN_MAX || !items[i].key)
             return EFS_ERR_INVAL;
-        if (items[i].vlen > KV_LSM_VLEN_MAX)
-            return EFS_ERR_INVAL;
-        if (items[i].op == EFS_KV_PUT && items[i].vlen && !items[i].val)
-            return EFS_ERR_INVAL;
+        /* A DEL carries no value: its val/vlen are not encoded and must not
+         * be validated. Callers build DEL items from scan callbacks that
+         * only set op/key/klen over an uninitialised stack array, and the
+         * memory KV (unit tests) ignores vlen on DEL — so a vlen check here
+         * made the reaper's LANE_SWEEP / rsv purge fail INVAL in production
+         * only, nondeterministically (`apply lane-sweep rc=-5` ~9/s on the
+         * leader, 124 REAP markers re-proposed every 2 s, nothing reclaimed). */
+        if (items[i].op == EFS_KV_PUT) {
+            if (items[i].vlen > KV_LSM_VLEN_MAX)
+                return EFS_ERR_INVAL;
+            if (items[i].vlen && !items[i].val)
+                return EFS_ERR_INVAL;
+        }
         need += 9 + items[i].klen;
         if (items[i].op == EFS_KV_PUT)
             need += items[i].vlen;

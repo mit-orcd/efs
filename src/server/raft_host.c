@@ -123,6 +123,17 @@ struct host_outbox {
     int peer;                /* raft_id this outbox serves */
     pthread_t tid;
     int started;
+    /* Per-peer wakeup (guarded by h->outbox_mu). Until Sep 20 every sender
+     * waited on ONE shared h->outbox_cv and host_send used cond_signal, so
+     * a message queued for peer A routinely woke the sender for peer B,
+     * which found its own queue empty and went back to sleep; A's sender
+     * ran only at the next signal for anyone — the next 50 ms heartbeat.
+     * Every AppendEntries and every AE reply therefore waited 0–50 ms on
+     * each hop, and a Raft commit took ~100 ms instead of ~1 ms: mkdir
+     * median 103 ms, create+close 60–107, O_APPEND+close 160–180, with the
+     * fsyncs at 0.3 ms. Visible in strace as followers acking only every
+     * other heartbeat, two replies back to back. */
+    pthread_cond_t cv;
     int n;
     struct host_outbox_item q[HOST_OUTBOX_MAX];
     /* EFS_RAFT_OBS counters (guarded by outbox_mu; stats are diagnostic
@@ -237,10 +248,10 @@ struct efs_raft_host {
      * encodes and queues; one lazily-spawned sender thread per peer does
      * the blocking send + empty-ACK wait, preserving per-peer FIFO order,
      * dead-conn detection and per-peer backpressure. A dead peer stalls
-     * only its own sender. outbox_mu/outbox_cv guard all tx[] state;
+     * only its own sender. outbox_mu guards all tx[] state, each sender
+     * sleeps on its own tx[].cv (see struct host_outbox);
      * tx_running=0 tells senders to drop-and-exit and host_send to drop. */
     pthread_mutex_t outbox_mu;
-    pthread_cond_t outbox_cv;
     int tx_running;
     struct host_outbox tx[EFS_RAFT_MAX_PEERS];
     /* EFS_RAFT_OBS: wait_applied timeouts, pump h->mu hold high-water, and
@@ -426,7 +437,7 @@ static void *host_sender(void *arg)
 
         pthread_mutex_lock(&h->outbox_mu);
         while (tx->n == 0 && h->tx_running)
-            pthread_cond_wait(&h->outbox_cv, &h->outbox_mu);
+            pthread_cond_wait(&tx->cv, &h->outbox_mu);
         if (!h->tx_running) {
             for (i = 0; i < tx->n; i++)
                 free(tx->q[i].buf);
@@ -560,7 +571,7 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
         else
             tx->n--; /* no sender: drop rather than queue forever */
     }
-    pthread_cond_signal(&h->outbox_cv);
+    pthread_cond_signal(&tx->cv);
     pthread_mutex_unlock(&h->outbox_mu);
     return EFS_OK;
 }
@@ -3920,30 +3931,47 @@ out:
     return rc;
 }
 
-/* Propose one GC command and wait for it to apply. Leader-only: the
- * reaper only walks groups this node leads, so a lost leadership is
- * NOT_PRIMARY and the next pass retries. Do not take read_mu — that
- * lock serializes every inode RPC, and a REAP_SCAN_MAX pass used to
- * hold it across tens of raft RTTs. */
+/* Propose one GC command and wait for it to apply. The reaper walks the
+ * anchor shards of groups this node LEADS, but the commands it drives do
+ * not all land in that group: a lane's shard is ish + lane * (odd stride),
+ * so every odd lane of an inode lives in the OTHER group. Until Sep 20
+ * this was leader-only (NOT_PRIMARY otherwise), which made any inode with
+ * an active odd lane unreapable unless one node happened to lead both
+ * groups: the pass swept lane 0 (landed), failed lane 1, and retried the
+ * whole marker next second — 64 markers × 1/s = 92 % of the raft log was
+ * LANE_SWEEP, ~33 entries/s per group with the cluster idle, and every
+ * client commit queued behind that fsync stream (mkdir median 103 ms).
+ * A foreign-group command is forwarded to that group's leader exactly as a
+ * client op would be (host_remote_cmd), then we wait for the local replica
+ * to apply it if we host one. Do not take read_mu — that lock serializes
+ * every inode RPC, and a REAP_SCAN_MAX pass used to hold it across tens of
+ * raft RTTs. */
 static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
                            const uint8_t *cmd, uint32_t clen)
 {
     struct efs_raft *r;
+    struct efs_msg_raft_mkfs_reply rep;
     uint64_t idx = 0;
-    int rc;
+    int rc, lid = -1;
 
     pthread_mutex_lock(&h->mu);
     r = group_raft(h, group);
-    if (!r || efs_raft_role(r) != EFS_RAFT_LEADER) {
+    if (r && efs_raft_role(r) == EFS_RAFT_LEADER) {
+        rc = efs_raft_propose(r, cmd, clen, &idx);
         pthread_mutex_unlock(&h->mu);
-        return EFS_ERR_NOT_PRIMARY;
+        if (rc != EFS_OK)
+            return rc;
+        host_pump_kick(h);
+        return host_wait_applied(h, group, idx, NULL);
     }
-    rc = efs_raft_propose(r, cmd, clen, &idx);
+    if (r)
+        lid = efs_raft_leader(r);
     pthread_mutex_unlock(&h->mu);
+    memset(&rep, 0, sizeof(rep));
+    rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);
     if (rc != EFS_OK)
         return rc;
-    host_pump_kick(h);
-    return host_wait_applied(h, group, idx, NULL);
+    return host_wait_applied(h, group, rep.index, NULL);
 }
 
 /* One GC record: attempt every un-acked fragment, appending an ack item
@@ -4196,12 +4224,12 @@ int server_raft_host_start(struct efsd_server *s)
     pthread_mutex_init(&h->inbox_mu, NULL);
     pthread_mutex_init(&h->outbox_mu, NULL);
     pthread_cond_init(&h->applied_cv, NULL);
-    pthread_cond_init(&h->outbox_cv, NULL);
     {
         int i;
         for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
             h->tx[i].h = h;
             h->tx[i].peer = i;
+            pthread_cond_init(&h->tx[i].cv, NULL);
         }
     }
     h->pump_efd = eventfd(0, EFD_NONBLOCK);
@@ -4306,7 +4334,8 @@ static void host_stop_senders(struct efs_raft_host *h)
 
     pthread_mutex_lock(&h->outbox_mu);
     h->tx_running = 0;
-    pthread_cond_broadcast(&h->outbox_cv);
+    for (i = 0; i < EFS_RAFT_MAX_PEERS; i++)
+        pthread_cond_broadcast(&h->tx[i].cv);
     pthread_mutex_unlock(&h->outbox_mu);
     for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
         if (h->tx[i].started)
@@ -4358,7 +4387,8 @@ void server_raft_host_stop(void)
     pthread_mutex_destroy(&h->inbox_mu);
     pthread_mutex_destroy(&h->outbox_mu);
     pthread_cond_destroy(&h->applied_cv);
-    pthread_cond_destroy(&h->outbox_cv);
+    for (i = 0; i < EFS_RAFT_MAX_PEERS; i++)
+        pthread_cond_destroy(&h->tx[i].cv);
     if (h->pump_efd >= 0)
         close(h->pump_efd);
     g_host = NULL;
@@ -7884,6 +7914,19 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         bounce_add(gs, &ngs, 8, efs_raft_shard_group(csh));
         if (xist)
             bounce_add(gs, &ngs, 8, efs_raft_shard_group(nsh));
+        /* A DIRECTORY rename GUARDs the dest's whole ancestry chain
+         * (host_pver_guard_chain: every ancestor's parent_version up to
+         * the root). Each MKDIR scatters its inode, so the chain spans
+         * both groups almost always, and the walk reads those rows from
+         * the local KV — on a single-group host the first foreign ancestor
+         * is group_raft()==NULL → NOT_PRIMARY with no leader hint, which
+         * the client cannot follow (EIO on `mv dir`; deterministic while
+         * the old_parent group's leader is a single-group node, Sep 20).
+         * Only a dual host can run a dir rename. */
+        if (is_dir) {
+            bounce_add(gs, &ngs, 8, EFS_RAFT_GROUP_SHARD);
+            bounce_add(gs, &ngs, 8, EFS_RAFT_GROUP_SHARD2);
+        }
         all = 1;
         for (j = 0; j < ngs; j++)
             if (!host_hosts(h, gs[j]))
@@ -8550,12 +8593,39 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
     return pack_publish_cmd(cmd, clen, &p);
 }
 
+/* One REPORT's publications for one Raft group. A report larger than
+ * HOST_PUB_BATCH_N pubs is proposed as SEVERAL log entries (push proposes
+ * when the buffer fills, finish proposes the tail). Every entry's apply
+ * verdict matters: a pub that loses its N-1 CAS at apply time (a peer's
+ * publish landed between our pack and our apply) is STALE on the ring for
+ * ITS entry only. Checking just the last entry — what this did until Sep 20
+ * — returned OK for a report whose first entry held STALE losers, the
+ * client marked those ranges clean, and the winner's generation (merged on
+ * an older base) became the file: ior-hard 36 ranks × 3000 segs lost 6707
+ * of 108000 records, every one "everything one client wrote into a shared
+ * chunk", zeros in a cold verify. `idxs` remembers every proposed index;
+ * `overflow` (alloc failure) makes the wait answer STALE, never OK. */
 struct host_pub_batch {
     uint8_t group;
     uint32_t len;
     uint8_t *buf;
     uint64_t last_idx;
+    uint64_t *idxs;
+    uint32_t nidx, cidx;
+    int overflow;
 };
+
+static void host_pub_batch_reset(struct host_pub_batch *b)
+{
+    free(b->buf);
+    free(b->idxs);
+    b->buf = NULL;
+    b->idxs = NULL;
+    b->len = 0;
+    b->last_idx = 0;
+    b->nidx = b->cidx = 0;
+    b->overflow = 0;
+}
 
 static int host_pub_batch_propose(struct efs_raft_host *h, struct host_pub_batch *b,
                                   int *hint)
@@ -8570,6 +8640,18 @@ static int host_pub_batch_propose(struct efs_raft_host *h, struct host_pub_batch
     if (rc != EFS_OK)
         return rc;
     b->last_idx = idx;
+    if (b->nidx == b->cidx) {
+        uint32_t nc = b->cidx ? b->cidx * 2 : 8;
+        uint64_t *ni = realloc(b->idxs, (size_t)nc * sizeof(*ni));
+
+        if (!ni) {
+            b->overflow = 1;
+            return EFS_OK;
+        }
+        b->idxs = ni;
+        b->cidx = nc;
+    }
+    b->idxs[b->nidx++] = idx;
     return EFS_OK;
 }
 
@@ -8608,23 +8690,52 @@ static int host_pub_batch_finish(struct efs_raft_host *h, struct host_pub_batch 
     return host_pub_batch_propose(h, b, hint);
 }
 
+/* Wait for the LAST proposed entry (indices in one group are monotonic, so
+ * every earlier one is applied too), then read EVERY entry's verdict. A
+ * ring miss (entry evicted from the HOST_APPLY_RC_RING before we looked,
+ * or `overflow`) is STALE here, not OK: the client's STALE path re-pulls
+ * the map and replays only chunks whose generation moved (a no-op when
+ * nothing did), whereas an unfounded OK drops dirty ranges for good. The
+ * first non-OK verdict wins, except that any STALE is reported as STALE
+ * (the client can only repair STALE by retrying). */
 static int host_pub_batch_wait(struct efs_raft_host *h, struct host_pub_batch *b,
                                int *hint)
 {
-    int rc = EFS_OK;
+    int rc = EFS_OK, saw_stale = 0;
     uint64_t idx = b->last_idx;
+    uint32_t i;
 
     if (idx)
         rc = host_wait_applied(h, b->group, idx, hint);
     if (rc == EFS_OK && idx) {
+        struct host_group *g;
+
         pthread_mutex_lock(&h->mu);
-        rc = host_apply_rc_locked(h, b->group, idx);
+        g = group_slot(h, b->group);
+        for (i = 0; i < b->nidx && g; i++) {
+            uint64_t s = b->idxs[i] & HOST_APPLY_RC_MASK;
+            int erc;
+
+            if (g->arc_idx[s] != b->idxs[i]) {
+                h->obs_arc_miss++;
+                erc = EFS_ERR_STALE;
+            } else {
+                erc = g->arc_rc[s];
+            }
+            if (erc == EFS_ERR_STALE)
+                saw_stale = 1;
+            else if (erc != EFS_OK && rc == EFS_OK)
+                rc = erc;
+        }
         pthread_mutex_unlock(&h->mu);
+        /* !g (group not hosted) cannot happen here: the report path
+         * requires every group it publishes to be local (checked above). */
+        if (b->overflow)
+            saw_stale = 1;
+        if (rc == EFS_OK && saw_stale)
+            rc = EFS_ERR_STALE;
     }
-    free(b->buf);
-    b->buf = NULL;
-    b->len = 0;
-    b->last_idx = 0;
+    host_pub_batch_reset(b);
     return rc;
 }
 
@@ -8872,10 +8983,8 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
 
             if (rc == EFS_OK)
                 rc = wrc;
-            else {
-                free(bat[bi].buf);
-                bat[bi].buf = NULL;
-            }
+            else
+                host_pub_batch_reset(&bat[bi]);
         }
         t_fin1 = now_us_();
         /* Committed everything committable; tell the client to retry the

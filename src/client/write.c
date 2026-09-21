@@ -1635,12 +1635,48 @@ struct dcache_ent {
     uint64_t object_gen;
     uint64_t snap_seq;
     uint64_t object_seq;
+    /* snap_seq of the image currently installed in e->data by a completed
+     * flush (dcache_install_image). Same race as object_seq, other side:
+     * close A snapshots (dirty=0), a write patches + re-dirties, close B
+     * snapshots (dirty=0, its copy has the write), PUT B installs, then
+     * the slower PUT A installs — with dirty==0 there is no overlay, so
+     * A's image (without the write) replaces B's in e->data. The write is
+     * gone from the only unpublished copy and every later PUT of the slot
+     * carries the hole (concurrent_appends 196–199/200, 2-byte NUL holes
+     * at the same offsets warm and cold, Sep 20). An install older than
+     * img_seq is skipped. */
+    uint64_t img_seq;
     efs_node_id_t object_nodes[EFS_NUM_FRAGMENTS];
     uint8_t object_cks[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     struct dcache_ent *next;
 };
 
 static struct dcache_ent *dcache_find(uint32_t s, efs_ino_t ino, uint32_t ci);
+
+/* Snapshot sequence: ONE monotonic counter for the whole dcache, not a
+ * per-entry one. snap_seq / object_seq / img_seq and the putid seq are all
+ * compared per (ino,ci), but the slot for an (ino,ci) is dropped and
+ * recreated (adopt shrink, truncate, reclaim) while PUTs of the old
+ * incarnation are still in flight or already recorded in putid. A per-entry
+ * counter restarted at 1 in the new incarnation, so putid_note saw
+ * seq 1 < 58 and SKIPPED every PUT of the new slot for the next 57
+ * closes: the REPORT kept publishing the old incarnation's last object and
+ * the file's tail was never on the server (concurrent_appends cold read:
+ * 8/40 files NUL tail, warm read fine, Sep 20). */
+static uint64_t g_dcache_seq;
+
+static uint64_t dcache_seq_next(struct dcache_ent *e)
+{
+    uint64_t s = __atomic_add_fetch(&g_dcache_seq, 1, __ATOMIC_RELAXED);
+
+    e->snap_seq = s;
+    return s;
+}
+
+static uint64_t dcache_seq_now(void)
+{
+    return __atomic_load_n(&g_dcache_seq, __ATOMIC_RELAXED);
+}
 
 /* EFS_DCACHE_TRACE=1: one stderr line per slot state transition (snapshot,
  * PUT record, replay, install, take). Off by default. */
@@ -2148,6 +2184,26 @@ void efs_dcache_overlay(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
     pthread_mutex_unlock(mu);
 }
 
+/* "Clean" for drop_if_clean means nothing of ours is at risk: not dirty,
+ * AND the last object we PUT is the committed base (its REPORT landed).
+ * A slot that is dirty==0 but whose object_gen != base_gen has bytes that
+ * exist only in that object and in e->data; the REPORT carrying it is
+ * still in flight. Dropping it made the next append rebuild the slot from
+ * the COMMITTED map gen — one PUT behind — so the rebuilt image lacked the
+ * previous close's bytes and every later PUT of the slot published that
+ * hole (concurrent_appends: 2-byte NUL at the offset right before each
+ * adopt-shrink rebuild, cold and warm; Sep 20 trace ino 14870 off 270).
+ * The adopt path hits this on every O_APPEND close: the owner's row
+ * (size after the last REPORT) is smaller than the local row (size after
+ * the next reservation), so "shrink" fires on our own echo. */
+static int dcache_keep_on_drop(const struct dcache_ent *e)
+{
+    if (e->dirty)
+        return 1;
+    return e->object_gen && e->base_gen != EFS_CHUNK_BASE_UNCOND &&
+           e->base_gen != e->object_gen;
+}
+
 static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)
 {
     uint32_t s = dcache_slot(ino, ci);
@@ -2155,10 +2211,12 @@ static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)
     pthread_mutex_lock(mu);
     struct dcache_ent *head = &g_dcache.e[s];
     if (head->ino == ino && head->ci == ci) {
-        if (skip_dirty && head->dirty) {
+        if (skip_dirty && dcache_keep_on_drop(head)) {
+            DTRACE(head, "drop-KEEP unreported");
             pthread_mutex_unlock(mu);
             return;
         }
+        DTRACE(head, "drop skip_dirty=%d", skip_dirty);
         if (head->dirty && head->len)
             dcache_note_dirty_bytes(-(int64_t)head->len);
         dcache_pin_release(head);
@@ -2178,8 +2236,11 @@ static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)
     struct dcache_ent *prev = head;
     for (struct dcache_ent *e = head->next; e; prev = e, e = e->next) {
         if (e->ino == ino && e->ci == ci) {
-            if (skip_dirty && e->dirty)
+            if (skip_dirty && dcache_keep_on_drop(e)) {
+                DTRACE(e, "drop-KEEP unreported");
                 break;
+            }
+            DTRACE(e, "drop skip_dirty=%d", skip_dirty);
             if (e->dirty && e->len)
                 dcache_note_dirty_bytes(-(int64_t)e->len);
             dcache_pin_release(e);
@@ -2569,6 +2630,10 @@ static int dcache_fill(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
     e->have_base = 1;
     e->nrange = 0;
     e->object_gen = 0;
+    /* A whole-chunk image (or a recreated slot) supersedes every snapshot
+     * taken so far, including a dropped incarnation's in-flight PUTs:
+     * their late installs would overwrite it (nrange==0 → no overlay). */
+    e->img_seq = dcache_seq_now();
     dcache_pin_add(e);
     if (!was_dirty)
         dcache_note_dirty_bytes((int64_t)chunk_size);
@@ -2593,6 +2658,7 @@ static int dcache_take(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
     e->have_base = 1;
     e->nrange = 0;
     e->object_gen = 0;
+    e->img_seq = dcache_seq_now(); /* see dcache_fill */
     dcache_pin_add(e);
     if (!was_dirty)
         dcache_note_dirty_bytes((int64_t)chunk_size);
@@ -2714,11 +2780,20 @@ static int dcache_merge_owned(efs_ino_t ino, uint32_t ci, uint32_t off,
  * NULs, identical on a peer). Keeping e->data untouched instead left a
  * sparse zeros+ranges image flagged have_base=1. */
 static void dcache_install_image(struct dcache_ent *e, uint8_t *img,
-                                 uint32_t len)
+                                 uint32_t len, uint64_t seq)
 {
     if (!e || !e->data || e->len < len)
         return;
-    DTRACE(e, "install len=%u", len);
+    if (seq && seq <= e->img_seq) {
+        /* An older snapshot's PUT finished after a newer one's install
+         * (see img_seq). e->data already holds the newer image. */
+        DTRACE(e, "install-SKIP-old len=%u seq=%llu img_seq=%llu", len,
+               (unsigned long long)seq, (unsigned long long)e->img_seq);
+        return;
+    }
+    DTRACE(e, "install len=%u seq=%llu", len, (unsigned long long)seq);
+    if (seq)
+        e->img_seq = seq;
     if (e->dirty) {
         for (uint8_t i = 0; i < e->nrange; i++) {
             uint32_t a = e->roff[i], n = e->rlen[i];
@@ -2789,7 +2864,7 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
         return EFS_ERR_NOMEM;
     }
     memcpy(copy, e->data, len);
-    *seq_out = ++e->snap_seq;
+    *seq_out = dcache_seq_next(e);
     DTRACE(e, "snap-steal");
     e->dirty = 0;
     dcache_note_dirty_bytes(-(int64_t)len);
@@ -2830,7 +2905,7 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
  * (same as flush_slot_inner — dropping the slot made concurrent_appends
  * read zeros). Re-dirty on PUT failure. */
 static void dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
-                              uint32_t len, int put_ok)
+                              uint32_t len, int put_ok, uint64_t seq)
 {
     uint32_t s = dcache_slot(ino, ci);
     pthread_mutex_t *mu = dcache_mu(s);
@@ -2848,7 +2923,7 @@ static void dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
         return;
     }
     if (e && e->ino == ino && e->ci == ci)
-        dcache_install_image(e, copy, len);
+        dcache_install_image(e, copy, len, seq);
     pthread_mutex_unlock(mu);
 }
 
@@ -2876,7 +2951,7 @@ static int flush_pipe_drain(struct flush_pipe *p)
         int pok = (p->jobs[i].rc == EFS_OK);
 
         dcache_flush_keep(p->jobs[i].ino, p->jobs[i].ci, p->copies[i],
-                          p->lens[i], pok);
+                          p->lens[i], pok, p->jobs[i].flush_seq);
         efs_buf_free(p->copies[i], p->lens[i]);
         p->copies[i] = NULL;
         if (!pok && p->rc == EFS_OK)
@@ -2953,7 +3028,7 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             return EFS_ERR_NOMEM;
         }
         memcpy(copy, e->data, len);
-        uint64_t seq = ++e->snap_seq;
+        uint64_t seq = dcache_seq_next(e);
         DTRACE(e, "snap-inner");
         e->dirty = 0;
         /* Un-count now, while the state transition is atomic. The old code
@@ -3008,7 +3083,7 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
         if (e->ino == ino && e->ci == ci && e->data && e->len >= len) {
             /* Keep nrange so a STALE report can re-apply this client's
              * bytes onto a fresher committed base (W1). */
-            dcache_install_image(e, copy, len);
+            dcache_install_image(e, copy, len, seq);
         } else if (!e->dirty && e->ino == ino && e->ci == ci) {
             dcache_pin_release(e);
             efs_buf_free(e->data, e->len);
@@ -3205,7 +3280,16 @@ static int dcache_object_of(efs_ino_t ino, uint32_t ci, struct efs_chunk_rec *re
  * or the same rec re-sent after a partial-commit STALE) CASes on the
  * pre-publish base and loses to itself. UNCOND slots keep UNCOND (full
  * overwrite semantics are independent of the committed gen). Returns 1
- * when the slot still holds that object. */
+ * when the slot still holds that object.
+ *
+ * The base advances even when the slot's object is already a NEWER one of
+ * ours (two closes of one file overlapped: A's PUT was reported and
+ * committed while B's PUT — a superset image, later snap_seq — was still
+ * in flight). B's publish must CAS on the committed gen A; leaving the
+ * base at the pre-A gen made B STALE by construction, and a close-kicked
+ * report gives up after two STALE rounds, so B's bytes stayed unpublished
+ * until some later close of the SAME file — which never came for the last
+ * appends of concurrent_appends (cold read: tail NUL, warm read: fine). */
 static int dcache_note_committed(efs_ino_t ino, uint32_t ci, uint64_t gen)
 {
     uint32_t s;
@@ -3218,10 +3302,10 @@ static int dcache_note_committed(efs_ino_t ino, uint32_t ci, uint64_t gen)
     s = dcache_slot(ino, ci);
     pthread_mutex_lock(dcache_mu(s));
     e = dcache_find(s, ino, ci);
-    if (e && e->object_gen == gen) {
+    if (e) {
         if (e->base_gen != EFS_CHUNK_BASE_UNCOND)
             e->base_gen = gen;
-        hit = 1;
+        hit = e->object_gen == gen;
     }
     pthread_mutex_unlock(dcache_mu(s));
     return hit;
@@ -3274,7 +3358,7 @@ int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci)
         return EFS_ERR_NOMEM;
     }
     memcpy(copy, e->data, len);
-    seq = ++e->snap_seq;
+    seq = dcache_seq_next(e);
     DTRACE(e, "snap-replay");
     pthread_mutex_unlock(dcache_mu(s));
 
@@ -3321,7 +3405,7 @@ int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci)
     if (e && e->data && e->len >= len) {
         if (e->base_gen != EFS_CHUNK_BASE_UNCOND)
             e->base_gen = bg;
-        dcache_install_image(e, base, len);
+        dcache_install_image(e, base, len, seq);
     }
     pthread_mutex_unlock(dcache_mu(s));
     efs_buf_free(base, len);

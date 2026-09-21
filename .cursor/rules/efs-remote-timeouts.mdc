@@ -19,3 +19,9 @@ does not kill D-state (`fusermount3`, FUSE `request_wait_answer`).
   `timeout 3 fusermount3`.
 - Timeout is a **FAIL**, not a skip. Do not retry-until-forever.
 - No `EFS_SSH_TIMEOUT=0`. Raise only after the work is already fast.
+- **Anything over ~60 s does not run from the login node at all.** Launch
+ it detached on node9901 with
+ `~/.cursor/skills/efs-test-ssh/scripts/efs-bg.sh start <name> '<cmd>'`
+ and poll `efs-bg.sh status/wait <name>` (log on NFS: `~/efs-runs/`).
+ The login-node Cursor shell dies on long commands (four times on
+ Sep 20) and a dead shell cannot tell you whether the job ran.

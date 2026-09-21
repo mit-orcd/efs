@@ -158,13 +158,16 @@ build dir / `make clean` immediately after. (Bit us Aug 27 2026.)
 
 ### Restart one efsd (server)
 
-Kill **by port** (or `pkill -9 -x efsd` — there is only 19810). NEVER
-`pkill -f "efsd --node-id N"` (matches the ssh remote command and kills
-your own shell).
+Kill with `pkill -9 -x efsd` — exact name, nothing else. There is only
+19810. NEVER `pkill -f "efsd --node-id N"` and NEVER the old
+`ps -eo pid,args | awk '/[e]fsd / && / --port 19810/'` kill-by-port: when
+the start command is in the same ssh line, that pattern matches the
+remote shell carrying it and kills your own shell before the start runs
+(Sep 20: 003 and 005 down, group 0 without quorum for 4 min).
 
 ```
-ps -eo pid,args | awk '/[e]fsd / && / --port 19810( |$)/ {print $1}' | xargs -r kill -9
-cd /tmp/efs && setsid ./efsd --node-id N --addr 172.16.223.5X --port 19810 --storage /data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs --quota 36T --direct-io [--join 172.16.223.57:19810] >efsd.log 2>&1 </dev/null &
+pkill -9 -x efsd; sleep 1
+cd /tmp/efs && (setsid ./efsd --node-id N --addr 172.16.223.5X --port 19810 --storage /data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs --quota 36T --direct-io [--join 172.16.223.57:19810] >efsd.log 2>&1 </dev/null &)
 ```
 Nodes 2–4 need `--join` after a storage wipe; restarts on unwiped
 storage do not. Use `setsid … </dev/null &` to detach.

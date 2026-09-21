@@ -150,6 +150,22 @@ static void test_semantics(void)
     CHECK(efs_kv_batch(kv, it, 2) == EFS_OK, "batch del absent");
     CHECK(get_is(kv, "d", "4") == EFS_OK, "batch put");
 
+    /* A DEL item's val/vlen are not part of the record and must not be
+     * validated: callers fill DEL items from scan callbacks (op/key/klen
+     * only) over uninitialised arrays. The memory KV never looked at them;
+     * the WAL encoder's blanket vlen cap made the reaper's LANE_SWEEP fail
+     * INVAL in production only (`apply lane-sweep rc=-5`). */
+    it[0].op = EFS_KV_DEL;
+    it[0].key = (const uint8_t *)"d";
+    it[0].klen = 1;
+    it[0].val = (const uint8_t *)0xdeadbeef;
+    it[0].vlen = 0xffffffffu;
+    CHECK(efs_kv_batch(kv, it, 1) == EFS_OK, "del with garbage vlen");
+    CHECK(get_is(kv, "d", "") == EFS_ERR_NOT_FOUND, "garbage-vlen del applied");
+    it[0].op = EFS_KV_PUT;
+    it[0].val = (const uint8_t *)"4";
+    it[0].vlen = 1;
+
     /* A rejected batch applies nothing. */
     it[2].op = 99;
     it[2].key = (const uint8_t *)"e";

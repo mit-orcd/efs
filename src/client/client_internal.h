@@ -170,8 +170,10 @@ struct efs_chunk_rec;
 int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
                              uint32_t start, struct efs_chunk_rec *recs,
                              uint32_t *inout_count);
-void efs_client_pull_chunks_range(efs_ino_t ino, uint32_t start_ci,
-                                  uint32_t end_ci);
+/* Returns EFS_OK only if every GETCHUNKS in the range succeeded; on an
+ * error the local table may be PARTIAL for the range. */
+int efs_client_pull_chunks_range(efs_ino_t ino, uint32_t start_ci,
+                                 uint32_t end_ci);
 int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci);
 int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, int is_dir);
@@ -214,8 +216,14 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
  * mechanism that replaces the blob flush). sync=1 = fsync barrier. */
 int efs_client_report_dirty(int sync);
 int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync);
-/* Read-miss self-heal: pull chunk mappings for [ci0, ci1) from the owner,
- * rate-limited per ino. Returns 1 when a pull ran (re-check the table). */
+/* Read-miss resolution: a chunk row missing from the local table inside
+ * the file size is a HOLE only if the owner says so. Pulls the mappings
+ * for [ci0, ci1) and returns EFS_OK when the range is now authoritative
+ * (whatever is still missing is a real hole); any error means the caller
+ * must NOT zero-fill (return the error instead — I9, never substitute
+ * absent for unavailable). A successful pull covering the same range is
+ * reused for 1 s so repeated hole reads cost one GETCHUNKS, not one per
+ * read. */
 int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1);
 
 void efs_client_ensure_dir_locks(void);

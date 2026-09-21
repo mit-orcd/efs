@@ -206,11 +206,13 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
 
 /* Fetch chunk mappings in [start_ci, end_ci). Split at group boundaries so
  * each GETCHUNKS goes to that group's owner. An empty group is a hole, not
- * the end of the file. */
-static void pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci)
+ * the end of the file. Returns the first RPC error; the table is then
+ * partial for the range and the caller must not treat a missing row as a
+ * hole. */
+static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci)
 {
     if (!ino || start_ci >= end_ci)
-        return;
+        return EFS_OK;
     uint32_t start = start_ci;
     while (start < end_ci) {
         uint32_t group_end = (start | (EFS_CHUNK_GROUP_SIZE - 1u)) + 1u;
@@ -225,7 +227,7 @@ static void pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci)
             int grc = efs_client_rpc_getchunks(g_client.export_id, ino, cur,
                                                recs, &n);
             if (grc != EFS_OK)
-                return;
+                return grc;
             if (n == 0)
                 break;
             apply_chunk_recs(ino, recs, n);
@@ -238,12 +240,13 @@ static void pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci)
         }
         start = group_end;
     }
+    return EFS_OK;
 }
 
-void efs_client_pull_chunks_range(efs_ino_t ino, uint32_t start_ci,
-                                  uint32_t end_ci)
+int efs_client_pull_chunks_range(efs_ino_t ino, uint32_t start_ci,
+                                 uint32_t end_ci)
 {
-    pull_chunks_range(ino, start_ci, end_ci);
+    return pull_chunks_range(ino, start_ci, end_ci);
 }
 
 static void pull_chunks_for_ino(efs_ino_t ino, uint64_t size)
@@ -276,27 +279,42 @@ static void pull_file_layout(const struct efs_inode *rpc)
     }
 }
 
-/* Read-miss self-heal (Phase 2b follow-on): the local chunk table is only
- * a cache, filled by adopt-time pulls. A client that never got the adopt
- * trigger (the file's server mtime/size never advanced past its snapshot)
- * would zero-fill real peer data as "holes" forever (mc_stress rwfile).
- * On a read miss inside the file size, pull the mapping range from the
- * owner and let the caller re-check. Rate-limited per ino so genuinely
- * sparse files cost at most one GETCHUNKS per second, not one per read. */
+/* Read-miss resolution (Phase 2b follow-on, tightened Sep 19): the local
+ * chunk table is only a cache — rows are pulled at adopt, and the row
+ * (with its whole chunk array) is EVICTED on the last close
+ * (efs_client_stage_evict_ino) or by the Part A evictor. So a missing
+ * chunk row inside the file size is, in the common case, not a hole but a
+ * cache miss, and the pull that refills it can fail under load (GETCHUNKS
+ * NET/BUSY on a busy owner; pull_chunks_range used to swallow that).
+ *
+ * The old version rate-limited this to one pull per ino per SECOND and
+ * let every other miss zero-fill. IO-500 ior-easy-read (rank N reads the
+ * 1.2 GiB file rank N+1 just wrote and closed on the same node): the
+ * writer's row was evicted at close, the reopen pull was partial under
+ * the 9x4 load, and 38054 of 42234 1 MiB reads came back as zeros in
+ * 1.36 s — no fetch at all. Earlier the writer's dcache image papered
+ * over the missing map; once the overlay demanded a current map entry
+ * (dcache_image_current) the zeros showed.
+ *
+ * Now: always pull the missing range; a miss is a hole only after a
+ * SUCCESSFUL pull that covered it. On a pull error the caller gets the
+ * error and must not zero-fill. A successful pull of a superset range is
+ * reused for 200 ms per ino so a genuinely sparse file read in small
+ * pieces costs one GETCHUNKS per range, not one per read. */
 int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
 {
     static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
     static struct {
         efs_ino_t ino;
+        uint32_t ci0, ci1; /* range of the last successful pull */
         uint64_t ns;
     } seen[64];
     static uint32_t next;
     if (!ino || ci0 >= ci1 || efs_ino_is_meta_table(ino))
-        return 0;
+        return EFS_OK;
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     uint64_t now = (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
-    int go;
     pthread_mutex_lock(&mu);
     int slot = -1;
     for (uint32_t i = 0; i < 64; i++) {
@@ -305,19 +323,32 @@ int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
             break;
         }
     }
-    if (slot < 0) {
-        slot = (int)(next++ % 64);
-        seen[slot].ino = ino;
-        seen[slot].ns = 0;
-    }
-    go = (now - seen[slot].ns >= 1000000000ull);
-    if (go)
-        seen[slot].ns = now;
+    int fresh = slot >= 0 && seen[slot].ns &&
+                now - seen[slot].ns < 200000000ull &&
+                seen[slot].ci0 <= ci0 && seen[slot].ci1 >= ci1;
     pthread_mutex_unlock(&mu);
-    if (!go)
-        return 0;
-    pull_chunks_range(ino, ci0, ci1);
-    return 1;
+    if (fresh)
+        return EFS_OK;
+    int rc = pull_chunks_range(ino, ci0, ci1);
+    if (rc != EFS_OK)
+        return rc;
+    pthread_mutex_lock(&mu);
+    if (slot < 0 || seen[slot].ino != ino) {
+        slot = -1;
+        for (uint32_t i = 0; i < 64; i++)
+            if (seen[i].ino == ino) {
+                slot = (int)i;
+                break;
+            }
+        if (slot < 0)
+            slot = (int)(next++ % 64);
+    }
+    seen[slot].ino = ino;
+    seen[slot].ci0 = ci0;
+    seen[slot].ci1 = ci1;
+    seen[slot].ns = now;
+    pthread_mutex_unlock(&mu);
+    return EFS_OK;
 }
 
 static void invalidate_file_layout(const struct efs_inode *rpc, int drop_dcache)
@@ -1050,6 +1081,10 @@ int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_na
         usleep(2000u << (unsigned)(t < 4 ? t : 4));
     }
     if (rc != EFS_OK) {
+        /* Rare and otherwise invisible: FUSE collapses this to EIO. */
+        fprintf(stderr, "efs: rename_at %llu/%s -> %llu/%s rc=%d after %d tries\n",
+                (unsigned long long)old_parent, old_name,
+                (unsigned long long)new_parent, new_name, rc, t + 1);
         g_client.last_err = rc;
         return rc;
     }

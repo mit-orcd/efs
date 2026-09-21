@@ -48,50 +48,227 @@ Whoever picks the project up next does **this first**; it is mechanical and
 the code is already unit-gated. Update or delete this block when done — an
 "in flight" block older than the last commit is a bug in this page.
 
-**State as of Sep 20 08:00 (verified by probe, not memory):**
+**Progress log (newest first — read this before the state below):**
 
+- **22:45 (Sep 20)** — **The 100 ms metadata floor is gone: mkdir med
+  103 → 7.2 ms, create+1B+close 60–107 → 6.7, append+close 160–180 → 9.0**
+  (`results/perf/20260921-md-latency.txt`). Step C below is DONE; the
+  reaper was only half of it. The other half was a wakeup bug in the
+  raft_host outbox: ONE shared `outbox_cv` for all per-peer sender threads
+  + `pthread_cond_signal`, so queuing a message for peer A usually woke
+  peer B's sender (empty queue, back to sleep) and A's message left at the
+  next signal for anyone — the next 50 ms heartbeat. Each AE and each AE
+  reply lost 0–50 ms per hop → ~100 ms per commit while every fsync was
+  0.3 ms. Found by strace on a FOLLOWER (003): it acked only every other
+  heartbeat, two 85-byte `writev` back to back; on the leader the AE to
+  one peer left 47 ms after the propose. Fix: per-peer `tx[].cv`
+  (`struct host_outbox`), `host_send` signals exactly that one, shutdown
+  broadcasts all. Rolled all four (`roll3`, 90 s, TCP peers,
+  `EFSD_ENV=EFS_TRANSPORT=tcp`); posix jobs=1 running as `posix3`. Not
+  committed yet (step A below now includes this).
+- **21:55 (Sep 20)** — Steps 1–4 DONE again on the full in-flight tree
+  (now also the `concurrent_appends` dcache fixes, the dir-rename dual-host
+  bounce, and a reaper fix found tonight); step 5 (9×4 IO-500) NOT run;
+  nothing committed yet. Everything long-running now runs **from node9901
+  via `efs-bg.sh`** (see the `efs-test-ssh` skill; logs in `~/efs-runs/`)
+  because the login-node shell died four times today — the fifth time was
+  mid-doc-edit at 21:50, which is why this entry exists.
+  - Posix jobs=1 twice: `results/posix/20260921-011518` (190 + mmap SKIP,
+    but 8 clients were being rebuilt/remounted during it) and
+    `results/posix/20260921-012432` (**191 both-pass + mmap SKIP**, fails
+    = `dir_deep_nesting`, `dir_deep_nesting_beyond_64`, `names_crazy_dirs`
+    15 s walks + `mtime_monotonic_many_writes` 15 s). `concurrent_appends`,
+    `dir_rename_dir_with_contents`, `trunc_zero_then_high_pwrite` PASS.
+    `mtime_monotonic_many_writes` is not a flake: 80 × (open O_APPEND,
+    write 1 B, close) at **~200 ms each** > 15 s. Isolated timing on 007
+    (idle cluster): mkdir med **103 ms** (min 5.5), create+1B+close 60–107,
+    append+close 160–180, `report_ms=104` on every 1-rec REPORT,
+    server `report-split ... finish_ms=103`.
+  - **Root cause of the ~100 ms floor (fixed in tree, deployed, gate
+    pending):** the reaper. `tests/tools/raft_log_tail.py` on 004's
+    `raft.log` showed **92 % of both groups' entries were `LANE_SWEEP`**
+    for the same 64 inodes, 362× each — ~33 entries/s per group with no
+    client. `host_gc_propose` was leader-only, but a lane's shard is
+    `ish + lane × odd stride`, so every ODD lane of an inode lives in the
+    OTHER group: the anchor-group leader swept lane 0 (landed), got
+    `NOT_PRIMARY` on lane 1, and retried the whole marker next second,
+    forever — unless one node happened to lead both groups. Fix:
+    `host_gc_propose` forwards a foreign-group command to that group's
+    leader (`host_remote_cmd`, same path as a client op) and waits for the
+    local replica if hosted. No unit test covers `raft_host`; the gate is
+    the log histogram going quiet + the latency numbers above dropping.
+  - Rolled all four (`tests/roll_efsd.sh 1 2 3 4` from node9901, 01:48–
+    01:50 UTC, each caught up in < 10 s, all `d0fd0448adb6-dirty`). After
+    the roll `REAP_DONE` finally lands (0.3 % → 40 % of entries): the
+    reaper is **draining a backlog of dead inodes at ~15/s per group**
+    (thousands from IO-500/mdtest/posix). Until it is idle every client
+    commit queues behind it (mkdir med still 150 ms at 21:55). **Wait for
+    both groups' `commit` to be flat for 30 s before measuring anything**,
+    then redo the isolated latency probe — the min of 5.5 ms says what a
+    raft commit costs; if the median stays > 20 ms on an idle cluster that
+    is the next serialization point (each apply fsyncs the KV WAL inside
+    the single pump thread, `raft_host.c:4245 EFS_KV_LSM_SYNC`) and needs
+    a user decision, not a tweak.
+  - Rolling restarts cause a **group-2 election storm** (term 199 → 264)
+    lasting ~5 min after the last restart: the server peer pool is RDMA
+    (`peer_pool.c` upgrades every peer conn; raft AE rides it) and a
+    restarted node's QPs die with `transport retry counter exceeded` /
+    `*** SOCKET CLOSED/REUSED BEHIND THIS CONN ***` on its peers, each
+    blocking a sender for seconds → missed heartbeats. Pre-existing (same
+    lines in every `efsd.log.prev`), converges by itself. Same class as
+    the client pool identity bug (`test_conn_fd`) — not chased tonight.
+  - New tooling, all committed with this batch: `efs-bg.sh` (detached
+    runner on node9901), `tests/deploy_fuse_clients.sh` +
+    `tests/fuse_client_remount.sh` (parallel client rebuild+remount, one
+    status line per host), `tests/roll_efsd.sh` (rolling restart with
+    build-ID check and per-group catch-up wait), `tests/tools/raft_log_tail.py`
+    (what is the log made of). The deploy rule's kill command is now
+    `pkill -9 -x efsd` only.
+- **12:05** — Steps 1–4 DONE, step 5 not started; the agent's shell died
+  again while probing the one new posix failure. Results:
+  - Churn (step 1) = the GC reaper draining the fragment backlog the
+    `lane-sweep rc=-5` bug left (no client process; `df` on every
+    `/data1/0N` falls ~150 KB/s). Benign; let it run.
+  - Rolling restart (step 2) done 11:33–11:45 in the order 004, 005, 006,
+    003; each caught up within 9 s; all four run `d0fd0448adb6-dirty`.
+  - **Step 3 PASSED:** raw IOR hard 36×3000 write **96.78 MiB/s** (was
+    ~45), cold `-r -R` verify **0 errors**, `/tmp/hardcheck.py` from
+    fcstor009 **bad records 0 of 108000** (was 6707). W1 `n1_shared_pwrite`
+    **lost=0**. All in `results/io500/20260920-hardv-pubbatch/gate.txt`.
+  - Step 4 posix jobs=1 `results/posix/20260920-155107`: **192 both-pass +
+    mmap SKIP**, 3 EFS fails. Isolated re-run: `dir_deep_nesting` PASS,
+    `mtime_monotonic_many_writes` PASS (load flakes, known), but
+    **`dir_rename_dir_with_contents` FAILS ISOLATED** (deterministic
+    `EIO` on `os.rename(d/src, d/dst)` where `src/sub/f` exists; 1.6 s).
+    It was PASS in the Sep 17 `results/posix/20260917-190719` gate, so
+    this is a regression in the in-flight tree or a state issue on this
+    populated cluster. `ino_dup=0`, `lane-sweep rc=-5`=0 on all four
+    servers. **Do this before step 5:** reproduce by hand on fcstor007
+    (`mkdir -p $d/src/sub; echo x >$d/src/sub/f; mv $d/src $d/dst`), vary
+    it (empty dir; dir with a file only; dir with an empty subdir) to see
+    which shape EIOs, and read the RENAME path in
+    `src/server/raft_host.c` (`server_raft_host_rename_at`, LOCAL same-dir
+    directory rename GUARDs dest ancestry `parent_version`) plus the
+    efsd.log of the parent's group leader for the txn status. Candidate:
+    the `alloc_key_claim` version bump or `dentry_seq` GUARD racing the
+    child's `nents` update — the test creates `sub` and `f` immediately
+    before the rename.
+
+**State as of Sep 20 10:40 (verified by probe, not memory; the agent's
+shell died mid-rolling-restart, which is why this block exists):**
+
+- **The bug being fixed: a REPORT that spans several Raft entries returned
+  OK when only its LAST entry applied OK.** `host_pub_batch_wait`
+  (`src/server/raft_host.c`) read the apply-verdict ring for `last_idx`
+  only; a report larger than `HOST_PUB_BATCH_N` (256) pubs is proposed as
+  several entries, and a pub that loses its N-1 CAS at apply time is
+  `STALE` on the ring for *its* entry only. The client took the OK, marked
+  those dirty ranges clean, and the CAS winner's generation (merged on an
+  older base) became the file. Measured: raw IOR hard, 36 ranks × 3000
+  segments of 47008 B (`SLOTS=4 bash tests/perf/io500/run.sh ior-hard-write
+  3000`, then cold-remount `ior-hard-verify 3000`) lost **6707 of 108000
+  records**, every one a client's whole sub-range of a record straddling a
+  128 KiB chunk boundary, zeros in a cold verify (classifier:
+  `/tmp/hardcheck.py <file> 36` on fcstor007 — recreate from the comment
+  in that file if it is gone). The 9×4 debug run
+  `results/io500/20260920-debug-9x4/` saw the same thing as 2 `-R` errors
+  on ior-hard-read (easy-read 0). This is a **correctness** bug and blocks
+  every other W6 item.
 - Uncommitted code in the working tree (on top of `cc828d8` + the Sep 20
-  docs/rules split commit):
-  - `src/meta/meta_apply.c` — `alloc_key_claim`: a log-path CREATE / MKDIR
-    alloc is `BUSY` while a txn holds an `EXCL` intent on the shard ALLOC
-    key, and bumps that key's version so an outdated txn PREPARE is
-    `STALE`. Closes the second allocator race (log path vs cross-group
-    mkdir / hashed create; posix `names_*` `cafeé` + `aaaa…` → one ino
-    4746, `cwi-fail: ino_dup`). Gate `tests/test_meta_apply.c`
-    `test_alloc_vs_txn_intent`. `test_meta_apply` / `test_sim` /
-    `test_txn` / `test_wire` **OK on fcstor003**.
+  docs/rules commit), all unit-gated on fcstor003 (`test_raft` /
+  `test_meta_apply` / `test_kv_lsm` OK):
+  - `src/server/raft_host.c` — `struct host_pub_batch` keeps every
+    proposed index (`idxs[]`, `overflow`); `host_pub_batch_wait` waits for
+    the last index then reads **every** entry's verdict; any `STALE`, any
+    ring miss (`obs_arc_miss`), or `overflow` → the report is `STALE`
+    (client re-pulls the map and replays only chunks whose generation
+    moved). `host_pub_batch_reset` frees both arrays. No unit test covers
+    `raft_host` (live-only); the gate is step 3 below.
+  - `src/meta/meta_apply.c` — `alloc_key_claim` (log-path CREATE/MKDIR
+    alloc is `BUSY` under a txn `EXCL` intent on the shard ALLOC key and
+    bumps its version; closes the `ino_dup` 4746 race; gate
+    `test_alloc_vs_txn_intent`); `sweep_cb` / `rsv_purge_cb` initialise
+    `val=NULL vlen=0` on `EFS_KV_DEL` items (uninitialised `vlen` made
+    `wal_encode` return `INVAL` → reaper `apply lane-sweep rc=-5` forever,
+    124 inos re-swept ~9 entries/s).
+  - `src/kv/kv_wal.c` — `wal_encode` validates `vlen` only for `PUT`;
+    regression in `tests/test_kv_lsm.c` (DEL with garbage `val/vlen`).
   - `src/client/read.c`, `src/client/ops.c`, `src/client/client_internal.h`
-    — a read whose layout pull fails now **fails** instead of zero-filling;
+    — a read whose layout pull fails **fails** instead of zero-filling;
     `pull_chunks_range` returns the first RPC error; `pull_layout_miss` has
-    a 200 ms range cache instead of a 1/s rate limit. Built into `efs-fuse`
-    on **fcstor007 only**; 008–015 run the pre-change client. The Sep 20
-    0-error IO-500 result did NOT include this change (server fix alone).
-- `efsd` + `efs-mgmt` built at `/tmp/efs` on fcstor003–006 from this tree
-  (`cc828d8-dirty`) but **not started**; all four servers are still running
-  `a9e94a63f880-dirty`. Because the build ID changed, a rolling restart is
-  rejected by the HELLO gate — **stop all four, then start all four**
-  (unwiped storage: no `--join`).
+    a 200 ms range cache, not a 1/s rate limit. Built into `efs-fuse` on
+    fcstor007–015 (all nine were remounted from this tree before the last
+    IO-500 run).
+- **Servers:** `efsd` built from this tree at `/tmp/efs` on fcstor003–006
+  (`d0fd0448adb6`-dirty, 4704656 B, 10:29). **fcstor004 (node 2) was
+  restarted on it at ~10:33 and caught up** (its `applied` equalled the
+  leaders' `commit` on both groups at every 3 s poll for 2 min). The HELLO
+  gate accepted it, so the build ID is unchanged and a **rolling** restart
+  is fine. **fcstor003 (node 1, g0 leader), fcstor005 (node 3), fcstor006
+  (node 4, g2 leader) still run the PREVIOUS process** (started ~09:20,
+  without the `host_pub_batch` fix). Nothing was wiped; no `--join`.
+- **Unexplained, check first:** with no test running, both Raft groups
+  were advancing ~33 entries/s (g0 commit 3259035 → 3333442 in ~7 min).
+  Candidates: a leftover IOR/posix process on a client, or the reaper on
+  the old-binary leaders. Do not restart anything until you know which.
 
-**Steps:**
+**Steps (as of 22:45 Sep 20 — steps 1–4, B and C are DONE; what is left):**
 
-1. Pre-flight (deploy rule). Expect `pgrep -x efsd` = 1 on each of 003–006
-   and `build=a9e94a63f880-dirty` in `/tmp/efs/efsd.log`.
-2. `pkill -9 -x efsd` on all four; confirm 0 each. Then start all four with
-   the exact command in the deploy rule ("Restart one efsd"), node-id 1–4 =
-   fcstor003–006, no `--join`. `./efs-mgmt raft-status 172.16.223.57:19810`
-   from fcstor003 until group 0 and group 2 each show one leader and
-   `commit == applied` on every voter.
-3. On fcstor007: `EFS_TRANSPORT=tcp bash tests/run_tests.sh posix fcstor007.ib`
-   (jobs=1). Gate: no `ino_dup` line in any efsd.log, no `names_*` dangling
-   dentry, and the suite at or above **195/201** with only the known
-   signature (`dir_deep_nesting*` / `dir_many_files` / `names_crazy_dirs`
-   15 s walks, `mmap_write_read` SKIP, `concurrent_writes_disjoint` flake).
-4. Build + remount `efs-fuse` on 008–015 (deploy rule "Restart one
-   efs-fuse") so every client carries the read.c change; re-run the 9×4
-   IO-500 debug once (`SLOTS=4 NP=36 bash tests/perf/io500/run.sh debug`)
-   and confirm 0 `-R` errors still. Copy `result.txt` + ini to
+- **A. Commit what is in the tree now** (code + rules + skill scripts +
+  this file + `results/posix/20260921-012432` +
+  `results/perf/20260921-md-latency.txt` + the `posix3` result dir once it
+  finishes). Message: W6 correctness batch — pub-batch verdicts,
+  alloc_key_claim, reaper DEL vlen + cross-group lane sweep, dcache
+  img_seq/global seq/keep-unreported, dir-rename dual-host bounce, read
+  fail-not-zero-fill, per-peer outbox condvar (100 ms commit floor),
+  node9901 runner tooling.
+- **B. DONE** — reaper drained, both groups flat; `raft_log_tail.py` on 004
+  no longer dominated by `LANE_SWEEP`. Keep the check as a habit before
+  any measurement.
+- **C. DONE** — `results/perf/20260921-md-latency.txt`: medians 6–9 ms.
+  The pump's per-apply KV WAL fsync is NOT a serialization point at this
+  load (0.3 ms per fsync on NVMe); no `sync_mode` question for the user.
+- **D. Step 5** (9×4 IO-500 debug) via
+  `efs-bg.sh start io500 'SLOTS=4 NP=36 bash tests/perf/io500/run.sh debug'`
+  — gate unchanged below. Then step 6.
+
+Original steps (1–4 done twice, kept for the commands):
+
+1. Pre-flight (deploy rule). Then the churn check: on fcstor007–015
+   `pgrep -x io500; pgrep -x ior; pgrep -f posix_suite` (kill leftovers
+   with `pkill -9 -x`, never `-f` on an ssh command line); on fcstor003 and
+   fcstor006 `tail -c 400000 /tmp/efs/efsd.log | grep -oE 'raft-host: [a-z-]+ [a-z-]+' | sort | uniq -c | sort -rn | head`.
+   If it is the reaper (`lane-sweep`), the restart below stops it; if it is
+   a client, kill it and re-check `commit` is flat for 30 s.
+2. Rolling restart: `efs-bg.sh start roll 'bash tests/roll_efsd.sh 1 2 3 4'`
+   from the login node (runs on node9901; builds on each node, `pkill -9
+   -x efsd`, starts, waits for per-group catch-up, refuses on a build-ID
+   change). ~2 min for four nodes. Expect a few minutes of group-2
+   elections afterwards (RDMA peer conns re-forming) — wait for
+   `leader != -1` and a stable `term` on all voters.
+3. **The gate for the fix:** on fcstor007
+   `SLOTS=4 bash tests/perf/io500/run.sh ior-hard-write 3000`, wait for
+   `last-run.log` to finish, remount every client (deploy rule "Restart one
+   efs-fuse" — cold verify or it is dcache), then
+   `SLOTS=4 bash tests/perf/io500/run.sh ior-hard-verify 3000`. Pass =
+   **0** `-R` mismatches; also run `/tmp/hardcheck.py` and expect `bad
+   records 0`. Expect hard-write MiB/s to DROP (the STALEs the old code
+   swallowed are now retried) — record it, do not tune it here. Also the
+   W1 gate: `tests/stress/n1_shared_pwrite.py` `prepare` on 007, then
+   `write-a` on 007 ∥ `write-b` on 008, remount 009, `verify` on 009 →
+   `lost=0` (shape and expected output: `results/stress/20260918-n1-w1/gate10c.txt`).
+4. `EFS_TRANSPORT=tcp POSIX_JOBS=1 bash tests/run_tests.sh posix fcstor007.ib`.
+   Gate: ≥ **195/201**, only the known signature (`dir_deep_nesting*` /
+   `dir_many_files` / `names_crazy_dirs` 15 s walks, `mmap_write_read`
+   SKIP, `concurrent_writes_disjoint` flake); no `ino_dup` in any
+   efsd.log; no `apply lane-sweep rc=-5` on any leader after the restart.
+5. 9×4 IO-500 debug once (`SLOTS=4 NP=36 bash tests/perf/io500/run.sh
+   debug`, detached driver; poll `driver.log`). Gate: every phase
+   finishes, ior-easy-read **and** ior-hard-read `-R` errors = 0, every
+   mdtest unlink OK. Copy `result.txt` + ini + `driver.log` to
    `results/io500/<id>/`.
-5. Commit code + rules + this file with the result directories cited.
+6. Commit code + rules + this file with the result directories cited, then
+   delete this block (W6 residuals move to the W6 queue item).
 
 ---
 

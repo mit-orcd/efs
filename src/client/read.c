@@ -1068,7 +1068,6 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
     uint32_t pipe = EFS_WRITE_PIPELINE;
     if (pipe < 1)
         pipe = 1;
-    int layout_pulled = 0;
 
     for (uint64_t pos = offset; pos < end; ) {
         /* Build a batch of whole chunks covering [pos, end). */
@@ -1102,10 +1101,14 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
                                       jobs[i].ci, NULL) == EFS_OK);
         pthread_mutex_unlock(&g_client.idx_mu);
 
-        /* A missing row inside the file size may be a stale local cache,
-         * not a real hole — pull the layout once per read and re-check
-         * before zero-filling (mc_stress rwfile read zeros forever). */
-        if (!layout_pulled) {
+        /* A missing row inside the file size is a cache miss until the
+         * owner says otherwise: the row (and its chunk array) is evicted on
+         * last close / by the Part A evictor, and refilled by GETCHUNKS at
+         * adopt. Pull the missing range for EVERY batch and only then treat
+         * what is still absent as a hole. A failed pull fails the read —
+         * zero-filling here is how IO-500 ior-easy-read returned 38054
+         * wrong 1 MiB reads in 1.36 s (see efs_client_pull_layout_miss). */
+        {
             uint32_t miss0 = UINT32_MAX, miss1 = 0;
             for (uint32_t i = 0; i < batch; i++) {
                 if (!jobs[i].have_ce) {
@@ -1115,9 +1118,17 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
                         miss1 = jobs[i].ci;
                 }
             }
-            if (miss0 != UINT32_MAX &&
-                efs_client_pull_layout_miss(ino, miss0, miss1 + 1)) {
-                layout_pulled = 1;
+            if (miss0 != UINT32_MAX) {
+                int prc = efs_client_pull_layout_miss(ino, miss0, miss1 + 1);
+                if (prc != EFS_OK) {
+                    fprintf(stderr,
+                            "efs: read ino=%llu ci=%u..%u layout pull rc=%d, "
+                            "failing read instead of zero-filling\n",
+                            (unsigned long long)ino, miss0, miss1, prc);
+                    for (uint32_t j = 0; j < batch; j++)
+                        efs_buf_free(jobs[j].chunk, chunk_size);
+                    return prc;
+                }
                 pthread_mutex_lock(&g_client.idx_mu);
                 for (uint32_t i = 0; i < batch; i++)
                     jobs[i].have_ce =

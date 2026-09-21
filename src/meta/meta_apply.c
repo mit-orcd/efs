@@ -522,6 +522,54 @@ static int alloc_hint_or_next(struct efs_kv *kv, uint32_t shard,
     return alloc_next_free(kv, shard, ino, next_out);
 }
 
+/* The per-shard ALLOC key is written by two paths: this log path (file
+ * CREATE, same-group MKDIR) and the host's txn path (cross-group MKDIR,
+ * hashed CREATE), which PREPAREs an EXCL intent on it at the version it
+ * read and PUTs the child row + new watermark at resolve. The txn treats
+ * the intent as its lock and the version as its CAS; the log path honored
+ * neither, so the two allocators raced in both orders: (1) intent pending →
+ * the log-path create took the same ino and the txn's resolve overwrote the
+ * row; (2) log-path alloc write unversioned → a txn that peeked BEFORE it
+ * still PREPAREd at the old version and won. posix names_* : file `cafeé`
+ * (parent shard 650) and dir `aaaa…` (mkdir_shard 650) both got ino 4746,
+ * the dir's unlink deleted the row, the file dangled (the old
+ * `cwi-fail: ino_dup` family). Rule now: a log-path alloc under a pending
+ * intent is BUSY (the txn rule — "PREPARE is no-wait, conflict → BUSY";
+ * the client retries), and every log-path alloc write bumps the key's
+ * version in the same batch so an outdated PREPARE is STALE, exactly as a
+ * resolve would. Deterministic: intents and versions are shard state of
+ * the same group's log. */
+static int alloc_key_claim(struct efs_kv *kv, const uint8_t *k_alloc,
+                           uint32_t ka, uint8_t *k_ver, uint32_t *kver,
+                           uint8_t v_ver[8])
+{
+    uint8_t ik[EFS_KV_KEY_MAX], buf[8];
+    uint32_t il = 0, n = 0;
+    uint64_t ver = 0;
+    int rc;
+
+    rc = efs_kv_key_intent(k_alloc, ka, ik, &il);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, ik, il, buf, &n); /* probe: found → INVAL */
+    if (rc == EFS_OK || rc == EFS_ERR_INVAL)
+        return EFS_ERR_BUSY;
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+    *kver = 0;
+    rc = efs_kv_key_ver(k_alloc, ka, k_ver, kver);
+    if (rc != EFS_OK)
+        return rc;
+    n = 8;
+    rc = efs_kv_get(kv, k_ver, *kver, buf, &n);
+    if (rc == EFS_OK && n >= 8)
+        ver = rd64(buf);
+    else if (rc != EFS_ERR_NOT_FOUND && rc != EFS_OK)
+        return rc;
+    be64(v_ver, ver + 1);
+    return EFS_OK;
+}
+
 static int load_window(struct efs_kv *kv, const struct efs_opid *op,
                        struct efs_opid_window *w)
 {
@@ -740,9 +788,11 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     uint8_t v_dent[DENT_VAL], v_ino[INO_VAL], v_alloc[ALLOC_VAL];
     uint8_t v_opid[EFS_OPID_VAL_MAX];
     uint32_t kd = 0, ki = 0, ka = 0, ko = 0, vo = sizeof(v_opid);
-    struct efs_kv_item it[8];
+    struct efs_kv_item it[9];
     uint32_t n = 0, shard;
     efs_ino_t next = 0, ino;
+    uint8_t k_aver[EFS_KV_KEY_MAX], v_aver[8];
+    uint32_t kav = 0;
     uint8_t k_par[EFS_KV_KEY_MAX], v_par[INO_VAL];
     uint8_t k_ln[EFS_KV_KEY_MAX], v_ln[LANE_VAL];
     uint8_t k_dseq[EFS_KV_KEY_MAX], v_dseq[8];
@@ -860,6 +910,8 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         rc = efs_kv_key_inode(shard, ino, k_ino, &ki);
     if (rc == EFS_OK)
         rc = efs_kv_key_alloc(shard, k_alloc, &ka);
+    if (rc == EFS_OK)
+        rc = alloc_key_claim(kv, k_alloc, ka, k_aver, &kav, v_aver);
     if (rc != EFS_OK)
         return rc;
 
@@ -915,6 +967,12 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     it[n].klen = ka;
     it[n].val = v_alloc;
     it[n].vlen = ALLOC_VAL;
+    n++;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_aver;
+    it[n].klen = kav;
+    it[n].val = v_aver;
+    it[n].vlen = 8;
     n++;
     if (touch_parent) {
         it[n].op = EFS_KV_PUT;
@@ -1021,7 +1079,9 @@ static int mkdir_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     uint8_t v_dent[DENT_VAL], v_ino[INO_VAL], v_alloc[ALLOC_VAL];
     uint8_t v_par[INO_VAL], v_ln[LANE_VAL], v_dseq[8];
     uint32_t kd = 0, ki = 0, ka = 0, kp = 0, kln = 0, ks = 0;
-    struct efs_kv_item it[8];
+    uint8_t k_aver[EFS_KV_KEY_MAX], v_aver[8];
+    uint32_t kav = 0;
+    struct efs_kv_item it[9];
     uint32_t n = 0, psh, csh, dsh;
     efs_ino_t next = 0, ino;
     uint64_t salt = 0, bit;
@@ -1127,6 +1187,8 @@ static int mkdir_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         rc = efs_kv_key_inode(csh, ino, k_ino, &ki);
     if (rc == EFS_OK)
         rc = efs_kv_key_alloc(csh, k_alloc, &ka);
+    if (rc == EFS_OK)
+        rc = alloc_key_claim(kv, k_alloc, ka, k_aver, &kav, v_aver);
     if (rc == EFS_OK && touch_parent) {
         pack_inode(v_par, &parent_row);
         rc = efs_kv_key_inode(psh, parent, k_par, &kp);
@@ -1151,6 +1213,12 @@ static int mkdir_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     it[n].klen = ka;
     it[n].val = v_alloc;
     it[n].vlen = ALLOC_VAL;
+    n++;
+    it[n].op = EFS_KV_PUT;
+    it[n].key = k_aver;
+    it[n].klen = kav;
+    it[n].val = v_aver;
+    it[n].vlen = 8;
     n++;
     if (touch_parent) {
         it[n].op = EFS_KV_PUT;
@@ -2841,6 +2909,8 @@ static int sweep_cb(void *user, const uint8_t *key, uint32_t klen,
     ss->it[ss->n].op = EFS_KV_DEL;
     ss->it[ss->n].key = ss->keys[ss->n];
     ss->it[ss->n].klen = klen;
+    ss->it[ss->n].val = NULL; /* `it` is an uninitialised stack array */
+    ss->it[ss->n].vlen = 0;
     ss->n++;
     ss->rc = gc_queue(ss->it, &ss->n, ss->cap, ss->keys, ss->gc_vals,
                       ino, lane, ci, &dead);
@@ -2933,6 +3003,8 @@ static int rsv_purge_cb(void *user, const uint8_t *key, uint32_t klen,
     rp->it[rp->n].op = EFS_KV_DEL;
     rp->it[rp->n].key = rp->keys[rp->n];
     rp->it[rp->n].klen = klen;
+    rp->it[rp->n].val = NULL;
+    rp->it[rp->n].vlen = 0;
     rp->n++;
     rp->found++;
     return 0;

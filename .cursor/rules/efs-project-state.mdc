@@ -30,6 +30,12 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   pre-flight §7). **Exception:** `raft-mkfs` / wipe of 19810 — ask first
   (START-HERE says which items need a fresh table).
 - **Never** `pkill -f` / `pgrep -f` (matches your own ssh). `-x` only.
+- **Nothing over ~60 s runs from the login node.** Launch it detached on
+ node9901: `~/.cursor/skills/efs-test-ssh/scripts/efs-bg.sh start <name>
+ '<cmd>'`, poll `status`/`wait`, log in `~/efs-runs/<name>.log` (NFS).
+ Posix suite, IO-500, `tests/roll_efsd.sh`, `tests/deploy_fuse_clients.sh`
+ all go through it. The login-node Cursor shell dies on long commands
+ (five times on Sep 20) and then nothing it issued can be trusted.
 - **Never** run `make` in `$HOME/git/efs` (login node is AVX-512; nodes are
   Zen2 → SIGILL). Build in `/tmp/efs` on a node after rsync.
 - **Never** widen a timeout to pass a test; a timeout is a FAIL
@@ -66,8 +72,10 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   `perf record -a/-g` with kernel symbols all work same-uid. Attach to a
   RUNNING daemon; never start a daemon under strace.
 - Leftover inert dangling dentries on 19810 (from the dup-ino bug, before
-  the fix): `/io500/easyv` (26), `/io500/2026.09.19-22.52.15/ior-easy`
-  (27). `rm` → ENOENT, `rmdir` → ENOTEMPTY, by design; ignore or wipe.
+  the   fix): `/io500/easyv` (26), `/io500/2026.09.19-22.52.15/ior-easy`
+  (27), `/posix-fcstor007-93jwgp99/names_unicode_nfc_nfd_coexist/cafeé`
+  (parent ino 650, the `alloc_key_claim` repro). `rm` → ENOENT, `rmdir` →
+  ENOTEMPTY, by design; ignore or wipe.
 - A dead `efs-fuse` leaves `/tmp/efs-mount` as a plain dir or a
   "Transport endpoint is not connected" corpse — everything reads ENOENT /
   fio shows `Disk stats: md0`. That is NOT data loss: `findmnt` + `stat`
@@ -78,16 +86,26 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - Step 11 Raft+KV engine + Step 12 FUSE A–D landed and gated (Sep 11–16).
 - W1 N-1 CAS, W2 spec (`write()` client-buffered), W3 fsync tail, W4
   multi-client measurement, W5 50g: done Sep 18.
-- **W6 IO-500 correctness gate met Sep 20** (`results/io500/20260920-debug-9x4/`,
-  commit `cc828d8`): all phases finish, 0 read-verify errors on easy and
-  hard, every unlink OK. easy-write 0.814 GiB/s, hard-write 0.044,
-  easy-read 1.80, hard-read 3.55, mdtest-easy-write 50/s. Open perf
-  residuals: hard-write 36-way sub-chunk CAS; 1 GiB open = 20 s (per-lane
-  range fetch not implemented); transient mdtest rmdir ENOTEMPTY.
-- **In flight (uncommitted; see START-HERE §1b for the exact steps):**
-  `alloc_key_claim` (log-path alloc vs txn intent), client fail-instead-of-
-  zero-fill on layout-pull error; `efsd` built on 003–006 but not started
-  (servers run `a9e94a63f880-dirty`, need a stop-all/start-all).
+- **W6 IO-500 correctness gate REOPENED Sep 20 PM.** The morning gate
+  (`results/io500/20260920-debug-9x4/`, commit `cc828d8`: all phases, 0
+  `-R` errors, every unlink OK; easy-write 0.814 GiB/s, hard-write 0.044,
+  easy-read 1.80, hard-read 3.55) does not hold under a second run: the
+  rerun had 2 ior-hard-read `-R` errors and a raw IOR hard 36×3000 lost
+  **6707/108000 records** in a COLD verify — real data loss, not cache.
+  Root cause: `host_pub_batch_wait` checked the apply verdict of the LAST
+  Raft entry of a multi-entry REPORT only, so a `STALE` CAS loser in an
+  earlier entry was reported OK and the client dropped those dirty ranges.
+  Fix in tree (every entry's verdict; ring miss = STALE); **not yet gated,
+  servers half-rolled** — START-HERE §1b has the exact state and steps.
+  Perf residuals unchanged: hard-write 36-way sub-chunk CAS; 1 GiB open =
+  20 s (per-lane range fetch not implemented); transient mdtest rmdir
+  ENOTEMPTY.
+- **In flight (uncommitted; see START-HERE §1b):** `host_pub_batch` fix
+  (above), `alloc_key_claim` (log-path alloc vs txn intent), reaper
+  `EFS_KV_DEL` `vlen` init + `wal_encode` PUT-only `vlen` check (reaper was
+  stuck `lane-sweep rc=-5`), client fail-instead-of-zero-fill on
+  layout-pull error. `efsd` from this tree runs on fcstor004 only;
+  003/005/006 still run the previous process (same build ID — rolling OK).
 - Honest write numbers (MiB/s, flush in clock): 1-client 8 GiB dd+fsync
   **639** (best 724); 4-client **251**; 9-client **202** — 3.8 / 0.46 /
   0.37 % of the 16.7 / 44 / 44 GB/s ceilings. Reads scale with clients,
@@ -114,8 +132,31 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   one preps STALE. Client retries STALE for `INODE_CREATE` only. Deeper fix
   (not done): parent nlink/dseq/times as commutative txn reductions (§7.2).
 - `efs_kv_scan_prefix` callback returning **>0 means batch-full**, not
-  error. The reaper (`lane-sweep`, `rsv_purge`) misread it for weeks —
-  no lane with >64 chunks was ever swept. Check this in any new scan user.
+ error. The reaper (`lane-sweep`, `rsv_purge`) misread it for weeks —
+ no lane with >64 chunks was ever swept. Check this in any new scan user.
+- **Lane shards straddle both groups** (`lane_shard = ish + lane × odd
+ stride`): every odd lane of an inode is in the other group. Anything the
+ anchor-group leader drives per lane (reaper `LANE_SWEEP`) must forward
+ foreign-group commands (`host_gc_propose` → `host_remote_cmd`, Sep 20);
+ leader-only made every inode with an active odd lane unreapable, and the
+ retry stream (92 % of the log, 33 entries/s per group, idle cluster)
+ queued every client commit behind it.
+ **Before any latency or metadata measurement: `commit` flat for 30 s on
+ both groups, and `tests/tools/raft_log_tail.py` on the leader's
+ `raft.log` shows no command dominating.**
+- **The ~100 ms metadata floor (mkdir med 103 ms, append+close 170) was a
+ wakeup bug, not fsync:** raft_host's per-peer sender threads all waited on
+ one shared condvar with `cond_signal`, so a queued AE/AE-reply usually
+ woke the wrong sender and left at the next 50 ms heartbeat, 0–50 ms per
+ hop. Per-peer `tx[].cv` since Sep 20: mkdir med **7.2 ms**, create+close
+ 6.7, append+close 9.0, stat 0.4 (`results/perf/20260921-md-latency.txt`).
+ A raft commit costs ~2–6 ms here; a median far above that on an idle
+ cluster is a scheduling/wakeup bug — strace the FOLLOWER (acks every
+ other heartbeat = this class) before blaming fsync.
+- Rolling restarts trigger ~5 min of group elections afterwards: peer
+ conns are RDMA (`peer_pool.c`), a restarted node's QPs die on its peers
+ with `transport retry counter exceeded` and block senders. Pre-existing,
+ converges; not the flow-control bug (that one is fixed).
 - Raft catch-up: follower dedupes same index+term entries; leader keeps
   one AE batch in flight per peer (`ae_inflight`). Before this, 005
   rewrote the same 128-entry window ~30×/s with an fsync each and never

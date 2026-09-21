@@ -332,6 +332,77 @@ static void test_create_log_at_dup_hint(void)
     efs_kv_mem_free(b);
 }
 
+/* The shard ALLOC key is shared with the txn path (cross-group mkdir /
+ * hashed create PREPARE an EXCL intent on it). Both orders must be safe:
+ * intent pending → log-path create is BUSY (never the same ino); log-path
+ * create first → it bumps the key's version so a PREPARE at the version a
+ * txn read before it is STALE. (posix names_*: file cafeé + dir aaaa… on
+ * shard 650 both got ino 4746.) */
+static void test_alloc_vs_txn_intent(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t parent = 0, want = 0, f1 = 0, f2 = 0;
+    uint32_t shard, ka = 0;
+    uint8_t k_alloc[EFS_KV_KEY_MAX], v[8];
+    uint64_t aver = 0, aver2 = 0;
+    struct efs_txid t;
+    struct efs_txn_parts p;
+    int rc;
+
+    CHECK(kv, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_mkdir(kv, &g_at, EFS_ROOT_INO, S_IFDIR | 0755, "p",
+                               &parent) == EFS_OK &&
+              parent,
+          "parent");
+    shard = efs_kv_dentry_shard(parent, "f1", EFS_META_LAYOUT_LOCAL);
+    CHECK(efs_kv_key_alloc(shard, k_alloc, &ka) == EFS_OK, "alloc key");
+    CHECK(efs_meta_apply_peek_alloc(kv, shard, &want) == EFS_OK && want, "peek");
+    CHECK(efs_txn_ver_get(kv, k_alloc, ka, &aver) == EFS_OK, "aver");
+
+    /* (1) a txn claimed the watermark: same ino a peeker would carry */
+    memset(&t, 0, sizeof(t));
+    t.bytes[0] = 0xa1;
+    memset(&p, 0, sizeof(p));
+    p.n = 1;
+    p.shard[0] = shard;
+    memset(v, 0, sizeof(v));
+    CHECK(efs_txn_prepare_excl(kv, &t, &p, k_alloc, ka, aver, EFS_TXN_PUT, v,
+                               8) == EFS_OK,
+          "txn prepare alloc");
+    rc = efs_meta_apply_create_file_log_at(kv, &g_at, parent, S_IFREG | 0644,
+                                           "f1", want, EFS_META_LAYOUT_LOCAL,
+                                           &f1);
+    CHECK(rc == EFS_ERR_BUSY, "create under alloc intent is BUSY");
+    rc = efs_meta_apply_create_file(kv, &g_at, parent, S_IFREG | 0644, "f1",
+                                    &f1);
+    CHECK(rc == EFS_ERR_BUSY, "create (no hint) under alloc intent is BUSY");
+    CHECK(efs_txn_drop(kv, &t, shard) == EFS_OK, "txn drop");
+    CHECK(efs_meta_apply_create_file_log_at(kv, &g_at, parent, S_IFREG | 0644,
+                                           "f1", want, EFS_META_LAYOUT_LOCAL,
+                                           &f1) == EFS_OK &&
+              f1 == want,
+          "create after drop takes the hint");
+
+    /* (2) log-path create first: the version moved, an outdated PREPARE
+     * (the txn read aver before the create) is STALE, not a silent win */
+    CHECK(efs_txn_ver_get(kv, k_alloc, ka, &aver2) == EFS_OK && aver2 > aver,
+          "log-path alloc bumped ver");
+    t.bytes[0] = 0xa2;
+    CHECK(efs_txn_prepare_excl(kv, &t, &p, k_alloc, ka, aver, EFS_TXN_PUT, v,
+                               8) == EFS_ERR_STALE,
+          "outdated txn prepare on alloc is STALE");
+    CHECK(efs_txn_prepare_excl(kv, &t, &p, k_alloc, ka, aver2, EFS_TXN_PUT, v,
+                               8) == EFS_OK,
+          "fresh-version prepare OK");
+    CHECK(efs_txn_drop(kv, &t, shard) == EFS_OK, "txn drop 2");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, parent, S_IFREG | 0644, "f2",
+                                     &f2) == EFS_OK &&
+              f2 && f2 != f1,
+          "second create distinct");
+    efs_kv_mem_free(kv);
+}
+
 static void test_mkdir_log_at_matches(void)
 {
     struct efs_kv *have = efs_kv_mem_create();
@@ -2906,6 +2977,7 @@ int main(void)
     test_alloc_skips_live();
     test_mkdir_log_at_matches();
     test_create_log_at_dup_hint();
+    test_alloc_vs_txn_intent();
     test_i9();
     test_batch_fail();
     test_i16_durable();
