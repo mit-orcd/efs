@@ -240,15 +240,39 @@ static void test_replicate_and_readindex(void)
     elect(&n, 8); /* heartbeats + catch-up */
     CHECK(efs_raft_commit(n.r[lid]) >= idx, "committed");
     CHECK(app[0].n + app[1].n + app[2].n >= 3, "applied somewhere");
-    CHECK(efs_raft_read_begin(n.r[lid]) == EFS_OK, "read begin");
-    elect(&n, 4);
-    CHECK(efs_raft_read_ready(n.r[lid]), "ReadIndex");
+    {
+        uint64_t want = efs_raft_commit(n.r[lid]);
+        /* The commit quorum of 'A' doubles as a read quorum (raft.c
+         * advance_commit), so the leader already covers `want`. */
+        CHECK(efs_raft_read_covers(n.r[lid], want), "commit quorum covers");
+        CHECK(!efs_raft_read_covers(n.r[lid], want + 1), "not a later index");
+        /* Hold the followers back so a fresh round stays pending: this is
+         * what host_read_index batches on — a second reader must join the
+         * pending round, never read_begin again (that resets its acks). */
+        for (i = 0; i < 3; i++)
+            n.drop[i] = (i != lid);
+        CHECK(efs_raft_read_begin(n.r[lid]) == EFS_OK, "read begin");
+        CHECK(efs_raft_read_pending(n.r[lid]), "round pending after begin");
+        CHECK(!efs_raft_read_ready(n.r[lid]), "not ready without a quorum");
+        CHECK(!efs_raft_read_covers(n.r[lid], want), "pending round covers nothing");
+        for (i = 0; i < 3; i++)
+            n.drop[i] = 0;
+        elect(&n, 4);
+        CHECK(efs_raft_read_ready(n.r[lid]), "ReadIndex");
+        CHECK(!efs_raft_read_pending(n.r[lid]), "round done");
+        CHECK(efs_raft_read_covers(n.r[lid], want), "finished round covers want");
+        CHECK(efs_raft_read_covers(n.r[lid], want - 1), "and anything older");
+    }
     CHECK(efs_raft_read_current(n.r[lid]), "ReadIndex still current");
     cmd = 'B';
     CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK, "propose 2");
     elect(&n, 8);
     CHECK(efs_raft_read_current(n.r[lid]),
           "commit quorum keeps ReadIndex current");
+    CHECK(efs_raft_read_covers(n.r[lid], idx),
+          "commit quorum covers the new index too");
+    CHECK(!efs_raft_read_pending(n.r[0] == n.r[lid] ? n.r[1] : n.r[0]),
+          "follower never reports a pending round");
     for (i = 0; i < 3; i++) {
         efs_raft_free(n.r[i]);
         efs_raft_mem_free(st[i]);

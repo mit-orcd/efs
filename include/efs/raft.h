@@ -179,6 +179,14 @@ int efs_raft_read_begin(struct efs_raft *r);
 int efs_raft_read_ready(const struct efs_raft *r);
 /* 1 if a prior ReadIndex still covers commit_index (skip a new quorum). */
 int efs_raft_read_current(const struct efs_raft *r);
+/* Batching: a round is pending when begun and not yet quorum-acked; a
+ * reader that recorded commit_index = want on arrival is satisfied once
+ * a finished round has read_index >= want and applied >= read_index.
+ * Readers arriving during a pending round wait for it (never restart it,
+ * which would drop its acks) and begin the next one only if its index
+ * turns out older than what they need. */
+int efs_raft_read_pending(const struct efs_raft *r);
+int efs_raft_read_covers(const struct efs_raft *r, uint64_t want);
 
 struct efs_raft_store *efs_raft_mem_create(void);
 void efs_raft_mem_free(struct efs_raft_store *st);

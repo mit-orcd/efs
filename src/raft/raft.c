@@ -1399,3 +1399,16 @@ int efs_raft_read_current(const struct efs_raft *r)
            r->last_applied >= r->commit_index &&
            r->read_index >= r->commit_index;
 }
+
+int efs_raft_read_pending(const struct efs_raft *r)
+{
+    return r && r->role == EFS_RAFT_LEADER && r->read_in_flight == 1;
+}
+
+int efs_raft_read_covers(const struct efs_raft *r, uint64_t want)
+{
+    if (!r || r->role != EFS_RAFT_LEADER)
+        return 0;
+    return r->read_in_flight == 2 && r->read_index >= want &&
+           r->last_applied >= r->read_index;
+}
