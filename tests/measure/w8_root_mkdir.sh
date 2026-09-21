@@ -65,7 +65,9 @@ t=time.time(); d=tempfile.mkdtemp(prefix=\"w8-\", dir=\"$dir\"); print(\"MKDIR_O
     wait
     local ok=0 late=0
     for h in $ALL_CLIENTS; do
-        if grep -q MKDIR_OK "$OUT/mkdir-$label-$h.txt"; then ok=$((ok + 1)); else late=$((late + 1)); fi
+        # anchored: the shell's "Killed ... python3 -c '...MKDIR_OK...'" echo
+        # of a timed-out command also contains the literal (Sep 21 miscount)
+        if grep -q '^MKDIR_OK ' "$OUT/mkdir-$label-$h.txt"; then ok=$((ok + 1)); else late=$((late + 1)); fi
         echo -n "$h "; tr '\n' ' ' < "$OUT/mkdir-$label-$h.txt"; echo
     done
     say "$label MKDIR_OK=$ok not_ok=$late"

@@ -331,7 +331,12 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         target = r->primary_id;
     }
     /* Exhausted BUSY retries is not "no primary" — that mapped to EIO
-     * on dir-rename under load (isolated PASS). */
+     * on dir-rename under load (isolated PASS). Say so: an app-visible
+     * EBUSY after 10 s of retries on an idle cluster is a server bug and
+     * the server line (raft-host: mkdir/create/unlink ... rc=) is the pair. */
+    if (saw_busy)
+        fprintf(stderr, "inode-rpc: shard=%u type=%u exhausted 16 BUSY/STALE "
+                "retries (%.1f s) -> EBUSY\n", shard, type, 10.35);
     return saw_busy ? EFS_ERR_BUSY : EFS_ERR_NOT_PRIMARY;
 }
 
@@ -869,6 +874,9 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
             return EFS_ERR_NOT_PRIMARY;
         target = r->primary_id;
     }
+    if (saw_busy)
+        fprintf(stderr, "inode-rpc: dual type=%u exhausted 16 BUSY/STALE "
+                "retries (%.1f s) -> EBUSY\n", type, 10.35);
     return saw_busy ? EFS_ERR_BUSY : EFS_ERR_NOT_PRIMARY;
 }
 

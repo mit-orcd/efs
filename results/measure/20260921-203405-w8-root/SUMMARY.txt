@@ -1,0 +1,9 @@
+root MKDIR_OK=9 not_ok=0
+sub MKDIR_OK=9 not_ok=0
+
+CORRECTION: the sub burst was 8/9, not 9/9 — fcstor009 was Killed at the
+10 s timeout (rc=137, D-state until then); the counter matched the literal
+MKDIR_OK inside the echoed killed command line (script fixed to anchor).
+Root burst is genuinely 9/9 in 0.005–0.203 s (was 6/9 in 1.2–6 s + 3 hung).
+The single fresh-parent hang is the next item: 16 BUSY/STALE retries on an
+idle cluster with no server log line — logging added in the next build.

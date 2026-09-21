@@ -353,6 +353,38 @@ static uint64_t now_us_(void)
     return (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000ull;
 }
 
+/* A directory op that ends BUSY or STALE is normal under contention and
+ * must never be persistent on an idle cluster (Sep 21: one of nine
+ * fresh-parent mkdirs ate the client's whole 10.4 s retry budget with no
+ * server line to say why). Log those two outcomes always, at most 20 lines
+ * per second per process; every other failure stays behind EFS_RAFT_DBG. */
+static int dirop_fail_on(int rc)
+{
+    static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
+    static uint64_t win_us;
+    static unsigned n;
+    uint64_t now;
+    int ok;
+
+    if (rc == EFS_OK)
+        return 0;
+    if (raft_dbg_on())
+        return 1;
+    if (rc != EFS_ERR_BUSY && rc != EFS_ERR_STALE)
+        return 0;
+    now = now_us_();
+    pthread_mutex_lock(&mu);
+    if (now - win_us >= 1000000ull) {
+        win_us = now;
+        n = 0;
+    }
+    ok = n < 20;
+    if (ok)
+        n++;
+    pthread_mutex_unlock(&mu);
+    return ok;
+}
+
 static int raft_obs_on(void)
 {
     static int v = -1;
@@ -5391,6 +5423,10 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
     if (rc == EFS_OK)
         host_stat_from_row(&prow, &st);
     pthread_mutex_unlock(&h->read_mu);
+    if (dirop_fail_on(rc))
+        fprintf(stderr, "raft-host: create parent=%llu name=%s rc=%d hint=%d "
+                "dsh=%u hashed=%d\n",
+                (unsigned long long)parent, name, rc, hint, dsh, hashed);
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
         stat_to_inode(&st, &out->inode);
@@ -6345,10 +6381,10 @@ mkdir_done:
     if (rc == EFS_OK)
         host_stat_from_row(&crow, &st);
     pthread_mutex_unlock(&h->read_mu);
-    if (rc != EFS_OK && env_on("EFS_RAFT_DBG"))
-        fprintf(stderr, "raft-host: mkdir parent=%llu namelen=%zu rc=%d "
+    if (dirop_fail_on(rc))
+        fprintf(stderr, "raft-host: mkdir parent=%llu name=%s rc=%d "
                 "hint=%d psh=%u csh=%u dsh=%u stage=%d ino=%llu\n",
-                (unsigned long long)parent, strlen(name), rc, hint, psh,
+                (unsigned long long)parent, name, rc, hint, psh,
                 csh, dsh, stage, (unsigned long long)ino);
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
@@ -6686,6 +6722,9 @@ rmdir_prepped:
     }
 rmdir_done:
     pthread_mutex_unlock(&h->read_mu);
+    if (dirop_fail_on(rc))
+        fprintf(stderr, "raft-host: rmdir parent=%llu name=%s rc=%d hint=%d\n",
+                (unsigned long long)parent, name, rc, hint);
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
         out->inode.ino = row.ino;
@@ -6885,7 +6924,7 @@ prepped:
         if (rc == EFS_OK)
             rc = efs_meta_apply_getattr(h->kv, row.ino, host_txn_coord, h, &st);
     }
-    if (rc != EFS_OK && env_on("EFS_RAFT_DBG"))
+    if (dirop_fail_on(rc))
         fprintf(stderr,
                 "raft-host: unlink-txn parent=%llu name=%s rc=%d hint=%d "
                 "last=%d held=%d dsh=%u ish=%u psh=%u\n",
@@ -7013,7 +7052,7 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
         rc = host_propose(h, dg, cmd, clen, &idx, &hint);
     if (rc == EFS_OK)
         rc = host_wait_applied(h, dg, idx, &hint);
-    if (rc != EFS_OK && env_on("EFS_RAFT_DBG"))
+    if (dirop_fail_on(rc))
         fprintf(stderr,
                 "raft-host: unlink-simple parent=%llu name=%s rc=%d hint=%d "
                 "dsh=%u dg=%u\n",
