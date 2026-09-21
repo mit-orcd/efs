@@ -1,0 +1,60 @@
+    39.48%          2425  efsd     [kernel.kallsyms]  [k] rep_movs_alternative
+            |
+            ---rep_movs_alternative
+               |          
+               |--38.82%--copyout
+               |          _copy_to_iter
+               |          |          
+               |           --38.73%--copy_page_to_iter
+               |                     filemap_read
+               |                     xfs_file_buffered_read
+               |                     xfs_file_read_iter
+               |                     vfs_read
+               |                     |          
+               |                      --38.71%--__x64_sys_pread64
+               |                                do_syscall_64
+               |                                entry_SYSCALL_64_after_hwframe
+               |                                __libc_pread
+               |                                |          
+               |                                 --38.56%--lookup
+               |                                           lsm_get
+               |                                           |          
+               |                                            --38.53%--efs_meta_apply_publish
+               |                                                      host_apply
+               |                                                      apply_committed
+               |                                                      try_commit
+               |                                                      efs_raft_recv
+               |                                                      drain_inbox
+               |                                                      host_pump
+               |                                                      start_thread
+               |          
+                --0.63%--copyin
+    17.16%          1054  efsd     libc.so.6          [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--14.47%--lookup
+               |          lsm_get
+               |          |          
+               |           --14.46%--efs_meta_apply_publish
+               |                     host_apply
+               |                     apply_committed
+               |                     try_commit
+               |                     efs_raft_recv
+               |                     drain_inbox
+               |                     host_pump
+               |                     start_thread
+               |          
+               |--1.55%--lsm_get
+               |          efs_meta_apply_publish
+               |          host_apply
+               |          apply_committed
+               |          try_commit
+               |          efs_raft_recv
+               |          drain_inbox
+               |          host_pump
+               |          start_thread
+               |          
+                --0.88%--lsm_batch
+                          efs_meta_apply_publish
+                          host_apply

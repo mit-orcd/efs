@@ -25,6 +25,26 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 21 2026 afternoon — measurements, W7 closed, W8 blocked on the mount root
+
+Runbooks ran on `b2184a5c7faf-dirty`. Same-parent rate is flat
+~140–160 ops/s (`results/measure/20260921-161931-samedir-rate`).
+IOR-hard write is 372 / 33 / 69 / 82 MiB/s at NP 1 / 4 / 9 / 36
+(`results/measure/20260921-162514-ior-hard-scaling`). 8 GiB dd+fsync
+is 499 MiB/s on one client and 176 on four
+(`results/measure/20260921-163033-dd-wall`); the 9-client row is
+INVALID (400 s, mkdir/fsync EIO). Raft logs are 1.8–4.4 GB, snapshot
+skipped, both groups caught up
+(`results/measure/20260921-182308-raft-snap-state`).
+
+W7 is done: the isolated walks are 1–6 s. W8's `NOTRUN` harness is
+proven on a cut suite. The 9-host suite still cannot start. Nine
+concurrent `mkdtemp` in the mount root take 1–6 s, three of nine miss
+an 8 s budget, and two creators then get ENOENT from `rmdir` of the
+directory they just made. The same nine in a fresh subdirectory finish
+in 0.2 s (`results/measure/20260921-194332-w8-root`). Root nlink is
+406 and `.stats` rollups are zero, under the 65536 spread threshold.
+
 ## Sep 21 2026 morning — parent-row lost update → §7.2 commutative reductions
 
 **Symptom (found 23:10 Sep 20 in the 9×4 IO-500 debug run

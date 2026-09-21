@@ -1,0 +1,22 @@
+  File: /tmp/efs-mount
+  Size: 0         	Blocks: 0          IO Block: 131072 directory
+Device: 2bh/43d	Inode: 1           Links: 406
+Access: (0755/drwxr-xr-x)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2026-09-18 18:11:43.860183916 -0400
+Modify: 2026-09-21 15:44:19.600595417 -0400
+Change: 2026-09-21 15:44:19.600595417 -0400
+ Birth: -
+STAT_RC=0
+imm_files=0
+imm_dirs=0
+imm_bytes=0
+imm_tmin=0
+imm_tmax=0
+tree_files=0
+tree_dirs=0
+tree_bytes=0
+tree_tmin=0
+tree_tmax=0
+as_of=1790020096.218839134
+
+STATS_RC=0

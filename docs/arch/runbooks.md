@@ -24,20 +24,24 @@ do not redeploy to "fix" it (that is a user decision; a redeploy is
    timeout is a FAIL, never widen it), `.cursor/rules/efs-fio-honest.mdc`
    (write numbers need the flush in the clock; `NOT_FUSE` = local disk =
    fiction).
-2. **Nothing over ~60 s runs from the login node.** Every runbook below is
-   launched as
+2. **Anything estimated over 10 s runs in a screen on node9901, fstor007,
+   or an fcstor**, not in the login-node shell. That includes every
+   runbook and the 15 s pre-flight. The Cursor shell there dies with
+   "no exit status" and then nothing it issued can be trusted. Launch with
    `~/.cursor/skills/efs-test-ssh/scripts/efs-bg.sh start <name> '<cmd>'`
-   which runs it in a detached `screen efs-<name>` on node9901 with the
-   log on NFS (`~/efs-runs/<name>.log`). Poll with
-   `efs-bg.sh status <name>` / `efs-bg.sh wait <name> <secs>`; or
-   `ssh node9901; screen -r efs-<name>` to watch it live (`Ctrl-a d` to
-   leave). Never run two runbooks at once: each one's pre-flight requires
-   an idle cluster (commit rate ≤ 5 entries/s) and the other would fail it
-   — and pollute the numbers.
-3. **Start every session with the pre-flight alone** (12–30 s):
-   `bash tests/preflight.sh --expect-build b2184a5c7faf-dirty`.
-   `PREFLIGHT_OK` or stop. The scripts run it again internally and abort on
-   FAIL; the output is saved as `preflight.txt` in the result dir.
+   (detached `screen efs-<name>`; `EFS_RUNNER=fstor007.ib` or
+   `EFS_RUNNER=fcstor007.ib` to put the screen on another host). Log on
+   NFS: `~/efs-runs/<name>.log`. The login node only does that start and
+   then reads the log. `efs-bg.sh status` is local; do not `efs-bg.sh
+   wait` (it sleeps on the login node). Or `ssh node9901; screen -r
+   efs-<name>` (`Ctrl-a d` to leave). Never run two runbooks at once: each one's
+   pre-flight requires an idle cluster (commit rate ≤ 5 entries/s) and the
+   other would fail it — and pollute the numbers.
+3. **Start every session with the pre-flight in a screen:**
+   `efs-bg.sh start m-preflight 'bash tests/preflight.sh --expect-build b2184a5c7faf-dirty'`,
+   then read `~/efs-runs/m-preflight.log`. `PREFLIGHT_OK` or stop. The
+   scripts run it again internally and abort on FAIL; the output is saved
+   as `preflight.txt` in the result dir.
 4. Auto-review will block cluster-touching commands. Retry the **same**
    command with `request_smart_mode_approval=true` and the verbatim reason.
    Do not split or weaken the command to dodge it.

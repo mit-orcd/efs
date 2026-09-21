@@ -1,0 +1,1 @@
+fcstor004 report-split nrec=65536 pack_ms=3554 push_ms=4848 finish_ms=1013 rc=0

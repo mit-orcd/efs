@@ -30,12 +30,13 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   pre-flight §7). **Exception:** `raft-mkfs` / wipe of 19810 — ask first
   (START-HERE says which items need a fresh table).
 - **Never** `pkill -f` / `pgrep -f` (matches your own ssh). `-x` only.
-- **Nothing over ~60 s runs from the login node.** Launch it detached on
- node9901: `~/.cursor/skills/efs-test-ssh/scripts/efs-bg.sh start <name>
- '<cmd>'`, poll `status`/`wait`, log in `~/efs-runs/<name>.log` (NFS).
- Posix suite, IO-500, `tests/roll_efsd.sh`, `tests/deploy_fuse_clients.sh`
- all go through it. The login-node Cursor shell dies on long commands
- (five times on Sep 20) and then nothing it issued can be trusted.
+- **Anything estimated over 10 s runs in a screen on node9901, fstor007,
+ or an fcstor** (`efs-bg.sh start`, `EFS_RUNNER=` to pick the host), not
+ in the login-node shell. Read `~/efs-runs/<name>.log`; do not `efs-bg.sh
+ wait`. Posix suite, IO-500, `tests/roll_efsd.sh`,
+ `tests/deploy_fuse_clients.sh`, and `tests/preflight.sh` (~15 s) all go
+ through it. The login-node Cursor shell dies with "no exit status" and
+ then nothing it issued can be trusted.
 - **Never** run `make` in `$HOME/git/efs` (login node is AVX-512; nodes are
   Zen2 → SIGILL). Build in `/tmp/efs` on a node after rsync.
 - **Never** widen a timeout to pass a test; a timeout is a FAIL
@@ -101,17 +102,23 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  `b2184a5c7faf-dirty` = byte-identical source to the §7.2 commit (`git log -1 --grep="commutative reductions"`)
  (the §7.2 commit), so the next server restart is a build-ID change →
  `tests/roll_efsd.sh --all` (stop all, start all); plain rolling refuses.
-- Honest write numbers (MiB/s, flush in clock): 1-client 8 GiB dd+fsync
-  **639** (best 724); 4-client **251**; 9-client **202** — 3.8 / 0.46 /
-  0.37 % of the 16.7 / 44 / 44 GB/s ceilings. Reads scale with clients,
-  writes share a ceiling that gets WORSE with clients. Every write wall
-  measured so far is software. Do not compare against the deleted pre-Raft
+- Honest write numbers (MiB/s, flush in clock): Sep 18, 1-client 8 GiB
+  dd+fsync **639** (best 724); 4-client **251**; 9-client **202**.
+  Sep 21 remeasure (`results/measure/20260921-163033-dd-wall`): 1-client
+  **499**, 4-client **176**; the 9-client row is INVALID (400 s timeout,
+  mkdir/fsync EIO — do not quote it). Reads scale with clients, writes
+  share a ceiling that gets worse with clients. Every write wall measured
+  so far is software. Do not compare against the deleted pre-Raft
   engine's numbers (Aug: 2355 / 3599) — different system.
 - posix suite 1 jobs=1 known signature (since the outbox fix): **200/201**
  in ~60 s, `mmap_write_read` SKIP (`MAP_SHARED` ENODEV by spec). The old
  15 s walk timeouts (`dir_deep_nesting*`, `names_crazy_dirs`,
  `mtime_monotonic_many_writes`) were the 100 ms floor — if they return,
- the cluster is not idle or a wakeup regressed. posix2 one pair **58–60/63**:
+ the cluster is not idle or a wakeup regressed (W7, isolated 1–6 s in
+ `results/measure/20260921-133437-posix-isolated`). A 9-host suite does not start. Concurrent `mkdtemp` in the mount root
+ is 1–6 s and sometimes ENOENT on the creator's own rmdir; the same
+ burst in a fresh directory is 9/9 in 0.2 s
+ (`results/measure/20260921-194332-w8-root`). posix2 one pair **58–60/63**:
   `peer_concurrent_append` (one side's O_APPEND records missing),
   `peer_fcntl_range_conflict` (per-client lockf), overlap-pwrite RMW flakes.
   Anything else is new.
@@ -140,12 +147,9 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  (`test-dir.0-0` nlink=2 with 3 children, rmdir EIO forever). Client
  retries STALE for CREATE/UNLINK/LINK/RENAME_AT. Repro/gate:
  `tests/stress/same_parent_storm.sh` (parent must end `children=0
- nlink=2`, rmdir OK). Same-parent op rate is a flat ~140–160 ops/s
- aggregate from 1 proc to 36 (`results/measure/20260921-161931-samedir-rate`:
- 138 / 134 / 159 ops/s, `busy_n=0`). The fuse daemon spends the wall in
- RPC recv; on-CPU server time is LSM scans in `reduces_pending` /
- `guards_conflict` / `efs_txn_resolve`. Not the 50 ms BUSY backoff and
- not the idle GC_ACK stream. Open perf item, not correctness.
+ nlink=2`, rmdir OK). The flat ~140–160 ops/s ceiling is in the status
+ section above: fuse spends the wall in RPC recv, server on-CPU time is
+ LSM scans, not the BUSY backoff. Open perf item, not correctness.
 - `efs_kv_scan_prefix` callback returning **>0 means batch-full**, not
  error. The reaper (`lane-sweep`, `rsv_purge`) misread it for weeks —
  no lane with >64 chunks was ever swept. Check this in any new scan user.
@@ -180,7 +184,10 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   follower). Salt is replicated via `EFS_MD_CMD_SALT`.
 - **W11 is every-run:** any data-bearing group's KV export exceeds the
   4 MiB SNAP cap → `snapshot skipped` → the raft log never compacts → a
-  follower restart is a full replay. Chunked SNAP is unspecified — ask.
+  follower restart is a full replay. Sep 21
+  (`results/measure/20260921-182308-raft-snap-state`): logs 1.8–4.4 GB,
+  still growing ~400–800 B/s idle, both groups `commit == applied`.
+  Chunked SNAP is unspecified — ask.
 - `host_pump` ticks are wall-clocked (`HOST_TICK_US`), never per iteration
   (iteration-counted ticks caused election storms). The network inbox path
   must never take `h->mu` (eventfd kick, not condvar). Forwarded-command

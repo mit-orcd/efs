@@ -3137,7 +3137,7 @@ def main():
     # sequential mkdirs at ~0.3s each was another 60s before any test ran.
     me = "posix-%s-" % host if not tag else "posix-%s-%s-" % (host, tag)
     base = tempfile.mkdtemp(prefix=me, dir=mnt)
-    npass = nfail = nskip = 0
+    npass = nfail = nskip = nnotrun = 0
     t0 = time.time()
     selected = []
     for name, fn in TESTS:
@@ -3164,14 +3164,15 @@ def main():
             for name, res, detail in ordered:
                 f.write("%s\t%s\t%s\n" %
                         (name, res, detail.replace("\n", " ")))
-            f.write("# summary pass=%d fail=%d skip=%d total=%d dur=%.1f\n" %
-                    (npass, nfail, nskip, npass + nfail + nskip, dt))
+            f.write("# summary pass=%d fail=%d skip=%d notrun=%d total=%d dur=%.1f\n" %
+                    (npass, nfail, nskip, nnotrun,
+                     npass + nfail + nskip + nnotrun, dt))
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, results_file)
 
     def record(name, status, detail):
-        nonlocal npass, nfail, nskip
+        nonlocal npass, nfail, nskip, nnotrun
         with tsv_mu:
             by_name[name] = (status, detail)
             RESULTS.append((name, status, detail))
@@ -3181,6 +3182,9 @@ def main():
             elif status == "SKIP":
                 nskip += 1
                 print("SKIP %-32s %s" % (name, detail), flush=True)
+            elif status == "NOTRUN":
+                nnotrun += 1
+                print("NOTRUN %-32s %s" % (name, detail), flush=True)
             else:
                 nfail += 1
                 print("FAIL %-32s %s" % (name, detail), flush=True)
@@ -3215,6 +3219,24 @@ def main():
         finally:
             if to > 0:
                 signal.alarm(0)
+
+    def _cut(signum, _frame):
+        # timeout(1) sends SIGTERM, then SIGKILL 5 s later. Write NOTRUN for
+        # anything not finished and leave. Do not take tsv_mu: the main
+        # thread may already hold it inside record().
+        nonlocal nnotrun
+        try:
+            for name, _fn, _td in selected:
+                if name not in by_name:
+                    by_name[name] = ("NOTRUN", "suite cut by signal %d" % signum)
+                    nnotrun += 1
+            flush_tsv()
+        except Exception:
+            pass
+        os._exit(128 + signum)
+
+    signal.signal(signal.SIGTERM, _cut)
+    signal.signal(signal.SIGHUP, _cut)
 
     try:
         parallel = [(n, fn, td) for n, fn, td in selected
@@ -3296,6 +3318,13 @@ def main():
                         print("stopped on first fail (--stop)")
                         break
 
+        # A cut run (outer `timeout` SIGTERM, or --stop) must still have one
+        # row per selected test. Missing rows become "[None]" in compare.py
+        # and get read as failures (W8).
+        for name, _fn, _td in selected:
+            if name not in by_name:
+                record(name, "NOTRUN", "not reached")
+
         # TSV / summary follow TESTS registration order.
         RESULTS[:] = [(n, by_name[n][0], by_name[n][1])
                       for n, _fn, _td in selected if n in by_name]
@@ -3307,10 +3336,10 @@ def main():
             shutil.rmtree(base, ignore_errors=True)
 
     dt = time.time() - t0
-    total = npass + nfail + nskip
+    total = npass + nfail + nskip + nnotrun
     print("=" * 60)
-    print("POSIX suite: %d/%d pass, %d fail, %d skip  (%.1fs)" %
-          (npass, total, nfail, nskip, dt))
+    print("POSIX suite: %d/%d pass, %d fail, %d skip, %d notrun  (%.1fs)" %
+          (npass, total, nfail, nskip, nnotrun, dt))
 
     if results_file:
         flush_tsv()
@@ -3348,7 +3377,7 @@ def main():
         pass
     sys.stdout.flush()
     sys.stderr.flush()
-    os._exit(0 if nfail == 0 else 1)
+    os._exit(0 if nfail == 0 and nnotrun == 0 else 1)
 
 
 if __name__ == "__main__":

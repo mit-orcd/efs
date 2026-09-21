@@ -4,7 +4,9 @@
 # (2) writes to results/measure/<date>-<name>/ (preflight.txt + raw + a
 # SUMMARY.txt with the numbers to hand back), (3) issues only short ssh
 # commands itself and puts anything long behind efs-bg.sh or a detached
-# harness. Run the scripts themselves via efs-bg.sh from node9901.
+# harness. Run the scripts themselves via efs-bg.sh (screen on node9901,
+# fstor007, or an fcstor). Anything estimated over 10 s stays out of the
+# login-node shell.
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
 MNT="${MNT:-/tmp/efs-mount}"
 REPO="${REPO:-$HOME/git/efs}"

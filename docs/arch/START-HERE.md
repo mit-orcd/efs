@@ -48,12 +48,61 @@ touching the cluster, run the **pre-flight** in the fcstor deploy rule
 
 ### 1b. In flight — finish this before taking a queue item
 
-Whoever picks the project up next does **this first**; it is mechanical and
-the code is already unit-gated. Update or delete this block when done — an
-"in flight" block older than the last commit is a bug in this page.
+Whoever picks the project up next does **this first**. Update or delete
+this block when done — an "in flight" block older than the last commit
+is a bug in this page.
+
+**Next mechanical item:** W8's harness change is proven (201 rows, 200
+`NOTRUN`, compare `EFS BUGS : 0`). The 9-host gate is blocked by the
+mount root: nine concurrent `mkdtemp` there take 1–6 s and sometimes
+ENOENT the creator's own `rmdir`; the same burst in a fresh directory
+is 9/9 in 0.2 s (`results/measure/20260921-194332-w8-root`). Root
+`nlink` is 406 and `.stats` rollups are zero
+(`results/measure/20260921-194815-w8-root-stats`), so this is not the
+65536-entry spread. Do not raise the warmup or suite timeout, and do
+not change the txn protocol from a guess.
 
 **Progress log (newest first — read this before the state below):**
 
+- **19:44 (Sep 21)** — **W8 root burst vs a fresh parent.**
+  `results/measure/20260921-194332-w8-root`. One root `mkdtemp` 1.192 s.
+  Nine at once: six `MKDIR_OK` in 1.19–5.96 s, three still out at 8 s
+  (one python in `request_wait_answer`), and fcstor012/014 then `rmdir`
+  ENOENT on the directory that same call had just created. Nine at once
+  in a fresh subdirectory: **9/9 in 0.008–0.197 s**, every `rmdir` OK.
+  Group 0 `commit == applied`, +55 entries in ~9 s. Root `stat` right
+  after: nlink=406, `.stats` rollups all zero
+  (`results/measure/20260921-194815-w8-root-stats`). Not a 65536-entry
+  spread. The mount root is what the 9-host suite cannot enter.
+- **19:40 (Sep 21)** — **W7 closed. W8 harness proven, 9-host gate not run.**
+  Isolated walks are 1.1–6.1 s (`results/measure/20260921-133437-posix-isolated`);
+  suite 1 jobs=1 stays 200/201. A 20 s cut of suite 1 writes 201 TSV rows
+  (`results/measure/w8-cut.tsv`): 1 PASS, 200 `NOTRUN` ("suite cut by
+  signal 15"), `NONE=0`. `compare.py` reports `EFS BUGS : 0` and
+  `not run : 200` (`results/measure/w8-compare.txt`). Immediately after,
+  9 clients each doing one `mkdtemp` in the mount root: **0 MKDIR_OK**.
+  Five ssh timed out at 20 s (D-state `request_wait_answer` ignores the
+  inner timeout); four were killed at 12 s (`rc=124`) with no success
+  line. A same-binary remount cleared them. One mkdir on one client
+  still returns. Do not start `run_tests.sh posix --parallel` until the
+  root burst in `w8_root_mkdir.sh` returns.
+- **18:23 (Sep 21)** — **W11 measured, still unspecified.**
+  `results/measure/20260921-182308-raft-snap-state`: raft logs
+  **1.83 / 3.56 / 4.36 / 1.89 GB** on fcstor003–006, still growing
+  388–801 B/s on an idle cluster. KV 0.54–1.08 GB. `snapshot skipped`
+  is latched (group 0 applied≈4521152, group 2 ≈3256233). Both groups
+  `commit == applied` on every voter — fcstor005 is not behind on this
+  build. A follower restart is still a full replay. Chunked
+  InstallSnapshot stays unspecified: ask, do not design.
+- **16:30 (Sep 21)** — **dd wall, 1 and 4 clients. 9-client number does not exist.**
+  `results/measure/20260921-163033-dd-wall`, 8 GiB `dd conv=fsync` of
+  non-zero `/tmp/src8g`, FUSE_OK, file 8589934592. **1 client 499 MiB/s**
+  (wall 16.4 s; Sep 18 was 639). That REPORT: pack 3554 + push 4848 +
+  finish 1013 ms, `rc=0`. **4 clients 176 MiB/s** aggregate (slowest
+  185.8 s; Sep 18 was 251). 21 `report-split` lines, all `nrec=65536`
+  `rc=0`, one push 149 s. 9 clients: every ssh hit 400 s; mkdir EIO on
+  007/009/010 (the 30.2 s WALL is a failed open) and fsync EIO on
+  011–015. Row is `INVALID`. Do not quote a 9-client rate from this run.
 - **12:30 (Sep 21)** — **IOR-hard scaling, full runbook**
   (`tests/measure/ior_hard_scaling.sh`,
   `results/measure/20260921-162514-ior-hard-scaling`). Write MiB/s
@@ -650,23 +699,26 @@ its data at the end of a run).
   `efs-fuse` dies). Never gdb-attach an MPI rank through a timeout'd ssh
   (left a rank T-stopped, job unrecoverable).
 
-#### W7 — Two POSIX suite-1 tests exceed the 15 s budget even in isolation
+#### W7 — Two POSIX suite-1 tests exceed the 15 s budget even in isolation — DONE
 
-Suite 1 jobs=1 is **193 both-pass / 3 EFS** (`results/posix/20260918-030811`).
-One is `mmap_write_read`, an expected SKIP (`MAP_SHARED` is ENODEV by spec —
-a documented deviation, not a bug). The other two are latency, not
-correctness, and fail isolated too:
+**Done Sep 21 2026.** The 15 s failures were the metadata wakeup floor
+(fixed Sep 20), not a remaining per-test bug. Isolated on an idle cluster,
+`results/measure/20260921-133437-posix-isolated` (budget 15 s, jobs=1):
 
-- `concurrent_creates_same_dir` — 160 creates in one directory.
-- `mtime_monotonic_many_writes` — 80 × 128 KiB close-publish + `stat`
-  (~187 ms per iteration).
+| test | result | seconds |
+| --- | --- | --- |
+| `concurrent_creates_same_dir` | PASS | 4.9 |
+| `mtime_monotonic_many_writes` | PASS | 1.1 |
+| `dir_deep_nesting` | PASS | 6.1 |
+| `dir_deep_nesting_beyond_64` | PASS | 4.8 |
+| `names_crazy_dirs` | PASS | 3.3 |
+| `dir_many_files` | PASS | 5.2 |
 
-Both are per-op metadata round trips. Profile one of them against the same
-publish/ReadIndex path W3 touches; they may move for free once W3 lands, so
-re-run them after W3 before optimizing anything.
+Suite 1 jobs=1 on the same build is **200/201** plus `mmap_write_read`
+SKIP (`results/posix/20260921-123904`), above the 193 floor. If any of
+these walks exceed 15 s again, the cluster was not idle or a wakeup
+regressed — do not raise the budget.
 
-- **Gate:** the two tests pass isolated inside budget, and suite 1 jobs=1
-  does not regress below 193.
 - **Forbidden:** raising `POSIX_TEST_SEC` or the `@budget(...)` values. A
   timeout is a failure to be removed, not re-labeled.
 
@@ -678,8 +730,26 @@ walk/name timeouts; the rest never ran and report `[None]`. So the number is a
 harness artifact and cannot be read as 60 bugs. Four-node under load is
 186–188 both-pass (`results/posix/20260917-190014`).
 
-Make a 9-way run produce a complete TSV (per-test result even when the run is
-cut) so the suite reports what it measured, then re-read the real failures.
+The suite now writes one row per selected test even when the outer
+`timeout` kills it: `SIGTERM` fills the unfinished names with `NOTRUN`
+(`posix_suite.py`), and `compare.py` counts `NOTRUN` and missing rows as
+"not run", not as EFS-BUG. Proven on a 20 s cut
+(`results/measure/w8-cut.tsv`, `results/measure/w8-compare.txt`): 201
+rows, 200 `NOTRUN`, `EFS BUGS : 0`, zero `[None]`. A finished run still
+has to have 201 data rows and 0 `NOTRUN`.
+
+The 9-host gate has not been run. Its warmup, and each suite's own
+working directory, is a `mkdtemp` in the mount root. One such mkdir
+takes 1.2 s. Nine at once (`results/measure/20260921-194332-w8-root`):
+six `MKDIR_OK` in 1.2–6.0 s, three still outstanding at 8 s, and two of
+the successes then `rmdir` ENOENT on the directory that same call
+created. The same nine-way burst in a fresh subdirectory is 9/9 in
+0.008–0.197 s with every `rmdir` succeeding. Group 0 stayed
+`commit == applied` (+55 entries in ~9 s). An earlier burst right after
+the cut suite returned 0/9 inside 12 s
+(`results/measure/w8-mkdir-fcstor0*.txt`). Do not raise the 70 s warmup
+or the 400 s suite timeout, and do not point the suite at a
+subdirectory to hide this.
 
 - **Forbidden:** reporting `[None]` rows as failures, or as passes.
 
@@ -723,9 +793,12 @@ path; TCP over IPoIB will not reach it.
 
 `raft_host` only compacts when the whole group's KV export fits in one
 `EFS_WIRE_RAFT_MAX_CMD` command. On 19810 one group is over that, so the log
-is never compacted, `snap_oversized` latches, and fcstor005 stays far behind
-(it still serves; the gossip `DOWN` right after a bounce is the STATUS probe,
-not a dead process — check `pgrep -x efsd`).
+is never compacted and `snap_oversized` latches. Measured Sep 21
+(`results/measure/20260921-182308-raft-snap-state`): logs 1.83–4.36 GB
+and still growing ~400–800 B/s idle, both groups `commit == applied`
+(fcstor005 is not behind on this build; the gossip `DOWN` right after a
+bounce is the STATUS probe, not a dead process — check `pgrep -x efsd`).
+A follower restart is a full replay of that log.
 
 The fix is a chunked / multi-message InstallSnapshot, and **that protocol is
 not specified anywhere**. Do not design it. Bring the measured symptom to the

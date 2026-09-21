@@ -19,9 +19,14 @@ does not kill D-state (`fusermount3`, FUSE `request_wait_answer`).
   `timeout 3 fusermount3`.
 - Timeout is a **FAIL**, not a skip. Do not retry-until-forever.
 - No `EFS_SSH_TIMEOUT=0`. Raise only after the work is already fast.
-- **Anything over ~60 s does not run from the login node at all.** Launch
- it detached on node9901 with
+- **Anything estimated over 10 s does not run in the login-node shell.**
+ Launch it in a detached GNU screen on **node9901, fstor007, or an
+ fcstor**:
  `~/.cursor/skills/efs-test-ssh/scripts/efs-bg.sh start <name> '<cmd>'`
- and poll `efs-bg.sh status/wait <name>` (log on NFS: `~/efs-runs/`).
- The login-node Cursor shell dies on long commands (four times on
- Sep 20) and a dead shell cannot tell you whether the job ran.
+ (default runner `node9901.ib`; `EFS_RUNNER=fstor007.ib` or
+ `EFS_RUNNER=fcstor007.ib`). The login node only issues that start
+ (expected under 10 s) and then reads `~/efs-runs/<name>.log`.
+ `efs-bg.sh status` reads the log locally. Do not `efs-bg.sh wait` —
+ it sleeps on the login node. The Cursor shell there dies even on short
+ cluster commands once the session is long ("no exit status", Sep 20–21)
+ and a dead shell cannot tell you whether the job ran.

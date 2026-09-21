@@ -37,12 +37,17 @@ def main():
     targ, td = load(sys.argv[2])
 
     names = sorted(set(base) | set(targ))
-    bugs, bothfail, better, ok, only_t = [], [], [], [], []
+    bugs, bothfail, better, ok, only_t, notrun = [], [], [], [], [], []
     for n in names:
         b = base.get(n)
         t = targ.get(n)
         if b is None:
             only_t.append(n)
+            continue
+        # A test the target never reached is a cut run, not a wrong answer.
+        # Missing rows used to land here as [None] and count as EFS-BUG (W8).
+        if t is None or t == "NOTRUN":
+            notrun.append((n, t if t else "missing", td.get(n, "")))
             continue
         if b == "PASS" and t == "PASS":
             ok.append(n)
@@ -59,6 +64,7 @@ def main():
     print("  EFS BUGS         : %d  (baseline PASS, target FAIL)" % len(bugs))
     print("  both fail (match): %d" % len(bothfail))
     print("  target better    : %d" % len(better))
+    print("  not run          : %d  (cut or missing; not a bug)" % len(notrun))
     print("=" * 64)
     if bugs:
         print("\n--- EFS BUGS (pass on baseline, fail on target) ---")
@@ -68,6 +74,10 @@ def main():
         print("\n--- target passes where baseline fails ---")
         for n in better:
             print("  %-32s" % n)
+    if notrun:
+        print("\n--- not run (suite cut or row missing; not an EFS bug) ---")
+        for n, t, det in notrun:
+            print("  %-32s [%s] %s" % (n, t, det))
     if bothfail:
         print("\n--- both fail (behaviour matches baseline) ---")
         for n, b, t in bothfail:

@@ -1,0 +1,14 @@
+8 GiB dd+fsync own-file, build=b2184a5c7faf-dirty, 2026-09-21. Sep 18: 1=639 4=251 9=202 MiB/s.
+clients  ssh_wall_s     agg_mibs  per_client_min_max_s  sum_rates_mibs  pct_of_ceiling
+1        18.976678028   499.1     16.412/16.412         499.1           2.98
+4        216.205759486  176.3     127.311/185.807       206.5           .40
+9        400.027574110  INVALID   30.208/30.208         -               -
+
+server REPORT timing (efsd report-split lines during each phase; the fsync tail is here):
+1 clients: report-split: 1 lines; pack_ms sum=3554 max=3554; push_ms sum=4848 max=4848; finish_ms sum=1013 max=1013
+4 clients: report-split: 21 lines; pack_ms sum=133138 max=7686; push_ms sum=949629 max=149248; finish_ms sum=311227 max=35846
+9 clients: report-split: 49 lines; pack_ms sum=328414 max=8137; push_ms sum=2001208 max=184108; finish_ms sum=1132923 max=76823
+
+agg = clients*8 GiB / slowest client dd wall (ssh_wall includes ~4 s ssh+check overhead); sum_rates = sum of per-client 8 GiB/wall. Perf: perf-ddwall-*.txt (PERF=1). Raw: dd-*-*.txt
+
+9-client row is INVALID. Every host hit the 400 s ssh budget. fcstor007/009/010: mkdir of the measure dir returned EIO and the WALL line is a failed open (30 s), not a write. fcstor011–015: fsync EIO. Do not quote 2440 MiB/s; that figure divided 8 GiB by the failed-open WALL.

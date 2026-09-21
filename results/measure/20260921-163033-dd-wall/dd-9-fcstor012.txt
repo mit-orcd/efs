@@ -1,0 +1,4 @@
+FUSE_CHECK fstype=fuse.efs-fuse
+FUSE_OK
+dd: fsync failed for '/tmp/efs-mount/measure/dd-fcstor012.bin': Input/output error
+efs-ssh: TIMEOUT after 400s host=fcstor012.ib

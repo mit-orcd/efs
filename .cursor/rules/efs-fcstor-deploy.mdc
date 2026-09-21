@@ -11,9 +11,11 @@ Every step is read-only and takes seconds. Skipping one of these is how
 every "mysterious" failure in this project's history started (dead mount
 read as data loss, stale binary, mixed build IDs, agent killed its own
 ssh). Record the answers before you act. **Steps 2–6 are one command:
-`bash tests/preflight.sh [--expect-build <id>]`** (≈15 s, prints
-`PREFLIGHT_OK build=…` or the failing lines; also checks the commit rate is
-idle). Step 1 (shell alive) and step 7 (approval mechanics) are yours.
+`efs-bg.sh start m-preflight 'bash tests/preflight.sh [--expect-build <id>]'`**
+(≈15 s, so it runs in a screen on node9901, not the login node; read
+`~/efs-runs/m-preflight.log` for `PREFLIGHT_OK build=…` or the failing
+lines; also checks the commit rate is idle). Step 1 (shell alive) and
+step 7 (approval mechanics) are yours.
 
 1. **Is the shell alive?** `echo alive; date`. If a `Shell` call returns
    "no exit status", the execution environment is dead — nothing you
@@ -100,7 +102,7 @@ allowlist). UNLESS the user says differently for a particular run.
 still holds the old table in RAM and will REPORT/flush it onto a fresh
 `mkfs` — that is the recurring `adopted cache blob 232MB / chunks=1932296
 / gen=102`. `pkill -x efs-fuse` without `-9` misses D-state daemons.
-Use `tests/wipe_cluster.sh` from the login node, or do this by hand:
+Use `efs-bg.sh start wipe 'bash tests/wipe_cluster.sh'` (the wipe is minutes; the screen is on node9901, or `EFS_RUNNER=fstor007.ib` / an fcstor). By hand, each step is its own short ssh:
 
 1. **Every client (fcstor003–015):** `killall -9 efs-fuse` **first**
    (or `pkill -9 -x efs-fuse`), then `timeout 3 fusermount3 -uz /tmp/efs-mount`.

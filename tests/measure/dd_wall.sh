@@ -48,6 +48,8 @@ for n in $NCLIENTS; do
     walls=""; sumr=0; bad=0
     for h in $hosts; do
         grep -q FUSE_OK "$OUT/dd-$n-$h.txt" || { say "FAIL: $h NOT_FUSE — number discarded"; bad=1; }
+        grep -qE 'TIMEOUT|fsync failed|Input/output error' "$OUT/dd-$n-$h.txt" && { say "FAIL: $h timed out or EIO — number discarded"; bad=1; }
+        grep -q 8589934592 "$OUT/dd-$n-$h.txt" || { say "FAIL: $h file is not 8 GiB — number discarded"; bad=1; }
         w=$(grep -o 'WALL [0-9.]*' "$OUT/dd-$n-$h.txt" | cut -d' ' -f2); walls="$walls $w"
         [ -n "$w" ] && sumr=$(echo "scale=1; $sumr + 8192 / $w" | bc)
     done

@@ -17,7 +17,7 @@
 set -u
 d=${1:?results/posix/<run-id>}
 [ -d "$d" ] || { echo "no such dir $d"; exit 2; }
-printf '%-12s %5s %5s %5s %5s %6s\n' host rows pass fail skip none
+printf '%-12s %5s %5s %5s %5s %6s %6s\n' host rows pass fail skip notrun none
 for f in "$d"/efs-*.tsv "$d"/*-fcstor0*.tsv; do
     [ -f "$f" ] || continue
     h=$(basename "$f" .tsv | grep -o 'fcstor0[0-9]*' | head -1)
@@ -25,7 +25,8 @@ for f in "$d"/efs-*.tsv "$d"/*-fcstor0*.tsv; do
     pass=$(awk -F'\t' '$2=="PASS"' "$f" | wc -l)
     fail=$(awk -F'\t' '$2=="FAIL"' "$f" | wc -l)
     skip=$(awk -F'\t' '$2=="SKIP"' "$f" | wc -l)
+    notrun=$(awk -F'\t' '$2=="NOTRUN"' "$f" | wc -l)
     none=$(grep -c 'None' "$f")
-    printf '%-12s %5d %5d %5d %5d %6d\n' "${h:-?}" "$rows" "$pass" "$fail" "$skip" "$none"
+    printf '%-12s %5d %5d %5d %5d %6d %6d\n' "${h:-?}" "$rows" "$pass" "$fail" "$skip" "$notrun" "$none"
 done
 echo "compare-*.txt summaries:"; grep -H 'both pass\|EFS BUGS' "$d"/compare-*.txt 2>/dev/null

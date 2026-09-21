@@ -1,0 +1,4 @@
+FUSE_CHECK fstype=fuse.efs-fuse
+FUSE_OK
+mkdir: cannot create directory ‘/tmp/efs-mount/measure’: Input/output error
+efs-ssh: TIMEOUT after 400s host=fcstor009.ib

@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "<string>", line 2, in <module>
+MKDIR_OK 1.190
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/efs-mount/w8-gdxxe6oz'
+rc=1

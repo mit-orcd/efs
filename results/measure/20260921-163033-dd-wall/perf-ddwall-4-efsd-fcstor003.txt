@@ -1,0 +1,60 @@
+    34.68%          3089  efsd     [kernel.kallsyms]  [k] rep_movs_alternative
+            |
+            ---rep_movs_alternative
+               |          
+               |--33.46%--copyout
+               |          _copy_to_iter
+               |          |          
+               |           --33.44%--copy_page_to_iter
+               |                     filemap_read
+               |                     xfs_file_buffered_read
+               |                     xfs_file_read_iter
+               |                     vfs_read
+               |                     __x64_sys_pread64
+               |                     do_syscall_64
+               |                     entry_SYSCALL_64_after_hwframe
+               |                     __libc_pread
+               |                     |          
+               |                     |--32.70%--lookup
+               |                     |          lsm_get
+               |                     |          |          
+               |                     |           --32.63%--efs_meta_apply_publish
+               |                     |                     host_apply
+               |                     |                     apply_committed
+               |                     |                     |          
+               |                     |                      --31.47%--try_commit
+               |                     |                                efs_raft_recv
+               |                     |                                drain_inbox
+               |                     |                                host_pump
+               |                     |                                start_thread
+               |                     |          
+               |                      --0.74%--kv_msrc_advance
+               |                                |          
+               |                                 --0.71%--kv_compact_locked.part.0
+               |          
+                --1.21%--copyin
+                          |          
+                           --0.90%--copy_page_from_iter_atomic
+                                     iomap_write_iter
+                                     iomap_file_buffered_write
+                                     xfs_file_buffered_write
+                                     vfs_write
+                                     |          
+                                      --0.88%--ksys_write
+                                                do_syscall_64
+                                                entry_SYSCALL_64_after_hwframe
+                                                __GI___libc_write
+    25.43%          2265  efsd     libc.so.6          [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--15.94%--lookup
+               |          lsm_get
+               |          |          
+               |           --15.91%--efs_meta_apply_publish
+               |                     host_apply
+               |                     apply_committed
+               |                     |          
+               |                      --15.55%--try_commit
+               |                                efs_raft_recv
+               |                                drain_inbox
