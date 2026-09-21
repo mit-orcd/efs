@@ -614,10 +614,39 @@ static int drop_cb(void *user, const uint8_t *key, uint32_t klen,
     return 0;
 }
 
+/* The transaction records of one shard live under exactly three key kinds.
+ * Visit those three prefixes, never the whole shard: a 2-byte shard scan
+ * walks every inode, dentry, chunk and lane key the shard holds (and every
+ * tombstone the LSM has not compacted yet) through the full segment merge,
+ * under the KV lock and the apply lock. On the mount root's shard that was
+ * 0.7–1.1 s per RESOLVE (Sep 21, results/measure/20260921-202253-w8-root-srv),
+ * long enough for the 400 ms apply wait to return BUSY and for the client to
+ * retry a committed UNLINK into ENOENT. */
+static int txn_scan_kinds(struct efs_kv *kv, uint32_t shard,
+                          int (*cb)(void *user, const uint8_t *key,
+                                    uint32_t klen, const uint8_t *val,
+                                    uint32_t vlen),
+                          void *user)
+{
+    static const uint8_t kinds[3] = { EFS_KV_KIND_INTENT, EFS_KV_KIND_GUARD,
+                                      EFS_KV_KIND_REDUCE };
+    uint8_t pref[3];
+    int i, rc;
+
+    pref[0] = (uint8_t)(shard >> 8);
+    pref[1] = (uint8_t)shard;
+    for (i = 0; i < 3; i++) {
+        pref[2] = kinds[i];
+        rc = efs_kv_scan_prefix(kv, pref, 3, cb, user);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    return EFS_OK;
+}
+
 int efs_txn_drop(struct efs_kv *kv, const struct efs_txid *t, uint32_t shard)
 {
     struct drop_acc a;
-    uint8_t pref[2];
     int rc;
 
     if (!kv || !t)
@@ -625,9 +654,7 @@ int efs_txn_drop(struct efs_kv *kv, const struct efs_txid *t, uint32_t shard)
     memset(&a, 0, sizeof(a));
     a.t = *t;
     a.shard = shard;
-    pref[0] = (uint8_t)(shard >> 8);
-    pref[1] = (uint8_t)shard;
-    rc = efs_kv_scan_prefix(kv, pref, 2, drop_cb, &a);
+    rc = txn_scan_kinds(kv, shard, drop_cb, &a);
     if (a.rc != EFS_OK)
         return a.rc;
     if (rc != EFS_OK)
@@ -1122,7 +1149,6 @@ int efs_txn_resolve(struct efs_kv *kv, const struct efs_txid *t, uint32_t shard,
                     int decision)
 {
     struct res_acc a;
-    uint8_t pref[2];
     int rc, i;
 
     if (!kv || !t)
@@ -1134,9 +1160,7 @@ int efs_txn_resolve(struct efs_kv *kv, const struct efs_txid *t, uint32_t shard,
     a.t = *t;
     a.shard = shard;
     a.decision = decision;
-    pref[0] = (uint8_t)(shard >> 8);
-    pref[1] = (uint8_t)shard;
-    rc = efs_kv_scan_prefix(kv, pref, 2, res_cb, &a);
+    rc = txn_scan_kinds(kv, shard, res_cb, &a);
     if (a.rc != EFS_OK)
         return a.rc;
     if (rc != EFS_OK)

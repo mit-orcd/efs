@@ -1,0 +1,25 @@
+w8_root_srv — server-side strace during 12 root mkdir+rmdir pairs (Sep 21 16:23)
+
+Client (fcstor007) talks to 172.16.223.57 (fcstor003, g0 leader) and .58
+(fcstor004, dual host). Under strace 10 of 24 ops were slow (0.74–1.44 s).
+
+What the four efsd showed inside every slow op:
+- fcstor004 (dual host, follower of both groups): 3–5 threads in one futex
+  wait that all release at the SAME instant, 0.70 s / 1.05 s after they
+  started — waiters on h->mu / applied_cv released when the pump finished
+  one apply.
+- fcstor005: one futex wait ETIMEDOUT at exactly 0.400 s = the
+  host_wait_applied / host_read_index deadline (HOST_READ_TRIES x 5 ms)
+  -> EFS_ERR_BUSY to the caller. This is the BUSY the client retries on.
+- fcstor003 / fcstor006 (leaders): peer-conn recvfrom gaps of 0.7–1.1 s —
+  no raft/peer traffic reached those conns while the apply was stalled.
+
+Recurring quanta: 0.40 s (deadline), ~0.70 s, ~1.05 s (=0.7+0.4 or two
+stalls). Nothing in the syscall list is disk: no fdatasync/pwrite >= 0.15 s.
+The stall is on-CPU inside the apply — see 20260921-202715-w8-root-perf.
+
+Consequence chain: RESOLVE apply on the root's shard takes 0.7–1.1 s under
+h->mu -> host_wait_applied hits its 400 ms deadline -> BUSY -> client
+backoff/retry (up to 16 attempts = 10.4 s) -> a retried UNLINK whose first
+attempt had committed returns NOT_FOUND -> the "rmdir ENOENT on a dir I just
+made" seen in 20260921-194332-w8-root.

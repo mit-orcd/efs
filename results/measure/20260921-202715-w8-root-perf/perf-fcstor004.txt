@@ -1,0 +1,34 @@
+== fcstor004 top symbols (self)
+    61.89%          3779  efsd     libc.so.6          [.] __memcmp_avx2_movbe
+    28.53%          1742  efsd     efsd               [.] merge_scan
+     4.11%           251  efsd     [kernel.kallsyms]  [k] rep_movs_alternative
+     1.16%            71  efsd     efsd               [.] kv_msrc_advance
+     0.98%            60  efsd     efsd               [.] kv_seg_iter_next
+     0.93%            57  efsd     efsd               [.] res_cb
+     0.46%            28  efsd     [kernel.kallsyms]  [k] filemap_get_read_batch
+     0.21%            13  efsd     efsd               [.] memcmp@plt
+     0.20%            12  efsd     [kernel.kallsyms]  [k] copyout
+     0.15%             9  efsd     [kernel.kallsyms]  [k] filemap_read
+     0.11%             7  efsd     [kernel.kallsyms]  [k] __fget_light
+     0.08%             5  efsd     [kernel.kallsyms]  [k] fput_many
+     0.08%             5  efsd     [kernel.kallsyms]  [k] syscall_enter_from_user_mode
+     0.07%             4  efsd     [kernel.kallsyms]  [k] _raw_spin_unlock_irq
+     0.05%             3  efsd     [kernel.kallsyms]  [k] _copy_to_iter
+     0.05%             3  efsd     [kernel.kallsyms]  [k] xas_load
+     0.03%             2  efsd     [kernel.kallsyms]  [k] _copy_from_user
+     0.03%             2  efsd     [kernel.kallsyms]  [k] _raw_spin_unlock_irqrestore
+     0.03%             2  efsd     [kernel.kallsyms]  [k] fsnotify_perm.part.0
+     0.03%             2  efsd     [kernel.kallsyms]  [k] schedule
+     0.03%             2  efsd     [kernel.kallsyms]  [k] xas_descend
+     0.03%             2  efsd     [kernel.kallsyms]  [k] xas_start
+     0.03%             2  efsd     [xfs]              [k] xfs_buf_lookup.constprop.0
+     0.02%             1  efsd     [kernel.kallsyms]  [k] ___slab_alloc
+     0.02%             1  efsd     [kernel.kallsyms]  [k] __d_lookup
+== fcstor004 callers of merge_scan
+# symbol: merge_scan
+               host_pump
+               apply_committed
+               host_apply
+               efs_txn_resolve
+               lsm_scan_prefix
+               merge_scan
