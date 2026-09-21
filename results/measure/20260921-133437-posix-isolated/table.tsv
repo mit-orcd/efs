@@ -1,0 +1,7 @@
+test	result	secs	ops	ms_per_op	detail
+concurrent_creates_same_dir	PASS	4.886	160	30.5	
+mtime_monotonic_many_writes	PASS	1.077	80	13.4	
+dir_deep_nesting	PASS	6.057	64	94.6	
+dir_deep_nesting_beyond_64	PASS	4.757	200	23.7	
+names_crazy_dirs	PASS	3.341	0	-	
+dir_many_files	PASS	5.182	0	-	

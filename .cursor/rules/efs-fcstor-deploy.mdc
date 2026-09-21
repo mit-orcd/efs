@@ -10,7 +10,10 @@ alwaysApply: true
 Every step is read-only and takes seconds. Skipping one of these is how
 every "mysterious" failure in this project's history started (dead mount
 read as data loss, stale binary, mixed build IDs, agent killed its own
-ssh). Record the answers before you act.
+ssh). Record the answers before you act. **Steps 2–6 are one command:
+`bash tests/preflight.sh [--expect-build <id>]`** (≈15 s, prints
+`PREFLIGHT_OK build=…` or the failing lines; also checks the commit rate is
+idle). Step 1 (shell alive) and step 7 (approval mechanics) are yours.
 
 1. **Is the shell alive?** `echo alive; date`. If a `Shell` call returns
    "no exit status", the execution environment is dead — nothing you

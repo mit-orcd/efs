@@ -1,0 +1,2 @@
+size_mib	cold_open_ms	cold_read4k_ms	cold_total_ms	warm_open_ms	warm_read4k_ms	getchunks_n	getchunks_avg_us	lookup_n	getattr_n	calls
+1024	219.8	21.4	241.2	29.6	0.0	128	1541	4	4	140

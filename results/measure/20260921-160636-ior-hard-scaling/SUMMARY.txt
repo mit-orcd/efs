@@ -1,0 +1,8 @@
+ior-hard-write scaling, build=b2184a5c7faf-dirty, 2026-09-21: -t 47008 -b 47008 -s 500, one shared file, ranks spread over fcstor007.. (SLOTS per host)
+np  slots  segs  bytes_total_mib  launch_wall_s  ior_write_s  write_mibs  busy_n  busy_s
+1   1      500   22               6              0.247014     90.74       0       0
+
+server REPORT timing (efsd report-split lines during each run):
+NP=1: report-split: none logged (all REPORTs <256 recs and <100 ms)
+
+busy_n/busy_s are rank0's CLIENT only (1/np of the ranks at SLOTS=1, 4/np at SLOTS=4) and exclude REPORT (unprofiled on this build). Raw: ior-*.log rpcprof-*.txt report-split-*.txt

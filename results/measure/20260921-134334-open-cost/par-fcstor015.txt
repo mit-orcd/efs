@@ -1,0 +1,4 @@
+par open_ms=1989.0 read4k_ms=20.8
+par open_ms=2452.7 read4k_ms=0.0
+par open_ms=2462.9 read4k_ms=0.0
+par open_ms=2489.1 read4k_ms=0.0

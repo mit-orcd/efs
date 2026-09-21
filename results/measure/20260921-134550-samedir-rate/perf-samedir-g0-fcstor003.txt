@@ -1,0 +1,60 @@
+    12.09%            33  efsd     libc.so.6          [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--9.89%--lsm_scan_prefix
+               |          host_gc_frag_pass
+               |          host_gc_thread
+               |          start_thread
+               |          
+                --1.83%--merge_scan
+                          lsm_scan_prefix
+                          |          
+                           --1.47%--host_gc_frag_pass
+                                     host_gc_thread
+                                     start_thread
+     6.59%            18  efsd     [kernel.kallsyms]  [k] __d_lookup_rcu
+            |
+            ---__d_lookup_rcu
+               lookup_fast
+               |          
+               |--5.13%--walk_component
+               |          |          
+               |           --4.76%--link_path_walk.part.0.constprop.0
+               |                     |          
+               |                     |--3.30%--path_openat
+               |                     |          do_filp_open
+               |                     |          do_sys_openat2
+               |                     |          __x64_sys_openat
+               |                     |          do_syscall_64
+               |                     |          entry_SYSCALL_64_after_hwframe
+               |                     |          __GI___libc_open
+               |                     |          |          
+               |                     |          |--1.47%--0x61642f7366652f33
+               |                     |          |          
+               |                     |           --1.10%--0x61642f7366652f35
+               |                     |          
+               |                      --1.47%--path_lookupat
+               |                                filename_lookup
+               |                                |          
+               |                                 --1.10%--user_path_at_empty
+               |                                           do_faccessat
+               |                                           do_syscall_64
+               |                                           entry_SYSCALL_64_after_hwframe
+               |                                           __GI___access
+               |                                           nvme_del_if_sum
+               |                                           |          
+               |                                            --0.73%--host_gc_frag_pass
+               |                                                      host_gc_thread
+               |                                                      start_thread
+               |          
+                --1.47%--open_last_lookups
+                          path_openat
+                          do_filp_open
+                          do_sys_openat2
+                          __x64_sys_openat
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __GI___libc_open
+                          |          
+                           --0.73%--0x61642f7366652f32

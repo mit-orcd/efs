@@ -27,6 +27,10 @@ item payload (`kv_snap.c`), not a new dump format.
 
 **So there is no next §10 step.** What is left is the work queue in
 [§1a](#1a-the-work-queue) — measured gaps, in the order they should be taken.
+**Every open measurement/bug-chasing item has a runbook + script in
+[runbooks.md](runbooks.md) (`tests/measure/*.sh`, pinned to build
+`b2184a5c7faf-dirty`); start there.** `tests/preflight.sh` is the deploy
+rule's pre-flight as one command — run it before anything else.
 **W1–W5 done; W6 correctness gate met Sep 20** (its three open sub-items
 are performance and each needs a user decision — see W6). Take the
 lowest-numbered item that is not marked done; correctness items come before
@@ -50,6 +54,26 @@ the code is already unit-gated. Update or delete this block when done — an
 
 **Progress log (newest first — read this before the state below):**
 
+- **11:30 (Sep 21)** — **Runbooks for every open measurement item**
+  ([runbooks.md](runbooks.md), `tests/measure/*.sh`, `tests/preflight.sh`),
+  all pinned to the running build `b2184a5c7faf-dirty`, each smoke-run
+  once (dirs under `results/measure/20260921-*`). Two findings from the
+  smokes that change the questions: **(1) 1 GiB cold open is 0.23 s idle,
+  not 20 s** — exactly 128 GETCHUNKS × 1.6 ms; with 32 concurrent openers
+  GETCHUNKS is **14.6 ms** (9.5×) and open 1.6–2.5 s, one map fetch per
+  host — so the IOR 20 s is server-side GETCHUNKS serialization under 36
+  ranks, not per-open cost. **(2) Same-parent storm is 171 ops/s at
+  1 proc AND at 4 procs with `busy_n=0`** — a flat aggregate ceiling that
+  is not the BUSY backoff (leader raft log tail: 52 % `GC_ACK`). Also:
+  `EFS_RPC_PROF=1` counters only dump on an RPC, ≤ every 2 s — read them
+  after a trivial RPC (`rpc_prof_last` in `tests/measure/lib.sh`), and they
+  do **not** count REPORT (`rpc_send_recv_dual` unprofiled) — the REPORT
+  number is the server's `report-split` line, which the write runbooks now
+  collect. **(3)** 1-client 8 GiB dd+fsync today 380–418 MiB/s (Sep 18:
+  639); its single REPORT was `pack 6.9 s + push 5.9 s + finish 1.0 s` =
+  **13.9 of the 21.5 s wall** — pack+push, not the apply wait, is the tail.
+  Next: run the runbooks at their default (full) settings, one at a time —
+  order in runbooks.md §1–7; then bring the tables to the user.
 - **08:45 (Sep 21)** — **Step E DONE as option (b), §7.2 end state:** the
   parent inode row, the dseq emptiness witness and the HASHED dir-lane
   stamp are **commutative reductions**, not EXCL full-image CASes. New txn

@@ -1,0 +1,60 @@
+    35.38%           179  efsd     libc.so.6          [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--29.25%--lsm_scan_prefix
+               |          |          
+               |           --29.05%--host_gc_frag_pass
+               |                     host_gc_thread
+               |                     start_thread
+               |          
+                --5.73%--merge_scan
+                          lsm_scan_prefix
+                          |          
+                          |--4.94%--host_gc_frag_pass
+                          |          host_gc_thread
+                          |          start_thread
+                          |          
+                           --0.79%--host_gc_reap_pass
+                                     host_gc_thread
+                                     start_thread
+    13.24%            67  efsd     efsd               [.] merge_scan
+            |
+            ---merge_scan
+               lsm_scan_prefix
+               |          
+               |--12.65%--host_gc_frag_pass
+               |          host_gc_thread
+               |          start_thread
+               |          
+                --0.59%--host_gc_reap_pass
+                          host_gc_thread
+                          start_thread
+     5.53%            28  efsd     [kernel.kallsyms]  [k] rep_movs_alternative
+            |
+            ---rep_movs_alternative
+               copyout
+               _copy_to_iter
+               copy_page_to_iter
+               filemap_read
+               xfs_file_buffered_read
+               xfs_file_read_iter
+               vfs_read
+               __x64_sys_pread64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pread
+               |          
+               |--4.15%--kv_msrc_advance
+               |          merge_scan
+               |          lsm_scan_prefix
+               |          |          
+               |          |--3.36%--host_gc_frag_pass
+               |          |          host_gc_thread
+               |          |          start_thread
+               |          |          
+               |           --0.79%--host_gc_reap_pass
+               |                     host_gc_thread
+               |                     start_thread
+               |          
+                --1.38%--lookup

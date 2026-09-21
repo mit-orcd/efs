@@ -1,0 +1,9 @@
+open cost vs file size, build=b2184a5c7faf-dirty, 2026-09-21, writer=fcstor007 reader=fcstor008 (cold remount before each size)
+size_mib  cold_open_ms  cold_read4k_ms  cold_total_ms  warm_open_ms  warm_read4k_ms  getchunks_n  getchunks_avg_us  lookup_n  getattr_n  calls
+1024      219.8         21.4            241.2          29.6          0.0             128          1541              4         4          140
+
+chunks = size_mib*8; GETCHUNKS returns <=64 records, so expected getchunks_n ~ chunks/64 per open if the whole map is fetched at open.
+
+parallel cold open of the 1024 MiB file from 32 procs (8x4): open_ms min/med/max = 1613.0 / 2197.2 / 2530.3; getchunks_n=1024 avg_us=14578 (vs single-opener avg above)
+(getchunks_avg_us growing with openers = the server serializes/queues GETCHUNKS; flat = client-side)
+Raw: open-*.txt rpcprof-*.txt write-*.txt par-*.txt
