@@ -86,17 +86,19 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - Step 11 Raft+KV engine + Step 12 FUSE A–D landed and gated (Sep 11–16).
 - W1 N-1 CAS, W2 spec (`write()` client-buffered), W3 fsync tail, W4
   multi-client measurement, W5 50g: done Sep 18.
-- **W6 IO-500 gate: data path CLEAN, one metadata bug open (Sep 20 23:10).**
-  Commit `30c41ee` (pub-batch every-entry verdicts, `alloc_key_claim`,
-  reaper vlen + cross-group lane sweep, dcache img_seq, per-peer outbox
-  condvar). 9×4 debug `results/io500/20260921-debug-9x4-outbox/`: both
-  `-R` reads 0 errors, every unlink OK; mdtest-easy-write **0.238 kIOPS**
-  (4.7× the morning), mdtest-hard-write 0.201 (11×), easy-read 1.16 GiB/s,
-  hard-read 3.89, easy-write 0.78, hard-write 0.046 (36-way sub-chunk CAS).
-  posix jobs=1 **200/201 + mmap SKIP in 60 s**. Open: parent-row lost
-  update (below, user decision), 1 GiB open = 20 s (per-lane range fetch
-  not implemented). The cluster runs `d0fd0448adb6-dirty` = same source as
-  `30c41ee`; next server restart is stop-all/start-all (build ID changed).
+- **W6 IO-500 gate: data path CLEAN; parent-row lost update FIXED (§7.2
+ reductions, Sep 21).** Commit `30c41ee` (pub-batch every-entry verdicts,
+ `alloc_key_claim`, reaper vlen + cross-group lane sweep, dcache img_seq,
+ per-peer outbox condvar). 9×4 debug `results/io500/20260921-debug-9x4-outbox/`:
+ both `-R` reads 0 errors, every unlink OK; mdtest-easy-write **0.238 kIOPS**
+ (4.7× the morning), mdtest-hard-write 0.201 (11×), easy-read 1.16 GiB/s,
+ hard-read 3.89, easy-write 0.78, hard-write 0.046 (36-way sub-chunk CAS).
+ posix jobs=1 **200/201 + mmap SKIP in 56 s** (`results/posix/20260921-123904`,
+ on the §7.2 build). Open perf: 1 GiB open = 20 s (per-lane range fetch
+ not implemented), same-parent op rate ~200/s. Cluster + 9 clients run
+ `b2184a5c7faf-dirty` = byte-identical source to the §7.2 commit (`git log -1 --grep="commutative reductions"`)
+ (the §7.2 commit), so the next server restart is a build-ID change →
+ `tests/roll_efsd.sh --all` (stop all, start all); plain rolling refuses.
 - Honest write numbers (MiB/s, flush in clock): 1-client 8 GiB dd+fsync
   **639** (best 724); 4-client **251**; 9-client **202** — 3.8 / 0.46 /
   0.37 % of the 16.7 / 44 / 44 GB/s ceilings. Reads scale with clients,
@@ -120,19 +122,25 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   hashed-create / cross-group-mkdir txns CAS the ALLOC key; log-path allocs
   are BUSY under a pending intent and bump the key version
   (`alloc_key_claim`). Callers read the ino back from the dentry.
-- Same-parent concurrent mkdir: two dual-hosts race the parent-row CAS →
- one preps STALE. Client retries STALE for `INODE_CREATE` only. Deeper fix
- (not done): parent nlink/dseq/times as commutative txn reductions (§7.2).
-- **Parent-row lost update (open, Sep 20 23:10, user decision pending):**
- log-path applies (`create_file_batch`, `mkdir_batch`,
- `efs_meta_apply_unlink/link/rename/rmdir`) PUT the parent inode row
- unversioned and without probing intents; the txn path EXCL-CASes the same
- row with a full image from its read snapshot. Concurrent same-parent
- mkdir/rmdir from 36 ranks left `test-dir.0-0` (ino 824) at nlink=2 with
- 3 children → every further rmdir is `EFS_ERR_PROTO` → EIO forever (the
- "transient mdtest rmdir" residual is not transient). Same class as
- `alloc_key_claim`; options in START-HERE §1b step E. A dir whose
- `raft-getattr` nlink ≠ 2 + `raft-readdir` count is this bug.
+- Same-parent concurrent dir ops no longer conflict on the parent row
+ (§7.2 reductions, below). A dir-op txn still lands STALE/BUSY on a real
+ conflict — same name, same child row, emptiness witness moved — and the
+ client retries (`stale_retryable`: CREATE/UNLINK/LINK/RENAME_AT).
+- **Parent row / dseq / dir-lane are commutative reductions (§7.2, Sep 21):**
+ `EFS_TXN_REDUCE_INO` (signed nlink/nents delta, times MAX, used_shards
+ OR, parent SET) and `EFS_TXN_REDUCE_ADD` (dseq +1) fold into whatever the
+ key holds at RESOLVE (`fold_reduce`, dispatch by DATA key kind) and bump
+ its version. A pending reduce and an EXCL/GUARD on one key are mutually
+ BUSY; the log path probes before an unversioned DEL (`dir_txn_busy`,
+ `efs_txn_key_busy`) and returns BUSY; dseq GUARDs compare the observed
+ VALUE (`efs_txn_dseq_observe`), never the version. Never reintroduce a
+ full-image EXCL PUT of a parent row — it was the Sep 20 lost update
+ (`test-dir.0-0` nlink=2 with 3 children, rmdir EIO forever). Client
+ retries STALE for CREATE/UNLINK/LINK/RENAME_AT. Repro/gate:
+ `tests/stress/same_parent_storm.sh` (parent must end `children=0
+ nlink=2`, rmdir OK). Same-parent op rate under 36-way contention is
+ ~200 ops/s aggregate (178 ms/op/proc vs 7 ms idle) — open perf item, not
+ correctness; BUSY/STALE retries are not logged, instrument first.
 - `efs_kv_scan_prefix` callback returning **>0 means batch-full**, not
  error. The reaper (`lane-sweep`, `rsv_purge`) misread it for weeks —
  no lane with >64 chunks was ever swept. Check this in any new scan user.

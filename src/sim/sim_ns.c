@@ -34,14 +34,6 @@ static void wr64(uint8_t *p, uint64_t v)
     p[7] = (uint8_t)v;
 }
 
-static uint64_t rd64(const uint8_t *p)
-{
-    return ((uint64_t)p[0] << 56) | ((uint64_t)p[1] << 48) |
-           ((uint64_t)p[2] << 40) | ((uint64_t)p[3] << 32) |
-           ((uint64_t)p[4] << 24) | ((uint64_t)p[5] << 16) |
-           ((uint64_t)p[6] << 8) | (uint64_t)p[7];
-}
-
 static int prep_add(struct ns_prep *pr, int *n, uint32_t shard, int kind,
                     const uint8_t *key, uint32_t klen, uint64_t expected, int op,
                     const uint8_t *val, uint32_t vlen,
@@ -141,27 +133,20 @@ static int dseq_prep(struct efs_kv *kv, uint32_t shard, efs_ino_t dir,
                      uint8_t lane, struct ns_prep *pr, int *n,
                      struct efs_txn_parts *p)
 {
-    uint8_t k[EFS_KV_KEY_MAX], v[8], buf[8];
-    uint32_t kl = 0, vn = 8;
-    uint64_t ver = 0, seq = 0;
-    int rc, gr;
+    uint8_t k[EFS_KV_KEY_MAX], v[EFS_TXN_REDUCE_ADD_WIRE];
+    uint32_t kl = 0;
+    int rc;
 
+    (void)kv;
+    /* Witness bump as a commutative +1 (§7.2), same as raft_host. */
     rc = efs_kv_key_dseq(shard, dir, lane, k, &kl);
     if (rc != EFS_OK)
         return rc;
-    rc = efs_txn_ver_get(kv, k, kl, &ver);
-    if (rc != EFS_OK)
-        return rc;
-    gr = efs_kv_get(kv, k, kl, buf, &vn);
-    if (gr == EFS_OK && vn >= 8)
-        seq = rd64(buf);
-    else if (gr != EFS_OK && gr != EFS_ERR_NOT_FOUND)
-        return gr;
-    wr64(v, seq + 1);
+    efs_txn_encode_add(v, 1);
     rc = sim_txn_parts_add(p, shard);
     if (rc != EFS_OK)
         return rc;
-    return prep_add(pr, n, shard, EFS_TXN_EXCL, k, kl, ver, EFS_TXN_PUT, v, 8,
+    return prep_add(pr, n, shard, EFS_TXN_REDUCE_ADD, k, kl, 0, 0, v, sizeof(v),
                     NULL);
 }
 
@@ -177,7 +162,8 @@ static int dseq_guard(struct efs_kv *kv, uint32_t shard, efs_ino_t dir,
     rc = efs_kv_key_dseq(shard, dir, lane, k, &kl);
     if (rc != EFS_OK)
         return rc;
-    rc = efs_txn_ver_get(kv, k, kl, &ver);
+    /* dseq GUARDs compare the witness VALUE (efs_txn_prepare_guard). */
+    rc = efs_txn_dseq_observe(kv, k, kl, &ver);
     if (rc != EFS_OK)
         return rc;
     rc = sim_txn_parts_add(p, shard);
@@ -750,7 +736,7 @@ static int rmdir_build(struct efs_sim *sim, int client, efs_ino_t parent, const 
         rc = efs_kv_key_dseq(csh, row.ino, 0, k_dseq, &ks);
         if (rc != EFS_OK)
             return rc;
-        rc = efs_txn_ver_get(ckv, k_dseq, ks, &cver);
+        rc = efs_txn_dseq_observe(ckv, k_dseq, ks, &cver);
         if (rc != EFS_OK)
             return rc;
         rc = prep_add(pr, &n, csh, EFS_TXN_GUARD, k_dseq, ks, cver, 0, NULL, 0,

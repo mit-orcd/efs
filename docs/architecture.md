@@ -626,6 +626,28 @@ keys that **do not exist**, so an insert into an observed-empty shard is a
 `dentry_seq` per dentry shard, bumped by every dentry mutation including
 inserts, and `RMDIR` guards those — predicate isolation without MVCC.
 
+**The parent directory row is a reduction target, not an exclusive key.**
+Every namespace op touches its parent's `nlink`/`nents`/`mtime`/`ctime` and
+the dentry shard's `dentry_seq`; if those were CAS'd as a full row image,
+every op in one directory would serialize on that one row (the hotspot P1
+forbids), and — since the same-group log path applies without a version
+CAS — a transaction that read the row before a log-path apply would
+overwrite it (Sep 20 2026: `mdtest` left a parent at `nlink=2` with three
+live children, every further `rmdir` an error forever). So a transaction
+carries a **signed inode delta** (`nlink ±`, `nents ±`, times `MAX`,
+`used_shards OR`, `parent SET`) and a **`+1` on the dentry_seq witness**,
+both folded into whatever the row/witness holds at RESOLVE, commuting with
+each other and with the log path. What keeps it sound: a pending reduction
+and an exclusive intent on the same key are mutually **BUSY** (an `RMDIR`'s
+DEL of the child row cannot pass a pending `LINK`'s `nlink+1`, nor the
+reverse), the log path probes for pending intents/reductions before an
+unversioned DEL and returns BUSY, every fold bumps the key's version so a
+stale EXCL lands STALE, and `dentry_seq` guards compare the **value**
+observed at read time (a log-path bump is unversioned but changes the
+value), which makes `RMDIR`'s emptiness guard STALE exactly when a child
+appeared. Directory ops thus retry only on real conflicts (same name, same
+child, emptiness violated), never on "someone else touched the parent".
+
 A transaction is visible **at its decision**, not when cleanup runs; a
 reader meeting an intent resolves COMMIT → new value, ABORT → old value,
 NO-DECISION → old value (the read linearizes before the eventual decision),

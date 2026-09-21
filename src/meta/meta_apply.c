@@ -5,6 +5,7 @@
 #include "efs/checksum.h"
 #include "efs/dir_layout.h"
 #include "efs/dir_spread.h"
+#include "efs/txn.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -745,6 +746,11 @@ int efs_meta_pack_inode(const struct efs_meta_row *r, uint8_t *out, uint32_t cap
     return EFS_OK;
 }
 
+int efs_meta_unpack_inode(const uint8_t *p, uint32_t n, struct efs_meta_row *r)
+{
+    return unpack_inode(p, n, r);
+}
+
 int efs_meta_pack_dentry(const struct efs_meta_dentry *d, uint8_t *out,
                          uint32_t cap)
 {
@@ -1340,6 +1346,12 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
         if (held < 0)
             return held;
         rc = efs_kv_key_inode(efs_kv_inode_shard(row.ino), row.ino, k_ino, &ki);
+        if (rc != EFS_OK)
+            return rc;
+        /* A transaction in the middle of changing this row (a LINK's
+         * nlink++ reduce, a RENAME's parent SET) must not lose to an
+         * unversioned DEL — same no-wait rule as PREPARE: BUSY, retry. */
+        rc = efs_txn_key_busy(kv, k_ino, ki);
         if (rc != EFS_OK)
             return rc;
         if (held) {
@@ -2187,6 +2199,44 @@ static int dir_empty_now(struct efs_kv *kv, const struct efs_meta_row *row)
     return EFS_OK;
 }
 
+/* "Empty now" is not "nobody is adding a child": a cross-group CREATE /
+ * MKDIR / LINK into `row` holds only intents until it resolves — a dentry
+ * EXCL (invisible to dir_has_live), a REDUCE_ADD on the dseq witness and
+ * a REDUCE_INO on the row itself. The log path deletes rows unversioned,
+ * so it has to honour those intents the way PREPARE does: BUSY. The
+ * probed keys are all local by construction — the log path only runs
+ * when every participant shard is on this group. */
+static int dir_txn_busy(struct efs_kv *kv, const struct efs_meta_row *row)
+{
+    uint8_t k[EFS_KV_KEY_MAX];
+    uint32_t kl = 0;
+    uint8_t lane;
+    int rc;
+
+    rc = efs_kv_key_inode(efs_kv_inode_shard(row->ino), row->ino, k, &kl);
+    if (rc == EFS_OK)
+        rc = efs_txn_key_busy(kv, k, kl);
+    if (rc != EFS_OK)
+        return rc;
+    if (row->layout == EFS_META_LAYOUT_LOCAL) {
+        rc = efs_kv_key_dseq(efs_kv_inode_shard(row->ino), row->ino, 0, k, &kl);
+        if (rc == EFS_OK)
+            rc = efs_txn_key_busy(kv, k, kl);
+        return rc;
+    }
+    for (lane = 0; lane < EFS_META_LANES; lane++) {
+        if ((row->used_shards & (1ull << lane)) == 0)
+            continue;
+        rc = efs_kv_key_dseq(efs_kv_lane_shard(row->ino, lane), row->ino, lane,
+                             k, &kl);
+        if (rc == EFS_OK)
+            rc = efs_txn_key_busy(kv, k, kl);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    return EFS_OK;
+}
+
 int efs_meta_apply_rmdir(struct efs_kv *kv, efs_ino_t parent, const char *name,
                          uint64_t now)
 {
@@ -2210,6 +2260,9 @@ int efs_meta_apply_rmdir(struct efs_kv *kv, efs_ino_t parent, const char *name,
     if (!S_ISDIR(row.mode) || row.ino == EFS_ROOT_INO)
         return EFS_ERR_INVAL;
     rc = dir_empty_now(kv, &row);
+    if (rc != EFS_OK)
+        return rc;
+    rc = dir_txn_busy(kv, &row);
     if (rc != EFS_OK)
         return rc;
     held = efs_lease_any(kv, row.ino, row.generation);

@@ -181,4 +181,8 @@ then `rm -f fuse.log` and:
 
 `efsd` HELLO requires a matching `EFS_BUILD_ID`. Rolling restart works only
 when the ID is unchanged (same commit, `-dirty`). After a NEW commit, restart
-ALL servers together — mixed build IDs are rejected.
+ALL servers together — mixed build IDs are rejected:
+`efs-bg.sh start roll-all 'EFSD_ENV=EFS_TRANSPORT=tcp bash tests/roll_efsd.sh --all'`
+(parallel build on all four, checks the four IDs agree, `pkill -9 -x efsd`
+on all four, starts all four without `--join`, waits for both groups;
+~2 min). Plain `roll_efsd.sh 1 2 3 4` refuses when the ID changed.

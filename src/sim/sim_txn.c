@@ -161,13 +161,10 @@ int sim_txn_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
 {
     struct efs_txid t;
     uint32_t shard, off;
-    int rc = EFS_ERR_PROTO, dec, kind, op;
-    uint64_t expected;
+    int rc = EFS_ERR_PROTO, dec, kind;
     uint32_t klen;
-    const uint8_t *key, *val;
-    uint32_t vlen;
+    const uint8_t *key;
     struct efs_txn_parts p;
-    struct efs_txn_reduce red;
 
     if (!s || !s->disk || !cmd || clen == 0)
         return EFS_OK;
@@ -199,31 +196,8 @@ int sim_txn_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
             break;
         key = cmd + off;
         off += klen;
-        if (kind == EFS_TXN_EXCL) {
-            if (clen < off + 8 + 1 + 4)
-                break;
-            expected = rd64(cmd + off);
-            op = cmd[off + 8];
-            vlen = rd32(cmd + off + 9);
-            off += 13;
-            if (clen < off + vlen)
-                break;
-            val = cmd + off;
-            rc = efs_txn_prepare_excl(s->disk, &t, &p, key, klen, expected, op,
-                                      val, vlen);
-        } else if (kind == EFS_TXN_GUARD) {
-            if (clen < off + 8)
-                break;
-            expected = rd64(cmd + off);
-            rc = efs_txn_prepare_guard(s->disk, &t, &p, key, klen, expected);
-        } else if (kind == EFS_TXN_REDUCE) {
-            if (clen < off + 24)
-                break;
-            red.max_end = rd64(cmd + off);
-            red.max_mtime = rd64(cmd + off + 8);
-            red.max_ctime = rd64(cmd + off + 16);
-            rc = efs_txn_prepare_reduce(s->disk, &t, &p, key, klen, &red);
-        }
+        rc = efs_txn_apply_prepare(s->disk, kind, &t, &p, key, klen, cmd + off,
+                                   clen - off);
         break;
     case CMD_DECIDE:
         if (clen < 1 + 16 + 4 + 1)
@@ -290,10 +264,15 @@ static uint32_t pack_prep(uint8_t *out, int kind, const struct efs_txid *t,
         wr64(out + n, expected);
         n += 8;
     } else if (kind == EFS_TXN_REDUCE && red) {
-        wr64(out + n, red->max_end);
-        wr64(out + n + 8, red->max_mtime);
-        wr64(out + n + 16, red->max_ctime);
-        n += 24;
+        efs_txn_encode_reduce(out + n, red);
+        n += EFS_TXN_REDUCE_WIRE;
+    } else if (kind == EFS_TXN_REDUCE_ADD) {
+        /* dseq +1: the caller passes the encoded add in val */
+        memcpy(out + n, val, EFS_TXN_REDUCE_ADD_WIRE);
+        n += EFS_TXN_REDUCE_ADD_WIRE;
+    } else if (kind == EFS_TXN_REDUCE_INO) {
+        memcpy(out + n, val, EFS_TXN_REDUCE_INO_WIRE);
+        n += EFS_TXN_REDUCE_INO_WIRE;
     }
     return n;
 }

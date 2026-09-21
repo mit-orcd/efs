@@ -1417,13 +1417,10 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 {
     struct efs_txid t;
     uint32_t shard, off;
-    int rc = EFS_ERR_PROTO, dec, kind, op;
-    uint64_t expected;
+    int rc = EFS_ERR_PROTO, dec, kind;
     uint32_t klen;
-    const uint8_t *key, *val;
-    uint32_t vlen;
+    const uint8_t *key;
     struct efs_txn_parts p;
-    struct efs_txn_reduce red;
 
     memset(&t, 0, sizeof(t));
     memset(&p, 0, sizeof(p));
@@ -1451,31 +1448,11 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
             break;
         key = cmd + off;
         off += klen;
-        if (kind == EFS_TXN_EXCL) {
-            if (clen < off + 8 + 1 + 4)
-                break;
-            expected = rd64be(cmd + off);
-            op = cmd[off + 8];
-            vlen = rd32be(cmd + off + 9);
-            off += 13;
-            if (clen < off + vlen)
-                break;
-            val = cmd + off;
-            rc = efs_txn_prepare_excl(h->kv, &t, &p, key, klen, expected, op,
-                                      val, vlen);
-        } else if (kind == EFS_TXN_GUARD) {
-            if (clen < off + 8)
-                break;
-            expected = rd64be(cmd + off);
-            rc = efs_txn_prepare_guard(h->kv, &t, &p, key, klen, expected);
-        } else if (kind == EFS_TXN_REDUCE) {
-            if (clen < off + 24)
-                break;
-            red.max_end = rd64be(cmd + off);
-            red.max_mtime = rd64be(cmd + off + 8);
-            red.max_ctime = rd64be(cmd + off + 16);
-            rc = efs_txn_prepare_reduce(h->kv, &t, &p, key, klen, &red);
-        }
+        /* Kind-specific payload (EXCL / GUARD / REDUCE / REDUCE_INO /
+         * REDUCE_ADD) is decoded in one place for the server and the
+         * simulator. */
+        rc = efs_txn_apply_prepare(h->kv, kind, &t, &p, key, klen, cmd + off,
+                                   clen - off);
         break;
     case EFS_MD_CMD_DECIDE:
         if (clen < 1 + 16 + 4 + 1)
@@ -2998,6 +2975,32 @@ static uint32_t pack_prep(uint8_t *out, int kind, const struct efs_txid *t,
         n += vlen;
     }
     return n;
+}
+
+/* PREPARE with a raw kind-specific payload (REDUCE / REDUCE_INO /
+ * REDUCE_ADD; see efs_txn_encode_*). pack_prep above is the EXCL/GUARD
+ * layout. */
+static uint32_t pack_prep_raw(uint8_t *out, int kind, const struct efs_txid *t,
+                              const struct efs_txn_parts *p, const uint8_t *key,
+                              uint32_t klen, const uint8_t *pay, uint32_t plen)
+{
+    uint32_t n, i;
+
+    out[0] = EFS_MD_CMD_PREPARE;
+    out[1] = (uint8_t)kind;
+    memcpy(out + 2, t->bytes, 16);
+    out[18] = p->n;
+    n = 19;
+    for (i = 0; i < p->n; i++) {
+        wr32be(out + n, p->shard[i]);
+        n += 4;
+    }
+    out[n++] = (uint8_t)(klen >> 8);
+    out[n++] = (uint8_t)klen;
+    memcpy(out + n, key, klen);
+    n += klen;
+    memcpy(out + n, pay, plen);
+    return n + plen;
 }
 
 static void pack_decide(uint8_t *out, const struct efs_txid *t, uint32_t coord,
@@ -5535,6 +5538,84 @@ static int host_prep_async(struct efs_raft_host *h, uint32_t shard, int kind,
     return host_propose(h, ref->group, cmd, n, &ref->idx, hint);
 }
 
+/* Commutative parts (§7.2). `ref` NULL = propose and wait (host_prep
+ * style); non-NULL = propose only, caller waits with host_wait_refs
+ * (host_prep_async style). */
+static int host_prep_raw(struct efs_raft_host *h, uint32_t shard, int kind,
+                         const struct efs_txid *t, const struct efs_txn_parts *p,
+                         const uint8_t *key, uint32_t klen, const uint8_t *pay,
+                         uint32_t plen, struct host_idx_ref *ref, int *hint)
+{
+    uint8_t cmd[HOST_CMD_MAX];
+    uint32_t n;
+
+    n = pack_prep_raw(cmd, kind, t, p, key, klen, pay, plen);
+    if (n > HOST_CMD_MAX)
+        return EFS_ERR_INVAL;
+    if (!ref)
+        return host_propose_wait(h, efs_raft_shard_group(shard), cmd, n, hint);
+    ref->group = efs_raft_shard_group(shard);
+    return host_propose(h, ref->group, cmd, n, &ref->idx, hint);
+}
+
+/* Parent (or moved-dir) inode row: nlink/nents delta, times MAX,
+ * used_shards OR, parent SET. Replaces the EXCL full-image PUT that lost
+ * concurrent log-path updates and serialized every op in one directory. */
+static int host_prep_ino_delta(struct efs_raft_host *h, uint32_t shard,
+                               const struct efs_txid *t,
+                               const struct efs_txn_parts *p, const uint8_t *key,
+                               uint32_t klen, const struct efs_txn_ino_delta *d,
+                               struct host_idx_ref *ref, int *hint)
+{
+    uint8_t pay[EFS_TXN_REDUCE_INO_WIRE];
+
+    efs_txn_encode_ino_delta(pay, d);
+    return host_prep_raw(h, shard, EFS_TXN_REDUCE_INO, t, p, key, klen, pay,
+                         sizeof(pay), ref, hint);
+}
+
+/* dseq emptiness witness +1 (commutes with every other bump; an RMDIR's
+ * GUARD on the same witness is BUSY while this is pending and STALE after
+ * it folds, which is exactly "the directory is no longer empty"). */
+static int host_prep_dseq_bump(struct efs_raft_host *h, uint32_t shard,
+                               const struct efs_txid *t,
+                               const struct efs_txn_parts *p, const uint8_t *key,
+                               uint32_t klen, struct host_idx_ref *ref, int *hint)
+{
+    uint8_t pay[EFS_TXN_REDUCE_ADD_WIRE];
+
+    efs_txn_encode_add(pay, 1);
+    return host_prep_raw(h, shard, EFS_TXN_REDUCE_ADD, t, p, key, klen, pay,
+                         sizeof(pay), ref, hint);
+}
+
+/* HASHED/SPLITTING parent dir-lane stamp: mtime/ctime MAX, seq++, the
+ * dir's mtime_gen. Replaces efs_meta_stamp_dir_lane + EXCL PUT. */
+static int host_prep_lane_stamp(struct efs_raft_host *h, uint32_t shard,
+                                const struct efs_txid *t,
+                                const struct efs_txn_parts *p,
+                                const struct efs_meta_row *dir, const char *name,
+                                uint64_t now, struct host_idx_ref *ref, int *hint)
+{
+    struct efs_txn_reduce red;
+    uint8_t key[EFS_KV_KEY_MAX], pay[EFS_TXN_REDUCE_WIRE];
+    uint32_t klen = 0;
+    uint8_t lane = efs_kv_dir_lane(name);
+    int rc;
+
+    rc = efs_kv_key_lane(efs_kv_lane_shard(dir->ino, lane), dir->ino,
+                         dir->generation, lane, key, &klen);
+    if (rc != EFS_OK)
+        return rc;
+    memset(&red, 0, sizeof(red));
+    red.max_mtime = now;
+    red.max_ctime = now;
+    red.mtime_gen = dir->mtime_gen;
+    efs_txn_encode_reduce(pay, &red);
+    return host_prep_raw(h, shard, EFS_TXN_REDUCE, t, p, key, klen, pay,
+                         sizeof(pay), ref, hint);
+}
+
 static int host_drop_parts(struct efs_raft_host *h, const struct efs_txid *t,
                            const struct efs_txn_parts *p, int *hint)
 {
@@ -5563,15 +5644,16 @@ static int host_dir_migrate_txn(struct efs_raft_host *h, efs_ino_t dir,
     struct efs_meta_dentry dent;
     struct efs_txid t;
     struct efs_txn_parts parts;
+    struct efs_txn_ino_delta pd;
     uint8_t k_loc[EFS_KV_KEY_MAX], k_hash[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
     uint8_t k_dseq[EFS_KV_KEY_MAX];
-    uint8_t v_dent[EFS_META_DENT_BYTES], v_ino[EFS_META_INO_BYTES], v_dseq[8];
-    uint8_t loc_buf[EFS_META_DENT_BYTES], sb[8], cmd[22];
-    uint32_t kl = 0, kh = 0, ki = 0, ks = 0, locn, sn = 8;
+    uint8_t v_dent[EFS_META_DENT_BYTES];
+    uint8_t loc_buf[EFS_META_DENT_BYTES], cmd[22];
+    uint32_t kl = 0, kh = 0, ki = 0, ks = 0, locn;
     uint32_t psh, coord;
-    uint64_t loc_ver = 0, hash_ver = 0, ino_ver = 0, sver = 0, seq = 0, bit;
+    uint64_t loc_ver = 0, hash_ver = 0, bit;
     uint8_t lane;
-    int rc, i, gr, stamp_ino = 0;
+    int rc, i, stamp_ino = 0;
 
     psh = efs_kv_inode_shard(dir);
     lane = efs_kv_dir_lane(name);
@@ -5594,11 +5676,11 @@ static int host_dir_migrate_txn(struct efs_raft_host *h, efs_ino_t dir,
     if (rc != EFS_OK)
         return rc;
     if ((row.used_shards & bit) == 0) {
-        row.used_shards |= bit;
+        /* first-use bit as a commutative OR on the dir row (§7.2) */
+        memset(&pd, 0, sizeof(pd));
+        pd.or_used_shards = bit;
         stamp_ino = 1;
         rc = efs_kv_key_inode(psh, dir, k_ino, &ki);
-        if (rc == EFS_OK)
-            rc = efs_meta_pack_inode(&row, v_ino, sizeof(v_ino));
         if (rc != EFS_OK)
             return rc;
     }
@@ -5608,16 +5690,8 @@ static int host_dir_migrate_txn(struct efs_raft_host *h, efs_ino_t dir,
     rc = efs_txn_ver_get(h->kv, k_loc, kl, &loc_ver);
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_hash, kh, &hash_ver);
-    if (rc == EFS_OK && stamp_ino)
-        rc = efs_txn_ver_get(h->kv, k_ino, ki, &ino_ver);
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_dseq, ks, &sver);
     if (rc != EFS_OK)
         return rc;
-    sn = 8;
-    gr = efs_kv_get(h->kv, k_dseq, ks, sb, &sn);
-    seq = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
-    wr64be(v_dseq, seq + 1);
     memset(&parts, 0, sizeof(parts));
     rc = host_parts_add(&parts, psh);
     if (rc == EFS_OK)
@@ -5632,17 +5706,16 @@ static int host_dir_migrate_txn(struct efs_raft_host *h, efs_ino_t dir,
             rc = host_prep(h, psh, EFS_TXN_EXCL, &t, &parts, k_loc, kl, loc_ver,
                            EFS_TXN_DEL, NULL, 0, hint);
             if (rc == EFS_OK && stamp_ino)
-                rc = host_prep(h, psh, EFS_TXN_EXCL, &t, &parts, k_ino, ki,
-                               ino_ver, EFS_TXN_PUT, v_ino, sizeof(v_ino),
-                               hint);
+                rc = host_prep_ino_delta(h, psh, &t, &parts, k_ino, ki, &pd,
+                                         NULL, hint);
         }
         if (rc == EFS_OK && sh == hsh) {
             rc = host_prep(h, hsh, EFS_TXN_EXCL, &t, &parts, k_hash, kh,
                            hash_ver, EFS_TXN_PUT, v_dent, sizeof(v_dent),
                            hint);
             if (rc == EFS_OK)
-                rc = host_prep(h, hsh, EFS_TXN_EXCL, &t, &parts, k_dseq, ks,
-                               sver, EFS_TXN_PUT, v_dseq, 8, hint);
+                rc = host_prep_dseq_bump(h, hsh, &t, &parts, k_dseq, ks, NULL,
+                                         hint);
         }
     }
     if (rc != EFS_OK)
@@ -5872,24 +5945,27 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
     struct efs_meta_dentry dent;
     struct efs_txid t;
     struct efs_txn_parts parts;
+    struct efs_txn_ino_delta pd;
     uint8_t k_dent[EFS_KV_KEY_MAX], k_pino[EFS_KV_KEY_MAX], k_cino[EFS_KV_KEY_MAX];
     uint8_t k_alloc[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX];
-    uint8_t k_ln[EFS_KV_KEY_MAX];
-    uint8_t v_dent[EFS_META_DENT_BYTES], v_pino[EFS_META_INO_BYTES];
+    uint8_t v_dent[EFS_META_DENT_BYTES];
     uint8_t v_cino[EFS_META_INO_BYTES], v_alloc[EFS_META_ALLOC_BYTES];
-    uint8_t v_dseq[8], v_ln[EFS_META_LANE_BYTES], sb[8];
-    uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0, kln = 0, sn = 8;
+    uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0;
     uint32_t psh, coord;
-    uint64_t pver = 0, aver = 0, sver = 0, dver = 0, lver = 0, seq = 0;
+    uint64_t aver = 0, dver = 0;
     uint64_t bit;
     uint8_t lane, cmd[22];
     efs_ino_t next = 0, ino = 0;
-    int rc, i, gr;
+    int rc, i;
 
     psh = efs_kv_inode_shard(parent);
     lane = efs_kv_dir_lane(name);
     bit = 1ull << lane;
     prow->used_shards |= bit;
+    /* Parent home row: first-use used_shards bit only, as a commutative
+     * OR (times ride the dir-lane). */
+    memset(&pd, 0, sizeof(pd));
+    pd.or_used_shards = bit;
     rc = efs_meta_apply_peek_alloc(h->kv, dsh, &next);
     if (rc == EFS_OK) {
         ino = next;
@@ -5915,8 +5991,6 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
         dent.type = mode & S_IFMT;
         rc = efs_meta_pack_dentry(&dent, v_dent, sizeof(v_dent));
         if (rc == EFS_OK)
-            rc = efs_meta_pack_inode(prow, v_pino, sizeof(v_pino));
-        if (rc == EFS_OK)
             rc = efs_meta_pack_inode(&crow, v_cino, sizeof(v_cino));
         wr64be(v_alloc, next);
     }
@@ -5931,23 +6005,10 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
     if (rc == EFS_OK)
         rc = efs_kv_key_dseq(dsh, parent, lane, k_dseq, &ks);
     if (rc == EFS_OK)
-        rc = efs_meta_stamp_dir_lane(h->kv, prow, name, at->now, k_ln, &kln,
-                                     v_ln, sizeof(v_ln));
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_pino, kpi, &pver);
-    if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_alloc, ka, &aver);
     if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_dseq, ks, &sver);
-    if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_ln, kln, &lver);
     if (rc == EFS_OK) {
-        sn = 8;
-        gr = efs_kv_get(h->kv, k_dseq, ks, sb, &sn);
-        seq = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
-        wr64be(v_dseq, seq + 1);
         memset(&parts, 0, sizeof(parts));
         parts.n = 2;
         if (psh < dsh) {
@@ -5961,9 +6022,8 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
             if (sh == psh)
-                rc = host_prep(h, psh, EFS_TXN_EXCL, &t, &parts, k_pino, kpi,
-                               pver, EFS_TXN_PUT, v_pino, sizeof(v_pino),
-                               hint);
+                rc = host_prep_ino_delta(h, psh, &t, &parts, k_pino, kpi, &pd,
+                                         NULL, hint);
             if (rc == EFS_OK && sh == dsh) {
                 rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dent, kd,
                                dver, EFS_TXN_PUT, v_dent, sizeof(v_dent),
@@ -5977,12 +6037,11 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                    ka, aver, EFS_TXN_PUT, v_alloc,
                                    sizeof(v_alloc), hint);
                 if (rc == EFS_OK)
-                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dseq,
-                                   ks, sver, EFS_TXN_PUT, v_dseq, 8, hint);
+                    rc = host_prep_dseq_bump(h, dsh, &t, &parts, k_dseq, ks,
+                                             NULL, hint);
                 if (rc == EFS_OK)
-                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_ln, kln,
-                                   lver, EFS_TXN_PUT, v_ln, sizeof(v_ln),
-                                   hint);
+                    rc = host_prep_lane_stamp(h, dsh, &t, &parts, prow, name,
+                                              at->now, NULL, hint);
             }
         }
         if (rc != EFS_OK)
@@ -6018,22 +6077,21 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     struct efs_meta_stat st;
     struct efs_txid t;
     struct efs_txn_parts parts;
+    struct efs_txn_ino_delta pd;
     uint8_t k_dent[EFS_KV_KEY_MAX], k_pino[EFS_KV_KEY_MAX], k_cino[EFS_KV_KEY_MAX];
     uint8_t k_alloc[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX];
-    uint8_t k_ln[EFS_KV_KEY_MAX], v_ln[EFS_META_LANE_BYTES];
-    uint8_t v_dent[EFS_META_DENT_BYTES], v_pino[EFS_META_INO_BYTES];
+    uint8_t v_dent[EFS_META_DENT_BYTES];
     uint8_t v_cino[EFS_META_INO_BYTES], v_alloc[EFS_META_ALLOC_BYTES];
-    uint8_t v_dseq[8], sb[8];
-    uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0, kln = 0, sn = 8;
+    uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0;
     uint32_t psh, csh, dsh, coord;
-    uint64_t pver = 0, aver = 0, sver = 0, dver = 0, lnver = 0, salt = 0;
-    uint64_t seq = 0, now;
+    uint64_t aver = 0, dver = 0, salt = 0;
+    uint64_t now;
     efs_ino_t next = 0, ino = 0;
     uint8_t cmd[22], mkcmd[HOST_CMD_MAX], p_lane = 0;
     uint32_t mklen = 0;
     struct host_idx_ref prefs[8];
     int hint = -1;
-    int rc, i, gr, np = 0;
+    int rc, i, np = 0;
     int stage = 0, stamp_lane = 0;
 
     memset(out, 0, sizeof(*out));
@@ -6165,24 +6223,21 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         dent.ino = ino;
         dent.generation = 1;
         dent.type = S_IFDIR;
-        prow.nlink++;
+        /* Parent row as a commutative delta (§7.2): nlink++ always; for a
+         * LOCAL parent the child count and the times too; for HASHED /
+         * SPLITTING the times live on the dir-lane (§7.4) and the home row
+         * takes only the first-use used_shards bit. */
+        memset(&pd, 0, sizeof(pd));
+        pd.d_nlink = 1;
         if (prow.layout == EFS_META_LAYOUT_LOCAL) {
-            if (prow.base_mtime < now)
-                prow.base_mtime = now;
-            if (prow.base_ctime < now)
-                prow.base_ctime = now;
-            efs_meta_dir_note_entry(&prow, 1);
+            pd.d_nents = 1;
+            pd.max_mtime = now;
+            pd.max_ctime = now;
         } else {
-            /* Times live on the dir-lane (§7.4); the home row carries
-             * nlink++ and the first-use used_shards bit only. */
-            uint64_t bit = 1ull << efs_kv_dir_lane(name);
-            if ((prow.used_shards & bit) == 0)
-                prow.used_shards |= bit;
+            pd.or_used_shards = 1ull << efs_kv_dir_lane(name);
             stamp_lane = 1;
         }
         rc = efs_meta_pack_dentry(&dent, v_dent, sizeof(v_dent));
-        if (rc == EFS_OK)
-            rc = efs_meta_pack_inode(&prow, v_pino, sizeof(v_pino));
         if (rc == EFS_OK)
             rc = efs_meta_pack_inode(&crow, v_cino, sizeof(v_cino));
         wr64be(v_alloc, next);
@@ -6199,26 +6254,13 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         rc = efs_kv_key_alloc(csh, k_alloc, &ka);
     if (rc == EFS_OK)
         rc = efs_kv_key_dseq(dsh, parent, p_lane, k_dseq, &ks);
-    if (rc == EFS_OK && stamp_lane)
-        rc = efs_meta_stamp_dir_lane(h->kv, &prow, name, now, k_ln, &kln,
-                                     v_ln, sizeof(v_ln));
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_pino, kpi, &pver);
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_alloc, ka, &aver);
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_dseq, ks, &sver);
-    if (rc == EFS_OK && stamp_lane)
-        rc = efs_txn_ver_get(h->kv, k_ln, kln, &lnver);
     if (rc == EFS_OK) {
         stage = 8;
         rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
     }
     if (rc == EFS_OK) {
-        sn = 8;
-        gr = efs_kv_get(h->kv, k_dseq, ks, sb, &sn);
-        seq = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
-        wr64be(v_dseq, seq + 1);
         memset(&parts, 0, sizeof(parts));
         rc = host_parts_add(&parts, psh);
         if (rc == EFS_OK)
@@ -6239,22 +6281,19 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                 if (rc == EFS_OK)
                     np++;
                 if (rc == EFS_OK)
-                    rc = host_prep_async(h, dsh, EFS_TXN_EXCL, &t, &parts,
-                                         k_dseq, ks, sver, EFS_TXN_PUT,
-                                         v_dseq, 8, &prefs[np], &hint);
+                    rc = host_prep_dseq_bump(h, dsh, &t, &parts, k_dseq, ks,
+                                             &prefs[np], &hint);
                 if (rc == EFS_OK)
                     np++;
                 if (rc == EFS_OK && stamp_lane)
-                    rc = host_prep_async(h, dsh, EFS_TXN_EXCL, &t, &parts,
-                                         k_ln, kln, lnver, EFS_TXN_PUT, v_ln,
-                                         sizeof(v_ln), &prefs[np], &hint);
+                    rc = host_prep_lane_stamp(h, dsh, &t, &parts, &prow, name,
+                                              now, &prefs[np], &hint);
                 if (rc == EFS_OK && stamp_lane)
                     np++;
             }
             if (rc == EFS_OK && sh == psh) {
-                rc = host_prep_async(h, psh, EFS_TXN_EXCL, &t, &parts, k_pino,
-                                     kpi, pver, EFS_TXN_PUT, v_pino,
-                                     sizeof(v_pino), &prefs[np], &hint);
+                rc = host_prep_ino_delta(h, psh, &t, &parts, k_pino, kpi, &pd,
+                                         &prefs[np], &hint);
                 if (rc == EFS_OK)
                     np++;
             }
@@ -6337,17 +6376,16 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
     struct efs_txn_parts parts;
     struct host_pver_guard gv[EFS_TXN_MAX_PART];
     struct host_dent_drop drop;
+    struct efs_txn_ino_delta pd;
     uint8_t k_pino[EFS_KV_KEY_MAX], k_cino[EFS_KV_KEY_MAX];
     uint8_t k_pdseq[EFS_KV_KEY_MAX], k_cdseq[EFS_KV_KEY_MAX];
-    uint8_t k_ln[EFS_KV_KEY_MAX], v_ln[EFS_META_LANE_BYTES];
-    uint8_t v_pino[EFS_META_INO_BYTES], v_pdseq[8], sb[8];
-    uint32_t kpi = 0, kci = 0, kps = 0, kcs = 0, kln = 0, sn = 8, nent = 0;
+    uint32_t kpi = 0, kci = 0, kps = 0, kcs = 0, nent = 0;
     uint32_t psh, csh, dsh, coord;
-    uint64_t pver = 0, sver = 0, cver = 0, gver = 0, lnver = 0, seq = 0, now;
+    uint64_t cver = 0, gver = 0, now;
     uint8_t cmd[HOST_CMD_MAX], rmcmd[HOST_CMD_MAX], p_lane = 0;
     struct host_idx_ref prefs[16];
     int hint = -1;
-    int rc, i, gr, held, stamp_lane = 0, ngv = 0, hashed_child = 0, npref = 0;
+    int rc, i, held, stamp_lane = 0, ngv = 0, hashed_child = 0, npref = 0;
     uint32_t rmlen = 0;
 
     memset(out, 0, sizeof(*out));
@@ -6478,24 +6516,25 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
             gv[ngv].klen = 0;
             rc = efs_kv_key_dseq(lsh, row.ino, (uint8_t)lane, gv[ngv].key,
                                   &gv[ngv].klen);
+            /* dseq GUARDs are by value (efs_txn_prepare_guard). */
             if (rc == EFS_OK)
-                rc = efs_txn_ver_get(h->kv, gv[ngv].key, gv[ngv].klen,
-                                      &gv[ngv].ver);
+                rc = efs_txn_dseq_observe(h->kv, gv[ngv].key, gv[ngv].klen,
+                                          &gv[ngv].ver);
             if (rc == EFS_OK)
                 ngv++;
         }
     }
     if (rc == EFS_OK) {
-        prow.nlink--;
+        /* Parent row delta (§7.2): nlink--, and for a LOCAL parent the
+         * child count and times; HASHED/SPLITTING times go to the lane. */
+        memset(&pd, 0, sizeof(pd));
+        pd.d_nlink = -1;
         if (prow.layout == EFS_META_LAYOUT_LOCAL) {
-            if (prow.base_mtime < now)
-                prow.base_mtime = now;
-            if (prow.base_ctime < now)
-                prow.base_ctime = now;
-            efs_meta_dir_note_entry(&prow, -1);
+            pd.d_nents = -1;
+            pd.max_mtime = now;
+            pd.max_ctime = now;
         } else
             stamp_lane = 1;
-        rc = efs_meta_pack_inode(&prow, v_pino, sizeof(v_pino));
     }
     if (rc == EFS_OK)
         rc = host_dent_drop_fill(h->kv, &prow, parent, name, &drop);
@@ -6531,24 +6570,11 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         rc = efs_kv_key_dseq(dsh, parent, p_lane, k_pdseq, &kps);
     if (rc == EFS_OK && !hashed_child)
         rc = efs_kv_key_dseq(csh, row.ino, 0, k_cdseq, &kcs);
-    if (rc == EFS_OK && stamp_lane)
-        rc = efs_meta_stamp_dir_lane(h->kv, &prow, name, now, k_ln, &kln, v_ln,
-                                     sizeof(v_ln));
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_pino, kpi, &pver);
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_pdseq, kps, &sver);
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_cino, kci, &cver);
     if (rc == EFS_OK && !hashed_child)
-        rc = efs_txn_ver_get(h->kv, k_cdseq, kcs, &gver);
-    if (rc == EFS_OK && stamp_lane)
-        rc = efs_txn_ver_get(h->kv, k_ln, kln, &lnver);
+        rc = efs_txn_dseq_observe(h->kv, k_cdseq, kcs, &gver);
     if (rc == EFS_OK) {
-        sn = 8;
-        gr = efs_kv_get(h->kv, k_pdseq, kps, sb, &sn);
-        seq = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
-        wr64be(v_pdseq, seq + 1);
         memset(&parts, 0, sizeof(parts));
         rc = host_parts_add(&parts, dsh);
         if (rc == EFS_OK)
@@ -6573,19 +6599,17 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
                 if (npref >= 16)
                     rc = EFS_ERR_BUSY;
                 else
-                    rc = host_prep_async(h, dsh, EFS_TXN_EXCL, &t, &parts,
-                                         k_pdseq, kps, sver, EFS_TXN_PUT,
-                                         v_pdseq, 8, &prefs[npref], &hint);
+                    rc = host_prep_dseq_bump(h, dsh, &t, &parts, k_pdseq, kps,
+                                             &prefs[npref], &hint);
                 if (rc == EFS_OK)
                     npref++;
                 if (rc == EFS_OK && stamp_lane) {
                     if (npref >= 16)
                         rc = EFS_ERR_BUSY;
                     else
-                        rc = host_prep_async(h, dsh, EFS_TXN_EXCL, &t, &parts,
-                                             k_ln, kln, lnver, EFS_TXN_PUT,
-                                             v_ln, sizeof(v_ln),
-                                             &prefs[npref], &hint);
+                        rc = host_prep_lane_stamp(h, dsh, &t, &parts, &prow,
+                                                  name, now, &prefs[npref],
+                                                  &hint);
                     if (rc == EFS_OK)
                         npref++;
                 }
@@ -6594,10 +6618,8 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
                 if (npref >= 16)
                     rc = EFS_ERR_BUSY;
                 else
-                    rc = host_prep_async(h, psh, EFS_TXN_EXCL, &t, &parts,
-                                         k_pino, kpi, pver, EFS_TXN_PUT,
-                                         v_pino, sizeof(v_pino),
-                                         &prefs[npref], &hint);
+                    rc = host_prep_ino_delta(h, psh, &t, &parts, k_pino, kpi,
+                                             &pd, &prefs[npref], &hint);
                 if (rc == EFS_OK)
                     npref++;
             }
@@ -6692,18 +6714,18 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
     struct efs_txid t;
     struct efs_txn_parts parts;
     struct host_dent_drop drop;
+    struct efs_txn_ino_delta pd, id;
     uint8_t k_ino[EFS_KV_KEY_MAX], k_par[EFS_KV_KEY_MAX];
-    uint8_t k_dseq[EFS_KV_KEY_MAX], k_ln[EFS_KV_KEY_MAX], v_ln[EFS_META_LANE_BYTES];
-    uint8_t v_ino[EFS_META_INO_BYTES], v_par[EFS_META_INO_BYTES], v_dseq[8];
+    uint8_t k_dseq[EFS_KV_KEY_MAX];
     uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
-    uint8_t sb[8], cmd[22];
-    uint32_t ki = 0, kp = 0, ks = 0, kln = 0, sn = 8, krl = 0;
+    uint8_t cmd[22];
+    uint32_t ki = 0, kp = 0, ks = 0, krl = 0;
     uint32_t dsh, ish, psh, coord, ash = 0;
-    uint64_t iver = 0, pver = 0, sver = 0, lnver = 0, seq = 0, now;
+    uint64_t iver = 0, now;
     uint64_t rver = 0;
     uint32_t nlink_out = 0;
     int hint = -1;
-    int rc, i, gr, held = 0, last = 0, put_ino = 0;
+    int rc, i, held = 0, last = 0, put_ino = 0;
     int touch_parent = 0, stamp_lane = 0;
     uint8_t d_lane = 0;
 
@@ -6740,6 +6762,12 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
     ish = (rc == EFS_OK) ? efs_kv_inode_shard(row.ino) : 0;
     if (rc == EFS_OK && efs_raft_shard_group(ish) != efs_raft_shard_group(dsh))
         rc = host_read_index(h, efs_raft_shard_group(ish), &hint);
+    /* The file row's nlink-- (or the held last-link's nlink=0) is a delta
+     * too: PUBLISH and setattr write the same row on the log path, and a
+     * full image from this read snapshot would overwrite them. */
+    memset(&id, 0, sizeof(id));
+    id.d_nlink = -1;
+    id.max_ctime = now;
     if (rc == EFS_OK) {
         nlink_out = row.nlink;
         last = row.nlink <= 1;
@@ -6747,34 +6775,21 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
             held = efs_lease_any(h->kv, row.ino, row.generation);
             if (held < 0)
                 rc = held;
-            else if (held) {
-                row.nlink = 0;
-                if (row.base_ctime < now)
-                    row.base_ctime = now;
+            else if (held)
                 put_ino = 1;
-            }
-        } else {
-            row.nlink--;
-            if (row.base_ctime < now)
-                row.base_ctime = now;
+        } else
             put_ino = 1;
-        }
     }
     if (rc == EFS_OK) {
         d_lane = prow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(name);
+        memset(&pd, 0, sizeof(pd));
         if (prow.layout == EFS_META_LAYOUT_LOCAL) {
-            if (prow.base_mtime < now)
-                prow.base_mtime = now;
-            if (prow.base_ctime < now)
-                prow.base_ctime = now;
-            efs_meta_dir_note_entry(&prow, -1);
+            pd.d_nents = -1;
+            pd.max_mtime = now;
+            pd.max_ctime = now;
             touch_parent = 1;
         } else
             stamp_lane = 1;
-        if (touch_parent)
-            rc = efs_meta_pack_inode(&prow, v_par, sizeof(v_par));
-        if (rc == EFS_OK && put_ino)
-            rc = efs_meta_pack_inode(&row, v_ino, sizeof(v_ino));
     }
     if (rc == EFS_OK)
         rc = host_dent_drop_fill(h->kv, &prow, parent, name, &drop);
@@ -6784,9 +6799,6 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
         rc = efs_kv_key_inode(psh, parent, k_par, &kp);
     if (rc == EFS_OK)
         rc = efs_kv_key_dseq(dsh, parent, d_lane, k_dseq, &ks);
-    if (rc == EFS_OK && stamp_lane)
-        rc = efs_meta_stamp_dir_lane(h->kv, &prow, name, now, k_ln, &kln, v_ln,
-                                     sizeof(v_ln));
     /* Last link with no leases retires the inode row: the reap marker
      * (L7) rides the same txn on the inode group's anchor shard. */
     if (rc == EFS_OK && last && !held) {
@@ -6797,19 +6809,9 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
         if (rc == EFS_OK)
             efs_meta_pack_reap(v_reap, row.generation, row.active_lanes);
     }
-    if (rc == EFS_OK)
+    if (rc == EFS_OK && !put_ino)
         rc = efs_txn_ver_get(h->kv, k_ino, ki, &iver);
-    if (rc == EFS_OK && touch_parent)
-        rc = efs_txn_ver_get(h->kv, k_par, kp, &pver);
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_dseq, ks, &sver);
-    if (rc == EFS_OK && stamp_lane)
-        rc = efs_txn_ver_get(h->kv, k_ln, kln, &lnver);
     if (rc == EFS_OK) {
-        sn = 8;
-        gr = efs_kv_get(h->kv, k_dseq, ks, sb, &sn);
-        seq = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
-        wr64be(v_dseq, seq + 1);
         memset(&parts, 0, sizeof(parts));
         rc = host_parts_add(&parts, dsh);
         if (rc == EFS_OK)
@@ -6829,21 +6831,19 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
             uint32_t sh = parts.shard[i];
             rc = host_dent_drop_prep(h, sh, &drop, &t, &parts, &hint);
             if (rc == EFS_OK && sh == dsh) {
-                rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dseq, ks,
-                               sver, EFS_TXN_PUT, v_dseq, 8, &hint);
+                rc = host_prep_dseq_bump(h, dsh, &t, &parts, k_dseq, ks, NULL,
+                                         &hint);
                 if (rc == EFS_OK && stamp_lane)
-                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_ln, kln,
-                                   lnver, EFS_TXN_PUT, v_ln, sizeof(v_ln),
-                                   &hint);
+                    rc = host_prep_lane_stamp(h, dsh, &t, &parts, &prow, name,
+                                              now, NULL, &hint);
             }
             if (rc == EFS_OK && touch_parent && sh == psh)
-                rc = host_prep(h, psh, EFS_TXN_EXCL, &t, &parts, k_par, kp,
-                               pver, EFS_TXN_PUT, v_par, sizeof(v_par), &hint);
+                rc = host_prep_ino_delta(h, psh, &t, &parts, k_par, kp, &pd,
+                                         NULL, &hint);
             if (rc == EFS_OK && sh == ish) {
                 if (put_ino)
-                    rc = host_prep(h, ish, EFS_TXN_EXCL, &t, &parts, k_ino, ki,
-                                   iver, EFS_TXN_PUT, v_ino, sizeof(v_ino),
-                                   &hint);
+                    rc = host_prep_ino_delta(h, ish, &t, &parts, k_ino, ki,
+                                             &id, NULL, &hint);
                 else
                     rc = host_prep(h, ish, EFS_TXN_EXCL, &t, &parts, k_ino, ki,
                                    iver, EFS_TXN_DEL, NULL, 0, &hint);
@@ -7537,15 +7537,15 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
     struct efs_meta_stat st;
     struct efs_txid t;
     struct efs_txn_parts parts;
+    struct efs_txn_ino_delta pd, id;
     uint8_t k_dent[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX], k_par[EFS_KV_KEY_MAX];
-    uint8_t k_dseq[EFS_KV_KEY_MAX], k_ln[EFS_KV_KEY_MAX], v_ln[EFS_META_LANE_BYTES];
-    uint8_t v_dent[EFS_META_DENT_BYTES], v_ino[EFS_META_INO_BYTES];
-    uint8_t v_par[EFS_META_INO_BYTES], v_dseq[8], sb[8], cmd[22];
-    uint32_t kd = 0, ki = 0, kp = 0, ks = 0, kln = 0, sn = 8;
+    uint8_t k_dseq[EFS_KV_KEY_MAX];
+    uint8_t v_dent[EFS_META_DENT_BYTES], cmd[22];
+    uint32_t kd = 0, ki = 0, kp = 0, ks = 0;
     uint32_t dsh, ish, psh, coord;
-    uint64_t dver = 0, iver = 0, pver = 0, sver = 0, lnver = 0, seq = 0, now;
+    uint64_t dver = 0, now;
     int hint = -1;
-    int rc, i, gr, touch_parent = 0, stamp_lane = 0;
+    int rc, i, touch_parent = 0, stamp_lane = 0;
     uint8_t d_lane = 0;
 
     memset(out, 0, sizeof(*out));
@@ -7616,38 +7616,31 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
             rc = EFS_OK;
     }
     if (rc == EFS_OK) {
-        uint64_t bit;
-
         memset(&ndent, 0, sizeof(ndent));
         ndent.ino = row.ino;
         ndent.generation = row.generation;
         ndent.type = row.mode & S_IFMT;
-        row.nlink++;
-        if (row.base_ctime < now)
-            row.base_ctime = now;
+        /* Source row nlink++ / ctime and the parent's count / times /
+         * first-use lane bit are commutative deltas (§7.2). */
+        memset(&id, 0, sizeof(id));
+        id.d_nlink = 1;
+        id.max_ctime = now;
+        memset(&pd, 0, sizeof(pd));
         d_lane = dprow.layout == EFS_META_LAYOUT_LOCAL
                      ? 0
                      : efs_kv_dir_lane(new_name);
         if (dprow.layout == EFS_META_LAYOUT_LOCAL) {
-            if (dprow.base_mtime < now)
-                dprow.base_mtime = now;
-            if (dprow.base_ctime < now)
-                dprow.base_ctime = now;
-            efs_meta_dir_note_entry(&dprow, 1);
+            pd.d_nents = 1;
+            pd.max_mtime = now;
+            pd.max_ctime = now;
             touch_parent = 1;
         } else {
-            bit = 1ull << d_lane;
-            if ((dprow.used_shards & bit) == 0) {
-                dprow.used_shards |= bit;
+            pd.or_used_shards = 1ull << d_lane;
+            if ((dprow.used_shards & pd.or_used_shards) == 0)
                 touch_parent = 1;
-            }
             stamp_lane = 1;
         }
         rc = efs_meta_pack_dentry(&ndent, v_dent, sizeof(v_dent));
-        if (rc == EFS_OK)
-            rc = efs_meta_pack_inode(&row, v_ino, sizeof(v_ino));
-        if (rc == EFS_OK && touch_parent)
-            rc = efs_meta_pack_inode(&dprow, v_par, sizeof(v_par));
     }
     if (rc == EFS_OK)
         rc = efs_kv_key_dentry(dsh, new_parent, new_name, k_dent, &kd);
@@ -7657,24 +7650,9 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
         rc = efs_kv_key_inode(psh, new_parent, k_par, &kp);
     if (rc == EFS_OK)
         rc = efs_kv_key_dseq(dsh, new_parent, d_lane, k_dseq, &ks);
-    if (rc == EFS_OK && stamp_lane)
-        rc = efs_meta_stamp_dir_lane(h->kv, &dprow, new_name, now, k_ln, &kln,
-                                     v_ln, sizeof(v_ln));
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_ino, ki, &iver);
-    if (rc == EFS_OK && touch_parent)
-        rc = efs_txn_ver_get(h->kv, k_par, kp, &pver);
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_dseq, ks, &sver);
-    if (rc == EFS_OK && stamp_lane)
-        rc = efs_txn_ver_get(h->kv, k_ln, kln, &lnver);
     if (rc == EFS_OK) {
-        sn = 8;
-        gr = efs_kv_get(h->kv, k_dseq, ks, sb, &sn);
-        seq = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
-        wr64be(v_dseq, seq + 1);
         memset(&parts, 0, sizeof(parts));
         rc = host_parts_add(&parts, dsh);
         if (rc == EFS_OK)
@@ -7691,21 +7669,18 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
                                dver, EFS_TXN_PUT, v_dent, sizeof(v_dent),
                                &hint);
                 if (rc == EFS_OK)
-                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dseq, ks,
-                                   sver, EFS_TXN_PUT, v_dseq, 8, &hint);
+                    rc = host_prep_dseq_bump(h, dsh, &t, &parts, k_dseq, ks,
+                                             NULL, &hint);
                 if (rc == EFS_OK && stamp_lane)
-                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_ln, kln,
-                                   lnver, EFS_TXN_PUT, v_ln, sizeof(v_ln),
-                                   &hint);
+                    rc = host_prep_lane_stamp(h, dsh, &t, &parts, &dprow,
+                                              new_name, now, NULL, &hint);
             }
             if (rc == EFS_OK && touch_parent && sh == psh)
-                rc = host_prep(h, psh, EFS_TXN_EXCL, &t, &parts, k_par, kp,
-                               pver, EFS_TXN_PUT, v_par, sizeof(v_par), &hint);
-            if (rc == EFS_OK && sh == ish) {
-                rc = host_prep(h, ish, EFS_TXN_EXCL, &t, &parts, k_ino, ki,
-                               iver, EFS_TXN_PUT, v_ino, sizeof(v_ino),
-                               &hint);
-            }
+                rc = host_prep_ino_delta(h, psh, &t, &parts, k_par, kp, &pd,
+                                         NULL, &hint);
+            if (rc == EFS_OK && sh == ish)
+                rc = host_prep_ino_delta(h, ish, &t, &parts, k_ino, ki, &id,
+                                         NULL, &hint);
         }
 link_prepped:
         if (rc != EFS_OK)
@@ -7760,25 +7735,22 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     struct efs_txid t;
     struct efs_txn_parts parts;
     struct host_pver_guard gv[EFS_TXN_MAX_PART];
+    struct efs_txn_ino_delta pd, dd, id, nd;
     uint8_t k_dst[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
     uint8_t k_par[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX], k_pver[EFS_KV_KEY_MAX];
     uint8_t k_nino[EFS_KV_KEY_MAX], k_ndseq[EFS_KV_KEY_MAX];
     uint8_t k_dpar[EFS_KV_KEY_MAX], k_ddseq[EFS_KV_KEY_MAX];
-    uint8_t v_dent[EFS_META_DENT_BYTES], v_ino[EFS_META_INO_BYTES];
-    uint8_t v_par[EFS_META_INO_BYTES], v_dseq[8], v_pver[8], sb[8], cmd[22];
-    uint8_t v_nino[EFS_META_INO_BYTES], v_dpar[EFS_META_INO_BYTES], v_ddseq[8];
+    uint8_t v_dent[EFS_META_DENT_BYTES];
+    uint8_t v_pver[8], cmd[22];
     uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
-    uint8_t k_sln[EFS_KV_KEY_MAX], v_sln[EFS_META_LANE_BYTES];
-    uint8_t k_dln[EFS_KV_KEY_MAX], v_dln[EFS_META_LANE_BYTES];
-    uint32_t kd = 0, ki = 0, kp = 0, kq = 0, kpv = 0, sn = 8;
-    uint32_t kn = 0, knd = 0, krl = 0, kdp = 0, kdsq = 0, ksln = 0, kdln = 0;
+    uint32_t kd = 0, ki = 0, kp = 0, kq = 0, kpv = 0;
+    uint32_t kn = 0, knd = 0, krl = 0, kdp = 0, kdsq = 0;
     uint32_t ssh, dsh, ish, psh, dpsh, coord, nsh = 0, ash = 0;
-    uint64_t dver = 0, iver = 0, pver = 0, qver = 0, ever = 0;
-    uint64_t nver = 0, gver2 = 0, rver = 0, dpver = 0, dsver = 0;
-    uint64_t slver = 0, dlver = 0;
-    uint64_t seq = 0, dseqn = 0, now;
+    uint64_t dver = 0, ever = 0;
+    uint64_t nver = 0, gver2 = 0, rver = 0;
+    uint64_t now;
     int hint = -1;
-    int rc, i, gr, is_dir = 0, ngv = 0, nxd = 0, hashed_xdir = 0;
+    int rc, i, is_dir = 0, ngv = 0, nxd = 0, hashed_xdir = 0;
     int xist = 0, xdir = 0, xput = 0, same = 0;
     int touch_src = 0, stamp_src = 0, touch_dst = 0, stamp_dst = 0, two_dseq = 0;
     uint8_t s_lane = 0, d_lane = 0;
@@ -7803,6 +7775,10 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     }
     now = now_ns();
     same = old_parent == new_parent;
+    memset(&pd, 0, sizeof(pd));
+    memset(&dd, 0, sizeof(dd));
+    memset(&id, 0, sizeof(id));
+    memset(&nd, 0, sizeof(nd));
     psh = efs_kv_inode_shard(old_parent);
     dpsh = efs_kv_inode_shard(new_parent);
     {
@@ -8034,8 +8010,8 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                 rc = efs_kv_key_dseq(lsh, nrow.ino, (uint8_t)lane, xdseq[nxd].key,
                                       &xdseq[nxd].klen);
                 if (rc == EFS_OK)
-                    rc = efs_txn_ver_get(h->kv, xdseq[nxd].key, xdseq[nxd].klen,
-                                         &xdseq[nxd].ver);
+                    rc = efs_txn_dseq_observe(h->kv, xdseq[nxd].key,
+                                              xdseq[nxd].klen, &xdseq[nxd].ver);
                 if (rc == EFS_OK)
                     nxd++;
             }
@@ -8043,32 +8019,29 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         if (rc == EFS_OK && (same ? prow.nlink : dprow.nlink) < 3)
             rc = EFS_ERR_PROTO;
         if (rc == EFS_OK) {
+            /* the replaced empty dir leaves its parent: nlink-- there */
             if (same)
-                prow.nlink--;
+                pd.d_nlink--;
             else
-                dprow.nlink--;
+                dd.d_nlink--;
         }
     }
+    /* Every row this rename touches is a commutative delta (§7.2): the
+     * two parents (pd / dd), the moved inode (id: parent SET, ctime,
+     * parent_version++), a replaced dest file (nd: nlink--). */
     if (rc == EFS_OK && xist && !xdir) {
+        memset(&nd, 0, sizeof(nd));
+        nd.d_nlink = -1;
+        nd.max_ctime = now;
         if (nrow.nlink <= 1) {
             int held = efs_lease_any(h->kv, nrow.ino, nrow.generation);
             if (held < 0)
                 rc = held;
-            else if (held) {
-                nrow.nlink = 0;
-                if (nrow.base_ctime < now)
-                    nrow.base_ctime = now;
+            else if (held)
                 xput = 1;
-            }
-        } else {
-            nrow.nlink--;
-            if (nrow.base_ctime < now)
-                nrow.base_ctime = now;
+        } else
             xput = 1;
-        }
     }
-    if (rc == EFS_OK && xist && xput)
-        rc = efs_meta_pack_inode(&nrow, v_nino, sizeof(v_nino));
     /* A file dest retired at its last link (the DEL below) needs its reap
      * marker (L7) in the same txn, on the dest inode group's anchor
      * shard. */
@@ -8082,8 +8055,8 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         if (prow.nlink < 3)
             rc = EFS_ERR_PROTO;
         else {
-            prow.nlink--;
-            dprow.nlink++;
+            pd.d_nlink--;
+            dd.d_nlink++;
         }
     }
     if (rc == EFS_OK) {
@@ -8095,44 +8068,37 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                      ? 0
                      : efs_kv_dir_lane(new_name);
         if (prow.layout == EFS_META_LAYOUT_LOCAL) {
-            if (prow.base_mtime < now)
-                prow.base_mtime = now;
-            if (prow.base_ctime < now)
-                prow.base_ctime = now;
+            pd.max_mtime = now;
+            pd.max_ctime = now;
             if (!(same && !xist))
-                efs_meta_dir_note_entry(&prow, -1);
+                pd.d_nents--;
             touch_src = 1;
         } else {
             bit = 1ull << s_lane;
-            if ((prow.used_shards & bit) == 0) {
-                prow.used_shards |= bit;
+            pd.or_used_shards |= bit;
+            if ((prow.used_shards & bit) == 0)
                 touch_src = 1;
-            }
             stamp_src = 1;
         }
         if (!same) {
             if (dprow.layout == EFS_META_LAYOUT_LOCAL) {
-                if (dprow.base_mtime < now)
-                    dprow.base_mtime = now;
-                if (dprow.base_ctime < now)
-                    dprow.base_ctime = now;
+                dd.max_mtime = now;
+                dd.max_ctime = now;
                 if (!xist)
-                    efs_meta_dir_note_entry(&dprow, 1);
+                    dd.d_nents++;
                 touch_dst = 1;
             } else {
                 bit = 1ull << d_lane;
-                if ((dprow.used_shards & bit) == 0) {
-                    dprow.used_shards |= bit;
+                dd.or_used_shards |= bit;
+                if ((dprow.used_shards & bit) == 0)
                     touch_dst = 1;
-                }
                 stamp_dst = 1;
             }
         } else if (prow.layout != EFS_META_LAYOUT_LOCAL) {
             bit = 1ull << d_lane;
-            if ((prow.used_shards & bit) == 0) {
-                prow.used_shards |= bit;
+            pd.or_used_shards |= bit;
+            if ((prow.used_shards & bit) == 0)
                 touch_src = 1;
-            }
             stamp_dst = 1;
         }
         if (is_dir && !same) {
@@ -8169,24 +8135,19 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     if (rc == EFS_OK && is_dir) {
         rc = host_pver_guard_chain(h, new_parent, row.ino, &parts, gv, &ngv,
                                    &hint);
-        if (rc == EFS_OK)
+        if (rc == EFS_OK) {
             row.parent_version++;
+            id.d_pver = 1;
+        }
     }
     if (rc == EFS_OK) {
         memset(&ndent, 0, sizeof(ndent));
         ndent.ino = row.ino;
         ndent.generation = row.generation;
         ndent.type = row.mode & S_IFMT;
-        row.parent = new_parent;
-        if (row.base_ctime < now)
-            row.base_ctime = now;
+        id.set_parent = new_parent;
+        id.max_ctime = now;
         rc = efs_meta_pack_dentry(&ndent, v_dent, sizeof(v_dent));
-        if (rc == EFS_OK)
-            rc = efs_meta_pack_inode(&row, v_ino, sizeof(v_ino));
-        if (rc == EFS_OK && touch_src)
-            rc = efs_meta_pack_inode(&prow, v_par, sizeof(v_par));
-        if (rc == EFS_OK && touch_dst)
-            rc = efs_meta_pack_inode(&dprow, v_dpar, sizeof(v_dpar));
     }
     if (rc == EFS_OK)
         rc = host_dent_drop_fill(h->kv, &prow, old_parent, old_name, &drop);
@@ -8202,12 +8163,6 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         rc = efs_kv_key_inode(dpsh, new_parent, k_dpar, &kdp);
     if (rc == EFS_OK && two_dseq)
         rc = efs_kv_key_dseq(dsh, new_parent, d_lane, k_ddseq, &kdsq);
-    if (rc == EFS_OK && stamp_src)
-        rc = efs_meta_stamp_dir_lane(h->kv, &prow, old_name, now, k_sln, &ksln,
-                                     v_sln, sizeof(v_sln));
-    if (rc == EFS_OK && stamp_dst)
-        rc = efs_meta_stamp_dir_lane(h->kv, same ? &prow : &dprow, new_name, now,
-                                     k_dln, &kdln, v_dln, sizeof(v_dln));
     if (rc == EFS_OK && xist)
         rc = efs_kv_key_inode(nsh, nrow.ino, k_nino, &kn);
     if (rc == EFS_OK && xist && xdir && !hashed_xdir)
@@ -8232,37 +8187,13 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     }
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_dst, kd, &dver);
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_ino, ki, &iver);
-    if (rc == EFS_OK && touch_src)
-        rc = efs_txn_ver_get(h->kv, k_par, kp, &pver);
-    if (rc == EFS_OK)
-        rc = efs_txn_ver_get(h->kv, k_dseq, kq, &qver);
-    if (rc == EFS_OK && touch_dst)
-        rc = efs_txn_ver_get(h->kv, k_dpar, kdp, &dpver);
-    if (rc == EFS_OK && two_dseq)
-        rc = efs_txn_ver_get(h->kv, k_ddseq, kdsq, &dsver);
-    if (rc == EFS_OK && stamp_src)
-        rc = efs_txn_ver_get(h->kv, k_sln, ksln, &slver);
-    if (rc == EFS_OK && stamp_dst)
-        rc = efs_txn_ver_get(h->kv, k_dln, kdln, &dlver);
-    if (rc == EFS_OK && xist)
+    if (rc == EFS_OK && xist && !xput)
         rc = efs_txn_ver_get(h->kv, k_nino, kn, &nver);
     if (rc == EFS_OK && xist && xdir && !hashed_xdir)
-        rc = efs_txn_ver_get(h->kv, k_ndseq, knd, &gver2);
+        rc = efs_txn_dseq_observe(h->kv, k_ndseq, knd, &gver2);
     if (rc == EFS_OK && xist && !xdir && !xput)
         rc = efs_txn_ver_get(h->kv, k_reap, krl, &rver);
     if (rc == EFS_OK) {
-        sn = 8;
-        gr = efs_kv_get(h->kv, k_dseq, kq, sb, &sn);
-        seq = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
-        wr64be(v_dseq, seq + 1);
-        if (two_dseq) {
-            sn = 8;
-            gr = efs_kv_get(h->kv, k_ddseq, kdsq, sb, &sn);
-            dseqn = (gr == EFS_OK && sn >= 8) ? rd64be(sb) : 0;
-            wr64be(v_ddseq, dseqn + 1);
-        }
         if (rc == EFS_OK && drop.del_loc)
             rc = host_parts_add(&parts, drop.psh);
         if (rc == EFS_OK && (drop.put_tomb || drop.del_hash))
@@ -8282,54 +8213,48 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                                    dver, EFS_TXN_PUT, v_dent, sizeof(v_dent),
                                    &hint);
                 if (rc == EFS_OK)
-                    rc = host_prep(h, ssh, EFS_TXN_EXCL, &t, &parts, k_dseq, kq,
-                                   qver, EFS_TXN_PUT, v_dseq, 8, &hint);
+                    rc = host_prep_dseq_bump(h, ssh, &t, &parts, k_dseq, kq,
+                                             NULL, &hint);
                 if (rc == EFS_OK && stamp_src)
-                    rc = host_prep(h, ssh, EFS_TXN_EXCL, &t, &parts, k_sln, ksln,
-                                   slver, EFS_TXN_PUT, v_sln, sizeof(v_sln),
-                                   &hint);
+                    rc = host_prep_lane_stamp(h, ssh, &t, &parts, &prow,
+                                              old_name, now, NULL, &hint);
                 if (rc == EFS_OK && stamp_dst && dsh == ssh)
-                    rc = host_prep(h, ssh, EFS_TXN_EXCL, &t, &parts, k_dln, kdln,
-                                   dlver, EFS_TXN_PUT, v_dln, sizeof(v_dln),
-                                   &hint);
+                    rc = host_prep_lane_stamp(h, ssh, &t, &parts,
+                                              same ? &prow : &dprow, new_name,
+                                              now, NULL, &hint);
                 if (rc == EFS_OK && two_dseq && dsh == ssh)
-                    rc = host_prep(h, ssh, EFS_TXN_EXCL, &t, &parts, k_ddseq,
-                                   kdsq, dsver, EFS_TXN_PUT, v_ddseq, 8, &hint);
+                    rc = host_prep_dseq_bump(h, ssh, &t, &parts, k_ddseq, kdsq,
+                                             NULL, &hint);
             }
             if (rc == EFS_OK && sh == dsh && dsh != ssh) {
                 rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dst, kd,
                                dver, EFS_TXN_PUT, v_dent, sizeof(v_dent),
                                &hint);
                 if (rc == EFS_OK && two_dseq)
-                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_ddseq,
-                                   kdsq, dsver, EFS_TXN_PUT, v_ddseq, 8,
-                                   &hint);
+                    rc = host_prep_dseq_bump(h, dsh, &t, &parts, k_ddseq, kdsq,
+                                             NULL, &hint);
                 if (rc == EFS_OK && stamp_dst)
-                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dln, kdln,
-                                   dlver, EFS_TXN_PUT, v_dln, sizeof(v_dln),
-                                   &hint);
+                    rc = host_prep_lane_stamp(h, dsh, &t, &parts,
+                                              same ? &prow : &dprow, new_name,
+                                              now, NULL, &hint);
             }
             if (rc == EFS_OK && touch_src && sh == psh)
-                rc = host_prep(h, psh, EFS_TXN_EXCL, &t, &parts, k_par, kp,
-                               pver, EFS_TXN_PUT, v_par, sizeof(v_par),
-                               &hint);
+                rc = host_prep_ino_delta(h, psh, &t, &parts, k_par, kp, &pd,
+                                         NULL, &hint);
             if (rc == EFS_OK && touch_dst && sh == dpsh)
-                rc = host_prep(h, dpsh, EFS_TXN_EXCL, &t, &parts, k_dpar, kdp,
-                               dpver, EFS_TXN_PUT, v_dpar, sizeof(v_dpar),
-                               &hint);
+                rc = host_prep_ino_delta(h, dpsh, &t, &parts, k_dpar, kdp, &dd,
+                                         NULL, &hint);
             if (rc == EFS_OK && sh == ish) {
-                rc = host_prep(h, ish, EFS_TXN_EXCL, &t, &parts, k_ino, ki,
-                               iver, EFS_TXN_PUT, v_ino, sizeof(v_ino),
-                               &hint);
+                rc = host_prep_ino_delta(h, ish, &t, &parts, k_ino, ki, &id,
+                                         NULL, &hint);
                 if (rc == EFS_OK && is_dir)
                     rc = host_prep(h, ish, EFS_TXN_EXCL, &t, &parts, k_pver,
                                    kpv, ever, EFS_TXN_PUT, v_pver, 8, &hint);
             }
             if (rc == EFS_OK && xist && sh == nsh) {
                 if (xput)
-                    rc = host_prep(h, nsh, EFS_TXN_EXCL, &t, &parts, k_nino,
-                                   kn, nver, EFS_TXN_PUT, v_nino,
-                                   sizeof(v_nino), &hint);
+                    rc = host_prep_ino_delta(h, nsh, &t, &parts, k_nino, kn,
+                                             &nd, NULL, &hint);
                 else
                     rc = host_prep(h, nsh, EFS_TXN_EXCL, &t, &parts, k_nino,
                                    kn, nver, EFS_TXN_DEL, NULL, 0, &hint);

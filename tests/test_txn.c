@@ -2,6 +2,7 @@
 #include "efs/txn.h"
 #include "efs/kv.h"
 #include "efs/kv_key.h"
+#include "efs/meta_apply.h"
 #include "efs/common.h"
 #include <stdio.h>
 #include <string.h>
@@ -311,6 +312,263 @@ static void test_abort_old_value(void)
     efs_kv_mem_free(kv);
 }
 
+/* §7.2 parent-row reductions. The bug this replaces (Sep 20, IO-500
+ * mdtest): a txn EXCL-PUT a full parent image read before a log-path
+ * apply changed the row, won the version CAS (the log path is
+ * unversioned) and overwrote the apply — parent nlink=2 with three live
+ * subdirectories. As reductions the deltas fold into the row as it is at
+ * RESOLVE, so they commute with the log path and with each other. */
+static void put_dir_row(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
+                        efs_ino_t ino, uint32_t nlink, uint32_t nents,
+                        uint64_t mtime)
+{
+    struct efs_meta_row r;
+    uint8_t v[EFS_META_INO_BYTES];
+
+    memset(&r, 0, sizeof(r));
+    r.ino = ino;
+    r.generation = 1;
+    r.mode = 040755;
+    r.nlink = nlink;
+    r.nents = nents;
+    r.layout = EFS_META_LAYOUT_LOCAL;
+    r.base_mtime = mtime;
+    r.base_ctime = mtime;
+    r.parent = 1;
+    CHECK(efs_meta_pack_inode(&r, v, sizeof(v)) == EFS_OK, "pack row");
+    CHECK(efs_kv_put(kv, key, klen, v, sizeof(v)) == EFS_OK, "put row");
+}
+
+static int get_dir_row(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
+                       struct efs_meta_row *r)
+{
+    uint8_t v[EFS_META_INO_BYTES];
+    uint32_t n = sizeof(v);
+
+    if (efs_kv_get(kv, key, klen, v, &n) != EFS_OK)
+        return -1;
+    return efs_meta_unpack_inode(v, n, r) == EFS_OK ? 0 : -1;
+}
+
+static void test_ino_delta_commutes(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_txid a, b;
+    struct efs_txn_parts p = two(1, 2);
+    struct efs_txn_ino_delta da, db;
+    struct efs_meta_row r;
+    uint8_t key[EFS_KV_KEY_MAX];
+    uint32_t klen = 0;
+    uint64_t ver0 = 0, ver1 = 0;
+
+    tid(&a, 21);
+    tid(&b, 22);
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_kv_key_inode(1, 824, key, &klen) == EFS_OK, "inode key");
+    put_dir_row(kv, key, klen, 824, 4, 2, 1000);
+    CHECK(efs_txn_ver_get(kv, key, klen, &ver0) == EFS_OK, "ver0");
+
+    /* two mkdirs in one parent: neither blocks the other */
+    memset(&da, 0, sizeof(da));
+    da.d_nlink = 1;
+    da.d_nents = 1;
+    da.max_mtime = 2000;
+    da.max_ctime = 2000;
+    db = da;
+    db.max_mtime = 1500; /* older clock on the other dual-host */
+    db.max_ctime = 1500;
+    CHECK(efs_txn_prepare_ino_delta(kv, &a, &p, key, klen, &da) == EFS_OK, "pa");
+    CHECK(efs_txn_prepare_ino_delta(kv, &b, &p, key, klen, &db) == EFS_OK,
+          "pb does not block on pa");
+
+    /* a same-group log-path rmdir applies in between, unversioned:
+     * nlink 4 -> 3, nents 2 -> 1, mtime 3000 */
+    put_dir_row(kv, key, klen, 824, 3, 1, 3000);
+
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&a, &p), &a, EFS_TXN_COMMIT) ==
+              EFS_OK,
+          "da");
+    CHECK(efs_txn_resolve(kv, &a, 1, EFS_TXN_COMMIT) == EFS_OK, "ra");
+    CHECK(get_dir_row(kv, key, klen, &r) == 0, "row after a");
+    CHECK(r.nlink == 4 && r.nents == 2, "a folded onto the log-path result");
+    CHECK(r.base_mtime == 3000, "MAX keeps the newer log-path time");
+    CHECK(efs_txn_ver_get(kv, key, klen, &ver1) == EFS_OK && ver1 == ver0 + 1,
+          "fold bumps the row version (a stale EXCL must land STALE)");
+
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&b, &p), &b, EFS_TXN_COMMIT) ==
+              EFS_OK,
+          "db");
+    CHECK(efs_txn_resolve(kv, &b, 1, EFS_TXN_COMMIT) == EFS_OK, "rb");
+    CHECK(get_dir_row(kv, key, klen, &r) == 0, "row after b");
+    CHECK(r.nlink == 5 && r.nents == 3, "b folded too: 3 + 1 + 1");
+    CHECK(r.base_mtime == 3000, "older clock does not move mtime back");
+
+    /* an EXCL that read the row before the folds must not be able to
+     * overwrite them */
+    {
+        struct efs_txid c;
+        uint8_t v[EFS_META_INO_BYTES];
+        memset(v, 0, sizeof(v));
+        tid(&c, 23);
+        CHECK(efs_txn_prepare_excl(kv, &c, &p, key, klen, ver0, EFS_TXN_PUT, v,
+                                   sizeof(v)) == EFS_ERR_STALE,
+              "EXCL at the pre-fold version is STALE");
+    }
+    efs_kv_mem_free(kv);
+}
+
+/* Reduce vs. exclusive on one row: an EXCL (rmdir's DEL of the child row)
+ * must not be prepared over a pending reduce (a create's nlink++ into that
+ * child), and a reduce must not be prepared over a pending EXCL. GUARD
+ * likewise. Both directions are BUSY, never a silent overwrite. */
+static void test_ino_delta_vs_excl_guard(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_txid a, b, c;
+    struct efs_txn_parts p = two(1, 2);
+    struct efs_txn_ino_delta d;
+    uint8_t key[EFS_KV_KEY_MAX], dk[EFS_KV_KEY_MAX];
+    uint32_t klen = 0, dl = 0;
+    uint64_t seq = 0;
+
+    tid(&a, 31);
+    tid(&b, 32);
+    tid(&c, 33);
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_kv_key_inode(1, 900, key, &klen) == EFS_OK, "inode key");
+    put_dir_row(kv, key, klen, 900, 2, 0, 10);
+    memset(&d, 0, sizeof(d));
+    d.d_nlink = 1;
+    CHECK(efs_txn_key_busy(kv, key, klen) == EFS_OK, "free row is not busy");
+    CHECK(efs_txn_prepare_ino_delta(kv, &a, &p, key, klen, &d) == EFS_OK, "pa");
+    CHECK(efs_txn_key_busy(kv, key, klen) == EFS_ERR_BUSY,
+          "log path sees the pending reduce");
+    CHECK(efs_txn_prepare_excl(kv, &b, &p, key, klen, 0, EFS_TXN_DEL, NULL, 0) ==
+              EFS_ERR_BUSY,
+          "EXCL over a pending reduce is BUSY");
+    CHECK(efs_txn_prepare_guard(kv, &b, &p, key, klen, 0) == EFS_ERR_BUSY,
+          "GUARD over a pending reduce is BUSY");
+    CHECK(efs_txn_drop(kv, &a, 1) == EFS_OK, "drop a");
+    CHECK(efs_txn_key_busy(kv, key, klen) == EFS_OK, "dropped reduce frees it");
+    CHECK(efs_txn_prepare_excl(kv, &b, &p, key, klen, 0, EFS_TXN_DEL, NULL, 0) ==
+              EFS_OK,
+          "EXCL after drop");
+    CHECK(efs_txn_prepare_ino_delta(kv, &c, &p, key, klen, &d) == EFS_ERR_BUSY,
+          "reduce over a pending EXCL is BUSY");
+    CHECK(efs_txn_key_busy(kv, key, klen) == EFS_ERR_BUSY,
+          "log path sees the pending intent");
+
+    /* dseq witness: GUARD by value, +1 as a reduce, GUARD/ADD exclusive */
+    CHECK(efs_kv_key_dseq(1, 900, 0, dk, &dl) == EFS_OK, "dseq key");
+    CHECK(efs_txn_dseq_observe(kv, dk, dl, &seq) == EFS_OK && seq == 0,
+          "absent witness observes 0");
+    CHECK(efs_txn_prepare_add(kv, &c, &p, dk, dl, 1) == EFS_OK, "add prep");
+    CHECK(efs_txn_prepare_guard(kv, &a, &p, dk, dl, 0) == EFS_ERR_BUSY,
+          "GUARD over a pending add is BUSY");
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&c, &p), &c, EFS_TXN_COMMIT) ==
+              EFS_OK,
+          "dc");
+    CHECK(efs_txn_resolve(kv, &c, 1, EFS_TXN_COMMIT) == EFS_OK, "rc");
+    CHECK(efs_txn_dseq_observe(kv, dk, dl, &seq) == EFS_OK && seq == 1,
+          "add folded");
+    CHECK(efs_txn_prepare_guard(kv, &a, &p, dk, dl, 0) == EFS_ERR_STALE,
+          "GUARD at the old value is STALE (dir is no longer empty)");
+    CHECK(efs_txn_prepare_guard(kv, &a, &p, dk, dl, 1) == EFS_OK,
+          "GUARD at the current value holds");
+    {
+        /* an unversioned log-path bump is seen by value too */
+        uint8_t v[8] = { 0, 0, 0, 0, 0, 0, 0, 2 };
+        CHECK(efs_txn_drop(kv, &a, 1) == EFS_OK, "drop guard");
+        CHECK(efs_kv_put(kv, dk, dl, v, 8) == EFS_OK, "log-path bump");
+        CHECK(efs_txn_prepare_guard(kv, &a, &p, dk, dl, 1) == EFS_ERR_STALE,
+              "log-path bump invalidates the guard");
+    }
+    efs_kv_mem_free(kv);
+}
+
+/* Lane fold keeps the owner's tail (fenced_epoch, mtime_gen, append_bar)
+ * and MAXes mtime_gen; a 56-byte published lane must not come back 32. */
+static void test_lane_fold_preserves_tail(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_txid a;
+    struct efs_txn_parts p = two(1, 2);
+    struct efs_txn_reduce red;
+    uint8_t key[EFS_KV_KEY_MAX], lv[56], got[64];
+    uint32_t klen = 0, n = sizeof(got);
+
+    tid(&a, 41);
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_kv_key_lane(1, 7, 1, 0, key, &klen) == EFS_OK, "lane");
+    memset(lv, 0, sizeof(lv));
+    lv[7] = 100;  /* max_end */
+    lv[15] = 50;  /* max_mtime */
+    lv[23] = 50;  /* max_ctime */
+    lv[31] = 3;   /* seq */
+    lv[39] = 9;   /* fenced_epoch */
+    lv[47] = 2;   /* mtime_gen */
+    lv[55] = 77;  /* append_bar */
+    CHECK(efs_kv_put(kv, key, klen, lv, sizeof(lv)) == EFS_OK, "put lane");
+    memset(&red, 0, sizeof(red));
+    red.max_mtime = 60;
+    red.max_ctime = 60;
+    red.mtime_gen = 4;
+    CHECK(efs_txn_prepare_reduce(kv, &a, &p, key, klen, &red) == EFS_OK, "prep");
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&a, &p), &a, EFS_TXN_COMMIT) ==
+              EFS_OK,
+          "decide");
+    CHECK(efs_txn_resolve(kv, &a, 1, EFS_TXN_COMMIT) == EFS_OK, "resolve");
+    CHECK(efs_kv_get(kv, key, klen, got, &n) == EFS_OK && n == 56,
+          "lane keeps its 56 bytes");
+    CHECK(got[7] == 100 && got[15] == 60 && got[23] == 60, "MAX triple");
+    CHECK(got[31] == 4, "seq++");
+    CHECK(got[39] == 9 && got[55] == 77, "fenced_epoch / append_bar kept");
+    CHECK(got[47] == 4, "mtime_gen MAX");
+    efs_kv_mem_free(kv);
+}
+
+/* The shared PREPARE decoder accepts every kind the host packs. */
+static void test_apply_prepare_wire(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_txid a;
+    struct efs_txn_parts p = two(1, 2);
+    struct efs_txn_ino_delta d;
+    struct efs_meta_row r;
+    uint8_t key[EFS_KV_KEY_MAX], pay[EFS_TXN_REDUCE_INO_WIRE];
+    uint32_t klen = 0;
+
+    tid(&a, 51);
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_kv_key_inode(1, 77, key, &klen) == EFS_OK, "key");
+    put_dir_row(kv, key, klen, 77, 2, 0, 5);
+    memset(&d, 0, sizeof(d));
+    d.d_nlink = -1;
+    d.d_nents = 0;
+    d.or_used_shards = 0x10;
+    d.set_parent = 4242;
+    d.d_pver = 1;
+    efs_txn_encode_ino_delta(pay, &d);
+    CHECK(efs_txn_apply_prepare(kv, EFS_TXN_REDUCE_INO, &a, &p, key, klen, pay,
+                                sizeof(pay)) == EFS_OK,
+          "decode + prepare");
+    CHECK(efs_txn_apply_prepare(kv, EFS_TXN_REDUCE_INO, &a, &p, key, klen, pay,
+                                sizeof(pay) - 1) == EFS_ERR_PROTO,
+          "short payload is PROTO");
+    CHECK(efs_txn_apply_prepare(kv, 99, &a, &p, key, klen, pay, sizeof(pay)) ==
+              EFS_ERR_PROTO,
+          "unknown kind is PROTO");
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&a, &p), &a, EFS_TXN_COMMIT) ==
+              EFS_OK,
+          "decide");
+    CHECK(efs_txn_resolve(kv, &a, 1, EFS_TXN_COMMIT) == EFS_OK, "resolve");
+    CHECK(get_dir_row(kv, key, klen, &r) == 0, "row");
+    CHECK(r.nlink == 1 && r.used_shards == 0x10 && r.parent == 4242 &&
+              r.parent_version == 1,
+          "every delta field folded");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     test_excl_conflict_i16();
@@ -321,6 +579,10 @@ int main(void)
     test_guard_vs_excl();
     test_cas_unversioned();
     test_abort_old_value();
+    test_ino_delta_commutes();
+    test_ino_delta_vs_excl_guard();
+    test_lane_fold_preserves_tail();
+    test_apply_prepare_wire();
     if (failures) {
         fprintf(stderr, "test_txn: %d failure(s)\n", failures);
         return 1;

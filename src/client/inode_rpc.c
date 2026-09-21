@@ -135,6 +135,16 @@ static int rpc_status_to_efs(uint8_t st)
     }
 }
 
+/* Namespace mutations whose txn may PREPARE STALE against a moved dentry,
+ * child row or emptiness witness. None of them has committed anything when
+ * the server says STALE, and each re-evaluates from scratch, so the client
+ * retries them like BUSY. REPORT_CHUNKS / APPEND own their STALE. */
+static int stale_retryable(uint8_t type)
+{
+    return type == EFS_MSG_INODE_CREATE || type == EFS_MSG_INODE_UNLINK ||
+           type == EFS_MSG_INODE_LINK || type == EFS_MSG_INODE_RENAME_AT;
+}
+
 /* Phase 2b: the metadata primary is the lowest-id live node. Mutations must
  * reach it (the meta-flush thread is primary-only). */
 static struct efs_conn *rpc_primary_conn(efs_node_id_t *nid_out)
@@ -296,13 +306,15 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
         }
-        if (r->status == EFS_INODE_RPC_STALE && type == EFS_MSG_INODE_CREATE) {
-            /* Cross-group mkdir/create txns CAS the parent-row and dseq
-             * versions; a concurrent create served by the other dual-host
-             * commits first and this prep lands STALE. The name is unique
-             * and the op idempotent (a landed retry reads as EEXIST, which
-             * the caller handles), so retry like BUSY. REPORT_CHUNKS owns
-             * its STALE (W1 refetch+overlay) — never retried here. */
+        if (r->status == EFS_INODE_RPC_STALE && stale_retryable(type)) {
+            /* A directory-op txn lands STALE when a same-name dentry, the
+             * child row, or an emptiness witness moved between its read
+             * and its PREPARE (the parent row itself is a commutative
+             * reduce since §7.2 and never conflicts). Nothing committed;
+             * re-running re-evaluates against the new state (EEXIST /
+             * ENOENT / ENOTEMPTY as appropriate), so retry like BUSY.
+             * REPORT_CHUNKS owns its STALE (W1 refetch+overlay) — never
+             * retried here. */
             saw_busy = 1;
             unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
             unsigned long long sleep_us = 50000ull << shift;
@@ -842,10 +854,10 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
             usleep((useconds_t)(50000ull << shift));
             continue;
         }
-        if (r->status == EFS_INODE_RPC_STALE && type == EFS_MSG_INODE_CREATE) {
-            /* See rpc_send_recv_shard: concurrent cross-group create txns
-             * lose the parent-row/dseq version CAS; the op is idempotent,
-             * so retry. REPORT_CHUNKS owns its STALE (W1). */
+        if (r->status == EFS_INODE_RPC_STALE && stale_retryable(type)) {
+            /* See rpc_send_recv_shard: a directory-op txn that lost a
+             * dentry / witness race committed nothing; re-run it.
+             * REPORT_CHUNKS owns its STALE (W1). */
             saw_busy = 1;
             unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
             usleep((useconds_t)(50000ull << shift));

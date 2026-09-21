@@ -5,6 +5,7 @@
 #include "efs/kv.h"
 #include "efs/kv_key.h"
 #include "efs/opid.h"
+#include "efs/txn.h"
 #include "efs/common.h"
 #include <stdio.h>
 #include <string.h>
@@ -400,6 +401,84 @@ static void test_alloc_vs_txn_intent(void)
                                      &f2) == EFS_OK &&
               f2 && f2 != f1,
           "second create distinct");
+    efs_kv_mem_free(kv);
+}
+
+/* §7.2: a cross-group CREATE into a directory is invisible to the log path
+ * until it resolves (dentry EXCL + dseq REDUCE_ADD + row REDUCE_INO). A
+ * same-group log-path rmdir of that directory must not DEL the row from
+ * under the intent (it would land the txn's nlink++ on a deleted row, or
+ * make a dir with children "empty"): BUSY, then OK once the intent is gone.
+ * Same for an unlink of a file whose row carries a pending reduce
+ * (link's nlink++). */
+static void test_log_delete_busy_under_intent(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t d = 0, f = 0;
+    uint32_t dshard, fshard, kd = 0, kf = 0, ki = 0;
+    uint8_t k_dseq[EFS_KV_KEY_MAX], k_fino[EFS_KV_KEY_MAX], k_dino[EFS_KV_KEY_MAX];
+    struct efs_txid t;
+    struct efs_txn_parts p;
+    struct efs_txn_ino_delta delta;
+    struct efs_meta_dentry dent;
+
+    CHECK(kv, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_mkdir(kv, &g_at, EFS_ROOT_INO, S_IFDIR | 0755, "d",
+                               &d) == EFS_OK &&
+              d,
+          "dir");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "f", &f) == EFS_OK &&
+              f,
+          "file");
+    dshard = efs_kv_inode_shard(d);
+    fshard = efs_kv_inode_shard(f);
+    memset(&t, 0, sizeof(t));
+    t.bytes[0] = 0xb1;
+    memset(&p, 0, sizeof(p));
+    p.n = 1;
+
+    /* (1) rmdir vs. a pending create-into-d: witness bump */
+    p.shard[0] = dshard;
+    CHECK(efs_kv_key_dseq(dshard, d, 0, k_dseq, &kd) == EFS_OK, "dseq key");
+    CHECK(efs_txn_prepare_add(kv, &t, &p, k_dseq, kd, 1) == EFS_OK, "add prep");
+    CHECK(efs_meta_apply_rmdir(kv, EFS_ROOT_INO, "d", T0 + 1) == EFS_ERR_BUSY,
+          "log rmdir under a pending dseq bump is BUSY");
+    CHECK(efs_txn_drop(kv, &t, dshard) == EFS_OK, "drop add");
+
+    /* (2) rmdir vs. a pending reduce on the dir row itself (mkdir's
+     * nlink++ into d) */
+    t.bytes[0] = 0xb2;
+    CHECK(efs_kv_key_inode(dshard, d, k_dino, &ki) == EFS_OK, "dino key");
+    memset(&delta, 0, sizeof(delta));
+    delta.d_nlink = 1;
+    delta.d_nents = 1;
+    CHECK(efs_txn_prepare_ino_delta(kv, &t, &p, k_dino, ki, &delta) == EFS_OK,
+          "ino delta prep");
+    CHECK(efs_meta_apply_rmdir(kv, EFS_ROOT_INO, "d", T0 + 1) == EFS_ERR_BUSY,
+          "log rmdir under a pending row reduce is BUSY");
+    CHECK(efs_txn_drop(kv, &t, dshard) == EFS_OK, "drop delta");
+    CHECK(efs_meta_apply_rmdir(kv, EFS_ROOT_INO, "d", T0 + 1) == EFS_OK,
+          "rmdir once the intents are gone");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "d", &dent) ==
+              EFS_ERR_NOT_FOUND,
+          "d gone");
+
+    /* (3) unlink of the last name vs. a pending link nlink++ */
+    t.bytes[0] = 0xb3;
+    p.shard[0] = fshard;
+    CHECK(efs_kv_key_inode(fshard, f, k_fino, &kf) == EFS_OK, "fino key");
+    delta.d_nents = 0;
+    CHECK(efs_txn_prepare_ino_delta(kv, &t, &p, k_fino, kf, &delta) == EFS_OK,
+          "link delta prep");
+    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "f", T0 + 1) == EFS_ERR_BUSY,
+          "log unlink under a pending nlink++ is BUSY");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "f", &dent) == EFS_OK,
+          "f still there (nothing half-applied)");
+    CHECK(efs_txn_drop(kv, &t, fshard) == EFS_OK, "drop link delta");
+    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "f", T0 + 1) == EFS_OK,
+          "unlink after drop");
     efs_kv_mem_free(kv);
 }
 
@@ -2978,6 +3057,7 @@ int main(void)
     test_mkdir_log_at_matches();
     test_create_log_at_dup_hint();
     test_alloc_vs_txn_intent();
+    test_log_delete_busy_under_intent();
     test_i9();
     test_batch_fail();
     test_i16_durable();

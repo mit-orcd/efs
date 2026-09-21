@@ -50,6 +50,53 @@ the code is already unit-gated. Update or delete this block when done — an
 
 **Progress log (newest first — read this before the state below):**
 
+- **08:45 (Sep 21)** — **Step E DONE as option (b), §7.2 end state:** the
+  parent inode row, the dseq emptiness witness and the HASHED dir-lane
+  stamp are **commutative reductions**, not EXCL full-image CASes. New txn
+  kinds `EFS_TXN_REDUCE_INO` (signed `nlink`/`nents` delta, times MAX,
+  `used_shards` OR, `parent` SET, `parent_version` delta) and
+  `EFS_TXN_REDUCE_ADD` (u64 +1); `fold_reduce` in `txn.c` dispatches on
+  the DATA key's kind (LANE / INODE / DSEQ) and bumps the folded key's
+  version so a stale EXCL lands STALE. Soundness rules: a pending reduce
+  and an EXCL/GUARD on one key are mutually BUSY (`reduces_pending`);
+  the log path probes before an unversioned DEL (`dir_txn_busy` in
+  `efs_meta_apply_rmdir`, `efs_txn_key_busy` in `efs_meta_apply_unlink`)
+  and returns BUSY; dseq GUARDs compare the observed **value**
+  (`efs_txn_dseq_observe`) — a log-path bump is unversioned but changes
+  the value, so `RMDIR`'s guard goes STALE exactly when a child appeared.
+  One shared PREPARE decoder `efs_txn_apply_prepare` (server + sim).
+  All of `host_hashed_create_txn`, mkdir, rmdir, `host_unlink_txn`, link,
+  `rename_at` converted (`host_prep_ino_delta` / `host_prep_dseq_bump` /
+  `host_prep_lane_stamp`); the simulator's `dseq_prep`/`dseq_guard` too.
+  Client retries STALE for UNLINK/LINK/RENAME_AT as well as CREATE
+  (`stale_retryable`). Unit gates: `test_txn` +4
+  (`test_ino_delta_commutes` is the Sep 20 lost update: log-path PUT
+  between PREPARE and RESOLVE, fold lands on the log-path result, ver+1;
+  vs-EXCL/GUARD BUSY both ways; lane 56-byte tail kept; wire decode) and
+  `test_meta_apply::test_log_delete_busy_under_intent`; `test_sim`,
+  `test_kv`, `test_raft` green. Deployed stop-all/start-all (new
+  `tests/roll_efsd.sh --all`) as `b2184a5c7faf-dirty` + all 9 clients
+  (`fuse-deploy`). **posix jobs=1 `results/posix/20260921-123904`:
+  200/201 + mmap SKIP in 56 s** (unchanged signature). **Repro
+  `tests/stress/same_parent_storm.sh` PASS
+  `results/stress/same-parent-20260921-124141/`:** 9 hosts × 4 procs ×
+  100 rounds of mkdir/create/rmdir/unlink in ONE parent = 14 400 ops,
+  0 errors, parent ends `children=0 nlink=2`, `rmdir` OK. Measured while
+  there: **~178 ms per op per proc under 36-way same-parent contention
+  (~200 ops/s aggregate)** vs 7 ms idle — the same ceiling as
+  mdtest-easy-write 0.238 kIOPS. Not a correctness item; it goes in the
+  W6 residuals as "same-directory op rate" (BUSY/STALE retries are not
+  logged at default verbosity, so first instrument, then decide).
+  **Step 5 (9×4 IO-500 debug) PASS on this build:
+  `results/io500/20260921-debug-9x4-reduce/`** — both `-R` reads 0
+  errors, **0 `Unable to remove directory`**, the run tree is gone
+  afterwards (the previous run left 3 undeletable dirs). Rates within
+  noise of the previous build (mdtest-easy-write 0.189 vs 0.238 kIOPS,
+  hard-write 0.240 vs 0.201, ior-easy-read 1.13, hard-read 4.06 GiB/s;
+  NOTE.txt has the table). Step 6 = this commit.
+  `efs-bg.sh` now runs jobs in a detached **GNU screen `efs-<name>`** on
+  node9901 (user's suggestion): `screen -r efs-<name>` there shows the
+  live job; log/rc bookkeeping unchanged.
 - **23:10 (Sep 20)** — **Step D (9×4 IO-500 debug) DONE and correct:**
   `results/io500/20260921-debug-9x4-outbox/` (run id 2026.09.20-22.45.42,
   cluster on the outbox-fix build). Both `-R` reads **0 errors**, every
@@ -275,12 +322,16 @@ shell died mid-rolling-restart, which is why this block exists):**
   load (0.3 ms per fsync on NVMe); no `sync_mode` question for the user.
 - **D. DONE** — `results/io500/20260921-debug-9x4-outbox/`, 0 read errors,
   all unlinks OK, mdtest 4.7–11× (see the 23:10 entry). Then step 6.
-- **E. Parent-row lost update (23:10 entry) — ask the user (a) or (b)
-  before coding.** Repro without IO-500: from 4 clients, 36 processes each
-  `mkdir P/dN; rmdir P/dN` 20× in one shared parent P; afterwards
-  `raft-getattr P` nlink must equal 2 + `raft-readdir P` count. Unit gate
-  for (a): `tests/test_meta_apply.c` — a log-path rmdir under a pending
-  EXCL intent on the parent row returns BUSY and bumps `ver(parent)`.
+- **E. DONE (user chose (b), 08:45 Sep 21 entry)** — §7.2 reductions on
+  the parent row / dseq / dir lane; repro is now a script,
+  `tests/stress/same_parent_storm.sh` (PASS, 14 400 ops, parent clean).
+  Any directory whose `stat` nlink ≠ 2 + subdir count after this build is
+  a NEW bug, not this one. Step 5 (9×4 IO-500) PASS on it
+  (`results/io500/20260921-debug-9x4-reduce/`); step 6 = the §7.2 commit
+  (`git log -1 --grep="commutative reductions"`). **Nothing is in flight after that commit** — take the lowest
+  open item in §1a (W6 residuals first). The cluster and the 9 clients run
+  `b2184a5c7faf-dirty` = the same source as that commit; the next server
+  restart is a build-ID change → `tests/roll_efsd.sh --all`.
 
 Original steps (1–4 done twice, kept for the commands):
 
@@ -519,9 +570,21 @@ Not a list submission (stonewall 1 s). Do not quote the Sep 19 easy-read
 2. **1 GiB open costs 20 s of a 22 s easy-read** — 128 sequential
    GETCHUNKS + a 64-lane stat per open. Spec §8 per-lane range fetch
    ([performance.md](performance.md)) is the fix; not implemented.
-3. 7/36 mdtest `rmdir` transient ENOTEMPTY under load (clean seconds
-   later) — same-parent txn STALE family; the client retries STALE only
-   for CREATE (see history "same-parent concurrent mkdir EIO").
+3. ~~mdtest `rmdir` ENOTEMPTY/EIO under load~~ — **FIXED Sep 21** (it was
+   the parent-row lost update, not transient; §7.2 reductions, gate
+   `results/io500/20260921-debug-9x4-reduce/` 0 rmdir warnings +
+   `tests/stress/same_parent_storm.sh`). What remains is its **rate**:
+   **~200 ops/s aggregate in one directory** under 36-way contention
+   (178 ms per op per proc vs 7 ms idle; mdtest-easy-write 0.19–0.24
+   kIOPS, storm 14 400 ops / 71 s). First find out what the 178 ms is:
+   BUSY/STALE retries are not logged at default verbosity — count them
+   in `inode_rpc.c` (client) and PREPARE rc in `raft_host` (server),
+   then the Raft commit queue depth per group during the storm. Candidates:
+   the 50 ms × 2ⁿ BUSY backoff (a same-parent CREATE and RMDIR are still
+   mutually BUSY on the dseq witness by design), or the two groups' apply
+   pumps serializing 36 clients' PREPARE/DECIDE/RESOLVE round trips (3–4
+   commits per op). Bring the count to the user before changing the
+   backoff or the protocol.
 
 Harness (`tests/perf/io500/run.sh`): `SLOTS=4 NP=36 … debug` detaches
 `prterun` and logs to `$IO500_DIR/last-run.log` (the ssh timeout used to

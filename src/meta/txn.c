@@ -1,6 +1,7 @@
 #include "efs/txn.h"
 #include "efs/kv_key.h"
 #include "efs/dir_spread.h"
+#include "efs/dir_layout.h"
 #include "efs/meta_apply.h"
 #include <string.h>
 
@@ -131,6 +132,7 @@ int efs_txn_ver_get(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
 
 struct scan_hit {
     int other;
+    int any; /* count every record, not just other transactions' */
     struct efs_txid self;
 };
 
@@ -143,7 +145,7 @@ static int guard_cb(void *user, const uint8_t *key, uint32_t klen,
     (void)vlen;
     if (klen < 16)
         return 0;
-    if (memcmp(key + klen - 16, h->self.bytes, 16) != 0)
+    if (h->any || memcmp(key + klen - 16, h->self.bytes, 16) != 0)
         h->other = 1;
     return 0;
 }
@@ -165,6 +167,77 @@ static int guards_conflict(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
     if (rc != EFS_OK)
         return rc;
     return h.other ? EFS_ERR_BUSY : EFS_OK;
+}
+
+/* A pending reduce from another transaction. EXCL and GUARD must not be
+ * prepared over one: EXCL would overwrite the fold (its image predates it),
+ * GUARD's predicate would not survive it. Reduces among themselves commute
+ * and never conflict. `t` NULL = any transaction counts. */
+static int reduces_pending(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
+                           const struct efs_txid *t)
+{
+    uint8_t pref[KEY_MAX];
+    uint32_t pl = 0;
+    struct scan_hit h;
+    int rc;
+
+    rc = efs_kv_key_reduce_prefix(key, klen, pref, &pl);
+    if (rc != EFS_OK)
+        return rc;
+    memset(&h, 0, sizeof(h));
+    if (t)
+        h.self = *t;
+    else
+        h.any = 1;
+    rc = efs_kv_scan_prefix(kv, pref, pl, guard_cb, &h);
+    if (rc != EFS_OK)
+        return rc;
+    return h.other ? EFS_ERR_BUSY : EFS_OK;
+}
+
+static int key_kind(const uint8_t *key, uint32_t klen)
+{
+    return klen >= 3 ? key[2] : -1;
+}
+
+int efs_txn_dseq_observe(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
+                         uint64_t *seq)
+{
+    uint8_t buf[8];
+    uint32_t n = 8;
+    int rc;
+
+    if (!kv || !key || !seq)
+        return EFS_ERR_INVAL;
+    *seq = 0;
+    rc = efs_kv_get(kv, key, klen, buf, &n);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_OK;
+    if (rc != EFS_OK)
+        return rc;
+    if (n < 8)
+        return EFS_ERR_PROTO;
+    *seq = rd64(buf);
+    return EFS_OK;
+}
+
+int efs_txn_key_busy(struct efs_kv *kv, const uint8_t *key, uint32_t klen)
+{
+    uint8_t ik[KEY_MAX], buf[VAL_MAX];
+    uint32_t il = 0, bl = VAL_MAX;
+    int rc;
+
+    if (!kv || !key || klen < 3)
+        return EFS_ERR_INVAL;
+    rc = efs_kv_key_intent(key, klen, ik, &il);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, ik, il, buf, &bl);
+    if (rc == EFS_OK || rc == EFS_ERR_INVAL) /* INVAL = present, buffer short */
+        return EFS_ERR_BUSY;
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+    return reduces_pending(kv, key, klen, NULL);
 }
 
 static int pack_excl(uint8_t *out, uint32_t cap, uint32_t *n,
@@ -266,6 +339,8 @@ int efs_txn_prepare_excl(struct efs_kv *kv, const struct efs_txid *t,
     if (rc != EFS_ERR_NOT_FOUND)
         return rc;
     rc = guards_conflict(kv, key, klen, t);
+    if (rc == EFS_OK)
+        rc = reduces_pending(kv, key, klen, t);
     if (rc != EFS_OK)
         return rc;
     rc = pack_excl(packed, sizeof(packed), &pn, t, p, expected_ver, op, new_val,
@@ -287,7 +362,13 @@ int efs_txn_prepare_guard(struct efs_kv *kv, const struct efs_txid *t,
 
     if (!kv || !t || !key || !parts_ok(p))
         return EFS_ERR_INVAL;
-    rc = efs_txn_ver_get(kv, key, klen, &ver);
+    /* A dseq witness is guarded by VALUE: it is bumped by unversioned
+     * log-path applies and by REDUCE_ADD folds, so its version sidecar
+     * says nothing. The value is monotone, so "unchanged" is exact. */
+    if (key_kind(key, klen) == EFS_KV_KIND_DSEQ)
+        rc = efs_txn_dseq_observe(kv, key, klen, &ver);
+    else
+        rc = efs_txn_ver_get(kv, key, klen, &ver);
     if (rc != EFS_OK)
         return rc;
     if (ver != observed_ver)
@@ -305,6 +386,9 @@ int efs_txn_prepare_guard(struct efs_kv *kv, const struct efs_txid *t,
     } else if (rc != EFS_ERR_NOT_FOUND) {
         return rc;
     }
+    rc = reduces_pending(kv, key, klen, t);
+    if (rc != EFS_OK)
+        return rc;
     rc = efs_kv_key_guard(key, klen, t->bytes, gk, &gl);
     if (rc != EFS_OK)
         return rc;
@@ -314,16 +398,60 @@ int efs_txn_prepare_guard(struct efs_kv *kv, const struct efs_txid *t,
     return efs_kv_put(kv, gk, gl, packed, (uint32_t)(16 + pn + 8));
 }
 
-int efs_txn_prepare_reduce(struct efs_kv *kv, const struct efs_txid *t,
-                           const struct efs_txn_parts *p, const uint8_t *key,
-                           uint32_t klen, const struct efs_txn_reduce *red)
+void efs_txn_encode_reduce(uint8_t out[EFS_TXN_REDUCE_WIRE],
+                           const struct efs_txn_reduce *red)
 {
-    uint8_t ik[KEY_MAX], rk[KEY_MAX], buf[VAL_MAX], packed[80];
+    be64(out, red->max_end);
+    be64(out + 8, red->max_mtime);
+    be64(out + 16, red->max_ctime);
+    be64(out + 24, red->mtime_gen);
+}
+
+void efs_txn_encode_ino_delta(uint8_t out[EFS_TXN_REDUCE_INO_WIRE],
+                              const struct efs_txn_ino_delta *d)
+{
+    be32(out, (uint32_t)d->d_nlink);
+    be32(out + 4, (uint32_t)d->d_nents);
+    be64(out + 8, d->max_mtime);
+    be64(out + 16, d->max_ctime);
+    be64(out + 24, d->or_used_shards);
+    be64(out + 32, d->set_parent);
+    be32(out + 40, (uint32_t)d->d_pver);
+    be32(out + 44, 0);
+}
+
+/* Decoder shared by apply (PREPARE) and resolve (fold). */
+static void decode_ino_delta(const uint8_t *pay, struct efs_txn_ino_delta *d)
+{
+    d->d_nlink = (int32_t)rd32(pay);
+    d->d_nents = (int32_t)rd32(pay + 4);
+    d->max_mtime = rd64(pay + 8);
+    d->max_ctime = rd64(pay + 16);
+    d->or_used_shards = rd64(pay + 24);
+    d->set_parent = rd64(pay + 32);
+    d->d_pver = (int32_t)rd32(pay + 40);
+}
+
+void efs_txn_encode_add(uint8_t out[EFS_TXN_REDUCE_ADD_WIRE], uint64_t add)
+{
+    be64(out, add);
+}
+
+/* Record under reduce(key, txid): [txid][parts][payload]. The payload's
+ * meaning follows the KIND OF THE DATA KEY (lane triple, inode delta, u64
+ * add) — one record shape, so drop/resolve find every reduce of a txn by
+ * its suffix regardless of kind. A pending EXCL intent or another txn's
+ * GUARD on the key is BUSY; other reduces are not (they commute). */
+static int prepare_reduce_rec(struct efs_kv *kv, const struct efs_txid *t,
+                              const struct efs_txn_parts *p, const uint8_t *key,
+                              uint32_t klen, const uint8_t *pay, uint32_t plen)
+{
+    uint8_t ik[KEY_MAX], rk[KEY_MAX], buf[VAL_MAX], packed[128];
     uint32_t il = 0, rl = 0, bl = VAL_MAX;
     struct efs_txid have;
     int pn, rc;
 
-    if (!kv || !t || !key || !red || !parts_ok(p))
+    if (!kv || !t || !key || klen < 3 || !parts_ok(p) || plen > 48)
         return EFS_ERR_INVAL;
     rc = efs_kv_key_intent(key, klen, ik, &il);
     if (rc != EFS_OK)
@@ -338,15 +466,106 @@ int efs_txn_prepare_reduce(struct efs_kv *kv, const struct efs_txid *t,
     } else if (rc != EFS_ERR_NOT_FOUND) {
         return rc;
     }
+    rc = guards_conflict(kv, key, klen, t);
+    if (rc != EFS_OK)
+        return rc;
     rc = efs_kv_key_reduce(key, klen, t->bytes, rk, &rl);
     if (rc != EFS_OK)
         return rc;
     memcpy(packed, t->bytes, 16);
     pn = pack_parts(packed + 16, p);
-    be64(packed + 16 + pn, red->max_end);
-    be64(packed + 16 + pn + 8, red->max_mtime);
-    be64(packed + 16 + pn + 16, red->max_ctime);
-    return efs_kv_put(kv, rk, rl, packed, (uint32_t)(16 + pn + 24));
+    memcpy(packed + 16 + pn, pay, plen);
+    return efs_kv_put(kv, rk, rl, packed, (uint32_t)(16 + pn) + plen);
+}
+
+int efs_txn_prepare_reduce(struct efs_kv *kv, const struct efs_txid *t,
+                           const struct efs_txn_parts *p, const uint8_t *key,
+                           uint32_t klen, const struct efs_txn_reduce *red)
+{
+    uint8_t pay[EFS_TXN_REDUCE_WIRE];
+
+    if (!red)
+        return EFS_ERR_INVAL;
+    efs_txn_encode_reduce(pay, red);
+    return prepare_reduce_rec(kv, t, p, key, klen, pay, sizeof(pay));
+}
+
+int efs_txn_prepare_ino_delta(struct efs_kv *kv, const struct efs_txid *t,
+                              const struct efs_txn_parts *p, const uint8_t *key,
+                              uint32_t klen, const struct efs_txn_ino_delta *d)
+{
+    uint8_t pay[EFS_TXN_REDUCE_INO_WIRE];
+
+    if (!d || key_kind(key, klen) != EFS_KV_KIND_INODE)
+        return EFS_ERR_INVAL;
+    efs_txn_encode_ino_delta(pay, d);
+    return prepare_reduce_rec(kv, t, p, key, klen, pay, sizeof(pay));
+}
+
+int efs_txn_prepare_add(struct efs_kv *kv, const struct efs_txid *t,
+                        const struct efs_txn_parts *p, const uint8_t *key,
+                        uint32_t klen, uint64_t add)
+{
+    uint8_t pay[EFS_TXN_REDUCE_ADD_WIRE];
+
+    if (key_kind(key, klen) != EFS_KV_KIND_DSEQ)
+        return EFS_ERR_INVAL;
+    efs_txn_encode_add(pay, add);
+    return prepare_reduce_rec(kv, t, p, key, klen, pay, sizeof(pay));
+}
+
+int efs_txn_apply_prepare(struct efs_kv *kv, int kind, const struct efs_txid *t,
+                          const struct efs_txn_parts *p, const uint8_t *key,
+                          uint32_t klen, const uint8_t *pay, uint32_t plen)
+{
+    struct efs_txn_reduce red;
+    struct efs_txn_ino_delta d;
+
+    if (!pay && plen)
+        return EFS_ERR_PROTO;
+    switch (kind) {
+    case EFS_TXN_EXCL: {
+        uint64_t expected;
+        uint32_t vlen;
+        int op;
+
+        if (plen < 13)
+            return EFS_ERR_PROTO;
+        expected = rd64(pay);
+        op = pay[8];
+        vlen = rd32(pay + 9);
+        if (plen < 13 + vlen)
+            return EFS_ERR_PROTO;
+        return efs_txn_prepare_excl(kv, t, p, key, klen, expected, op,
+                                    pay + 13, vlen);
+    }
+    case EFS_TXN_GUARD:
+        if (plen < EFS_TXN_GUARD_WIRE)
+            return EFS_ERR_PROTO;
+        return efs_txn_prepare_guard(kv, t, p, key, klen, rd64(pay));
+    case EFS_TXN_REDUCE:
+        /* 24-byte payload = pre-mtime_gen encoder. */
+        if (plen < 24)
+            return EFS_ERR_PROTO;
+        memset(&red, 0, sizeof(red));
+        red.max_end = rd64(pay);
+        red.max_mtime = rd64(pay + 8);
+        red.max_ctime = rd64(pay + 16);
+        if (plen >= EFS_TXN_REDUCE_WIRE)
+            red.mtime_gen = rd64(pay + 24);
+        return efs_txn_prepare_reduce(kv, t, p, key, klen, &red);
+    case EFS_TXN_REDUCE_INO:
+        if (plen < EFS_TXN_REDUCE_INO_WIRE)
+            return EFS_ERR_PROTO;
+        decode_ino_delta(pay, &d);
+        return efs_txn_prepare_ino_delta(kv, t, p, key, klen, &d);
+    case EFS_TXN_REDUCE_ADD:
+        if (plen < EFS_TXN_REDUCE_ADD_WIRE)
+            return EFS_ERR_PROTO;
+        return efs_txn_prepare_add(kv, t, p, key, klen, rd64(pay));
+    default:
+        return EFS_ERR_PROTO;
+    }
 }
 
 struct drop_acc {
@@ -623,6 +842,8 @@ static int red_cb(void *user, const uint8_t *key, uint32_t klen,
         a->out->max_mtime = rd64(pay + 8);
     if (rd64(pay + 16) > a->out->max_ctime)
         a->out->max_ctime = rd64(pay + 16);
+    if (16 + used + 32 <= vlen && rd64(pay + 24) > a->out->mtime_gen)
+        a->out->mtime_gen = rd64(pay + 24);
     return 0;
 }
 
@@ -656,6 +877,8 @@ int efs_txn_reduce_read_ex(struct efs_kv *kv, const uint8_t *lane_key,
         out->max_end = rd64(buf);
         out->max_mtime = rd64(buf + 8);
         out->max_ctime = rd64(buf + 16);
+        if (n >= 48)
+            out->mtime_gen = rd64(buf + 40);
     } else if (rc != EFS_ERR_NOT_FOUND && rc != EFS_OK) {
         return rc;
     }
@@ -720,6 +943,127 @@ static int res_add_put(struct res_acc *a, const uint8_t *key, uint32_t klen,
     return 0;
 }
 
+/* Queue a version bump for `key` (the post-scan loop reads the current
+ * version and writes +1). An EXCL prepared against the pre-fold version
+ * must land STALE, or its full image would overwrite the fold. */
+static int res_add_ver_bump(struct res_acc *a, const uint8_t *key, uint32_t klen)
+{
+    uint8_t vk[KEY_MAX], vv[8];
+    uint32_t vl = 0;
+
+    be64(vv, 1);
+    if (efs_kv_key_ver(key, klen, vk, &vl) != EFS_OK)
+        return 0;
+    return res_add_put(a, vk, vl, vv, 8);
+}
+
+/* COMMIT of a reduce record: fold its payload into the data key as it is
+ * NOW. Dispatch on the data key's kind. Missing data key: a lane starts
+ * from zero; a dseq starts from zero; an inode row that is gone means the
+ * directory was removed after this reduce was prepared, which the BUSY
+ * rules prevent — treat as nothing to fold rather than resurrect it. */
+static int fold_reduce(struct res_acc *a, const uint8_t *key, uint32_t klen,
+                       const uint8_t *pay, uint32_t plen)
+{
+    uint8_t cur[VAL_MAX];
+    uint32_t cn = VAL_MAX;
+    int rc;
+
+    if (!a->kv || klen < 3)
+        return 0;
+    rc = efs_kv_get(a->kv, key, klen, cur, &cn);
+    if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) {
+        a->rc = rc;
+        return 1;
+    }
+    if (rc == EFS_ERR_NOT_FOUND)
+        cn = 0;
+    switch (key[2]) {
+    case EFS_KV_KIND_LANE: {
+        /* MAX triple + seq++ + mtime_gen MAX in place; the owner's tail
+         * (fenced_epoch, append_bar, ...) is preserved, not truncated. */
+        uint8_t out[VAL_MAX];
+        uint32_t on = cn > 48 ? cn : 48;
+        uint64_t e = 0, mt = 0, ct = 0, seq = 0, gen = 0;
+
+        if (plen < 24)
+            return 0;
+        memset(out, 0, on);
+        memcpy(out, cur, cn);
+        if (cn >= 24) {
+            e = rd64(cur);
+            mt = rd64(cur + 8);
+            ct = rd64(cur + 16);
+        }
+        if (cn >= 32)
+            seq = rd64(cur + 24);
+        if (cn >= 48)
+            gen = rd64(cur + 40);
+        if (rd64(pay) > e)
+            e = rd64(pay);
+        if (rd64(pay + 8) > mt)
+            mt = rd64(pay + 8);
+        if (rd64(pay + 16) > ct)
+            ct = rd64(pay + 16);
+        if (plen >= 32 && rd64(pay + 24) > gen)
+            gen = rd64(pay + 24);
+        be64(out, e);
+        be64(out + 8, mt);
+        be64(out + 16, ct);
+        be64(out + 24, seq + 1);
+        be64(out + 40, gen);
+        if (res_add_put(a, key, klen, out, on))
+            return 1;
+        return res_add_ver_bump(a, key, klen);
+    }
+    case EFS_KV_KIND_INODE: {
+        struct efs_meta_row r;
+        struct efs_txn_ino_delta d;
+        uint8_t out[EFS_META_INO_BYTES];
+        int64_t nl;
+        int32_t i;
+
+        if (plen < EFS_TXN_REDUCE_INO_WIRE || cn == 0)
+            return 0;
+        if (efs_meta_unpack_inode(cur, cn, &r) != EFS_OK)
+            return 0;
+        decode_ino_delta(pay, &d);
+        nl = (int64_t)r.nlink + d.d_nlink;
+        r.nlink = nl < 0 ? 0 : (nl > UINT32_MAX ? UINT32_MAX : (uint32_t)nl);
+        for (i = 0; i < d.d_nents; i++)
+            efs_meta_dir_note_entry(&r, 1);
+        for (i = 0; i > d.d_nents; i--)
+            efs_meta_dir_note_entry(&r, -1);
+        if (d.max_mtime > r.base_mtime)
+            r.base_mtime = d.max_mtime;
+        if (d.max_ctime > r.base_ctime)
+            r.base_ctime = d.max_ctime;
+        r.used_shards |= d.or_used_shards;
+        if (d.set_parent)
+            r.parent = d.set_parent;
+        r.parent_version = (uint64_t)((int64_t)r.parent_version + d.d_pver);
+        if (efs_meta_pack_inode(&r, out, sizeof(out)) != EFS_OK)
+            return 0;
+        if (res_add_put(a, key, klen, out, sizeof(out)))
+            return 1;
+        return res_add_ver_bump(a, key, klen);
+    }
+    case EFS_KV_KIND_DSEQ: {
+        uint8_t out[8];
+        uint64_t seq = 0;
+
+        if (plen < EFS_TXN_REDUCE_ADD_WIRE)
+            return 0;
+        if (cn >= 8)
+            seq = rd64(cur);
+        be64(out, seq + rd64(pay));
+        return res_add_put(a, key, klen, out, 8);
+    }
+    default:
+        return 0;
+    }
+}
+
 static int res_cb(void *user, const uint8_t *key, uint32_t klen,
                   const uint8_t *val, uint32_t vlen)
 {
@@ -759,46 +1103,14 @@ static int res_cb(void *user, const uint8_t *key, uint32_t klen,
             return 0;
         if (key[2] == EFS_KV_KIND_REDUCE && a->decision == EFS_TXN_COMMIT) {
             uint32_t used = 0;
-            uint8_t lane[KEY_MAX];
-            uint32_t ln = 0;
-            uint8_t folded[32];
+            uint8_t orig_k[KEY_MAX];
+            uint32_t on = 0;
 
             if (parse_parts_txid(val, vlen, &have, &p, &used) != EFS_OK)
                 return 0;
-            if (efs_kv_key_unwrap(key, klen - 16, lane, &ln) != EFS_OK)
+            if (efs_kv_key_unwrap(key, klen - 16, orig_k, &on) != EFS_OK)
                 return 0;
-            /* Materialize MAX into the lane key; missing lane starts at 0. */
-            memset(folded, 0, sizeof(folded));
-            {
-                uint8_t cur[32];
-                uint32_t cn = 32;
-                uint64_t e = 0, mt = 0, ct = 0, seq = 1;
-
-                if (a->kv && efs_kv_get(a->kv, lane, ln, cur, &cn) == EFS_OK &&
-                    cn >= 24) {
-                    e = rd64(cur);
-                    mt = rd64(cur + 8);
-                    ct = rd64(cur + 16);
-                    seq = (cn >= 32) ? rd64(cur + 24) + 1 : 1;
-                }
-                if (16 + used + 24 <= vlen) {
-                    uint64_t pe = rd64(val + 16 + used);
-                    uint64_t pmt = rd64(val + 16 + used + 8);
-                    uint64_t pct = rd64(val + 16 + used + 16);
-
-                    if (pe > e)
-                        e = pe;
-                    if (pmt > mt)
-                        mt = pmt;
-                    if (pct > ct)
-                        ct = pct;
-                }
-                be64(folded, e);
-                be64(folded + 8, mt);
-                be64(folded + 16, ct);
-                be64(folded + 24, seq);
-            }
-            if (res_add_put(a, lane, ln, folded, 32))
+            if (fold_reduce(a, orig_k, on, val + 16 + used, vlen - 16 - used))
                 return 1;
         }
         return res_add_del(a, key, klen);

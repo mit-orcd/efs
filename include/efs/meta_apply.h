@@ -523,6 +523,7 @@ uint64_t efs_meta_candidate_gen(const uint8_t uuid[16], uint32_t session_epoch,
                                 uint32_t retry);
 int efs_meta_apply_check(struct efs_kv *kv);
 int efs_meta_pack_inode(const struct efs_meta_row *r, uint8_t *out, uint32_t cap);
+int efs_meta_unpack_inode(const uint8_t *p, uint32_t n, struct efs_meta_row *r);
 int efs_meta_pack_dentry(const struct efs_meta_dentry *d, uint8_t *out,
                          uint32_t cap);
 int efs_meta_unpack_dentry(const uint8_t *p, uint32_t n, struct efs_meta_dentry *d);

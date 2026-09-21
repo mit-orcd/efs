@@ -25,6 +25,107 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 21 2026 morning — parent-row lost update → §7.2 commutative reductions
+
+**Symptom (found 23:10 Sep 20 in the 9×4 IO-500 debug run
+`results/io500/20260921-debug-9x4-outbox/`).** 7 mdtest `WARNING: Unable
+to remove directory …/mdtest-easy/test-dir.0-0/mdtest_tree.N.0`; 3 of them
+returned EIO forever afterwards. `raft-getattr` of the parent
+`test-dir.0-0` (ino 824) said **nlink=2 with 3 live subdirectories**
+(true value 5); `server_raft_host_rmdir` / `efs_meta_apply_rmdir` hit
+`prow.nlink < 3 → EFS_ERR_PROTO`. It had been filed as "transient mdtest
+rmdir ENOTEMPTY" for days.
+
+**Root cause.** 36 ranks did `mkdir` then `rmdir` of one child each in one
+parent. Children whose ino lands in the parent's group take the same-group
+**log path** (`mkdir_batch`, `efs_meta_apply_rmdir`: a plain PUT of the
+parent row, unversioned, no intent probe); children in the other group
+take the **txn path** (EXCL on the parent row at the version it read, PUT
+of a full row image with `nlink±1` from that read snapshot). A txn that
+read the row, then had a log-path apply change it, still PREPAREs at the
+old version — the log path never bumped it — wins, and its full image
+overwrites the log-path increment/decrement. Every log-path parent-row PUT
+was exposed (`create_file_batch`, `mkdir_batch`,
+`efs_meta_apply_unlink/link/rename/rmdir`). Same class as the ALLOC-key
+bug `alloc_key_claim` fixed the day before, now on the parent inode row.
+
+**Options given to the user.** (a) generalize `alloc_key_claim`: log-path
+PUT is BUSY under a pending intent and bumps the version so the txn goes
+STALE, plus client STALE retry for every dir op — mechanical, but every op
+in a directory then serializes on one row and the 50 ms × 2ⁿ BUSY backoff
+becomes the same-parent latency. (b) the spec'd §7.2 end state: parent
+nlink / dseq / mtime as commutative REDUCE parts, conflict-free instead of
+retried. User: "a or b which scales better?" → b → "do b".
+
+**What was built (all in one dirty tree, unit-gated on fstor007, then
+deployed):**
+
+- `include/efs/txn.h`, `src/meta/txn.c`: kinds `EFS_TXN_REDUCE_INO`
+  (`struct efs_txn_ino_delta`: signed `d_nlink`/`d_nents`, `max_mtime`/
+  `max_ctime`, `or_used_shards`, `set_parent`, `d_pver`; 48-byte wire) and
+  `EFS_TXN_REDUCE_ADD` (u64, 8-byte wire); `struct efs_txn_reduce` gained
+  `mtime_gen` (32-byte wire, 24-byte payloads still decode). One record
+  shape `reduce(key, txid) = [txid][parts][payload]` for all three
+  (`prepare_reduce_rec`), so drop/resolve find every reduce of a txn by
+  suffix. `fold_reduce` dispatches on the DATA key's kind: LANE = MAX
+  triple + seq++ + mtime_gen MAX keeping the 56-byte tail; INODE = unpack,
+  apply delta, repack; DSEQ = u64 add; INODE and LANE folds bump the key
+  version (`res_add_ver_bump`) so a stale EXCL lands STALE. `reduces_pending`
+  makes `efs_txn_prepare_excl` / `_guard` BUSY over another txn's pending
+  reduce; `prepare_reduce_rec` is BUSY over a pending EXCL intent or
+  another txn's GUARD. `efs_txn_dseq_observe` (value, not version) and
+  `efs_txn_key_busy` (generic intent-or-reduce probe for the log path).
+  `efs_txn_apply_prepare` is the one PREPARE decoder for server and sim.
+- `src/server/raft_host.c`: `pack_prep_raw`, `host_prep_raw`,
+  `host_prep_ino_delta`, `host_prep_dseq_bump`, `host_prep_lane_stamp`;
+  every txn site converted — `host_hashed_create_txn`,
+  `server_raft_host_mkdir`, `server_raft_host_rmdir`, `host_unlink_txn`,
+  `server_raft_host_link`, `server_raft_host_rename_at`. Parent rows are
+  no longer read-modify-EXCL-PUT; dseq bumps are `+1`; HASHED dir-lane
+  stamps are REDUCE with mtime_gen; RMDIR's emptiness GUARD carries the
+  observed dseq VALUE.
+- `src/meta/meta_apply.c`: `dir_txn_busy` before the log-path rmdir DEL
+  (probes the dir row and all its dseq keys), `efs_txn_key_busy` before
+  the log-path unlink DEL of a last-name row; `efs_meta_unpack_inode`
+  exported for the fold.
+- `src/client/inode_rpc.c`: `stale_retryable` — STALE retried for
+  CREATE, UNLINK, LINK, RENAME_AT (nothing has committed when a dir-op
+  txn says STALE; REPORT/APPEND still own their STALE).
+- `src/sim/sim_ns.c`, `sim_txn.c`: `dseq_prep` → REDUCE_ADD, `dseq_guard`
+  → value observe; `pack_prep` carries raw payloads. Until this the sim
+  failed 11 `test_sim` checks (rmdir / rename / hashed overwrite) because
+  its dseq guards still used versions.
+- Tests: `test_txn` +4 (`test_ino_delta_commutes` — the exact race: two
+  deltas prepared, a log-path PUT lands between, both fold onto the
+  log-path result, ver+1, a pre-fold EXCL is STALE;
+  `test_ino_delta_vs_excl_guard`; `test_lane_fold_preserves_tail`;
+  `test_apply_prepare_wire`), `test_meta_apply::test_log_delete_busy_under_intent`.
+- `tests/roll_efsd.sh --all`: parallel build on all four, ID agreement,
+  stop all / start all, wait for both groups (the build-ID gate rejects a
+  rolling restart across a commit; there was no script for that case).
+- `tests/stress/same_parent_storm.sh` + `same_parent_worker.py`: the
+  repro as a gate.
+
+**Gates on the deployed build `b2184a5c7faf-dirty`.** posix jobs=1
+`results/posix/20260921-123904` 200/201 + mmap SKIP in 56 s (unchanged
+signature). `results/stress/same-parent-20260921-124141/` 9 hosts × 4
+procs × 100 rounds mkdir/create/rmdir/unlink in one parent = 14 400 ops,
+0 errors, parent `children=0 nlink=2`, rmdir OK. 9×4 IO-500 debug
+`results/io500/20260921-debug-9x4-reduce/`: both `-R` reads 0 errors, 0
+`Unable to remove directory`, run tree gone afterwards; rates within noise
+of the previous build (mdtest-easy-write 0.189 vs 0.238 kIOPS, hard-write
+0.240 vs 0.201, ior-easy-read 1.13, hard-read 4.06 GiB/s).
+
+**Learned.** (1) The storm measured **178 ms per op per proc under 36-way
+same-parent contention** (~200 ops/s aggregate) vs 7 ms idle — the
+reductions removed the lost update, not the same-directory ceiling; that
+is now W6 residual 3 (count BUSY/STALE retries first; they are not logged).
+(2) `efs_kv_scan_prefix` callbacks returning >0 = batch-full, again
+relevant in `reduces_pending` — check it in every new scan user. (3) The
+user pointed out `screen -S` on node9901 as the natural long-job holder;
+`efs-bg.sh` now launches each job in a detached `screen efs-<name>` (same
+NFS log + rc bookkeeping) so `screen -r efs-<name>` shows the live job.
+
 ## Sep 20 2026 evening — reaper cross-group lane bug, the 100 ms commit floor, node9901 runner
 
 **Symptom chain.** Posix jobs=1 on the full in-flight tree gave 191/201 +
