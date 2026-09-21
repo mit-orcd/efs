@@ -227,6 +227,10 @@ struct efs_raft_host {
     pthread_t gc_tid;    /* background GC reaper (spec L7) */
     int gc_running;
     int gc_started;
+    /* Stranded-txn recovery (L5): next shard the GC pass inspects, and a
+     * few counters for the OBS dump / tests. */
+    uint32_t rec_cursor;
+    uint64_t rec_found, rec_aborted, rec_resolved, rec_fail;
     pthread_mutex_t inbox_mu;
     struct host_inbox_item inbox[HOST_INBOX_MAX];
     int inbox_n;
@@ -3981,8 +3985,8 @@ out:
  * to apply it if we host one. Do not take read_mu — that lock serializes
  * every inode RPC, and a REAP_SCAN_MAX pass used to hold it across tens of
  * raft RTTs. */
-static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
-                           const uint8_t *cmd, uint32_t clen)
+static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
+                           const uint8_t *cmd, uint32_t clen, int verdict)
 {
     struct efs_raft *r;
     struct efs_msg_raft_mkfs_reply rep;
@@ -3997,16 +4001,162 @@ static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
         if (rc != EFS_OK)
             return rc;
         host_pump_kick(h);
-        return host_wait_applied(h, group, idx, NULL);
+        rc = host_wait_applied(h, group, idx, NULL);
+        if (rc != EFS_OK || !verdict)
+            return rc;
+        pthread_mutex_lock(&h->mu);
+        rc = host_apply_rc_locked(h, group, idx);
+        pthread_mutex_unlock(&h->mu);
+        return rc;
     }
     if (r)
         lid = efs_raft_leader(r);
     pthread_mutex_unlock(&h->mu);
     memset(&rep, 0, sizeof(rep));
+    /* The forward path's rep.rc IS the leader's apply verdict. */
     rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);
     if (rc != EFS_OK)
         return rc;
     return host_wait_applied(h, group, rep.index, NULL);
+}
+
+static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
+                           const uint8_t *cmd, uint32_t clen)
+{
+    return host_bg_propose(h, group, cmd, clen, 0);
+}
+
+/* ---- stranded-transaction recovery (architecture §7.2, L5) ----------------
+ *
+ * A coordinator that dies, or gives up, between its PREPAREs and the last
+ * RESOLVE leaves INTENT/GUARD/REDUCE records on the participants. Every
+ * later EXCL/GUARD/log-path op on those keys is BUSY for as long as the
+ * records exist, and nothing else removes them. Sep 21
+ * (results/measure/20260921-w8-orphans): 105 intents, 45 of them ALLOC keys,
+ * up to 5 000 s old, from txns whose DECIDE/RESOLVE hit the 400 ms apply
+ * wait while efs_txn_resolve was still a whole-shard scan; each poisoned
+ * shard turned one of nine fresh-parent mkdirs into a 10.4 s EBUSY.
+ *
+ * The leader of a shard's group sweeps HOST_REC_SHARDS of its shards per GC
+ * pass. For each pending txn older than HOST_REC_AGE_NS it (a) proposes
+ * DECIDE ABORT at the coordinator — idempotent when ABORT is already there,
+ * PROTO when COMMIT is (the coordinator got there first, and its RESOLVEs
+ * are what went missing) — then (b) proposes RESOLVE with the established
+ * decision to every participant shard the record names. Both commands
+ * forward to whichever node leads the target group, so the pass needs no
+ * local replica of the coordinator's group. A live txn is never touched:
+ * one takes tens of ms, the threshold is seconds. */
+#define HOST_REC_AGE_NS  (5ull * 1000000000ull)
+#define HOST_REC_SHARDS  512u /* shards inspected per GC pass (8 s sweep) */
+#define HOST_REC_MAX     32u  /* txns handled per shard per pass */
+
+static uint64_t txid_ns(const struct efs_txid *t)
+{
+    uint64_t a;
+
+    memcpy(&a, t->bytes, 8); /* fill_txid: now_ns(), host byte order */
+    return a;
+}
+
+static int host_leads(struct efs_raft_host *h, uint8_t group)
+{
+    struct efs_raft *r;
+    int lead;
+
+    pthread_mutex_lock(&h->mu);
+    r = group_raft(h, group);
+    lead = r && efs_raft_role(r) == EFS_RAFT_LEADER;
+    pthread_mutex_unlock(&h->mu);
+    return lead;
+}
+
+static void host_txn_recover_one(struct efs_raft_host *h, uint32_t shard,
+                                 const struct efs_txn_pending_rec *rec)
+{
+    uint8_t cmd[22];
+    uint32_t coord, i, nsh, shards[EFS_TXN_MAX_PART + 1];
+    int dec = EFS_TXN_ABORT, rc, j;
+
+    h->rec_found++;
+    coord = efs_txn_coordinator(&rec->t, &rec->parts);
+    pack_decide(cmd, &rec->t, coord, EFS_TXN_ABORT);
+    rc = host_bg_propose(h, efs_raft_shard_group(coord), cmd, 22, 1);
+    if (rc == EFS_ERR_PROTO) {
+        dec = EFS_TXN_COMMIT; /* committed; only its RESOLVEs were lost */
+    } else if (rc != EFS_OK) {
+        h->rec_fail++;
+        fprintf(stderr, "raft-host: txn-recover shard=%u coord=%u age=%.1fs "
+                "decide-abort rc=%d (retry next pass)\n", shard, coord,
+                (double)(now_ns() - txid_ns(&rec->t)) / 1e9, rc);
+        return;
+    } else {
+        h->rec_aborted++;
+    }
+    /* Every participant the record names, plus the shard we found it on
+     * (a record's part list always includes its own shard, but do not
+     * depend on it). */
+    nsh = 0;
+    for (i = 0; i < rec->parts.n && nsh < EFS_TXN_MAX_PART + 1; i++) {
+        for (j = 0; j < (int)nsh; j++)
+            if (shards[j] == rec->parts.shard[i])
+                break;
+        if (j == (int)nsh)
+            shards[nsh++] = rec->parts.shard[i];
+    }
+    for (j = 0; j < (int)nsh; j++)
+        if (shards[j] == shard)
+            break;
+    if (j == (int)nsh)
+        shards[nsh++] = shard;
+    for (i = 0; i < nsh; i++) {
+        uint32_t sh = shards[i];
+
+        pack_resolve(cmd, &rec->t, sh, dec);
+        rc = host_bg_propose(h, efs_raft_shard_group(sh), cmd, 22, 1);
+        if (rc != EFS_OK) {
+            h->rec_fail++;
+            fprintf(stderr, "raft-host: txn-recover shard=%u resolve sh=%u "
+                    "dec=%d rc=%d (retry next pass)\n", shard, sh, dec, rc);
+            return;
+        }
+    }
+    h->rec_resolved++;
+    fprintf(stderr, "raft-host: txn-recover shard=%u coord=%u parts=%u "
+            "age=%.1fs -> %s\n", shard, coord, rec->parts.n,
+            (double)(now_ns() - txid_ns(&rec->t)) / 1e9,
+            dec == EFS_TXN_COMMIT ? "COMMIT (resolved)" : "ABORT");
+}
+
+static void host_txn_recover_pass(struct efs_raft_host *h)
+{
+    struct efs_txn_pending_rec recs[HOST_REC_MAX];
+    uint64_t now = now_ns();
+    uint32_t k, n, i;
+    int lead[2];
+
+    if (!h->kv)
+        return;
+    lead[0] = host_leads(h, EFS_RAFT_GROUP_SHARD);
+    lead[1] = host_leads(h, EFS_RAFT_GROUP_SHARD2);
+    if (!lead[0] && !lead[1])
+        return;
+    for (k = 0; k < HOST_REC_SHARDS && h->gc_running && h->running; k++) {
+        uint32_t shard = h->rec_cursor;
+
+        h->rec_cursor = (h->rec_cursor + 1) & EFS_KV_SHARD_MASK;
+        if (!lead[(shard & 1u) ? 0 : 1])
+            continue;
+        n = 0;
+        if (efs_txn_scan_pending(h->kv, shard, recs, HOST_REC_MAX, &n) != EFS_OK)
+            continue;
+        for (i = 0; i < n && h->gc_running && h->running; i++) {
+            uint64_t born = txid_ns(&recs[i].t);
+
+            if (born > now || now - born < HOST_REC_AGE_NS)
+                continue;
+            host_txn_recover_one(h, shard, &recs[i]);
+        }
+    }
 }
 
 /* One GC record: attempt every un-acked fragment, appending an ack item
@@ -4212,6 +4362,7 @@ static void *host_gc_thread(void *arg)
             host_gc_frag_pass(h, h->g[g].group, anchor);
         }
         host_dir_spread_pass(h);
+        host_txn_recover_pass(h);
         /* ~1s between passes, in 20 ms slices so shutdown is prompt. */
         for (g = 0; g < GC_LOOP_MS / 20 && h->gc_running; g++)
             usleep(20 * 1000);

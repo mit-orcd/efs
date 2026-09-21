@@ -569,8 +569,91 @@ static void test_apply_prepare_wire(void)
     efs_kv_mem_free(kv);
 }
 
+/* Recovery input (L5): the distinct pending txns of one shard, with the
+ * part list a host needs to find the coordinator; records of other shards
+ * and of resolved txns are not reported; an abort-resolve clears the shard. */
+static void test_scan_pending(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_txid a, b;
+    struct efs_txn_parts pa = two(1, 2), pb = two(1, 1);
+    struct efs_txn_pending_rec recs[4];
+    struct efs_txn_ino_delta d;
+    uint8_t k1[EFS_KV_KEY_MAX], k2[EFS_KV_KEY_MAX], k3[EFS_KV_KEY_MAX],
+        val[4] = { 1, 2, 3, 4 };
+    uint32_t l1 = 0, l2 = 0, l3 = 0, n = 99;
+
+    tid(&a, 41);
+    tid(&b, 42);
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_kv_key_dentry(1, EFS_ROOT_INO, "p", k1, &l1) == EFS_OK, "k1");
+    CHECK(efs_kv_key_dentry(2, EFS_ROOT_INO, "q", k2, &l2) == EFS_OK, "k2");
+    CHECK(efs_kv_key_inode(1, 900, k3, &l3) == EFS_OK, "k3");
+    put_dir_row(kv, k3, l3, 900, 2, 0, 10);
+    memset(&d, 0, sizeof(d));
+    d.d_nlink = 1;
+    /* txn a: EXCL on shard 1 and 2, plus a reduce on shard 1 (three records,
+     * one txn); txn b: a guard on shard 1. */
+    CHECK(efs_txn_prepare_excl(kv, &a, &pa, k1, l1, 0, EFS_TXN_PUT, val, 4) ==
+              EFS_OK,
+          "a excl 1");
+    CHECK(efs_txn_prepare_excl(kv, &a, &pa, k2, l2, 0, EFS_TXN_PUT, val, 4) ==
+              EFS_OK,
+          "a excl 2");
+    CHECK(efs_txn_prepare_ino_delta(kv, &a, &pa, k3, l3, &d) == EFS_OK,
+          "a reduce 1");
+    CHECK(efs_txn_prepare_guard(kv, &b, &pb, k1, l1, 0) == EFS_ERR_BUSY,
+          "b cannot guard a's key");
+    {
+        uint8_t k4[EFS_KV_KEY_MAX];
+        uint32_t l4 = 0;
+        CHECK(efs_kv_key_dentry(1, EFS_ROOT_INO, "r", k4, &l4) == EFS_OK, "k4");
+        CHECK(efs_txn_prepare_guard(kv, &b, &pb, k4, l4, 0) == EFS_OK, "b guard");
+    }
+    CHECK(efs_txn_scan_pending(kv, 1, recs, 4, &n) == EFS_OK, "scan 1");
+    CHECK(n == 2, "two distinct txns on shard 1 (a has 2 records there)");
+    if (n == 2) {
+        int ia = recs[0].t.bytes[0] == 41 ? 0 : 1;
+        CHECK(recs[ia].t.bytes[0] == 41 && recs[1 - ia].t.bytes[0] == 42,
+              "both txids reported");
+        CHECK(recs[ia].parts.n == 2 && recs[ia].parts.shard[1] == 2,
+              "a's part list carries shard 2");
+        CHECK(efs_txn_coordinator(&recs[ia].t, &recs[ia].parts) ==
+                  efs_txn_coordinator(&a, &pa),
+              "coordinator recomputable from the record");
+    }
+    CHECK(efs_txn_scan_pending(kv, 2, recs, 4, &n) == EFS_OK && n == 1 &&
+              recs[0].t.bytes[0] == 41,
+          "shard 2 sees only a");
+    CHECK(efs_txn_scan_pending(kv, 3, recs, 4, &n) == EFS_OK && n == 0,
+          "shard 3 is clean");
+    /* one-slot page: full page is not an error, caller sweeps again */
+    CHECK(efs_txn_scan_pending(kv, 1, recs, 1, &n) == EFS_OK && n == 1,
+          "page of one");
+    /* what recovery does: decide ABORT at the coordinator, resolve parts */
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&a, &pa), &a, EFS_TXN_ABORT) ==
+              EFS_OK,
+          "abort a");
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&a, &pa), &a, EFS_TXN_COMMIT) ==
+              EFS_ERR_PROTO,
+          "a later COMMIT of an aborted txn is PROTO (recovery relies on it)");
+    CHECK(efs_txn_resolve(kv, &a, 1, EFS_TXN_ABORT) == EFS_OK, "res a 1");
+    CHECK(efs_txn_resolve(kv, &a, 2, EFS_TXN_ABORT) == EFS_OK, "res a 2");
+    CHECK(efs_txn_resolve(kv, &a, 2, EFS_TXN_ABORT) == EFS_OK,
+          "resolve of a resolved shard is idempotent");
+    CHECK(efs_txn_scan_pending(kv, 1, recs, 4, &n) == EFS_OK && n == 1 &&
+              recs[0].t.bytes[0] == 42,
+          "only b remains on shard 1");
+    CHECK(efs_txn_scan_pending(kv, 2, recs, 4, &n) == EFS_OK && n == 0,
+          "shard 2 clean after abort");
+    CHECK(efs_txn_prepare_guard(kv, &b, &pb, k1, l1, 0) == EFS_OK,
+          "a's key is free again");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
+    test_scan_pending();
     test_excl_conflict_i16();
     test_i17_visible_at_decision();
     test_i9();

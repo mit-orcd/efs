@@ -20,7 +20,13 @@ if [ "${EFS_NO_BUILD:-0}" != 1 ]; then
         "$HOME/git/efs/" /tmp/efs/ >/dev/null 2>&1
     cd /tmp/efs || { echo "$(hostname -s): no /tmp/efs"; exit 1; }
     make clean >/dev/null 2>&1
-    if ! make -j"$(nproc)" efs-fuse >/tmp/efs/build-fuse.log 2>&1; then
+    # fcstor003-006 run efsd too: the rsync --delete + make clean above
+    # removed their efsd/efs-mgmt binaries, and preflight needs efs-mgmt
+    # (Sep 21: PREFLIGHT_FAIL "efs-mgmt missing" right after a client
+    # deploy). Rebuild what the host serves with.
+    extra=""
+    pgrep -x efsd >/dev/null 2>&1 && extra="efsd efs-mgmt"
+    if ! make -j"$(nproc)" efs-fuse $extra >/tmp/efs/build-fuse.log 2>&1; then
         echo "$(hostname -s): BUILD_FAIL $(grep -m3 -E 'error' /tmp/efs/build-fuse.log | tr '\n' ' ')"
         exit 1
     fi

@@ -1186,3 +1186,59 @@ int efs_txn_resolve(struct efs_kv *kv, const struct efs_txid *t, uint32_t shard,
         return EFS_OK;
     return efs_kv_batch(kv, a.it, a.n);
 }
+
+struct pend_acc {
+    uint32_t shard;
+    struct efs_txn_pending_rec *out;
+    uint32_t cap, n;
+    int overflow;
+};
+
+static int pend_cb(void *user, const uint8_t *key, uint32_t klen,
+                   const uint8_t *val, uint32_t vlen)
+{
+    struct pend_acc *a = user;
+    struct efs_txid t;
+    struct efs_txn_parts p;
+    uint32_t i, used = 0;
+
+    if (klen < 3 || key_shard(key) != a->shard)
+        return 0;
+    if (key[2] != EFS_KV_KIND_INTENT && key[2] != EFS_KV_KIND_GUARD &&
+        key[2] != EFS_KV_KIND_REDUCE)
+        return 0;
+    /* Every record kind starts its value with txid[16] + parts. */
+    if (parse_parts_txid(val, vlen, &t, &p, &used) != EFS_OK)
+        return 0;
+    for (i = 0; i < a->n; i++)
+        if (same_txid(a->out[i].t.bytes, &t))
+            return 0;
+    if (a->n >= a->cap) {
+        a->overflow = 1;
+        return 1;
+    }
+    a->out[a->n].t = t;
+    a->out[a->n].parts = p;
+    a->n++;
+    return 0;
+}
+
+int efs_txn_scan_pending(struct efs_kv *kv, uint32_t shard,
+                         struct efs_txn_pending_rec *out, uint32_t cap,
+                         uint32_t *n)
+{
+    struct pend_acc a;
+    int rc;
+
+    if (!kv || !out || !n || cap == 0)
+        return EFS_ERR_INVAL;
+    memset(&a, 0, sizeof(a));
+    a.shard = shard;
+    a.out = out;
+    a.cap = cap;
+    rc = txn_scan_kinds(kv, shard, pend_cb, &a);
+    *n = a.n;
+    if (a.overflow)
+        return EFS_OK; /* a full page; the caller sweeps again */
+    return rc;
+}

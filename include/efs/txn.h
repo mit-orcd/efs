@@ -185,4 +185,19 @@ int efs_txn_pending_recheck(const struct efs_txn_pending *pend,
 int efs_txn_resolve(struct efs_kv *kv, const struct efs_txid *t, uint32_t shard,
                     int decision);
 
+/* Stranded-transaction recovery (architecture §7.2, L5: "recovery drives
+ * every prepared transaction to COMMIT or ABORT"). The distinct transactions
+ * that still hold an INTENT, GUARD or REDUCE record on `shard`, each with
+ * the participant set its record carries — enough for a host to locate the
+ * coordinator, read (or, for an undecided old one, write ABORT as) the
+ * decision, and RESOLVE every participant. Records are transient by design,
+ * so this is a short scan of three kind prefixes, never of the shard. */
+struct efs_txn_pending_rec {
+    struct efs_txid t;
+    struct efs_txn_parts parts;
+};
+int efs_txn_scan_pending(struct efs_kv *kv, uint32_t shard,
+                         struct efs_txn_pending_rec *out, uint32_t cap,
+                         uint32_t *n);
+
 #endif
