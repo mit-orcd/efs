@@ -54,6 +54,14 @@ the code is already unit-gated. Update or delete this block when done — an
 
 **Progress log (newest first — read this before the state below):**
 
+- **12:30 (Sep 21)** — **IOR-hard scaling, full runbook**
+  (`tests/measure/ior_hard_scaling.sh`,
+  `results/measure/20260921-162514-ior-hard-scaling`). Write MiB/s
+  **372 / 33 / 69 / 82 at NP 1 / 4 / 9 / 36** (47008 B × 3000 segs, one
+  file). 1-rank matches the own-file dd wall. From 4 ranks, ~half of
+  `report-split` lines are `rc=-14` STALE and `finish_ms` (apply wait)
+  is the large phase (37 s summed vs a 59 s IOR wall at 36 ranks).
+  Not a monotone CAS cliff. Next: `dd_wall.sh` at 1/4/9 with `PERF=1`.
 - **12:25 (Sep 21)** — **W6 same-directory rate, full runbook**
   (`PERF=1 tests/measure/samedir_rate.sh`,
   `results/measure/20260921-161931-samedir-rate`). Storm PASS at 1×1,
@@ -597,13 +605,16 @@ Not a list submission (stonewall 1 s). Do not quote the Sep 19 easy-read
 
 **Open under this item (performance, not correctness):**
 
-1. **ior-hard-write 45 MiB/s** — 36-way N-1 CAS on 47008 B records
-   sharing 128 KiB chunks; every fsync replays the losers. Spec answer is
-   [protocols/data.md](protocols/data.md) sub-chunk RMW = generation CAS;
-   the small-write envelope ([architecture.md §9](../architecture.md))
-   says immutable delta objects are the designed escape, **not built until
-   benchmarks demand** — this benchmark demands it, so bring the measured
-   number to the user before building anything.
+1. **ior-hard-write** — measured
+   `results/measure/20260921-162514-ior-hard-scaling` (47008 B, 3000 segs,
+   one file): **372 / 33 / 69 / 82 MiB/s at 1 / 4 / 9 / 36 ranks**. The
+   1-rank number matches today's own-file dd (~380). From 4 ranks up,
+   about half of the logged REPORTs return `EFS_ERR_STALE` (-14) and
+   `finish_ms` (wait for apply) is the bulk of server time (37 s summed
+   at 36 ranks, IOR wall 59 s). Throughput rises 4→36 rather than falling,
+   so it is shared-chunk CAS replay plus apply wait, not a cliff that
+   gets worse without bound. Spec answer remains §9 immutable delta
+   objects — a user decision; do not add a chunk lock.
 2. **1 GiB open costs 20 s of a 22 s easy-read** — 128 sequential
    GETCHUNKS + a 64-lane stat per open. Spec §8 per-lane range fetch
    ([performance.md](performance.md)) is the fix; not implemented.

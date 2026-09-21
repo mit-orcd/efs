@@ -1,0 +1,5 @@
+np	slots	segs	bytes_total_mib	launch_wall_s	ior_write_s	write_mibs	busy_n	busy_s
+1	1	3000	134	6	0.361285	372.26	0	0
+4	1	3000	537	21	16.25	33.11	0	0
+9	1	3000	1210	26	17.44	69.40	0	0
+36	4	3000	4841	91	58.78	82.36	0	0

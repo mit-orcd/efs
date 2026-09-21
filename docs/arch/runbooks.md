@@ -176,10 +176,15 @@ If a run does not finish in 25 min the script says so and moves on — look
 for D-state ranks (`pgrep -x ior` on the clients; `pkill -9 -x ior`, then
 remount that client). Do not raise the deadline.
 
-**Hand back.** The curve and which of the two shapes it is. The designed
-escape is §9 immutable delta objects for sub-chunk writes — a user
-decision. Do not tune IOR's transfer size (47008 is the point) and do not
-add a chunk lock (W1 forbids).
+**Already known (Sep 21, this build,
+`results/measure/20260921-162514-ior-hard-scaling`):** 372 / 33 / 69 / 82
+MiB/s at NP 1 / 4 / 9 / 36. `rc=-14` (STALE) on about half of logged
+REPORTs from 4 ranks up; `finish_ms` dominates `pack_ms`/`push_ms`.
+Shape: shared-chunk CAS replay + apply wait. Re-run only if the build
+changed. The designed escape is §9 immutable delta objects — a user
+decision. Do not tune IOR's transfer size and do not add a chunk lock.
+
+**Hand back.** The curve and which of the two shapes it is.
 
 ## 4. W4 — multi-client write wall (`dd_wall.sh`)
 

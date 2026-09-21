@@ -1,0 +1,4 @@
+NP=1: report-split: 1 lines; pack_ms sum=0 max=0; push_ms sum=0 max=0; finish_ms sum=142 max=142
+NP=4: report-split: 21 lines; pack_ms sum=2131 max=283; push_ms sum=0 max=0; finish_ms sum=6660 max=2321
+NP=9: report-split: 47 lines; pack_ms sum=1766 max=85; push_ms sum=0 max=0; finish_ms sum=10747 max=1460
+NP=36: report-split: 51 lines; pack_ms sum=3688 max=402; push_ms sum=11540 max=3247; finish_ms sum=37103 max=3591
