@@ -1,0 +1,18 @@
+# 9534e53 sweep regression — idle cluster, fcstor007, 21:28Z (mdlat.py: 20 ops each in a fresh dir)
+fuse.efs-fuse
+mkdir              min   15.3 med   99.5 max  152.3 ms
+create+1B+close    min   83.0 med  151.9 max  241.5 ms
+append+close       min  113.7 med  201.9 max  327.0 ms
+stat               min    0.5 med    0.5 max   56.1 ms
+unlink             min    2.3 med   55.8 max  110.1 ms
+rmdir              min    7.4 med   69.3 max  195.7 ms
+
+# reference (Sep 21 02:43Z, results/perf/20260921-md-latency.txt): mkdir med 7.2, create+close 6.7, append+close 9.0, stat 0.4, unlink 1.8, rmdir 6.4 ms
+
+# posix jobs=1 on this build: 200/201 + mmap SKIP but dur=219 s (was 56 s); jobs=16: 77 tests hit the 15 s budget (results/posix/20260921-211622)
+# w8_root_lat sub-dir mkdir: 9 at 2-3 ms, 9 at 70 ms (results/measure/20260921-211258-w8-root-lat)
+
+# cause: host_txn_recover_pass scanned 512 shards x 3 kind prefixes every GC pass on each leader; strace of the GC thread on fcstor006:
+#   one efs_kv_scan_prefix = 9 pread64 (one block per segment) ~0.3 ms, each under the LSM lock the apply path needs; ~1536 scans/s
+# perf (10 s, idle): 38% rep_movs (block copy), 21% memcmp, 9% kv_seg_iter_next — all the sweep. Process CPU only 3%, the damage is lock hold, not CPU.
+# fix: mark shards from the PREPARE apply; scan only marks older than 5 s, 64 per pass, 1 ms yield between scans.

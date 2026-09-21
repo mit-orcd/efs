@@ -1,0 +1,8 @@
+# after 9534e53 roll (17:08) + ~1 min of sweep; copy of fcstor004 /data1/01/efs/mdraft/kv at 21:09Z
+efs-bg: start 2026-09-21T21:09:04Z host=fcstor004 name=kv-intents2 screen=efs-kv-intents2
+scan rc=0
+total DECISION 16729 (older than 5s: 16729)
+stranded ALLOC intents: 0 on
+efs-bg: end 2026-09-21T21:09:06Z rc=0
+
+# txn-recover lines: fcstor004 (g0 leader) 14, fcstor006 (g2 leader) 33; all 47 -> COMMIT (resolved), 1 BUSY retry on a forwarded RESOLVE

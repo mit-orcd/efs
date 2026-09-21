@@ -1,0 +1,21 @@
+== root-9s 21:13:47
+  group 0 hosted=1 role=FOLLOWER leader=2 term=859 commit=4648370 applied=4648370 voters=0x7 joint=0
+  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0
+fcstor003 efsd pid=724509
+     45 wait_woken
+     22 futex_do_wait
+      2 hrtimer_nanosleep
+      1 poll_schedule_timeout.constprop.0
+      1 inet_csk_accept
+fcstor004 efsd pid=594154
+     44 wait_woken
+     23 futex_do_wait
+      2 hrtimer_nanosleep
+      1 poll_schedule_timeout.constprop.0
+      1 inet_csk_accept
+fcstor007 efs-fuse pid=440056
+      4 futex_do_wait
+      2 fuse_dev_do_read
+fcstor008 efs-fuse pid=1753421
+      4 futex_do_wait
+      2 fuse_dev_do_read

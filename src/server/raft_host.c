@@ -227,10 +227,15 @@ struct efs_raft_host {
     pthread_t gc_tid;    /* background GC reaper (spec L7) */
     int gc_running;
     int gc_started;
-    /* Stranded-txn recovery (L5): next shard the GC pass inspects, and a
-     * few counters for the OBS dump / tests. */
-    uint32_t rec_cursor;
-    uint64_t rec_found, rec_aborted, rec_resolved, rec_fail;
+    /* Stranded-txn recovery (L5). rec_mark[shard] is the time of the first
+     * PREPARE applied on that shard since it was last scanned clean (0 =
+     * nothing pending was ever written there). The GC pass scans only
+     * shards whose mark is HOST_REC_AGE_NS old, so an idle cluster scans
+     * nothing and a busy shard is scanned once per age period. Written by
+     * the apply path (under h->mu), read by the GC thread — rec_mu. */
+    pthread_mutex_t rec_mu;
+    uint64_t rec_mark[EFS_KV_SHARD_MASK + 1];
+    uint64_t rec_found, rec_aborted, rec_resolved, rec_fail, rec_scans;
     pthread_mutex_t inbox_mu;
     struct host_inbox_item inbox[HOST_INBOX_MAX];
     int inbox_n;
@@ -328,6 +333,7 @@ static uint32_t rd32be(const uint8_t *p)
 
 static uint64_t now_ns(void);
 static void host_stop_senders(struct efs_raft_host *h);
+static void host_rec_mark(struct efs_raft_host *h, uint32_t shard);
 
 static int env_on(const char *name)
 {
@@ -1489,6 +1495,8 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
          * simulator. */
         rc = efs_txn_apply_prepare(h->kv, kind, &t, &p, key, klen, cmd + off,
                                    clen - off);
+        if (rc == EFS_OK && klen >= 2)
+            host_rec_mark(h, ((uint32_t)key[0] << 8) | key[1]);
         break;
     case EFS_MD_CMD_DECIDE:
         if (clen < 1 + 16 + 4 + 1)
@@ -4037,8 +4045,19 @@ static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
  * wait while efs_txn_resolve was still a whole-shard scan; each poisoned
  * shard turned one of nine fresh-parent mkdirs into a 10.4 s EBUSY.
  *
- * The leader of a shard's group sweeps HOST_REC_SHARDS of its shards per GC
- * pass. For each pending txn older than HOST_REC_AGE_NS it (a) proposes
+ * Which shards to look at comes from the apply path, not from a sweep: every
+ * PREPARE applied on shard S marks S (host_rec_mark, first-mark time kept).
+ * Once a mark is HOST_REC_AGE_NS old the leader of S's group scans S's
+ * three txn-record prefixes; nothing pending clears the mark, only young
+ * records re-arm it. So an idle cluster scans nothing, a busy shard is
+ * scanned once per age period, and a fresh process (all shards marked at
+ * start) walks the table once, HOST_REC_SHARDS shards per pass with a
+ * yield between scans. The first version swept 512 shards per second
+ * unconditionally: 1 536 prefix scans × ~0.3 ms, each taking the KV lock
+ * the apply path needs, put mkdir back at 100 ms median
+ * (results/measure/20260921-w8-orphans/sweep-regression.txt).
+ *
+ * For each pending txn older than HOST_REC_AGE_NS the pass (a) proposes
  * DECIDE ABORT at the coordinator — idempotent when ABORT is already there,
  * PROTO when COMMIT is (the coordinator got there first, and its RESOLVEs
  * are what went missing) — then (b) proposes RESOLVE with the established
@@ -4047,8 +4066,29 @@ static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
  * local replica of the coordinator's group. A live txn is never touched:
  * one takes tens of ms, the threshold is seconds. */
 #define HOST_REC_AGE_NS  (5ull * 1000000000ull)
-#define HOST_REC_SHARDS  512u /* shards inspected per GC pass (8 s sweep) */
+#define HOST_REC_SHARDS  64u  /* due shards scanned per GC pass */
 #define HOST_REC_MAX     32u  /* txns handled per shard per pass */
+#define HOST_REC_YIELD_US 1000
+
+static void host_rec_mark(struct efs_raft_host *h, uint32_t shard)
+{
+    shard &= EFS_KV_SHARD_MASK;
+    pthread_mutex_lock(&h->rec_mu);
+    if (h->rec_mark[shard] == 0)
+        h->rec_mark[shard] = now_ns();
+    pthread_mutex_unlock(&h->rec_mu);
+}
+
+static void host_rec_mark_all(struct efs_raft_host *h)
+{
+    uint64_t now = now_ns();
+    uint32_t s;
+
+    pthread_mutex_lock(&h->rec_mu);
+    for (s = 0; s <= EFS_KV_SHARD_MASK; s++)
+        h->rec_mark[s] = now;
+    pthread_mutex_unlock(&h->rec_mu);
+}
 
 static uint64_t txid_ns(const struct efs_txid *t)
 {
@@ -4131,7 +4171,7 @@ static void host_txn_recover_pass(struct efs_raft_host *h)
 {
     struct efs_txn_pending_rec recs[HOST_REC_MAX];
     uint64_t now = now_ns();
-    uint32_t k, n, i;
+    uint32_t shard, n, i, done = 0;
     int lead[2];
 
     if (!h->kv)
@@ -4140,15 +4180,22 @@ static void host_txn_recover_pass(struct efs_raft_host *h)
     lead[1] = host_leads(h, EFS_RAFT_GROUP_SHARD2);
     if (!lead[0] && !lead[1])
         return;
-    for (k = 0; k < HOST_REC_SHARDS && h->gc_running && h->running; k++) {
-        uint32_t shard = h->rec_cursor;
+    for (shard = 0; shard <= EFS_KV_SHARD_MASK && done < HOST_REC_SHARDS &&
+                    h->gc_running && h->running; shard++) {
+        uint64_t mark;
 
-        h->rec_cursor = (h->rec_cursor + 1) & EFS_KV_SHARD_MASK;
         if (!lead[(shard & 1u) ? 0 : 1])
             continue;
+        pthread_mutex_lock(&h->rec_mu);
+        mark = h->rec_mark[shard];
+        pthread_mutex_unlock(&h->rec_mu);
+        if (mark == 0 || now - mark < HOST_REC_AGE_NS)
+            continue;
+        done++;
+        h->rec_scans++;
         n = 0;
         if (efs_txn_scan_pending(h->kv, shard, recs, HOST_REC_MAX, &n) != EFS_OK)
-            continue;
+            continue; /* mark stays; retried next pass */
         for (i = 0; i < n && h->gc_running && h->running; i++) {
             uint64_t born = txid_ns(&recs[i].t);
 
@@ -4156,6 +4203,15 @@ static void host_txn_recover_pass(struct efs_raft_host *h)
                 continue;
             host_txn_recover_one(h, shard, &recs[i]);
         }
+        /* Clean: clear the mark unless a PREPARE landed meanwhile (mark
+         * moved). Anything found — young, recovered, or a failed recovery
+         * — re-arms from now so the shard is looked at again in one age
+         * period and a recovery is verified gone. */
+        pthread_mutex_lock(&h->rec_mu);
+        if (h->rec_mark[shard] == mark)
+            h->rec_mark[shard] = n ? now : 0;
+        pthread_mutex_unlock(&h->rec_mu);
+        usleep(HOST_REC_YIELD_US); /* let the apply path have the KV lock */
     }
 }
 
@@ -4409,6 +4465,10 @@ int server_raft_host_start(struct efsd_server *s)
     pthread_mutex_init(&h->wait_mu, NULL);
     pthread_mutex_init(&h->inbox_mu, NULL);
     pthread_mutex_init(&h->outbox_mu, NULL);
+    pthread_mutex_init(&h->rec_mu, NULL);
+    /* A fresh process knows nothing about pending txn records: walk every
+     * shard once (throttled by the GC pass), then only marked ones. */
+    host_rec_mark_all(h);
     pthread_cond_init(&h->applied_cv, NULL);
     {
         int i;
@@ -4572,6 +4632,7 @@ void server_raft_host_stop(void)
     pthread_mutex_destroy(&h->wait_mu);
     pthread_mutex_destroy(&h->inbox_mu);
     pthread_mutex_destroy(&h->outbox_mu);
+    pthread_mutex_destroy(&h->rec_mu);
     pthread_cond_destroy(&h->applied_cv);
     for (i = 0; i < EFS_RAFT_MAX_PEERS; i++)
         pthread_cond_destroy(&h->tx[i].cv);
