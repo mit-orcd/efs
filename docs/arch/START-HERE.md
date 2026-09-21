@@ -54,6 +54,19 @@ the code is already unit-gated. Update or delete this block when done — an
 
 **Progress log (newest first — read this before the state below):**
 
+- **12:25 (Sep 21)** — **W6 same-directory rate, full runbook**
+  (`PERF=1 tests/measure/samedir_rate.sh`,
+  `results/measure/20260921-161931-samedir-rate`). Storm PASS at 1×1,
+  1×9, 4×9. Aggregate **138 / 134 / 159 ops/s** — flat, so adding procs
+  does not add throughput. `busy_n=0` rules out the BUSY backoff.
+  `checkout_us` ~15 ms/client rules out the conn pool. Fuse `recv_us`
+  ≈ storm wall rules in server+wire wait. Leader log tail is the storm's
+  own PREPARE/CREATE/UNLINK/RESOLVE/LEASE_CLOSE/REAP_DONE (GC_ACK 0.4 %,
+  so the earlier 52 % GC_ACK was an idle-tail artifact of the small
+  smoke). On-CPU profile: `memcmp` in `lsm_scan_prefix` under
+  `reduces_pending`, `guards_conflict`, `efs_txn_resolve`. Next runbook
+  in order: `ior_hard_scaling.sh` at `NPS="1 4 9 36" SEGS=3000`
+  (open-cost §2 is already answered by the smoke).
 - **11:30 (Sep 21)** — **Runbooks for every open measurement item**
   ([runbooks.md](runbooks.md), `tests/measure/*.sh`, `tests/preflight.sh`),
   all pinned to the running build `b2184a5c7faf-dirty`, each smoke-run
@@ -595,20 +608,18 @@ Not a list submission (stonewall 1 s). Do not quote the Sep 19 easy-read
    GETCHUNKS + a 64-lane stat per open. Spec §8 per-lane range fetch
    ([performance.md](performance.md)) is the fix; not implemented.
 3. ~~mdtest `rmdir` ENOTEMPTY/EIO under load~~ — **FIXED Sep 21** (it was
-   the parent-row lost update, not transient; §7.2 reductions, gate
-   `results/io500/20260921-debug-9x4-reduce/` 0 rmdir warnings +
-   `tests/stress/same_parent_storm.sh`). What remains is its **rate**:
-   **~200 ops/s aggregate in one directory** under 36-way contention
-   (178 ms per op per proc vs 7 ms idle; mdtest-easy-write 0.19–0.24
-   kIOPS, storm 14 400 ops / 71 s). First find out what the 178 ms is:
-   BUSY/STALE retries are not logged at default verbosity — count them
-   in `inode_rpc.c` (client) and PREPARE rc in `raft_host` (server),
-   then the Raft commit queue depth per group during the storm. Candidates:
-   the 50 ms × 2ⁿ BUSY backoff (a same-parent CREATE and RMDIR are still
-   mutually BUSY on the dseq witness by design), or the two groups' apply
-   pumps serializing 36 clients' PREPARE/DECIDE/RESOLVE round trips (3–4
-   commits per op). Bring the count to the user before changing the
-   backoff or the protocol.
+   the parent-row lost update, not transient; §7.2 reductions). **Rate
+   measured** `results/measure/20260921-161931-samedir-rate` (ROUNDS=100,
+   storm PASS at every level): **138 / 134 / 159 ops/s aggregate at 1 / 9 /
+   36 procs** — a flat ceiling, 7.3 → 226 ms/op/proc. `busy_n=0` (the
+   50 ms BUSY backoff is not it). Each client's fuse daemon spends the
+   wall in RPC recv (`recv_us` ≈ the storm wall, `checkout_us` ~15 ms).
+   The group-0 leader's log tail during the storm is the storm itself
+   (PREPARE 31 %, CREATE/UNLINK/RMDIR, RESOLVE, LEASE_CLOSE, REAP_DONE);
+   GC_ACK is 0.4 %. On-CPU samples are LSM prefix scans inside
+   `reduces_pending` / `guards_conflict` / `efs_txn_resolve`. Do not
+   change the backoff or the txn protocol; the remaining question (LSM
+   scan vs Raft fsync, which cpu-clock cannot separate) is the user's.
 
 Harness (`tests/perf/io500/run.sh`): `SLOTS=4 NP=36 … debug` detaches
 `prterun` and logs to `$IO500_DIR/last-run.log` (the ssh timeout used to

@@ -84,9 +84,17 @@ in `efs_kv_*`/`fold_reduce`/`efs_txn_*` = apply cost; `fsync`/`fdatasync`
 `children=0 nlink=2`). A FAIL is a correctness regression — report that
 first and stop.
 
+**Already known (Sep 21, this build,
+`results/measure/20260921-161931-samedir-rate`):** 138 / 134 / 159 ops/s
+at 1 / 9 / 36 procs, storm PASS, `busy_n=0`, fuse `recv_us` ≈ wall,
+`checkout_us` negligible. GC_ACK is 0.4 % of the leader's log during the
+storm (the 52 % figure was an idle tail). On-CPU time is LSM scans in
+txn prepare/resolve. Re-run only if the build changed. Do **not** change
+`inode_rpc.c` backoff or the txn protocol.
+
 **Hand back.** The table, the two shares, one sentence per candidate
 (backoff / server apply / commit queue) saying whether the data supports
-it. Do **not** change `inode_rpc.c` backoff or the txn protocol.
+it.
 
 ## 2. W6 residual 2 — 1 GiB open costs ~20 s (`open_cost.sh`)
 

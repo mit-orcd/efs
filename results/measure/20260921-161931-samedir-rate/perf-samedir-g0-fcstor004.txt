@@ -1,0 +1,60 @@
+    23.34%          5745  efsd     libc.so.6          [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--8.94%--lsm_scan_prefix
+               |          |          
+               |           --8.58%--efs_txn_resolve
+               |                     host_apply
+               |                     apply_committed
+               |                     |          
+               |                      --8.17%--try_commit
+               |                                efs_raft_recv
+               |                                drain_inbox
+               |                                host_pump
+               |                                start_thread
+               |          
+               |--8.80%--merge_scan
+               |          |          
+               |           --8.34%--lsm_scan_prefix
+               |                     |          
+               |                     |--1.96%--reduces_pending
+               |                     |          |          
+               |                     |          |--0.99%--efs_txn_prepare_excl
+               |                     |          |          efs_txn_apply_prepare
+               |                     |          |          host_apply
+               |                     |          |          apply_committed
+               |                     |          |          |          
+               |                     |          |           --0.53%--on_ae_req
+               |                     |          |                     drain_inbox
+               |                     |          |                     host_pump
+               |                     |          |                     start_thread
+               |                     |          |          
+               |                     |           --0.75%--efs_txn_key_busy
+               |                     |          
+               |                     |--1.83%--guards_conflict
+               |                     |          |          
+               |                     |          |--1.05%--efs_txn_prepare_excl
+               |                     |          |          efs_txn_apply_prepare
+               |                     |          |          host_apply
+               |                     |          |          apply_committed
+               |                     |          |          |          
+               |                     |          |           --0.63%--on_ae_req
+               |                     |          |                     drain_inbox
+               |                     |          |                     host_pump
+               |                     |          |                     start_thread
+               |                     |          |          
+               |                     |           --0.78%--prepare_reduce_rec
+               |                     |                     efs_txn_apply_prepare
+               |                     |                     host_apply
+               |                     |                     apply_committed
+               |                     |                     try_commit
+               |                     |                     efs_raft_recv
+               |                     |                     drain_inbox
+               |                     |                     host_pump
+               |                     |                     start_thread
+               |                     |          
+               |                     |--1.74%--efs_txn_resolve
+               |                     |          host_apply
+               |                     |          apply_committed
+               |                     |          |          

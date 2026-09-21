@@ -1,0 +1,32 @@
+== group 0 leader fcstor004
+file /data1/01/efs/mdraft/log/raft.log size 3331723404, parsed 4194304 bytes from offset 3327529100, records {'ENTRY': 47197}
+group 0: 34415 entries, index 4594935..4629349
+  PREPARE                  10830   31.5%
+  CREATE                    5409   15.7%
+  UNLINK                    3610   10.5%
+  RESOLVE                   3608   10.5%
+  SESSION/LEASE_CLOSE       3606   10.5%
+  REAP_DONE                 3598   10.5%
+  DECIDE                    1806    5.2%
+  RMDIR                     1805    5.2%
+  GC_ACK                     141    0.4%
+  DROP                         2    0.0%
+group 2: 12782 entries, index 3299476..3312257
+  PREPARE                   7220   56.5%
+  RESOLVE                   3608   28.2%
+  DECIDE                    1802   14.1%
+== group 2 leader fcstor006
+file /data1/01/efs/mdraft/log/raft.log size 1777122556, parsed 4194304 bytes from offset 1772928252, records {'ENTRY': 17681}
+group 2: 17681 entries, index 3294579..3312259
+  PREPARE                   9309   52.6%
+  RESOLVE                   4602   26.0%
+  DECIDE                    2327   13.2%
+  GC_ACK                     888    5.0%
+  CREATE                     150    0.8%
+  SESSION/LEASE_CLOSE        101    0.6%
+  UNLINK                     101    0.6%
+  REAP_DONE                  101    0.6%
+  RMDIR                       50    0.3%
+  LANE_SWEEP                  44    0.2%
+  PUBLISH                      5    0.0%
+  DROP                         3    0.0%

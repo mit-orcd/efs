@@ -1,0 +1,2 @@
+children=0 nlink=2
+RMDIR_OK

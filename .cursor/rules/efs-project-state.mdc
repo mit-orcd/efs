@@ -94,8 +94,10 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  (4.7× the morning), mdtest-hard-write 0.201 (11×), easy-read 1.16 GiB/s,
  hard-read 3.89, easy-write 0.78, hard-write 0.046 (36-way sub-chunk CAS).
  posix jobs=1 **200/201 + mmap SKIP in 56 s** (`results/posix/20260921-123904`,
- on the §7.2 build). Open perf: 1 GiB open = 20 s (per-lane range fetch
- not implemented), same-parent op rate ~200/s. Cluster + 9 clients run
+ on the §7.2 build). Open perf: 1 GiB cold open is 0.23 s idle (128 GETCHUNKS × 1.6 ms);
+ 14.6 ms/GETCHUNKS under 32 openers — the IOR 20 s is that serialization.
+ Same-parent rate is a flat ~140–160 ops/s from 1 to 36 procs
+ (`results/measure/20260921-161931-samedir-rate`), not the BUSY backoff. Cluster + 9 clients run
  `b2184a5c7faf-dirty` = byte-identical source to the §7.2 commit (`git log -1 --grep="commutative reductions"`)
  (the §7.2 commit), so the next server restart is a build-ID change →
  `tests/roll_efsd.sh --all` (stop all, start all); plain rolling refuses.
@@ -138,9 +140,12 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  (`test-dir.0-0` nlink=2 with 3 children, rmdir EIO forever). Client
  retries STALE for CREATE/UNLINK/LINK/RENAME_AT. Repro/gate:
  `tests/stress/same_parent_storm.sh` (parent must end `children=0
- nlink=2`, rmdir OK). Same-parent op rate under 36-way contention is
- ~200 ops/s aggregate (178 ms/op/proc vs 7 ms idle) — open perf item, not
- correctness; BUSY/STALE retries are not logged, instrument first.
+ nlink=2`, rmdir OK). Same-parent op rate is a flat ~140–160 ops/s
+ aggregate from 1 proc to 36 (`results/measure/20260921-161931-samedir-rate`:
+ 138 / 134 / 159 ops/s, `busy_n=0`). The fuse daemon spends the wall in
+ RPC recv; on-CPU server time is LSM scans in `reduces_pending` /
+ `guards_conflict` / `efs_txn_resolve`. Not the 50 ms BUSY backoff and
+ not the idle GC_ACK stream. Open perf item, not correctness.
 - `efs_kv_scan_prefix` callback returning **>0 means batch-full**, not
  error. The reaper (`lane-sweep`, `rsv_purge`) misread it for weeks —
  no lane with >64 chunks was ever swept. Check this in any new scan user.

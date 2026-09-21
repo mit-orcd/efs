@@ -1,0 +1,60 @@
+    20.65%          1029  efsd     [kernel.kallsyms]  [k] rep_movs_alternative
+            |
+            ---rep_movs_alternative
+               |          
+                --20.24%--copyout
+                          _copy_to_iter
+                          |          
+                           --20.16%--copy_page_to_iter
+                                     filemap_read
+                                     xfs_file_buffered_read
+                                     xfs_file_read_iter
+                                     vfs_read
+                                     __x64_sys_pread64
+                                     do_syscall_64
+                                     entry_SYSCALL_64_after_hwframe
+                                     __libc_pread
+                                     |          
+                                     |--12.02%--kv_msrc_advance
+                                     |          merge_scan
+                                     |          lsm_scan_prefix
+                                     |          |          
+                                     |          |--5.16%--reduces_pending
+                                     |          |          |          
+                                     |          |          |--4.15%--efs_txn_prepare_excl
+                                     |          |          |          efs_txn_apply_prepare
+                                     |          |          |          host_apply
+                                     |          |          |          apply_committed
+                                     |          |          |          try_commit
+                                     |          |          |          efs_raft_recv
+                                     |          |          |          drain_inbox
+                                     |          |          |          host_pump
+                                     |          |          |          start_thread
+                                     |          |          |          
+                                     |          |           --1.00%--efs_txn_prepare_guard
+                                     |          |                     host_apply
+                                     |          |                     apply_committed
+                                     |          |                     try_commit
+                                     |          |                     efs_raft_recv
+                                     |          |                     drain_inbox
+                                     |          |                     host_pump
+                                     |          |                     start_thread
+                                     |          |          
+                                     |          |--3.39%--guards_conflict
+                                     |          |          efs_txn_prepare_excl
+                                     |          |          efs_txn_apply_prepare
+                                     |          |          host_apply
+                                     |          |          apply_committed
+                                     |          |          try_commit
+                                     |          |          efs_raft_recv
+                                     |          |          drain_inbox
+                                     |          |          host_pump
+                                     |          |          start_thread
+                                     |          |          
+                                     |           --3.33%--efs_txn_resolve
+                                     |                     host_apply
+                                     |                     apply_committed
+                                     |                     try_commit
+                                     |                     efs_raft_recv
+                                     |                     drain_inbox
+                                     |                     host_pump
