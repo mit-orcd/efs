@@ -8,7 +8,7 @@
 # PROBE_AT seconds, then on each probe client: gdb backtrace of efs-fuse
 # (function histogram + every thread in an RPC recv), ss of its 19810
 # conns; on every server: gdb backtrace of efsd (histogram of non-idle
-# stacks, read_mu holders), one RPC-PROF line per client; a second probe
+# stacks, threads blocked on a host mutex), one RPC-PROF line per client; a second probe
 # 30 s later. Then waits for the suite and prints per-host pass/fail/none
 # counts plus a per-test timing view (which alphabet position timed out
 # first on each host).
@@ -57,10 +57,10 @@ probe() {
             echo "threads=$(grep -c ^Thread /tmp/efsd-bt.txt)"
             echo "-- conn threads (server_handle_conn) not idle in recv, by stack:"
             awk "/^Thread/{s=\"\"} /^#/{gsub(/^#[0-9]+ +(0x[0-9a-f]+ in )?/,\"\"); sub(/ \\(.*/,\"\"); s=s\" > \"\$1} /^\$/{if(s ~ /server_handle_conn/ && s !~ /^ > recv > efs_recv_all > server_handle_conn/) print s}" /tmp/efsd-bt.txt | cut -c1-400 | sort | uniq -c | sort -rn | head -14
-            echo "-- waiting on read_mu (lll_lock under a server_raft_host_ frame):"
+            echo "-- blocked on a host mutex (lll_lock under a server_raft_host_ frame; h->mu since read_mu went):"
             awk "/^Thread/{s=\"\"} /^#/{gsub(/^#[0-9]+ +(0x[0-9a-f]+ in )?/,\"\"); sub(/ \\(.*/,\"\"); s=s\" > \"\$1} /^\$/{if(s ~ /lll_lock|pthread_mutex_lock/ && s ~ /server_raft_host_/) print s}" /tmp/efsd-bt.txt | cut -c1-300 | sort | uniq -c | sort -rn | head -6
             top -b -H -n1 -p $pid | awk "NR>7 && \$9>=5.0 {print \"  cpu\", \$9, \$12}" | head -5' > "$OUT/probe-$tag-$h.txt" 2>&1
-        echo "  $h: $(grep -m1 threads= "$OUT/probe-$tag-$h.txt") busy-conn-threads=$(awk '/conn threads/{f=1;next} /waiting on read_mu/{f=0} f{s+=$1} END{print s+0}' "$OUT/probe-$tag-$h.txt") read_mu-waiters=$(awk '/waiting on read_mu/{f=1;next} /^  cpu/{f=0} f{s+=$1} END{print s+0}' "$OUT/probe-$tag-$h.txt")"
+        echo "  $h: $(grep -m1 threads= "$OUT/probe-$tag-$h.txt") busy-conn-threads=$(awk '/conn threads/{f=1;next} /blocked on a host mutex/{f=0} f{s+=$1} END{print s+0}' "$OUT/probe-$tag-$h.txt") mutex-waiters=$(awk '/blocked on a host mutex/{f=1;next} /^  cpu/{f=0} f{s+=$1} END{print s+0}' "$OUT/probe-$tag-$h.txt")"
     done
 }
 
@@ -99,7 +99,7 @@ say "suite results: $RID"
             "$(rpc_field_n "$l" unlink)" "$(( $(n0 "$(rpc_field_us "$l" unlink)") / ( $(n0 "$(rpc_field_n "$l" unlink)") + 1 ) ))"
     done
     echo
-    echo "Probe summaries: probe-*-fcstor0NN.txt (client: RPC threads + conns; server: busy conn threads, read_mu waiters)"
+    echo "Probe summaries: probe-*-fcstor0NN.txt (client: RPC threads + conns; server: busy conn threads, host-mutex waiters)"
 } | tee "$OUT/SUMMARY.txt"
 
 say "== restore clients (plain remount)"

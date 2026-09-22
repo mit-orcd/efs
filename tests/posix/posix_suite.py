@@ -3260,12 +3260,28 @@ def main():
                 print("parallel %d tests jobs=%d (serial %d after)" %
                       (len(parallel), jobs, len(serials)))
                 ex = ThreadPoolExecutor(max_workers=jobs)
-                start = {}
+                # The per-test budget is EXECUTION time. Until Sep 21 the
+                # clock started at submit: all 196 tests were submitted at
+                # once to `jobs` workers, so anything still queued after
+                # --timeout-s was recorded "timeout after 15s" without
+                # having run — 3-op tests "timing out", the same first
+                # timeout on every host, ~100 of 201 per host in the 9-way
+                # suite, and the abandoned futures kept the pool busy into
+                # the 385 s cap. The worker stamps its own start (`started`,
+                # written before the test's first syscall); an unstarted
+                # test cannot time out. Only invoke_timed runs in workers.
+                started = {}
+                started_mu = threading.Lock()
+
+                def invoke_timed(name, fn, tdir):
+                    with started_mu:
+                        started[name] = time.time()
+                    return invoke(fn, tdir)
+
                 futs = {}
                 for name, fn, tdir in parallel:
-                    fut = ex.submit(invoke, fn, tdir)
+                    fut = ex.submit(invoke_timed, name, fn, tdir)
                     futs[fut] = name
-                    start[fut] = time.time()
                 pending = set(futs)
                 while pending:
                     done, pending = wait(pending, timeout=0.2,
@@ -3297,7 +3313,9 @@ def main():
                                 fn_to = getattr(fn, "_posix_timeout",
                                                 test_timeout)
                                 break
-                        if now - start[fut] < fn_to:
+                        with started_mu:
+                            began = started.get(name)
+                        if began is None or now - began < fn_to:
                             continue
                         by_name[name] = (
                             "FAIL", "timeout after %ss" % fn_to)
