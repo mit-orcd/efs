@@ -221,6 +221,13 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  (`results/measure/20260921-220933-w8-stall-timeline/obs-*.txt`).
  Unspecified → decision (START-HERE §1b). Steady apply is still ~0.3 ms
  per entry with no fsync: `pread` per segment (17) per KV read, no cache.
+- **Half-applied cross-shard txns exist on 19810 (I17), found Sep 21
+ night:** ino 62991 nlink=3 nents=1 with 0 dentries; ino 31264 with a
+ dentry `sub` → ino 83075 whose row is gone (`tests/tools/kv_dir_dump`
+ on a KV copy, fcstor004/005 see every shard). Suspect: L5 recovery's 5 s
+ stranded age vs a live coordinator's 10.4 s worst case (2.4 s stall +
+ BUSY backoff) — two deciders. START-HERE §1b item 0. A leftover
+ `posix-*` dir that `rm -rf` cannot remove is evidence; dump it first.
 - **A queued posix test cannot time out** (`posix_suite.py` stamped the
  clock at submit until `a683def`): every 9-host number before Sep 21
  22:00 was that artefact plus real stalls. Compare only against later runs.

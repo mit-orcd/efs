@@ -52,8 +52,36 @@ Whoever picks the project up next does **this first**. Update or delete
 this block when done — an "in flight" block older than the last commit
 is a bug in this page.
 
-**Next mechanical item: I16 op-id dedup for LINK / UNLINK / MKDIR /
-RENAME (spec §7.9; today only APPEND and create_file have it).** Cluster
+**Next item — correctness, before anything else: half-applied
+cross-shard txns (I17) in the 9-host run's leftovers.** Six `posix-*`
+dirs in the mount root would not `rm -rf`; `tests/tools/kv_dir_dump`
+(new; run on a KV COPY on fcstor004 or 005, which hold every shard) on
+two of them, identical on both replicas:
+`posix-fcstor007-ay0bpdfq/names_crazy_dirs` ino **62991**: nlink=3
+nents=1, **0 dentries** (22:10 run, build `84a2a55`);
+`posix-fcstor011-9nu20if3/mkdirat_unlinkat` ino **31264**: nlink=3
+nents=1, dentry `sub` → ino 83075 whose **row is MISSING** (21:19 run,
+`f10fec0`). So an rmdir txn committed its child-row DEL and not its
+dentry DEL / parent REDUCE — visible half-committed. Also
+`posix-fcstor012-dkl3px2h/perm_sticky_owner_can_unlink/sub` (ino 66151,
+row fine, `rmdir` → EIO) and `posix-fcstor007-ydfgl8ay/names_near_path_max_dir/aaa…`
+(ENOTEMPTY, nlink=2, no children). Leave them in place as evidence.
+Hypothesis to test first: `host_txn_recover_pass` calls a txn stranded
+at **5 s**, but a live coordinator behind a 2.4 s compaction stall plus
+the 400 ms wait + BUSY backoff can take up to **10.4 s**; recovery then
+DECIDE-ABORTs at the coordinator shard and RESOLVEs some participants
+while the coordinator's own COMMIT resolves the rest. Check: is the
+coordinator's DECIDE a first-writer-wins CAS on the DECISION record,
+and does a coordinator that loses that CAS follow the recorded decision
+(PROTO → re-read → resolve with THAT verdict)? Reproduce with
+`tests/tools/raft_log_tail.py` on the DECIDE/RESOLVE entries for the two
+txids, or force it: pause a coordinator (SIGSTOP efsd on the group-2
+leader for 6 s during `same_parent_storm.sh`) and dump. Do not raise
+the 5 s age to hide it — the fix is the CAS, and I16 dedup (next) is
+what stops the retries that widen the window.
+
+**Then: I16 op-id dedup for LINK / UNLINK / MKDIR / RENAME (spec §7.9;
+today only APPEND and create_file have it).** Cluster
 runs `84a2a5553194` with `EFS_RAFT_OBS=1` (5 s `raft-obs:` lines in
 `efsd.log`; keep it on until W8 closes). W8's gate chain passes except
 the 9-host row: `tests/measure/w8_root_lat.sh` root mkdir med 10 ms max
@@ -68,7 +96,9 @@ stat 0.3 / unlink 1.5 / rmdir 5.2 ms (a run 20 s after a roll shows a
 50 ms mode — that is the post-roll RDMA election churn, wait 2 min).
 
 What is left in the 9-host row, and what to do with each:
-1. **Retry of a committed non-idempotent op** — `link_of_symlink` EEXIST
+1. **Half-applied cross-shard txn (I17)** — the block above. Correctness;
+   first.
+2. **Retry of a committed non-idempotent op** — `link_of_symlink` EEXIST
    on a never-used name, `concurrent_create_unlink_two_proc` EIO,
    `unlink_open_then_recreate` reading `b''`: a client got BUSY from the
    400 ms apply-wait deadline during a stall, retried LINK/UNLINK
@@ -77,7 +107,7 @@ What is left in the 9-host row, and what to do with each:
    commands and answer a replay with the original verdict; do not make
    the client stop retrying (BUSY is legitimately retryable) and do not
    widen the 400 ms deadline.
-2. **Compaction stall → leader loss (needs a decision, §4).** One pump
+3. **Compaction stall → leader loss (needs a decision, §4).** One pump
    cycle held `h->mu` for **2.4 s** on both g0 replicas at once
    (`obs-fcstor004/005.txt`: `apply_max=2464250us applies_in_worst=54`),
    the leader missed its heartbeats and g0 went 5299→5302→5303; the
@@ -91,7 +121,7 @@ What is left in the 9-host row, and what to do with each:
    (background thread, readers merge an immutable memtable); a larger
    memtable as a stopgap (fewer, not shorter, stalls). Bring this to
    the user with the numbers; do not raise the election timeout.
-3. **Throughput at 144 concurrent jobs** — the six many-op tests
+4. **Throughput at 144 concurrent jobs** — the six many-op tests
    (`dir_deep_nesting*`, `names_crazy_*`, `concurrent_write_and_readdir`,
    `concurrent_creates_same_dir`, `mtime_monotonic_many_writes`) time out
    on most hosts: mkdir p50 21 ms / p90 88 ms under the suite, so a
@@ -881,6 +911,8 @@ are closed: whole-shard txn scans (`165e779`), stranded txn records
 (`f10fec0`), harness (`a683def`), view (`4eb1419`), WAL hold (`84a2a55`).
 
 What still fails, in order (details and instructions in §1b):
+0. Half-applied cross-shard txns in the leftovers (I17) — parent
+   nlink/nents with no dentry; a dentry whose child row is gone.
 1. Retry of a committed non-idempotent op after a BUSY (EEXIST on a
    fresh LINK name, EIO, empty read) → I16 op-id dedup for
    LINK/UNLINK/MKDIR/RENAME. Mechanical, spec §7.9.

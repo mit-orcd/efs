@@ -109,6 +109,22 @@ already committed (the latent hazard noted Sep 21 evening). Spec §7.9 /
 I16 defines the fix (op-id dedup, implemented today only for APPEND and
 create_file); it is the next queue item.
 
+**Leftovers = evidence of half-applied txns (I17).** 41 `posix-*` dirs
+were left in the mount root by the timed-out suites; `rm -rf` removed
+35. New `tests/tools/kv_dir_dump` (inode row + dentries + child-row
+presence for an ino, from a KV copy) on fcstor004 and fcstor005 (both
+host both groups; output identical): `names_crazy_dirs` ino 62991
+nlink=3 nents=1 **0 dentries** (created 22:10, build `84a2a55`);
+`mkdirat_unlinkat` ino 31264 nlink=3 nents=1, dentry `sub` → 83075
+**row missing** (21:19, `f10fec0`); `perm_sticky_owner_can_unlink/sub`
+66151 healthy row, `rmdir` EIO; `names_near_path_max_dir/aaa…` ENOTEMPTY
+with nlink=2. A rmdir/unlink txn committed on the child shard and not on
+the dentry/parent shard. Working hypothesis: `host_txn_recover_pass`
+(5 s stranded age) and a live coordinator delayed past 5 s by the
+compaction stall + BUSY backoff (10.4 s worst case) both decide — see
+START-HERE §1b for the check (DECIDE must be a first-writer-wins CAS on
+the DECISION record). Left in place.
+
 Also: `w8_posix9_probe.sh` labels updated (`read_mu` → "host mutex").
 `same_parent_storm.sh` PASS 9×4×100 both before and after; root lat /
 root mkdir gates unchanged (max 0.063 s, 9/9).
