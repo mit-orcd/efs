@@ -3561,6 +3561,21 @@ static void *host_pump(void *arg)
             t_wait = now_us_() - c0;
             c0 = now_us_();
         }
+        /* One KV WAL fsync per pump cycle, not per applied entry. Every
+         * metadata apply is one or more efs_kv puts and each put fsynced
+         * the KV WAL, under h->mu, on every replica: 0.5 ms per entry
+         * (EFS_RAFT_OBS apply_max 20 ms / 40 applies on the leader,
+         * 130 ms / 256 on a follower; results/measure/20260921-215919-
+         * w8-stall-timeline obs-*.txt). The Raft log is already durable
+         * before commit, so the KV only has to be durable before
+         * persist_applied advances the saved index: hold across the
+         * applies, release (= the one fsync) before persist_applied.
+         * A crash between release and persist re-applies entries whose
+         * puts are already in the KV — the same window per-put fsync had,
+         * and apply is idempotent for it. A handler-thread KV write
+         * during the hold (session/lock rows) is durable at this cycle's
+         * release, at most one cycle later than before. */
+        (void)efs_kv_lsm_sync_hold(h->kv);
         drain_inbox(h);
         if (obs) {
             t_drain = now_us_() - c0;
@@ -3588,6 +3603,8 @@ static void *host_pump(void *arg)
             t_tick = now_us_() - c0;
             c0 = now_us_();
         }
+        if (efs_kv_lsm_sync_release(h->kv) != EFS_OK)
+            fprintf(stderr, "raft-host: kv wal fsync failed at pump release\n");
         for (i = 0; i < HOST_NGROUPS; i++) {
             (void)persist_applied(h, i);
             (void)host_maybe_snapshot(h, i);
