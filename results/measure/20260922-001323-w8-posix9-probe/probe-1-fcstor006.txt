@@ -1,0 +1,6 @@
+threads=155
+-- conn threads (server_handle_conn) not idle in recv, by stack:
+      1  > __futex_abstimed_wait_common > pthread_cond_timedwait@@GLIBC_2.3.2 > host_wait_applied > host_propose_wait_idx > server_raft_host_submit > server_handle_conn > conn_thread > start_thread > clone3
+-- waiting on read_mu (lll_lock under a server_raft_host_ frame):
+  cpu 6.2 efsd
+  cpu 6.2 efsd

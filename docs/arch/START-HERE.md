@@ -52,23 +52,148 @@ Whoever picks the project up next does **this first**. Update or delete
 this block when done — an "in flight" block older than the last commit
 is a bug in this page.
 
-**Next mechanical item:** W8's harness is proven. The 9-host gate is
-blocked by mkdir latency, and it is not directory size. The mount root
-has 410 names (`results/measure/20260921-195541-w8-root-trace`, counted
-in 10 ms). One-at-a-time, a root `mkdir` is **2 ms or 1.03–1.08 s**, and
-the slow one is a single server reply (`recvfrom`), with the following
-`rmdir` the same speed. Interleaved with a fresh directory
-(`results/measure/20260921-200108-w8-root-interleave`): the fresh
-directory stays ≤15 ms in the same second, except two calls that return
-`EBUSY` after **10.38 s** — the 16-attempt BUSY backoff in
-`rpc_send_recv_dual` (50 ms, doubling, capped at 800 ms). Those names
-were not created. The recent raft tail has ~6 PREPARE entries per
-DECIDE (`results/measure/20260921-200251-w8-root-log`). Next: which key
-those extra PREPAREs touch. Do not raise the warmup or suite timeout,
-and do not change the txn protocol from a guess.
+**Next mechanical item: I16 op-id dedup for LINK / UNLINK / MKDIR /
+RENAME (spec §7.9; today only APPEND and create_file have it).** Cluster
+runs `84a2a5553194` with `EFS_RAFT_OBS=1` (5 s `raft-obs:` lines in
+`efsd.log`; keep it on until W8 closes). W8's gate chain passes except
+the 9-host row: `tests/measure/w8_root_lat.sh` root mkdir med 10 ms max
+0.063, no 1 s mode; `w8_root_mkdir.sh` 9/9 root + 9/9 sub; posix jobs=1
+**200/201 + mmap SKIP in 37 s** (`results/posix/20260922-015106`);
+`same_parent_storm.sh` PASS 9×4×100 (`results/stress/same-parent-20260922-015426`);
+9-host suite **191–195 / 201 on every host, 0 NOTRUN, all nine done in
+~62 s** (`results/posix/20260922-020950`, timeline
+`results/measure/20260921-220933-w8-stall-timeline`). Idle
+`md_latency.py` reference is now mkdir 6.1 / create 4.0 / append 6.2 /
+stat 0.3 / unlink 1.5 / rmdir 5.2 ms (a run 20 s after a roll shows a
+50 ms mode — that is the post-roll RDMA election churn, wait 2 min).
+
+What is left in the 9-host row, and what to do with each:
+1. **Retry of a committed non-idempotent op** — `link_of_symlink` EEXIST
+   on a never-used name, `concurrent_create_unlink_two_proc` EIO,
+   `unlink_open_then_recreate` reading `b''`: a client got BUSY from the
+   400 ms apply-wait deadline during a stall, retried LINK/UNLINK
+   (`stale_retryable`), and met its own result. This is the item above.
+   The apply must record `(client uuid, seq)` completion for these
+   commands and answer a replay with the original verdict; do not make
+   the client stop retrying (BUSY is legitimately retryable) and do not
+   widen the 400 ms deadline.
+2. **Compaction stall → leader loss (needs a decision, §4).** One pump
+   cycle held `h->mu` for **2.4 s** on both g0 replicas at once
+   (`obs-fcstor004/005.txt`: `apply_max=2464250us applies_in_worst=54`),
+   the leader missed its heartbeats and g0 went 5299→5302→5303; the
+   client saw a 2 s `stat` and two failed mkdirs in that window. The KV
+   is 1 GiB per node in 64 MiB L1 segments; an L0 segment spans every
+   shard, so `kv_compact_locked` merges **all** of L1 every 4 flushes
+   (≈ 16 MiB of writes) under `l->mu` (every read on the node stalls
+   too) and `h->mu`. It is deterministic, so every replica does it at
+   the same moment. Options the spec does not choose between: bounded
+   (leveled / per-key-range) compaction; compaction off the apply path
+   (background thread, readers merge an immutable memtable); a larger
+   memtable as a stopgap (fewer, not shorter, stalls). Bring this to
+   the user with the numbers; do not raise the election timeout.
+3. **Throughput at 144 concurrent jobs** — the six many-op tests
+   (`dir_deep_nesting*`, `names_crazy_*`, `concurrent_write_and_readdir`,
+   `concurrent_creates_same_dir`, `mtime_monotonic_many_writes`) time out
+   on most hosts: mkdir p50 21 ms / p90 88 ms under the suite, so a
+   200-op test needs > 15 s. Steady-state apply is still ~0.3 ms per
+   entry with no fsync in it (`apply_max=10657us applies_in_worst=36`):
+   that is the KV reads in the apply path — one `pread` per segment per
+   lookup/scan, 17 segments, no block cache. Measure before choosing
+   (perf on the pump thread under the suite); a block cache is an
+   implementation matter, a different segment layout is a decision.
+Do not raise the per-test 15 s budget or the suite cap.
 
 **Progress log (newest first — read this before the state below):**
 
+- **22:15 (Sep 21)** — **9-host posix: 191–195/201 on all nine in 62 s
+  (was 66–95 with `[None]` at the 385 s cap). Three causes, three fixes.**
+  (1) *Harness:* the parallel path stamped the per-test clock at
+  **submit** — 196 tests into 16 workers, so anything still queued after
+  15 s was recorded "timeout" without running (3-op tests "timing out",
+  the same first timeout on every host, ~100/201). The worker now stamps
+  its own start (`4eb1419`, first commit); the budget is unchanged.
+  (2) *`h->mu` contention:* with `read_mu` gone, 30+ handlers per pump
+  cycle took the pump's own mutex to read commit/applied/leader and to
+  cond_wait; the pump lost its heartbeat cadence and both groups
+  re-elected 4× in 50 s under load
+  (`results/measure/20260921-211829-w8-stall-timeline`). Handlers now
+  read a lock-free view the pump publishes (`host_publish_view`,
+  atomics) and sleep on `applied_cv` under a separate `cv_mu`; a handler
+  takes `h->mu` only to propose or begin a read round (`4eb1419`).
+  (3) *KV WAL fsync per applied entry:* 0.5 ms per apply on every
+  replica under `h->mu` (`EFS_RAFT_OBS`). One `efs_kv_lsm_sync_hold` per
+  pump cycle, released before `persist_applied` (`84a2a55`); spec
+  §"Raft log is the durability boundary" says the KV owes nothing on
+  the critical path. Under the suite: stat p50 3 ms (was 9), mkdir p50
+  21 ms (was 63); idle mkdir 6.1 / create 4.0 / append 6.2 ms. What
+  remains (§1b): retry-of-committed-op (I16 dedup), the 2.4 s
+  full-L1 compaction stall that still costs a term, and per-op cost at
+  144 jobs. New tools: `tests/measure/w8_stall_timeline.sh` (1 Hz
+  raft term/commit + client op latency around the 9-host suite),
+  `EFS_RAFT_OBS=1` on the deployed efsd.
+
+- **17:37 (Sep 21)** — **The sweep itself was a 100 ms regression; fixed
+  in `3291c6d`.** posix jobs=1 on `9534e53` passed 200/201 but took 219 s
+  (56 s in the morning); jobs=16 put 77 tests over the 15 s budget;
+  `md_latency.py`: mkdir med 99.5, create+close 152, append+close 202 ms
+  (reference 7.2/6.7/9.0). The GC thread on each leader ran 512 shards ×
+  3 prefix scans per second; strace: one scan = 9 `pread64` (one block
+  per segment) ≈ 0.3 ms under the LSM mutex the apply path needs; perf:
+  38 % `rep_movs` + 21 % memcmp, process CPU only 3 % — lock hold, not
+  CPU. Now every PREPARE apply marks its shard, a 5 s-old mark gets one
+  scan (64 per pass, 1 ms yield), clean clears it, a fresh process marks
+  all 4096 once. After the roll: create 6.1–6.7, append 8.5–9.3, stat
+  0.4, unlink 2.1, rmdir 7–10 ms medians; mkdir 9.9 (bimodal 2 ms log
+  path / ~50 ms cross-group txn, so its median is the mix).
+- **17:15 (Sep 21)** — **Recovery gates 0–3 pass on `9534e53`.** Within
+  ~1 min of the roll the two leaders logged 47 `txn-recover` lines —
+  every one `COMMIT (resolved)`: the coordinators HAD written COMMIT,
+  only their RESOLVEs were lost, so the recovered ops (dentries, inodes,
+  ALLOC bumps) are now visible ~90 min after their callers were told
+  EBUSY. One forwarded RESOLVE came back BUSY once and succeeded the
+  next pass. `kv_intents` on a fresh copy: **0** INTENT/GUARD/REDUCE
+  (`results/measure/20260921-w8-orphans/after-recovery.txt`). Parent
+  burst 12 rounds × 9 hosts: **108/108, 0 BUSY lines, max 0.31 s**
+  (`results/measure/20260921-210917-w8-parent-burst`). Root lat
+  (`…-211258-w8-root-lat`): root mkdir 16 ms (log path) or 50–57 ms
+  (cross-group txn: 5 PREPARE + DECIDE + 2 RESOLVE ≈ 8 commits), max
+  0.119, **no 1 s mode**; the "≤ 15 ms" I wrote for this gate was the
+  log-path number, the txn path is ~50 ms by construction. Concurrent
+  root mkdtemp (`…-211320-w8-root`): root 9/9 ≤ 0.137 s, fresh parent
+  9/9 ≤ 0.311 s, every rmdir OK, no ENOENT.
+- **17:10 (Sep 21)** — **Stranded transactions were the 10.4 s EBUSY.**
+  `tests/measure/w8_parent_burst.sh` (9 hosts × 6 rounds of fresh-parent
+  `mkdtemp`, `results/measure/20260921-204358-w8-parent-burst`): 53 OK,
+  1 EBUSY after 10.39 s, and the new server line shows 16 identical
+  `mkdir … rc=-13 (BUSY)` for it — one shard, every retry. A copy of
+  node 2's `mdraft/kv` through `tests/tools/kv_intents`
+  (`results/measure/20260921-w8-orphans`): **105 INTENT, 1 GUARD, 28
+  REDUCE records, all 4 500–5 000 s old**, 45 of the intents on ALLOC
+  keys of 45 even shards — a log-path create/mkdir landing on one of
+  those shards is BUSY on every attempt. They date from the 1 s-scan era:
+  a DECIDE or RESOLVE whose `host_wait_applied` hit 400 ms made the
+  coordinator skip the rest, and nothing ever came back for the records
+  (spec L5 says recovery must; there was none). `9534e53`:
+  `efs_txn_scan_pending` + `host_txn_recover_pass` on the GC thread.
+
+- **16:30 (Sep 21)** — **Root cause of the 1 s root mkdir: full-shard
+  scan in RESOLVE.** Server strace during 12 root pairs
+  (`results/measure/20260921-202253-w8-root-srv`): on the dual host 3–5
+  threads sit in one futex wait and release together 0.70 s / 1.05 s
+  later; on fcstor005 a futex wait ends `ETIMEDOUT` at exactly 0.400 s
+  (the `host_wait_applied` deadline → BUSY); no disk syscall ≥ 0.15 s.
+  perf on fcstor003+004 (`results/measure/20260921-202715-w8-root-perf`):
+  **85–90 % of efsd CPU** is `host_pump → apply_committed → host_apply →
+  efs_txn_resolve → lsm_scan_prefix → merge_scan → memcmp`.
+  `efs_txn_resolve` and `efs_txn_drop` used a 2-byte prefix = every key
+  of the shard, on every replica, per participant shard, under the KV
+  lock and `h->mu`. Root's shard 1 carries the most history, so a
+  cross-group child (txn path) cost ~1 s while a same-group child (log
+  path, no RESOLVE) cost 2 ms — the bimodality. The 400 ms BUSY then
+  drove the 10.4 s client backoff, and a retried UNLINK whose first
+  attempt had committed came back NOT_FOUND = the rmdir ENOENT. Fix
+  `165e779`: scan `[shard][INTENT|GUARD|REDUCE]` (3-byte prefixes).
+  Unit tests `test_txn`/`test_meta_apply`/`test_sim` OK on fcstor003.
 - **20:02 (Sep 21)** — **Root mkdir is 2 ms or 1.05 s; BUSY burns 10.4 s.**
   Root has **410** names, listed in 10 ms
   (`results/measure/20260921-195541-w8-root-trace`). Not the 65536
@@ -742,41 +867,36 @@ regressed — do not raise the budget.
 - **Forbidden:** raising `POSIX_TEST_SEC` or the `@budget(...)` values. A
   timeout is a failure to be removed, not re-labeled.
 
-#### W8 — 9-node POSIX suite 1 hits the harness wall
+#### W8 — 9-node POSIX suite 1 (gate: 201 rows, 0 NOTRUN, every host)
 
-Nine hosts running suite 1 concurrently all hit the 385 s python cap at
-131–144 of 201 (`results/posix/20260917-191430`). Only 5–7 were real
-walk/name timeouts; the rest never ran and report `[None]`. So the number is a
-harness artifact and cannot be read as 60 bugs. Four-node under load is
-186–188 both-pass (`results/posix/20260917-190014`).
+**State (Sep 21 22:15): 191–195 / 201 on every host, 0 NOTRUN, all nine
+finish in ~62 s** (`results/posix/20260922-020950`). History and the
+three fixes that got here are in the §1b progress log (harness clock at
+submit; `h->mu` contention after `read_mu`; KV WAL fsync per apply).
+Earlier symptoms — nine hosts at the 385 s cap with `[None]` rows
+(`results/posix/20260917-191430`), the 1.2 s / 1.03–1.08 s root mkdir,
+`rmdir` ENOENT on a just-created name, `EBUSY` after the 10.4 s backoff —
+are closed: whole-shard txn scans (`165e779`), stranded txn records
+(`9534e53`, `3291c6d`), `read_mu` (`223da15`), peer-pool starvation
+(`f10fec0`), harness + view (`4eb1419`), WAL hold (`84a2a55`).
 
-The suite now writes one row per selected test even when the outer
-`timeout` kills it: `SIGTERM` fills the unfinished names with `NOTRUN`
-(`posix_suite.py`), and `compare.py` counts `NOTRUN` and missing rows as
-"not run", not as EFS-BUG. Proven on a 20 s cut
-(`results/measure/w8-cut.tsv`, `results/measure/w8-compare.txt`): 201
-rows, 200 `NOTRUN`, `EFS BUGS : 0`, zero `[None]`. A finished run still
-has to have 201 data rows and 0 `NOTRUN`.
+What still fails, in order (details and instructions in §1b):
+1. Retry of a committed non-idempotent op after a BUSY (EEXIST on a
+   fresh LINK name, EIO, empty read) → I16 op-id dedup for
+   LINK/UNLINK/MKDIR/RENAME. Mechanical, spec §7.9.
+2. The synchronous full-L1 compaction: 2.4 s under `h->mu`+`l->mu` on
+   every replica at once, costs the leader its term. **Decision.**
+3. Six many-op tests at 144 concurrent jobs (mkdir p50 21 ms under
+   load; apply 0.3 ms/entry of KV reads). Measure, then decide.
 
-The 9-host gate has not been run. Its warmup, and each suite's own
-working directory, is a `mkdtemp` in the mount root. One such mkdir
-takes 1.2 s. Nine at once (`results/measure/20260921-194332-w8-root`):
-six `MKDIR_OK` in 1.2–6.0 s, three still outstanding at 8 s, and two of
-the successes then `rmdir` ENOENT on the directory that same call
-created. The same nine-way burst in a fresh subdirectory is 9/9 in
-0.008–0.197 s with every `rmdir` succeeding. Group 0 stayed
-`commit == applied` (+55 entries in ~9 s). An earlier burst right after
-the cut suite returned 0/9 inside 12 s
-(`results/measure/w8-mkdir-fcstor0*.txt`). One at a time the root is
-bimodal, 2 ms or 1.03–1.08 s, and the slow call is one server reply.
-A fresh directory in the same second stays ≤15 ms, except `EBUSY`
-after the 10.4 s BUSY backoff
-(`results/measure/20260921-200108-w8-root-interleave`). Root has 410
-names. Do not raise the 70 s warmup
-or the 400 s suite timeout, and do not point the suite at a
-subdirectory to hide this.
+Run it as `bash tests/measure/w8_stall_timeline.sh` (runs the suite,
+gives the raft/latency timeline) and read `raft-obs:` from the four
+`efsd.log`s. Do not raise the 70 s warmup, the 15 s per-test budget,
+or the 400 s suite timeout; do not point the suite at a subdirectory;
+do not raise the election timeout.
 
-- **Forbidden:** reporting `[None]` rows as failures, or as passes.
+- **Forbidden:** reporting `[None]` rows as failures, or as passes;
+  the clock-at-submit bug coming back (a queued test cannot time out).
 
 #### W9 — The client staging table is unbounded
 

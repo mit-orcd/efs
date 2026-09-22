@@ -1,0 +1,20 @@
+threads=212
+-- threads in an RPC (rpc_send_recv_*), by top efs frame:
+      4  > recv > efs_recv_all > efs_recv_msg > efs_conn_recv_msg > rpc_send_recv_shard > rpc_send_recv_owner > efs_client_rpc_lookup > efs_fuse_lookup_at > ll_lookup > fuse_session_process_buf_int
+      1  > recv > efs_recv_all > efs_recv_msg > efs_conn_recv_msg > rpc_send_recv_shard > rpc_send_recv_owner > efs_client_rpc_hold > efs_fuse_release_ino > ll_release > do_release.lto_priv
+      1  > recv > efs_recv_all > efs_recv_msg > efs_conn_recv_msg > rpc_send_recv_shard > rpc_send_recv_owner > efs_client_rpc_getattr > efs_client_stat_refresh > efs_fuse_getattr_ino > lookup_fill
+      1  > recv > efs_recv_all > efs_recv_msg > efs_conn_recv_msg > rpc_send_recv_dual > efs_client_rpc_report_dirty_raft > efs_client_report_dirty_ino > efs_fuse_flush_ino > ll_flush > do_flush.lto_priv
+-- fuse workers not in fuse_do_work read (busy):
+      1  > recv > efs_recv_all > efs_recv_msg > efs_conn_recv_msg > efs_client_rpc_readdir_cur > efs_fuse_readdir_ino > ll_readdir > do_readdir.lto_priv > fuse_session_process_buf_int > fuse_do_work
+      1  > __lll_lock_wait > pthread_mutex_lock@@GLIBC_2.2.5 > efs_client_report_dirty_ino > efs_fuse_flush_ino > ll_flush > do_flush.lto_priv > fuse_session_process_buf_int > fuse_do_work > start_thread > clone3
+-- conns to 19810 (Recv-Q Send-Q peer):
+     12 0 0 172.16.223.58:19810
+     11 0 0 172.16.223.57:19810
+      9 0 0 172.16.223.60:19810
+      8 0 0 172.16.223.59:19810
+      4 0 277 172.16.223.57:19810
+      2 0 277 172.16.223.58:19810
+      1 0 37 172.16.223.58:19810
+      1 0 37 172.16.223.57:19810
+      1 0 29 172.16.223.58:19810
+RPC-PROF calls=14685 checkout_us=3187858 send_us=65281 recv_us=364297859 busy_us=50000 busy_n=1 checkout_wait_n=142 lookup=9196/202893875us getattr=2470/35031221us create=756/34810387us setattr=71/3991760us readdir=0/0us unlink=196/8682862us append=314/12082858us report=0/0us getchunks=411/5822947us lookup_path=0/0us

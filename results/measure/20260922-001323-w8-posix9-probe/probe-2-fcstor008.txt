@@ -1,0 +1,13 @@
+threads=206
+-- threads in an RPC (rpc_send_recv_*), by top efs frame:
+      1  > recv > efs_recv_all > efs_recv_msg > efs_conn_recv_msg > rpc_send_recv_dual > efs_client_rpc_create > efs_client_create_ex > efs_client_create > efs_fuse_mkdir_at > ll_mkdir
+-- fuse workers not in fuse_do_work read (busy):
+      1  > recv > efs_recv_all > efs_recv_msg > efs_conn_recv_msg > efs_client_rpc_readdir_cur > efs_fuse_readdir_ino > ll_readdir > do_readdir.lto_priv > fuse_session_process_buf_int > fuse_do_work
+-- conns to 19810 (Recv-Q Send-Q peer):
+     16 0 0 172.16.223.58:19810
+     14 0 0 172.16.223.57:19810
+     10 0 0 172.16.223.60:19810
+      9 0 0 172.16.223.59:19810
+      1 0 285 172.16.223.57:19810
+      1 0 277 172.16.223.57:19810
+RPC-PROF calls=24384 checkout_us=3327350 send_us=110833 recv_us=463086765 busy_us=0 busy_n=0 checkout_wait_n=141 lookup=16256/274167693us getattr=3617/40156568us create=958/38416776us setattr=73/4006028us readdir=0/0us unlink=670/18479755us append=408/14513660us report=0/0us getchunks=788/7159935us lookup_path=0/0us

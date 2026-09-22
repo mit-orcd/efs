@@ -1,0 +1,24 @@
+9-host posix suite on f10fec0deaf6-dirty, probes at +45s and +75s; suite dir results/posix/20260922-001341
+host       rows  pass  fail  none     dur first_timeout
+fcstor007   202   101   100     0   109.6 dir_deep_nesting
+fcstor008   202   131    69     0   111.3 dir_deep_nesting
+fcstor009   202    97   104     0   112.8 dir_deep_nesting
+fcstor010   202   122    79     0   110.7 dir_deep_nesting
+fcstor011   202   132    68     0   112.0 dir_deep_nesting
+fcstor012   202   127    74     0   110.1 dir_deep_nesting
+fcstor013   202   126    75     0   111.0 dir_deep_nesting
+fcstor014   202   127    74     0   104.9 dir_deep_nesting
+fcstor015   202    97   104     0   112.8 dir_deep_nesting
+
+RPC-PROF (last line per client): lookup/getattr/create/unlink avg us
+fcstor007 calls=30608 recv_s=507 lookup=18683/16140us getattr=6239/7606us create=958/38038us unlink=1505/22144us
+fcstor008 calls=31020 recv_s=505 lookup=19102/15272us getattr=6256/7635us create=959/40029us unlink=1507/22779us
+fcstor009 calls=31124 recv_s=500 lookup=19105/15624us getattr=6258/7184us create=960/37129us unlink=1582/21078us
+fcstor010 calls=31021 recv_s=504 lookup=19102/15260us getattr=6258/7531us create=960/39938us unlink=1507/21972us
+fcstor011 calls=31174 recv_s=504 lookup=19102/15211us getattr=6262/7331us create=959/40306us unlink=1639/21013us
+fcstor012 calls=31033 recv_s=506 lookup=19103/15347us getattr=6262/7364us create=960/40028us unlink=1507/21739us
+fcstor013 calls=31049 recv_s=510 lookup=19102/15369us getattr=6264/7789us create=960/40604us unlink=1507/21882us
+fcstor014 calls=30680 recv_s=492 lookup=18637/15305us getattr=6393/7266us create=958/38650us unlink=1498/21335us
+fcstor015 calls=31025 recv_s=498 lookup=19102/15637us getattr=6258/7210us create=959/37711us unlink=1507/20787us
+
+Probe summaries: probe-*-fcstor0NN.txt (client: RPC threads + conns; server: busy conn threads, read_mu waiters)

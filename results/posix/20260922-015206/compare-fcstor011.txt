@@ -1,0 +1,25 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 188
+  EFS BUGS         : 8  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 5
+  not run          : 0  (cut or missing; not a bug)
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  concurrent_creates_same_dir      [FAIL] timeout after 15s
+  concurrent_write_and_readdir     [FAIL] timeout after 15s
+  dir_deep_nesting                 [FAIL] timeout after 15s
+  dir_deep_nesting_beyond_64       [FAIL] timeout after 15s
+  flock_unlock_on_close            [FAIL] LOCK_EX after other fd close: [Errno 11] Resource temporarily unavailable
+  mmap_write_read                  [SKIP] mmap unsupported: [Errno 19] No such device
+  names_crazy_dirs                 [FAIL] timeout after 15s
+  names_crazy_roundtrip            [FAIL] timeout after 15s
+
+--- target passes where baseline fails ---
+  dir_mkdir_umask                 
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

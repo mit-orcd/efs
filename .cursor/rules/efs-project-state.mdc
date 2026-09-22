@@ -3,7 +3,7 @@ description: efs project memory — current facts, live do-not-re-chase learning
 alwaysApply: true
 ---
 
-# efs project state (current — Sep 20 2026)
+# efs project state (current — Sep 21 2026 night)
 
 efs: distributed FS, 2+1 XOR EC, FUSE low-level client, 128 KiB chunks,
 metadata = one Raft group per shard over an on-disk ordered KV (Step 11,
@@ -88,36 +88,39 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - W1 N-1 CAS, W2 spec (`write()` client-buffered), W3 fsync tail, W4
   multi-client measurement, W5 50g: done Sep 18.
 - **W6 IO-500 gate: data path CLEAN; parent-row lost update FIXED (§7.2
- reductions, Sep 21).** Commit `30c41ee` (pub-batch every-entry verdicts,
- `alloc_key_claim`, reaper vlen + cross-group lane sweep, dcache img_seq,
- per-peer outbox condvar). 9×4 debug `results/io500/20260921-debug-9x4-outbox/`:
- both `-R` reads 0 errors, every unlink OK; mdtest-easy-write **0.238 kIOPS**
- (4.7× the morning), mdtest-hard-write 0.201 (11×), easy-read 1.16 GiB/s,
- hard-read 3.89, easy-write 0.78, hard-write 0.046 (36-way sub-chunk CAS).
- posix jobs=1 **200/201 + mmap SKIP in 56 s** (`results/posix/20260921-123904`,
- on the §7.2 build). Open perf: 1 GiB cold open is 0.23 s idle (128 GETCHUNKS × 1.6 ms);
- 14.6 ms/GETCHUNKS under 32 openers — the IOR 20 s is that serialization.
- Same-parent rate is a flat ~140–160 ops/s from 1 to 36 procs
- (`results/measure/20260921-161931-samedir-rate`), not the BUSY backoff.
- Cluster runs `b2184a5c7faf-dirty`. Next server restart is a build-ID
- change → `tests/roll_efsd.sh --all`.
+ reductions, Sep 21, `30c41ee`).** 9×4 `results/io500/20260921-debug-9x4-outbox/`:
+ both `-R` reads 0 errors, every unlink OK; mdtest-easy-write 0.238 kIOPS,
+ hard-write 0.201, easy-read 1.16 GiB/s, hard-read 3.89, easy-write 0.78,
+ hard-write 0.046 (36-way sub-chunk CAS). Open perf: 1 GiB cold open
+ 0.23 s idle (128 GETCHUNKS × 1.6 ms), 14.6 ms/GETCHUNKS under 32 openers.
+ Same-parent rate ~140–160 ops/s flat 1–36 procs
+ (`results/measure/20260921-161931-samedir-rate`, pre-`165e779`; remeasure).
+ Cluster runs **`84a2a5553194`** with
+ `EFS_RAFT_OBS=1` (rolled Sep 21 22:08; 5 s `raft-obs:` lines in
+ `efsd.log` — keep it on until W8 closes). Next server restart is a
+ build-ID change → `tests/roll_efsd.sh --all`.
 - Honest write numbers (MiB/s, flush in clock): Sep 18, 1-client 8 GiB
   dd+fsync **639** (best 724); 4-client **251**; 9-client **202**.
   Sep 21 remeasure (`results/measure/20260921-163033-dd-wall`): 1-client
   **499**, 4-client **176**; the 9-client row is INVALID (400 s timeout,
   mkdir/fsync EIO — do not quote it). Do not compare against the deleted
   pre-Raft engine's numbers (Aug: 2355 / 3599) — different system.
-- posix suite 1 jobs=1 known signature (since the outbox fix): **200/201**
- in ~60 s, `mmap_write_read` SKIP (`MAP_SHARED` ENODEV by spec). The old
- 15 s walk timeouts (`dir_deep_nesting*`, `names_crazy_dirs`,
- `mtime_monotonic_many_writes`) were the 100 ms floor — if they return,
- the cluster is not idle or a wakeup regressed (W7, isolated 1–6 s in
- `results/measure/20260921-133437-posix-isolated`). A 9-host suite does not start.
- One root mkdir is 2 ms or 1.03–1.08 s (one server reply, not client
- backoff); a fresh directory in the same second is ≤15 ms, except
- `EBUSY` after the full 10.4 s BUSY budget
- (`results/measure/20260921-200108-w8-root-interleave`). Root has 410
- names. posix2 one pair **58–60/63**:
+- posix suite 1 jobs=1 known signature: **200/201 in ~37 s**,
+ `mmap_write_read` SKIP (`MAP_SHARED` ENODEV by spec). **9-host suite
+ (W8's gate): 191–195/201 on every host, 0 NOTRUN, all nine in ~62 s**
+ (`results/posix/20260922-020950`; run it as
+ `tests/measure/w8_stall_timeline.sh`). What still fails there: the six
+ many-op tests (`dir_deep_nesting*`, `names_crazy_*`,
+ `concurrent_write_and_readdir`, `concurrent_creates_same_dir`,
+ `mtime_monotonic_many_writes` — throughput at 144 jobs, mkdir p50 21 ms
+ under load) and 1–3 one-offs at an election (EEXIST on a fresh LINK
+ name, EIO, empty read = retry of a committed op, I16). Idle
+ `md_latency.py` reference: **mkdir 6.1 / create 4.0 / append 6.2 /
+ stat 0.3 / unlink 1.5 / rmdir 5.2 ms**; 20 s after a roll it shows a
+ 50 ms mode — post-roll RDMA election churn, wait 2 min.
+ Root mkdir (410 names): med 10 ms, max 0.063, no 1 s mode
+ (`w8_root_lat.sh`); 9 concurrent root mkdtemp 9/9 (`w8_root_mkdir.sh`).
+ posix2 one pair **58–60/63**:
   `peer_concurrent_append` (one side's O_APPEND records missing),
   `peer_fcntl_range_conflict` (per-client lockf), overlap-pwrite RMW flakes.
   Anything else is new.
@@ -149,6 +152,33 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  nlink=2`, rmdir OK). The flat ~140–160 ops/s ceiling is in the status
  section above: fuse spends the wall in RPC recv, server on-CPU time is
  LSM scans, not the BUSY backoff. Open perf item, not correctness.
+- **Never scan a whole shard (2-byte prefix) in the apply path.**
+  `efs_txn_resolve`/`efs_txn_drop` did (0.7–1.1 s per RESOLVE on the
+  root's shard, every replica, under the KV lock and `h->mu`) → the
+  bimodal 2 ms / 1 s root mkdir, 400 ms `host_wait_applied` BUSY, 10.4 s
+  client backoff, retried committed UNLINK → ENOENT. Fixed `165e779`
+  (`txn_scan_kinds`: three 3-byte prefixes). Bound every scan by kind.
+  **Latent hazard, now the open I16 item:** a BUSY from the apply-wait
+  deadline makes the client retry a non-idempotent op (LINK/UNLINK/
+  MKDIR/RENAME) that may already have committed → EEXIST/ENOENT/EIO.
+- **A txn record with no coordinator behind it is permanent poison until
+  recovery removes it** (a coordinator BUSY on its own DECIDE/RESOLVE
+  wait left INTENT/GUARD/REDUCE behind; an EXCL intent on a shard's
+  ALLOC key made every log-path create/mkdir there BUSY; 105 orphans,
+  `results/measure/20260921-w8-orphans`). Since `9534e53`/`3291c6d` the
+  group leader's GC thread (`host_txn_recover_pass`) scans a shard's
+  three txn-record prefixes once its PREPARE-apply mark is 5 s old and
+  DECIDEs/RESOLVEs (PROTO = it was COMMITted); logs `txn-recover`.
+  Diagnose with `tests/tools/kv_intents` on a COPY of `mdraft/kv`. A
+  `(retry next pass)` line every 5 s = coordinator group without a leader.
+- **Never run KV prefix scans in a loop on a server thread.** One
+  `efs_kv_scan_prefix` = one block `pread` per LSM segment (17 now,
+  ~0.3 ms) under the LSM mutex the apply path needs; the first recovery
+  sweep (1 536/s per leader, 3 % CPU) put every metadata op at ~100 ms
+  (`results/measure/20260921-w8-orphans/sweep-regression.txt`). Lock
+  hold, not CPU. Check `python3 tests/measure/md_latency.py` (reference
+  medians 6.1/4.0/6.2/0.3/1.5/5.2 ms since `84a2a55`) after any change
+  that adds background KV work.
 - `efs_kv_scan_prefix` callback returning **>0 means batch-full**, not
  error. The reaper (`lane-sweep`, `rsv_purge`) misread it for weeks —
  no lane with >64 chunks was ever swept. Check this in any new scan user.
@@ -171,6 +201,29 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  A raft commit costs ~2–6 ms here; a median far above that on an idle
  cluster is a scheduling/wakeup bug — strace the FOLLOWER (acks every
  other heartbeat = this class) before blaming fsync.
+- **Handlers never take `h->mu` to read raft state or to wait** (`4eb1419`).
+ The pump publishes commit/applied/term/role/leader/read-round as atomics
+ (`host_publish_view`); readers use the view and sleep on `applied_cv`
+ under `cv_mu`; `h->mu` only to propose or read_begin. Before, 30+
+ handlers per cycle sat on the pump's mutex, it lost its heartbeat
+ cadence and both groups re-elected 4× in 50 s under the 9-host suite.
+- **One KV WAL fsync per pump cycle** (`sync_hold` around drain+tick,
+ release before `persist_applied`, `84a2a55`): per-put fsync was 0.5 ms
+ per applied entry under `h->mu` on every replica. Spec: the Raft log is
+ the durability boundary; the KV must be durable only before the saved
+ applied index advances. No per-apply fsync; no snapshot past the KV's
+ durable point.
+- **Synchronous full-L1 compaction = the remaining election trigger.**
+ KV 1 GiB/node, 64 MiB L1 segments; an L0 spans every shard so
+ `kv_compact_locked` rewrites ALL of L1 every 4 flushes (≈16 MiB) under
+ `l->mu`+`h->mu`, on every replica at once: `apply_max=2464250us` on 004
+ and 005 together, g0 5299→5302→5303, client stat 2 s
+ (`results/measure/20260921-220933-w8-stall-timeline/obs-*.txt`).
+ Unspecified → decision (START-HERE §1b). Steady apply is still ~0.3 ms
+ per entry with no fsync: `pread` per segment (17) per KV read, no cache.
+- **A queued posix test cannot time out** (`posix_suite.py` stamped the
+ clock at submit until `4eb1419`): every 9-host number before Sep 21
+ 22:00 was that artefact plus real stalls. Compare only against later runs.
 - Rolling restarts trigger ~5 min of group elections afterwards: peer
  conns are RDMA (`peer_pool.c`), a restarted node's QPs die on its peers
  with `transport retry counter exceeded` and block senders. Pre-existing,

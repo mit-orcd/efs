@@ -25,6 +25,168 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 21 2026 night — the 9-host posix suite: harness clock, h->mu, KV WAL fsync, compaction
+
+Where it started: after `read_mu` (`223da15`) and the peer-pool /
+forwarding fixes (`f10fec0`), the 9-host suite still failed ~100 of 201
+per host, with the same first timeout (`dir_deep_nesting`) on every
+host and 3-op tests like `err_stat_nonexistent` "timing out"
+(`results/posix/20260922-001341`). The probe showed the contended lock
+had moved from `read_mu` to `h->mu` itself (31 handler threads on the
+g0 leader in `host_read_index`/`host_wait_applied`).
+
+**Timeline tool.** `tests/measure/w8_stall_timeline.sh` runs the suite
+and samples at 1 Hz: raft term/leader/commit for both groups from
+fcstor003 and stat + mkdir + rmdir wall time from fcstor007 (itself
+under load). First run (`results/measure/20260921-211829-w8-stall-timeline`):
+**four leader changes in the first 50 s** (g2 391→392→395, g0
+5215→5216→5219), but **no 15 s stall anywhere** — stat p50 9 ms, mkdir
+p50 63 ms / p90 212 ms, max 1.9 s at a leaderless moment. So the
+"timeouts" were not a stall.
+
+**Harness.** `posix_suite.py`'s parallel path did
+`start[fut] = time.time()` at **submit**, for all 196 tests at once,
+into a 16-worker pool; the timeout loop then failed every future older
+than 15 s whether or not a worker had picked it up. Every 9-host number
+before this (Sep 17's 131–144 with `[None]`, the 66–95 pass rows) was
+queue time plus real stalls, and the abandoned-but-running futures are
+why the run hit the 385 s cap. Fix (`4eb1419`): the worker stamps its
+own start; an unstarted test cannot time out; the budget is unchanged.
+(First attempt shadowed `main()`'s `t0` and crashed `flush_tsv` — the
+run produced empty TSVs, `results/measure/20260921-213802-w8-stall-timeline`;
+renamed to `began`.)
+
+**h->mu.** With `read_mu` gone, every handler took `h->mu` to read
+commit/applied/leader/role and to `cond_wait` on `applied_cv`; the pump
+(which ticks heartbeats) waited on an unfair mutex behind 30+ threads
+per cycle. `host_publish_view` now stores the replica state as atomics
+(end of every pump cycle, after `read_begin`/propose, on attach);
+`host_read_index`, `host_wait_applied`, `host_is_leader`,
+`host_local_leader`, `server_raft_host_submit` read the view; waiters
+sleep under a dedicated `cv_mu` (predicate on the view checked while
+holding it; pump publishes then broadcasts under `cv_mu`). New raft
+accessors `efs_raft_read_index`, `efs_raft_read_done` (`4eb1419`).
+Result (`results/posix/20260922-015206`): **191–194/201 on every host,
+0 NOTRUN, all nine in ~87 s**, stat p50 3 ms; still 3 leader changes.
+
+**KV WAL fsync per apply.** Rolled with `EFS_RAFT_OBS=1`
+(`results/measure/20260921-215919-w8-stall-timeline/obs-*.txt`):
+steady state `apply_max` 20 ms for 40 applies on the leader, 130 ms for
+256 on a follower — 0.5 ms per applied entry, under `h->mu`, on every
+replica. Cause: every metadata apply is ≥1 `efs_kv_put` and `lsm_batch`
+fsyncs the KV WAL per put unless a hold is open (only the publish batch
+opened one). Spec ("The Raft log is the durability boundary; the applied
+KV is a replayable view … the KV's own sync mode is a performance
+choice") — so one `efs_kv_lsm_sync_hold` per pump cycle around
+drain+tick, `sync_release` (the single fsync) before `persist_applied`
+(`84a2a55`). Result (`results/posix/20260922-020950`,
+`results/measure/20260921-220933-w8-stall-timeline`): **191–195/201, all
+nine in ~62 s**, mkdir p50 21 ms / p90 88 ms under the suite; idle
+`md_latency.py` mkdir 6.1 / create 4.0 / append 6.2 / stat 0.3 /
+unlink 1.5 / rmdir 5.2 ms. (Measured 20 s after the roll it read
+53/57/59 ms — post-roll RDMA election churn, not a regression.)
+
+**What the OBS lines still show.** One pump cycle of **2.4 s** on 004
+and 005 at the same moment (`apply_max=2464250us applies_in_worst=54`
+/ `2430765us`, 37), 1.0 s on 003 and 006 at other moments; g0 went
+5299→5302→5303 around it, the client saw a 2 s `stat` and two failed
+mkdirs, `arc_miss=1` on both g0 replicas. The KV is 1 GiB per node in
+64 MiB L1 segments (`/data1/01/efs/mdraft/kv`: 17 sst, every L1
+segment's mtime identical), an L0 segment spans every shard, so
+`kv_compact_locked` merges all of L1 every 4 flushes (4 MiB memtable →
+≈16 MiB of writes) under `l->mu` (all reads on the node stall) and
+`h->mu`, deterministically on every replica. Compaction strategy is not
+in the spec → decision item. Steady-state apply is still ~0.3 ms/entry
+with no fsync in it: the KV reads in the apply path (`pread` per
+segment per lookup/scan, no block cache).
+
+**Remaining 9-host failures** (`results/posix/20260922-020950`): six
+many-op tests time out on most hosts (throughput at 144 jobs); and at
+the election moment `link_of_symlink` EEXIST on a never-used name,
+`concurrent_create_unlink_two_proc` EIO, `unlink_open_then_recreate`
+reading `b''` — the client's BUSY retry of a LINK/UNLINK that had
+already committed (the latent hazard noted Sep 21 evening). Spec §7.9 /
+I16 defines the fix (op-id dedup, implemented today only for APPEND and
+create_file); it is the next queue item.
+
+Also: `w8_posix9_probe.sh` labels updated (`read_mu` → "host mutex").
+`same_parent_storm.sh` PASS 9×4×100 both before and after; root lat /
+root mkdir gates unchanged (max 0.063 s, 9/9).
+
+## Sep 21 2026 evening — root mkdir 1 s, stranded transactions, the sweep that cost 100 ms
+
+Three server commits, all on the W8 path (9-host posix suite cannot
+start because concurrent root `mkdtemp` stalls).
+
+**`165e779` — RESOLVE/DROP scanned the whole shard.** Server strace during
+12 root mkdir+rmdir pairs (`results/measure/20260921-202253-w8-root-srv`):
+3–5 efsd threads park in one futex and release together 0.70 s / 1.05 s
+later; on fcstor005 a futex wait ends ETIMEDOUT at exactly 0.400 s (the
+`host_wait_applied` deadline → BUSY). perf
+(`results/measure/20260921-202715-w8-root-perf`): 85–90 % of efsd CPU in
+`host_apply → efs_txn_resolve → lsm_scan_prefix → merge_scan → memcmp`.
+`efs_txn_resolve`/`efs_txn_drop` used a 2-byte `[shard]` prefix = every
+key of the shard, on every replica, per participant, under the KV lock
+and `h->mu`. Root's shard 1 has the most history, so a cross-group child
+(txn path, RESOLVE) cost ~1 s while a same-group child (log path) cost
+2 ms — the bimodal 2 ms / 1.05 s of
+`results/measure/20260921-195829-w8-root-lat`. The 400 ms BUSY drove the
+client's 16-retry 10.4 s backoff, and a retried UNLINK whose first attempt
+had committed came back NOT_FOUND = the `rmdir` ENOENT. Fix: three 3-byte
+`[shard][INTENT|GUARD|REDUCE]` prefixes (`txn_scan_kinds`). After it,
+root mkdir max 0.119 s.
+
+**`d5cbee6` — log BUSY/STALE dir-op outcomes.** Rate-limited (20/s) server
+lines for mkdir/rmdir/create/unlink ending BUSY or STALE; client line when
+the 16 BUSY/STALE retries are exhausted. Before this, a 10 s EBUSY had no
+line anywhere.
+
+**`9534e53` — L5 recovery of stranded transactions.**
+`tests/measure/w8_parent_burst.sh` (9 hosts × 6 rounds of fresh-parent
+mkdtemp, `results/measure/20260921-204358-w8-parent-burst`): 53 OK, one
+EBUSY after 10.39 s with 16 identical server `mkdir … rc=-13` lines —
+same shard, every retry. `tests/tools/kv_intents` on a copy of node 2's
+`mdraft/kv` (`results/measure/20260921-w8-orphans`): 105 INTENT, 1 GUARD,
+28 REDUCE records, all 4 500–5 000 s old, 45 intents on ALLOC keys of 45
+even shards; a log-path create/mkdir landing on one of those shards was
+BUSY on every attempt. They were left by coordinators whose DECIDE or
+RESOLVE wait hit the 400 ms deadline in the 1 s-scan era; nothing ever
+came back for the records (spec L5 says recovery must; there was none).
+`efs_txn_scan_pending` lists a shard's distinct pending txns with their
+part lists; the group leader's GC thread proposes DECIDE ABORT at the
+coordinator (PROTO = it had COMMITted, only the RESOLVEs were lost) and
+RESOLVE on every participant; `host_bg_propose` returns the apply
+verdict for the local-leader path. After the roll: 47 `txn-recover`
+lines, every one `COMMIT (resolved)` — the recovered dentries/inodes/ALLOC
+bumps became visible ~90 min after their callers were told EBUSY (2PC
+lost-ack semantics). `kv_intents` afterwards: 0 pending. Burst 12 × 9:
+108/108, 0 BUSY. Root lat: no 1 s mode; root mkdir 16 ms (log) / 50–57 ms
+(cross-group txn ≈ 8 commits). Concurrent root mkdtemp 9/9 ≤ 0.137 s,
+fresh parent 9/9 ≤ 0.311 s, no ENOENT.
+
+**`3291c6d` — the sweep was a 100 ms regression.** posix jobs=1 on
+`9534e53`: 200/201 but 219 s (56 s in the morning); jobs=16: 77 tests
+over the 15 s budget (`results/posix/20260921-211622`, `-211929`).
+`tests/measure/md_latency.py`: mkdir med 99.5, create+close 152,
+append+close 202 ms (reference 7.2/6.7/9.0). The first sweep scanned 512
+shards × 3 prefixes per second on each leader; strace of the GC thread:
+one `efs_kv_scan_prefix` = 9 `pread64` (one block per LSM segment) ≈
+0.3 ms under the LSM mutex the apply path needs; perf 38 % `rep_movs` +
+21 % memcmp with the process at 3 % CPU — lock hold, not CPU
+(`results/measure/20260921-w8-orphans/sweep-regression.txt`). Now every
+PREPARE apply marks its shard (`host_rec_mark`), a mark 5 s old gets one
+scan (64 per pass, 1 ms yield), nothing pending clears it, anything found
+re-arms it; a fresh process marks all 4096 once. After the roll: create
+6.1–6.7, append 8.5–9.3, stat 0.4, unlink 2.1, rmdir 7–10 ms; posix
+jobs=1 200/201 in 42.5 s (`results/posix/20260921-213801`).
+
+Seen once during the `9534e53` posix run, not chased: the suite's cleanup
+`rmdir` sat ≥ 90 s in `recv` on fcstor003's conn while the server's conn
+thread for that fd was idle in `recv` and both Recv-Q/Send-Q were 0 — a
+lost reply or lost request; SO_RCVTIMEO is 30 s, so the 90 s is itself a
+question. It eventually returned. Open: 16 729 DECISION records are never
+reaped (spec silent on when a decision may go).
+
 ## Sep 21 2026 afternoon — measurements, W7 closed, W8 blocked on the mount root
 
 Runbooks ran on `b2184a5c7faf-dirty`. Same-parent rate is flat
