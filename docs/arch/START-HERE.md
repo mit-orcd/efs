@@ -66,14 +66,22 @@ dentry DEL / parent REDUCE — visible half-committed. Also
 `posix-fcstor012-dkl3px2h/perm_sticky_owner_can_unlink/sub` (ino 66151,
 row fine, `rmdir` → EIO) and `posix-fcstor007-ydfgl8ay/names_near_path_max_dir/aaa…`
 (ENOTEMPTY, nlink=2, no children). Leave them in place as evidence.
-Hypothesis to test first: `host_txn_recover_pass` calls a txn stranded
-at **5 s**, but a live coordinator behind a 2.4 s compaction stall plus
-the 400 ms wait + BUSY backoff can take up to **10.4 s**; recovery then
-DECIDE-ABORTs at the coordinator shard and RESOLVEs some participants
-while the coordinator's own COMMIT resolves the rest. Check: is the
-coordinator's DECIDE a first-writer-wins CAS on the DECISION record,
-and does a coordinator that loses that CAS follow the recorded decision
-(PROTO → re-read → resolve with THAT verdict)? Reproduce with
+Checked already: `efs_txn_decide` IS first-writer-wins (a conflicting
+decision → PROTO), so two deciders cannot both win. What is NOT covered:
+every coordinator (`host_mkdir`/rmdir/unlink/link/rename, e.g.
+`raft_host.c` ~6088) runs `DECIDE COMMIT` then `RESOLVE` per participant
+in a loop that stops at the first `rc != EFS_OK` — and `host_propose_wait`
+returns **BUSY at its 400 ms apply-wait deadline for an entry that is
+committed and will apply**. Under the 2.4 s compaction stall that is
+routine. The participants after the first BUSY stay pending until
+`host_txn_recover_pass` (5 s) — which first proposes `DECIDE ABORT`,
+gets PROTO, then must read the recorded COMMIT and RESOLVE COMMIT;
+verify that path end-to-end (a NOT_FOUND on the decision read — e.g.
+the coordinator's DECIDE itself still unapplied behind the stall, or
+looked up on the wrong shard — would ABORT participants that another
+shard already COMMITted). Also verify a participant RESOLVE that got
+BUSY-but-committed is not re-proposed with a different verdict.
+Reproduce with
 `tests/tools/raft_log_tail.py` on the DECIDE/RESOLVE entries for the two
 txids, or force it: pause a coordinator (SIGSTOP efsd on the group-2
 leader for 6 s during `same_parent_storm.sh`) and dump. Do not raise
