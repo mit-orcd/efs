@@ -222,7 +222,7 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  Unspecified → decision (START-HERE §1b). Steady apply is still ~0.3 ms
  per entry with no fsync: `pread` per segment (17) per KV read, no cache.
 - **A queued posix test cannot time out** (`posix_suite.py` stamped the
- clock at submit until `4eb1419`): every 9-host number before Sep 21
+ clock at submit until `a683def`): every 9-host number before Sep 21
  22:00 was that artefact plus real stalls. Compare only against later runs.
 - Rolling restarts trigger ~5 min of group elections afterwards: peer
  conns are RDMA (`peer_pool.c`), a restarted node's QPs die on its peers

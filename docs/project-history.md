@@ -50,7 +50,7 @@ into a 16-worker pool; the timeout loop then failed every future older
 than 15 s whether or not a worker had picked it up. Every 9-host number
 before this (Sep 17's 131–144 with `[None]`, the 66–95 pass rows) was
 queue time plus real stalls, and the abandoned-but-running futures are
-why the run hit the 385 s cap. Fix (`4eb1419`): the worker stamps its
+why the run hit the 385 s cap. Fix (`a683def`): the worker stamps its
 own start; an unstarted test cannot time out; the budget is unchanged.
 (First attempt shadowed `main()`'s `t0` and crashed `flush_tsv` — the
 run produced empty TSVs, `results/measure/20260921-213802-w8-stall-timeline`;

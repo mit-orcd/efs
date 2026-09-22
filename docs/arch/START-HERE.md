@@ -111,7 +111,7 @@ Do not raise the per-test 15 s budget or the suite cap.
   **submit** — 196 tests into 16 workers, so anything still queued after
   15 s was recorded "timeout" without running (3-op tests "timing out",
   the same first timeout on every host, ~100/201). The worker now stamps
-  its own start (`4eb1419`, first commit); the budget is unchanged.
+  its own start (`a683def`); the budget is unchanged.
   (2) *`h->mu` contention:* with `read_mu` gone, 30+ handlers per pump
   cycle took the pump's own mutex to read commit/applied/leader and to
   cond_wait; the pump lost its heartbeat cadence and both groups
@@ -878,7 +878,7 @@ Earlier symptoms — nine hosts at the 385 s cap with `[None]` rows
 `rmdir` ENOENT on a just-created name, `EBUSY` after the 10.4 s backoff —
 are closed: whole-shard txn scans (`165e779`), stranded txn records
 (`9534e53`, `3291c6d`), `read_mu` (`223da15`), peer-pool starvation
-(`f10fec0`), harness + view (`4eb1419`), WAL hold (`84a2a55`).
+(`f10fec0`), harness (`a683def`), view (`4eb1419`), WAL hold (`84a2a55`).
 
 What still fails, in order (details and instructions in §1b):
 1. Retry of a committed non-idempotent op after a BUSY (EEXIST on a
