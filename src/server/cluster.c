@@ -185,19 +185,56 @@ void server_gossip_membership(struct efsd_server *s, const struct efs_msg_hello 
     }
 }
 
-static int send_heartbeat(const char *host, uint16_t port)
+/* Liveness probes use private per-peer connections (server_peer_conn_new),
+ * not the bounded pool: when forwarded client commands filled the pool the
+ * heartbeat queued behind them and marked healthy peers down ("unresponsive
+ * — marked down for 30s" on every node, Sep 21). Only the heartbeat thread
+ * touches hb_conn[]. */
+static struct efs_conn *hb_conn[EFS_MAX_NODES];
+static char hb_host[EFS_MAX_NODES][64];
+static uint16_t hb_port[EFS_MAX_NODES];
+
+static void hb_conn_drop(uint32_t slot)
+{
+    if (slot < EFS_MAX_NODES && hb_conn[slot]) {
+        efs_conn_destroy(hb_conn[slot]);
+        hb_conn[slot] = NULL;
+    }
+}
+
+/* Slot = index in the node table; indices may shift on membership
+ * change, so a cached conn is reused only for the same host:port. */
+static struct efs_conn *hb_conn_for(uint32_t slot, const char *host,
+                                    uint16_t port)
+{
+    if (slot >= EFS_MAX_NODES)
+        return NULL;
+    if (hb_conn[slot] &&
+        (hb_port[slot] != port || strcmp(hb_host[slot], host) != 0))
+        hb_conn_drop(slot);
+    if (!hb_conn[slot]) {
+        hb_conn[slot] = server_peer_conn_new(host, port);
+        if (hb_conn[slot]) {
+            snprintf(hb_host[slot], sizeof(hb_host[slot]), "%s", host);
+            hb_port[slot] = port;
+        }
+    }
+    return hb_conn[slot];
+}
+
+static int send_heartbeat(uint32_t slot, const char *host, uint16_t port)
 {
     /* Skip non-numeric peers: avoids NSS. IB clusters advertise IPv4. */
     struct in_addr a;
     if (!host || inet_pton(AF_INET, host, &a) != 1)
         return -1;
 
-    struct efs_conn *pc = server_peer_conn_get(host, port);
+    struct efs_conn *pc = hb_conn_for(slot, host, port);
     if (!pc)
         return -1;
 
     if (efs_conn_send_msg(pc, EFS_MSG_HEARTBEAT, NULL, 0) != 0) {
-        server_peer_conn_drop(host, port, pc);
+        hb_conn_drop(slot);
         return -1;
     }
 
@@ -207,10 +244,9 @@ static int send_heartbeat(const char *host, uint16_t port)
     int rc = efs_conn_recv_msg(pc, &type, &payload, &payload_len);
     free(payload);
     if (rc != 0) {
-        server_peer_conn_drop(host, port, pc);
+        hb_conn_drop(slot);
         return -1;
     }
-    server_peer_conn_release(host, port, pc);
     return (type == EFS_MSG_HEARTBEAT_ACK) ? 0 : -1;
 }
 
@@ -250,7 +286,7 @@ static void *heartbeat_thread(void *arg)
         for (uint32_t i = 0; i < node_count; i++) {
             if (nodes[i].id == self)
                 continue;
-            int ok = (send_heartbeat(nodes[i].addr, nodes[i].port) == 0);
+            int ok = (send_heartbeat(i, nodes[i].addr, nodes[i].port) == 0);
 
             /* Record outcome under the lock by node id (indices may shift). */
             pthread_mutex_lock(&s->lock);

@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <time.h>
+#include <arpa/inet.h>
 
 /* Persistent server→server pool. Same idea as the client conn pool:
  * connect once per peer, upgrade to RDMA when the HCA is usable, reuse
@@ -137,6 +138,22 @@ static struct efs_conn *peer_connect(const char *host, uint16_t port)
         return NULL;
     }
     return nc;
+}
+
+/* A private connection outside the pool for a long-lived owner thread
+ * (the per-peer Raft sender). Raft AppendEntries/votes used to check a
+ * pool conn out per message; when forwarded client commands filled all
+ * EFS_PEER_CONNS_PER_NODE slots, the senders and the cluster heartbeat
+ * queued behind them in server_peer_conn_get, heartbeats stopped, the
+ * group lost its leader, the forwards then waited for a leader and the
+ * pool never drained (group 0 term 911 -> 1783 in 15 min, Sep 21).
+ * Consensus traffic must not share a bounded pool with client work. */
+struct efs_conn *server_peer_conn_new(const char *host, uint16_t port)
+{
+    struct in_addr a;
+    if (!host || inet_pton(AF_INET, host, &a) != 1 || port == 0)
+        return NULL;
+    return peer_connect(host, port);
 }
 
 struct efs_conn *server_peer_conn_get(const char *host, uint16_t port)

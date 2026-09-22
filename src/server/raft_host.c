@@ -134,6 +134,11 @@ struct host_outbox {
      * fsyncs at 0.3 ms. Visible in strace as followers acking only every
      * other heartbeat, two replies back to back. */
     pthread_cond_t cv;
+    /* Private connection to the peer, outside server_peer_conn_get's
+     * bounded pool (see server_peer_conn_new): consensus traffic never
+     * queues behind forwarded client commands. Owned by the sender
+     * thread only; reconnected on the next message after an error. */
+    struct efs_conn *conn;
     int n;
     struct host_outbox_item q[HOST_OUTBOX_MAX];
     /* EFS_RAFT_OBS counters (guarded by outbox_mu; stats are diagnostic
@@ -489,6 +494,10 @@ static void *host_sender(void *arg)
                 free(tx->q[i].buf);
             tx->n = 0;
             pthread_mutex_unlock(&h->outbox_mu);
+            if (tx->conn) {
+                efs_conn_destroy(tx->conn);
+                tx->conn = NULL;
+            }
             return NULL;
         }
         buf = tx->q[0].buf;
@@ -506,8 +515,11 @@ static void *host_sender(void *arg)
                 free(buf);
                 continue;
             }
-            pc = server_peer_conn_get(host, port);
+            if (!tx->conn)
+                tx->conn = server_peer_conn_new(host, port);
+            pc = tx->conn;
             if (!pc) {
+                tx->st_fail++;
                 free(buf);
                 continue;
             }
@@ -525,7 +537,8 @@ static void *host_sender(void *arg)
             }
             if (efs_conn_send_msg(pc, EFS_MSG_RAFT, buf, len) != 0) {
                 tx->st_fail++;
-                server_peer_conn_drop(host, port, pc);
+                efs_conn_destroy(pc);
+                tx->conn = NULL;
                 free(buf);
                 continue;
             }
@@ -533,16 +546,12 @@ static void *host_sender(void *arg)
                 rtype != EFS_MSG_RAFT_REPLY) {
                 tx->st_fail++;
                 free(reply);
-                server_peer_conn_drop(host, port, pc);
+                efs_conn_destroy(pc);
+                tx->conn = NULL;
                 free(buf);
                 continue;
             }
-            if (pc->kind == EFS_CONN_TCP && pc->fd >= 0) {
-                efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
-                efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
-            }
             free(reply);
-            server_peer_conn_release(host, port, pc);
             free(buf);
             if (obs) {
                 tx->st_sent++;
@@ -1875,35 +1884,76 @@ out:
 
 /* Submit cmd (or ReadIndex if clen==0) to the group's leader. Never targets
  * self. prefer_rid is a hint; NOT_PRIMARY replies retry leader_hint. */
+static void host_deadline_us(struct timespec *ts, long us);
+static int host_past_deadline(const struct timespec *end);
+
+/* The local replica's view of the group's leader, or -1. */
+static int host_local_leader(struct efs_raft_host *h, uint8_t group)
+{
+    struct efs_raft *r;
+    int lid = -1;
+
+    pthread_mutex_lock(&h->mu);
+    r = group_raft(h, group);
+    if (r)
+        lid = efs_raft_leader(r);
+    pthread_mutex_unlock(&h->mu);
+    return lid;
+}
+
 static int host_remote_cmd(struct efs_raft_host *h, uint8_t group,
                            const uint8_t *cmd, uint32_t clen,
                            struct efs_msg_raft_mkfs_reply *rep, int prefer_rid)
 {
-    int attempt, rid, skip = -1, rc;
+    struct timespec end;
+    int rid, skip = -1, rc;
 
-    for (attempt = 0; attempt < h->n + 2; attempt++) {
+    /* A peer that is not the leader answers NOT_PRIMARY (+hint) instead
+     * of forwarding on (server_raft_host_submit). During an election
+     * nobody has a hint; ride that out here, within the read budget,
+     * rather than failing the client's op or parking on a chain of
+     * forwards. Each retry re-reads the local replica's leader view. */
+    host_deadline_us(&end, (long)HOST_READ_TRIES * HOST_TICK_US);
+    for (;;) {
         rid = prefer_rid;
         if (rid < 0 || rid == h->raft_id || rid == skip)
+            rid = host_local_leader(h, group);
+        if (rid < 0 || rid == h->raft_id || rid == skip)
             rid = host_pick_peer(h, &group, 1, skip);
-        if (rid < 0 || rid == h->raft_id)
-            return EFS_ERR_NOT_PRIMARY;
+        if (rid < 0 || rid == h->raft_id) {
+            if (host_past_deadline(&end))
+                return EFS_ERR_NOT_PRIMARY;
+            usleep(HOST_TICK_US);
+            skip = -1;
+            prefer_rid = -1;
+            continue;
+        }
         rc = host_rpc_submit(h, rid, group, cmd, clen, rep, EFS_IO_TIMEOUT_MS);
         if (rc != EFS_OK) {
+            if (host_past_deadline(&end))
+                return rc;
+            usleep(HOST_TICK_US);
             skip = rid;
             prefer_rid = -1;
             continue;
         }
         if (rep->rc == EFS_OK)
             return EFS_OK;
-        if (rep->rc == EFS_ERR_NOT_PRIMARY && rep->leader_hint >= 0 &&
-            rep->leader_hint != h->raft_id && rep->leader_hint != rid) {
+        if (rep->rc != EFS_ERR_NOT_PRIMARY)
+            return rep->rc;
+        if (host_past_deadline(&end))
+            return EFS_ERR_NOT_PRIMARY;
+        if (rep->leader_hint >= 0 && rep->leader_hint != h->raft_id &&
+            rep->leader_hint != rid) {
             prefer_rid = rep->leader_hint;
             skip = rid;
             continue;
         }
-        return rep->rc != 0 ? rep->rc : EFS_ERR_NOT_PRIMARY;
+        /* No leader known anywhere yet: wait a tick, then re-pick. */
+        usleep(HOST_TICK_US);
+        skip = rid;
+        prefer_rid = -1;
     }
-    return EFS_ERR_NOT_PRIMARY;
 }
 
 static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
@@ -4801,6 +4851,28 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             out->rc = rc;
         return;
     }
+    /* A forwarded command is answered here only by the leader. A hosted
+     * follower used to run host_read_index/host_propose, which forward
+     * again — under a leaderless group every hop parked a conn thread and
+     * a peer-pool slot on the next node's recv (56 + 48 such threads on
+     * fcstor003, Sep 21) and the chain kept the pool full. The caller's
+     * host_remote_cmd retries the hinted leader itself. DIR_MIGRATE is
+     * exempt: it is bounced to a dual-host precisely because the pg
+     * leader may not host the dest group; its own reads/proposes each
+     * forward one hop to a leader that answers. */
+    pthread_mutex_lock(&h->mu);
+    r = group_raft(h, group);
+    if ((!r || efs_raft_role(r) != EFS_RAFT_LEADER) &&
+        !(clen >= HOST_DIR_LEN && cmd[0] == EFS_MD_CMD_DIR &&
+          cmd[1] == EFS_MD_DIR_MIGRATE)) {
+        int lid = r ? efs_raft_leader(r) : -1;
+        pthread_mutex_unlock(&h->mu);
+        out->rc = EFS_ERR_NOT_PRIMARY;
+        if (lid >= 0 && lid != h->raft_id)
+            out->leader_hint = lid;
+        return;
+    }
+    pthread_mutex_unlock(&h->mu);
     if (clen == 0) {
         rc = host_read_index(h, group, &hint);
         pthread_mutex_lock(&h->mu);

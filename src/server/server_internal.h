@@ -18,6 +18,8 @@ void server_peer_pool_init(void);
 void server_peer_pool_shutdown(void);
 /* Checkout a live conn to host:port (connects on miss). Returns NULL on failure. */
 struct efs_conn *server_peer_conn_get(const char *host, uint16_t port);
+/* Unpooled connection owned by the caller (destroy with efs_conn_destroy). */
+struct efs_conn *server_peer_conn_new(const char *host, uint16_t port);
 /* Return conn to the pool after a successful request/response. */
 void server_peer_conn_release(const char *host, uint16_t port, struct efs_conn *c);
 /* Close and discard a broken conn (net/protocol error). */
