@@ -1,0 +1,6 @@
+ERR fcstor015 p2 r29 unlink EIO
+DONE fcstor015 p1 rounds=80 errs=0 secs=47.2
+DONE fcstor015 p0 rounds=80 errs=0 secs=47.2
+DONE fcstor015 p3 rounds=80 errs=0 secs=47.2
+DONE fcstor015 p2 rounds=80 errs=1 secs=47.3
+HOST_DONE fcstor015 bad_procs=1

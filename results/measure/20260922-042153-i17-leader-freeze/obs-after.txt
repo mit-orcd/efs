@@ -1,0 +1,5 @@
+  fcstor003 arc_term_miss=none
+  fcstor004 arc_term_miss=none
+  fcstor005 arc_term_miss=none
+  fcstor006 arc_term_miss=none
+  total=0

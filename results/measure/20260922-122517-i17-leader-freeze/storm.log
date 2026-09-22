@@ -1,0 +1,19 @@
+[same-parent] clients=9 procs=4 rounds=80 parent=/tmp/efs-mount/spstorm-20260922-122519 -> /home/erbmi1/git/efs/results/measure/20260922-122517-i17-leader-freeze/storm
+[same-parent] FAIL fcstor007 rc=1 errs=2       1 EEXIST       1 ENOENT 
+[same-parent] FAIL fcstor008 rc=1 errs=3       1 EIO       2 ENOENT 
+[same-parent] FAIL fcstor009 rc=1 errs=1       1 EIO 
+[same-parent] FAIL fcstor010 rc=1 errs=1       1 ENOENT 
+[same-parent] PASS fcstor011 4 procs, slowest 38.7s
+[same-parent] PASS fcstor012 4 procs, slowest 39.0s
+[same-parent] FAIL fcstor013 rc=1 errs=2       1 EEXIST       1 ENOENT 
+[same-parent] FAIL fcstor014 rc=1 errs=4       1 EBUSY       1 EEXIST       2 ENOENT 
+[same-parent] FAIL fcstor015 rc=1 errs=1       1 EIO 
+rmdir: failed to remove '/tmp/efs-mount/spstorm-20260922-122519': Directory not empty
+children=3 nlink=5
+RMDIR_FAIL
+d-fcstor007-0-25
+d-fcstor013-1-25
+d-fcstor014-0-25
+[same-parent] FAIL: parent not clean (expected children=0 nlink=2)
+[same-parent] FAIL: rmdir parent
+[same-parent] FAIL (9) — see /home/erbmi1/git/efs/results/measure/20260922-122517-i17-leader-freeze/storm

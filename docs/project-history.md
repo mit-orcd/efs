@@ -25,6 +25,93 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 22 2026 00:00–00:35 — I17: the apply ring matched proposals by index, not (index, term)
+
+Picked up START-HERE §1b item 0 (half-applied cross-shard txns: ino 62991
+nlink=3 nents=1 with 0 dentries, ino 31264 with a dentry to a missing row).
+The hypothesis in that block — recovery's 5 s stranded age racing a slow
+coordinator — was wrong on inspection: `efs_txn_decide` is first-writer-
+wins and `host_txn_recover_one` does ABORT → PROTO → "COMMIT (resolved)"
+correctly. The hole was in the primitive under every coordinator:
+
+- `host_propose_wait_idx` = `host_propose` (returns the log index) →
+  `host_wait_applied(idx)` (published view `applied >= idx`) →
+  `host_apply_rc_locked(idx)`, which read `arc_rc[idx & MASK]` if
+  `arc_idx[slot] == idx`, else counted `obs_arc_miss` and returned **OK**.
+  `host_apply` recorded the ring with `(void)term;`.
+- Raft reuses an index across terms: a leader that loses its term has
+  its uncommitted tail truncated by the new leader, which commits a
+  different entry at the same index. The old leader's waiter then sees
+  `applied >= idx` and reads the stranger's verdict — almost always OK.
+  For a txn coordinator that is "my DECIDE COMMIT applied" when no
+  DECISION exists → RESOLVE COMMIT on the participants it reaches (child
+  row deleted / dentry written), recovery finds no decision 5 s later →
+  ABORT on the rest. Exactly the two dumped rows. The compaction stall
+  (2.4 s under `h->mu`, both g0 replicas) supplied the leader changes
+  (g0 5302→5303 in the 22:10 run).
+- Forced repro before fixing: `tests/measure/i17_leader_freeze.sh` —
+  `same_parent_storm.sh` 9×4×80 while SIGSTOPping the g0 leader 3 s, then
+  the g2 leader 3 s (HOST_ELECT_BASE 100 ticks × 5 ms = 0.5–1 s, so each
+  freeze forces an election). On `84a2a55`: parent `children=1 nlink=2`,
+  `rmdir` FAIL, `kv_dir_dump` on a fcstor004 KV copy: parent 230820
+  `nlink=2 nents=0` with dentry `d-fcstor009-2-29` → ino 113873 row
+  present; the worker logged `mkdir EIO` then `rmdir ENOENT`; recovery
+  logged `shard=1444 coord=3281 parts=2 age=13.6s -> COMMIT (resolved)`
+  (`results/measure/20260922-042153-i17-leader-freeze`). First attempt
+  of the script silently froze nothing: `GROUPS` is a bash builtin array
+  (read 246111) — renamed `FREEZE_GROUPS`.
+- Fix `46d54e6`: `arc_term[]` beside `arc_idx[]`; `host_propose` gains a
+  `uint64_t *term` out (= `efs_raft_term(r)` under the same `h->mu` as
+  the append; 0 when forwarded); `host_apply_rc_locked` /
+  `host_apply_extra_locked` take the term: mismatch → `EFS_ERR_NOT_PRIMARY`
+  (the entry was never committed; nothing happened; retry at the new
+  leader), slot overwritten → `EFS_ERR_BUSY` (verdict unknown), never OK.
+  `host_wait_verdict` (wait + verdict) and `host_wait_settled` (wait +
+  term check only, for the CREATE/APPEND-style callers that ignored the
+  verdict) replace the six bare propose+`host_wait_applied` pairs;
+  `host_bg_propose` (recovery DECIDE/RESOLVE, reaper) checks too;
+  `host_idx_ref` and the pipelined RESOLVE prefs carry the term;
+  `host_pub_batch` keeps `terms[]` and answers STALE on a mismatch (client
+  repulls). `efs_msg_raft_mkfs_reply.term` (server↔server, same build ID
+  everywhere) carries the leader's term for the forwarded-PUBLISH branch
+  of `server_raft_host_submit`, which proposes without waiting. `host_apply`
+  stamps the slot on its early return so no waited-on slot is ever
+  "never written". `raft-obs` prints `arc_term_miss=`. Unit tests
+  (test_raft/txn/meta_apply/wire/sim) OK, 0 warnings, built on fcstor007.
+- Rolled all four (`roll_efsd.sh --all`, `EFS_RAFT_OBS=1` kept):
+  running `46d54e679e4f-dirty` (dirty = the doc edits in the tree; the
+  four IDs agree, which is what the HELLO gate needs). Preflight passed
+  everything except my exact-string `--expect-build`; then the login-node
+  shell died ("no exit status" ×3) before the fixed-build freeze run
+  could be launched. **Owed:** `i17_leader_freeze.sh` ×2 on the new build
+  (pass = clean parent + `arc_term_miss` total > 0), posix jobs=1, 9-host.
+- Not fixed by this and not I17: worker ERR lines during a freeze
+  (`mkdir EIO`, `unlink EIO`, then `rmdir ENOENT` of the name whose mkdir
+  "failed") are the frozen leader's in-flight ops and the retry of a
+  committed op — I16 op-id dedup, next. The six pre-fix `posix-*`
+  leftovers on 19810 stay half-applied; there is no repair tool.
+- Gate, once the login shell was back (Sep 22 08:25–09:36,
+  `46d54e679e4f-dirty`): two freezes. `arc_term_miss` 0→6 on the leaders
+  that were stopped (fcstor004 and fcstor006), then 6→8. Run 2 parent
+  `children=0 nlink=2` RMDIR_OK
+  (`results/measure/20260922-122629-i17-leader-freeze`). Run 1 left
+  `d-fcstor007-0-25`, `d-fcstor013-1-25`, `d-fcstor014-0-25`
+  (`20260922-122517-…`); each worker line was `mkdir EEXIST` then
+  `rmdir ENOENT`. Dump of a fcstor004 KV copy: parent ino 145111
+  `nlink=5 nents=3`, three dentries, three child rows present and empty.
+  Idle rmdir of the three and of the parent succeeded
+  (`~/efs-runs/rec-rmdir-left.log`). Recovery during that run was
+  `COMMIT (resolved)` on shards 1436, 1622, 1751, 3816 — the child shards
+  and the parent shard. The client observed ENOENT while the txn was not
+  visible yet; recovery then installed it. The freeze script's
+  `children=0` check called that a torn row; it now accepts
+  `nlink == 2 + d-* lines` as a note. Review leftover, not hit here:
+  `host_wait_settled` (CREATE/APPEND-style callers) still returns OK when
+  the ring slot was overwritten; `host_wait_verdict` returns BUSY. The
+  txn path uses the verdict.
+
+---
+
 ## Sep 21 2026 night — the 9-host posix suite: harness clock, h->mu, KV WAL fsync, compaction
 
 Where it started: after `read_mu` (`223da15`) and the peer-pool /

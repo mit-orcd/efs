@@ -66,31 +66,62 @@ dentry DEL / parent REDUCE — visible half-committed. Also
 `posix-fcstor012-dkl3px2h/perm_sticky_owner_can_unlink/sub` (ino 66151,
 row fine, `rmdir` → EIO) and `posix-fcstor007-ydfgl8ay/names_near_path_max_dir/aaa…`
 (ENOTEMPTY, nlink=2, no children). Leave them in place as evidence.
-Checked already: `efs_txn_decide` IS first-writer-wins (a conflicting
-decision → PROTO), so two deciders cannot both win. What is NOT covered:
-every coordinator (`host_mkdir`/rmdir/unlink/link/rename, e.g.
-`raft_host.c` ~6088) runs `DECIDE COMMIT` then `RESOLVE` per participant
-in a loop that stops at the first `rc != EFS_OK` — and `host_propose_wait`
-returns **BUSY at its 400 ms apply-wait deadline for an entry that is
-committed and will apply**. Under the 2.4 s compaction stall that is
-routine. The participants after the first BUSY stay pending until
-`host_txn_recover_pass` (5 s) — which first proposes `DECIDE ABORT`,
-gets PROTO, then must read the recorded COMMIT and RESOLVE COMMIT;
-verify that path end-to-end (a NOT_FOUND on the decision read — e.g.
-the coordinator's DECIDE itself still unapplied behind the stall, or
-looked up on the wrong shard — would ABORT participants that another
-shard already COMMITted). Also verify a participant RESOLVE that got
-BUSY-but-committed is not re-proposed with a different verdict.
-Reproduce with
-`tests/tools/raft_log_tail.py` on the DECIDE/RESOLVE entries for the two
-txids, or force it: pause a coordinator (SIGSTOP efsd on the group-2
-leader for 6 s during `same_parent_storm.sh`) and dump. Do not raise
-the 5 s age to hide it — the fix is the CAS, and I16 dedup (next) is
-what stops the retries that widen the window.
+**Root cause found and fixed (Sep 22 00:25, `46d54e6`), gate run
+still owed.** Not the recovery pass (`efs_txn_decide` is first-writer-
+wins; recovery's ABORT→PROTO→COMMIT path is right). The bug was one
+level down: `host_propose_wait` matched a proposal to the apply ring
+**by index only** (`host_apply` did `(void)term`). After a leader
+change the old leader's uncommitted entry at index *i* is truncated and
+the new leader commits a different entry at *i*; the old leader's
+coordinator thread sees `applied >= i` and reads that stranger's OK as
+its own verdict: "DECIDE COMMIT applied" with no DECISION on disk →
+RESOLVE COMMIT on one participant, recovery (no decision) ABORTs the
+rest. A ring miss (slot overwritten) also returned OK. Forced repro:
+`tests/measure/i17_leader_freeze.sh` (SIGSTOP the g0 then g2 leader 3 s
+each during `same_parent_storm.sh`) on `84a2a55` left the storm parent
+`nlink=2 nents=0` with a live dentry `d-fcstor009-2-29` → child row
+present, worker `mkdir EIO` + `rmdir ENOENT`, `rmdir` parent fails
+(`results/measure/20260922-042153-i17-leader-freeze`). Fix: ring keeps
+`arc_term`; `host_propose` returns the term it appended under; every
+ring read matches `(idx, term)` — mismatch → `NOT_PRIMARY` (nothing
+happened, retry), overwritten → `BUSY` (verdict unknown), never OK;
+`efs_msg_raft_mkfs_reply.term` lets a forwarder match a forwarded
+PUBLISH; `raft-obs` line gains `arc_term_miss=`. Cluster rolled to
+**`46d54e679e4f-dirty`** (dirty = the doc edits; all four agree, that is
+fine — pass `--expect-build 46d54e679e4f-dirty` to preflight).
+**Gated Sep 22 morning on `46d54e679e4f-dirty`**
+(`results/measure/20260922-122517-i17-leader-freeze` and
+`20260922-122629-i17-leader-freeze`). `arc_term_miss` moved 0→6 then
+6→8, so the new check fired. Run 2: parent `children=0 nlink=2`,
+`RMDIR_OK`. Run 1's script said FAIL (`children=3 nlink=5`, three
+`d-*` dirs whose mkdir returned EEXIST and whose rmdir returned
+ENOENT). That row is not torn: `kv_dir_dump` on a fcstor004 copy shows
+parent ino 145111 `nlink=5 nents=3`, exactly three dentries, each child
+row present and empty; idle `rmdir` of the three and of the parent then
+succeeded (`~/efs-runs/rec-rmdir-left.log`). Recovery had logged
+`COMMIT (resolved)` on those shards (1436, 1622, 1751, 3816): the
+client gave up while the txn was still invisible, and recovery installed
+the dentries afterward. That is I16, the next item. The script now
+treats `nlink == 2 + d-* lines` as a note, not a torn row. The six old
+`posix-*` leftovers on 19810 stay half-applied (pre-fix rows, no repair
+tool) — ignore or wipe at the next agreed `raft-mkfs`. posix jobs=1 on this build is the known signature:
+**200 pass / 0 fail / mmap SKIP / 0 NOTRUN in 92 s**
+(`results/posix/20260922-133653`). `run_tests.sh` exits 1 because the
+XFS comparator lists that SKIP as an "EFS BUG" (XFS passes mmap). The
+9-host suite on this build is **185–197 / 201, 0 NOTRUN, 46–66 s**
+(`results/posix/20260922-134008`, timeline
+`results/measure/20260922-093952-w8-stall-timeline`). Both groups
+changed leader 12 s in (g0 term 5339→5340, g2 452→453); that window is
+the 15 s timeouts piled on fcstor008 and one 1.09 s root mkdir. The
+repeated fails are still the many-op tests (`dir_deep_nesting` 7 hosts,
+`names_crazy_dirs` / `names_near_path_max*`). One-offs are EIO, EBUSY,
+and those timeouts — I16 and the compaction stall, not a new torn row.
+Next mechanical item is I16 (§7.9; the op-id window already exists for
+CREATE and APPEND, directory RPCs do not carry it).
 
 **Then: I16 op-id dedup for LINK / UNLINK / MKDIR / RENAME (spec §7.9;
 today only APPEND and create_file have it).** Cluster
-runs `84a2a5553194` with `EFS_RAFT_OBS=1` (5 s `raft-obs:` lines in
+runs `46d54e679e4f-dirty` with `EFS_RAFT_OBS=1` (5 s `raft-obs:` lines in
 `efsd.log`; keep it on until W8 closes). W8's gate chain passes except
 the 9-host row: `tests/measure/w8_root_lat.sh` root mkdir med 10 ms max
 0.063, no 1 s mode; `w8_root_mkdir.sh` 9/9 root + 9/9 sub; posix jobs=1
@@ -104,8 +135,8 @@ stat 0.3 / unlink 1.5 / rmdir 5.2 ms (a run 20 s after a roll shows a
 50 ms mode — that is the post-roll RDMA election churn, wait 2 min).
 
 What is left in the 9-host row, and what to do with each:
-1. **Half-applied cross-shard txn (I17)** — the block above. Correctness;
-   first.
+1. **Half-applied cross-shard txn (I17)** — fixed `46d54e6` (ring match
+   by `(index, term)`); the block above says which gate run is owed.
 2. **Retry of a committed non-idempotent op** — `link_of_symlink` EEXIST
    on a never-used name, `concurrent_create_unlink_two_proc` EIO,
    `unlink_open_then_recreate` reading `b''`: a client got BUSY from the
@@ -919,8 +950,11 @@ are closed: whole-shard txn scans (`165e779`), stranded txn records
 (`f10fec0`), harness (`a683def`), view (`4eb1419`), WAL hold (`84a2a55`).
 
 What still fails, in order (details and instructions in §1b):
-0. Half-applied cross-shard txns in the leftovers (I17) — parent
-   nlink/nents with no dentry; a dentry whose child row is gone.
+0. Half-applied cross-shard txns (I17) — **fixed `46d54e6` and gated**
+   (Sep 22): freeze both leaders during `same_parent_storm`. The parent
+   row stayed consistent (`nlink=5 nents=3` with three real children on
+   the run that left names behind; the other run removed the parent).
+   `arc_term_miss` moved. Details in §1b.
 1. Retry of a committed non-idempotent op after a BUSY (EEXIST on a
    fresh LINK name, EIO, empty read) → I16 op-id dedup for
    LINK/UNLINK/MKDIR/RENAME. Mechanical, spec §7.9.

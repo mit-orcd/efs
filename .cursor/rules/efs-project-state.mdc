@@ -35,8 +35,11 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  in the login-node shell. Read `~/efs-runs/<name>.log`; do not `efs-bg.sh
  wait`. Posix suite, IO-500, `tests/roll_efsd.sh`,
  `tests/deploy_fuse_clients.sh`, and `tests/preflight.sh` (~15 s) all go
- through it. The login-node Cursor shell dies with "no exit status" and
- then nothing it issued can be trusted.
+ through it. The login-node Cursor shell dies with "no exit status"
+ (no stdout, no stderr, no exit code). Every login-node command is
+ `efs-rec.sh <name> '<cmd>'`; on that failure read
+ `~/efs-runs/rec-<name>.log` (and the screen log, if it was an
+ `efs-bg.sh start`) before deciding whether the command ran.
 - **Never** run `make` in `$HOME/git/efs` (login node is AVX-512; nodes are
   Zen2 → SIGILL). Build in `/tmp/efs` on a node after rsync.
 - **Never** widen a timeout to pass a test; a timeout is a FAIL
@@ -95,21 +98,34 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  0.23 s idle (128 GETCHUNKS × 1.6 ms), 14.6 ms/GETCHUNKS under 32 openers.
  Same-parent rate ~140–160 ops/s flat 1–36 procs
  (`results/measure/20260921-161931-samedir-rate`, pre-`165e779`; remeasure).
- Cluster runs **`84a2a5553194`** with
- `EFS_RAFT_OBS=1` (rolled Sep 21 22:08; 5 s `raft-obs:` lines in
- `efsd.log` — keep it on until W8 closes). Next server restart is a
- build-ID change → `tests/roll_efsd.sh --all`.
+  Cluster runs **`46d54e679e4f-dirty`** with
+  `EFS_RAFT_OBS=1` (rolled Sep 22 00:26; 5 s `raft-obs:` lines in
+  `efsd.log` — keep it on until W8 closes; "dirty" = doc edits, all
+  four agree — preflight `--expect-build 46d54e679e4f-dirty`). Next
+  server restart is a build-ID change → `tests/roll_efsd.sh --all`.
+  **I17 gate done** (`i17_leader_freeze.sh` ×2, Sep 22 08:25):
+  `arc_term_miss` 0→8; one run parent clean, the other left 3 dirs whose
+  row was `nlink=5 nents=3` with matching dentries and child rows
+  (`results/measure/20260922-122517-i17-leader-freeze`,
+  `20260922-122629-i17-leader-freeze`). Idle rmdir of those dirs
+  succeeded. posix jobs=1 on this build: 200/0/1 SKIP in 92 s
+  (`results/posix/20260922-133653`). 9-host: 185–197/201, 0 NOTRUN,
+  46–66 s (`results/posix/20260922-134008`); an election 12 s in
+  accounts for the low end. Next mechanical item: I16.
 - Honest write numbers (MiB/s, flush in clock): Sep 18, 1-client 8 GiB
   dd+fsync **639** (best 724); 4-client **251**; 9-client **202**.
   Sep 21 remeasure (`results/measure/20260921-163033-dd-wall`): 1-client
   **499**, 4-client **176**; the 9-client row is INVALID (400 s timeout,
   mkdir/fsync EIO — do not quote it). Do not compare against the deleted
   pre-Raft engine's numbers (Aug: 2355 / 3599) — different system.
-- posix suite 1 jobs=1 known signature: **200/201 in ~37 s**,
- `mmap_write_read` SKIP (`MAP_SHARED` ENODEV by spec). **9-host suite
- (W8's gate): 191–195/201 on every host, 0 NOTRUN, all nine in ~62 s**
- (`results/posix/20260922-020950`; run it as
- `tests/measure/w8_stall_timeline.sh`). What still fails there: the six
+- posix suite 1 jobs=1 known signature: **200/201**,
+ `mmap_write_read` SKIP (`MAP_SHARED` ENODEV by spec). Sep 22 on
+ `46d54e6`: 200/0/1 in 92 s (`results/posix/20260922-133653`; the prior
+ ~37 s run is `results/posix/20260922-015106`). **9-host suite
+ (W8's gate): 185–197/201, 0 NOTRUN, 46–66 s**
+ (`results/posix/20260922-134008`, via
+ `tests/measure/w8_stall_timeline.sh`). Prior Sep 21 night was
+ 191–195/201 in ~62 s (`results/posix/20260922-020950`). What still fails there: the six
  many-op tests (`dir_deep_nesting*`, `names_crazy_*`,
  `concurrent_write_and_readdir`, `concurrent_creates_same_dir`,
  `mtime_monotonic_many_writes` — throughput at 144 jobs, mkdir p50 21 ms
@@ -221,13 +237,20 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  (`results/measure/20260921-220933-w8-stall-timeline/obs-*.txt`).
  Unspecified → decision (START-HERE §1b). Steady apply is still ~0.3 ms
  per entry with no fsync: `pread` per segment (17) per KV read, no cache.
-- **Half-applied cross-shard txns exist on 19810 (I17), found Sep 21
- night:** ino 62991 nlink=3 nents=1 with 0 dentries; ino 31264 with a
- dentry `sub` → ino 83075 whose row is gone (`tests/tools/kv_dir_dump`
- on a KV copy, fcstor004/005 see every shard). Suspect: L5 recovery's 5 s
- stranded age vs a live coordinator's 10.4 s worst case (2.4 s stall +
- BUSY backoff) — two deciders. START-HERE §1b item 0. A leftover
- `posix-*` dir that `rm -rf` cannot remove is evidence; dump it first.
+- **A Raft proposal is identified by `(index, term)`, never by index
+  (I17 root cause, fixed `46d54e6`):** the apply ring matched by index;
+  after a leader change the truncated entry's index is reused and the
+  old leader's coordinator read the new entry's OK as "DECIDE COMMIT
+  applied" → RESOLVE COMMIT on one shard, recovery ABORT on the rest =
+  ino 62991 (nlink=3 nents=1, 0 dentries), ino 31264 (dentry → missing
+  row), and the forced repro `tests/measure/i17_leader_freeze.sh` on
+  `84a2a55` (`results/measure/20260922-042153-i17-leader-freeze`).
+  Now: term mismatch → NOT_PRIMARY, ring slot overwritten → BUSY, never
+  OK; `raft-obs` prints `arc_term_miss=`. Any new wait-for-apply must go
+  through `host_wait_verdict` / `host_wait_settled`, not a bare
+  `host_wait_applied` + ring read. Pre-fix leftovers on 19810 stay
+  half-applied (no repair tool); dump with `tests/tools/kv_dir_dump` on
+  a KV COPY (fcstor004/005 hold every shard) before blaming new code.
 - **A queued posix test cannot time out** (`posix_suite.py` stamped the
  clock at submit until `a683def`): every 9-host number before Sep 21
  22:00 was that artefact plus real stalls. Compare only against later runs.

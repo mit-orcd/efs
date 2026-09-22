@@ -17,11 +17,13 @@ ssh). Record the answers before you act. **Steps 2–6 are one command:
 lines; also checks the commit rate is idle). Step 1 (shell alive) and
 step 7 (approval mechanics) are yours.
 
-1. **Is the shell alive?** `echo alive; date`. If a `Shell` call returns
-   "no exit status", the execution environment is dead — nothing you
-   issue from then on can be trusted to have run. Stop, tell the user to
-   restart the environment, and re-probe state from scratch afterwards
-   (do NOT assume the last command ran or did not run).
+1. **Is the shell alive?** `efs-rec.sh probe 'echo alive; date'` (timeouts
+   rule: every login-node command is recorded). If a `Shell` call returns
+   "no exit status", stop issuing Shell calls and read
+   `~/efs-runs/rec-probe.log` plus the `rec-<name>.log` of the command
+   that just died. That file is the stdout/stderr. Then tell the user and
+   re-probe from scratch once a shell answers; do not guess that the
+   command did not run.
 2. **Servers:** on each of fcstor003–006:
    `pgrep -x efsd | wc -l; grep -o "build=[^ ]*" /tmp/efs/efsd.log | head -1`.
    Expect `1` and the same build string on all four. Different strings =

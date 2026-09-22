@@ -1,0 +1,5 @@
+  fcstor003 arc_term_miss=0
+  fcstor004 arc_term_miss=5
+  fcstor005 arc_term_miss=0
+  fcstor006 arc_term_miss=3
+  total=8

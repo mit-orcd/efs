@@ -1,0 +1,5 @@
+children=3 nlink=5
+RMDIR_FAIL
+d-fcstor007-0-25
+d-fcstor013-1-25
+d-fcstor014-0-25

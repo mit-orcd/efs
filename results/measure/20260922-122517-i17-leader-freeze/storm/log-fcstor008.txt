@@ -1,0 +1,8 @@
+ERR fcstor008 p1 r7 rmdir ENOENT
+ERR fcstor008 p1 r25 mkdir EIO
+ERR fcstor008 p1 r25 rmdir ENOENT
+DONE fcstor008 p0 rounds=80 errs=0 secs=42.3
+DONE fcstor008 p1 rounds=80 errs=3 secs=42.3
+DONE fcstor008 p3 rounds=80 errs=0 secs=42.3
+DONE fcstor008 p2 rounds=80 errs=0 secs=42.3
+HOST_DONE fcstor008 bad_procs=1

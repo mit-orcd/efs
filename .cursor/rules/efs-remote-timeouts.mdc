@@ -29,4 +29,39 @@ does not kill D-state (`fusermount3`, FUSE `request_wait_answer`).
  `efs-bg.sh status` reads the log locally. Do not `efs-bg.sh wait` —
  it sleeps on the login node. The Cursor shell there dies even on short
  cluster commands once the session is long ("no exit status", Sep 20–21)
- and a dead shell cannot tell you whether the job ran.
+ and the tool result then has no stdout, no stderr, and no exit code.
+
+## "no exit status" — read the transcript, do not guess
+
+That result means the tool channel died. It does not say whether the
+command started, and it does not kill a screen already running on
+node9901.
+
+Every login-node Shell command goes through the recorder, including
+`echo alive`, `efs-bg.sh start`, and a short ssh. One unique name per
+attempt:
+
+```
+~/.cursor/skills/efs-test-ssh/scripts/efs-rec.sh <name> '<cmd>'
+```
+
+The transcript is `~/efs-runs/rec-<name>.log`. A start line is appended
+before `<cmd>` runs; an end line carries `rc=`. The file is append-only.
+
+When the tool returns "no exit status":
+
+1. Stop issuing more Shell calls.
+2. Read `~/efs-runs/rec-<name>.log` with the file tools. File reads still
+   work after the shell channel dies.
+3. If `<cmd>` was `efs-bg.sh start <screen>`, also read
+   `~/efs-runs/<screen>.log` and `<screen>.rc`.
+4. Say what the file shows:
+   - no new `efs-rec: start` line — the wrapper never ran
+   - start line, output, no `efs-rec: end` — it started; the channel died
+     mid-run; the partial stdout/stderr in that file is the detail
+   - `efs-rec: end … rc=N` — it finished; only the tool result was lost
+   - screen log contains `efs-bg: start` and no `efs-bg: end` — that
+     screen is running on node9901
+   - screen log absent — `efs-bg.sh start` did not create it
+5. Do not report "the command did not run" unless the transcript says
+   the wrapper never started.
