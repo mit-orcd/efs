@@ -186,6 +186,19 @@ struct host_group {
     /* EFS_RAFT_OBS: last logged term/role, for election-churn timing. */
     uint64_t obs_term;
     int obs_role;
+    /* Lock-free view of the replica for RPC handlers, published by
+     * host_publish_view under h->mu (pump: end of every cycle; also right
+     * after a read_begin/propose) and read with __atomic_load_n. Handlers
+     * used to take h->mu just to read commit/applied/leader and to
+     * cond_wait on applied_cv, so under the 9-host posix suite 30+ RPC
+     * threads per cycle queued on the pump's own mutex, the pump lost its
+     * 50 ms heartbeat cadence and both groups re-elected four times in
+     * 50 s (results/measure/20260922-*-w8-stall-timeline). h->mu is now
+     * taken by a handler only to mutate raft (propose, read_begin). */
+    uint64_t v_commit, v_applied, v_read_index, v_term;
+    int v_has;          /* 1 when a local replica exists */
+    int v_role, v_leader;
+    int v_read_pending, v_read_done;
 };
 
 /* One blocked lock waiter (10.5c-34). Stack-allocated by the waiting
@@ -257,6 +270,10 @@ struct efs_raft_host {
      * fresh applied index without polling; used with h->mu (no I/O under
      * that wait). */
     int pump_efd;
+    /* applied_cv waiters (host_wait_applied, host_read_index) sleep under
+     * cv_mu, not h->mu: their predicate is the published view above, and
+     * the pump takes cv_mu only for the broadcast. */
+    pthread_mutex_t cv_mu;
     pthread_cond_t applied_cv;
     /* Per-peer send outboxes. host_send runs under h->mu (pump ticks and
      * proposer threads) and must NEVER do network I/O there: a dead peer's
@@ -1744,6 +1761,70 @@ static struct host_group *group_slot(struct efs_raft_host *h, uint8_t group)
     return NULL;
 }
 
+#define V_LOAD(p) __atomic_load_n(&(p), __ATOMIC_ACQUIRE)
+#define V_STORE(p, v) __atomic_store_n(&(p), (v), __ATOMIC_RELEASE)
+
+/* Publish one group's replica state for lock-free readers. h->mu held. */
+static void host_publish_view(struct efs_raft_host *h, int gi)
+{
+    struct host_group *g = &h->g[gi];
+    struct efs_raft *r = g->r;
+
+    if (!r) {
+        V_STORE(g->v_has, 0);
+        return;
+    }
+    V_STORE(g->v_commit, efs_raft_commit(r));
+    V_STORE(g->v_applied, efs_raft_applied(r));
+    V_STORE(g->v_term, efs_raft_term(r));
+    V_STORE(g->v_role, (int)efs_raft_role(r));
+    V_STORE(g->v_leader, efs_raft_leader(r));
+    V_STORE(g->v_read_index, efs_raft_read_index(r));
+    V_STORE(g->v_read_pending, efs_raft_read_pending(r));
+    V_STORE(g->v_read_done, efs_raft_read_done(r));
+    V_STORE(g->v_has, 1);
+}
+
+static void host_publish_group(struct efs_raft_host *h, uint8_t group)
+{
+    int i;
+    for (i = 0; i < HOST_NGROUPS; i++)
+        if (h->g[i].group == group && h->g[i].hosted)
+            host_publish_view(h, i);
+}
+
+/* Snapshot of the view (consistent enough for a predicate check: every
+ * field is monotone or re-validated by the caller's loop). */
+struct host_view {
+    int has, role, leader, read_pending, read_done;
+    uint64_t commit, applied, read_index;
+};
+
+static void host_view_get(struct efs_raft_host *h, uint8_t group,
+                          struct host_view *v)
+{
+    struct host_group *g = group_slot(h, group);
+
+    memset(v, 0, sizeof(*v));
+    v->leader = -1;
+    if (!g || !V_LOAD(g->v_has))
+        return;
+    v->has = 1;
+    v->commit = V_LOAD(g->v_commit);
+    v->applied = V_LOAD(g->v_applied);
+    v->read_index = V_LOAD(g->v_read_index);
+    v->role = V_LOAD(g->v_role);
+    v->leader = V_LOAD(g->v_leader);
+    v->read_pending = V_LOAD(g->v_read_pending);
+    v->read_done = V_LOAD(g->v_read_done);
+}
+
+static int host_view_covers(const struct host_view *v, uint64_t want)
+{
+    return v->has && v->role == EFS_RAFT_LEADER && v->read_done &&
+           v->read_index >= want && v->applied >= v->read_index;
+}
+
 static int host_hosts(struct efs_raft_host *h, uint8_t group)
 {
     struct host_group *s = group_slot(h, group);
@@ -1887,18 +1968,13 @@ out:
 static void host_deadline_us(struct timespec *ts, long us);
 static int host_past_deadline(const struct timespec *end);
 
-/* The local replica's view of the group's leader, or -1. */
+/* The local replica's view of the group's leader, or -1 (lock-free). */
 static int host_local_leader(struct efs_raft_host *h, uint8_t group)
 {
-    struct efs_raft *r;
-    int lid = -1;
+    struct host_view v;
 
-    pthread_mutex_lock(&h->mu);
-    r = group_raft(h, group);
-    if (r)
-        lid = efs_raft_leader(r);
-    pthread_mutex_unlock(&h->mu);
-    return lid;
+    host_view_get(h, group, &v);
+    return v.has ? v.leader : -1;
 }
 
 static int host_remote_cmd(struct efs_raft_host *h, uint8_t group,
@@ -1980,55 +2056,47 @@ static int host_past_deadline(const struct timespec *end)
     return now.tv_nsec >= end->tv_nsec;
 }
 
-/* ReadIndex for one group, batched. The raft core keeps ONE read round
- * (read_begin resets its acks), so rounds used to be serialized by a
- * host-wide read_mu that every inode handler then held across its whole
- * KV read + propose — one metadata RPC at a time per leader (33 threads
- * queued on it under the 9-host posix suite, lookup 53 ms avg). Now the
- * round state is shared under h->mu: a reader records commit_index on
- * arrival (`want`), joins a pending round instead of restarting it, and
- * is satisfied by any finished round whose read_index >= want with
- * applied >= read_index. Only a reader that finds no round pending and
- * none covering it begins one. h->mu is dropped while waiting: the pump
- * must tick for heartbeats to land, and applied_cv wakes us when they do.
- * Not the leader: forward (blocking peer RPC, no host lock held). */
+/* ReadIndex for one group, batched and lock-free on the hot path. The
+ * raft core keeps ONE read round (read_begin resets its acks), so rounds
+ * used to be serialized by a host-wide read_mu that every inode handler
+ * then held across its whole KV read + propose — one metadata RPC at a
+ * time per leader (33 threads queued on it under the 9-host posix suite,
+ * lookup 53 ms avg). A reader records commit_index on arrival (`want`),
+ * joins a pending round instead of restarting it, and is satisfied by any
+ * finished round whose read_index >= want with applied >= read_index. It
+ * reads all of that from the published view; h->mu is taken only by the
+ * one reader that finds no round pending and none covering it, to
+ * read_begin. Waiting is on applied_cv under cv_mu (the pump broadcasts
+ * after every cycle), never on h->mu — the pump must keep its heartbeat
+ * cadence under 100+ concurrent handlers. Not the leader: forward
+ * (blocking peer RPC, no host lock held). */
 static int host_read_index(struct efs_raft_host *h, uint8_t group,
                            int *leader_hint)
 {
     struct timespec end;
+    struct host_view v;
     uint64_t want;
-    int lid = -1;
 
     if (leader_hint)
         *leader_hint = -1;
     host_deadline_us(&end, (long)HOST_READ_TRIES * HOST_TICK_US);
-    pthread_mutex_lock(&h->mu);
-    {
-        struct efs_raft *r = group_raft(h, group);
-        if (!r) {
-            pthread_mutex_unlock(&h->mu);
-            return EFS_ERR_NOT_PRIMARY;
-        }
-        want = efs_raft_commit(r);
-    }
+    host_view_get(h, group, &v);
+    if (!v.has)
+        return EFS_ERR_NOT_PRIMARY;
+    want = v.commit;
     for (;;) {
-        struct efs_raft *r = group_raft(h, group);
         int rc;
 
-        if (!r) {
-            pthread_mutex_unlock(&h->mu);
+        if (!v.has)
             return EFS_ERR_NOT_PRIMARY;
-        }
-        lid = efs_raft_leader(r);
         if (leader_hint)
-            *leader_hint = lid;
-        if (efs_raft_role(r) != EFS_RAFT_LEADER) {
+            *leader_hint = v.leader;
+        if (v.role != EFS_RAFT_LEADER) {
             struct efs_msg_raft_mkfs_reply rep;
 
-            pthread_mutex_unlock(&h->mu);
-            if (lid == h->raft_id)
+            if (v.leader == h->raft_id)
                 return EFS_ERR_NOT_PRIMARY;
-            rc = host_remote_cmd(h, group, NULL, 0, &rep, lid);
+            rc = host_remote_cmd(h, group, NULL, 0, &rep, v.leader);
             if (rc == EFS_OK)
                 rc = host_wait_applied(h, group, rep.index, leader_hint);
             if (rc != EFS_OK)
@@ -2037,28 +2105,38 @@ static int host_read_index(struct efs_raft_host *h, uint8_t group,
                 *leader_hint = rep.leader_hint;
             return EFS_OK;
         }
-        if (efs_raft_read_covers(r, want)) {
-            pthread_mutex_unlock(&h->mu);
+        if (host_view_covers(&v, want))
             return EFS_OK;
-        }
-        if (!efs_raft_read_pending(r)) {
-            rc = efs_raft_read_begin(r);
-            if (rc != EFS_OK) {
-                pthread_mutex_unlock(&h->mu);
-                return rc;
-            }
-            if (efs_raft_read_covers(r, want)) {
-                pthread_mutex_unlock(&h->mu);
-                return EFS_OK;
-            }
-        }
-        if (host_past_deadline(&end)) {
+        if (!v.read_pending) {
+            /* Begin a round — under h->mu, re-validated against the core
+             * (another reader may have begun one since the view). */
+            struct efs_raft *r;
+
+            pthread_mutex_lock(&h->mu);
+            r = group_raft(h, group);
+            rc = EFS_OK;
+            if (r && efs_raft_role(r) == EFS_RAFT_LEADER &&
+                !efs_raft_read_pending(r) && !efs_raft_read_covers(r, want))
+                rc = efs_raft_read_begin(r);
+            host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
-            return EFS_ERR_BUSY;
+            if (rc != EFS_OK)
+                return rc;
+            host_pump_kick(h);
+            host_view_get(h, group, &v);
+            continue;
         }
-        /* read_ready lands when heartbeat replies arrive — the pump
-         * broadcasts applied_cv at the end of that cycle. */
-        pthread_cond_timedwait(&h->applied_cv, &h->mu, &end);
+        if (host_past_deadline(&end))
+            return EFS_ERR_BUSY;
+        /* read_done lands when heartbeat replies arrive — the pump
+         * publishes the view and broadcasts applied_cv each cycle. */
+        pthread_mutex_lock(&h->cv_mu);
+        host_view_get(h, group, &v);
+        if (v.has && v.role == EFS_RAFT_LEADER && v.read_pending &&
+            !host_view_covers(&v, want))
+            pthread_cond_timedwait(&h->applied_cv, &h->cv_mu, &end);
+        pthread_mutex_unlock(&h->cv_mu);
+        host_view_get(h, group, &v);
     }
 }
 
@@ -2066,31 +2144,32 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
                              uint64_t idx, int *leader_hint)
 {
     struct timespec end;
+    struct host_view v;
 
     /* Same overall budget as the old poll loop (HOST_READ_TRIES x
      * HOST_TICK_US), but the pump's applied_cv broadcast wakes us the
-     * moment the index applies instead of up to 5 ms later. */
+     * moment the index applies instead of up to 5 ms later. Lock-free
+     * predicate on the published view; sleeps under cv_mu, never h->mu. */
     host_deadline_us(&end, (long)HOST_READ_TRIES * HOST_TICK_US);
-    pthread_mutex_lock(&h->mu);
     for (;;) {
-        struct efs_raft *r = group_raft(h, group);
-        if (!r) {
+        host_view_get(h, group, &v);
+        if (!v.has) {
             /* No local replica: the leader already waited in submit. */
-            pthread_mutex_unlock(&h->mu);
             return EFS_OK;
         }
         if (leader_hint)
-            *leader_hint = efs_raft_leader(r);
-        if (efs_raft_applied(r) >= idx) {
-            pthread_mutex_unlock(&h->mu);
+            *leader_hint = v.leader;
+        if (v.applied >= idx)
             return EFS_OK;
-        }
         if (host_past_deadline(&end)) {
-            h->obs_wait_timeouts++;
-            pthread_mutex_unlock(&h->mu);
+            __atomic_fetch_add(&h->obs_wait_timeouts, 1, __ATOMIC_RELAXED);
             return EFS_ERR_BUSY;
         }
-        pthread_cond_timedwait(&h->applied_cv, &h->mu, &end);
+        pthread_mutex_lock(&h->cv_mu);
+        host_view_get(h, group, &v);
+        if (v.has && v.applied < idx)
+            pthread_cond_timedwait(&h->applied_cv, &h->cv_mu, &end);
+        pthread_mutex_unlock(&h->cv_mu);
     }
 }
 
@@ -2111,6 +2190,7 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
             *leader_hint = lid;
         if (efs_raft_role(r) == EFS_RAFT_LEADER) {
             rc = efs_raft_propose(r, cmd, clen, idx);
+            host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
             /* New entry pending: pump ships AppendEntries immediately.
              * (After the unlock: propose already broadcast under h->mu;
@@ -3516,9 +3596,17 @@ static void *host_pump(void *arg)
         }
         if (obs)
             t_persist = now_us_() - c0;
-        /* Applies above may have advanced commit/applied: wake every waiter
-         * (host_wait_applied / host_read_index) without a poll interval. */
+        /* Applies above may have advanced commit/applied/read state:
+         * publish the lock-free view, then wake every waiter
+         * (host_wait_applied / host_read_index) without a poll interval.
+         * Waiters check the view under cv_mu before sleeping, so the
+         * publish-then-broadcast order here rules out a lost wakeup. */
+        for (i = 0; i < HOST_NGROUPS; i++)
+            if (h->g[i].hosted)
+                host_publish_view(h, i);
+        pthread_mutex_lock(&h->cv_mu);
         pthread_cond_broadcast(&h->applied_cv);
+        pthread_mutex_unlock(&h->cv_mu);
         if (obs) {
             uint64_t held;
             if (t_wait > h->obs_wait_max_us)
@@ -3715,6 +3803,7 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
             h->g[gi].applied_saved = efs_raft_applied(h->g[gi].r);
         }
     }
+    host_publish_view(h, gi);
     return EFS_OK;
 }
 
@@ -3729,6 +3818,7 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
     h->g[gi].hosted = 0;
     h->g[gi].snap_oversized = 0;
     h->g[gi].r = NULL;
+    V_STORE(h->g[gi].v_has, 0);
     memset(h->g[gi].arc_idx, 0, sizeof(h->g[gi].arc_idx));
     memset(h->g[gi].arc_rc, 0, sizeof(h->g[gi].arc_rc));
     want = load_desired(h, group, boot);
@@ -4488,6 +4578,7 @@ int server_raft_host_start(struct efsd_server *s)
     /* A fresh process knows nothing about pending txn records: walk every
      * shard once (throttled by the GC pass), then only marked ones. */
     host_rec_mark_all(h);
+    pthread_mutex_init(&h->cv_mu, NULL);
     pthread_cond_init(&h->applied_cv, NULL);
     {
         int i;
@@ -4652,6 +4743,7 @@ void server_raft_host_stop(void)
     pthread_mutex_destroy(&h->outbox_mu);
     pthread_mutex_destroy(&h->rec_mu);
     pthread_cond_destroy(&h->applied_cv);
+    pthread_mutex_destroy(&h->cv_mu);
     for (i = 0; i < EFS_RAFT_MAX_PEERS; i++)
         pthread_cond_destroy(&h->tx[i].cv);
     if (h->pump_efd >= 0)
@@ -4783,7 +4875,6 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                              struct efs_msg_raft_mkfs_reply *out)
 {
     struct efs_raft_host *h = g_host;
-    struct efs_raft *r;
     uint8_t group;
     const uint8_t *cmd;
     uint32_t clen;
@@ -4803,11 +4894,11 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     clen = plen - 1;
     if (clen >= HOST_CFG_LEN && cmd[0] == EFS_MD_CMD_CFG) {
         rc = host_cfg(h, group, cmd, clen, &hint);
-        pthread_mutex_lock(&h->mu);
-        r = group_raft(h, group);
-        if (r)
-            idx = efs_raft_applied(r);
-        pthread_mutex_unlock(&h->mu);
+        {
+            struct host_view v;
+            host_view_get(h, group, &v);
+            idx = v.applied;
+        }
         out->rc = rc;
         out->index = idx;
         if (hint >= 0)
@@ -4827,11 +4918,11 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             return;
         }
         rc = host_session_get(h, cmd, clen, group, &hint, &salt);
-        pthread_mutex_lock(&h->mu);
-        r = group_raft(h, group);
-        if (r)
-            idx = efs_raft_applied(r);
-        pthread_mutex_unlock(&h->mu);
+        {
+            struct host_view v;
+            host_view_get(h, group, &v);
+            idx = v.applied;
+        }
         out->rc = rc;
         out->index = idx;
         out->salt = salt;
@@ -4860,34 +4951,33 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
      * exempt: it is bounced to a dual-host precisely because the pg
      * leader may not host the dest group; its own reads/proposes each
      * forward one hop to a leader that answers. */
-    pthread_mutex_lock(&h->mu);
-    r = group_raft(h, group);
-    if ((!r || efs_raft_role(r) != EFS_RAFT_LEADER) &&
-        !(clen >= HOST_DIR_LEN && cmd[0] == EFS_MD_CMD_DIR &&
-          cmd[1] == EFS_MD_DIR_MIGRATE)) {
-        int lid = r ? efs_raft_leader(r) : -1;
-        pthread_mutex_unlock(&h->mu);
-        out->rc = EFS_ERR_NOT_PRIMARY;
-        if (lid >= 0 && lid != h->raft_id)
-            out->leader_hint = lid;
-        return;
+    {
+        struct host_view v;
+        host_view_get(h, group, &v);
+        if ((!v.has || v.role != EFS_RAFT_LEADER) &&
+            !(clen >= HOST_DIR_LEN && cmd[0] == EFS_MD_CMD_DIR &&
+              cmd[1] == EFS_MD_DIR_MIGRATE)) {
+            out->rc = EFS_ERR_NOT_PRIMARY;
+            if (v.has && v.leader >= 0 && v.leader != h->raft_id)
+                out->leader_hint = v.leader;
+            return;
+        }
     }
-    pthread_mutex_unlock(&h->mu);
     if (clen == 0) {
         rc = host_read_index(h, group, &hint);
-        pthread_mutex_lock(&h->mu);
-        r = group_raft(h, group);
-        if (r)
-            idx = efs_raft_applied(r);
-        pthread_mutex_unlock(&h->mu);
+        {
+            struct host_view v;
+            host_view_get(h, group, &v);
+            idx = v.applied;
+        }
     } else if (clen >= HOST_DIR_LEN && cmd[0] == EFS_MD_CMD_DIR &&
                cmd[1] == EFS_MD_DIR_MIGRATE) {
         rc = host_dir_migrate(h, rd64be(cmd + 2), cmd, clen, &hint);
-        pthread_mutex_lock(&h->mu);
-        r = group_raft(h, group);
-        if (r)
-            idx = efs_raft_applied(r);
-        pthread_mutex_unlock(&h->mu);
+        {
+            struct host_view v;
+            host_view_get(h, group, &v);
+            idx = v.applied;
+        }
     } else if (clen >= 1 && cmd[0] == EFS_MD_CMD_PUBLISH) {
         /* Same as the local report path: propose, return the index, let
          * the reporter host_wait_applied the last idx. host_propose_wait
@@ -5079,15 +5169,10 @@ void server_raft_host_hold(efs_ino_t ino, uint32_t flags, uint64_t owner,
 
 static int host_is_leader(struct efs_raft_host *h, uint8_t group)
 {
-    struct efs_raft *r;
-    int ret = 0;
+    struct host_view v;
 
-    pthread_mutex_lock(&h->mu);
-    r = group_raft(h, group);
-    if (r && efs_raft_role(r) == EFS_RAFT_LEADER)
-        ret = 1;
-    pthread_mutex_unlock(&h->mu);
-    return ret;
+    host_view_get(h, group, &v);
+    return v.has && v.role == EFS_RAFT_LEADER;
 }
 
 /* Current leader hint for a group (-1 unknown). */

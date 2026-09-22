@@ -187,6 +187,10 @@ int efs_raft_read_current(const struct efs_raft *r);
  * turns out older than what they need. */
 int efs_raft_read_pending(const struct efs_raft *r);
 int efs_raft_read_covers(const struct efs_raft *r, uint64_t want);
+/* Raw round state for a host that publishes a lock-free view: the round's
+ * index and whether it has its quorum (ready once applied >= that index). */
+uint64_t efs_raft_read_index(const struct efs_raft *r);
+int efs_raft_read_done(const struct efs_raft *r);
 
 struct efs_raft_store *efs_raft_mem_create(void);
 void efs_raft_mem_free(struct efs_raft_store *st);

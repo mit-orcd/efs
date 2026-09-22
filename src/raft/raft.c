@@ -1405,6 +1405,16 @@ int efs_raft_read_pending(const struct efs_raft *r)
     return r && r->role == EFS_RAFT_LEADER && r->read_in_flight == 1;
 }
 
+uint64_t efs_raft_read_index(const struct efs_raft *r)
+{
+    return r ? r->read_index : 0;
+}
+
+int efs_raft_read_done(const struct efs_raft *r)
+{
+    return r && r->role == EFS_RAFT_LEADER && r->read_in_flight == 2;
+}
+
 int efs_raft_read_covers(const struct efs_raft *r, uint64_t want)
 {
     if (!r || r->role != EFS_RAFT_LEADER)
