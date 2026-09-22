@@ -171,6 +171,8 @@ struct efs_msg_raft_mkfs_reply {
     int32_t leader_hint;
     uint64_t index;
     uint64_t salt; /* this process's mkfs salt candidate */
+    uint64_t term; /* term of the entry at index (forwarded commands); the
+                    * forwarder matches (index, term) in its apply ring */
 };
 
 #define EFS_RAFT_HOST_MAX_GROUPS 4

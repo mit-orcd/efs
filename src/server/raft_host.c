@@ -179,8 +179,17 @@ struct host_group {
      * conflict looked like success and a cross-shard txn committed with a
      * partial intent set — the peer_concurrent_hardlink nlink lost-update.
      * extra is the O_APPEND reserved offset for APPEND_RSV (not the live
-     * watermark — two concurrent reserves otherwise both write at wm-len). */
+     * watermark — two concurrent reserves otherwise both write at wm-len).
+     * arc_term is the applied entry's term: a proposer matches (index,
+     * term), never the index alone. A leader that loses its term has its
+     * uncommitted tail truncated and a DIFFERENT entry lands at the same
+     * index; a waiter keyed by index read that stranger's OK verdict as
+     * its own. For a txn coordinator that was "DECIDE COMMIT applied" →
+     * RESOLVE COMMIT on one participant while the decision never existed
+     * → recovery ABORTed the rest = the half-applied rmdir/unlink rows of
+     * Sep 21 (I17: child row gone, dentry + parent counts kept). */
     uint64_t arc_idx[HOST_APPLY_RC_RING];
+    uint64_t arc_term[HOST_APPLY_RC_RING];
     int32_t arc_rc[HOST_APPLY_RC_RING];
     uint64_t arc_extra[HOST_APPLY_RC_RING];
     /* EFS_RAFT_OBS: last logged term/role, for election-churn timing. */
@@ -304,11 +313,14 @@ struct efs_raft_host {
     uint64_t obs_apply_cycle_us; /* cumulative apply time, current cycle */
     uint64_t obs_apply_cnt;      /* applies in the current cycle */
     uint64_t obs_apply_max_cnt;  /* most applies in one cycle */
-    /* Apply-result ring reads that found the slot overwritten/never written
-     * (noop/cfg entry, or >HOST_APPLY_RC_RING applies in one wait window).
-     * The waiter then returns EFS_OK — the pre-fix behavior — so a nonzero
-     * sustained value means the ring is too small, not a correctness bug. */
+    /* Apply-result ring reads that found the slot overwritten
+     * (>HOST_APPLY_RC_RING applies in one wait window). The waiter returns
+     * BUSY (verdict unknown), so a sustained nonzero value means the ring
+     * is too small. obs_arc_term_miss: slot holds idx under another term =
+     * the proposer's entry was truncated by a leader change; the waiter
+     * returns NOT_PRIMARY. Expected to be nonzero only across elections. */
     uint64_t obs_arc_miss;
+    uint64_t obs_arc_term_miss;
     /* Set by apply_append_rsv_cmd; host_apply copies it into the ring. */
     uint64_t apply_extra;
     /* In-memory I16 for APPEND: a retried RPC with the same (ino,token,seq)
@@ -1595,9 +1607,14 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     uint64_t a0 = 0;
     int rc, ret;
 
-    (void)term;
-    if (!h || !h->kv || !cmd || clen == 0)
+    if (!h || !h->kv || !cmd || clen == 0) {
+        /* Still stamp the slot: a waiter must never find "never written". */
+        g->arc_idx[index & HOST_APPLY_RC_MASK] = index;
+        g->arc_term[index & HOST_APPLY_RC_MASK] = term;
+        g->arc_rc[index & HOST_APPLY_RC_MASK] = EFS_OK;
+        g->arc_extra[index & HOST_APPLY_RC_MASK] = 0;
         return EFS_OK;
+    }
     if (raft_obs_on())
         a0 = now_us_();
     h->apply_extra = 0;
@@ -1620,6 +1637,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * holds h->mu across apply_committed, and host_propose_wait reads the
      * ring under h->mu, so this is race-free. */
     g->arc_idx[index & HOST_APPLY_RC_MASK] = index;
+    g->arc_term[index & HOST_APPLY_RC_MASK] = term;
     g->arc_rc[index & HOST_APPLY_RC_MASK] = rc;
     g->arc_extra[index & HOST_APPLY_RC_MASK] = h->apply_extra;
     /* Txn apply never stalls the log: a conflict verdict rides the ring to
@@ -2173,15 +2191,23 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
     }
 }
 
+/* Propose one command. *idx / *term identify the log entry: a waiter must
+ * match BOTH against the apply ring (host_apply_rc_locked) — the same index
+ * carries a different entry after a leader change. term is 0 when the
+ * command was forwarded: the leader matched (idx, term) itself before it
+ * replied and its reply rc is the verdict; the local wait on rep.index is
+ * only read-your-writes (a committed index is unique). */
 static int host_propose(struct efs_raft_host *h, uint8_t group,
                         const uint8_t *cmd, uint32_t clen, uint64_t *idx,
-                        int *leader_hint)
+                        uint64_t *term, int *leader_hint)
 {
     struct efs_raft *r;
     int rc;
     int lid = -1;
     struct efs_msg_raft_mkfs_reply rep;
 
+    if (term)
+        *term = 0;
     pthread_mutex_lock(&h->mu);
     r = group_raft(h, group);
     if (r) {
@@ -2190,6 +2216,8 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
             *leader_hint = lid;
         if (efs_raft_role(r) == EFS_RAFT_LEADER) {
             rc = efs_raft_propose(r, cmd, clen, idx);
+            if (rc == EFS_OK && term)
+                *term = efs_raft_term(r); /* append_local uses current_term */
             host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
             /* New entry pending: pump ships AppendEntries immediately.
@@ -2209,17 +2237,30 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
         return rc;
     if (idx)
         *idx = rep.index;
+    if (term)
+        *term = rep.term;
     if (leader_hint && rep.leader_hint >= 0)
         *leader_hint = rep.leader_hint;
     return EFS_OK;
 }
 
-/* h->mu held. The apply layer's verdict for log index idx, read from the
- * group's apply-result ring. EFS_OK when the slot was never written or was
- * already overwritten (a noop/cfg entry, or more than HOST_APPLY_RC_RING
- * applies inside one wait window — counted in obs_arc_miss). */
+/* h->mu held. The apply layer's verdict for the log entry (idx, term), read
+ * from the group's apply-result ring, after host_wait_applied said
+ * applied >= idx.
+ *   - slot holds idx with the same term: the verdict (OK / BUSY / STALE /
+ *     ...). term 0 = forwarded command, the index alone identifies it (the
+ *     leader already matched its own term before replying).
+ *   - slot holds idx with ANOTHER term: our entry was never committed — the
+ *     leader lost the term, the new leader truncated it and committed
+ *     something else at idx. EFS_ERR_NOT_PRIMARY: nothing happened, retry
+ *     at the new leader. Reading the stranger's OK here is what committed
+ *     half a cross-shard txn (I17, Sep 21).
+ *   - slot overwritten (more than HOST_APPLY_RC_RING applies inside the
+ *     wait window): the verdict is unknown. EFS_ERR_BUSY, never OK —
+ *     the old "OK on miss" turned a rejected PREP into a phantom success.
+ *     obs_arc_miss counts these. */
 static int host_apply_rc_locked(struct efs_raft_host *h, uint8_t group,
-                                uint64_t idx)
+                                uint64_t idx, uint64_t term)
 {
     struct host_group *g = group_slot(h, group);
     uint64_t s;
@@ -2229,13 +2270,18 @@ static int host_apply_rc_locked(struct efs_raft_host *h, uint8_t group,
     s = idx & HOST_APPLY_RC_MASK;
     if (g->arc_idx[s] != idx) {
         h->obs_arc_miss++;
-        return EFS_OK;
+        return EFS_ERR_BUSY;
+    }
+    if (term && g->arc_term[s] != term) {
+        h->obs_arc_term_miss++;
+        return EFS_ERR_NOT_PRIMARY;
     }
     return g->arc_rc[s];
 }
 
 static int host_apply_extra_locked(struct efs_raft_host *h, uint8_t group,
-                                   uint64_t idx, uint64_t *extra_out)
+                                   uint64_t idx, uint64_t term,
+                                   uint64_t *extra_out)
 {
     struct host_group *g = group_slot(h, group);
     uint64_t s;
@@ -2247,26 +2293,69 @@ static int host_apply_extra_locked(struct efs_raft_host *h, uint8_t group,
         h->obs_arc_miss++;
         return EFS_ERR_BUSY;
     }
+    if (term && g->arc_term[s] != term) {
+        h->obs_arc_term_miss++;
+        return EFS_ERR_NOT_PRIMARY;
+    }
     if (extra_out)
         *extra_out = g->arc_extra[s];
     return EFS_OK;
+}
+
+/* Wait for (idx, term) to apply and return the apply layer's verdict. */
+static int host_wait_verdict(struct efs_raft_host *h, uint8_t group,
+                             uint64_t idx, uint64_t term, int *hint)
+{
+    int rc;
+
+    rc = host_wait_applied(h, group, idx, hint);
+    if (rc != EFS_OK)
+        return rc;
+    pthread_mutex_lock(&h->mu);
+    rc = host_apply_rc_locked(h, group, idx, term);
+    pthread_mutex_unlock(&h->mu);
+    return rc;
+}
+
+/* Wait for (idx, term) to apply; only checks that OUR entry is the one that
+ * applied (NOT_PRIMARY otherwise). The verdict itself is not returned —
+ * for the callers that historically ignored it (CREATE/APPEND-style single
+ * commands whose apply cannot reject). */
+static int host_wait_settled(struct efs_raft_host *h, uint8_t group,
+                             uint64_t idx, uint64_t term, int *hint)
+{
+    struct host_group *g;
+    int rc = EFS_OK;
+
+    rc = host_wait_applied(h, group, idx, hint);
+    if (rc != EFS_OK || !term)
+        return rc;
+    pthread_mutex_lock(&h->mu);
+    g = group_slot(h, group);
+    if (g) {
+        uint64_t s = idx & HOST_APPLY_RC_MASK;
+
+        if (g->arc_idx[s] == idx && g->arc_term[s] != term) {
+            h->obs_arc_term_miss++;
+            rc = EFS_ERR_NOT_PRIMARY;
+        }
+    }
+    pthread_mutex_unlock(&h->mu);
+    return rc;
 }
 
 static int host_propose_wait_idx(struct efs_raft_host *h, uint8_t group,
                                  const uint8_t *cmd, uint32_t clen, int *hint,
                                  uint64_t *idx_out)
 {
-    uint64_t idx = 0;
+    uint64_t idx = 0, term = 0;
     int rc;
 
-    rc = host_propose(h, group, cmd, clen, &idx, hint);
+    rc = host_propose(h, group, cmd, clen, &idx, &term, hint);
     if (rc != EFS_OK)
         return rc;
     if (idx_out)
         *idx_out = idx;
-    rc = host_wait_applied(h, group, idx, hint);
-    if (rc != EFS_OK)
-        return rc;
     /* The index applied; the apply layer's verdict rides the per-group ring.
      * A rejected txn PREP (intent-conflict BUSY / version STALE) must reach
      * the proposer — before this, host_wait_applied only proved the index
@@ -2274,10 +2363,7 @@ static int host_propose_wait_idx(struct efs_raft_host *h, uint8_t group,
      * committed with a partial intent set (the nlink lost-update). A
      * forwarded command never reaches here with a conflict: host_propose's
      * forward branch returns the leader's submit reply rc directly. */
-    pthread_mutex_lock(&h->mu);
-    rc = host_apply_rc_locked(h, group, idx);
-    pthread_mutex_unlock(&h->mu);
-    return rc;
+    return host_wait_verdict(h, group, idx, term, hint);
 }
 
 static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
@@ -2290,18 +2376,18 @@ static int host_propose_wait_ex(struct efs_raft_host *h, uint8_t group,
                                 const uint8_t *cmd, uint32_t clen, int *hint,
                                 uint64_t *extra_out)
 {
-    uint64_t idx = 0;
+    uint64_t idx = 0, term = 0;
     int rc, erc;
 
-    rc = host_propose(h, group, cmd, clen, &idx, hint);
+    rc = host_propose(h, group, cmd, clen, &idx, &term, hint);
     if (rc != EFS_OK)
         return rc;
     rc = host_wait_applied(h, group, idx, hint);
     if (rc != EFS_OK)
         return rc;
     pthread_mutex_lock(&h->mu);
-    rc = host_apply_rc_locked(h, group, idx);
-    erc = host_apply_extra_locked(h, group, idx, extra_out);
+    rc = host_apply_rc_locked(h, group, idx, term);
+    erc = host_apply_extra_locked(h, group, idx, term, extra_out);
     pthread_mutex_unlock(&h->mu);
     if (rc == EFS_OK && extra_out)
         rc = erc;
@@ -3512,12 +3598,12 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
                 (unsigned long long)(tx->st_get_max_us / 1000ull));
     }
     if (any || h->obs_wait_timeouts || h->obs_pump_hold_max_us ||
-        h->obs_arc_miss) {
+        h->obs_arc_miss || h->obs_arc_term_miss) {
         fprintf(stderr,
                 "raft-obs: wait_timeouts=%llu pump_hold_max=%lluus "
                 "lock_wait_max=%lluus drain_max=%lluus tick_max=%lluus "
                 "apply_max=%lluus persist_max=%lluus applies_in_worst=%llu "
-                "arc_miss=%llu\n",
+                "arc_miss=%llu arc_term_miss=%llu\n",
                 (unsigned long long)h->obs_wait_timeouts,
                 (unsigned long long)h->obs_pump_hold_max_us,
                 (unsigned long long)h->obs_wait_max_us,
@@ -3526,7 +3612,8 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
                 (unsigned long long)h->obs_apply_max_us,
                 (unsigned long long)h->obs_persist_max_us,
                 (unsigned long long)h->obs_apply_max_cnt,
-                (unsigned long long)h->obs_arc_miss);
+                (unsigned long long)h->obs_arc_miss,
+                (unsigned long long)h->obs_arc_term_miss);
         h->obs_pump_hold_max_us = 0;
         h->obs_wait_max_us = 0;
         h->obs_drain_max_us = 0;
@@ -4125,24 +4212,25 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
 {
     struct efs_raft *r;
     struct efs_msg_raft_mkfs_reply rep;
-    uint64_t idx = 0;
+    uint64_t idx = 0, term = 0;
     int rc, lid = -1;
 
     pthread_mutex_lock(&h->mu);
     r = group_raft(h, group);
     if (r && efs_raft_role(r) == EFS_RAFT_LEADER) {
         rc = efs_raft_propose(r, cmd, clen, &idx);
+        if (rc == EFS_OK)
+            term = efs_raft_term(r);
         pthread_mutex_unlock(&h->mu);
         if (rc != EFS_OK)
             return rc;
         host_pump_kick(h);
-        rc = host_wait_applied(h, group, idx, NULL);
-        if (rc != EFS_OK || !verdict)
-            return rc;
-        pthread_mutex_lock(&h->mu);
-        rc = host_apply_rc_locked(h, group, idx);
-        pthread_mutex_unlock(&h->mu);
-        return rc;
+        /* Recovery's DECIDE ABORT / RESOLVE verdicts decide a txn's fate;
+         * they must be OUR entry's verdict, so (idx, term) even when the
+         * caller does not want the rc (host_wait_settled). */
+        if (!verdict)
+            return host_wait_settled(h, group, idx, term, NULL);
+        return host_wait_verdict(h, group, idx, term, NULL);
     }
     if (r)
         lid = efs_raft_leader(r);
@@ -4895,7 +4983,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     uint8_t group;
     const uint8_t *cmd;
     uint32_t clen;
-    uint64_t idx = 0;
+    uint64_t idx = 0, term = 0;
     uint64_t salt = 0;
     int hint = -1;
     int rc;
@@ -5000,7 +5088,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
          * the reporter host_wait_applied the last idx. host_propose_wait
          * here was one Raft round per forwarded batch (~16 × ~150 ms on
          * the group this dual-host does not lead). */
-        rc = host_propose(h, group, cmd, clen, &idx, &hint);
+        rc = host_propose(h, group, cmd, clen, &idx, &term, &hint);
     } else {
         /* Return THIS command's index, never the live applied index. The
          * forwarding follower waits for out->index and reads its own
@@ -5017,6 +5105,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     }
     out->rc = rc;
     out->index = idx;
+    out->term = term; /* 0 unless the PUBLISH branch proposed without waiting */
     if (hint >= 0)
         out->leader_hint = hint;
 }
@@ -5644,7 +5733,7 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
     struct efs_meta_attrs at;
     uint8_t cmd[HOST_CMD_MAX];
     uint32_t clen = 0;
-    uint64_t idx = 0;
+    uint64_t idx = 0, term = 0;
     uint32_t dsh = 0;
     uint8_t pg, dg = 0;
     int hint = -1;
@@ -5731,9 +5820,9 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
             rc = pack_create_cmd(cmd, &clen, parent, mode, name, &at, hold,
                                  next, prow.layout);
         if (rc == EFS_OK)
-            rc = host_propose(h, dg, cmd, clen, &idx, &hint);
+            rc = host_propose(h, dg, cmd, clen, &idx, &term, &hint);
         if (rc == EFS_OK)
-            rc = host_wait_applied(h, dg, idx, &hint);
+            rc = host_wait_settled(h, dg, idx, term, &hint);
     }
     if (rc == EFS_OK)
         rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
@@ -5831,6 +5920,7 @@ static int host_pver_guard_chain(struct efs_raft_host *h, efs_ino_t dst_parent,
 struct host_idx_ref {
     uint8_t group;
     uint64_t idx;
+    uint64_t term; /* 0 = forwarded (leader matched its own term) */
 };
 
 static int host_wait_refs(struct efs_raft_host *h, struct host_idx_ref *refs,
@@ -5863,7 +5953,8 @@ static int host_wait_refs(struct efs_raft_host *h, struct host_idx_ref *refs,
     rc = EFS_OK;
     for (i = 0; i < n; i++) {
         pthread_mutex_lock(&h->mu);
-        one = host_apply_rc_locked(h, refs[i].group, refs[i].idx);
+        one = host_apply_rc_locked(h, refs[i].group, refs[i].idx,
+                                   refs[i].term);
         pthread_mutex_unlock(&h->mu);
         if (one != EFS_OK && rc == EFS_OK)
             rc = one;
@@ -5898,7 +5989,8 @@ static int host_prep_async(struct efs_raft_host *h, uint32_t shard, int kind,
     if (n > HOST_CMD_MAX)
         return EFS_ERR_INVAL;
     ref->group = efs_raft_shard_group(shard);
-    return host_propose(h, ref->group, cmd, n, &ref->idx, hint);
+    return host_propose(h, ref->group, cmd, n, &ref->idx, &ref->term,
+                        hint);
 }
 
 /* Commutative parts (§7.2). `ref` NULL = propose and wait (host_prep
@@ -5918,7 +6010,8 @@ static int host_prep_raw(struct efs_raft_host *h, uint32_t shard, int kind,
     if (!ref)
         return host_propose_wait(h, efs_raft_shard_group(shard), cmd, n, hint);
     ref->group = efs_raft_shard_group(shard);
-    return host_propose(h, ref->group, cmd, n, &ref->idx, hint);
+    return host_propose(h, ref->group, cmd, n, &ref->idx, &ref->term,
+                        hint);
 }
 
 /* Parent (or moved-dir) inode row: nlink/nents delta, times MAX,
@@ -6679,6 +6772,7 @@ mkdir_prepped:
                 pack_resolve(cmd, &t, parts.shard[i], EFS_TXN_COMMIT);
                 prefs[np].group = efs_raft_shard_group(parts.shard[i]);
                 rc = host_propose(h, prefs[np].group, cmd, 22, &prefs[np].idx,
+                                  &prefs[np].term,
                                   &hint);
                 if (rc == EFS_OK)
                     np++;
@@ -7022,7 +7116,8 @@ rmdir_prepped:
                 pack_resolve(cmd, &t, parts.shard[i], EFS_TXN_COMMIT);
                 prefs[npref].group = efs_raft_shard_group(parts.shard[i]);
                 rc = host_propose(h, prefs[npref].group, cmd, 22,
-                                  &prefs[npref].idx, &hint);
+                                  &prefs[npref].idx, &prefs[npref].term,
+                                  &hint);
                 if (rc == EFS_OK)
                     npref++;
             }
@@ -7264,7 +7359,7 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
     struct efs_meta_dentry dent;
     uint8_t cmd[HOST_CMD_MAX];
     uint32_t clen = 0;
-    uint64_t idx = 0;
+    uint64_t idx = 0, term = 0;
     uint32_t dsh = 0;
     uint8_t pg, dg = 0, ig;
     int hint = -1;
@@ -7351,9 +7446,9 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
     if (rc == EFS_OK)
         rc = pack_unlink_cmd(cmd, &clen, parent, now_ns(), name);
     if (rc == EFS_OK)
-        rc = host_propose(h, dg, cmd, clen, &idx, &hint);
+        rc = host_propose(h, dg, cmd, clen, &idx, &term, &hint);
     if (rc == EFS_OK)
-        rc = host_wait_applied(h, dg, idx, &hint);
+        rc = host_wait_settled(h, dg, idx, term, &hint);
     if (dirop_fail_on(rc))
         fprintf(stderr,
                 "raft-host: unlink-simple parent=%llu name=%s rc=%d hint=%d "
@@ -7382,7 +7477,7 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
     struct efs_meta_row row;
     uint8_t cmd[HOST_UTIMENS_LEN];
     uint32_t clen = 0;
-    uint64_t idx = 0, bits;
+    uint64_t idx = 0, term = 0, bits;
     uint8_t g;
     int hint = -1;
     int rc;
@@ -7433,9 +7528,9 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
     if (rc == EFS_OK)
         rc = pack_utimens_cmd(cmd, &clen, ino, now_ns(), &u);
     if (rc == EFS_OK)
-        rc = host_propose(h, g, cmd, clen, &idx, &hint);
+        rc = host_propose(h, g, cmd, clen, &idx, &term, &hint);
     if (rc == EFS_OK)
-        rc = host_wait_applied(h, g, idx, &hint);
+        rc = host_wait_settled(h, g, idx, term, &hint);
     if (rc == EFS_OK)
         rc = host_read_inode_lanes(h, ino, &hint);
     if (rc == EFS_OK)
@@ -7464,7 +7559,7 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
     uint8_t uuid[EFS_OPID_UUID_LEN];
     uint8_t cross[EFS_META_LANES];
     uint32_t clen = 0, tci = 0, lsh = 0;
-    uint64_t idx = 0, bits = 0, now, same_mask = 0;
+    uint64_t idx = 0, term = 0, bits = 0, now, same_mask = 0;
     uint8_t g, lane = 0, lg = 0, has_tail = 0;
     int hint = -1, ncross = 0, tail_ext = 0;
     int rc;
@@ -7596,9 +7691,9 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
     if (rc == EFS_OK && clen > HOST_CMD_MAX)
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK)
-        rc = host_propose(h, g, cmd, clen, &idx, &hint);
+        rc = host_propose(h, g, cmd, clen, &idx, &term, &hint);
     if (rc == EFS_OK)
-        rc = host_wait_applied(h, g, idx, &hint);
+        rc = host_wait_settled(h, g, idx, term, &hint);
     /* Cross-group tail: the fence on its lane already kept tail_ci and
      * rejects old-epoch publishes, so the zero-filled tail candidate goes
      * up as a lane-local publish under the NEW epoch after the commit.
@@ -7657,9 +7752,9 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
             if (rc == EFS_OK && clen > HOST_CMD_MAX)
                 rc = EFS_ERR_INVAL;
             if (rc == EFS_OK)
-                rc = host_propose(h, tg, cmd, clen, &idx, &hint);
+                rc = host_propose(h, tg, cmd, clen, &idx, &term, &hint);
             if (rc == EFS_OK)
-                rc = host_wait_applied(h, tg, idx, &hint);
+                rc = host_wait_settled(h, tg, idx, term, &hint);
             if (rc != EFS_ERR_STALE)
                 break;
         }
@@ -7691,7 +7786,7 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
     struct efs_meta_row row;
     uint8_t cmd[HOST_SETATTR_LEN];
     uint32_t clen = 0;
-    uint64_t idx = 0;
+    uint64_t idx = 0, term = 0;
     uint8_t g;
     int hint = -1;
     int rc;
@@ -7748,9 +7843,9 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, ino, &row);
     if (rc == EFS_OK)
-        rc = host_propose(h, g, cmd, clen, &idx, &hint);
+        rc = host_propose(h, g, cmd, clen, &idx, &term, &hint);
     if (rc == EFS_OK)
-        rc = host_wait_applied(h, g, idx, &hint);
+        rc = host_wait_settled(h, g, idx, term, &hint);
     if (rc == EFS_OK)
         rc = host_read_inode_lanes(h, ino, &hint);
     if (rc == EFS_OK)
@@ -8857,6 +8952,7 @@ struct host_pub_batch {
     uint8_t *buf;
     uint64_t last_idx;
     uint64_t *idxs;
+    uint64_t *terms; /* per idxs[i]; 0 = forwarded, index-only match */
     uint32_t nidx, cidx;
     int overflow;
 };
@@ -8865,8 +8961,10 @@ static void host_pub_batch_reset(struct host_pub_batch *b)
 {
     free(b->buf);
     free(b->idxs);
+    free(b->terms);
     b->buf = NULL;
     b->idxs = NULL;
+    b->terms = NULL;
     b->len = 0;
     b->last_idx = 0;
     b->nidx = b->cidx = 0;
@@ -8876,12 +8974,12 @@ static void host_pub_batch_reset(struct host_pub_batch *b)
 static int host_pub_batch_propose(struct efs_raft_host *h, struct host_pub_batch *b,
                                   int *hint)
 {
-    uint64_t idx = 0;
+    uint64_t idx = 0, term = 0;
     int rc;
 
     if (!b->buf || !b->len)
         return EFS_OK;
-    rc = host_propose(h, b->group, b->buf, b->len, &idx, hint);
+    rc = host_propose(h, b->group, b->buf, b->len, &idx, &term, hint);
     b->len = 0;
     if (rc != EFS_OK)
         return rc;
@@ -8889,15 +8987,24 @@ static int host_pub_batch_propose(struct efs_raft_host *h, struct host_pub_batch
     if (b->nidx == b->cidx) {
         uint32_t nc = b->cidx ? b->cidx * 2 : 8;
         uint64_t *ni = realloc(b->idxs, (size_t)nc * sizeof(*ni));
+        uint64_t *nt;
 
         if (!ni) {
             b->overflow = 1;
             return EFS_OK;
         }
         b->idxs = ni;
+        nt = realloc(b->terms, (size_t)nc * sizeof(*nt));
+        if (!nt) {
+            b->overflow = 1;
+            return EFS_OK;
+        }
+        b->terms = nt;
         b->cidx = nc;
     }
-    b->idxs[b->nidx++] = idx;
+    b->idxs[b->nidx] = idx;
+    b->terms[b->nidx] = term;
+    b->nidx++;
     return EFS_OK;
 }
 
@@ -8964,6 +9071,12 @@ static int host_pub_batch_wait(struct efs_raft_host *h, struct host_pub_batch *b
 
             if (g->arc_idx[s] != b->idxs[i]) {
                 h->obs_arc_miss++;
+                erc = EFS_ERR_STALE;
+            } else if (b->terms[i] && g->arc_term[s] != b->terms[i]) {
+                /* Our entry was truncated by a leader change; a stranger
+                 * applied at this index. The publish did not happen:
+                 * STALE makes the client re-pull and replay the range. */
+                h->obs_arc_term_miss++;
                 erc = EFS_ERR_STALE;
             } else {
                 erc = g->arc_rc[s];
