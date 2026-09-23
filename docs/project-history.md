@@ -25,6 +25,52 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 23 2026 — visibility at the coordinator's decision (`ad292b9`, `7e29943`); four decisions written up
+
+Two more reply-path errors from the freeze runs on `bb634d9`, both the
+same shape: a client saw ENOENT/EIO for a name or row that had already
+COMMITted but whose RESOLVE was still pending (recovery of a stranded
+txn takes 5–16 s; the I16 window answers the retry OK meanwhile).
+`getattr` on the new dir read the inode row with a bare kv get and got
+NOT_FOUND (`fuse: mkdir ... ok ino=85959 but getattr rc=-2`) →
+`efs_meta_apply_get_inode_tx` reads through a COMMITted EXCL intent via
+`efs_txn_read` (`ad292b9`). Then `rmdir` of `d-fcstor011-1-22` returned
+ENOENT for a dentry in the same state → `efs_meta_apply_lookup_tx` /
+`resolve_tx` (`7e29943`); every handler-side lookup/resolve in
+`raft_host.c` uses them, the apply path stays on the plain read (a state
+machine cannot ask a coordinator). `rmdir`/`unlink` now map
+`EFS_ERR_BUSY` to EBUSY (`fuse_unlink_errno`), not EIO. Tests
+`test_stat_committed_unresolved_row`, `test_lookup_committed_unresolved_dentry`.
+Rolled `7e29943f28ef-dirty` 18:21 UTC (servers + clients 007–015);
+freeze ×2 (`results/measure/20260923-182559-i17-leader-freeze`,
+`-182709-`) both PASS, 0 worker errors, parent removable,
+`opid_replay` 0→1→3, `arc_term_miss` 0→3→15. Idle `md_latency.py`
+pre-freeze 9.8/4.4/7.1/0.4/2.0/10.5 ms (mkdir/rmdir above the
+6.1/5.2 reference; remeasure on a flat commit). Design limit kept: the
+16-attempt client budget (10.3 s) is shorter than a 16.5 s recovery →
+EBUSY to the app, never a wrong answer.
+
+Tooling: one `Shell` call executed three times (three `efs-rec: start`
+lines within a second → concurrent builds in one `/tmp/efs`, duplicate
+`git commit`s). `efs-rec.sh` now runs a name once (flock + `.done`,
+exit 75 `DUPLICATE`), `efs-bg.sh start` holds a per-name lock; rule
+`efs-remote-timeouts` says never reuse a name to retry. An `EFSD_ENV`
+with a comma (`EFS_TRANSPORT=tcp,EFS_RAFT_OBS=1`) is one env var →
+transport AUTO (ungated RDMA), no OBS; caught by the `efsd.log` header
+and re-rolled with the space form.
+
+With the freeze class closed, the queue stopped on four decisions the
+spec does not make. Each got a recommendation, the reason, and steps in
+START-HERE §1a ("Decisions pending", items W13/W11/W9/W10): background
+compactor (a lock hold, not CPU; per-range compaction cannot help while
+one L0 spans every shard); the Raft paper's chunked InstallSnapshot over
+a lazily exported snapshot file from a pinned segment view (the RAM
+`snap_blob` + export under the SM lock is the same stall class as
+compaction — removing only the 4 MiB cap would make it worse); ratify
+the client-cache pin rules and the 256 MB soft cap; and no wipe for W10
+— `tests/rdma_first_inode.sh` is a private 3-node cluster on fcstor007
+and is the empty-table repro, so 19810 can be switched to RDMA in place.
+
 ## Sep 22–23 2026 — I16: op-id dedup for directory RPCs (`43bdf6a41f7d`)
 
 Why now: the second I17 freeze run (`results/measure/20260922-122629-i17-leader-freeze`)

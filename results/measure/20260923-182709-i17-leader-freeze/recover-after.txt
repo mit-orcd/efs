@@ -1,0 +1,1 @@
+  fcstor006: raft-host: txn-recover shard=1742 coord=1742 parts=2 age=7.1s -> ABORT

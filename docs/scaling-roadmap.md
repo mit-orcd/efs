@@ -27,7 +27,10 @@ elsewhere in the tree that describes `g_server->lock`, shard tabs,
 `EFS_INO_RAM_MB`, extras catchup or `meta-rebuild` is history.
 
 What is left is measured performance and harness work, ordered in
-[START-HERE §1a](arch/START-HERE.md).
+[START-HERE §1a](arch/START-HERE.md). The four design decisions that queue
+is currently stopped on (W13 background compaction, W11 chunked
+InstallSnapshot, W9 client-cache bound, W10 RDMA gate) each carry a
+recommendation, the reason, and the steps there, under "Decisions pending".
 
 ## Parked: server-side `.stats` / `.find` refresh
 

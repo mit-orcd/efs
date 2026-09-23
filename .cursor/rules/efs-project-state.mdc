@@ -98,11 +98,16 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  0.23 s idle (128 GETCHUNKS × 1.6 ms), 14.6 ms/GETCHUNKS under 32 openers.
  Same-parent rate ~140–160 ops/s flat 1–36 procs
  (`results/measure/20260921-161931-samedir-rate`, pre-`165e779`; remeasure).
- Cluster runs **`ad292b9684e0-dirty`** with
- `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1` (rolled Sep 23 06:20; 5 s
+ Cluster runs **`7e29943f28ef-dirty`** with
+ `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1` (rolled Sep 23 18:21 UTC; 5 s
  `raft-obs:` lines in `efsd.log` — keep it on until W8 closes; "dirty"
- = rule edits, all four agree). Clients 007–015 mounted
- (`PREFLIGHT_OK` 13:26). `EFSD_ENV` is **space**-separated
+ = doc/rule edits, all four agree). Clients 007–015 on the same build
+ (18:21). Freeze ×2 on it: PASS, 0 worker errors
+ (`results/measure/20260923-182559-i17-leader-freeze`, `-182709-`).
+ **Queue is stopped on four decisions** — START-HERE §1a "Decisions
+ pending" has a recommendation + steps for each (W13 compaction, W11
+ chunked snapshot, W9 client cache, W10 RDMA without a wipe); do not
+ implement any of them until the user ratifies the row. `EFSD_ENV` is **space**-separated
  (`env $EFSD_ENV`): a comma form
  (`EFS_TRANSPORT=tcp,EFS_RAFT_OBS=1`) silently makes the transport AUTO
  (ungated RDMA) and drops OBS — that roll happened once (05:49) and was
@@ -250,7 +255,8 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  `l->mu`+`h->mu`, on every replica at once: `apply_max=2464250us` on 004
  and 005 together, g0 5299→5302→5303, client stat 2 s
  (`results/measure/20260921-220933-w8-stall-timeline/obs-*.txt`).
- Unspecified → decision (START-HERE §1b). Steady apply is still ~0.3 ms
+ Decision item W13 (START-HERE §1a; recommended: background compactor
+ over a pinned segment view). Steady apply is still ~0.3 ms
  per entry with no fsync: `pread` per segment (17) per KV read, no cache.
 - **A Raft proposal is identified by `(index, term)`, never by index
   (I17 root cause, fixed `46d54e6`):** the apply ring matched by index;
@@ -315,7 +321,10 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   follower restart is a full replay. Sep 21
   (`results/measure/20260921-182308-raft-snap-state`): logs 1.8–4.4 GB,
   still growing ~400–800 B/s idle, both groups `commit == applied`.
-  Chunked SNAP is unspecified — ask.
+  Chunked SNAP is unspecified — W11 in START-HERE §1a carries the
+  recommendation (Raft-paper `offset`/`done` chunks over a lazily
+  exported snapshot file; no RAM `snap_blob`, no export under the SM
+  lock); implement only after it is ratified.
 - `host_pump` ticks are wall-clocked (`HOST_TICK_US`), never per iteration
   (iteration-counted ticks caused election storms). The network inbox path
   must never take `h->mu` (eventfd kick, not condvar). Forwarded-command
@@ -353,7 +362,9 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - Auto/RDMA first-`mkdir` hang on an EMPTY table: root cause was the client
   closing a pooled conn's TCP side-channel (fd recycled) so the server
   reaped the QP. Pool identity fix is in tree (`test_conn_fd`), live gate
-  needs a fresh mkfs (W10 — ask). RNR-NAK / recv-buffer hypothesis is
+  needs an EMPTY table — `tests/rdma_first_inode.sh` is one (private
+  3-node cluster on fcstor007, ports 19950–19952; W10 recommends this,
+  not a wipe of 19810). RNR-NAK / recv-buffer hypothesis is
   **dead**. Default stays TCP until gated. RDMA is not "broken": a
   populated table drove millions of creates over RDMA with 0 errors.
 

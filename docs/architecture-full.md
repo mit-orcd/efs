@@ -1444,13 +1444,23 @@ used a bare kv get. Handler lookups and resolves now go through
 the apply path stays plain). `rmdir`/`unlink` map `EFS_ERR_BUSY` to
 EBUSY — they were returning EIO. Do not widen the 16-attempt budget to
 outrun recovery.
-**Owed now:** roll (`roll_efsd.sh --all`, space-separated
-`EFSD_ENV="EFS_TRANSPORT=tcp EFS_RAFT_OBS=1"`) + `deploy_fuse_clients.sh`
-fcstor007…015; `i17_leader_freeze.sh` ×2. A leftover name whose counts
-match is still a failed remove, not a torn parent. Idle `md_latency.py`
-only after commit is flat for 30 s (the pre-freeze sample on `ad292b9`
-had mkdir med 56 ms with min 2.1 — remeasure before calling it a
-regression; create 5.2 / stat 0.5 / unlink 2.2 were at the reference).
+**Gated on `7e29943f28ef-dirty` (rolled Sep 23 18:21 UTC, servers and
+clients 007–015):** `i17_leader_freeze.sh` ×2
+(`results/measure/20260923-182559-i17-leader-freeze`, `-182709-`) — both
+PASS, 0 worker errors on all 9 clients, parent removable, `opid_replay`
+0→1→3, `arc_term_miss` 0→3→15, every `fuse.log` `getattr=0 exhausted=0`.
+Idle `md_latency.py` before the freeze: mkdir 9.8 / create 4.4 / append
+7.1 / stat 0.4 / unlink 2.0 / rmdir 10.5 ms (reference 6.1/4.0/6.2/0.3/
+1.5/5.2; mkdir/rmdir high — remeasure once `commit` is flat 30 s; the
+post-freeze samples were taken with commit still moving and are
+invalid). Known limit, by design: a client's 16-attempt budget (~10.3 s)
+is shorter than recovery of a stranded txn (16.5 s on shard 1504) → the
+app sees EBUSY, never a wrong answer. Do not widen it.
+
+**Owed now:** 9-host posix suite and `same_parent_storm.sh` on `7e29943`;
+the idle `md_latency.py` remeasure. Then the queue: the four pending
+decisions are written up with a recommendation each in §1a ("Decisions
+pending") — W13, W11, W9, W10 — and stop there until ratified.
 
 The I17 story (index-only ring match; `46d54e6`; two gate runs
 `results/measure/20260922-122517-i17-leader-freeze`, `-122629-`) is in
@@ -1497,8 +1507,9 @@ What is left in the 9-host row, and what to do with each:
    the same moment. Options the spec does not choose between: bounded
    (leveled / per-key-range) compaction; compaction off the apply path
    (background thread, readers merge an immutable memtable); a larger
-   memtable as a stopgap (fewer, not shorter, stalls). Bring this to
-   the user with the numbers; do not raise the election timeout.
+   memtable as a stopgap (fewer, not shorter, stalls). **Now queue item
+   W13 (§1a) with a recommendation — background compactor — and steps;
+   awaiting ratification.** Do not raise the election timeout.
 4. **Throughput at 144 concurrent jobs** — the six many-op tests
    (`dir_deep_nesting*`, `names_crazy_*`, `concurrent_write_and_readdir`,
    `concurrent_creates_same_dir`, `mtime_monotonic_many_writes`) time out
@@ -2069,6 +2080,20 @@ pre-flush and read several GiB/s. The number is bytes ÷ wall with the flush
 inside. `dd if=/dev/zero` is also invalid here: all-zero payloads skip PUTs.
 Use a non-zero source file.
 
+##### Decisions pending — recommended answers (Sep 23 2026)
+
+Four queue items stop on a choice the spec does not make. Each item below
+carries a **Recommendation**, the reason, and the steps that follow from
+it. Nothing here is implemented until the user ratifies the row. The
+order is the build order: W13 and W11 share one primitive.
+
+| item | question | recommended | why, in one line |
+| --- | --- | --- | --- |
+| W13 | full-L1 compaction holds the apply path 2.4 s and costs a term | **compact on a background thread**; per-range compaction later; memtable size is not a fix | it is a lock hold, not CPU — moving it off `l->mu`/`h->mu` removes the stall at any table size; per-range does nothing while one L0 spans every shard; a bigger memtable makes the same stall rarer, and one stall is one election |
+| W11 | the KV export is larger than one 4 MiB SNAP command, so the log never truncates | **the Raft paper's chunked InstallSnapshot** (`offset`, `done`) over a snapshot *file* the leader exports from a pinned segment view | it is the protocol Raft already specifies, so nothing is invented; the pinned view is the same primitive W13 needs; the follower imports on `done` with the existing `efs_kv_group_import` |
+| W9 | bound the client staging table | **ratify the pin rules and the 256 MB default** (`EFS_CLIENT_META_MB`), soft cap | 256 MB is ~1M rows, far above any FUSE working set; the pin rules are the only ones that make a report-record miss impossible; a pinned-full table grows and logs rather than losing a write |
+| W10 | RDMA needs an empty table to gate | **no wipe.** Gate on the private 3-node cluster (`tests/rdma_first_inode.sh`, fcstor007, port 19950), then switch 19810 to RDMA in place | the bug only needs an *empty* table, and the private cluster is one; a populated 19810 already ran millions of RDMA creates clean, so the live switch needs no wipe. Keep the wipe for when W11's gate wants a table that grows from zero |
+
 ---
 
 ##### W1 — Shared-file (N-1) writes from two clients silently lose data — DONE
@@ -2324,12 +2349,38 @@ out of this table, so evicting a dirty row is data loss), and the gate are in
 [../client-cache-design.md](../client-cache-design.md). Two design points in it
 are unratified — bring them to the user before implementing.
 
+**Recommendation (Sep 23): ratify both as written.** (1) The pin rules —
+dirty / publishing / dirty dcache, ghost with an open fd, in-flight op pin,
+live append reservation or lock — are exactly the set of rows whose absence
+a report or an open fd could observe; anything narrower loses a write,
+anything wider is not a bound. (2) `EFS_CLIENT_META_MB` = 256 MB default,
+soft: at ~200–300 B per row plus chunk maps that is on the order of a
+million rows, above any FUSE working set we have measured (IO-500 9×4,
+the posix suites, `find` over the 410-name root), and a table where
+everything is pinned grows and logs once rather than evicting work. Pick
+a different number only if a client RSS measurement says so; the cap is
+an env var, not a protocol.
+
+Steps, once ratified:
+1. Pin bookkeeping: a per-row pin count set by the dirty/publishing sets,
+   `efs_open_note`/`close_note` for ghosts, and a scoped pin in every
+   dual-apply window (create, rename, link, unlink). Unit test: a report
+   built while eviction runs never skips a dirty row.
+2. LRU by last-touch tick over unpinned rows; evict chunk maps of clean
+   closed files first, then rows. Ghost reclaim at last close.
+3. `statfs` from server numbers; `efs_export_fits_page_cap` becomes a
+   best-effort early-out (the doc's §4).
+4. Gate: `make test`; posix 1 (jobs=1 and 9-host) and posix 2 with no new
+   failures; the walk-RSS gate — one client walks a multi-million-file
+   tree and RSS stays near the cap where it grew linearly before; the
+   valgrind leak gate (eviction is a new free path).
+
 - **Gate:** the walk-RSS gate in that doc, plus posix 1 + 2 and `leaks`.
 - **Forbidden:** evicting a row that is dirty, publishing, a ghost with an open
   fd, or pinned by an in-flight op. Bounding it by dropping records instead of
   refetching them.
 
-##### W10 — RDMA empty-table first `mkdir` — needs a fresh table, so ASK first
+##### W10 — RDMA empty-table first `mkdir` — gate on the private cluster, no wipe
 
 The client connection-pool lifecycle fix is in tree and unit-gated
 (`test_conn_fd`): a pooled conn pins its socket identity, checkout evicts on
@@ -2337,17 +2388,50 @@ mismatch, destroy refuses to close a recycled fd. The **live** repro was never
 re-run, because it only reproduces on a freshly `mkfs`'d / effectively empty
 table, and 19810 is populated. A remount there is *not* this gate.
 
-Running it means wiping and re-`mkfs`ing a cluster. **Ask before doing that.**
-Default transport stays TCP for the items above until it is gated. Note that
-every ceiling in the table above assumes RDMA eventually carries the data
-path; TCP over IPoIB will not reach it.
+Default transport stays TCP until it is gated. Every ceiling in the table
+above assumes RDMA eventually carries the data path; TCP over IPoIB will
+not reach it, so every perf item after this one is capped until W10 closes.
+
+**Recommendation (Sep 23): do not wipe 19810 for this.** The repro needs an
+*empty* table, not *the* table: `tests/rdma_first_inode.sh` stands up a
+private 3-node efsd on one host (fcstor007, ports 19950–19952, storage
+under `/tmp/efs-rdma-first`, `EFS_TRANSPORT=auto`) and runs the first
+`mkdir`. That is the gate, and it touches nothing on 19810. The live
+switch of 19810 to RDMA then needs no fresh table either — the project
+state rule records that a populated table drove millions of creates over
+RDMA with 0 errors; the empty-table hang was the only open defect. A wipe
+buys nothing here that the private cluster does not; keep it for W11
+(below), whose gate is easier on a table that grows from zero.
+
+Steps:
+1. `efs-bg.sh start w10-first 'bash tests/rdma_first_inode.sh'` with
+   `EFS_RUNNER=fcstor007.ib`, ×5 (the tree must be built on 007 first:
+   `efsd`, `efs-mgmt`, `efs-fuse`). Pass = every run prints
+   `MKDIR_RC=0 WRITE_RC=0` and exits 0 (the first `mkdir` and a write
+   inside it each have an 8 s `timeout`). Fail = any `MKDIR_RC=124`, and
+   the fix is not in; stop and bring `/tmp/efs-rdma-first/fuse.log`'s
+   `RDMA transport|WAIT TIMEOUT|SOCKET CLOSED` lines.
+2. Switch the live cluster: `tests/roll_efsd.sh --all` with
+   `EFSD_ENV="EFS_TRANSPORT=rdma EFS_RAFT_OBS=1"`, then remount the
+   clients with `EFS_TRANSPORT=rdma`. Wait for `commit` flat on both
+   groups (post-roll election churn is ~2–5 min).
+3. Gate on RDMA, same numbers as TCP or better: posix jobs=1 (200/201),
+   9-host posix (≥185/201, 0 not-run), `i17_leader_freeze.sh` ×2 with
+   0 worker errors, idle `md_latency.py` within the TCP reference.
+4. Re-baseline the write wall (`efs-fio-honest`: 8 GiB dd+fsync 1/4/9
+   clients) and record it in §1a's ceiling table. Then TCP is no longer
+   the default in the deploy rule and START-HERE.
+5. If step 3 fails on anything that passes on TCP, roll back to TCP with
+   the same `roll_efsd.sh --all` and bring the failure; do not debug
+   RDMA on the live cluster with the suites down.
 
 - **Read:** the root cause and what was already disproven is in the project
   state rule — the RNR-NAK/recv-buffer hypothesis is **dead**, do not re-chase
   it.
-- **Forbidden:** re-deriving the diagnosis; wiping without being asked.
+- **Forbidden:** re-deriving the diagnosis; wiping 19810 without being asked
+  (this item no longer needs it).
 
-##### W11 — fcstor005 lags because its group's snapshot does not fit — BLOCKED, ASK
+##### W11 — fcstor005 lags because its group's snapshot does not fit — recommendation below, awaiting ratification
 
 `raft_host` only compacts when the whole group's KV export fits in one
 `EFS_WIRE_RAFT_MAX_CMD` command. On 19810 one group is over that, so the log
@@ -2359,11 +2443,134 @@ bounce is the STATUS probe, not a dead process — check `pgrep -x efsd`).
 A follower restart is a full replay of that log.
 
 The fix is a chunked / multi-message InstallSnapshot, and **that protocol is
-not specified anywhere**. Do not design it. Bring the measured symptom to the
-user and ask for the decision. Until then this is a known, documented lag.
+not specified anywhere**. Do not implement it before the recommendation
+below is ratified. Until then this is a known, documented lag.
 
-- **Forbidden:** inventing chunked SNAP. Killing 005 to "fix" the lag — a 2+1
-  PUT needs every fragment ACK, so removing a node breaks writes.
+**Recommendation (Sep 23): adopt the Raft paper's InstallSnapshot chunking
+(§7 of the paper: `lastIncludedIndex`, `lastIncludedTerm`, `offset`,
+`data[]`, `done`), and take the snapshot as a pinned segment view, not a
+RAM blob.** Two facts drive it:
+
+- The wire cap is the smaller problem. Today `efs_raft_snapshot` calls
+  `snap_get` at `last_applied` **under the SM lock** and keeps the whole
+  KV export in `r->snap_blob` in RAM; `host_snap_get` is a full
+  `efs_kv_scan` of the group. Removing the 4 MiB cap alone would turn every
+  `HOST_SNAP_MIN`-entry snapshot into a multi-hundred-MB scan under `h->mu`
+  on the leader — the same stall class as W13, on every snapshot instead of
+  every fourth flush. The spec already says snapshots exist only for log
+  truncation and the KV is durable, so the snapshot *point* should cost a
+  memtable flush and a `save_snap(idx, term)`; the *export* happens only when
+  a follower actually needs one, off the pump thread.
+- The protocol is not an invention. Chunked InstallSnapshot with
+  `offset`/`done` is the one the Raft paper specifies; the code base already
+  has the "regenerate at the current applied index on demand" precedent
+  (`send_snap` after a leader restart). The follower side stays
+  `efs_kv_group_import` on the assembled bytes, unchanged.
+
+Steps, once ratified (after W13's step 1, which builds the pinned view):
+1. Spec: add to [architecture.md](#architecture) §KV the snapshot
+   rule — snapshot point = memtable flushed + `save_snap`; export is lazy,
+   from a pinned immutable segment view taken in one pump cycle at applied
+   index N (so it is exactly the state at N); shipped as ≤ 4 MiB `SNAP_REQ`
+   chunks `(incl_index, incl_term, offset, done)`; the follower stages
+   chunks in `<storage>/mdraft/snap-<group>-<incl>.part`, restarts from
+   `offset 0` on any `(incl_index, incl_term)` change, and on `done` imports
+   the file, sets `last_applied = incl`, and truncates. Under the existing
+   rule: no snapshot past the KV's durable point.
+2. `raft.c`: drop `snap_blob`; `snap_get` becomes `snap_open(incl) →
+   (handle, total_len)` + `snap_read(handle, offset, buf, n)` +
+   `snap_close`; `send_snap` keeps one chunk in flight per peer (like
+   `ae_inflight`) and advances on the `SNAP_REP` ack carrying `offset`.
+   The 8-byte `app_old/app_new` prefix stays on chunk 0.
+3. `raft_host.c`: `host_snap_open` pins the view in the pump cycle, exports
+   it to `mdraft/snap-<g>-<incl>.kvx` on the GC thread (the one that runs
+   `host_txn_recover_pass`), unpins, and serves `pread`s from the file;
+   one snapshot file per group, replaced when a newer one is opened.
+   `snap_oversized` and the `snapshot skipped` path go away.
+4. `raft_sim` test: a follower behind a truncated log catches up from a
+   snapshot that spans ≥ 3 chunks; a leader change mid-transfer restarts
+   the transfer from offset 0; a follower crash mid-transfer leaves no
+   `.part` applied.
+5. Live gate on 19810: both groups' `raft.log` shrink and stay bounded
+   (`results/measure/…-raft-snap-state` re-run: today 1.83–4.36 GB); kill
+   and restart fcstor005's efsd — it rejoins by snapshot in seconds, not by
+   replaying GBs; `apply_max` in `raft-obs` does not spike at a snapshot;
+   `md_latency.py` unchanged. 9-host posix and the freeze script as usual.
+
+- **Forbidden:** implementing before the row is ratified. Killing 005 to
+  "fix" the lag — a 2+1 PUT needs every fragment ACK, so removing a node
+  breaks writes.
+
+##### W13 — Synchronous full-L1 compaction is the remaining election trigger
+
+Measured Sep 21 (`results/measure/20260921-220933-w8-stall-timeline/obs-*.txt`):
+`kv_compact_locked` runs inside the apply path under `l->mu` + `h->mu`,
+rewrites all of L1 (~16 MiB; 64 MiB L1 segments) every 4 memtable flushes
+because one L0 segment spans every shard and so overlaps every L1 segment.
+`apply_max=2464250us` on 004 and 005 at once, group 0 term 5299→5302→5303,
+client `stat` 2 s. It is the last non-hardware cause of a term change under
+the 9-host suite, and it scales with table size, so it gets worse. It was
+listed in §1b as "unspecified → decision"; the decision request is here.
+
+**Recommendation: run compaction on a background thread; then, as a
+follow-on, bound its per-cycle I/O with a partitioned flush. Do not raise
+the memtable or the election timeout.**
+
+- *Why background first.* The stall is a lock hold, not CPU: the apply path
+  waits on `l->mu` for a 2.4 s file rewrite it does not need to observe.
+  Segment files are immutable, so a compactor can read the old L0/L1 files
+  and write new L1 files with no lock at all; only the manifest swap needs
+  `l->mu`, and that is microseconds. The logical content of the KV is the
+  same on every replica regardless of when compaction runs, so it does not
+  touch determinism, the applied index, or the durability rule (the WAL and
+  the manifest swap are what persist). This removes the stall at any table
+  size.
+- *Why not per-key-range compaction alone.* Leveled compaction bounds the
+  bytes per compaction only when L0 segments have narrow key ranges. Our
+  memtable holds every shard, so every L0 segment overlaps every L1 segment
+  and a range compaction still rewrites all of L1. It needs a partitioned
+  flush (one L0 file per key range) first — that is the follow-on, and it
+  is worth doing for read cost (one `pread` per overlapping segment per
+  KV read), not for the stall.
+- *Why not a bigger memtable.* It makes the same stall rarer, and one stall
+  is one election. Same reason the election timeout stays: a longer timeout
+  hides a 2.4 s apply stall today and a 5 s one at twice the table size.
+
+Steps:
+1. **Pinned segment view** (shared with W11): `kv_lsm_view_pin()` returns a
+   refcounted copy of `{l0[], l1[]}`; a segment file is unlinked only when
+   the manifest no longer lists it *and* its pin count is 0. Unit test:
+   a scan over a pinned view is unaffected by a concurrent flush and
+   compaction.
+2. **Compactor thread** in `kv_lsm`: the write path flushes memtable → L0
+   as today and signals when `n_l0 >= l0max`; the compactor pins the L0 set
+   plus overlapping L1, merges to new L1 files with no lock held, then
+   under `l->mu` swaps the manifest (atomic rename — verify
+   `kv_manifest_write` is), drops its pin, unlinks unreferenced files.
+   `kv_compact_locked` remains only for `efs_kv_lsm_compact` (tests,
+   `--compact` tools). Back-pressure: when `n_l0` reaches `KV_LSM_MAX_SEGS`
+   the write path waits on `l->cv` for the compactor — the only stall left,
+   and it means the compactor is 16× behind (log it). Crash test: kill
+   after every file write in a compaction, reopen, verify every key.
+3. Remove the compaction call from `efs_kv_lsm_flush` (the snapshot path)
+   — it only needs the memtable flushed.
+4. **Gate:** `raft-obs` `apply_max` < 100 ms on every replica across ≥ 3
+   compactions during the 9-host suite (log `kv-compact: start/end` with
+   bytes and ms); `tests/measure/w8_stall_timeline.sh` shows no term change
+   on either group through the run; `md_latency.py` within the idle
+   reference; `make test` green with the two new tests; 9-host posix
+   ≥ the current 185–197/201.
+5. **Follow-on (after gate):** partitioned flush — write the memtable as
+   one L0 file per shard range so compaction touches only overlapping L1
+   segments; gate = bytes rewritten per compaction bounded by
+   `KV_LSM_L1_TARGET` × ranges touched, read `pread` count per KV get ≤ 3
+   on a 1 GiB table.
+
+- **Read:** `src/kv/kv_compact.c`, `src/kv/kv_lsm.c` (`efs_kv_lsm_flush`,
+  `kv_maybe_flush_locked`), the "One KV WAL fsync per pump cycle" and
+  "Synchronous full-L1 compaction" learnings in the project state rule.
+- **Forbidden:** raising the election timeout; raising `KV_LSM_MEM_DEFAULT`
+  as the fix; any compaction step that holds `h->mu`.
 
 ##### W12 — Repo hygiene
 
