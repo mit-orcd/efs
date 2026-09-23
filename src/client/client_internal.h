@@ -5,6 +5,7 @@
 #include "efs/metadata.h"
 #include "efs/network.h"
 #include "efs/protocol.h"
+#include "efs/opid.h"
 #include <pthread.h>
 #include <sys/types.h>
 
@@ -42,6 +43,15 @@ struct efs_client {
     uint64_t flock_token;
     /* Monotonic APPEND op-id seq (never 0). Retries of one reserve reuse it. */
     uint64_t append_opid_seq;
+    /* I16 directory op-id (§7.9): per-mount identity, one monotonic seq
+     * space, and the in-flight set that yields the contiguous ack the
+     * server windows reclaim by. A slot is held from the first send of an
+     * RPC to its final return; every retry inside reuses the same seq. */
+#define EFS_OPID_INFLIGHT 512
+    uint8_t opid_uuid[EFS_OPID_UUID_LEN]; /* guarded by inode_rpc.c opid_mu */
+    uint32_t opid_epoch;
+    uint64_t opid_next;                        /* next seq; 0 = unseeded */
+    uint64_t opid_inflight[EFS_OPID_INFLIGHT]; /* 0 = free slot */
 
     /* Persistent connection pool to each server. The server's accept
      * loop handles multiple requests per connection; a pool of conns lets

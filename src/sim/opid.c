@@ -219,8 +219,22 @@ int efs_opid_ack(struct efs_opid_window *w, uint64_t contiguous_ack)
 
     if (!w || !w->inited)
         return EFS_ERR_INVAL;
-    if (contiguous_ack > w->highest_contiguous_seq)
-        contiguous_ack = w->highest_contiguous_seq;
+    if (contiguous_ack > w->highest_contiguous_seq) {
+        /* The client has every reply at or below `contiguous_ack`, so those
+         * seqs are done here too — including ones another shard served.
+         * Move the watermark up and shift the ragged edge with it. */
+        uint64_t adv = contiguous_ack - w->highest_contiguous_seq;
+
+        if (adv >= EFS_OPID_BITMAP_BITS)
+            w->bitmap = 0;
+        else
+            w->bitmap >>= adv;
+        w->highest_contiguous_seq = contiguous_ack;
+        while (w->bitmap & 1ULL) {
+            w->highest_contiguous_seq++;
+            w->bitmap >>= 1;
+        }
+    }
     for (i = 0; i < w->ncache; i++) {
         if (w->cache[i].seq <= contiguous_ack)
             continue;
@@ -228,4 +242,88 @@ int efs_opid_ack(struct efs_opid_window *w, uint64_t contiguous_ack)
     }
     w->ncache = n;
     return EFS_OK;
+}
+
+void efs_opid_req_pack(const struct efs_opid_req *q, uint8_t out[EFS_OPID_WIRE_LEN])
+{
+    memcpy(out, q->id.client_uuid, EFS_OPID_UUID_LEN);
+    memcpy(out + EFS_OPID_UUID_LEN, &q->id.session_epoch, 4);
+    memcpy(out + EFS_OPID_UUID_LEN + 4, &q->id.seq, 8);
+    memcpy(out + EFS_OPID_UUID_LEN + 12, &q->ack, 8);
+}
+
+void efs_opid_req_unpack(struct efs_opid_req *q, const uint8_t in[EFS_OPID_WIRE_LEN])
+{
+    memset(q, 0, sizeof(*q));
+    memcpy(q->id.client_uuid, in, EFS_OPID_UUID_LEN);
+    memcpy(&q->id.session_epoch, in + EFS_OPID_UUID_LEN, 4);
+    memcpy(&q->id.seq, in + EFS_OPID_UUID_LEN + 4, 8);
+    memcpy(&q->ack, in + EFS_OPID_UUID_LEN + 12, 8);
+}
+
+int efs_opid_req_valid(const struct efs_opid_req *q)
+{
+    int i;
+
+    if (!q || q->id.seq == 0)
+        return 0;
+    for (i = 0; i < EFS_OPID_UUID_LEN; i++) {
+        if (q->id.client_uuid[i])
+            return 1;
+    }
+    return 0;
+}
+
+static int window_load(const uint8_t *cur, uint32_t cn,
+                       const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
+                       struct efs_opid_window *w)
+{
+    int rc;
+
+    if (cn == 0) {
+        efs_opid_window_init(w, uuid, epoch);
+        return EFS_OK;
+    }
+    rc = efs_opid_window_unpack(w, cur, cn);
+    if (rc != EFS_OK)
+        return rc;
+    if (w->session_epoch != epoch || !uuid_eq(w->client_uuid, uuid))
+        return EFS_ERR_PROTO;
+    return EFS_OK;
+}
+
+int efs_opid_fold(const uint8_t *cur, uint32_t cn,
+                  const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
+                  const struct efs_opid_req *q, const struct efs_opid_reply *reply,
+                  uint8_t *out, uint32_t *olen)
+{
+    struct efs_opid_window w;
+    int rc;
+
+    if (!q || !reply || !out || !olen || !uuid)
+        return EFS_ERR_INVAL;
+    rc = window_load(cur, cn, uuid, epoch, &w);
+    if (rc != EFS_OK)
+        return rc;
+    (void)efs_opid_ack(&w, q->ack);
+    rc = efs_opid_complete(&w, &q->id, reply);
+    if (rc == EFS_ERR_INVAL || rc == EFS_ERR_NOMEM)
+        return EFS_ERR_NOMEM; /* out of window: op applies unrecorded */
+    if (rc != EFS_OK)
+        return rc;
+    return efs_opid_window_pack(&w, out, olen);
+}
+
+int efs_opid_probe(const uint8_t *cur, uint32_t cn, const struct efs_opid *id,
+                   struct efs_opid_reply *out)
+{
+    struct efs_opid_window w;
+    int rc;
+
+    if (!id)
+        return EFS_ERR_INVAL;
+    rc = window_load(cur, cn, id->client_uuid, id->session_epoch, &w);
+    if (rc != EFS_OK)
+        return rc;
+    return efs_opid_lookup(&w, id, out);
 }

@@ -4,6 +4,7 @@
 #include "efs/rdma.h"
 #include "efs/checksum.h"
 #include "efs/store.h"
+#include "efs/opid.h"
 #include "server_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +28,19 @@ static __thread uint8_t *tls_payload;
 static __thread uint32_t tls_payload_cap;
 static __thread uint8_t *tls_reply;
 static __thread uint32_t tls_reply_cap;
+
+/* Optional op-id suffix on a directory RPC (protocol.h EFS_DIROP_OPID_LEN):
+ * present iff the payload is exactly struct + suffix and names a real
+ * identity. Anything else = no op-id (pre-I16 client). */
+static const struct efs_opid_req *dirop_opid(const void *payload, uint32_t plen,
+                                             uint32_t slen,
+                                             struct efs_opid_req *q)
+{
+    if (plen != slen + EFS_OPID_WIRE_LEN)
+        return NULL;
+    efs_opid_req_unpack(q, (const uint8_t *)payload + slen);
+    return efs_opid_req_valid(q) ? q : NULL;
+}
 
 void server_handler_tls_cleanup(void)
 {
@@ -582,14 +596,23 @@ send_reply:
                 } else if (type == EFS_MSG_INODE_CREATE &&
                            payload_len >= sizeof(struct efs_msg_inode_create)) {
                     struct efs_msg_inode_create *req = payload;
+                    struct efs_opid_req q;
+
                     server_raft_host_create(req->parent, req->name, req->mode,
                                             req->uid, req->gid, req->flags,
-                                            req->owner, &r);
+                                            req->owner,
+                                            dirop_opid(payload, payload_len,
+                                                       sizeof(*req), &q),
+                                            &r);
                     rtype = EFS_MSG_INODE_CREATE_REPLY;
                 } else if (type == EFS_MSG_INODE_UNLINK &&
                            payload_len >= sizeof(struct efs_msg_inode_unlink)) {
                     struct efs_msg_inode_unlink *req = payload;
+                    struct efs_opid_req q;
+
                     server_raft_host_unlink(req->parent, req->name, req->is_dir,
+                                            dirop_opid(payload, payload_len,
+                                                       sizeof(*req), &q),
                                             &r);
                     rtype = EFS_MSG_INODE_UNLINK_REPLY;
                 } else if (type == EFS_MSG_INODE_SETATTR &&
@@ -626,14 +649,23 @@ send_reply:
                 } else if (type == EFS_MSG_INODE_LINK &&
                            payload_len >= sizeof(struct efs_msg_inode_link)) {
                     struct efs_msg_inode_link *req = payload;
+                    struct efs_opid_req q;
+
                     server_raft_host_link(req->src_ino, req->new_parent,
-                                          req->new_name, &r);
+                                          req->new_name,
+                                          dirop_opid(payload, payload_len,
+                                                     sizeof(*req), &q),
+                                          &r);
                     rtype = EFS_MSG_INODE_LINK_REPLY;
                 } else if (type == EFS_MSG_INODE_RENAME_AT &&
                            payload_len >= sizeof(struct efs_msg_inode_rename_at)) {
                     struct efs_msg_inode_rename_at *req = payload;
+                    struct efs_opid_req q;
+
                     server_raft_host_rename_at(req->old_parent, req->old_name,
                                                req->new_parent, req->new_name,
+                                               dirop_opid(payload, payload_len,
+                                                          sizeof(*req), &q),
                                                &r);
                     rtype = EFS_MSG_INODE_RENAME_AT_REPLY;
                 } else if (type == EFS_MSG_INODE_HOLD &&

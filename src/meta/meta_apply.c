@@ -571,32 +571,10 @@ static int alloc_key_claim(struct efs_kv *kv, const uint8_t *k_alloc,
     return EFS_OK;
 }
 
-static int load_window(struct efs_kv *kv, const struct efs_opid *op,
-                       struct efs_opid_window *w)
-{
-    uint8_t key[EFS_KV_KEY_MAX], val[EFS_OPID_VAL_MAX];
-    uint32_t klen = 0, vlen;
-    uint32_t shard;
-    int rc;
-
-    shard = efs_kv_session_shard(op->client_uuid);
-    rc = efs_kv_key_opid(shard, op->client_uuid, op->session_epoch, key, &klen);
-    if (rc != EFS_OK)
-        return rc;
-    vlen = sizeof(val);
-    rc = efs_kv_get(kv, key, klen, val, &vlen);
-    if (rc == EFS_ERR_NOT_FOUND) {
-        efs_opid_window_init(w, op->client_uuid, op->session_epoch);
-        return EFS_OK;
-    }
-    if (rc != EFS_OK)
-        return rc;
-    return efs_opid_window_unpack(w, val, vlen);
-}
-
-/* Production host packs a zero UUID / seq 0 until sessions are hosted.
- * That must not PUT the op-id window (zero UUID hashes off the inode
- * group) and must not call lookup (seq 0 is an error). */
+/* Op-id window (I16, §7.9) for a directory op lives on the shard that
+ * served it — the dentry shard — under efs_kv_key_opid(shard, uuid,
+ * epoch). A zero UUID / seq 0 means "no identity" (pre-I16 caller, or the
+ * APPEND stand-in): no probe, no record. */
 static int opid_hosted(const struct efs_opid *op)
 {
     uint32_t i;
@@ -608,6 +586,69 @@ static int opid_hosted(const struct efs_opid *op)
             return 1;
     }
     return 0;
+}
+
+static int opid_get(struct efs_kv *kv, uint32_t shard, const struct efs_opid *id,
+                    uint8_t *key, uint32_t *klen, uint8_t *val, uint32_t *vlen)
+{
+    int rc;
+
+    rc = efs_kv_key_opid(shard, id->client_uuid, id->session_epoch, key, klen);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, key, *klen, val, vlen);
+    if (rc == EFS_ERR_NOT_FOUND) {
+        *vlen = 0;
+        return EFS_OK;
+    }
+    return rc;
+}
+
+int efs_meta_apply_opid_probe(struct efs_kv *kv, uint32_t shard,
+                              const struct efs_opid *id,
+                              struct efs_opid_reply *out)
+{
+    uint8_t key[EFS_KV_KEY_MAX], val[EFS_OPID_VAL_MAX];
+    uint32_t klen = 0, vlen = sizeof(val);
+    int rc;
+
+    if (!kv || !opid_hosted(id))
+        return 0;
+    rc = opid_get(kv, shard, id, key, &klen, val, &vlen);
+    if (rc != EFS_OK)
+        return rc;
+    return efs_opid_probe(val, vlen, id, out);
+}
+
+/* Fill the batch item that records `rep` for q in the window on `shard`.
+ * 1 = item filled; 0 = nothing to record (no identity, or the window has
+ * no room — the op still applies); negative = KV error. */
+static int opid_item(struct efs_kv *kv, uint32_t shard,
+                     const struct efs_opid_req *q, const struct efs_opid_reply *rep,
+                     uint8_t *key, uint8_t *val, struct efs_kv_item *it)
+{
+    uint8_t cur[EFS_OPID_VAL_MAX];
+    uint32_t klen = 0, cn = sizeof(cur), vlen = EFS_OPID_VAL_MAX;
+    int rc;
+
+    if (!q || !opid_hosted(&q->id))
+        return 0;
+    rc = opid_get(kv, shard, &q->id, key, &klen, cur, &cn);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_opid_fold(cur, cn, q->id.client_uuid, q->id.session_epoch, q, rep,
+                       val, &vlen);
+    if (rc == EFS_ERR_NOMEM)
+        return 0;
+    if (rc != EFS_OK)
+        return rc;
+    memset(it, 0, sizeof(*it));
+    it->op = EFS_KV_PUT;
+    it->key = key;
+    it->klen = klen;
+    it->val = val;
+    it->vlen = vlen;
+    return 1;
 }
 
 int efs_meta_apply_mkfs(struct efs_kv *kv, uint64_t now, uint64_t salt)
@@ -781,20 +822,19 @@ int efs_meta_apply_peek_alloc(struct efs_kv *kv, uint32_t shard, efs_ino_t *next
 
 static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
                              efs_ino_t parent, uint32_t mode,
-                             const char *name, const struct efs_opid *op,
+                             const char *name, const struct efs_opid_req *q,
                              int from_log, efs_ino_t want_ino, int want_layout,
                              efs_ino_t *out)
 {
     struct efs_meta_dentry dent;
     struct efs_meta_row row, parent_row;
-    struct efs_opid_window win;
     struct efs_opid_reply rep;
     uint8_t k_dent[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
     uint8_t k_alloc[EFS_KV_KEY_MAX], k_opid[EFS_KV_KEY_MAX];
     uint8_t v_dent[DENT_VAL], v_ino[INO_VAL], v_alloc[ALLOC_VAL];
     uint8_t v_opid[EFS_OPID_VAL_MAX];
-    uint32_t kd = 0, ki = 0, ka = 0, ko = 0, vo = sizeof(v_opid);
-    struct efs_kv_item it[9];
+    uint32_t kd = 0, ki = 0, ka = 0;
+    struct efs_kv_item it[10];
     uint32_t n = 0, shard;
     efs_ino_t next = 0, ino;
     uint8_t k_aver[EFS_KV_KEY_MAX], v_aver[8];
@@ -851,13 +891,18 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     if (!S_ISDIR(parent_row.mode))
         return EFS_ERR_INVAL;
 
-    if (op) {
-        int hit;
+    {
+        uint8_t lay = want_layout >= 0 ? (uint8_t)want_layout
+                                       : parent_row.layout;
 
-        rc = load_window(kv, op, &win);
-        if (rc != EFS_OK)
-            return rc;
-        hit = efs_opid_lookup(&win, op, &rep);
+        shard = efs_kv_dentry_shard(parent, name, lay);
+        dseq_lane = lay == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(name);
+    }
+    /* I16: a replay of an op this window already recorded returns the
+     * recorded verdict and touches nothing. */
+    if (q) {
+        int hit = efs_meta_apply_opid_probe(kv, shard, &q->id, &rep);
+
         if (hit < 0)
             return hit;
         if (hit) {
@@ -872,14 +917,6 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         return EFS_ERR_EXIST;
     if (rc != EFS_ERR_NOT_FOUND)
         return rc;
-
-    {
-        uint8_t lay = want_layout >= 0 ? (uint8_t)want_layout
-                                       : parent_row.layout;
-
-        shard = efs_kv_dentry_shard(parent, name, lay);
-        dseq_lane = lay == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(name);
-    }
     if (want_ino) {
         rc = alloc_hint_or_next(kv, shard, want_ino, &ino, &next);
         if (rc != EFS_OK)
@@ -1006,27 +1043,14 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     it[n].vlen = 8;
     n++;
 
-    if (op) {
+    if (q) {
         memset(&rep, 0, sizeof(rep));
         rep.rc = EFS_OK;
         rep.ino = ino;
-        rc = efs_opid_complete(&win, op, &rep);
-        if (rc != EFS_OK)
+        rc = opid_item(kv, shard, q, &rep, k_opid, v_opid, &it[n]);
+        if (rc < 0)
             return rc;
-        vo = sizeof(v_opid);
-        rc = efs_opid_window_pack(&win, v_opid, &vo);
-        if (rc != EFS_OK)
-            return rc;
-        rc = efs_kv_key_opid(efs_kv_session_shard(op->client_uuid),
-                             op->client_uuid, op->session_epoch, k_opid, &ko);
-        if (rc != EFS_OK)
-            return rc;
-        it[n].op = EFS_KV_PUT;
-        it[n].key = k_opid;
-        it[n].klen = ko;
-        it[n].val = v_opid;
-        it[n].vlen = vo;
-        n++;
+        n += (uint32_t)rc;
     }
 
     rc = efs_kv_batch(kv, it, n);
@@ -1049,9 +1073,13 @@ int efs_meta_apply_create_file_op(struct efs_kv *kv, const struct efs_opid *op,
                                   efs_ino_t parent, uint32_t mode, const char *name,
                                   efs_ino_t *out)
 {
+    struct efs_opid_req q;
+
     if (!op)
         return EFS_ERR_INVAL;
-    return create_file_batch(kv, at, parent, mode, name, op, 0, 0, -1, out);
+    memset(&q, 0, sizeof(q));
+    q.id = *op;
+    return create_file_batch(kv, at, parent, mode, name, &q, 0, 0, -1, out);
 }
 
 int efs_meta_apply_create_file_log(struct efs_kv *kv, const struct efs_meta_attrs *at,
@@ -1059,6 +1087,17 @@ int efs_meta_apply_create_file_log(struct efs_kv *kv, const struct efs_meta_attr
                                    const char *name, efs_ino_t *out)
 {
     return create_file_batch(kv, at, parent, mode, name, NULL, 1, 0, -1, out);
+}
+
+int efs_meta_apply_create_file_log_op(struct efs_kv *kv,
+                                      const struct efs_meta_attrs *at,
+                                      efs_ino_t parent, uint32_t mode,
+                                      const char *name, efs_ino_t ino,
+                                      int layout, const struct efs_opid_req *q,
+                                      efs_ino_t *out)
+{
+    return create_file_batch(kv, at, parent, mode, name, q, 1, ino,
+                             ino ? layout : -1, out);
 }
 
 int efs_meta_apply_create_file_log_at(struct efs_kv *kv, const struct efs_meta_attrs *at,
@@ -1075,19 +1114,21 @@ int efs_meta_apply_create_file_log_at(struct efs_kv *kv, const struct efs_meta_a
 static int mkdir_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
                        efs_ino_t parent, uint32_t mode, const char *name,
                        int from_log, efs_ino_t want_ino, int want_layout,
-                       efs_ino_t *out)
+                       const struct efs_opid_req *q, efs_ino_t *out)
 {
     struct efs_meta_dentry dent;
     struct efs_meta_row row, parent_row;
+    struct efs_opid_reply rep;
     uint8_t k_dent[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
     uint8_t k_alloc[EFS_KV_KEY_MAX], k_par[EFS_KV_KEY_MAX];
     uint8_t k_ln[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX];
+    uint8_t k_opid[EFS_KV_KEY_MAX], v_opid[EFS_OPID_VAL_MAX];
     uint8_t v_dent[DENT_VAL], v_ino[INO_VAL], v_alloc[ALLOC_VAL];
     uint8_t v_par[INO_VAL], v_ln[LANE_VAL], v_dseq[8];
     uint32_t kd = 0, ki = 0, ka = 0, kp = 0, kln = 0, ks = 0;
     uint8_t k_aver[EFS_KV_KEY_MAX], v_aver[8];
     uint32_t kav = 0;
-    struct efs_kv_item it[9];
+    struct efs_kv_item it[10];
     uint32_t n = 0, psh, csh, dsh;
     efs_ino_t next = 0, ino;
     uint64_t salt = 0, bit;
@@ -1126,6 +1167,19 @@ static int mkdir_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         parent_row.layout != EFS_META_LAYOUT_HASHED &&
         parent_row.layout != EFS_META_LAYOUT_SPLITTING)
         return EFS_ERR_INVAL;
+    lay = want_layout >= 0 ? (uint8_t)want_layout : parent_row.layout;
+    dsh = efs_kv_dentry_shard(parent, name, lay);
+    if (q) {
+        int hit = efs_meta_apply_opid_probe(kv, dsh, &q->id, &rep);
+
+        if (hit < 0)
+            return hit;
+        if (hit) {
+            if (out)
+                *out = rep.ino;
+            return rep.rc;
+        }
+    }
     rc = efs_meta_apply_lookup(kv, parent, name, &dent);
     if (rc == EFS_OK)
         return EFS_ERR_EXIST;
@@ -1134,10 +1188,8 @@ static int mkdir_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     rc = efs_meta_apply_export_salt(kv, &salt);
     if (rc != EFS_OK)
         return rc;
-    lay = want_layout >= 0 ? (uint8_t)want_layout : parent_row.layout;
     psh = efs_kv_inode_shard(parent);
     csh = efs_kv_mkdir_shard(parent, name, salt);
-    dsh = efs_kv_dentry_shard(parent, name, lay);
     dseq_lane = lay == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(name);
     if (want_ino) {
         rc = alloc_hint_or_next(kv, csh, want_ino, &ino, &next);
@@ -1251,6 +1303,15 @@ static int mkdir_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     it[n].val = v_dseq;
     it[n].vlen = 8;
     n++;
+    if (q) {
+        memset(&rep, 0, sizeof(rep));
+        rep.rc = EFS_OK;
+        rep.ino = ino;
+        rc = opid_item(kv, dsh, q, &rep, k_opid, v_opid, &it[n]);
+        if (rc < 0)
+            return rc;
+        n += (uint32_t)rc;
+    }
     rc = efs_kv_batch(kv, it, n);
     if (rc != EFS_OK)
         return rc;
@@ -1263,7 +1324,7 @@ int efs_meta_apply_mkdir(struct efs_kv *kv, const struct efs_meta_attrs *at,
                          efs_ino_t parent, uint32_t mode, const char *name,
                          efs_ino_t *out)
 {
-    return mkdir_batch(kv, at, parent, mode, name, 0, 0, -1, out);
+    return mkdir_batch(kv, at, parent, mode, name, 0, 0, -1, NULL, out);
 }
 
 int efs_meta_apply_mkdir_at(struct efs_kv *kv, const struct efs_meta_attrs *at,
@@ -1272,22 +1333,42 @@ int efs_meta_apply_mkdir_at(struct efs_kv *kv, const struct efs_meta_attrs *at,
 {
     if (!ino)
         return EFS_ERR_INVAL;
-    return mkdir_batch(kv, at, parent, mode, name, 1, ino, (int)layout, out);
+    return mkdir_batch(kv, at, parent, mode, name, 1, ino, (int)layout, NULL,
+                       out);
+}
+
+int efs_meta_apply_mkdir_log_op(struct efs_kv *kv, const struct efs_meta_attrs *at,
+                                efs_ino_t parent, uint32_t mode, const char *name,
+                                efs_ino_t ino, int layout,
+                                const struct efs_opid_req *q, efs_ino_t *out)
+{
+    /* Without a leader-chosen ino this is the plain (non-log) mkdir shape
+     * the host used before; the log-only parent stand-in needs the layout. */
+    return mkdir_batch(kv, at, parent, mode, name, ino ? 1 : 0, ino,
+                       ino ? layout : -1, q, out);
 }
 
 int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
                           uint64_t now)
 {
+    return efs_meta_apply_unlink_op(kv, parent, name, now, NULL);
+}
+
+int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *name,
+                             uint64_t now, const struct efs_opid_req *q)
+{
     struct efs_meta_dentry dent, tomb;
     struct efs_meta_row row, prow;
+    struct efs_opid_reply rep;
     uint8_t k_loc[EFS_KV_KEY_MAX], k_hash[EFS_KV_KEY_MAX];
     uint8_t k_ino[EFS_KV_KEY_MAX], v_ino[INO_VAL], v_tomb[DENT_VAL];
     uint8_t k_par[EFS_KV_KEY_MAX], v_par[INO_VAL];
     uint8_t k_ln[EFS_KV_KEY_MAX], v_ln[LANE_VAL];
     uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
+    uint8_t k_opid[EFS_KV_KEY_MAX], v_opid[EFS_OPID_VAL_MAX];
     uint32_t kl = 0, kh = 0, ki = 0, kp = 0, kln = 0, kr = 0;
-    struct efs_kv_item it[8];
-    uint32_t n = 0, psh, hsh;
+    struct efs_kv_item it[10];
+    uint32_t n = 0, psh, hsh, dsh, nlink_after = 0;
     int rc, held = 0;
     int touch_parent = 0;
     int stamp_lane = 0;
@@ -1295,15 +1376,31 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
     uint32_t ks = 0;
     uint8_t dseq_lane;
 
+    /* I16 first: after a committed unlink the dentry is gone, and the
+     * replay must answer OK, not ENOENT. The window shard is the dentry
+     * shard, which needs the parent's layout. */
+    if (q && opid_hosted(&q->id)) {
+        rc = efs_meta_apply_get_inode(kv, parent, &prow);
+        if (rc != EFS_OK)
+            return rc;
+        dsh = efs_kv_dentry_shard(parent, name, prow.layout);
+        rc = efs_meta_apply_opid_probe(kv, dsh, &q->id, &rep);
+        if (rc < 0)
+            return rc;
+        if (rc)
+            return rep.rc;
+    }
     rc = efs_meta_apply_resolve(kv, parent, name, &dent, &row);
     if (rc != EFS_OK)
         return rc;
     if (S_ISDIR(row.mode))
         return EFS_ERR_INVAL;
+    nlink_after = row.nlink <= 1 ? 0 : row.nlink - 1;
     rc = efs_meta_apply_get_inode(kv, parent, &prow);
     if (rc != EFS_OK)
         return rc;
     psh = efs_kv_inode_shard(parent);
+    dsh = efs_kv_dentry_shard(parent, name, prow.layout);
     hsh = efs_kv_dentry_shard(parent, name, EFS_META_LAYOUT_HASHED);
     rc = efs_kv_key_dentry(psh, parent, name, k_loc, &kl);
     if (rc == EFS_OK)
@@ -1437,8 +1534,7 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
         n++;
     }
     dseq_lane = prow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(name);
-    rc = dseq_bump(kv, efs_kv_dentry_shard(parent, name, prow.layout), parent,
-                   dseq_lane, k_dseq, &ks, v_dseq);
+    rc = dseq_bump(kv, dsh, parent, dseq_lane, k_dseq, &ks, v_dseq);
     if (rc != EFS_OK)
         return rc;
     it[n].op = EFS_KV_PUT;
@@ -1447,6 +1543,16 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
     it[n].val = v_dseq;
     it[n].vlen = 8;
     n++;
+    if (q) {
+        memset(&rep, 0, sizeof(rep));
+        rep.rc = EFS_OK;
+        rep.ino = row.ino;
+        rep.extra = nlink_after;
+        rc = opid_item(kv, dsh, q, &rep, k_opid, v_opid, &it[n]);
+        if (rc < 0)
+            return rc;
+        n += (uint32_t)rc;
+    }
     return efs_kv_batch(kv, it, n);
 }
 
@@ -2240,20 +2346,39 @@ static int dir_txn_busy(struct efs_kv *kv, const struct efs_meta_row *row)
 int efs_meta_apply_rmdir(struct efs_kv *kv, efs_ino_t parent, const char *name,
                          uint64_t now)
 {
+    return efs_meta_apply_rmdir_op(kv, parent, name, now, NULL);
+}
+
+int efs_meta_apply_rmdir_op(struct efs_kv *kv, efs_ino_t parent, const char *name,
+                            uint64_t now, const struct efs_opid_req *q)
+{
     struct efs_meta_dentry dent;
     struct efs_meta_row row, prow;
+    struct efs_opid_reply rep;
     uint8_t k_loc[EFS_KV_KEY_MAX], k_hash[EFS_KV_KEY_MAX], v_tomb[DENT_VAL];
     uint8_t k_ino[EFS_KV_KEY_MAX], k_par[EFS_KV_KEY_MAX], v_par[INO_VAL];
     uint8_t k_ln[EFS_KV_KEY_MAX], v_ln[LANE_VAL];
     uint8_t k_dseq[EFS_KV_KEY_MAX], v_dseq[8];
-    uint32_t kl = 0, kh = 0, ki = 0, kp = 0, kln = 0, ks = 0;
-    struct efs_kv_item it[8];
+    uint8_t k_opid[EFS_KV_KEY_MAX], v_opid[EFS_OPID_VAL_MAX];
+    uint32_t kl = 0, kh = 0, ki = 0, kp = 0, kln = 0, ks = 0, dsh;
+    struct efs_kv_item it[10];
     uint32_t n = 0;
     int rc, held, stamp_lane = 0;
     uint8_t dseq_lane;
 
     if (!kv || !name || parent == 0)
         return EFS_ERR_INVAL;
+    if (q && opid_hosted(&q->id)) {
+        rc = efs_meta_apply_get_inode(kv, parent, &prow);
+        if (rc != EFS_OK)
+            return rc;
+        dsh = efs_kv_dentry_shard(parent, name, prow.layout);
+        rc = efs_meta_apply_opid_probe(kv, dsh, &q->id, &rep);
+        if (rc < 0)
+            return rc;
+        if (rc)
+            return rep.rc;
+    }
     rc = efs_meta_apply_resolve(kv, parent, name, &dent, &row);
     if (rc != EFS_OK)
         return rc;
@@ -2319,8 +2444,8 @@ int efs_meta_apply_rmdir(struct efs_kv *kv, efs_ino_t parent, const char *name,
         n++;
     }
     dseq_lane = prow.layout == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(name);
-    rc = dseq_bump(kv, efs_kv_dentry_shard(parent, name, prow.layout), parent,
-                   dseq_lane, k_dseq, &ks, v_dseq);
+    dsh = efs_kv_dentry_shard(parent, name, prow.layout);
+    rc = dseq_bump(kv, dsh, parent, dseq_lane, k_dseq, &ks, v_dseq);
     if (rc != EFS_OK)
         return rc;
     it[n].op = EFS_KV_PUT;
@@ -2329,6 +2454,15 @@ int efs_meta_apply_rmdir(struct efs_kv *kv, efs_ino_t parent, const char *name,
     it[n].val = v_dseq;
     it[n].vlen = 8;
     n++;
+    if (q) {
+        memset(&rep, 0, sizeof(rep));
+        rep.rc = EFS_OK;
+        rep.ino = row.ino;
+        rc = opid_item(kv, dsh, q, &rep, k_opid, v_opid, &it[n]);
+        if (rc < 0)
+            return rc;
+        n += (uint32_t)rc;
+    }
     return efs_kv_batch(kv, it, n);
 }
 
@@ -4105,7 +4239,6 @@ int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len
                                   uint64_t *off_out)
 {
     struct efs_meta_row row;
-    struct efs_opid_window win;
     struct efs_opid_reply rep;
     struct append_cur cur;
     struct append_rsv rsv;
@@ -4116,23 +4249,20 @@ int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len
     uint8_t k_ln[EFS_META_LANES][EFS_KV_KEY_MAX];
     uint8_t v_ln[EFS_META_LANES][LANE_VAL];
     struct efs_kv_item it[EFS_META_LANES + 4];
-    uint32_t kc = 0, kr = 0, ko = 0, vo, n = 0, i;
+    uint32_t kc = 0, kr = 0, n = 0, i;
     int rc, hit;
 
     if (!kv || !op || !coord || !off_out || ino == 0 || len == 0)
         return EFS_ERR_INVAL;
-    hit = 0;
-    if (opid_hosted(op)) {
-        rc = load_window(kv, op, &win);
-        if (rc != EFS_OK)
-            return rc;
-        hit = efs_opid_lookup(&win, op, &rep);
-        if (hit < 0)
-            return hit;
-        if (hit) {
-            *off_out = rep.extra;
-            return rep.rc;
-        }
+    /* APPEND's window (sim; production APPEND carries seq 0) lives on the
+     * session shard, not a dentry shard. */
+    hit = efs_meta_apply_opid_probe(kv, efs_kv_session_shard(op->client_uuid),
+                                    op, &rep);
+    if (hit < 0)
+        return hit;
+    if (hit) {
+        *off_out = rep.extra;
+        return rep.rc;
     }
     rc = efs_meta_apply_get_inode(kv, ino, &row);
     if (rc != EFS_OK)
@@ -4200,27 +4330,19 @@ int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len
     if (rc != EFS_OK)
         return rc;
     if (opid_hosted(op)) {
+        struct efs_opid_req q;
+
+        memset(&q, 0, sizeof(q));
+        q.id = *op;
         memset(&rep, 0, sizeof(rep));
         rep.rc = EFS_OK;
         rep.ino = ino;
         rep.extra = eof;
-        rc = efs_opid_complete(&win, op, &rep);
-        if (rc != EFS_OK)
+        rc = opid_item(kv, efs_kv_session_shard(op->client_uuid), &q, &rep,
+                       k_opid, v_opid, &it[n]);
+        if (rc < 0)
             return rc;
-        vo = sizeof(v_opid);
-        rc = efs_opid_window_pack(&win, v_opid, &vo);
-        if (rc != EFS_OK)
-            return rc;
-        rc = efs_kv_key_opid(efs_kv_session_shard(op->client_uuid),
-                             op->client_uuid, op->session_epoch, k_opid, &ko);
-        if (rc != EFS_OK)
-            return rc;
-        it[n].op = EFS_KV_PUT;
-        it[n].key = k_opid;
-        it[n].klen = ko;
-        it[n].val = v_opid;
-        it[n].vlen = vo;
-        n++;
+        n += (uint32_t)rc;
     }
     rc = efs_kv_batch(kv, it, n);
     if (rc != EFS_OK)

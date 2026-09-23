@@ -3,6 +3,7 @@
 
 #include "efs/common.h"
 #include "efs/kv.h"
+#include "efs/opid.h"
 
 /* Cross-shard transaction SM (architecture.md §7.2 / §10 step 7).
  * Pure: one KV per participant, no sockets. PREPARE is no-wait
@@ -20,6 +21,9 @@
 #define EFS_TXN_REDUCE_INO 4 /* inode-row delta: nlink/nents +-, times MAX,
                               * used_shards OR (§7.2 parent-row reductions) */
 #define EFS_TXN_REDUCE_ADD 5 /* u64 add (dseq emptiness witness bump) */
+#define EFS_TXN_REDUCE_OPID 6 /* op-id window: ack + record one verdict
+                               * (I16 for the txn directory ops; the key
+                               * is efs_kv_key_opid on a participant) */
 
 #define EFS_TXN_UNDECIDED 0
 #define EFS_TXN_COMMIT    1
@@ -71,6 +75,7 @@ struct efs_txn_ino_delta {
 #define EFS_TXN_REDUCE_WIRE     32
 #define EFS_TXN_REDUCE_INO_WIRE 48
 #define EFS_TXN_REDUCE_ADD_WIRE 8
+#define EFS_TXN_REDUCE_OPID_WIRE 36 /* seq, rc, ino, extra, ack (BE) */
 #define EFS_TXN_GUARD_WIRE      8
 
 /* Coordinator = parts.shard[hash(txid) % n] (§7.2). */
@@ -97,6 +102,13 @@ int efs_txn_prepare_ino_delta(struct efs_kv *kv, const struct efs_txid *t,
 int efs_txn_prepare_add(struct efs_kv *kv, const struct efs_txid *t,
                         const struct efs_txn_parts *p, const uint8_t *key,
                         uint32_t klen, uint64_t add);
+/* Op-id window record (key = efs_kv_key_opid on a participant shard):
+ * COMMIT folds `ack` and the verdict for q->id.seq into the window as it
+ * is then (efs_opid_fold); ABORT drops the record, nothing committed. */
+int efs_txn_prepare_opid(struct efs_kv *kv, const struct efs_txid *t,
+                         const struct efs_txn_parts *p, const uint8_t *key,
+                         uint32_t klen, const struct efs_opid_req *q,
+                         const struct efs_opid_reply *reply);
 int efs_txn_drop(struct efs_kv *kv, const struct efs_txid *t, uint32_t shard);
 
 /* BUSY if any transaction holds an EXCL intent or a pending reduce on
@@ -121,6 +133,9 @@ void efs_txn_encode_reduce(uint8_t out[EFS_TXN_REDUCE_WIRE],
 void efs_txn_encode_ino_delta(uint8_t out[EFS_TXN_REDUCE_INO_WIRE],
                               const struct efs_txn_ino_delta *d);
 void efs_txn_encode_add(uint8_t out[EFS_TXN_REDUCE_ADD_WIRE], uint64_t add);
+void efs_txn_encode_opid(uint8_t out[EFS_TXN_REDUCE_OPID_WIRE],
+                         const struct efs_opid_req *q,
+                         const struct efs_opid_reply *reply);
 int efs_txn_apply_prepare(struct efs_kv *kv, int kind, const struct efs_txid *t,
                           const struct efs_txn_parts *p, const uint8_t *key,
                           uint32_t klen, const uint8_t *pay, uint32_t plen);

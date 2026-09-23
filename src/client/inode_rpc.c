@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <pthread.h>
 
 /* EFS_RPC_PROF: split inode-RPC wall time into conn checkout vs send vs
  * recv vs BUSY backoff. Recv is the server+wire wait (the parked H3
@@ -143,6 +145,91 @@ static int stale_retryable(uint8_t type)
 {
     return type == EFS_MSG_INODE_CREATE || type == EFS_MSG_INODE_UNLINK ||
            type == EFS_MSG_INODE_LINK || type == EFS_MSG_INODE_RENAME_AT;
+}
+
+/* I16 op-id for the directory mutations above (§7.9). One identity per
+ * mount (random uuid, epoch 1), one seq space, and an in-flight table:
+ * the contiguous ack sent with every request is (lowest in-flight seq)
+ * - 1, so a server window advances past seqs it never served. A slot is
+ * held from before the first send to after the final return — every
+ * BUSY / STALE / NOT_PRIMARY retry inside rpc_send_recv_* reuses the
+ * same bytes, which is the whole point. Table full = the op goes out
+ * without an identity (unprotected, as before I16). */
+static pthread_mutex_t opid_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static void opid_seed_locked(void)
+{
+    int fd, got = 0;
+
+    if (g_client.opid_next)
+        return;
+    fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+    if (fd >= 0) {
+        ssize_t n = read(fd, g_client.opid_uuid, EFS_OPID_UUID_LEN);
+        close(fd);
+        got = n == (ssize_t)EFS_OPID_UUID_LEN;
+    }
+    if (!got) {
+        uint64_t a = (uint64_t)getpid() * 0x9E3779B97F4A7C15ull ^
+                     (uint64_t)time(NULL);
+        uint64_t b = (uint64_t)(uintptr_t)&g_client ^ 0xD1B54A32D192ED03ull;
+        memcpy(g_client.opid_uuid, &a, 8);
+        memcpy(g_client.opid_uuid + 8, &b, 8);
+    }
+    g_client.opid_uuid[0] |= 1; /* never the all-zero "no identity" */
+    g_client.opid_epoch = 1;
+    g_client.opid_next = 1;
+    memset(g_client.opid_inflight, 0, sizeof(g_client.opid_inflight));
+}
+
+/* Fill q and take a slot (returned; -1 = none, q left invalid). */
+static int opid_begin(struct efs_opid_req *q)
+{
+    int i, slot = -1;
+    uint64_t low = 0;
+
+    memset(q, 0, sizeof(*q));
+    pthread_mutex_lock(&opid_mu);
+    opid_seed_locked();
+    for (i = 0; i < EFS_OPID_INFLIGHT; i++) {
+        uint64_t s = g_client.opid_inflight[i];
+
+        if (s == 0) {
+            if (slot < 0)
+                slot = i;
+        } else if (low == 0 || s < low) {
+            low = s;
+        }
+    }
+    if (slot >= 0) {
+        uint64_t seq = g_client.opid_next++;
+
+        g_client.opid_inflight[slot] = seq;
+        memcpy(q->id.client_uuid, g_client.opid_uuid, EFS_OPID_UUID_LEN);
+        q->id.session_epoch = g_client.opid_epoch;
+        q->id.seq = seq;
+        q->ack = (low ? low : seq) - 1;
+    }
+    pthread_mutex_unlock(&opid_mu);
+    return slot;
+}
+
+static void opid_end(int slot)
+{
+    if (slot < 0)
+        return;
+    pthread_mutex_lock(&opid_mu);
+    g_client.opid_inflight[slot] = 0;
+    pthread_mutex_unlock(&opid_mu);
+}
+
+/* Append the wire suffix after `slen` bytes of struct; new length. */
+static uint32_t opid_suffix(uint8_t *buf, uint32_t slen, const struct efs_opid_req *q)
+{
+    if (!efs_opid_req_valid(q))
+        return slen;
+    efs_opid_req_pack(q, buf + slen);
+    return slen + EFS_OPID_WIRE_LEN;
 }
 
 /* Phase 2b: the metadata primary is the lowest-id live node. Mutations must
@@ -402,31 +489,39 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
                           uint32_t flags, efs_ino_t *out_ino,
                           struct efs_inode *out)
 {
-    struct efs_msg_inode_create req;
-    memset(&req, 0, sizeof(req));
-    req.export_id = export_id;
-    req.parent = parent;
+    uint8_t buf[sizeof(struct efs_msg_inode_create) + EFS_OPID_WIRE_LEN];
+    struct efs_msg_inode_create *req = (struct efs_msg_inode_create *)buf;
+    struct efs_opid_req q;
+    uint32_t slen;
+    int slot;
+
+    memset(buf, 0, sizeof(buf));
+    req->export_id = export_id;
+    req->parent = parent;
     if (name)
-        strncpy(req.name, name, EFS_MAX_NAME - 1);
-    req.mode = mode;
-    req.uid = (uint32_t)uid;
-    req.gid = (uint32_t)gid;
-    req.flags = flags;
+        strncpy(req->name, name, EFS_MAX_NAME - 1);
+    req->mode = mode;
+    req->uid = (uint32_t)uid;
+    req->gid = (uint32_t)gid;
+    req->flags = flags;
     if ((flags & EFS_CREATE_F_HOLD) && !g_client.flock_token)
         g_client.flock_token = 1;
-    req.owner = g_client.flock_token;
+    req->owner = g_client.flock_token;
+    slot = opid_begin(&q);
+    slen = opid_suffix(buf, sizeof(*req), &q);
     struct efs_msg_inode_reply r;
     /* Files co-locate with the parent (one group). MKDIR scatters the
      * child inode, so a parent-group-only voter has to bounce the whole
      * RPC to a dual-host — an extra RTT on ~half of mkdirs. Send dirs
      * to a dual-host so both groups are local. */
     int rc = S_ISDIR(mode)
-                 ? rpc_send_recv_dual(EFS_MSG_INODE_CREATE, &req, sizeof(req),
+                 ? rpc_send_recv_dual(EFS_MSG_INODE_CREATE, buf, slen,
                                       EFS_MSG_INODE_CREATE_REPLY, &r,
                                       sizeof(r))
-                 : rpc_send_recv_owner(parent, EFS_MSG_INODE_CREATE, &req,
-                                       sizeof(req), EFS_MSG_INODE_CREATE_REPLY,
+                 : rpc_send_recv_owner(parent, EFS_MSG_INODE_CREATE, buf,
+                                       slen, EFS_MSG_INODE_CREATE_REPLY,
                                        &r, sizeof(r));
+    opid_end(slot);
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
@@ -627,16 +722,24 @@ int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
 int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, int is_dir)
 {
-    struct efs_msg_inode_unlink req;
-    memset(&req, 0, sizeof(req));
-    req.export_id = export_id;
-    req.parent = parent;
+    uint8_t buf[sizeof(struct efs_msg_inode_unlink) + EFS_OPID_WIRE_LEN];
+    struct efs_msg_inode_unlink *req = (struct efs_msg_inode_unlink *)buf;
+    struct efs_opid_req q;
+    uint32_t slen;
+    int slot;
+
+    memset(buf, 0, sizeof(buf));
+    req->export_id = export_id;
+    req->parent = parent;
     if (name)
-        strncpy(req.name, name, EFS_MAX_NAME - 1);
-    req.is_dir = is_dir ? 1 : 0;
+        strncpy(req->name, name, EFS_MAX_NAME - 1);
+    req->is_dir = is_dir ? 1 : 0;
+    slot = opid_begin(&q);
+    slen = opid_suffix(buf, sizeof(*req), &q);
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_owner(parent, EFS_MSG_INODE_UNLINK, &req, sizeof(req),
+    int rc = rpc_send_recv_owner(parent, EFS_MSG_INODE_UNLINK, buf, slen,
                                  EFS_MSG_INODE_UNLINK_REPLY, &r, sizeof(r));
+    opid_end(slot);
     if (rc != EFS_OK)
         return rc;
     return rpc_status_to_efs(r.status);
@@ -646,19 +749,27 @@ int efs_client_rpc_rename_at(efs_export_id_t export_id, efs_ino_t old_parent,
                              const char *old_name, efs_ino_t new_parent,
                              const char *new_name, struct efs_inode *out)
 {
-    struct efs_msg_inode_rename_at req;
-    memset(&req, 0, sizeof(req));
-    req.export_id = export_id;
-    req.old_parent = old_parent;
-    req.new_parent = new_parent;
+    uint8_t buf[sizeof(struct efs_msg_inode_rename_at) + EFS_OPID_WIRE_LEN];
+    struct efs_msg_inode_rename_at *req = (struct efs_msg_inode_rename_at *)buf;
+    struct efs_opid_req q;
+    uint32_t slen;
+    int slot;
+
+    memset(buf, 0, sizeof(buf));
+    req->export_id = export_id;
+    req->old_parent = old_parent;
+    req->new_parent = new_parent;
     if (old_name)
-        strncpy(req.old_name, old_name, EFS_MAX_NAME - 1);
+        strncpy(req->old_name, old_name, EFS_MAX_NAME - 1);
     if (new_name)
-        strncpy(req.new_name, new_name, EFS_MAX_NAME - 1);
+        strncpy(req->new_name, new_name, EFS_MAX_NAME - 1);
+    slot = opid_begin(&q);
+    slen = opid_suffix(buf, sizeof(*req), &q);
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_owner(old_parent, EFS_MSG_INODE_RENAME_AT, &req,
-                                 sizeof(req), EFS_MSG_INODE_RENAME_AT_REPLY,
+    int rc = rpc_send_recv_owner(old_parent, EFS_MSG_INODE_RENAME_AT, buf,
+                                 slen, EFS_MSG_INODE_RENAME_AT_REPLY,
                                  &r, sizeof(r));
+    opid_end(slot);
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
@@ -796,16 +907,24 @@ int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
                         efs_ino_t new_parent, const char *new_name,
                         struct efs_inode *out)
 {
-    struct efs_msg_inode_link req;
-    memset(&req, 0, sizeof(req));
-    req.export_id = export_id;
-    req.src_ino = src_ino;
-    req.new_parent = new_parent;
+    uint8_t buf[sizeof(struct efs_msg_inode_link) + EFS_OPID_WIRE_LEN];
+    struct efs_msg_inode_link *req = (struct efs_msg_inode_link *)buf;
+    struct efs_opid_req q;
+    uint32_t slen;
+    int slot;
+
+    memset(buf, 0, sizeof(buf));
+    req->export_id = export_id;
+    req->src_ino = src_ino;
+    req->new_parent = new_parent;
     if (new_name)
-        strncpy(req.new_name, new_name, EFS_MAX_NAME - 1);
+        strncpy(req->new_name, new_name, EFS_MAX_NAME - 1);
+    slot = opid_begin(&q);
+    slen = opid_suffix(buf, sizeof(*req), &q);
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_owner(new_parent, EFS_MSG_INODE_LINK, &req, sizeof(req),
+    int rc = rpc_send_recv_owner(new_parent, EFS_MSG_INODE_LINK, buf, slen,
                                  EFS_MSG_INODE_LINK_REPLY, &r, sizeof(r));
+    opid_end(slot);
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)

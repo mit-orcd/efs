@@ -296,15 +296,22 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
                             struct efs_msg_inode_reply *out);
 void server_raft_host_lookup(efs_ino_t parent, const char *name,
                              struct efs_msg_inode_reply *out);
+/* Directory mutations take the request's op-id (`q`, NULL = none; I16):
+ * a retry with the same identity gets the recorded verdict. */
+struct efs_opid_req;
 void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
                              uint32_t uid, uint32_t gid, uint32_t flags,
-                             uint64_t owner, struct efs_msg_inode_reply *out);
+                             uint64_t owner, const struct efs_opid_req *q,
+                             struct efs_msg_inode_reply *out);
 void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                             uint32_t uid, uint32_t gid,
+                            const struct efs_opid_req *q,
                             struct efs_msg_inode_reply *out);
 void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
+                             const struct efs_opid_req *q,
                              struct efs_msg_inode_reply *out);
 void server_raft_host_rmdir(efs_ino_t parent, const char *name,
+                            const struct efs_opid_req *q,
                             struct efs_msg_inode_reply *out);
 void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
                               uint32_t uid, uint32_t gid, uint64_t size,
@@ -314,9 +321,11 @@ void server_raft_host_append(efs_ino_t ino, uint64_t len,
                              const uint8_t *sess_uuid, uint32_t sess_epoch,
                              uint64_t op_seq, struct efs_msg_inode_reply *out);
 void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
-                           const char *new_name, struct efs_msg_inode_reply *out);
+                           const char *new_name, const struct efs_opid_req *q,
+                           struct efs_msg_inode_reply *out);
 void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                                 efs_ino_t new_parent, const char *new_name,
+                                const struct efs_opid_req *q,
                                 struct efs_msg_inode_reply *out);
 void server_raft_host_readdir(efs_ino_t parent, uint32_t max_ents,
                               uint32_t after_src, const char *after_name,

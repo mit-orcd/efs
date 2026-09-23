@@ -190,6 +190,31 @@ int efs_meta_apply_create_file_log_at(struct efs_kv *kv, const struct efs_meta_a
                                       efs_ino_t parent, uint32_t mode,
                                       const char *name, efs_ino_t ino,
                                       uint8_t layout, efs_ino_t *out);
+/* Log apply with an op-id (I16): a replay of q returns the recorded
+ * verdict and ino without touching the namespace; a first apply records
+ * (OK, ino) in the window on the dentry shard in the same batch. ino 0 =
+ * allocate here (layout ignored). q NULL or zero identity = unprotected. */
+int efs_meta_apply_create_file_log_op(struct efs_kv *kv,
+                                      const struct efs_meta_attrs *at,
+                                      efs_ino_t parent, uint32_t mode,
+                                      const char *name, efs_ino_t ino,
+                                      int layout, const struct efs_opid_req *q,
+                                      efs_ino_t *out);
+int efs_meta_apply_mkdir_log_op(struct efs_kv *kv, const struct efs_meta_attrs *at,
+                                efs_ino_t parent, uint32_t mode, const char *name,
+                                efs_ino_t ino, int layout,
+                                const struct efs_opid_req *q, efs_ino_t *out);
+/* UNLINK / RMDIR with an op-id: replay answers the recorded OK (reply
+ * ino = the removed inode; extra = nlink after, unlink only). */
+int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *name,
+                             uint64_t now, const struct efs_opid_req *q);
+int efs_meta_apply_rmdir_op(struct efs_kv *kv, efs_ino_t parent, const char *name,
+                            uint64_t now, const struct efs_opid_req *q);
+/* Leader-side pre-check: 1 = id already completed in the window on
+ * `shard` (out filled), 0 = new, negative = KV error. Zero identity = 0. */
+int efs_meta_apply_opid_probe(struct efs_kv *kv, uint32_t shard,
+                              const struct efs_opid *id,
+                              struct efs_opid_reply *out);
 /* MKDIR. Child inode is scattered (mkdir_shard); dentry follows the
  * parent's layout. One atomic batch — the host only proposes this when
  * parent, dentry, and child shards share a Raft group (same log). Cross-

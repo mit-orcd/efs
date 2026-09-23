@@ -573,6 +573,14 @@ struct efs_msg_inode_hold {
 #define EFS_FLOCK_RANGE_LEN 16u
 #define EFS_SESS_WIRE_LEN 20u
 #define EFS_APPEND_OPID_LEN (EFS_SESS_WIRE_LEN + 8u)
+/* Directory mutations (INODE_CREATE incl. mkdir, INODE_UNLINK incl.
+ * rmdir, INODE_LINK, INODE_RENAME_AT) take an optional EFS_OPID_WIRE_LEN
+ * suffix (opid.h: uuid[16] + native u32 epoch + native u64 seq + native
+ * u64 contiguous ack) after the fixed struct. With it the op is I16: a
+ * retry with the same (uuid, epoch, seq) returns the recorded verdict
+ * instead of EEXIST / ENOENT for an op that already committed. Absent
+ * keeps the unprotected behaviour. Do not grow those structs. */
+#define EFS_DIROP_OPID_LEN 36u
 struct efs_msg_inode_flock {
     efs_export_id_t export_id;
     efs_ino_t ino;

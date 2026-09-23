@@ -583,6 +583,68 @@ static void test_i16_durable(void)
           "replay other name");
     CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "other", &d) == EFS_ERR_NOT_FOUND,
           "no second name");
+
+    /* Log-path directory ops with an op-id (I16 for the production host):
+     * the retry of a committed op returns the recorded verdict, not the
+     * EEXIST / ENOENT the namespace would now give. */
+    {
+        struct efs_opid_req q;
+        struct efs_opid_reply got;
+        efs_ino_t dir = 0, dir2 = 0, f = 0, f2 = 0;
+        uint32_t dsh;
+
+        memset(&q, 0, sizeof(q));
+        q.id = op;
+        q.id.seq = 2;
+        CHECK(efs_meta_apply_mkdir_log_op(kv, &g_at, EFS_ROOT_INO, S_IFDIR | 0755,
+                                          "d", 0, -1, &q, &dir) == EFS_OK && dir,
+              "mkdir op");
+        CHECK(efs_meta_apply_mkdir_log_op(kv, &g_at, EFS_ROOT_INO, S_IFDIR | 0755,
+                                          "d", 0, -1, &q, &dir2) == EFS_OK &&
+                  dir2 == dir,
+              "mkdir replay = same ino, not EEXIST");
+        CHECK(efs_meta_apply_mkdir(kv, &g_at, EFS_ROOT_INO, S_IFDIR | 0755, "d",
+                                   &dir2) == EFS_ERR_EXIST,
+              "same name without an op-id is EEXIST");
+        dsh = efs_kv_dentry_shard(EFS_ROOT_INO, "d", EFS_META_LAYOUT_LOCAL);
+        CHECK(efs_meta_apply_opid_probe(kv, dsh, &q.id, &got) == 1 &&
+                  got.ino == dir,
+              "probe sees the mkdir verdict");
+        q.id.seq = 3;
+        q.ack = 2;
+        CHECK(efs_meta_apply_create_file_log_op(kv, &g_at, dir, S_IFREG | 0644,
+                                                "f", 0, -1, &q, &f) == EFS_OK && f,
+              "create op");
+        CHECK(efs_meta_apply_create_file_log_op(kv, &g_at, dir, S_IFREG | 0644,
+                                                "f", 0, -1, &q, &f2) == EFS_OK &&
+                  f2 == f,
+              "create replay");
+        q.id.seq = 4;
+        q.ack = 3;
+        CHECK(efs_meta_apply_unlink_op(kv, dir, "f", T0 + 5, &q) == EFS_OK,
+              "unlink op");
+        CHECK(efs_meta_apply_lookup(kv, dir, "f", &d) == EFS_ERR_NOT_FOUND,
+              "f gone");
+        CHECK(efs_meta_apply_unlink_op(kv, dir, "f", T0 + 5, &q) == EFS_OK,
+              "unlink replay is OK, not ENOENT");
+        CHECK(efs_meta_apply_unlink(kv, dir, "f", T0 + 5) == EFS_ERR_NOT_FOUND,
+              "without an op-id it is ENOENT");
+        q.id.seq = 5;
+        q.ack = 4;
+        CHECK(efs_meta_apply_rmdir_op(kv, EFS_ROOT_INO, "d", T0 + 6, &q) == EFS_OK,
+              "rmdir op");
+        CHECK(efs_meta_apply_rmdir_op(kv, EFS_ROOT_INO, "d", T0 + 6, &q) == EFS_OK,
+              "rmdir replay is OK");
+        CHECK(efs_meta_apply_opid_probe(kv, dsh, &q.id, &got) == 1 &&
+                  got.ino == dir,
+              "rmdir verdict names the removed dir");
+        /* the ack watermark reclaimed the older cache entries but they
+         * still answer OK (acked stub) */
+        q.id.seq = 2;
+        CHECK(efs_meta_apply_opid_probe(kv, dsh, &q.id, &got) == 1 &&
+                  got.rc == EFS_OK,
+              "acked seq still completed");
+    }
     efs_kv_mem_free(kv);
 }
 

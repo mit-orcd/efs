@@ -5,7 +5,9 @@
 #include "efs/meta_apply.h"
 #include <string.h>
 
-#define VAL_MAX EFS_KV_KEY_MAX
+/* Values this file reads or writes whole: txn records (≤ 128), inode rows,
+ * lanes, and the op-id window (EFS_OPID_VAL_MAX = 512, the largest). */
+#define VAL_MAX EFS_OPID_VAL_MAX
 #define KEY_MAX EFS_KV_KEY_MAX
 
 static void be32(uint8_t *p, uint32_t v)
@@ -437,6 +439,39 @@ void efs_txn_encode_add(uint8_t out[EFS_TXN_REDUCE_ADD_WIRE], uint64_t add)
     be64(out, add);
 }
 
+void efs_txn_encode_opid(uint8_t out[EFS_TXN_REDUCE_OPID_WIRE],
+                         const struct efs_opid_req *q,
+                         const struct efs_opid_reply *reply)
+{
+    be64(out, q->id.seq);
+    be32(out + 8, (uint32_t)reply->rc);
+    be64(out + 12, reply->ino);
+    be64(out + 20, reply->extra);
+    be64(out + 28, q->ack);
+}
+
+/* The window key carries uuid (key+3) and epoch (key+19, BE); the record
+ * carries seq/verdict/ack. Rebuild the request the fold needs. */
+static int decode_opid(const uint8_t *key, uint32_t klen, const uint8_t *pay,
+                       uint32_t plen, struct efs_opid_req *q,
+                       struct efs_opid_reply *rep)
+{
+    if (klen < 3 + EFS_OPID_UUID_LEN + 4 || key[2] != EFS_KV_KIND_OPID ||
+        plen < EFS_TXN_REDUCE_OPID_WIRE)
+        return EFS_ERR_PROTO;
+    memset(q, 0, sizeof(*q));
+    memset(rep, 0, sizeof(*rep));
+    memcpy(q->id.client_uuid, key + 3, EFS_OPID_UUID_LEN);
+    q->id.session_epoch = rd32(key + 3 + EFS_OPID_UUID_LEN);
+    q->id.seq = rd64(pay);
+    rep->seq = q->id.seq;
+    rep->rc = (int)(int32_t)rd32(pay + 8);
+    rep->ino = rd64(pay + 12);
+    rep->extra = rd64(pay + 20);
+    q->ack = rd64(pay + 28);
+    return EFS_OK;
+}
+
 /* Record under reduce(key, txid): [txid][parts][payload]. The payload's
  * meaning follows the KIND OF THE DATA KEY (lane triple, inode delta, u64
  * add) — one record shape, so drop/resolve find every reduce of a txn by
@@ -514,6 +549,22 @@ int efs_txn_prepare_add(struct efs_kv *kv, const struct efs_txid *t,
     return prepare_reduce_rec(kv, t, p, key, klen, pay, sizeof(pay));
 }
 
+int efs_txn_prepare_opid(struct efs_kv *kv, const struct efs_txid *t,
+                         const struct efs_txn_parts *p, const uint8_t *key,
+                         uint32_t klen, const struct efs_opid_req *q,
+                         const struct efs_opid_reply *reply)
+{
+    uint8_t pay[EFS_TXN_REDUCE_OPID_WIRE];
+
+    /* Exactly the window key (shard, kind, uuid, epoch): a truncated key
+     * would PREPARE a record decode_opid can never fold at RESOLVE. */
+    if (!q || !reply || key_kind(key, klen) != EFS_KV_KIND_OPID ||
+        klen != 3 + EFS_OPID_UUID_LEN + 4)
+        return EFS_ERR_INVAL;
+    efs_txn_encode_opid(pay, q, reply);
+    return prepare_reduce_rec(kv, t, p, key, klen, pay, sizeof(pay));
+}
+
 int efs_txn_apply_prepare(struct efs_kv *kv, int kind, const struct efs_txid *t,
                           const struct efs_txn_parts *p, const uint8_t *key,
                           uint32_t klen, const uint8_t *pay, uint32_t plen)
@@ -563,6 +614,14 @@ int efs_txn_apply_prepare(struct efs_kv *kv, int kind, const struct efs_txid *t,
         if (plen < EFS_TXN_REDUCE_ADD_WIRE)
             return EFS_ERR_PROTO;
         return efs_txn_prepare_add(kv, t, p, key, klen, rd64(pay));
+    case EFS_TXN_REDUCE_OPID: {
+        struct efs_opid_req q;
+        struct efs_opid_reply rep;
+
+        if (decode_opid(key, klen, pay, plen, &q, &rep) != EFS_OK)
+            return EFS_ERR_PROTO;
+        return efs_txn_prepare_opid(kv, t, p, key, klen, &q, &rep);
+    }
     default:
         return EFS_ERR_PROTO;
     }
@@ -1085,6 +1144,24 @@ static int fold_reduce(struct res_acc *a, const uint8_t *key, uint32_t klen,
             seq = rd64(cur);
         be64(out, seq + rd64(pay));
         return res_add_put(a, key, klen, out, 8);
+    }
+    case EFS_KV_KIND_OPID: {
+        /* Ack + one verdict folded into the window as it is now; commutes
+         * with the log path's read-modify-write of the same window. A
+         * window with no room leaves the op unrecorded, never unapplied. */
+        struct efs_opid_req q;
+        struct efs_opid_reply rep;
+        uint8_t out[EFS_OPID_VAL_MAX];
+        uint32_t on = sizeof(out);
+        int frc;
+
+        if (decode_opid(key, klen, pay, plen, &q, &rep) != EFS_OK)
+            return 0;
+        frc = efs_opid_fold(cur, cn, q.id.client_uuid, q.id.session_epoch, &q,
+                            &rep, out, &on);
+        if (frc != EFS_OK)
+            return 0;
+        return res_add_put(a, key, klen, out, on);
     }
     default:
         return 0;

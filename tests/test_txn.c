@@ -651,8 +651,113 @@ static void test_scan_pending(void)
     efs_kv_mem_free(kv);
 }
 
+/* I16 op-id window as a txn REDUCE: COMMIT folds the verdict into whatever
+ * the window holds (including a log-path record that landed in between),
+ * ABORT records nothing, and the wire form round-trips through
+ * efs_txn_apply_prepare. */
+static void test_opid_reduce(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_txid a, b;
+    struct efs_txn_parts p = two(1, 2);
+    struct efs_opid_req q1, q2, q3;
+    struct efs_opid_reply rep, got;
+    uint8_t uuid[EFS_OPID_UUID_LEN], key[EFS_KV_KEY_MAX];
+    uint8_t cur[EFS_OPID_VAL_MAX], out[EFS_OPID_VAL_MAX];
+    uint8_t pay[EFS_TXN_REDUCE_OPID_WIRE];
+    uint32_t klen = 0, cn, on;
+    int rc;
+
+    tid(&a, 51);
+    tid(&b, 52);
+    CHECK(kv != NULL, "kv");
+    memset(uuid, 0, sizeof(uuid));
+    uuid[3] = 7;
+    CHECK(efs_kv_key_opid(1, uuid, 1, key, &klen) == EFS_OK, "opid key");
+    memset(&q1, 0, sizeof(q1));
+    memcpy(q1.id.client_uuid, uuid, EFS_OPID_UUID_LEN);
+    q1.id.session_epoch = 1;
+    q1.id.seq = 1;
+    q2 = q1;
+    q2.id.seq = 2;
+    q3 = q1;
+    q3.id.seq = 3;
+    q3.ack = 1;
+    memset(&rep, 0, sizeof(rep));
+    rep.rc = EFS_OK;
+    rep.ino = 4242;
+
+    /* no window yet: probe is a miss, not an error */
+    CHECK(efs_meta_apply_opid_probe(kv, 1, &q1.id, &got) == 0, "empty probe");
+    /* txn a records seq 1 on COMMIT */
+    CHECK(efs_txn_prepare_opid(kv, &a, &p, key, klen, &q1, &rep) == EFS_OK,
+          "prep a");
+    CHECK(efs_meta_apply_opid_probe(kv, 1, &q1.id, &got) == 0,
+          "pending reduce is not visible");
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&a, &p), &a, EFS_TXN_COMMIT) ==
+              EFS_OK,
+          "decide a");
+    CHECK(efs_txn_resolve(kv, &a, 1, EFS_TXN_COMMIT) == EFS_OK, "resolve a");
+    rc = efs_meta_apply_opid_probe(kv, 1, &q1.id, &got);
+    CHECK(rc == 1 && got.rc == EFS_OK && got.ino == 4242, "seq 1 recorded");
+    CHECK(efs_meta_apply_opid_probe(kv, 1, &q2.id, &got) == 0, "seq 2 new");
+
+    /* txn b prepares seq 2; a log-path fold of seq 3 lands meanwhile */
+    rep.ino = 4343;
+    CHECK(efs_txn_prepare_opid(kv, &b, &p, key, klen, &q2, &rep) == EFS_OK,
+          "prep b");
+    cn = sizeof(cur);
+    CHECK(efs_kv_get(kv, key, klen, cur, &cn) == EFS_OK, "window present");
+    rep.ino = 4444;
+    on = sizeof(out);
+    CHECK(efs_opid_fold(cur, cn, uuid, 1, &q3, &rep, out, &on) == EFS_OK, "fold 3");
+    CHECK(efs_kv_put(kv, key, klen, out, on) == EFS_OK, "log-path put");
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&b, &p), &b, EFS_TXN_COMMIT) ==
+              EFS_OK,
+          "decide b");
+    CHECK(efs_txn_resolve(kv, &b, 1, EFS_TXN_COMMIT) == EFS_OK, "resolve b");
+    rc = efs_meta_apply_opid_probe(kv, 1, &q2.id, &got);
+    CHECK(rc == 1 && got.ino == 4343, "seq 2 folded over the log-path window");
+    rc = efs_meta_apply_opid_probe(kv, 1, &q3.id, &got);
+    CHECK(rc == 1 && got.ino == 4444, "seq 3 (log path) survived the fold");
+    rc = efs_meta_apply_opid_probe(kv, 1, &q1.id, &got);
+    CHECK(rc == 1 && got.rc == EFS_OK, "seq 1 still answers (acked stub or cache)");
+
+    /* ABORT leaves the window untouched */
+    tid(&a, 53);
+    q1.id.seq = 9;
+    CHECK(efs_txn_prepare_opid(kv, &a, &p, key, klen, &q1, &rep) == EFS_OK,
+          "prep abort");
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&a, &p), &a, EFS_TXN_ABORT) ==
+              EFS_OK,
+          "decide abort");
+    CHECK(efs_txn_resolve(kv, &a, 1, EFS_TXN_ABORT) == EFS_OK, "resolve abort");
+    CHECK(efs_meta_apply_opid_probe(kv, 1, &q1.id, &got) == 0,
+          "aborted op is not recorded");
+
+    /* wire form: encode + apply_prepare = prepare_opid */
+    tid(&b, 54);
+    q1.id.seq = 10;
+    efs_txn_encode_opid(pay, &q1, &rep);
+    CHECK(efs_txn_apply_prepare(kv, EFS_TXN_REDUCE_OPID, &b, &p, key, klen, pay,
+                                sizeof(pay)) == EFS_OK,
+          "apply_prepare opid");
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&b, &p), &b, EFS_TXN_COMMIT) ==
+              EFS_OK,
+          "decide wire");
+    CHECK(efs_txn_resolve(kv, &b, 1, EFS_TXN_COMMIT) == EFS_OK, "resolve wire");
+    rc = efs_meta_apply_opid_probe(kv, 1, &q1.id, &got);
+    CHECK(rc == 1 && got.ino == rep.ino, "wire-form record");
+    /* wrong kind for the key is INVAL, not a silent no-op */
+    CHECK(efs_txn_prepare_opid(kv, &b, &p, key, klen - 1, &q1, &rep) ==
+              EFS_ERR_INVAL,
+          "non-opid key rejected");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
+    test_opid_reduce();
     test_scan_pending();
     test_excl_conflict_i16();
     test_i17_visible_at_decision();
