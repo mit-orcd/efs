@@ -134,6 +134,12 @@ int efs_meta_apply_salt_record(struct efs_kv *kv, uint32_t anchor,
                                uint64_t salt);
 int efs_meta_apply_get_inode(struct efs_kv *kv, efs_ino_t ino,
                              struct efs_meta_row *out);
+/* Handler-side row read: when the row is absent, a pending EXCL intent
+ * whose coordinator has COMMITted is served as the row (visibility at
+ * the decision, I17). NULL coord = plain read. Never from the apply. */
+int efs_meta_apply_get_inode_tx(struct efs_kv *kv, efs_ino_t ino,
+                                efs_txn_coord_fn coord, void *ctx,
+                                struct efs_meta_row *out);
 int efs_meta_apply_lookup(struct efs_kv *kv, efs_ino_t parent, const char *name,
                           struct efs_meta_dentry *out);
 /* LOOKUP + inode fetch. Dentry miss = NOT_FOUND; inode miss = I9 (IO). */

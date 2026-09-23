@@ -1420,6 +1420,71 @@ static int utimens_at(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     return efs_meta_apply_utimens(kv, ino, now, &u);
 }
 
+/* A row whose creating txn is COMMITted but not yet RESOLVEd on the row's
+ * shard (coordinator lost its RESOLVEs; recovery is seconds away) must be
+ * visible to a handler-side stat: the client already holds OK, or gets it
+ * from the op-id window on the dentry shard. Sep 23 2026: `mkdir ENOENT`
+ * on a directory that exists (freeze run, fcstor013). UNDECIDED stays
+ * absent; ABORT stays absent; the plain apply-path read never sees it. */
+static void test_stat_committed_unresolved_row(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct coord_ctx cc;
+    struct efs_meta_stat st;
+    struct efs_meta_row row;
+    struct efs_txid t;
+    struct efs_txn_parts p;
+    uint8_t key[EFS_KV_KEY_MAX], img[512];
+    uint32_t klen = 0, n, coord, sh;
+    efs_ino_t ino = 0;
+
+    CHECK(kv != NULL, "kv");
+    memset(&cc, 0, sizeof(cc));
+    cc.kv = kv;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    /* Build a real row image the simple way, then turn it back into a
+     * pending intent. */
+    CHECK(efs_meta_apply_mkdir(kv, &g_at, EFS_ROOT_INO, S_IFDIR | 0755, "d",
+                               &ino) == EFS_OK, "mkdir");
+    sh = efs_kv_inode_shard(ino);
+    CHECK(efs_kv_key_inode(sh, ino, key, &klen) == EFS_OK, "key");
+    n = sizeof(img);
+    CHECK(efs_kv_get(kv, key, klen, img, &n) == EFS_OK, "row image");
+    CHECK(efs_kv_del(kv, key, klen) == EFS_OK, "drop row");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) ==
+              EFS_ERR_NOT_FOUND, "gone");
+
+    memset(&t, 0, sizeof(t));
+    t.bytes[0] = 0x5c;
+    p = one_part(sh);
+    CHECK(efs_txn_prepare_excl(kv, &t, &p, key, klen, 0, EFS_TXN_PUT, img, n) ==
+              EFS_OK, "intent");
+    /* UNDECIDED: not visible. */
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) ==
+              EFS_ERR_NOT_FOUND, "undecided absent");
+    /* Authority unreachable while an intent is met: IO, never absence (I9). */
+    cc.fail = 1;
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_ERR_IO,
+          "no authority = IO");
+    cc.fail = 0;
+    /* COMMIT at the coordinator, RESOLVE still pending: visible. */
+    coord = efs_txn_coordinator(&t, &p);
+    CHECK(efs_txn_decide(kv, coord, &t, EFS_TXN_COMMIT) == EFS_OK, "decide");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_ERR_NOT_FOUND,
+          "apply-path read still absent");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK,
+          "committed unresolved row visible to stat");
+    CHECK(st.ino == ino && S_ISDIR(st.mode) && st.nlink == 2, "row attrs");
+    CHECK(efs_meta_apply_get_inode_tx(kv, ino, coord_fn, &cc, &row) == EFS_OK &&
+              row.ino == ino, "get_inode_tx");
+    CHECK(efs_meta_apply_get_inode_tx(kv, ino, NULL, NULL, &row) ==
+              EFS_ERR_NOT_FOUND, "NULL coord = plain read");
+    /* After RESOLVE the plain read sees it too. */
+    CHECK(efs_txn_resolve(kv, &t, sh, EFS_TXN_COMMIT) == EFS_OK, "resolve");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "materialized");
+    efs_kv_mem_free(kv);
+}
+
 static void test_stat_collect(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -3135,6 +3200,7 @@ int main(void)
     test_readdir_lane0();
     test_setattr_mode_owner();
     test_stat_collect();
+    test_stat_committed_unresolved_row();
     test_stat_fence_and_gen();
     test_stat_dir_hashed();
     test_utimens_fence();

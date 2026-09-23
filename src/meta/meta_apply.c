@@ -271,6 +271,39 @@ int efs_meta_apply_get_inode(struct efs_kv *kv, efs_ino_t ino,
     return unpack_inode(val, vlen, out);
 }
 
+/* Handler-side row read: visibility is at the coordinator's decision
+ * (txn.h, I17), not at RESOLVE. A cross-group MKDIR/CREATE whose
+ * coordinator lost its RESOLVEs (leader change) is COMMITted — the client
+ * already holds OK, or gets OK from the op-id window on the dentry shard
+ * — while the child row on another shard is still only an EXCL intent
+ * until recovery resolves it (≤ 5 s). A bare kv get there is NOT_FOUND
+ * and the client's post-mkdir GETATTR became `mkdir ENOENT` on a
+ * directory that exists (Sep 23, freeze run, fcstor013). The intent is
+ * probed only when the row is absent, so the common path costs nothing
+ * extra; the coordinator round happens only when an intent is met.
+ * Apply-path readers must keep efs_meta_apply_get_inode: the state
+ * machine cannot ask a coordinator. */
+int efs_meta_apply_get_inode_tx(struct efs_kv *kv, efs_ino_t ino,
+                                efs_txn_coord_fn coord, void *ctx,
+                                struct efs_meta_row *out)
+{
+    uint8_t key[EFS_KV_KEY_MAX], val[INO_VAL];
+    uint32_t klen = 0, vlen;
+    int rc;
+
+    rc = efs_meta_apply_get_inode(kv, ino, out);
+    if (rc != EFS_ERR_NOT_FOUND || !coord)
+        return rc;
+    rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, key, &klen);
+    if (rc != EFS_OK)
+        return rc;
+    vlen = sizeof(val);
+    rc = efs_txn_read(kv, key, klen, coord, ctx, val, &vlen);
+    if (rc != EFS_OK)
+        return rc;
+    return unpack_inode(val, vlen, out);
+}
+
 static int dent_get(struct efs_kv *kv, uint32_t shard, efs_ino_t parent,
                     const char *name, struct efs_meta_dentry *out)
 {
@@ -3420,7 +3453,7 @@ int efs_meta_apply_getattr(struct efs_kv *kv, efs_ino_t ino,
         uint32_t i, nl = 0;
         int moved = 0, stable = 1, rc, is_dir;
 
-        rc = efs_meta_apply_get_inode(kv, ino, &row);
+        rc = efs_meta_apply_get_inode_tx(kv, ino, coord, ctx, &row);
         if (rc != EFS_OK)
             return rc;
         is_dir = S_ISDIR(row.mode) ? 1 : 0;
@@ -3501,7 +3534,7 @@ int efs_meta_apply_getattr(struct efs_kv *kv, efs_ino_t ino,
             return rc;
         if (moved)
             stable = 0;
-        rc = efs_meta_apply_get_inode(kv, ino, &again);
+        rc = efs_meta_apply_get_inode_tx(kv, ino, coord, ctx, &again);
         if (rc != EFS_OK)
             return rc;
         if (again.content_epoch != row.content_epoch ||
