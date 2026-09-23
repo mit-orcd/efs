@@ -98,11 +98,16 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  0.23 s idle (128 GETCHUNKS × 1.6 ms), 14.6 ms/GETCHUNKS under 32 openers.
  Same-parent rate ~140–160 ops/s flat 1–36 procs
  (`results/measure/20260921-161931-samedir-rate`, pre-`165e779`; remeasure).
-  Cluster runs **`46d54e679e4f-dirty`** with
-  `EFS_RAFT_OBS=1` (rolled Sep 22 00:26; 5 s `raft-obs:` lines in
-  `efsd.log` — keep it on until W8 closes; "dirty" = doc edits, all
-  four agree — preflight `--expect-build 46d54e679e4f-dirty`). Next
-  server restart is a build-ID change → `tests/roll_efsd.sh --all`.
+ Cluster runs **`43bdf6a41f7d-dirty`** with
+ `EFS_RAFT_OBS=1` (rolled Sep 23 02:49; 5 s `raft-obs:` lines in
+ `efsd.log` — keep it on until W8 closes; "dirty" = doc edits, all
+ four agree — preflight `--expect-build 43bdf6a41f7d-dirty`). Next
+ server restart is a build-ID change → `tests/roll_efsd.sh --all`.
+ **I16 landed in that build** (op-id suffix on every dir RPC, window on
+ the dentry shard, REDUCE_OPID txn part / log-path trailer, client
+ in-flight table → contiguous ack; START-HERE §1b has the design and the
+ two limits: 16-entry reply cache per window, no GC of dead-client
+ windows). Gate runs owed: freeze ×2, posix jobs=1, 9-host, md_latency.
   **I17 gate done** (`i17_leader_freeze.sh` ×2, Sep 22 08:25):
   `arc_term_miss` 0→8; one run parent clean, the other left 3 dirs whose
   row was `nlink=5 nents=3` with matching dentries and child rows
@@ -245,12 +250,34 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   ino 62991 (nlink=3 nents=1, 0 dentries), ino 31264 (dentry → missing
   row), and the forced repro `tests/measure/i17_leader_freeze.sh` on
   `84a2a55` (`results/measure/20260922-042153-i17-leader-freeze`).
-  Now: term mismatch → NOT_PRIMARY, ring slot overwritten → BUSY, never
-  OK; `raft-obs` prints `arc_term_miss=`. Any new wait-for-apply must go
-  through `host_wait_verdict` / `host_wait_settled`, not a bare
-  `host_wait_applied` + ring read. Pre-fix leftovers on 19810 stay
-  half-applied (no repair tool); dump with `tests/tools/kv_dir_dump` on
-  a KV COPY (fcstor004/005 hold every shard) before blaming new code.
+ Now: term mismatch → NOT_PRIMARY, ring slot overwritten → BUSY, never
+ OK; `raft-obs` prints `arc_term_miss=`. Any new wait-for-apply must go
+ through `host_wait_verdict` / `host_wait_settled`, not a bare
+ `host_wait_applied` + ring read. Pre-fix leftovers on 19810 stay
+ half-applied (no repair tool); dump with `tests/tools/kv_dir_dump` on
+ a KV COPY (fcstor004/005 hold every shard) before blaming new code.
+- **A retried dir op is answered from its op-id window (I16, `43bdf6a`):**
+ the window's shard is the dentry shard of the destination name, never
+ the coordinator (randomized) or the parent shard (may be the other
+ group). Record the verdict in the same txn (`host_prep_opid`,
+ `EFS_TXN_REDUCE_OPID`) or the same KV batch (`opid_item`) as the op —
+ never as a separate write, and never make the apply return the
+ pre-check error (EEXIST/ENOENT) itself; the leader's pre-check runs
+ after `host_opid_replay`. The client holds one in-flight slot across
+ the whole `rpc_send_recv_*` retry loop so every retry is byte-identical;
+ a new RPC = a new seq. Do not add a client-side "stop retrying BUSY".
+- **A hintless NOT_PRIMARY (`primary_id == 0`) is an election in
+ progress, not an error** (Sep 23): a stale leader that just stepped down
+ answers NOT_PRIMARY with no hint for up to a heartbeat or two; the client
+ used to return `EFS_ERR_NOT_PRIMARY` at once, `efs_client_stat_ino` maps
+ every RPC failure to NOT_FOUND, and the FUSE `*_at` helpers map that to
+ ENOENT — so `mkdir` on a dir that had just committed returned ENOENT
+ (`ll_mkdir` → `lookup_fill(new_ino)` GETATTR; freeze run 2,
+ `results/measure/20260923-025903-i17-leader-freeze`). Now
+ `rpc_send_recv_shard/_dual` back off like BUSY. An ENOENT/EIO from a
+ FUSE dir op whose target exists is a reply-path RPC failure first —
+ grep `fuse: mkdir ... but getattr` / `inode-rpc:` in `fuse.log` before
+ suspecting metadata.
 - **A queued posix test cannot time out** (`posix_suite.py` stamped the
  clock at submit until `a683def`): every 9-host number before Sep 21
  22:00 was that artefact plus real stalls. Compare only against later runs.

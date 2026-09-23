@@ -1,0 +1,6 @@
+ERR fcstor007 p0 r7 mkdir ENOENT
+DONE fcstor007 p1 rounds=80 errs=0 secs=32.9
+DONE fcstor007 p2 rounds=80 errs=0 secs=32.9
+DONE fcstor007 p3 rounds=80 errs=0 secs=32.9
+DONE fcstor007 p0 rounds=80 errs=1 secs=32.9
+HOST_DONE fcstor007 bad_procs=1

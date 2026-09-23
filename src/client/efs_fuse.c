@@ -3799,8 +3799,15 @@ static void ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
     int rc;
     t_req = req;
     rc = efs_fuse_mkdir_at(parent, name, mode, &new_ino);
-    if (rc == 0)
+    if (rc == 0) {
         rc = lookup_fill((fuse_ino_t)new_ino, &e, NULL);
+        if (rc)
+            /* The mkdir committed; the app sees this errno for a dir
+             * that exists. stat_ino maps every RPC failure to ENOENT. */
+            fprintf(stderr, "fuse: mkdir parent=%llu name=%s ok ino=%llu "
+                    "but getattr rc=%d\n", (unsigned long long)parent, name,
+                    (unsigned long long)new_ino, rc);
+    }
     t_req = NULL;
     if (rc)
         fuse_reply_err(req, -rc);

@@ -1,0 +1,13 @@
+[same-parent] clients=9 procs=4 rounds=80 parent=/tmp/efs-mount/spstorm-20260923-025301 -> /home/erbmi1/git/efs/results/measure/20260923-025259-i17-leader-freeze/storm
+[same-parent] PASS fcstor007 4 procs, slowest 35.4s
+[same-parent] PASS fcstor008 4 procs, slowest 35.1s
+[same-parent] PASS fcstor009 4 procs, slowest 35.2s
+[same-parent] PASS fcstor010 4 procs, slowest 35.3s
+[same-parent] PASS fcstor011 4 procs, slowest 36.9s
+[same-parent] PASS fcstor012 4 procs, slowest 35.5s
+[same-parent] PASS fcstor013 4 procs, slowest 34.9s
+[same-parent] PASS fcstor014 4 procs, slowest 35.0s
+[same-parent] PASS fcstor015 4 procs, slowest 35.4s
+children=0 nlink=2
+RMDIR_OK
+[same-parent] PASS 9×4 procs × 80 rounds in one parent

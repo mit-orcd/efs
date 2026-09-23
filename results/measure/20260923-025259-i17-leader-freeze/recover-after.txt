@@ -1,0 +1,2 @@
+  fcstor005: raft-host: txn-recover shard=440 coord=2343 parts=2 age=10.1s -> COMMIT (resolved)
+  fcstor006: raft-host: txn-recover shard=398 coord=398 parts=2 age=7.8s -> COMMIT (resolved)

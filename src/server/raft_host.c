@@ -5846,13 +5846,23 @@ static void host_opid_reply_ino(struct efs_raft_host *h, efs_ino_t parent,
     struct efs_meta_stat st;
 
     set_inode_rc(out, rep->rc, -1);
-    if (rep->rc != EFS_OK || !rep->ino)
+    if (rep->rc != EFS_OK || !rep->ino) {
+        /* An acked-and-reclaimed stub (ino 0) should never answer a live
+         * retry: the client acks only below its lowest in-flight seq. */
+        fprintf(stderr, "raft-host: opid-replay parent=%llu name=%s seq=%llu "
+                "rc=%d ino=%llu (stub)\n", (unsigned long long)parent, name,
+                (unsigned long long)rep->seq, rep->rc,
+                (unsigned long long)rep->ino);
         return;
+    }
     if (efs_meta_apply_get_inode(h->kv, rep->ino, &row) == EFS_OK) {
         host_stat_from_row(&row, &st);
         stat_to_inode(&st, &out->inode);
     } else {
         out->inode.ino = rep->ino;
+        fprintf(stderr, "raft-host: opid-replay parent=%llu name=%s seq=%llu "
+                "ino=%llu row gone\n", (unsigned long long)parent, name,
+                (unsigned long long)rep->seq, (unsigned long long)rep->ino);
     }
     out->inode.parent = parent;
     strncpy(out->inode.name, name, EFS_MAX_NAME - 1);

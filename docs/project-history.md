@@ -25,6 +25,93 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 22–23 2026 — I16: op-id dedup for directory RPCs (`43bdf6a41f7d`)
+
+Why now: the second I17 freeze run (`results/measure/20260922-122629-i17-leader-freeze`)
+left three `d-*` dirs whose `mkdir` had returned EEXIST and whose `rmdir`
+returned ENOENT, with a perfectly consistent parent row. Recovery had
+logged `COMMIT (resolved)` on those shards: the client's coordinator got
+BUSY from the apply-wait deadline, the client retried the same MKDIR, and
+the retry met the dentry its first attempt had (invisibly, at that
+moment) committed. Same class as the 9-host suite's `link_of_symlink`
+EEXIST on a fresh name, `concurrent_create_unlink_two_proc` EIO and the
+`b''` read. §7.9 already specified the fix (stable request identity +
+bounded per-shard window); only APPEND (sim) and `create_file_op` (sim)
+implemented it, and the production dir RPCs carried no identity at all
+(`pack_create_cmd` zeroed the uuid slot; that slot is the lease holder's
+identity, not the requester's).
+
+Design decisions taken (each was a real choice, recorded so nobody
+re-litigates): (1) **Window shard = dentry shard of the destination
+name.** The coordinator is randomized per txn (a retry would probe the
+wrong shard); the parent's inode shard can be in the other group (the
+window record would then live in a group that does not own that shard
+range). The dentry shard is deterministic from the request, always a
+participant, always owned by its group. (2) **Atomic with the op, never
+a separate write.** Cross-group txns get a `EFS_TXN_REDUCE_OPID` part
+folded at RESOLVE by `fold_reduce` (dispatch on `EFS_KV_KIND_OPID`),
+which commutes with the log path's read-modify-write of the same window
+because both are Raft-log-ordered on the owning group; the single-group
+log path carries a trailer on the CREATE (`HOST_CREATE_F_OPID` flag in
+`cmd[1]`) / UNLINK / RMDIR (by length) commands and the apply writes the
+window in the same `efs_kv_batch`. (3) **Probe before the pre-check.**
+The apply's idempotent OK-on-EEXIST would otherwise mask a genuine
+second create; so the leader probes (`host_opid_replay`) first, then
+runs the usual lookup that yields EEXIST/ENOENT. (4) **Ack semantics.**
+`efs_opid_ack` now advances the watermark and shifts the bitmap even
+past seqs the shard never served; the client sends `ack = lowest
+in-flight seq − 1` (512-slot in-flight table, slot held across the
+whole `rpc_send_recv_*` retry loop so the retry is byte-identical).
+Because an op is in flight until its RPC returns, no request ever probes
+a window whose watermark already covers its own seq — so the "acked
+stub" answer in `efs_opid_lookup` cannot fire for a first attempt.
+(5) `VAL_MAX` in `txn.c` rose from 320 to `EFS_OPID_VAL_MAX` (512); the
+res_acc buffer is 48 × 512 on a server thread stack.
+
+Limits left in place (spec-bounded, not bugs): 16-entry reply cache per
+`(client, epoch, shard)` — a 17th un-acked op on one shard applies
+unrecorded (falls back to pre-I16); the identity is a per-mount random
+uuid rather than the §7.5 session's, so the fence barrier does not yet
+drop a dead client's windows (follow-up in START-HERE §1b).
+
+Tests: `test_txn:test_opid_reduce`, `test_meta_apply` I16 block; on-node
+build clean (no warnings), all C tests OK
+(`~/efs-runs/i16-build.log`). Rolled all four (`roll-all.log`,
+`ROLL_OK`, `43bdf6a41f7d-dirty`, g0 leader 1 term 5374, g2 leader 3 term
+469), `EFS_RAFT_OBS=1` kept.
+
+Gate runs on `43bdf6a` (02:52–03:07): freeze run 1
+(`results/measure/20260923-025259-i17-leader-freeze`) parent clean,
+`arc_term_miss` 0→3, `opid_replay` 0→3, 0 worker errors — the retry
+class the item was opened for is answered from the window. Freeze run 2
+(`-025903-`) parent clean, `opid_replay` 3→7, but three workers got
+`mkdir ENOENT` at round 7 during the g0 freeze; the same workers'
+`rmdir` of that name then succeeded, so the MKDIR had committed and the
+error was in the reply path. Server logs held no mkdir `rc=-3`. Traced
+in the client: `rpc_send_recv_shard/_dual` return `EFS_ERR_NOT_PRIMARY`
+at once when NOT_PRIMARY arrives without a hint (`primary_id == 0` — a
+stale leader that just stepped down, before it hears the new leader's
+heartbeat); `efs_client_stat_ino` maps any GETATTR failure to
+NOT_FOUND; `ll_mkdir` does `lookup_fill(new_ino)` after the mkdir reply
+and the FUSE `*_at` helpers map that to ENOENT. So the app saw ENOENT
+for a directory that exists. Fix: a hintless NOT_PRIMARY backs off like
+BUSY (50 ms × 2^min(n,4), same 16-attempt budget, EBUSY at the end) in
+both send paths; `ll_mkdir` logs `fuse: mkdir ... ok ino=N but getattr
+rc=` so the next occurrence is attributable; `host_opid_reply_ino` logs
+`opid-replay ... (stub)`/`row gone`. The same class is the first
+suspect for the 9-host one-off EIOs. posix jobs=1 200/201 + mmap SKIP
+(`results/posix/20260923-030005`); 9-host 189–191/201 per host, 0
+not-run (`results/posix/20260923-030056`). `md_latency.py` 30 s after
+the suite (8.4/19.3/65.9/0.5/2.0/8.3 ms) is post-suite churn, not a
+number; idle remeasure owed.
+
+Operational note: the login-node Cursor shell died three times in this
+session ("no exit status", no `rec-*.log` created = wrapper never ran);
+each time a fresh probe 20–60 min later answered. The nested-quoting
+`efs-bg.sh start … "ssh … \"…\""` one-liner was replaced by a script in
+`~/efs-runs/i16-build.sh` (rsync + `make clean` + build + run the C
+tests on one fcstor) — reuse it.
+
 ## Sep 22 2026 00:00–00:35 — I17: the apply ring matched proposals by index, not (index, term)
 
 Picked up START-HERE §1b item 0 (half-applied cross-shard txns: ino 62991

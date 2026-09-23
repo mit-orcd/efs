@@ -42,14 +42,16 @@ leader_of() { # group -> raft id (0-3) or ""
     ssh_ 15 fcstor004 "cd /tmp/efs && ./efs-mgmt raft-status 172.16.223.58:19810 2>/dev/null" \
         | grep "group $1 " | grep -o 'leader=[-0-9]*' | cut -d= -f2
 }
-obs_term_miss() { # sum of the latest arc_term_miss on every server
-    local h tot=0 v
+obs_term_miss() { # latest arc_term_miss + opid_replay (I16) on every server
+    local h tot=0 v r rtot=0
     for h in fcstor003 fcstor004 fcstor005 fcstor006; do
-        v=$(ssh_ 10 $h "grep -o 'arc_term_miss=[0-9]*' /tmp/efs/efsd.log | tail -1 | cut -d= -f2")
-        echo "  $h arc_term_miss=${v:-none}"
-        tot=$((tot + ${v:-0}))
+        v=$(ssh_ 10 $h "grep -o 'arc_term_miss=[0-9]*' /tmp/efs/efsd.log | tail -1 | cut -d= -f2; grep -o 'opid_replay=[0-9]*' /tmp/efs/efsd.log | tail -1 | cut -d= -f2")
+        r=$(echo "$v" | sed -n 2p); v=$(echo "$v" | sed -n 1p)
+        echo "  $h arc_term_miss=${v:-none} opid_replay=${r:-none}"
+        tot=$((tot + ${v:-0})); rtot=$((rtot + ${r:-0}))
     done
     echo "  total=$tot"
+    echo "  replay_total=$rtot"
 }
 
 say "pre: leaders g0=$(leader_of 0) g2=$(leader_of 2); arc_term_miss before:"
@@ -104,11 +106,19 @@ else
     say "FAIL: parent row inconsistent (children=${nc:-?} nlink=${nl:-?} d-lines=$nd, expected nlink=$((2 + nd)))"
     fail=1
 fi
-tm=$(grep total= "$OUT/obs-after.txt" | cut -d= -f2); tb=$(grep total= "$OUT/obs-before.txt" | cut -d= -f2)
+tm=$(grep '^  total=' "$OUT/obs-after.txt" | cut -d= -f2); tb=$(grep '^  total=' "$OUT/obs-before.txt" | cut -d= -f2)
 if [ "${tm:-0}" -le "${tb:-0}" ]; then
     say "NOTE: arc_term_miss did not move (${tb:-0} -> ${tm:-0}): the freeze did not produce a truncated proposal this time — the consistency result stands, the term-check path was not exercised; rerun or raise PROCS"
 fi
-# Worker errors: report by errno; not a fail (I16).
+# Worker errors by errno. Since I16 (43bdf6a) a retry of a committed op is
+# answered from its op-id window, so EEXIST / ENOENT here means the window
+# missed (see START-HERE §1b: 16-entry cache, or an op without an id).
+# EBUSY / EIO during the freeze are still expected.
+rb=$(grep replay_total= "$OUT/obs-before.txt" | cut -d= -f2); ra=$(grep replay_total= "$OUT/obs-after.txt" | cut -d= -f2)
+say "opid_replay ${rb:-0} -> ${ra:-0} (I16 replays answered from the window)"
 for f in "$OUT"/storm/log-*.txt; do grep '^ERR' "$f"; done 2>/dev/null | awk '{print $6}' | sort | uniq -c | sed 's/^/  worker ERR: /'
+if for f in "$OUT"/storm/log-*.txt; do grep '^ERR' "$f"; done 2>/dev/null | grep -qE 'EEXIST|ENOENT'; then
+    say "NOTE: EEXIST/ENOENT from a worker = an I16 window miss; check the raw ERR lines in $OUT/storm/log-*.txt"
+fi
 if [ $fail = 0 ]; then say "PASS -> $OUT"; echo PASS > "$OUT/result.txt"; exit 0; fi
 say "FAIL -> $OUT"; echo FAIL > "$OUT/result.txt"; exit 1

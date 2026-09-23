@@ -412,9 +412,21 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, 0);
         if (r->status != EFS_INODE_RPC_NOT_PRIMARY)
             return EFS_OK;
-        /* NOT_PRIMARY: retry on the server-reported primary. */
-        if (r->primary_id == 0 || r->primary_id == nid)
-            return EFS_ERR_NOT_PRIMARY; /* no better info */
+        /* NOT_PRIMARY: retry on the server-reported primary. No hint (or
+         * the hint is the node that just answered) = an election is in
+         * progress or a stale leader just stepped down and has not heard
+         * the new one yet (0.5-1 s). That is transient, same as BUSY:
+         * back off and re-pick, do not fail. Failing here turned into
+         * ENOENT/EIO at every caller (stat_ino maps any rc to NOT_FOUND),
+         * e.g. GETATTR of a just-made dir right after a leader freeze. */
+        if (r->primary_id == 0 || r->primary_id == nid) {
+            unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
+            unsigned long long sleep_us = 50000ull << shift;
+            saw_busy = 1;
+            target = 0;
+            usleep((useconds_t)sleep_us);
+            continue;
+        }
         target = r->primary_id;
     }
     /* Exhausted BUSY retries is not "no primary" — that mapped to EIO
@@ -989,8 +1001,15 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         }
         if (r->status != EFS_INODE_RPC_NOT_PRIMARY)
             return EFS_OK;
-        if (r->primary_id == 0 || r->primary_id == nid)
-            return EFS_ERR_NOT_PRIMARY;
+        if (r->primary_id == 0 || r->primary_id == nid) {
+            /* Hintless NOT_PRIMARY = election in progress; transient,
+             * back off like BUSY (see rpc_send_recv_shard). */
+            unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
+            saw_busy = 1;
+            target = 0;
+            usleep((useconds_t)(50000ull << shift));
+            continue;
+        }
         target = r->primary_id;
     }
     if (saw_busy)

@@ -1353,76 +1353,99 @@ Whoever picks the project up next does **this first**. Update or delete
 this block when done — an "in flight" block older than the last commit
 is a bug in this page.
 
-**Next item — correctness, before anything else: half-applied
-cross-shard txns (I17) in the 9-host run's leftovers.** Six `posix-*`
-dirs in the mount root would not `rm -rf`; `tests/tools/kv_dir_dump`
-(new; run on a KV COPY on fcstor004 or 005, which hold every shard) on
-two of them, identical on both replicas:
-`posix-fcstor007-ay0bpdfq/names_crazy_dirs` ino **62991**: nlink=3
-nents=1, **0 dentries** (22:10 run, build `84a2a55`);
-`posix-fcstor011-9nu20if3/mkdirat_unlinkat` ino **31264**: nlink=3
-nents=1, dentry `sub` → ino 83075 whose **row is MISSING** (21:19 run,
-`f10fec0`). So an rmdir txn committed its child-row DEL and not its
-dentry DEL / parent REDUCE — visible half-committed. Also
-`posix-fcstor012-dkl3px2h/perm_sticky_owner_can_unlink/sub` (ino 66151,
-row fine, `rmdir` → EIO) and `posix-fcstor007-ydfgl8ay/names_near_path_max_dir/aaa…`
-(ENOTEMPTY, nlink=2, no children). Leave them in place as evidence.
-**Root cause found and fixed (Sep 22 00:25, `46d54e6`), gate run
-still owed.** Not the recovery pass (`efs_txn_decide` is first-writer-
-wins; recovery's ABORT→PROTO→COMMIT path is right). The bug was one
-level down: `host_propose_wait` matched a proposal to the apply ring
-**by index only** (`host_apply` did `(void)term`). After a leader
-change the old leader's uncommitted entry at index *i* is truncated and
-the new leader commits a different entry at *i*; the old leader's
-coordinator thread sees `applied >= i` and reads that stranger's OK as
-its own verdict: "DECIDE COMMIT applied" with no DECISION on disk →
-RESOLVE COMMIT on one participant, recovery (no decision) ABORTs the
-rest. A ring miss (slot overwritten) also returned OK. Forced repro:
-`tests/measure/i17_leader_freeze.sh` (SIGSTOP the g0 then g2 leader 3 s
-each during `same_parent_storm.sh`) on `84a2a55` left the storm parent
-`nlink=2 nents=0` with a live dentry `d-fcstor009-2-29` → child row
-present, worker `mkdir EIO` + `rmdir ENOENT`, `rmdir` parent fails
-(`results/measure/20260922-042153-i17-leader-freeze`). Fix: ring keeps
-`arc_term`; `host_propose` returns the term it appended under; every
-ring read matches `(idx, term)` — mismatch → `NOT_PRIMARY` (nothing
-happened, retry), overwritten → `BUSY` (verdict unknown), never OK;
-`efs_msg_raft_mkfs_reply.term` lets a forwarder match a forwarded
-PUBLISH; `raft-obs` line gains `arc_term_miss=`. Cluster rolled to
-**`46d54e679e4f-dirty`** (dirty = the doc edits; all four agree, that is
-fine — pass `--expect-build 46d54e679e4f-dirty` to preflight).
-**Gated Sep 22 morning on `46d54e679e4f-dirty`**
-(`results/measure/20260922-122517-i17-leader-freeze` and
-`20260922-122629-i17-leader-freeze`). `arc_term_miss` moved 0→6 then
-6→8, so the new check fired. Run 2: parent `children=0 nlink=2`,
-`RMDIR_OK`. Run 1's script said FAIL (`children=3 nlink=5`, three
-`d-*` dirs whose mkdir returned EEXIST and whose rmdir returned
-ENOENT). That row is not torn: `kv_dir_dump` on a fcstor004 copy shows
-parent ino 145111 `nlink=5 nents=3`, exactly three dentries, each child
-row present and empty; idle `rmdir` of the three and of the parent then
-succeeded (`~/efs-runs/rec-rmdir-left.log`). Recovery had logged
-`COMMIT (resolved)` on those shards (1436, 1622, 1751, 3816): the
-client gave up while the txn was still invisible, and recovery installed
-the dentries afterward. That is I16, the next item. The script now
-treats `nlink == 2 + d-* lines` as a note, not a torn row. The six old
-`posix-*` leftovers on 19810 stay half-applied (pre-fix rows, no repair
-tool) — ignore or wipe at the next agreed `raft-mkfs`. posix jobs=1 on this build is the known signature:
-**200 pass / 0 fail / mmap SKIP / 0 NOTRUN in 92 s**
-(`results/posix/20260922-133653`). `run_tests.sh` exits 1 because the
-XFS comparator lists that SKIP as an "EFS BUG" (XFS passes mmap). The
-9-host suite on this build is **185–197 / 201, 0 NOTRUN, 46–66 s**
-(`results/posix/20260922-134008`, timeline
-`results/measure/20260922-093952-w8-stall-timeline`). Both groups
-changed leader 12 s in (g0 term 5339→5340, g2 452→453); that window is
-the 15 s timeouts piled on fcstor008 and one 1.09 s root mkdir. The
-repeated fails are still the many-op tests (`dir_deep_nesting` 7 hosts,
-`names_crazy_dirs` / `names_near_path_max*`). One-offs are EIO, EBUSY,
-and those timeouts — I16 and the compaction stall, not a new torn row.
-Next mechanical item is I16 (§7.9; the op-id window already exists for
-CREATE and APPEND, directory RPCs do not carry it).
+**I16 landed (Sep 23 02:47, `43bdf6a41f7d`) — gate runs owed.** Every
+directory RPC (CREATE/MKDIR, UNLINK/RMDIR, LINK, RENAME_AT) now carries
+an optional 36-byte op-id suffix `(client uuid, session epoch, seq,
+contiguous ack)` (`EFS_OPID_WIRE_LEN`, `handler.c:dirop_opid`). The
+window for an op lives on the **dentry shard of the (destination) name**
+— deterministic from the request, always a participant, always in the
+group that owns the shard (the coordinator is randomized, the parent
+shard may be in the other group: both rejected). The leader probes it
+(`host_opid_replay`) *before* the EEXIST/ENOENT pre-checks and answers a
+replay from the recorded verdict (`host_opid_reply_ino`: current row if
+the ino still exists, the stored ino/nlink otherwise). The verdict is
+recorded **atomically with the op**: cross-group txns add a
+`EFS_TXN_REDUCE_OPID` part (`host_prep_opid`; `fold_reduce` on
+`EFS_KV_KIND_OPID` runs `efs_opid_fold` = ack + complete on whatever the
+window holds at RESOLVE, so it commutes with the log path's
+read-modify-write); the single-group log path appends a trailer to the
+`CREATE` (flag bit `HOST_CREATE_F_OPID` in `cmd[1]`) / `UNLINK` /
+`RMDIR` (by length) commands and `efs_meta_apply_*_op` writes the window
+in the same `efs_kv_batch` (`opid_item`). The apply keeps
+returning OK for a replay it sees (idempotent); the client-visible
+EEXIST/ENOENT for a *genuine* second attempt still comes from the
+leader's pre-check, which now runs after the probe. Client
+(`inode_rpc.c`): one random uuid per mount (epoch 1), one seq space,
+512-slot in-flight table; `ack = lowest in-flight − 1`, so a shard's
+window advances past seqs it never served; the slot is held across every
+BUSY/STALE/NOT_PRIMARY retry inside `rpc_send_recv_*`, so the retry is
+byte-identical. Table full = op goes out with no identity (pre-I16
+behaviour). `efs_opid_ack` now moves the watermark and shifts the
+bitmap; `efs_txn_prepare_opid` rejects any key that is not exactly the
+window key. Unit: `test_txn:test_opid_reduce` (commit records, abort does
+not, commutes with a log-path fold, wire form), `test_meta_apply` I16
+block (mkdir/create/unlink/rmdir replay = recorded verdict; the same op
+without an id = EEXIST/ENOENT). `raft-obs` line gains `opid_replay=`.
+**Bounded by design, and the two limits to know:** the reply cache is
+16 entries per `(client, epoch, shard)` window (`EFS_OPID_REPLY_CACHE`;
+`EFS_OPID_VAL_MAX` 512 → `txn.c VAL_MAX`); a 17th un-acked op on one
+shard applies **unrecorded** (`efs_opid_fold` NOMEM → skip), i.e. falls
+back to pre-I16. One client with > 16 concurrent dir ops on one shard
+whose oldest is stalled hits that. If the 9-host gate still shows
+EEXIST-on-fresh-name, check this first (count `opid_replay` and look for
+>16 in-flight per shard) before suspecting the mechanism; raising the
+cache is an implementation matter. Second limit: the dir op-id identity
+is a per-mount random uuid (epoch 1), **not** the §7.5 session's
+`(uuid, epoch)`, so a dead client's windows are never dropped by the
+fence barrier §7.9 relies on ("a fenced session's records are dropped
+wholesale") — a remount leaves its old windows behind. Follow-up, no
+decision needed: seed `opid_uuid/epoch` from the client session and drop
+`EFS_KV_KIND_OPID` keys for a fenced epoch in the barrier.
+**Gate results on `43bdf6a` (Sep 23 02:52–03:07, rolled 02:49):**
+`i17_leader_freeze.sh` run 1
+(`results/measure/20260923-025259-i17-leader-freeze`): parent clean,
+`arc_term_miss` 0→3, `opid_replay` 0→3, **0 worker errors** (the
+`46d54e6` runs had 3 EEXIST + 1 ENOENT). Run 2 (`-025903-`): parent
+clean, `opid_replay` 3→7, but **3 workers got `mkdir ENOENT`** at round 7
+during the g0 freeze (fcstor007 p0, fcstor008 p3, fcstor015 p3); the
+following `rmdir` of the same name succeeded, so the MKDIR committed and
+only the *reply path* failed. Not an I16 miss: the replay path returns
+OK, and `raft-host` logs no mkdir `rc=-3`. Root cause found in the
+client: `rpc_send_recv_shard/_dual` returned `EFS_ERR_NOT_PRIMARY`
+immediately on a **hintless** NOT_PRIMARY (`primary_id == 0` — a stale
+leader that just stepped down and has not heard the new one), and
+`efs_client_stat_ino` maps every RPC failure to NOT_FOUND, so
+`ll_mkdir`'s post-mkdir `lookup_fill(new_ino)` (GETATTR) turned into
+ENOENT for a dir that exists. Fix in tree (uncommitted, see §1b tail):
+hintless NOT_PRIMARY backs off like BUSY (50 ms ×2^n, same 16-attempt
+budget, EBUSY at the end) in both send paths; `ll_mkdir` logs
+`fuse: mkdir ... ok ino=N but getattr rc=` when it happens. Server side:
+`host_opid_reply_ino` logs `opid-replay ... (stub)` / `row gone`.
+posix jobs=1: **200/201 + mmap SKIP** (`results/posix/20260923-030005`).
+9-host: **189–191/201 per host, 0 not-run**
+(`results/posix/20260923-030056`); fails = the six many-op timeouts
+(item 4) + one-offs `names_crazy_roundtrip` EIO (014), `symlink_absolute`
+EIO (012), `unlink_open_then_recreate` `b''` (012) — the same hintless-
+NOT_PRIMARY class is the first suspect for the EIOs. `md_latency.py` 30 s
+after the suite: mkdir 8.4 / create+close 19.3 / append+close 65.9 /
+stat 0.5 / unlink 2.0 / rmdir 8.3 ms — post-suite churn, **not** a valid
+comparison; remeasure on an idle cluster (commit flat 30 s).
+**Owed now:** build + `deploy_fuse_clients.sh fcstor007…015` (client
+fix) + `roll_efsd.sh --all` (the server log line changes the build ID);
+`i17_leader_freeze.sh` ×2 expecting 0 worker errors and no `fuse: mkdir
+... but getattr` lines; idle `md_latency.py` vs 6.1/4.0/6.2/0.3/1.5/5.2.
 
-**Then: I16 op-id dedup for LINK / UNLINK / MKDIR / RENAME (spec §7.9;
-today only APPEND and create_file have it).** Cluster
-runs `46d54e679e4f-dirty` with `EFS_RAFT_OBS=1` (5 s `raft-obs:` lines in
+The I17 story (index-only ring match; `46d54e6`; two gate runs
+`results/measure/20260922-122517-i17-leader-freeze`, `-122629-`) is in
+`docs/project-history.md` (Sep 22). posix jobs=1 on `46d54e6`:
+**200/0/1 SKIP in 92 s** (`results/posix/20260922-133653`); 9-host
+**185–197 / 201, 0 NOTRUN, 46–66 s** (`results/posix/20260922-134008`,
+a leader change 12 s in explains the low end). The six old `posix-*`
+leftovers on 19810 stay half-applied (pre-fix rows, no repair tool) —
+ignore or wipe at the next agreed `raft-mkfs`.
+
+Cluster runs `46d54e679e4f-dirty` → rolling to **`43bdf6a41f7d`** with
+`EFS_RAFT_OBS=1` (5 s `raft-obs:` lines in
 `efsd.log`; keep it on until W8 closes). W8's gate chain passes except
 the 9-host row: `tests/measure/w8_root_lat.sh` root mkdir med 10 ms max
 0.063, no 1 s mode; `w8_root_mkdir.sh` 9/9 root + 9/9 sub; posix jobs=1
@@ -1437,16 +1460,14 @@ stat 0.3 / unlink 1.5 / rmdir 5.2 ms (a run 20 s after a roll shows a
 
 What is left in the 9-host row, and what to do with each:
 1. **Half-applied cross-shard txn (I17)** — fixed `46d54e6` (ring match
-   by `(index, term)`); the block above says which gate run is owed.
-2. **Retry of a committed non-idempotent op** — `link_of_symlink` EEXIST
-   on a never-used name, `concurrent_create_unlink_two_proc` EIO,
+   by `(index, term)`), gated Sep 22 (two freeze runs).
+2. **Retry of a committed non-idempotent op (I16)** — `link_of_symlink`
+   EEXIST on a never-used name, `concurrent_create_unlink_two_proc` EIO,
    `unlink_open_then_recreate` reading `b''`: a client got BUSY from the
    400 ms apply-wait deadline during a stall, retried LINK/UNLINK
-   (`stale_retryable`), and met its own result. This is the item above.
-   The apply must record `(client uuid, seq)` completion for these
-   commands and answer a replay with the original verdict; do not make
-   the client stop retrying (BUSY is legitimately retryable) and do not
-   widen the 400 ms deadline.
+   (`stale_retryable`), and met its own result. **Landed `43bdf6a`**
+   (block above); gate runs owed. The client still retries BUSY and the
+   400 ms deadline is unchanged.
 3. **Compaction stall → leader loss (needs a decision, §4).** One pump
    cycle held `h->mu` for **2.4 s** on both g0 replicas at once
    (`obs-fcstor004/005.txt`: `apply_max=2464250us applies_in_worst=54`),
