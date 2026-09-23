@@ -321,8 +321,34 @@ static int dent_get(struct efs_kv *kv, uint32_t shard, efs_ino_t parent,
     return unpack_dentry(val, vlen, out);
 }
 
-int efs_meta_apply_lookup(struct efs_kv *kv, efs_ino_t parent, const char *name,
-                          struct efs_meta_dentry *out)
+/* As dent_get, and when the key is absent a COMMITted EXCL intent is the
+ * value (I17: visible at the decision). A negative lookup pays one extra
+ * local get of the intent key; the coordinator is asked only when an
+ * intent is actually there. NULL coord = plain read. */
+static int dent_get_tx(struct efs_kv *kv, uint32_t shard, efs_ino_t parent,
+                       const char *name, efs_txn_coord_fn coord, void *ctx,
+                       struct efs_meta_dentry *out)
+{
+    uint8_t key[EFS_KV_KEY_MAX], val[DENT_VAL];
+    uint32_t klen = 0, vlen;
+    int rc;
+
+    rc = dent_get(kv, shard, parent, name, out);
+    if (rc != EFS_ERR_NOT_FOUND || !coord)
+        return rc;
+    rc = efs_kv_key_dentry(shard, parent, name, key, &klen);
+    if (rc != EFS_OK)
+        return rc;
+    vlen = sizeof(val);
+    rc = efs_txn_read(kv, key, klen, coord, ctx, val, &vlen);
+    if (rc != EFS_OK)
+        return rc;
+    return unpack_dentry(val, vlen, out);
+}
+
+static int lookup_at(struct efs_kv *kv, efs_ino_t parent, const char *name,
+                     efs_txn_coord_fn coord, void *ctx,
+                     struct efs_meta_dentry *out)
 {
     struct efs_meta_row prow;
     uint32_t hsh;
@@ -330,11 +356,11 @@ int efs_meta_apply_lookup(struct efs_kv *kv, efs_ino_t parent, const char *name,
 
     if (!kv || !name || !out || parent == 0)
         return EFS_ERR_INVAL;
-    rc = efs_meta_apply_get_inode(kv, parent, &prow);
+    rc = efs_meta_apply_get_inode_tx(kv, parent, coord, ctx, &prow);
     if (rc == EFS_ERR_NOT_FOUND) {
         /* Parent row lives on another Raft group. Try hashed then local. */
         hsh = efs_kv_dentry_shard(parent, name, EFS_META_LAYOUT_HASHED);
-        rc = dent_get(kv, hsh, parent, name, out);
+        rc = dent_get_tx(kv, hsh, parent, name, coord, ctx, out);
         if (rc == EFS_OK) {
             if (out->type == EFS_META_DENT_TOMBSTONE)
                 return EFS_ERR_NOT_FOUND;
@@ -342,14 +368,16 @@ int efs_meta_apply_lookup(struct efs_kv *kv, efs_ino_t parent, const char *name,
         }
         if (rc != EFS_ERR_NOT_FOUND)
             return rc;
-        return dent_get(kv, efs_kv_inode_shard(parent), parent, name, out);
+        return dent_get_tx(kv, efs_kv_inode_shard(parent), parent, name,
+                           coord, ctx, out);
     }
     if (rc != EFS_OK)
         return rc;
     if (prow.layout == EFS_META_LAYOUT_LOCAL)
-        return dent_get(kv, efs_kv_inode_shard(parent), parent, name, out);
+        return dent_get_tx(kv, efs_kv_inode_shard(parent), parent, name,
+                           coord, ctx, out);
     hsh = efs_kv_dentry_shard(parent, name, EFS_META_LAYOUT_HASHED);
-    rc = dent_get(kv, hsh, parent, name, out);
+    rc = dent_get_tx(kv, hsh, parent, name, coord, ctx, out);
     if (rc == EFS_OK) {
         if (out->type == EFS_META_DENT_TOMBSTONE)
             return EFS_ERR_NOT_FOUND;
@@ -359,7 +387,21 @@ int efs_meta_apply_lookup(struct efs_kv *kv, efs_ino_t parent, const char *name,
         return rc;
     if (prow.layout == EFS_META_LAYOUT_HASHED)
         return EFS_ERR_NOT_FOUND;
-    return dent_get(kv, efs_kv_inode_shard(parent), parent, name, out);
+    return dent_get_tx(kv, efs_kv_inode_shard(parent), parent, name, coord,
+                       ctx, out);
+}
+
+int efs_meta_apply_lookup(struct efs_kv *kv, efs_ino_t parent, const char *name,
+                          struct efs_meta_dentry *out)
+{
+    return lookup_at(kv, parent, name, NULL, NULL, out);
+}
+
+int efs_meta_apply_lookup_tx(struct efs_kv *kv, efs_ino_t parent,
+                             const char *name, efs_txn_coord_fn coord,
+                             void *ctx, struct efs_meta_dentry *out)
+{
+    return lookup_at(kv, parent, name, coord, ctx, out);
 }
 
 int efs_meta_apply_resolve(struct efs_kv *kv, efs_ino_t parent, const char *name,
@@ -373,6 +415,35 @@ int efs_meta_apply_resolve(struct efs_kv *kv, efs_ino_t parent, const char *name
     if (rc != EFS_OK)
         return rc;
     rc = efs_meta_apply_get_inode(kv, d.ino, &r);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_ERR_IO; /* I9: dentry without a row is not absence */
+    if (rc != EFS_OK)
+        return rc;
+    if (dent)
+        *dent = d;
+    if (row)
+        *row = r;
+    return EFS_OK;
+}
+
+/* Handler-side resolve. A COMMITted-but-unresolved dentry or child row
+ * is visible (lookup_tx / get_inode_tx). The apply path keeps
+ * efs_meta_apply_resolve: it cannot ask a coordinator. Sep 23 freeze:
+ * rmdir of d-fcstor011-1-22 returned ENOENT while the name existed,
+ * because the creating txn's RESOLVE had not landed. */
+int efs_meta_apply_resolve_tx(struct efs_kv *kv, efs_ino_t parent,
+                              const char *name, efs_txn_coord_fn coord,
+                              void *ctx, struct efs_meta_dentry *dent,
+                              struct efs_meta_row *row)
+{
+    struct efs_meta_dentry d;
+    struct efs_meta_row r;
+    int rc;
+
+    rc = efs_meta_apply_lookup_tx(kv, parent, name, coord, ctx, &d);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_meta_apply_get_inode_tx(kv, d.ino, coord, ctx, &r);
     if (rc == EFS_ERR_NOT_FOUND)
         return EFS_ERR_IO; /* I9: dentry without a row is not absence */
     if (rc != EFS_OK)

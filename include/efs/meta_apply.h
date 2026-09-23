@@ -142,9 +142,18 @@ int efs_meta_apply_get_inode_tx(struct efs_kv *kv, efs_ino_t ino,
                                 struct efs_meta_row *out);
 int efs_meta_apply_lookup(struct efs_kv *kv, efs_ino_t parent, const char *name,
                           struct efs_meta_dentry *out);
+/* Handler-side lookup: a COMMITted EXCL intent is the dentry. NULL coord
+ * = plain lookup. Never from the apply. */
+int efs_meta_apply_lookup_tx(struct efs_kv *kv, efs_ino_t parent,
+                             const char *name, efs_txn_coord_fn coord,
+                             void *ctx, struct efs_meta_dentry *out);
 /* LOOKUP + inode fetch. Dentry miss = NOT_FOUND; inode miss = I9 (IO). */
 int efs_meta_apply_resolve(struct efs_kv *kv, efs_ino_t parent, const char *name,
                            struct efs_meta_dentry *dent, struct efs_meta_row *row);
+int efs_meta_apply_resolve_tx(struct efs_kv *kv, efs_ino_t parent,
+                              const char *name, efs_txn_coord_fn coord,
+                              void *ctx, struct efs_meta_dentry *dent,
+                              struct efs_meta_row *row);
 
 /* One hop of a LOOKUP_PATH walk: the inode the component resolved to, with
  * the fields the caller needs for the ancestor exec check. Size/mtime are

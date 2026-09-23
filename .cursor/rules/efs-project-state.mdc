@@ -98,16 +98,26 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  0.23 s idle (128 GETCHUNKS × 1.6 ms), 14.6 ms/GETCHUNKS under 32 openers.
  Same-parent rate ~140–160 ops/s flat 1–36 procs
  (`results/measure/20260921-161931-samedir-rate`, pre-`165e779`; remeasure).
- Cluster runs **`43bdf6a41f7d-dirty`** with
- `EFS_RAFT_OBS=1` (rolled Sep 23 02:49; 5 s `raft-obs:` lines in
- `efsd.log` — keep it on until W8 closes; "dirty" = doc edits, all
- four agree — preflight `--expect-build 43bdf6a41f7d-dirty`). Next
- server restart is a build-ID change → `tests/roll_efsd.sh --all`.
- **I16 landed in that build** (op-id suffix on every dir RPC, window on
- the dentry shard, REDUCE_OPID txn part / log-path trailer, client
- in-flight table → contiguous ack; START-HERE §1b has the design and the
- two limits: 16-entry reply cache per window, no GC of dead-client
- windows). Gate runs owed: freeze ×2, posix jobs=1, 9-host, md_latency.
+ Cluster runs **`ad292b9684e0-dirty`** with
+ `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1` (rolled Sep 23 06:20; 5 s
+ `raft-obs:` lines in `efsd.log` — keep it on until W8 closes; "dirty"
+ = rule edits, all four agree). Clients 007–015 mounted
+ (`PREFLIGHT_OK` 13:26). `EFSD_ENV` is **space**-separated
+ (`env $EFSD_ENV`): a comma form
+ (`EFS_TRANSPORT=tcp,EFS_RAFT_OBS=1`) silently makes the transport AUTO
+ (ungated RDMA) and drops OBS — that roll happened once (05:49) and was
+ re-rolled at 05:51. Next server restart is a build-ID change →
+ `tests/roll_efsd.sh --all`.
+ **I16 landed `43bdf6a`** (op-id suffix on every dir RPC, window on the
+ dentry shard, REDUCE_OPID txn part / log-path trailer, client in-flight
+ table → contiguous ack; two limits: 16-entry reply cache per window, no
+ GC of dead-client windows). Gated Sep 23 03:00: freeze run 1 **0 worker
+ errors**, run 2 parent clean + 3 `mkdir ENOENT` traced to the client's
+ hintless-NOT_PRIMARY fast-fail (fixed `bb634d9`); posix jobs=1 200/201
+ + mmap SKIP (`results/posix/20260923-030005`); 9-host 189–191/201, 0
+ not-run (`results/posix/20260923-030056`). On `ad292b9` the freeze's
+ getattr ENOENT did not recur; run 1 left one committed dir whose rmdir
+ returned ENOENT (dentry intent, fixed by `lookup_tx` — learning below).
   **I17 gate done** (`i17_leader_freeze.sh` ×2, Sep 22 08:25):
   `arc_term_miss` 0→8; one run parent clean, the other left 3 dirs whose
   row was `nlink=5 nents=3` with matching dentries and child rows
@@ -278,6 +288,15 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  FUSE dir op whose target exists is a reply-path RPC failure first —
  grep `fuse: mkdir ... but getattr` / `inode-rpc:` in `fuse.log` before
  suspecting metadata.
+- **A COMMITted directory entry is visible before RESOLVE** (Sep 23,
+ `lookup_tx`): handler lookup and resolve read through an EXCL intent
+ whose coordinator has COMMITted (`efs_meta_apply_lookup_tx` /
+ `resolve_tx`), same rule as `get_inode_tx` for the inode row. The
+ apply path stays on the plain read. A negative lookup pays one extra
+ local get of the intent key; the coordinator is asked only when an
+ intent exists. `rmdir`/`unlink` map `EFS_ERR_BUSY` to EBUSY. The 16-
+ attempt client budget (~10 s) is shorter than a freeze's recovery
+ (16 s on shard 1504); do not widen it.
 - **A queued posix test cannot time out** (`posix_suite.py` stamped the
  clock at submit until `a683def`): every 9-host number before Sep 21
  22:00 was that artefact plus real stalls. Compare only against later runs.

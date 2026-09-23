@@ -48,6 +48,15 @@ attempt:
 The transcript is `~/efs-runs/rec-<name>.log`. A start line is appended
 before `<cmd>` runs; an end line carries `rc=`. The file is append-only.
 
+**The channel can execute one tool call several times** (Sep 23 2026:
+three `efs-rec: start` lines within one second for a single `Shell`
+call — three concurrent builds in one `/tmp/efs`, three `git commit`s).
+`efs-rec.sh` therefore runs a name once (`flock` on the log + a `.done`
+marker; duplicates log `efs-rec: DUPLICATE` and exit 75) and
+`efs-bg.sh start` holds a per-name lock. Never issue a mutating command
+(roll, deploy, wipe, commit) outside `efs-rec.sh`, and never reuse a
+name to retry — a new attempt is a new name.
+
 When the tool returns "no exit status":
 
 1. Stop issuing more Shell calls.

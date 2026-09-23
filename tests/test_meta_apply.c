@@ -1485,6 +1485,66 @@ static void test_stat_committed_unresolved_row(void)
     efs_kv_mem_free(kv);
 }
 
+/* Same window, on the dentry. rmdir lookup of a name whose creating txn
+ * is COMMITted but not yet RESOLVEd must see the dentry; a plain lookup
+ * must not. Sep 23 freeze: d-fcstor011-1-22 existed, rmdir returned
+ * ENOENT. */
+static void test_lookup_committed_unresolved_dentry(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct coord_ctx cc;
+    struct efs_meta_dentry dent;
+    struct efs_meta_row root, row;
+    struct efs_txid t;
+    struct efs_txn_parts p;
+    uint8_t key[EFS_KV_KEY_MAX], img[512];
+    uint32_t klen = 0, n, sh, coord;
+    efs_ino_t ino = 0;
+
+    CHECK(kv != NULL, "kv");
+    memset(&cc, 0, sizeof(cc));
+    cc.kv = kv;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_mkdir(kv, &g_at, EFS_ROOT_INO, S_IFDIR | 0755, "c",
+                               &ino) == EFS_OK, "mkdir");
+    CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &root) == EFS_OK, "root");
+    sh = root.layout == EFS_META_LAYOUT_LOCAL
+             ? efs_kv_inode_shard(EFS_ROOT_INO)
+             : efs_kv_dentry_shard(EFS_ROOT_INO, "c", EFS_META_LAYOUT_HASHED);
+    CHECK(efs_kv_key_dentry(sh, EFS_ROOT_INO, "c", key, &klen) == EFS_OK, "key");
+    n = sizeof(img);
+    CHECK(efs_kv_get(kv, key, klen, img, &n) == EFS_OK, "dentry image");
+    CHECK(efs_kv_del(kv, key, klen) == EFS_OK, "drop dentry");
+    CHECK(efs_meta_apply_lookup_tx(kv, EFS_ROOT_INO, "c", coord_fn, &cc,
+                                   &dent) == EFS_ERR_NOT_FOUND, "gone");
+
+    memset(&t, 0, sizeof(t));
+    t.bytes[0] = 0x5d;
+    p = one_part(sh);
+    CHECK(efs_txn_prepare_excl(kv, &t, &p, key, klen, 0, EFS_TXN_PUT, img, n) ==
+              EFS_OK, "intent");
+    CHECK(efs_meta_apply_lookup_tx(kv, EFS_ROOT_INO, "c", coord_fn, &cc,
+                                   &dent) == EFS_ERR_NOT_FOUND, "undecided absent");
+    cc.fail = 1;
+    CHECK(efs_meta_apply_lookup_tx(kv, EFS_ROOT_INO, "c", coord_fn, &cc,
+                                   &dent) == EFS_ERR_IO, "no authority = IO");
+    cc.fail = 0;
+    coord = efs_txn_coordinator(&t, &p);
+    CHECK(efs_txn_decide(kv, coord, &t, EFS_TXN_COMMIT) == EFS_OK, "decide");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "c", &dent) ==
+              EFS_ERR_NOT_FOUND, "plain lookup still absent");
+    CHECK(efs_meta_apply_lookup_tx(kv, EFS_ROOT_INO, "c", coord_fn, &cc,
+                                   &dent) == EFS_OK && dent.ino == ino,
+          "committed unresolved dentry visible");
+    CHECK(efs_meta_apply_resolve_tx(kv, EFS_ROOT_INO, "c", coord_fn, &cc, &dent,
+                                    &row) == EFS_OK && row.ino == ino,
+          "resolve sees the row");
+    CHECK(efs_txn_resolve(kv, &t, sh, EFS_TXN_COMMIT) == EFS_OK, "resolve");
+    CHECK(efs_meta_apply_lookup(kv, EFS_ROOT_INO, "c", &dent) == EFS_OK &&
+              dent.ino == ino, "materialized");
+    efs_kv_mem_free(kv);
+}
+
 static void test_stat_collect(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -3201,6 +3261,7 @@ int main(void)
     test_setattr_mode_owner();
     test_stat_collect();
     test_stat_committed_unresolved_row();
+    test_lookup_committed_unresolved_dentry();
     test_stat_fence_and_gen();
     test_stat_dir_hashed();
     test_utimens_fence();

@@ -2516,6 +2516,23 @@ static int efs_fuse_flush_ino(fuse_ino_t ino, struct fuse_file_info *fi)
     return 0;
 }
 
+/* A busy directory RPC is EBUSY. Mapping it to EIO made a leader-freeze
+ * rmdir look like metadata corruption (Sep 23, fcstor007). */
+static int fuse_unlink_errno(int urc)
+{
+    if (urc == 0 || urc == EFS_OK)
+        return 0;
+    if (urc == EFS_ERR_NOT_FOUND)
+        return -ENOENT;
+    if (urc == EFS_ERR_NOT_EMPTY)
+        return -ENOTEMPTY;
+    if (urc == EFS_ERR_BUSY || urc == EFS_ERR_AGAIN)
+        return -EBUSY;
+    if (urc == EFS_ERR_INVAL)
+        return -EINVAL;
+    return -EIO;
+}
+
 static int fuse_create_errno(efs_ino_t parent, const char *name)
 {
     if (g_client.last_err == EFS_ERR_QUOTA)
@@ -2652,9 +2669,7 @@ static int efs_fuse_unlink_at(fuse_ino_t parent_ino, const char *name)
     int wx = check_dir_wx(&parent);
     if (wx != 0)
         return wx;
-    if (efs_client_unlink(parent.ino, name, false) != 0)
-        return -EIO;
-    return 0;
+    return fuse_unlink_errno(efs_client_unlink(parent.ino, name, false));
 }
 
 static int efs_fuse_rmdir_at(fuse_ino_t parent_ino, const char *name)
@@ -2676,13 +2691,7 @@ static int efs_fuse_rmdir_at(fuse_ino_t parent_ino, const char *name)
             nanosleep(&ts, NULL);
         }
     }
-    if (urc == 0)
-        return 0;
-    if (urc == EFS_ERR_NOT_EMPTY)
-        return -ENOTEMPTY;
-    if (urc == EFS_ERR_NOT_FOUND)
-        return -ENOENT;
-    return -EIO;
+    return fuse_unlink_errno(urc);
 }
 
 /* Refresh node used/quota from STATUS at most every 5 s (df callers). The

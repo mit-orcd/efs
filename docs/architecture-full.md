@@ -1430,10 +1430,27 @@ NOT_PRIMARY class is the first suspect for the EIOs. `md_latency.py` 30 s
 after the suite: mkdir 8.4 / create+close 19.3 / append+close 65.9 /
 stat 0.5 / unlink 2.0 / rmdir 8.3 ms — post-suite churn, **not** a valid
 comparison; remeasure on an idle cluster (commit flat 30 s).
-**Owed now:** build + `deploy_fuse_clients.sh fcstor007…015` (client
-fix) + `roll_efsd.sh --all` (the server log line changes the build ID);
-`i17_leader_freeze.sh` ×2 expecting 0 worker errors and no `fuse: mkdir
-... but getattr` lines; idle `md_latency.py` vs 6.1/4.0/6.2/0.3/1.5/5.2.
+**That client fix is `bb634d9`, rolled, and it closed the getattr
+case.** On `ad292b9` (getattr reads a COMMITted-but-unresolved inode
+row; `efs_meta_apply_get_inode_tx`) the freeze
+(`results/measure/20260923-144129-i17-leader-freeze` and `-144243-`)
+had no new `fuse: mkdir ... but getattr` line. Run 2 was clean
+(opid_replay 1→5, parent removable). Run 1 left `d-fcstor011-1-22`:
+three clients got `mkdir EBUSY` after the 10.3 s retry budget while
+recovery of shard 1504 took 16.5 s, then `rmdir` returned ENOENT for a
+name that existed. The dentry was a COMMITted EXCL intent, and lookup
+used a bare kv get. Handler lookups and resolves now go through
+`efs_meta_apply_lookup_tx` / `resolve_tx` (same rule as the inode row;
+the apply path stays plain). `rmdir`/`unlink` map `EFS_ERR_BUSY` to
+EBUSY — they were returning EIO. Do not widen the 16-attempt budget to
+outrun recovery.
+**Owed now:** roll (`roll_efsd.sh --all`, space-separated
+`EFSD_ENV="EFS_TRANSPORT=tcp EFS_RAFT_OBS=1"`) + `deploy_fuse_clients.sh`
+fcstor007…015; `i17_leader_freeze.sh` ×2. A leftover name whose counts
+match is still a failed remove, not a torn parent. Idle `md_latency.py`
+only after commit is flat for 30 s (the pre-freeze sample on `ad292b9`
+had mkdir med 56 ms with min 2.1 — remeasure before calling it a
+regression; create 5.2 / stat 0.5 / unlink 2.2 were at the reference).
 
 The I17 story (index-only ring match; `46d54e6`; two gate runs
 `results/measure/20260922-122517-i17-leader-freeze`, `-122629-`) is in

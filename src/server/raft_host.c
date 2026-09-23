@@ -5774,7 +5774,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
         }
     }
     if (rc == EFS_OK)
-        rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
+        rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_coord, h, &dent);
     if (rc == EFS_OK) {
         uint8_t cg = efs_raft_shard_group(efs_kv_inode_shard(dent.ino));
         if (!host_hosts(h, cg)) {
@@ -5954,7 +5954,7 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         }
     }
     if (rc == EFS_OK) {
-        rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
+        rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_coord, h, &dent);
         if (rc == EFS_OK) {
             set_inode_rc(out, EFS_ERR_EXIST, hint);
             return;
@@ -5983,7 +5983,7 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
             rc = host_wait_settled(h, dg, idx, term, &hint);
     }
     if (rc == EFS_OK)
-        rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
+        rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_coord, h, &dent);
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, dent.ino, &prow);
     if (rc == EFS_OK && hashed && hold) {
@@ -6820,7 +6820,7 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     }
     if (rc == EFS_OK) {
         stage = 5;
-        rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
+        rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_coord, h, &dent);
     }
     if (rc == EFS_OK) {
         set_inode_rc(out, EFS_ERR_EXIST, hint);
@@ -6998,7 +6998,7 @@ mkdir_prepped:
 mkdir_done:
     stage = 11;
     if (rc == EFS_OK)
-        rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
+        rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_coord, h, &dent);
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, dent.ino, &crow);
     if (rc == EFS_OK)
@@ -7110,7 +7110,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         }
     }
     if (rc == EFS_OK)
-        rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
+        rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_coord, h, &dent);
     if (rc == EFS_OK && dent.ino == EFS_ROOT_INO)
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK && (dent.type & S_IFMT) != S_IFDIR)
@@ -7128,7 +7128,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         }
     }
     if (rc == EFS_OK)
-        rc = efs_meta_apply_resolve(h->kv, parent, name, &dent, &row);
+        rc = efs_meta_apply_resolve_tx(h->kv, parent, name, host_txn_coord, h, &dent, &row);
     if (rc == EFS_OK && (!S_ISDIR(row.mode) || row.ino == EFS_ROOT_INO))
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK && row.layout == EFS_META_LAYOUT_SPLITTING)
@@ -7443,7 +7443,7 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
     } else
         dsh = 0;
     if (rc == EFS_OK)
-        rc = efs_meta_apply_resolve(h->kv, parent, name, &dent, &row);
+        rc = efs_meta_apply_resolve_tx(h->kv, parent, name, host_txn_coord, h, &dent, &row);
     if (rc == EFS_OK && S_ISDIR(row.mode))
         rc = EFS_ERR_INVAL;
     ish = (rc == EFS_OK) ? efs_kv_inode_shard(row.ino) : 0;
@@ -7694,7 +7694,7 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
          * not host, and resolve would then fail I9 (EFS_ERR_IO) before the
          * hosting check below ever runs. Look the dentry up locally, bounce
          * to a host that has the inode's group, and only then resolve. */
-        rc = efs_meta_apply_lookup(h->kv, parent, name, &dent);
+        rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_coord, h, &dent);
         if (rc == EFS_OK && (dent.type & S_IFMT) == S_IFDIR) {
             server_raft_host_rmdir(parent, name, q, out);
             return;
@@ -7712,7 +7712,7 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
             }
         }
         if (rc == EFS_OK)
-            rc = efs_meta_apply_resolve(h->kv, parent, name, &dent, &row);
+            rc = efs_meta_apply_resolve_tx(h->kv, parent, name, host_txn_coord, h, &dent, &row);
         if (rc == EFS_OK) {
             if (row.nlink > 1 || ig != dg ||
                 (prow.layout == EFS_META_LAYOUT_SPLITTING && pg != dg)) {
@@ -8321,7 +8321,7 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
         }
     }
     if (rc == EFS_OK) {
-        rc = efs_meta_apply_lookup(h->kv, new_parent, new_name, &dent);
+        rc = efs_meta_apply_lookup_tx(h->kv, new_parent, new_name, host_txn_coord, h, &dent);
         if (rc == EFS_OK) {
             set_inode_rc(out, EFS_ERR_EXIST, hint);
             return;
@@ -8576,7 +8576,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         }
     }
     if (rc == EFS_OK)
-        rc = efs_meta_apply_lookup(h->kv, old_parent, old_name, &dent);
+        rc = efs_meta_apply_lookup_tx(h->kv, old_parent, old_name, host_txn_coord, h, &dent);
     if (rc == EFS_OK && (dent.type & S_IFMT) == S_IFDIR)
         is_dir = 1;
     if (rc == EFS_OK && is_dir && dent.ino == EFS_ROOT_INO)
@@ -8587,7 +8587,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
      * same (ino,gen) as the source is a hardlink self-rename: no dest
      * handling, the txn just moves the name (old-monolith behaviour). */
     if (rc == EFS_OK) {
-        int xrc = efs_meta_apply_lookup(h->kv, new_parent, new_name, &ndent);
+        int xrc = efs_meta_apply_lookup_tx(h->kv, new_parent, new_name, host_txn_coord, h, &ndent);
         if (xrc == EFS_OK) {
             if (ndent.ino == dent.ino && ndent.generation == dent.generation) {
                 /* same inode: no dest row to retire */
@@ -8646,7 +8646,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         }
     }
     if (rc == EFS_OK)
-        rc = efs_meta_apply_resolve(h->kv, old_parent, old_name, &dent, &row);
+        rc = efs_meta_apply_resolve_tx(h->kv, old_parent, old_name, host_txn_coord, h, &dent, &row);
     if (rc == EFS_OK && S_ISDIR(row.mode))
         is_dir = 1;
     if (rc == EFS_OK && is_dir && row.ino == EFS_ROOT_INO)
@@ -9981,7 +9981,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
         if (dg != pg)
             rc = host_read_index(h, dg, &hint);
         if (rc == EFS_OK)
-            rc = efs_meta_apply_lookup(h->kv, cur, name, &dent);
+            rc = efs_meta_apply_lookup_tx(h->kv, cur, name, host_txn_coord, h, &dent);
         if (rc == EFS_OK) {
             uint8_t cg = efs_raft_shard_group(efs_kv_inode_shard(dent.ino));
             if (!host_hosts(h, cg)) {
