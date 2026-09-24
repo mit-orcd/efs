@@ -142,18 +142,22 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  `mmap_write_read` SKIP (`MAP_SHARED` ENODEV by spec). Sep 22 on
  `46d54e6`: 200/0/1 in 92 s (`results/posix/20260922-133653`; the prior
  ~37 s run is `results/posix/20260922-015106`). **9-host suite
- (W8's gate): 185–197/201, 0 NOTRUN, 46–66 s**
- (`results/posix/20260922-134008`, via
- `tests/measure/w8_stall_timeline.sh`). Prior Sep 21 night was
- 191–195/201 in ~62 s (`results/posix/20260922-020950`). What still fails there: the six
+ (W8's gate): 193–196/201, 0 NOTRUN, 79–94 s on `7e29943`**
+ (`results/posix/20260923-202626`). Prior: 185–197/201 in 46–66 s
+ (`results/posix/20260922-134008`) and 191–195/201 in ~62 s
+ (`results/posix/20260922-020950`). What still fails there: the six
  many-op tests (`dir_deep_nesting*`, `names_crazy_*`,
  `concurrent_write_and_readdir`, `concurrent_creates_same_dir`,
  `mtime_monotonic_many_writes` — throughput at 144 jobs, mkdir p50 21 ms
  under load) and 1–3 one-offs at an election (EEXIST on a fresh LINK
  name, EIO, empty read = retry of a committed op, I16). Idle
- `md_latency.py` reference: **mkdir 6.1 / create 4.0 / append 6.2 /
- stat 0.3 / unlink 1.5 / rmdir 5.2 ms**; 20 s after a roll it shows a
- 50 ms mode — post-roll RDMA election churn, wait 2 min.
+ `md_latency.py` reference (Sep 21): **mkdir 6.1 / create 4.0 / append 6.2 /
+ stat 0.3 / unlink 1.5 / rmdir 5.2 ms**. On `7e29943`, idle, term stable,
+ commit==applied but +1/s: mkdir 8.5 / create+close **56.8** /
+ append+close **59.5** / stat 0.5 / unlink 2.2 / rmdir 7.8
+ (`results/measure/20260923-162535-idle-mdlat/mdlat-idle2.txt`). The 50 ms
+ is on the two ops that write a byte and close. A 20 s post-roll sample
+ also shows a 50 ms mode (RDMA election churn) — that one, wait 2 min.
  Root mkdir (410 names): med 10 ms, max 0.063, no 1 s mode
  (`w8_root_lat.sh`); 9 concurrent root mkdtemp 9/9 (`w8_root_mkdir.sh`).
  posix2 one pair **58–60/63**:

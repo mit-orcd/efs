@@ -1,0 +1,27 @@
+suite results in /home/erbmi1/git/efs/results/posix/20260923-202626; suite start epoch 1790195186
+efs-fcstor007.tsv # summary pass=193 fail=7 skip=1 notrun=0 total=201 dur=79.4
+efs-fcstor008.tsv # summary pass=196 fail=4 skip=1 notrun=0 total=201 dur=93.6
+efs-fcstor009.tsv # summary pass=194 fail=6 skip=1 notrun=0 total=201 dur=93.4
+efs-fcstor010.tsv # summary pass=193 fail=7 skip=1 notrun=0 total=201 dur=89.9
+efs-fcstor011.tsv # summary pass=194 fail=6 skip=1 notrun=0 total=201 dur=79.4
+efs-fcstor012.tsv # summary pass=195 fail=5 skip=1 notrun=0 total=201 dur=92.3
+efs-fcstor013.tsv # summary pass=196 fail=4 skip=1 notrun=0 total=201 dur=93.6
+efs-fcstor014.tsv # summary pass=195 fail=5 skip=1 notrun=0 total=201 dur=85.6
+efs-fcstor015.tsv # summary pass=196 fail=4 skip=1 notrun=0 total=201 dur=92.4
+
+-- term/leader changes (raft.tsv):
+1790195186.625 g0 LEADER 0 5498 commit=5764601
+1790195186.625 g2 FOLLOWER 2 535 commit=4374651
+1790195236.441 g2 FOLLOWER 3 537 commit=4410529
+
+-- seconds where stat/mkdir/rmdir took >1 s or rc!=0/0/0 (ops.tsv):
+1790195236.254 1.635 0.066 0.016 0/0/0
+
+-- ops latency percentiles (s): stat / mkdir / rmdir
+  n=120 p50=0.003 p90=0.010 p99=0.049 max=1.635
+  n=120 p50=0.046 p90=0.230 p99=0.357 max=0.380
+  n=120 p50=0.022 p90=0.214 p99=0.354 max=0.414
+
+-- commit rate per group (entries/s over the run):
+  g0 389 entries/s over 139 s
+  g2 410 entries/s over 139 s

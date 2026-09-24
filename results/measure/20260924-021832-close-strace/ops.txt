@@ -1,0 +1,19 @@
+mkdir         189.8 ms
+mkdir          59.8 ms
+mkdir         192.7 ms
+mkdir          59.2 ms
+mkdir         182.7 ms
+mkdir         111.0 ms
+create        111.2 ms
+create        112.2 ms
+create        111.9 ms
+create        112.7 ms
+create        112.5 ms
+create        112.6 ms
+append        114.4 ms
+append        109.7 ms
+append        128.2 ms
+append        109.6 ms
+append        109.4 ms
+append        109.5 ms
+DIR /tmp/efs-mount/stclose-493548

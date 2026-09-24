@@ -1,0 +1,123 @@
+[run_tests] wait_cluster_idle: Heal idle + matching gen on all nodes
+[run_tests]   idle gen=- (1s)
+[run_tests] posix: XFS baseline on node9901.ib:/data1/efs
+efs-ssh: TIMEOUT after 400s host=node9901.ib
+[run_tests]   baseline: 0 pass
+[run_tests] posix: efs on fcstor007.ib:/tmp/efs-mount  (x1)
+[run_tests] posix: efs on fcstor008.ib:/tmp/efs-mount  (x1)
+[run_tests] posix: efs on fcstor009.ib:/tmp/efs-mount  (x1)
+[run_tests] posix: efs on fcstor010.ib:/tmp/efs-mount  (x1)
+[run_tests] posix: efs on fcstor011.ib:/tmp/efs-mount  (x1)
+[run_tests] posix: efs on fcstor012.ib:/tmp/efs-mount  (x1)
+[run_tests] posix: efs on fcstor013.ib:/tmp/efs-mount  (x1)
+[run_tests] posix: efs on fcstor014.ib:/tmp/efs-mount  (x1)
+[run_tests] posix: efs on fcstor015.ib:/tmp/efs-mount  (x1)
+[run_tests]   --- compare fcstor007.ib vs XFS baseline ---
+================================================================
+POSIX baseline comparison: 202 tests
+  both pass        : 0
+  EFS BUGS         : 0  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+  not run          : 1  (cut or missing; not a bug)
+================================================================
+
+--- not run (suite cut or row missing; not an EFS bug) ---
+              printf '%s\n' '# TIMEOUT no TSV' 'test [missing] 
+[run_tests]   --- compare fcstor011.ib vs XFS baseline ---
+================================================================
+POSIX baseline comparison: 202 tests
+  both pass        : 0
+  EFS BUGS         : 0  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+  not run          : 1  (cut or missing; not a bug)
+================================================================
+
+--- not run (suite cut or row missing; not an EFS bug) ---
+              printf '%s\n' '# TIMEOUT no TSV' 'test [missing] 
+[run_tests]   --- compare fcstor014.ib vs XFS baseline ---
+================================================================
+POSIX baseline comparison: 202 tests
+  both pass        : 0
+  EFS BUGS         : 0  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+  not run          : 1  (cut or missing; not a bug)
+================================================================
+
+--- not run (suite cut or row missing; not an EFS bug) ---
+              printf '%s\n' '# TIMEOUT no TSV' 'test [missing] 
+[run_tests]   --- compare fcstor010.ib vs XFS baseline ---
+================================================================
+POSIX baseline comparison: 202 tests
+  both pass        : 0
+  EFS BUGS         : 0  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+  not run          : 1  (cut or missing; not a bug)
+================================================================
+
+--- not run (suite cut or row missing; not an EFS bug) ---
+              printf '%s\n' '# TIMEOUT no TSV' 'test [missing] 
+[run_tests]   --- compare fcstor012.ib vs XFS baseline ---
+================================================================
+POSIX baseline comparison: 202 tests
+  both pass        : 0
+  EFS BUGS         : 0  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+  not run          : 1  (cut or missing; not a bug)
+================================================================
+
+--- not run (suite cut or row missing; not an EFS bug) ---
+              printf '%s\n' '# TIMEOUT no TSV' 'test [missing] 
+[run_tests]   --- compare fcstor015.ib vs XFS baseline ---
+================================================================
+POSIX baseline comparison: 202 tests
+  both pass        : 0
+  EFS BUGS         : 0  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+  not run          : 1  (cut or missing; not a bug)
+================================================================
+
+--- not run (suite cut or row missing; not an EFS bug) ---
+              printf '%s\n' '# TIMEOUT no TSV' 'test [missing] 
+[run_tests]   --- compare fcstor013.ib vs XFS baseline ---
+[run_tests]   --- compare fcstor008.ib vs XFS baseline ---
+================================================================
+POSIX baseline comparison: 202 tests
+  both pass        : 0
+  EFS BUGS         : 0  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+  not run          : 1  (cut or missing; not a bug)
+================================================================
+
+--- not run (suite cut or row missing; not an EFS bug) ---
+              printf '%s\n' '# TIMEOUT no TSV' 'test [missing] 
+================================================================
+POSIX baseline comparison: 202 tests
+  both pass        : 0
+  EFS BUGS         : 0  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+  not run          : 1  (cut or missing; not a bug)
+================================================================
+
+--- not run (suite cut or row missing; not an EFS bug) ---
+              printf '%s\n' '# TIMEOUT no TSV' 'test [missing] 
+[run_tests]   --- compare fcstor009.ib vs XFS baseline ---
+================================================================
+POSIX baseline comparison: 202 tests
+  both pass        : 0
+  EFS BUGS         : 0  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+  not run          : 1  (cut or missing; not a bug)
+================================================================
+
+--- not run (suite cut or row missing; not an EFS bug) ---
+              printf '%s\n' '# TIMEOUT no TSV' 'test [missing] 
+[run_tests] posix results in /home/erbmi1/git/efs/results/posix/20260923-202626

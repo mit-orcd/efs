@@ -3576,6 +3576,36 @@ static int lookup_fill(fuse_ino_t ino, struct fuse_entry_param *e,
     return 0;
 }
 
+/* The mutation already committed and dual-applied `ino`. lookup_fill with
+ * no open fh always refreshes, and stat_refresh maps every RPC failure to
+ * NOT_FOUND, so the app saw ENOENT for a directory that existed
+ * (same_parent_storm: mkdir ENOENT, the following rmdir succeeded).
+ * Reply the local row instead. */
+static int lookup_fill_committed(fuse_ino_t ino, struct fuse_entry_param *e,
+                                 const char *op, fuse_ino_t parent,
+                                 const char *name)
+{
+    struct efs_inode row;
+    struct stat st;
+    int rc = lookup_fill(ino, e, NULL);
+
+    if (rc == 0)
+        return 0;
+    if (efs_client_stat_ino((efs_ino_t)ino, &row) != EFS_OK) {
+        fprintf(stderr, "fuse: %s parent=%llu name=%s ok ino=%llu "
+                "but getattr rc=%d\n", op, (unsigned long long)parent,
+                name ? name : "", (unsigned long long)ino, rc);
+        return rc;
+    }
+    fprintf(stderr, "fuse: %s parent=%llu name=%s ok ino=%llu "
+            "getattr rc=%d, local reply\n", op,
+            (unsigned long long)parent, name ? name : "",
+            (unsigned long long)ino, rc);
+    fill_stat_from_inode(&st, &row);
+    fill_entry(ino, e, &st);
+    return 0;
+}
+
 static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
                               struct fuse_entry_param *e)
 {
@@ -3808,15 +3838,9 @@ static void ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
     int rc;
     t_req = req;
     rc = efs_fuse_mkdir_at(parent, name, mode, &new_ino);
-    if (rc == 0) {
-        rc = lookup_fill((fuse_ino_t)new_ino, &e, NULL);
-        if (rc)
-            /* The mkdir committed; the app sees this errno for a dir
-             * that exists. stat_ino maps every RPC failure to ENOENT. */
-            fprintf(stderr, "fuse: mkdir parent=%llu name=%s ok ino=%llu "
-                    "but getattr rc=%d\n", (unsigned long long)parent, name,
-                    (unsigned long long)new_ino, rc);
-    }
+    if (rc == 0)
+        rc = lookup_fill_committed((fuse_ino_t)new_ino, &e, "mkdir",
+                                   parent, name);
     t_req = NULL;
     if (rc)
         fuse_reply_err(req, -rc);
@@ -3851,7 +3875,8 @@ static void ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
     t_req = req;
     rc = efs_fuse_symlink_at(link, parent, name, &new_ino);
     if (rc == 0)
-        rc = lookup_fill((fuse_ino_t)new_ino, &e, NULL);
+        rc = lookup_fill_committed((fuse_ino_t)new_ino, &e, "symlink",
+                                   parent, name);
     t_req = NULL;
     if (rc)
         fuse_reply_err(req, -rc);
@@ -3880,7 +3905,7 @@ static void ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
     t_req = req;
     rc = efs_fuse_link_at(ino, newparent, newname);
     if (rc == 0)
-        rc = lookup_fill(ino, &e, NULL);
+        rc = lookup_fill_committed(ino, &e, "link", newparent, newname);
     t_req = NULL;
     if (rc)
         fuse_reply_err(req, -rc);

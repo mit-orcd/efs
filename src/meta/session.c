@@ -321,7 +321,27 @@ int efs_session_fence_local(struct efs_kv *kv, uint32_t shard,
         return rc;
     if (fence_epoch > loc.reject_below)
         loc.reject_below = fence_epoch;
-    return store_local(kv, shard, uuid, &loc);
+    rc = store_local(kv, shard, uuid, &loc);
+    if (rc != EFS_OK)
+        return rc;
+    /* This shard's dir-op window for the epoch just fenced. Windows live
+     * on the dentry shard (§7.9), so the drop has to happen here: finish
+     * runs on the session shard and cannot see the other group's keys.
+     * Old-epoch requests are rejected by reject_below from this point, so
+     * the recorded verdict is no longer the answer. A shard the session
+     * never registered is not visited — its window stays until it is. */
+    if (fence_epoch > 0) {
+        uint8_t okey[EFS_KV_KEY_MAX];
+        uint32_t olen = 0;
+
+        rc = efs_kv_key_opid(shard, uuid, fence_epoch - 1, okey, &olen);
+        if (rc == EFS_OK) {
+            rc = efs_kv_del(kv, okey, olen);
+            if (rc == EFS_ERR_NOT_FOUND)
+                rc = EFS_OK;
+        }
+    }
+    return rc;
 }
 
 int efs_session_accept(struct efs_kv *kv, uint32_t shard,

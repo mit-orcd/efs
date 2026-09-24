@@ -25,6 +25,35 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 23 2026 evening — gates on `7e29943`, and the idle 50 ms is on close
+
+Owed gates, no new code on the cluster. 9-host posix 193–196/201, 0
+not-run, 79–94 s (`results/posix/20260923-202626`). The six many-op
+timeouts remain (mkdir p50 46 ms under the suite). One group-2 election
+(term 535→537) lines up with the one-offs: EIO on
+`concurrent_create_unlink_two_proc` (009, 010), `content_random_roundtrip`
+(014), `concurrent_write_and_readdir` (007), a `b''` read on
+`unlink_open_then_recreate` (009), `concurrent_appends` timeout (010).
+Group 0 stayed term 5498; the status line `leader=0` is raft id 0, which
+is node 1. No 2.4 s compaction stall in this run.
+`same_parent_storm` 9×4×100 left the parent `children=0 nlink=2`, rmdir
+OK, and FAILed on two `mkdir ENOENT` from fcstor014 at round 63
+(`results/stress/same-parent-20260923-202846`) — a reply-path ENOENT, the
+row was not torn.
+Idle `md_latency` 20 min later, term stable, commit==applied, still +30
+entries in 30 s: mkdir 8.5 / create+close 56.8 / append+close 59.5 /
+stat 0.5 / unlink 2.2 / rmdir 7.8
+(`results/measure/20260923-162535-idle-mdlat`). The 50 ms mode is the
+two ops that write one byte and close, not every metadata op, and it is
+not the post-roll churn (roll was two hours earlier). Next measurement
+is a follower strace of one create+close.
+
+Server half of the I16 window-GC follow-up, not rolled: `fence_local`
+deletes that shard's op-id window for the epoch it fences
+(`test_session` OK on node9901). The FUSE client never creates an efs
+session, so this path does not run in production, and seeding the op-id
+uuid from "the client session" has nothing to copy.
+
 ## Sep 23 2026 — visibility at the coordinator's decision (`ad292b9`, `7e29943`); four decisions written up
 
 Two more reply-path errors from the freeze runs on `bb634d9`, both the

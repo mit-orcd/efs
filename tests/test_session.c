@@ -122,11 +122,37 @@ static void test_unlink_no_lease(void)
     efs_kv_mem_free(kv);
 }
 
+/* FENCE_LOC drops that shard's op-id window for the epoch it fences
+ * (fence_epoch - 1). A window on a shard that was not fenced stays. */
+static void test_fence_drops_opid(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    uint8_t u[EFS_OPID_UUID_LEN];
+    uint8_t key[EFS_KV_KEY_MAX], other[EFS_KV_KEY_MAX], val[8];
+    uint32_t klen = 0, olen = 0, vlen;
+    uint8_t one = 1;
+
+    uuid_of(u, 9);
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_kv_key_opid(7, u, 1, key, &klen) == EFS_OK, "key");
+    CHECK(efs_kv_key_opid(8, u, 1, other, &olen) == EFS_OK, "other");
+    CHECK(efs_kv_put(kv, key, klen, &one, 1) == EFS_OK, "put");
+    CHECK(efs_kv_put(kv, other, olen, &one, 1) == EFS_OK, "put other");
+    CHECK(efs_session_fence_local(kv, 7, u, 2) == EFS_OK, "fence 7");
+    vlen = sizeof(val);
+    CHECK(efs_kv_get(kv, key, klen, val, &vlen) == EFS_ERR_NOT_FOUND, "dropped");
+    vlen = sizeof(val);
+    CHECK(efs_kv_get(kv, other, olen, val, &vlen) == EFS_OK, "other shard kept");
+    CHECK(efs_session_fence_local(kv, 7, u, 2) == EFS_OK, "fence idemp");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     test_register_and_fence();
     test_i19_lease();
     test_unlink_no_lease();
+    test_fence_drops_opid();
     if (failures) {
         fprintf(stderr, "test_session: %d failure(s)\n", failures);
         return 1;

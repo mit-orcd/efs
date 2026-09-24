@@ -156,10 +156,71 @@ invalid). Known limit, by design: a client's 16-attempt budget (~10.3 s)
 is shorter than recovery of a stranded txn (16.5 s on shard 1504) → the
 app sees EBUSY, never a wrong answer. Do not widen it.
 
-**Owed now:** 9-host posix suite and `same_parent_storm.sh` on `7e29943`;
-the idle `md_latency.py` remeasure. Then the queue: the four pending
-decisions are written up with a recommendation each in §1a ("Decisions
-pending") — W13, W11, W9, W10 — and stop there until ratified.
+**Gates on `7e29943f28ef-dirty` (Sep 23 20:26–20:46 UTC):**
+9-host posix **193–196/201, 0 not-run, 79–94 s**
+(`results/posix/20260923-202626`, timeline
+`results/measure/20260923-162609-w8-stall-timeline`). Fails are the six
+many-op timeouts (item 4; mkdir p50 46 ms / p90 230 ms under the suite)
+plus one-offs at the one group-2 election in the run (term 535→537,
+leader raft-id 2→3, one root stat of 1.6 s): `concurrent_create_unlink_two_proc`
+EIO on 009 and 010, `content_random_roundtrip` EIO on 014,
+`concurrent_write_and_readdir` EIO on 007, `unlink_open_then_recreate`
+reading `b''` on 009, `concurrent_appends` timeout on 010. Group 0 did
+not change term during the suite (5498; `leader=0` in the status line is
+raft id 0 = node 1, not "no leader"). No 2.4 s apply stall in this run.
+`same_parent_storm.sh` 9×4×100 on Sep 23: parent ended `children=0
+nlink=2` and `rmdir` succeeded, but fcstor014 logged two `mkdir ENOENT`
+at round 63 (`results/stress/same-parent-20260923-202846`). Reply path:
+`ll_mkdir` committed, then `lookup_fill` (no open fh) refreshed, and
+`stat_refresh` maps every GETATTR failure to NOT_FOUND. Fixed: a
+committed mkdir/symlink/link replies the dual-applied local row when
+that refresh fails (`lookup_fill_committed`). Re-gate on the new
+clients (servers still `7e29943f28ef-dirty`): PASS 9×4×100, parent
+`children=0 nlink=2`, `RMDIR_OK`
+(`results/stress/same-parent-20260924-170945`). The fallback line did
+not fire, so this run did not exercise the failed refresh; the Sep 23
+failure is the case the reply now covers.
+Idle `md_latency.py` twice, 20 min apart, term stable and
+`commit == applied`, commit still +30 in 30 s (the 0–2/s reaper band,
+not catch-up): mkdir 8.5 / create+close **56.8** / append+close **59.5**
+/ stat 0.5 / unlink 2.2 / rmdir 7.8 ms
+(`results/measure/20260923-162535-idle-mdlat/mdlat-idle2.txt`). The 50 ms
+mode is on the two ops that write a byte and close; mkdir is near the
+6.1 ms reference. Not the post-roll election (the roll was 18:21, this
+sample is 20:46). A 4 MiB raft-log tail still shows the suite, not the
+idle 1/s — do not blame a command from it.
+**Strace (Sep 24, `results/measure/20260924-021832-close-strace`,
+`20260924-053648-leader-strace`): the 50 ms is a `recvfrom`, not fsync.**
+On the client every slow mkdir/create/append is one `recvfrom` of a
+441-byte reply (0x1B9). On both leaders, at the same instant as the slow
+creates, a thread blocks 60–70 ms in `recvfrom` of a 2-byte frame; the
+group-2 leader also blocks 77–114 ms reading a ~64 KiB frame (0x10049).
+A different pair of threads on each leader sits ~52 ms in `recvfrom` of
+an 81-byte frame for the whole trace — the 50 ms heartbeat cadence,
+present with no creates running. The follower's long calls were a
+2.000 s `clock_nanosleep` and 2.000 s reads, not this op. One create in
+the leader trace was 10 ms; the other three were 66 / 73 / 118 ms.
+Do not treat this as the Sep 20 wrong-condvar bug until a send-side
+trace shows the 81-byte frame leaving a follower late.
+
+**Owed now:** the election-time one-offs in the 9-host suite
+(`concurrent_create_unlink_two_proc` EIO, `content_random_roundtrip`
+EIO, `concurrent_write_and_readdir` EIO, `unlink_open_then_recreate`
+reading `b''`). They showed up once, at the group-2 election, and the
+storm does not reproduce them. Then the four pending decisions in §1a
+("Decisions pending") — W13, W11, W9, W10 — which stop until ratified.
+The idle 50 ms create+close median did not hold: Sep 24 15:03 UTC on
+the live mount, term stable, `md_latency.py` was mkdir 5.9 /
+create+close 4.1 / append+close 6.1 / stat 0.3 / unlink 1.6 / rmdir
+6.2 (`results/measure/20260924-150154-rpcprof-shapes` agrees). One
+50–110 ms sample per 20-op batch remains. Not a code change until
+that median is back.
+The I16 follow-up's server half is in tree and unit-tested
+(`efs_session_fence_local` deletes that shard's op-id window for the
+fenced epoch; `test_session` OK on node9901) and is **not rolled**: the
+FUSE client never creates an efs session, so nothing fences it. Seeding
+the op-id from the session waits on that client session, which is the
+product-gap item, not a one-line change.
 
 The I17 story (index-only ring match; `46d54e6`; two gate runs
 `results/measure/20260922-122517-i17-leader-freeze`, `-122629-`) is in
@@ -192,8 +253,10 @@ What is left in the 9-host row, and what to do with each:
    `unlink_open_then_recreate` reading `b''`: a client got BUSY from the
    400 ms apply-wait deadline during a stall, retried LINK/UNLINK
    (`stale_retryable`), and met its own result. **Landed `43bdf6a`**
-   (block above); gate runs owed. The client still retries BUSY and the
-   400 ms deadline is unchanged.
+   (block above); gated on `7e29943` (the 20:26 9-host run above). The
+   client still retries BUSY and the 400 ms deadline is unchanged. The
+   `b''` read and the EIO one-offs recurred once, at the group-2
+   election in that run.
 3. **Compaction stall → leader loss (needs a decision, §4).** One pump
    cycle held `h->mu` for **2.4 s** on both g0 replicas at once
    (`obs-fcstor004/005.txt`: `apply_max=2464250us applies_in_worst=54`),

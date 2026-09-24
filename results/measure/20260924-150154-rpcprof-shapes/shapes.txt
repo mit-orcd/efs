@@ -1,0 +1,33 @@
+FSTYPE=fuse.efs-fuse
+   BASE RPC-PROF calls=3 checkout_us=90 send_us=24 recv_us=427 busy_us=0 busy_n=0 checkout_wait_n=0 lookup=2/396us getattr=1/31us create=0/0us setattr=0/0us readdir=0/0us unlink=0/0us append=0/0us report=0/0us getchunks=0/0us lookup_path=0/0us
+mkdir                  ms: min 2.0 med 9.6 max 61.4
+    RPC-PROF calls=65 checkout_us=316 send_us=282 recv_us=6577 busy_us=0 busy_n=0 checkout_wait_n=0 lookup=43/5260us getattr=22/1317us create=0/0us setattr=0/0us readdir=0/0us unlink=0/0us append=0/0us report=0/0us getchunks=0/0us lookup_path=0/0us
+rmdir                  ms: min 1.9 med 9.8 max 61.0
+    RPC-PROF calls=127 checkout_us=502 send_us=559 recv_us=329416 busy_us=0 busy_n=0 checkout_wait_n=0 lookup=84/8251us getattr=23/1347us create=0/0us setattr=0/0us readdir=0/0us unlink=20/319818us append=0/0us report=0/0us getchunks=0/0us lookup_path=0/0us
+creat+close(nowrite)   ms: min 1.8 med 2.3 max 33.1
+    RPC-PROF calls=209 checkout_us=751 send_us=875 recv_us=476555 busy_us=0 busy_n=0 checkout_wait_n=0 lookup=125/13081us getattr=24/1374us create=20/69131us setattr=0/0us readdir=0/0us unlink=20/319818us append=0/0us report=0/0us getchunks=0/0us lookup_path=0/0us
+open+write1+close      ms: min 3.7 med 3.9 max 10.8
+    RPC-PROF calls=291 checkout_us=945 send_us=1184 recv_us=560654 busy_us=0 busy_n=0 checkout_wait_n=0 lookup=166/18737us getattr=25/1484us create=20/69131us setattr=0/0us readdir=0/0us unlink=20/319818us append=0/0us report=0/0us getchunks=0/0us lookup_path=0/0us
+open+close(nowrite)    ms: min 2.0 med 2.4 max 3.0
+    RPC-PROF calls=393 checkout_us=1303 send_us=1567 recv_us=646847 busy_us=0 busy_n=0 checkout_wait_n=0 lookup=207/26402us getattr=26/1560us create=20/69131us setattr=0/0us readdir=0/0us unlink=20/319818us append=0/0us report=0/0us getchunks=20/1474us lookup_path=0/0us
+open+write1+fsync+cl   ms: min 3.4 med 3.6 max 48.0
+    RPC-PROF calls=475 checkout_us=1494 send_us=1871 recv_us=772921 busy_us=0 busy_n=0 checkout_wait_n=0 lookup=248/77588us getattr=27/1644us create=20/69131us setattr=0/0us readdir=0/0us unlink=20/319818us append=0/0us report=0/0us getchunks=20/1474us lookup_path=0/0us
+unlink(data)           ms: min 1.8 med 1.8 max 2.2
+    RPC-PROF calls=557 checkout_us=1671 send_us=2156 recv_us=808085 busy_us=0 busy_n=0 checkout_wait_n=0 lookup=289/82685us getattr=28/1711us create=20/69131us setattr=0/0us readdir=0/0us unlink=40/347781us append=0/0us report=0/0us getchunks=40/3511us lookup_path=0/0us
+creat+write1+close     ms: min 3.8 med 4.0 max 4.2
+    RPC-PROF calls=639 checkout_us=1868 send_us=2470 recv_us=898548 busy_us=0 busy_n=0 checkout_wait_n=0 lookup=330/87753us getattr=29/1744us create=40/108057us setattr=0/0us readdir=0/0us unlink=40/347781us append=0/0us report=0/0us getchunks=40/3511us lookup_path=0/0us
+unlink(data2)          ms: min 1.7 med 1.7 max 2.0
+    RPC-PROF calls=721 checkout_us=2048 send_us=2752 recv_us=932533 busy_us=0 busy_n=0 checkout_wait_n=0 lookup=371/92582us getattr=30/1771us create=40/108057us setattr=0/0us readdir=0/0us unlink=60/375398us append=0/0us report=0/0us getchunks=60/5023us lookup_path=0/0us
+--- non-PROF fuse.log tail ---
+Discovered 4 cluster nodes from 172.16.223.57:19810
+  node id=1 172.16.223.57:19810
+  node id=2 172.16.223.58:19810
+  node id=3 172.16.223.59:19810
+  node id=4 172.16.223.60:19810
+fetching metadata...
+meta: raft host mounted export 'efs-test' (bits=12, no GET_META table)
+export id=1 name=efs-test
+meta ready staged_rows=1 staged_chunks=0 staged_bytes=151456 root_get=0 mode=40755
+efs-fuse daemon pid=496531
+fuse serving
+PROF_DONE
