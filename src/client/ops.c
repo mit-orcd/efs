@@ -562,6 +562,19 @@ int efs_client_stat_local(efs_ino_t ino, struct efs_inode *out)
     return rc == 0 ? EFS_OK : EFS_ERR_NOT_FOUND;
 }
 
+int efs_client_lookup_local(efs_ino_t parent, const char *name,
+                            struct efs_inode *out)
+{
+    if (!out || !parent || !name || !name[0])
+        return EFS_ERR_INVAL;
+    efs_client_lock_dir(parent);
+    pthread_mutex_lock(&g_client.idx_mu);
+    int rc = efs_export_lookup(&g_client.export, parent, name, out);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(parent);
+    return rc == 0 ? EFS_OK : EFS_ERR_NOT_FOUND;
+}
+
 /* Writer: local size/pack is newer than the owner until REPORT.
  * Peer remount stubs must not clobber GETATTR. more=1 for a walk
  * intermediate (directories; no size overlay). */

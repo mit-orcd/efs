@@ -203,12 +203,53 @@ the leader trace was 10 ms; the other three were 66 / 73 / 118 ms.
 Do not treat this as the Sep 20 wrong-condvar bug until a send-side
 trace shows the 81-byte frame leaving a follower late.
 
-**Owed now:** the election-time one-offs in the 9-host suite
-(`concurrent_create_unlink_two_proc` EIO, `content_random_roundtrip`
-EIO, `concurrent_write_and_readdir` EIO, `unlink_open_then_recreate`
-reading `b''`). They showed up once, at the group-2 election, and the
-storm does not reproduce them. Then the four pending decisions in §1a
-("Decisions pending") — W13, W11, W9, W10 — which stop until ratified.
+**9-host on the mkdir-reply clients (Sep 24 20:33 UTC,
+`results/posix/20260924-203211`, servers still `7e29943f28ef-dirty`):**
+193–196/201, skip=1 (`mmap_write_read`), 0 not-run, 74–80 s. The Sep 23
+election one-offs (`content_random_roundtrip`, `unlink_open_then_recreate`
+`b''`, `concurrent_create_unlink_two_proc`) did not recur. New one-offs:
+fcstor008 `names_near_path_max` and `content_random_overwrite_append`
+EEXIST, `rename_file_over_symlink` EIO; fcstor010 `dir_many_files` EIO
+at `f0149`; fcstor015 `dir_deep_nesting` ENOENT. The rest are the six
+many-op timeouts. The XFS baseline on node9901 did not run
+(`/data1/efs` is not a mount there); score the `efs-*.tsv` summaries,
+not the compare files.
+**9-host after the ghost + close-unlock clients (Sep 25 00:02 UTC,
+`results/posix/20260925-0002-ghost`, servers still
+`abc6e913e760-dirty`):** 191–197/201, skip=1, 0 not-run, 66–74 s.
+`unlink_open_then_recreate` and `flock_unlock_on_close` passed on
+every host. The empty read was the sharded `keep_last` path returning
+only when the dentry table differed from the parent, so the common
+case deleted the open-fd ghost and getattr adopted size 0. Last close
+now also sends `LOCK_UN` for that fd's owner. Non-timeout leftovers:
+fcstor007 and 009 `dir_many_files` EIO (`f0200`, `f0253`), fcstor010
+`trunc_grow_sparse` FileExistsError on the test directory, fcstor011
+`names_dash_prefix_terminal` EBUSY on the test directory. The rest
+are the many-op timeouts.
+**9-host after NET-retry + visible-dir mkdir (Sep 25 00:54 UTC,
+`results/posix/20260925-0048-net`):** 194–197/201, skip=1, 0 not-run,
+77–101 s. `dir_many_files`, `trunc_grow_sparse`, and
+`names_dash_prefix_terminal` passed on every host, as did
+`unlink_open_then_recreate` and `flock_unlock_on_close`. A dropped
+conn or recv used to return `EFS_ERR_NET` on the first attempt
+(create → EIO). It now stays inside the existing 16-attempt loop.
+MKDIR `EEXIST`/`EBUSY` returns success only when a lookup sees a
+directory, and no longer reports EEXIST when the name is not visible
+(`fuse_create_errno` used to short-circuit on `last_err`).
+**9-host after local directory lookup (Sep 25 02:50 UTC,
+`results/posix/20260925-0130-lookup`):** 195–198/201, skip=1, 0
+not-run, 63–69 s. `dir_deep_nesting_beyond_64` passed on all nine
+hosts. With `entry_timeout=0` a depth-100 mkdir was one LOOKUP RPC
+per ancestor per level. A directory this client already has is
+answered from the local table; files still go to the server, so a
+peer unlink stays visible. `dir_deep_nesting` (the same walk plus
+`rmtree`) still timed out on 7 of 9 hosts. `names_crazy_dirs` timed
+out on every host. `names_crazy_roundtrip`,
+`concurrent_creates_same_dir`, and `concurrent_write_and_readdir`
+timed out on some hosts only.
+**Owed now:** those remaining many-op timeouts. Then the four
+pending decisions in §1a — W13, W11, W9, W10 — which stop until
+ratified.
 The idle 50 ms create+close median did not hold: Sep 24 15:03 UTC on
 the live mount, term stable, `md_latency.py` was mkdir 5.9 /
 create+close 4.1 / append+close 6.1 / stat 0.3 / unlink 1.6 / rmdir

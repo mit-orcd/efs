@@ -352,10 +352,17 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             conn = rpc_owner_conn_shard(shard, &nid);
         }
         unsigned long long t1 = prof ? rpc_prof_now_us() : 0;
-        if (!conn)
-            return EFS_ERR_NET;
-        if (efs_conn_send_msg(conn, type, req, req_len) != 0) {
-            efs_client_conn_drop(nid, conn);
+        if (!conn || efs_conn_send_msg(conn, type, req, req_len) != 0) {
+            if (conn)
+                efs_client_conn_drop(nid, conn);
+            /* One dropped conn is not a failed create. Same 16-attempt
+             * budget as BUSY; a hard NET only after it is used up
+             * (dir_many_files EIO on a single recv failure). */
+            if (attempt + 1 < 16) {
+                unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
+                usleep((useconds_t)(50000ull << shift));
+                continue;
+            }
             return EFS_ERR_NET;
         }
         unsigned long long t2 = prof ? rpc_prof_now_us() : 0;
@@ -366,6 +373,11 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
         if (rc != 0) {
             efs_client_conn_drop(nid, conn);
+            if (attempt + 1 < 16) {
+                unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
+                usleep((useconds_t)(50000ull << shift));
+                continue;
+            }
             return EFS_ERR_NET;
         }
         efs_client_conn_release(nid, conn);
@@ -962,10 +974,14 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         } else {
             conn = raft_dual_voter_conn(&nid);
         }
-        if (!conn)
-            return EFS_ERR_NET;
-        if (efs_conn_send_msg(conn, type, req, req_len) != 0) {
-            efs_client_conn_drop(nid, conn);
+        if (!conn || efs_conn_send_msg(conn, type, req, req_len) != 0) {
+            if (conn)
+                efs_client_conn_drop(nid, conn);
+            if (attempt + 1 < 16) {
+                unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
+                usleep((useconds_t)(50000ull << shift));
+                continue;
+            }
             return EFS_ERR_NET;
         }
         uint8_t rtype = 0;
@@ -974,6 +990,11 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
         if (rc != 0) {
             efs_client_conn_drop(nid, conn);
+            if (attempt + 1 < 16) {
+                unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
+                usleep((useconds_t)(50000ull << shift));
+                continue;
+            }
             return EFS_ERR_NET;
         }
         efs_client_conn_release(nid, conn);

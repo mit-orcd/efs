@@ -2539,8 +2539,9 @@ static int fuse_create_errno(efs_ino_t parent, const char *name)
         return -ENOSPC;
     if (g_client.last_err == EFS_ERR_BUSY)
         return -EBUSY;
-    if (g_client.last_err == EFS_ERR_EXIST)
-        return -EEXIST;
+    /* EXIST with no visible inode is not EEXIST: makedirs then treats
+     * the path as a non-directory (trunc_grow_sparse FileExistsError).
+     * A lookup that finds the name still reports EEXIST below. */
     /* Peer create of a name this client never dual-applied: the primary
      * already has the row (EEXIST) but a local lookup would miss and we
      * used to return EIO (IOR-hard). Ask the primary. */
@@ -2639,16 +2640,37 @@ static int efs_fuse_mkdir_at(fuse_ino_t parent_ino, const char *name, mode_t mod
     gid_t gid = ctx ? ctx->gid : 0;
     efs_ino_t ino = efs_client_create(parent.ino, name, S_IFDIR | mode, uid, gid);
     if (ino == 0) {
-        /* Kernel LOOKUP was negative, then MKDIR. A retry or a create
-         * that landed but returned 0 looks like EEXIST even though the
-         * unique testdir name is ours (posix makedirs FileExistsError). */
+        /* Kernel LOOKUP was negative, then MKDIR. The server can answer
+         * EEXIST for a dentry this client's lookup has not seen yet
+         * (posix makedirs FileExistsError on a unique testdir name:
+         * names_near_path_max, content_random_overwrite_append). A real
+         * existing dir is caught by the kernel lookup before MKDIR, so
+         * finding it here means the create landed — reply success.
+         * A few short lookups, not the 16-attempt RPC budget. */
+        int mk = g_client.last_err;
         struct efs_inode row;
-        if (efs_client_rpc_lookup(g_client.export_id, parent.ino, name,
-                                  &row) == EFS_OK &&
-            efs_mode_is_dir(row.mode)) {
-            if (out_ino)
-                *out_ino = row.ino;
-            return 0;
+        int tries;
+
+        /* Lookup does not update last_err, so the old loop's
+         * last_err==EXIST test stayed true and we returned EEXIST
+         * without ever seeing a directory. BUSY after the RPC budget
+         * can be the same committed mkdir (names_dash EBUSY). */
+        if (mk == EFS_ERR_EXIST || mk == EFS_ERR_BUSY) {
+            for (tries = 0; tries < 8; tries++) {
+                int lrc = efs_client_rpc_lookup(g_client.export_id,
+                                                parent.ino, name, &row);
+                if (lrc == EFS_OK) {
+                    if (!efs_mode_is_dir(row.mode))
+                        return -EEXIST;
+                    if (out_ino)
+                        *out_ino = row.ino;
+                    return 0;
+                }
+                if (lrc != EFS_ERR_NOT_FOUND)
+                    break;
+                if (tries + 1 < 8)
+                    usleep(20000u * (unsigned)(tries + 1));
+            }
         }
         return fuse_create_errno(parent.ino, name);
     }
@@ -3025,8 +3047,19 @@ static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)
     efs_ino_t fh = (fi && fi->fh) ? (efs_ino_t)fi->fh : (efs_ino_t)ino;
     efs_client_note_meta_change(0);
     if (fh && efs_close_note(fh)) {
+        uint64_t lk = fi ? fi->lock_owner : 0;
+        uint64_t owner = g_client.flock_token ^
+                         (lk ? lk : ((uint64_t)(uintptr_t)fi << 8));
+
+        /* The kernel does not send LOCK_UN on close. The lease-close
+         * edge drops every lock, but a failed or skipped hold leaves
+         * the lock behind and the next LOCK_NB returns EAGAIN
+         * (flock_unlock_on_close). Unlock this fd's owner too. A
+         * release of a lock we do not hold is OK. */
         (void)efs_client_rpc_hold(g_client.export_id, fh, 0,
                                   g_client.flock_token);
+        (void)efs_client_rpc_flock(g_client.export_id, fh, EFS_FLOCK_UN,
+                                   owner);
         efs_client_stage_evict_ino(fh);
     }
     return 0;
@@ -3662,6 +3695,19 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
     rc = check_dir_x(&prow);
     if (rc != 0)
         return rc;
+    /* A directory this client just created is in the local table.
+     * Answering it here keeps a deep mkdir from re-reading every
+     * ancestor over RPC (dir_deep_nesting*_64 is O(n^2) LOOKUPs with
+     * entry_timeout=0). Files stay on the RPC: a peer unlink must
+     * still be visible (peer_negative_after_unlink). A name we have
+     * never seen is a miss and falls through. */
+    if (efs_client_lookup_local((efs_ino_t)parent, name, &row) == EFS_OK &&
+        efs_mode_is_dir(row.mode)) {
+        struct stat st;
+        fill_stat_from_inode(&st, &row);
+        fill_entry((fuse_ino_t)row.ino, e, &st);
+        return 0;
+    }
     rc = efs_client_rpc_lookup(g_client.export_id, (efs_ino_t)parent, name, &row);
     if (rc != EFS_OK)
         return (rc == EFS_ERR_ACCES) ? -EACCES : -ENOENT;

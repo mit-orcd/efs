@@ -169,6 +169,9 @@ int efs_client_stat_ino(efs_ino_t ino, struct efs_inode *out);
 int efs_client_stat_refresh(efs_ino_t ino, struct efs_inode *out);
 /* Local table only — no RPC. For parent-dir checks on a known nodeid. */
 int efs_client_stat_local(efs_ino_t ino, struct efs_inode *out);
+/* Name this client already dual-applied. A miss is not "does not exist". */
+int efs_client_lookup_local(efs_ino_t parent, const char *name,
+                            struct efs_inode *out);
 /* Adopt a LOOKUP/GETATTR reply and overlay this client's unflushed size. */
 void efs_client_adopt_lookup(const struct efs_inode *rpc, struct efs_inode *out);
 /* Readdir with the server's (src, name) resume cookie. */

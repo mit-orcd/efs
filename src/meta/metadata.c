@@ -2337,7 +2337,10 @@ int efs_export_unlink_name_ex(struct efs_export *ex, efs_ino_t parent,
                     inode_set_name(dtab, row, "");
                     row->parent = 0;
                 }
-                if (ptab != dtab)
+                /* Same table as the parent is the common case. Falling
+                 * through removed the ghost, getattr missed, and the
+                 * kernel's size-0 attr made the still-open fd read EOF
+                 * (unlink_open_then_recreate). */
                 return EFS_OK;
             }
         }
