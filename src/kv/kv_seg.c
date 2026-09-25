@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -44,6 +45,12 @@ struct kv_seg {
     uint32_t nblocks;
     uint8_t *last_key;
     uint32_t last_klen;
+    /* Immutable once published, so the last block read is still valid.
+     * A get walks every segment under the LSM lock; re-reading the same
+     * block from disk (and mallocing it) was most of a metadata op. */
+    uint32_t cache_bi;
+    uint8_t *cache;
+    uint32_t cache_len;
 };
 
 /* --- writer ---------------------------------------------------------- */
@@ -341,6 +348,7 @@ int kv_seg_open(const char *path, struct kv_seg **out)
     s = calloc(1, sizeof(*s));
     if (!s)
         return EFS_ERR_NOMEM;
+    s->cache_bi = UINT32_MAX;
     s->fd = open(path, O_RDONLY);
     if (s->fd < 0) {
         free(s);
@@ -426,6 +434,7 @@ void kv_seg_close(struct kv_seg *s)
         return;
     seg_free_idx(s);
     free(s->last_key);
+    free(s->cache);
     if (s->fd >= 0)
         close(s->fd);
     free(s);
@@ -520,12 +529,20 @@ int kv_seg_get(struct kv_seg *s, const uint8_t *key, uint32_t klen,
     if (bi < 0)
         return EFS_ERR_NOT_FOUND;
     r = &s->idx[bi];
-    blk = malloc(r->len);
-    if (!blk)
-        return EFS_ERR_NOMEM;
-    if (pread_all(s->fd, blk, r->len, r->off) != EFS_OK) {
-        free(blk);
-        return EFS_ERR_IO;
+    if (s->cache && s->cache_bi == (uint32_t)bi && s->cache_len == r->len) {
+        blk = s->cache;
+    } else {
+        blk = malloc(r->len);
+        if (!blk)
+            return EFS_ERR_NOMEM;
+        if (pread_all(s->fd, blk, r->len, r->off) != EFS_OK) {
+            free(blk);
+            return EFS_ERR_IO;
+        }
+        free(s->cache);
+        s->cache = blk;
+        s->cache_len = r->len;
+        s->cache_bi = (uint32_t)bi;
     }
     while (off + 9 <= r->len) {
         uint8_t o = blk[off];
@@ -545,7 +562,6 @@ int kv_seg_get(struct kv_seg *s, const uint8_t *key, uint32_t klen,
             break;
         off += 9 + kl + vl;
     }
-    free(blk);
     return rc;
 }
 

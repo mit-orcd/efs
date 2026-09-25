@@ -260,9 +260,17 @@ Alone on fcstor007 (Sep 25 04:34 UTC, same build, jobs=16) both
 pairs pass: `dir_deep_nesting` + `beyond_64` in 3.6 s,
 `names_crazy_dirs` + `names_crazy_roundtrip` in 3.2 s. The 15 s
 failure is the 9-host queue, not a bug in those tests.
-**Owed now:** metadata-op latency under the 9-host suite (one
-sequential mkdir/rmdir/create stream falls behind the shared Raft
-commit rate). Then W13, W11, W9, W10, which stop until ratified.
+**9-host after an immutable-segment block cache (Sep 25 12:35 UTC,
+`results/posix/20260925-0445-segcache`, `6ba3592b03c2-dirty`):**
+198–199/201, skip=1, 0 not-run, 48–56 s. `dir_deep_nesting` and
+`dir_deep_nesting_beyond_64` passed on every host checked.
+`names_crazy_dirs` still timed out on every host;
+`names_crazy_roundtrip` on some. Each KV get was malloc + pread of
+the block under the LSM lock, including a miss that walks every
+segment. The segment is immutable, so the last block stays cached.
+**Owed now:** `names_crazy_dirs` (and sometimes
+`names_crazy_roundtrip`) under the 9-host suite. Then W13, W11, W9,
+W10, which stop until ratified.
 The idle 50 ms create+close median did not hold: Sep 24 15:03 UTC on
 the live mount, term stable, `md_latency.py` was mkdir 5.9 /
 create+close 4.1 / append+close 6.1 / stat 0.3 / unlink 1.6 / rmdir
