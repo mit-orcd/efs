@@ -768,6 +768,18 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
     }
     efs_client_table_unlock();
 
+    /* A flush of a clean fd (the rd() after wr() already published)
+     * used to send a sync REPORT with no records. That is a Raft
+     * commit per read-close — names_crazy_dirs pays it once per name. */
+    if (cn == 0 && in == 0) {
+        free(crecs);
+        free(irecs);
+        pub_ino_clear();
+        dirty_snap_free(&ds);
+        pthread_mutex_unlock(&report_mu);
+        return EFS_OK;
+    }
+
     /* Send the report as ONE batch to a dual-host voter (a node that is a
      * voter of every metadata group, so it can apply the whole batch
      * locally). NOT_PRIMARY follows the hint; transient NET/NO_QUORUM/BUSY
