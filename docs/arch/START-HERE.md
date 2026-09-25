@@ -247,9 +247,18 @@ peer unlink stays visible. `dir_deep_nesting` (the same walk plus
 out on every host. `names_crazy_roundtrip`,
 `concurrent_creates_same_dir`, and `concurrent_write_and_readdir`
 timed out on some hosts only.
-**Owed now:** those remaining many-op timeouts. Then the four
-pending decisions in §1a — W13, W11, W9, W10 — which stop until
-ratified.
+**9-host after write() stopped reporting inline (Sep 25 04:30 UTC,
+`results/posix/20260925-0412-write`, servers+clients
+`d2e593244a10-dirty`):** 194–198/201, skip=1, 0 not-run, 60–66 s.
+`write()` used to `report_dirty(0)` the whole set before returning;
+flush/close already does `report_dirty_ino(ino, 1)`, so the write
+report was a second round trip on every small file. Best hosts
+(007, 008, 011) fail only `dir_deep_nesting` and `names_crazy_dirs`.
+Those two still time out on every host. `dir_deep_nesting_beyond_64`
+slipped back to a timeout on some hosts after the roll.
+**Owed now:** `dir_deep_nesting` (the rmtree) and `names_crazy_dirs`,
+then the flaky many-op timeouts. Then W13, W11, W9, W10, which stop
+until ratified.
 The idle 50 ms create+close median did not hold: Sep 24 15:03 UTC on
 the live mount, term stable, `md_latency.py` was mkdir 5.9 /
 create+close 4.1 / append+close 6.1 / stat 0.3 / unlink 1.6 / rmdir

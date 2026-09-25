@@ -3904,8 +3904,10 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_mark_ino_dirty(ino);
     efs_client_unlock_dir(ino);
-    /* Phase 2b: report dirty chunk/size to the primary instead of blob-flush. */
-    efs_client_report_dirty(0);
+    /* Durable at flush/close (report_dirty_ino), not at write(). A
+     * synchronous whole-set report here doubled every small wr() under
+     * the posix suite (names_crazy_dirs, dir_deep_nesting rmtree). */
+    (void)efs_client_note_meta_change(0);
 
     return EFS_OK;
 }
