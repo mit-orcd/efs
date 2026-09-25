@@ -525,6 +525,11 @@ int kv_seg_get(struct kv_seg *s, const uint8_t *key, uint32_t klen,
 
     if (!s || !key || klen == 0 || !val || !op)
         return EFS_ERR_INVAL;
+    /* Key past this segment. Learned the first time the last block is
+     * scanned to the end; later misses must not pread or evict. */
+    if (s->last_key &&
+        kv_key_cmp(key, klen, s->last_key, s->last_klen) > 0)
+        return EFS_ERR_NOT_FOUND;
     bi = block_for(s, key, klen);
     if (bi < 0)
         return EFS_ERR_NOT_FOUND;
@@ -539,28 +544,53 @@ int kv_seg_get(struct kv_seg *s, const uint8_t *key, uint32_t klen,
             free(blk);
             return EFS_ERR_IO;
         }
-        free(s->cache);
-        s->cache = blk;
-        s->cache_len = r->len;
-        s->cache_bi = (uint32_t)bi;
     }
-    while (off + 9 <= r->len) {
-        uint8_t o = blk[off];
-        uint32_t kl = get_u32(blk + off + 1);
-        uint32_t vl = get_u32(blk + off + 5);
-        int c;
+    {
+        const uint8_t *tail = NULL;
+        uint32_t tail_kl = 0;
+        int saw_end = 1;
 
-        if (off + 9 + kl + vl > r->len)
-            break;
-        c = kv_key_cmp(blk + off + 9, kl, key, klen);
-        if (c == 0) {
-            *op = o;
-            rc = kv_buf_set(val, blk + off + 9 + kl, vl);
-            break;
+        while (off + 9 <= r->len) {
+            uint8_t o = blk[off];
+            uint32_t kl = get_u32(blk + off + 1);
+            uint32_t vl = get_u32(blk + off + 5);
+            int c;
+
+            if (off + 9 + kl + vl > r->len)
+                break;
+            c = kv_key_cmp(blk + off + 9, kl, key, klen);
+            if (c == 0) {
+                *op = o;
+                rc = kv_buf_set(val, blk + off + 9 + kl, vl);
+                saw_end = 0;
+                break;
+            }
+            if (c > 0) {
+                saw_end = 0;
+                break;
+            }
+            tail = blk + off + 9;
+            tail_kl = kl;
+            off += 9 + kl + vl;
         }
-        if (c > 0)
-            break;
-        off += 9 + kl + vl;
+        if (saw_end && (uint32_t)bi + 1 == s->nblocks && tail &&
+            !s->last_key) {
+            s->last_key = malloc(tail_kl);
+            if (s->last_key) {
+                memcpy(s->last_key, tail, tail_kl);
+                s->last_klen = tail_kl;
+            }
+        }
+    }
+    if (blk != s->cache) {
+        if (rc == EFS_OK) {
+            free(s->cache);
+            s->cache = blk;
+            s->cache_len = r->len;
+            s->cache_bi = (uint32_t)bi;
+        } else {
+            free(blk);
+        }
     }
     return rc;
 }

@@ -268,9 +268,17 @@ failure is the 9-host queue, not a bug in those tests.
 `names_crazy_roundtrip` on some. Each KV get was malloc + pread of
 the block under the LSM lock, including a miss that walks every
 segment. The segment is immutable, so the last block stays cached.
-**Owed now:** `names_crazy_dirs` (and sometimes
-`names_crazy_roundtrip`) under the 9-host suite. Then W13, W11, W9,
-W10, which stop until ratified.
+A miss used to install that block and evict the hot one. Misses
+leave the cache alone, and a key past the segment's last key does
+not read the last block again.
+**9-host after that, plus no open-lease and no empty close REPORT
+(Sep 25 16:49 UTC, `results/posix/20260925-1240-misscache`,
+`59b312f5904b-dirty`):** 199–200/201, skip=1 (`mmap_write_read`),
+0 not-run, 44–49 s. Seven hosts failed nothing. fcstor008 and
+fcstor013 failed only `names_crazy_dirs` (15 s). `dir_deep_nesting`,
+`dir_deep_nesting_beyond_64`, and `names_crazy_roundtrip` passed.
+**Owed now:** `names_crazy_dirs` on the slow hosts. Then W13, W11,
+W9, W10, which stop until ratified.
 The idle 50 ms create+close median did not hold: Sep 24 15:03 UTC on
 the live mount, term stable, `md_latency.py` was mkdir 5.9 /
 create+close 4.1 / append+close 6.1 / stat 0.3 / unlink 1.6 / rmdir
