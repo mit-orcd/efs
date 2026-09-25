@@ -256,9 +256,13 @@ report was a second round trip on every small file. Best hosts
 (007, 008, 011) fail only `dir_deep_nesting` and `names_crazy_dirs`.
 Those two still time out on every host. `dir_deep_nesting_beyond_64`
 slipped back to a timeout on some hosts after the roll.
-**Owed now:** `dir_deep_nesting` (the rmtree) and `names_crazy_dirs`,
-then the flaky many-op timeouts. Then W13, W11, W9, W10, which stop
-until ratified.
+Alone on fcstor007 (Sep 25 04:34 UTC, same build, jobs=16) both
+pairs pass: `dir_deep_nesting` + `beyond_64` in 3.6 s,
+`names_crazy_dirs` + `names_crazy_roundtrip` in 3.2 s. The 15 s
+failure is the 9-host queue, not a bug in those tests.
+**Owed now:** metadata-op latency under the 9-host suite (one
+sequential mkdir/rmdir/create stream falls behind the shared Raft
+commit rate). Then W13, W11, W9, W10, which stop until ratified.
 The idle 50 ms create+close median did not hold: Sep 24 15:03 UTC on
 the live mount, term stable, `md_latency.py` was mkdir 5.9 /
 create+close 4.1 / append+close 6.1 / stat 0.3 / unlink 1.6 / rmdir
