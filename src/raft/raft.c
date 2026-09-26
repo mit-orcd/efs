@@ -27,9 +27,16 @@ struct efs_raft {
      * retransmitted by the next send (tick heartbeat or propose), so a lost
      * batch or reply still recovers within one heartbeat interval —
      * broadcast_ae resets hb_elapsed, so under load the tick heartbeat
-     * itself never fires and cannot be the only retransmit path. */
+     * itself never fires and cannot be the only retransmit path.
+     * ae_inflight_commit is the leader_commit that batch carried. A later
+     * commit (the other peer acked) is not in it; suppressing every send
+     * then hid the new commit until the 50 ms heartbeat. A moved commit
+     * sends an empty probe (no entry rewrite — that was the Sep 19 storm)
+     * marked vote_granted so the reply does not drop this batch. */
     uint64_t ae_inflight[EFS_RAFT_MAX_PEERS];
     uint64_t ae_inflight_tick[EFS_RAFT_MAX_PEERS];
+    uint64_t ae_inflight_commit[EFS_RAFT_MAX_PEERS];
+    uint64_t ae_inflight_end[EFS_RAFT_MAX_PEERS]; /* last index that batch carried */
     uint64_t ticks; /* efs_raft_tick count, for ae_inflight aging */
     uint64_t peer_boot[EFS_RAFT_MAX_PEERS];
     unsigned vote_bits;
@@ -436,10 +443,38 @@ static int ae_inflight_fresh(const struct efs_raft *r, int to, uint64_t ni)
            r->ticks - r->ae_inflight_tick[to] < (uint64_t)r->heartbeat_ticks;
 }
 
-static void ae_inflight_set(struct efs_raft *r, int to, uint64_t ni)
+static void ae_inflight_set(struct efs_raft *r, int to, uint64_t ni,
+                            uint64_t end)
 {
     r->ae_inflight[to] = ni;
     r->ae_inflight_tick[to] = r->ticks;
+    r->ae_inflight_commit[to] = r->commit_index;
+    r->ae_inflight_end[to] = end;
+}
+
+/* Follower already has the outstanding batch (this is queued behind that
+ * RPC). Tell it the commit index moved, without resending the entries. */
+static int send_commit_probe(struct efs_raft *r, int to)
+{
+    struct efs_raft_msg m;
+    uint64_t end, pt = 0;
+    int rc;
+
+    end = r->ae_inflight_end[to];
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_AE_REQ;
+    m.to = to;
+    m.vote_granted = 1; /* reply must not clear ae_inflight */
+    m.prev_index = end;
+    rc = log_term(r, end, &pt);
+    if (rc != EFS_OK && end != 0)
+        return EFS_OK;
+    m.prev_term = pt;
+    m.leader_commit = r->commit_index;
+    rc = send_msg(r, &m);
+    if (rc == EFS_OK)
+        r->ae_inflight_commit[to] = r->commit_index;
+    return EFS_OK;
 }
 
 static int send_ae(struct efs_raft *r, int to)
@@ -467,7 +502,7 @@ static int send_ae(struct efs_raft *r, int to)
             return EFS_OK;
         rc = send_snap(r, to);
         if (rc == EFS_OK)
-            ae_inflight_set(r, to, ni);
+            ae_inflight_set(r, to, ni, ni);
         return rc;
     }
     m.prev_index = ni - 1;
@@ -486,9 +521,14 @@ static int send_ae(struct efs_raft *r, int to)
 
         /* One outstanding batch per behind peer. A reply (on_ae_rep) clears
          * ae_inflight and sends the next window; an unanswered batch is
-         * resent once it is a heartbeat interval old. */
-        if (ae_inflight_fresh(r, to, ni))
+         * resent once it is a heartbeat interval old. A commit that landed
+         * after the batch was built is pushed as an empty probe so the
+         * follower can apply without waiting out the heartbeat. */
+        if (ae_inflight_fresh(r, to, ni)) {
+            if (r->commit_index > r->ae_inflight_commit[to])
+                return send_commit_probe(r, to);
             return EFS_OK;
+        }
         arena = malloc(EFS_RAFT_AE_BYTES);
         if (!arena)
             return EFS_ERR_NOMEM;
@@ -541,7 +581,8 @@ static int send_ae(struct efs_raft *r, int to)
     }
     rc = send_msg(r, &m);
     if (rc == EFS_OK)
-        ae_inflight_set(r, to, m.nentries ? ni : 0);
+        ae_inflight_set(r, to, m.nentries ? ni : 0,
+                        m.nentries ? ni + m.nentries - 1 : m.prev_index);
     free(arena);
     return rc;
 }
@@ -643,6 +684,8 @@ static int become_leader(struct efs_raft *r)
         r->match_index[i] = (i == r->id) ? last_i : 0;
     }
     memset(r->ae_inflight, 0, sizeof(r->ae_inflight));
+    memset(r->ae_inflight_commit, 0, sizeof(r->ae_inflight_commit));
+    memset(r->ae_inflight_end, 0, sizeof(r->ae_inflight_end));
     rc = append_local(r, r->current_term, NULL, 0, NULL);
     if (rc != EFS_OK)
         return rc;
@@ -756,6 +799,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
     memset(&m, 0, sizeof(m));
     m.type = EFS_RAFT_MSG_AE_REP;
     m.to = in->from;
+    m.vote_granted = in->vote_granted; /* echo a commit probe */
     if (in->term < r->current_term) {
         m.success = 0;
         return send_msg(r, &m);
@@ -853,7 +897,10 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
         return EFS_OK;
     if (in->from < 0 || in->from >= EFS_RAFT_MAX_PEERS)
         return EFS_OK;
-    r->ae_inflight[in->from] = 0;
+    /* A commit probe echoes vote_granted. Clearing inflight here would
+     * forget an entry batch that is still unanswered. */
+    if (!in->vote_granted)
+        r->ae_inflight[in->from] = 0;
     if (in->success) {
         uint64_t prev_commit = r->commit_index;
         if (in->match_index > r->match_index[in->from])

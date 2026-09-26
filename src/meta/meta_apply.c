@@ -4650,6 +4650,21 @@ int efs_meta_apply_append_open(struct efs_kv *kv, efs_ino_t ino, uint64_t *offs,
     rc = efs_meta_apply_get_inode(kv, ino, &row);
     if (rc != EFS_OK)
         return rc;
+    /* nopen is the count of OPEN rows, kept on the cursor and deleted
+     * with them when it hits 0 (same batch). append_foreign already
+     * trusts nopen==0 and skips the prefix scan; this path is the one
+     * every close REPORT hits, and the scan is one pread per LSM
+     * segment under the LSM lock. A file that never reserved has no
+     * cursor (NOT_FOUND → nopen 0). */
+    {
+        struct append_cur cur;
+
+        rc = load_append_cur(kv, ino, row.generation, &cur);
+        if (rc != EFS_OK)
+            return rc;
+        if (cur.nopen == 0)
+            return EFS_OK;
+    }
     rc = load_rsvs(kv, ino, row.generation, &scan);
     if (rc != EFS_OK) {
         free(scan.r);
