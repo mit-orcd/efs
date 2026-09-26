@@ -1310,6 +1310,18 @@ int efs_raft_submit(struct efs_raft *r, uint64_t idx)
     efs_raft_arm_durable(r);
     if (idx > r->send_idx)
         r->send_idx = idx;
+    return EFS_OK;
+}
+
+/* Send every entry covered by efs_raft_submit. Call after dropping the
+ * state-machine lock so appends that landed in between join this batch;
+ * a peer with a batch already in flight is left for its reply. */
+int efs_raft_flush(struct efs_raft *r)
+{
+    if (!r)
+        return EFS_ERR_INVAL;
+    if (r->role != EFS_RAFT_LEADER)
+        return EFS_ERR_NOT_PRIMARY;
     return broadcast_ae(r);
 }
 
