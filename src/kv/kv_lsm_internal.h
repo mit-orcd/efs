@@ -182,6 +182,27 @@ void kv_seg_close(struct kv_seg *s);
  * about the key. A tombstone is EFS_OK with *op == KV_OP_DEL. */
 int kv_seg_get(struct kv_seg *s, const uint8_t *key, uint32_t klen,
                struct kv_buf *val, uint8_t *op);
+/* Where a miss has to read. fd/off/len are copied so the pread can run
+ * without the LSM lock; the segment stays alive across that only if the
+ * caller pinned it first. */
+struct kv_seg_io {
+    int fd;
+    uint64_t off;
+    uint32_t len;
+    uint32_t bi;
+};
+/* EFS_OK and *need_io == 0: found (*op set). EFS_ERR_NOT_FOUND: this
+ * segment does not hold the key. EFS_OK and *need_io == 1: *io is filled. */
+int kv_seg_probe(struct kv_seg *s, const uint8_t *key, uint32_t klen,
+                 struct kv_buf *val, uint8_t *op, int *need_io,
+                 struct kv_seg_io *io);
+int kv_seg_read(const struct kv_seg_io *io, uint8_t **blk);
+/* Takes ownership of blk. Caches it, then searches. */
+int kv_seg_install(struct kv_seg *s, const struct kv_seg_io *io, uint8_t *blk,
+                   const uint8_t *key, uint32_t klen, struct kv_buf *val,
+                   uint8_t *op);
+void kv_seg_pin(struct kv_seg *s);
+void kv_seg_unpin(struct kv_seg *s);
 int kv_seg_first_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen);
 int kv_seg_last_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen);
 

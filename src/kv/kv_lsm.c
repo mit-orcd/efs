@@ -330,30 +330,136 @@ static int manifest_load(struct kv_lsm *l)
 
 /* --- reads ----------------------------------------------------------- */
 
-/* EFS_OK with *op, or NOT_FOUND when no level speaks about the key. */
-static int lookup(struct kv_lsm *l, const uint8_t *key, uint32_t klen,
-                  struct kv_buf *out, uint8_t *op)
+/* EFS_OK with *op, or NOT_FOUND when no level speaks about the key.
+ * Caller holds l->mu. A segment miss drops the lock around the pread
+ * so concurrent gets overlap; the segment is pinned so compaction can
+ * unlink it without closing the fd. The memtable is newer than every
+ * segment and is rechecked after each pread. */
+static int lookup_mt(struct kv_lsm *l, const uint8_t *key, uint32_t klen,
+                     struct kv_buf *out, uint8_t *op)
 {
-    uint32_t i;
     int found;
     uint32_t at = kv_mtab_pos(&l->mt, key, klen, &found);
 
-    if (found) {
-        struct kv_ent *e = l->mt.e[at];
-        *op = e->op;
-        return kv_buf_set(out, e->val, e->vlen);
-    }
+    if (!found)
+        return EFS_ERR_NOT_FOUND;
+    *op = l->mt.e[at]->op;
+    return kv_buf_set(out, l->mt.e[at]->val, l->mt.e[at]->vlen);
+}
+
+struct lsm_view {
+    uint32_t n0, n1;
+    struct kv_seg *a, *b;
+};
+
+static void lsm_view_get(struct kv_lsm *l, struct lsm_view *v)
+{
+    v->n0 = l->n_l0;
+    v->n1 = l->n_l1;
+    v->a = v->n0 ? l->l0[0].seg : NULL;
+    v->b = v->n1 ? l->l1[0].seg : NULL;
+}
+
+static int lsm_view_same(const struct lsm_view *x, const struct lsm_view *y)
+{
+    return x->n0 == y->n0 && x->n1 == y->n1 && x->a == y->a && x->b == y->b;
+}
+
+static int lookup_locked(struct kv_lsm *l, const uint8_t *key, uint32_t klen,
+                         struct kv_buf *out, uint8_t *op)
+{
+    uint32_t i;
+    int rc = lookup_mt(l, key, klen, out, op);
+
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
     for (i = 0; i < l->n_l0; i++) {
-        int rc = kv_seg_get(l->l0[i].seg, key, klen, out, op);
+        rc = kv_seg_get(l->l0[i].seg, key, klen, out, op);
         if (rc != EFS_ERR_NOT_FOUND)
             return rc;
     }
     for (i = 0; i < l->n_l1; i++) {
-        int rc = kv_seg_get(l->l1[i].seg, key, klen, out, op);
+        rc = kv_seg_get(l->l1[i].seg, key, klen, out, op);
         if (rc != EFS_ERR_NOT_FOUND)
             return rc;
     }
     return EFS_ERR_NOT_FOUND;
+}
+
+static int lookup(struct kv_lsm *l, const uint8_t *key, uint32_t klen,
+                  struct kv_buf *out, uint8_t *op)
+{
+    int guard = 0;
+
+    for (;;) {
+        struct lsm_view snap;
+        uint32_t i, n;
+        int rc;
+
+        if (guard++ > 16)
+            return lookup_locked(l, key, klen, out, op);
+        rc = lookup_mt(l, key, klen, out, op);
+        if (rc != EFS_ERR_NOT_FOUND)
+            return rc;
+        lsm_view_get(l, &snap);
+        n = l->n_l0 + l->n_l1;
+        for (i = 0; i < n; i++) {
+            struct kv_seg *s = i < l->n_l0 ? l->l0[i].seg
+                                           : l->l1[i - l->n_l0].seg;
+            struct kv_seg_io io;
+            uint8_t *blk = NULL;
+            int need_io = 0;
+
+            rc = kv_seg_probe(s, key, klen, out, op, &need_io, &io);
+            if (rc != EFS_OK || !need_io) {
+                if (rc != EFS_ERR_NOT_FOUND)
+                    return rc;
+                continue;
+            }
+            kv_seg_pin(s);
+            pthread_mutex_unlock(&l->mu);
+            rc = kv_seg_read(&io, &blk);
+            pthread_mutex_lock(&l->mu);
+            if (rc != EFS_OK) {
+                kv_seg_unpin(s);
+                return rc;
+            }
+            {
+                struct lsm_view now;
+
+                lsm_view_get(l, &now);
+                rc = kv_seg_install(s, &io, blk, key, klen, out, op);
+                kv_seg_unpin(s);
+                if (!lsm_view_same(&snap, &now) || rc == EFS_ERR_AGAIN)
+                    goto restart;
+            }
+            /* A put that landed during the pread is in the memtable and
+             * is newer than this segment. A miss here still has to walk
+             * older segments: the name is absent only if every level
+             * says so. */
+            {
+                int mrc = lookup_mt(l, key, klen, out, op);
+
+                if (mrc != EFS_ERR_NOT_FOUND)
+                    return mrc;
+            }
+            if (rc != EFS_ERR_NOT_FOUND)
+                return rc;
+        }
+        rc = lookup_mt(l, key, klen, out, op);
+        if (rc != EFS_ERR_NOT_FOUND)
+            return rc;
+        {
+            struct lsm_view now;
+
+            lsm_view_get(l, &now);
+            if (!lsm_view_same(&snap, &now))
+                goto restart;
+        }
+        return EFS_ERR_NOT_FOUND;
+    restart:
+        ;
+    }
 }
 
 int kv_msrc_advance(struct kv_lsm *l, struct msrc *s, const uint8_t *lower,

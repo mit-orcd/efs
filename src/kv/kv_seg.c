@@ -39,18 +39,31 @@ struct blk_ref {
     uint32_t len;
 };
 
+/* Direct-mapped. A mkdir's negative dentry lookup used to pread one
+ * block per segment and free it, so the next name in the same directory
+ * paid the disk again. Slots keep those blocks resident. Each block is
+ * about 64 KiB, so this is a couple of megabytes per segment. */
+#define KV_SEG_CACHE_SLOTS 32
+
+struct seg_cslot {
+    uint32_t bi;
+    uint32_t len;
+    uint64_t off;
+    uint8_t *blk;
+    int valid;
+};
+
 struct kv_seg {
     int fd;
     struct blk_ref *idx;
     uint32_t nblocks;
     uint8_t *last_key;
     uint32_t last_klen;
-    /* Immutable once published, so the last block read is still valid.
-     * A get walks every segment under the LSM lock; re-reading the same
-     * block from disk (and mallocing it) was most of a metadata op. */
-    uint32_t cache_bi;
-    uint8_t *cache;
-    uint32_t cache_len;
+    /* Owner holds one ref. A get pins a second ref before it drops the
+     * LSM lock to pread, so compaction can unlink the segment without
+     * closing the fd under that read. */
+    uint32_t refs;
+    struct seg_cslot cslot[KV_SEG_CACHE_SLOTS];
 };
 
 /* --- writer ---------------------------------------------------------- */
@@ -348,7 +361,7 @@ int kv_seg_open(const char *path, struct kv_seg **out)
     s = calloc(1, sizeof(*s));
     if (!s)
         return EFS_ERR_NOMEM;
-    s->cache_bi = UINT32_MAX;
+    s->refs = 1;
     s->fd = open(path, O_RDONLY);
     if (s->fd < 0) {
         free(s);
@@ -428,16 +441,36 @@ fail:
     return rc;
 }
 
-void kv_seg_close(struct kv_seg *s)
+static void seg_free(struct kv_seg *s)
 {
+    uint32_t i;
+
     if (!s)
         return;
     seg_free_idx(s);
     free(s->last_key);
-    free(s->cache);
+    for (i = 0; i < KV_SEG_CACHE_SLOTS; i++)
+        free(s->cslot[i].blk);
     if (s->fd >= 0)
         close(s->fd);
     free(s);
+}
+
+void kv_seg_pin(struct kv_seg *s)
+{
+    __atomic_add_fetch(&s->refs, 1, __ATOMIC_ACQ_REL);
+}
+
+void kv_seg_unpin(struct kv_seg *s)
+{
+    if (__atomic_sub_fetch(&s->refs, 1, __ATOMIC_ACQ_REL) == 0)
+        seg_free(s);
+}
+
+void kv_seg_close(struct kv_seg *s)
+{
+    if (s)
+        kv_seg_unpin(s);
 }
 
 int kv_seg_first_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen)
@@ -514,16 +547,63 @@ static int32_t block_for(struct kv_seg *s, const uint8_t *key, uint32_t klen)
     return ans;
 }
 
-int kv_seg_get(struct kv_seg *s, const uint8_t *key, uint32_t klen,
-               struct kv_buf *val, uint8_t *op)
+/* Search one immutable block. A miss is cached by the caller too: the
+ * next lookup of a nearby key (the next name in a directory) must not
+ * pread this block again. */
+static int search_block(struct kv_seg *s, const uint8_t *blk, uint32_t len,
+                        uint32_t bi, const uint8_t *key, uint32_t klen,
+                        struct kv_buf *val, uint8_t *op)
 {
-    struct blk_ref *r;
-    uint8_t *blk;
     uint32_t off = 0;
-    int32_t bi;
+    const uint8_t *tail = NULL;
+    uint32_t tail_kl = 0;
+    int saw_end = 1;
     int rc = EFS_ERR_NOT_FOUND;
 
-    if (!s || !key || klen == 0 || !val || !op)
+    while (off + 9 <= len) {
+        uint8_t o = blk[off];
+        uint32_t kl = get_u32(blk + off + 1);
+        uint32_t vl = get_u32(blk + off + 5);
+        int c;
+
+        if (off + 9 + kl + vl > len)
+            break;
+        c = kv_key_cmp(blk + off + 9, kl, key, klen);
+        if (c == 0) {
+            *op = o;
+            rc = kv_buf_set(val, blk + off + 9 + kl, vl);
+            saw_end = 0;
+            break;
+        }
+        if (c > 0) {
+            saw_end = 0;
+            break;
+        }
+        tail = blk + off + 9;
+        tail_kl = kl;
+        off += 9 + kl + vl;
+    }
+    if (saw_end && bi + 1 == s->nblocks && tail && !s->last_key) {
+        s->last_key = malloc(tail_kl);
+        if (s->last_key) {
+            memcpy(s->last_key, tail, tail_kl);
+            s->last_klen = tail_kl;
+        }
+    }
+    return rc;
+}
+
+int kv_seg_probe(struct kv_seg *s, const uint8_t *key, uint32_t klen,
+                 struct kv_buf *val, uint8_t *op, int *need_io,
+                 struct kv_seg_io *io)
+{
+    struct blk_ref *r;
+    struct seg_cslot *c;
+    int32_t bi;
+
+    if (need_io)
+        *need_io = 0;
+    if (!s || !key || klen == 0 || !val || !op || !need_io || !io)
         return EFS_ERR_INVAL;
     /* Key past this segment. Learned the first time the last block is
      * scanned to the end; later misses must not pread or evict. */
@@ -534,65 +614,73 @@ int kv_seg_get(struct kv_seg *s, const uint8_t *key, uint32_t klen,
     if (bi < 0)
         return EFS_ERR_NOT_FOUND;
     r = &s->idx[bi];
-    if (s->cache && s->cache_bi == (uint32_t)bi && s->cache_len == r->len) {
-        blk = s->cache;
-    } else {
-        blk = malloc(r->len);
-        if (!blk)
-            return EFS_ERR_NOMEM;
-        if (pread_all(s->fd, blk, r->len, r->off) != EFS_OK) {
-            free(blk);
-            return EFS_ERR_IO;
-        }
-    }
-    {
-        const uint8_t *tail = NULL;
-        uint32_t tail_kl = 0;
-        int saw_end = 1;
+    c = &s->cslot[(uint32_t)bi % KV_SEG_CACHE_SLOTS];
+    if (c->valid && c->bi == (uint32_t)bi && c->len == r->len &&
+        c->off == r->off && c->blk)
+        return search_block(s, c->blk, c->len, (uint32_t)bi, key, klen, val,
+                            op);
+    io->fd = s->fd;
+    io->off = r->off;
+    io->len = r->len;
+    io->bi = (uint32_t)bi;
+    *need_io = 1;
+    return EFS_OK;
+}
 
-        while (off + 9 <= r->len) {
-            uint8_t o = blk[off];
-            uint32_t kl = get_u32(blk + off + 1);
-            uint32_t vl = get_u32(blk + off + 5);
-            int c;
+int kv_seg_read(const struct kv_seg_io *io, uint8_t **blk)
+{
+    uint8_t *p;
 
-            if (off + 9 + kl + vl > r->len)
-                break;
-            c = kv_key_cmp(blk + off + 9, kl, key, klen);
-            if (c == 0) {
-                *op = o;
-                rc = kv_buf_set(val, blk + off + 9 + kl, vl);
-                saw_end = 0;
-                break;
-            }
-            if (c > 0) {
-                saw_end = 0;
-                break;
-            }
-            tail = blk + off + 9;
-            tail_kl = kl;
-            off += 9 + kl + vl;
-        }
-        if (saw_end && (uint32_t)bi + 1 == s->nblocks && tail &&
-            !s->last_key) {
-            s->last_key = malloc(tail_kl);
-            if (s->last_key) {
-                memcpy(s->last_key, tail, tail_kl);
-                s->last_klen = tail_kl;
-            }
-        }
+    if (!io || !blk || !io->len || io->fd < 0)
+        return EFS_ERR_INVAL;
+    p = malloc(io->len);
+    if (!p)
+        return EFS_ERR_NOMEM;
+    if (pread_all(io->fd, p, io->len, io->off) != EFS_OK) {
+        free(p);
+        return EFS_ERR_IO;
     }
-    if (blk != s->cache) {
-        if (rc == EFS_OK) {
-            free(s->cache);
-            s->cache = blk;
-            s->cache_len = r->len;
-            s->cache_bi = (uint32_t)bi;
-        } else {
-            free(blk);
-        }
+    *blk = p;
+    return EFS_OK;
+}
+
+int kv_seg_install(struct kv_seg *s, const struct kv_seg_io *io, uint8_t *blk,
+                   const uint8_t *key, uint32_t klen, struct kv_buf *val,
+                   uint8_t *op)
+{
+    struct seg_cslot *c;
+
+    if (!s || !io || !blk || !key || !val || !op)
+        return EFS_ERR_INVAL;
+    if (io->bi >= s->nblocks || s->idx[io->bi].off != io->off ||
+        s->idx[io->bi].len != io->len) {
+        free(blk);
+        return EFS_ERR_AGAIN;
     }
-    return rc;
+    c = &s->cslot[io->bi % KV_SEG_CACHE_SLOTS];
+    free(c->blk);
+    c->blk = blk;
+    c->bi = io->bi;
+    c->len = io->len;
+    c->off = io->off;
+    c->valid = 1;
+    return search_block(s, blk, io->len, io->bi, key, klen, val, op);
+}
+
+int kv_seg_get(struct kv_seg *s, const uint8_t *key, uint32_t klen,
+               struct kv_buf *val, uint8_t *op)
+{
+    struct kv_seg_io io;
+    uint8_t *blk = NULL;
+    int need_io = 0;
+    int rc = kv_seg_probe(s, key, klen, val, op, &need_io, &io);
+
+    if (rc != EFS_OK || !need_io)
+        return rc;
+    rc = kv_seg_read(&io, &blk);
+    if (rc != EFS_OK)
+        return rc;
+    return kv_seg_install(s, &io, blk, key, klen, val, op);
 }
 
 /* --- iterator -------------------------------------------------------- */

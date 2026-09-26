@@ -1,0 +1,3 @@
+apply_max host=fcstor005 apply_max=59016 us persist_max=956 us pump_hold_max=127329 us applies_in_worst=256 wait_timeouts=0 fin_q=0 fin_done=0
+persist_max host=fcstor004 apply_max=25118 us persist_max=17166 us pump_hold_max=26020 us applies_in_worst=50 wait_timeouts=0 fin_q=0 fin_done=0
+pump_hold_max host=fcstor005 apply_max=59016 us persist_max=956 us pump_hold_max=127329 us applies_in_worst=256 wait_timeouts=0 fin_q=0 fin_done=0
