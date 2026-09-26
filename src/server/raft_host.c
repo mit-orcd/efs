@@ -2327,6 +2327,10 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
                 rc = efs_raft_submit(r, myidx);
             host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
+            /* The pump sends every entry appended while this lock was
+             * held by the waiters behind us. Kick before the fsync so
+             * that round trip overlaps the sync. */
+            host_pump_kick(h);
             if (quiet && rc == EFS_OK)
                 rc = efs_raft_disk_sync_release_wait(h->disk);
             else if (quiet)
@@ -3837,6 +3841,19 @@ static void *host_pump(void *arg)
             t_wait = now_us_() - c0;
             c0 = now_us_();
         }
+        /* One AppendEntries for everything appended since the last
+         * send. Proposers only raise the send ceiling; doing the send
+         * under their lock shipped a single entry and the next mkdir
+         * waited out that round trip. A peer with a batch in flight is
+         * left alone (no pipeline — a pipelined suffix applied twelve
+         * thousand entries under this lock). */
+        for (i = 0; i < HOST_NGROUPS; i++) {
+            if (h->g[i].hosted && h->g[i].r &&
+                efs_raft_role(h->g[i].r) == EFS_RAFT_LEADER)
+                (void)efs_raft_flush(h->g[i].r);
+        }
+        if (obs)
+            c0 = now_us_();
         /* One KV WAL fsync per pump cycle, not per applied entry. Every
          * metadata apply is one or more efs_kv puts and each put fsynced
          * the KV WAL, under h->mu, on every replica: 0.5 ms per entry

@@ -484,7 +484,11 @@ static int send_commit_probe(struct efs_raft *r, int to)
     return EFS_OK;
 }
 
-static int send_ae(struct efs_raft *r, int to)
+/* data_only: push entries that are already covered by send_idx. Do not
+ * emit an empty heartbeat and do not clear ae_inflight when there is
+ * nothing new — a heartbeat does both, and doing that on every propose
+ * wake would drop the one-batch cap. */
+static int send_ae(struct efs_raft *r, int to, int data_only)
 {
     struct efs_raft_msg m;
     uint64_t last_i = 0, last_t = 0, prev_t = 0;
@@ -526,6 +530,8 @@ static int send_ae(struct efs_raft *r, int to)
 
         if (r->ae_capped && r->send_idx < end)
             end = r->send_idx;
+        if (data_only && ni > end)
+            return EFS_OK;
         if (ni <= end) {
         /* Batch the catch-up: read up to EFS_RAFT_AE_MAX entries (byte-
          * capped at EFS_RAFT_AE_BYTES) into one arena so a behind follower
@@ -540,7 +546,7 @@ static int send_ae(struct efs_raft *r, int to)
          * after the batch was built is pushed as an empty probe so the
          * follower can apply without waiting out the heartbeat. */
         if (ae_inflight_fresh(r, to, ni)) {
-            if (r->commit_index > r->ae_inflight_commit[to])
+            if (!data_only && r->commit_index > r->ae_inflight_commit[to])
                 return send_commit_probe(r, to);
             return EFS_OK;
         }
@@ -611,7 +617,7 @@ static int broadcast_ae(struct efs_raft *r)
     for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
         if (i == r->id || !(mask & (1u << i)))
             continue;
-        rc = send_ae(r, i);
+        rc = send_ae(r, i, 0);
         if (rc != EFS_OK)
             return rc;
     }
@@ -928,6 +934,12 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
         r->next_index[in->from] = r->match_index[in->from] + 1;
         if (r->read_in_flight == 1)
             r->read_acks |= 1u << in->from;
+        /* Queue the next batch before apply. The sender thread writes
+         * it while apply still holds the lock, so the round trip
+         * overlaps the apply. send_ae will not start a second batch
+         * while this one is in flight. */
+        if (r->next_index[in->from] <= r->match_index[r->id])
+            (void)send_ae(r, in->from, 1);
         try_commit(r);
         apply_committed(r);
         if (r->commit_index != prev_commit) {
@@ -938,8 +950,6 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
             broadcast_ae(r);
             return EFS_OK;
         }
-        if (r->next_index[in->from] <= r->match_index[r->id])
-            return send_ae(r, in->from);
         return EFS_OK;
     }
     /* Rejection: the follower's reply carries match_index = its last log
@@ -958,7 +968,7 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
             ni = 1;
         r->next_index[in->from] = ni;
     }
-    return send_ae(r, in->from);
+    return send_ae(r, in->from, 0);
 }
 
 static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
@@ -1085,7 +1095,7 @@ static int on_snap_rep(struct efs_raft *r, const struct efs_raft_msg *in)
         try_commit(r);
         apply_committed(r);
         if (r->next_index[in->from] <= r->match_index[r->id])
-            return send_ae(r, in->from);
+            return send_ae(r, in->from, 0);
         return EFS_OK;
     }
     /* Stay in the snapshot window; the next heartbeat retries. Immediate
@@ -1310,7 +1320,30 @@ int efs_raft_submit(struct efs_raft *r, uint64_t idx)
     efs_raft_arm_durable(r);
     if (idx > r->send_idx)
         r->send_idx = idx;
-    return broadcast_ae(r);
+    /* Do not transmit here. The caller still holds the state-machine
+     * lock, so a send now would be this one entry; the pump flushes
+     * every index covered by send_idx in one batch. */
+    return EFS_OK;
+}
+
+int efs_raft_flush(struct efs_raft *r)
+{
+    int i, rc = EFS_OK;
+    uint32_t mask;
+
+    if (!r)
+        return EFS_ERR_INVAL;
+    if (r->role != EFS_RAFT_LEADER)
+        return EFS_ERR_NOT_PRIMARY;
+    mask = peer_mask(r);
+    for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
+        if (i == r->id || !(mask & (1u << i)))
+            continue;
+        rc = send_ae(r, i, 1);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    return EFS_OK;
 }
 
 int efs_raft_durable(struct efs_raft *r, uint64_t idx)
