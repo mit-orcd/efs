@@ -143,15 +143,12 @@ int efs_raft_tick(struct efs_raft *r);
 int efs_raft_recv(struct efs_raft *r, const struct efs_raft_msg *msg);
 int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,
                      uint64_t *index_out);
-/* Append only. Pair with efs_raft_submit (raise the send ceiling) and
- * efs_raft_flush (replicate, after dropping the lock) before the fsync,
+/* Append only. Pair with efs_raft_submit (replicate) before the fsync
  * and efs_raft_durable (leader may vote) after it. Caller holds the lock.
  * Not for a 1-voter group. */
 int efs_raft_propose_local(struct efs_raft *r, const uint8_t *cmd,
                            uint32_t clen, uint64_t *index_out);
 void efs_raft_arm_durable(struct efs_raft *r);
-/* Raise the send ceiling. Does not transmit — efs_raft_flush does,
- * after the caller has dropped the lock. */
 int efs_raft_submit(struct efs_raft *r, uint64_t idx);
 int efs_raft_flush(struct efs_raft *r);
 int efs_raft_durable(struct efs_raft *r, uint64_t idx);

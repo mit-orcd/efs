@@ -2327,19 +2327,6 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
                 rc = efs_raft_submit(r, myidx);
             host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
-            /* Appends that were waiting on h->mu land before this
-             * broadcast, so one AppendEntries carries the wave instead
-             * of one entry per round trip. */
-            if (rc == EFS_OK) {
-                pthread_mutex_lock(&h->mu);
-                r = group_raft(h, group);
-                if (!r || efs_raft_role(r) != EFS_RAFT_LEADER)
-                    rc = EFS_ERR_NOT_PRIMARY;
-                else
-                    rc = efs_raft_flush(r);
-                host_publish_group(h, group);
-                pthread_mutex_unlock(&h->mu);
-            }
             if (quiet && rc == EFS_OK)
                 rc = efs_raft_disk_sync_release_wait(h->disk);
             else if (quiet)
