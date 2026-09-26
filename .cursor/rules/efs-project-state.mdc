@@ -98,8 +98,9 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  0.23 s idle (128 GETCHUNKS × 1.6 ms), 14.6 ms/GETCHUNKS under 32 openers.
  Same-parent rate ~140–160 ops/s flat 1–36 procs
  (`results/measure/20260921-161931-samedir-rate`, pre-`165e779`; remeasure).
- Cluster runs **`f93e7e6669b6-dirty`** (source `5d3e603`) with
- `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1` (rolled Sep 26; 5 s
+ Cluster runs **`c044fb16e859-dirty`** (source `c044fb1`, servers and
+ clients, rolled Sep 26 15:00) with
+ `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1` (5 s
  `raft-obs:` lines in `efsd.log` — keep it on until W8 closes; "dirty"
  = tracked result logs the deploy rsync deletes, all four agree).
  Clients 007–015 on the same build. A point get pins the LSM segment

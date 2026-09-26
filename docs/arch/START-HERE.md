@@ -177,7 +177,10 @@ array insert), txn-record scans ~6 %, `kv_compact_locked` (W13), and
 the residual futex share is `l->mu` / `h->mu` handoffs, not the herd.
 One PREPARE command = one part = one Raft entry = one `lsm_put`;
 folding a txn's parts into one PREPARE is a protocol change (per-part
-verdicts) and goes to the user, not into the tree.
+verdicts) and goes to the user, not into the tree. Staging WAL
+records under the hold into one `write()` per cycle was tried and
+reverted (no measurable change; history, Sep 26 afternoon). Cluster
+is on `c044fb16e859-dirty`, servers and clients.
 
 **9-host suite on that same tree** (`results/posix/20260926-054047`,
 timeline `results/measure/20260926-014030-w8-stall-timeline`):

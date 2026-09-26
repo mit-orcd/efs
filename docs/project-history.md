@@ -174,6 +174,21 @@ election per group at the start. (The first run's output landed under
 `results/posix/home/...` because `POSIX_OUT` is a directory name, not a
 path; moved.)
 
+Tried and reverted right after: staging WAL records under a sync-hold
+in a 1 MiB user buffer and issuing one `write()` before the hold's
+fsync (one syscall per pump cycle instead of one per `lsm_put`). Tests
+passed, the cluster ran it (`20260926-143658` / `-143818`: idle 5.29 /
+5.10, p50 45 / 49 ms, both stall-dominated), but the pump's syscall
+share did not move (`rep_movs_alternative` 2.1 %, `syscall_enter` 0.5
+% — the bytes copied are the same, and the per-call overhead was never
+the cost) and the 9-host suite (`20260926-1441-wal`, not committed)
+ran into another multi-term election burst at an 850 ms `apply_max`
+and scored 194–200. No measurable gain, a small change to
+process-crash semantics (records in user memory instead of the page
+cache until the hold's fsync): reverted before commit. The servers were
+then rolled to the committed tree (`c044fb16e859-dirty`; hammer idle
+p50 **4.73 ms**, 26585 / p50 54).
+
 What is left on the pump: `memmove` 7 % (two-array insert into a
 sorted memtable), `kv_msrc_advance` / `kv_seg_iter_next` /
 `search_block` ~5 % (the txn-record scans — `guards_conflict` and
