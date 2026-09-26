@@ -25,6 +25,38 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 26 2026 — Raft log fsync moved out of the host lock
+
+Propose held `h->mu` across `log_sync_locked`, so 144 mkdir threads
+each waited out a private fsync and AppendEntries did not start until
+that fsync returned. `68dfebb` takes the shared sync hold before the
+lock, broadcasts, fsyncs outside the lock, then
+`efs_raft_durable` so the leader does not vote for an entry it has
+not synced. Followers can still form a majority without the leader.
+
+`results/measure/20260926-042515-mkdir-hammer` (before): idle p50
+8.4 ms, 9×16 p50 258 ms, 470 mkdir/s. `20260926-044248-mkdir-hammer`
+(after, smaller table): idle p50 3.7 ms, 144-way p50 144 ms, 735
+mkdir/s. One AppendEntries stayed in flight, so the next mkdir was
+still its own round trip.
+
+Two attempts to batch that send were reverted. Broadcasting only
+after dropping `h->mu` (`1835c70`) did not beat 735/s. Pipelining
+every newer suffix while the previous batch was unacked (`0e81e49`)
+committed far ahead of apply: `20260926-050319-mkdir-hammer` shows
+fcstor005 `pump_hold_max=5336343us` and `applies_in_worst=12120`.
+`e8f3dc1` puts the one-batch cap back. Remeasure on the table those
+runs left behind (`20260926-050609-mkdir-hammer`): idle p50 10.9 ms,
+144-way p50 189 ms, 706 mkdir/s, apply_max 67 ms, `fin_q=0`. The
+idle gap versus 3.7 ms is the grown table, not a return of the
+under-lock fsync. Do not pipeline past the one in-flight batch.
+
+9-host suite on `e8f3dc1`
+(`results/posix/20260926-050825`, timeline
+`results/measure/20260926-010808-w8-stall-timeline`): 194–199/201 in
+40–44 s. Group 0 elected once (term 6294→6296). `names_crazy_dirs`
+still hits the 15 s budget on the slower hosts.
+
 ## Sep 26 2026 — txn finisher after a 400 ms apply wait
 
 A full-L1 compaction under the KV lock stalls apply for >400 ms

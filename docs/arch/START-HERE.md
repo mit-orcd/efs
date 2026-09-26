@@ -68,16 +68,31 @@ timeouts plus a few EIO, with `fin_done` 4–11 and `apply_max` still
 ~1.6 s. Do not treat 200/201 as the steady score until a suite run
 after the cluster has been busy still holds it. Do not start W13.
 
-**Mkdir hammer (Sep 26).** Propose was fsyncing the Raft log while
-holding `h->mu`, then sending AppendEntries. 9×16 own-directory
-mkdir (`results/measure/20260926-042515-mkdir-hammer`): idle p50
-8.4 ms, 144-way p50 **258 ms** / 470 mkdir/s, apply_max 25 ms. The
-fsync now runs outside the lock and overlaps the send; the leader
-does not vote for an entry until that fsync finishes
-(`efs_raft_submit` / `efs_raft_durable`). Rehammer
-(`20260926-044248-mkdir-hammer`): idle p50 **3.7 ms**, 144-way p50
-**144 ms** / 735 mkdir/s. Still a queue (144 waiters). The build
-string stays `af0b4deb14d3-dirty` until this is committed and rolled.
+**Mkdir hammer (Sep 26, `68dfebb`, raft path still that commit at
+`e8f3dc1`).** Propose was fsyncing the Raft log while holding `h->mu`,
+then sending AppendEntries. 9×16 own-directory mkdir
+(`results/measure/20260926-042515-mkdir-hammer`): idle p50 8.4 ms,
+144-way p50 **258 ms** / 470 mkdir/s. The fsync now runs outside the
+lock and overlaps the send; the leader does not vote for an entry
+until that fsync finishes (`efs_raft_submit` / `efs_raft_durable`).
+Same-morning rehammer (`20260926-044248-mkdir-hammer`): idle p50
+**3.7 ms**, 144-way p50 **144 ms** / 735 mkdir/s. Still one round
+trip per mkdir (one AppendEntries in flight). Sending every newer
+suffix immediately (`0e81e49`, reverted by `e8f3dc1`) let a follower
+apply 12 120 entries under the host lock
+(`20260926-050319-mkdir-hammer`, pump hold 5.3 s). The kept code,
+remeasured after that load (`20260926-050609-mkdir-hammer`): idle
+p50 10.9 ms, 144-way p50 **189 ms** / 706 mkdir/s, apply_max 67 ms,
+`fin_q=0`. Do not pipeline past the one in-flight batch. Do not
+start W13.
+
+**9-host suite on that build** (`results/posix/20260926-050825`,
+timeline `results/measure/20260926-010808-w8-stall-timeline`):
+194–199/201, 40–44 s, 0 NOTRUN. Group 0 changed leader once
+(term 6294→6296, ~12 s); the EIO rows sit on that window. A single
+mkdir probed during the suite was p50 14 ms. `names_crazy_dirs`
+still times out on the slower hosts. That is the 144-way queue,
+not a new lost update.
 
 
 
