@@ -52,6 +52,24 @@ Whoever picks the project up next does **this first**. Update or delete
 this block when done — an "in flight" block older than the last commit
 is a bug in this page.
 
+**Txn finisher (Sep 26, `src/server/raft_host.c` `host_txn_commit`).**
+A compaction stall longer than the 400 ms apply wait turns an in-flight
+DECIDE/RESOLVE into BUSY and leaves the EXCL intent until the 5 s
+recovery scan; that intent makes every later create on the shard BUSY
+and the client burns its 16 attempts into EIO. `host_txn_commit` hands
+that txn to a finisher thread, which reads the decision record and
+proposes RESOLVE (retrying BUSY until 10 s). It does not remove the
+stall — that is still W13, not ratified. Measured: first 9-host suite
+on the build **200/201 all nine, 42–44 s**
+(`results/posix/20260926-0345-fin`, `fin_q=0`, no stall that run).
+Three immediate repeats (`-fin2` `-fin3` `-fin4`, uncited) slipped to
+196–200 as the table grew: `dir_deep_nesting*` / `names_crazy_dirs`
+timeouts plus a few EIO, with `fin_done` 4–11 and `apply_max` still
+~1.6 s. Do not treat 200/201 as the steady score until a suite run
+after the cluster has been busy still holds it. Do not start W13.
+
+
+
 **I16 landed (Sep 23 02:47, `43bdf6a41f7d`) — gate runs owed.** Every
 directory RPC (CREATE/MKDIR, UNLINK/RMDIR, LINK, RENAME_AT) now carries
 an optional 36-byte op-id suffix `(client uuid, session epoch, seq,

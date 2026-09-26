@@ -142,7 +142,12 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  `mmap_write_read` SKIP (`MAP_SHARED` ENODEV by spec). Sep 22 on
  `46d54e6`: 200/0/1 in 92 s (`results/posix/20260922-133653`; the prior
  ~37 s run is `results/posix/20260922-015106`). **9-host suite
- (W8's gate): 193–196/201, 0 NOTRUN, 79–94 s on `7e29943`**
+ (W8's gate): 200/201 all nine hosts, 42–44 s** on the txn-finisher
+ build (`results/posix/20260926-0345-fin`); that run had no apply-wait
+ timeout (`fin_q=0`). Back-to-back repeats on the same table slip to
+ 196–200, mostly `dir_deep_nesting*` / `names_crazy_dirs` timeouts,
+ while `apply_max` still hits ~1.6 s (W13, not ratified). Prior steady
+ score: 193–196/201, 79–94 s on `7e29943`
  (`results/posix/20260923-202626`). Prior: 185–197/201 in 46–66 s
  (`results/posix/20260922-134008`) and 191–195/201 in ~62 s
  (`results/posix/20260922-020950`). What still fails there: the six
@@ -211,6 +216,11 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   DECIDEs/RESOLVEs (PROTO = it was COMMITted); logs `txn-recover`.
   Diagnose with `tests/tools/kv_intents` on a COPY of `mdraft/kv`. A
   `(retry next pass)` line every 5 s = coordinator group without a leader.
+  Since the Sep 26 finisher, `host_txn_commit` also queues a txn whose
+  DECIDE/RESOLVE wait returned BUSY; the finisher thread reads the
+  decision and proposes RESOLVE (retries BUSY for 10 s). `raft-obs`
+  prints `fin_q` / `fin_done` / `fin_drop`. A stall longer than 400 ms
+  is still the compaction (`apply_max`, `persist_max` ~1 ms) — W13.
 - **Never run KV prefix scans in a loop on a server thread.** One
   `efs_kv_scan_prefix` = one block `pread` per LSM segment (17 now,
   ~0.3 ms) under the LSM mutex the apply path needs; the first recovery

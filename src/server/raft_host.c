@@ -154,6 +154,14 @@ struct host_outbox {
     uint64_t st_get_max_us;
 };
 
+#define HOST_FIN_MAX 1024
+struct host_fin_item {
+    struct efs_txid t;
+    struct efs_txn_parts parts;
+    uint32_t coord;
+    uint64_t born_ns;
+};
+
 /* Apply-result ring slots per group. Power of 2. Must exceed the most
  * applies that can land inside one host_propose_wait window (the wait
  * deadline is ~400 ms and each apply is a KV WAL fsync, ~200 us, so the
@@ -267,6 +275,17 @@ struct efs_raft_host {
     pthread_mutex_t rec_mu;
     uint64_t rec_mark[EFS_KV_SHARD_MASK + 1];
     uint64_t rec_found, rec_aborted, rec_resolved, rec_fail, rec_scans;
+    /* Txn finisher: a coordinator whose DECIDE COMMIT is in the log but
+     * whose apply wait ran out (or whose RESOLVEs did not all land) hands
+     * the txn here instead of leaving its intents for the 5 s recovery
+     * scan. Ring under fin_mu; fin_cv wakes the thread. */
+    pthread_t fin_tid;
+    int fin_running, fin_started;
+    pthread_mutex_t fin_mu;
+    pthread_cond_t fin_cv;
+    struct host_fin_item *fin;
+    uint32_t fin_head, fin_n;
+    uint64_t fin_queued, fin_done, fin_dropped, fin_full;
     pthread_mutex_t inbox_mu;
     struct host_inbox_item inbox[HOST_INBOX_MAX];
     int inbox_n;
@@ -3697,7 +3716,8 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
                 "raft-obs: wait_timeouts=%llu pump_hold_max=%lluus "
                 "lock_wait_max=%lluus drain_max=%lluus tick_max=%lluus "
                 "apply_max=%lluus persist_max=%lluus applies_in_worst=%llu "
-                "arc_miss=%llu arc_term_miss=%llu opid_replay=%llu\n",
+                "arc_miss=%llu arc_term_miss=%llu opid_replay=%llu "
+                "fin_q=%llu fin_done=%llu fin_drop=%llu fin_full=%llu\n",
                 (unsigned long long)h->obs_wait_timeouts,
                 (unsigned long long)h->obs_pump_hold_max_us,
                 (unsigned long long)h->obs_wait_max_us,
@@ -3709,7 +3729,11 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
                 (unsigned long long)h->obs_arc_miss,
                 (unsigned long long)h->obs_arc_term_miss,
                 (unsigned long long)__atomic_load_n(&h->obs_opid_replay,
-                                                    __ATOMIC_RELAXED));
+                                                    __ATOMIC_RELAXED),
+                (unsigned long long)h->fin_queued,
+                (unsigned long long)h->fin_done,
+                (unsigned long long)h->fin_dropped,
+                (unsigned long long)h->fin_full);
         h->obs_pump_hold_max_us = 0;
         h->obs_wait_max_us = 0;
         h->obs_drain_max_us = 0;
@@ -4345,6 +4369,126 @@ static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
     return host_bg_propose(h, group, cmd, clen, 0);
 }
 
+/* Txn finisher. A coordinator that proposed DECIDE COMMIT and then hit
+ * the 400 ms apply wait (a compaction stall: apply_max 1.6 s on two
+ * replicas at once, results/posix/20260926-0330-diag) returned BUSY to
+ * the client with its intents still pending — an EXCL intent on the
+ * child shard's ALLOC key makes every log-path create/mkdir on that
+ * shard BUSY until the 5 s recovery scan resolves it (txn-recover ...
+ * age=6.0s -> COMMIT (resolved)). One stall poisoned 79 txns for 6 s.
+ * The coordinator knows the txn; only its wait ran out. It hands the
+ * txn here and this thread reads the decision record once the stall
+ * clears, then proposes the RESOLVEs — the same commands recovery would
+ * send, so racing recovery is harmless (RESOLVE is idempotent). No
+ * decision within HOST_FIN_MAX_NS → drop; recovery ABORTs. */
+#define HOST_FIN_MAX_NS (10ull * 1000000000ull)
+#define HOST_FIN_POLL_US 5000
+
+static void host_fin_add(struct efs_raft_host *h, const struct efs_txid *t,
+                         const struct efs_txn_parts *p, uint32_t coord)
+{
+    struct host_fin_item *it;
+
+    if (!h->fin || !h->fin_running)
+        return;
+    pthread_mutex_lock(&h->fin_mu);
+    if (h->fin_n >= HOST_FIN_MAX) {
+        h->fin_full++;
+        pthread_mutex_unlock(&h->fin_mu);
+        return;
+    }
+    it = &h->fin[(h->fin_head + h->fin_n) % HOST_FIN_MAX];
+    it->t = *t;
+    it->parts = *p;
+    it->coord = coord;
+    it->born_ns = now_ns();
+    h->fin_n++;
+    h->fin_queued++;
+    pthread_cond_signal(&h->fin_cv);
+    pthread_mutex_unlock(&h->fin_mu);
+}
+
+static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it)
+{
+    uint8_t cmd[22];
+    uint8_t cg = efs_raft_shard_group(it->coord);
+    int dec = EFS_TXN_ABORT, rc, i, hint = -1;
+
+    for (;;) {
+        if (!h->fin_running)
+            return;
+        if (now_ns() - it->born_ns > HOST_FIN_MAX_NS) {
+            h->fin_dropped++;
+            return;
+        }
+        if (!host_hosts(h, cg)) {
+            h->fin_dropped++;
+            return;
+        }
+        rc = host_read_index(h, cg, &hint);
+        if (rc == EFS_OK)
+            rc = efs_txn_decision_get(h->kv, it->coord, &it->t, &dec);
+        if (rc == EFS_OK)
+            break;
+        if (rc != EFS_ERR_NOT_FOUND && rc != EFS_ERR_BUSY &&
+            rc != EFS_ERR_NOT_PRIMARY) {
+            h->fin_dropped++;
+            return;
+        }
+        usleep(HOST_FIN_POLL_US);
+    }
+    for (i = 0; i < it->parts.n; i++) {
+        uint32_t sh = it->parts.shard[i];
+
+        pack_resolve(cmd, &it->t, sh, dec);
+        for (;;) {
+            if (!h->fin_running)
+                return;
+            if (now_ns() - it->born_ns > HOST_FIN_MAX_NS) {
+                h->fin_dropped++;
+                return;
+            }
+            /* verdict=1: a rejected RESOLVE must not count as done.
+             * BUSY here is the same 400 ms apply wait that stranded the
+             * txn; ride it out until the deadline, then recovery. */
+            rc = host_bg_propose(h, efs_raft_shard_group(sh), cmd, 22, 1);
+            if (rc == EFS_OK)
+                break;
+            if (rc != EFS_ERR_BUSY && rc != EFS_ERR_NOT_PRIMARY) {
+                h->fin_dropped++;
+                fprintf(stderr, "raft-host: txn-finish coord=%u resolve "
+                        "sh=%u dec=%d rc=%d (recovery)\n",
+                        it->coord, sh, dec, rc);
+                return;
+            }
+            usleep(HOST_FIN_POLL_US);
+        }
+    }
+    h->fin_done++;
+}
+
+static void *host_fin_thread(void *arg)
+{
+    struct efs_raft_host *h = arg;
+    struct host_fin_item it;
+
+    while (h->fin_running) {
+        pthread_mutex_lock(&h->fin_mu);
+        while (h->fin_running && h->fin_n == 0)
+            pthread_cond_wait(&h->fin_cv, &h->fin_mu);
+        if (!h->fin_running) {
+            pthread_mutex_unlock(&h->fin_mu);
+            break;
+        }
+        it = h->fin[h->fin_head];
+        h->fin_head = (h->fin_head + 1) % HOST_FIN_MAX;
+        h->fin_n--;
+        pthread_mutex_unlock(&h->fin_mu);
+        host_fin_one(h, &it);
+    }
+    return NULL;
+}
+
 /* ---- stranded-transaction recovery (architecture §7.2, L5) ----------------
  *
  * A coordinator that dies, or gives up, between its PREPAREs and the last
@@ -4776,6 +4920,9 @@ int server_raft_host_start(struct efsd_server *s)
     pthread_mutex_init(&h->inbox_mu, NULL);
     pthread_mutex_init(&h->outbox_mu, NULL);
     pthread_mutex_init(&h->rec_mu, NULL);
+    pthread_mutex_init(&h->fin_mu, NULL);
+    pthread_cond_init(&h->fin_cv, NULL);
+    h->fin = calloc(HOST_FIN_MAX, sizeof(*h->fin));
     /* A fresh process knows nothing about pending txn records: walk every
      * shard once (throttled by the GC pass), then only marked ones. */
     host_rec_mark_all(h);
@@ -4870,6 +5017,17 @@ int server_raft_host_start(struct efsd_server *s)
     } else {
         h->gc_started = 1;
     }
+    /* Txn finisher (see host_fin_one). Without it recovery still resolves
+     * an abandoned commit, only 5 s later. */
+    h->fin_running = h->fin != NULL;
+    if (h->fin_running &&
+        efsd_pthread_create(&h->fin_tid, host_fin_thread, h) != 0) {
+        fprintf(stderr, "raft-host: txn finisher thread failed; "
+                "recovery covers abandoned commits\n");
+        h->fin_running = 0;
+    } else if (h->fin_running) {
+        h->fin_started = 1;
+    }
     fprintf(stderr,
             "raft-host: up raft_id=%d n=%d boot=%llu salt=%llu "
             "g0=%s g2=%s\n",
@@ -4913,6 +5071,14 @@ void server_raft_host_stop(void)
     h->gc_running = 0;
     if (h->gc_started)
         pthread_join(h->gc_tid, NULL);
+    pthread_mutex_lock(&h->fin_mu);
+    h->fin_running = 0;
+    pthread_cond_broadcast(&h->fin_cv);
+    pthread_mutex_unlock(&h->fin_mu);
+    if (h->fin_started)
+        pthread_join(h->fin_tid, NULL);
+    free(h->fin);
+    h->fin = NULL;
     h->running = 0;
     /* Wake the pump so shutdown does not wait out a 5 ms tick. */
     host_pump_kick(h);
@@ -6120,6 +6286,44 @@ static int host_wait_refs(struct efs_raft_host *h, struct host_idx_ref *refs,
     return rc;
 }
 
+/* DECIDE COMMIT at the coordinator, then RESOLVE COMMIT on every part
+ * (proposed together, waited together). A wait that runs out after the
+ * DECIDE is in the log goes to the finisher; the caller still sees the
+ * error (the client retries, and the op-id window answers the retry). */
+static int host_txn_commit(struct efs_raft_host *h, const struct efs_txid *t,
+                           const struct efs_txn_parts *parts, uint32_t coord,
+                           int *hint)
+{
+    uint8_t cmd[22];
+    struct host_idx_ref refs[EFS_TXN_MAX_PART];
+    int i, n = 0, rc;
+
+    pack_decide(cmd, t, coord, EFS_TXN_COMMIT);
+    rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, 22, hint);
+    if (rc != EFS_OK) {
+        /* BUSY = the wait ran out; the entry may well commit. Any other
+         * verdict means it was decided differently (recovery ABORT) or
+         * never proposed — nothing to finish. */
+        if (rc == EFS_ERR_BUSY)
+            host_fin_add(h, t, parts, coord);
+        return rc;
+    }
+    for (i = 0; i < parts->n && i < EFS_TXN_MAX_PART; i++) {
+        pack_resolve(cmd, t, parts->shard[i], EFS_TXN_COMMIT);
+        refs[n].group = efs_raft_shard_group(parts->shard[i]);
+        rc = host_propose(h, refs[n].group, cmd, 22, &refs[n].idx,
+                          &refs[n].term, hint);
+        if (rc != EFS_OK)
+            break;
+        n++;
+    }
+    if (rc == EFS_OK)
+        rc = host_wait_refs(h, refs, n, hint);
+    if (rc != EFS_OK)
+        host_fin_add(h, t, parts, coord);
+    return rc;
+}
+
 static int host_prep(struct efs_raft_host *h, uint32_t shard, int kind,
                      const struct efs_txid *t, const struct efs_txn_parts *p,
                      const uint8_t *key, uint32_t klen, uint64_t expected,
@@ -6371,13 +6575,7 @@ static int host_dir_migrate_txn(struct efs_raft_host *h, efs_ino_t dir,
         (void)host_drop_parts(h, &t, &parts, hint);
     else {
         coord = efs_txn_coordinator(&t, &parts);
-        pack_decide(cmd, &t, coord, EFS_TXN_COMMIT);
-        rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, 22, hint);
-        for (i = 0; i < parts.n && rc == EFS_OK; i++) {
-            pack_resolve(cmd, &t, parts.shard[i], EFS_TXN_COMMIT);
-            rc = host_propose_wait(h, efs_raft_shard_group(parts.shard[i]), cmd,
-                                   22, hint);
-        }
+        rc = host_txn_commit(h, &t, &parts, coord, hint);
     }
     return rc;
 }
@@ -6692,14 +6890,7 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
             (void)host_drop_parts(h, &t, &parts, hint);
         else {
             coord = efs_txn_coordinator(&t, &parts);
-            pack_decide(cmd, &t, coord, EFS_TXN_COMMIT);
-            rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, 22,
-                                   hint);
-            for (i = 0; i < parts.n && rc == EFS_OK; i++) {
-                pack_resolve(cmd, &t, parts.shard[i], EFS_TXN_COMMIT);
-                rc = host_propose_wait(h, efs_raft_shard_group(parts.shard[i]),
-                                       cmd, 22, hint);
-            }
+            rc = host_txn_commit(h, &t, &parts, coord, hint);
         }
     }
     return rc;
@@ -6978,21 +7169,7 @@ mkdir_prepped:
         else {
             stage = 10;
             coord = efs_txn_coordinator(&t, &parts);
-            pack_decide(cmd, &t, coord, EFS_TXN_COMMIT);
-            rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, 22,
-                                   &hint);
-            np = 0;
-            for (i = 0; i < parts.n && rc == EFS_OK; i++) {
-                pack_resolve(cmd, &t, parts.shard[i], EFS_TXN_COMMIT);
-                prefs[np].group = efs_raft_shard_group(parts.shard[i]);
-                rc = host_propose(h, prefs[np].group, cmd, 22, &prefs[np].idx,
-                                  &prefs[np].term,
-                                  &hint);
-                if (rc == EFS_OK)
-                    np++;
-            }
-            if (rc == EFS_OK)
-                rc = host_wait_refs(h, prefs, np, &hint);
+            rc = host_txn_commit(h, &t, &parts, coord, &hint);
         }
     }
 mkdir_done:
@@ -7348,25 +7525,7 @@ rmdir_prepped:
             (void)host_drop_parts(h, &t, &parts, &hint);
         else {
             coord = efs_txn_coordinator(&t, &parts);
-            pack_decide(cmd, &t, coord, EFS_TXN_COMMIT);
-            rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, 22,
-                                   &hint);
-            npref = 0;
-            for (i = 0; i < parts.n && rc == EFS_OK; i++) {
-                if (npref >= 16) {
-                    rc = EFS_ERR_BUSY;
-                    break;
-                }
-                pack_resolve(cmd, &t, parts.shard[i], EFS_TXN_COMMIT);
-                prefs[npref].group = efs_raft_shard_group(parts.shard[i]);
-                rc = host_propose(h, prefs[npref].group, cmd, 22,
-                                  &prefs[npref].idx, &prefs[npref].term,
-                                  &hint);
-                if (rc == EFS_OK)
-                    npref++;
-            }
-            if (rc == EFS_OK)
-                rc = host_wait_refs(h, prefs, npref, &hint);
+            rc = host_txn_commit(h, &t, &parts, coord, &hint);
         }
     }
 rmdir_done:
@@ -7560,14 +7719,7 @@ prepped:
             (void)host_drop_parts(h, &t, &parts, &hint);
         else {
             coord = efs_txn_coordinator(&t, &parts);
-            pack_decide(cmd, &t, coord, EFS_TXN_COMMIT);
-            rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, 22,
-                                   &hint);
-            for (i = 0; i < parts.n && rc == EFS_OK; i++) {
-                pack_resolve(cmd, &t, parts.shard[i], EFS_TXN_COMMIT);
-                rc = host_propose_wait(h, efs_raft_shard_group(parts.shard[i]),
-                                       cmd, 22, &hint);
-            }
+            rc = host_txn_commit(h, &t, &parts, coord, &hint);
         }
     }
     if (rc == EFS_OK && !last) {
@@ -8404,14 +8556,7 @@ link_prepped:
             (void)host_drop_parts(h, &t, &parts, &hint);
         else {
             coord = efs_txn_coordinator(&t, &parts);
-            pack_decide(cmd, &t, coord, EFS_TXN_COMMIT);
-            rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, 22,
-                                   &hint);
-            for (i = 0; i < parts.n && rc == EFS_OK; i++) {
-                pack_resolve(cmd, &t, parts.shard[i], EFS_TXN_COMMIT);
-                rc = host_propose_wait(h, efs_raft_shard_group(parts.shard[i]),
-                                       cmd, 22, &hint);
-            }
+            rc = host_txn_commit(h, &t, &parts, coord, &hint);
         }
     }
     if (rc == EFS_OK)
@@ -9022,14 +9167,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
             (void)host_drop_parts(h, &t, &parts, &hint);
         else {
             coord = efs_txn_coordinator(&t, &parts);
-            pack_decide(cmd, &t, coord, EFS_TXN_COMMIT);
-            rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, 22,
-                                   &hint);
-            for (i = 0; i < parts.n && rc == EFS_OK; i++) {
-                pack_resolve(cmd, &t, parts.shard[i], EFS_TXN_COMMIT);
-                rc = host_propose_wait(h, efs_raft_shard_group(parts.shard[i]),
-                                       cmd, 22, &hint);
-            }
+            rc = host_txn_commit(h, &t, &parts, coord, &hint);
         }
     }
     if (rc == EFS_OK)

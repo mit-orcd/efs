@@ -25,6 +25,36 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 26 2026 — txn finisher after a 400 ms apply wait
+
+A full-L1 compaction under the KV lock stalls apply for >400 ms
+(`results/posix/20260926-0330-diag`: fcstor004 `apply_max=1665075us`,
+`persist_max=1103us`, `wait_timeouts` 0→79 in one obs window). Every
+in-flight `host_propose_wait` returns BUSY. A DECIDE COMMIT already in
+the log then has no RESOLVE, the EXCL intent (often the ALLOC key)
+stays until `host_txn_recover_pass` (age 5 s; log showed
+`txn-recover ... age=6.0s -> COMMIT`), and other clients on that shard
+burn the 16-attempt budget into EIO.
+
+`host_txn_commit` queues that txn on a finisher thread. The thread
+reads `efs_txn_decision_get` (NOT_FOUND until DECIDE has applied) and
+proposes RESOLVE with that decision, retrying BUSY/NOT_PRIMARY until
+10 s. RESOLVE stays idempotent with recovery. This does not shorten
+the stall (W13).
+
+First 9-host suite on the build: 200/201 × 9, 42–44 s
+(`results/posix/20260926-0345-fin`), `fin_q=0`. Repeats
+`-fin2`/`-fin3`/`-fin4` (not cited): 196–200, `fin_done` up to 11,
+`fin_drop` 1, remaining fails are the 15 s many-op tests once the
+table is warm and a stall lands inside the window.
+
+Rejected the same day, do not restore: forwarded-submit early return,
+batched remote PREPARE/RESOLVE, and an AppendEntries suffix while one
+batch is in flight. Each left the 9-host suite worse than the
+committed empty-commit-probe baseline (`20260926-0125-clean`,
+199–200/201). `send_ae` keeps one batch in flight on purpose (Sep 19
+fsync storm).
+
 ## Sep 23 2026 evening — gates on `7e29943`, and the idle 50 ms is on close
 
 Owed gates, no new code on the cluster. 9-host posix 193–196/201, 0
