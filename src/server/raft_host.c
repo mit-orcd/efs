@@ -2125,6 +2125,27 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
                              uint64_t idx, int *leader_hint);
 static void host_pump_kick(struct efs_raft_host *h);
 
+/* Threads inside host_propose, including those blocked on h->mu.
+ * The pump does not send while this is non-zero, so the send sees
+ * every append that was already queued instead of the one that
+ * happened to hold the lock. */
+static unsigned propose_q;
+
+static void propose_q_add(void)
+{
+    __atomic_add_fetch(&propose_q, 1u, __ATOMIC_RELEASE);
+}
+
+static void propose_q_sub(void)
+{
+    __atomic_sub_fetch(&propose_q, 1u, __ATOMIC_ACQ_REL);
+}
+
+static int propose_q_busy(void)
+{
+    return __atomic_load_n(&propose_q, __ATOMIC_ACQUIRE) != 0;
+}
+
 static void host_deadline_us(struct timespec *ts, long us)
 {
     clock_gettime(CLOCK_REALTIME, ts);
@@ -2291,6 +2312,7 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
     if (h->disk && efs_raft_disk_sync_depth(h->disk) == 0 &&
         efs_raft_disk_sync_hold(h->disk) == EFS_OK)
         quiet = 1;
+    propose_q_add();
     pthread_mutex_lock(&h->mu);
     r = group_raft(h, group);
     if (r) {
@@ -2310,6 +2332,7 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
             r = group_raft(h, group);
             if (!r || efs_raft_role(r) != EFS_RAFT_LEADER) {
                 pthread_mutex_unlock(&h->mu);
+                propose_q_sub();
                 rc = EFS_ERR_NOT_PRIMARY;
                 return rc;
             }
@@ -2327,9 +2350,9 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
                 rc = efs_raft_submit(r, myidx);
             host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
-            /* The pump sends every entry appended while this lock was
-             * held by the waiters behind us. Kick before the fsync so
-             * that round trip overlaps the sync. */
+            /* Drop the count before the kick so the pump sends once
+             * the other queued proposers have appended too. */
+            propose_q_sub();
             host_pump_kick(h);
             if (quiet && rc == EFS_OK)
                 rc = efs_raft_disk_sync_release_wait(h->disk);
@@ -2363,6 +2386,7 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
                 rc = efs_raft_durable(r, *idx);
             host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
+            propose_q_sub();
             if (quiet)
                 (void)efs_raft_disk_sync_release(h->disk);
             host_pump_kick(h);
@@ -2370,6 +2394,7 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
         }
     }
     pthread_mutex_unlock(&h->mu);
+    propose_q_sub();
     if (quiet)
         (void)efs_raft_disk_sync_release(h->disk);
     /* Not the leader: forward to it. host_remote_cmd is a blocking peer
@@ -3847,10 +3872,12 @@ static void *host_pump(void *arg)
          * waited out that round trip. A peer with a batch in flight is
          * left alone (no pipeline — a pipelined suffix applied twelve
          * thousand entries under this lock). */
-        for (i = 0; i < HOST_NGROUPS; i++) {
-            if (h->g[i].hosted && h->g[i].r &&
-                efs_raft_role(h->g[i].r) == EFS_RAFT_LEADER)
-                (void)efs_raft_flush(h->g[i].r);
+        if (!propose_q_busy()) {
+            for (i = 0; i < HOST_NGROUPS; i++) {
+                if (h->g[i].hosted && h->g[i].r &&
+                    efs_raft_role(h->g[i].r) == EFS_RAFT_LEADER)
+                    (void)efs_raft_flush(h->g[i].r);
+            }
         }
         if (obs)
             c0 = now_us_();
