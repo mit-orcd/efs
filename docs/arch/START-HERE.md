@@ -138,6 +138,47 @@ That is W13's row: nothing here changes the recommendation, it makes
 the decision more urgent. Do not tune `l0_max`/memtable size as a
 substitute without ratifying; report it.
 
+**Follow-on, same afternoon: memtable probes and the wakeup herd.**
+After `610f4a8` the pump thread was still 61–67 % of efsd samples,
+with `memcmp` 23 % — 12 % of it the memtable binary search inlined
+into `lsm_batch` (one `lsm_put` per PREPARE part, ~15 probes, each
+two dependent cache misses: `e[mid]` then its key) — and ~20 % of
+efsd in `native_queued_spin_lock_slowpath` / `futex_wake` /
+`futex_wait_setup`: the pump's `pthread_cond_broadcast(applied_cv)`
+after every cycle woke every sleeping handler (~150 under the
+hammer) to re-check a predicate that was false for all but a few, all
+on one futex word. Three changes, no protocol change: (1) the
+memtable entry's key is allocated inline with `struct kv_ent`; (2) a
+parallel `uint64_t pfx[]` array (first 8 key bytes, big-endian) is
+what the binary search probes — L2-resident, an entry is touched only
+on a prefix tie; (3) waiters register the index they need (or "any
+change of this group's view" for a read-index round) in one of 512
+slots with its own condvar (`host_waiter_sleep`), and the pump
+signals only the slots the fresh view satisfies
+(`host_waiters_wake`); the view carries a `stamp` bumped by every
+publish that changed a field; `applied_cv` remains as the overflow
+path. `memcmp` 23 → 11–13 %, `kv_mtab_pos` itself 2.2 %. Hammer
+(build `610f4a8…-dirty`): `20260926-141940` idle **5.23 ms**, 144-way
+**30366 / p50 52 ms**, p99 224, 0 mkdir errors (67 `rmdir-own
+ENOTEMPTY`); its twin `20260926-142052` hit a 14.7 s max with 30
+`mkdir EIO` — the run-to-run spread is how many 2 s compaction stalls
+and the elections they trigger land in the 15 s window (g0 term
+6746 → 6751 during the first run), not the code. 9-host suite:
+`results/posix/20260926-1430-wake2` **200/201 on eight hosts, 199 on
+fcstor009** (`flock_shared_then_exclusive`, an intermittent seen on
+Sep 22/25/26 builds) in **15.5–23 s per host** — the prior gate runs
+were 39–44 s — with a 2.0 s `apply_max` and one election per group
+at the start. Its predecessor `20260926-1425-wake` ran into a
+four-term g0 election burst (`apply_max=851 ms` on 003 → LEADER→
+FOLLOWER → CANDIDATE ×3, `arc_term_miss=37`) and scored 193–200 in
+16–75 s with the EIO cluster on one host. Same W13 class; do not
+bisect it. Remaining pump profile: `memmove` 7 % (pointer + prefix
+array insert), txn-record scans ~6 %, `kv_compact_locked` (W13), and
+the residual futex share is `l->mu` / `h->mu` handoffs, not the herd.
+One PREPARE command = one part = one Raft entry = one `lsm_put`;
+folding a txn's parts into one PREPARE is a protocol change (per-part
+verdicts) and goes to the user, not into the tree.
+
 **9-host suite on that same tree** (`results/posix/20260926-054047`,
 timeline `results/measure/20260926-014030-w8-stall-timeline`):
 seven hosts **200/201**, fcstor007 199, fcstor013 198, 39–41 s,

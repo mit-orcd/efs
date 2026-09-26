@@ -1,0 +1,130 @@
+raft-host: apply publish rc=-13 index=10469630 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10471734 ino=1051709 ci=0
+raft-host: apply create rc=-13 index=10474367 parent=973683 name=dirlink
+raft-host: apply create rc=-13 index=8995850 parent=899602 name=hardlink_shared_data
+raft-host: apply create rc=-13 index=8996942 parent=984714 name=d42
+raft-host: apply publish rc=-13 index=10475970 ino=1051709 ci=0
+raft-host: apply create rc=-13 index=8997659 parent=1158716 name=dash-prefix
+raft-host: apply create rc=-13 index=10478083 parent=1239023 name=d
+raft-host: apply create rc=-13 index=10478566 parent=975657 name=sub
+raft-host: apply create rc=-13 index=10478846 parent=1180197 name=--help
+raft-host: applied session index=10479086 kind=9 shard=0 ino=1371701
+raft-host: applied session index=10479254 kind=9 shard=0 ino=828209
+raft-host: applied session index=10479255 kind=9 shard=0 ino=932933
+raft-host: applied session index=10479256 kind=9 shard=0 ino=888227
+raft-host: applied session index=10479483 kind=9 shard=0 ino=1520057
+raft-host: applied session index=9000048 kind=9 shard=0 ino=1533940
+raft-host: applied session index=9000123 kind=9 shard=0 ino=1408016
+raft-host: applied session index=9000124 kind=9 shard=0 ino=1150730
+raft-host: applied session index=10479914 kind=9 shard=0 ino=953919
+raft-host: applied session index=10479916 kind=9 shard=0 ino=847331
+raft-host: applied session index=10479921 kind=9 shard=0 ino=879311
+raft-host: applied session index=9000160 kind=9 shard=0 ino=927616
+raft-host: applied session index=9000161 kind=9 shard=0 ino=1864090
+raft-host: applied session index=10479930 kind=9 shard=0 ino=1011205
+raft-host: applied session index=9000289 kind=9 shard=0 ino=2218362
+raft-host: applied session index=9000328 kind=9 shard=0 ino=851622
+raft-host: applied session index=9000333 kind=9 shard=0 ino=964086
+raft-host: applied session index=9000346 kind=9 shard=0 ino=968924
+raft-host: applied session index=9000478 kind=9 shard=0 ino=813612
+raft-host: apply publish rc=-13 index=10480458 ino=1051709 ci=0
+raft-host: applied session index=9000622 kind=9 shard=0 ino=1224044
+raft-host: applied session index=9000655 kind=9 shard=0 ino=980060
+raft-host: applied session index=9000733 kind=9 shard=0 ino=1141330
+raft-host: applied session index=9000735 kind=9 shard=0 ino=939890
+raft-host: applied session index=10480591 kind=9 shard=0 ino=2328815
+raft-host: applied session index=9000785 kind=9 shard=0 ino=2394232
+raft-host: applied session index=9000797 kind=9 shard=0 ino=801314
+raft-host: applied session index=9000862 kind=9 shard=0 ino=1462468
+raft-host: applied session index=9000863 kind=9 shard=0 ino=1056680
+raft-host: apply publish rc=-14 index=10480788 ino=939777 ci=0
+raft-host: apply publish rc=-14 index=9000970 ino=970240 ci=0
+raft-host: apply publish rc=-14 index=9000999 ino=848258 ci=0
+raft-host: apply publish rc=-14 index=10481072 ino=991985 ci=0
+raft-host: applied session index=9001163 kind=9 shard=0 ino=967930
+raft-host: applied session index=9001261 kind=9 shard=0 ino=1254858
+raft-host: apply publish rc=-14 index=10481369 ino=914335 ci=0
+raft-host: applied session index=10481803 kind=9 shard=0 ino=908403
+raft-host: apply create rc=-13 index=9001715 parent=910530 name=comma,colon:char
+raft-host: apply publish rc=-14 index=10482001 ino=1156519 ci=0
+raft-host: applied session index=10482314 kind=9 shard=0 ino=961485
+raft-host: applied session index=9002174 kind=9 shard=0 ino=875612
+raft-host: applied session index=9002224 kind=9 shard=0 ino=783850
+raft-host: apply create rc=-13 index=9002697 parent=901794 name=brace{curly}
+raft-host: apply create rc=-13 index=9002838 parent=1091104 name=t5-4
+raft-host: applied session index=9002839 kind=9 shard=0 ino=2254252
+raft-host: applied session index=9003205 kind=9 shard=0 ino=991906
+raft-host: apply publish rc=-13 index=10484821 ino=1051709 ci=0
+raft-host: applied session index=9005351 kind=9 shard=0 ino=857228
+raft-host: applied session index=9005528 kind=9 shard=0 ino=2788914
+raft-host: applied session index=9005534 kind=9 shard=0 ino=1018084
+raft-host: applied session index=9005563 kind=9 shard=0 ino=971674
+raft-host: applied session index=9005900 kind=9 shard=0 ino=2173674
+raft-host: applied session index=9006070 kind=9 shard=0 ino=2118834
+raft-host: applied session index=9006208 kind=9 shard=0 ino=1376478
+raft-host: applied session index=9006243 kind=9 shard=0 ino=1153912
+raft-host: applied session index=9006314 kind=9 shard=0 ino=1376478
+raft-host: applied session index=9006315 kind=9 shard=0 ino=929508
+raft-host: applied session index=9006506 kind=9 shard=0 ino=1189100
+raft-host: apply publish rc=-14 index=10488024 ino=873223 ci=0
+raft-host: applied session index=9006696 kind=9 shard=0 ino=1175648
+raft-host: applied session index=9006775 kind=9 shard=0 ino=1189100
+raft-obs: tx->0 enq=101537 drop=0 sent=101537 fail=0 hi=133 rtt_avg=36us get_avg=0us get_max=0ms
+raft-obs: tx->1 enq=287405 drop=0 sent=287400 fail=0 hi=45 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=315416 drop=0 sent=315415 fail=0 hi=67 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=28 pump_hold_max=14609us lock_wait_max=5349us drain_max=14608us tick_max=6us apply_max=14577us persist_max=1784us applies_in_worst=61 arc_miss=0 arc_term_miss=0 opid_replay=5 fin_q=0 fin_done=0 fin_drop=0 fin_full=0
+raft-host: applied session index=9007146 kind=9 shard=0 ino=937850
+raft-host: apply publish rc=-13 index=10488793 ino=1051709 ci=0
+raft-host: applied session index=10488832 kind=9 shard=0 ino=1013883
+raft-host: apply publish rc=-14 index=10489099 ino=1094841 ci=0
+raft-host: applied session index=10489145 kind=9 shard=0 ino=1013883
+raft-host: applied session index=9007627 kind=9 shard=0 ino=937850
+raft-host: applied session index=10489328 kind=9 shard=0 ino=1151221
+raft-host: applied session index=10489363 kind=9 shard=0 ino=1153405
+raft-host: applied session index=10489384 kind=9 shard=0 ino=827627
+raft-host: applied session index=9007810 kind=9 shard=0 ino=876482
+raft-host: applied session index=10489609 kind=9 shard=0 ino=827627
+raft-host: applied session index=10489677 kind=9 shard=0 ino=1153405
+raft-host: applied session index=10489729 kind=9 shard=0 ino=1151221
+raft-host: applied session index=9008683 kind=9 shard=0 ino=1928836
+raft-host: apply publish rc=-13 index=10491855 ino=1051709 ci=0
+raft-host: applied session index=10493612 kind=9 shard=0 ino=925725
+raft-host: applied session index=10493749 kind=9 shard=0 ino=925725
+raft-host: applied session index=10494158 kind=9 shard=0 ino=873043
+raft-host: applied session index=10494208 kind=9 shard=0 ino=873043
+raft-host: apply publish rc=-13 index=10494563 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10496649 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10496796 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10497080 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10497536 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10498581 ino=1051709 ci=0
+raft-obs: tx->0 enq=101537 drop=0 sent=101537 fail=0 hi=133 rtt_avg=36us get_avg=0us get_max=0ms
+raft-obs: tx->1 enq=301418 drop=0 sent=301417 fail=0 hi=45 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=321522 drop=0 sent=321522 fail=0 hi=67 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=28 pump_hold_max=2014383us lock_wait_max=4976us drain_max=2014383us tick_max=11us apply_max=2014132us persist_max=1735us applies_in_worst=56 arc_miss=0 arc_term_miss=0 opid_replay=5 fin_q=0 fin_done=0 fin_drop=0 fin_full=0
+raft-obs: g0 term 6758->6759 role FOLLOWER->FOLLOWER leader=-1 commit=10499379 applied=10499379 t=1790432877171ms
+raft-obs: g2 term 1132->1134 role LEADER->FOLLOWER leader=-1 commit=9015628 applied=9015628 t=1790432877171ms
+raft-obs: g2 term 1134->1135 role FOLLOWER->FOLLOWER leader=-1 commit=9015628 applied=9015628 t=1790432877435ms
+raft-host: apply publish rc=-13 index=10499385 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10500143 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10501443 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10502896 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10504276 ino=1051709 ci=0
+raft-obs: tx->0 enq=114578 drop=0 sent=114576 fail=0 hi=133 rtt_avg=36us get_avg=0us get_max=0ms
+raft-obs: tx->1 enq=301439 drop=0 sent=301439 fail=0 hi=45 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=333748 drop=0 sent=333747 fail=0 hi=122 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=36 pump_hold_max=163439us lock_wait_max=1311us drain_max=163439us tick_max=6us apply_max=3486us persist_max=1407us applies_in_worst=171 arc_miss=0 arc_term_miss=0 opid_replay=5 fin_q=0 fin_done=0 fin_drop=0 fin_full=0
+raft-host: apply create rc=-13 index=9025087 parent=869912 name=f3
+raft-host: applied session index=10509217 kind=9 shard=0 ino=2151507
+raft-host: applied session index=10509218 kind=9 shard=0 ino=1223439
+raft-host: applied session index=10509259 kind=9 shard=0 ino=3028629
+raft-host: applied session index=10509260 kind=9 shard=0 ino=895359
+raft-host: applied session index=10509479 kind=9 shard=0 ino=955167
+raft-host: apply publish rc=-14 index=9026267 ino=833490 ci=0
+raft-host: applied session index=10509955 kind=9 shard=0 ino=830269
+raft-host: applied session index=9028143 kind=9 shard=0 ino=1158922
+raft-host: applied session index=9028202 kind=9 shard=0 ino=1158922
+raft-obs: tx->0 enq=125728 drop=0 sent=125728 fail=0 hi=133 rtt_avg=36us get_avg=0us get_max=0ms
+raft-obs: tx->1 enq=301439 drop=0 sent=301439 fail=0 hi=45 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=343901 drop=0 sent=343900 fail=0 hi=122 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=36 pump_hold_max=13899us lock_wait_max=4us drain_max=13899us tick_max=4us apply_max=13652us persist_max=882us applies_in_worst=14 arc_miss=0 arc_term_miss=0 opid_replay=5 fin_q=0 fin_done=0 fin_drop=0 fin_full=0

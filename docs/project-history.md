@@ -90,6 +90,103 @@ every proposer a slot, so the fsync waited for threads that had not
 appended yet, moved idle mkdir from 7.1 ms to 11.9 ms and did not
 raise the 144-way rate. That version was not kept.
 
+## Sep 26 2026 afternoon — memtable probes and the applied_cv herd
+
+With the scans pruned (`610f4a8`) the pump thread was still 61–67 % of
+efsd samples on the dual-host follower. `perf report --sort pid,sym`
+put `memcmp` at 21 % of efsd on that one thread, and `-g caller` split
+it: 12 % under `lsm_batch ← lsm_put ← prepare_reduce_rec ←
+efs_txn_apply_prepare` — the memtable binary search (`kv_mtab_pos`,
+inlined), ~15 probes per put, each probe a pointer load `e[mid]` and
+then the key behind it, two dependent misses; the rest under the txn
+scans and `kv_seg_probe`. A second block, ~20 % of efsd, was kernel:
+`native_queued_spin_lock_slowpath` under `futex_wake` and
+`futex_wait_setup`, `_raw_spin_unlock_irqrestore`, `futex_hash`. That
+is the signature of many threads on one futex word: the pump ended
+every cycle with `pthread_cond_broadcast(&h->applied_cv)`, so under
+the hammer ~150 sleeping handlers woke on every cycle (hundreds per
+second), took `cv_mu`, re-read the view, found `applied < idx`, and
+slept again.
+
+Three changes, all inside `src/kv/kv_lsm.c` and `raft_host.c`, no
+wire or on-disk change:
+
+1. The memtable entry's key is allocated inline
+   (`calloc(sizeof(*e) + klen)`, `e->key = (uint8_t *)(e + 1)`);
+   `ent_free` no longer frees the key. Alone it moved `memcmp` from
+   13.4 to 11.9 % — the miss just moved to the single load.
+2. `struct kv_mtab` gained `uint64_t *pfx`, the first 8 key bytes of
+   `e[i]` as a big-endian integer, zero-padded; `kv_mtab_pos` compares
+   the integer and calls `kv_key_cmp` only on a tie (a key shorter than
+   8 bytes ties with a longer key whose tail is zero, and the tie falls
+   through to the full compare, so ordering is `kv_key_cmp`'s). The
+   array is ~220 KiB for a full 4 MiB memtable and stays in L2; insert
+   memmoves both arrays; `m->bytes` counts the extra 8 bytes.
+   `memcmp` 23 → 11.6 % of efsd, `kv_mtab_pos` 2.2 %, `memmove` 4.7 →
+   6.7 %.
+3. Targeted wakeups. `struct host_waiter` × 512 in the host, each with
+   its own condvar and `group / any / idx / seen`. `host_waiter_sleep`
+   (cv_mu held, called right after the caller re-read the view under
+   cv_mu and found its predicate false) takes a free slot and
+   timed-waits on it; the pump, after `host_publish_view`, runs
+   `host_waiters_wake`: under cv_mu, for every active slot, signal if
+   the group's replica is gone, or (`any`) the group's `v_stamp`
+   differs from `seen`, or (`!any`) `v_applied >= idx`. `v_stamp` is
+   bumped by every publish that changed a field, stored last, and
+   `host_view_get` reads it first, so a waiter holding stamp S has
+   fields from publish S or later. `applied_cv` stays as the overflow
+   path (`cv_overflow` counts sleepers on it; the pump broadcasts only
+   when it is non-zero). `host_read_index` sleeps with `any=1`,
+   `host_wait_applied` with `any=0`.
+
+Each step went through `test_kv`, `test_kv_lsm`, `test_meta_apply`,
+`test_txn`, `test_raft_store`, `test_raft` on fcstor007, a
+`roll_efsd.sh --all` + client redeploy, and two `mkdir_hammer.sh` runs
+(the second with `perf record` on fcstor004). Build string
+`610f4a847738-dirty` throughout.
+
+| run | change | idle p50 | 144-way mkdir | p50 | max |
+| `20260926-135832` / `-135944` | inline key | 5.43 / 5.15 | 16520 / 23983 | 51 / 49 | 11.4 s / 11.2 s |
+| `20260926-141042` / `-141156` | + prefix array | 5.53 / 5.35 | 25942 / 26834 | 65 / 60 | 9.7 s / 12.1 s |
+| `20260926-141940` / `-142052` | + targeted wakeups | **5.23** / 5.08 | **30366** / 14439 | **52** / 60 | 3.3 s / 14.7 s |
+
+The mkdir count is dominated by how many 2 s `kv_compact_locked`
+stalls, and the elections they trigger, land in the 15 s window: every
+run had `apply_max` ≈ 2.0 s, and group 0 went from term 6746 to 6751
+during the best run alone. The 10–15 s maxima are the client's 16
+BUSY/STALE retries (10.3 s) exhausted across a stall + election. Read
+p50, idle p50 and the profile, not the count.
+
+9-host posix on the final build: `results/posix/20260926-1425-wake`
+started into a four-term group-0 election burst (fcstor003
+`apply_max=851 ms` → LEADER→FOLLOWER at 6754, CANDIDATE→CANDIDATE
+twice, LEADER at 6757, FOLLOWER again at 6758, `arc_term_miss=37`) and
+scored 193–200/201 in 16–75 s, with an EIO cluster on fcstor014's
+file tests (`write_hole_pread_zeros`, `two_fds_independent_offset`,
+`trailing_slash_on_file`, `flock_unlock_on_close`,
+`access_f_ok_after_unlink`, `mkdirat_unlinkat`) inside that window.
+Sixty seconds later `results/posix/20260926-1430-wake2`: **200/201 on
+eight hosts, 199 on fcstor009** (`flock_shared_then_exclusive` —
+"LOCK_EX taken while another fd holds LOCK_SH", seen once each on Sep
+22, 25 and 26 builds), **15.5–23 s per host** against 39–44 s on every
+earlier gate run, through a 2.0 s `apply_max` on 004/005 and one
+election per group at the start. (The first run's output landed under
+`results/posix/home/...` because `POSIX_OUT` is a directory name, not a
+path; moved.)
+
+What is left on the pump: `memmove` 7 % (two-array insert into a
+sorted memtable), `kv_msrc_advance` / `kv_seg_iter_next` /
+`search_block` ~5 % (the txn-record scans — `guards_conflict` and
+`reduces_pending` are already per-key prefixes; `txn_scan_kinds` walks
+a shard's three kinds because the txid is the key's suffix, and
+narrowing that is a key-layout change), `kv_compact_locked` (W13), and
+a residual futex share from `l->mu` / `h->mu` handoffs. One PREPARE
+command carries one part and costs one Raft entry and one `lsm_put`;
+a mkdir is ~8 of them plus DECIDE and RESOLVEs. Folding a
+transaction's parts into one PREPARE would cut the entry count but
+changes the verdict protocol (one verdict per part today) — that is
+a decision for the user, listed in START-HERE §1b.
+
 ## Sep 26 2026 midday — the mkdir ceiling was the apply path, not fsync
 
 Follow-up to the hammer work above. A thread-local fsync defer

@@ -108,13 +108,20 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  fsync** (Sep 26 midday): `merge_scan` now skips segments whose key
  range misses the prefix, the pump's WAL fsync + applied-file write
  run off `h->mu` (file write throttled 10 ms), LSM blocks are 8 KiB
- (were 64; linear `memcmp` in blocks was half of efsd CPU). 144-way
- mkdir p50 **60 ms** / ~1 870 mkdir/s, idle p50 **4.5–5.6 ms**
- (`results/measure/20260926-134738-mkdir-hammer`, `-134640`), from
- 147 ms / 887 (`20260926-053753`). Each run still had a 1.7–2.0 s
- `kv_compact_locked` stall; at this rate the L1 rewrite comes every
- ~7 s of hammer and costs an election — W13, not ratified; do not
- tune memtable/`l0_max` around it. A thread-local fsync defer for a
+ (were 64; linear `memcmp` in blocks was half of efsd CPU). Then
+ (afternoon): memtable key inline in `kv_ent` + an L2-resident 8-byte
+ prefix array for the binary search, and **targeted apply wakeups**
+ (per-waiter condvar slots; the pump's `cond_broadcast` woke ~150
+ handlers per cycle = ~20 % of efsd in futex/spinlock). 144-way mkdir
+ p50 **52 ms**, **30366** in 15 s, idle p50 **5.2 ms**
+ (`results/measure/20260926-141940-mkdir-hammer`), from 147 ms / 887
+ (`20260926-053753`). Run-to-run mkdir counts swing 14k–30k with how
+ many 2 s `kv_compact_locked` stalls (and the elections they trigger)
+ land in the window; compare p50/idle and the profile, not the count.
+ The L1 rewrite comes every ~7 s of hammer and costs an election —
+ W13, not ratified; do not tune memtable/`l0_max` around it. Folding
+ a txn's PREPARE parts into one command is a protocol change (per-part
+ verdicts) — ask. A thread-local fsync defer for a
  txn's prep burst gave nothing (reverted); giving every proposer a
  sync-hold slot slowed idle mkdir (7.1 → 11.9 ms). Do not pipeline
  past the one in-flight batch. A multi-entry AppendEntries fsyncs
@@ -157,8 +164,15 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  `mmap_write_read` SKIP (`MAP_SHARED` ENODEV by spec). Sep 22 on
  `46d54e6`: 200/0/1 in 92 s (`results/posix/20260922-133653`; the prior
  ~37 s run is `results/posix/20260922-015106`). **9-host suite
- (W8's gate): 200/201 all nine hosts, 42–44 s** on the txn-finisher
- build (`results/posix/20260926-0345-fin`); that run had no apply-wait
+ (W8's gate): 200/201 on eight hosts + 199 on one
+ (`flock_shared_then_exclusive`, intermittent since Sep 22) in
+ 15.5–23 s per host** on the targeted-wakeup build
+ (`results/posix/20260926-1430-wake2`), through a 2.0 s `apply_max`
+ and one election per group; the run before it
+ (`20260926-1425-wake`) met a four-term g0 election burst
+ (`arc_term_miss=37`) and scored 193–200 in 16–75 s — W13 class. Prior
+ gate: 200/201 all nine, 42–44 s on the txn-finisher build
+ (`results/posix/20260926-0345-fin`); that run had no apply-wait
  timeout (`fin_q=0`). On `5d3e603`
  (`results/posix/20260926-054047`): seven hosts 200/201, fcstor007
  199, fcstor013 198, 39–41 s, no term change; `names_crazy_dirs`
@@ -278,6 +292,11 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  under `cv_mu`; `h->mu` only to propose or read_begin. Before, 30+
  handlers per cycle sat on the pump's mutex, it lost its heartbeat
  cadence and both groups re-elected 4× in 50 s under the 9-host suite.
+ Waiters sleep in per-waiter slots (`host_waiter_sleep`) and the pump
+ signals only the satisfied ones (`host_waiters_wake`, Sep 26); a
+ `cond_broadcast` to 150 handlers per cycle was ~20 % of efsd in
+ futex/spinlock. Any new wait-for-view goes through a slot, not a
+ shared condvar.
 - **One KV WAL fsync per pump cycle** (`sync_hold` around drain+tick,
  release before `persist_applied`, `84a2a55`): per-put fsync was 0.5 ms
  per applied entry under `h->mu` on every replica. Spec: the Raft log is

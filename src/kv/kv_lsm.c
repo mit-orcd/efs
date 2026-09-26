@@ -53,11 +53,13 @@ void kv_sync_dir(const char *dir)
 
 /* --- memtable -------------------------------------------------------- */
 
+/* The key lives in the entry's own allocation: the memtable binary
+ * search dereferences e[mid] then its key on every probe, and two
+ * dependent cache misses per probe was 13 % of efsd (perf, Sep 26). */
 static void ent_free(struct kv_ent *e)
 {
     if (!e)
         return;
-    free(e->key);
     free(e->val);
     free(e);
 }
@@ -69,10 +71,28 @@ void kv_mtab_clear(struct kv_mtab *m)
     for (i = 0; i < m->n; i++)
         ent_free(m->e[i]);
     free(m->e);
+    free(m->pfx);
     m->e = NULL;
+    m->pfx = NULL;
     m->n = 0;
     m->cap = 0;
     m->bytes = 0;
+}
+
+/* First 8 key bytes as a big-endian integer, zero-padded. Ordered like
+ * kv_key_cmp except that a key shorter than 8 bytes ties with a longer
+ * key whose tail is zeros; a tie falls through to the full compare. The
+ * memtable keeps these in a contiguous side array so a binary search
+ * probes ~200 KiB of L2-resident integers and touches an entry (one
+ * cache miss) only on a prefix tie. */
+static uint64_t key_pfx(const uint8_t *key, uint32_t klen)
+{
+    uint64_t v = 0;
+    uint32_t i, n = klen < 8 ? klen : 8;
+
+    for (i = 0; i < n; i++)
+        v = (v << 8) | key[i];
+    return v << (8 * (8 - n));
 }
 
 /* Index of key, or the insertion point with *found = 0. */
@@ -80,11 +100,14 @@ uint32_t kv_mtab_pos(const struct kv_mtab *m, const uint8_t *key,
                          uint32_t klen, int *found)
 {
     uint32_t lo = 0, hi = m->n;
+    uint64_t kp = key_pfx(key, klen);
 
     *found = 0;
     while (lo < hi) {
         uint32_t mid = lo + (hi - lo) / 2;
-        int c = kv_key_cmp(m->e[mid]->key, m->e[mid]->klen, key, klen);
+        uint64_t mp = m->pfx[mid];
+        int c = mp < kp ? -1 : mp > kp ? 1 :
+                kv_key_cmp(m->e[mid]->key, m->e[mid]->klen, key, klen);
         if (c == 0) {
             *found = 1;
             return mid;
@@ -128,19 +151,20 @@ int kv_mtab_set(struct kv_mtab *m, uint8_t op, const uint8_t *key,
     if (m->n == m->cap) {
         uint32_t cap = m->cap ? m->cap * 2 : 64;
         struct kv_ent **p = realloc(m->e, cap * sizeof(*p));
+        uint64_t *q;
         if (!p)
             return EFS_ERR_NOMEM;
         m->e = p;
+        q = realloc(m->pfx, cap * sizeof(*q));
+        if (!q)
+            return EFS_ERR_NOMEM;
+        m->pfx = q;
         m->cap = cap;
     }
-    e = calloc(1, sizeof(*e));
+    e = calloc(1, sizeof(*e) + klen);
     if (!e)
         return EFS_ERR_NOMEM;
-    e->key = malloc(klen);
-    if (!e->key) {
-        free(e);
-        return EFS_ERR_NOMEM;
-    }
+    e->key = (uint8_t *)(e + 1);
     memcpy(e->key, key, klen);
     e->klen = klen;
     if (vlen) {
@@ -153,11 +177,14 @@ int kv_mtab_set(struct kv_mtab *m, uint8_t op, const uint8_t *key,
     }
     e->vlen = vlen;
     e->op = op;
-    if (at < m->n)
+    if (at < m->n) {
         memmove(&m->e[at + 1], &m->e[at], (m->n - at) * sizeof(*m->e));
+        memmove(&m->pfx[at + 1], &m->pfx[at], (m->n - at) * sizeof(*m->pfx));
+    }
     m->e[at] = e;
+    m->pfx[at] = key_pfx(key, klen);
     m->n++;
-    m->bytes += klen + vlen + sizeof(*e) + sizeof(e);
+    m->bytes += klen + vlen + sizeof(*e) + sizeof(e) + sizeof(*m->pfx);
     return EFS_OK;
 }
 

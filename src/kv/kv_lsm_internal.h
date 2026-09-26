@@ -114,6 +114,7 @@ struct kv_ent {
 /* Sorted by key; binary search to find, memmove to insert. */
 struct kv_mtab {
     struct kv_ent **e;
+    uint64_t *pfx;  /* first 8 key bytes of e[i], big-endian, zero-padded */
     uint32_t n;
     uint32_t cap;
     uint64_t bytes;

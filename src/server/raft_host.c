@@ -217,6 +217,7 @@ struct host_group {
     int v_has;          /* 1 when a local replica exists */
     int v_role, v_leader;
     int v_read_pending, v_read_done;
+    uint64_t v_stamp;   /* bumped by every publish that changed a field */
 };
 
 /* One blocked lock waiter (10.5c-34). Stack-allocated by the waiting
@@ -234,6 +235,18 @@ struct host_lock_wait {
     pthread_cond_t cv;
     int abort;
     int fenced; /* revocation barrier: never grant, reply STALE */
+};
+
+/* One sleeping handler (see the waiters[] comment in efs_raft_host). All
+ * fields are read and written under cv_mu. */
+#define HOST_WAITERS 512
+struct host_waiter {
+    pthread_cond_t cv;
+    uint64_t idx;   /* wake once the group's applied >= idx */
+    uint64_t seen;  /* any=1: wake once the group's view stamp != seen */
+    uint8_t group;
+    uint8_t active;
+    uint8_t any;
 };
 
 struct efs_raft_host {
@@ -304,6 +317,18 @@ struct efs_raft_host {
      * the pump takes cv_mu only for the broadcast. */
     pthread_mutex_t cv_mu;
     pthread_cond_t applied_cv;
+    /* Targeted wakeups. A broadcast on applied_cv woke every waiting
+     * handler on every pump cycle: under 144 concurrent mkdirs that was
+     * ~150 threads x hundreds of cycles/s of futex wake + wait, all on one
+     * futex word, and the futex hash-bucket spinlock plus cv_mu ping-pong
+     * was ~20 % of efsd samples (perf, Sep 26). A waiter now registers the
+     * index it needs (or "any change of this group's view" for a
+     * read-index round) in a slot with its own condvar, and the pump
+     * signals only the slots whose predicate the fresh view satisfies.
+     * applied_cv stays as the overflow path when every slot is taken. */
+    struct host_waiter waiters[HOST_WAITERS];
+    uint32_t waiter_hint;
+    uint32_t cv_overflow; /* waiters sleeping on applied_cv (under cv_mu) */
     /* Per-peer send outboxes. host_send runs under h->mu (pump ticks and
      * proposer threads) and must NEVER do network I/O there: a dead peer's
      * synchronous send+ACK (up to HOST_SEND_IO_MS) under h->mu stalled
@@ -1860,19 +1885,41 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     struct host_group *g = &h->g[gi];
     struct efs_raft *r = g->r;
 
+    uint64_t commit, applied, term, ridx;
+    int role, leader, rpend, rdone, changed;
+
     if (!r) {
+        if (V_LOAD(g->v_has))
+            V_STORE(g->v_stamp, V_LOAD(g->v_stamp) + 1);
         V_STORE(g->v_has, 0);
         return;
     }
-    V_STORE(g->v_commit, efs_raft_commit(r));
-    V_STORE(g->v_applied, efs_raft_applied(r));
-    V_STORE(g->v_term, efs_raft_term(r));
-    V_STORE(g->v_role, (int)efs_raft_role(r));
-    V_STORE(g->v_leader, efs_raft_leader(r));
-    V_STORE(g->v_read_index, efs_raft_read_index(r));
-    V_STORE(g->v_read_pending, efs_raft_read_pending(r));
-    V_STORE(g->v_read_done, efs_raft_read_done(r));
+    commit = efs_raft_commit(r);
+    applied = efs_raft_applied(r);
+    term = efs_raft_term(r);
+    role = (int)efs_raft_role(r);
+    leader = efs_raft_leader(r);
+    ridx = efs_raft_read_index(r);
+    rpend = efs_raft_read_pending(r);
+    rdone = efs_raft_read_done(r);
+    changed = !V_LOAD(g->v_has) || V_LOAD(g->v_commit) != commit ||
+              V_LOAD(g->v_applied) != applied || V_LOAD(g->v_term) != term ||
+              V_LOAD(g->v_role) != role || V_LOAD(g->v_leader) != leader ||
+              V_LOAD(g->v_read_index) != ridx ||
+              V_LOAD(g->v_read_pending) != rpend ||
+              V_LOAD(g->v_read_done) != rdone;
+    V_STORE(g->v_commit, commit);
+    V_STORE(g->v_applied, applied);
+    V_STORE(g->v_term, term);
+    V_STORE(g->v_role, role);
+    V_STORE(g->v_leader, leader);
+    V_STORE(g->v_read_index, ridx);
+    V_STORE(g->v_read_pending, rpend);
+    V_STORE(g->v_read_done, rdone);
     V_STORE(g->v_has, 1);
+    /* Stamp last: a waiter that read the new stamp has the new fields. */
+    if (changed)
+        V_STORE(g->v_stamp, V_LOAD(g->v_stamp) + 1);
 }
 
 static void host_publish_group(struct efs_raft_host *h, uint8_t group)
@@ -1888,6 +1935,7 @@ static void host_publish_group(struct efs_raft_host *h, uint8_t group)
 struct host_view {
     int has, role, leader, read_pending, read_done;
     uint64_t commit, applied, read_index;
+    uint64_t stamp; /* read FIRST: the fields are from this publish or later */
 };
 
 static void host_view_get(struct efs_raft_host *h, uint8_t group,
@@ -1897,7 +1945,10 @@ static void host_view_get(struct efs_raft_host *h, uint8_t group,
 
     memset(v, 0, sizeof(*v));
     v->leader = -1;
-    if (!g || !V_LOAD(g->v_has))
+    if (!g)
+        return;
+    v->stamp = V_LOAD(g->v_stamp);
+    if (!V_LOAD(g->v_has))
         return;
     v->has = 1;
     v->commit = V_LOAD(g->v_commit);
@@ -1913,6 +1964,71 @@ static int host_view_covers(const struct host_view *v, uint64_t want)
 {
     return v->has && v->role == EFS_RAFT_LEADER && v->read_done &&
            v->read_index >= want && v->applied >= v->read_index;
+}
+
+/* Sleep until the pump wakes this waiter or `end` passes. cv_mu HELD by
+ * the caller, who has just re-read the view under it and found its
+ * predicate false (that order is what rules out a lost wakeup). any=0:
+ * wake when the group's applied >= idx (or the replica goes away); any=1:
+ * wake when the group's view stamp moves past `seen`. Falls back to the
+ * shared applied_cv when all slots are busy. Returns with cv_mu held. */
+static void host_waiter_sleep(struct efs_raft_host *h, uint8_t group, int any,
+                              uint64_t idx, uint64_t seen,
+                              const struct timespec *end)
+{
+    uint32_t i, n = HOST_WAITERS;
+    struct host_waiter *w = NULL;
+
+    for (i = 0; i < n; i++) {
+        uint32_t k = (h->waiter_hint + i) % n;
+        if (!h->waiters[k].active) {
+            w = &h->waiters[k];
+            h->waiter_hint = k + 1;
+            break;
+        }
+    }
+    if (!w) {
+        h->cv_overflow++;
+        pthread_cond_timedwait(&h->applied_cv, &h->cv_mu, end);
+        h->cv_overflow--;
+        return;
+    }
+    w->group = group;
+    w->any = (uint8_t)any;
+    w->idx = idx;
+    w->seen = seen;
+    w->active = 1;
+    pthread_cond_timedwait(&w->cv, &h->cv_mu, end);
+    w->active = 0;
+}
+
+/* Pump side: after publishing every hosted group's view, wake the waiters
+ * whose predicate that view satisfies, and only those. */
+static void host_waiters_wake(struct efs_raft_host *h)
+{
+    uint32_t k;
+
+    pthread_mutex_lock(&h->cv_mu);
+    for (k = 0; k < HOST_WAITERS; k++) {
+        struct host_waiter *w = &h->waiters[k];
+        struct host_group *g;
+        int wake;
+
+        if (!w->active)
+            continue;
+        g = group_slot(h, w->group);
+        if (!g || !V_LOAD(g->v_has))
+            wake = 1;
+        else if (w->any)
+            wake = V_LOAD(g->v_stamp) != w->seen;
+        else
+            wake = V_LOAD(g->v_applied) >= w->idx;
+        if (wake)
+            pthread_cond_signal(&w->cv);
+    }
+    if (h->cv_overflow)
+        pthread_cond_broadcast(&h->applied_cv);
+    pthread_mutex_unlock(&h->cv_mu);
 }
 
 static int host_hosts(struct efs_raft_host *h, uint8_t group)
@@ -2245,7 +2361,7 @@ static int host_read_index(struct efs_raft_host *h, uint8_t group,
         host_view_get(h, group, &v);
         if (v.has && v.role == EFS_RAFT_LEADER && v.read_pending &&
             !host_view_covers(&v, want))
-            pthread_cond_timedwait(&h->applied_cv, &h->cv_mu, &end);
+            host_waiter_sleep(h, group, 1, 0, v.stamp, &end);
         pthread_mutex_unlock(&h->cv_mu);
         host_view_get(h, group, &v);
     }
@@ -2279,7 +2395,7 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
         pthread_mutex_lock(&h->cv_mu);
         host_view_get(h, group, &v);
         if (v.has && v.applied < idx)
-            pthread_cond_timedwait(&h->applied_cv, &h->cv_mu, &end);
+            host_waiter_sleep(h, group, 0, idx, 0, &end);
         pthread_mutex_unlock(&h->cv_mu);
     }
 }
@@ -3947,16 +4063,14 @@ static void *host_pump(void *arg)
                 h->g[i].voters = efs_raft_voters(h->g[i].r);
         }
         /* Applies above may have advanced commit/applied/read state:
-         * publish the lock-free view, then wake every waiter
-         * (host_wait_applied / host_read_index) without a poll interval.
+         * publish the lock-free view, then wake the waiters
+         * (host_wait_applied / host_read_index) that view satisfies.
          * Waiters check the view under cv_mu before sleeping, so the
-         * publish-then-broadcast order here rules out a lost wakeup. */
+         * publish-then-wake order here rules out a lost wakeup. */
         for (i = 0; i < HOST_NGROUPS; i++)
             if (h->g[i].hosted)
                 host_publish_view(h, i);
-        pthread_mutex_lock(&h->cv_mu);
-        pthread_cond_broadcast(&h->applied_cv);
-        pthread_mutex_unlock(&h->cv_mu);
+        host_waiters_wake(h);
         if (obs) {
             uint64_t held;
             if (t_wait > h->obs_wait_max_us)
@@ -5091,6 +5205,11 @@ int server_raft_host_start(struct efsd_server *s)
     pthread_mutex_init(&h->cv_mu, NULL);
     pthread_cond_init(&h->applied_cv, NULL);
     {
+        uint32_t k;
+        for (k = 0; k < HOST_WAITERS; k++)
+            pthread_cond_init(&h->waiters[k].cv, NULL);
+    }
+    {
         int i;
         for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
             h->tx[i].h = h;
@@ -5272,6 +5391,11 @@ void server_raft_host_stop(void)
     pthread_mutex_destroy(&h->outbox_mu);
     pthread_mutex_destroy(&h->rec_mu);
     pthread_cond_destroy(&h->applied_cv);
+    {
+        uint32_t k;
+        for (k = 0; k < HOST_WAITERS; k++)
+            pthread_cond_destroy(&h->waiters[k].cv);
+    }
     pthread_mutex_destroy(&h->cv_mu);
     for (i = 0; i < EFS_RAFT_MAX_PEERS; i++)
         pthread_cond_destroy(&h->tx[i].cv);

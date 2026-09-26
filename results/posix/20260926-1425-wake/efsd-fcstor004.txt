@@ -1,0 +1,750 @@
+raft-obs: wait_timeouts=1784 pump_hold_max=4us lock_wait_max=1us drain_max=3us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=125 fin_q=144 fin_done=131 fin_drop=13 fin_full=0
+raft-host: mkdir parent=1019889 name=dir_rename_noreplace rc=-14 hint=3 psh=4081 csh=2428 dsh=4081 stage=11 ino=870780
+raft-host: mkdir parent=1019889 name=dir_rename_noreplace rc=-14 hint=3 psh=4081 csh=2428 dsh=4081 stage=11 ino=891260
+raft-host: mkdir parent=1019889 name=dir_rename_noreplace rc=-14 hint=3 psh=4081 csh=2428 dsh=4081 stage=11 ino=915836
+raft-host: mkdir parent=957403 name=symlink_chmod_follows rc=-13 hint=0 psh=3035 csh=491 dsh=3035 stage=11 ino=0
+raft-host: apply create rc=-13 index=10422712 parent=957403 name=symlink_chmod_follows
+raft-host: mkdir parent=1261772 name=d16 rc=-14 hint=0 psh=204 csh=4003 dsh=204 stage=11 ino=909219
+raft-host: mkdir parent=1261772 name=d16 rc=-14 hint=0 psh=204 csh=4003 dsh=204 stage=11 ino=925603
+raft-host: mkdir parent=1513301 name=d11 rc=-14 hint=3 psh=1877 csh=2714 dsh=1877 stage=11 ino=1092250
+raft-host: mkdir parent=1019889 name=dir_rename_noreplace rc=-14 hint=3 psh=4081 csh=2428 dsh=4081 stage=11 ino=964988
+raft-host: mkdir parent=1513301 name=d11 rc=-14 hint=3 psh=1877 csh=2714 dsh=1877 stage=11 ino=1108634
+raft-host: mkdir parent=1261772 name=d16 rc=-14 hint=0 psh=204 csh=4003 dsh=204 stage=11 ino=946083
+raft-host: mkdir parent=1017708 name=d38 rc=-13 hint=3 psh=1900 csh=1526 dsh=1900 stage=11 ino=0
+raft-host: apply create rc=-13 index=8954058 parent=1017708 name=d38
+raft-host: mkdir parent=1006196 name=d45 rc=-14 hint=0 psh=2676 csh=3549 dsh=2676 stage=11 ino=1367517
+raft-host: mkdir parent=945222 name=d29 rc=-13 hint=3 psh=3142 csh=3962 dsh=3142 stage=11 ino=0
+raft-host: apply create rc=-13 index=8954663 parent=945222 name=d29
+raft-host: mkdir parent=1019889 name=dir_dot_entries rc=-14 hint=3 psh=4081 csh=2024 dsh=4081 stage=11 ino=882664
+raft-host: mkdir parent=1006196 name=d45 rc=-14 hint=0 psh=2676 csh=3549 dsh=2676 stage=11 ino=1400285
+raft-host: mkdir parent=864337 name=d57 rc=-13 hint=0 psh=81 csh=3027 dsh=81 stage=11 ino=0
+raft-host: apply create rc=-13 index=10426708 parent=864337 name=d57
+raft-host: mkdir parent=1006196 name=d45 rc=-14 hint=0 psh=2676 csh=3549 dsh=2676 stage=11 ino=1445341
+raft-host: mkdir parent=982802 name=d56 rc=-14 hint=0 psh=3858 csh=2517 dsh=3858 stage=11 ino=2169301
+raft-host: mkdir parent=1006196 name=d45 rc=-14 hint=0 psh=2676 csh=3549 dsh=2676 stage=11 ino=1514973
+raft-host: mkdir parent=771715 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-14 hint=3 psh=1667 csh=3944 dsh=1667 stage=11 ino=1605480
+raft-host: mkdir parent=801395 name=dir_deep_nesting_beyond_64 rc=-14 hint=3 psh=2675 csh=888 dsh=2675 stage=11 ino=2229112
+raft-host: mkdir parent=952674 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-14 hint=0 psh=2402 csh=1033 dsh=2402 stage=11 ino=955401
+raft-host: mkdir parent=913541 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-13 hint=3 psh=133 csh=2694 dsh=133 stage=11 ino=1059462
+raft-host: mkdir parent=801395 name=dir_deep_nesting_beyond_64 rc=-14 hint=3 psh=2675 csh=888 dsh=2675 stage=11 ino=2249592
+raft-host: mkdir parent=992089 name=d53 rc=-13 hint=3 psh=857 csh=2164 dsh=857 stage=11 ino=2185332
+raft-obs: tx->0 enq=204480 drop=0 sent=204480 fail=0 hi=147 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=38219 drop=0 sent=38219 fail=0 hi=10 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=161006 drop=0 sent=161005 fail=0 hi=40 rtt_avg=34us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1784 pump_hold_max=17355us lock_wait_max=6us drain_max=17354us tick_max=1us apply_max=16789us persist_max=897us applies_in_worst=39 arc_miss=0 arc_term_miss=0 opid_replay=125 fin_q=144 fin_done=131 fin_drop=13 fin_full=0
+raft-host: create parent=1794936 name=f0116 rc=-13 hint=3 dsh=888 hashed=0
+raft-host: apply create rc=-13 index=8958061 parent=1794936 name=f0116
+raft-host: mkdir parent=1023549 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-14 hint=3 psh=3645 csh=486 dsh=3645 stage=11 ino=963046
+raft-host: mkdir parent=1130106 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-14 hint=0 psh=3706 csh=3045 dsh=3706 stage=11 ino=1285093
+raft-host: mkdir parent=1006196 name=d45 rc=-14 hint=0 psh=2676 csh=3549 dsh=2676 stage=11 ino=1600989
+raft-host: mkdir parent=1285093 name=d rc=-13 hint=3 psh=3045 csh=560 dsh=3045 stage=11 ino=852528
+raft-host: mkdir parent=905989 name=err_hardlink_nonexistent_src rc=-14 hint=3 psh=773 csh=3406 dsh=773 stage=11 ino=3411278
+raft-host: mkdir parent=1023549 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-14 hint=3 psh=3645 csh=486 dsh=3645 stage=11 ino=971238
+raft-host: applied session index=10431128 kind=9 shard=0 ino=2848823
+raft-host: applied session index=10431340 kind=9 shard=0 ino=958683
+raft-host: applied session index=10431347 kind=9 shard=0 ino=896275
+raft-host: applied session index=10431351 kind=9 shard=0 ino=2236553
+raft-host: applied session index=10431534 kind=9 shard=0 ino=973059
+raft-host: mkdir parent=1626221 name=sub rc=-14 hint=3 psh=109 csh=3296 dsh=109 stage=11 ino=1522912
+raft-host: mkdir parent=1286041 name=..dots.. rc=-14 hint=3 psh=3993 csh=352 dsh=3993 stage=11 ino=979296
+raft-host: mkdir parent=1023549 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-14 hint=3 psh=3645 csh=486 dsh=3645 stage=11 ino=987622
+raft-host: applied session index=10432199 kind=9 shard=0 ino=1083477
+raft-host: applied session index=10432334 kind=9 shard=0 ino=1205137
+raft-host: applied session index=8959911 kind=9 shard=0 ino=777570
+raft-host: applied session index=8959982 kind=9 shard=0 ino=869616
+raft-host: apply publish rc=-14 index=8959991 ino=1838054 ci=0
+raft-host: applied session index=8960012 kind=9 shard=0 ino=849170
+raft-host: applied session index=8960013 kind=9 shard=0 ino=1051592
+raft-host: applied session index=8960014 kind=9 shard=0 ino=1082676
+raft-host: applied session index=10432597 kind=9 shard=0 ino=1537381
+raft-host: applied session index=8960076 kind=9 shard=0 ino=1708046
+raft-host: applied session index=8960100 kind=9 shard=0 ino=831518
+raft-host: applied session index=8960164 kind=9 shard=0 ino=1443864
+raft-host: applied session index=8960199 kind=9 shard=0 ino=1137382
+raft-host: applied session index=8960327 kind=9 shard=0 ino=1138420
+raft-host: applied session index=8960347 kind=9 shard=0 ino=2065616
+raft-host: applied session index=8960363 kind=9 shard=0 ino=810838
+raft-host: applied session index=10433001 kind=9 shard=0 ino=1017689
+raft-host: applied session index=8960406 kind=9 shard=0 ino=1077960
+raft-host: applied session index=8960459 kind=9 shard=0 ino=1659070
+raft-host: applied session index=10433096 kind=9 shard=0 ino=975043
+raft-host: applied session index=8960609 kind=9 shard=0 ino=1325558
+raft-host: applied session index=8960674 kind=9 shard=0 ino=1194180
+raft-host: applied session index=8960707 kind=9 shard=0 ino=2053458
+raft-host: applied session index=8960710 kind=9 shard=0 ino=906974
+raft-host: applied session index=8960733 kind=9 shard=0 ino=1501636
+raft-host: applied session index=8960795 kind=9 shard=0 ino=2180672
+raft-host: applied session index=8960804 kind=9 shard=0 ino=2256164
+raft-host: applied session index=8960862 kind=9 shard=0 ino=852994
+raft-host: applied session index=8960892 kind=9 shard=0 ino=1006766
+raft-host: applied session index=8961032 kind=9 shard=0 ino=969316
+raft-host: applied session index=8961065 kind=9 shard=0 ino=1331448
+raft-host: applied session index=10433750 kind=9 shard=0 ino=1532329
+raft-host: applied session index=8961191 kind=9 shard=0 ino=899848
+raft-host: applied session index=8961224 kind=9 shard=0 ino=869876
+raft-host: applied session index=8961233 kind=9 shard=0 ino=2148308
+raft-host: apply publish rc=-14 index=10433917 ino=2095881 ci=0
+raft-host: applied session index=8961268 kind=9 shard=0 ino=1302690
+raft-host: applied session index=8961353 kind=9 shard=0 ino=867240
+raft-host: mkdir parent=874820 name=d rc=-14 hint=0 psh=2372 csh=345 dsh=2372 stage=11 ino=1569113
+raft-host: apply publish rc=-14 index=8961573 ino=866912 ci=0
+raft-host: apply publish rc=-14 index=10434358 ino=916697 ci=0
+raft-host: mkdir parent=874820 name=d rc=-14 hint=0 psh=2372 csh=345 dsh=2372 stage=11 ino=1597785
+raft-host: apply publish rc=-14 index=10434512 ino=1028907 ci=0
+raft-host: mkdir parent=1002273 name=virt_find_query rc=-14 hint=3 psh=2849 csh=1548 dsh=2849 stage=11 ino=1771020
+raft-host: apply publish rc=-14 index=10434762 ino=987181 ci=0
+raft-host: apply publish rc=-14 index=10434913 ino=1275325 ci=0
+raft-host: applied session index=8962237 kind=9 shard=0 ino=2441588
+raft-host: apply publish rc=-14 index=10435285 ino=1581853 ci=0
+raft-host: mkdir parent=801395 name=virt_find_query rc=-14 hint=3 psh=2675 csh=2622 dsh=2675 stage=11 ino=1178174
+raft-host: applied session index=10435914 kind=9 shard=0 ino=908307
+raft-host: applied session index=8963535 kind=9 shard=0 ino=1136320
+raft-host: mkdir parent=905989 name=direct_rmw_4k_in_chunk rc=-14 hint=3 psh=773 csh=1290 dsh=773 stage=11 ino=1340682
+raft-host: mkdir parent=1019889 name=err_open_dir_for_write rc=-14 hint=3 psh=4081 csh=3032 dsh=4081 stage=11 ino=1326040
+raft-host: applied session index=8964131 kind=9 shard=0 ino=1160560
+raft-host: applied session index=8964400 kind=9 shard=0 ino=890384
+raft-host: mkdir parent=1019889 name=err_open_dir_for_write rc=-14 hint=3 psh=4081 csh=3032 dsh=4081 stage=11 ino=1371096
+raft-host: mkdir parent=801395 name=link_across_dirs rc=-13 hint=0 psh=2675 csh=1427 dsh=2675 stage=11 ino=0
+raft-host: apply create rc=-13 index=10438200 parent=801395 name=link_across_dirs
+raft-host: applied session index=8965118 kind=9 shard=0 ino=996452
+raft-host: mkdir parent=2433884 name=d rc=-14 hint=0 psh=860 csh=351 dsh=860 stage=11 ino=1200479
+raft-host: mkdir parent=1064923 name=c rc=-14 hint=3 psh=4059 csh=1512 dsh=4059 stage=11 ino=1861096
+raft-host: mkdir parent=2433884 name=d rc=-14 hint=0 psh=860 csh=351 dsh=860 stage=11 ino=1216863
+raft-host: applied session index=8965839 kind=9 shard=0 ino=1325982
+raft-host: applied session index=8966011 kind=9 shard=0 ino=881884
+raft-host: applied session index=8966124 kind=9 shard=0 ino=1479308
+raft-host: applied session index=8966146 kind=9 shard=0 ino=952290
+raft-host: mkdir parent=2433884 name=d rc=-14 hint=0 psh=860 csh=351 dsh=860 stage=11 ino=1241439
+raft-host: applied session index=8966367 kind=9 shard=0 ino=887540
+raft-host: applied session index=8966534 kind=9 shard=0 ino=1521418
+raft-host: mkdir parent=884139 name=sub rc=-14 hint=3 psh=3499 csh=3768 dsh=3499 stage=11 ino=2780856
+raft-host: applied session index=8966603 kind=9 shard=0 ino=925562
+raft-host: applied session index=8966888 kind=9 shard=0 ino=1091558
+raft-host: applied session index=8967134 kind=9 shard=0 ino=1091558
+raft-host: apply publish rc=-14 index=10441375 ino=1008887 ci=0
+raft-host: mkdir parent=1162536 name=d rc=-14 hint=0 psh=3368 csh=1365 dsh=3368 stage=11 ino=906581
+raft-host: mkdir parent=796995 name=a rc=-14 hint=3 psh=2371 csh=2036 dsh=2371 stage=11 ino=1275892
+raft-host: mkdir parent=757162 name=d rc=-14 hint=0 psh=3498 csh=2153 dsh=3498 stage=11 ino=964713
+raft-host: mkdir parent=796995 name=a rc=-14 hint=3 psh=2371 csh=2036 dsh=2371 stage=11 ino=1300468
+raft-host: mkdir parent=12716603 name=sub rc=-14 hint=3 psh=2619 csh=3126 dsh=2619 stage=11 ino=1768502
+raft-host: mkdir parent=726753 name=d rc=-13 hint=0 psh=1761 csh=2315 dsh=1761 stage=11 ino=0
+raft-host: apply create rc=-13 index=10442709 parent=726753 name=d
+raft-host: applied session index=8968483 kind=9 shard=0 ino=1479308
+raft-host: mkdir parent=905843 name=plus+equals= rc=-13 hint=0 psh=627 csh=1862 dsh=627 stage=11 ino=866118
+raft-host: mkdir parent=1110214 name=d rc=-13 hint=0 psh=198 csh=4017 dsh=198 stage=11 ino=2211761
+raft-host: mkdir parent=1002273 name=access_f_ok_after_unlink rc=-13 hint=0 psh=2849 csh=3107 dsh=2849 stage=11 ino=0
+raft-host: opid-replay parent=1110214 name=d seq=58110 ino=2211761 row gone
+raft-obs: g0 term 6753->6754 role FOLLOWER->CANDIDATE leader=-1 commit=10442742 applied=10442742 t=1790432607407ms
+raft-obs: g0 term 6754->6754 role CANDIDATE->LEADER leader=1 commit=10442742 applied=10442742 t=1790432607407ms
+raft-host: txn-finish coord=627 resolve sh=627 dec=1 rc=-3 (recovery)
+raft-host: applied session index=8969131 kind=9 shard=0 ino=1541266
+raft-host: opid-replay parent=1089572 name=d seq=57595 ino=1135255 row gone
+raft-host: opid-replay parent=811243 name=sub seq=57430 ino=1523762 row gone
+raft-host: mkdir parent=12716603 name=sub rc=-13 hint=3 psh=2619 csh=3126 dsh=2619 stage=11 ino=1772598
+raft-host: rmdir parent=972571 name=d49 rc=-13 hint=3
+raft-host: mkdir parent=901893 name=rename_file_over_symlink rc=-13 hint=3 psh=773 csh=2466 dsh=773 stage=11 ino=936354
+raft-host: mkdir parent=972905 name=d rc=-13 hint=3 psh=2153 csh=2480 dsh=2153 stage=11 ino=891312
+raft-host: mkdir parent=796995 name=a rc=-13 hint=3 psh=2371 csh=2036 dsh=2371 stage=11 ino=1361908
+raft-host: mkdir parent=1019889 name=direct_rmw_4k_in_chunk rc=-13 hint=3 psh=4081 csh=2824 dsh=4081 stage=11 ino=903944
+raft-host: opid-replay parent=905843 name=plus+equals= seq=57593 ino=866118 row gone
+raft-host: mkdir parent=854833 name=creat_existing_dir_eisdir rc=-13 hint=3 psh=2865 csh=2548 dsh=2865 stage=11 ino=1001972
+raft-host: mkdir parent=1135255 name=d rc=-13 hint=3 psh=663 csh=2987 dsh=0 stage=11 ino=1420203
+raft-host: rmdir parent=972571 name=d49 rc=-13 hint=3
+raft-host: mkdir parent=1019889 name=direct_rmw_4k_in_chunk rc=-13 hint=3 psh=4081 csh=2824 dsh=4081 stage=11 ino=903944
+raft-host: mkdir parent=901893 name=rename_file_over_symlink rc=-13 hint=3 psh=773 csh=2466 dsh=773 stage=11 ino=936354
+raft-host: mkdir parent=972905 name=d rc=-13 hint=3 psh=2153 csh=2480 dsh=2153 stage=11 ino=891312
+raft-host: applied session index=10443359 kind=9 shard=0 ino=920243
+raft-host: applied session index=10443445 kind=9 shard=0 ino=1023241
+raft-host: mkdir parent=854833 name=creat_existing_dir_eisdir rc=-13 hint=3 psh=2865 csh=2548 dsh=2865 stage=11 ino=1001972
+raft-host: mkdir parent=12716603 name=sub rc=-13 hint=3 psh=2619 csh=3126 dsh=2619 stage=11 ino=1772598
+raft-host: mkdir parent=801395 name=creat_existing_dir_eisdir rc=-14 hint=3 psh=2675 csh=1592 dsh=2675 stage=11 ino=988728
+raft-host: applied session index=10443612 kind=9 shard=0 ino=946723
+raft-host: applied session index=10443687 kind=9 shard=0 ino=1023241
+raft-host: mkdir parent=899502 name=sub rc=-14 hint=1 psh=2478 csh=1909 dsh=2478 stage=11 ino=829301
+raft-host: applied session index=10443701 kind=9 shard=0 ino=920243
+raft-host: rmdir parent=972571 name=d49 rc=-13 hint=3
+raft-host: mkdir parent=1019889 name=direct_rmw_4k_in_chunk rc=-13 hint=3 psh=4081 csh=2824 dsh=4081 stage=11 ino=903944
+raft-host: mkdir parent=972905 name=d rc=-13 hint=3 psh=2153 csh=2480 dsh=2153 stage=11 ino=891312
+raft-host: mkdir parent=901893 name=rename_file_over_symlink rc=-13 hint=3 psh=773 csh=2466 dsh=773 stage=11 ino=936354
+raft-host: applied session index=10443876 kind=9 shard=0 ino=946723
+raft-host: applied session index=10443902 kind=9 shard=0 ino=960591
+raft-host: applied session index=10444078 kind=9 shard=0 ino=960591
+raft-host: unlink-simple parent=1065972 name=inner rc=-13 hint=3 dsh=1012 dg=2
+raft-host: report resolve ino=992824 rc=-13 (deferred)
+raft-host: mkdir parent=796995 name=a rc=-13 hint=3 psh=2371 csh=2036 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=854833 name=creat_existing_dir_eisdir rc=-13 hint=3 psh=2865 csh=2548 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=12716603 name=sub rc=-13 hint=3 psh=2619 csh=3126 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=1019889 name=direct_rmw_4k_in_chunk rc=-13 hint=3 psh=4081 csh=2824 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=901893 name=rename_file_over_symlink rc=-13 hint=3 psh=773 csh=2466 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=972905 name=d rc=-13 hint=3 psh=2153 csh=2480 dsh=0 stage=11 ino=0
+raft-host: unlink-simple parent=1065972 name=inner rc=-13 hint=3 dsh=0 dg=0
+raft-host: unlink-simple parent=1065972 name=inner rc=-13 hint=3 dsh=0 dg=0
+raft-host: mkdir parent=796995 name=a rc=-13 hint=3 psh=2371 csh=2036 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=854833 name=creat_existing_dir_eisdir rc=-13 hint=3 psh=2865 csh=2548 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=12716603 name=sub rc=-13 hint=3 psh=2619 csh=3126 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=1019889 name=direct_rmw_4k_in_chunk rc=-13 hint=3 psh=4081 csh=2824 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=901893 name=rename_file_over_symlink rc=-13 hint=3 psh=773 csh=2466 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=972905 name=d rc=-13 hint=3 psh=2153 csh=2480 dsh=0 stage=11 ino=0
+raft-host: unlink-simple parent=1065972 name=inner rc=-13 hint=3 dsh=0 dg=0
+raft-obs: tx->0 enq=223844 drop=0 sent=223844 fail=0 hi=147 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=41250 drop=0 sent=41250 fail=0 hi=10 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=171608 drop=0 sent=171607 fail=0 hi=40 rtt_avg=34us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1822 pump_hold_max=1999237us lock_wait_max=10126us drain_max=1999236us tick_max=15us apply_max=1999226us persist_max=1832us applies_in_worst=42 arc_miss=0 arc_term_miss=7 opid_replay=130 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-obs: g0 term 6754->6756 role LEADER->FOLLOWER leader=-1 commit=10448275 applied=10448275 t=1790432611172ms
+raft-obs: g0 term 6756->6757 role FOLLOWER->FOLLOWER leader=-1 commit=10448275 applied=10448275 t=1790432611182ms
+raft-obs: g0 term 6757->6758 role FOLLOWER->CANDIDATE leader=-1 commit=10448275 applied=10448275 t=1790432611908ms
+raft-obs: g0 term 6758->6758 role CANDIDATE->LEADER leader=1 commit=10448275 applied=10448275 t=1790432611909ms
+raft-host: rmdir parent=972571 name=d49 rc=-13 hint=3
+raft-host: mkdir parent=12716603 name=sub rc=-13 hint=3 psh=2619 csh=3126 dsh=2619 stage=11 ino=1772598
+raft-host: mkdir parent=854833 name=creat_existing_dir_eisdir rc=-13 hint=3 psh=2865 csh=2548 dsh=2865 stage=11 ino=1001972
+raft-host: mkdir parent=901893 name=rename_file_over_symlink rc=-13 hint=3 psh=773 csh=2466 dsh=773 stage=11 ino=936354
+raft-host: mkdir parent=796995 name=a rc=-13 hint=3 psh=2371 csh=2036 dsh=2371 stage=11 ino=1529844
+raft-host: mkdir parent=1019889 name=direct_rmw_4k_in_chunk rc=-13 hint=3 psh=4081 csh=2824 dsh=4081 stage=11 ino=903944
+raft-host: mkdir parent=972905 name=d rc=-13 hint=3 psh=2153 csh=2480 dsh=2153 stage=11 ino=891312
+raft-host: mkdir parent=854833 name=creat_existing_dir_eisdir rc=-13 hint=3 psh=2865 csh=2548 dsh=2865 stage=11 ino=1001972
+raft-host: mkdir parent=796995 name=a rc=-13 hint=3 psh=2371 csh=2036 dsh=2371 stage=11 ino=1529844
+raft-host: mkdir parent=972905 name=d rc=-13 hint=3 psh=2153 csh=2480 dsh=2153 stage=11 ino=891312
+raft-host: mkdir parent=12716603 name=sub rc=-13 hint=3 psh=2619 csh=3126 dsh=2619 stage=11 ino=1772598
+raft-host: mkdir parent=901893 name=rename_file_over_symlink rc=-13 hint=3 psh=773 csh=2466 dsh=773 stage=11 ino=936354
+raft-host: mkdir parent=1019889 name=direct_rmw_4k_in_chunk rc=-13 hint=3 psh=4081 csh=2824 dsh=4081 stage=11 ino=903944
+raft-host: apply publish rc=-13 index=10448572 ino=1051709 ci=0
+raft-host: rmdir parent=972571 name=d49 rc=-13 hint=3
+raft-host: txn-recover shard=51 coord=0 parts=3 age=5.3s -> ABORT
+raft-host: apply publish rc=-13 index=10448745 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10449069 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10449587 ino=1051709 ci=0
+raft-host: mkdir parent=854833 name=creat_existing_dir_eisdir rc=-13 hint=3 psh=2865 csh=2548 dsh=2865 stage=11 ino=1001972
+raft-host: mkdir parent=972905 name=d rc=-13 hint=3 psh=2153 csh=2480 dsh=2153 stage=11 ino=891312
+raft-host: mkdir parent=1019889 name=direct_rmw_4k_in_chunk rc=-13 hint=3 psh=4081 csh=2824 dsh=4081 stage=11 ino=903944
+raft-host: apply publish rc=-13 index=10450518 ino=1051709 ci=0
+raft-host: mkdir parent=901893 name=rename_file_over_symlink rc=-13 hint=3 psh=773 csh=2466 dsh=773 stage=11 ino=936354
+raft-host: mkdir parent=796995 name=a rc=-13 hint=3 psh=2371 csh=2036 dsh=2371 stage=11 ino=1529844
+raft-host: mkdir parent=12716603 name=sub rc=-13 hint=3 psh=2619 csh=3126 dsh=2619 stage=11 ino=1772598
+raft-host: rmdir parent=972571 name=d49 rc=-13 hint=3
+raft-host: mkdir parent=854833 name=creat_existing_dir_eisdir rc=-13 hint=3 psh=2865 csh=2548 dsh=2865 stage=11 ino=1001972
+raft-host: apply publish rc=-13 index=10451302 ino=1051709 ci=0
+raft-host: mkdir parent=972905 name=d rc=-13 hint=3 psh=2153 csh=2480 dsh=2153 stage=11 ino=891312
+raft-host: mkdir parent=901893 name=rename_file_over_symlink rc=-13 hint=3 psh=773 csh=2466 dsh=773 stage=11 ino=936354
+raft-host: mkdir parent=1019889 name=direct_rmw_4k_in_chunk rc=-13 hint=3 psh=4081 csh=2824 dsh=4081 stage=11 ino=903944
+raft-host: mkdir parent=796995 name=a rc=-13 hint=3 psh=2371 csh=2036 dsh=2371 stage=11 ino=1529844
+raft-host: mkdir parent=12716603 name=sub rc=-13 hint=3 psh=2619 csh=3126 dsh=2619 stage=11 ino=1772598
+raft-host: rmdir parent=972571 name=d49 rc=-13 hint=3
+raft-host: mkdir parent=854833 name=creat_existing_dir_eisdir rc=-13 hint=3 psh=2865 csh=2548 dsh=2865 stage=11 ino=1001972
+raft-host: apply publish rc=-13 index=10451899 ino=1051709 ci=0
+raft-host: mkdir parent=796995 name=a rc=-13 hint=3 psh=2371 csh=2036 dsh=2371 stage=11 ino=1529844
+raft-host: mkdir parent=901893 name=rename_file_over_symlink rc=-13 hint=3 psh=773 csh=2466 dsh=773 stage=11 ino=936354
+raft-host: mkdir parent=972905 name=d rc=-13 hint=3 psh=2153 csh=2480 dsh=2153 stage=11 ino=891312
+raft-host: mkdir parent=1019889 name=direct_rmw_4k_in_chunk rc=-13 hint=3 psh=4081 csh=2824 dsh=4081 stage=11 ino=903944
+raft-host: txn-recover shard=773 coord=2466 parts=2 age=8.6s -> ABORT
+raft-host: mkdir parent=12716603 name=sub rc=-13 hint=3 psh=2619 csh=3126 dsh=2619 stage=11 ino=1772598
+raft-host: rmdir parent=972571 name=d49 rc=-13 hint=3
+raft-obs: tx->0 enq=231581 drop=0 sent=231581 fail=0 hi=147 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=49533 drop=0 sent=49533 fail=0 hi=21 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=181027 drop=0 sent=181026 fail=0 hi=43 rtt_avg=34us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=2107us lock_wait_max=3487us drain_max=2107us tick_max=265us apply_max=4003us persist_max=1649us applies_in_worst=27 arc_miss=0 arc_term_miss=7 opid_replay=130 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10452540 ino=1051709 ci=0
+raft-host: mkdir parent=854833 name=creat_existing_dir_eisdir rc=-13 hint=3 psh=2865 csh=2548 dsh=2865 stage=11 ino=1001972
+raft-host: mkdir parent=1019889 name=direct_rmw_4k_in_chunk rc=-13 hint=3 psh=4081 csh=2824 dsh=4081 stage=11 ino=903944
+raft-host: mkdir parent=796995 name=a rc=-13 hint=3 psh=2371 csh=2036 dsh=2371 stage=11 ino=1529844
+raft-host: mkdir parent=12716603 name=sub rc=-13 hint=3 psh=2619 csh=3126 dsh=2619 stage=11 ino=1772598
+raft-host: mkdir parent=972905 name=d rc=-13 hint=3 psh=2153 csh=2480 dsh=2153 stage=11 ino=891312
+raft-host: applied session index=10452619 kind=9 shard=0 ino=823455
+raft-host: applied session index=10452641 kind=9 shard=0 ino=823455
+raft-host: rmdir parent=972571 name=d49 rc=-13 hint=3
+raft-host: apply publish rc=-13 index=10453080 ino=1051709 ci=0
+raft-host: mkdir parent=854833 name=creat_existing_dir_eisdir rc=-13 hint=3 psh=2865 csh=2548 dsh=2865 stage=11 ino=1001972
+raft-host: mkdir parent=1019889 name=direct_rmw_4k_in_chunk rc=-13 hint=3 psh=4081 csh=2824 dsh=4081 stage=11 ino=903944
+raft-host: mkdir parent=12716603 name=sub rc=-13 hint=3 psh=2619 csh=3126 dsh=2619 stage=11 ino=1772598
+raft-host: mkdir parent=972905 name=d rc=-13 hint=3 psh=2153 csh=2480 dsh=2153 stage=11 ino=891312
+raft-host: rmdir parent=972571 name=d49 rc=-13 hint=3
+raft-host: mkdir parent=796995 name=a rc=-13 hint=3 psh=2371 csh=2036 dsh=2371 stage=11 ino=1529844
+raft-host: apply publish rc=-13 index=10453546 ino=1051709 ci=0
+raft-host: mkdir parent=854833 name=creat_existing_dir_eisdir rc=-13 hint=3 psh=2865 csh=2548 dsh=2865 stage=11 ino=1001972
+raft-host: mkdir parent=1019889 name=direct_rmw_4k_in_chunk rc=-13 hint=3 psh=4081 csh=2824 dsh=4081 stage=11 ino=903944
+raft-host: rmdir parent=972571 name=d49 rc=-13 hint=3
+raft-host: mkdir parent=12716603 name=sub rc=-13 hint=3 psh=2619 csh=3126 dsh=2619 stage=11 ino=1772598
+raft-host: mkdir parent=972905 name=d rc=-13 hint=3 psh=2153 csh=2480 dsh=2153 stage=11 ino=891312
+raft-host: mkdir parent=796995 name=a rc=-13 hint=3 psh=2371 csh=2036 dsh=2371 stage=11 ino=1529844
+raft-host: apply publish rc=-13 index=10454125 ino=1051709 ci=0
+raft-host: mkdir parent=854833 name=creat_existing_dir_eisdir rc=-13 hint=3 psh=2865 csh=2548 dsh=2865 stage=11 ino=1001972
+raft-host: rmdir parent=972571 name=d49 rc=-13 hint=3
+raft-host: mkdir parent=1019889 name=direct_rmw_4k_in_chunk rc=-13 hint=3 psh=4081 csh=2824 dsh=4081 stage=11 ino=903944
+raft-host: mkdir parent=972905 name=d rc=-13 hint=3 psh=2153 csh=2480 dsh=2153 stage=11 ino=891312
+raft-host: mkdir parent=12716603 name=sub rc=-13 hint=3 psh=2619 csh=3126 dsh=2619 stage=11 ino=1772598
+raft-host: mkdir parent=796995 name=a rc=-13 hint=3 psh=2371 csh=2036 dsh=2371 stage=11 ino=1529844
+raft-host: apply publish rc=-13 index=10454676 ino=1051709 ci=0
+raft-host: rmdir parent=972571 name=d49 rc=-13 hint=3
+raft-host: apply publish rc=-13 index=10455116 ino=1051709 ci=0
+raft-host: applied session index=10455221 kind=9 shard=0 ino=1126541
+raft-host: applied session index=10455239 kind=9 shard=0 ino=1126541
+raft-host: rmdir parent=972571 name=d49 rc=-13 hint=3
+raft-host: apply publish rc=-13 index=10455459 ino=1051709 ci=0
+raft-obs: tx->0 enq=238194 drop=0 sent=238194 fail=0 hi=147 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=55286 drop=0 sent=55286 fail=0 hi=21 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=189840 drop=0 sent=189839 fail=0 hi=43 rtt_avg=34us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=1094us lock_wait_max=1305us drain_max=1094us tick_max=24us apply_max=1121us persist_max=2112us applies_in_worst=13 arc_miss=0 arc_term_miss=7 opid_replay=130 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10456237 ino=1051709 ci=0
+raft-host: txn-recover shard=1577 coord=1577 parts=2 age=14.7s -> COMMIT (resolved)
+raft-host: apply publish rc=-13 index=10457177 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10457708 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10457709 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10457710 ino=1051709 ci=0
+raft-host: unlink-simple parent=926094 name=f36 rc=-13 hint=3 dsh=398 dg=2
+raft-host: apply publish rc=-13 index=10457711 ino=1051709 ci=0
+raft-obs: g2 term 1130->1131 role FOLLOWER->CANDIDATE leader=-1 commit=8981304 applied=8981304 t=1790432623984ms
+raft-host: apply publish rc=-13 index=10457715 ino=1051709 ci=0
+raft-obs: g2 term 1131->1132 role CANDIDATE->FOLLOWER leader=-1 commit=8981304 applied=8981304 t=1790432624588ms
+raft-host: unlink-simple parent=926094 name=f36 rc=-13 hint=3 dsh=398 dg=2
+raft-host: rmdir parent=870402 name=b rc=-13 hint=3
+raft-host: apply publish rc=-13 index=10458122 ino=1051709 ci=0
+raft-host: rmdir parent=757162 name=d rc=-13 hint=1
+raft-host: rmdir parent=757162 name=d rc=-13 hint=1
+raft-host: rmdir parent=757162 name=d rc=-13 hint=1
+raft-host: rmdir parent=757162 name=d rc=-13 hint=1
+raft-host: apply rmdir rc=-13 index=10458786 parent=901893 name=hardlink_three_names
+raft-host: apply rmdir rc=-13 index=10458872 parent=901893 name=hardlink_three_names
+raft-host: txn-recover shard=1819 coord=1819 parts=2 age=19.0s -> ABORT
+raft-host: apply publish rc=-13 index=10458920 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10458994 parent=901893 name=hardlink_three_names
+raft-host: rmdir parent=757162 name=d rc=-13 hint=1
+raft-obs: tx->0 enq=245410 drop=0 sent=245410 fail=0 hi=147 rtt_avg=40us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=64636 drop=0 sent=64635 fail=0 hi=23 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=895us lock_wait_max=1354us drain_max=895us tick_max=269us apply_max=1577us persist_max=5579us applies_in_worst=8 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply rmdir rc=-13 index=10459105 parent=901893 name=hardlink_three_names
+raft-host: apply rmdir rc=-13 index=10459313 parent=901893 name=hardlink_three_names
+raft-host: apply publish rc=-13 index=10459389 ino=1051709 ci=0
+raft-host: rmdir parent=757162 name=d rc=-13 hint=1
+raft-host: txn-recover shard=1955 coord=1955 parts=1 age=20.2s -> ABORT
+raft-host: apply publish rc=-13 index=10459931 ino=1051709 ci=0
+raft-host: rmdir parent=757162 name=d rc=-13 hint=1
+raft-host: apply rmdir rc=-13 index=10460465 parent=1 name=posix-fcstor009-r2nyxeg5
+raft-host: rmdir parent=1 name=posix-fcstor009-r2nyxeg5 rc=-13 hint=1
+raft-host: apply rmdir rc=-13 index=10460467 parent=1 name=posix-fcstor009-r2nyxeg5
+raft-host: rmdir parent=1 name=posix-fcstor009-r2nyxeg5 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10460516 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10460521 parent=1 name=posix-fcstor009-r2nyxeg5
+raft-host: rmdir parent=1 name=posix-fcstor009-r2nyxeg5 rc=-13 hint=1
+raft-host: apply rmdir rc=-13 index=10460596 parent=1 name=posix-fcstor009-r2nyxeg5
+raft-host: rmdir parent=1 name=posix-fcstor009-r2nyxeg5 rc=-13 hint=1
+raft-host: rmdir parent=757162 name=d rc=-13 hint=1
+raft-host: apply rmdir rc=-13 index=10460786 parent=1 name=posix-fcstor009-r2nyxeg5
+raft-host: rmdir parent=1 name=posix-fcstor009-r2nyxeg5 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10460889 ino=1051709 ci=0
+raft-host: txn-recover shard=2153 coord=2480 parts=2 age=22.5s -> ABORT
+raft-host: apply rmdir rc=-13 index=10461354 parent=1 name=posix-fcstor009-r2nyxeg5
+raft-host: rmdir parent=1 name=posix-fcstor009-r2nyxeg5 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10461495 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10461934 parent=1 name=posix-fcstor009-r2nyxeg5
+raft-host: rmdir parent=1 name=posix-fcstor009-r2nyxeg5 rc=-13 hint=1
+raft-host: apply rmdir rc=-13 index=10461940 parent=1019889 name=opt_openat
+raft-host: apply rmdir rc=-13 index=10461941 parent=1019889 name=opt_openat
+raft-host: apply rmdir rc=-13 index=10461942 parent=1019889 name=opt_openat
+raft-host: apply publish rc=-13 index=10461943 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10461944 parent=1019889 name=opt_openat
+raft-obs: tx->0 enq=253736 drop=0 sent=253736 fail=0 hi=147 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=78742 drop=0 sent=78742 fail=0 hi=23 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=759us lock_wait_max=808us drain_max=759us tick_max=5us apply_max=1113us persist_max=1162us applies_in_worst=6 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply rmdir rc=-13 index=10461945 parent=1019889 name=opt_openat
+raft-host: apply rmdir rc=-13 index=10461946 parent=1 name=posix-fcstor009-r2nyxeg5
+raft-host: rmdir parent=1 name=posix-fcstor009-r2nyxeg5 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10461993 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10462024 parent=1019889 name=opt_openat
+raft-host: apply rmdir rc=-13 index=10462028 parent=1 name=posix-fcstor009-r2nyxeg5
+raft-host: rmdir parent=1 name=posix-fcstor009-r2nyxeg5 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10462029 ino=1051709 ci=0
+raft-host: txn-recover shard=2371 coord=2036 parts=2 age=25.8s -> ABORT
+raft-host: apply rmdir rc=-13 index=10462095 parent=1019889 name=opt_openat
+raft-host: apply rmdir rc=-13 index=10462099 parent=1 name=posix-fcstor009-r2nyxeg5
+raft-host: rmdir parent=1 name=posix-fcstor009-r2nyxeg5 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10462100 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10462101 parent=1019889 name=opt_openat
+raft-host: apply rmdir rc=-13 index=10462105 parent=1 name=posix-fcstor009-r2nyxeg5
+raft-host: rmdir parent=1 name=posix-fcstor009-r2nyxeg5 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10462171 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10462172 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10462173 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10462174 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10462175 parent=1019889 name=opt_openat
+raft-host: apply rmdir rc=-13 index=10462179 parent=1 name=posix-fcstor009-r2nyxeg5
+raft-host: rmdir parent=1 name=posix-fcstor009-r2nyxeg5 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10462180 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10462246 parent=1019889 name=opt_openat
+raft-host: apply rmdir rc=-13 index=10462250 parent=1 name=posix-fcstor009-r2nyxeg5
+raft-host: rmdir parent=1 name=posix-fcstor009-r2nyxeg5 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10462259 ino=1051709 ci=0
+raft-host: txn-recover shard=2619 coord=3126 parts=2 age=29.2s -> ABORT
+raft-host: apply rmdir rc=-13 index=10462364 parent=1 name=posix-fcstor009-r2nyxeg5
+raft-host: rmdir parent=1 name=posix-fcstor009-r2nyxeg5 rc=-13 hint=1
+raft-obs: tx->0 enq=259050 drop=0 sent=259050 fail=0 hi=147 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=88056 drop=0 sent=88056 fail=0 hi=38 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=502us lock_wait_max=280us drain_max=502us tick_max=11us apply_max=118us persist_max=1023us applies_in_worst=3 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10462519 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10462639 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-host: apply rmdir rc=-13 index=10462640 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-host: apply rmdir rc=-13 index=10462642 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-host: apply rmdir rc=-13 index=10462646 parent=1 name=posix-fcstor009-r2nyxeg5
+raft-host: rmdir parent=1 name=posix-fcstor009-r2nyxeg5 rc=-13 hint=1
+raft-host: apply rmdir rc=-13 index=10462647 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10462697 ino=1051709 ci=0
+raft-host: txn-recover shard=2865 coord=2865 parts=2 age=30.4s -> ABORT
+raft-host: apply rmdir rc=-13 index=10462716 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10462721 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10462722 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10462791 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10462792 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10462861 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10462862 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10462866 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10462932 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-host: txn-recover shard=3283 coord=3283 parts=2 age=33.8s -> ABORT
+raft-host: apply publish rc=-13 index=10463014 ino=1051709 ci=0
+raft-obs: tx->0 enq=264402 drop=0 sent=264402 fail=0 hi=147 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=96384 drop=0 sent=96383 fail=0 hi=38 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=14563us lock_wait_max=270us drain_max=14563us tick_max=9us apply_max=14555us persist_max=1056us applies_in_worst=3 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply rmdir rc=-13 index=10463015 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10463082 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10463083 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10463084 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10463150 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10463151 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10463152 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-host: apply rmdir rc=-13 index=10463218 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10463219 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463220 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463221 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463222 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463288 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10463289 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-host: apply publish rc=-13 index=10463290 ino=1051709 ci=0
+raft-host: apply rmdir rc=-13 index=10463297 parent=1 name=posix-fcstor012-lcz1_e82
+raft-host: rmdir parent=1 name=posix-fcstor012-lcz1_e82 rc=-13 hint=1
+raft-obs: tx->0 enq=268641 drop=0 sent=268635 fail=0 hi=147 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=105964 drop=0 sent=105957 fail=0 hi=38 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=277us lock_wait_max=276us drain_max=277us tick_max=7us apply_max=84us persist_max=834us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10463357 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463423 ino=1051709 ci=0
+raft-host: txn-recover shard=4081 coord=4081 parts=2 age=41.6s -> ABORT
+raft-host: apply publish rc=-13 index=10463491 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463492 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463558 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463625 ino=1051709 ci=0
+raft-obs: tx->0 enq=273237 drop=0 sent=273237 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=115940 drop=0 sent=115940 fail=0 hi=38 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=275us lock_wait_max=380us drain_max=275us tick_max=8us apply_max=49us persist_max=1265us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10463691 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463692 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463758 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463821 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463886 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463887 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463888 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463889 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10463955 ino=1051709 ci=0
+raft-obs: tx->0 enq=278153 drop=0 sent=278153 fail=0 hi=147 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=125129 drop=0 sent=125129 fail=0 hi=38 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=286us lock_wait_max=302us drain_max=286us tick_max=5us apply_max=49us persist_max=809us applies_in_worst=2 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10463956 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464022 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464089 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464154 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464155 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464221 ino=1051709 ci=0
+raft-obs: tx->0 enq=282411 drop=0 sent=282404 fail=0 hi=147 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=131790 drop=0 sent=131784 fail=0 hi=38 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=303us lock_wait_max=297us drain_max=303us tick_max=6us apply_max=76us persist_max=838us applies_in_worst=2 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10464287 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464353 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464380 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464420 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464486 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464552 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464553 ino=1051709 ci=0
+raft-obs: tx->0 enq=287551 drop=0 sent=287551 fail=0 hi=147 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=141813 drop=0 sent=141813 fail=0 hi=38 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=273us lock_wait_max=271us drain_max=273us tick_max=6us apply_max=82us persist_max=824us applies_in_worst=2 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10464554 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464555 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464621 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464694 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464695 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464761 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464827 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464892 ino=1051709 ci=0
+raft-obs: tx->0 enq=292911 drop=0 sent=292911 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=151762 drop=0 sent=151762 fail=0 hi=38 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=288us lock_wait_max=285us drain_max=288us tick_max=6us apply_max=87us persist_max=817us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10464893 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10464959 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465025 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465092 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465101 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465167 ino=1051709 ci=0
+raft-obs: tx->0 enq=298100 drop=0 sent=298100 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=159163 drop=0 sent=159163 fail=0 hi=38 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=1782us lock_wait_max=494us drain_max=1781us tick_max=4us apply_max=326us persist_max=815us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10465233 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465234 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465235 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465301 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465302 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465380 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465412 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465447 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465514 ino=1051709 ci=0
+raft-obs: tx->0 enq=301182 drop=0 sent=301182 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=166241 drop=0 sent=166241 fail=0 hi=38 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=292us lock_wait_max=284us drain_max=292us tick_max=5us apply_max=66us persist_max=1053us applies_in_worst=2 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10465580 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465637 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465647 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465713 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465779 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465845 ino=1051709 ci=0
+raft-obs: tx->0 enq=306940 drop=0 sent=306940 fail=0 hi=147 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=176654 drop=0 sent=176653 fail=0 hi=42 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=302us lock_wait_max=278us drain_max=302us tick_max=13us apply_max=81us persist_max=788us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10465846 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465912 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465913 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465979 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465980 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10465981 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466047 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466113 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466115 ino=1051709 ci=0
+raft-obs: tx->0 enq=312961 drop=0 sent=312961 fail=0 hi=147 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=185952 drop=0 sent=185952 fail=0 hi=42 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=279us lock_wait_max=509us drain_max=279us tick_max=8us apply_max=67us persist_max=861us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10466181 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466247 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466313 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466315 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466381 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466447 ino=1051709 ci=0
+raft-obs: tx->0 enq=318019 drop=0 sent=318006 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=195795 drop=0 sent=195782 fail=0 hi=42 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=295us lock_wait_max=280us drain_max=295us tick_max=6us apply_max=122us persist_max=815us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10466512 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466513 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466587 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466588 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466589 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466654 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466655 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466720 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466723 ino=1051709 ci=0
+raft-obs: tx->0 enq=322966 drop=0 sent=322966 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=205594 drop=0 sent=205594 fail=0 hi=42 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=301us lock_wait_max=328us drain_max=301us tick_max=8us apply_max=119us persist_max=812us applies_in_worst=2 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10466787 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466853 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466919 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466983 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10466986 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467052 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467118 ino=1051709 ci=0
+raft-obs: tx->0 enq=328384 drop=0 sent=328384 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=216315 drop=0 sent=216311 fail=0 hi=42 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=521us lock_wait_max=279us drain_max=521us tick_max=11us apply_max=65us persist_max=801us applies_in_worst=3 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10467184 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467185 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467251 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467252 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467253 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467319 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467328 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467393 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467459 ino=1051709 ci=0
+raft-obs: tx->0 enq=334426 drop=0 sent=334425 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=226346 drop=0 sent=226345 fail=0 hi=42 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=524us lock_wait_max=269us drain_max=523us tick_max=5us apply_max=70us persist_max=798us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10467460 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467526 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467591 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467657 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467658 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467724 ino=1051709 ci=0
+raft-obs: tx->0 enq=338531 drop=0 sent=338531 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=236232 drop=0 sent=236232 fail=0 hi=42 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=294us lock_wait_max=264us drain_max=294us tick_max=6us apply_max=61us persist_max=791us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10467790 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467856 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467916 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467923 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467924 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467989 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467991 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10467992 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468058 ino=1051709 ci=0
+raft-obs: tx->0 enq=344551 drop=0 sent=344551 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=246611 drop=0 sent=246611 fail=0 hi=42 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=527us lock_wait_max=274us drain_max=527us tick_max=8us apply_max=91us persist_max=803us applies_in_worst=2 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10468124 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468125 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468191 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468257 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468323 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468389 ino=1051709 ci=0
+raft-obs: tx->0 enq=350376 drop=0 sent=350376 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=256452 drop=0 sent=256452 fail=0 hi=42 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=272us lock_wait_max=494us drain_max=272us tick_max=9us apply_max=75us persist_max=870us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10468390 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468456 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468522 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468587 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468653 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468654 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468655 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468656 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468657 ino=1051709 ci=0
+raft-obs: tx->0 enq=355147 drop=0 sent=355147 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=262179 drop=0 sent=262179 fail=0 hi=42 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=292us lock_wait_max=267us drain_max=291us tick_max=12us apply_max=111us persist_max=789us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10468723 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468788 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468854 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468920 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468921 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10468988 ino=1051709 ci=0
+raft-obs: tx->0 enq=359364 drop=0 sent=359364 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=267196 drop=0 sent=267196 fail=0 hi=42 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=288us lock_wait_max=287us drain_max=288us tick_max=5us apply_max=85us persist_max=834us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10469053 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469119 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469120 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469186 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469252 ino=1051709 ci=0
+raft-obs: tx->0 enq=364262 drop=0 sent=364261 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=272136 drop=0 sent=272135 fail=0 hi=42 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=279us lock_wait_max=280us drain_max=279us tick_max=11us apply_max=93us persist_max=810us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10469319 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469320 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469321 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469325 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469326 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469328 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469329 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469331 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469333 ino=1051709 ci=0
+raft-obs: tx->0 enq=364388 drop=0 sent=364388 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=272375 drop=0 sent=272375 fail=0 hi=42 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=289us lock_wait_max=1us drain_max=289us tick_max=5us apply_max=75us persist_max=784us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10469335 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469337 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469339 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469340 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469342 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469344 ino=1051709 ci=0
+raft-obs: tx->0 enq=364502 drop=0 sent=364502 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=272599 drop=0 sent=272599 fail=0 hi=42 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=293us lock_wait_max=111us drain_max=293us tick_max=5us apply_max=75us persist_max=562us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10469346 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469348 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469349 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469350 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469351 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469353 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469355 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469357 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469358 ino=1051709 ci=0
+raft-obs: tx->0 enq=364622 drop=0 sent=364622 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=272833 drop=0 sent=272832 fail=0 hi=42 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=291us lock_wait_max=1us drain_max=291us tick_max=5us apply_max=74us persist_max=561us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10469360 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469362 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469364 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469366 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469367 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469369 ino=1051709 ci=0
+raft-obs: tx->0 enq=364737 drop=0 sent=364737 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=273058 drop=0 sent=273058 fail=0 hi=42 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=280us lock_wait_max=4us drain_max=280us tick_max=8us apply_max=79us persist_max=555us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10469371 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469373 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469375 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469376 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469377 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469379 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469380 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469382 ino=1051709 ci=0
+raft-obs: tx->0 enq=364855 drop=0 sent=364855 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=273289 drop=0 sent=273289 fail=0 hi=42 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=299us lock_wait_max=144us drain_max=298us tick_max=14us apply_max=108us persist_max=554us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10469384 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469385 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469387 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469389 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469391 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469393 ino=1051709 ci=0
+raft-obs: tx->0 enq=364970 drop=0 sent=364969 fail=0 hi=147 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=273514 drop=0 sent=273513 fail=0 hi=42 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=286us lock_wait_max=1us drain_max=286us tick_max=5us apply_max=76us persist_max=565us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10469395 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469396 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469398 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469400 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469402 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469403 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469404 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469406 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469407 ino=1051709 ci=0
+raft-obs: tx->0 enq=365092 drop=0 sent=365092 fail=0 hi=147 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=273745 drop=0 sent=273745 fail=0 hi=42 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=294us lock_wait_max=1us drain_max=294us tick_max=5us apply_max=83us persist_max=576us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10469409 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469411 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469413 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469414 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469416 ino=1051709 ci=0
+raft-host: apply publish rc=-13 index=10469418 ino=1051709 ci=0
+raft-obs: tx->0 enq=365205 drop=0 sent=365205 fail=0 hi=147 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=273969 drop=0 sent=273969 fail=0 hi=42 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=194234 drop=0 sent=194234 fail=0 hi=43 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=1833 pump_hold_max=286us lock_wait_max=1us drain_max=286us tick_max=5us apply_max=73us persist_max=546us applies_in_worst=1 arc_miss=0 arc_term_miss=7 opid_replay=131 fin_q=150 fin_done=136 fin_drop=14 fin_full=0
+raft-host: apply publish rc=-13 index=10469420 ino=1051709 ci=0
