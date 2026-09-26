@@ -611,19 +611,25 @@ int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
     req.after_src = src_io ? *src_io : 0;
     if (name_io)
         strncpy(req.after_name, name_io, EFS_MAX_NAME - 1);
+    int prof = rpc_prof_enabled();
+    unsigned long long t0 = prof ? rpc_prof_now_us() : 0;
     conn = rpc_owner_conn_shard(shard, &nid);
+    unsigned long long t1 = prof ? rpc_prof_now_us() : 0;
     if (!conn)
         return EFS_ERR_NET;
     if (efs_conn_send_msg(conn, EFS_MSG_INODE_READDIR, &req, sizeof(req)) != 0) {
         efs_client_conn_drop(nid, conn);
         return EFS_ERR_NET;
     }
+    unsigned long long t2 = prof ? rpc_prof_now_us() : 0;
     rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
+    unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
     if (rc != 0) {
         efs_client_conn_drop(nid, conn);
         return EFS_ERR_NET;
     }
     efs_client_conn_release(nid, conn);
+    rpc_prof_add(EFS_MSG_INODE_READDIR, t1 - t0, t2 - t1, t3 - t2, 0);
     if (rtype != EFS_MSG_INODE_READDIR_REPLY ||
         plen < sizeof(struct efs_msg_inode_readdir_reply)) {
         free(payload);
@@ -965,15 +971,18 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
 {
     efs_node_id_t target = 0;
     int saw_busy = 0;
+    int prof = rpc_prof_enabled();
     for (int attempt = 0; attempt < 16; attempt++) {
         efs_node_id_t nid = 0;
         struct efs_conn *conn;
+        unsigned long long t0 = prof ? rpc_prof_now_us() : 0;
         if (target != 0) {
             conn = efs_client_conn_get(target);
             nid = target;
         } else {
             conn = raft_dual_voter_conn(&nid);
         }
+        unsigned long long t1 = prof ? rpc_prof_now_us() : 0;
         if (!conn || efs_conn_send_msg(conn, type, req, req_len) != 0) {
             if (conn)
                 efs_client_conn_drop(nid, conn);
@@ -984,10 +993,12 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
             }
             return EFS_ERR_NET;
         }
+        unsigned long long t2 = prof ? rpc_prof_now_us() : 0;
         uint8_t rtype = 0;
         void *payload = NULL;
         uint32_t plen = 0;
         int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
+        unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
         if (rc != 0) {
             efs_client_conn_drop(nid, conn);
             if (attempt + 1 < 16) {
@@ -1008,7 +1019,9 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         if (r->status == EFS_INODE_RPC_BUSY) {
             saw_busy = 1;
             unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
-            usleep((useconds_t)(50000ull << shift));
+            unsigned long long sleep_us = 50000ull << shift;
+            usleep((useconds_t)sleep_us);
+            rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
         }
         if (r->status == EFS_INODE_RPC_STALE && stale_retryable(type)) {
@@ -1017,20 +1030,27 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
              * REPORT_CHUNKS owns its STALE (W1). */
             saw_busy = 1;
             unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
-            usleep((useconds_t)(50000ull << shift));
+            unsigned long long sleep_us = 50000ull << shift;
+            usleep((useconds_t)sleep_us);
+            rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
         }
-        if (r->status != EFS_INODE_RPC_NOT_PRIMARY)
+        if (r->status != EFS_INODE_RPC_NOT_PRIMARY) {
+            rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, 0);
             return EFS_OK;
+        }
         if (r->primary_id == 0 || r->primary_id == nid) {
             /* Hintless NOT_PRIMARY = election in progress; transient,
              * back off like BUSY (see rpc_send_recv_shard). */
             unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
+            unsigned long long sleep_us = 50000ull << shift;
             saw_busy = 1;
             target = 0;
-            usleep((useconds_t)(50000ull << shift));
+            usleep((useconds_t)sleep_us);
+            rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
         }
+        rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, 0);
         target = r->primary_id;
     }
     if (saw_busy)
