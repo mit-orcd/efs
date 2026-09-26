@@ -42,8 +42,8 @@ struct blk_ref {
 /* Direct-mapped. A mkdir's negative dentry lookup used to pread one
  * block per segment and free it, so the next name in the same directory
  * paid the disk again. Slots keep those blocks resident. Each block is
- * about 64 KiB, so this is a couple of megabytes per segment. */
-#define KV_SEG_CACHE_SLOTS 32
+ * about 8 KiB, so this is a couple of megabytes per segment. */
+#define KV_SEG_CACHE_SLOTS 256
 
 struct seg_cslot {
     uint32_t bi;
@@ -683,6 +683,31 @@ int kv_seg_get(struct kv_seg *s, const uint8_t *key, uint32_t klen,
     return kv_seg_install(s, &io, blk, key, klen, val, op);
 }
 
+/* True when no key of this segment can be >= seek and carry prefix.
+ * The range test is the one compaction uses (first key from the block
+ * index, last key learned once per segment). Unknown = not excluded. */
+int kv_seg_excludes(struct kv_seg *s, const uint8_t *seek, uint32_t slen,
+                    const uint8_t *prefix, uint32_t plen)
+{
+    const uint8_t *fk = NULL, *lk = NULL;
+    uint32_t fl = 0, ll = 0;
+
+    if (!s || !s->nblocks)
+        return 1;
+    if (plen && prefix) {
+        if (kv_seg_first_key(s, &fk, &fl) == EFS_OK &&
+            !kv_has_prefix(fk, fl, prefix, plen) &&
+            kv_key_cmp(fk, fl, prefix, plen) > 0)
+            return 1;
+    }
+    if (slen && seek) {
+        if (kv_seg_last_key(s, &lk, &ll) == EFS_OK &&
+            kv_key_cmp(lk, ll, seek, slen) < 0)
+            return 1;
+    }
+    return 0;
+}
+
 /* --- iterator -------------------------------------------------------- */
 
 struct kv_seg_iter {
@@ -728,6 +753,20 @@ static int iter_load(struct kv_seg_iter *it)
     if (!p)
         return EFS_ERR_NOMEM;
     it->blk = p;
+    /* A block a point get just read is in the segment's slots; iterators
+     * run under the LSM lock like the install that filled them. */
+    {
+        struct seg_cslot *c = &it->s->cslot[it->bi % KV_SEG_CACHE_SLOTS];
+
+        if (c->valid && c->bi == it->bi && c->len == r->len &&
+            c->off == r->off && c->blk) {
+            memcpy(it->blk, c->blk, r->len);
+            it->blk_len = r->len;
+            it->off = 0;
+            it->loaded = 1;
+            return EFS_OK;
+        }
+    }
     if (pread_all(it->s->fd, it->blk, r->len, r->off) != EFS_OK)
         return EFS_ERR_IO;
     it->blk_len = r->len;

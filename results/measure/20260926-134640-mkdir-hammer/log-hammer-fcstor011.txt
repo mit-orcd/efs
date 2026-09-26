@@ -1,0 +1,20 @@
+ERR fcstor011 p2 i77 mkdir EIO
+DONE fcstor011 p3 n=146 err=0 p50=66.44 p90=144.88 p99=873.12 max=1886.84 sum=15.006
+DONE fcstor011 p14 n=136 err=0 p50=81.89 p90=136.68 p99=897.37 max=2657.90 sum=15.106
+DONE fcstor011 p12 n=148 err=0 p50=66.03 p90=134.78 p99=893.89 max=1947.92 sum=15.020
+DONE fcstor011 p7 n=145 err=0 p50=72.83 p90=143.25 p99=911.26 max=2257.10 sum=15.057
+DONE fcstor011 p1 n=150 err=0 p50=65.61 p90=136.70 p99=877.72 max=1956.68 sum=15.018
+DONE fcstor011 p5 n=147 err=0 p50=84.02 p90=140.58 p99=899.56 max=1895.10 sum=15.012
+DONE fcstor011 p10 n=145 err=0 p50=74.80 p90=138.85 p99=883.58 max=1881.30 sum=15.097
+ERR fcstor011 p9 rmdir-own ENOTEMPTY
+DONE fcstor011 p9 n=147 err=0 p50=87.01 p90=138.38 p99=890.37 max=2000.33 sum=15.120
+DONE fcstor011 p0 n=143 err=0 p50=71.42 p90=157.00 p99=979.39 max=2109.08 sum=15.067
+DONE fcstor011 p4 n=148 err=0 p50=79.32 p90=157.60 p99=1046.28 max=1899.69 sum=15.044
+DONE fcstor011 p6 n=151 err=0 p50=76.04 p90=152.51 p99=298.97 max=1916.77 sum=15.006
+ERR fcstor011 p11 rmdir-own ENOTEMPTY
+DONE fcstor011 p11 n=151 err=0 p50=67.67 p90=149.86 p99=358.01 max=2155.28 sum=15.085
+DONE fcstor011 p13 n=156 err=0 p50=74.52 p90=151.63 p99=261.79 max=2100.77 sum=15.057
+DONE fcstor011 p15 n=153 err=0 p50=75.19 p90=151.57 p99=273.13 max=1969.51 sum=15.081
+DONE fcstor011 p2 n=155 err=1 p50=73.04 p90=150.99 p99=174.16 max=860.37 sum=13.028
+DONE fcstor011 p8 n=164 err=0 p50=72.99 p90=143.66 p99=359.44 max=2146.51 sum=15.039
+HOST_DONE fcstor011 bad_procs=1

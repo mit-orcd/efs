@@ -98,6 +98,46 @@ under the host lock). Do not give every proposer its own sync-hold
 slot: idle mkdir waited out unrelated appends (p50 7.1 → 11.9 ms)
 and the 144-way rate did not move.
 
+**Apply path: where the 887/s ceiling was (Sep 26 midday).** A
+thread-local fsync defer for one txn's PREPARE/RESOLVE burst was
+built and measured first: no gain (`20260926-110435`, 12059 / p50
+174 ms, clean apply) — the wall was never the leader fsync count. It
+was the apply itself: `strace -c` on the dual-host follower during
+the hammer showed 8 650 `pread64`/s and 875 `fsync`/s; `perf` showed
+half of efsd on `memcmp` under `search_block` / `kv_msrc_advance`.
+Every PREPARE apply runs two prefix scans (`guards_conflict`,
+`reduces_pending`), every RESOLVE three (`txn_scan_kinds`), and
+`merge_scan` opened an iterator on every LSM segment — one pread and
+a linear walk of a 64 KiB block each — under `l->mu` on the pump.
+Three changes, all LSM-internal / pump-internal, no protocol change:
+(1) `merge_scan` skips a segment whose [first,last] key range cannot
+hold the prefix (`kv_seg_excludes`; L1 is range-partitioned, so a
+3-byte txn prefix is in one or two of them) and the iterator reuses
+the segment's cached block; (2) the pump's KV WAL fsync and the
+applied-index file write moved off `h->mu` and the file write is
+throttled to 10 ms (three fsyncs per ~3 ms cycle were under the lock
+proposers queue on; the saved index is only a restart lower bound);
+(3) `KV_LSM_BLOCK_TARGET` 64 → 8 KiB (readers take any block size;
+old segments stay valid until compaction rewrites them). Hammers,
+build string still `194286c37a4f-dirty`: prune alone
+`20260926-112916`: idle 9.5, 144-way **13715 / p50 137 ms**; + pump
+tail `20260926-133934`: idle **6.97**, **14764 / 106 ms**; + 8 KiB
+blocks `20260926-134640` idle **4.54**, **21990 / 73 ms** and
+`20260926-134738` idle 5.59, **28072 / p50 60 ms** (~1 870 mkdir/s,
+22 `rmdir-own ENOTEMPTY`, 0 mkdir errors). Every one of those runs
+contained a 1.7–2.0 s `kv_compact_locked` stall; the clean-window
+rate is higher still. **Cost of the speed: the L1 rewrite now
+happens every ~7 s of hammer** (compaction trigger is 4 × 4 MiB L0
+flushes and the table writes ~2 MB/s of records) and a 1.9 s stall is
+past the election timeout — the 9-host suite on this build
+(`results/posix/20260926-1350-blk`) ran in **20–38 s** but scored
+195–199/201 with two elections, both at a 1.9 s compaction
+(`link_across_dirs`, `last_link_unlink_other_dir`, `dir_many_files`,
+`dir_deep_nesting*` — the BUSY-exhausted-10 s / election class).
+That is W13's row: nothing here changes the recommendation, it makes
+the decision more urgent. Do not tune `l0_max`/memtable size as a
+substitute without ratifying; report it.
+
 **9-host suite on that same tree** (`results/posix/20260926-054047`,
 timeline `results/measure/20260926-014030-w8-stall-timeline`):
 seven hosts **200/201**, fcstor007 199, fcstor013 198, 39–41 s,

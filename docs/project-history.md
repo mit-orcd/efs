@@ -90,6 +90,67 @@ every proposer a slot, so the fsync waited for threads that had not
 appended yet, moved idle mkdir from 7.1 ms to 11.9 ms and did not
 raise the 144-way rate. That version was not kept.
 
+## Sep 26 2026 midday — the mkdir ceiling was the apply path, not fsync
+
+Follow-up to the hammer work above. A thread-local fsync defer
+(`log_defer_depth`, the follower-batch mechanism) wrapped the
+cross-group mkdir/rmdir PREPARE loops and the RESOLVE loop so one
+thread's ~6 entries shared one fsync. Rolled and measured
+(`results/measure/20260926-110435-mkdir-hammer`, uncited): 12059
+mkdirs / p50 174 ms with a clean 26 ms apply_max, idle 10.7 ms —
+no better than the 887/s baseline. Reverted before commit.
+
+Then measured instead of guessed. `strace -c -f -p efsd` on fcstor004
+(dual-host follower) for 12 s of hammer: 103 847 `pread64`, 10 506
+`fsync`, 3 502 `openat`+`rename`+`pwrite64`+`close` (the applied-index
+file, one per pump cycle per group). `perf record -g` on the same
+host: 32 % `__memcmp_avx2_movbe`, 5 % `search_block`, 4.7 %
+`kv_seg_iter_next`, 6 % `memmove` — the linear walk inside 64 KiB
+LSM blocks, under `l->mu`, on the pump. Each PREPARE apply runs
+`guards_conflict` + `reduces_pending` (two prefix scans), each RESOLVE
+`txn_scan_kinds` (three); `merge_scan` opened an iterator on every
+segment (one pread + walk each) whether or not the segment's key
+range could hold the prefix.
+
+Three changes, committed together:
+
+1. `kv_seg_excludes` + `merge_scan` skip: a segment whose first key is
+   past the prefix or whose last key is below the seek is not opened
+   (the range test compaction already uses). `iter_load` copies a block
+   from the segment's slot cache instead of a pread when a point get
+   just read it. `pread64` fell off the strace top list.
+2. Pump durability tail off `h->mu`: the KV WAL fsync and the
+   applied-index write now run after the unlock; the file write is
+   throttled to 10 ms (`HOST_APPLIED_PERSIST_US`) and forced once at
+   pump exit. The saved index is only a restart lower bound and never
+   passes the durable KV, so the guarantee is unchanged; waiters wake
+   before the KV fsync, which is fine because the Raft log is the
+   durability boundary.
+3. `KV_LSM_BLOCK_TARGET` 64 KiB → 8 KiB, `KV_SEG_CACHE_SLOTS` 32 →
+   256. Readers take any block size, so the live table needed no wipe;
+   compaction rewrites old segments. Index RAM ≈ 8 MB per GiB.
+
+Hammers (all on build string `194286c37a4f-dirty`, each containing one
+1.7–2.0 s `kv_compact_locked` stall): prune only
+`20260926-112916` idle 9.5 / 144-way 13715 / p50 137 ms; + pump tail
+`20260926-133934` idle 6.97 / 14764 / 106; + 8 KiB `20260926-134640`
+idle 4.54 / 21990 / 73 and `20260926-134738` idle 5.59 / **28072 /
+p50 60 ms**, 22 `rmdir-own ENOTEMPTY`, 0 mkdir errors. perf after:
+`memcmp` 24 % (now mostly `kv_compact_locked` 7 % and `lookup_mt`),
+`search_block` 0.8 %.
+
+Cost: the L1 rewrite now comes every ~7 s of hammer (trigger is 4 ×
+4 MiB flushes; the table writes ~2 MB/s of records at this rate) and
+1.9 s is past the election timeout. 9-host suite
+`results/posix/20260926-1350-blk`: 20–38 s per host (was 39–41),
+195–199/201, two elections each at a 1.9 s compaction (g0 6624→6626,
+g2 1068→1069), `txn-recover` ABORTs after them, client
+`inode-rpc: ... exhausted 16 BUSY/STALE retries (10.3 s)`. Failures
+are the election class (`link_across_dirs`,
+`last_link_unlink_other_dir`, `dir_many_files`, `dir_deep_nesting*`).
+W13 is unchanged as a decision; it is now the only thing between this
+build and 200/201.
+
 ## Sep 26 2026 — txn finisher after a 400 ms apply wait
 
 A full-L1 compaction under the KV lock stalls apply for >400 ms

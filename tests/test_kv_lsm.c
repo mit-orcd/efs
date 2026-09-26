@@ -283,6 +283,32 @@ static void test_scan_across_levels(void)
     CHECK(efs_kv_scan_prefix(kv, (const uint8_t *)"p/", 2, acc_cb, &a) == EFS_OK,
           "scan_prefix");
     CHECK(strcmp(a.buf, "p/a,p/b,p/d,") == 0, "prefix bounded");
+
+    /* Segments whose key range misses the prefix are skipped, not read:
+     * a prefix below every L1 key, one above, and one whose only hit is
+     * the segment's last key. */
+    CHECK(put_s(kv, "r/a", "1") == EFS_OK, "put");
+    CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "flush r/ to L0");
+    memset(&a, 0, sizeof(a));
+    CHECK(efs_kv_scan_prefix(kv, (const uint8_t *)"o/", 2, acc_cb, &a) == EFS_OK,
+          "scan below");
+    CHECK(a.n == 0, "nothing below");
+    memset(&a, 0, sizeof(a));
+    CHECK(efs_kv_scan_prefix(kv, (const uint8_t *)"s/", 2, acc_cb, &a) == EFS_OK,
+          "scan above");
+    CHECK(a.n == 0, "nothing above");
+    memset(&a, 0, sizeof(a));
+    CHECK(efs_kv_scan_prefix(kv, (const uint8_t *)"q/", 2, acc_cb, &a) == EFS_OK,
+          "scan last key");
+    CHECK(strcmp(a.buf, "q/z,") == 0, "last key of the L1 segment");
+    memset(&a, 0, sizeof(a));
+    CHECK(efs_kv_scan_prefix(kv, (const uint8_t *)"r/", 2, acc_cb, &a) == EFS_OK,
+          "scan L0 only");
+    CHECK(strcmp(a.buf, "r/a,") == 0, "L0 segment past L1's range");
+    memset(&a, 0, sizeof(a));
+    CHECK(efs_kv_scan_from(kv, (const uint8_t *)"q/", 2, (const uint8_t *)"q/zz",
+                           4, acc_cb, &a) == EFS_OK, "scan_from past last");
+    CHECK(a.n == 0, "start past the segment's last key");
     efs_kv_lsm_close(kv);
 }
 

@@ -175,6 +175,7 @@ struct host_group {
     uint32_t voters;
     uint32_t desired; /* operator target; actual follows via joint (I18) */
     uint64_t applied_saved;
+    uint64_t applied_saved_us; /* pump-only: last applied-file write */
     int snap_oversized; /* export exceeded SNAP cmd cap; do not retry */
     int kv_incomplete;  /* apply missed a committed row; do not lead */
     struct efs_raft *r;
@@ -3691,18 +3692,30 @@ static void applied_path(struct efs_raft_host *h, uint8_t group,
     snprintf(path, cap, "%s/mdraft/applied.%u", h->s->storage_path, group);
 }
 
-static int persist_applied(struct efs_raft_host *h, int gi)
+/* Pump thread only, h->mu NOT required: idx was read under h->mu after
+ * this cycle's applies and the KV WAL fsync has already run, so the
+ * saved index never passes the KV's durable point. `force` skips the
+ * throttle (shutdown). Three fsyncs per pump cycle (WAL + one applied
+ * file per group) ran under h->mu at ~290 cycles/s: persist_max ~1 ms
+ * of every ~3 ms cycle with proposers queued on the lock. The saved
+ * index is only a restart lower bound; apply is idempotent for the
+ * replayed tail, so writing it every 10 ms is the same guarantee. */
+#define HOST_APPLIED_PERSIST_US 10000ull
+
+static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
+                           uint64_t now, int force)
 {
-    uint64_t idx;
     char path[EFS_MAX_PATH], tmp[EFS_MAX_PATH];
     uint8_t buf[8];
     int fd, n, rc;
 
     if (!h->g[gi].hosted || !h->g[gi].r)
         return EFS_OK;
-    idx = efs_raft_applied(h->g[gi].r);
     if (idx == 0 || idx == h->g[gi].applied_saved)
         return EFS_OK;
+    if (!force && now - h->g[gi].applied_saved_us < HOST_APPLIED_PERSIST_US)
+        return EFS_OK;
+    h->g[gi].applied_saved_us = now;
     applied_path(h, h->g[gi].group, path, sizeof(path));
     snprintf(tmp, sizeof(tmp), "%s.tmp", path);
     wr64be(buf, idx);
@@ -3855,6 +3868,7 @@ static void *host_pump(void *arg)
         struct pollfd pfd;
         uint64_t sink;
         uint64_t c0 = 0;
+        uint64_t applied_now[HOST_NGROUPS];
         int i;
         int obs = raft_obs_on();
         uint64_t t_drain = 0, t_tick = 0, t_persist = 0, t_wait = 0;
@@ -3925,16 +3939,13 @@ static void *host_pump(void *arg)
             t_tick = now_us_() - c0;
             c0 = now_us_();
         }
-        if (efs_kv_lsm_sync_release(h->kv) != EFS_OK)
-            fprintf(stderr, "raft-host: kv wal fsync failed at pump release\n");
         for (i = 0; i < HOST_NGROUPS; i++) {
-            (void)persist_applied(h, i);
+            applied_now[i] = h->g[i].hosted && h->g[i].r
+                                 ? efs_raft_applied(h->g[i].r) : 0;
             (void)host_maybe_snapshot(h, i);
             if (h->g[i].r)
                 h->g[i].voters = efs_raft_voters(h->g[i].r);
         }
-        if (obs)
-            t_persist = now_us_() - c0;
         /* Applies above may have advanced commit/applied/read state:
          * publish the lock-free view, then wake every waiter
          * (host_wait_applied / host_read_index) without a poll interval.
@@ -3954,18 +3965,37 @@ static void *host_pump(void *arg)
                 h->obs_drain_max_us = t_drain;
             if (t_tick > h->obs_tick_max_us)
                 h->obs_tick_max_us = t_tick;
-            if (t_persist > h->obs_persist_max_us)
-                h->obs_persist_max_us = t_persist;
             if (h->obs_apply_cycle_us > h->obs_apply_max_us)
                 h->obs_apply_max_us = h->obs_apply_cycle_us;
             if (h->obs_apply_cnt > h->obs_apply_max_cnt)
                 h->obs_apply_max_cnt = h->obs_apply_cnt;
-            held = t_drain + t_tick + t_persist;
+            held = t_drain + t_tick;
             if (held > h->obs_pump_hold_max_us)
                 h->obs_pump_hold_max_us = held;
             host_obs_dump(h, 0);
         }
         pthread_mutex_unlock(&h->mu);
+        /* Durability tail, off the lock: the KV WAL fsync for this
+         * cycle's applies, then (throttled) the saved applied index.
+         * Order matters — the index must not pass the durable KV. Only
+         * the pump applies, so nothing under h->mu depends on this fsync
+         * having finished; handler-thread KV writes outside the hold
+         * fsync themselves. */
+        if (obs)
+            c0 = now_us_();
+        if (efs_kv_lsm_sync_release(h->kv) != EFS_OK)
+            fprintf(stderr, "raft-host: kv wal fsync failed at pump release\n");
+        {
+            uint64_t pnow = now_us_();
+
+            for (i = 0; i < HOST_NGROUPS; i++)
+                (void)persist_applied(h, i, applied_now[i], pnow, 0);
+        }
+        if (obs) {
+            t_persist = now_us_() - c0;
+            if (t_persist > h->obs_persist_max_us)
+                h->obs_persist_max_us = t_persist;
+        }
         /* Sleep until the next raft timer tick OR an event (inbox message,
          * local propose, shutdown) — whichever comes first. Timer cadence is
          * unchanged; events just remove the up-to-5 ms wait. h->mu is NOT
@@ -3975,6 +4005,20 @@ static void *host_pump(void *arg)
         pfd.events = POLLIN;
         if (poll(&pfd, 1, HOST_TICK_US / 1000) > 0 && (pfd.revents & POLLIN))
             (void)read(h->pump_efd, &sink, sizeof(sink));
+    }
+    /* Final index, unthrottled, so a clean stop restarts without replay. */
+    {
+        uint64_t idx[HOST_NGROUPS];
+        int i;
+
+        pthread_mutex_lock(&h->mu);
+        for (i = 0; i < HOST_NGROUPS; i++)
+            idx[i] = h->g[i].hosted && h->g[i].r
+                         ? efs_raft_applied(h->g[i].r) : 0;
+        pthread_mutex_unlock(&h->mu);
+        (void)efs_kv_lsm_sync_release(h->kv);
+        for (i = 0; i < HOST_NGROUPS; i++)
+            (void)persist_applied(h, i, idx[i], now_us_(), 1);
     }
     return NULL;
 }

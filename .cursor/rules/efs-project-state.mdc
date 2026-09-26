@@ -104,14 +104,21 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  = tracked result logs the deploy rsync deletes, all four agree).
  Clients 007–015 on the same build. A point get pins the LSM segment
  and preads outside the KV lock, and keeps the block on a miss
- (`5d3e603`). Clean 144-way mkdir p50 **147 ms** / 887 mkdir/s, idle
- p50 7.1 ms
- (`results/measure/20260926-053753-mkdir-hammer`). Prior batching
- (`6a60318`) was 168 ms / 754. A 766 ms apply on that older binary
- is still W13, not ratified. Do not pipeline past the one
- in-flight batch. A multi-entry AppendEntries fsyncs once;
- giving every proposer a sync-hold slot slowed idle mkdir
- (7.1 → 11.9 ms) and did not raise the 144-way rate.
+ (`5d3e603`). **The mkdir ceiling was the apply path's KV scans, not
+ fsync** (Sep 26 midday): `merge_scan` now skips segments whose key
+ range misses the prefix, the pump's WAL fsync + applied-file write
+ run off `h->mu` (file write throttled 10 ms), LSM blocks are 8 KiB
+ (were 64; linear `memcmp` in blocks was half of efsd CPU). 144-way
+ mkdir p50 **60 ms** / ~1 870 mkdir/s, idle p50 **4.5–5.6 ms**
+ (`results/measure/20260926-134738-mkdir-hammer`, `-134640`), from
+ 147 ms / 887 (`20260926-053753`). Each run still had a 1.7–2.0 s
+ `kv_compact_locked` stall; at this rate the L1 rewrite comes every
+ ~7 s of hammer and costs an election — W13, not ratified; do not
+ tune memtable/`l0_max` around it. A thread-local fsync defer for a
+ txn's prep burst gave nothing (reverted); giving every proposer a
+ sync-hold slot slowed idle mkdir (7.1 → 11.9 ms). Do not pipeline
+ past the one in-flight batch. A multi-entry AppendEntries fsyncs
+ once.
  **Queue is stopped on four decisions** — START-HERE §1a "Decisions
  pending" has a recommendation + steps for each (W13 compaction, W11
  chunked snapshot, W9 client cache, W10 RDMA without a wipe); do not
@@ -235,8 +242,9 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   prints `fin_q` / `fin_done` / `fin_drop`. A stall longer than 400 ms
   is still the compaction (`apply_max`, `persist_max` ~1 ms) — W13.
 - **Never run KV prefix scans in a loop on a server thread.** One
-  `efs_kv_scan_prefix` = one block `pread` per LSM segment (17 now,
-  ~0.3 ms) under the LSM mutex the apply path needs; the first recovery
+ `efs_kv_scan_prefix` = one block `pread` per LSM segment whose key
+ range can hold the prefix (all of them before Sep 26; now L0s plus
+ one or two L1s), under the LSM mutex the apply path needs; the first recovery
   sweep (1 536/s per leader, 3 % CPU) put every metadata op at ~100 ms
   (`results/measure/20260921-w8-orphans/sweep-regression.txt`). Lock
   hold, not CPU. Check `python3 tests/measure/md_latency.py` (reference

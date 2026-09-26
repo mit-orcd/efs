@@ -23,7 +23,13 @@
  *              u32 version · u32 crc32(first 24B) · u32 pad
  * Only the index is resident, so RAM per segment is one key per block. */
 
-#define KV_LSM_BLOCK_TARGET (64u * 1024u)
+/* A block is searched linearly (search_block, kv_msrc_advance). At 64 KiB
+ * that memcmp was half of efsd's CPU on a dual-host replica under the
+ * 144-way mkdir hammer (perf, Sep 26). 8 KiB is 8x fewer compares per
+ * get/scan for ~8 MB of resident index per GiB of table. Readers take
+ * any block size, so old segments stay valid until compaction rewrites
+ * them. */
+#define KV_LSM_BLOCK_TARGET (8u * 1024u)
 #define KV_LSM_MEM_DEFAULT  (4u * 1024u * 1024u)
 #define KV_LSM_L0_DEFAULT   4u
 #define KV_LSM_MAX_SEGS     64u
@@ -205,6 +211,10 @@ void kv_seg_pin(struct kv_seg *s);
 void kv_seg_unpin(struct kv_seg *s);
 int kv_seg_first_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen);
 int kv_seg_last_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen);
+/* 1 when the segment holds no key >= seek with the prefix (either may be
+ * empty = unconstrained). Caller holds the LSM lock. */
+int kv_seg_excludes(struct kv_seg *s, const uint8_t *seek, uint32_t slen,
+                    const uint8_t *prefix, uint32_t plen);
 
 int kv_seg_iter_open(struct kv_seg *s, struct kv_seg_iter **out);
 void kv_seg_iter_close(struct kv_seg_iter *it);

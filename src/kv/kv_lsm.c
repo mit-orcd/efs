@@ -521,6 +521,12 @@ static int merge_scan(struct kv_lsm *l, const uint8_t *prefix, uint32_t plen,
     nsrc++;
     for (i = 0; i < l->n_l0 + l->n_l1; i++) {
         struct seg_slot *sl = i < l->n_l0 ? &l->l0[i] : &l->l1[i - l->n_l0];
+
+        /* L1 is range-partitioned: a 3-byte txn-record prefix lives in
+         * one or two of its segments. Opening the rest cost one pread
+         * each under l->mu on every PREPARE/RESOLVE apply. */
+        if (seek_len && kv_seg_excludes(sl->seg, seek, seek_len, prefix, plen))
+            continue;
         rc = kv_seg_iter_open(sl->seg, &src[nsrc].it);
         if (rc != EFS_OK)
             goto out;
