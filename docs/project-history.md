@@ -65,6 +65,22 @@ lock). Clean hammer `results/measure/20260926-052320-mkdir-hammer`:
 `20260926-052437-mkdir-hammer` is the same binary with a 766 ms
 apply of 31 entries (p50 235 ms) — compaction, not the batching.
 
+`5d3e603` stops holding the LSM lock across a segment pread and
+caches the block after a miss. A negative dentry lookup used to read
+every segment and free the buffer, so the next name in the same
+directory paid the disk again. Hammer
+`results/measure/20260926-053753-mkdir-hammer` (build string
+`f93e7e6669b6-dirty`, the bytes of `5d3e603`): idle p50 7.1 ms,
+144-way p50 147 ms, 887 mkdir/s, apply_max 59 ms / 256 applies,
+`fin_q=0`. Three `rmdir-own ENOTEMPTY` cleanups, no mkdir errors.
+9-host suite on the same tree
+(`results/posix/20260926-054047`, timeline
+`results/measure/20260926-014030-w8-stall-timeline`): seven hosts
+200/201, fcstor007 199 (`dir_many_files` EIO), fcstor013 198
+(`names_crazy_roundtrip` EIO and `dir_deep_nesting` 15 s), 39–41 s.
+Term did not move. `names_crazy_dirs` passed on every host. Probe
+during the run: stat p50 3 ms (one sample 1.3 s), mkdir p50 14 ms.
+
 ## Sep 26 2026 — txn finisher after a 400 ms apply wait
 
 A full-L1 compaction under the KV lock stalls apply for >400 ms

@@ -1,0 +1,11 @@
+ERROR: /data1/efs is not a mounted directory
+# TIMEOUT no TSV
+test	result	detail
+# summary pass=0 fail=0 skip=0 total=0 dur=0
+[run_tests] TIMEOUT 400s: node9901.ib rm -f '/tmp/posix-xfs-20260926-054047.tsv'
+        PYTHONUNBUFFERED=1 timeout -k 5 385         python3 /tmp/efs/tests/posix/posix_suite.py '/data1/efs'         --timeout-s 15 --jobs 16         --results '/tmp/posix-xfs-20260926-054047.tsv'
+        if [ ! -s '/tmp/posix-xfs-20260926-054047.tsv' ]; then
+            printf '%s\n' '# TIMEOUT no TSV' 'test	result	detail'                 '# summary pass=0 fail=0 skip=0 total=0 dur=0'
+            exit 124
+        fi
+        cat '/tmp/posix-xfs-20260926-054047.tsv'

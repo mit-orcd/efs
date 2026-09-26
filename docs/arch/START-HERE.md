@@ -84,13 +84,24 @@ ratified. Do not pipeline past the one in-flight batch. Earlier
 same-morning numbers, before this batching, are in the history
 (`044248` 144 ms / 735 on a smaller table, `050609` 189 ms / 706).
 
-**9-host suite on `e8f3dc1`** (`results/posix/20260926-050825`,
-timeline `results/measure/20260926-010808-w8-stall-timeline`):
-194–199/201, 40–44 s, 0 NOTRUN. Group 0 changed leader once
-(term 6294→6296, ~12 s); the EIO rows sit on that window. A single
-mkdir probed during the suite was p50 14 ms. `names_crazy_dirs`
-still times out on the slower hosts. That is the 144-way queue,
-not a new lost update.
+**KV get (`5d3e603`).** A mkdir's negative lookup pread every LSM
+segment under the KV lock and freed the block on a miss. The segment
+is pinned, the pread runs outside the lock, and the block stays
+cached (32 slots per segment). Measured on that tree (build string
+`f93e7e6669b6-dirty`):
+`results/measure/20260926-053753-mkdir-hammer` idle p50 **7.1 ms**,
+144-way p50 **147 ms** / 887 mkdir/s, apply_max 59 ms, `fin_q=0`.
+Three `rmdir-own ENOTEMPTY` lines, no mkdir errors. Do not pipeline
+past the one in-flight batch.
+
+**9-host suite on that same tree** (`results/posix/20260926-054047`,
+timeline `results/measure/20260926-014030-w8-stall-timeline`):
+seven hosts **200/201**, fcstor007 199, fcstor013 198, 39–41 s,
+0 NOTRUN. No term change. `names_crazy_dirs` passed on all nine.
+Left: one `dir_many_files` EIO, one `names_crazy_roundtrip` EIO,
+one `dir_deep_nesting` 15 s timeout. The previous suite on
+`e8f3dc1` was 194–199/201 with a group-0 election
+(`results/posix/20260926-050825`).
 
 
 
