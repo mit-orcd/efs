@@ -52,10 +52,13 @@ int efs_raft_disk_rotate(struct efs_raft_disk *d);
 /* Bytes currently in the log file (tests assert rotation actually shrinks). */
 uint64_t efs_raft_disk_bytes(const struct efs_raft_disk *d);
 
-/* Defer log fsync across a burst of appends. Nested. Release issues one
- * fsync that covers every write since the matching hold. Crash during
- * hold loses those appends — the caller must not have ACKed them. */
+/* Defer log fsync across a burst of appends. Nested. The release that
+ * drops the count to zero fsyncs once, covering every append during the
+ * hold. A hold with no append does not fsync. Crash during hold loses
+ * those appends — the caller must not have ACKed them. */
 int efs_raft_disk_sync_hold(struct efs_raft_disk *d);
 int efs_raft_disk_sync_release(struct efs_raft_disk *d);
+int efs_raft_disk_sync_release_wait(struct efs_raft_disk *d);
+int efs_raft_disk_sync_depth(struct efs_raft_disk *d);
 
 #endif

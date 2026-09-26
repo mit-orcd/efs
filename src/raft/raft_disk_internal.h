@@ -82,6 +82,8 @@ struct efs_raft_disk {
     uint64_t sync_want;  /* highest requested round */
     int syncing;
     int sync_hold;   /* >0: append writes, skip fsync (W3 report batch) */
+    int sync_need;   /* an append happened during a hold; release fsyncs */
+    uint64_t synced_bytes; /* file offset covered by the last fsync */
     int io_failed;
     uint8_t *rec; /* append scratch, RAFT_REC_MAX */
 };

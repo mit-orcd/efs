@@ -67,6 +67,13 @@ struct efs_raft {
     uint8_t *snap_blob;
     uint32_t snap_blob_len;
     int allow_campaign; /* 0 = do not start elections (hollow KV) */
+    /* send_idx may go out in AppendEntries before the leader fsync.
+     * durable_idx is what this leader has fsynced; try_commit must not
+     * count the leader's own match above it (a follower majority is
+     * still a real majority). */
+    int ae_capped;
+    uint64_t send_idx;
+    uint64_t durable_idx;
 };
 
 static void wr32(uint8_t *p, uint32_t v)
@@ -511,7 +518,15 @@ static int send_ae(struct efs_raft *r, int to)
         return rc;
     m.prev_term = prev_t;
     m.leader_commit = r->commit_index;
-    if (ni <= last_i) {
+    {
+        /* Unsynced tail (appended, fsync still in the caller's hands)
+         * stays out of this batch. A caught-up peer still gets the
+         * empty heartbeat below. */
+        uint64_t end = last_i;
+
+        if (r->ae_capped && r->send_idx < end)
+            end = r->send_idx;
+        if (ni <= end) {
         /* Batch the catch-up: read up to EFS_RAFT_AE_MAX entries (byte-
          * capped at EFS_RAFT_AE_BYTES) into one arena so a behind follower
          * recovers in one round-trip instead of one-entry-per-AE. Only
@@ -532,7 +547,7 @@ static int send_ae(struct efs_raft *r, int to)
         arena = malloc(EFS_RAFT_AE_BYTES);
         if (!arena)
             return EFS_ERR_NOMEM;
-        while (m.nentries < EFS_RAFT_AE_MAX && ni + m.nentries <= last_i &&
+        while (m.nentries < EFS_RAFT_AE_MAX && ni + m.nentries <= end &&
                off < EFS_RAFT_AE_BYTES) {
             uint64_t eterm = 0;
             uint32_t ec = EFS_RAFT_AE_BYTES - off;
@@ -577,6 +592,7 @@ static int send_ae(struct efs_raft *r, int to)
              * would look like a heartbeat with a stale prev_index. */
             free(arena);
             return EFS_ERR_PROTO;
+        }
         }
     }
     rc = send_msg(r, &m);
@@ -639,6 +655,10 @@ static int try_commit(struct efs_raft *r)
         if (t != r->current_term)
             break;
         for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
+            /* Own match is set at append, before the fsync. Do not let
+             * that vote commit an entry this process could still lose. */
+            if (r->ae_capped && i == r->id && n > r->durable_idx)
+                continue;
             if (r->match_index[i] >= n)
                 bits |= 1u << i;
         }
@@ -1224,6 +1244,7 @@ int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,
                      uint64_t *index_out)
 {
     int rc;
+    uint64_t ix = 0;
 
     if (!r)
         return EFS_ERR_INVAL;
@@ -1231,9 +1252,11 @@ int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,
         return EFS_ERR_NOT_PRIMARY;
     if (is_cfg_cmd(cmd, clen))
         return EFS_ERR_INVAL;
-    rc = append_local(r, r->current_term, cmd, clen, index_out);
+    rc = append_local(r, r->current_term, cmd, clen, &ix);
     if (rc != EFS_OK)
         return rc;
+    if (index_out)
+        *index_out = ix;
     if (solo(r)) {
         uint64_t last_i = 0, last_t = 0;
         last_log(r, &last_i, &last_t);
@@ -1243,7 +1266,63 @@ int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,
             return rc;
         return maybe_append_cold(r);
     }
+    if (r->ae_capped && ix > r->send_idx)
+        r->send_idx = ix;
     return broadcast_ae(r);
+}
+
+/* Arm before the first quiet append so a heartbeat cannot carry an
+ * entry whose fsync has not finished. The replayed log is durable. */
+void efs_raft_arm_durable(struct efs_raft *r)
+{
+    uint64_t last_i = 0, last_t = 0;
+
+    if (!r || r->ae_capped)
+        return;
+    if (last_log(r, &last_i, &last_t) != EFS_OK)
+        return;
+    r->send_idx = last_i;
+    r->durable_idx = last_i;
+    r->ae_capped = 1;
+}
+
+int efs_raft_propose_local(struct efs_raft *r, const uint8_t *cmd,
+                           uint32_t clen, uint64_t *index_out)
+{
+    if (!r)
+        return EFS_ERR_INVAL;
+    if (r->role != EFS_RAFT_LEADER)
+        return EFS_ERR_NOT_PRIMARY;
+    if (is_cfg_cmd(cmd, clen))
+        return EFS_ERR_INVAL;
+    if (solo(r))
+        return EFS_ERR_INVAL;
+    efs_raft_arm_durable(r);
+    return append_local(r, r->current_term, cmd, clen, index_out);
+}
+
+int efs_raft_submit(struct efs_raft *r, uint64_t idx)
+{
+    if (!r)
+        return EFS_ERR_INVAL;
+    if (r->role != EFS_RAFT_LEADER)
+        return EFS_ERR_NOT_PRIMARY;
+    efs_raft_arm_durable(r);
+    if (idx > r->send_idx)
+        r->send_idx = idx;
+    return broadcast_ae(r);
+}
+
+int efs_raft_durable(struct efs_raft *r, uint64_t idx)
+{
+    if (!r)
+        return EFS_ERR_INVAL;
+    if (r->role != EFS_RAFT_LEADER)
+        return EFS_ERR_NOT_PRIMARY;
+    efs_raft_arm_durable(r);
+    if (idx > r->durable_idx)
+        r->durable_idx = idx;
+    return try_commit(r);
 }
 
 int efs_raft_change(struct efs_raft *r, uint32_t new_voters)

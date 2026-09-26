@@ -2275,30 +2275,99 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
     struct efs_raft *r;
     int rc;
     int lid = -1;
+    int quiet = 0;
+    uint64_t myidx = 0;
     struct efs_msg_raft_mkfs_reply rep;
 
     if (term)
         *term = 0;
+    /* Join the shared fsync before taking h->mu. Every proposer blocked
+     * on the raft lock is already inside the hold, so one fsync covers
+     * the batch. The fsync used to run inside disk_append while h->mu
+     * was held: 144 mkdir threads each waited out a private fsync
+     * (idle p50 8 ms, 9×16 p50 258 ms). A caller that already holds
+     * (the report batch) keeps that outer fsync and broadcasts after
+     * it. */
+    if (h->disk && efs_raft_disk_sync_depth(h->disk) == 0 &&
+        efs_raft_disk_sync_hold(h->disk) == EFS_OK)
+        quiet = 1;
     pthread_mutex_lock(&h->mu);
     r = group_raft(h, group);
     if (r) {
+        uint32_t voters = efs_raft_voters(r);
+        int solo = voters && (voters & (voters - 1)) == 0;
+
         lid = efs_raft_leader(r);
         if (leader_hint)
             *leader_hint = lid;
-        if (efs_raft_role(r) == EFS_RAFT_LEADER) {
-            rc = efs_raft_propose(r, cmd, clen, idx);
+        if (efs_raft_role(r) == EFS_RAFT_LEADER && solo && quiet) {
+            /* One voter commits inside propose. Drop the hold first so
+             * that commit's append fsyncs before it returns. */
+            pthread_mutex_unlock(&h->mu);
+            (void)efs_raft_disk_sync_release(h->disk);
+            quiet = 0;
+            pthread_mutex_lock(&h->mu);
+            r = group_raft(h, group);
+            if (!r || efs_raft_role(r) != EFS_RAFT_LEADER) {
+                pthread_mutex_unlock(&h->mu);
+                rc = EFS_ERR_NOT_PRIMARY;
+                return rc;
+            }
+            lid = efs_raft_leader(r);
+            if (leader_hint)
+                *leader_hint = lid;
+        }
+        if (efs_raft_role(r) == EFS_RAFT_LEADER && quiet && !solo) {
+            rc = efs_raft_propose_local(r, cmd, clen, idx);
             if (rc == EFS_OK && term)
-                *term = efs_raft_term(r); /* append_local uses current_term */
+                *term = efs_raft_term(r);
+            if (rc == EFS_OK && idx)
+                myidx = *idx;
+            if (rc == EFS_OK)
+                rc = efs_raft_submit(r, myidx);
             host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
-            /* New entry pending: pump ships AppendEntries immediately.
-             * (After the unlock: propose already broadcast under h->mu;
-             * the kick just makes the next cycle prompt.) */
+            if (quiet && rc == EFS_OK)
+                rc = efs_raft_disk_sync_release_wait(h->disk);
+            else if (quiet)
+                (void)efs_raft_disk_sync_release(h->disk);
+            if (rc == EFS_OK) {
+                pthread_mutex_lock(&h->mu);
+                r = group_raft(h, group);
+                if (!r || efs_raft_role(r) != EFS_RAFT_LEADER)
+                    rc = EFS_ERR_NOT_PRIMARY;
+                else
+                    rc = efs_raft_durable(r, myidx);
+                if (rc == EFS_OK && term)
+                    *term = efs_raft_term(r);
+                host_publish_group(h, group);
+                pthread_mutex_unlock(&h->mu);
+            }
+            host_pump_kick(h);
+            return rc;
+        }
+        if (efs_raft_role(r) == EFS_RAFT_LEADER) {
+            int nested = h->disk && efs_raft_disk_sync_depth(h->disk) > 0;
+
+            rc = efs_raft_propose(r, cmd, clen, idx);
+            if (rc == EFS_OK && term)
+                *term = efs_raft_term(r);
+            /* No outer hold: append fsynced before propose returned, so
+             * the leader may vote. An outer hold fsyncs and then calls
+             * efs_raft_durable itself. */
+            if (rc == EFS_OK && !nested && idx)
+                rc = efs_raft_durable(r, *idx);
+            host_publish_group(h, group);
+            pthread_mutex_unlock(&h->mu);
+            if (quiet)
+                (void)efs_raft_disk_sync_release(h->disk);
             host_pump_kick(h);
             return rc;
         }
     }
     pthread_mutex_unlock(&h->mu);
+    if (quiet)
+        (void)efs_raft_disk_sync_release(h->disk);
     /* Not the leader: forward to it. host_remote_cmd is a blocking peer
      * RPC; no host lock is held across it. The command is already fully
      * formed and the Raft log + apply-side validation order it against
@@ -4018,6 +4087,7 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     h->g[gi].r = efs_raft_new(&cfg);
     if (!h->g[gi].r)
         return EFS_ERR_NOMEM;
+    efs_raft_arm_durable(h->g[gi].r);
     h->g[gi].hosted = 1;
     h->g[gi].voters = efs_raft_voters(h->g[gi].r);
     {
@@ -4341,6 +4411,8 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
         rc = efs_raft_propose(r, cmd, clen, &idx);
         if (rc == EFS_OK)
             term = efs_raft_term(r);
+        if (rc == EFS_OK)
+            rc = efs_raft_durable(r, idx);
         pthread_mutex_unlock(&h->mu);
         if (rc != EFS_OK)
             return rc;
@@ -9790,6 +9862,20 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         }
         if (held)
             (void)efs_raft_disk_sync_release(h->disk);
+        /* The hold suppressed the per-entry fsync, and the durable ceiling
+         * kept those entries out of AppendEntries. They are on disk now. */
+        pthread_mutex_lock(&h->mu);
+        for (bi = 0; bi < HOST_NGROUPS; bi++) {
+            struct efs_raft *rr;
+
+            if (!bat[bi].last_idx)
+                continue;
+            rr = group_raft(h, bat[bi].group);
+            if (rr && efs_raft_role(rr) == EFS_RAFT_LEADER)
+                (void)efs_raft_durable(rr, bat[bi].last_idx);
+        }
+        pthread_mutex_unlock(&h->mu);
+        host_pump_kick(h);
         for (bi = 0; bi < HOST_NGROUPS; bi++) {
             int wrc = host_pub_batch_wait(h, &bat[bi], &hint);
 

@@ -1,0 +1,17 @@
+DONE fcstor011 p11 n=35 err=0 p50=482.02 p90=740.60 p99=1354.02 max=1354.02 sum=15.061
+DONE fcstor011 p4 n=37 err=0 p50=424.09 p90=708.07 p99=887.00 max=887.00 sum=15.225
+DONE fcstor011 p8 n=43 err=0 p50=281.14 p90=679.47 p99=1081.55 max=1081.55 sum=15.015
+DONE fcstor011 p15 n=37 err=0 p50=344.34 p90=724.47 p99=780.12 max=780.12 sum=15.037
+DONE fcstor011 p13 n=38 err=0 p50=229.98 p90=651.58 p99=1531.33 max=1531.33 sum=15.026
+DONE fcstor011 p0 n=46 err=0 p50=243.11 p90=638.85 p99=681.15 max=681.15 sum=15.097
+DONE fcstor011 p6 n=46 err=0 p50=224.20 p90=617.93 p99=759.95 max=759.95 sum=15.453
+DONE fcstor011 p2 n=46 err=0 p50=192.73 p90=626.97 p99=1110.31 max=1110.31 sum=15.686
+DONE fcstor011 p10 n=58 err=0 p50=221.43 p90=420.33 p99=514.79 max=587.67 sum=15.081
+DONE fcstor011 p12 n=53 err=0 p50=280.91 p90=475.97 p99=561.44 max=686.80 sum=15.052
+DONE fcstor011 p9 n=61 err=0 p50=253.05 p90=427.26 p99=479.00 max=484.49 sum=15.118
+DONE fcstor011 p7 n=63 err=0 p50=157.71 p90=459.73 p99=561.66 max=734.98 sum=15.002
+DONE fcstor011 p5 n=59 err=0 p50=267.11 p90=482.04 p99=515.00 max=531.68 sum=15.475
+DONE fcstor011 p14 n=56 err=0 p50=271.99 p90=482.66 p99=553.08 max=598.82 sum=15.184
+DONE fcstor011 p1 n=65 err=0 p50=174.15 p90=446.52 p99=504.78 max=588.96 sum=15.079
+DONE fcstor011 p3 n=62 err=0 p50=201.21 p90=435.38 p99=522.61 max=628.86 sum=15.567
+HOST_DONE fcstor011 bad_procs=0

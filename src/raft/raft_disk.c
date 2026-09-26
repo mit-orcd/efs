@@ -510,6 +510,7 @@ struct efs_raft_disk *efs_raft_disk_open(const char *dir, int sync_mode)
         efs_raft_disk_close(d);
         return NULL;
     }
+    d->synced_bytes = d->bytes;
     return d;
 }
 

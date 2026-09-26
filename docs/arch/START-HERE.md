@@ -68,6 +68,17 @@ timeouts plus a few EIO, with `fin_done` 4–11 and `apply_max` still
 ~1.6 s. Do not treat 200/201 as the steady score until a suite run
 after the cluster has been busy still holds it. Do not start W13.
 
+**Mkdir hammer (Sep 26).** Propose was fsyncing the Raft log while
+holding `h->mu`, then sending AppendEntries. 9×16 own-directory
+mkdir (`results/measure/20260926-042515-mkdir-hammer`): idle p50
+8.4 ms, 144-way p50 **258 ms** / 470 mkdir/s, apply_max 25 ms. The
+fsync now runs outside the lock and overlaps the send; the leader
+does not vote for an entry until that fsync finishes
+(`efs_raft_submit` / `efs_raft_durable`). Rehammer
+(`20260926-044248-mkdir-hammer`): idle p50 **3.7 ms**, 144-way p50
+**144 ms** / 735 mkdir/s. Still a queue (144 waiters). The build
+string stays `af0b4deb14d3-dirty` until this is committed and rolled.
+
 
 
 **I16 landed (Sep 23 02:47, `43bdf6a41f7d`) — gate runs owed.** Every

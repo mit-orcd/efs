@@ -135,17 +135,25 @@ static int log_sync_locked(struct efs_raft_disk *d)
             pthread_cond_wait(&d->cv, &d->mu);
             continue;
         }
-        /* Take the round that covers every append written so far. */
+        /* Take the round that covers every append written so far.
+         * `cover` is that byte offset: a write that lands during the
+         * fsync is past it and still needs its own round. */
         d->syncing = 1;
         want = d->sync_want;
-        pthread_mutex_unlock(&d->mu);
-        if (fsync(d->fd) != 0) {
-            pthread_mutex_lock(&d->mu);
-            d->io_failed = 1;
-        } else {
-            pthread_mutex_lock(&d->mu);
-            if (d->sync_done < want)
-                d->sync_done = want;
+        {
+            uint64_t cover = d->bytes;
+
+            pthread_mutex_unlock(&d->mu);
+            if (fsync(d->fd) != 0) {
+                pthread_mutex_lock(&d->mu);
+                d->io_failed = 1;
+            } else {
+                pthread_mutex_lock(&d->mu);
+                if (d->sync_done < want)
+                    d->sync_done = want;
+                if (d->synced_bytes < cover)
+                    d->synced_bytes = cover;
+            }
         }
         d->syncing = 0;
         pthread_cond_broadcast(&d->cv);
@@ -186,6 +194,8 @@ int raft_log_append(struct efs_raft_disk *d, uint8_t type,
 
     if (rc != EFS_OK)
         return rc;
+    if (d->sync_hold > 0)
+        d->sync_need = 1;
     return log_sync_locked(d);
 }
 
@@ -416,6 +426,7 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
         close(dfd);
     }
     d->live_bytes = d->bytes;
+    d->synced_bytes = d->bytes;
     return EFS_OK;
 }
 
@@ -457,8 +468,63 @@ int efs_raft_disk_sync_release(struct efs_raft_disk *d)
     pthread_mutex_lock(&d->mu);
     if (d->sync_hold > 0)
         d->sync_hold--;
-    if (d->sync_hold == 0)
+    /* A hold/release that appended nothing (a propose that forwarded)
+     * must not fsync. Nested holds fsync once, on the release that
+     * drops the count to zero, covering every append in between. */
+    if (d->sync_hold == 0 && d->sync_need) {
+        d->sync_need = 0;
         rc = log_sync_locked(d);
+    }
+    pthread_mutex_unlock(&d->mu);
+    return rc;
+}
+
+int efs_raft_disk_sync_depth(struct efs_raft_disk *d)
+{
+    int n;
+
+    if (!d)
+        return 0;
+    pthread_mutex_lock(&d->mu);
+    n = d->sync_hold;
+    pthread_mutex_unlock(&d->mu);
+    return n;
+}
+
+/* Caller dropped one hold. Returns only once `bytes` as of this call are
+ * durable, so a later broadcast cannot publish an unsynced append. Other
+ * holders may fsync the batch; this waits for that fsync. */
+int efs_raft_disk_sync_release_wait(struct efs_raft_disk *d)
+{
+    int rc = EFS_OK;
+    uint64_t mine;
+
+    if (!d)
+        return EFS_ERR_INVAL;
+    pthread_mutex_lock(&d->mu);
+    if (d->sync_hold > 0)
+        d->sync_hold--;
+    mine = d->bytes;
+    if (d->sync_mode != EFS_RAFT_DISK_SYNC) {
+        pthread_mutex_unlock(&d->mu);
+        return EFS_OK;
+    }
+    for (;;) {
+        if (d->io_failed) {
+            rc = EFS_ERR_IO;
+            break;
+        }
+        if (d->sync_hold == 0 && d->sync_need) {
+            d->sync_need = 0;
+            rc = log_sync_locked(d);
+            break;
+        }
+        if (d->synced_bytes >= mine)
+            break;
+        if (d->sync_hold == 0)
+            break;
+        pthread_cond_wait(&d->cv, &d->mu);
+    }
     pthread_mutex_unlock(&d->mu);
     return rc;
 }
