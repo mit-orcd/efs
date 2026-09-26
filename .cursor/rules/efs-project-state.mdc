@@ -98,16 +98,17 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  0.23 s idle (128 GETCHUNKS × 1.6 ms), 14.6 ms/GETCHUNKS under 32 openers.
  Same-parent rate ~140–160 ops/s flat 1–36 procs
  (`results/measure/20260921-161931-samedir-rate`, pre-`165e779`; remeasure).
- Cluster runs **`e8f3dc1e7b9a-dirty`** with
+ Cluster runs **`6a603187b2e1-dirty`** with
  `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1` (rolled Sep 26; 5 s
  `raft-obs:` lines in `efsd.log` — keep it on until W8 closes; "dirty"
  = tracked result logs the deploy rsync deletes, all four agree).
- Clients 007–015 on the same build. Own-dir mkdir after the log fsync
- moved out of `h->mu` (`68dfebb`): 144-way p50 189 ms / 706 mkdir/s
- on the grown table (`results/measure/20260926-050609-mkdir-hammer`;
- the same morning's smaller table was 144 ms / 735). One AppendEntries
- stays in flight — pipelining the suffix applied 12k entries under
- the host lock. Do not start W13.
+ Clients 007–015 on the same build. Own-dir mkdir: the log fsync is
+ outside `h->mu` and the pump sends one AppendEntries for the
+ proposers that were queued (`6a60318`). Clean 144-way run p50
+ **168 ms** / 754 mkdir/s
+ (`results/measure/20260926-052320-mkdir-hammer`). A repeat hit a
+ 766 ms apply (W13, not ratified). Do not pipeline past the one
+ in-flight batch.
  **Queue is stopped on four decisions** — START-HERE §1a "Decisions
  pending" has a recommendation + steps for each (W13 compaction, W11
  chunked snapshot, W9 client cache, W10 RDMA without a wipe); do not

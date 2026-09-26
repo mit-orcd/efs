@@ -57,6 +57,14 @@ under-lock fsync. Do not pipeline past the one in-flight batch.
 40–44 s. Group 0 elected once (term 6294→6296). `names_crazy_dirs`
 still hits the 15 s budget on the slower hosts.
 
+`6a60318` holds the pump's AppendEntries until proposers blocked on
+`h->mu` have appended, and still refuses a second batch while one is
+in flight (the `0e81e49` pipeline applied 12 120 entries under the
+lock). Clean hammer `results/measure/20260926-052320-mkdir-hammer`:
+144-way p50 168 ms, 754 mkdir/s, apply_max 61 ms, `fin_q=0`.
+`20260926-052437-mkdir-hammer` is the same binary with a 766 ms
+apply of 31 entries (p50 235 ms) — compaction, not the batching.
+
 ## Sep 26 2026 — txn finisher after a 400 ms apply wait
 
 A full-L1 compaction under the KV lock stalls apply for >400 ms
