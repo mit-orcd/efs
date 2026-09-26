@@ -52,21 +52,55 @@ Whoever picks the project up next does **this first**. Update or delete
 this block when done — an "in flight" block older than the last commit
 is a bug in this page.
 
+**W13 done (Sep 26).** The user ratified the background-compactor row.
+L1 compaction runs on a `kv_lsm` thread. The pump still flushes the
+memtable to L0 and kicks the thread when `n_l0 >= l0max`; the merge
+opens private segment fds, drops `l->mu` for the rewrite, and installs
+under the lock (atomic manifest rename). A segment file is unlinked
+only when its refcount hits 0 (`kv_seg_doom`), so `efs_kv_lsm_view_pin`
+survives a concurrent flush and compact. `kv_compact_locked` remains
+for `efs_kv_lsm_compact` and for the fallback if the thread did not
+start. The write path waits on `l->cv` only when `n_l0` reaches
+`KV_LSM_MAX_SEGS` (64) and logs `kv-compact: backpressure` — that wait
+means the compactor is ~16× behind. `EFS_KV_COMPACT_DIE=N` exits after
+the Nth finished output segment, before the manifest rename; reopen
+serves the old manifest. Partitioned flush (one L0 file per shard
+range) is the follow-on and is not in this change.
+
+Running binaries report **`3210a3d63f73-dirty`** (W13 compiled on
+top of `3210a3d` before this commit; rolled Sep 26 16:37 UTC;
+clients fcstor007–015; `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1`). Gate:
+
+- Hammer `results/measure/20260926-163709-mkdir-hammer`: idle p50
+  **4.68 ms**; 144-way **35166** mkdirs in 15 s, p50 **56.5 ms**.
+  `apply_max` **68 ms** on fcstor005 while two compactions rewrote
+  ~760 MiB in 1964 ms and 2067 ms (`l1=12`). The only errors are
+  harness `rmdir-own ENOTEMPTY`.
+- 9-host posix `results/posix/20260926-164123`: **200/201 on all
+  nine**, mmap SKIP, **13.2–14.8 s**. Timeline
+  `results/measure/20260926-124106-w8-stall-timeline`: group 0 stayed
+  term 6882 leader 1, group 2 stayed term 1198 leader 3, for 139 s;
+  no probe stat/mkdir/rmdir over 1 s. Four `kv-compact` cycles in
+  that window; worst `apply_max` **67 ms**.
+- Idle `md_latency.py` on fcstor007 after the suite: mkdir 2.9 /
+  create+close 1.6 / append+close 2.0 / stat 0.3 / unlink 0.8 /
+  rmdir 2.9 ms.
+
+Do not start W11, W9, W10, or the partitioned-flush follow-on until
+the user asks. Do not raise `l0_max`, the memtable, or the election
+timeout. `EFSD_ENV` is space-separated. The next server restart is a
+build-id change → `tests/roll_efsd.sh --all`.
+
 **Txn finisher (Sep 26, `src/server/raft_host.c` `host_txn_commit`).**
 A compaction stall longer than the 400 ms apply wait turns an in-flight
 DECIDE/RESOLVE into BUSY and leaves the EXCL intent until the 5 s
 recovery scan; that intent makes every later create on the shard BUSY
 and the client burns its 16 attempts into EIO. `host_txn_commit` hands
 that txn to a finisher thread, which reads the decision record and
-proposes RESOLVE (retrying BUSY until 10 s). It does not remove the
-stall — that is still W13, not ratified. Measured: first 9-host suite
-on the build **200/201 all nine, 42–44 s**
-(`results/posix/20260926-0345-fin`, `fin_q=0`, no stall that run).
-Three immediate repeats (`-fin2` `-fin3` `-fin4`, uncited) slipped to
-196–200 as the table grew: `dir_deep_nesting*` / `names_crazy_dirs`
-timeouts plus a few EIO, with `fin_done` 4–11 and `apply_max` still
-~1.6 s. Do not treat 200/201 as the steady score until a suite run
-after the cluster has been busy still holds it. Do not start W13.
+proposes RESOLVE (retrying BUSY until 10 s). The stall itself is W13,
+now off the apply path (above). First 9-host suite on the finisher
+build was **200/201 all nine, 42–44 s**
+(`results/posix/20260926-0345-fin`, `fin_q=0`).
 
 **Mkdir hammer (Sep 26, `6a60318`).** Propose was fsyncing the Raft
 log while holding `h->mu`, then sending one AppendEntries.
@@ -79,8 +113,9 @@ and it will not start a second batch while one is in flight
 (`results/measure/20260926-052320-mkdir-hammer`): idle p50 11.3 ms,
 144-way p50 **168 ms** / 754 mkdir/s, apply_max 61 ms, `fin_q=0`.
 The repeat (`20260926-052437-mkdir-hammer`) hit a 766 ms apply of
-31 entries and fell to p50 235 ms — that stall is still W13, not
-ratified. Do not pipeline past the one in-flight batch. Earlier
+31 entries and fell to p50 235 ms — that stall was the synchronous
+compaction W13 has since moved off the apply path. Do not pipeline
+past the one in-flight batch. Earlier
 same-morning numbers, before this batching, are in the history
 (`044248` 144 ms / 735 on a smaller table, `050609` 189 ms / 706).
 
@@ -134,9 +169,9 @@ past the election timeout — the 9-host suite on this build
 195–199/201 with two elections, both at a 1.9 s compaction
 (`link_across_dirs`, `last_link_unlink_other_dir`, `dir_many_files`,
 `dir_deep_nesting*` — the BUSY-exhausted-10 s / election class).
-That is W13's row: nothing here changes the recommendation, it makes
-the decision more urgent. Do not tune `l0_max`/memtable size as a
-substitute without ratifying; report it.
+That stall is what W13 (done, top of this section) removed from the
+apply path. Do not tune `l0_max` or the memtable size around how
+often compaction runs.
 
 **Follow-on, same afternoon: memtable probes and the wakeup herd.**
 After `610f4a8` the pump thread was still 61–67 % of efsd samples,
@@ -418,8 +453,9 @@ not read the last block again.
 0 not-run, 44–49 s. Seven hosts failed nothing. fcstor008 and
 fcstor013 failed only `names_crazy_dirs` (15 s). `dir_deep_nesting`,
 `dir_deep_nesting_beyond_64`, and `names_crazy_roundtrip` passed.
-**Owed now:** `names_crazy_dirs` on the slow hosts. Then W13, W11,
-W9, W10, which stop until ratified.
+`names_crazy_dirs` later passed on all nine
+(`results/posix/20260926-164123`). W13 is done; W11, W9, and W10
+still stop until the user asks.
 The idle 50 ms create+close median did not hold: Sep 24 15:03 UTC on
 the live mount, term stable, `md_latency.py` was mkdir 5.9 /
 create+close 4.1 / append+close 6.1 / stat 0.3 / unlink 1.6 / rmdir
@@ -480,9 +516,9 @@ What is left in the 9-host row, and what to do with each:
    the same moment. Options the spec does not choose between: bounded
    (leveled / per-key-range) compaction; compaction off the apply path
    (background thread, readers merge an immutable memtable); a larger
-   memtable as a stopgap (fewer, not shorter, stalls). **Now queue item
-   W13 (§1a) with a recommendation — background compactor — and steps;
-   awaiting ratification.** Do not raise the election timeout.
+   memtable as a stopgap (fewer, not shorter, stalls). **W13 landed
+   the background compactor (Sep 26); see the top of §1b.** Do not
+   raise the election timeout.
 4. **Throughput at 144 concurrent jobs** — the six many-op tests
    (`dir_deep_nesting*`, `names_crazy_*`, `concurrent_write_and_readdir`,
    `concurrent_creates_same_dir`, `mtime_monotonic_many_writes`) time out
@@ -1053,16 +1089,17 @@ pre-flush and read several GiB/s. The number is bytes ÷ wall with the flush
 inside. `dd if=/dev/zero` is also invalid here: all-zero payloads skip PUTs.
 Use a non-zero source file.
 
-#### Decisions pending — recommended answers (Sep 23 2026)
+#### Decisions pending — recommended answers (Sep 26 2026)
 
-Four queue items stop on a choice the spec does not make. Each item below
-carries a **Recommendation**, the reason, and the steps that follow from
-it. Nothing here is implemented until the user ratifies the row. The
-order is the build order: W13 and W11 share one primitive.
+Three queue items still stop on a choice the spec does not make. Each
+item below carries a **Recommendation**, the reason, and the steps that
+follow from it. Nothing in the open rows is implemented until the user
+asks. W13 is done; its pinned segment view is the primitive W11's
+steps use.
 
 | item | question | recommended | why, in one line |
 | --- | --- | --- | --- |
-| W13 | full-L1 compaction holds the apply path 2.4 s and costs a term | **compact on a background thread**; per-range compaction later; memtable size is not a fix | it is a lock hold, not CPU — moving it off `l->mu`/`h->mu` removes the stall at any table size; per-range does nothing while one L0 spans every shard; a bigger memtable makes the same stall rarer, and one stall is one election |
+| W13 | full-L1 compaction holds the apply path 2.4 s and costs a term | **done Sep 26** — background compactor; partitioned flush is the follow-on, not started | the merge no longer holds `l->mu`/`h->mu`; `apply_max` stayed under 70 ms across ~2 s / ~760 MiB rewrites (`results/posix/20260926-164123`) |
 | W11 | the KV export is larger than one 4 MiB SNAP command, so the log never truncates | **the Raft paper's chunked InstallSnapshot** (`offset`, `done`) over a snapshot *file* the leader exports from a pinned segment view | it is the protocol Raft already specifies, so nothing is invented; the pinned view is the same primitive W13 needs; the follower imports on `done` with the existing `efs_kv_group_import` |
 | W9 | bound the client staging table | **ratify the pin rules and the 256 MB default** (`EFS_CLIENT_META_MB`), soft cap | 256 MB is ~1M rows, far above any FUSE working set; the pin rules are the only ones that make a report-record miss impossible; a pinned-full table grows and logs rather than losing a write |
 | W10 | RDMA needs an empty table to gate | **no wipe.** Gate on the private 3-node cluster (`tests/rdma_first_inode.sh`, fcstor007, port 19950), then switch 19810 to RDMA in place | the bug only needs an *empty* table, and the private cluster is one; a populated 19810 already ran millions of RDMA creates clean, so the live switch needs no wipe. Keep the wipe for when W11's gate wants a table that grows from zero |
@@ -1474,7 +1511,12 @@ Steps, once ratified (after W13's step 1, which builds the pinned view):
   "fix" the lag — a 2+1 PUT needs every fragment ACK, so removing a node
   breaks writes.
 
-#### W13 — Synchronous full-L1 compaction is the remaining election trigger
+#### W13 — Synchronous full-L1 compaction is the remaining election trigger — DONE Sep 26 2026
+
+Gate is at the top of §1b. Steps 1–4 landed: pinned view, background
+compactor, flush no longer compacts, and the 9-host suite kept
+`apply_max` under 100 ms with no term change. Step 5 (partitioned
+flush) is not started.
 
 Measured Sep 21 (`results/measure/20260921-220933-w8-stall-timeline/obs-*.txt`):
 `kv_compact_locked` runs inside the apply path under `l->mu` + `h->mu`,

@@ -63,6 +63,7 @@ struct kv_seg {
      * LSM lock to pread, so compaction can unlink the segment without
      * closing the fd under that read. */
     uint32_t refs;
+    char *doom; /* unlink this path when refs hits 0 */
     struct seg_cslot cslot[KV_SEG_CACHE_SLOTS];
 };
 
@@ -453,7 +454,18 @@ static void seg_free(struct kv_seg *s)
         free(s->cslot[i].blk);
     if (s->fd >= 0)
         close(s->fd);
+    free(s->doom);
     free(s);
+}
+
+void kv_seg_doom(struct kv_seg *s, const char *path)
+{
+    if (!s || !path)
+        return;
+    free(s->doom);
+    s->doom = strdup(path);
+    if (!s->doom)
+        unlink(path);
 }
 
 void kv_seg_pin(struct kv_seg *s)
@@ -463,8 +475,13 @@ void kv_seg_pin(struct kv_seg *s)
 
 void kv_seg_unpin(struct kv_seg *s)
 {
-    if (__atomic_sub_fetch(&s->refs, 1, __ATOMIC_ACQ_REL) == 0)
+    if (!s)
+        return;
+    if (__atomic_sub_fetch(&s->refs, 1, __ATOMIC_ACQ_REL) == 0) {
+        if (s->doom)
+            unlink(s->doom);
         seg_free(s);
+    }
 }
 
 void kv_seg_close(struct kv_seg *s)
@@ -482,19 +499,41 @@ int kv_seg_first_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen)
     return EFS_OK;
 }
 
+/* First learner publishes. A pinned view can read the segment while
+ * compaction learns the same last key; the loser frees its copy. */
+static void seg_note_last(struct kv_seg *s, const uint8_t *tail, uint32_t tail_kl)
+{
+    uint8_t *p, *cur;
+
+    if (!tail || !tail_kl)
+        return;
+    cur = __atomic_load_n(&s->last_key, __ATOMIC_ACQUIRE);
+    if (cur)
+        return;
+    p = malloc(tail_kl);
+    if (!p)
+        return;
+    memcpy(p, tail, tail_kl);
+    __atomic_store_n(&s->last_klen, tail_kl, __ATOMIC_RELAXED);
+    if (!__atomic_compare_exchange_n(&s->last_key, &cur, p, 0,
+                                     __ATOMIC_RELEASE, __ATOMIC_RELAXED))
+        free(p);
+}
+
 /* Blocks are ordered, so the last key is the last entry of the last block. */
 int kv_seg_last_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen)
 {
     struct blk_ref *r;
-    uint8_t *blk;
+    uint8_t *blk, *have;
     uint32_t off = 0;
     int rc;
 
     if (!s || !s->nblocks)
         return EFS_ERR_NOT_FOUND;
-    if (s->last_key) {
-        *key = s->last_key;
-        *klen = s->last_klen;
+    have = __atomic_load_n(&s->last_key, __ATOMIC_ACQUIRE);
+    if (have) {
+        *key = have;
+        *klen = __atomic_load_n(&s->last_klen, __ATOMIC_RELAXED);
         return EFS_OK;
     }
     r = &s->idx[s->nblocks - 1];
@@ -506,27 +545,28 @@ int kv_seg_last_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen)
         free(blk);
         return rc;
     }
-    while (off + 9 <= r->len) {
-        uint32_t kl = get_u32(blk + off + 1);
-        uint32_t vl = get_u32(blk + off + 5);
+    {
+        const uint8_t *tail = NULL;
+        uint32_t tail_kl = 0;
 
-        if (off + 9 + kl + vl > r->len)
-            break;
-        free(s->last_key);
-        s->last_key = malloc(kl);
-        if (!s->last_key) {
-            free(blk);
-            return EFS_ERR_NOMEM;
+        while (off + 9 <= r->len) {
+            uint32_t kl = get_u32(blk + off + 1);
+            uint32_t vl = get_u32(blk + off + 5);
+
+            if (off + 9 + kl + vl > r->len)
+                break;
+            tail = blk + off + 9;
+            tail_kl = kl;
+            off += 9 + kl + vl;
         }
-        memcpy(s->last_key, blk + off + 9, kl);
-        s->last_klen = kl;
-        off += 9 + kl + vl;
+        seg_note_last(s, tail, tail_kl);
     }
     free(blk);
-    if (!s->last_key)
+    have = __atomic_load_n(&s->last_key, __ATOMIC_ACQUIRE);
+    if (!have)
         return EFS_ERR_PROTO;
-    *key = s->last_key;
-    *klen = s->last_klen;
+    *key = have;
+    *klen = __atomic_load_n(&s->last_klen, __ATOMIC_RELAXED);
     return EFS_OK;
 }
 
@@ -583,13 +623,8 @@ static int search_block(struct kv_seg *s, const uint8_t *blk, uint32_t len,
         tail_kl = kl;
         off += 9 + kl + vl;
     }
-    if (saw_end && bi + 1 == s->nblocks && tail && !s->last_key) {
-        s->last_key = malloc(tail_kl);
-        if (s->last_key) {
-            memcpy(s->last_key, tail, tail_kl);
-            s->last_klen = tail_kl;
-        }
-    }
+    if (saw_end && bi + 1 == s->nblocks)
+        seg_note_last(s, tail, tail_kl);
     return rc;
 }
 
@@ -607,9 +642,13 @@ int kv_seg_probe(struct kv_seg *s, const uint8_t *key, uint32_t klen,
         return EFS_ERR_INVAL;
     /* Key past this segment. Learned the first time the last block is
      * scanned to the end; later misses must not pread or evict. */
-    if (s->last_key &&
-        kv_key_cmp(key, klen, s->last_key, s->last_klen) > 0)
-        return EFS_ERR_NOT_FOUND;
+    {
+        uint8_t *lk = __atomic_load_n(&s->last_key, __ATOMIC_ACQUIRE);
+
+        if (lk && kv_key_cmp(key, klen, lk,
+                             __atomic_load_n(&s->last_klen, __ATOMIC_RELAXED)) > 0)
+            return EFS_ERR_NOT_FOUND;
+    }
     bi = block_for(s, key, klen);
     if (bi < 0)
         return EFS_ERR_NOT_FOUND;

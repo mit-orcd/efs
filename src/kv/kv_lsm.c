@@ -777,10 +777,12 @@ static void lsm_destroy(void *ctx)
 
     if (!l)
         return;
+    kv_compactor_stop(l);
     kv_wal_close(l->wal);
     drop_segs(l);
     kv_mtab_clear(&l->mt);
     kv_buf_free(&l->scratch);
+    pthread_cond_destroy(&l->compact_cv);
     pthread_cond_destroy(&l->cv);
     pthread_mutex_destroy(&l->mu);
     free(l);
@@ -844,8 +846,22 @@ struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg
         return NULL;
     }
     pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
-    if (pthread_mutex_init(&l->mu, &mattr) != 0 ||
-        pthread_cond_init(&l->cv, NULL) != 0) {
+    if (pthread_mutex_init(&l->mu, &mattr) != 0) {
+        pthread_mutexattr_destroy(&mattr);
+        free(kv);
+        free(l);
+        return NULL;
+    }
+    if (pthread_cond_init(&l->cv, NULL) != 0) {
+        pthread_mutex_destroy(&l->mu);
+        pthread_mutexattr_destroy(&mattr);
+        free(kv);
+        free(l);
+        return NULL;
+    }
+    if (pthread_cond_init(&l->compact_cv, NULL) != 0) {
+        pthread_cond_destroy(&l->cv);
+        pthread_mutex_destroy(&l->mu);
         pthread_mutexattr_destroy(&mattr);
         free(kv);
         free(l);
@@ -873,6 +889,7 @@ struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg
     }
     kv->ops = &lsm_ops;
     kv->ctx = l;
+    kv_compactor_start(l);
     return kv;
 }
 
@@ -887,26 +904,41 @@ void efs_kv_lsm_close(struct efs_kv *kv)
 int efs_kv_lsm_flush(struct efs_kv *kv)
 {
     struct kv_lsm *l;
-    uint32_t l0max;
     int rc;
 
     if (!kv || !kv->ctx)
         return EFS_ERR_INVAL;
     l = kv->ctx;
     pthread_mutex_lock(&l->mu);
-    /* Host snapshot flush used to only append L0. After MAX_SEGS the
-     * next write compact-crashed (fcstor004 SIGSEGV in compact_emit).
-     * Compact first when L0 is at the engine cap or the configured
-     * trigger, so a snapshot cannot pin the store at 64 L0 files. */
-    l0max = l->cfg.l0_max ? l->cfg.l0_max : KV_LSM_L0_DEFAULT;
-    if (l->n_l0 >= KV_LSM_MAX_SEGS || l->n_l0 >= l0max) {
-        rc = kv_compact_locked(l);
-        if (rc != EFS_OK) {
-            pthread_mutex_unlock(&l->mu);
-            return rc;
+    /* Snapshot flush only needs the memtable durable. Compaction is the
+     * background thread's job; at the engine cap, wait for it instead of
+     * rewriting L1 on this call. */
+    while (l->n_l0 >= KV_LSM_MAX_SEGS && !l->io_failed) {
+        if (!l->compact_started) {
+            rc = kv_compact_locked(l, 0);
+            if (rc != EFS_OK) {
+                pthread_mutex_unlock(&l->mu);
+                return rc;
+            }
+            break;
         }
+        l->compact_req = 1;
+        pthread_cond_signal(&l->compact_cv);
+        pthread_cond_wait(&l->cv, &l->mu);
+    }
+    if (l->io_failed) {
+        pthread_mutex_unlock(&l->mu);
+        return EFS_ERR_IO;
     }
     rc = kv_flush_locked(l);
+    if (rc == EFS_OK && l->compact_started) {
+        uint32_t l0max = l->cfg.l0_max ? l->cfg.l0_max : KV_LSM_L0_DEFAULT;
+
+        if (l->n_l0 >= l0max) {
+            l->compact_req = 1;
+            pthread_cond_signal(&l->compact_cv);
+        }
+    }
     pthread_mutex_unlock(&l->mu);
     return rc;
 }
@@ -920,7 +952,12 @@ int efs_kv_lsm_compact(struct efs_kv *kv)
         return EFS_ERR_INVAL;
     l = kv->ctx;
     pthread_mutex_lock(&l->mu);
-    rc = kv_compact_locked(l);
+    while (l->compact_busy)
+        pthread_cond_wait(&l->cv, &l->mu);
+    l->compact_busy = 1;
+    rc = kv_compact_locked(l, 0);
+    l->compact_busy = 0;
+    pthread_cond_broadcast(&l->cv);
     pthread_mutex_unlock(&l->mu);
     return rc;
 }
@@ -963,4 +1000,111 @@ int efs_kv_lsm_sync_release(struct efs_kv *kv)
     if (l->magic != KV_LSM_MAGIC || !l->wal)
         return EFS_OK;
     return kv_wal_hold(l->wal, 0);
+}
+
+struct efs_kv_lsm_view {
+    struct kv_seg *seg[KV_LSM_MAX_SEGS * 2];
+    uint32_t n;
+};
+
+int efs_kv_lsm_view_pin(struct efs_kv *kv, struct efs_kv_lsm_view **out)
+{
+    struct kv_lsm *l;
+    struct efs_kv_lsm_view *v;
+    uint32_t i;
+
+    if (!kv || kv->ops != &lsm_ops || !kv->ctx || !out)
+        return EFS_ERR_INVAL;
+    l = kv->ctx;
+    v = calloc(1, sizeof(*v));
+    if (!v)
+        return EFS_ERR_NOMEM;
+    pthread_mutex_lock(&l->mu);
+    for (i = 0; i < l->n_l0 && v->n < KV_LSM_MAX_SEGS * 2; i++) {
+        v->seg[v->n] = l->l0[i].seg;
+        kv_seg_pin(v->seg[v->n]);
+        v->n++;
+    }
+    for (i = 0; i < l->n_l1 && v->n < KV_LSM_MAX_SEGS * 2; i++) {
+        v->seg[v->n] = l->l1[i].seg;
+        kv_seg_pin(v->seg[v->n]);
+        v->n++;
+    }
+    pthread_mutex_unlock(&l->mu);
+    *out = v;
+    return EFS_OK;
+}
+
+int efs_kv_lsm_view_get(struct efs_kv_lsm_view *v, const uint8_t *key,
+                        uint32_t klen, uint8_t *val, uint32_t *vlen)
+{
+    struct kv_buf b;
+    uint32_t i;
+
+    if (!v || !key || klen == 0 || !vlen)
+        return EFS_ERR_INVAL;
+    memset(&b, 0, sizeof(b));
+    for (i = 0; i < v->n; i++) {
+        uint8_t op = 0;
+        int rc = kv_seg_get(v->seg[i], key, klen, &b, &op);
+
+        if (rc == EFS_ERR_NOT_FOUND)
+            continue;
+        if (rc != EFS_OK) {
+            kv_buf_free(&b);
+            return rc;
+        }
+        if (op == KV_OP_DEL) {
+            kv_buf_free(&b);
+            return EFS_ERR_NOT_FOUND;
+        }
+        if (*vlen < b.len || (b.len > 0 && !val)) {
+            *vlen = b.len;
+            kv_buf_free(&b);
+            return EFS_ERR_NOMEM;
+        }
+        if (b.len)
+            memcpy(val, b.p, b.len);
+        *vlen = b.len;
+        kv_buf_free(&b);
+        return EFS_OK;
+    }
+    kv_buf_free(&b);
+    return EFS_ERR_NOT_FOUND;
+}
+
+void efs_kv_lsm_view_unpin(struct efs_kv_lsm_view *v)
+{
+    uint32_t i;
+
+    if (!v)
+        return;
+    for (i = 0; i < v->n; i++)
+        kv_seg_unpin(v->seg[i]);
+    free(v);
+}
+
+int efs_kv_lsm_quiesce(struct efs_kv *kv)
+{
+    struct kv_lsm *l;
+    uint32_t l0max;
+
+    if (!kv || kv->ops != &lsm_ops || !kv->ctx)
+        return EFS_ERR_INVAL;
+    l = kv->ctx;
+    pthread_mutex_lock(&l->mu);
+    l0max = l->cfg.l0_max ? l->cfg.l0_max : KV_LSM_L0_DEFAULT;
+    while (!l->io_failed && (l->compact_busy || l->n_l0 >= l0max)) {
+        if (!l->compact_started) {
+            int rc = kv_compact_locked(l, 0);
+
+            pthread_mutex_unlock(&l->mu);
+            return rc;
+        }
+        l->compact_req = 1;
+        pthread_cond_signal(&l->compact_cv);
+        pthread_cond_wait(&l->cv, &l->mu);
+    }
+    pthread_mutex_unlock(&l->mu);
+    return l->io_failed ? EFS_ERR_IO : EFS_OK;
 }

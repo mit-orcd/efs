@@ -25,6 +25,52 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 26 2026 evening — W13: L1 compaction off the apply path
+
+The user asked to implement the next roadmap item. That ratified W13
+only. The merge used to run inside `kv_compact_locked` under `l->mu`
+and `h->mu` and rewrote every L1 segment (an L0 spans all shards),
+which was the remaining election trigger (`apply_max` 1.7–2.4 s).
+
+The compactor is one thread in `kv_lsm`. Flush still writes the
+memtable to an L0 file and signals when `n_l0 >= l0max`. The thread
+snapshots the L0 set plus overlapping L1, drops the lock, merges
+through private `kv_seg` opens (the live segment block cache is not
+shared), then under `l->mu` drops only the snapshotted inputs, keeps
+L0 files flushed during the merge, and commits with the existing
+atomic manifest rename. `kv_seg_doom` unlinks a file when the last
+pin goes away, so `efs_kv_lsm_view_pin` still reads the old segments.
+`EFS_KV_COMPACT_DIE=N` `_exit(99)` after the Nth finished output
+segment, before that rename. `efs_kv_lsm_flush` no longer compacts;
+at `KV_LSM_MAX_SEGS` it waits on `l->cv` and logs
+`kv-compact: backpressure`. `kv_compact_locked` stays for
+`efs_kv_lsm_compact` and for the no-thread fallback.
+
+`make` of the KV/raft/txn tests on fcstor007 was green, including
+`test_pinned_view` and `test_compact_crash`, before
+`tests/roll_efsd.sh --all` with
+`EFSD_ENV='EFS_TRANSPORT=tcp EFS_RAFT_OBS=1'`. Build
+`3210a3d63f73-dirty`. Clients fcstor007–015 remounted
+`fuse.efs-fuse`.
+
+Hammer `results/measure/20260926-163709-mkdir-hammer`: idle p50
+4.68 ms; 144-way 35166 mkdirs, p50 56.5 ms; `apply_max` 68473 µs on
+fcstor005. fcstor004 logged two compactions, 796333166 bytes in
+1964 ms and 798775386 bytes in 2067 ms. Errors were ten
+`rmdir-own ENOTEMPTY` lines.
+
+9-host posix `results/posix/20260926-164123`: 200/201 on all nine
+hosts, 13.2–14.8 s. Timeline
+`results/measure/20260926-124106-w8-stall-timeline`: group 0 term
+6882 leader 1 and group 2 term 1198 leader 3 for the whole 139 s;
+no probe over 1 s. Four `kv-compact` lines in the window (two ~400
+MiB in ~0.85 s, two ~760 MiB in ~2.1 s); per-host `apply_max` peaks
+32 / 67 / 64 / 11 ms. Idle `md_latency.py` afterwards: mkdir 2.9,
+create+close 1.6, append+close 2.0, stat 0.3, unlink 0.8, rmdir
+2.9 ms.
+
+Not started: partitioned flush (W13 step 5), W11, W9, W10.
+
 ## Sep 26 2026 — Raft log fsync moved out of the host lock
 
 Propose held `h->mu` across `log_sync_locked`, so 144 mkdir threads

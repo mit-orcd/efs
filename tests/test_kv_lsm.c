@@ -9,6 +9,7 @@
 #include "efs/raft.h"
 
 #include <dirent.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -514,6 +515,7 @@ static void test_bulk_auto_compact(void)
             bad++;
     }
     CHECK(bad == 0, "bulk deletes");
+    CHECK(efs_kv_lsm_quiesce(kv) == EFS_OK, "quiesce");
     CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK, "count");
     CHECK(l1 > 0, "auto compaction ran");
     efs_kv_lsm_close(kv);
@@ -667,7 +669,9 @@ static void test_compact_full_l0(void)
     memset(&cfg, 0, sizeof(cfg));
     cfg.sync_mode = EFS_KV_LSM_NOSYNC;
     cfg.memtable_max = 4u * 1024u * 1024u;
-    cfg.l0_max = 64;
+    /* Above the engine cap so the background compactor does not race the
+     * "L0 is full" check. The cap itself (64) is what this test fills. */
+    cfg.l0_max = 1000;
     kv = efs_kv_lsm_open(g_dir, &cfg);
     CHECK(kv != NULL, "open full-l0");
     if (!kv)
@@ -752,6 +756,122 @@ static void test_sync_hold(void)
     efs_kv_lsm_close(kv);
 }
 
+static void *view_worker(void *arg)
+{
+    struct efs_kv *kv = arg;
+    int i;
+
+    for (i = 0; i < 20; i++) {
+        char k[32], v[32];
+
+        snprintf(k, sizeof(k), "extra%02d", i);
+        snprintf(v, sizeof(v), "x%02d", i);
+        if (put_s(kv, k, v) != EFS_OK)
+            return (void *)1;
+        if (efs_kv_lsm_flush(kv) != EFS_OK)
+            return (void *)1;
+        if (efs_kv_lsm_compact(kv) != EFS_OK)
+            return (void *)1;
+    }
+    return NULL;
+}
+
+/* A pinned view keeps reading the segments it pinned while another thread
+ * flushes and compacts. */
+static void test_pinned_view(void)
+{
+    struct efs_kv *kv;
+    struct efs_kv_lsm_view *view = NULL;
+    pthread_t th;
+    uint8_t buf[32];
+    uint32_t n;
+    int i, bad = 0;
+    void *wr = NULL;
+
+    rmtree(g_dir);
+    kv = open_store(EFS_KV_LSM_NOSYNC, 0);
+    CHECK(kv != NULL, "open view");
+    if (!kv)
+        return;
+    CHECK(put_s(kv, "pinned", "old") == EFS_OK, "put pinned");
+    CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "flush pinned");
+    CHECK(efs_kv_lsm_view_pin(kv, &view) == EFS_OK, "pin");
+    CHECK(pthread_create(&th, NULL, view_worker, kv) == 0, "worker");
+    for (i = 0; i < 100; i++) {
+        n = sizeof(buf);
+        if (efs_kv_lsm_view_get(view, (const uint8_t *)"pinned", 6, buf, &n) !=
+                EFS_OK ||
+            n != 3 || memcmp(buf, "old", 3) != 0)
+            bad++;
+    }
+    CHECK(bad == 0, "view stable across compaction");
+    CHECK(pthread_join(th, &wr) == 0, "join");
+    CHECK(wr == NULL, "worker ok");
+    n = sizeof(buf);
+    CHECK(efs_kv_lsm_view_get(view, (const uint8_t *)"extra00", 7, buf, &n) ==
+              EFS_ERR_NOT_FOUND,
+          "view does not see later keys");
+    CHECK(get_is(kv, "pinned", "old") == EFS_OK, "live still has pinned");
+    CHECK(get_is(kv, "extra00", "x00") == EFS_OK, "live sees later key");
+    efs_kv_lsm_view_unpin(view);
+    efs_kv_lsm_close(kv);
+}
+
+/* Kill after the compaction output file is durable and before the manifest
+ * rename. Reopen must still serve every key from the old segments. */
+static void test_compact_crash(void)
+{
+    struct efs_kv *kv;
+    pid_t pid;
+    int status = -1;
+    int i, bad = 0;
+
+    rmtree(g_dir);
+    kv = open_store(EFS_KV_LSM_SYNC, 0);
+    CHECK(kv != NULL, "open crash-compact");
+    if (!kv)
+        return;
+    for (i = 0; i < 20; i++) {
+        char k[32], v[32];
+
+        snprintf(k, sizeof(k), "ck%02d", i);
+        snprintf(v, sizeof(v), "cv%02d", i);
+        CHECK(put_s(kv, k, v) == EFS_OK, "put ck");
+    }
+    CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "flush ck");
+    efs_kv_lsm_close(kv);
+    setenv("EFS_KV_COMPACT_DIE", "1", 1);
+    pid = fork();
+    CHECK(pid >= 0, "fork compact");
+    if (pid == 0) {
+        kv = open_store(EFS_KV_LSM_SYNC, 0);
+        if (!kv)
+            _exit(2);
+        if (efs_kv_lsm_compact(kv) == EFS_OK)
+            _exit(0);
+        _exit(3);
+    }
+    unsetenv("EFS_KV_COMPACT_DIE");
+    if (pid > 0) {
+        waitpid(pid, &status, 0);
+        CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 99, "died after segment");
+    }
+    kv = open_store(EFS_KV_LSM_SYNC, 0);
+    CHECK(kv != NULL, "reopen after compact crash");
+    if (!kv)
+        return;
+    for (i = 0; i < 20; i++) {
+        char k[32], v[32];
+
+        snprintf(k, sizeof(k), "ck%02d", i);
+        snprintf(v, sizeof(v), "cv%02d", i);
+        if (get_is(kv, k, v) != EFS_OK)
+            bad++;
+    }
+    CHECK(bad == 0, "keys survived compact crash");
+    efs_kv_lsm_close(kv);
+}
+
 int main(void)
 {
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-kvlsm-%d", (int)getpid());
@@ -767,6 +887,8 @@ int main(void)
     test_bulk_auto_compact();
     test_kv_group_snap();
     test_compact_full_l0();
+    test_pinned_view();
+    test_compact_crash();
     test_sync_hold();
 
     rmtree(g_dir);

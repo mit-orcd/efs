@@ -1,0 +1,18 @@
+DONE fcstor008 p5 n=159 err=0 p50=82.64 p90=133.85 p99=260.89 max=1338.37 sum=15.034
+DONE fcstor008 p3 n=161 err=0 p50=76.48 p90=129.01 p99=269.82 max=1088.22 sum=15.042
+DONE fcstor008 p1 n=168 err=0 p50=66.79 p90=129.51 p99=256.03 max=1175.16 sum=15.011
+DONE fcstor008 p7 n=166 err=0 p50=71.12 p90=131.30 p99=269.48 max=1093.45 sum=15.056
+DONE fcstor008 p9 n=167 err=0 p50=77.36 p90=126.15 p99=177.53 max=1159.25 sum=15.017
+DONE fcstor008 p10 n=166 err=0 p50=74.94 p90=131.20 p99=237.31 max=1144.99 sum=15.023
+DONE fcstor008 p12 n=168 err=0 p50=73.71 p90=126.26 p99=226.79 max=1157.58 sum=15.075
+ERR fcstor008 p14 rmdir-own ENOTEMPTY
+DONE fcstor008 p14 n=171 err=0 p50=82.47 p90=129.41 p99=215.94 max=1061.64 sum=15.007
+DONE fcstor008 p11 n=295 err=0 p50=34.25 p90=98.08 p99=176.24 max=1043.89 sum=15.010
+DONE fcstor008 p15 n=294 err=0 p50=53.17 p90=96.09 p99=154.43 max=1124.18 sum=14.999
+DONE fcstor008 p8 n=298 err=0 p50=52.67 p90=96.60 p99=135.45 max=1053.18 sum=15.044
+DONE fcstor008 p4 n=312 err=0 p50=36.55 p90=93.29 p99=116.87 max=1099.20 sum=15.006
+DONE fcstor008 p2 n=332 err=0 p50=23.03 p90=96.74 p99=189.84 max=211.58 sum=15.065
+DONE fcstor008 p13 n=343 err=0 p50=22.60 p90=92.86 p99=190.35 max=216.47 sum=15.006
+DONE fcstor008 p6 n=343 err=0 p50=25.03 p90=94.38 p99=181.55 max=226.33 sum=15.052
+DONE fcstor008 p0 n=346 err=0 p50=23.71 p90=93.56 p99=119.17 max=212.34 sum=15.010
+HOST_DONE fcstor008 bad_procs=0

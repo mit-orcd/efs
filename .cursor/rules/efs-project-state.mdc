@@ -98,39 +98,21 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  0.23 s idle (128 GETCHUNKS × 1.6 ms), 14.6 ms/GETCHUNKS under 32 openers.
  Same-parent rate ~140–160 ops/s flat 1–36 procs
  (`results/measure/20260921-161931-samedir-rate`, pre-`165e779`; remeasure).
- Cluster runs **`c044fb16e859-dirty`** (source `c044fb1`, servers and
- clients, rolled Sep 26 15:00) with
- `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1` (5 s
- `raft-obs:` lines in `efsd.log` — keep it on until W8 closes; "dirty"
- = tracked result logs the deploy rsync deletes, all four agree).
- Clients 007–015 on the same build. A point get pins the LSM segment
- and preads outside the KV lock, and keeps the block on a miss
- (`5d3e603`). **The mkdir ceiling was the apply path's KV scans, not
- fsync** (Sep 26 midday): `merge_scan` now skips segments whose key
- range misses the prefix, the pump's WAL fsync + applied-file write
- run off `h->mu` (file write throttled 10 ms), LSM blocks are 8 KiB
- (were 64; linear `memcmp` in blocks was half of efsd CPU). Then
- (afternoon): memtable key inline in `kv_ent` + an L2-resident 8-byte
- prefix array for the binary search, and **targeted apply wakeups**
- (per-waiter condvar slots; the pump's `cond_broadcast` woke ~150
- handlers per cycle = ~20 % of efsd in futex/spinlock). 144-way mkdir
- p50 **52 ms**, **30366** in 15 s, idle p50 **5.2 ms**
- (`results/measure/20260926-141940-mkdir-hammer`), from 147 ms / 887
- (`20260926-053753`). Run-to-run mkdir counts swing 14k–30k with how
- many 2 s `kv_compact_locked` stalls (and the elections they trigger)
- land in the window; compare p50/idle and the profile, not the count.
- The L1 rewrite comes every ~7 s of hammer and costs an election —
- W13, not ratified; do not tune memtable/`l0_max` around it. Folding
- a txn's PREPARE parts into one command is a protocol change (per-part
- verdicts) — ask. A thread-local fsync defer for a
- txn's prep burst gave nothing (reverted); giving every proposer a
- sync-hold slot slowed idle mkdir (7.1 → 11.9 ms). Do not pipeline
- past the one in-flight batch. A multi-entry AppendEntries fsyncs
- once.
- **Queue is stopped on four decisions** — START-HERE §1a "Decisions
- pending" has a recommendation + steps for each (W13 compaction, W11
- chunked snapshot, W9 client cache, W10 RDMA without a wipe); do not
- implement any of them until the user ratifies the row. `EFSD_ENV` is **space**-separated
+ Cluster binaries report **`3210a3d63f73-dirty`** (W13 compiled on
+ `3210a3d` before this commit; rolled Sep 26 16:37 UTC, servers and
+ clients fcstor007–015, `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1`; all four
+ agree). **W13 is done:** L1
+ compaction runs on a background thread; the apply path only flushes
+ the memtable and swaps the manifest. 144-way mkdir
+ (`results/measure/20260926-163709-mkdir-hammer`): idle p50 **4.68 ms**,
+ **35166** in 15 s, p50 **56.5 ms**, `apply_max` **68 ms** while two
+ ~760 MiB compactions took 2.0 s each. Compare p50 and `apply_max`,
+ not the raw count. Do not tune memtable/`l0_max` to change how often
+ compaction runs. Folding a txn's PREPARE parts into one command is a
+ protocol change (per-part verdicts) — ask. Do not pipeline past the
+ one in-flight batch. A multi-entry AppendEntries fsyncs once.
+ **Queue: W11, W9, W10 still need the user** (START-HERE §1a). Do not
+ start them or the partitioned-flush follow-on. `EFSD_ENV` is **space**-separated
  (`env $EFSD_ENV`): a comma form
  (`EFS_TRANSPORT=tcp,EFS_RAFT_OBS=1`) silently makes the transport AUTO
  (ungated RDMA) and drops OBS — that roll happened once (05:49) and was
@@ -164,24 +146,14 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - posix suite 1 jobs=1 known signature: **200/201**,
  `mmap_write_read` SKIP (`MAP_SHARED` ENODEV by spec). Sep 22 on
  `46d54e6`: 200/0/1 in 92 s (`results/posix/20260922-133653`; the prior
- ~37 s run is `results/posix/20260922-015106`). **9-host suite
- (W8's gate): 200/201 on eight hosts + 199 on one
- (`flock_shared_then_exclusive`, intermittent since Sep 22) in
- 15.5–23 s per host** on the targeted-wakeup build
- (`results/posix/20260926-1430-wake2`), through a 2.0 s `apply_max`
- and one election per group; the run before it
- (`20260926-1425-wake`) met a four-term g0 election burst
- (`arc_term_miss=37`) and scored 193–200 in 16–75 s — W13 class. Prior
- gate: 200/201 all nine, 42–44 s on the txn-finisher build
- (`results/posix/20260926-0345-fin`); that run had no apply-wait
- timeout (`fin_q=0`). On `5d3e603`
- (`results/posix/20260926-054047`): seven hosts 200/201, fcstor007
- 199, fcstor013 198, 39–41 s, no term change; `names_crazy_dirs`
- passed on all nine. On `e8f3dc1` the same suite was 194–199/201
- with one group-0 election (`results/posix/20260926-050825`).
- Back-to-back repeats on the finisher table slip to
- 196–200, mostly `dir_deep_nesting*` / `names_crazy_dirs` timeouts,
- while `apply_max` still hits ~1.6 s (W13, not ratified). Prior steady
+ ~37 s run is `results/posix/20260922-015106`). **9-host suite (W8's gate) on the W13 build: 200/201 on all
+ nine, 13.2–14.8 s** (`results/posix/20260926-164123`). Timeline
+ `results/measure/20260926-124106-w8-stall-timeline`: no term change
+ (g0 6882 leader 1, g2 1198 leader 3), worst `apply_max` 67 ms across
+ four compactions. Prior wakeup build was 200/201 on eight hosts +
+ 199 on fcstor009 (`flock_shared_then_exclusive`) in 15.5–23 s
+ (`results/posix/20260926-1430-wake2`) through a 2.0 s `apply_max`.
+ Prior steady
  score: 193–196/201, 79–94 s on `7e29943`
  (`results/posix/20260923-202626`). Prior: 185–197/201 in 46–66 s
  (`results/posix/20260922-134008`) and 191–195/201 in ~62 s
@@ -304,16 +276,18 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  the durability boundary; the KV must be durable only before the saved
  applied index advances. No per-apply fsync; no snapshot past the KV's
  durable point.
-- **Synchronous full-L1 compaction = the remaining election trigger.**
- KV 1 GiB/node, 64 MiB L1 segments; an L0 spans every shard so
- `kv_compact_locked` rewrites ALL of L1 every 4 flushes (≈16 MiB) under
- `l->mu`+`h->mu`, on every replica at once: `apply_max=2464250us` on 004
- and 005 together, g0 5299→5302→5303, client stat 2 s
- (`results/measure/20260921-220933-w8-stall-timeline/obs-*.txt`).
- Decision item W13 (START-HERE §1a; recommended: background compactor
- over a pinned segment view). Steady apply is still ~0.3 ms
- per entry with no fsync. A point get pins the segment and preads
- outside `l->mu`, and keeps 32 blocks per segment (`5d3e603`).
+- **L1 compaction is a background thread (W13, Sep 26).** An L0 still
+ spans every shard, so each cycle rewrites all of L1 (~760 MiB, ~2 s
+ on the live table). The merge uses private segment opens and holds
+ no `l->mu` and no `h->mu`; the pump only swaps the manifest. A
+ segment file is unlinked when its pin count hits 0, so a pinned
+ view (and a lookup pread) keeps the old file. `apply_max` during
+ those 2 s rewrites was 68 ms. The write path blocks only if `n_l0`
+ hits 64 (`kv-compact: backpressure`). `kv_compact_locked` remains
+ the synchronous path for tests and for a thread that failed to
+ start. Do not put compaction back under the pump. Partitioned
+ flush is the unread follow-on. A point get still pins the segment
+ and preads outside `l->mu` (`5d3e603`).
 - **A Raft proposal is identified by `(index, term)`, never by index
   (I17 root cause, fixed `46d54e6`):** the apply ring matched by index;
   after a leader change the truncated entry's index is reused and the

@@ -139,6 +139,16 @@ struct kv_lsm {
     uint64_t next_seq;
     pthread_mutex_t mu;
     pthread_cond_t cv;
+    /* Compaction runs on compact_thr so a full-L1 rewrite never holds mu
+     * (and therefore never holds the raft apply lock). compact_cv wakes
+     * the thread; cv wakes writers blocked on KV_LSM_MAX_SEGS. */
+    pthread_t compact_thr;
+    pthread_cond_t compact_cv;
+    int compact_started;
+    int compact_stop;
+    int compact_busy;
+    int compact_req;
+    int bp_logged;
     uint64_t apply_next; /* WAL seq whose turn it is to hit the memtable */
     int io_failed;
     int fail_next_batch;
@@ -172,10 +182,13 @@ int kv_msrc_advance(struct kv_lsm *l, struct msrc *s, const uint8_t *lower,
 int kv_manifest_write(struct kv_lsm *l);
 int kv_l1_cmp(const void *a, const void *b);
 
-/* Callers hold l->mu. */
+/* Callers hold l->mu. kv_compact_locked(async=1) drops mu across the
+ * merge and reacquires it before returning. */
 int kv_flush_locked(struct kv_lsm *l);
-int kv_compact_locked(struct kv_lsm *l);
+int kv_compact_locked(struct kv_lsm *l, int async);
 int kv_maybe_flush_locked(struct kv_lsm *l);
+void kv_compactor_start(struct kv_lsm *l);
+void kv_compactor_stop(struct kv_lsm *l);
 
 /* --- segments -------------------------------------------------------- */
 
@@ -210,6 +223,10 @@ int kv_seg_install(struct kv_seg *s, const struct kv_seg_io *io, uint8_t *blk,
                    uint8_t *op);
 void kv_seg_pin(struct kv_seg *s);
 void kv_seg_unpin(struct kv_seg *s);
+/* Unlink path when the last pin drops, not before. A pinned view keeps
+ * the file (and the fd) alive across a compaction that has already
+ * dropped the segment from the manifest. */
+void kv_seg_doom(struct kv_seg *s, const char *path);
 int kv_seg_first_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen);
 int kv_seg_last_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen);
 /* 1 when the segment holds no key >= seek with the prefix (either may be

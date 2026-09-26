@@ -46,4 +46,16 @@ int efs_kv_lsm_seg_count(struct efs_kv *kv, uint32_t *l0, uint32_t *l1);
 int efs_kv_lsm_sync_hold(struct efs_kv *kv);
 int efs_kv_lsm_sync_release(struct efs_kv *kv);
 
+/* A pinned view is the segment set at pin time. Flush and compaction
+ * publish a new set; reads through the view stay on the old files until
+ * the last unpin (that is when the file is unlinked). */
+struct efs_kv_lsm_view;
+int efs_kv_lsm_view_pin(struct efs_kv *kv, struct efs_kv_lsm_view **out);
+int efs_kv_lsm_view_get(struct efs_kv_lsm_view *v, const uint8_t *key,
+                        uint32_t klen, uint8_t *val, uint32_t *vlen);
+void efs_kv_lsm_view_unpin(struct efs_kv_lsm_view *v);
+/* Block until background compaction has caught up (n_l0 below the
+ * trigger and no compaction in progress). */
+int efs_kv_lsm_quiesce(struct efs_kv *kv);
+
 #endif

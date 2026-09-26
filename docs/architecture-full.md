@@ -1353,6 +1353,182 @@ Whoever picks the project up next does **this first**. Update or delete
 this block when done — an "in flight" block older than the last commit
 is a bug in this page.
 
+**W13 done (Sep 26).** The user ratified the background-compactor row.
+L1 compaction runs on a `kv_lsm` thread. The pump still flushes the
+memtable to L0 and kicks the thread when `n_l0 >= l0max`; the merge
+opens private segment fds, drops `l->mu` for the rewrite, and installs
+under the lock (atomic manifest rename). A segment file is unlinked
+only when its refcount hits 0 (`kv_seg_doom`), so `efs_kv_lsm_view_pin`
+survives a concurrent flush and compact. `kv_compact_locked` remains
+for `efs_kv_lsm_compact` and for the fallback if the thread did not
+start. The write path waits on `l->cv` only when `n_l0` reaches
+`KV_LSM_MAX_SEGS` (64) and logs `kv-compact: backpressure` — that wait
+means the compactor is ~16× behind. `EFS_KV_COMPACT_DIE=N` exits after
+the Nth finished output segment, before the manifest rename; reopen
+serves the old manifest. Partitioned flush (one L0 file per shard
+range) is the follow-on and is not in this change.
+
+Running binaries report **`3210a3d63f73-dirty`** (W13 compiled on
+top of `3210a3d` before this commit; rolled Sep 26 16:37 UTC;
+clients fcstor007–015; `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1`). Gate:
+
+- Hammer `results/measure/20260926-163709-mkdir-hammer`: idle p50
+  **4.68 ms**; 144-way **35166** mkdirs in 15 s, p50 **56.5 ms**.
+  `apply_max` **68 ms** on fcstor005 while two compactions rewrote
+  ~760 MiB in 1964 ms and 2067 ms (`l1=12`). The only errors are
+  harness `rmdir-own ENOTEMPTY`.
+- 9-host posix `results/posix/20260926-164123`: **200/201 on all
+  nine**, mmap SKIP, **13.2–14.8 s**. Timeline
+  `results/measure/20260926-124106-w8-stall-timeline`: group 0 stayed
+  term 6882 leader 1, group 2 stayed term 1198 leader 3, for 139 s;
+  no probe stat/mkdir/rmdir over 1 s. Four `kv-compact` cycles in
+  that window; worst `apply_max` **67 ms**.
+- Idle `md_latency.py` on fcstor007 after the suite: mkdir 2.9 /
+  create+close 1.6 / append+close 2.0 / stat 0.3 / unlink 0.8 /
+  rmdir 2.9 ms.
+
+Do not start W11, W9, W10, or the partitioned-flush follow-on until
+the user asks. Do not raise `l0_max`, the memtable, or the election
+timeout. `EFSD_ENV` is space-separated. The next server restart is a
+build-id change → `tests/roll_efsd.sh --all`.
+
+**Txn finisher (Sep 26, `src/server/raft_host.c` `host_txn_commit`).**
+A compaction stall longer than the 400 ms apply wait turns an in-flight
+DECIDE/RESOLVE into BUSY and leaves the EXCL intent until the 5 s
+recovery scan; that intent makes every later create on the shard BUSY
+and the client burns its 16 attempts into EIO. `host_txn_commit` hands
+that txn to a finisher thread, which reads the decision record and
+proposes RESOLVE (retrying BUSY until 10 s). The stall itself is W13,
+now off the apply path (above). First 9-host suite on the finisher
+build was **200/201 all nine, 42–44 s**
+(`results/posix/20260926-0345-fin`, `fin_q=0`).
+
+**Mkdir hammer (Sep 26, `6a60318`).** Propose was fsyncing the Raft
+log while holding `h->mu`, then sending one AppendEntries.
+`results/measure/20260926-042515-mkdir-hammer`: idle p50 8.4 ms,
+144-way p50 **258 ms** / 470 mkdir/s. The fsync now runs outside the
+lock (`68dfebb`). Proposers only raise the send ceiling; the pump
+ships one batch after the threads queued on the lock have appended,
+and it will not start a second batch while one is in flight
+(`f47854b`, `6a60318`). A clean 144-way run
+(`results/measure/20260926-052320-mkdir-hammer`): idle p50 11.3 ms,
+144-way p50 **168 ms** / 754 mkdir/s, apply_max 61 ms, `fin_q=0`.
+The repeat (`20260926-052437-mkdir-hammer`) hit a 766 ms apply of
+31 entries and fell to p50 235 ms — that stall was the synchronous
+compaction W13 has since moved off the apply path. Do not pipeline
+past the one in-flight batch. Earlier
+same-morning numbers, before this batching, are in the history
+(`044248` 144 ms / 735 on a smaller table, `050609` 189 ms / 706).
+
+**KV get (`5d3e603`).** A mkdir's negative lookup pread every LSM
+segment under the KV lock and freed the block on a miss. The segment
+is pinned, the pread runs outside the lock, and the block stays
+cached (32 slots per segment). Measured on that tree (build string
+`f93e7e6669b6-dirty`):
+`results/measure/20260926-053753-mkdir-hammer` idle p50 **7.1 ms**,
+144-way p50 **147 ms** / 887 mkdir/s, apply_max 59 ms, `fin_q=0`.
+Three `rmdir-own ENOTEMPTY` lines, no mkdir errors. Do not pipeline
+past the one in-flight batch. A multi-entry AppendEntries fsyncs
+once at the end of the batch (catch-up used to fsync each entry
+under the host lock). Do not give every proposer its own sync-hold
+slot: idle mkdir waited out unrelated appends (p50 7.1 → 11.9 ms)
+and the 144-way rate did not move.
+
+**Apply path: where the 887/s ceiling was (Sep 26 midday).** A
+thread-local fsync defer for one txn's PREPARE/RESOLVE burst was
+built and measured first: no gain (`20260926-110435`, 12059 / p50
+174 ms, clean apply) — the wall was never the leader fsync count. It
+was the apply itself: `strace -c` on the dual-host follower during
+the hammer showed 8 650 `pread64`/s and 875 `fsync`/s; `perf` showed
+half of efsd on `memcmp` under `search_block` / `kv_msrc_advance`.
+Every PREPARE apply runs two prefix scans (`guards_conflict`,
+`reduces_pending`), every RESOLVE three (`txn_scan_kinds`), and
+`merge_scan` opened an iterator on every LSM segment — one pread and
+a linear walk of a 64 KiB block each — under `l->mu` on the pump.
+Three changes, all LSM-internal / pump-internal, no protocol change:
+(1) `merge_scan` skips a segment whose [first,last] key range cannot
+hold the prefix (`kv_seg_excludes`; L1 is range-partitioned, so a
+3-byte txn prefix is in one or two of them) and the iterator reuses
+the segment's cached block; (2) the pump's KV WAL fsync and the
+applied-index file write moved off `h->mu` and the file write is
+throttled to 10 ms (three fsyncs per ~3 ms cycle were under the lock
+proposers queue on; the saved index is only a restart lower bound);
+(3) `KV_LSM_BLOCK_TARGET` 64 → 8 KiB (readers take any block size;
+old segments stay valid until compaction rewrites them). Hammers,
+build string still `194286c37a4f-dirty`: prune alone
+`20260926-112916`: idle 9.5, 144-way **13715 / p50 137 ms**; + pump
+tail `20260926-133934`: idle **6.97**, **14764 / 106 ms**; + 8 KiB
+blocks `20260926-134640` idle **4.54**, **21990 / 73 ms** and
+`20260926-134738` idle 5.59, **28072 / p50 60 ms** (~1 870 mkdir/s,
+22 `rmdir-own ENOTEMPTY`, 0 mkdir errors). Every one of those runs
+contained a 1.7–2.0 s `kv_compact_locked` stall; the clean-window
+rate is higher still. **Cost of the speed: the L1 rewrite now
+happens every ~7 s of hammer** (compaction trigger is 4 × 4 MiB L0
+flushes and the table writes ~2 MB/s of records) and a 1.9 s stall is
+past the election timeout — the 9-host suite on this build
+(`results/posix/20260926-1350-blk`) ran in **20–38 s** but scored
+195–199/201 with two elections, both at a 1.9 s compaction
+(`link_across_dirs`, `last_link_unlink_other_dir`, `dir_many_files`,
+`dir_deep_nesting*` — the BUSY-exhausted-10 s / election class).
+That stall is what W13 (done, top of this section) removed from the
+apply path. Do not tune `l0_max` or the memtable size around how
+often compaction runs.
+
+**Follow-on, same afternoon: memtable probes and the wakeup herd.**
+After `610f4a8` the pump thread was still 61–67 % of efsd samples,
+with `memcmp` 23 % — 12 % of it the memtable binary search inlined
+into `lsm_batch` (one `lsm_put` per PREPARE part, ~15 probes, each
+two dependent cache misses: `e[mid]` then its key) — and ~20 % of
+efsd in `native_queued_spin_lock_slowpath` / `futex_wake` /
+`futex_wait_setup`: the pump's `pthread_cond_broadcast(applied_cv)`
+after every cycle woke every sleeping handler (~150 under the
+hammer) to re-check a predicate that was false for all but a few, all
+on one futex word. Three changes, no protocol change: (1) the
+memtable entry's key is allocated inline with `struct kv_ent`; (2) a
+parallel `uint64_t pfx[]` array (first 8 key bytes, big-endian) is
+what the binary search probes — L2-resident, an entry is touched only
+on a prefix tie; (3) waiters register the index they need (or "any
+change of this group's view" for a read-index round) in one of 512
+slots with its own condvar (`host_waiter_sleep`), and the pump
+signals only the slots the fresh view satisfies
+(`host_waiters_wake`); the view carries a `stamp` bumped by every
+publish that changed a field; `applied_cv` remains as the overflow
+path. `memcmp` 23 → 11–13 %, `kv_mtab_pos` itself 2.2 %. Hammer
+(build `610f4a8…-dirty`): `20260926-141940` idle **5.23 ms**, 144-way
+**30366 / p50 52 ms**, p99 224, 0 mkdir errors (67 `rmdir-own
+ENOTEMPTY`); its twin `20260926-142052` hit a 14.7 s max with 30
+`mkdir EIO` — the run-to-run spread is how many 2 s compaction stalls
+and the elections they trigger land in the 15 s window (g0 term
+6746 → 6751 during the first run), not the code. 9-host suite:
+`results/posix/20260926-1430-wake2` **200/201 on eight hosts, 199 on
+fcstor009** (`flock_shared_then_exclusive`, an intermittent seen on
+Sep 22/25/26 builds) in **15.5–23 s per host** — the prior gate runs
+were 39–44 s — with a 2.0 s `apply_max` and one election per group
+at the start. Its predecessor `20260926-1425-wake` ran into a
+four-term g0 election burst (`apply_max=851 ms` on 003 → LEADER→
+FOLLOWER → CANDIDATE ×3, `arc_term_miss=37`) and scored 193–200 in
+16–75 s with the EIO cluster on one host. Same W13 class; do not
+bisect it. Remaining pump profile: `memmove` 7 % (pointer + prefix
+array insert), txn-record scans ~6 %, `kv_compact_locked` (W13), and
+the residual futex share is `l->mu` / `h->mu` handoffs, not the herd.
+One PREPARE command = one part = one Raft entry = one `lsm_put`;
+folding a txn's parts into one PREPARE is a protocol change (per-part
+verdicts) and goes to the user, not into the tree. Staging WAL
+records under the hold into one `write()` per cycle was tried and
+reverted (no measurable change; history, Sep 26 afternoon). Cluster
+is on `c044fb16e859-dirty`, servers and clients.
+
+**9-host suite on that same tree** (`results/posix/20260926-054047`,
+timeline `results/measure/20260926-014030-w8-stall-timeline`):
+seven hosts **200/201**, fcstor007 199, fcstor013 198, 39–41 s,
+0 NOTRUN. No term change. `names_crazy_dirs` passed on all nine.
+Left: one `dir_many_files` EIO, one `names_crazy_roundtrip` EIO,
+one `dir_deep_nesting` 15 s timeout. The previous suite on
+`e8f3dc1` was 194–199/201 with a group-0 election
+(`results/posix/20260926-050825`).
+
+
+
 **I16 landed (Sep 23 02:47, `43bdf6a41f7d`) — gate runs owed.** Every
 directory RPC (CREATE/MKDIR, UNLINK/RMDIR, LINK, RENAME_AT) now carries
 an optional 36-byte op-id suffix `(client uuid, session epoch, seq,
@@ -1457,10 +1633,142 @@ invalid). Known limit, by design: a client's 16-attempt budget (~10.3 s)
 is shorter than recovery of a stranded txn (16.5 s on shard 1504) → the
 app sees EBUSY, never a wrong answer. Do not widen it.
 
-**Owed now:** 9-host posix suite and `same_parent_storm.sh` on `7e29943`;
-the idle `md_latency.py` remeasure. Then the queue: the four pending
-decisions are written up with a recommendation each in §1a ("Decisions
-pending") — W13, W11, W9, W10 — and stop there until ratified.
+**Gates on `7e29943f28ef-dirty` (Sep 23 20:26–20:46 UTC):**
+9-host posix **193–196/201, 0 not-run, 79–94 s**
+(`results/posix/20260923-202626`, timeline
+`results/measure/20260923-162609-w8-stall-timeline`). Fails are the six
+many-op timeouts (item 4; mkdir p50 46 ms / p90 230 ms under the suite)
+plus one-offs at the one group-2 election in the run (term 535→537,
+leader raft-id 2→3, one root stat of 1.6 s): `concurrent_create_unlink_two_proc`
+EIO on 009 and 010, `content_random_roundtrip` EIO on 014,
+`concurrent_write_and_readdir` EIO on 007, `unlink_open_then_recreate`
+reading `b''` on 009, `concurrent_appends` timeout on 010. Group 0 did
+not change term during the suite (5498; `leader=0` in the status line is
+raft id 0 = node 1, not "no leader"). No 2.4 s apply stall in this run.
+`same_parent_storm.sh` 9×4×100 on Sep 23: parent ended `children=0
+nlink=2` and `rmdir` succeeded, but fcstor014 logged two `mkdir ENOENT`
+at round 63 (`results/stress/same-parent-20260923-202846`). Reply path:
+`ll_mkdir` committed, then `lookup_fill` (no open fh) refreshed, and
+`stat_refresh` maps every GETATTR failure to NOT_FOUND. Fixed: a
+committed mkdir/symlink/link replies the dual-applied local row when
+that refresh fails (`lookup_fill_committed`). Re-gate on the new
+clients (servers still `7e29943f28ef-dirty`): PASS 9×4×100, parent
+`children=0 nlink=2`, `RMDIR_OK`
+(`results/stress/same-parent-20260924-170945`). The fallback line did
+not fire, so this run did not exercise the failed refresh; the Sep 23
+failure is the case the reply now covers.
+Idle `md_latency.py` twice, 20 min apart, term stable and
+`commit == applied`, commit still +30 in 30 s (the 0–2/s reaper band,
+not catch-up): mkdir 8.5 / create+close **56.8** / append+close **59.5**
+/ stat 0.5 / unlink 2.2 / rmdir 7.8 ms
+(`results/measure/20260923-162535-idle-mdlat/mdlat-idle2.txt`). The 50 ms
+mode is on the two ops that write a byte and close; mkdir is near the
+6.1 ms reference. Not the post-roll election (the roll was 18:21, this
+sample is 20:46). A 4 MiB raft-log tail still shows the suite, not the
+idle 1/s — do not blame a command from it.
+**Strace (Sep 24, `results/measure/20260924-021832-close-strace`,
+`20260924-053648-leader-strace`): the 50 ms is a `recvfrom`, not fsync.**
+On the client every slow mkdir/create/append is one `recvfrom` of a
+441-byte reply (0x1B9). On both leaders, at the same instant as the slow
+creates, a thread blocks 60–70 ms in `recvfrom` of a 2-byte frame; the
+group-2 leader also blocks 77–114 ms reading a ~64 KiB frame (0x10049).
+A different pair of threads on each leader sits ~52 ms in `recvfrom` of
+an 81-byte frame for the whole trace — the 50 ms heartbeat cadence,
+present with no creates running. The follower's long calls were a
+2.000 s `clock_nanosleep` and 2.000 s reads, not this op. One create in
+the leader trace was 10 ms; the other three were 66 / 73 / 118 ms.
+Do not treat this as the Sep 20 wrong-condvar bug until a send-side
+trace shows the 81-byte frame leaving a follower late.
+
+**9-host on the mkdir-reply clients (Sep 24 20:33 UTC,
+`results/posix/20260924-203211`, servers still `7e29943f28ef-dirty`):**
+193–196/201, skip=1 (`mmap_write_read`), 0 not-run, 74–80 s. The Sep 23
+election one-offs (`content_random_roundtrip`, `unlink_open_then_recreate`
+`b''`, `concurrent_create_unlink_two_proc`) did not recur. New one-offs:
+fcstor008 `names_near_path_max` and `content_random_overwrite_append`
+EEXIST, `rename_file_over_symlink` EIO; fcstor010 `dir_many_files` EIO
+at `f0149`; fcstor015 `dir_deep_nesting` ENOENT. The rest are the six
+many-op timeouts. The XFS baseline on node9901 did not run
+(`/data1/efs` is not a mount there); score the `efs-*.tsv` summaries,
+not the compare files.
+**9-host after the ghost + close-unlock clients (Sep 25 00:02 UTC,
+`results/posix/20260925-0002-ghost`, servers still
+`abc6e913e760-dirty`):** 191–197/201, skip=1, 0 not-run, 66–74 s.
+`unlink_open_then_recreate` and `flock_unlock_on_close` passed on
+every host. The empty read was the sharded `keep_last` path returning
+only when the dentry table differed from the parent, so the common
+case deleted the open-fd ghost and getattr adopted size 0. Last close
+now also sends `LOCK_UN` for that fd's owner. Non-timeout leftovers:
+fcstor007 and 009 `dir_many_files` EIO (`f0200`, `f0253`), fcstor010
+`trunc_grow_sparse` FileExistsError on the test directory, fcstor011
+`names_dash_prefix_terminal` EBUSY on the test directory. The rest
+are the many-op timeouts.
+**9-host after NET-retry + visible-dir mkdir (Sep 25 00:54 UTC,
+`results/posix/20260925-0048-net`):** 194–197/201, skip=1, 0 not-run,
+77–101 s. `dir_many_files`, `trunc_grow_sparse`, and
+`names_dash_prefix_terminal` passed on every host, as did
+`unlink_open_then_recreate` and `flock_unlock_on_close`. A dropped
+conn or recv used to return `EFS_ERR_NET` on the first attempt
+(create → EIO). It now stays inside the existing 16-attempt loop.
+MKDIR `EEXIST`/`EBUSY` returns success only when a lookup sees a
+directory, and no longer reports EEXIST when the name is not visible
+(`fuse_create_errno` used to short-circuit on `last_err`).
+**9-host after local directory lookup (Sep 25 02:50 UTC,
+`results/posix/20260925-0130-lookup`):** 195–198/201, skip=1, 0
+not-run, 63–69 s. `dir_deep_nesting_beyond_64` passed on all nine
+hosts. With `entry_timeout=0` a depth-100 mkdir was one LOOKUP RPC
+per ancestor per level. A directory this client already has is
+answered from the local table; files still go to the server, so a
+peer unlink stays visible. `dir_deep_nesting` (the same walk plus
+`rmtree`) still timed out on 7 of 9 hosts. `names_crazy_dirs` timed
+out on every host. `names_crazy_roundtrip`,
+`concurrent_creates_same_dir`, and `concurrent_write_and_readdir`
+timed out on some hosts only.
+**9-host after write() stopped reporting inline (Sep 25 04:30 UTC,
+`results/posix/20260925-0412-write`, servers+clients
+`d2e593244a10-dirty`):** 194–198/201, skip=1, 0 not-run, 60–66 s.
+`write()` used to `report_dirty(0)` the whole set before returning;
+flush/close already does `report_dirty_ino(ino, 1)`, so the write
+report was a second round trip on every small file. Best hosts
+(007, 008, 011) fail only `dir_deep_nesting` and `names_crazy_dirs`.
+Those two still time out on every host. `dir_deep_nesting_beyond_64`
+slipped back to a timeout on some hosts after the roll.
+Alone on fcstor007 (Sep 25 04:34 UTC, same build, jobs=16) both
+pairs pass: `dir_deep_nesting` + `beyond_64` in 3.6 s,
+`names_crazy_dirs` + `names_crazy_roundtrip` in 3.2 s. The 15 s
+failure is the 9-host queue, not a bug in those tests.
+**9-host after an immutable-segment block cache (Sep 25 12:35 UTC,
+`results/posix/20260925-0445-segcache`, `6ba3592b03c2-dirty`):**
+198–199/201, skip=1, 0 not-run, 48–56 s. `dir_deep_nesting` and
+`dir_deep_nesting_beyond_64` passed on every host checked.
+`names_crazy_dirs` still timed out on every host;
+`names_crazy_roundtrip` on some. Each KV get was malloc + pread of
+the block under the LSM lock, including a miss that walks every
+segment. The segment is immutable, so the last block stays cached.
+A miss used to install that block and evict the hot one. Misses
+leave the cache alone, and a key past the segment's last key does
+not read the last block again.
+**9-host after that, plus no open-lease and no empty close REPORT
+(Sep 25 16:49 UTC, `results/posix/20260925-1240-misscache`,
+`59b312f5904b-dirty`):** 199–200/201, skip=1 (`mmap_write_read`),
+0 not-run, 44–49 s. Seven hosts failed nothing. fcstor008 and
+fcstor013 failed only `names_crazy_dirs` (15 s). `dir_deep_nesting`,
+`dir_deep_nesting_beyond_64`, and `names_crazy_roundtrip` passed.
+`names_crazy_dirs` later passed on all nine
+(`results/posix/20260926-164123`). W13 is done; W11, W9, and W10
+still stop until the user asks.
+The idle 50 ms create+close median did not hold: Sep 24 15:03 UTC on
+the live mount, term stable, `md_latency.py` was mkdir 5.9 /
+create+close 4.1 / append+close 6.1 / stat 0.3 / unlink 1.6 / rmdir
+6.2 (`results/measure/20260924-150154-rpcprof-shapes` agrees). One
+50–110 ms sample per 20-op batch remains. Not a code change until
+that median is back.
+The I16 follow-up's server half is in tree and unit-tested
+(`efs_session_fence_local` deletes that shard's op-id window for the
+fenced epoch; `test_session` OK on node9901) and is **not rolled**: the
+FUSE client never creates an efs session, so nothing fences it. Seeding
+the op-id from the session waits on that client session, which is the
+product-gap item, not a one-line change.
 
 The I17 story (index-only ring match; `46d54e6`; two gate runs
 `results/measure/20260922-122517-i17-leader-freeze`, `-122629-`) is in
@@ -1493,8 +1801,10 @@ What is left in the 9-host row, and what to do with each:
    `unlink_open_then_recreate` reading `b''`: a client got BUSY from the
    400 ms apply-wait deadline during a stall, retried LINK/UNLINK
    (`stale_retryable`), and met its own result. **Landed `43bdf6a`**
-   (block above); gate runs owed. The client still retries BUSY and the
-   400 ms deadline is unchanged.
+   (block above); gated on `7e29943` (the 20:26 9-host run above). The
+   client still retries BUSY and the 400 ms deadline is unchanged. The
+   `b''` read and the EIO one-offs recurred once, at the group-2
+   election in that run.
 3. **Compaction stall → leader loss (needs a decision, §4).** One pump
    cycle held `h->mu` for **2.4 s** on both g0 replicas at once
    (`obs-fcstor004/005.txt`: `apply_max=2464250us applies_in_worst=54`),
@@ -1507,9 +1817,9 @@ What is left in the 9-host row, and what to do with each:
    the same moment. Options the spec does not choose between: bounded
    (leveled / per-key-range) compaction; compaction off the apply path
    (background thread, readers merge an immutable memtable); a larger
-   memtable as a stopgap (fewer, not shorter, stalls). **Now queue item
-   W13 (§1a) with a recommendation — background compactor — and steps;
-   awaiting ratification.** Do not raise the election timeout.
+   memtable as a stopgap (fewer, not shorter, stalls). **W13 landed
+   the background compactor (Sep 26); see the top of §1b.** Do not
+   raise the election timeout.
 4. **Throughput at 144 concurrent jobs** — the six many-op tests
    (`dir_deep_nesting*`, `names_crazy_*`, `concurrent_write_and_readdir`,
    `concurrent_creates_same_dir`, `mtime_monotonic_many_writes`) time out
@@ -2080,16 +2390,17 @@ pre-flush and read several GiB/s. The number is bytes ÷ wall with the flush
 inside. `dd if=/dev/zero` is also invalid here: all-zero payloads skip PUTs.
 Use a non-zero source file.
 
-##### Decisions pending — recommended answers (Sep 23 2026)
+##### Decisions pending — recommended answers (Sep 26 2026)
 
-Four queue items stop on a choice the spec does not make. Each item below
-carries a **Recommendation**, the reason, and the steps that follow from
-it. Nothing here is implemented until the user ratifies the row. The
-order is the build order: W13 and W11 share one primitive.
+Three queue items still stop on a choice the spec does not make. Each
+item below carries a **Recommendation**, the reason, and the steps that
+follow from it. Nothing in the open rows is implemented until the user
+asks. W13 is done; its pinned segment view is the primitive W11's
+steps use.
 
 | item | question | recommended | why, in one line |
 | --- | --- | --- | --- |
-| W13 | full-L1 compaction holds the apply path 2.4 s and costs a term | **compact on a background thread**; per-range compaction later; memtable size is not a fix | it is a lock hold, not CPU — moving it off `l->mu`/`h->mu` removes the stall at any table size; per-range does nothing while one L0 spans every shard; a bigger memtable makes the same stall rarer, and one stall is one election |
+| W13 | full-L1 compaction holds the apply path 2.4 s and costs a term | **done Sep 26** — background compactor; partitioned flush is the follow-on, not started | the merge no longer holds `l->mu`/`h->mu`; `apply_max` stayed under 70 ms across ~2 s / ~760 MiB rewrites (`results/posix/20260926-164123`) |
 | W11 | the KV export is larger than one 4 MiB SNAP command, so the log never truncates | **the Raft paper's chunked InstallSnapshot** (`offset`, `done`) over a snapshot *file* the leader exports from a pinned segment view | it is the protocol Raft already specifies, so nothing is invented; the pinned view is the same primitive W13 needs; the follower imports on `done` with the existing `efs_kv_group_import` |
 | W9 | bound the client staging table | **ratify the pin rules and the 256 MB default** (`EFS_CLIENT_META_MB`), soft cap | 256 MB is ~1M rows, far above any FUSE working set; the pin rules are the only ones that make a report-record miss impossible; a pinned-full table grows and logs rather than losing a write |
 | W10 | RDMA needs an empty table to gate | **no wipe.** Gate on the private 3-node cluster (`tests/rdma_first_inode.sh`, fcstor007, port 19950), then switch 19810 to RDMA in place | the bug only needs an *empty* table, and the private cluster is one; a populated 19810 already ran millions of RDMA creates clean, so the live switch needs no wipe. Keep the wipe for when W11's gate wants a table that grows from zero |
@@ -2501,7 +2812,12 @@ Steps, once ratified (after W13's step 1, which builds the pinned view):
   "fix" the lag — a 2+1 PUT needs every fragment ACK, so removing a node
   breaks writes.
 
-##### W13 — Synchronous full-L1 compaction is the remaining election trigger
+##### W13 — Synchronous full-L1 compaction is the remaining election trigger — DONE Sep 26 2026
+
+Gate is at the top of §1b. Steps 1–4 landed: pinned view, background
+compactor, flush no longer compacts, and the 9-host suite kept
+`apply_max` under 100 ms with no term change. Step 5 (partitioned
+flush) is not started.
 
 Measured Sep 21 (`results/measure/20260921-220933-w8-stall-timeline/obs-*.txt`):
 `kv_compact_locked` runs inside the apply path under `l->mu` + `h->mu`,
