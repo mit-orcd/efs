@@ -81,6 +81,15 @@ directory paid the disk again. Hammer
 Term did not move. `names_crazy_dirs` passed on every host. Probe
 during the run: stat p50 3 ms (one sample 1.3 s), mkdir p50 14 ms.
 
+A follower AppendEntries of many entries fsynced once per entry
+under `h->mu` (the duplicated 128-entry catch-up was ~30 ms). The
+store's `batch_begin` / `batch_end` defer that fsync to one call at
+the end of the batch. The leader path is unchanged: only the
+proposer that finds the sync hold at zero takes a slot. Giving
+every proposer a slot, so the fsync waited for threads that had not
+appended yet, moved idle mkdir from 7.1 ms to 11.9 ms and did not
+raise the 144-way rate. That version was not kept.
+
 ## Sep 26 2026 — txn finisher after a 400 ms apply wait
 
 A full-L1 compaction under the KV lock stalls apply for >400 ms

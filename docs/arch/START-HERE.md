@@ -92,7 +92,11 @@ cached (32 slots per segment). Measured on that tree (build string
 `results/measure/20260926-053753-mkdir-hammer` idle p50 **7.1 ms**,
 144-way p50 **147 ms** / 887 mkdir/s, apply_max 59 ms, `fin_q=0`.
 Three `rmdir-own ENOTEMPTY` lines, no mkdir errors. Do not pipeline
-past the one in-flight batch.
+past the one in-flight batch. A multi-entry AppendEntries fsyncs
+once at the end of the batch (catch-up used to fsync each entry
+under the host lock). Do not give every proposer its own sync-hold
+slot: idle mkdir waited out unrelated appends (p50 7.1 → 11.9 ms)
+and the 144-way rate did not move.
 
 **9-host suite on that same tree** (`results/posix/20260926-054047`,
 timeline `results/measure/20260926-014030-w8-stall-timeline`):

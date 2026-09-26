@@ -94,6 +94,12 @@ struct efs_raft_store {
     int (*save_cfg)(void *ctx, uint32_t cfg_old, uint32_t cfg_new);
     int (*load_cfg)(void *ctx, uint32_t *cfg_old, uint32_t *cfg_new);
     void (*destroy)(void *ctx);
+    /* Optional. One fsync for a multi-entry AppendEntries. NULL means
+     * each append fsyncs on its own. batch_end returns only once this
+     * thread's appends are durable, including when other threads are
+     * still holding the shared log fsync. */
+    int (*batch_begin)(void *ctx);
+    int (*batch_end)(void *ctx);
 };
 
 typedef int (*efs_raft_send_fn)(void *net, const struct efs_raft_msg *msg);

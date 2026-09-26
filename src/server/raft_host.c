@@ -2308,7 +2308,9 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
      * was held: 144 mkdir threads each waited out a private fsync
      * (idle p50 8 ms, 9×16 p50 258 ms). A caller that already holds
      * (the report batch) keeps that outer fsync and broadcasts after
-     * it. */
+     * it. Taking a slot on every proposer, including ones that arrive
+     * after the first hold, made idle mkdir wait out unrelated
+     * appends (p50 7.1 → 11.9 ms) and did not raise the 144-way rate. */
     if (h->disk && efs_raft_disk_sync_depth(h->disk) == 0 &&
         efs_raft_disk_sync_hold(h->disk) == EFS_OK)
         quiet = 1;

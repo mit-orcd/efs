@@ -93,6 +93,10 @@ struct efs_raft_disk {
 int raft_log_append(struct efs_raft_disk *d, uint8_t type,
                     struct raft_disk_group *g, uint64_t a, uint64_t b,
                     const uint8_t *cmd, uint32_t clen);
+/* This thread's appends skip the fsync. defer_end fsyncs them once,
+ * even if other threads still hold the shared sync. Nested. */
+void raft_log_defer_begin(void);
+int raft_log_defer_end(struct efs_raft_disk *d);
 int raft_log_replay(struct efs_raft_disk *d);
 int raft_log_rotate_locked(struct efs_raft_disk *d);
 void raft_log_maybe_rotate_locked(struct efs_raft_disk *d);

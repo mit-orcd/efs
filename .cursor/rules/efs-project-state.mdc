@@ -109,7 +109,9 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  (`results/measure/20260926-053753-mkdir-hammer`). Prior batching
  (`6a60318`) was 168 ms / 754. A 766 ms apply on that older binary
  is still W13, not ratified. Do not pipeline past the one
- in-flight batch.
+ in-flight batch. A multi-entry AppendEntries fsyncs once;
+ giving every proposer a sync-hold slot slowed idle mkdir
+ (7.1 → 11.9 ms) and did not raise the 144-way rate.
  **Queue is stopped on four decisions** — START-HERE §1a "Decisions
  pending" has a recommendation + steps for each (W13 compaction, W11
  chunked snapshot, W9 client cache, W10 RDMA without a wipe); do not

@@ -398,6 +398,26 @@ static void disk_destroy(void *ctx)
     (void)ctx;
 }
 
+/* One fsync for a multi-entry AppendEntries. Not the shared sync_hold:
+ * the pump calls this while it owns the host lock, and waiting out other
+ * threads' holds would deadlock on that lock. */
+static int disk_batch_begin(void *ctx)
+{
+    if (!group_of(ctx))
+        return EFS_ERR_INVAL;
+    raft_log_defer_begin();
+    return EFS_OK;
+}
+
+static int disk_batch_end(void *ctx)
+{
+    struct raft_disk_group *g = group_of(ctx);
+
+    if (!g)
+        return EFS_ERR_INVAL;
+    return raft_log_defer_end(g->d);
+}
+
 static const struct efs_raft_store disk_ops = {
     .save_hard = disk_save_hard,
     .load_hard = disk_load_hard,
@@ -410,6 +430,8 @@ static const struct efs_raft_store disk_ops = {
     .save_cfg = disk_save_cfg,
     .load_cfg = disk_load_cfg,
     .destroy = disk_destroy,
+    .batch_begin = disk_batch_begin,
+    .batch_end = disk_batch_end,
 };
 
 /* --- open / close ---------------------------------------------------- */

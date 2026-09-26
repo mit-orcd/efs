@@ -873,6 +873,11 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
     if (in->nentries) {
         uint64_t idx = in->prev_index + 1;
         uint32_t i;
+        int batch = in->nentries > 1 && r->store->batch_begin &&
+                    r->store->batch_end;
+
+        if (batch && r->store->batch_begin(r->store_ctx) != EFS_OK)
+            batch = 0;
         for (i = 0; i < in->nentries; i++, idx++) {
             uint64_t et = 0;
             rc = log_term(r, idx, &et);
@@ -896,9 +901,16 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
                 if (getenv("EFS_RAFT_AE_DBG"))
                     fprintf(stderr, "AE_REQ APPEND FAIL idx=%llu i=%u rc=%d\n",
                             (unsigned long long)idx, i, rc);
+                if (batch)
+                    (void)r->store->batch_end(r->store_ctx);
                 return rc;
             }
             install_log_cfg(r, in->entries[i].cmd, in->entries[i].clen, idx);
+        }
+        if (batch) {
+            rc = r->store->batch_end(r->store_ctx);
+            if (rc != EFS_OK)
+                return rc;
         }
         last_log(r, &last_i, &last_t);
         if (getenv("EFS_RAFT_AE_DBG"))
