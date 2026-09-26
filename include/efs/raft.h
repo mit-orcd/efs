@@ -150,7 +150,6 @@ int efs_raft_propose_local(struct efs_raft *r, const uint8_t *cmd,
                            uint32_t clen, uint64_t *index_out);
 void efs_raft_arm_durable(struct efs_raft *r);
 int efs_raft_submit(struct efs_raft *r, uint64_t idx);
-int efs_raft_flush(struct efs_raft *r);
 int efs_raft_durable(struct efs_raft *r, uint64_t idx);
 /* Compact log prefix through last_applied. Captures snap_get (if set) so
  * InstallSnapshot can rebuild a learner that never applied 1..snap_idx.

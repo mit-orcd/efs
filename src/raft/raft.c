@@ -491,7 +491,6 @@ static int send_ae(struct efs_raft *r, int to)
     uint64_t ni;
     uint8_t *arena = NULL;
     int rc;
-    int pipelined = 0;
 
     memset(&m, 0, sizeof(m));
     m.type = EFS_RAFT_MSG_AE_REQ;
@@ -535,34 +534,15 @@ static int send_ae(struct efs_raft *r, int to)
          * follower gets a bare heartbeat (nentries=0) and no arena. */
         uint32_t off = 0;
 
-        /* A peer with a batch in flight still gets a newer suffix
-         * immediately (the ack used to be the only thing that sent it,
-         * so each mkdir was its own round trip). The base inflight index
-         * stays at next_index so the outstanding prefix is not resent;
-         * ae_inflight_end grows. An unanswered batch is resent once it
-         * is a heartbeat interval old. A commit that landed after the
-         * batch was built is pushed as an empty probe. */
+        /* One outstanding batch per behind peer. A reply (on_ae_rep) clears
+         * ae_inflight and sends the next window; an unanswered batch is
+         * resent once it is a heartbeat interval old. A commit that landed
+         * after the batch was built is pushed as an empty probe so the
+         * follower can apply without waiting out the heartbeat. */
         if (ae_inflight_fresh(r, to, ni)) {
-            /* New entries landed while this peer still owes an ack.
-             * Ship only the suffix past the in-flight batch. The base
-             * inflight index stays at next_index so a later send does
-             * not resend the outstanding prefix; ae_inflight_end grows.
-             * A lagging catch-up uses the same path: TCP to one peer is
-             * ordered, and a rejection still rewinds next_index. */
-            if (r->ae_inflight_end[to] >= ni && end > r->ae_inflight_end[to]) {
-                ni = r->ae_inflight_end[to] + 1;
-                pipelined = 1;
-                m.prev_index = ni - 1;
-                prev_t = 0;
-                rc = log_term(r, m.prev_index, &prev_t);
-                if (rc != EFS_OK && m.prev_index != 0)
-                    return rc;
-                m.prev_term = prev_t;
-            } else {
-                if (r->commit_index > r->ae_inflight_commit[to])
-                    return send_commit_probe(r, to);
-                return EFS_OK;
-            }
+            if (r->commit_index > r->ae_inflight_commit[to])
+                return send_commit_probe(r, to);
+            return EFS_OK;
         }
         arena = malloc(EFS_RAFT_AE_BYTES);
         if (!arena)
@@ -616,9 +596,7 @@ static int send_ae(struct efs_raft *r, int to)
         }
     }
     rc = send_msg(r, &m);
-    if (rc == EFS_OK && m.nentries && pipelined)
-        r->ae_inflight_end[to] = ni + m.nentries - 1;
-    else if (rc == EFS_OK)
+    if (rc == EFS_OK)
         ae_inflight_set(r, to, m.nentries ? ni : 0,
                         m.nentries ? ni + m.nentries - 1 : m.prev_index);
     free(arena);
@@ -940,17 +918,9 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
     if (in->from < 0 || in->from >= EFS_RAFT_MAX_PEERS)
         return EFS_OK;
     /* A commit probe echoes vote_granted. Clearing inflight here would
-     * forget an entry batch that is still unanswered. A success that
-     * does not yet cover a pipelined suffix slides the window instead
-     * of dropping it, so the suffix is not resent. */
-    if (!in->vote_granted) {
-        if (!in->success ||
-            in->match_index >= r->ae_inflight_end[in->from])
-            r->ae_inflight[in->from] = 0;
-        else if (r->ae_inflight[in->from] &&
-                 in->match_index >= r->match_index[in->from])
-            r->ae_inflight[in->from] = in->match_index + 1;
-    }
+     * forget an entry batch that is still unanswered. */
+    if (!in->vote_granted)
+        r->ae_inflight[in->from] = 0;
     if (in->success) {
         uint64_t prev_commit = r->commit_index;
         if (in->match_index > r->match_index[in->from])
@@ -1340,19 +1310,6 @@ int efs_raft_submit(struct efs_raft *r, uint64_t idx)
     efs_raft_arm_durable(r);
     if (idx > r->send_idx)
         r->send_idx = idx;
-    /* Broadcast now. A peer that already has a batch in flight gets the
-     * new suffix immediately (send_ae pipelines); waiting for its ack
-     * left every mkdir as its own round trip. */
-    return broadcast_ae(r);
-}
-
-/* Send every entry covered by efs_raft_submit. */
-int efs_raft_flush(struct efs_raft *r)
-{
-    if (!r)
-        return EFS_ERR_INVAL;
-    if (r->role != EFS_RAFT_LEADER)
-        return EFS_ERR_NOT_PRIMARY;
     return broadcast_ae(r);
 }
 
