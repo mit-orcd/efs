@@ -1,0 +1,6 @@
+  fcstor003 arc_term_miss=3 opid_replay=1
+  fcstor004 arc_term_miss=0 opid_replay=4
+  fcstor005 arc_term_miss=3 opid_replay=1
+  fcstor006 arc_term_miss=0 opid_replay=0
+  total=6
+  replay_total=6

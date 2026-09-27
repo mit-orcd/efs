@@ -376,12 +376,13 @@ static void test_rotation(void)
     cmd[sizeof(cmd) - 1] = '\0';
     for (k = 1; k <= 400; k++)
         CHECK(st_append(s, (uint64_t)k, 1, cmd) == EFS_OK, "bulk append");
-    /* Snapshot through 399: only index 400 stays live. */
-    CHECK(s->save_snap(s, 399, 1) == EFS_OK, "save_snap");
+    /* Snapshot through 399: only index 400 stays live. save_snap rotates
+     * immediately — a multi-GB log must not wait until the file doubles. */
     before = efs_raft_disk_bytes(d);
-    CHECK(efs_raft_disk_rotate(d) == EFS_OK, "rotate");
+    CHECK(s->save_snap(s, 399, 1) == EFS_OK, "save_snap");
     after = efs_raft_disk_bytes(d);
-    CHECK(after < before, "rotation did not shrink the log");
+    CHECK(after < before, "snapshot did not shrink the log");
+    CHECK(efs_raft_disk_rotate(d) == EFS_OK, "rotate");
     CHECK(s->last(s, &idx, &term) == EFS_OK && idx == 400,
           "rotation lost the live tail");
     CHECK(st_check(s, 400, 1, cmd), "rotation lost the live payload");

@@ -1784,6 +1784,22 @@ static void forget_ino_on_tab(struct efs_export *ex, efs_ino_t ino)
     }
 }
 
+int efs_export_ino_has_chunks(const struct efs_export *ex, efs_ino_t ino)
+{
+    if (!ex || !ino)
+        return 0;
+    if (icnt_get(ex, ino) > 0)
+        return 1;
+    if (ex->root.shard_bits && ex->root.shard_count > 1 &&
+        ex->shard_id == 0 && ex->shard_tabs) {
+        for (uint32_t s = 1; s < ex->shard_tab_cap; s++) {
+            if (ex->shard_tabs[s] && icnt_get(ex->shard_tabs[s], ino) > 0)
+                return 1;
+        }
+    }
+    return 0;
+}
+
 void efs_export_forget_ino(struct efs_export *ex, efs_ino_t ino)
 {
     if (!ex || !ino)

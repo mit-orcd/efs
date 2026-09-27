@@ -284,6 +284,9 @@ int efs_export_set_size_norollup(struct efs_export *ex, efs_ino_t ino,
 /* Drop chunk map entries with chunk_index >= first_chunk (truncate shrink). */
 void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
                                  uint32_t first_chunk);
+/* 1 if this ino has any staged chunk-map entry on ex or a loaded shard
+ * tab. Used to drop maps before the row. */
+int efs_export_ino_has_chunks(const struct efs_export *ex, efs_ino_t ino);
 
 /* Cache eviction (client staging table): drop every staged trace of ino —
  * chunk recs across all loaded tabs, then the inode row(s). A create

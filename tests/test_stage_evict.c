@@ -77,6 +77,17 @@ int main(void)
     assert(efs_export_lookup(&ex, 8, "f1alias", &out) == EFS_OK);
     assert(chunk_present(&ex, 9, 0) && chunk_present(&ex, 9, 2));
     assert(chunk_present(&ex, 10, 0) && chunk_present(&ex, 10, 1));
+    assert(efs_export_ino_has_chunks(&ex, 9));
+    assert(!efs_export_ino_has_chunks(&ex, 11));
+
+    /* Chunk maps drop first. The row and the name stay, so a later
+     * report of a still-dirty file still finds them. ino 10 is clean
+     * here; the evictor refuses a dirty ino before it calls this. */
+    efs_export_drop_chunks_from(&ex, 10, 0);
+    assert(!chunk_present(&ex, 10, 0) && !chunk_present(&ex, 10, 1));
+    assert(!efs_export_ino_has_chunks(&ex, 10));
+    assert(efs_export_get_inode(&ex, 10, &out) == EFS_OK);
+    assert(efs_export_lookup(&ex, 8, "f2", &out) == EFS_OK);
 
     /* Forget ino 9: both name rows (f1, f1alias) and all 3 chunk recs go. */
     efs_export_forget_ino(&ex, 9);
@@ -88,7 +99,7 @@ int main(void)
     /* The other files and the dir are untouched. */
     assert(efs_export_get_inode(&ex, 10, &out) == EFS_OK);
     assert(efs_export_lookup(&ex, 8, "f2", &out) == EFS_OK);
-    assert(chunk_present(&ex, 10, 0) && chunk_present(&ex, 10, 1));
+    assert(!chunk_present(&ex, 10, 0) && !chunk_present(&ex, 10, 1));
     assert(efs_export_get_inode(&ex, 8, &out) == EFS_OK);
 
     /* Forgetting an ino that was never staged is a no-op. */

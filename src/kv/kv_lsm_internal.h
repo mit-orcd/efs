@@ -227,6 +227,7 @@ void kv_seg_unpin(struct kv_seg *s);
  * the file (and the fd) alive across a compaction that has already
  * dropped the segment from the manifest. */
 void kv_seg_doom(struct kv_seg *s, const char *path);
+const char *kv_seg_filepath(const struct kv_seg *s);
 int kv_seg_first_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen);
 int kv_seg_last_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen);
 /* 1 when the segment holds no key >= seek with the prefix (either may be

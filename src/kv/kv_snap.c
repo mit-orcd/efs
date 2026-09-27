@@ -1,8 +1,10 @@
 #include "efs/kv_snap.h"
 #include "efs/kv_key.h"
 #include "efs/raft.h"
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static void put_u32(uint8_t *p, uint32_t v)
 {
@@ -128,6 +130,8 @@ int efs_kv_group_export(struct efs_kv *kv, uint8_t group, uint32_t max_bytes,
 struct key_ref {
     uint32_t off;
     uint32_t klen;
+    uint32_t voff;
+    uint32_t vlen;
 };
 
 struct collect {
@@ -140,6 +144,20 @@ struct collect {
     uint32_t acap;
     int rc;
 };
+
+static int cmp_bytes(const uint8_t *a, uint32_t al, const uint8_t *b, uint32_t bl)
+{
+    uint32_t n = al < bl ? al : bl;
+    int c = memcmp(a, b, n);
+
+    if (c)
+        return c;
+    if (al < bl)
+        return -1;
+    if (al > bl)
+        return 1;
+    return 0;
+}
 
 static int col_grow_k(struct collect *c)
 {
@@ -177,17 +195,19 @@ static int col_cb(void *user, const uint8_t *key, uint32_t klen,
 {
     struct collect *c = user;
 
-    (void)val;
-    (void)vlen;
     if (c->rc != EFS_OK)
         return c->rc;
     if (!key_in_group(key, klen, c->group))
         return EFS_OK;
+    if (klen > UINT32_MAX - c->alen || vlen > UINT32_MAX - c->alen - klen) {
+        c->rc = EFS_ERR_NOMEM;
+        return EFS_ERR_NOMEM;
+    }
     if (c->n == c->cap && col_grow_k(c) != EFS_OK) {
         c->rc = EFS_ERR_NOMEM;
         return EFS_ERR_NOMEM;
     }
-    if (col_grow_a(c, klen) != EFS_OK) {
+    if (col_grow_a(c, klen + vlen) != EFS_OK) {
         c->rc = EFS_ERR_NOMEM;
         return EFS_ERR_NOMEM;
     }
@@ -195,20 +215,30 @@ static int col_cb(void *user, const uint8_t *key, uint32_t klen,
     c->k[c->n].off = c->alen;
     c->k[c->n].klen = klen;
     c->alen += klen;
+    c->k[c->n].voff = c->alen;
+    c->k[c->n].vlen = vlen;
+    if (vlen) {
+        memcpy(c->arena + c->alen, val, vlen);
+        c->alen += vlen;
+    }
     c->n++;
     return EFS_OK;
 }
 
-static int incoming_has(const struct efs_kv_item *items, uint32_t n,
-                        const uint8_t *key, uint32_t klen)
+static int item_cmp(const void *a, const void *b, void *arg)
 {
-    uint32_t i;
+    const struct efs_kv_item *ia = a, *ib = b;
 
-    for (i = 0; i < n; i++) {
-        if (items[i].klen == klen && memcmp(items[i].key, key, klen) == 0)
-            return 1;
-    }
-    return 0;
+    (void)arg;
+    return cmp_bytes(ia->key, ia->klen, ib->key, ib->klen);
+}
+
+static int ref_cmp(const void *a, const void *b, void *arg)
+{
+    const struct key_ref *ra = a, *rb = b;
+    const uint8_t *arena = arg;
+
+    return cmp_bytes(arena + ra->off, ra->klen, arena + rb->off, rb->klen);
 }
 
 int efs_kv_group_import(struct efs_kv *kv, uint8_t group, const uint8_t *data,
@@ -276,35 +306,128 @@ int efs_kv_group_import(struct efs_kv *kv, uint8_t group, const uint8_t *data,
         return rc;
     }
 
-    total = n;
-    for (i = 0; i < c.n; i++) {
-        if (!incoming_has(items, n, c.arena + c.k[i].off, c.k[i].klen))
-            total++;
-    }
-    if (total > n) {
-        struct efs_kv_item *p = realloc(items, (size_t)total * sizeof(*p));
-        if (!p) {
-            free(c.k);
-            free(c.arena);
-            free(items);
-            return EFS_ERR_NOMEM;
+    /* A full-image install used to memcmp every local key against every
+     * incoming key, then PUT the whole image. On a live group that is
+     * hours under the Raft lock for a one-index catch-up. Sort both
+     * sides and write only the diff. */
+    if (n > 1)
+        qsort_r(items, n, sizeof(*items), item_cmp, NULL);
+    if (c.n > 1)
+        qsort_r(c.k, c.n, sizeof(*c.k), ref_cmp, c.arena);
+    total = n + c.n;
+    {
+        struct efs_kv_item *diff = NULL;
+
+        if (total) {
+            diff = calloc(total, sizeof(*diff));
+            if (!diff) {
+                free(c.k);
+                free(c.arena);
+                free(items);
+                return EFS_ERR_NOMEM;
+            }
         }
-        items = p;
+        ni = 0;
+        i = 0;
+        off = 0; /* local cursor */
+        while (i < n || off < c.n) {
+            int cmpv;
+
+            if (i + 1 < n &&
+                cmp_bytes(items[i].key, items[i].klen, items[i + 1].key,
+                          items[i + 1].klen) == 0) {
+                i++;
+                continue;
+            }
+            if (off + 1 < c.n &&
+                cmp_bytes(c.arena + c.k[off].off, c.k[off].klen,
+                          c.arena + c.k[off + 1].off, c.k[off + 1].klen) == 0) {
+                off++;
+                continue;
+            }
+            if (i < n && off < c.n)
+                cmpv = cmp_bytes(items[i].key, items[i].klen,
+                                 c.arena + c.k[off].off, c.k[off].klen);
+            else
+                cmpv = i < n ? -1 : 1;
+            if (cmpv < 0) {
+                diff[ni++] = items[i];
+                i++;
+            } else if (cmpv > 0) {
+                diff[ni].op = EFS_KV_DEL;
+                diff[ni].key = c.arena + c.k[off].off;
+                diff[ni].klen = c.k[off].klen;
+                diff[ni].val = NULL;
+                diff[ni].vlen = 0;
+                ni++;
+                off++;
+            } else {
+                if (items[i].vlen != c.k[off].vlen ||
+                    (items[i].vlen &&
+                     memcmp(items[i].val, c.arena + c.k[off].voff,
+                            items[i].vlen) != 0))
+                    diff[ni++] = items[i];
+                i++;
+                off++;
+            }
+        }
+        rc = ni ? efs_kv_batch(kv, diff, ni) : EFS_OK;
+        free(diff);
     }
-    ni = n;
-    for (i = 0; i < c.n; i++) {
-        if (incoming_has(items, n, c.arena + c.k[i].off, c.k[i].klen))
-            continue;
-        items[ni].op = EFS_KV_DEL;
-        items[ni].key = c.arena + c.k[i].off;
-        items[ni].klen = c.k[i].klen;
-        items[ni].val = NULL;
-        items[ni].vlen = 0;
-        ni++;
-    }
-    rc = ni ? efs_kv_batch(kv, items, ni) : EFS_OK;
     free(c.k);
     free(c.arena);
     free(items);
+    return rc;
+}
+
+int efs_kv_group_import_file(struct efs_kv *kv, uint8_t group, const char *path)
+{
+    uint8_t *buf = NULL;
+    off_t sz;
+    int fd, rc;
+
+    if (!kv || !path)
+        return EFS_ERR_INVAL;
+    fd = open(path, O_RDONLY);
+    if (fd < 0)
+        return EFS_ERR_IO;
+    sz = lseek(fd, 0, SEEK_END);
+    if (sz < 4 || (uint64_t)sz > 0xffffffffu) {
+        close(fd);
+        return sz < 4 ? EFS_ERR_PROTO : EFS_ERR_NOMEM;
+    }
+    buf = malloc((size_t)sz);
+    if (!buf) {
+        close(fd);
+        return EFS_ERR_NOMEM;
+    }
+    {
+        uint8_t *p = buf;
+        size_t left = (size_t)sz;
+        off_t at = 0;
+
+        while (left) {
+            ssize_t n = pread(fd, p, left, at);
+
+            if (n < 0) {
+                free(buf);
+                close(fd);
+                return EFS_ERR_IO;
+            }
+            if (n == 0)
+                break;
+            p += n;
+            at += n;
+            left -= (size_t)n;
+        }
+        if (left) {
+            free(buf);
+            close(fd);
+            return EFS_ERR_IO;
+        }
+    }
+    close(fd);
+    rc = efs_kv_group_import(kv, group, buf, (uint32_t)sz);
+    free(buf);
     return rc;
 }

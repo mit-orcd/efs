@@ -2350,6 +2350,10 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
      * reserved range with this client's bytes. */
     if (rc != EFS_OK || ns < len)
         return -EIO;
+    /* The size below is ahead of the PUT. Pin until the caller has the
+     * bytes in dcache or the ino is marked dirty. An early dirty mark
+     * would release the server's append barrier before the PUT. */
+    efs_client_stage_pin(ino);
     uint64_t off = (start + len == ns) ? start : (ns - len);
     if (len > 0) {
         uint32_t cs = g_client.export.chunk_size ? g_client.export.chunk_size
@@ -2409,7 +2413,9 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
         if (append) {
             /* Keep the range in dcache. Adjacent O_APPEND patches coalesce
              * (one range). A per-write GET+PUT raced the peer and the last
-             * full-chunk PUT dropped their records. Close flushes+reports. */
+             * full-chunk PUT dropped their records. Close flushes+reports.
+             * dcache now pins the ino, so the reservation pin can drop. */
+            efs_client_stage_unpin(ino);
             pthread_mutex_unlock(&g_append_mu);
         }
         return (int)size;
@@ -2417,8 +2423,10 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
     size_t copy_cap = 0;
     char *copy = bounce_alloc(size, &copy_cap);
     if (!copy) {
-        if (append)
+        if (append) {
+            efs_client_stage_unpin(ino);
             pthread_mutex_unlock(&g_append_mu);
+        }
         return -ENOMEM;
     }
     memcpy(copy, buf, size);
@@ -2427,6 +2435,9 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
     if (append) {
         if (rc == 0)
             (void)efs_wb_sync_ino(ino);
+        /* Success marked the ino dirty inside the PUT. A failed PUT
+         * leaves the open fd pin holding the reflected size. */
+        efs_client_stage_unpin(ino);
         pthread_mutex_unlock(&g_append_mu);
     }
     if (rc == EFS_ERR_QUOTA) {
@@ -2491,8 +2502,10 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
                                         (const uint8_t *)copy) == 0) {
         bounce_release(copy, copy_cap);
         efs_dcache_maybe_reclaim();
-        if (append)
+        if (append) {
+            efs_client_stage_unpin(ino);
             pthread_mutex_unlock(&g_append_mu);
+        }
         return (int)size;
     }
 
@@ -2501,6 +2514,7 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
     if (append) {
         if (rc == 0)
             (void)efs_wb_sync_ino(ino);
+        efs_client_stage_unpin(ino);
         pthread_mutex_unlock(&g_append_mu);
     }
     if (rc == EFS_ERR_QUOTA) {

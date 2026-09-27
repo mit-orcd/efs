@@ -25,6 +25,46 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 27 2026 — chunked InstallSnapshot, and the import that held the pump
+
+The first roll of chunked snapshots truncated every raft.log from
+1.7–5.8 GB down to 1–3 KB and exported ~386 MB per group in ~8 s on
+the GC thread. fcstor003 and fcstor004 then stopped answering
+`raft-status`. The pump was inside `efs_kv_group_import`, which
+compared every local key with every incoming key and then PUT the
+whole image, under `h->mu`. A one-index catch-up of a live group does
+not finish that way. The import now sorts both sides and writes only
+the diff (`src/kv/kv_snap.c`). Unit tests passed (`w11mktest4`).
+After `roll_efsd.sh --all` the four logs stayed under 5 KB, both
+groups had one leader with commit==applied, and a restart of
+fcstor005's efsd rejoined in 510 ms (`results/measure/20260927-w11-gate`).
+`apply_max` during the 386 MB export was 0. Idle md_latency on the
+second sample was mkdir 2.9 / create 1.5 / append 2.0 / stat 0.4 /
+unlink 0.7 / rmdir 2.8 ms. The first sample, a minute after the
+restart, had create and append at 53 ms (one retry sleep) and did not
+hold. 9-host posix was 199–200/201 on the second run
+(`results/posix/20260927-015719`), not the clean 200/201 of
+`20260926-164123`. The leader-freeze script failed once (one rmdir
+EBUSY left a child whose parent nlink stayed 2) and passed on the
+rerun (`results/measure/20260927-020111-i17-leader-freeze`,
+`arc_term_miss` 0→6, parent clean). The private RDMA empty-table
+mkdir on fcstor007 passed 5/5 (`MKDIR_RC=0 WRITE_RC=0`). 19810 stayed
+on TCP.
+
+The client staging-table pin rules from the Sep 23 recommendation
+are in the tree the same night. `efs_client_stage_pin` holds a
+count across create, rename, link, unlink, and from an append
+reservation until the write has the bytes in dcache or the PUT has
+marked the ino dirty. Rename marks the ino dirty before it drops
+the directory locks. The evictor drops chunk maps of a clean closed
+file and leaves the row for a later pass. Every open fd stays
+pinned. `make test` on node9901 passed (`w9mktest2`), including
+`test_stage_evict`. The nine clients were remounted (`w9fuse1`).
+9-host posix jobs=1 is 200/201, skip `mmap_write_read`, 30.4–31.3 s
+(`results/posix/20260927-033723`). That is the W11 bar as well.
+Walk-RSS, posix 2, and the valgrind leak gate have not been run.
+19810 stayed on TCP.
+
 ## Sep 26 2026 evening — W13: L1 compaction off the apply path
 
 The user asked to implement the next roadmap item. That ratified W13

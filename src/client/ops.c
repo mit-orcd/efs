@@ -826,6 +826,10 @@ efs_ino_t efs_client_create_ex(efs_ino_t parent, const char *name, uint32_t mode
         g_client.last_err = rc;
         return 0;
     }
+    /* Pin across the local insert. The dirty mark below is what keeps
+     * the row after we unpin; the pin covers the insert itself. */
+    efs_client_stage_pin(out.ino);
+    efs_client_stage_pin(parent);
     efs_client_lock_dir(parent);
     pthread_mutex_lock(&g_client.idx_mu);
     /* create_with_ino applies the same side effects as the primary
@@ -860,6 +864,8 @@ efs_ino_t efs_client_create_ex(efs_ino_t parent, const char *name, uint32_t mode
     efs_client_mark_ino_dirty(parent);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);
+    efs_client_stage_unpin(parent);
+    efs_client_stage_unpin(out.ino);
     return out.ino;
 }
 
@@ -1085,6 +1091,12 @@ int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_na
     int rc = EFS_ERR_BUSY;
     int t;
 
+    /* Held across the RPC and the local apply. mark_ino_dirty runs
+     * before the unlock so the dirty set, not this pin, is what the
+     * report sees. */
+    efs_client_stage_pin(ino);
+    efs_client_stage_pin(old_parent);
+    efs_client_stage_pin(new_parent);
     for (t = 0; t < 8; t++) {
         rc = efs_client_rpc_rename_at(g_client.export_id, old_parent, old_name,
                                       new_parent, new_name, &out);
@@ -1099,6 +1111,9 @@ int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_na
                 (unsigned long long)old_parent, old_name,
                 (unsigned long long)new_parent, new_name, rc, t + 1);
         g_client.last_err = rc;
+        efs_client_stage_unpin(new_parent);
+        efs_client_stage_unpin(old_parent);
+        efs_client_stage_unpin(ino);
         return rc;
     }
     efs_client_lock_dirs2(ino, new_parent);
@@ -1108,9 +1123,15 @@ int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_na
         efs_export_rename(&g_client.export, ino, new_parent, new_name) != EFS_OK)
         efs_export_upsert_inode(&g_client.export, &out);
     efs_client_stage_touch(ino);
+    /* Before the unlock: the evictor takes every stripe, then the dirty
+     * lock. A mark after the unlock let it forget the row, and the
+     * report then skipped a name that was no longer staged. */
+    efs_client_mark_ino_dirty(ino);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dirs2(ino, new_parent);
-    efs_client_mark_ino_dirty(ino);
+    efs_client_stage_unpin(new_parent);
+    efs_client_stage_unpin(old_parent);
+    efs_client_stage_unpin(ino);
     return EFS_OK;
 }
 
@@ -1143,10 +1164,17 @@ int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);
 
+    efs_client_stage_pin(parent);
+    if (victim_ino)
+        efs_client_stage_pin(victim_ino);
     /* Phase 2b: unlink on the primary; dual-apply removes the local entry. */
     int rc = efs_client_rpc_unlink(g_client.export_id, parent, name, is_dir);
-    if (rc != EFS_OK)
+    if (rc != EFS_OK) {
+        if (victim_ino)
+            efs_client_stage_unpin(victim_ino);
+        efs_client_stage_unpin(parent);
         return rc;
+    }
     efs_client_lock_dir(parent);
     pthread_mutex_lock(&g_client.idx_mu);
     /* Keep a nlink=0 ghost so an already-open fd can still get_inode.
@@ -1160,6 +1188,9 @@ int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
         (void)efs_export_nlink_dec_ex(&g_client.export, victim_ino, NULL, 1);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);
+    if (victim_ino)
+        efs_client_stage_unpin(victim_ino);
+    efs_client_stage_unpin(parent);
     return EFS_OK;
 }
 
@@ -1167,10 +1198,14 @@ int efs_client_link(efs_ino_t src_ino, efs_ino_t new_parent, const char *new_nam
 {
     /* Phase 2b: link on the primary. */
     struct efs_inode out;
+    efs_client_stage_pin(src_ino);
+    efs_client_stage_pin(new_parent);
     int rc = efs_client_rpc_link(g_client.export_id, src_ino, new_parent,
                                  new_name, &out);
     if (rc != EFS_OK) {
         g_client.last_err = rc;
+        efs_client_stage_unpin(new_parent);
+        efs_client_stage_unpin(src_ino);
         return rc;
     }
     efs_client_lock_dirs2(src_ino, new_parent);
@@ -1185,6 +1220,8 @@ int efs_client_link(efs_ino_t src_ino, efs_ino_t new_parent, const char *new_nam
     efs_client_stage_touch(src_ino);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dirs2(src_ino, new_parent);
+    efs_client_stage_unpin(new_parent);
+    efs_client_stage_unpin(src_ino);
     return EFS_OK;
 }
 

@@ -1,10 +1,14 @@
 # Client staging table — bound it (step 12 part A)
 
-Status: **PROPOSAL, not ratified.** Where this doc and the spec disagree, the
-spec ([architecture.md](architecture.md)) wins. The pin rules in §3 and the cap
-in §4 are design points the spec does not contain; per
-[arch/START-HERE.md](arch/START-HERE.md) §4 they are to be ratified, not
-silently invented.
+Status: **implemented Sep 27. Posix 1 passed; the rest of the gate
+has not been run.** The Sep 23 recommendation (pin rules as written,
+`EFS_CLIENT_META_MB` = 256) is on fcstor007–015. The open-fd pin
+covers every open fd, not only ghosts, because local getattr of an
+open file does not refetch. 9-host jobs=1 is 200/201
+(`results/posix/20260927-033723`). Walk-RSS, posix 2, and the
+valgrind leak gate have not been run, so this is not marked done.
+Where this doc and the spec ([architecture.md](architecture.md))
+disagree, the spec wins.
 
 The other three parts of step 12 have landed: low-level (inode-based) FUSE
 (part B), exact self-invalidation with timeouts still 0 (part C), and

@@ -13,13 +13,14 @@
  *   1. ino is in the dirty set / publishing set (efs_client_ino_is_dirty)
  *      or has unreported dcache data (efs_dcache_ino_pinned) — eviction
  *      would silently drop a REPORT record = data loss;
- *   2. ghost (nlink=0) with an open fd (efs_client_ino_is_open) — open-fd
- *      stat/read must keep working;
- *   3. live byte-range lock record (efs_client_ino_has_plock).
- * The create/rename/unlink dual-apply windows are covered by the locking
- * discipline below, not a per-op pin: every row mutation runs under a
- * dir-stripe lock, and the evictor holds the whole table lock while it
- * evicts, so no op can be mid-mutation on the victim.
+ *   2. an open fd (efs_client_ino_is_open). The design names this for a
+ *      ghost; every open fd is pinned so stat/read of that fd still
+ *      resolves;
+ *   3. an in-flight op pin (efs_client_stage_pin) — create, rename, link,
+ *      unlink, and a live append reservation. Dropped when the op ends;
+ *   4. a byte-range lock record (efs_client_ino_has_plock).
+ * Chunk maps of an unpinned clean file go first. The row follows on a
+ * later pass, once the maps are gone.
  *
  * Check-then-remove atomicity: the final pin re-check and the removal both
  * happen under table_lock + idx_mu + dirty_mu. dirty_mu is what makes
@@ -191,14 +192,147 @@ static int g_evict_kick;
  * the kick path so a create burst only wakes the evictor when the table
  * is actually over the cap. */
 static uint64_t g_stage_bytes_seen;
-/* Last staged-bytes reading, refreshed by every pass. Read lock-free by
- * the kick path so a create burst only wakes the evictor when the table
- * is actually over the cap. */
-static uint64_t g_stage_bytes_seen;
-/* Last staged-bytes reading, refreshed by every pass. Read lock-free by
- * the kick path so a create burst only wakes the evictor when the table
- * is actually over the cap. */
-static uint64_t g_stage_bytes_seen;
+
+/* In-flight op pins (design rule 3 and the append-reservation half of
+ * rule 4). A count, not a bool: create pins the new ino and the parent,
+ * and those can be the same ino. pin/unpin take only this leaf lock and
+ * drop it before returning, so a caller may already hold a dir stripe.
+ * The evictor takes stripes, then idx, then dirty, then this. */
+static pthread_mutex_t g_opin_mu = PTHREAD_MUTEX_INITIALIZER;
+static uint64_t *g_opin_keys;
+static uint32_t *g_opin_counts;
+static uint64_t g_opin_mask;
+static uint64_t g_opin_count;
+
+static int opin_ensure(uint64_t need)
+{
+    if (g_opin_keys && need * 2 <= g_opin_mask + 1)
+        return 0;
+    uint64_t old_mask = g_opin_mask;
+    uint64_t *old_keys = g_opin_keys;
+    uint32_t *old_counts = g_opin_counts;
+    uint64_t cap = g_opin_mask ? g_opin_mask + 1 : 64;
+    while (cap < need * 4)
+        cap *= 2;
+    uint64_t *nk = calloc(cap, sizeof(*nk));
+    uint32_t *nc = calloc(cap, sizeof(*nc));
+    if (!nk || !nc) {
+        free(nk);
+        free(nc);
+        return -1;
+    }
+    g_opin_keys = nk;
+    g_opin_counts = nc;
+    g_opin_mask = cap - 1;
+    if (old_keys) {
+        for (uint64_t i = 0; i <= old_mask; i++) {
+            uint64_t k = old_keys[i];
+            if (!k)
+                continue;
+            uint64_t j = k & g_opin_mask;
+            while (g_opin_keys[j])
+                j = (j + 1) & g_opin_mask;
+            g_opin_keys[j] = k;
+            g_opin_counts[j] = old_counts[i];
+        }
+        free(old_keys);
+        free(old_counts);
+    }
+    return 0;
+}
+
+static void opin_del_locked(uint64_t i)
+{
+    g_opin_keys[i] = 0;
+    g_opin_counts[i] = 0;
+    g_opin_count--;
+    uint64_t j = (i + 1) & g_opin_mask;
+    while (g_opin_keys[j]) {
+        uint64_t h = g_opin_keys[j] & g_opin_mask;
+        int in_gap = (i < j) ? (h > i && h <= j) : (h > i || h <= j);
+        if (!in_gap) {
+            g_opin_keys[i] = g_opin_keys[j];
+            g_opin_counts[i] = g_opin_counts[j];
+            g_opin_keys[j] = 0;
+            g_opin_counts[j] = 0;
+            i = j;
+        }
+        j = (j + 1) & g_opin_mask;
+    }
+}
+
+void efs_client_stage_pin(efs_ino_t ino)
+{
+    if (!ino)
+        return;
+    pthread_mutex_lock(&g_opin_mu);
+    if (opin_ensure(g_opin_count + 1) != 0) {
+        pthread_mutex_unlock(&g_opin_mu);
+        return;
+    }
+    uint64_t i = (uint64_t)ino & g_opin_mask;
+    for (;;) {
+        if (g_opin_keys[i] == (uint64_t)ino) {
+            if (g_opin_counts[i] != 0xffffffffu)
+                g_opin_counts[i]++;
+            break;
+        }
+        if (!g_opin_keys[i]) {
+            g_opin_keys[i] = (uint64_t)ino;
+            g_opin_counts[i] = 1;
+            g_opin_count++;
+            break;
+        }
+        i = (i + 1) & g_opin_mask;
+    }
+    pthread_mutex_unlock(&g_opin_mu);
+}
+
+void efs_client_stage_unpin(efs_ino_t ino)
+{
+    if (!ino)
+        return;
+    pthread_mutex_lock(&g_opin_mu);
+    if (g_opin_keys) {
+        uint64_t i = (uint64_t)ino & g_opin_mask;
+        for (uint64_t n = 0; n <= g_opin_mask; n++) {
+            if (!g_opin_keys[i])
+                break;
+            if (g_opin_keys[i] == (uint64_t)ino) {
+                if (g_opin_counts[i] > 1)
+                    g_opin_counts[i]--;
+                else
+                    opin_del_locked(i);
+                break;
+            }
+            i = (i + 1) & g_opin_mask;
+        }
+    }
+    pthread_mutex_unlock(&g_opin_mu);
+}
+
+static int stage_op_pinned(efs_ino_t ino)
+{
+    int hit = 0;
+
+    if (!ino)
+        return 0;
+    pthread_mutex_lock(&g_opin_mu);
+    if (g_opin_keys) {
+        uint64_t i = (uint64_t)ino & g_opin_mask;
+        for (uint64_t n = 0; n <= g_opin_mask; n++) {
+            if (!g_opin_keys[i])
+                break;
+            if (g_opin_keys[i] == (uint64_t)ino) {
+                hit = g_opin_counts[i] > 0;
+                break;
+            }
+            i = (i + 1) & g_opin_mask;
+        }
+    }
+    pthread_mutex_unlock(&g_opin_mu);
+    return hit;
+}
 
 static uint64_t stage_cap_bytes(void)
 {
@@ -234,6 +368,8 @@ static int stage_pinned(efs_ino_t ino)
         return 1;
     if (stage_ino_is_open(ino))
         return 1;
+    if (stage_op_pinned(ino))
+        return 1;
     if (stage_ino_has_plock(ino))
         return 1;
     return 0;
@@ -252,7 +388,8 @@ static int evict_one(efs_ino_t ino, uint64_t tick)
      * mark_*_dirty takes dirty_mu (held) and every row mutation takes a
      * stripe (all held by the table lock). */
     if (efs_client_ino_is_dirty_locked(ino) || efs_dcache_ino_pinned(ino) ||
-        stage_ino_is_open(ino) || stage_ino_has_plock(ino))
+        stage_ino_is_open(ino) || stage_op_pinned(ino) ||
+        stage_ino_has_plock(ino))
         goto out;
     pthread_mutex_lock(&g_lru_mu);
     uint64_t cur_tick = 0;
@@ -275,9 +412,17 @@ static int evict_one(efs_ino_t ino, uint64_t tick)
         pthread_mutex_unlock(&g_lru_mu);
         goto out;
     }
-    /* A ghost with no open fd is evictable (rule 2 pins only OPEN ghosts);
-     * forget_ino handles rows and chunk recs across every loaded tab. A
-     * not-staged ino is a no-op there — this also GCs its LRU entry. */
+    /* Chunk maps first. A later pass drops the row once the maps are
+     * gone. A stale chunk count that survives the drop falls through
+     * to the row drop so a pass cannot spin on an empty map. */
+    if (efs_export_ino_has_chunks(&g_client.export, ino)) {
+        efs_export_drop_chunks_from(&g_client.export, ino, 0);
+        if (!efs_export_ino_has_chunks(&g_client.export, ino)) {
+            pthread_mutex_unlock(&g_lru_mu);
+            dropped = 1;
+            goto out;
+        }
+    }
     efs_export_forget_ino(&g_client.export, ino);
     lru_remove_locked(ino);
     pthread_mutex_unlock(&g_lru_mu);
@@ -464,7 +609,8 @@ void efs_client_stage_evict_ino(efs_ino_t ino)
     struct efs_inode cur;
     if (efs_export_get_inode(&g_client.export, ino, &cur) == EFS_OK &&
         cur.nlink == 0 && !efs_client_ino_is_dirty(ino) &&
-        !efs_dcache_ino_pinned(ino)) {
+        !efs_dcache_ino_pinned(ino) && !stage_ino_is_open(ino) &&
+        !stage_op_pinned(ino) && !stage_ino_has_plock(ino)) {
         efs_export_forget_ino(&g_client.export, ino);
         pthread_mutex_lock(&g_lru_mu);
         lru_remove_locked(ino);

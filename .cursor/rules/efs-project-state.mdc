@@ -98,10 +98,9 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  0.23 s idle (128 GETCHUNKS × 1.6 ms), 14.6 ms/GETCHUNKS under 32 openers.
  Same-parent rate ~140–160 ops/s flat 1–36 procs
  (`results/measure/20260921-161931-samedir-rate`, pre-`165e779`; remeasure).
- Cluster binaries report **`3210a3d63f73-dirty`** (W13 compiled on
- `3210a3d` before this commit; rolled Sep 26 16:37 UTC, servers and
- clients fcstor007–015, `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1`; all four
- agree). **W13 is done:** L1
+ Cluster binaries report **`612ee9ba9202-dirty`** (W11 on top of
+ W13; rolled Sep 27 00:51 UTC, servers and clients fcstor007–015,
+ `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1`; all four agree). **W13 is done:** L1
  compaction runs on a background thread; the apply path only flushes
  the memtable and swaps the manifest. 144-way mkdir
  (`results/measure/20260926-163709-mkdir-hammer`): idle p50 **4.68 ms**,
@@ -111,8 +110,17 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  compaction runs. Folding a txn's PREPARE parts into one command is a
  protocol change (per-part verdicts) — ask. Do not pipeline past the
  one in-flight batch. A multi-entry AppendEntries fsyncs once.
- **Queue: W11, W9, W10 still need the user** (START-HERE §1a). Do not
- start them or the partitioned-flush follow-on. `EFSD_ENV` is **space**-separated
+ **W11 is done.** Logs are under 5 KB (were multi-GB). fcstor005
+ rejoined in 510 ms. Idle md_latency matches the W13 sample on a
+ second read (`results/measure/20260927-w11-gate`). 9-host posix is
+ 200/201 again (`results/posix/20260927-033723`, 30.4–31.3 s; the
+ earlier 199–200 run is `20260927-015719`). Freeze passed on the
+ rerun. W10's private empty-mkdir passed 5/5 on fcstor007. The live
+ cluster stays TCP until that switch is its own gate. W9's pin
+ rules are on fcstor007–015. Posix 1 passed on the same 200/201 run.
+ Walk-RSS, posix 2, and the valgrind leak gate have not been run.
+ Partitioned flush stays
+ unstarted. `EFSD_ENV` is **space**-separated
  (`env $EFSD_ENV`): a comma form
  (`EFS_TRANSPORT=tcp,EFS_RAFT_OBS=1`) silently makes the transport AUTO
  (ungated RDMA) and drops OBS — that roll happened once (05:49) and was
@@ -346,15 +354,13 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   caught up. A restarted leader re-exports the snapshot blob on demand;
   `disk_save_snap` accepts skip-ahead (InstallSnapshot onto a behind
   follower). Salt is replicated via `EFS_MD_CMD_SALT`.
-- **W11 is every-run:** any data-bearing group's KV export exceeds the
-  4 MiB SNAP cap → `snapshot skipped` → the raft log never compacts → a
-  follower restart is a full replay. Sep 21
-  (`results/measure/20260921-182308-raft-snap-state`): logs 1.8–4.4 GB,
-  still growing ~400–800 B/s idle, both groups `commit == applied`.
-  Chunked SNAP is unspecified — W11 in START-HERE §1a carries the
-  recommendation (Raft-paper `offset`/`done` chunks over a lazily
-  exported snapshot file; no RAM `snap_blob`, no export under the SM
-  lock); implement only after it is ratified.
+- **Snapshot install must be a sorted diff.** `efs_kv_group_import`
+  used to scan every local key against the whole image and then PUT
+  every key, on the pump under `h->mu`. On the first chunked install
+  that held fcstor003 and fcstor004 for hours (`incoming_has` in
+  `kv_snap.c`). A live group that already matches the image writes
+  nothing. Do not put that scan back. The export itself stays on the
+  GC thread; `apply_max` during a 386 MB export was 0.
 - `host_pump` ticks are wall-clocked (`HOST_TICK_US`), never per iteration
   (iteration-counted ticks caused election storms). The network inbox path
   must never take `h->mu` (eventfd kick, not condvar). Forwarded-command

@@ -509,6 +509,17 @@ snapshots, tombstones, transaction and dedup state, and compaction headroom
 — with `N_dentries ≥ N_inodes` (hardlinks). NVMe capacity is designed
 around this explicitly; it is not a "2³² × 128 B fits" claim.
 
+**Log truncation is a chunked InstallSnapshot of a snapshot file.** The
+snapshot point is a memtable flush plus `save_snap` at the applied index.
+The bytes are that group's export of the segment view pinned in the same
+cycle, written off the apply path to one file per group
+(`mdraft/snap-<group>-<index>.kvx`). The Raft message carries
+`lastIncludedIndex`, `lastIncludedTerm`, `offset`, `data[]`, and `done`.
+A follower stages `mdraft/snap-<group>-<index>.part` and imports it only
+when `done` is set. One chunk is in flight per peer. A snapshot never
+advances past the KV's durable point, and the leader does not hold the
+image in a RAM blob.
+
 **A cache miss is never absence.** Because RAM is a bounded cache over the
 KV rather than the store itself, every miss must be resolvable from local
 applied state. When it cannot be — I/O error, corruption, or an evicted

@@ -335,6 +335,10 @@ static int disk_save_snap(void *ctx, uint64_t last_index, uint64_t last_term)
                          0);
     if (rc == EFS_OK) {
         rc = raft_group_snap(g, last_index, last_term);
+        /* A snapshot can drop almost the whole file. The usual check
+         * waits until the file doubles, which would leave a multi-GB
+         * log on disk after the prefix is dead. */
+        g->d->check_at = 0;
         raft_log_maybe_rotate_locked(g->d);
     }
     pthread_mutex_unlock(&g->d->mu);

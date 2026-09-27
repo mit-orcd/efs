@@ -1,0 +1,11 @@
+================================================================
+POSIX baseline comparison: 202 tests
+  both pass        : 0
+  EFS BUGS         : 0  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+  not run          : 1  (cut or missing; not a bug)
+================================================================
+
+--- not run (suite cut or row missing; not an EFS bug) ---
+              printf '%s\n' '# TIMEOUT no TSV' 'test [missing] 

@@ -1,0 +1,35 @@
+# 9-host posix, jobs=16. XFS baseline on node9901 did not run
+# (/data1/efs is not a mounted directory). Counts are the suite's own summary.
+
+20260927-015515 (first, just after the fcstor005 restart)
+fcstor007 pass=200 fail=0 skip=1 dur=26.9
+fcstor008 pass=200 fail=0 skip=1 dur=26.4
+fcstor009 pass=200 fail=0 skip=1 dur=26.6
+fcstor010 pass=198 fail=2 skip=1 dur=14.5  dir_readdir_listing EIO, concurrent_appends 199/200
+fcstor011 pass=199 fail=1 skip=1 dur=25.4  concurrent_appends 199/200
+fcstor012 pass=199 fail=1 skip=1 dur=26.4  basic_chunk_boundary
+fcstor013 pass=199 fail=1 skip=1 dur=14.7  basic_chunk_boundary
+fcstor014 pass=199 fail=1 skip=1 dur=25.5  basic_chunk_boundary
+fcstor015 pass=200 fail=0 skip=1 dur=14.5
+
+20260927-015719 (second)
+fcstor007 pass=199 fail=1 skip=1 dur=13.6  content_random_roundtrip EIO
+fcstor008 pass=200 fail=0 skip=1 dur=14.0
+fcstor009 pass=200 fail=0 skip=1 dur=13.9
+fcstor010 pass=200 fail=0 skip=1 dur=13.9
+fcstor011 pass=199 fail=1 skip=1 dur=12.9  dir_many_files EIO
+fcstor012 pass=199 fail=1 skip=1 dur=14.8  dir_deep_nesting ENOTEMPTY
+fcstor013 pass=200 fail=0 skip=1 dur=13.5
+fcstor014 pass=199 fail=1 skip=1 dur=14.3  names_crazy_roundtrip EIO
+fcstor015 pass=200 fail=0 skip=1 dur=13.4
+
+mmap_write_read is the skip. No term change during the second run
+(apply_max 85us on fcstor004). Yesterday's clean run was
+results/posix/20260926-164123, 200/201 on all nine, 13.2-14.8s.
+
+freeze:
+20260927-015843 FAIL — one rmdir EBUSY on fcstor012 left
+d-fcstor012-2-29, parent children=1 nlink=2 (want nlink=3).
+arc_term_miss 0→3.
+20260927-020111 PASS — 9/9 hosts, children=0 nlink=2, rmdir ok,
+arc_term_miss 0→6, no txn-recover ABORT.

@@ -23,6 +23,14 @@ struct net {
     struct efs_raft_msg *keep;       /* deep copy of the last AE_REQ to keep_to */
     int keep_to;
     int keep_on;
+    int snap_chunks;
+    int snap_hold;
+    int snap_hold_to;
+    int snap_hold_left;
+    uint64_t snap_held_off;
+    int snap_restart_watch;
+    uint64_t snap_restart_off;
+    int snap_restart_seen;
 };
 
 static void msg_free_deep(struct efs_raft_msg *m)
@@ -57,6 +65,17 @@ struct app {
     int n;
     uint8_t last;
     uint64_t snap_at;
+    int wide; /* 40-byte snapshot so a small chunk size spans ≥ 3 chunks */
+    uint8_t *part;
+    uint32_t part_len;
+    uint32_t part_resets;
+    int part_applied;
+    int drop_blob; /* next snap_open fails once; the retry re-exports */
+};
+
+struct snap_mem {
+    uint8_t *p;
+    uint32_t len;
 };
 
 static void wr32_t(uint8_t *p, uint32_t v)
@@ -73,31 +92,90 @@ static uint32_t rd32_t(const uint8_t *p)
            ((uint32_t)p[2] << 8) | (uint32_t)p[3];
 }
 
-static int snap_get(void *app, uint64_t last_index, uint8_t **data, uint32_t *len)
+static int snap_open(void *app_, uint64_t incl, void **handle, uint64_t *total)
 {
-    struct app *a = app;
-    uint8_t *p = malloc(5);
+    struct app *a = app_;
+    struct snap_mem *b = calloc(1, sizeof(*b));
+    uint32_t len = a->wide ? 40u : 5u;
 
-    if (!p)
+    if (a->drop_blob) {
+        a->drop_blob = 0;
+        return EFS_ERR_NOT_FOUND;
+    }
+    if (!b)
         return EFS_ERR_NOMEM;
-    p[0] = a->last;
-    wr32_t(p + 1, (uint32_t)a->n);
-    *data = p;
-    *len = 5;
-    a->snap_at = last_index;
+    b->p = calloc(1, len);
+    if (!b->p) {
+        free(b);
+        return EFS_ERR_NOMEM;
+    }
+    b->len = len;
+    b->p[0] = a->last;
+    wr32_t(b->p + 1, (uint32_t)a->n);
+    *handle = b;
+    *total = len;
+    a->snap_at = incl;
     return EFS_OK;
 }
 
-static int snap_put(void *app, uint64_t last_index, const uint8_t *data,
-                    uint32_t len)
+static int snap_read(void *handle, uint64_t offset, uint8_t *buf, uint32_t n,
+                     uint32_t *got)
 {
-    struct app *a = app;
+    struct snap_mem *b = handle;
 
-    if (len < 5 || !data)
+    if (!b || offset > b->len)
         return EFS_ERR_INVAL;
-    a->last = data[0];
-    a->n = (int)rd32_t(data + 1);
-    a->snap_at = last_index;
+    if (offset + n > b->len)
+        n = b->len - (uint32_t)offset;
+    if (n)
+        memcpy(buf, b->p + offset, n);
+    *got = n;
+    return EFS_OK;
+}
+
+static void snap_close(void *handle)
+{
+    struct snap_mem *b = handle;
+
+    if (!b)
+        return;
+    free(b->p);
+    free(b);
+}
+
+static int snap_chunk(void *app_, uint64_t incl, uint64_t incl_term,
+                      uint64_t offset, const uint8_t *data, uint32_t len,
+                      int done)
+{
+    struct app *a = app_;
+    uint8_t *p;
+
+    (void)incl_term;
+    if (offset == 0) {
+        free(a->part);
+        a->part = NULL;
+        a->part_len = 0;
+        a->part_resets++;
+    } else if (offset != a->part_len) {
+        return EFS_ERR_INVAL;
+    }
+    if (len) {
+        p = realloc(a->part, a->part_len + len);
+        if (!p)
+            return EFS_ERR_NOMEM;
+        if (data)
+            memcpy(p + a->part_len, data, len);
+        a->part = p;
+        a->part_len += len;
+    }
+    if (!done)
+        return EFS_OK;
+    if (!a->part || a->part_len < 5)
+        return EFS_ERR_INVAL;
+    a->last = a->part[0];
+    a->n = (int)rd32_t(a->part + 1);
+    a->snap_at = incl;
+    a->part_applied = 1;
     return EFS_OK;
 }
 
@@ -111,6 +189,21 @@ static int send_now(void *net, const struct efs_raft_msg *msg)
         if (n->keep_on && msg->to == n->keep_to) {
             msg_free_deep(n->keep);
             n->keep = msg_copy_deep(msg);
+        }
+    }
+    if (msg->type == EFS_RAFT_MSG_SNAP_REQ) {
+        n->snap_chunks++;
+        if (n->snap_restart_watch && !n->snap_restart_seen) {
+            n->snap_restart_off = msg->prev_index;
+            n->snap_restart_seen = 1;
+        }
+        if (n->snap_hold && msg->to == n->snap_hold_to) {
+            if (n->snap_hold_left > 0)
+                n->snap_hold_left--;
+            else {
+                n->snap_held_off = msg->prev_index;
+                return EFS_OK;
+            }
         }
     }
     if (n->drop[msg->to])
@@ -775,8 +868,10 @@ static void test_install_snapshot(void)
     uint64_t snap_at = 0;
 
     boot_n(&n, st, app, &cfg, 5, 0x7);
-    cfg.snap_get = snap_get;
-    cfg.snap_put = snap_put;
+    cfg.snap_open = snap_open;
+    cfg.snap_read = snap_read;
+    cfg.snap_close = snap_close;
+    cfg.snap_chunk = snap_chunk;
     for (i = 0; i < 5; i++) {
         efs_raft_free(n.r[i]);
         cfg.id = i;
@@ -863,8 +958,10 @@ static void test_install_snapshot_restarted_leader(void)
     uint64_t snap_at = 0;
 
     boot_n(&n, st, app, &cfg, 5, 0x7);
-    cfg.snap_get = snap_get;
-    cfg.snap_put = snap_put;
+    cfg.snap_open = snap_open;
+    cfg.snap_read = snap_read;
+    cfg.snap_close = snap_close;
+    cfg.snap_chunk = snap_chunk;
     for (i = 0; i < 5; i++) {
         efs_raft_free(n.r[i]);
         cfg.id = i;
@@ -897,6 +994,7 @@ static void test_install_snapshot_restarted_leader(void)
     /* Process restart: same store (snap_idx survives), fresh efs_raft
      * (blob gone). Win the next election with the smallest deadline. */
     efs_raft_free(n.r[lid]);
+    app[lid].drop_blob = 1;
     cfg.id = lid;
     cfg.store = st[lid];
     cfg.store_ctx = st[lid];
@@ -923,6 +1021,112 @@ static void test_install_snapshot_restarted_leader(void)
     free_n(&n, st, 5);
 }
 
+/* A snapshot larger than one chunk. A follower whose log was truncated
+ * behind the snap point catches up across ≥ 3 chunks. A leader change
+ * mid-transfer restarts at offset 0. Freeing the follower after the first
+ * chunk leaves the partial image unapplied. */
+static void test_snap_chunks(void)
+{
+    struct net n;
+    struct efs_raft_store *st[3];
+    struct app app[3];
+    struct efs_raft_cfg cfg;
+    int i, lid, fol, keep;
+    uint32_t resets;
+
+    boot_n(&n, st, app, &cfg, 3, 0x7);
+    cfg.snap_open = snap_open;
+    cfg.snap_read = snap_read;
+    cfg.snap_close = snap_close;
+    cfg.snap_chunk = snap_chunk;
+    cfg.snap_chunk_bytes = 16;
+    for (i = 0; i < 3; i++) {
+        efs_raft_free(n.r[i]);
+        app[i].wide = 1;
+        cfg.id = i;
+        cfg.store = st[i];
+        cfg.store_ctx = st[i];
+        cfg.app = &app[i];
+        cfg.election_ticks = (uint32_t)(4 + i * 4);
+        cfg.heartbeat_ticks = 1;
+        n.r[i] = efs_raft_new(&cfg);
+        CHECK(n.r[i] != NULL, "raft with chunked snap");
+    }
+    CHECK(elect(&n, 20) == 1, "elect");
+    lid = leader_id(&n);
+    CHECK(lid >= 0, "leader");
+    for (i = 0; i < 8; i++) {
+        uint8_t cmd = (uint8_t)('a' + i);
+        uint64_t idx = 0;
+
+        CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK, "propose");
+        if (elect(&n, 2) < 0)
+            CHECK(0, "elect during propose");
+        lid = leader_id(&n);
+    }
+    for (i = 0; i < 3; i++)
+        CHECK(efs_raft_snapshot(n.r[i]) == EFS_OK, "snapshot voter");
+    fol = (lid + 1) % 3;
+    keep = (lid + 2) % 3;
+    efs_raft_free(n.r[fol]);
+    efs_raft_mem_free(st[fol]);
+    st[fol] = efs_raft_mem_create();
+    cfg.id = fol;
+    cfg.store = st[fol];
+    cfg.store_ctx = st[fol];
+    cfg.app = &app[fol];
+    cfg.election_ticks = 40;
+    cfg.voters = 0x7;
+    cfg.n = 3;
+    n.r[fol] = efs_raft_new(&cfg);
+    CHECK(n.r[fol] != NULL, "empty follower");
+    efs_raft_allow_campaign(n.r[fol], 0);
+    n.snap_chunks = 0;
+    n.snap_hold = 1;
+    n.snap_hold_to = fol;
+    n.snap_hold_left = 1;
+    CHECK(efs_raft_tick(n.r[lid]) == EFS_OK, "first chunks");
+    CHECK(n.snap_chunks >= 2, "at least two chunks sent");
+    CHECK(app[fol].part_applied == 0, "partial snap not applied");
+    CHECK(app[fol].part_len > 0, "partial bytes staged");
+    resets = app[fol].part_resets;
+    CHECK(resets >= 1, "offset 0 started a part");
+    n.drop[fol] = 1;
+    efs_raft_free(n.r[fol]);
+    n.r[fol] = NULL;
+    CHECK(app[fol].part_applied == 0, "crash leaves the part unapplied");
+    efs_raft_mem_free(st[fol]);
+    st[fol] = efs_raft_mem_create();
+    cfg.store = st[fol];
+    cfg.store_ctx = st[fol];
+    n.r[fol] = efs_raft_new(&cfg);
+    CHECK(n.r[fol] != NULL, "follower after crash");
+    efs_raft_allow_campaign(n.r[fol], 0);
+    efs_raft_allow_campaign(n.r[lid], 0);
+    CHECK(efs_raft_step_down(n.r[lid]) == EFS_OK, "step down mid-transfer");
+    CHECK(elect(&n, 40) == 1, "new leader");
+    CHECK(leader_id(&n) == keep, "survivor leads");
+    lid = keep;
+    n.drop[fol] = 0;
+    n.snap_hold = 0;
+    n.snap_chunks = 0;
+    n.snap_restart_watch = 1;
+    n.snap_restart_seen = 0;
+    for (i = 0; i < 8; i++)
+        CHECK(efs_raft_tick(n.r[lid]) == EFS_OK, "resume snap");
+    CHECK(n.snap_restart_seen, "new leader sent a snapshot");
+    CHECK(n.snap_restart_off == 0, "transfer restarts at offset 0");
+    CHECK(n.snap_chunks >= 3, "catch-up spans at least 3 chunks");
+    CHECK(app[fol].part_resets > resets, "offset 0 reopened the part");
+    CHECK(app[fol].part_applied == 1, "done imports the snapshot");
+    CHECK(app[fol].n == app[lid].n && app[fol].last == app[lid].last,
+          "follower SM matches");
+    free(app[0].part);
+    free(app[1].part);
+    free(app[2].part);
+    free_n(&n, st, 3);
+}
+
 int main(void)
 {
     test_election_i1();
@@ -938,6 +1142,7 @@ int main(void)
     test_install_snapshot();
     test_install_snapshot_needs_blob();
     test_install_snapshot_restarted_leader();
+    test_snap_chunks();
     if (failures) {
         fprintf(stderr, "test_raft: %d failure(s)\n", failures);
         return 1;

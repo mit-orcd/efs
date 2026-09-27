@@ -526,6 +526,17 @@ snapshots, tombstones, transaction and dedup state, and compaction headroom
 — with `N_dentries ≥ N_inodes` (hardlinks). NVMe capacity is designed
 around this explicitly; it is not a "2³² × 128 B fits" claim.
 
+**Log truncation is a chunked InstallSnapshot of a snapshot file.** The
+snapshot point is a memtable flush plus `save_snap` at the applied index.
+The bytes are that group's export of the segment view pinned in the same
+cycle, written off the apply path to one file per group
+(`mdraft/snap-<group>-<index>.kvx`). The Raft message carries
+`lastIncludedIndex`, `lastIncludedTerm`, `offset`, `data[]`, and `done`.
+A follower stages `mdraft/snap-<group>-<index>.part` and imports it only
+when `done` is set. One chunk is in flight per peer. A snapshot never
+advances past the KV's durable point, and the leader does not hold the
+image in a RAM blob.
+
 **A cache miss is never absence.** Because RAM is a bounded cache over the
 KV rather than the store itself, every miss must be resolvable from local
 applied state. When it cannot be — I/O error, corruption, or an evicted
@@ -1368,9 +1379,9 @@ the Nth finished output segment, before the manifest rename; reopen
 serves the old manifest. Partitioned flush (one L0 file per shard
 range) is the follow-on and is not in this change.
 
-Running binaries report **`3210a3d63f73-dirty`** (W13 compiled on
-top of `3210a3d` before this commit; rolled Sep 26 16:37 UTC;
-clients fcstor007–015; `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1`). Gate:
+W13 gate, on the build that was rolled Sep 26 16:37 UTC
+(`3210a3d63f73-dirty`, TCP). The cluster has since moved to
+`612ee9ba9202-dirty` (W11, Sep 27). Gate:
 
 - Hammer `results/measure/20260926-163709-mkdir-hammer`: idle p50
   **4.68 ms**; 144-way **35166** mkdirs in 15 s, p50 **56.5 ms**.
@@ -1387,10 +1398,11 @@ clients fcstor007–015; `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1`). Gate:
   create+close 1.6 / append+close 2.0 / stat 0.3 / unlink 0.8 /
   rmdir 2.9 ms.
 
-Do not start W11, W9, W10, or the partitioned-flush follow-on until
-the user asks. Do not raise `l0_max`, the memtable, or the election
-timeout. `EFSD_ENV` is space-separated. The next server restart is a
-build-id change → `tests/roll_efsd.sh --all`.
+W11's chunked snapshot is running on this build (see the Sep 27 note
+below). Do not switch 19810 to RDMA until a 9-host posix is 200/201
+again. Do not start partitioned flush. Do not raise `l0_max`, the
+memtable, or the election timeout. `EFSD_ENV` is space-separated.
+The next server restart is a build-id change → `tests/roll_efsd.sh --all`.
 
 **Txn finisher (Sep 26, `src/server/raft_host.c` `host_txn_commit`).**
 A compaction stall longer than the 400 ms apply wait turns an in-flight
@@ -1755,8 +1767,12 @@ not read the last block again.
 fcstor013 failed only `names_crazy_dirs` (15 s). `dir_deep_nesting`,
 `dir_deep_nesting_beyond_64`, and `names_crazy_roundtrip` passed.
 `names_crazy_dirs` later passed on all nine
-(`results/posix/20260926-164123`). W13 is done; W11, W9, and W10
-still stop until the user asks.
+(`results/posix/20260926-164123`). W13 is done. W11 is done
+(Sep 27): 9-host posix is 200/201 again
+(`results/posix/20260927-033723`). W9's pin rules are on the nine
+clients; posix 1 passed with that run. Walk-RSS, posix 2, and the
+valgrind leak gate have not been run. W10's private empty-mkdir
+passed 5/5; the live cluster stays TCP.
 The idle 50 ms create+close median did not hold: Sep 24 15:03 UTC on
 the live mount, term stable, `md_latency.py` was mkdir 5.9 /
 create+close 4.1 / append+close 6.1 / stat 0.3 / unlink 1.6 / rmdir
@@ -2401,8 +2417,8 @@ steps use.
 | item | question | recommended | why, in one line |
 | --- | --- | --- | --- |
 | W13 | full-L1 compaction holds the apply path 2.4 s and costs a term | **done Sep 26** — background compactor; partitioned flush is the follow-on, not started | the merge no longer holds `l->mu`/`h->mu`; `apply_max` stayed under 70 ms across ~2 s / ~760 MiB rewrites (`results/posix/20260926-164123`) |
-| W11 | the KV export is larger than one 4 MiB SNAP command, so the log never truncates | **the Raft paper's chunked InstallSnapshot** (`offset`, `done`) over a snapshot *file* the leader exports from a pinned segment view | it is the protocol Raft already specifies, so nothing is invented; the pinned view is the same primitive W13 needs; the follower imports on `done` with the existing `efs_kv_group_import` |
-| W9 | bound the client staging table | **ratify the pin rules and the 256 MB default** (`EFS_CLIENT_META_MB`), soft cap | 256 MB is ~1M rows, far above any FUSE working set; the pin rules are the only ones that make a report-record miss impossible; a pinned-full table grows and logs rather than losing a write |
+| W11 | the KV export is larger than one 4 MiB SNAP command, so the log never truncates | **done Sep 27** — chunked InstallSnapshot of a file; import is a sorted diff | logs under 5 KB; fcstor005 rejoined in 510 ms; `apply_max` 0 on a 386 MB export. 9-host posix 200/201 (`results/posix/20260927-033723`, 30.4–31.3 s) |
+| W9 | bound the client staging table | **in tree, posix 1 passed, rest of the gate not run** — in-flight pin, append-reservation pin, chunk maps before the row | 9-host jobs=1 is 200/201 on the same run as W11 (`results/posix/20260927-033723`). Walk-RSS, posix 2, and valgrind not run |
 | W10 | RDMA needs an empty table to gate | **no wipe.** Gate on the private 3-node cluster (`tests/rdma_first_inode.sh`, fcstor007, port 19950), then switch 19810 to RDMA in place | the bug only needs an *empty* table, and the private cluster is one; a populated 19810 already ran millions of RDMA creates clean, so the live switch needs no wipe. Keep the wipe for when W11's gate wants a table that grows from zero |
 
 ---
@@ -2652,15 +2668,17 @@ do not raise the election timeout.
 `g_client.export` in `efs-fuse` keeps one row per inode this client has ever
 touched and one entry per chunk it has written or pulled, and evicts nothing —
 so a client that walks a large namespace holds the whole tree in RAM and the
-server-side memory wall reappears per client. This is step 12 part A, the only
-part of step 12 that never landed.
+server-side memory wall reappears per client. This is step 12 part A.
+The evictor and the pin rules are in the client as of Sep 27.
 
 The plan, the pin rules that make eviction safe (a report builds its records
 out of this table, so evicting a dirty row is data loss), and the gate are in
-[../client-cache-design.md](../client-cache-design.md). Two design points in it
-are unratified — bring them to the user before implementing.
+[../client-cache-design.md](../client-cache-design.md). The Sep 23
+recommendation below is in the client as of Sep 27. Posix 1 is
+200/201 (`results/posix/20260927-033723`). Not marked done: walk-RSS,
+posix 2, and the valgrind leak gate have not been run.
 
-**Recommendation (Sep 23): ratify both as written.** (1) The pin rules —
+**Recommendation (Sep 23), implemented Sep 27:** (1) The pin rules —
 dirty / publishing / dirty dcache, ghost with an open fd, in-flight op pin,
 live append reservation or lock — are exactly the set of rows whose absence
 a report or an open fd could observe; anything narrower loses a write,
@@ -2742,7 +2760,16 @@ Steps:
 - **Forbidden:** re-deriving the diagnosis; wiping 19810 without being asked
   (this item no longer needs it).
 
-##### W11 — fcstor005 lags because its group's snapshot does not fit — recommendation below, awaiting ratification
+##### W11 — chunked InstallSnapshot — DONE Sep 27
+
+Running build `612ee9ba9202-dirty`, TCP. The log truncates. A follower
+install is a sorted diff (`src/kv/kv_snap.c`). fcstor005 rejoined in
+510 ms. 9-host posix is 200/201, skip `mmap_write_read`, 30.4–31.3 s
+(`results/posix/20260927-033723`). The earlier 199–200 run is
+`results/posix/20260927-015719`. Gate numbers are in
+`results/measure/20260927-w11-gate` and `docs/project-history.md`
+(Sep 27). The original recommendation, kept so the steps stay
+findable:
 
 `raft_host` only compacts when the whole group's KV export fits in one
 `EFS_WIRE_RAFT_MAX_CMD` command. On 19810 one group is over that, so the log

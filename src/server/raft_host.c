@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/eventfd.h>
+#include <dirent.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -95,8 +96,8 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
 #define HOST_DIR_LEN       10
 #define HOST_CFG_LEN       6 /* tag + sub + voters:4 */
 #define HOST_SPREAD_MAX    8 /* leftovers per GC tick; batch, not a scan */
-/* Log-truncation batch (same class as AE_MAX). A group whose KV export
- * exceeds EFS_WIRE_RAFT_MAX_CMD is left uncompacted — no chunked SNAP. */
+/* Log-truncation batch. The export is a file shipped as SNAP chunks;
+ * this is only how often the snap point advances. */
 #define HOST_SNAP_MIN      256
 #define HOST_SESS_HDR_LEN  18 /* tag+sub+uuid; same as sim pack_hdr */
 #define HOST_SESS_CREATE_LEN 22 /* hdr+epoch */
@@ -176,7 +177,21 @@ struct host_group {
     uint32_t desired; /* operator target; actual follows via joint (I18) */
     uint64_t applied_saved;
     uint64_t applied_saved_us; /* pump-only: last applied-file write */
-    int snap_oversized; /* export exceeded SNAP cmd cap; do not retry */
+    /* Snapshot file for this group. The pump pins a view and the GC
+     * thread writes snap-<group>-<incl>.kvx. part_* is the follower's
+     * in-progress InstallSnapshot. fds are -1 when closed. */
+    int snap_exporting;
+    int snap_ready;
+    int snap_fd;
+    uint64_t snap_incl;
+    uint64_t snap_bytes;
+    struct efs_kv_lsm_view *snap_view;
+    char snap_path[EFS_MAX_PATH];
+    int part_fd;
+    uint64_t part_incl;
+    uint64_t part_term;
+    uint64_t part_off;
+    char part_path[EFS_MAX_PATH];
     int kv_incomplete;  /* apply missed a committed row; do not lead */
     struct efs_raft *r;
     struct efs_raft_host *host; /* back-pointer, set in attach_group */
@@ -266,6 +281,9 @@ struct efs_raft_host {
     char mdraft[EFS_MAX_PATH];
     struct host_group g[HOST_NGROUPS];
     pthread_mutex_t mu;
+    pthread_mutex_t snap_mu; /* snapshot file/view; never taken under h->mu
+                              * from the GC thread. The pump may hold h->mu
+                              * then snap_mu. */
     /* No host-wide handler lock: ReadIndex rounds are batched under h->mu
      * (host_read_index) and the apply is the arbiter of every check-then-
      * propose (guards, CAS, reductions). The old read_mu that every inode
@@ -1756,57 +1774,159 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     return ret;
 }
 
-/* SNAP blob = existing KV records for this group's shards. Flush first
- * (raft_disk.h): compacting past a non-durable KV drops the replay prefix. */
-static int host_snap_get(void *app, uint64_t last_index, uint8_t **data,
-                         uint32_t *len)
+/* Snapshot point = flush + save_snap. The bytes are a pinned view written
+ * on the GC thread to mdraft/snap-<group>-<incl>.kvx; send_snap preads
+ * that file. A BUSY open means the file is not ready yet. */
+static int host_snap_open(void *app, uint64_t incl, void **handle,
+                          uint64_t *total)
 {
     struct host_group *g = app;
     struct efs_raft_host *h = g->host;
+    struct efs_kv_lsm_view *view = NULL;
+    int fd, rc;
 
-    (void)last_index;
-    if (!h || !h->kv)
+    if (!h || !h->kv || !handle || !total)
         return EFS_ERR_INVAL;
-    return efs_kv_group_export(h->kv, g->group, EFS_WIRE_RAFT_MAX_CMD - 16u,
-                               data, len);
+    pthread_mutex_lock(&h->snap_mu);
+    if (g->snap_ready && g->snap_incl == incl && g->snap_fd >= 0) {
+        fd = dup(g->snap_fd);
+        *total = g->snap_bytes;
+        pthread_mutex_unlock(&h->snap_mu);
+        if (fd < 0)
+            return EFS_ERR_IO;
+        *handle = (void *)(intptr_t)fd;
+        return EFS_OK;
+    }
+    if (g->snap_exporting) {
+        pthread_mutex_unlock(&h->snap_mu);
+        return EFS_ERR_BUSY;
+    }
+    if (!g->r || incl != efs_raft_applied(g->r)) {
+        pthread_mutex_unlock(&h->snap_mu);
+        return EFS_ERR_NOT_FOUND;
+    }
+    pthread_mutex_unlock(&h->snap_mu);
+    rc = efs_kv_lsm_flush(h->kv);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_lsm_view_pin(h->kv, &view);
+    if (rc != EFS_OK)
+        return rc;
+    pthread_mutex_lock(&h->snap_mu);
+    if (g->snap_exporting) {
+        pthread_mutex_unlock(&h->snap_mu);
+        efs_kv_lsm_view_unpin(view);
+        return EFS_ERR_BUSY;
+    }
+    g->snap_view = view;
+    g->snap_incl = incl;
+    g->snap_exporting = 1;
+    g->snap_ready = 0;
+    snprintf(g->snap_path, sizeof(g->snap_path), "%s/snap-%u-%llu.kvx",
+             h->mdraft, g->group, (unsigned long long)incl);
+    pthread_mutex_unlock(&h->snap_mu);
+    return EFS_ERR_BUSY;
 }
 
-static int host_snap_put(void *app, uint64_t last_index, const uint8_t *data,
-                         uint32_t len)
+static int host_snap_read(void *handle, uint64_t offset, uint8_t *buf,
+                          uint32_t n, uint32_t *got)
+{
+    int fd = (int)(intptr_t)handle;
+    ssize_t r;
+
+    if (fd < 0 || !buf || !got)
+        return EFS_ERR_INVAL;
+    r = pread(fd, buf, n, (off_t)offset);
+    if (r < 0)
+        return EFS_ERR_IO;
+    *got = (uint32_t)r;
+    return EFS_OK;
+}
+
+static void host_snap_close(void *handle)
+{
+    int fd = (int)(intptr_t)handle;
+
+    if (fd >= 0)
+        close(fd);
+}
+
+static int host_snap_chunk(void *app, uint64_t incl, uint64_t incl_term,
+                           uint64_t offset, const uint8_t *data, uint32_t len,
+                           int done)
 {
     struct host_group *g = app;
     struct efs_raft_host *h = g->host;
+    int rc;
 
-    (void)last_index;
     if (!h || !h->kv)
         return EFS_ERR_INVAL;
-    return efs_kv_group_import(h->kv, g->group, data, len);
+    if (offset == 0) {
+        if (g->part_fd >= 0) {
+            close(g->part_fd);
+            unlink(g->part_path);
+            g->part_fd = -1;
+        }
+        snprintf(g->part_path, sizeof(g->part_path),
+                 "%s/snap-%u-%llu.part", h->mdraft, g->group,
+                 (unsigned long long)incl);
+        g->part_fd = open(g->part_path, O_CREAT | O_TRUNC | O_RDWR, 0644);
+        if (g->part_fd < 0)
+            return EFS_ERR_IO;
+        g->part_incl = incl;
+        g->part_term = incl_term;
+        g->part_off = 0;
+    } else if (incl != g->part_incl || incl_term != g->part_term ||
+               offset != g->part_off || g->part_fd < 0) {
+        return EFS_ERR_INVAL;
+    }
+    if (len) {
+        uint32_t left = len;
+        const uint8_t *p = data;
+
+        if (!p)
+            return EFS_ERR_INVAL;
+        while (left) {
+            ssize_t w = pwrite(g->part_fd, p, left, (off_t)g->part_off);
+
+            if (w <= 0)
+                return EFS_ERR_IO;
+            g->part_off += (uint64_t)w;
+            p += w;
+            left -= (uint32_t)w;
+        }
+    }
+    if (!done)
+        return EFS_OK;
+    if (fsync(g->part_fd) != 0)
+        return EFS_ERR_IO;
+    close(g->part_fd);
+    g->part_fd = -1;
+    rc = efs_kv_group_import_file(h->kv, g->group, g->part_path);
+    unlink(g->part_path);
+    g->part_off = 0;
+    return rc;
 }
 
 static int host_maybe_snapshot(struct efs_raft_host *h, int gi)
 {
     uint64_t applied, snap;
-    int rc;
+    int exporting;
 
-    if (!h->g[gi].hosted || !h->g[gi].r || h->g[gi].snap_oversized)
+    if (!h->g[gi].hosted || !h->g[gi].r)
+        return EFS_OK;
+    pthread_mutex_lock(&h->snap_mu);
+    exporting = h->g[gi].snap_exporting;
+    pthread_mutex_unlock(&h->snap_mu);
+    if (exporting)
         return EFS_OK;
     applied = efs_raft_applied(h->g[gi].r);
     snap = efs_raft_snap_index(h->g[gi].r);
     if (applied < snap + HOST_SNAP_MIN)
         return EFS_OK;
-    rc = efs_kv_lsm_flush(h->kv);
-    if (rc != EFS_OK)
-        return rc;
-    rc = efs_raft_snapshot(h->g[gi].r);
-    if (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOMEM) {
-        h->g[gi].snap_oversized = 1;
-        fprintf(stderr,
-                "raft-host: snapshot skipped group=%u applied=%llu "
-                "(KV export exceeds SNAP cap; log stays uncompacted)\n",
-                h->g[gi].group, (unsigned long long)applied);
-        return EFS_OK;
-    }
-    return rc;
+    /* efs_raft_snapshot → host_snap_open flushes again and pins. A BUSY
+     * open still records the snap point; the file follows on the GC thread. */
+    return efs_raft_snapshot(h->g[gi].r);
 }
 
 static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
@@ -4286,8 +4406,10 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     cfg.net = h;
     cfg.apply = host_apply;
     cfg.app = &h->g[gi]; /* per-group: host_apply records into g->arc_* */
-    cfg.snap_get = host_snap_get;
-    cfg.snap_put = host_snap_put;
+    cfg.snap_open = host_snap_open;
+    cfg.snap_read = host_snap_read;
+    cfg.snap_close = host_snap_close;
+    cfg.snap_chunk = host_snap_chunk;
     h->g[gi].r = efs_raft_new(&cfg);
     if (!h->g[gi].r)
         return EFS_ERR_NOMEM;
@@ -4314,7 +4436,10 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
     h->g[gi].voters = boot;
     h->g[gi].host = h;
     h->g[gi].hosted = 0;
-    h->g[gi].snap_oversized = 0;
+    h->g[gi].snap_fd = -1;
+    h->g[gi].part_fd = -1;
+    h->g[gi].snap_exporting = 0;
+    h->g[gi].snap_ready = 0;
     h->g[gi].r = NULL;
     V_STORE(h->g[gi].v_has, 0);
     memset(h->g[gi].arc_idx, 0, sizeof(h->g[gi].arc_idx));
@@ -5120,12 +5245,134 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
 
 static void host_dir_spread_pass(struct efs_raft_host *h);
 
+static void host_snap_unlink_other(struct efs_raft_host *h, uint8_t group,
+                                   const char *keep)
+{
+    char prefix[32];
+    DIR *d;
+    struct dirent *de;
+    const char *base;
+
+    base = strrchr(keep, '/');
+    base = base ? base + 1 : keep;
+    snprintf(prefix, sizeof(prefix), "snap-%u-", group);
+    d = opendir(h->mdraft);
+    if (!d)
+        return;
+    while ((de = readdir(d)) != NULL) {
+        char path[EFS_MAX_PATH];
+        size_t n;
+
+        if (strncmp(de->d_name, prefix, strlen(prefix)) != 0)
+            continue;
+        n = strlen(de->d_name);
+        if (n < 4 || strcmp(de->d_name + n - 4, ".kvx") != 0)
+            continue;
+        if (strcmp(de->d_name, base) == 0)
+            continue;
+        snprintf(path, sizeof(path), "%s/%s", h->mdraft, de->d_name);
+        unlink(path);
+    }
+    closedir(d);
+}
+
+static void host_snap_drop_parts(struct efs_raft_host *h)
+{
+    DIR *d;
+    struct dirent *de;
+
+    d = opendir(h->mdraft);
+    if (!d)
+        return;
+    while ((de = readdir(d)) != NULL) {
+        char path[EFS_MAX_PATH];
+        size_t n = strlen(de->d_name);
+
+        if (strncmp(de->d_name, "snap-", 5) != 0)
+            continue;
+        if (n < 5 || strcmp(de->d_name + n - 5, ".part") != 0)
+            continue;
+        snprintf(path, sizeof(path), "%s/%s", h->mdraft, de->d_name);
+        unlink(path);
+    }
+    closedir(d);
+}
+
+/* GC thread. The view was pinned on the pump at the snap index. */
+static void host_snap_export_pass(struct efs_raft_host *h)
+{
+    int gi;
+
+    for (gi = 0; gi < HOST_NGROUPS && h->gc_running; gi++) {
+        struct efs_kv_lsm_view *view;
+        char path[EFS_MAX_PATH];
+        uint64_t incl, t0;
+        uint8_t group;
+        int rc;
+
+        pthread_mutex_lock(&h->snap_mu);
+        if (!h->g[gi].snap_exporting || !h->g[gi].snap_view) {
+            pthread_mutex_unlock(&h->snap_mu);
+            continue;
+        }
+        view = h->g[gi].snap_view;
+        h->g[gi].snap_view = NULL;
+        incl = h->g[gi].snap_incl;
+        group = h->g[gi].group;
+        snprintf(path, sizeof(path), "%s", h->g[gi].snap_path);
+        pthread_mutex_unlock(&h->snap_mu);
+        t0 = now_us_();
+        fprintf(stderr, "raft-snap: start group=%u incl=%llu\n", group,
+                (unsigned long long)incl);
+        rc = efs_kv_lsm_view_export(view, group, path);
+        efs_kv_lsm_view_unpin(view);
+        pthread_mutex_lock(&h->snap_mu);
+        if (h->g[gi].snap_incl != incl) {
+            unlink(path);
+            h->g[gi].snap_exporting = 0;
+        } else if (rc != EFS_OK) {
+            fprintf(stderr, "raft-snap: export failed group=%u rc=%d\n",
+                    group, rc);
+            h->g[gi].snap_exporting = 0;
+            h->g[gi].snap_ready = 0;
+        } else {
+            struct stat st;
+
+            if (h->g[gi].snap_fd >= 0)
+                close(h->g[gi].snap_fd);
+            h->g[gi].snap_fd = open(path, O_RDONLY);
+            if (h->g[gi].snap_fd < 0 || fstat(h->g[gi].snap_fd, &st) != 0) {
+                if (h->g[gi].snap_fd >= 0) {
+                    close(h->g[gi].snap_fd);
+                    h->g[gi].snap_fd = -1;
+                }
+                h->g[gi].snap_exporting = 0;
+                h->g[gi].snap_ready = 0;
+                fprintf(stderr, "raft-snap: open failed group=%u\n", group);
+            } else {
+                h->g[gi].snap_bytes = (uint64_t)st.st_size;
+                h->g[gi].snap_ready = 1;
+                h->g[gi].snap_exporting = 0;
+                fprintf(stderr, "raft-snap: end group=%u incl=%llu bytes=%llu "
+                        "ms=%llu\n", group, (unsigned long long)incl,
+                        (unsigned long long)h->g[gi].snap_bytes,
+                        (unsigned long long)((now_us_() - t0) / 1000));
+                pthread_mutex_unlock(&h->snap_mu);
+                host_snap_unlink_other(h, group, path);
+                continue;
+            }
+        }
+        pthread_mutex_unlock(&h->snap_mu);
+    }
+}
+
 static void *host_gc_thread(void *arg)
 {
     struct efs_raft_host *h = arg;
     int g;
 
     while (h->gc_running) {
+        host_snap_export_pass(h);
         for (g = 0; g < HOST_NGROUPS && h->gc_running; g++) {
             uint32_t anchor;
             int lead = 0;
@@ -5150,9 +5397,12 @@ static void *host_gc_thread(void *arg)
         }
         host_dir_spread_pass(h);
         host_txn_recover_pass(h);
-        /* ~1s between passes, in 20 ms slices so shutdown is prompt. */
-        for (g = 0; g < GC_LOOP_MS / 20 && h->gc_running; g++)
+        /* ~1s between passes, in 20 ms slices so shutdown is prompt.
+         * A snapshot export queued by the pump starts on the next slice. */
+        for (g = 0; g < GC_LOOP_MS / 20 && h->gc_running; g++) {
+            host_snap_export_pass(h);
             usleep(20 * 1000);
+        }
     }
     return NULL;
 }
@@ -5192,6 +5442,7 @@ int server_raft_host_start(struct efsd_server *s)
     h->boot_id = make_boot_id();
     h->salt = make_salt(h->boot_id);
     pthread_mutex_init(&h->mu, NULL);
+    pthread_mutex_init(&h->snap_mu, NULL);
     pthread_mutex_init(&h->wait_mu, NULL);
     pthread_mutex_init(&h->inbox_mu, NULL);
     pthread_mutex_init(&h->outbox_mu, NULL);
@@ -5226,6 +5477,7 @@ int server_raft_host_start(struct efsd_server *s)
         free(h);
         return EFS_ERR_IO;
     }
+    host_snap_drop_parts(h);
     rc = host_boot_bump(dir, &h->boot_id);
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: boot persist %s failed\n", dir);
@@ -5369,6 +5621,19 @@ void server_raft_host_stop(void)
     pthread_mutex_unlock(&h->wait_mu);
     if (h->started)
         pthread_join(h->tid, NULL);
+    for (i = 0; i < HOST_NGROUPS; i++) {
+        if (h->g[i].snap_view)
+            efs_kv_lsm_view_unpin(h->g[i].snap_view);
+        h->g[i].snap_view = NULL;
+        if (h->g[i].snap_fd >= 0)
+            close(h->g[i].snap_fd);
+        h->g[i].snap_fd = -1;
+        if (h->g[i].part_fd >= 0) {
+            close(h->g[i].part_fd);
+            unlink(h->g[i].part_path);
+        }
+        h->g[i].part_fd = -1;
+    }
     /* After the pump join (no new tick sends) and before the raft cores are
      * freed. A sender blocked on a dead peer exits within HOST_SEND_IO_MS. */
     host_stop_senders(h);
@@ -5386,6 +5651,7 @@ void server_raft_host_stop(void)
     efs_raft_disk_close(h->disk);
     efs_kv_lsm_close(h->kv);
     pthread_mutex_destroy(&h->mu);
+    pthread_mutex_destroy(&h->snap_mu);
     pthread_mutex_destroy(&h->wait_mu);
     pthread_mutex_destroy(&h->inbox_mu);
     pthread_mutex_destroy(&h->outbox_mu);

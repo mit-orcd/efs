@@ -586,6 +586,10 @@ static void test_kv_group_snap(void)
           "import g0");
     CHECK(get_ino(dst, 1, 1, "odd") == EFS_OK, "g0 landed");
     CHECK(get_ino(dst, 2, 2, NULL) == EFS_ERR_NOT_FOUND, "g2 not in g0 snap");
+    CHECK(put_ino(dst, 1, 1, "ODD") == EFS_OK, "overwrite");
+    CHECK(efs_kv_group_import(dst, EFS_RAFT_GROUP_SHARD, blob, blen) == EFS_OK,
+          "reimport same image");
+    CHECK(get_ino(dst, 1, 1, "odd") == EFS_OK, "changed value restored");
     free(blob);
     blob = NULL;
     CHECK(put_ino(dst, 1, 99, "stale") == EFS_OK, "stale");

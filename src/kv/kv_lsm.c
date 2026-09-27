@@ -1,4 +1,6 @@
 #include "kv_lsm_internal.h"
+#include "efs/kv_key.h"
+#include "efs/raft.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -1082,6 +1084,227 @@ void efs_kv_lsm_view_unpin(struct efs_kv_lsm_view *v)
     for (i = 0; i < v->n; i++)
         kv_seg_unpin(v->seg[i]);
     free(v);
+}
+
+/* Group export of a pinned view. Private segment opens: the live block
+ * cache is not shared with the apply path. The caller flushed the
+ * memtable before the pin, so the view is the whole state. Newest
+ * segment wins; tombstones are dropped. File format matches
+ * efs_kv_group_import (little-endian nitems, then PUT items). */
+static void vx_put_u32(uint8_t *p, uint32_t v)
+{
+    p[0] = (uint8_t)(v & 0xFF);
+    p[1] = (uint8_t)((v >> 8) & 0xFF);
+    p[2] = (uint8_t)((v >> 16) & 0xFF);
+    p[3] = (uint8_t)((v >> 24) & 0xFF);
+}
+
+static int vx_write(int fd, const void *p, size_t n)
+{
+    const uint8_t *b = p;
+
+    while (n) {
+        ssize_t w = write(fd, b, n);
+
+        if (w < 0) {
+            if (errno == EINTR)
+                continue;
+            return EFS_ERR_IO;
+        }
+        b += (size_t)w;
+        n -= (size_t)w;
+    }
+    return EFS_OK;
+}
+
+static int vx_in_group(const uint8_t *key, uint32_t klen, uint8_t group)
+{
+    uint32_t shard;
+
+    if (klen < 2)
+        return 0;
+    shard = ((uint32_t)key[0] << 8) | (uint32_t)key[1];
+    if (shard > EFS_KV_SHARD_MASK)
+        return 0;
+    return efs_raft_shard_group(shard) == group;
+}
+
+struct vx_src {
+    struct kv_seg *seg;
+    struct kv_seg_iter *it;
+    const uint8_t *key;
+    const uint8_t *val;
+    uint32_t klen;
+    uint32_t vlen;
+    uint8_t op;
+    int done;
+};
+
+static int vx_pull(struct vx_src *s)
+{
+    int rc = kv_seg_iter_next(s->it, &s->key, &s->klen, &s->val, &s->vlen,
+                              &s->op);
+
+    if (rc == EFS_ERR_NOT_FOUND) {
+        s->done = 1;
+        return EFS_OK;
+    }
+    return rc;
+}
+
+int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
+                           const char *path)
+{
+    struct vx_src src[KV_LSM_MAX_SEGS * 2];
+    char tmp[4096];
+    uint8_t *wkbuf;
+    uint32_t nsrc = 0, i, nitems = 0;
+    int fd = -1, rc = EFS_OK;
+
+    wkbuf = malloc(KV_LSM_KLEN_MAX);
+    if (!wkbuf)
+        return EFS_ERR_NOMEM;
+
+    if (!v || !path || (group != 0 && group != 2)) {
+        free(wkbuf);
+        return EFS_ERR_INVAL;
+    }
+    memset(src, 0, sizeof(src));
+    for (i = 0; i < v->n; i++) {
+        const char *sp = kv_seg_filepath(v->seg[i]);
+
+        if (!sp)
+            continue;
+        rc = kv_seg_open(sp, &src[nsrc].seg);
+        if (rc != EFS_OK)
+            goto out;
+        rc = kv_seg_iter_open(src[nsrc].seg, &src[nsrc].it);
+        if (rc != EFS_OK)
+            goto out;
+        rc = kv_seg_iter_seek(src[nsrc].it, NULL, 0);
+        if (rc != EFS_OK)
+            goto out;
+        rc = vx_pull(&src[nsrc]);
+        if (rc != EFS_OK)
+            goto out;
+        nsrc++;
+    }
+    if (strlen(path) + 5 >= sizeof(tmp)) {
+        rc = EFS_ERR_INVAL;
+        goto out;
+    }
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    fd = open(tmp, O_CREAT | O_TRUNC | O_WRONLY, 0644);
+    if (fd < 0) {
+        rc = EFS_ERR_IO;
+        goto out;
+    }
+    {
+        uint8_t z[4] = {0, 0, 0, 0};
+        rc = vx_write(fd, z, 4);
+        if (rc != EFS_OK)
+            goto out;
+    }
+    for (;;) {
+        uint32_t win = nsrc;
+        uint8_t hdr[9];
+
+        for (i = 0; i < nsrc; i++) {
+            if (src[i].done)
+                continue;
+            if (win == nsrc ||
+                kv_key_cmp(src[i].key, src[i].klen, src[win].key,
+                           src[win].klen) < 0)
+                win = i;
+        }
+        if (win == nsrc)
+            break;
+        if (src[win].op == KV_OP_PUT &&
+            vx_in_group(src[win].key, src[win].klen, group)) {
+            if (nitems == 0xffffffffu) {
+                rc = EFS_ERR_NOMEM;
+                goto out;
+            }
+            hdr[0] = KV_OP_PUT;
+            vx_put_u32(hdr + 1, src[win].klen);
+            vx_put_u32(hdr + 5, src[win].vlen);
+            rc = vx_write(fd, hdr, 9);
+            if (rc == EFS_OK && src[win].klen)
+                rc = vx_write(fd, src[win].key, src[win].klen);
+            if (rc == EFS_OK && src[win].vlen)
+                rc = vx_write(fd, src[win].val, src[win].vlen);
+            if (rc != EFS_OK)
+                goto out;
+            nitems++;
+        }
+        {
+            uint32_t wl = src[win].klen;
+
+            if (wl > KV_LSM_KLEN_MAX) {
+                rc = EFS_ERR_INVAL;
+                goto out;
+            }
+            if (wl)
+                memcpy(wkbuf, src[win].key, wl);
+            for (i = 0; i < nsrc; i++) {
+                if (src[i].done)
+                    continue;
+                if (kv_key_cmp(src[i].key, src[i].klen, wkbuf, wl) != 0)
+                    continue;
+                rc = vx_pull(&src[i]);
+                if (rc != EFS_OK)
+                    goto out;
+            }
+        }
+    }
+    if (lseek(fd, 0, SEEK_SET) < 0) {
+        rc = EFS_ERR_IO;
+        goto out;
+    }
+    {
+        uint8_t nb[4];
+        vx_put_u32(nb, nitems);
+        rc = vx_write(fd, nb, 4);
+        if (rc != EFS_OK)
+            goto out;
+    }
+    if (fsync(fd) != 0) {
+        rc = EFS_ERR_IO;
+        goto out;
+    }
+    if (close(fd) != 0) {
+        fd = -1;
+        rc = EFS_ERR_IO;
+        goto out;
+    }
+    fd = -1;
+    if (rename(tmp, path) != 0) {
+        rc = EFS_ERR_IO;
+        goto out;
+    }
+    {
+        char dir[4096];
+        char *slash;
+
+        snprintf(dir, sizeof(dir), "%s", path);
+        slash = strrchr(dir, '/');
+        if (slash) {
+            *slash = 0;
+            kv_sync_dir(dir);
+        }
+    }
+    rc = EFS_OK;
+out:
+    free(wkbuf);
+    if (fd >= 0)
+        close(fd);
+    if (rc != EFS_OK)
+        unlink(tmp);
+    for (i = 0; i < nsrc; i++) {
+        kv_seg_iter_close(src[i].it);
+        kv_seg_close(src[i].seg);
+    }
+    return rc;
 }
 
 int efs_kv_lsm_quiesce(struct efs_kv *kv)

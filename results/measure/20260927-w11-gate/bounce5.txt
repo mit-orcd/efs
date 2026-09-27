@@ -1,0 +1,8 @@
+fcstor005 efsd restart 2026-09-27T01:38:49Z
+elapsed_ms 510
+both groups FOLLOWER commit==applied
+group 0 term=6965 commit=11185564
+group 2 term=1242 commit=9653034
+raft.log 4796 bytes
+apply_max=0us
+OK=1

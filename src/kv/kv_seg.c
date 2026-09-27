@@ -63,6 +63,7 @@ struct kv_seg {
      * LSM lock to pread, so compaction can unlink the segment without
      * closing the fd under that read. */
     uint32_t refs;
+    char *path; /* open path; a private reopen for export */
     char *doom; /* unlink this path when refs hits 0 */
     struct seg_cslot cslot[KV_SEG_CACHE_SLOTS];
 };
@@ -363,8 +364,14 @@ int kv_seg_open(const char *path, struct kv_seg **out)
     if (!s)
         return EFS_ERR_NOMEM;
     s->refs = 1;
+    s->path = strdup(path);
+    if (!s->path) {
+        free(s);
+        return EFS_ERR_NOMEM;
+    }
     s->fd = open(path, O_RDONLY);
     if (s->fd < 0) {
+        free(s->path);
         free(s);
         return EFS_ERR_NOT_FOUND;
     }
@@ -438,6 +445,7 @@ fail:
     free(ibuf);
     seg_free_idx(s);
     close(s->fd);
+    free(s->path);
     free(s);
     return rc;
 }
@@ -454,8 +462,14 @@ static void seg_free(struct kv_seg *s)
         free(s->cslot[i].blk);
     if (s->fd >= 0)
         close(s->fd);
+    free(s->path);
     free(s->doom);
     free(s);
+}
+
+const char *kv_seg_filepath(const struct kv_seg *s)
+{
+    return s ? s->path : NULL;
 }
 
 void kv_seg_doom(struct kv_seg *s, const char *path)

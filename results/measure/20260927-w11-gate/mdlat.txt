@@ -1,0 +1,15 @@
+=== md_latency ===
+mkdir              min    0.7 med    3.0 max    6.1 ms
+create+1B+close    min    2.1 med   53.0 max   53.4 ms
+append+close       min    3.7 med   53.6 max   55.0 ms
+stat               min    0.2 med    0.2 max    0.3 ms
+unlink             min    0.6 med    0.6 max    0.9 ms
+rmdir              min    0.6 med    2.9 max    8.0 ms
+mdlat_rc=0
+# second sample, 90s later, term unchanged (g0 6965 leader 1, g2 1242 leader 3)
+mkdir              min    0.6 med    2.9 max    5.4 ms
+create+1B+close    min    1.4 med    1.5 max    3.9 ms
+append+close       min    1.9 med    2.0 max    2.3 ms
+stat               min    0.3 med    0.4 max    0.4 ms
+unlink             min    0.6 med    0.7 max    0.9 ms
+rmdir              min    0.6 med    2.8 max    5.3 ms

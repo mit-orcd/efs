@@ -141,6 +141,10 @@ void efs_client_stage_evict_stop(void);
 void efs_client_stage_set_pin_hooks(int (*is_open)(efs_ino_t),
                                     int (*has_plock)(efs_ino_t));
 void efs_client_stage_evict_kick(void);
+/* In-flight op pin (design rule 3, and a live append reservation).
+ * Balanced pin/unpin around the op. Takes only its own leaf lock. */
+void efs_client_stage_pin(efs_ino_t ino);
+void efs_client_stage_unpin(efs_ino_t ino);
 /* Targeted drop of one ino (ghost reclaim at last close). Takes the table
  * locks itself; safe to call from any FUSE handler. */
 void efs_client_stage_evict_ino(efs_ino_t ino);

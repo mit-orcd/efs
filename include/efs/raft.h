@@ -24,7 +24,12 @@
 #define EFS_RAFT_MSG_VOTE_REP 2
 #define EFS_RAFT_MSG_AE_REQ   3
 #define EFS_RAFT_MSG_AE_REP   4
-#define EFS_RAFT_MSG_SNAP_REQ 5 /* last_log_* = lastIncluded; entries[0] = blob */
+/* InstallSnapshot chunk. last_log_* = lastIncluded. prev_index = byte
+ * offset into the user blob. success = 1 on the last chunk. entries[0]
+ * is the chunk; offset 0 starts with app_old:4, app_new:4, then user
+ * bytes. SNAP_REP prev_index is the next offset; vote_granted = 1 once
+ * the follower has installed the snapshot. */
+#define EFS_RAFT_MSG_SNAP_REQ 5
 #define EFS_RAFT_MSG_SNAP_REP 6
 
 #define EFS_RAFT_GROUP_SHARD  0
@@ -58,6 +63,7 @@ struct efs_raft_entry {
  * in a few round-trips. */
 #define EFS_RAFT_AE_MAX   128u             /* max entries per AppendEntries */
 #define EFS_RAFT_AE_BYTES (1024u * 1024u)  /* max cmd bytes per AE batch */
+#define EFS_RAFT_SNAP_CHUNK (4u * 1024u * 1024u) /* ≤ wire SNAP cmd cap */
 
 struct efs_raft_msg {
     uint8_t type;
@@ -105,13 +111,23 @@ struct efs_raft_store {
 typedef int (*efs_raft_send_fn)(void *net, const struct efs_raft_msg *msg);
 typedef int (*efs_raft_apply_fn)(void *app, uint64_t index, uint64_t term,
                                  const uint8_t *cmd, uint32_t clen);
-/* Snapshot blob as of last_included. get mallocs *data (raft frees it).
- * put installs that exact prefix — current SM may be ahead of snap_idx.
- * NULL get → metadata-only SNAP_REQ; NULL put rejects a skip-ahead. */
-typedef int (*efs_raft_snap_get_fn)(void *app, uint64_t last_index,
-                                    uint8_t **data, uint32_t *len);
-typedef int (*efs_raft_snap_put_fn)(void *app, uint64_t last_index,
-                                    const uint8_t *data, uint32_t len);
+/* Snapshot of applied index `incl`. open returns a handle and the user
+ * blob length. BUSY = the bytes are not readable yet (export in
+ * progress); NOT_FOUND = this index has no snapshot, try last_applied.
+ * read copies n bytes at offset. close drops the handle.
+ * chunk is the follower: write user bytes at offset (offset 0 restarts
+ * the staging file). done=1 means this chunk finishes the blob and the
+ * callback imports it before returning. NULL open → metadata-only
+ * SNAP; NULL chunk rejects a skip-ahead. */
+typedef int (*efs_raft_snap_open_fn)(void *app, uint64_t incl, void **handle,
+                                     uint64_t *total_len);
+typedef int (*efs_raft_snap_read_fn)(void *handle, uint64_t offset,
+                                     uint8_t *buf, uint32_t n, uint32_t *got);
+typedef void (*efs_raft_snap_close_fn)(void *handle);
+typedef int (*efs_raft_snap_chunk_fn)(void *app, uint64_t incl,
+                                      uint64_t incl_term, uint64_t offset,
+                                      const uint8_t *data, uint32_t len,
+                                      int done);
 
 struct efs_raft_cfg {
     int id; /* 0 .. EFS_RAFT_MAX_PEERS-1; may be outside voters (learner) */
@@ -136,8 +152,13 @@ struct efs_raft_cfg {
     void *net;
     efs_raft_apply_fn apply;
     void *app;
-    efs_raft_snap_get_fn snap_get;
-    efs_raft_snap_put_fn snap_put;
+    efs_raft_snap_open_fn snap_open;
+    efs_raft_snap_read_fn snap_read;
+    efs_raft_snap_close_fn snap_close;
+    efs_raft_snap_chunk_fn snap_chunk;
+    /* User bytes per chunk. 0 → EFS_RAFT_SNAP_CHUNK. Chunk 0 also
+     * carries the 8-byte config prefix inside the same 4 MiB cap. */
+    uint32_t snap_chunk_bytes;
 };
 
 struct efs_raft;
@@ -162,9 +183,11 @@ int efs_raft_submit(struct efs_raft *r, uint64_t idx);
  * No empty heartbeat. Caller holds the lock. */
 int efs_raft_flush(struct efs_raft *r);
 int efs_raft_durable(struct efs_raft *r, uint64_t idx);
-/* Compact log prefix through last_applied. Captures snap_get (if set) so
- * InstallSnapshot can rebuild a learner that never applied 1..snap_idx.
- * KV already durable through last_applied — no snapshot past that (step 4). */
+/* Compact log prefix through last_applied. snap_open (if set) captures
+ * the state at that index so InstallSnapshot can rebuild a learner that
+ * never applied 1..snap_idx. The bytes may become readable later (BUSY);
+ * the snap point is recorded either way. KV already durable through
+ * last_applied — no snapshot past that (step 4). */
 int efs_raft_snapshot(struct efs_raft *r);
 /* Crash restart without dropping the log: KV is already durable through
  * idx, so do not re-apply 1..idx. Does not compact. idx is clamped to

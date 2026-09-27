@@ -1,0 +1,21 @@
+=== status 2026-09-27T01:50:57Z ===
+== fcstor003
+  group 0 hosted=1 role=FOLLOWER leader=1 term=6965 commit=11185564 applied=11185564 voters=0x7 joint=0
+  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0
+bytes=436
+apply_max=0us
+== fcstor004
+  group 0 hosted=1 role=LEADER leader=1 term=6965 commit=11185564 applied=11185564 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=3 term=1242 commit=9653034 applied=9653034 voters=0xe joint=0
+bytes=1031
+apply_max=0us
+== fcstor005
+  group 0 hosted=1 role=FOLLOWER leader=1 term=6965 commit=11185564 applied=11185564 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=3 term=1242 commit=9653034 applied=9653034 voters=0xe joint=0
+bytes=4796
+apply_max=0us
+== fcstor006
+  group 0 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0x7 joint=0
+  group 2 hosted=1 role=LEADER leader=3 term=1242 commit=9653034 applied=9653034 voters=0xe joint=0
+bytes=1824
+apply_max=0us

@@ -54,6 +54,10 @@ int efs_kv_lsm_view_pin(struct efs_kv *kv, struct efs_kv_lsm_view **out);
 int efs_kv_lsm_view_get(struct efs_kv_lsm_view *v, const uint8_t *key,
                         uint32_t klen, uint8_t *val, uint32_t *vlen);
 void efs_kv_lsm_view_unpin(struct efs_kv_lsm_view *v);
+/* Write this group's live keys to path (atomic rename). The view must
+ * have been pinned after a memtable flush. Does not take the LSM lock. */
+int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
+                           const char *path);
 /* Block until background compaction has caught up (n_l0 below the
  * trigger and no compaction in progress). */
 int efs_kv_lsm_quiesce(struct efs_kv *kv);
