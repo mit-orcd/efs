@@ -3369,10 +3369,17 @@ def _stop_registered(procs, budget=1.0):
             _reap_pid(pid)
 
     def survivors():
+        snapshot = _process_snapshot()
         out = []
         for proc in items:
             pid = proc.pid if hasattr(proc, "pid") else int(proc)
-            if pid and _pgid_alive(pid):
+            if not pid:
+                continue
+            running = _running_in_group(pid, snapshot)
+            if running is None:
+                if _pgid_alive(pid):
+                    out.append(pid)
+            elif running:
                 out.append(pid)
         return out
 
@@ -3392,6 +3399,8 @@ def _pgid_alive(pgid):
 
     The leader exiting does not empty the group: a child that ignored
     SIGTERM, or one blocked in a filesystem call, keeps the same pgid.
+    A zombie still belongs to the group until it is collected, so this is
+    the wrong test for "a worker is still running."
     """
     if not pgid or pgid <= 0:
         return False
@@ -3403,6 +3412,46 @@ def _pgid_alive(pgid):
         # EPERM means something in the group exists and we cannot signal it.
         return True
     return True
+
+
+def _process_snapshot():
+    """One process table read: (pid, pgid, state) or None if ps failed."""
+    try:
+        out = subprocess.check_output(
+            ["ps", "-ax", "-o", "pid=,pgid=,state="],
+            stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    rows = []
+    for line in out.decode("ascii", "replace").splitlines():
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        try:
+            pid = int(parts[0])
+            pgrp = int(parts[1])
+        except ValueError:
+            continue
+        rows.append((pid, pgrp, parts[2]))
+    return rows
+
+
+def _running_in_group(pgid, snapshot=None):
+    """Members of pgid that are not zombies.
+
+    SIGKILL turns a grandchild into a zombie reparented to init. That
+    zombie still answers killpg(pgid, 0) until init collects it, so a
+    group of only zombies is not a worker that is still running.
+    Returns None when the process list cannot be read.
+    """
+    if not pgid or pgid <= 0:
+        return []
+    if snapshot is None:
+        snapshot = _process_snapshot()
+    if snapshot is None:
+        return None
+    return [pid for pid, pgrp, state in snapshot
+            if pgrp == pgid and not state.startswith("Z")]
 
 
 def _kill_group(proc, grace=1.0):
@@ -4074,6 +4123,30 @@ def _self_test():
         if "signal" not in spawn_text:
             fails.append("cancel-at-spawn missing signal NOTRUN")
 
+        fake_tsv = os.path.join(td, "fake-surv.tsv")
+        fake_pid = os.path.join(td, "fake-surv.pids")
+        rc = _run_cli(
+            mnt,
+            {"EFS_POSIX_HOLD": "start", "EFS_POSIX_HOLD_S": "30",
+             "EFS_POSIX_HOLD_PID": fake_pid,
+             "EFS_POSIX_FAKE_SURVIVOR": "424242"},
+            ["--filter", "basic_empty_file", "--timeout-s", "20", "--jobs", "1",
+             "--results", fake_tsv],
+            sig=signal.SIGTERM, wait_pid=fake_pid)
+        fake_text = open(fake_tsv).read() if os.path.isfile(fake_tsv) else ""
+        if rc != 128 + signal.SIGTERM:
+            fails.append("fake survivor rc=%s" % rc)
+        if not fake_text:
+            fails.append("fake survivor wrote no results file")
+        elif "424242" not in fake_text or "groups still alive" not in fake_text:
+            fails.append("fake survivor diagnostic missing: %s" % fake_text[-240:])
+        if "# complete" in fake_text:
+            fails.append("fake survivor run marked complete")
+        if not [n for n in os.listdir(mnt) if n.startswith("posix-")]:
+            fails.append("fake survivor cleanup deleted the test tree")
+        for pid in _pids_alive(fake_pid):
+            _kill_pgid(int(pid))
+
         hold2 = os.path.join(td, "hold2.pids")
         rc = _run_cli(
             mnt,
@@ -4113,6 +4186,41 @@ def _self_test():
             fails.append("zombie leader looked alive (ok=%s dt=%.3f poll=%s)" %
                          (killed, kill_dt, sleeper.poll()))
             _kill_pgid(sleeper.pid)
+
+        # Leader exits and leaves a grandchild in its group. After SIGKILL
+        # that grandchild is a zombie until init collects it. killpg still
+        # sees the group; it is not a running worker, and cleanup must not
+        # wait out the budget or skip the results file for it.
+        orphan = (
+            "import os, signal, time\n"
+            "child = os.fork()\n"
+            "if child == 0:\n"
+            "    signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            "    time.sleep(60)\n"
+            "    os._exit(0)\n"
+            "os._exit(0)\n"
+        )
+        leader = subprocess.Popen(
+            [sys.executable, "-c", orphan], start_new_session=True)
+        try:
+            leader.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            fails.append("orphan leader did not exit")
+            _kill_pgid(leader.pid)
+        else:
+            if not _pgid_alive(leader.pid):
+                fails.append("grandchild was not left in the leader group")
+            else:
+                t_stop = time.monotonic()
+                left = _stop_registered([leader], budget=1.0)
+                stop_dt = time.monotonic() - t_stop
+                if left:
+                    fails.append("zombie grandchild reported as running: %s" % left)
+                    for pid in left:
+                        _kill_pgid(pid)
+                if stop_dt >= 0.8:
+                    fails.append("zombie grandchild burned the cleanup budget "
+                                 "(%.3fs)" % stop_dt)
 
         def _cancel_n(n):
             pidfile = os.path.join(td, "scale-%d.pids" % n)
@@ -4323,10 +4431,19 @@ def main(argv=None):
         # Do not delete the tree here: a group that survives SIGKILL still
         # has it as its cwd.
         survivors = _reap_live()
+        fake = os.environ.get("EFS_POSIX_FAKE_SURVIVOR")
+        if fake:
+            survivors = list(survivors) + [fake]
+        # Always publish. Skipping the write when a group still looked
+        # occupied left cancel runs with exit 143 and no TSV. The marker
+        # stays off; os._exit below does not reach the tree cleanup.
+        reason = "suite cut by signal %d" % signum
+        if survivors:
+            reason += " groups still alive: %s" % ",".join(
+                str(pid) for pid in survivors)
         try:
-            _fill_unfinished("suite cut by signal %d" % signum)
-            if not survivors:
-                flush_tsv(done=False)
+            _fill_unfinished(reason)
+            flush_tsv(done=False)
         except Exception:
             pass
         os._exit(128 + signum)
