@@ -131,6 +131,25 @@ int efs_rdma_transport(void)
     return mode;
 }
 
+/* mlx5 completion moderation holds a CQE back for cq_period even when the
+ * CQ is polled. A raft AppendEntries round trip was ~15us on TCP and
+ * ~380us on RDMA (private 3-node, Sep 27); the send-CQE wait was most of
+ * that. Ask for a completion per CQE with no timer. */
+static void cq_unmoderate(struct ibv_cq *cq)
+{
+    struct ibv_modify_cq_attr a;
+    memset(&a, 0, sizeof(a));
+    a.attr_mask = IBV_CQ_ATTR_MODERATE;
+    a.moderate.cq_count = 1;
+    a.moderate.cq_period = 0;
+    if (ibv_modify_cq(cq, &a) != 0) {
+        static int logged;
+        if (!__sync_lock_test_and_set(&logged, 1))
+            fprintf(stderr, "efs: CQ moderation off failed errno=%d\n",
+                    errno);
+    }
+}
+
 static int spin_us(void)
 {
     static int v = -1;
@@ -538,10 +557,13 @@ static void ack_cq_events(struct efs_rdma_dev *dev)
 }
 
 /* Shared-CQ poller. Arm AFTER draining, race-drain, ALWAYS ack the notify
- * we requested, then block. Never `continue` between req_notify and ack:
- * that dropped the channel event and the next CQE after a quiet gap
- * generated no wake — first inode RPC after a fresh RDMA mount hung
- * forever while poll_cq saw an empty CQ (the WC sat un-notified). */
+ * we requested. Never `continue` between req_notify and ack: that dropped
+ * the channel event and the next CQE after a quiet gap generated no wake.
+ * Ack consumes the event for a CQE that landed after the race poll, so
+ * harvest again before sleeping. The sleep is 1ms. A 100ms sleep here
+ * stalled every conn (11 of 100 private mkdirs, Sep 27). Do not tight-spin
+ * this thread while idle: the send path used to sched_yield for its CQE,
+ * and a pegged poller stole that core for the rest of the timeslice. */
 static void *recv_poller(void *arg)
 {
     struct efs_rdma_dev *dev = arg;
@@ -570,13 +592,19 @@ static void *recv_poller(void *arg)
         ack_cq_events(dev);
         if (n > 0)
             continue;
+        n = ibv_poll_cq(dev->recv_cq, 32, wcs);
+        if (n < 0) {
+            usleep(1000);
+            continue;
+        }
+        if (n > 0) {
+            harvest_recv_wcs(wcs, n);
+            continue;
+        }
         struct pollfd p = { .fd = dev->recv_chan->fd, .events = POLLIN };
-        poll(&p, 1, 100); /* tick so a wedged device can't hang us forever */
+        poll(&p, 1, 1);
         if (p.revents & POLLIN)
             ack_cq_events(dev);
-        /* Harvest before looping. ack-then-loop left a CQE sitting until
-         * the next 100ms tick if mlx5 delivered the WC without a second
-         * notify — first inode RPC after a quiet gap. */
         n = ibv_poll_cq(dev->recv_cq, 32, wcs);
         if (n > 0)
             harvest_recv_wcs(wcs, n);
@@ -602,6 +630,7 @@ static int dev_shared_cq_start(struct efs_rdma_dev *dev)
     dev->recv_cq = ibv_create_cq(dev->ctx, 1 << 16, NULL, dev->recv_chan, 0);
     if (!dev->recv_cq)
         return -1;
+    cq_unmoderate(dev->recv_cq);
     if (pthread_create(&dev->poller, NULL, recv_poller, dev) != 0)
         return -1;
     pthread_detach(dev->poller);
@@ -655,6 +684,7 @@ static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
     rc->send_cq = ibv_create_cq(dev->ctx, 64, NULL, NULL, 0);
     if (!rc->send_cq)
         goto fail;
+    cq_unmoderate(rc->send_cq);
 
     size_t recv_stride = rc->bufsz + EFS_RDMA_RECV_STRIDE;
     size_t total = (size_t)rc->nrecv * recv_stride +
@@ -971,7 +1001,11 @@ static int send_buf_pick(struct efs_rdma_conn *rc)
         return -1;
     if (!rc->send_busy[idx])
         return idx;
+    /* The CQE is a few microseconds behind post_send. sched_yield on the
+     * first miss hands the core away for the rest of a timeslice (~100us
+     * here, and longer when another thread is runnable). Spin first. */
     int64_t end = now_us() + EFS_RDMA_SEND_WAIT_US;
+    int64_t spin_end = now_us() + 200;
     while (rc->send_busy[idx]) {
         if (reap_sends(rc) != 0)
             return -1;
@@ -981,7 +1015,8 @@ static int send_buf_pick(struct efs_rdma_conn *rc)
             rc->broken = 1;
             return -1;
         }
-        sched_yield();
+        if (now_us() >= spin_end)
+            sched_yield();
     }
     return idx;
 }
@@ -1040,9 +1075,11 @@ static void send_ident_take(struct efs_rdma_conn *rc, struct send_ident *id)
     id->qpn = rc->qp ? rc->qp->qp_num : 0;
     id->gen = rc->reg_gen;
     id->st = -2;
-    id->xmit_pkts = rc->dev ? ib_port_counter(rc->dev->name, rc->dev->port,
-                                              "port_xmit_packets")
-                            : 0;
+    /* Port-counter and ibv_query_qp stay off this path. Both are kernel
+     * round trips; doing them before every SEND made a same-host raft
+     * AppendEntries ~380us against ~15us on TCP (Sep 27). The failure
+     * dump reads them only after a send has already failed. */
+    id->xmit_pkts = 0;
 }
 
 static void send_fail_dump2(struct efs_rdma_conn *rc, uint8_t type,
@@ -1117,14 +1154,11 @@ static void send_fail_dump2(struct efs_rdma_conn *rc, uint8_t type,
             rc->n_reaped >= rc->n_posted
                 ? "*** ALL COMPLETIONS ARRIVED: flag was missed ***"
                 : "(a completion is genuinely outstanding)");
-    if (id && rc->dev)
-        fprintf(stderr,
-                "efs: RDMA port_xmit_packets delta over the send window = "
-                "%llu\n",
-                (unsigned long long)(ib_port_counter(rc->dev->name,
-                                                     rc->dev->port,
-                                                     "port_xmit_packets") -
-                                     id->xmit_pkts));
+    if (rc->dev)
+        fprintf(stderr, "efs: RDMA port_xmit_packets now = %llu\n",
+                (unsigned long long)ib_port_counter(rc->dev->name,
+                                                    rc->dev->port,
+                                                    "port_xmit_packets"));
     /* Nothing else in the process reads the async queue, so whatever took the
      * QP out of RTS is still sitting in it. Non-blocking drain. */
     if (rc->dev && rc->dev->ctx) {
@@ -1208,7 +1242,6 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
     }
     struct send_ident ident;
     send_ident_take(rc, &ident);
-    ident.st = qp_state_now(rc);
     if (post_send(rc, SEND_WRID_POOL | (uint64_t)idx, b, frame, inline_ok) != 0) {
         send_fail_dump2(rc, type, "ibv_post_send", &ident);
         return EFS_ERR_NET;
@@ -1218,6 +1251,7 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
      * (name[256] is already > INLINE_MAX) fire-and-forget: a failed first
      * SEND after upgrade hung the FUSE worker in recv instead of EIO. */
     int64_t end = now_us() + EFS_RDMA_SEND_WAIT_US;
+    int64_t spin_end = now_us() + 200;
     while (rc->send_busy[idx]) {
         if (reap_sends(rc) != 0) {
             send_fail_dump2(rc, type, "reap: send CQE reported error", &ident);
@@ -1256,7 +1290,8 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
             }
             return EFS_ERR_NET;
         }
-        sched_yield();
+        if (now_us() >= spin_end)
+            sched_yield();
     }
     if (rdma_first_log()) {
         static int ndone;

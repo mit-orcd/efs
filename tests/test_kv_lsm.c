@@ -876,6 +876,85 @@ static void test_compact_crash(void)
     efs_kv_lsm_close(kv);
 }
 
+/* A flush of two key[0] ranges is two L0 files. Compacting one range
+ * rewrites that range's L1 and leaves the other file in place. */
+static int sst_names(char names[][64], int cap)
+{
+    DIR *d = opendir(g_dir);
+    struct dirent *de;
+    int n = 0;
+
+    if (!d)
+        return 0;
+    while ((de = readdir(d))) {
+        if (strncmp(de->d_name, "seg-1-", 6) != 0)
+            continue;
+        if (n < cap)
+            snprintf(names[n], 64, "%s", de->d_name);
+        n++;
+    }
+    closedir(d);
+    return n;
+}
+
+static void test_partitioned_flush(void)
+{
+    struct efs_kv_lsm_cfg cfg;
+    struct efs_kv *kv;
+    uint32_t l0 = 0, l1 = 0;
+    uint8_t ka[8], kb[8], kc[8], buf[4];
+    uint32_t len;
+    char before[8][64], after[8][64];
+    int nb, na, i, kept = 0;
+
+    rmtree(g_dir);
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.sync_mode = EFS_KV_LSM_NOSYNC;
+    cfg.l0_max = 1000;
+    kv = efs_kv_lsm_open(g_dir, &cfg);
+    CHECK(kv != NULL, "open partitioned");
+    if (!kv)
+        return;
+    memset(ka, 0x01, sizeof(ka));
+    memset(kb, 0x80, sizeof(kb));
+    memset(kc, 0x01, sizeof(kc));
+    ka[7] = 1;
+    kb[7] = 2;
+    kc[7] = 3;
+    CHECK(efs_kv_put(kv, ka, 8, (const uint8_t *)"A", 1) == EFS_OK, "put A");
+    CHECK(efs_kv_put(kv, kb, 8, (const uint8_t *)"B", 1) == EFS_OK, "put B");
+    CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "flush two ranges");
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK, "count flush");
+    CHECK(l0 == 2 && l1 == 0, "one L0 file per range");
+    CHECK(efs_kv_lsm_compact(kv) == EFS_OK, "compact first range");
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK, "count 1");
+    CHECK(l0 == 1 && l1 == 1, "one range stayed L0");
+    CHECK(efs_kv_lsm_compact(kv) == EFS_OK, "compact second range");
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK, "count 2");
+    CHECK(l0 == 0 && l1 == 2, "each range its own L1");
+    nb = sst_names(before, 8);
+    CHECK(nb == 2, "two L1 files");
+    CHECK(efs_kv_put(kv, kc, 8, (const uint8_t *)"C", 1) == EFS_OK, "put C");
+    CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "flush one range");
+    CHECK(efs_kv_lsm_compact(kv) == EFS_OK, "compact that range");
+    na = sst_names(after, 8);
+    for (i = 0; i < nb && i < 8; i++) {
+        int j;
+
+        for (j = 0; j < na && j < 8; j++)
+            if (strcmp(before[i], after[j]) == 0)
+                kept++;
+    }
+    CHECK(kept >= 1, "other range's L1 file was not rewritten");
+    len = sizeof(buf);
+    CHECK(efs_kv_get(kv, ka, 8, buf, &len) == EFS_OK && buf[0] == 'A', "A");
+    len = sizeof(buf);
+    CHECK(efs_kv_get(kv, kb, 8, buf, &len) == EFS_OK && buf[0] == 'B', "B");
+    len = sizeof(buf);
+    CHECK(efs_kv_get(kv, kc, 8, buf, &len) == EFS_OK && buf[0] == 'C', "C");
+    efs_kv_lsm_close(kv);
+}
+
 int main(void)
 {
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-kvlsm-%d", (int)getpid());
@@ -894,6 +973,7 @@ int main(void)
     test_pinned_view();
     test_compact_crash();
     test_sync_hold();
+    test_partitioned_flush();
 
     rmtree(g_dir);
     if (failures) {

@@ -98,8 +98,8 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  0.23 s idle (128 GETCHUNKS × 1.6 ms), 14.6 ms/GETCHUNKS under 32 openers.
  Same-parent rate ~140–160 ops/s flat 1–36 procs
  (`results/measure/20260921-161931-samedir-rate`, pre-`165e779`; remeasure).
- Cluster binaries report **`612ee9ba9202-dirty`** (W11 on top of
- W13; rolled Sep 27 00:51 UTC, servers and clients fcstor007–015,
+ Cluster binaries report **`4c6a5acefe03-dirty`** (W11+W9 on top of
+ W13; TCP rollback Sep 27 04:52 UTC, servers and clients fcstor007–015,
  `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1`; all four agree). **W13 is done:** L1
  compaction runs on a background thread; the apply path only flushes
  the memtable and swaps the manifest. 144-way mkdir
@@ -113,18 +113,24 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  **W11 is done.** Logs are under 5 KB (were multi-GB). fcstor005
  rejoined in 510 ms. Idle md_latency matches the W13 sample on a
  second read (`results/measure/20260927-w11-gate`). 9-host posix is
- 200/201 again (`results/posix/20260927-033723`, 30.4–31.3 s; the
- earlier 199–200 run is `20260927-015719`). Freeze passed on the
- rerun. W10's private empty-mkdir passed 5/5 on fcstor007. The live
- cluster stays TCP until that switch is its own gate. W9's pin
+ 200/201 on all nine (`results/posix/20260927-123717`, mmap SKIP
+ only, 0 not-run). Freeze passed on the
+ rerun. W10's private empty-mkdir passed 5/5. The live RDMA
+ switch failed 9-host posix (193–196/201, 385 s,
+ `results/posix/20260927-044348`) and was rolled back; 19810
+ stays TCP. Private 100-mkdir after the poller and per-send
+ query fix is 642 ms vs TCP 507 ms. Do not switch 19810 on
+ that alone. W9's pin
  rules are on fcstor007–015. Posix 1 passed on the same 200/201 run.
- Posix 2 is 59/63 (`results/posix2/20260927-035212`); the
- shared-pwrite miss did not repeat on its own. The leak gate passed
+ Posix 2 is 63/63 (`results/posix2/20260927-123946`, 58 s).
+ The leak gate passed
  (`results/leaks/20260927-035622`). A cold stat of 1M files on the
  fixed evictor leveled at 233 MB RSS
  (`results/measure/20260927-w9-walk`). W9 is done.
- Partitioned flush stays
- unstarted. `EFSD_ENV` is **space**-separated
+ Partitioned flush is in the TCP build rolled Sep 27 05:07 UTC:
+ one L0 file per `key[0]`, compaction rewrites one range.
+ `test_kv_lsm` covers it. Existing wide L1 files split on the
+ next compaction. `EFSD_ENV` is **space**-separated
  (`env $EFSD_ENV`): a comma form
  (`EFS_TRANSPORT=tcp,EFS_RAFT_OBS=1`) silently makes the transport AUTO
  (ungated RDMA) and drops OBS — that roll happened once (05:49) and was
@@ -149,12 +155,13 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   (`results/posix/20260922-133653`). 9-host: 185–197/201, 0 NOTRUN,
   46–66 s (`results/posix/20260922-134008`); an election 12 s in
   accounts for the low end. Next mechanical item: I16.
-- Honest write numbers (MiB/s, flush in clock): Sep 18, 1-client 8 GiB
-  dd+fsync **639** (best 724); 4-client **251**; 9-client **202**.
-  Sep 21 remeasure (`results/measure/20260921-163033-dd-wall`): 1-client
-  **499**, 4-client **176**; the 9-client row is INVALID (400 s timeout,
-  mkdir/fsync EIO — do not quote it). Do not compare against the deleted
-  pre-Raft engine's numbers (Aug: 2355 / 3599) — different system.
+- Honest write numbers (MiB/s, flush in clock): Sep 27
+  (`results/measure/20260927-053506-dd-wall`, TCP, FUSE_OK, 8 GiB):
+  1-client **977**, 4-client **1984**. 9-client is INVALID — fsync
+  EIO on fcstor009 and fcstor013 (`EFS_ERR_NOT_FOUND` from report;
+  files were still 8 GiB). Do not quote 1464. Prior: Sep 18
+  639/251/202, Sep 21 499/176 and 9-client invalid. Do not compare
+  against the deleted pre-Raft engine (Aug: 2355/3599).
 - posix suite 1 jobs=1 known signature: **200/201**,
  `mmap_write_read` SKIP (`MAP_SHARED` ENODEV by spec). Sep 22 on
  `46d54e6`: 200/0/1 in 92 s (`results/posix/20260922-133653`; the prior
@@ -184,10 +191,12 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  also shows a 50 ms mode (RDMA election churn) — that one, wait 2 min.
  Root mkdir (410 names): med 10 ms, max 0.063, no 1 s mode
  (`w8_root_lat.sh`); 9 concurrent root mkdtemp 9/9 (`w8_root_mkdir.sh`).
- posix2 one pair **58–60/63**:
-  `peer_concurrent_append` (one side's O_APPEND records missing),
-  `peer_fcntl_range_conflict` (per-client lockf), overlap-pwrite RMW flakes.
-  Anything else is new.
+ posix2 one pair **63/63** (`results/posix2/20260927-123946`).
+  The morning 59/63 was shared-pwrite (dcache cap 8 collapsed 16
+  ranges to UNCOND; `DCACHE_NR` is 32), truncate EIO (alias stub
+  minted a generation never PUT; keep `got.generation`), and overlap
+  pwrite (STALE replay of a committed span; clear `nrange` when the
+  slot is clean). Anything else is new.
 
 ## Live learnings — do not re-derive, do not re-chase
 
@@ -364,7 +373,10 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   that held fcstor003 and fcstor004 for hours (`incoming_has` in
   `kv_snap.c`). A live group that already matches the image writes
   nothing. Do not put that scan back. The export itself stays on the
-  GC thread; `apply_max` during a 386 MB export was 0.
+  GC thread; `apply_max` during a 386 MB export was 0. While that
+ export is in progress `send_snap` returns BUSY; `send_ae` must still
+ emit an empty AppendEntries or the peer campaigns and steps the
+ leader down (Sep 27 group 2, term +200, 9-host mkdir EBUSY).
 - `host_pump` ticks are wall-clocked (`HOST_TICK_US`), never per iteration
   (iteration-counted ticks caused election storms). The network inbox path
   must never take `h->mu` (eventfd kick, not condvar). Forwarded-command
@@ -405,8 +417,14 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   needs an EMPTY table — `tests/rdma_first_inode.sh` is one (private
   3-node cluster on fcstor007, ports 19950–19952; W10 recommends this,
   not a wipe of 19810). RNR-NAK / recv-buffer hypothesis is
-  **dead**. Default stays TCP until gated. RDMA is not "broken": a
-  populated table drove millions of creates over RDMA with 0 errors.
+  **dead**. A populated table drove millions of creates over RDMA
+  with 0 errors. The Sep 27 live switch of 19810 failed the 9-host
+  posix (many-op tests hit 15 s; `apply_max` under 1 ms) and was
+  rolled back. Cause, fixed in tree and not rolled: the shared recv
+  poller slept 100 ms after acking a CQ event, and every SEND called
+  `ibv_query_qp` plus a sysfs read (~380 µs raft RTT vs ~15 µs TCP).
+  Private 100-mkdir afterward was 642 ms vs 507 ms TCP. Default
+  stays TCP. Do not debug that on the live cluster.
 
 **Harness / measurement**
 - IO-500 harness detaches `prterun` (ssh timeout killed the driver);

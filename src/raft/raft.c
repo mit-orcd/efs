@@ -587,8 +587,27 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
         if (ae_inflight_fresh(r, to, ni))
             return EFS_OK;
         rc = send_snap(r, to);
-        if (rc == EFS_ERR_AGAIN)
-            return EFS_OK;
+        if (rc == EFS_ERR_AGAIN) {
+            /* The snap file is not ready (export still running). Sending
+             * nothing lets this peer's election timer fire; its vote
+             * request carries a higher term and steps the leader down for
+             * the whole export. Group 2 did that under 9-host posix
+             * (term +200, commit stuck, mkdir EBUSY). An empty
+             * AppendEntries is enough: on_ae_req resets the timer before
+             * it rejects a prev_index the follower does not have yet.
+             * data_only must not send it: that marks ae_inflight and
+             * suppresses the real snapshot for a heartbeat interval on
+             * every propose wake. */
+            if (data_only)
+                return EFS_OK;
+            m.prev_index = last_i;
+            m.prev_term = last_t;
+            m.leader_commit = r->commit_index;
+            rc = send_msg(r, &m);
+            if (rc == EFS_OK)
+                ae_inflight_set(r, to, ni, last_i);
+            return rc;
+        }
         return rc;
     }
     m.prev_index = ni - 1;

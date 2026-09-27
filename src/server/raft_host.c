@@ -8614,23 +8614,25 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
             tail.chunk_index = tci;
             tail.new_size = size;
             tail.expected_gen = got.generation;
-            tail.candidate_gen = efs_meta_candidate_gen(uuid, 0, 2, tci, 0);
-            if (tail.candidate_gen == 0 ||
-                tail.candidate_gen == tail.expected_gen)
-                tail.candidate_gen = tail.expected_gen + 1;
-            if (tail.candidate_gen == 0)
-                tail.candidate_gen = 1;
             tail.coding_profile_id = EFS_META_PROFILE_K2F1;
             if (got.generation != 0) {
-                /* The tail stub writes no data of its own: alias the
-                 * superseded row's placement so reads keep finding the
-                 * surviving prefix's fragments. The apply side recognizes
-                 * the alias and skips the GC record — the fragments are
-                 * shared with the live row, not dead. */
+                /* Alias the live objects under the generation they were
+                 * PUT at. A fresh candidate_gen is a filename nothing
+                 * wrote; the reader GETs that name and DECODE-fails
+                 * (peer_truncate_visible, peer_extend_and_truncate).
+                 * The epoch fence rejects a stale publish. The apply
+                 * sees candidate == committed and leaves the row. */
+                tail.candidate_gen = got.generation;
                 memcpy(tail.ch.nodes, got.nodes, sizeof(tail.ch.nodes));
                 memcpy(tail.ch.checksums, got.checksums,
                        sizeof(tail.ch.checksums));
             } else {
+                tail.candidate_gen = efs_meta_candidate_gen(uuid, 0, 2, tci, 0);
+                if (tail.candidate_gen == 0 ||
+                    tail.candidate_gen == tail.expected_gen)
+                    tail.candidate_gen = tail.expected_gen + 1;
+                if (tail.candidate_gen == 0)
+                    tail.candidate_gen = 1;
                 /* Grow into a chunk that was never written: publish the
                  * well-known zero-fragment digests so the read path
                  * synthesizes zeros without a GET (no fragments exist). */
@@ -8706,25 +8708,26 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
             tail.chunk_index = tci;
             tail.new_size = size;
             tail.expected_gen = got.generation;
-            tail.candidate_gen = efs_meta_candidate_gen(uuid, 0, 2, tci,
-                                                        (uint32_t)attempt);
-            if (tail.candidate_gen == 0 ||
-                tail.candidate_gen == tail.expected_gen)
-                tail.candidate_gen = tail.expected_gen + 1;
-            if (tail.candidate_gen == 0)
-                tail.candidate_gen = 1;
             tail.coding_profile_id = EFS_META_PROFILE_K2F1;
             tail.content_epoch = row.content_epoch + 1;
             tail.inode_gen = row.generation;
             tail.mtime_gen = row.mtime_gen;
             tail.lane_local = 1;
             if (got.generation != 0) {
-                /* Alias the superseded row's placement (see the
-                 * same-group branch above). */
+                /* Same alias rule as the same-group branch: the live
+                 * generation already names the objects. */
+                tail.candidate_gen = got.generation;
                 memcpy(tail.ch.nodes, got.nodes, sizeof(tail.ch.nodes));
                 memcpy(tail.ch.checksums, got.checksums,
                        sizeof(tail.ch.checksums));
             } else {
+                tail.candidate_gen = efs_meta_candidate_gen(uuid, 0, 2, tci,
+                                                            (uint32_t)attempt);
+                if (tail.candidate_gen == 0 ||
+                    tail.candidate_gen == tail.expected_gen)
+                    tail.candidate_gen = tail.expected_gen + 1;
+                if (tail.candidate_gen == 0)
+                    tail.candidate_gen = 1;
                 for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
                     tail.ch.nodes[i] = (efs_node_id_t)(i + 1);
                     efs_hash_zero_fragment(tail.ch.checksums[i]);

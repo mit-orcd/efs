@@ -1617,7 +1617,13 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
  * serialized PUTs on one mutex and tanked 4k IOPS) — the caller PUTs now. */
 #define DCACHE_SLOTS  65536
 #define DCACHE_SHARDS 64
-#define DCACHE_NR     8
+/* Disjoint dirty ranges kept per chunk. peer_shared_pwrite puts 16
+ * non-adjacent 4 KiB blocks in one 128 KiB chunk; the old cap of 8
+ * collapsed the rest into one whole-chunk range and an unconditional
+ * CAS, so the last fsync of the chunk published this client's image
+ * over the peer's blocks (496 of 1000 half-blocks). 32 covers a full
+ * chunk of 4 KiB pages. */
+#define DCACHE_NR     32
 struct dcache_ent {
     efs_ino_t ino;
     uint32_t ci;
@@ -3318,6 +3324,13 @@ static int dcache_note_committed(efs_ino_t ino, uint32_t ci, uint64_t gen)
         if (e->base_gen != EFS_CHUNK_BASE_UNCOND)
             e->base_gen = gen;
         hit = e->object_gen == gen;
+        /* This object's ranges are committed. A later pwrite must record
+         * only its own bytes: keeping the previous span made a STALE
+         * replay paint the old image over a peer's exclusive range
+         * (peer_overlap_pwrite_partial / chunk_straddle). A write that
+         * re-dirtied the slot during the report still needs its ranges. */
+        if (!e->dirty)
+            e->nrange = 0;
     }
     pthread_mutex_unlock(dcache_mu(s));
     return hit;

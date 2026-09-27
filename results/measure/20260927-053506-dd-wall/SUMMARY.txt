@@ -1,0 +1,15 @@
+8 GiB dd+fsync own-file, build=4c6a5acefe03-dirty, 2026-09-27. Sep 18: 1=639 4=251 9=202 MiB/s.
+clients  ssh_wall_s    agg_mibs  per_client_min_max_s  sum_rates_mibs  pct_of_ceiling
+1        9.014231464   976.6     8.388/8.388           976.6           5.84
+4        18.139939407  1984.1    16.415/16.515         1989.8          4.50
+9        54.910163876  INVALID   50.199/50.346         1466.3          3.32
+
+server REPORT timing (efsd report-split lines during each phase; the fsync tail is here):
+1 clients: report-split: 1 lines; pack_ms sum=390 max=390; push_ms sum=386 max=386; finish_ms sum=147 max=147
+4 clients: report-split: 8 lines; pack_ms sum=10689 max=1753; push_ms sum=7063 max=2060; finish_ms sum=3606 max=943
+9 clients: report-split: 136 lines; pack_ms sum=45293 max=3462; push_ms sum=25257 max=3778; finish_ms sum=46849 max=4269
+
+agg = clients*8 GiB / slowest client dd wall (ssh_wall includes ~4 s ssh+check overhead); sum_rates = sum of per-client 8 GiB/wall. Perf: perf-ddwall-*.txt (PERF=1). Raw: dd-*-*.txt
+
+9-client INVALID: fcstor009 and fcstor013 printed "dd: fsync failed ... Input/output error". Both files were still 8589934592 bytes and FUSE_OK. fuse.log: fsync-split rc=-3 (EFS_ERR_NOT_FOUND) from report, flush ~10s, report 13-18s. Do not quote sum_rates 1466 or the 1464 derived from the walls.
+Preflight was skipped: both groups ~8 REAP_DONE/s, commit==applied, no client.

@@ -101,6 +101,10 @@ int kv_wal_replay(const char *path,
 /* --- engine (shared by kv_lsm.c and kv_compact.c) -------------------- */
 
 #define KV_LSM_L1_TARGET (64ull * 1024ull * 1024ull)
+/* One L0 file per distinct key[0]. efs keys store the shard in the first
+ * two bytes (0x0000..0x0FFF), so a flush of the live table is at most 16
+ * files and compaction can rewrite one of those ranges instead of L1. */
+#define KV_LSM_RANGE_MAX 16u
 #define KV_LSM_PATH_MAX  1024
 
 struct kv_ent {

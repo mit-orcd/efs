@@ -1,0 +1,4 @@
+FUSE_CHECK fstype=fuse.efs-fuse
+FUSE_OK
+WALL 50.236
+-rw-r--r-- 1 erbmi1 erbmi1 8589934592 Sep 27 01:36 /tmp/efs-mount/measure/dd-fcstor014.bin

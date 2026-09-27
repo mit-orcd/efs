@@ -532,6 +532,7 @@ struct rdcache_ent {
     uint8_t *data;
     uint32_t len;
     uint32_t tick;
+    uint64_t gen; /* chunk-map generation these bytes were decoded from */
 };
 static struct {
     pthread_mutex_t mu[RDCACHE_STRIPES];
@@ -578,18 +579,36 @@ static struct rdcache_ent *rdcache_find(uint32_t s, efs_ino_t ino, uint32_t ci)
     return NULL;
 }
 
+/* Generation the local chunk map names. 0 = no row. Taken without the
+ * rdcache lock: idx_mu must not be acquired under an rdcache stripe. */
+static uint64_t rdcache_map_gen(efs_ino_t ino, uint32_t ci)
+{
+    struct efs_chunk_entry ce;
+    int ok;
+
+    pthread_mutex_lock(&g_client.idx_mu);
+    ok = efs_export_get_chunk(&g_client.export, ino, ci, &ce) == 0;
+    pthread_mutex_unlock(&g_client.idx_mu);
+    return ok ? ce.generation : 0;
+}
+
 int efs_rdcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
 {
+    uint64_t tg;
+
     /* Dirty write-combined chunks are newer than anything on the servers. */
     if (efs_dcache_get(ino, ci, dst, len) == 0)
         return 0;
     if (!dst || !len)
         return -1;
+    tg = rdcache_map_gen(ino, ci);
+    if (!tg)
+        return -1;
     uint32_t s = rdcache_slot(ino, ci);
     pthread_mutex_t *mu = rdcache_mu(s);
     pthread_mutex_lock(mu);
     struct rdcache_ent *e = rdcache_find(s, ino, ci);
-    if (e && e->len >= len) {
+    if (e && e->gen == tg && e->len >= len) {
         memcpy(dst, e->data, len);
         e->tick = ++g_rdcache.tick;
         pthread_mutex_unlock(mu);
@@ -602,13 +621,18 @@ int efs_rdcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
 int efs_rdcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
                      uint8_t *dst, uint32_t len)
 {
+    uint64_t tg;
+
     if (!dst || !len)
+        return -1;
+    tg = rdcache_map_gen(ino, ci);
+    if (!tg)
         return -1;
     uint32_t s = rdcache_slot(ino, ci);
     pthread_mutex_t *mu = rdcache_mu(s);
     pthread_mutex_lock(mu);
     struct rdcache_ent *e = rdcache_find(s, ino, ci);
-    if (e && (uint64_t)off + len <= e->len) {
+    if (e && e->gen == tg && (uint64_t)off + len <= e->len) {
         memcpy(dst, e->data + off, len);
         e->tick = ++g_rdcache.tick;
         pthread_mutex_unlock(mu);
@@ -620,8 +644,11 @@ int efs_rdcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
 
 void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t len)
 {
+    uint64_t tg;
+
     if (!src || !len)
         return;
+    tg = rdcache_map_gen(ino, ci);
     uint32_t s = rdcache_slot(ino, ci);
     pthread_mutex_t *mu = rdcache_mu(s);
     pthread_mutex_lock(mu);
@@ -654,6 +681,7 @@ void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t le
     memcpy(e->data, src, len);
     e->ino = ino;
     e->ci = ci;
+    e->gen = tg;
     e->tick = ++g_rdcache.tick;
     pthread_mutex_unlock(mu);
 }

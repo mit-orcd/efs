@@ -1364,6 +1364,20 @@ Whoever picks the project up next does **this first**. Update or delete
 this block when done — an "in flight" block older than the last commit
 is a bug in this page.
 
+**Posix suites clean (Sep 27, TCP, `4c6a5acefe03-dirty`).** 9-host
+`results/posix/20260927-123717`: 200 pass + `mmap_write_read` SKIP
+on all nine, 0 not-run (screen 12:37:17–12:37:52Z). posix2
+`results/posix2/20260927-123946`: **63/63** in 58 s. The 9-host
+EBUSY before this roll was group 2 electing: `send_snap` returns
+`EFS_ERR_AGAIN` while the export file is not ready, and sending
+nothing let that peer campaign and step the leader down (term +200,
+mkdir EBUSY). `send_ae` now sends an empty AppendEntries in that
+window. Do not remove it. Same tree, data path: `DCACHE_NR` 32,
+truncate keeps `got.generation`, `dcache_note_committed` clears
+`nrange` when the slot is clean. Next queue item is the lowest open
+row in §1a. W6's perf residuals need a user decision. Do not switch
+19810 to RDMA. Do not quote the 9-client dd row.
+
 **W13 done (Sep 26).** The user ratified the background-compactor row.
 L1 compaction runs on a `kv_lsm` thread. The pump still flushes the
 memtable to L0 and kicks the thread when `n_l0 >= l0max`; the merge
@@ -1376,12 +1390,12 @@ start. The write path waits on `l->cv` only when `n_l0` reaches
 `KV_LSM_MAX_SEGS` (64) and logs `kv-compact: backpressure` — that wait
 means the compactor is ~16× behind. `EFS_KV_COMPACT_DIE=N` exits after
 the Nth finished output segment, before the manifest rename; reopen
-serves the old manifest. Partitioned flush (one L0 file per shard
-range) is the follow-on and is not in this change.
+serves the old manifest. Partitioned flush (one L0 file per `key[0]`)
+is in the TCP build rolled Sep 27 05:07 UTC.
 
 W13 gate, on the build that was rolled Sep 26 16:37 UTC
-(`3210a3d63f73-dirty`, TCP). The cluster has since moved to
-`612ee9ba9202-dirty` (W11, Sep 27). Gate:
+(`3210a3d63f73-dirty`, TCP). The cluster is now
+`4c6a5acefe03-dirty`, TCP, after the Sep 27 RDMA rollback. Gate:
 
 - Hammer `results/measure/20260926-163709-mkdir-hammer`: idle p50
   **4.68 ms**; 144-way **35166** mkdirs in 15 s, p50 **56.5 ms**.
@@ -1399,10 +1413,29 @@ W13 gate, on the build that was rolled Sep 26 16:37 UTC
   rmdir 2.9 ms.
 
 W11's chunked snapshot is running on this build (see the Sep 27 note
-below). Do not switch 19810 to RDMA until a 9-host posix is 200/201
-again. Do not start partitioned flush. Do not raise `l0_max`, the
-memtable, or the election timeout. `EFSD_ENV` is space-separated.
-The next server restart is a build-id change → `tests/roll_efsd.sh --all`.
+below). The live RDMA switch was tried Sep 27 and rolled back: 9-host
+posix was 193–196/201 in 385 s
+(`results/posix/20260927-044348`), against the TCP 200/201 in 31 s.
+19810 is TCP again (`4c6a5acefe03-dirty`). Partitioned flush is
+in this build (one L0 file per `key[0]`; compaction rewrites one
+range). The RDMA mkdir gap is diagnosed on the private cluster and
+fixed in tree, not rolled: the shared recv poller slept 100 ms after
+acking a CQ event (11 of 100 mkdirs), and every SEND called
+`ibv_query_qp` plus a sysfs read (~380 µs raft RTT vs ~15 µs TCP).
+After both fixes, 100 mkdirs were 642 ms on RDMA vs 507 ms on TCP,
+raft RTT ~50 µs (`~/efs-runs/rdmaprof7.log`). A later run's wall was
+one 1.5 s mkdir plus three BUSY retries; the other 99 were 2–7 ms.
+Do not switch 19810 on that private number.
+
+Sep 27 dd rebaseline (TCP, 8 GiB `conv=fsync`, FUSE_OK,
+`results/measure/20260927-053506-dd-wall`): 1-client **977** MiB/s,
+4-client **1984**. The 9-client row is INVALID: fcstor009 and
+fcstor013 `fsync` returned EIO (`EFS_ERR_NOT_FOUND` from report
+after the data sync). A REAP_DONE tail was ~8/s during the run
+(commit==applied). Do not quote 1464.
+Do not raise `l0_max`, the memtable, or the election timeout. `EFSD_ENV` is
+space-separated. The next server restart is a build-id change →
+`tests/roll_efsd.sh --all`.
 
 **Txn finisher (Sep 26, `src/server/raft_host.c` `host_txn_commit`).**
 A compaction stall longer than the 400 ms apply wait turns an in-flight
@@ -1772,8 +1805,8 @@ fcstor013 failed only `names_crazy_dirs` (15 s). `dir_deep_nesting`,
 (`results/posix/20260927-033723`). W9's pin rules are on the nine
 clients. Posix 1, posix 2 (59/63), the leak gate, and the
 1M-file RSS walk are done (`results/measure/20260927-w9-walk`).
-W10's private empty-mkdir
-passed 5/5; the live cluster stays TCP.
+W10's private empty-mkdir passed 5/5. The live switch failed the
+9-host suite and was rolled back the same hour; 19810 stays TCP.
 The idle 50 ms create+close median did not hold: Sep 24 15:03 UTC on
 the live mount, term stable, `md_latency.py` was mkdir 5.9 /
 create+close 4.1 / append+close 6.1 / stat 0.3 / unlink 1.6 / rmdir
@@ -2417,10 +2450,10 @@ steps use.
 
 | item | question | recommended | why, in one line |
 | --- | --- | --- | --- |
-| W13 | full-L1 compaction holds the apply path 2.4 s and costs a term | **done Sep 26** — background compactor; partitioned flush is the follow-on, not started | the merge no longer holds `l->mu`/`h->mu`; `apply_max` stayed under 70 ms across ~2 s / ~760 MiB rewrites (`results/posix/20260926-164123`) |
-| W11 | the KV export is larger than one 4 MiB SNAP command, so the log never truncates | **done Sep 27** — chunked InstallSnapshot of a file; import is a sorted diff | logs under 5 KB; fcstor005 rejoined in 510 ms; `apply_max` 0 on a 386 MB export. 9-host posix 200/201 (`results/posix/20260927-033723`, 30.4–31.3 s) |
-| W9 | bound the client staging table | **done Sep 27** — in-flight pin, append-reservation pin, chunk maps before the row, and the evictor walks past a pinned oldest window | a cold stat of 1M files leveled at 233 MB RSS (`results/measure/20260927-w9-walk`). posix 2 is 59/63. Leaks are clean (`results/leaks/20260927-035622`) |
-| W10 | RDMA needs an empty table to gate | **no wipe.** Gate on the private 3-node cluster (`tests/rdma_first_inode.sh`, fcstor007, port 19950), then switch 19810 to RDMA in place | the bug only needs an *empty* table, and the private cluster is one; a populated 19810 already ran millions of RDMA creates clean, so the live switch needs no wipe. Keep the wipe for when W11's gate wants a table that grows from zero |
+| W13 | full-L1 compaction holds the apply path 2.4 s and costs a term | **done Sep 26**, partitioned flush rolled Sep 27 on TCP | background compactor kept `apply_max` under 70 ms. Flush now writes one L0 file per `key[0]`; one compact leaves the other range's L1 file in place (`test_kv_lsm`) |
+| W11 | the KV export is larger than one 4 MiB SNAP command, so the log never truncates | **done Sep 27** — chunked InstallSnapshot of a file; import is a sorted diff | logs under 5 KB; fcstor005 rejoined in 510 ms; `apply_max` 0 on a 386 MB export. 9-host posix 200/201 (`results/posix/20260927-123717`) |
+| W9 | bound the client staging table | **done Sep 27** — in-flight pin, append-reservation pin, chunk maps before the row, and the evictor walks past a pinned oldest window | a cold stat of 1M files leveled at 233 MB RSS (`results/measure/20260927-w9-walk`). posix 2 is 63/63 (`results/posix2/20260927-123946`). Leaks are clean (`results/leaks/20260927-035622`) |
+| W10 | RDMA needs an empty table to gate | **rolled back Sep 27.** Private mkdir is in the TCP range after two transport fixes; 19810 stays TCP | `results/posix/20260927-044348` was the failed live switch. Private 100-mkdir: 642 ms RDMA vs 507 ms TCP (`~/efs-runs/rdmaprof7.log`). Do not switch 19810 without a live gate |
 
 ---
 
@@ -2711,7 +2744,39 @@ Steps, once ratified:
   fd, or pinned by an in-flight op. Bounding it by dropping records instead of
   refetching them.
 
-##### W10 — RDMA empty-table first `mkdir` — gate on the private cluster, no wipe
+##### W10 — RDMA empty-table first `mkdir` — live switch rolled back Sep 27
+
+Private gate passed 5/5 (`tests/rdma_first_inode.sh` on fcstor007).
+The live switch (`EFSD_ENV='EFS_TRANSPORT=rdma EFS_RAFT_OBS=1'`,
+`roll_efsd.sh --all`, clients remounted `EFS_TRANSPORT=rdma`) did not
+match TCP. 9-host posix jobs=1 was 193–196/201, skip
+`mmap_write_read`, 0 not-run, duration 385 s on every host
+(`results/posix/20260927-044348`). The TCP bar on this tree is
+200/201 in 30.4–31.3 s. What failed that passes on TCP: the many-op
+tests (`dir_deep_nesting`, `dir_deep_nesting_beyond_64`,
+`names_crazy_dirs`, and on some hosts `concurrent_creates_same_dir`
+and `mtime_monotonic_many_writes`) hit the 15 s cap, plus a few
+EIO/EEXIST one-offs. During that run `apply_max` on fcstor003 stayed
+under 1 ms. Step 5 rolled 19810 back to
+`EFS_TRANSPORT=tcp EFS_RAFT_OBS=1` the same hour; clients
+fcstor007–015 are TCP and a mkdir/rmdir on fcstor007 returned
+immediately. Freeze, idle `md_latency`, and the dd rebaseline were
+not run on RDMA. Do not debug this on the live cluster.
+
+The private-cluster gap (100 mkdirs, fcstor007, ports 19950–19952)
+was two bugs in `src/common/rdma.c`, both fixed in tree and not
+rolled. The shared recv poller acked the completion-channel event
+and then slept 100 ms, so a work completion already in the CQ
+stalled every conn (11 of 100 mkdirs; 9-host posix then hit the
+15 s cap). It now harvests again before a 1 ms backstop. Every
+SEND also called `ibv_query_qp` and read a port counter, which made
+a raft AppendEntries ~380 µs against ~15 µs on TCP; those reads
+happen only after a send has already failed. With both fixes, one
+clean run was 642 ms RDMA vs 507 ms TCP and raft RTT ~50 µs
+(`~/efs-runs/rdmaprof7.log`). 19810 stays TCP until a live gate.
+
+The steps below are the procedure that was followed, kept so the
+gate stays findable.
 
 The client connection-pool lifecycle fix is in tree and unit-gated
 (`test_conn_fd`): a pooled conn pins its socket identity, checkout evicts on
@@ -2846,7 +2911,14 @@ Steps, once ratified (after W13's step 1, which builds the pinned view):
 Gate is at the top of §1b. Steps 1–4 landed: pinned view, background
 compactor, flush no longer compacts, and the 9-host suite kept
 `apply_max` under 100 ms with no term change. Step 5 (partitioned
-flush) is not started.
+flush) is in the TCP build rolled Sep 27 05:07 UTC. A flush writes
+one L0 file per `key[0]` (at most 16 on efs keys, shard in the first
+two bytes). Compaction merges one of those ranges plus the L1 files
+that overlap it, and cuts an output file when the range changes, so
+the next cycle does not rewrite the other ranges. `make test` on
+fcstor014 passed, including `test_partitioned_flush`. The live table's
+existing L1 files are still wide until the next compaction rewrites
+them; the byte bound is the steady state after that.
 
 Measured Sep 21 (`results/measure/20260921-220933-w8-stall-timeline/obs-*.txt`):
 `kv_compact_locked` runs inside the apply path under `l->mu` + `h->mu`,

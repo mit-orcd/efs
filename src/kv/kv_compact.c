@@ -1,12 +1,13 @@
 /* Turning the memtable into segments, and segments into fewer segments.
  *
- * Flush writes the memtable out as one L0 segment; L0 segments have
- * overlapping key ranges, so a read consults all of them newest-first.
- * Compaction merges every L0 plus the L1 segments whose ranges they touch
- * into fresh disjoint L1 segments, so a read consults at most one of those.
- * Both publish by writing the MANIFEST, which is the only authority on
- * which segment files are live; the old files are unlinked once nothing
- * still pins them.
+ * Flush writes the memtable as one L0 segment per key[0] range. Those
+ * files do not overlap, so a read skips every L0 whose range misses the
+ * key, and compaction merges one range plus the L1 segments that overlap
+ * it. A segment left by an older flush that itself spans several ranges
+ * is still compacted whole, and the output is split on the range boundary
+ * so the next cycle is narrow. L1 segments stay disjoint. Both publish
+ * by writing the MANIFEST, which is the only authority on which segment
+ * files are live; the old files are unlinked once nothing still pins them.
  *
  * kv_flush_locked and kv_maybe_flush_locked are called with l->mu held.
  * kv_compact_locked is too, but async=1 drops the lock for the merge:
@@ -22,48 +23,119 @@
 #include <time.h>
 #include <unistd.h>
 
+static int key_range(const uint8_t *key, uint32_t klen)
+{
+    return klen ? (int)key[0] : 0;
+}
+
+static void flush_drop_new(struct kv_lsm *l, struct seg_slot *neu, uint32_t n)
+{
+    uint32_t i;
+
+    for (i = 0; i < n; i++) {
+        char path[KV_LSM_PATH_MAX + 64];
+
+        kv_seg_path(l, 0, neu[i].seq, path, sizeof(path));
+        if (neu[i].seg)
+            kv_seg_close(neu[i].seg);
+        unlink(path);
+    }
+}
+
 int kv_flush_locked(struct kv_lsm *l)
 {
     char path[KV_LSM_PATH_MAX + 64];
+    struct seg_slot neu[256];
     struct kv_seg_w *w = NULL;
-    struct kv_seg *s = NULL;
-    uint64_t seq;
-    uint32_t i;
-    int rc;
+    uint32_t nneu = 0, i, runs = 0;
+    int cur = -1, prev = -1;
+    int rc = EFS_OK;
 
     if (l->mt.n == 0)
         return EFS_OK;
-    if (l->n_l0 >= KV_LSM_MAX_SEGS)
+    for (i = 0; i < l->mt.n; i++) {
+        int r = key_range(l->mt.e[i]->key, l->mt.e[i]->klen);
+
+        if (r != prev) {
+            runs++;
+            prev = r;
+        }
+    }
+    if (runs > 256 || l->n_l0 + runs > KV_LSM_MAX_SEGS)
         return EFS_ERR_BUSY;
-    seq = l->next_seq++;
-    kv_seg_path(l, 0, seq, path, sizeof(path));
-    rc = kv_seg_w_open(path, &w);
-    if (rc != EFS_OK)
-        return rc;
+    memset(neu, 0, sizeof(neu));
     for (i = 0; i < l->mt.n; i++) {
         struct kv_ent *e = l->mt.e[i];
+        int r = key_range(e->key, e->klen);
+
+        if (r != cur) {
+            if (w) {
+                struct kv_seg *s = NULL;
+                uint64_t seq = neu[nneu].seq;
+
+                rc = kv_seg_w_finish(w);
+                w = NULL;
+                if (rc != EFS_OK)
+                    goto fail;
+                kv_seg_path(l, 0, seq, path, sizeof(path));
+                rc = kv_seg_open(path, &s);
+                if (rc != EFS_OK) {
+                    unlink(path);
+                    goto fail;
+                }
+                neu[nneu].seg = s;
+                neu[nneu].level = 0;
+                nneu++;
+            }
+            if (nneu >= 256) {
+                rc = EFS_ERR_BUSY;
+                goto fail;
+            }
+            neu[nneu].seq = l->next_seq++;
+            kv_seg_path(l, 0, neu[nneu].seq, path, sizeof(path));
+            rc = kv_seg_w_open(path, &w);
+            if (rc != EFS_OK)
+                goto fail;
+            cur = r;
+        }
         rc = kv_seg_w_add(w, e->op, e->key, e->klen, e->val, e->vlen);
         if (rc != EFS_OK) {
             kv_seg_w_abort(w);
-            return rc;
+            w = NULL;
+            goto fail;
         }
     }
-    rc = kv_seg_w_finish(w);
-    if (rc != EFS_OK)
-        return rc;
-    rc = kv_seg_open(path, &s);
-    if (rc != EFS_OK)
-        return rc;
-    memmove(&l->l0[1], &l->l0[0], l->n_l0 * sizeof(l->l0[0]));
-    l->l0[0].seg = s;
-    l->l0[0].seq = seq;
-    l->l0[0].level = 0;
-    l->n_l0++;
+    if (w) {
+        struct kv_seg *s = NULL;
+        uint64_t seq = neu[nneu].seq;
+
+        rc = kv_seg_w_finish(w);
+        w = NULL;
+        if (rc != EFS_OK)
+            goto fail;
+        kv_seg_path(l, 0, seq, path, sizeof(path));
+        rc = kv_seg_open(path, &s);
+        if (rc != EFS_OK) {
+            unlink(path);
+            goto fail;
+        }
+        neu[nneu].seg = s;
+        neu[nneu].level = 0;
+        nneu++;
+    }
+    memmove(&l->l0[nneu], &l->l0[0], l->n_l0 * sizeof(l->l0[0]));
+    for (i = 0; i < nneu; i++)
+        l->l0[i] = neu[nneu - 1 - i];
+    l->n_l0 += nneu;
     rc = kv_manifest_write(l);
     if (rc != EFS_OK)
         return rc;
     kv_mtab_clear(&l->mt);
     return kv_wal_reset(l->wal);
+
+fail:
+    flush_drop_new(l, neu, nneu);
+    return rc;
 }
 
 /* True when seg's key range intersects [lo,hi]. */
@@ -87,6 +159,7 @@ struct compact_ctx {
     uint64_t bytes;
     struct seg_slot out[KV_LSM_MAX_SEGS];
     uint32_t n_out;
+    int range;
     int rc;
 };
 
@@ -144,7 +217,8 @@ static int compact_emit(struct compact_ctx *c, uint8_t op, const uint8_t *key,
     char path[KV_LSM_PATH_MAX + 64];
     int rc;
 
-    if (c->w && kv_seg_w_bytes(c->w) >= KV_LSM_L1_TARGET) {
+    if (c->w && (kv_seg_w_bytes(c->w) >= KV_LSM_L1_TARGET ||
+                 c->range != key_range(key, klen))) {
         c->bytes += kv_seg_w_bytes(c->w);
         rc = kv_seg_w_finish(c->w);
         c->w = NULL;
@@ -156,6 +230,7 @@ static int compact_emit(struct compact_ctx *c, uint8_t op, const uint8_t *key,
     if (!c->w) {
         if (c->n_out >= KV_LSM_MAX_SEGS)
             return EFS_ERR_BUSY;
+        c->range = key_range(key, klen);
         c->seq = take_seq(c->l);
         c->out[c->n_out].seq = c->seq;
         c->out[c->n_out].level = 1;
@@ -167,9 +242,10 @@ static int compact_emit(struct compact_ctx *c, uint8_t op, const uint8_t *key,
     return kv_seg_w_add(c->w, op, key, klen, val, vlen);
 }
 
-/* Merges every L0 plus the L1 segments overlapping their range into fresh
- * L1 runs, so cost tracks overlapping data rather than the whole store.
- * Caller holds l->mu. async=1 releases it across the file merge. */
+/* Merges one key[0] range of L0, plus the L1 segments overlapping it,
+ * into fresh L1 runs. A wide L0 (several ranges in one file) still pulls
+ * every L0 so the old shape drains in one pass. Caller holds l->mu.
+ * async=1 releases it across the file merge. */
 int kv_compact_locked(struct kv_lsm *l, int async)
 {
     struct msrc src[KV_LSM_MAX_SEGS * 2];
@@ -185,6 +261,9 @@ int kv_compact_locked(struct kv_lsm *l, int async)
     int rc = EFS_OK;
     int have_range = 0;
     int held = 1;
+    int wide = 0;
+    int chosen = -1;
+    int count[256];
     uint64_t t0;
 
     if (l->n_l0 == 0)
@@ -192,17 +271,53 @@ int kv_compact_locked(struct kv_lsm *l, int async)
     memset(src, 0, sizeof(src));
     memset(priv, 0, sizeof(priv));
     memset(&c, 0, sizeof(c));
+    memset(count, 0, sizeof(count));
     c.l = l;
+    c.range = -1;
     n_l0_in = l->n_l0;
     for (i = 0; i < l->n_l0; i++) {
         const uint8_t *fk = NULL, *lk = NULL;
         uint32_t fl = 0, ll = 0;
+        int rlo, rhi;
 
         if (kv_seg_first_key(l->l0[i].seg, &fk, &fl) != EFS_OK)
             continue;
         rc = kv_seg_last_key(l->l0[i].seg, &lk, &ll);
         if (rc != EFS_OK)
             return rc;
+        rlo = key_range(fk, fl);
+        rhi = key_range(lk, ll);
+        if (rlo != rhi)
+            wide = 1;
+        else if (rlo >= 0 && rlo < 256)
+            count[rlo]++;
+    }
+    if (!wide) {
+        int best = 0, r;
+
+        for (r = 0; r < 256; r++) {
+            if (count[r] > best) {
+                best = count[r];
+                chosen = r;
+            }
+        }
+        if (chosen < 0)
+            return EFS_OK;
+    }
+    for (i = 0; i < l->n_l0; i++) {
+        const uint8_t *fk = NULL, *lk = NULL;
+        uint32_t fl = 0, ll = 0;
+        int rlo, rhi;
+
+        if (kv_seg_first_key(l->l0[i].seg, &fk, &fl) != EFS_OK)
+            continue;
+        rc = kv_seg_last_key(l->l0[i].seg, &lk, &ll);
+        if (rc != EFS_OK)
+            return rc;
+        rlo = key_range(fk, fl);
+        rhi = key_range(lk, ll);
+        if (!wide && (rlo != chosen || rhi != chosen))
+            continue;
         if (!have_range || kv_key_cmp(fk, fl, lo, lol) < 0) {
             lo = fk;
             lol = fl;
@@ -230,7 +345,8 @@ int kv_compact_locked(struct kv_lsm *l, int async)
         n_drop++;
     }
     t0 = mono_ms();
-    fprintf(stderr, "kv-compact: start l0=%u inputs=%u\n", n_l0_in, n_drop);
+    fprintf(stderr, "kv-compact: start l0=%u inputs=%u range=%d\n", n_l0_in,
+            n_drop, wide ? -1 : chosen);
     if (async) {
         pthread_mutex_unlock(&l->mu);
         held = 0;
@@ -471,16 +587,24 @@ int kv_maybe_flush_locked(struct kv_lsm *l)
     /* The only stall left: L0 is at the engine cap, so the writer waits
      * until the compactor publishes. That is 16x behind (l0_max is 4);
      * log it. Inline compact only if the thread never started. */
-    while (l->n_l0 >= KV_LSM_MAX_SEGS && !l->io_failed) {
+    /* A flush may add one file per key range, so wait until that many
+     * slots are free, not merely until one slot is. */
+    while (l->n_l0 + KV_LSM_RANGE_MAX > KV_LSM_MAX_SEGS && l->n_l0 > 0 &&
+           !l->io_failed) {
+        uint32_t before;
+
         if (!l->bp_logged) {
             fprintf(stderr, "kv-compact: backpressure n_l0=%u\n", l->n_l0);
             l->bp_logged = 1;
         }
         if (!l->compact_started) {
+            before = l->n_l0;
             rc = kv_compact_locked(l, 0);
             if (rc != EFS_OK)
                 return rc;
-            break;
+            if (l->n_l0 >= before)
+                break;
+            continue;
         }
         compact_kick(l);
         pthread_cond_wait(&l->cv, &l->mu);

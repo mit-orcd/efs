@@ -25,6 +25,147 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 27 2026 — posix suites, and the snapshot window that elected
+
+9-host suite 1 on TCP (`results/posix/20260927-123717`, screen
+12:37:17–12:37:52Z): every host 200 pass, `mmap_write_read` SKIP
+(`MAP_SHARED` ENODEV), 0 fail, 0 not-run. Compare still exits 1
+because it counts that SKIP as an EFS bug. posix2
+(`results/posix2/20260927-123946`): 63/63 in 58.0 s, rc=0.
+Group 0 stayed term 7858 and group 2 stayed term 1719 through the
+9-host run.
+
+Two earlier 9-host runs the same morning (`20260927-121916`,
+`posix9b`) were not this. `os.makedirs` of a fresh test directory
+returned EBUSY, some hosts aborted on the uncaught `OSError`, and
+the rest were cut. `apply_max` was under 1 ms. fcstor006's log
+shows the cause: `raft-snap: start group=2` and then ~200 term
+changes, commit frozen at 11164719 while fcstor005's commit moved
+on. `send_snap` returns `EFS_ERR_AGAIN` for the whole export
+(`host_snap_open` while `snap_exporting`). `send_ae` treated that
+as success and sent nothing. The peer's election timer fired, the
+vote request carried a higher term, and `maybe_step_down` dropped
+the leader even though the log was not up to date enough to win.
+`send_ae` now sends an empty AppendEntries in that window (not on
+the `data_only` flush path). `on_ae_req` resets the timer before it
+rejects a `prev_index` the follower does not have.
+
+posix2's earlier 59/63 (`results/posix2/20260927-035212`) and the
+mid-fix 57/63 were three data-path bugs, all on the build that
+posix2d re-ran:
+
+- `peer_shared_pwrite` lost 496 of 1000 half-blocks. `DCACHE_NR`
+  was 8. Sixteen disjoint 4 KiB ranges in one chunk collapsed to
+  one whole-chunk range with `base_gen = EFS_CHUNK_BASE_UNCOND`, so
+  the last fsync published that client's image over the peer.
+  `DCACHE_NR` is 32.
+- `peer_truncate_visible` and `peer_extend_and_truncate` returned
+  EIO. The truncate stub minted a new `candidate_gen` while copying
+  the old objects' nodes and checksums. Objects are named
+  `{ci}.{fi}.{gen}`. The reader GET of the new gen was never PUT
+  (`EFS_ERR_DECODE`, fuse `efs_rc=-9`). When `got.generation != 0`
+  the stub now keeps that generation, so apply sees
+  `committed == candidate` and leaves the chunk row. The client
+  already rewrites the zeroed tail before setattr.
+- `peer_overlap_pwrite_partial` and `chunk_straddle` kept the
+  previous pwrite's ranges after a successful report. The next
+  pwrite merged into that span and a STALE replay painted the old
+  image over the peer's exclusive tail. `dcache_note_committed`
+  clears `nrange` when the slot is not dirty.
+
+An every-read `pull_chunks_range` was tried and removed. GETCHUNKS
+`NOT_FOUND` became EIO on an open fd after unlink, and the posix2
+holder script turns that into an empty read. Do not put that pull
+back on the read path.
+
+## Sep 27 2026 — dd rebaseline on TCP
+
+8 GiB `dd bs=1M conv=fsync`, own file per client, flush in the
+clock, every mount `fuse.efs-fuse` (`results/measure/20260927-053506-dd-wall`).
+Preflight refused because both groups were committing ~8 entries/s;
+the leader log tail was `REAP_DONE` from the million-file unlink,
+commit==applied, no client. The run was taken with that noted.
+1 client (fcstor007) 8.388 s, **977 MiB/s**. 4 clients (007–010)
+16.42–16.52 s, aggregate **1984 MiB/s**. 9 clients all wrote
+8589934592 bytes in ~50.2 s, but fcstor009 and fcstor013 returned
+`fsync` EIO: `fsync-split` `rc=-3` (`EFS_ERR_NOT_FOUND`) from
+`efs_client_report_dirty_ino` after flush ~10 s and report 13–18 s.
+That row is INVALID. Do not quote the 1464 the harness printed
+from the walls. Sep 18 was 639 / 251 / 202; Sep 21 was 499 / 176
+with the 9-client row also invalid.
+
+## Sep 27 2026 — RDMA mkdir gap, two transport bugs
+
+A private 3-node cluster on fcstor007 (ports 19950–19952, not
+19810) made the live posix failure reproducible without the reap
+tail. 100 mkdirs were ~2× to ~7× TCP, and the histogram had a
+mode at 100–108 ms (11 of 100). RPC-PROF put that time in recv,
+with `busy_n=0`. The shared recv poller acked the completion
+channel and then `poll`ed it for 100 ms. Acking consumes the
+event for a CQE that landed in between, so the WC sat in the CQ
+until the tick, and that one poller stalled every conn. The
+poller now harvests again before a 1 ms backstop.
+
+That removed the 100 ms mode and left a raft AppendEntries at
+~380 µs against ~15 µs on TCP. The send-CQE wait itself was 1 µs.
+Every `efs_rdma_send_frame` called `ibv_query_qp` and opened the
+port-counter sysfs file before posting, so the failure dump could
+show the QP state at post time. Those reads now happen only after
+a send has already failed. A clean rerun was 642 ms RDMA vs 507 ms
+TCP for 100 mkdirs, raft RTT ~50 µs
+(`~/efs-runs/rdmaprof7.log`). A later run's wall was one 1.5 s
+mkdir and three BUSY retries; the other 99 were 2–7 ms. 19810
+stays TCP. The send path also spins ~200 µs before `sched_yield`,
+because a yield on the first miss gave the core away for the rest
+of a timeslice.
+
+## Sep 27 2026 — partitioned flush, and the RDMA mkdir gap
+
+W13 step 5. A memtable flush used to write one L0 segment spanning
+every key, so every compaction rewrote all of L1. The flush now
+writes one L0 file per distinct `key[0]`. efs keys store the shard
+in the first two bytes, so that is at most 16 files. Compaction
+merges the fullest of those ranges and the L1 segments that overlap
+it, and starts a new output file when the key range changes. A
+segment that already spans several ranges is still compacted whole,
+once, so the old files drain. `make test` on fcstor014 passed
+(`test_partitioned_flush`: two ranges, two L0 files, and compacting
+one leaves the other range's L1 file on disk). `roll_efsd.sh --all`
+with `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1` (`pflush-roll`) put that
+binary on 19810. A mkdir/rmdir on fcstor007 returned immediately.
+
+The same hour, a private 3-node cluster on fcstor007 (ports
+19950–19952, not 19810) timed 100 mkdirs: TCP 1000 ms, RDMA 2246 ms.
+That is the gap the live 9-host suite hit (193–196/201, 385 s).
+The two causes and the private rerun are in the section above.
+19810 stays TCP.
+
+## Sep 27 2026 — live RDMA switch rolled back
+
+W10 step 1 had already passed (private empty-table mkdir, 5/5 on
+fcstor007). After the million-file tree delete finished, all four
+servers were rolled with `EFSD_ENV='EFS_TRANSPORT=rdma EFS_RAFT_OBS=1'`
+(`w10roll`, `ROLL_OK`, build `4c6a5acefe03-dirty` on every node) and
+fcstor007–015 were remounted with `EFS_TRANSPORT=rdma`. A single
+mkdir/rmdir on fcstor007 returned immediately. The 9-host posix
+jobs=1 did not match TCP: 193–196/201, skip `mmap_write_read`, 0
+not-run, 385 s on every host
+(`results/posix/20260927-044348`). The TCP bar is 200/201 in
+30.4–31.3 s (`results/posix/20260927-033723`). The failures that
+pass on TCP are the many-op tests hitting the 15 s cap
+(`dir_deep_nesting`, `dir_deep_nesting_beyond_64`, `names_crazy_dirs`,
+and on some hosts `concurrent_creates_same_dir` and
+`mtime_monotonic_many_writes`) plus a few EIO and EEXIST one-offs.
+`apply_max` on fcstor003 during that window stayed under 1 ms, so
+it was not the compactor. A REAP_DONE tail from the deleted tree
+was still committing before the suite, and group 0's term moved
+during the run; the suite was still several times the TCP wall and
+step 5 says that is a rollback, not a debugging session. The same
+`roll_efsd.sh --all` with `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1`
+(`w10back`) brought 19810 back, the nine clients were remounted
+TCP, and a mkdir/rmdir on fcstor007 returned immediately. Freeze,
+idle md_latency, and the dd rebaseline were not run.
+
 ## Sep 27 2026 — chunked InstallSnapshot, and the import that held the pump
 
 The first roll of chunked snapshots truncated every raft.log from

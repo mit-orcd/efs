@@ -35,9 +35,28 @@ on-disk `du` of `/data1/0*/efs` (× ~1.5 for 2+1 EC).
   best 724). `FIO_SKIP1=1` skips the 1-client sweep; `FIO_ONLY=1` skips 4/9.
   Prior: `results/perf/20260917-honest/` plus `results/perf/20260918-dd-1c/`.
 
-## Current numbers (Sep 17–18, Raft+KV, 19810, TCP) — MiB/s
+## Latest dd (Sep 27, TCP, flush in the clock)
 
-4- and 9-client **writes share a ceiling and get worse, not better.**
+8 GiB `dd bs=1M conv=fsync`, own file, `FUSE_OK`, on-disk size
+8589934592. `results/measure/20260927-053506-dd-wall`. A REAP_DONE
+tail was ~8/s (commit==applied, no client); the idle-commit gate
+was skipped for that reason only.
+
+| clients | aggregate MiB/s | slowest wall |
+| --- | --- | --- |
+| 1 | **977** | 8.388 s |
+| 4 | **1984** | 16.515 s (16.42–16.52 s) |
+| 9 | **INVALID** | fsync EIO on fcstor009 and fcstor013 |
+
+1→4 is 2.0×, not the Sep 18 collapse. Do not quote a 9-client rate
+from this run: both EIO files are still 8 GiB, and
+`fsync-split` logged `rc=-3` (`EFS_ERR_NOT_FOUND`) from
+`efs_client_report_dirty_ino` after flush ~10 s and report 13–18 s.
+The harness printed 1464 from the walls; that number is not a result.
+
+## Prior dd and fio (Sep 17–18, Raft+KV, 19810, TCP) — MiB/s
+
+On Sep 18, 4- and 9-client **writes shared a ceiling and got worse.**
 8 GiB dd+fsync own-file: 1-client **639**, 4-client **251** (0.41×),
 9-client first-write **202** (0.32×). That is 3.8 % / 0.46 % / 0.37 % of
 the 16.7 / 44 / 44 GB/s ceilings. Do not quote 9-client 007–010 13–31 s
