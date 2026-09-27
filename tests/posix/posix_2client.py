@@ -1877,18 +1877,31 @@ def run_step_index(name, idx, d, ab_side=None):
         fn(d)
 
 
-def write_results(path, host_a, host_b, mnt, npass, nfail, dt, quiet=False):
+def write_results(path, host_a, host_b, mnt, npass, nfail, dt, quiet=False,
+                  selected=None, done=False):
+    """Write the TSV. `# complete` is only for a finished selection.
+
+    Remote runs rewrite this file after every test. Those snapshots list
+    the full selected inventory but omit the marker, so a prefix of PASS
+    rows is not a successful comparison.
+    """
+    selected = list(selected or [])
+    have = set(name for name, _res, _detail in RESULTS)
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
         f.write("# posix-2client host_a=%s host_b=%s mnt=%s %s\n" %
                 (host_a, host_b, mnt,
                  time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())))
+        for name in selected:
+            f.write("# select\t%s\n" % name)
         f.write("test\tresult\tdetail\n")
         for name, res, detail in RESULTS:
             f.write("%s\t%s\t%s\n" %
-                    (name, res, detail.replace("\n", " ")))
+                    (name, res, (detail or "").replace("\n", " ")))
         f.write("# summary pass=%d fail=%d skip=0 total=%d dur=%.1f\n" %
                 (npass, nfail, npass + nfail, dt))
+        if done and selected and set(selected) <= have:
+            f.write("# complete\n")
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)
@@ -1913,6 +1926,7 @@ def run_local(mnt_a, mnt_b, results_file, filt, keep):
         print("ERROR: %s missing on B — remount B after --prepare" % parent_b)
         return 2
 
+    selected = [t[0] for t in _matched(filt)]
     npass = nfail = 0
     t0 = time.time()
     try:
@@ -1957,7 +1971,7 @@ def run_local(mnt_a, mnt_b, results_file, filt, keep):
           (npass, total, nfail, dt))
     if results_file:
         write_results(results_file, "local-a", "local-b", mnt_a,
-                      npass, nfail, dt)
+                      npass, nfail, dt, selected=selected, done=True)
     return 0 if nfail == 0 else 1
 
 
@@ -2032,6 +2046,7 @@ def run_remote(host_a, host_b, mnt, ssh, script, results_file, filt):
             print(err)
         return 2
 
+    selected = [t[0] for t in _matched(filt)]
     for name, steps, _doc in TESTS:
         if filt and filt not in name:
             continue
@@ -2056,7 +2071,8 @@ def run_remote(host_a, host_b, mnt, ssh, script, results_file, filt):
             print("pass %-32s" % name, flush=True)
         if results_file:
             write_results(results_file, host_a, host_b, mnt, npass, nfail,
-                          time.time() - t0, quiet=True)
+                          time.time() - t0, quiet=True, selected=selected,
+                          done=False)
 
     dt = time.time() - t0
     total = npass + nfail
@@ -2064,7 +2080,8 @@ def run_remote(host_a, host_b, mnt, ssh, script, results_file, filt):
     print("POSIX 2-client: %d/%d pass, %d fail  (%.1fs)" %
           (npass, total, nfail, dt))
     if results_file:
-        write_results(results_file, host_a, host_b, mnt, npass, nfail, dt)
+        write_results(results_file, host_a, host_b, mnt, npass, nfail, dt,
+                      selected=selected, done=True)
     return 0 if nfail == 0 else 1
 
 
@@ -2251,6 +2268,49 @@ def _self_test():
             fails.append("unmatched filter rc=%s" % rc)
         if not os.path.isfile(marker) or open(marker).read() != "stay":
             fails.append("unmatched filter changed existing prepare data")
+    finally:
+        shutil.rmtree(mnt, ignore_errors=True)
+
+    import compare
+    mnt = tempfile.mkdtemp(prefix="posix2-cmp-")
+    try:
+        r1 = os.path.join(mnt, "a.tsv")
+        r2 = os.path.join(mnt, "b.tsv")
+        run = subprocess.run(
+            [sys.executable, os.path.abspath(__file__), "--local", mnt, mnt,
+             "--filter", "peer_create_visible", "--results", r1, "--keep"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if run.returncode != 0:
+            fails.append("peer_create_visible CLI rc=%s" % run.returncode)
+        else:
+            code, lines = compare.compare_files(r1, r1)
+            if code != 0:
+                fails.append("two-client results file does not compare: %s" %
+                             "\n".join(lines[-8:]))
+        run = subprocess.run(
+            [sys.executable, os.path.abspath(__file__), "--local", mnt, mnt,
+             "--filter", "peer_mkdir_visible", "--results", r2, "--keep"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if run.returncode != 0:
+            fails.append("peer_mkdir_visible CLI rc=%s" % run.returncode)
+        else:
+            code, lines = compare.compare_files(r1, r2)
+            text = "\n".join(lines)
+            if code == 0 or "inventory differs" not in text:
+                fails.append("filtered inventories compared as the same run")
+        snap = os.path.join(mnt, "snap.tsv")
+        RESULTS.append(("peer_create_visible", "PASS", ""))
+        try:
+            write_results(snap, "a", "b", mnt, 1, 0, 0.1, quiet=True,
+                          selected=[t[0] for t in _matched("peer_")],
+                          done=False)
+            code, lines = compare.compare_files(snap, snap)
+            text = "\n".join(lines)
+            if code == 0 or "no # complete" not in text:
+                fails.append("remote snapshot was treated as finished")
+        finally:
+            if RESULTS and RESULTS[-1][0] == "peer_create_visible":
+                RESULTS.pop()
     finally:
         shutil.rmtree(mnt, ignore_errors=True)
 

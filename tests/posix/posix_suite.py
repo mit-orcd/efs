@@ -3301,20 +3301,90 @@ def _unlink_quiet(path):
         pass
 
 
+def _reap_pid(pid):
+    """Collect a direct child so a zombie does not keep its process group visible."""
+    if not pid or pid <= 0:
+        return
+    try:
+        os.waitpid(pid, os.WNOHANG)
+    except OSError:
+        pass
+
+
 def _kill_pgid(pgid, grace=0.5):
-    """SIGKILL a process group and wait until it is empty."""
+    """SIGKILL a process group and wait until it is empty.
+
+    The leader is reaped. A killed direct child stays in the group as a
+    zombie until wait/poll, and that used to look like a survivor for the
+    whole grace period.
+    """
     if not pgid or pgid <= 0:
         return True
     try:
         os.killpg(pgid, signal.SIGKILL)
     except OSError:
         pass
+    _reap_pid(pgid)
+    if not _pgid_alive(pgid):
+        return True
     deadline = time.monotonic() + grace
     while time.monotonic() < deadline:
+        _reap_pid(pgid)
         if not _pgid_alive(pgid):
             return True
         time.sleep(0.02)
+    _reap_pid(pgid)
     return not _pgid_alive(pgid)
+
+
+def _stop_registered(procs, budget=1.0):
+    """SIGKILL every group first, then reap under one shared deadline.
+
+    Returns pids whose groups are still occupied. An unreaped zombie is not
+    a survivor. Waiting per group would blow the outer 5s SIGTERM-to-SIGKILL
+    budget once more than a handful of workers are live.
+    """
+    items = []
+    for proc in procs:
+        if hasattr(proc, "poll"):
+            items.append(proc)
+        elif proc:
+            items.append(proc)
+    for proc in items:
+        pid = proc.pid if hasattr(proc, "pid") else int(proc)
+        if pid and pid > 0:
+            try:
+                os.killpg(pid, signal.SIGKILL)
+            except OSError:
+                pass
+
+    def reap():
+        for proc in items:
+            if hasattr(proc, "poll"):
+                try:
+                    proc.poll()
+                except Exception:
+                    pass
+            pid = proc.pid if hasattr(proc, "pid") else int(proc)
+            _reap_pid(pid)
+
+    def survivors():
+        out = []
+        for proc in items:
+            pid = proc.pid if hasattr(proc, "pid") else int(proc)
+            if pid and _pgid_alive(pid):
+                out.append(pid)
+        return out
+
+    deadline = time.monotonic() + budget
+    reap()
+    while True:
+        left = survivors()
+        if not left or time.monotonic() >= deadline:
+            reap()
+            return survivors()
+        time.sleep(0.02)
+        reap()
 
 
 def _pgid_alive(pgid):
@@ -3444,12 +3514,15 @@ def _run_pool(items, jobs, spawn, on_done, kill_group=None, live=None,
     stuck = None
 
     def drop_live(proc):
-        if live is not None and proc.pid in live:
-            live.remove(proc.pid)
+        if live is None:
+            return
+        live[:] = [p for p in live if getattr(p, "pid", p) != proc.pid]
 
     def note_live(proc):
-        if live is not None and proc.pid not in live:
-            live.append(proc.pid)
+        if live is None:
+            return
+        if all(getattr(p, "pid", p) != proc.pid for p in live):
+            live.append(proc)
 
     while (queue or inflight) and stuck is None:
         while queue and len(inflight) < max(1, jobs) and not stop:
@@ -3472,7 +3545,7 @@ def _run_pool(items, jobs, spawn, on_done, kill_group=None, live=None,
             # The child is registered before a deferred signal is allowed
             # to exit. on_cancel does not return.
             if pending is not None and on_cancel is not None:
-                on_cancel(pending)
+                on_cancel(pending, None)
             if raised is not None:
                 raise raised
             inflight.append((name, proc, result, time.monotonic(), timeout))
@@ -3983,16 +4056,23 @@ def _self_test():
             fails.append("SIGINT deleted the test tree while workers were live")
 
         spawn_pid = os.path.join(td, "spawn.pid")
+        spawn_tsv = os.path.join(td, "spawn.tsv")
         rc = _run_cli(
             mnt,
             {"EFS_POSIX_CANCEL_AT_SPAWN": "1", "EFS_POSIX_SPAWN_PID": spawn_pid},
-            ["--filter", "basic_empty_file", "--timeout-s", "20", "--jobs", "1"])
-        if rc == 0:
-            fails.append("cancel-at-spawn exited 0")
+            ["--filter", "basic_empty_file", "--timeout-s", "20", "--jobs", "1",
+             "--results", spawn_tsv])
+        if rc != 128 + signal.SIGTERM:
+            fails.append("cancel-at-spawn rc=%s want signal exit" % rc)
         if not os.path.exists(spawn_pid):
             fails.append("cancel-at-spawn did not reach Popen")
         elif _pids_alive(spawn_pid):
             fails.append("cancel-at-spawn left %s" % _pids_alive(spawn_pid))
+        spawn_text = open(spawn_tsv).read() if os.path.isfile(spawn_tsv) else ""
+        if "TypeError" in spawn_text or "runner exception" in spawn_text:
+            fails.append("cancel-at-spawn took the exception path")
+        if "signal" not in spawn_text:
+            fails.append("cancel-at-spawn missing signal NOTRUN")
 
         hold2 = os.path.join(td, "hold2.pids")
         rc = _run_cli(
@@ -4022,6 +4102,77 @@ def _self_test():
         rc = _run_cli(mnt, {}, ["--filter", "definitely_missing_test"])
         if rc != 2:
             fails.append("unmatched filter rc=%s" % rc)
+
+        sleeper = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            start_new_session=True)
+        t_kill = time.monotonic()
+        killed = _kill_pgid(sleeper.pid, grace=0.5)
+        kill_dt = time.monotonic() - t_kill
+        if not killed or kill_dt >= 0.4 or sleeper.poll() is None:
+            fails.append("zombie leader looked alive (ok=%s dt=%.3f poll=%s)" %
+                         (killed, kill_dt, sleeper.poll()))
+            _kill_pgid(sleeper.pid)
+
+        def _cancel_n(n):
+            pidfile = os.path.join(td, "scale-%d.pids" % n)
+            open(pidfile, "w").close()
+            tsv = os.path.join(td, "scale-%d.tsv" % n)
+            env = os.environ.copy()
+            env.update({
+                "EFS_POSIX_HOLD": "start",
+                "EFS_POSIX_HOLD_S": "60",
+                "EFS_POSIX_SPAWN_PID": pidfile,
+            })
+            proc = subprocess.Popen(
+                [sys.executable, os.path.abspath(__file__), mnt,
+                 "--jobs", str(n), "--timeout-s", "60", "--results", tsv],
+                env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True)
+            try:
+                deadline = time.monotonic() + 45
+                while time.monotonic() < deadline:
+                    got = [ln for ln in open(pidfile) if ln.strip()]
+                    if len(got) >= n or proc.poll() is not None:
+                        break
+                    time.sleep(0.05)
+                got = [ln for ln in open(pidfile) if ln.strip()]
+                if len(got) < n:
+                    fails.append("scale %d: started %d" % (n, len(got)))
+                    return
+                os.kill(proc.pid, signal.SIGTERM)
+                try:
+                    rc_n = proc.wait(timeout=4)
+                except subprocess.TimeoutExpired:
+                    fails.append("scale %d: cleanup exceeded 4s" % n)
+                    return
+                if rc_n != 128 + signal.SIGTERM:
+                    fails.append("scale %d: rc=%s" % (n, rc_n))
+                alive = _pids_alive(pidfile)
+                if alive:
+                    fails.append("scale %d: left %s" % (n, alive))
+                text = open(tsv).read() if os.path.isfile(tsv) else ""
+                if "TypeError" in text or "runner exception" in text:
+                    fails.append("scale %d: exception fallback" % n)
+                if "# complete" in text:
+                    fails.append("scale %d: interrupted run marked complete" % n)
+                if not text:
+                    fails.append("scale %d: no results file" % n)
+            finally:
+                if proc.poll() is None:
+                    try:
+                        os.kill(proc.pid, signal.SIGKILL)
+                    except OSError:
+                        pass
+                    try:
+                        proc.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        pass
+                for tok in open(pidfile).read().split():
+                    _kill_pgid(int(tok))
+
+        for n_workers in (1, 16, 17):
+            _cancel_n(n_workers)
     finally:
         shutil.rmtree(mnt, ignore_errors=True)
 
@@ -4151,11 +4302,7 @@ def main(argv=None):
     gate = _SpawnGate()
 
     def _reap_live():
-        survivors = []
-        for pid in list(live):
-            if not _kill_pgid(pid):
-                survivors.append(pid)
-        return survivors
+        return _stop_registered(list(live), budget=1.0)
 
     def _fill_unfinished(reason):
         nonlocal nnotrun
@@ -4164,7 +4311,7 @@ def main(argv=None):
                 by_name[name] = ("NOTRUN", reason)
                 nnotrun += 1
 
-    def _cut(signum, _frame):
+    def _cut(signum, _frame=None):
         # Defer until an in-progress spawn has been registered. Otherwise
         # the new session is invisible to this handler and keeps running.
         if gate.defer:
@@ -4194,7 +4341,7 @@ def main(argv=None):
         proc = subprocess.Popen(
             [sys.executable, script, "--worker", name, tdir, result],
             start_new_session=True)
-        live.append(proc.pid)
+        live.append(proc)
         pidfile = os.environ.get("EFS_POSIX_SPAWN_PID")
         if pidfile:
             with open(pidfile, "a") as f:

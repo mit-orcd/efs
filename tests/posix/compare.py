@@ -160,6 +160,18 @@ def compare(base, bd, targ, td, base_problems, targ_problems,
     lines.append("  target skipped   : %d  (baseline PASS, target SKIP)" % len(skipped))
     lines.append("  incomplete       : %d  (cut, missing, or NOTRUN)" % len(incomplete))
     lines.append("  target only      : %d" % len(only_t))
+    if not base_complete or not targ_complete:
+        missing_mark = []
+        if not base_complete:
+            missing_mark.append("baseline")
+        if not targ_complete:
+            missing_mark.append("target")
+        lines.append("  not finished     : %s (no # complete marker; "
+                     "this is a snapshot, not a finished run)"
+                     % ", ".join(missing_mark))
+    if list(base_selected) != list(targ_selected):
+        lines.append("  inventory differs: baseline %d ids, target %d ids"
+                     % (len(base_selected), len(targ_selected)))
     if unqualified:
         lines.append("  verdict          : PASS (every test PASS on both sides)")
     else:

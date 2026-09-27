@@ -52,7 +52,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # must be the SAME generator: a divergent copy would silently compare a file
 # against bytes it was never written with.
 from posix_suite import (  # noqa: E402
-    Fail, _SpawnGate, _kill_pgid, _run_pool, _write_status, eq,
+    Fail, _SpawnGate, _kill_pgid, _run_pool, _stop_registered, _write_status, eq,
     format_result_line, rand_bytes, rd, sh, wr)
 
 CHUNK = 128 * 1024
@@ -806,19 +806,27 @@ def _self_test():
             if not os.path.isfile(marker):
                 fails.append("unmatched prepare filter removed prepared data")
         spawn_pid = os.path.join(td, "persist-spawn.pid")
+        boundary_tsv = os.path.join(td, "boundary.tsv")
         proc_env_rc = subprocess.run(
             [sys.executable, os.path.abspath(__file__), mnt,
              "--phase", "prepare", "--filter", "small_file",
-             "--tag", "boundary", "--timeout-s", "20", "--keep"],
+             "--tag", "boundary", "--timeout-s", "20", "--keep",
+             "--results", boundary_tsv],
             env=dict(os.environ, EFS_PERSIST_CANCEL_AT_SPAWN="1",
                      EFS_PERSIST_SPAWN_PID=spawn_pid,
                      EFS_PERSIST_HOLD="start", EFS_PERSIST_HOLD_S="30"),
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(0.2)
-        if proc_env_rc.returncode == 0:
-            fails.append("persist cancel-at-spawn exited 0")
+        if proc_env_rc.returncode != 128 + signal.SIGTERM:
+            fails.append("persist cancel-at-spawn rc=%s want signal exit" %
+                         proc_env_rc.returncode)
         if _pids_alive(spawn_pid):
             fails.append("persist cancel-at-spawn left %s" % _pids_alive(spawn_pid))
+        btext = open(boundary_tsv).read() if os.path.isfile(boundary_tsv) else ""
+        if "TypeError" in btext or "runner exception" in btext:
+            fails.append("persist cancel-at-spawn took the exception path")
+        if "signal" not in btext:
+            fails.append("persist cancel-at-spawn missing signal NOTRUN")
     finally:
         shutil.rmtree(mnt, ignore_errors=True)
         base = os.path.join(mnt, "posix-persist-%s-cli" % host)
@@ -967,7 +975,7 @@ def main(argv=None):
     live = []
     gate = _SpawnGate()
 
-    def _cut(signum, _frame):
+    def _cut(signum, _frame=None):
         # An outer timeout must not leave a worker writing across the
         # unmount that separates prepare from verify. Kill every group
         # still registered, then leave a row for every test not finished.
@@ -975,8 +983,7 @@ def main(argv=None):
             gate.pending = signum
             return
         nonlocal nfail
-        for pid in list(live):
-            _kill_pgid(pid)
+        _stop_registered(list(live), budget=1.0)
         try:
             for name, _fn in selected:
                 if name not in by_name:
@@ -1006,7 +1013,7 @@ def main(argv=None):
         if os.environ.get("EFS_PERSIST_CANCEL_AT_SPAWN"):
             os.kill(os.getpid(), signal.SIGTERM)
         # Register before anything else so a failure here is still cancelled.
-        live.append(proc.pid)
+        live.append(proc)
         if os.environ.get("EFS_PERSIST_RAISE"):
             raise RuntimeError("injected runner failure")
         return proc, result
@@ -1022,8 +1029,7 @@ def main(argv=None):
             lambda name, status, detail: record(name, status, detail) or False,
             live=live, gate=gate, on_cancel=_cut)
     except Exception as exc:
-        for pid in list(live):
-            _kill_pgid(pid)
+        _stop_registered(list(live), budget=1.0)
         for name, _fn in selected:
             if name not in by_name:
                 try:
