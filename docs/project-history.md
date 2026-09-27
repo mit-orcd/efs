@@ -70,8 +70,13 @@ itself. The valgrind leak gate failed once on 36 bytes in
 `test_raft`'s snapshot callbacks (the forced export miss allocated
 the handle, and the receiver kept the assembled bytes) and passed
 after those frees (`results/leaks/20260927-035622`: unit, efsd,
-efs-fuse, and the RDMA phase all 0 definite). The namespace-walk
-RSS gate is the part still open. 19810 stayed on TCP.
+efs-fuse, and the RDMA phase all 0 definite). The first stat of that tree, on a client whose oldest rows were
+still pinned, grew RSS from 264 MB to 622 MB with no plateau: the
+drain treated a full window of pinned entries as "nothing left" and
+never reached the clean files behind them. After the drain walks
+past that window, a cold stat on fcstor013 went from 5 MB to a
+level 233 MB at 1M files
+(`results/measure/20260927-w9-walk`). 19810 stayed on TCP.
 
 ## Sep 26 2026 evening — W13: L1 compaction off the apply path
 

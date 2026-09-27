@@ -1,0 +1,35 @@
+efs-bg: start 2026-09-27T04:21:58Z host=node9901 name=w9stat3 screen=efs-w9stat3
+STAT_START pid=1736026 rss_kb=5348
+n=32000 rss_kb=45496 elapsed=5
+n=94000 rss_kb=60748 elapsed=10
+n=134000 rss_kb=87740 elapsed=15
+n=188000 rss_kb=101456 elapsed=20
+n=238000 rss_kb=116356 elapsed=25
+n=284000 rss_kb=131076 elapsed=30
+n=336000 rss_kb=152448 elapsed=35
+n=400000 rss_kb=168836 elapsed=40
+n=432000 rss_kb=179644 elapsed=46
+n=464000 rss_kb=185844 elapsed=51
+n=496000 rss_kb=189904 elapsed=56
+n=528000 rss_kb=195108 elapsed=61
+n=560000 rss_kb=197760 elapsed=66
+n=590000 rss_kb=200840 elapsed=72
+n=614000 rss_kb=203680 elapsed=77
+n=640000 rss_kb=207724 elapsed=82
+n=662000 rss_kb=210604 elapsed=87
+n=692000 rss_kb=213200 elapsed=92
+n=724000 rss_kb=216992 elapsed=98
+n=750000 rss_kb=218868 elapsed=103
+n=770000 rss_kb=223188 elapsed=108
+n=798000 rss_kb=223928 elapsed=113
+n=828000 rss_kb=224900 elapsed=118
+n=856000 rss_kb=228852 elapsed=123
+n=872000 rss_kb=229724 elapsed=129
+n=896000 rss_kb=230540 elapsed=134
+n=926000 rss_kb=231788 elapsed=139
+n=955500 rss_kb=232952 elapsed=144
+n=980000 rss_kb=232584 elapsed=149
+n=1000000 rss_kb=233340 elapsed=154
+STAT_DONE rss_kb=233340 elapsed=154
+STAT_RC=0
+efs-bg: end 2026-09-27T04:24:32Z rc=0

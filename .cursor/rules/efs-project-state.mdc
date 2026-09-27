@@ -120,7 +120,9 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  rules are on fcstor007–015. Posix 1 passed on the same 200/201 run.
  Posix 2 is 59/63 (`results/posix2/20260927-035212`); the
  shared-pwrite miss did not repeat on its own. The leak gate passed
- (`results/leaks/20260927-035622`). The walk-RSS gate is still open.
+ (`results/leaks/20260927-035622`). A cold stat of 1M files on the
+ fixed evictor leveled at 233 MB RSS
+ (`results/measure/20260927-w9-walk`). W9 is done.
  Partitioned flush stays
  unstarted. `EFSD_ENV` is **space**-separated
  (`env $EFSD_ENV`): a comma form

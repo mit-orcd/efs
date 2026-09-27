@@ -434,12 +434,20 @@ out:
     return dropped;
 }
 
-/* One pass: if over the cap, evict up to EVICT_BATCH oldest unpinned inos.
- * Returns the staged-bytes reading that decided the pass. */
-static uint64_t evict_pass(uint64_t cap, int *evicted)
+/* One pass: if over the cap, evict up to EVICT_BATCH unpinned inos
+ * among the SCAN_BATCH oldest whose touch tick is greater than
+ * min_tick. A fully pinned oldest window used to end the drain, so a
+ * client that still held a few dirty files never reached the clean
+ * ones behind them and the table grew without a bound. *band_full is
+ * 1 when that window was full (newer entries may exist). *band_max is
+ * the newest tick in the window. Returns the staged-bytes reading. */
+static uint64_t evict_pass(uint64_t cap, int *evicted, uint64_t min_tick,
+                           int *band_full, uint64_t *band_max)
 {
     uint64_t bytes;
     *evicted = 0;
+    *band_full = 0;
+    *band_max = min_tick;
 
     efs_client_table_lock();
     bytes = efs_export_staged_bytes(&g_client.export);
@@ -460,13 +468,15 @@ static uint64_t evict_pass(uint64_t cap, int *evicted)
             if (!k)
                 continue;
             uint64_t t = g_lru_ticks[i];
+            if (t <= min_tick)
+                continue;
             if (nc < SCAN_BATCH) {
                 cand[nc].ino = (efs_ino_t)k;
                 cand[nc].tick = t;
                 if (t > worst)
                     worst = t;
                 nc++;
-            } else if (t < worst) {
+            } else if (t < worst && t > min_tick) {
                 uint32_t w = 0;
                 for (uint32_t j = 1; j < nc; j++)
                     if (cand[j].tick > cand[w].tick)
@@ -481,6 +491,10 @@ static uint64_t evict_pass(uint64_t cap, int *evicted)
         }
     }
     pthread_mutex_unlock(&g_lru_mu);
+    *band_full = nc == SCAN_BATCH;
+    for (uint32_t i = 0; i < nc; i++)
+        if (cand[i].tick > *band_max)
+            *band_max = cand[i].tick;
 
     uint32_t evicted_n = 0;
     for (uint32_t i = 0; i < nc && evicted_n < EVICT_BATCH; i++) {
@@ -517,15 +531,25 @@ static void *stage_evict_main(void *arg)
         g_evict_kick = 0;
         pthread_mutex_unlock(&g_evict_mu);
 
-        /* Drain passes until under the cap or nothing is evictable. */
+        /* Drain passes until under the cap or the whole LRU is pinned.
+         * min_tick walks past a pinned oldest window instead of treating
+         * that window as the entire table. */
+        uint64_t min_tick = 0;
         for (int rounds = 0; rounds < 1024; rounds++) {
             int evicted = 0;
-            uint64_t bytes = evict_pass(cap, &evicted);
+            int band_full = 0;
+            uint64_t band_max = 0;
+            uint64_t bytes = evict_pass(cap, &evicted, min_tick,
+                                        &band_full, &band_max);
             if (bytes <= cap)
                 break;
             if (evicted == 0) {
-                /* Everything found is pinned (or already gone): grow —
-                 * pinned data is real work, not cache. Log once. */
+                if (band_full) {
+                    min_tick = band_max;
+                    continue;
+                }
+                /* Every remaining LRU entry is pinned (or already gone):
+                 * grow — pinned data is real work, not cache. Log once. */
                 if (!logged_grow) {
                     logged_grow = 1;
                     fprintf(stderr,
@@ -533,6 +557,7 @@ static void *stage_evict_main(void *arg)
                             "(%llu MB) with nothing evictable; growing "
                             "(pinned data is real work, not cache)\n",
                             (unsigned long long)(cap >> 20));
+                    fflush(stderr);
                 }
                 break;
             }

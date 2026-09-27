@@ -1,0 +1,24 @@
+efs-bg: start 2026-09-27T04:17:47Z host=node9901 name=w9stat2 screen=efs-w9stat2
+STAT_START pid=1734527 rss_kb=263792
+n=54000 rss_kb=308120 elapsed=5
+n=112000 rss_kb=337076 elapsed=10
+n=176000 rss_kb=353916 elapsed=15
+n=240000 rss_kb=372252 elapsed=20
+n=298000 rss_kb=387976 elapsed=25
+n=348000 rss_kb=407520 elapsed=30
+n=400000 rss_kb=419932 elapsed=35
+n=464000 rss_kb=433196 elapsed=40
+n=508000 rss_kb=497652 elapsed=45
+n=560000 rss_kb=512572 elapsed=50
+n=616000 rss_kb=525940 elapsed=55
+n=668000 rss_kb=539308 elapsed=60
+n=724000 rss_kb=553564 elapsed=65
+n=782000 rss_kb=572184 elapsed=71
+n=832000 rss_kb=589012 elapsed=76
+n=896000 rss_kb=601956 elapsed=81
+n=946000 rss_kb=615472 elapsed=86
+n=999000 rss_kb=621508 elapsed=91
+n=1000000 rss_kb=621508 elapsed=96
+STAT_DONE rss_kb=621508 elapsed=96
+STAT_RC=0
+efs-bg: end 2026-09-27T04:19:23Z rc=0

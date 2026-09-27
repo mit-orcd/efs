@@ -1770,8 +1770,9 @@ fcstor013 failed only `names_crazy_dirs` (15 s). `dir_deep_nesting`,
 (`results/posix/20260926-164123`). W13 is done. W11 is done
 (Sep 27): 9-host posix is 200/201 again
 (`results/posix/20260927-033723`). W9's pin rules are on the nine
-clients; posix 1 passed with that run. Walk-RSS, posix 2, and the
-valgrind leak gate have not been run. W10's private empty-mkdir
+clients. Posix 1, posix 2 (59/63), the leak gate, and the
+1M-file RSS walk are done (`results/measure/20260927-w9-walk`).
+W10's private empty-mkdir
 passed 5/5; the live cluster stays TCP.
 The idle 50 ms create+close median did not hold: Sep 24 15:03 UTC on
 the live mount, term stable, `md_latency.py` was mkdir 5.9 /
@@ -2418,7 +2419,7 @@ steps use.
 | --- | --- | --- | --- |
 | W13 | full-L1 compaction holds the apply path 2.4 s and costs a term | **done Sep 26** — background compactor; partitioned flush is the follow-on, not started | the merge no longer holds `l->mu`/`h->mu`; `apply_max` stayed under 70 ms across ~2 s / ~760 MiB rewrites (`results/posix/20260926-164123`) |
 | W11 | the KV export is larger than one 4 MiB SNAP command, so the log never truncates | **done Sep 27** — chunked InstallSnapshot of a file; import is a sorted diff | logs under 5 KB; fcstor005 rejoined in 510 ms; `apply_max` 0 on a 386 MB export. 9-host posix 200/201 (`results/posix/20260927-033723`, 30.4–31.3 s) |
-| W9 | bound the client staging table | **posix 1 and the leak gate passed; walk-RSS still running** — in-flight pin, append-reservation pin, chunk maps before the row | posix 2 is 59/63 (`results/posix2/20260927-035212`); `peer_shared_pwrite` failed in that suite and passed on the immediate rerun. Leaks are clean (`results/leaks/20260927-035622`) |
+| W9 | bound the client staging table | **done Sep 27** — in-flight pin, append-reservation pin, chunk maps before the row, and the evictor walks past a pinned oldest window | a cold stat of 1M files leveled at 233 MB RSS (`results/measure/20260927-w9-walk`). posix 2 is 59/63. Leaks are clean (`results/leaks/20260927-035622`) |
 | W10 | RDMA needs an empty table to gate | **no wipe.** Gate on the private 3-node cluster (`tests/rdma_first_inode.sh`, fcstor007, port 19950), then switch 19810 to RDMA in place | the bug only needs an *empty* table, and the private cluster is one; a populated 19810 already ran millions of RDMA creates clean, so the live switch needs no wipe. Keep the wipe for when W11's gate wants a table that grows from zero |
 
 ---
@@ -2675,8 +2676,9 @@ The plan, the pin rules that make eviction safe (a report builds its records
 out of this table, so evicting a dirty row is data loss), and the gate are in
 [../client-cache-design.md](../client-cache-design.md). The Sep 23
 recommendation below is in the client as of Sep 27. Posix 1 is
-200/201 (`results/posix/20260927-033723`). Not marked done: walk-RSS,
-posix 2, and the valgrind leak gate have not been run.
+200/201, posix 2 is 59/63, the leak gate is clean, and a cold stat
+of 1M files leveled at 233 MB RSS
+(`results/measure/20260927-w9-walk`). Done.
 
 **Recommendation (Sep 23), implemented Sep 27:** (1) The pin rules —
 dirty / publishing / dirty dcache, ghost with an open fd, in-flight op pin,
