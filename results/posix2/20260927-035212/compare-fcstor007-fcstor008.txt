@@ -1,0 +1,14 @@
+================================================================
+POSIX baseline comparison: 63 tests
+  both pass        : 59
+  EFS BUGS         : 4  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 0
+  not run          : 0  (cut or missing; not a bug)
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  peer_overlap_pwrite_chunk_straddle [FAIL] above-chunk exclusive range not B
+  peer_overlap_pwrite_partial      [FAIL] [8192,12288) is not B's exclusive range
+  peer_shared_pwrite               [FAIL] I12 N-1 lost 496 of 1000 half-blocks
+  peer_truncate_visible            [FAIL] OSError: [Errno 5] Input/output error

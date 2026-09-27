@@ -95,13 +95,14 @@ static uint32_t rd32_t(const uint8_t *p)
 static int snap_open(void *app_, uint64_t incl, void **handle, uint64_t *total)
 {
     struct app *a = app_;
-    struct snap_mem *b = calloc(1, sizeof(*b));
+    struct snap_mem *b;
     uint32_t len = a->wide ? 40u : 5u;
 
     if (a->drop_blob) {
         a->drop_blob = 0;
         return EFS_ERR_NOT_FOUND;
     }
+    b = calloc(1, sizeof(*b));
     if (!b)
         return EFS_ERR_NOMEM;
     b->p = calloc(1, len);
@@ -170,12 +171,19 @@ static int snap_chunk(void *app_, uint64_t incl, uint64_t incl_term,
     }
     if (!done)
         return EFS_OK;
-    if (!a->part || a->part_len < 5)
+    if (!a->part || a->part_len < 5) {
+        free(a->part);
+        a->part = NULL;
+        a->part_len = 0;
         return EFS_ERR_INVAL;
+    }
     a->last = a->part[0];
     a->n = (int)rd32_t(a->part + 1);
     a->snap_at = incl;
     a->part_applied = 1;
+    free(a->part);
+    a->part = NULL;
+    a->part_len = 0;
     return EFS_OK;
 }
 

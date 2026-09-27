@@ -118,7 +118,9 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  rerun. W10's private empty-mkdir passed 5/5 on fcstor007. The live
  cluster stays TCP until that switch is its own gate. W9's pin
  rules are on fcstor007–015. Posix 1 passed on the same 200/201 run.
- Walk-RSS, posix 2, and the valgrind leak gate have not been run.
+ Posix 2 is 59/63 (`results/posix2/20260927-035212`); the
+ shared-pwrite miss did not repeat on its own. The leak gate passed
+ (`results/leaks/20260927-035622`). The walk-RSS gate is still open.
  Partitioned flush stays
  unstarted. `EFSD_ENV` is **space**-separated
  (`env $EFSD_ENV`): a comma form

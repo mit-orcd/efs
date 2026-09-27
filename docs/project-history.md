@@ -62,8 +62,16 @@ pinned. `make test` on node9901 passed (`w9mktest2`), including
 `test_stage_evict`. The nine clients were remounted (`w9fuse1`).
 9-host posix jobs=1 is 200/201, skip `mmap_write_read`, 30.4–31.3 s
 (`results/posix/20260927-033723`). That is the W11 bar as well.
-Walk-RSS, posix 2, and the valgrind leak gate have not been run.
-19810 stayed on TCP.
+Posix 2 one pair is 59/63
+(`results/posix2/20260927-035212`): `peer_truncate_visible`, both
+overlap-pwrite cases, and `peer_shared_pwrite` (496 of 1000
+half-blocks). The shared-pwrite case passed when run again by
+itself. The valgrind leak gate failed once on 36 bytes in
+`test_raft`'s snapshot callbacks (the forced export miss allocated
+the handle, and the receiver kept the assembled bytes) and passed
+after those frees (`results/leaks/20260927-035622`: unit, efsd,
+efs-fuse, and the RDMA phase all 0 definite). The namespace-walk
+RSS gate is the part still open. 19810 stayed on TCP.
 
 ## Sep 26 2026 evening — W13: L1 compaction off the apply path
 

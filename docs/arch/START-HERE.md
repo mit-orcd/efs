@@ -1106,7 +1106,7 @@ steps use.
 | --- | --- | --- | --- |
 | W13 | full-L1 compaction holds the apply path 2.4 s and costs a term | **done Sep 26** — background compactor; partitioned flush is the follow-on, not started | the merge no longer holds `l->mu`/`h->mu`; `apply_max` stayed under 70 ms across ~2 s / ~760 MiB rewrites (`results/posix/20260926-164123`) |
 | W11 | the KV export is larger than one 4 MiB SNAP command, so the log never truncates | **done Sep 27** — chunked InstallSnapshot of a file; import is a sorted diff | logs under 5 KB; fcstor005 rejoined in 510 ms; `apply_max` 0 on a 386 MB export. 9-host posix 200/201 (`results/posix/20260927-033723`, 30.4–31.3 s) |
-| W9 | bound the client staging table | **in tree, posix 1 passed, rest of the gate not run** — in-flight pin, append-reservation pin, chunk maps before the row | 9-host jobs=1 is 200/201 on the same run as W11 (`results/posix/20260927-033723`). Walk-RSS, posix 2, and valgrind not run |
+| W9 | bound the client staging table | **posix 1 and the leak gate passed; walk-RSS still running** — in-flight pin, append-reservation pin, chunk maps before the row | posix 2 is 59/63 (`results/posix2/20260927-035212`); `peer_shared_pwrite` failed in that suite and passed on the immediate rerun. Leaks are clean (`results/leaks/20260927-035622`) |
 | W10 | RDMA needs an empty table to gate | **no wipe.** Gate on the private 3-node cluster (`tests/rdma_first_inode.sh`, fcstor007, port 19950), then switch 19810 to RDMA in place | the bug only needs an *empty* table, and the private cluster is one; a populated 19810 already ran millions of RDMA creates clean, so the live switch needs no wipe. Keep the wipe for when W11's gate wants a table that grows from zero |
 
 ---
