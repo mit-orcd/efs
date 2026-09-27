@@ -3369,29 +3369,41 @@ def _stop_registered(procs, budget=1.0):
             _reap_pid(pid)
 
     def survivors():
-        snapshot = _process_snapshot()
+        remaining = deadline - time.monotonic()
+        # Do not start a process-table read after the budget is gone.
+        # The previous call's answer stands.
+        if remaining <= 0:
+            return last["rows"]
+        snapshot = _process_snapshot(remaining)
         out = []
         for proc in items:
             pid = proc.pid if hasattr(proc, "pid") else int(proc)
             if not pid:
                 continue
+            # Pass the snapshot through even when it is None. None means
+            # "this read failed"; it must not be fetched again per worker.
             running = _running_in_group(pid, snapshot)
             if running is None:
                 if _pgid_alive(pid):
                     out.append(pid)
             elif running:
                 out.append(pid)
+        last["rows"] = out
         return out
 
     deadline = time.monotonic() + budget
+    last = {"rows": []}
     reap()
-    while True:
+    while time.monotonic() < deadline:
         left = survivors()
-        if not left or time.monotonic() >= deadline:
-            reap()
-            return survivors()
-        time.sleep(0.02)
+        if not left:
+            return []
         reap()
+        if time.monotonic() >= deadline:
+            return left
+        time.sleep(min(0.02, deadline - time.monotonic()))
+        reap()
+    return last["rows"]
 
 
 def _pgid_alive(pgid):
@@ -3414,13 +3426,38 @@ def _pgid_alive(pgid):
     return True
 
 
-def _process_snapshot():
-    """One process table read: (pid, pgid, state) or None if ps failed."""
+# Sentinel: the caller did not supply a snapshot, so read the process
+# table. None is a different value and means that read already failed.
+_SNAPSHOT_OMITTED = object()
+
+# Test hook. None uses ps. A replacement is called as hook(timeout).
+_ps_hook = None
+
+
+def _process_snapshot(timeout):
+    """One process table read: (pid, pgid, state), or None if it failed.
+
+    The lookup is limited to `timeout` seconds. None is reused by the
+    caller; it must not be read as "please try ps again."
+    """
+    if timeout <= 0:
+        return None
+    hook = _ps_hook
     try:
-        out = subprocess.check_output(
-            ["ps", "-ax", "-o", "pid=,pgid=,state="],
-            stderr=subprocess.DEVNULL)
-    except (OSError, subprocess.CalledProcessError):
+        if hook is not None:
+            out = hook(timeout)
+        else:
+            proc = subprocess.run(
+                ["ps", "-ax", "-o", "pid=,pgid=,state="],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                timeout=timeout)
+            if proc.returncode != 0:
+                return None
+            out = proc.stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if out is None:
         return None
     rows = []
     for line in out.decode("ascii", "replace").splitlines():
@@ -3436,18 +3473,19 @@ def _process_snapshot():
     return rows
 
 
-def _running_in_group(pgid, snapshot=None):
+def _running_in_group(pgid, snapshot=_SNAPSHOT_OMITTED):
     """Members of pgid that are not zombies.
 
     SIGKILL turns a grandchild into a zombie reparented to init. That
     zombie still answers killpg(pgid, 0) until init collects it, so a
     group of only zombies is not a worker that is still running.
-    Returns None when the process list cannot be read.
+    Returns None when the process list cannot be read. A None snapshot
+    is that failure and is not fetched again.
     """
     if not pgid or pgid <= 0:
         return []
-    if snapshot is None:
-        snapshot = _process_snapshot()
+    if snapshot is _SNAPSHOT_OMITTED:
+        snapshot = _process_snapshot(1.0)
     if snapshot is None:
         return None
     return [pid for pid, pgrp, state in snapshot
@@ -4221,6 +4259,34 @@ def _self_test():
                 if stop_dt >= 0.8:
                     fails.append("zombie grandchild burned the cleanup budget "
                                  "(%.3fs)" % stop_dt)
+
+        class _Pid(object):
+            def __init__(self, pid):
+                self.pid = pid
+
+            def poll(self):
+                return None
+
+        calls = {"n": 0}
+
+        def slow_ps(timeout):
+            calls["n"] += 1
+            time.sleep(min(0.16, max(0.0, timeout)))
+            raise subprocess.TimeoutExpired(cmd="ps", timeout=timeout)
+
+        global _ps_hook
+        _ps_hook = slow_ps
+        try:
+            t_ps = time.monotonic()
+            _stop_registered([_Pid(1000000 + i) for i in range(16)],
+                             budget=1.0)
+            ps_dt = time.monotonic() - t_ps
+        finally:
+            _ps_hook = None
+        if calls["n"] > 2:
+            fails.append("failing ps ran %d times (want at most 2)" % calls["n"])
+        if ps_dt >= 2.0:
+            fails.append("failing ps cleanup took %.2fs with budget 1s" % ps_dt)
 
         def _cancel_n(n):
             pidfile = os.path.join(td, "scale-%d.pids" % n)
