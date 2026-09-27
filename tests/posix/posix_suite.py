@@ -3301,9 +3301,30 @@ def _unlink_quiet(path):
         pass
 
 
+# Test hooks. None uses the real process operations. The deadline
+# self-test installs these so a synthetic process-group id is never
+# passed to killpg, waitpid, or a group-existence probe.
+_signal_group_hook = None
+_reap_hook = None
+_pgid_alive_hook = None
+
+
+def _signal_group(pgid, sig):
+    """Deliver sig to a process group. The test hook replaces os.killpg."""
+    hook = _signal_group_hook
+    if hook is not None:
+        hook(pgid, sig)
+        return
+    os.killpg(pgid, sig)
+
+
 def _reap_pid(pid):
     """Collect a direct child so a zombie does not keep its process group visible."""
     if not pid or pid <= 0:
+        return
+    hook = _reap_hook
+    if hook is not None:
+        hook(pid)
         return
     try:
         os.waitpid(pid, os.WNOHANG)
@@ -3321,7 +3342,7 @@ def _kill_pgid(pgid, grace=0.5):
     if not pgid or pgid <= 0:
         return True
     try:
-        os.killpg(pgid, signal.SIGKILL)
+        _signal_group(pgid, signal.SIGKILL)
     except OSError:
         pass
     _reap_pid(pgid)
@@ -3354,7 +3375,7 @@ def _stop_registered(procs, budget=1.0):
         pid = proc.pid if hasattr(proc, "pid") else int(proc)
         if pid and pid > 0:
             try:
-                os.killpg(pid, signal.SIGKILL)
+                _signal_group(pid, signal.SIGKILL)
             except OSError:
                 pass
 
@@ -3416,6 +3437,9 @@ def _pgid_alive(pgid):
     """
     if not pgid or pgid <= 0:
         return False
+    hook = _pgid_alive_hook
+    if hook is not None:
+        return hook(pgid)
     try:
         os.killpg(pgid, 0)
     except OSError as e:
@@ -3509,7 +3533,7 @@ def _kill_group(proc, grace=1.0):
     if settled():
         return True
     try:
-        os.killpg(pgid, signal.SIGTERM)
+        _signal_group(pgid, signal.SIGTERM)
     except OSError:
         pass
     deadline = time.monotonic() + grace
@@ -3518,7 +3542,7 @@ def _kill_group(proc, grace=1.0):
             return True
         time.sleep(0.02)
     try:
-        os.killpg(pgid, signal.SIGKILL)
+        _signal_group(pgid, signal.SIGKILL)
     except OSError:
         pass
     deadline = time.monotonic() + grace
@@ -4268,25 +4292,54 @@ def _self_test():
                 return None
 
         calls = {"n": 0}
+        signaled = []
+        reaped = []
+        alive_checks = []
+        synthetic = [1000000 + i for i in range(16)]
 
         def slow_ps(timeout):
             calls["n"] += 1
             time.sleep(min(0.16, max(0.0, timeout)))
             raise subprocess.TimeoutExpired(cmd="ps", timeout=timeout)
 
-        global _ps_hook
+        def fake_signal(pgid, sig):
+            signaled.append((pgid, sig))
+
+        def fake_reap(pid):
+            reaped.append(pid)
+
+        def fake_alive(pgid):
+            alive_checks.append(pgid)
+            return False
+
+        # These ids are not process groups this test owns. The hooks
+        # stand in for kill, reap, and group existence so cleanup can
+        # exercise a failed process-table read without signaling them.
+        global _ps_hook, _signal_group_hook, _reap_hook, _pgid_alive_hook
         _ps_hook = slow_ps
+        _signal_group_hook = fake_signal
+        _reap_hook = fake_reap
+        _pgid_alive_hook = fake_alive
         try:
             t_ps = time.monotonic()
-            _stop_registered([_Pid(1000000 + i) for i in range(16)],
-                             budget=1.0)
+            _stop_registered([_Pid(pid) for pid in synthetic], budget=1.0)
             ps_dt = time.monotonic() - t_ps
         finally:
             _ps_hook = None
+            _signal_group_hook = None
+            _reap_hook = None
+            _pgid_alive_hook = None
         if calls["n"] > 2:
             fails.append("failing ps ran %d times (want at most 2)" % calls["n"])
         if ps_dt >= 2.0:
             fails.append("failing ps cleanup took %.2fs with budget 1s" % ps_dt)
+        if [pgid for pgid, sig in signaled] != synthetic or any(
+                sig != signal.SIGKILL for _pgid, sig in signaled):
+            fails.append("synthetic cleanup signaled %s" % signaled)
+        if sorted(set(reaped)) != synthetic or sorted(set(alive_checks)) != synthetic:
+            fails.append("synthetic cleanup did not reap and probe exactly "
+                         "the fake groups (reap=%s alive=%s)" %
+                         (reaped, alive_checks))
 
         def _cancel_n(n):
             pidfile = os.path.join(td, "scale-%d.pids" % n)
