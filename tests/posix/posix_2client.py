@@ -1896,7 +1896,14 @@ def write_results(path, host_a, host_b, mnt, npass, nfail, dt, quiet=False):
         print("wrote %s" % path, flush=True)
 
 
+def _matched(filt):
+    return [t for t in TESTS if not filt or filt in t[0]]
+
+
 def run_local(mnt_a, mnt_b, results_file, filt, keep):
+    if not _matched(filt):
+        print("ERROR: no tests matched filter %r" % (filt,))
+        return 2
     do_prepare(mnt_a)
     # same-path XFS: testdirs exist on B immediately. Two FUSE mounts:
     # B must already see PARENT (harness remounted B after a prior prepare,
@@ -2009,6 +2016,9 @@ def ssh_cmd(ssh, host, remote):
 
 
 def run_remote(host_a, host_b, mnt, ssh, script, results_file, filt):
+    if not _matched(filt):
+        print("ERROR: no tests matched filter %r" % (filt,))
+        return 2
     npass = nfail = 0
     t0 = time.time()
     parent_b = os.path.join(mnt, PARENT)
@@ -2229,6 +2239,20 @@ def _self_test():
         fails.append("holder: %s" % e)
     finally:
         shutil.rmtree(d, ignore_errors=True)
+
+    mnt = tempfile.mkdtemp(prefix="posix2-filt-")
+    try:
+        os.makedirs(os.path.join(mnt, PARENT))
+        marker = os.path.join(mnt, PARENT, "keep")
+        with open(marker, "w") as f:
+            f.write("stay")
+        rc = run_local(mnt, mnt, None, "definitely_missing_test", True)
+        if rc != 2:
+            fails.append("unmatched filter rc=%s" % rc)
+        if not os.path.isfile(marker) or open(marker).read() != "stay":
+            fails.append("unmatched filter changed existing prepare data")
+    finally:
+        shutil.rmtree(mnt, ignore_errors=True)
 
     if fails:
         for msg in fails:

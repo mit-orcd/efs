@@ -2153,25 +2153,63 @@ def concurrent_creates_same_dir(d):
     eq(len(os.listdir(d)), 8 * 20, "all concurrent creates present")
 
 
+def _append_record(writer, seq):
+    return ("W%sS%04d\n" % (writer, seq)).encode()
+
+
+def _write_full(fd, rec):
+    n = os.write(fd, rec)
+    if n != len(rec):
+        raise Fail("short append write %d/%d" % (n, len(rec)))
+    return n
+
+
+def _check_append_log(data, writers, count):
+    """Every writer/sequence record once, intact. A matching line count is not enough."""
+    if not data.endswith(b"\n"):
+        raise Fail("torn trailing append record: %r" % data[-24:])
+    lines = data.splitlines()
+    want = [_append_record(w, i)[:-1] for w in writers for i in range(count)]
+    if len(lines) != len(want):
+        raise Fail("append count %d, want %d" % (len(lines), len(want)))
+    got = {}
+    for ln in lines:
+        got[ln] = got.get(ln, 0) + 1
+    for rec in want:
+        n = got.get(rec, 0)
+        if n != 1:
+            raise Fail("append record %r count %d, want 1" % (rec, n))
+    extra = [ln for ln in got if ln not in want]
+    if extra:
+        raise Fail("unexpected append record %r" % extra[0])
+
+
 @test
 @budget(30)
 def concurrent_appends(d):
     import threading
     p = os.path.join(d, "f")
     wr(p, b"")
+    errors = []
+    nwriters, count = 4, 50
 
     def worker(i):
-        for _ in range(50):
-            with open(p, "ab") as f:
-                f.write(b"%d\n" % i)
+        try:
+            for j in range(count):
+                rec = _append_record(i, j)
+                with open(p, "ab") as f:
+                    _write_full(f.fileno(), rec)
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
 
-    threads = [threading.Thread(target=worker, args=(i,)) for i in range(4)]
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(nwriters)]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
-    lines = rd(p).splitlines()
-    eq(len(lines), 4 * 50, "all appends landed (O_APPEND atomic)")
+    if errors:
+        raise Fail("append worker: %s" % errors[0])
+    _check_append_log(rd(p), list(range(nwriters)), count)
 
 
 @test
@@ -2179,21 +2217,27 @@ def concurrent_appends(d):
 def concurrent_appends_two_proc(d):
     p = os.path.join(d, "f")
     wr(p, b"")
+    nwriters, count = 3, 40
     snippet = (
         "import os,sys\n"
         "fd=os.open(sys.argv[1], os.O_WRONLY|os.O_APPEND)\n"
-        "for _ in range(40):\n"
-        "    os.write(fd, (sys.argv[2]+chr(10)).encode())\n"
+        "writer=sys.argv[2]\n"
+        "n=int(sys.argv[3])\n"
+        "for i in range(n):\n"
+        "    rec=('W%sS%04d\\n'%(writer,i)).encode()\n"
+        "    got=os.write(fd, rec)\n"
+        "    if got!=len(rec):\n"
+        "        sys.exit(2)\n"
         "os.close(fd)\n"
     )
     procs = [
-        subprocess.Popen([sys.executable, "-c", snippet, p, str(i)])
-        for i in range(3)
+        subprocess.Popen([sys.executable, "-c", snippet, p, str(i), str(count)])
+        for i in range(nwriters)
     ]
     for pr in procs:
         if pr.wait() != 0:
             raise Fail("append child rc=%d" % pr.returncode)
-    eq(len(rd(p).splitlines()), 3 * 40, "two-process O_APPEND all landed")
+    _check_append_log(rd(p), list(range(nwriters)), count)
 
 
 @test
@@ -3371,7 +3415,20 @@ def _finish_worker(proc, result, kill_group):
     return status, detail, True
 
 
-def _run_pool(items, jobs, spawn, on_done, kill_group=None, live=None):
+class _SpawnGate(object):
+    """Defer cancellation until the new process group is in `live`.
+
+    A signal between Popen and registration used to exit the parent while
+    the child, already in its own session, kept running.
+    """
+
+    def __init__(self):
+        self.defer = 0
+        self.pending = None
+
+
+def _run_pool(items, jobs, spawn, on_done, kill_group=None, live=None,
+              gate=None, on_cancel=None):
     """Run items of (name, timeout_s, payload) in up to `jobs` processes.
 
     `on_done(name, status, detail)` returns true to stop starting new work.
@@ -3397,8 +3454,27 @@ def _run_pool(items, jobs, spawn, on_done, kill_group=None, live=None):
     while (queue or inflight) and stuck is None:
         while queue and len(inflight) < max(1, jobs) and not stop:
             name, timeout, payload = queue.pop(0)
-            proc, result = spawn(name, payload)
-            note_live(proc)
+            pending = None
+            raised = None
+            if gate is not None:
+                gate.defer += 1
+            try:
+                proc, result = spawn(name, payload)
+                note_live(proc)
+            except BaseException as exc:
+                raised = exc
+            finally:
+                if gate is not None:
+                    gate.defer -= 1
+                    if gate.defer == 0:
+                        pending = gate.pending
+                        gate.pending = None
+            # The child is registered before a deferred signal is allowed
+            # to exit. on_cancel does not return.
+            if pending is not None and on_cancel is not None:
+                on_cancel(pending)
+            if raised is not None:
+                raise raised
             inflight.append((name, proc, result, time.monotonic(), timeout))
         if not inflight:
             break
@@ -3453,7 +3529,30 @@ def _run_pool(items, jobs, spawn, on_done, kill_group=None, live=None):
     return stuck, queue
 
 
+def _posix_hold(name):
+    """Test hook. Sleep in this worker, with a child that ignores SIGTERM."""
+    if os.environ.get("EFS_POSIX_HOLD") != "start":
+        return
+    match = os.environ.get("EFS_POSIX_HOLD_MATCH")
+    if match and match not in name:
+        return
+    seconds = float(os.environ.get("EFS_POSIX_HOLD_S", "30"))
+    pidfile = os.environ.get("EFS_POSIX_HOLD_PID")
+    child = os.fork()
+    if child == 0:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        time.sleep(seconds)
+        os._exit(0)
+    if pidfile:
+        with open(pidfile, "w") as f:
+            f.write("%s %s\n" % (os.getpid(), child))
+            f.flush()
+            os.fsync(f.fileno())
+    time.sleep(seconds)
+
+
 def _worker_main(name, tdir, result_path):
+    _posix_hold(name)
     try:
         fns = dict(TESTS)
         if name not in fns:
@@ -3789,6 +3888,143 @@ def _self_test():
     except Fail as e:
         fails.append("lock oracle: %s" % e)
 
+    try:
+        _check_append_log(b"CORRUPT\n" * 200, list(range(4)), 50)
+    except Fail:
+        pass
+    else:
+        fails.append("corrupt append payload was accepted")
+    try:
+        _check_append_log(b"W0S0000\n" * 200, list(range(4)), 50)
+    except Fail:
+        pass
+    else:
+        fails.append("duplicated append records were accepted")
+    try:
+        _check_append_log(b"W0S0000\nW0S0001", [0], 2)
+    except Fail:
+        pass
+    else:
+        fails.append("torn append record was accepted")
+    real_write = os.write
+    os.write = lambda fd, data: 1
+    try:
+        try:
+            _write_full(1, b"W0S0000\n")
+        except Fail:
+            pass
+        else:
+            fails.append("short append write was accepted")
+    finally:
+        os.write = real_write
+    try:
+        raise Fail("append worker: injected")
+    except Fail:
+        pass
+
+    def _pids_alive(path):
+        if not os.path.exists(path):
+            return []
+        alive = []
+        for tok in open(path).read().split():
+            pid = int(tok)
+            try:
+                os.kill(pid, 0)
+            except OSError as e:
+                if e.errno != errno.ESRCH:
+                    alive.append(pid)
+            else:
+                alive.append(pid)
+        return alive
+
+    def _run_cli(mnt, extra_env, args, sig=None, wait_pid=None):
+        env = os.environ.copy()
+        env.update(extra_env)
+        proc = subprocess.Popen(
+            [sys.executable, os.path.abspath(__file__), mnt] + args,
+            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True)
+        try:
+            if wait_pid:
+                deadline = time.monotonic() + 8
+                while time.monotonic() < deadline and not os.path.exists(wait_pid):
+                    if proc.poll() is not None:
+                        break
+                    time.sleep(0.02)
+            if sig is not None and proc.poll() is None:
+                os.kill(proc.pid, sig)
+            try:
+                rc = proc.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                _kill_pgid(proc.pid)
+                rc = proc.wait(timeout=2)
+            time.sleep(0.2)
+            return rc
+        finally:
+            if proc.poll() is None:
+                _kill_pgid(proc.pid)
+
+    mnt = tempfile.mkdtemp(prefix="posix-cli-")
+    try:
+        hold_pid = os.path.join(td, "hold.pids")
+        rc = _run_cli(
+            mnt,
+            {"EFS_POSIX_HOLD": "start", "EFS_POSIX_HOLD_S": "30",
+             "EFS_POSIX_HOLD_PID": hold_pid},
+            ["--filter", "basic_empty_file", "--timeout-s", "20", "--jobs", "1",
+             "--results", os.path.join(td, "int.tsv")],
+            sig=signal.SIGINT, wait_pid=hold_pid)
+        if rc == 0:
+            fails.append("SIGINT run exited 0")
+        if _pids_alive(hold_pid):
+            fails.append("SIGINT left workers %s" % _pids_alive(hold_pid))
+        left = [n for n in os.listdir(mnt) if n.startswith("posix-")]
+        if not left:
+            fails.append("SIGINT deleted the test tree while workers were live")
+
+        spawn_pid = os.path.join(td, "spawn.pid")
+        rc = _run_cli(
+            mnt,
+            {"EFS_POSIX_CANCEL_AT_SPAWN": "1", "EFS_POSIX_SPAWN_PID": spawn_pid},
+            ["--filter", "basic_empty_file", "--timeout-s", "20", "--jobs", "1"])
+        if rc == 0:
+            fails.append("cancel-at-spawn exited 0")
+        if not os.path.exists(spawn_pid):
+            fails.append("cancel-at-spawn did not reach Popen")
+        elif _pids_alive(spawn_pid):
+            fails.append("cancel-at-spawn left %s" % _pids_alive(spawn_pid))
+
+        hold2 = os.path.join(td, "hold2.pids")
+        rc = _run_cli(
+            mnt,
+            {"EFS_POSIX_HOLD": "start", "EFS_POSIX_HOLD_S": "30",
+             "EFS_POSIX_HOLD_PID": hold2, "EFS_POSIX_SPAWN_PID": hold2,
+             "EFS_POSIX_SPAWN_FAIL_AFTER": "1"},
+            ["--filter", "basic_", "--timeout-s", "20", "--jobs", "2"])
+        if rc == 0:
+            fails.append("spawn failure exited 0")
+        if _pids_alive(hold2):
+            fails.append("spawn failure left workers %s" % _pids_alive(hold2))
+
+        hold3 = os.path.join(td, "hold3.pids")
+        rc = _run_cli(
+            mnt,
+            {"EFS_POSIX_HOLD": "start", "EFS_POSIX_HOLD_S": "30",
+             "EFS_POSIX_HOLD_MATCH": "empty", "EFS_POSIX_HOLD_PID": hold3,
+             "EFS_POSIX_TSV_FAIL": "1"},
+            ["--filter", "basic_", "--timeout-s", "20", "--jobs", "2",
+             "--results", os.path.join(td, "tsv.tsv")])
+        if rc == 0:
+            fails.append("tsv failure exited 0")
+        if _pids_alive(hold3):
+            fails.append("tsv failure left workers %s" % _pids_alive(hold3))
+
+        rc = _run_cli(mnt, {}, ["--filter", "definitely_missing_test"])
+        if rc != 2:
+            fails.append("unmatched filter rc=%s" % rc)
+    finally:
+        shutil.rmtree(mnt, ignore_errors=True)
+
     if fails:
         for msg in fails:
             print("FAIL " + msg)
@@ -3844,23 +4080,28 @@ def main(argv=None):
     # POSIX_PER_HOST siblings (each mkdtemp prefix is host+tag).
     # Testdirs under the base are created lazily in invoke() — 201
     # sequential mkdirs at ~0.3s each was another 60s before any test ran.
+    matched = [(n, fn) for n, fn in TESTS if not filt or filt in n]
+    if not matched:
+        what = "filter %r" % filt if filt else "the suite"
+        print("ERROR: no tests matched %s" % what)
+        return 2
     me = "posix-%s-" % host if not tag else "posix-%s-%s-" % (host, tag)
     base = tempfile.mkdtemp(prefix=me, dir=mnt)
     npass = nfail = nskip = nnotrun = 0
     t0 = time.time()
     selected = []
-    for name, fn in TESTS:
-        if filt and filt not in name:
-            continue
+    for name, fn in matched:
         tdir = os.path.join(base, name)
         selected.append((name, fn, tdir))
 
     tsv_mu = threading.Lock()
     by_name = {}
 
-    def flush_tsv():
+    def flush_tsv(done=False):
         if not results_file:
             return
+        if os.environ.get("EFS_POSIX_TSV_FAIL"):
+            raise OSError(errno.EIO, "injected tsv failure")
         ordered = [(n, by_name[n][0], by_name[n][1])
                    for n, _fn, _td in selected if n in by_name]
         dt = time.time() - t0
@@ -3869,12 +4110,18 @@ def main(argv=None):
             f.write("# posix-suite host=%s mnt=%s %s\n" %
                     (host, mnt, time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                               time.gmtime())))
+            for name, _fn, _td in selected:
+                f.write("# select\t%s\n" % name)
             f.write("test\tresult\tdetail\n")
             for name, res, detail in ordered:
                 f.write(format_result_line(name, res, detail))
             f.write("# summary pass=%d fail=%d skip=%d notrun=%d total=%d dur=%.1f\n" %
                     (npass, nfail, nskip, nnotrun,
                      npass + nfail + nskip + nnotrun, dt))
+            # Incremental flushes omit this. A snapshot of the first PASS
+            # rows is not a finished run.
+            if done and len(by_name) == len(selected):
+                f.write("# complete\n")
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, results_file)
@@ -3901,26 +4148,45 @@ def main(argv=None):
     live = []
     stuck_run = False
     script = os.path.abspath(__file__)
+    gate = _SpawnGate()
+
+    def _reap_live():
+        survivors = []
+        for pid in list(live):
+            if not _kill_pgid(pid):
+                survivors.append(pid)
+        return survivors
+
+    def _fill_unfinished(reason):
+        nonlocal nnotrun
+        for name, _fn, _td in selected:
+            if name not in by_name:
+                by_name[name] = ("NOTRUN", reason)
+                nnotrun += 1
 
     def _cut(signum, _frame):
+        # Defer until an in-progress spawn has been registered. Otherwise
+        # the new session is invisible to this handler and keeps running.
+        if gate.defer:
+            gate.pending = signum
+            return
         # timeout(1) sends SIGTERM, then SIGKILL 5 s later. Kill test
         # process groups, write NOTRUN for anything not finished, and leave.
         # Do not take tsv_mu: the main thread may already hold it in record().
-        nonlocal nnotrun
-        for pid in list(live):
-            _kill_pgid(pid)
+        # Do not delete the tree here: a group that survives SIGKILL still
+        # has it as its cwd.
+        survivors = _reap_live()
         try:
-            for name, _fn, _td in selected:
-                if name not in by_name:
-                    by_name[name] = ("NOTRUN", "suite cut by signal %d" % signum)
-                    nnotrun += 1
-            flush_tsv()
+            _fill_unfinished("suite cut by signal %d" % signum)
+            if not survivors:
+                flush_tsv(done=False)
         except Exception:
             pass
         os._exit(128 + signum)
 
     signal.signal(signal.SIGTERM, _cut)
     signal.signal(signal.SIGHUP, _cut)
+    signal.signal(signal.SIGINT, _cut)
 
     def spawn_test(name, tdir):
         fd, result = tempfile.mkstemp(prefix="posix-result-")
@@ -3928,6 +4194,19 @@ def main(argv=None):
         proc = subprocess.Popen(
             [sys.executable, script, "--worker", name, tdir, result],
             start_new_session=True)
+        live.append(proc.pid)
+        pidfile = os.environ.get("EFS_POSIX_SPAWN_PID")
+        if pidfile:
+            with open(pidfile, "a") as f:
+                f.write("%d\n" % proc.pid)
+                f.flush()
+                os.fsync(f.fileno())
+        if os.environ.get("EFS_POSIX_CANCEL_AT_SPAWN"):
+            os.kill(os.getpid(), signal.SIGTERM)
+        fail_after = int(os.environ.get("EFS_POSIX_SPAWN_FAIL_AFTER", "0"))
+        spawn_test.n = getattr(spawn_test, "n", 0) + 1
+        if fail_after and spawn_test.n > fail_after:
+            raise RuntimeError("injected spawn failure")
         return proc, result
 
     def on_done(name, status, detail):
@@ -3957,13 +4236,15 @@ def main(argv=None):
         if parallel:
             print("parallel %d tests jobs=%d (serial %d after)" %
                   (len(parallel), max(1, jobs), len(serials)))
-        stuck, _left = _run_pool(items_for(parallel), max(1, jobs),
-                                 spawn_test, on_done, live=live)
+        stuck, _left = _run_pool(
+            items_for(parallel), max(1, jobs),
+            spawn_test, on_done, live=live, gate=gate, on_cancel=_cut)
         if stuck:
             stuck_run = True
         elif serials and not (stop and nfail):
-            stuck, _left = _run_pool(items_for(serials), 1,
-                                     spawn_test, on_done, live=live)
+            stuck, _left = _run_pool(
+                items_for(serials), 1,
+                spawn_test, on_done, live=live, gate=gate, on_cancel=_cut)
             if stuck:
                 stuck_run = True
 
@@ -3979,6 +4260,23 @@ def main(argv=None):
         # TSV / summary follow TESTS registration order.
         RESULTS[:] = [(n, by_name[n][0], by_name[n][1])
                       for n, _fn, _td in selected if n in by_name]
+        try:
+            flush_tsv(done=not stuck_run)
+        except Exception:
+            stuck_run = True
+            raise
+    except BaseException as exc:
+        survivors = _reap_live()
+        if survivors:
+            stuck_run = True
+        try:
+            _fill_unfinished("runner exception: %s" % exc)
+            flush_tsv(done=False)
+        except Exception:
+            pass
+        # Leave the tree. Deleting it while a worker group is still alive
+        # was the SIGINT / spawn-failure failure mode.
+        os._exit(1)
     finally:
         leave_fuse_cwd()
         if stuck_run:
@@ -3995,7 +4293,6 @@ def main(argv=None):
           (npass, total, nfail, nskip, nnotrun, dt))
 
     if results_file:
-        flush_tsv()
         print("wrote %s" % results_file)
 
     # Interpreter teardown closes leftover FUSE fds (cwd, listdir,

@@ -42,9 +42,17 @@ def load(path):
     rows = {}
     detail = {}
     problems = []
+    selected = []
+    complete = False
     with open(path) as f:
         for lineno, line in enumerate(f, 1):
             raw = line.rstrip("\n")
+            if raw.startswith("# select\t"):
+                selected.append(raw.split("\t", 1)[1].strip())
+                continue
+            if raw.startswith("# complete"):
+                complete = True
+                continue
             if not raw or raw.startswith("#"):
                 continue
             # The detail is the remainder of the line, tabs included.
@@ -69,13 +77,17 @@ def load(path):
                                 (path, lineno, status, name))
             rows[name] = status
             detail[name] = parts[2] if len(parts) > 2 else ""
-    if not rows and not problems:
+    if not rows and not problems and not selected:
         problems.append("%s: no test rows" % path)
-    return rows, detail, problems
+    return rows, detail, problems, selected, complete
 
 
-def compare(base, bd, targ, td, base_problems, targ_problems):
+def compare(base, bd, targ, td, base_problems, targ_problems,
+            base_selected=None, targ_selected=None,
+            base_complete=False, targ_complete=False):
     """Classify and return (exit_code, lines_to_print)."""
+    base_selected = list(base_selected or [])
+    targ_selected = list(targ_selected or [])
     bugs, bothfail, mismatch, better, ok = [], [], [], [], []
     skipped, incomplete, only_t = [], [], []
     lines = []
@@ -118,12 +130,22 @@ def compare(base, bd, targ, td, base_problems, targ_problems):
     # PASS/PASS across the whole inventory is the unqualified success.
     # SKIP where the baseline passed, a missing row, or NOTRUN is incomplete
     # (exit 2), not an EFS-BUG. A real mismatch is exit 1.
-    unqualified = (not bugs and not mismatch and not skipped
+    for n in base_selected:
+        if n not in base:
+            incomplete.append((n, "selected", "missing", ""))
+    for n in targ_selected:
+        if n not in targ and n not in base_selected:
+            incomplete.append((n, "missing", "selected", ""))
+    files_done = (base_complete and targ_complete
+                  and bool(base_selected) and base_selected == targ_selected
+                  and all(n in base for n in base_selected)
+                  and all(n in targ for n in targ_selected))
+    unqualified = (files_done and not bugs and not mismatch and not skipped
                    and not incomplete and not only_t and bool(ok)
                    and len(ok) == len(names))
     if bugs or mismatch:
         code = 1
-    elif skipped or incomplete or only_t:
+    elif skipped or incomplete or only_t or not files_done:
         code = 2
     else:
         code = 0
@@ -176,9 +198,9 @@ def compare(base, bd, targ, td, base_problems, targ_problems):
 
 
 def compare_files(base_path, targ_path):
-    base, bd, bp = load(base_path)
-    targ, td, tp = load(targ_path)
-    return compare(base, bd, targ, td, bp, tp)
+    base, bd, bp, bs, bc = load(base_path)
+    targ, td, tp, ts, tc = load(targ_path)
+    return compare(base, bd, targ, td, bp, tp, bs, ts, bc, tc)
 
 
 def _write(dirpath, name, text):
@@ -205,8 +227,23 @@ def _self_test():
                 fails.append("%s: output contains %r" % (label, phrase))
         return text
 
+    def finish(text):
+        names = []
+        for line in text.splitlines():
+            if not line or line.startswith("#") or line.startswith("test\t"):
+                continue
+            names.append(line.split("\t", 1)[0])
+        return (text + "".join("# select\t%s\n" % n for n in names)
+                + "# complete\n")
+
     both = header + "t\tPASS\t\n"
-    check("pass-pass", both, both, 0)
+    check("pass-pass", finish(both), finish(both), 0)
+    text = check("cut-snapshot", both, both, 2,
+                 banned=("PASS (every test PASS",))
+    partial = (header + "# select\tt\n# select\tu\n# complete\n"
+               "t\tPASS\t\n")
+    check("partial-inventory", partial, partial, 2,
+          banned=("PASS (every test PASS",))
     check("header-only", header, header, 2)
     check("empty", "", "", 2)
     check("missing-row", header + "t\tPASS\t\nother\tPASS\t\n",
@@ -246,10 +283,10 @@ def _self_test():
           banned=("both fail (match): 1",))
     same = "# c\ntest\tresult\tdetail\n" + posix_suite.format_result_line(
         "u", "FAIL", "café\tsame")
-    check("tab-detail-same", same, same, 0)
+    check("tab-detail-same", finish(same), finish(same), 0)
     empty_detail = "# c\ntest\tresult\tdetail\n" + posix_suite.format_result_line(
         "e", "PASS", "")
-    check("empty-detail", empty_detail, empty_detail, 0)
+    check("empty-detail", finish(empty_detail), finish(empty_detail), 0)
     check("bad-id", header + "has space\tFAIL\tx\n",
           header + "has space\tFAIL\tx\n", 2)
 

@@ -52,8 +52,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # must be the SAME generator: a divergent copy would silently compare a file
 # against bytes it was never written with.
 from posix_suite import (  # noqa: E402
-    Fail, _kill_pgid, _run_pool, _write_status, eq, format_result_line,
-    rand_bytes, rd, sh, wr)
+    Fail, _SpawnGate, _kill_pgid, _run_pool, _write_status, eq,
+    format_result_line, rand_bytes, rd, sh, wr)
 
 CHUNK = 128 * 1024
 
@@ -776,6 +776,49 @@ def _self_test():
                 fails.append("%s/%s recorded PASS (%s)" % (phase, when, status))
             if when in ("start", "after-result", "raise") and status is None:
                 fails.append("%s/%s wrote no row for small_file" % (phase, when))
+        marker = os.path.join(
+            mnt, "posix-persist-%s-keep" % host, "small_file", "f")
+        kept = subprocess.run(
+            [sys.executable, os.path.abspath(__file__), mnt,
+             "--phase", "prepare", "--filter", "small_file",
+             "--tag", "keep", "--timeout-s", "30", "--keep"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if kept.returncode != 0 or not os.path.isfile(marker):
+            fails.append("setup for unmatched filter failed")
+        else:
+            before = open(marker, "rb").read()
+            bad = subprocess.run(
+                [sys.executable, os.path.abspath(__file__), mnt,
+                 "--phase", "verify", "--filter", "definitely_missing_test",
+                 "--tag", "keep", "--timeout-s", "10"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if bad.returncode == 0:
+                fails.append("unmatched verify filter exited 0")
+            if not os.path.isfile(marker) or open(marker, "rb").read() != before:
+                fails.append("unmatched verify filter removed prepared data")
+            badp = subprocess.run(
+                [sys.executable, os.path.abspath(__file__), mnt,
+                 "--phase", "prepare", "--filter", "small_filX",
+                 "--tag", "keep", "--timeout-s", "10"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if badp.returncode == 0:
+                fails.append("unmatched prepare filter exited 0")
+            if not os.path.isfile(marker):
+                fails.append("unmatched prepare filter removed prepared data")
+        spawn_pid = os.path.join(td, "persist-spawn.pid")
+        proc_env_rc = subprocess.run(
+            [sys.executable, os.path.abspath(__file__), mnt,
+             "--phase", "prepare", "--filter", "small_file",
+             "--tag", "boundary", "--timeout-s", "20", "--keep"],
+            env=dict(os.environ, EFS_PERSIST_CANCEL_AT_SPAWN="1",
+                     EFS_PERSIST_SPAWN_PID=spawn_pid,
+                     EFS_PERSIST_HOLD="start", EFS_PERSIST_HOLD_S="30"),
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(0.2)
+        if proc_env_rc.returncode == 0:
+            fails.append("persist cancel-at-spawn exited 0")
+        if _pids_alive(spawn_pid):
+            fails.append("persist cancel-at-spawn left %s" % _pids_alive(spawn_pid))
     finally:
         shutil.rmtree(mnt, ignore_errors=True)
         base = os.path.join(mnt, "posix-persist-%s-cli" % host)
@@ -848,6 +891,13 @@ def main(argv=None):
     base = os.path.join(mnt, "posix-persist-%s%s" %
                         (host, ("-" + tag) if tag else ""))
 
+    # Reject a miss before prepare deletes the tree or verify removes it.
+    selected_names = [n for n, _fn in TESTS if not filt or filt in n]
+    if not selected_names:
+        what = "filter %r" % filt if filt else "the suite"
+        print("ERROR: no tests matched %s" % what)
+        return 2
+
     if phase == "prepare":
         # Only prepare clears the tree. If verify did any cleanup first it
         # could destroy the very evidence it exists to check.
@@ -860,13 +910,13 @@ def main(argv=None):
     # A cwd inside the mount blocks the unmount that has to happen next.
     os.chdir("/tmp")
 
-    selected = [(n, fn) for n, fn in TESTS if not filt or filt in n]
+    selected = [(n, fn) for n, fn in TESTS if n in selected_names]
     npass = nfail = 0
     t0 = time.time()
     by_name = {}
     mu = threading.Lock()
 
-    def flush_tsv():
+    def flush_tsv(done=False):
         if not results_file:
             return
         tmp = results_file + ".tmp"
@@ -874,12 +924,16 @@ def main(argv=None):
             f.write("# posix-persist host=%s mnt=%s phase=%s %s\n" %
                     (host, mnt, phase,
                      time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())))
+            for n, _fn in selected:
+                f.write("# select\t%s\n" % n)
             f.write("test\tresult\tdetail\n")
             for n, _fn in selected:
                 if n in by_name:
                     f.write(format_result_line(n, by_name[n][0], by_name[n][1]))
             f.write("# summary pass=%d fail=%d skip=0 total=%d dur=%.1f\n" %
                     (npass, nfail, npass + nfail, time.time() - t0))
+            if done and len(by_name) == len(selected):
+                f.write("# complete\n")
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, results_file)
@@ -911,11 +965,15 @@ def main(argv=None):
         runnable.append((name, test_timeout, tdir))
 
     live = []
+    gate = _SpawnGate()
 
     def _cut(signum, _frame):
         # An outer timeout must not leave a worker writing across the
         # unmount that separates prepare from verify. Kill every group
         # still registered, then leave a row for every test not finished.
+        if gate.defer:
+            gate.pending = signum
+            return
         nonlocal nfail
         for pid in list(live):
             _kill_pgid(pid)
@@ -939,6 +997,14 @@ def main(argv=None):
         proc = subprocess.Popen(
             [sys.executable, script, "--worker", name, tdir, phase, mnt, result],
             start_new_session=True)
+        pidfile = os.environ.get("EFS_PERSIST_SPAWN_PID")
+        if pidfile:
+            with open(pidfile, "a") as f:
+                f.write("%d\n" % proc.pid)
+                f.flush()
+                os.fsync(f.fileno())
+        if os.environ.get("EFS_PERSIST_CANCEL_AT_SPAWN"):
+            os.kill(os.getpid(), signal.SIGTERM)
         # Register before anything else so a failure here is still cancelled.
         live.append(proc.pid)
         if os.environ.get("EFS_PERSIST_RAISE"):
@@ -954,7 +1020,7 @@ def main(argv=None):
         stuck, left = _run_pool(
             runnable, 1, spawn_test,
             lambda name, status, detail: record(name, status, detail) or False,
-            live=live)
+            live=live, gate=gate, on_cancel=_cut)
     except Exception as exc:
         for pid in list(live):
             _kill_pgid(pid)
@@ -975,7 +1041,7 @@ def main(argv=None):
 
     print("\n%s: pass=%d fail=%d total=%d in %.1fs" %
           (phase, npass, nfail, npass + nfail, time.time() - t0), flush=True)
-    flush_tsv()
+    flush_tsv(done=not stuck)
     # os._exit: a lingering FUSE fd in a daemon thread can hang interpreter
     # shutdown, and the TSV is already on disk.
     os._exit(0 if nfail == 0 else 1)
