@@ -3222,10 +3222,15 @@ def invoke(fn, tdir):
     return "PASS", ""
 
 
+def format_result_line(name, status, detail):
+    """One TSV row. Tabs in the detail stay in the third field."""
+    return "%s\t%s\t%s\n" % (name, status, (detail or "").replace("\n", " "))
+
+
 def _write_status(path, status, detail):
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
-        f.write("%s\t%s\n" % (status, detail.replace("\n", " ")))
+        f.write("%s\t%s\n" % (status, (detail or "").replace("\n", " ")))
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)
@@ -3252,29 +3257,118 @@ def _unlink_quiet(path):
         pass
 
 
-def _kill_group(proc, grace=1.0):
-    """SIGTERM the process group, then SIGKILL. False means it is still alive."""
-    if proc.poll() is not None:
+def _kill_pgid(pgid, grace=0.5):
+    """SIGKILL a process group and wait until it is empty."""
+    if not pgid or pgid <= 0:
         return True
     try:
-        os.killpg(proc.pid, signal.SIGTERM)
+        os.killpg(pgid, signal.SIGKILL)
     except OSError:
         pass
     deadline = time.monotonic() + grace
     while time.monotonic() < deadline:
-        if proc.poll() is not None:
+        if not _pgid_alive(pgid):
+            return True
+        time.sleep(0.02)
+    return not _pgid_alive(pgid)
+
+
+def _pgid_alive(pgid):
+    """True while any process still belongs to this process group.
+
+    The leader exiting does not empty the group: a child that ignored
+    SIGTERM, or one blocked in a filesystem call, keeps the same pgid.
+    """
+    if not pgid or pgid <= 0:
+        return False
+    try:
+        os.killpg(pgid, 0)
+    except OSError as e:
+        if e.errno == errno.ESRCH:
+            return False
+        # EPERM means something in the group exists and we cannot signal it.
+        return True
+    return True
+
+
+def _kill_group(proc, grace=1.0):
+    """Stop the leader and every same-group descendant.
+
+    True only when the process group is empty. The leader's exit status is
+    not that proof: a descendant can survive SIGTERM after the leader has
+    already been reaped. False means at least one member is still alive.
+    """
+    pgid = proc.pid
+    proc.poll()
+
+    def settled():
+        proc.poll()
+        return not _pgid_alive(pgid)
+
+    if settled():
+        return True
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except OSError:
+        pass
+    deadline = time.monotonic() + grace
+    while time.monotonic() < deadline:
+        if settled():
             return True
         time.sleep(0.02)
     try:
-        os.killpg(proc.pid, signal.SIGKILL)
+        os.killpg(pgid, signal.SIGKILL)
     except OSError:
         pass
     deadline = time.monotonic() + grace
     while time.monotonic() < deadline:
-        if proc.poll() is not None:
+        if settled():
             return True
         time.sleep(0.02)
-    return proc.poll() is not None
+    return settled()
+
+
+def _classify_worker(rc, got):
+    """Accept PASS/SKIP only from a process that exited 0.
+
+    `got` is (status, detail) or None. A published PASS followed by a
+    nonzero exit or a signal is a failure; the published text stays in
+    the detail.
+    """
+    if rc is None:
+        return "FAIL", "worker has no exit status"
+    published = ""
+    if got is not None:
+        published = " after publishing %s" % got[0]
+        if got[1]:
+            published += ": " + got[1]
+    if rc < 0:
+        return "FAIL", "worker killed by signal %s%s" % (-rc, published)
+    if got is None:
+        return "FAIL", "worker exited %s without a result" % rc
+    status, detail = got
+    if rc != 0 and status in ("PASS", "SKIP"):
+        return "FAIL", "worker exited %s after publishing %s: %s" % (
+            rc, status, detail)
+    return status, detail
+
+
+def _finish_worker(proc, result, kill_group):
+    """Reap the whole group, then classify the leader's exit and result file.
+
+    Returns (status, detail, group_dead). The group stays the caller's
+    problem when group_dead is false.
+    """
+    dead = kill_group(proc)
+    rc = proc.poll()
+    got = _read_status_file(result)
+    if not dead:
+        status, detail = _classify_worker(rc, got)
+        return ("FAIL",
+                "worker group still alive (" + detail + ")",
+                False)
+    status, detail = _classify_worker(rc, got)
+    return status, detail, True
 
 
 def _run_pool(items, jobs, spawn, on_done, kill_group=None, live=None):
@@ -3296,12 +3390,15 @@ def _run_pool(items, jobs, spawn, on_done, kill_group=None, live=None):
         if live is not None and proc.pid in live:
             live.remove(proc.pid)
 
+    def note_live(proc):
+        if live is not None and proc.pid not in live:
+            live.append(proc.pid)
+
     while (queue or inflight) and stuck is None:
         while queue and len(inflight) < max(1, jobs) and not stop:
             name, timeout, payload = queue.pop(0)
             proc, result = spawn(name, payload)
-            if live is not None:
-                live.append(proc.pid)
+            note_live(proc)
             inflight.append((name, proc, result, time.monotonic(), timeout))
         if not inflight:
             break
@@ -3309,55 +3406,50 @@ def _run_pool(items, jobs, spawn, on_done, kill_group=None, live=None):
         now = time.monotonic()
         still = []
         for name, proc, result, start, timeout in inflight:
+            if stuck is not None:
+                still.append((name, proc, result, start, timeout))
+                continue
             rc = proc.poll()
             if rc is not None:
+                # The leader is gone. Descendants in its process group are
+                # not. Leave the pgid in `live` until the group is empty.
+                st, det, dead = _finish_worker(proc, result, kill_group)
+                if not dead:
+                    on_done(name, st, det)
+                    stuck = name
+                    continue
                 drop_live(proc)
-                got = _read_status_file(result)
-                if got is None:
-                    st, det = ("FAIL",
-                               "worker exited %s without a result" % rc)
-                else:
-                    st, det = got
                 _unlink_quiet(result)
                 if on_done(name, st, det):
                     stop = True
                 continue
             if timeout > 0 and now - start >= timeout:
-                drop_live(proc)
-                if not kill_group(proc):
+                st, det, dead = _finish_worker(proc, result, kill_group)
+                if not dead:
                     on_done(name, "FAIL",
-                            "timeout after %ss; worker still alive" % timeout)
+                            "timeout after %ss; worker group still alive" %
+                            timeout)
                     stuck = name
-                    for oname, oproc, oresult, _ostart, _otimeout in inflight:
-                        if oproc is proc or oproc.poll() is not None:
-                            continue
-                        drop_live(oproc)
-                        kill_group(oproc)
-                        _unlink_quiet(oresult)
-                        on_done(oname, "FAIL",
-                                "stopped because %s is still alive" % name)
-                    break
+                    continue
+                drop_live(proc)
                 _unlink_quiet(result)
                 if on_done(name, "FAIL", "timeout after %ss" % timeout):
                     stop = True
                 continue
             still.append((name, proc, result, start, timeout))
         inflight = still
-    if stop and stuck is None:
+    if stuck is not None:
+        # Stop siblings. A group that survives stays in `live` so a signal
+        # handler can still see it, and no later test is started.
         for name, proc, result, start, timeout in inflight:
-            if proc.poll() is None:
-                drop_live(proc)
-                if not kill_group(proc):
-                    on_done(name, "FAIL", "worker still alive after stop")
-                    stuck = name
-                    break
-                on_done(name, "FAIL", "stopped before finish")
-            else:
-                drop_live(proc)
-                got = _read_status_file(result)
-                if got:
-                    on_done(name, *got)
+            st, det, dead = _finish_worker(proc, result, kill_group)
+            if not dead:
+                on_done(name, "FAIL",
+                        "worker group still alive after %s" % stuck)
+                continue
+            drop_live(proc)
             _unlink_quiet(result)
+            on_done(name, st, det)
     return stuck, queue
 
 
@@ -3456,30 +3548,32 @@ def _self_test():
     finally:
         os.geteuid = real_euid
 
-    real_setxattr = os.setxattr
-    try:
-        def denied(*_a, **_k):
-            raise OSError(errno.EACCES, "injected")
-        os.setxattr = denied
+    if hasattr(os, "setxattr"):
+        real_setxattr = os.setxattr
         try:
-            opt_xattr(td)
-        except Fail as e:
-            expect(not getattr(e, "soft", False),
-                   "xattr EACCES was treated as unsupported")
-        else:
-            fails.append("xattr EACCES returned as PASS")
-        def unsupported(*_a, **_k):
-            raise OSError(errno.EOPNOTSUPP, "injected")
-        os.setxattr = unsupported
-        try:
-            opt_xattr(td)
-        except Fail as e:
-            expect(getattr(e, "soft", False),
-                   "xattr EOPNOTSUPP was a hard failure")
-        else:
-            fails.append("xattr EOPNOTSUPP returned as PASS")
-    finally:
-        os.setxattr = real_setxattr
+            def denied(*_a, **_k):
+                raise OSError(errno.EACCES, "injected")
+            os.setxattr = denied
+            try:
+                opt_xattr(td)
+            except Fail as e:
+                expect(not getattr(e, "soft", False),
+                       "xattr EACCES was treated as unsupported")
+            else:
+                fails.append("xattr EACCES returned as PASS")
+
+            def unsupported(*_a, **_k):
+                raise OSError(errno.EOPNOTSUPP, "injected")
+            os.setxattr = unsupported
+            try:
+                opt_xattr(td)
+            except Fail as e:
+                expect(getattr(e, "soft", False),
+                       "xattr EOPNOTSUPP was a hard failure")
+            else:
+                fails.append("xattr EOPNOTSUPP returned as PASS")
+        finally:
+            os.setxattr = real_setxattr
 
     import unicodedata
     nfc, nfd = _nfc_nfd_names()
@@ -3552,6 +3646,140 @@ def _self_test():
     for p in procs:
         if p.poll() is None:
             _kill_group(p)
+
+    # Leader dies on SIGTERM; a same-group child ignores SIGTERM and keeps
+    # writing. Cleanup is finished only when that child is gone.
+    term_child = (
+        "import os, signal, sys, time\n"
+        "marker, pids = sys.argv[1], sys.argv[2]\n"
+        "child = os.fork()\n"
+        "if child == 0:\n"
+        "    signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "    while True:\n"
+        "        f = open(marker, 'a')\n"
+        "        f.write('x')\n"
+        "        f.close()\n"
+        "        time.sleep(0.05)\n"
+        "else:\n"
+        "    f = open(pids, 'w')\n"
+        "    f.write('%d\\n' % child)\n"
+        "    f.close()\n"
+        "    while True:\n"
+        "        time.sleep(0.05)\n"
+    )
+    marker = os.path.join(td, "term-marker")
+    pids_path = os.path.join(td, "term-pids")
+    leader = subprocess.Popen(
+        [sys.executable, "-c", term_child, marker, pids_path],
+        start_new_session=True)
+    try:
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and not os.path.exists(pids_path):
+            time.sleep(0.02)
+        expect(os.path.exists(pids_path), "TERM child did not start")
+        child_pid = int(open(pids_path).read().strip())
+        expect(_kill_group(leader) is True, "_kill_group left the group alive")
+        try:
+            os.kill(child_pid, 0)
+            fails.append("SIGTERM-ignoring descendant still alive")
+        except OSError as e:
+            expect(e.errno == errno.ESRCH, "kill child: %s" % e)
+        size = os.path.getsize(marker) if os.path.exists(marker) else 0
+        time.sleep(0.25)
+        size2 = os.path.getsize(marker) if os.path.exists(marker) else 0
+        expect(size == size2, "descendant wrote after the group was reaped")
+    finally:
+        _kill_pgid(leader.pid)
+
+    # Normal leader exit while a nested child keeps mutating.
+    tree = (
+        "import os, signal, sys, time\n"
+        "marker, result, pids = sys.argv[1:4]\n"
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "mid = os.fork()\n"
+        "if mid == 0:\n"
+        "    grand = os.fork()\n"
+        "    if grand == 0:\n"
+        "        while True:\n"
+        "            f = open(marker, 'a')\n"
+        "            f.write('y')\n"
+        "            f.close()\n"
+        "            time.sleep(0.05)\n"
+        "    else:\n"
+        "        while True:\n"
+        "            time.sleep(0.2)\n"
+        "else:\n"
+        "    f = open(pids, 'w')\n"
+        "    f.write('%d\\n' % mid)\n"
+        "    f.close()\n"
+        "    f = open(result, 'w')\n"
+        "    f.write('PASS\\tdone\\n')\n"
+        "    f.close()\n"
+        "    os._exit(0)\n"
+    )
+    tree_marker = os.path.join(td, "tree-marker")
+    tree_pids = os.path.join(td, "tree-pids")
+    tree_out = {}
+
+    def spawn_tree(name, script):
+        result = os.path.join(td, name + ".res")
+        proc = subprocess.Popen(
+            [sys.executable, "-c", script, tree_marker, result, tree_pids],
+            start_new_session=True)
+        procs.append(proc)
+        return proc, result
+
+    stuck, _left = _run_pool(
+        [("tree", 5.0, tree)], 1, spawn_tree,
+        lambda n, s, d: tree_out.update({n: (s, d)}) or False)
+    expect(stuck is None, "exited leader with children was stuck: %s" % stuck)
+    expect(tree_out.get("tree", ("", ""))[0] == "PASS",
+           "tree result %s" % (tree_out,))
+    if os.path.exists(tree_pids):
+        mid = int(open(tree_pids).read().strip())
+        try:
+            os.kill(mid, 0)
+            fails.append("nested child still alive after the pool returned")
+        except OSError as e:
+            expect(e.errno == errno.ESRCH, "kill nested: %s" % e)
+    else:
+        fails.append("nested child pid file missing")
+    grown = os.path.getsize(tree_marker) if os.path.exists(tree_marker) else 0
+    time.sleep(0.25)
+    grown2 = os.path.getsize(tree_marker) if os.path.exists(tree_marker) else 0
+    expect(grown == grown2, "nested child wrote after the test was finished")
+
+    # PASS published, then a nonzero exit, must not be accepted.
+    exits = {}
+
+    def spawn_exit(name, script):
+        result = os.path.join(td, name + ".res")
+        proc = subprocess.Popen(
+            [sys.executable, "-c", script, result],
+            start_new_session=True,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        procs.append(proc)
+        return proc, result
+
+    exit_scripts = {
+        "badexit": "import sys\nopen(sys.argv[1],'w').write('PASS\\t\\n')\nraise SystemExit(7)\n",
+        "sig": "import os, signal, sys\nopen(sys.argv[1],'w').write('PASS\\t\\n')\nos.kill(os.getpid(), signal.SIGTERM)\n",
+        "missing": "raise SystemExit(0)\n",
+        "ok": "import sys\nopen(sys.argv[1],'w').write('PASS\\tok\\n')\nraise SystemExit(0)\n",
+    }
+    stuck, _left = _run_pool(
+        [(n, 3.0, exit_scripts[n]) for n in ("badexit", "sig", "missing", "ok")],
+        4, spawn_exit,
+        lambda n, s, d: exits.update({n: (s, d)}) or False)
+    expect(stuck is None, "exit-code pool stuck")
+    expect(exits.get("badexit", ("",))[0] == "FAIL",
+           "PASS+rc7 accepted: %r" % (exits.get("badexit"),))
+    expect(exits.get("sig", ("",))[0] == "FAIL",
+           "PASS+signal accepted: %r" % (exits.get("sig"),))
+    expect(exits.get("missing", ("",))[0] == "FAIL",
+           "missing result+rc0 accepted: %r" % (exits.get("missing"),))
+    expect(exits.get("ok") == ("PASS", "ok"),
+           "rc0 PASS rejected: %r" % (exits.get("ok"),))
 
     lockdir = os.path.join(td, "locks")
     os.mkdir(lockdir)
@@ -3643,8 +3871,7 @@ def main(argv=None):
                                               time.gmtime())))
             f.write("test\tresult\tdetail\n")
             for name, res, detail in ordered:
-                f.write("%s\t%s\t%s\n" %
-                        (name, res, detail.replace("\n", " ")))
+                f.write(format_result_line(name, res, detail))
             f.write("# summary pass=%d fail=%d skip=%d notrun=%d total=%d dur=%.1f\n" %
                     (npass, nfail, nskip, nnotrun,
                      npass + nfail + nskip + nnotrun, dt))
@@ -3681,10 +3908,7 @@ def main(argv=None):
         # Do not take tsv_mu: the main thread may already hold it in record().
         nonlocal nnotrun
         for pid in list(live):
-            try:
-                os.killpg(pid, signal.SIGKILL)
-            except OSError:
-                pass
+            _kill_pgid(pid)
         try:
             for name, _fn, _td in selected:
                 if name not in by_name:

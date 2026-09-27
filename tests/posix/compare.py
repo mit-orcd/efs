@@ -47,13 +47,20 @@ def load(path):
             raw = line.rstrip("\n")
             if not raw or raw.startswith("#"):
                 continue
-            parts = raw.split("\t")
+            # The detail is the remainder of the line, tabs included.
+            # Splitting the whole line and keeping only parts[2] drops
+            # everything after a second tab, so two different failures
+            # compare equal.
+            parts = raw.split("\t", 2)
             if parts[0] == "test" and len(parts) >= 2 and parts[1] == "result":
                 continue
-            if len(parts) < 2 or parts[1] == "":
+            if len(parts) < 2 or parts[1] == "" or parts[0] == "":
                 problems.append("%s:%d: truncated row %r" % (path, lineno, raw))
                 continue
             name, status = parts[0], parts[1]
+            if any(ch.isspace() for ch in name):
+                problems.append("%s:%d: malformed id %r" % (path, lineno, name))
+                continue
             if name in rows:
                 problems.append("%s:%d: duplicate id %s" % (path, lineno, name))
                 continue
@@ -227,6 +234,24 @@ def _self_test():
     text = check("empty-baseline", header, header + "t\tFAIL\thidden\n", 2)
     if "hidden" not in text:
         fails.append("empty-baseline: target failure was dropped")
+
+    # A detail with an embedded tab must survive a real writer and still
+    # count as a different failure. The writer lives in posix_suite.
+    import posix_suite
+    base_line = "# c\ntest\tresult\tdetail\n" + posix_suite.format_result_line(
+        "t", "FAIL", "common\tone")
+    targ_line = "# c\ntest\tresult\tdetail\n" + posix_suite.format_result_line(
+        "t", "FAIL", "common\ttwo")
+    check("tab-detail", base_line, targ_line, 1,
+          banned=("both fail (match): 1",))
+    same = "# c\ntest\tresult\tdetail\n" + posix_suite.format_result_line(
+        "u", "FAIL", "café\tsame")
+    check("tab-detail-same", same, same, 0)
+    empty_detail = "# c\ntest\tresult\tdetail\n" + posix_suite.format_result_line(
+        "e", "PASS", "")
+    check("empty-detail", empty_detail, empty_detail, 0)
+    check("bad-id", header + "has space\tFAIL\tx\n",
+          header + "has space\tFAIL\tx\n", 2)
 
     if fails:
         for f in fails:

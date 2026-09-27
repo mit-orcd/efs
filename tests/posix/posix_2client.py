@@ -1212,21 +1212,31 @@ def peer_rename_vs_unlink_src():
         has_b = os.path.exists(os.path.join(d, "b"))
         if has_a:
             raise Fail("source still present (rename=%s unlink=%s)" % (arc, brc))
-        if arc != 0 and brc != 0:
-            raise Fail("neither rename nor unlink succeeded")
+        # Exactly one call succeeds. The loser must report ENOENT: a false
+        # success that did not touch the name is not a race outcome.
+        if (arc == 0) == (brc == 0):
+            raise Fail("want exactly one success (rename=%s unlink=%s)" %
+                       (arc, brc))
+        if arc not in (0, errno.ENOENT) or brc not in (0, errno.ENOENT):
+            raise Fail("unexpected errno rename=%s unlink=%s" % (arc, brc))
         if arc == 0:
             if not has_b:
                 raise Fail("rename succeeded but b is missing")
             eq(rd(os.path.join(d, "b")), b"n", "renamed content")
         elif has_b:
-            raise Fail("b exists after a lost rename")
+            raise Fail("b exists after unlink won")
 
     return [("a", a0), ("ab", (a, b)), ("a", a2)]
 
 
 @test
 def peer_rename_vs_unlink_dst():
-    """A rename a→b while B unlinks b. Legal: a gone, b is a or missing."""
+    """A rename a→b while B unlinks b. Both calls succeed; a is gone.
+
+    b exists for the whole race: it starts as OLD, and rename replaces it
+    atomically, so unlink cannot legitimately observe ENOENT. Afterwards b
+    is NEW (unlink ran first) or absent (unlink removed the replacement).
+    """
     def a0(d):
         wr(os.path.join(d, "a"), b"NEW")
         wr(os.path.join(d, "b"), b"OLD")
@@ -1246,8 +1256,11 @@ def peer_rename_vs_unlink_dst():
         _race_rc(d, "b", rc)
 
     def a2(d):
-        _read_rc(d, "a")
-        _read_rc(d, "b")
+        arc = _read_rc(d, "a")
+        brc = _read_rc(d, "b")
+        if arc != 0 or brc != 0:
+            raise Fail("rename and unlink must both succeed "
+                       "(rename=%s unlink=%s)" % (arc, brc))
         if os.path.exists(os.path.join(d, "a")):
             raise Fail("source still present after rename")
         if os.path.exists(os.path.join(d, "b")):
@@ -1297,16 +1310,23 @@ def peer_rename_across_dirs_chase():
     def a2(d):
         if _read_rc(d, "a") != 0:
             raise Fail("first rename did not succeed")
+        brc = _read_rc(d, "b")
         if os.path.exists(os.path.join(d, "d1", "x")):
             raise Fail("source remains after a successful rename")
-        hits = []
-        for name in ("d2/x", "d3/x"):
-            p = os.path.join(d, name)
-            if os.path.exists(p):
-                eq(rd(p), b"moved", name)
-                hits.append(name)
-        if len(hits) != 1:
-            raise Fail("x at %s (want exactly one of d2/x, d3/x)" % hits)
+        at_d2 = os.path.exists(os.path.join(d, "d2", "x"))
+        at_d3 = os.path.exists(os.path.join(d, "d3", "x"))
+        if brc == 0:
+            if not at_d3 or at_d2:
+                raise Fail("B reported a successful chase but x is not only "
+                           "at d3 (d2=%s d3=%s)" % (at_d2, at_d3))
+            eq(rd(os.path.join(d, "d3", "x")), b"moved", "d3/x")
+        elif brc == errno.ENOENT:
+            if not at_d2 or at_d3:
+                raise Fail("B did not chase but x is not only at d2 "
+                           "(d2=%s d3=%s)" % (at_d2, at_d3))
+            eq(rd(os.path.join(d, "d2", "x")), b"moved", "d2/x")
+        else:
+            raise Fail("chase rc %s" % brc)
 
     return [("a", a0), ("ab", (a, b)), ("a", a2)]
 
@@ -2125,6 +2145,48 @@ def _self_test():
     exercise("peer_rename_vs_unlink_dst", 0, 1, 2)
     exercise("peer_rename_same_src_two_dst", 0, 1, 2)
 
+    def lie_ok(*_a, **_k):
+        return None
+
+    def lie_enoent(*_a, **_k):
+        raise OSError(errno.ENOENT, "injected")
+
+    def run_sides(name, rename_fn, unlink_fn, order="ab"):
+        steps = _step_fns(name)
+        setup, (fa, fb), check = steps[0][1], steps[1][1], steps[2][1]
+        d = tempfile.mkdtemp(prefix="posix2-side-")
+        try:
+            setup(d)
+            os.rename = rename_fn
+            os.unlink = unlink_fn
+            try:
+                if order == "ab":
+                    fa(d)
+                    fb(d)
+                else:
+                    fb(d)
+                    fa(d)
+            finally:
+                os.rename, os.unlink = real_rename, real_unlink
+            check(d)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    must_fail("src false unlink success", lambda: run_sides(
+        "peer_rename_vs_unlink_src", real_rename, lie_ok))
+    must_fail("src false rename success", lambda: run_sides(
+        "peer_rename_vs_unlink_src", lie_ok, real_unlink))
+    must_fail("src rename EIO", lambda: run_sides(
+        "peer_rename_vs_unlink_src", boom, real_unlink))
+    must_fail("src unlink EIO", lambda: run_sides(
+        "peer_rename_vs_unlink_src", real_rename, boom))
+    must_fail("dst unlink false ENOENT", lambda: run_sides(
+        "peer_rename_vs_unlink_dst", real_rename, lie_enoent))
+    must_fail("dst rename EIO", lambda: run_sides(
+        "peer_rename_vs_unlink_dst", boom, real_unlink))
+    must_fail("dst unlink EIO", lambda: run_sides(
+        "peer_rename_vs_unlink_dst", real_rename, boom))
+
     chase = _step_fns("peer_rename_across_dirs_chase")
     d = tempfile.mkdtemp(prefix="posix2-chase-")
     try:
@@ -2139,6 +2201,16 @@ def _self_test():
         try:
             rename_step(d)
             must_fail("chase noop", lambda: chase[2][1](d))
+        finally:
+            os.rename = real_rename
+        # A really moves d1/x to d2/x. B claims the second rename succeeded
+        # and does not move it. That acknowledgement is not a legal miss.
+        os.rename = real_rename
+        rename_step(d)
+        os.rename = noop
+        try:
+            chase[1][1][1](d)
+            must_fail("chase false success", lambda: chase[2][1](d))
         finally:
             os.rename = real_rename
     finally:

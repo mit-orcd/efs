@@ -39,6 +39,7 @@ import errno
 import hashlib
 import os
 import shutil
+import signal
 import tempfile
 import stat as statmod
 import subprocess
@@ -51,7 +52,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # must be the SAME generator: a divergent copy would silently compare a file
 # against bytes it was never written with.
 from posix_suite import (  # noqa: E402
-    Fail, _run_pool, _write_status, eq, rand_bytes, rd, sh, wr)
+    Fail, _kill_pgid, _run_pool, _write_status, eq, format_result_line,
+    rand_bytes, rd, sh, wr)
 
 CHUNK = 128 * 1024
 
@@ -559,8 +561,32 @@ def _capture_paths(mnt, results):
     return mnt, results
 
 
+def _maybe_hold(where):
+    """Test hook. EFS_PERSIST_HOLD=start|after-result sleeps in this worker.
+
+    A same-group child ignores SIGTERM, so cancelling the runner has to
+    kill the process group and not only the leader.
+    """
+    if os.environ.get("EFS_PERSIST_HOLD") != where:
+        return
+    seconds = float(os.environ.get("EFS_PERSIST_HOLD_S", "30"))
+    pidfile = os.environ.get("EFS_PERSIST_HOLD_PID")
+    child = os.fork()
+    if child == 0:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        time.sleep(seconds)
+        os._exit(0)
+    if pidfile:
+        with open(pidfile, "w") as f:
+            f.write("%s %s\n" % (os.getpid(), child))
+            f.flush()
+            os.fsync(f.fileno())
+    time.sleep(seconds)
+
+
 def _worker_main(name, tdir, phase, mnt, result):
     os.chdir("/tmp")
+    _maybe_hold("start")
     fns = dict(TESTS)
     try:
         if name not in fns:
@@ -570,6 +596,7 @@ def _worker_main(name, tdir, phase, mnt, result):
         if phase == "prepare":
             _fsync_ancestry(tdir, mnt)
         _write_status(result, "PASS", "")
+        _maybe_hold("after-result")
     except Fail as e:
         try:
             _write_status(result, "FAIL", str(e))
@@ -592,7 +619,9 @@ def _self_test():
         os.mkdir("mnt")
         mnt, results = _capture_paths("mnt", "out.tsv")
         os.chdir("/")
-        if mnt != os.path.join(td, "mnt") or results != os.path.join(td, "out.tsv"):
+        want_mnt = os.path.realpath(os.path.join(td, "mnt"))
+        want_out = os.path.realpath(os.path.join(td, "out.tsv"))
+        if os.path.realpath(mnt) != want_mnt or os.path.realpath(results) != want_out:
             fails.append("relative paths were not captured before chdir")
         if not os.path.isdir(mnt):
             fails.append("captured mount path is not a directory")
@@ -643,6 +672,114 @@ def _self_test():
     check_raises("dir fsync", patch_dir_fsync, td)
     check_raises("file fsync", patch_file_fsync, td)
     check_raises("dir open", patch_dir_open, td)
+
+    def _pids_alive(path):
+        if not os.path.exists(path):
+            return []
+        alive = []
+        for tok in open(path).read().split():
+            pid = int(tok)
+            try:
+                os.kill(pid, 0)
+            except OSError as e:
+                if e.errno != errno.ESRCH:
+                    alive.append(pid)
+            else:
+                alive.append(pid)
+        return alive
+
+    def _row_status(path, name):
+        if not os.path.exists(path):
+            return None
+        prefix = name + "\t"
+        for line in open(path):
+            if line.startswith(prefix):
+                return line.split("\t", 2)[1]
+        return None
+
+    def _cli(mnt, phase, tag, when, results):
+        pidfile = results + ".pids"
+        env = os.environ.copy()
+        env["EFS_PERSIST_HOLD_S"] = "30"
+        env["EFS_PERSIST_HOLD_PID"] = pidfile
+        env["EFS_PERSIST_HOLD"] = "after-result" if when == "after-result" else "start"
+        if when == "raise":
+            env["EFS_PERSIST_RAISE"] = "1"
+        proc = subprocess.Popen(
+            [sys.executable, os.path.abspath(__file__), mnt,
+             "--phase", phase, "--filter", "small_file", "--tag", tag,
+             "--results", results, "--timeout-s", "20", "--keep"],
+            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True)
+        try:
+            if when == "immediate":
+                os.kill(proc.pid, signal.SIGTERM)
+            elif when != "raise":
+                deadline = time.monotonic() + 8
+                while (time.monotonic() < deadline and
+                       not os.path.exists(pidfile)):
+                    if proc.poll() is not None:
+                        break
+                    time.sleep(0.02)
+                if proc.poll() is None:
+                    os.kill(proc.pid, signal.SIGTERM)
+            try:
+                rc = proc.wait(timeout=12)
+            except subprocess.TimeoutExpired:
+                _kill_pgid(proc.pid)
+                rc = proc.wait(timeout=2)
+            time.sleep(0.2)
+            alive = _pids_alive(pidfile)
+            return rc, alive, _row_status(results, "small_file")
+        finally:
+            if proc.poll() is None:
+                _kill_pgid(proc.pid)
+            for pid in _pids_alive(pidfile):
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+
+    host = subprocess.run(["hostname", "-s"], stdout=subprocess.PIPE
+                          ).stdout.decode().strip()
+    mnt = tempfile.mkdtemp(prefix="persist-cli-")
+    try:
+        prep = subprocess.run(
+            [sys.executable, os.path.abspath(__file__), mnt,
+             "--phase", "prepare", "--filter", "small_file",
+             "--tag", "cli", "--timeout-s", "30", "--keep"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if prep.returncode != 0:
+            fails.append("prepare before cancel tests rc=%s" % prep.returncode)
+        cases = (
+            ("prepare", "immediate", "cli"),
+            ("prepare", "start", "cli"),
+            ("prepare", "after-result", "cli"),
+            ("prepare", "raise", "cli"),
+            ("verify", "start", "cliv"),
+        )
+        vprep = subprocess.run(
+            [sys.executable, os.path.abspath(__file__), mnt,
+             "--phase", "prepare", "--filter", "small_file",
+             "--tag", "cliv", "--timeout-s", "30", "--keep"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if vprep.returncode != 0:
+            fails.append("verify setup prepare rc=%s" % vprep.returncode)
+        for phase, when, tag in cases:
+            results = os.path.join(td, "cli-%s-%s.tsv" % (phase, when))
+            rc, alive, status = _cli(mnt, phase, tag, when, results)
+            if rc == 0:
+                fails.append("%s/%s exited 0" % (phase, when))
+            if alive:
+                fails.append("%s/%s left workers %s" % (phase, when, alive))
+            if when != "immediate" and status == "PASS":
+                fails.append("%s/%s recorded PASS (%s)" % (phase, when, status))
+            if when in ("start", "after-result", "raise") and status is None:
+                fails.append("%s/%s wrote no row for small_file" % (phase, when))
+    finally:
+        shutil.rmtree(mnt, ignore_errors=True)
+        base = os.path.join(mnt, "posix-persist-%s-cli" % host)
+        shutil.rmtree(base, ignore_errors=True)
 
     if fails:
         for msg in fails:
@@ -740,8 +877,7 @@ def main(argv=None):
             f.write("test\tresult\tdetail\n")
             for n, _fn in selected:
                 if n in by_name:
-                    f.write("%s\t%s\t%s\n" % (n, by_name[n][0],
-                                              by_name[n][1].replace("\n", " ")))
+                    f.write(format_result_line(n, by_name[n][0], by_name[n][1]))
             f.write("# summary pass=%d fail=%d skip=0 total=%d dur=%.1f\n" %
                     (npass, nfail, npass + nfail, time.time() - t0))
             f.flush()
@@ -774,20 +910,63 @@ def main(argv=None):
             continue
         runnable.append((name, test_timeout, tdir))
 
+    live = []
+
+    def _cut(signum, _frame):
+        # An outer timeout must not leave a worker writing across the
+        # unmount that separates prepare from verify. Kill every group
+        # still registered, then leave a row for every test not finished.
+        nonlocal nfail
+        for pid in list(live):
+            _kill_pgid(pid)
+        try:
+            for name, _fn in selected:
+                if name not in by_name:
+                    by_name[name] = ("NOTRUN",
+                                     "runner cut by signal %d" % signum)
+                    nfail += 1
+            flush_tsv()
+        except Exception:
+            pass
+        os._exit(128 + signum)
+
+    signal.signal(signal.SIGTERM, _cut)
+    signal.signal(signal.SIGINT, _cut)
+
     def spawn_test(name, tdir):
         fd, result = tempfile.mkstemp(prefix="persist-result-")
         os.close(fd)
         proc = subprocess.Popen(
             [sys.executable, script, "--worker", name, tdir, phase, mnt, result],
             start_new_session=True)
+        # Register before anything else so a failure here is still cancelled.
+        live.append(proc.pid)
+        if os.environ.get("EFS_PERSIST_RAISE"):
+            raise RuntimeError("injected runner failure")
         return proc, result
 
     # One test at a time. The next test starts only after this process group
     # has been reaped. A worker that survives SIGKILL ends the phase; the
     # tree is left in place for an external supervisor.
-    stuck, left = _run_pool(
-        runnable, 1, spawn_test,
-        lambda name, status, detail: record(name, status, detail) or False)
+    stuck = None
+    left = []
+    try:
+        stuck, left = _run_pool(
+            runnable, 1, spawn_test,
+            lambda name, status, detail: record(name, status, detail) or False,
+            live=live)
+    except Exception as exc:
+        for pid in list(live):
+            _kill_pgid(pid)
+        for name, _fn in selected:
+            if name not in by_name:
+                try:
+                    record(name, "NOTRUN", "runner exception: %s" % exc)
+                except Exception:
+                    by_name[name] = ("NOTRUN", "runner exception")
+                    nfail += 1
+        flush_tsv()
+        os._exit(1)
     if stuck:
         for name, _timeout, _tdir in left:
             record(name, "NOTRUN", "incomplete: timed-out worker still alive")
