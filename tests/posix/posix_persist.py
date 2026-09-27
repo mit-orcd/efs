@@ -35,9 +35,11 @@ Usage:
 
 Exit code: 0 if every selected test passed.
 """
+import errno
 import hashlib
 import os
 import shutil
+import tempfile
 import stat as statmod
 import subprocess
 import sys
@@ -48,7 +50,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # Reuse the suite's helpers rather than copying them. rand_bytes in particular
 # must be the SAME generator: a divergent copy would silently compare a file
 # against bytes it was never written with.
-from posix_suite import Fail, eq, rand_bytes, rd, sh, wr  # noqa: E402
+from posix_suite import (  # noqa: E402
+    Fail, _run_pool, _write_status, eq, rand_bytes, rd, sh, wr)
 
 CHUNK = 128 * 1024
 
@@ -132,8 +135,6 @@ def fsynced_file(d, phase):
         dfd = os.open(d, os.O_RDONLY)
         try:
             os.fsync(dfd)
-        except OSError:
-            pass
         finally:
             os.close(dfd)
     else:
@@ -477,27 +478,24 @@ def dir_mode(d, phase):
         eq(got, 0o711, "dir mode")
 
 
+# Fixed by the test, not copied from a pre-remount stat. A filesystem that
+# stores the wrong size or truncates the nanoseconds must not get to define
+# its own expected value.
+_MTIME_NS = 1600000000 * 1000000000 + 123456789
+
+
 @persist
 def size_and_mtime(d, phase):
-    """st_size and st_mtime are the same values after the remount.
-
-    The prepare phase records what it observed into a file that the verify
-    phase reads back, so a drifting mtime is caught rather than a mtime that
-    merely looks plausible.
-    """
+    """st_size and st_mtime_ns survive as the values this test set."""
     p = os.path.join(d, "f")
-    stamp = os.path.join(d, "stamp")
     want = rand_bytes("size_and_mtime", 12345)
     if phase == "prepare":
         wr(p, want)
-        os.utime(p, (1600000000, 1600000000))
-        st = os.stat(p)
-        wr(stamp, ("%d %d" % (st.st_size, int(st.st_mtime))).encode())
+        os.utime(p, ns=(_MTIME_NS, _MTIME_NS))
     else:
-        pre_size, pre_mtime = rd(stamp).decode().split()
         st = os.stat(p)
-        eq(st.st_size, int(pre_size), "size")
-        eq(int(st.st_mtime), int(pre_mtime), "mtime")
+        eq(st.st_size, 12345, "size")
+        eq(st.st_mtime_ns, _MTIME_NS, "mtime_ns")
 
 
 @persist
@@ -529,8 +527,141 @@ def large_file_size_only(d, phase):
 # Runner
 # --------------------------------------------------------------------------
 
-def main():
-    args = sys.argv[1:]
+def _fsync_dir(path):
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _fsync_ancestry(start, stop):
+    """fsync start and each parent through stop. Errors propagate."""
+    path = os.path.abspath(start)
+    stop = os.path.abspath(stop)
+    seen = set()
+    while path not in seen:
+        seen.add(path)
+        _fsync_dir(path)
+        if path == stop:
+            return
+        parent = os.path.dirname(path)
+        if parent == path:
+            return
+        path = parent
+
+
+def _capture_paths(mnt, results):
+    """Absolute paths from the caller's cwd, before this process chdirs."""
+    mnt = os.path.abspath(mnt)
+    if results:
+        results = os.path.abspath(results)
+    return mnt, results
+
+
+def _worker_main(name, tdir, phase, mnt, result):
+    os.chdir("/tmp")
+    fns = dict(TESTS)
+    try:
+        if name not in fns:
+            _write_status(result, "FAIL", "unknown test %s" % name)
+            os._exit(1)
+        fns[name](tdir, phase)
+        if phase == "prepare":
+            _fsync_ancestry(tdir, mnt)
+        _write_status(result, "PASS", "")
+    except Fail as e:
+        try:
+            _write_status(result, "FAIL", str(e))
+        except Exception:
+            pass
+    except Exception as e:  # noqa: BLE001
+        try:
+            _write_status(result, "FAIL", "%s: %s" % (type(e).__name__, e))
+        except Exception:
+            pass
+    os._exit(0)
+
+
+def _self_test():
+    fails = []
+    td = tempfile.mkdtemp(prefix="persist-self-")
+    old = os.getcwd()
+    try:
+        os.chdir(td)
+        os.mkdir("mnt")
+        mnt, results = _capture_paths("mnt", "out.tsv")
+        os.chdir("/")
+        if mnt != os.path.join(td, "mnt") or results != os.path.join(td, "out.tsv"):
+            fails.append("relative paths were not captured before chdir")
+        if not os.path.isdir(mnt):
+            fails.append("captured mount path is not a directory")
+    finally:
+        os.chdir(old)
+
+    real_fsync = os.fsync
+    real_open = os.open
+
+    def check_raises(label, patch, target):
+        patch()
+        try:
+            try:
+                fsynced_file(td, "prepare")
+            except OSError as e:
+                if e.errno != errno.EIO:
+                    fails.append("%s: errno %s" % (label, e.errno))
+            except Fail as e:
+                fails.append("%s became Fail (swallowed into the test?): %s" %
+                             (label, e))
+            else:
+                fails.append("%s was swallowed and prepare returned" % label)
+        finally:
+            os.fsync = real_fsync
+            os.open = real_open
+
+    def patch_dir_fsync():
+        def fsync(fd):
+            if statmod.S_ISDIR(os.fstat(fd).st_mode):
+                raise OSError(errno.EIO, "injected")
+            return real_fsync(fd)
+        os.fsync = fsync
+
+    def patch_file_fsync():
+        def fsync(fd):
+            if not statmod.S_ISDIR(os.fstat(fd).st_mode):
+                raise OSError(errno.EIO, "injected")
+            return real_fsync(fd)
+        os.fsync = fsync
+
+    def patch_dir_open():
+        def open_(path, *a, **k):
+            if path == td:
+                raise OSError(errno.EIO, "injected")
+            return real_open(path, *a, **k)
+        os.open = open_
+
+    check_raises("dir fsync", patch_dir_fsync, td)
+    check_raises("file fsync", patch_file_fsync, td)
+    check_raises("dir open", patch_dir_open, td)
+
+    if fails:
+        for msg in fails:
+            print("FAIL " + msg)
+        return 1
+    print("posix_persist self-test: pass")
+    return 0
+
+
+def main(argv=None):
+    args = list(sys.argv[1:] if argv is None else argv)
+    if args == ["--self-test"]:
+        return _self_test()
+    if args[:1] == ["--worker"]:
+        if len(args) != 6:
+            print("usage: --worker NAME TDIR PHASE MNT RESULT", file=sys.stderr)
+            return 2
+        _worker_main(args[1], args[2], args[3], args[4], args[5])
+        return 1
     if not args:
         print(__doc__)
         return 2
@@ -563,6 +694,8 @@ def main():
             i += 1
         else:
             i += 1
+
+    mnt, results_file = _capture_paths(mnt, results_file)
 
     if phase not in ("prepare", "verify"):
         print("ERROR: --phase must be 'prepare' or 'verify'")
@@ -622,39 +755,43 @@ def main():
             if status == "PASS":
                 npass += 1
                 print("pass %-32s" % name, flush=True)
+            elif status == "NOTRUN":
+                nfail += 1
+                print("NOTRUN %-32s %s" % (name, detail), flush=True)
             else:
                 nfail += 1
                 print("FAIL %-32s %s" % (name, detail), flush=True)
             flush_tsv()
 
-    for name, fn in selected:
+    script = os.path.abspath(__file__)
+    runnable = []
+    for name, _fn in selected:
         tdir = os.path.join(base, name)
         if phase == "prepare":
             os.makedirs(tdir, exist_ok=True)
         elif not os.path.isdir(tdir):
             record(name, "FAIL", "test directory vanished across the remount")
             continue
-        done = {}
+        runnable.append((name, test_timeout, tdir))
 
-        def run(fn=fn, tdir=tdir, done=done):
-            try:
-                fn(tdir, phase)
-                done["r"] = ("PASS", "")
-            except Fail as e:
-                done["r"] = ("FAIL", str(e))
-            except Exception as e:  # noqa: BLE001
-                done["r"] = ("FAIL", "%s: %s" % (type(e).__name__, e))
+    def spawn_test(name, tdir):
+        fd, result = tempfile.mkstemp(prefix="persist-result-")
+        os.close(fd)
+        proc = subprocess.Popen(
+            [sys.executable, script, "--worker", name, tdir, phase, mnt, result],
+            start_new_session=True)
+        return proc, result
 
-        th = threading.Thread(target=run, daemon=True)
-        th.start()
-        th.join(test_timeout)
-        if th.is_alive():
-            record(name, "FAIL", "timeout after %ss" % test_timeout)
-        else:
-            st, detail = done.get("r", ("FAIL", "no result"))
-            record(name, st, detail)
-
-    if phase == "verify" and not keep:
+    # One test at a time. The next test starts only after this process group
+    # has been reaped. A worker that survives SIGKILL ends the phase; the
+    # tree is left in place for an external supervisor.
+    stuck, left = _run_pool(
+        runnable, 1, spawn_test,
+        lambda name, status, detail: record(name, status, detail) or False)
+    if stuck:
+        for name, _timeout, _tdir in left:
+            record(name, "NOTRUN", "incomplete: timed-out worker still alive")
+    elif phase == "verify" and not keep:
         shutil.rmtree(base, ignore_errors=True)
 
     print("\n%s: pass=%d fail=%d total=%d in %.1fs" %

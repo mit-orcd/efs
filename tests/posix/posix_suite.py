@@ -31,7 +31,6 @@ import sys
 import tempfile
 import threading
 import time
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
 # --------------------------------------------------------------------------
 # Test registry + result tracking
@@ -930,6 +929,12 @@ def _root():
     return os.geteuid() == 0
 
 
+def _skip_root():
+    """Root bypasses DAC. That is a skipped check, not a pass."""
+    if _root():
+        raise Fail("skipped: root bypasses permission checks", soft=True)
+
+
 def _write_script(path):
     with open(path, "w") as f:
         f.write("#!%s\nimport sys\nsys.exit(0)\n" % sys.executable)
@@ -937,8 +942,7 @@ def _write_script(path):
 
 @test
 def perm_file_000_denied(d):
-    if _root():
-        return
+    _skip_root()
     p = os.path.join(d, "f")
     wr(p, b"x")
     os.chmod(p, 0o000)
@@ -952,8 +956,7 @@ def perm_file_000_denied(d):
 
 @test
 def perm_file_write_only(d):
-    if _root():
-        return
+    _skip_root()
     p = os.path.join(d, "f")
     wr(p, b"old")
     os.chmod(p, 0o200)
@@ -966,8 +969,7 @@ def perm_file_write_only(d):
 
 @test
 def perm_file_read_only_ops(d):
-    if _root():
-        return
+    _skip_root()
     p = os.path.join(d, "f")
     wr(p, b"keep")
     os.chmod(p, 0o400)
@@ -982,8 +984,7 @@ def perm_file_read_only_ops(d):
 
 @test
 def perm_owner_bits_not_other(d):
-    if _root():
-        return
+    _skip_root()
     p = os.path.join(d, "f")
     wr(p, b"x")
     os.chmod(p, 0o007)   # --- --- rwx : owner has nothing
@@ -994,8 +995,7 @@ def perm_owner_bits_not_other(d):
 
 @test
 def perm_owner_bits_not_group(d):
-    if _root():
-        return
+    _skip_root()
     p = os.path.join(d, "f")
     wr(p, b"x")
     os.chmod(p, 0o070)
@@ -1005,8 +1005,7 @@ def perm_owner_bits_not_group(d):
 
 @test
 def perm_create_mode_000_reopen(d):
-    if _root():
-        return
+    _skip_root()
     p = os.path.join(d, "f")
     fd = os.open(p, os.O_CREAT | os.O_WRONLY, 0o000)
     os.write(fd, b"x")
@@ -1018,8 +1017,7 @@ def perm_create_mode_000_reopen(d):
 
 @test
 def perm_open_fd_survives_chmod(d):
-    if _root():
-        return
+    _skip_root()
     p = os.path.join(d, "f")
     fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
     os.write(fd, b"abcd")
@@ -1080,6 +1078,7 @@ def perm_ftruncate_after_chmod(d):
 
 @test
 def perm_access_rwx(d):
+    _skip_root()
     p = os.path.join(d, "f")
     wr(p, b"x")
     os.chmod(p, 0o644)
@@ -1098,8 +1097,7 @@ def perm_access_rwx(d):
 
 @test
 def perm_exec_denied_no_x(d):
-    if _root():
-        return
+    _skip_root()
     p = os.path.join(d, "s")
     _write_script(p)
     os.chmod(p, 0o644)
@@ -1152,8 +1150,7 @@ def perm_sticky_owner_can_unlink(d):
 
 @test
 def perm_chown_other_uid_denied(d):
-    if _root():
-        return
+    _skip_root()
     p = os.path.join(d, "f")
     wr(p, b"x")
     expect_err((errno.EPERM, errno.EACCES), os.chown, p, os.getuid() + 1, -1)
@@ -1162,8 +1159,7 @@ def perm_chown_other_uid_denied(d):
 
 @test
 def perm_chown_other_gid_denied(d):
-    if _root():
-        return
+    _skip_root()
     p = os.path.join(d, "f")
     wr(p, b"x")
     mine = set(os.getgroups())
@@ -1181,8 +1177,7 @@ def perm_chown_other_gid_denied(d):
 
 @test
 def perm_dir_readonly_mutate(d):
-    if _root():
-        return
+    _skip_root()
     sub = os.path.join(d, "sub")
     os.mkdir(sub)
     wr(os.path.join(sub, "a"), b"x")
@@ -1206,8 +1201,7 @@ def perm_dir_readonly_mutate(d):
 @test
 @serial
 def perm_dir_no_x_search(d):
-    if _root():
-        return
+    _skip_root()
     sub = os.path.join(d, "sub")
     os.mkdir(sub)
     wr(os.path.join(sub, "child"), b"x")
@@ -1228,8 +1222,7 @@ def perm_dir_no_x_search(d):
 
 @test
 def perm_dir_no_r_list(d):
-    if _root():
-        return
+    _skip_root()
     sub = os.path.join(d, "sub")
     os.mkdir(sub)
     wr(os.path.join(sub, "child"), b"hid")
@@ -1245,8 +1238,7 @@ def perm_dir_no_r_list(d):
 
 @test
 def perm_dir_wx_no_r(d):
-    if _root():
-        return
+    _skip_root()
     sub = os.path.join(d, "sub")
     os.mkdir(sub)
     os.chmod(sub, 0o300)   # -wx------
@@ -1261,6 +1253,7 @@ def perm_dir_wx_no_r(d):
 
 @test
 def perm_dir_000_restore(d):
+    _skip_root()
     sub = os.path.join(d, "sub")
     os.mkdir(sub)
     wr(os.path.join(sub, "f"), b"x")
@@ -1282,8 +1275,7 @@ def perm_unlink_mode_000_file(d):
 
 @test
 def perm_nested_parent_no_x(d):
-    if _root():
-        return
+    _skip_root()
     a = os.path.join(d, "a")
     os.makedirs(os.path.join(a, "b"))
     wr(os.path.join(a, "b", "c"), b"deep")
@@ -1297,8 +1289,7 @@ def perm_nested_parent_no_x(d):
 
 @test
 def perm_rename_into_readonly_dir(d):
-    if _root():
-        return
+    _skip_root()
     src = os.path.join(d, "src")
     dst = os.path.join(d, "dst")
     os.mkdir(src)
@@ -1315,8 +1306,7 @@ def perm_rename_into_readonly_dir(d):
 
 @test
 def perm_symlink_target_denied(d):
-    if _root():
-        return
+    _skip_root()
     t = os.path.join(d, "t")
     wr(t, b"x")
     os.symlink("t", os.path.join(d, "sl"))
@@ -1327,8 +1317,7 @@ def perm_symlink_target_denied(d):
 
 @test
 def perm_hardlink_shares_mode(d):
-    if _root():
-        return
+    _skip_root()
     a = os.path.join(d, "a")
     b = os.path.join(d, "b")
     wr(a, b"shared")
@@ -1526,14 +1515,29 @@ def names_control_and_high_bytes(d):
     eq(os.listdir(bd), [], "byte-names removed: leftover %r" % os.listdir(bd))
 
 
+def _nfc_nfd_names():
+    """Return (NFC, NFD) for the same word 'café'.
+
+    The raw encodings differ and each normalizes to the other form. A name
+    built as cafe + U+00E9 ('cafeé') is a different word and does not catch
+    a filesystem that folds canonical equivalents together.
+    """
+    import unicodedata
+    nfc = unicodedata.normalize("NFC", "caf\u00e9")
+    nfd = unicodedata.normalize("NFD", nfc)
+    if nfc == nfd or os.fsencode(nfc) == os.fsencode(nfd):
+        raise Fail("test setup: NFC and NFD encodings are not distinct")
+    if unicodedata.normalize("NFC", nfd) != nfc:
+        raise Fail("test setup: NFD does not normalize back to NFC")
+    if unicodedata.normalize("NFD", nfc) != nfd:
+        raise Fail("test setup: NFC does not normalize to NFD")
+    return nfc, nfd
+
+
 @test
 def names_unicode_nfc_nfd_coexist(d):
-    # NFC (é = U+00E9 precomposed) vs NFD (e + U+0301 combining) are different
-    # byte sequences for the same glyph; both must coexist as distinct names.
-    nfc = "cafe\u00e9"  # NFC: precomposed U+00E9
-    nfd = "cafe\u0301"  # NFD: e + combining acute U+0301
-    if nfc == nfd:
-        raise Fail("test setup: NFC == NFD")
+    # NFC (é = U+00E9) vs NFD (e + U+0301) of the same word must coexist.
+    nfc, nfd = _nfc_nfd_names()
     wr(os.path.join(d, nfc), b"nfc")
     wr(os.path.join(d, nfd), b"nfd")
     eq(rd(os.path.join(d, nfc)), b"nfc", "NFC roundtrip")
@@ -1885,47 +1889,81 @@ def flock_shared_then_exclusive(d):
         os.close(fd2)
 
 
+def _wait_for(path, seconds, what):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if os.path.exists(path):
+            return
+        time.sleep(0.02)
+    raise Fail(what)
+
+
 @test
 def flock_two_proc_exclusive(d):
+    """Another process holds LOCK_EX until this process asks it to release."""
     p = os.path.join(d, "f")
     ready = os.path.join(d, ".flock-ready")
+    release = os.path.join(d, ".flock-release")
     wr(p, b"x")
     snippet = (
-        "import fcntl,os,sys,time\n"
-        "fd=os.open(sys.argv[1], os.O_RDWR)\n"
+        "import fcntl, os, sys, time\n"
+        "fd = os.open(sys.argv[1], os.O_RDWR)\n"
         "fcntl.flock(fd, fcntl.LOCK_EX)\n"
-        "open(sys.argv[2],'w').write('1\\n')\n"
-        "time.sleep(1.2)\n"
+        "open(sys.argv[2], 'w').write('1\\n')\n"
+        "deadline = time.monotonic() + 10\n"
+        "while not os.path.exists(sys.argv[3]):\n"
+        "    if time.monotonic() > deadline:\n"
+        "        sys.exit(3)\n"
+        "    time.sleep(0.02)\n"
         "fcntl.flock(fd, fcntl.LOCK_UN)\n"
         "os.close(fd)\n"
     )
-    child = subprocess.Popen([sys.executable, "-c", snippet, p, ready])
-    deadline = time.time() + 5.0
-    while time.time() < deadline and not os.path.exists(ready):
-        time.sleep(0.05)
-    if not os.path.exists(ready):
-        child.kill()
-        child.wait()
-        raise Fail("child did not acquire LOCK_EX")
-    fd = os.open(p, os.O_RDWR)
+    child = subprocess.Popen(
+        [sys.executable, "-c", snippet, p, ready, release])
     try:
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            held = True
-        except OSError as e:
-            if e.errno not in (errno.EAGAIN, errno.EACCES):
-                raise Fail("parent lock errno %s" % e)
-            held = False
-        if held:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-            raise Fail("parent got LOCK_EX|NB while child held LOCK_EX")
+            _wait_for(ready, 5.0, "child did not acquire LOCK_EX")
+        except Fail:
+            child.kill()
+            raise
+        fd = os.open(p, os.O_RDWR)
+        try:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError as e:
+                if e.errno not in (errno.EAGAIN, errno.EACCES):
+                    raise Fail("parent lock errno %s" % e)
+            else:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                raise Fail("parent got LOCK_EX|NB while child held LOCK_EX")
+            open(release, "w").close()
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except OSError as e:
+                    if e.errno not in (errno.EAGAIN, errno.EACCES):
+                        raise Fail("parent relock errno %s" % e)
+                    time.sleep(0.02)
+                    continue
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                break
+            else:
+                raise Fail("parent did not acquire LOCK_EX after child release")
+        finally:
+            os.close(fd)
     finally:
-        os.close(fd)
         child.wait()
 
 
 @test
 def fcntl_byte_range_lock(d):
+    """POSIX record locks belong to the process, and conflict across processes.
+
+    Same-process overlap must succeed (the second lock merges). Another
+    process's overlap must fail with EAGAIN/EACCES, an adjacent range must
+    succeed, and a blocked waiter must acquire only after an explicit unlock.
+    """
     p = os.path.join(d, "f")
     wr(p, b"x" * 100)
     fd1 = os.open(p, os.O_RDWR)
@@ -1936,16 +1974,107 @@ def fcntl_byte_range_lock(d):
             fcntl.lockf(fd2, fcntl.LOCK_EX | fcntl.LOCK_NB, 20, 10)
         except OSError as e:
             if e.errno in (errno.EAGAIN, errno.EACCES):
-                return
-            raise Fail("overlapping lockf: %s" % e)
-        raise Fail("overlapping lockf both succeeded (range locks look like no-ops)")
-    finally:
+                raise Fail("same-process overlapping lockf conflicted "
+                           "(record locks are per process)")
+            raise Fail("same-process overlapping lockf: %s" % e)
+        fcntl.lockf(fd2, fcntl.LOCK_UN, 20, 10)
         try:
-            fcntl.lockf(fd1, fcntl.LOCK_UN, 50, 0)
-        except OSError:
-            pass
+            fcntl.lockf(fd2, fcntl.LOCK_EX | fcntl.LOCK_NB, 10, 50)
+        except OSError as e:
+            raise Fail("same-process adjacent lockf: %s" % e)
+        fcntl.lockf(fd2, fcntl.LOCK_UN, 10, 50)
+        fcntl.lockf(fd1, fcntl.LOCK_UN, 50, 0)
+    finally:
         os.close(fd1)
         os.close(fd2)
+
+    held = os.path.join(d, ".range-held")
+    release = os.path.join(d, ".range-release")
+    holder = (
+        "import fcntl, os, sys, time\n"
+        "fd = os.open(sys.argv[1], os.O_RDWR)\n"
+        "fcntl.lockf(fd, fcntl.LOCK_EX, 50, 0)\n"
+        "open(sys.argv[2], 'w').write('held\\n')\n"
+        "deadline = time.monotonic() + 10\n"
+        "while not os.path.exists(sys.argv[3]):\n"
+        "    if time.monotonic() > deadline:\n"
+        "        sys.exit(3)\n"
+        "    time.sleep(0.02)\n"
+        "fcntl.lockf(fd, fcntl.LOCK_UN, 50, 0)\n"
+        "os.close(fd)\n"
+    )
+    child = subprocess.Popen(
+        [sys.executable, "-c", holder, p, held, release])
+    fd = os.open(p, os.O_RDWR)
+    try:
+        try:
+            _wait_for(held, 5.0, "other process did not acquire [0, 50)")
+        except Fail:
+            child.kill()
+            raise
+        try:
+            fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB, 20, 10)
+        except OSError as e:
+            if e.errno not in (errno.EAGAIN, errno.EACCES):
+                raise Fail("cross-process overlap errno %s" % e)
+        else:
+            fcntl.lockf(fd, fcntl.LOCK_UN, 20, 10)
+            raise Fail("cross-process overlapping lockf succeeded")
+        try:
+            fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB, 10, 50)
+        except OSError as e:
+            raise Fail("adjacent range vs other process: %s" % e)
+        fcntl.lockf(fd, fcntl.LOCK_UN, 10, 50)
+        open(release, "w").close()
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            try:
+                fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB, 50, 0)
+            except OSError as e:
+                if e.errno not in (errno.EAGAIN, errno.EACCES):
+                    raise Fail("relock after release errno %s" % e)
+                time.sleep(0.02)
+                continue
+            break
+        else:
+            raise Fail("did not acquire [0, 50) after the holder released")
+
+        # Parent now holds [0, 50). A child blocks in lockf until we unlock.
+        reached = os.path.join(d, ".waiter-reached")
+        acquired = os.path.join(d, ".waiter-acquired")
+        waiter = (
+            "import fcntl, os, sys\n"
+            "fd = os.open(sys.argv[1], os.O_RDWR)\n"
+            "open(sys.argv[2], 'w').write('reached\\n')\n"
+            "fcntl.lockf(fd, fcntl.LOCK_EX, 20, 10)\n"
+            "open(sys.argv[3], 'w').write('got\\n')\n"
+            "fcntl.lockf(fd, fcntl.LOCK_UN, 20, 10)\n"
+            "os.close(fd)\n"
+        )
+        blocked = subprocess.Popen(
+            [sys.executable, "-c", waiter, p, reached, acquired])
+        try:
+            _wait_for(reached, 5.0, "waiter did not start")
+            confirm = time.monotonic() + 0.3
+            while time.monotonic() < confirm:
+                if os.path.exists(acquired):
+                    raise Fail("waiter acquired the range while it was held")
+                time.sleep(0.02)
+            fcntl.lockf(fd, fcntl.LOCK_UN, 50, 0)
+            _wait_for(acquired, 5.0, "waiter did not acquire after unlock")
+        finally:
+            if blocked.poll() is None:
+                blocked.kill()
+            blocked.wait()
+    finally:
+        try:
+            fcntl.lockf(fd, fcntl.LOCK_UN, 50, 0)
+        except OSError:
+            pass
+        os.close(fd)
+        if child.poll() is None:
+            child.kill()
+        child.wait()
 
 
 # ==========================================================================
@@ -2207,10 +2336,9 @@ def opt_fallocate(d):
     try:
         os.posix_fallocate(fd, 0, 4096)
     except OSError as e:
-        if e.errno in (errno.EOPNOTSUPP, errno.ENOTSUP):
-            os.close(fd)
-            return
         os.close(fd)
+        if e.errno in (errno.EOPNOTSUPP, errno.ENOTSUP):
+            raise Fail("posix_fallocate unsupported: %s" % e, soft=True)
         raise Fail("posix_fallocate: %s" % e)
     sz = os.fstat(fd).st_size
     os.close(fd)
@@ -2226,8 +2354,9 @@ def opt_xattr(d):
         os.setxattr(p, "user.efs", b"1")
         eq(os.getxattr(p, "user.efs"), b"1", "xattr roundtrip")
     except OSError as e:
-        if e.errno in (errno.EOPNOTSUPP, errno.ENOTSUP, errno.EACCES):
-            return
+        # EACCES is a permission failure, not "xattr is unsupported".
+        if e.errno in (errno.EOPNOTSUPP, errno.ENOTSUP):
+            raise Fail("xattr unsupported: %s" % e, soft=True)
         raise Fail("xattr: %s" % e)
 
 
@@ -2265,7 +2394,7 @@ def opt_copy_file_range(d):
         os.close(fd_s)
         os.close(fd_d)
         if e.errno in (errno.EOPNOTSUPP, errno.ENOTSUP, errno.EXDEV, errno.EINVAL):
-            return
+            raise Fail("copy_file_range unsupported: %s" % e, soft=True)
         raise Fail("copy_file_range: %s" % e)
     os.close(fd_s)
     os.close(fd_d)
@@ -2746,15 +2875,24 @@ def chmod_preserves_mtime(d):
 
 @test
 def unlink_recreate_new_ino(d):
+    """A still-open inode and its replacement must not share an inode number.
+
+    Reuse after the last close is allowed by POSIX, so this test keeps the
+    old descriptor open while the name is recreated.
+    """
     p = os.path.join(d, "f")
-    wr(p, b"a")
-    i0 = os.stat(p).st_ino
-    os.unlink(p)
-    wr(p, b"b")
-    i1 = os.stat(p).st_ino
-    if i0 == i1:
-        raise Fail("unlink+create reused ino %d" % i0)
-    eq(rd(p), b"b", "new content")
+    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        os.write(fd, b"a")
+        i0 = os.fstat(fd).st_ino
+        os.unlink(p)
+        wr(p, b"b")
+        i1 = os.stat(p).st_ino
+        if i0 == i1:
+            raise Fail("recreate reused inode %d while the old fd is open" % i0)
+        eq(rd(p), b"b", "new content")
+    finally:
+        os.close(fd)
 
 
 @test
@@ -3066,12 +3204,187 @@ def write_beyond_eof_then_seek_end(d):
 # ==========================================================================
 # Runner
 # ==========================================================================
-def main():
-    args = sys.argv[1:]
-    if not args:
-        print(__doc__)
-        return 2
-    mnt = args[0]
+def invoke(fn, tdir):
+    os.makedirs(tdir, exist_ok=True)
+    try:
+        fn(tdir)
+    except Fail as e:
+        if getattr(e, "soft", False):
+            return "SKIP", str(e)
+        return "FAIL", str(e)
+    except TestTimeout as e:
+        return "FAIL", str(e)
+    except Exception as e:  # noqa: BLE001
+        try:
+            return "FAIL", "%s: %s" % (type(e).__name__, e)
+        except TestTimeout:
+            return "FAIL", "%s: %s" % (type(e).__name__, e)
+    return "PASS", ""
+
+
+def _write_status(path, status, detail):
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        f.write("%s\t%s\n" % (status, detail.replace("\n", " ")))
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+def _read_status_file(path):
+    try:
+        with open(path) as f:
+            line = f.readline().rstrip("\n")
+    except OSError:
+        return None
+    if "\t" not in line:
+        return None
+    status, detail = line.split("\t", 1)
+    if status not in ("PASS", "FAIL", "SKIP"):
+        return None
+    return status, detail
+
+
+def _unlink_quiet(path):
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+def _kill_group(proc, grace=1.0):
+    """SIGTERM the process group, then SIGKILL. False means it is still alive."""
+    if proc.poll() is not None:
+        return True
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except OSError:
+        pass
+    deadline = time.monotonic() + grace
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            return True
+        time.sleep(0.02)
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except OSError:
+        pass
+    deadline = time.monotonic() + grace
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            return True
+        time.sleep(0.02)
+    return proc.poll() is not None
+
+
+def _run_pool(items, jobs, spawn, on_done, kill_group=None, live=None):
+    """Run items of (name, timeout_s, payload) in up to `jobs` processes.
+
+    `on_done(name, status, detail)` returns true to stop starting new work.
+    A timeout kills the process group. If the process survives SIGKILL, that
+    name is returned and no further item is started. The unstarted tail is
+    the second return value. timeout_s <= 0 disables the budget.
+    """
+    if kill_group is None:
+        kill_group = _kill_group
+    queue = list(items)
+    inflight = []
+    stop = False
+    stuck = None
+
+    def drop_live(proc):
+        if live is not None and proc.pid in live:
+            live.remove(proc.pid)
+
+    while (queue or inflight) and stuck is None:
+        while queue and len(inflight) < max(1, jobs) and not stop:
+            name, timeout, payload = queue.pop(0)
+            proc, result = spawn(name, payload)
+            if live is not None:
+                live.append(proc.pid)
+            inflight.append((name, proc, result, time.monotonic(), timeout))
+        if not inflight:
+            break
+        time.sleep(0.05)
+        now = time.monotonic()
+        still = []
+        for name, proc, result, start, timeout in inflight:
+            rc = proc.poll()
+            if rc is not None:
+                drop_live(proc)
+                got = _read_status_file(result)
+                if got is None:
+                    st, det = ("FAIL",
+                               "worker exited %s without a result" % rc)
+                else:
+                    st, det = got
+                _unlink_quiet(result)
+                if on_done(name, st, det):
+                    stop = True
+                continue
+            if timeout > 0 and now - start >= timeout:
+                drop_live(proc)
+                if not kill_group(proc):
+                    on_done(name, "FAIL",
+                            "timeout after %ss; worker still alive" % timeout)
+                    stuck = name
+                    for oname, oproc, oresult, _ostart, _otimeout in inflight:
+                        if oproc is proc or oproc.poll() is not None:
+                            continue
+                        drop_live(oproc)
+                        kill_group(oproc)
+                        _unlink_quiet(oresult)
+                        on_done(oname, "FAIL",
+                                "stopped because %s is still alive" % name)
+                    break
+                _unlink_quiet(result)
+                if on_done(name, "FAIL", "timeout after %ss" % timeout):
+                    stop = True
+                continue
+            still.append((name, proc, result, start, timeout))
+        inflight = still
+    if stop and stuck is None:
+        for name, proc, result, start, timeout in inflight:
+            if proc.poll() is None:
+                drop_live(proc)
+                if not kill_group(proc):
+                    on_done(name, "FAIL", "worker still alive after stop")
+                    stuck = name
+                    break
+                on_done(name, "FAIL", "stopped before finish")
+            else:
+                drop_live(proc)
+                got = _read_status_file(result)
+                if got:
+                    on_done(name, *got)
+            _unlink_quiet(result)
+    return stuck, queue
+
+
+def _worker_main(name, tdir, result_path):
+    try:
+        fns = dict(TESTS)
+        if name not in fns:
+            _write_status(result_path, "FAIL", "unknown test %s" % name)
+            os._exit(1)
+        st, det = invoke(fns[name], tdir)
+        _write_status(result_path, st, det)
+    except Exception as e:  # noqa: BLE001
+        try:
+            _write_status(result_path, "FAIL",
+                          "%s: %s" % (type(e).__name__, e))
+        except Exception:
+            pass
+        os._exit(1)
+    os._exit(0)
+
+
+def _parse_cli(args):
+    """Parse suite argv. Mount and results paths are absolute at parse time,
+    before any chdir, so a relative mount survives the later cwd change."""
+    if not args or args[0].startswith("-"):
+        return None
+    mnt = os.path.abspath(args[0])
     results_file = None
     keep = False
     stop = False
@@ -3082,7 +3395,7 @@ def main():
     i = 1
     while i < len(args):
         if args[i] == "--results":
-            results_file = args[i + 1]
+            results_file = os.path.abspath(args[i + 1])
             i += 2
         elif args[i] == "--keep":
             keep = True
@@ -3104,6 +3417,174 @@ def main():
             i += 2
         else:
             i += 1
+    return (mnt, results_file, keep, stop, filt, tag, test_timeout, jobs)
+
+
+def _self_test():
+    """Harness regressions that do not need a filesystem mount."""
+    fails = []
+
+    def expect(cond, msg):
+        if not cond:
+            fails.append(msg)
+
+    td = tempfile.mkdtemp(prefix="posix-self-")
+    old = os.getcwd()
+    try:
+        os.chdir(td)
+        os.mkdir("mnt")
+        parsed = _parse_cli(["mnt", "--results", "out.tsv"])
+        os.chdir("/")
+        expect(parsed[0] == os.path.join(td, "mnt"),
+               "relative mount was not captured before chdir")
+        expect(parsed[1] == os.path.join(td, "out.tsv"),
+               "relative results path was not captured before chdir")
+        expect(os.path.isdir(parsed[0]), "abspath mount is not a directory")
+    finally:
+        os.chdir(old)
+
+    real_euid = os.geteuid
+    os.geteuid = lambda: 0
+    try:
+        try:
+            perm_file_000_denied(td)
+        except Fail as e:
+            expect(getattr(e, "soft", False),
+                   "root permission skip was not soft: %s" % e)
+        else:
+            fails.append("root permission test returned as PASS")
+    finally:
+        os.geteuid = real_euid
+
+    real_setxattr = os.setxattr
+    try:
+        def denied(*_a, **_k):
+            raise OSError(errno.EACCES, "injected")
+        os.setxattr = denied
+        try:
+            opt_xattr(td)
+        except Fail as e:
+            expect(not getattr(e, "soft", False),
+                   "xattr EACCES was treated as unsupported")
+        else:
+            fails.append("xattr EACCES returned as PASS")
+        def unsupported(*_a, **_k):
+            raise OSError(errno.EOPNOTSUPP, "injected")
+        os.setxattr = unsupported
+        try:
+            opt_xattr(td)
+        except Fail as e:
+            expect(getattr(e, "soft", False),
+                   "xattr EOPNOTSUPP was a hard failure")
+        else:
+            fails.append("xattr EOPNOTSUPP returned as PASS")
+    finally:
+        os.setxattr = real_setxattr
+
+    import unicodedata
+    nfc, nfd = _nfc_nfd_names()
+    folded = {}
+    folded[unicodedata.normalize("NFC", nfc)] = b"nfc"
+    folded[unicodedata.normalize("NFC", nfd)] = b"nfd"
+    expect(len(folded) == 1,
+           "NFC/NFD pair does not collide under a normalizing adapter")
+
+    # Exhaust the workers with blocked processes. The queued third item must
+    # still run, and the whole pool must return well under the sleep time.
+    outcomes = []
+    procs = []
+
+    def spawn_cmd(name, argv):
+        proc = subprocess.Popen(argv, start_new_session=True,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL)
+        procs.append(proc)
+        return proc, os.path.join(td, name + ".noresult")
+
+    def on_done(name, status, detail):
+        outcomes.append((name, status))
+        return False
+
+    sleep30 = [sys.executable, "-c", "import time; time.sleep(30)"]
+    short = [sys.executable, "-c", "import time; time.sleep(0.05)"]
+    t0 = time.monotonic()
+    stuck, left = _run_pool(
+        [("a", 0.4, sleep30), ("b", 0.4, sleep30), ("c", 2.0, short)],
+        2, spawn_cmd, on_done)
+    elapsed = time.monotonic() - t0
+    expect(stuck is None, "killable workers were reported stuck")
+    expect(elapsed < 4.0, "pool ran for %.1fs (workers were not killed)" % elapsed)
+    expect(left == [], "queued work was abandoned: %s" % [n for n, _t, _p in left])
+    names = [n for n, _s in outcomes]
+    expect(names.count("c") == 1, "queued item did not run: %s" % names)
+    expect(all(p.poll() is not None for p in procs),
+           "a timed-out worker was still alive after the pool returned")
+
+    # A worker that ignores SIGTERM must still die on SIGKILL.
+    ignore = [sys.executable, "-c",
+              "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"]
+    outcomes2 = []
+    stuck, _left = _run_pool(
+        [("ign", 0.3, ignore)], 1, spawn_cmd,
+        lambda n, s, d: outcomes2.append(s) or False)
+    expect(stuck is None, "SIGTERM-ignoring worker survived SIGKILL")
+    expect(outcomes2 == ["FAIL"], "ignore-SIGTERM outcome %s" % outcomes2)
+
+    # If the worker cannot be reaped, do not start queued work or a serial phase.
+    serial = []
+    started = []
+
+    def spawn_track(name, argv):
+        started.append(name)
+        return spawn_cmd(name, argv)
+
+    def kill_fail(proc):
+        return False
+
+    stuck, left = _run_pool(
+        [("s1", 0.2, sleep30), ("s2", 0.2, sleep30), ("s3", 5.0, short)],
+        2, spawn_track, lambda n, s, d: False, kill_group=kill_fail)
+    if stuck is None:
+        serial.append("ran")
+    expect(stuck == "s1" or stuck == "s2", "unkillable worker was not stuck: %s" % stuck)
+    expect(serial == [], "serial phase ran while a worker was alive")
+    expect("s3" not in started, "queued work started after a stuck worker")
+    for p in procs:
+        if p.poll() is None:
+            _kill_group(p)
+
+    lockdir = os.path.join(td, "locks")
+    os.mkdir(lockdir)
+    try:
+        flock_two_proc_exclusive(lockdir)
+        fcntl_byte_range_lock(lockdir)
+    except Fail as e:
+        fails.append("lock oracle: %s" % e)
+
+    if fails:
+        for msg in fails:
+            print("FAIL " + msg)
+        return 1
+    print("posix_suite self-test: pass")
+    return 0
+
+
+def main(argv=None):
+    args = list(sys.argv[1:] if argv is None else argv)
+    if args == ["--self-test"]:
+        return _self_test()
+    if args[:1] == ["--worker"]:
+        if len(args) != 4:
+            print("usage: --worker NAME TDIR RESULT", file=sys.stderr)
+            return 2
+        _worker_main(args[1], args[2], args[3])
+        return 1
+    parsed = _parse_cli(args)
+    if parsed is None:
+        print(__doc__)
+        return 2
+    (mnt, results_file, keep, stop, filt, tag,
+     test_timeout, jobs) = parsed
 
     if not os.path.isdir(mnt):
         print("ERROR: %s is not a mounted directory" % mnt)
@@ -3190,41 +3671,20 @@ def main():
                 print("FAIL %-32s %s" % (name, detail), flush=True)
             flush_tsv()
 
-    def invoke(fn, tdir):
-        os.makedirs(tdir, exist_ok=True)
-        try:
-            fn(tdir)
-        except Fail as e:
-            if getattr(e, "soft", False):
-                return "SKIP", str(e)
-            return "FAIL", str(e)
-        except TestTimeout as e:
-            return "FAIL", str(e)
-        except Exception as e:  # noqa: BLE001
-            try:
-                return "FAIL", "%s: %s" % (type(e).__name__, e)
-            except TestTimeout:
-                return "FAIL", "%s: %s" % (type(e).__name__, e)
-        return "PASS", ""
-
-    def run_serial_one(name, fn, tdir):
-        to = getattr(fn, "_posix_timeout", test_timeout)
-        if to > 0:
-            def _on_alarm(_signum, _frame):
-                raise TestTimeout(to)
-            signal.signal(signal.SIGALRM, _on_alarm)
-            signal.alarm(to)
-        try:
-            return invoke(fn, tdir)
-        finally:
-            if to > 0:
-                signal.alarm(0)
+    live = []
+    stuck_run = False
+    script = os.path.abspath(__file__)
 
     def _cut(signum, _frame):
-        # timeout(1) sends SIGTERM, then SIGKILL 5 s later. Write NOTRUN for
-        # anything not finished and leave. Do not take tsv_mu: the main
-        # thread may already hold it inside record().
+        # timeout(1) sends SIGTERM, then SIGKILL 5 s later. Kill test
+        # process groups, write NOTRUN for anything not finished, and leave.
+        # Do not take tsv_mu: the main thread may already hold it in record().
         nonlocal nnotrun
+        for pid in list(live):
+            try:
+                os.killpg(pid, signal.SIGKILL)
+            except OSError:
+                pass
         try:
             for name, _fn, _td in selected:
                 if name not in by_name:
@@ -3238,117 +3698,68 @@ def main():
     signal.signal(signal.SIGTERM, _cut)
     signal.signal(signal.SIGHUP, _cut)
 
+    def spawn_test(name, tdir):
+        fd, result = tempfile.mkstemp(prefix="posix-result-")
+        os.close(fd)
+        proc = subprocess.Popen(
+            [sys.executable, script, "--worker", name, tdir, result],
+            start_new_session=True)
+        return proc, result
+
+    def on_done(name, status, detail):
+        record(name, status, detail)
+        if stop and status == "FAIL":
+            print("stopped on first fail (--stop)")
+            return True
+        return False
+
+    def items_for(rows):
+        out = []
+        for name, fn, tdir in rows:
+            timeout = getattr(fn, "_posix_timeout", test_timeout)
+            out.append((name, timeout, tdir))
+        return out
+
     try:
+        # Every test runs in its own process group. A timeout kills that
+        # group. Serial tests (umask/cwd) start only after every prior
+        # worker has been reaped. A worker that survives SIGKILL — a FUSE
+        # operation stuck in D state — ends the run as incomplete; this
+        # process does not close fds or delete the tree out from under it.
         parallel = [(n, fn, td) for n, fn, td in selected
                     if not getattr(fn, "_posix_serial", False)]
         serials = [(n, fn, td) for n, fn, td in selected
                    if getattr(fn, "_posix_serial", False)]
-        abort = False
-
-        if jobs <= 1:
-            for name, fn, tdir in selected:
-                st, det = run_serial_one(name, fn, tdir)
-                by_name[name] = (st, det)
-                record(name, st, det)
-                close_leaked_mount_fds(mnt)
-                if stop and st == "FAIL":
-                    print("stopped on first fail (--stop)")
-                    abort = True
-                    break
-        else:
-            if parallel:
-                print("parallel %d tests jobs=%d (serial %d after)" %
-                      (len(parallel), jobs, len(serials)))
-                ex = ThreadPoolExecutor(max_workers=jobs)
-                # The per-test budget is EXECUTION time. Until Sep 21 the
-                # clock started at submit: all 196 tests were submitted at
-                # once to `jobs` workers, so anything still queued after
-                # --timeout-s was recorded "timeout after 15s" without
-                # having run — 3-op tests "timing out", the same first
-                # timeout on every host, ~100 of 201 per host in the 9-way
-                # suite, and the abandoned futures kept the pool busy into
-                # the 385 s cap. The worker stamps its own start (`started`,
-                # written before the test's first syscall); an unstarted
-                # test cannot time out. Only invoke_timed runs in workers.
-                started = {}
-                started_mu = threading.Lock()
-
-                def invoke_timed(name, fn, tdir):
-                    with started_mu:
-                        started[name] = time.time()
-                    return invoke(fn, tdir)
-
-                futs = {}
-                for name, fn, tdir in parallel:
-                    fut = ex.submit(invoke_timed, name, fn, tdir)
-                    futs[fut] = name
-                pending = set(futs)
-                while pending:
-                    done, pending = wait(pending, timeout=0.2,
-                                         return_when=FIRST_COMPLETED)
-                    now = time.time()
-                    for fut in done:
-                        name = futs[fut]
-                        try:
-                            st, det = fut.result()
-                        except Exception as e:  # noqa: BLE001
-                            st, det = "FAIL", "%s: %s" % (
-                                type(e).__name__, e)
-                        by_name[name] = (st, det)
-                        record(name, st, det)
-                        if stop and st == "FAIL":
-                            print("stopped on first fail (--stop)")
-                            abort = True
-                            pending.clear()
-                            break
-                    if abort:
-                        break
-                    if test_timeout <= 0:
-                        continue
-                    for fut in list(pending):
-                        name = futs[fut]
-                        fn_to = test_timeout
-                        for n, fn, _td in parallel:
-                            if n == name:
-                                fn_to = getattr(fn, "_posix_timeout",
-                                                test_timeout)
-                                break
-                        with started_mu:
-                            began = started.get(name)
-                        if began is None or now - began < fn_to:
-                            continue
-                        by_name[name] = (
-                            "FAIL", "timeout after %ss" % fn_to)
-                        record(name, *by_name[name])
-                        pending.discard(fut)
-                try:
-                    ex.shutdown(wait=False, cancel_futures=True)
-                except TypeError:
-                    ex.shutdown(wait=False)
-            close_leaked_mount_fds(mnt)
-            if not abort:
-                for name, fn, tdir in serials:
-                    st, det = run_serial_one(name, fn, tdir)
-                    by_name[name] = (st, det)
-                    record(name, st, det)
-                    close_leaked_mount_fds(mnt)
-                    if stop and st == "FAIL":
-                        print("stopped on first fail (--stop)")
-                        break
+        if parallel:
+            print("parallel %d tests jobs=%d (serial %d after)" %
+                  (len(parallel), max(1, jobs), len(serials)))
+        stuck, _left = _run_pool(items_for(parallel), max(1, jobs),
+                                 spawn_test, on_done, live=live)
+        if stuck:
+            stuck_run = True
+        elif serials and not (stop and nfail):
+            stuck, _left = _run_pool(items_for(serials), 1,
+                                     spawn_test, on_done, live=live)
+            if stuck:
+                stuck_run = True
 
         # A cut run (outer `timeout` SIGTERM, or --stop) must still have one
         # row per selected test. Missing rows become "[None]" in compare.py
         # and get read as failures (W8).
+        reason = ("incomplete: timed-out worker still alive"
+                  if stuck_run else "not reached")
         for name, _fn, _td in selected:
             if name not in by_name:
-                record(name, "NOTRUN", "not reached")
+                record(name, "NOTRUN", reason)
 
         # TSV / summary follow TESTS registration order.
         RESULTS[:] = [(n, by_name[n][0], by_name[n][1])
                       for n, _fn, _td in selected if n in by_name]
     finally:
         leave_fuse_cwd()
-        if keep:
+        if stuck_run:
+            print("left test tree (a timed-out worker is still alive): %s" % base)
+        elif keep:
             print("kept test tree: %s" % base)
         else:
             shutil.rmtree(base, ignore_errors=True)

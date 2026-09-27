@@ -31,6 +31,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -78,6 +79,32 @@ def test(fn):
 class Fail(Exception):
     def __init__(self, msg):
         super(Fail, self).__init__(msg)
+
+
+# Errno a losing rename/unlink may see when the other side already took the
+# name. Anything else (EIO, EACCES, EPERM) is a failed operation, not a race.
+_RACE_LOST = (errno.ENOENT,)
+
+
+def _race_call(label, fn):
+    try:
+        fn()
+    except OSError as e:
+        if e.errno not in _RACE_LOST:
+            raise Fail("%s: errno %s (%s)" % (label, e.errno, e.strerror))
+        return e.errno
+    return 0
+
+
+def _race_rc(d, side, rc):
+    wr(os.path.join(d, ".race-%s" % side), str(rc).encode())
+
+
+def _read_rc(d, side):
+    p = os.path.join(d, ".race-%s" % side)
+    if not os.path.exists(p):
+        raise Fail("%s did not report a result" % side)
+    return int(rd(p))
 
 
 def wr(path, data):
@@ -628,8 +655,9 @@ def peer_unlink_while_b_has_fd():
             raise Fail("name still exists after unlink")
 
     def b2(d):
-        data = _holder_go(d)
+        data, nlink = _holder_go(d)
         eq(data, b"still-here", "B fd read after A unlink")
+        eq(nlink, 0, "nlink of the unlinked open file")
 
     return [("a", a), ("b", b), ("a", a2), ("b", b2)]
 
@@ -947,10 +975,7 @@ def peer_append_while_truncate():
     def b(d):
         p = os.path.join(d, "f")
         for _ in range(16):
-            try:
-                os.truncate(p, 0)
-            except OSError:
-                pass
+            os.truncate(p, 0)
             time.sleep(0.01)
 
     def a2(d):
@@ -1128,21 +1153,28 @@ def peer_rename_same_src_two_dst():
         fsync_path(os.path.join(d, "x"))
 
     def a(d):
-        try:
-            os.rename(os.path.join(d, "x"), os.path.join(d, "y"))
-        except OSError:
-            pass
+        rc = _race_call("rename x→y", lambda: os.rename(
+            os.path.join(d, "x"), os.path.join(d, "y")))
+        _race_rc(d, "a", rc)
 
     def b(d):
-        try:
-            os.rename(os.path.join(d, "x"), os.path.join(d, "z"))
-        except OSError:
-            pass
+        rc = _race_call("rename x→z", lambda: os.rename(
+            os.path.join(d, "x"), os.path.join(d, "z")))
+        _race_rc(d, "b", rc)
 
     def a2(d):
+        arc = _read_rc(d, "a")
+        brc = _read_rc(d, "b")
         y = os.path.exists(os.path.join(d, "y"))
         z = os.path.exists(os.path.join(d, "z"))
         x = os.path.exists(os.path.join(d, "x"))
+        if arc == 0 and brc == 0:
+            raise Fail("both renames reported success")
+        if arc != 0 and brc != 0:
+            raise Fail("neither rename succeeded (a=%s b=%s)" % (arc, brc))
+        if (arc == 0) != y or (brc == 0) != z:
+            raise Fail("result bits a=%s b=%s do not match y=%s z=%s" %
+                       (arc, brc, y, z))
         if y and z:
             raise Fail("both y and z exist (src consumed twice)")
         if not y and not z:
@@ -1165,26 +1197,29 @@ def peer_rename_vs_unlink_src():
         fsync_path(os.path.join(d, "a"))
 
     def a(d):
-        try:
-            os.rename(os.path.join(d, "a"), os.path.join(d, "b"))
-        except OSError:
-            pass
+        rc = _race_call("rename a→b", lambda: os.rename(
+            os.path.join(d, "a"), os.path.join(d, "b")))
+        _race_rc(d, "a", rc)
 
     def b(d):
-        try:
-            os.unlink(os.path.join(d, "a"))
-        except OSError:
-            pass
+        rc = _race_call("unlink a", lambda: os.unlink(os.path.join(d, "a")))
+        _race_rc(d, "b", rc)
 
     def a2(d):
+        arc = _read_rc(d, "a")
+        brc = _read_rc(d, "b")
         has_a = os.path.exists(os.path.join(d, "a"))
         has_b = os.path.exists(os.path.join(d, "b"))
-        if has_a and has_b:
-            raise Fail("both a and b exist")
-        if not has_a and not has_b:
-            return
-        if has_b:
+        if has_a:
+            raise Fail("source still present (rename=%s unlink=%s)" % (arc, brc))
+        if arc != 0 and brc != 0:
+            raise Fail("neither rename nor unlink succeeded")
+        if arc == 0:
+            if not has_b:
+                raise Fail("rename succeeded but b is missing")
             eq(rd(os.path.join(d, "b")), b"n", "renamed content")
+        elif has_b:
+            raise Fail("b exists after a lost rename")
 
     return [("a", a0), ("ab", (a, b)), ("a", a2)]
 
@@ -1198,27 +1233,27 @@ def peer_rename_vs_unlink_dst():
         fsync_path(os.path.join(d, "a"))
 
     def a(d):
+        # Rename has a live source. ENOENT means the source disappeared,
+        # which this race does not do — unlink removes the destination.
         try:
             os.rename(os.path.join(d, "a"), os.path.join(d, "b"))
-        except OSError:
-            pass
+        except OSError as e:
+            raise Fail("rename a→b: errno %s (%s)" % (e.errno, e.strerror))
+        _race_rc(d, "a", 0)
 
     def b(d):
-        try:
-            os.unlink(os.path.join(d, "b"))
-        except OSError:
-            pass
+        rc = _race_call("unlink b", lambda: os.unlink(os.path.join(d, "b")))
+        _race_rc(d, "b", rc)
 
     def a2(d):
-        has_a = os.path.exists(os.path.join(d, "a"))
-        has_b = os.path.exists(os.path.join(d, "b"))
-        if has_a and has_b:
-            if rd(os.path.join(d, "b")) == b"NEW":
-                raise Fail("a still exists after rename-over")
-        if has_b:
+        _read_rc(d, "a")
+        _read_rc(d, "b")
+        if os.path.exists(os.path.join(d, "a")):
+            raise Fail("source still present after rename")
+        if os.path.exists(os.path.join(d, "b")):
             data = rd(os.path.join(d, "b"))
-            if data not in (b"NEW", b"OLD"):
-                raise Fail("b has corrupt content %r" % data)
+            if data != b"NEW":
+                raise Fail("destination is %r, want NEW or absent" % data)
 
     return [("a", a0), ("ab", (a, b)), ("a", a2)]
 
@@ -1236,30 +1271,42 @@ def peer_rename_across_dirs_chase():
     def a(d):
         try:
             os.rename(os.path.join(d, "d1", "x"), os.path.join(d, "d2", "x"))
-        except OSError:
-            pass
+        except OSError as e:
+            raise Fail("rename d1/x→d2/x: errno %s (%s)" % (e.errno, e.strerror))
+        _race_rc(d, "a", 0)
 
     def b(d):
-        deadline = time.time() + 5.0
-        while time.time() < deadline:
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
             src = os.path.join(d, "d2", "x")
             if os.path.exists(src):
                 try:
                     os.rename(src, os.path.join(d, "d3", "x"))
-                    return
-                except OSError:
-                    return
-            time.sleep(0.05)
+                except OSError as e:
+                    if e.errno != errno.ENOENT:
+                        raise Fail("chase rename: errno %s (%s)" %
+                                   (e.errno, e.strerror))
+                    continue
+                _race_rc(d, "b", 0)
+                return
+            time.sleep(0.02)
+        # A may have landed the file in d2 after this wait. That is one
+        # legal resting place; a2 checks it. A failed chase is not success.
+        _race_rc(d, "b", errno.ENOENT)
 
     def a2(d):
+        if _read_rc(d, "a") != 0:
+            raise Fail("first rename did not succeed")
+        if os.path.exists(os.path.join(d, "d1", "x")):
+            raise Fail("source remains after a successful rename")
         hits = []
-        for name in ("d1/x", "d2/x", "d3/x"):
+        for name in ("d2/x", "d3/x"):
             p = os.path.join(d, name)
             if os.path.exists(p):
                 eq(rd(p), b"moved", name)
                 hits.append(name)
         if len(hits) != 1:
-            raise Fail("x at %s (want exactly one)" % hits)
+            raise Fail("x at %s (want exactly one of d2/x, d3/x)" % hits)
 
     return [("a", a0), ("ab", (a, b)), ("a", a2)]
 
@@ -1311,11 +1358,12 @@ def peer_create_unlink_stat_churn():
     def a(d):
         p = os.path.join(d, "foo")
         for i in range(40):
+            wr(p, ("N%03d" % i).encode())
             try:
-                wr(p, ("N%03d" % i).encode())
                 os.unlink(p)
-            except OSError:
-                pass
+            except OSError as e:
+                if e.errno != errno.ENOENT:
+                    raise Fail("A unlink during churn: errno %s" % e.errno)
 
     def b(d):
         p = os.path.join(d, "foo")
@@ -1387,7 +1435,11 @@ def peer_rename_negative():
 
 @test
 def peer_unlink_recreate_stale_ino():
-    """B stats foo (ino1); A unlink+create foo (ino2); B must see ino2/content."""
+    """B reads foo; A unlink+create; B must see the new bytes.
+
+    Inode reuse after the last close is allowed, so a repeated st_ino is
+    not by itself a stale binding. The old bytes are.
+    """
     def a(d):
         wr(os.path.join(d, "foo"), b"one")
         fsync_path(os.path.join(d, "foo"))
@@ -1405,10 +1457,6 @@ def peer_unlink_recreate_stale_ino():
     def b2(d):
         p = os.path.join(d, "foo")
         eq(rd(p), b"two", "B second incarnation content")
-        ino1 = int(rd(os.path.join(d, ".ino1")))
-        ino2 = os.stat(p).st_ino
-        if ino2 == ino1:
-            raise Fail("B still bound to inode %s after recreate" % ino1)
 
     return [("a", a), ("b", b1), ("a", a2), ("b", b2)]
 
@@ -1429,8 +1477,9 @@ def peer_open_unlink_nlink():
             raise Fail("B still looks up unlinked f")
 
     def a2(d):
-        data = _holder_go(d)
+        data, nlink = _holder_go(d)
         eq(data, b"live", "A fd after B unlink")
+        eq(nlink, 0, "nlink of the unlinked open file")
 
     return [("a", a0), ("a", a), ("b", b), ("a", a2)]
 
@@ -1449,7 +1498,7 @@ def peer_open_rename_fd():
         os.rename(os.path.join(d, "f"), os.path.join(d, "bar"))
 
     def a2(d):
-        data = _holder_go(d)
+        data, _nlink = _holder_go(d)
         eq(data, b"fdok", "A fd after B rename")
         eq(rd(os.path.join(d, "bar")), b"fdok", "bar")
         if os.path.exists(os.path.join(d, "f")):
@@ -1474,7 +1523,7 @@ def peer_unlink_recreate_old_fd():
         fsync_path(os.path.join(d, "f"))
 
     def a2(d):
-        data = _holder_go(d)
+        data, _nlink = _holder_go(d)
         eq(data, b"OLDINC", "old fd is old object")
         eq(rd(os.path.join(d, "f")), b"NEWINC", "name is new object")
 
@@ -1615,7 +1664,10 @@ class _Flock(ctypes.Structure):
 mode, path, ready, go, result = sys.argv[1:6]
 fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
 data = b""
+nlink = -1
 rc = 2
+status = b"FAIL"
+err = b"holder failed before ready"
 try:
     if mode == "flock":
         fcntl.flock(fd, fcntl.LOCK_EX)
@@ -1623,14 +1675,21 @@ try:
         fl = _Flock(l_type=fcntl.F_WRLCK, l_whence=os.SEEK_SET,
                     l_start=0, l_len=4096, l_pid=0)
         fcntl.fcntl(fd, fcntl.F_SETLKW, fl)
-    with open(ready, "w") as f:
+    # Publish readiness only after the bytes are durable, via rename, so the
+    # peer never observes an empty ready file.
+    tmp = ready + ".tmp"
+    with open(tmp, "w") as f:
         f.write("1\n")
         f.flush()
         os.fsync(f.fileno())
-    deadline = time.time() + 20.0
-    while time.time() < deadline:
+    os.rename(tmp, ready)
+    deadline = time.monotonic() + 20.0
+    status = b"FAIL"
+    err = b"go timeout"
+    while time.monotonic() < deadline:
         if os.path.exists(go):
             if mode == "holdfd":
+                nlink = os.fstat(fd).st_nlink
                 os.lseek(fd, 0, os.SEEK_SET)
                 data = os.read(fd, 4096)
             elif mode == "pwrite1m":
@@ -1638,6 +1697,8 @@ try:
                 data = b"ok\n"
             else:
                 data = b"ok\n"
+            status = b"OK"
+            err = b""
             rc = 0
             break
         time.sleep(0.05)
@@ -1647,10 +1708,13 @@ finally:
     except OSError:
         pass
     try:
-        with open(result, "wb") as f:
-            f.write(data)
+        tmp = result + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(b"%s\t%d\n" % (status, nlink))
+            f.write(err if status != b"OK" else data)
             f.flush()
             os.fsync(f.fileno())
+        os.rename(tmp, result)
     except OSError:
         pass
 sys.exit(rc)
@@ -1670,9 +1734,11 @@ def _spawn_holder(d, mode):
             os.unlink(p)
         except OSError:
             pass
-    script = "/tmp/efs-posix2-hold.py"
+    script = os.path.join(d, ".hold.py")
     with open(script, "w") as f:
         f.write(_HOLD_SCRIPT)
+        f.flush()
+        os.fsync(f.fileno())
     target = os.path.join(d, "f")
     subprocess.Popen(
         [sys.executable, script, mode, target, ready, go, result],
@@ -1680,32 +1746,41 @@ def _spawn_holder(d, mode):
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    deadline = time.time() + 10.0
-    while time.time() < deadline:
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
         if os.path.exists(ready):
             return
         time.sleep(0.05)
     raise Fail("holder %s did not become ready" % mode)
 
 
+def _parse_holder_result(blob):
+    nl = blob.find(b"\n")
+    if nl < 0:
+        raise Fail("holder result truncated")
+    head, payload = blob[:nl], blob[nl + 1:]
+    parts = head.split(b"\t")
+    if len(parts) != 2 or parts[0] not in (b"OK", b"FAIL"):
+        raise Fail("holder result malformed: %r" % head)
+    if parts[0] != b"OK":
+        raise Fail("holder failed: %s" % payload.decode("utf-8", "replace"))
+    return payload, int(parts[1])
+
+
 def _holder_go(d):
-    ready, go, result = _holder_paths(d)
+    """Return (payload, nlink). The result file appears only after a full write."""
+    _ready, go, result = _holder_paths(d)
     with open(go, "w") as f:
         f.write("1\n")
         f.flush()
         os.fsync(f.fileno())
-    deadline = time.time() + 8.0
-    while time.time() < deadline:
+    deadline = time.monotonic() + 8.0
+    while time.monotonic() < deadline:
         if os.path.exists(result):
             with open(result, "rb") as f:
-                return f.read()
-        if not os.path.exists(ready):
-            break
+                return _parse_holder_result(f.read())
         time.sleep(0.05)
-    if os.path.exists(result):
-        with open(result, "rb") as f:
-            return f.read()
-    return b""
+    raise Fail("holder produced no result")
 
 
 def stat_isdir(st):
@@ -1860,14 +1935,19 @@ def run_local(mnt_a, mnt_b, results_file, filt, keep):
 
 
 def _check_exec_result(side, i, rc, out, err):
-    line = ""
-    for ln in out.splitlines():
-        if ln.startswith("RESULT\t"):
-            line = ln
-    if not line:
-        raise Fail("no RESULT from %s step %d: rc=%d out=%r err=%r" %
+    """A RESULT line is not success unless the process also exited 0.
+
+    A step can print PASS and then hang until the SSH deadline kills it.
+    That deadline must stay a failure. More than one RESULT row is malformed.
+    """
+    if rc != 0:
+        raise Fail("exec %s step %d rc=%d out=%r err=%r" %
                    (side, i, rc, out[-300:], err[-300:]))
-    parts = line.split("\t", 2)
+    lines = [ln for ln in out.splitlines() if ln.startswith("RESULT\t")]
+    if len(lines) != 1:
+        raise Fail("exec %s step %d: %d RESULT rows out=%r err=%r" %
+                   (side, i, len(lines), out[-300:], err[-300:]))
+    parts = lines[0].split("\t", 2)
     status = parts[1] if len(parts) > 1 else "?"
     detail = parts[2] if len(parts) > 2 else ""
     if status != "PASS":
@@ -1962,9 +2042,135 @@ def _q(s):
     return "'" + s.replace("'", "'\\''") + "'"
 
 
+def _step_fns(name):
+    for n, steps, _doc in TESTS:
+        if n == name:
+            return steps
+    raise AssertionError(name)
+
+
+def _self_test():
+    fails = []
+
+    def must_fail(label, fn):
+        try:
+            fn()
+        except Fail:
+            return
+        fails.append(label + " was accepted")
+
+    def must_pass(label, fn):
+        try:
+            fn()
+        except Fail as e:
+            fails.append("%s: %s" % (label, e))
+
+    must_pass("rc0 PASS", lambda: _check_exec_result(
+        "a", 0, 0, "RESULT\tPASS\t\n", ""))
+    for rc in (124, 255, -15):
+        must_fail("PASS with rc=%s" % rc, lambda rc=rc: _check_exec_result(
+            "a", 0, rc, "RESULT\tPASS\t\n", ""))
+    must_fail("missing RESULT", lambda: _check_exec_result("a", 0, 0, "", ""))
+    must_fail("two RESULT rows", lambda: _check_exec_result(
+        "a", 0, 0, "RESULT\tPASS\t\nRESULT\tFAIL\tx\n", ""))
+    must_fail("RESULT FAIL", lambda: _check_exec_result(
+        "a", 0, 0, "RESULT\tFAIL\tx\n", ""))
+
+    real_rename, real_unlink = os.rename, os.unlink
+
+    def boom(*_a, **_k):
+        raise OSError(errno.EIO, "injected")
+
+    def noop(*_a, **_k):
+        return None
+
+    def exercise(name, setup_idx, ab_idx, check_idx):
+        steps = _step_fns(name)
+        setup, (fa, fb), check = (steps[setup_idx][1], steps[ab_idx][1],
+                                  steps[check_idx][1])
+        for label, repl in (("eio", boom), ("noop", noop)):
+            d = tempfile.mkdtemp(prefix="posix2-race-")
+            try:
+                setup(d)
+                os.rename = repl
+                os.unlink = repl
+                try:
+                    if label == "eio":
+                        must_fail("%s %s side a" % (name, label), lambda: fa(d))
+                        must_fail("%s %s side b" % (name, label), lambda: fb(d))
+                    else:
+                        fa(d)
+                        fb(d)
+                        must_fail("%s noop final" % name, lambda: check(d))
+                finally:
+                    os.rename, os.unlink = real_rename, real_unlink
+            finally:
+                shutil.rmtree(d, ignore_errors=True)
+        # Both legal serial orders, with the real syscalls.
+        for order in ("ab", "ba"):
+            d = tempfile.mkdtemp(prefix="posix2-order-")
+            try:
+                setup(d)
+                if order == "ab":
+                    fa(d)
+                    fb(d)
+                else:
+                    fb(d)
+                    fa(d)
+                must_pass("%s order %s" % (name, order), lambda: check(d))
+            finally:
+                shutil.rmtree(d, ignore_errors=True)
+
+    exercise("peer_rename_vs_unlink_src", 0, 1, 2)
+    exercise("peer_rename_vs_unlink_dst", 0, 1, 2)
+    exercise("peer_rename_same_src_two_dst", 0, 1, 2)
+
+    chase = _step_fns("peer_rename_across_dirs_chase")
+    d = tempfile.mkdtemp(prefix="posix2-chase-")
+    try:
+        chase[0][1](d)
+        rename_step = chase[1][1][0]
+        os.rename = boom
+        try:
+            must_fail("chase EIO", lambda: rename_step(d))
+        finally:
+            os.rename = real_rename
+        os.rename = noop
+        try:
+            rename_step(d)
+            must_fail("chase noop", lambda: chase[2][1](d))
+        finally:
+            os.rename = real_rename
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+        os.rename = real_rename
+
+    d = tempfile.mkdtemp(prefix="posix2-hold-")
+    try:
+        wr(os.path.join(d, "f"), b"live")
+        _spawn_holder(d, "holdfd")
+        os.unlink(os.path.join(d, "f"))
+        data, nlink = _holder_go(d)
+        if data != b"live" or nlink != 0:
+            fails.append("holder after unlink data=%r nlink=%s" % (data, nlink))
+    except Fail as e:
+        fails.append("holder: %s" % e)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+    if fails:
+        for msg in fails:
+            print("FAIL " + msg)
+        return 1
+    print("posix_2client self-test: pass")
+    return 0
+
+
 def main(argv):
     global PARENT
     args = list(argv)
+    if args == ["--self-test"]:
+        return _self_test()
     if not args or args[0] in ("-h", "--help"):
         print(__doc__)
         return 2
