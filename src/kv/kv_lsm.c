@@ -276,6 +276,27 @@ static void gc_orphans(struct kv_lsm *l)
     closedir(d);
 }
 
+int kv_l1_reserve(struct kv_lsm *l, uint32_t need)
+{
+    struct seg_slot *p;
+    uint32_t cap;
+
+    if (need <= l->l1_cap)
+        return EFS_OK;
+    cap = l->l1_cap ? l->l1_cap : 16u;
+    while (cap < need) {
+        if (cap > (1u << 30))
+            return EFS_ERR_NOMEM;
+        cap *= 2u;
+    }
+    p = realloc(l->l1, (size_t)cap * sizeof(*p));
+    if (!p)
+        return EFS_ERR_NOMEM;
+    l->l1 = p;
+    l->l1_cap = cap;
+    return EFS_OK;
+}
+
 int kv_l1_cmp(const void *a, const void *b)
 {
     const struct seg_slot *x = a, *y = b;
@@ -316,10 +337,20 @@ static int manifest_load(struct kv_lsm *l)
             rc = EFS_ERR_PROTO;
             break;
         }
-        if ((level != 0 && level != 1) ||
-            (level == 0 ? l->n_l0 : l->n_l1) >= KV_LSM_MAX_SEGS) {
+        if (level != 0 && level != 1) {
             rc = EFS_ERR_PROTO;
             break;
+        }
+        /* L0 is a fixed array. L1 is a list: the MANIFEST already stores
+         * one line per file, and a dual-host node hits 64 L1 files. */
+        if (level == 0 && l->n_l0 >= KV_LSM_MAX_SEGS) {
+            rc = EFS_ERR_PROTO;
+            break;
+        }
+        if (level == 1) {
+            rc = kv_l1_reserve(l, l->n_l1 + 1);
+            if (rc != EFS_OK)
+                break;
         }
         kv_seg_path(l, level, seq, spath, sizeof(spath));
         rc = kv_seg_open(spath, &s);
@@ -535,13 +566,24 @@ static int merge_scan(struct kv_lsm *l, const uint8_t *prefix, uint32_t plen,
                                 const uint8_t *val, uint32_t vlen),
                       void *user)
 {
-    struct msrc src[KV_LSM_MAX_SEGS * 2 + 1];
+    struct msrc stack_src[KV_LSM_MAX_SEGS * 2 + 1];
+    struct msrc *src = stack_src;
     const uint8_t *seek = slen ? start : prefix;
     uint32_t seek_len = slen ? slen : plen;
-    uint32_t nsrc = 0, i;
+    uint32_t nsrc = 0, i, cap = KV_LSM_MAX_SEGS * 2 + 1;
+    uint32_t need = l->n_l0 + l->n_l1 + 1;
+    int src_heap = 0;
     int rc = EFS_OK;
 
-    memset(src, 0, sizeof(src));
+    if (need > cap) {
+        src = calloc(need, sizeof(*src));
+        if (!src)
+            return EFS_ERR_NOMEM;
+        src_heap = 1;
+        cap = need;
+    } else {
+        memset(src, 0, sizeof(stack_src));
+    }
     src[nsrc].mi = 0;
     if (l->mt.n && seek_len) {
         int found;
@@ -556,6 +598,10 @@ static int merge_scan(struct kv_lsm *l, const uint8_t *prefix, uint32_t plen,
          * each under l->mu on every PREPARE/RESOLVE apply. */
         if (seek_len && kv_seg_excludes(sl->seg, seek, seek_len, prefix, plen))
             continue;
+        if (nsrc >= cap) {
+            rc = EFS_ERR_NOMEM;
+            goto out;
+        }
         rc = kv_seg_iter_open(sl->seg, &src[nsrc].it);
         if (rc != EFS_OK)
             goto out;
@@ -608,6 +654,8 @@ static int merge_scan(struct kv_lsm *l, const uint8_t *prefix, uint32_t plen,
 out:
     for (i = 0; i < nsrc; i++)
         kv_seg_iter_close(src[i].it);
+    if (src_heap)
+        free(src);
     return rc;
 }
 
@@ -782,6 +830,9 @@ static void lsm_destroy(void *ctx)
     kv_compactor_stop(l);
     kv_wal_close(l->wal);
     drop_segs(l);
+    free(l->l1);
+    l->l1 = NULL;
+    l->l1_cap = 0;
     kv_mtab_clear(&l->mt);
     kv_buf_free(&l->scratch);
     pthread_cond_destroy(&l->compact_cv);
@@ -903,7 +954,7 @@ void efs_kv_lsm_close(struct efs_kv *kv)
     free(kv);
 }
 
-int efs_kv_lsm_flush(struct efs_kv *kv)
+static int lsm_flush(struct efs_kv *kv, int wait)
 {
     struct kv_lsm *l;
     int rc;
@@ -912,21 +963,35 @@ int efs_kv_lsm_flush(struct efs_kv *kv)
         return EFS_ERR_INVAL;
     l = kv->ctx;
     pthread_mutex_lock(&l->mu);
+    /* A flush emits at most one L0 file per key[0]. Counting those runs
+     * walks the memtable. The raft pump calls this on every snapshot
+     * open; refuse before the walk when a full memtable cannot fit. */
+    if (!wait && l->mt.n > 0 &&
+        l->n_l0 + KV_LSM_RANGE_MAX > KV_LSM_MAX_SEGS) {
+        if (l->compact_started) {
+            l->compact_req = 1;
+            pthread_cond_signal(&l->compact_cv);
+        }
+        pthread_mutex_unlock(&l->mu);
+        return EFS_ERR_BUSY;
+    }
     /* Snapshot flush only needs the memtable durable. Compaction is the
      * background thread's job; at the engine cap, wait for it instead of
-     * rewriting L1 on this call. */
-    while (l->n_l0 >= KV_LSM_MAX_SEGS && !l->io_failed) {
-        if (!l->compact_started) {
-            rc = kv_compact_locked(l, 0);
-            if (rc != EFS_OK) {
-                pthread_mutex_unlock(&l->mu);
-                return rc;
+     * rewriting L1 on this call. The pump must not wait. */
+    if (wait) {
+        while (l->n_l0 >= KV_LSM_MAX_SEGS && !l->io_failed) {
+            if (!l->compact_started) {
+                rc = kv_compact_locked(l, 0);
+                if (rc != EFS_OK) {
+                    pthread_mutex_unlock(&l->mu);
+                    return rc;
+                }
+                break;
             }
-            break;
+            l->compact_req = 1;
+            pthread_cond_signal(&l->compact_cv);
+            pthread_cond_wait(&l->cv, &l->mu);
         }
-        l->compact_req = 1;
-        pthread_cond_signal(&l->compact_cv);
-        pthread_cond_wait(&l->cv, &l->mu);
     }
     if (l->io_failed) {
         pthread_mutex_unlock(&l->mu);
@@ -943,6 +1008,16 @@ int efs_kv_lsm_flush(struct efs_kv *kv)
     }
     pthread_mutex_unlock(&l->mu);
     return rc;
+}
+
+int efs_kv_lsm_flush(struct efs_kv *kv)
+{
+    return lsm_flush(kv, 1);
+}
+
+int efs_kv_lsm_flush_nowait(struct efs_kv *kv)
+{
+    return lsm_flush(kv, 0);
 }
 
 int efs_kv_lsm_compact(struct efs_kv *kv)
@@ -1005,7 +1080,7 @@ int efs_kv_lsm_sync_release(struct efs_kv *kv)
 }
 
 struct efs_kv_lsm_view {
-    struct kv_seg *seg[KV_LSM_MAX_SEGS * 2];
+    struct kv_seg **seg;
     uint32_t n;
 };
 
@@ -1022,12 +1097,19 @@ int efs_kv_lsm_view_pin(struct efs_kv *kv, struct efs_kv_lsm_view **out)
     if (!v)
         return EFS_ERR_NOMEM;
     pthread_mutex_lock(&l->mu);
-    for (i = 0; i < l->n_l0 && v->n < KV_LSM_MAX_SEGS * 2; i++) {
+    v->seg = calloc(l->n_l0 + l->n_l1 ? l->n_l0 + l->n_l1 : 1,
+                    sizeof(*v->seg));
+    if (!v->seg) {
+        pthread_mutex_unlock(&l->mu);
+        free(v);
+        return EFS_ERR_NOMEM;
+    }
+    for (i = 0; i < l->n_l0; i++) {
         v->seg[v->n] = l->l0[i].seg;
         kv_seg_pin(v->seg[v->n]);
         v->n++;
     }
-    for (i = 0; i < l->n_l1 && v->n < KV_LSM_MAX_SEGS * 2; i++) {
+    for (i = 0; i < l->n_l1; i++) {
         v->seg[v->n] = l->l1[i].seg;
         kv_seg_pin(v->seg[v->n]);
         v->n++;
@@ -1083,6 +1165,7 @@ void efs_kv_lsm_view_unpin(struct efs_kv_lsm_view *v)
         return;
     for (i = 0; i < v->n; i++)
         kv_seg_unpin(v->seg[i]);
+    free(v->seg);
     free(v);
 }
 
@@ -1276,12 +1359,12 @@ static uint32_t vx_pop(uint32_t *h, uint32_t *n, const struct vx_src *src)
 int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
                            const char *path)
 {
-    struct vx_src src[KV_LSM_MAX_SEGS * 2];
-    uint32_t heap[KV_LSM_MAX_SEGS * 2];
+    struct vx_src *src = NULL;
+    uint32_t *heap = NULL;
     struct vx_buf outb;
     char tmp[4096];
     uint8_t *wkbuf;
-    uint32_t nsrc = 0, i, nitems = 0, hn = 0;
+    uint32_t nsrc = 0, i, nitems = 0, hn = 0, cap;
     int fd = -1, rc = EFS_OK;
 
     memset(&outb, 0, sizeof(outb));
@@ -1294,7 +1377,15 @@ int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
         free(wkbuf);
         return EFS_ERR_INVAL;
     }
-    memset(src, 0, sizeof(src));
+    cap = v->n ? v->n : 1;
+    src = calloc(cap, sizeof(*src));
+    heap = calloc(cap, sizeof(*heap));
+    if (!src || !heap) {
+        free(src);
+        free(heap);
+        free(wkbuf);
+        return EFS_ERR_NOMEM;
+    }
     for (i = 0; i < v->n; i++) {
         const char *sp = kv_seg_filepath(v->seg[i]);
 
@@ -1444,6 +1535,8 @@ out:
         kv_seg_iter_close(src[i].it);
         kv_seg_close(src[i].seg);
     }
+    free(src);
+    free(heap);
     return rc;
 }
 

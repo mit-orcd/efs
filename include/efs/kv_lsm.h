@@ -38,6 +38,11 @@ void efs_kv_lsm_close(struct efs_kv *kv);
 /* Test/maintenance hooks. flush makes the memtable an L0 segment; compact
  * merges L0 plus the overlapping L1 into a new L1. */
 int efs_kv_lsm_flush(struct efs_kv *kv);
+/* Same flush, but BUSY immediately when L0 cannot take another full
+ * memtable (one file per key range). Does not walk the memtable and
+ * does not wait. The raft pump uses this; a waiting flush there was
+ * the snapshot-open stack. */
+int efs_kv_lsm_flush_nowait(struct efs_kv *kv);
 int efs_kv_lsm_compact(struct efs_kv *kv);
 int efs_kv_lsm_seg_count(struct efs_kv *kv, uint32_t *l0, uint32_t *l1);
 /* Nested. Hold: WAL write + memtable apply, no fsync. Release (last nest):

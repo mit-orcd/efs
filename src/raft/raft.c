@@ -72,6 +72,10 @@ struct efs_raft {
     uint64_t snap_handle_incl;
     uint64_t snap_off[EFS_RAFT_MAX_PEERS];
     uint64_t snap_peer_incl[EFS_RAFT_MAX_PEERS];
+    /* No-progress InstallSnapshot ack: do not read another chunk until
+     * this tick. Propose wakes were copying the same chunk every time
+     * the follower answered BUSY. An empty AppendEntries still goes out. */
+    uint64_t snap_retry_tick[EFS_RAFT_MAX_PEERS];
     /* Follower staging cursor. Offset 0 restarts it. */
     uint64_t rx_incl;
     uint64_t rx_term;
@@ -464,7 +468,12 @@ static int send_snap(struct efs_raft *r, int to)
     if (r->snap_peer_incl[to] != incl) {
         r->snap_off[to] = 0;
         r->snap_peer_incl[to] = incl;
+        r->snap_retry_tick[to] = 0;
     }
+    /* Follower still importing this offset. Skip the pread; the caller
+     * sends an empty AppendEntries so the election timer stays quiet. */
+    if (r->ticks < r->snap_retry_tick[to])
+        return EFS_ERR_AGAIN;
     off = r->snap_off[to];
     total = r->snap_total;
     if (off > total)
@@ -1327,15 +1336,22 @@ static int on_snap_rep(struct efs_raft *r, const struct efs_raft_msg *in)
                     (unsigned long long)in->match_index,
                     (unsigned long long)r->snap_idx);
         r->snap_off[in->from] = 0;
+        r->snap_retry_tick[in->from] = 0;
         if (r->snap_idx)
             r->next_index[in->from] = r->snap_idx;
         return EFS_OK;
     }
     if (!in->vote_granted) {
-        /* Same offset: the follower is still importing. Sending again
-         * here tight-loops the last chunk. The next heartbeat retries. */
-        if (in->prev_index == r->snap_off[in->from])
+        /* Same offset: the follower is still importing. One chunk is
+         * already in flight; the next heartbeat retries. Propose wakes
+         * must not pread the chunk again. */
+        if (in->prev_index == r->snap_off[in->from]) {
+            uint32_t hb = r->heartbeat_ticks ? r->heartbeat_ticks : 1;
+
+            r->snap_retry_tick[in->from] = r->ticks + hb;
             return EFS_OK;
+        }
+        r->snap_retry_tick[in->from] = 0;
         r->snap_off[in->from] = in->prev_index;
         rc = send_snap(r, in->from);
         if (rc == EFS_ERR_AGAIN)
@@ -1346,6 +1362,7 @@ static int on_snap_rep(struct efs_raft *r, const struct efs_raft_msg *in)
         r->match_index[in->from] = in->match_index;
     r->next_index[in->from] = r->match_index[in->from] + 1;
     r->snap_off[in->from] = 0;
+    r->snap_retry_tick[in->from] = 0;
     try_commit(r);
     apply_committed(r);
     if (r->next_index[in->from] <= r->match_index[r->id])

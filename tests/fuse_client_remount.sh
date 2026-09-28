@@ -16,7 +16,7 @@ EXPORT="${EFS_EXPORT:-efs-test}"
 MNT="${EFS_MNT:-/tmp/efs-mount}"
 
 if [ "${EFS_NO_BUILD:-0}" != 1 ]; then
-    rsync -a --delete --exclude='/mnt/' --exclude='*.log' --exclude='/results/' \
+    rsync -a --checksum --delete --exclude='/mnt/' --exclude='*.log' --exclude='/results/' \
         "$HOME/git/efs/" /tmp/efs/ >/dev/null 2>&1
     cd /tmp/efs || { echo "$(hostname -s): no /tmp/efs"; exit 1; }
     make clean >/dev/null 2>&1

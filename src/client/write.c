@@ -1226,13 +1226,9 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         if (acks >= 2)
             break;
 
-        /* Nothing ready: ONE short fixed-budget spin on the first pending
-         * conn. The legs' replies land within a few us of each other (same
-         * server disk latency), so the wave is caught here and reaped by
-         * the quick harvest on the next iteration. The budget is capped:
-         * the adaptive watch hands out up to 200us whenever fewer than 16
-         * of the 32 put workers spin at once, which was ~8 cores of pure
-         * spin at 5 GB/s; the poll below catches late replies. */
+        /* Nothing ready: a few pauses on the first pending conn, then
+         * the poll below blocks on the CQ event fd. A PUT reply waits
+         * on a disk write, so a clock spin here ran out on every chunk. */
         for (int i = 0; i < EFS_NUM_FRAGMENTS && acks < 2; i++) {
             if (!pending[i] || !conns[i])
                 continue;

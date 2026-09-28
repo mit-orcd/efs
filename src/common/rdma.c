@@ -1532,28 +1532,35 @@ int efs_rdma_reply_ready_quick(struct efs_rdma_conn *rc)
     return __atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail;
 }
 
-/* Fixed-budget variant for the PUT reply wait: the adaptive budget only
- * shrinks when >16 threads spin at once, but the 32-worker put pool sits
- * just under that — every worker burned the full 200us per chunk (~8 cores
- * of pure spin at 5 GB/s). The caller picks the budget; the poll that
- * follows catches whatever the spin misses, so this only trades ~2us of
- * wakeup latency for the freed cores. */
+/* Fixed-budget variant for the PUT reply wait. A reply is behind a disk
+ * write, so a clock_gettime spin runs to its end on every chunk. 64
+ * pauses measured ~200 µs in efs_rdma_recv_wait; 16 pauses is the ~50 µs
+ * cap. budget_us scales within that cap. The caller then blocks on the
+ * CQ event fd. */
 int efs_rdma_reply_ready_us(struct efs_rdma_conn *rc, int budget_us)
 {
+    uint32_t pauses, n = 16;
+
     if (rc->broken)
         return -1;
     if (__atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail)
         return 1;
-    int64_t spin_end = now_us() + budget_us;
-    uint32_t polls = 0;
-    for (;;) {
+    if (budget_us <= 0)
+        n = 1;
+    else if (budget_us < 50)
+        n = (uint32_t)((budget_us * 16 + 49) / 50);
+    if (n < 1)
+        n = 1;
+    if (n > 16)
+        n = 16;
+    for (pauses = 0; pauses < n; pauses++) {
         if (__atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail)
             return 1;
         if (rc->broken)
             return -1;
-        if (((++polls) & 63) == 0 && now_us() >= spin_end)
-            return 0;
+        __asm__ volatile("pause" ::: "memory");
     }
+    return 0;
 }
 
 int efs_rdma_reply_fd(struct efs_rdma_conn *rc)

@@ -25,6 +25,55 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 28 2026 — perf IOR, stopped after stat EBUSY
+
+Restarted 19810 with the real node ids (not `scripts/server.sh`,
+which derives a node id from the address) and `perf record -F 499 -g`
+on each efsd. Clients fcstor007–015 were mounted with
+`scripts/client.sh --perf` and `EFS_TRANSPORT=rdma`. mdtest in
+`config-ior-only.ini` is `run=FALSE`. The driver printed the 30 s
+stonewall INVALID line, then `stat` of the easy files failed and
+rank 6 called `MPI_ABORT`. No RESULT line. Client logs: REPORT
+(type 67) exhausted 16 BUSY retries, `fsync-split` `flush_ms=202803`
+`report_ms=0` `rc=0`, then `INODE_LOOKUP` (type 43) on shard 3745
+exhausted the same budget. Profiles:
+`~/orcd/scratch/efs/perf/fcstor00N/efsd-19810/` and
+`.../efs-mount/`. Daemons were stopped after the reports were
+written. `efs-fuse` and `efsd` counts were 0 on a later check.
+
+## Sep 28 2026 — L1 list, snapshot pump, IOR easy-write
+
+The dual-host nodes were stuck at 64 L1 files, so compaction
+published BUSY, L0 could not drain, and the group 0 follower never
+installed a snapshot. The pump on that follower's other group spent
+the profile in `kv_flush_locked` (fcstor004, 41%) and the group 0
+leader spent it in `send_snap` (fcstor003, 50%).
+
+L1 is now a growable list. The MANIFEST format did not change.
+`host_snap_open` calls `efs_kv_lsm_flush_nowait`, which returns BUSY
+before walking the memtable when L0 cannot take `KV_LSM_RANGE_MAX`
+more files. A no-progress snapshot ack sets a one-heartbeat retry
+and the next send skips the pread; an empty AppendEntries is still
+sent. Abandoned `snap-*.kvx.tmp` files were removed on fcstor003–006
+while efsd was down.
+
+`roll_efsd.sh --all` with `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1` built
+`7eecf1da00cd-dirty` and reported `ROLL_OK`. Both groups were
+commit==applied at the leaders' indexes (group 0 13616251, group 2
+12041271). Compaction on fcstor004/005 ended rc=0 and L0 fell to 2
+and 3. fcstor004's group 0 import applied a 15697-item diff.
+
+`tests/perf/io500/run.sh ior` on fcstor007–015 (all `MOUNT_OK`)
+printed easy-write **1.048 GiB/s** in 397.381 s. The client log for
+that fsync is `flush_ms=325611 report_ms=0 rc=0`. The driver then
+aborted on `create file.mdtest.0.2236 failed (EIO)`. Official score
+is not a result: stonewall is 30 s, and the later phases did not
+run. After the write, L1 was 310 files on fcstor004 and 405 on
+fcstor005, L0 still 3. Group 0 and group 2 were still
+commit==applied (13624345 and 12050181). Server profiles are under
+`~/orcd/scratch/efs/perf/efsd-19810-fcstor00{3,4,5,6}/`; client
+profiles under `~/orcd/scratch/efs/perf/fcstor00N/efs-mount/`.
+
 ## Sep 28 2026 — 9×4 IO-500, TCP and RDMA
 
 Same binaries (`db2b88c4802a-dirty`, the tree committed as

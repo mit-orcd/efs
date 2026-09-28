@@ -136,10 +136,13 @@ struct kv_lsm {
     struct efs_kv_lsm_cfg cfg;
     struct kv_wal *wal;
     struct kv_mtab mt;
-    struct seg_slot l0[KV_LSM_MAX_SEGS]; /* newest first */
+    struct seg_slot l0[KV_LSM_MAX_SEGS]; /* newest first; capped */
     uint32_t n_l0;
-    struct seg_slot l1[KV_LSM_MAX_SEGS]; /* ascending, disjoint ranges */
+    /* Ascending, disjoint ranges. The MANIFEST is one "1 <seq>" line per
+     * file, so this list grows. L0 stays at KV_LSM_MAX_SEGS. */
+    struct seg_slot *l1;
     uint32_t n_l1;
+    uint32_t l1_cap;
     uint64_t next_seq;
     pthread_mutex_t mu;
     pthread_cond_t cv;
@@ -185,6 +188,8 @@ int kv_msrc_advance(struct kv_lsm *l, struct msrc *s, const uint8_t *lower,
                     uint32_t lower_len);
 int kv_manifest_write(struct kv_lsm *l);
 int kv_l1_cmp(const void *a, const void *b);
+/* Caller holds l->mu. Grows l->l1 so n_l1 may exceed KV_LSM_MAX_SEGS. */
+int kv_l1_reserve(struct kv_lsm *l, uint32_t need);
 
 /* Callers hold l->mu. kv_compact_locked(async=1) drops mu across the
  * merge and reacquires it before returning. */

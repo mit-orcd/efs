@@ -39,7 +39,7 @@ group_max_commit() {
     echo "$best"
 }
 
-BUILD_CMD="rsync -a --delete --exclude=/mnt/ --exclude='*.log' --exclude=/results/ \$HOME/git/efs/ /tmp/efs/ >/dev/null 2>&1; cd /tmp/efs && make clean >/dev/null 2>&1 && make -j\$(nproc) efsd efs-mgmt >build.log 2>&1 && echo BUILD_OK; grep -o 'build=[^ ]*' efsd.log | head -1; id=\$(git rev-parse --short=12 HEAD); git status --short 2>/dev/null | grep -qv '^??' && id=\$id-dirty; echo build=\$id"
+BUILD_CMD="rsync -a --checksum --delete --exclude=/mnt/ --exclude='*.log' --exclude=/results/ \$HOME/git/efs/ /tmp/efs/ >/dev/null 2>&1; cd /tmp/efs && make clean >/dev/null 2>&1 && make -j\$(nproc) efsd efs-mgmt >build.log 2>&1 && echo BUILD_OK; grep -o 'build=[^ ]*' efsd.log | head -1; id=\$(git rev-parse --short=12 HEAD); git status --short 2>/dev/null | grep -qv '^??' && id=\$id-dirty; echo build=\$id"
 
 # All hosted groups on host $1 (addr $2): commit==applied and within 2 of
 # the cluster max. Prints the status lines; returns 0 when caught up.

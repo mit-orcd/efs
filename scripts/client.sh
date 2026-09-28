@@ -72,7 +72,10 @@ start_perf() {
         return 1
     fi
     rm -f "$dir/fuse.data" "$dir/flat.txt" "$dir/by_thread.txt" "$dir/callers.txt"
-    setsid perf record -F 499 -g -p "$pid" -o "$dir/fuse.data" \
+    # nohup keeps $! as perf. setsid forks when it is a process-group
+    # leader and the parent only waits; signalling that parent leaves
+    # perf running and fuse.data unflushed.
+    nohup perf record -F 499 -g -p "$pid" -o "$dir/fuse.data" \
         </dev/null >"$dir/perf.stdout" 2>"$dir/fuse.stderr" &
     echo $! > "$dir/perf.pid"
     echo "$dir" > "$(perf_mark "$mnt")"

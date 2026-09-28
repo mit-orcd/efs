@@ -1364,6 +1364,35 @@ Whoever picks the project up next does **this first**. Update or delete
 this block when done — an "in flight" block older than the last commit
 is a bug in this page.
 
+**L1 cap and the snapshot pump (Sep 28 evening, uncommitted).**
+The 64-slot L1 array is a growable list. The on-disk MANIFEST was
+already one `1 <seq>` line per file. `efs_kv_lsm_flush_nowait` returns
+BUSY without walking the memtable when L0 cannot take another full
+set of ranges; `host_snap_open` uses that on the pump. A no-progress
+InstallSnapshot ack waits one heartbeat before the next chunk, and
+the empty AppendEntries still goes out. Abandoned `snap-*.kvx.tmp`
+files were deleted while efsd was down. Roll `--all` of
+`7eecf1da00cd-dirty` (`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`) caught
+every voter up inside the script's window: group 0 commit=applied
+13616251, group 2 12041271. fcstor004 L0 49→2, fcstor005 58→3,
+compaction rc=0, group 0 snapshot import diff n=15697. Unit tests
+`test_kv_lsm` and `test_raft` passed on node9901. 9-client
+`run.sh ior` (30 s stonewall, mdtest still `run=TRUE` in
+`config-ior-only.ini`) finished easy-write at **1.048 GiB/s** in
+397.381 s (one fsync flush 325.6 s, rc=0) and then aborted:
+`create file.mdtest.0.2236 failed (EIO)`, rank 0 `MPI_ABORT`.
+That easy-write is not comparable to the 1 s stonewall 2.917 GiB/s.
+mdtest in `config-ior-only.ini` is now `run=FALSE`. A later
+`client.sh --perf` IOR (22:00Z, daemons then stopped) produced no
+RESULT: fsync `flush_ms=202803` `rc=0`, then `INODE_LOOKUP` on
+shard 3745 exhausted 16 BUSY retries and IOR's `stat` aborted.
+Profiles from the run (`cycles:P`): fcstor003 top is kernel dentry
+lookup under `nvme_put` (5.6%); fcstor004 top is LSM `memcmp` in
+lookup (10.6%). `send_snap` / `kv_flush_locked` are not the stack.
+Client top is blake3 in the dcache reclaim thread (25%). efsd was
+left up; fcstor007–015 are mounted RDMA. W15's reply-wait change is
+in the same dirty tree. Do not commit unless asked.
+
 **9-client dd profile cycle is done (Sep 28 afternoon).** Five
 rounds on RDMA, 8 GiB `dd bs=1M conv=fsync`, own file, every file
 8589934592. The change that moved the wall was probing for an

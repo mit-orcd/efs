@@ -75,7 +75,9 @@ start_server_perf() {
     command -v perf >/dev/null 2>&1 || { echo "ERROR: perf not on PATH" >&2; return 1; }
     mkdir -p "$dir" "$storage/log"
     rm -f "$dir/efsd.data" "$dir/flat.txt" "$dir/by_thread.txt" "$dir/callers.txt"
-    setsid perf record -F 499 -g -p "$pid" -o "$dir/efsd.data" \
+    # nohup keeps $! as perf. setsid's parent is not the recorder, so
+    # stop would fail to flush efsd.data.
+    nohup perf record -F 499 -g -p "$pid" -o "$dir/efsd.data" \
         </dev/null >"$dir/perf.stdout" 2>"$dir/perf.stderr" &
     echo $! > "$dir/perf.pid"
     echo "$dir" > "$(perf_mark_storage "$storage")"

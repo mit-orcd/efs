@@ -71,7 +71,7 @@ int efs_rdma_reply_ready(struct efs_rdma_conn *rc);
  * several conns per wait — a full adaptive spin per conn multiplies CPU by
  * the conn count (the sw-1m client CPU sink). */
 int efs_rdma_reply_ready_quick(struct efs_rdma_conn *rc);
-/* Fixed-budget spin variant (PUT reply wait; see rdma.c). */
+/* A few pauses, then the caller blocks on the CQ event fd. No clock spin. */
 int efs_rdma_reply_ready_us(struct efs_rdma_conn *rc, int budget_us);
 int efs_rdma_reply_fd(struct efs_rdma_conn *rc);
 

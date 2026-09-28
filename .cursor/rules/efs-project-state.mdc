@@ -59,7 +59,15 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 
 - **Only live cluster: port 19810**, fcstor003–006 = node 1–4 =
   172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA
-  (`db2b88c4802a-dirty`, `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
+  (`7eecf1da00cd-dirty`, `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
+  Stopped after the Sep 28 22:05Z perf IOR: efsd and efs-fuse are
+  down on purpose. Restart is the usual no-`--join` start.
+  L1 is a growable list (the MANIFEST was already one line per file).
+  After the Sep 28 evening roll, fcstor004 L0 went 49→2 and fcstor005
+  58→3 with `kv-compact` rc=0; during the following IOR, L1 grew to
+  310 / 405 on those two nodes and L0 stayed at 3. The pump does not
+  flush a memtable it cannot place, and a no-progress snapshot ack
+  waits one heartbeat before the next chunk.
   Group 0 = odd shards = nodes 1–3 (`voters=0x7`); group 2 = even shards =
   nodes 2–4 (`0xe`). Clients fcstor007–015 (003–006 also run efs-fuse),
   export `efs-test`, mount `/tmp/efs-mount`, `EFS_TRANSPORT=rdma`. 19820 is

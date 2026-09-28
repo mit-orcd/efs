@@ -53,16 +53,20 @@ int kv_flush_locked(struct kv_lsm *l)
 
     if (l->mt.n == 0)
         return EFS_OK;
+    if (l->n_l0 >= KV_LSM_MAX_SEGS)
+        return EFS_ERR_BUSY;
+    /* Stop once another run cannot fit. A full walk that then returns
+     * BUSY is what host_snap_open did on every heartbeat. */
     for (i = 0; i < l->mt.n; i++) {
         int r = key_range(l->mt.e[i]->key, l->mt.e[i]->klen);
 
         if (r != prev) {
             runs++;
             prev = r;
+            if (runs > 256 || l->n_l0 + runs > KV_LSM_MAX_SEGS)
+                return EFS_ERR_BUSY;
         }
     }
-    if (runs > 256 || l->n_l0 + runs > KV_LSM_MAX_SEGS)
-        return EFS_ERR_BUSY;
     memset(neu, 0, sizeof(neu));
     for (i = 0; i < l->mt.n; i++) {
         struct kv_ent *e = l->mt.e[i];
@@ -157,11 +161,31 @@ struct compact_ctx {
     struct kv_seg_w *w;
     uint64_t seq;
     uint64_t bytes;
-    struct seg_slot out[KV_LSM_MAX_SEGS];
+    struct seg_slot *out;
     uint32_t n_out;
+    uint32_t out_cap;
     int range;
     int rc;
 };
+
+static int compact_out_slot(struct compact_ctx *c)
+{
+    struct seg_slot *p;
+    uint32_t ncap;
+
+    if (c->n_out < c->out_cap)
+        return EFS_OK;
+    ncap = c->out_cap ? c->out_cap * 2u : 8u;
+    if (ncap < c->n_out + 1)
+        ncap = c->n_out + 1;
+    p = realloc(c->out, (size_t)ncap * sizeof(*p));
+    if (!p)
+        return EFS_ERR_NOMEM;
+    memset(p + c->out_cap, 0, (size_t)(ncap - c->out_cap) * sizeof(*p));
+    c->out = p;
+    c->out_cap = ncap;
+    return EFS_OK;
+}
 
 struct seg_id {
     int level;
@@ -228,8 +252,9 @@ static int compact_emit(struct compact_ctx *c, uint8_t op, const uint8_t *key,
         c->n_out++;
     }
     if (!c->w) {
-        if (c->n_out >= KV_LSM_MAX_SEGS)
-            return EFS_ERR_BUSY;
+        rc = compact_out_slot(c);
+        if (rc != EFS_OK)
+            return rc;
         c->range = key_range(key, klen);
         c->seq = take_seq(c->l);
         c->out[c->n_out].seq = c->seq;
@@ -318,17 +343,18 @@ static uint32_t cm_pop(uint32_t *h, uint32_t *n, const struct msrc *src)
  * async=1 releases it across the file merge. */
 int kv_compact_locked(struct kv_lsm *l, int async)
 {
-    struct msrc src[KV_LSM_MAX_SEGS * 2];
-    struct kv_seg *priv[KV_LSM_MAX_SEGS * 2];
-    struct seg_id drop[KV_LSM_MAX_SEGS * 2];
+    struct msrc *src = NULL;
+    struct kv_seg **priv = NULL;
+    struct seg_id *drop = NULL;
     struct seg_slot keep[KV_LSM_MAX_SEGS];
-    struct seg_slot doomed[KV_LSM_MAX_SEGS * 2];
+    struct seg_slot *doomed = NULL;
+    struct seg_slot *nl1 = NULL;
     struct compact_ctx c;
-    uint32_t heap[KV_LSM_MAX_SEGS * 2];
+    uint32_t *heap = NULL;
     const uint8_t *lo = NULL, *hi = NULL;
     uint32_t lol = 0, hil = 0;
     uint32_t nsrc = 0, n_drop = 0, n_keep = 0, n_doomed = 0, hn = 0, i, j;
-    uint32_t n_l0_in = 0;
+    uint32_t n_l0_in = 0, cap = 0;
     int rc = EFS_OK;
     int have_range = 0;
     int held = 1;
@@ -339,8 +365,6 @@ int kv_compact_locked(struct kv_lsm *l, int async)
 
     if (l->n_l0 == 0)
         return EFS_OK;
-    memset(src, 0, sizeof(src));
-    memset(priv, 0, sizeof(priv));
     memset(&c, 0, sizeof(c));
     memset(count, 0, sizeof(count));
     c.l = l;
@@ -375,6 +399,16 @@ int kv_compact_locked(struct kv_lsm *l, int async)
         if (chosen < 0)
             return EFS_OK;
     }
+    cap = l->n_l0 + l->n_l1;
+    src = calloc(cap, sizeof(*src));
+    priv = calloc(cap, sizeof(*priv));
+    drop = calloc(cap, sizeof(*drop));
+    doomed = calloc(cap, sizeof(*doomed));
+    heap = calloc(cap, sizeof(*heap));
+    if (!src || !priv || !drop || !doomed || !heap) {
+        rc = EFS_ERR_NOMEM;
+        goto cleanup;
+    }
     for (i = 0; i < l->n_l0; i++) {
         const uint8_t *fk = NULL, *lk = NULL;
         uint32_t fl = 0, ll = 0;
@@ -384,7 +418,7 @@ int kv_compact_locked(struct kv_lsm *l, int async)
             continue;
         rc = kv_seg_last_key(l->l0[i].seg, &lk, &ll);
         if (rc != EFS_OK)
-            return rc;
+            goto cleanup;
         rlo = key_range(fk, fl);
         rhi = key_range(lk, ll);
         if (!wide && (rlo != chosen || rhi != chosen))
@@ -398,19 +432,25 @@ int kv_compact_locked(struct kv_lsm *l, int async)
             hil = ll;
         }
         have_range = 1;
-        if (n_drop >= KV_LSM_MAX_SEGS * 2)
-            return EFS_ERR_BUSY;
+        if (n_drop >= cap) {
+            rc = EFS_ERR_NOMEM;
+            goto cleanup;
+        }
         drop[n_drop].level = 0;
         drop[n_drop].seq = l->l0[i].seq;
         n_drop++;
     }
-    if (!have_range)
-        return EFS_OK;
+    if (!have_range) {
+        rc = EFS_OK;
+        goto cleanup;
+    }
     for (i = 0; i < l->n_l1; i++) {
         if (!overlaps(l->l1[i].seg, lo, lol, hi, hil))
             continue;
-        if (n_drop >= KV_LSM_MAX_SEGS * 2)
-            return EFS_ERR_BUSY;
+        if (n_drop >= cap) {
+            rc = EFS_ERR_NOMEM;
+            goto cleanup;
+        }
         drop[n_drop].level = 1;
         drop[n_drop].seq = l->l1[i].seq;
         n_drop++;
@@ -526,8 +566,11 @@ int kv_compact_locked(struct kv_lsm *l, int async)
     n_keep = 0;
     for (i = 0; i < l->n_l0; i++) {
         if (id_has(drop, n_drop, 0, l->l0[i].seq)) {
-            if (n_doomed < KV_LSM_MAX_SEGS * 2)
-                doomed[n_doomed++] = l->l0[i];
+            if (n_doomed >= cap) {
+                rc = EFS_ERR_NOMEM;
+                goto discard;
+            }
+            doomed[n_doomed++] = l->l0[i];
             continue;
         }
         if (n_keep >= KV_LSM_MAX_SEGS) {
@@ -540,30 +583,41 @@ int kv_compact_locked(struct kv_lsm *l, int async)
     }
     {
         struct seg_slot nl0[KV_LSM_MAX_SEGS];
-        struct seg_slot nl1[KV_LSM_MAX_SEGS];
         uint32_t nl0n = n_keep, nl1n = 0;
+        uint32_t nl1_cap = l->n_l1 + c.n_out;
 
+        nl1 = calloc(nl1_cap ? nl1_cap : 1, sizeof(*nl1));
+        if (!nl1) {
+            rc = EFS_ERR_NOMEM;
+            goto discard;
+        }
         for (i = 0; i < n_keep; i++)
             nl0[i] = keep[i];
         for (i = 0; i < l->n_l1; i++) {
             if (id_has(drop, n_drop, 1, l->l1[i].seq)) {
-                if (n_doomed < KV_LSM_MAX_SEGS * 2)
-                    doomed[n_doomed++] = l->l1[i];
+                if (n_doomed >= cap) {
+                    rc = EFS_ERR_NOMEM;
+                    goto discard;
+                }
+                doomed[n_doomed++] = l->l1[i];
                 continue;
             }
-            if (nl1n >= KV_LSM_MAX_SEGS) {
-                rc = EFS_ERR_BUSY;
+            if (nl1n >= nl1_cap) {
+                rc = EFS_ERR_NOMEM;
                 goto discard;
             }
             nl1[nl1n++] = l->l1[i];
         }
         for (i = 0; i < c.n_out; i++) {
-            if (nl1n >= KV_LSM_MAX_SEGS) {
-                rc = EFS_ERR_BUSY;
+            if (nl1n >= nl1_cap) {
+                rc = EFS_ERR_NOMEM;
                 goto discard;
             }
             nl1[nl1n++] = c.out[i];
         }
+        rc = kv_l1_reserve(l, nl1n);
+        if (rc != EFS_OK)
+            goto discard;
         l->n_l0 = nl0n;
         for (i = 0; i < nl0n; i++)
             l->l0[i] = nl0[i];
@@ -581,7 +635,7 @@ int kv_compact_locked(struct kv_lsm *l, int async)
         fprintf(stderr, "kv-compact: end bytes=%llu ms=%llu rc=%d\n",
                 (unsigned long long)c.bytes,
                 (unsigned long long)(mono_ms() - t0), rc);
-        return rc;
+        goto cleanup;
     }
     for (i = 0; i < n_doomed; i++) {
         char path[KV_LSM_PATH_MAX + 64];
@@ -594,7 +648,8 @@ int kv_compact_locked(struct kv_lsm *l, int async)
     fprintf(stderr, "kv-compact: end bytes=%llu ms=%llu l0=%u l1=%u rc=0\n",
             (unsigned long long)c.bytes, (unsigned long long)(mono_ms() - t0),
             l->n_l0, l->n_l1);
-    return EFS_OK;
+    rc = EFS_OK;
+    goto cleanup;
 
 discard:
     for (i = 0; i < c.n_out; i++) {
@@ -609,7 +664,7 @@ discard:
     fprintf(stderr, "kv-compact: end bytes=%llu ms=%llu rc=%d\n",
             (unsigned long long)c.bytes, (unsigned long long)(mono_ms() - t0),
             rc);
-    return rc;
+    goto cleanup;
 
 out:
     for (i = 0; i < nsrc; i++)
@@ -634,6 +689,14 @@ out:
     fprintf(stderr, "kv-compact: end bytes=%llu ms=%llu rc=%d\n",
             (unsigned long long)c.bytes, (unsigned long long)(mono_ms() - t0),
             rc);
+cleanup:
+    free(src);
+    free(priv);
+    free(drop);
+    free(doomed);
+    free(heap);
+    free(nl1);
+    free(c.out);
     return rc;
 }
 

@@ -716,6 +716,114 @@ static void test_compact_full_l0(void)
     efs_kv_lsm_close(kv);
 }
 
+/* L1 used to be a 64-slot array. Publish returned BUSY at the 65th file
+ * and the MANIFEST loader refused to open it. The on-disk list is one
+ * line per file; 80 ranges must compact, reopen, and read back. */
+static void test_l1_grows(void)
+{
+    struct efs_kv_lsm_cfg cfg;
+    struct efs_kv_lsm_view *view = NULL;
+    struct efs_kv *kv;
+    uint32_t l0 = 0, l1 = 0;
+    char k[4], v[8];
+    uint8_t got[8];
+    uint32_t glen;
+    int i, bad = 0, n = 80;
+
+    rmtree(g_dir);
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.sync_mode = EFS_KV_LSM_NOSYNC;
+    cfg.memtable_max = 4u * 1024u * 1024u;
+    cfg.l0_max = 1000;
+    kv = efs_kv_lsm_open(g_dir, &cfg);
+    CHECK(kv != NULL, "open l1 grow");
+    if (!kv)
+        return;
+    for (i = 0; i < n; i++) {
+        k[0] = (char)(i + 1);
+        k[1] = 'k';
+        k[2] = 0;
+        snprintf(v, sizeof(v), "v%02d", i);
+        if (put_s(kv, k, v) != EFS_OK || efs_kv_lsm_flush(kv) != EFS_OK ||
+            efs_kv_lsm_compact(kv) != EFS_OK)
+            bad++;
+    }
+    CHECK(bad == 0, "80 range flush+compact");
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK && l0 == 0 &&
+              l1 == (uint32_t)n,
+          "L1 past 64");
+    CHECK(efs_kv_lsm_view_pin(kv, &view) == EFS_OK && view, "pin past 64");
+    if (view) {
+        k[0] = 1;
+        k[1] = 'k';
+        k[2] = 0;
+        glen = sizeof(got);
+        CHECK(efs_kv_lsm_view_get(view, (const uint8_t *)k, 2, got, &glen) ==
+                  EFS_OK &&
+              glen == 3 && memcmp(got, "v00", 3) == 0,
+              "pinned view sees every segment");
+        efs_kv_lsm_view_unpin(view);
+    }
+    efs_kv_lsm_close(kv);
+    kv = efs_kv_lsm_open(g_dir, &cfg);
+    CHECK(kv != NULL, "reopen past 64 L1");
+    if (!kv)
+        return;
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK && l0 == 0 &&
+              l1 == (uint32_t)n,
+          "manifest kept every L1");
+    bad = 0;
+    for (i = 0; i < n; i++) {
+        k[0] = (char)(i + 1);
+        k[1] = 'k';
+        k[2] = 0;
+        snprintf(v, sizeof(v), "v%02d", i);
+        if (get_is(kv, k, v) != EFS_OK)
+            bad++;
+    }
+    CHECK(bad == 0, "keys live past 64 L1");
+    efs_kv_lsm_close(kv);
+}
+
+/* 49 L0 files: a one-run flush still fits, but the pump must not walk
+ * the memtable to discover that. nowait refuses; the waiting flush
+ * still places the run. */
+static void test_flush_nowait(void)
+{
+    struct efs_kv_lsm_cfg cfg;
+    struct efs_kv *kv;
+    uint32_t l0 = 0, l1 = 0;
+    char k[8], v[8];
+    int i, bad = 0;
+
+    rmtree(g_dir);
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.sync_mode = EFS_KV_LSM_NOSYNC;
+    cfg.memtable_max = 4u * 1024u * 1024u;
+    cfg.l0_max = 1000;
+    kv = efs_kv_lsm_open(g_dir, &cfg);
+    CHECK(kv != NULL, "open nowait");
+    if (!kv)
+        return;
+    for (i = 0; i < 49; i++) {
+        snprintf(k, sizeof(k), "n%02d", i);
+        snprintf(v, sizeof(v), "v%02d", i);
+        if (put_s(kv, k, v) != EFS_OK || efs_kv_lsm_flush(kv) != EFS_OK)
+            bad++;
+    }
+    CHECK(bad == 0, "49 flushes");
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK && l0 == 49,
+          "L0 at the nowait line");
+    CHECK(put_s(kv, "n49", "v49") == EFS_OK, "one more key");
+    CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "one run still fits");
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK && l0 == 50,
+          "waiting flush published");
+    CHECK(efs_kv_lsm_flush_nowait(kv) == EFS_OK, "empty memtable is OK");
+    CHECK(put_s(kv, "n50", "v50") == EFS_OK, "key past the line");
+    CHECK(efs_kv_lsm_flush_nowait(kv) == EFS_ERR_BUSY, "nowait does not walk");
+    efs_kv_lsm_close(kv);
+}
+
 /* Hold writes 32 records then one fsync; reopen must see them all. */
 static void test_sync_hold(void)
 {
@@ -1041,6 +1149,8 @@ int main(void)
     test_bulk_auto_compact();
     test_kv_group_snap();
     test_compact_full_l0();
+    test_l1_grows();
+    test_flush_nowait();
     test_pinned_view();
     test_compact_crash();
     test_sync_hold();

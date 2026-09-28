@@ -1931,7 +1931,10 @@ static int host_snap_open(void *app, uint64_t incl, void **handle,
         return EFS_ERR_NOT_FOUND;
     }
     pthread_mutex_unlock(&h->snap_mu);
-    rc = efs_kv_lsm_flush(h->kv);
+    /* The pump calls this on every catch-up heartbeat. A flush that
+     * would walk the memtable and return BUSY (L0 cannot take another
+     * full set of ranges) stays off this thread. */
+    rc = efs_kv_lsm_flush_nowait(h->kv);
     if (rc != EFS_OK)
         return rc;
     rc = efs_kv_lsm_view_pin(h->kv, &view);
