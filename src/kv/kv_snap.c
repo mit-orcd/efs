@@ -431,3 +431,205 @@ int efs_kv_group_import_file(struct efs_kv *kv, uint8_t group, const char *path)
     free(buf);
     return rc;
 }
+
+static int read_whole(const char *path, uint8_t **out, uint32_t *len)
+{
+    uint8_t *buf;
+    off_t sz;
+    int fd;
+
+    *out = NULL;
+    *len = 0;
+    fd = open(path, O_RDONLY);
+    if (fd < 0)
+        return EFS_ERR_IO;
+    sz = lseek(fd, 0, SEEK_END);
+    if (sz < 4 || (uint64_t)sz > 0xffffffffu) {
+        close(fd);
+        return sz < 4 ? EFS_ERR_PROTO : EFS_ERR_NOMEM;
+    }
+    buf = malloc((size_t)sz);
+    if (!buf) {
+        close(fd);
+        return EFS_ERR_NOMEM;
+    }
+    {
+        uint8_t *p = buf;
+        size_t left = (size_t)sz;
+        off_t at = 0;
+
+        while (left) {
+            ssize_t n = pread(fd, p, left, at);
+
+            if (n <= 0) {
+                free(buf);
+                close(fd);
+                return EFS_ERR_IO;
+            }
+            p += n;
+            at += n;
+            left -= (size_t)n;
+        }
+    }
+    close(fd);
+    *out = buf;
+    *len = (uint32_t)sz;
+    return EFS_OK;
+}
+
+static int parse_image(const uint8_t *data, uint32_t len, uint8_t group,
+                       struct efs_kv_item **out, uint32_t *n_out)
+{
+    struct efs_kv_item *items;
+    uint32_t n, i, off;
+
+    *out = NULL;
+    *n_out = 0;
+    if (len < 4)
+        return EFS_ERR_PROTO;
+    n = get_u32(data);
+    if (n > (len - 4) / 9)
+        return EFS_ERR_PROTO;
+    items = calloc(n ? n : 1, sizeof(*items));
+    if (!items)
+        return EFS_ERR_NOMEM;
+    off = 4;
+    for (i = 0; i < n; i++) {
+        uint32_t klen, vlen;
+
+        if (off + 9 > len || data[off] != 1) {
+            free(items);
+            return EFS_ERR_PROTO;
+        }
+        off++;
+        klen = get_u32(data + off);
+        off += 4;
+        vlen = get_u32(data + off);
+        off += 4;
+        if (klen > len - off || vlen > len - off - klen ||
+            !key_in_group(data + off, klen, group)) {
+            free(items);
+            return EFS_ERR_PROTO;
+        }
+        items[i].op = EFS_KV_PUT;
+        items[i].key = data + off;
+        items[i].klen = klen;
+        off += klen;
+        items[i].val = vlen ? data + off : NULL;
+        items[i].vlen = vlen;
+        off += vlen;
+    }
+    if (off != len) {
+        free(items);
+        return EFS_ERR_PROTO;
+    }
+    *out = items;
+    *n_out = n;
+    return EFS_OK;
+}
+
+int efs_kv_group_import_prepare(struct efs_kv *kv, uint8_t group,
+                                const char *incoming, const char *local,
+                                struct efs_kv_item **diff_out, uint32_t *n_out,
+                                uint8_t **hold_a, uint8_t **hold_b)
+{
+    uint8_t *ibuf = NULL, *lbuf = NULL;
+    uint32_t ilen = 0, llen = 0, ni = 0, n = 0, ln = 0, i, off;
+    struct efs_kv_item *items = NULL, *loc = NULL, *diff = NULL;
+    int rc;
+
+    if (diff_out)
+        *diff_out = NULL;
+    if (n_out)
+        *n_out = 0;
+    if (hold_a)
+        *hold_a = NULL;
+    if (hold_b)
+        *hold_b = NULL;
+    if (!kv || !incoming || !local || !diff_out || !n_out || !hold_a || !hold_b)
+        return EFS_ERR_INVAL;
+    rc = read_whole(incoming, &ibuf, &ilen);
+    if (rc != EFS_OK)
+        return rc;
+    rc = read_whole(local, &lbuf, &llen);
+    if (rc != EFS_OK) {
+        free(ibuf);
+        return rc;
+    }
+    rc = parse_image(ibuf, ilen, group, &items, &n);
+    if (rc != EFS_OK) {
+        free(ibuf);
+        free(lbuf);
+        return rc;
+    }
+    rc = parse_image(lbuf, llen, group, &loc, &ln);
+    if (rc != EFS_OK) {
+        free(items);
+        free(ibuf);
+        free(lbuf);
+        return rc;
+    }
+    if (n > 1)
+        qsort_r(items, n, sizeof(*items), item_cmp, NULL);
+    if (ln > 1)
+        qsort_r(loc, ln, sizeof(*loc), item_cmp, NULL);
+    if (n + ln) {
+        diff = calloc(n + ln, sizeof(*diff));
+        if (!diff) {
+            free(items);
+            free(loc);
+            free(ibuf);
+            free(lbuf);
+            return EFS_ERR_NOMEM;
+        }
+    }
+    i = 0;
+    off = 0;
+    while (i < n || off < ln) {
+        int cmpv;
+
+        if (i + 1 < n &&
+            cmp_bytes(items[i].key, items[i].klen, items[i + 1].key,
+                      items[i + 1].klen) == 0) {
+            i++;
+            continue;
+        }
+        if (off + 1 < ln &&
+            cmp_bytes(loc[off].key, loc[off].klen, loc[off + 1].key,
+                      loc[off + 1].klen) == 0) {
+            off++;
+            continue;
+        }
+        if (i < n && off < ln)
+            cmpv = cmp_bytes(items[i].key, items[i].klen, loc[off].key,
+                             loc[off].klen);
+        else
+            cmpv = i < n ? -1 : 1;
+        if (cmpv < 0)
+            diff[ni++] = items[i++];
+        else if (cmpv > 0) {
+            diff[ni].op = EFS_KV_DEL;
+            diff[ni].key = loc[off].key;
+            diff[ni].klen = loc[off].klen;
+            diff[ni].val = NULL;
+            diff[ni].vlen = 0;
+            ni++;
+            off++;
+        } else {
+            if (items[i].vlen != loc[off].vlen ||
+                (items[i].vlen &&
+                 memcmp(items[i].val, loc[off].val, items[i].vlen) != 0))
+                diff[ni++] = items[i];
+            i++;
+            off++;
+        }
+    }
+    free(items);
+    free(loc);
+    *diff_out = diff;
+    *n_out = ni;
+    *hold_a = ibuf;
+    *hold_b = lbuf;
+    (void)kv;
+    return EFS_OK;
+}

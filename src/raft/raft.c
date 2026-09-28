@@ -1284,6 +1284,15 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
             return snap_reject(r, &m, last_i);
     }
     rc = r->snap_chunk(r->app, incl, incl_t, offset, user, ulen, done);
+    if (rc == EFS_ERR_BUSY) {
+        /* Chunk is on disk; the KV diff is still running off this thread.
+         * Ack this same offset so the leader retries it. snap_reject would
+         * clear rx_off and the next chunk would restart from byte 0. */
+        m.success = 1;
+        m.vote_granted = 0;
+        m.prev_index = offset;
+        return send_msg(r, &m);
+    }
     if (rc != EFS_OK) {
         if (getenv("EFS_RAFT_DBG"))
             fprintf(stderr, "raft[%u]: on_snap_req chunk rc=%d incl=%llu "
@@ -1323,6 +1332,10 @@ static int on_snap_rep(struct efs_raft *r, const struct efs_raft_msg *in)
         return EFS_OK;
     }
     if (!in->vote_granted) {
+        /* Same offset: the follower is still importing. Sending again
+         * here tight-loops the last chunk. The next heartbeat retries. */
+        if (in->prev_index == r->snap_off[in->from])
+            return EFS_OK;
         r->snap_off[in->from] = in->prev_index;
         rc = send_snap(r, in->from);
         if (rc == EFS_ERR_AGAIN)

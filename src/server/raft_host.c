@@ -202,6 +202,28 @@ struct host_group {
     uint64_t part_term;
     uint64_t part_off;
     char part_path[EFS_MAX_PATH];
+    /* InstallSnapshot apply. The pump writes the .part file; the GC
+     * thread scans and diffs it. import_state is snap_mu. A retry of the
+     * last chunk returns BUSY until DONE, then OK. import_gen bumps when
+     * a newer snapshot replaces this one. */
+    int import_state;
+    int import_rc;
+    /* 1 while this group's install diff is in flight. host_apply of this
+     * group returns BUSY. The other group keeps applying: the scan is a
+     * pinned view and does not hold the LSM lock. */
+    int import_block;
+    uint64_t import_gen;
+    uint64_t import_incl;
+    uint64_t import_term;
+    char import_path[EFS_MAX_PATH];
+    /* Prepared diff. Key pointers live in the two hold buffers. The pump
+     * batches this in the same call that acknowledges the snapshot, so a
+     * newer snapshot can still discard it without writing the KV. */
+    struct efs_kv_item *import_diff;
+    uint32_t import_ni;
+    uint8_t *import_hold_a;
+    uint8_t *import_hold_b;
+    uint64_t import_retry_us;
     int kv_incomplete;  /* apply missed a committed row; do not lead */
     struct efs_raft *r;
     struct efs_raft_host *host; /* back-pointer, set in attach_group */
@@ -294,6 +316,9 @@ struct efs_raft_host {
     pthread_mutex_t snap_mu; /* snapshot file/view; never taken under h->mu
                               * from the GC thread. The pump may hold h->mu
                               * then snap_mu. */
+    /* 1 while a snapshot diff batch holds the LSM lock. Every group's
+     * apply returns BUSY so the pump does not block behind that batch. */
+    int snap_batch;
     /* No host-wide handler lock: ReadIndex rounds are batched under h->mu
      * (host_read_index) and the apply is the arbiter of every check-then-
      * propose (guards, CAS, reductions). The old read_mu that every inode
@@ -1817,6 +1842,10 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     uint64_t a0 = 0;
     int rc, ret;
 
+    if (g && __atomic_load_n(&g->import_block, __ATOMIC_ACQUIRE))
+        return EFS_ERR_BUSY;
+    if (h && __atomic_load_n(&h->snap_batch, __ATOMIC_ACQUIRE))
+        return EFS_ERR_BUSY;
     if (!h || !h->kv || !cmd || clen == 0) {
         /* Still stamp the slot: a waiter must never find "never written". */
         g->arc_idx[index & HOST_APPLY_RC_MASK] = index;
@@ -1947,6 +1976,93 @@ static void host_snap_close(void *handle)
         close(fd);
 }
 
+/* import_state. snap_mu. */
+#define SNAP_IMP_IDLE   0
+#define SNAP_IMP_QUEUED 1
+#define SNAP_IMP_RUN    2
+#define SNAP_IMP_DONE   3
+#define SNAP_IMP_FAIL   4
+
+static void snap_import_free_diff(struct host_group *g)
+{
+    free(g->import_diff);
+    free(g->import_hold_a);
+    free(g->import_hold_b);
+    g->import_diff = NULL;
+    g->import_hold_a = NULL;
+    g->import_hold_b = NULL;
+    g->import_ni = 0;
+}
+
+/* Drop a queued import, or invalidate one the GC thread is already
+ * scanning. A prepared diff is discarded here, not written: the pump
+ * is the only thread that batches it, in the ack that installs the snap.
+ * A cancel of RUN leaves import_block for the GC thread. */
+static void snap_import_cancel(struct efs_raft_host *h, struct host_group *g)
+{
+    int st;
+
+    pthread_mutex_lock(&h->snap_mu);
+    st = g->import_state;
+    g->import_gen++;
+    g->import_state = SNAP_IMP_IDLE;
+    if (st != SNAP_IMP_RUN)
+        snap_import_free_diff(g);
+    if (st == SNAP_IMP_QUEUED || st == SNAP_IMP_DONE || st == SNAP_IMP_FAIL)
+        __atomic_store_n(&g->import_block, 0, __ATOMIC_RELEASE);
+    pthread_mutex_unlock(&h->snap_mu);
+}
+
+/* 1 if this incl already has an import queued, running, or finished.
+ * *rc is BUSY, OK, or the import error. */
+static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
+                            uint64_t incl, uint64_t term, int *rc)
+{
+    int st;
+
+    pthread_mutex_lock(&h->snap_mu);
+    if (g->import_incl != incl || g->import_term != term ||
+        g->import_state == SNAP_IMP_IDLE) {
+        pthread_mutex_unlock(&h->snap_mu);
+        return 0;
+    }
+    st = g->import_state;
+    if (st == SNAP_IMP_QUEUED || st == SNAP_IMP_RUN) {
+        pthread_mutex_unlock(&h->snap_mu);
+        *rc = EFS_ERR_BUSY;
+        return 1;
+    }
+    if (st == SNAP_IMP_DONE) {
+        struct efs_kv_item *diff = g->import_diff;
+        uint8_t *ha = g->import_hold_a, *hb = g->import_hold_b;
+        uint32_t ni = g->import_ni;
+
+        g->import_diff = NULL;
+        g->import_hold_a = NULL;
+        g->import_hold_b = NULL;
+        g->import_ni = 0;
+        g->part_off = 0;
+        g->import_state = SNAP_IMP_IDLE;
+        pthread_mutex_unlock(&h->snap_mu);
+        unlink(g->part_path);
+        /* Same call as the ack, so a newer snapshot cannot land between
+         * the write and snap_installed. */
+        __atomic_store_n(&h->snap_batch, 1, __ATOMIC_RELEASE);
+        *rc = ni ? efs_kv_batch(h->kv, diff, ni) : EFS_OK;
+        __atomic_store_n(&h->snap_batch, 0, __ATOMIC_RELEASE);
+        __atomic_store_n(&g->import_block, 0, __ATOMIC_RELEASE);
+        free(diff);
+        free(ha);
+        free(hb);
+        return 1;
+    }
+    *rc = g->import_rc ? g->import_rc : EFS_ERR_IO;
+    g->import_state = SNAP_IMP_IDLE;
+    __atomic_store_n(&g->import_block, 0, __ATOMIC_RELEASE);
+    pthread_mutex_unlock(&h->snap_mu);
+    return 1;
+}
+
 static int host_snap_chunk(void *app, uint64_t incl, uint64_t incl_term,
                            uint64_t offset, const uint8_t *data, uint32_t len,
                            int done)
@@ -1957,7 +2073,13 @@ static int host_snap_chunk(void *app, uint64_t incl, uint64_t incl_term,
 
     if (!h || !h->kv)
         return EFS_ERR_INVAL;
+    /* Retry of the chunk that closed the file, including a one-chunk
+     * snapshot whose retry comes back at offset 0. The bytes are already
+     * in the .part; the GC thread is diffing them into the KV. */
+    if (done && snap_import_poll(h, g, incl, incl_term, &rc))
+        return rc;
     if (offset == 0) {
+        snap_import_cancel(h, g);
         if (g->part_fd >= 0) {
             close(g->part_fd);
             unlink(g->part_path);
@@ -1998,10 +2120,16 @@ static int host_snap_chunk(void *app, uint64_t incl, uint64_t incl_term,
         return EFS_ERR_IO;
     close(g->part_fd);
     g->part_fd = -1;
-    rc = efs_kv_group_import_file(h->kv, g->group, g->part_path);
-    unlink(g->part_path);
-    g->part_off = 0;
-    return rc;
+    /* Scan and sort on the GC thread. This returns before the diff is
+     * applied; the leader retries this chunk until that finishes. */
+    pthread_mutex_lock(&h->snap_mu);
+    g->import_gen++;
+    g->import_incl = incl;
+    g->import_term = incl_term;
+    snprintf(g->import_path, sizeof(g->import_path), "%s", g->part_path);
+    g->import_state = SNAP_IMP_QUEUED;
+    pthread_mutex_unlock(&h->snap_mu);
+    return EFS_ERR_BUSY;
 }
 
 static int host_maybe_snapshot(struct efs_raft_host *h, int gi)
@@ -5537,6 +5665,113 @@ static void host_snap_export_pass(struct efs_raft_host *h)
     }
 }
 
+/* One queued InstallSnapshot. The local image is a pinned view, so the
+ * scan does not hold the LSM lock. import_block covers only this group. */
+static void host_snap_import_pass(struct efs_raft_host *h)
+{
+    int gi;
+
+    for (gi = 0; gi < HOST_NGROUPS && h->gc_running; gi++) {
+        char path[EFS_MAX_PATH], local[EFS_MAX_PATH];
+        struct efs_kv_lsm_view *view = NULL;
+        uint64_t incl, gen, t0;
+        uint8_t group;
+        int rc;
+
+        pthread_mutex_lock(&h->snap_mu);
+        if (h->g[gi].import_state != SNAP_IMP_QUEUED ||
+            now_us_() < h->g[gi].import_retry_us) {
+            pthread_mutex_unlock(&h->snap_mu);
+            continue;
+        }
+        h->g[gi].import_state = SNAP_IMP_RUN;
+        gen = h->g[gi].import_gen;
+        incl = h->g[gi].import_incl;
+        group = h->g[gi].group;
+        snprintf(path, sizeof(path), "%s", h->g[gi].import_path);
+        pthread_mutex_unlock(&h->snap_mu);
+        __atomic_store_n(&h->g[gi].import_block, 1, __ATOMIC_RELEASE);
+        t0 = now_us_();
+        fprintf(stderr, "raft-snap: import start group=%u incl=%llu\n",
+                group, (unsigned long long)incl);
+        snprintf(local, sizeof(local), "%s/snap-%u-import-local.kvx",
+                 h->mdraft, group);
+        rc = efs_kv_lsm_flush(h->kv);
+        fprintf(stderr, "raft-snap: import flush group=%u rc=%d ms=%llu\n",
+                group, rc, (unsigned long long)((now_us_() - t0) / 1000));
+        if (rc == EFS_ERR_BUSY) {
+            /* L0 is at the cap. Leave the .part queued and try again.
+             * Failing the snapshot here made the leader resend immediately. */
+            pthread_mutex_lock(&h->snap_mu);
+            if (h->g[gi].import_gen == gen &&
+                h->g[gi].import_state == SNAP_IMP_RUN) {
+                h->g[gi].import_state = SNAP_IMP_QUEUED;
+                h->g[gi].import_retry_us = now_us_() + 1000000ull;
+            }
+            pthread_mutex_unlock(&h->snap_mu);
+            __atomic_store_n(&h->g[gi].import_block, 0, __ATOMIC_RELEASE);
+            continue;
+        }
+        if (rc == EFS_OK)
+            rc = efs_kv_lsm_view_pin(h->kv, &view);
+        if (rc == EFS_OK) {
+            rc = efs_kv_lsm_view_export(view, group, local);
+            efs_kv_lsm_view_unpin(view);
+        }
+        fprintf(stderr, "raft-snap: import export group=%u rc=%d ms=%llu\n",
+                group, rc, (unsigned long long)((now_us_() - t0) / 1000));
+        if (rc == EFS_OK) {
+            struct efs_kv_item *diff = NULL;
+            uint8_t *ha = NULL, *hb = NULL;
+            uint32_t ni = 0;
+
+            rc = efs_kv_group_import_prepare(h->kv, group, path, local,
+                                             &diff, &ni, &ha, &hb);
+            fprintf(stderr, "raft-snap: import diff group=%u rc=%d n=%u "
+                    "ms=%llu\n", group, rc, ni,
+                    (unsigned long long)((now_us_() - t0) / 1000));
+            if (rc == EFS_OK) {
+                pthread_mutex_lock(&h->snap_mu);
+                if (h->g[gi].import_gen == gen &&
+                    h->g[gi].import_state == SNAP_IMP_RUN) {
+                    snap_import_free_diff(&h->g[gi]);
+                    h->g[gi].import_diff = diff;
+                    h->g[gi].import_ni = ni;
+                    h->g[gi].import_hold_a = ha;
+                    h->g[gi].import_hold_b = hb;
+                    h->g[gi].import_rc = EFS_OK;
+                    h->g[gi].import_state = SNAP_IMP_DONE;
+                    diff = NULL;
+                    ha = NULL;
+                    hb = NULL;
+                }
+                pthread_mutex_unlock(&h->snap_mu);
+                free(diff);
+                free(ha);
+                free(hb);
+                unlink(local);
+                continue;
+            }
+        }
+        unlink(local);
+        fprintf(stderr, "raft-snap: import end group=%u incl=%llu rc=%d "
+                "ms=%llu\n", group, (unsigned long long)incl, rc,
+                (unsigned long long)((now_us_() - t0) / 1000));
+        pthread_mutex_lock(&h->snap_mu);
+        if (h->g[gi].import_gen == gen &&
+            h->g[gi].import_state == SNAP_IMP_RUN) {
+            h->g[gi].import_rc = rc;
+            h->g[gi].import_state =
+                rc == EFS_OK ? SNAP_IMP_DONE : SNAP_IMP_FAIL;
+            /* import_block stays until the pump observes DONE/FAIL. */
+            pthread_mutex_unlock(&h->snap_mu);
+        } else {
+            pthread_mutex_unlock(&h->snap_mu);
+            __atomic_store_n(&h->g[gi].import_block, 0, __ATOMIC_RELEASE);
+        }
+    }
+}
+
 static void *host_gc_thread(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -5544,6 +5779,7 @@ static void *host_gc_thread(void *arg)
 
     while (h->gc_running) {
         host_snap_export_pass(h);
+        host_snap_import_pass(h);
         for (g = 0; g < HOST_NGROUPS && h->gc_running; g++) {
             uint32_t anchor;
             int lead = 0;
@@ -5572,6 +5808,7 @@ static void *host_gc_thread(void *arg)
          * A snapshot export queued by the pump starts on the next slice. */
         for (g = 0; g < GC_LOOP_MS / 20 && h->gc_running; g++) {
             host_snap_export_pass(h);
+            host_snap_import_pass(h);
             usleep(20 * 1000);
         }
     }
