@@ -66,14 +66,16 @@ Sanity check any write number against on-disk `du` of `/data1/0*/efs`.
 
 ## Profiling
 
-`--perf` on the server or client runs `perf record` against that process and
-writes `perf.data` on exit (server: `<storage>/log/`; client:
-`/tmp/efs-fuse-perf-<pid>/`). Missing `perf` is a warning, not a fatal error.
+`--perf` on `server.sh` or `client.sh` attaches `perf record -F 499 -g` to
+the daemon. `stop` writes `flat.txt`, `by_thread.txt`, and `callers.txt`
+next to the data file under `~/orcd/scratch/efs/perf/` (`efsd-<port>/` or
+`<mount-name>/`).
 
 ```bash
-./scripts/server.sh 127.0.0.1:17432 /tmp/efs/s1:5G --perf
-./scripts/client.sh 127.0.0.1:17432 /mnt/efs myexport --perf
-perf report -i /tmp/efs/s1/log/perf.data
+./scripts/server.sh --perf 127.0.0.1:17432 /tmp/efs/s1:5G
+./scripts/server.sh stop 127.0.0.1:17432
+./scripts/client.sh --perf 127.0.0.1:17432 /mnt/efs
+./scripts/client.sh stop /mnt/efs
 ```
 
 To profile a live cluster, attach instead of restarting: `perf record -p

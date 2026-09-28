@@ -7,10 +7,10 @@
 ## Scripts
 
 ```text
-./scripts/server.sh <addr:port> <path[,path...][:quota]> [join-addr:port] [efsd args...]
+./scripts/server.sh [--perf] <addr:port> <path[,path...][:quota]> [join-addr:port] [efsd args...]
 ./scripts/server.sh stop <path[:quota]|addr:port>
 
-./scripts/client.sh <server-addr:port> <mount-path> [export-name] [efs-fuse args...]
+./scripts/client.sh [--perf] <server-addr:port> <mount-path> [efs-fuse args...]
 ./scripts/client.sh stop <mount-path>
 ```
 

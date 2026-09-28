@@ -79,6 +79,49 @@ Decisions already made, if it is picked up:
 Rejected: client-local expiry; per-chunk expiry; sub-second/lease-style
 expiry; MVCC "expired versions".
 
+## Queued in START-HERE, not here
+
+The Sep 28 2026 `perf` analysis of the four `efsd` and of `efs-fuse` under
+`ecopy` (snapshot install on the pump thread, six `access()` per PUT,
+leftover `snap-*.kvx.tmp`, client copies and reply busy-wait) is two
+work-queue items with steps and gates:
+[START-HERE §1a W14 and W15](arch/START-HERE.md#1a-the-work-queue). Take
+them from there.
+
+## Parked: cross-group directory `utimens`
+
+`futimens` / `os.utime` on a directory returns `EINVAL` when that directory
+is not `EFS_META_LAYOUT_LOCAL` and one of its `used_shards` sits in the
+other Raft group. `host_utimens` bails with `EFS_ERR_INVAL` and the comment
+`cross-group lane fence later` (`src/server/raft_host.c`). The client maps
+that to `EINVAL`. A local directory and an ordinary file already succeed
+(`attr_utimens` / `attr_utimens_ns` are files only).
+
+Seen from `ecopy` restamping directories under `/tmp/efs-mount/knouse/`
+(Sep 28): `futimens: Invalid argument` on directory paths. The copy
+continues; only those timestamps are skipped.
+
+The spec already requires this ([architecture.md](architecture.md) §7.4,
+directory `utimens`): `dir_mtime_gen` on the directory row, bumped only by
+`utimens`, distributed to the used lanes by the same bounded fence a file
+uses (≤65 authorities). Do not leave the `EINVAL` as the behavior.
+
+**POSIX tests, in the same change** (runner auto-registers `@test`):
+
+- `posix_suite.py`: `utimens` on a directory that is still local (a handful
+  of children). `mtime` and `atime` stick, including nanoseconds. Must not
+  return `EINVAL`.
+- `posix_suite.py`: the same on a directory that has spread. Spread starts
+  at `EFS_DIR_SPREAD_MIN` (65536 names, `include/efs/common.h`), which is
+  what puts `used_shards` in both groups. `futimens` returns 0 and
+  `stat` shows the times that were set.
+- `posix_2client.py`: after that spread-directory `utimens`, the other
+  client sees the same `mtime` and `atime` (remount or a fresh lookup, not
+  a same-mount dcache hit).
+
+Re-run the XFS baseline so `compare.py` sees the new names. Do not weaken
+the file `utimens` tests to make the directory case pass.
+
 ## Parked: tests still to write
 
 POSIX layers 1–3 exist (`tests/posix/posix_suite.py` 201 tests,
@@ -97,8 +140,13 @@ syscalls, peer visibility and same-file races. Not covered:
   stale resurrection across 128 KiB boundaries.
 - **Missing POSIX cases:** a second uid (most `perm_*` tests no-op as root),
   cross-client `MAP_SHARED` (or document it as unsupported — it is currently
-  ENODEV), a ≥1 GiB single write, a many-client hardlink storm, and parent
-  directory mtime/ctime on create/unlink/rename/link.
+  ENODEV), a ≥1 GiB single write, a many-client hardlink storm, parent
+  directory mtime/ctime on create/unlink/rename/link, and directory
+  `utimens` once the directory has spread across both Raft groups
+  (local-directory `utimens`, spread-directory `utimens` at
+  `EFS_DIR_SPREAD_MIN`, and a second client observing those times). The
+  spread case is `EINVAL` today; the feature and these tests are one item
+  under "Parked: cross-group directory `utimens`".
 - **Invariant harnesses:** an offline `fsck --verify-only` to run after
   randomized load and after every Layer 4 case; a 300k-file single-directory
   spread stress; a fence test for leftover clients; and a stuck-catchup joiner

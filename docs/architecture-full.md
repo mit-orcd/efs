@@ -1380,6 +1380,24 @@ that restore: **2551.5** MiB/s, walls 24.84–28.90 s
 hung round (`20260928-102121-dd-prof-r2`). Prior morning RDMA
 9-client was 1326.6.
 
+**9×4 IO-500 debug, same binary, TCP and RDMA (Sep 28).**
+`SLOTS=4 NP=36 tests/perf/io500/run.sh debug` (1 s stonewall,
+IOR easy/hard + mdtest, find off). Servers
+`db2b88c4802a-dirty`, preflight idle, every client
+`fuse.efs-fuse` + `stat` OK. Reads are same-mount (client
+dcache). Official score is INVALID (stonewall is not 300 s).
+No data-check failures in either driver log. RDMA easy-write
+**2.917 GiB/s**, hard-write **0.291**, easy-read **3.092**,
+hard-read **1.525**; mdtest-easy-write **3.418 kIOPS**,
+hard-write **0.757**, easy-stat **3.248**. TCP easy-write
+**1.376 GiB/s**, hard-write **0.274**, easy-read **2.669**,
+hard-read **1.162**; mdtest-easy-write **2.721 kIOPS**,
+hard-write **0.910**, easy-stat **16.461**. Dirs
+`results/io500/20260928-150609-rdma` and
+`results/io500/20260928-151707-tcp`. An earlier RDMA attempt
+aborted in easy-write when `INODE_LOOKUP` returned EBUSY
+after 16 retries; that attempt is not a result.
+
 **User xattrs are durable (Sep 28, same `db2b88c4802a-dirty`).**
 One blob per inode (`EFS_KV_KIND_XATTR` 23), command
 `EFS_MD_CMD_XATTR` 27. Only names starting with `user.` are stored;
@@ -3147,6 +3165,135 @@ Steps:
   "Synchronous full-L1 compaction" learnings in the project state rule.
 - **Forbidden:** raising the election timeout; raising `KV_LSM_MEM_DEFAULT`
   as the fix; any compaction step that holds `h->mu`.
+
+##### W14 — Server: snapshot install and the fragment probe are on the write path
+
+**Source (Sep 28 2026, 13:30–13:45 EDT).** `perf record -F 499 -g` attached
+to all four `efsd` on 19810 (RDMA, `2f086f5a0ef8-dirty`) while fstor007 ran
+`ecopy` and then a `dd` that did not start. Reports:
+`~/orcd/scratch/efs/perf/efsd-19810-fcstor00{3,4,5,6}/{flat,by_thread,callers}.txt`.
+The recorded binary was replaced on disk by the roll, so user frames are
+raw addresses in the reports; resolve them with
+`addr2line -f -C -e /tmp/efs/efsd <addr>` on that host (the file there is the
+same build). fcstor005, 265K samples:
+
+| share | stack | what |
+| --- | --- | --- |
+| 16% | pump → `drain_inbox` → `on_snap_req` → `host_snap_chunk` → `efs_kv_group_import` → `efs_kv_scan` (`lsm_scan_from`), `memcmp` 12% self | a follower installing a snapshot: full local KV scan under `l->mu`, then sort + diff of every key, **on the pump thread under `h->mu`** |
+| 12% | `writer_thread` → `run_job` → `server_write_fragment_with_sum_sync` → `pwrite` | fragment writes (the useful work) |
+| 10.6% | `server_handle_conn` → `recv` (`copyout`) | PUT payloads over TCP |
+| 10.4% | `server_handle_conn` → `server_find_fragment_root` → `access()` ×6 (`__d_lookup_rcu`, `link_path_walk`) | six path walks per PUT to find which of the six roots has the fragment |
+| 8.6% | `host_gc_thread` → `host_snap_export_pass` → `vx_pop` / `msort` | a leader exporting a snapshot |
+| 7.5% | `compactor_main` → `kv_compact_locked` → `cm_push` | L1 compaction |
+
+`raft-obs` in the same window: group 0 changed term at 13:31, 13:37, 13:40,
+13:43–13:44; group 2 at 13:39–13:40. Every leader change re-exports and
+re-ships a snapshot. Every server holds 5–12 abandoned
+`/data1/01/efs/mdraft/snap-*.kvx.tmp` files (34 MB–960 MB each, from 00:41
+through 11:24 that day); nothing removes them.
+
+**Why the `dd` did not start.** `create` is a group-0 commit that waits in
+`host_wait_settled` for the pump. The pump was inside
+`efs_kv_group_import` under `h->mu`, and group 0 was re-electing. The
+client's 16 BUSY/NOT_PRIMARY retries back off to 800 ms each, so the
+`open()` sat for over ten seconds with nothing printed.
+
+Steps, in this order; each is its own change with its own gate:
+
+1. **Take `efs_kv_group_import` off the pump thread.** The scan and the sort
+   run on the GC thread (the export already does). Only the resulting diff
+   batch is applied under `h->mu`. `on_snap_req` hands the finished `.part`
+   file to that thread and answers the leader when the diff has been
+   applied. Gate: `perf` on a follower during a forced InstallSnapshot
+   (`tests/measure/i17_leader_freeze.sh` or a bounce of one voter) shows
+   `efs_kv_scan` off the pump, and `raft-obs` `apply_max` stays under
+   70 ms while the install runs.
+2. **Find the election trigger and stop it.** Run
+   `tests/tools/raft_log_tail.py` on fcstor004's `raft.log` for the
+   13:37 and 13:43 windows. If step 1 removes the term changes under the
+   same load, this is done. If not, the follower that cannot answer
+   AppendEntries during an import needs the heartbeat answered from a
+   thread that is not importing. Do not raise the election timeout.
+3. **Reap dead `snap-*.kvx.tmp`.** At `efsd` start, and whenever an export
+   is abandoned (`send_snap` BUSY path, leader step-down), unlink every
+   `snap-<group>-*.kvx.tmp` that is not the one in progress. Gate: after
+   a roll, `ls /data1/01/efs/mdraft/*.tmp` is empty on all four.
+4. **Drop the six `access()` calls per PUT.** A global fd cache hung the
+   9-client dd; a thread-local fd cache removed the sample and made the
+   slowest client worse (both reverted, see `docs/project-history.md`
+   Sep 28). Do not retry either. The PUT reply already tells the client
+   which storage path took the fragment; carry that `path_index` back on
+   the next PUT of the same `(ino, ci)` as a hint and probe only on a
+   miss. Gate: `server_find_fragment_root` under 1% in a single-client
+   8 GiB dd profile, and the 9-client dd slowest wall not worse than
+   `results/measure/20260928-134637-dd-prof-r5b` (2551.5 MiB/s).
+5. **`send_buf_pick` spin.** `pthread_spin_lock` inside
+   `efs_rdma_send_frame` is 2.3% of the client and has a server
+   counterpart. Size the send-buffer pool per QP so a pick does not
+   contend, or hand each sender its own ring. Gate: the spin is gone from
+   `flat.txt` on both sides.
+
+- **Gate:** items above, plus posix 1 jobs=1 and 9-host, posix 2, and a
+  1-client and 9-client 8 GiB dd with the flush in the clock, none worse
+  than the Sep 28 numbers in `.cursor/rules/efs-fio-honest.mdc`.
+- **Forbidden:** raising the election timeout or `HOST_TICK_US`;
+  chunking InstallSnapshot differently (W11 is done); the global or
+  thread-local fd cache; changing `EFS_RAFT_SNAP_CHUNK`, `HOST_PUB_BATCH_N`
+  or `EFS_RAFT_AE_BYTES` (all three were measured worse on Sep 28).
+
+##### W15 — Client: copies and busy-waits are the write CPU
+
+**Source.** `client.sh --perf` on fstor007 during the same `ecopy`
+(`~/orcd/scratch/efs/perf/efs-mount/{flat,by_thread,callers}.txt`,
+371K samples). This profile is of the binary **before** the Sep 28
+dcache changes (full-chunk body drop, no snapshot copy, running
+`staged_bytes`); take a fresh one first and strike whatever those already
+removed.
+
+| share | where |
+| --- | --- |
+| 36% | `memmove`: 15.4% in `ll_write_buf` (FUSE copy-in + dcache patch), 3.5% into the RDMA send buffer, the rest under `dcache_flush_slot_inner` (snapshot copy + `dcache_install_image` copy-back) |
+| 7.5% + 5.8% | vDSO `clock_gettime` and `efs_rdma_reply_ready_us` from `efs_conn_reply_watch_us`: busy-waiting for the PUT reply |
+| 7.1% | `blake3_hash_many_avx512` |
+| 5.2% | `efs_export_staged_bytes` (the evictor walk; replaced by a running total Sep 28) |
+| 4.6% | `xor_into` (parity) |
+| 2.3% | `pthread_spin_lock` in `efs_rdma_send_frame` (`send_buf_pick`) |
+| 2.2% | `__lll_lock_wait` from `dcache_put_now` |
+
+Kernel futex + schedule under 3%: the client is not lock-bound. It is
+copying and spinning. `ecopy` and `dd` on the same mount were not blocked
+by each other; the `dd` was blocked on the server (W14).
+
+Steps:
+
+1. **Re-profile on the current binary** (one client, 8 GiB `dd bs=1M
+   conv=fsync`, non-zero source, `client.sh --perf`, `stop` writes the
+   reports). Record the three shares above again. If `memmove` under
+   `dcache_flush_slot_inner` is still above 5%, the body-drop path is not
+   being taken for the sequential write; find out why before anything
+   else.
+2. **Replace the reply busy-wait.** `efs_conn_reply_watch_us` +
+   `efs_rdma_reply_ready_us` spin on `clock_gettime`. A PUT reply is
+   behind a disk write, tens of milliseconds. Spin for at most ~50 µs,
+   then block on the CQ event fd (`rc->efd`) the way `efs_rdma_recv_wait`
+   already does. Gate: the two symbols together under 2% on the dd
+   profile; the 1-client dd wall not worse.
+3. **Cut the FUSE copy-in for whole chunks.** `ll_write_buf` copies the
+   libfuse buffer into the dcache. When one write covers a whole 128 KiB
+   chunk, hand the libfuse buffer to the slot as the body (the body-drop
+   path then sends it and frees it). Check `fuse_buf_copy` ownership in
+   libfuse 3.10.2 before assuming the buffer outlives the reply. Gate:
+   `ll_write_buf` `memmove` under 5%.
+4. **`send_buf_pick` spin** — same as W14 step 5, one change for both
+   sides.
+
+- **Gate:** posix 1 jobs=1 (200/201, `mmap_write_read` SKIP only), posix 2
+  63/63, 1-client 8 GiB dd ≥ 977 MiB/s TCP / 947 RDMA (the Sep 27–28
+  numbers), 9-client dd not worse than 2551.5.
+- **Forbidden:** clearing `FOPEN_DIRECT_IO`; touching `entry/attr_timeout`;
+  replacing blake3 (the hash is not the wall; W3); putting the
+  `sched_yield` loop back in `recv_poller` or the 200 µs clock spin back
+  in `efs_rdma_recv_wait`.
 
 ##### W12 — Repo hygiene
 

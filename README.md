@@ -34,7 +34,7 @@ Create an export and mount it:
 
 ```bash
 ./efs-mgmt mkfs 127.0.0.1:17432 myexport
-./scripts/client.sh 127.0.0.1:17432 /mnt/efs myexport
+./scripts/client.sh 127.0.0.1:17432 /mnt/efs
 ```
 
 ```bash

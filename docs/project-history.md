@@ -25,6 +25,37 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 28 2026 — 9×4 IO-500, TCP and RDMA
+
+Same binaries (`db2b88c4802a-dirty`, the tree committed as
+`2f086f5`), 9 clients × 4 ranks, `tests/perf/io500/run.sh debug`
+(1 s stonewall). Preflight idle and `fuse.efs-fuse` + `stat` OK
+before each run. Reads are the driver's same-mount reads.
+
+| phase | TCP | RDMA |
+| --- | --- | --- |
+| ior-easy-write GiB/s | 1.376 | 2.917 |
+| ior-hard-write GiB/s | 0.274 | 0.291 |
+| ior-easy-read GiB/s | 2.669 | 3.092 |
+| ior-hard-read GiB/s | 1.162 | 1.525 |
+| mdtest-easy-write kIOPS | 2.721 | 3.418 |
+| mdtest-hard-write kIOPS | 0.910 | 0.757 |
+| mdtest-easy-stat kIOPS | 16.461 | 3.248 |
+| mdtest-hard-stat kIOPS | 10.271 | 5.683 |
+| mdtest-easy-delete kIOPS | 2.964 | 2.223 |
+| mdtest-hard-read kIOPS | 10.661 | 4.895 |
+| mdtest-hard-delete kIOPS | 0.425 | 0.538 |
+
+`results/io500/20260928-151707-tcp` and
+`results/io500/20260928-150609-rdma`. The first RDMA launch
+aborted: `INODE_LOOKUP` on shard 1745 exhausted 16 BUSY retries
+(10.3 s) and IOR's post-write `stat` called `MPI_Abort`. The
+files were on disk afterward (36 × ~1.4 GiB). The quoted RDMA
+row is the retry. After the TCP run, fcstor010–015 wedged
+(`stat` hung, ssh 10 s timeout). `killall -9 efs-fuse`, then
+`timeout 3 fusermount3`, then an RDMA remount: all nine
+`MOUNT_OK`, `RDMA transport up` once each.
+
 ## Sep 28 2026 — five 9-client dd profile rounds
 
 8 GiB `dd bs=1M conv=fsync`, non-zero source, own file, FUSE only,

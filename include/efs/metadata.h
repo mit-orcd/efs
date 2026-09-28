@@ -172,6 +172,12 @@ struct efs_export {
     struct efs_child_vec *child_vecs;
     uint64_t child_vec_count;
     uint64_t child_vec_cap;
+    /* Running sums of the two walks in the staging-byte estimate: per-slab
+     * row and name arenas, and each child vector's slot array. The rest of
+     * the estimate is capacities and index masks, read in constant time.
+     * The evictor used to recompute the walks on every pass. */
+    uint64_t staged_slab_bytes;
+    uint64_t staged_child_bytes;
 
     /* Size/mtime updated via *_norollup; parent dir tree stats/times need
      * efs_export_ensure_rollups before serialize or incremental rollups. */

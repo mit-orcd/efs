@@ -38,14 +38,30 @@ static uint32_t slab_of_row(const struct efs_export *ex,
 static void remove_inode_slot(struct efs_export *ex, uint64_t i,
                               int expect_survivor);
 
-static int slab_names_grow(struct efs_ino_slab *sl, uint32_t need)
+static void staged_slab_add(struct efs_export *ex, int64_t delta)
 {
-    uint32_t ncap;
+    if (!ex || delta == 0)
+        return;
+    if (delta > 0) {
+        ex->staged_slab_bytes += (uint64_t)delta;
+        return;
+    }
+    if ((uint64_t)(-delta) >= ex->staged_slab_bytes)
+        ex->staged_slab_bytes = 0;
+    else
+        ex->staged_slab_bytes -= (uint64_t)(-delta);
+}
+
+static int slab_names_grow(struct efs_export *ex, struct efs_ino_slab *sl,
+                           uint32_t need)
+{
+    uint32_t ncap, old;
     char *na;
     if (!sl)
         return -1;
     if (sl->names_used + need <= sl->names_cap)
         return 0;
+    old = sl->names_cap;
     ncap = sl->names_cap ? sl->names_cap : 1024;
     while (ncap < sl->names_used + need) {
         if (ncap > UINT32_MAX / 2)
@@ -57,6 +73,7 @@ static int slab_names_grow(struct efs_ino_slab *sl, uint32_t need)
         return -1;
     sl->names = na;
     sl->names_cap = ncap;
+    staged_slab_add(ex, (int64_t)ncap - (int64_t)old);
     return 0;
 }
 
@@ -155,6 +172,7 @@ static int inode_slab_ensure(struct efs_export *ex, uint32_t si)
                                     sizeof(struct efs_inode_mem));
     if (!ex->ino_slabs[si].rows)
         return -1;
+    staged_slab_add(ex, (int64_t)EFS_INO_SLAB_ROWS * EFS_INODE_ROW_SIZE);
     ex->ino_slabs_resident++;
     slab_rows_tag(ex, si);
     ex->ino_slabs[si].tick = ++ex->ino_slab_tick;
@@ -376,7 +394,7 @@ static int inode_set_name(struct efs_export *ex, struct efs_inode_mem *p,
     if (sl->names_used > 64 * 1024 &&
         sl->names_used > 4 * EFS_INO_SLAB_ROWS * 32)
         slab_names_compact(ex, si);
-    if (slab_names_grow(sl, (uint32_t)ln + 1) != 0)
+    if (slab_names_grow(ex, sl, (uint32_t)ln + 1) != 0)
         return -1;
     p->name_off = sl->names_used;
     p->name_len = (uint16_t)ln;
@@ -1006,6 +1024,7 @@ static void child_vecs_free(struct efs_export *ex)
     ex->child_vecs = NULL;
     ex->child_vec_count = 0;
     ex->child_vec_cap = 0;
+    ex->staged_child_bytes = 0;
     idx_free(&ex->child_keys, &ex->child_vals, &ex->child_mask);
 }
 
@@ -1089,6 +1108,7 @@ static int child_idx_add(struct efs_export *ex, efs_ino_t parent, uint64_t slot)
         if (!ns)
             return -1;
         v->slots = ns;
+        ex->staged_child_bytes += (ncap - v->cap) * sizeof(uint64_t);
         v->cap = ncap;
     }
     v->slots[v->count++] = slot;
@@ -3249,20 +3269,16 @@ int efs_export_reserve_chunks(struct efs_export *ex, uint64_t extra)
 
 /* Approximate resident bytes of ONE table's cache structures (slab rows,
  * per-slab name arenas, chunk array, open-addressing indexes, child vecs).
- * Used by the client staging-table cap — an occupancy estimate, not a
- * serialization number. Caller holds the relevant locks. */
+ * Slab arenas and child-vector slot arrays are running totals
+ * (staged_slab_bytes / staged_child_bytes). The rest is capacities and
+ * masks. Caller holds the relevant locks. */
 static uint64_t export_staged_bytes_one(const struct efs_export *ex)
 {
+    uint64_t b;
     if (!ex)
         return 0;
-    uint64_t b = 0;
+    b = ex->staged_slab_bytes + ex->staged_child_bytes;
     if (ex->ino_slabs) {
-        for (uint32_t i = 0; i < ex->ino_slab_n; i++) {
-            const struct efs_ino_slab *sl = &ex->ino_slabs[i];
-            if (sl->rows)
-                b += (uint64_t)EFS_INO_SLAB_ROWS * EFS_INODE_ROW_SIZE;
-            b += sl->names_cap;
-        }
         b += (uint64_t)ex->ino_slab_n * sizeof(struct efs_ino_slab);
     } else if (ex->inodes) {
         b += ex->inode_capacity * sizeof(struct efs_inode_mem);
@@ -3279,8 +3295,6 @@ static uint64_t export_staged_bytes_one(const struct efs_export *ex)
     if (ex->child_keys)
         b += (ex->child_mask + 1) * 2 * sizeof(uint64_t);
     b += ex->child_vec_cap * sizeof(struct efs_child_vec);
-    for (uint64_t i = 0; i < ex->child_vec_count; i++)
-        b += ex->child_vecs[i].cap * sizeof(uint64_t);
     return b;
 }
 
@@ -3311,6 +3325,10 @@ static void compact_one_tab(struct efs_export *ex)
                         EFS_INO_SLAB_ROWS;
         if (ex->ino_slab_n > need) {
             for (uint64_t si = need; si < ex->ino_slab_n; si++) {
+                if (ex->ino_slabs[si].rows)
+                    staged_slab_add(ex, -(int64_t)EFS_INO_SLAB_ROWS *
+                                            EFS_INODE_ROW_SIZE);
+                staged_slab_add(ex, -(int64_t)ex->ino_slabs[si].names_cap);
                 free(ex->ino_slabs[si].rows);
                 free(ex->ino_slabs[si].names);
             }

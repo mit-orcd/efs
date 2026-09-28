@@ -4,16 +4,83 @@ set -e
 usage() {
     cat <<EOF
 Usage:
-  $0 <addr:port> <path[,path...][:quota]> [join-addr:port] [extra-efsd-args...]
+  $0 [--perf] <addr:port> <path[,path...][:quota]> [join-addr:port] [extra-efsd-args...]
   $0 stop <path[:quota]|path[,path...]|addr:port>
 
   start:  bind addr:port; one storage path or comma-separated 1..24 paths
           (optional :quota after the path list); optional join
+  --perf: record efsd (perf record -F 499 -g) until stop.
+          stop then writes flat.txt, by_thread.txt, and callers.txt under
+          ~/orcd/scratch/efs/perf/efsd-<port>/ (override with EFS_PERF_DIR).
   stop:   stop by first storage path (PID file) or by addr:port
   env:    EFS_TRANSPORT=auto|tcp|rdma (default auto: RDMA if IB is up, else TCP)
           rdma is strict (no TCP fallback). Optional EFS_RDMA_DEV=<ibdev>.
 EOF
     exit 1
+}
+
+# Mark files start writes so stop can find the perf directory.
+perf_mark_storage() {
+    local storage=$1
+    storage=${storage%%,*}
+    echo "$storage/log/efsd.perfdir"
+}
+
+perf_mark_port() {
+    local root=${EFS_PERF_DIR:-$HOME/orcd/scratch/efs/perf}
+    echo "$root/.port-$1"
+}
+
+finish_perf_dir() {
+    local dir=$1 ppid i
+    [ -n "$dir" ] && [ -d "$dir" ] || return 0
+    ppid=$(cat "$dir/perf.pid" 2>/dev/null || true)
+    if [ -n "$ppid" ] && kill -0 "$ppid" 2>/dev/null; then
+        kill -INT "$ppid" 2>/dev/null || true
+        for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+            kill -0 "$ppid" 2>/dev/null || break
+            sleep 1
+        done
+        if kill -0 "$ppid" 2>/dev/null; then
+            kill -TERM "$ppid" 2>/dev/null || true
+        fi
+    fi
+    if [ ! -s "$dir/efsd.data" ]; then
+        echo "ERROR: no perf data at $dir/efsd.data (see $dir/perf.stderr)" >&2
+        return 1
+    fi
+    echo "Writing perf reports in $dir"
+    (
+        cd "$dir"
+        perf report -i efsd.data --stdio --no-children --sort dso,sym --percent-limit 0.3 -g none > flat.txt
+        perf report -i efsd.data --stdio --no-children --sort comm,sym --percent-limit 0.5 -g none > by_thread.txt
+        perf report -i efsd.data --stdio --children --sort sym --percent-limit 2 -g caller,0.5,callee,function,percent > callers.txt
+    )
+    echo "perf reports: $dir/flat.txt $dir/by_thread.txt $dir/callers.txt"
+}
+
+finish_perf_mark() {
+    local mark=$1 dir
+    [ -f "$mark" ] || return 0
+    dir=$(cat "$mark")
+    rm -f "$mark"
+    finish_perf_dir "$dir"
+}
+
+start_server_perf() {
+    local pid=$1 port=$2 storage=$3
+    local root dir
+    root=${EFS_PERF_DIR:-$HOME/orcd/scratch/efs/perf}
+    dir="$root/efsd-$port"
+    command -v perf >/dev/null 2>&1 || { echo "ERROR: perf not on PATH" >&2; return 1; }
+    mkdir -p "$dir" "$storage/log"
+    rm -f "$dir/efsd.data" "$dir/flat.txt" "$dir/by_thread.txt" "$dir/callers.txt"
+    setsid perf record -F 499 -g -p "$pid" -o "$dir/efsd.data" \
+        </dev/null >"$dir/perf.stdout" 2>"$dir/perf.stderr" &
+    echo $! > "$dir/perf.pid"
+    echo "$dir" > "$(perf_mark_storage "$storage")"
+    echo "$dir" > "$(perf_mark_port "$port")"
+    echo "perf record -F 499 -g -p $pid -> $dir/efsd.data"
 }
 
 # Run from the project root so efsd is found.
@@ -77,9 +144,10 @@ cmd_stop() {
     if [[ "$target" == *:* ]] && [[ "$target" != /* ]] && [[ "$target" != ./* ]]; then
         local port=${target##*:}
         if [[ "$port" =~ ^[0-9]+$ ]]; then
-            kill_port_holder "$port"
-            echo "Stopped efsd on port $port (if any)"
-            return 0
+    kill_port_holder "$port"
+    echo "Stopped efsd on port $port (if any)"
+    finish_perf_mark "$(perf_mark_port "$port")" || echo "WARNING: perf reports were not written" >&2
+    return 0
         fi
     fi
     local storage=${target%:*}
@@ -88,10 +156,17 @@ cmd_stop() {
     kill_from_pidfile "$storage/log/efsd.pid"
     kill_from_pidfile "$storage/efsd.pid"
     echo "Stopped efsd for storage $storage (if any)"
+    finish_perf_mark "$(perf_mark_storage "$storage")" || echo "WARNING: perf reports were not written" >&2
 }
 
 if [ $# -lt 1 ]; then
     usage
+fi
+
+PERF=0
+if [ "$1" = "--perf" ]; then
+    PERF=1
+    shift
 fi
 
 if [ "$1" = "stop" ]; then
@@ -115,7 +190,13 @@ if [ $# -gt 0 ] && [[ "$1" == *:* ]]; then
     JOIN=$1
     shift
 fi
-EXTRA_ARGS+=("$@")
+for a in "$@"; do
+    if [ "$a" = "--perf" ]; then
+        PERF=1
+    else
+        EXTRA_ARGS+=("$a")
+    fi
+done
 
 ADDR=${ADDR_PORT%:*}
 PORT=${ADDR_PORT##*:}
@@ -178,6 +259,10 @@ if ! kill -0 "$NEW_PID" 2>/dev/null; then
     echo "ERROR: efsd exited immediately. Last log lines:"
     tail -n 20 "$LOG_FILE" 2>/dev/null || true
     exit 1
+fi
+
+if [ "$PERF" = 1 ]; then
+    start_server_perf "$NEW_PID" "$PORT" "$FIRST_STORAGE"
 fi
 
 # Join failures are non-fatal (efsd runs standalone and retries), but they

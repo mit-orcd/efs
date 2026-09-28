@@ -1756,6 +1756,7 @@ struct dcache_ent {
 };
 
 static struct dcache_ent *dcache_find(uint32_t s, efs_ino_t ino, uint32_t ci);
+static struct dcache_ent *dcache_find_meta(uint32_t s, efs_ino_t ino, uint32_t ci);
 
 /* Snapshot sequence: ONE monotonic counter for the whole dcache, not a
  * per-entry one. snap_seq / object_seq / img_seq and the putid seq are all
@@ -2192,7 +2193,7 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
         uint32_t sl = dcache_slot(ino, ci);
         struct dcache_ent *de;
         pthread_mutex_lock(dcache_mu(sl));
-        de = dcache_find(sl, ino, ci);
+        de = dcache_find_meta(sl, ino, ci);
         if (de && (!snap_seq || snap_seq >= de->object_seq)) {
             de->object_gen = obj;
             de->object_seq = snap_seq;
@@ -2227,6 +2228,41 @@ static struct dcache_ent *dcache_find(uint32_t s, efs_ino_t ino, uint32_t ci)
             return e;
     }
     return NULL;
+}
+
+/* Same identity match as dcache_find, including a slot whose 128 KiB body
+ * was dropped after a full-chunk PUT. Report and CAS base still live on
+ * the entry. */
+static struct dcache_ent *dcache_find_meta(uint32_t s, efs_ino_t ino, uint32_t ci)
+{
+    for (struct dcache_ent *e = &g_dcache.e[s]; e; e = e->next) {
+        if (e->ino == ino && e->ci == ci)
+            return e;
+    }
+    return NULL;
+}
+
+/* Sequential full-chunk overwrite. Append and partial writes keep ranges
+ * and must retain the body so a later close does not rebuild from a short
+ * published size and zero the prefix. */
+static int dcache_full_overwrite(int have_base, uint64_t bg, uint8_t nrange)
+{
+    return have_base && nrange == 0 && bg == EFS_CHUNK_BASE_UNCOND;
+}
+
+/* Hand the slot body to the PUT. No second buffer: a sequential writer
+ * fills the next chunk, not this one, while the send is in flight. */
+static uint8_t *dcache_steal_body(struct dcache_ent *e)
+{
+    uint8_t *p = e->data;
+    uint32_t len = e->len;
+
+    e->data = NULL;
+    e->len = 0;
+    e->dirty = 0;
+    if (len)
+        dcache_note_dirty_bytes(-(int64_t)len);
+    return p;
 }
 
 int efs_dcache_has(efs_ino_t ino, uint32_t ci)
@@ -2950,7 +2986,9 @@ static int dcache_store(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
         return rc;
     }
     struct dcache_ent *head = &g_dcache.e[s];
-    if (!head->dirty && !head->data) {
+    /* A body-less entry still names a published chunk (full overwrite
+     * dropped the 128 KiB). Do not reuse it for a different chunk. */
+    if (!head->ino && !head->dirty && !head->data) {
         int rc = dcache_fill(head, ino, ci, chunk, chunk_size);
         pthread_mutex_unlock(mu);
         return rc;
@@ -2988,7 +3026,7 @@ static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
         return rc;
     }
     struct dcache_ent *head = &g_dcache.e[s];
-    if (!head->dirty && !head->data) {
+    if (!head->ino && !head->dirty && !head->data) {
         int rc = dcache_take(head, ino, ci, chunk, chunk_size);
         pthread_mutex_unlock(mu);
         return rc;
@@ -3157,7 +3195,7 @@ static void span_of(efs_ino_t ino, uint32_t ci, uint64_t bg, uint8_t nrange,
 static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
                               uint32_t *len_out, uint64_t *bg_out,
                               uint64_t *seq_out, uint32_t *doff,
-                              uint32_t *dlen)
+                              uint32_t *dlen, int *drop_body)
 {
     uint32_t s = dcache_slot(ino, ci);
     pthread_mutex_t *io = dcache_io_mu(s);
@@ -3174,6 +3212,8 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
         *doff = 0;
     if (dlen)
         *dlen = 0;
+    if (drop_body)
+        *drop_body = 0;
     pthread_mutex_lock(io);
     pthread_mutex_lock(mu);
     for (e = &g_dcache.e[s]; e; e = e->next) {
@@ -3194,17 +3234,24 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
         memcpy(roff, e->roff, (size_t)nrange * sizeof(uint32_t));
         memcpy(rlen, e->rlen, (size_t)nrange * sizeof(uint32_t));
     }
-    copy = efs_buf_alloc(len);
-    if (!copy) {
-        pthread_mutex_unlock(mu);
-        pthread_mutex_unlock(io);
-        return EFS_ERR_NOMEM;
-    }
-    memcpy(copy, e->data, len);
     *seq_out = dcache_seq_next(e);
-    DTRACE(e, "snap-steal");
-    e->dirty = 0;
-    dcache_note_dirty_bytes(-(int64_t)len);
+    if (dcache_full_overwrite(have_base, bg, nrange)) {
+        copy = dcache_steal_body(e);
+        if (drop_body)
+            *drop_body = 1;
+        DTRACE(e, "snap-steal-full");
+    } else {
+        copy = efs_buf_alloc(len);
+        if (!copy) {
+            pthread_mutex_unlock(mu);
+            pthread_mutex_unlock(io);
+            return EFS_ERR_NOMEM;
+        }
+        memcpy(copy, e->data, len);
+        DTRACE(e, "snap-steal");
+        e->dirty = 0;
+        dcache_note_dirty_bytes(-(int64_t)len);
+    }
     pthread_mutex_unlock(mu);
     pthread_mutex_unlock(io);
     int merged = 0;
@@ -3279,33 +3326,56 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
 /* After a pipelined dcache_put_now: keep published bytes as have_base=1
  * (same as flush_slot_inner — dropping the slot made concurrent_appends
  * read zeros). Re-dirty on PUT failure. */
-static void dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
-                              uint32_t len, int put_ok, uint64_t seq)
+static int dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
+                             uint32_t len, int put_ok, uint64_t seq,
+                             int drop_body)
 {
     uint32_t s = dcache_slot(ino, ci);
     pthread_mutex_t *mu = dcache_mu(s);
     struct dcache_ent *e;
 
     pthread_mutex_lock(mu);
-    e = dcache_find(s, ino, ci);
+    e = drop_body ? dcache_find_meta(s, ino, ci) : dcache_find(s, ino, ci);
     if (!put_ok) {
+        if (drop_body && e && !e->data) {
+            e->data = copy;
+            e->len = len;
+            e->dirty = 1;
+            e->have_base = 1;
+            e->nrange = 0;
+            e->base_gen = EFS_CHUNK_BASE_UNCOND;
+            dcache_pin_add(e);
+            dcache_note_dirty_bytes((int64_t)len);
+            DTRACE(e, "keep-putfail-restore");
+            pthread_mutex_unlock(mu);
+            return 1;
+        }
         if (e && e->ino == ino && e->ci == ci && e->data && !e->dirty) {
             e->dirty = 1;
             dcache_note_dirty_bytes((int64_t)len);
             DTRACE(e, "keep-putfail");
         }
         pthread_mutex_unlock(mu);
-        return;
+        return 0;
+    }
+    /* Full-chunk overwrite: the body was the PUT buffer. Leave it dropped.
+     * Append and partial writes still install, so a later close does not
+     * rebuild from a short size and zero the prefix. */
+    if (drop_body) {
+        pthread_mutex_unlock(mu);
+        return 0;
     }
     if (e && e->ino == ino && e->ci == ci)
         dcache_install_image(e, copy, len, seq);
     pthread_mutex_unlock(mu);
+    return 0;
 }
 
 struct flush_pipe {
     struct chunk_put_job jobs[EFS_WRITE_PIPELINE];
     uint8_t *copies[EFS_WRITE_PIPELINE];
     uint32_t lens[EFS_WRITE_PIPELINE];
+    uint8_t drop[EFS_WRITE_PIPELINE];
     uint32_t n;
     int rc;
 };
@@ -3325,9 +3395,10 @@ static int flush_pipe_drain(struct flush_pipe *p)
     for (i = 0; i < p->n; i++) {
         int pok = (p->jobs[i].rc == EFS_OK);
 
-        dcache_flush_keep(p->jobs[i].ino, p->jobs[i].ci, p->copies[i],
-                          p->lens[i], pok, p->jobs[i].flush_seq);
-        efs_buf_free(p->copies[i], p->lens[i]);
+        if (!dcache_flush_keep(p->jobs[i].ino, p->jobs[i].ci, p->copies[i],
+                               p->lens[i], pok, p->jobs[i].flush_seq,
+                               p->drop[i]))
+            efs_buf_free(p->copies[i], p->lens[i]);
         p->copies[i] = NULL;
         if (!pok && p->rc == EFS_OK)
             p->rc = p->jobs[i].rc;
@@ -3338,7 +3409,8 @@ static int flush_pipe_drain(struct flush_pipe *p)
 
 static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
                           uint8_t *copy, uint32_t len, uint64_t bg,
-                          uint64_t seq, uint32_t doff, uint32_t dlen)
+                          uint64_t seq, uint32_t doff, uint32_t dlen,
+                          int drop_body)
 {
     struct chunk_put_job *j;
 
@@ -3346,6 +3418,9 @@ static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
         int drc = flush_pipe_drain(p);
 
         if (drc != EFS_OK) {
+            if (drop_body &&
+                dcache_flush_keep(ino, ci, copy, len, 0, seq, 1))
+                copy = NULL;
             efs_buf_free(copy, len);
             p->rc = drc;
             return drc;
@@ -3365,6 +3440,7 @@ static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
     j->rc = EFS_ERR_IO;
     p->copies[p->n] = copy;
     p->lens[p->n] = len;
+    p->drop[p->n] = drop_body ? 1 : 0;
     p->n++;
     return EFS_OK;
 }
@@ -3401,21 +3477,28 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             memcpy(roff, e->roff, (size_t)nrange * sizeof(uint32_t));
             memcpy(rlen, e->rlen, (size_t)nrange * sizeof(uint32_t));
         }
-        uint8_t *copy = efs_buf_alloc(len);
-        if (!copy) {
-            pthread_mutex_unlock(mu);
-            return EFS_ERR_NOMEM;
-        }
-        memcpy(copy, e->data, len);
         uint64_t seq = dcache_seq_next(e);
-        DTRACE(e, "snap-inner");
-        e->dirty = 0;
-        /* Un-count now, while the state transition is atomic. The old code
-         * decremented only if the entry was still clean after the network
-         * PUT; a re-dirty during the PUT re-added a full chunk, so every
-         * flush/redirty race leaked 128 KiB into dirty_bytes and pinned it
-         * above the reclaim limit (perpetual flush storms). */
-        dcache_note_dirty_bytes(-(int64_t)len);
+        int full = dcache_full_overwrite(have_base, slot_bg, nrange);
+        uint8_t *copy;
+        if (full) {
+            copy = dcache_steal_body(e);
+            DTRACE(e, "snap-inner-full");
+        } else {
+            copy = efs_buf_alloc(len);
+            if (!copy) {
+                pthread_mutex_unlock(mu);
+                return EFS_ERR_NOMEM;
+            }
+            memcpy(copy, e->data, len);
+            DTRACE(e, "snap-inner");
+            e->dirty = 0;
+            /* Un-count now, while the state transition is atomic. The old
+             * code decremented only if the entry was still clean after the
+             * network PUT; a re-dirty during the PUT re-added a full chunk,
+             * so every flush/redirty race leaked 128 KiB into dirty_bytes
+             * and pinned it above the reclaim limit. */
+            dcache_note_dirty_bytes(-(int64_t)len);
+        }
         pthread_mutex_unlock(mu);
         if (dcache_need_published_merge(have_base, slot_bg, object_gen,
                                         ino, ci)) {
@@ -3465,28 +3548,38 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
                                  dlen);
         pthread_mutex_lock(mu);
         if (prc != EFS_OK) {
-            efs_buf_free(copy, len);
             if (rc == EFS_OK)
                 rc = prc;
-            /* PUT failed: this slot is the only copy. Keep it dirty. */
-            if (e->ino == ino && e->ci == ci && e->data && !e->dirty) {
+            if (full) {
+                struct dcache_ent *back = dcache_find_meta(s, ino, ci);
+                if (back && !back->data) {
+                    back->data = copy;
+                    back->len = len;
+                    back->dirty = 1;
+                    back->have_base = 1;
+                    back->nrange = 0;
+                    back->base_gen = EFS_CHUNK_BASE_UNCOND;
+                    dcache_pin_add(back);
+                    dcache_note_dirty_bytes((int64_t)len);
+                    copy = NULL;
+                }
+            } else if (e->ino == ino && e->ci == ci && e->data && !e->dirty) {
+                /* PUT failed: this slot is the only copy. Keep it dirty. */
                 e->dirty = 1;
                 dcache_note_dirty_bytes((int64_t)len);
             }
+            efs_buf_free(copy, len);
             e = e->next;
             continue;
         }
-        /* Keep the published bytes as have_base=1. Freeing the slot made
-         * the next close GET a merge base; efs_client_read treats a lagging
-         * inode.size as EOF and returns zeros, so that GET+PUT wiped
-         * earlier append lines (concurrent_appends NULs). */
-        if (e->ino == ino && e->ci == ci && e->data && e->len >= len) {
-            /* Keep nrange so a STALE report can re-apply this client's
-             * bytes onto a fresher committed base (W1). */
+        if (!full && e->ino == ino && e->ci == ci && e->data && e->len >= len) {
+            /* Append / partial: keep the published bytes so the next close
+             * does not GET a short size and zero the prefix. A full-chunk
+             * overwrite drops the body (handled above). */
             if (e->base_gen != EFS_CHUNK_BASE_UNCOND)
                 e->base_gen = slot_bg;
             dcache_install_image(e, copy, len, seq);
-        } else if (!e->dirty && e->ino == ino && e->ci == ci) {
+        } else if (!full && !e->dirty && e->ino == ino && e->ci == ci) {
             dcache_pin_release(e);
             efs_buf_free(e->data, e->len);
             e->data = NULL;
@@ -3551,6 +3644,7 @@ static int dcache_flush_all_slots(efs_ino_t only_ino, int have_only)
                 uint32_t len = 0;
                 uint64_t bg = 0, seq = 0;
                 uint32_t doff = 0, dlen = 0;
+                int drop_body = 0;
                 int st;
 
                 pthread_mutex_lock(io);
@@ -3568,14 +3662,14 @@ static int dcache_flush_all_slots(efs_ino_t only_ino, int have_only)
                 pthread_mutex_unlock(mu);
                 pthread_mutex_unlock(io);
                 st = dcache_steal_dirty(only_ino, ci, &copy, &len, &bg, &seq,
-                                        &doff, &dlen);
+                                        &doff, &dlen, &drop_body);
                 if (st < 0) {
                     pipe.rc = st;
                     break;
                 }
                 if (st > 0) {
                     if (flush_pipe_add(&pipe, only_ino, ci, copy, len, bg,
-                                       seq, doff, dlen) != EFS_OK)
+                                       seq, doff, dlen, drop_body) != EFS_OK)
                         break;
                 } else {
                     break;
@@ -3623,14 +3717,15 @@ int efs_dcache_flush_ino(efs_ino_t ino)
         uint32_t len = 0;
         uint64_t bg = 0, seq = 0;
         uint32_t doff = 0, dlen = 0;
+        int drop_body = 0;
         int st = dcache_steal_dirty(ino, ci, &copy, &len, &bg, &seq, &doff,
-                                    &dlen);
+                                    &dlen, &drop_body);
 
         if (st < 0)
             pipe.rc = st;
         else if (st > 0 &&
                  flush_pipe_add(&pipe, ino, ci, copy, len, bg, seq, doff,
-                                dlen) != EFS_OK)
+                                dlen, drop_body) != EFS_OK)
             break;
     }
     (void)flush_pipe_drain(&pipe);
@@ -3653,7 +3748,7 @@ static uint64_t dcache_base_gen_of(efs_ino_t ino, uint32_t ci, uint64_t fallback
     pthread_once(&g_dcache_once, dcache_init);
     s = dcache_slot(ino, ci);
     pthread_mutex_lock(dcache_mu(s));
-    e = dcache_find(s, ino, ci);
+    e = dcache_find_meta(s, ino, ci);
     g = e ? e->base_gen : fallback;
     pthread_mutex_unlock(dcache_mu(s));
     return g;
@@ -3671,7 +3766,7 @@ static int dcache_object_of(efs_ino_t ino, uint32_t ci, struct efs_chunk_rec *re
     pthread_once(&g_dcache_once, dcache_init);
     s = dcache_slot(ino, ci);
     pthread_mutex_lock(dcache_mu(s));
-    e = dcache_find(s, ino, ci);
+    e = dcache_find_meta(s, ino, ci);
     if (e && e->object_gen) {
         memcpy(rec->nodes, e->object_nodes, sizeof(rec->nodes));
         memcpy(rec->checksums, e->object_cks, sizeof(rec->checksums));
@@ -3712,7 +3807,7 @@ static int dcache_note_committed(efs_ino_t ino, uint32_t ci, uint64_t gen)
     pthread_once(&g_dcache_once, dcache_init);
     s = dcache_slot(ino, ci);
     pthread_mutex_lock(dcache_mu(s));
-    e = dcache_find(s, ino, ci);
+    e = dcache_find_meta(s, ino, ci);
     if (e) {
         /* A span publish does not move the base generation (pass 0).
          * A full image does: later CAS expects that object. */

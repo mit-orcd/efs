@@ -191,7 +191,17 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   `20260928-102121-dd-prof-r2` (ssh timeout). Morning RDMA
   9-client **1326.6**, walls 28.55–55.57 s
   (`results/measure/20260928-033420-dd-wall`, `db2b88c4802a-dirty`).
-  99/108 report-split lines BUSY. Slower than TCP 1478. Earlier
+  99/108 report-split lines BUSY. Slower than TCP 1478.
+  Sep 28 9×4 IO-500 debug (1 s stonewall, same-mount reads,
+  `db2b88c4802a-dirty`): RDMA easy-write **2.917 GiB/s**,
+  hard-write **0.291**, easy-read **3.092**, hard-read **1.525**,
+  mdtest-easy-write **3.418 kIOPS**
+  (`results/io500/20260928-150609-rdma`). TCP on that binary:
+  easy-write **1.376**, hard-write **0.274**, easy-read **2.669**,
+  hard-read **1.162**, mdtest-easy-write **2.721**, easy-stat
+  **16.461** vs RDMA **3.248**
+  (`results/io500/20260928-151707-tcp`). Do not quote the
+  aborted RDMA attempt (lookup EBUSY). Earlier
   RDMA `113823180b15-dirty`: 1-client **947**, 4-client **2311**;
   that 9-client row is INVALID (do not quote ~238)
   (`results/measure/20260928-015839-dd-wall`). Sep 27 TCP, 8 GiB,
