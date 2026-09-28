@@ -58,11 +58,12 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 ## Cluster facts
 
 - **Only live cluster: port 19810**, fcstor003–006 = node 1–4 =
-  172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, TCP.
+  172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA
+  (`db2b88c4802a-dirty`, `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
   Group 0 = odd shards = nodes 1–3 (`voters=0x7`); group 2 = even shards =
   nodes 2–4 (`0xe`). Clients fcstor007–015 (003–006 also run efs-fuse),
-  export `efs-test`, mount `/tmp/efs-mount`, `EFS_TRANSPORT=tcp`. 19820 is
-  retired; do not stand it up.
+  export `efs-test`, mount `/tmp/efs-mount`, `EFS_TRANSPORT=rdma`. 19820 is
+  retired; do not stand it up. Do not roll back to TCP unless a suite fails.
 - Restart on unwiped storage: no `--join`. After a wipe: node 1 seed,
   2–4 `--join 172.16.223.57:19810`, all 4 up THEN `raft-mkfs`. HELLO
   rejects mixed `EFS_BUILD_ID` → after a new commit (or dirty↔clean) stop
@@ -96,11 +97,18 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  hard-write 0.201, easy-read 1.16 GiB/s, hard-read 3.89, easy-write 0.78,
  hard-write 0.046 (36-way sub-chunk CAS). Open perf: 1 GiB cold open
  0.23 s idle (128 GETCHUNKS × 1.6 ms), 14.6 ms/GETCHUNKS under 32 openers.
- Same-parent rate ~140–160 ops/s flat 1–36 procs
- (`results/measure/20260921-161931-samedir-rate`, pre-`165e779`; remeasure).
- Cluster binaries report **`4c6a5acefe03-dirty`** (W11+W9 on top of
- W13; TCP rollback Sep 27 04:52 UTC, servers and clients fcstor007–015,
- `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1`; all four agree). **W13 is done:** L1
+ Same-parent rate **333 / 1385 / 1241** ops/s at 1 / 9 / 36 procs
+ (`results/measure/20260927-211953-samedir-rate`, storm PASS, `busy_n`
+ 0/0/1). Was 138/134/159. Concurrent metadata proposers append into
+ one fsync and one AppendEntries.
+ Cluster binaries: servers **`ab458efab95b-dirty`** (rolled `--all`
+ 21:11Z). Clients fcstor007–015 remounted 21:32Z, all FUSE_OK.
+ The same-dir number was measured before that remount. Shared-file IOR-hard NP=4
+ SEGS=3000, cold verify: write **481.56 MiB/s**, read **91.35**,
+ 12000 records bad 0; posix2 63/63
+ (`results/posix2/20260927-190509`). 1/9/36 not measured
+ (group 2 REAP_DONE ~11–16/s; do not raise the idle gate). TCP,
+ `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1`. **W13 is done:** L1
  compaction runs on a background thread; the apply path only flushes
  the memtable and swaps the manifest. 144-way mkdir
  (`results/measure/20260926-163709-mkdir-hammer`): idle p50 **4.68 ms**,
@@ -115,12 +123,31 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  second read (`results/measure/20260927-w11-gate`). 9-host posix is
  200/201 on all nine (`results/posix/20260927-123717`, mmap SKIP
  only, 0 not-run). Freeze passed on the
- rerun. W10's private empty-mkdir passed 5/5. The live RDMA
- switch failed 9-host posix (193–196/201, 385 s,
- `results/posix/20260927-044348`) and was rolled back; 19810
- stays TCP. Private 100-mkdir after the poller and per-send
- query fix is 642 ms vs TCP 507 ms. Do not switch 19810 on
- that alone. W9's pin
+ rerun. W10's private empty-mkdir passed 5/5. Sep 27's live switch
+ failed 9-host posix (193–196/201, 385 s,
+ `results/posix/20260927-044348`) and was rolled back. Sep 28
+ 19810 is RDMA again: 9-host 199/201 in 57–59 s
+ (`results/posix/20260928-034049`), posix2 63/63, morning
+ 9-client dd **1326.6** vs TCP 1478. Afternoon cycle best
+ **2810.5** (`20260928-131651-dd-prof-r2b`); live restore
+ **2551.5** (`20260928-134637-dd-prof-r5b`). Not faster than
+ the 44 GB/s ceiling. User xattr is on that same
+ dirty build: jobs=1 **200/201**, `opt_xattr` PASS, only
+ `mmap_write_read` SKIP (`results/posix/20260928-043918`, 45.2 s).
+ The RDMA recv poller waits on the CQ channel after 32 empty polls
+ (`recv_poller` was 64% of efs-fuse on the yield loop; that loop is
+ gone). Five posix jobs=1 profiles on Sep 28,
+ `results/measure/20260928-093100-posix-prof-r1` through
+ `20260928-100138-posix-prof-r5`, each 200/201. Last check after
+ the 32-poll roll: 45.1 s. Do not put the yield loop back. The
+ 200 µs `efs_rdma_recv_wait` clock spin is 64 pauses. Snapshot
+ export merges with a heap and writes 64 KiB at a time.
+ Kernel 5.14 returns ENODEV for
+ `MAP_SHARED` on `FOPEN_DIRECT_IO`;
+ do not clear `direct_io`. posix2 alone 63/63
+ (`results/posix2/20260928-044304`). Four suites on one client:
+ each 200/201, 46–57 s (`results/posix/20260928-044951`). Private 100-mkdir after the
+ poller and per-send query fix is 642 ms vs TCP 507 ms. W9's pin
  rules are on fcstor007–015. Posix 1 passed on the same 200/201 run.
  Posix 2 is 63/63 (`results/posix2/20260927-123946`, 58 s).
  The leak gate passed
@@ -155,11 +182,27 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   (`results/posix/20260922-133653`). 9-host: 185–197/201, 0 NOTRUN,
   46–66 s (`results/posix/20260922-134008`); an election 12 s in
   accounts for the low end. Next mechanical item: I16.
-- Honest write numbers (MiB/s, flush in clock): Sep 27
-  (`results/measure/20260927-053506-dd-wall`, TCP, FUSE_OK, 8 GiB):
-  1-client **977**, 4-client **1984**. 9-client is INVALID — fsync
-  EIO on fcstor009 and fcstor013 (`EFS_ERR_NOT_FOUND` from report;
-  files were still 8 GiB). Do not quote 1464. Prior: Sep 18
+- Honest write numbers (MiB/s, flush in clock): Sep 28 afternoon
+  RDMA 9-client, probe outside the writer-pool lock, live restore
+  **2551.5**, walls 24.84–28.90 s, all nine 8589934592
+  (`results/measure/20260928-134637-dd-prof-r5b`). Best of that
+  cycle **2810.5**, walls 25.05–26.23 s
+  (`results/measure/20260928-131651-dd-prof-r2b`). Do not quote
+  `20260928-102121-dd-prof-r2` (ssh timeout). Morning RDMA
+  9-client **1326.6**, walls 28.55–55.57 s
+  (`results/measure/20260928-033420-dd-wall`, `db2b88c4802a-dirty`).
+  99/108 report-split lines BUSY. Slower than TCP 1478. Earlier
+  RDMA `113823180b15-dirty`: 1-client **947**, 4-client **2311**;
+  that 9-client row is INVALID (do not quote ~238)
+  (`results/measure/20260928-015839-dd-wall`). Sep 27 TCP, 8 GiB,
+  FUSE_OK. Morning `4c6a5acefe03-dirty`
+  (`results/measure/20260927-053506-dd-wall`): 1-client **977**,
+  4-client **1984**; 9-client INVALID (fsync EIO, report `rc=-3`).
+  Do not quote 1464 from that run. Evening `75321297f719-dirty`,
+  preflight idle (`results/measure/20260927-204907-dd-wall`):
+  9-client **1478**, walls 49.76–49.89 s, all nine 8589934592, no
+  EIO, zero `rc=-3`. 119/128 report-split lines are BUSY (3.4% of
+  44 GB/s). 1 and 4 were not remeasured on this build. Prior: Sep 18
   639/251/202, Sep 21 499/176 and 9-client invalid. Do not compare
   against the deleted pre-Raft engine (Aug: 2355/3599).
 - posix suite 1 jobs=1 known signature: **200/201**,
@@ -222,9 +265,10 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  (`test-dir.0-0` nlink=2 with 3 children, rmdir EIO forever). Client
  retries STALE for CREATE/UNLINK/LINK/RENAME_AT. Repro/gate:
  `tests/stress/same_parent_storm.sh` (parent must end `children=0
- nlink=2`, rmdir OK). The flat ~140–160 ops/s ceiling is in the status
- section above: fuse spends the wall in RPC recv, server on-CPU time is
- LSM scans, not the BUSY backoff. Open perf item, not correctness.
+ nlink=2`, rmdir OK). The old flat ~140 ops/s was one AppendEntries
+ per op (a nested proposer broadcast under `h->mu`). Sep 27:
+ `results/measure/20260927-211953-samedir-rate` is 333/1385/1241.
+ Do not put every proposer on the fsync hold (idle mkdir 7.1 → 11.9 ms).
 - **Never scan a whole shard (2-byte prefix) in the apply path.**
   `efs_txn_resolve`/`efs_txn_drop` did (0.7–1.1 s per RESOLVE on the
   root's shard, every replica, under the KV lock and `h->mu`) → the

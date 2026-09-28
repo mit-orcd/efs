@@ -500,6 +500,17 @@ int efs_kv_key_reap(uint32_t shard, efs_ino_t ino, uint8_t *out,
     return EFS_OK;
 }
 
+int efs_kv_key_xattr(uint32_t shard, efs_ino_t ino, uint8_t *out,
+                     uint32_t *len)
+{
+    int rc = start(out, len, shard, EFS_KV_KIND_XATTR, 8, EFS_KV_KEY_MAX);
+
+    if (rc != EFS_OK)
+        return rc;
+    be64(out + 3, ino);
+    return EFS_OK;
+}
+
 int efs_kv_key_reap_prefix(uint32_t shard, uint8_t *out, uint32_t *len)
 {
     return start(out, len, shard, EFS_KV_KIND_REAP, 0, EFS_KV_KEY_MAX);

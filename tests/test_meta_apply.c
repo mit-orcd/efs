@@ -1,9 +1,11 @@
 /* Isolated applied-state SM over mem KV. No sockets, no cluster. */
 #include "efs/meta_apply.h"
+#include "efs/metadata.h"
 #include "efs/raft.h"
 #include "efs/dir_layout.h"
 #include "efs/kv.h"
 #include "efs/kv_key.h"
+#include "efs/meta_cmd.h"
 #include "efs/opid.h"
 #include "efs/txn.h"
 #include "efs/common.h"
@@ -765,6 +767,105 @@ static void test_publish_stale_then_retry(void)
     CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
               got.generation == 0xB2,
           "landed");
+    efs_kv_mem_free(kv);
+}
+
+/* Disjoint sub-chunk publishes append spans and leave the base
+ * generation alone. Overlap and a full chain are STALE. A full image
+ * CAS has to name the span list it folded, and then the trailer is gone. */
+static void test_chunk_deltas(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t ino = 0;
+    struct efs_meta_chunk ch, got;
+    struct efs_meta_pub p;
+    struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
+    uint32_t nd = 0, i;
+    uint64_t newest = 0;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "delta", &ino) == EFS_OK,
+          "create");
+    fill_ch(&ch);
+    memset(&p, 0, sizeof(p));
+    p.ino = ino;
+    p.new_size = 128 * 1024;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
+    p.ch = ch;
+    p.delta_off = 0;
+    p.delta_len = 47008;
+    p.candidate_gen = 0xD1;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "span0");
+    p.delta_off = 47008;
+    p.delta_len = 47008;
+    p.candidate_gen = 0xD2;
+    ch.checksums[0][0] = 0x22;
+    p.ch = ch;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "span1");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK, "base");
+    CHECK(got.generation == 0, "base gen held");
+    CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds, EFS_CHUNK_DELTA_MAX,
+                                          &nd, &newest) == EFS_OK,
+          "list");
+    CHECK(nd == 2 && ds[0].generation == 0xD1 && ds[1].generation == 0xD2 &&
+              ds[0].off == 0 && ds[1].off == 47008 && newest != 0,
+          "two spans");
+    p.candidate_gen = 0xD2;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "replay");
+    CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds, EFS_CHUNK_DELTA_MAX,
+                                          &nd, &newest) == EFS_OK &&
+              nd == 2,
+          "replay did not append");
+    p.candidate_gen = 0xD3;
+    p.delta_off = 100;
+    p.delta_len = 50;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE, "overlap");
+    p.delta_len = 0;
+    p.delta_base_n = 0;
+    p.delta_base_seq = 0;
+    p.candidate_gen = 0xE1;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE, "fold blind");
+    p.delta_base_n = nd;
+    p.delta_base_seq = newest;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "fold");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
+              got.generation == 0xE1,
+          "folded gen");
+    CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds, EFS_CHUNK_DELTA_MAX,
+                                          &nd, &newest) == EFS_OK &&
+              nd == 0,
+          "trailer gone");
+
+    /* A fresh file fills the chain and refuses the next span. */
+    efs_kv_mem_free(kv);
+    kv = efs_kv_mem_create();
+    CHECK(kv != NULL, "kv2");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init2");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "full", &ino) == EFS_OK,
+          "create2");
+    fill_ch(&ch);
+    memset(&p, 0, sizeof(p));
+    p.ino = ino;
+    p.new_size = 128 * 1024;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
+    p.ch = ch;
+    p.delta_len = 64;
+    for (i = 0; i < EFS_CHUNK_DELTA_MAX; i++) {
+        p.delta_off = i * 64;
+        p.candidate_gen = 0x100 + i;
+        ch.checksums[0][0] = (uint8_t)i;
+        p.ch = ch;
+        CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "fill");
+    }
+    p.delta_off = EFS_CHUNK_DELTA_MAX * 64;
+    p.candidate_gen = 0x1FF;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE, "chain full");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
+              got.generation == 0,
+          "full chain kept the base");
     efs_kv_mem_free(kv);
 }
 
@@ -3234,9 +3335,76 @@ static void test_gc_tail_alias(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_xattr(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_row row;
+    efs_ino_t a = 0;
+    uint8_t got[8], list[64], key[EFS_KV_KEY_MAX];
+    uint32_t n, kl = 0;
+    const uint8_t *efs = (const uint8_t *)"user.efs";
+    const uint8_t *other = (const uint8_t *)"user.other";
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_xattr(kv, 999999, T0, EFS_XATTR_SET, 0, efs, 8,
+                               (const uint8_t *)"1", 1) == EFS_ERR_NOT_FOUND,
+          "missing inode");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "xa", &a) == EFS_OK && a,
+          "create");
+    CHECK(efs_meta_apply_xattr(kv, a, T0 + 5, EFS_XATTR_SET, 0, efs, 8,
+                               (const uint8_t *)"1", 1) == EFS_OK,
+          "set");
+    n = sizeof(got);
+    CHECK(efs_meta_xattr_get(kv, a, efs, 8, got, &n) == EFS_OK && n == 1 &&
+              got[0] == '1',
+          "get");
+    CHECK(efs_meta_apply_xattr(kv, a, T0 + 6, EFS_XATTR_SET, EFS_XATTR_CREATE,
+                               efs, 8, (const uint8_t *)"2", 1) == EFS_ERR_EXIST,
+          "create flag");
+    CHECK(efs_meta_apply_xattr(kv, a, T0 + 6, EFS_XATTR_SET, EFS_XATTR_REPLACE,
+                               other, 10, (const uint8_t *)"z", 1) ==
+              EFS_ERR_NODATA,
+          "replace missing");
+    CHECK(efs_meta_apply_xattr(kv, a, T0 + 6, EFS_XATTR_SET, 0, other, 10,
+                               (const uint8_t *)"ab", 2) == EFS_OK,
+          "second");
+    n = sizeof(got);
+    CHECK(efs_meta_xattr_get(kv, a, efs, 8, got, &n) == EFS_OK && n == 1 &&
+              got[0] == '1',
+          "first kept");
+    n = sizeof(list);
+    CHECK(efs_meta_xattr_list(kv, a, list, &n) == EFS_OK && n > 0, "list");
+    CHECK(efs_meta_apply_xattr(kv, a, T0 + 7, EFS_XATTR_REMOVE, 0, efs, 8,
+                               NULL, 0) == EFS_OK,
+          "remove");
+    n = sizeof(got);
+    CHECK(efs_meta_xattr_get(kv, a, efs, 8, got, &n) == EFS_ERR_NODATA, "gone");
+    n = sizeof(got);
+    CHECK(efs_meta_xattr_get(kv, a, other, 10, got, &n) == EFS_OK && n == 2 &&
+              got[0] == 'a' && got[1] == 'b',
+          "other kept");
+    CHECK(efs_meta_apply_xattr(kv, a, T0 + 8, EFS_XATTR_REMOVE, 0,
+                               (const uint8_t *)"user.nope", 9, NULL, 0) ==
+              EFS_ERR_NODATA,
+          "remove missing");
+    CHECK(efs_meta_apply_get_inode(kv, a, &row) == EFS_OK &&
+              row.base_ctime >= T0 + 5,
+          "ctime");
+    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "xa", T0 + 9) == EFS_OK,
+          "unlink");
+    CHECK(efs_kv_key_xattr(efs_kv_inode_shard(a), a, key, &kl) == EFS_OK, "key");
+    n = sizeof(got);
+    CHECK(efs_kv_get(kv, key, kl, got, &n) == EFS_ERR_NOT_FOUND, "key deleted");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     test_create_lookup_unlink();
+    test_xattr();
     test_mkdir();
     test_create_remote_parent();
     test_create_log_at_matches();
@@ -3251,6 +3419,7 @@ int main(void)
     test_publish();
     test_cas_i20_i21();
     test_publish_stale_then_retry();
+    test_chunk_deltas();
     test_epoch_i22();
     test_evidence();
     test_i8_spread();

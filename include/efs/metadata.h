@@ -19,12 +19,29 @@
 /* EFS_FEATURE_* / EFS_FEATURES_DEFAULT live in common.h (shared with the wire
  * protocol and efs-mgmt). */
 
+/* One immutable sub-chunk publish (architecture.md §9). A disjoint small
+ * write appends one of these to the chunk instead of CAS-replacing the
+ * whole image. At most EFS_CHUNK_DELTA_MAX live per chunk; the next
+ * full-chunk publish folds them into a new base and drops the list. */
+#define EFS_CHUNK_DELTA_MAX 8
+struct efs_chunk_delta {
+    uint32_t off;
+    uint32_t len;
+    uint64_t generation;
+    uint64_t seq;
+    efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+    uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+};
+
 struct efs_chunk_entry {
     efs_ino_t ino;
     uint32_t chunk_index;
     efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS];
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     uint64_t generation;
+    uint32_t ndelta;
+    uint64_t delta_seq; /* newest delta seq; 0 if ndelta == 0 */
+    struct efs_chunk_delta deltas[EFS_CHUNK_DELTA_MAX];
 };
 
 struct efs_inode {
@@ -344,9 +361,23 @@ int efs_export_rename_at(struct efs_export *ex, efs_ino_t old_parent,
 int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index,
                          const efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS],
                          const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE]);
-/* Stamp the staging generation after set_chunk / GETCHUNKS adopt. */
+/* Stamp the staging generation after set_chunk / GETCHUNKS adopt.
+ * Replaces the delta list: a new base generation retires every delta
+ * that was patched onto the previous one. The caller installs the
+ * current list afterwards when this gen still has deltas. */
 int efs_export_set_chunk_gen(struct efs_export *ex, efs_ino_t ino,
                              uint32_t chunk_index, uint64_t generation);
+/* Replace the chunk's delta list. n == 0 clears it. Does not touch the
+ * base generation or its fragment set. */
+int efs_export_set_chunk_deltas(struct efs_export *ex, efs_ino_t ino,
+                                uint32_t chunk_index,
+                                const struct efs_chunk_delta *deltas,
+                                uint32_t n, uint64_t newest_seq);
+/* Append one delta. EFS_ERR_NOMEM when the chunk already holds
+ * EFS_CHUNK_DELTA_MAX (the caller publishes a full image instead). */
+int efs_export_add_chunk_delta(struct efs_export *ex, efs_ino_t ino,
+                               uint32_t chunk_index,
+                               const struct efs_chunk_delta *delta);
 
 /* Get a chunk entry. Returns 0 if found. */
 int efs_export_get_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index,

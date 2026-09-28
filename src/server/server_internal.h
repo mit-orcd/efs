@@ -317,6 +317,10 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
                               uint32_t uid, uint32_t gid, uint64_t size,
                               uint64_t mtime, uint32_t mtime_nsec,
                               uint64_t atime, struct efs_msg_inode_reply *out);
+void server_raft_host_xattr(efs_ino_t ino, uint8_t op, uint32_t flags,
+                            const uint8_t *name, uint16_t nlen,
+                            const uint8_t *val, uint32_t vlen,
+                            struct efs_msg_xattr_reply *out, uint32_t *out_len);
 void server_raft_host_append(efs_ino_t ino, uint64_t len,
                              const uint8_t *sess_uuid, uint32_t sess_epoch,
                              uint64_t op_seq, struct efs_msg_inode_reply *out);

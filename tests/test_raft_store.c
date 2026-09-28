@@ -197,6 +197,41 @@ static void test_matches_mem(void)
     rmtree(g_dir);
 }
 
+/* One hold, several appends: the fsync covers every record written
+ * before the release, and not a record written under the next hold. */
+static void test_hold_covers_batch(void)
+{
+    struct efs_raft_disk *d = efs_raft_disk_open(g_dir, EFS_RAFT_DISK_SYNC);
+    struct efs_raft_store *s;
+    uint64_t synced, covered;
+
+    CHECK(d != NULL, "open failed");
+    if (!d)
+        return;
+    s = efs_raft_disk_group(d, EFS_RAFT_GROUP_SHARD);
+    CHECK(efs_raft_disk_sync_hold(d) == EFS_OK, "hold");
+    CHECK(st_append(s, 1, 1, "a") == EFS_OK, "append 1");
+    CHECK(st_append(s, 2, 1, "b") == EFS_OK, "append 2");
+    CHECK(st_append(s, 3, 1, "c") == EFS_OK, "append 3");
+    synced = efs_raft_disk_synced_bytes(d);
+    covered = efs_raft_disk_covered_index(d, EFS_RAFT_GROUP_SHARD, synced);
+    CHECK(covered == 0, "unsynced batch must not be covered");
+    CHECK(efs_raft_disk_sync_release_wait(d) == EFS_OK, "release");
+    synced = efs_raft_disk_synced_bytes(d);
+    covered = efs_raft_disk_covered_index(d, EFS_RAFT_GROUP_SHARD, synced);
+    CHECK(covered == 3, "fsync covers the whole hold");
+    CHECK(efs_raft_disk_sync_hold(d) == EFS_OK, "hold 2");
+    CHECK(st_append(s, 4, 1, "d") == EFS_OK, "append 4");
+    covered = efs_raft_disk_covered_index(d, EFS_RAFT_GROUP_SHARD, synced);
+    CHECK(covered == 3, "a later hold is not covered by the previous fsync");
+    CHECK(efs_raft_disk_sync_release_wait(d) == EFS_OK, "release 2");
+    synced = efs_raft_disk_synced_bytes(d);
+    covered = efs_raft_disk_covered_index(d, EFS_RAFT_GROUP_SHARD, synced);
+    CHECK(covered == 4, "second fsync covers the new record");
+    efs_raft_disk_close(d);
+    rmtree(g_dir);
+}
+
 /* --- durability ------------------------------------------------------ */
 
 static void test_reopen(void)
@@ -501,6 +536,7 @@ int main(void)
     rmtree(g_dir);
 
     test_matches_mem();
+    test_hold_covers_batch();
     test_reopen();
     test_truncate_persists();
     test_torn_tail();

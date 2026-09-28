@@ -1105,7 +1105,7 @@ silently failing them:
 | `truncate` on one file | content-epoch serialization (§7.3) |
 | Cross-directory rename storm | transaction-throughput limited (§7.2) |
 | Same-file `fcntl` lock storm | inode lock-authority limited (§7.6) |
-| 4K random updates in 128K chunks | RMW limited — declared envelope (§7.3) |
+| 4K random updates in 128K chunks | full chunk image per span; disjoint spans do not CAS (§7.3) |
 
 Every row above scales **per client node**. Three of them are additionally
 bounded *within a single mount* by upstream Linux, not by efs: concurrent

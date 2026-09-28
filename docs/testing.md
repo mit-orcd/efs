@@ -57,6 +57,12 @@ Sanity check any write number against on-disk `du` of `/data1/0*/efs`.
   `mkdir` over RDMA.
 - `tests/perf/io500/` — IOR easy/hard through the FUSE mounts (needs an MPI
   stack and the IO-500 driver; not a valid list submission).
+- `tests/perf/tcp_rdma/` — paired TCP/RDMA benchmarks. Transport echo and
+  the SEND baseline are separate from filesystem runs. They do not switch
+  the live cluster. See `tests/perf/tcp_rdma/README.md`.
+- `tests/faults/` — fault injection beside the POSIX suites. The simulator
+  layer and a private 3-server FUSE cluster are separate. Repair stays a
+  gap. See `tests/faults/README.md`. It is not part of `make test`.
 
 ## Profiling
 

@@ -59,11 +59,12 @@ do not redeploy to "fix" it (that is a user decision; a redeploy is
 
 ## 1. W6 residual 3 — same-directory op rate (`samedir_rate.sh`)
 
-**Question.** 36 procs doing mkdir/create/rmdir/unlink in ONE parent get
-~200 ops/s aggregate (178 ms per op per proc; idle mkdir is 7 ms). Is the
-time spent in the client's BUSY backoff (a same-parent CREATE and RMDIR
-are mutually BUSY on the dseq emptiness witness by design, 50 ms × 2ⁿ), or
-on the server (apply pump / Raft commit queue, 3–4 commits per op)?
+**Question.** Many procs doing mkdir/create/rmdir/unlink in ONE parent.
+The Sep 21 ceiling was ~150 ops/s aggregate and did not rise from 1
+proc to 36. A same-parent CREATE and RMDIR are mutually BUSY on the
+dseq emptiness witness by design (50 ms × 2ⁿ). The Sep 27 measurement
+is the check that a Raft-batching change did not bring that backoff
+back, and that the parent still ends empty.
 
 ```
 efs-bg.sh start m-samedir 'PERF=1 bash tests/measure/samedir_rate.sh'      # ~6 min
@@ -88,13 +89,14 @@ in `efs_kv_*`/`fold_reduce`/`efs_txn_*` = apply cost; `fsync`/`fdatasync`
 `children=0 nlink=2`). A FAIL is a correctness regression — report that
 first and stop.
 
-**Already known (Sep 21, this build,
-`results/measure/20260921-161931-samedir-rate`):** 138 / 134 / 159 ops/s
-at 1 / 9 / 36 procs, storm PASS, `busy_n=0`, fuse `recv_us` ≈ wall,
-`checkout_us` negligible. GC_ACK is 0.4 % of the leader's log during the
-storm (the 52 % figure was an idle tail). On-CPU time is LSM scans in
-txn prepare/resolve. Re-run only if the build changed. Do **not** change
-`inode_rpc.c` backoff or the txn protocol.
+**Already known (Sep 27, `ab458efab95b-dirty`,
+`results/measure/20260927-211953-samedir-rate`):** 333 / 1385 / 1241
+ops/s at 1 / 9 / 36 procs, storm PASS, `busy_n` 0 / 0 / 1, idle mkdir
+median 3.1 ms. Prior flat ceiling was 138 / 134 / 159
+(`results/measure/20260921-161931-samedir-rate`): each nested proposer
+called `efs_raft_propose` and shipped one entry under `h->mu`. Re-run
+only if the build changed. Do **not** change `inode_rpc.c` backoff or
+the txn protocol. Do **not** lower `EFS_DIR_SPREAD_MIN`.
 
 **Hand back.** The table, the two shares, one sentence per candidate
 (backoff / server apply / commit queue) saying whether the data supports
@@ -180,13 +182,16 @@ If a run does not finish in 25 min the script says so and moves on — look
 for D-state ranks (`pgrep -x ior` on the clients; `pkill -9 -x ior`, then
 remount that client). Do not raise the deadline.
 
-**Already known (Sep 21, this build,
-`results/measure/20260921-162514-ior-hard-scaling`):** 372 / 33 / 69 / 82
+**Already known.** Pre-span curve (Sep 21,
+`results/measure/20260921-162514-ior-hard-scaling`): 372 / 33 / 69 / 82
 MiB/s at NP 1 / 4 / 9 / 36. `rc=-14` (STALE) on about half of logged
-REPORTs from 4 ranks up; `finish_ms` dominates `pack_ms`/`push_ms`.
-Shape: shared-chunk CAS replay + apply wait. Re-run only if the build
-changed. The designed escape is §9 immutable delta objects — a user
-decision. Do not tune IOR's transfer size and do not add a chunk lock.
+REPORTs from 4 ranks up. Spans are now the data path. The remeasured
+4-rank point (Sep 27, cold remount, 12000 records bad 0) is write
+481.56 MiB/s and read 91.35 MiB/s. 1/9/36 were not remeasured: the
+REAP_DONE tail kept preflight above 5 entries/s. Re-run the curve
+only once `tests/preflight.sh` prints `PREFLIGHT_OK`. Do not raise
+that threshold, do not tune IOR's transfer size, and do not add a
+chunk lock.
 
 **Hand back.** The curve and which of the two shapes it is.
 

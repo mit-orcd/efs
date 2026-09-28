@@ -19,9 +19,11 @@
 #include "efs/wire.h"
 #include "efs/network.h"
 #include <errno.h>
+#include <stddef.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -45,14 +47,14 @@
  * bounce RPCs keep the long budget. */
 #define HOST_SEND_IO_MS    250
 #define HOST_INBOX_MAX     256
-/* Per-peer outbound queue cap. Full -> drop newest: a dropped packet is
- * indistinguishable from loss, which Raft retries through. Bumped 256 ->
- * 2048: the synchronous sender drains at the raft-message RTT (~1-4 ms),
- * so a slow peer backs the queue up and 256 dropped under the steady
- * heartbeat/commit/ReadIndex broadcast (observed hi=256 + drops, which
- * put fcstor005 thousands of entries behind). Batched catch-up
- * (EFS_RAFT_AE_MAX) is the real fix; this is headroom so a transient slow
- * phase doesn't drop. */
+/* Per-peer outbound queue cap. A full queue used to drop the newest
+ * message and still return success, so ae_inflight was set for an
+ * AppendEntries that was never queued and the follower stopped
+ * applying until the heartbeat. host_send evicts an older heartbeat
+ * or reply, keeps snapshot chunks and entry-carrying AppendEntries
+ * in order, and returns EFS_ERR_AGAIN when the new message itself
+ * cannot be queued. Bumped 256 -> 2048 after hi=256 + drops put
+ * fcstor005 thousands of entries behind. */
 #define HOST_OUTBOX_MAX    2048
 #define HOST_ENCODE_STACK  (64 * 1024)
 #define HOST_NGROUPS       2
@@ -64,6 +66,7 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
                           uint32_t epoch);
 #define HOST_CMD_MAX       512 /* stack size for small cmds, not a wire cap */
 #define HOST_SETATTR_LEN   61
+#define HOST_XATTR_HDR     28
 #define HOST_UTIMENS_LEN   73
 /* TRUNCATE: +8 lane_mask (which active lanes THIS entry fences — the ones
  * whose shard maps to the inode's group) +1 flags (bit0: tail_external —
@@ -72,6 +75,11 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
  * their own groups before this entry was proposed. */
 #define HOST_TRUNC_LEN     63
 #define HOST_TRUNC_F_TAIL_EXT 1
+/* Bit1: unaligned size, no tail CAS. The tail chunk is a generation-0
+ * span row; a zero stub would drop the trailer and the bytes with it.
+ * The client folds spans into one image before truncate when it can.
+ * This flag is the case where that fold has not landed yet. */
+#define HOST_TRUNC_F_KEEP_TAIL 2
 #define HOST_APPEND_RSV_LEN 45
 #define HOST_APPEND_RES_LEN 38
 #define HOST_TRUNC_TAIL    (4u + 8u + 8u + 4u + \
@@ -83,8 +91,10 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
                             8u + 8u + 1u)
 /* Many publications per Raft proposal (data.md §7.3). 2048 × ~202 B ≈
  * 404 KiB, under one AE (1 MiB). N=4096 did not beat 2048 (entry size
- * ate the fewer-propose win). Report fsyncs are amortized by
- * efs_raft_disk_sync_hold around the pack/push loop. */
+ * ate the fewer-propose win). Shrinking the batch so the frame fit a
+ * 72 KiB RDMA recv made the 9-client dd wall worse (more proposals).
+ * Report fsyncs are amortized by efs_raft_disk_sync_hold around the
+ * pack/push loop. */
 #define HOST_PUB_BATCH_N   2048u
 #define HOST_PUB_F_LANE_LOCAL 1
 #define HOST_PUB_TAIL_TRIES  4 /* cross-group truncate tail CAS retries */
@@ -684,14 +694,36 @@ static void *host_sender(void *arg)
     }
 }
 
-/* Best-effort: a send failure is a dropped packet. Returning an error from
- * tick/recv aborts the remaining broadcasts and stalls elections.
- *
- * Called under h->mu from the pump (tick) and from proposer threads
+/* Snapshot chunks must stay in order. An AppendEntries that carries
+ * entries is the catch-up batch; a newer heartbeat must not evict it.
+ * Heartbeats, vote traffic, and replies are safe to drop: the next
+ * tick sends them again. nentries is the last big-endian u32 of the
+ * raft header (src/wire/wire.c). */
+static int outbox_must_keep(const uint8_t *buf, uint32_t len)
+{
+    uint32_t nent;
+
+    if (!buf || len < EFS_WIRE_RAFT_HDR_LEN)
+        return 0;
+    if (buf[0] == EFS_RAFT_MSG_SNAP_REQ)
+        return 1;
+    if (buf[0] != EFS_RAFT_MSG_AE_REQ)
+        return 0;
+    nent = ((uint32_t)buf[EFS_WIRE_RAFT_HDR_LEN - 4] << 24) |
+           ((uint32_t)buf[EFS_WIRE_RAFT_HDR_LEN - 3] << 16) |
+           ((uint32_t)buf[EFS_WIRE_RAFT_HDR_LEN - 2] << 8) |
+           (uint32_t)buf[EFS_WIRE_RAFT_HDR_LEN - 1];
+    return nent > 0;
+}
+
+/* Called under h->mu from the pump (tick) and from proposer threads
  * (efs_raft_propose), so it must NEVER do network I/O: it only encodes and
  * queues to the destination peer's outbox; the per-peer sender thread does
- * the blocking send. Queue full -> drop the newest message (Raft retries
- * whatever mattered). */
+ * the blocking send. Queue full -> evict the oldest heartbeat or reply.
+ * If every queued message is a snapshot chunk or an entry-carrying
+ * AppendEntries, do not queue this one and return EFS_ERR_AGAIN so the
+ * caller does not mark it in flight. send_ae turns that into success:
+ * the entry is already in the leader log, and the next tick retries. */
 static int host_send(void *net, const struct efs_raft_msg *msg)
 {
     struct efs_raft_host *h = net;
@@ -715,27 +747,50 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
             cap += 12u + msg->entries[i].clen;
         heap = malloc(cap);
         if (!heap)
-            return EFS_OK;
+            return EFS_ERR_AGAIN;
         buf = heap;
         rc = efs_wire_raft_encode(msg, buf, cap, &len);
     }
     if (rc != EFS_OK) {
         free(heap);
-        return EFS_OK;
+        return EFS_ERR_AGAIN;
     }
     if (!heap) {
         heap = malloc(len);
         if (!heap)
-            return EFS_OK;
+            return EFS_ERR_AGAIN;
         memcpy(heap, buf, len);
     }
     tx = &h->tx[msg->to];
     pthread_mutex_lock(&h->outbox_mu);
-    if (!h->tx_running || tx->n >= HOST_OUTBOX_MAX) {
+    if (!h->tx_running) {
         tx->st_drop++;
         pthread_mutex_unlock(&h->outbox_mu);
         free(heap);
-        return EFS_OK;
+        return EFS_ERR_AGAIN;
+    }
+    if (tx->n >= HOST_OUTBOX_MAX) {
+        int vic = -1;
+        uint32_t i;
+
+        for (i = 0; i < (uint32_t)tx->n; i++) {
+            if (!outbox_must_keep(tx->q[i].buf, tx->q[i].len)) {
+                vic = (int)i;
+                break;
+            }
+        }
+        if (vic < 0) {
+            tx->st_drop++;
+            pthread_mutex_unlock(&h->outbox_mu);
+            free(heap);
+            return EFS_ERR_AGAIN;
+        }
+        free(tx->q[vic].buf);
+        if (vic < tx->n - 1)
+            memmove(&tx->q[vic], &tx->q[vic + 1],
+                    (size_t)(tx->n - vic - 1) * sizeof(tx->q[0]));
+        tx->n--;
+        tx->st_drop++;
     }
     tx->q[tx->n].buf = heap;
     tx->q[tx->n].len = len;
@@ -1008,6 +1063,41 @@ static int apply_setattr_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+/* EFS_MD_CMD_XATTR. The verdict (NODATA/EXIST/NOT_FOUND) rides the apply
+ * ring; host_apply does not halt the log on it. */
+static int apply_xattr_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                           uint32_t clen, uint64_t index)
+{
+    efs_ino_t ino;
+    uint64_t now;
+    uint32_t flags, vlen, body;
+    uint16_t nlen;
+    uint8_t op;
+    int rc;
+
+    if (clen < HOST_XATTR_HDR)
+        return EFS_ERR_INVAL;
+    op = cmd[1];
+    ino = rd64be(cmd + 2);
+    now = rd64be(cmd + 10);
+    flags = rd32be(cmd + 18);
+    nlen = (uint16_t)(((uint16_t)cmd[22] << 8) | cmd[23]);
+    vlen = rd32be(cmd + 24);
+    if (nlen > EFS_XATTR_NAME_MAX || vlen > EFS_XATTR_VALUE_MAX)
+        return EFS_ERR_INVAL;
+    body = (uint32_t)nlen + vlen;
+    if (clen != HOST_XATTR_HDR + body)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_xattr(h->kv, ino, now, op, flags, cmd + HOST_XATTR_HDR,
+                              nlen, cmd + HOST_XATTR_HDR + nlen, vlen);
+    if (rc != EFS_OK && rc != EFS_ERR_NODATA && rc != EFS_ERR_EXIST &&
+        rc != EFS_ERR_NOT_FOUND && rc != EFS_ERR_INVAL) {
+        fprintf(stderr, "raft-host: apply xattr rc=%d index=%llu ino=%llu\n",
+                rc, (unsigned long long)index, (unsigned long long)ino);
+    }
+    return rc;
+}
+
 /* Same encoding as sim apply_utimens_cmd. Session fencing is not hosted. */
 static int apply_utimens_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                              uint32_t clen, uint64_t index)
@@ -1060,6 +1150,7 @@ static int apply_truncate_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     t.size = rd64be(cmd + 25);
     t.lane_mask = rd64be(cmd + 54);
     t.tail_external = (cmd[62] & HOST_TRUNC_F_TAIL_EXT) ? 1 : 0;
+    t.keep_tail = (cmd[62] & HOST_TRUNC_F_KEEP_TAIL) ? 1 : 0;
     if (cmd[33]) {
         if (clen < HOST_TRUNC_LEN + HOST_TRUNC_TAIL)
             return EFS_OK;
@@ -1549,6 +1640,10 @@ static int apply_one_publish(struct efs_raft_host *h, const uint8_t *cmd,
         memcpy(p.ch.checksums[i], q, EFS_HASH_SIZE);
         q += EFS_HASH_SIZE;
     }
+    p.delta_off = rd32be(q + 0);
+    p.delta_len = rd32be(q + 4);
+    p.delta_base_n = rd32be(q + 8);
+    p.delta_base_seq = rd64be(q + 12);
     q += EFS_OPID_UUID_LEN + 4;
     p.candidate_gen = rd64be(q);
     p.expected_gen = rd64be(q + 8);
@@ -1764,7 +1859,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     ret = (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
            cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
            cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
-           cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH)
+           cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
+           cmd[0] == EFS_MD_CMD_XATTR)
               ? EFS_OK
               : rc;
     if (a0) {
@@ -1946,6 +2042,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
         return apply_publish_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_SETATTR)
         return apply_setattr_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_XATTR)
+        return apply_xattr_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_UTIMENS)
         return apply_utimens_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_TRUNCATE)
@@ -2237,9 +2335,9 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
 
     memset(rep, 0, sizeof(*rep));
     /* HOST_CMD_MAX is the stack buffer, not a protocol max. A publication
-     * batch is HOST_PUB_BATCH_N × HOST_PUBLISH_LEN (2048 × ~202 B ≈ 404 KiB);
-     * rejecting it at 512 made every g2-follower forward return INVAL, and
-     * host_remote_cmd remapped that to NOT_PRIMARY (fio end_fsync -15). */
+     * batch is HOST_PUB_BATCH_N × HOST_PUBLISH_LEN; rejecting it at 512
+     * made every g2-follower forward return INVAL, and host_remote_cmd
+     * remapped that to NOT_PRIMARY (fio end_fsync -15). */
     if (rid < 0 || rid == h->raft_id || clen > EFS_WIRE_RAFT_MAX_CMD)
         return EFS_ERR_INVAL;
     plen = 1u + clen;
@@ -2480,8 +2578,18 @@ static int host_read_index(struct efs_raft_host *h, uint8_t group,
         pthread_mutex_lock(&h->cv_mu);
         host_view_get(h, group, &v);
         if (v.has && v.role == EFS_RAFT_LEADER && v.read_pending &&
-            !host_view_covers(&v, want))
+            !host_view_covers(&v, want)) {
+            uint64_t s0 = now_us_();
             host_waiter_sleep(h, group, 1, 0, v.stamp, &end);
+            s0 = now_us_() - s0;
+            if (s0 > 20000)
+                fprintf(stderr, "raft-host: read-sleep us=%llu group=%u "
+                        "want=%llu read_idx=%llu applied=%llu pending=%d\n",
+                        (unsigned long long)s0, group,
+                        (unsigned long long)want,
+                        (unsigned long long)v.read_index,
+                        (unsigned long long)v.applied, v.read_pending);
+        }
         pthread_mutex_unlock(&h->cv_mu);
         host_view_get(h, group, &v);
     }
@@ -2514,9 +2622,42 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group,
         }
         pthread_mutex_lock(&h->cv_mu);
         host_view_get(h, group, &v);
-        if (v.has && v.applied < idx)
+        if (v.has && v.applied < idx) {
+            uint64_t s0 = now_us_();
             host_waiter_sleep(h, group, 0, idx, 0, &end);
+            s0 = now_us_() - s0;
+            if (s0 > 20000)
+                fprintf(stderr, "raft-host: apply-sleep us=%llu group=%u "
+                        "idx=%llu applied=%llu\n",
+                        (unsigned long long)s0, group,
+                        (unsigned long long)idx,
+                        (unsigned long long)v.applied);
+        }
         pthread_mutex_unlock(&h->cv_mu);
+    }
+}
+
+/* h->mu held. One fsync covered every append whose record ends at or
+ * before the synced offset, on every group this process leads. */
+static void host_durable_synced(struct efs_raft_host *h)
+{
+    uint64_t synced;
+    int i;
+
+    if (!h->disk)
+        return;
+    synced = efs_raft_disk_synced_bytes(h->disk);
+    for (i = 0; i < HOST_NGROUPS; i++) {
+        struct efs_raft *r = h->g[i].r;
+        uint64_t idx;
+
+        if (!h->g[i].hosted || !r)
+            continue;
+        if (efs_raft_role(r) != EFS_RAFT_LEADER)
+            continue;
+        idx = efs_raft_disk_covered_index(h->disk, h->g[i].group, synced);
+        if (idx)
+            (void)efs_raft_durable(r, idx);
     }
 }
 
@@ -2579,7 +2720,13 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
             if (leader_hint)
                 *leader_hint = lid;
         }
-        if (efs_raft_role(r) == EFS_RAFT_LEADER && quiet && !solo) {
+        /* A hold is already open (this caller, or one queued ahead).
+         * Append locally and let the pump send one AppendEntries for
+         * the whole burst. Broadcasting here, under h->mu, shipped a
+         * single entry and the next create in the same directory waited
+         * out that round trip — the flat ~150 files/s ceiling. */
+        if (efs_raft_role(r) == EFS_RAFT_LEADER && !solo &&
+            (quiet || (h->disk && efs_raft_disk_sync_depth(h->disk) > 0))) {
             rc = efs_raft_propose_local(r, cmd, clen, idx);
             if (rc == EFS_OK && term)
                 *term = efs_raft_term(r);
@@ -2589,22 +2736,42 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
                 rc = efs_raft_submit(r, myidx);
             host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
-            /* Drop the count before the kick so the pump sends once
-             * the other queued proposers have appended too. */
             propose_q_sub();
-            host_pump_kick(h);
-            if (quiet && rc == EFS_OK)
+            if (quiet && rc == EFS_OK) {
+                int spins = 0;
+
+                /* Threads already inside host_propose are in propose_q.
+                 * Let them append before the fsync; a continuous arrival
+                 * of new calls is cut off by the spin cap. */
+                while (propose_q_busy() && spins++ < 10000)
+                    sched_yield();
+                host_pump_kick(h);
                 rc = efs_raft_disk_sync_release_wait(h->disk);
-            else if (quiet)
+                if (rc == EFS_OK) {
+                    pthread_mutex_lock(&h->mu);
+                    r = group_raft(h, group);
+                    if (!r || efs_raft_role(r) != EFS_RAFT_LEADER)
+                        rc = EFS_ERR_NOT_PRIMARY;
+                    else
+                        host_durable_synced(h);
+                    if (rc == EFS_OK && term && r)
+                        *term = efs_raft_term(r);
+                    host_publish_group(h, group);
+                    pthread_mutex_unlock(&h->mu);
+                }
+            } else if (quiet) {
                 (void)efs_raft_disk_sync_release(h->disk);
-            if (rc == EFS_OK) {
+            } else if (rc == EFS_OK && h->disk &&
+                       efs_raft_disk_sync_depth(h->disk) == 0) {
+                /* The outer hold closed before this append, so the
+                 * append fsynced itself. Mark that index durable. */
                 pthread_mutex_lock(&h->mu);
                 r = group_raft(h, group);
                 if (!r || efs_raft_role(r) != EFS_RAFT_LEADER)
                     rc = EFS_ERR_NOT_PRIMARY;
                 else
                     rc = efs_raft_durable(r, myidx);
-                if (rc == EFS_OK && term)
+                if (rc == EFS_OK && term && r)
                     *term = efs_raft_term(r);
                 host_publish_group(h, group);
                 pthread_mutex_unlock(&h->mu);
@@ -2613,15 +2780,11 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
             return rc;
         }
         if (efs_raft_role(r) == EFS_RAFT_LEADER) {
-            int nested = h->disk && efs_raft_disk_sync_depth(h->disk) > 0;
-
             rc = efs_raft_propose(r, cmd, clen, idx);
             if (rc == EFS_OK && term)
                 *term = efs_raft_term(r);
-            /* No outer hold: append fsynced before propose returned, so
-             * the leader may vote. An outer hold fsyncs and then calls
-             * efs_raft_durable itself. */
-            if (rc == EFS_OK && !nested && idx)
+            /* No hold: append fsynced before propose returned. */
+            if (rc == EFS_OK && idx)
                 rc = efs_raft_durable(r, *idx);
             host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
@@ -3356,7 +3519,7 @@ static int pack_utimens_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
 static int pack_truncate_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
                              uint64_t now, uint64_t expect_gen, uint64_t size,
                              const struct efs_meta_pub *tail,
-                             uint64_t lane_mask, uint8_t tail_external)
+                             uint64_t lane_mask, uint8_t flags)
 {
     uint8_t *q;
     int i;
@@ -3369,7 +3532,7 @@ static int pack_truncate_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     out[33] = tail ? 1 : 0;
     memset(out + 34, 0, EFS_OPID_UUID_LEN + 4);
     wr64be(out + 54, lane_mask);
-    out[62] = tail_external ? HOST_TRUNC_F_TAIL_EXT : 0;
+    out[62] = flags;
     *len = HOST_TRUNC_LEN;
     if (!tail)
         return EFS_OK;
@@ -3569,7 +3732,13 @@ static int pack_publish_cmd(uint8_t *out, uint32_t *len, const struct efs_meta_p
         memcpy(q, p->ch.checksums[i], EFS_HASH_SIZE);
         q += EFS_HASH_SIZE;
     }
-    memset(q, 0, EFS_OPID_UUID_LEN + 4);
+    /* Session bytes are unused on this path. A span publish stores its
+     * range here; a full CAS stores the delta list it observed. Old
+     * entries are zeros, which is a full CAS that saw no spans. */
+    wr32be(q + 0, p->delta_off);
+    wr32be(q + 4, p->delta_len);
+    wr32be(q + 8, p->delta_base_n);
+    wr64be(q + 12, p->delta_base_seq);
     q += EFS_OPID_UUID_LEN + 4;
     wr64be(q, p->candidate_gen);
     wr64be(q + 8, p->expected_gen);
@@ -3827,6 +3996,8 @@ static uint8_t rc_to_inode_status(int rc)
         return EFS_INODE_RPC_INVAL;
     if (rc == EFS_ERR_NOT_EMPTY)
         return EFS_INODE_RPC_NOT_EMPTY;
+    if (rc == EFS_ERR_NODATA)
+        return EFS_INODE_RPC_NODATA;
     return EFS_INODE_RPC_ERROR;
 }
 
@@ -8543,7 +8714,7 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
     uint32_t clen = 0, tci = 0, lsh = 0;
     uint64_t idx = 0, term = 0, bits = 0, now, same_mask = 0;
     uint8_t g, lane = 0, lg = 0, has_tail = 0;
-    int hint = -1, ncross = 0, tail_ext = 0;
+    int hint = -1, ncross = 0, tail_ext = 0, keep_tail = 0;
     int rc;
     uint32_t i;
 
@@ -8626,22 +8797,40 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
                 memcpy(tail.ch.nodes, got.nodes, sizeof(tail.ch.nodes));
                 memcpy(tail.ch.checksums, got.checksums,
                        sizeof(tail.ch.checksums));
+                tp = &tail;
             } else {
-                tail.candidate_gen = efs_meta_candidate_gen(uuid, 0, 2, tci, 0);
-                if (tail.candidate_gen == 0 ||
-                    tail.candidate_gen == tail.expected_gen)
-                    tail.candidate_gen = tail.expected_gen + 1;
-                if (tail.candidate_gen == 0)
-                    tail.candidate_gen = 1;
-                /* Grow into a chunk that was never written: publish the
-                 * well-known zero-fragment digests so the read path
-                 * synthesizes zeros without a GET (no fragments exist). */
-                for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-                    tail.ch.nodes[i] = (efs_node_id_t)(i + 1);
-                    efs_hash_zero_fragment(tail.ch.checksums[i]);
+                struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
+                uint32_t nd = 0;
+
+                /* A generation-0 row with a trailer is a span chain, not
+                 * a hole. A zero stub drops the trailer
+                 * (peer_truncate_visible read back zeros). Keep the row;
+                 * the size change still hides bytes past EOF. */
+                if (efs_meta_apply_get_chunk_deltas(h->kv, ino, tci, ds,
+                                                    EFS_CHUNK_DELTA_MAX, &nd,
+                                                    NULL) == EFS_OK &&
+                    nd > 0) {
+                    has_tail = 0;
+                    tp = NULL;
+                    tail_ext = 0;
+                    keep_tail = 1;
+                } else {
+                    tail.candidate_gen = efs_meta_candidate_gen(uuid, 0, 2, tci, 0);
+                    if (tail.candidate_gen == 0 ||
+                        tail.candidate_gen == tail.expected_gen)
+                        tail.candidate_gen = tail.expected_gen + 1;
+                    if (tail.candidate_gen == 0)
+                        tail.candidate_gen = 1;
+                    /* Grow into a chunk that was never written: publish the
+                     * well-known zero-fragment digests so the read path
+                     * synthesizes zeros without a GET (no fragments exist). */
+                    for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+                        tail.ch.nodes[i] = (efs_node_id_t)(i + 1);
+                        efs_hash_zero_fragment(tail.ch.checksums[i]);
+                    }
+                    tp = &tail;
                 }
             }
-            tp = &tail;
         }
     }
     /* Fence the cross-group lanes BEFORE the inode-group entry commits the
@@ -8671,7 +8860,8 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
         now = mtime * 1000000000ull + (uint64_t)mtime_nsec;
     if (rc == EFS_OK)
         rc = pack_truncate_cmd(cmd, &clen, ino, now, 0, size, tp, same_mask,
-                               (uint8_t)tail_ext);
+                               (uint8_t)((tail_ext ? HOST_TRUNC_F_TAIL_EXT : 0) |
+                                         (keep_tail ? HOST_TRUNC_F_KEEP_TAIL : 0)));
     if (rc == EFS_OK && clen > HOST_CMD_MAX)
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK)
@@ -8838,6 +9028,77 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK)
         stat_to_inode(&st, &out->inode);
+}
+
+_Static_assert(offsetof(struct efs_msg_xattr_reply, primary_id) ==
+                   offsetof(struct efs_msg_inode_reply, primary_id),
+               "xattr reply status layout");
+_Static_assert(offsetof(struct efs_msg_xattr_reply, data) == 12,
+               "xattr reply header");
+_Static_assert(sizeof(struct efs_msg_xattr) == 24, "xattr request layout");
+
+void server_raft_host_xattr(efs_ino_t ino, uint8_t op, uint32_t flags,
+                            const uint8_t *name, uint16_t nlen,
+                            const uint8_t *val, uint32_t vlen,
+                            struct efs_msg_xattr_reply *out, uint32_t *out_len)
+{
+    struct efs_raft_host *h = g_host;
+    uint8_t cmd[HOST_XATTR_HDR + EFS_XATTR_NAME_MAX + EFS_XATTR_VALUE_MAX];
+    uint32_t clen, hdr, n = 0;
+    uint8_t g;
+    int hint = -1;
+    int rc;
+
+    hdr = (uint32_t)offsetof(struct efs_msg_xattr_reply, data);
+    memset(out, 0, hdr);
+    out->status = EFS_INODE_RPC_ERROR;
+    if (out_len)
+        *out_len = hdr;
+    if (!h || !h->running || ino == 0 || !out_len) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if (nlen > EFS_XATTR_NAME_MAX || vlen > EFS_XATTR_VALUE_MAX ||
+        (nlen && !name) || (vlen && !val) ||
+        (op != EFS_XATTR_GET && op != EFS_XATTR_LIST &&
+         op != EFS_XATTR_SET && op != EFS_XATTR_REMOVE)) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    g = efs_raft_shard_group(efs_kv_inode_shard(ino));
+    if (op == EFS_XATTR_GET || op == EFS_XATTR_LIST) {
+        n = EFS_XATTR_BLOB_MAX;
+        rc = host_read_index(h, g, &hint);
+        if (rc == EFS_OK) {
+            if (op == EFS_XATTR_GET)
+                rc = efs_meta_xattr_get(h->kv, ino, name, nlen, out->data, &n);
+            else
+                rc = efs_meta_xattr_list(h->kv, ino, out->data, &n);
+        }
+        out->status = rc_to_inode_status(rc);
+        out->primary_id = (hint >= 0) ? (efs_node_id_t)(hint + 1) : 0;
+        if (rc == EFS_OK) {
+            out->nbytes = n;
+            *out_len = hdr + n;
+        }
+        return;
+    }
+    cmd[0] = EFS_MD_CMD_XATTR;
+    cmd[1] = op;
+    wr64be(cmd + 2, ino);
+    wr64be(cmd + 10, now_ns());
+    wr32be(cmd + 18, flags);
+    cmd[22] = (uint8_t)(nlen >> 8);
+    cmd[23] = (uint8_t)nlen;
+    wr32be(cmd + 24, vlen);
+    if (nlen)
+        memcpy(cmd + HOST_XATTR_HDR, name, nlen);
+    if (vlen)
+        memcpy(cmd + HOST_XATTR_HDR + nlen, val, vlen);
+    clen = HOST_XATTR_HDR + (uint32_t)nlen + vlen;
+    rc = host_propose_wait(h, g, cmd, clen, &hint);
+    out->status = rc_to_inode_status(rc);
+    out->primary_id = (hint >= 0) ? (efs_node_id_t)(hint + 1) : 0;
 }
 
 /* O_APPEND reserve. Reply size is THIS reservation's end (eof+len), not
@@ -9897,8 +10158,23 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
     memset(&got, 0, sizeof(got));
     /* First publish (base_gen=0): apply CAS(expected=0) is the existence
      * check. A per-rec lsm_get here was 65536 lookups on an 8 GiB fsync
-     * and never skipped (skip-identical needs a live mapping). */
-    if (rec->base_gen != 0) {
+     * and never skipped (skip-identical needs a live mapping).
+     * A span publish is not the base image, so the identical-fragment
+     * skip does not apply to it. */
+    if (rec->delta_len) {
+        if (rec->base_gen == EFS_CHUNK_BASE_UNCOND)
+            return EFS_ERR_INVAL;
+        if (rec->base_gen != 0) {
+            rc = efs_meta_apply_get_chunk(h->kv, rec->ino, rec->chunk_index,
+                                          &got);
+            if (rc == EFS_ERR_NOT_FOUND)
+                return EFS_ERR_STALE;
+            if (rc != EFS_OK)
+                return rc;
+            if (got.generation != rec->base_gen)
+                return EFS_ERR_STALE;
+        }
+    } else if (rec->base_gen != 0) {
         rc = efs_meta_apply_get_chunk(h->kv, rec->ino, rec->chunk_index, &got);
         if (rc == EFS_ERR_NOT_FOUND)
             rc = EFS_OK;
@@ -9932,6 +10208,10 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
     p.coding_profile_id = EFS_META_PROFILE_K2F1;
     memcpy(p.ch.nodes, rec->nodes, sizeof(p.ch.nodes));
     memcpy(p.ch.checksums, rec->checksums, sizeof(p.ch.checksums));
+    p.delta_off = rec->delta_off;
+    p.delta_len = rec->delta_len;
+    p.delta_base_n = rec->delta_base_n;
+    p.delta_base_seq = rec->delta_base_seq;
     if (lg != ig) {
         /* Lane-local: the lane group's KV has no inode row. The FileID
          * fields ride the entry (read above under ReadIndex on the inode
@@ -10381,6 +10661,13 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                     (unsigned long long)(t_pack / 1000ull),
                     (unsigned long long)(t_push / 1000ull),
                     (unsigned long long)((t_fin1 - t_fin0) / 1000ull), rc);
+        /* Deleted inode is already OK (skipped above). A NOT_FOUND
+         * that remains is a log index the snapshot removed under the
+         * propose. Map it to BUSY so the report is retried. The log
+         * line above still shows the original rc. A NOT_FOUND that
+         * reached the client was the 9-client fsync EIO. */
+        if (rc == EFS_ERR_NOT_FOUND)
+            rc = EFS_ERR_BUSY;
         /* Once per inode, not per chunk: append_open is a KV scan, and a 2g
          * file is 16k recs. Doing it per rec times out the client as NET. */
         for (k = 0; k < nu && rc == EFS_OK; k++) {
@@ -10475,6 +10762,34 @@ void server_raft_host_getchunks(efs_ino_t ino, uint32_t start, uint32_t max,
                sizeof(out->recs[out->count].checksums));
         out->recs[out->count].base_gen = ch.generation;
         out->recs[out->count].chunk_generation = ch.generation;
+        out->recs[out->count].delta_off = 0;
+        out->recs[out->count].delta_len = 0;
+        {
+            struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
+            uint32_t nd = 0, di;
+            uint64_t newest = 0;
+
+            if (efs_meta_apply_get_chunk_deltas(h->kv, ino, ci, ds,
+                                                EFS_CHUNK_DELTA_MAX, &nd,
+                                                &newest) == EFS_OK &&
+                nd > 0) {
+                if (nd > EFS_CHUNK_DELTA_MAX)
+                    nd = EFS_CHUNK_DELTA_MAX;
+                out->recs[out->count].delta_base_n = nd;
+                out->recs[out->count].delta_base_seq = newest;
+                for (di = 0; di < nd; di++) {
+                    out->recs[out->count].deltas[di].off = ds[di].off;
+                    out->recs[out->count].deltas[di].len = ds[di].len;
+                    out->recs[out->count].deltas[di].generation =
+                        ds[di].generation;
+                    out->recs[out->count].deltas[di].seq = ds[di].seq;
+                    memcpy(out->recs[out->count].deltas[di].nodes,
+                           ds[di].nodes, sizeof(ds[di].nodes));
+                    memcpy(out->recs[out->count].deltas[di].checksums,
+                           ds[di].checksums, sizeof(ds[di].checksums));
+                }
+            }
+        }
         out->count++;
     }
     out->status = rc_to_inode_status(rc);

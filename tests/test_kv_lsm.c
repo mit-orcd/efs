@@ -955,6 +955,77 @@ static void test_partitioned_flush(void)
     efs_kv_lsm_close(kv);
 }
 
+/* Two flushed L0s share keys. The export heap must keep the newest
+ * value, drop a newer tombstone, and omit the other raft group. */
+static void test_view_export_overlap(void)
+{
+    struct efs_kv_lsm_cfg cfg;
+    struct efs_kv *kv, *dst;
+    struct efs_kv_lsm_view *view = NULL;
+    uint8_t key[EFS_KV_KEY_MAX];
+    uint8_t *blob = NULL;
+    char path[600];
+    uint32_t klen = 0, blen = 0;
+    FILE *f;
+    long sz;
+
+    rmtree(g_dir);
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.sync_mode = EFS_KV_LSM_NOSYNC;
+    cfg.memtable_max = 4u * 1024u * 1024u;
+    cfg.l0_max = 1000;
+    kv = efs_kv_lsm_open(g_dir, &cfg);
+    CHECK(kv != NULL, "view-export open");
+    if (!kv)
+        return;
+    CHECK(put_ino(kv, 1, 1, "old") == EFS_OK, "old");
+    CHECK(put_ino(kv, 1, 11, "keep") == EFS_OK, "keep");
+    CHECK(put_ino(kv, 1, 21, "gone") == EFS_OK, "gone");
+    CHECK(put_ino(kv, 2, 2, "even") == EFS_OK, "even");
+    CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "flush old");
+    CHECK(put_ino(kv, 1, 1, "new") == EFS_OK, "new");
+    CHECK(efs_kv_key_inode(1, 21, key, &klen) == EFS_OK, "del key");
+    CHECK(efs_kv_del(kv, key, klen) == EFS_OK, "del");
+    CHECK(put_ino(kv, 1, 31, "only-new") == EFS_OK, "only-new");
+    CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "flush new");
+    CHECK(efs_kv_lsm_view_pin(kv, &view) == EFS_OK && view, "pin");
+    snprintf(path, sizeof(path), "%s/snap.bin", g_dir);
+    if (view) {
+        CHECK(efs_kv_lsm_view_export(view, EFS_RAFT_GROUP_SHARD, path) == EFS_OK,
+              "view export");
+        efs_kv_lsm_view_unpin(view);
+    }
+    f = fopen(path, "rb");
+    CHECK(f != NULL, "snap open");
+    if (f) {
+        fseek(f, 0, SEEK_END);
+        sz = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        CHECK(sz > 4, "snap size");
+        if (sz > 4) {
+            blob = malloc((size_t)sz);
+            CHECK(blob && fread(blob, 1, (size_t)sz, f) == (size_t)sz, "snap read");
+            blen = (uint32_t)sz;
+        }
+        fclose(f);
+    }
+    dst = efs_kv_mem_create();
+    CHECK(dst != NULL, "dst");
+    if (dst && blob) {
+        CHECK(efs_kv_group_import(dst, EFS_RAFT_GROUP_SHARD, blob, blen) == EFS_OK,
+              "import view");
+        CHECK(get_ino(dst, 1, 1, "new") == EFS_OK, "newest wins");
+        CHECK(get_ino(dst, 1, 11, "keep") == EFS_OK, "older unique kept");
+        CHECK(get_ino(dst, 1, 21, NULL) == EFS_ERR_NOT_FOUND, "tombstone dropped");
+        CHECK(get_ino(dst, 1, 31, "only-new") == EFS_OK, "new unique kept");
+        CHECK(get_ino(dst, 2, 2, NULL) == EFS_ERR_NOT_FOUND, "other group omitted");
+        efs_kv_mem_free(dst);
+    }
+    free(blob);
+    efs_kv_lsm_close(kv);
+    rmtree(g_dir);
+}
+
 int main(void)
 {
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-kvlsm-%d", (int)getpid());
@@ -974,6 +1045,7 @@ int main(void)
     test_compact_crash();
     test_sync_hold();
     test_partitioned_flush();
+    test_view_export_overlap();
 
     rmtree(g_dir);
     if (failures) {

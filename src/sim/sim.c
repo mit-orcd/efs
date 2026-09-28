@@ -1071,6 +1071,37 @@ int efs_sim_corrupt(struct efs_sim *sim, int server, const struct efs_frag_id *i
     return rc;
 }
 
+int efs_sim_drop_sum(struct efs_sim *sim, const struct efs_frag_id *id)
+{
+    efs_node_id_t ranks[EFS_NUM_FRAGMENTS];
+    int si;
+
+    if (!sim || !id)
+        return EFS_ERR_INVAL;
+    place_rank(sim, id->ino, id->chunk_index, ranks);
+    si = (int)ranks[id->fragment_index] - 1;
+    if (si < 0 || si >= sim->nservers)
+        return EFS_ERR_INVAL;
+    return efs_store_mem_drop_sum(sim->srv[si].store, id);
+}
+
+int efs_sim_frag_healthy(struct efs_sim *sim, const struct efs_frag_id *id)
+{
+    uint8_t *buf;
+    uint32_t len;
+    int ok;
+
+    if (!sim || !id)
+        return 0;
+    len = (uint32_t)EFS_SIM_CHUNK / 2;
+    buf = malloc(len);
+    if (!buf)
+        return 0;
+    ok = frag_ok(sim, id, NULL, buf, &len, NULL) == EFS_OK;
+    free(buf);
+    return ok;
+}
+
 int efs_sim_partition(struct efs_sim *sim, int server, int on)
 {
     if (!sim || server < 0 || server >= sim->nservers)

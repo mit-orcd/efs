@@ -34,6 +34,7 @@
 #define EFS_KV_KIND_EXPORT   20 /* per-export salt (chosen at mkfs, §7.4) */
 #define EFS_KV_KIND_GC       21 /* dead fragment set + per-fragment acks (L7) */
 #define EFS_KV_KIND_REAP     22 /* dead inode awaiting lane sweep + frag GC */
+#define EFS_KV_KIND_XATTR    23 /* one extended-attribute blob per inode */
 
 /* GC and REAP records for every shard of a group live on that group's one
  * fixed anchor shard, so the background reaper scans ONE prefix per group
@@ -125,6 +126,10 @@ int efs_kv_key_gc_prefix(uint32_t shard, uint8_t *out, uint32_t *len);
  * `shard` is the anchor shard of the inode's shard. */
 int efs_kv_key_reap(uint32_t shard, efs_ino_t ino, uint8_t *out,
                     uint32_t *len);
+/* One blob of every extended attribute on an inode. `shard` is the inode
+ * shard. The value format lives with efs_meta_apply_xattr. */
+int efs_kv_key_xattr(uint32_t shard, efs_ino_t ino, uint8_t *out,
+                     uint32_t *len);
 int efs_kv_key_reap_prefix(uint32_t shard, uint8_t *out, uint32_t *len);
 int efs_kv_key_unwrap(const uint8_t *wrap, uint32_t wlen, uint8_t *orig,
                       uint32_t *olen);

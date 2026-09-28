@@ -348,7 +348,13 @@ int efs_conn_send_msg(struct efs_conn *c, uint8_t type, const void *payload,
 static int conn_rdma_frame(struct efs_conn *c, uint8_t *type,
                            const uint8_t **payload, uint32_t *payload_len)
 {
-    if (efs_rdma_recv_wait(c->rc, EFS_IO_TIMEOUT_MS) != 0)
+    int wr = efs_rdma_recv_wait(c->rc, EFS_IO_TIMEOUT_MS);
+    /* A real byte on the TCP side-channel (reply larger than the RDMA
+     * pool, or a request the server answered on TCP). Caller reads it
+     * with the TCP recv. Anything else is a dead conn. */
+    if (wr == EFS_ERR_AGAIN)
+        return EFS_ERR_AGAIN;
+    if (wr != 0)
         return EFS_ERR_NET;
     uint32_t flen = 0;
     uint8_t *frame = efs_rdma_recv_frame(c->rc, &flen);
@@ -378,6 +384,8 @@ int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **payload,
     const uint8_t *pl = NULL;
     uint32_t plen = 0;
     int rc = conn_rdma_frame(c, type, &pl, &plen);
+    if (rc == EFS_ERR_AGAIN)
+        return efs_recv_msg(c->fd, type, payload, payload_len);
     if (rc != EFS_OK)
         return rc;
     if (payload_len)
@@ -410,6 +418,9 @@ int efs_conn_recv_msg_into(struct efs_conn *c, uint8_t *type, uint8_t *status,
     const uint8_t *pl = NULL;
     uint32_t plen = 0;
     int rc = conn_rdma_frame(c, type, &pl, &plen);
+    if (rc == EFS_ERR_AGAIN)
+        return efs_recv_msg_into(c->fd, type, status, hdr, hdr_len,
+                                 body, body_len);
     if (rc != EFS_OK)
         return rc;
     if (plen != 1 && plen != 1 + hdr_len + body_len) {
@@ -435,6 +446,8 @@ int efs_conn_recv_u8_reply(struct efs_conn *c, uint8_t *type, uint8_t *status)
     const uint8_t *pl = NULL;
     uint32_t plen = 0;
     int rc = conn_rdma_frame(c, type, &pl, &plen);
+    if (rc == EFS_ERR_AGAIN)
+        return efs_recv_u8_reply(c->fd, type, status);
     if (rc != EFS_OK)
         return rc;
     if (plen != 1) {

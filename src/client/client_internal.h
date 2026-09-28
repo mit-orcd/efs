@@ -169,6 +169,10 @@ int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
                            struct efs_inode *out);
 /* Local-first getattr (open fd). RPC only on a table miss. */
 int efs_client_stat_ino(efs_ino_t ino, struct efs_inode *out);
+/* Open fd: local size, server nlink. A peer unlink is invisible in the
+ * local row; copying the whole GETATTR row would replace an unflushed
+ * size. RPC failure keeps the local ghost. */
+int efs_client_stat_open(efs_ino_t ino, struct efs_inode *out);
 /* Path getattr: GETATTR RPC + adopt + overlay. Peer size/nlink growth. */
 int efs_client_stat_refresh(efs_ino_t ino, struct efs_inode *out);
 /* Local table only — no RPC. For parent-dir checks on a known nodeid. */
@@ -201,6 +205,12 @@ int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
                            uint32_t mask, uint32_t mode, uid_t uid, gid_t gid,
                            uint64_t size, uint64_t mtime, uint32_t mtime_nsec,
                            uint64_t atime, struct efs_inode *out);
+/* op is EFS_XATTR_GET/SET/REMOVE/LIST. out_len is the buffer size in and
+ * the byte count out. SET/REMOVE may pass out NULL. */
+int efs_client_rpc_xattr(efs_export_id_t export_id, efs_ino_t ino, uint8_t op,
+                         uint32_t flags, const void *name, uint16_t nlen,
+                         const void *val, uint32_t vlen, void *out,
+                         uint32_t *out_len);
 int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
                         efs_ino_t new_parent, const char *new_name,
                         struct efs_inode *out);
@@ -296,6 +306,11 @@ int efs_dcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
  * outrun inode.size under FOPEN_DIRECT_IO. */
 int efs_dcache_copy_unpub(efs_ino_t ino, uint32_t ci, uint32_t off,
                           uint8_t *dst, uint32_t len);
+/* have_base image with no generation check. Only for an inode row that
+ * is already gone (unlink-open): a span leaves base gen 0, so
+ * efs_dcache_copy refuses the image, and the bytes live only here. */
+int efs_dcache_copy_kept(efs_ino_t ino, uint32_t ci, uint32_t off,
+                         uint8_t *dst, uint32_t len);
 /* Fill buf with the published chunk (fragment GET). Does not consult
  * inode.size. Unpublished → zeros + EFS_OK. */
 int efs_client_fetch_published_chunk(efs_ino_t ino, uint32_t ci,

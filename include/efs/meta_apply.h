@@ -117,6 +117,27 @@ struct efs_meta_pub {
     uint64_t inode_gen;
     uint64_t mtime_gen;
     uint8_t lane_local;
+    /* delta_len > 0 appends an immutable span instead of CAS-replacing
+     * the chunk image. expected_gen is still the base image's generation
+     * (0 if the chunk has no base object yet). A full CAS (delta_len == 0)
+     * commits only when the live delta list is exactly (delta_base_n,
+     * delta_base_seq) — the list the writer's merged image includes. */
+    uint32_t delta_off;
+    uint32_t delta_len;
+    uint32_t delta_base_n;
+    uint64_t delta_base_seq;
+};
+
+/* One delta stored in the chunk value's trailer. `seq` is the lane
+ * sequence assigned at apply, so the list order is the Raft order. */
+struct efs_meta_delta {
+    uint32_t off;
+    uint32_t len;
+    uint64_t generation;
+    uint64_t content_epoch;
+    uint64_t seq;
+    efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+    uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
 };
 
 /* Creates the root inode if absent. `now` is the leader-stamped time it is
@@ -299,6 +320,22 @@ struct efs_meta_setattr {
 int efs_meta_apply_setattr(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
                            const struct efs_meta_setattr *sa);
 
+/* One blob of extended attributes on the inode shard (EFS_KV_KIND_XATTR).
+ * op is EFS_XATTR_SET or EFS_XATTR_REMOVE. flags is XATTR_CREATE/REPLACE.
+ * The apply folds the op into the blob currently stored, so a later name
+ * does not wipe an earlier one. An empty blob deletes the key. */
+int efs_meta_apply_xattr(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
+                         uint8_t op, uint32_t flags, const uint8_t *name,
+                         uint16_t nlen, const uint8_t *val, uint32_t vlen);
+/* *vlen is the buffer size in and the value size out. A missing name is
+ * EFS_ERR_NODATA; a missing inode is EFS_ERR_NOT_FOUND. */
+int efs_meta_xattr_get(struct efs_kv *kv, efs_ino_t ino, const uint8_t *name,
+                       uint16_t nlen, uint8_t *val, uint32_t *vlen);
+/* Linux listxattr: names separated by NUL. *len is the buffer size in and
+ * the byte count out. buf NULL reports the size only. */
+int efs_meta_xattr_list(struct efs_kv *kv, efs_ino_t ino, uint8_t *buf,
+                        uint32_t *len);
+
 /* SETATTR utimens class: the bounded inode fence (§7.3 / §7.4).
  *
  * Only utimens can set a time backwards, so it is the only op that bumps
@@ -444,6 +481,9 @@ struct efs_meta_truncate {
      * this entry (it is lane-local-published after commit, fenced by the
      * LANE_FENCE that already landed on that lane). tail must be NULL. */
     uint8_t tail_external;
+    /* Unaligned size and no tail image: keep the existing tail chunk
+     * (a generation-0 span row). Do not publish a zero stub over it. */
+    uint8_t keep_tail;
 };
 
 int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
@@ -558,6 +598,13 @@ int efs_meta_apply_append_drop_session(struct efs_kv *kv, uint32_t shard,
 int efs_meta_apply_append_drain_file(struct efs_kv *kv, efs_ino_t ino);
 int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_index,
                              struct efs_meta_chunk *out);
+/* Deltas layered on the base image. *n is the count (capped by `cap`).
+ * *newest is the last delta's seq, or 0 when there are none. NOT_FOUND
+ * when the chunk row itself is absent. */
+int efs_meta_apply_get_chunk_deltas(struct efs_kv *kv, efs_ino_t ino,
+                                    uint32_t chunk_index,
+                                    struct efs_meta_delta *out, uint32_t cap,
+                                    uint32_t *n, uint64_t *newest);
 uint64_t efs_meta_candidate_gen(const uint8_t uuid[16], uint32_t session_epoch,
                                 uint64_t seq, uint32_t chunk_index,
                                 uint32_t retry);

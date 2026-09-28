@@ -242,6 +242,76 @@ static int compact_emit(struct compact_ctx *c, uint8_t op, const uint8_t *key,
     return kv_seg_w_add(c->w, op, key, klen, val, vlen);
 }
 
+/* Lowest index wins a tie: L0 is appended newest-first, then L1.
+ * The linear scan used strict <, so that source supplies the value. */
+static int cm_before(const struct msrc *src, uint32_t a, uint32_t b)
+{
+    int c = kv_key_cmp(src[a].key, src[a].klen, src[b].key, src[b].klen);
+
+    if (c != 0)
+        return c < 0;
+    return a < b;
+}
+
+static void cm_swap(uint32_t *h, uint32_t i, uint32_t j)
+{
+    uint32_t t = h[i];
+
+    h[i] = h[j];
+    h[j] = t;
+}
+
+static void cm_sift_up(uint32_t *h, const struct msrc *src, uint32_t i)
+{
+    while (i > 0) {
+        uint32_t p = (i - 1) / 2;
+
+        if (!cm_before(src, h[i], h[p]))
+            break;
+        cm_swap(h, i, p);
+        i = p;
+    }
+}
+
+static void cm_sift_down(uint32_t *h, uint32_t n, const struct msrc *src,
+                         uint32_t i)
+{
+    for (;;) {
+        uint32_t l = i * 2 + 1;
+        uint32_t r = l + 1;
+        uint32_t best = i;
+
+        if (l < n && cm_before(src, h[l], h[best]))
+            best = l;
+        if (r < n && cm_before(src, h[r], h[best]))
+            best = r;
+        if (best == i)
+            break;
+        cm_swap(h, i, best);
+        i = best;
+    }
+}
+
+static void cm_push(uint32_t *h, uint32_t *n, const struct msrc *src,
+                    uint32_t idx)
+{
+    h[*n] = idx;
+    cm_sift_up(h, src, *n);
+    (*n)++;
+}
+
+static uint32_t cm_pop(uint32_t *h, uint32_t *n, const struct msrc *src)
+{
+    uint32_t top = h[0];
+
+    (*n)--;
+    if (*n > 0) {
+        h[0] = h[*n];
+        cm_sift_down(h, *n, src, 0);
+    }
+    return top;
+}
+
 /* Merges one key[0] range of L0, plus the L1 segments overlapping it,
  * into fresh L1 runs. A wide L0 (several ranges in one file) still pulls
  * every L0 so the old shape drains in one pass. Caller holds l->mu.
@@ -254,9 +324,10 @@ int kv_compact_locked(struct kv_lsm *l, int async)
     struct seg_slot keep[KV_LSM_MAX_SEGS];
     struct seg_slot doomed[KV_LSM_MAX_SEGS * 2];
     struct compact_ctx c;
+    uint32_t heap[KV_LSM_MAX_SEGS * 2];
     const uint8_t *lo = NULL, *hi = NULL;
     uint32_t lol = 0, hil = 0;
-    uint32_t nsrc = 0, n_drop = 0, n_keep = 0, n_doomed = 0, i, j;
+    uint32_t nsrc = 0, n_drop = 0, n_keep = 0, n_doomed = 0, hn = 0, i, j;
     uint32_t n_l0_in = 0;
     int rc = EFS_OK;
     int have_range = 0;
@@ -368,19 +439,13 @@ int kv_compact_locked(struct kv_lsm *l, int async)
         if (rc != EFS_OK)
             goto out;
     }
-    for (;;) {
-        uint32_t win = nsrc;
+    for (i = 0; i < nsrc; i++) {
+        if (!src[i].done)
+            cm_push(heap, &hn, src, i);
+    }
+    while (hn > 0) {
+        uint32_t win = cm_pop(heap, &hn, src);
 
-        for (i = 0; i < nsrc; i++) {
-            if (src[i].done)
-                continue;
-            if (win == nsrc ||
-                kv_key_cmp(src[i].key, src[i].klen, src[win].key,
-                           src[win].klen) < 0)
-                win = i;
-        }
-        if (win == nsrc)
-            break;
         /* A tombstone is dropped only once nothing older can survive it:
          * every older run is an input here, so L1 output needs no marker. */
         if (src[win].op == KV_OP_PUT) {
@@ -389,22 +454,26 @@ int kv_compact_locked(struct kv_lsm *l, int async)
             if (rc != EFS_OK)
                 goto out;
         }
-        /* The winner advances last: advancing it first would move the key
-         * every other source is being compared against, and the older
-         * duplicates would then survive their own tombstone. */
-        for (i = 0; i < nsrc; i++) {
-            if (src[i].done || i == win)
-                continue;
-            if (kv_key_cmp(src[i].key, src[i].klen, src[win].key,
-                           src[win].klen) != 0)
-                continue;
-            rc = kv_msrc_advance(l, &src[i], NULL, 0);
+        /* The winner advances last. Advancing it first would change the
+         * key the other sources are matched against, and an older copy
+         * would survive its tombstone. A scan of every input per key was
+         * the compactor's share of efsd cpu-clock during posix. */
+        while (hn > 0 &&
+               kv_key_cmp(src[heap[0]].key, src[heap[0]].klen,
+                          src[win].key, src[win].klen) == 0) {
+            uint32_t o = cm_pop(heap, &hn, src);
+
+            rc = kv_msrc_advance(l, &src[o], NULL, 0);
             if (rc != EFS_OK)
                 goto out;
+            if (!src[o].done)
+                cm_push(heap, &hn, src, o);
         }
         rc = kv_msrc_advance(l, &src[win], NULL, 0);
         if (rc != EFS_OK)
             goto out;
+        if (!src[win].done)
+            cm_push(heap, &hn, src, win);
     }
     if (c.w) {
         c.bytes += kv_seg_w_bytes(c.w);

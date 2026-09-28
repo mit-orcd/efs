@@ -83,5 +83,20 @@
  * matching existing record is OK, a mismatch is EFS_ERR_PROTO (never
  * overwrite — placement is derived from this value). */
 #define EFS_MD_CMD_SALT 26 /* [anchor:4][salt:8] */
+/* One extended-attribute update on the inode's shard. Apply reads the
+ * current blob and folds this op in, so two names on one inode do not
+ * lose each other. [op:1][ino:8][now:8][flags:4][nlen:2][vlen:4][name][value]
+ * op is EFS_XATTR_SET or EFS_XATTR_REMOVE. A user-visible error (NODATA,
+ * EXIST) is the apply verdict; it must not halt the log. */
+#define EFS_MD_CMD_XATTR 27
+#define EFS_XATTR_SET    1
+#define EFS_XATTR_REMOVE 2
+#define EFS_XATTR_GET    3 /* read path; not a log command */
+#define EFS_XATTR_LIST   4
+#define EFS_XATTR_CREATE  0x1u /* Linux XATTR_CREATE */
+#define EFS_XATTR_REPLACE 0x2u /* Linux XATTR_REPLACE */
+#define EFS_XATTR_NAME_MAX  255
+#define EFS_XATTR_VALUE_MAX 4096
+#define EFS_XATTR_BLOB_MAX  16384
 
 #endif

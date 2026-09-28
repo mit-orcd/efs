@@ -75,7 +75,7 @@ DELETED from the tree (commits 94c4c15..f5c4390). Operationally:
   `/tmp/efs-raft-scratch` cluster is retired — `wipe_cluster.sh`
   removes those dirs. Start order: all 4 up, THEN
   `./efs-mgmt raft-mkfs 172.16.223.57:19810 efs-test`. Client:
-  fcstor007 `/tmp/efs-mount`, `EFS_TRANSPORT=tcp`.
+  fcstor007 `/tmp/efs-mount`, `EFS_TRANSPORT=rdma`.
   After a storage wipe, start nodes 2–4 with
   `--join 172.16.223.57:19810` (node 1 stays seed). Restarts on
   unwiped storage need no `--join` (membership is persisted).
@@ -189,7 +189,7 @@ then `rm -f fuse.log` and:
 `efsd` HELLO requires a matching `EFS_BUILD_ID`. Rolling restart works only
 when the ID is unchanged (same commit, `-dirty`). After a NEW commit, restart
 ALL servers together — mixed build IDs are rejected:
-`efs-bg.sh start roll-all 'EFSD_ENV=EFS_TRANSPORT=tcp bash tests/roll_efsd.sh --all'`
+`efs-bg.sh start roll-all "EFSD_ENV='EFS_TRANSPORT=rdma EFS_RAFT_OBS=1' bash tests/roll_efsd.sh --all"`
 (parallel build on all four, checks the four IDs agree, `pkill -9 -x efsd`
 on all four, starts all four without `--join`, waits for both groups;
 ~2 min). Plain `roll_efsd.sh 1 2 3 4` refuses when the ID changed.

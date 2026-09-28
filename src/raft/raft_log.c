@@ -459,6 +459,18 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
     }
     d->live_bytes = d->bytes;
     d->synced_bytes = d->bytes;
+    /* The rewritten file is synced. Offsets recorded against the old
+     * file would look past synced_bytes and hide every later append
+     * from the durable scan. Zero means "already in a synced file". */
+    for (i = 0; i < RAFT_DISK_MAX_GROUPS; i++) {
+        struct raft_disk_group *g = d->g[i];
+        uint32_t k;
+
+        if (!g)
+            continue;
+        for (k = 0; k < g->n; k++)
+            g->log[k].end_off = 0;
+    }
     return EFS_OK;
 }
 

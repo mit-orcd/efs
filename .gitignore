@@ -28,6 +28,8 @@ tests/test_session
 tests/test_lock
 tests/test_stage_evict
 tests/test_conn_fd
+tests/perf/tcp_rdma/xprt_bench
+tests/faults/fault_sim
 
 # profiling / job runtime output
 /logs/

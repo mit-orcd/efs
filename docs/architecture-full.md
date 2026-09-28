@@ -1122,7 +1122,7 @@ silently failing them:
 | `truncate` on one file | content-epoch serialization (§7.3) |
 | Cross-directory rename storm | transaction-throughput limited (§7.2) |
 | Same-file `fcntl` lock storm | inode lock-authority limited (§7.6) |
-| 4K random updates in 128K chunks | RMW limited — declared envelope (§7.3) |
+| 4K random updates in 128K chunks | full chunk image per span; disjoint spans do not CAS (§7.3) |
 
 Every row above scales **per client node**. Three of them are additionally
 bounded *within a single mount* by upstream Linux, not by efs: concurrent
@@ -1352,7 +1352,7 @@ does not contain, **stop and ask** (§4); several items below are blocked on
 exactly that and say so.
 
 **The one live cluster is port 19810** on fcstor003–006 (`/data1/01–06/efs`,
-`--quota 36T --direct-io`, TCP), clients fcstor007–015 at `/tmp/efs-mount`.
+`--quota 36T --direct-io`, RDMA), clients fcstor007–015 at `/tmp/efs-mount`.
 19820 is retired. Do not `wipe_cluster.sh`, `pkill -x efsd`, or `raft-mkfs`
 without being asked — several items below run on the existing data. Before
 touching the cluster, run the **pre-flight** in the fcstor deploy rule
@@ -1364,19 +1364,152 @@ Whoever picks the project up next does **this first**. Update or delete
 this block when done — an "in flight" block older than the last commit
 is a bug in this page.
 
-**Posix suites clean (Sep 27, TCP, `4c6a5acefe03-dirty`).** 9-host
+**9-client dd profile cycle is done (Sep 28 afternoon).** Five
+rounds on RDMA, 8 GiB `dd bs=1M conv=fsync`, own file, every file
+8589934592. The change that moved the wall was probing for an
+existing fragment *before* taking the writer-pool lock
+(`results/measure/20260928-131651-dd-prof-r2b`, **2810.5** MiB/s,
+walls 25.05–26.23 s). 64 KiB snapshot chunks, a thread-local
+directory fd, and a 256-publish / 64 KiB AppendEntries cap each
+made the slowest client worse; those three are reverted. Kept:
+the probe stays outside the pool lock, and a snapshot chunk in
+flight is not resent on every pump wake (`ae_inflight` end is
+`UINT64_MAX` until the reply or a heartbeat). Live check after
+that restore: **2551.5** MiB/s, walls 24.84–28.90 s
+(`results/measure/20260928-134637-dd-prof-r5b`). Do not quote the
+hung round (`20260928-102121-dd-prof-r2`). Prior morning RDMA
+9-client was 1326.6.
+
+**User xattrs are durable (Sep 28, same `db2b88c4802a-dirty`).**
+One blob per inode (`EFS_KV_KIND_XATTR` 23), command
+`EFS_MD_CMD_XATTR` 27. Only names starting with `user.` are stored;
+`security.*` and `system.*` return EOPNOTSUPP with no RPC. The key
+is deleted with the inode when it exists. `roll_efsd.sh --all`
+exited FAIL while fcstor005 was still receiving the snapshot; both
+groups then reached the leaders (group 0 commit 13387007, group 2
+11813960). Clients fcstor007–015 were remounted RDMA. posix jobs=1:
+**200/201**, 0 fail, `opt_xattr` PASS, `mmap_write_read` SKIP
+(`MAP_SHARED` ENODEV; kernel 5.14 has no
+`FOPEN_DIRECT_IO_ALLOW_MMAP`), 45.2 s
+(`results/posix/20260928-043918`). posix2 alone **63/63** in 65.4 s
+(`results/posix2/20260928-044304`). The overlapped posix2
+(`results/posix2/20260928-043918`) failed
+`peer_overlap_pwrite_chunk_straddle` and
+`peer_rename_vs_unlink_src`; they did not reproduce alone. persist
+26/26 (`results/posixpersist/20260928-043919`). Four suites at once
+on fcstor007 (`POSIX_JOBS=1`, `posixstress 4`): each **200/201**,
+0 fail, mmap SKIP only, 46–57 s
+(`results/posix/20260928-044951`). The Sep 17 four-suite run
+(`results/posix/20260917-120328`) was 165–168 timeouts at 15 s;
+that was saturation on the old build, not this one. Do not clear
+`direct_io` to make the mmap test pass. fcstor003–006 still run the
+previous fuse.
+
+**RDMA recv poller no longer spins (Sep 28).** During posix jobs=1
+the shared CQ poller was 64% of `efs-fuse` and 31% of `efsd`
+(`results/measure/20260928-050145-posix-prof-rdma`, 147775
+cpu-clock samples in `recv_poller`). It paused and `sched_yield`'d
+for the whole time a QP was up. TCP on the same suite
+(`results/measure/20260928-050841-posix-prof-tcp`) has no such
+thread; its top sample is blake3 at 355 hits, and the wall is
+45.9 s / 59.0 s. The poller now spins about 100 µs and then waits
+on the completion channel for at most 1 ms. Acking the event
+before that wait disarmed the notify and added a millisecond to
+every RPC (76 s). After the ack moved to after `poll`, jobs=1 is
+**200/201** twice, 58.5 s and 57.8 s, 0 fail
+(`results/measure/20260928-053033-posix-prof-rdma-fix2`).
+`perf trace` cannot read tracefs here. Do not put the yield loop back.
+
+Five more cpu-clock rounds, same morning, jobs=1 on fcstor007,
+RDMA, all four servers restarted after each change
+(`results/measure/20260928-093100-posix-prof-r1` through
+`20260928-100138-posix-prof-r5`). Every suite was **200/201**,
+mmap SKIP only. The client top was `clock_gettime` in a 200 µs
+`efs_rdma_recv_wait` spin; metadata replies wait on a Raft
+commit, so the spin always ran out. That wait is 64 pauses, then
+`poll` on the eventfd. The server top was snapshot export: a
+linear merge (`memcmp`), then three `write`s per key. The merge
+is a heap (newest L0 still wins a tie) and the export buffers
+64 KiB. Compaction uses the same heap. With the recv spin gone,
+`recv_poller`'s 128 empty CQ polls were 16% of efs-fuse; that
+spin is 32. A jobs=1 run after the last roll was **200/201** in
+45.1 s. One pair on the recv-wait change was 29.0 s and 29.7 s;
+the runs around it were 44–58 s. Do not quote 29 s as the wall.
+
+**Shared-file IOR-hard uses immutable spans (Sep 27, TCP, clients
+`8e62ff12b422-dirty`).** A partial publish appends a span object.
+The base generation does not move, so disjoint writers do not STALE
+each other. A full-chunk fold commits only when the live span list
+is the one that image already folded; a longer list is left at seq 0
+so the CAS STALEs and the replay refetches. NP=4, SEGS=3000, 47008 B,
+cold remount, FUSE_OK: write **481.56 MiB/s** (1.12 s), read
+**91.35 MiB/s** (5.89 s), pattern 12000 records bad 0. posix2 on
+those clients: **63/63** (`results/posix2/20260927-190509`, 77.7 s).
+The prior 4-rank bar was 33 MiB/s
+(`results/measure/20260921-162514-ior-hard-scaling`). 1/9/36 were
+not remeasured. Group 2 kept committing REAP_DONE of distinct dead
+inodes at ~11–16/s, and `tests/preflight.sh` fails above 5 entries/s.
+Do not raise that threshold. The dd above was measured on
+`75321297f719-dirty` (servers rolled `--all` Sep 27 20:35Z). The
+`pub-stale` fprintfs are out of the live efsd. 9-client 8 GiB
+dd+fsync is valid: **1478** MiB/s, walls 49.76–49.89 s, every host
+FUSE_OK and 8589934592 bytes, zero report `rc=-3`
+(`results/measure/20260927-204907-dd-wall`). Preflight was idle.
+1-client 977 and 4-client 1984 are build `4c6a5acefe03-dirty` and
+were not remeasured here. The 9-client wall is report BUSY retries
+(119 of 128 `report-split` lines), 3.4% of the 44 GB/s ceiling.
+Servers are now `ab458efab95b-dirty` (`roll_efsd.sh --all` Sep 27
+21:11Z, TCP, `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1`). Same-directory
+creates no longer each broadcast their own AppendEntries: a leader
+with an open fsync hold appends locally, one fsync covers the
+burst, and the pump sends one batch. `samedir_rate.sh`
+(`results/measure/20260927-211953-samedir-rate`, PREFLIGHT_OK,
+storm PASS, parent `children=0 nlink=2`): **333 / 1385 / 1241**
+ops/s at 1 / 9 / 36 procs (was 138 / 134 / 159). `busy_n` was 0, 0,
+and 1. Idle mkdir median 3.1 ms. Next queue item is W6 residual 2
+(1 GiB open).
+
+**19810 is on RDMA (Sep 28, `db2b88c4802a-dirty`).**
+`EFSD_ENV='EFS_TRANSPORT=rdma EFS_RAFT_OBS=1'`, clients fcstor007–015
+remounted, fuse log `RDMA transport up`. A full per-peer outbox dropped
+the catch-up AppendEntries and still returned success, so
+`ae_inflight` suppressed the retry and fcstor004 group 0 sat 704
+entries behind until a snapshot install finished. `host_send` keeps
+snapshot chunks and entry-carrying AppendEntries and returns
+`EFS_ERR_AGAIN` when it cannot queue; `send_ae` does not mark that
+batch in flight. Gate before user xattr: posix jobs=1 **199/201**,
+mmap + xattr SKIP, 0 fail, 90.1 s
+(`results/posix/20260928-033823`); 9-host **199/201**
+on all nine, 56.7–59.1 s (`results/posix/20260928-034049`); posix2
+**63/63** in 76.8 s (`results/posix2/20260928-034350`). 9-client
+8 GiB dd+fsync that morning was **1326.6** MiB/s, slowest wall
+55.574 s (walls 28.55–55.57 s), all nine files 8589934592, no
+fsync EIO, zero `rc=-3`
+(`results/measure/20260928-033420-dd-wall`). Afternoon cycle,
+same shape, after the probe moved off the writer-pool lock:
+best **2810.5** (`20260928-131651-dd-prof-r2b`), live restore
+**2551.5** (`20260928-134637-dd-prof-r5b`). 99 of 108
+report-split lines are BUSY. That is slower than the TCP 1478.
+Earlier RDMA build `113823180b15-dirty`: 1-client **947**, 4-client
+**2311** (`results/measure/20260928-015839-dd-wall`); that run's
+9-client row is INVALID (do not quote ~238). IOR-hard NP=4 on that
+earlier build: write **469.55**, read **107.03**, bad 0
+(`results/measure/20260928-015806-ior-hard-rdma`); not remeasured
+on this server roll. Posix and the 9-client write are not faster
+than TCP. Do not roll 19810 back to TCP unless a suite fails.
+
+**Posix suites clean (Sep 27, TCP).** 9-host
 `results/posix/20260927-123717`: 200 pass + `mmap_write_read` SKIP
 on all nine, 0 not-run (screen 12:37:17–12:37:52Z). posix2
-`results/posix2/20260927-123946`: **63/63** in 58 s. The 9-host
-EBUSY before this roll was group 2 electing: `send_snap` returns
+`results/posix2/20260927-123946`: **63/63** in 58 s, and again
+63/63 after the span client fix (above). The 9-host EBUSY before
+the morning roll was group 2 electing: `send_snap` returns
 `EFS_ERR_AGAIN` while the export file is not ready, and sending
 nothing let that peer campaign and step the leader down (term +200,
 mkdir EBUSY). `send_ae` now sends an empty AppendEntries in that
 window. Do not remove it. Same tree, data path: `DCACHE_NR` 32,
 truncate keeps `got.generation`, `dcache_note_committed` clears
-`nrange` when the slot is clean. Next queue item is the lowest open
-row in §1a. W6's perf residuals need a user decision. Do not switch
-19810 to RDMA. Do not quote the 9-client dd row.
+`nrange` when the slot is clean.
 
 **W13 done (Sep 26).** The user ratified the background-compactor row.
 L1 compaction runs on a `kv_lsm` thread. The pump still flushes the
@@ -1394,8 +1527,9 @@ serves the old manifest. Partitioned flush (one L0 file per `key[0]`)
 is in the TCP build rolled Sep 27 05:07 UTC.
 
 W13 gate, on the build that was rolled Sep 26 16:37 UTC
-(`3210a3d63f73-dirty`, TCP). The cluster is now
-`4c6a5acefe03-dirty`, TCP, after the Sep 27 RDMA rollback. Gate:
+(`3210a3d63f73-dirty`, TCP). The cluster at that write-up was
+`4c6a5acefe03-dirty`, TCP, after the Sep 27 RDMA rollback. It is
+RDMA as of Sep 28 (§1b). Gate:
 
 - Hammer `results/measure/20260926-163709-mkdir-hammer`: idle p50
   **4.68 ms**; 144-way **35166** mkdirs in 15 s, p50 **56.5 ms**.
@@ -1427,15 +1561,17 @@ raft RTT ~50 µs (`~/efs-runs/rdmaprof7.log`). A later run's wall was
 one 1.5 s mkdir plus three BUSY retries; the other 99 were 2–7 ms.
 Do not switch 19810 on that private number.
 
-Sep 27 dd rebaseline (TCP, 8 GiB `conv=fsync`, FUSE_OK,
-`results/measure/20260927-053506-dd-wall`): 1-client **977** MiB/s,
-4-client **1984**. The 9-client row is INVALID: fcstor009 and
-fcstor013 `fsync` returned EIO (`EFS_ERR_NOT_FOUND` from report
-after the data sync). A REAP_DONE tail was ~8/s during the run
-(commit==applied). Do not quote 1464.
+Sep 27 dd (TCP, 8 GiB `conv=fsync`, FUSE_OK). Morning run
+`results/measure/20260927-053506-dd-wall` on `4c6a5acefe03-dirty`:
+1-client **977** MiB/s, 4-client **1984**. Its 9-client row is
+INVALID (fcstor009 and fcstor013 fsync EIO, report `rc=-3`); do not
+quote 1464 from that run. Evening rerun on `75321297f719-dirty`,
+preflight idle: 9-client **1478** MiB/s, walls 49.76–49.89 s, all
+nine files 8589934592, no fsync EIO, zero `rc=-3`
+(`results/measure/20260927-204907-dd-wall`). 119 of 128 report-split
+lines are BUSY. That is 3.4% of the 44 GB/s ceiling.
 Do not raise `l0_max`, the memtable, or the election timeout. `EFSD_ENV` is
-space-separated. The next server restart is a build-id change →
-`tests/roll_efsd.sh --all`.
+space-separated. Live servers are already `75321297f719-dirty`.
 
 **Txn finisher (Sep 26, `src/server/raft_host.c` `host_txn_commit`).**
 A compaction stall longer than the 400 ms apply wait turns an in-flight
@@ -1805,8 +1941,9 @@ fcstor013 failed only `names_crazy_dirs` (15 s). `dir_deep_nesting`,
 (`results/posix/20260927-033723`). W9's pin rules are on the nine
 clients. Posix 1, posix 2 (59/63), the leak gate, and the
 1M-file RSS walk are done (`results/measure/20260927-w9-walk`).
-W10's private empty-mkdir passed 5/5. The live switch failed the
-9-host suite and was rolled back the same hour; 19810 stays TCP.
+W10's private empty-mkdir passed 5/5. The Sep 27 live switch failed
+the 9-host suite and was rolled back that hour. Sep 28 the cluster
+is on RDMA again; see §1b.
 The idle 50 ms create+close median did not hold: Sep 24 15:03 UTC on
 the live mount, term stable, `md_latency.py` was mkdir 5.9 /
 create+close 4.1 / append+close 6.1 / stat 0.3 / unlink 1.6 / rmdir
@@ -2453,7 +2590,7 @@ steps use.
 | W13 | full-L1 compaction holds the apply path 2.4 s and costs a term | **done Sep 26**, partitioned flush rolled Sep 27 on TCP | background compactor kept `apply_max` under 70 ms. Flush now writes one L0 file per `key[0]`; one compact leaves the other range's L1 file in place (`test_kv_lsm`) |
 | W11 | the KV export is larger than one 4 MiB SNAP command, so the log never truncates | **done Sep 27** — chunked InstallSnapshot of a file; import is a sorted diff | logs under 5 KB; fcstor005 rejoined in 510 ms; `apply_max` 0 on a 386 MB export. 9-host posix 200/201 (`results/posix/20260927-123717`) |
 | W9 | bound the client staging table | **done Sep 27** — in-flight pin, append-reservation pin, chunk maps before the row, and the evictor walks past a pinned oldest window | a cold stat of 1M files leveled at 233 MB RSS (`results/measure/20260927-w9-walk`). posix 2 is 63/63 (`results/posix2/20260927-123946`). Leaks are clean (`results/leaks/20260927-035622`) |
-| W10 | RDMA needs an empty table to gate | **rolled back Sep 27.** Private mkdir is in the TCP range after two transport fixes; 19810 stays TCP | `results/posix/20260927-044348` was the failed live switch. Private 100-mkdir: 642 ms RDMA vs 507 ms TCP (`~/efs-runs/rdmaprof7.log`). Do not switch 19810 without a live gate |
+| W10 | RDMA needs an empty table to gate | **live Sep 28**, suites pass, not faster than TCP on posix or the 9-client write | 19810 is RDMA (`db2b88c4802a-dirty`). jobs=1 after user xattr is 200/201 (`results/posix/20260928-043918`); 9-host before that was 199/201 in 57–59 s; posix2 63/63; 9-client dd **1326.6** vs TCP 1478 |
 
 ---
 
@@ -2593,32 +2730,33 @@ Not a list submission (stonewall 1 s). Do not quote the Sep 19 easy-read
 
 **Open under this item (performance, not correctness):**
 
-1. **ior-hard-write** — measured
-   `results/measure/20260921-162514-ior-hard-scaling` (47008 B, 3000 segs,
-   one file): **372 / 33 / 69 / 82 MiB/s at 1 / 4 / 9 / 36 ranks**. The
-   1-rank number matches today's own-file dd (~380). From 4 ranks up,
-   about half of the logged REPORTs return `EFS_ERR_STALE` (-14) and
-   `finish_ms` (wait for apply) is the bulk of server time (37 s summed
-   at 36 ranks, IOR wall 59 s). Throughput rises 4→36 rather than falling,
-   so it is shared-chunk CAS replay plus apply wait, not a cliff that
-   gets worse without bound. Spec answer remains §9 immutable delta
-   objects — a user decision; do not add a chunk lock.
+1. **ior-hard-write** — **spans are the data path (Sep 27).**
+   NP=4, SEGS=3000, 47008 B, one file, cold remount: write
+   **481.56 MiB/s** (1.12 s), read **91.35 MiB/s** (5.89 s), pattern
+   12000 records bad 0. posix2 **63/63**
+   (`results/posix2/20260927-190509`). Prior curve
+   `results/measure/20260921-162514-ior-hard-scaling`: **372 / 33 /
+   69 / 82 MiB/s at 1 / 4 / 9 / 36**, about half of REPORTs
+   `EFS_ERR_STALE`. The 4-rank point moved 33 → 482. 1/9/36 were not
+   remeasured: group 2's REAP_DONE tail stayed ~11–16 entries/s
+   (distinct inodes) and preflight fails above 5/s. Do not raise it.
+   Do not add a chunk lock. Do not tune 47008.
 2. **1 GiB open costs 20 s of a 22 s easy-read** — 128 sequential
    GETCHUNKS + a 64-lane stat per open. Spec §8 per-lane range fetch
    ([performance.md](performance.md)) is the fix; not implemented.
 3. ~~mdtest `rmdir` ENOTEMPTY/EIO under load~~ — **FIXED Sep 21** (it was
    the parent-row lost update, not transient; §7.2 reductions). **Rate
-   measured** `results/measure/20260921-161931-samedir-rate` (ROUNDS=100,
-   storm PASS at every level): **138 / 134 / 159 ops/s aggregate at 1 / 9 /
-   36 procs** — a flat ceiling, 7.3 → 226 ms/op/proc. `busy_n=0` (the
-   50 ms BUSY backoff is not it). Each client's fuse daemon spends the
-   wall in RPC recv (`recv_us` ≈ the storm wall, `checkout_us` ~15 ms).
-   The group-0 leader's log tail during the storm is the storm itself
-   (PREPARE 31 %, CREATE/UNLINK/RMDIR, RESOLVE, LEASE_CLOSE, REAP_DONE);
-   GC_ACK is 0.4 %. On-CPU samples are LSM prefix scans inside
-   `reduces_pending` / `guards_conflict` / `efs_txn_resolve`. Do not
-   change the backoff or the txn protocol; the remaining question (LSM
-   scan vs Raft fsync, which cpu-clock cannot separate) is the user's.
+   fixed Sep 27.** The flat 138 / 134 / 159 ops/s
+   (`results/measure/20260921-161931-samedir-rate`) was one AppendEntries
+   per create: a proposer that arrived while a fsync hold was open
+   broadcast that single entry under the raft lock. Those proposers now
+   append locally; the hold owner fsyncs the burst and marks every
+   covered index durable; the pump sends one batch.
+   `results/measure/20260927-211953-samedir-rate` (ROUNDS=100, storm
+   PASS, parent `children=0 nlink=2`): **333 / 1385 / 1241 ops/s at
+   1 / 9 / 36 procs**, `busy_n` 0 / 0 / 1. Idle mkdir median 3.1 ms.
+   Do not change the backoff or the txn protocol. Do not lower
+   `EFS_DIR_SPREAD_MIN`.
 
 Harness (`tests/perf/io500/run.sh`): `SLOTS=4 NP=36 … debug` detaches
 `prterun` and logs to `$IO500_DIR/last-run.log` (the ssh timeout used to
@@ -2744,7 +2882,25 @@ Steps, once ratified:
   fd, or pinned by an in-flight op. Bounding it by dropping records instead of
   refetching them.
 
-##### W10 — RDMA empty-table first `mkdir` — live switch rolled back Sep 27
+##### W10 — RDMA — live on 19810 Sep 28, not faster than TCP
+
+Sep 28 gate on `db2b88c4802a-dirty` (`EFS_TRANSPORT=rdma`,
+`EFS_RAFT_OBS=1`). posix jobs=1 199/201 in 90.1 s
+(`results/posix/20260928-033823`); 9-host 199/201 on all nine,
+56.7–59.1 s, 0 fail, mmap + xattr SKIP
+(`results/posix/20260928-034049`); posix2 63/63 in 76.8 s
+(`results/posix2/20260928-034350`). After user xattr, jobs=1 is
+**200/201** (`mmap_write_read` SKIP only,
+`results/posix/20260928-043918`); 9-host was not remeasured.
+9-client 8 GiB dd+fsync
+**1326.6** MiB/s, walls 28.55–55.57 s, every file 8589934592
+(`results/measure/20260928-033420-dd-wall`). TCP bars are posix
+9-host ~13–15 s and 9-client dd 1478. The outbox fix that let
+fcstor004 catch up is in this build. The speed bar in step 3
+below is still open. Do not roll back to TCP unless a suite fails.
+
+The Sep 27 live switch below was rolled back the same hour. It is
+history, not the current cluster.
 
 Private gate passed 5/5 (`tests/rdma_first_inode.sh` on fcstor007).
 The live switch (`EFSD_ENV='EFS_TRANSPORT=rdma EFS_RAFT_OBS=1'`,
@@ -2773,7 +2929,9 @@ SEND also called `ibv_query_qp` and read a port counter, which made
 a raft AppendEntries ~380 µs against ~15 µs on TCP; those reads
 happen only after a send has already failed. With both fixes, one
 clean run was 642 ms RDMA vs 507 ms TCP and raft RTT ~50 µs
-(`~/efs-runs/rdmaprof7.log`). 19810 stays TCP until a live gate.
+(`~/efs-runs/rdmaprof7.log`). The Sep 28 live gate is the paragraph
+above this section. 19810 is RDMA. The "same numbers as TCP or
+better" speed bar is not met.
 
 The steps below are the procedure that was followed, kept so the
 gate stays findable.
@@ -2784,9 +2942,10 @@ mismatch, destroy refuses to close a recycled fd. The **live** repro was never
 re-run, because it only reproduces on a freshly `mkfs`'d / effectively empty
 table, and 19810 is populated. A remount there is *not* this gate.
 
-Default transport stays TCP until it is gated. Every ceiling in the table
-above assumes RDMA eventually carries the data path; TCP over IPoIB will
-not reach it, so every perf item after this one is capped until W10 closes.
+19810's transport is RDMA as of the Sep 28 gate in §1b. Suites pass.
+Posix and the 9-client write are still slower than TCP, so the speed
+bar in step 3 is open. Every ceiling in the table above assumes the
+data path can use the fabric; TCP over IPoIB will not reach it.
 
 **Recommendation (Sep 23): do not wipe 19810 for this.** The repro needs an
 *empty* table, not *the* table: `tests/rdma_first_inode.sh` stands up a
@@ -4290,20 +4449,20 @@ writes share an inode.
   serialization of committed byte-range writes," not "old whole chunk or one
   writer's whole chunk."
 - **The small-write envelope is declared honestly.** A 4 KiB write inside a
-  128 KiB chunk pays the immutable-generation RMW: read 128 KiB, construct a
-  new 128 KiB generation, write k+f fragments — roughly **80× data-path
-  amplification** for the logical 4 KiB, and two disjoint 4 KiB writes in the
-  same chunk contend on one generation CAS (an invented conflict at *chunk*
-  granularity — P1 is violated there by construction). This is a deliberate
-  scoping decision: **efs is optimized for HPC-sized, aligned I/O; sub-chunk
-  random updates intentionally pay RMW amplification**, and the scaling
-  claim in §1 of the spec does not cover random 4K mutation. If benchmarks
-  later show the workload needs it, the designed escape hatch is **immutable
-  delta objects** (a small write appends a delta object to the chunk's
-  publication rather than rebuilding the chunk; a background consolidation
-  folds deltas into a new base generation) — that makes disjoint sub-chunk
-  writes independent, at real complexity cost. It is not built until
-  measured.
+  128 KiB chunk still stores a full chunk image (k+f fragments) — roughly
+  **80× data-path amplification** for the logical 4 KiB. Disjoint writes
+  do not share one generation CAS. A partial publish appends an
+  **immutable span**: the object is a full chunk image, readers copy only
+  `[off, len)`, and the base generation does not change, so concurrent
+  disjoint spans do not STALE each other. Overlap, or a trailer already
+  holding `EFS_CHUNK_DELTA_MAX` (8) spans, returns STALE. The client
+  refetches and publishes one image that folds exactly the spans it
+  read; `delta_base_n` and `delta_base_seq` must match, or that CAS
+  STALEs. A fold that names a longer list than the image contains
+  deletes a peer span. That client fold is the consolidation. There is
+  no separate background span compactor. **efs stays optimized for
+  HPC-sized, aligned I/O**; the span path removes the invented chunk
+  conflict, and the bytes on disk stay a full chunk per span.
 - **Truncate is a content-epoch bump, distributed by a bounded fence.**
   Truncate (or any wholesale content replacement) advances the inode's
   `content_epoch` and stamps the new authoritative `base_size`. But a bump

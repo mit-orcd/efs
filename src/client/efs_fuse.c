@@ -1385,15 +1385,15 @@ static int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
         return rc;
     }
 
-    /* Open-fd getattr stays local-first: a peer REPORT must not adopt+invalidate
-     * this client's in-flight dcache (posix2 overlap pwrite), and unlink-open
-     * reads the keep_last ghost size. The server does not keep a lease, so a
-     * refresh of an open ino is ENOENT (nlink_after_unlink_open). */
+    /* Open-fd size stays local: a full adopt pulls a peer REPORT over
+     * unflushed bytes (posix2 overlap pwrite) and a missing ghost is
+     * ENOENT (nlink_after_unlink_open). nlink is not local — the peer
+     * that unlinks the last name is the one that commits 0. */
     {
         efs_ino_t id = (fi && fi->fh) ? (efs_ino_t)fi->fh : (efs_ino_t)ino;
         if (id && efs_client_ino_is_open(id)) {
             struct efs_inode row;
-            if (efs_client_stat_ino(id, &row) == EFS_OK) {
+            if (efs_client_stat_open(id, &row) == EFS_OK) {
                 fill_stat_from_inode(stbuf, &row);
                 return 0;
             }
@@ -2262,18 +2262,67 @@ static int efs_wb_sync_ino(efs_ino_t ino)
  * each write+close: without this, two flushes GET the same unpublished
  * base and the last PUT zeros the other's lines (concurrent_appends
  * 200 reserved bytes, 191 lines, NULs in the middle). */
-static pthread_mutex_t g_append_mu = PTHREAD_MUTEX_INITIALIZER;
+/* Same-file append writes and close/fsync share one mutex. A single
+ * global mutex made every close in the process wait out every other
+ * file's REPORT. 64 stripes: one inode always hits the same stripe;
+ * unrelated files usually do not. */
+#define APPEND_MU_N 64
+static pthread_mutex_t g_append_mu[APPEND_MU_N];
+static pthread_once_t g_append_mu_once = PTHREAD_ONCE_INIT;
+
+static void append_mu_init(void)
+{
+    int i;
+
+    for (i = 0; i < APPEND_MU_N; i++)
+        pthread_mutex_init(&g_append_mu[i], NULL);
+}
+
+static pthread_mutex_t *append_mu(efs_ino_t ino)
+{
+    pthread_once(&g_append_mu_once, append_mu_init);
+    return &g_append_mu[(uint32_t)ino % APPEND_MU_N];
+}
 
 static int efs_file_data_sync_for_ino(efs_ino_t ino)
 {
+    pthread_mutex_t *amu;
+
     if (!ino || virt_kind(ino))
         return EFS_OK;
     int rc = efs_wb_sync_ino(ino);
     if (rc != EFS_OK)
         return rc;
-    pthread_mutex_lock(&g_append_mu);
+    amu = append_mu(ino);
+    pthread_mutex_lock(amu);
     rc = efs_dcache_flush_ino(ino);
-    pthread_mutex_unlock(&g_append_mu);
+    pthread_mutex_unlock(amu);
+    return rc;
+}
+
+/* Close: flush and the REPORT that publishes it are one critical
+ * section with O_APPEND writes. FUSE_FLUSH and FUSE_FSYNC do not carry
+ * the open flags (fi->flags is zero here), so this cannot key off
+ * O_APPEND. A write between the PUT and the REPORT merged into the
+ * span still in flight; the next image left that offset zero
+ * (concurrent_appends: size 1600, 16 NUL bytes). */
+static int efs_append_flush_report(struct fuse_file_info *fi, efs_ino_t ino)
+{
+    pthread_mutex_t *amu;
+    int rc;
+
+    (void)fi;
+    if (!ino || virt_kind(ino))
+        return EFS_OK;
+    rc = efs_wb_sync_ino(ino);
+    if (rc != EFS_OK)
+        return rc;
+    amu = append_mu(ino);
+    pthread_mutex_lock(amu);
+    rc = efs_dcache_flush_ino(ino);
+    if (rc == EFS_OK)
+        rc = efs_client_report_dirty_ino(ino, 1);
+    pthread_mutex_unlock(amu);
     return rc;
 }
 
@@ -2337,11 +2386,11 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
                 fflush(stderr);
                 break;
             }
-            pthread_mutex_unlock(&g_append_mu);
+            pthread_mutex_unlock(append_mu(ino));
             usleep(delay_us);
             if (delay_us < 50000)
                 delay_us *= 2;
-            pthread_mutex_lock(&g_append_mu);
+            pthread_mutex_lock(append_mu(ino));
         }
     }
     /* Never fall back to an unreserved local end: under 9-way that
@@ -2399,10 +2448,10 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
         return -EINVAL;
     int append = fi && (fi->flags & O_APPEND);
     if (append) {
-        pthread_mutex_lock(&g_append_mu);
+        pthread_mutex_lock(append_mu(ino));
         rc = append_reserve_offset(ino, (uint64_t)size, &offset);
         if (rc != 0) {
-            pthread_mutex_unlock(&g_append_mu);
+            pthread_mutex_unlock(append_mu(ino));
             return rc;
         }
     }
@@ -2416,7 +2465,7 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
              * full-chunk PUT dropped their records. Close flushes+reports.
              * dcache now pins the ino, so the reservation pin can drop. */
             efs_client_stage_unpin(ino);
-            pthread_mutex_unlock(&g_append_mu);
+            pthread_mutex_unlock(append_mu(ino));
         }
         return (int)size;
     }
@@ -2425,7 +2474,7 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
     if (!copy) {
         if (append) {
             efs_client_stage_unpin(ino);
-            pthread_mutex_unlock(&g_append_mu);
+            pthread_mutex_unlock(append_mu(ino));
         }
         return -ENOMEM;
     }
@@ -2438,7 +2487,7 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
         /* Success marked the ino dirty inside the PUT. A failed PUT
          * leaves the open fd pin holding the reflected size. */
         efs_client_stage_unpin(ino);
-        pthread_mutex_unlock(&g_append_mu);
+        pthread_mutex_unlock(append_mu(ino));
     }
     if (rc == EFS_ERR_QUOTA) {
         efs_fuse_log_err("write", rc, ino, (uint64_t)offset, size, path);
@@ -2484,11 +2533,11 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
 
     int append = fi && (fi->flags & O_APPEND);
     if (append) {
-        pthread_mutex_lock(&g_append_mu);
+        pthread_mutex_lock(append_mu(ino));
         rc = append_reserve_offset(ino, (uint64_t)size, &offset);
         if (rc != 0) {
             bounce_release(copy, copy_cap);
-            pthread_mutex_unlock(&g_append_mu);
+            pthread_mutex_unlock(append_mu(ino));
             return rc;
         }
     }
@@ -2504,7 +2553,7 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
         efs_dcache_maybe_reclaim();
         if (append) {
             efs_client_stage_unpin(ino);
-            pthread_mutex_unlock(&g_append_mu);
+            pthread_mutex_unlock(append_mu(ino));
         }
         return (int)size;
     }
@@ -2515,7 +2564,7 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
         if (rc == 0)
             (void)efs_wb_sync_ino(ino);
         efs_client_stage_unpin(ino);
-        pthread_mutex_unlock(&g_append_mu);
+        pthread_mutex_unlock(append_mu(ino));
     }
     if (rc == EFS_ERR_QUOTA) {
         efs_fuse_log_err("write_buf", rc, ino, (uint64_t)offset, size, path);
@@ -2536,7 +2585,7 @@ static int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
 
     (void)isdatasync;
     t0 = stats_now_ms();
-    rc = efs_file_data_sync_fh(fi);
+    rc = efs_append_flush_report(fi, (efs_ino_t)ino);
     t1 = stats_now_ms();
     if (rc == EFS_ERR_QUOTA) {
         efs_fuse_log_err("fsync", rc, ino, 0, 0, NULL);
@@ -2546,7 +2595,7 @@ static int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
         efs_fuse_log_err("fsync", rc, ino, 0, 0, NULL);
         return -EIO;
     }
-    rc = efs_client_report_dirty_ino((efs_ino_t)ino, 1);
+    rc = EFS_OK;
     t2 = stats_now_ms();
     flush_ms = t1 - t0;
     report_ms = t2 - t1;
@@ -2569,19 +2618,13 @@ static int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
 
 static int efs_fuse_flush_ino(fuse_ino_t ino, struct fuse_file_info *fi)
 {
-    int rc = efs_file_data_sync_fh(fi);
-    if (rc == EFS_ERR_QUOTA) {
-        efs_fuse_log_err("flush", rc, ino, 0, 0, NULL);
-        return -ENOSPC;
-    }
-    if (rc != 0) {
-        efs_fuse_log_err("flush", rc, ino, 0, 0, NULL);
-        return -EIO;
-    }
     /* W2: last close is durable+visible. Kick-only left size/chunk-map
      * unpublished so the next O_APPEND used i_size 0 and wiped the
-     * prefix (fcntl_setfl_oappend, hardlink_shared_data). */
-    rc = efs_client_report_dirty_ino((efs_ino_t)ino, 1);
+     * prefix (fcntl_setfl_oappend, hardlink_shared_data).
+     * The inode's append stripe covers the report too; see
+     * efs_append_flush_report.
+     * fi->flags is not O_APPEND on this path. */
+    int rc = efs_append_flush_report(fi, (efs_ino_t)ino);
     if (rc != EFS_OK) {
         efs_fuse_log_err("flush-meta", rc, ino, 0, 0, NULL);
         return rc == EFS_ERR_QUOTA ? -ENOSPC : -EIO;
@@ -2925,6 +2968,7 @@ static int efs_rc_to_errno(int rc)
     case EFS_ERR_NOT_EMPTY: return -ENOTEMPTY;
     case EFS_ERR_ACCES:     return -EACCES;
     case EFS_ERR_NAMETOOLONG: return -ENAMETOOLONG;
+    case EFS_ERR_NODATA:    return -ENODATA;
     case EFS_ERR_BUSY:
     case EFS_ERR_AGAIN:
         return -EAGAIN;
@@ -3352,6 +3396,7 @@ struct efs_plock {
 };
 
 static pthread_mutex_t g_plock_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_plock_cv = PTHREAD_COND_INITIALIZER;
 static struct efs_plock *g_plocks;
 
 /* Client-cache design Part A, pin rule 3: a row with live byte-range lock
@@ -3386,10 +3431,12 @@ static int plock_overlap(off_t a0, off_t a1, off_t b0, off_t b1)
 }
 
 static struct efs_plock *plock_find_conflict(efs_ino_t ino, off_t start,
-                                             off_t end, int type)
+                                             off_t end, int type,
+                                             uint64_t owner)
 {
     for (struct efs_plock *p = g_plocks; p; p = p->next) {
-        if (p->ino != ino || !plock_overlap(p->start, p->end, start, end))
+        if (p->ino != ino || p->owner == owner ||
+            !plock_overlap(p->start, p->end, start, end))
             continue;
         if (p->type == F_WRLCK || type == F_WRLCK)
             return p;
@@ -3436,7 +3483,8 @@ static int efs_fuse_getlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
     int rc;
 
     pthread_mutex_lock(&g_plock_mu);
-    struct efs_plock *c = plock_find_conflict(inum, start, end, lock->l_type);
+    struct efs_plock *c = plock_find_conflict(inum, start, end, lock->l_type,
+                                              fi ? fi->lock_owner : 0);
     if (c) {
         lock->l_type = c->type;
         lock->l_start = c->start;
@@ -3482,13 +3530,6 @@ static int efs_fuse_setlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
     plock_range_u64(lock, inum, &rs, &re);
     start = (off_t)rs;
     end = (re == ~(uint64_t)0) ? OFF_MAX : (off_t)re;
-    fprintf(stderr,
-            "setlk ino=%llu type=%d whence=%d l_start=%ld l_len=%ld "
-            "rs=%llu re=%llu sleep=%d\n",
-            (unsigned long long)inum, lock->l_type, lock->l_whence,
-            (long)lock->l_start, (long)lock->l_len,
-            (unsigned long long)rs, (unsigned long long)re, sleep);
-    fflush(stderr);
     if (lock->l_type == F_UNLCK) {
         op = EFS_FLOCK_UN | EFS_FLOCK_FCNTL;
         rc = efs_client_rpc_flock_range(g_client.export_id, inum, op,
@@ -3505,51 +3546,73 @@ static int efs_fuse_setlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
             }
             pp = &(*pp)->next;
         }
+        /* Blocking setlk waits on this cond instead of returning EAGAIN.
+         * Wake it only after the server release has been applied, so the
+         * waiter's follow-up GRANT does not see the lock we just dropped. */
+        pthread_cond_broadcast(&g_plock_cv);
         pthread_mutex_unlock(&g_plock_mu);
         return efs_rc_to_errno(rc);
     }
 
-    pthread_mutex_lock(&g_plock_mu);
-    if (plock_find_conflict(inum, start, end, lock->l_type)) {
+    /* F_SETLKW must block in the daemon. Returning EAGAIN here made the
+     * kernel fail the syscall at once (fcntl_byte_range_lock: the waiter
+     * never acquired after unlock). A non-blocking lock still fails fast. */
+    for (;;) {
+        pthread_mutex_lock(&g_plock_mu);
+        while (plock_find_conflict(inum, start, end, lock->l_type, owner)) {
+            if (!sleep) {
+                pthread_mutex_unlock(&g_plock_mu);
+                return -EAGAIN;
+            }
+            pthread_cond_wait(&g_plock_cv, &g_plock_mu);
+        }
         pthread_mutex_unlock(&g_plock_mu);
-        return -EAGAIN;
-    }
-    pthread_mutex_unlock(&g_plock_mu);
 
-    op = EFS_FLOCK_FCNTL;
-    op |= (lock->l_type == F_RDLCK) ? EFS_FLOCK_SH : EFS_FLOCK_EX;
-    op |= sleep ? EFS_FLOCK_WAIT : EFS_FLOCK_NB;
-    rc = efs_client_rpc_flock_range(g_client.export_id, inum, op,
-                                    plock_rpc_owner(fi), rs, re, NULL);
-    if (rc != EFS_OK)
-        return efs_rc_to_errno(rc);
+        op = EFS_FLOCK_FCNTL;
+        op |= (lock->l_type == F_RDLCK) ? EFS_FLOCK_SH : EFS_FLOCK_EX;
+        op |= sleep ? EFS_FLOCK_WAIT : EFS_FLOCK_NB;
+        rc = efs_client_rpc_flock_range(g_client.export_id, inum, op,
+                                        plock_rpc_owner(fi), rs, re, NULL);
+        if (rc == EFS_ERR_BUSY || rc == EFS_ERR_AGAIN) {
+            if (!sleep)
+                return -EAGAIN;
+            usleep(2000);
+            continue;
+        }
+        if (rc != EFS_OK)
+            return efs_rc_to_errno(rc);
 
-    pthread_mutex_lock(&g_plock_mu);
-    if (plock_find_conflict(inum, start, end, lock->l_type)) {
+        pthread_mutex_lock(&g_plock_mu);
+        if (plock_find_conflict(inum, start, end, lock->l_type, owner)) {
+            pthread_mutex_unlock(&g_plock_mu);
+            (void)efs_client_rpc_flock_range(g_client.export_id, inum,
+                                             EFS_FLOCK_UN | EFS_FLOCK_FCNTL,
+                                             plock_rpc_owner(fi), rs, re,
+                                             NULL);
+            if (!sleep)
+                return -EAGAIN;
+            continue;
+        }
+        struct efs_plock *n = calloc(1, sizeof(*n));
+        if (!n) {
+            pthread_mutex_unlock(&g_plock_mu);
+            (void)efs_client_rpc_flock_range(g_client.export_id, inum,
+                                             EFS_FLOCK_UN | EFS_FLOCK_FCNTL,
+                                             plock_rpc_owner(fi), rs, re,
+                                             NULL);
+            return -ENOMEM;
+        }
+        n->ino = inum;
+        n->owner = owner;
+        n->start = start;
+        n->end = end;
+        n->type = lock->l_type;
+        n->next = g_plocks;
+        g_plocks = n;
         pthread_mutex_unlock(&g_plock_mu);
-        (void)efs_client_rpc_flock_range(g_client.export_id, inum,
-                                         EFS_FLOCK_UN | EFS_FLOCK_FCNTL,
-                                         plock_rpc_owner(fi), rs, re, NULL);
-        return -EAGAIN;
+        flock_arm(inum, plock_rpc_owner(fi));
+        return 0;
     }
-    struct efs_plock *n = calloc(1, sizeof(*n));
-    if (!n) {
-        pthread_mutex_unlock(&g_plock_mu);
-        (void)efs_client_rpc_flock_range(g_client.export_id, inum,
-                                         EFS_FLOCK_UN | EFS_FLOCK_FCNTL,
-                                         plock_rpc_owner(fi), rs, re, NULL);
-        return -ENOMEM;
-    }
-    n->ino = inum;
-    n->owner = owner;
-    n->start = start;
-    n->end = end;
-    n->type = lock->l_type;
-    n->next = g_plocks;
-    g_plocks = n;
-    pthread_mutex_unlock(&g_plock_mu);
-    flock_arm(inum, plock_rpc_owner(fi));
-    return 0;
 }
 
 static int efs_fuse_flock_ino(fuse_ino_t ino, struct fuse_file_info *fi, int op)
@@ -4357,6 +4420,126 @@ static void ll_lseek(fuse_req_t req, fuse_ino_t ino, off_t off, int whence,
         fuse_reply_lseek(req, r);
 }
 
+static int xattr_user_name(const char *name)
+{
+    size_t n;
+
+    if (!name || !name[0])
+        return -EINVAL;
+    n = strlen(name);
+    if (n > EFS_XATTR_NAME_MAX)
+        return -ERANGE;
+    /* security.* and system.* stay unsupported. Accepting them makes every
+     * create pay a Raft round trip for the LSM label. */
+    if (strncmp(name, "user.", 5) != 0)
+        return -EOPNOTSUPP;
+    return 0;
+}
+
+static void ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
+                        const char *value, size_t size, int flags)
+{
+    int rc;
+
+    t_req = req;
+    rc = xattr_user_name(name);
+    if (rc == 0 && virt_kind(ino))
+        rc = -EOPNOTSUPP;
+    if (rc == 0 && size > EFS_XATTR_VALUE_MAX)
+        rc = -ERANGE;
+    if (rc == 0) {
+        uint32_t fl = (uint32_t)flags;
+
+        if ((fl & ~(EFS_XATTR_CREATE | EFS_XATTR_REPLACE)) != 0 ||
+            ((fl & EFS_XATTR_CREATE) && (fl & EFS_XATTR_REPLACE)))
+            rc = -EINVAL;
+    }
+    if (rc == 0) {
+        rc = efs_client_rpc_xattr(g_client.export_id, (efs_ino_t)ino,
+                                  EFS_XATTR_SET, (uint32_t)flags, name,
+                                  (uint16_t)strlen(name), value, (uint32_t)size,
+                                  NULL, NULL);
+        if (rc)
+            rc = efs_rc_to_errno(rc);
+    }
+    t_req = NULL;
+    fuse_reply_err(req, rc ? -rc : 0);
+}
+
+static void ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
+                        size_t size)
+{
+    uint8_t buf[EFS_XATTR_VALUE_MAX];
+    uint32_t n = sizeof(buf);
+    int rc;
+
+    t_req = req;
+    rc = xattr_user_name(name);
+    if (rc == 0 && virt_kind(ino))
+        rc = -EOPNOTSUPP;
+    if (rc == 0) {
+        rc = efs_client_rpc_xattr(g_client.export_id, (efs_ino_t)ino,
+                                  EFS_XATTR_GET, 0, name,
+                                  (uint16_t)strlen(name), NULL, 0, buf, &n);
+        if (rc)
+            rc = efs_rc_to_errno(rc);
+    }
+    t_req = NULL;
+    if (rc)
+        fuse_reply_err(req, -rc);
+    else if (size == 0)
+        fuse_reply_xattr(req, n);
+    else if (size < n)
+        fuse_reply_err(req, ERANGE);
+    else
+        fuse_reply_buf(req, (const char *)buf, n);
+}
+
+static void ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
+{
+    uint8_t buf[EFS_XATTR_BLOB_MAX];
+    uint32_t n = sizeof(buf);
+    int rc = 0;
+
+    t_req = req;
+    if (virt_kind(ino))
+        rc = -EOPNOTSUPP;
+    if (rc == 0) {
+        rc = efs_client_rpc_xattr(g_client.export_id, (efs_ino_t)ino,
+                                  EFS_XATTR_LIST, 0, NULL, 0, NULL, 0, buf, &n);
+        if (rc)
+            rc = efs_rc_to_errno(rc);
+    }
+    t_req = NULL;
+    if (rc)
+        fuse_reply_err(req, -rc);
+    else if (size == 0)
+        fuse_reply_xattr(req, n);
+    else if (size < n)
+        fuse_reply_err(req, ERANGE);
+    else
+        fuse_reply_buf(req, (const char *)buf, n);
+}
+
+static void ll_removexattr(fuse_req_t req, fuse_ino_t ino, const char *name)
+{
+    int rc;
+
+    t_req = req;
+    rc = xattr_user_name(name);
+    if (rc == 0 && virt_kind(ino))
+        rc = -EOPNOTSUPP;
+    if (rc == 0) {
+        rc = efs_client_rpc_xattr(g_client.export_id, (efs_ino_t)ino,
+                                  EFS_XATTR_REMOVE, 0, name,
+                                  (uint16_t)strlen(name), NULL, 0, NULL, NULL);
+        if (rc)
+            rc = efs_rc_to_errno(rc);
+    }
+    t_req = NULL;
+    fuse_reply_err(req, rc ? -rc : 0);
+}
+
 /* Low-level (inode-based) FUSE ops. Timeouts stay 0 (Part C later). */
 static const struct fuse_lowlevel_ops efs_ll_ops = {
     .init = efs_fuse_init,
@@ -4390,6 +4573,10 @@ static const struct fuse_lowlevel_ops efs_ll_ops = {
     .setlk = ll_setlk,
     .flock = ll_flock,
     .lseek = ll_lseek,
+    .setxattr = ll_setxattr,
+    .getxattr = ll_getxattr,
+    .listxattr = ll_listxattr,
+    .removexattr = ll_removexattr,
 };
 
 static int parse_addr(const char *str, char *host, size_t host_len, uint16_t *port)

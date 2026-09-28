@@ -449,6 +449,32 @@ send_reply:
             }
             break;
         }
+        case EFS_MSG_XATTR: {
+            struct efs_msg_xattr_reply rep;
+            uint32_t rlen = (uint32_t)offsetof(struct efs_msg_xattr_reply, data);
+            struct efs_msg_xattr *req;
+            const uint8_t *name, *val;
+            uint32_t body;
+
+            memset(&rep, 0, rlen);
+            rep.status = EFS_INODE_RPC_INVAL;
+            if (server_raft_host_active() &&
+                payload_len >= sizeof(struct efs_msg_xattr)) {
+                req = payload;
+                body = (uint32_t)req->nlen + req->vlen;
+                if (req->nlen <= EFS_XATTR_NAME_MAX &&
+                    req->vlen <= EFS_XATTR_VALUE_MAX &&
+                    payload_len == sizeof(*req) + body) {
+                    name = (const uint8_t *)payload + sizeof(*req);
+                    val = name + req->nlen;
+                    server_raft_host_xattr(req->ino, req->op, req->flags, name,
+                                           req->nlen, val, req->vlen, &rep,
+                                           &rlen);
+                }
+            }
+            efs_conn_send_msg(conn, EFS_MSG_XATTR_REPLY, &rep, rlen);
+            break;
+        }
         case EFS_MSG_BENCH_PUT: {
             /* Network bench: accept mount-shaped PUT payload, ACK, discard. */
             uint8_t reply = EFS_BENCH_PUT_ERROR;

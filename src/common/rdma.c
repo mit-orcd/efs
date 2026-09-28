@@ -556,18 +556,21 @@ static void ack_cq_events(struct efs_rdma_dev *dev)
         ibv_ack_cq_events(cq, 1);
 }
 
-/* Shared-CQ poller. Arm AFTER draining, race-drain, ALWAYS ack the notify
- * we requested. Never `continue` between req_notify and ack: that dropped
- * the channel event and the next CQE after a quiet gap generated no wake.
- * Ack consumes the event for a CQE that landed after the race poll, so
- * harvest again before sleeping. The sleep is 1ms. A 100ms sleep here
- * stalled every conn (11 of 100 private mkdirs, Sep 27). Do not tight-spin
- * this thread while idle: the send path used to sched_yield for its CQE,
- * and a pegged poller stole that core for the rest of the timeslice. */
+/* Shared-CQ poller. A few empty polls spin; then the thread arms the
+ * completion channel and waits at most 1 ms. The old live-QP path
+ * paused and sched_yield'd forever: during posix jobs=1 that thread
+ * was 64% of efs-fuse and 31% of efsd, and the yield handed the core
+ * away for a timeslice so the reply sat until the poller was
+ * rescheduled. Do not sleep 100 ms after an event — that missed the
+ * next completion and stalled mkdir. Heartbeats are 50 ms and the
+ * election timeout is 500 ms, so a 1 ms wait cannot start an election.
+ * Arm, drain the CQ, then wait. Ack only after poll() reports the
+ * channel is readable — acking first disarms the notify. */
 static void *recv_poller(void *arg)
 {
     struct efs_rdma_dev *dev = arg;
     struct ibv_wc wcs[32];
+    unsigned empty = 0;
     for (;;) {
         int n = ibv_poll_cq(dev->recv_cq, 32, wcs);
         if (n < 0) {
@@ -576,8 +579,20 @@ static void *recv_poller(void *arg)
         }
         if (n > 0) {
             harvest_recv_wcs(wcs, n);
+            empty = 0;
             continue;
         }
+        /* A few empty polls catch a completion already in the CQ.
+         * 128 of them were 16% of efs-fuse during posix jobs=1; the
+         * channel wait below wakes the thread for the next one.
+         * Acking an event before that wait disarms the notify, and
+         * the next completion is then invisible until poll() times
+         * out — that added about a millisecond to every RPC. */
+        if (__sync_fetch_and_add(&g_live_conns, 0) > 0 && ++empty < 32) {
+            __asm__ volatile("pause" ::: "memory");
+            continue;
+        }
+        empty = 0;
         if (ibv_req_notify_cq(dev->recv_cq, 0) != 0) {
             usleep(1000);
             continue;
@@ -587,27 +602,16 @@ static void *recv_poller(void *arg)
             usleep(1000);
             continue;
         }
-        if (n > 0)
-            harvest_recv_wcs(wcs, n);
-        ack_cq_events(dev);
-        if (n > 0)
-            continue;
-        n = ibv_poll_cq(dev->recv_cq, 32, wcs);
-        if (n < 0) {
-            usleep(1000);
-            continue;
-        }
         if (n > 0) {
             harvest_recv_wcs(wcs, n);
             continue;
         }
-        struct pollfd p = { .fd = dev->recv_chan->fd, .events = POLLIN };
-        poll(&p, 1, 1);
-        if (p.revents & POLLIN)
-            ack_cq_events(dev);
-        n = ibv_poll_cq(dev->recv_cq, 32, wcs);
-        if (n > 0)
-            harvest_recv_wcs(wcs, n);
+        {
+            struct pollfd p = { .fd = dev->recv_chan->fd, .events = POLLIN };
+            int pr = poll(&p, 1, 1);
+            if (pr > 0 && (p.revents & POLLIN))
+                ack_cq_events(dev);
+        }
     }
     return NULL;
 }
@@ -1391,19 +1395,22 @@ int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms)
             return EFS_OK;
         if (rc->broken)
             return EFS_ERR_NET;
-        /* Brief ring spin: catches the poller's push within microseconds
-         * without a sleep/wakeup. Cheap — an atomic load, no CQ lock. The
-         * clock is gated to every 64th check: now_us() per iteration was
-         * ~30% of efs-fuse CPU under an 8-job write load. */
-        int64_t spin_end = now_us() + spin_us();
-        uint32_t polls = 0;
-        for (;;) {
-            if (__atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail)
-                break;
-            if (rc->broken)
-                return EFS_ERR_NET;
-            if (((++polls) & 63) == 0 && now_us() >= spin_end)
-                break;
+        /* A few pauses catch a completion that landed while the send
+         * was returning. clock_gettime on a 200us spin was the top of
+         * efs-fuse during posix jobs=1 (~20%, all of it this wait):
+         * metadata replies wait on a Raft commit, so the spin always
+         * ran out and then poll() woke on the eventfd anyway. */
+        {
+            uint32_t polls;
+
+            for (polls = 0; polls < 64; polls++) {
+                if (__atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) !=
+                    rc->pr_tail)
+                    break;
+                if (rc->broken)
+                    return EFS_ERR_NET;
+                __asm__ volatile("pause" ::: "memory");
+            }
         }
         if (pend_pop(rc))
             return EFS_OK;
@@ -1441,8 +1448,22 @@ int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms)
                 rc->broken = 1;
                 return EFS_ERR_NET;
             }
-            if (ev & POLLIN)
-                return EFS_ERR_AGAIN;
+            if (ev & POLLIN) {
+                /* poll() reports POLLIN for a real side-channel byte and
+                 * also spuriously after the RDMA upgrade. A peek that
+                 * finds nothing must not abort the RDMA wait: the client
+                 * treated that as a dead conn and slept 50 ms before
+                 * retrying a mkdir that had not failed. */
+                char peek;
+                ssize_t n = recv(rc->tcp_fd, &peek, 1,
+                                 MSG_PEEK | MSG_DONTWAIT);
+                if (n > 0)
+                    return EFS_ERR_AGAIN;
+                if (n == 0) {
+                    rc->broken = 1;
+                    return EFS_ERR_NET;
+                }
+            }
             if (ev & POLLHUP) {
                 rc->broken = 1;
                 return EFS_ERR_NET;

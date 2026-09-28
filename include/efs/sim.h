@@ -176,6 +176,10 @@ int efs_sim_unlock(struct efs_sim *sim, int client, efs_ino_t ino, uint8_t domai
 int efs_sim_crash(struct efs_sim *sim, int server); /* RAM gone, disk kept */
 int efs_sim_restart(struct efs_sim *sim, int server);
 int efs_sim_corrupt(struct efs_sim *sim, int server, const struct efs_frag_id *id);
+/* Remove the sidecar checksum and leave the payload. */
+int efs_sim_drop_sum(struct efs_sim *sim, const struct efs_frag_id *id);
+/* 1 when the payload still matches its stored checksum. */
+int efs_sim_frag_healthy(struct efs_sim *sim, const struct efs_frag_id *id);
 int efs_sim_partition(struct efs_sim *sim, int server, int on);
 int efs_sim_clock_step(struct efs_sim *sim, uint64_t delta);
 

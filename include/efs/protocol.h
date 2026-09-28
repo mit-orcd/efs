@@ -3,6 +3,7 @@
 
 #include "efs/common.h"
 #include "efs/metadata.h"
+#include "efs/meta_cmd.h"
 #include <stdint.h>
 
 /* Length-prefixed TCP frames: 4 bytes length (network order), 1 byte type,
@@ -140,6 +141,12 @@ enum efs_msg_type {
      * Idempotent: an absent fragment is a success. */
     EFS_MSG_GC_FRAGMENT = 99,
     EFS_MSG_GC_FRAGMENT_REPLY = 100,
+    /* Extended attribute on one inode. Request is struct efs_msg_xattr
+     * followed by name[nlen] and value[vlen]. The reply begins with the
+     * same status + primary_id layout as efs_msg_inode_reply so a client
+     * can retry NOT_PRIMARY and BUSY, then nbytes and the bytes. */
+    EFS_MSG_XATTR = 101,
+    EFS_MSG_XATTR_REPLY = 102,
 };
 
 /* GC_FRAGMENT request: delete fragment `fragment_index` of chunk
@@ -159,6 +166,27 @@ struct efs_msg_gc_fragment {
 struct efs_msg_gc_fragment_reply {
     uint8_t status;
     uint8_t pad[7];
+};
+
+/* XATTR request. name[nlen] and value[vlen] follow this header with no
+ * padding. op is EFS_XATTR_GET/SET/REMOVE/LIST. sizeof is 24. */
+struct efs_msg_xattr {
+    efs_export_id_t export_id;
+    uint32_t flags;
+    efs_ino_t ino;
+    uint32_t vlen;
+    uint16_t nlen;
+    uint8_t op;
+    uint8_t pad;
+};
+
+/* First two fields match efs_msg_inode_reply so the client retry loop can
+ * read status and primary_id. Only the first hdr+nbytes bytes are sent. */
+struct efs_msg_xattr_reply {
+    uint8_t status;
+    efs_node_id_t primary_id;
+    uint32_t nbytes;
+    uint8_t data[EFS_XATTR_BLOB_MAX];
 };
 
 /* RAFT_MKFS reply. rc: EFS_OK (accepted at index, and applied on this
@@ -353,6 +381,8 @@ struct efs_msg_query_stats_reply {
 #define EFS_INODE_RPC_DEEP      10
 /* REPORT CAS lost: the client's RMW base is no longer committed. */
 #define EFS_INODE_RPC_STALE     11
+/* getxattr/removexattr of a name that is not set. Not ENOENT. */
+#define EFS_INODE_RPC_NODATA    12
 
 struct efs_msg_inode_lookup {
     efs_export_id_t export_id;
@@ -603,6 +633,19 @@ struct efs_chunk_rec {
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     uint64_t base_gen;
     uint64_t chunk_generation;
+    /* delta_len > 0: this rec is one immutable span [delta_off, +len),
+     * not a full-chunk CAS. chunk_generation names a full-chunk object;
+     * readers copy only that range. delta_len == 0: full-chunk publish
+     * or the base image in a GETCHUNKS reply. delta_base_n /
+     * delta_base_seq are the delta list the writer observed (full CAS)
+     * or the list attached to this base image (GETCHUNKS). deltas[] is
+     * meaningful on GETCHUNKS. */
+    uint32_t delta_off;
+    uint32_t delta_len;
+    uint32_t delta_base_n;
+    uint32_t delta_pad;
+    uint64_t delta_base_seq;
+    struct efs_chunk_delta deltas[EFS_CHUNK_DELTA_MAX];
 };
 
 /* Phase 2b: one inode size/mtime update (the write path grows a file and bumps

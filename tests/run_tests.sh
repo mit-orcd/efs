@@ -236,7 +236,7 @@ cmd_posix() { # [--keep] [--parallel] [efs-host ...]
         PYTHONUNBUFFERED=1 timeout -k 5 $((POSIX_SSH_SEC - 15)) \
         python3 /tmp/efs/tests/posix/posix_suite.py '$XFS_DIR' \
         --timeout-s ${POSIX_TEST_SEC:-15} --jobs ${POSIX_JOBS:-16} \
-        --results '$xfs_tsv'
+        --results '$xfs_tsv' >&2
         if [ ! -s '$xfs_tsv' ]; then
             printf '%s\\n' '# TIMEOUT no TSV' 'test	result	detail' \
                 '# summary pass=0 fail=0 skip=0 total=0 dur=0'
@@ -261,7 +261,7 @@ cmd_posix() { # [--keep] [--parallel] [efs-host ...]
             PYTHONUNBUFFERED=1 timeout -k 5 $((POSIX_SSH_SEC - 15)) \
             python3 /tmp/efs/tests/posix/posix_suite.py '$EFS_MNT' \
             $keep $tag --timeout-s ${POSIX_TEST_SEC:-15} --jobs ${POSIX_JOBS:-16} \
-            --results '$remote_tsv'
+            --results '$remote_tsv' >&2
             if [ ! -s '$remote_tsv' ]; then
                 printf '%s\\n' '# TIMEOUT no TSV' 'test\tresult\tdetail' \
                     '# summary pass=0 fail=0 skip=0 total=0 dur=0'
@@ -388,7 +388,7 @@ cmd_posixpersist() { # [--keep] [--crash] [efs-host ...]
         ssh_to "$sec" "$h" "rm -f /tmp/persist-prep.tsv
             PYTHONUNBUFFERED=1 timeout -k 5 $((sec - 20)) \
             python3 $py '$EFS_MNT' --phase prepare \
-            --timeout-s ${PERSIST_TEST_SEC:-60} --results /tmp/persist-prep.tsv
+            --timeout-s ${PERSIST_TEST_SEC:-60} --results /tmp/persist-prep.tsv >&2
             cat /tmp/persist-prep.tsv 2>/dev/null" > "$pdir/prepare-$short.tsv"
         local pfail
         pfail=$(awk -F'fail=' '/# summary/{split($2,a," "); print a[1]}' \
@@ -427,7 +427,7 @@ cmd_posixpersist() { # [--keep] [--crash] [efs-host ...]
         ssh_to "$sec" "$h" "rm -f /tmp/persist-ver.tsv
             PYTHONUNBUFFERED=1 timeout -k 5 $((sec - 20)) \
             python3 $py '$EFS_MNT' --phase verify $keep \
-            --timeout-s ${PERSIST_TEST_SEC:-60} --results /tmp/persist-ver.tsv
+            --timeout-s ${PERSIST_TEST_SEC:-60} --results /tmp/persist-ver.tsv >&2
             cat /tmp/persist-ver.tsv 2>/dev/null" > "$pdir/verify-$short.tsv"
 
         local vpass vfail
@@ -494,7 +494,8 @@ cmd_posix2() { # [host-a] [host-b]  |  multi
     push_tests "$XFS_HOST"
     ssh_to "$POSIX_SSH_SEC" "$XFS_HOST" "timeout -k 5 $((POSIX_SSH_SEC - 15)) \
         python3 /tmp/efs/tests/posix/posix_2client.py --local \
-        '$XFS_DIR' '$XFS_DIR' --results /tmp/posix2-xfs.tsv; \
+        '$XFS_DIR' '$XFS_DIR' --results /tmp/posix2-xfs.tsv \
+        >/tmp/posix2-xfs.out; \
         cat /tmp/posix2-xfs.tsv" > "$pdir/xfs-baseline.tsv"
     say "  baseline: $(grep -c $'\tPASS' "$pdir/xfs-baseline.tsv") pass"
 

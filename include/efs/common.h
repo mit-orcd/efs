@@ -121,6 +121,7 @@
 #define EFS_ERR_AGAIN      -18 /* retry: TCP side-channel has a frame */
 #define EFS_ERR_DEADLK     -19 /* EDEADLK: same-inode lock cycle */
 #define EFS_ERR_NOLCK      -20 /* ENOLCK: per-inode lock record cap */
+#define EFS_ERR_NODATA     -21 /* ENODATA: xattr name is not set */
 
 typedef uint64_t efs_ino_t;
 typedef uint32_t efs_export_id_t;

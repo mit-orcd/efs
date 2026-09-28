@@ -85,8 +85,11 @@ static uint64_t chunk_candidate_gen(const efs_node_id_t nodes[EFS_NUM_FRAGMENTS]
 
 /* Last successful PUT, independent of dcache_find (which requires e->data).
  * GETCHUNKS/apply_chunk_recs must not be the source of REPORT mappings —
- * that is how a ftruncate stub gen was republished and remount DECODE'd. */
-#define PUTID_N 4096
+ * that is how a ftruncate stub gen was republished and remount DECODE'd.
+ * Direct-mapped: 4096 slots at one shared 3000-seg IOR file (~4000 chunks
+ * per client) collided, and the fallback below used to drop delta_len.
+ * 65536 keeps that working set sparse. */
+#define PUTID_N 65536
 struct put_id {
     efs_ino_t ino;
     uint32_t ci;
@@ -94,6 +97,10 @@ struct put_id {
     uint64_t seq; /* dcache snapshot seq of this PUT (0 = unordered) */
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t cks[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+    uint32_t delta_off;
+    uint32_t delta_len; /* 0 = this PUT is a full-chunk image */
+    uint32_t delta_base_n;
+    uint64_t delta_base_seq;
 };
 static struct put_id g_putid[PUTID_N];
 static pthread_mutex_t g_putid_mu = PTHREAD_MUTEX_INITIALIZER;
@@ -107,7 +114,9 @@ static uint32_t putid_slot(efs_ino_t ino, uint32_t ci)
  * one for the same chunk (see dcache_ent.object_seq). */
 static void putid_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint64_t seq,
                       const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
-                      const uint8_t cks[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE])
+                      const uint8_t cks[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
+                      uint32_t delta_off, uint32_t delta_len,
+                      uint32_t delta_base_n, uint64_t delta_base_seq)
 {
     struct put_id *p;
 
@@ -125,6 +134,10 @@ static void putid_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint64_t seq,
     p->seq = seq;
     memcpy(p->nodes, nodes, sizeof(p->nodes));
     memcpy(p->cks, cks, sizeof(p->cks));
+    p->delta_off = delta_off;
+    p->delta_len = delta_len;
+    p->delta_base_n = delta_base_n;
+    p->delta_base_seq = delta_base_seq;
     pthread_mutex_unlock(&g_putid_mu);
 }
 
@@ -141,6 +154,10 @@ static int putid_fill(efs_ino_t ino, uint32_t ci, struct efs_chunk_rec *rec)
         memcpy(rec->nodes, p->nodes, sizeof(rec->nodes));
         memcpy(rec->checksums, p->cks, sizeof(rec->checksums));
         rec->chunk_generation = p->gen;
+        rec->delta_off = p->delta_off;
+        rec->delta_len = p->delta_len;
+        rec->delta_base_n = p->delta_base_n;
+        rec->delta_base_seq = p->delta_base_seq;
         hit = 1;
     }
     pthread_mutex_unlock(&g_putid_mu);
@@ -606,13 +623,26 @@ static void stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino)
             continue; /* truncated away; the rec rebuild skips it */
         }
         /* Committed gen is OUR object (same identity source as the rec
-         * builder: putid, then the dcache slot): the host took this rec. */
-            obj.chunk_generation = 0;
-            if ((putid_fill(pp[i].ino, pp[i].ci, &obj) ||
-                 dcache_object_of(pp[i].ino, pp[i].ci, &obj)) &&
-                obj.chunk_generation == ce.generation) {
-                (void)dcache_note_committed(pp[i].ino, pp[i].ci, ce.generation);
-                done = 1;
+         * builder: putid, then the dcache slot): the host took this rec.
+         * A span does not move the base generation; it shows up in the
+         * chunk's delta list instead. */
+            memset(&obj, 0, sizeof(obj));
+            if (putid_fill(pp[i].ino, pp[i].ci, &obj) ||
+                dcache_object_of(pp[i].ino, pp[i].ci, &obj)) {
+                uint32_t di;
+
+                if (obj.chunk_generation &&
+                    obj.chunk_generation == ce.generation)
+                    done = 1;
+                for (di = 0; di < ce.ndelta && !done; di++) {
+                    if (ce.deltas[di].generation == obj.chunk_generation)
+                        done = 1;
+                }
+            }
+            if (done) {
+                (void)dcache_note_committed(
+                    pp[i].ino, pp[i].ci,
+                    obj.delta_len ? ce.generation : obj.chunk_generation);
             }
             if (dcache_trace_on())
                 fprintf(stderr,
@@ -631,7 +661,36 @@ static void stale_repull_replay(struct dirty_snap *ds, efs_ino_t only_ino)
             continue;
         }
         base = dcache_base_gen_of(pp[i].ino, pp[i].ci, 0);
-        if (base == EFS_CHUNK_BASE_UNCOND || ce.generation == base) {
+        if (obj.delta_len) {
+            uint32_t di;
+            int hit = 0;
+
+            for (di = 0; di < ce.ndelta; di++) {
+                uint32_t a = ce.deltas[di].off, al = ce.deltas[di].len;
+
+                if ((uint64_t)a < (uint64_t)obj.delta_off + obj.delta_len &&
+                    (uint64_t)obj.delta_off < (uint64_t)a + al)
+                    hit = 1;
+            }
+            /* Base held still and our span is still free: resend it.
+             * Overlap or a full chain: rebuild one image and CAS. */
+            if (!hit && ce.generation == base &&
+                ce.ndelta < EFS_CHUNK_DELTA_MAX) {
+                i = j;
+                continue;
+            }
+        } else if (base == EFS_CHUNK_BASE_UNCOND || ce.generation == base) {
+            /* A full-image CAS also fails when the span list moved and
+             * the base generation did not (it stays 0 until a fold).
+             * Resending the same observation STALEs for every retry.
+             * Rebuild on the list this pull just installed. */
+            if (ce.ndelta != obj.delta_base_n ||
+                (ce.ndelta && ce.delta_seq != obj.delta_base_seq)) {
+                (void)efs_dcache_replay_stale(pp[i].ino, pp[i].ci);
+                replayed++;
+                i = j;
+                continue;
+            }
             i = j; /* never CAS-fails / did not move: resend as is */
             continue;
         }
@@ -740,6 +799,10 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
         /* CAS expected is the dcache base, never the object name. */
         crecs[cn].base_gen = dcache_base_gen_of(ds.chunk_inos[i],
                                                ds.chunk_idxs[i], 0);
+        crecs[cn].delta_off = 0;
+        crecs[cn].delta_len = 0;
+        crecs[cn].delta_base_n = 0;
+        crecs[cn].delta_base_seq = 0;
         if (!putid_fill(ds.chunk_inos[i], ds.chunk_idxs[i], &crecs[cn]) &&
             !dcache_object_of(ds.chunk_inos[i], ds.chunk_idxs[i],
                               &crecs[cn])) {
@@ -829,6 +892,10 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
                        sizeof(crecs[cn].checksums));
                 crecs[cn].base_gen = dcache_base_gen_of(ds.chunk_inos[i],
                                                        ds.chunk_idxs[i], 0);
+                crecs[cn].delta_off = 0;
+                crecs[cn].delta_len = 0;
+                crecs[cn].delta_base_n = 0;
+                crecs[cn].delta_base_seq = 0;
                 if (!putid_fill(ds.chunk_inos[i], ds.chunk_idxs[i],
                                 &crecs[cn]) &&
                     !dcache_object_of(ds.chunk_inos[i], ds.chunk_idxs[i],
@@ -841,8 +908,13 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
             efs_client_table_unlock();
             continue;
         }
+        /* NOT_FOUND here is not a missing inode: the server skips a
+         * deleted row and replies OK. What still arrives is a Raft
+         * index a snapshot ate under the propose. Retry it like BUSY.
+         * Failing the first one is the 9-client fsync EIO. */
         if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM &&
-            rc != EFS_ERR_NOT_PRIMARY && rc != EFS_ERR_BUSY)
+            rc != EFS_ERR_NOT_PRIMARY && rc != EFS_ERR_BUSY &&
+            rc != EFS_ERR_NOT_FOUND)
             break;
         if (attempt >= 7)
             break;
@@ -854,8 +926,10 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
          * (n1: 16 pwrite+fsync per chunk) CASes on the pre-publish base,
          * loses to itself, and pays a full GET+PUT replay round. */
         for (uint32_t k = 0; k < cn; k++)
-            (void)dcache_note_committed(crecs[k].ino, crecs[k].chunk_index,
-                                        crecs[k].chunk_generation);
+            (void)dcache_note_committed(
+                crecs[k].ino, crecs[k].chunk_index,
+                crecs[k].delta_len ? crecs[k].base_gen
+                                   : crecs[k].chunk_generation);
     }
     free(crecs);
     free(irecs);
@@ -1599,6 +1673,8 @@ struct chunk_put_job {
     uint32_t flush_len;
     uint64_t flush_base_gen;
     uint64_t flush_seq;
+    uint32_t flush_delta_off;
+    uint32_t flush_delta_len;
     struct put_batch *bp;
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
@@ -1608,7 +1684,8 @@ static void *chunk_put_worker(void *arg);
 static int put_pool_run(struct chunk_put_job *jobs, uint32_t batch);
 static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
                           uint32_t chunk_size, uint64_t base_gen,
-                          uint64_t snap_seq);
+                          uint64_t snap_seq, uint32_t delta_off,
+                          uint32_t delta_len);
 
 /* Dirty assembled-chunk cache. Partial writes (4k randwrite) used to GET+encode
  * +PUT a full 128 KiB chunk on every FUSE write. Hold the assembled chunk and
@@ -1666,6 +1743,15 @@ struct dcache_ent {
     uint64_t img_seq;
     efs_node_id_t object_nodes[EFS_NUM_FRAGMENTS];
     uint8_t object_cks[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+    /* Span identity of that PUT. putid is direct-mapped and can lose a
+     * chunk; REPORT's fallback is this slot. delta_len 0 is a full image.
+     * Leaving these unset made a collided span report as a full-chunk CAS
+     * of a zero-padded buffer, which replaced the trailer and dropped the
+     * other ranks' bytes (IOR-hard, first ~200 chunks). */
+    uint32_t object_delta_off;
+    uint32_t object_delta_len;
+    uint32_t object_delta_base_n;
+    uint64_t object_delta_base_seq;
     struct dcache_ent *next;
 };
 
@@ -1942,15 +2028,27 @@ static pthread_mutex_t *dcache_io_mu(uint32_t slot)
 }
 
 /* snap_seq: the slot's dcache_ent.snap_seq taken when `chunk` was copied
- * out (0 = not a dcache snapshot; always recorded). */
+ * out (0 = not a dcache snapshot; always recorded).
+ * delta_len > 0 publishes [delta_off, +len) as an immutable span. The
+ * object itself is a full chunk image (fragment files are the export
+ * size); readers copy only that range. The base mapping is not
+ * replaced. delta_len == 0 is the full-chunk CAS object. */
 static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
                           uint32_t chunk_size, uint64_t base_gen,
-                          uint64_t snap_seq)
+                          uint64_t snap_seq, uint32_t delta_off,
+                          uint32_t delta_len)
 {
-    uint32_t frag_len = chunk_size / 2;
+    uint32_t stripe = chunk_size;
+    uint32_t frag_len;
     uint8_t *parity;
+    /* The span is a distinct generation of a full chunk image. Fragment
+     * files are the export size (O_DIRECT). Readers copy only
+     * [delta_off, delta_len); the rest of this object is not the base. */
+    int span = delta_len > 0 && (uint64_t)delta_off + delta_len <= chunk_size &&
+               delta_len < chunk_size;
     /* CAS expected stays on e->base_gen; this is the object write only. */
     (void)base_gen;
+    frag_len = stripe / 2;
     parity = efs_buf_alloc(frag_len);
     if (!parity)
         return EFS_ERR_NOMEM;
@@ -1959,13 +2057,13 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
     frags[0] = (uint8_t *)(uintptr_t)chunk;
     frags[1] = (uint8_t *)(uintptr_t)(chunk + frag_len);
     frags[2] = parity;
-    efs_encode_chunk(chunk, chunk_size, chunk_size, frags);
+    efs_encode_chunk(chunk, chunk_size, stripe, frags);
 
     const uint8_t *cfrags[EFS_NUM_FRAGMENTS] = {frags[0], frags[1], frags[2]};
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     int from_zero = efs_bytes_are_zero(chunk, chunk_size);
-    hash_write_fragments(cfrags, frag_len, chunk_size, from_zero, 0, 0,
-                         chunk_size, checksums);
+    hash_write_fragments(cfrags, frag_len, stripe, from_zero, 0, 0,
+                         stripe, checksums);
 
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     efs_place_fragments(g_client.nodes, g_client.node_count, ino, ci, nodes);
@@ -1988,20 +2086,111 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
     }
     if (efs_export_needs_chunk_grow(&g_client.export))
         export_reserve_chunks_locked(4096);
-    efs_client_lock_dir(ino);
-    pthread_mutex_lock(&g_client.idx_mu);
-    efs_export_set_chunk(&g_client.export, ino, ci, nodes, checksums);
-    /* Table gen is the object name (candidate), not the CAS base. GET
-     * reads this; report still uses dcache.base_gen. */
-    (void)efs_export_set_chunk_gen(&g_client.export, ino, ci,
-                                   chunk_candidate_gen(nodes, checksums, ci));
-    pthread_mutex_unlock(&g_client.idx_mu);
-    efs_client_unlock_dir(ino);
+    uint32_t obs_n = 0;
+    uint64_t obs_seq = 0;
+    {
+        struct efs_chunk_entry ce;
+        uint64_t obj = chunk_candidate_gen(nodes, checksums, ci);
+        int have = export_chunk_copy(ino, ci, &ce) == 0;
+
+        uint64_t before_gen[EFS_CHUNK_DELTA_MAX];
+        uint32_t before_n = 0;
+
+        if (have) {
+            obs_n = ce.ndelta;
+            obs_seq = ce.delta_seq;
+            before_n = ce.ndelta;
+            if (before_n > EFS_CHUNK_DELTA_MAX)
+                before_n = EFS_CHUNK_DELTA_MAX;
+            for (uint32_t bi = 0; bi < before_n; bi++)
+                before_gen[bi] = ce.deltas[bi].generation;
+        }
+        /* A fold must name the server's list. Locally appended spans
+         * leave delta_seq at 0, and a CAS with that seq never matches
+         * the lane seq. Learn the seq only when the server's spans are
+         * the ones this image already folded. Adopting a longer list
+         * deletes a peer span the image does not contain (the exclusive
+         * tail in peer_overlap_pwrite_chunk_straddle). Leave seq at 0
+         * in that case so the CAS STALEs and the replay refetches. */
+        if (!span && have && ce.ndelta > 0 && ce.delta_seq == 0) {
+            int same = 0;
+
+            efs_client_pull_chunks_range(ino, ci, ci + 1);
+            have = export_chunk_copy(ino, ci, &ce) == 0;
+            if (have && ce.ndelta == before_n) {
+                same = 1;
+                for (uint32_t bi = 0; same && bi < before_n; bi++) {
+                    int found = 0;
+
+                    for (uint32_t bj = 0; bj < ce.ndelta; bj++) {
+                        if (ce.deltas[bj].generation == before_gen[bi]) {
+                            found = 1;
+                            break;
+                        }
+                    }
+                    if (!found)
+                        same = 0;
+                }
+            }
+            if (same) {
+                obs_n = ce.ndelta;
+                obs_seq = ce.delta_seq;
+            }
+        }
+        efs_client_lock_dir(ino);
+        pthread_mutex_lock(&g_client.idx_mu);
+        if (span) {
+            struct efs_chunk_delta d;
+            efs_node_id_t znodes[EFS_NUM_FRAGMENTS];
+            uint8_t zck[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+
+            /* A span must not replace the base image. The first span
+             * on an empty chunk plants a generation-0 row to hang off. */
+            if (!have) {
+                memset(znodes, 0, sizeof(znodes));
+                memset(zck, 0, sizeof(zck));
+                efs_export_set_chunk(&g_client.export, ino, ci, znodes, zck);
+                (void)efs_export_set_chunk_gen(&g_client.export, ino, ci, 0);
+            }
+            memset(&d, 0, sizeof(d));
+            d.off = delta_off;
+            d.len = delta_len;
+            d.generation = obj;
+            d.seq = obs_seq + 1;
+            memcpy(d.nodes, nodes, sizeof(d.nodes));
+            memcpy(d.checksums, checksums, sizeof(d.checksums));
+            if (efs_export_add_chunk_delta(&g_client.export, ino, ci, &d) !=
+                EFS_OK) {
+                /* Chain full. This flush's buffer is the local image
+                 * (have_base, or the sparse merge done before the span
+                 * decision). A span can no longer be recorded, so the
+                 * image replaces the base. Callers must not pass a buffer
+                 * that is only the new range. */
+                efs_export_set_chunk(&g_client.export, ino, ci, nodes,
+                                     checksums);
+                (void)efs_export_set_chunk_gen(
+                    &g_client.export, ino, ci,
+                    chunk_candidate_gen(nodes, checksums, ci));
+                span = 0;
+            }
+        } else {
+            efs_export_set_chunk(&g_client.export, ino, ci, nodes, checksums);
+            /* Table gen is the object name (candidate), not the CAS base.
+             * GET reads this; report still uses dcache.base_gen.
+             * set_chunk_gen drops the span list this image folds. */
+            (void)efs_export_set_chunk_gen(
+                &g_client.export, ino, ci,
+                chunk_candidate_gen(nodes, checksums, ci));
+        }
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(ino);
+        putid_note(ino, ci, obj, snap_seq, nodes, checksums,
+                   span ? delta_off : 0, span ? delta_len : 0, obs_n, obs_seq);
+    }
     {
         uint64_t obj = chunk_candidate_gen(nodes, checksums, ci);
         uint32_t sl = dcache_slot(ino, ci);
         struct dcache_ent *de;
-        putid_note(ino, ci, obj, snap_seq, nodes, checksums);
         pthread_mutex_lock(dcache_mu(sl));
         de = dcache_find(sl, ino, ci);
         if (de && (!snap_seq || snap_seq >= de->object_seq)) {
@@ -2009,6 +2198,10 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
             de->object_seq = snap_seq;
             memcpy(de->object_nodes, nodes, sizeof(de->object_nodes));
             memcpy(de->object_cks, checksums, sizeof(de->object_cks));
+            de->object_delta_off = span ? delta_off : 0;
+            de->object_delta_len = span ? delta_len : 0;
+            de->object_delta_base_n = obs_n;
+            de->object_delta_base_seq = obs_seq;
             DTRACE(de, "put-record obj=%llx seq=%llu",
                    (unsigned long long)obj, (unsigned long long)snap_seq);
         } else {
@@ -2121,6 +2314,16 @@ int efs_dcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
     if (!dst || !len)
         return -1;
     uint64_t tg = export_chunk_gen_of(ino, ci);
+    int spans = 0;
+    {
+        struct efs_chunk_entry ce;
+
+        /* Spans hang off the base generation. The cached whole image is
+         * that base (or an older fold) and does not include a peer span
+         * that landed later. Unpublished ranges are still ours. */
+        if (export_chunk_copy(ino, ci, &ce) == 0 && ce.ndelta > 0)
+            spans = 1;
+    }
     uint32_t s = dcache_slot(ino, ci);
     pthread_mutex_t *mu = dcache_mu(s);
     pthread_mutex_lock(mu);
@@ -2132,13 +2335,33 @@ int efs_dcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
      * A clean image the map no longer names is skipped: the caller fetches
      * the published chunk (a peer moved it). */
     if (e && (uint64_t)off + len <= e->len &&
-        (dcache_image_current(e, tg) ||
+        ((dcache_image_current(e, tg) && !spans) ||
          (dcache_unpublished(e) && dcache_range_covered(e, off, len)))) {
         memcpy(dst, e->data + off, len);
         pthread_mutex_unlock(mu);
         return 0;
     }
     pthread_mutex_unlock(mu);
+    return -1;
+}
+
+int efs_dcache_copy_kept(efs_ino_t ino, uint32_t ci, uint32_t off,
+                         uint8_t *dst, uint32_t len)
+{
+    uint32_t s;
+    struct dcache_ent *e;
+
+    if (!dst || !len)
+        return -1;
+    s = dcache_slot(ino, ci);
+    pthread_mutex_lock(dcache_mu(s));
+    e = dcache_find(s, ino, ci);
+    if (e && e->data && e->have_base && (uint64_t)off + len <= e->len) {
+        memcpy(dst, e->data + off, len);
+        pthread_mutex_unlock(dcache_mu(s));
+        return 0;
+    }
+    pthread_mutex_unlock(dcache_mu(s));
     return -1;
 }
 
@@ -2411,9 +2634,15 @@ static int dcache_load_and_patch(efs_ino_t ino, uint32_t ci, uint32_t off,
             memset(chunk, 0, cs);
     }
     memcpy(chunk + off, src, len);
-    if (dcache_merge_owned(ino, ci, off, src, len, chunk, cs) != 0) {
-        efs_buf_free(chunk, cs);
-        return -1;
+    {
+        int folded = dcache_merge_owned(ino, ci, off, src, len, chunk, cs);
+
+        if (folded < 0) {
+            efs_buf_free(chunk, cs);
+            return -1;
+        }
+        if (folded > 0)
+            return 0;
     }
     uint32_t s = dcache_slot(ino, ci);
     pthread_mutex_t *mu = dcache_mu(s);
@@ -2469,7 +2698,7 @@ static int dcache_store_full_chunk(efs_ino_t ino, uint32_t ci,
         if (!chunk)
             return -1;
         memcpy(chunk, src, cs);
-        if (dcache_merge_owned(ino, ci, 0, src, cs, chunk, cs) != 0) {
+        if (dcache_merge_owned(ino, ci, 0, src, cs, chunk, cs) < 0) {
             efs_buf_free(chunk, cs);
             return -1;
         }
@@ -2575,15 +2804,31 @@ static int dcache_load_sparse(efs_ino_t ino, uint32_t ci, uint32_t off,
      * peer leftover name is the W1 first-fsync DECODE. */
     if (export_chunk_copy(ino, ci, &ce) == 0) {
         bg = ce.generation;
-        if (efs_client_fetch_published_chunk(ino, ci, chunk, cs) == EFS_OK)
+        if (efs_client_fetch_published_chunk(ino, ci, chunk, cs) == EFS_OK ||
+            efs_client_fetch_published_chunk(ino, ci, chunk, cs) == EFS_OK)
             have_base = 1;
+        else {
+            /* A published chunk we could not read. Zeros plus this range
+             * would PUT over the prefix (concurrent_appends). */
+            efs_buf_free(chunk, cs);
+            return -1;
+        }
     }
     if (!have_base)
         memset(chunk, 0, cs);
     memcpy(chunk + off, src, len);
-    if (dcache_merge_owned(ino, ci, off, src, len, chunk, cs) != 0) {
-        efs_buf_free(chunk, cs);
-        return -1;
+    {
+        int folded = dcache_merge_owned(ino, ci, off, src, len, chunk, cs);
+
+        if (folded < 0) {
+            efs_buf_free(chunk, cs);
+            return -1;
+        }
+        /* Folded into a slot another writer already dirtied. That slot
+         * owns the bytes and the ranges. Clearing nrange here kept only
+         * this write; the next flush then published the rest as zeros. */
+        if (folded > 0)
+            return 0;
     }
     s = dcache_slot(ino, ci);
     mu = dcache_mu(s);
@@ -2648,6 +2893,10 @@ static int dcache_fill(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
     e->have_base = 1;
     e->nrange = 0;
     e->object_gen = 0;
+    e->object_delta_off = 0;
+    e->object_delta_len = 0;
+    e->object_delta_base_n = 0;
+    e->object_delta_base_seq = 0;
     /* A whole-chunk image (or a recreated slot) supersedes every snapshot
      * taken so far, including a dropped incarnation's in-flight PUTs:
      * their late installs would overwrite it (nrange==0 → no overlay). */
@@ -2676,6 +2925,10 @@ static int dcache_take(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
     e->have_base = 1;
     e->nrange = 0;
     e->object_gen = 0;
+    e->object_delta_off = 0;
+    e->object_delta_len = 0;
+    e->object_delta_base_n = 0;
+    e->object_delta_base_seq = 0;
     e->img_seq = dcache_seq_now(); /* see dcache_fill */
     dcache_pin_add(e);
     if (!was_dirty)
@@ -2758,8 +3011,9 @@ static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
 }
 
 /* Install a freshly loaded+patched chunk, or fold just [off,len) into a
- * chunk another writer dirtied while we were fetching. Steals `chunk` on
- * success (including the fold path, which frees it). */
+ * chunk another writer dirtied while we were fetching. 0 = new slot
+ * (chunk stolen), 1 = folded (chunk freed, existing ranges kept),
+ * <0 = error (caller frees chunk). */
 static int dcache_merge_owned(efs_ino_t ino, uint32_t ci, uint32_t off,
                               const uint8_t *src, uint32_t len,
                               uint8_t *chunk, uint32_t cs)
@@ -2775,7 +3029,7 @@ static int dcache_merge_owned(efs_ino_t ino, uint32_t ci, uint32_t off,
         pthread_mutex_unlock(mu);
         efs_buf_free(chunk, cs);
         efs_rdcache_invalidate(ino, ci);
-        return 0;
+        return 1;
     }
     pthread_mutex_unlock(mu);
     if (dcache_store_owned(ino, ci, chunk, cs) != 0)
@@ -2828,13 +3082,72 @@ static void dcache_install_image(struct dcache_ent *e, uint8_t *img,
 }
 
 static int dcache_need_published_merge(int have_base, uint64_t bg,
+                                       uint64_t object_gen,
                                        efs_ino_t ino, uint32_t ci)
 {
-    if (have_base || bg == EFS_CHUNK_BASE_UNCOND)
+    struct efs_chunk_entry ce;
+
+    if (bg == EFS_CHUNK_BASE_UNCOND)
         return 0;
-    if (bg != 0)
+    if (!have_base) {
+        if (bg != 0)
+            return 1;
+        return export_chunk_exists(ino, ci);
+    }
+    /* have_base is this client's image as of its last fetch. A peer's
+     * commit is invisible until the map is pulled; publishing the buffer
+     * then drops their bytes (peer_shared_pwrite, chunk-straddle). */
+    efs_client_pull_chunks_range(ino, ci, ci + 1);
+    if (export_chunk_copy(ino, ci, &ce) != 0)
+        return 0;
+    if (ce.ndelta > 0)
         return 1;
-    return export_chunk_exists(ino, ci);
+    if (object_gen && ce.generation == object_gen)
+        return 0;
+    if (ce.generation && ce.generation != bg)
+        return 1;
+    return 0;
+}
+
+/* One committed span covers this flush when the dirty bytes are a single
+ * proper sub-chunk range and the chain still has a free slot. A range
+ * that starts inside an already-published span (appends merge with the
+ * previous range before that span's report clears it) publishes only
+ * the uncovered tail. Replacing the whole chain with this buffer there
+ * dropped the earlier records. A range that is entirely covered, or a
+ * full chain, stays a full-chunk image. */
+static void span_of(efs_ino_t ino, uint32_t ci, uint64_t bg, uint8_t nrange,
+                    const uint32_t *roff, const uint32_t *rlen, uint32_t len,
+                    uint32_t *off, uint32_t *sp)
+{
+    struct efs_chunk_entry ce;
+    uint32_t i, rs, re, cover;
+
+    *off = 0;
+    *sp = 0;
+    if (bg == EFS_CHUNK_BASE_UNCOND || nrange != 1 || !roff || !rlen)
+        return;
+    if (rlen[0] == 0 || (uint64_t)roff[0] + rlen[0] > len || rlen[0] >= len)
+        return;
+    rs = roff[0];
+    re = roff[0] + rlen[0];
+    cover = rs;
+    memset(&ce, 0, sizeof(ce));
+    if (export_chunk_copy(ino, ci, &ce) == 0) {
+        if (ce.ndelta >= EFS_CHUNK_DELTA_MAX)
+            return;
+        for (i = 0; i < ce.ndelta; i++) {
+            uint32_t a = ce.deltas[i].off, al = ce.deltas[i].len;
+            uint32_t b = a + al;
+
+            if ((uint64_t)a < re && (uint64_t)rs < b && b > cover)
+                cover = b;
+        }
+    }
+    if (cover >= re)
+        return;
+    *off = cover;
+    *sp = re - cover;
 }
 
 /* W3: steal one dirty (ino,ci) so the PUT can run on the write pipeline
@@ -2843,7 +3156,8 @@ static int dcache_need_published_merge(int have_base, uint64_t bg,
  * is set, 0 if that ci is clean, <0 on error. */
 static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
                               uint32_t *len_out, uint64_t *bg_out,
-                              uint64_t *seq_out)
+                              uint64_t *seq_out, uint32_t *doff,
+                              uint32_t *dlen)
 {
     uint32_t s = dcache_slot(ino, ci);
     pthread_mutex_t *io = dcache_io_mu(s);
@@ -2853,9 +3167,13 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
     uint32_t len, roff[DCACHE_NR], rlen[DCACHE_NR];
     uint8_t nrange = 0;
     int have_base;
-    uint64_t bg;
+    uint64_t bg, object_gen;
 
     *copy_out = NULL;
+    if (doff)
+        *doff = 0;
+    if (dlen)
+        *dlen = 0;
     pthread_mutex_lock(io);
     pthread_mutex_lock(mu);
     for (e = &g_dcache.e[s]; e; e = e->next) {
@@ -2871,7 +3189,8 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
     have_base = e->have_base;
     nrange = e->nrange;
     bg = e->base_gen;
-    if (!have_base && nrange) {
+    object_gen = e->object_gen;
+    if (nrange) {
         memcpy(roff, e->roff, (size_t)nrange * sizeof(uint32_t));
         memcpy(rlen, e->rlen, (size_t)nrange * sizeof(uint32_t));
     }
@@ -2888,7 +3207,9 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
     dcache_note_dirty_bytes(-(int64_t)len);
     pthread_mutex_unlock(mu);
     pthread_mutex_unlock(io);
-    if (dcache_need_published_merge(have_base, bg, ino, ci)) {
+    int merged = 0;
+    if (dcache_need_published_merge(have_base, bg, object_gen, ino, ci)) {
+        merged = 1;
         uint8_t *base = efs_buf_alloc(len);
         uint8_t i;
 
@@ -2904,18 +3225,54 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
             return EFS_ERR_NOMEM;
         }
         if (efs_client_fetch_published_chunk(ino, ci, base, len) != EFS_OK &&
-            efs_client_fetch_published_chunk(ino, ci, base, len) != EFS_OK)
-            memset(base, 0, len);
+            efs_client_fetch_published_chunk(ino, ci, base, len) != EFS_OK) {
+            /* Do not PUT a zero base over a chunk we failed to read. */
+            efs_buf_free(base, len);
+            efs_buf_free(copy, len);
+            pthread_mutex_lock(mu);
+            e = dcache_find(s, ino, ci);
+            if (e && e->ino == ino && e->ci == ci && e->data && !e->dirty) {
+                e->dirty = 1;
+                dcache_note_dirty_bytes((int64_t)len);
+            }
+            pthread_mutex_unlock(mu);
+            return EFS_ERR_IO;
+        }
         for (i = 0; i < nrange; i++) {
             if (roff[i] + rlen[i] <= len)
                 memcpy(base + roff[i], copy + roff[i], rlen[i]);
         }
         memcpy(copy, base, len);
         efs_buf_free(base, len);
+        if (have_base) {
+            struct efs_chunk_entry ce;
+
+            if (export_chunk_copy(ino, ci, &ce) == 0 && ce.generation)
+                bg = ce.generation;
+        }
+    }
+    if (merged) {
+        pthread_mutex_lock(mu);
+        e = dcache_find(s, ino, ci);
+        if (e && e->ino == ino && e->ci == ci &&
+            e->base_gen != EFS_CHUNK_BASE_UNCOND)
+            e->base_gen = bg;
+        pthread_mutex_unlock(mu);
     }
     *copy_out = copy;
     *len_out = len;
     *bg_out = bg;
+    /* A have_base buffer is the whole chunk this client has. Publishing
+     * another span and later folding a short copy of it is what turned
+     * concurrent appends into NUL records. The image replaces the chain. */
+    if (have_base) {
+        if (doff)
+            *doff = 0;
+        if (dlen)
+            *dlen = 0;
+    } else if (doff && dlen) {
+        span_of(ino, ci, bg, nrange, roff, rlen, len, doff, dlen);
+    }
     return 1;
 }
 
@@ -2981,7 +3338,7 @@ static int flush_pipe_drain(struct flush_pipe *p)
 
 static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
                           uint8_t *copy, uint32_t len, uint64_t bg,
-                          uint64_t seq)
+                          uint64_t seq, uint32_t doff, uint32_t dlen)
 {
     struct chunk_put_job *j;
 
@@ -3003,6 +3360,8 @@ static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
     j->flush_len = len;
     j->flush_base_gen = bg;
     j->flush_seq = seq;
+    j->flush_delta_off = doff;
+    j->flush_delta_len = dlen;
     j->rc = EFS_ERR_IO;
     p->copies[p->n] = copy;
     p->lens[p->n] = len;
@@ -3034,9 +3393,11 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
         uint32_t len = e->len;
         int have_base = e->have_base;
         uint64_t slot_bg = e->base_gen;
+        uint64_t object_gen = e->object_gen;
         uint8_t nrange = e->nrange;
         uint32_t roff[DCACHE_NR], rlen[DCACHE_NR];
-        if (!have_base && nrange) {
+        uint32_t doff = 0, dlen = 0;
+        if (nrange) {
             memcpy(roff, e->roff, (size_t)nrange * sizeof(uint32_t));
             memcpy(rlen, e->rlen, (size_t)nrange * sizeof(uint32_t));
         }
@@ -3056,7 +3417,8 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
          * above the reclaim limit (perpetual flush storms). */
         dcache_note_dirty_bytes(-(int64_t)len);
         pthread_mutex_unlock(mu);
-        if (dcache_need_published_merge(have_base, slot_bg, ino, ci)) {
+        if (dcache_need_published_merge(have_base, slot_bg, object_gen,
+                                        ino, ci)) {
             uint8_t *base = efs_buf_alloc(len);
             if (!base) {
                 efs_buf_free(copy, len);
@@ -3071,16 +3433,36 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             int rrc = efs_client_fetch_published_chunk(ino, ci, base, len);
             if (rrc != EFS_OK)
                 rrc = efs_client_fetch_published_chunk(ino, ci, base, len);
-            if (rrc != EFS_OK)
-                memset(base, 0, len);
+            if (rrc != EFS_OK) {
+                efs_buf_free(base, len);
+                efs_buf_free(copy, len);
+                pthread_mutex_lock(mu);
+                if (e->ino == ino && e->ci == ci && e->data && !e->dirty) {
+                    e->dirty = 1;
+                    dcache_note_dirty_bytes((int64_t)len);
+                }
+                pthread_mutex_unlock(mu);
+                return rrc;
+            }
             for (uint8_t i = 0; i < nrange; i++) {
                 if (roff[i] + rlen[i] <= len)
                     memcpy(base + roff[i], copy + roff[i], rlen[i]);
             }
             memcpy(copy, base, len);
             efs_buf_free(base, len);
+            if (have_base) {
+                struct efs_chunk_entry ce;
+
+                if (export_chunk_copy(ino, ci, &ce) == 0 && ce.generation)
+                    slot_bg = ce.generation;
+            }
         }
-        int prc = dcache_put_now(ino, ci, copy, len, e->base_gen, seq);
+        if (have_base)
+            doff = dlen = 0;
+        else
+            span_of(ino, ci, slot_bg, nrange, roff, rlen, len, &doff, &dlen);
+        int prc = dcache_put_now(ino, ci, copy, len, slot_bg, seq, doff,
+                                 dlen);
         pthread_mutex_lock(mu);
         if (prc != EFS_OK) {
             efs_buf_free(copy, len);
@@ -3101,6 +3483,8 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
         if (e->ino == ino && e->ci == ci && e->data && e->len >= len) {
             /* Keep nrange so a STALE report can re-apply this client's
              * bytes onto a fresher committed base (W1). */
+            if (e->base_gen != EFS_CHUNK_BASE_UNCOND)
+                e->base_gen = slot_bg;
             dcache_install_image(e, copy, len, seq);
         } else if (!e->dirty && e->ino == ino && e->ci == ci) {
             dcache_pin_release(e);
@@ -3166,6 +3550,7 @@ static int dcache_flush_all_slots(efs_ino_t only_ino, int have_only)
                 uint8_t *copy = NULL;
                 uint32_t len = 0;
                 uint64_t bg = 0, seq = 0;
+                uint32_t doff = 0, dlen = 0;
                 int st;
 
                 pthread_mutex_lock(io);
@@ -3182,14 +3567,15 @@ static int dcache_flush_all_slots(efs_ino_t only_ino, int have_only)
                 ci = e->ci;
                 pthread_mutex_unlock(mu);
                 pthread_mutex_unlock(io);
-                st = dcache_steal_dirty(only_ino, ci, &copy, &len, &bg, &seq);
+                st = dcache_steal_dirty(only_ino, ci, &copy, &len, &bg, &seq,
+                                        &doff, &dlen);
                 if (st < 0) {
                     pipe.rc = st;
                     break;
                 }
                 if (st > 0) {
                     if (flush_pipe_add(&pipe, only_ino, ci, copy, len, bg,
-                                       seq) != EFS_OK)
+                                       seq, doff, dlen) != EFS_OK)
                         break;
                 } else {
                     break;
@@ -3236,12 +3622,15 @@ int efs_dcache_flush_ino(efs_ino_t ino)
         uint8_t *copy = NULL;
         uint32_t len = 0;
         uint64_t bg = 0, seq = 0;
-        int st = dcache_steal_dirty(ino, ci, &copy, &len, &bg, &seq);
+        uint32_t doff = 0, dlen = 0;
+        int st = dcache_steal_dirty(ino, ci, &copy, &len, &bg, &seq, &doff,
+                                    &dlen);
 
         if (st < 0)
             pipe.rc = st;
         else if (st > 0 &&
-                 flush_pipe_add(&pipe, ino, ci, copy, len, bg, seq) != EFS_OK)
+                 flush_pipe_add(&pipe, ino, ci, copy, len, bg, seq, doff,
+                                dlen) != EFS_OK)
             break;
     }
     (void)flush_pipe_drain(&pipe);
@@ -3287,6 +3676,10 @@ static int dcache_object_of(efs_ino_t ino, uint32_t ci, struct efs_chunk_rec *re
         memcpy(rec->nodes, e->object_nodes, sizeof(rec->nodes));
         memcpy(rec->checksums, e->object_cks, sizeof(rec->checksums));
         rec->chunk_generation = e->object_gen;
+        rec->delta_off = e->object_delta_off;
+        rec->delta_len = e->object_delta_len;
+        rec->delta_base_n = e->object_delta_base_n;
+        rec->delta_base_seq = e->object_delta_base_seq;
         hit = 1;
     }
     pthread_mutex_unlock(dcache_mu(s));
@@ -3314,16 +3707,18 @@ static int dcache_note_committed(efs_ino_t ino, uint32_t ci, uint64_t gen)
     struct dcache_ent *e;
     int hit = 0;
 
-    if (!ino || !gen)
+    if (!ino)
         return 0;
     pthread_once(&g_dcache_once, dcache_init);
     s = dcache_slot(ino, ci);
     pthread_mutex_lock(dcache_mu(s));
     e = dcache_find(s, ino, ci);
     if (e) {
-        if (e->base_gen != EFS_CHUNK_BASE_UNCOND)
+        /* A span publish does not move the base generation (pass 0).
+         * A full image does: later CAS expects that object. */
+        if (gen && e->base_gen != EFS_CHUNK_BASE_UNCOND)
             e->base_gen = gen;
-        hit = e->object_gen == gen;
+        hit = gen && e->object_gen == gen;
         /* This object's ranges are committed. A later pwrite must record
          * only its own bytes: keeping the previous span made a STALE
          * replay paint the old image over a peer's exclusive range
@@ -3354,7 +3749,10 @@ int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci)
     struct dcache_ent *e;
     struct efs_chunk_entry ce;
     int rc;
+    int have_base = 0;
+    uint64_t object_gen = 0;
     pthread_mutex_t *io;
+    uint32_t span_off = 0, span_len = 0;
 
     if (!ino)
         return EFS_OK;
@@ -3372,6 +3770,10 @@ int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci)
     bg = e->base_gen;
     len = e->len;
     nrange = e->nrange;
+    have_base = e->have_base;
+    object_gen = e->object_gen;
+    span_off = e->object_delta_off;
+    span_len = e->object_delta_len;
     if (nrange)
         memcpy(roff, e->roff, (size_t)nrange * sizeof(uint32_t));
     if (nrange)
@@ -3406,16 +3808,37 @@ int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci)
                 (unsigned long long)ino, ci, (unsigned long long)committed, rc,
                 nrange);
     if (rc != EFS_OK) {
-        /* Committed gen may have no objects (ftruncate stub, or a
-         * hash that was never PUT). RMW retry still CASes that gen;
-         * start from zeros and overlay our ranges. */
-        memset(base, 0, len);
-        rc = EFS_OK;
+        /* A zero-checksum stub returns OK above. This is a span object
+         * we could not read. Zero-filling and publishing that image
+         * drops every earlier span (concurrent_appends: full size,
+         * NUL records). Leave the chain in place. */
+        efs_buf_free(base, len);
+        efs_buf_free(copy, len);
+        pthread_mutex_unlock(io);
+        return rc;
     }
-    if (!nrange) {
-        /* have_base image with no ranges: treat as full overwrite */
+    /* The published object is still ours: the local buffer has every
+     * byte this client wrote, including ranges cleared after commit.
+     * A different generation is the peer's image (peer_shared_pwrite).
+     * Copying our buffer over that drops their half. Overlay only the
+     * ranges this flush still owns. */
+    if (have_base && object_gen && committed == object_gen) {
         memcpy(base, copy, len);
-        bg = EFS_CHUNK_BASE_UNCOND;
+        bg = committed;
+    } else if (!nrange) {
+        /* A span publish clears nrange once it commits. The bytes
+         * outside that span are not this client's; copying the whole
+         * image deletes a peer's exclusive range. A full-chunk image
+         * (span_len == 0) is still a full overwrite. */
+        if (span_len && (uint64_t)span_off + span_len <= len) {
+            memcpy(base + span_off, copy + span_off, span_len);
+            bg = committed;
+        } else if (!(have_base && object_gen && committed != object_gen)) {
+            memcpy(base, copy, len);
+            bg = EFS_CHUNK_BASE_UNCOND;
+        } else {
+            bg = committed;
+        }
     } else {
         uint8_t i;
         for (i = 0; i < nrange; i++) {
@@ -3424,7 +3847,7 @@ int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci)
         }
         bg = committed;
     }
-    rc = dcache_put_now(ino, ci, base, len, bg, seq);
+    rc = dcache_put_now(ino, ci, base, len, bg, seq, 0, 0);
     pthread_mutex_lock(dcache_mu(s));
     e = dcache_find(s, ino, ci);
     if (e && e->data && e->len >= len) {
@@ -3696,7 +4119,8 @@ static void *chunk_put_worker(void *arg)
     if (job->flush_put) {
         job->rc = dcache_put_now(job->ino, job->ci, job->flush_buf,
                                  job->flush_len, job->flush_base_gen,
-                                 job->flush_seq);
+                                 job->flush_seq, job->flush_delta_off,
+                                 job->flush_delta_len);
         return NULL;
     }
     chunk_size = data_chunk_size();
@@ -4037,7 +4461,9 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
                            chunk_candidate_gen(jobs[i].nodes,
                                                jobs[i].checksums,
                                                jobs[i].ci),
-                           0, jobs[i].nodes, jobs[i].checksums);
+                           0, jobs[i].nodes, jobs[i].checksums, 0, 0,
+                           have ? prev.ndelta : 0,
+                           have ? prev.delta_seq : 0);
                 /* Same placement + new checksums is a new immutable
                  * generation. Skipping REPORT left KV on the ftruncate
                  * stub gen while PUT wrote `{ci}.{fi}.{G}` — remount

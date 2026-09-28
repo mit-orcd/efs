@@ -87,15 +87,15 @@ static uint32_t path_spread_hash(const struct writer_job *job)
  * minimize in-flight jobs (latency) with bytes-assigned as tie-break so
  * all paths stay roughly even. Near-ties (new empty disks) are broken by
  * a per-file hash so one inode does not pile onto one path. */
-static uint32_t pick_write_path(struct writer_job *job)
+/* existing is the root already holding this fragment, or -1.
+ * The caller probes before taking g_pool.lock: the probe used to
+ * run under that lock and every PUT waited on six directory walks. */
+static uint32_t pick_write_path(struct writer_job *job, int existing)
 {
     uint32_t n = (uint32_t)g_pool.npaths;
     if (n <= 1)
         return 0;
 
-    int existing = server_find_fragment_root(job->s, job->ex, job->ino,
-                                             job->chunk_index,
-                                             job->fragment_index);
     if (existing >= 0 && (uint32_t)existing < n)
         return (uint32_t)existing;
 
@@ -138,7 +138,10 @@ static int run_job(struct writer_job *job)
         efs_tls_write_known_zero = 0;
     }
     if (efs_tls_write_root < 0)
-        efs_tls_write_root = (int)pick_write_path(job);
+        efs_tls_write_root = (int)pick_write_path(
+            job, server_find_fragment_root(job->s, job->ex, job->ino,
+                                           job->chunk_index,
+                                           job->fragment_index));
     efs_tls_chunk_gen = job->chunk_generation;
 
     switch (job->op) {
@@ -211,8 +214,13 @@ static int submit_and_wait(struct writer_job *job)
     job->done = 0;
     job->result = EFS_ERR_IO;
 
+    int existing = -1;
+    if (g_pool.npaths > 1)
+        existing = server_find_fragment_root(job->s, job->ex, job->ino,
+                                             job->chunk_index,
+                                             job->fragment_index);
     pthread_mutex_lock(&g_pool.lock);
-    uint32_t pi = pick_write_path(job);
+    uint32_t pi = pick_write_path(job, existing);
     if (pi >= (uint32_t)g_pool.npaths)
         pi = 0;
     job->path_index = pi;

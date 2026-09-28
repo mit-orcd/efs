@@ -47,6 +47,7 @@ const char *efs_strerror(int rc)
     case EFS_ERR_ACCES:  return "permission denied";
     case EFS_ERR_NAMETOOLONG: return "name too long";
     case EFS_ERR_AGAIN:  return "try again";
+    case EFS_ERR_NODATA: return "attribute not found";
     default:             return "unknown error";
     }
 }

@@ -44,6 +44,7 @@ def load(path):
     problems = []
     selected = []
     complete = False
+    seen_header = False
     with open(path) as f:
         for lineno, line in enumerate(f, 1):
             raw = line.rstrip("\n")
@@ -55,12 +56,18 @@ def load(path):
                 continue
             if not raw or raw.startswith("#"):
                 continue
+            # run_tests.sh used to capture the suite's stdout ("pass …",
+            # "POSIX suite: …") in front of the TSV. That preamble is not
+            # a row. A line with no tab after the header still is.
+            if not seen_header and "\t" not in raw:
+                continue
             # The detail is the remainder of the line, tabs included.
             # Splitting the whole line and keeping only parts[2] drops
             # everything after a second tab, so two different failures
             # compare equal.
             parts = raw.split("\t", 2)
             if parts[0] == "test" and len(parts) >= 2 and parts[1] == "result":
+                seen_header = True
                 continue
             if len(parts) < 2 or parts[1] == "" or parts[0] == "":
                 problems.append("%s:%d: truncated row %r" % (path, lineno, raw))
@@ -262,6 +269,9 @@ def _self_test():
           header + "t\tPASS\t\n", 2)
     check("notrun", header + "t\tPASS\t\n", header + "t\tNOTRUN\tcut\n", 2)
     check("truncated", header + "t\tPASS\t\n", header + "onlyname\n", 2)
+    preamble = ("pass t\nPOSIX suite: 1/1 pass\nwrote /tmp/x.tsv\n" + header +
+                "# select\tt\nt\tPASS\t\n# complete\n")
+    check("stdout-preamble", preamble, preamble, 0)
     text = check("target-only-fail", header + "a\tPASS\t\n",
                  header + "a\tPASS\t\nb\tFAIL\tboom\n", 2)
     if "b" not in text or "FAIL" not in text:

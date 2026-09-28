@@ -4,6 +4,8 @@
 #include "efs/network.h"
 #include "efs/raft.h"
 #include "efs/kv_key.h"
+#include "efs/meta_cmd.h"
+#include <stddef.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -131,6 +133,7 @@ static int rpc_status_to_efs(uint8_t st)
     case EFS_INODE_RPC_NOT_PRIMARY: return EFS_ERR_NOT_PRIMARY;
     case EFS_INODE_RPC_NOT_EMPTY:   return EFS_ERR_NOT_EMPTY;
     case EFS_INODE_RPC_STALE:       return EFS_ERR_STALE;
+    case EFS_INODE_RPC_NODATA:      return EFS_ERR_NODATA;
     case EFS_INODE_RPC_SYMLINK:
     case EFS_INODE_RPC_DEEP:        return EFS_ERR_PROTO;
     default:                        return EFS_ERR_IO;
@@ -304,11 +307,15 @@ static struct efs_conn *raft_voter_conn(uint32_t shard,
  * compiled-in 4-node mapping (voters {1,2,3} and {2,3,4}) two quorums
  * always share a live node. Falls back to any group-0 voter when no
  * dual-host is reachable — the server side forwards from there. */
-static struct efs_conn *raft_dual_voter_conn(efs_node_id_t *nid_out)
+static struct efs_conn *raft_dual_voter_conn(efs_node_id_t *nid_out,
+                                            efs_node_id_t skip)
 {
     int n = (int)g_client.node_count;
     uint32_t dual = raft_group_voters(EFS_RAFT_GROUP_SHARD, n) &
                     raft_group_voters(EFS_RAFT_GROUP_SHARD2, n);
+    struct efs_conn *held = NULL;
+    efs_node_id_t held_id = 0;
+
     for (int rid = 0; rid < n && rid < EFS_RAFT_MAX_PEERS; rid++) {
         if (!(dual & (1u << rid)))
             continue;
@@ -316,10 +323,29 @@ static struct efs_conn *raft_dual_voter_conn(efs_node_id_t *nid_out)
         if (efs_client_node_is_down(id))
             continue;
         struct efs_conn *conn = efs_client_conn_get(id);
-        if (conn) {
-            *nid_out = id;
-            return conn;
+        if (!conn)
+            continue;
+        /* A report that just got BUSY from this node tries the other
+         * dual-host. Both host every group; the first one (fcstor004)
+         * was the only target, and a follower that has fallen behind
+         * turns every ReadIndex into BUSY while its peer is caught up. */
+        if (skip && id == skip) {
+            if (!held) {
+                held = conn;
+                held_id = id;
+            } else {
+                efs_client_conn_release(id, conn);
+            }
+            continue;
         }
+        if (held)
+            efs_client_conn_release(held_id, held);
+        *nid_out = id;
+        return conn;
+    }
+    if (held) {
+        *nid_out = held_id;
+        return held;
     }
     return raft_voter_conn(EFS_ROOT_INO, nid_out);
 }
@@ -336,7 +362,8 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
 /* Send to the owner of `shard`. Retry NOT_PRIMARY. */
 static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
                                uint32_t req_len, uint8_t expect, void *reply,
-                               uint32_t reply_len)
+                               uint32_t reply_len, uint32_t copy_cap,
+                               uint32_t *copied)
 {
     efs_node_id_t target = 0; /* 0 = compute the owner from our view */
     int prof = rpc_prof_enabled();
@@ -360,6 +387,8 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
              * (dir_many_files EIO on a single recv failure). */
             if (attempt + 1 < 16) {
                 unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
+                fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=send\n",
+                        type, attempt);
                 usleep((useconds_t)(50000ull << shift));
                 continue;
             }
@@ -375,6 +404,8 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             efs_client_conn_drop(nid, conn);
             if (attempt + 1 < 16) {
                 unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
+                fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d\n",
+                        type, attempt, rc);
                 usleep((useconds_t)(50000ull << shift));
                 continue;
             }
@@ -385,7 +416,19 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             free(payload);
             return EFS_ERR_PROTO;
         }
-        memcpy(reply, payload, reply_len);
+        {
+            uint32_t cap = copy_cap ? copy_cap : reply_len;
+            uint32_t ncopy;
+
+            if (cap < reply_len) {
+                free(payload);
+                return EFS_ERR_PROTO;
+            }
+            ncopy = plen < cap ? plen : cap;
+            memcpy(reply, payload, ncopy);
+            if (copied)
+                *copied = ncopy;
+        }
         free(payload);
         struct efs_msg_inode_reply *r = reply;
         if (r->status == EFS_INODE_RPC_BUSY) {
@@ -422,6 +465,9 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             continue;
         }
         rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, 0);
+        if (t3 > t2 && t3 - t2 > 10000)
+            fprintf(stderr, "inode-rpc: slow-recv type=%u us=%llu\n",
+                    type, t3 - t2);
         if (r->status != EFS_INODE_RPC_NOT_PRIMARY)
             return EFS_OK;
         /* NOT_PRIMARY: retry on the server-reported primary. No hint (or
@@ -436,6 +482,8 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             unsigned long long sleep_us = 50000ull << shift;
             saw_busy = 1;
             target = 0;
+            fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=no-hint\n",
+                    type, attempt);
             usleep((useconds_t)sleep_us);
             continue;
         }
@@ -457,7 +505,8 @@ static int rpc_send_recv_owner(efs_ino_t ino, uint8_t type, const void *req,
 {
     /* The KV shard space is the fixed 12-bit one (ino & 0xFFF). */
     return rpc_send_recv_shard(efs_export_shard_of(ino, EFS_KV_SHARD_BITS),
-                               type, req, req_len, expect, reply, reply_len);
+                               type, req, req_len, expect, reply, reply_len,
+                               0, NULL);
 }
 
 int efs_client_rpc_lookup_path(efs_export_id_t export_id, efs_ino_t start,
@@ -970,6 +1019,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
                               uint8_t expect, void *reply, uint32_t reply_len)
 {
     efs_node_id_t target = 0;
+    efs_node_id_t skip = 0;
     int saw_busy = 0;
     int prof = rpc_prof_enabled();
     for (int attempt = 0; attempt < 16; attempt++) {
@@ -980,7 +1030,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
             conn = efs_client_conn_get(target);
             nid = target;
         } else {
-            conn = raft_dual_voter_conn(&nid);
+            conn = raft_dual_voter_conn(&nid, skip);
         }
         unsigned long long t1 = prof ? rpc_prof_now_us() : 0;
         if (!conn || efs_conn_send_msg(conn, type, req, req_len) != 0) {
@@ -1003,6 +1053,8 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
             efs_client_conn_drop(nid, conn);
             if (attempt + 1 < 16) {
                 unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
+                fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d\n",
+                        type, attempt, rc);
                 usleep((useconds_t)(50000ull << shift));
                 continue;
             }
@@ -1018,6 +1070,8 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         struct efs_msg_inode_reply *r = reply;
         if (r->status == EFS_INODE_RPC_BUSY) {
             saw_busy = 1;
+            skip = nid;
+            target = 0;
             unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
             unsigned long long sleep_us = 50000ull << shift;
             usleep((useconds_t)sleep_us);
@@ -1092,4 +1146,56 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
     if (rc != EFS_OK)
         return rc;
     return rpc_status_to_efs(r.status);
+}
+
+int efs_client_rpc_xattr(efs_export_id_t export_id, efs_ino_t ino, uint8_t op,
+                         uint32_t flags, const void *name, uint16_t nlen,
+                         const void *val, uint32_t vlen, void *out,
+                         uint32_t *out_len)
+{
+    uint8_t reqbuf[sizeof(struct efs_msg_xattr) + EFS_XATTR_NAME_MAX +
+                   EFS_XATTR_VALUE_MAX];
+    struct efs_msg_xattr_reply rep;
+    struct efs_msg_xattr *req;
+    uint32_t req_len, got = 0, hdr;
+    int rc;
+
+    if (nlen > EFS_XATTR_NAME_MAX || vlen > EFS_XATTR_VALUE_MAX)
+        return EFS_ERR_INVAL;
+    if ((nlen && !name) || (vlen && !val))
+        return EFS_ERR_INVAL;
+    req = (struct efs_msg_xattr *)reqbuf;
+    memset(req, 0, sizeof(*req));
+    req->export_id = export_id;
+    req->flags = flags;
+    req->ino = ino;
+    req->vlen = vlen;
+    req->nlen = nlen;
+    req->op = op;
+    if (nlen)
+        memcpy(reqbuf + sizeof(*req), name, nlen);
+    if (vlen)
+        memcpy(reqbuf + sizeof(*req) + nlen, val, vlen);
+    req_len = (uint32_t)sizeof(*req) + (uint32_t)nlen + vlen;
+    hdr = (uint32_t)offsetof(struct efs_msg_xattr_reply, data);
+    memset(&rep, 0, hdr);
+    rc = rpc_send_recv_shard(efs_export_shard_of(ino, EFS_KV_SHARD_BITS),
+                             EFS_MSG_XATTR, reqbuf, req_len,
+                             EFS_MSG_XATTR_REPLY, &rep, hdr, sizeof(rep), &got);
+    if (rc != EFS_OK)
+        return rc;
+    if (rep.status != EFS_INODE_RPC_OK)
+        return rpc_status_to_efs(rep.status);
+    if (got < hdr || rep.nbytes > got - hdr || rep.nbytes > EFS_XATTR_BLOB_MAX)
+        return EFS_ERR_PROTO;
+    if (out_len) {
+        if (out && *out_len < rep.nbytes) {
+            *out_len = rep.nbytes;
+            return EFS_ERR_INVAL;
+        }
+        if (out && rep.nbytes)
+            memcpy(out, rep.data, rep.nbytes);
+        *out_len = rep.nbytes;
+    }
+    return EFS_OK;
 }

@@ -3042,6 +3042,63 @@ int efs_export_set_chunk_gen(struct efs_export *ex, efs_ino_t ino,
     if (chunk_idx_get(ex, ino, chunk_index, &pos) != 0)
         return EFS_ERR_NOT_FOUND;
     ex->chunks[pos].generation = generation;
+    /* A new base retires deltas patched onto the previous image. */
+    ex->chunks[pos].ndelta = 0;
+    ex->chunks[pos].delta_seq = 0;
+    return EFS_OK;
+}
+
+int efs_export_set_chunk_deltas(struct efs_export *ex, efs_ino_t ino,
+                                uint32_t chunk_index,
+                                const struct efs_chunk_delta *deltas,
+                                uint32_t n, uint64_t newest_seq)
+{
+    uint64_t pos = 0;
+
+    if (!ex || n > EFS_CHUNK_DELTA_MAX)
+        return EFS_ERR_INVAL;
+    if (export_is_sharded_root(ex)) {
+        struct efs_export *tab = efs_export_table_for_chunk(ex, ino,
+                                                           chunk_index);
+        if (tab && tab != ex)
+            return efs_export_set_chunk_deltas(tab, ino, chunk_index, deltas,
+                                               n, newest_seq);
+    }
+    if (chunk_idx_get(ex, ino, chunk_index, &pos) != 0)
+        return EFS_ERR_NOT_FOUND;
+    ex->chunks[pos].ndelta = n;
+    ex->chunks[pos].delta_seq = n ? newest_seq : 0;
+    if (n && deltas)
+        memcpy(ex->chunks[pos].deltas, deltas, n * sizeof(*deltas));
+    return EFS_OK;
+}
+
+int efs_export_add_chunk_delta(struct efs_export *ex, efs_ino_t ino,
+                               uint32_t chunk_index,
+                               const struct efs_chunk_delta *delta)
+{
+    uint64_t pos = 0;
+    struct efs_chunk_entry *ce;
+
+    if (!ex || !delta || delta->len == 0)
+        return EFS_ERR_INVAL;
+    if (export_is_sharded_root(ex)) {
+        struct efs_export *tab = efs_export_table_for_chunk(ex, ino,
+                                                           chunk_index);
+        if (tab && tab != ex)
+            return efs_export_add_chunk_delta(tab, ino, chunk_index, delta);
+    }
+    if (chunk_idx_get(ex, ino, chunk_index, &pos) != 0)
+        return EFS_ERR_NOT_FOUND;
+    ce = &ex->chunks[pos];
+    if (ce->ndelta >= EFS_CHUNK_DELTA_MAX)
+        return EFS_ERR_NOMEM;
+    ce->deltas[ce->ndelta] = *delta;
+    ce->ndelta++;
+    /* delta_seq stays the newest seq a GETCHUNKS reply installed.
+     * A locally appended span does not know the lane seq; stamping
+     * obs+1 here made the next full-image CAS name a list the server
+     * does not have. */
     return EFS_OK;
 }
 

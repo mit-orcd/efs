@@ -222,3 +222,20 @@ int efs_store_mem_corrupt(struct efs_store *s, const struct efs_frag_id *id)
     (*pp)->data[0] ^= 0x5a;
     return EFS_OK;
 }
+
+int efs_store_mem_drop_sum(struct efs_store *s, const struct efs_frag_id *id)
+{
+    struct mem_store *m;
+    struct mem_rec **pp;
+
+    if (!s || !s->ctx || !id)
+        return EFS_ERR_INVAL;
+    m = s->ctx;
+    if (m->magic != MEM_STORE_MAGIC)
+        return EFS_ERR_INVAL;
+    pp = find_slot(m, id);
+    if (!*pp || !(*pp)->has_sum)
+        return EFS_ERR_NOT_FOUND;
+    (*pp)->has_sum = 0;
+    return EFS_OK;
+}

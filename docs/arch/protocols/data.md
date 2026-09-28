@@ -501,20 +501,20 @@ writes share an inode.
   serialization of committed byte-range writes," not "old whole chunk or one
   writer's whole chunk."
 - **The small-write envelope is declared honestly.** A 4 KiB write inside a
-  128 KiB chunk pays the immutable-generation RMW: read 128 KiB, construct a
-  new 128 KiB generation, write k+f fragments — roughly **80× data-path
-  amplification** for the logical 4 KiB, and two disjoint 4 KiB writes in the
-  same chunk contend on one generation CAS (an invented conflict at *chunk*
-  granularity — P1 is violated there by construction). This is a deliberate
-  scoping decision: **efs is optimized for HPC-sized, aligned I/O; sub-chunk
-  random updates intentionally pay RMW amplification**, and the scaling
-  claim in §1 of the spec does not cover random 4K mutation. If benchmarks
-  later show the workload needs it, the designed escape hatch is **immutable
-  delta objects** (a small write appends a delta object to the chunk's
-  publication rather than rebuilding the chunk; a background consolidation
-  folds deltas into a new base generation) — that makes disjoint sub-chunk
-  writes independent, at real complexity cost. It is not built until
-  measured.
+  128 KiB chunk still stores a full chunk image (k+f fragments) — roughly
+  **80× data-path amplification** for the logical 4 KiB. Disjoint writes
+  do not share one generation CAS. A partial publish appends an
+  **immutable span**: the object is a full chunk image, readers copy only
+  `[off, len)`, and the base generation does not change, so concurrent
+  disjoint spans do not STALE each other. Overlap, or a trailer already
+  holding `EFS_CHUNK_DELTA_MAX` (8) spans, returns STALE. The client
+  refetches and publishes one image that folds exactly the spans it
+  read; `delta_base_n` and `delta_base_seq` must match, or that CAS
+  STALEs. A fold that names a longer list than the image contains
+  deletes a peer span. That client fold is the consolidation. There is
+  no separate background span compactor. **efs stays optimized for
+  HPC-sized, aligned I/O**; the span path removes the invented chunk
+  conflict, and the bytes on disk stay a full chunk per span.
 - **Truncate is a content-epoch bump, distributed by a bounded fence.**
   Truncate (or any wholesale content replacement) advances the inode's
   `content_epoch` and stamps the new authoritative `base_size`. But a bump

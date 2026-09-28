@@ -29,6 +29,9 @@ static void frag_ptrs(uint8_t *buf, uint32_t frag_len, uint8_t *frags[EFS_NUM_FR
         frags[i] = buf + (size_t)i * frag_len;
 }
 
+static int overlay_chunk_deltas(efs_ino_t ino, uint32_t ci, uint8_t *buf,
+                                uint32_t chunk_len);
+
 struct frag_batch {
     pthread_mutex_t mu;
     pthread_cond_t cv;
@@ -352,14 +355,6 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     return rc;
 }
 
-static int efs_client_decode_placed_chunk(efs_ino_t ino, uint32_t chunk_index,
-                                          uint8_t *chunk_out)
-{
-    return efs_client_decode_placed_chunk_attempts(ino, chunk_index, chunk_out,
-                                                   data_chunk_size(), data_frag_size(),
-                                                   2, 1);
-}
-
 int efs_client_fetch_published_chunk(efs_ino_t ino, uint32_t ci,
                                      uint8_t *buf, uint32_t len)
 {
@@ -397,12 +392,15 @@ int efs_client_fetch_published_chunk(efs_ino_t ino, uint32_t ci,
                 stub = 1;
         }
     }
-    if (stub || !published) {
+    if (stub || !published)
         memset(buf, 0, len);
-        return EFS_OK;
+    else {
+        int rc = efs_client_decode_placed_chunk_attempts(ino, ci, buf, cs,
+                                                         frag_len, 2, 0);
+        if (rc != EFS_OK)
+            return rc;
     }
-    return efs_client_decode_placed_chunk_attempts(ino, ci, buf, cs,
-                                                   frag_len, 2, 0);
+    return overlay_chunk_deltas(ino, ci, buf, len);
 }
 
 
@@ -585,11 +583,108 @@ static uint64_t rdcache_map_gen(efs_ino_t ino, uint32_t ci)
 {
     struct efs_chunk_entry ce;
     int ok;
+    uint64_t g;
 
     pthread_mutex_lock(&g_client.idx_mu);
     ok = efs_export_get_chunk(&g_client.export, ino, ci, &ce) == 0;
     pthread_mutex_unlock(&g_client.idx_mu);
-    return ok ? ce.generation : 0;
+    if (!ok)
+        return 0;
+    g = ce.generation;
+    /* A span list changes the bytes without moving the base generation.
+     * Mix the list into the cache key so a later span misses this entry.
+     * delta_seq can stay 0 when the list was appended locally; the count
+     * and the newest span generation still change. */
+    if (ce.ndelta) {
+        g ^= (uint64_t)ce.ndelta * 0x9E3779B97F4A7C15ULL;
+        g ^= ce.deltas[ce.ndelta - 1].generation;
+        if (ce.delta_seq)
+            g ^= ce.delta_seq * 0xBF58476D1CE4E5B9ULL;
+        if (g == 0)
+            g = 1;
+    }
+    return g;
+}
+
+/* Fetch one span object and paint [off, len) onto the base image.
+ * The object is a full chunk generation (export fragment size, so
+ * O_DIRECT stores it). Only the published range is copied; the rest
+ * of that generation is not the base. A failure fails the read:
+ * dropping the span would return a hole where a writer committed. */
+static int overlay_one_delta(efs_ino_t ino, uint32_t ci, uint8_t *buf,
+                             uint32_t chunk_len, const struct efs_chunk_delta *d)
+{
+    uint32_t frag_len, i, ngood;
+    uint8_t *decoded, *fbuf;
+    uint8_t *frags[EFS_NUM_FRAGMENTS];
+    int have[EFS_NUM_FRAGMENTS];
+    int a = -1, b = -1, missing = -1;
+
+    if (!d || d->len == 0 || (uint64_t)d->off + d->len > chunk_len ||
+        (chunk_len % 2u) != 0)
+        return EFS_ERR_INVAL;
+    frag_len = chunk_len / 2;
+    decoded = malloc(chunk_len);
+    fbuf = malloc((size_t)EFS_NUM_FRAGMENTS * frag_len);
+    if (!decoded || !fbuf) {
+        free(decoded);
+        free(fbuf);
+        return EFS_ERR_NOMEM;
+    }
+    memset(decoded, 0, chunk_len);
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        frags[i] = fbuf + (size_t)i * frag_len;
+    memset(have, 0, sizeof(have));
+    ngood = 0;
+    for (i = 0; i < EFS_NUM_FRAGMENTS && ngood < 2; i++) {
+        uint32_t got = 0;
+        uint8_t sum[EFS_HASH_SIZE];
+        int grc = efs_client_get_fragment(d->nodes[i], ino, ci, i, frag_len,
+                                          frags[i], &got, sum, d->generation);
+
+        if (grc == EFS_OK && got == frag_len) {
+            have[i] = 1;
+            ngood++;
+        }
+    }
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (!have[i]) {
+            if (missing < 0)
+                missing = (int)i;
+        } else if (a < 0) {
+            a = (int)i;
+        } else if (b < 0) {
+            b = (int)i;
+        }
+    }
+    if (a < 0 || b < 0 || missing < 0 ||
+        efs_decode_chunk(frags, chunk_len, a, b, missing, decoded,
+                         chunk_len) != 0) {
+        free(decoded);
+        free(fbuf);
+        return EFS_ERR_DECODE;
+    }
+    memcpy(buf + d->off, decoded + d->off, d->len);
+    free(decoded);
+    free(fbuf);
+    return EFS_OK;
+}
+
+static int overlay_chunk_deltas(efs_ino_t ino, uint32_t ci, uint8_t *buf,
+                                uint32_t chunk_len)
+{
+    struct efs_chunk_entry ce;
+    uint32_t i;
+    int rc = EFS_OK;
+
+    memset(&ce, 0, sizeof(ce));
+    pthread_mutex_lock(&g_client.idx_mu);
+    if (efs_export_get_chunk(&g_client.export, ino, ci, &ce) != 0)
+        ce.ndelta = 0;
+    pthread_mutex_unlock(&g_client.idx_mu);
+    for (i = 0; i < ce.ndelta && rc == EFS_OK; i++)
+        rc = overlay_one_delta(ino, ci, buf, chunk_len, &ce.deltas[i]);
+    return rc;
 }
 
 int efs_rdcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
@@ -714,7 +809,11 @@ static void *chunk_get_worker(void *arg)
     uint32_t chunk_size = data_chunk_size();
     if (efs_rdcache_get(job->ino, job->ci, job->chunk, chunk_size) == 0) {
         efs_dcache_overlay(job->ino, job->ci, job->chunk, chunk_size);
-        job->rc = EFS_OK;
+        /* The cached image is the base. Spans published after it was
+         * stored are not in it; paint them or the read hides a peer
+         * (peer_overlap_pwrite_chunk_straddle). */
+        job->rc = overlay_chunk_deltas(job->ino, job->ci, job->chunk,
+                                       chunk_size);
         return NULL;
     }
     if (!job->have_ce) {
@@ -736,7 +835,11 @@ static void *chunk_get_worker(void *arg)
         job->rc = EFS_OK;
         return NULL;
     }
-    job->rc = efs_client_decode_placed_chunk(job->ino, job->ci, job->chunk);
+    /* fetch covers a generation-0 base (first spans hang off an empty
+     * row) and paints every span. decode_placed_chunk would fail that
+     * row: its nodes are zero. */
+    job->rc = efs_client_fetch_published_chunk(job->ino, job->ci, job->chunk,
+                                               chunk_size);
     if (job->rc == EFS_OK) {
         efs_dcache_overlay(job->ino, job->ci, job->chunk, chunk_size);
         if (job->cacheable)
@@ -1032,8 +1135,10 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
                 (offset / cs) == ((offset + size - 1) / cs)) {
                 uint32_t ci = (uint32_t)(offset / cs);
                 uint32_t off = (uint32_t)(offset % cs);
-                if (efs_dcache_copy_unpub(ino, ci, off, (uint8_t *)buf,
-                                          (uint32_t)size) == 0) {
+            if (efs_dcache_copy_unpub(ino, ci, off, (uint8_t *)buf,
+                                      (uint32_t)size) == 0 ||
+                efs_dcache_copy_kept(ino, ci, off, (uint8_t *)buf,
+                                     (uint32_t)size) == 0) {
                     *out_len = size;
                     return EFS_OK;
                 }
@@ -1082,15 +1187,31 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
         (offset / chunk_size) == ((end - 1) / chunk_size)) {
         uint32_t ci = (uint32_t)(offset / chunk_size);
         uint32_t off = (uint32_t)(offset % chunk_size);
+        /* Peer spans do not move the base generation, so a cached image
+         * from our own fold stays "current" and hides them. The batch
+         * path paints spans onto a decoded-cache hit; this 2 KiB path
+         * must not return that hit raw (peer_overlap_pwrite_chunk_straddle). */
+        (void)efs_client_pull_chunks_range(ino, ci, ci + 1);
         if (efs_dcache_copy(ino, ci, off, (uint8_t *)buf, (uint32_t)size) == 0) {
             *out_len = size;
             maybe_prefetch(want_pf, ino, end, file_size);
             return EFS_OK;
         }
-        if (efs_rdcache_copy(ino, ci, off, (uint8_t *)buf, (uint32_t)size) == 0) {
-            *out_len = size;
-            maybe_prefetch(want_pf, ino, end, file_size);
-            return EFS_OK;
+        {
+            struct efs_chunk_entry sce;
+            int spans;
+
+            pthread_mutex_lock(&g_client.idx_mu);
+            spans = efs_export_get_chunk(&g_client.export, ino, ci, &sce) == 0
+                    && sce.ndelta > 0;
+            pthread_mutex_unlock(&g_client.idx_mu);
+            if (!spans &&
+                efs_rdcache_copy(ino, ci, off, (uint8_t *)buf,
+                                 (uint32_t)size) == 0) {
+                *out_len = size;
+                maybe_prefetch(want_pf, ino, end, file_size);
+                return EFS_OK;
+            }
         }
     }
     uint32_t pipe = EFS_WRITE_PIPELINE;
@@ -1123,10 +1244,17 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
         /* Index lookup is idx_mu, not the table lock — g_client.lock is held
          * across serialize/snapshot and would stall every multi-job read. */
         pthread_mutex_lock(&g_client.idx_mu);
-        for (uint32_t i = 0; i < batch; i++)
-            jobs[i].have_ce =
-                (efs_export_get_chunk(&g_client.export, jobs[i].ino,
-                                      jobs[i].ci, NULL) == EFS_OK);
+        for (uint32_t i = 0; i < batch; i++) {
+            struct efs_chunk_entry ce;
+            int got = efs_export_get_chunk(&g_client.export, jobs[i].ino,
+                                           jobs[i].ci, &ce) == EFS_OK;
+            (void)got;
+            (void)ce;
+            /* A peer span does not move the base generation. A local
+             * row with ndelta==0 is not proof the map is complete.
+             * Re-pull before painting. */
+            jobs[i].have_ce = 0;
+        }
         pthread_mutex_unlock(&g_client.idx_mu);
 
         /* A missing row inside the file size is a cache miss until the
@@ -1148,21 +1276,42 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
             }
             if (miss0 != UINT32_MAX) {
                 int prc = efs_client_pull_layout_miss(ino, miss0, miss1 + 1);
-                if (prc != EFS_OK) {
-                    fprintf(stderr,
-                            "efs: read ino=%llu ci=%u..%u layout pull rc=%d, "
-                            "failing read instead of zero-filling\n",
-                            (unsigned long long)ino, miss0, miss1, prc);
-                    for (uint32_t j = 0; j < batch; j++)
-                        efs_buf_free(jobs[j].chunk, chunk_size);
-                    return prc;
-                }
                 pthread_mutex_lock(&g_client.idx_mu);
-                for (uint32_t i = 0; i < batch; i++)
-                    jobs[i].have_ce =
-                        (efs_export_get_chunk(&g_client.export, jobs[i].ino,
-                                              jobs[i].ci, NULL) == EFS_OK);
-                pthread_mutex_unlock(&g_client.idx_mu);
+                if (prc != EFS_OK) {
+                    int cached = 1;
+
+                    /* Unlink drops the inode row, so GETCHUNKS fails,
+                     * but an open fd still has the map from adopt.
+                     * Serving that map is the last layout; zero-filling
+                     * a miss that has no row is still a failed read. */
+                    for (uint32_t i = 0; i < batch; i++) {
+                        if (jobs[i].have_ce)
+                            continue;
+                        if (efs_export_get_chunk(&g_client.export,
+                                                 jobs[i].ino, jobs[i].ci,
+                                                 NULL) == EFS_OK)
+                            jobs[i].have_ce = 1;
+                        else
+                            cached = 0;
+                    }
+                    pthread_mutex_unlock(&g_client.idx_mu);
+                    if (!cached) {
+                        fprintf(stderr,
+                                "efs: read ino=%llu ci=%u..%u layout pull rc=%d, "
+                                "failing read instead of zero-filling\n",
+                                (unsigned long long)ino, miss0, miss1, prc);
+                        for (uint32_t j = 0; j < batch; j++)
+                            efs_buf_free(jobs[j].chunk, chunk_size);
+                        return prc;
+                    }
+                } else {
+                    for (uint32_t i = 0; i < batch; i++)
+                        jobs[i].have_ce =
+                            (efs_export_get_chunk(&g_client.export,
+                                                  jobs[i].ino, jobs[i].ci,
+                                                  NULL) == EFS_OK);
+                    pthread_mutex_unlock(&g_client.idx_mu);
+                }
             }
         }
 

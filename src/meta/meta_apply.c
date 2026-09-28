@@ -1,5 +1,7 @@
 #include "efs/meta_apply.h"
+#include "efs/metadata.h"
 #include "efs/raft.h"
+#include "efs/meta_cmd.h"
 #include "efs/kv_key.h"
 #include "efs/session.h"
 #include "efs/checksum.h"
@@ -17,6 +19,24 @@
 #define CHUNK_HDR 20
 #define CHUNK_VAL (CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS + \
                    EFS_HASH_SIZE * EFS_NUM_FRAGMENTS)
+/* Trailer after CHUNK_VAL: u16 count, u16 pad, then count records.
+ * Absent (vlen == CHUNK_VAL) means no deltas. A full-chunk CAS writes
+ * the short value again and the list is gone. */
+#define DELTA_REC 140
+#define DELTA_HDR 4
+#define CHUNK_VAL_MAX (CHUNK_VAL + DELTA_HDR + \
+                       EFS_CHUNK_DELTA_MAX * DELTA_REC)
+
+static void be16(uint8_t *p, uint16_t v)
+{
+    p[0] = (uint8_t)(v >> 8);
+    p[1] = (uint8_t)v;
+}
+
+static uint16_t rd16(const uint8_t *p)
+{
+    return (uint16_t)(((uint16_t)p[0] << 8) | p[1]);
+}
 
 static void be32(uint8_t *p, uint32_t v)
 {
@@ -1452,6 +1472,306 @@ int efs_meta_apply_mkdir_log_op(struct efs_kv *kv, const struct efs_meta_attrs *
                        ino ? layout : -1, q, out);
 }
 
+/* Blob: u32 count, then count times u16 nlen, u32 vlen, name, value.
+ * One key per inode. Empty means the key is absent, not a zero count. */
+
+static int xattr_check_blob(const uint8_t *b, uint32_t n, uint32_t *count)
+{
+    uint32_t c, pos, i;
+
+    if (n == 0) {
+        *count = 0;
+        return EFS_OK;
+    }
+    if (n < 4 || n > EFS_XATTR_BLOB_MAX)
+        return EFS_ERR_PROTO;
+    c = rd32(b);
+    pos = 4;
+    for (i = 0; i < c; i++) {
+        uint16_t nl;
+        uint32_t vl, step;
+
+        if (pos > n || n - pos < 6)
+            return EFS_ERR_PROTO;
+        nl = rd16(b + pos);
+        vl = rd32(b + pos + 2);
+        if (nl == 0 || nl > EFS_XATTR_NAME_MAX || vl > EFS_XATTR_VALUE_MAX)
+            return EFS_ERR_PROTO;
+        step = 6u + (uint32_t)nl + vl;
+        if (step < 6 || n - pos < step)
+            return EFS_ERR_PROTO;
+        pos += step;
+    }
+    if (pos != n)
+        return EFS_ERR_PROTO;
+    *count = c;
+    return EFS_OK;
+}
+
+static int xattr_load(struct efs_kv *kv, efs_ino_t ino, uint8_t *k, uint32_t *kl,
+                      uint8_t *blob, uint32_t *blen)
+{
+    int rc;
+
+    rc = efs_kv_key_xattr(efs_kv_inode_shard(ino), ino, k, kl);
+    if (rc != EFS_OK)
+        return rc;
+    *blen = EFS_XATTR_BLOB_MAX;
+    rc = efs_kv_get(kv, k, *kl, blob, blen);
+    if (rc == EFS_ERR_NOT_FOUND) {
+        *blen = 0;
+        return EFS_OK;
+    }
+    return rc;
+}
+
+static int blob_put(uint8_t *dst, uint32_t cap, uint32_t *dp, const uint8_t *name,
+                    uint16_t nlen, const uint8_t *val, uint32_t vlen)
+{
+    uint32_t need = 6u + (uint32_t)nlen + vlen;
+
+    if (need < 6 || *dp > cap || cap - *dp < need)
+        return EFS_ERR_INVAL;
+    be16(dst + *dp, nlen);
+    be32(dst + *dp + 2, vlen);
+    memcpy(dst + *dp + 6, name, nlen);
+    if (vlen)
+        memcpy(dst + *dp + 6 + nlen, val, vlen);
+    *dp += need;
+    return EFS_OK;
+}
+
+/* Fill one DEL when this inode has an xattr blob. A miss is not a
+ * tombstone — every unlink would otherwise plant a key the file never
+ * had. *added is 1 when it was filled. */
+static int xattr_del_item(struct efs_kv *kv, efs_ino_t ino, uint8_t *k,
+                          uint32_t *kl, struct efs_kv_item *it, int *added)
+{
+    uint32_t pn = 0;
+    int rc;
+
+    *added = 0;
+    rc = efs_kv_key_xattr(efs_kv_inode_shard(ino), ino, k, kl);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, k, *kl, NULL, &pn);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_OK;
+    if (rc != EFS_ERR_INVAL && rc != EFS_OK)
+        return rc;
+    memset(it, 0, sizeof(*it));
+    it->op = EFS_KV_DEL;
+    it->key = k;
+    it->klen = *kl;
+    *added = 1;
+    return EFS_OK;
+}
+
+static int xattr_name_ok(const uint8_t *name, uint16_t nlen, const uint8_t *val,
+                         uint32_t vlen)
+{
+    uint16_t i;
+
+    if (!name || nlen == 0 || nlen > EFS_XATTR_NAME_MAX || vlen > EFS_XATTR_VALUE_MAX)
+        return EFS_ERR_INVAL;
+    if (vlen && !val)
+        return EFS_ERR_INVAL;
+    for (i = 0; i < nlen; i++) {
+        if (name[i] == 0)
+            return EFS_ERR_INVAL;
+    }
+    return EFS_OK;
+}
+
+int efs_meta_apply_xattr(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
+                         uint8_t op, uint32_t flags, const uint8_t *name,
+                         uint16_t nlen, const uint8_t *val, uint32_t vlen)
+{
+    struct efs_meta_row row;
+    uint8_t blob[EFS_XATTR_BLOB_MAX], neu[EFS_XATTR_BLOB_MAX];
+    uint8_t k_xa[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX], v_ino[INO_VAL];
+    uint32_t kl = 0, ki = 0, blen = 0, count = 0, pos, i, dp, nc;
+    struct efs_kv_item it[2];
+    int rc, replaced = 0;
+
+    if (!kv || ino == 0)
+        return EFS_ERR_INVAL;
+    if (op != EFS_XATTR_SET && op != EFS_XATTR_REMOVE)
+        return EFS_ERR_INVAL;
+    if ((flags & ~(EFS_XATTR_CREATE | EFS_XATTR_REPLACE)) != 0)
+        return EFS_ERR_INVAL;
+    if ((flags & EFS_XATTR_CREATE) && (flags & EFS_XATTR_REPLACE))
+        return EFS_ERR_INVAL;
+    rc = xattr_name_ok(name, nlen, val, vlen);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    rc = xattr_load(kv, ino, k_xa, &kl, blob, &blen);
+    if (rc != EFS_OK)
+        return rc;
+    rc = xattr_check_blob(blob, blen, &count);
+    if (rc != EFS_OK)
+        return rc;
+    dp = 4;
+    nc = 0;
+    pos = blen ? 4 : 0;
+    for (i = 0; i < count; i++) {
+        uint16_t nl = rd16(blob + pos);
+        uint32_t vl = rd32(blob + pos + 2);
+        const uint8_t *nm = blob + pos + 6;
+        const uint8_t *vv = nm + nl;
+        uint32_t step = 6u + (uint32_t)nl + vl;
+        int match = nl == nlen && memcmp(nm, name, nlen) == 0;
+
+        if (match && op == EFS_XATTR_SET) {
+            if (flags & EFS_XATTR_CREATE)
+                return EFS_ERR_EXIST;
+            if (vl == vlen && (vlen == 0 || memcmp(vv, val, vlen) == 0))
+                return EFS_OK;
+            rc = blob_put(neu, EFS_XATTR_BLOB_MAX, &dp, name, nlen, val, vlen);
+            if (rc != EFS_OK)
+                return rc;
+            nc++;
+            replaced = 1;
+        } else if (match && op == EFS_XATTR_REMOVE) {
+            replaced = 1;
+        } else {
+            rc = blob_put(neu, EFS_XATTR_BLOB_MAX, &dp, nm, nl, vv, vl);
+            if (rc != EFS_OK)
+                return rc;
+            nc++;
+        }
+        pos += step;
+    }
+    if (op == EFS_XATTR_SET && !replaced) {
+        if (flags & EFS_XATTR_REPLACE)
+            return EFS_ERR_NODATA;
+        rc = blob_put(neu, EFS_XATTR_BLOB_MAX, &dp, name, nlen, val, vlen);
+        if (rc != EFS_OK)
+            return rc;
+        nc++;
+    }
+    if (op == EFS_XATTR_REMOVE && !replaced)
+        return EFS_ERR_NODATA;
+    be32(neu, nc);
+    row.base_ctime = max_u64(row.base_ctime, now);
+    rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, k_ino, &ki);
+    if (rc != EFS_OK)
+        return rc;
+    pack_inode(v_ino, &row);
+    memset(it, 0, sizeof(it));
+    it[0].op = EFS_KV_PUT;
+    it[0].key = k_ino;
+    it[0].klen = ki;
+    it[0].val = v_ino;
+    it[0].vlen = INO_VAL;
+    if (nc == 0) {
+        it[1].op = EFS_KV_DEL;
+        it[1].key = k_xa;
+        it[1].klen = kl;
+    } else {
+        it[1].op = EFS_KV_PUT;
+        it[1].key = k_xa;
+        it[1].klen = kl;
+        it[1].val = neu;
+        it[1].vlen = dp;
+    }
+    return efs_kv_batch(kv, it, 2);
+}
+
+int efs_meta_xattr_get(struct efs_kv *kv, efs_ino_t ino, const uint8_t *name,
+                       uint16_t nlen, uint8_t *val, uint32_t *vlen)
+{
+    struct efs_meta_row row;
+    uint8_t blob[EFS_XATTR_BLOB_MAX], k[EFS_KV_KEY_MAX];
+    uint32_t kl = 0, blen = 0, count = 0, pos, i;
+    int rc;
+
+    if (!kv || !vlen || ino == 0)
+        return EFS_ERR_INVAL;
+    rc = xattr_name_ok(name, nlen, NULL, 0);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    if (row.ino != ino)
+        return EFS_ERR_PROTO;
+    rc = xattr_load(kv, ino, k, &kl, blob, &blen);
+    if (rc != EFS_OK)
+        return rc;
+    rc = xattr_check_blob(blob, blen, &count);
+    if (rc != EFS_OK)
+        return rc;
+    pos = blen ? 4 : 0;
+    for (i = 0; i < count; i++) {
+        uint16_t nl = rd16(blob + pos);
+        uint32_t vl = rd32(blob + pos + 2);
+        const uint8_t *nm = blob + pos + 6;
+        const uint8_t *vv = nm + nl;
+
+        if (nl == nlen && memcmp(nm, name, nlen) == 0) {
+            if (*vlen < vl) {
+                *vlen = vl;
+                return EFS_ERR_INVAL;
+            }
+            if (vl && val)
+                memcpy(val, vv, vl);
+            *vlen = vl;
+            return EFS_OK;
+        }
+        pos += 6u + (uint32_t)nl + vl;
+    }
+    return EFS_ERR_NODATA;
+}
+
+int efs_meta_xattr_list(struct efs_kv *kv, efs_ino_t ino, uint8_t *buf,
+                        uint32_t *len)
+{
+    struct efs_meta_row row;
+    uint8_t blob[EFS_XATTR_BLOB_MAX], k[EFS_KV_KEY_MAX];
+    uint32_t kl = 0, blen = 0, count = 0, pos, i, dp, cap;
+    int rc;
+
+    if (!kv || !len || ino == 0)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    if (row.ino != ino)
+        return EFS_ERR_PROTO;
+    rc = xattr_load(kv, ino, k, &kl, blob, &blen);
+    if (rc != EFS_OK)
+        return rc;
+    rc = xattr_check_blob(blob, blen, &count);
+    if (rc != EFS_OK)
+        return rc;
+    cap = buf ? *len : 0;
+    dp = 0;
+    pos = blen ? 4 : 0;
+    for (i = 0; i < count; i++) {
+        uint16_t nl = rd16(blob + pos);
+        uint32_t vl = rd32(blob + pos + 2);
+        const uint8_t *nm = blob + pos + 6;
+        uint32_t piece = (uint32_t)nl + 1;
+
+        if (buf && dp + piece <= cap) {
+            memcpy(buf + dp, nm, nl);
+            buf[dp + nl] = 0;
+        }
+        dp += piece;
+        pos += 6u + (uint32_t)nl + vl;
+    }
+    if (buf && dp > cap) {
+        *len = dp;
+        return EFS_ERR_INVAL;
+    }
+    *len = dp;
+    return EFS_OK;
+}
+
 int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
                           uint64_t now)
 {
@@ -1470,8 +1790,9 @@ int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *na
     uint8_t k_ln[EFS_KV_KEY_MAX], v_ln[LANE_VAL];
     uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
     uint8_t k_opid[EFS_KV_KEY_MAX], v_opid[EFS_OPID_VAL_MAX];
-    uint32_t kl = 0, kh = 0, ki = 0, kp = 0, kln = 0, kr = 0;
-    struct efs_kv_item it[10];
+    uint8_t k_xa[EFS_KV_KEY_MAX];
+    uint32_t kl = 0, kh = 0, ki = 0, kp = 0, kln = 0, kr = 0, kxa = 0;
+    struct efs_kv_item it[12];
     uint32_t n = 0, psh, hsh, dsh, nlink_after = 0;
     int rc, held = 0;
     int touch_parent = 0;
@@ -1565,10 +1886,16 @@ int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *na
             it[n].vlen = INO_VAL;
             n++;
         } else {
+            int xa = 0;
+
             it[n].op = EFS_KV_DEL;
             it[n].key = k_ino;
             it[n].klen = ki;
             n++;
+            rc = xattr_del_item(kv, row.ino, k_xa, &kxa, &it[n], &xa);
+            if (rc != EFS_OK)
+                return rc;
+            n += (uint32_t)xa;
             /* The row dies here; the reap marker is what the background
              * reaper needs to sweep the dead file's lanes and GC its
              * fragments (L7), and it must be atomic with the delete. The
@@ -2464,10 +2791,11 @@ int efs_meta_apply_rmdir_op(struct efs_kv *kv, efs_ino_t parent, const char *nam
     uint8_t k_ln[EFS_KV_KEY_MAX], v_ln[LANE_VAL];
     uint8_t k_dseq[EFS_KV_KEY_MAX], v_dseq[8];
     uint8_t k_opid[EFS_KV_KEY_MAX], v_opid[EFS_OPID_VAL_MAX];
-    uint32_t kl = 0, kh = 0, ki = 0, kp = 0, kln = 0, ks = 0, dsh;
-    struct efs_kv_item it[10];
+    uint8_t k_xa[EFS_KV_KEY_MAX];
+    uint32_t kl = 0, kh = 0, ki = 0, kp = 0, kln = 0, ks = 0, kxa = 0, dsh;
+    struct efs_kv_item it[12];
     uint32_t n = 0;
-    int rc, held, stamp_lane = 0;
+    int rc, held, xa = 0, stamp_lane = 0;
     uint8_t dseq_lane;
 
     if (!kv || !name || parent == 0)
@@ -2533,6 +2861,10 @@ int efs_meta_apply_rmdir_op(struct efs_kv *kv, efs_ino_t parent, const char *nam
     it[n].key = k_ino;
     it[n].klen = ki;
     n++;
+    rc = xattr_del_item(kv, row.ino, k_xa, &kxa, &it[n], &xa);
+    if (rc != EFS_OK)
+        return rc;
+    n += (uint32_t)xa;
     it[n].op = EFS_KV_PUT;
     it[n].key = k_par;
     it[n].klen = kp;
@@ -2575,9 +2907,10 @@ int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino)
     struct efs_meta_row row;
     uint8_t k_ino[EFS_KV_KEY_MAX];
     uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
-    uint32_t ki = 0, kr = 0;
-    struct efs_kv_item it[2];
-    int rc, held;
+    uint8_t k_xa[EFS_KV_KEY_MAX];
+    uint32_t ki = 0, kr = 0, kxa = 0;
+    struct efs_kv_item it[3];
+    int rc, held, xa = 0;
 
     if (!kv || ino == 0)
         return EFS_ERR_INVAL;
@@ -2611,7 +2944,10 @@ int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino)
     it[1].klen = kr;
     it[1].val = v_reap;
     it[1].vlen = EFS_META_REAP_VAL;
-    return efs_kv_batch(kv, it, 2);
+    rc = xattr_del_item(kv, ino, k_xa, &kxa, &it[2], &xa);
+    if (rc != EFS_OK)
+        return rc;
+    return efs_kv_batch(kv, it, xa ? 3 : 2);
 }
 
 static void pack_chunk(uint8_t *p, const struct efs_meta_chunk *ch)
@@ -2642,6 +2978,90 @@ static int unpack_chunk(const uint8_t *p, uint32_t n, struct efs_meta_chunk *ch)
     memcpy(ch->checksums, p + CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
     return EFS_OK;
+}
+
+/* Delta record: off:4 len:4 gen:8 epoch:8 seq:8 nodes:12 cks:96 = 140. */
+static void pack_delta_rec(uint8_t *p, const struct efs_meta_delta *d)
+{
+    int i;
+
+    be32(p + 0, d->off);
+    be32(p + 4, d->len);
+    be64(p + 8, d->generation);
+    be64(p + 16, d->content_epoch);
+    be64(p + 24, d->seq);
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        be32(p + 32 + (uint32_t)i * 4u, d->nodes[i]);
+    memcpy(p + 32 + 4 * EFS_NUM_FRAGMENTS, d->checksums,
+           EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+}
+
+static int unpack_delta_rec(const uint8_t *p, struct efs_meta_delta *d)
+{
+    int i;
+
+    memset(d, 0, sizeof(*d));
+    d->off = rd32(p + 0);
+    d->len = rd32(p + 4);
+    d->generation = rd64(p + 8);
+    d->content_epoch = rd64(p + 16);
+    d->seq = rd64(p + 24);
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        d->nodes[i] = rd32(p + 32 + (uint32_t)i * 4u);
+    memcpy(d->checksums, p + 32 + 4 * EFS_NUM_FRAGMENTS,
+           EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+    return EFS_OK;
+}
+
+/* 0 when the value is a bare chunk image or the trailer is short. */
+static uint32_t trailer_n(const uint8_t *v, uint32_t n)
+{
+    uint32_t c;
+
+    if (!v || n < CHUNK_VAL + DELTA_HDR)
+        return 0;
+    c = ((uint32_t)v[CHUNK_VAL] << 8) | v[CHUNK_VAL + 1];
+    if (c > EFS_CHUNK_DELTA_MAX)
+        return 0;
+    if (n < CHUNK_VAL + DELTA_HDR + c * DELTA_REC)
+        return 0;
+    return c;
+}
+
+static int trailer_at(const uint8_t *v, uint32_t n, uint32_t i,
+                      struct efs_meta_delta *d)
+{
+    if (i >= trailer_n(v, n))
+        return EFS_ERR_INVAL;
+    return unpack_delta_rec(v + CHUNK_VAL + DELTA_HDR + i * DELTA_REC, d);
+}
+
+static int ranges_overlap(uint32_t a, uint32_t al, uint32_t b, uint32_t bl)
+{
+    if (al == 0 || bl == 0)
+        return 0;
+    return (uint64_t)a < (uint64_t)b + bl && (uint64_t)b < (uint64_t)a + al;
+}
+
+/* Write base image + n deltas. n == 0 keeps the historical short value
+ * so a chunk with no deltas stays CHUNK_VAL bytes. */
+static uint32_t pack_chunk_value(uint8_t *dst, const struct efs_meta_chunk *ch,
+                                 const struct efs_meta_delta *deltas,
+                                 uint32_t n)
+{
+    uint32_t i;
+
+    pack_chunk(dst, ch);
+    if (n == 0)
+        return CHUNK_VAL;
+    dst[CHUNK_VAL] = (uint8_t)(n >> 8);
+    dst[CHUNK_VAL + 1] = (uint8_t)n;
+    dst[CHUNK_VAL + 2] = 0;
+    dst[CHUNK_VAL + 3] = 0;
+    for (i = 0; i < n; i++)
+        pack_delta_rec(dst + CHUNK_VAL + DELTA_HDR + i * DELTA_REC,
+                       &deltas[i]);
+    return CHUNK_VAL + DELTA_HDR + n * DELTA_REC;
 }
 
 /* True when a new publication carries the exact fragment set of the row it
@@ -2864,18 +3284,24 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     uint8_t lane;
     uint32_t lsh, ish;
     uint8_t k_ch[EFS_KV_KEY_MAX], k_ln[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
-    uint8_t v_ch[CHUNK_VAL], v_ln[LANE_VAL], v_ino[INO_VAL];
-    uint8_t old_ln[LANE_VAL], old_ch[CHUNK_VAL];
-    /* gc_queue indexes by the global item number, so these are cap-sized. */
-    uint8_t k_gc[5][EFS_KV_KEY_MAX], v_gc[5][EFS_META_GC_VAL];
-    uint32_t kc = 0, kl = 0, ki = 0, vn;
+    uint8_t v_ch[CHUNK_VAL_MAX], v_ln[LANE_VAL], v_ino[INO_VAL];
+    uint8_t old_ln[LANE_VAL], old_ch[CHUNK_VAL_MAX];
+    /* gc_queue indexes by the global item number: chunk + lane + inode
+     * + the superseded base + one record per delta. */
+    uint8_t k_gc[4 + EFS_CHUNK_DELTA_MAX][EFS_KV_KEY_MAX];
+    uint8_t v_gc[4 + EFS_CHUNK_DELTA_MAX][EFS_META_GC_VAL];
+    uint32_t kc = 0, kl = 0, ki = 0, vn, ch_vlen = 0;
     uint64_t committed = 0;
     uint64_t inode_gen, mtime_gen, row_base_size = 0, row_active = 0;
     struct lane_rec ln;
-    struct efs_kv_item it[5];
+    struct efs_kv_item it[4 + EFS_CHUNK_DELTA_MAX];
     uint32_t n = 0;
+    uint32_t ch_wlen = CHUNK_VAL;
+    uint32_t nd_old = 0;
+    int appending = 0;
     int touch_inode = 0;
     int rc;
+    struct efs_meta_delta dlist[EFS_CHUNK_DELTA_MAX];
 
     if (!kv || !p || p->ino == 0)
         return EFS_ERR_INVAL;
@@ -2936,6 +3362,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
         rc = efs_kv_key_lane(lsh, p->ino, inode_gen, lane, k_ln, &kl);
     if (rc != EFS_OK)
         return rc;
+    memset(&got, 0, sizeof(got));
     vn = sizeof(old_ch);
     rc = efs_kv_get(kv, k_ch, kc, old_ch, &vn);
     if (rc == EFS_OK) {
@@ -2943,10 +3370,13 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
         if (rc != EFS_OK)
             return rc;
         committed = got.generation;
+        ch_vlen = vn;
     } else if (rc != EFS_ERR_NOT_FOUND) {
         return rc;
     }
-    if (committed == p->candidate_gen)
+    /* A delta's candidate names the span object, not the base image, so
+     * matching the base generation is not a replay of this publish. */
+    if (!p->delta_len && committed == p->candidate_gen)
         return EFS_OK;
     if (p->expected_gen != committed)
         return EFS_ERR_STALE;
@@ -2965,6 +3395,44 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
         return EFS_ERR_STALE;
     if (ln.append_bar && p->new_size > ln.append_bar)
         return EFS_ERR_BUSY;
+    nd_old = trailer_n(old_ch, ch_vlen);
+    if (p->delta_len) {
+        uint32_t i;
+
+        if ((uint64_t)p->delta_off + p->delta_len > EFS_MAX_CHUNK_SIZE)
+            return EFS_ERR_INVAL;
+        for (i = 0; i < nd_old; i++) {
+            rc = trailer_at(old_ch, ch_vlen, i, &dlist[i]);
+            if (rc != EFS_OK)
+                return rc;
+            /* Replay of this same span object. */
+            if (dlist[i].generation == p->candidate_gen)
+                return EFS_OK;
+            if (ranges_overlap(dlist[i].off, dlist[i].len, p->delta_off,
+                               p->delta_len))
+                return EFS_ERR_STALE;
+        }
+        /* The chain is full: the client refetches and publishes one
+         * image that folds every span. That is the consolidation. */
+        if (nd_old >= EFS_CHUNK_DELTA_MAX)
+            return EFS_ERR_STALE;
+        appending = 1;
+    } else {
+        uint64_t newest = 0;
+
+        if (nd_old) {
+            struct efs_meta_delta last;
+
+            rc = trailer_at(old_ch, ch_vlen, nd_old - 1, &last);
+            if (rc != EFS_OK)
+                return rc;
+            newest = last.seq;
+        }
+        /* The merged image covers exactly the deltas the writer read.
+         * A span that landed after that read must not be deleted. */
+        if (nd_old != p->delta_base_n || newest != p->delta_base_seq)
+            return EFS_ERR_STALE;
+    }
     ln.max_end = max_u64(ln.max_end, p->new_size);
     /* A write updates mtime AND ctime, and both live here rather than on the
      * inode row so that a million writers never touch the inode's leader.
@@ -2980,11 +3448,34 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     }
     ln.max_ctime = max_u64(ln.max_ctime, p->now);
     ln.seq++;
-    stored = p->ch;
-    stored.generation = p->candidate_gen;
-    stored.coding_profile_id = p->coding_profile_id;
-    stored.content_epoch = p->content_epoch;
-    pack_chunk(v_ch, &stored);
+    if (appending) {
+        struct efs_meta_delta *neu = &dlist[nd_old];
+
+        memset(neu, 0, sizeof(*neu));
+        neu->off = p->delta_off;
+        neu->len = p->delta_len;
+        neu->generation = p->candidate_gen;
+        neu->content_epoch = p->content_epoch;
+        neu->seq = ln.seq;
+        memcpy(neu->nodes, p->ch.nodes, sizeof(neu->nodes));
+        memcpy(neu->checksums, p->ch.checksums, sizeof(neu->checksums));
+        /* Keep the base image. A first span creates a generation-0 row
+         * so GETCHUNKS has a key to hang the trailer on; readers treat
+         * generation 0 as an empty base and overlay the spans. */
+        stored = got;
+        if (committed == 0) {
+            memset(&stored, 0, sizeof(stored));
+            stored.coding_profile_id = p->coding_profile_id;
+            stored.content_epoch = p->content_epoch;
+        }
+        ch_wlen = pack_chunk_value(v_ch, &stored, dlist, nd_old + 1);
+    } else {
+        stored = p->ch;
+        stored.generation = p->candidate_gen;
+        stored.coding_profile_id = p->coding_profile_id;
+        stored.content_epoch = p->content_epoch;
+        ch_wlen = pack_chunk_value(v_ch, &stored, NULL, 0);
+    }
     pack_lane(v_ln, &ln);
 
     memset(it, 0, sizeof(it));
@@ -2992,7 +3483,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     it[n].key = k_ch;
     it[n].klen = kc;
     it[n].val = v_ch;
-    it[n].vlen = CHUNK_VAL;
+    it[n].vlen = ch_wlen;
     n++;
     it[n].op = EFS_KV_PUT;
     it[n].key = k_ln;
@@ -3037,11 +3528,35 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
      * (L7). Emit one for the superseded generation — unless the new row
      * aliases the old fragment set (truncate tail stub), in which case the
      * fragments are shared with the live row and nothing is dead. */
-    if (committed != 0 && !chunk_aliases(&stored, &got)) {
+    if (!appending && committed != 0 && !chunk_aliases(&stored, &got)) {
         rc = gc_queue(it, &n, (uint32_t)(sizeof(it) / sizeof(it[0])),
                       k_gc, v_gc, p->ino, lane, p->chunk_index, &got);
         if (rc != EFS_OK)
             return rc;
+    }
+    /* A full image replaces the spans. Their objects are orphans (L7).
+     * An append keeps the base and every earlier span. */
+    if (!appending && nd_old) {
+        uint32_t di;
+
+        for (di = 0; di < nd_old; di++) {
+            struct efs_meta_delta dead_d;
+            struct efs_meta_chunk dead;
+
+            rc = trailer_at(old_ch, ch_vlen, di, &dead_d);
+            if (rc != EFS_OK)
+                return rc;
+            if (dead_d.generation == 0)
+                continue;
+            memset(&dead, 0, sizeof(dead));
+            dead.generation = dead_d.generation;
+            memcpy(dead.nodes, dead_d.nodes, sizeof(dead.nodes));
+            memcpy(dead.checksums, dead_d.checksums, sizeof(dead.checksums));
+            rc = gc_queue(it, &n, (uint32_t)(sizeof(it) / sizeof(it[0])),
+                          k_gc, v_gc, p->ino, lane, p->chunk_index, &dead);
+            if (rc != EFS_OK)
+                return rc;
+        }
     }
     return efs_kv_batch(kv, it, n);
 }
@@ -3203,10 +3718,33 @@ static int sweep_cb(void *user, const uint8_t *key, uint32_t klen,
     ss->it[ss->n].val = NULL; /* `it` is an uninitialised stack array */
     ss->it[ss->n].vlen = 0;
     ss->n++;
-    ss->rc = gc_queue(ss->it, &ss->n, ss->cap, ss->keys, ss->gc_vals,
-                      ino, lane, ci, &dead);
-    if (ss->rc != EFS_OK)
-        return 1;
+    if (dead.generation != 0) {
+        ss->rc = gc_queue(ss->it, &ss->n, ss->cap, ss->keys, ss->gc_vals,
+                          ino, lane, ci, &dead);
+        if (ss->rc != EFS_OK)
+            return 1;
+    }
+    {
+        uint32_t di, nd = trailer_n(val, vlen);
+
+        for (di = 0; di < nd; di++) {
+            struct efs_meta_delta dd;
+            struct efs_meta_chunk span;
+
+            if (ss->n + 1 > ss->cap)
+                break;
+            if (trailer_at(val, vlen, di, &dd) != EFS_OK || dd.generation == 0)
+                continue;
+            memset(&span, 0, sizeof(span));
+            span.generation = dd.generation;
+            memcpy(span.nodes, dd.nodes, sizeof(span.nodes));
+            memcpy(span.checksums, dd.checksums, sizeof(span.checksums));
+            ss->rc = gc_queue(ss->it, &ss->n, ss->cap, ss->keys, ss->gc_vals,
+                              ino, lane, ci, &span);
+            if (ss->rc != EFS_OK)
+                return 1;
+        }
+    }
     ss->chunks++;
     return 0;
 }
@@ -3304,10 +3842,10 @@ static int rsv_purge_cb(void *user, const uint8_t *key, uint32_t klen,
 int efs_meta_apply_reap_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
 {
     struct efs_meta_row row;
-    struct efs_kv_item it[3];
+    struct efs_kv_item it[4];
     uint8_t k_reap[EFS_KV_KEY_MAX], k_cur[EFS_KV_KEY_MAX];
-    uint8_t k_ino[EFS_KV_KEY_MAX];
-    uint32_t kr = 0, kc = 0, ki = 0, n = 0;
+    uint8_t k_ino[EFS_KV_KEY_MAX], k_xa[EFS_KV_KEY_MAX];
+    uint32_t kr = 0, kc = 0, ki = 0, kxa = 0, n = 0;
     uint32_t ish;
     int rc, held, drop_row = 0;
 
@@ -3382,10 +3920,16 @@ int efs_meta_apply_reap_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
         rc = efs_kv_key_inode(ish, ino, k_ino, &ki);
         if (rc != EFS_OK)
             return rc;
+        int xa = 0;
+
         it[n].op = EFS_KV_DEL;
         it[n].key = k_ino;
         it[n].klen = ki;
         n++;
+        rc = xattr_del_item(kv, ino, k_xa, &kxa, &it[n], &xa);
+        if (rc != EFS_OK)
+            return rc;
+        n += (uint32_t)xa;
     }
     return efs_kv_batch(kv, it, n);
 }
@@ -3764,10 +4308,36 @@ del:
         ts->rc = EFS_ERR_PROTO;
         return 1;
     }
-    ts->rc = gc_queue(ts->it, &ts->n, ts->cap, ts->gc_keys, ts->gc_vals,
-                      ino, lane, ci, &dead);
-    if (ts->rc != EFS_OK)
-        return 1;
+    if (dead.generation != 0) {
+        ts->rc = gc_queue(ts->it, &ts->n, ts->cap, ts->gc_keys, ts->gc_vals,
+                          ino, lane, ci, &dead);
+        if (ts->rc != EFS_OK)
+            return 1;
+    }
+    /* Spans ride in the value. The key delete drops them; queue a GC
+     * record per span while the batch has room. A span that does not
+     * fit is an orphan fragment (L7), not a resurrected byte. */
+    {
+        uint32_t di, nd = trailer_n(val, vlen);
+
+        for (di = 0; di < nd; di++) {
+            struct efs_meta_delta dd;
+            struct efs_meta_chunk span;
+
+            if (ts->n + 1 > ts->cap)
+                break;
+            if (trailer_at(val, vlen, di, &dd) != EFS_OK || dd.generation == 0)
+                continue;
+            memset(&span, 0, sizeof(span));
+            span.generation = dd.generation;
+            memcpy(span.nodes, dd.nodes, sizeof(span.nodes));
+            memcpy(span.checksums, dd.checksums, sizeof(span.checksums));
+            ts->rc = gc_queue(ts->it, &ts->n, ts->cap, ts->gc_keys, ts->gc_vals,
+                              ino, lane, ci, &span);
+            if (ts->rc != EFS_OK)
+                return 1;
+        }
+    }
     return 0;
 }
 
@@ -3823,8 +4393,8 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
     struct efs_meta_chunk got;
     uint8_t lane;
     uint32_t lsh;
-    uint8_t old_ch[CHUNK_VAL];
-    uint32_t kc = 0, kl = 0, vn;
+    uint8_t old_ch[CHUNK_VAL_MAX];
+    uint32_t kc = 0, kl = 0, vn, ch_vlen = 0;
     uint64_t committed = 0;
     struct lane_rec ln;
     struct efs_meta_chunk stored;
@@ -3856,6 +4426,7 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
         if (rc != EFS_OK)
             return rc;
         committed = got.generation;
+        ch_vlen = vn;
     } else if (rc != EFS_ERR_NOT_FOUND) {
         return rc;
     }
@@ -3917,6 +4488,28 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
             return rc;
     }
     {
+        uint32_t di, nd = trailer_n(old_ch, ch_vlen);
+
+        for (di = 0; di < nd; di++) {
+            struct efs_meta_delta dd;
+            struct efs_meta_chunk span;
+
+            if (*n + 1 > cap)
+                break;
+            if (trailer_at(old_ch, ch_vlen, di, &dd) != EFS_OK ||
+                dd.generation == 0)
+                continue;
+            memset(&span, 0, sizeof(span));
+            span.generation = dd.generation;
+            memcpy(span.nodes, dd.nodes, sizeof(span.nodes));
+            memcpy(span.checksums, dd.checksums, sizeof(span.checksums));
+            rc = gc_queue(it, n, cap, k_gc, v_gc, row->ino, lane,
+                          p.chunk_index, &span);
+            if (rc != EFS_OK)
+                return rc;
+        }
+    }
+    {
         uint32_t i;
         int found = 0;
 
@@ -3976,7 +4569,7 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     if (t->size > 0 && (t->size % EFS_MIN_CHUNK_SIZE) != 0) {
         tail_ci = (uint32_t)(t->size / EFS_MIN_CHUNK_SIZE);
         has_tail = t->tail != NULL;
-        if (!has_tail && !t->tail_external)
+        if (!has_tail && !t->tail_external && !t->keep_tail)
             return EFS_ERR_INVAL;
         if (has_tail && t->tail->chunk_index != tail_ci)
             return EFS_ERR_INVAL;
@@ -4796,12 +5389,61 @@ int efs_meta_apply_append_drain_file(struct efs_kv *kv, efs_ino_t ino)
     return rc;
 }
 
+int efs_meta_apply_get_chunk_deltas(struct efs_kv *kv, efs_ino_t ino,
+                                    uint32_t chunk_index,
+                                    struct efs_meta_delta *out, uint32_t cap,
+                                    uint32_t *n, uint64_t *newest)
+{
+    struct efs_meta_row row;
+    uint8_t lane;
+    uint8_t key[EFS_KV_KEY_MAX], val[CHUNK_VAL_MAX];
+    uint32_t klen = 0, vlen, nd, i, wr;
+    int rc;
+
+    if (!kv || !n || ino == 0)
+        return EFS_ERR_INVAL;
+    *n = 0;
+    if (newest)
+        *newest = 0;
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc != EFS_OK)
+        return rc;
+    lane = (uint8_t)(chunk_index % EFS_META_LANES);
+    rc = efs_kv_key_chunk(efs_kv_lane_shard(ino, lane), ino, row.generation, lane,
+                          chunk_index, key, &klen);
+    if (rc != EFS_OK)
+        return rc;
+    vlen = sizeof(val);
+    rc = kv_get_copy(kv, key, klen, val, sizeof(val), &vlen);
+    if (rc != EFS_OK)
+        return rc;
+    nd = trailer_n(val, vlen);
+    wr = nd < cap ? nd : cap;
+    for (i = 0; i < wr; i++) {
+        if (!out)
+            break;
+        rc = trailer_at(val, vlen, i, &out[i]);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    *n = nd;
+    if (newest && nd) {
+        struct efs_meta_delta last;
+
+        rc = trailer_at(val, vlen, nd - 1, &last);
+        if (rc != EFS_OK)
+            return rc;
+        *newest = last.seq;
+    }
+    return EFS_OK;
+}
+
 int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_index,
                              struct efs_meta_chunk *out)
 {
     struct efs_meta_row row;
     uint8_t lane;
-    uint8_t key[EFS_KV_KEY_MAX], val[CHUNK_VAL];
+    uint8_t key[EFS_KV_KEY_MAX], val[CHUNK_VAL_MAX];
     uint32_t klen = 0, vlen;
     int rc;
 

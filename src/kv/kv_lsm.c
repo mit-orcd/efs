@@ -1099,21 +1099,70 @@ static void vx_put_u32(uint8_t *p, uint32_t v)
     p[3] = (uint8_t)((v >> 24) & 0xFF);
 }
 
-static int vx_write(int fd, const void *p, size_t n)
-{
-    const uint8_t *b = p;
+/* One write() per key was the top of efsd during posix: the export
+ * walks the whole table on the GC thread, and each item was three
+ * syscalls (header, key, value). 64 KiB absorbs those. */
+#define VX_BUF (64u * 1024u)
 
-    while (n) {
-        ssize_t w = write(fd, b, n);
+struct vx_buf {
+    int fd;
+    uint8_t *p;
+    size_t n;
+};
+
+static int vx_flush(struct vx_buf *b)
+{
+    size_t off = 0;
+
+    while (off < b->n) {
+        ssize_t w = write(b->fd, b->p + off, b->n - off);
 
         if (w < 0) {
             if (errno == EINTR)
                 continue;
             return EFS_ERR_IO;
         }
-        b += (size_t)w;
-        n -= (size_t)w;
+        if (w == 0)
+            return EFS_ERR_IO;
+        off += (size_t)w;
     }
+    b->n = 0;
+    return EFS_OK;
+}
+
+static int vx_write(struct vx_buf *b, const void *p, size_t n)
+{
+    const uint8_t *s = p;
+
+    if (n >= VX_BUF) {
+        int rc = vx_flush(b);
+
+        if (rc != EFS_OK)
+            return rc;
+        while (n) {
+            ssize_t w = write(b->fd, s, n);
+
+            if (w < 0) {
+                if (errno == EINTR)
+                    continue;
+                return EFS_ERR_IO;
+            }
+            if (w == 0)
+                return EFS_ERR_IO;
+            s += (size_t)w;
+            n -= (size_t)w;
+        }
+        return EFS_OK;
+    }
+    if (b->n + n > VX_BUF) {
+        int rc = vx_flush(b);
+
+        if (rc != EFS_OK)
+            return rc;
+    }
+    if (n)
+        memcpy(b->p + b->n, s, n);
+    b->n += n;
     return EFS_OK;
 }
 
@@ -1152,15 +1201,91 @@ static int vx_pull(struct vx_src *s)
     return rc;
 }
 
+/* Min-heap of source indexes. Lowest index wins a tie: the view pins L0
+ * newest-first, and the old linear scan used strict < so that source
+ * supplied the value. A full scan per key was the cpu-clock top of efsd
+ * during posix (memcmp inside this export, on the GC thread). */
+static int vx_before(const struct vx_src *src, uint32_t a, uint32_t b)
+{
+    int c = kv_key_cmp(src[a].key, src[a].klen, src[b].key, src[b].klen);
+
+    if (c != 0)
+        return c < 0;
+    return a < b;
+}
+
+static void vx_swap(uint32_t *h, uint32_t i, uint32_t j)
+{
+    uint32_t t = h[i];
+
+    h[i] = h[j];
+    h[j] = t;
+}
+
+static void vx_sift_up(uint32_t *h, const struct vx_src *src, uint32_t i)
+{
+    while (i > 0) {
+        uint32_t p = (i - 1) / 2;
+
+        if (!vx_before(src, h[i], h[p]))
+            break;
+        vx_swap(h, i, p);
+        i = p;
+    }
+}
+
+static void vx_sift_down(uint32_t *h, uint32_t n, const struct vx_src *src,
+                         uint32_t i)
+{
+    for (;;) {
+        uint32_t l = i * 2 + 1;
+        uint32_t r = l + 1;
+        uint32_t best = i;
+
+        if (l < n && vx_before(src, h[l], h[best]))
+            best = l;
+        if (r < n && vx_before(src, h[r], h[best]))
+            best = r;
+        if (best == i)
+            break;
+        vx_swap(h, i, best);
+        i = best;
+    }
+}
+
+static void vx_push(uint32_t *h, uint32_t *n, const struct vx_src *src,
+                    uint32_t idx)
+{
+    h[*n] = idx;
+    vx_sift_up(h, src, *n);
+    (*n)++;
+}
+
+static uint32_t vx_pop(uint32_t *h, uint32_t *n, const struct vx_src *src)
+{
+    uint32_t top = h[0];
+
+    (*n)--;
+    if (*n > 0) {
+        h[0] = h[*n];
+        vx_sift_down(h, *n, src, 0);
+    }
+    return top;
+}
+
 int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
                            const char *path)
 {
     struct vx_src src[KV_LSM_MAX_SEGS * 2];
+    uint32_t heap[KV_LSM_MAX_SEGS * 2];
+    struct vx_buf outb;
     char tmp[4096];
     uint8_t *wkbuf;
-    uint32_t nsrc = 0, i, nitems = 0;
+    uint32_t nsrc = 0, i, nitems = 0, hn = 0;
     int fd = -1, rc = EFS_OK;
 
+    memset(&outb, 0, sizeof(outb));
+    outb.fd = -1;
     wkbuf = malloc(KV_LSM_KLEN_MAX);
     if (!wkbuf)
         return EFS_ERR_NOMEM;
@@ -1199,26 +1324,27 @@ int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
         rc = EFS_ERR_IO;
         goto out;
     }
+    outb.fd = fd;
+    outb.p = malloc(VX_BUF);
+    if (!outb.p) {
+        rc = EFS_ERR_NOMEM;
+        goto out;
+    }
     {
         uint8_t z[4] = {0, 0, 0, 0};
-        rc = vx_write(fd, z, 4);
+        rc = vx_write(&outb, z, 4);
         if (rc != EFS_OK)
             goto out;
     }
-    for (;;) {
-        uint32_t win = nsrc;
+    for (i = 0; i < nsrc; i++) {
+        if (!src[i].done)
+            vx_push(heap, &hn, src, i);
+    }
+    while (hn > 0) {
+        uint32_t win = vx_pop(heap, &hn, src);
         uint8_t hdr[9];
+        uint32_t wl;
 
-        for (i = 0; i < nsrc; i++) {
-            if (src[i].done)
-                continue;
-            if (win == nsrc ||
-                kv_key_cmp(src[i].key, src[i].klen, src[win].key,
-                           src[win].klen) < 0)
-                win = i;
-        }
-        if (win == nsrc)
-            break;
         if (src[win].op == KV_OP_PUT &&
             vx_in_group(src[win].key, src[win].klen, group)) {
             if (nitems == 0xffffffffu) {
@@ -1228,35 +1354,46 @@ int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
             hdr[0] = KV_OP_PUT;
             vx_put_u32(hdr + 1, src[win].klen);
             vx_put_u32(hdr + 5, src[win].vlen);
-            rc = vx_write(fd, hdr, 9);
+            rc = vx_write(&outb, hdr, 9);
             if (rc == EFS_OK && src[win].klen)
-                rc = vx_write(fd, src[win].key, src[win].klen);
+                rc = vx_write(&outb, src[win].key, src[win].klen);
             if (rc == EFS_OK && src[win].vlen)
-                rc = vx_write(fd, src[win].val, src[win].vlen);
+                rc = vx_write(&outb, src[win].val, src[win].vlen);
             if (rc != EFS_OK)
                 goto out;
             nitems++;
         }
-        {
-            uint32_t wl = src[win].klen;
-
-            if (wl > KV_LSM_KLEN_MAX) {
-                rc = EFS_ERR_INVAL;
-                goto out;
-            }
-            if (wl)
-                memcpy(wkbuf, src[win].key, wl);
-            for (i = 0; i < nsrc; i++) {
-                if (src[i].done)
-                    continue;
-                if (kv_key_cmp(src[i].key, src[i].klen, wkbuf, wl) != 0)
-                    continue;
-                rc = vx_pull(&src[i]);
-                if (rc != EFS_OK)
-                    goto out;
-            }
+        wl = src[win].klen;
+        if (wl > KV_LSM_KLEN_MAX) {
+            rc = EFS_ERR_INVAL;
+            goto out;
         }
+        if (wl)
+            memcpy(wkbuf, src[win].key, wl);
+        /* Advance the winner after the other sources still sitting on
+         * this key. Pushing it first would hide a second copy of the
+         * same key inside that one segment. */
+        rc = vx_pull(&src[win]);
+        if (rc != EFS_OK)
+            goto out;
+        while (hn > 0 &&
+               kv_key_cmp(src[heap[0]].key, src[heap[0]].klen, wkbuf, wl) == 0) {
+            uint32_t j = vx_pop(heap, &hn, src);
+
+            rc = vx_pull(&src[j]);
+            if (rc != EFS_OK)
+                goto out;
+            if (!src[j].done)
+                vx_push(heap, &hn, src, j);
+        }
+        if (!src[win].done)
+            vx_push(heap, &hn, src, win);
     }
+    /* Flush before the seek. A buffered tail written after lseek(0)
+     * would overwrite the item count. */
+    rc = vx_flush(&outb);
+    if (rc != EFS_OK)
+        goto out;
     if (lseek(fd, 0, SEEK_SET) < 0) {
         rc = EFS_ERR_IO;
         goto out;
@@ -1264,7 +1401,9 @@ int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
     {
         uint8_t nb[4];
         vx_put_u32(nb, nitems);
-        rc = vx_write(fd, nb, 4);
+        rc = vx_write(&outb, nb, 4);
+        if (rc == EFS_OK)
+            rc = vx_flush(&outb);
         if (rc != EFS_OK)
             goto out;
     }
@@ -1295,6 +1434,7 @@ int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
     }
     rc = EFS_OK;
 out:
+    free(outb.p);
     free(wkbuf);
     if (fd >= 0)
         close(fd);

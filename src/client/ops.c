@@ -198,6 +198,15 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
                                        recs[i].chunk_generation
                                            ? recs[i].chunk_generation
                                            : recs[i].base_gen);
+        /* set_chunk_gen drops any previous span list. Install the one
+         * this reply carries (empty when the image has no spans).
+         * Do not keep local spans the reply lacks: their seq is not the
+         * lane seq, and a later full-image CAS would name the wrong
+         * list and STALE forever. */
+        (void)efs_export_set_chunk_deltas(&g_client.export, recs[i].ino,
+                                          recs[i].chunk_index,
+                                          recs[i].deltas, recs[i].delta_base_n,
+                                          recs[i].delta_base_seq);
         efs_client_stage_touch(recs[i].ino);
     }
     pthread_mutex_unlock(&g_client.idx_mu);
@@ -499,6 +508,54 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
  * file. The RPC was discarded whenever a local row existed — ~2 RTTs
  * of pure wait on the dest owner's shard lock. Local-first: RPC only
  * on a miss (peer-created ino, or a cold table). */
+int efs_client_stat_open(efs_ino_t ino, struct efs_inode *out)
+{
+    struct efs_inode local, rpc;
+    int have, rpc_ok;
+
+    if (!out || !ino)
+        return EFS_ERR_INVAL;
+    have = efs_client_stat_local(ino, &local) == EFS_OK;
+    rpc_ok = efs_client_rpc_getattr(g_client.export_id, ino, &rpc);
+    if (!have && rpc_ok != EFS_OK)
+        return rpc_ok;
+    if (!have) {
+        adopt_rpc_inode(&rpc);
+        if (efs_client_stat_local(ino, out) != EFS_OK)
+            *out = rpc;
+        return EFS_OK;
+    }
+    /* No server lease on open, so the last unlink deletes the row
+     * instead of storing nlink 0. This fd still has the ghost. A
+     * transport error is not that: keep the local count. */
+    if (rpc_ok == EFS_ERR_NOT_FOUND)
+        rpc.nlink = 0;
+    else if (rpc_ok != EFS_OK) {
+        *out = local;
+        return EFS_OK;
+    }
+    if (rpc.nlink != local.nlink) {
+        struct efs_inode cur;
+
+        local.nlink = rpc.nlink;
+        if (rpc_ok == EFS_OK)
+            local.ctime = rpc.ctime;
+        efs_client_lock_dir(ino);
+        pthread_mutex_lock(&g_client.idx_mu);
+        if (efs_export_get_inode(&g_client.export, ino, &cur) == 0) {
+            cur.nlink = local.nlink;
+            if (rpc_ok == EFS_OK)
+                cur.ctime = rpc.ctime;
+            (void)efs_export_upsert_inode(&g_client.export, &cur);
+            local = cur;
+        }
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(ino);
+    }
+    *out = local;
+    return EFS_OK;
+}
+
 int efs_client_stat_ino(efs_ino_t ino, struct efs_inode *out)
 {
     if (!out || !ino)

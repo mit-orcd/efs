@@ -103,5 +103,8 @@ struct efs_store *efs_store_mem_create(void);
 void efs_store_mem_free(struct efs_store *s);
 /* Flip one payload byte; leave the sidecar checksum unchanged (I25). */
 int efs_store_mem_corrupt(struct efs_store *s, const struct efs_frag_id *id);
+/* Drop the sidecar checksum. The payload bytes stay. A get then reports
+ * sum_ok=0 so a reader must not treat a freshly computed hash as trust. */
+int efs_store_mem_drop_sum(struct efs_store *s, const struct efs_frag_id *id);
 
 #endif

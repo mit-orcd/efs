@@ -60,5 +60,11 @@ int efs_raft_disk_sync_hold(struct efs_raft_disk *d);
 int efs_raft_disk_sync_release(struct efs_raft_disk *d);
 int efs_raft_disk_sync_release_wait(struct efs_raft_disk *d);
 int efs_raft_disk_sync_depth(struct efs_raft_disk *d);
+/* File offset covered by the last completed fsync. */
+uint64_t efs_raft_disk_synced_bytes(struct efs_raft_disk *d);
+/* Highest log index of `group` whose record ends at or before `synced`.
+ * A replayed entry (no offset) counts as covered. 0 if the group is empty. */
+uint64_t efs_raft_disk_covered_index(struct efs_raft_disk *d, uint32_t group,
+                                    uint64_t synced);
 
 #endif

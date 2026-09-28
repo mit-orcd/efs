@@ -56,6 +56,7 @@ void raft_group_install(struct raft_disk_group *g, uint64_t index,
         g->n++;
     }
     g->log[off].term = term;
+    g->log[off].end_off = 0;
     g->log[off].clen = clen;
     g->log[off].cmd = cmd;
 }
@@ -213,6 +214,12 @@ static int disk_append(void *ctx, uint64_t index, uint64_t term,
     if (rc != EFS_OK)
         goto out;
     raft_group_install(g, index, term, copy, clen);
+    {
+        uint32_t off = (uint32_t)(index - (g->snap_idx + 1));
+
+        if (off < g->n)
+            g->log[off].end_off = g->d->bytes;
+    }
     copy = NULL;
     raft_log_maybe_rotate_locked(g->d);
 out:
@@ -579,4 +586,45 @@ int efs_raft_disk_rotate(struct efs_raft_disk *d)
 uint64_t efs_raft_disk_bytes(const struct efs_raft_disk *d)
 {
     return d ? d->bytes : 0;
+}
+
+uint64_t efs_raft_disk_synced_bytes(struct efs_raft_disk *d)
+{
+    uint64_t n;
+
+    if (!d)
+        return 0;
+    pthread_mutex_lock(&d->mu);
+    n = d->synced_bytes;
+    pthread_mutex_unlock(&d->mu);
+    return n;
+}
+
+uint64_t efs_raft_disk_covered_index(struct efs_raft_disk *d, uint32_t group,
+                                    uint64_t synced)
+{
+    struct raft_disk_group *g;
+    uint64_t best = 0;
+    uint32_t i;
+
+    if (!d || group >= RAFT_DISK_MAX_GROUPS)
+        return 0;
+    pthread_mutex_lock(&d->mu);
+    g = d->g[group];
+    /* Offsets grow with the file. The tail is the unsynced part, so
+     * walk back to the first record the fsync already covers. */
+    if (g) {
+        i = g->n;
+        while (i > 0) {
+            uint64_t off = g->log[i - 1].end_off;
+
+            i--;
+            if (off == 0 || off <= synced) {
+                best = g->snap_idx + 1 + i;
+                break;
+            }
+        }
+    }
+    pthread_mutex_unlock(&d->mu);
+    return best;
 }

@@ -25,6 +25,268 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 28 2026 — five 9-client dd profile rounds
+
+8 GiB `dd bs=1M conv=fsync`, non-zero source, own file, FUSE only,
+RDMA. Aggregate is 9 × 8192 / slowest client wall. Every quoted row
+has all nine files at 8589934592.
+
+| round | aggregate MiB/s | slowest wall | what changed |
+| --- | --- | --- | --- |
+| 1 | 1875.6 | 39.31 s | profile only (`20260928-101245-dd-prof-r1`) |
+| 2 | 2810.5 | 26.23 s | fragment probe moved off `g_pool.lock` (`20260928-131651-dd-prof-r2b`) |
+| 3 | 2443.1 | 30.18 s | 64 KiB snap chunks (`20260928-133055-dd-prof-r3`) |
+| 4 | 2326.7 | 31.69 s | thread-local inode-dir fd (`20260928-133558-dd-prof-r4`) |
+| 5 | 1776.1 | 41.51 s | publish batch 256 and AE cap 64 KiB (`20260928-134137-dd-prof-r5`) |
+| restore | 2551.5 | 28.90 s | rounds 3–5 reverted (`20260928-134637-dd-prof-r5b`) |
+
+The first attempt at round 2 cached inode-directory fds in a global
+table and the 9-client dd hit the 150 s ssh timeout
+(`20260928-102121-dd-prof-r2`). That cache is not in the tree.
+`access()` under the pool lock was the round-1 server sample; moving
+the probe out is what moved the wall. Later rounds removed that
+`access()` and the snapshot `pread` from the top of the profile and
+the slowest client got worse. Client CPU stayed blake3 in
+`hash_write_fragments`. A 4 MiB snapshot chunk made the pump resend
+the same chunk on every wake once `send_idx` passed `next_index`
+(outbox hi=2048, ~20k messages/s). The in-flight end for a snapshot
+chunk is now `UINT64_MAX` until the reply or a heartbeat. That fix
+stayed in the restore.
+
+## Sep 28 2026 — five posix jobs=1 profile rounds
+
+cpu-clock while posix suite 1 ran on fcstor007, RDMA, port 19810.
+Each round restarted fcstor003–006 with `roll_efsd.sh --all`
+(`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`) and remounted the clients
+when the client binary changed. Every suite was 200/201, mmap
+SKIP only, 0 EFS bugs. `perf trace` still cannot read tracefs;
+the second pass of the harness is not a wall-time result (one
+traced pass took 150.9 s).
+
+Round 1 (`results/measure/20260928-093100-posix-prof-r1`, 54.9 s):
+client top `clock_gettime` in `efs_rdma_recv_wait`; server top
+`memcmp` in `efs_kv_lsm_view_export` on the GC thread. The export
+merge became a heap. Newest segment (lowest index) still wins a
+tie. `test_kv_lsm` covers two overlapping L0s, a tombstone, and
+the other raft group.
+
+Round 2 (44.1 s / 56.1 s): export `memcmp` dropped off the top of
+group 0. The client spin was still the top. `efs_rdma_recv_wait`
+now pauses 64 times and then polls the eventfd.
+
+Round 3 (29.0 s / 29.7 s): `clock_gettime` left `recv_wait`.
+`recv_poller` was 16% and blake3 6%. Compactor `memcmp` was the
+server-side merge; it uses the same heap. The 29 s pair did not
+hold on the next rounds.
+
+Round 4 (58.4 s / 57.0 s): server top was `write` from the export,
+three syscalls per key. The export now buffers 64 KiB and flushes
+before the seek that writes the item count.
+
+Round 5 (50.7 s on the cpu-clock pass): writes left the server
+top. A large export put `memcmp` and `vx_sift_down` back on top;
+that is the heap walking the table, not a loop to delete.
+`recv_poller` was still 16% of efs-fuse. The empty-CQ spin went
+from 128 polls to 32. The ack stays after `poll`. A jobs=1 run
+with no tracer after that roll was 200/201 in 45.1 s.
+
+## Sep 28 2026 — RDMA recv poller
+
+posix jobs=1 under `perf record -e cpu-clock -g` on the client fuse
+and both raft leaders. RDMA
+(`results/measure/20260928-050145-posix-prof-rdma`): `recv_poller`
+was 64% of efs-fuse (147775 samples) and 31% of efsd. The thread
+polled, paused, and `sched_yield`'d whenever a QP was up. Suites
+56.4 s and 43.6 s, 200/201, 0 fail. TCP on the same binary
+(`results/measure/20260928-050841-posix-prof-tcp`): no poller; the
+top sample is blake3 at 355 hits. Suites 45.9 s and 59.0 s.
+`perf trace` cannot open `/sys/kernel/tracing` (mode 700).
+
+The poller now does a short spin and then `poll`s the completion
+channel for at most 1 ms. Acking a CQ event before that `poll`
+disarms `ibv_req_notify_cq`, so the next completion was invisible
+until the timeout. That version took 76–78 s. With the ack after
+`poll`, jobs=1 is 58.5 s and 57.8 s, 200/201, 0 fail
+(`results/measure/20260928-053033-posix-prof-rdma-fix2`), and
+`recv_poller` is absent. Servers and fcstor007–015 are that binary,
+`EFS_TRANSPORT=rdma`. The wall did not move past TCP. The spinning
+core is what came out.
+
+## Sep 28 2026 — user xattrs, posix gate
+
+`user.*` attributes are one KV blob per inode
+(`EFS_KV_KIND_XATTR`) and one raft command (`EFS_MD_CMD_XATTR`).
+`security.*` and `system.*` return EOPNOTSUPP without an RPC, so a
+create does not pay a commit for an LSM label. The blob is removed
+in the same batch as the inode row, and only when the key exists.
+SELinux on fcstor007 is Disabled.
+
+`roll_efsd.sh --all` with `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`
+built `db2b88c4802a-dirty` on all four and then exited FAIL:
+fcstor005 stayed at group 0 commit 13316260 and group 2 11742588
+while the leaders were at 13387007 and 11813960. The follower was
+writing `snap-0-13387007.part` and `snap-2-11813960.part`. A minute
+later both groups matched the leaders. Clients fcstor007–015 were
+remounted. fcstor003–006 still have the previous fuse.
+
+posix jobs=1 on fcstor007: **200/201**, 0 fail, `opt_xattr` PASS,
+`mmap_write_read` SKIP (`MAP_SHARED` ENODEV), 45.2 s
+(`results/posix/20260928-043918`). Compare exits 2 because XFS
+passes that mmap test. Kernel 5.14.0-687 has `FOPEN_DIRECT_IO` and
+no `FOPEN_DIRECT_IO_ALLOW_MMAP`; `fuse_file_mmap` returns ENODEV
+when the file is direct-I/O and the mapping is shared.
+`MAP_PRIVATE` still passes. Do not clear `direct_io`.
+
+Four suites at once on one client (`posixstress 4 fcstor007`,
+`POSIX_JOBS=1`): each **200/201**, 0 fail, mmap SKIP only, 46–57 s
+(`results/posix/20260928-044951`). The Sep 17 four-suite result
+(`results/posix/20260917-120328`, 165–168 timeouts) is not this
+build. A 16-suite run exists only on the deleted engine (Sep 1).
+
+posix2 overlapped with that suite and persist
+(`results/posix2/20260928-043918`): 61/63,
+`peer_overlap_pwrite_chunk_straddle` and
+`peer_rename_vs_unlink_src`. Alone, the same pair is **63/63** in
+65.4 s (`results/posix2/20260928-044304`). persist on fcstor015:
+26 prepared, 26 survived (`results/posixpersist/20260928-043919`).
+
+## Sep 28 2026 — 19810 on RDMA
+
+The Sep 27 live switch had been rolled back after 9-host posix
+took 385 s. A second switch (`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`,
+`roll_efsd.sh --all`) stayed up. posix jobs=1 and 9-host are
+199/201 (mmap + xattr SKIP, 0 fail) in 90 s and 57–59 s
+(`results/posix/20260928-033823`, `results/posix/20260928-034049`).
+posix2 is 63/63 in 76.8 s (`results/posix2/20260928-034350`).
+9-client 8 GiB dd+fsync is **1326.6** MiB/s, walls 28.55–55.57 s,
+every file 8589934592 (`results/measure/20260928-033420-dd-wall`).
+TCP's 9-client bar is 1478, and TCP 9-host posix was ~13–15 s.
+RDMA is not faster on those two.
+
+fcstor004 group 0 had sat at commit 13315306 while the leader was
+at 13316010, across RDMA and a TCP restart, until a snapshot
+install landed. The shared per-peer outbox dropped the catch-up
+AppendEntries and `host_send` still returned success, so
+`ae_inflight` suppressed the resend. It now keeps snapshot chunks
+and entry-carrying AppendEntries, and returns `EFS_ERR_AGAIN`
+when the new message is not queued. `send_ae` / `send_snap` do
+not mark that batch in flight and do not fail the propose.
+Earlier RDMA build `113823180b15-dirty` had a valid 1-client
+**947** and 4-client **2311**
+(`results/measure/20260928-015839-dd-wall`) and an INVALID
+9-client (do not quote ~238). IOR-hard NP=4 on that build:
+write 469.55, read 107.03, bad 0
+(`results/measure/20260928-015806-ior-hard-rdma`).
+
+## Sep 27 2026 — same-directory creates
+
+Creating many files in one directory stayed near 140 ops/s from 1
+process to 36 (`results/measure/20260921-161931-samedir-rate`).
+Spread does not apply below 65536 entries, and the log-path file
+create is point gets, not a shard scan. The remaining serialization
+was Raft: the first proposer held the fsync and appended locally,
+but every proposer that arrived while that hold was open called
+`efs_raft_propose`, which broadcast that one entry under `h->mu`.
+The next create waited out the round trip.
+
+A leader with a hold already open now appends locally and raises
+the send ceiling. The hold owner waits until the proposers already
+inside `host_propose` have appended (capped), kicks the pump, fsyncs
+once, and marks every log index covered by that fsync durable on
+every group it leads. A record remembers the file offset where it
+ended so a later append in the same file is not treated as covered.
+Log rotation fsyncs the new file and clears those offsets; leaving
+the old offsets in place made the durable scan stop at the first
+stale one. Idle single-create still takes the hold only when none
+is open, so it does not wait out an unrelated batch (that version
+moved idle mkdir from 7.1 ms to 11.9 ms and did not raise the
+144-way rate).
+
+`tests/test_raft_store` checks the covered-index rule. Servers
+rolled `--all` as `ab458efab95b-dirty` at 21:11Z, TCP.
+`results/measure/20260927-211953-samedir-rate` (PREFLIGHT_OK,
+ROUNDS=100): storm PASS at 1×1, 1×9, and 4×9, parent
+`children=0 nlink=2`. Aggregate **333 / 1385 / 1241** ops/s.
+`busy_n` was 0, 0, and 1. Idle mkdir median on fcstor007 was
+3.1 ms; an empty create+close median was 0.6 ms.
+
+## Sep 27 2026 — 9-client fsync EIO
+
+The morning 9-client 8 GiB dd (`results/measure/20260927-053506-dd-wall`)
+returned fsync EIO on fcstor009 and fcstor013. Both files were still
+8589934592 bytes. `report-split` on fcstor004 had two lines
+`nrec=65536 pack_ms=0 push_ms=0 finish_ms=0 rc=-3`. A deleted inode
+is already answered OK on this path, so that NOT_FOUND was not a
+missing row. `send_ae` returned `EFS_ERR_NOT_FOUND` when `store->get`
+or `log_term` raced a snapshot that had compacted the index.
+`broadcast_ae` then failed the propose, and
+`efs_client_report_dirty_ino` did not retry NOT_FOUND.
+
+`send_ae_behind` sends an empty AppendEntries (or the snapshot) in
+that window and does not return NOT_FOUND. `broadcast_ae` keeps
+going if one peer still returns it. The report handler maps a
+leftover NOT_FOUND to BUSY after the log line, and the client
+retries NOT_FOUND the same way it retries BUSY.
+
+`tests/test_raft` and `tests/test_raft_store` passed on fcstor014.
+`roll_efsd.sh --all` with `EFS_TRANSPORT=tcp EFS_RAFT_OBS=1` landed
+`75321297f719-dirty` on fcstor003–006 (ROLL_OK 20:35Z). Fuse on
+fcstor007–015 was rebuilt at 20:36Z.
+
+9-client rerun `results/measure/20260927-204907-dd-wall`, preflight
+idle (group0 0/s, group2 0/s): **1478 MiB/s**, slowest wall 49.894 s,
+all nine walls 49.76–49.89 s, every file 8589934592, FUSE_OK, no
+fsync EIO. `report-split` is 128 lines: 119 `rc=-13`, 9 `rc=0`,
+zero `rc=-3`. The OK lines have `push_ms=0` (the BUSY attempts had
+already published). 1478 is 3.4% of the 44 GB/s ceiling. 1-client
+977 and 4-client 1984 stay the morning numbers; they were not
+remeasured on this build. Do not quote 1464.
+
+## Sep 27 2026 — shared-file IOR-hard on immutable spans
+
+A partial chunk publish appends a span object. The base generation
+does not change, so concurrent disjoint ranges do not STALE each
+other. The span object is a full chunk image; readers copy
+`[off, len)`. Overlap, or a trailer already at 8 spans, returns
+STALE and the client folds those spans into one full-chunk CAS.
+That CAS commits only when `delta_base_n` / `delta_base_seq` name
+the list the image already contains. Adopting a longer list after
+the image was built deletes a peer span: that was
+`peer_overlap_pwrite_chunk_straddle` (B's exclusive tail above the
+chunk boundary came back as A's bytes). The fold now pulls the lane
+seq only when the span generation set is unchanged, and leaves seq
+at 0 otherwise so the CAS STALEs and the replay refetches. A replay
+whose slot was cleaned keeps the published span range instead of
+copying the whole zero-padded object. A short read with `ndelta > 0`
+does not return an unpainted rdcache hit.
+
+Open does not take a server lease, so the last unlink deletes the
+inode row. A peer `fstat` of a still-open fd used to return the
+local nlink (1). `efs_client_stat_open` treats GETATTR
+`EFS_ERR_NOT_FOUND` as nlink 0 and copies only nlink and ctime, so
+the local size stays. That pair, plus the xfs baseline capture
+(python's stdout had been prepended to the tsv, and compare.py
+rejected every row), is posix2 **63/63**
+(`results/posix2/20260927-190509`, 77.7 s, compare PASS).
+
+NP=4, SEGS=3000, 47008 B, one shared file, cold remount, FUSE_OK:
+write **481.56 MiB/s** (1.12 s, 537.96 MiB), read **91.35 MiB/s**
+(5.89 s), pattern 12000 records bad 0. The Sep 21 4-rank bar was
+33 MiB/s. 1/9/36 were not remeasured. After the verify both groups
+kept committing REAP_DONE. Group 0 fell to 1/s; group 2 stayed
+~11–16/s for the whole wait. A 2 MiB tail of group 2
+(index 11532756..11534661) was 1710 REAP_DONE and 1710 distinct
+inodes, so it is a backlog, not a loop on one marker.
+`tests/preflight.sh` fails above 5 entries/s. The scaling script
+was not run on that cluster. Do not quote a 1/9/36 table from this
+day, and do not raise the idle gate.
+
+Clients fcstor007–015 are the gate6 fuse (`8e62ff12b422-dirty`).
+Servers were not rolled for the fold and nlink fix; they already
+had the span apply. The `pub-stale` fprintfs are removed from the
+tree and still present in the live efsd until the next
+`roll_efsd.sh --all`. Uncommitted.
+
 ## Sep 27 2026 — posix suites, and the snapshot window that elected
 
 9-host suite 1 on TCP (`results/posix/20260927-123717`, screen

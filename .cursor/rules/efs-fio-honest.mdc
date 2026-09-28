@@ -35,24 +35,64 @@ on-disk `du` of `/data1/0*/efs` (× ~1.5 for 2+1 EC).
   best 724). `FIO_SKIP1=1` skips the 1-client sweep; `FIO_ONLY=1` skips 4/9.
   Prior: `results/perf/20260917-honest/` plus `results/perf/20260918-dd-1c/`.
 
-## Latest dd (Sep 27, TCP, flush in the clock)
+## Latest dd (Sep 28 afternoon, RDMA, flush in the clock)
 
 8 GiB `dd bs=1M conv=fsync`, own file, `FUSE_OK`, on-disk size
-8589934592. `results/measure/20260927-053506-dd-wall`. A REAP_DONE
-tail was ~8/s (commit==applied, no client); the idle-commit gate
-was skipped for that reason only.
+8589934592. `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`. The probe for an
+existing fragment runs before the writer-pool lock. A snapshot
+chunk in flight is not resent on every pump wake. 64 KiB snap
+chunks, a thread-local inode-dir fd, and a 256-publish batch were
+tried and reverted (each made the slowest client worse).
 
-| clients | aggregate MiB/s | slowest wall |
-| --- | --- | --- |
-| 1 | **977** | 8.388 s |
-| 4 | **1984** | 16.515 s (16.42–16.52 s) |
-| 9 | **INVALID** | fsync EIO on fcstor009 and fcstor013 |
+| run | aggregate MiB/s | walls | dir |
+| --- | --- | --- | --- |
+| best (probe off the lock) | **2810.5** | 25.05–26.23 s | `results/measure/20260928-131651-dd-prof-r2b` |
+| live restore | **2551.5** | 24.84–28.90 s | `results/measure/20260928-134637-dd-prof-r5b` |
 
-1→4 is 2.0×, not the Sep 18 collapse. Do not quote a 9-client rate
-from this run: both EIO files are still 8 GiB, and
-`fsync-split` logged `rc=-3` (`EFS_ERR_NOT_FOUND`) from
-`efs_client_report_dirty_ino` after flush ~10 s and report 13–18 s.
-The harness printed 1464 from the walls; that number is not a result.
+Do not quote `results/measure/20260928-102121-dd-prof-r2` (8 of 9
+clients hit the 150 s ssh timeout).
+
+## Morning dd (Sep 28, RDMA, flush in the clock)
+
+8 GiB `dd bs=1M conv=fsync`, own file, `FUSE_OK`, on-disk size
+8589934592. Servers `db2b88c4802a-dirty`,
+`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`. 9 clients only
+(`results/measure/20260928-033420-dd-wall`): aggregate **1326.6**
+MiB/s, slowest wall 55.574 s, per-client walls 28.55–55.57 s, all
+nine files 8589934592, no fsync EIO, zero `rc=-3`. 99 of 108
+report-split lines are BUSY. Slower than the TCP 1478 below.
+Earlier the same day on `113823180b15-dirty`
+(`results/measure/20260928-015839-dd-wall`): 1-client **947.4**
+(8.646 s), 4-client **2310.6** (walls 11.329–14.181 s). That run's
+9-client row is INVALID (fsync EIO, harness ~238). Do not quote it.
+1 and 4 were not remeasured on `db2b88c4802a-dirty`.
+
+## Sep 27 dd (TCP, flush in the clock)
+
+8 GiB `dd bs=1M conv=fsync`, own file, `FUSE_OK`, on-disk size
+8589934592.
+
+Morning, build `4c6a5acefe03-dirty`,
+`results/measure/20260927-053506-dd-wall`. A REAP_DONE tail was ~8/s
+(commit==applied, no client); the idle-commit gate was skipped for
+that reason only. 1→4 is 2.0×, not the Sep 18 collapse. Do not quote
+a 9-client rate from this run: fsync EIO on fcstor009 and fcstor013,
+report `rc=-3` (`EFS_ERR_NOT_FOUND`). The harness printed 1464; that
+number is not a result.
+
+| clients | aggregate MiB/s | slowest wall | build |
+| --- | --- | --- | --- |
+| 1 | **977** | 8.388 s | `4c6a5acefe03-dirty` |
+| 4 | **1984** | 16.515 s (16.42–16.52 s) | `4c6a5acefe03-dirty` |
+| 9 | **1478** | 49.894 s (49.76–49.89 s) | `75321297f719-dirty` |
+
+Evening 9-client only, preflight idle (0/s both groups),
+`results/measure/20260927-204907-dd-wall`: all nine files
+8589934592, no fsync EIO, zero `rc=-3`. 119 of 128 `report-split`
+lines are BUSY (`rc=-13`); the nine `rc=0` lines are the retries
+that found the chunks already published (`push_ms=0`). 1478 is
+3.4% of the 44 GB/s four-host ceiling. 1 and 4 clients were not
+remeasured on `75321297f719-dirty`.
 
 ## Prior dd and fio (Sep 17–18, Raft+KV, 19810, TCP) — MiB/s
 

@@ -447,6 +447,12 @@ static int send_snap(struct efs_raft *r, int to)
          * caller holds the SM lock over. */
         incl = r->last_applied;
         rc = log_term(r, incl, &incl_t);
+        /* The applied index was compacted between the two lookups.
+         * AGAIN, not NOT_FOUND: the caller sends an empty AppendEntries
+         * and retries. NOT_FOUND here used to fail the proposer's RPC,
+         * and a client fsync mapped that to EIO. */
+        if (rc == EFS_ERR_NOT_FOUND)
+            return EFS_ERR_AGAIN;
         if (rc != EFS_OK)
             return rc;
         rc = snap_ensure(r, incl);
@@ -511,8 +517,21 @@ static int send_snap(struct efs_raft *r, int to)
     rc = send_msg(r, &m);
     free(pay);
     if (rc == EFS_OK)
+        /* End is not next_index. ae_inflight_fresh treats a batch as
+         * stale when send_idx moves past its end, so the next flush
+         * resends. A snapshot chunk's bytes do not change when a later
+         * entry is proposed, and send_idx is already past next_index
+         * for a peer in the snap window — that resend fired on every
+         * pump wake (outbox hi=2048, ~20k duplicate chunks/s, the
+         * follower's part file advancing ~10/s). The reply or one
+         * heartbeat retransmits. UINT64_MAX keeps the send_idx check
+         * from matching. */
         ae_inflight_set(r, to, r->next_index[to] ? r->next_index[to] : 1,
-                        r->next_index[to] ? r->next_index[to] : 1);
+                        UINT64_MAX);
+    /* Not queued. The next tick retries the same offset; marking this
+     * chunk in flight would suppress that retry for a heartbeat. */
+    if (rc == EFS_ERR_AGAIN)
+        return EFS_OK;
     return rc;
 }
 
@@ -521,8 +540,18 @@ static int send_snap(struct efs_raft *r, int to)
  * trigger the next send. */
 static int ae_inflight_fresh(const struct efs_raft *r, int to, uint64_t ni)
 {
-    return r->ae_inflight[to] == ni &&
-           r->ticks - r->ae_inflight_tick[to] < (uint64_t)r->heartbeat_ticks;
+    if (r->ae_inflight[to] != ni)
+        return 0;
+    if (r->ticks - r->ae_inflight_tick[to] >= (uint64_t)r->heartbeat_ticks)
+        return 0;
+    /* The outstanding batch does not cover entries appended since it
+     * was built. Waiting out the heartbeat (50 ms) left apply one
+     * index behind while every raft ACK was still ~10 us. Resend from
+     * the same next_index with the longer end; that is a replacement
+     * batch, not a second window. */
+    if (r->send_idx > r->ae_inflight_end[to])
+        return 0;
+    return 1;
 }
 
 static void ae_inflight_set(struct efs_raft *r, int to, uint64_t ni,
@@ -559,6 +588,47 @@ static int send_commit_probe(struct efs_raft *r, int to)
     return EFS_OK;
 }
 
+/* Peer is at or behind the snapshot, or a get raced a snapshot and the
+ * index is gone. Do not return NOT_FOUND: efs_raft_propose already
+ * appended, and that code fails the caller's metadata RPC. A client
+ * fsync then returns EIO ("report could not find the inode") and does
+ * not retry. Heartbeat / the empty AppendEntries below retries. */
+static int send_ae_behind(struct efs_raft *r, int to, int data_only,
+                          uint64_t ni)
+{
+    struct efs_raft_msg m;
+    uint64_t last_i = 0, last_t = 0;
+    int rc;
+
+    if (ae_inflight_fresh(r, to, ni))
+        return EFS_OK;
+    rc = send_snap(r, to);
+    /* snap_idx 0: send_snap sent nothing. Still probe, or this peer
+     * gets no AppendEntries and its election timer fires. */
+    if (rc == EFS_OK && r->snap_idx == 0)
+        rc = EFS_ERR_AGAIN;
+    if (rc == EFS_ERR_AGAIN || rc == EFS_ERR_NOT_FOUND) {
+        if (data_only)
+            return EFS_OK;
+        memset(&m, 0, sizeof(m));
+        m.type = EFS_RAFT_MSG_AE_REQ;
+        m.to = to;
+        rc = last_log(r, &last_i, &last_t);
+        if (rc != EFS_OK)
+            return rc;
+        m.prev_index = last_i;
+        m.prev_term = last_t;
+        m.leader_commit = r->commit_index;
+        rc = send_msg(r, &m);
+        if (rc == EFS_OK)
+            ae_inflight_set(r, to, ni, last_i);
+        if (rc == EFS_ERR_AGAIN)
+            return EFS_OK;
+        return rc;
+    }
+    return rc;
+}
+
 /* data_only: push entries that are already covered by send_idx. Do not
  * emit an empty heartbeat and do not clear ae_inflight when there is
  * nothing new — a heartbeat does both, and doing that on every propose
@@ -583,35 +653,21 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
     if (ni <= r->snap_idx) {
         /* Same one-outstanding rule as the entry batch below: a snapshot
          * per propose to a peer in the snap window is a multi-MiB blob per
-         * propose. on_snap_rep clears it; the heartbeat retransmits. */
-        if (ae_inflight_fresh(r, to, ni))
-            return EFS_OK;
-        rc = send_snap(r, to);
-        if (rc == EFS_ERR_AGAIN) {
-            /* The snap file is not ready (export still running). Sending
-             * nothing lets this peer's election timer fire; its vote
-             * request carries a higher term and steps the leader down for
-             * the whole export. Group 2 did that under 9-host posix
-             * (term +200, commit stuck, mkdir EBUSY). An empty
-             * AppendEntries is enough: on_ae_req resets the timer before
-             * it rejects a prev_index the follower does not have yet.
-             * data_only must not send it: that marks ae_inflight and
-             * suppresses the real snapshot for a heartbeat interval on
-             * every propose wake. */
-            if (data_only)
-                return EFS_OK;
-            m.prev_index = last_i;
-            m.prev_term = last_t;
-            m.leader_commit = r->commit_index;
-            rc = send_msg(r, &m);
-            if (rc == EFS_OK)
-                ae_inflight_set(r, to, ni, last_i);
-            return rc;
-        }
-        return rc;
+         * propose. on_snap_rep clears it; the heartbeat retransmits.
+         * The snap file may not be ready yet. Sending nothing lets this
+         * peer's election timer fire; its vote request carries a higher
+         * term and steps the leader down for the whole export. Group 2
+         * did that under 9-host posix (term +200, commit stuck, mkdir
+         * EBUSY). send_ae_behind sends an empty AppendEntries in that
+         * window. data_only must not: that marks ae_inflight and
+         * suppresses the real snapshot for a heartbeat interval on
+         * every propose wake. */
+        return send_ae_behind(r, to, data_only, ni);
     }
     m.prev_index = ni - 1;
     rc = log_term(r, m.prev_index, &prev_t);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return send_ae_behind(r, to, data_only, ni);
     if (rc != EFS_OK && m.prev_index != 0)
         return rc;
     m.prev_term = prev_t;
@@ -663,6 +719,11 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
                         return EFS_ERR_NOMEM;
                     }
                     rc = r->store->get(r->store_ctx, ni, &eterm, big, &ec);
+                    if (rc == EFS_ERR_NOT_FOUND) {
+                        free(big);
+                        free(arena);
+                        return send_ae_behind(r, to, data_only, ni);
+                    }
                     if (rc != EFS_OK) {
                         free(big);
                         free(arena);
@@ -676,6 +737,10 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
                     m.nentries = 1;
                 }
                 break; /* send the batch accumulated so far */
+            }
+            if (rc == EFS_ERR_NOT_FOUND) {
+                free(arena);
+                return send_ae_behind(r, to, data_only, ni);
             }
             if (rc != EFS_OK) {
                 free(arena);
@@ -700,6 +765,11 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
         ae_inflight_set(r, to, m.nentries ? ni : 0,
                         m.nentries ? ni + m.nentries - 1 : m.prev_index);
     free(arena);
+    /* The entry is already in the leader log. A full outbox must not
+     * fail the proposer's RPC, and must not mark a batch in flight
+     * that the sender will never write. */
+    if (rc == EFS_ERR_AGAIN)
+        return EFS_OK;
     return rc;
 }
 
@@ -712,6 +782,10 @@ static int broadcast_ae(struct efs_raft *r)
         if (i == r->id || !(mask & (1u << i)))
             continue;
         rc = send_ae(r, i, 0);
+        /* One peer's compacted index must not skip the other peers'
+         * heartbeats or fail a propose that already appended. */
+        if (rc == EFS_ERR_NOT_FOUND)
+            continue;
         if (rc != EFS_OK)
             return rc;
     }
@@ -857,6 +931,8 @@ static int start_election(struct efs_raft *r)
             continue;
         m.to = i;
         rc = send_msg(r, &m);
+        if (rc == EFS_ERR_AGAIN)
+            continue;
         if (rc != EFS_OK)
             return rc;
     }
@@ -1064,7 +1140,13 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
      * catching up a long log would otherwise need one RTT per index, and at
      * the heartbeat-gated rate that is minutes of the follower being
      * unusable for quorum reads. match_index is 0 for a term rejection,
-     * which safely restarts from index 1. */
+     * which safely restarts from index 1.
+     * A commit probe sets vote_granted so its reply does not clear
+     * ae_inflight on the success path. A rejection must still clear it:
+     * the follower does not have the outstanding batch, and leaving
+     * inflight set held the resend until the next heartbeat (apply sat
+     * one index behind for 50 ms; the wire ACK was ~10 us). */
+    r->ae_inflight[in->from] = 0;
     {
         uint64_t ni = in->match_index + 1, last_i = 0, last_t = 0;
         last_log(r, &last_i, &last_t);
