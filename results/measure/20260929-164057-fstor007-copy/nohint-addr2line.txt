@@ -1,0 +1,28 @@
+-----
+efs-rec: start 2026-09-29T20:48:57Z pid=2192204 host=login007
+efs-rec: cmd S=$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh; for h in 003 004 005 006; do echo == fcstor$h; EFS_SSH_TIMEOUT=20 "$S" fcstor$h.ib "cd /tmp/efs; grep -c \"NOT_PRIMARY without hint\" efsd.log; grep -o \"without hint from=0x[0-9a-f]*\" efsd.log | sort | uniq -c | sort -rn | head -5; for a in \$(grep -o \"without hint from=0x[0-9a-f]*\" efsd.log | sed s/.*=// | sort -u | head -5); do echo -n \"\$a -> \"; addr2line -f -e ./efsd \$a | paste -sd\" \"; done; grep -c apply-sleep efsd.log; grep raft-obs efsd.log | tail -1 | cut -c1-200"; done
+== fcstor003
+32
+     17 without hint from=0x40f766
+     15 without hint from=0x40f475
+0x40f475 -> server_handle_conn /tmp/efs/src/server/handler.c:662
+0x40f766 -> server_handle_conn /tmp/efs/src/server/handler.c:704
+48
+raft-obs: wait_timeouts=0 pump_hold_max=3us lock_wait_max=1us drain_max=3us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fi
+== fcstor004
+2
+      2 without hint from=0x40e1b8
+0x40e1b8 -> server_handle_conn /tmp/efs/src/server/handler.c:839
+247
+raft-obs: wait_timeouts=2 pump_hold_max=4us lock_wait_max=1us drain_max=3us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=49 fin_q=0 fin_done=0 f
+== fcstor005
+1
+      1 without hint from=0x40e1b8
+0x40e1b8 -> server_handle_conn /tmp/efs/src/server/handler.c:839
+8
+raft-obs: wait_timeouts=1 pump_hold_max=10us lock_wait_max=1us drain_max=3us tick_max=10us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 
+== fcstor006
+0
+0
+raft-obs: wait_timeouts=0 pump_hold_max=10us lock_wait_max=1us drain_max=10us tick_max=5us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 
+efs-rec: end 2026-09-29T20:48:59Z rc=0

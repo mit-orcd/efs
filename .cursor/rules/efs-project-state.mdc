@@ -497,7 +497,15 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  ENOENT — so `mkdir` on a dir that had just committed returned ENOENT
  (`ll_mkdir` → `lookup_fill(new_ino)` GETATTR; freeze run 2,
  `results/measure/20260923-025903-i17-leader-freeze`). Now
- `rpc_send_recv_shard/_dual` back off like BUSY. An ENOENT/EIO from a
+  `rpc_send_recv_shard/_dual` back off like BUSY. **Sep 29: the steady
+  source of hintless NOT_PRIMARY on a stable cluster is
+  `host_read_inode_lanes` on a single-group host** (a foreign lane's
+  `host_read_index` returns `!v.has` → hint −1, after the op committed:
+  setattr, rename, utimens, unlink, link, getattr callers). It cost
+  50 ms per hit on the skip-the-voter client and 16× → 10 s EBUSY
+  before (the 810 `exhausted` lines in fstor007's ecopy log). Fix is
+  START-HERE §1b 20:55Z item 2 (hint a dual host, check before
+  propose). An ENOENT/EIO from a
  FUSE dir op whose target exists is a reply-path RPC failure first —
  grep `fuse: mkdir ... but getattr` / `inode-rpc:` in `fuse.log` before
  suspecting metadata.
