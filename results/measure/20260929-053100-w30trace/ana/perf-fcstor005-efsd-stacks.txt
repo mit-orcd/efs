@@ -1,0 +1,10 @@
+     7.76%         41667  efsd     efsd                     [.] recv_poller
+     5.81%         33392  efsd     [kernel.kallsyms]        [k] child_wait_callback
+     4.76%         29105  efsd     [kernel.kallsyms]        [k] ptrace_do_notify
+     4.26%         23630  efsd     [kernel.kallsyms]        [k] entry_SYSCALL_64
+     3.87%         23202  efsd     [kernel.kallsyms]        [k] retbleed_return_thunk
+     2.88%         17293  efsd     [kernel.kallsyms]        [k] __rcu_read_unlock
+     2.49%         14760  efsd     libc.so.6                [.] __memcmp_avx2_movbe
+     2.04%         12438  efsd     efsd                     [.] kv_seg_probe
+     1.92%         12149  efsd     [kernel.kallsyms]        [k] __task_pid_nr_ns
+     1.51%          9164  efsd     [kernel.kallsyms]        [k] _raw_spin_lock_irqsave

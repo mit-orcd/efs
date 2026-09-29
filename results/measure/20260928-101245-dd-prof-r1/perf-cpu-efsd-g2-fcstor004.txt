@@ -1,0 +1,60 @@
+    14.76%         91388  efsd     [kernel.kallsyms]        [k] rep_movs_alternative
+            |
+            ---rep_movs_alternative
+               |          
+               |--9.28%--copyout
+               |          _copy_to_iter
+               |          |          
+               |          |--7.47%--copy_page_to_iter
+               |          |          filemap_read
+               |          |          xfs_file_buffered_read
+               |          |          xfs_file_read_iter
+               |          |          vfs_read
+               |          |          |          
+               |          |           --7.47%--__x64_sys_pread64
+               |          |                     do_syscall_64
+               |          |                     entry_SYSCALL_64_after_hwframe
+               |          |                     __libc_pread
+               |          |                     |          
+               |          |                      --6.60%--send_snap
+               |          |                                |          
+               |          |                                |--3.74%--efs_raft_recv
+               |          |                                |          drain_inbox
+               |          |                                |          host_pump
+               |          |                                |          start_thread
+               |          |                                |          
+               |          |                                 --2.87%--send_ae_behind
+               |          |                                           send_ae
+               |          |                                           |          
+               |          |                                            --2.76%--efs_raft_flush
+               |          |                                                      host_pump
+               |          |                                                      start_thread
+               |          |          
+               |           --1.81%--__skb_datagram_iter
+               |                     |          
+               |                     |--1.04%--skb_copy_datagram_iter
+               |                     |          tcp_recvmsg_locked
+               |                     |          tcp_recvmsg
+               |                     |          inet_recvmsg
+               |                     |          sock_recvmsg
+               |                     |          __sys_recvfrom
+               |                     |          __x64_sys_recvfrom
+               |                     |          do_syscall_64
+               |                     |          entry_SYSCALL_64_after_hwframe
+               |                     |          __libc_recv
+               |                     |          |          
+               |                     |           --1.03%--server_handle_conn
+               |                     |          
+               |                      --0.77%--__skb_datagram_iter
+               |                                skb_copy_datagram_iter
+               |                                tcp_recvmsg_locked
+               |                                tcp_recvmsg
+               |                                inet_recvmsg
+               |                                sock_recvmsg
+               |                                __sys_recvfrom
+               |                                __x64_sys_recvfrom
+               |                                do_syscall_64
+               |                                entry_SYSCALL_64_after_hwframe
+               |                                __libc_recv
+               |                                server_handle_conn
+               |          

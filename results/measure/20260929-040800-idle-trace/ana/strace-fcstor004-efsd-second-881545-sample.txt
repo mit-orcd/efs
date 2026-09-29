@@ -1,0 +1,60 @@
+881545 00:07:15.683928 restart_syscall(<... resuming interrupted poll ...> <unfinished ...>
+881545 00:07:15.686724 <... restart_syscall resumed>) = 0 <0.002792>
+881545 00:07:15.686739 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.691804 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.691818 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.696883 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.696897 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.701959 <... poll resumed>) = 0 (Timeout) <0.005055>
+881545 00:07:15.701974 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.707040 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.707056 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.712122 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.712137 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.717202 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.717216 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.722281 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.722294 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.727359 <... poll resumed>) = 0 (Timeout) <0.005059>
+881545 00:07:15.727376 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.732442 <... poll resumed>) = 0 (Timeout) <0.005059>
+881545 00:07:15.732456 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.737521 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.737533 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.742598 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.742611 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.747676 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.747690 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.752755 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.752767 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.757832 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.757845 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.762910 <... poll resumed>) = 0 (Timeout) <0.005059>
+881545 00:07:15.762924 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.767959 <... poll resumed>) = 0 (Timeout) <0.005027>
+881545 00:07:15.767973 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.773038 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.773053 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.778120 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.778134 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.783199 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.783213 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.788279 <... poll resumed>) = 0 (Timeout) <0.005059>
+881545 00:07:15.788294 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.793359 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.793371 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.798436 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.798451 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.803516 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.803530 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.808594 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.808607 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.813672 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.813685 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.818751 <... poll resumed>) = 0 (Timeout) <0.005059>
+881545 00:07:15.818765 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.823830 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.823843 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.828908 <... poll resumed>) = 0 (Timeout) <0.005058>
+881545 00:07:15.828921 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+881545 00:07:15.833958 <... poll resumed>) = 0 (Timeout) <0.005030>

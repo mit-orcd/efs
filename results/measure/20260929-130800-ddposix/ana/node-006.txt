@@ -1,0 +1,4 @@
+fcstor006 begin 13:58:11Z
+fcstor006 efsd window=--time 3695455.922,3697435.922
+fcstor006 fuse window=--time 3695456.328,3697436.328
+fcstor006 ANA_DONE 14:04:50Z

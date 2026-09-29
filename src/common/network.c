@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <execinfo.h>
 #include <sys/stat.h>
+#include <time.h>
 
 /* Keep short: a missing peer must not stall small-file meta flushes for long.
  * Down-marked peers are skipped entirely for EFS_NODE_DOWN_MS after one fail. */
@@ -245,13 +246,49 @@ static void conn_capture_fd(struct efs_conn *c)
 
 int efs_conn_fd_matches(const struct efs_conn *c)
 {
-    if (!c || c->fd < 0 || !c->fd_id_ok)
+    if (!c || c->fd < 0)
+        return 0;
+    if (c->use_gen) {
+        uint64_t cur;
+
+        if (!c->gen_live)
+            return 0;
+        cur = __atomic_load_n(c->gen_live, __ATOMIC_RELAXED);
+        return cur == c->gen_seen;
+    }
+    if (!c->fd_id_ok)
         return 0;
     struct stat st;
     if (fstat(c->fd, &st) != 0)
         return 0;
     return (uint64_t)st.st_dev == c->fd_dev &&
            (uint64_t)st.st_ino == c->fd_ino;
+}
+
+void efs_conn_bind_gen(struct efs_conn *c, uint64_t *slot)
+{
+    uint64_t g;
+
+    if (!c || !slot)
+        return;
+    g = __atomic_load_n(slot, __ATOMIC_RELAXED);
+    if (g == 0) {
+        __atomic_store_n(slot, 1, __ATOMIC_RELAXED);
+        g = 1;
+    }
+    c->use_gen = 1;
+    c->gen_live = slot;
+    c->gen_seen = g;
+}
+
+void efs_conn_note_ok(struct efs_conn *c)
+{
+    struct timespec ts;
+
+    if (!c)
+        return;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    c->last_ok_ms = (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
 struct efs_conn *efs_conn_wrap_tcp(int fd, int is_server)
@@ -283,12 +320,16 @@ void efs_conn_destroy(struct efs_conn *c)
                 c->fd, efs_rdma_qpn(c->rc), efs_conn_fd_matches(c));
         backtrace_symbols_fd(bt, nb, fileno(stderr));
     }
+    int own = efs_conn_fd_matches(c);
+
+    if (c->use_gen && c->gen_live)
+        __atomic_fetch_add(c->gen_live, 1, __ATOMIC_RELAXED);
     if (c->rc)
         efs_rdma_conn_destroy(c->rc);
-    /* Only close if this handle still owns the descriptor. A recycled
-     * number belongs to someone else — closing it FINs their TCP and the
-     * peer destroys the QP our next checkout will send into. */
-    if (c->fd >= 0 && efs_conn_fd_matches(c))
+    /* Only close if this handle still owned the descriptor at entry.
+     * The generation bump above makes a recycled number fail fd_matches
+     * for anyone still holding the old pointer. */
+    if (c->fd >= 0 && own)
         close(c->fd);
     c->fd = -1;
     free(c);

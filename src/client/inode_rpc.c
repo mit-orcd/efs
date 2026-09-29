@@ -861,7 +861,8 @@ int efs_client_rpc_rename_at(efs_export_id_t export_id, efs_ino_t old_parent,
 int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
                            uint32_t mask, uint32_t mode, uid_t uid, gid_t gid,
                            uint64_t size, uint64_t mtime, uint32_t mtime_nsec,
-                           uint64_t atime, struct efs_inode *out)
+                           uint64_t atime, uint32_t atime_nsec,
+                           struct efs_inode *out)
 {
     struct efs_msg_inode_setattr req;
     memset(&req, 0, sizeof(req));
@@ -875,6 +876,7 @@ int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
     req.mtime = mtime;
     req.mtime_nsec = mtime_nsec;
     req.atime = atime;
+    req.atime_nsec = atime_nsec;
     struct efs_msg_inode_reply r;
     int rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_SETATTR, &req, sizeof(req),
                                  EFS_MSG_INODE_SETATTR_REPLY, &r, sizeof(r));
@@ -1020,6 +1022,11 @@ void efs_client_rpc_set_deadline_ms(uint64_t mono_ms)
     tl_rpc_deadline_ms = mono_ms;
 }
 
+uint64_t efs_client_rpc_deadline_ms(void)
+{
+    return tl_rpc_deadline_ms;
+}
+
 static int rpc_past_deadline(void)
 {
     struct timespec ts;
@@ -1030,6 +1037,11 @@ static int rpc_past_deadline(void)
     clock_gettime(CLOCK_MONOTONIC, &ts);
     now = (uint64_t)ts.tv_sec * 1000ull + (uint64_t)ts.tv_nsec / 1000000ull;
     return now >= tl_rpc_deadline_ms;
+}
+
+int efs_client_rpc_past_deadline(void)
+{
+    return rpc_past_deadline();
 }
 
 /* rpc_send_recv_shard with the dual-host picker (raft mode reports). Same

@@ -1,0 +1,54 @@
+posix cpu+trace profile label=r5 build=db2b88c4802a-dirty host=fcstor007
+leaders g0=fcstor004 g2=fcstor005  record_s=55
+suite cpu pass rc=1; trace pass rc=1
+(rc=1 with 0 EFS-bugs is compare exit 2: mmap SKIP on 5.14)
+
+== suite lines ==
+/home/erbmi1/git/efs/results/measure/20260928-100138-posix-prof-r5/posix-cpu.log:POSIX suite: 198/201 pass, 0 fail, 3 skip, 0 notrun  (13.7s)
+/home/erbmi1/git/efs/results/measure/20260928-100138-posix-prof-r5/posix-cpu.log:POSIX suite: 200/201 pass, 0 fail, 1 skip, 0 notrun  (50.7s)
+/home/erbmi1/git/efs/results/measure/20260928-100138-posix-prof-r5/posix-cpu.log:  EFS BUGS         : 0  (baseline PASS, target FAIL)
+/home/erbmi1/git/efs/results/measure/20260928-100138-posix-prof-r5/posix-trace.log:POSIX suite: 198/201 pass, 0 fail, 3 skip, 0 notrun  (13.7s)
+/home/erbmi1/git/efs/results/measure/20260928-100138-posix-prof-r5/posix-trace.log:POSIX suite: 200/201 pass, 0 fail, 1 skip, 0 notrun  (150.9s)
+/home/erbmi1/git/efs/results/measure/20260928-100138-posix-prof-r5/posix-trace.log:  EFS BUGS         : 0  (baseline PASS, target FAIL)
+
+== cpu-clock top (fuse) ==
+    16.33%           876  efs-fuse  efs-fuse              [.] recv_poller
+            |
+            ---recv_poller
+               start_thread
+     6.40%           343  efs-fuse  efs-fuse              [.] blake3_hash_many_avx2
+            |
+            ---blake3_hash_many_avx2
+               |          
+                --6.38%--blake3_compress_subtree_wide
+                          |          
+                           --6.32%--blake3_compress_subtree_wide
+                                     |          
+                                      --6.21%--blake3_compress_subtree_wide
+                                                |          
+                                                 --5.93%--blake3_compress_subtree_wide
+                                                           blake3_hasher_update.part.0
+                                                           efs_hash
+                                                           |          
+                                                           |--3.71%--hash_write_fragments
+                                                           |          |          
+                                                           |           --3.65%--dcache_put_now.constprop.0
+                                                           |                     put_pool_run.isra.0
+                                                           |                     efs_dcache_flush_ino
+                                                           |                     |          
+                                                           |                      --3.58%--ll_flush
+                                                           |                                0x7f691e48d361
+                                                           |          
+                                                            --2.20%--dcache_put_now.constprop.0
+                                                                      put_pool_run.isra.0
+                                                                      efs_dcache_flush_ino
+                                                                      ll_flush
+                                                                      0x7f691e48d361
+     4.57%           245  efs-fuse  [vdso]                [.] 0x0000000000000b18
+            |
+            ---0x7ffdf1deeb18
+               clock_gettime@@GLIBC_2.17
+               |          
+               |--1.81%--efs_conn_send_msg
+               |          |          
+               |           --1.27%--rpc_send_recv_shard

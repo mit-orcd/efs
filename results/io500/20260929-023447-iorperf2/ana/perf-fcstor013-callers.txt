@@ -1,0 +1,982 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 26K of event 'cycles:P'
+# Event count (approx.): 58468914160
+#
+# Overhead       Samples  Command   Shared Object            Symbol                                        
+# ........  ............  ........  .......................  ..............................................
+#
+    16.32%          4069  efs-fuse  efs-fuse                 [.] blake3_hash_many_avx2
+            |          
+             --15.72%--blake3_hash_many_avx2
+                       |          
+                        --15.71%--blake3_compress_subtree_wide
+                                  |          
+                                   --15.47%--blake3_compress_subtree_wide
+                                             |          
+                                              --15.18%--blake3_compress_subtree_wide
+                                                        |          
+                                                        |--14.63%--blake3_compress_subtree_wide
+                                                        |          blake3_hasher_update.part.0
+                                                        |          efs_hash
+                                                        |          |          
+                                                        |          |--9.67%--hash_write_fragments
+                                                        |          |          dcache_put_now.constprop.0
+                                                        |          |          |          
+                                                        |          |          |--5.75%--dcache_flush_slot_inner
+                                                        |          |          |          |          
+                                                        |          |          |           --5.70%--dcache_reclaim_main
+                                                        |          |          |                     start_thread
+                                                        |          |          |          
+                                                        |          |           --3.92%--put_pool_thread
+                                                        |          |                     start_thread
+                                                        |          |          
+                                                        |           --4.96%--dcache_put_now.constprop.0
+                                                        |                     |          
+                                                        |                     |--2.97%--dcache_flush_slot_inner
+                                                        |                     |          |          
+                                                        |                     |           --2.94%--dcache_reclaim_main
+                                                        |                     |                     start_thread
+                                                        |                     |          
+                                                        |                      --1.99%--put_pool_thread
+                                                        |                                start_thread
+                                                        |          
+                                                         --0.55%--blake3_hasher_update.part.0
+                                                                   efs_hash
+
+     5.05%          1208  efs-fuse  libc.so.6                [.] __memmove_avx_unaligned_erms
+            |          
+             --3.71%--__memmove_avx_unaligned_erms
+                       |          
+                        --2.86%--efs_rdma_send_frame
+                                  efs_conn_send_msg_parts
+                                  put_fragments_parallel_once
+                                  efs_client_put_fragments_parallel
+                                  dcache_put_now.constprop.0
+                                  |          
+                                  |--1.56%--put_pool_thread
+                                  |          start_thread
+                                  |          
+                                   --1.30%--dcache_flush_slot_inner
+                                             |          
+                                              --1.26%--dcache_reclaim_main
+                                                        start_thread
+
+     4.80%          1163  efs-fuse  [kernel.kallsyms]        [k] ptrace_do_notify
+            |          
+             --0.64%--ttwu_queue_wakelist
+                       try_to_wake_up
+                       |          
+                        --0.63%--__wake_up_common
+                                  __wake_up_sync_key
+                                  do_notify_parent_cldstop
+                                  ptrace_stop.part.0
+                                  ptrace_do_notify
+                                  ptrace_notify
+
+     3.71%           849  efs-fuse  [kernel.kallsyms]        [k] child_wait_callback
+            |          
+             --0.66%--__schedule
+                       schedule
+                       ptrace_stop.part.0
+                       ptrace_do_notify
+                       ptrace_notify
+
+     3.55%           620  efs-fuse  efs-fuse                 [.] recv_poller
+            |          
+             --1.28%--__GI___pthread_enable_asynccancel
+                       start_thread
+
+     3.07%           814  efs-fuse  [kernel.kallsyms]        [k] retbleed_return_thunk
+     2.62%           693  efs-fuse  efs-fuse                 [.] xor_into
+            |          
+             --1.18%--xor_into
+                       efs_encode_chunk
+                       dcache_put_now.constprop.0
+                       |          
+                        --0.69%--dcache_flush_slot_inner
+                                  |          
+                                   --0.69%--dcache_reclaim_main
+                                             start_thread
+
+     2.49%           659  efs-fuse  [kernel.kallsyms]        [k] __rcu_read_unlock
+     2.40%           530  efs-fuse  [kernel.kallsyms]        [k] __memcpy
+            |          
+             --1.54%--__memcpy
+                       fuse_copy_do
+                       fuse_copy_page
+                       fuse_copy_args
+                       fuse_dev_do_read
+                       fuse_dev_read
+                       vfs_read
+                       ksys_read
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       read
+                       0x300000000
+                       0x746e756f6d2d
+
+     2.33%           525  efs-fuse  [kernel.kallsyms]        [k] entry_SYSCALL_64
+     1.89%           510  efs-fuse  [kernel.kallsyms]        [k] __task_pid_nr_ns
+     1.76%           390  efs-fuse  [kernel.kallsyms]        [k] clear_page_rep
+            |          
+             --0.82%--clear_page_rep
+                       post_alloc_hook
+                       get_page_from_freelist
+                       __alloc_pages
+                       alloc_pages_mpol
+                       vma_alloc_folio
+                       do_anonymous_page
+                       __handle_mm_fault
+                       handle_mm_fault
+                       |          
+                        --0.77%--do_user_addr_fault
+                                  exc_page_fault
+                                  asm_exc_page_fault
+                                  |          
+                                   --0.76%--__memmove_avx_unaligned_erms
+
+     1.30%           314  efs-fuse  [kernel.kallsyms]        [k] do_notify_parent_cldstop
+     1.10%           265  efs-fuse  [kernel.kallsyms]        [k] _raw_spin_lock_irqsave
+     1.04%           262  efs-fuse  [kernel.kallsyms]        [k] ptrace_stop.part.0
+     0.94%           232  efs-fuse  [kernel.kallsyms]        [k] ptrace_notify
+     0.85%           205  efs-fuse  [kernel.kallsyms]        [k] _copy_from_user
+     0.78%           235  efs-fuse  [kernel.kallsyms]        [k] __get_user_8
+     0.78%           195  efs-fuse  [vdso]                   [.] 0x0000000000000b15
+     0.76%           180  efs-fuse  [kernel.kallsyms]        [k] select_task_rq
+     0.67%           158  efs-fuse  efs-fuse                 [.] blake3_compress_xof_sse41
+     0.63%           147  efs-fuse  [kernel.kallsyms]        [k] map_id_up
+     0.61%           144  efs-fuse  [kernel.kallsyms]        [k] _raw_spin_lock_irq
+     0.57%           128  efs-fuse  [kernel.kallsyms]        [k] select_task_rq_fair
+     0.55%           129  efs-fuse  [kernel.kallsyms]        [k] __wake_up_common
+     0.54%           145  efs-fuse  [kernel.kallsyms]        [k] merge_sched_in
+     0.51%           126  efs-fuse  [kernel.kallsyms]        [k] native_irq_return_iret
+     0.50%           120  efs-fuse  [kernel.kallsyms]        [k] try_to_wake_up
+     0.49%           125  efs-fuse  [kernel.kallsyms]        [k] do_syscall_64
+     0.49%           123  efs-fuse  efs-fuse                 [.] efs_client_conn_get
+     0.47%           125  efs-fuse  [kernel.kallsyms]        [k] schedule
+     0.46%            86  efs-fuse  [kernel.kallsyms]        [k] rep_movs_alternative
+     0.46%           113  efs-fuse  efs-fuse                 [.] put_fragments_parallel_once
+     0.46%           107  efs-fuse  [kernel.kallsyms]        [k] do_sys_poll
+     0.44%           106  efs-fuse  [kernel.kallsyms]        [k] ttwu_queue_wakelist
+     0.44%           139  efs-fuse  [kernel.kallsyms]        [k] __rcu_read_lock
+     0.42%           123  efs-fuse  [kernel.kallsyms]        [k] _raw_spin_unlock_irq
+     0.42%           104  efs-fuse  [kernel.kallsyms]        [k] __handle_mm_fault
+     0.37%            81  efs-fuse  [kernel.kallsyms]        [k] __rseq_handle_notify_resume
+     0.37%            94  efs-fuse  [kernel.kallsyms]        [k] send_signal_locked
+     0.36%            90  efs-fuse  [kernel.kallsyms]        [k] do_numa_page
+     0.36%            79  efs-fuse  [kernel.kallsyms]        [k] vm_normal_page
+     0.36%            74  efs-fuse  [kernel.kallsyms]        [k] visit_groups_merge.constprop.0.isra.0
+     0.35%            78  efs-fuse  efs-fuse                 [.] blake3_hasher_update.part.0
+     0.35%            88  efs-fuse  [kernel.kallsyms]        [k] mas_walk
+     0.32%            69  efs-fuse  [kernel.kallsyms]        [k] __x64_sys_poll
+     0.32%            84  efs-fuse  [kernel.kallsyms]        [k] syscall_trace_enter.constprop.0
+     0.31%            92  efs-fuse  [kernel.kallsyms]        [k] syscall_exit_work
+     0.30%            63  efs-fuse  [kernel.kallsyms]        [k] rmqueue_bulk
+     0.30%            62  efs-fuse  libc.so.6                [.] __poll
+     0.29%            63  efs-fuse  [kernel.kallsyms]        [k] perf_pmu_nop_void
+     0.29%            61  efs-fuse  [kernel.kallsyms]        [k] perf_ctx_sched_task_cb
+     0.29%            81  efs-fuse  libc.so.6                [.] pthread_mutex_lock@@GLIBC_2.2.5
+     0.28%            62  efs-fuse  [kernel.kallsyms]        [k] perf_event_groups_next
+     0.27%            92  efs-fuse  [kernel.kallsyms]        [k] futex_wait_setup
+     0.27%            71  efs-fuse  efs-fuse                 [.] efs_conn_fd_matches
+     0.26%            90  efs-fuse  [kernel.kallsyms]        [k] copy_page
+     0.25%            58  efs-fuse  [kernel.kallsyms]        [k] arch_exit_to_user_mode_prepare.constprop.0
+     0.25%            59  efs-fuse  [kernel.kallsyms]        [k] finish_task_switch.isra.0
+     0.25%            64  efs-fuse  [kernel.kallsyms]        [k] perf_ctx_unlock
+     0.25%            58  efs-fuse  [kernel.kallsyms]        [k] __put_user_8
+     0.25%            61  efs-fuse  efs-fuse                 [.] blake3_compress_subtree_wide
+     0.25%            80  efs-fuse  [kernel.kallsyms]        [k] __x64_sys_futex
+     0.24%            58  efs-fuse  [kernel.kallsyms]        [k] __perf_event_task_sched_in
+     0.24%            61  efs-fuse  efs-fuse                 [.] blake3_compress_in_place_sse41
+     0.24%            63  efs-fuse  [kernel.kallsyms]        [k] prepare_signal
+     0.24%            56  efs-fuse  [kernel.kallsyms]        [k] syscall_exit_to_user_mode
+     0.23%            52  efs-fuse  [kernel.kallsyms]        [k] asm_exc_page_fault
+     0.22%            54  efs-fuse  [kernel.kallsyms]        [k] folio_mark_dirty
+     0.22%            49  efs-fuse  [kernel.kallsyms]        [k] change_pte_range
+     0.22%            54  efs-fuse  [kernel.kallsyms]        [k] __list_add_valid
+     0.22%            56  efs-fuse  [kernel.kallsyms]        [k] perf_ctx_enable
+     0.21%            56  efs-fuse  [kernel.kallsyms]        [k] eventfd_poll
+     0.21%            48  efs-fuse  libc.so.6                [.] read
+     0.21%            48  efs-fuse  [kernel.kallsyms]        [k] do_user_addr_fault
+     0.20%            52  efs-fuse  libc.so.6                [.] __memmove_avx_unaligned
+     0.20%            47  efs-fuse  [kernel.kallsyms]        [k] __pte_offset_map
+     0.19%           668  efs-fuse  [kernel.kallsyms]        [k] native_sched_clock
+     0.19%           125  efs-fuse  [kernel.kallsyms]        [k] restore_fpregs_from_fpstate
+     0.19%            46  efs-fuse  [kernel.kallsyms]        [k] ctx_sched_in
+     0.19%            50  efs-fuse  [kernel.kallsyms]        [k] entry_SYSCALL_64_after_hwframe
+     0.19%            45  efs-fuse  [kernel.kallsyms]        [k] __x64_sys_read
+     0.19%            50  efs-fuse  libc.so.6                [.] __fstat64
+     0.19%            47  efs-fuse  [kernel.kallsyms]        [k] sync_regs
+     0.18%            41  efs-fuse  [kernel.kallsyms]        [k] handle_mm_fault
+     0.18%            45  efs-fuse  efs-fuse                 [.] blake3_hasher_finalize_seek
+     0.18%            41  efs-fuse  [kernel.kallsyms]        [k] exit_to_user_mode_loop
+     0.17%            43  efs-fuse  efs-fuse                 [.] efs_rdma_recv_repost
+     0.17%            49  efs-fuse  [kernel.kallsyms]        [k] __schedule
+     0.17%            50  efs-fuse  [kernel.kallsyms]        [k] _raw_spin_unlock_irqrestore
+     0.17%            47  efs-fuse  efs-fuse                 [.] blake3_hash_many_sse41
+     0.17%            43  efs-fuse  [kernel.kallsyms]        [k] siginfo_layout
+     0.17%            47  efs-fuse  [kernel.kallsyms]        [k] native_queued_spin_lock_slowpath
+     0.17%            39  efs-fuse  [kernel.kallsyms]        [k] do_anonymous_page
+     0.17%            38  efs-fuse  [kernel.kallsyms]        [k] get_mem_cgroup_from_mm
+     0.17%            27  efs-fuse  libc.so.6                [.] pthread_spin_unlock@@GLIBC_2.34
+     0.17%            41  efs-fuse  efs-fuse                 [.] efs_rdma_reply_ready_us
+     0.16%            43  efs-fuse  [kernel.kallsyms]        [k] futex_wait
+     0.16%            41  efs-fuse  [kernel.kallsyms]        [k] __x86_indirect_thunk_rax
+     0.16%            41  efs-fuse  [kernel.kallsyms]        [k] mm_account_fault
+     0.16%            36  efs-fuse  [kernel.kallsyms]        [k] retbleed_untrain_ret
+     0.15%            37  efs-fuse  [kernel.kallsyms]        [k] __send_signal_locked
+     0.15%            35  efs-fuse  [kernel.kallsyms]        [k] _raw_spin_unlock
+     0.15%            50  efs-fuse  [kernel.kallsyms]        [k] futex_wake_mark
+     0.15%            28  efs-fuse  [fuse]                   [k] fuse_copy_fill
+     0.15%            31  efs-fuse  [kernel.kallsyms]        [k] __audit_syscall_entry
+     0.15%            36  efs-fuse  [kernel.kallsyms]        [k] lock_vma_under_rcu
+     0.14%            33  efs-fuse  [kernel.kallsyms]        [k] pollwake
+     0.14%            29  efs-fuse  [kernel.kallsyms]        [k] __list_del_entry_valid
+     0.14%            33  efs-fuse  [kernel.kallsyms]        [k] do_poll.constprop.0
+     0.14%            34  efs-fuse  [kernel.kallsyms]        [k] cgroup_enter_frozen
+     0.14%            26  efs-fuse  efs-fuse                 [.] harvest_recv_wcs
+     0.13%            30  efs-fuse  [kernel.kallsyms]        [k] perf_iterate_ctx
+     0.13%           357  efs-fuse  [kernel.kallsyms]        [k] event_sched_in
+     0.13%            32  efs-fuse  efs-fuse                 [.] efs_rdma_reply_ready_quick
+     0.13%            37  efs-fuse  [kernel.kallsyms]        [k] perf_pmu_nop_int
+     0.13%            28  efs-fuse  [kernel.kallsyms]        [k] gup_pte_range
+     0.12%            26  efs-fuse  libc.so.6                [.] __GI___libc_write
+     0.12%            30  efs-fuse  [kernel.kallsyms]        [k] entry_SYSRETQ_unsafe_stack
+     0.12%            31  efs-fuse  [kernel.kallsyms]        [k] __mod_memcg_lruvec_state
+     0.12%            32  efs-fuse  libc.so.6                [.] __GI___pthread_mutex_unlock_usercnt
+     0.12%            29  efs-fuse  libc.so.6                [.] __getsockopt
+     0.12%            25  efs-fuse  [kernel.kallsyms]        [k] read_tsc
+     0.12%            32  efs-fuse  [kernel.kallsyms]        [k] select_idle_sibling
+     0.11%            29  efs-fuse  [kernel.kallsyms]        [k] raw_spin_rq_unlock
+     0.11%            31  efs-fuse  [kernel.kallsyms]        [k] vfs_getattr_nosec
+     0.11%            26  efs-fuse  [kernel.kallsyms]        [k] gup_pgd_range
+     0.11%            26  efs-fuse  [kernel.kallsyms]        [k] cgroup_leave_frozen
+     0.11%            24  efs-fuse  [kernel.kallsyms]        [k] eventfd_write
+     0.11%            23  efs-fuse  [kernel.kallsyms]        [k] lru_add_fn
+     0.11%            38  efs-fuse  libc.so.6                [.] __GI___lll_lock_wait
+     0.11%            24  efs-fuse  [kernel.kallsyms]        [k] rmqueue.constprop.0
+     0.10%            23  efs-fuse  [kernel.kallsyms]        [k] lockless_pages_from_mm
+     0.10%            23  efs-fuse  [kernel.kallsyms]        [k] __audit_syscall_exit
+     0.10%            31  efs-fuse  [kernel.kallsyms]        [k] _raw_spin_lock
+     0.10%            25  efs-fuse  [kernel.kallsyms]        [k] _copy_to_user
+     0.10%            25  efs-fuse  [kernel.kallsyms]        [k] __x64_sys_newfstat
+     0.10%            32  efs-fuse  [kernel.kallsyms]        [k] rseq_get_rseq_cs
+     0.10%            22  efs-fuse  [kernel.kallsyms]        [k] exc_page_fault
+     0.10%            28  efs-fuse  [kernel.kallsyms]        [k] _raw_read_lock
+     0.10%            25  efs-fuse  [kernel.kallsyms]        [k] lru_gen_add_folio
+     0.10%            23  efs-fuse  [fuse]                   [k] fuse_copy_page
+     0.10%            20  efs-fuse  [kernel.kallsyms]        [k] __fget_light
+     0.09%            20  efs-fuse  [kernel.kallsyms]        [k] rseq_ip_fixup
+     0.09%            20  efs-fuse  [kernel.kallsyms]        [k] __count_memcg_events
+     0.09%            19  efs-fuse  efs-fuse                 [.] conn_rdma_frame.constprop.0
+     0.09%            22  efs-fuse  [kernel.kallsyms]        [k] get_page_from_freelist
+     0.09%            25  efs-fuse  [kernel.kallsyms]        [k] sched_update_worker
+     0.09%            19  efs-fuse  libc.so.6                [.] pthread_spin_lock@@GLIBC_2.34
+     0.09%            21  efs-fuse  [fuse]                   [k] fuse_copy_do
+     0.09%            24  efs-fuse  [kernel.kallsyms]        [k] mpol_misplaced
+     0.09%            23  efs-fuse  [kernel.kallsyms]        [k] __x64_sys_getsockopt
+     0.09%            18  efs-fuse  libibverbs.so.1.16.63.0  [.] ibv_get_cq_event
+     0.09%            22  efs-fuse  [kernel.kallsyms]        [k] from_kuid_munged
+     0.09%            24  efs-fuse  [kernel.kallsyms]        [k] error_entry
+     0.09%            23  efs-fuse  efs-fuse                 [.] efs_conn_send_msg_parts
+     0.09%            19  efs-fuse  efs-fuse                 [.] efs_export_table_for_chunk
+     0.08%            19  efs-fuse  [kernel.kallsyms]        [k] __check_heap_object
+     0.08%            13  efs-fuse  libmlx5.so.1.27.63.0     [.] pthread_spin_unlock@plt
+     0.08%            30  efs-fuse  [kernel.kallsyms]        [k] __futex_wait
+     0.08%            22  efs-fuse  [kernel.kallsyms]        [k] fput_many
+     0.08%            23  efs-fuse  efs-fuse                 [.] efs_rdma_recv_wait
+     0.08%            17  efs-fuse  [kernel.kallsyms]        [k] sched_clock_noinstr
+     0.08%            32  efs-fuse  [kernel.kallsyms]        [k] do_futex
+     0.08%            20  efs-fuse  [kernel.kallsyms]        [k] __irqentry_text_end
+     0.08%            18  efs-fuse  [kernel.kallsyms]        [k] try_charge_memcg
+     0.08%            22  efs-fuse  [kernel.kallsyms]        [k] rb_next
+     0.08%            22  efs-fuse  [kernel.kallsyms]        [k] raw_spin_rq_lock_nested
+     0.08%            22  efs-fuse  [kernel.kallsyms]        [k] _raw_read_unlock
+     0.08%            30  efs-fuse  [kernel.kallsyms]        [k] wake_up_q
+     0.08%            13  efs-fuse  efs-fuse                 [.] efs_client_report_dirty_ino
+     0.08%            18  efs-fuse  [kernel.kallsyms]        [k] __x64_sys_recvfrom
+     0.08%            15  efs-fuse  [kernel.kallsyms]        [k] task_numa_fault
+     0.07%            19  efs-fuse  [kernel.kallsyms]        [k] __pte_offset_map_lock
+     0.07%            18  efs-fuse  [kernel.kallsyms]        [k] __alloc_pages
+     0.07%            19  efs-fuse  [kernel.kallsyms]        [k] cgroup_rstat_updated
+     0.07%            18  efs-fuse  libc.so.6                [.] getenv
+     0.07%            19  efs-fuse  [kernel.kallsyms]        [k] task_active_pid_ns
+     0.07%            19  efs-fuse  efs-fuse                 [.] chunk_idx_get.constprop.0
+     0.07%            19  efs-fuse  [kernel.kallsyms]        [k] __wake_up_sync_key
+     0.07%            13  efs-fuse  efs-fuse                 [.] efs_export_get_chunk
+     0.07%            16  efs-fuse  [kernel.kallsyms]        [k] blkcg_maybe_throttle_current
+     0.07%            19  efs-fuse  [kernel.kallsyms]        [k] amd_clear_divider
+     0.07%            17  efs-fuse  [kernel.kallsyms]        [k] get_vma_policy
+     0.07%            16  efs-fuse  [kernel.kallsyms]        [k] recalc_sigpending_tsk
+     0.06%            13  efs-fuse  [kernel.kallsyms]        [k] nsec_to_clock_t
+     0.06%            12  efs-fuse  [kernel.kallsyms]        [k] check_heap_object
+     0.06%            16  efs-fuse  [kernel.kallsyms]        [k] down_read_trylock
+     0.06%            14  efs-fuse  [kernel.kallsyms]        [k] __x64_sys_write
+     0.06%            15  efs-fuse  [kernel.kallsyms]        [k] poll_freewait
+     0.06%            14  efs-fuse  [kernel.kallsyms]        [k] task_cputime
+     0.06%            14  efs-fuse  [kernel.kallsyms]        [k] folio_add_lru
+     0.06%            13  efs-fuse  [kernel.kallsyms]        [k] fput
+     0.06%            12  efs-fuse  [kernel.kallsyms]        [k] default_wake_function
+     0.06%            17  efs-fuse  [kernel.kallsyms]        [k] tcp_get_info
+     0.06%            12  efs-fuse  [kernel.kallsyms]        [k] iov_iter_get_pages2
+     0.06%            15  efs-fuse  [kernel.kallsyms]        [k] dequeue_entity
+     0.06%            15  efs-fuse  efs-fuse                 [.] efs_export_set_chunk
+     0.06%            16  efs-fuse  [kernel.kallsyms]        [k] futex_wake
+     0.06%            14  efs-fuse  [kernel.kallsyms]        [k] pte_offset_map_nolock
+     0.06%            12  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022339
+     0.06%            13  efs-fuse  [kernel.kallsyms]        [k] __iov_iter_get_pages_alloc
+     0.06%            20  efs-fuse  efs-fuse                 [.] efs_conn_recv_put_reply
+     0.06%            13  efs-fuse  [kernel.kallsyms]        [k] syscall_enter_from_user_mode
+     0.05%            12  efs-fuse  [kernel.kallsyms]        [k] mem_cgroup_commit_charge
+     0.05%            12  efs-fuse  [fuse]                   [k] fuse_copy_finish
+     0.05%            14  efs-fuse  [kernel.kallsyms]        [k] mem_cgroup_handle_over_high
+     0.05%            49  efs-fuse  [kernel.kallsyms]        [k] sched_clock
+     0.05%            13  efs-fuse  [kernel.kallsyms]        [k] available_idle_cpu
+     0.05%            17  efs-fuse  [kernel.kallsyms]        [k] up_read
+     0.05%            12  efs-fuse  [kernel.kallsyms]        [k] prepare_alloc_pages.constprop.0
+     0.05%            13  efs-fuse  [kernel.kallsyms]        [k] syscall_exit_to_user_mode_prepare
+     0.05%            11  efs-fuse  [kernel.kallsyms]        [k] post_alloc_hook
+     0.05%            15  efs-fuse  efs-fuse                 [.] dcache_put_now.constprop.0
+     0.05%            14  efs-fuse  libc.so.6                [.] __GI___pthread_enable_asynccancel
+     0.05%            10  efs-fuse  [kernel.kallsyms]        [k] sk_getsockopt
+     0.05%            15  efs-fuse  [kernel.kallsyms]        [k] sched_clock_cpu
+     0.05%            13  efs-fuse  [kernel.kallsyms]        [k] __wake_up_parent
+     0.05%            15  efs-fuse  [kernel.kallsyms]        [k] dequeue_task_fair
+     0.05%            10  efs-fuse  [kernel.kallsyms]        [k] set_page_dirty_lock
+     0.05%            11  efs-fuse  efs-fuse                 [.] reap_sends
+     0.05%            10  efs-fuse  [kernel.kallsyms]        [k] folio_add_new_anon_rmap
+     0.05%            16  efs-fuse  [kernel.kallsyms]        [k] __update_load_avg_cfs_rq
+     0.05%            10  efs-fuse  [kernel.kallsyms]        [k] vfs_read
+     0.05%            11  efs-fuse  [kernel.kallsyms]        [k] vfs_fstat
+     0.05%            12  efs-fuse  [kernel.kallsyms]        [k] __fdget
+     0.05%            13  efs-fuse  efs-fuse                 [.] efs_client_node_is_down
+     0.05%            10  efs-fuse  [kernel.kallsyms]        [k] vfs_write
+     0.05%            13  efs-fuse  [kernel.kallsyms]        [k] __mod_lruvec_page_state
+     0.05%            15  efs-fuse  libc.so.6                [.] clock_gettime@@GLIBC_2.17
+     0.05%            12  efs-fuse  efs-fuse                 [.] blake3_hash_many
+     0.05%             8  efs-fuse  efs-fuse                 [.] efs_meta_candidate_gen
+     0.05%            10  efs-fuse  [kernel.kallsyms]        [k] schedule_hrtimeout_range_clock
+     0.05%             9  efs-fuse  [kernel.kallsyms]        [k] node_is_toptier
+     0.05%            15  efs-fuse  [kernel.kallsyms]        [k] try_to_migrate_one
+     0.04%            13  efs-fuse  [kernel.kallsyms]        [k] fpregs_restore_userregs
+     0.04%            10  efs-fuse  [kernel.kallsyms]        [k] get_user_pages_fast
+     0.04%            20  efs-fuse  [kernel.kallsyms]        [k] page_vma_mapped_walk
+     0.04%            11  efs-fuse  [kernel.kallsyms]        [k] __mod_lruvec_state
+     0.04%            11  efs-fuse  [kernel.kallsyms]        [k] access_error
+     0.04%             9  efs-fuse  efs-fuse                 [.] dcache_reclaim_main
+     0.04%            12  efs-fuse  [kernel.kallsyms]        [k] __mod_node_page_state
+     0.04%            10  efs-fuse  efs-fuse                 [.] pthread_mutex_lock@plt
+     0.04%             8  efs-fuse  [kernel.kallsyms]        [k] poll_schedule_timeout.constprop.0
+     0.04%            10  efs-fuse  [kernel.kallsyms]        [k] kthread_blkcg
+     0.04%            11  efs-fuse  libc.so.6                [.] pthread_cond_signal@@GLIBC_2.3.2
+     0.04%             9  efs-fuse  [kernel.kallsyms]        [k] try_grab_folio_fast
+     0.04%            10  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022329
+     0.04%             8  efs-fuse  [kernel.kallsyms]        [k] timerqueue_del
+     0.04%            12  efs-fuse  [kernel.kallsyms]        [k] ktime_get_coarse_real_ts64
+     0.04%             9  efs-fuse  libc.so.6                [.] _int_malloc
+     0.04%             9  efs-fuse  [kernel.kallsyms]        [k] alloc_pages_mpol
+     0.04%             9  efs-fuse  [kernel.kallsyms]        [k] __check_object_size.part.0
+     0.04%            11  efs-fuse  [kernel.kallsyms]        [k] update_curr
+     0.04%             9  efs-fuse  [kernel.kallsyms]        [k] __cond_resched
+     0.04%             9  efs-fuse  [kernel.kallsyms]        [k] can_change_pte_writable
+     0.04%            18  efs-fuse  efs-fuse                 [.] efs_export_staged_bytes
+     0.04%             8  efs-fuse  libc.so.6                [.] __mprotect
+     0.04%            10  efs-fuse  [kernel.kallsyms]        [k] get_futex_key
+     0.04%             8  efs-fuse  efs-fuse                 [.] efs_client_mark_ino_dirty.part.0
+     0.04%             9  efs-fuse  efs-fuse                 [.] efs_rdma_send_frame
+     0.04%             9  efs-fuse  [kernel.kallsyms]        [k] cgroup_update_frozen
+     0.04%             6  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022331
+     0.04%             9  efs-fuse  libc.so.6                [.] __strncmp_avx2
+     0.04%             6  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022315
+     0.04%             9  efs-fuse  [ib_uverbs]              [k] ib_uverbs_comp_event_poll
+     0.04%            15  efs-fuse  [kernel.kallsyms]        [k] update_rq_clock_task
+     0.04%            12  efs-fuse  [kernel.kallsyms]        [k] copyout
+     0.04%            13  efs-fuse  libc.so.6                [.] __GI___lll_lock_wake
+     0.03%             8  efs-fuse  libmlx5.so.1.27.63.0     [.] pthread_spin_lock@plt
+     0.03%            10  efs-fuse  [kernel.kallsyms]        [k] pte_mkwrite
+     0.03%             6  efs-fuse  libc.so.6                [.] sysmalloc
+     0.03%             7  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000002232d
+     0.03%             9  efs-fuse  [kernel.kallsyms]        [k] release_pages
+     0.03%             7  efs-fuse  [ib_uverbs]              [k] ib_uverbs_event_read.constprop.0
+     0.03%             9  efs-fuse  efs-fuse                 [.] put_recv_reply
+     0.03%             8  efs-fuse  [kernel.kallsyms]        [k] tcp_getsockopt
+     0.03%             5  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000229f5
+     0.03%             5  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000002229e
+     0.03%            10  efs-fuse  [kernel.kallsyms]        [k] generic_fillattr
+     0.03%           121  efs-fuse  [kernel.kallsyms]        [k] perf_ibs_start
+     0.03%             6  efs-fuse  [kernel.kallsyms]        [k] rcu_core
+     0.03%             6  efs-fuse  [kernel.kallsyms]        [k] ksys_read
+     0.03%             8  efs-fuse  [kernel.kallsyms]        [k] __remove_hrtimer
+     0.03%             7  efs-fuse  [kernel.kallsyms]        [k] is_valid_gup_args
+     0.03%             9  efs-fuse  efs-fuse                 [.] blake3_compress_in_place
+     0.03%            76  efs-fuse  [kernel.kallsyms]        [k] perf_event_update_userpage
+     0.03%             8  efs-fuse  libc.so.6                [.] _int_free
+     0.03%             5  efs-fuse  efs-fuse                 [.] efs_wire_frame_encode
+     0.03%             7  efs-fuse  [kernel.kallsyms]        [k] __futex_hash
+     0.03%             8  efs-fuse  [kernel.kallsyms]        [k] sock_poll
+     0.03%            10  efs-fuse  [kernel.kallsyms]        [k] __pollwait
+     0.03%             6  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022312
+     0.03%             4  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022232
+     0.03%             7  efs-fuse  [kernel.kallsyms]        [k] __folio_throttle_swaprate
+     0.03%             8  efs-fuse  efs-fuse                 [.] blake3_simd_degree
+     0.03%             7  efs-fuse  [kernel.kallsyms]        [k] blk_cgroup_congested
+     0.03%            20  efs-fuse  [kernel.kallsyms]        [k] update_sg_lb_stats
+     0.03%             8  efs-fuse  [kernel.kallsyms]        [k] __smp_call_single_queue
+     0.03%             7  efs-fuse  efs-fuse                 [.] efs_hash
+     0.03%             6  efs-fuse  efs-fuse                 [.] efs_client_lock_dir
+     0.03%             7  efs-fuse  [kernel.kallsyms]        [k] rb_erase
+     0.03%             7  efs-fuse  [kernel.kallsyms]        [k] check_stack_object
+     0.03%            16  efs-fuse  [kernel.kallsyms]        [k] update_load_avg
+     0.03%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222df
+     0.03%             4  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022222
+     0.03%             6  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000223fe
+     0.03%             8  efs-fuse  efs-fuse                 [.] efs_conn_reply_watch_quick
+     0.03%             5  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022216
+     0.03%             6  efs-fuse  [kernel.kallsyms]        [k] call_function_single_prep_ipi
+     0.03%            13  efs-fuse  [kernel.kallsyms]        [k] rmap_walk_anon
+     0.03%             7  efs-fuse  [kernel.kallsyms]        [k] internal_get_user_pages_fast
+     0.03%            11  efs-fuse  [kernel.kallsyms]        [k] rcu_note_context_switch
+     0.03%             8  efs-fuse  [kernel.kallsyms]        [k] vma_alloc_folio
+     0.03%             8  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022aca
+     0.03%             6  efs-fuse  efs-fuse                 [.] dcache_merge_owned
+     0.03%             7  efs-fuse  [kernel.kallsyms]        [k] syscall_return_via_sysret
+     0.03%            10  efs-fuse  libc.so.6                [.] __libc_recv
+     0.03%             4  efs-fuse  [kernel.kallsyms]        [k] default_send_IPI_single_phys
+     0.03%             6  efs-fuse  [kernel.kallsyms]        [k] __mem_cgroup_charge
+     0.03%             8  efs-fuse  libc.so.6                [.] __GI___pthread_disable_asynccancel
+     0.03%             6  efs-fuse  [kernel.kallsyms]        [k] do_pte_missing
+     0.03%             7  efs-fuse  efs-fuse                 [.] put_pool_run.isra.0
+     0.03%             5  efs-fuse  [fuse]                   [k] fuse_copy_args
+     0.03%             7  efs-fuse  [kernel.kallsyms]        [k] numa_migrate_prep
+     0.03%             6  efs-fuse  efs-fuse                 [.] efs_client_mark_chunk_dirty.part.0
+     0.03%             4  efs-fuse  [kernel.kallsyms]        [k] kfree
+     0.03%             7  efs-fuse  [kernel.kallsyms]        [k] do_sock_getsockopt
+     0.03%             6  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022865
+     0.03%             6  efs-fuse  [kernel.kallsyms]        [k] update_irq_load_avg
+     0.03%             6  efs-fuse  [kernel.kallsyms]        [k] migrate_folio_move
+     0.03%             6  efs-fuse  [kernel.kallsyms]        [k] migrate_pages_batch
+     0.03%             9  efs-fuse  [kernel.kallsyms]        [k] migrate_task_rq_fair
+     0.03%             7  efs-fuse  efs-fuse                 [.] blake3_hasher_init
+     0.03%             3  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222c9
+     0.03%             5  efs-fuse  [kernel.kallsyms]        [k] __x64_sys_mprotect
+     0.02%             6  efs-fuse  [kernel.kallsyms]        [k] handle_pte_fault
+     0.02%             7  efs-fuse  efs-fuse                 [.] pthread_mutex_unlock@plt
+     0.02%             5  efs-fuse  [kernel.kallsyms]        [k] vm_normal_folio
+     0.02%             6  efs-fuse  [kernel.kallsyms]        [k] update_rq_clock
+     0.02%             6  efs-fuse  [kernel.kallsyms]        [k] __mod_zone_page_state
+     0.02%             5  efs-fuse  [ib_uverbs]              [k] ib_uverbs_comp_event_read
+     0.02%             4  efs-fuse  [kernel.kallsyms]        [k] __check_object_size
+     0.02%             5  efs-fuse  [kernel.kallsyms]        [k] iov_iter_advance
+     0.02%             6  efs-fuse  [kernel.kallsyms]        [k] exit_to_user_mode_prepare
+     0.02%             6  efs-fuse  [kernel.kallsyms]        [k] free_unref_page_commit
+     0.02%             5  efs-fuse  efs-fuse                 [.] efs_export_get_inode
+     0.02%             3  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022223
+     0.02%             7  efs-fuse  [kernel.kallsyms]        [k] futex_do_wait
+     0.02%             5  efs-fuse  [kernel.kallsyms]        [k] hrtimer_active
+     0.02%            11  efs-fuse  libc.so.6                [.] __futex_abstimed_wait_common
+     0.02%             6  efs-fuse  libc.so.6                [.] __memset_avx2_unaligned_erms
+     0.02%            10  efs-fuse  [kernel.kallsyms]        [k] folio_get_anon_vma
+     0.02%             5  efs-fuse  [kernel.kallsyms]        [k] __rmqueue_pcplist
+     0.02%             4  efs-fuse  [kernel.kallsyms]        [k] mas_next_slot
+     0.02%             5  efs-fuse  [kernel.kallsyms]        [k] ktime_get_ts64
+     0.02%             4  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000229f0
+     0.02%             7  efs-fuse  [kernel.kallsyms]        [k] futex_ref_get
+     0.02%             5  efs-fuse  efs-fuse                 [.] dcache_patch
+     0.02%             4  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222d3
+     0.02%             4  efs-fuse  [kernel.kallsyms]        [k] __update_blocked_fair
+     0.02%             4  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000002221f
+     0.02%             6  efs-fuse  [kernel.kallsyms]        [k] folio_mapping
+     0.02%             4  efs-fuse  [kernel.kallsyms]        [k] mt_find
+     0.02%             6  efs-fuse  [kernel.kallsyms]        [k] _raw_spin_trylock
+     0.02%             5  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000002233e
+     0.02%             8  efs-fuse  [kernel.kallsyms]        [k] nohz_balancer_kick
+     0.02%             5  efs-fuse  [kernel.kallsyms]        [k] _raw_spin_lock_bh
+     0.02%             6  efs-fuse  efs-fuse                 [.] efs_rdcache_invalidate
+     0.02%             4  efs-fuse  [kernel.kallsyms]        [k] error_return
+     0.02%             3  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000002222e
+     0.02%             5  efs-fuse  [kernel.kallsyms]        [k] rcu_sched_clock_irq
+     0.02%             5  efs-fuse  efs-fuse                 [.] efs_client_conn_release
+     0.02%             4  efs-fuse  efs-fuse                 [.] clock_gettime@plt
+     0.02%             5  efs-fuse  [kernel.kallsyms]        [k] eventfd_read
+     0.02%             5  efs-fuse  [kernel.kallsyms]        [k] mas_prev_slot
+     0.02%             3  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000002248b
+     0.02%             4  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022412
+     0.02%             5  efs-fuse  [kernel.kallsyms]        [k] hrtimer_try_to_cancel.part.0
+     0.02%             5  efs-fuse  [kernel.kallsyms]        [k] mem_cgroup_charge_statistics
+     0.02%             4  efs-fuse  [kernel.kallsyms]        [k] timerqueue_add
+     0.02%             4  efs-fuse  [kernel.kallsyms]        [k] __local_bh_enable_ip
+     0.02%             4  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000002221a
+     0.02%             3  efs-fuse  [kernel.kallsyms]        [k] __virt_addr_valid
+     0.02%             4  efs-fuse  efs-fuse                 [.] efs_export_table.part.0
+     0.02%             5  efs-fuse  libc.so.6                [.] pthread_mutex_unlock@@GLIBC_2.2.5
+     0.02%             3  efs-fuse  [kernel.kallsyms]        [k] mprotect_fixup
+     0.02%             4  efs-fuse  [kernel.kallsyms]        [k] llist_add_batch
+     0.02%             4  efs-fuse  [kernel.kallsyms]        [k] __update_load_avg_blocked_se
+     0.02%             3  efs-fuse  [kernel.kallsyms]        [k] poll_select_set_timeout
+     0.02%             3  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022493
+     0.02%             4  efs-fuse  [kernel.kallsyms]        [k] migrate_folio_unmap
+     0.02%             4  efs-fuse  [kernel.kallsyms]        [k] folio_batch_move_lru
+     0.02%             5  efs-fuse  [kernel.kallsyms]        [k] irqentry_enter
+     0.02%             3  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022224
+     0.02%             5  efs-fuse  [kernel.kallsyms]        [k] rcu_preempt_deferred_qs
+     0.02%             3  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022291
+     0.02%             3  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022218
+     0.02%             4  efs-fuse  [kernel.kallsyms]        [k] account_system_index_time
+     0.02%             5  efs-fuse  libc.so.6                [.] pthread_cond_wait@@GLIBC_2.3.2
+     0.02%             9  efs-fuse  [kernel.kallsyms]        [k] migrate_hugetlbs
+     0.02%             4  efs-fuse  [kernel.kallsyms]        [k] cpuacct_charge
+     0.02%             3  efs-fuse  efs-fuse                 [.] dcache_note_committed.part.0.isra.0
+     0.02%             3  efs-fuse  [kernel.kallsyms]        [k] should_numa_migrate_memory
+     0.02%             3  efs-fuse  [vdso]                   [.] 0x0000000000000aba
+     0.02%             3  efs-fuse  [kernel.kallsyms]        [k] sock_common_getsockopt
+     0.01%             4  efs-fuse  [kernel.kallsyms]        [k] tcp_poll
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] account_process_tick
+     0.01%             4  efs-fuse  [kernel.kallsyms]        [k] tcp_release_cb
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222b8
+     0.01%             5  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022860
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] migrate_pages
+     0.01%             4  efs-fuse  [kernel.kallsyms]        [k] copyin
+     0.01%             5  efs-fuse  [kernel.kallsyms]        [k] security_socket_recvmsg
+     0.01%             4  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000048c29
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] __cgroup_account_cputime
+     0.01%             6  efs-fuse  [kernel.kallsyms]        [k] folio_migrate_flags
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022491
+     0.01%             3  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022ac0
+     0.01%             4  efs-fuse  [kernel.kallsyms]        [k] migrate_misplaced_folio
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] percpu_counter_add_batch
+     0.01%            14  efs-fuse  efs-fuse                 [.] put_pool_thread
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000002221d
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] __note_gp_changes
+     0.01%             3  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022228
+     0.01%             4  efs-fuse  [kernel.kallsyms]        [k] arch_scale_cpu_capacity
+     0.01%             5  efs-fuse  [kernel.kallsyms]        [k] alloc_misplaced_dst_folio
+     0.01%             7  efs-fuse  [kernel.kallsyms]        [k] cpu_util
+     0.01%             4  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022214
+     0.01%             4  efs-fuse  [kernel.kallsyms]        [k] tcp_get_info_chrono_stats
+     0.01%             3  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000000a7ce
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] __irq_exit_rcu
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] cond_accept_memory
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] set_page_dirty
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] check_cpu_stall
+     0.01%             2  efs-fuse  efs-fuse                 [.] hash_write_fragments
+     0.01%             6  efs-fuse  [kernel.kallsyms]        [k] dequeue_task
+     0.01%             4  efs-fuse  libc.so.6                [.] pthread_cond_timedwait@@GLIBC_2.3.2
+     0.01%             2  efs-fuse  efs-fuse                 [.] dcache_account_extra
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] mem_cgroup_from_task
+     0.01%             5  efs-fuse  [kernel.kallsyms]        [k] free_unref_page_prepare
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] perf_iterate_sb
+     0.01%             3  efs-fuse  efs-fuse                 [.] memcpy@plt
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022ac5
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] change_pmd_range.isra.0
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] futex_unqueue
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] vma_modify
+     0.01%            22  efs-fuse  libc.so.6                [.] __pthread_mutex_cond_lock
+     0.01%             4  efs-fuse  [kernel.kallsyms]        [k] update_min_vruntime
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000048cf9
+     0.01%             4  efs-fuse  [kernel.kallsyms]        [k] __hrtimer_next_event_base
+     0.01%             3  efs-fuse  efs-fuse                 [.] flush_pipe_add
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] _find_next_and_bit
+     0.01%             3  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022265
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] rcu_pending
+     0.01%             2  efs-fuse  [vdso]                   [.] 0x0000000000000af8
+     0.01%             5  efs-fuse  [kernel.kallsyms]        [k] remove_migration_pte
+     0.01%             3  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000048c31
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] policy_nodemask
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] futex_private_hash_put
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] p4d_offset
+     0.01%             4  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000048c26
+     0.01%             4  efs-fuse  efs-fuse                 [.] efs_bytes_are_zero
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] futex_setup_timer
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] irqentry_exit
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] bpf_lsm_inode_getattr
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] switch_fpu_return
+     0.01%             4  efs-fuse  [kernel.kallsyms]        [k] irqtime_account_irq
+     0.01%             4  efs-fuse  [kernel.kallsyms]        [k] ktime_get_update_offsets_now
+     0.01%             7  efs-fuse  [kernel.kallsyms]        [k] _find_next_bit
+     0.01%             4  efs-fuse  [kernel.kallsyms]        [k] check_pte
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] folio_lruvec_lock_irqsave
+     0.01%             4  efs-fuse  [fuse]                   [k] fuse_dev_do_read
+     0.01%             4  efs-fuse  [kernel.kallsyms]        [k] lru_gen_del_folio
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] _find_first_bit
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222a9
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022495
+     0.01%             3  efs-fuse  efs-fuse                 [.] efs_buf_free
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] mem_cgroup_migrate
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] migrate_folio_done
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] __free_one_page
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] __sys_recvfrom
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] __wake_up_locked_key
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] update_cfs_group
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] hrtimer_start_range_ns
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000016a84
+     0.01%             3  efs-fuse  libc.so.6                [.] __errno_location
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] update_curr_se
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022260
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000229fa
+     0.01%             2  efs-fuse  efs-fuse                 [.] chunk_idx_put
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022507
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] folio_migrate_mapping
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] tcp_recvmsg
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] page_counter_try_charge
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] folio_isolate_lru
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] get_pfnblock_flags_mask
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] mas_preallocate
+     0.01%             3  efs-fuse  efs-fuse                 [.] dcache_steal_dirty
+     0.01%             2  efs-fuse  efs-fuse                 [.] efs_export_set_size_norollup
+     0.01%             4  efs-fuse  [kernel.kallsyms]        [k] free_pcppages_bulk
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] task_h_load
+     0.01%             2  efs-fuse  libfuse3.so.3.10.2       [.] 0x000000000001ee86
+     0.01%             2  efs-fuse  efs-fuse                 [.] efs_wire_frame_decode
+     0.01%             3  efs-fuse  efs-fuse                 [.] dcache_flush_keep
+     0.01%             2  efs-fuse  efs-fuse                 [.] efs_dcache_store_full_owned
+     0.01%             4  efs-fuse  [vdso]                   [.] __vdso_clock_gettime
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] __hrtimer_init
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222e7
+     0.01%             5  efs-fuse  [kernel.kallsyms]        [k] __update_load_avg_se
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] entry_SYSCALL_64_safe_stack
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] rw_verify_area
+     0.01%             3  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022258
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000223f4
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] cpus_share_cache
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] zap_pte_range
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] update_rt_rq_load_avg
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022497
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] __zone_watermark_ok
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222bf
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] page_add_anon_rmap
+     0.01%             2  efs-fuse  libc.so.6                [.] malloc
+     0.01%             2  efs-fuse  efs-fuse                 [.] send_buf_pick
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] pmd_huge
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] __fdget_raw
+     0.01%             3  efs-fuse  efs-fuse                 [.] efs_client_node_note_ok
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] tcp_recvmsg_locked
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] mas_wr_append
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] tlb_is_not_lazy
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] sched_balance_find_src_group
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] wake_affine
+     0.01%             2  efs-fuse  efs-fuse                 [.] memset@plt
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] remove_wait_queue
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] __sys_getsockopt
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] handle_softirqs
+     0.01%             2  efs-fuse  efs-fuse                 [.] efs_place_fragments
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] tick_nohz_highres_handler
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] perf_event_idx_default
+     0.01%             3  efs-fuse  efs-fuse                 [.] dcache_flush_slot_inner
+     0.01%             2  efs-fuse  [vdso]                   [.] 0x0000000000000ab1
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] timespec64_add_safe
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] sched_balance_softirq
+     0.01%             2  efs-fuse  [vdso]                   [.] 0x0000000000000ab6
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000002231b
+     0.01%             1  efs-fuse  efs-fuse                 [.] ll_write_buf
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] arch_perf_update_userpage
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] queue_work_on
+     0.01%             2  efs-fuse  libc.so.6                [.] __strlen_avx2
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022480
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000016a7e
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000223ec
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] __tcp_cleanup_rbuf
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] xas_load
+     0.01%             2  efs-fuse  [vdso]                   [.] 0x0000000000000abd
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] do_tcp_getsockopt
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] ktime_get
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] schedule_debug.constprop.0
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000489a1
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000004559c
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] tlb_finish_mmu
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] invalid_migration_vma
+     0.01%             1  efs-fuse  efs-fuse                 [.] blake3_hasher_finalize
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] sched_balance_domains
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] folio_copy
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] rb_insert_color
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] smp_call_function_many_cond
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000004901c
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222d6
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] memcg_check_events
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] security_socket_getsockopt
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222f3
+     0.01%             3  efs-fuse  efs-fuse                 [.] dcache_take
+     0.01%             1  efs-fuse  libibverbs.so.1.16.63.0  [.] ibv_ack_cq_events
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000004fa5b
+     0.01%             2  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022210
+     0.01%             4  efs-fuse  [kernel.kallsyms]        [k] anon_vma_interval_tree_iter_first
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] update_dl_rq_load_avg
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000017f70
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] show_cpuinfo
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] mem_cgroup_charge_skmem
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] native_flush_tlb_one_user
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] __fdget_pos
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] mod_node_page_state
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] __mod_memcg_state
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] anon_vma_interval_tree_insert
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] tcp_skb_entail
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] strlen
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] __do_sys_newfstat
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000048cc6
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000000a7b0
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000223f6
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] update_process_times
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022503
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222fd
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] sk_stream_alloc_skb
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] tlb_gather_mmu
+     0.01%             1  efs-fuse  [vdso]                   [.] 0x0000000000000ab0
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] sysvec_apic_timer_interrupt
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000000a825
+     0.01%             1  efs-fuse  [vdso]                   [.] 0x0000000000000b57
+     0.01%             3  efs-fuse  [kernel.kallsyms]        [k] trace_rss_stat
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222b5
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] _copy_to_iter
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] __alloc_skb
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] make_vfsuid
+     0.01%             1  efs-fuse  efs-fuse                 [.] dcache_base_gen_of.part.0.constprop.0
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000002226d
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022300
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] simple_lookup
+     0.01%             4  efs-fuse  [kernel.kallsyms]        [k] acct_account_cputime
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000002241a
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] task_tick_fair
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222ef
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] __mem_cgroup_threshold
+     0.01%             1  efs-fuse  efs-fuse                 [.] getsockopt@plt
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000048a88
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] sized_strscpy
+     0.01%             1  efs-fuse  efs-fuse                 [.] dcache_note_size
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] plist_add
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222bd
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000002249b
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000004fa58
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000000a786
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] task_numa_placement
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] should_fail_alloc_page
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] collect_longterm_unpinnable_folios
+     0.01%             2  efs-fuse  [kernel.kallsyms]        [k] __anon_vma_interval_tree_subtree_search
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] jiffies_to_usecs
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] security_inode_getattr
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000000a867
+     0.01%             1  efs-fuse  [kernel.kallsyms]        [k] _copy_from_iter
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222d1
+     0.01%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000224bc
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __get_unmapped_area
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __wake_up
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] obj_cgroup_charge
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] irq_chip_ack_parent
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] move_to_new_folio
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] tick_do_update_jiffies64
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] security_file_permission
+     0.00%             1  efs-fuse  [mlx5_core]              [k] mlx5i_sq_xmit
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] irqentry_enter_from_user_mode
+     0.00%             1  efs-fuse  efs-fuse                 [.] efs_client_set_chunk
+     0.00%             1  efs-fuse  efs-fuse                 [.] blake3_compress_xof
+     0.00%             1  efs-fuse  efs-fuse                 [.] efs_dcache_maybe_reclaim
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] tcp_sendmsg_locked
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] asm_sysvec_apic_timer_interrupt
+     0.00%             1  efs-fuse  [vdso]                   [.] 0x0000000000000ab4
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] mas_find
+     0.00%             1  efs-fuse  libfuse3.so.3.10.2       [.] 0x000000000001ec9e
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __flush_smp_call_function_queue
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000489ea
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] update_fast_timekeeper
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] ksys_write
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] __calc_delta
+     0.00%             1  efs-fuse  [vdso]                   [.] 0x0000000000000aff
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] set_tlb_ubc_flush_pending.isra.0
+     0.00%             1  efs-fuse  [vdso]                   [.] 0x0000000000000b02
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] mas_wr_walk
+     0.00%             1  efs-fuse  [vdso]                   [.] 0x0000000000000b48
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] switch_hrtimer_base
+     0.00%             1  efs-fuse  efs-fuse                 [.] efs_client_ensure_meta_room
+     0.00%             1  efs-fuse  libfuse3.so.3.10.2       [.] 0x000000000001ae3a
+     0.00%             1  efs-fuse  libfuse3.so.3.10.2       [.] 0x000000000001ec56
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022400
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] housekeeping_cpumask
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] slab_update_freelist.constprop.0.isra.0
+     0.00%             1  efs-fuse  efs-fuse                 [.] efs_buf_alloc
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000048964
+     0.00%             1  efs-fuse  [vdso]                   [.] 0x0000000000000b7e
+     0.00%             1  efs-fuse  libfuse3.so.3.10.2       [.] 0x000000000001f0f8
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222a0
+     0.00%             3  efs-fuse  [kernel.kallsyms]        [k] folio_lruvec_lock_irq
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] task_numa_migrate.isra.0
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __split_huge_pmd
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] check_canary
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] vm_stat_account
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] __hrtimer_run_queues
+     0.00%             1  efs-fuse  efs-fuse                 [.] efs_get_placement
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] folio_lock_anon_vma_read
+     0.00%             1  efs-fuse  [fuse]                   [k] fuse_dev_read
+     0.00%             1  efs-fuse  libfuse3.so.3.10.2       [.] 0x000000000001effd
+     0.00%             1  efs-fuse  libfuse3.so.3.10.2       [.] fuse_buf_copy
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] mas_store_prealloc
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __sk_mem_raise_allocated
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] mtree_range_walk
+     0.00%             2  efs-fuse  efs-fuse                 [.] efs_client_put_fragments_parallel
+     0.00%             2  efs-fuse  libc.so.6                [.] unlink_chunk.constprop.0
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] jiffies_to_msecs
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000491c8
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000049493
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] folio_add_lru_vma
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] do_writev
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000049092
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __x86_indirect_thunk_r13
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] using_native_sched_clock
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] idle_cpu
+     0.00%             1  efs-fuse  efs-fuse                 [.] inode_ensure_cap
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] schedule_hrtimeout_range
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000000a726
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] sock_recvmsg
+     0.00%             1  efs-fuse  efs-fuse                 [.] efs_client_stage_evict_kick
+     0.00%             1  efs-fuse  [vdso]                   [.] 0x0000000000000adf
+     0.00%             1  efs-fuse  efs-fuse                 [.] efs_recv_all
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000048f0a
+     0.00%             1  efs-fuse  efs-fuse                 [.] getenv@plt
+     0.00%             3  efs-fuse  [kernel.kallsyms]        [k] migrate_folio_extra
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222d9
+     0.00%             1  efs-fuse  efs-fuse                 [.] fstat@plt
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] native_flush_tlb_local
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __msecs_to_jiffies
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] __bitmap_and
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] free_unref_page
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] can_migrate_task
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000484ce
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] tick_sched_do_timer
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] tick_program_event
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] prepare_to_wait_event
+     0.00%             1  efs-fuse  [vdso]                   [.] 0x0000000000000b3d
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000000a7c3
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x000000000004898f
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] futex_hash
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] down_write
+     0.00%             1  efs-fuse  efs-fuse                 [.] dcache_pin_add.part.0
+     0.00%             1  efs-fuse  [vdso]                   [.] 0x0000000000000b21
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] get_timespec64
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000223f2
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] probe_sched_wakeup
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000222dc
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000486ec
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] do_mprotect_pkey
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000492cd
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] down_write_killable
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] perf_event_mmap_output
+     0.00%             1  efs-fuse  [vdso]                   [.] 0x0000000000000b10
+     0.00%             1  efs-fuse  [vdso]                   [.] 0x0000000000000b2f
+     0.00%             1  efs-fuse  efs-fuse                 [.] efs_client_unlock_dir
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022488
+     0.00%             1  efs-fuse  efs-fuse                 [.] efs_conn_reply_watch_us
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] cp_new_stat
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] folio_unlock
+     0.00%             1  efs-fuse  efs-fuse                 [.] inode_ptr
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] vma_adjust_trans_huge
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022492
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] __task_rq_lock
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] mas_wr_end_piv
+     0.00%             1  efs-fuse  [vdso]                   [.] 0x0000000000000ac0
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] memcpy@plt
+     0.00%             1  efs-fuse  [vdso]                   [.] 0x0000000000000b36
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] cyc2ns_read_begin
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] inet_recvmsg
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000048ce6
+     0.00%             1  efs-fuse  [vdso]                   [.] 0x0000000000000abc
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __handle_irq_event_percpu
+     0.00%             2  efs-fuse  libc.so.6                [.] __GI___writev
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __x64_sys_pselect6
+     0.00%             1  efs-fuse  [mlx5_core]              [k] mlx5_cmd_invoke
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] tcp_rbtree_insert
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] flush_tlb_func
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] futex_q_lock
+     0.00%             1  efs-fuse  efs-fuse                 [.] free@plt
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] lru_gen_del_folio.constprop.0
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] invoke_rcu_core
+     0.00%             1  efs-fuse  efs-fuse                 [.] efs_dcache_flush_ino
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] arch_check_zapped_pte
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __x64_sys_openat
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x00000000000489e3
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] native_apic_mem_write
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] zone_watermark_ok
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] can_migrate_task.part.0
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000049315
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] unpin_user_page_range_dirty_lock
+     0.00%             1  efs-fuse  [vdso]                   [.] 0x0000000000000b44
+     0.00%             1  efs-fuse  [ib_uverbs]              [k] ib_uverbs_release_uevent
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] irqtime_account_process_tick
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __dma_map_sg_attrs
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] __futex_queue
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] sched_balance_trigger
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000022306
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000048ce1
+     0.00%             1  efs-fuse  [ib_uverbs]              [k] uobj_destroy
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __futex_unqueue
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] gup_put_folio
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] __snmp6_fill_stats64.constprop.0
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] set_task_cpu
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] entry_untrain_ret
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] enqueue_task_fair
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] import_single_range
+     0.00%             1  efs-fuse  libc.so.6                [.] __GI___futex_abstimed_wait_cancelable64
+     0.00%             1  efs-fuse  efs-fuse                 [.] pthread_cond_signal@plt
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] enqueue_hrtimer
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] folio_not_mapped
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] follow_p4d_mask.constprop.0
+     0.00%             1  efs-fuse  [vdso]                   [.] 0x0000000000000ac4
+     0.00%             2  efs-fuse  [kernel.kallsyms]        [k] futex_hash_put
+     0.00%             3  efs-fuse  [kernel.kallsyms]        [k] update_sd_lb_stats.constprop.0
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] lapic_next_event
+     0.00%             1  efs-fuse  libc.so.6                [.] _pthread_cleanup_pop@GLIBC_2.2.5
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] page_remove_rmap
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] try_to_unmap_flush
+     0.00%             1  efs-fuse  libc.so.6                [.] __vfprintf_internal
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] follow_page_pte
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] kmem_cache_free
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __fput
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] vm_get_page_prot
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000048b87
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __sys_recvmsg
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] skb_put
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] folio_xchg_last_cpupid
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] arch_scale_freq_tick
+     0.00%             1  efs-fuse  libc.so.6                [.] getifaddrs_internal
+     0.00%             1  efs-fuse  [mlx5_core]              [k] mlx5_add_cq_to_tasklet
+     0.00%             1  efs-fuse  libc.so.6                [.] __GI___pthread_setcancelstate
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] try_to_migrate
+     0.00%             1  efs-fuse  [mlx5_ib]                [k] __mlx5_ib_modify_qp
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __sys_connect_file
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] proc_pid_permission
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] radix_tree_next_chunk
+     0.00%           321  efs-fuse  [kernel.kallsyms]        [k] perf_ibs_handle_irq
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] task_numa_compare
+     0.00%             1  efs-fuse  libmlx5.so.1.27.63.0     [.] 0x0000000000048a22
+     0.00%             4  efs-fuse  [kernel.kallsyms]        [k] sched_balance_rq
+     0.00%             4  efs-fuse  libc.so.6                [.] clone3
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] rmap_walk
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] nohz_balance_exit_idle
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] tracing_record_taskinfo
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] ipv6_store_devconf
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] inet_sk_rebuild_header
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] ttwu_do_activate
+     0.00%             1  efs-fuse  efs-fuse                 [.] setsockopt@plt
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] update_numa_stats
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] get_signal
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] osq_lock
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] fsnotify_perm.part.0
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] perf_ibs_add
+     0.00%             1  efs-fuse  efs-fuse                 [.] efs_encode_chunk
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] smp_call_function_single_async
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] __x64_sys_socket
+     0.00%             1  efs-fuse  [ib_uverbs]              [k] lookup_put_idr_uobject
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] cache_from_obj
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] percpu_counter_destroy_many
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] do_select
+     0.00%            23  efs-fuse  [kernel.kallsyms]        [k] perf_ibs_nmi_handler
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] reweight_entity
+     0.00%            20  efs-fuse  [kernel.kallsyms]        [k] calc_timer_values
+     0.00%             1  efs-fuse  [mlx5_core]              [k] cmd_ent_put
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] asm_sysvec_call_function_single
+     0.00%             1  efs-fuse  [kernel.kallsyms]        [k] perf_sample_event_took
+
+
+#
+# (Tip: System-wide collection from all CPUs: perf record -a)
+#

@@ -1,0 +1,60 @@
+    16.68%         16817  efsd     libc.so.6          [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--12.29%--host_snap_export_pass
+               |          host_gc_thread
+               |          start_thread
+               |          
+               |--2.83%--compactor_main
+               |          start_thread
+               |          
+                --0.54%--lsm_scan_prefix
+                          |          
+                           --0.54%--efs_txn_resolve
+                                     host_apply
+                                     apply_committed
+                                     |          
+                                      --0.53%--try_commit
+     6.69%          6749  efsd     efsd               [.] efs_kv_lsm_view_export
+            |
+            ---efs_kv_lsm_view_export
+               host_snap_export_pass
+               host_gc_thread
+               start_thread
+     4.22%          4254  efsd     [kernel.kallsyms]  [k] syscall_enter_from_user_mode
+            |
+            ---syscall_enter_from_user_mode
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               |          
+                --3.87%--__GI___libc_write
+                          |          
+                           --3.75%--host_snap_export_pass
+                                     host_gc_thread
+                                     start_thread
+     3.52%          3552  efsd     [kernel.kallsyms]  [k] iomap_iter_advance
+            |
+            ---iomap_iter_advance
+               iomap_iter
+               iomap_file_buffered_write
+               xfs_file_buffered_write
+               vfs_write
+               |          
+                --3.51%--ksys_write
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __GI___libc_write
+                          |          
+                           --3.42%--host_snap_export_pass
+                                     host_gc_thread
+                                     start_thread
+     3.05%          3072  efsd     libc.so.6          [.] __GI___libc_write
+            |
+            ---__GI___libc_write
+               |          
+                --2.95%--host_snap_export_pass
+                          host_gc_thread
+                          start_thread
+     2.78%          2803  efsd     [xfs]              [k] xfs_buffered_write_iomap_begin
+            |

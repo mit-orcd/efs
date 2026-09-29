@@ -1,0 +1,300 @@
+raft-obs: tx->1 enq=99465 drop=0 sent=99103 fail=1 hi=159 rtt_avg=631us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=83058 drop=0 sent=83009 fail=2 hi=179 rtt_avg=497us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=75 pump_hold_max=40160us lock_wait_max=35108us drain_max=40159us tick_max=37us apply_max=38204us persist_max=114044us applies_in_worst=8 arc_miss=0 arc_term_miss=0 opid_replay=54 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: end bytes=884700546 ms=2538 l0=9 l1=51 rc=0
+kv-compact: start l0=9 inputs=3 range=4
+kv-compact: end bytes=99419916 ms=290 l0=8 l1=51 rc=0
+kv-compact: start l0=8 inputs=3 range=5
+kv-compact: end bytes=109603422 ms=312 l0=7 l1=51 rc=0
+kv-compact: start l0=7 inputs=3 range=6
+kv-compact: end bytes=110682776 ms=295 l0=6 l1=51 rc=0
+kv-compact: start l0=6 inputs=3 range=7
+kv-compact: end bytes=107487149 ms=289 l0=5 l1=51 rc=0
+kv-compact: start l0=5 inputs=3 range=8
+kv-compact: end bytes=125767093 ms=360 l0=4 l1=51 rc=0
+kv-compact: start l0=4 inputs=3 range=9
+kv-compact: end bytes=121566682 ms=350 l0=3 l1=51 rc=0
+kv-compact: start l0=19 inputs=5 range=13
+kv-compact: end bytes=140626434 ms=416 l0=17 l1=51 rc=0
+kv-compact: start l0=17 inputs=5 range=14
+raft-obs: tx->1 enq=100476 drop=0 sent=100113 fail=1 hi=159 rtt_avg=625us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=84173 drop=0 sent=84124 fail=2 hi=179 rtt_avg=491us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=76 pump_hold_max=36821us lock_wait_max=97991us drain_max=36820us tick_max=40us apply_max=36776us persist_max=91261us applies_in_worst=6 arc_miss=0 arc_term_miss=0 opid_replay=57 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: end bytes=162573864 ms=464 l0=15 l1=51 rc=0
+kv-compact: start l0=15 inputs=4 range=15
+kv-compact: end bytes=128993568 ms=357 l0=13 l1=51 rc=0
+kv-compact: start l0=13 inputs=15 range=0
+kv-compact: end bytes=884988209 ms=2662 l0=28 l1=51 rc=0
+kv-compact: start l0=28 inputs=4 range=1
+kv-compact: end bytes=97562655 ms=264 l0=26 l1=51 rc=0
+kv-compact: start l0=26 inputs=4 range=2
+kv-compact: end bytes=128498548 ms=353 l0=24 l1=51 rc=0
+kv-compact: start l0=24 inputs=4 range=3
+kv-compact: end bytes=126371163 ms=357 l0=22 l1=51 rc=0
+kv-compact: start l0=22 inputs=4 range=4
+kv-compact: end bytes=99817833 ms=284 l0=20 l1=51 rc=0
+kv-compact: start l0=20 inputs=4 range=5
+kv-compact: end bytes=109952777 ms=295 l0=18 l1=51 rc=0
+kv-compact: start l0=18 inputs=4 range=6
+raft-obs: tx->1 enq=101677 drop=0 sent=101309 fail=1 hi=159 rtt_avg=618us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=85372 drop=0 sent=85318 fail=2 hi=179 rtt_avg=485us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=76 pump_hold_max=138385us lock_wait_max=61325us drain_max=138384us tick_max=8us apply_max=138345us persist_max=96139us applies_in_worst=10 arc_miss=0 arc_term_miss=0 opid_replay=59 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: end bytes=110893565 ms=326 l0=16 l1=51 rc=0
+kv-compact: start l0=16 inputs=4 range=7
+kv-compact: end bytes=107748640 ms=304 l0=14 l1=51 rc=0
+kv-compact: start l0=14 inputs=4 range=8
+kv-compact: end bytes=125997047 ms=352 l0=12 l1=51 rc=0
+kv-compact: start l0=12 inputs=4 range=9
+kv-compact: end bytes=121824614 ms=342 l0=10 l1=51 rc=0
+kv-compact: start l0=10 inputs=4 range=10
+kv-compact: end bytes=89191546 ms=253 l0=8 l1=51 rc=0
+kv-compact: start l0=8 inputs=4 range=11
+kv-compact: end bytes=128951221 ms=374 l0=6 l1=51 rc=0
+kv-compact: start l0=6 inputs=5 range=12
+kv-compact: end bytes=155377202 ms=459 l0=4 l1=51 rc=0
+kv-compact: start l0=4 inputs=15 range=0
+kv-compact: end bytes=885213805 ms=2535 l0=3 l1=51 rc=0
+raft-obs: tx->1 enq=102533 drop=0 sent=102170 fail=1 hi=159 rtt_avg=613us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=86234 drop=0 sent=86184 fail=2 hi=179 rtt_avg=480us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=86 pump_hold_max=21218us lock_wait_max=94390us drain_max=21218us tick_max=5us apply_max=21180us persist_max=93901us applies_in_worst=7 arc_miss=0 arc_term_miss=0 opid_replay=59 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: start l0=19 inputs=5 range=13
+kv-compact: end bytes=141378432 ms=387 l0=17 l1=51 rc=0
+kv-compact: start l0=17 inputs=5 range=14
+kv-compact: end bytes=163303015 ms=457 l0=15 l1=51 rc=0
+kv-compact: start l0=15 inputs=4 range=15
+kv-compact: end bytes=129334585 ms=358 l0=13 l1=51 rc=0
+kv-compact: start l0=13 inputs=15 range=0
+kv-compact: end bytes=885389660 ms=2625 l0=12 l1=51 rc=0
+kv-compact: start l0=12 inputs=3 range=1
+raft-obs: tx->1 enq=103782 drop=0 sent=103415 fail=1 hi=159 rtt_avg=606us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=87401 drop=0 sent=87348 fail=2 hi=179 rtt_avg=475us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=89 pump_hold_max=23173us lock_wait_max=37907us drain_max=23173us tick_max=85us apply_max=38913us persist_max=112616us applies_in_worst=9 arc_miss=0 arc_term_miss=0 opid_replay=60 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: end bytes=97698052 ms=278 l0=11 l1=51 rc=0
+kv-compact: start l0=11 inputs=3 range=2
+kv-compact: end bytes=128682206 ms=374 l0=10 l1=51 rc=0
+kv-compact: start l0=10 inputs=3 range=3
+kv-compact: end bytes=126488778 ms=346 l0=25 l1=51 rc=0
+kv-compact: start l0=25 inputs=4 range=4
+kv-compact: end bytes=100255425 ms=274 l0=23 l1=51 rc=0
+kv-compact: start l0=23 inputs=4 range=5
+kv-compact: end bytes=110331134 ms=322 l0=21 l1=51 rc=0
+kv-compact: start l0=21 inputs=4 range=6
+kv-compact: end bytes=111161864 ms=295 l0=19 l1=51 rc=0
+kv-compact: start l0=19 inputs=4 range=7
+kv-compact: end bytes=108052150 ms=304 l0=17 l1=51 rc=0
+kv-compact: start l0=17 inputs=4 range=8
+kv-compact: end bytes=126253047 ms=380 l0=15 l1=51 rc=0
+kv-compact: start l0=15 inputs=4 range=9
+kv-compact: end bytes=122097107 ms=350 l0=13 l1=51 rc=0
+kv-compact: start l0=13 inputs=4 range=10
+kv-compact: end bytes=89487260 ms=256 l0=11 l1=51 rc=0
+kv-compact: start l0=11 inputs=4 range=11
+kv-compact: end bytes=129451978 ms=355 l0=9 l1=51 rc=0
+kv-compact: start l0=9 inputs=5 range=12
+kv-compact: end bytes=156085792 ms=427 l0=7 l1=51 rc=0
+kv-compact: start l0=7 inputs=15 range=0
+raft-obs: tx->1 enq=104729 drop=0 sent=104358 fail=1 hi=159 rtt_avg=601us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=88345 drop=0 sent=88290 fail=2 hi=179 rtt_avg=470us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=89 pump_hold_max=78465us lock_wait_max=125794us drain_max=78464us tick_max=24us apply_max=78424us persist_max=105648us applies_in_worst=8 arc_miss=0 arc_term_miss=0 opid_replay=61 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: end bytes=885567567 ms=2636 l0=22 l1=51 rc=0
+kv-compact: start l0=22 inputs=4 range=1
+kv-compact: end bytes=97961857 ms=258 l0=20 l1=51 rc=0
+kv-compact: start l0=20 inputs=4 range=2
+kv-compact: end bytes=129041650 ms=336 l0=18 l1=51 rc=0
+kv-compact: start l0=18 inputs=4 range=3
+kv-compact: end bytes=126730979 ms=331 l0=16 l1=51 rc=0
+kv-compact: start l0=16 inputs=5 range=13
+kv-compact: end bytes=142128260 ms=376 l0=14 l1=51 rc=0
+kv-compact: start l0=14 inputs=5 range=14
+kv-compact: end bytes=164066003 ms=432 l0=12 l1=51 rc=0
+kv-compact: start l0=12 inputs=4 range=15
+kv-compact: end bytes=129679364 ms=340 l0=10 l1=51 rc=0
+kv-compact: start l0=10 inputs=15 range=0
+raft-obs: tx->1 enq=104896 drop=0 sent=104525 fail=1 hi=159 rtt_avg=600us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=88497 drop=0 sent=88441 fail=2 hi=179 rtt_avg=469us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=103 pump_hold_max=128973us lock_wait_max=566us drain_max=128972us tick_max=37us apply_max=128926us persist_max=101523us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=61 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: end bytes=885743695 ms=2506 l0=9 l1=51 rc=0
+kv-compact: start l0=9 inputs=3 range=4
+kv-compact: end bytes=100474291 ms=260 l0=8 l1=51 rc=0
+kv-compact: start l0=8 inputs=3 range=5
+kv-compact: end bytes=110517974 ms=288 l0=7 l1=51 rc=0
+kv-compact: start l0=7 inputs=3 range=6
+kv-compact: end bytes=111297837 ms=289 l0=6 l1=51 rc=0
+kv-compact: start l0=6 inputs=3 range=7
+kv-compact: end bytes=108203317 ms=282 l0=5 l1=51 rc=0
+kv-compact: start l0=5 inputs=3 range=8
+kv-compact: end bytes=126389611 ms=326 l0=4 l1=51 rc=0
+kv-compact: start l0=4 inputs=3 range=9
+kv-compact: end bytes=122232253 ms=320 l0=3 l1=51 rc=0
+raft-obs: tx->1 enq=105111 drop=0 sent=104733 fail=1 hi=159 rtt_avg=599us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=88709 drop=0 sent=88647 fail=2 hi=179 rtt_avg=468us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=103 pump_hold_max=19540us lock_wait_max=3148us drain_max=19540us tick_max=22us apply_max=19502us persist_max=42186us applies_in_worst=14 arc_miss=0 arc_term_miss=0 opid_replay=61 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+raft-obs: tx->1 enq=105236 drop=0 sent=104857 fail=1 hi=159 rtt_avg=599us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=88835 drop=0 sent=88773 fail=2 hi=179 rtt_avg=467us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=103 pump_hold_max=19044us lock_wait_max=1611us drain_max=19044us tick_max=4us apply_max=19006us persist_max=1147us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=61 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: start l0=19 inputs=4 range=10
+kv-compact: end bytes=89761092 ms=242 l0=17 l1=51 rc=0
+kv-compact: start l0=17 inputs=4 range=11
+kv-compact: end bytes=129980528 ms=343 l0=15 l1=51 rc=0
+kv-compact: start l0=15 inputs=5 range=12
+kv-compact: end bytes=156845683 ms=425 l0=13 l1=51 rc=0
+kv-compact: start l0=13 inputs=15 range=0
+raft-obs: tx->1 enq=105366 drop=0 sent=104988 fail=1 hi=159 rtt_avg=598us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=88964 drop=0 sent=88902 fail=2 hi=179 rtt_avg=467us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=103 pump_hold_max=4306us lock_wait_max=24792us drain_max=4305us tick_max=5us apply_max=14548us persist_max=86728us applies_in_worst=2 arc_miss=0 arc_term_miss=0 opid_replay=61 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: end bytes=885877820 ms=2530 l0=12 l1=51 rc=0
+kv-compact: start l0=12 inputs=3 range=1
+kv-compact: end bytes=98118986 ms=255 l0=11 l1=51 rc=0
+kv-compact: start l0=11 inputs=3 range=2
+kv-compact: end bytes=129167020 ms=328 l0=10 l1=51 rc=0
+kv-compact: start l0=10 inputs=3 range=3
+kv-compact: end bytes=126827657 ms=323 l0=9 l1=51 rc=0
+kv-compact: start l0=9 inputs=3 range=4
+kv-compact: end bytes=100748841 ms=257 l0=8 l1=51 rc=0
+kv-compact: start l0=8 inputs=3 range=5
+kv-compact: end bytes=110671841 ms=283 l0=7 l1=51 rc=0
+kv-compact: start l0=7 inputs=3 range=6
+kv-compact: end bytes=111449941 ms=283 l0=6 l1=51 rc=0
+kv-compact: start l0=6 inputs=3 range=7
+kv-compact: end bytes=108360556 ms=277 l0=5 l1=51 rc=0
+kv-compact: start l0=5 inputs=3 range=8
+kv-compact: end bytes=126503872 ms=322 l0=4 l1=51 rc=0
+kv-compact: start l0=4 inputs=3 range=9
+kv-compact: end bytes=122389416 ms=314 l0=3 l1=51 rc=0
+raft-obs: tx->1 enq=105476 drop=0 sent=105098 fail=1 hi=159 rtt_avg=597us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=89074 drop=0 sent=89012 fail=2 hi=179 rtt_avg=466us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=103 pump_hold_max=966us lock_wait_max=12615us drain_max=966us tick_max=6us apply_max=3118us persist_max=15711us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=61 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+raft-obs: tx->1 enq=105580 drop=0 sent=105202 fail=1 hi=159 rtt_avg=597us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=89178 drop=0 sent=89116 fail=2 hi=179 rtt_avg=466us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=103 pump_hold_max=55us lock_wait_max=1us drain_max=55us tick_max=8us apply_max=50us persist_max=666us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=61 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+raft-obs: tx->1 enq=105685 drop=0 sent=105306 fail=1 hi=159 rtt_avg=596us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=89283 drop=0 sent=89221 fail=2 hi=179 rtt_avg=465us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=103 pump_hold_max=37us lock_wait_max=1us drain_max=37us tick_max=7us apply_max=32us persist_max=581us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=61 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+raft-obs: tx->1 enq=108797 drop=0 sent=108414 fail=1 hi=159 rtt_avg=580us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=92412 drop=0 sent=92345 fail=2 hi=179 rtt_avg=450us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=103 pump_hold_max=6225us lock_wait_max=2797us drain_max=6225us tick_max=5us apply_max=6212us persist_max=1151us applies_in_worst=6 arc_miss=0 arc_term_miss=0 opid_replay=61 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: start l0=19 inputs=5 range=13
+kv-compact: end bytes=142679891 ms=405 l0=17 l1=51 rc=0
+kv-compact: start l0=17 inputs=5 range=14
+kv-compact: end bytes=164648503 ms=471 l0=15 l1=51 rc=0
+kv-compact: start l0=15 inputs=4 range=15
+raft-obs: tx->1 enq=114209 drop=0 sent=113813 fail=1 hi=159 rtt_avg=553us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=97840 drop=0 sent=97764 fail=2 hi=179 rtt_avg=427us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=103 pump_hold_max=20160us lock_wait_max=8803us drain_max=20159us tick_max=6us apply_max=20137us persist_max=91653us applies_in_worst=6 arc_miss=0 arc_term_miss=0 opid_replay=62 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: end bytes=129952061 ms=355 l0=13 l1=51 rc=0
+kv-compact: start l0=13 inputs=15 range=0
+kv-compact: end bytes=886857745 ms=2626 l0=12 l1=51 rc=0
+kv-compact: start l0=12 inputs=3 range=1
+kv-compact: end bytes=98168411 ms=265 l0=11 l1=51 rc=0
+kv-compact: start l0=11 inputs=3 range=2
+kv-compact: end bytes=129279295 ms=353 l0=10 l1=51 rc=0
+kv-compact: start l0=10 inputs=3 range=3
+kv-compact: end bytes=126931389 ms=341 l0=9 l1=51 rc=0
+kv-compact: start l0=9 inputs=2 range=4
+kv-compact: end bytes=67187009 ms=182 l0=8 l1=52 rc=0
+kv-compact: start l0=8 inputs=3 range=5
+kv-compact: end bytes=110948597 ms=300 l0=7 l1=52 rc=0
+kv-compact: start l0=7 inputs=3 range=6
+kv-compact: end bytes=111523198 ms=300 l0=6 l1=52 rc=0
+kv-compact: start l0=6 inputs=3 range=7
+kv-compact: end bytes=108435557 ms=287 l0=5 l1=52 rc=0
+kv-compact: start l0=5 inputs=3 range=8
+kv-compact: end bytes=126622400 ms=347 l0=4 l1=52 rc=0
+kv-compact: start l0=4 inputs=3 range=9
+raft-obs: tx->1 enq=115338 drop=0 sent=114938 fail=1 hi=159 rtt_avg=548us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=98824 drop=0 sent=98741 fail=2 hi=179 rtt_avg=423us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=103 pump_hold_max=62599us lock_wait_max=108365us drain_max=62598us tick_max=18us apply_max=62592us persist_max=106899us applies_in_worst=11 arc_miss=0 arc_term_miss=0 opid_replay=62 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: end bytes=122672454 ms=326 l0=19 l1=52 rc=0
+kv-compact: start l0=19 inputs=4 range=10
+kv-compact: end bytes=90125757 ms=256 l0=17 l1=52 rc=0
+kv-compact: start l0=17 inputs=4 range=11
+kv-compact: end bytes=130249085 ms=362 l0=15 l1=52 rc=0
+kv-compact: start l0=15 inputs=5 range=12
+kv-compact: end bytes=156917216 ms=440 l0=13 l1=52 rc=0
+kv-compact: start l0=13 inputs=15 range=0
+kv-compact: end bytes=887289610 ms=2608 l0=12 l1=52 rc=0
+kv-compact: start l0=12 inputs=3 range=1
+kv-compact: end bytes=98315648 ms=275 l0=11 l1=52 rc=0
+kv-compact: start l0=11 inputs=3 range=2
+kv-compact: end bytes=129420552 ms=341 l0=10 l1=52 rc=0
+kv-compact: start l0=10 inputs=3 range=3
+kv-compact: end bytes=127078889 ms=346 l0=9 l1=52 rc=0
+kv-compact: start l0=9 inputs=4 range=4
+raft-obs: tx->1 enq=116131 drop=0 sent=115732 fail=1 hi=159 rtt_avg=545us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=99563 drop=0 sent=99481 fail=2 hi=179 rtt_avg=420us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=103 pump_hold_max=53536us lock_wait_max=84431us drain_max=53536us tick_max=36us apply_max=53532us persist_max=110548us applies_in_worst=6 arc_miss=0 arc_term_miss=0 opid_replay=62 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: end bytes=101224158 ms=272 l0=8 l1=51 rc=0
+kv-compact: start l0=8 inputs=3 range=5
+kv-compact: end bytes=111160268 ms=305 l0=7 l1=51 rc=0
+kv-compact: start l0=7 inputs=3 range=6
+kv-compact: end bytes=111631623 ms=296 l0=6 l1=51 rc=0
+kv-compact: start l0=6 inputs=3 range=7
+kv-compact: end bytes=108524499 ms=292 l0=5 l1=51 rc=0
+kv-compact: start l0=5 inputs=3 range=8
+kv-compact: end bytes=126795831 ms=359 l0=20 l1=51 rc=0
+kv-compact: start l0=20 inputs=4 range=9
+kv-compact: end bytes=122923962 ms=346 l0=18 l1=51 rc=0
+kv-compact: start l0=18 inputs=5 range=13
+kv-compact: end bytes=143165487 ms=412 l0=16 l1=51 rc=0
+kv-compact: start l0=16 inputs=5 range=14
+kv-compact: end bytes=165137359 ms=456 l0=14 l1=51 rc=0
+kv-compact: start l0=14 inputs=4 range=15
+kv-compact: end bytes=130398475 ms=351 l0=12 l1=51 rc=0
+kv-compact: start l0=12 inputs=14 range=0
+raft-obs: tx->1 enq=116790 drop=0 sent=116391 fail=1 hi=159 rtt_avg=542us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=100216 drop=0 sent=100134 fail=2 hi=179 rtt_avg=417us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=103 pump_hold_max=77422us lock_wait_max=82981us drain_max=77422us tick_max=14us apply_max=77390us persist_max=112225us applies_in_worst=3 arc_miss=0 arc_term_miss=0 opid_replay=62 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: end bytes=872757363 ms=2556 l0=11 l1=52 rc=0
+kv-compact: start l0=11 inputs=3 range=1
+kv-compact: end bytes=98462784 ms=260 l0=10 l1=52 rc=0
+kv-compact: start l0=10 inputs=3 range=2
+kv-compact: end bytes=129547724 ms=342 l0=9 l1=52 rc=0
+kv-compact: start l0=9 inputs=3 range=3
+kv-compact: end bytes=127277424 ms=341 l0=8 l1=52 rc=0
+kv-compact: start l0=8 inputs=3 range=4
+kv-compact: end bytes=101492214 ms=272 l0=7 l1=52 rc=0
+kv-compact: start l0=7 inputs=3 range=5
+kv-compact: end bytes=111431045 ms=294 l0=6 l1=52 rc=0
+kv-compact: start l0=6 inputs=3 range=6
+kv-compact: end bytes=111760237 ms=300 l0=5 l1=52 rc=0
+kv-compact: start l0=5 inputs=3 range=7
+kv-compact: end bytes=108634415 ms=299 l0=4 l1=52 rc=0
+kv-compact: start l0=4 inputs=3 range=8
+kv-compact: end bytes=127099220 ms=338 l0=3 l1=52 rc=0
+kv-compact: start l0=19 inputs=4 range=10
+kv-compact: end bytes=90766903 ms=243 l0=17 l1=52 rc=0
+kv-compact: start l0=17 inputs=4 range=11
+kv-compact: end bytes=130830817 ms=384 l0=15 l1=52 rc=0
+kv-compact: start l0=15 inputs=5 range=12
+raft-obs: tx->1 enq=117667 drop=0 sent=117264 fail=1 hi=159 rtt_avg=538us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=101109 drop=0 sent=101022 fail=2 hi=179 rtt_avg=414us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=103 pump_hold_max=59889us lock_wait_max=89550us drain_max=59889us tick_max=4us apply_max=93123us persist_max=102924us applies_in_worst=6 arc_miss=0 arc_term_miss=0 opid_replay=62 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: end bytes=156977314 ms=436 l0=13 l1=52 rc=0
+kv-compact: start l0=13 inputs=14 range=0
+kv-compact: end bytes=872565008 ms=2544 l0=12 l1=53 rc=0
+kv-compact: start l0=12 inputs=3 range=1
+kv-compact: end bytes=98767520 ms=272 l0=11 l1=53 rc=0
+kv-compact: start l0=11 inputs=3 range=2
+kv-compact: end bytes=129716058 ms=353 l0=10 l1=53 rc=0
+kv-compact: start l0=10 inputs=3 range=3
+kv-compact: end bytes=127403929 ms=354 l0=9 l1=53 rc=0
+kv-compact: start l0=9 inputs=3 range=4
+kv-compact: end bytes=101651542 ms=278 l0=8 l1=53 rc=0
+kv-compact: start l0=8 inputs=3 range=5
+kv-compact: end bytes=111668813 ms=309 l0=7 l1=53 rc=0
+kv-compact: start l0=7 inputs=3 range=6
+kv-compact: end bytes=111907565 ms=307 l0=6 l1=53 rc=0
+kv-compact: start l0=6 inputs=3 range=7
+raft-obs: tx->1 enq=118391 drop=0 sent=117986 fail=1 hi=159 rtt_avg=535us get_avg=3us get_max=341ms
+raft-obs: tx->2 enq=101841 drop=0 sent=101751 fail=2 hi=179 rtt_avg=411us get_avg=0us get_max=9ms
+raft-obs: wait_timeouts=103 pump_hold_max=22613us lock_wait_max=67718us drain_max=22613us tick_max=38us apply_max=24013us persist_max=113556us applies_in_worst=8 arc_miss=0 arc_term_miss=0 opid_replay=62 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+kv-compact: end bytes=108911336 ms=298 l0=5 l1=53 rc=0
+kv-compact: start l0=5 inputs=3 range=8
+kv-compact: end bytes=127251325 ms=337 l0=4 l1=53 rc=0
+kv-compact: start l0=4 inputs=3 range=9
+kv-compact: end bytes=122998563 ms=322 l0=3 l1=53 rc=0
+kv-compact: start l0=19 inputs=5 range=13
+kv-compact: end bytes=143578045 ms=401 l0=17 l1=53 rc=0
+kv-compact: start l0=17 inputs=5 range=14
+kv-compact: end bytes=165708838 ms=456 l0=15 l1=53 rc=0
+kv-compact: start l0=15 inputs=4 range=15

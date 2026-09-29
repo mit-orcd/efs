@@ -1,0 +1,60 @@
+    10.58%           355  efs-fuse  efs-fuse              [.] blake3_hash_many_avx2
+            |
+            ---blake3_hash_many_avx2
+               blake3_compress_subtree_wide
+               |          
+                --10.44%--blake3_compress_subtree_wide
+                          |          
+                           --10.08%--blake3_compress_subtree_wide
+                                     |          
+                                      --9.72%--blake3_compress_subtree_wide
+                                                blake3_hasher_update.part.0
+                                                efs_hash
+                                                |          
+                                                |--5.81%--hash_write_fragments
+                                                |          |          
+                                                |           --5.78%--dcache_put_now.constprop.0
+                                                |                     put_pool_run.isra.0
+                                                |                     efs_dcache_flush_ino
+                                                |                     |          
+                                                |                      --5.72%--ll_flush
+                                                |                                0x7f3ff0b6b361
+                                                |          
+                                                 --3.85%--dcache_put_now.constprop.0
+                                                           put_pool_run.isra.0
+                                                           efs_dcache_flush_ino
+                                                           |          
+                                                            --3.82%--ll_flush
+                                                                      0x7f3ff0b6b361
+     7.30%           245  efs-fuse  [kernel.kallsyms]     [k] rep_movs_alternative
+            |
+            ---rep_movs_alternative
+               |          
+               |--5.04%--copyout
+               |          _copy_to_iter
+               |          __skb_datagram_iter
+               |          |          
+               |          |--3.94%--skb_copy_datagram_iter
+               |          |          tcp_recvmsg_locked
+               |          |          tcp_recvmsg
+               |          |          inet_recvmsg
+               |          |          sock_recvmsg
+               |          |          __sys_recvfrom
+               |          |          __x64_sys_recvfrom
+               |          |          do_syscall_64
+               |          |          entry_SYSCALL_64_after_hwframe
+               |          |          __libc_recv
+               |          |          |          
+               |          |           --3.58%--efs_recv_msg
+               |          |                     |          
+               |          |                     |--1.97%--efs_client_rpc_getchunks
+               |          |                     |          pull_chunks_range.part.0
+               |          |                     |          |          
+               |          |                     |           --1.28%--adopt_rpc_inode
+               |          |                     |                     efs_client_adopt_lookup
+               |          |                     |                     ll_lookup
+               |          |                     |                     0x7f3ff0b77f5f
+               |          |                     |          
+               |          |                     |--0.92%--efs_client_rpc_readdir_cur
+               |          |                     |          efs_fuse_readdir_ino
+               |          |                     |          ll_readdir

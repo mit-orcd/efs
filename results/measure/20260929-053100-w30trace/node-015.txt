@@ -1,0 +1,6 @@
+fcstor015 begin 12:07:36Z efsd=0 fuse=0
+total 1960552
+-rw------- 1 erbmi1 erbmi1   12954080 Sep 29 08:02 fuse.data
+-rw-r--r-- 1 erbmi1 erbmi1 1994649056 Sep 29 08:02 fuse.strace
+fcstor015 fuse perf_t0=3667522.182281 strace_t0=01:31:12.301746
+ANA_DONE fcstor015 12:08:48Z

@@ -25,6 +25,32 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 29 2026 15:15Z — 24 h review: six fixes to the unrolled tree
+
+`kv_flush_locked` capped runs at 256 while `KV_RANGE_N` is 512 (a wide memtable was BUSY forever under D9). `kv_seg_data_bytes` is cached at open and `kv_l0_bytes` is hoisted out of the compactor's range loop (was O(blocks) per L1 file and per range under `l->mu`). The D13 fold's output is installed at the newest input's position, not at the head (a same-range file flushed during the merge stays ahead). The merge iterator reads a block over 1 MiB whole instead of returning IO. `maybe_prefetch` asks the layout-miss path only when the chunk map is absent. `dcache_flush_slot_inner` re-finds its entry after the unlocked GET/PUT instead of dereferencing a pointer a drop may have freed. `lane_bits` moved into `pack_utimens_cmd`. Two `test_kv_lsm` assertions updated to the byte rule. Not rolled, not gated.
+
+## Sep 29 2026 14:50Z — reclaim drops the shard lock before a fragment GET
+
+In tree, not rolled, not gated. `dcache_reclaim_main` flushed through `dcache_flush_slot`, which held `shard_io` across `efs_client_fetch_published_chunk`. On the 12:36Z IOR that recv sat at 30 s and `ll_fsync` of the shared file blocked on the same lock until the client was killed. The flush now drops `shard_io` with the dcache mutex before the GET and the PUT, after the entry is clean, and takes both again only to install the result. `dcache_steal_dirty` already dropped the lock at that point.
+
+## Sep 29 2026 14:20Z — D13: a file-cap compact does not read L1
+
+In tree, not rolled, not gated. When `n_l0` is over the file cap and no range meets the 1/8 rule or the 1 GiB byte cap, `kv_compact_locked` merges the range with the most L0 files (at least two) into one L0 file and does not open that range's L1. Tombstones are kept, because L1 still holds older copies. The compactor already loops while the count is over the cap. A single-file range is left for the 1/8 rule. The 1 GiB byte cap still rewrites L1.
+
+## Sep 29 2026 13:53Z — 100 GiB copy trace: the file-cap backstop rewrote L1
+
+Stopped the 13:08Z `--perf --strace` roll at 13:53Z (`~/efs-runs/stop32.log`). Reduction is `results/measure/20260929-130800-ddposix/ana`, window 09:17–09:50 EDT (posix on fcstor007/008 plus `dd conv=fsync` of two 100 GiB files from fcstor009 and fcstor010). Every `fsync` returned EIO. D12 compacted whenever `n_l0` was over 4, which was the whole copy, so the 1/8 rule never applied: fcstor004 wrote 67.5 GB in 425 compacts (max 17 s, L0 peak 379). The apply still binary-searched those files (`kv_seg_probe` 8.3 % self on fcstor004) and `host_read_index` returned BUSY at 400 ms (`pack_ms=0` on 172 of 184 `rc=-13` reports). One `push_ms` was 206 s. `backpressure` did not fire. Server `fsync` averaged 3 ms (max 3.6 s on the compactor). The fix is D13: over the file cap, merge a range's L0 files together and do not read its L1.
+
+## Sep 29 2026 12:36Z — 8h and D12 rolled; easy-write finished, hard-write did not
+
+Rolled `--all` at 12:29Z without perf or strace (`~/efs-runs/rollw31.log`), build `a53b253f2455-dirty`. 8h caches a segment's last key at open and `kv_seg_probe` rejects a key outside the in-memory span before `block_for`. D12, when `n_l0` is over the file cap, compacts the range with the most L0 files even under the 1/8 byte rule. The 9×4 1 s-stonewall IOR (`results/io500/20260929-123635-rdma`) printed ior-easy-write 2.218 GiB/s (19.720 s) and mdtest-easy-write 1.765 kIOPS (2.739 s). ior-hard-write then logged 31 `fsync failed` and no bandwidth; rank 28 on fcstor014 called abort. fcstor004 ended at L0=3, L1=397, with 73 of 99 `report-split` lines `rc=-13`. On fcstor012 the shared-file `ll_fsync` waited on the shard I/O lock while the reclaimer held it across a fragment GET (`efs_rdma_recv_wait`, 30 s) of chunk 170279; those four ranks went D and were cleared by killing that `efs-fuse` and remounting.
+
+## Sep 29 2026 12:02Z — IOR trace: L0 file count, not the pump wait
+
+Recorders from the 05:31Z roll (`a53b253f2455-dirty`, RDMA, `--perf --strace`) ran until 12:02Z and were stopped so the files could be read (`~/efs-runs/stop31.log`). Clients exited on SIGTERM. The four `efsd` did not return within 8 s and were killed after their recorder children were signaled; the perf files still open (fcstor004 IOR slice 155K samples, lost 0). Reduction is `results/measure/20260929-053100-w30trace/ana`. The only write in the 01:31–08:02 EDT window is the 01:46 EDT IOR, which aborted with no bandwidth: `report-loop rounds=1 busy=1 rc=-13`, walls 8–26 s, one client `recvfrom` of 25.9 s.
+
+D9, D10's byte rule, D11, and D7 held. 34 compactions on fcstor004 wrote 0.254 GB (max 1161 ms, no `backpressure` line, `fsync` max 91 ms, `access()` 10K against 855K `openat`). What did not hold is D10's dropped file cap: L0 went 26 → 310 files and L1 ended at 353, because `kv_compact_locked` returns BUSY unless a range's L0 bytes are 1/8 of its L1, and the ranges that qualify are 0.5–1 MB / 10 ms. `lookup` probes every segment, so the publish apply on the pump (`efs_meta_apply_get_chunk` 9 %, `lookup` 18 %, `kv_seg_probe` 12 %, memcmp 10 % self) falls behind and `host_wait_applied` returns BUSY at 400 ms with `pack_ms=0` (54 of 60 reports on fcstor004). One group-2 snapshot, 2.82 GB / 14.1 s, accounts for the two `rc=-15` reports, not the 54 BUSYs. Fixes are START-HERE 8h and D12. The client hot path is blake3 at 21 % of on-CPU time while the wall is the RPC wait.
+
 ## Sep 29 2026 04:08Z — snapshot window, sliced import, first-write hint
 
 Rolled `--all` (`~/efs-runs/rollw22.log`) onto `54a500da9dc8-dirty`,
@@ -73,6 +99,25 @@ compactor's own segment, so D6's shared-journal premise is closed
 `setvbuf` 1 MiB on segment writes (5.25M 4 KiB `write`s). W23 (D9:
 pump never waits for the compactor; D10: compact by bytes, split
 range 0) is written up as pending decisions in START-HERE.
+
+## Sep 29 2026 05:11Z — pump no longer waits; map windows; range 0 split
+
+Rolled `--all` (`~/efs-runs/rollw25.log`) onto `a53b253f2455-dirty`,
+RDMA, `--perf --strace`, clients fcstor003–015 remounted. No suite.
+Group 0 leader 1 term 9426 commit==applied 13735166; group 2 leader 2
+term 2907 commit==applied 12147949. Recorders running.
+
+D2: `pull_layout_miss` pulls an adaptive window (16 chunks, doubling
+to 256 while the read stays sequential) one window ahead of the
+caller, and issues each chunk group's GETCHUNKS on its own thread.
+D9: `kv_maybe_flush_locked` returns without waiting when L0 cannot
+take the flush; `host_pub_batch_propose` returns BUSY while L0 is
+within one flush of the 64-file cap. D10: compaction skips a range
+whose L0 bytes are under 1/8 of its L1 unless L0 is at that cap;
+`key[0]==0` flushes and compacts as 16 subranges; compaction reads
+1 MiB ahead of each block. The L0 array is still 64 files. Also in
+this binary: the O(1) log-byte counter and the 1 MiB segment
+`setvbuf`.
 
 ## Sep 29 2026 02:35Z — outbox coalesce, multi-chunk copy, post-and-return; IOR with perf and strace
 

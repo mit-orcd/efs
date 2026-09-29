@@ -1,0 +1,43 @@
+## pump 879257 syscall mix 22:38:58-22:39:00
+6329 write
+3226 pread64
+## pump: fsync lines 22:38:58-22:39:03 (ts dur)
+879257 22:39:01.724756 fsync(481 <unfinished ...>
+22:39:01.731044 0.006283
+## pump: gaps > 20 ms between consecutive syscalls, 22:38:58-22:39:20 (prev_ts gap_ms next_syscall)
+22:39:04.896179  100.4 879257 22:39:04.996619 <... fsync resumed>) = 0 <0.100435>
+22:39:07.000371   99.9 879257 22:39:07.100274 <... fsync resumed>) = 0 <0.099898>
+22:39:07.634818   32.7 879257 22:39:07.667546 <... fsync resumed>) = 0 <0.032723>
+22:39:09.785795  100.8 879257 22:39:09.886619 <... fsync resumed>) = 0 <0.100818>
+22:39:11.712298  100.5 879257 22:39:11.812799 <... fsync resumed>) = 0 <0.100497>
+22:39:13.067181  112.1 879257 22:39:13.179285 <... fsync resumed>) = 0 <0.112099>
+22:39:18.958878   25.0 879257 22:39:18.983857 <... fsync resumed>) = 0 <0.024973>
+## threads that writev (senders): recvfrom duration histogram 22:36:00-22:41:00
+152 /tmp/ana3b-senders.txt
+10-50ms    n=73 total_s=1.45
+50-200ms   n=6 total_s=0.58
+1-10ms     n=410 total_s=0.96
+200ms-1s   n=7 total_s=2.54
+<1ms       n=208199 total_s=13.40
+## per sender tid: recvfrom n / total_s / max
+879266 n=100850 total=5.78 max=0.209
+879283 n=99837 total=5.36 max=0.003
+879504 n=1058 total=1.48 max=0.532
+879499 n=125 total=1.02 max=0.675
+879501 n=253 total=0.58 max=0.206
+879503 n=120 total=0.52 max=0.208
+879498 n=747 total=0.41 max=0.018
+879497 n=606 total=0.37 max=0.019
+879505 n=982 total=0.36 max=0.019
+879500 n=937 total=0.35 max=0.018
+879502 n=644 total=0.30 max=0.019
+879817 n=874 total=0.29 max=0.005
+## writev sizes (AE frames) by sender: count of writev with len>65536 vs total
+879266 writev=1692 big=0 bytes=8484
+879283 writev=1669 big=0 bytes=8369
+879497 writev=2 big=0 bytes=54
+879724 writev=1 big=0 bytes=29
+879676 writev=1 big=0 bytes=29
+879656 writev=1 big=0 bytes=29
+879655 writev=1 big=0 bytes=29
+879654 writev=1 big=0 bytes=29

@@ -1,0 +1,31 @@
+tid  calls  work_s  (top work syscalls)
+879257 3540051   88.306  fsync=13.49 pread64=24.30 write=50.01
+879259 1371698   52.583  fsync=0.91 write=3.99 pread64=46.36
+879235  778215   34.285  write=34.28
+879255  185267   15.144  openat=6.38 close=4.07 write=4.62
+879254  182760   14.807  close=3.98 write=4.52 openat=6.24
+879253  180026   14.476  close=3.88 openat=6.11 write=4.42
+879252  177371   14.158  openat=5.95 close=3.80 write=4.33
+879251  175696   13.968  close=3.73 write=4.32 openat=5.84
+879250  172335   13.600  close=3.65 openat=5.69 write=4.21
+879258  441788   13.503  fsync=0.99 write=12.18
+879249  170363   13.376  write=4.14 openat=5.62 close=3.56
+879248  169634   13.368  write=4.16 openat=5.58 close=3.55
+879246  166692   12.951  write=4.05 openat=5.40 close=3.44
+879247  166704   12.944  write=4.02 openat=5.41 close=3.45
+879245  164480   12.702  write=3.99 openat=5.28 close=3.35
+879244  163582   12.686  write=4.00 close=3.36 openat=5.26
+879243  161245   12.368  write=3.93 openat=5.11 close=3.26
+879242  160373   12.325  write=3.92 openat=5.10 close=3.23
+879241  158884   12.212  openat=5.06 write=3.87 close=3.21
+879240  157550   12.046  write=3.84 openat=4.98 close=3.16
+879239  155776   11.903  close=3.10 openat=4.91 write=3.83
+879238  155650   11.895  openat=4.90 close=3.09 write=3.83
+879237  154053   11.739  openat=4.83 close=3.05 write=3.80
+879236  151873   11.606  close=2.98 openat=4.78 write=3.78
+879498  261651   10.093  access=8.61 fstat=1.43
+879497  260260   10.085  access=8.57 fstat=1.45
+879500  263651   10.053  fstat=1.45 access=8.54
+879502  263445   10.005  access=8.46 fstat=1.49
+879499  279494    9.935  fstat=1.43 access=8.46
+879503  303567    9.916  fstat=1.45 access=8.45

@@ -1,0 +1,60 @@
+    10.03%         29005  efsd     [kernel.kallsyms]        [k] __d_lookup_rcu
+            |
+            ---__d_lookup_rcu
+               |          
+                --10.00%--lookup_fast
+                          |          
+                           --9.81%--walk_component
+                                     |          
+                                     |--6.45%--link_path_walk.part.0.constprop.0
+                                     |          |          
+                                     |          |--4.28%--path_lookupat
+                                     |          |          filename_lookup
+                                     |          |          user_path_at_empty
+                                     |          |          do_faccessat
+                                     |          |          do_syscall_64
+                                     |          |          entry_SYSCALL_64_after_hwframe
+                                     |          |          __GI___access
+                                     |          |          |          
+                                     |          |           --4.28%--pick_write_path
+                                     |          |                     server_write_fragment_with_sum
+                                     |          |                     nvme_put
+                                     |          |                     server_handle_conn
+                                     |          |                     |          
+                                     |          |                      --4.28%--conn_thread
+                                     |          |                                start_thread
+                                     |          |          
+                                     |           --2.16%--path_openat
+                                     |                     do_filp_open
+                                     |                     do_sys_openat2
+                                     |                     __x64_sys_openat
+                                     |                     do_syscall_64
+                                     |                     entry_SYSCALL_64_after_hwframe
+                                     |                     |          
+                                     |                      --2.16%--__GI___libc_open
+                                     |          
+                                      --3.36%--path_lookupat
+                                                filename_lookup
+                                                |          
+                                                 --3.36%--user_path_at_empty
+                                                           do_faccessat
+                                                           do_syscall_64
+                                                           entry_SYSCALL_64_after_hwframe
+                                                           __GI___access
+                                                           |          
+                                                            --3.35%--pick_write_path
+                                                                      server_write_fragment_with_sum
+                                                                      nvme_put
+                                                                      server_handle_conn
+                                                                      |          
+                                                                       --3.35%--conn_thread
+                                                                                 start_thread
+     3.31%          9579  efsd     [kernel.kallsyms]        [k] _raw_spin_unlock_irqrestore
+            |
+            ---_raw_spin_unlock_irqrestore
+               |          
+                --1.47%--try_to_wake_up
+                          |          
+                           --1.46%--wake_up_q
+                                     |          
+                                      --1.45%--futex_wake

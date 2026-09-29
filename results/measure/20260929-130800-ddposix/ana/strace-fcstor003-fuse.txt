@@ -1,0 +1,4 @@
+window_lines_first=09:13:00.886339 last=09:53:00.298505
+work_s=0.000 fsync_n=0 fsync_s=0.000 fsync_max=0.000 openat=0 access=0 pread_gt_1m=0 max_work=0.000 
+futex                    3960     1980.115      1.000
+poll                  1841688     1947.654      0.005

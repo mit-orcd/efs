@@ -1,0 +1,101 @@
+== fragment openat per minute (O_CREAT = PUT)
+ 119890 00:15
+  38599 00:16
+  31218 00:18
+  53954 00:19
+  64156 00:20
+  64022 00:21
+  36467 00:22
+== fragment openat RDONLY per minute (GET/verify/reap)
+    693 00:15
+   2034 00:16
+   2796 00:17
+   2947 00:18
+   4559 00:19
+   3656 00:20
+   3100 00:21
+   2808 00:22
+   2886 00:23
+   2874 00:24
+   2820 00:25
+   2700 00:26
+   1176 00:27
+== unlink fragment per minute
+    158 00:15
+    370 00:16
+    932 00:17
+    922 00:18
+    846 00:19
+    908 00:20
+    912 00:21
+    936 00:22
+    962 00:23
+    958 00:24
+    940 00:25
+    898 00:26
+    392 00:27
+== fsync durations by fd class (raft.log / seg / applied / other), buckets
+31 applied <2ms
+total applied n=31 s=0.01
+70 frag <2ms
+total frag n=70 s=0.02
+68 kvdir <2ms
+total kvdir n=68 s=0.02
+30 manifest <2ms
+total manifest n=30 s=0.01
+6 other <2ms
+total other n=6 s=0.00
+43 seg <2ms
+total seg n=43 s=0.01
+531 unknown <2ms
+total unknown n=531 s=0.15
+== log: flush / l0 lines
+    110 inputs=10
+    107 inputs=9
+     57 inputs=8
+     35 inputs=7
+     31 inputs=11
+     24 inputs=6
+     21 inputs=5
+     13 inputs=33
+== kv-compact: end bytes total (MB) and count
+433 compactions, 159.0 GB written
+== L0/L1 segment count, sizes
+      3 L0
+    100 L1
+      1 MANIFEST
+      1 wal
+5.3G	/data1/01/efs/mdraft/kv
+== raft-obs g lines (terms)
+raft-obs: g2 term 2902->2902 role CANDIDATE->LEADER leader=1 commit=12107762 applied=12107762 t=1790654839311ms
+raft-obs: g0 term 9418->9419 role LEADER->FOLLOWER leader=-1 commit=13687406 applied=13687406 t=1790655343193ms
+raft-obs: g0 term 9419->9420 role FOLLOWER->FOLLOWER leader=-1 commit=13687406 applied=13687406 t=1790655343779ms
+raft-obs: g0 term 9420->9421 role FOLLOWER->FOLLOWER leader=-1 commit=13687406 applied=13687406 t=1790655344606ms
+raft-obs: g2 term 2902->2904 role LEADER->FOLLOWER leader=3 commit=12108530 applied=12108530 t=1790655377150ms
+== applied.tmp renames per minute
+    809 00:15
+    321 00:16
+    117 00:17
+    771 00:18
+   6102 00:19
+   4768 00:20
+   2510 00:21
+    225 00:22
+    118 00:23
+    118 00:24
+    118 00:25
+    118 00:26
+     52 00:27
+== 20ms nanosleep tid: what else does it do
+120456 clock_nanosleep
+32508 pread64
+13223 futex
+12790 write
+929 read
+830 openat
+690 access
+398 fstat
+396 poll
+276 unlink
+276 pwrite64
+256 fsync

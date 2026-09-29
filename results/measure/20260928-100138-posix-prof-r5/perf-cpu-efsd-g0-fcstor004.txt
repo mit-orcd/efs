@@ -1,0 +1,60 @@
+    27.28%         80384  efsd     libc.so.6                [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--18.06%--efs_kv_lsm_view_export
+               |          host_snap_export_pass
+               |          host_gc_thread
+               |          start_thread
+               |          
+               |--5.44%--kv_compact_locked
+               |          compactor_main
+               |          start_thread
+               |          
+               |--2.48%--host_snap_export_pass
+               |          host_gc_thread
+               |          start_thread
+               |          
+                --1.13%--compactor_main
+                          start_thread
+    15.93%         46938  efsd     efsd                     [.] vx_sift_down.constprop.0
+            |
+            ---vx_sift_down.constprop.0
+               |          
+                --15.83%--efs_kv_lsm_view_export
+                          host_snap_export_pass
+                          host_gc_thread
+                          start_thread
+     7.94%         23412  efsd     [kernel.kallsyms]        [k] rep_movs_alternative
+            |
+            ---rep_movs_alternative
+               |          
+               |--4.53%--copyout
+               |          _copy_to_iter
+               |          copy_page_to_iter
+               |          filemap_read
+               |          xfs_file_buffered_read
+               |          xfs_file_read_iter
+               |          vfs_read
+               |          __x64_sys_pread64
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __libc_pread
+               |          |          
+               |          |--2.74%--efs_kv_lsm_view_export
+               |          |          host_snap_export_pass
+               |          |          host_gc_thread
+               |          |          start_thread
+               |          |          
+               |           --1.76%--kv_msrc_advance
+               |                     |          
+               |                      --1.76%--kv_compact_locked
+               |                                compactor_main
+               |                                start_thread
+               |          
+                --3.40%--copyin
+                          |          
+                           --3.40%--copy_page_from_iter_atomic
+                                     iomap_write_iter
+                                     iomap_file_buffered_write
+                                     xfs_file_buffered_write

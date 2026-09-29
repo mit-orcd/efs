@@ -1,0 +1,6 @@
+host=fcstor011 tag=fuse
+report-split
+kv-compact n=0 bytes=0.000GB max_ms=0 l0max=0 l0last=0 l1last=0
+raft-snap=0 backpressure=0
+report-loop n=0 busy=0 stale=0 max_ms=0
+exhausted=0 fsync_msg=0

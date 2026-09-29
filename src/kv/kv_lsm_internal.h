@@ -33,6 +33,9 @@
 #define KV_LSM_MEM_DEFAULT  (4u * 1024u * 1024u)
 #define KV_LSM_L0_DEFAULT   4u
 #define KV_LSM_MAX_SEGS     64u
+/* L0 admission. The file count is not the constraint (a read probes
+ * every L0); 1 GiB of L0 is. The slot array grows to hold it. */
+#define KV_LSM_L0_BYTES     (1ull << 30)
 #define KV_LSM_KLEN_MAX     (64u * 1024u)
 #define KV_LSM_VLEN_MAX     (16u * 1024u * 1024u)
 /* Enforced at append AND at replay: a record replay would refuse to read
@@ -136,10 +139,12 @@ struct kv_lsm {
     struct efs_kv_lsm_cfg cfg;
     struct kv_wal *wal;
     struct kv_mtab mt;
-    struct seg_slot l0[KV_LSM_MAX_SEGS]; /* newest first; capped */
+    struct seg_slot *l0;
     uint32_t n_l0;
+    uint32_t l0_cap;
     /* Ascending, disjoint ranges. The MANIFEST is one "1 <seq>" line per
-     * file, so this list grows. L0 stays at KV_LSM_MAX_SEGS. */
+     * file, so this list grows. L0 grows the same way, bounded by
+     * KV_LSM_L0_BYTES rather than a file count. */
     struct seg_slot *l1;
     uint32_t n_l1;
     uint32_t l1_cap;
@@ -190,6 +195,9 @@ int kv_manifest_write(struct kv_lsm *l);
 int kv_l1_cmp(const void *a, const void *b);
 /* Caller holds l->mu. Grows l->l1 so n_l1 may exceed KV_LSM_MAX_SEGS. */
 int kv_l1_reserve(struct kv_lsm *l, uint32_t need);
+int kv_l0_reserve(struct kv_lsm *l, uint32_t need);
+/* Caller holds l->mu. */
+uint64_t kv_l0_bytes(const struct kv_lsm *l);
 
 /* Callers hold l->mu. kv_compact_locked(async=1) drops mu across the
  * merge and reacquires it before returning. */
@@ -238,6 +246,7 @@ void kv_seg_unpin(struct kv_seg *s);
 void kv_seg_doom(struct kv_seg *s, const char *path);
 const char *kv_seg_filepath(const struct kv_seg *s);
 int kv_seg_first_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen);
+uint64_t kv_seg_data_bytes(const struct kv_seg *s);
 int kv_seg_last_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen);
 /* 1 when the segment holds no key >= seek with the prefix (either may be
  * empty = unconstrained). Caller holds the LSM lock. */

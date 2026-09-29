@@ -1,0 +1,10 @@
+== group 0 leader fcstor003
+file /data1/01/efs/mdraft/log/raft.log size 8794, parsed 8794 bytes from offset 0, records {'HARD': 1, 'SNAP': 1, 'CFG': 2, 'ENTRY': 140}
+group 0: 140 entries, index 13153215..13153354
+  REAP_DONE                  135   96.4%
+  GC_ACK                       5    3.6%
+== group 2 leader fcstor005
+file /data1/01/efs/mdraft/log/raft.log size 26023, parsed 26023 bytes from offset 0, records {'HARD': 2, 'SNAP': 2, 'CFG': 3, 'ENTRY': 429}
+group 0: 429 entries, index 13152959..13153387
+  REAP_DONE                  416   97.0%
+  GC_ACK                      13    3.0%

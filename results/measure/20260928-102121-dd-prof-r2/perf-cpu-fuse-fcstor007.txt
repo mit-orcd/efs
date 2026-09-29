@@ -1,0 +1,60 @@
+    21.55%         17830  efs-fuse  efs-fuse              [.] blake3_hash_many_avx2
+            |
+            ---blake3_hash_many_avx2
+               |          
+                --21.55%--blake3_compress_subtree_wide
+                          |          
+                           --21.40%--blake3_compress_subtree_wide
+                                     |          
+                                      --21.06%--blake3_compress_subtree_wide
+                                                |          
+                                                |--20.32%--blake3_compress_subtree_wide
+                                                |          blake3_hasher_update.part.0
+                                                |          efs_hash
+                                                |          |          
+                                                |          |--13.46%--hash_write_fragments
+                                                |          |          dcache_put_now.constprop.0
+                                                |          |          |          
+                                                |          |          |--9.95%--dcache_flush_slot_inner
+                                                |          |          |          |          
+                                                |          |          |           --9.91%--dcache_reclaim_main
+                                                |          |          |                     start_thread
+                                                |          |          |          
+                                                |          |           --3.51%--put_pool_thread
+                                                |          |                     start_thread
+                                                |          |          
+                                                |           --6.87%--dcache_put_now.constprop.0
+                                                |                     |          
+                                                |                     |--5.06%--dcache_flush_slot_inner
+                                                |                     |          |          
+                                                |                     |           --5.05%--dcache_reclaim_main
+                                                |                     |                     start_thread
+                                                |                     |          
+                                                |                      --1.80%--put_pool_thread
+                                                |                                start_thread
+                                                |          
+                                                 --0.73%--blake3_hasher_update.part.0
+                                                           efs_hash
+    15.08%         12475  efs-fuse  libc.so.6             [.] __memmove_avx_unaligned_erms
+            |
+            ---__memmove_avx_unaligned_erms
+               |          
+               |--5.27%--efs_rdma_send_frame
+               |          efs_conn_send_msg_parts
+               |          put_fragments_parallel_once
+               |          efs_client_put_fragments_parallel
+               |          dcache_put_now.constprop.0
+               |          |          
+               |          |--3.42%--dcache_flush_slot_inner
+               |          |          |          
+               |          |           --3.42%--dcache_reclaim_main
+               |          |                     start_thread
+               |          |          
+               |           --1.84%--put_pool_thread
+               |                     start_thread
+               |          
+               |--1.70%--dcache_reclaim_main
+               |          start_thread
+               |          
+               |--1.43%--efs_dcache_flush_ino
+               |          ll_fsync

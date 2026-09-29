@@ -1,0 +1,27 @@
+fcstor007 fuse.efs-fuse
+MOUNT_OK
+1
+fcstor008 fuse.efs-fuse
+MOUNT_OK
+1
+fcstor009 fuse.efs-fuse
+MOUNT_OK
+1
+fcstor010 fuse.efs-fuse
+MOUNT_OK
+1
+fcstor011 fuse.efs-fuse
+MOUNT_OK
+1
+fcstor012 fuse.efs-fuse
+MOUNT_OK
+1
+fcstor013 fuse.efs-fuse
+MOUNT_OK
+1
+fcstor014 fuse.efs-fuse
+MOUNT_OK
+1
+fcstor015 fuse.efs-fuse
+MOUNT_OK
+1

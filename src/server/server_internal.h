@@ -328,7 +328,8 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
 void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
                               uint32_t uid, uint32_t gid, uint64_t size,
                               uint64_t mtime, uint32_t mtime_nsec,
-                              uint64_t atime, struct efs_msg_inode_reply *out);
+                              uint64_t atime, uint32_t atime_nsec,
+                              struct efs_msg_inode_reply *out);
 void server_raft_host_xattr(efs_ino_t ino, uint8_t op, uint32_t flags,
                             const uint8_t *name, uint16_t nlen,
                             const uint8_t *val, uint32_t vlen,

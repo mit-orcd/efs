@@ -1,0 +1,71 @@
+Agent pid 374083
+Agent pid 374083
+Agent pid 374083
+Agent pid 374083
+Agent pid 374083
+Agent pid 374083
+Agent pid 374083
+Agent pid 374083
+--------------------------------------------------------------------------
+PMIx was unable to find a usable compression library
+on the system. We will therefore be unable to compress
+large data streams. This may result in longer-than-normal
+startup times and larger memory footprints. We will
+continue, but strongly recommend installing zlib or
+a comparable compression library for better user experience.
+
+You can suppress this warning by adding "pcompress_base_silence_warning=1"
+to your PMIx MCA default parameter file, or by adding
+"PMIX_MCA_pcompress_base_silence_warning=1" to your environment.
+--------------------------------------------------------------------------
+IO500 version 02091cf254d8-13 (standard)
+ERROR INVALID (src/phase_dbg.c:15) stonewall-time 1s != 300s
+8 more processes have sent help message help-pcompress.txt / unavailable
+1 more process has sent help message help-pcompress.txt / unavailable
+ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime
+[RESULT]       ior-easy-write        2.217855 GiB/s : time 19.720 seconds [INVALID]
+ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime
+[RESULT]    mdtest-easy-write        1.765397 kIOPS : time 2.739 seconds [INVALID]
+[      ]            timestamp        0.000000 kIOPS : time 0.060 seconds
+WARNING: fsync(23) failed
+WARNING: fsync(22) failed
+WARNING: fsync(24) failed
+WARNING: fsync(22) failed
+WARNING: fsync(23) failed
+WARNING: fsync(22) failed
+WARNING: fsync(22) failed
+WARNING: fsync(25) failed
+WARNING: fsync(23) failed
+WARNING: fsync(25) failed
+WARNING: fsync(24) failed
+WARNING: fsync(22) failed
+WARNING: fsync(23) failed
+WARNING: fsync(22) failed
+WARNING: fsync(23) failed
+WARNING: fsync(23) failed
+WARNING: fsync(22) failed
+WARNING: fsync(23) failed
+WARNING: fsync(23) failed
+WARNING: fsync(23) failed
+WARNING: fsync(25) failed
+WARNING: fsync(26) failed
+WARNING: fsync(24) failed
+WARNING: fsync(22) failed
+WARNING: fsync(23) failed
+WARNING: fsync(23) failed
+WARNING: fsync(24) failed
+WARNING: fsync(23) failed
+WARNING: fsync(23) failed
+WARNING: fsync(23) failed
+WARNING: fsync(23) failed
+[fcstor007:00000] *** An error occurred in Socket closed
+[fcstor007:00000] *** reported by process [3518824449,1]
+[fcstor007:00000] *** on a NULL communicator
+[fcstor007:00000] *** Unknown error
+[fcstor007:00000] *** MPI_ERRORS_ARE_FATAL (processes in this communicator will now abort,
+[fcstor007:00000] ***    and MPI will try to terminate your MPI job as well)
+--------------------------------------------------------------------------
+prterun has exited due to process rank 28 with PID 1532263 on node fcstor014 calling
+"abort". This may have caused other processes in the application to be
+terminated by signals sent by prterun (as reported here).
+--------------------------------------------------------------------------

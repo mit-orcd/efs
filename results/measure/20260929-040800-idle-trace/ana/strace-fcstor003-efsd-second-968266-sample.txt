@@ -1,0 +1,60 @@
+968266 00:07:13.878443 restart_syscall(<... resuming interrupted poll ...> <unfinished ...>
+968266 00:07:13.881796 <... restart_syscall resumed>) = 0 <0.003340>
+968266 00:07:13.881841 write(2, "raft-obs: wait_timeouts=0 pump_h"..., 244) = 244 <0.000007>
+968266 00:07:13.881870 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005058>
+968266 00:07:13.886947 poll([{fd=4, events=POLLIN}], 1, 5 <unfinished ...>
+968266 00:07:13.892014 <... poll resumed>) = 0 (Timeout) <0.005058>
+968266 00:07:13.892028 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:13.897112 write(2, "raft-obs: wait_timeouts=0 pump_h"..., 244) = 244 <0.000006>
+968266 00:07:13.897134 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005058>
+968266 00:07:13.902209 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:13.907286 write(2, "raft-obs: wait_timeouts=0 pump_h"..., 244) = 244 <0.000005>
+968266 00:07:13.907306 poll([{fd=4, events=POLLIN}], 1, 5 <unfinished ...>
+968266 00:07:13.912374 <... poll resumed>) = 0 (Timeout) <0.005061>
+968266 00:07:13.912391 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005059>
+968266 00:07:13.917467 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005058>
+968266 00:07:13.922542 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:13.927617 poll([{fd=4, events=POLLIN}], 1, 5 <unfinished ...>
+968266 00:07:13.932684 <... poll resumed>) = 0 (Timeout) <0.005058>
+968266 00:07:13.932696 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:13.937771 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:13.942846 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:13.947922 poll([{fd=4, events=POLLIN}], 1, 5 <unfinished ...>
+968266 00:07:13.952988 <... poll resumed>) = 0 (Timeout) <0.005058>
+968266 00:07:13.953005 write(2, "raft-obs: wait_timeouts=0 pump_h"..., 244) = 244 <0.000005>
+968266 00:07:13.953024 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005056>
+968266 00:07:13.958095 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:13.963168 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:13.968244 poll([{fd=4, events=POLLIN}], 1, 5 <unfinished ...>
+968266 00:07:13.973311 <... poll resumed>) = 0 (Timeout) <0.005058>
+968266 00:07:13.973326 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005056>
+968266 00:07:13.978398 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005058>
+968266 00:07:13.983476 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:13.988552 poll([{fd=4, events=POLLIN}], 1, 5 <unfinished ...>
+968266 00:07:13.993617 <... poll resumed>) = 0 (Timeout) <0.005058>
+968266 00:07:13.993632 write(2, "raft-obs: wait_timeouts=0 pump_h"..., 244) = 244 <0.000006>
+968266 00:07:13.993652 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:13.998725 write(2, "raft-obs: wait_timeouts=0 pump_h"..., 244) = 244 <0.000006>
+968266 00:07:13.998743 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005058>
+968266 00:07:14.003818 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:14.008894 poll([{fd=4, events=POLLIN}], 1, 5 <unfinished ...>
+968266 00:07:14.013960 <... poll resumed>) = 0 (Timeout) <0.005058>
+968266 00:07:14.013976 write(2, "raft-obs: wait_timeouts=0 pump_h"..., 244) = 244 <0.000006>
+968266 00:07:14.013994 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005058>
+968266 00:07:14.019069 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005058>
+968266 00:07:14.024145 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:14.029224 write(2, "raft-obs: wait_timeouts=0 pump_h"..., 244) = 244 <0.000006>
+968266 00:07:14.029244 poll([{fd=4, events=POLLIN}], 1, 5 <unfinished ...>
+968266 00:07:14.034309 <... poll resumed>) = 0 (Timeout) <0.005058>
+968266 00:07:14.034323 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:14.039396 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:14.044468 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005058>
+968266 00:07:14.049543 poll([{fd=4, events=POLLIN}], 1, 5 <unfinished ...>
+968266 00:07:14.054610 <... poll resumed>) = 0 (Timeout) <0.005058>
+968266 00:07:14.054623 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005058>
+968266 00:07:14.059698 write(2, "raft-obs: wait_timeouts=0 pump_h"..., 244) = 244 <0.000006>
+968266 00:07:14.059719 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:14.064793 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>
+968266 00:07:14.069868 poll([{fd=4, events=POLLIN}], 1, 5 <unfinished ...>
+968266 00:07:14.074933 <... poll resumed>) = 0 (Timeout) <0.005058>
+968266 00:07:14.074948 poll([{fd=4, events=POLLIN}], 1, 5) = 0 (Timeout) <0.005057>

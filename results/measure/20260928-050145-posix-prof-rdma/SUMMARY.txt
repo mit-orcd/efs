@@ -1,0 +1,54 @@
+posix cpu+trace profile label=rdma build=db2b88c4802a-dirty host=fcstor007
+leaders g0=fcstor003 g2=fcstor004  record_s=55
+suite cpu pass rc=1; trace pass rc=1
+(rc=1 with 0 EFS-bugs is compare exit 2: mmap SKIP on 5.14)
+
+== suite lines ==
+/home/erbmi1/git/efs/results/measure/20260928-050145-posix-prof-rdma/posix-cpu.log:POSIX suite: 198/201 pass, 0 fail, 3 skip, 0 notrun  (13.7s)
+/home/erbmi1/git/efs/results/measure/20260928-050145-posix-prof-rdma/posix-cpu.log:POSIX suite: 200/201 pass, 0 fail, 1 skip, 0 notrun  (56.4s)
+/home/erbmi1/git/efs/results/measure/20260928-050145-posix-prof-rdma/posix-cpu.log:  EFS BUGS         : 0  (baseline PASS, target FAIL)
+/home/erbmi1/git/efs/results/measure/20260928-050145-posix-prof-rdma/posix-trace.log:POSIX suite: 198/201 pass, 0 fail, 3 skip, 0 notrun  (13.8s)
+/home/erbmi1/git/efs/results/measure/20260928-050145-posix-prof-rdma/posix-trace.log:POSIX suite: 200/201 pass, 0 fail, 1 skip, 0 notrun  (43.6s)
+/home/erbmi1/git/efs/results/measure/20260928-050145-posix-prof-rdma/posix-trace.log:  EFS BUGS         : 0  (baseline PASS, target FAIL)
+
+== cpu-clock top (fuse) ==
+    63.82%        147775  efs-fuse  efs-fuse              [.] recv_poller
+            |
+            ---recv_poller
+               start_thread
+     5.09%         11789  efs-fuse  libc.so.6             [.] pthread_spin_lock@@GLIBC_2.34
+            |
+            ---pthread_spin_lock@@GLIBC_2.34
+               |          
+                --5.09%--start_thread
+     5.03%         11658  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222ec
+            |
+            ---0x7f34382982ec
+     5.02%         11632  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022400
+            |
+            ---0x7f3438298400
+     4.98%         11538  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022210
+            |
+            ---0x7f3438298210
+               |          
+                --4.98%--start_thread
+     1.98%          4587  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000229f5
+            |
+            ---0x7f34382989f5
+               start_thread
+     1.57%          3637  efs-fuse  efs-fuse              [.] efs_rdma_recv_wait
+            |
+            ---efs_rdma_recv_wait
+               conn_rdma_frame.constprop.0
+               |          
+                --1.40%--efs_conn_recv_msg
+                          |          
+                           --0.70%--rpc_send_recv_shard
+     1.00%          2326  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222f7
+            |
+            ---0x7f34382982f7
+     1.00%          2322  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x000000000002226d
+            |
+            ---0x7f343829826d
+               start_thread
+     1.00%          2315  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x000000000002248b

@@ -1,0 +1,19 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 194
+  EFS BUGS         : 3  (baseline PASS, target FAIL)
+  both fail (match): 0
+  target better    : 4
+  not run          : 0  (cut or missing; not a bug)
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  err_rename_dir_into_itself       [FAIL] timeout after 15s
+  mmap_write_read                  [SKIP] mmap unsupported: [Errno 19] No such device
+  names_crazy_dirs                 [FAIL] OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor008-wgbtgk5y/names_crazy_dirs/comma,colon:char'
+
+--- target passes where baseline fails ---
+  fcntl_byte_range_lock           
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             

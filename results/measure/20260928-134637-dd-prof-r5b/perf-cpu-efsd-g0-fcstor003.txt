@@ -1,0 +1,60 @@
+    10.52%         32526  efsd     [kernel.kallsyms]        [k] __d_lookup_rcu
+            |
+            ---__d_lookup_rcu
+               |          
+                --10.48%--lookup_fast
+                          |          
+                           --10.33%--walk_component
+                                     |          
+                                     |--6.34%--link_path_walk.part.0.constprop.0
+                                     |          |          
+                                     |          |--4.44%--path_lookupat
+                                     |          |          filename_lookup
+                                     |          |          |          
+                                     |          |           --4.44%--user_path_at_empty
+                                     |          |                     do_faccessat
+                                     |          |                     do_syscall_64
+                                     |          |                     entry_SYSCALL_64_after_hwframe
+                                     |          |                     __GI___access
+                                     |          |                     |          
+                                     |          |                      --4.44%--server_write_fragment_with_sum
+                                     |          |                                nvme_put
+                                     |          |                                server_handle_conn
+                                     |          |                                |          
+                                     |          |                                 --4.24%--conn_thread
+                                     |          |                                           start_thread
+                                     |          |          
+                                     |           --1.90%--path_openat
+                                     |                     do_filp_open
+                                     |                     do_sys_openat2
+                                     |                     __x64_sys_openat
+                                     |                     do_syscall_64
+                                     |                     entry_SYSCALL_64_after_hwframe
+                                     |                     |          
+                                     |                      --1.90%--__GI___libc_open
+                                     |          
+                                      --3.98%--path_lookupat
+                                                filename_lookup
+                                                |          
+                                                 --3.98%--user_path_at_empty
+                                                           do_faccessat
+                                                           do_syscall_64
+                                                           entry_SYSCALL_64_after_hwframe
+                                                           __GI___access
+                                                           |          
+                                                            --3.98%--server_write_fragment_with_sum
+                                                                      nvme_put
+                                                                      server_handle_conn
+                                                                      |          
+                                                                       --3.79%--conn_thread
+                                                                                 start_thread
+     5.33%         16477  efsd     libc.so.6                [.] __memmove_avx_unaligned_erms
+            |
+            ---__memmove_avx_unaligned_erms
+               |          
+               |--2.91%--host_send
+               |          send_ae
+               |          |          
+               |          |--1.78%--efs_raft_recv
+               |          |          drain_inbox
+               |          |          host_pump

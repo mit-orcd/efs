@@ -1,0 +1,60 @@
+    19.34%        163921  efsd     [kernel.kallsyms]        [k] native_queued_spin_lock_slowpath
+            |
+            ---native_queued_spin_lock_slowpath
+               |          
+                --19.34%--_raw_spin_lock
+                          |          
+                          |--10.66%--futex_wait_setup
+                          |          __futex_wait
+                          |          futex_wait
+                          |          do_futex
+                          |          __x64_sys_futex
+                          |          do_syscall_64
+                          |          entry_SYSCALL_64_after_hwframe
+                          |          |          
+                          |           --10.66%--__GI___lll_lock_wait
+                          |                     |          
+                          |                     |--9.93%--server_write_fragment_with_sum
+                          |                     |          nvme_put
+                          |                     |          server_handle_conn
+                          |                     |          |          
+                          |                     |           --2.47%--conn_thread
+                          |                     |                     start_thread
+                          |                     |          
+                          |                      --0.72%--server_write_fragment_with_sum_sync
+                          |                                run_job
+                          |                                writer_thread
+                          |                                start_thread
+                          |          
+                          |--7.27%--futex_wake
+                          |          do_futex
+                          |          __x64_sys_futex
+                          |          do_syscall_64
+                          |          entry_SYSCALL_64_after_hwframe
+                          |          __GI___lll_lock_wake
+                          |          |          
+                          |           --6.79%--server_write_fragment_with_sum
+                          |                     nvme_put
+                          |                     server_handle_conn
+                          |                     |          
+                          |                      --1.66%--conn_thread
+                          |                                start_thread
+                          |          
+                          |--0.73%--alloc_fd
+                          |          |          
+                          |           --0.54%--do_sys_openat2
+                          |                     __x64_sys_openat
+                          |                     do_syscall_64
+                          |                     entry_SYSCALL_64_after_hwframe
+                          |                     __GI___libc_open
+                          |          
+                           --0.59%--close_fd_get_file
+                                     __x64_sys_close
+                                     do_syscall_64
+                                     entry_SYSCALL_64_after_hwframe
+                                     |          
+                                      --0.59%--__close
+    16.04%        135932  efsd     [kernel.kallsyms]        [k] rep_movs_alternative
+            |
+            ---rep_movs_alternative
+               |          

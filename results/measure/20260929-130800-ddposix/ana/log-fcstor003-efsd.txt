@@ -1,0 +1,7 @@
+host=fcstor003 tag=efsd
+report-split
+apply-sleep group=0 n=655 ge400ms=599 sum_s=247.3 max_us=400154
+kv-compact n=770 bytes=75.467GB max_ms=7098 l0max=95 l0last=3 l1last=420
+raft-snap=4 backpressure=0
+report-loop n=0 busy=0 stale=0 max_ms=0
+exhausted=0 fsync_msg=0

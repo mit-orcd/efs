@@ -1,0 +1,4 @@
+level	procs	ops	wall_s	ops_per_s	ms_per_op_proc	calls	busy_n	busy_s	recv_s	create_n	create_avg_us	unlink_n	unlink_avg_us
+1x1	1	400	1.2	333.3	3.00	1018	0	0	1.1	201	3504	201	2179
+1x9	9	3600	2.6	1384.6	6.50	12242	0	0	22.4	1801	5471	1801	5294
+4x9	36	14400	11.6	1241.3	29.00	48843	1	0	112.8	7202	6653	7201	6756

@@ -59,6 +59,10 @@ struct kv_seg {
     uint32_t nblocks;
     uint8_t *last_key;
     uint32_t last_klen;
+    /* Sum of block lengths, fixed at open. The compactor asks for it
+     * per range per pass; a walk of 230K index entries under the LSM
+     * lock is not what a byte count should cost. */
+    uint64_t data_bytes;
     /* Owner holds one ref. A get pins a second ref before it drops the
      * LSM lock to pread, so compaction can unlink the segment without
      * closing the fd under that read. */
@@ -440,8 +444,19 @@ int kv_seg_open(const char *path, struct kv_seg **out)
             rc = EFS_ERR_PROTO;
             goto fail;
         }
+        s->data_bytes += s->idx[i].len;
     }
     free(ibuf);
+    /* Cache the last key now. A point get rejects this segment from the
+     * in-memory span; learning it on the first miss would pread under the
+     * lookup. A failure leaves the key unknown and the get falls back to
+     * the block search. */
+    {
+        const uint8_t *lk = NULL;
+        uint32_t ll = 0;
+
+        (void)kv_seg_last_key(s, &lk, &ll);
+    }
     *out = s;
     return EFS_OK;
 
@@ -506,6 +521,11 @@ void kv_seg_close(struct kv_seg *s)
 {
     if (s)
         kv_seg_unpin(s);
+}
+
+uint64_t kv_seg_data_bytes(const struct kv_seg *s)
+{
+    return s ? s->data_bytes : 0;
 }
 
 int kv_seg_first_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen)
@@ -667,6 +687,11 @@ int kv_seg_probe(struct kv_seg *s, const uint8_t *key, uint32_t klen,
                              __atomic_load_n(&s->last_klen, __ATOMIC_RELAXED)) > 0)
             return EFS_ERR_NOT_FOUND;
     }
+    /* Key precedes this segment. One compare, not a binary search of a
+     * file that cannot hold it. */
+    if (s->nblocks > 0 &&
+        kv_key_cmp(key, klen, s->idx[0].key, s->idx[0].klen) < 0)
+        return EFS_ERR_NOT_FOUND;
     bi = block_for(s, key, klen);
     if (bi < 0)
         return EFS_ERR_NOT_FOUND;
@@ -774,6 +799,10 @@ struct kv_seg_iter {
     uint8_t *blk;
     uint32_t blk_len;
     int loaded;
+    /* Sequential readahead for compaction. Point gets do not use this. */
+    uint8_t *ra;
+    uint64_t ra_off;
+    uint32_t ra_len;
 };
 
 int kv_seg_iter_open(struct kv_seg *s, struct kv_seg_iter **out)
@@ -795,6 +824,7 @@ void kv_seg_iter_close(struct kv_seg_iter *it)
     if (!it)
         return;
     free(it->blk);
+    free(it->ra);
     free(it);
 }
 
@@ -824,8 +854,28 @@ static int iter_load(struct kv_seg_iter *it)
             return EFS_OK;
         }
     }
-    if (pread_all(it->s->fd, it->blk, r->len, r->off) != EFS_OK)
-        return EFS_ERR_IO;
+    if (it->ra && r->off >= it->ra_off &&
+        r->off + r->len <= it->ra_off + it->ra_len) {
+        memcpy(it->blk, it->ra + (uint32_t)(r->off - it->ra_off), r->len);
+    } else if (r->len > (1u << 20)) {
+        /* Entries never split, so one value up to KV_LSM_VLEN_MAX is one
+         * block. Read it whole; the 1 MiB window cannot hold it. */
+        if (pread_all(it->s->fd, it->blk, r->len, r->off) != EFS_OK)
+            return EFS_ERR_IO;
+    } else {
+        uint8_t *ra = it->ra ? it->ra : malloc(1u << 20);
+        ssize_t k;
+
+        if (!ra)
+            return EFS_ERR_NOMEM;
+        it->ra = ra;
+        k = pread(it->s->fd, ra, 1u << 20, (off_t)r->off);
+        if (k < (ssize_t)r->len)
+            return EFS_ERR_IO;
+        it->ra_off = r->off;
+        it->ra_len = (uint32_t)k;
+        memcpy(it->blk, ra, r->len);
+    }
     it->blk_len = r->len;
     it->off = 0;
     it->loaded = 1;

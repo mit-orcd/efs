@@ -1100,6 +1100,26 @@ static void maybe_prefetch(int want, efs_ino_t ino, uint64_t end_off,
     if (!want || !cs)
         return;
     next_ci = (uint32_t)((end_off + cs - 1) / cs);
+    /* Map window one data window ahead of this prefetch. A miss inside
+     * the file still fails the read; this only warms the map. */
+    if (file_size > end_off) {
+        uint32_t max_ci = (uint32_t)((file_size + cs - 1) / cs);
+        uint32_t depth = prefetch_depth();
+        uint32_t a0 = next_ci + depth;
+        int have = 1;
+
+        /* Only when that chunk's map is not here yet. The miss path
+         * re-pulls its window every 200 ms; a sequential read with
+         * the maps already local must not pay a GETCHUNKS for that. */
+        if (a0 < max_ci) {
+            pthread_mutex_lock(&g_client.idx_mu);
+            have = efs_export_get_chunk(&g_client.export, ino, a0, NULL) ==
+                   EFS_OK;
+            pthread_mutex_unlock(&g_client.idx_mu);
+        }
+        if (a0 < max_ci && !have)
+            (void)efs_client_pull_layout_miss(ino, a0, a0 + 1);
+    }
     prefetch_ahead(ino, next_ci, file_size);
 }
 

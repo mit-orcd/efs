@@ -326,17 +326,26 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
             g_client.conn[idx][free_slot] = nc;
             g_client.node_fail_streak[idx] = 0;
             g_client.node_down_until_ms[idx] = 0;
+            efs_conn_bind_gen(nc, &g_client.conn_gen[idx][free_slot]);
+            efs_conn_note_ok(nc);
             /* busy already set */
             pthread_mutex_unlock(&g_client.conn_lock[idx]);
             return nc;
         }
 
         struct efs_conn *c = g_client.conn[idx][free_slot];
-        if (conn_fd_is_dead(c)) {
-            efs_conn_destroy(c);
-            g_client.conn[idx][free_slot] = NULL;
-            continue;
+        /* A conn that completed an RPC in the last second is not in
+         * CLOSE-WAIT. The probe stays for one that sat idle. */
+        if (c->last_ok_ms == 0 || now - c->last_ok_ms > 1000) {
+            if (conn_fd_is_dead(c)) {
+                efs_conn_destroy(c);
+                g_client.conn[idx][free_slot] = NULL;
+                continue;
+            }
+            efs_conn_note_ok(c);
         }
+        if (!c->use_gen)
+            efs_conn_bind_gen(c, &g_client.conn_gen[idx][free_slot]);
         g_client.conn_busy[idx][free_slot] = 1;
         pthread_mutex_unlock(&g_client.conn_lock[idx]);
         return c;

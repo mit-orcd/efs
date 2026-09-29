@@ -1,0 +1,7 @@
+ior-hard NP=4 SEGS=3000 shared file, EFS_TRANSPORT=rdma, cold remount before -R
+write_mibs=469.55 write_total_s=1.15 read_mibs=107.03 read_total_s=5.03
+verify_error_lines=0
+file size:
+aggregate filesize  : 537.96 MiB
+verify warnings:
+none

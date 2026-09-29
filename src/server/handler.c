@@ -664,7 +664,7 @@ send_reply:
                     server_raft_host_setattr(req->ino, req->mask, req->mode,
                                               req->uid, req->gid, req->size,
                                               req->mtime, req->mtime_nsec,
-                                              req->atime, &r);
+                                              req->atime, req->atime_nsec, &r);
                     rtype = EFS_MSG_INODE_SETATTR_REPLY;
                 } else if (type == EFS_MSG_INODE_APPEND &&
                            payload_len >= sizeof(struct efs_msg_inode_append)) {

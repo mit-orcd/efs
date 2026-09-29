@@ -1,0 +1,60 @@
+    16.33%           876  efs-fuse  efs-fuse              [.] recv_poller
+            |
+            ---recv_poller
+               start_thread
+     6.40%           343  efs-fuse  efs-fuse              [.] blake3_hash_many_avx2
+            |
+            ---blake3_hash_many_avx2
+               |          
+                --6.38%--blake3_compress_subtree_wide
+                          |          
+                           --6.32%--blake3_compress_subtree_wide
+                                     |          
+                                      --6.21%--blake3_compress_subtree_wide
+                                                |          
+                                                 --5.93%--blake3_compress_subtree_wide
+                                                           blake3_hasher_update.part.0
+                                                           efs_hash
+                                                           |          
+                                                           |--3.71%--hash_write_fragments
+                                                           |          |          
+                                                           |           --3.65%--dcache_put_now.constprop.0
+                                                           |                     put_pool_run.isra.0
+                                                           |                     efs_dcache_flush_ino
+                                                           |                     |          
+                                                           |                      --3.58%--ll_flush
+                                                           |                                0x7f691e48d361
+                                                           |          
+                                                            --2.20%--dcache_put_now.constprop.0
+                                                                      put_pool_run.isra.0
+                                                                      efs_dcache_flush_ino
+                                                                      ll_flush
+                                                                      0x7f691e48d361
+     4.57%           245  efs-fuse  [vdso]                [.] 0x0000000000000b18
+            |
+            ---0x7ffdf1deeb18
+               clock_gettime@@GLIBC_2.17
+               |          
+               |--1.81%--efs_conn_send_msg
+               |          |          
+               |           --1.27%--rpc_send_recv_shard
+               |                     |          
+               |                      --0.54%--efs_client_rpc_getattr
+               |          
+               |--1.32%--efs_conn_send_msg_parts
+               |          put_fragments_parallel_once
+               |          efs_client_put_fragments_parallel
+               |          |          
+               |           --1.31%--dcache_put_now.constprop.0
+               |                     put_pool_run.isra.0
+               |                     efs_dcache_flush_ino
+               |                     ll_flush
+               |                     0x7f691e48d361
+               |          
+                --1.21%--efs_conn_reply_watch_us
+                          put_fragments_parallel_once
+                          efs_client_put_fragments_parallel
+                          |          
+                           --1.16%--dcache_put_now.constprop.0
+                                     |          
+                                      --1.14%--put_pool_run.isra.0

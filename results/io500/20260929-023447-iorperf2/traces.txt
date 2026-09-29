@@ -1,0 +1,27 @@
+perf and strace files (node-local /tmp, not NFS):
+fcstor003 30M efsd.data
+2.0G efsd.strace
+fcstor004 32M efsd.data
+2.4G efsd.strace
+fcstor005 33M efsd.data
+2.4G efsd.strace
+fcstor006 28M efsd.data
+1.9G efsd.strace
+fcstor007 4.4M fuse.data
+244M fuse.strace
+fcstor008 4.8M fuse.data
+242M fuse.strace
+fcstor009 4.7M fuse.data
+243M fuse.strace
+fcstor010 5.0M fuse.data
+242M fuse.strace
+fcstor011 4.6M fuse.data
+245M fuse.strace
+fcstor012 4.9M fuse.data
+242M fuse.strace
+fcstor013 4.1M fuse.data
+243M fuse.strace
+fcstor014 4.3M fuse.data
+241M fuse.strace
+fcstor015 4.4M fuse.data
+243M fuse.strace

@@ -46,13 +46,24 @@ struct efs_conn {
     uint64_t fd_dev;
     uint64_t fd_ino;
     int fd_id_ok;
+    /* Pool-owned conns compare this generation instead of fstat. The pool
+     * is the only closer; a bump means the fd was dropped. */
+    int use_gen;
+    uint64_t gen_seen;
+    uint64_t *gen_live;
+    int64_t last_ok_ms;
 };
 
 /* Take ownership of fd. */
 struct efs_conn *efs_conn_wrap_tcp(int fd, int is_server);
 
-/* 1 if fstat(fd) still matches wrap-time sockfs identity. */
+/* 1 if this handle still owns fd. Pool conns compare a generation the
+ * pool bumps on destroy; everyone else fstats. */
 int efs_conn_fd_matches(const struct efs_conn *c);
+/* Point a pool conn at its slot generation. slot must outlive the conn. */
+void efs_conn_bind_gen(struct efs_conn *c, uint64_t *slot);
+/* Successful send or recv. Checkouts skip the liveness probe for 1 s. */
+void efs_conn_note_ok(struct efs_conn *c);
 
 /* Destroy the QP (if any), close the fd when we still own it, free. */
 void efs_conn_destroy(struct efs_conn *c);

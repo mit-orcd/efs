@@ -1,0 +1,300 @@
+kv-compact: start l0=32 inputs=9 range=3
+kv-compact: end bytes=243655451 ms=689 l0=27 l1=90 rc=0
+kv-compact: start l0=27 inputs=7 range=4
+kv-compact: end bytes=195161839 ms=527 l0=23 l1=90 rc=0
+kv-compact: start l0=23 inputs=8 range=5
+raft-obs: tx->0 enq=88267 drop=0 sent=77539 fail=0 hi=1 rtt_avg=480us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=53468 drop=0 sent=48817 fail=0 hi=1 rtt_avg=437us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=97033us lock_wait_max=3us drain_max=97032us tick_max=1us apply_max=58229us persist_max=99625us applies_in_worst=18 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+kv-compact: end bytes=230592549 ms=632 l0=19 l1=90 rc=0
+kv-compact: start l0=19 inputs=8 range=6
+kv-compact: end bytes=220477967 ms=606 l0=15 l1=90 rc=0
+kv-compact: start l0=15 inputs=7 range=7
+kv-compact: end bytes=217923783 ms=577 l0=28 l1=90 rc=0
+kv-compact: start l0=28 inputs=8 range=8
+kv-compact: end bytes=263559211 ms=702 l0=24 l1=90 rc=0
+kv-compact: start l0=24 inputs=7 range=9
+kv-compact: end bytes=235880621 ms=623 l0=21 l1=90 rc=0
+kv-compact: start l0=21 inputs=6 range=10
+kv-compact: end bytes=189343239 ms=497 l0=18 l1=90 rc=0
+kv-compact: start l0=18 inputs=8 range=14
+kv-compact: end bytes=334760366 ms=894 l0=15 l1=90 rc=0
+kv-compact: start l0=15 inputs=29 range=0
+raft-obs: tx->0 enq=88392 drop=0 sent=77664 fail=0 hi=1 rtt_avg=480us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=53585 drop=0 sent=48930 fail=0 hi=1 rtt_avg=436us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=79436us lock_wait_max=1us drain_max=79435us tick_max=1us apply_max=40034us persist_max=94530us applies_in_worst=5 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+kv-compact: end bytes=1773219658 ms=5350 l0=13 l1=90 rc=0
+kv-compact: start l0=13 inputs=6 range=11
+raft-obs: tx->0 enq=88524 drop=0 sent=77795 fail=0 hi=1 rtt_avg=479us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=53724 drop=0 sent=49069 fail=0 hi=1 rtt_avg=435us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=97717us lock_wait_max=1us drain_max=97716us tick_max=1us apply_max=97708us persist_max=10138us applies_in_worst=3 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+kv-compact: end bytes=248348087 ms=650 l0=27 l1=90 rc=0
+kv-compact: start l0=27 inputs=7 range=15
+kv-compact: end bytes=246743948 ms=649 l0=24 l1=90 rc=0
+kv-compact: start l0=24 inputs=6 range=1
+kv-compact: end bytes=202562813 ms=532 l0=22 l1=90 rc=0
+kv-compact: start l0=22 inputs=6 range=2
+kv-compact: end bytes=258102550 ms=679 l0=20 l1=90 rc=0
+kv-compact: start l0=20 inputs=6 range=3
+kv-compact: end bytes=243903952 ms=633 l0=18 l1=90 rc=0
+kv-compact: start l0=18 inputs=5 range=4
+kv-compact: end bytes=195493374 ms=511 l0=16 l1=90 rc=0
+kv-compact: start l0=16 inputs=6 range=5
+kv-compact: end bytes=231009585 ms=612 l0=14 l1=90 rc=0
+kv-compact: start l0=14 inputs=6 range=6
+kv-compact: end bytes=220758126 ms=585 l0=12 l1=90 rc=0
+kv-compact: start l0=12 inputs=6 range=7
+raft-obs: tx->0 enq=88632 drop=0 sent=77903 fail=0 hi=1 rtt_avg=478us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=53834 drop=0 sent=49179 fail=0 hi=1 rtt_avg=434us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=2442us lock_wait_max=1us drain_max=2442us tick_max=1us apply_max=2436us persist_max=4139us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+kv-compact: end bytes=218270926 ms=575 l0=10 l1=90 rc=0
+kv-compact: start l0=10 inputs=7 range=12
+kv-compact: end bytes=322579717 ms=855 l0=8 l1=90 rc=0
+kv-compact: start l0=8 inputs=7 range=13
+kv-compact: end bytes=276245427 ms=737 l0=6 l1=90 rc=0
+kv-compact: start l0=6 inputs=28 range=0
+raft-obs: tx->0 enq=88736 drop=0 sent=78007 fail=0 hi=1 rtt_avg=478us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=53938 drop=0 sent=49283 fail=0 hi=1 rtt_avg=433us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=10943us lock_wait_max=1us drain_max=10943us tick_max=1us apply_max=37us persist_max=16438us applies_in_worst=2 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+kv-compact: end bytes=1773383805 ms=5268 l0=5 l1=90 rc=0
+kv-compact: start l0=5 inputs=5 range=8
+kv-compact: end bytes=263777451 ms=680 l0=4 l1=90 rc=0
+kv-compact: start l0=4 inputs=5 range=9
+kv-compact: end bytes=236015700 ms=606 l0=3 l1=90 rc=0
+raft-obs: tx->0 enq=88840 drop=0 sent=78111 fail=0 hi=1 rtt_avg=477us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=54042 drop=0 sent=49387 fail=0 hi=1 rtt_avg=433us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=13940us lock_wait_max=20us drain_max=13940us tick_max=1us apply_max=37us persist_max=5823us applies_in_worst=2 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+raft-obs: tx->0 enq=92680 drop=0 sent=81084 fail=0 hi=1 rtt_avg=460us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=57121 drop=0 sent=51907 fail=0 hi=1 rtt_avg=413us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=17405us lock_wait_max=1us drain_max=17405us tick_max=27us apply_max=16868us persist_max=1286us applies_in_worst=11 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+kv-compact: start l0=19 inputs=5 range=10
+kv-compact: end bytes=189632645 ms=506 l0=17 l1=90 rc=0
+kv-compact: start l0=17 inputs=6 range=11
+kv-compact: end bytes=248780858 ms=664 l0=15 l1=90 rc=0
+kv-compact: start l0=15 inputs=7 range=14
+kv-compact: end bytes=335372918 ms=920 l0=13 l1=90 rc=0
+kv-compact: start l0=13 inputs=28 range=0
+raft-obs: tx->0 enq=97405 drop=0 sent=84723 fail=0 hi=1 rtt_avg=442us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=60655 drop=0 sent=54804 fail=0 hi=1 rtt_avg=392us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=99152us lock_wait_max=1us drain_max=99151us tick_max=1us apply_max=30730us persist_max=79649us applies_in_worst=27 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+kv-compact: end bytes=1773808530 ms=5451 l0=44 l1=90 rc=0
+kv-compact: start l0=44 inputs=7 range=1
+kv-compact: end bytes=202812911 ms=559 l0=41 l1=90 rc=0
+kv-compact: start l0=41 inputs=7 range=2
+kv-compact: end bytes=258360224 ms=715 l0=54 l1=90 rc=0
+kv-compact: start l0=54 inputs=8 range=3
+raft-obs: tx->0 enq=98389 drop=0 sent=85527 fail=0 hi=1 rtt_avg=438us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=61457 drop=0 sent=55509 fail=0 hi=1 rtt_avg=387us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=107744us lock_wait_max=1us drain_max=107744us tick_max=1us apply_max=107741us persist_max=105911us applies_in_worst=16 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+kv-compact: end bytes=244512492 ms=689 l0=50 l1=90 rc=0
+kv-compact: start l0=50 inputs=7 range=4
+kv-compact: end bytes=196197719 ms=540 l0=46 l1=90 rc=0
+kv-compact: start l0=46 inputs=8 range=5
+kv-compact: end bytes=231729762 ms=629 l0=42 l1=90 rc=0
+kv-compact: start l0=42 inputs=8 range=6
+kv-compact: end bytes=221241918 ms=618 l0=38 l1=90 rc=0
+kv-compact: start l0=38 inputs=8 range=7
+kv-compact: end bytes=218647925 ms=603 l0=50 l1=90 rc=0
+kv-compact: start l0=50 inputs=10 range=8
+kv-compact: end bytes=264628270 ms=745 l0=45 l1=89 rc=0
+kv-compact: start l0=45 inputs=9 range=9
+kv-compact: end bytes=236763230 ms=672 l0=40 l1=89 rc=0
+kv-compact: start l0=40 inputs=10 range=12
+raft-obs: tx->0 enq=99145 drop=0 sent=86145 fail=0 hi=1 rtt_avg=435us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=62113 drop=0 sent=56068 fail=0 hi=1 rtt_avg=384us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=101286us lock_wait_max=1us drain_max=101286us tick_max=16us apply_max=35586us persist_max=102181us applies_in_worst=23 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+kv-compact: end bytes=322785729 ms=913 l0=35 l1=89 rc=0
+kv-compact: start l0=35 inputs=10 range=13
+kv-compact: end bytes=277101929 ms=818 l0=46 l1=89 rc=0
+kv-compact: start l0=46 inputs=10 range=15
+kv-compact: end bytes=247651547 ms=722 l0=40 l1=89 rc=0
+kv-compact: start l0=40 inputs=32 range=0
+raft-obs: tx->0 enq=99842 drop=0 sent=86717 fail=0 hi=1 rtt_avg=432us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=62681 drop=0 sent=56553 fail=0 hi=1 rtt_avg=381us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=101826us lock_wait_max=1us drain_max=101826us tick_max=1us apply_max=74005us persist_max=104285us applies_in_worst=50 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+kv-compact: end bytes=1776490368 ms=5467 l0=51 l1=89 rc=0
+kv-compact: start l0=51 inputs=9 range=10
+kv-compact: end bytes=190769368 ms=546 l0=45 l1=89 rc=0
+kv-compact: start l0=45 inputs=10 range=11
+kv-compact: end bytes=250071043 ms=716 l0=39 l1=89 rc=0
+kv-compact: start l0=39 inputs=11 range=14
+kv-compact: end bytes=336656817 ms=968 l0=49 l1=90 rc=0
+kv-compact: start l0=49 inputs=9 range=1
+raft-obs: tx->0 enq=100684 drop=0 sent=87402 fail=0 hi=1 rtt_avg=429us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=63264 drop=0 sent=57051 fail=0 hi=1 rtt_avg=378us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=98401us lock_wait_max=1us drain_max=98401us tick_max=1us apply_max=66476us persist_max=100427us applies_in_worst=30 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+kv-compact: end bytes=203734818 ms=585 l0=44 l1=90 rc=0
+kv-compact: start l0=44 inputs=9 range=2
+kv-compact: end bytes=259393901 ms=738 l0=39 l1=90 rc=0
+kv-compact: start l0=39 inputs=8 range=3
+kv-compact: end bytes=245044241 ms=671 l0=35 l1=90 rc=0
+kv-compact: start l0=35 inputs=7 range=4
+kv-compact: end bytes=197180755 ms=567 l0=31 l1=90 rc=0
+kv-compact: start l0=31 inputs=8 range=5
+kv-compact: end bytes=232600386 ms=657 l0=43 l1=90 rc=0
+kv-compact: start l0=43 inputs=9 range=6
+kv-compact: end bytes=221754333 ms=629 l0=38 l1=90 rc=0
+kv-compact: start l0=38 inputs=9 range=7
+kv-compact: end bytes=219683087 ms=627 l0=33 l1=90 rc=0
+kv-compact: start l0=33 inputs=8 range=8
+kv-compact: end bytes=265720995 ms=749 l0=29 l1=90 rc=0
+kv-compact: start l0=29 inputs=8 range=9
+raft-obs: tx->0 enq=101405 drop=0 sent=87973 fail=0 hi=1 rtt_avg=426us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=64093 drop=0 sent=57711 fail=0 hi=1 rtt_avg=374us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=149446us lock_wait_max=3us drain_max=149446us tick_max=1us apply_max=50687us persist_max=100689us applies_in_worst=33 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+kv-compact: end bytes=237202668 ms=663 l0=41 l1=90 rc=0
+kv-compact: start l0=41 inputs=10 range=12
+kv-compact: end bytes=323194558 ms=930 l0=36 l1=90 rc=0
+kv-compact: start l0=36 inputs=9 range=13
+kv-compact: end bytes=269615828 ms=787 l0=31 l1=91 rc=0
+kv-compact: start l0=31 inputs=31 range=0
+raft-obs: tx->0 enq=102111 drop=0 sent=88572 fail=0 hi=1 rtt_avg=424us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=64554 drop=0 sent=58124 fail=0 hi=1 rtt_avg=371us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=113341us lock_wait_max=1us drain_max=113341us tick_max=1us apply_max=52463us persist_max=109609us applies_in_worst=29 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+kv-compact: end bytes=1777196380 ms=5551 l0=59 l1=91 rc=0
+kv-compact: start l0=59 inputs=10 range=15
+kv-compact: end bytes=248443347 ms=717 l0=53 l1=91 rc=0
+kv-compact: start l0=53 inputs=8 range=10
+kv-compact: backpressure n_l0=53
+kv-compact: end bytes=192090347 ms=514 l0=48 l1=91 rc=0
+kv-compact: start l0=48 inputs=9 range=11
+report-split nrec=5768 pack_ms=20 push_ms=0 finish_ms=46 rc=0
+kv-compact: end bytes=251497981 ms=706 l0=59 l1=91 rc=0
+kv-compact: start l0=59 inputs=11 range=14
+raft-obs: tx->0 enq=102802 drop=0 sent=89071 fail=0 hi=1 rtt_avg=421us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=65035 drop=0 sent=58496 fail=0 hi=1 rtt_avg=369us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=548921us lock_wait_max=1us drain_max=548920us tick_max=2us apply_max=548890us persist_max=105437us applies_in_worst=48 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=46511us
+kv-compact: end bytes=336962393 ms=968 l0=53 l1=92 rc=0
+kv-compact: start l0=53 inputs=9 range=1
+kv-compact: end bytes=204554341 ms=610 l0=48 l1=92 rc=0
+kv-compact: start l0=48 inputs=9 range=2
+kv-compact: end bytes=260211751 ms=756 l0=59 l1=92 rc=0
+kv-compact: start l0=59 inputs=10 range=3
+kv-compact: end bytes=246024542 ms=717 l0=53 l1=92 rc=0
+kv-compact: start l0=53 inputs=9 range=4
+kv-compact: end bytes=198718657 ms=571 l0=47 l1=92 rc=0
+kv-compact: start l0=47 inputs=10 range=5
+kv-compact: end bytes=234054135 ms=686 l0=41 l1=92 rc=0
+kv-compact: start l0=41 inputs=9 range=6
+kv-compact: end bytes=222392259 ms=632 l0=52 l1=92 rc=0
+kv-compact: start l0=52 inputs=10 range=7
+raft-obs: tx->0 enq=103609 drop=0 sent=89707 fail=0 hi=1 rtt_avg=418us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=65558 drop=0 sent=58924 fail=0 hi=1 rtt_avg=366us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=21 pump_hold_max=109579us lock_wait_max=1us drain_max=109579us tick_max=1us apply_max=109021us persist_max=114935us applies_in_worst=39 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+kv-compact: end bytes=220885894 ms=642 l0=46 l1=92 rc=0
+kv-compact: start l0=46 inputs=10 range=8
+kv-compact: end bytes=267003510 ms=750 l0=40 l1=92 rc=0
+kv-compact: start l0=40 inputs=10 range=9
+kv-compact: end bytes=238330080 ms=696 l0=34 l1=92 rc=0
+kv-compact: start l0=34 inputs=32 range=0
+kv-compact: backpressure n_l0=50
+kv-compact: end bytes=1778178932 ms=5483 l0=45 l1=92 rc=0
+kv-compact: start l0=45 inputs=11 range=12
+raft-obs: tx->0 enq=104295 drop=0 sent=90253 fail=0 hi=1 rtt_avg=416us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=66161 drop=0 sent=59423 fail=0 hi=1 rtt_avg=364us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=22 pump_hold_max=2249091us lock_wait_max=19us drain_max=2249090us tick_max=1us apply_max=2249059us persist_max=109022us applies_in_worst=41 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+report-split nrec=2108 pack_ms=0 push_ms=0 finish_ms=1080 rc=-13
+kv-compact: end bytes=324100696 ms=924 l0=55 l1=92 rc=0
+kv-compact: start l0=55 inputs=13 range=13
+kv-compact: backpressure n_l0=55
+kv-compact: end bytes=280141048 ms=808 l0=48 l1=91 rc=0
+kv-compact: start l0=48 inputs=8 range=10
+kv-compact: backpressure n_l0=64
+kv-compact: end bytes=193446505 ms=535 l0=59 l1=91 rc=0
+kv-compact: start l0=59 inputs=10 range=11
+raft-host: mkdir parent=2923125 name=libcurl-8.7.1-hca28451_0 rc=-13 hint=0 psh=2677 csh=2870 dsh=0 stage=11 ino=0
+kv-compact: end bytes=252842412 ms=699 l0=53 l1=91 rc=0
+kv-compact: start l0=53 inputs=10 range=15
+kv-compact: end bytes=249049405 ms=689 l0=47 l1=91 rc=0
+kv-compact: start l0=47 inputs=9 range=1
+kv-compact: end bytes=205024759 ms=589 l0=58 l1=91 rc=0
+kv-compact: start l0=58 inputs=10 range=2
+kv-compact: end bytes=260865161 ms=736 l0=52 l1=91 rc=0
+kv-compact: start l0=52 inputs=11 range=14
+raft-obs: tx->0 enq=105198 drop=0 sent=90942 fail=0 hi=1 rtt_avg=413us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=66990 drop=0 sent=60091 fail=0 hi=1 rtt_avg=360us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=23 pump_hold_max=1583001us lock_wait_max=1us drain_max=1583001us tick_max=2us apply_max=1582996us persist_max=102432us applies_in_worst=56 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=3109us pub_max=0us
+kv-compact: backpressure n_l0=52
+kv-compact: end bytes=336255682 ms=970 l0=46 l1=92 rc=0
+kv-compact: start l0=46 inputs=9 range=3
+report-split nrec=1458 pack_ms=6 push_ms=0 finish_ms=140 rc=0
+kv-compact: end bytes=246142555 ms=686 l0=57 l1=92 rc=0
+kv-compact: start l0=57 inputs=9 range=4
+kv-compact: end bytes=199040716 ms=561 l0=51 l1=92 rc=0
+kv-compact: start l0=51 inputs=10 range=5
+kv-compact: end bytes=234213626 ms=668 l0=45 l1=92 rc=0
+kv-compact: start l0=45 inputs=10 range=6
+kv-compact: end bytes=222669909 ms=638 l0=39 l1=92 rc=0
+kv-compact: start l0=39 inputs=32 range=0
+raft-obs: tx->0 enq=106951 drop=0 sent=92313 fail=0 hi=1 rtt_avg=407us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=68466 drop=0 sent=61310 fail=0 hi=1 rtt_avg=353us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=23 pump_hold_max=217132us lock_wait_max=1us drain_max=217131us tick_max=1us apply_max=217099us persist_max=83757us applies_in_worst=33 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=46511us pub_max=140923us
+raft-host: apply create rc=-13 index=12131543 parent=2677496 name=xproto.h
+kv-compact: end bytes=1783385687 ms=5446 l0=50 l1=92 rc=0
+kv-compact: start l0=50 inputs=10 range=7
+kv-compact: end bytes=221186607 ms=632 l0=44 l1=92 rc=0
+kv-compact: start l0=44 inputs=10 range=8
+raft-obs: tx->0 enq=110786 drop=0 sent=95169 fail=0 hi=1 rtt_avg=396us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=70873 drop=0 sent=63234 fail=0 hi=1 rtt_avg=343us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=23 pump_hold_max=130539us lock_wait_max=1us drain_max=130539us tick_max=2us apply_max=127884us persist_max=97349us applies_in_worst=97 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=46511us pub_max=0us
+kv-compact: end bytes=267085347 ms=754 l0=38 l1=92 rc=0
+kv-compact: start l0=38 inputs=10 range=9
+kv-compact: end bytes=238577409 ms=675 l0=48 l1=92 rc=0
+kv-compact: start l0=48 inputs=11 range=12
+kv-compact: end bytes=324453992 ms=901 l0=42 l1=92 rc=0
+kv-compact: start l0=42 inputs=8 range=10
+kv-compact: end bytes=193610574 ms=521 l0=37 l1=92 rc=0
+kv-compact: start l0=37 inputs=10 range=13
+kv-compact: end bytes=280328591 ms=786 l0=32 l1=92 rc=0
+kv-compact: start l0=32 inputs=8 range=1
+kv-compact: end bytes=205221570 ms=570 l0=28 l1=92 rc=0
+kv-compact: start l0=28 inputs=8 range=11
+kv-compact: end bytes=252867718 ms=696 l0=55 l1=92 rc=0
+kv-compact: start l0=55 inputs=10 range=15
+kv-compact: backpressure n_l0=55
+kv-compact: end bytes=248823114 ms=698 l0=49 l1=92 rc=0
+kv-compact: start l0=49 inputs=9 range=2
+kv-compact: end bytes=261024285 ms=702 l0=44 l1=92 rc=0
+kv-compact: start l0=44 inputs=9 range=3
+raft-obs: tx->0 enq=113157 drop=0 sent=97010 fail=0 hi=1 rtt_avg=389us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=72273 drop=0 sent=64391 fail=0 hi=1 rtt_avg=337us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=24 pump_hold_max=1035450us lock_wait_max=1us drain_max=1035449us tick_max=1us apply_max=1033199us persist_max=104268us applies_in_worst=81 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=46511us pub_max=0us
+report-split nrec=1 pack_ms=0 push_ms=0 finish_ms=239 rc=-13
+kv-compact: end bytes=246043966 ms=689 l0=54 l1=92 rc=0
+kv-compact: start l0=54 inputs=11 range=14
+kv-compact: backpressure n_l0=54
+kv-compact: end bytes=335701987 ms=917 l0=48 l1=93 rc=0
+kv-compact: start l0=48 inputs=32 range=0
+kv-compact: backpressure n_l0=64
+kv-compact: end bytes=1790441018 ms=5443 l0=59 l1=93 rc=0
+kv-compact: start l0=59 inputs=9 range=4
+kv-compact: end bytes=198878146 ms=558 l0=53 l1=93 rc=0
+kv-compact: start l0=53 inputs=10 range=5
+kv-compact: end bytes=234037783 ms=660 l0=47 l1=93 rc=0
+kv-compact: start l0=47 inputs=10 range=6
+raft-obs: tx->0 enq=114291 drop=0 sent=97854 fail=0 hi=1 rtt_avg=386us get_avg=0us get_max=8ms
+raft-obs: tx->1 enq=74053 drop=0 sent=72780 fail=0 hi=5 rtt_avg=771us get_avg=3us get_max=262ms
+raft-obs: tx->3 enq=73485 drop=0 sent=65302 fail=0 hi=1 rtt_avg=333us get_avg=0us get_max=7ms
+raft-obs: wait_timeouts=25 pump_hold_max=5977103us lock_wait_max=1us drain_max=5977102us tick_max=1us apply_max=5976844us persist_max=50066us applies_in_worst=82 arc_miss=0 arc_term_miss=0 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=46511us pub_max=1974us
+report-split nrec=1 pack_ms=0 push_ms=0 finish_ms=1144 rc=-13

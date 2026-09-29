@@ -1,0 +1,4 @@
+FUSE_CHECK fstype=fuse.efs-fuse
+FUSE_OK
+WALL 13.660
+ls: cannot access '/tmp/efs-mount/measure/dd-fcstor011.bin': No such file or directory

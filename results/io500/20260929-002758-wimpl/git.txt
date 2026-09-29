@@ -1,0 +1,41 @@
+bbcbcb5ad779
+ M .cursor/rules/efs-project-state.mdc
+ M docs/arch/START-HERE.md
+ M docs/architecture-full.md
+ M docs/architecture.html
+ M docs/project-history.md
+ M include/efs/raft.h
+ M src/client/client_internal.h
+ M src/client/efs_fuse.c
+ M src/client/inode_rpc.c
+ M src/client/ops.c
+ M src/client/write.c
+ M src/meta/meta_apply.c
+ M src/raft/raft.c
+ M src/server/raft_host.c
+?? results/io500/20260928-135647-rdma/
+?? results/io500/20260928-150609-rdma/
+?? results/io500/20260928-150609-restore-preflight.txt
+?? results/io500/20260928-150609-tcp/
+?? results/io500/20260928-151707-restore-preflight.txt
+?? results/io500/20260928-151707-tcp/
+?? results/io500/20260928-165006-nfs-fstor007/
+?? results/io500/20260928-165158-nfs-fstor007/
+?? results/io500/20260928-165219-nfs-fstor007/
+?? results/io500/20260929-002758-wimpl/
+?? results/leaks/20260927-035212/
+?? results/leaks/20260927-035239/
+?? results/measure/20260926-045319-mkdir-hammer/
+?? results/measure/20260926-045534-mkdir-hammer/
+?? results/measure/20260926-050140-mkdir-hammer/
+?? results/measure/20260926-051728-mkdir-hammer/
+?? results/measure/20260926-051907-mkdir-hammer/
+?? results/measure/20260926-054959-mkdir-hammer/
+?? results/measure/20260926-055234-mkdir-hammer/
+?? results/measure/20260926-055508-mkdir-hammer/
+?? results/measure/20260926-060739-mkdir-hammer/
+?? results/measure/20260926-061104-mkdir-hammer/
+?? results/measure/20260926-061407-mkdir-hammer/
+?? results/measure/20260926-061605-mkdir-hammer/
+?? results/measure/20260926-110435-mkdir-hammer/
+?? results/measure/20260926-110632-mkdir-hammer/

@@ -1,0 +1,47 @@
+Agent pid 374083
+Agent pid 374083
+Agent pid 374083
+Agent pid 374083
+Agent pid 374083
+Agent pid 374083
+Agent pid 374083
+Agent pid 374083
+--------------------------------------------------------------------------
+PMIx was unable to find a usable compression library
+on the system. We will therefore be unable to compress
+large data streams. This may result in longer-than-normal
+startup times and larger memory footprints. We will
+continue, but strongly recommend installing zlib or
+a comparable compression library for better user experience.
+
+You can suppress this warning by adding "pcompress_base_silence_warning=1"
+to your PMIx MCA default parameter file, or by adding
+"PMIX_MCA_pcompress_base_silence_warning=1" to your environment.
+--------------------------------------------------------------------------
+IO500 version 02091cf254d8-13 (standard)
+ERROR INVALID (src/phase_dbg.c:15) stonewall-time 1s != 300s
+8 more processes have sent help message help-pcompress.txt / unavailable
+1 more process has sent help message help-pcompress.txt / unavailable
+ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime
+[RESULT]       ior-easy-write        2.916597 GiB/s : time 22.038 seconds [INVALID]
+ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime
+[RESULT]    mdtest-easy-write        3.417608 kIOPS : time 2.948 seconds [INVALID]
+[      ]            timestamp        0.000000 kIOPS : time 0.008 seconds
+ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime
+[RESULT]       ior-hard-write        0.290995 GiB/s : time 72.814 seconds [INVALID]
+ERROR INVALID (src/main.c:490) Runtime is smaller than expected minimum runtime
+[RESULT]    mdtest-hard-write        0.756536 kIOPS : time 2.499 seconds [INVALID]
+ERROR INVALID (src/main.c:486) Resulting score shouldn't be 0.0
+[RESULT]                 find        0.000000 kIOPS : time 0.000 seconds [INVALID]
+[RESULT]        ior-easy-read        3.092085 GiB/s : time 15.865 seconds
+[RESULT]     mdtest-easy-stat        3.247854 kIOPS : time 3.010 seconds
+[RESULT]        ior-hard-read        1.524904 GiB/s : time 12.393 seconds
+[RESULT]     mdtest-hard-stat        5.682773 kIOPS : time 1.345 seconds
+[RESULT]   mdtest-easy-delete        2.223499 kIOPS : time 5.484 seconds
+[RESULT]     mdtest-hard-read        4.895151 kIOPS : time 1.372 seconds
+[RESULT]   mdtest-hard-delete        0.537693 kIOPS : time 3.074 seconds
+ERROR INVALID (src/main.c:486) Resulting score shouldn't be 0.0
+[      ]  ior-rnd4K-easy-read        0.000000 GiB/s : time 0.000 seconds [INVALID]
+[SCORE ] Bandwidth 1.414373 GiB/s : IOPS 2.235811 kiops : TOTAL 1.778278 [INVALID]
+
+The result files are stored in the directory: /tmp/efs-mount/io500-results/2026.09.28-11.06.31

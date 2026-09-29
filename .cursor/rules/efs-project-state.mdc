@@ -82,6 +82,11 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   1 MiB merge reads; D11 closes D6 — the Raft-log fsync is 0.4 ms, the
   100 ms mode is the compactor's own segment, do not move `mdraft/`.
   D8 is answered: `pub_p50` 3 ms with a pump-hold tail; no wire change.
+  Implemented and rolled 05:11Z Sep 29 (`a53b253f2455-dirty`), not
+  gated: D9 (no pump wait; publish BUSY when L0 is hot), D10's ratio
+  and the range-0 split (L0 byte cap, plus the D12 file-cap
+  backstop rolled 12:29Z), D2's parallel
+  chunk-map window. D11 stands: do not move `mdraft/`.
 - **EEXIST / `ino_dup` on a unique never-used name is an allocator bug,
   never benign.** Two names on one inode row = duplicate ino (Sep 19–20:
   IO-500 76108 read errors + 27 undeletable files; posix `cafeé`/`aaaa…`).
@@ -90,27 +95,39 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 
 - **Only live cluster: port 19810**, fcstor003–006 = node 1–4 =
   172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA
-  (`54a500da9dc8-dirty`, `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
-  Rolled `--all` 04:08Z Sep 29 with `--perf --strace` (RDMA). Group 0
-  leader 1 term 9418 commit==applied 13687019; group 2 leader 1 term
-  2902 commit==applied 12107762.   Clients fcstor007–015 remounted 04:08Z and fcstor003–006's
-  efs-fuse remounted 04:13Z, all FUSE_OK, perf and strace attached
-  and still running (the recorder starts in the daemon child).
-  Recorders stopped 04:27Z (perf children are zombies until
-  `stop_recorder`; `pgrep -x perf` counts them). Files node-local and
-  final: `/tmp/efs-perf/efsd.data` + `efsd.strace` (2.4–3.7 GB) on
-  003–006, `fuse.data` + `fuse.strace` on 003–015. Analysis:
-  `results/measure/20260929-040800-idle-trace/ana`. A user `ecopy`
-  04:15–04:22Z wrote 408K fragments per server; zero `raft-snap: start`
-  (W22.1 holds), 26K `access()` for 408K creates (D7 holds), but the
-  pump blocked in `kv_maybe_flush_locked` on L0 back-pressure for
-  4.1 / 1.7 / 24.2 / 2.7 / 3.6 s on fcstor004 (each = one compaction;
-  range 0 is 1.8 GB per rewrite; 433 compactions / 159 GB in 20 min on
-  a 5.3 GB table) → `apply-sleep` 400 ms → REPORT `rc=-13` and g0
-  9418→9421, g2 2902→2904. That is the remaining election trigger
-  (W23). In tree, not rolled: O(1) `disk_log_new_bytes` (the tick walk
-  was 1–1.25 %), `setvbuf` 1 MiB on segment writes (5.25M 4 KiB
-  `write`s). Prior roll 02:35Z
+  (`a53b253f2455-dirty`, `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
+  Stopped 13:53Z Sep 29 (`~/efs-runs/stop32.log`) after the
+  13:08Z `--perf --strace` roll. Reduction
+  `results/measure/20260929-130800-ddposix/ana`: D12's file-cap
+  backstop rewrote 67 GB of L1 during two 100 GiB copies (L0 peak
+  379) and `fsync` returned EIO. D13 is in the tree (14:20Z), not
+  rolled, not gated: over the file cap, and only when no range
+  meets 1/8 or the 1 GiB byte cap, that range's L0 files merge
+  into one L0 file and its L1 is not opened. The shard-I/O
+  lock is dropped before a fragment GET (14:50Z, in tree, not
+  rolled): reclaim no longer holds it across the 30 s recv that
+  wedged ll_fsync on the 12:36Z IOR. A 15:15Z review of the 24 h
+  diff fixed six more things in the tree (START-HERE §1b): the
+  256-run flush cap vs 512 ranges, O(blocks) `kv_seg_data_bytes`
+  under `l->mu`, the fold's L0 position, a >1 MiB merge block,
+  prefetch's redundant map pull, and a chain pointer used after
+  the unlocked PUT. Next is 10's one IOR.
+  Files, node-local:
+  `/tmp/efs-perf/efsd.data` + `efsd.strace` (13–20 GB) on 003–006,
+  `fuse.data` + `fuse.strace` on 003–015. Prior roll 12:29Z was
+  the same tree without recorders. The 12:36Z 9×4 debug IOR
+  (`results/io500/20260929-123635-rdma`) finished ior-easy-write at
+  2.218 GiB/s and mdtest-easy-write at 1.765 kIOPS, then ior-hard-write
+  aborted on fsync with no bandwidth. Prior
+  roll 05:11Z
+  was the same id without those changes.
+  Prior roll 04:08Z (`54a500da9dc8-dirty`): recorders stopped
+  04:27Z. Analysis `results/measure/20260929-040800-idle-trace/ana`.
+  A user `ecopy` 04:15–04:22Z wrote 408K fragments per server; zero
+  `raft-snap: start` (W22.1 holds), 26K `access()` for 408K creates
+  (D7 holds), but the pump blocked in `kv_maybe_flush_locked` for
+  4.1 / 1.7 / 24.2 / 2.7 / 3.6 s on fcstor004. That is what the 05:11Z
+  roll changes (W23). Prior to that, 02:35Z
   (`bbcbcb5ad779-dirty`) recorded the IOR abort in
   `results/io500/20260929-023447-iorperf2`; those recorders were
   stopped at 02:41Z. Prior to that, 00:28Z.

@@ -355,11 +355,15 @@ int efs_conn_send_msg_parts(struct efs_conn *c, uint8_t type,
                                 part2, n2) != 0)
             return EFS_ERR_NET;
         c->recv_chan = EFS_CONN_RDMA;
+        efs_conn_note_ok(c);
         return EFS_OK;
     }
     c->recv_chan = EFS_CONN_TCP;
-    return efs_send_msg_parts(c->fd, type, part1, part1_len,
-                              part2, part2_len);
+    if (efs_send_msg_parts(c->fd, type, part1, part1_len,
+                           part2, part2_len) != 0)
+        return EFS_ERR_NET;
+    efs_conn_note_ok(c);
+    return EFS_OK;
 }
 
 int efs_conn_send_msg(struct efs_conn *c, uint8_t type, const void *payload,
@@ -403,8 +407,12 @@ static int conn_rdma_frame(struct efs_conn *c, uint8_t *type,
 int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **payload,
                       uint32_t *payload_len)
 {
-    if (!c->rc || c->recv_chan == EFS_CONN_TCP)
-        return efs_recv_msg(c->fd, type, payload, payload_len);
+    if (!c->rc || c->recv_chan == EFS_CONN_TCP) {
+        int rc = efs_recv_msg(c->fd, type, payload, payload_len);
+        if (rc == 0)
+            efs_conn_note_ok(c);
+        return rc;
+    }
 
     const uint8_t *pl = NULL;
     uint32_t plen = 0;
@@ -419,6 +427,7 @@ int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **payload,
         if (payload)
             *payload = NULL;
         efs_rdma_recv_repost(c->rc);
+        efs_conn_note_ok(c);
         return EFS_OK;
     }
     uint8_t *buf = malloc(plen);
@@ -429,6 +438,7 @@ int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **payload,
     memcpy(buf, pl, plen);
     *payload = buf;
     efs_rdma_recv_repost(c->rc);
+    efs_conn_note_ok(c);
     return EFS_OK;
 }
 

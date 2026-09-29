@@ -1,0 +1,3 @@
+fcstor015 begin 13:58:11Z
+fcstor015 fuse window=--time 3695470.842,3697450.842
+fcstor015 ANA_DONE 13:58:19Z

@@ -4770,6 +4770,18 @@ int efs_meta_apply_utimens(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     if ((u->mask & EFS_META_SET_MTIME) && u->mtime_gen == 0)
         return EFS_ERR_INVAL;
     rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc == EFS_ERR_NOT_FOUND && u->lane_bits && u->expect_gen &&
+        (u->mask & EFS_META_SET_MTIME)) {
+        memset(it, 0, sizeof(it));
+        rc = fence_lane_bits(kv, ino, u->expect_gen, u->lane_bits,
+                             utimens_lane_upd, (void *)&u->mtime_gen, it, &n,
+                             k_ln, v_ln);
+        if (rc != EFS_OK)
+            return rc;
+        if (n == 0)
+            return EFS_OK;
+        return efs_kv_batch(kv, it, n);
+    }
     if (rc != EFS_OK)
         return rc;
     if (u->expect_gen != 0 && u->expect_gen != row.generation)

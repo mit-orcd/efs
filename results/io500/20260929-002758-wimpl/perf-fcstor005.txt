@@ -1,0 +1,9 @@
+WARNING: The efsd.data file's data size field is 0 which is unexpected.
+Was the 'perf record' command properly terminated?
+Error:
+failed to process sample
+WARNING: The efsd.data file's data size field is 0 which is unexpected.
+Was the 'perf record' command properly terminated?
+Error:
+failed to process sample
+REPORT_OK fcstor005 efsd-19810 85

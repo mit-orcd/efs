@@ -1,0 +1,54 @@
+posix cpu+trace profile label=r1 build=db2b88c4802a-dirty host=fcstor007
+leaders g0=fcstor003 g2=fcstor004  record_s=55
+suite cpu pass rc=1; trace pass rc=1
+(rc=1 with 0 EFS-bugs is compare exit 2: mmap SKIP on 5.14)
+
+== suite lines ==
+/home/erbmi1/git/efs/results/measure/20260928-093100-posix-prof-r1/posix-cpu.log:POSIX suite: 198/201 pass, 0 fail, 3 skip, 0 notrun  (13.7s)
+/home/erbmi1/git/efs/results/measure/20260928-093100-posix-prof-r1/posix-cpu.log:POSIX suite: 200/201 pass, 0 fail, 1 skip, 0 notrun  (54.9s)
+/home/erbmi1/git/efs/results/measure/20260928-093100-posix-prof-r1/posix-cpu.log:  EFS BUGS         : 0  (baseline PASS, target FAIL)
+/home/erbmi1/git/efs/results/measure/20260928-093100-posix-prof-r1/posix-trace.log:POSIX suite: 198/201 pass, 0 fail, 3 skip, 0 notrun  (13.7s)
+/home/erbmi1/git/efs/results/measure/20260928-093100-posix-prof-r1/posix-trace.log:POSIX suite: 200/201 pass, 0 fail, 1 skip, 0 notrun  (45.2s)
+/home/erbmi1/git/efs/results/measure/20260928-093100-posix-prof-r1/posix-trace.log:  EFS BUGS         : 0  (baseline PASS, target FAIL)
+
+== cpu-clock top (fuse) ==
+    21.29%          2643  efs-fuse  [vdso]                [.] 0x0000000000000b18
+            |
+            ---0x7ffcef886b18
+               clock_gettime@@GLIBC_2.17
+               |          
+               |--19.31%--0x41166b
+               |          |          
+               |          |--17.21%--0x4123bc
+               |          |          |          
+               |          |          |--9.50%--0x4390bb
+               |          |          |          |          
+               |          |          |          |--3.19%--0x43a79b
+               |          |          |          |          |          
+               |          |          |          |           --3.16%--0x42675f
+               |          |          |          |                     |          
+               |          |          |          |                     |--2.13%--0x40c797
+               |          |          |          |                     |          0x40c7e1
+               |          |          |          |                     |          0x7f8d8acfdf5f
+               |          |          |          |                     |          
+               |          |          |          |                      --1.02%--0x40c5ed
+               |          |          |          |                                0x40c691
+               |          |          |          |                                0x7f8d8acfdf5f
+               |          |          |          |          
+               |          |          |          |--2.00%--0x439a38
+               |          |          |          |          0x425b51
+               |          |          |          |          |          
+               |          |          |          |           --1.97%--0x40def1
+               |          |          |          |                     0x7f8d8acf113c
+               |          |          |          |          
+               |          |          |          |--1.97%--0x439c2c
+               |          |          |          |          |          
+               |          |          |          |          |--1.32%--0x4258d9
+               |          |          |          |          |          0x40bf8b
+               |          |          |          |          |          |          
+               |          |          |          |          |           --0.55%--0x40c508
+               |          |          |          |          |                     0x7f8d8acf0c68
+               |          |          |          |          |          
+               |          |          |          |           --0.64%--0x425581
+               |          |          |          |                     0x40bb9e
+               |          |          |          |          

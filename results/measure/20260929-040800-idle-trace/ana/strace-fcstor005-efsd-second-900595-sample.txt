@@ -1,0 +1,60 @@
+900595 00:07:18.936238 restart_syscall(<... resuming interrupted poll ...> <unfinished ...>
+900595 00:07:18.936268 <... restart_syscall resumed>) = 0 <0.000025>
+900595 00:07:18.936284 poll([{fd=7, events=POLLIN}], 1, 1 <unfinished ...>
+900595 00:07:18.937355 <... poll resumed>) = 0 (Timeout) <0.001061>
+900595 00:07:18.937370 poll([{fd=7, events=POLLIN}], 1, 1 <unfinished ...>
+900595 00:07:18.938374 <... poll resumed>) = 1 ([{fd=7, revents=POLLIN}]) <0.000996>
+900595 00:07:18.938389 read(7, "\300\n\306\1\0\0\0\0", 8) = 8 <0.000007>
+900595 00:07:18.938414 read(7, 0x7ff22c0e47b0, 8) = -1 EAGAIN (Resource temporarily unavailable) <0.000007>
+900595 00:07:18.938442 write(8, "\1\0\0\0\0\0\0\0", 8) = 8 <0.000009>
+900595 00:07:18.938470 poll([{fd=7, events=POLLIN}], 1, 1 <unfinished ...>
+900595 00:07:18.939560 <... poll resumed>) = 0 (Timeout) <0.001083>
+900595 00:07:18.939578 poll([{fd=7, events=POLLIN}], 1, 1 <unfinished ...>
+900595 00:07:18.940645 <... poll resumed>) = 0 (Timeout) <0.001060>
+900595 00:07:18.940660 poll([{fd=7, events=POLLIN}], 1, 1 <unfinished ...>
+900595 00:07:18.941727 <... poll resumed>) = 0 (Timeout) <0.001060>
+900595 00:07:18.941743 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001060>
+900595 00:07:18.942829 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001054>
+900595 00:07:18.943902 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.944980 poll([{fd=7, events=POLLIN}], 1, 1 <unfinished ...>
+900595 00:07:18.946048 <... poll resumed>) = 0 (Timeout) <0.001060>
+900595 00:07:18.946063 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.947142 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001060>
+900595 00:07:18.948222 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001060>
+900595 00:07:18.949300 poll([{fd=7, events=POLLIN}], 1, 1 <unfinished ...>
+900595 00:07:18.950368 <... poll resumed>) = 0 (Timeout) <0.001060>
+900595 00:07:18.950382 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.951460 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.952538 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.953615 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001060>
+900595 00:07:18.954696 poll([{fd=7, events=POLLIN}], 1, 1 <unfinished ...>
+900595 00:07:18.955763 <... poll resumed>) = 0 (Timeout) <0.001060>
+900595 00:07:18.955777 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.956854 poll([{fd=7, events=POLLIN}], 1, 1 <unfinished ...>
+900595 00:07:18.957890 <... poll resumed>) = 0 (Timeout) <0.001029>
+900595 00:07:18.957904 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.958982 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.960059 poll([{fd=7, events=POLLIN}], 1, 1 <unfinished ...>
+900595 00:07:18.961126 <... poll resumed>) = 0 (Timeout) <0.001060>
+900595 00:07:18.961141 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.962218 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.963295 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.964372 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.965449 poll([{fd=7, events=POLLIN}], 1, 1 <unfinished ...>
+900595 00:07:18.966516 <... poll resumed>) = 0 (Timeout) <0.001060>
+900595 00:07:18.966531 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.967608 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.968686 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.969763 poll([{fd=7, events=POLLIN}], 1, 1 <unfinished ...>
+900595 00:07:18.970830 <... poll resumed>) = 0 (Timeout) <0.001060>
+900595 00:07:18.970843 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001040>
+900595 00:07:18.971901 poll([{fd=7, events=POLLIN}], 1, 1) = 1 ([{fd=7, revents=POLLIN}]) <0.000514>
+900595 00:07:18.972435 read(7, "\300\n\306\1\0\0\0\0", 8) = 8 <0.000007>
+900595 00:07:18.972459 read(7, 0x7ff22c0e47b0, 8) = -1 EAGAIN (Resource temporarily unavailable) <0.000006>
+900595 00:07:18.972486 write(112, "\1\0\0\0\0\0\0\0", 8) = 8 <0.000010>
+900595 00:07:18.972514 poll([{fd=7, events=POLLIN}], 1, 1 <unfinished ...>
+900595 00:07:18.973581 <... poll resumed>) = 0 (Timeout) <0.001060>
+900595 00:07:18.973596 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.974674 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001059>
+900595 00:07:18.975751 poll([{fd=7, events=POLLIN}], 1, 1) = 0 (Timeout) <0.001060>
+900595 00:07:18.976829 poll([{fd=7, events=POLLIN}], 1, 1 <unfinished ...>

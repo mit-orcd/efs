@@ -1,0 +1,60 @@
+     9.63%          8372  efsd     libc.so.6          [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--8.67%--host_snap_export_pass
+               |          host_gc_thread
+               |          start_thread
+               |          
+                --0.67%--compactor_main
+                          start_thread
+     5.26%          4576  efsd     [kernel.kallsyms]  [k] syscall_enter_from_user_mode
+            |
+            ---syscall_enter_from_user_mode
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               |          
+                --5.09%--__GI___libc_write
+                          |          
+                           --5.04%--host_snap_export_pass
+                                     host_gc_thread
+                                     start_thread
+     4.97%          4322  efsd     efsd               [.] efs_kv_lsm_view_export
+            |
+            ---efs_kv_lsm_view_export
+               host_snap_export_pass
+               host_gc_thread
+               start_thread
+     4.69%          4074  efsd     [kernel.kallsyms]  [k] iomap_iter_advance
+            |
+            ---iomap_iter_advance
+               iomap_iter
+               iomap_file_buffered_write
+               xfs_file_buffered_write
+               vfs_write
+               |          
+                --4.68%--ksys_write
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __GI___libc_write
+                          |          
+                           --4.64%--host_snap_export_pass
+                                     host_gc_thread
+                                     start_thread
+     3.98%          3458  efsd     [xfs]              [k] xfs_buffered_write_iomap_begin
+            |
+            ---xfs_buffered_write_iomap_begin
+               iomap_iter
+               iomap_file_buffered_write
+               xfs_file_buffered_write
+               vfs_write
+               |          
+                --3.97%--ksys_write
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __GI___libc_write
+                          |          
+                           --3.94%--host_snap_export_pass
+                                     host_gc_thread
+                                     start_thread
+     3.97%          3455  efsd     libc.so.6          [.] __GI___libc_write

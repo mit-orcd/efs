@@ -1,0 +1,60 @@
+968265 00:16:09.402268 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-0-0000105464.sst", O_RDONLY <unfinished ...>
+968265 00:16:09.402486 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-0-0000105394.sst", O_RDONLY <unfinished ...>
+968265 00:16:09.402645 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105347.sst", O_RDONLY <unfinished ...>
+968265 00:16:09.406074 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105348.sst", O_RDONLY <unfinished ...>
+968265 00:16:09.409621 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105349.sst", O_RDONLY <unfinished ...>
+968265 00:16:09.410280 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105467.sst.tmp", O_WRONLY|O_CREAT|O_TRUNC, 0666 <unfinished ...>
+968265 00:16:10.283212 fsync(189 <unfinished ...>
+968265 00:16:10.300641 rename("/data1/01/efs/mdraft/kv/seg-1-0000105467.sst.tmp", "/data1/01/efs/mdraft/kv/seg-1-0000105467.sst" <unfinished ...>
+968265 00:16:10.300867 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105468.sst.tmp", O_WRONLY|O_CREAT|O_TRUNC, 0666 <unfinished ...>
+968265 00:16:11.170380 fsync(189 <unfinished ...>
+968265 00:16:11.188468 rename("/data1/01/efs/mdraft/kv/seg-1-0000105468.sst.tmp", "/data1/01/efs/mdraft/kv/seg-1-0000105468.sst") = 0 <0.000034>
+968265 00:16:11.189071 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105469.sst.tmp", O_WRONLY|O_CREAT|O_TRUNC, 0666 <unfinished ...>
+968265 00:16:11.206325 fsync(189 <unfinished ...>
+968265 00:16:11.207051 rename("/data1/01/efs/mdraft/kv/seg-1-0000105469.sst.tmp", "/data1/01/efs/mdraft/kv/seg-1-0000105469.sst" <unfinished ...>
+968265 00:16:11.207558 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105467.sst", O_RDONLY) = 184 <0.000012>
+968265 00:16:11.207970 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105468.sst", O_RDONLY) = 186 <0.000013>
+968265 00:16:11.208456 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105469.sst", O_RDONLY <unfinished ...>
+968265 00:16:11.208689 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/MANIFEST.tmp", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 187 <0.000028>
+968265 00:16:11.208804 fsync(187 <unfinished ...>
+968265 00:16:11.209144 rename("/data1/01/efs/mdraft/kv/MANIFEST.tmp", "/data1/01/efs/mdraft/kv/MANIFEST" <unfinished ...>
+968265 00:16:11.209201 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv", O_RDONLY <unfinished ...>
+968265 00:16:11.209235 fsync(188 <unfinished ...>
+968265 00:16:11.209528 unlink("/data1/01/efs/mdraft/kv/seg-0-0000105464.sst" <unfinished ...>
+968265 00:16:11.209664 unlink("/data1/01/efs/mdraft/kv/seg-0-0000105394.sst" <unfinished ...>
+968265 00:16:11.209756 unlink("/data1/01/efs/mdraft/kv/seg-1-0000105347.sst") = 0 <0.000016>
+968265 00:16:11.210173 unlink("/data1/01/efs/mdraft/kv/seg-1-0000105348.sst" <unfinished ...>
+968265 00:16:11.210635 unlink("/data1/01/efs/mdraft/kv/seg-1-0000105349.sst") = 0 <0.000017>
+968265 00:16:11.210703 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv", O_RDONLY) = 8 <0.000011>
+968265 00:16:11.210732 fsync(8)         = 0 <0.000262>
+968265 00:16:11.211264 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-0-0000105465.sst", O_RDONLY) = 54 <0.000014>
+968265 00:16:11.211390 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-0-0000105395.sst", O_RDONLY <unfinished ...>
+968265 00:16:11.211525 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105350.sst", O_RDONLY <unfinished ...>
+968265 00:16:11.212044 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105351.sst", O_RDONLY <unfinished ...>
+968265 00:16:11.212629 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105352.sst", O_RDONLY <unfinished ...>
+968265 00:16:11.212990 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105470.sst.tmp", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 187 <0.000032>
+968265 00:16:12.280475 fsync(187 <unfinished ...>
+968265 00:16:12.298088 rename("/data1/01/efs/mdraft/kv/seg-1-0000105470.sst.tmp", "/data1/01/efs/mdraft/kv/seg-1-0000105470.sst" <unfinished ...>
+968265 00:16:12.298391 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105471.sst.tmp", O_WRONLY|O_CREAT|O_TRUNC, 0666 <unfinished ...>
+968265 00:16:13.114845 fsync(187 <unfinished ...>
+968265 00:16:13.132528 rename("/data1/01/efs/mdraft/kv/seg-1-0000105471.sst.tmp", "/data1/01/efs/mdraft/kv/seg-1-0000105471.sst") = 0 <0.000054>
+968265 00:16:13.132773 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105472.sst.tmp", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 187 <0.000046>
+968265 00:16:13.398820 fsync(187 <unfinished ...>
+968265 00:16:13.405317 rename("/data1/01/efs/mdraft/kv/seg-1-0000105472.sst.tmp", "/data1/01/efs/mdraft/kv/seg-1-0000105472.sst" <unfinished ...>
+968265 00:16:13.405912 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105470.sst", O_RDONLY) = 8 <0.000017>
+968265 00:16:13.406325 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105471.sst", O_RDONLY) = 54 <0.000011>
+968265 00:16:13.406736 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-1-0000105472.sst", O_RDONLY) = 55 <0.000011>
+968265 00:16:13.406958 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/MANIFEST.tmp", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 56 <0.000042>
+968265 00:16:13.407093 fsync(56)        = 0 <0.000286>
+968265 00:16:13.407423 rename("/data1/01/efs/mdraft/kv/MANIFEST.tmp", "/data1/01/efs/mdraft/kv/MANIFEST" <unfinished ...>
+968265 00:16:13.407487 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv", O_RDONLY) = 56 <0.000012>
+968265 00:16:13.407517 fsync(56)        = 0 <0.000232>
+968265 00:16:13.407794 unlink("/data1/01/efs/mdraft/kv/seg-0-0000105465.sst") = 0 <0.000026>
+968265 00:16:13.407923 unlink("/data1/01/efs/mdraft/kv/seg-0-0000105395.sst") = 0 <0.000018>
+968265 00:16:13.408003 unlink("/data1/01/efs/mdraft/kv/seg-1-0000105350.sst") = 0 <0.000016>
+968265 00:16:13.408456 unlink("/data1/01/efs/mdraft/kv/seg-1-0000105351.sst") = 0 <0.000017>
+968265 00:16:13.408893 unlink("/data1/01/efs/mdraft/kv/seg-1-0000105352.sst") = 0 <0.000018>
+968265 00:16:13.409076 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv", O_RDONLY) = 7 <0.000013>
+968265 00:16:13.409108 fsync(7)         = 0 <0.000243>
+968265 00:16:13.409571 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-0-0000105466.sst", O_RDONLY) = 7 <0.000012>
+968265 00:16:13.409689 openat(AT_FDCWD, "/data1/01/efs/mdraft/kv/seg-0-0000105396.sst", O_RDONLY) = 56 <0.000010>

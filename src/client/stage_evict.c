@@ -188,6 +188,22 @@ static pthread_mutex_t g_evict_mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t g_evict_cv = PTHREAD_COND_INITIALIZER;
 static int g_evict_stop;
 static int g_evict_kick;
+/* While now < this, a kick does not wake a scan that just found nothing
+ * evictable. Cleared when a pin drops, so a real opportunity runs at once. */
+static int64_t g_evict_idle_until;
+
+static int64_t evict_now_ms(void)
+{
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+static void evict_idle_clear(void)
+{
+    __atomic_store_n(&g_evict_idle_until, 0, __ATOMIC_RELAXED);
+}
 /* Oldest tick already proven pinned this drain. The next wake starts
  * here instead of rescanning that prefix. */
 static uint64_t g_evict_cursor;
@@ -306,6 +322,7 @@ void efs_client_stage_unpin(efs_ino_t ino)
                     g_opin_counts[i]--;
                 else
                     opin_del_locked(i);
+                evict_idle_clear();
                 break;
             }
             i = (i + 1) & g_opin_mask;
@@ -566,6 +583,8 @@ static void *stage_evict_main(void *arg)
         if (evicted_total > 0)
             g_evict_cursor = 0;
         if (bytes > cap && evicted_total == 0) {
+            __atomic_store_n(&g_evict_idle_until, evict_now_ms() + 1000,
+                             __ATOMIC_RELAXED);
             /* Every band we looked at is pinned (or the table is
              * already under the next reading). Log once and sleep. */
             if (!logged_grow && g_evict_cursor == 0) {
@@ -630,6 +649,9 @@ void efs_client_stage_evict_kick(void)
         return;
     if (__atomic_load_n(&g_stage_bytes_seen, __ATOMIC_RELAXED) <=
         stage_cap_bytes())
+        return;
+    if (evict_now_ms() <
+        __atomic_load_n(&g_evict_idle_until, __ATOMIC_RELAXED))
         return;
     pthread_mutex_lock(&g_evict_mu);
     g_evict_kick = 1;

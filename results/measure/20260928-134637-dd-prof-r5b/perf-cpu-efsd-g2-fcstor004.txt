@@ -1,0 +1,60 @@
+     8.33%         41796  efsd     libc.so.6                [.] __memmove_avx_unaligned_erms
+            |
+            ---__memmove_avx_unaligned_erms
+               |          
+               |--2.45%--server_handle_conn
+               |          
+               |--1.59%--host_send
+               |          send_ae
+               |          |          
+               |          |--0.82%--efs_raft_flush
+               |          |          host_pump
+               |          |          start_thread
+               |          |          
+               |           --0.77%--efs_raft_recv
+               |                     drain_inbox
+               |                     host_pump
+               |                     start_thread
+               |          
+               |--1.57%--drain_inbox
+               |          host_pump
+               |          start_thread
+               |          
+               |--0.99%--lsm_batch
+               |          |          
+               |           --0.99%--efs_meta_apply_publish
+               |                     host_apply
+               |                     apply_committed
+               |                     |          
+               |                      --0.54%--try_commit
+               |                                |          
+               |                                 --0.53%--efs_raft_recv
+               |                                           drain_inbox
+               |                                           host_pump
+               |                                           start_thread
+               |          
+                --0.94%--send_ae
+     8.33%         41776  efsd     libc.so.6                [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--2.85%--lookup
+               |          lsm_get
+               |          |          
+               |          |--1.52%--efs_meta_apply_get_chunk
+               |          |          |          
+               |          |           --1.21%--server_raft_host_report
+               |          |                     server_handle_conn
+               |          |                     conn_thread
+               |          |                     start_thread
+               |          |          
+               |           --0.59%--efs_meta_apply_publish
+               |                     host_apply
+               |                     apply_committed
+               |          
+               |--2.55%--kv_seg_probe
+               |          lookup
+               |          lsm_get
+               |          |          
+               |          |--1.53%--efs_meta_apply_get_chunk
+               |          |          |          

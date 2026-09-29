@@ -1,0 +1,60 @@
+    30.48%        146002  efsd     efsd                  [.] recv_poller
+            |
+            ---recv_poller
+               start_thread
+     9.91%         47490  efsd     libc.so.6             [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--6.27%--host_snap_export_pass
+               |          |          
+               |           --3.77%--host_gc_thread
+               |                     start_thread
+               |          
+                --1.76%--compactor_main
+                          start_thread
+     4.28%         20494  efsd     efsd                  [.] efs_kv_lsm_view_export
+            |
+            ---efs_kv_lsm_view_export
+               |          
+                --3.34%--host_snap_export_pass
+                          |          
+                           --2.01%--host_gc_thread
+                                     start_thread
+     2.89%         13836  efsd     libmlx5.so.1.27.63.0  [.] 0x00000000000222ec
+            |
+            ---0x7fc7ad26c2ec
+     2.41%         11535  efsd     libmlx5.so.1.27.63.0  [.] 0x00000000000222f7
+            |
+            ---0x7fc7ad26c2f7
+     2.40%         11496  efsd     libmlx5.so.1.27.63.0  [.] 0x0000000000022210
+            |
+            ---0x7fc7ad26c210
+               |          
+                --2.40%--start_thread
+     2.39%         11464  efsd     libc.so.6             [.] pthread_spin_lock@@GLIBC_2.34
+            |
+            ---pthread_spin_lock@@GLIBC_2.34
+               |          
+                --2.34%--start_thread
+     2.25%         10790  efsd     [kernel.kallsyms]     [k] syscall_enter_from_user_mode
+            |
+            ---syscall_enter_from_user_mode
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               |          
+                --2.16%--__GI___libc_write
+                          |          
+                           --1.68%--host_snap_export_pass
+                                     |          
+                                      --1.09%--host_gc_thread
+                                                start_thread
+     1.84%          8804  efsd     [kernel.kallsyms]     [k] iomap_iter_advance
+            |
+            ---iomap_iter_advance
+               iomap_iter
+               iomap_file_buffered_write
+               xfs_file_buffered_write
+               vfs_write
+               |          
+                --1.84%--ksys_write

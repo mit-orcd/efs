@@ -1,0 +1,5 @@
+fcstor007 recorders_left perf=1 strace=1 efsd=0 fuse=1
+total 90284
+-rw------- 1 erbmi1 erbmi1   505380 Sep 29 00:27 fuse.data
+-rw-r--r-- 1 erbmi1 erbmi1 91940845 Sep 29 00:27 fuse.strace
+ANA_DONE fcstor007 04:27:54

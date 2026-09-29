@@ -1,0 +1,60 @@
+    20.21%        121728  efsd     [kernel.kallsyms]        [k] rep_movs_alternative
+            |
+            ---rep_movs_alternative
+               |          
+               |--11.85%--copyout
+               |          _copy_to_iter
+               |          |          
+               |           --11.84%--copy_page_to_iter
+               |                     filemap_read
+               |                     xfs_file_buffered_read
+               |                     xfs_file_read_iter
+               |                     vfs_read
+               |                     |          
+               |                      --11.84%--__x64_sys_pread64
+               |                                do_syscall_64
+               |                                entry_SYSCALL_64_after_hwframe
+               |                                __libc_pread
+               |                                |          
+               |                                 --11.40%--send_snap
+               |                                           |          
+               |                                           |--5.84%--efs_raft_recv
+               |                                           |          drain_inbox
+               |                                           |          host_pump
+               |                                           |          start_thread
+               |                                           |          
+               |                                            --5.57%--send_ae_behind
+               |                                                      send_ae
+               |                                                      |          
+               |                                                       --5.35%--efs_raft_flush
+               |                                                                 host_pump
+               |                                                                 start_thread
+               |          
+                --8.34%--copyin
+                          |          
+                           --7.90%--_copy_from_iter
+                                     skb_do_copy_data_nocache
+                                     tcp_sendmsg_locked
+                                     tcp_sendmsg
+                                     sock_write_iter
+                                     do_iter_readv_writev
+                                     do_iter_write
+                                     vfs_writev
+                                     do_writev
+                                     do_syscall_64
+                                     entry_SYSCALL_64_after_hwframe
+                                     __GI___writev
+                                     efs_conn_send_msg
+                                     host_sender
+                                     start_thread
+    12.37%         74489  efsd     libc.so.6                [.] __memmove_avx_unaligned_erms
+            |
+            ---__memmove_avx_unaligned_erms
+               |          
+               |--10.28%--host_send
+               |          |          
+               |          |--9.11%--send_snap
+               |          |          |          
+               |          |          |--4.93%--send_ae_behind
+               |          |          |          send_ae
+               |          |          |          |          

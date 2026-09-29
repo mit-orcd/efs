@@ -1,0 +1,20 @@
+9 hosts fcstor007–015, 4 ranks each, tests/perf/io500/config-debug.ini,
+stonewall 1s (score INVALID, same as 20260928-150609-rdma, 151707-tcp,
+and 165219-nfs-fstor007). Build a53b253f2455-dirty rolled 12:29Z without
+--perf/--strace (8h span skip + D12 file-cap backstop). EFS_TRANSPORT=rdma.
+Launched 12:36:34Z. Log: last-run.log.
+
+ior-easy-write and mdtest-easy-write finished. ior-hard-write (shared
+file, ino 2595379) printed 31 fsync failures and no bandwidth. fcstor007
+fuse.log: report-loop rounds=1 stale=1 rc=-14, then efs_rc=-1.
+fcstor012: one BUSY (rc=-13, 9.0 s) then STALE (rc=-14, 23.5 s) on the
+same inode, then ll_fsync stayed in the kernel. That client's reclaimer
+held the shard I/O lock across efs_client_fetch_published_chunk of
+chunk 170279; the two fragment GETs sat in efs_rdma_recv_wait
+(timeout 30s) on nodes 3 and 4. Ranks on fcstor012 went D
+(request_wait_answer / fuse_flush) and ignored SIGKILL until efs-fuse
+was killed at 12:50Z and the client remounted (FUSE_OK).
+
+fcstor004 during the run: report-split 23 rc=0, 73 rc=-13, 3 rc=-14;
+kv-compact brought L0 from 7 down to 3 (L1 stayed 397); 1582 apply-sleep
+lines. D12's file cap held. The 400 ms apply wait still returned BUSY.

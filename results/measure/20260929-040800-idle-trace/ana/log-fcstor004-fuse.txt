@@ -1,0 +1,2 @@
+efs-fuse perf recorder pid=882166 -> /tmp/efs-perf/fuse.data
+efs-fuse strace pid=882167 -> /tmp/efs-perf/fuse.strace

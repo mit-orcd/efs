@@ -1,0 +1,11 @@
+    22.50%          4423  efs-fuse  efs-fuse                 [.] blake3_hash_many_avx2
+     6.42%           670  efs-fuse  efs-fuse                 [.] recv_poller
+     6.20%          1161  efs-fuse  libc.so.6                [.] __memmove_avx_unaligned_erms
+     3.34%           554  efs-fuse  [kernel.kallsyms]        [k] __memcpy
+     2.74%           638  efs-fuse  efs-fuse                 [.] xor_into
+     2.59%           486  efs-fuse  [kernel.kallsyms]        [k] retbleed_return_thunk
+     2.43%           428  efs-fuse  [kernel.kallsyms]        [k] clear_page_rep
+     2.41%           438  efs-fuse  [kernel.kallsyms]        [k] ptrace_do_notify
+     2.20%           296  efs-fuse  [kernel.kallsyms]        [k] entry_SYSCALL_64
+     1.93%           290  efs-fuse  [kernel.kallsyms]        [k] child_wait_callback
+     1.62%           328  efs-fuse  [kernel.kallsyms]        [k] __rcu_read_unlock

@@ -1,0 +1,6 @@
+efs-fuse perf recorder pid=1965243 -> /tmp/efs-perf/fuse.data
+efs-fuse strace pid=1965244 -> /tmp/efs-perf/fuse.strace
+report-loop ino=1262465 rounds=1 stale=0 busy=1 ms=14350 rc=-13
+efs-fuse fsync: resource busy (efs_rc=-13) ino=1262465 off=0 len=0
+report-loop ino=1262465 rounds=1 stale=0 busy=1 ms=18229 rc=-13
+efs-fuse flush-meta: resource busy (efs_rc=-13) ino=1262465 off=0 len=0

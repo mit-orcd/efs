@@ -1,0 +1,4 @@
+== fcstor007
+fsync-split ino=1613546 flush_ms=32532 report_ms=0 rc=0
+report-loop ino=1481146 rounds=1 stale=0 busy=1 ms=12596 rc=-13
+report-loop ino=1493434 rounds=1 stale=0 busy=1 ms=8855 rc=-13

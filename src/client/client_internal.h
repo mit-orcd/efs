@@ -60,6 +60,8 @@ struct efs_client {
      * Checkout waits if all slots are busy. */
     struct efs_conn *conn[EFS_MAX_NODES][EFS_CLIENT_CONNS_PER_NODE];
     int conn_busy[EFS_MAX_NODES][EFS_CLIENT_CONNS_PER_NODE];
+    /* Bumped when the slot's conn is destroyed. Checkout compares it. */
+    uint64_t conn_gen[EFS_MAX_NODES][EFS_CLIENT_CONNS_PER_NODE];
     pthread_mutex_t conn_lock[EFS_MAX_NODES];
     pthread_cond_t conn_cv[EFS_MAX_NODES];
     int conn_pool_size; /* 1..EFS_CLIENT_CONNS_PER_NODE, from env or default */
@@ -204,7 +206,8 @@ int efs_client_rpc_rename_at(efs_export_id_t export_id, efs_ino_t old_parent,
 int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
                            uint32_t mask, uint32_t mode, uid_t uid, gid_t gid,
                            uint64_t size, uint64_t mtime, uint32_t mtime_nsec,
-                           uint64_t atime, struct efs_inode *out);
+                           uint64_t atime, uint32_t atime_nsec,
+                           struct efs_inode *out);
 /* op is EFS_XATTR_GET/SET/REMOVE/LIST. out_len is the buffer size in and
  * the byte count out. SET/REMOVE may pass out NULL. */
 int efs_client_rpc_xattr(efs_export_id_t export_id, efs_ino_t ino, uint8_t op,
@@ -237,6 +240,8 @@ struct efs_ino_size_rec;
 /* W17.1: monotonic ms. 0 clears. rpc_send_recv_dual stops before the
  * next attempt once this passes. One in-flight recv still finishes. */
 void efs_client_rpc_set_deadline_ms(uint64_t mono_ms);
+uint64_t efs_client_rpc_deadline_ms(void);
+int efs_client_rpc_past_deadline(void);
 int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
                                      const struct efs_chunk_rec *recs,
                                      uint32_t count,
@@ -278,7 +283,7 @@ int efs_client_lookup(const char *path, struct efs_inode *out);
 
 /* Set atime and mtime in one SETATTR RPC. */
 int efs_client_utimens_both(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec,
-                            uint64_t atime);
+                            uint64_t atime, uint32_t atime_nsec);
 
 /* Client inode-number namespace so concurrent writers do not collide. */
 void efs_client_setup_ino_namespace(void);
@@ -396,7 +401,7 @@ int efs_client_chown(efs_ino_t ino, uid_t uid, gid_t gid);
 int efs_client_utimens(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec);
 
 /* Set access time (seconds; never bumped on read). */
-int efs_client_set_atime(efs_ino_t ino, uint64_t atime);
+int efs_client_set_atime(efs_ino_t ino, uint64_t atime, uint32_t atime_nsec);
 
 /* Truncate or extend a file to the given size. */
 int efs_client_truncate(efs_ino_t ino, uint64_t size);

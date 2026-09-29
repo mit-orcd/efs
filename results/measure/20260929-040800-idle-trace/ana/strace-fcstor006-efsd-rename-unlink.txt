@@ -1,0 +1,7 @@
+   7723 rename /dataN/N/efs/mdraft/applied.N.tmp
+   5015 unlink /dataN/N/efs/data/exports/N/N/N/N/N/N/N/N.N.N.sum
+   5015 unlink /dataN/N/efs/data/exports/N/N/N/N/N/N/N/N.N.N
+    373 unlink /dataN/N/efs/mdraft/kv/seg-N-N.sst
+    373 rename /dataN/N/efs/mdraft/kv/seg-N-N.sst.tmp
+    196 rename /dataN/N/efs/meta/usage.bin.tmp.N.N
+     89 rename /dataN/N/efs/mdraft/kv/MANIFEST.tmp

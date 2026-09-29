@@ -1,0 +1,7 @@
+libbpf: Failed to bump RLIMIT_MEMLOCK (err = -1), you might need to do it explicitly!
+libbpf: Error in bpf_object__probe_loading():Operation not permitted(1). Couldn't load trivial BPF program. Make sure your kernel supports BPF (CONFIG_BPF_SYSCALL=y) and/or that RLIMIT_MEMLOCK is set to big enough value.
+libbpf: failed to load object 'augmented_raw_syscalls_bpf'
+libbpf: failed to load BPF skeleton 'augmented_raw_syscalls_bpf': -1
+Error:	No permissions to read /sys/kernel/tracing//events/raw_syscalls/sys_(enter|exit)
+Hint:	Try 'sudo mount -o remount,mode=755 /sys/kernel/tracing/'
+

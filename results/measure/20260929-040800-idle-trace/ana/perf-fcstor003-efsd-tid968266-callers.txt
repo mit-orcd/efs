@@ -1,0 +1,339 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 183K of event 'cycles:P'
+# Event count (approx.): 444016966726
+#
+# Overhead       Samples  Command  Shared Object      Symbol                                    
+# ........  ............  .......  .................  ..........................................
+#
+     2.89%          5273  efsd     [kernel.kallsyms]  [k] child_wait_callback
+            |          
+             --1.07%--__schedule
+                       schedule
+                       ptrace_stop.part.0
+                       ptrace_do_notify
+                       ptrace_notify
+                       |          
+                        --0.58%--syscall_trace_enter.constprop.0
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+
+     2.14%          3867  efsd     [kernel.kallsyms]  [k] __task_pid_nr_ns
+     1.22%          2201  efsd     [kernel.kallsyms]  [k] _raw_spin_lock_irqsave
+     1.06%          1880  efsd     efsd               [.] disk_log_new_bytes
+            |          
+             --0.90%--disk_log_new_bytes
+                       host_pump
+                       start_thread
+
+     0.83%          1602  efsd     efsd               [.] kv_seg_w_add
+     0.79%          1442  efsd     [kernel.kallsyms]  [k] _raw_spin_unlock_irq
+     0.75%          1440  efsd     [kernel.kallsyms]  [k] fault_in_readable
+            |          
+             --0.58%--rep_movs_alternative
+                       copyin
+                       copy_page_from_iter_atomic
+                       iomap_write_iter
+                       iomap_file_buffered_write
+                       xfs_file_buffered_write
+                       vfs_write
+                       |          
+                        --0.58%--ksys_write
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  __GI___libc_write
+
+     0.64%          1234  efsd     efsd               [.] kv_seg_iter_next
+     0.61%          1108  efsd     [vdso]             [.] 0x0000000000000b15
+     0.37%           683  efsd     [kernel.kallsyms]  [k] merge_sched_in
+     0.35%           657  efsd     [kernel.kallsyms]  [k] perf_event_idx_default
+     0.29%           534  efsd     efsd               [.] host_pump
+     0.28%           503  efsd     [kernel.kallsyms]  [k] do_sys_poll
+     0.23%           433  efsd     [kernel.kallsyms]  [k] __x64_sys_futex
+     0.21%           380  efsd     [kernel.kallsyms]  [k] memset_orig
+     0.21%           365  efsd     libc.so.6          [.] __memset_avx2_unaligned_erms
+     0.17%           303  efsd     [kernel.kallsyms]  [k] rseq_get_rseq_cs
+     0.16%           297  efsd     [kernel.kallsyms]  [k] eventfd_poll
+     0.15%           247  efsd     efsd               [.] efs_crc32
+     0.15%           285  efsd     [kernel.kallsyms]  [k] arch_perf_update_userpage
+     0.14%           262  efsd     [kernel.kallsyms]  [k] siginfo_layout
+     0.14%           268  efsd     [xfs]              [k] xfs_file_write_checks
+     0.13%           244  efsd     [kernel.kallsyms]  [k] dequeue_entity
+     0.13%           236  efsd     [kernel.kallsyms]  [k] dequeue_task_fair
+     0.12%           531  efsd     [kernel.kallsyms]  [k] perf_event_update_userpage
+     0.11%           204  efsd     libc.so.6          [.] pthread_mutex_lock@@GLIBC_2.2.5
+     0.11%           182  efsd     libc.so.6          [.] _int_free
+     0.10%           193  efsd     [kernel.kallsyms]  [k] _raw_read_unlock
+     0.10%           191  efsd     [kernel.kallsyms]  [k] raw_spin_rq_unlock
+     0.10%           137  efsd     [kernel.kallsyms]  [k] find_lock_entries
+     0.09%           177  efsd     [kernel.kallsyms]  [k] _copy_to_iter
+     0.09%           169  efsd     libc.so.6          [.] pthread_cond_signal@@GLIBC_2.3.2
+     0.09%           152  efsd     [kernel.kallsyms]  [k] vfs_read
+     0.08%           138  efsd     libc.so.6          [.] malloc
+     0.08%           137  efsd     [xfs]              [k] xlog_cil_alloc_shadow_bufs.constprop.0
+     0.08%           153  efsd     [xfs]              [k] xfs_file_write_iter
+     0.08%           151  efsd     [xfs]              [k] xfs_file_buffered_write
+     0.07%           131  efsd     [kernel.kallsyms]  [k] __wake_up_sync_key
+     0.07%           130  efsd     [kernel.kallsyms]  [k] sched_update_worker
+     0.07%           128  efsd     efsd               [.] lookup
+     0.07%           121  efsd     [kernel.kallsyms]  [k] __folio_start_writeback
+     0.06%           124  efsd     [kernel.kallsyms]  [k] futex_wake_mark
+     0.05%           101  efsd     [kernel.kallsyms]  [k] cyc2ns_read_begin
+     0.05%            97  efsd     [kernel.kallsyms]  [k] iomap_write_end
+     0.05%            85  efsd     [kernel.kallsyms]  [k] fpregs_restore_userregs
+     0.05%            87  efsd     [kernel.kallsyms]  [k] cgroup_update_frozen
+     0.04%            80  efsd     [kernel.kallsyms]  [k] fault_in_iov_iter_readable
+     0.04%            72  efsd     [kernel.kallsyms]  [k] poll_schedule_timeout.constprop.0
+     0.04%            82  efsd     libc.so.6          [.] __strncmp_avx2
+     0.04%            69  efsd     [xfs]              [k] xfs_buf_item_size_segment.isra.0
+     0.04%            67  efsd     [kernel.kallsyms]  [k] syscall_return_via_sysret
+     0.04%            72  efsd     [kernel.kallsyms]  [k] _raw_spin_trylock
+     0.04%            73  efsd     [kernel.kallsyms]  [k] wake_up_q
+     0.04%            63  efsd     [xfs]              [k] xfs_inode_item_precommit
+     0.03%            52  efsd     [kernel.kallsyms]  [k] recalc_sigpending_tsk
+     0.03%            52  efsd     [kernel.kallsyms]  [k] iomap_do_writepage
+     0.03%            53  efsd     [xfs]              [k] xfs_log_reserve
+     0.03%            48  efsd     efsd               [.] send_ae
+     0.03%            55  efsd     [kernel.kallsyms]  [k] __smp_call_single_queue
+     0.03%            50  efsd     libc.so.6          [.] clock_gettime@@GLIBC_2.17
+     0.03%            47  efsd     [kernel.kallsyms]  [k] flush_workqueue_prep_pwqs
+     0.02%            41  efsd     [kernel.kallsyms]  [k] rw_verify_area
+     0.02%            37  efsd     libc.so.6          [.] __memset_avx2_unaligned
+     0.02%            46  efsd     [kernel.kallsyms]  [k] exit_to_user_mode_prepare
+     0.02%            40  efsd     [xfs]              [k] xfs_cil_prepare_item
+     0.02%            39  efsd     [kernel.kallsyms]  [k] call_function_single_prep_ipi
+     0.02%            33  efsd     libc.so.6          [.] malloc_consolidate
+     0.02%            39  efsd     [kernel.kallsyms]  [k] filemap_get_pages
+     0.02%            37  efsd     [kernel.kallsyms]  [k] llist_add_batch
+     0.02%            38  efsd     [kernel.kallsyms]  [k] __pollwait
+     0.02%            31  efsd     [xfs]              [k] xfs_inobt_get_rec
+     0.02%            30  efsd     efsd               [.] pthread_mutex_unlock@plt
+     0.02%            33  efsd     efsd               [.] host_send
+     0.02%            37  efsd     efsd               [.] pthread_mutex_lock@plt
+     0.02%            29  efsd     efsd               [.] disk_get
+     0.01%            25  efsd     efsd               [.] drain_inbox
+     0.01%            30  efsd     [kernel.kallsyms]  [k] ktime_get_update_offsets_now
+     0.01%            21  efsd     [kernel.kallsyms]  [k] __blk_mq_alloc_requests
+     0.01%            26  efsd     [kernel.kallsyms]  [k] __f_unlock_pos
+     0.01%            21  efsd     efsd               [.] disk_last
+     0.01%            25  efsd     [kernel.kallsyms]  [k] update_irq_load_avg
+     0.01%            21  efsd     efsd               [.] try_commit
+     0.01%            19  efsd     [kernel.kallsyms]  [k] landlock_put_ruleset_deferred
+     0.01%            21  efsd     [kernel.kallsyms]  [k] submit_bio_noacct
+     0.01%            19  efsd     [kernel.kallsyms]  [k] rb_insert_color
+     0.01%            20  efsd     efsd               [.] efs_meta_apply_publish
+     0.01%            19  efsd     efsd               [.] host_apply
+     0.01%            19  efsd     [kernel.kallsyms]  [k] __cgroup_account_cputime
+     0.01%            20  efsd     efsd               [.] efs_raft_recv
+     0.01%           124  efsd     [kernel.kallsyms]  [k] perf_ibs_start
+     0.01%            19  efsd     efsd               [.] host_publish_view
+     0.01%            17  efsd     [kernel.kallsyms]  [k] using_native_sched_clock
+     0.01%            15  efsd     [vdso]             [.] 0x0000000000000ab6
+     0.01%            18  efsd     efsd               [.] malloc@plt
+     0.01%            15  efsd     [vdso]             [.] 0x0000000000000b10
+     0.01%            16  efsd     efsd               [.] kv_wal_hold
+     0.01%            15  efsd     efsd               [.] efs_wire_raft_decode
+     0.01%            15  efsd     [kernel.kallsyms]  [k] rcu_sched_clock_irq
+     0.01%            14  efsd     [xfs]              [k] xfs_log_item_init
+     0.01%            15  efsd     [kernel.kallsyms]  [k] rcu_core
+     0.01%            14  efsd     [kernel.kallsyms]  [k] hrtimer_start_range_ns
+     0.01%            13  efsd     efsd               [.] kv_wal_append
+     0.01%            11  efsd     [kernel.kallsyms]  [k] select_estimate_accuracy
+     0.01%            15  efsd     [kernel.kallsyms]  [k] handle_softirqs
+     0.01%            13  efsd     libc.so.6          [.] alloc_perturb
+     0.01%            10  efsd     [kernel.kallsyms]  [k] __x64_sys_fsync
+     0.01%            10  efsd     [kernel.kallsyms]  [k] security_inode_init_security
+     0.01%             9  efsd     [kernel.kallsyms]  [k] __update_load_avg_blocked_se
+     0.01%            11  efsd     libc.so.6          [.] __libc_calloc
+     0.01%            15  efsd     [kernel.kallsyms]  [k] sched_balance_newidle
+     0.01%            10  efsd     efsd               [.] efs_kv_lsm_sync_hold
+     0.01%             7  efsd     efsd               [.] efs_raft_flush
+     0.01%             9  efsd     efsd               [.] kv_mtab_set
+     0.00%            11  efsd     [kernel.kallsyms]  [k] plist_del
+     0.00%            11  efsd     [kernel.kallsyms]  [k] wake_q_add_safe
+     0.00%             8  efsd     [vdso]             [.] 0x0000000000000b0c
+     0.00%             8  efsd     [kernel.kallsyms]  [k] asm_sysvec_apic_timer_interrupt
+     0.00%            10  efsd     [kernel.kallsyms]  [k] sched_balance_update_blocked_averages
+     0.00%             6  efsd     [kernel.kallsyms]  [k] __queue_work
+     0.00%             7  efsd     efsd               [.] lsm_batch
+     0.00%             9  efsd     [kernel.kallsyms]  [k] sched_balance_find_src_group
+     0.00%             6  efsd     [kernel.kallsyms]  [k] __filename_parentat
+     0.00%             5  efsd     [vdso]             [.] 0x0000000000000b7c
+     0.00%             5  efsd     [kernel.kallsyms]  [k] irq_fpu_usable
+     0.00%           475  efsd     [kernel.kallsyms]  [k] calc_timer_values
+     0.00%             5  efsd     [kernel.kallsyms]  [k] irqentry_enter
+     0.00%             5  efsd     efsd               [.] kv_seg_last_key
+     0.00%             4  efsd     efsd               [.] fsync@plt
+     0.00%             6  efsd     [crc32c_intel]     [k] crc_1
+     0.00%             5  efsd     efsd               [.] kv_flush_locked
+     0.00%             6  efsd     [vdso]             [.] 0x0000000000000ac0
+     0.00%             5  efsd     [kernel.kallsyms]  [k] tracing_record_taskinfo
+     0.00%             4  efsd     efsd               [.] disk_log_floor
+     0.00%             6  efsd     [vdso]             [.] 0x0000000000000ac4
+     0.00%             4  efsd     [kernel.kallsyms]  [k] dentry_unlink_inode
+     0.00%             4  efsd     [kernel.kallsyms]  [k] rq_qos_wait
+     0.00%             5  efsd     [kernel.kallsyms]  [k] switch_hrtimer_base
+     0.00%             5  efsd     efsd               [.] on_ae_req
+     0.00%             4  efsd     [xfs]              [k] xfs_trans_free_dqinfo
+     0.00%             4  efsd     [kernel.kallsyms]  [k] pick_next_task
+     0.00%             4  efsd     [kernel.kallsyms]  [k] lock_vma_under_rcu
+     0.00%             4  efsd     efsd               [.] persist_applied.part.0.isra.0
+     0.00%             5  efsd     [kernel.kallsyms]  [k] blk_rq_init
+     0.00%             4  efsd     [kernel.kallsyms]  [k] do_renameat2
+     0.00%             5  efsd     efsd               [.] efs_raft_log_new_bytes
+     0.00%             4  efsd     [kernel.kallsyms]  [k] dma_direct_map_page
+     0.00%             4  efsd     [kernel.kallsyms]  [k] timespec64_add_safe
+     0.00%             5  efsd     [kernel.kallsyms]  [k] select_idle_cpu
+     0.00%             4  efsd     [kernel.kallsyms]  [k] enqueue_entity
+     0.00%             3  efsd     [xfs]              [k] xfs_sort_inodes
+     0.00%             3  efsd     [kernel.kallsyms]  [k] enqueue_hrtimer
+     0.00%             4  efsd     [xfs]              [k] xlog_write_iclog
+     0.00%             3  efsd     [kernel.kallsyms]  [k] inode_io_list_del
+     0.00%             3  efsd     [xfs]              [k] xfs_bmapi_convert_one_delalloc
+     0.00%             3  efsd     efsd               [.] efs_raft_applied
+     0.00%             3  efsd     [kernel.kallsyms]  [k] set_next_buddy
+     0.00%             4  efsd     [kernel.kallsyms]  [k] folio_wait_stable
+     0.00%             5  efsd     [vdso]             [.] 0x0000000000000b5d
+     0.00%             3  efsd     [kernel.kallsyms]  [k] __filemap_fdatawrite_range
+     0.00%             3  efsd     [kernel.kallsyms]  [k] wait_for_completion
+     0.00%             3  efsd     libc.so.6          [.] rename
+     0.00%             3  efsd     efsd               [.] apply_committed
+     0.00%             2  efsd     [kernel.kallsyms]  [k] path_parentat
+     0.00%             4  efsd     [vdso]             [.] 0x0000000000000b8c
+     0.00%             3  efsd     [vdso]             [.] 0x0000000000000aeb
+     0.00%             2  efsd     [kernel.kallsyms]  [k] __bitmap_and
+     0.00%             2  efsd     [vdso]             [.] 0x0000000000000af8
+     0.00%             3  efsd     [kernel.kallsyms]  [k] do_writepages
+     0.00%             3  efsd     [xfs]              [k] xlog_cil_force_seq
+     0.00%             3  efsd     [crc32c_intel]     [k] crc_75
+     0.00%             2  efsd     [kernel.kallsyms]  [k] mnt_get_write_access_file
+     0.00%             3  efsd     efsd               [.] efs_wire_raft_encode
+     0.00%             3  efsd     efsd               [.] efs_raft_tick
+     0.00%             2  efsd     efsd               [.] efs_raft_read_pending
+     0.00%             2  efsd     [kernel.kallsyms]  [k] wakeup_preempt
+     0.00%             2  efsd     [crc32c_intel]     [k] crc_13
+     0.00%             2  efsd     [kernel.kallsyms]  [k] lru_add_drain_cpu
+     0.00%             2  efsd     [vdso]             [.] 0x0000000000000b44
+     0.00%             2  efsd     [kernel.kallsyms]  [k] fsnotify_get_cookie
+     0.00%             2  efsd     [kernel.kallsyms]  [k] smp_call_function_single_async
+     0.00%             2  efsd     [kernel.kallsyms]  [k] ct_nmi_exit
+     0.00%             2  efsd     [vdso]             [.] 0x0000000000000b82
+     0.00%             2  efsd     [vdso]             [.] 0x0000000000000b28
+     0.00%             2  efsd     libc.so.6          [.] _IO_str_init_static_internal
+     0.00%             2  efsd     [crc32c_intel]     [k] crc_7
+     0.00%             2  efsd     efsd               [.] efs_raft_term
+     0.00%             2  efsd     [crc32c_intel]     [k] crc_43
+     0.00%             2  efsd     [kernel.kallsyms]  [k] account_user_time
+     0.00%             2  efsd     [xfs]              [k] xfs_da_compname
+     0.00%             2  efsd     [xfs]              [k] xfs_dir2_sf_addname
+     0.00%             2  efsd     [xfs]              [k] xfs_file_llseek
+     0.00%             2  efsd     [kernel.kallsyms]  [k] _atomic_dec_and_lock
+     0.00%             2  efsd     [vdso]             [.] 0x0000000000000b83
+     0.00%             1  efsd     [kernel.kallsyms]  [k] cap_vm_enough_memory
+     0.00%             2  efsd     [vdso]             [.] 0x0000000000000b1a
+     0.00%             2  efsd     [xfs]              [k] xlog_sync
+     0.00%             2  efsd     efsd               [.] efs_raft_read_index
+     0.00%             2  efsd     libc.so.6          [.] _IO_old_init
+     0.00%             1  efsd     [kernel.kallsyms]  [k] security_path_rename
+     0.00%             2  efsd     [kernel.kallsyms]  [k] vfs_rename
+     0.00%             3  efsd     efsd               [.] efs_raft_leader
+     0.00%             2  efsd     [crc32c_intel]     [k] crc_35
+     0.00%             2  efsd     [kernel.kallsyms]  [k] __bio_release_pages
+     0.00%             2  efsd     [kernel.kallsyms]  [k] add_wait_queue_exclusive
+     0.00%             1  efsd     [kernel.kallsyms]  [k] __ksize
+     0.00%             2  efsd     [kernel.kallsyms]  [k] native_flush_tlb_local
+     0.00%             2  efsd     [kernel.kallsyms]  [k] kfence_ksize
+     0.00%             2  efsd     [vdso]             [.] 0x0000000000000b8b
+     0.00%             1  efsd     [kernel.kallsyms]  [k] evict
+     0.00%             2  efsd     [kernel.kallsyms]  [k] hrtimer_update_next_event
+     0.00%             2  efsd     [vdso]             [.] 0x0000000000000ae5
+     0.00%             1  efsd     [kernel.kallsyms]  [k] ttwu_do_activate
+     0.00%             2  efsd     [kernel.kallsyms]  [k] timer_delete
+     0.00%             1  efsd     efsd               [.] kv_maybe_flush_locked
+     0.00%             1  efsd     [kernel.kallsyms]  [k] release_dentry_name_snapshot
+     0.00%             1  efsd     [kernel.kallsyms]  [k] folio_add_new_anon_rmap
+     0.00%             1  efsd     [kernel.kallsyms]  [k] __d_move
+     0.00%             1  efsd     [kernel.kallsyms]  [k] security_inode_rename
+     0.00%             1  efsd     efsd               [.] pack_chunk_value
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_64
+     0.00%             1  efsd     efsd               [.] kv_seg_install
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_114
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_106
+     0.00%             1  efsd     [kernel.kallsyms]  [k] vma_merge.isra.0
+     0.00%             2  efsd     [crc32c_intel]     [k] crc_32
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_82
+     0.00%             1  efsd     efsd               [.] efs_txn_apply_prepare
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_89
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_99
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_91
+     0.00%             1  efsd     [crc32c_intel]     [k] less_than_1
+     0.00%             1  efsd     [crc32c_intel]     [k] full_block
+     0.00%             1  efsd     [kernel.kallsyms]  [k] krealloc
+     0.00%             1  efsd     [vdso]             [.] 0x0000000000000acd
+     0.00%             1  efsd     efsd               [.] apply_create_cmd.constprop.0
+     0.00%             1  efsd     efsd               [.] efs_kv_key_lane
+     0.00%             1  efsd     [kernel.kallsyms]  [k] blk_mq_kick_requeue_list
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_70
+     0.00%             1  efsd     [kernel.kallsyms]  [k] __folio_alloc
+     0.00%             1  efsd     [kernel.kallsyms]  [k] access_error
+     0.00%             1  efsd     efsd               [.] pthread_cond_broadcast@plt
+     0.00%             1  efsd     [kernel.kallsyms]  [k] getname_flags
+     0.00%             1  efsd     efsd               [.] pack_lane
+     0.00%             1  efsd     [kernel.kallsyms]  [k] may_delete
+     0.00%             1  efsd     libc.so.6          [.] __vsnprintf_internal
+     0.00%             1  efsd     [kernel.kallsyms]  [k] folio_migrate_mapping
+     0.00%             1  efsd     [vdso]             [.] 0x0000000000000b02
+     0.00%             1  efsd     efsd               [.] efs_raft_tracks_log_bytes
+     0.00%             1  efsd     [kernel.kallsyms]  [k] __handle_irq_event_percpu
+     0.00%             1  efsd     efsd               [.] efs_kv_key_dseq
+     0.00%             1  efsd     [xfs]              [k] xfs_dir2_sf_replace
+     0.00%             1  efsd     [vdso]             [.] 0x0000000000000b87
+     0.00%           370  efsd     [kernel.kallsyms]  [k] perf_ibs_handle_irq
+     0.00%             1  efsd     [kernel.kallsyms]  [k] lookup_one_qstr_excl
+     0.00%             1  efsd     efsd               [.] efs_opid_window_unpack
+     0.00%             1  efsd     [kernel.kallsyms]  [k] invoke_rcu_core
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_47
+     0.00%             1  efsd     [kernel.kallsyms]  [k] current_check_refer_path
+     0.00%             1  efsd     [kernel.kallsyms]  [k] strnlen
+     0.00%             1  efsd     [kernel.kallsyms]  [k] housekeeping_enabled
+     0.00%             1  efsd     [kernel.kallsyms]  [k] dentry_free
+     0.00%             1  efsd     [mlx5_core]        [k] mlx5_add_cq_to_tasklet
+     0.00%             1  efsd     [xfs]              [k] xfs_lock_inodes
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_45
+     0.00%             1  efsd     [xfs]              [k] xfs_bmapi_convert_delalloc
+     0.00%             1  efsd     [xfs]              [k] xfs_dir_replace
+     0.00%             1  efsd     libc.so.6          [.] llseek@GLIBC_2.2.5
+     0.00%             1  efsd     efsd               [.] efs_meta_apply_gc_ack
+     0.00%             1  efsd     [kernel.kallsyms]  [k] folio_migrate_flags
+     0.00%             1  efsd     efsd               [.] efs_raft_commit
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_125
+     0.00%             1  efsd     [kernel.kallsyms]  [k] wbc_detach_inode
+     0.00%             1  efsd     [vdso]             [.] 0x0000000000000b33
+     0.00%             1  efsd     efsd               [.] gc_queue
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_53
+     0.00%             1  efsd     [kernel.kallsyms]  [k] lock_for_kill
+     0.00%             1  efsd     [vdso]             [.] 0x0000000000000adf
+     0.00%             1  efsd     [kernel.kallsyms]  [k] sb_mark_inode_writeback
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_94
+     0.00%             1  efsd     [vdso]             [.] 0x0000000000000ad2
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_0
+     0.00%             1  efsd     [kernel.kallsyms]  [k] add_timer_on
+     0.00%             1  efsd     efsd               [.] sweep_cb.part.0
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_68
+     0.00%             1  efsd     [kernel.kallsyms]  [k] __wait_for_common
+     0.00%             1  efsd     [kernel.kallsyms]  [k] place_entity
+     0.00%             1  efsd     [kernel.kallsyms]  [k] led_trigger_blink_oneshot
+     0.00%             1  efsd     efsd               [.] efs_kv_lsm_sync_release
+     0.00%             1  efsd     [kernel.kallsyms]  [k] __fsnotify_parent
+     0.00%             1  efsd     [xfs]              [k] xfs_dir_rename_children
+     0.00%             1  efsd     [crc32c_intel]     [k] crc_80
+     0.00%             1  efsd     efsd               [.] decode_ino_delta
+     0.00%             1  efsd     [kernel.kallsyms]  [k] kernel_fpu_end
+
+
+#
+# (Tip: To filter subset of samples with report or script add --time X-Y or --cpu A,B,C or --socket-filter ...)
+#

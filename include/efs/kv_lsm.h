@@ -45,6 +45,9 @@ int efs_kv_lsm_flush(struct efs_kv *kv);
 int efs_kv_lsm_flush_nowait(struct efs_kv *kv);
 int efs_kv_lsm_compact(struct efs_kv *kv);
 int efs_kv_lsm_seg_count(struct efs_kv *kv, uint32_t *l0, uint32_t *l1);
+/* 1 when L0 is within one flush of the file cap. Publish admission
+ * returns BUSY; the apply path does not wait. */
+int efs_kv_lsm_l0_hot(struct efs_kv *kv);
 /* Nested. Hold: WAL write + memtable apply, no fsync. Release (last nest):
  * one fsync. No-op on a non-LSM store. Raft apply of a batched PUBLISH
  * holds across the entry so 256 pubs share one durable boundary. */

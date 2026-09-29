@@ -1,0 +1,10 @@
+   3422 /dataN/N/efs
+   3422 /dataN/N
+   3422 /dataN
+   3255 /dataN/N/efs/data/exports/N/N/N/N/N/N/N
+   3255 /dataN/N/efs/data/exports/N/N/N/N/N/N
+   3255 /dataN/N/efs/data/exports/N/N/N/N/N
+   3255 /dataN/N/efs/data/exports/N/N/N/N
+   3255 /dataN/N/efs/data/exports/N/N/N
+   3255 /dataN/N/efs/data/exports/N/N
+   3255 /dataN/N/efs/data/exports/N

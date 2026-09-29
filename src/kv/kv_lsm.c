@@ -276,6 +276,37 @@ static void gc_orphans(struct kv_lsm *l)
     closedir(d);
 }
 
+int kv_l0_reserve(struct kv_lsm *l, uint32_t need)
+{
+    struct seg_slot *p;
+    uint32_t cap;
+
+    if (need <= l->l0_cap)
+        return EFS_OK;
+    cap = l->l0_cap ? l->l0_cap : 16u;
+    while (cap < need) {
+        if (cap > (1u << 20))
+            return EFS_ERR_NOMEM;
+        cap *= 2u;
+    }
+    p = realloc(l->l0, (size_t)cap * sizeof(*p));
+    if (!p)
+        return EFS_ERR_NOMEM;
+    l->l0 = p;
+    l->l0_cap = cap;
+    return EFS_OK;
+}
+
+uint64_t kv_l0_bytes(const struct kv_lsm *l)
+{
+    uint64_t n = 0;
+    uint32_t i;
+
+    for (i = 0; i < l->n_l0; i++)
+        n += kv_seg_data_bytes(l->l0[i].seg);
+    return n;
+}
+
 int kv_l1_reserve(struct kv_lsm *l, uint32_t need)
 {
     struct seg_slot *p;
@@ -341,11 +372,11 @@ static int manifest_load(struct kv_lsm *l)
             rc = EFS_ERR_PROTO;
             break;
         }
-        /* L0 is a fixed array. L1 is a list: the MANIFEST already stores
-         * one line per file, and a dual-host node hits 64 L1 files. */
-        if (level == 0 && l->n_l0 >= KV_LSM_MAX_SEGS) {
-            rc = EFS_ERR_PROTO;
-            break;
+        /* L0 and L1 are both growable lists. Admission is L0 bytes. */
+        if (level == 0) {
+            rc = kv_l0_reserve(l, l->n_l0 + 1);
+            if (rc != EFS_OK)
+                break;
         }
         if (level == 1) {
             rc = kv_l1_reserve(l, l->n_l1 + 1);
@@ -830,6 +861,9 @@ static void lsm_destroy(void *ctx)
     kv_compactor_stop(l);
     kv_wal_close(l->wal);
     drop_segs(l);
+    free(l->l0);
+    l->l0 = NULL;
+    l->l0_cap = 0;
     free(l->l1);
     l->l1 = NULL;
     l->l1_cap = 0;
@@ -966,8 +1000,7 @@ static int lsm_flush(struct efs_kv *kv, int wait)
     /* A flush emits at most one L0 file per key[0]. Counting those runs
      * walks the memtable. The raft pump calls this on every snapshot
      * open; refuse before the walk when a full memtable cannot fit. */
-    if (!wait && l->mt.n > 0 &&
-        l->n_l0 + KV_LSM_RANGE_MAX > KV_LSM_MAX_SEGS) {
+    if (!wait && l->mt.n > 0 && kv_l0_bytes(l) >= KV_LSM_L0_BYTES) {
         if (l->compact_started) {
             l->compact_req = 1;
             pthread_cond_signal(&l->compact_cv);
@@ -979,7 +1012,7 @@ static int lsm_flush(struct efs_kv *kv, int wait)
      * background thread's job; at the engine cap, wait for it instead of
      * rewriting L1 on this call. The pump must not wait. */
     if (wait) {
-        while (l->n_l0 >= KV_LSM_MAX_SEGS && !l->io_failed) {
+        while (kv_l0_bytes(l) >= KV_LSM_L0_BYTES && !l->io_failed) {
             if (!l->compact_started) {
                 rc = kv_compact_locked(l, 0);
                 if (rc != EFS_OK) {
@@ -1037,6 +1070,20 @@ int efs_kv_lsm_compact(struct efs_kv *kv)
     pthread_cond_broadcast(&l->cv);
     pthread_mutex_unlock(&l->mu);
     return rc;
+}
+
+int efs_kv_lsm_l0_hot(struct efs_kv *kv)
+{
+    struct kv_lsm *l;
+    int hot;
+
+    if (!kv || !kv->ctx)
+        return 0;
+    l = kv->ctx;
+    pthread_mutex_lock(&l->mu);
+    hot = kv_l0_bytes(l) >= KV_LSM_L0_BYTES;
+    pthread_mutex_unlock(&l->mu);
+    return hot;
 }
 
 int efs_kv_lsm_seg_count(struct efs_kv *kv, uint32_t *l0, uint32_t *l1)

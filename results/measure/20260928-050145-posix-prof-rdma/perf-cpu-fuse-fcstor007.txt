@@ -1,0 +1,60 @@
+    63.82%        147775  efs-fuse  efs-fuse              [.] recv_poller
+            |
+            ---recv_poller
+               start_thread
+     5.09%         11789  efs-fuse  libc.so.6             [.] pthread_spin_lock@@GLIBC_2.34
+            |
+            ---pthread_spin_lock@@GLIBC_2.34
+               |          
+                --5.09%--start_thread
+     5.03%         11658  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222ec
+            |
+            ---0x7f34382982ec
+     5.02%         11632  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022400
+            |
+            ---0x7f3438298400
+     4.98%         11538  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022210
+            |
+            ---0x7f3438298210
+               |          
+                --4.98%--start_thread
+     1.98%          4587  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000229f5
+            |
+            ---0x7f34382989f5
+               start_thread
+     1.57%          3637  efs-fuse  efs-fuse              [.] efs_rdma_recv_wait
+            |
+            ---efs_rdma_recv_wait
+               conn_rdma_frame.constprop.0
+               |          
+                --1.40%--efs_conn_recv_msg
+                          |          
+                           --0.70%--rpc_send_recv_shard
+     1.00%          2326  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222f7
+            |
+            ---0x7f34382982f7
+     1.00%          2322  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x000000000002226d
+            |
+            ---0x7f343829826d
+               start_thread
+     1.00%          2315  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x000000000002248b
+            |
+            ---0x7f343829848b
+     1.00%          2312  efs-fuse  [vdso]                [.] 0x0000000000000b18
+            |
+            ---0x7ffd12741b18
+               clock_gettime@@GLIBC_2.17
+               |          
+                --0.91%--conn_rdma_frame.constprop.0
+                          |          
+                           --0.80%--efs_conn_recv_msg
+     0.99%          2288  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022214
+            |
+            ---0x7f3438298214
+               |          
+                --0.99%--start_thread
+     0.99%          2285  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222d1
+            |
+            ---0x7f34382982d1
+     0.98%          2268  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022224
+            |

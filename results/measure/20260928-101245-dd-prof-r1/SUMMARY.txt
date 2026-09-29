@@ -1,0 +1,38 @@
+dd cpu profile label=r1 build=db2b88c4802a-dirty n=9
+leaders g0=fcstor003 g2=fcstor004 record_s=70
+ssh_wall_s=78.293608371 slowest_s=39.308 fastest_s=35.600
+aggregate_MiB_s=1875.6  (n * 8192 / slowest dd wall)
+per_client_walls: 38.598 39.308 35.600 35.819 38.554 35.878 35.640 38.572 36.532
+report-split: 77 lines; pack_ms sum=25016 max=2236; push_ms sum=32464 max=4234; finish_ms sum=11198 max=1352
+
+== fuse ==
+    23.05%         18869  efs-fuse  efs-fuse                 [.] blake3_hash_many_avx2
+            |
+            ---blake3_hash_many_avx2
+               |          
+                --23.04%--blake3_compress_subtree_wide
+                          |          
+                           --22.87%--blake3_compress_subtree_wide
+                                     |          
+                                      --22.46%--blake3_compress_subtree_wide
+                                                |          
+                                                |--21.72%--blake3_compress_subtree_wide
+                                                |          blake3_hasher_update.part.0
+                                                |          efs_hash
+                                                |          |          
+                                                |          |--14.43%--hash_write_fragments
+                                                |          |          dcache_put_now.constprop.0
+                                                |          |          |          
+                                                |          |          |--10.67%--dcache_flush_slot_inner
+                                                |          |          |          |          
+                                                |          |          |           --10.45%--dcache_reclaim_main
+                                                |          |          |                     start_thread
+                                                |          |          |          
+                                                |          |           --3.76%--put_pool_thread
+                                                |          |                     start_thread
+                                                |          |          
+                                                |           --7.29%--dcache_put_now.constprop.0
+                                                |                     |          
+                                                |                     |--5.32%--dcache_flush_slot_inner
+                                                |                     |          |          
+                                                |                     |           --5.22%--dcache_reclaim_main

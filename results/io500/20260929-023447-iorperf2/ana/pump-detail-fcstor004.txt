@@ -1,0 +1,134 @@
+## tid 879257 22:38:58-22:39:03: per-syscall count / total_s / max
+write               9600    1.603   0.000
+pread64             4850    0.807   0.000
+fsync                  1    0.006   0.006
+rename                 1    0.000   0.000
+openat                 1    0.000   0.000
+mprotect               1    0.000   0.000
+fstat                  1    0.000   0.000
+close                  1    0.000   0.000
+## tid 879257: wall covered by syscalls in that 5 s window (sum of durations)
+2.417 s of 5.000
+## tid 879257: 40 consecutive lines from 22:38:59.000
+879257 22:38:59.000112 write(481, "#\234\1\30\0\0\0\200\0\0\0\v1\4\0\0\0\0\0w\5G\0\0\0\0\0\0\0\0016\0"..., 4096 <unfinished ...>
+879257 22:38:59.000427 <... write resumed>) = 4096 <0.000309>
+879257 22:38:59.000736 write(481, "7:\200\203\345\205\315amYwrU\350\330\317\212\330-g*/\277\34F\234\375\342$\221\252e"..., 4096 <unfinished ...>
+879257 22:38:59.001084 <... write resumed>) = 4096 <0.000342>
+879257 22:38:59.001393 pread64(475,  <unfinished ...>
+879257 22:38:59.001701 <... pread64 resumed>"\1\30\0\0\0\200\0\0\0\v1\4\0\0\0\0\0w\5G\0\0\0\0\0\0\0\0016\0\2\251"..., 8050, 49211941) = 8050 <0.000304
+879257 22:38:59.002049 write(481, "\220\4)\210\265\7O\301\370\357\310\224\301\320\214\305\245\230\206#\234\1\30\0\0\0\200\0\0\0\v1"..., 4096 <unfinish
+879257 22:38:59.002422 <... write resumed>) = 4096 <0.000367>
+879257 22:38:59.002783 write(481, "\0\0\0\0\0\0\1\0\0\0\2\0\0\0\3M\5\\c7:\200\203\345\205\315amYwrU"..., 4096 <unfinished ...>
+879257 22:38:59.003145 <... write resumed>) = 4096 <0.000355>
+879257 22:38:59.003465 pread64(475,  <unfinished ...>
+879257 22:38:59.003755 <... pread64 resumed>"\1\30\0\0\0\200\0\0\0\v1\4\0\0\0\0\0w\5G\0\0\0\0\0\0\0\0016\0\2\266"..., 8050, 49219991) = 8050 <0.000285
+879257 22:38:59.004018 write(481, "p\30U\rD.\273-\200\370fJ?kE\r3\371\243\220\4)\210\265\7O\301\370\357\310\224\301"..., 4096 <unfinished ...>
+879257 22:38:59.004282 <... write resumed>) = 4096 <0.000257>
+879257 22:38:59.004533 write(481, "\257\366`k:\25D-\37-\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0\1\0\0\0\2\0\0"..., 4096 <unfinished ...>
+879257 22:38:59.004802 <... write resumed>) = 4096 <0.000263>
+879257 22:38:59.005045 pread64(475,  <unfinished ...>
+879257 22:38:59.005255 <... pread64 resumed>"\1\30\0\0\0\200\0\0\0\v1\4\0\0\0\0\0w\5G\0\0\0\0\0\0\0\0016\0\2\302"..., 8050, 49228041) = 8050 <0.000206
+879257 22:38:59.005474 write(481, "\16\337\237\364\215\261h\352\337\273l _\225t\224\263\214bp\30U\rD.\273-\200\370fJ?"..., 4096 <unfinished ...>
+879257 22:38:59.005732 <... write resumed>) = 4096 <0.000252>
+879257 22:38:59.006008 write(481, "\0\0\0\0\0w\5G\0\0\0\0\0\0\0\0016\0\2\274\266WR=+\375\355\301/\0\0\0"..., 4096 <unfinished ...>
+879257 22:38:59.006333 <... write resumed>) = 4096 <0.000319>
+879257 22:38:59.006659 pread64(475,  <unfinished ...>
+879257 22:38:59.006981 <... pread64 resumed>"\1\30\0\0\0\200\0\0\0\v1\4\0\0\0\0\0w\5G\0\0\0\0\0\0\0\0016\0\2\317"..., 8050, 49236091) = 8050 <0.000317
+879257 22:38:59.007293 write(481, "\330\317\212\330-g*/\277\34F\234\375\342$\221\252e2\16\337\237\364\215\261h\352\337\273l _"..., 4096 <unfinished ..
+879257 22:38:59.007586 <... write resumed>) = 4096 <0.000287>
+879257 22:38:59.007832 write(481, "\214\305\245\230\206#\234\1\30\0\0\0\200\0\0\0\v1\4\0\0\0\0\0w\5G\0\0\0\0\0"..., 4096 <unfinished ...>
+879257 22:38:59.008077 <... write resumed>) = 4096 <0.000240>
+879257 22:38:59.008326 pread64(475,  <unfinished ...>
+879257 22:38:59.008544 <... pread64 resumed>"\1\30\0\0\0\200\0\0\0\v1\4\0\0\0\0\0w\5G\0\0\0\0\0\0\0\0016\0\2\333"..., 8050, 49244141) = 8050 <0.000214
+879257 22:38:59.008761 write(481, "\3M\5\\c7:\200\203\345\205\315amYwrU\350\330\317\212\330-g*/\277\34F\234\375"..., 4096 <unfinished ...>
+879257 22:38:59.008968 <... write resumed>) = 4096 <0.000202>
+879257 22:38:59.009183 write(481, "E\r3\371\243\220\4)\210\265\7O\301\370\357\310\224\301\320\214\305\245\230\206#\234\1\30\0\0\0\200"..., 4096 <unfin
+879257 22:38:59.009395 <... write resumed>) = 4096 <0.000206>
+879257 22:38:59.009603 pread64(475,  <unfinished ...>
+879257 22:38:59.009810 <... pread64 resumed>"\1\30\0\0\0\200\0\0\0\v1\4\0\0\0\0\0w\5G\0\0\0\0\0\0\0\0016\0\2\350"..., 8050, 49252191) = 8050 <0.000202
+879257 22:38:59.010058 write(481, "\0\0\0\0\0\0\0\0\0\0\0\1\0\0\0\2\0\0\0\3M\5\\c7:\200\203\345\205\315a"..., 4096 <unfinished ...>
+879257 22:38:59.010329 <... write resumed>) = 4096 <0.000265>
+879257 22:38:59.010584 write(481, "t\224\263\214bp\30U\rD.\273-\200\370fJ?kE\r3\371\243\220\4)\210\265\7O\301"..., 4096 <unfinished ...>
+879257 22:38:59.010842 <... write resumed>) = 4096 <0.000252>
+## tid 879259 22:38:58-22:39:03: per-syscall count / total_s / max
+pread64             9529    1.412   0.002
+futex                  6    1.021   0.759
+clock_nanosleep       50    1.014   0.021
+openat               139    0.025   0.000
+lseek                138    0.024   0.000
+write                  1    0.000   0.000
+## tid 879259: wall covered by syscalls in that 5 s window (sum of durations)
+3.496 s of 5.000
+## tid 879259: 40 consecutive lines from 22:38:59.000
+879259 22:38:59.017145 <... clock_nanosleep resumed>NULL) = 0 <0.020387>
+879259 22:38:59.017419 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.037763 <... clock_nanosleep resumed>NULL) = 0 <0.020337>
+879259 22:38:59.037959 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.058257 <... clock_nanosleep resumed>NULL) = 0 <0.020290>
+879259 22:38:59.058483 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.078882 <... clock_nanosleep resumed>NULL) = 0 <0.020392>
+879259 22:38:59.079306 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.099501 <... clock_nanosleep resumed>NULL) = 0 <0.020188>
+879259 22:38:59.099712 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.120006 <... clock_nanosleep resumed>NULL) = 0 <0.020287>
+879259 22:38:59.120300 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.140584 <... clock_nanosleep resumed>NULL) = 0 <0.020277>
+879259 22:38:59.140801 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.161197 <... clock_nanosleep resumed>NULL) = 0 <0.020389>
+879259 22:38:59.161521 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.181751 <... clock_nanosleep resumed>NULL) = 0 <0.020222>
+879259 22:38:59.181989 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.202391 <... clock_nanosleep resumed>NULL) = 0 <0.020396>
+879259 22:38:59.202626 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.222816 <... clock_nanosleep resumed>NULL) = 0 <0.020183>
+879259 22:38:59.223005 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.243223 <... clock_nanosleep resumed>NULL) = 0 <0.020210>
+879259 22:38:59.243490 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.263810 <... clock_nanosleep resumed>NULL) = 0 <0.020313>
+879259 22:38:59.264127 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.284302 <... clock_nanosleep resumed>NULL) = 0 <0.020168>
+879259 22:38:59.284468 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.304564 <... clock_nanosleep resumed>NULL) = 0 <0.020088>
+879259 22:38:59.304625 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.324832 <... clock_nanosleep resumed>NULL) = 0 <0.020199>
+879259 22:38:59.324979 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.345260 <... clock_nanosleep resumed>NULL) = 0 <0.020274>
+879259 22:38:59.345572 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.365837 <... clock_nanosleep resumed>NULL) = 0 <0.020258>
+879259 22:38:59.366046 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.386282 <... clock_nanosleep resumed>NULL) = 0 <0.020229>
+879259 22:38:59.386532 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+879259 22:38:59.406751 <... clock_nanosleep resumed>NULL) = 0 <0.020212>
+879259 22:38:59.406877 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=20000000},  <unfinished ...>
+## tid 879257 futex: count and total over the run; args of the 5 longest
+82.4409 879257 22:38:51.107876 <... futex resumed>) = 0 <82.440860>
+71.98 879257 22:36:35.463419 <... futex resumed>) = 0 <71.980037>
+9e-06 879257 22:41:08.516127 <... futex resumed>) = 0 <0.000009>
+9e-06 879257 22:41:08.479436 futex(0xb74c2c, FUTEX_WAKE_PRIVATE, 2147483647) = 1 <0.000009>
+9e-06 879257 22:41:05.574885 futex(0xb74bd8, FUTEX_WAKE_PRIVATE, 1) = 1 <0.000009>
+## pread64 fds on 879257 (which files): top 8
+50761 fd 153
+42045 fd 98
+38087 fd 160
+34327 fd 97
+33769 fd 108
+33727 fd 274
+33658 fd 109
+33595 fd 116
+## write fds on 879257: top 8
+428095 fd 413
+214045 fd 723
+131334 fd 606
+99054 fd 275
+90307 fd 160
+84883 fd 22
+82325 fd 201
+76460 fd 248
+## fd -> path (from openat lines, last wins)
+471 socket:[14954098]
+474 anon_inode:[eventfd]
+481 socket:[14970077]
+485 /data1/01/efs/mdraft/kv/seg-1-0000191937.sst
+492 anon_inode:[eventfd]
+493 socket:[14982449]
+498 /data1/01/efs/mdraft/kv/seg-1-0000191945.sst

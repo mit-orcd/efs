@@ -1,0 +1,16 @@
+ 376268 /XtaN/X/Xs/Xta/exports/N/X/X/X/X/X/N/X.N.N
+ 209822 /XtaN/X/Xs/Xta/exports/N/X/X/X/X/X/N/X.N.N.sum
+  26130 /XtaN/X/Xs/Xta/exports/N/X/X/X/X/X/X/X.N.N
+  21948 /XtaN/X/Xs/Xta/exports/N/X/X/X/X/X/X/X.N.N.sum
+  16147 /XtaN/X/Xs/mdraft/applied.N.tmp
+   8795 /XtaN/X/Xs/Xta/exports/N/X/X/X/X/X/N/N.N.N
+   4633 /XtaN/X/Xs/Xta/exports/N/X/X/X/X/X/N/N.N.N.sum
+   1412 /XtaN/X/Xs/mdraft/kv/seg-N-N.sst
+    704 /XtaN/X/Xs/mdraft/kv/seg-N-N.sst.tmp
+    196 /XtaN/X/Xs/meta/usage.bin.tmp.N.N
+    169 /XtaN/X/Xs/mdraft/kv
+     92 /XtaN/X/Xs/mdraft/kv/MANIFEST.tmp
+     88 /sys/class/net/ibsNfN/Xvice/infiniband
+     12 /XtaN/X/Xs/meta/cluster_nodes.bin
+      1 /sys/Xvices/system/cpu/online
+      1 /proc/sys/vm/overcommit_memory

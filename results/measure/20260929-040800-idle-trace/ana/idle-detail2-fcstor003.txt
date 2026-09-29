@@ -1,0 +1,119 @@
+== fsync duration buckets per tid (resumed lines carry the duration)
+247 968265 a<2ms
+10 968265 b2-10ms
+75 968265 c10-50ms
+32 968265 d50-90ms
+141 968265 e90-120ms
+22232 968266 a<2ms
+313 968266 b2-10ms
+12 968266 c10-50ms
+6 968266 d50-90ms
+1881 968267 a<2ms
+41 968267 b2-10ms
+1 968267 c10-50ms
+2 968267 d50-90ms
+3064 968282 a<2ms
+92 968282 b2-10ms
+7 968282 c10-50ms
+5 968282 d50-90ms
+9 968285 a<2ms
+923 968287 a<2ms
+17 968287 b2-10ms
+7 968978 a<2ms
+4 968979 a<2ms
+370 968996 a<2ms
+9 968996 b2-10ms
+39 968997 a<2ms
+1 968997 b2-10ms
+1570 969065 a<2ms
+99 969065 b2-10ms
+1246 969066 a<2ms
+29 969066 b2-10ms
+1 969066 c10-50ms
+997 969067 a<2ms
+29 969067 b2-10ms
+768 969068 a<2ms
+35 969068 b2-10ms
+491 969069 a<2ms
+27 969069 b2-10ms
+624 969070 a<2ms
+20 969070 b2-10ms
+463 969071 a<2ms
+21 969071 b2-10ms
+258 969072 a<2ms
+4 969072 b2-10ms
+139 969075 a<2ms
+14 969075 b2-10ms
+1 969075 c10-50ms
+180 969076 a<2ms
+1 969076 b2-10ms
+1 969076 d50-90ms
+82 969077 a<2ms
+1 969077 b2-10ms
+71 969079 a<2ms
+4 969079 b2-10ms
+1 969079 c10-50ms
+53 969080 a<2ms
+9 969080 b2-10ms
+62 969081 a<2ms
+2 969081 b2-10ms
+53 969082 a<2ms
+8 969082 b2-10ms
+33 969083 a<2ms
+total tid=968265 n=505 s=18.38 avg_ms=36.39
+total tid=968266 n=22563 s=9.06 avg_ms=0.40
+total tid=968267 n=1925 s=1.00 avg_ms=0.52
+total tid=968282 n=3168 s=1.94 avg_ms=0.61
+total tid=968287 n=940 s=0.37 avg_ms=0.40
+total tid=968996 n=379 s=0.16 avg_ms=0.43
+total tid=969065 n=1669 s=0.88 avg_ms=0.53
+total tid=969066 n=1276 s=0.58 avg_ms=0.45
+total tid=969067 n=1026 s=0.44 avg_ms=0.43
+total tid=969068 n=803 s=0.38 avg_ms=0.47
+total tid=969069 n=518 s=0.25 avg_ms=0.48
+total tid=969070 n=644 s=0.29 avg_ms=0.45
+total tid=969071 n=484 s=0.25 avg_ms=0.51
+total tid=969072 n=262 s=0.10 avg_ms=0.39
+total tid=969075 n=154 s=0.12 avg_ms=0.81
+total tid=969076 n=182 s=0.15 avg_ms=0.85
+total tid=969077 n=83 s=0.03 avg_ms=0.36
+total tid=969079 n=76 s=0.05 avg_ms=0.72
+total tid=969080 n=62 s=0.04 avg_ms=0.71
+total tid=969081 n=64 s=0.03 avg_ms=0.40
+total tid=969082 n=61 s=0.04 avg_ms=0.70
+== pump tid (poll fd=9 5ms): fsync per minute and avg
+pump=
+== pump: what else per call name
+== pump: write sizes (raft log appends)
+== election window: log lines around term changes
+18:raft-obs: g0 term 0->9415 role FOLLOWER->FOLLOWER leader=-1 commit=13687019 applied=13687019 t=1790654833871ms
+71:raft-obs: g0 term 9415->9416 role FOLLOWER->CANDIDATE leader=-1 commit=13687019 applied=13687019 t=1790654834749ms
+75:raft-obs: g0 term 9416->9417 role CANDIDATE->CANDIDATE leader=-1 commit=13687019 applied=13687019 t=1790654835339ms
+79:raft-obs: g0 term 9417->9418 role CANDIDATE->FOLLOWER leader=-1 commit=13687019 applied=13687019 t=1790654836242ms
+723:raft-obs: g0 term 9418->9419 role FOLLOWER->FOLLOWER leader=-1 commit=13687406 applied=13687406 t=1790655343199ms
+724:raft-obs: g0 term 9419->9420 role FOLLOWER->FOLLOWER leader=-1 commit=13687406 applied=13687406 t=1790655343777ms
+725:raft-obs: g0 term 9420->9421 role FOLLOWER->CANDIDATE leader=-1 commit=13687406 applied=13687406 t=1790655344601ms
+726:raft-obs: g0 term 9421->9421 role CANDIDATE->LEADER leader=0 commit=13687406 applied=13687406 t=1790655344603ms
+raft-host: apply-sleep us=105508 group=0 idx=13687326 applied=13687325
+raft-host: apply-sleep us=105373 group=0 idx=13687326 applied=13687325
+raft-host: apply-sleep us=62838 group=0 idx=13687327 applied=13687325
+raft-obs: tx->1 enq=16322 drop=0 sent=16019 fail=1 hi=1 rtt_avg=808us get_avg=21us get_max=341ms
+raft-obs: tx->2 enq=2 drop=0 sent=0 fail=2 hi=1 rtt_avg=0us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=0 pump_hold_max=1429us lock_wait_max=3us drain_max=1429us tick_max=1us apply_max=632us persist_max=1601us applies_in_worst=5 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 
+raft-obs: tx->1 enq=16641 drop=0 sent=16331 fail=1 hi=1 rtt_avg=828us get_avg=21us get_max=341ms
+raft-obs: tx->2 enq=2 drop=0 sent=0 fail=2 hi=1 rtt_avg=0us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=0 pump_hold_max=4402us lock_wait_max=1us drain_max=4402us tick_max=1us apply_max=4305us persist_max=1552us applies_in_worst=2 arc_miss=0 arc_term_miss=0 opid_replay=1 fin_q=0 fin_done=0 fin_drop=0
+raft-obs: tx->1 enq=16734 drop=0 sent=16423 fail=1 hi=1 rtt_avg=835us get_avg=21us get_max=341ms
+raft-obs: tx->2 enq=2 drop=0 sent=0 fail=2 hi=1 rtt_avg=0us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=0 pump_hold_max=4850us lock_wait_max=4us drain_max=4849us tick_max=1us apply_max=27us persist_max=763us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=1 fin_q=0 fin_done=0 fin_drop=0 fi
+raft-obs: g0 term 9418->9419 role FOLLOWER->FOLLOWER leader=-1 commit=13687406 applied=13687406 t=1790655343199ms
+raft-obs: g0 term 9419->9420 role FOLLOWER->FOLLOWER leader=-1 commit=13687406 applied=13687406 t=1790655343777ms
+raft-obs: g0 term 9420->9421 role FOLLOWER->CANDIDATE leader=-1 commit=13687406 applied=13687406 t=1790655344601ms
+raft-obs: g0 term 9421->9421 role CANDIDATE->LEADER leader=0 commit=13687406 applied=13687406 t=1790655344603ms
+----
+== raft-obs tx lines at end
+raft-obs: tx->2 enq=175993 drop=0 sent=175798 fail=2 hi=179 rtt_avg=264us get_avg=0us get_max=9ms
+raft-obs: tx->1 enq=191063 drop=0 sent=190568 fail=1 hi=159 rtt_avg=342us get_avg=2us get_max=341ms
+raft-obs: tx->2 enq=176097 drop=0 sent=175902 fail=2 hi=179 rtt_avg=264us get_avg=0us get_max=9ms
+== ae/snap related
+0

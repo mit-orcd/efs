@@ -1,0 +1,69 @@
+== fsync duration buckets per tid (resumed lines carry the duration)
+252 655903 a<2ms
+28 655903 b2-10ms
+227 655903 c10-50ms
+20648 655904 a<2ms
+1946 655905 a<2ms
+6642 656564 a<2ms
+1 656564 b2-10ms
+690 656572 a<2ms
+1 656580 a<2ms
+1885 656581 a<2ms
+430 656582 a<2ms
+84 656583 a<2ms
+14 656584 a<2ms
+2 656643 a<2ms
+total tid=655903 n=507 s=4.11 avg_ms=8.11
+total tid=655904 n=20648 s=5.99 avg_ms=0.29
+total tid=655905 n=1946 s=0.63 avg_ms=0.32
+total tid=656564 n=6643 s=2.00 avg_ms=0.30
+total tid=656572 n=690 s=0.20 avg_ms=0.29
+total tid=656581 n=1885 s=0.55 avg_ms=0.29
+total tid=656582 n=430 s=0.13 avg_ms=0.30
+total tid=656583 n=84 s=0.03 avg_ms=0.30
+== pump tid (poll fd=9 5ms): fsync per minute and avg
+pump=655904
+00:15 n=1509 avg_ms=0.4 max? total_s=0.54
+00:16 n=582 avg_ms=0.3 max? total_s=0.19
+00:17 n=116 avg_ms=0.3 max? total_s=0.03
+00:18 n=774 avg_ms=0.3 max? total_s=0.21
+00:19 n=8220 avg_ms=0.3 max? total_s=2.32
+00:20 n=5818 avg_ms=0.3 max? total_s=1.65
+00:21 n=2867 avg_ms=0.3 max? total_s=0.82
+00:22 n=238 avg_ms=0.3 max? total_s=0.07
+00:23 n=118 avg_ms=0.3 max? total_s=0.03
+00:24 n=118 avg_ms=0.3 max? total_s=0.03
+00:25 n=118 avg_ms=0.3 max? total_s=0.03
+00:26 n=118 avg_ms=0.3 max? total_s=0.03
+00:27 n=52 avg_ms=0.3 max? total_s=0.01
+== pump: what else per call name
+691773 poll
+289866 write
+270901 futex
+269737 read
+40792 fsync
+17495 pread64
+15246 openat
+14340 rename
+14253 close
+1438 pwrite64
+1434 mprotect
+169 fstat
+== pump: write sizes (raft log appends)
+30490 <512
+313 512-4k
+3649 4k-64k
+127707 >64k
+== election window: log lines around term changes
+11:raft-obs: g2 term 0->2899 role FOLLOWER->FOLLOWER leader=-1 commit=12107762 applied=12107762 t=1790654839294ms
+18:raft-obs: g2 term 2899->2901 role FOLLOWER->FOLLOWER leader=-1 commit=12107762 applied=12107762 t=1790654839305ms
+21:raft-obs: g2 term 2901->2902 role FOLLOWER->FOLLOWER leader=-1 commit=12107762 applied=12107762 t=1790654839306ms
+237:raft-obs: g2 term 2902->2903 role FOLLOWER->CANDIDATE leader=-1 commit=12108499 applied=12108499 t=1790655373415ms
+240:raft-obs: g2 term 2903->2904 role CANDIDATE->CANDIDATE leader=-1 commit=12108499 applied=12108499 t=1790655374113ms
+244:raft-obs: g2 term 2904->2904 role CANDIDATE->LEADER leader=3 commit=12108499 applied=12108499 t=1790655374690ms
+== raft-obs tx lines at end
+raft-obs: tx->2 enq=127365 drop=0 sent=127317 fail=0 hi=119 rtt_avg=213us get_avg=0us get_max=6ms
+raft-obs: tx->1 enq=183696 drop=0 sent=182692 fail=0 hi=43 rtt_avg=437us get_avg=0us get_max=4ms
+raft-obs: tx->2 enq=127469 drop=0 sent=127421 fail=0 hi=119 rtt_avg=213us get_avg=0us get_max=6ms
+== ae/snap related
+0

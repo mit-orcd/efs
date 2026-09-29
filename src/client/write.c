@@ -853,12 +853,14 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
      * REPORT up to 16 retries) until the kernel FUSE request returned. */
     struct timespec ts_budget;
     uint64_t budget0 = 0;
+    uint64_t outer = efs_client_rpc_deadline_ms();
     int hit_budget = 0, nstale = 0, nbusy = 0, rounds = 0;
     if (sync) {
         clock_gettime(CLOCK_MONOTONIC, &ts_budget);
         budget0 = (uint64_t)ts_budget.tv_sec * 1000ull +
                   (uint64_t)ts_budget.tv_nsec / 1000000ull;
-        efs_client_rpc_set_deadline_ms(budget0 + 8000ull);
+        if (!outer || outer > budget0 + 8000ull)
+            efs_client_rpc_set_deadline_ms(budget0 + 8000ull);
     }
     /* STALE needs more than the NET budget: the peer fsyncs the same
      * chunk many times (n1 = 16 pwrite+fsync per 128 KiB) and each
@@ -870,7 +872,9 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
             clock_gettime(CLOCK_MONOTONIC, &ts);
             now = (uint64_t)ts.tv_sec * 1000ull +
                   (uint64_t)ts.tv_nsec / 1000000ull;
-            if (now >= budget0 + 8000ull) {
+            if (now >= budget0 + 8000ull ||
+                (efs_client_rpc_deadline_ms() &&
+                 now >= efs_client_rpc_deadline_ms())) {
                 hit_budget = 1;
                 break;
             }
@@ -948,7 +952,8 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
             break;
         usleep(50000u << (attempt < 4 ? attempt : 3));
     }
-    efs_client_rpc_set_deadline_ms(0);
+    if (!outer)
+        efs_client_rpc_set_deadline_ms(0);
     if (hit_budget) {
         struct timespec ts;
         uint64_t now, ms;
@@ -3707,10 +3712,30 @@ static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
     return EFS_OK;
 }
 
+/* 1 if e is still a node of slot s's chain. A drop under dcache_mu frees
+ * chain nodes; a flush that released the lock for a GET or PUT must not
+ * touch its saved pointer until this says so. The head is an array
+ * element and is never freed. */
+static int dcache_chain_has(uint32_t s, const struct dcache_ent *e)
+{
+    const struct dcache_ent *p;
+
+    for (p = &g_dcache.e[s]; p; p = p->next)
+        if (p == e)
+            return 1;
+    return 0;
+}
+
 static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only)
 {
+    pthread_mutex_t *io = dcache_io_mu(s);
     pthread_mutex_t *mu = dcache_mu(s);
     int rc = EFS_OK;
+    /* shard_io -> dcache_mu. Both drop before a fragment GET or PUT:
+     * fsync of another file on this shard must not sit out a 30 s
+     * recv. The entry is clean (body stolen or dirty cleared) before
+     * the drop, so a second flush does not read the same merge base. */
+    pthread_mutex_lock(io);
     pthread_mutex_lock(mu);
     struct dcache_ent *e = &g_dcache.e[s];
     while (e) {
@@ -3749,6 +3774,7 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             copy = efs_buf_alloc(len);
             if (!copy) {
                 pthread_mutex_unlock(mu);
+                pthread_mutex_unlock(io);
                 return EFS_ERR_NOMEM;
             }
             memcpy(copy, e->data, len);
@@ -3763,17 +3789,21 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             dcache_note_dirty_bytes(-(int64_t)len);
         }
         pthread_mutex_unlock(mu);
+        pthread_mutex_unlock(io);
         if (dcache_need_published_merge(have_base, slot_bg, object_gen,
                                         ino, ci)) {
             uint8_t *base = efs_buf_alloc(len);
             if (!base) {
                 efs_buf_free(copy, len);
+                pthread_mutex_lock(io);
                 pthread_mutex_lock(mu);
-                if (e->ino == ino && e->ci == ci && e->data && !e->dirty) {
+                e = dcache_find(s, ino, ci);
+                if (e && !e->dirty) {
                     dcache_set_dirty(e, s);
                     dcache_note_dirty_bytes((int64_t)len);
                 }
                 pthread_mutex_unlock(mu);
+                pthread_mutex_unlock(io);
                 return EFS_ERR_NOMEM;
             }
             int rrc = efs_client_fetch_published_chunk(ino, ci, base, len);
@@ -3782,12 +3812,15 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             if (rrc != EFS_OK) {
                 efs_buf_free(base, len);
                 efs_buf_free(copy, len);
+                pthread_mutex_lock(io);
                 pthread_mutex_lock(mu);
-                if (e->ino == ino && e->ci == ci && e->data && !e->dirty) {
+                e = dcache_find(s, ino, ci);
+                if (e && !e->dirty) {
                     dcache_set_dirty(e, s);
                     dcache_note_dirty_bytes((int64_t)len);
                 }
                 pthread_mutex_unlock(mu);
+                pthread_mutex_unlock(io);
                 return rrc;
             }
             for (uint8_t i = 0; i < nrange; i++) {
@@ -3811,7 +3844,34 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             span_of(ino, ci, slot_bg, nrange, roff, rlen, len, &doff, &dlen);
         int prc = dcache_put_now(ino, ci, copy, len, slot_bg, seq, doff,
                                  dlen);
+        pthread_mutex_lock(io);
         pthread_mutex_lock(mu);
+        if (!dcache_chain_has(s, e)) {
+            /* The node was dropped while the PUT ran. Whatever holds
+             * (ino,ci) now, if anything, gets the result; the walk
+             * restarts from the head, where every flushed entry is
+             * already clean. */
+            struct dcache_ent *cur = dcache_find_meta(s, ino, ci);
+
+            if (prc != EFS_OK && rc == EFS_OK)
+                rc = prc;
+            if (prc != EFS_OK && cur && !cur->data) {
+                cur->data = copy;
+                cur->len = len;
+                dcache_set_dirty(cur, s);
+                cur->have_base = 1;
+                cur->nrange = 0;
+                cur->base_gen = EFS_CHUNK_BASE_UNCOND;
+                dcache_pin_add(cur);
+                dcache_note_dirty_bytes((int64_t)len);
+                copy = NULL;
+            }
+            efs_buf_free(copy, len);
+            if (prc != EFS_OK)
+                break; /* re-dirtied; a later flush retries, not this walk */
+            e = &g_dcache.e[s];
+            continue;
+        }
         if (prc != EFS_OK) {
             if (rc == EFS_OK)
                 rc = prc;
@@ -3856,20 +3916,16 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
         e = e->next;
     }
     pthread_mutex_unlock(mu);
+    pthread_mutex_unlock(io);
     return rc;
 }
 
-/* Hold the shard I/O lock across the whole flush so the base-read + PUT of
- * one flush completes before a concurrent flush of the same shard reads its
- * merge base. Lock order is shard_io -> dcache_mu (never the reverse), and
- * the base-read's efs_client_read only takes dcache_mu, so no deadlock. */
+/* The shard lock is taken inside the flush and dropped before the
+ * fragment GET and the PUT. Holding it across that GET wedged ll_fsync
+ * of every other file on the shard for the recv timeout (12:36Z). */
 static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
 {
-    pthread_mutex_t *io = dcache_io_mu(s);
-    pthread_mutex_lock(io);
-    int rc = dcache_flush_slot_inner(s, only_ino, have_only);
-    pthread_mutex_unlock(io);
-    return rc;
+    return dcache_flush_slot_inner(s, only_ino, have_only);
 }
 
 /* Close/truncate used to walk all 65536 slots (and 64 shard locks) per
@@ -3879,10 +3935,9 @@ static int dcache_flush_all_slots(efs_ino_t only_ino, int have_only)
 {
     int rc = EFS_OK;
     dcache_ensure();
-    /* Reclaim (have_only=0) stays serial: it skips unpublished
-     * have_base=0 slots and shares shard_io with a live writer. fsync
-     * (have_only=1) walks every slot looking for this ino and pipelines
-     * the PUTs (W3). */
+    /* Reclaim (have_only=0) skips unpublished have_base=0 slots. It
+     * takes shard_io only to snapshot a dirty entry, then drops it
+     * before the fragment GET. fsync (have_only=1) pipelines the PUTs. */
     if (!have_only || !only_ino) {
         uint32_t i;
 
@@ -3978,6 +4033,11 @@ int efs_dcache_flush_ino(efs_ino_t ino)
     dcache_ensure();
     flush_pipe_init(&pipe);
     for (ci = 0; ci < nci && pipe.rc == EFS_OK; ci++) {
+        if (efs_client_rpc_deadline_ms() &&
+            efs_client_rpc_past_deadline()) {
+            pipe.rc = EFS_ERR_BUSY;
+            break;
+        }
         uint8_t *copy = NULL;
         uint32_t len = 0;
         uint64_t bg = 0, seq = 0;

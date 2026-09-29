@@ -1,0 +1,101 @@
+raft-obs: wait_timeouts=0 pump_hold_max=752us lock_wait_max=1us drain_max=326us tick_max=1us apply_max=213us persist_max=550us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-obs: tx->1 enq=12404 drop=0 sent=12376 fail=28 hi=26 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=29 drop=0 sent=0 fail=29 hi=1 rtt_avg=0us get_avg=59us get_max=0ms
+raft-obs: wait_timeouts=0 pump_hold_max=11635us lock_wait_max=1us drain_max=11058us tick_max=1us apply_max=7410us persist_max=8552us applies_in_worst=25 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-obs: tx->1 enq=13017 drop=0 sent=12989 fail=28 hi=26 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=29 drop=0 sent=0 fail=29 hi=1 rtt_avg=0us get_avg=59us get_max=0ms
+raft-obs: wait_timeouts=0 pump_hold_max=15233us lock_wait_max=25us drain_max=14684us tick_max=1us apply_max=9070us persist_max=5635us applies_in_worst=38 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-host: create parent=729147 name=... rc=-13 hint=1 dsh=59 hashed=0
+raft-host: apply create rc=-13 index=7330890 parent=729147 name=...
+raft-host: create parent=281659 name=f0034 rc=-13 hint=1 dsh=3131 hashed=0
+raft-obs: g0 term 6068->6069 role FOLLOWER->CANDIDATE leader=-1 commit=7331344 applied=7331344 t=1790393488438ms
+raft-obs: g0 term 6069->6069 role CANDIDATE->LEADER leader=0 commit=7331344 applied=7331344 t=1790393488440ms
+raft-host: apply create rc=-13 index=7331806 parent=656871 name=f0050
+raft-host: applied session index=7332757 kind=9 shard=0 ino=331041
+raft-host: apply create rc=-13 index=7332801 parent=335551 name=d
+raft-host: applied session index=7332859 kind=9 shard=0 ino=447717
+raft-host: applied session index=7332925 kind=9 shard=0 ino=392785
+raft-host: applied session index=7332926 kind=9 shard=0 ino=349935
+raft-host: applied session index=7333154 kind=9 shard=0 ino=277013
+raft-host: applied session index=7333537 kind=9 shard=0 ino=785219
+raft-host: applied session index=7333538 kind=9 shard=0 ino=334047
+raft-host: applied session index=7333545 kind=9 shard=0 ino=352303
+raft-host: applied session index=7333616 kind=9 shard=0 ino=1134949
+raft-host: applied session index=7333701 kind=9 shard=0 ino=275023
+raft-host: applied session index=7334345 kind=9 shard=0 ino=354767
+raft-host: applied session index=7334527 kind=9 shard=0 ino=2782547
+raft-host: applied session index=7334528 kind=9 shard=0 ino=1931467
+raft-host: applied session index=7334529 kind=9 shard=0 ino=357649
+raft-host: applied session index=7334530 kind=9 shard=0 ino=344059
+raft-host: apply publish rc=-14 index=7335211 ino=359657 ci=0
+raft-obs: tx->1 enq=14110 drop=0 sent=14082 fail=28 hi=26 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=644 drop=0 sent=615 fail=29 hi=4 rtt_avg=35us get_avg=3us get_max=0ms
+raft-obs: wait_timeouts=0 pump_hold_max=13521us lock_wait_max=7353us drain_max=12971us tick_max=375us apply_max=7735us persist_max=788us applies_in_worst=42 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-host: applied session index=7335601 kind=9 shard=0 ino=310823
+raft-host: apply publish rc=-14 index=7336036 ino=913731 ci=0
+raft-host: apply publish rc=-14 index=7336388 ino=1021883 ci=0
+raft-host: apply create rc=-13 index=7337549 parent=479453 name=d
+raft-host: applied session index=7337558 kind=9 shard=0 ino=374061
+raft-host: apply create rc=-13 index=7337655 parent=479453 name=d
+raft-host: applied session index=7337734 kind=9 shard=0 ino=634689
+raft-host: apply create rc=-13 index=7337815 parent=479453 name=d
+raft-host: apply create rc=-13 index=7338105 parent=479453 name=d
+raft-host: apply create rc=-13 index=7338674 parent=479453 name=d
+raft-host: apply create rc=-13 index=7338904 parent=258445 name=t1-11
+raft-host: apply create rc=-13 index=7338924 parent=258445 name=t7-12
+raft-host: apply create rc=-13 index=7338946 parent=258445 name=t5-11
+raft-host: apply create rc=-13 index=7338951 parent=258445 name=t4-13
+raft-host: apply create rc=-13 index=7339655 parent=479453 name=d
+raft-host: apply publish rc=-14 index=7339737 ino=364015 ci=0
+raft-host: apply publish rc=-14 index=7340383 ino=297575 ci=0
+raft-host: apply create rc=-13 index=7340737 parent=479453 name=d
+raft-host: apply publish rc=-14 index=7341293 ino=1566369 ci=0
+raft-host: apply create rc=-13 index=7341720 parent=479453 name=d
+raft-obs: tx->1 enq=16688 drop=0 sent=16660 fail=28 hi=26 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=2647 drop=0 sent=2618 fail=29 hi=11 rtt_avg=37us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=0 pump_hold_max=8373us lock_wait_max=8726us drain_max=7805us tick_max=29us apply_max=7795us persist_max=827us applies_in_worst=33 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-host: apply create rc=-13 index=7342864 parent=479453 name=d
+raft-host: applied session index=7343273 kind=9 shard=0 ino=991811
+raft-host: applied session index=7343560 kind=9 shard=0 ino=991811
+raft-host: apply create rc=-13 index=7343958 parent=479453 name=d
+raft-host: apply create rc=-13 index=7344934 parent=479453 name=d
+raft-host: applied session index=7344946 kind=9 shard=0 ino=728065
+raft-host: create parent=1096931 name=c0-24 rc=-13 hint=0 dsh=3299 hashed=0
+raft-host: unlink-txn parent=358033 name=b rc=-13 hint=0 last=0 held=0 dsh=1681 ish=1681 psh=1681
+raft-host: apply create rc=-13 index=7345092 parent=479453 name=d
+raft-host: applied session index=7345261 kind=9 shard=0 ino=728065
+raft-host: applied session index=7345425 kind=9 shard=0 ino=990873
+raft-host: applied session index=7345550 kind=9 shard=0 ino=990873
+raft-host: apply create rc=-13 index=7346024 parent=479453 name=d
+raft-host: apply create rc=-13 index=7346633 parent=479453 name=d
+raft-obs: tx->1 enq=19388 drop=0 sent=19355 fail=28 hi=26 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=5175 drop=0 sent=5116 fail=29 hi=29 rtt_avg=40us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=9 pump_hold_max=703788us lock_wait_max=7420us drain_max=703400us tick_max=10us apply_max=703380us persist_max=986us applies_in_worst=28 arc_miss=0 arc_term_miss=0 opid_replay=1
+raft-host: apply create rc=-13 index=7347004 parent=479453 name=d
+raft-host: applied session index=7347181 kind=9 shard=0 ino=412421
+raft-host: applied session index=7347215 kind=9 shard=0 ino=276029
+raft-host: applied session index=7347380 kind=9 shard=0 ino=412421
+raft-host: applied session index=7347444 kind=9 shard=0 ino=276029
+raft-host: apply create rc=-13 index=7347948 parent=479453 name=d
+raft-host: applied session index=7348337 kind=9 shard=0 ino=450523
+raft-host: applied session index=7348410 kind=9 shard=0 ino=450523
+raft-obs: tx->1 enq=24643 drop=0 sent=24614 fail=29 hi=26 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=11688 drop=0 sent=11658 fail=30 hi=35 rtt_avg=37us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=9 pump_hold_max=1577us lock_wait_max=3396us drain_max=1025us tick_max=42us apply_max=1013us persist_max=840us applies_in_worst=13 arc_miss=0 arc_term_miss=0 opid_replay=1
+raft-obs: tx->1 enq=29795 drop=0 sent=29766 fail=29 hi=26 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=16767 drop=0 sent=16737 fail=30 hi=35 rtt_avg=35us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=9 pump_hold_max=1670us lock_wait_max=1208us drain_max=459us tick_max=30us apply_max=452us persist_max=1573us applies_in_worst=5 arc_miss=0 arc_term_miss=0 opid_replay=1
+raft-obs: tx->1 enq=34427 drop=0 sent=34398 fail=29 hi=26 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=21380 drop=0 sent=21350 fail=30 hi=35 rtt_avg=34us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=9 pump_hold_max=1214us lock_wait_max=1826us drain_max=681us tick_max=5us apply_max=676us persist_max=683us applies_in_worst=7 arc_miss=0 arc_term_miss=0 opid_replay=1
+raft-host: txn-recover shard=2461 coord=3022 parts=2 age=31.9s -> COMMIT (resolved)
+raft-obs: tx->1 enq=39121 drop=0 sent=39092 fail=29 hi=26 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=26146 drop=0 sent=26116 fail=30 hi=35 rtt_avg=33us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=9 pump_hold_max=1187us lock_wait_max=1834us drain_max=655us tick_max=5us apply_max=651us persist_max=652us applies_in_worst=7 arc_miss=0 arc_term_miss=0 opid_replay=1
+raft-host: txn-recover shard=2733 coord=2733 parts=2 age=38.3s -> COMMIT (resolved)
+raft-obs: tx->1 enq=43457 drop=0 sent=43427 fail=29 hi=26 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=30523 drop=0 sent=30492 fail=30 hi=35 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=9 pump_hold_max=1159us lock_wait_max=1324us drain_max=618us tick_max=8us apply_max=612us persist_max=919us applies_in_worst=6 arc_miss=0 arc_term_miss=0 opid_replay=1
+raft-obs: tx->1 enq=45112 drop=0 sent=45082 fail=30 hi=26 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=32178 drop=0 sent=32147 fail=31 hi=35 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=9 pump_hold_max=867us lock_wait_max=524us drain_max=321us tick_max=5us apply_max=317us persist_max=628us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=1

@@ -820,7 +820,11 @@ static void test_flush_nowait(void)
           "waiting flush published");
     CHECK(efs_kv_lsm_flush_nowait(kv) == EFS_OK, "empty memtable is OK");
     CHECK(put_s(kv, "n50", "v50") == EFS_OK, "key past the line");
-    CHECK(efs_kv_lsm_flush_nowait(kv) == EFS_ERR_BUSY, "nowait does not walk");
+    /* D10: admission is L0 bytes (1 GiB), not a file count. 51 tiny files
+     * are far under that, so the nowait flush places the run. */
+    CHECK(efs_kv_lsm_flush_nowait(kv) == EFS_OK, "nowait under the byte cap");
+    CHECK(efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK && l0 == 51,
+          "nowait flush published");
     efs_kv_lsm_close(kv);
 }
 
@@ -871,7 +875,7 @@ static void test_sync_hold(void)
 static void *view_worker(void *arg)
 {
     struct efs_kv *kv = arg;
-    int i;
+    int i, rc;
 
     for (i = 0; i < 20; i++) {
         char k[32], v[32];
@@ -882,7 +886,10 @@ static void *view_worker(void *arg)
             return (void *)1;
         if (efs_kv_lsm_flush(kv) != EFS_OK)
             return (void *)1;
-        if (efs_kv_lsm_compact(kv) != EFS_OK)
+        /* BUSY = under the 1/8 rule and under the file cap: nothing to
+         * merge yet. That is the compactor's answer, not a failure. */
+        rc = efs_kv_lsm_compact(kv);
+        if (rc != EFS_OK && rc != EFS_ERR_BUSY)
             return (void *)1;
     }
     return NULL;

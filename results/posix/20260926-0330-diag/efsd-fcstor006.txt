@@ -1,0 +1,87 @@
+raft-obs: wait_timeouts=0 pump_hold_max=726us lock_wait_max=1us drain_max=183us tick_max=9us apply_max=179us persist_max=544us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-obs: tx->1 enq=12398 drop=0 sent=12386 fail=12 hi=2 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=11907 drop=0 sent=11855 fail=52 hi=519 rtt_avg=35us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=0 pump_hold_max=14186us lock_wait_max=7322us drain_max=5132us tick_max=5us apply_max=5122us persist_max=12170us applies_in_worst=28 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-host: apply create rc=-13 index=5948634 parent=958360 name=attr_chown_self
+raft-obs: tx->1 enq=13934 drop=0 sent=13922 fail=12 hi=4 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=13169 drop=0 sent=13117 fail=52 hi=519 rtt_avg=37us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=0 pump_hold_max=10125us lock_wait_max=6782us drain_max=5775us tick_max=5us apply_max=5768us persist_max=9769us applies_in_worst=27 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-host: apply create rc=-13 index=5951731 parent=348810 name=perm_owner_utime_readonly
+raft-host: applied session index=5952367 kind=9 shard=0 ino=354306
+raft-host: applied session index=5952529 kind=9 shard=0 ino=519736
+raft-host: applied session index=5952541 kind=9 shard=0 ino=351656
+raft-host: applied session index=5952710 kind=9 shard=0 ino=1749862
+raft-host: applied session index=5952796 kind=9 shard=0 ino=733742
+raft-host: applied session index=5952984 kind=9 shard=0 ino=748512
+raft-host: applied session index=5953047 kind=9 shard=0 ino=535040
+raft-host: applied session index=5953062 kind=9 shard=0 ino=355568
+raft-host: applied session index=5953260 kind=9 shard=0 ino=692052
+raft-host: applied session index=5953269 kind=9 shard=0 ino=464814
+raft-host: applied session index=5953287 kind=9 shard=0 ino=1516582
+raft-host: applied session index=5953546 kind=9 shard=0 ino=1433142
+raft-host: applied session index=5953581 kind=9 shard=0 ino=411576
+raft-host: apply publish rc=-14 index=5953643 ino=512732 ci=0
+raft-host: applied session index=5953915 kind=9 shard=0 ino=294750
+raft-host: applied session index=5954069 kind=9 shard=0 ino=473006
+raft-host: apply publish rc=-14 index=5955006 ino=1015202 ci=0
+raft-host: apply create rc=-13 index=5955352 parent=673626 name=star*char
+raft-host: apply publish rc=-14 index=5955481 ino=925294 ci=0
+raft-obs: tx->1 enq=15965 drop=0 sent=15953 fail=12 hi=19 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=14474 drop=0 sent=14422 fail=52 hi=519 rtt_avg=37us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=0 pump_hold_max=6838us lock_wait_max=6174us drain_max=6285us tick_max=8us apply_max=6276us persist_max=846us applies_in_worst=23 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-host: applied session index=5956363 kind=9 shard=0 ino=350228
+raft-host: txn-recover shard=410 coord=1685 parts=2 age=6.0s -> COMMIT (resolved)
+raft-host: txn-recover shard=1310 coord=3931 parts=2 age=6.0s -> COMMIT (resolved)
+raft-host: txn-recover shard=1692 coord=1692 parts=2 age=6.0s -> COMMIT (resolved)
+raft-host: applied session index=5957337 kind=9 shard=0 ino=281060
+raft-host: applied session index=5957408 kind=9 shard=0 ino=317002
+raft-host: applied session index=5957457 kind=9 shard=0 ino=507534
+raft-host: applied session index=5957481 kind=9 shard=0 ino=393986
+raft-host: applied session index=5957482 kind=9 shard=0 ino=494412
+raft-host: applied session index=5957649 kind=9 shard=0 ino=928722
+raft-host: applied session index=5957761 kind=9 shard=0 ino=417068
+raft-host: applied session index=5957825 kind=9 shard=0 ino=296466
+raft-host: applied session index=5957868 kind=9 shard=0 ino=333188
+raft-host: applied session index=5957870 kind=9 shard=0 ino=377274
+raft-host: applied session index=5958051 kind=9 shard=0 ino=925254
+raft-host: applied session index=5958088 kind=9 shard=0 ino=1099914
+raft-host: applied session index=5958837 kind=9 shard=0 ino=516458
+raft-host: applied session index=5958904 kind=9 shard=0 ino=1553072
+raft-host: applied session index=5958958 kind=9 shard=0 ino=425356
+raft-host: applied session index=5958960 kind=9 shard=0 ino=349574
+raft-host: applied session index=5959059 kind=9 shard=0 ino=473224
+raft-host: applied session index=5960653 kind=9 shard=0 ino=784090
+raft-obs: tx->1 enq=18729 drop=0 sent=18717 fail=12 hi=19 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=16832 drop=0 sent=16780 fail=52 hi=519 rtt_avg=37us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=0 pump_hold_max=8614us lock_wait_max=6308us drain_max=8032us tick_max=28us apply_max=8009us persist_max=1638us applies_in_worst=24 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-host: applied session index=5961749 kind=9 shard=0 ino=439740
+raft-host: applied session index=5961983 kind=9 shard=0 ino=439906
+raft-host: applied session index=5962247 kind=9 shard=0 ino=583822
+raft-host: applied session index=5962325 kind=9 shard=0 ino=285808
+raft-host: applied session index=5962606 kind=9 shard=0 ino=922842
+raft-host: applied session index=5962676 kind=9 shard=0 ino=285808
+raft-host: applied session index=5962683 kind=9 shard=0 ino=583822
+raft-host: applied session index=5962958 kind=9 shard=0 ino=922842
+raft-host: apply create rc=-13 index=5964441 parent=358050 name=l
+raft-obs: g2 term 792->793 role LEADER->FOLLOWER leader=1 commit=5964895 applied=5964895 t=1790393502148ms
+raft-obs: tx->1 enq=20520 drop=0 sent=20508 fail=12 hi=19 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=18368 drop=0 sent=18316 fail=52 hi=519 rtt_avg=37us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=19 pump_hold_max=708321us lock_wait_max=5788us drain_max=707725us tick_max=3us apply_max=707706us persist_max=695us applies_in_worst=22 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-obs: tx->1 enq=23441 drop=0 sent=23428 fail=12 hi=19 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=18368 drop=0 sent=18316 fail=52 hi=519 rtt_avg=37us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=19 pump_hold_max=4991us lock_wait_max=60us drain_max=4455us tick_max=1us apply_max=1120us persist_max=779us applies_in_worst=17 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-obs: tx->1 enq=25903 drop=0 sent=25891 fail=12 hi=19 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=18368 drop=0 sent=18316 fail=52 hi=519 rtt_avg=37us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=19 pump_hold_max=3660us lock_wait_max=25us drain_max=3141us tick_max=1us apply_max=973us persist_max=754us applies_in_worst=11 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-obs: tx->1 enq=28471 drop=0 sent=28459 fail=12 hi=19 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=18368 drop=0 sent=18316 fail=52 hi=519 rtt_avg=37us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=19 pump_hold_max=3221us lock_wait_max=1us drain_max=2878us tick_max=1us apply_max=1037us persist_max=571us applies_in_worst=11 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-obs: tx->1 enq=30921 drop=0 sent=30908 fail=12 hi=19 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=18368 drop=0 sent=18316 fail=52 hi=519 rtt_avg=37us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=19 pump_hold_max=3294us lock_wait_max=1us drain_max=2767us tick_max=5us apply_max=927us persist_max=772us applies_in_worst=10 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-obs: tx->1 enq=33525 drop=0 sent=33512 fail=12 hi=19 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=18368 drop=0 sent=18316 fail=52 hi=519 rtt_avg=37us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=19 pump_hold_max=3672us lock_wait_max=1us drain_max=3156us tick_max=1us apply_max=845us persist_max=773us applies_in_worst=12 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-obs: tx->1 enq=34722 drop=0 sent=34710 fail=12 hi=19 rtt_avg=30us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=18368 drop=0 sent=18316 fail=52 hi=519 rtt_avg=37us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=19 pump_hold_max=1434us lock_wait_max=1us drain_max=896us tick_max=1us apply_max=255us persist_max=735us applies_in_worst=3 arc_miss=0 arc_term_miss=0 opid_replay=0

@@ -1,0 +1,13 @@
+[same-parent] clients=9 procs=4 rounds=100 parent=/tmp/efs-mount/spstorm-20260927-212052 -> /home/erbmi1/git/efs/results/measure/20260927-211953-samedir-rate/storm-4x9
+[same-parent] PASS fcstor007 4 procs, slowest 11.3s
+[same-parent] PASS fcstor008 4 procs, slowest 11.5s
+[same-parent] PASS fcstor009 4 procs, slowest 11.4s
+[same-parent] PASS fcstor010 4 procs, slowest 11.5s
+[same-parent] PASS fcstor011 4 procs, slowest 11.5s
+[same-parent] PASS fcstor012 4 procs, slowest 11.6s
+[same-parent] PASS fcstor013 4 procs, slowest 11.4s
+[same-parent] PASS fcstor014 4 procs, slowest 11.5s
+[same-parent] PASS fcstor015 4 procs, slowest 11.4s
+children=0 nlink=2
+RMDIR_OK
+[same-parent] PASS 9×4 procs × 100 rounds in one parent

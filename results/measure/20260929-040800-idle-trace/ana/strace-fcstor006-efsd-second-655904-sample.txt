@@ -1,0 +1,60 @@
+655904 00:07:19.307113 restart_syscall(<... resuming interrupted poll ...> <unfinished ...>
+655904 00:07:19.311081 <... restart_syscall resumed>) = 0 <0.003963>
+655904 00:07:19.311095 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.311440 <... poll resumed>) = 1 ([{fd=9, revents=POLLIN}]) <0.000337>
+655904 00:07:19.311455 read(9,  <unfinished ...>
+655904 00:07:19.311470 <... read resumed>"\1\0\0\0\0\0\0\0", 8) = 8 <0.000010>
+655904 00:07:19.311485 futex(0x7fd31c4da5e0, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+655904 00:07:19.311508 <... futex resumed>) = 1 <0.000014>
+655904 00:07:19.311536 futex(0x7fd31c4ca4c8, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+655904 00:07:19.311549 <... futex resumed>) = 0 <0.000008>
+655904 00:07:19.311563 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.316629 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.316643 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.321667 <... poll resumed>) = 0 (Timeout) <0.005018>
+655904 00:07:19.321683 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.326749 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.326763 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.331830 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.331844 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.336910 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.336923 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.341989 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.342003 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.347069 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.347083 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.352149 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.352162 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.357228 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.357241 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.358654 <... poll resumed>) = 1 ([{fd=9, revents=POLLIN}]) <0.001405>
+655904 00:07:19.358674 read(9,  <unfinished ...>
+655904 00:07:19.358689 <... read resumed>"\1\0\0\0\0\0\0\0", 8) = 8 <0.000010>
+655904 00:07:19.358704 futex(0x7fd31c4da5e4, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+655904 00:07:19.358723 <... futex resumed>) = 1 <0.000013>
+655904 00:07:19.358750 futex(0x7fd31c4ca4c8, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+655904 00:07:19.358763 <... futex resumed>) = 0 <0.000008>
+655904 00:07:19.358777 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.363843 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.363858 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.368924 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.368937 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.374005 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.374019 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.379085 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.379099 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.384165 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.384178 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.389245 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.389258 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.394325 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.394339 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.399405 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.399418 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.404483 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.404497 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.409563 <... poll resumed>) = 0 (Timeout) <0.005059>
+655904 00:07:19.409578 poll([{fd=9, events=POLLIN}], 1, 5 <unfinished ...>
+655904 00:07:19.411712 <... poll resumed>) = 1 ([{fd=9, revents=POLLIN}]) <0.002127>
+655904 00:07:19.411726 read(9,  <unfinished ...>
+655904 00:07:19.411741 <... read resumed>"\1\0\0\0\0\0\0\0", 8) = 8 <0.000010>

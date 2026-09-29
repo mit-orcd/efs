@@ -1,0 +1,80 @@
+968247 00:07:13.878538 futex(0x5290a8, FUTEX_WAIT_BITSET_PRIVATE|FUTEX_CLOCK_REALTIME, 0, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+968247 00:15:20.977714 <... futex resumed>) = 0 <487.099171>
+968247 00:15:20.977759 futex(0x529058, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+968247 00:15:20.977797 <... futex resumed>) = 0 <0.000033>
+968247 00:15:20.977842 openat(AT_FDCWD, "/data1/01/efs/data/exports/1/0000/0000/0000/0198/2917/0/19.0.6727419515524346746", O_WRONLY|O_TRUNC|O_DIRECT <unfinished ...>
+968247 00:15:20.977891 <... openat resumed>) = -1 ENOENT (No such file or directory) <0.000042>
+968247 00:15:20.977917 openat(AT_FDCWD, "/data1/01/efs/data/exports/1/0000/0000/0000/0198/2917/0/19.0.6727419515524346746", O_WRONLY|O_CREAT|O_TRUNC|O_DIRECT, 0644 <unfinished ...>
+968247 00:15:20.977972 <... openat resumed>) = 158 <0.000048>
+968247 00:15:20.978000 write(158, "NUIWKUZNERNTRDTCJWXLMZUCVNBMHJZW"..., 65536 <unfinished ...>
+968247 00:15:20.978086 <... write resumed>) = 65536 <0.000077>
+968247 00:15:20.978106 close(158 <unfinished ...>
+968247 00:15:20.978122 <... close resumed>) = 0 <0.000011>
+968247 00:15:20.978136 openat(AT_FDCWD, "/data1/01/efs/data/exports/1/0000/0000/0000/0198/2917/0/19.0.6727419515524346746.sum", O_WRONLY|O_CREAT|O_TRUNC, 0644 <unfinished ...>
+968247 00:15:20.978182 <... openat resumed>) = 158 <0.000038>
+968247 00:15:20.978209 write(158, "L\271\237\237\312D\211\326\253\276\2035c\245\246B\240\346\251\226\206\220x\376\212:{\274\33~\265\34", 32 <unfinished ...>
+968247 00:15:20.978252 <... write resumed>) = 32 <0.000036>
+968247 00:15:20.978297 close(158 <unfinished ...>
+968247 00:15:20.978341 <... close resumed>) = 0 <0.000038>
+968247 00:15:20.978385 futex(0x7fb1e2af3498, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+968247 00:15:20.978449 <... futex resumed>) = 1 <0.000059>
+968247 00:15:20.978519 futex(0x7fb1e2af3448, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+968247 00:15:20.978574 <... futex resumed>) = 0 <0.000050>
+968247 00:15:20.978631 openat(AT_FDCWD, "/data1/03/efs/data/exports/1/0000/0000/0000/0198/2917/0/7.0.2303146787496308315", O_WRONLY|O_TRUNC|O_DIRECT <unfinished ...>
+968247 00:15:20.978753 <... openat resumed>) = -1 ENOENT (No such file or directory) <0.000115>
+968247 00:15:20.978813 openat(AT_FDCWD, "/data1/03/efs/data/exports/1/0000/0000/0000/0198/2917/0/7.0.2303146787496308315", O_WRONLY|O_CREAT|O_TRUNC|O_DIRECT, 0644 <unfinished ...>
+968247 00:15:20.978934 <... openat resumed>) = 158 <0.000114>
+968247 00:15:20.978982 write(158, "LETQPDGPGFXOCAZFCOJLZTBWKTBMRBCF"..., 65536 <unfinished ...>
+968247 00:15:20.979061 <... write resumed>) = 65536 <0.000072>
+968247 00:15:20.979107 close(158 <unfinished ...>
+968247 00:15:20.979174 <... close resumed>) = 0 <0.000062>
+968247 00:15:20.979223 openat(AT_FDCWD, "/data1/03/efs/data/exports/1/0000/0000/0000/0198/2917/0/7.0.2303146787496308315.sum", O_WRONLY|O_CREAT|O_TRUNC, 0644 <unfinished ...>
+968247 00:15:20.979294 <... openat resumed>) = 158 <0.000064>
+968247 00:15:20.979335 write(158, "O\275qB\261\243\246\343\214\323\24\22?\351\301\2639sK\277\261$}\211$\7\365\23_\231\36Y", 32 <unfinished ...>
+968247 00:15:20.979445 <... write resumed>) = 32 <0.000104>
+968247 00:15:20.979502 close(158 <unfinished ...>
+968247 00:15:20.979560 <... close resumed>) = 0 <0.000053>
+968247 00:15:20.979619 futex(0x7fb19b92c498, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+968247 00:15:20.979681 <... futex resumed>) = 1 <0.000057>
+968247 00:15:20.979748 futex(0x7fb19b92c448, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+968247 00:15:20.979820 <... futex resumed>) = 0 <0.000067>
+968247 00:15:20.979877 openat(AT_FDCWD, "/data1/02/efs/data/exports/1/0000/0000/0000/0198/2917/0/30.1.7280415948474875309", O_WRONLY|O_TRUNC|O_DIRECT <unfinished ...>
+968247 00:15:20.979984 <... openat resumed>) = -1 ENOENT (No such file or directory) <0.000098>
+968247 00:15:20.980049 openat(AT_FDCWD, "/data1/02/efs/data/exports/1/0000/0000/0000/0198/2917/0/30.1.7280415948474875309", O_WRONLY|O_CREAT|O_TRUNC|O_DIRECT, 0644 <unfinished ...>
+968247 00:15:20.980123 <... openat resumed>) = 158 <0.000067>
+968247 00:15:20.980167 write(158, "UJXTFZJUEOXYVGUIALCVTWIUKNFHVOKR"..., 65536 <unfinished ...>
+968247 00:15:20.980271 <... write resumed>) = 65536 <0.000097>
+968247 00:15:20.980314 close(158 <unfinished ...>
+968247 00:15:20.980362 <... close resumed>) = 0 <0.000043>
+968247 00:15:20.980408 openat(AT_FDCWD, "/data1/02/efs/data/exports/1/0000/0000/0000/0198/2917/0/30.1.7280415948474875309.sum", O_WRONLY|O_CREAT|O_TRUNC, 0644 <unfinished ...>
+968247 00:15:20.980495 <... openat resumed>) = 158 <0.000080>
+968247 00:15:20.980546 write(158, "\203X\27\201r\23\205\32\353\241@\10\347\312C\254@'\331*\27\37\6JH\336\355\271&\200\211\316", 32 <unfinished ...>
+968247 00:15:20.980640 <... write resumed>) = 32 <0.000086>
+968247 00:15:20.980694 close(158 <unfinished ...>
+968247 00:15:20.980793 <... close resumed>) = 0 <0.000095>
+968247 00:15:20.980839 futex(0x7fb19b629498, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+968247 00:15:20.980891 <... futex resumed>) = 1 <0.000048>
+968247 00:15:20.980951 futex(0x5290a8, FUTEX_WAIT_BITSET_PRIVATE|FUTEX_CLOCK_REALTIME, 1, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+968247 00:15:21.002490 <... futex resumed>) = 0 <0.021534>
+968247 00:15:21.002540 futex(0x529058, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+968247 00:15:21.002568 <... futex resumed>) = 0 <0.000024>
+968247 00:15:21.002614 openat(AT_FDCWD, "/data1/02/efs/data/exports/1/0000/0000/0000/0198/2917/0/57.2.841052168117093597", O_WRONLY|O_TRUNC|O_DIRECT <unfinished ...>
+968247 00:15:21.002666 <... openat resumed>) = -1 ENOENT (No such file or directory) <0.000046>
+968247 00:15:21.002703 openat(AT_FDCWD, "/data1/02/efs/data/exports/1/0000/0000/0000/0198/2917/0/57.2.841052168117093597", O_WRONLY|O_CREAT|O_TRUNC|O_DIRECT, 0644 <unfinished ...>
+968247 00:15:21.002778 <... openat resumed>) = 159 <0.000068>
+968247 00:15:21.002823 write(159, "\4\2\r\24\1\27\24\36\33\2\4\35\v\35\4\1\25\f\25\24\5\0\7\6\30\23\0\25\3\n\21\0"..., 65536 <unfinished ...>
+968247 00:15:21.002909 <... write resumed>) = 65536 <0.000079>
+968247 00:15:21.002945 close(159 <unfinished ...>
+968247 00:15:21.002982 <... close resumed>) = 0 <0.000032>
+968247 00:15:21.003035 openat(AT_FDCWD, "/data1/02/efs/data/exports/1/0000/0000/0000/0198/2917/0/57.2.841052168117093597.sum", O_WRONLY|O_CREAT|O_TRUNC, 0644 <unfinished ...>
+968247 00:15:21.003098 <... openat resumed>) = 158 <0.000056>
+968247 00:15:21.003136 write(158, ">j\331\247'\362uVd\310|:z0\353\255\341\23\242\217P\f\355\374}c\360\205\322GB\35", 32 <unfinished ...>
+968247 00:15:21.003208 <... write resumed>) = 32 <0.000066>
+968247 00:15:21.003247 close(158 <unfinished ...>
+968247 00:15:21.003337 <... close resumed>) = 0 <0.000086>
+968247 00:15:21.003385 futex(0x7fb19b629498, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+968247 00:15:21.003442 <... futex resumed>) = 1 <0.000052>
+968247 00:15:21.003482 futex(0x529058, FUTEX_WAIT_PRIVATE, 2, NULL <unfinished ...>
+968247 00:15:21.003532 <... futex resumed>) = -1 EAGAIN (Resource temporarily unavailable) <0.000046>
+968247 00:15:21.003576 futex(0x529058, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+968247 00:15:21.003621 <... futex resumed>) = 0 <0.000041>

@@ -1264,6 +1264,7 @@ static int apply_utimens_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     u.mtime = rd64be(cmd + 29);
     u.atime = rd64be(cmd + 37);
     u.mtime_gen = rd64be(cmd + 45);
+    u.lane_bits = rd64be(cmd + 53);
     rc = efs_meta_apply_utimens(h->kv, ino, now, &u);
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_STALE)
         rc = EFS_OK;
@@ -3584,6 +3585,7 @@ static void host_fwd_setattr(struct efs_raft_host *h, efs_ino_t ino,
                              uint32_t mask, uint32_t mode, uint32_t uid,
                              uint32_t gid, uint64_t size, uint64_t mtime,
                              uint32_t mtime_nsec, uint64_t atime,
+                             uint32_t atime_nsec,
                              struct efs_msg_inode_reply *out,
                              const uint8_t *groups, int ng)
 {
@@ -3599,6 +3601,7 @@ static void host_fwd_setattr(struct efs_raft_host *h, efs_ino_t ino,
     req.mtime = mtime;
     req.mtime_nsec = mtime_nsec;
     req.atime = atime;
+    req.atime_nsec = atime_nsec;
     host_inode_forward(h, EFS_MSG_INODE_SETATTR, &req, sizeof(req),
                        EFS_MSG_INODE_SETATTR_REPLY, out, groups, ng);
 }
@@ -3803,7 +3806,11 @@ static int pack_utimens_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     wr64be(out + 29, u->mtime);
     wr64be(out + 37, u->atime);
     wr64be(out + 45, u->mtime_gen);
+    /* +53: lane_bits (W25). Nonzero only on the copy proposed to the
+     * other group, whose KV has no inode row. UTIMENS carries no op-id;
+     * the remaining 12 bytes are zero. */
     memset(out + 53, 0, EFS_OPID_UUID_LEN + 4);
+    wr64be(out + 53, u->lane_bits);
     *len = HOST_UTIMENS_LEN;
     return EFS_OK;
 }
@@ -9058,6 +9065,7 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
  * mode+time classes are INVAL — the §6 matrix splits them. */
 static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
                          uint32_t mtime_nsec, uint64_t atime,
+                         uint32_t atime_nsec,
                          struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
@@ -9090,7 +9098,7 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
     }
     if (mask & EFS_SETATTR_ATIME) {
         u.mask |= EFS_META_SET_ATIME;
-        u.atime = atime * 1000000000ull;
+        u.atime = atime * 1000000000ull + (uint64_t)atime_nsec;
     }
     u.expect_gen = 0;
     g = efs_raft_shard_group(efs_kv_inode_shard(ino));
@@ -9098,6 +9106,9 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, ino, &row);
     if (rc == EFS_OK && (u.mask & EFS_META_SET_MTIME)) {
+        uint64_t cross = 0;
+        uint8_t fg = g;
+
         u.mtime_gen = row.mtime_gen + 1;
         bits = S_ISDIR(row.mode) && row.layout != EFS_META_LAYOUT_LOCAL
                    ? row.used_shards
@@ -9110,8 +9121,30 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
                 continue;
             lsh = efs_kv_lane_shard(ino, (uint8_t)i);
             lg = efs_raft_shard_group(lsh);
-            if (lg != g)
-                rc = EFS_ERR_INVAL; /* cross-group lane fence later */
+            if (lg != g) {
+                cross |= 1ULL << i;
+                fg = lg;
+            }
+        }
+        /* Lane records in the other group are updated by the same
+         * utimens command applied there (inode row is not in that KV;
+         * lane_bits says which lanes). Proposed first, like truncate's
+         * LANE_FENCE, so a REPORT cannot stamp "now" over the set time. */
+        if (rc == EFS_OK && cross) {
+            if (!host_hosts(h, fg)) {
+                uint8_t need[2];
+                host_need_both(need);
+                host_fwd_setattr(h, ino, mask, 0, 0, 0, 0, mtime, mtime_nsec,
+                                 atime, atime_nsec, out, need, 2);
+                return;
+            }
+            u.expect_gen = row.generation;
+            u.lane_bits = cross;
+            rc = pack_utimens_cmd(cmd, &clen, ino, now_ns(), &u);
+            if (rc == EFS_OK)
+                rc = host_propose_wait(h, fg, cmd, clen, &hint);
+            u.expect_gen = 0;
+            u.lane_bits = 0;
         }
     }
     if (rc == EFS_OK)
@@ -9167,7 +9200,7 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
         uint8_t need[2];
         host_need_both(need);
         host_fwd_setattr(h, ino, EFS_SETATTR_SIZE | EFS_SETATTR_MTIME, 0, 0,
-                         0, size, mtime, mtime_nsec, 0, out, need, 2);
+                         0, size, mtime, mtime_nsec, 0, 0, out, need, 2);
         return;
     }
     rc = host_read_index(h, g, &hint);
@@ -9197,7 +9230,7 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
             uint8_t need[2];
             host_need_both(need);
             host_fwd_setattr(h, ino, EFS_SETATTR_SIZE | EFS_SETATTR_MTIME, 0,
-                             0, 0, size, mtime, mtime_nsec, 0, out, need, 2);
+                             0, 0, size, mtime, mtime_nsec, 0, 0, out, need, 2);
             return;
         }
     }
@@ -9389,7 +9422,8 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
 void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
                               uint32_t uid, uint32_t gid, uint64_t size,
                               uint64_t mtime, uint32_t mtime_nsec,
-                              uint64_t atime, struct efs_msg_inode_reply *out)
+                              uint64_t atime, uint32_t atime_nsec,
+                              struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
     struct efs_meta_setattr sa;
@@ -9430,7 +9464,7 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
         return;
     }
     if (times) {
-        host_utimens(ino, times, mtime, mtime_nsec, atime, out);
+        host_utimens(ino, times, mtime, mtime_nsec, atime, atime_nsec, out);
         return;
     }
     if (own == 0 || (mask & ~(EFS_SETATTR_MODE | EFS_SETATTR_UID |
@@ -10705,6 +10739,10 @@ static int host_pub_batch_propose(struct efs_raft_host *h, struct host_pub_batch
 
     if (!b->buf || !b->len)
         return EFS_OK;
+    /* L0 is within one flush of the cap. BUSY here, on the leader,
+     * instead of the apply path waiting out a compaction. */
+    if (h->kv && efs_kv_lsm_l0_hot(h->kv))
+        return EFS_ERR_BUSY;
     b->t0 = now_us_();
     rc = host_propose(h, b->group, b->buf, b->len, &idx, &term, hint);
     b->len = 0;

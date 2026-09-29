@@ -1,0 +1,486 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 4K of event 'cycles:P'
+# Event count (approx.): 18899918087
+#
+# Overhead       Samples  Command   Shared Object         Symbol                                        
+# ........  ............  ........  ....................  ..............................................
+#
+    41.23%          1666  efs-fuse  efs-fuse              [.] recv_poller
+            |          
+            |--16.58%--__GI___pthread_enable_asynccancel
+            |          start_thread
+            |          
+            |--3.12%--recv_poller
+            |          start_thread
+            |          
+            |--1.90%--_raw_read_lock
+            |          ptrace_stop.part.0
+            |          ptrace_do_notify
+            |          ptrace_notify
+            |          syscall_trace_enter.constprop.0
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __poll
+            |          start_thread
+            |          
+            |--1.85%--_raw_spin_lock_irqsave
+            |          |          
+            |           --0.85%--__wake_up_sync_key
+            |                     do_notify_parent_cldstop
+            |                     ptrace_stop.part.0
+            |                     ptrace_do_notify
+            |                     ptrace_notify
+            |                     syscall_trace_enter.constprop.0
+            |                     do_syscall_64
+            |                     entry_SYSCALL_64_after_hwframe
+            |                     __poll
+            |                     start_thread
+            |          
+            |--1.43%--prepare_signal
+            |          __send_signal_locked
+            |          do_notify_parent_cldstop
+            |          ptrace_stop.part.0
+            |          ptrace_do_notify
+            |          ptrace_notify
+            |          syscall_trace_enter.constprop.0
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __poll
+            |          start_thread
+            |          
+            |--1.16%--ptrace_do_notify
+            |          ptrace_notify
+            |          syscall_trace_enter.constprop.0
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __poll
+            |          start_thread
+            |          
+            |--1.15%--entry_SYSCALL_64
+            |          __poll
+            |          start_thread
+            |          
+            |--0.92%--__task_pid_nr_ns
+            |          |          
+            |           --0.66%--ptrace_do_notify
+            |                     ptrace_notify
+            |                     syscall_trace_enter.constprop.0
+            |                     do_syscall_64
+            |                     entry_SYSCALL_64_after_hwframe
+            |                     __poll
+            |                     start_thread
+            |          
+            |--0.79%--__wake_up_common
+            |          __wake_up_sync_key
+            |          do_notify_parent_cldstop
+            |          ptrace_stop.part.0
+            |          ptrace_do_notify
+            |          ptrace_notify
+            |          syscall_trace_enter.constprop.0
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __poll
+            |          start_thread
+            |          
+            |--0.69%--cpus_share_cache
+            |          select_idle_sibling
+            |          select_task_rq_fair
+            |          select_task_rq
+            |          try_to_wake_up
+            |          __wake_up_common
+            |          __wake_up_sync_key
+            |          do_notify_parent_cldstop
+            |          ptrace_stop.part.0
+            |          ptrace_do_notify
+            |          ptrace_notify
+            |          syscall_trace_enter.constprop.0
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __poll
+            |          start_thread
+            |          
+            |--0.68%--do_notify_parent_cldstop
+            |          ptrace_stop.part.0
+            |          ptrace_do_notify
+            |          ptrace_notify
+            |          syscall_trace_enter.constprop.0
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __poll
+            |          start_thread
+            |          
+            |--0.68%--select_task_rq_fair
+            |          select_task_rq
+            |          try_to_wake_up
+            |          __wake_up_common
+            |          __wake_up_sync_key
+            |          do_notify_parent_cldstop
+            |          ptrace_stop.part.0
+            |          ptrace_do_notify
+            |          ptrace_notify
+            |          syscall_trace_enter.constprop.0
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __poll
+            |          start_thread
+            |          
+            |--0.57%--__poll
+            |          start_thread
+            |          
+            |--0.56%--map_id_up
+            |          from_kuid_munged
+            |          
+            |--0.55%--select_task_rq
+            |          try_to_wake_up
+            |          __wake_up_common
+            |          __wake_up_sync_key
+            |          do_notify_parent_cldstop
+            |          ptrace_stop.part.0
+            |          ptrace_do_notify
+            |          ptrace_notify
+            |          syscall_trace_enter.constprop.0
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __poll
+            |          start_thread
+            |          
+            |--0.52%--__rcu_read_unlock
+            |          
+             --0.52%--child_wait_callback
+                       __wake_up_common
+                       __wake_up_sync_key
+                       do_notify_parent_cldstop
+                       ptrace_stop.part.0
+                       ptrace_do_notify
+                       ptrace_notify
+                       syscall_trace_enter.constprop.0
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __poll
+                       start_thread
+
+     6.29%           261  efs-fuse  [kernel.kallsyms]     [k] entry_SYSCALL_64
+            |          
+            |--0.90%--__schedule
+            |          schedule
+            |          ptrace_stop.part.0
+            |          ptrace_do_notify
+            |          ptrace_notify
+            |          syscall_trace_enter.constprop.0
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __poll
+            |          start_thread
+            |          
+            |--0.76%--pick_next_task
+            |          __schedule
+            |          schedule
+            |          ptrace_stop.part.0
+            |          ptrace_do_notify
+            |          ptrace_notify
+            |          syscall_trace_enter.constprop.0
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __poll
+            |          start_thread
+            |          
+            |--0.76%--put_prev_task_fair
+            |          pick_next_task
+            |          __schedule
+            |          schedule
+            |          ptrace_stop.part.0
+            |          ptrace_do_notify
+            |          ptrace_notify
+            |          syscall_trace_enter.constprop.0
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __poll
+            |          start_thread
+            |          
+            |--0.74%--sched_balance_newidle
+            |          pick_next_task_fair
+            |          pick_next_task
+            |          __schedule
+            |          schedule
+            |          ptrace_stop.part.0
+            |          ptrace_do_notify
+            |          ptrace_notify
+            |          syscall_trace_enter.constprop.0
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __poll
+            |          start_thread
+            |          
+             --0.58%--put_prev_entity
+                       put_prev_task_fair
+                       pick_next_task
+                       __schedule
+                       schedule
+                       ptrace_stop.part.0
+                       ptrace_do_notify
+                       ptrace_notify
+                       syscall_trace_enter.constprop.0
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __poll
+                       start_thread
+
+     3.15%           126  efs-fuse  [kernel.kallsyms]     [k] retbleed_return_thunk
+            |          
+             --0.64%--recv_poller
+                       start_thread
+
+     2.33%            93  efs-fuse  [kernel.kallsyms]     [k] __rcu_read_unlock
+            |          
+            |--0.58%--perf_ibs_stop
+            |          perf_ibs_del
+            |          event_sched_out
+            |          group_sched_out
+            |          __pmu_ctx_sched_out
+            |          ctx_sched_out
+            |          perf_event_context_sched_out
+            |          __perf_event_task_sched_out
+            |          prepare_task_switch
+            |          __schedule
+            |          schedule
+            |          ptrace_stop.part.0
+            |          ptrace_do_notify
+            |          ptrace_notify
+            |          
+             --0.57%--perf_ibs_del
+                       event_sched_out
+                       group_sched_out
+                       __pmu_ctx_sched_out
+                       ctx_sched_out
+                       perf_event_context_sched_out
+                       __perf_event_task_sched_out
+                       prepare_task_switch
+                       __schedule
+                       schedule
+                       ptrace_stop.part.0
+                       ptrace_do_notify
+                       ptrace_notify
+
+     2.09%            90  efs-fuse  [kernel.kallsyms]     [k] ptrace_do_notify
+            |          
+             --0.55%--recv_poller
+                       start_thread
+
+     1.57%            62  efs-fuse  [kernel.kallsyms]     [k] __task_pid_nr_ns
+     1.55%            64  efs-fuse  libc.so.6             [.] pthread_spin_unlock@@GLIBC_2.34
+     1.43%            57  efs-fuse  [kernel.kallsyms]     [k] do_notify_parent_cldstop
+     1.17%            47  efs-fuse  libc.so.6             [.] __poll
+     1.11%            46  efs-fuse  [kernel.kallsyms]     [k] do_sys_poll
+     1.02%            40  efs-fuse  [kernel.kallsyms]     [k] ptrace_stop.part.0
+     1.01%            42  efs-fuse  [kernel.kallsyms]     [k] merge_sched_in
+     0.97%            40  efs-fuse  [kernel.kallsyms]     [k] _raw_spin_lock_irq
+     0.87%            37  efs-fuse  [kernel.kallsyms]     [k] do_syscall_64
+     0.87%            36  efs-fuse  [kernel.kallsyms]     [k] ptrace_notify
+     0.86%            36  efs-fuse  [kernel.kallsyms]     [k] _raw_spin_lock_irqsave
+     0.82%            33  efs-fuse  [kernel.kallsyms]     [k] syscall_exit_work
+     0.68%            29  efs-fuse  libc.so.6             [.] pthread_spin_lock@@GLIBC_2.34
+     0.65%            27  efs-fuse  [kernel.kallsyms]     [k] do_poll.constprop.0
+     0.62%            25  efs-fuse  [kernel.kallsyms]     [k] _raw_spin_unlock_irq
+     0.61%            26  efs-fuse  [kernel.kallsyms]     [k] __x64_sys_poll
+     0.60%            25  efs-fuse  [kernel.kallsyms]     [k] map_id_up
+     0.59%            25  efs-fuse  [kernel.kallsyms]     [k] __get_user_8
+     0.57%            23  efs-fuse  [kernel.kallsyms]     [k] send_signal_locked
+     0.56%            24  efs-fuse  [kernel.kallsyms]     [k] schedule
+     0.55%            22  efs-fuse  [kernel.kallsyms]     [k] visit_groups_merge.constprop.0.isra.0
+     0.54%            21  efs-fuse  [kernel.kallsyms]     [k] __list_add_valid
+     0.53%            25  efs-fuse  [kernel.kallsyms]     [k] __rcu_read_lock
+     0.53%            21  efs-fuse  [kernel.kallsyms]     [k] __perf_event_task_sched_in
+     0.52%            22  efs-fuse  [kernel.kallsyms]     [k] finish_task_switch.isra.0
+     0.51%            19  efs-fuse  [kernel.kallsyms]     [k] __rseq_handle_notify_resume
+     0.48%            20  efs-fuse  [kernel.kallsyms]     [k] perf_ctx_sched_task_cb
+     0.47%            19  efs-fuse  [kernel.kallsyms]     [k] entry_SYSCALL_64_after_hwframe
+     0.46%            20  efs-fuse  [kernel.kallsyms]     [k] perf_pmu_nop_void
+     0.46%            19  efs-fuse  [kernel.kallsyms]     [k] __put_user_8
+     0.41%            18  efs-fuse  [kernel.kallsyms]     [k] perf_pmu_nop_int
+     0.41%            16  efs-fuse  [kernel.kallsyms]     [k] syscall_exit_to_user_mode
+     0.41%            18  efs-fuse  [kernel.kallsyms]     [k] read_tsc
+     0.40%            18  efs-fuse  [kernel.kallsyms]     [k] event_sched_in
+     0.40%            16  efs-fuse  [ib_uverbs]           [k] ib_uverbs_comp_event_poll
+     0.39%            15  efs-fuse  [kernel.kallsyms]     [k] perf_ctx_enable
+     0.39%            15  efs-fuse  [kernel.kallsyms]     [k] exit_to_user_mode_loop
+     0.38%            16  efs-fuse  [kernel.kallsyms]     [k] perf_ctx_unlock
+     0.38%            16  efs-fuse  [kernel.kallsyms]     [k] child_wait_callback
+     0.36%            16  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000229f5
+     0.36%            15  efs-fuse  [kernel.kallsyms]     [k] _raw_spin_unlock
+     0.36%            15  efs-fuse  libc.so.6             [.] __GI___pthread_enable_asynccancel
+     0.35%            15  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022ac5
+     0.33%            13  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222dc
+     0.32%            14  efs-fuse  libmlx5.so.1.27.63.0  [.] pthread_spin_unlock@plt
+     0.31%            13  efs-fuse  [kernel.kallsyms]     [k] perf_event_groups_next
+     0.30%            13  efs-fuse  libmlx5.so.1.27.63.0  [.] pthread_spin_lock@plt
+     0.30%            13  efs-fuse  [kernel.kallsyms]     [k] ctx_sched_in
+     0.30%            13  efs-fuse  [kernel.kallsyms]     [k] rb_next
+     0.28%            13  efs-fuse  [kernel.kallsyms]     [k] _raw_read_lock
+     0.27%            11  efs-fuse  [kernel.kallsyms]     [k] from_kuid_munged
+     0.26%            11  efs-fuse  [kernel.kallsyms]     [k] select_task_rq_fair
+     0.24%            10  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000223ec
+     0.24%             8  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022483
+     0.24%            12  efs-fuse  [kernel.kallsyms]     [k] prepare_signal
+     0.23%             9  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x000000000002248f
+     0.23%            10  efs-fuse  [kernel.kallsyms]     [k] task_cputime
+     0.22%             9  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000223f6
+     0.22%             9  efs-fuse  [kernel.kallsyms]     [k] nsec_to_clock_t
+     0.21%             9  efs-fuse  [kernel.kallsyms]     [k] __schedule
+     0.21%             9  efs-fuse  [kernel.kallsyms]     [k] _copy_from_user
+     0.21%             9  efs-fuse  [kernel.kallsyms]     [k] schedule_hrtimeout_range_clock
+     0.20%             8  efs-fuse  [kernel.kallsyms]     [k] sched_update_worker
+     0.20%            11  efs-fuse  [kernel.kallsyms]     [k] native_sched_clock
+     0.20%             8  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000223fe
+     0.20%             7  efs-fuse  [kernel.kallsyms]     [k] __x86_indirect_thunk_rax
+     0.20%             8  efs-fuse  [kernel.kallsyms]     [k] __fget_light
+     0.20%             8  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222b5
+     0.19%             7  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x000000000002222e
+     0.19%             8  efs-fuse  [kernel.kallsyms]     [k] syscall_trace_enter.constprop.0
+     0.19%             9  efs-fuse  [kernel.kallsyms]     [k] siginfo_layout
+     0.19%             7  efs-fuse  [kernel.kallsyms]     [k] __send_signal_locked
+     0.18%             6  efs-fuse  [kernel.kallsyms]     [k] syscall_exit_to_user_mode_prepare
+     0.18%             8  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022aca
+     0.18%             7  efs-fuse  libc.so.6             [.] __GI___pthread_disable_asynccancel
+     0.18%             8  efs-fuse  [kernel.kallsyms]     [k] entry_SYSRETQ_unsafe_stack
+     0.18%             7  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022412
+     0.18%             7  efs-fuse  [kernel.kallsyms]     [k] __wake_up_common
+     0.18%             7  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022224
+     0.17%             7  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x000000000002241a
+     0.17%             6  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022495
+     0.16%             6  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222bf
+     0.16%             7  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222b8
+     0.16%             7  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000223f2
+     0.16%             6  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222c9
+     0.16%             7  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x000000000002229e
+     0.15%             6  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022218
+     0.15%             6  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022258
+     0.15%             6  efs-fuse  [kernel.kallsyms]     [k] task_active_pid_ns
+     0.15%             4  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222d9
+     0.15%             6  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022223
+     0.14%             6  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x000000000002248b
+     0.14%             6  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022480
+     0.14%             6  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x000000000002221f
+     0.14%             6  efs-fuse  [kernel.kallsyms]     [k] cgroup_leave_frozen
+     0.13%             6  efs-fuse  [kernel.kallsyms]     [k] retbleed_untrain_ret
+     0.13%             6  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022260
+     0.13%             5  efs-fuse  [kernel.kallsyms]     [k] fput
+     0.13%             6  efs-fuse  [kernel.kallsyms]     [k] cgroup_update_frozen
+     0.12%             6  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022299
+     0.12%             5  efs-fuse  [kernel.kallsyms]     [k] poll_schedule_timeout.constprop.0
+     0.12%             5  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222ac
+     0.12%             5  efs-fuse  [kernel.kallsyms]     [k] __audit_syscall_exit
+     0.12%             5  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x000000000002249b
+     0.11%             4  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022214
+     0.11%             4  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222a0
+     0.11%             5  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022865
+     0.11%             5  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x000000000002226d
+     0.11%             4  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222c1
+     0.11%             5  efs-fuse  [kernel.kallsyms]     [k] _raw_spin_unlock_irqrestore
+     0.10%             4  efs-fuse  [kernel.kallsyms]     [k] rseq_ip_fixup
+     0.10%             3  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022265
+     0.10%             4  efs-fuse  [kernel.kallsyms]     [k] fput_many
+     0.10%             4  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022492
+     0.10%             4  efs-fuse  [kernel.kallsyms]     [k] __audit_syscall_entry
+     0.10%             4  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022ac0
+     0.09%             3  efs-fuse  [kernel.kallsyms]     [k] raw_spin_rq_unlock
+     0.09%             3  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000223e4
+     0.09%             4  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x000000000002221d
+     0.09%             4  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222d6
+     0.09%             4  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022216
+     0.08%             4  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222ef
+     0.08%             3  efs-fuse  [kernel.kallsyms]     [k] remove_wait_queue
+     0.08%             3  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022291
+     0.08%             3  efs-fuse  [kernel.kallsyms]     [k] default_wake_function
+     0.08%             5  efs-fuse  [kernel.kallsyms]     [k] mem_cgroup_handle_over_high
+     0.08%             3  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222a9
+     0.08%             3  efs-fuse  [kernel.kallsyms]     [k] try_to_wake_up
+     0.07%             3  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000229fa
+     0.07%             4  efs-fuse  [kernel.kallsyms]     [k] _raw_read_unlock
+     0.07%             3  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222df
+     0.07%             3  efs-fuse  [kernel.kallsyms]     [k] __wake_up_sync_key
+     0.07%             3  efs-fuse  [kernel.kallsyms]     [k] blkcg_maybe_throttle_current
+     0.07%             3  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022228
+     0.07%             2  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x000000000002221a
+     0.07%             3  efs-fuse  [kernel.kallsyms]     [k] select_task_rq
+     0.07%             3  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000229f0
+     0.06%             3  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022232
+     0.06%             2  efs-fuse  [kernel.kallsyms]     [k] poll_freewait
+     0.06%             3  efs-fuse  [kernel.kallsyms]     [k] syscall_return_via_sysret
+     0.06%             2  efs-fuse  [kernel.kallsyms]     [k] syscall_enter_from_user_mode
+     0.06%             2  efs-fuse  [kernel.kallsyms]     [k] ktime_get_ts64
+     0.06%             3  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022222
+     0.06%             3  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022499
+     0.06%             2  efs-fuse  [kernel.kallsyms]     [k] arch_exit_to_user_mode_prepare.constprop.0
+     0.06%             2  efs-fuse  efs-fuse              [.] poll@plt
+     0.06%             2  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022210
+     0.05%             2  efs-fuse  [kernel.kallsyms]     [k] _find_next_and_bit
+     0.05%             2  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222e3
+     0.05%             2  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022493
+     0.05%             2  efs-fuse  [kernel.kallsyms]     [k] wake_affine
+     0.05%             2  efs-fuse  [kernel.kallsyms]     [k] __check_object_size.part.0
+     0.05%             2  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222bd
+     0.05%             2  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000223f4
+     0.04%             2  efs-fuse  [kernel.kallsyms]     [k] __list_del_entry_valid
+     0.04%             2  efs-fuse  [kernel.kallsyms]     [k] __hrtimer_run_queues
+     0.04%             2  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222d3
+     0.04%             2  efs-fuse  [kernel.kallsyms]     [k] recalc_sigpending_tsk
+     0.04%             2  efs-fuse  [kernel.kallsyms]     [k] poll_select_set_timeout
+     0.04%             2  efs-fuse  [kernel.kallsyms]     [k] __wake_up_parent
+     0.04%             2  efs-fuse  [kernel.kallsyms]     [k] fpregs_restore_userregs
+     0.04%             2  efs-fuse  [kernel.kallsyms]     [k] select_idle_sibling
+     0.04%             1  efs-fuse  [kernel.kallsyms]     [k] ttwu_queue_wakelist
+     0.04%             2  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022497
+     0.04%             1  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222f3
+     0.03%             1  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222ec
+     0.03%             1  efs-fuse  [kernel.kallsyms]     [k] rcu_sched_clock_irq
+     0.03%             1  efs-fuse  [kernel.kallsyms]     [k] asm_sysvec_apic_timer_interrupt
+     0.03%             1  efs-fuse  [kernel.kallsyms]     [k] hrtimer_active
+     0.03%             1  efs-fuse  [kernel.kallsyms]     [k] folio_batch_move_lru
+     0.03%             1  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022488
+     0.03%             1  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222ae
+     0.03%             1  efs-fuse  [kernel.kallsyms]     [k] irqentry_exit_to_user_mode
+     0.02%             1  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000016a6c
+     0.02%             1  efs-fuse  [kernel.kallsyms]     [k] __update_load_avg_blocked_se
+     0.02%             1  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000016aa1
+     0.02%             1  efs-fuse  [kernel.kallsyms]     [k] sched_clock
+     0.02%             1  efs-fuse  [kernel.kallsyms]     [k] call_function_single_prep_ipi
+     0.02%             1  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000016a7c
+     0.02%             1  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222d1
+     0.02%             1  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000022860
+     0.02%             2  efs-fuse  libc.so.6             [.] __GI___pthread_mutex_unlock_usercnt
+     0.02%             1  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222f7
+     0.02%             1  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x00000000000222e7
+     0.02%             1  efs-fuse  [kernel.kallsyms]     [k] sched_balance_find_src_group
+     0.02%             1  efs-fuse  [kernel.kallsyms]     [k] rseq_get_rseq_cs
+     0.02%             1  efs-fuse  [kernel.kallsyms]     [k] __check_object_size
+     0.02%             1  efs-fuse  libmlx5.so.1.27.63.0  [.] 0x0000000000016ac2
+     0.02%             1  efs-fuse  [kernel.kallsyms]     [k] set_normalized_timespec64
+     0.02%             1  efs-fuse  [kernel.kallsyms]     [k] amd_clear_divider
+     0.01%             1  efs-fuse  libc.so.6             [.] pthread_cond_timedwait@@GLIBC_2.3.2
+     0.01%             1  efs-fuse  [kernel.kallsyms]     [k] futex_do_wait
+     0.01%             1  efs-fuse  [kernel.kallsyms]     [k] cpus_share_cache
+     0.01%             1  efs-fuse  [kernel.kallsyms]     [k] task_tick_fair
+     0.01%             1  efs-fuse  efs-fuse              [.] efs_client_table_lock
+     0.01%             1  efs-fuse  [kernel.kallsyms]     [k] restore_fpregs_from_fpstate
+     0.01%             1  efs-fuse  [kernel.kallsyms]     [k] sched_clock_cpu
+     0.01%             1  efs-fuse  [kernel.kallsyms]     [k] __x64_sys_futex
+     0.01%             1  efs-fuse  libc.so.6             [.] pthread_mutex_lock@@GLIBC_2.2.5
+     0.00%             1  efs-fuse  [kernel.kallsyms]     [k] slab_pre_alloc_hook.constprop.0
+     0.00%             1  efs-fuse  [kernel.kallsyms]     [k] gup_pgd_range
+     0.00%             1  efs-fuse  [kernel.kallsyms]     [k] _find_next_bit
+     0.00%             1  efs-fuse  [kernel.kallsyms]     [k] futex_wait_setup
+     0.00%             7  efs-fuse  [kernel.kallsyms]     [k] perf_ibs_handle_irq
+     0.00%             4  efs-fuse  [kernel.kallsyms]     [k] calc_timer_values
+     0.00%             2  efs-fuse  [kernel.kallsyms]     [k] perf_event_update_userpage
+     0.00%             1  efs-fuse  [kernel.kallsyms]     [k] local_clock
+     0.00%             1  efs-fuse  [kernel.kallsyms]     [k] local_clock_noinstr
+     0.00%             1  efs-fuse  [kernel.kallsyms]     [k] perf_ibs_start
+
+
+#
+# (Tip: To adjust path to source files to local file system use perf report --prefix=... --prefix-strip=...)
+#

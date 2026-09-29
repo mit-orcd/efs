@@ -3090,6 +3090,7 @@ static int efs_rc_to_errno(int rc)
     case EFS_ERR_NAMETOOLONG: return -ENAMETOOLONG;
     case EFS_ERR_NODATA:    return -ENODATA;
     case EFS_ERR_BUSY:
+        return -EBUSY;
     case EFS_ERR_AGAIN:
         return -EAGAIN;
     case EFS_ERR_NO_QUORUM:
@@ -3224,14 +3225,18 @@ static int efs_fuse_utimens_ino(fuse_ino_t ino, const struct timespec tv[2])
     struct timespec now;
     int have_now = 0;
     uint64_t asec = 0, msec = 0;
-    uint32_t nsec = 0;
+    uint32_t nsec = 0, ansec = 0;
     if (set_a) {
         if (tv[0].tv_nsec == UTIME_NOW) {
             clock_gettime(CLOCK_REALTIME, &now);
             have_now = 1;
             asec = (uint64_t)now.tv_sec;
+            ansec = (uint32_t)now.tv_nsec;
         } else {
             asec = (uint64_t)tv[0].tv_sec;
+            ansec = (uint32_t)tv[0].tv_nsec;
+            if (ansec >= 1000000000u)
+                ansec = 0;
         }
     }
     if (set_m) {
@@ -3253,11 +3258,11 @@ static int efs_fuse_utimens_ino(fuse_ino_t ino, const struct timespec tv[2])
      * and reported the ENOENT correctly. */
     int rc;
     if (set_a && set_m) {
-        rc = efs_client_utimens_both(ino, msec, nsec, asec);
+        rc = efs_client_utimens_both(ino, msec, nsec, asec, ansec);
         return efs_rc_to_errno(rc);
     }
     if (set_a) {
-        rc = efs_client_set_atime(ino, asec);
+        rc = efs_client_set_atime(ino, asec, ansec);
         if (rc != EFS_OK)
             return efs_rc_to_errno(rc);
     }
@@ -3287,9 +3292,19 @@ static int efs_fuse_truncate_ino(fuse_ino_t ino, off_t size,
         if (ctx && check_access(&row, ctx->uid, ctx->gid, W_OK) != 0)
             return -EACCES;
     }
-    (void)efs_dcache_flush_ino((efs_ino_t)ino);
     {
-        int trc = efs_client_truncate((efs_ino_t)ino, (uint64_t)size);
+        struct timespec ts;
+        uint64_t now;
+        int trc;
+
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        now = (uint64_t)ts.tv_sec * 1000ull +
+              (uint64_t)ts.tv_nsec / 1000000ull;
+        /* One budget for flush + REPORT + SETATTR, not 8 s per RPC. */
+        efs_client_rpc_set_deadline_ms(now + 8000ull);
+        (void)efs_dcache_flush_ino((efs_ino_t)ino);
+        trc = efs_client_truncate((efs_ino_t)ino, (uint64_t)size);
+        efs_client_rpc_set_deadline_ms(0);
         return efs_rc_to_errno(trc);
     }
 }

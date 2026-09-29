@@ -1,0 +1,5 @@
+== fcstor015
+report-loop ino=1629930 rounds=1 stale=0 busy=1 ms=12719 rc=-13
+report-loop ino=1629930 rounds=1 stale=0 busy=1 ms=24840 rc=-13
+inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY

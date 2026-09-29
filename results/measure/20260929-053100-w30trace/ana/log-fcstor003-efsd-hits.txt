@@ -1,0 +1,56 @@
+kv-compact: start l0=25 inputs=2 range=291
+kv-compact: end bytes=67132009 ms=803 l0=24 l1=138 rc=0
+kv-compact: start l0=24 inputs=2 range=471
+kv-compact: end bytes=50034138 ms=575 l0=23 l1=175 rc=0
+raft-host: apply-sleep us=400073 group=0 idx=13735315 applied=13735314
+raft-host: apply-sleep us=400075 group=0 idx=13735318 applied=13735314
+raft-host: apply-sleep us=400055 group=0 idx=13735321 applied=13735318
+kv-compact: start l0=41 inputs=2 range=471
+kv-compact: end bytes=488454 ms=9 l0=40 l1=175 rc=0
+kv-compact: start l0=40 inputs=3 range=503
+kv-compact: end bytes=79131 ms=5 l0=38 l1=175 rc=0
+raft-host: apply-sleep us=400055 group=0 idx=13735331 applied=13735327
+raft-host: apply-sleep us=91545 group=0 idx=13735334 applied=13735333
+kv-compact: start l0=56 inputs=2 range=503
+kv-compact: end bytes=207694 ms=5 l0=55 l1=175 rc=0
+raft-host: apply-sleep us=136870 group=0 idx=13735339 applied=13735337
+raft-host: apply-sleep us=400078 group=0 idx=13735352 applied=13735346
+kv-compact: start l0=73 inputs=3 range=471
+kv-compact: end bytes=595300 ms=9 l0=71 l1=175 rc=0
+kv-compact: start l0=71 inputs=2 range=503
+kv-compact: end bytes=254648 ms=4 l0=70 l1=175 rc=0
+raft-host: apply-sleep us=304109 group=0 idx=13735355 applied=13735354
+raft-host: apply-sleep us=277541 group=0 idx=13735363 applied=13735361
+raft-host: apply-sleep us=400076 group=0 idx=13735371 applied=13735364
+kv-compact: start l0=88 inputs=2 range=471
+kv-compact: end bytes=761774 ms=13 l0=87 l1=175 rc=0
+kv-compact: start l0=87 inputs=2 range=503
+kv-compact: end bytes=303109 ms=7 l0=86 l1=175 rc=0
+raft-host: apply-sleep us=50256 group=0 idx=13735372 applied=13735371
+raft-host: apply-sleep us=400062 group=0 idx=13735380 applied=13735374
+raft-host: apply-sleep us=400078 group=0 idx=13735381 applied=13735374
+kv-compact: start l0=104 inputs=2 range=503
+kv-compact: end bytes=357688 ms=7 l0=103 l1=175 rc=0
+raft-host: apply-sleep us=374507 group=0 idx=13735389 applied=13735386
+kv-compact: start l0=121 inputs=3 range=471
+kv-compact: end bytes=1238978 ms=20 l0=119 l1=175 rc=0
+kv-compact: start l0=119 inputs=2 range=503
+kv-compact: end bytes=412428 ms=8 l0=118 l1=175 rc=0
+raft-host: apply-sleep us=400052 group=0 idx=13735396 applied=13735391
+raft-host: apply-sleep us=264899 group=0 idx=13735398 applied=13735397
+raft-host: apply-sleep us=400077 group=0 idx=13735405 applied=13735404
+kv-compact: start l0=136 inputs=2 range=503
+kv-compact: end bytes=619957 ms=11 l0=135 l1=175 rc=0
+raft-host: apply-sleep us=400082 group=0 idx=13735411 applied=13735404
+raft-host: apply-sleep us=400078 group=0 idx=13735417 applied=13735409
+raft-host: apply-sleep us=400080 group=0 idx=13735423 applied=13735414
+kv-compact: start l0=149 inputs=2 range=503
+kv-compact: end bytes=879167 ms=14 l0=148 l1=175 rc=0
+raft-host: apply-sleep us=400079 group=0 idx=13735428 applied=13735420
+raft-host: apply-sleep us=275464 group=0 idx=13735429 applied=13735428
+raft-host: apply-sleep us=400082 group=0 idx=13735431 applied=13735430
+raft-host: apply-sleep us=400074 group=0 idx=13735433 applied=13735432
+raft-host: apply-sleep us=115250 group=0 idx=13735435 applied=13735434
+raft-host: apply-sleep us=201847 group=0 idx=13735442 applied=13735441
+raft-host: apply-sleep us=39766 group=0 idx=13742974 applied=13742973
+raft-host: apply-sleep us=23244 group=0 idx=13753897 applied=13753896

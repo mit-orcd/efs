@@ -1,0 +1,98 @@
+raft-obs: wait_timeouts=106 pump_hold_max=8us lock_wait_max=1us drain_max=1us tick_max=8us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0
+raft-obs: g2 term 1156->1157 role LEADER->FOLLOWER leader=2 commit=9239160 applied=9239160 t=1790433702817ms
+raft-host: apply create rc=-5 index=9239227 parent=1109158 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: apply create rc=-13 index=9239259 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: apply create rc=-13 index=9239433 parent=1148986 name=f4
+raft-host: apply create rc=-13 index=9239592 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: apply create rc=-13 index=9239644 parent=1543122 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-obs: tx->1 enq=135592 drop=0 sent=135576 fail=16 hi=125 rtt_avg=34us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=88208 drop=0 sent=88152 fail=55 hi=157 rtt_avg=36us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=114 pump_hold_max=847959us lock_wait_max=3300us drain_max=847959us tick_max=5us apply_max=847922us persist_max=1284us applies_in_worst=30 arc_miss=1 arc_term_miss=26 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0
+raft-host: apply create rc=-13 index=9240069 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: apply create rc=-13 index=9240090 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: apply create rc=-13 index=9240193 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: applied session index=9241289 kind=9 shard=0 ino=2249574
+raft-host: applied session index=9241527 kind=9 shard=0 ino=860276
+raft-host: applied session index=9241626 kind=9 shard=0 ino=1652178
+raft-host: apply create rc=-13 index=9241683 parent=1528704 name=err_read_from_dir
+raft-host: applied session index=9241697 kind=9 shard=0 ino=1206222
+raft-host: applied session index=9241717 kind=9 shard=0 ino=1652178
+raft-host: applied session index=9241790 kind=9 shard=0 ino=979644
+raft-host: applied session index=9241872 kind=9 shard=0 ino=2353866
+raft-host: applied session index=9241947 kind=9 shard=0 ino=2353866
+raft-host: applied session index=9242013 kind=9 shard=0 ino=1194872
+raft-host: applied session index=9242135 kind=9 shard=0 ino=958160
+raft-host: applied session index=9242167 kind=9 shard=0 ino=1076196
+raft-host: applied session index=9242329 kind=9 shard=0 ino=977596
+raft-host: apply create rc=-13 index=9242632 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: apply create rc=-13 index=9243218 parent=1096646 name=pipe|char
+raft-host: apply publish rc=-14 index=9243760 ino=943048 ci=0
+raft-host: applied session index=9244092 kind=9 shard=0 ino=2089352
+raft-host: apply publish rc=-14 index=9244474 ino=1598616 ci=0
+raft-host: apply publish rc=-14 index=9244835 ino=3022106 ci=0
+raft-host: apply publish rc=-14 index=9244926 ino=988838 ci=0
+raft-host: apply publish rc=-14 index=9245135 ino=1494224 ci=0
+raft-host: apply publish rc=-14 index=9245552 ino=1840564 ci=0
+raft-host: apply create rc=-13 index=9246013 parent=1048928 name=d
+raft-host: apply create rc=-13 index=9246083 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: apply create rc=-13 index=9246236 parent=1048928 name=d
+raft-host: apply create rc=-13 index=9246648 parent=1048928 name=d
+raft-host: apply create rc=-13 index=9247463 parent=1048928 name=d
+raft-host: applied session index=9248735 kind=9 shard=0 ino=978836
+raft-host: applied session index=9248909 kind=9 shard=0 ino=978836
+raft-host: apply create rc=-13 index=9249314 parent=1048928 name=d
+raft-host: apply create rc=-13 index=9249532 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: applied session index=9249594 kind=9 shard=0 ino=877990
+raft-host: applied session index=9249635 kind=9 shard=0 ino=1120100
+raft-host: applied session index=9249819 kind=9 shard=0 ino=877990
+raft-host: applied session index=9249863 kind=9 shard=0 ino=1120100
+raft-host: applied session index=9249951 kind=9 shard=0 ino=1306834
+raft-host: applied session index=9250214 kind=9 shard=0 ino=1306834
+raft-host: applied session index=9250267 kind=9 shard=0 ino=1233532
+raft-host: applied session index=9250489 kind=9 shard=0 ino=1233532
+raft-host: applied session index=9251802 kind=9 shard=0 ino=1306248
+raft-host: applied session index=9251885 kind=9 shard=0 ino=1306248
+raft-host: apply create rc=-13 index=9252002 parent=1048928 name=d
+raft-host: apply create rc=-13 index=9252127 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: apply create rc=-13 index=9254055 parent=1048928 name=d
+raft-host: apply create rc=-13 index=9254171 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-obs: tx->1 enq=135592 drop=0 sent=135576 fail=16 hi=125 rtt_avg=34us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=97198 drop=0 sent=97142 fail=55 hi=157 rtt_avg=36us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=114 pump_hold_max=959us lock_wait_max=1us drain_max=959us tick_max=4us apply_max=395us persist_max=637us applies_in_worst=34 arc_miss=1 arc_term_miss=26 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0
+raft-host: apply create rc=-13 index=9255579 parent=1048928 name=d
+raft-host: apply create rc=-13 index=9255696 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: apply create rc=-13 index=9257211 parent=1048928 name=d
+raft-host: apply create rc=-13 index=9257260 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: apply create rc=-13 index=9257606 parent=1048928 name=d
+raft-host: apply create rc=-13 index=9257625 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: apply create rc=-13 index=9258177 parent=1048928 name=d
+raft-host: apply create rc=-13 index=9258254 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: apply create rc=-13 index=9258878 parent=1048928 name=d
+raft-host: apply create rc=-13 index=9258907 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: apply create rc=-13 index=9259576 parent=1048928 name=d
+raft-host: apply create rc=-13 index=9259620 parent=1203746 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-obs: tx->1 enq=135592 drop=0 sent=135576 fail=16 hi=125 rtt_avg=34us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=105716 drop=0 sent=105661 fail=55 hi=157 rtt_avg=35us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=114 pump_hold_max=782us lock_wait_max=1us drain_max=782us tick_max=4us apply_max=199us persist_max=4960us applies_in_worst=7 arc_miss=1 arc_term_miss=26 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0
+raft-host: apply create rc=-13 index=9260112 parent=1048928 name=d
+raft-host: apply create rc=-13 index=9260585 parent=1048928 name=d
+raft-host: apply create rc=-13 index=9261328 parent=1048928 name=d
+raft-host: applied session index=9262060 kind=9 shard=0 ino=1054702
+raft-host: applied session index=9262061 kind=9 shard=0 ino=13760156
+raft-host: applied session index=9262077 kind=9 shard=0 ino=851050
+raft-host: applied session index=9262082 kind=9 shard=0 ino=762608
+raft-host: applied session index=9262225 kind=9 shard=0 ino=957404
+raft-host: applied session index=9262581 kind=9 shard=0 ino=1068200
+raft-host: applied session index=9262900 kind=9 shard=0 ino=1105728
+raft-obs: tx->1 enq=135592 drop=0 sent=135576 fail=16 hi=125 rtt_avg=34us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=115335 drop=0 sent=115279 fail=55 hi=157 rtt_avg=35us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=114 pump_hold_max=655us lock_wait_max=5us drain_max=654us tick_max=25us apply_max=229us persist_max=653us applies_in_worst=9 arc_miss=1 arc_term_miss=26 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0
+raft-obs: tx->1 enq=135592 drop=0 sent=135576 fail=16 hi=125 rtt_avg=34us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=125912 drop=0 sent=125856 fail=55 hi=157 rtt_avg=35us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=114 pump_hold_max=578us lock_wait_max=7us drain_max=578us tick_max=4us apply_max=188us persist_max=676us applies_in_worst=5 arc_miss=1 arc_term_miss=26 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0
+raft-obs: tx->1 enq=135592 drop=0 sent=135576 fail=16 hi=125 rtt_avg=34us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=131295 drop=0 sent=131239 fail=55 hi=157 rtt_avg=35us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=114 pump_hold_max=403us lock_wait_max=3us drain_max=403us tick_max=3us apply_max=132us persist_max=1074us applies_in_worst=2 arc_miss=1 arc_term_miss=26 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0
+raft-obs: tx->1 enq=135592 drop=0 sent=135576 fail=16 hi=125 rtt_avg=34us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=136632 drop=0 sent=136577 fail=55 hi=157 rtt_avg=35us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=114 pump_hold_max=519us lock_wait_max=3us drain_max=519us tick_max=6us apply_max=104us persist_max=592us applies_in_worst=1 arc_miss=1 arc_term_miss=26 opid_replay=2 fin_q=0 fin_done=0 fin_drop=0 fin_full=0

@@ -262,6 +262,67 @@ static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci)
     return EFS_OK;
 }
 
+/* One GETCHUNKS per chunk group, concurrent. A 1 GiB file is 128 groups;
+ * issuing them one after another is the open-time stall D2 removes. */
+struct pull_group_job {
+    efs_ino_t ino;
+    uint32_t start;
+    uint32_t end;
+    int rc;
+    int started;
+    pthread_t th;
+};
+
+static void *pull_group_thread(void *arg)
+{
+    struct pull_group_job *j = arg;
+
+    j->rc = pull_chunks_range(j->ino, j->start, j->end);
+    return NULL;
+}
+
+static int pull_groups_parallel(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci)
+{
+    struct pull_group_job jobs[8];
+    uint32_t s = start_ci;
+    int n = 0, i, rc = EFS_OK;
+
+    if (start_ci >= end_ci)
+        return EFS_OK;
+    while (s < end_ci && n < 8) {
+        uint32_t ge = (s | (EFS_CHUNK_GROUP_SIZE - 1u)) + 1u;
+
+        if (ge > end_ci)
+            ge = end_ci;
+        jobs[n].ino = ino;
+        jobs[n].start = s;
+        jobs[n].end = ge;
+        jobs[n].rc = EFS_OK;
+        jobs[n].started = 0;
+        n++;
+        s = ge;
+    }
+    if (n <= 1) {
+        rc = pull_chunks_range(ino, start_ci, end_ci);
+        return rc;
+    }
+    for (i = 0; i < n; i++) {
+        if (pthread_create(&jobs[i].th, NULL, pull_group_thread, &jobs[i]) == 0)
+            jobs[i].started = 1;
+        else
+            jobs[i].rc = pull_chunks_range(jobs[i].ino, jobs[i].start, jobs[i].end);
+    }
+    for (i = 0; i < n; i++) {
+        if (jobs[i].started)
+            pthread_join(jobs[i].th, NULL);
+        if (jobs[i].rc != EFS_OK && rc == EFS_OK)
+            rc = jobs[i].rc;
+    }
+    if (rc == EFS_OK && s < end_ci)
+        rc = pull_groups_parallel(ino, s, end_ci);
+    return rc;
+}
+
 int efs_client_pull_chunks_range(efs_ino_t ino, uint32_t start_ci,
                                  uint32_t end_ci)
 {
@@ -311,10 +372,16 @@ static void pull_file_layout(const struct efs_inode *rpc)
  * pieces costs one GETCHUNKS per range, not one per read. */
 int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
 {
+    /* Metadata window: start at the prefetch depth, double while the
+     * caller keeps asking at the end of the covered range, cap so this
+     * never becomes a whole-map pull. One extra window is pulled ahead
+     * of the range the read asked for. Internal; no knob. */
+    enum { META_WIN_MIN = 16, META_WIN_MAX = 256 };
     static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
     static struct {
         efs_ino_t ino;
-        uint32_t ci0, ci1; /* range of the last successful pull */
+        uint32_t ci0, ci1;
+        uint32_t win;
         uint64_t ns;
     } seen[64];
     static uint32_t next;
@@ -331,13 +398,29 @@ int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
             break;
         }
     }
+    int seq = slot >= 0 && seen[slot].ns &&
+              ci0 >= seen[slot].ci0 &&
+              ci0 <= seen[slot].ci1 + EFS_CHUNK_GROUP_SIZE;
+    uint32_t win = META_WIN_MIN;
+    if (seq && seen[slot].win)
+        win = seen[slot].win < META_WIN_MAX / 2 ? seen[slot].win * 2
+                                                : META_WIN_MAX;
+    uint32_t ahead = ci0 + win * 2u;
+    if (ahead < ci1)
+        ahead = ci1;
     int fresh = slot >= 0 && seen[slot].ns &&
                 now - seen[slot].ns < 200000000ull &&
-                seen[slot].ci0 <= ci0 && seen[slot].ci1 >= ci1;
+                seen[slot].ci0 <= ci0 && seen[slot].ci1 >= ahead;
+    uint32_t pull_from = ci0;
+    if (!fresh && seq && seen[slot].ci1 > ci0 && seen[slot].ci1 < ahead)
+        pull_from = seen[slot].ci1;
+    uint32_t cov0 = (slot >= 0 && seq) ? seen[slot].ci0 : ci0;
     pthread_mutex_unlock(&mu);
     if (fresh)
         return EFS_OK;
-    int rc = pull_chunks_range(ino, ci0, ci1);
+    int rc = EFS_OK;
+    if (pull_from < ahead)
+        rc = pull_groups_parallel(ino, pull_from, ahead);
     if (rc != EFS_OK)
         return rc;
     pthread_mutex_lock(&mu);
@@ -352,8 +435,9 @@ int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
             slot = (int)(next++ % 64);
     }
     seen[slot].ino = ino;
-    seen[slot].ci0 = ci0;
-    seen[slot].ci1 = ci1;
+    seen[slot].ci0 = cov0;
+    seen[slot].ci1 = ahead;
+    seen[slot].win = win;
     seen[slot].ns = now;
     pthread_mutex_unlock(&mu);
     return EFS_OK;
@@ -931,7 +1015,7 @@ efs_ino_t efs_client_create_ex(efs_ino_t parent, const char *name, uint32_t mode
 static int setattr_rpc_dual_apply(efs_ino_t ino, uint32_t mask, uint32_t mode,
                                   uid_t uid, gid_t gid, uint64_t size,
                                   uint64_t mtime, uint32_t mtime_nsec,
-                                  uint64_t atime)
+                                  uint64_t atime, uint32_t atime_nsec)
 {
     /* wr() close kicks REPORT async with mtime=now. A later SETATTR
      * (utimens or truncate) must drain that snap first: a late newer-only
@@ -943,7 +1027,7 @@ static int setattr_rpc_dual_apply(efs_ino_t ino, uint32_t mask, uint32_t mode,
     struct efs_inode out;
     int rc = efs_client_rpc_setattr(g_client.export_id, ino, mask, mode,
                                     uid, gid, size, mtime, mtime_nsec, atime,
-                                    &out);
+                                    atime_nsec, &out);
     if (rc != EFS_OK) {
         g_client.last_err = rc;
         return rc;
@@ -1006,7 +1090,8 @@ int efs_client_chmod(efs_ino_t ino, uint32_t mode)
     if (local_inode(ino, &cur) == 0 &&
         (cur.mode & 07777) == (mode & 07777))
         return EFS_OK;
-    return setattr_rpc_dual_apply(ino, EFS_SETATTR_MODE, mode, 0, 0, 0, 0, 0, 0);
+    return setattr_rpc_dual_apply(ino, EFS_SETATTR_MODE, mode, 0, 0, 0, 0, 0,
+                                  0, 0);
 }
 
 int efs_client_chown(efs_ino_t ino, uid_t uid, gid_t gid)
@@ -1025,26 +1110,27 @@ int efs_client_chown(efs_ino_t ino, uid_t uid, gid_t gid)
         mask |= EFS_SETATTR_GID;
     if (!mask)
         return EFS_OK;
-    return setattr_rpc_dual_apply(ino, mask, 0, uid, gid, 0, 0, 0, 0);
+    return setattr_rpc_dual_apply(ino, mask, 0, uid, gid, 0, 0, 0, 0, 0);
 }
 
 int efs_client_utimens(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec)
 {
     return setattr_rpc_dual_apply(ino, EFS_SETATTR_MTIME, 0, 0, 0, 0,
-                                  mtime, mtime_nsec, 0);
+                                  mtime, mtime_nsec, 0, 0);
 }
 
-int efs_client_set_atime(efs_ino_t ino, uint64_t atime)
+int efs_client_set_atime(efs_ino_t ino, uint64_t atime, uint32_t atime_nsec)
 {
     return setattr_rpc_dual_apply(ino, EFS_SETATTR_ATIME, 0, 0, 0, 0, 0, 0,
-                                  atime);
+                                  atime, atime_nsec);
 }
 
 int efs_client_utimens_both(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec,
-                            uint64_t atime)
+                            uint64_t atime, uint32_t atime_nsec)
 {
     return setattr_rpc_dual_apply(ino, EFS_SETATTR_ATIME | EFS_SETATTR_MTIME,
-                                  0, 0, 0, 0, mtime, mtime_nsec, atime);
+                                  0, 0, 0, 0, mtime, mtime_nsec, atime,
+                                  atime_nsec);
 }
 
 int efs_client_truncate(efs_ino_t ino, uint64_t size)
@@ -1114,7 +1200,7 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
     struct efs_inode out;
     int rc = efs_client_rpc_setattr(g_client.export_id, ino,
                                     EFS_SETATTR_SIZE | EFS_SETATTR_MTIME,
-                                    0, 0, 0, size, sec, nsec, 0, &out);
+                                    0, 0, 0, size, sec, nsec, 0, 0, &out);
     if (rc != EFS_OK) {
         g_client.last_err = rc;
         return rc;

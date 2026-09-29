@@ -1,0 +1,31 @@
+tid  calls  work_s  (top work syscalls)
+881544 10790525  174.060  fsync=35.57 pread64=44.24 close=1.49 write=92.61
+881521 3118137   38.791  write=38.79
+881545 1325101   34.440  rename=0.62 openat=0.79 pwrite64=0.84 write=7.53 fsync=23.85
+881568  484923    7.459  write=3.64 fstat=3.81
+881566  363869    5.804  write=2.71 fstat=2.83
+881541  132938    5.782  close=1.25 write=2.20 openat=2.24
+881540  130312    5.759  openat=2.17 close=1.20 write=2.29
+881537  126372    5.547  close=1.13 write=2.26 openat=2.08
+881539  129233    5.510  write=2.12 openat=2.12 close=1.17
+881538  128909    5.454  close=1.17 write=2.05 openat=2.13
+881536  126011    5.397  openat=2.08 close=1.12 write=2.12
+881530  121864    5.318  openat=2.00 write=2.19 close=1.05
+881532  122904    5.299  openat=2.02 close=1.06 write=2.13
+881531  121497    5.273  close=1.04 openat=2.02 write=2.13
+881527  119709    5.269  close=1.01 openat=1.99 write=2.19
+881550  443507    5.237  write=2.66 fstat=2.57
+881533  123281    5.226  openat=2.01 close=1.07 write=2.07
+881524  118127    5.191  close=0.99 write=2.10 openat=2.02
+881534  124395    5.161  write=1.95 openat=2.03 close=1.09
+881526  119259    5.148  openat=2.05 write=2.02 close=1.01
+881529  121002    5.137  openat=1.99 close=1.02 write=2.03
+881535  124620    5.129  write=1.92 openat=2.04 close=1.10
+881525  118651    5.089  close=0.99 write=2.01 openat=2.01
+881523  117004    5.084  close=0.97 write=2.03 openat=2.01
+881528  120324    5.045  openat=1.98 close=1.01 write=1.97
+881522  116180    5.002  openat=2.00 close=0.94 write=1.98
+881563  488364    3.748  fstat=3.60
+881556  375336    2.837  fstat=2.73
+881552  445341    2.296  fstat=2.30
+881564  186684    1.949  fstat=1.14

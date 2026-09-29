@@ -1,0 +1,80 @@
+881541 00:07:15.683943 futex(0x5290a8, FUTEX_WAIT_BITSET_PRIVATE|FUTEX_CLOCK_REALTIME, 0, NULL, FUTEX_BITSET_MATCH_ANY <unfinished ...>
+881541 00:15:20.763722 <... futex resumed>) = 0 <485.079773>
+881541 00:15:20.763810 futex(0x529058, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+881541 00:15:20.763863 <... futex resumed>) = 0 <0.000049>
+881541 00:15:20.764313 futex(0x52bae0, FUTEX_WAKE_PRIVATE, 2147483647 <unfinished ...>
+881541 00:15:20.764380 <... futex resumed>) = 0 <0.000062>
+881541 00:15:20.764426 openat(AT_FDCWD, "/data1/01/efs/data/exports/1/0000/0000/0000/0521/4374/0/0.1.5357525469037132979", O_WRONLY|O_TRUNC|O_DIRECT <unfinished ...>
+881541 00:15:20.764506 <... openat resumed>) = -1 ENOENT (No such file or directory) <0.000071>
+881541 00:15:20.764554 openat(AT_FDCWD, "/data1/01/efs/data/exports/1/0000/0000/0000/0521/4374/0/0.1.5357525469037132979", O_WRONLY|O_CREAT|O_TRUNC|O_DIRECT, 0644 <unfinished ...>
+881541 00:15:20.764592 <... openat resumed>) = -1 ENOENT (No such file or directory) <0.000031>
+881541 00:15:20.764640 mmap(NULL, 134217728, PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0 <unfinished ...>
+881541 00:15:20.764831 <... mmap resumed>) = 0x7fca7c000000 <0.000185>
+881541 00:15:20.764894 munmap(0x7fca80000000, 67108864 <unfinished ...>
+881541 00:15:20.764954 <... munmap resumed>) = 0 <0.000055>
+881541 00:15:20.765015 mprotect(0x7fca7c000000, 135168, PROT_READ|PROT_WRITE <unfinished ...>
+881541 00:15:20.765095 <... mprotect resumed>) = 0 <0.000076>
+881541 00:15:20.765148 mkdir("/data1", 0755 <unfinished ...>
+881541 00:15:20.765198 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000042>
+881541 00:15:20.765247 mkdir("/data1/01", 0755 <unfinished ...>
+881541 00:15:20.765326 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000073>
+881541 00:15:20.765387 mkdir("/data1/01/efs", 0755 <unfinished ...>
+881541 00:15:20.765462 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000069>
+881541 00:15:20.765544 mkdir("/data1/01/efs/data", 0755 <unfinished ...>
+881541 00:15:20.765608 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000057>
+881541 00:15:20.765684 mkdir("/data1/01/efs/data/exports", 0755 <unfinished ...>
+881541 00:15:20.765745 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000055>
+881541 00:15:20.765808 mkdir("/data1/01/efs/data/exports/1", 0755 <unfinished ...>
+881541 00:15:20.765848 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000034>
+881541 00:15:20.765903 mkdir("/data1/01/efs/data/exports/1/0000", 0755 <unfinished ...>
+881541 00:15:20.765973 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000063>
+881541 00:15:20.766042 mkdir("/data1/01/efs/data/exports/1/0000/0000", 0755 <unfinished ...>
+881541 00:15:20.766094 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000045>
+881541 00:15:20.766145 mkdir("/data1/01/efs/data/exports/1/0000/0000/0000", 0755 <unfinished ...>
+881541 00:15:20.766191 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000039>
+881541 00:15:20.766251 mkdir("/data1/01/efs/data/exports/1/0000/0000/0000/0521", 0755 <unfinished ...>
+881541 00:15:20.766307 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000050>
+881541 00:15:20.766360 mkdir("/data1/01/efs/data/exports/1/0000/0000/0000/0521/4374", 0755 <unfinished ...>
+881541 00:15:20.766484 <... mkdir resumed>) = 0 <0.000118>
+881541 00:15:20.766553 mkdir("/data1/01/efs/data/exports/1/0000/0000/0000/0521/4374/0", 0755 <unfinished ...>
+881541 00:15:20.766703 <... mkdir resumed>) = 0 <0.000144>
+881541 00:15:20.766772 openat(AT_FDCWD, "/data1/01/efs/data/exports/1/0000/0000/0000/0521/4374/0/0.1.5357525469037132979", O_WRONLY|O_CREAT|O_TRUNC|O_DIRECT, 0644 <unfinished ...>
+881541 00:15:20.766931 <... openat resumed>) = 203 <0.000152>
+881541 00:15:20.767098 write(203, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 65536 <unfinished ...>
+881541 00:15:20.767204 <... write resumed>) = 65536 <0.000098>
+881541 00:15:20.767247 close(203 <unfinished ...>
+881541 00:15:20.767298 <... close resumed>) = 0 <0.000046>
+881541 00:15:20.767336 openat(AT_FDCWD, "/data1/01/efs/data/exports/1/0000/0000/0000/0521/4374/0/0.1.5357525469037132979.sum", O_WRONLY|O_CREAT|O_TRUNC, 0644 <unfinished ...>
+881541 00:15:20.767419 <... openat resumed>) = 203 <0.000076>
+881541 00:15:20.767463 write(203, ";\336\257\217\216\230x\v1\201\6\252\375\303\312%\177s\337\22=\227\266\221\22\262`D\311\32}V", 32 <unfinished ...>
+881541 00:15:20.767511 <... write resumed>) = 32 <0.000040>
+881541 00:15:20.767552 close(203 <unfinished ...>
+881541 00:15:20.767600 <... close resumed>) = 0 <0.000043>
+881541 00:15:20.767650 futex(0x7fcae392c498, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+881541 00:15:20.767707 <... futex resumed>) = 1 <0.000052>
+881541 00:15:20.767767 futex(0x7fcae392c448, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+881541 00:15:20.767842 <... futex resumed>) = 0 <0.000070>
+881541 00:15:20.767910 openat(AT_FDCWD, "/data1/03/efs/data/exports/1/0000/0000/0000/0115/9988/0/0.0.11107302317202802743", O_WRONLY|O_TRUNC|O_DIRECT <unfinished ...>
+881541 00:15:20.768009 <... openat resumed>) = -1 ENOENT (No such file or directory) <0.000091>
+881541 00:15:20.768066 openat(AT_FDCWD, "/data1/03/efs/data/exports/1/0000/0000/0000/0115/9988/0/0.0.11107302317202802743", O_WRONLY|O_CREAT|O_TRUNC|O_DIRECT, 0644 <unfinished ...>
+881541 00:15:20.768159 <... openat resumed>) = -1 ENOENT (No such file or directory) <0.000086>
+881541 00:15:20.768239 mkdir("/data1", 0755 <unfinished ...>
+881541 00:15:20.768321 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000076>
+881541 00:15:20.768400 mkdir("/data1/03", 0755 <unfinished ...>
+881541 00:15:20.768472 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000067>
+881541 00:15:20.768537 mkdir("/data1/03/efs", 0755 <unfinished ...>
+881541 00:15:20.768612 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000069>
+881541 00:15:20.768703 mkdir("/data1/03/efs/data", 0755 <unfinished ...>
+881541 00:15:20.768774 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000064>
+881541 00:15:20.768850 mkdir("/data1/03/efs/data/exports", 0755 <unfinished ...>
+881541 00:15:20.768930 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000074>
+881541 00:15:20.769006 mkdir("/data1/03/efs/data/exports/1", 0755 <unfinished ...>
+881541 00:15:20.769101 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000088>
+881541 00:15:20.769177 mkdir("/data1/03/efs/data/exports/1/0000", 0755 <unfinished ...>
+881541 00:15:20.769256 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000072>
+881541 00:15:20.769323 mkdir("/data1/03/efs/data/exports/1/0000/0000", 0755 <unfinished ...>
+881541 00:15:20.769407 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000078>
+881541 00:15:20.769486 mkdir("/data1/03/efs/data/exports/1/0000/0000/0000", 0755 <unfinished ...>
+881541 00:15:20.769565 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000073>
+881541 00:15:20.769635 mkdir("/data1/03/efs/data/exports/1/0000/0000/0000/0115", 0755 <unfinished ...>
+881541 00:15:20.769721 <... mkdir resumed>) = -1 EEXIST (File exists) <0.000079>

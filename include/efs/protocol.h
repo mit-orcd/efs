@@ -548,6 +548,7 @@ struct efs_msg_inode_setattr {
     uint64_t mtime;
     uint32_t mtime_nsec;
     uint64_t atime;
+    uint32_t atime_nsec;
 };
 
 /* Phase 2b: add a hard link (extra name) for an existing non-directory inode. */

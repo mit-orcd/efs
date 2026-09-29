@@ -364,6 +364,9 @@ struct efs_meta_utimens {
     uint64_t atime;
     uint64_t expect_gen;
     uint64_t mtime_gen;
+    /* Nonzero: this apply is the other group's lanes only (the inode
+     * row is not in this KV). */
+    uint64_t lane_bits;
 };
 
 int efs_meta_apply_utimens(struct efs_kv *kv, efs_ino_t ino, uint64_t now,

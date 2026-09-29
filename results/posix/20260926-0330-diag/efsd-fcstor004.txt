@@ -1,0 +1,321 @@
+raft-obs: wait_timeouts=0 pump_hold_max=841us lock_wait_max=1us drain_max=324us tick_max=7us apply_max=287us persist_max=581us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-host: mkdir parent=528690 name=a rc=-14 hint=1 psh=306 csh=3581 dsh=306 stage=11 ino=343549
+raft-host: mkdir parent=564750 name=sub rc=-14 hint=1 psh=3598 csh=2137 dsh=3598 stage=11 ino=1132633
+raft-host: mkdir parent=958360 name=dir_rename_file rc=-14 hint=1 psh=3992 csh=1097 dsh=3992 stage=11 ino=513097
+raft-obs: tx->0 enq=12482 drop=0 sent=12482 fail=0 hi=68 rtt_avg=228us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=11953 drop=0 sent=11918 fail=35 hi=649 rtt_avg=48us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=12304 drop=0 sent=12304 fail=0 hi=5 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=0 pump_hold_max=15534us lock_wait_max=4075us drain_max=9444us tick_max=8us apply_max=8151us persist_max=14363us applies_in_worst=27 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-host: mkdir parent=680018 name=d20 rc=-14 hint=1 psh=82 csh=61 dsh=82 stage=11 ino=393277
+raft-host: mkdir parent=680018 name=d20 rc=-14 hint=1 psh=82 csh=61 dsh=82 stage=11 ino=401469
+raft-host: mkdir parent=680018 name=d20 rc=-14 hint=1 psh=82 csh=61 dsh=82 stage=11 ino=413757
+raft-host: mkdir parent=680018 name=d20 rc=-14 hint=1 psh=82 csh=61 dsh=82 stage=11 ino=434237
+raft-host: mkdir parent=680018 name=d20 rc=-14 hint=1 psh=82 csh=61 dsh=82 stage=11 ino=458813
+raft-host: mkdir parent=416217 name=perm_hardlink_shares_mode rc=-14 hint=3 psh=2521 csh=180 dsh=2521 stage=11 ino=295092
+raft-host: mkdir parent=680018 name=d20 rc=-14 hint=1 psh=82 csh=61 dsh=82 stage=11 ino=495677
+raft-host: mkdir parent=958360 name=attr_chown_self rc=-13 hint=3 psh=3992 csh=732 dsh=3992 stage=11 ino=0
+raft-host: apply create rc=-13 index=5948634 parent=958360 name=attr_chown_self
+raft-host: mkdir parent=348810 name=attr_ctime_after_chmod rc=-14 hint=1 psh=650 csh=3269 dsh=650 stage=11 ino=793797
+raft-host: mkdir parent=633465 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-14 hint=3 psh=2681 csh=3052 dsh=2681 stage=11 ino=527340
+raft-host: mkdir parent=348810 name=attr_ctime_after_chmod rc=-14 hint=1 psh=650 csh=3269 dsh=650 stage=11 ino=797893
+raft-host: mkdir parent=680018 name=d20 rc=-14 hint=1 psh=82 csh=61 dsh=82 stage=11 ino=524349
+raft-host: mkdir parent=348810 name=attr_ctime_after_chmod rc=-14 hint=1 psh=650 csh=3269 dsh=650 stage=11 ino=801989
+raft-host: mkdir parent=448702 name=d rc=-14 hint=1 psh=2238 csh=2195 dsh=2238 stage=11 ino=522387
+raft-host: mkdir parent=522387 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-13 hint=3 psh=2195 csh=3698 dsh=2195 stage=11 ino=507506
+raft-host: mkdir parent=348810 name=attr_ctime_after_chmod rc=-14 hint=1 psh=650 csh=3269 dsh=650 stage=11 ino=806085
+raft-host: apply create rc=-13 index=7330890 parent=729147 name=...
+raft-host: mkdir parent=348810 name=attr_ctime_after_chmod rc=-14 hint=1 psh=650 csh=3269 dsh=650 stage=11 ino=818373
+raft-host: mkdir parent=476663 name=d22 rc=-14 hint=3 psh=1527 csh=2980 dsh=1527 stage=11 ino=400292
+raft-obs: tx->0 enq=13069 drop=0 sent=13069 fail=0 hi=68 rtt_avg=220us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=12603 drop=0 sent=12568 fail=35 hi=649 rtt_avg=48us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=13887 drop=0 sent=13887 fail=0 hi=5 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=0 pump_hold_max=13675us lock_wait_max=7727us drain_max=13119us tick_max=4us apply_max=13081us persist_max=997us applies_in_worst=42 arc_miss=0 arc_term_miss=0 opid_replay=0
+raft-host: mkdir parent=297879 name=b rc=-13 hint=1 psh=2967 csh=3051 dsh=2967 stage=11 ino=0
+raft-host: mkdir parent=416217 name=err_hardlink_nonexistent_src rc=-13 hint=1 psh=2521 csh=3793 dsh=2521 stage=11 ino=0
+raft-host: mkdir parent=318718 name=d51 rc=-13 hint=1 psh=3326 csh=507 dsh=3326 stage=11 ino=332283
+raft-host: mkdir parent=1187437 name=err_write_readonly_file rc=-13 hint=1 psh=3693 csh=3599 dsh=3693 stage=11 ino=0
+raft-host: mkdir parent=692059 name=err_unlink_nonexistent rc=-13 hint=1 psh=3931 csh=1310 dsh=3931 stage=11 ino=320798
+raft-host: mkdir parent=376819 name=err_rmdir_a_file rc=-13 hint=1 psh=4083 csh=3703 dsh=4083 stage=11 ino=0
+raft-host: mkdir parent=362845 name=err_unlink_nonexistent rc=-13 hint=1 psh=2397 csh=2623 dsh=2397 stage=11 ino=0
+raft-host: mkdir parent=515428 name=sub rc=-13 hint=1 psh=3428 csh=2733 dsh=3428 stage=11 ino=314029
+raft-host: mkdir parent=331456 name=d58 rc=-13 hint=1 psh=3776 csh=1973 dsh=3776 stage=11 ino=640949
+raft-host: mkdir parent=1221018 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-13 hint=1 psh=410 csh=1685 dsh=410 stage=11 ino=2418325
+raft-host: mkdir parent=1001932 name=d rc=-13 hint=1 psh=2508 csh=1219 dsh=2508 stage=11 ino=554179
+raft-host: mkdir parent=305710 name=--help rc=-13 hint=3 psh=2606 csh=3040 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=321949 name=-rf rc=-13 hint=3 psh=2461 csh=3022 dsh=2461 stage=11 ino=494542
+raft-host: create parent=370566 name=f0047 rc=-13 hint=3 dsh=1926 hashed=0
+raft-host: mkdir parent=438149 name=err_unlink_a_directory rc=-13 hint=3 psh=3973 csh=1692 dsh=3973 stage=11 ino=13145756
+raft-host: mkdir parent=593264 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-13 hint=3 psh=3440 csh=904 dsh=3440 stage=11 ino=0
+raft-host: mkdir parent=344802 name=d39 rc=-13 hint=3 psh=738 csh=3710 dsh=738 stage=11 ino=0
+raft-host: mkdir parent=270266 name=d rc=-13 hint=3 psh=4026 csh=2920 dsh=4026 stage=11 ino=0
+raft-host: mkdir parent=348810 name=attr_ctime_after_chmod rc=-13 hint=3 psh=650 csh=3269 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=318718 name=d51 rc=-13 hint=3 psh=3326 csh=507 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=692059 name=err_unlink_nonexistent rc=-13 hint=3 psh=3931 csh=1310 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=515428 name=sub rc=-13 hint=3 psh=3428 csh=2733 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=331456 name=d58 rc=-13 hint=3 psh=3776 csh=1973 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=1001932 name=d rc=-13 hint=3 psh=2508 csh=1219 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=1221018 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-13 hint=3 psh=410 csh=1685 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=305710 name=--help rc=-13 hint=3 psh=2606 csh=3040 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=321949 name=-rf rc=-13 hint=3 psh=2461 csh=3022 dsh=0 stage=11 ino=0
+raft-host: create parent=370566 name=f0047 rc=-13 hint=3 dsh=0 hashed=0
+raft-host: mkdir parent=438149 name=err_unlink_a_directory rc=-13 hint=3 psh=3973 csh=1692 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=352811 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-13 hint=3 psh=555 csh=4030 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=344802 name=d39 rc=-13 hint=3 psh=738 csh=3710 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=593264 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-13 hint=3 psh=3440 csh=904 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=270266 name=d rc=-13 hint=3 psh=4026 csh=2920 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=298298 name=sub rc=-13 hint=3 psh=3386 csh=1940 dsh=0 stage=11 ino=0
+raft-host: create parent=351212 name=f0052 rc=-13 hint=3 dsh=0 hashed=0
+raft-host: mkdir parent=318718 name=d51 rc=-13 hint=3 psh=3326 csh=507 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=692059 name=err_unlink_nonexistent rc=-13 hint=3 psh=3931 csh=1310 dsh=0 stage=11 ino=0
+raft-host: mkdir parent=515428 name=sub rc=-13 hint=3 psh=3428 csh=2733 dsh=0 stage=11 ino=0
+raft-obs: g0 term 6068->6069 role LEADER->FOLLOWER leader=0 commit=7331373 applied=7331373 t=1790393489440ms
+raft-host: mkdir parent=673626 name=--help rc=-14 hint=0 psh=1882 csh=1511 dsh=1882 stage=11 ino=857575
+raft-host: mkdir parent=519073 name=d53 rc=-13 hint=3 psh=2977 csh=1692 dsh=2977 stage=11 ino=13145756
+raft-host: apply create rc=-13 index=7331806 parent=656871 name=f0050
+raft-host: mkdir parent=519073 name=d53 rc=-13 hint=3 psh=2977 csh=1692 dsh=2977 stage=11 ino=13145756
+raft-host: apply create rc=-13 index=5951731 parent=348810 name=perm_owner_utime_readonly
+raft-host: mkdir parent=348810 name=perm_owner_utime_readonly rc=-13 hint=3 psh=650 csh=2816 dsh=650 stage=11 ino=0
+raft-host: mkdir parent=519073 name=d53 rc=-13 hint=3 psh=2977 csh=1692 dsh=2977 stage=11 ino=13145756
+raft-host: mkdir parent=519856 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-14 hint=0 psh=3760 csh=1091 dsh=3760 stage=11 ino=726083
+raft-host: mkdir parent=519073 name=d53 rc=-13 hint=3 psh=2977 csh=1692 dsh=2977 stage=11 ino=13145756
+raft-host: applied session index=7332757 kind=9 shard=0 ino=331041
+raft-host: apply create rc=-13 index=7332801 parent=335551 name=d
+raft-host: mkdir parent=335551 name=d rc=-13 hint=0 psh=3775 csh=2459 dsh=3775 stage=11 ino=0
+raft-host: applied session index=5952367 kind=9 shard=0 ino=354306
+raft-host: applied session index=7332859 kind=9 shard=0 ino=447717
+raft-host: applied session index=7332925 kind=9 shard=0 ino=392785
+raft-host: applied session index=7332926 kind=9 shard=0 ino=349935
+raft-host: applied session index=5952529 kind=9 shard=0 ino=519736
+raft-host: applied session index=5952541 kind=9 shard=0 ino=351656
+raft-host: applied session index=7333154 kind=9 shard=0 ino=277013
+raft-host: applied session index=5952710 kind=9 shard=0 ino=1749862
+raft-host: applied session index=5952796 kind=9 shard=0 ino=733742
+raft-host: applied session index=5952984 kind=9 shard=0 ino=748512
+raft-host: applied session index=7333537 kind=9 shard=0 ino=785219
+raft-host: applied session index=7333538 kind=9 shard=0 ino=334047
+raft-host: applied session index=7333545 kind=9 shard=0 ino=352303
+raft-host: mkdir parent=519073 name=d53 rc=-13 hint=3 psh=2977 csh=1692 dsh=2977 stage=11 ino=13145756
+raft-host: applied session index=5953047 kind=9 shard=0 ino=535040
+raft-host: applied session index=5953062 kind=9 shard=0 ino=355568
+raft-host: applied session index=7333616 kind=9 shard=0 ino=1134949
+raft-host: applied session index=7333701 kind=9 shard=0 ino=275023
+raft-host: applied session index=5953260 kind=9 shard=0 ino=692052
+raft-host: applied session index=5953269 kind=9 shard=0 ino=464814
+raft-host: applied session index=5953287 kind=9 shard=0 ino=1516582
+raft-host: applied session index=5953546 kind=9 shard=0 ino=1433142
+raft-host: applied session index=5953581 kind=9 shard=0 ino=411576
+raft-host: mkdir parent=362845 name=mmap_write_read rc=-13 hint=3 psh=2397 csh=3264 dsh=2397 stage=11 ino=322752
+raft-host: apply publish rc=-14 index=5953643 ino=512732 ci=0
+raft-host: applied session index=7334345 kind=9 shard=0 ino=354767
+raft-host: applied session index=7334527 kind=9 shard=0 ino=2782547
+raft-host: applied session index=7334528 kind=9 shard=0 ino=1931467
+raft-host: applied session index=7334529 kind=9 shard=0 ino=357649
+raft-host: applied session index=7334530 kind=9 shard=0 ino=344059
+raft-host: applied session index=5953915 kind=9 shard=0 ino=294750
+raft-host: mkdir parent=302336 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-13 hint=0 psh=3328 csh=1761 dsh=3328 stage=11 ino=239329
+raft-host: applied session index=5954069 kind=9 shard=0 ino=473006
+raft-host: mkdir parent=302336 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rc=-14 hint=0 psh=3328 csh=1761 dsh=3328 stage=11 ino=239329
+raft-host: mkdir parent=519073 name=d53 rc=-13 hint=3 psh=2977 csh=1692 dsh=2977 stage=11 ino=13145756
+raft-host: apply publish rc=-14 index=7335211 ino=359657 ci=0
+raft-host: mkdir parent=347128 name=sub rc=-13 hint=0 psh=3064 csh=3777 dsh=3064 stage=11 ino=499393
+raft-host: mkdir parent=362845 name=concurrent_create_unlink_two_proc rc=-14 hint=3 psh=2397 csh=3130 dsh=2397 stage=11 ino=433210
+raft-host: mkdir parent=362908 name=d rc=-14 hint=0 psh=2460 csh=3577 dsh=2460 stage=11 ino=392697
+raft-host: applied session index=7335601 kind=9 shard=0 ino=310823
+raft-host: apply publish rc=-14 index=5955006 ino=1015202 ci=0
+raft-obs: tx->0 enq=14221 drop=0 sent=14221 fail=0 hi=68 rtt_avg=204us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=12643 drop=0 sent=12608 fail=35 hi=649 rtt_avg=48us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=15757 drop=0 sent=15757 fail=0 hi=27 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=79 pump_hold_max=1665738us lock_wait_max=2434us drain_max=1665103us tick_max=1us apply_max=1665075us persist_max=1103us applies_in_worst=55 arc_miss=0 arc_term_miss=4 opid_replay=10
+raft-host: apply publish rc=-14 index=7336036 ino=913731 ci=0
+raft-host: apply create rc=-13 index=5955352 parent=673626 name=star*char
+raft-host: mkdir parent=673626 name=star*char rc=-13 hint=3 psh=1882 csh=3148 dsh=1882 stage=11 ino=0
+raft-host: apply publish rc=-14 index=5955481 ino=925294 ci=0
+raft-host: apply publish rc=-14 index=7336388 ino=1021883 ci=0
+raft-host: mkdir parent=519073 name=d53 rc=-13 hint=3 psh=2977 csh=1692 dsh=2977 stage=11 ino=13145756
+raft-host: mkdir parent=277682 name=d rc=-14 hint=0 psh=3250 csh=397 dsh=3250 stage=11 ino=479629
+raft-host: applied session index=5956363 kind=9 shard=0 ino=350228
+raft-host: mkdir parent=277682 name=d rc=-14 hint=0 psh=3250 csh=397 dsh=3250 stage=11 ino=496013
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: apply create rc=-13 index=7337549 parent=479453 name=d
+raft-host: applied session index=7337558 kind=9 shard=0 ino=374061
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: apply create rc=-13 index=7337655 parent=479453 name=d
+raft-host: mkdir parent=277682 name=d rc=-14 hint=0 psh=3250 csh=397 dsh=3250 stage=11 ino=532877
+raft-host: applied session index=7337734 kind=9 shard=0 ino=634689
+raft-host: mkdir parent=519073 name=d53 rc=-14 hint=3 psh=2977 csh=1692 dsh=2977 stage=11 ino=13145756
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: apply create rc=-13 index=7337815 parent=479453 name=d
+raft-host: apply create rc=-13 index=7338105 parent=479453 name=d
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: mkdir parent=277682 name=d rc=-14 hint=0 psh=3250 csh=397 dsh=3250 stage=11 ino=577933
+raft-host: applied session index=5957337 kind=9 shard=0 ino=281060
+raft-host: applied session index=5957408 kind=9 shard=0 ino=317002
+raft-host: applied session index=5957457 kind=9 shard=0 ino=507534
+raft-host: applied session index=5957481 kind=9 shard=0 ino=393986
+raft-host: applied session index=5957482 kind=9 shard=0 ino=494412
+raft-host: applied session index=5957649 kind=9 shard=0 ino=928722
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: apply create rc=-13 index=7338674 parent=479453 name=d
+raft-host: applied session index=5957761 kind=9 shard=0 ino=417068
+raft-host: applied session index=5957825 kind=9 shard=0 ino=296466
+raft-host: applied session index=5957868 kind=9 shard=0 ino=333188
+raft-host: applied session index=5957870 kind=9 shard=0 ino=377274
+raft-host: apply create rc=-13 index=7338904 parent=258445 name=t1-11
+raft-host: apply create rc=-13 index=7338924 parent=258445 name=t7-12
+raft-host: apply create rc=-13 index=7338946 parent=258445 name=t5-11
+raft-host: apply create rc=-13 index=7338951 parent=258445 name=t4-13
+raft-host: applied session index=5958051 kind=9 shard=0 ino=925254
+raft-host: applied session index=5958088 kind=9 shard=0 ino=1099914
+raft-host: mkdir parent=238387 name=d rc=-14 hint=3 psh=819 csh=3442 dsh=819 stage=11 ino=294258
+raft-host: apply create rc=-13 index=7339655 parent=479453 name=d
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: apply publish rc=-14 index=7339737 ino=364015 ci=0
+raft-host: applied session index=5958837 kind=9 shard=0 ino=516458
+raft-host: applied session index=5958904 kind=9 shard=0 ino=1553072
+raft-host: applied session index=5958958 kind=9 shard=0 ino=425356
+raft-host: applied session index=5958960 kind=9 shard=0 ino=349574
+raft-host: applied session index=5959059 kind=9 shard=0 ino=473224
+raft-host: mkdir parent=499971 name=d rc=-13 hint=3 psh=259 csh=1648 dsh=259 stage=11 ino=1562224
+raft-host: apply publish rc=-14 index=7340383 ino=297575 ci=0
+raft-host: mkdir parent=1027944 name=d rc=-14 hint=0 psh=3944 csh=3901 dsh=3944 stage=11 ino=352061
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: apply create rc=-13 index=7340737 parent=479453 name=d
+raft-host: apply publish rc=-14 index=7341293 ino=1566369 ci=0
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: apply create rc=-13 index=7341720 parent=479453 name=d
+raft-host: applied session index=5960653 kind=9 shard=0 ino=784090
+raft-obs: tx->0 enq=16933 drop=0 sent=16933 fail=0 hi=68 rtt_avg=177us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=12643 drop=0 sent=12608 fail=35 hi=649 rtt_avg=48us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=18464 drop=0 sent=18464 fail=0 hi=27 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=79 pump_hold_max=9484us lock_wait_max=62us drain_max=8927us tick_max=1us apply_max=4814us persist_max=1077us applies_in_worst=33 arc_miss=0 arc_term_miss=4 opid_replay=10
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: apply create rc=-13 index=7342864 parent=479453 name=d
+raft-host: mkdir parent=376819 name=chmod_preserves_mtime rc=-14 hint=3 psh=4083 csh=2226 dsh=4083 stage=11 ino=1980594
+raft-host: applied session index=7343273 kind=9 shard=0 ino=991811
+raft-host: applied session index=5961749 kind=9 shard=0 ino=439740
+raft-host: mkdir parent=376819 name=chmod_preserves_mtime rc=-14 hint=3 psh=4083 csh=2226 dsh=4083 stage=11 ino=1988786
+raft-host: applied session index=7343560 kind=9 shard=0 ino=991811
+raft-host: applied session index=5961983 kind=9 shard=0 ino=439906
+raft-host: mkdir parent=376819 name=chmod_preserves_mtime rc=-14 hint=3 psh=4083 csh=2226 dsh=4083 stage=11 ino=2001074
+raft-host: mkdir parent=416217 name=mkdirat_unlinkat rc=-14 hint=3 psh=2521 csh=1784 dsh=2521 stage=11 ino=2598648
+raft-host: applied session index=5962247 kind=9 shard=0 ino=583822
+raft-host: applied session index=5962325 kind=9 shard=0 ino=285808
+raft-host: apply create rc=-13 index=7343958 parent=479453 name=d
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: mkdir parent=416217 name=mkdirat_unlinkat rc=-14 hint=3 psh=2521 csh=1784 dsh=2521 stage=11 ino=2606840
+raft-host: applied session index=5962606 kind=9 shard=0 ino=922842
+raft-host: applied session index=5962676 kind=9 shard=0 ino=285808
+raft-host: applied session index=5962683 kind=9 shard=0 ino=583822
+raft-host: applied session index=5962958 kind=9 shard=0 ino=922842
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: apply create rc=-13 index=7344934 parent=479453 name=d
+raft-host: applied session index=7344946 kind=9 shard=0 ino=728065
+raft-host: report resolve ino=411109 rc=-13 (deferred)
+raft-host: rmdir parent=305710 name=dot.mid.name rc=-13 hint=0
+raft-host: mkdir parent=281191 name=percent%char rc=-13 hint=3 psh=2663 csh=2246 dsh=2663 stage=11 ino=379078
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: apply create rc=-13 index=7345092 parent=479453 name=d
+raft-host: applied session index=7345261 kind=9 shard=0 ino=728065
+raft-host: applied session index=7345425 kind=9 shard=0 ino=990873
+raft-host: applied session index=7345550 kind=9 shard=0 ino=990873
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: apply create rc=-13 index=7346024 parent=479453 name=d
+raft-host: create parent=358050 name=l rc=-13 hint=3 dsh=1698 hashed=0
+raft-host: apply create rc=-13 index=5964441 parent=358050 name=l
+raft-host: apply create rc=-13 index=7346633 parent=479453 name=d
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=3
+raft-host: rmdir parent=400643 name=dash-prefix rc=-13 hint=3
+raft-host: unlink-simple parent=323538 name=c2-22 rc=-13 hint=3 dsh=4050 dg=2
+raft-host: create parent=337174 name=t3-17 rc=-13 hint=3 dsh=1302 hashed=0
+raft-host: report resolve ino=334764 rc=-13 (deferred)
+raft-host: create parent=370566 name=f0148 rc=-13 hint=3 dsh=1926 hashed=0
+raft-host: create parent=270448 name=t6-12 rc=-13 hint=3 dsh=112 hashed=0
+raft-host: create parent=617968 name=c0-24 rc=-13 hint=3 dsh=3568 hashed=0
+raft-host: report resolve ino=593996 rc=-13 (deferred)
+raft-host: create parent=306142 name=c1-12 rc=-13 hint=3 dsh=3038 hashed=0
+raft-obs: g2 term 792->793 role FOLLOWER->CANDIDATE leader=-1 commit=5964882 applied=5964882 t=1790393501989ms
+raft-obs: g2 term 793->793 role CANDIDATE->LEADER leader=1 commit=5964882 applied=5964882 t=1790393501990ms
+raft-host: rmdir parent=921043 name=d16 rc=-13 hint=1
+raft-host: rmdir parent=350656 name=with	tab rc=-13 hint=0
+raft-host: mkdir parent=348810 name=fstat_size_after_write rc=-13 hint=0 psh=650 csh=103 dsh=650 stage=11 ino=348263
+raft-host: rmdir parent=342236 name=c rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-obs: tx->0 enq=19606 drop=0 sent=19606 fail=0 hi=68 rtt_avg=157us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=12722 drop=0 sent=12687 fail=35 hi=649 rtt_avg=48us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=20375 drop=0 sent=20375 fail=0 hi=27 rtt_avg=32us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=84 pump_hold_max=17661us lock_wait_max=2102us drain_max=17099us tick_max=10us apply_max=17088us persist_max=1105us applies_in_worst=28 arc_miss=0 arc_term_miss=4 opid_replay=11
+raft-host: apply create rc=-13 index=7347004 parent=479453 name=d
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: applied session index=7347181 kind=9 shard=0 ino=412421
+raft-host: applied session index=7347215 kind=9 shard=0 ino=276029
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: applied session index=7347380 kind=9 shard=0 ino=412421
+raft-host: applied session index=7347444 kind=9 shard=0 ino=276029
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: mkdir parent=479453 name=d rc=-13 hint=0 psh=221 csh=2733 dsh=221 stage=11 ino=0
+raft-host: apply create rc=-13 index=7347948 parent=479453 name=d
+raft-host: applied session index=7348337 kind=9 shard=0 ino=450523
+raft-host: applied session index=7348410 kind=9 shard=0 ino=450523
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-obs: tx->0 enq=25172 drop=0 sent=25172 fail=0 hi=68 rtt_avg=128us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=15770 drop=0 sent=15735 fail=35 hi=649 rtt_avg=46us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=23344 drop=0 sent=23344 fail=0 hi=27 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=84 pump_hold_max=5741us lock_wait_max=3029us drain_max=5189us tick_max=9us apply_max=4423us persist_max=1280us applies_in_worst=22 arc_miss=0 arc_term_miss=4 opid_replay=11
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-obs: tx->0 enq=30239 drop=0 sent=30239 fail=0 hi=68 rtt_avg=112us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=18387 drop=0 sent=18352 fail=35 hi=649 rtt_avg=43us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=25728 drop=0 sent=25728 fail=0 hi=27 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=84 pump_hold_max=4505us lock_wait_max=3154us drain_max=3689us tick_max=55us apply_max=3315us persist_max=2204us applies_in_worst=11 arc_miss=0 arc_term_miss=4 opid_replay=11
+raft-obs: tx->0 enq=34823 drop=0 sent=34823 fail=0 hi=68 rtt_avg=101us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=21055 drop=0 sent=21020 fail=35 hi=649 rtt_avg=41us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=28288 drop=0 sent=28288 fail=0 hi=27 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=84 pump_hold_max=5673us lock_wait_max=3162us drain_max=4851us tick_max=1us apply_max=4841us persist_max=907us applies_in_worst=15 arc_miss=0 arc_term_miss=4 opid_replay=11
+raft-host: rmdir parent=416217 name=err_hardlink_to_dir rc=-13 hint=1
+raft-host: rmdir parent=416217 name=err_hardlink_to_dir rc=-13 hint=1
+raft-host: rmdir parent=416217 name=err_hardlink_to_dir rc=-13 hint=1
+raft-host: rmdir parent=416217 name=err_hardlink_to_dir rc=-13 hint=1
+raft-host: rmdir parent=416217 name=err_hardlink_to_dir rc=-13 hint=1
+raft-host: rmdir parent=416217 name=err_hardlink_to_dir rc=-13 hint=1
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=416217 name=err_hardlink_to_dir rc=-13 hint=1
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-obs: tx->0 enq=39423 drop=0 sent=39423 fail=0 hi=68 rtt_avg=92us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=23657 drop=0 sent=23622 fail=35 hi=649 rtt_avg=40us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=30708 drop=0 sent=30708 fail=0 hi=27 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=84 pump_hold_max=17149us lock_wait_max=2907us drain_max=16833us tick_max=4us apply_max=16588us persist_max=1126us applies_in_worst=16 arc_miss=0 arc_term_miss=4 opid_replay=11
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=416217 name=err_hardlink_to_dir rc=-13 hint=1
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=416217 name=err_hardlink_to_dir rc=-13 hint=1
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=416217 name=err_hardlink_to_dir rc=-13 hint=1
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=416217 name=err_hardlink_to_dir rc=-13 hint=1
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-obs: tx->0 enq=43768 drop=0 sent=43768 fail=0 hi=68 rtt_avg=86us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=26441 drop=0 sent=26406 fail=35 hi=649 rtt_avg=39us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=33291 drop=0 sent=33291 fail=0 hi=27 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=84 pump_hold_max=4449us lock_wait_max=3352us drain_max=3626us tick_max=7us apply_max=3115us persist_max=1052us applies_in_worst=12 arc_miss=0 arc_term_miss=4 opid_replay=11
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-host: rmdir parent=305710 name=brack[et] rc=-13 hint=0
+raft-obs: tx->0 enq=45154 drop=0 sent=45154 fail=0 hi=68 rtt_avg=84us get_avg=0us get_max=0ms
+raft-obs: tx->2 enq=27576 drop=0 sent=27541 fail=35 hi=649 rtt_avg=38us get_avg=0us get_max=0ms
+raft-obs: tx->3 enq=34438 drop=0 sent=34438 fail=0 hi=27 rtt_avg=31us get_avg=0us get_max=0ms
+raft-obs: wait_timeouts=84 pump_hold_max=1836us lock_wait_max=537us drain_max=1019us tick_max=6us apply_max=1015us persist_max=1513us applies_in_worst=2 arc_miss=0 arc_term_miss=4 opid_replay=11
